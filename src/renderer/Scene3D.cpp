@@ -474,8 +474,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  if(w.level()==3){
   // Boarding deck: freight holding on the west, traction plant on the east.
   // The central approach is kept clear; equipment is concentrated at cab windows.
-  for(float x:{5.7f,7.1f}){prop(m_crateMesh,m_crateTexture,x,8.1f,.85f,0,1.05f,0);
-   quad({x-.46f,7.52f,.012f},{x+.46f,7.52f,.012f},{x+.46f,7.67f,.012f},{x-.46f,7.67f,.012f},m_hazard,.9f);}
+  // This bay ends at the existing x=7 structural partition: keep every crate
+  // fully west of it rather than allowing an attractive but impossible overlap.
+  for(Vec2 cargo:{Vec2{4.45f,7.9f},Vec2{5.75f,9.25f}}){prop(m_crateMesh,m_crateTexture,cargo.x,cargo.y,.85f,0,1.05f,0);
+   quad({cargo.x-.46f,cargo.y-.58f,.012f},{cargo.x+.46f,cargo.y-.58f,.012f},{cargo.x+.46f,cargo.y-.43f,.012f},{cargo.x-.46f,cargo.y-.43f,.012f},m_hazard,.9f);}
   prop(m_barrelMesh,m_barrelTexture,6.5f,13.4f,.95f,0,.65f,0);
   for(float y:{10.55f,11.45f})for(float z:{.13f,.77f})prop(m_crateMesh,m_crateTexture,6.2f,y,.30f,0,.34f,z);
   // Cable drum on bearing blocks; repeated narrow collars read as wound cable.

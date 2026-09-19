@@ -116,6 +116,14 @@ bool Game::testLift(){
   if(s.rail&&((s.x2-s.x1<.1f&&((s.x1==1&&world.tile(0,y)=='#')||(s.x2==23&&world.tile(23,y)=='#')))||(s.y2-s.y1<.1f&&((s.y1==1&&world.tile(x,0)=='#')||(s.y2==23&&world.tile(x,23)=='#')))))return check(false,"Redundant outer-wall rail");
  }
  if(!check(stairSteps==15,"Reactor stairs use explicit tread material; outer-wall duplicates removed"))return false;
+ // Freight props must never intersect the fixed partition at x=7. This catches
+ // the exact class of visual overlap that can escape a wide establishing view.
+ for(Vec2 cargo:{Vec2{4.45f,7.9f},Vec2{5.75f,9.25f}})for(const auto&s:world.structures()){
+  if(s.material==6||s.top<=.02f||s.bottom>=.85f)continue;
+  bool overlap=cargo.x+.525f>s.x1&&cargo.x-.525f<s.x2&&cargo.y+.525f>s.y1&&cargo.y-.525f<s.y2;
+  if(overlap)return check(false,"Freight crate clears all fixed structure");
+ }
+ check(true,"Freight crate clears all fixed structure");
  if(!check(world.supportBelow(17.5f,20.5f,-6)==-6&&world.supportBelow(17.5f,20.5f,-9)==-9,"Two reactor floors at same XY"))return false;
  if(!check(!world.rayClear({17.5f,20.5f},-8,{17.5f,20.5f},-5),"Vertical sight rays cannot pass through decks"))return false;
  auto game=mapInspection({3.5f,1.5f},kPi*.5f,0,3,false,0,true);game.m_clutter.clear();

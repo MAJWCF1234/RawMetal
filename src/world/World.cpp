@@ -289,7 +289,7 @@ World::World(int level) {
   // Maintenance workbench, with open leg space and a correctly supported disk.
   // Boarding-level freight and traction equipment. Bounds match visible props;
   // the north approach and 11..13 metre boarding bridge remain unobstructed.
-  for(float x:{5.7f,7.1f})m_structures.push_back({x-.525f,7.575f,x+.525f,8.625f,0,.85f,false,6});
+  for(Vec2 cargo:{Vec2{4.45f,7.9f},Vec2{5.75f,9.25f}})m_structures.push_back({cargo.x-.525f,cargo.y-.525f,cargo.x+.525f,cargo.y+.525f,0,.85f,false,6});
   m_structures.push_back({6.175f,13.075f,6.825f,13.725f,0,.95f,false,6});
   m_structures.push_back({15.97f,10.74f,17.9f,11.86f,0,1.71f,false,6});
   m_structures.push_back({15.5f,14.9f,18.5f,15.05f,0,2.55f,false,2});

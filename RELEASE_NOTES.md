@@ -1,7 +1,8 @@
-# RawMetal v0.3.1 — Lift Plant & Mechanical Valves
+# RawMetal v0.3.2 — Freight Placement Correction
 
 ## What changed
 
+- Corrected the lift freight-bay crates: they are staggered clear of the fixed concrete partition rather than intersecting it. Added a route regression test that rejects any crate/fixed-structure overlap.
 - Reactor valves now have cylindrical pipe risers, flanges, valve bodies, projecting stems and solid metal handwheels. Removed the electrical switch cabinets behind them.
 - Fixed opaque concrete panels around the boarding cage. Open steel bars reveal the lift plant while retaining fall protection.
 - Added a freight holding area with crates, stocked shelving and a drum; a traction bay with a cable winch, bearing blocks, generator and backed electrical cabinets; and ventilation ductwork. Equipment is concentrated near cab sightlines, with matching collision and a clear boarding route.

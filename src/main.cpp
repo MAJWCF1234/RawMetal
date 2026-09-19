@@ -26,7 +26,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         save("plant-feed.ppm",retro::Game::mapInspection({6.3f,16.95f},retro::kPi*.5f,5,3,false,-9,true));
         save("plant-return.ppm",retro::Game::liftInspection(48,7));
         save("plant-arrival.ppm",retro::Game::mapInspection({10.2f,6.8f},1.2f,0,3,false,0,true));
-        save("plant-freight.ppm",retro::Game::mapInspection({8.3f,9.5f},2.4f,0,3,false,0,true));
+        save("plant-freight.ppm",retro::Game::mapInspection({3.1f,8.15f},0,-10,3,false,0,true));
+        save("plant-freight-low.ppm",retro::Game::mapInspection({3.4f,7.1f},.55f,-35,3,false,0,true));
         save("plant-winch.ppm",retro::Game::mapInspection({15.3f,9.4f},.7f,0,3,false,0,true));
         save("plant-cab.ppm",retro::Game::liftInspection(0,8));return 0;
     }
