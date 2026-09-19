@@ -163,8 +163,8 @@ constexpr MapRows reactorDeck(){
 "_========______====__==_",
 "_========______====__==_",
 "_==================__==_",
-"_==================__==_",
-"_==================__==_",
+"_=========_____====__==_",
+"_=========_____====__==_",
 "_=========_____========_",
 "_=========_____========_",
 "_=========_____========_",
@@ -280,7 +280,20 @@ World::World(int level) {
    m_structures.push_back({9,7.8f,15,9,z+2.65f,z+2.7f,false,2});
    m_structures.push_back({9,15,15,16.2f,z+2.65f,z+2.7f,false,2});
   }
+  // Deliberate perimeter piers replace the automatic forest of thin posts.
+  for(float x:{1.3f,22.3f})for(float y:{16.7f,22.f})
+   m_structures.push_back({x,y,x+.4f,y+.4f,-9,-3.3f,false,3});
+  for(float y:{16.7f,22.f})m_structures.push_back({1.3f,y,22.7f,y+.4f,-3.65f,-3.3f,false,2});
+  // Console cabinets use the source model's proportions, with matching collision.
+  for(float x:{17.35f,18.85f})m_structures.push_back({x-.313f,19.04f,x+.313f,19.46f,-9,-7.812f,false,6});
   // Maintenance workbench, with open leg space and a correctly supported disk.
+  // Boarding-level freight and traction equipment. Bounds match visible props;
+  // the north approach and 11..13 metre boarding bridge remain unobstructed.
+  for(float x:{5.7f,7.1f})m_structures.push_back({x-.525f,7.575f,x+.525f,8.625f,0,.85f,false,6});
+  m_structures.push_back({6.175f,13.075f,6.825f,13.725f,0,.95f,false,6});
+  m_structures.push_back({15.97f,10.74f,17.9f,11.86f,0,1.71f,false,6});
+  m_structures.push_back({15.5f,14.9f,18.5f,15.05f,0,2.55f,false,2});
+  m_structures.push_back({4,12.4f,8.85f,12.95f,2.15f,2.55f,false,6});
   m_structures.push_back({5.1f,20.65f,6.9f,21.4f,-5.45f,-5.4f,false,2});
   for(float x:{5.15f,6.75f})for(float y:{20.7f,21.25f})m_structures.push_back({x,y,x+.08f,y+.08f,-6,-5.45f,false,2});
   // Pump plinths, cable trunks and service-bay partitions leave the stair route clear.
@@ -294,7 +307,7 @@ World::World(int level) {
   m_doors={{2,5,.5f,0,false,false,true,9},{20,23,21.5f,0,false,true}};
   m_terminals={{{4.5f,2.5f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","BOARD CAB. USE DISPATCH CONTROL.",9},
                {{13.35f,11.5f},"CAB CONTROL / DISPATCH","ASCENDING TO SURFACE.","WARNING: CABLE TENSION CRITICAL.",9,true},
-               {{8.3f,21.2f},"MAINTENANCE / SHIFT LOG","AUTH DISK: WORKBENCH. FEED FIRST.","RETURN SECOND. CONFIRM AT COMPUTER.",3},
+               {{8.3f,21.2f},"MAINTENANCE / SHIFT LOG","RETURN TRIPPED AGAIN. NO FEED PRESSURE.","LEFT THE SERVICE DISK WITH THE SPARES.",3},
                {{18.1f,19.1f},"REACTOR ACCESS / DRIVE A:","","",0,false,1},
                {{6.3f,18.2f},"01 / COOLANT FEED","","",0,false,2},
                {{17.1f,19.6f},"02 / COOLANT RETURN","","",3,false,3}};
@@ -305,6 +318,9 @@ World::World(int level) {
               {7,{16.2f,21.6f},3,2.052f,.61217f,1.44f,0,true}};
   for(float y:{16.7f,18.4f,20.1f})m_fixtures.push_back({8,{22.9f,y},.5f,.66776f,.1156f,.90576f,kPi*.5f,true});
   for(float x:{15.9f,17.1f})m_fixtures.push_back({8,{x,22.87f},3.55f,.66776f,.1156f,.90576f,0,true});
+  m_fixtures.push_back({7,{6.2f,11.f},9,2.052f,.61217f,1.44f,kPi*.5f,true});
+  m_fixtures.push_back({6,{16.9f,13.2f},9,2.38f,.70f,1.26f,0,true});
+  for(float x:{16.f,17.f,18.f})m_fixtures.push_back({8,{x,14.83f},9.7f,.66776f,.1156f,.90576f,0,true});
   // Explicit ceiling-mounted lights: no fixtures generated from narrow rail spans.
   for(float z:{-9.f,-6.f,0.f})for(Vec2 p:{Vec2{4,6},Vec2{16,6},Vec2{21,6},Vec2{4,19},Vec2{8,22},Vec2{16,22},Vec2{21,19}}){
    float ceiling=clearanceAbove(p.x,p.y,z);if(ceiling-z>1.8f)m_lights.push_back({p,ceiling-.15f});
@@ -470,7 +486,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    m_structures.push_back({float(start),float(y),float(x),float(y+1),underside,z});
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
-   if((x+y)%5==0&&tile(x,y)!='#')
+   if(m_level!=3&&(x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,m_level==3?std::max(-9.f,z-3.f):floorHeight(x+.1f,y+.1f),underside});
    if(!deck(x-1,y)&&!(m_level==3&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,true});

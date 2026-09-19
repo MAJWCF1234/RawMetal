@@ -266,6 +266,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(eye.z>=b.z)face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},light*1.1f);
   if(eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.65f);
  };
+ // Low-sided, capped pipes retain a cylindrical silhouette without dense meshes.
+ auto cylinder=[&](Point3 a,Point3 b,float radius,const Texture&texture){
+  Point3 axis=b-a;float length=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);if(length<.001f)return;
+  axis=axis*(1.f/length);Point3 u=cross3(axis,std::fabs(axis.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
+  u=u*(1.f/std::sqrt(u.x*u.x+u.y*u.y+u.z*u.z));Point3 v=cross3(axis,u);
+  if(!sphereVisible((a+b)*.5f,length*.5f+radius))return;
+  if(hidden({std::min(a.x,b.x)-radius,std::min(a.y,b.y)-radius,std::min(a.z,b.z)-radius},{std::max(a.x,b.x)+radius,std::max(a.y,b.y)+radius,std::max(a.z,b.z)+radius}))return;
+  for(int i=0;i<10;++i){float t=i*kTwoPi/10,n=(i+1)*kTwoPi/10;auto p=(u*std::cos(t)+v*std::sin(t))*radius,q=(u*std::cos(n)+v*std::sin(n))*radius;
+   quad(a+p,a+q,b+q,b+p,texture,1.f,{radius*.63f,length});
+   tri({a,.5f,.5f},{a+q,1,1},{a+p,0,0},texture,.8f);tri({b,.5f,.5f},{b+p,0,0},{b+q,1,1},texture,.8f);
+  }
+ };
  auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
   if(base==-999.f)base=w.floorHeight(x,y);Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
   if(hidden({x-footprint,y-footprint,base},{x+footprint,y+footprint,base+height}))return;
@@ -299,7 +311,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(w.tile(x,y)!='#'){
    // Half-metre floor patches expose real stair risers and the sides of raised decks.
    for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
-    quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.level()==1?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.level()==1?.9f:w.metalFloor(x,y)?.8f:.95f);
+    quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.level()==3?m_concrete:w.level()==1?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.level()==1?.9f:w.level()==3?.95f:w.metalFloor(x,y)?.8f:.95f);
     float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
     if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
     if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
@@ -340,7 +352,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     float wallBase=w.level()==3?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if((x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
-    if((x+y)%4==0){if(w.level()==3){for(float base=-9;base<Z;base+=3)facility(2,cx-dy*.055f,cy+dx*.055f,base,.15f,.16f,std::min(3.f,Z-base),yaw);}else facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);}
+    if(w.level()!=3&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
     (void)light;
    };
    if(w.tile(x-1,y)!='#')wall(X,Y,X,Y+1,.90f);
@@ -350,6 +362,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  }
  for(auto&s:w.structures()){
+  if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.material==1){
    // Faceted containment jacket, with consistent metre-scale panels.
@@ -360,7 +373,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }
    // Containment vessel spans both reactor maps. Luminous coolant channels
    // and heavy external bands make it readable from below and the balcony.
-   for(float x:{11.55f,12.3f})box({x,18.2f,-8.6f},{x+.12f,18.28f,-3.8f},blue,1.8f);
+   for(float x:{11.55f,12.3f})for(float z:{-8.4f,-7.4f,-5.9f,-4.9f})box({x,18.2f,z},{x+.06f,18.28f,z+.65f},blue,1.2f);
    quad({12.4f,18.17f,-5.7f},{11.6f,18.17f,-5.7f},{11.6f,18.17f,-4.9f},{12.4f,18.17f,-4.9f},m_chemicalSign,1.1f);
   }
   else if(s.material==4){
@@ -368,8 +381,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==2?m_panelMetal:s.material==3||(w.level()==3&&s.top-s.bottom>1.5f)?m_pressureWall:m_floor,1.05f);
-  else{if(s.top-s.bottom>1.5f)box({s.x1+.012f,s.y1+.012f,s.bottom+.012f},{s.x2-.012f,s.y2-.012f,s.top-.08f},w.level()==3?m_pressureWall:m_floor,.8f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==2?m_panelMetal:s.material==3||(w.level()==3&&s.top-s.bottom>1.5f)?m_pressureWall:w.level()==3?m_bulkhead:m_floor,1.05f);
+  else{if(s.top-s.bottom>1.5f){
+    if(w.level()==3){
+     // A safety cage must not become an opaque wall around every cab window.
+     box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.bottom+.16f},m_panelMetal,.8f);
+     box({s.x1,s.y1,s.bottom+.92f},{s.x2,s.y2,s.bottom+.96f},m_metal,.9f);
+     float run=std::max(s.x2-s.x1,s.y2-s.y1);int bars=std::max(1,int(run/.4f));
+     for(int i=1;i<=bars;++i){float t=float(i)/(bars+1),x=s.x1+(s.x2-s.x1)*t,y=s.y1+(s.y2-s.y1)*t;
+      box({x-.012f,y-.012f,s.bottom+.16f},{x+.012f,y+.012f,s.top-.07f},m_metal,.85f);}
+    }else box({s.x1+.012f,s.y1+.012f,s.bottom+.012f},{s.x2-.012f,s.y2-.012f,s.top-.08f},m_floor,.8f);
+   }
    box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},m_panelMetal,.95f);
    box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},m_panelMetal,.9f);
    box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},m_panelMetal,.9f);}
@@ -450,13 +472,29 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  quad({9.99f,14.15f,.83f},{9.99f,14.85f,.83f},{9.99f,14.85f,1.05f},{9.99f,14.15f,1.05f},m_serviceSign,1.1f);
  }
  if(w.level()==3){
+  // Boarding deck: freight holding on the west, traction plant on the east.
+  // The central approach is kept clear; equipment is concentrated at cab windows.
+  for(float x:{5.7f,7.1f}){prop(m_crateMesh,m_crateTexture,x,8.1f,.85f,0,1.05f,0);
+   quad({x-.46f,7.52f,.012f},{x+.46f,7.52f,.012f},{x+.46f,7.67f,.012f},{x-.46f,7.67f,.012f},m_hazard,.9f);}
+  prop(m_barrelMesh,m_barrelTexture,6.5f,13.4f,.95f,0,.65f,0);
+  for(float y:{10.55f,11.45f})for(float z:{.13f,.77f})prop(m_crateMesh,m_crateTexture,6.2f,y,.30f,0,.34f,z);
+  // Cable drum on bearing blocks; repeated narrow collars read as wound cable.
+  cylinder({16.1f,11.3f,1.15f},{17.8f,11.3f,1.15f},.42f,m_pressureMetal);
+  for(float x:{16.1f,17.7f})cylinder({x,11.3f,1.15f},{x+.10f,11.3f,1.15f},.56f,m_metal);
+  for(int i=0;i<13;++i){float x=16.3f+i*.10f;cylinder({x,11.3f,1.15f},{x+.035f,11.3f,1.15f},.43f,iron);}
+  for(float x:{16.25f,17.6f}){box({x-.13f,11.05f,0},{x+.13f,11.55f,1.1f},m_pressureMetal,.9f);box({x-.3f,10.8f,0},{x+.3f,11.8f,.12f},m_metal,.9f);}
+  cylinder({16.2f,11.3f,1.55f},{14.9f,11.3f,2.45f},.025f,iron);
+  box({15.1f,9.8f,2.35f},{19.f,10.1f,2.55f},m_panelMetal,.9f);
+  // Ventilation trunk runs into the shaft rather than ending in an empty room.
+  box({4.f,12.4f,2.15f},{8.85f,12.95f,2.55f},m_pressureMetal,.9f);
+  for(float x:{4.2f,6.2f,8.2f})box({x,12.37f,2.12f},{x+.08f,12.98f,2.58f},m_metal,.8f);
   // Theatre-like shaft bays: readable machinery silhouettes within the window
   // sightline, backed by opaque walls instead of distant explorable rooms.
   for(float z:{-3.f,3.f,6.f,9.f}){
    for(float x:{8.16f,15.84f}){
     if(z==3)facility(6,x<12?8.5f:15.5f,11.65f,z+.12f,2.38f,.70f,1.26f,kPi*.5f);
     else if(z==6){for(float y:{10.7f,12.2f,13.7f})facility(8,x,y,z+.55f,.7856f,.136f,1.0656f,kPi*.5f);}
-    else if(z==-3){for(float y:{10.8f,12.f,13.2f})box({x-.08f,y,z+.08f},{x+.08f,y+.18f,z+2.4f},m_pressureMetal,1.f);}
+    else if(z==-3){for(float y:{10.8f,12.f,13.2f}){cylinder({x,y,z+.12f},{x,y,z+2.45f},.12f,m_pressureMetal);for(float h:{.4f,1.9f})cylinder({x,y,z+h},{x,y,z+h+.09f},.18f,m_metal);}}
     else {box({x-.06f,10.2f,z},{x+.06f,13.8f,z+2.35f},m_bulkhead,1.f);}
    }
    // Different color accents and heavy cross-members identify a passing level.
@@ -481,9 +519,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    quad({x,y,z},{x,y+.012f,z},{x,y+.06f,z+.10f+life*.15f},{x,y+.048f,z+.10f+life*.15f},i%3?amber:lamp,1.8f);
   }
   movingGeometry=false;
-  // Equipment labels are real plates, not floating interaction markers.
-  box({5.2f,21.35f,-5.17f},{6.8f,21.41f,-4.62f},m_panelMetal,.9f);
-  quad({6.75f,21.34f,-5.12f},{5.25f,21.34f,-5.12f},{5.25f,21.34f,-4.67f},{6.75f,21.34f,-4.67f},m_diskSign,1.1f);
+  // Purchased instrument cabinets flank the actual interactive computer.
+  for(float x:{17.35f,18.85f})prop(m_consoleMesh,m_consoleTexture,x,19.25f,1.188f,kPi,.626f,-9.f);
+  // Elevated coolant headers connect the west pump bay to the containment jacket.
+  for(float z:{-6.6f,-3.65f}){
+   box({3.8f,21.85f,z},{10.4f,22.03f,z+.18f},m_pressureMetal,.9f);
+   box({10.22f,20.4f,z},{10.4f,22.03f,z+.18f},m_pressureMetal,.9f);
+   for(float x:{4.f,6.f,8.f,10.f})box({x,21.82f,z-.025f},{x+.08f,22.06f,z+.205f},m_metal,1.f);
+  }
   movingGeometry=true;
   float z=w.liftHeight();bool ready=w.liftPhase()==World::LiftPhase::Ready,crashed=w.liftPhase()==World::LiftPhase::Crashed;
   // Modular freight cab: structural frame, recessed kick panels, wide cage
@@ -533,17 +576,27 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  movingGeometry=false;
  for(auto&terminal:w.terminals()){movingGeometry=w.level()==3&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
-  if(terminal.reactorAction){float plate=h+(terminal.reactorAction==1?1.f:1.52f);box({x-.42f,y+.28f,plate-.02f},{x+.42f,y+.33f,plate+.27f},m_panelMetal,1.f);quad({x+.4f,y+.27f,plate},{x-.4f,y+.27f,plate},{x-.4f,y+.27f,plate+.25f},{x+.4f,y+.27f,plate+.25f},terminal.reactorAction==1?m_authSign:terminal.reactorAction==2?m_feedSign:m_returnSign,1.1f);}
   if(terminal.control){
    box({x-.27f,y-.18f,h},{x+.27f,y+.18f,h+.2f},m_panelMetal,.9f);
    facility(8,x,y,h+.2f,.36f,.54f,.75f,kPi*.5f);
   }else if(terminal.reactorAction>=2){
-   box({x-.24f,y-.18f,h},{x+.24f,y+.18f,h+.65f},m_pressureMetal,.95f);
-   facility(8,x,y,h+.65f,.5892f,.102f,.7992f,0);
-   // A round handwheel and pipe riser distinguish local flow controls from PCs.
-   box({x-.065f,y+.12f,h+.2f},{x+.065f,y+.30f,h+1.8f},m_metal,1.f);
-   box({x-.17f,y-.095f,h+1.065f},{x+.17f,y-.075f,h+1.095f},m_metal,1.f);box({x-.015f,y-.095f,h+.91f},{x+.015f,y-.075f,h+1.25f},m_metal,1.f);
-   for(int i=0;i<12;++i){float a=i*kPi/6,b=(i+1)*kPi/6;quad({x+.19f*std::cos(a),y-.09f,h+1.08f+.19f*std::sin(a)},{x+.19f*std::cos(b),y-.09f,h+1.08f+.19f*std::sin(b)},{x+.15f*std::cos(b),y-.09f,h+1.08f+.15f*std::sin(b)},{x+.15f*std::cos(a),y-.09f,h+1.08f+.15f*std::sin(a)},terminal.reactorAction==2?amber:blue,1.1f);}
+   // Mechanical gate valve: pipe, flanges, valve body, projecting stem and wheel.
+   // No electrical switch housing is reused behind the handwheel.
+   cylinder({x,y+.12f,h},{x,y+.12f,h+2.45f},.09f,m_pressureMetal);
+   for(float z:{.12f,.78f,1.38f,2.32f})cylinder({x,y+.12f,h+z},{x,y+.12f,h+z+.08f},.15f,m_metal);
+   cylinder({x,y+.12f,h+.92f},{x,y+.12f,h+1.23f},.17f,m_metal);
+   cylinder({x,y+.12f,h+1.08f},{x,y-.19f,h+1.08f},.045f,m_metal);
+   cylinder({x,y-.17f,h+1.08f},{x,y-.22f,h+1.08f},.07f,m_metal);
+   for(int i=0;i<12;++i){float a=i*kPi/6,b=(i+1)*kPi/6;
+    auto point=[&](float angle,float radius,float depth){return Point3{x+radius*std::cos(angle),y+depth,h+1.08f+radius*std::sin(angle)};};
+    quad(point(a,.23f,-.23f),point(b,.23f,-.23f),point(b,.19f,-.23f),point(a,.19f,-.23f),m_metal,1.f);
+    quad(point(a,.19f,-.19f),point(b,.19f,-.19f),point(b,.23f,-.19f),point(a,.23f,-.19f),m_metal,1.f);
+    quad(point(a,.23f,-.19f),point(b,.23f,-.19f),point(b,.23f,-.23f),point(a,.23f,-.23f),m_metal,.9f);
+    if(i%3==0)cylinder({x,y-.21f,h+1.08f},point(a,.20f,-.21f),.014f,m_metal);
+   }
+   // Small identification tag clamped to the pipe, below the mechanical assembly.
+   box({x-.16f,y-.005f,h+.46f},{x+.16f,y+.02f,h+.60f},m_panelMetal,.9f);
+   quad({x+.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.59f},{x+.15f,y-.01f,h+.59f},terminal.reactorAction==2?m_feedSign:m_returnSign,1.f);
   }else{
    // Personnel records belong on a computer, visually distinct from switchgear.
    box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);

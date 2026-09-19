@@ -66,7 +66,6 @@ public:
     static constexpr float ReactorDiskZ=-5.39f;
     bool takeReactorDisk();
     void useReactorTerminal(int action);
-    const char* reactorObjective()const;
 
     char tile(int x, int y) const;
     bool solid(float x, float y) const;

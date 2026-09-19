@@ -90,7 +90,7 @@ const char* Game::interactionHint()const{
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  int door=m_world.nearbyDoor(m_player.pos,forward,m_player.z);
  if(door>=0){auto&d=m_world.doors()[door];if(d.transfer&&(enemiesRemaining()>0||(m_level>=2&&!m_world.controlReleased())))return "TRANSFER INTERLOCK / LOCKED";return d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
- if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.reactorAction)return t.reactorAction==1?"E / ACCESS COMPUTER / DRIVE A:":t.reactorAction==2?"E / PRIME 01 FEED":"E / OPEN 02 RETURN";return t.control?(m_level==3?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
+ if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.reactorAction)return t.reactorAction==1?"E / USE COMPUTER":"E / OPERATE VALVE";return t.control?(m_level==3?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
  return nearbyClutter()>=0?"E / LIFT":nullptr;
 }
 void Game::updateInteraction(const InputState& input,float dt){

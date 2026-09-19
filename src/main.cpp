@@ -20,6 +20,16 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         for(float seconds:{0.f,9.f,17.f,25.f,29.f,35.f,38.7f,39.6f,42.f,48.f}){auto scene=retro::Game::liftInspection(seconds,8);renderer.render(scene);std::ofstream out("shaft-"+std::to_string(index++)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
         return 0;
     }
+    if(std::wcsstr(commandLine,L"--plant-inspection")){
+        retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
+        auto save=[&](const char* name,const retro::Game& scene){renderer.render(scene);std::ofstream out(name,std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
+        save("plant-feed.ppm",retro::Game::mapInspection({6.3f,16.95f},retro::kPi*.5f,5,3,false,-9,true));
+        save("plant-return.ppm",retro::Game::liftInspection(48,7));
+        save("plant-arrival.ppm",retro::Game::mapInspection({10.2f,6.8f},1.2f,0,3,false,0,true));
+        save("plant-freight.ppm",retro::Game::mapInspection({8.3f,9.5f},2.4f,0,3,false,0,true));
+        save("plant-winch.ppm",retro::Game::mapInspection({15.3f,9.4f},.7f,0,3,false,0,true));
+        save("plant-cab.ppm",retro::Game::liftInspection(0,8));return 0;
+    }
     if(std::wcsstr(commandLine,L"--repair-inspection")){
         retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
         auto save=[&](const char* name,const retro::Game& scene){renderer.render(scene);std::ofstream out(name,std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};

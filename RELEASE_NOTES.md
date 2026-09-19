@@ -1,55 +1,24 @@
-# RawMetal v0.3.0 — Reactor Puzzle, Save Slots & Staged Lift
+# RawMetal v0.3.1 — Lift Plant & Mechanical Valves
 
-## Playable changes
+## What changed
 
-- Expanded reactor service bays with pumps, compressor, generator, shelving,
-  switchgear and a computer with a floppy drive.
-- Find the upper maintenance authorization disk, insert it at the lower
-  computer, prime FEED, open upper RETURN, then confirm bulkhead authorization.
-- Esc now offers Save Game and Load Game submenus with three slots, confirmation
-  prompts and corruption checks. Saves retain all map progress, inventory,
-  enemies, doors, the lift and the reactor puzzle.
-- Saves live in `%LOCALAPPDATA%\RawMetal\saves`. Loading preserves local settings.
+- Reactor valves now have cylindrical pipe risers, flanges, valve bodies, projecting stems and solid metal handwheels. Removed the electrical switch cabinets behind them.
+- Fixed opaque concrete panels around the boarding cage. Open steel bars reveal the lift plant while retaining fall protection.
+- Added a freight holding area with crates, stocked shelving and a drum; a traction bay with a cable winch, bearing blocks, generator and backed electrical cabinets; and ventilation ductwork. Equipment is concentrated near cab sightlines, with matching collision and a clear boarding route.
+- Passing coolant bays now have cylindrical risers and flanges. Upper floors remain compact scenery rather than full maps.
+- Includes the reactor art pass: removed computer/disk instruction boards and the persistent puzzle walkthrough, opened the containment sightline, replaced the thin-post grid, improved floor materials, and added PSX Tech instrument cabinets.
+- Puzzle order, save slots, developer console and the interrupted ascent/cable-snap sequence are retained.
 
-## Lift staging and visual repairs
+## Verification and limitations
 
-- Approximately 47-second lift sequence: interrupted ascent, blackout, creaking,
-  cable failure, a temporary brake catch and a second fall into the reactor.
-- Four passing shaft storeys are compact scenic machinery bays instead of full
-  maps: 28 deck tiles each rather than 448. Boarding and reactor rooms remain
-  playable, with proper ceilings.
-- Close guide rails, height markers, sparks and a loose cable provide motion cues.
-  Free look is retained; effects pause and restore with the saved lift state.
-- Fixed duplicate wall/rail surfaces causing z-fighting, stair materials,
-  texture stretching, lamp mounting and the formerly floating dispatch sign.
-  The sign is now mounted on the header, leaving the window clear.
+Player-height Vulkan captures were reviewed from both valve stations, the boarding approach, freight area, winch bay and inside the cab. Lift traversal and fall protection, reactor puzzle, save/load, audio, console, hardware tests, and software/Vulkan smoke suites pass. Vulkan synchronization validation reports no errors.
 
-## Rendering and verification
-
-Vulkan remains the default at full 640x360 internal resolution, with software
-fallback available via `--software`. Windows x64 remains the supported platform.
-
-Two consecutive local 1,560-frame benchmark runs passed the 50 ms budget.
-In the repeat run, lift/reactor scenes averaged approximately 92–106 FPS;
-their worst measured frame was 14.45 ms (69 FPS). All six culling/reference
-comparisons matched exactly. Measurements include simulation, audio control,
-rendering and GPU readback, but exclude startup and OS window presentation.
-These are local Intel Graphics results, not a universal minimum-FPS guarantee.
-Earlier revisions exhibited intermittent hitches; those reports are retained.
-
-Full software and Vulkan smoke suites, lift/route, reactor puzzle, save/load,
-audio, console and hardware-rendering tests passed. Vulkan synchronization
-validation logged no errors. Save tests include mid-fall restoration, invalid
-files, cancelled overwrites and preservation of the old slot after write failure.
+Vulkan remains the default at full 640x360 internal resolution. In the 1,560-frame local Intel Graphics benchmark, lift/reactor scenes averaged 53–58 FPS and all six culling/reference comparisons matched exactly. However, three ride frames exceeded 50 ms, with a worst frame of 184 ms: the strict minimum-20-FPS test fails. Intermittent elevator hitches remain a known issue. Measurements exclude startup and OS window presentation; no universal minimum-FPS guarantee is claimed.
 
 ## Download
 
-Download `RawMetal.zip`, extract it, and run `RawMetal.exe`. The ZIP contains
-the same standalone executable offered separately; assets and shaders are
-embedded. A Vulkan-capable graphics driver is sufficient; the SDK is not needed.
+Download `RawMetal.zip`, extract it, and run `RawMetal.exe`. The separately offered EXE is identical to the one in the ZIP. Assets and shaders are embedded; a Vulkan-capable driver is sufficient and the Vulkan SDK is not needed to play. Windows x64 is supported; `--software` enables the fallback renderer.
 
-Press backtick and enter `map lift` to try the full sequence, or `map reactor`
-to jump to the puzzle. Developer map commands start fresh. Use Esc to save/load.
+Press backtick and enter `map lift` for the full sequence, or `map reactor` for the reactor. Developer map commands start fresh. Esc provides Save Game and Load Game; saves live in `%LOCALAPPDATA%\RawMetal\saves`.
 
-Source builds use Visual Studio 2022 C++ tools, CMake and the Vulkan SDK with
-`glslc`; run `Build.cmd`.
+Source builds use Visual Studio 2022 C++ tools, CMake and the Vulkan SDK with `glslc`; run `Build.cmd`.

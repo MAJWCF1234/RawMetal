@@ -1,29 +1,24 @@
 #include "Game.h"
 #include <fstream>
 namespace retro {
-const char* World::reactorObjective()const{
- switch(m_reactorStage){
-  case ReactorStage::NoDisk:return "FIND AUTH DISK / UPPER MAINTENANCE";
-  case ReactorStage::DiskHeld:return "INSERT DISK / LOWER CONTROL DESK";
-  case ReactorStage::DiskLoaded:return "PRIME 01 FEED / LOWER PUMP BAY";
-  case ReactorStage::FeedPrimed:return "OPEN 02 RETURN / UPPER MANIFOLD";
-  case ReactorStage::ReturnPrimed:return "CONFIRM RELEASE / CONTROL DESK";
-  case ReactorStage::Released:return "CONTAINMENT RELEASE AUTHORIZED";
- }return "";
-}
 void World::refreshReactorTerminals(){
  for(auto&t:m_terminals){
-  if(t.reactorAction==1){t.title="REACTOR ACCESS / FLOPPY DRIVE A:";
+  if(t.reactorAction==1){t.title="R-03 / CONTAINMENT CONTROL";
    switch(m_reactorStage){
-    case ReactorStage::NoDisk:t.line1="NO BOOT DISK. BULKHEAD FAIL-SAFE LOCKED.";t.line2="AUTH DISK: UPPER MAINTENANCE WORKBENCH.";break;
-    case ReactorStage::DiskHeld:t.line1="AUTH DISK AVAILABLE. E TO INSERT.";t.line2="COOLANT INTERLOCK REQUIRES LOCAL RESET.";break;
-    case ReactorStage::DiskLoaded:t.line1=m_reactorFault?"FLOW FAULT: FEED MUST PRECEDE RETURN.":"DISK ACCEPTED. FIRST PRIME 01 / FEED.";t.line2="LOWER PUMP BAY. THEN 02 / UPPER RETURN.";break;
-    case ReactorStage::FeedPrimed:t.line1="FEED PRESSURIZED. OPEN 02 / RETURN.";t.line2="UPPER MANIFOLD. THEN CONFIRM HERE.";break;
-    case ReactorStage::ReturnPrimed:t.line1="FLOW STABLE. E TO AUTHORIZE BULKHEAD.";t.line2="ENSURE CONTAINMENT AREA IS CLEAR.";break;
-    case ReactorStage::Released:t.line1="AUTHORIZATION WRITTEN. INTERLOCK READY.";t.line2="CLEAR HOSTILES. OPEN LOWER BULKHEAD.";break;
+    case ReactorStage::NoDisk:t.line1="DRIVE A: NOT READY.";t.line2="CONTAINMENT INTERLOCK: FAIL-SAFE.";break;
+    case ReactorStage::DiskHeld:t.line1="REMOVABLE MEDIA DETECTED.";t.line2="DRIVE A: STANDBY.";break;
+    case ReactorStage::DiskLoaded:t.line1=m_reactorFault?"RETURN TRIP / INLET PRESSURE LOW.":"SERVICE SESSION ACTIVE.";t.line2="FEED: 0 BAR. RETURN: ISOLATED.";break;
+    case ReactorStage::FeedPrimed:t.line1="FEED: 4.2 BAR. RETURN: ISOLATED.";t.line2="CONTAINMENT INTERLOCK: NO CIRCULATION.";break;
+    case ReactorStage::ReturnPrimed:t.line1="COOLANT CIRCULATION: NOMINAL.";t.line2="E / ACKNOWLEDGE INTERLOCK RESET.";break;
+    case ReactorStage::Released:t.line1="INTERLOCK RESET ACCEPTED.";t.line2="BULKHEAD: LOCAL CONTROL ENABLED.";break;
    }
-  }else if(t.reactorAction==2){t.line1=m_reactorStage<ReactorStage::DiskLoaded?"LOCAL CONTROL LOCKED. BOOT DRIVE A:.":m_reactorStage>=ReactorStage::FeedPrimed?"FEED LINE PRESSURIZED.":"PRIME FEED BEFORE OPENING RETURN.";t.line2="RETURN VALVE IS ON THE UPPER MANIFOLD.";
-  }else if(t.reactorAction==3){t.line1=m_reactorStage<ReactorStage::DiskLoaded?"LOCAL CONTROL LOCKED. BOOT DRIVE A:.":m_reactorFault?"SEQUENCE FAULT. PRIME FEED FIRST.":m_reactorStage>=ReactorStage::ReturnPrimed?"RETURN FLOW STABLE.":"FEED PRESSURE REQUIRED BEFORE RETURN.";t.line2="AFTER RESET: CONFIRM AT LOWER COMPUTER.";}
+  }else if(t.reactorAction==2){
+   t.line1=m_reactorStage<ReactorStage::DiskLoaded?"REMOTE SERVICE LOCK.":m_reactorStage>=ReactorStage::FeedPrimed?"INLET PRESSURE: 4.2 BAR.":"INLET PRESSURE: 0 BAR.";
+   t.line2="P-01 / PRIMARY COOLANT FEED.";
+  }else if(t.reactorAction==3){
+   t.line1=m_reactorStage<ReactorStage::DiskLoaded?"REMOTE SERVICE LOCK.":m_reactorFault?"TRIPPED: INLET PRESSURE LOW.":m_reactorStage>=ReactorStage::ReturnPrimed?"RETURN FLOW: NOMINAL.":"RETURN FLOW: ISOLATED.";
+   t.line2="P-02 / PRIMARY COOLANT RETURN.";
+  }
  }
 }
 bool World::takeReactorDisk(){
@@ -69,6 +64,8 @@ bool Game::testReactor(){
  game.storeChunk();game.m_chunks[3].world.unloadGeometry();game.m_chunks[3].resident=false;game.ensureChunk(3);
  if(!check(game.m_chunks[3].world.reactorStage()==World::ReactorStage::Released,"Puzzle persists across geometry reload"))return false;
  World world(3);if(!check(world.fits(3.6f,21.8f,-9,1)&&!world.fits(3.6f,21.8f,-6,1),"Upper equipment does not block the lower floor"))return false;
+ if(!check(!world.fits(17.35f,19.25f,-9,1)&&world.fits(18.1f,17.9f,-9,1),"Instrument cabinets collide but computer approach stays clear"))return false;
+ if(!check(world.rayClear({12,16.5f},-5.8f,{12,17.5f},-8.5f),"Upper opening exposes the lower containment hall"))return false;
  for(auto&light:world.lights())if(&light!=&world.lights().back()){bool mounted=false;for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f})mounted|=std::fabs(light.z+.15f-world.clearanceAbove(light.position.x,light.position.y,z))<.005f;if(!check(mounted,"Fixed light has a supporting ceiling"))return false;}
  game.restart();return check(game.world().reactorStage()==World::ReactorStage::NoDisk&&!game.world().controlReleased(),"Restart resets puzzle and disk");
 }

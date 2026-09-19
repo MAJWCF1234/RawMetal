@@ -44,7 +44,7 @@ bool SoftwareRenderer::enableHardware(){
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>();
   for(const auto*texture:{&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
   m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
@@ -53,6 +53,7 @@ bool SoftwareRenderer::enableHardware(){
 SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
  for(int i=0;i<15;++i)m_facilityTextures.emplace(materialNames[i],loadTexture(172+i));
+ m_consoleTexture=loadTexture(241);
  m_facilityTextures.emplace("pc_1",loadTexture(192));m_facilityTextures.emplace("keyboard_1",loadTexture(193));
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
  m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);
@@ -73,8 +74,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_controlSign=makeSign("CONTROL GALLERY","SWITCHGEAR",0xffa7a766u);m_surfaceSign=makeSign("SURFACE LIFT","EXTRACTION",0xffa7a766u);m_gantrySign=makeSign("TURBINE GANTRY","TRANSFER / 03",0xffa7a766u);
  m_reactorSign=makeSign("REACTOR CORE","CONTAINMENT BREACH",0xffbf583eu);
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
- m_feedSign=makeSign("01 / FEED","PRIME BEFORE RETURN",0xffd7ac64u);m_returnSign=makeSign("02 / RETURN","FEED PRESSURE REQUIRED",0xff53aec4u);
- m_diskSign=makeSign("MAINTENANCE","AUTH DISK / DRIVE A",0xffd7ac64u);m_authSign=makeSign("BULKHEAD CONTROL","INSERT AUTH DISK",0xff53aec4u);
+ m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
+ m_diskSign=makeSign("MAINTENANCE","SERVICE BENCH",0xffd7ac64u);m_authSign=makeSign("CONTROL","R-03",0xff53aec4u);
 }
 SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
  Texture sign{256,80,std::vector<std::uint32_t>(256*80)};
@@ -155,7 +156,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  const int sector=int(p.pos.y)/8;
  wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
  text(19,14,game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
- if(game.level()==3)text(19,32,game.world().liftPhase()==World::LiftPhase::Crashed?game.world().reactorObjective():game.world().liftStatus(),amber);
+ if(game.level()==3&&game.world().liftPhase()!=World::LiftPhase::Crashed)text(19,32,game.world().liftStatus(),amber);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
  // Compact map reveals nearby contacts and a fixed extraction marker.
  const int mx=m_width-57,my=8;
