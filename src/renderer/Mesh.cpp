@@ -23,6 +23,13 @@ Mesh::Mesh(int id,const char* nodeFilter):m_materialParts(id>=163&&id<200),m_nod
  std::ostringstream info;info<<id<<": "<<triangles.size()<<" triangles; bounds "<<minimum.x<<","<<minimum.y<<","<<minimum.z<<" to "<<maximum.x<<","<<maximum.y<<","<<maximum.z<<"\n";
  for(auto node:m_scene->nodes)if(node->bone){++bones;info<<" bone "<<node->name.data<<" at "<<node->node_to_world.m03<<","<<node->node_to_world.m13<<","<<node->node_to_world.m23<<"\n";}
  description=info.str();if(triangles.empty())throw std::runtime_error("Mesh has no triangles");
+ if(id==242){m_creatureFrames=loadResource(244);uint32_t vertices=0,clips=0;
+  if(m_creatureFrames.size()<20||std::memcmp(m_creatureFrames.data(),"RMA2",4))throw std::runtime_error("Invalid creature animation");
+  std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&m_creatureSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
+  std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);
+  if(vertices!=triangles.size()*3||m_creatureSamples<2||m_creatureSamples>128||clips!=5||m_creatureVertices==0||m_creatureVertices>65535||m_creatureFrames.size()!=20+size_t(vertices)*2+size_t(m_creatureVertices)*6*m_creatureSamples*clips)throw std::runtime_error("Creature animation topology mismatch");
+  for(size_t i=0;i<vertices;++i){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+i*2,2);if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");}
+ }
  for(auto n:m_scene->nodes)if(n->mesh){description+=" mesh "+std::string(n->name.data)+" triangles "+std::to_string(n->mesh->num_triangles)+"\n";for(auto mat:n->materials)description+=" material "+std::string(mat->name.data)+"\n";}
  description+="Animation stacks: "+std::to_string(m_scene->anim_stacks.count)+"\n";
  for(auto stack:m_scene->anim_stacks)description+=std::string(stack->name.data)+"\n";
@@ -40,6 +47,14 @@ Mesh::Mesh(int id,const char* nodeFilter):m_materialParts(id>=163&&id<200),m_nod
  }
 }
 Mesh::~Mesh(){ufbx_free_scene(m_scene);ufbx_free_scene(m_bindScene);}
+void Mesh::poseCreature(int clip,float phase){
+ if(m_creatureFrames.empty()||clip<0||clip>=5)throw std::runtime_error("Missing creature clip");
+ float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
+ size_t stride=size_t(m_creatureVertices)*6,base=20+triangles.size()*6+size_t(clip)*m_creatureSamples*stride;
+ std::vector<Point3> posed(m_creatureVertices);
+ for(size_t i=0;i<posed.size();++i){float xyz[3];for(int axis=0;axis<3;++axis){size_t offset=i*6+axis*2;int16_t x,y;std::memcpy(&x,m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,m_creatureFrames.data()+base+b*stride+offset,2);xyz[axis]=(x+(y-x)*blend)*.001f;}posed[i]={xyz[0],xyz[1],xyz[2]};}
+ for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+(t*3+v)*2,2);triangles[t].v[v].p=posed[index];}
+}
 Point3 Mesh::bonePosition(const char* name)const{auto n=ufbx_find_node(m_scene,name);if(!n)return {};return {float(n->node_to_world.m03),float(n->node_to_world.m13),float(n->node_to_world.m23)};}
 void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw){
  auto add=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.x+b.x,a.y+b.y,a.z+b.z};};

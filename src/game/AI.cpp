@@ -28,7 +28,7 @@ void Game::updateEnemies(float dt){
  for(auto&e:m_enemies){
   float support=groundHeight(e.pos,e.z+.01f);
   if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}
-  if(!e.alive)continue;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*4);e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*5);
+  if(!e.alive)continue;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(e.kind==Enemy::Kind::Warden?1.f/.45f:4.f));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*5);
   auto to=m_player.pos-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   bool visible=dist<11&&(dist<2.5f||dot(normalized(to),facing)>-.25f)&&m_world.rayClear(e.pos,e.z+.7f,m_player.pos,m_player.z+m_player.eye);
   float soundDistance=std::sqrt(dist*dist+(m_player.z-e.z)*(m_player.z-e.z));
@@ -39,16 +39,15 @@ void Game::updateEnemies(float dt){
   e.voiceTimer-=dt;e.stepTimer-=dt;
   if(e.awareness>0&&e.voiceTimer<=0){enemySound(e,0,.65f);e.voiceTimer=6.f+float(int(e.home.x)%4);}
   bool warden=e.kind==Enemy::Kind::Warden;
-  float range=warden?7.f:e.kind==Enemy::Kind::Brute?1.25f:1.05f;
+  float range=warden?1.1f:e.kind==Enemy::Kind::Brute?1.25f:1.05f;
   bool sameLevel=m_player.z<e.bodyTop()&&m_player.z+m_player.hullHeight()>e.bodyBottom();
-  if(e.windup>0){if(!warden&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=warden?2.4f:e.kind==Enemy::Kind::Wasp?.8f:e.kind==Enemy::Kind::Huntsman?1.f:1.6f;
-    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.995f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,m_player.pos,m_player.z+.5f))receiveDamage(warden?16.f:e.kind==Enemy::Kind::Brute?18.f:9.f,e.pos);
+  if(e.windup>0){if(!warden&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=warden?1.3f:e.kind==Enemy::Kind::Wasp?.8f:e.kind==Enemy::Kind::Huntsman?1.f:1.6f;
+    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,m_player.pos,m_player.z+.5f))receiveDamage(warden?16.f:e.kind==Enemy::Kind::Brute?18.f:9.f,e.pos);
    }continue;
   }
-  // Warden commits its aim at the start of a long, audible charge. Cover
-  // and lateral dodges remain effective through the entire attack.
+  // Close-range committed swing: the player can backstep or circle behind it.
   if(warden&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){
-   e.heading=std::atan2(to.y,to.x);e.windup=1.1f;enemySound(e,1,.9f);continue;
+   e.heading=std::atan2(to.y,to.x);e.windup=.55f;enemySound(e,1,.9f);continue;
   }
   Vec2 goal=e.awareness>0?e.lastKnown:e.home;
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
@@ -78,10 +77,10 @@ void Game::updateEnemies(float dt){
   }
   Vec2 direction=normalized(destination-e.pos);
   if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
-  if(warden&&visible&&direct&&dist<5.f){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*(dist<2.5f?-1.f:0.f)+Vec2{-direction.y,direction.x}*side);}
+  if(warden&&visible&&direct&&dist>1.3f&&dist<3.f){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction+Vec2{-direction.y,direction.x}*side*.25f);}
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
   direction=normalized(direction+separation*2.f);
-  float speed=e.kind==Enemy::Kind::Wasp?1.85f:e.kind==Enemy::Kind::Brute?.75f:1.4f;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
+  float speed=warden?1.65f:e.kind==Enemy::Kind::Wasp?1.85f:e.kind==Enemy::Kind::Brute?.75f:1.4f;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
   auto old=e.pos;
   auto move=[&](Vec2 next){float step=e.kind==Enemy::Kind::Huntsman?.65f:.215f;float ground=groundHeight(next,e.z+step),height=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
    float feet=std::max(e.z,ground);if(ground-e.z<=step+.01f&&hullFits(next,feet,height)){e.pos=next;if(ground>e.z){e.z=ground;e.verticalVelocity=0;}}
@@ -99,17 +98,19 @@ bool Game::testAI(){
   alone.updateEnemies(.01f);stacked.updateEnemies(.01f);
   if(length(alone.m_enemies[0].pos-stacked.m_enemies[0].pos)>.00001f)return false;
  }
- // The ranged attack must hit a stationary exposed player, miss a lateral
- // dodge after aim-lock, and never damage through intervening architecture.
+ // Contact-only damage, backstep dodge, and closing door canceling a swing.
  for(int scenario=0;scenario<3;++scenario){auto g=validationScene(Enemy::Kind::Warden);auto& w=g.m_enemies[0];
-  w.pos={7.5f,4.5f};w.home=w.pos;g.m_player.pos={5.f,4.5f};w.heading=kPi;
-  if(scenario==2){w.pos={4.5f,9.5f};w.home=w.pos;g.m_player.pos={4.5f,6.5f};w.heading=-kPi*.5f;g.m_world.setDoor(0,1,true);}
+  w.pos={7.5f,4.5f};w.home=w.pos;g.m_player.pos={6.6f,4.5f};w.heading=kPi;
+  if(scenario==2){w.pos={4.5f,8.95f};w.home=w.pos;g.m_player.pos={4.5f,7.95f};w.heading=-kPi*.5f;g.m_world.setDoor(0,1,true);}
   g.updateEnemies(.01f);if(w.windup<=0)return false;
   if(scenario==1)g.m_player.pos={5.f,5.5f};
   if(scenario==2)g.m_world.setDoor(0,0,false);
-  for(int tick=0;tick<135;++tick)g.updateEnemies(1.f/120.f);
+  for(int tick=0;tick<70;++tick)g.updateEnemies(1.f/120.f);
   debug<<"warden scenario "<<scenario<<" health "<<g.player().health<<'\n';
   if((scenario==0&&g.player().health>=100)||(scenario!=0&&g.player().health!=100))return false;
+ }
+ {auto g=validationScene(Enemy::Kind::Warden);auto& e=g.m_enemies[0];e.pos={7.5f,4.5f};g.m_player.pos={4.5f,4.5f};e.heading=kPi;
+  for(int i=0;i<120;++i){e.pos={7.5f,4.5f};g.updateEnemies(1.f/120.f);if(e.windup>0||g.player().health!=100)return false;}
  }
  auto game=validationScene(Enemy::Kind::Huntsman);auto&e=game.m_enemies[0];e.pos={4.5f,9.5f};e.home=e.pos;e.lastKnown=e.pos;e.heading=-kPi*.5f;game.m_player.pos={4.5f,6.5f};auto original=e.pos;
  for(int i=0;i<120;++i)game.update({},1.f/120.f);debug<<"idle "<<int(e.state)<<' '<<length(e.pos-original)<<'\n';if(e.state!=Enemy::State::Idle||length(e.pos-original)>.05f)return false;

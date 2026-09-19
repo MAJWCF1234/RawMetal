@@ -127,7 +127,8 @@
 233 RCDATA "assets/audio/junk-soft.wav"
 240 RCDATA "assets/reactor/control-panel.obj"
 241 RCDATA "assets/reactor/electronics.png"
-242 RCDATA "assets/reactor/warden.obj"
-243 RCDATA "assets/reactor/warden.png"
+242 RCDATA "assets/reactor/stalker.obj"
+243 RCDATA "assets/reactor/stalker.png"
+244 RCDATA "assets/reactor/stalker-animation.bin"
 
 

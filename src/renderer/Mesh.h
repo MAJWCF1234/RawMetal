@@ -19,7 +19,8 @@ public:
  Mesh(const Mesh&)=delete;
  Mesh& operator=(const Mesh&)=delete;
  void pose(float phase,float recoil);
- bool poseAction(const char* action,float phase);
+    bool poseAction(const char* action,float phase);
+    void poseCreature(int clip,float phase);
  void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil);
  Point3 bonePosition(const char* name)const;
  std::vector<MeshTriangle> triangles;
@@ -29,6 +30,8 @@ public:
  std::string description;
  std::vector<std::string> materialNames;
 private:
+ std::vector<unsigned char> m_creatureFrames;
+ uint32_t m_creatureSamples=0,m_creatureVertices=0;
  struct CachedTriangle {uint32_t node;std::array<uint32_t,3> corners;MeshTriangle prototype;};
  struct CachedRing {uint32_t node;std::vector<uint32_t> corners;};
  std::vector<CachedTriangle> m_cachedTriangles;

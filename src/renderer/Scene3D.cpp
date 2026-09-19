@@ -618,6 +618,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   bool wasp=e.kind==Enemy::Kind::Wasp,warden=e.kind==Enemy::Kind::Warden,brute=e.kind==Enemy::Kind::Brute||warden;
   auto&mesh=warden?m_wardenMesh:wasp?m_waspMesh:brute?m_bruteMesh:m_enemyMesh;
   auto&texture=warden?m_wardenTexture:wasp?m_waspTexture:brute?m_bruteTexture:m_enemyTexture;
+  if(warden){int clip=0;float phase=std::fmod(game.elapsed()/2.5f+e.home.x*.1f,1.f);
+   if(!e.alive){clip=4;phase=std::min(1.f,e.deathTime/1.15f);}
+   else if(e.windup>0){clip=2;phase=(1-std::clamp(e.windup/.55f,0.f,1.f))*.4f;}
+   else if(e.strike>0){clip=2;phase=.4f+(1-e.strike)*.6f;}
+   else if(e.painFlash>0){clip=3;phase=1-e.painFlash;}
+   else if(e.moving){clip=1;phase=std::fmod(e.gait/(2*kPi),1.f);}
+   mesh.poseCreature(clip,phase);
+  }
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   float scale=warden?1.8f/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z});
   float angle=e.heading,collapse=e.alive?0.f:std::min(1.f,e.deathTime/.65f);
@@ -625,10 +633,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float wind=e.windup>0?std::sin(e.windup*5.f)*.12f:0;
   for(auto face:mesh.triangles){
    for(auto&v:face.v){Point3 p=(v.p-center)*scale;
-    if(warden){float x=p.x;p.x=p.z;p.z=-x;}
     float localY=p.z;
     float height=p.y+range.y*scale*.5f;
-    if(e.alive){
+    if(e.alive&&!warden){
      if(wasp){height+=.60f+.065f*std::sin(game.elapsed()*4.f+e.pos.x);if(face.part==1)height+=std::sin(game.elapsed()*36.f)*std::fabs(p.x)*.9f;}
      else if(brute){float sway=e.moving?std::sin(e.gait)*.07f:0;p.x+=sway*height;height+=std::fabs(sway)*.18f;}
      else if(std::fabs(p.x)>.21f){
@@ -639,24 +646,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
      }
      height+=wind*(1-std::min(1.f,std::fabs(p.x)));localY+=e.strike*.22f;
      localY-=e.painFlash*.035f;
-    }else{height*=1-.88f*collapse;p.x+=std::sin(collapse*3.14f)*.1f*(p.x<0?-1.f:1.f);}
+    }else if(!e.alive&&!warden){height*=1-.88f*collapse;p.x+=std::sin(collapse*3.14f)*.1f*(p.x<0?-1.f:1.f);}
     p.x*=shrink;localY*=shrink;height*=shrink;
     v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
    }
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+e.painFlash*.22f;
-   if(warden&&e.windup>0)light+=.45f*(.5f+.5f*std::sin(game.elapsed()*25));
    tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:texture,e.alive?light:.65f);
   }
   objectLighting=false;
-  if(warden&&e.alive&&(e.windup>0||e.strike>.7f)){
-   Vec2 forward{std::cos(e.heading),std::sin(e.heading)},side{-forward.y*.025f,forward.x*.025f};
-   // A short segmented aiming stripe is depth-tested and stops at cover.
-   for(float d=.4f;d<7.f;d+=.2f){auto a=e.pos+forward*d,b=e.pos+forward*(d+.18f);
-    if(!w.rayClear(e.pos,e.z+.6f,b,e.z+.6f))break;
-    float h=e.z+.04f;quad({a.x+side.x,a.y+side.y,h},{b.x+side.x,b.y+side.y,h},{b.x-side.x,b.y-side.y,h},{a.x-side.x,a.y-side.y,h},m_redPaint,1.4f);
-   }
-  }
  }
  // Recognizable authored supplies, with their original UVs and world depth.
  for(auto&p:game.pickups())if(p.active){

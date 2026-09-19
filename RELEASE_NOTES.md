@@ -1,25 +1,27 @@
-# RawMetal v0.3.4 — Movement & Reactor Warden
+# RawMetal v0.3.5 — Animated Melee Stalker
 
 ## Changes
 
-- Player contact resolution reaches the wall instead of losing a whole movement step; unobstructed wall-axis motion is retained. Descending steps stay grounded. Reduced airborne steering preserves launch momentum. Existing jump buffering, coyote time, crouch clearance and duck-jumps remain supported.
-- Thrown clutter retains tangential velocity on wall impacts instead of reversing both horizontal axes. Ceiling contacts clamp to the available clearance.
-- New reactor-only Warden using the supplied Criaturas1 W2 creature (738 triangles) and texture. It locks aim for a 1.1-second audiovisual charge, fires a narrow dodgeable strike, respects cover and repositions between attacks. Existing brute sounds are reused at a lower pitch.
-- Bugs no longer separate from creatures on other floors or mistake reloading for a shot. Blocked movement falls back to cached routing without rebuilding a path every frame.
-- R reloads the six-round shotgun tube; mouse wheel up selects shotgun and down selects fists. Restart moved to the Esc menu with confirmation. HUD distinguishes loaded shells from reserve.
-- Save format 3 supports the Warden and reads version 1/2 saves. Old saves retain their original enemy populations; start a fresh reactor map to encounter the new creature.
-- Fixed an unbounded audio/combat regression test after the reload change.
+- Replaced the antlered Warden with a different masked horror creature from the supplied PSX character library (Character_Monster_03, 1,386 triangles).
+- Added articulated idle, walk, melee swing, hit reaction and death animation. Five Quaternius clips are retargeted onto the creature's skeleton, skinned offline and stored as compact shared-vertex samples with runtime interpolation.
+- Corrected source/rest-mesh orientation, exact clip-name matching and ground alignment. Damage occurs at the melee animation's reach peak.
+- Removed the ranged strike, targeting stripe and glowing charge. The Stalker must approach to melee distance; its committed windup can be dodged, and walls/closed doors block damage.
+- Existing save enemy kind 3 now loads the melee Stalker. No save-format change or fresh save is required. Prior movement, physics, reload, weapon-wheel and menu changes are retained.
 
-## Verification and limitations
+## Verification
 
-Targeted movement/AI/clutter tests, save/load and controls tests, and full Vulkan and software smoke suites pass. Tests cover 30/60/120 Hz movement consistency, wall sliding, glancing clutter impacts, stacked-floor separation, stationary/dodging/covered Warden targets, bug pursuit and stairs. Vulkan images were inspected in a controlled scene and the reactor.
+The targeted Stalker test checks that all five clips deform the mesh (not just translate it), remain finite and stay above the floor. It also checks melee contact, backstep dodges, door blocking and no attack at three units. Twenty-five reactor pose captures cover the clips.
 
-Local Intel Graphics benchmark, 640x360: reactor active AI averaged 17.06 ms/frame (58.6 FPS), with a 28.12 ms worst frame (35.6 FPS); update time peaked at 0.39 ms. The balcony averaged 16.69 ms. All six culling/reference comparisons matched. These measurements exclude startup and OS presentation. Elevator rendering hitches still fail the strict 50 ms minimum-frame-rate budget; no universal 20 FPS minimum is claimed.
+Full Vulkan/software smoke tests, save/load, physics/AI and Vulkan checks passed. The binary stays below the 19,800,000-byte limit.
 
-This improves the movement foundation for future parkour levels; it does not add vaulting or wall-running. Physics remain a lightweight game controller and clutter simulation, not a full rigid-body engine.
+The final 1,560-frame Intel Graphics benchmark passed the 50 ms update/audio/render budget at 640x360. Reactor active AI averaged 17.30 ms (57.8 FPS), with a worst measured frame of 21.59 ms (46.3 FPS); all six culling/reference comparisons matched. Startup and OS presentation are excluded.
+
+## Known limitations
+
+Earlier benchmarks showed intermittent elevator rendering hitches; one passing run is not a universal minimum-20-FPS guarantee. These animations are retargeted skeletal clips baked to vertex samples, not a new runtime animation graph or ragdoll system.
 
 ## Download
 
-Extract RawMetal.zip and run RawMetal.exe. Assets/shaders are embedded. Windows x64; Vulkan is default, with --software fallback. Use backtick and map reactor for a fresh reactor encounter, or map lift for the full ride. Saves are under %LOCALAPPDATA%/RawMetal/saves.
+Extract RawMetal.zip and run RawMetal.exe. Use the backtick console and map reactor to inspect the replacement, or load an existing reactor save. Vulkan is default; --software enables fallback.
 
-The executable is self-signed with the existing RawMetal Development Build certificate. This does not establish public publisher trust, create SmartScreen reputation, or guarantee antivirus clearance. The EXE in the ZIP is identical to the separately downloadable EXE.
+The EXE is signed with the existing self-signed RawMetal Development Build certificate. Self-signing does not establish public publisher trust, SmartScreen reputation, or antivirus clearance. The EXE inside the ZIP matches the separately uploaded executable.

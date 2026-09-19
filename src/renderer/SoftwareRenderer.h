@@ -25,6 +25,7 @@ public:
     bool validate3D();
     static bool testPerformance();
     static bool testHardware();
+    static bool testCreatureAnimation();
     float gripError()const{return m_gripError;}
     void inspectRig(const Game& game,float yaw,float pitch);
 private:

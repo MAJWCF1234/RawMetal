@@ -167,6 +167,16 @@ void Game::shoot() {
         else enemySound(*best,0,.55f,1.22f);
     }
 }
+Game Game::stalkerInspection(int clip,float phase){
+ auto game=mapInspection({18.6f,18.5f},0,clip==4?-35.f:0.f,3,true,-9,false);
+ game.m_enemies.resize(1);auto& e=game.m_enemies[0];e={};e.kind=Enemy::Kind::Warden;e.pos={21.5f,18.5f};e.z=-9;e.home=e.pos;e.heading=kPi;e.hp=e.maxHp=220;
+ game.m_elapsed=phase*2.5f-e.home.x*.25f;
+ if(clip==1){e.moving=true;e.gait=phase*2*kPi;}
+ if(clip==2){if(phase<.4f)e.windup=(1-phase/.4f)*.55f;else e.strike=1-(phase-.4f)/.6f;}
+ if(clip==3)e.painFlash=1-phase;
+ if(clip==4){e.alive=false;e.deathTime=phase*1.15f;}
+ return game;
+}
 void Game::reloadWeapon(){
  if(dead()||m_won||holdingClutter()||!m_weaponEquipped||m_reloadTimer>0||m_player.loaded>=6||m_player.ammo<=m_player.loaded)return;
  m_reloadTimer=.62f;m_shotCooldown=std::max(m_shotCooldown,m_reloadTimer);m_weaponKick=.18f;

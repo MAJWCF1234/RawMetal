@@ -7,6 +7,21 @@
 #include <numeric>
 #include <algorithm>
 namespace retro {
+bool SoftwareRenderer::testCreatureAnimation(){
+ Mesh mesh(242);std::ofstream report("stalker-animation-test.txt");
+ for(int clip=0;clip<5;++clip){mesh.poseCreature(clip,0);auto first=mesh.triangles;float movement=0,deformation=0;
+  for(float phase:{.25f,.5f,.75f,1.f}){mesh.poseCreature(clip,phase);
+   for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=mesh.triangles[i].v[v].p,d=p-first[i].v[v].p;
+    if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.002f)return false;
+    movement=std::max(movement,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
+    auto a=p-mesh.triangles[0].v[0].p,b=first[i].v[v].p-first[0].v[0].p;
+    deformation=std::max(deformation,std::fabs(std::sqrt(a.x*a.x+a.y*a.y+a.z*a.z)-std::sqrt(b.x*b.x+b.y*b.y+b.z*b.z)));
+   }
+  }
+  movement*=1.8f/(mesh.maximum.y-mesh.minimum.y);report<<"clip "<<clip<<" maximum vertex motion "<<movement<<" gameplay metres, non-rigid deformation "<<deformation<<'\n';if(!std::isfinite(movement)||movement<.001f||movement>4||deformation<.001f)return false;
+ }
+ report<<"PASS: five independently deforming skeletal clips, matching topology\n";return true;
+}
 bool SoftwareRenderer::testHardware(){
  SoftwareRenderer renderer(128,72);std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;
  auto check=[&](bool condition,const char* label){report<<label<<": "<<(condition?"PASS":"FAIL")<<'\n';passed&=condition;};
