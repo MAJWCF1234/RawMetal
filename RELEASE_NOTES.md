@@ -1,7 +1,8 @@
-# RawMetal v0.3.2 — Freight Placement Correction
+# RawMetal v0.3.3 — Fresh Build & Self-Signature
 
 ## What changed
 
+- Freshly compiled from a new, isolated Visual Studio/CMake build directory with no reused objects or linker cache. The executable is self-signed as `RawMetal Development Build` using SHA-256.
 - Corrected the lift freight-bay crates: they are staggered clear of the fixed concrete partition rather than intersecting it. Added a route regression test that rejects any crate/fixed-structure overlap.
 - Reactor valves now have cylindrical pipe risers, flanges, valve bodies, projecting stems and solid metal handwheels. Removed the electrical switch cabinets behind them.
 - Fixed opaque concrete panels around the boarding cage. Open steel bars reveal the lift plant while retaining fall protection.
@@ -19,6 +20,8 @@ Vulkan remains the default at full 640x360 internal resolution. In the 1,560-fra
 ## Download
 
 Download `RawMetal.zip`, extract it, and run `RawMetal.exe`. The separately offered EXE is identical to the one in the ZIP. Assets and shaders are embedded; a Vulkan-capable driver is sufficient and the Vulkan SDK is not needed to play. Windows x64 is supported; `--software` enables the fallback renderer.
+
+The code-signing certificate is self-signed, so it is not trusted by Windows on other PCs and does not create Microsoft SmartScreen reputation. It verifies the packaged file came from this release build, but it cannot independently establish publisher identity like a certificate from a public certificate authority.
 
 Press backtick and enter `map lift` for the full sequence, or `map reactor` for the reactor. Developer map commands start fresh. Esc provides Save Game and Load Game; saves live in `%LOCALAPPDATA%\RawMetal\saves`.
 
