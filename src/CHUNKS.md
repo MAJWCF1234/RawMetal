@@ -1,5 +1,21 @@
 # Map layers and door-controlled chunks
 
+## Surface Lift extension
+
+The fourth connected chunk follows Turbine Gantry at offset (54,72). Gantry's
+southern seam is open after its existing control/combat interlock. The new chunk
+contains seven full map layers at -9, -6, -3, 0, 3, 6 and 9 metres. The two bottom
+maps form the reactor, connected by an east staircase and overlooking a common
+containment vessel. The central lift room rises from 0 to 9, jams and falls to -9.
+Its opposite emergency door opens on impact. The lower reactor exit ends the
+currently authored route. See LIFT_DESIGN.md for the implementation and tests.
+
+Door z offsets and negative-height spans support the stacked maps. Cab phase,
+height and timing persist through geometry unload/reload. The reactor uses the
+same span-aware enemy navigation as the gantry. Audio follows cab state, with
+music/effects controls remaining independent. The historical notes below describe
+the original three chunks; the new fourth chunk extends that route.
+
 All authored map arrays and named layer instances live in `world/World.cpp`. `world/World.h` defines `MapRows`, `MapLayer`, `Staircase` and the public `layers()` / `spansAt()` queries. There is no map-specific Gantry.cpp.
 
 - `FoundryGround`: map 1, ground layer.

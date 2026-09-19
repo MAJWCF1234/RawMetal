@@ -25,15 +25,20 @@ add_executable(RawMetal WIN32
     game/Inventory.cpp
     game/Movement.cpp
     game/GantryTest.cpp
+    game/Lift.cpp
+    game/Console.cpp
     game/Streaming.cpp
     game/Clutter.cpp
     game/AI.cpp
     audio/AudioEngine.cpp
+    audio/DecodeMusic.cpp
     world/World.cpp
     renderer/SoftwareRenderer.cpp
     renderer/NormalMapping.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
+    renderer/Performance.cpp
+    renderer/GpuRenderer.cpp
     ThirdParty/ufbx/ufbx.c
     platform/Win32Window.cpp)
 # One published game executable for every build configuration.
@@ -44,7 +49,23 @@ set_target_properties(RawMetal PROPERTIES
     PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/symbols/$<CONFIG>")
 target_include_directories(RawMetal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(RawMetal PRIVATE NOMINMAX UNICODE _UNICODE)
-target_link_libraries(RawMetal PRIVATE user32 gdi32 winmm cabinet bcrypt)
+file(GLOB RAWMETAL_VULKAN_SDKS "C:/VulkanSDK/*")
+list(APPEND CMAKE_PREFIX_PATH ${RAWMETAL_VULKAN_SDKS})
+find_package(Vulkan REQUIRED COMPONENTS glslc)
+set(RAWMETAL_SHADERS "${CMAKE_BINARY_DIR}/shaders")
+file(MAKE_DIRECTORY "${RAWMETAL_SHADERS}")
+foreach(STAGE vert frag)
+  add_custom_command(OUTPUT "${RAWMETAL_SHADERS}/scene.${STAGE}.inc"
+    COMMAND Vulkan::glslc --target-env=vulkan1.0 -O -mfmt=c "${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders/scene.${STAGE}" -o "${RAWMETAL_SHADERS}/scene.${STAGE}.inc"
+    DEPENDS "renderer/shaders/scene.${STAGE}" VERBATIM)
+  target_sources(RawMetal PRIVATE "${RAWMETAL_SHADERS}/scene.${STAGE}.inc")
+endforeach()
+target_include_directories(RawMetal PRIVATE "${RAWMETAL_SHADERS}")
+target_link_libraries(RawMetal PRIVATE user32 gdi32 winmm cabinet bcrypt Vulkan::Vulkan)
+if(MSVC)
+  target_link_libraries(RawMetal PRIVATE delayimp)
+  target_link_options(RawMetal PRIVATE /DELAYLOAD:vulkan-1.dll)
+endif()
 add_custom_command(TARGET RawMetal POST_BUILD
     COMMAND ${CMAKE_COMMAND} "-DRAWMetalExecutable=$<TARGET_FILE:RawMetal>" -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_size.cmake"
     VERBATIM)

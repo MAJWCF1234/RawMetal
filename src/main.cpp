@@ -12,6 +12,18 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--lift-test"))return retro::Game::testLift()?0:32;
+    if(std::wcsstr(commandLine,L"--console-test"))return retro::Game::testConsole()?0:34;
+    if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
+    if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
+    if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
+    if(std::wcsstr(commandLine,L"--lift-inspection")){
+        retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();int index=0;
+        for(float seconds:{0.f,3.f,7.f,9.f,12.f,12.f,12.f}){auto scene=retro::Game::liftInspection(seconds,index>=5?index-4:index==1?3:0);renderer.render(scene);
+            std::ofstream out("lift-"+std::to_string(index++)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
+            for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+        return 0;
+    }
     if(std::wcsstr(commandLine,L"--audio-device-test"))return retro::AudioEngine::testDevice()?0:15;
     if(std::wcsstr(commandLine,L"--environment-inspection")){
         retro::SoftwareRenderer renderer(W,H);
@@ -41,6 +53,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--smoke-test")){
         retro::Game game;
         retro::SoftwareRenderer renderer(W,H);
+        if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
         std::ofstream("model-report.txt")<<renderer.modelReport();
         if(!renderer.validate3D())return 7;
         if(!retro::Game::testCombat())return 9;
@@ -53,6 +66,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(!retro::Game::testProgression())return 20;
         if(!retro::Game::testAI())return 21;
         if(!retro::Game::testGantry())return 24;
+        if(!retro::Game::testLift())return 32;
+        if(!retro::Game::testConsole())return 34;
+        if(!retro::AudioEngine::testLiftMix())return 33;
         if(!retro::Game::testClutter())return 25;
         if(!retro::Game::testStreaming())return 26;
         if(!retro::Game::testUnarmed())return 22;
@@ -103,6 +119,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
         auto saveFrame=[&](const char* name){std::ofstream frame(name,std::ios::binary);frame<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}};
         {auto inventory=game;retro::InputState open{};open.inventory=true;inventory.update(open,.01f);renderer.render(inventory);saveFrame("inventory-menu.ppm");}
+        {auto console=game;retro::InputState consoleInput{};consoleInput.console=true;console.update(consoleInput,.01f);consoleInput={};consoleInput.textInput="maps\rmap reactor\r";console.update(consoleInput,.01f);renderer.render(console);saveFrame("developer-console.ppm");}
         for(int kind=0;kind<6;++kind)for(int stage=0;stage<3;++stage){auto scene=retro::Game::clutterInspection(kind,stage==0?0:stage==1?.3f:5.f);renderer.render(scene);saveFrame(("clutter-tumble-"+std::to_string(kind)+"-"+std::to_string(stage)+".ppm").c_str());}
         {const retro::Vec2 positions[]={{7.5f,4.5f},{4.8f,17.4f},{6.5f,20.5f},{6.5f,3.5f},{16.5f,11.5f},{17.5f,9.5f},{21.5f,20.5f}};
            const float yaw[]={2.3f,1.570796f,-.7f,.2f,-1.5f,0,1.570796f},pitch[]={50,45,-45,-45,-30,-90,15};
@@ -175,15 +192,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(!window.valid()) return 1;
     retro::Game game;
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
+    if(std::wcsstr(commandLine,L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);
     retro::SoftwareRenderer renderer(W,H);
     retro::AudioEngine audio;
+    if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();game.update(window.input(wasPaused||game.inventoryOpen()),dt);window.setMenu(game.paused()||game.inventoryOpen());
+        bool wasPaused=game.paused();game.update(window.input(wasPaused||game.inventoryOpen()||game.consoleOpen()),dt);window.setMenu(game.paused()||game.inventoryOpen()||game.consoleOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,window.focused()); renderer.render(game); window.present(renderer.pixels(),renderer.width(),renderer.height());

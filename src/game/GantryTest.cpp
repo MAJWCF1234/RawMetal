@@ -41,7 +41,8 @@ bool Game::testGantry(){
  game.m_player.pos={18.5f,12.5f};game.m_player.z=3;game.m_velocity={};game.m_player.grounded=false;
  for(int i=0;i<180;++i)game.update({},1.f/120);if(game.player().z!=0)return false;
  game.m_player.pos={21.5f,20.5f};game.m_player.angle=kPi*.5f;game.update({},.01f);game.update(use,.01f);if(!game.world().doors().back().opening)return false;
- for(int i=0;i<200;++i)game.update({},1.f/120);game.m_player.pos={21.5f,22.5f};game.update({},.01f);if(!game.won())return false;
+ for(int i=0;i<200;++i)game.update({},1.f/120);game.m_player.pos={21.5f,22.5f};game.update({},.01f);if(game.won())return false;
+ game.m_player.pos={21.5f,24.1f};game.crossChunkBoundary();if(game.level()!=3||game.player().z!=0)return false;
  report<<"Stairs, full connected catwalk route, upper terminal, E dismissal, gravity drop, locked/unlocked extraction: PASS\n";return true;
 }
 }

@@ -8,5 +8,6 @@ RawMetal.assets
 *.ppm
 RawMetal-error.txt
 RawMetal-audio.txt
+RawMetal-renderer.txt
 RawMetal-*.zip
 inventory.zip

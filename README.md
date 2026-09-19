@@ -1,5 +1,36 @@
 # RawMetal
 
+Vulkan hardware rendering is now the default, at full **640x360** internal
+resolution. The GPU handles triangles, depth, textures, normal maps and emission;
+materials are uploaded at startup and geometry is batched by material. Conservative
+deck occlusion preserves shaft and stairwell views. Static lighting is cached,
+shadow sampling is budgeted, and animation reuses mesh topology. A persistent
+worker evaluates the arm rig in parallel with world geometry preparation.
+
+Windows x64 remains the supported game platform. A Vulkan-capable graphics driver
+is required for hardware acceleration; `--software` forces the CPU fallback.
+The renderer targets Vulkan 1.0 without vendor-specific extensions. Its portable
+graphics API does not yet make the Win32 window/input/audio layer cross-platform.
+`RawMetal-renderer.txt` records the selected GPU or fallback reason.
+
+Surface Lift now follows Turbine Gantry. Seven full map floors surround a
+continuous shaft: the enclosed lift room rises three storeys, jams, then drops
+six into the two-floor reactor complex. The main OST fades into lift machinery,
+followed by cable creaking, a snap, impact and a darker reactor soundtrack.
+
+Run `RawMetal.exe --surface-lift` to play the new section directly. E operates
+the cab control. After impact, leave through the opposite door; the east service
+stairs connect the reactor floors. Clear the hostiles to unlock the lower exit.
+Design notes and asset provenance are in `src/LIFT_DESIGN.md`.
+
+Press **backtick (`)** to open the developer console. Type `maps` or `help`,
+then use `map foundry`, `map pressureworks`, `map gantry`, `map lift`, or
+`map reactor`. IDs 0-3 also work. Map loading starts fresh; `map reactor` skips
+the lift sequence. `reload`, `where`, `fps`, and `clear` are available, along
+with `r_scale 50`, `r_scale 75`, and `r_scale 100` (the default). The view is
+never cropped and the HUD stays full-resolution. Up/Down recall commands;
+backtick or Esc closes the console. Gameplay pauses while it is open.
+
 Download **RawMetal.zip** from [GitHub Releases](https://github.com/MAJWCF1234/RawMetal/releases/latest), extract it, and run **RawMetal.exe**. The ZIP contains one self-contained executable; no companion asset file is required. **RawMetal.cmd** is an optional launcher in the source checkout.
 
 Press **I** for inventory and **Esc** for settings (or to close inventory). Select an inventory item, then click an empty storage cell to move it. **E / Enter** equips or stows the selected shotgun, or consumes selected first aid. Item previews use the game models; ammo counts reflect your current supply.
@@ -8,13 +39,23 @@ The current renderer uses cached soft shadow samples, normal maps with normalize
 
 The canonical build outputs are **RawMetal.exe** and **RawMetal.zip** in the project root. Binaries belong in GitHub Releases. Runtime audio/error logs and temporary archives are excluded from source control.
 
-Build with **Build.cmd** (Visual Studio 2022 C++ tools and CMake required). Every configuration writes the same root executable. Close the game before rebuilding; do not create alternate executable folders to work around a running game.
+Build with **Build.cmd** (Visual Studio 2022 C++ tools, CMake and the Vulkan SDK
+with `glslc` required). Shaders compile to embedded SPIR-V; players do not need
+the SDK or loose shader files. Every configuration writes the same root
+executable. Close the game before rebuilding; do not create alternate executable
+folders to work around a running game.
 
 - `src/`: game source, embedded assets and detailed documentation.
 - `.build/`: disposable compiler intermediates and symbols.
 - `diagnostics/`: verification reports and inspection images.
 
 For smoke verification, run `..\RawMetal.exe --smoke-test` from `diagnostics/`.
+`--vulkan-test` checks hardware materials, depth, alpha cutouts and near clipping.
+`--performance-test` measures update/audio/render time at full resolution across
+seven scenarios and compares six culled views pixel-for-pixel with an unculled
+reference. It fails if any measured gameplay frame exceeds 50 ms (20 FPS).
+Startup is reported separately; window presentation is not included. Results are
+machine/load-dependent, not a universal minimum-FPS guarantee.
 
 All map arrays and named layers are in `src/world/World.cpp`; layer types are in `World.h`. Turbine Gantry has a separate upper-catwalk array at 3 m. See `src/CHUNKS.md` for traversal and door-controlled streaming.
 

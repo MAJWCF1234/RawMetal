@@ -4,7 +4,7 @@ namespace retro {
 void Game::seedClutter(){
  m_heldClutter=-1;m_clutter.clear();
  const Vec2 positions[3][6]={{{2.8f,5.9f},{3.1f,6.1f},{11.3f,4.3f},{11.7f,4.6f},{18.1f,19.9f},{18.8f,20.2f}},{{6.8f,3.2f},{7.1f,3.4f},{9.2f,12.2f},{9.5f,12.6f},{18.7f,19.8f},{19.1f,20.f}},{{7.3f,4.6f},{7.7f,4.8f},{7.2f,18.7f},{7.6f,19.f},{18.6f,9.7f},{19.5f,9.5f}}};
- for(int i=0;i<6;++i){auto p=positions[m_level][i];Clutter c;c.pos=p;c.z=m_level==2&&i>=4?3:m_world.floorHeight(p.x,p.y);c.kind=i;c.yaw=i*.7f;m_clutter.push_back(c);}
+ for(int i=0;i<6;++i){auto p=m_level==3?Vec2{3.5f+i*.45f,19.5f}:positions[m_level][i];Clutter c;c.pos=p;c.z=m_level==2&&i>=4?3:m_world.floorHeight(p.x,p.y);c.kind=i;c.yaw=i*.7f;m_clutter.push_back(c);}
 }
 int Game::nearbyClutter()const{
  int best=-1;float distance=1.5f;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};

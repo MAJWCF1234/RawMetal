@@ -10,6 +10,8 @@ namespace retro {
 constexpr int DisplayWidth=640,DisplayHeight=360;
 
 struct InputState {
+    bool console=false;
+    std::string textInput;
     bool forward = false;
     bool back = false;
     bool left = false;
@@ -97,7 +99,7 @@ public:
     void update(const InputState& input, float dt);
     void restart();
     int level()const{return m_level;}
-    static constexpr int ChunkCount=3;
+    static constexpr int ChunkCount=4;
     static Vec2 chunkOffset(int level){return {18.f*level,24.f*level};}
     Game chunkView(int level)const;
     const World& worldAt(Vec2& local)const;
@@ -140,6 +142,8 @@ public:
     static bool testProgression();
     static bool testAI();
     static bool testGantry();
+    static bool testLift();
+    static Game liftInspection(float seconds,int view=0);
     const char* interactionHint()const;
     int activeLog()const{return m_activeLog;}
     float logTime()const{return m_logTime;}
@@ -147,6 +151,12 @@ public:
     const std::string& pickupNotice()const{return m_pickupNotice;}
     float pickupNoticeTime()const{return m_pickupNoticeTime;}
     bool paused()const{return m_paused;}
+    bool consoleOpen()const{return m_consoleOpen;}
+    const std::string& consoleLine()const{return m_consoleLine;}
+    const std::vector<std::string>& consoleLog()const{return m_consoleLog;}
+    bool showFps()const{return m_showFps;}
+    float renderScale()const{return m_renderScale;}
+    static bool testConsole();
     bool inventoryOpen()const{return m_inventoryOpen;}
     bool weaponEquipped()const{return m_weaponEquipped;}
     int medkits()const{return m_medkits;}
@@ -165,6 +175,14 @@ public:
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false);
 
 private:
+    void updateConsole(const InputState& input);
+    void executeConsole(std::string command);
+    bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false;
+    std::string m_consoleLine;
+    std::vector<std::string> m_consoleLog{"RAWMETAL DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
+    std::vector<std::string> m_consoleHistory;
+    int m_consoleHistoryIndex=0;
+    float m_renderScale=1.f;
     void loadLevel(int level,bool carry);
     int m_level=0;
     struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
@@ -183,6 +201,7 @@ private:
     float groundHeight(Vec2 position)const;
     float groundHeight(Vec2 position,float feet)const;
     void updateMovement(const InputState& input,float dt);
+    void updateLift(float dt);
     void updateInteraction(const InputState& input,float dt);
     bool lineOfSight(const Vec2& a, const Vec2& b) const;
     void shoot();

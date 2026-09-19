@@ -49,6 +49,7 @@ void Game::loadLevel(int level,bool carry) {
     };
     if(m_level==1)m_enemies={{{17.5f,4.5f}},{{6.5f,6.2f}},{{4.5f,14.5f}},{{9.5f,12.5f}},{{19.5f,12.5f}},{{21.5f,15.5f}},{{7.5f,19.5f}},{{15.5f,20.5f}},{{21.5f,19.5f}}};
     if(m_level==2)m_enemies={{{7.5f,4.5f}},{{16.5f,4.5f}},{{7.5f,12.5f}},{{3.5f,15.5f}},{{19.5f,15.5f}},{{21.5f,20.5f}}};
+    if(m_level==3)m_enemies={{{5.5f,13.5f}},{{17.5f,19.5f}},{{21.5f,18.5f}}};
     for(size_t i=0;i<m_enemies.size();++i){auto&e=m_enemies[i];e.kind=i%3==1?Enemy::Kind::Wasp:i%3==2?Enemy::Kind::Brute:Enemy::Kind::Huntsman;e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:110.f;e.voiceTimer=.8f+float(i)*.9f;e.home=e.pos;e.lastKnown=e.pos;e.z=m_world.floorHeight(e.pos.x,e.pos.y);e.heading=kPi;}
     m_pickups = {
         {{4.5f, 7.5f}, Pickup::Kind::Ammo, true},
@@ -58,6 +59,7 @@ void Game::loadLevel(int level,bool carry) {
     };
     if(m_level==1)m_pickups={{{4.5f,4.5f},Pickup::Kind::Ammo,true},{{16.5f,3.5f},Pickup::Kind::Health,true},{{2.5f,15.5f},Pickup::Kind::Ammo,true},{{21.5f,12.5f},Pickup::Kind::Ammo,true},{{7.5f,20.5f},Pickup::Kind::Health,true},{{17.5f,19.5f},Pickup::Kind::Ammo,true}};
     if(m_level==2)m_pickups={{{3.5f,3.5f},Pickup::Kind::Ammo,true},{{7.5f,15.5f},Pickup::Kind::Health,true},{{7.5f,19.5f},Pickup::Kind::Ammo,true},{{21.5f,18.5f},Pickup::Kind::Ammo,true}};
+    if(m_level==3)m_pickups={{{12.5f,15.5f},Pickup::Kind::Ammo,true},{{15.5f,17.5f},Pickup::Kind::Health,true},{{21.5f,19.5f},Pickup::Kind::Ammo,true}};
 
     m_previousFire = false;
     m_previousRestart = false;
@@ -192,6 +194,9 @@ bool Game::testPickups(){
 
 void Game::update(const InputState& input, float dt) {
     m_sounds.clear();
+    bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
+    if(consolePressed){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
+    if(m_consoleOpen){updateConsole(input);return;}
     bool escapePressed=input.escape&&!m_previousEscape;m_previousEscape=input.escape;
     bool inventoryPressed=input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
     if(m_inventoryOpen&&escapePressed){m_inventoryOpen=false;m_suppressFire=true;return;}
@@ -215,6 +220,7 @@ void Game::update(const InputState& input, float dt) {
         m_player.angle = wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
         m_player.pitch = clamp(m_player.pitch - input.mouseDy * 0.55f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -95.0f, 95.0f);
 
+        updateLift(dt);
         updateMovement(input,dt);
         crossChunkBoundary();
         updateInteraction(input,dt);

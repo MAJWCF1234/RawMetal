@@ -87,19 +87,22 @@ const char* Game::interactionHint()const{
  if(m_logTime>0)return "E / CLOSE LOG";
  if(holdingClutter())return "E / DROP     FIRE / PUNT";
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
- int door=m_world.nearbyDoor(m_player.pos,forward);
- if(door>=0){auto&d=m_world.doors()[door];if(d.transfer&&(enemiesRemaining()>0||(m_level==2&&!m_world.controlReleased())))return "TRANSFER INTERLOCK / LOCKED";return d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
- if(int terminal=nearbyTerminal();terminal>=0)return m_world.terminals()[terminal].control?"E / GANTRY CONTROL":"E / READ SHIFT LOG";
+ int door=m_world.nearbyDoor(m_player.pos,forward,m_player.z);
+ if(door>=0){auto&d=m_world.doors()[door];if(d.transfer&&(enemiesRemaining()>0||(m_level>=2&&!m_world.controlReleased())))return "TRANSFER INTERLOCK / LOCKED";return d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
+ if(int terminal=nearbyTerminal();terminal>=0)return m_world.terminals()[terminal].control?(m_level==3?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";
  return nearbyClutter()>=0?"E / LIFT":nullptr;
 }
 void Game::updateInteraction(const InputState& input,float dt){
  m_logTime=std::max(0.f,m_logTime-dt);
  if(input.use&&!m_previousUse&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
  if(input.use&&!m_previousUse&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
- if(input.use&&!m_previousUse){Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int door=m_world.nearbyDoor(m_player.pos,forward);
+ if(input.use&&!m_previousUse){Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int door=m_world.nearbyDoor(m_player.pos,forward,m_player.z);
   if(holdingClutter()){interactClutter();}
-  else if(door>=0){if(!m_world.doors()[door].transfer||(enemiesRemaining()==0&&(m_level!=2||m_world.controlReleased())))useDoor(door);}
-  else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].control)m_world.releaseControl();sound(Sound::Exit,.4f);}
+  else if(door>=0){if(!m_world.doors()[door].transfer||(enemiesRemaining()==0&&(m_level<2||m_world.controlReleased())))useDoor(door);}
+  else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].control){
+   if(m_level==3){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
+   else m_world.releaseControl();
+  }sound(Sound::Exit,.4f);}
   if(!holdingClutter()&&door<0&&m_logTime==0)interactClutter();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);

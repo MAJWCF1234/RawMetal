@@ -79,7 +79,7 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw){
    else {auto parent=ufbx_matrix_to_transform(&hand->parent->node_to_world).rotation;parent={-parent.x,-parent.y,-parent.z,parent.w};auto tr=hand->local_transform;double angle=yaw;ufbx_quat turn{0,std::sin(angle*.5),0,std::cos(angle*.5)},tilt{std::sin(pitch*.5),0,0,std::cos(pitch*.5)};tr.rotation=ufbx_quat_mul(parent,ufbx_quat_mul(turn,ufbx_quat_mul(tilt,handRot[side])));changes.push_back({hand->typed_id,tr});}
   }
   for(auto n:m_scene->nodes)if(n->bone&&std::none_of(changes.begin(),changes.end(),[&](auto&c){return c.node_id==n->typed_id;}))changes.push_back({n->typed_id,n->local_transform});
-  ufbx_anim_opts ao{};ao.transform_overrides={changes.data(),changes.size()};auto anim=ufbx_create_anim(m_scene,&ao,nullptr);ufbx_evaluate_opts eo{};eo.evaluate_skinning=true;auto posed=ufbx_evaluate_scene(m_scene,anim,0,&eo,nullptr);ufbx_free_anim(anim);
+  ufbx_anim_opts ao{};ao.transform_overrides={changes.data(),changes.size()};auto anim=ufbx_create_anim(m_scene,&ao,nullptr);ufbx_evaluate_opts eo{};eo.evaluate_skinning=step==2;auto posed=ufbx_evaluate_scene(m_scene,anim,0,&eo,nullptr);ufbx_free_anim(anim);
   if(!posed)throw std::runtime_error("Arm IK evaluation failed");ufbx_free_scene(m_scene);m_scene=posed;
  }
 }
@@ -98,6 +98,14 @@ bool Mesh::poseAction(const char* action,float phase){
  }return false;
 }
 void Mesh::extract(ufbx_scene* scene){
+ // Animation changes positions, not topology, UVs, materials or boundary
+ // connectivity. Triangulate and discover shoulder rings only once per asset.
+ if(m_topologyReady){
+  auto position=[&](uint32_t nodeId,uint32_t corner){auto node=scene->nodes[nodeId];auto p=ufbx_get_vertex_vec3(&node->mesh->skinned_position,corner);if(node->mesh->skinned_is_local)p=ufbx_transform_position(&node->geometry_to_world,p);return Point3{float(p.x),float(p.y),float(p.z)};};
+  triangles.resize(m_cachedTriangles.size());for(size_t i=0;i<triangles.size();++i){auto&source=m_cachedTriangles[i];triangles[i]=source.prototype;for(int c=0;c<3;++c)triangles[i].v[c].p=position(source.node,source.corners[c]);}
+  openRings.resize(m_cachedRings.size());for(size_t i=0;i<openRings.size();++i){auto&source=m_cachedRings[i];auto&ring=openRings[i];ring.resize(source.corners.size());for(size_t j=0;j<ring.size();++j)ring[j]={position(source.node,source.corners[j]),0,0};}
+  return;
+ }
  triangles.clear();
  openRings.clear();
  for(auto node:scene->nodes){auto mesh=node->mesh;if(!mesh||(!m_nodeFilter.empty()&&m_nodeFilter!=node->name.data))continue;
@@ -109,12 +117,12 @@ void Mesh::extract(ufbx_scene* scene){
    }
    std::map<uint32_t,uint32_t> next,corner;
    for(auto&entry:edges){auto&e=entry.second;if(e.count==1){next[e.a]=e.b;corner[e.a]=e.faceA;corner[e.b]=e.faceB;}}
-   while(!next.empty()){std::vector<MeshVertex> ring;auto start=next.begin()->first,current=start;bool closed=false;
+   while(!next.empty()){std::vector<MeshVertex> ring;CachedRing cached{node->typed_id,{}};auto start=next.begin()->first,current=start;bool closed=false;
     for(size_t i=0;i<mesh->num_vertices;++i){auto it=next.find(current);if(it==next.end())break;
      auto ix=corner[current];auto p=ufbx_get_vertex_vec3(&mesh->skinned_position,ix);if(mesh->skinned_is_local)p=ufbx_transform_position(&node->geometry_to_world,p);
-     ring.push_back({{float(p.x),float(p.y),float(p.z)},0,0});current=it->second;next.erase(it);if(current==start){closed=true;break;}
+     ring.push_back({{float(p.x),float(p.y),float(p.z)},0,0});cached.corners.push_back(ix);current=it->second;next.erase(it);if(current==start){closed=true;break;}
     }
-    if(closed&&ring.size()>=3)openRings.push_back(ring);
+    if(closed&&ring.size()>=3){openRings.push_back(ring);m_cachedRings.push_back(std::move(cached));}
    }
   }
   std::vector<uint32_t> indices(mesh->max_face_triangles*3);
@@ -125,10 +133,11 @@ void Mesh::extract(ufbx_scene* scene){
      if(mesh->skinned_is_local)p=ufbx_transform_position(&node->geometry_to_world,p);
      ufbx_vec2 uv{};if(mesh->vertex_uv.exists)uv=ufbx_get_vertex_vec2(&mesh->vertex_uv,ix);
      triangle.v[c]={{float(p.x),float(p.y),float(p.z)},float(uv.x),1.f-float(uv.y)};
-    }triangles.push_back(triangle);
+    }triangles.push_back(triangle);m_cachedTriangles.push_back({node->typed_id,{indices[t*3],indices[t*3+1],indices[t*3+2]},triangle});
    }
   }
  }
+ m_topologyReady=true;
 }
 void Mesh::pose(float phase,float recoil){
  if(!bones)return;

@@ -1,4 +1,7 @@
 #include "SoftwareRenderer.h"
+#include "GpuRenderer.h"
+#include "FrameWorker.h"
+#include <fstream>
 #include "../core/PackedResource.h"
 #include "../core/Math.h"
 #include <algorithm>
@@ -9,6 +12,7 @@
 #include <cstring>
 #include <windows.h>
 #include <stdexcept>
+#include <chrono>
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #include "../ThirdParty/stb/stb_image.h"
@@ -32,6 +36,19 @@ const std::array<std::array<unsigned char,5>, 46> glyphs = {{
 int gi(char c){ if(c>='0'&&c<='9')return c-'0'; if(c>='A'&&c<='Z')return 10+c-'A'; if(c==' ')return 36;const char* extra="/-.><%()";auto found=std::strchr(extra,c);return found?38+int(found-extra):37; }
 }
 
+SoftwareRenderer::~SoftwareRenderer()=default;
+bool SoftwareRenderer::enableHardware(){
+ if(m_gpu)return true;
+ // Delay-load the system Vulkan loader so unsupported machines can still run.
+ static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
+ if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
+ try{m_gpu=std::make_unique<GpuRenderer>();
+  for(const auto*texture:{&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
+  for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
+  for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
+  m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
+ catch(const std::exception&e){m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
+}
 SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
  for(int i=0;i<15;++i)m_facilityTextures.emplace(materialNames[i],loadTexture(172+i));
@@ -53,6 +70,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_serviceSign=makeSign("SERVICE 04","LOW CLEARANCE",0xffca994du);
  m_transferSign=makeSign("PRESSURE WORKS","TRANSFER / 02",0xffa7a766u);m_pumpSign=makeSign("PUMP HALL","HIGH PRESSURE",0xffa7a766u);
  m_controlSign=makeSign("CONTROL GALLERY","SWITCHGEAR",0xffa7a766u);m_surfaceSign=makeSign("SURFACE LIFT","EXTRACTION",0xffa7a766u);m_gantrySign=makeSign("TURBINE GANTRY","TRANSFER / 03",0xffa7a766u);
+ m_reactorSign=makeSign("REACTOR CORE","CONTAINMENT BREACH",0xffbf583eu);
+ m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
 }
 SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
  Texture sign{256,80,std::vector<std::uint32_t>(256*80)};
@@ -132,7 +151,8 @@ void SoftwareRenderer::drawHud(const Game& game){
  const auto paper=rgb(222,206,164),muted=rgb(159,139,105),amber=rgb(210,145,54),red=rgb(180,55,36);
  const int sector=int(p.pos.y)/8;
  wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
- text(19,14,game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
+ text(19,14,game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
+ if(game.level()==3)text(19,32,game.world().liftStatus(),amber);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
  // Compact map reveals nearby contacts and a fixed extraction marker.
  const int mx=m_width-57,my=8;
@@ -158,7 +178,7 @@ void SoftwareRenderer::drawHud(const Game& game){
   rect(x,y+8,130,5,rgb(10,7,5));rect(x+1,y+9,int(128*std::max(0.f,target->hp)/target->maxHp),3,target->windup>0?amber:red);
   if(target->windup>0)text(cx-22,cy-22,"INCOMING",amber);
  }
- if(game.enemiesRemaining()==0){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
+ if(game.enemiesRemaining()==0&&(game.level()<2||game.world().controlReleased())){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
  if(game.dead()||game.won()){wornPanel(cx-100,cy-26,200,51);text(cx-68,cy-15,game.won()?"SECTOR CLEARED":"SIGNAL LOST",game.won()?amber:red,2);text(cx-50,cy+7,"R TO RESTART",paper);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
  if(game.audioMuted())text(10,43,"AUDIO MUTED / M",muted);
@@ -239,7 +259,31 @@ void SoftwareRenderer::drawInventory(const Game& game){
  wornPanel(350,280,224,28,true);text(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":"AMMO IS USED BY THE SHOTGUN",amber);
  text(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);text(64,316,"I / ESC CLOSE   CLICK PRIMARY TO EQUIP",amber);
 }
-void SoftwareRenderer::render(const Game& game){clear(rgb(12,16,18));drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}drawViewModel(game);drawHud(game);if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
+void SoftwareRenderer::drawConsole(const Game& game){
+ rect(0,0,m_width,152,rgb(10,14,16));rect(0,150,m_width,2,rgb(202,150,67));
+ text(12,9,"RAWMETAL / DEVELOPER CONSOLE",rgb(218,172,89),2);
+ auto&log=game.consoleLog();size_t first=log.size()>9?log.size()-9:0;
+ int y=28;for(size_t i=first;i<log.size();++i,y+=11)text(12,y,log[i].substr(0,150).c_str(),rgb(188,204,196));
+ text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
+}
+void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
+ int fullWidth=m_width,fullHeight=m_height;bool scaled=game.renderScale()<1;
+ if(scaled){m_width=int(fullWidth*game.renderScale());m_height=int(fullHeight*game.renderScale());m_scenePixels.resize(size_t(m_width*m_height));m_sceneZ.resize(size_t(m_width*m_height));m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);}
+ auto scene=[&]{bool parallel=m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
+  if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
+  try{clear(rgb(12,16,18));drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}
+   if(parallel){m_animationWorker->wait();m_poseReady=true;}drawViewModel(game);m_poseReady=false;
+  }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
+ };
+ if(m_gpu){try{m_gpu->begin(m_width,m_height);m_gpuFrame=true;scene();m_gpu->finish(m_pixels);m_gpuFrame=false;}
+  catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';scene();}}
+ else scene();
+ if(scaled){int sceneWidth=m_width,sceneHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);
+  for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*sceneHeight/m_height)*sceneWidth+x*sceneWidth/m_width)];}
+ drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);
+ float ms=std::chrono::duration<float,std::milli>(std::chrono::steady_clock::now()-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
+ if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",int(fullWidth*game.renderScale()),int(fullHeight*game.renderScale()),m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
+}
 }
 
 

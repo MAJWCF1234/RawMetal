@@ -31,9 +31,10 @@ void Game::updateEnemies(float dt){
   if(!e.alive)continue;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*4);e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*5);
   auto to=m_player.pos-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   bool visible=dist<11&&(dist<2.5f||dot(normalized(to),facing)>-.25f)&&m_world.rayClear(e.pos,e.z+.7f,m_player.pos,m_player.z+m_player.eye);
-  bool heard=(m_shotAge<.08f&&dist<14)||(footsteps&&dist<4.5f);
+  float soundDistance=std::sqrt(dist*dist+(m_player.z-e.z)*(m_player.z-e.z));
+  bool heard=(m_shotAge<.08f&&soundDistance<14)||(footsteps&&soundDistance<4.5f);
   if(visible){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=6.f;e.state=Enemy::State::Chase;}
-  else if(heard){e.lastKnown=m_player.pos;e.awareness=5.f;e.state=Enemy::State::Investigate;}
+  else if(heard){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=5.f;e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
   e.voiceTimer-=dt;e.stepTimer-=dt;
   if(e.awareness>0&&e.voiceTimer<=0){enemySound(e,0,.65f);e.voiceTimer=6.f+float(int(e.home.x)%4);}
@@ -53,7 +54,7 @@ void Game::updateEnemies(float dt){
   bool direct=std::fabs((visible?m_player.z:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
   if(e.kind==Enemy::Kind::Huntsman&&visible&&m_world.tile(int(goal.x),int(goal.y))=='C')direct=m_world.rayClear(e.pos,e.z+.7f,goal,m_player.z+.3f);
   if(!direct&&e.repathTimer>0)destination=e.waypoint;
-  else if(!direct&&m_level==2){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,e.kind==Enemy::Kind::Brute?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f);e.waypoint=destination;e.repathTimer=.35f;}
+  else if(!direct&&m_level>=2){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,e.kind==Enemy::Kind::Brute?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f);e.waypoint=destination;e.repathTimer=.35f;}
   else if(!direct){
    int field[World::Height][World::Width];for(auto&row:field)for(auto&value:row)value=9999;
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){

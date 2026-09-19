@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <array>
 #include "../ThirdParty/ufbx/ufbx.h"
 namespace retro {
 struct Point3 {
@@ -28,6 +29,11 @@ public:
  std::string description;
  std::vector<std::string> materialNames;
 private:
+ struct CachedTriangle {uint32_t node;std::array<uint32_t,3> corners;MeshTriangle prototype;};
+ struct CachedRing {uint32_t node;std::vector<uint32_t> corners;};
+ std::vector<CachedTriangle> m_cachedTriangles;
+ std::vector<CachedRing> m_cachedRings;
+ bool m_topologyReady=false;
  bool m_materialParts=false;
  std::string m_nodeFilter;
  void extract(ufbx_scene* scene);

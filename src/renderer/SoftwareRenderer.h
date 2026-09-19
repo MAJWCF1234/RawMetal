@@ -3,12 +3,19 @@
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
+#include <memory>
 #include "Mesh.h"
 
 namespace retro {
+class GpuRenderer;
+class FrameWorker;
 class SoftwareRenderer {
 public:
     SoftwareRenderer(int width, int height);
+    ~SoftwareRenderer();
+    bool enableHardware();
+    bool hardwareActive()const{return bool(m_gpu);}
+    const std::string& hardwareName()const{return m_gpuName;}
     void render(const Game& game);
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
@@ -16,9 +23,17 @@ public:
     std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
     void previewModel(int model,float angle);
     bool validate3D();
+    static bool testPerformance();
+    static bool testHardware();
     float gripError()const{return m_gripError;}
     void inspectRig(const Game& game,float yaw,float pitch);
 private:
+    friend class GpuRenderer;
+    std::unique_ptr<GpuRenderer> m_gpu;
+    std::unique_ptr<FrameWorker> m_animationWorker;
+    std::string m_gpuName;
+    bool m_gpuFrame=false;
+    bool m_poseReady=false;
     struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint32_t> emission; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true);
@@ -27,7 +42,7 @@ private:
     Texture m_muzzleFlash;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
-    Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign;
+    Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;
     Texture m_wall, m_floor, m_metal, m_arms;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;
@@ -50,6 +65,7 @@ private:
     static void prepareDecal(Texture& texture,bool clampEdges=true);
     void drawScene(const Game& game,bool clearDepth=true);
     void drawViewModel(const Game& game);
+    void prepareViewModel(const Game& game);
     void triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const Texture& texture,float light,const NormalLighting* normalLighting=nullptr);
     Point3 cameraPoint(Point3 p,const Game& game)const;
     static Texture loadTexture(int id);
@@ -58,6 +74,8 @@ private:
     void put(int x,int y,std::uint32_t c);
     void rect(int x,int y,int w,int h,std::uint32_t c);
     void drawHud(const Game& game);
+    void drawConsole(const Game& game);
+    float m_frameMs=0;
     void drawSettings(const Game& game);
     void drawInventory(const Game& game);
     void text(int x,int y,const char* s,std::uint32_t c,int scale=1);
@@ -66,9 +84,15 @@ private:
     std::vector<std::uint32_t> m_pixels;
     std::vector<float> m_depth;
     std::vector<float> m_zbuffer;
+    std::vector<std::uint32_t> m_scenePixels;
+    std::vector<float> m_sceneZ;
+    bool m_visibilityCulling=true;
+    int m_shadowBudgetLimit=2200;
     std::array<std::unordered_map<std::uint64_t,float>,Game::ChunkCount> m_chunkLighting;
     std::array<std::unordered_map<std::uint64_t,NormalLighting>,Game::ChunkCount> m_chunkNormalLighting;
     std::array<std::vector<float>,Game::ChunkCount> m_chunkLightingDoors;
+    std::array<std::vector<std::vector<size_t>>,Game::ChunkCount> m_chunkLightCells;
+    std::array<size_t,Game::ChunkCount> m_chunkLightCounts{};
     float m_gripError=0;
     bool m_inspectRig=false;
     float m_inspectYaw=0,m_inspectPitch=0;

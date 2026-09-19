@@ -8,12 +8,15 @@
 #include <fstream>
 #include <chrono>
 namespace retro {
+std::vector<int16_t> decodeMusic(const unsigned char* data,size_t bytes);
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
   auto resource=loadResource(int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
-  if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4))throw std::runtime_error("Invalid audio container");
+  if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
+   m_samples[i].pcm=decodeMusic(data,size);m_samples[i].channels=2;continue;
+  }
   const unsigned char* pcm=nullptr;size_t bytes=0;bool format=false;
   for(size_t offset=12;offset+8<=size;){size_t count=u32(data+offset+4);auto chunk=data+offset+8;
    if(count>size-offset-8)throw std::runtime_error("Truncated audio resource");
@@ -68,11 +71,18 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
 void AudioEngine::update(const Game& game,bool focused){
  std::lock_guard lock(m_mutex);
  float dt=std::clamp(game.elapsed()-m_lastTime,0.f,.1f);
- if(game.elapsed()<m_lastTime){m_voices.clear();play({Sound::Music,{},1,1,false},-1,true);}
+ if(game.elapsed()<m_lastTime){m_voices.clear();play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;}
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=Game::chunkOffset(m_lastChunk)-Game::chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
  m_musicGain=game.musicEnabled()?(game.dead()||game.won()?.16f:.28f)*game.settings().music/.75f:0;
- m_effectsGain=game.settings().effects;m_paused=game.paused();
+ m_effectsGain=game.settings().effects;m_paused=game.paused()||game.consoleOpen();
+ auto phase=game.world().liftPhase();bool shaft=game.level()==3;
+ m_mainTarget=!shaft||phase==World::LiftPhase::Ready?1.f:0.f;
+ m_reactorTarget=shaft&&phase==World::LiftPhase::Crashed?1.f:0.f;
+ m_motorTarget=shaft&&phase==World::LiftPhase::Ascending?.8f:shaft&&phase==World::LiftPhase::Jammed?.25f:0.f;
+ auto sceneLoop=[&](Sound cue,int id){if(std::none_of(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==id;}))play({cue,{},1,1,false},id,true);};
+ if(m_motorTarget>0)sceneLoop(Sound::LiftMotor,-2);
+ if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
  for(const auto&event:game.sounds())play(event);
  auto loop=[&](int emitter,Sound sound,Vec2 pos,float gain){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
   if(it==m_voices.end()){play({sound,pos,gain,1,true},emitter,true);}else{it->position=pos;it->gain=gain;}
@@ -88,15 +98,22 @@ void AudioEngine::update(const Game& game,bool focused){
 void AudioEngine::mix(int16_t* output,size_t frames){
  std::fill(output,output+frames*2,int16_t(0));
  for(size_t frame=0;frame<frames;++frame){float left=0,right=0;
-  for(auto&v:m_voices){if(m_paused&&v.sound!=Sound::Music)continue;auto&s=m_samples[size_t(v.sound)];size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
+  // Per-sample envelopes: main track fades over roughly 2 seconds, motor
+  // takes over quickly, and the reactor bed arrives slowly after the impact.
+  m_mainBlend+=(m_mainTarget-m_mainBlend)/(.65f*Rate);
+  m_reactorBlend+=(m_reactorTarget-m_reactorBlend)/(1.2f*Rate);
+  m_motorBlend+=(m_motorTarget-m_motorBlend)/(.18f*Rate);
+  for(auto&v:m_voices){bool music=v.sound==Sound::Music||v.sound==Sound::ReactorMusic;
+   if(m_paused&&!music)continue;auto&s=m_samples[size_t(v.sound)];size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
    size_t a=size_t(v.cursor),b=a+1<n?a+1:v.loop?0:a;float frac=float(v.cursor-double(a));
    auto sample=[&](int channel){float value=s.pcm[a*s.channels+channel]*(1-frac)+s.pcm[b*s.channels+channel]*frac;
-    if(v.loop&&v.sound==Sound::Machine){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
+    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
     return value/32768.f;};
-   float gain=v.gain*(v.sound==Sound::Music?m_musicGain:m_effectsGain);
+   float blend=v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
+   float gain=v.gain*(music?m_musicGain:m_effectsGain)*blend;
    v.smoothLeft+=(v.left*gain-v.smoothLeft)*.0015f;v.smoothRight+=(v.right*gain-v.smoothRight)*.0015f;
    left+=sample(0)*v.smoothLeft;right+=sample(s.channels-1)*v.smoothRight;v.cursor+=v.pitch;
-   if(v.loop&&v.sound==Sound::Machine&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
+   if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
   m_master+=(m_targetMaster-m_master)*.002f;
   // Smooth limiter leaves headroom when footsteps, music and several attacks overlap.
@@ -110,6 +127,30 @@ void AudioEngine::run(){
    if(waveOutWrite(m_device,&buffer.header,sizeof(WAVEHDR))!=MMSYSERR_NOERROR){m_stop=true;break;}
   }WaitForSingleObject(m_wake,10);
  }
+}
+bool AudioEngine::testLiftMix(){
+ AudioEngine audio(false);auto game=Game::mapInspection({12,11},kPi*.5f,0,3,false,0,true);
+ std::ofstream report("lift-audio-test.txt");std::vector<int16_t> output;
+ auto block=[&](){audio.update(game);std::array<int16_t,1470> samples{};audio.mix(samples.data(),735);output.insert(output.end(),samples.begin(),samples.end());};
+ for(int i=0;i<120;++i){game.update({},1.f/60);block();}
+ game=Game::liftInspection(0);bool creak=false,snap=false,crash=false;
+ for(int i=0;i<900;++i){game.update({},1.f/60);block();
+  for(auto&e:game.sounds()){creak|=e.sound==Sound::LiftCreak;snap|=e.sound==Sound::LiftSnap;crash|=e.sound==Sound::LiftCrash;}
+  if(i==240){if(audio.m_mainBlend>.01f||audio.m_motorBlend<.7f)return false;report<<"Main OST fades out; lift motor takes over: PASS\n";}
+ }
+ if(!creak||!snap||!crash||audio.m_reactorBlend<.95f||audio.m_motorBlend>.001f||audio.m_mainBlend>.001f)return false;
+ report<<"Creak, snap, crash and sinister reactor music transition: PASS\n";
+ size_t reactorVoices=0;for(auto&v:audio.m_voices)reactorVoices+=v.sound==Sound::ReactorMusic;
+ if(reactorVoices!=1)return false;
+ InputState muteMusic{};muteMusic.music=true;game.update(muteMusic,1.f/60);audio.update(game);
+ if(audio.m_musicGain!=0||audio.m_effectsGain==0)return false;
+ report<<"One reactor loop; music toggle preserves effects: PASS\n";
+ game.restart();audio.update(game);if(audio.m_mainTarget!=1||audio.m_reactorTarget!=0||audio.m_motorTarget!=0)return false;
+ report<<"Restart restores main OST: PASS\n";
+ std::ofstream file("lift-audio-preview.wav",std::ios::binary);uint32_t bytes=uint32_t(output.size()*2),riff=bytes+36,fmt=16,rate=Rate,byteRate=Rate*4;uint16_t pcm=1,channels=2,align=4,bits=16;
+ auto write=[&](auto v){file.write(reinterpret_cast<const char*>(&v),sizeof(v));};
+ file.write("RIFF",4);write(riff);file.write("WAVEfmt ",8);write(fmt);write(pcm);write(channels);write(rate);write(byteRate);write(align);write(bits);file.write("data",4);write(bytes);file.write(reinterpret_cast<const char*>(output.data()),bytes);
+ return true;
 }
 bool AudioEngine::test(){
  AudioEngine audio(false);auto game=Game::validationScene(Enemy::Kind::Brute);

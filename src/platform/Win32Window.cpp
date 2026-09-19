@@ -8,8 +8,13 @@ RECT Win32Window::viewport(int clientWidth,int clientHeight){
  int width=std::max(1,int(DisplayWidth*scale)),height=std::max(1,int(DisplayHeight*scale));
  int x=(clientWidth-width)/2,y=(clientHeight-height)/2;return {x,y,x+width,y+height};
 }
-LRESULT CALLBACK Win32Window::wndProc(HWND h,UINT m,WPARAM w,LPARAM l){if(m==WM_CLOSE){DestroyWindow(h);return 0;}if(m==WM_DESTROY){PostQuitMessage(0);return 0;}return DefWindowProcW(h,m,w,l);} 
-Win32Window::Win32Window(int w,int h,const wchar_t* title){HINSTANCE in=GetModuleHandleW(nullptr);WNDCLASSW wc{};wc.lpfnWndProc=wndProc;wc.hInstance=in;wc.lpszClassName=L"RetroQuakeCppWindow";wc.hCursor=LoadCursor(nullptr,IDC_CROSS);RegisterClassW(&wc);RECT r{0,0,w*2,h*2};AdjustWindowRect(&r,WS_OVERLAPPEDWINDOW,FALSE);m_hwnd=CreateWindowExW(0,wc.lpszClassName,title,WS_OVERLAPPEDWINDOW|WS_VISIBLE,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,nullptr,nullptr,in,nullptr);m_bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);m_bmi.bmiHeader.biWidth=w;m_bmi.bmiHeader.biHeight=-h;m_bmi.bmiHeader.biPlanes=1;m_bmi.bmiHeader.biBitCount=32;m_bmi.bmiHeader.biCompression=BI_RGB;ShowCursor(FALSE);}
+LRESULT CALLBACK Win32Window::wndProc(HWND h,UINT m,WPARAM w,LPARAM l){
+ if(m==WM_NCCREATE)SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams));
+ auto*self=reinterpret_cast<Win32Window*>(GetWindowLongPtrW(h,GWLP_USERDATA));
+ if(m==WM_CHAR&&self){if(w<127&&w!='`'&&w!='~'&&self->m_textInput.size()<256)self->m_textInput+=char(w);return 0;}
+ if(m==WM_CLOSE){DestroyWindow(h);return 0;}if(m==WM_DESTROY){PostQuitMessage(0);return 0;}return DefWindowProcW(h,m,w,l);
+}
+Win32Window::Win32Window(int w,int h,const wchar_t* title){HINSTANCE in=GetModuleHandleW(nullptr);WNDCLASSW wc{};wc.lpfnWndProc=wndProc;wc.hInstance=in;wc.lpszClassName=L"RetroQuakeCppWindow";wc.hCursor=LoadCursor(nullptr,IDC_CROSS);RegisterClassW(&wc);RECT r{0,0,w*2,h*2};AdjustWindowRect(&r,WS_OVERLAPPEDWINDOW,FALSE);m_hwnd=CreateWindowExW(0,wc.lpszClassName,title,WS_OVERLAPPEDWINDOW|WS_VISIBLE,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,nullptr,nullptr,in,this);m_bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);m_bmi.bmiHeader.biWidth=w;m_bmi.bmiHeader.biHeight=-h;m_bmi.bmiHeader.biPlanes=1;m_bmi.bmiHeader.biBitCount=32;m_bmi.bmiHeader.biCompression=BI_RGB;ShowCursor(FALSE);}
 Win32Window::~Win32Window(){if(!m_cursorVisible)ShowCursor(TRUE);if(m_hwnd)DestroyWindow(m_hwnd);} 
 bool Win32Window::pump(){MSG msg{};while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){if(msg.message==WM_QUIT)m_quit=true;TranslateMessage(&msg);DispatchMessageW(&msg);}return !m_quit;}
 void Win32Window::setMenu(bool open){
@@ -17,11 +22,12 @@ void Win32Window::setMenu(bool open){
  if(free||open!=m_menuOpen)m_mouseCaptured=false;m_menuOpen=open;
 }
 InputState Win32Window::input(bool menuOpen){
- setMenu(menuOpen);InputState i{};if(!focused())return i;
+ setMenu(menuOpen);InputState i{};i.textInput=std::move(m_textInput);m_textInput.clear();if(!focused()){i.textInput.clear();return i;}
  auto key=[](int value){return (GetAsyncKeyState(value)&0x8000)!=0;};
  i.forward=key('W');i.back=key('S');i.left=key('A');i.right=key('D');i.sprint=key(VK_SHIFT);i.jump=key(VK_SPACE);i.crouch=key('C')||key(VK_CONTROL);i.fire=key(VK_LBUTTON);i.restart=key('R');i.mute=key('M');i.music=key('N');i.use=key('E');
  i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);
  i.guard=key(VK_RBUTTON);
+ i.console=key(VK_OEM_3);
  RECT rc{};GetClientRect(m_hwnd,&rc);POINT pointer{};GetCursorPos(&pointer);
  if(menuOpen){ScreenToClient(m_hwnd,&pointer);auto view=viewport(rc.right,rc.bottom);
   if(i.fire&&GetCapture()!=m_hwnd)SetCapture(m_hwnd);else if(!i.fire&&GetCapture()==m_hwnd)ReleaseCapture();

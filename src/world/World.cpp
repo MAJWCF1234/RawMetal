@@ -84,7 +84,7 @@ constexpr MapRows TurbineGantryGround = {
     "#...SS...#......#......#",
     "#...SS..........####...#",
     "#...............####.X.#",
-    "########################"
+    "####################...#"
 };
 constexpr MapRows TurbineGantryUpperCatwalk = {
     "________________________",
@@ -114,6 +114,101 @@ constexpr MapRows TurbineGantryUpperCatwalk = {
 };
 
 constexpr MapLayer FoundryGroundLayer{"Foundry / ground",0,0,FoundryGround};
+// The lift room travels through one continuous shaft. The reactor has two
+// playable floors; upper floors are separate decks over the lower map.
+constexpr MapRows LiftShaftGround = {
+    "##...###################",
+    "#......................#",
+    "#......................#",
+    "#.....CC...............#",
+    "#......................#",
+    "#..BB..................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#....GG................#",
+    "#......................#",
+    "#..............GG......#",
+    "#......................#",
+    "#....................X.#",
+    "########################",
+};
+constexpr MapRows emptyDeck(){
+ MapRows rows{};for(auto& row:rows)row="________________________";return rows;
+}
+constexpr MapRows reactorDeck(){
+ return {
+"________________________",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_========______========_",
+"_========______========_",
+"_========______====__==_",
+"_========______====__==_",
+"_========______====__==_",
+"_========______====__==_",
+"_==================__==_",
+"_==================__==_",
+"_==================__==_",
+"_=========_____========_",
+"_=========_____========_",
+"_=========_____========_",
+"_=========_____========_",
+"_=========_____========_",
+"________________________",
+ };
+}
+constexpr MapRows shaftDeck(){
+ return {
+"________________________",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_========______========_",
+"_========______========_",
+"_========______========_",
+"_========______========_",
+"_========______========_",
+"_========______========_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"_======================_",
+"________________________",
+ };
+}
+constexpr MapRows collarDeck(){
+ auto rows=shaftDeck();
+ rows[0]="__===___________________";
+ rows[8]="_==========SS==========_";
+ rows[9]="_========__SS__========_";
+ return rows;
+}
+constexpr std::array ReactorStairs{Staircase{19,12,21,18,-9,-6,15,true,true}};
 constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,PressureWorksGround};
 constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
 constexpr MapLayer TurbineGantryUpperLayer{"Turbine Gantry / upper catwalk",3,.3f,TurbineGantryUpperCatwalk};
@@ -135,7 +230,42 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
 }
 
 World::World(int level) {
- m_level=std::clamp(level,0,2);
+ m_level=std::clamp(level,0,3);
+ if(m_level==3){
+  m_layers={{"Reactor / lower containment",-9,0,LiftShaftGround},
+            {"Reactor / upper manifold",-6,.3f,reactorDeck()},
+            {"Shaft / lower service",-3,.25f,shaftDeck()},
+            {"Surface lift / collar",0,.3f,collarDeck()},
+            {"Shaft / transfer gantry",3,.25f,shaftDeck()},
+            {"Shaft / maintenance",6,.25f,shaftDeck()},
+            {"Surface / sealed gates",9,.35f,shaftDeck()}};
+  // Entry bridge ends exactly at the lift's north door.
+  m_structures.push_back({11,8,13,10,-.3f,0});
+  // Cage the boarding bridge so a missed jump cannot strand the player below
+  // the uncalled cab with no way to complete the mandatory descent sequence.
+  m_structures.push_back({10.95f,8,11,10,0,2.1f,true});
+  m_structures.push_back({13,8,13.05f,10,0,2.1f,true});
+  m_structures.push_back({2,0,5,1,-9,-.3f});
+  m_structures.push_back({10.5f,18.5f,13.5f,21.5f,-9,-3.4f,false,1});
+  // Room partitions on each full map floor, with door-sized circulation gaps.
+  for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f}){
+   m_structures.push_back({7,2,7.2f,5,z,z+2.65f});
+   m_structures.push_back({7,7,7.2f,9,z,z+2.65f});
+   m_structures.push_back({2,16,5,16.2f,z,z+2.65f});
+   m_structures.push_back({7,16,9,16.2f,z,z+2.65f});
+  }
+  buildLayers(ReactorStairs);
+  m_doors={{2,5,.5f,0,false,false,true,9},{20,23,21.5f,0,false,true}};
+  m_terminals={{{4.5f,2.5f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","BOARD CAB. USE DISPATCH CONTROL.",9},
+               {{13.35f,11.5f},"CAB CONTROL / DISPATCH","ASCENDING TO SURFACE.","WARNING: CABLE TENSION CRITICAL.",9,true},
+               {{6.5f,20.5f},"REACTOR / CONTAINMENT","COOLANT MANIFOLD RUPTURED.","UPPER WALKWAY: SERVICE STAIRS."}};
+  m_props={{0,{6,16},1.5f,2.8f,0,{1.4f,.8f}},{1,{16,20},1.374f,2.4f,0,{1.2f,.369f}}};
+  m_fixtures={{6,{5.9f,18.5f},0,1.88f,1.88f/3.4f,1.88f*1.8f/3.4f,0,true},
+              {6,{15.9f,20.5f},0,1.88f,1.88f/3.4f,1.88f*1.8f/3.4f,0,true}};
+  buildLights();m_lights.push_back({{12,12},13.5f});m_lights.push_back({{12,14.5f},-5.5f});
+  m_lights.push_back({{12,17.7f},-4.5f});m_lights.push_back({{12,11.8f},2.45f});
+  return;
+ }
  m_fixtures=MapFixtures[m_level];
  m_layers={m_level==0?FoundryGroundLayer:m_level==1?PressureWorksGroundLayer:TurbineGantryGroundLayer};
  // Each pair (or remaining single tile) owns one complete generator. Preserve
@@ -176,6 +306,7 @@ void World::buildLights(){
   for(const auto&span:spansAt(x,y))if(span.ceiling-span.floor>1.8f)m_lights.push_back({{x+.5f,y+.35f},span.ceiling-.15f});
 }
 float World::floorHeight(float x,float y)const{
+ if(m_level==3)return -9.f;
  if(m_level==2)return 0;
  if(m_level==1){
   if(x>=20&&x<23&&y>=21&&y<23)return std::max(0.f,.8f-std::floor((y-21)*2)*.2f);
@@ -191,6 +322,7 @@ float World::floorHeight(float x,float y)const{
  return 0;
 }
 float World::ceilingHeight(float x,float y)const{
+ if(m_level==3)return 16.f;
  if(m_level==2)return 6.f;
  if(m_level==0&&y>=24&&x>=20&&x<23)return 3.4f;
  if(m_level==1&&y<0&&x>=2&&x<5)return 3.6f;
@@ -198,29 +330,29 @@ float World::ceilingHeight(float x,float y)const{
  if(int(x)==10&&int(y)==14)return .66f; // Crouch-only service bypass.
  return y<8?3.1f:y<16?4.2f:3.6f;
 }
-float World::supportHeight(float x,float y)const{
+float World::supportHeight(float x,float y,bool dynamic)const{
  for(const auto&fixture:m_fixtures)if(fixture.solid&&insideFixture(fixture,x,y))return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y)return floorHeight(p.position.x,p.position.y)+p.height;
- for(auto&terminal:m_terminals)if(terminal.z==0&&std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<(terminal.control?.18f:.27f))return floorHeight(x,y)+.95f;
+ for(auto&terminal:m_terminals)if((dynamic||m_level!=3||!terminal.control)&&terminal.z==0&&std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<(terminal.control?.18f:.27f))return floorHeight(x,y)+.95f;
  float floor=floorHeight(x,y);switch(tile(int(std::floor(x)),int(std::floor(y)))){
  case '#':return wallHeight(int(std::floor(x)),int(std::floor(y)));case 'C':return floor+.60f;case 'B':return floor+1.1f;
  case 'T':return floor+2.62f;default:return floor;
  }
 }
 bool World::doorBlocks(float x,float y,float feet,float height)const{
- for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f&&feet+height>door.open*2.65f+.015f)return true;
+ for(auto&door:m_doors){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f&&feet+height>base+door.open*2.65f+.015f&&feet<base+door.open*2.65f+2.48f)return true;}
  return false;
 }
 float World::clearanceHeight(float x,float y)const{
- float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f)height=std::min(height,2.5f);
+ float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f)height=std::min(height,floorHeight((door.left+door.right)*.5f,door.y)+door.z+2.5f);
  // The dispatch board hangs from the vestibule ceiling, above the walking route.
  if(m_level==0&&x>20.17f&&x<22.83f&&y>22.90f&&y<23.04f)height=std::min(height,2.57f);
  return height;
 }
-bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors)const{
- auto delta=b-a;int steps=std::max(1,int(std::ceil(length(delta)/.12f)));
+bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic)const{
+ auto delta=b-a;float dz=bz-az;int steps=std::max(1,int(std::ceil(std::sqrt(lengthSq(delta)+dz*dz)/.12f)));
  for(int i=1;i<steps;++i){float t=float(i)/steps;auto p=a+delta*t;float z=az+(bz-az)*t;
-  if(!fits(p.x,p.y,z,.015f)|| (doors&&doorBlocks(p.x,p.y,z,.015f)))return false;
+  if(!fits(p.x,p.y,z,.015f,dynamic)|| (doors&&doorBlocks(p.x,p.y,z,.015f)))return false;
  }return true;
 }
 bool World::navigable(int x,int y,int nx,int ny,float height)const{
@@ -231,9 +363,10 @@ bool World::navigable(int x,int y,int nx,int ny,float height)const{
 void World::updateDoors(float dt){for(auto&door:m_doors)door.open=std::clamp(door.open+(door.opening?1.f:-1.f)*dt*.85f,0.f,1.f);}
 bool World::openDoor(int index){if(index<0||size_t(index)>=m_doors.size()||m_doors[index].opening)return false;m_doors[index].opening=true;return true;}
 bool World::toggleDoor(int index){if(index<0||size_t(index)>=m_doors.size())return false;m_doors[index].opening=!m_doors[index].opening;return true;}
-int World::nearbyDoor(Vec2 position,Vec2 forward)const{
+int World::nearbyDoor(Vec2 position,Vec2 forward,float feet)const{
  int best=-1;float distance=2.f;
  for(size_t i=0;i<m_doors.size();++i){auto&d=m_doors[i];Vec2 closest{std::clamp(position.x,d.left+.2f,d.right-.2f),d.y};auto delta=closest-position;float lengthTo=length(delta);
+  if(std::fabs(feet-floorHeight((d.left+d.right)*.5f,d.y)-d.z)>1.25f)continue;
   if(lengthTo<distance&&dot(delta,forward)>-.15f){best=int(i);distance=lengthTo;}
  }return best;
 }
@@ -273,8 +406,10 @@ void World::buildLayers(std::span<const Staircase> stairs){
   for(auto row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Invalid map layer row width");
   if(layer.thickness<=0)continue; // Ground tiles are read directly by tile().
   const float z=layer.elevation, underside=z-layer.thickness;
+  const float railHeight=m_level==3&&z==0?2.1f:.55f;
   auto deck=[&](int x,int y){return x>=0&&y>=0&&x<Width&&y<Height&&layer.rows[y][x]=='=';};
   auto stairConnection=[&](float x,float y){
+   if(m_level==3&&z==0&&x>=11&&x<=13&&y>=7.9f&&y<=10)return true;
    for(const auto& stair:stairs)if(x>=stair.x1&&x<stair.x2&&y>=stair.y1&&y<stair.y2){
     float t=stair.alongY?(y-stair.y1)/(stair.y2-stair.y1):(x-stair.x1)/(stair.x2-stair.x1);
     if(!stair.ascending)t=1-t;
@@ -289,24 +424,24 @@ void World::buildLayers(std::span<const Staircase> stairs){
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
    if((x+y)%5==0&&tile(x,y)!='#')
-    m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
+    m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,m_level==3?std::max(-9.f,z-3.f):floorHeight(x+.1f,y+.1f),underside});
    if(!deck(x-1,y)&&!stairConnection(x-.001f,y+.5f)){
-    m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+.55f,true});
+    m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,true});
     // Seal the upper catwalk against a lower-layer wall.  Without this
     // backing panel the rail leaves a one-cell sightline into the void.
-    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,6.f,false});
+    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
    if(!deck(x+1,y)&&!stairConnection(x+1.001f,y+.5f)){
-    m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+.55f,true});
-    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,6.f,false});
+    m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,true});
+    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
    if(!deck(x,y-1)&&!stairConnection(x+.5f,y-.001f)){
-    m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+.55f,true});
-    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,6.f,false});
+    m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,true});
+    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,m_level==3?z+2.7f:6.f,false});
    }
    if(!deck(x,y+1)&&!stairConnection(x+.5f,y+1.001f)){
-    m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+.55f,true});
-    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,6.f,false});
+    m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,true});
+    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
   }
  }
@@ -329,25 +464,34 @@ void World::buildLayers(std::span<const Staircase> stairs){
 float World::wallHeight(int x,int y)const{return m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
  float result=floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
+ if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
 }
 float World::clearanceAbove(float x,float y,float feet)const{
  float ceiling=clearanceHeight(x,y);
+ if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
- for(auto&t:m_terminals)if(t.z>feet+.025f&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f)ceiling=std::min(ceiling,t.z);
+ for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f)ceiling=std::min(ceiling,base);}
  return ceiling;
 }
-bool World::fits(float x,float y,float feet,float height)const{
- if(feet<supportHeight(x,y)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
+bool World::fits(float x,float y,float feet,float height,bool dynamic)const{
+ if(dynamic&&insideLift(x,y)&&feet<m_liftHeight+2.8f&&feet+height>m_liftHeight-.25f){
+  if(feet<m_liftHeight-.025f||feet+height>m_liftHeight+2.605f)return false;
+  if(x<10.12f||x>13.88f)return false;
+  bool northOpen=m_liftPhase==LiftPhase::Ready&&x>11&&x<13;
+  bool southOpen=m_liftPhase==LiftPhase::Crashed&&m_liftTimer>=.65f&&x>11&&x<13;
+  if((y<10.12f&&!northOpen)||(y>13.88f&&!southOpen))return false;
+ }
+ if(feet<supportHeight(x,y,dynamic)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
- for(auto&t:m_terminals)if(t.z>0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<t.z+.95f&&feet+height>t.z)return false;
+ for(auto&t:m_terminals){if(!dynamic&&m_level==3&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(t.z!=0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
  return true;
 }
 std::vector<Span> World::spansAt(int x,int y)const{
  float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);std::vector<std::pair<float,float>> solids={{-100.f,supportHeight(px,py)}};
- for(auto&s:m_structures)if(px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});
- std::sort(solids.begin(),solids.end());std::vector<Span> result;float bottom=0;
+ for(auto index:structureIndices(px,py)){auto&s=m_structures[index];if(px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});}
+ std::sort(solids.begin(),solids.end());std::vector<Span> result;float bottom=-100.f;
  for(auto solid:solids){if(solid.first>bottom)result.push_back({bottom,solid.first,0});bottom=std::max(bottom,solid.second);}
  if(bottom<roof)result.push_back({bottom,roof,0});return result;
 }

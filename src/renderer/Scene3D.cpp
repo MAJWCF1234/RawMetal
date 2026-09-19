@@ -1,4 +1,5 @@
 #include "SoftwareRenderer.h"
+#include "GpuRenderer.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -64,6 +65,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    for(int i=0;i<2;++i){auto lightDirection=normalLighting->directions[i];tangentLights[i]={dot(tangent,lightDirection),dot(bitangent,lightDirection),dot(normal,lightDirection)};flatResponse+=normalLighting->weights[i]*std::max(0.f,tangentLights[i].z);}
   }
  }
+ if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,normalActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive);return;}
  // Clip in camera space before perspective division; preserve UVs at intersections.
  MeshVertex input[8]={a,b,c},output[8];int count=3;
  for(int plane=0;plane<5;++plane){
@@ -91,7 +93,13 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
   }
   int left=std::max(0,int(std::floor(std::min({A.x,B.x,C.x})))),right=std::min(m_width-1,int(std::ceil(std::max({A.x,B.x,C.x}))));
   int top=std::max(0,int(std::floor(std::min({A.y,B.y,C.y})))),bottom=std::min(m_height-1,int(std::ceil(std::max({A.y,B.y,C.y}))));
-  for(int y=top;y<=bottom;++y)for(int x=left;x<=right;++x){float px=x+.5f,py=y+.5f;
+  // Clip each scanline to the triangle before per-pixel depth/material work.
+  // Conservative bounds retain the existing barycentric edge coverage rule.
+  for(int y=top;y<=bottom;++y){float py=y+.5f,lo=float(right+1),hi=float(left-1);
+   auto edge=[&](const P& p,const P& q){if(py<std::min(p.y,q.y)||py>std::max(p.y,q.y)||std::fabs(q.y-p.y)<.000001f)return;float x=p.x+(py-p.y)*(q.x-p.x)/(q.y-p.y);lo=std::min(lo,x);hi=std::max(hi,x);};
+   edge(A,B);edge(B,C);edge(C,A);
+   int rowLeft=std::max(left,int(std::floor(lo-.5f))-1),rowRight=std::min(right,int(std::ceil(hi-.5f))+1);
+   for(int x=rowLeft;x<=rowRight;++x){float px=x+.5f;
    float u=((B.x-px)*(C.y-py)-(B.y-py)*(C.x-px))*inverseArea,v=((C.x-px)*(A.y-py)-(C.y-py)*(A.x-px))*inverseArea,w=1.f-u-v;
    if(u<0||v<0||w<0)continue;float iz=A.iz*u+B.iz*v+C.iz*w,z=1.f/iz;size_t index=size_t(y*m_width+x);
    if(z>=m_zbuffer[index])continue;
@@ -115,6 +123,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
      int ex=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ey=std::min(texture.height-1,int((V-std::floor(V))*texture.height));auto glow=texture.emission[size_t(ey*texture.width+ex)];unsigned result=0xff000000u;
      for(int channel=0;channel<3;++channel){unsigned value=std::min(255u,unsigned((color>>(channel*8))&255)+unsigned(((glow>>(channel*8))&255)*1.6f));result|=value<<(channel*8);}color=result;
     }put(x,y,color);}
+   }
   }
  }
 }
@@ -124,18 +133,58 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto&m_lightingCache=m_chunkLighting[w.level()];auto&m_lightingDoors=m_chunkLightingDoors[w.level()];
  // Refresh shadow caches at discrete door poses instead of rebuilding every frame.
  std::vector<float> doorState;for(auto&door:w.doors())doorState.push_back(std::floor(door.open*8.f)/8.f);
- if(doorState!=m_lightingDoors||m_lightingCache.size()>50000){m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_lightingDoors=doorState;}
+ if(doorState!=m_lightingDoors||m_lightingCache.size()>250000){m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_lightingDoors=doorState;}
+ bool movingGeometry=false;
+ int shadowBudget=m_shadowBudgetLimit;
+ // Bin lights in 4 m cells; a stacked map must not scan every storey's lamps
+ // for each surface sample. The radius test below remains the exact filter.
+ auto&lightCells=m_chunkLightCells[w.level()];
+ auto lightCell=[](Point3 p){int x=std::clamp(int(std::floor((p.x+4)/4)),0,7),y=std::clamp(int(std::floor((p.y+4)/4)),0,7),z=std::clamp(int(std::floor((p.z+12)/4)),0,7);return (z*8+y)*8+x;};
+ if(lightCells.empty()||m_chunkLightCounts[w.level()]!=w.lights().size()){
+ lightCells.assign(512,{});m_chunkLightCounts[w.level()]=w.lights().size();
+ for(const auto& light:w.lights()){
+  if(w.level()==3&&&light==&w.lights().back())continue;
+  for(int z=0;z<8;++z)for(int y=0;y<8;++y)for(int x=0;x<8;++x){
+   auto separation=[](float p,int cell,float origin){float lo=cell==0?-1000.f:origin+cell*4,hi=cell==7?1000.f:origin+(cell+1)*4;return std::max({lo-p,0.f,p-hi});};
+   float dx=separation(light.position.x,x,-4),dy=separation(light.position.y,y,-4),dz=separation(light.z,z,-12);
+   if(dx*dx+dy*dy+dz*dz<=30.01f)lightCells[(z*8+y)*8+x].push_back(size_t(&light-w.lights().data()));
+  }
+ }
+ }
+ // Merge authored deck runs into opaque rectangles. Only reject a complete
+ // projected bounding box covered by one rectangle: shaft/stair openings stay
+ // visible at every camera height, with no arbitrary floor-distance cutoff.
+ std::vector<Structure> occluders;
+ if(w.level()==3&&m_visibilityCulling)for(const auto&layer:w.layers())if(layer.thickness>0){
+  size_t first=occluders.size();
+  for(int y=0;y<24;++y)for(int x=0;x<24;){if(layer.rows[y][x]!='='){++x;continue;}int begin=x;while(x<24&&layer.rows[y][x]=='=')++x;
+   bool joined=false;for(size_t i=first;i<occluders.size();++i){auto&o=occluders[i];if(o.x1==begin&&o.x2==x&&o.y2==y){o.y2=float(y+1);joined=true;break;}}
+   if(!joined)occluders.push_back({float(begin),float(y),float(x),float(y+1),layer.elevation-layer.thickness,layer.elevation});
+  }
+ }
+ Point3 eye{game.player().pos.x,game.player().pos.y,game.player().z+game.player().eye};
+ auto hidden=[&](Point3 a,Point3 b){
+  for(auto&o:occluders){float z=(o.bottom+o.top)*.5f;
+   if(!((eye.z>o.top+.03f&&b.z<o.bottom-.03f)||(eye.z<o.bottom-.03f&&a.z>o.top+.03f)))continue;
+   float t1=(z-eye.z)/(a.z-eye.z),t2=(z-eye.z)/(b.z-eye.z);
+   float x1=eye.x+(a.x-eye.x)*t1,x2=eye.x+(b.x-eye.x)*t1,x3=eye.x+(a.x-eye.x)*t2,x4=eye.x+(b.x-eye.x)*t2;
+   if(std::min({x1,x2,x3,x4})<o.x1+.005f||std::max({x1,x2,x3,x4})>o.x2-.005f)continue;
+   float y1=eye.y+(a.y-eye.y)*t1,y2=eye.y+(b.y-eye.y)*t1,y3=eye.y+(a.y-eye.y)*t2,y4=eye.y+(b.y-eye.y)*t2;
+   if(std::min({y1,y2,y3,y4})>=o.y1+.005f&&std::max({y1,y2,y3,y4})<=o.y2-.005f)return true;
+  }return false;
+ };
  auto outside=[](Point3 p){unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;return mask;};
  auto sphereVisible=[&](Point3 point,float radius){auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
+  if(movingGeometry)return .82f+.12f*std::fabs(normal.z);
   // Static receivers reuse light samples. A moving bulkhead invalidates them.
   auto positionBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
   auto normalBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*15))+15,0,30));};
   auto key=positionBits(point.x)|(positionBits(point.y)<<12)|(positionBits(point.z)<<24)|(normalBits(normal.x)<<36)|(normalBits(normal.y)<<41)|(normalBits(normal.z)<<46);
   auto cached=m_lightingCache.find(key);if(cached!=m_lightingCache.end())return cached->second;
   float brightness=.27f+.07f*std::fabs(normal.z);
-  for(const auto&fixture:w.lights()){float x=fixture.position.x,y=fixture.position.y;
+  for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];float x=fixture.position.x,y=fixture.position.y;
    if(std::fabs(x-point.x)>5.5f||std::fabs(y-point.y)>5.5f)continue;
    Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>30||d2<.001f)continue;
    float distance=std::sqrt(d2),facing=std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
@@ -143,16 +192,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    // to avoid self-shadowing without skipping the receiver's entire grid cell.
    float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;
    auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
-   float visibility=0;
+   float visibility=0;bool complete=true;
    for(float offset:{-.18f,0.f,.18f}){
     auto target=light+Point3{offset,0,0};auto ray=target-origin;
     int steps=std::max(1,int(std::ceil(distance/.18f)));bool blocked=false;
-    for(int i=1;i<steps;++i){auto p=origin+ray*(float(i)/steps);
-     if(!w.fits(p.x,p.y,p.z,.01f)||w.doorBlocks(p.x,p.y,p.z,.01f)){blocked=true;break;}}
+    for(int i=1;i<steps;++i){if(shadowBudget<=0){complete=false;break;}--shadowBudget;auto p=origin+ray*(float(i)/steps);
+     if(!w.fits(p.x,p.y,p.z,.01f,false)||w.doorBlocks(p.x,p.y,p.z,.01f)){blocked=true;break;}}
     visibility+=blocked?.04f:1.f;
    }
    brightness+=(visibility/3.f)*(.12f+.88f*facing)*3.2f/(1+d2*.65f);
-  }brightness=std::sqrt(std::clamp(brightness,.24f,1.4f));m_lightingCache.emplace(key,brightness);return brightness;
+   if(!complete)break;
+  }brightness=std::sqrt(std::clamp(brightness,.24f,1.4f));if(shadowBudget>0)m_lightingCache.emplace(key,brightness);return brightness;
  };
  auto normalLightingAt=[&](Point3 center){
   auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
@@ -160,15 +210,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   auto found=cache.find(key);
   if(found==cache.end()){
    NormalLighting lights;
-   for(const auto&fixture:w.lights()){
+   for(auto source:lightCells[lightCell(center)]){const auto&fixture=w.lights()[source];
     auto delta=Point3{fixture.position.x,fixture.position.y,fixture.z}-center;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
     if(d2>30||d2<.001f)continue;float weight=2.8f/(1+d2*.65f);
     auto start=center+delta*(.04f/std::sqrt(d2));
-    if(!w.rayClear({start.x,start.y},start.z,fixture.position,fixture.z))weight*=.04f;
+    if(shadowBudget>0){shadowBudget-=int(std::sqrt(d2)/.12f)+1;if(!w.rayClear({start.x,start.y},start.z,fixture.position,fixture.z,true,false))weight*=.04f;}
     if(weight<=lights.weights[1])continue;
     int slot=weight>lights.weights[0]?0:1;if(slot==0){lights.weights[1]=lights.weights[0];lights.directions[1]=lights.directions[0];}
     lights.weights[slot]=weight;lights.directions[slot]=delta*(1/std::sqrt(d2));
    }
+   if(shadowBudget<=0){auto origin=cameraPoint(center,game);for(auto&direction:lights.directions)direction=cameraPoint(center+direction,game)-origin;return lights;}
    found=cache.emplace(key,lights).first;
   }
   auto result=found->second;auto origin=cameraPoint(center,game);
@@ -184,6 +235,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  };
  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
   if(outside(cameraPoint(a,game))&outside(cameraPoint(b,game))&outside(cameraPoint(c,game))&outside(cameraPoint(d,game)))return;
+  if(hidden({std::min({a.x,b.x,c.x,d.x}),std::min({a.y,b.y,c.y,d.y}),std::min({a.z,b.z,c.z,d.z})},{std::max({a.x,b.x,c.x,d.x}),std::max({a.y,b.y,c.y,d.y}),std::max({a.z,b.z,c.z,d.z})}))return;
   auto size=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
   // Sample large architectural surfaces on a regular grid so light and shadow
   // gradients do not expose the two triangles of an entire wall or door.
@@ -191,25 +243,30 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(light<1.5f&&(t.mips.empty()||!t.normalLevels.empty())){columns=std::clamp(int(std::ceil(size(b-a))),1,16);rows=std::clamp(int(std::ceil(size(d-a))),1,16);}
   auto normal=cross3(b-a,c-a);std::array<MeshVertex,289> vertices;
   for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){float u=float(x)/columns,v=float(y)/rows;auto p=a+(b-a)*u+(d-a)*v;
-   vertices[size_t(y*(columns+1)+x)]={cameraPoint(p,game),u*uvScale.x+uvOffset.x,(1-v)*uvScale.y+uvOffset.y,light<1.5f?illumination(p,normal):1.f};
+   vertices[size_t(y*(columns+1)+x)]={cameraPoint(p,game),u*uvScale.x+uvOffset.x,(1-v)*uvScale.y+uvOffset.y,-1.f};
   }
-  for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){int i=y*(columns+1)+x;auto A=vertices[i],B=vertices[i+1],C=vertices[i+columns+2],D=vertices[i+columns+1];
+  for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){int i=y*(columns+1)+x;auto &A=vertices[i],&B=vertices[i+1],&C=vertices[i+columns+2],&D=vertices[i+columns+1];
+   if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
+   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0)v.light=light<1.5f?illumination(a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows),normal):1.f;};
+   illuminate(A,x,y);illuminate(B,x+1,y);illuminate(C,x+1,y+1);illuminate(D,x,y+1);
    NormalLighting lights;const NormalLighting* normalState=nullptr;
-   if(!t.normalLevels.empty()){lights=normalLightingAt(a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows));normalState=&lights;}
+   if(!t.normalLevels.empty()&&!movingGeometry){lights=normalLightingAt(a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows));normalState=&lights;}
    triangle3D(A,B,C,t,light,normalState);triangle3D(A,C,D,t,light,normalState);}
  };
  Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};
  Texture iron{1,1,{0xff343834u}},red{1,1,{0xffb84728u}};
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
-  quad({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},texture,light);
-  quad({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},texture,light*.8f);
-  quad({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},texture,light*.85f);
-  quad({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},texture,light);
-  quad({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},texture,light*1.1f);
-  quad({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},texture,light*.65f);
+  if(hidden(a,b))return;
+  if(eye.y<=a.y)quad({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},texture,light);
+  if(eye.y>=b.y)quad({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},texture,light*.8f);
+  if(eye.x<=a.x)quad({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},texture,light*.85f);
+  if(eye.x>=b.x)quad({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},texture,light);
+  if(eye.z>=b.z)quad({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},texture,light*1.1f);
+  if(eye.z<=a.z)quad({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},texture,light*.65f);
  };
  auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
   if(base==-999.f)base=w.floorHeight(x,y);Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
+  if(hidden({x-footprint,y-footprint,base},{x+footprint,y+footprint,base+height}))return;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   float scale=std::min(height/std::max(.001f,range.y),footprint/std::max(range.x,range.z));
@@ -222,6 +279,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
+  float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   float c=std::cos(yaw),s=std::sin(yaw);
   for(auto face:mesh.triangles){
@@ -277,7 +335,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
     auto&material=w.level()==0?m_wall:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
-    quad({ax,ay,0},{bx,by,0},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,Z/3.f},{offset,0});
+    float wallBase=w.level()==3?-9.f:0.f;
+    quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if((x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
     if((x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
     (void)light;
@@ -290,19 +349,28 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  for(auto&s:w.structures()){
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
-  if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_floor,1.05f);
-  else{box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},m_panelMetal,.95f);
+  if(s.material==1){
+   box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_bulkhead,1.f);
+   // Containment vessel spans both reactor maps. Luminous coolant channels
+   // and heavy external bands make it readable from below and the balcony.
+   for(float x:{10.8f,11.55f,12.3f,13.05f})box({x,18.46f,-8.6f},{x+.12f,18.5f,-3.8f},blue,1.8f);
+   for(float z:{-8.6f,-6.5f,-4.f})box({10.35f,18.35f,z},{13.65f,21.65f,z+.16f},m_pressureMetal,1.f);
+   quad({13.2f,18.33f,-5.6f},{10.8f,18.33f,-5.6f},{10.8f,18.33f,-4.9f},{13.2f,18.33f,-4.9f},m_chemicalSign,1.1f);
+  }
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_floor,1.05f);
+  else{if(s.top-s.bottom>1.5f)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_floor,.8f);
+   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},m_panelMetal,.95f);
    box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top},m_panelMetal,.9f);
    box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top},m_panelMetal,.9f);}
  }
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
- auto stripeBand=[&](float left,float right,float centerY){
+ auto stripeBand=[&](float left,float right,float centerY,float offset=0.f){
   float halfWidth=(right-left)*m_hazard.height/m_hazard.width*.5f;
-  float height=w.floorHeight((left+right)*.5f,centerY)+.009f;
+  float height=w.floorHeight((left+right)*.5f,centerY)+offset+.009f;
   quad({left,centerY-halfWidth,height},{right,centerY-halfWidth,height},{right,centerY+halfWidth,height},{left,centerY+halfWidth,height},m_hazard,.85f);
  };
- for(auto&door:w.doors())stripeBand(door.left,door.right,door.y);
+ for(auto&door:w.doors())stripeBand(door.left,door.right,door.y,door.z);
  for(int y=1;y<World::Height-1;++y)for(int x=1;x<World::Width-1;){
   if(w.tile(x,y)!='G'){++x;continue;}
   int start=x;while(x<World::Width-1&&w.tile(x,y)=='G')++x;
@@ -311,31 +379,32 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  // Door lintels and signs are geometry in the world, visible along both routes.
  for(auto&door:w.doors()){
   float x=(door.left+door.right)*.5f,y=door.y-.5f,half=(door.right-door.left)*.5f;
-  box({x-half,y-.12f,2.5f},{x+half,y+1.12f,3.f},m_metal,.8f);
-  float bottom=door.open*2.65f;
+  float base=w.floorHeight(x,door.y)+door.z;
+  box({x-half,y-.12f,base+2.5f},{x+half,y+1.12f,base+3.f},m_metal,.8f);
+  float bottom=base+door.open*2.65f;
   box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},m_bulkhead,1.f);
   float stripeHeight=(door.right-door.left)*m_hazard.height/m_hazard.width;
   quad({door.right,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f+stripeHeight},{door.right,door.y-.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
   quad({door.left,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f+stripeHeight},{door.left,door.y+.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
-  for(float jamb:{door.left,door.right})box({jamb-.055f,y-.08f,0},{jamb+.055f,y+1.08f,2.75f},m_panelMetal,.85f);
+  for(float jamb:{door.left,door.right})box({jamb-.055f,y-.08f,base},{jamb+.055f,y+1.08f,base+2.75f},m_panelMetal,.85f);
   // Switch housings attach to the fixed wall on both sides, never to the moving leaf.
   for(float side:{-1.f,1.f}){float face=door.y+side*.535f,switchX=door.left-.25f;
-   float h=w.floorHeight(switchX,face);
+   float h=base;
    box({switchX-.17f,face-.035f,h+.86f},{switchX+.17f,face+.035f,h+1.27f},m_panelMetal,.9f);
    if(side<0)quad({switchX+.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+1.24f},{switchX+.14f,face-.04f,h+1.24f},m_terminalTexture,.85f);
    else quad({switchX-.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+1.24f},{switchX-.14f,face+.04f,h+1.24f},m_terminalTexture,.85f);
    box({switchX-.025f,face+side*.042f-.005f,h+1.17f},{switchX+.025f,face+side*.042f+.005f,h+1.20f},door.opening?blue:amber,1.55f);
   }
   // Compact sector label bolted directly to the header.
-  auto&front=door.transfer?(w.level()==0?m_transferSign:w.level()==1?m_gantrySign:m_surfaceSign):w.level()==1?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
+  auto&front=door.transfer?(w.level()==0?m_transferSign:w.level()==1?m_gantrySign:w.level()==3?m_reactorSign:m_surfaceSign):w.level()==1?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
   auto&back=door.transfer?front:w.level()==1?m_transferSign:(y<10?m_intakeSign:m_processingSign);
-  quad({x+.7f,y-.125f,2.52f},{x-.7f,y-.125f,2.52f},{x-.7f,y-.125f,2.9575f},{x+.7f,y-.125f,2.9575f},front,.9f);
-  quad({x-.7f,y+1.125f,2.52f},{x+.7f,y+1.125f,2.52f},{x+.7f,y+1.125f,2.9575f},{x-.7f,y+1.125f,2.9575f},back,.9f);
+  quad({x+.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.9575f},{x+.7f,y-.125f,base+2.9575f},front,.9f);
+  quad({x-.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.9575f},{x-.7f,y+1.125f,base+2.9575f},back,.9f);
  }
  for(auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint);}
  // Original square fixture proportions, with its top 2 cm below its support.
  // The light source sits 4 cm beneath the luminous underside.
- for(const auto&light:w.lights())facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);
+ for(const auto&light:w.lights()){movingGeometry=w.level()==3&&&light==&w.lights().back();facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);}movingGeometry=false;
  for(const auto&fixture:w.fixtures())facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
  for(auto&c:game.clutter()){
   auto&mesh=m_clutterMeshes[c.kind];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;auto size=c.size();float scale=std::max({size[0],size[1],size[2]})/std::max({range.x,range.y,range.z});
@@ -369,7 +438,51 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  box({10,14,.66f},{11,15,3.2f},m_metal,.9f);
  quad({9.99f,14.15f,.83f},{9.99f,14.85f,.83f},{9.99f,14.85f,1.05f},{9.99f,14.15f,1.05f},m_serviceSign,1.1f);
  }
- for(auto&terminal:w.terminals()){float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
+ if(w.level()==3){
+  movingGeometry=true;
+  float z=w.liftHeight();bool ready=w.liftPhase()==World::LiftPhase::Ready,crashed=w.liftPhase()==World::LiftPhase::Crashed;
+  // Modular freight cab: structural frame, recessed kick panels, wide cage
+  // windows and split doors. Detail is geometry using the purchased materials.
+  box({10,10,z-.25f},{14,14,z},m_pressureMetal,1.05f);
+  quad({10.3f,10.3f,z+.004f},{13.7f,10.3f,z+.004f},{13.7f,13.7f,z+.004f},{10.3f,13.7f,z+.004f},m_floor,1.f,{2,2});
+  for(float y:{10.18f,13.62f})quad({10.2f,y,z+.01f},{13.8f,y,z+.01f},{13.8f,y+.16f,z+.01f},{10.2f,y+.16f,z+.01f},m_hazard,1.1f);
+  box({10,10,z+2.6f},{14,14,z+2.8f},m_bulkhead,.9f);
+  for(float y:{10.15f,13.65f})box({10.12f,y,z+2.42f},{13.88f,y+.2f,z+2.6f},m_metal,.85f);
+  for(float x:{10.f,13.88f}){
+   box({x,10,z},{x+.12f,14,z+.65f},m_pressureWall,.95f);
+   box({x,10,z+2.12f},{x+.12f,14,z+2.6f},m_panelMetal,.9f);
+   for(float y:{10.05f,11.95f,13.8f})box({x,y,z},{x+.12f,y+.15f,z+2.6f},m_metal,.8f);
+   float rail=x<11?10.16f:13.78f;
+   box({rail,10.2f,z+.82f},{rail+.06f,13.8f,z+.89f},m_metal,1.1f);
+   for(float y:{10.6f,12.9f})box({x+.015f,y,z+.13f},{x+.1f,y+.45f,z+.47f},m_bulkhead,1.05f);
+  }
+  for(float y:{10.f,13.88f}){
+   box({10,y,z},{11,y+.12f,z+2.6f},m_panelMetal,1.f);
+   box({13,y,z},{14,y+.12f,z+2.6f},m_panelMetal,1.f);
+   box({11,y,z+2.2f},{13,y+.12f,z+2.6f},m_panelMetal,1.f);
+   float opening=y==10?(ready?1.f:w.liftPhase()==World::LiftPhase::Ascending?1-std::min(1.f,w.liftPhaseTime()/.65f):0.f):(crashed?std::min(1.f,w.liftPhaseTime()/.65f):0.f);
+   for(int leaf=0;leaf<2;++leaf){float left=11+leaf+(leaf?opening:-opening),right=left+1;
+    box({left,y,z},{right,y+.12f,z+1.12f},m_bulkhead,1.f);
+    box({left,y,z+1.82f},{right,y+.12f,z+2.2f},m_bulkhead,1.f);
+    for(float post:{left,left+.47f,right-.06f})box({post,y,z+1.12f},{post+.06f,y+.12f,z+1.82f},m_metal,.8f);
+    box({left,y,z+1.45f},{right,y+.12f,z+1.49f},m_metal,.8f);
+   }
+   // Load plate and threshold tracks stay on the fixed door frame.
+   box({10.94f,y-.025f,z+.01f},{13.06f,y+.145f,z+.035f},m_metal,1.f);
+  }
+  quad({12.7f,13.865f,z+2.23f},{11.3f,13.865f,z+2.23f},{11.3f,13.865f,z+2.56f},{12.7f,13.865f,z+2.56f},m_liftSign,1.2f);
+  quad({13.87f,10.95f,z+1.05f},{13.87f,12.05f,z+1.05f},{13.87f,12.05f,z+1.39f},{13.87f,10.95f,z+1.39f},m_liftDispatch,1.2f);
+  bool alarm=w.liftPhase()==World::LiftPhase::Jammed||w.liftPhase()==World::LiftPhase::Falling;
+  auto&signal=alarm&&int(game.elapsed()*8)%2?m_redPaint:amber;
+  for(float x:{10.65f,13.25f})box({x,13.70f,z+2.27f},{x+.1f,13.82f,z+2.49f},signal,1.8f);
+  for(float x:{10.15f,13.75f})box({x,10.3f,z+2.8f},{x+.045f,10.35f,crashed||w.liftPhase()==World::LiftPhase::Falling?z+3.2f:15.8f},m_metal,.7f);
+  box({11.3f,11.6f,z+2.8f},{12.7f,12.4f,z+3.05f},m_pressureMetal,.8f);
+  // The sealed surface gates stay in the shaft when the room plunges away.
+  box({10,14.05f,9},{14,14.25f,12},m_bulkhead,1.f);
+  quad({13.8f,14.04f,10.5f},{10.2f,14.04f,10.5f},{10.2f,14.04f,11.3f},{13.8f,14.04f,11.3f},m_surfaceSign,1.1f);
+ }
+ movingGeometry=false;
+ for(auto&terminal:w.terminals()){movingGeometry=w.level()==3&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
   if(terminal.control){
    box({x-.27f,y-.18f,h},{x+.27f,y+.18f,h+.2f},m_panelMetal,.9f);
    facility(8,x,y,h+.2f,.36f,.54f,.75f,kPi*.5f);
@@ -381,6 +494,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  }
  // Extraction floor remains readable even before its gate unlocks.
+ movingGeometry=false;
  for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining()==0?m_routePaint:m_redPaint,1.f);}
  for(const auto&e:game.enemies()){
   if(!e.visible())continue;
@@ -424,10 +538,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   prop(health?m_medkitMesh:m_shellsMesh,health?m_medkitTexture:m_shellsTexture,p.pos.x,p.pos.y,health?.4f:.36f,-.3f,health?.65f:.48f);
  }
 }
+void SoftwareRenderer::prepareViewModel(const Game& game){
+ const auto&motion=game.weaponMotion();
+ if(game.unarmed()){bool jab=game.punchAge()<.48f&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/.48f:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
+ auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=1.15f/std::max({range.x,range.y,range.z});
+ auto local=[&](Point3 source){auto p=(source-center)*scale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
+ const Point3 pivot{.15f,-.155f,.52f};
+ auto animated=[&](Point3 p){p=p-pivot;float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;};
+ auto armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;
+ auto toRig=[&](Point3 view){auto p=(view-Point3{.15f,-.285f,.52f})*(1.f/1.15f);p.x=-p.x;return p+armCenter;};
+ auto right=animated(local({.02f,.70f,1.10f})+Point3{.045f,-.105f,-.07f}),left=animated(local({.02f,1.10f,-1.15f})+Point3{-.085f,-.055f,-.03f});
+ m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick());
+}
 void SoftwareRenderer::drawViewModel(const Game& game){
+ if(m_gpuFrame)m_gpu->clearDepth();
  if(game.holdingClutter()&&!m_inspectRig)return;
  std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
- const auto&motion=game.weaponMotion();float kick=game.weaponKick();
+ const auto&motion=game.weaponMotion();
  Point3 gunCenter=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f;
  Point3 gunRange=m_weaponMesh.maximum-m_weaponMesh.minimum;
  float gunScale=1.15f/std::max({gunRange.x,gunRange.y,gunRange.z});
@@ -445,10 +572,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto leftWrist=animated(gunLocal(supportSocket)+Point3{-.085f,-.055f,-.03f});
  bool fists=game.unarmed();
  Point3 armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f,armOffset=fists?Point3{0,-.22f,.30f}:Point3{.15f,-.285f,.52f};
- auto toRig=[&](Point3 view){auto p=(view-armOffset)*(1.f/1.15f);p.x=-p.x;return p+armCenter;};
  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*1.15f;p.x=-p.x;return p+armOffset;};
- if(fists){bool jab=game.punchAge()<.48f&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/.48f:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");}
- else m_armsMesh.poseAttached(toRig(rightWrist),toRig(leftWrist),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,kick);
+ if(!m_poseReady)prepareViewModel(game);
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
   return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-game.holster()*.85f),p.z};};
  m_gripError=0;

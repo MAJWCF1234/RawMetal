@@ -3,7 +3,7 @@
 namespace retro {
 void Game::ensureChunk(int level){
  auto&chunk=m_chunks[level];if(chunk.resident)return;auto doors=chunk.world.doors();bool control=chunk.world.controlReleased();
- chunk.world=World(level);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();chunk.resident=true;
+ auto saved=chunk.world;chunk.world=World(level);chunk.world.restoreLift(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();chunk.resident=true;
 }
 void Game::useDoor(int index){
  auto door=m_world.doors()[index];m_world.toggleDoor(index);bool opening=!door.opening;
