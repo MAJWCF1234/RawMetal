@@ -1,1 +1,0 @@
-Stereo audio device opened. 34 embedded samples loaded.

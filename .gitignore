@@ -7,3 +7,6 @@ RawMetal.assets
 *.rmz
 *.ppm
 RawMetal-error.txt
+RawMetal-audio.txt
+RawMetal-*.zip
+inventory.zip

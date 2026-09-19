@@ -122,7 +122,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  if(clearDepth)std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
  const auto&w=game.world();
  auto&m_lightingCache=m_chunkLighting[w.level()];auto&m_lightingDoors=m_chunkLightingDoors[w.level()];
- std::vector<float> doorState;for(auto&door:w.doors())doorState.push_back(door.open);
+ // Refresh shadow caches at discrete door poses instead of rebuilding every frame.
+ std::vector<float> doorState;for(auto&door:w.doors())doorState.push_back(std::floor(door.open*8.f)/8.f);
  if(doorState!=m_lightingDoors||m_lightingCache.size()>50000){m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_lightingDoors=doorState;}
  auto outside=[](Point3 p){unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;return mask;};
  auto sphereVisible=[&](Point3 point,float radius){auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
@@ -133,16 +134,25 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   auto normalBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*15))+15,0,30));};
   auto key=positionBits(point.x)|(positionBits(point.y)<<12)|(positionBits(point.z)<<24)|(normalBits(normal.x)<<36)|(normalBits(normal.y)<<41)|(normalBits(normal.z)<<46);
   auto cached=m_lightingCache.find(key);if(cached!=m_lightingCache.end())return cached->second;
-  float brightness=.38f;
+  float brightness=.27f+.07f*std::fabs(normal.z);
   for(const auto&fixture:w.lights()){float x=fixture.position.x,y=fixture.position.y;
    if(std::fabs(x-point.x)>5.5f||std::fabs(y-point.y)>5.5f)continue;
    Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>30||d2<.001f)continue;
-   float distance=std::sqrt(d2),facing=std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance,visibility=1;
-   for(float t=.25f;t<distance-.2f;t+=.35f){auto p=point+delta*(t/distance);if(int(p.x)==int(point.x)&&int(p.y)==int(point.y))continue;
-    if(!w.fits(p.x,p.y,p.z,.01f)||w.doorBlocks(p.x,p.y,p.z,.01f)){visibility=.12f;break;}
+   float distance=std::sqrt(d2),facing=std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
+   // A small area emitter softens static shadow edges. Offset toward the light
+   // to avoid self-shadowing without skipping the receiver's entire grid cell.
+   float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;
+   auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
+   float visibility=0;
+   for(float offset:{-.18f,0.f,.18f}){
+    auto target=light+Point3{offset,0,0};auto ray=target-origin;
+    int steps=std::max(1,int(std::ceil(distance/.18f)));bool blocked=false;
+    for(int i=1;i<steps;++i){auto p=origin+ray*(float(i)/steps);
+     if(!w.fits(p.x,p.y,p.z,.01f)||w.doorBlocks(p.x,p.y,p.z,.01f)){blocked=true;break;}}
+    visibility+=blocked?.04f:1.f;
    }
-   brightness+=visibility*(.18f+.82f*facing)*2.8f/(1+d2*.65f);
-  }brightness=std::sqrt(std::clamp(brightness,.3f,1.4f));m_lightingCache.emplace(key,brightness);return brightness;
+   brightness+=(visibility/3.f)*(.12f+.88f*facing)*3.2f/(1+d2*.65f);
+  }brightness=std::sqrt(std::clamp(brightness,.24f,1.4f));m_lightingCache.emplace(key,brightness);return brightness;
  };
  auto normalLightingAt=[&](Point3 center){
   auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
@@ -153,7 +163,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    for(const auto&fixture:w.lights()){
     auto delta=Point3{fixture.position.x,fixture.position.y,fixture.z}-center;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
     if(d2>30||d2<.001f)continue;float weight=2.8f/(1+d2*.65f);
-    if(!w.rayClear({center.x,center.y},center.z,fixture.position,fixture.z))weight*=.12f;
+    auto start=center+delta*(.04f/std::sqrt(d2));
+    if(!w.rayClear({start.x,start.y},start.z,fixture.position,fixture.z))weight*=.04f;
     if(weight<=lights.weights[1])continue;
     int slot=weight>lights.weights[0]?0:1;if(slot==0){lights.weights[1]=lights.weights[0];lights.directions[1]=lights.directions[0];}
     lights.weights[slot]=weight;lights.directions[slot]=delta*(1/std::sqrt(d2));

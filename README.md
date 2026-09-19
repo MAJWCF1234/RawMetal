@@ -1,6 +1,12 @@
 # RawMetal
 
-Extract the ZIP, then play **RawMetal.exe** or use **RawMetal.cmd**. This ZIP contains one self-contained executable; no companion asset file is required.
+Download **RawMetal.zip** from [GitHub Releases](https://github.com/MAJWCF1234/RawMetal/releases/latest), extract it, and run **RawMetal.exe**. The ZIP contains one self-contained executable; no companion asset file is required. **RawMetal.cmd** is an optional launcher in the source checkout.
+
+Press **I** for inventory and **Esc** for settings (or to close inventory). Select an inventory item, then click an empty storage cell to move it. **E / Enter** equips or stows the selected shotgun, or consumes selected first aid. Item previews use the game models; ammo counts reflect your current supply.
+
+The current renderer uses cached soft shadow samples, normal maps with normalized mip blending, and discrete door poses for shadow-cache updates.
+
+The canonical build outputs are **RawMetal.exe** and **RawMetal.zip** in the project root. Binaries belong in GitHub Releases. Runtime audio/error logs and temporary archives are excluded from source control.
 
 Build with **Build.cmd** (Visual Studio 2022 C++ tools and CMake required). Every configuration writes the same root executable. Close the game before rebuilding; do not create alternate executable folders to work around a running game.
 

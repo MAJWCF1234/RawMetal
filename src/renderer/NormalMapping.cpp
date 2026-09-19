@@ -24,10 +24,15 @@ Point3 SoftwareRenderer::sampleNormal(const Texture& texture,float u,float v,flo
  if(texture.normalLevels.empty())return {0,0,1};u-=std::floor(u);v-=std::floor(v);
  lod=std::clamp(lod,0.f,float(texture.normalLevels.size()-1));int level=int(lod);
  auto fetch=[&](int at){int width=std::max(1,texture.width>>at),height=std::max(1,texture.height>>at);return texture.normalLevels[at][std::min(height-1,int(v*height))*width+std::min(width-1,int(u*width))];};
- auto a=fetch(level);if(size_t(level+1)==texture.normalLevels.size())return a;float blend=lod-level;return a*(1-blend)+fetch(level+1)*blend;
+ auto a=fetch(level);if(size_t(level+1)==texture.normalLevels.size())return a;float blend=lod-level;
+ // Interpolated directions must stay unit length or relief darkens at mip transitions.
+ return unitNormal(a*(1-blend)+fetch(level+1)*blend);
 }
 bool SoftwareRenderer::testNormalMapping(){
  std::ofstream report("normal-mapping-test.txt");
+ Texture blendTest{2,2,{}};blendTest.normalLevels={std::vector<Point3>(4,Point3{.6f,0,.8f}),{{0,0,1}}};
+ auto blended=sampleNormal(blendTest,.2f,.3f,.5f);
+ if(std::fabs(blended.x*blended.x+blended.y*blended.y+blended.z*blended.z-1)>.001f)return false;
  for(auto* texture:{&m_wall,&m_pressureWall,&m_bulkhead,&m_floor}){
   if(texture->normalLevels.size()!=texture->mips.size()+1)return false;
   for(auto n:texture->normalLevels[0])if(!std::isfinite(n.x+n.y+n.z)||std::fabs(n.x*n.x+n.y*n.y+n.z*n.z-1)>.001f)return false;
