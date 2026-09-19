@@ -31,7 +31,7 @@ void Game::executeConsole(std::string command){
   if(level<0||!extra.empty())m_consoleLog.push_back("UNKNOWN MAP. TYPE MAPS FOR VALID NAMES / IDS.");
   else{
    m_level=level;restart();m_paused=false;m_inventoryOpen=false;
-   if(reactor){m_world.startLift();m_world.updateLift(12);m_player.pos={12,15.5f};m_player.z=-9;m_player.angle=kPi*.5f;}
+   if(reactor){m_world.startLift();m_world.updateLift(World::LiftRideComplete);m_player.pos={12,15.5f};m_player.z=-9;m_player.angle=kPi*.5f;}
    m_consoleLog.push_back("LOADED "+(reactor?std::string("REACTOR"):std::to_string(level))+". PRESS ` OR ESC TO PLAY.");
   }
  }else m_consoleLog.push_back("UNKNOWN COMMAND. TYPE HELP.");

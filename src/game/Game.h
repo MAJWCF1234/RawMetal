@@ -90,7 +90,7 @@ struct Player {
 };
 struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0;};
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;};
-struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-224)/2,Width=304,Height=224,RowTop=Y+46,RowHeight=21,Rows=7,SliderX=X+179,SliderWidth=75;};
+struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-266)/2,Width=304,Height=266,RowTop=Y+46,RowHeight=21,Rows=9,SliderX=X+179,SliderWidth=75;};
 
 class Game {
 public:
@@ -137,6 +137,16 @@ public:
     static bool testWeaponMotion();
     static bool testAudioEvents();
     static bool testSettings();
+    static bool testSaves();
+    enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad};
+    MenuPage menuPage()const{return m_menuPage;}
+    int menuRows()const{return m_menuPage==MenuPage::Settings?MenuLayout::Rows:(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load?4:2);}
+    const std::string& menuMessage()const{return m_menuMessage;}
+    const std::string& slotLabel(int slot)const{return m_slotLabels[slot];}
+    void setSaveDirectory(std::wstring path){m_saveDirectory=std::move(path);}
+    bool saveSlot(int slot);
+    bool loadSlot(int slot);
+    unsigned sessionRevision()const{return m_sessionRevision;}
     static bool testPickups();
     static bool testMovement();
     static bool testProgression();
@@ -144,6 +154,7 @@ public:
     static bool testGantry();
     static bool testLift();
     static Game liftInspection(float seconds,int view=0);
+    static bool testReactor();
     const char* interactionHint()const;
     int activeLog()const{return m_activeLog;}
     float logTime()const{return m_logTime;}
@@ -175,6 +186,17 @@ public:
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false);
 
 private:
+    MenuPage m_menuPage=MenuPage::Settings;
+    std::wstring m_saveDirectory;
+    std::array<std::string,3> m_slotLabels{"SLOT 1 / EMPTY","SLOT 2 / EMPTY","SLOT 3 / EMPTY"};
+    std::string m_menuMessage;
+    int m_pendingSlot=-1;
+    unsigned m_sessionRevision=0;
+    void refreshSaveSlots();
+    std::string encodeSave()const;
+    bool decodeSave(const std::string& data);
+    template<class Archive> void archiveSave(Archive& archive);
+    bool nearReactorDisk()const;
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
     bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false;

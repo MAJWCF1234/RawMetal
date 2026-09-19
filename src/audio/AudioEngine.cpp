@@ -71,17 +71,20 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
 void AudioEngine::update(const Game& game,bool focused){
  std::lock_guard lock(m_mutex);
  float dt=std::clamp(game.elapsed()-m_lastTime,0.f,.1f);
- if(game.elapsed()<m_lastTime){m_voices.clear();play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;}
+ bool newSession=game.sessionRevision()!=m_lastRevision;
+ if(game.elapsed()<m_lastTime||newSession){m_voices.clear();play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;}m_lastRevision=game.sessionRevision();
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=Game::chunkOffset(m_lastChunk)-Game::chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
  m_musicGain=game.musicEnabled()?(game.dead()||game.won()?.16f:.28f)*game.settings().music/.75f:0;
  m_effectsGain=game.settings().effects;m_paused=game.paused()||game.consoleOpen();
  auto phase=game.world().liftPhase();bool shaft=game.level()==3;
  m_mainTarget=!shaft||phase==World::LiftPhase::Ready?1.f:0.f;
- m_reactorTarget=shaft&&phase==World::LiftPhase::Crashed?1.f:0.f;
- m_motorTarget=shaft&&phase==World::LiftPhase::Ascending?.8f:shaft&&phase==World::LiftPhase::Jammed?.25f:0.f;
+ m_reactorTarget=shaft&&phase==World::LiftPhase::Crashed&&game.world().liftPhaseTime()>2?1.f:0.f;
+ m_motorTarget=shaft?game.world().liftMotorGain():0.f;
+ if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;}
  auto sceneLoop=[&](Sound cue,int id){if(std::none_of(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==id;}))play({cue,{},1,1,false},id,true);};
  if(m_motorTarget>0)sceneLoop(Sound::LiftMotor,-2);
+ for(auto&voice:m_voices)if(voice.emitter==-2)voice.pitch=m_motorTarget<.3f?.65f:game.world().liftPhaseTime()>24?.82f:1.f;
  if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
  for(const auto&event:game.sounds())play(event);
  auto loop=[&](int emitter,Sound sound,Vec2 pos,float gain){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
@@ -91,7 +94,8 @@ void AudioEngine::update(const Game& game,bool focused){
   for(size_t i=0;i<chunk.enemies().size();++i){auto&e=chunk.enemies()[i];int id=100+level*100+int(i);
    if(e.alive&&e.kind==Enemy::Kind::Wasp)loop(id,Sound::Wings,e.pos+shift,.3f);else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
   }
-  int index=0;for(auto emitter:chunk.world().machines())loop(-1000-level*100-index++,Sound::Machine,emitter+shift,.30f);
+  float machineGain=.30f;if(level==3&&game.level()==3)machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
+  int index=0;for(auto emitter:chunk.world().machines())loop(-1000-level*100-index++,Sound::Machine,emitter+shift,machineGain);
  }
  for(auto&voice:m_voices)spatialize(voice,game,dt);
 }
@@ -134,7 +138,7 @@ bool AudioEngine::testLiftMix(){
  auto block=[&](){audio.update(game);std::array<int16_t,1470> samples{};audio.mix(samples.data(),735);output.insert(output.end(),samples.begin(),samples.end());};
  for(int i=0;i<120;++i){game.update({},1.f/60);block();}
  game=Game::liftInspection(0);bool creak=false,snap=false,crash=false;
- for(int i=0;i<900;++i){game.update({},1.f/60);block();
+ for(int i=0;i<3300;++i){game.update({},1.f/60);block();
   for(auto&e:game.sounds()){creak|=e.sound==Sound::LiftCreak;snap|=e.sound==Sound::LiftSnap;crash|=e.sound==Sound::LiftCrash;}
   if(i==240){if(audio.m_mainBlend>.01f||audio.m_motorBlend<.7f)return false;report<<"Main OST fades out; lift motor takes over: PASS\n";}
  }

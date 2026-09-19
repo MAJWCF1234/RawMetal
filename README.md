@@ -20,7 +20,20 @@ followed by cable creaking, a snap, impact and a darker reactor soundtrack.
 
 Run `RawMetal.exe --surface-lift` to play the new section directly. E operates
 the cab control. After impact, leave through the opposite door; the east service
-stairs connect the reactor floors. Clear the hostiles to unlock the lower exit.
+stairs connect the reactor floors. Find the upper maintenance authorization disk,
+insert it in the lower computer's floppy drive, prime lower FEED, open upper
+RETURN, then confirm at the computer. Clear hostiles to open the authorized exit.
+The extended lift sequence includes interrupted ascents, a power failure, a
+temporary brake catch and a second fall before emergency egress.
+Passing shaft floors are compact scenic machinery bays rather than full maps;
+close guide rails, floor markers, sparks and a loose cable sell the movement.
+The boarding room and both reactor floors remain playable.
+
+Esc now includes **Save Game** and **Load Game** submenus with three slots.
+Click or use arrows/Enter; Esc goes back before resuming. Overwriting or loading
+requires confirmation. Saves retain all map progress, inventory, enemies, doors,
+the lift ride and reactor puzzle, in `%LOCALAPPDATA%\RawMetal\saves`.
+Invalid saves report an error without replacing the current game.
 Design notes and asset provenance are in `src/LIFT_DESIGN.md`.
 
 Press **backtick (`)** to open the developer console. Type `maps` or `help`,

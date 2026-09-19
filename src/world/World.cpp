@@ -208,6 +208,13 @@ constexpr MapRows collarDeck(){
  rows[9]="_========__SS__========_";
  return rows;
 }
+// Passing storeys are shallow scenery rings, not full exploration maps.
+constexpr MapRows shaftScenery(){
+ MapRows rows{};for(auto&row:rows)row="________________________";
+ rows[8]=rows[15]="________========________";
+ for(int y=9;y<15;++y)rows[y]="________=______=________";
+ return rows;
+}
 constexpr std::array ReactorStairs{Staircase{19,12,21,18,-9,-6,15,true,true}};
 constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,PressureWorksGround};
 constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
@@ -234,11 +241,11 @@ World::World(int level) {
  if(m_level==3){
   m_layers={{"Reactor / lower containment",-9,0,LiftShaftGround},
             {"Reactor / upper manifold",-6,.3f,reactorDeck()},
-            {"Shaft / lower service",-3,.25f,shaftDeck()},
+            {"Scenery / coolant risers",-3,.25f,shaftScenery()},
             {"Surface lift / collar",0,.3f,collarDeck()},
-            {"Shaft / transfer gantry",3,.25f,shaftDeck()},
-            {"Shaft / maintenance",6,.25f,shaftDeck()},
-            {"Surface / sealed gates",9,.35f,shaftDeck()}};
+            {"Scenery / ventilation plant",3,.25f,shaftScenery()},
+            {"Scenery / electrical service",6,.25f,shaftScenery()},
+            {"Surface / sealed gates",9,.35f,shaftScenery()}};
   // Entry bridge ends exactly at the lift's north door.
   m_structures.push_back({11,8,13,10,-.3f,0});
   // Cage the boarding bridge so a missed jump cannot strand the player below
@@ -247,23 +254,63 @@ World::World(int level) {
   m_structures.push_back({13,8,13.05f,10,0,2.1f,true});
   m_structures.push_back({2,0,5,1,-9,-.3f});
   m_structures.push_back({10.5f,18.5f,13.5f,21.5f,-9,-3.4f,false,1});
-  // Room partitions on each full map floor, with door-sized circulation gaps.
-  for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f}){
-   m_structures.push_back({7,2,7.2f,5,z,z+2.65f});
-   m_structures.push_back({7,7,7.2f,9,z,z+2.65f});
-   m_structures.push_back({2,16,5,16.2f,z,z+2.65f});
-   m_structures.push_back({7,16,9,16.2f,z,z+2.65f});
+  // Only occupied spaces retain full room layouts.
+  for(float z:{-9.f,-6.f,0.f}){
+   m_structures.push_back({7,2,7.2f,5,z,z+2.65f,false,3});
+   m_structures.push_back({7,7,7.2f,9,z,z+2.65f,false,3});
+   m_structures.push_back({2,16,5,16.2f,z,z+2.65f,false,3});
+   m_structures.push_back({7,16,9,16.2f,z,z+2.65f,false,3});
+  }
+  // Cheap opaque ceilings preserve the boarding and reactor rooms below the
+  // scenery floors. The central shaft stays open; no distant upper rooms exist.
+  for(float z:{-3.3f,2.7f}){
+   m_structures.push_back({1,1,23,9,z,z+.12f,false,2});
+   m_structures.push_back({1,15,23,23,z,z+.12f,false,2});
+   m_structures.push_back({1,9,9,15,z,z+.12f,false,2});
+   m_structures.push_back({15,9,23,15,z,z+.12f,false,2});
+  }
+  for(float z:{-3.f,3.f,6.f,9.f}){
+   // Backing walls stop sightlines behind each one-metre-deep scenic bay.
+   m_structures.push_back({7.8f,7.8f,8,16.2f,z,z+2.75f,false,3});
+   m_structures.push_back({16,7.8f,16.2f,16.2f,z,z+2.75f,false,3});
+   m_structures.push_back({8,7.8f,16,8,z,z+2.75f,false,3});
+   m_structures.push_back({8,16,16,16.2f,z,z+2.75f,false,3});
+   m_structures.push_back({7.8f,7.8f,9,16.2f,z+2.65f,z+2.7f,false,2});
+   m_structures.push_back({15,7.8f,16.2f,16.2f,z+2.65f,z+2.7f,false,2});
+   m_structures.push_back({9,7.8f,15,9,z+2.65f,z+2.7f,false,2});
+   m_structures.push_back({9,15,15,16.2f,z+2.65f,z+2.7f,false,2});
+  }
+  // Maintenance workbench, with open leg space and a correctly supported disk.
+  m_structures.push_back({5.1f,20.65f,6.9f,21.4f,-5.45f,-5.4f,false,2});
+  for(float x:{5.15f,6.75f})for(float y:{20.7f,21.25f})m_structures.push_back({x,y,x+.08f,y+.08f,-6,-5.45f,false,2});
+  // Pump plinths, cable trunks and service-bay partitions leave the stair route clear.
+  m_structures.push_back({2.8f,17.2f,5.5f,19.1f,-9,-8.85f,false,3});
+  m_structures.push_back({15.2f,20.55f,18.2f,22.f,-9,-8.88f,false,3});
+  for(float z:{-9.f,-6.f}){
+   m_structures.push_back({2.2f,17.1f,2.38f,22.5f,z+2.1f,z+2.28f,false,2});
+   m_structures.push_back({15.1f,22.3f,22.5f,22.48f,z+2.1f,z+2.28f,false,2});
   }
   buildLayers(ReactorStairs);
   m_doors={{2,5,.5f,0,false,false,true,9},{20,23,21.5f,0,false,true}};
   m_terminals={{{4.5f,2.5f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","BOARD CAB. USE DISPATCH CONTROL.",9},
                {{13.35f,11.5f},"CAB CONTROL / DISPATCH","ASCENDING TO SURFACE.","WARNING: CABLE TENSION CRITICAL.",9,true},
-               {{6.5f,20.5f},"REACTOR / CONTAINMENT","COOLANT MANIFOLD RUPTURED.","UPPER WALKWAY: SERVICE STAIRS."}};
-  m_props={{0,{6,16},1.5f,2.8f,0,{1.4f,.8f}},{1,{16,20},1.374f,2.4f,0,{1.2f,.369f}}};
-  m_fixtures={{6,{5.9f,18.5f},0,1.88f,1.88f/3.4f,1.88f*1.8f/3.4f,0,true},
-              {6,{15.9f,20.5f},0,1.88f,1.88f/3.4f,1.88f*1.8f/3.4f,0,true}};
-  buildLights();m_lights.push_back({{12,12},13.5f});m_lights.push_back({{12,14.5f},-5.5f});
-  m_lights.push_back({{12,17.7f},-4.5f});m_lights.push_back({{12,11.8f},2.45f});
+               {{8.3f,21.2f},"MAINTENANCE / SHIFT LOG","AUTH DISK: WORKBENCH. FEED FIRST.","RETURN SECOND. CONFIRM AT COMPUTER.",3},
+               {{18.1f,19.1f},"REACTOR ACCESS / DRIVE A:","","",0,false,1},
+               {{6.3f,18.2f},"01 / COOLANT FEED","","",0,false,2},
+               {{17.1f,19.6f},"02 / COOLANT RETURN","","",3,false,3}};
+  m_props={{0,{4.15f,18.15f},1.25f,2.2f,0,{1.1f,.66f},.15f},{1,{16.7f,21.2f},1.12f,2.f,0,{1.f,.31f},.12f},
+           {2,{5.1f,22.15f},.3f,4.2f,kPi*.5f,{2.1f,.15f}}};
+  m_fixtures={{6,{4.2f,20.2f},0,1.87f,.55f,.99f,0,true},
+              {7,{3.6f,21.8f},3,2.052f,.61217f,1.44f,0,true},
+              {7,{16.2f,21.6f},3,2.052f,.61217f,1.44f,0,true}};
+  for(float y:{16.7f,18.4f,20.1f})m_fixtures.push_back({8,{22.9f,y},.5f,.66776f,.1156f,.90576f,kPi*.5f,true});
+  for(float x:{15.9f,17.1f})m_fixtures.push_back({8,{x,22.87f},3.55f,.66776f,.1156f,.90576f,0,true});
+  // Explicit ceiling-mounted lights: no fixtures generated from narrow rail spans.
+  for(float z:{-9.f,-6.f,0.f})for(Vec2 p:{Vec2{4,6},Vec2{16,6},Vec2{21,6},Vec2{4,19},Vec2{8,22},Vec2{16,22},Vec2{21,19}}){
+   float ceiling=clearanceAbove(p.x,p.y,z);if(ceiling-z>1.8f)m_lights.push_back({p,ceiling-.15f});
+  }
+  for(float z:{-3.f,3.f,6.f,9.f})for(Vec2 p:{Vec2{8.5f,11.5f},Vec2{15.5f,12.5f}})m_lights.push_back({p,clearanceAbove(p.x,p.y,z)-.15f});
+  m_lights.push_back({{12,11.8f},2.45f});refreshReactorTerminals();
   return;
  }
  m_fixtures=MapFixtures[m_level];
@@ -331,8 +378,8 @@ float World::ceilingHeight(float x,float y)const{
  return y<8?3.1f:y<16?4.2f:3.6f;
 }
 float World::supportHeight(float x,float y,bool dynamic)const{
- for(const auto&fixture:m_fixtures)if(fixture.solid&&insideFixture(fixture,x,y))return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
- for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y)return floorHeight(p.position.x,p.position.y)+p.height;
+ for(const auto&fixture:m_fixtures)if(fixture.solid&&fixture.base<.025f&&insideFixture(fixture,x,y))return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
+ for(auto&p:m_props)if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y)return floorHeight(p.position.x,p.position.y)+p.base+p.height;
  for(auto&terminal:m_terminals)if((dynamic||m_level!=3||!terminal.control)&&terminal.z==0&&std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<(terminal.control?.18f:.27f))return floorHeight(x,y)+.95f;
  float floor=floorHeight(x,y);switch(tile(int(std::floor(x)),int(std::floor(y)))){
  case '#':return wallHeight(int(std::floor(x)),int(std::floor(y)));case 'C':return floor+.60f;case 'B':return floor+1.1f;
@@ -425,21 +472,21 @@ void World::buildLayers(std::span<const Staircase> stairs){
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
    if((x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,m_level==3?std::max(-9.f,z-3.f):floorHeight(x+.1f,y+.1f),underside});
-   if(!deck(x-1,y)&&!stairConnection(x-.001f,y+.5f)){
+   if(!deck(x-1,y)&&!(m_level==3&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,true});
     // Seal the upper catwalk against a lower-layer wall.  Without this
     // backing panel the rail leaves a one-cell sightline into the void.
     if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
-   if(!deck(x+1,y)&&!stairConnection(x+1.001f,y+.5f)){
+   if(!deck(x+1,y)&&!(m_level==3&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
     m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,true});
     if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
-   if(!deck(x,y-1)&&!stairConnection(x+.5f,y-.001f)){
+   if(!deck(x,y-1)&&!(m_level==3&&tile(x,y-1)=='#')&&!stairConnection(x+.5f,y-.001f)){
     m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,true});
     if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,m_level==3?z+2.7f:6.f,false});
    }
-   if(!deck(x,y+1)&&!stairConnection(x+.5f,y+1.001f)){
+   if(!deck(x,y+1)&&!(m_level==3&&tile(x,y+1)=='#')&&!stairConnection(x+.5f,y+1.001f)){
     m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,true});
     if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
@@ -452,7 +499,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    stair.alongY?stair.x1:stair.x1+(stair.x2-stair.x1)*lo,
    stair.alongY?stair.y1+(stair.y2-stair.y1)*lo:stair.y1,
    stair.alongY?stair.x2:stair.x1+(stair.x2-stair.x1)*hi,
-   stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.bottom,top});
+   stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.bottom,top,false,m_level==3?4:0});
  }
  m_structureCells.resize(Width*Height);
  for(uint16_t index=0;index<m_structures.size();++index){
@@ -463,13 +510,19 @@ void World::buildLayers(std::span<const Staircase> stairs){
 }
 float World::wallHeight(int x,int y)const{return m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
+ float fixtureTop=-100;
+ for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float top=floorHeight(f.position.x,f.position.y)+f.base+f.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
+ for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
  float result=floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
+ result=std::max(result,fixtureTop);
  if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
 }
 float World::clearanceAbove(float x,float y,float feet)const{
  float ceiling=clearanceHeight(x,y);
+ for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float base=floorHeight(f.position.x,f.position.y)+f.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
+ for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
  for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f)ceiling=std::min(ceiling,base);}
@@ -480,16 +533,20 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic)const{
   if(feet<m_liftHeight-.025f||feet+height>m_liftHeight+2.605f)return false;
   if(x<10.12f||x>13.88f)return false;
   bool northOpen=m_liftPhase==LiftPhase::Ready&&x>11&&x<13;
-  bool southOpen=m_liftPhase==LiftPhase::Crashed&&m_liftTimer>=.65f&&x>11&&x<13;
+  bool southOpen=m_liftPhase==LiftPhase::Crashed&&m_liftTimer>=3.65f&&x>11&&x<13;
   if((y<10.12f&&!northOpen)||(y>13.88f&&!southOpen))return false;
  }
  if(feet<supportHeight(x,y,dynamic)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
+ for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float base=floorHeight(f.position.x,f.position.y)+f.base;if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;}
+ for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
  for(auto&t:m_terminals){if(!dynamic&&m_level==3&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(t.z!=0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
  return true;
 }
 std::vector<Span> World::spansAt(int x,int y)const{
  float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);std::vector<std::pair<float,float>> solids={{-100.f,supportHeight(px,py)}};
+ for(auto&f:m_fixtures)if(f.solid&&f.base>.025f&&insideFixture(f,px,py)){float base=floorHeight(px,py)+f.base;solids.push_back({base,base+f.height});}
+ for(auto&p:m_props)if(p.base>.025f&&std::fabs(px-p.position.x)<p.halfSize.x&&std::fabs(py-p.position.y)<p.halfSize.y){float base=floorHeight(px,py)+p.base;solids.push_back({base,base+p.height});}
  for(auto index:structureIndices(px,py)){auto&s=m_structures[index];if(px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});}
  std::sort(solids.begin(),solids.end());std::vector<Span> result;float bottom=-100.f;
  for(auto solid:solids){if(solid.first>bottom)result.push_back({bottom,solid.first,0});bottom=std::max(bottom,solid.second);}

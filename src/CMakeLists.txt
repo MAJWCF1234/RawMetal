@@ -22,10 +22,12 @@ add_executable(RawMetal WIN32
     "${RAWMETAL_PACKED_RC}"
     game/Game.cpp
     game/Settings.cpp
+    game/Saves.cpp
     game/Inventory.cpp
     game/Movement.cpp
     game/GantryTest.cpp
     game/Lift.cpp
+    game/Reactor.cpp
     game/Console.cpp
     game/Streaming.cpp
     game/Clutter.cpp

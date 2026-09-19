@@ -38,7 +38,8 @@ private:
  float m_mainBlend=1,m_reactorBlend=0,m_motorBlend=0;
  float m_mainTarget=1,m_reactorTarget=0,m_motorTarget=0;
  bool m_paused=false;
- int m_lastChunk=-1;
+  int m_lastChunk=-1;
+  unsigned m_lastRevision=0;
  void play(const SoundEvent& event,int emitter=0,bool loop=false);
  void mix(int16_t* output,size_t frames);
  void run();

@@ -13,13 +13,31 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
     if(std::wcsstr(commandLine,L"--lift-test"))return retro::Game::testLift()?0:32;
+    if(std::wcsstr(commandLine,L"--reactor-test"))return retro::Game::testReactor()?0:37;
+    if(std::wcsstr(commandLine,L"--save-test"))return retro::Game::testSaves()?0:38;
+    if(std::wcsstr(commandLine,L"--shaft-inspection")){
+        retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();int index=0;
+        for(float seconds:{0.f,9.f,17.f,25.f,29.f,35.f,38.7f,39.6f,42.f,48.f}){auto scene=retro::Game::liftInspection(seconds,8);renderer.render(scene);std::ofstream out("shaft-"+std::to_string(index++)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+        return 0;
+    }
+    if(std::wcsstr(commandLine,L"--repair-inspection")){
+        retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
+        auto save=[&](const char* name,const retro::Game& scene){renderer.render(scene);std::ofstream out(name,std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
+        save("repair-wall.ppm",retro::Game::mapInspection({17,20},0,0,3,false,-9,true));
+        save("repair-stairs.ppm",retro::Game::mapInspection({21.8f,11.5f},2.04f,15,3,false,-9,true));
+        save("repair-stairs-top.ppm",retro::Game::mapInspection({21.8f,18.5f},-2.1f,-35,3,false,-6,true));
+        save("repair-sign.ppm",retro::Game::liftInspection(0,3));
+        auto menu=retro::Game::liftInspection(retro::World::LiftRideComplete);menu.setSaveDirectory(L"inspection-empty-saves");retro::InputState input{};input.escape=true;menu.update(input,.01f);save("repair-pause.ppm",menu);
+        auto click=[&](int row){menu.update({},.01f);retro::InputState i{};i.fire=true;i.pointerX=retro::MenuLayout::X+30;i.pointerY=retro::MenuLayout::RowTop+row*retro::MenuLayout::RowHeight+7;menu.update(i,.01f);};
+        click(6);save("repair-save.ppm",menu);click(3);click(7);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
+    }
     if(std::wcsstr(commandLine,L"--console-test"))return retro::Game::testConsole()?0:34;
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
     if(std::wcsstr(commandLine,L"--lift-inspection")){
         retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();int index=0;
-        for(float seconds:{0.f,3.f,7.f,9.f,12.f,12.f,12.f}){auto scene=retro::Game::liftInspection(seconds,index>=5?index-4:index==1?3:0);renderer.render(scene);
+        for(float seconds:{0.f,7.f,21.f,34.f,48.f,48.f,48.f,48.f,48.f,48.f,48.f}){auto scene=retro::Game::liftInspection(seconds,index>=7?index-3:index>=5?index-4:index==1?3:0);renderer.render(scene);
             std::ofstream out("lift-"+std::to_string(index++)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
             for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
         return 0;
@@ -67,6 +85,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(!retro::Game::testAI())return 21;
         if(!retro::Game::testGantry())return 24;
         if(!retro::Game::testLift())return 32;
+        if(!retro::Game::testReactor())return 37;
+        if(!retro::Game::testSaves())return 38;
         if(!retro::Game::testConsole())return 34;
         if(!retro::AudioEngine::testLiftMix())return 33;
         if(!retro::Game::testClutter())return 25;
@@ -195,6 +215,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);
+    if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\\RawMetal\\saves");
     retro::SoftwareRenderer renderer(W,H);
     retro::AudioEngine audio;
     if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();

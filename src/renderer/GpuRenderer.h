@@ -11,7 +11,7 @@ public:
  void begin(int width,int height);
  void prepare(const SoftwareRenderer::Texture& texture);
  void clearDepth();
- void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals);
+ void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f);
  void finish(std::vector<std::uint32_t>& pixels);
  const std::string& adapter()const;
 private:

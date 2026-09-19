@@ -18,6 +18,7 @@ bool SoftwareRenderer::testHardware(){
  begin();triangle(red,1);triangle(blue,2);auto pixel=finish();check((pixel&0xff0000u)>0xf00000u&&(pixel&255)==0,"Nearest surface wins depth test");
  begin();triangle(transparent,1);triangle(blue,2);pixel=finish();check((pixel&255)>240&&(pixel&0xff0000u)==0,"Alpha cutout keeps geometry behind visible");
  begin();triangle(emissive,1,0);check(finish()==0xffffffu,"Emission survives zero ambient illumination");
+ renderer.m_emissionScale=.1f;begin();triangle(emissive,1,0);pixel=finish();check((pixel&255)>30&&(pixel&255)<50,"Emergency lamp emission dims on the GPU");renderer.m_emissionScale=1.f;
  begin();triangle(normal,1,.5f);auto flat=finish();begin();triangle(normal,1,.5f,&lights);auto relief=finish();check((relief&255)>(flat&255),"Authored normal map affects hardware lighting");
  begin();triangle(red,1);renderer.m_gpu->clearDepth();triangle(blue,2);pixel=finish();check((pixel&255)>240,"View-model depth range remains independent");
  begin();renderer.triangle3D({{-.3f,-.1f,-.2f},0,0},{{.3f,-.1f,1},1,0},{{0,.3f,1},.5f,1},red,1);finish();size_t coverage=0;for(auto p:renderer.m_pixels)coverage+=(p&0xffffffu)!=0x0c1012u;check(coverage>100,"Near-plane clipping keeps crossing geometry");
@@ -37,6 +38,7 @@ bool SoftwareRenderer::testPerformance(){
    if(simulate||sweep)game.update(input,1.f/60);auto updated=Clock::now();audio.update(game);auto mixed=Clock::now();renderer.render(game);auto rendered=Clock::now();
    updateMax=std::max(updateMax,std::chrono::duration<double,std::milli>(updated-begin).count());audioMax=std::max(audioMax,std::chrono::duration<double,std::milli>(mixed-updated).count());renderMax=std::max(renderMax,std::chrono::duration<double,std::milli>(rendered-mixed).count());
    timings.push_back(std::chrono::duration<double,std::milli>(Clock::now()-begin).count());
+   if(timings.back()>50)report<<"Slow frame "<<i<<" phase "<<int(game.world().liftPhase())<<" time "<<game.world().liftPhaseTime()<<" height "<<game.world().liftHeight()<<" scene "<<renderer.m_sceneMs<<" GPU submission/readback "<<renderer.m_submitMs<<" ms\n";
    passed&=renderer.hardwareActive();
   }
   std::sort(timings.begin(),timings.end());double mean=std::accumulate(timings.begin(),timings.end(),0.)/frames,peak=timings.back(),p95=timings[frames*95/100];
@@ -46,15 +48,15 @@ bool SoftwareRenderer::testPerformance(){
  measure("Foundry turn",Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true),120,false,true);
  measure("Gantry turn",Game::mapInspection({7.5f,12.5f},0,0,2,false,0,true),120,false,true);
  measure("Lift entry turn",Game::mapInspection({3.5f,2},kPi*.5f,0,3,false,0,true),120,false,true);
- measure("Ascent window",Game::liftInspection(0,3),240,true,false);
- measure("Jam and six-floor fall",Game::liftInspection(6,3),300,true,true);
- measure("Reactor balcony turn",Game::liftInspection(12,2),180,false,true);
+ measure("Ascent window",Game::liftInspection(5,3),240,true,false);
+ measure("Jam and six-floor fall",Game::liftInspection(35,3),600,true,true);
+ measure("Reactor balcony turn",Game::liftInspection(World::LiftRideComplete,2),180,false,true);
  auto combat=Game::mapInspection({18,17},kPi*.5f,0,3,false,-9,false);
  measure("Reactor active AI",combat,180,true,true);
  // Compare exact output with deck occlusion disabled. Geometry remains present;
  // the optimization must not change what is visible through shaft openings.
  SoftwareRenderer reference(DisplayWidth,DisplayHeight);reference.enableHardware();reference.m_shadowBudgetLimit=10000000;
- for(int view=0;view<6;++view){auto scene=view<3?Game::liftInspection(float(view)*3,3):view==3?Game::liftInspection(12,2):Game::mapInspection({20,15},kPi*.5f,view==4?65.f:-65.f,3,false,-7.5f,true);
+ for(int view=0;view<6;++view){auto scene=view<3?Game::liftInspection(float(view)*14,3):view==3?Game::liftInspection(World::LiftRideComplete,2):Game::mapInspection({20,15},kPi*.5f,view==4?65.f:-65.f,3,false,-7.5f,true);
   reference.m_visibilityCulling=true;reference.render(scene);auto optimized=reference.m_pixels;
   reference.m_visibilityCulling=false;reference.render(scene);size_t changed=0;
   for(size_t i=0;i<optimized.size();++i)changed+=optimized[i]!=reference.m_pixels[i];

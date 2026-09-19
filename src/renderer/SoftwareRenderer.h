@@ -33,6 +33,8 @@ private:
     std::unique_ptr<FrameWorker> m_animationWorker;
     std::string m_gpuName;
     bool m_gpuFrame=false;
+    float m_emissionScale=1.f;
+    double m_sceneMs=0,m_submitMs=0;
     bool m_poseReady=false;
     struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint32_t> emission; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};};
@@ -43,6 +45,7 @@ private:
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;
+    Texture m_feedSign,m_returnSign,m_diskSign,m_authSign;
     Texture m_wall, m_floor, m_metal, m_arms;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;

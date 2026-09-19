@@ -44,6 +44,7 @@ bool SoftwareRenderer::enableHardware(){
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>();
   for(const auto*texture:{&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
   m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
@@ -72,6 +73,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_controlSign=makeSign("CONTROL GALLERY","SWITCHGEAR",0xffa7a766u);m_surfaceSign=makeSign("SURFACE LIFT","EXTRACTION",0xffa7a766u);m_gantrySign=makeSign("TURBINE GANTRY","TRANSFER / 03",0xffa7a766u);
  m_reactorSign=makeSign("REACTOR CORE","CONTAINMENT BREACH",0xffbf583eu);
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
+ m_feedSign=makeSign("01 / FEED","PRIME BEFORE RETURN",0xffd7ac64u);m_returnSign=makeSign("02 / RETURN","FEED PRESSURE REQUIRED",0xff53aec4u);
+ m_diskSign=makeSign("MAINTENANCE","AUTH DISK / DRIVE A",0xffd7ac64u);m_authSign=makeSign("BULKHEAD CONTROL","INSERT AUTH DISK",0xff53aec4u);
 }
 SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
  Texture sign{256,80,std::vector<std::uint32_t>(256*80)};
@@ -152,7 +155,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  const int sector=int(p.pos.y)/8;
  wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
  text(19,14,game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
- if(game.level()==3)text(19,32,game.world().liftStatus(),amber);
+ if(game.level()==3)text(19,32,game.world().liftPhase()==World::LiftPhase::Crashed?game.world().reactorObjective():game.world().liftStatus(),amber);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
  // Compact map reveals nearby contacts and a fixed extraction marker.
  const int mx=m_width-57,my=8;
@@ -199,14 +202,17 @@ void SoftwareRenderer::drawSettings(const Game& game){
  constexpr int x=MenuLayout::X,y=MenuLayout::Y;
  const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
  wornPanel(x,y,MenuLayout::Width,MenuLayout::Height,false,true);
- text(x+15,y+12,"RAWMETAL / SETTINGS",paper,2);text(x+15,y+29,"PAUSED",amber);
- const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","QUIT GAME"};
+ auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;
+ const char* title=settingsPage?"RAWMETAL / PAUSED":page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":"CONFIRM LOAD";
+ text(x+15,y+12,title,paper,2);text(x+15,y+29,settingsPage?"SETTINGS / SAVED GAMES":"GAMEPLAY IS PAUSED",amber);
+ const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","SAVE GAME...","LOAD GAME...","QUIT GAME"};
  auto&settings=game.settings();
- for(int row=0;row<MenuLayout::Rows;++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
+ for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   wornPanel(x+12,top,MenuLayout::Width-24,19,true,true);
   if(selected){rect(x+13,top+2,2,15,amber);rect(x+17,top+2,MenuLayout::Width-35,1,rgb(101,72,32));}
-  text(x+23,top+7,labels[row],selected?paper:muted);
-  if(row>=1&&row<=4){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:settings.sensitivity;
+  const char* label=settingsPage?labels[row]:(page==Game::MenuPage::Save||page==Game::MenuPage::Load)?(row==3?"BACK":game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":"LOAD / REPLACE CURRENT PROGRESS");
+  text(x+23,top+7,label,selected?paper:muted);
+  if(settingsPage&&row>=1&&row<=4){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:settings.sensitivity;
    float normalized=row==4?(value-.2f)/2.8f:value;
    rect(MenuLayout::SliderX-3,top+7,MenuLayout::SliderWidth+6,5,rgb(8,7,5));
    rect(MenuLayout::SliderX,top+8,MenuLayout::SliderWidth,1,rgb(116,97,67));
@@ -215,9 +221,10 @@ void SoftwareRenderer::drawSettings(const Game& game){
    for(int grip=-2;grip<=2;grip+=2)rect(knob+grip,top+7,1,5,rgb(53,47,34));
    char valueText[16];if(row==4)std::snprintf(valueText,sizeof(valueText),"%.1fX",value);else std::snprintf(valueText,sizeof(valueText),"%d",int(value*100+.5f));text(MenuLayout::SliderX+83,top+7,valueText,paper);
   }
-  if(row==5)text(MenuLayout::SliderX,top+7,settings.invertMouse?"ON":"OFF",paper);
+  if(settingsPage&&row==5)text(MenuLayout::SliderX,top+7,settings.invertMouse?"ON":"OFF",paper);
  }
- text(x+15,y+201,"DRAG HANDLES / ARROWS / ENTER",muted);text(x+15,y+211,"ESC TO RESUME",amber);
+ if(!settingsPage){text(x+15,y+153,game.menuMessage().c_str(),amber);if(page==Game::MenuPage::Overwrite)text(x+15,y+177,"THE PREVIOUS SLOT WILL BE REPLACED",muted);if(page==Game::MenuPage::ConfirmLoad)text(x+15,y+177,"UNSAVED PROGRESS WILL BE LOST",muted);}
+ text(x+15,y+MenuLayout::Height-23,"CLICK / ARROWS / ENTER",muted);text(x+15,y+MenuLayout::Height-13,settingsPage?"ESC TO RESUME":"ESC TO GO BACK",amber);
 }
 void SoftwareRenderer::drawInventory(const Game& game){
  for(auto&pixel:m_pixels)pixel=shade(pixel,.22f);
@@ -275,7 +282,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    if(parallel){m_animationWorker->wait();m_poseReady=true;}drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
- if(m_gpu){try{m_gpu->begin(m_width,m_height);m_gpuFrame=true;scene();m_gpu->finish(m_pixels);m_gpuFrame=false;}
+ if(m_gpu){try{m_gpu->begin(m_width,m_height);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';scene();}}
  else scene();
  if(scaled){int sceneWidth=m_width,sceneHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);

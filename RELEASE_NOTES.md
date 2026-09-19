@@ -1,70 +1,55 @@
-# RawMetal v0.2.0 — Vulkan, Surface Lift & Reactor
+# RawMetal v0.3.0 — Reactor Puzzle, Save Slots & Staged Lift
 
-## Hardware rendering and performance
+## Playable changes
 
-- Vulkan 1.0 hardware rendering is the default at full 640x360 resolution.
-  Normal maps, texture mip chains, emission, alpha cutouts and additive effects
-  remain enabled. There is no shortened view distance or floor-count reduction.
-- Materials upload at startup; opaque geometry is batched by material.
-- Conservative deck occlusion preserves views through the shaft and stairwells.
-- Static lighting caches no longer reset as the lift moves. Spatially indexed
-  lights, bounded shadow work and per-cell collision queries reduce CPU cost.
-- A persistent animation worker runs the arm rig alongside world preparation.
-  Mesh topology and open shoulder boundaries are cached instead of rebuilt.
-- Software rendering remains available with `--software`, and is used if
-  Vulkan initialization fails. `RawMetal-renderer.txt` records the adapter or
-  fallback reason. The game currently supports Windows x64; the renderer's
-  portable API is not a complete Linux/macOS port.
+- Expanded reactor service bays with pumps, compressor, generator, shelving,
+  switchgear and a computer with a floppy drive.
+- Find the upper maintenance authorization disk, insert it at the lower
+  computer, prime FEED, open upper RETURN, then confirm bulkhead authorization.
+- Esc now offers Save Game and Load Game submenus with three slots, confirmation
+  prompts and corruption checks. Saves retain all map progress, inventory,
+  enemies, doors, the lift and the reactor puzzle.
+- Saves live in `%LOCALAPPDATA%\RawMetal\saves`. Loading preserves local settings.
 
-## Surface Lift and reactor
+## Lift staging and visual repairs
 
-- Turbine Gantry now leads into seven stacked map floors around a continuous
-  lift shaft. The enclosed room rises three floors, jams, then falls six with
-  the player inside. The two bottom floors form the reactor complex.
-- Redesigned freight cab with sliding split gates, inspection windows,
-  recessed panels, handrails, hoist details and side-mounted dispatch control.
-- The main OST fades into motor sounds, followed by strained creaking, a cable
-  snap and a crash. A darker reactor OST fades in after impact.
-- Reactor stairs, encounters and a locked lower exit complete the authored
-  route. The cab's state persists through map geometry unloading.
-- Vertical sight rays respect solid decks; hearing distance and remembered
-  target height account for stacked floors.
+- Approximately 47-second lift sequence: interrupted ascent, blackout, creaking,
+  cable failure, a temporary brake catch and a second fall into the reactor.
+- Four passing shaft storeys are compact scenic machinery bays instead of full
+  maps: 28 deck tiles each rather than 448. Boarding and reactor rooms remain
+  playable, with proper ceilings.
+- Close guide rails, height markers, sparks and a loose cable provide motion cues.
+  Free look is retained; effects pause and restore with the saved lift state.
+- Fixed duplicate wall/rail surfaces causing z-fighting, stair materials,
+  texture stretching, lamp mounting and the formerly floating dispatch sign.
+  The sign is now mounted on the header, leaving the window clear.
 
-## Developer console
+## Rendering and verification
 
-Press **backtick (`)**. Commands include:
+Vulkan remains the default at full 640x360 internal resolution, with software
+fallback available via `--software`. Windows x64 remains the supported platform.
 
-- `maps`, `help`
-- `map foundry`, `map pressureworks`, `map gantry`, `map lift`, `map reactor`
-- `map 0` through `map 3`
-- `reload`, `where`, `fps`, `clear`
-- `r_scale 50`, `r_scale 75`, `r_scale 100` (default)
+Two consecutive local 1,560-frame benchmark runs passed the 50 ms budget.
+In the repeat run, lift/reactor scenes averaged approximately 92–106 FPS;
+their worst measured frame was 14.45 ms (69 FPS). All six culling/reference
+comparisons matched exactly. Measurements include simulation, audio control,
+rendering and GPU readback, but exclude startup and OS window presentation.
+These are local Intel Graphics results, not a universal minimum-FPS guarantee.
+Earlier revisions exhibited intermittent hitches; those reports are retained.
 
-Map loading starts fresh. `map reactor` skips directly to the crashed lift.
-Up/Down recalls command history. Backtick or Esc closes the console.
+Full software and Vulkan smoke suites, lift/route, reactor puzzle, save/load,
+audio, console and hardware-rendering tests passed. Vulkan synchronization
+validation logged no errors. Save tests include mid-fall restoration, invalid
+files, cancelled overwrites and preservation of the old slot after write failure.
 
-## Verification on the release build
+## Download
 
-On this Intel Core 3 100U / Intel Graphics machine at full 640x360, the seven
-benchmark scenarios averaged **68–92 FPS**. The slowest measured frame was
-**23.21 ms (43 FPS)**; none of the 1,260 measured gameplay frames exceeded the
-50 ms / 20 FPS target. Timing includes update, audio control, rendering and GPU
-readback, but excludes startup and OS window presentation.
+Download `RawMetal.zip`, extract it, and run `RawMetal.exe`. The ZIP contains
+the same standalone executable offered separately; assets and shaders are
+embedded. A Vulkan-capable graphics driver is sufficient; the SDK is not needed.
 
-Software and Vulkan smoke suites, hardware material/depth tests, parallel/serial
-animation comparisons and all six exact culling/reference image comparisons
-passed. Lift, audio, console, movement, combat and streaming regressions passed.
+Press backtick and enter `map lift` to try the full sequence, or `map reactor`
+to jump to the puzzle. Developer map commands start fresh. Use Esc to save/load.
 
-## Download and build
-
-Download `RawMetal.zip`, extract, and run `RawMetal.exe`. The ZIP contains the
-same standalone executable offered separately. Assets and SPIR-V shaders are
-embedded. Hardware rendering needs a Vulkan-capable graphics driver, not the SDK.
-
-Source builds require Visual Studio 2022 C++ tools, CMake and the Vulkan SDK
-with `glslc`. Use `Build.cmd`.
-
-The renderer still uses an offscreen Vulkan image with readback to the existing
-Win32 presentation/HUD path. See `src/RENDERING.md` for architecture and test scope.
-Benchmark results depend on hardware and background load; a universal minimum
-FPS is not guaranteed.
+Source builds use Visual Studio 2022 C++ tools, CMake and the Vulkan SDK with
+`glslc`; run `Build.cmd`.

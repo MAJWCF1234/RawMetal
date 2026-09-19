@@ -8,10 +8,10 @@
 
 namespace retro {
 struct Door {float left=0,right=0,y=0,open=0;bool opening=false,transfer=false,entry=false;float z=0;};
-struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;};
+struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
 struct WorldLight {Vec2 position;float z;};
-struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;};
+struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;};
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
 struct Span {float floor,ceiling;uint16_t flags=0;};
 using MapRows = std::array<std::string_view,24>;
@@ -47,7 +47,8 @@ public:
     float wallHeight(int x,int y)const;
     bool controlReleased()const{return m_controlReleased;}
     void releaseControl(){m_controlReleased=true;}
-    enum class LiftPhase { Ready, Ascending, Jammed, Falling, Crashed };
+    enum class LiftPhase { Ready, Ascending, Jammed, Falling, Caught, Crashed };
+    static constexpr float LiftRideComplete=48.f;
     LiftPhase liftPhase()const{return m_liftPhase;}
     float liftHeight()const{return m_liftHeight;}
     float liftPhaseTime()const{return m_liftTimer;}
@@ -57,6 +58,15 @@ public:
     void updateLift(float dt);
     void restoreLift(const World& saved);
     const char* liftStatus()const;
+    float liftLampPower()const;
+    float liftMotorGain()const;
+    enum class ReactorStage { NoDisk, DiskHeld, DiskLoaded, FeedPrimed, ReturnPrimed, Released };
+    ReactorStage reactorStage()const{return m_reactorStage;}
+    static Vec2 reactorDiskPosition(){return {6.f,21.f};}
+    static constexpr float ReactorDiskZ=-5.39f;
+    bool takeReactorDisk();
+    void useReactorTerminal(int action);
+    const char* reactorObjective()const;
 
     char tile(int x, int y) const;
     bool solid(float x, float y) const;
@@ -81,6 +91,7 @@ public:
     const std::vector<Terminal>& terminals()const{return m_terminals;}
 
 private:
+    friend class Game; // Save codec persists dynamic state, never geometry or pointers.
     std::vector<MapLayer> m_layers;
     float m_internalWallHeight=0;
     int m_level=0;
@@ -96,6 +107,9 @@ private:
     bool m_controlReleased=false;
     LiftPhase m_liftPhase=LiftPhase::Ready;
     float m_liftHeight=0,m_liftTimer=0,m_liftVelocity=0;
+    bool m_liftCaught=false,m_reactorFault=false;
+    ReactorStage m_reactorStage=ReactorStage::NoDisk;
+    void refreshReactorTerminals();
     void buildLayers(std::span<const Staircase> stairs);
 };
 

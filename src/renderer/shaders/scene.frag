@@ -19,6 +19,6 @@ void main(){
  }
  if(surface.z>0.5){outColor=vec4(color.rgb*color.a*lighting.x*vec3(1,0.72,0.35),1);return;}
  vec3 result=color.rgb*lighting.x*vertexLight/(1+surface.x*0.018);
- if(surface.y>0.5)result+=texture(emissionMap,uv).rgb*1.6;
+ if(surface.y>0.0)result+=texture(emissionMap,uv).rgb*1.6*surface.y;
  outColor=vec4(clamp(result,0,1),1);
 }

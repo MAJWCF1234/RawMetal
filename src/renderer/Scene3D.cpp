@@ -65,7 +65,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    for(int i=0;i<2;++i){auto lightDirection=normalLighting->directions[i];tangentLights[i]={dot(tangent,lightDirection),dot(bitangent,lightDirection),dot(normal,lightDirection)};flatResponse+=normalLighting->weights[i]*std::max(0.f,tangentLights[i].z);}
   }
  }
- if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,normalActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive);return;}
+ if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,normalActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale);return;}
  // Clip in camera space before perspective division; preserve UVs at intersections.
  MeshVertex input[8]={a,b,c},output[8];int count=3;
  for(int plane=0;plane<5;++plane){
@@ -121,7 +121,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    }else{m_zbuffer[index]=z;auto color=shade(texel,light*vertexLight/(1.f+z*.018f));
     if(!texture.emission.empty()){
      int ex=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ey=std::min(texture.height-1,int((V-std::floor(V))*texture.height));auto glow=texture.emission[size_t(ey*texture.width+ex)];unsigned result=0xff000000u;
-     for(int channel=0;channel<3;++channel){unsigned value=std::min(255u,unsigned((color>>(channel*8))&255)+unsigned(((glow>>(channel*8))&255)*1.6f));result|=value<<(channel*8);}color=result;
+     for(int channel=0;channel<3;++channel){unsigned value=std::min(255u,unsigned((color>>(channel*8))&255)+unsigned(((glow>>(channel*8))&255)*1.6f*m_emissionScale));result|=value<<(channel*8);}color=result;
     }put(x,y,color);}
    }
   }
@@ -177,7 +177,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto sphereVisible=[&](Point3 point,float radius){auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
-  if(movingGeometry)return .82f+.12f*std::fabs(normal.z);
+  if(movingGeometry)return (.82f+.12f*std::fabs(normal.z))*(.35f+.65f*w.liftLampPower());
   // Static receivers reuse light samples. A moving bulkhead invalidates them.
   auto positionBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
   auto normalBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*15))+15,0,30));};
@@ -257,12 +257,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  Texture iron{1,1,{0xff343834u}},red{1,1,{0xffb84728u}};
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
-  if(eye.y<=a.y)quad({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},texture,light);
-  if(eye.y>=b.y)quad({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},texture,light*.8f);
-  if(eye.x<=a.x)quad({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},texture,light*.85f);
-  if(eye.x>=b.x)quad({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},texture,light);
-  if(eye.z>=b.z)quad({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},texture,light*1.1f);
-  if(eye.z<=a.z)quad({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},texture,light*.65f);
+  // Architectural repeats are measured in metres, never stretched over a deck.
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,w.level()==3?Vec2{length3(B-A),length3(D-A)}:Vec2{1,1});};
+  if(eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
+  if(eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
+  if(eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
+  if(eye.x>=b.x)face({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},light);
+  if(eye.z>=b.z)face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},light*1.1f);
+  if(eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.65f);
  };
  auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
   if(base==-999.f)base=w.floorHeight(x,y);Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
@@ -338,7 +340,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     float wallBase=w.level()==3?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if((x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
-    if((x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
+    if((x+y)%4==0){if(w.level()==3){for(float base=-9;base<Z;base+=3)facility(2,cx-dy*.055f,cy+dx*.055f,base,.15f,.16f,std::min(3.f,Z-base),yaw);}else facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);}
     (void)light;
    };
    if(w.tile(x-1,y)!='#')wall(X,Y,X,Y+1,.90f);
@@ -350,18 +352,27 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  for(auto&s:w.structures()){
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.material==1){
-   box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_bulkhead,1.f);
+   // Faceted containment jacket, with consistent metre-scale panels.
+   for(int side=0;side<12;++side){float a=side*kPi/6,b=(side+1)*kPi/6;float ax=12+1.74f*std::cos(a),ay=20+1.74f*std::sin(a),bx=12+1.74f*std::cos(b),by=20+1.74f*std::sin(b);
+    quad({ax,ay,s.bottom},{bx,by,s.bottom},{bx,by,s.top},{ax,ay,s.top},m_bulkhead,1.f,{.9f,5.6f});
+    for(float z:{-8.6f,-6.5f,-4.f}){float A=12+1.82f*std::cos(a),B=20+1.82f*std::sin(a),C=12+1.82f*std::cos(b),D=20+1.82f*std::sin(b);quad({A,B,z},{C,D,z},{C,D,z+.16f},{A,B,z+.16f},m_pressureMetal,1.1f,{.94f,.16f});}
+    tri({{12,20,s.top},.5f,.5f},{{ax,ay,s.top},0,0},{{bx,by,s.top},1,0},m_metal,1.f);
+   }
    // Containment vessel spans both reactor maps. Luminous coolant channels
    // and heavy external bands make it readable from below and the balcony.
-   for(float x:{10.8f,11.55f,12.3f,13.05f})box({x,18.46f,-8.6f},{x+.12f,18.5f,-3.8f},blue,1.8f);
-   for(float z:{-8.6f,-6.5f,-4.f})box({10.35f,18.35f,z},{13.65f,21.65f,z+.16f},m_pressureMetal,1.f);
-   quad({13.2f,18.33f,-5.6f},{10.8f,18.33f,-5.6f},{10.8f,18.33f,-4.9f},{13.2f,18.33f,-4.9f},m_chemicalSign,1.1f);
+   for(float x:{11.55f,12.3f})box({x,18.2f,-8.6f},{x+.12f,18.28f,-3.8f},blue,1.8f);
+   quad({12.4f,18.17f,-5.7f},{11.6f,18.17f,-5.7f},{11.6f,18.17f,-4.9f},{12.4f,18.17f,-4.9f},m_chemicalSign,1.1f);
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_floor,1.05f);
-  else{if(s.top-s.bottom>1.5f)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_floor,.8f);
+  else if(s.material==4){
+   // Every tread uses the same concrete body and one inset anti-slip plate.
+   box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
+   quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
+  }
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==2?m_panelMetal:s.material==3||(w.level()==3&&s.top-s.bottom>1.5f)?m_pressureWall:m_floor,1.05f);
+  else{if(s.top-s.bottom>1.5f)box({s.x1+.012f,s.y1+.012f,s.bottom+.012f},{s.x2-.012f,s.y2-.012f,s.top-.08f},w.level()==3?m_pressureWall:m_floor,.8f);
    box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},m_panelMetal,.95f);
-   box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top},m_panelMetal,.9f);
-   box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top},m_panelMetal,.9f);}
+   box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},m_panelMetal,.9f);
+   box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},m_panelMetal,.9f);}
  }
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
@@ -401,10 +412,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   quad({x+.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.9575f},{x+.7f,y-.125f,base+2.9575f},front,.9f);
   quad({x-.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.9575f},{x-.7f,y+1.125f,base+2.9575f},back,.9f);
  }
- for(auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint);}
+ for(auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.
  // The light source sits 4 cm beneath the luminous underside.
- for(const auto&light:w.lights()){movingGeometry=w.level()==3&&&light==&w.lights().back();facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);}movingGeometry=false;
+ for(const auto&light:w.lights()){movingGeometry=w.level()==3&&&light==&w.lights().back();m_emissionScale=movingGeometry?w.liftLampPower():1.f;facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);}movingGeometry=false;m_emissionScale=1.f;
  for(const auto&fixture:w.fixtures())facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
  for(auto&c:game.clutter()){
   auto&mesh=m_clutterMeshes[c.kind];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;auto size=c.size();float scale=std::max({size[0],size[1],size[2]})/std::max({range.x,range.y,range.z});
@@ -439,6 +450,40 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  quad({9.99f,14.15f,.83f},{9.99f,14.85f,.83f},{9.99f,14.85f,1.05f},{9.99f,14.15f,1.05f},m_serviceSign,1.1f);
  }
  if(w.level()==3){
+  // Theatre-like shaft bays: readable machinery silhouettes within the window
+  // sightline, backed by opaque walls instead of distant explorable rooms.
+  for(float z:{-3.f,3.f,6.f,9.f}){
+   for(float x:{8.16f,15.84f}){
+    if(z==3)facility(6,x<12?8.5f:15.5f,11.65f,z+.12f,2.38f,.70f,1.26f,kPi*.5f);
+    else if(z==6){for(float y:{10.7f,12.2f,13.7f})facility(8,x,y,z+.55f,.7856f,.136f,1.0656f,kPi*.5f);}
+    else if(z==-3){for(float y:{10.8f,12.f,13.2f})box({x-.08f,y,z+.08f},{x+.08f,y+.18f,z+2.4f},m_pressureMetal,1.f);}
+    else {box({x-.06f,10.2f,z},{x+.06f,13.8f,z+2.35f},m_bulkhead,1.f);}
+   }
+   // Different color accents and heavy cross-members identify a passing level.
+   auto&accent=z==-3?blue:z==6?red:amber;
+   for(float x:{8.95f,14.95f}){box({x,9.2f,z+2.28f},{x+.10f,14.8f,z+2.42f},m_metal,.9f);box({x+.025f,10.3f,z+2.24f},{x+.075f,13.7f,z+2.27f},accent,1.65f);}
+  }
+  // Close guide rails and repeated height markers supply real parallax during
+  // ascent and much faster upward optical flow during the scripted fall.
+  for(float x:{9.45f,14.45f}){
+   box({x,10.5f,-8.9f},{x+.10f,10.64f,12.f},m_metal,.9f);
+   box({x,13.35f,-8.9f},{x+.10f,13.49f,12.f},m_metal,.9f);
+   for(int band=-7;band<10;++band){float z=band*1.2f;box({x-.025f,13.30f,z},{x+.125f,13.34f,z+.10f},band<0?red:amber,1.65f);}
+  }
+  auto phase=w.liftPhase();float phaseTime=w.liftPhaseTime(),cab=w.liftHeight();
+  bool broken=phase==World::LiftPhase::Falling||phase==World::LiftPhase::Caught||phase==World::LiftPhase::Crashed;
+  bool scrape=phase==World::LiftPhase::Falling||(phase==World::LiftPhase::Caught&&phaseTime<.35f)||(phase==World::LiftPhase::Crashed&&phaseTime<.45f);
+  movingGeometry=true;
+  if(broken&&phase!=World::LiftPhase::Crashed){float sway=.12f*std::sin(phaseTime*11.f);Point3 a{14.25f,11.5f,cab+2.9f},b{14.25f+sway,11.5f,cab+1.6f},c{14.3f+sway*1.8f,11.5f,cab+.85f};
+   quad(a,b,b+Point3{0,.035f,0},a+Point3{0,.035f,0},m_metal,.8f,{1,3});quad(b,c,c+Point3{0,.035f,0},b+Point3{0,.035f,0},m_metal,.8f,{1,2});
+  }
+  if(scrape)for(float x:{9.65f,14.35f})for(int i=0;i<12;++i){float life=std::fmod(phaseTime*2.7f+i*.137f,1.f),y=12.1f+i*.055f,z=cab+.65f+life*1.7f;
+   quad({x,y,z},{x,y+.012f,z},{x,y+.06f,z+.10f+life*.15f},{x,y+.048f,z+.10f+life*.15f},i%3?amber:lamp,1.8f);
+  }
+  movingGeometry=false;
+  // Equipment labels are real plates, not floating interaction markers.
+  box({5.2f,21.35f,-5.17f},{6.8f,21.41f,-4.62f},m_panelMetal,.9f);
+  quad({6.75f,21.34f,-5.12f},{5.25f,21.34f,-5.12f},{5.25f,21.34f,-4.67f},{6.75f,21.34f,-4.67f},m_diskSign,1.1f);
   movingGeometry=true;
   float z=w.liftHeight();bool ready=w.liftPhase()==World::LiftPhase::Ready,crashed=w.liftPhase()==World::LiftPhase::Crashed;
   // Modular freight cab: structural frame, recessed kick panels, wide cage
@@ -448,6 +493,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   for(float y:{10.18f,13.62f})quad({10.2f,y,z+.01f},{13.8f,y,z+.01f},{13.8f,y+.16f,z+.01f},{10.2f,y+.16f,z+.01f},m_hazard,1.1f);
   box({10,10,z+2.6f},{14,14,z+2.8f},m_bulkhead,.9f);
   for(float y:{10.15f,13.65f})box({10.12f,y,z+2.42f},{13.88f,y+.2f,z+2.6f},m_metal,.85f);
+  for(float x:{10.8f,12.85f})box({x,10.25f,z+2.50f},{x+.10f,13.75f,z+2.59f},m_metal,.85f);
+  // Recessed utility panels and ventilation keep the cab from reading as a box.
+  for(float y:{10.7f,12.6f}){box({10.125f,y,z+1.65f},{10.15f,y+.6f,z+2.08f},iron,.8f);for(int i=0;i<5;++i)box({10.15f,y+.04f,z+1.69f+i*.07f},{10.18f,y+.56f,z+1.71f+i*.07f},m_metal,.85f);}
   for(float x:{10.f,13.88f}){
    box({x,10,z},{x+.12f,14,z+.65f},m_pressureWall,.95f);
    box({x,10,z+2.12f},{x+.12f,14,z+2.6f},m_panelMetal,.9f);
@@ -460,7 +508,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({10,y,z},{11,y+.12f,z+2.6f},m_panelMetal,1.f);
    box({13,y,z},{14,y+.12f,z+2.6f},m_panelMetal,1.f);
    box({11,y,z+2.2f},{13,y+.12f,z+2.6f},m_panelMetal,1.f);
-   float opening=y==10?(ready?1.f:w.liftPhase()==World::LiftPhase::Ascending?1-std::min(1.f,w.liftPhaseTime()/.65f):0.f):(crashed?std::min(1.f,w.liftPhaseTime()/.65f):0.f);
+   float opening=y==10?(ready?1.f:w.liftPhase()==World::LiftPhase::Ascending?1-std::min(1.f,w.liftPhaseTime()/.65f):0.f):(crashed?std::clamp((w.liftPhaseTime()-3.f)/.65f,0.f,1.f):0.f);
    for(int leaf=0;leaf<2;++leaf){float left=11+leaf+(leaf?opening:-opening),right=left+1;
     box({left,y,z},{right,y+.12f,z+1.12f},m_bulkhead,1.f);
     box({left,y,z+1.82f},{right,y+.12f,z+2.2f},m_bulkhead,1.f);
@@ -471,11 +519,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({10.94f,y-.025f,z+.01f},{13.06f,y+.145f,z+.035f},m_metal,1.f);
   }
   quad({12.7f,13.865f,z+2.23f},{11.3f,13.865f,z+2.23f},{11.3f,13.865f,z+2.56f},{12.7f,13.865f,z+2.56f},m_liftSign,1.2f);
-  quad({13.87f,10.95f,z+1.05f},{13.87f,12.05f,z+1.05f},{13.87f,12.05f,z+1.39f},{13.87f,10.95f,z+1.39f},m_liftDispatch,1.2f);
-  bool alarm=w.liftPhase()==World::LiftPhase::Jammed||w.liftPhase()==World::LiftPhase::Falling;
-  auto&signal=alarm&&int(game.elapsed()*8)%2?m_redPaint:amber;
+  // Header-mounted sign leaves the passing scenery window unobstructed.
+  box({13.84f,10.88f,z+2.14f},{13.89f,12.12f,z+2.52f},m_panelMetal,.95f);
+  quad({13.833f,10.95f,z+2.16f},{13.833f,12.05f,z+2.16f},{13.833f,12.05f,z+2.50f},{13.833f,10.95f,z+2.50f},m_liftDispatch,1.2f);
+  bool alarm=w.liftPhase()==World::LiftPhase::Jammed||w.liftPhase()==World::LiftPhase::Falling||w.liftPhase()==World::LiftPhase::Caught;
+  auto&signal=alarm&&int(game.elapsed()*2)%2?m_redPaint:amber;
   for(float x:{10.65f,13.25f})box({x,13.70f,z+2.27f},{x+.1f,13.82f,z+2.49f},signal,1.8f);
-  for(float x:{10.15f,13.75f})box({x,10.3f,z+2.8f},{x+.045f,10.35f,crashed||w.liftPhase()==World::LiftPhase::Falling?z+3.2f:15.8f},m_metal,.7f);
+  for(float x:{10.15f,13.75f})box({x,10.3f,z+2.8f},{x+.045f,10.35f,crashed||w.liftPhase()==World::LiftPhase::Falling||w.liftPhase()==World::LiftPhase::Caught?z+3.2f:15.8f},m_metal,.7f);
   box({11.3f,11.6f,z+2.8f},{12.7f,12.4f,z+3.05f},m_pressureMetal,.8f);
   // The sealed surface gates stay in the shaft when the room plunges away.
   box({10,14.05f,9},{14,14.25f,12},m_bulkhead,1.f);
@@ -483,18 +533,28 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  movingGeometry=false;
  for(auto&terminal:w.terminals()){movingGeometry=w.level()==3&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
+  if(terminal.reactorAction){float plate=h+(terminal.reactorAction==1?1.f:1.52f);box({x-.42f,y+.28f,plate-.02f},{x+.42f,y+.33f,plate+.27f},m_panelMetal,1.f);quad({x+.4f,y+.27f,plate},{x-.4f,y+.27f,plate},{x-.4f,y+.27f,plate+.25f},{x+.4f,y+.27f,plate+.25f},terminal.reactorAction==1?m_authSign:terminal.reactorAction==2?m_feedSign:m_returnSign,1.1f);}
   if(terminal.control){
    box({x-.27f,y-.18f,h},{x+.27f,y+.18f,h+.2f},m_panelMetal,.9f);
    facility(8,x,y,h+.2f,.36f,.54f,.75f,kPi*.5f);
+  }else if(terminal.reactorAction>=2){
+   box({x-.24f,y-.18f,h},{x+.24f,y+.18f,h+.65f},m_pressureMetal,.95f);
+   facility(8,x,y,h+.65f,.5892f,.102f,.7992f,0);
+   // A round handwheel and pipe riser distinguish local flow controls from PCs.
+   box({x-.065f,y+.12f,h+.2f},{x+.065f,y+.30f,h+1.8f},m_metal,1.f);
+   box({x-.17f,y-.095f,h+1.065f},{x+.17f,y-.075f,h+1.095f},m_metal,1.f);box({x-.015f,y-.095f,h+.91f},{x+.015f,y-.075f,h+1.25f},m_metal,1.f);
+   for(int i=0;i<12;++i){float a=i*kPi/6,b=(i+1)*kPi/6;quad({x+.19f*std::cos(a),y-.09f,h+1.08f+.19f*std::sin(a)},{x+.19f*std::cos(b),y-.09f,h+1.08f+.19f*std::sin(b)},{x+.15f*std::cos(b),y-.09f,h+1.08f+.15f*std::sin(b)},{x+.15f*std::cos(a),y-.09f,h+1.08f+.15f*std::sin(a)},terminal.reactorAction==2?amber:blue,1.1f);}
   }else{
    // Personnel records belong on a computer, visually distinct from switchgear.
    box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
    box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
    facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,kPi);
+   if(terminal.reactorAction==1){box({x-.2f,y-.295f,h+.28f},{x+.2f,y-.24f,h+.39f},m_metal,1.f);box({x-.15f,y-.30f,h+.33f},{x+.11f,y-.296f,h+.345f},iron,1.f);box({x+.15f,y-.302f,h+.32f},{x+.17f,y-.295f,h+.34f},w.reactorStage()>=World::ReactorStage::DiskLoaded?blue:amber,1.8f);}
   }
  }
  // Extraction floor remains readable even before its gate unlocks.
  movingGeometry=false;
+ if(w.level()==3&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
  for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining()==0?m_routePaint:m_redPaint,1.f);}
  for(const auto&e:game.enemies()){
   if(!e.visible())continue;
