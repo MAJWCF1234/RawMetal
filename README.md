@@ -15,10 +15,21 @@ overlapping floors, hear actual shots instead of reload animation, and request
 a new route when blocked.
 
 **R** reloads the six-round tube; mouse wheel up selects the shotgun and down
-selects fists. Restart is in Esc with confirmation. Save format 3 includes the
-Stalker and still reads version 1/2 saves. Run `--physics-ai-test` for targeted
+selects fists. Restart is in Esc with confirmation. Save format 4 includes the
+hazmat ragdoll and still reads version 1/2/3 saves. Run `--physics-ai-test` for targeted
 movement, creature behavior and clutter checks, or `--stalker-test` for animation
-deformation checks and twenty-five reactor pose captures.
+deformation checks and fifty front/side reactor pose captures.
+
+The Stalker's shoulder/elbow/wrist retargeting now follows the source limb
+directions instead of applying incompatible bone rolls. An olive-suited gas-mask
+worker lies in the lift boarding room, with blood on the suit and floor. This
+uses `Characters_psx/Models/Male/Character_28_HM.fbx` and its original matching
+texture from the supplied asset library (988 triangles), not the rejected heavy
+yellow radiation suit. The blood texture is `Textures/textures2/bloodsplotch_zdw3k.png`.
+Fifteen articulated joints react to bumps and shots; saves retain the pose and
+velocity. `--hazmat-test` checks floor clearance, constraints, fixed-step timing,
+save/load and ray contact, and captures three inspection views. Texture packing
+uses a verified reversible predictor without reducing texture resolution.
 
 Vulkan hardware rendering is now the default, at full **640x360** internal
 resolution. The GPU handles triangles, depth, textures, normal maps and emission;

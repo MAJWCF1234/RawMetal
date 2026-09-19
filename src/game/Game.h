@@ -5,6 +5,7 @@
 #include <vector>
 #include "../audio/Sound.h"
 #include <string>
+#include "Ragdoll.h"
 
 namespace retro {
 constexpr int DisplayWidth=640,DisplayHeight=360;
@@ -109,6 +110,9 @@ public:
 
     const World& world() const { return m_world; }
     const Player& player() const { return m_player; }
+    const Ragdoll& hazmat()const{return m_hazmat;}
+    static Game hazmatInspection(int view=0);
+    static bool testHazmat();
     const std::vector<Enemy>& enemies() const { return m_enemies; }
     const std::vector<Pickup>& pickups() const { return m_pickups; }
     const std::vector<Clutter>& clutter()const{return m_clutter;}
@@ -185,7 +189,7 @@ public:
     bool audioMuted()const{return m_audioMuted;}
     bool musicEnabled()const{return m_musicEnabled;}
     static Game validationScene(Enemy::Kind kind,float deathTime=-1,float windup=0);
-    static Game stalkerInspection(int clip,float phase);
+    static Game stalkerInspection(int clip,float phase,int view=0);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false);
 
 private:
@@ -237,6 +241,7 @@ private:
     void updatePickups();
 
     World m_world;
+    Ragdoll m_hazmat;
     Player m_player;
     std::vector<Enemy> m_enemies;
     std::vector<Pickup> m_pickups;

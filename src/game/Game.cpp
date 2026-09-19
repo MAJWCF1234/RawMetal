@@ -10,7 +10,7 @@ namespace retro {
 
 Game::Game() { restart(); }
 
-void Game::restart(){++m_sessionRevision;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hazmat={};m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -76,6 +76,7 @@ void Game::loadLevel(int level,bool carry) {
     m_sounds.clear();m_stepDistance=0;m_stepVariant=0;
     m_pickupNotice.clear();m_pickupNoticeTime=0;
     seedClutter();
+    if(m_level==3&&!m_hazmat.initialized)m_hazmat.seed(m_world);
 }
 void Game::sound(Sound sound,float gain,float pitch){m_sounds.push_back({sound,{},gain,pitch,false});}
 void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int kind=enemy.kind==Enemy::Kind::Warden?2:int(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+kind*3+action),enemy.pos,gain,pitch*(enemy.kind==Enemy::Kind::Warden?.78f:1.f),true});}
@@ -152,6 +153,10 @@ void Game::shoot() {
         if (along < bestAlong) { bestAlong = along; best = &e; }
     }
 
+    if(m_level==3){int joint=-1;float pitch=m_player.pitch/140.f;RagPoint direction{forward.x*std::cos(pitch),forward.y*std::cos(pitch),std::sin(pitch)};
+     float distance=m_hazmat.rayHit({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction,joint);
+     if(joint>=0&&distance<bestAlong&&distance<18){auto p=m_hazmat.p[joint];if(m_world.rayClear(m_player.pos,m_player.z+m_player.eye,{p.x,p.y},p.z)){m_hazmat.impulse(joint,direction*2.5f+RagPoint{0,0,.7f});sound(Sound::PunchHit,.55f,.8f);return;}}
+    }
     if (best) {
         const float damage = bestAlong < 4.0f ? 34.0f : (bestAlong < 9.0f ? 28.0f : 21.0f);
         best->hp -= damage;
@@ -167,8 +172,9 @@ void Game::shoot() {
         else enemySound(*best,0,.55f,1.22f);
     }
 }
-Game Game::stalkerInspection(int clip,float phase){
+Game Game::stalkerInspection(int clip,float phase,int view){
  auto game=mapInspection({18.6f,18.5f},0,clip==4?-35.f:0.f,3,true,-9,false);
+ if(view){game.m_player.pos={21.5f,21.2f};game.m_player.angle=-kPi*.5f;}
  game.m_enemies.resize(1);auto& e=game.m_enemies[0];e={};e.kind=Enemy::Kind::Warden;e.pos={21.5f,18.5f};e.z=-9;e.home=e.pos;e.heading=kPi;e.hp=e.maxHp=220;
  game.m_elapsed=phase*2.5f-e.home.x*.25f;
  if(clip==1){e.moving=true;e.gait=phase*2*kPi;}
@@ -253,6 +259,7 @@ void Game::update(const InputState& input, float dt) {
 
         updateLift(dt);
         updateMovement(input,dt);
+        if(m_level==3){if(length(m_velocity)>.5f)for(int joint=0;joint<Ragdoll::Count;++joint){auto p=m_hazmat.p[joint];if(length(Vec2{p.x,p.y}-m_player.pos)<.4f&&p.z>m_player.z&&p.z<m_player.z+.7f)m_hazmat.impulse(joint,{m_velocity.x*.12f,m_velocity.y*.12f,.08f});}m_hazmat.update(m_world,dt);}
         crossChunkBoundary();
         updateInteraction(input,dt);
         updateStreaming(dt);

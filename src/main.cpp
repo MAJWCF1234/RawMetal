@@ -12,11 +12,16 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--hazmat-test")){
+     bool passed=retro::Game::testHazmat();retro::SoftwareRenderer renderer(W,H);renderer.enableHardware();
+     for(int view=0;view<3;++view){auto scene=retro::Game::hazmatInspection(view);renderer.render(scene);std::ofstream out("hazmat-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return passed?0:41;
+    }
     if(std::wcsstr(commandLine,L"--stalker-test")){
      if(!retro::SoftwareRenderer::testCreatureAnimation()||!retro::Game::testAI())return 40;
      retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 36;
-     for(int clip=0;clip<5;++clip)for(int frame=0;frame<5;++frame){auto scene=retro::Game::stalkerInspection(clip,.01f+frame*.245f);renderer.render(scene);
-      std::ofstream out("stalker-"+std::to_string(clip)+"-"+std::to_string(frame)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
+     for(int view=0;view<2;++view)for(int clip=0;clip<5;++clip)for(int frame=0;frame<5;++frame){auto scene=retro::Game::stalkerInspection(clip,.01f+frame*.245f,view);renderer.render(scene);
+      std::ofstream out(std::string(view?"stalker-side-":"stalker-")+std::to_string(clip)+"-"+std::to_string(frame)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
@@ -103,6 +108,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
         std::ofstream("model-report.txt")<<renderer.modelReport();
         if(!renderer.validate3D())return 7;
+        if(!retro::Game::testHazmat())return 41;
         if(!retro::SoftwareRenderer::testCreatureAnimation())return 40;
         if(!retro::Game::testCombat())return 9;
         if(!retro::Game::testWeaponMotion())return 11;

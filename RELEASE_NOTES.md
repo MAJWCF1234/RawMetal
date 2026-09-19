@@ -1,27 +1,26 @@
-# RawMetal v0.3.5 — Animated Melee Stalker
+# RawMetal v0.3.6 — Stalker Arms & Hazmat Casualty
 
 ## Changes
 
-- Replaced the antlered Warden with a different masked horror creature from the supplied PSX character library (Character_Monster_03, 1,386 triangles).
-- Added articulated idle, walk, melee swing, hit reaction and death animation. Five Quaternius clips are retargeted onto the creature's skeleton, skinned offline and stored as compact shared-vertex samples with runtime interpolation.
-- Corrected source/rest-mesh orientation, exact clip-name matching and ground alignment. Damage occurs at the melee animation's reach peak.
-- Removed the ranged strike, targeting stripe and glowing charge. The Stalker must approach to melee distance; its committed windup can be dodged, and walls/closed doors block damage.
-- Existing save enemy kind 3 now loads the melee Stalker. No save-format change or fresh save is required. Prior movement, physics, reload, weapon-wheel and menu changes are retained.
+- Corrected Stalker shoulder/elbow/wrist retargeting: arms follow the animation's actual limb directions instead of incompatible bone-roll axes. Idle, movement and melee remain articulated; there are no ranged attacks.
+- Added the supplied PSX Character_28_HM worker: olive protective suit, sealed gas mask, black gloves and boots (988 triangles). Replaced the rejected bulky yellow radiation worker.
+- Authored an asymmetric face-down collapse with an outstretched arm and unevenly folded legs. Blood follows the suit surface; a pool and narrow smears mark the floor.
+- Added a 15-joint, fixed-120-Hz ragdoll with floor/wall contact, impact response and sleeping. Oriented suit contact prevents both floor penetration and the hovering caused by oversized spherical ground proxies.
+- Save format 4 retains the ragdoll's pose and velocity and continues to read versions 1–3.
+- Added reversible texture prediction to lossless asset packing. Original texture resolution and decoded pixels are preserved; packing verifies round trips.
 
 ## Verification
 
-The targeted Stalker test checks that all five clips deform the mesh (not just translate it), remain finite and stay above the floor. It also checks melee contact, backstep dodges, door blocking and no attack at three units. Twenty-five reactor pose captures cover the clips.
+The hazmat test checks skin-floor clearance, joint lengths, impact response, settling, 60/120-Hz agreement, save/load and ray contact. Three in-engine views were inspected after settling. The Stalker baker checks arm-direction alignment in every sampled clip; front and side captures cover all five clips.
 
-Full Vulkan/software smoke tests, save/load, physics/AI and Vulkan checks passed. The binary stays below the 19,800,000-byte limit.
+Vulkan and software smoke tests passed, as did targeted physics/AI, save/load, Stalker and Vulkan checks. All six culling/reference comparisons matched. The executable remains below the 19,800,000-byte limit.
 
-The final 1,560-frame Intel Graphics benchmark passed the 50 ms update/audio/render budget at 640x360. Reactor active AI averaged 17.30 ms (57.8 FPS), with a worst measured frame of 21.59 ms (46.3 FPS); all six culling/reference comparisons matched. Startup and OS presentation are excluded.
+## Performance limitation
 
-## Known limitations
-
-Earlier benchmarks showed intermittent elevator rendering hitches; one passing run is not a universal minimum-20-FPS guarantee. These animations are retargeted skeletal clips baked to vertex samples, not a new runtime animation graph or ragdoll system.
+The final 1,680-frame Intel Graphics test at 640x360 recorded an awake-ragdoll average of 19.95 ms (50.1 FPS), with a 24.02 ms worst frame (41.6 FPS). However, two reactor-balcony frames exceeded 50 ms, peaking at 81.89 ms. The strict whole-game minimum-20-FPS test therefore failed; this release does not claim a universal minimum. Startup and OS presentation are excluded from these timings.
 
 ## Download
 
-Extract RawMetal.zip and run RawMetal.exe. Use the backtick console and map reactor to inspect the replacement, or load an existing reactor save. Vulkan is default; --software enables fallback.
+Extract RawMetal.zip and run RawMetal.exe. Use the backtick console and map lift for the casualty, or map reactor for the Stalker. Existing version-4 saves retain their saved corpse pose; load the map fresh to see the new authored collapse.
 
 The EXE is signed with the existing self-signed RawMetal Development Build certificate. Self-signing does not establish public publisher trust, SmartScreen reputation, or antivirus clearance. The EXE inside the ZIP matches the separately uploaded executable.

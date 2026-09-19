@@ -45,6 +45,8 @@ private:
     Texture m_muzzleFlash;
     Mesh m_consoleMesh{240};
     Texture m_consoleTexture;
+    std::array<Texture,3> m_hazmatTextures;
+    Texture m_blood;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;

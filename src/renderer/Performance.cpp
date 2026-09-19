@@ -63,6 +63,7 @@ bool SoftwareRenderer::testPerformance(){
  measure("Foundry turn",Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true),120,false,true);
  measure("Gantry turn",Game::mapInspection({7.5f,12.5f},0,0,2,false,0,true),120,false,true);
  measure("Lift entry turn",Game::mapInspection({3.5f,2},kPi*.5f,0,3,false,0,true),120,false,true);
+ measure("Hazmat impact and settling",Game::hazmatInspection(3),120,true,false);
  measure("Ascent window",Game::liftInspection(5,3),240,true,false);
  measure("Jam and six-floor fall",Game::liftInspection(35,3),600,true,true);
  measure("Reactor balcony turn",Game::liftInspection(World::LiftRideComplete,2),180,false,true);

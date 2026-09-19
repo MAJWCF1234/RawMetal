@@ -130,5 +130,8 @@
 242 RCDATA "assets/reactor/stalker.obj"
 243 RCDATA "assets/reactor/stalker.png"
 244 RCDATA "assets/reactor/stalker-animation.bin"
+245 RCDATA "assets/reactor/hazmat.bin"
+246 RCDATA "assets/reactor/hazmat-body.png"
+249 RCDATA "assets/reactor/blood-splotch.png"
 
 

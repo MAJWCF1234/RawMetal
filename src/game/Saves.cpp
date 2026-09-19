@@ -38,6 +38,10 @@ std::string readFile(const std::filesystem::path& path){
 template<class A> void Game::archiveSave(A& a,int version){
  auto vec=[&](Vec2& v){a(v.x,v.y);};
  a(m_level,m_elapsed,m_won,m_medkits,m_weaponEquipped,m_heldClutter);
+ if(version>=4){a(m_hazmat.initialized,m_hazmat.sleeping,m_hazmat.quiet,m_hazmat.accumulator);
+  for(auto&points:{&m_hazmat.p,&m_hazmat.previous})for(auto&p:*points){a(p.x,p.y,p.z);if(p.x<0||p.x>24||p.y<0||p.y>24||p.z<-12||p.z>20)throw std::runtime_error("Invalid hazmat pose");}
+  if(m_hazmat.accumulator<0||m_hazmat.accumulator>.06f||m_hazmat.quiet<0||m_hazmat.quiet>10)throw std::runtime_error("Invalid hazmat simulation");
+ }
  auto&p=m_player;vec(p.pos);a(p.angle,p.pitch,p.health,p.ammo);if(version>=2)a(p.loaded);a(p.z,p.verticalVelocity,p.grounded,p.crouched,p.eye);vec(m_velocity);
  a(m_weaponKick,m_shotCooldown);if(version>=2)a(m_reloadTimer);a(m_shotAge,m_holster,m_punchAge,m_punchLeft,m_guarding,m_verticalSpring,m_verticalSpringVelocity,m_stepDistance,m_stepVariant,m_jumpBuffer,m_coyote);
  a(m_weaponMotion.yaw,m_weaponMotion.pitch,m_weaponMotion.bob,m_weaponMotion.back,m_weaponMotion.elbow,m_weaponMotion.bolt,m_weaponMotion.roll);vec(m_sway);vec(m_swayVelocity);a(m_elbowVelocity);
@@ -54,20 +58,21 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,3);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 3 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,4);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 4 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version!=1&&version!=2&&version!=3))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>4))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   auto&p=next.m_player;
   if(next.m_level<0||next.m_level>=ChunkCount||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>1.1f||std::fabs(p.pitch)>100||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
+  if(next.m_level==3&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
   next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
   next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;

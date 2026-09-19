@@ -8,6 +8,7 @@
 #include <iostream>
 #include <stdexcept>
 #include "../core/AssetHash.h"
+#include "../core/TextureCodec.h"
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #include "../ThirdParty/stb/stb_image.h"
@@ -42,6 +43,7 @@ int main(int argc,char** argv){try{
    candidate(raw,0);auto planar=raw;
    for(size_t c=0;c<4;++c){unsigned char previous=0;for(size_t i=0;i<count;++i){auto value=raw[12+4*i+c];planar[12+c*count+i]=static_cast<unsigned char>(value-previous);previous=value;}}
    candidate(planar,2);
+   auto predicted=retro::texturePredict(raw,false);if(retro::texturePredict(predicted,true)!=raw)throw std::runtime_error("Texture predictor round-trip failed");candidate(predicted,3);
   }
   verify(packed,chosen);fs::path destination=out/(match[1].str()+".rmz");std::ofstream asset(destination,std::ios::binary);
   uint32_t size=uint32_t(chosen.size());asset.write("RMZ1",4);asset.write(reinterpret_cast<char*>(&size),4);asset.write(reinterpret_cast<char*>(&encoding),4);asset.write(reinterpret_cast<char*>(packed.data()),packed.size());

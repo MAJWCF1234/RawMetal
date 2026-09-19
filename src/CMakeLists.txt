@@ -9,6 +9,8 @@ target_link_libraries(RawMetalAssetPacker PRIVATE cabinet bcrypt)
 set_target_properties(RawMetalAssetPacker PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 add_executable(RawMetalClutterImport EXCLUDE_FROM_ALL tools/import_clutter.cpp ThirdParty/ufbx/ufbx.c)
 add_executable(RawMetalCreatureBake EXCLUDE_FROM_ALL tools/bake_creature.cpp ThirdParty/ufbx/ufbx.c)
+add_executable(RawMetalHazmatImport EXCLUDE_FROM_ALL tools/import_hazmat.cpp ThirdParty/ufbx/ufbx.c)
+set_target_properties(RawMetalHazmatImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 set_target_properties(RawMetalCreatureBake PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 set_target_properties(RawMetalClutterImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 file(GLOB_RECURSE RAWMETAL_ASSETS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
@@ -33,6 +35,7 @@ add_executable(RawMetal WIN32
     game/Console.cpp
     game/Streaming.cpp
     game/Clutter.cpp
+    game/Ragdoll.cpp
     game/AI.cpp
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp

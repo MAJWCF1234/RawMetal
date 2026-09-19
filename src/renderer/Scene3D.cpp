@@ -473,6 +473,24 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  if(w.level()==3){
   // Boarding deck: freight holding on the west, traction plant on the east.
+  const auto& corpse=game.hazmat();
+  if(corpse.initialized&&sphereVisible({corpse.p[0].x,corpse.p[0].y,corpse.p[0].z},2.1f)){
+   quad({8.25f,6.7f,.009f},{9.55f,6.7f,.009f},{9.55f,7.9f,.009f},{8.25f,7.9f,.009f},m_blood,1.1f);
+   quad({8.05f,7.7f,.010f},{8.43f,7.7f,.010f},{8.43f,8.13f,.010f},{8.05f,8.13f,.010f},m_blood,.9f);
+   // Narrow contact smears lead into the final collapse, not an even halo.
+   quad({9.00f,7.58f,.011f},{9.20f,7.49f,.011f},{9.72f,8.28f,.011f},{9.55f,8.39f,.011f},m_blood,.82f);
+   quad({9.49f,8.21f,.012f},{9.62f,8.15f,.012f},{9.94f,8.62f,.012f},{9.83f,8.69f,.012f},m_blood,.72f);
+   auto posed=corpse.skin();auto&vertices=Ragdoll::asset().vertices;objectLighting=true;objectLight=illumination({corpse.p[1].x,corpse.p[1].y,corpse.p[1].z},{0,0,1});
+   for(size_t i=0;i<vertices.size();i+=3){MeshVertex face[3];for(int j=0;j<3;++j){auto p=posed[i+j];face[j]={{p.x,p.y,p.z},vertices[i+j].u,vertices[i+j].v};}
+    tri(face[0],face[1],face[2],m_hazmatTextures[vertices[i].material],.95f);
+    // The blood follows the skinned chest surface, not a floating world card.
+    bool patch=vertices[i].material==0;float front=0;for(int j=0;j<3;++j){auto p=vertices[i+j].p;patch&=p.x>-.40f&&p.x<.40f&&p.z>.72f&&p.z<1.42f;front+=p.y;}
+    if(patch&&std::fabs(front)>.02f){auto n=cross3(face[1].p-face[0].p,face[2].p-face[0].p);auto a=vertices[i+1].p-vertices[i].p,b=vertices[i+2].p-vertices[i].p;float restY=a.z*b.x-a.x*b.z;float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);n=n*((restY*front<0?-1.f:1.f)*.004f/std::max(.00001f,len));
+     for(int j=0;j<3;++j){face[j].p=face[j].p+n;auto p=vertices[i+j].p;face[j].u=p.x/.8f+.5f;face[j].v=1-(p.z-.72f)/.7f;}tri(face[0],face[1],face[2],m_blood,.95f);
+    }
+   }
+   objectLighting=false;
+  }
   // The central approach is kept clear; equipment is concentrated at cab windows.
   // This bay ends at the existing x=7 structural partition: keep every crate
   // fully west of it rather than allowing an attractive but impossible overlap.

@@ -44,7 +44,8 @@ bool SoftwareRenderer::enableHardware(){
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>();
   for(const auto*texture:{&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
+  for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
   m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
@@ -54,6 +55,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
  for(int i=0;i<15;++i)m_facilityTextures.emplace(materialNames[i],loadTexture(172+i));
  m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);
+ for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
+ m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
  m_facilityTextures.emplace("pc_1",loadTexture(192));m_facilityTextures.emplace("keyboard_1",loadTexture(193));
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
  m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);
