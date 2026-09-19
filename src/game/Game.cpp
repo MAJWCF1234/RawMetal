@@ -29,7 +29,7 @@ void Game::crossChunkBoundary(){
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
 }
 void Game::loadLevel(int level,bool carry) {
-    float health=m_player.health;int ammo=m_player.ammo;
+    float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
     m_level=std::clamp(level,0,ChunkCount-1);m_world=World{m_level};m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_level==0?Vec2{3.5f,4.5f}:Vec2{3.5f,3.5f};
@@ -37,7 +37,8 @@ void Game::loadLevel(int level,bool carry) {
     m_player.pitch = 0.0f;
     m_player.health = 100.0f;
     m_player.ammo = 72;
-    if(carry){m_player.health=health;m_player.ammo=ammo;}
+    m_player.loaded = 6;
+    if(carry){m_player.health=health;m_player.ammo=ammo;m_player.loaded=loaded;}
     m_player.z = 0.0f;
     m_player.verticalVelocity = 0.0f;
     m_player.grounded = true;
@@ -51,6 +52,7 @@ void Game::loadLevel(int level,bool carry) {
     if(m_level==2)m_enemies={{{7.5f,4.5f}},{{16.5f,4.5f}},{{7.5f,12.5f}},{{3.5f,15.5f}},{{19.5f,15.5f}},{{21.5f,20.5f}}};
     if(m_level==3)m_enemies={{{5.5f,13.5f}},{{17.5f,19.5f}},{{21.5f,18.5f}}};
     for(size_t i=0;i<m_enemies.size();++i){auto&e=m_enemies[i];e.kind=i%3==1?Enemy::Kind::Wasp:i%3==2?Enemy::Kind::Brute:Enemy::Kind::Huntsman;e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:110.f;e.voiceTimer=.8f+float(i)*.9f;e.home=e.pos;e.lastKnown=e.pos;e.z=m_world.floorHeight(e.pos.x,e.pos.y);e.heading=kPi;}
+    if(m_level==3){auto&e=m_enemies.back();e.kind=Enemy::Kind::Warden;e.hp=e.maxHp=220;}
     m_pickups = {
         {{4.5f, 7.5f}, Pickup::Kind::Ammo, true},
         {{13.5f, 5.5f}, Pickup::Kind::Health, true},
@@ -62,8 +64,8 @@ void Game::loadLevel(int level,bool carry) {
     if(m_level==3)m_pickups={{{12.5f,15.5f},Pickup::Kind::Ammo,true},{{15.5f,17.5f},Pickup::Kind::Health,true},{{21.5f,19.5f},Pickup::Kind::Ammo,true}};
 
     m_previousFire = false;
-    m_previousRestart = false;
-    m_weaponKick = 0.0f; m_shotCooldown = 0.0f;
+    m_previousReload = false;
+    m_weaponKick = 0.0f; m_reloadTimer=0; m_shotCooldown = 0.0f;
     m_damageFlash = 0.0f;
     m_elapsed = 0.0f;
     m_kills = 0;
@@ -76,7 +78,7 @@ void Game::loadLevel(int level,bool carry) {
     seedClutter();
 }
 void Game::sound(Sound sound,float gain,float pitch){m_sounds.push_back({sound,{},gain,pitch,false});}
-void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){m_sounds.push_back({Sound(int(Sound::SpiderCall)+int(enemy.kind)*3+action),enemy.pos,gain,pitch,true});}
+void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int kind=enemy.kind==Enemy::Kind::Warden?2:int(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+kind*3+action),enemy.pos,gain,pitch*(enemy.kind==Enemy::Kind::Warden?.78f:1.f),true});}
 
 int Game::enemiesRemaining() const {
     int n = 0;
@@ -93,7 +95,7 @@ const Enemy* Game::targetEnemy()const{
 bool Game::testCombat(){
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute}){
   auto encounter=validationScene(kind);int shots=0;
-  while(encounter.m_enemies[0].alive&&shots<10){encounter.shoot();++shots;}
+  while(encounter.m_enemies[0].alive&&shots<10){encounter.shoot();++shots;if(encounter.m_player.loaded==0&&encounter.m_player.ammo>0)encounter.m_player.loaded=std::min(6,encounter.m_player.ammo);}
   int expected=kind==Enemy::Kind::Huntsman?4:kind==Enemy::Kind::Wasp?3:9;
   if(shots!=expected||encounter.m_kills!=1)return false;
  }
@@ -106,7 +108,14 @@ bool Game::testCombat(){
  g.restart();g.m_enemies.resize(1);g.m_enemies[0].pos=g.m_player.pos+Vec2{.7f,0};
  g.update({},.05f);if(g.m_player.health!=100||g.m_enemies[0].windup<=0)return false;
  for(int i=0;i<40;++i)g.update({},1.f/60.f);
- return g.m_player.health<100;
+ if(g.m_player.health>=100)return false;
+ auto reload=validationScene(Enemy::Kind::Huntsman);reload.m_player.ammo=8;reload.m_player.loaded=2;auto revision=reload.sessionRevision();auto position=reload.player().pos;
+ InputState reloadKey{};reloadKey.reload=true;reload.update(reloadKey,.01f);
+ if(reload.player().ammo!=8||reload.player().loaded!=2||reload.sessionRevision()!=revision)return false;
+ reloadKey.reload=false;for(int i=0;i<80;++i)reload.update(reloadKey,.01f);
+ if(reload.player().ammo!=8||reload.player().loaded!=6||lengthSq(reload.player().pos-position)>.0001f)return false;
+ InputState scroll{};scroll.weaponScroll=-1;reload.update(scroll,.01f);if(reload.weaponEquipped())return false;
+ scroll.weaponScroll=1;reload.update(scroll,.01f);return reload.weaponEquipped();
 }
 Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
  Game g;g.m_enemies.resize(1);auto&e=g.m_enemies[0];e.kind=kind;e.pos={6.2f,4.5f};e.heading=kPi;e.moving=true;e.gait=2.f;e.windup=windup;e.hp=e.maxHp=kind==Enemy::Kind::Brute?280.f:kind==Enemy::Kind::Wasp?85.f:110.f;
@@ -120,8 +129,8 @@ bool Game::lineOfSight(const Vec2& a,const Vec2& b)const{return m_world.rayClear
 
 void Game::shoot() {
     if(dead()||m_won)return;
-    if(m_player.ammo<=0){sound(Sound::Empty,.55f);return;}
-    --m_player.ammo;
+    if(m_player.ammo<=0||m_player.loaded<=0){sound(Sound::Empty,.55f);return;}
+    --m_player.ammo;--m_player.loaded;
     sound(Sound::Shot,.95f);
     m_weaponKick = 1.0f;
     m_shotAge=0;
@@ -157,6 +166,10 @@ void Game::shoot() {
         }
         else enemySound(*best,0,.55f,1.22f);
     }
+}
+void Game::reloadWeapon(){
+ if(dead()||m_won||holdingClutter()||!m_weaponEquipped||m_reloadTimer>0||m_player.loaded>=6||m_player.ammo<=m_player.loaded)return;
+ m_reloadTimer=.62f;m_shotCooldown=std::max(m_shotCooldown,m_reloadTimer);m_weaponKick=.18f;
 }
 
 void Game::updatePickups() {
@@ -203,7 +216,7 @@ void Game::update(const InputState& input, float dt) {
     if(escapePressed){
      if(m_paused&&m_menuPage!=MenuPage::Settings){
       if(m_menuPage==MenuPage::Overwrite||m_menuPage==MenuPage::ConfirmLoad){m_menuPage=m_menuPage==MenuPage::Overwrite?MenuPage::Save:MenuPage::Load;m_menuSelection=m_pendingSlot;}
-      else {m_menuSelection=m_menuPage==MenuPage::Save?6:7;m_menuPage=MenuPage::Settings;}
+      else {m_menuSelection=m_menuPage==MenuPage::Save?7:m_menuPage==MenuPage::Load?8:6;m_menuPage=MenuPage::Settings;}
       m_menuMessage.clear();
      }else {m_paused=!m_paused;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_menuMessage.clear();}
      m_dragSlider=-1;m_menuPrevious=input;m_suppressFire=true;return;
@@ -217,8 +230,9 @@ void Game::update(const InputState& input, float dt) {
     if(input.mute&&!m_previousMute)m_audioMuted=!m_audioMuted;
     if(input.music&&!m_previousMusic)m_musicEnabled=!m_musicEnabled;
     m_previousMute=input.mute;m_previousMusic=input.music;
-    if (input.restart && !m_previousRestart) restart();
-    m_previousRestart = input.restart;
+    if (input.reload && !m_previousReload) reloadWeapon();
+    m_previousReload = input.reload;
+    if(input.weaponScroll){m_weaponEquipped=input.weaponScroll>0;m_holster=m_weaponEquipped&&m_player.ammo>0?0.f:1.f;m_suppressFire=true;}
     for(auto&e:m_enemies)if(!e.alive)e.deathTime+=dt;
     m_hitFlash=std::max(0.f,m_hitFlash-dt*5.f);
 
@@ -234,13 +248,15 @@ void Game::update(const InputState& input, float dt) {
         updateStreaming(dt);
         bool carryingAtStart=holdingClutter();updateClutter(input,dt);
 
+        float oldReload=m_reloadTimer;m_reloadTimer=std::max(0.f,m_reloadTimer-dt);
+        if(oldReload>0&&m_reloadTimer==0){m_player.loaded=std::min(6,m_player.ammo);m_shotAge=0;}
         m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
         m_guarding=input.guard&&unarmed();if(m_guarding)m_punchAge=10;
         float oldPunch=m_punchAge;m_punchAge+=dt;if(oldPunch<.22f&&m_punchAge>=.22f)punchImpact();
         float lower=(!m_weaponEquipped||m_player.ammo<=0)&&m_shotAge>.42f?1.f:0.f;
         m_holster+=std::clamp(lower-m_holster,-dt*2.6f,dt*2.6f);
         if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f) {
-            if(m_player.ammo>0&&m_holster<.05f){shoot();m_shotCooldown=.55f;}
+            if(m_player.ammo>0&&m_player.loaded>0&&m_holster<.05f){shoot();m_shotCooldown=.55f;}
             else if(unarmed()&&!m_guarding){m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=.58f;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
         updateEnemies(dt);
@@ -337,7 +353,11 @@ bool Game::testAudioEvents(){
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute}){
   game=validationScene(kind);game.m_sounds.clear();game.shoot();
   if(!contains(Sound::Shot)||!contains(Sound(int(Sound::SpiderCall)+int(kind)*3)))return false;
-  while(game.m_enemies[0].alive)game.shoot();
+  for(int attempts=0;game.m_enemies[0].alive&&attempts<32;++attempts){
+   if(game.m_player.loaded==0)game.m_player.loaded=std::min(6,game.m_player.ammo);
+   game.shoot();
+  }
+  if(game.m_enemies[0].alive)return false;
   if(!contains(Sound(int(Sound::SpiderDeath)+int(kind)*3)))return false;
  }
  game=validationScene(Enemy::Kind::Huntsman,3);game.m_player.pos={1.21f,4.5f};game.m_player.angle=kPi;

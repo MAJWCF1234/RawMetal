@@ -21,7 +21,8 @@ struct InputState {
     bool crouch = false;
     bool fire = false;
     bool guard = false;
-    bool restart = false;
+    bool reload = false;
+    int weaponScroll=0;
     bool use=false;
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
@@ -32,7 +33,7 @@ struct InputState {
 };
 
 struct Enemy {
-    enum class Kind { Huntsman, Wasp, Brute };
+    enum class Kind { Huntsman, Wasp, Brute, Warden };
     Vec2 pos{};
     float hp = 110.0f;
     float attackCooldown = 0.0f;
@@ -50,8 +51,8 @@ struct Enemy {
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
-    float bodyTop()const{return z+(kind==Kind::Wasp?1.55f:kind==Kind::Brute?1.85f:1.05f);}
-    const char* name()const{return kind==Kind::Wasp?"XENOWASP":kind==Kind::Brute?"SCISSOR FIEND":"HUNTSMAN";}
+    float bodyTop()const{return z+(kind==Kind::Wasp?1.55f:kind==Kind::Brute||kind==Kind::Warden?1.85f:1.05f);}
+    const char* name()const{return kind==Kind::Warden?"REACTOR WARDEN":kind==Kind::Wasp?"XENOWASP":kind==Kind::Brute?"SCISSOR FIEND":"HUNTSMAN";}
 };
 
 struct Pickup {
@@ -81,6 +82,7 @@ struct Player {
     float pitch = 0.0f;
     float health = 100.0f;
     int ammo = 36;
+    int loaded = 6;
     float z = 0.0f;
     float verticalVelocity = 0.0f;
     bool grounded = true;
@@ -90,7 +92,7 @@ struct Player {
 };
 struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0;};
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;};
-struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-266)/2,Width=304,Height=266,RowTop=Y+46,RowHeight=21,Rows=9,SliderX=X+179,SliderWidth=75;};
+struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-288)/2,Width=304,Height=288,RowTop=Y+46,RowHeight=21,Rows=10,SliderX=X+179,SliderWidth=75;};
 
 class Game {
 public:
@@ -138,7 +140,7 @@ public:
     static bool testAudioEvents();
     static bool testSettings();
     static bool testSaves();
-    enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad};
+    enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
     MenuPage menuPage()const{return m_menuPage;}
     int menuRows()const{return m_menuPage==MenuPage::Settings?MenuLayout::Rows:(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load?4:2);}
     const std::string& menuMessage()const{return m_menuMessage;}
@@ -195,7 +197,7 @@ private:
     void refreshSaveSlots();
     std::string encodeSave()const;
     bool decodeSave(const std::string& data);
-    template<class Archive> void archiveSave(Archive& archive);
+    template<class Archive> void archiveSave(Archive& archive,int version=2);
     bool nearReactorDisk()const;
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
@@ -227,6 +229,7 @@ private:
     void updateInteraction(const InputState& input,float dt);
     bool lineOfSight(const Vec2& a, const Vec2& b) const;
     void shoot();
+    void reloadWeapon();
     void punchImpact();
     void receiveDamage(float amount,Vec2 source);
     void updateEnemies(float dt);
@@ -239,8 +242,8 @@ private:
     std::vector<Clutter> m_clutter;
     int m_heldClutter=-1;
     bool m_previousFire = false;
-    bool m_previousRestart = false;
-    float m_weaponKick = 0.0f;
+    bool m_previousReload = false;
+    float m_weaponKick = 0.0f,m_reloadTimer=0.0f;
     float m_shotCooldown = 0.0f;
     Vec2 m_velocity{};
     float m_damageFlash = 0.0f;

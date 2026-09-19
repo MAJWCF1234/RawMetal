@@ -12,6 +12,15 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
+    if(std::wcsstr(commandLine,L"--warden-inspection")){
+        retro::SoftwareRenderer renderer(W,H);renderer.enableHardware();
+        for(int view=0;view<2;++view){
+         auto scene=view==0?retro::Game::validationScene(retro::Enemy::Kind::Warden,-1,.9f):retro::Game::mapInspection({19.2f,18.5f},0,0,3,true,-9,false);renderer.render(scene);
+         std::ofstream out(view==0?"warden.ppm":"warden-reactor.ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
+         for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+        }return 0;
+    }
     if(std::wcsstr(commandLine,L"--lift-test"))return retro::Game::testLift()?0:32;
     if(std::wcsstr(commandLine,L"--reactor-test"))return retro::Game::testReactor()?0:37;
     if(std::wcsstr(commandLine,L"--save-test"))return retro::Game::testSaves()?0:38;
@@ -40,9 +49,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         save("repair-sign.ppm",retro::Game::liftInspection(0,3));
         auto menu=retro::Game::liftInspection(retro::World::LiftRideComplete);menu.setSaveDirectory(L"inspection-empty-saves");retro::InputState input{};input.escape=true;menu.update(input,.01f);save("repair-pause.ppm",menu);
         auto click=[&](int row){menu.update({},.01f);retro::InputState i{};i.fire=true;i.pointerX=retro::MenuLayout::X+30;i.pointerY=retro::MenuLayout::RowTop+row*retro::MenuLayout::RowHeight+7;menu.update(i,.01f);};
-        click(6);save("repair-save.ppm",menu);click(3);click(7);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
+        click(7);save("repair-save.ppm",menu);click(3);click(8);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
     }
     if(std::wcsstr(commandLine,L"--console-test"))return retro::Game::testConsole()?0:34;
+    if(std::wcsstr(commandLine,L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;

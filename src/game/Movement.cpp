@@ -12,7 +12,7 @@ float Game::groundHeight(Vec2 p,float feet)const{
  for(float x:{-.20f,.20f})for(float y:{-.20f,.20f}){auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);height=std::max(height,w.supportBelow(corner.x,corner.y,feet));}return height;
 }
 bool Game::hullFits(Vec2 p,float feet,float height)const{
- for(float x:{-.20f,.20f})for(float y:{-.20f,.20f}){
+ for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f}){
   auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);float px=corner.x,py=corner.y;
   if(!w.fits(px,py,feet,height)||w.doorBlocks(px,py,feet,height))return false;
  }return true;
@@ -23,7 +23,14 @@ bool Game::tryMove(Vec2 delta){
   float feet=m_player.z,ground=groundHeight(next);
   if(m_player.grounded&&ground>feet&&ground-feet<=.215f)feet=ground;
   if(hullFits(next,feet,m_player.hullHeight())){m_player.pos=next;m_player.z=feet;}
-  else{if(axis==0)m_velocity.x=0;else m_velocity.y=0;}
+  else{
+   // Resolve contact, preserving motion along the unobstructed wall axis.
+   auto start=m_player.pos;float lo=0,hi=1;
+   for(int i=0;i<8;++i){float t=(lo+hi)*.5f;auto p=start+(next-start)*t;
+    if(hullFits(p,m_player.z,m_player.hullHeight()))lo=t;else hi=t;}
+   m_player.pos=start+(next-start)*lo;
+   if(axis==0)m_velocity.x=0;else m_velocity.y=0;
+  }
  }return lengthSq(m_player.pos-old)>0;
 }
 void Game::updateMovement(const InputState& input,float dt){
@@ -47,7 +54,7 @@ void Game::updateMovement(const InputState& input,float dt){
   float speed=length(m_velocity),wishSpeed=m_player.crouched?1.65f:input.sprint?5.4f:3.6f;
   if(m_player.grounded&&speed>0){float remaining=std::max(0.f,speed-std::max(1.5f,speed)*6.f*step);m_velocity=m_velocity*(remaining/speed);}
   if(lengthSq(wish)>0){
-   float acceleration=m_player.grounded?12.f:9.f;
+   float acceleration=m_player.grounded?12.f:3.f;
    // Air control accelerates only the requested component, retaining launch momentum.
    float target=m_player.grounded?wishSpeed:std::min(wishSpeed,1.25f);
    float add=target-dot(m_velocity,wish);
@@ -55,7 +62,10 @@ void Game::updateMovement(const InputState& input,float dt){
   }
   tryMove(m_velocity*step);
   float ground=groundHeight(m_player.pos);
-  if(m_player.grounded&&m_player.z>ground+.03f)m_player.grounded=false;
+  if(m_player.grounded&&m_player.z>ground+.03f){
+   if(m_player.z-ground<=.215f&&hullFits(m_player.pos,ground,m_player.hullHeight()))m_player.z=ground;
+   else m_player.grounded=false;
+  }
   float previousZ=m_player.z;
   if(!m_player.grounded)m_player.verticalVelocity-=14.f*step;
   m_player.z+=m_player.verticalVelocity*step;
@@ -112,11 +122,14 @@ void Game::updateInteraction(const InputState& input,float dt){
 bool Game::testMovement(){
  std::ofstream debug("movement-diagnostic.txt");
  auto clean=[](){auto game=validationScene(Enemy::Kind::Huntsman,3);game.m_enemies.clear();return game;};
+ {auto slide=clean();slide.m_player.pos={1.3f,4.5f};slide.m_velocity={-4,2};slide.tryMove({-.6f,.1f});
+  if(slide.player().pos.x<1.199f||slide.player().pos.x>1.21f||std::fabs(slide.player().pos.y-4.6f)>.001f||slide.m_velocity.x!=0||slide.m_velocity.y!=2)return false;
+ }
  auto game=clean();InputState input{};input.crouch=true;input.jump=true;float peak=0;
  for(int i=0;i<150;++i){game.update(input,1.f/120.f);peak=std::max(peak,game.player().z);}debug<<"jump "<<peak<<" grounded "<<game.player().grounded<<'\n';if(peak<.8f||!game.player().grounded)return false;
  auto run=[&](int rate){auto g=clean();InputState move{};move.forward=true;move.sprint=true;
   for(int i=0;i<rate;++i){move.jump=i==rate/4;move.crouch=i>rate/3&&i<rate*3/4;g.update(move,1.f/rate);}return g;};
- auto a=run(60),b=run(120);debug<<"rate "<<length(a.player().pos-b.player().pos)<<' '<<a.player().z<<' '<<b.player().z<<'\n';if(length(a.player().pos-b.player().pos)>.15f||std::fabs(a.player().z-b.player().z)>.15f)return false;
+ auto a=run(60),b=run(120),c=run(30);debug<<"rate "<<length(a.player().pos-b.player().pos)<<' '<<a.player().z<<' '<<b.player().z<<'\n';if(length(a.player().pos-b.player().pos)>.15f||std::fabs(a.player().z-b.player().z)>.15f||length(c.player().pos-b.player().pos)>.25f)return false;
  game=clean();game.m_player.pos={20.5f,15.75f};game.m_player.angle=-kPi*.5f;game.m_player.z=game.groundHeight(game.m_player.pos);input={};input.forward=true;
  for(int i=0;i<130;++i)game.update(input,1.f/120.f);debug<<"stairs "<<game.player().pos.y<<' '<<game.player().z<<'\n';if(std::fabs(game.player().z-1.2f)>.01f||game.player().pos.y>=13)return false;
  game=clean();game.m_player.pos={9.6f,14.5f};game.m_player.angle=0;input={};input.forward=true;

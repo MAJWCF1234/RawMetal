@@ -1,5 +1,23 @@
 # RawMetal
 
+Movement now resolves wall contact without discarding the whole movement step,
+follows descending stairs, and preserves launch momentum with restrained air
+steering. Thrown clutter rebounds off the wall normal while keeping tangential
+velocity. These are improvements to the existing jump/crouch controller, not
+a complete vaulting or wall-running system.
+
+The reactor now contains a **Reactor Warden**, using a separate 738-triangle
+creature from the supplied asset library. It commits to an audible, visible
+charge before a narrow ranged strike; dodge sideways or break sight with cover.
+It repositions between attacks. Bugs now separate only from creatures on
+overlapping floors, hear actual shots instead of reload animation, and request
+a new route when blocked.
+
+**R** reloads the six-round tube; mouse wheel up selects the shotgun and down
+selects fists. Restart is in Esc with confirmation. Save format 3 includes the
+Warden and still reads version 1/2 saves. Run `--physics-ai-test` for targeted
+movement, creature behavior and clutter checks.
+
 Vulkan hardware rendering is now the default, at full **640x360** internal
 resolution. The GPU handles triangles, depth, textures, normal maps and emission;
 materials are uploaded at startup and geometry is batched by material. Conservative

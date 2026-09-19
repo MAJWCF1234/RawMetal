@@ -35,18 +35,18 @@ std::string readFile(const std::filesystem::path& path){
  std::ifstream in(path,std::ios::binary);std::string data(size,'\0');if(!in.read(data.data(),std::streamsize(size)))throw std::runtime_error("unreadable save");return data;
 }
 }
-template<class A> void Game::archiveSave(A& a){
+template<class A> void Game::archiveSave(A& a,int version){
  auto vec=[&](Vec2& v){a(v.x,v.y);};
  a(m_level,m_elapsed,m_won,m_medkits,m_weaponEquipped,m_heldClutter);
- auto&p=m_player;vec(p.pos);a(p.angle,p.pitch,p.health,p.ammo,p.z,p.verticalVelocity,p.grounded,p.crouched,p.eye);vec(m_velocity);
- a(m_weaponKick,m_shotCooldown,m_shotAge,m_holster,m_punchAge,m_punchLeft,m_guarding,m_verticalSpring,m_verticalSpringVelocity,m_stepDistance,m_stepVariant,m_jumpBuffer,m_coyote);
+ auto&p=m_player;vec(p.pos);a(p.angle,p.pitch,p.health,p.ammo);if(version>=2)a(p.loaded);a(p.z,p.verticalVelocity,p.grounded,p.crouched,p.eye);vec(m_velocity);
+ a(m_weaponKick,m_shotCooldown);if(version>=2)a(m_reloadTimer);a(m_shotAge,m_holster,m_punchAge,m_punchLeft,m_guarding,m_verticalSpring,m_verticalSpringVelocity,m_stepDistance,m_stepVariant,m_jumpBuffer,m_coyote);
  a(m_weaponMotion.yaw,m_weaponMotion.pitch,m_weaponMotion.bob,m_weaponMotion.back,m_weaponMotion.elbow,m_weaponMotion.bolt,m_weaponMotion.roll);vec(m_sway);vec(m_swayVelocity);a(m_elbowVelocity);
  for(auto& cell:m_itemCells)a(cell);
  auto list=[&](auto& values,auto visit){int count=int(values.size());a(count);if(count<0||count>1024)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(count);for(auto&v:values)visit(v);};
  for(int index=0;index<ChunkCount;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   int doors=int(w.m_doors.size());a(doors);if(doors!=int(w.m_doors.size()))throw std::runtime_error("door schema mismatch");for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
-  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(int(e.kind)>2||int(e.state)>3||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
+  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(int(e.kind)>(version>=3?3:2)||int(e.state)>3||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>5)throw std::runtime_error("invalid clutter");});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
@@ -54,18 +54,18 @@ template<class A> void Game::archiveSave(A& a){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 1 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,3);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 3 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||version!=1)return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version!=1&&version!=2&&version!=3))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
-  Game next;Reader reader(payload);next.archiveSave(reader);reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   auto&p=next.m_player;
-  if(next.m_level<0||next.m_level>=ChunkCount||next.m_elapsed<0||p.ammo<0||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>1.1f||std::fabs(p.pitch)>100||next.m_medkits<0)return false;
+  if(next.m_level<0||next.m_level>=ChunkCount||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>1.1f||std::fabs(p.pitch)>100||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
@@ -118,7 +118,7 @@ bool Game::testSaves(){
  struct Cleanup {std::filesystem::path path;~Cleanup(){std::error_code e;for(int i=0;i<3;++i){auto p=slotPath(path.wstring(),i);std::filesystem::remove(p,e);p+=L".tmp";std::filesystem::remove(p,e);}std::filesystem::remove(path,e);}} cleanup{directory};
  InputState escape{};escape.escape=true;game.update(escape,.01f);game.update({},.01f);
  auto click=[&](int row){game.update({},.01f);InputState i{};i.pointerX=MenuLayout::X+30;i.pointerY=MenuLayout::RowTop+row*MenuLayout::RowHeight+7;i.fire=true;game.update(i,.01f);};
- click(6);if(!check(game.paused()&&game.menuPage()==MenuPage::Save,"Esc menu opens Save submenu"))return false;
+ click(7);if(!check(game.paused()&&game.menuPage()==MenuPage::Save,"Esc menu opens Save submenu"))return false;
  auto time=game.elapsed();click(0);if(!check(std::filesystem::exists(slotPath(directory.wstring(),0))&&game.elapsed()==time&&game.menuMessage()=="GAME SAVED","Save slot writes while simulation stays paused"))return false;
  auto before=readFile(slotPath(directory.wstring(),0));game.m_player.ammo=5;click(0);if(!check(game.menuPage()==MenuPage::Overwrite,"Existing slot requires overwrite confirmation"))return false;
  click(0);if(!check(readFile(slotPath(directory.wstring(),0))==before,"Cancel preserves old save"))return false;
@@ -126,7 +126,7 @@ bool Game::testSaves(){
  {auto path=slotPath(directory.wstring(),0),temp=path;temp+=L".tmp";auto saved=readFile(path);std::filesystem::create_directory(temp);
   bool safe=!game.saveSlot(0)&&readFile(path)==saved;std::filesystem::remove(temp);if(!check(safe,"Failed temporary write preserves the previous slot"))return false;}
  game.update({},.01f);game.update(escape,.01f);if(!check(game.paused()&&game.menuPage()==MenuPage::Settings,"Esc returns from submenu without resuming"))return false;
- click(7);click(2);click(1);if(!check(game.paused()&&game.menuPage()==MenuPage::Load&&game.menuMessage().find("FAILED")!=std::string::npos,"Empty slot reports load error without losing progress"))return false;
+ click(8);click(2);click(1);if(!check(game.paused()&&game.menuPage()==MenuPage::Load&&game.menuMessage().find("FAILED")!=std::string::npos,"Empty slot reports load error without losing progress"))return false;
  click(0);click(0);if(!check(game.menuPage()==MenuPage::Load,"Load confirmation can be cancelled"))return false;
  game.m_player.ammo=1;auto revision=game.sessionRevision();click(0);click(1);
  if(!check(!game.paused()&&game.player().ammo==5&&game.sessionRevision()>revision,"Confirmed load resumes and resets audio session"))return false;

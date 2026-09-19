@@ -53,8 +53,8 @@ private:
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;
     Mesh m_weaponMesh{109},m_armsMesh{111},m_enemyMesh{110};
-    Mesh m_waspMesh{114},m_bruteMesh{116};
-    Texture m_waspTexture,m_bruteTexture,m_wingTexture;
+    Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242};
+    Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture;
     Mesh m_barrelMesh{121},m_crateMesh{123};
     std::array<Mesh,12> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191}};
     std::unordered_map<std::string,Texture> m_facilityTextures;

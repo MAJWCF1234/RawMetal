@@ -39,13 +39,17 @@ void Game::updateClutter(const InputState&input,float dt){
    auto fits=[&](Vec2 p,float z){for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]})if(!m_world.fits(p.x+x,p.y+y,z,extent[2]*2)||m_world.doorBlocks(p.x+x,p.y+y,z,extent[2]*2))return false;return true;};
    float floor=m_world.supportBelow(c.pos.x,c.pos.y,std::max(c.z,center-oldExtent[2])+.025f);
    if(!fits(c.pos,std::max(c.z,floor))){c.pitch=oldPitch;c.roll=oldRoll;c.yaw=oldYaw;c.pitchSpeed*=-.2f;c.rollSpeed*=-.2f;c.spin*=-.2f;extent=oldExtent;c.z=center-extent[2];}
-   c.vz-=14.f*step;auto next=c.pos+c.velocity*step;
-   if(fits(next,std::max(c.z,floor))){c.pos=next;}
-   else{impact(length(c.velocity));c.pitchSpeed+=std::clamp(c.velocity.x*1.5f,-8.f,8.f);c.rollSpeed-=std::clamp(c.velocity.y*1.5f,-8.f,8.f);c.velocity=c.velocity*-.25f;c.projectile=false;}
+   c.vz-=14.f*step;
+   // Wall impulses affect the normal component, not tangential momentum.
+   for(int axis=0;axis<2;++axis){auto next=c.pos;float& speed=axis==0?c.velocity.x:c.velocity.y;
+    if(axis==0)next.x+=speed*step;else next.y+=speed*step;
+    if(fits(next,std::max(c.z,floor)))c.pos=next;
+    else{impact(std::fabs(speed));if(axis==0)c.pitchSpeed+=std::clamp(speed*1.5f,-8.f,8.f);else c.rollSpeed-=std::clamp(speed*1.5f,-8.f,8.f);speed*=-.25f;c.projectile=false;}
+   }
    floor=-100;float ceiling=100;
    for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){floor=std::max(floor,m_world.supportBelow(c.pos.x+x,c.pos.y+y,std::max(c.z,center-oldExtent[2])+.025f));ceiling=std::min(ceiling,m_world.clearanceAbove(c.pos.x+x,c.pos.y+y,c.z));}
    float z=c.z+c.vz*step;
-   if(c.vz>0&&z+c.height()>ceiling){impact(c.vz);c.vz=-c.vz*.2f;}
+   if(c.vz>0&&z+c.height()>ceiling){impact(c.vz);c.z=std::max(floor,ceiling-c.height());c.vz=-c.vz*.2f;}
    else if(z<=floor+.001f){
     float speed=-c.vz;impact(speed);c.z=floor;float bounce=c.impactSound()==Sound::JunkSoft?.04f:.2f;c.vz=speed>1.f?speed*bounce:0;
     if(speed>1.5f&&length(c.velocity)>.1f){c.pitchSpeed+=c.velocity.x*.4f;c.rollSpeed-=c.velocity.y*.4f;}
@@ -69,6 +73,10 @@ void Game::updateClutter(const InputState&input,float dt){
  }
 }
 bool Game::testClutter(){
+ {auto slide=validationScene(Enemy::Kind::Huntsman);slide.m_enemies.clear();slide.m_clutter={{{1.14f,4.5f},{-4,2},1.f}};
+  slide.updateClutter({},.025f);auto& c=slide.m_clutter[0];
+  if(c.velocity.x<=0||c.velocity.y<1.9f||c.pos.y<=4.5f)return false;
+ }
  auto g=validationScene(Enemy::Kind::Huntsman);g.m_enemies[0].pos={5.2f,4.5f};g.m_clutter={{{4.2f,4.5f}}};
  if(!g.interactClutter()||!g.holdingClutter())return false;g.updateClutter({},.01f);InputState fire{};fire.fire=true;g.updateClutter(fire,.01f);
  for(int i=0;i<90;++i)g.updateClutter({},1.f/120);if(g.m_enemies[0].hp!=105||g.holdingClutter())return false;

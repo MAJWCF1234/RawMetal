@@ -18,10 +18,15 @@ void Game::updateMenu(const InputState& input){
  int direction=int(pressed(input.menuRight,m_menuPrevious.menuRight))-int(pressed(input.menuLeft,m_menuPrevious.menuLeft));
  bool activate=pressed(input.menuAccept,m_menuPrevious.menuAccept)||(inside&&click);
  if(m_menuPage!=MenuPage::Settings){
+  if(m_menuPage==MenuPage::ConfirmRestart){
+   if(activate){if(m_menuSelection==0){m_menuPage=MenuPage::Settings;m_menuSelection=6;}
+    else {restart();m_paused=false;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_suppressFire=true;}}
+   m_menuPrevious=input;return;
+  }
   if(activate){
    if(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load){
     bool saving=m_menuPage==MenuPage::Save;
-    if(m_menuSelection==3){m_menuPage=MenuPage::Settings;m_menuSelection=saving?6:7;m_menuMessage.clear();}
+    if(m_menuSelection==3){m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}
     else {m_pendingSlot=m_menuSelection;m_menuMessage.clear();
      if(saving){std::error_code error;bool exists=!m_saveDirectory.empty()&&std::filesystem::exists(std::filesystem::path(m_saveDirectory)/("slot-"+std::to_string(m_pendingSlot+1)+".rms"),error);
       if(exists){m_menuPage=MenuPage::Overwrite;m_menuSelection=0;}else saveSlot(m_pendingSlot);
@@ -46,8 +51,9 @@ void Game::updateMenu(const InputState& input){
  }
  if(m_menuSelection==5&&(activate||direction))m_settings.invertMouse=!m_settings.invertMouse;
  if(activate&&m_menuSelection==0){m_paused=false;m_suppressFire=true;}
- if(activate&&(m_menuSelection==6||m_menuSelection==7)){m_menuPage=m_menuSelection==6?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
- if(activate&&m_menuSelection==8)m_quitRequested=true;
+ if(activate&&m_menuSelection==6){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
+ if(activate&&(m_menuSelection==7||m_menuSelection==8)){m_menuPage=m_menuSelection==7?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
+ if(activate&&m_menuSelection==9)m_quitRequested=true;
  m_menuPrevious=input;
 }
 void Game::loadSettings(const std::wstring& path){
@@ -94,9 +100,14 @@ bool Game::testSettings(){
   click.fire=false;game.update(click,.02f);
  }
  click.fire=true;
- game.update({},.02f);click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+8*MenuLayout::RowHeight+5;game.update(click,.02f);
+ game.update({},.02f);click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+6*MenuLayout::RowHeight+5;game.update(click,.02f);
+ if(game.menuPage()!=MenuPage::ConfirmRestart||!game.paused())return false;
+ game.update({},.02f);click.pointerY=MenuLayout::RowTop+0*MenuLayout::RowHeight+5;game.update(click,.02f);if(game.menuPage()!=MenuPage::Settings)return false;
+ game.update({},.02f);click.pointerY=MenuLayout::RowTop+6*MenuLayout::RowHeight+5;game.update(click,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+1*MenuLayout::RowHeight+5;game.update(click,.02f);
+ if(game.paused()||game.player().health!=100)return false;
+ InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(!game.quitRequested())return false;
- std::ofstream("settings-test.txt")<<"Escape toggling, frozen gameplay, keyboard/mouse controls, resume fire suppression, aiming settings, persistence and explicit quit: PASS\n";
+ std::ofstream("settings-test.txt")<<"Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence and explicit quit: PASS\n";
  return true;
 }
 }

@@ -44,7 +44,7 @@ bool SoftwareRenderer::enableHardware(){
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>();
   for(const auto*texture:{&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
   m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
@@ -53,7 +53,7 @@ bool SoftwareRenderer::enableHardware(){
 SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
  for(int i=0;i<15;++i)m_facilityTextures.emplace(materialNames[i],loadTexture(172+i));
- m_consoleTexture=loadTexture(241);
+ m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);
  m_facilityTextures.emplace("pc_1",loadTexture(192));m_facilityTextures.emplace("keyboard_1",loadTexture(193));
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
  m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);
@@ -171,9 +171,9 @@ void SoftwareRenderer::drawHud(const Game& game){
  wornPanel(7,m_height-34,114,30,true);wornPanel(130,m_height-34,104,30,true);wornPanel(240,m_height-34,111,30,true);wornPanel(359,m_height-34,m_width-365,30,true);
  text(12,m_height-29,"HEALTH",muted);std::snprintf(b,sizeof(b),"%03d",int(p.health));text(12,m_height-20,b,p.health<30?red:paper,3);
  for(int i=0;i<10;++i){rect(62+i*5,m_height-16,4,11,rgb(10,7,5));if(p.health>i*10){rect(63+i*5,m_height-15,2,8,rgb(158,57,33));put(63+i*5,m_height-15,rgb(215,115,54));}}
- text(139,m_height-29,game.unarmed()?"UNARMED":"12 GA / SHELLS",muted);std::snprintf(b,sizeof(b),"%02d",p.ammo);text(139,m_height-20,game.unarmed()?(game.guarding()?"GUARD":"FISTS"):b,amber,game.unarmed()?2:3);
+ text(139,m_height-29,game.unarmed()?"UNARMED":"12 GA / TUBE-RESERVE",muted);std::snprintf(b,sizeof(b),"%02d/%02d",p.loaded,std::max(0,p.ammo-p.loaded));text(139,m_height-20,game.unarmed()?(game.guarding()?"GUARD":"FISTS"):b,amber,game.unarmed()?2:3);
  text(247,m_height-29,"PURGE",muted);std::snprintf(b,sizeof(b),"%02d / %02d",game.kills(),int(game.enemies().size()));text(247,m_height-19,b,paper,2);
- text(m_width-103,m_height-27,"RAWMETAL",paper,2);text(m_width-103,m_height-12,"R  RESTART",muted);
+ text(m_width-103,m_height-27,"RAWMETAL",paper,2);text(m_width-103,m_height-12,"R / RELOAD",muted);
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
  rect(cx-6,cy,3,1,cross);rect(cx+4,cy,3,1,cross);rect(cx,cy-6,1,3,cross);rect(cx,cy+4,1,3,cross);
  if(auto target=game.targetEnemy()){
@@ -183,7 +183,7 @@ void SoftwareRenderer::drawHud(const Game& game){
   if(target->windup>0)text(cx-22,cy-22,"INCOMING",amber);
  }
  if(game.enemiesRemaining()==0&&(game.level()<2||game.world().controlReleased())){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
- if(game.dead()||game.won()){wornPanel(cx-100,cy-26,200,51);text(cx-68,cy-15,game.won()?"SECTOR CLEARED":"SIGNAL LOST",game.won()?amber:red,2);text(cx-50,cy+7,"R TO RESTART",paper);}
+ if(game.dead()||game.won()){wornPanel(cx-100,cy-26,200,51);text(cx-68,cy-15,game.won()?"SECTOR CLEARED":"SIGNAL LOST",game.won()?amber:red,2);text(cx-63,cy+7,"ESC / RESTART GAME",paper);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
  if(game.audioMuted())text(10,43,"AUDIO MUTED / M",muted);
  else if(!game.musicEnabled())text(10,43,"MUSIC OFF / N",muted);
@@ -204,14 +204,14 @@ void SoftwareRenderer::drawSettings(const Game& game){
  const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
  wornPanel(x,y,MenuLayout::Width,MenuLayout::Height,false,true);
  auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;
- const char* title=settingsPage?"RAWMETAL / PAUSED":page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":"CONFIRM LOAD";
+ const char* title=settingsPage?"RAWMETAL / PAUSED":page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
  text(x+15,y+12,title,paper,2);text(x+15,y+29,settingsPage?"SETTINGS / SAVED GAMES":"GAMEPLAY IS PAUSED",amber);
- const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","SAVE GAME...","LOAD GAME...","QUIT GAME"};
+ const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...","QUIT GAME"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   wornPanel(x+12,top,MenuLayout::Width-24,19,true,true);
   if(selected){rect(x+13,top+2,2,15,amber);rect(x+17,top+2,MenuLayout::Width-35,1,rgb(101,72,32));}
-  const char* label=settingsPage?labels[row]:(page==Game::MenuPage::Save||page==Game::MenuPage::Load)?(row==3?"BACK":game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":"LOAD / REPLACE CURRENT PROGRESS");
+  const char* label=settingsPage?labels[row]:(page==Game::MenuPage::Save||page==Game::MenuPage::Load)?(row==3?"BACK":game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
   text(x+23,top+7,label,selected?paper:muted);
   if(settingsPage&&row>=1&&row<=4){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:settings.sensitivity;
    float normalized=row==4?(value-.2f)/2.8f:value;
@@ -224,7 +224,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
   }
   if(settingsPage&&row==5)text(MenuLayout::SliderX,top+7,settings.invertMouse?"ON":"OFF",paper);
  }
- if(!settingsPage){text(x+15,y+153,game.menuMessage().c_str(),amber);if(page==Game::MenuPage::Overwrite)text(x+15,y+177,"THE PREVIOUS SLOT WILL BE REPLACED",muted);if(page==Game::MenuPage::ConfirmLoad)text(x+15,y+177,"UNSAVED PROGRESS WILL BE LOST",muted);}
+ if(!settingsPage){text(x+15,y+153,game.menuMessage().c_str(),amber);if(page==Game::MenuPage::Overwrite)text(x+15,y+177,"THE PREVIOUS SLOT WILL BE REPLACED",muted);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)text(x+15,y+177,"UNSAVED PROGRESS WILL BE LOST",muted);}
  text(x+15,y+MenuLayout::Height-23,"CLICK / ARROWS / ENTER",muted);text(x+15,y+MenuLayout::Height-13,settingsPage?"ESC TO RESUME":"ESC TO GO BACK",amber);
 }
 void SoftwareRenderer::drawInventory(const Game& game){
