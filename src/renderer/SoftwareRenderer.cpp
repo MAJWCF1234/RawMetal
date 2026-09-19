@@ -207,11 +207,37 @@ void SoftwareRenderer::drawInventory(const Game& game){
  auto section=[&](int sx,int sy,int sw,int sh,const char* title){wornPanel(sx,sy,sw,sh,true,true);text(sx+8,sy+8,title,amber);};
  section(x+14,y+36,260,72,"PRIMARY WEAPON");section(x+14,y+116,260,72,"SECONDARY / MELEE");section(x+14,y+196,260,44,"EQUIPMENT");
  section(x+286,y+36,w-300,h-50,"STORAGE");
- text(x+28,y+62,game.unarmed()?"EMPTY / FISTS":"12 GA SHOTGUN",paper,2);text(x+28,y+86,game.unarmed()?"NO WEAPON EQUIPPED":"SHELLS",muted);char b[24];std::snprintf(b,sizeof(b),"%02d",game.player().ammo);text(x+215,y+84,b,amber,2);
- text(x+28,y+142,"UTILITY BLADE",paper);text(x+28,y+162,"RIGHT CLICK: GUARD",muted);
- text(x+28,y+216,"FIELD RIG / 6 SLOTS",paper);
- int gx=x+302,gy=y+66;for(int row=0;row<5;++row)for(int col=0;col<6;++col){int cw=34,ch=29;wornPanel(gx+col*cw,gy+row*ch,cw-3,ch-3,true);if(row==0&&col==0){text(gx+col*cw+6,gy+row*ch+8,"AM",amber);text(gx+col*cw+7,gy+row*ch+18,"16",paper);}if(row==0&&col==1){text(gx+col*cw+6,gy+row*ch+8,"MED",amber);text(gx+col*cw+7,gy+row*ch+18,"35",paper);}}
- text(x+302,y+h-25,"SLOTS 06 / 30",muted);text(x+16,y+h-18,"I TO RETURN TO THE SECTOR",amber);
+ // Orthographic thumbnails use the same textured meshes as the world items.
+ auto icon=[&](Mesh&mesh,const Texture&texture,int ix,int iy,int iw,int ih,bool gun){
+  auto center=(mesh.minimum+mesh.maximum)*.5f;
+  auto project=[&](Point3 p){p=p-center;return gun?Point3{-p.z,p.y,p.x}:Point3{p.x*.94f+p.z*.34f,p.y,p.z*.94f-p.x*.34f};};
+  float rx=.001f,ry=.001f;for(auto&t:mesh.triangles)for(auto&v:t.v){auto p=project(v.p);rx=std::max(rx,std::fabs(p.x));ry=std::max(ry,std::fabs(p.y));}
+  float scale=std::min((iw-4)/(2*rx),(ih-4)/(2*ry));std::vector<float> depth(iw*ih,1e9f);
+  for(auto&t:mesh.triangles){Point3 p[3];for(int k=0;k<3;++k){p[k]=project(t.v[k].p);p[k].x=iw*.5f+p[k].x*scale;p[k].y=ih*.5f-p[k].y*scale;}
+   float det=(p[1].y-p[2].y)*(p[0].x-p[2].x)+(p[2].x-p[1].x)*(p[0].y-p[2].y);if(std::fabs(det)<.001f)continue;
+   int left=std::max(0,int(std::floor(std::min({p[0].x,p[1].x,p[2].x})))),right=std::min(iw-1,int(std::ceil(std::max({p[0].x,p[1].x,p[2].x}))));
+   int top=std::max(0,int(std::floor(std::min({p[0].y,p[1].y,p[2].y})))),bottom=std::min(ih-1,int(std::ceil(std::max({p[0].y,p[1].y,p[2].y}))));
+   for(int py=top;py<=bottom;++py)for(int px=left;px<=right;++px){float a=((p[1].y-p[2].y)*(px+.5f-p[2].x)+(p[2].x-p[1].x)*(py+.5f-p[2].y))/det,b=((p[2].y-p[0].y)*(px+.5f-p[2].x)+(p[0].x-p[2].x)*(py+.5f-p[2].y))/det,c=1-a-b;
+    if(a<0||b<0||c<0)continue;float z=a*p[0].z+b*p[1].z+c*p[2].z;if(z>=depth[py*iw+px])continue;depth[py*iw+px]=z;
+    put(ix+px,iy+py,sample(texture,a*t.v[0].u+b*t.v[1].u+c*t.v[2].u,a*t.v[0].v+b*t.v[1].v+c*t.v[2].v));
+   }
+  }
+ };
+ if(game.weaponEquipped())icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
+ text(76,123,game.weaponEquipped()?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
+ text(76,173,"FISTS / CLICK TO HOLSTER",paper);text(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
+ text(76,258,"ARMOR: EMPTY    TOOL: EMPTY",muted);
+ for(int row=0;row<5;++row)for(int col=0;col<6;++col)wornPanel(350+col*34,94+row*29,31,26,true);
+ int occupied=0;for(int item=0;item<3;++item){if((item==0&&game.weaponEquipped())||(item==1&&game.player().ammo==0)||(item==2&&game.medkits()==0))continue;
+  int cell=game.itemCell(item),ix=350+cell%6*34,iy=94+cell/6*29,iw=item==0?133:item==1?31:65;occupied+=item==0?8:item==1?2:4;
+  wornPanel(ix,iy,iw,55,true);if(game.selectedItem()==item){rect(ix,iy,iw,1,amber);rect(ix,iy,1,55,amber);rect(ix+iw-1,iy,1,55,amber);rect(ix,iy+54,iw,1,amber);}
+  icon(item==0?m_weaponMesh:item==1?m_shellsMesh:m_medkitMesh,item==0?m_weaponTexture:item==1?m_shellsTexture:m_medkitTexture,ix+3,iy+3,iw-6,39,item==0);
+  char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?game.player().ammo:game.medkits());text(ix+5,iy+45,count,paper);
+ }
+ char status[40];std::snprintf(status,sizeof(status),"%d / 30 CELLS  HP %d",occupied,int(game.player().health));text(350,250,status,muted);
+ const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2"};text(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
+ wornPanel(350,280,224,28,true);text(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":"AMMO IS USED BY THE SHOTGUN",amber);
+ text(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);text(64,316,"I / ESC CLOSE   CLICK PRIMARY TO EQUIP",amber);
 }
 void SoftwareRenderer::render(const Game& game){clear(rgb(12,16,18));drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}drawViewModel(game);drawHud(game);if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
 }

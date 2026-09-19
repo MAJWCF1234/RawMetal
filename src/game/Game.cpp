@@ -10,7 +10,7 @@ namespace retro {
 
 Game::Game() { restart(); }
 
-void Game::restart(){int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
+void Game::restart(){m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -161,7 +161,10 @@ void Game::updatePickups() {
     for (auto& p : m_pickups) {
         if (!p.active || lengthSq(p.pos - m_player.pos) > 0.45f * 0.45f||std::fabs(m_player.z-m_world.floorHeight(p.pos.x,p.pos.y))>.5f) continue;
         if (p.kind == Pickup::Kind::Health) {
-            if (m_player.health >= 100.0f) continue;
+            if (m_player.health >= 100.0f) {
+                if(m_medkits>=5)continue;
+                ++m_medkits;p.active=false;m_pickupNotice="STORED FIRST AID / I TO USE";m_pickupNoticeTime=2;sound(Sound::Pickup,.6f);continue;
+            }
             float gained=std::min(35.f,100.f-m_player.health);m_player.health+=gained;
             m_pickupNotice="RECOVERED "+std::to_string(int(gained))+" HEALTH";
         } else {
@@ -180,7 +183,7 @@ const Pickup* Game::nearbyPickup()const{
 }
 bool Game::testPickups(){
  auto g=validationScene(Enemy::Kind::Huntsman,3);g.m_pickups={{{3.5f,4.5f},Pickup::Kind::Health,true}};
- g.updatePickups();if(!g.m_pickups[0].active)return false;
+ g.updatePickups();if(g.m_pickups[0].active||g.m_medkits!=1)return false;g.m_pickups[0].active=true;
  g.m_player.health=85;g.updatePickups();if(g.m_player.health!=100||g.m_pickups[0].active||g.m_pickupNotice!="RECOVERED 15 HEALTH")return false;
  g.m_pickups={{{3.5f,4.5f},Pickup::Kind::Ammo,true}};int ammo=g.m_player.ammo;
  g.m_player.z=1;g.updatePickups();if(g.m_player.ammo!=ammo)return false;
@@ -190,12 +193,12 @@ bool Game::testPickups(){
 void Game::update(const InputState& input, float dt) {
     m_sounds.clear();
     bool escapePressed=input.escape&&!m_previousEscape;m_previousEscape=input.escape;
+    bool inventoryPressed=input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
+    if(m_inventoryOpen&&escapePressed){m_inventoryOpen=false;m_suppressFire=true;return;}
     if(escapePressed){m_paused=!m_paused;m_menuPrevious=input;m_suppressFire=true;return;}
     if(m_paused){updateMenu(input);return;}
-    bool inventoryPressed=input.inventory&&!m_previousInventory;
-    m_previousInventory=input.inventory;
-    if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;}
-    if(m_inventoryOpen){m_previousFire=input.fire;return;}
+    if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;m_inventoryClick=input.fire;m_inventoryUse=input.use;return;}
+    if(m_inventoryOpen){updateInventory(input);return;}
     m_pickupNoticeTime=std::max(0.f,m_pickupNoticeTime-std::min(dt,.05f));
     if(!input.fire)m_suppressFire=false;
     dt = std::min(dt, 0.05f);
@@ -221,7 +224,7 @@ void Game::update(const InputState& input, float dt) {
         m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
         m_guarding=input.guard&&unarmed();if(m_guarding)m_punchAge=10;
         float oldPunch=m_punchAge;m_punchAge+=dt;if(oldPunch<.22f&&m_punchAge>=.22f)punchImpact();
-        float lower=m_player.ammo<=0&&m_shotAge>.42f?1.f:0.f;
+        float lower=(!m_weaponEquipped||m_player.ammo<=0)&&m_shotAge>.42f?1.f:0.f;
         m_holster+=std::clamp(lower-m_holster,-dt*2.6f,dt*2.6f);
         if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f) {
             if(m_player.ammo>0&&m_holster<.05f){shoot();m_shotCooldown=.55f;}

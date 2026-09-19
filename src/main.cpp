@@ -47,6 +47,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(!retro::Game::testWeaponMotion())return 11;
         if(!retro::Game::testAudioEvents())return 12;
         if(!retro::Game::testSettings())return 16;
+        if(!retro::Game::testInventory())return 31;
         if(!retro::Game::testPickups())return 18;
         if(!retro::Game::testMovement())return 19;
         if(!retro::Game::testProgression())return 20;
@@ -101,6 +102,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         out<<"P6\n"<<W<<" "<<H<<"\n255\n";
         for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
         auto saveFrame=[&](const char* name){std::ofstream frame(name,std::ios::binary);frame<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}};
+        {auto inventory=game;retro::InputState open{};open.inventory=true;inventory.update(open,.01f);renderer.render(inventory);saveFrame("inventory-menu.ppm");}
         for(int kind=0;kind<6;++kind)for(int stage=0;stage<3;++stage){auto scene=retro::Game::clutterInspection(kind,stage==0?0:stage==1?.3f:5.f);renderer.render(scene);saveFrame(("clutter-tumble-"+std::to_string(kind)+"-"+std::to_string(stage)+".ppm").c_str());}
         {const retro::Vec2 positions[]={{7.5f,4.5f},{4.8f,17.4f},{6.5f,20.5f},{6.5f,3.5f},{16.5f,11.5f},{17.5f,9.5f},{21.5f,20.5f}};
            const float yaw[]={2.3f,1.570796f,-.7f,.2f,-1.5f,0,1.570796f},pitch[]={50,45,-45,-45,-30,-90,15};
@@ -181,7 +183,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();game.update(window.input(wasPaused),dt);window.setMenu(game.paused());
+        bool wasPaused=game.paused();game.update(window.input(wasPaused||game.inventoryOpen()),dt);window.setMenu(game.paused()||game.inventoryOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,window.focused()); renderer.render(game); window.present(renderer.pixels(),renderer.width(),renderer.height());

@@ -148,6 +148,11 @@ public:
     float pickupNoticeTime()const{return m_pickupNoticeTime;}
     bool paused()const{return m_paused;}
     bool inventoryOpen()const{return m_inventoryOpen;}
+    bool weaponEquipped()const{return m_weaponEquipped;}
+    int medkits()const{return m_medkits;}
+    int selectedItem()const{return m_selectedItem;}
+    int itemCell(int item)const{return m_itemCells[item];}
+    static bool testInventory();
     bool quitRequested()const{return m_quitRequested;}
     int menuSelection()const{return m_menuSelection;}
     const Settings& settings()const{return m_settings;}
@@ -223,6 +228,10 @@ private:
     int m_menuSelection=0,m_pointerX=-1,m_pointerY=-1,m_dragSlider=-1;
     InputState m_menuPrevious;
     void updateMenu(const InputState& input);
+    void updateInventory(const InputState& input);
+    bool m_weaponEquipped=true,m_inventoryClick=false,m_inventoryUse=false;
+    int m_medkits=0,m_selectedItem=-1;
+    std::array<int,3> m_itemCells{12,0,2};
     void sound(Sound sound,float gain=1,float pitch=1);
     void enemySound(const Enemy& enemy,int action,float gain=1,float pitch=1);
     void updateWeaponMotion(const InputState& input,float dt);
