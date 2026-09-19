@@ -1,0 +1,5 @@
+file(SIZE "${RAWMetalExecutable}" RAWMETAL_BYTES)
+if(RAWMETAL_BYTES GREATER_EQUAL 19800000)
+    message(FATAL_ERROR "RawMetal is ${RAWMETAL_BYTES} bytes; it must be below the 19,800,000-byte limit.")
+endif()
+message(STATUS "RawMetal executable: ${RAWMETAL_BYTES} / 19,800,000 bytes")

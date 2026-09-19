@@ -1,0 +1,2 @@
+make a quake style game in pure C++ here are the assets you can copy from dont touch originals:
+"O:\retro official" you must use the assets

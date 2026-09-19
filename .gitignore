@@ -1,0 +1,9 @@
+.build/
+diagnostics/
+RawMetal.exe
+RawMetal.zip
+RawMetal.assets
+*.pdb
+*.rmz
+*.ppm
+RawMetal-error.txt
