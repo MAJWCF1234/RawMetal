@@ -290,10 +290,24 @@ void World::buildLayers(std::span<const Staircase> stairs){
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
    if((x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
-   if(!deck(x-1,y)&&!stairConnection(x-.001f,y+.5f))m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+.55f,true});
-   if(!deck(x+1,y)&&!stairConnection(x+1.001f,y+.5f))m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+.55f,true});
-   if(!deck(x,y-1)&&!stairConnection(x+.5f,y-.001f))m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+.55f,true});
-   if(!deck(x,y+1)&&!stairConnection(x+.5f,y+1.001f))m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+.55f,true});
+   if(!deck(x-1,y)&&!stairConnection(x-.001f,y+.5f)){
+    m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+.55f,true});
+    // Seal the upper catwalk against a lower-layer wall.  Without this
+    // backing panel the rail leaves a one-cell sightline into the void.
+    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,6.f,false});
+   }
+   if(!deck(x+1,y)&&!stairConnection(x+1.001f,y+.5f)){
+    m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+.55f,true});
+    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,6.f,false});
+   }
+   if(!deck(x,y-1)&&!stairConnection(x+.5f,y-.001f)){
+    m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+.55f,true});
+    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,6.f,false});
+   }
+   if(!deck(x,y+1)&&!stairConnection(x+.5f,y+1.001f)){
+    m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+.55f,true});
+    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,6.f,false});
+   }
   }
  }
  for(const auto& stair:stairs)for(int step=0;step<stair.steps;++step){
