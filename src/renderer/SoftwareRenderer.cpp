@@ -199,7 +199,21 @@ void SoftwareRenderer::drawSettings(const Game& game){
  }
  text(x+15,y+201,"DRAG HANDLES / ARROWS / ENTER",muted);text(x+15,y+211,"ESC TO RESUME",amber);
 }
-void SoftwareRenderer::render(const Game& game){clear(rgb(12,16,18));drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}drawViewModel(game);drawHud(game);if(game.paused())drawSettings(game);}
+void SoftwareRenderer::drawInventory(const Game& game){
+ for(auto&pixel:m_pixels)pixel=shade(pixel,.22f);
+ const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
+ int x=48,y=28,w=m_width-96,h=m_height-56;wornPanel(x,y,w,h,false,true);
+ text(x+16,y+12,"FIELD INVENTORY",paper,2);text(x+w-112,y+15,"I / CLOSE",muted);
+ auto section=[&](int sx,int sy,int sw,int sh,const char* title){wornPanel(sx,sy,sw,sh,true,true);text(sx+8,sy+8,title,amber);};
+ section(x+14,y+36,260,72,"PRIMARY WEAPON");section(x+14,y+116,260,72,"SECONDARY / MELEE");section(x+14,y+196,260,44,"EQUIPMENT");
+ section(x+286,y+36,w-300,h-50,"STORAGE");
+ text(x+28,y+62,game.unarmed()?"EMPTY / FISTS":"12 GA SHOTGUN",paper,2);text(x+28,y+86,game.unarmed()?"NO WEAPON EQUIPPED":"SHELLS",muted);char b[24];std::snprintf(b,sizeof(b),"%02d",game.player().ammo);text(x+215,y+84,b,amber,2);
+ text(x+28,y+142,"UTILITY BLADE",paper);text(x+28,y+162,"RIGHT CLICK: GUARD",muted);
+ text(x+28,y+216,"FIELD RIG / 6 SLOTS",paper);
+ int gx=x+302,gy=y+66;for(int row=0;row<5;++row)for(int col=0;col<6;++col){int cw=34,ch=29;wornPanel(gx+col*cw,gy+row*ch,cw-3,ch-3,true);if(row==0&&col==0){text(gx+col*cw+6,gy+row*ch+8,"AM",amber);text(gx+col*cw+7,gy+row*ch+18,"16",paper);}if(row==0&&col==1){text(gx+col*cw+6,gy+row*ch+8,"MED",amber);text(gx+col*cw+7,gy+row*ch+18,"35",paper);}}
+ text(x+302,y+h-25,"SLOTS 06 / 30",muted);text(x+16,y+h-18,"I TO RETURN TO THE SECTOR",amber);
+}
+void SoftwareRenderer::render(const Game& game){clear(rgb(12,16,18));drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}drawViewModel(game);drawHud(game);if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
 }
 
 

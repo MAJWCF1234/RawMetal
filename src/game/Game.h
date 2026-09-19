@@ -23,6 +23,7 @@ struct InputState {
     bool use=false;
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
+    bool inventory=false;
     int pointerX=-1,pointerY=-1;
     float mouseDx = 0.0f;
     float mouseDy = 0.0f;
@@ -146,6 +147,7 @@ public:
     const std::string& pickupNotice()const{return m_pickupNotice;}
     float pickupNoticeTime()const{return m_pickupNoticeTime;}
     bool paused()const{return m_paused;}
+    bool inventoryOpen()const{return m_inventoryOpen;}
     bool quitRequested()const{return m_quitRequested;}
     int menuSelection()const{return m_menuSelection;}
     const Settings& settings()const{return m_settings;}
@@ -217,7 +219,7 @@ private:
     unsigned m_stepVariant=0;
     bool m_audioMuted=false,m_musicEnabled=true,m_previousMute=false,m_previousMusic=false;
     Settings m_settings;
-    bool m_paused=false,m_quitRequested=false,m_previousEscape=false,m_suppressFire=false;
+    bool m_paused=false,m_inventoryOpen=false,m_quitRequested=false,m_previousEscape=false,m_previousInventory=false,m_suppressFire=false;
     int m_menuSelection=0,m_pointerX=-1,m_pointerY=-1,m_dragSlider=-1;
     InputState m_menuPrevious;
     void updateMenu(const InputState& input);

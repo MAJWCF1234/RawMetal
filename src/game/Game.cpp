@@ -192,6 +192,10 @@ void Game::update(const InputState& input, float dt) {
     bool escapePressed=input.escape&&!m_previousEscape;m_previousEscape=input.escape;
     if(escapePressed){m_paused=!m_paused;m_menuPrevious=input;m_suppressFire=true;return;}
     if(m_paused){updateMenu(input);return;}
+    bool inventoryPressed=input.inventory&&!m_previousInventory;
+    m_previousInventory=input.inventory;
+    if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;}
+    if(m_inventoryOpen){m_previousFire=input.fire;return;}
     m_pickupNoticeTime=std::max(0.f,m_pickupNoticeTime-std::min(dt,.05f));
     if(!input.fire)m_suppressFire=false;
     dt = std::min(dt, 0.05f);

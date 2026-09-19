@@ -59,6 +59,7 @@ private:
     void rect(int x,int y,int w,int h,std::uint32_t c);
     void drawHud(const Game& game);
     void drawSettings(const Game& game);
+    void drawInventory(const Game& game);
     void text(int x,int y,const char* s,std::uint32_t c,int scale=1);
     std::uint32_t shade(std::uint32_t c,float s) const;
     int m_width, m_height;
