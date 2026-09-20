@@ -21,9 +21,10 @@ void Game::setObjective(StateId id,ObjectiveStatus status){if(!id)return;int val
 int Game::questItemCount(StateId id)const{int index=findValue(m_questItems,id);return index<0?0:m_questItems[size_t(index)].count;}
 bool Game::hasQuestItem(StateId id,int count)const{return count>0&&questItemCount(id)>=count;}
 void Game::giveQuestItem(StateId id,int count){if(!id||count<=0)return;int index=findValue(m_questItems,id);if(index<0)m_questItems.push_back({id,std::min(99,count)});else m_questItems[size_t(index)].count=std::min(99,m_questItems[size_t(index)].count+count);}
-bool Game::takeQuestItem(StateId id,int count){if(!id||count<=0)return false;int index=findValue(m_questItems,id);if(index<0||m_questItems[size_t(index)].count<count)return false;auto&item=m_questItems[size_t(index)];item.count-=count;if(item.count==0)m_questItems.erase(m_questItems.begin()+index);return true;}
+bool Game::takeQuestItem(StateId id,int count){if(!id||count<=0)return false;int index=findValue(m_questItems,id);if(index<0||m_questItems[size_t(index)].count<count)return false;auto&item=m_questItems[size_t(index)];item.count-=count;if(item.count==0){m_questItems.erase(m_questItems.begin()+index);if(id==Flashlight)setState(stateId("flashlight_on"),0);}return true;}
 const char* Game::questItemName(StateId id){
  if(id==ReactorAuthDisk)return "REACTOR AUTH DISK";
+ if(id==Flashlight)return "FLASHLIGHT";
  if(id==stateId("keycard"))return "KEYCARD";
  if(id==stateId("fuse"))return "FUSE";
  if(id==stateId("tool"))return "SERVICE TOOL";
@@ -51,7 +52,7 @@ void Game::executeScriptAction(const ScriptAction& action){
  switch(action.type){
   case ScriptAction::Type::SetState:setState(action.id,action.value);break;
   case ScriptAction::Type::SetObjective:setObjective(action.id,static_cast<ObjectiveStatus>(std::clamp(action.value,0,3)));break;
-  case ScriptAction::Type::GiveItem:giveQuestItem(action.id,std::max(1,action.value));break;
+  case ScriptAction::Type::GiveItem:giveQuestItem(action.id,std::max(1,action.value));if(action.id==Flashlight){m_pickupNotice="FLASHLIGHT ACQUIRED / F TO TOGGLE";m_pickupNoticeTime=3.f;sound(Sound::Pickup,.6f);}break;
   case ScriptAction::Type::TakeItem:takeQuestItem(action.id,std::max(1,action.value));break;
   case ScriptAction::Type::OpenDoor:if(action.index>=0&&action.index<int(m_world.doors().size())){auto d=m_world.doors()[size_t(action.index)];m_world.setDoor(action.index,d.open,true);}break;
   case ScriptAction::Type::CloseDoor:if(action.index>=0&&action.index<int(m_world.doors().size())){auto d=m_world.doors()[size_t(action.index)];m_world.setDoor(action.index,d.open,false);}break;
@@ -82,6 +83,15 @@ void Game::updateHazards(float dt){
  }
  if(damage<=0)return;m_player.health=std::max(0.f,m_player.health-damage);m_damageFlash=std::max(m_damageFlash,.35f);
  if(m_hazardSoundTimer<=0){sound(loudest==Hazard::Kind::Crusher||loudest==Hazard::Kind::FallingDebris?Sound::JunkMetal:Sound::Hurt,.55f,loudest==Hazard::Kind::Anomaly?.72f:1.f);m_hazardSoundTimer=.35f;}
+}
+
+bool Game::testFlashlight(){
+ Game game;InputState key{};key.flashlight=true;game.update(key,.01f);if(game.hasFlashlight()||game.flashlightOn())return false;
+ game.update({},.01f);game.giveQuestItem(Flashlight);game.update(key,.01f);if(!game.flashlightOn())return false;
+ game.update(key,.01f);if(!game.flashlightOn())return false;game.update({},.01f);game.update(key,.01f);if(game.flashlightOn())return false;
+ game.setState(stateId("flashlight_on"),1);if(!game.takeQuestItem(Flashlight)||game.flashlightOn())return false;
+ game.giveQuestItem(Flashlight);game.setState(stateId("flashlight_on"),1);Game restored;
+ return restored.decodeSave(game.encodeSave())&&restored.hasFlashlight()&&restored.flashlightOn();
 }
 
 bool Game::testSystems(){

@@ -15,7 +15,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;seedScripts();int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;seedScripts();int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -231,6 +231,7 @@ bool Game::testPickups(){
 
 void Game::update(const InputState& input, float dt) {
     m_sounds.clear();
+    bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
     if(m_titleScreen){updateTitle(input);return;}
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
     if(consolePressed){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
@@ -252,6 +253,11 @@ void Game::update(const InputState& input, float dt) {
     if(m_paused){updateMenu(input);return;}
     if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;m_inventoryClick=input.fire;m_inventoryUse=input.use;return;}
     if(m_inventoryOpen){updateInventory(input);return;}
+    if(flashlightPressed){
+     if(hasFlashlight()){bool on=!flashlightOn();setState(stateId("flashlight_on"),on?1:0);m_pickupNotice=on?"FLASHLIGHT / ON":"FLASHLIGHT / OFF";}
+     else m_pickupNotice="NO FLASHLIGHT";
+     m_pickupNoticeTime=1.25f;
+    }
     m_pickupNoticeTime=std::max(0.f,m_pickupNoticeTime-std::min(dt,.05f));
     if(!input.fire)m_suppressFire=false;
     dt = std::min(dt, 0.05f);

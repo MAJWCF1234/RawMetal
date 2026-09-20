@@ -175,34 +175,49 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  };
  auto outside=[](Point3 p){unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;return mask;};
  auto sphereVisible=[&](Point3 point,float radius){auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
+ auto flashPitch=game.player().pitch/140.f,flashCp=std::cos(flashPitch),flashSp=std::sin(flashPitch);
+ Point3 flashForward{std::cos(game.player().angle)*flashCp,std::sin(game.player().angle)*flashCp,flashSp};
+ bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
+ auto flashlightContribution=[&](Point3 point,Point3 normal){
+  if(!flashlightEnabled)return 0.f;Point3 delta=point-eye;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2<.04f||d2>196.f)return 0.f;
+  float distance=std::sqrt(d2),along=(delta.x*flashForward.x+delta.y*flashForward.y+delta.z*flashForward.z)/distance;if(along<=.80f)return 0.f;
+  float cone=std::clamp((along-.80f)/.16f,0.f,1.f);cone=cone*cone*(3.f-2.f*cone);
+  float nl=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z),facing=.65f;if(nl>.00001f)facing=.30f+.70f*std::fabs((normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/(nl*distance));
+  if(flashlightRayBudget>0){--flashlightRayBudget;float startT=0.f;
+   if(eye.x<.01f&&delta.x>0)startT=std::max(startT,(.01f-eye.x)/delta.x);if(eye.x>23.99f&&delta.x<0)startT=std::max(startT,(23.99f-eye.x)/delta.x);
+   if(eye.y<.01f&&delta.y>0)startT=std::max(startT,(.01f-eye.y)/delta.y);if(eye.y>23.99f&&delta.y<0)startT=std::max(startT,(23.99f-eye.y)/delta.y);
+   startT=std::clamp(startT,0.f,.98f);auto start=eye+delta*startT;
+   if(!w.rayClear({start.x,start.y},start.z,{point.x,point.y},point.z,true,false))return 0.f;
+  }
+  return cone*facing*1.9f/(1.f+d2*.020f);
+ };
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
-  if(movingGeometry)return (.82f+.12f*std::fabs(normal.z))*(.35f+.65f*w.liftLampPower());
-  // Static receivers reuse light samples. A moving bulkhead invalidates them.
+  if(movingGeometry){float base=(.82f+.12f*std::fabs(normal.z))*(.35f+.65f*w.liftLampPower());return std::clamp(base+flashlightContribution(point,normal),.24f,2.4f);}
+  // Static fixture lighting is cached; the player-mounted flashlight is added
+  // afterward because its cone moves every frame with yaw and pitch.
   auto positionBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
   auto normalBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*15))+15,0,30));};
   auto key=positionBits(point.x)|(positionBits(point.y)<<12)|(positionBits(point.z)<<24)|(normalBits(normal.x)<<36)|(normalBits(normal.y)<<41)|(normalBits(normal.z)<<46);
-  auto cached=m_lightingCache.find(key);if(cached!=m_lightingCache.end())return cached->second;
-  float brightness=.27f+.07f*std::fabs(normal.z);
-  for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];float x=fixture.position.x,y=fixture.position.y;
-   if(std::fabs(x-point.x)>5.5f||std::fabs(y-point.y)>5.5f)continue;
-   Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>30||d2<.001f)continue;
-   float distance=std::sqrt(d2),facing=std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
-   // A small area emitter softens static shadow edges. Offset toward the light
-   // to avoid self-shadowing without skipping the receiver's entire grid cell.
-   float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;
-   auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
-   float visibility=0;bool complete=true;
-   for(float offset:{-.18f,0.f,.18f}){
-    auto target=light+Point3{offset,0,0};auto ray=target-origin;
-    int steps=std::max(1,int(std::ceil(distance/.18f)));bool blocked=false;
-    for(int i=1;i<steps;++i){if(shadowBudget<=0){complete=false;break;}--shadowBudget;auto p=origin+ray*(float(i)/steps);
-     if(!w.fits(p.x,p.y,p.z,.01f,false)||w.doorBlocks(p.x,p.y,p.z,.01f)){blocked=true;break;}}
-    visibility+=blocked?.04f:1.f;
+  float brightness=0;auto cached=m_lightingCache.find(key);
+  if(cached!=m_lightingCache.end())brightness=cached->second;
+  else{
+   brightness=.27f+.07f*std::fabs(normal.z);
+   for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];float x=fixture.position.x,y=fixture.position.y;
+    if(std::fabs(x-point.x)>5.5f||std::fabs(y-point.y)>5.5f)continue;
+    Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>30||d2<.001f)continue;
+    float distance=std::sqrt(d2),facing=std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
+    float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
+    float visibility=0;bool complete=true;
+    for(float offset:{-.18f,0.f,.18f}){auto target=light+Point3{offset,0,0};auto ray=target-origin;int steps=std::max(1,int(std::ceil(distance/.18f)));bool blocked=false;
+     for(int i=1;i<steps;++i){if(shadowBudget<=0){complete=false;break;}--shadowBudget;auto p=origin+ray*(float(i)/steps);if(!w.fits(p.x,p.y,p.z,.01f,false)||w.doorBlocks(p.x,p.y,p.z,.01f)){blocked=true;break;}}
+     visibility+=blocked?.04f:1.f;
+    }
+    brightness+=(visibility/3.f)*(.12f+.88f*facing)*3.2f/(1+d2*.65f);if(!complete)break;
    }
-   brightness+=(visibility/3.f)*(.12f+.88f*facing)*3.2f/(1+d2*.65f);
-   if(!complete)break;
-  }brightness=std::sqrt(std::clamp(brightness,.24f,1.4f));if(shadowBudget>0)m_lightingCache.emplace(key,brightness);return brightness;
+   brightness=std::sqrt(std::clamp(brightness,.24f,1.4f));if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
+  }
+  return std::clamp(brightness+flashlightContribution(point,normal),.24f,2.4f);
  };
  auto normalLightingAt=[&](Point3 center){
   auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};

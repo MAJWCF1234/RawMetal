@@ -176,6 +176,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  for(int i=0;i<10;++i){rect(62+i*5,m_height-16,4,11,rgb(10,7,5));if(p.health>i*10){rect(63+i*5,m_height-15,2,8,rgb(158,57,33));put(63+i*5,m_height-15,rgb(215,115,54));}}
  text(139,m_height-29,game.unarmed()?"UNARMED":"12 GA / TUBE-RESERVE",muted);std::snprintf(b,sizeof(b),"%02d/%02d",p.loaded,std::max(0,p.ammo-p.loaded));text(139,m_height-20,game.unarmed()?(game.guarding()?"GUARD":"FISTS"):b,amber,game.unarmed()?2:3);
  text(247,m_height-29,"PURGE",muted);std::snprintf(b,sizeof(b),"%02d / %02d",game.kills(),int(game.enemies().size()));text(247,m_height-19,b,paper,2);
+ if(game.hasFlashlight())text(369,m_height-27,game.flashlightOn()?"LIGHT / ON":"LIGHT / OFF",game.flashlightOn()?amber:muted);
  text(m_width-103,m_height-27,"DEPTHWORKS",paper,2);text(m_width-103,m_height-12,"R / RELOAD",muted);
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
  rect(cx-6,cy,3,1,cross);rect(cx+4,cy,3,1,cross);rect(cx,cy-6,1,3,cross);rect(cx,cy+4,1,3,cross);
