@@ -19,6 +19,13 @@ bool Game::testGantry(){
  }
  report<<"All machine tiles rendered once, original generator proportions, level feet and matching collision: PASS\n";
  if(spans.size()!=2||spans[0].floor!=0||spans[0].ceiling!=2.7f||spans[1].floor!=3)return false;
+ // Ground transfers remain walkable, while the same perimeter openings are
+ // physically closed above their 2.5 m headers. Interior catwalk rails remain
+ // low/jumpable, so parkour is preserved without exposing the outside void.
+ if(!world.fits(3.5f,.08f,0,1.f)||world.fits(3.5f,.08f,3,1.f))return false;
+ if(!world.fits(21.5f,23.92f,0,1.f)||world.fits(21.5f,23.92f,3,1.f))return false;
+ bool jumpableRail=false;for(const auto&s:world.structures())if(s.rail&&s.bottom>2.9f&&s.top-s.bottom<.7f){jumpableRail=true;break;}
+ if(!jumpableRail)return false;
  auto game=mapInspection({6.5f,2.5f},0,0,2);game.m_enemies.clear();
  for(int i=0;i<60;++i)game.update({},1.f/120);if(game.player().z!=0)return false;
  game.m_player.z=3;for(int i=0;i<60;++i)game.update({},1.f/120);if(game.player().z!=3)return false;
@@ -43,6 +50,6 @@ bool Game::testGantry(){
  game.m_player.pos={21.5f,20.5f};game.m_player.angle=kPi*.5f;game.update({},.01f);game.update(use,.01f);if(!game.world().doors().back().opening)return false;
  for(int i=0;i<200;++i)game.update({},1.f/120);game.m_player.pos={21.5f,22.5f};game.update({},.01f);if(game.won())return false;
  game.m_player.pos={21.5f,24.1f};game.crossChunkBoundary();if(game.level()!=3||game.player().z!=0)return false;
- report<<"Stairs, full connected catwalk route, upper terminal, E dismissal, gravity drop, locked/unlocked extraction: PASS\n";return true;
+ report<<"Stairs, full connected catwalk route, jumpable rails, sealed upper transfer shell, upper terminal, E dismissal, gravity drop, locked/unlocked extraction: PASS\n";return true;
 }
 }
