@@ -14,7 +14,7 @@ void Game::updateTitle(const InputState& input){
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
  bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
  if(activate){
-  if(m_titleSelection==0){m_titleScreen=false;m_menuFromTitle=false;restart();m_suppressFire=true;}
+  if(m_titleSelection==0){m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
   else if(m_titleSelection==1){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
   else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
   else if(m_titleSelection==3)m_quitRequested=true;
@@ -85,6 +85,9 @@ void Game::saveSettings(const std::wstring& path)const{
  std::ofstream file(filePath);file<<m_settings.master<<' '<<m_settings.music<<' '<<m_settings.effects<<' '<<m_settings.sensitivity<<' '<<int(m_settings.invertMouse)<<'\n';
 }
 bool Game::testSettings(){
+ {Game title;title.m_level=3;title.showTitleScreen();InputState accept{};accept.menuAccept=true;title.update(accept,.02f);
+  if(title.titleScreen()||title.paused()||title.level()!=0)return false;
+ }
  auto game=validationScene(Enemy::Kind::Huntsman);InputState escape{};escape.escape=true;game.update(escape,.02f);
  if(!game.paused()||game.quitRequested())return false;
  game.update(escape,.02f);if(!game.paused())return false;
@@ -125,7 +128,7 @@ bool Game::testSettings(){
  if(game.paused()||game.player().health!=100)return false;
  InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(!game.quitRequested())return false;
- std::ofstream("settings-test.txt")<<"Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence and explicit quit: PASS\n";
+ std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence and explicit quit: PASS\n";
  return true;
 }
 }
