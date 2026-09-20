@@ -294,7 +294,7 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
 World::World(int level) {
  m_level=std::clamp(level,0,5);
  if(m_level>=4){
-  m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",0,0,m_level==4?CoolantReturnGround:CableVaultsGround}};
+  m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",-9,0,m_level==4?CoolantReturnGround:CableVaultsGround}};
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
   if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
@@ -308,24 +308,31 @@ World::World(int level) {
    m_structures.push_back({8.2f,10.2f,12.0f,10.45f,0,1.65f,false,2});
    m_props={{0,{4.3f,5.5f},1.35f,2.2f,0,{1.1f,.66f},0},
             {1,{10.2f,18.5f},1.12f,2.f,kPi*.5f,{1.f,.31f},0},
-            {3,{19.5f,11.5f},.3f,4.2f,kPi*.5f,{2.1f,.15f},0}};
+            {2,{19.5f,11.5f},.3f,4.2f,kPi*.5f,{.15f,2.1f},0}};
    m_fixtures={{7,{1.28f,5.3f},0,2,.5f,1.8f,kPi*.5f,true},
-               {8,{21.7f,18.5f},.8f,.7f,.2f,1.f,0,true}};
+               {8,{22.89f,18.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
+   m_structures.push_back({7.05f,2,16.8f,22,2.65f,2.8f,false,2});
    m_terminals={{{9.4f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false}};
   }else{
    // Coolant Return: wide pipe corridors, valve banks and two visible trenches.
    m_structures.push_back({4.8f,2,5.05f,9.2f,0,2.25f,false,2});
    m_structures.push_back({18.8f,14.8f,19.05f,22,0,2.25f,false,2});
-   m_structures.push_back({8.0f,8.4f,15.8f,8.7f,0,.22f,false,2});
-   m_structures.push_back({8.0f,15.3f,15.8f,15.6f,0,.22f,false,2});
    m_props={{0,{3.6f,6.5f},1.3f,2.1f,0,{1.05f,.64f},0},
             {1,{9.5f,12.5f},1.1f,1.9f,kPi*.5f,{.95f,.30f},0},
             {2,{16.5f,18.2f},.32f,4.6f,0,{2.3f,.16f},0},
             {2,{12.5f,5.2f},.32f,4.6f,0,{2.3f,.16f},0}};
    m_fixtures={{7,{1.28f,18.5f},0,2,.5f,1.8f,kPi*.5f,true},
-               {8,{21.7f,5.5f},.8f,.7f,.2f,1.f,0,true}};
+               {8,{22.89f,5.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
+   // The prototype ends here. A fixed bulkhead seals the entire aperture;
+   // it has collision and no misleading open-door interaction into the void.
+   m_structures.push_back({18,23.65f,21,24,0,2.5f,false,7});
+   m_structures.push_back({18,23.6f,21,24,2.5f,4.2f,false,2});
+   for(float x:{18.f,20.9f})m_structures.push_back({x,23.5f,x+.1f,24,0,2.5f,false,2});
    m_terminals={{{10.4f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false}};
   }
+  // Structures use absolute elevations; props/fixtures have floor-relative bases.
+  for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
+  buildLayers({}); // Build the collision/occlusion index for these structures too.
   buildLights();
   return;
  }
@@ -466,6 +473,7 @@ void World::buildLights(){
   for(const auto&span:spansAt(x,y))if(span.ceiling-span.floor>1.8f)m_lights.push_back({{x+.5f,y+.35f},span.ceiling-.15f});
 }
 float World::floorHeight(float x,float y)const{
+ if(m_level==5&&x>=8&&x<16&&(x<11||x>=13)&&((y>=8.5f&&y<9.5f)||(y>=14.5f&&y<15.5f)))return -9.18f;
  if(m_level>=4)return -9.f;
  if(m_level==3)return -9.f;
  if(m_level==2)return 0;

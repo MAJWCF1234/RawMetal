@@ -258,7 +258,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
   // Architectural repeats are measured in metres, never stretched over a deck.
-  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,w.level()==3?Vec2{length3(B-A),length3(D-A)}:Vec2{1,1});};
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,w.level()>=3?Vec2{length3(B-A),length3(D-A)}:Vec2{1,1});};
   if(eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
   if(eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
   if(eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
@@ -381,7 +381,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==2?m_panelMetal:s.material==3||(w.level()==3&&s.top-s.bottom>1.5f)?m_pressureWall:w.level()==3?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.level()==3&&s.top-s.bottom>1.5f)?m_pressureWall:w.level()==3?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.level()==3){
      // A safety cage must not become an opaque wall around every cab window.
@@ -444,6 +444,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},.4f))continue;
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}objectLighting=false;
+ }
+ if(w.level()==5){
+  // Shallow flooded returns flank the continuous, dry centre walkway.
+  Texture water{1,1,{0xff203d40u}},ripple{1,1,{0xff496567u}};
+  for(float y:{9.f,15.f})for(float x:{8.f,13.f}){
+   quad({x,y-.5f,-9.055f},{x+3,y-.5f,-9.055f},{x+3,y+.5f,-9.055f},{x,y+.5f,-9.055f},water,.9f);
+   for(int i=0;i<4;++i){float offset=std::fmod(game.elapsed()*.12f+i*.24f, .9f);float line=y-.45f+offset;
+    quad({x+.12f,line,-9.05f},{x+2.87f,line,-9.05f},{x+2.87f,line+.008f,-9.05f},{x+.12f,line+.008f,-9.05f},ripple,.85f);}
+  }
+  // The sealed end bulkhead has visible reinforcement and an unpowered lock.
+  for(float x:{18.45f,20.45f})box({x,23.58f,-8.9f},{x+.10f,23.65f,-6.65f},m_panelMetal,.9f);
+  box({19.38f,23.52f,-8.2f},{19.62f,23.65f,-7.82f},iron,.9f);
+  quad({18.1f,23.64f,-8.83f},{20.9f,23.64f,-8.83f},{20.9f,23.64f,-8.64f},{18.1f,23.64f,-8.64f},m_hazard,.85f);
+  cylinder({17.5f,18.2f,-8.88f},{17.5f,18.2f,-8.48f},.05f,m_pipeTexture);
+  static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
+   for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=dx*dx+dy*dy;unsigned noise=unsigned(x+y*32+1)*747796405u+2891336453u;noise=((noise>>((noise>>28)+4))^noise)*277803737u;noise=((noise>>22)^noise)&255u;
+    t.pixels[y*32+x]=d<1&&noise<190*(1-d)?0xff7f8e91u:0;}return t;}();
+  Point3 side{-std::sin(game.player().angle),std::cos(game.player().angle),0};
+  for(int i=0;i<7;++i){float age=std::fmod(game.elapsed()*.55f+i/7.f,1.f),radius=.07f+age*.2f;Point3 p{17.5f+age*.28f,18.2f,-8.48f+age*1.05f},up{0,0,radius};
+   quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,steam,.9f);}
  }
  if(w.level()==0){
  box({1.f,1.37f,1.27f},{1.055f,3.63f,2.03f},m_panelMetal,.9f);

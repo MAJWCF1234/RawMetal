@@ -12,6 +12,23 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--megamap-inspection")){
+     retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
+     std::ofstream report("megamap-inspection.txt");bool ok=true;
+     for(int level:{4,5}){retro::World w(level);for(auto&s:w.structures()){bool valid=s.bottom>=-9.01f&&s.top<=-4.79f;ok&=valid;report<<"map "<<level<<" structure "<<s.x1<<','<<s.y1<<" z "<<s.bottom<<".."<<s.top<<" in room "<<valid<<'\n';}
+      bool blocks=level==4?!w.fits(6.9f,5,-9,1):!w.fits(19.5f,23.8f,-9,1);ok&=blocks;report<<"collision present "<<blocks<<'\n';}
+     struct View{std::string name;int level;retro::Vec2 p;float yaw,pitch;};
+     std::vector<View> views={{"gallery-entry",4,{6.5f,1.5f},1.4f,0},{"gallery-bays",4,{11.f,12.f},2.65f,-8},{"gallery-seam",4,{12.f,22.f},retro::kPi*.5f,0},{"coolant-seam",5,{12.f,2.f},-retro::kPi*.5f,0},{"coolant-pools",5,{12.f,6.5f},retro::kPi*.5f,-14},{"coolant-equipment",5,{15.f,16.f},.75f,-15},{"coolant-bulkhead",5,{19.5f,21.3f},retro::kPi*.5f,0}};
+     for(int level:{4,5})for(int angle=0;angle<8;++angle)views.push_back({std::string(level==4?"gallery":"coolant")+"-sweep-"+std::to_string(angle),level,{12,12},angle*retro::kPi*.25f,-8});
+     for(auto v:views){
+      auto scene=retro::Game::mapInspection(v.p,v.yaw,v.pitch,v.level,false,-9,true);renderer.render(scene);
+      auto start=std::chrono::steady_clock::now();for(int frame=0;frame<12;++frame)renderer.render(scene);
+      report<<v.name<<" warm render ms/frame "<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/12<<'\n';
+      std::ofstream out(v.name+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";
+      for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }
+     return ok&&retro::Game::testStreaming()?0:42;
+    }
     if(std::wcsstr(commandLine,L"--hazmat-test")){
      bool passed=retro::Game::testHazmat();retro::SoftwareRenderer renderer(W,H);renderer.enableHardware();
      for(int view=0;view<3;++view){auto scene=retro::Game::hazmatInspection(view);renderer.render(scene);std::ofstream out("hazmat-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
