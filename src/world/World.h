@@ -44,6 +44,7 @@ public:
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;
     bool fits(float x,float y,float feet,float height,bool dynamic=true)const;
+    bool railBlocksHull(float x,float y,float radius,float feet,float height)const;
     float wallHeight(int x,int y)const;
     bool controlReleased()const{return m_controlReleased;}
     void releaseControl(){m_controlReleased=true;}

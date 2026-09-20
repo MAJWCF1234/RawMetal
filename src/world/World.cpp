@@ -559,6 +559,17 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic)const{
  for(auto&t:m_terminals){if(!dynamic&&m_level==3&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(t.z!=0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
  return true;
 }
+bool World::railBlocksHull(float x,float y,float radius,float feet,float height)const{
+ if(m_structureCells.empty())return false;
+ int x0=std::max(0,int(std::floor(x-radius))),x1=std::min(Width-1,int(std::floor(x+radius)));
+ int y0=std::max(0,int(std::floor(y-radius))),y1=std::min(Height-1,int(std::floor(y+radius)));
+ for(int cy=y0;cy<=y1;++cy)for(int cx=x0;cx<=x1;++cx)for(auto index:m_structureCells[cy*Width+cx]){
+  const auto&s=m_structures[index];if(!s.rail)continue;
+  if(x+radius<=s.x1||x-radius>=s.x2||y+radius<=s.y1||y-radius>=s.y2)continue;
+  if(feet<s.top-.025f&&feet+height>s.bottom+.005f)return true;
+ }
+ return false;
+}
 std::vector<Span> World::spansAt(int x,int y)const{
  float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);std::vector<std::pair<float,float>> solids={{-100.f,supportHeight(px,py)}};
  for(auto&f:m_fixtures)if(f.solid&&f.base>.025f&&insideFixture(f,px,py)){float base=floorHeight(px,py)+f.base;solids.push_back({base,base+f.height});}
