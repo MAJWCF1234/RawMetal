@@ -15,7 +15,14 @@ bool Game::hullFits(Vec2 p,float feet,float height)const{
  for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f}){
   auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);float px=corner.x,py=corner.y;
   if(!w.fits(px,py,feet,height)||w.doorBlocks(px,py,feet,height))return false;
- }return true;
+ }
+ // Rails are only 5.5 cm thick. Point-sampling the 40 cm player hull can put
+ // every sample on one side or the other while the body itself overlaps the rail.
+ // Test the hull footprint against rail AABBs so the player can never phase into
+ // the narrow volume and become trapped inside it.
+ auto center=p;const auto&w=worldAt(center);
+ if(w.railBlocksHull(center.x,center.y,.20f,feet,height))return false;
+ return true;
 }
 bool Game::tryMove(Vec2 delta){
  auto old=m_player.pos;
@@ -125,6 +132,14 @@ bool Game::testMovement(){
  {auto slide=clean();slide.m_player.pos={1.3f,4.5f};slide.m_velocity={-4,2};slide.tryMove({-.6f,.1f});
   if(slide.player().pos.x<1.199f||slide.player().pos.x>1.21f||std::fabs(slide.player().pos.y-4.6f)>.001f||slide.m_velocity.x!=0||slide.m_velocity.y!=2)return false;
  }
+ {auto rails=clean();rails.loadLevel(2,false);const Structure* rail=nullptr;
+  for(const auto&s:rails.m_world.structures())if(s.rail&&s.bottom>2.9f){rail=&s;break;}
+  if(!rail)return false;float width=rail->x2-rail->x1,depth=rail->y2-rail->y1;Vec2 a,b;
+  if(width<depth){float y=(rail->y1+rail->y2)*.5f;a={rail->x1-.12f,y};b={rail->x2+.12f,y};}
+  else {float x=(rail->x1+rail->x2)*.5f;a={x,rail->y1-.12f};b={x,rail->y2+.12f};}
+  bool sideA=rails.hullFits(a,rail->bottom,rails.m_player.hullHeight()),sideB=rails.hullFits(b,rail->bottom,rails.m_player.hullHeight());
+  debug<<"rail hull sides "<<sideA<<' '<<sideB<<'\n';if(sideA||sideB)return false;
+ }
  auto game=clean();InputState input{};input.crouch=true;input.jump=true;float peak=0;
  for(int i=0;i<150;++i){game.update(input,1.f/120.f);peak=std::max(peak,game.player().z);}debug<<"jump "<<peak<<" grounded "<<game.player().grounded<<'\n';if(peak<.8f||!game.player().grounded)return false;
  auto run=[&](int rate){auto g=clean();InputState move{};move.forward=true;move.sprint=true;
@@ -140,7 +155,7 @@ bool Game::testMovement(){
  for(int i=0;i<130;++i){input={};input.jump=i==0;input.crouch=i>=18;input.forward=game.player().pos.y>2.55f;game.update(input,1.f/120.f);
   if(game.player().pos.y<3.f&&game.player().pos.y>2.f&&game.player().grounded&&std::fabs(game.player().z-1.1f)<.01f){reachedCover=true;break;}
  }debug<<"duck-jump cover "<<game.player().pos.y<<' '<<game.player().z<<' '<<reachedCover<<'\n';if(!reachedCover)return false;
- std::ofstream("movement-test.txt")<<"Crouched jump, airborne duck onto 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb, crouch tunnel and blocked standing: PASS\n";return true;
+ std::ofstream("movement-test.txt")<<"Thin rail hull collision, crouched jump, airborne duck onto 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb, crouch tunnel and blocked standing: PASS\n";return true;
 }
 bool Game::testProgression(){
  auto game=validationScene(Enemy::Kind::Huntsman,3);game.m_enemies.clear();game.m_player.pos={4.5f,7.9f};game.m_player.angle=kPi*.5f;
