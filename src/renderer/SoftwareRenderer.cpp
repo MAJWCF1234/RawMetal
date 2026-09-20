@@ -227,7 +227,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  wornPanel(386,190,196,106,false,true);
  text(400,204,"SITE TELEMETRY",amber,2);text(400,226,"POWER / DEGRADED",paper);
  text(400,242,"LIFT / EMERGENCY",paper);text(400,258,"CONTAINMENT / FAILED",rust);
- text(400,283,"AUTHORIZED PERSONNEL",muted);text(400,296,"ONLY",muted);
+ text(400,283,"AUTHORIZED STAFF ONLY",muted);
  text(58,m_height-26,"ARROWS / ENTER / MOUSE",muted);text(m_width-173,m_height-26,"DEPTHWORKS",paper);
 }
 
