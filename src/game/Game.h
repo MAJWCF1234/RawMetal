@@ -33,6 +33,7 @@ struct InputState {
     bool reload = false;
     int weaponScroll=0;
     bool use=false;
+    bool flashlight=false;
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
     bool inventory=false;
@@ -217,6 +218,10 @@ public:
     const std::vector<QuestItemStack>& questItems()const{return m_questItems;}
     static const char* questItemName(StateId id);
     static constexpr StateId ReactorAuthDisk=stateId("reactor_auth_disk");
+    static constexpr StateId Flashlight=stateId("flashlight");
+    bool hasFlashlight()const{return hasQuestItem(Flashlight);}
+    bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0;}
+    static bool testFlashlight();
     bool inventoryOpen()const{return m_inventoryOpen;}
     bool weaponEquipped()const{return m_weaponEquipped;}
     int medkits()const{return m_medkits;}
@@ -332,7 +337,7 @@ private:
     std::string m_pickupNotice;
     float m_pickupNoticeTime=0;
     unsigned m_stepVariant=0;
-    bool m_audioMuted=false,m_musicEnabled=true,m_previousMute=false,m_previousMusic=false;
+    bool m_audioMuted=false,m_musicEnabled=true,m_previousMute=false,m_previousMusic=false,m_previousFlashlight=false;
     Settings m_settings;
     bool m_paused=false,m_inventoryOpen=false,m_quitRequested=false,m_previousEscape=false,m_previousInventory=false,m_suppressFire=false;
     int m_menuSelection=0,m_pointerX=-1,m_pointerY=-1,m_dragSlider=-1;

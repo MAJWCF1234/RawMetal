@@ -25,7 +25,7 @@ void Win32Window::setMenu(bool open){
 InputState Win32Window::input(bool menuOpen){
  setMenu(menuOpen);InputState i{};i.textInput=std::move(m_textInput);m_textInput.clear();if(!focused()){i.textInput.clear();return i;}
  auto key=[](int value){return (GetAsyncKeyState(value)&0x8000)!=0;};
- i.forward=key('W');i.back=key('S');i.left=key('A');i.right=key('D');i.sprint=key(VK_SHIFT);i.jump=key(VK_SPACE);i.crouch=key('C')||key(VK_CONTROL);i.fire=key(VK_LBUTTON);i.reload=key('R');i.mute=key('M');i.music=key('N');i.use=key('E');
+ i.forward=key('W');i.back=key('S');i.left=key('A');i.right=key('D');i.sprint=key(VK_SHIFT);i.jump=key(VK_SPACE);i.crouch=key('C')||key(VK_CONTROL);i.fire=key(VK_LBUTTON);i.reload=key('R');i.mute=key('M');i.music=key('N');i.use=key('E');i.flashlight=key('F');
  i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);
  i.guard=key(VK_RBUTTON);
  i.console=key(VK_OEM_3);
