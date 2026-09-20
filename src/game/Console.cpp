@@ -11,7 +11,7 @@ void Game::executeConsole(std::string command){
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
   m_consoleLog.push_back("0 FOUNDRY / 1 PRESSUREWORKS / 2 GANTRY / 3 LIFT");
-  m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH. MAP LOADS A FRESH MAP.");
+  m_consoleLog.push_back("4 COOLANT / 5 CABLE / MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
@@ -28,6 +28,8 @@ void Game::executeConsole(std::string command){
   else if(arg=="1"||arg=="pressureworks"||arg=="pressure")level=1;
   else if(arg=="2"||arg=="gantry")level=2;
   else if(arg=="3"||arg=="lift"||arg=="surface"||reactor)level=3;
+  else if(arg=="4"||arg=="coolant"||arg=="return")level=4;
+  else if(arg=="5"||arg=="cable"||arg=="vaults")level=5;
   if(level<0||!extra.empty())m_consoleLog.push_back("UNKNOWN MAP. TYPE MAPS FOR VALID NAMES / IDS.");
   else{
    m_level=level;restart();m_paused=false;m_inventoryOpen=false;
@@ -52,12 +54,12 @@ bool Game::testConsole(){
  Game game;InputState toggle{};toggle.console=true;game.update(toggle,.02f);if(!game.consoleOpen())return false;
  auto p=game.player();float time=game.elapsed();InputState input{};input.forward=true;input.fire=true;input.mouseDx=30;
  game.update(input,.02f);if(game.elapsed()!=time||game.player().ammo!=p.ammo||game.player().angle!=p.angle)return false;
- for(int level=0;level<4;++level){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return false;}
+ for(int level=0;level<ChunkCount;++level){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return false;}
  input.textInput="map reactor\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Crashed||game.player().z!=-9)return false;
  input.textInput="map 99\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return false;
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
  input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
  input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return false;
- std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-3 and reactor; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
+ std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
 }
 }
