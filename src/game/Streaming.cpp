@@ -20,8 +20,14 @@ void Game::updateStreaming(float dt){
   if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
  }
  for(int level=0;level<ChunkCount;++level)if(level!=m_level){bool needed=false;
-  if(level==m_level+1){auto&d=m_world.doors().back();needed=d.opening||d.open>0;}
-  if(level==m_level-1){auto&d=m_world.doors().front();needed=d.opening||d.open>0;}
+  if(level==m_level+1){
+   needed=m_world.openSouthBoundary();
+   if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().back();needed=d.transfer&&(d.opening||d.open>0);}
+  }
+  if(level==m_level-1){
+   needed=m_world.openNorthBoundary();
+   if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().front();needed=d.entry&&(d.opening||d.open>0);}
+  }
   if(needed)ensureChunk(level);
   else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
  }
@@ -39,6 +45,11 @@ bool Game::testStreaming(){
  game.useDoor(0);game.updateStreaming(0);if(!game.chunkResident(0)||game.m_chunks[0].world.tile(3,4)=='#')return false;
  for(int i=0;i<160;++i)game.update({},1.f/120);
  game.m_player.pos={3.5f,-.1f};game.crossChunkBoundary();if(game.level()!=0||!game.enemies().empty()||!game.pickups().empty())return false;
- std::ofstream("streaming-test.txt")<<"Closed chunk released, opening rebuilds before visibility, closing retains until sealed, return preserves cleared enemies/pickups: PASS\n";return true;
+ Game joined;joined.m_level=4;joined.restart();
+ if(!joined.chunkResident(5)||joined.world().tile(0,23)!='#'||joined.world().tile(1,23)=='#'||joined.m_chunks[5].world.tile(0,0)!='#'||joined.m_chunks[5].world.tile(1,0)=='#')return false;
+ Vec2 probe{12.f,24.1f};if(joined.worldAt(probe).level()!=5||std::fabs(probe.x-12.f)>.001f||std::fabs(probe.y-.1f)>.001f)return false;
+ joined.m_player.pos={12.f,24.1f};joined.crossChunkBoundary();
+ if(joined.level()!=5||std::fabs(joined.player().pos.x-12.f)>.001f||std::fabs(joined.player().pos.y-.1f)>.001f||!joined.chunkResident(4))return false;
+ std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\n";return true;
 }
 }
