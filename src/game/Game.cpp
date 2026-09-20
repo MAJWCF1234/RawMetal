@@ -15,7 +15,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;seedScripts();int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -26,12 +26,13 @@ const World& Game::worldAt(Vec2& local)const{
  if(other==m_level)return m_world;local=local+chunkOffset(m_level)-chunkOffset(other);return m_chunks[other].world;
 }
 void Game::crossChunkBoundary(){
- int next=m_player.pos.y>=24&&m_level+1<ChunkCount?m_level+1:m_player.pos.y<0&&m_level>0?m_level-1:m_level;if(next==m_level)return;
+ int next=m_player.pos.y>=24&&m_level+1<ChunkCount?m_level+1:m_player.pos.y<0&&m_level>0?m_level-1:m_level;if(next==m_level)return;int previous=m_level;
  auto shift=chunkOffset(m_level)-chunkOffset(next);bool carried=holdingClutter();Clutter held;if(carried){held=m_clutter[m_heldClutter];m_clutter.erase(m_clutter.begin()+m_heldClutter);}m_heldClutter=-1;
  ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
+ if(next>previous)saveCheckpoint();
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
@@ -279,6 +280,8 @@ void Game::update(const InputState& input, float dt) {
             m_hazmat.update(m_world,dt);
         }
         crossChunkBoundary();
+        updateScripts(dt);
+        updateHazards(dt);
         updateInteraction(input,dt);
         updateStreaming(dt);
         bool carryingAtStart=holdingClutter();updateClutter(input,dt);
@@ -297,9 +300,8 @@ void Game::update(const InputState& input, float dt) {
         updateEnemies(dt);
         updatePickups();
 
-        if (enemiesRemaining() == 0 && m_world.isExit(m_player.pos.x, m_player.pos.y)&&m_world.doors().back().open>.95f){
-            if(m_level==ChunkCount-1&&m_world.controlReleased())m_won=true;
-        }
+        // Campaign completion is explicit through scripted content. Reaching the
+        // numerically last compiled chunk is never an implicit ending.
     }
 
     m_previousFire = input.fire;

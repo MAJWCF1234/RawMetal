@@ -37,6 +37,13 @@ void World::useReactorTerminal(int action){
  }
  refreshReactorTerminals();
 }
+void Game::useReactorAction(int action){
+ if(action==1&&m_world.reactorStage()==World::ReactorStage::DiskHeld){
+  if(!takeQuestItem(ReactorAuthDisk)){m_pickupNotice="REACTOR AUTH DISK REQUIRED";m_pickupNoticeTime=2;return;}
+ }
+ m_world.useReactorTerminal(action);
+ if(m_world.reactorStage()==World::ReactorStage::Released){setState(stateId("reactor_bulkhead_released"),1);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Complete);}
+}
 bool Game::nearReactorDisk()const{
  if(m_level!=3||m_world.reactorStage()!=World::ReactorStage::NoDisk||std::fabs(m_player.z+6)>.4f)return false;
  auto delta=World::reactorDiskPosition()-m_player.pos;float distance=length(delta);Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
@@ -53,9 +60,9 @@ bool Game::testReactor(){
  game.m_player.pos={6,19.9f};game.m_player.z=-6;game.m_player.angle=kPi*.5f;
  if(!check(game.nearReactorDisk(),"Workbench disk reachable from upper floor"))return false;
  InputState use{};use.use=true;game.update(use,.01f);
- if(!check(game.world().reactorStage()==World::ReactorStage::DiskHeld,"E collects a protected quest disk"))return false;
+ if(!check(game.world().reactorStage()==World::ReactorStage::DiskHeld&&game.hasQuestItem(ReactorAuthDisk),"E collects a protected reusable quest item"))return false;
  auto operate=[&](int index,Vec2 position,float z,float angle){game.m_logTime=0;game.m_activeLog=-1;game.m_player.pos=position;game.m_player.z=z;game.m_player.angle=angle;game.m_velocity={};game.update({},.01f);if(game.nearbyTerminal()!=index)return false;game.update(use,.01f);return true;};
- if(!check(operate(3,{18.1f,17.9f},-9,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::DiskLoaded,"E inserts disk into lower computer"))return false;
+ if(!check(operate(3,{18.1f,17.9f},-9,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::DiskLoaded&&!game.hasQuestItem(ReactorAuthDisk),"E inserts and consumes the authorization disk"))return false;
  if(!check(operate(5,{17.1f,18.4f},-6,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::DiskLoaded,"Wrong valve order stays locked and can be retried"))return false;
  if(!check(operate(4,{6.3f,17.f},-9,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::FeedPrimed,"Lower feed primes first"))return false;
  if(!check(operate(5,{17.1f,18.4f},-6,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::ReturnPrimed,"Upper return restores circulation"))return false;

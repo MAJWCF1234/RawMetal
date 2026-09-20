@@ -244,7 +244,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   wornPanel(x+12,top,MenuLayout::Width-24,19,true,true);
   if(selected){rect(x+13,top+2,2,15,amber);rect(x+17,top+2,MenuLayout::Width-35,1,rgb(101,72,32));}
-  const char* label=settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):(page==Game::MenuPage::Save||page==Game::MenuPage::Load)?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
+  const char* label=settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
   text(x+23,top+7,label,selected?paper:muted);
   if(settingsPage&&row>=1&&row<=4){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:settings.sensitivity;
    float normalized=row==4?(value-.2f)/2.8f:value;
@@ -266,7 +266,7 @@ void SoftwareRenderer::drawInventory(const Game& game){
  int x=48,y=28,w=m_width-96,h=m_height-56;wornPanel(x,y,w,h,false,true);
  text(x+16,y+12,"FIELD INVENTORY",paper,2);text(x+w-112,y+15,"I / CLOSE",muted);
  auto section=[&](int sx,int sy,int sw,int sh,const char* title){wornPanel(sx,sy,sw,sh,true,true);text(sx+8,sy+8,title,amber);};
- section(x+14,y+36,260,72,"PRIMARY WEAPON");section(x+14,y+116,260,72,"SECONDARY / MELEE");section(x+14,y+196,260,44,"EQUIPMENT");
+ section(x+14,y+36,260,72,"PRIMARY WEAPON");section(x+14,y+116,260,72,"SECONDARY / MELEE");section(x+14,y+196,260,72,"EQUIPMENT / KEY ITEMS");
  section(x+286,y+36,w-300,h-50,"STORAGE");
  // Orthographic thumbnails use the same textured meshes as the world items.
  auto icon=[&](Mesh&mesh,const Texture&texture,int ix,int iy,int iw,int ih,bool gun){
@@ -288,6 +288,8 @@ void SoftwareRenderer::drawInventory(const Game& game){
  text(76,123,game.weaponEquipped()?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
  text(76,173,"FISTS / CLICK TO HOLSTER",paper);text(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
  text(76,258,"ARMOR: EMPTY    TOOL: EMPTY",muted);
+ int keyY=273,shown=0;for(const auto&item:game.questItems()){if(shown>=2)break;std::string label=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");text(76,keyY+shown*11,label.c_str(),paper);++shown;}
+ if(int(game.questItems().size())>shown){std::string more="+ "+std::to_string(int(game.questItems().size())-shown)+" MORE KEY ITEMS";text(76,keyY+shown*11,more.c_str(),muted);}
  for(int row=0;row<5;++row)for(int col=0;col<6;++col)wornPanel(350+col*34,94+row*29,31,26,true);
  int occupied=0;for(int item=0;item<3;++item){if((item==0&&game.weaponEquipped())||(item==1&&game.player().ammo==0)||(item==2&&game.medkits()==0))continue;
   int cell=game.itemCell(item),ix=350+cell%6*34,iy=94+cell/6*29,iw=item==0?133:item==1?31:65;occupied+=item==0?8:item==1?2:4;

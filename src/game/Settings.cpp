@@ -43,8 +43,9 @@ void Game::updateMenu(const InputState& input){
   }
   if(activate){
    if(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load){
-    bool saving=m_menuPage==MenuPage::Save;
-    if(m_menuSelection==3){if(m_menuFromTitle)showTitleScreen();else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}}
+    bool saving=m_menuPage==MenuPage::Save;int backRow=saving?3:4;
+    if(m_menuSelection==backRow){if(m_menuFromTitle)showTitleScreen();else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}}
+    else if(!saving&&m_menuSelection==3){m_menuMessage.clear();loadCheckpoint();}
     else {m_pendingSlot=m_menuSelection;m_menuMessage.clear();
      if(saving){std::error_code error;bool exists=!m_saveDirectory.empty()&&std::filesystem::exists(std::filesystem::path(m_saveDirectory)/("slot-"+std::to_string(m_pendingSlot+1)+".rms"),error);
       if(exists){m_menuPage=MenuPage::Overwrite;m_menuSelection=0;}else saveSlot(m_pendingSlot);

@@ -114,11 +114,11 @@ void Game::updateInteraction(const InputState& input,float dt){
  m_logTime=std::max(0.f,m_logTime-dt);
  if(input.use&&!m_previousUse&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
  if(input.use&&!m_previousUse&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
- if(input.use&&!m_previousUse&&nearReactorDisk()&&m_world.takeReactorDisk()){m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
+ if(input.use&&!m_previousUse&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
  if(input.use&&!m_previousUse){Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int door=m_world.nearbyDoor(m_player.pos,forward,m_player.z);
   if(holdingClutter()){interactClutter();}
   else if(door>=0){if(!m_world.doors()[door].transfer||(enemiesRemaining()==0&&(m_level<2||m_world.controlReleased())))useDoor(door);}
-  else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].reactorAction)m_world.useReactorTerminal(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
+  else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].reactorAction)useReactorAction(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
    if(m_level==3){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
   }sound(Sound::Exit,.4f);}

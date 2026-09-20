@@ -30,6 +30,8 @@ struct Reader {
  template<class... T> void operator()(T&... v){(one(v),...);}
 };
 std::filesystem::path slotPath(const std::wstring& directory,int slot){return std::filesystem::path(directory)/("slot-"+std::to_string(slot+1)+".rms");}
+std::filesystem::path checkpointPath(const std::wstring& directory){return std::filesystem::path(directory)/"checkpoint.rms";}
+void writeAtomic(const std::filesystem::path& path,const std::string& data){auto temp=path;temp+=L".tmp";std::filesystem::create_directories(path.parent_path());{std::ofstream file(temp,std::ios::binary|std::ios::trunc);file.write(data.data(),std::streamsize(data.size()));file.flush();if(!file)throw std::runtime_error("write failed");file.close();if(file.fail())throw std::runtime_error("close failed");}if(!MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("replace failed");}
 std::string readFile(const std::filesystem::path& path){
  std::error_code error;auto size=std::filesystem::file_size(path,error);if(error||size>MaxSaveBytes)throw std::runtime_error("missing or oversized save");
  std::ifstream in(path,std::ios::binary);std::string data(size,'\0');if(!in.read(data.data(),std::streamsize(size)))throw std::runtime_error("unreadable save");return data;
@@ -47,6 +49,12 @@ template<class A> void Game::archiveSave(A& a,int version){
  a(m_weaponMotion.yaw,m_weaponMotion.pitch,m_weaponMotion.bob,m_weaponMotion.back,m_weaponMotion.elbow,m_weaponMotion.bolt,m_weaponMotion.roll);vec(m_sway);vec(m_swayVelocity);a(m_elbowVelocity);
  for(auto& cell:m_itemCells)a(cell);
  auto list=[&](auto& values,auto visit){int count=int(values.size());a(count);if(count<0||count>1024)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(count);for(auto&v:values)visit(v);};
+ if(version>=6){
+  list(m_states,[&](StateValue&v){a(v.id,v.value);if(v.id==0)throw std::runtime_error("invalid state id");});
+  list(m_objectives,[&](StateValue&v){a(v.id,v.value);if(v.id==0||v.value<0||v.value>3)throw std::runtime_error("invalid objective");});
+  list(m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});
+  list(m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});
+ }
  for(int index=0;index<ChunkCount;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
@@ -62,16 +70,17 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,5);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 5 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,6);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 6 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>5))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>6))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  if(version<6){auto stage=next.m_chunks[3].world.reactorStage();if(stage==World::ReactorStage::DiskHeld)next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);}
 
   // Saves store mutable gameplay state, but the executable owns the current
   // authored population. Reconcile old state onto today's baseline so content
@@ -117,15 +126,10 @@ bool Game::decodeSave(const std::string& data){
 }
 bool Game::saveSlot(int slot){
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
- try {
-  auto path=slotPath(m_saveDirectory,slot),temp=path;temp+=L".tmp";
-  std::filesystem::create_directories(path.parent_path());auto data=encodeSave();
-  {std::ofstream file(temp,std::ios::binary|std::ios::trunc);file.write(data.data(),std::streamsize(data.size()));file.flush();if(!file)throw std::runtime_error("write failed");file.close();if(file.fail())throw std::runtime_error("close failed");}
-  // Same-volume replacement preserves the old slot if writing or replacement fails.
-  if(!MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("replace failed");
-  refreshSaveSlots();m_menuMessage="GAME SAVED";return true;
- }catch(const std::exception&){m_menuMessage="SAVE FAILED / CHECK DISK AND FOLDER";return false;}
+ try {writeAtomic(slotPath(m_saveDirectory,slot),encodeSave());refreshSaveSlots();m_menuMessage="GAME SAVED";return true;}catch(const std::exception&){m_menuMessage="SAVE FAILED / CHECK DISK AND FOLDER";return false;}
 }
+bool Game::saveCheckpoint(){if(m_saveDirectory.empty())return false;try{writeAtomic(checkpointPath(m_saveDirectory),encodeSave());refreshSaveSlots();return true;}catch(const std::exception&){return false;}}
+bool Game::loadCheckpoint(){if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}try{if(decodeSave(readFile(checkpointPath(m_saveDirectory))))return true;}catch(const std::exception&){}m_menuMessage="AUTOSAVE EMPTY OR INVALID";return false;}
 bool Game::loadSlot(int slot){
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
  try{if(decodeSave(readFile(slotPath(m_saveDirectory,slot))))return true;}catch(const std::exception&){}
@@ -137,6 +141,9 @@ void Game::refreshSaveSlots(){
   auto path=slotPath(m_saveDirectory,slot);std::error_code error;if(!std::filesystem::exists(path,error)){label+=error?"UNAVAILABLE":"EMPTY";continue;}
   try{Game preview;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);label+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else label+="INVALID SAVE";}catch(const std::exception&){label+="UNREADABLE";}
  }
+ m_checkpointLabel="AUTOSAVE / ";
+ if(m_saveDirectory.empty())m_checkpointLabel+="UNAVAILABLE";
+ else {auto path=checkpointPath(m_saveDirectory);std::error_code error;if(!std::filesystem::exists(path,error))m_checkpointLabel+=error?"UNAVAILABLE":"EMPTY";else try{Game preview;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);m_checkpointLabel+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else m_checkpointLabel+="INVALID";}catch(const std::exception&){m_checkpointLabel+="UNREADABLE";}}
 }
 bool Game::testSaves(){
  std::ofstream report("save-test.txt");auto check=[&](bool ok,const char* label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();return ok;};
@@ -197,7 +204,7 @@ bool Game::testSaves(){
  auto invalid=game;invalid.m_player.ammo=-1;if(!check(!game.decodeSave(invalid.encodeSave()),"Valid-checksum invalid gameplay data rejected"))return false;
  game.m_heldClutter=0;game.m_clutter[0].projectile=true;game.m_clutter[0].velocity={2,3};Game held;if(!check(held.decodeSave(game.encodeSave())&&held.holdingClutter()&&held.m_clutter[0].velocity.x==2,"Held and moving clutter roundtrip"))return false;
  auto directory=std::filesystem::current_path()/("save-test-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));game.setSaveDirectory(directory.wstring());
- struct Cleanup {std::filesystem::path path;~Cleanup(){std::error_code e;for(int i=0;i<3;++i){auto p=slotPath(path.wstring(),i);std::filesystem::remove(p,e);p+=L".tmp";std::filesystem::remove(p,e);}std::filesystem::remove(path,e);}} cleanup{directory};
+ struct Cleanup {std::filesystem::path path;~Cleanup(){std::error_code e;for(int i=0;i<3;++i){auto p=slotPath(path.wstring(),i);std::filesystem::remove(p,e);p+=L".tmp";std::filesystem::remove(p,e);}auto c=checkpointPath(path.wstring());std::filesystem::remove(c,e);c+=L".tmp";std::filesystem::remove(c,e);std::filesystem::remove(path,e);}} cleanup{directory};
  InputState escape{};escape.escape=true;game.update(escape,.01f);game.update({},.01f);
  auto click=[&](int row){game.update({},.01f);InputState i{};i.pointerX=MenuLayout::X+30;i.pointerY=MenuLayout::RowTop+row*MenuLayout::RowHeight+7;i.fire=true;game.update(i,.01f);};
  click(7);if(!check(game.paused()&&game.menuPage()==MenuPage::Save,"Esc menu opens Save submenu"))return false;
@@ -214,6 +221,10 @@ bool Game::testSaves(){
  if(!check(!game.paused()&&game.player().ammo==5&&game.sessionRevision()>revision,"Confirmed load resumes and resets audio session"))return false;
  InputState fire{};fire.fire=true;game.update(fire,.01f);if(!check(game.player().ammo==5,"Load click cannot fire the weapon"))return false;
  for(int slot=1;slot<3;++slot){if(!check(game.saveSlot(slot),"All three slots support independent saves"))return false;}
- return check(!game.saveSlot(-1)&&!game.loadSlot(3),"Invalid slots are rejected");
+ game.setState(stateId("checkpoint_test"),37);game.giveQuestItem(stateId("test_fuse"));game.m_player.health=42;
+ if(!check(game.saveCheckpoint(),"Autosave checkpoint writes independently of manual slots"))return false;
+ game.setState(stateId("checkpoint_test"),0);game.takeQuestItem(stateId("test_fuse"));game.m_player.health=99;
+ if(!check(game.loadCheckpoint()&&game.player().health==42&&game.state("checkpoint_test")==37&&game.hasQuestItem(stateId("test_fuse")),"Autosave restores flags, quest items and player state"))return false;
+ return check(!game.saveSlot(-1)&&!game.loadSlot(3),"Invalid manual slots are rejected");
 }
 }

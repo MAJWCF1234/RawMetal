@@ -4,6 +4,7 @@
 #include <string_view>
 #include <span>
 #include <vector>
+#include <cstdint>
 #include "../core/Math.h"
 
 namespace retro {
@@ -11,6 +12,11 @@ struct Door {float left=0,right=0,y=0,open=0;bool opening=false,transfer=false,e
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
 struct WorldLight {Vec2 position;float z;};
+struct Hazard {
+ enum class Kind {Electricity,Steam,Crusher,Toxic,Fire,FallingDebris,Pressure,Anomaly};
+ Kind kind=Kind::Electricity;float x1=0,y1=0,x2=0,y2=0,bottom=-100,top=100,damagePerSecond=0;
+ std::uint32_t enabledFlag=0;int enabledValue=1;bool invertFlag=false;
+};
 struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;};
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
 struct Span {float floor,ceiling;uint16_t flags=0;};
@@ -39,6 +45,7 @@ public:
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}
     bool wallSpaceFree(Vec2 center,Vec2 along,float width,float bottom,float top)const;
     const std::vector<WorldLight>& lights()const{return m_lights;}
+    const std::vector<Hazard>& hazards()const{return m_hazards;}
     const std::vector<Structure>& structures()const{return m_structures;}
     std::vector<Span> spansAt(int x,int y)const;
     float supportBelow(float x,float y,float feet)const;
@@ -85,7 +92,7 @@ public:
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
     void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
-    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<WorldLight>{}.swap(m_lights);std::vector<Terminal>{}.swap(m_terminals);}
+    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
@@ -98,6 +105,7 @@ private:
     std::vector<WorldProp> m_props;
     std::vector<Fixture> m_fixtures;
     std::vector<WorldLight> m_lights;
+    std::vector<Hazard> m_hazards;
     void buildLights();
     std::vector<Door> m_doors;
     std::vector<Terminal> m_terminals;
