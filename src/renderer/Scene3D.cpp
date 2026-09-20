@@ -352,7 +352,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     float wallBase=w.level()>=3?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if((x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
-    if(w.level()!=3&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
+    if(w.level()<3&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
     (void)light;
    };
    if(w.tile(x-1,y)!='#')wall(X,Y,X,Y+1,.90f);
