@@ -50,8 +50,9 @@ add_executable(RawMetal WIN32
     platform/Win32Window.cpp)
 # One published game executable for every build configuration.
 get_filename_component(RAWMETAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+set(RAWMETAL_RUNTIME_DIRECTORY "${RAWMETAL_ROOT}" CACHE PATH "Game output directory (override for testing while the game is running)")
 set_target_properties(RawMetal PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${RAWMETAL_ROOT}/$<0:>"
+    RUNTIME_OUTPUT_DIRECTORY "${RAWMETAL_RUNTIME_DIRECTORY}/$<0:>"
     INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
     PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/symbols/$<CONFIG>")
 target_include_directories(RawMetal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

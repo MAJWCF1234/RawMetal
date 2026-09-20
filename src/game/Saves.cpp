@@ -50,7 +50,7 @@ template<class A> void Game::archiveSave(A& a,int version){
  for(int index=0;index<ChunkCount;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   int doors=int(w.m_doors.size());a(doors);if(doors!=int(w.m_doors.size()))throw std::runtime_error("door schema mismatch");for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
-  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(int(e.kind)>(version>=3?3:2)||int(e.state)>3||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
+  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(int(e.kind)>(version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>5)throw std::runtime_error("invalid clutter");});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
@@ -58,14 +58,14 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,4);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 4 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,5);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 5 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>4))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>5))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   auto&p=next.m_player;
@@ -107,6 +107,7 @@ bool Game::testSaves(){
  for(float time:{0.f,7.f,21.f,34.f,39.5f,42.f,48.f}){
   auto original=liftInspection(time);original.m_player.health=63;original.m_player.ammo=17;original.m_medkits=2;original.m_weaponEquipped=false;original.m_world.setDoor(1,.35f,true);
   original.m_chunks[1].enemies[0].alive=false;original.m_chunks[1].enemies[0].hp=0;original.m_chunks[1].pickups[0].active=false;original.m_chunks[1].kills=1;
+  if(!original.m_enemies.empty()){auto&stalker=original.m_enemies.back();if(stalker.kind==Enemy::Kind::Warden){stalker.stalkMode=Enemy::StalkMode::Flank;stalker.stalkTimer=.73f;stalker.stalkSide=-1.f;}}
   if(time==48){original.m_world.takeReactorDisk();original.m_world.useReactorTerminal(1);original.m_world.useReactorTerminal(2);}
   auto data=original.encodeSave();Game restored;restored.m_settings.master=.4f;
   if(!check(restored.decodeSave(data)&&restored.encodeSave()==data&&restored.settings().master==.4f,"Exact dynamic-state roundtrip / settings preserved"))return false;
@@ -114,6 +115,11 @@ bool Game::testSaves(){
   if(!check(restored.world().liftPhase()==original.world().liftPhase()&&std::fabs(restored.player().z-original.player().z)<.0001f,"Loaded lift resumes without moving the passenger incorrectly"))return false;
   if(time==39.5f&&!check(phase==World::LiftPhase::Caught,"Brake-catch save is covered"))return false;
   if(time==48){restored.m_world.useReactorTerminal(3);restored.m_world.useReactorTerminal(1);if(!check(restored.world().controlReleased(),"Loaded reactor puzzle can finish"))return false;}
+ }
+ // Version 4 saves remain loadable; new stalk state falls back to safe defaults.
+ {Game legacy=stalkerInspection(0,0,0);legacy.storeChunk();Writer writer;legacy.archiveSave(writer,4);auto payload=writer.stream.str();
+  auto data=std::string("RAWMETAL_SAVE 4 ")+std::to_string(checksum(payload))+"\n"+payload;Game restored;
+  if(!check(restored.decodeSave(data)&&!restored.m_enemies.empty()&&restored.m_enemies.back().stalkMode==Enemy::StalkMode::Watch&&restored.m_enemies.back().stalkTimer==0&&restored.m_enemies.back().stalkSide==1,"Version 4 saves load with default stalk state"))return false;
  }
  Game game;auto pristine=game.encodeSave();auto corrupt=pristine;corrupt.back()='x';
  if(!check(!game.decodeSave(corrupt)&&!game.decodeSave(pristine.substr(0,pristine.size()/2))&&!game.decodeSave("RAWMETAL_SAVE 99 0\n")&&game.encodeSave()==pristine,"Corrupt / truncated / future saves leave the live game untouched"))return false;

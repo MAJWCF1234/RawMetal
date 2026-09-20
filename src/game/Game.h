@@ -49,6 +49,8 @@ struct Enemy {
     Vec2 waypoint{};
     Vec2 home{},lastKnown{};
     enum class State {Idle,Investigate,Chase,Search};State state=State::Idle;
+    enum class StalkMode {Watch,Flank,Rush};StalkMode stalkMode=StalkMode::Watch;
+    float stalkTimer=0,stalkSide=1;
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
