@@ -142,7 +142,10 @@ bool Game::testSaves(){
  std::ofstream report("save-test.txt");auto check=[&](bool ok,const char* label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();return ok;};
  for(float time:{0.f,7.f,21.f,34.f,39.5f,42.f,48.f}){
   auto original=liftInspection(time);original.m_player.health=63;original.m_player.ammo=17;original.m_medkits=2;original.m_weaponEquipped=false;original.m_world.setDoor(1,.35f,true);
-  original.m_chunks[1].enemies[0].alive=false;original.m_chunks[1].enemies[0].hp=0;original.m_chunks[1].pickups[0].active=false;original.m_chunks[1].kills=1;
+  // liftInspection() deliberately removes enemies from every chunk, so do not
+  // index the stripped enemy vectors here. Enemy death persistence is covered
+  // by the authored-content migration regression below.
+  original.m_chunks[1].pickups[0].active=false;original.m_chunks[1].kills=1;
   if(!original.m_enemies.empty()){auto&stalker=original.m_enemies.back();if(stalker.kind==Enemy::Kind::Warden){stalker.stalkMode=Enemy::StalkMode::Flank;stalker.stalkTimer=.73f;stalker.stalkSide=-1.f;}}
   if(time==48){original.m_world.takeReactorDisk();original.m_world.useReactorTerminal(1);original.m_world.useReactorTerminal(2);}
   auto data=original.encodeSave();Game restored;restored.m_settings.master=.4f;
