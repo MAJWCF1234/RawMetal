@@ -238,7 +238,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
  wornPanel(x,y,MenuLayout::Width,MenuLayout::Height,false,true);
  auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;
  const char* title=settingsPage?(game.menuFromTitle()?"DEPTHWORKS / SETTINGS":"DEPTHWORKS / PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
- text(x+15,y+12,title,paper,2);text(x+15,y+29,settingsPage?"SETTINGS / SAVED GAMES":"GAMEPLAY IS PAUSED",amber);
+ text(x+15,y+12,title,paper,2);text(x+15,y+29,settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED"),amber);
  const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...","QUIT GAME"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
