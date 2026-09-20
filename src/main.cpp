@@ -78,8 +78,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(std::wcsstr(commandLine,L"--audio-device-test"))return retro::AudioEngine::testDevice()?0:15;
     if(std::wcsstr(commandLine,L"--environment-inspection")){
-        if(!directStart)game.showTitleScreen();
-    retro::SoftwareRenderer renderer(W,H);
+        retro::SoftwareRenderer renderer(W,H);
         auto save=[&](const std::string&name){std::ofstream out(name+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
         const retro::Vec2 centers[]={{16.f,2.5f},{4.f,10.5f},{11.5f,11.f},{11.f,2.5f}};
         for(int target=0;target<4;++target)for(int side=0;side<4;++side){float a=side*retro::kPi*.5f+.3f;auto center=centers[target];auto position=center+retro::Vec2{std::cos(a),std::sin(a)}*2.8f;
@@ -254,6 +253,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);
     if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\\RawMetal\\saves");
+    if(!directStart)game.showTitleScreen();
     retro::SoftwareRenderer renderer(W,H);
     retro::AudioEngine audio;
     if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
