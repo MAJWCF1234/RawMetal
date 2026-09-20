@@ -5,10 +5,18 @@
 #include <vector>
 #include "../audio/Sound.h"
 #include <string>
+#include <string_view>
+#include <cstdint>
 #include "Ragdoll.h"
 
 namespace retro {
 constexpr int DisplayWidth=640,DisplayHeight=360;
+
+using StateId=std::uint32_t;
+constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
+enum class ObjectiveStatus { Hidden, Active, Complete, Failed };
+struct StateValue {StateId id=0;int value=0;};
+struct QuestItemStack {StateId id=0;int count=0;};
 
 struct InputState {
     bool console=false;
@@ -98,6 +106,15 @@ struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMo
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-288)/2,Width=304,Height=288,RowTop=Y+46,RowHeight=21,Rows=10,SliderX=X+179,SliderWidth=75;};
 struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=4;};
 
+struct ScriptAction {
+ enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign};
+ Type type=Type::SetState;StateId id=0;int value=0,index=0;Enemy::Kind enemyKind=Enemy::Kind::Huntsman;Vec2 position{};float z=-999,amount=0;Sound sound=Sound::Exit;
+};
+struct ScriptEvent {
+ StateId id=0;int level=0;float x1=0,y1=0,x2=0,y2=0,bottom=-100,top=100;StateId requireState=0;int requireValue=1;bool requireEnemiesClear=false,once=true;
+ std::vector<ScriptAction> actions;
+};
+
 class Game {
 public:
     Game();
@@ -153,12 +170,15 @@ public:
     static bool testSaves();
     enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
     MenuPage menuPage()const{return m_menuPage;}
-    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?6:MenuLayout::Rows):(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load?4:2);}
+    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?6:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:2;}
     const std::string& menuMessage()const{return m_menuMessage;}
     const std::string& slotLabel(int slot)const{return m_slotLabels[slot];}
-    void setSaveDirectory(std::wstring path){m_saveDirectory=std::move(path);}
+    const std::string& checkpointLabel()const{return m_checkpointLabel;}
+    void setSaveDirectory(std::wstring path){m_saveDirectory=std::move(path);refreshSaveSlots();}
     bool saveSlot(int slot);
     bool loadSlot(int slot);
+    bool saveCheckpoint();
+    bool loadCheckpoint();
     unsigned sessionRevision()const{return m_sessionRevision;}
     static bool testPickups();
     static bool testMovement();
@@ -181,6 +201,19 @@ public:
     bool showFps()const{return m_showFps;}
     float renderScale()const{return m_renderScale;}
     static bool testConsole();
+    static bool testSystems();
+    int state(StateId id)const;
+    int state(std::string_view name)const{return state(stateId(name));}
+    void setState(StateId id,int value=1);
+    ObjectiveStatus objective(StateId id)const;
+    void setObjective(StateId id,ObjectiveStatus status);
+    bool hasQuestItem(StateId id,int count=1)const;
+    int questItemCount(StateId id)const;
+    void giveQuestItem(StateId id,int count=1);
+    bool takeQuestItem(StateId id,int count=1);
+    const std::vector<QuestItemStack>& questItems()const{return m_questItems;}
+    static const char* questItemName(StateId id);
+    static constexpr StateId ReactorAuthDisk=stateId("reactor_auth_disk");
     bool inventoryOpen()const{return m_inventoryOpen;}
     bool weaponEquipped()const{return m_weaponEquipped;}
     int medkits()const{return m_medkits;}
@@ -207,6 +240,7 @@ private:
     MenuPage m_menuPage=MenuPage::Settings;
     std::wstring m_saveDirectory;
     std::array<std::string,3> m_slotLabels{"SLOT 1 / EMPTY","SLOT 2 / EMPTY","SLOT 3 / EMPTY"};
+    std::string m_checkpointLabel="AUTOSAVE / EMPTY";
     std::string m_menuMessage;
     int m_pendingSlot=-1;
     unsigned m_sessionRevision=0;
@@ -215,6 +249,7 @@ private:
     bool decodeSave(const std::string& data);
     template<class Archive> void archiveSave(Archive& archive,int version=2);
     bool nearReactorDisk()const;
+    void useReactorAction(int action);
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
     bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false;
@@ -223,6 +258,16 @@ private:
     std::vector<std::string> m_consoleHistory;
     int m_consoleHistoryIndex=0;
     float m_renderScale=1.f;
+    std::vector<StateValue> m_states,m_objectives;
+    std::vector<QuestItemStack> m_questItems;
+    std::vector<StateId> m_firedEvents;
+    std::vector<ScriptEvent> m_scriptEvents;
+    float m_hazardSoundTimer=0;
+    void seedScripts();
+    void updateScripts(float dt);
+    void executeScriptAction(const ScriptAction& action);
+    void spawnScriptEnemy(const ScriptAction& action);
+    void updateHazards(float dt);
     void loadLevel(int level,bool carry);
     int m_level=0;
     struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};

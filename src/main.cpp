@@ -123,6 +123,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(!retro::Game::testLift())return 32;
         if(!retro::Game::testReactor())return 37;
         if(!retro::Game::testSaves())return 38;
+        if(!retro::Game::testSystems())return 42;
         if(!retro::Game::testConsole())return 34;
         if(!retro::AudioEngine::testLiftMix())return 33;
         if(!retro::Game::testClutter())return 25;

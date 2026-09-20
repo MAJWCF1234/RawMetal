@@ -87,7 +87,7 @@ void Game::updateLift(float dt){
   if(m_world.liftPhase()==World::LiftPhase::Jammed){sound(Sound::Exit,.6f,.55f);sound(Sound::LiftCreak,.9f,.8f);}
   if(m_world.liftPhase()==World::LiftPhase::Falling){sound(Sound::LiftSnap,1.f,1.1f);m_verticalSpringVelocity-=.5f;}
   if(m_world.liftPhase()==World::LiftPhase::Caught){sound(Sound::JunkMetal,1.f,.55f);sound(Sound::LiftCreak,.9f,.65f);m_verticalSpringVelocity-=.8f;}
-  if(m_world.liftPhase()==World::LiftPhase::Crashed){sound(Sound::LiftCrash,1.f,.8f);m_verticalSpringVelocity-=1.4f;m_damageFlash=.4f;}
+  if(m_world.liftPhase()==World::LiftPhase::Crashed){sound(Sound::LiftCrash,1.f,.8f);m_verticalSpringVelocity-=1.4f;m_damageFlash=.4f;setState(stateId("lift_crashed"),1);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);saveCheckpoint();}
  }
 }
 Game Game::liftInspection(float seconds,int view){
@@ -152,8 +152,8 @@ bool Game::testLift(){
  game.m_player.angle=kPi*.5f;game.update({},.01f);game.update(use,.01f);
  for(int i=0;i<180;++i)game.update({},1.f/120);
  if(!check(game.world().doors().back().open>.95f,"Lower reactor interlock opens"))return false;
- if(!check(walk({21.5f,22.5f})||game.won(),"Lower reactor exit reached"))return false;
- if(!check(game.won(),"Authored route completes at reactor exit"))return false;
+ if(!check(walk({21.5f,22.5f}),"Lower reactor exit reached"))return false;
+ if(!check(!game.won(),"Reactor exit remains a campaign transfer, not an implicit ending"))return false;
  for(int rate:{30,60,120}){auto ride=liftInspection(0);for(int i=0;i<int(rate*World::LiftRideComplete);++i)ride.update({},1.f/rate);
   if(!check(ride.world().liftHeight()==-9&&std::fabs(ride.player().z+9)<.03f,"Frame-rate independent ride"))return false;}
  auto ride=liftInspection(0);InputState push{};push.right=true;push.jump=true;
