@@ -188,7 +188,7 @@ bool Game::testSaves(){
   if(!check(restored.m_chunks[2].world.doors().size()==Game{}.m_chunks[2].world.doors().size(),"New doors use current map defaults instead of invalidating old saves"))return false;
  }
  // Version 4 saves remain loadable; new stalk state falls back to safe defaults.
- {Game legacy=stalkerInspection(0,0,0);legacy.storeChunk();Writer writer;legacy.archiveSave(writer,4);auto payload=writer.stream.str();
+ {Game legacy=mapInspection({18.6f,18.5f},0,0,3,true,-9,false);legacy.storeChunk();Writer writer;legacy.archiveSave(writer,4);auto payload=writer.stream.str();
   auto data=std::string("RAWMETAL_SAVE 4 ")+std::to_string(checksum(payload))+"\n"+payload;Game restored;
   if(!check(restored.decodeSave(data)&&!restored.m_enemies.empty()&&restored.m_enemies.back().stalkMode==Enemy::StalkMode::Watch&&restored.m_enemies.back().stalkTimer==0&&restored.m_enemies.back().stalkSide==1,"Version 4 saves load with default stalk state"))return false;
  }
