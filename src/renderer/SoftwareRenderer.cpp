@@ -176,7 +176,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  for(int i=0;i<10;++i){rect(62+i*5,m_height-16,4,11,rgb(10,7,5));if(p.health>i*10){rect(63+i*5,m_height-15,2,8,rgb(158,57,33));put(63+i*5,m_height-15,rgb(215,115,54));}}
  text(139,m_height-29,game.unarmed()?"UNARMED":"12 GA / TUBE-RESERVE",muted);std::snprintf(b,sizeof(b),"%02d/%02d",p.loaded,std::max(0,p.ammo-p.loaded));text(139,m_height-20,game.unarmed()?(game.guarding()?"GUARD":"FISTS"):b,amber,game.unarmed()?2:3);
  text(247,m_height-29,"PURGE",muted);std::snprintf(b,sizeof(b),"%02d / %02d",game.kills(),int(game.enemies().size()));text(247,m_height-19,b,paper,2);
- text(m_width-103,m_height-27,"RAWMETAL",paper,2);text(m_width-103,m_height-12,"R / RELOAD",muted);
+ text(m_width-103,m_height-27,"DEPTHWORKS",paper,2);text(m_width-103,m_height-12,"R / RELOAD",muted);
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
  rect(cx-6,cy,3,1,cross);rect(cx+4,cy,3,1,cross);rect(cx,cy-6,1,3,cross);rect(cx,cy+4,1,3,cross);
  if(auto target=game.targetEnemy()){
@@ -201,20 +201,50 @@ void SoftwareRenderer::drawHud(const Game& game){
  }
 }
 
+void SoftwareRenderer::drawTitle(const Game& game){
+ for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x){
+  auto&p=m_pixels[size_t(y*m_width+x)];unsigned hash=unsigned(x*92837111u)^unsigned(y*689287499u);
+  float dim=.17f+float((hash^(hash>>13))&7)*.008f;p=shade(p,dim);
+  if((y%4)==0)p=shade(p,.78f);
+ }
+ const auto paper=rgb(220,207,170),amber=rgb(203,137,47),rust=rgb(116,52,31),muted=rgb(137,124,96),black=rgb(7,6,5);
+ rect(0,0,m_width,8,black);rect(0,m_height-9,m_width,9,black);
+ for(int x=-20;x<m_width;x+=32){rect(x,7,20,3,rust);rect(x+20,7,12,3,rgb(42,34,23));}
+ rect(46,34,548,1,rgb(92,70,43));rect(46,121,548,2,rgb(71,45,27));
+ for(int i=0;i<30;++i){unsigned h=unsigned(i*2654435761u+9137u);int x=38+int(h%560),y=20+int((h>>9)%318),len=3+int((h>>18)%34);rect(x,y,len,1,(i%3)?rgb(37,29,20):rgb(82,55,31));}
+ text(58,48,"DEPTHWORKS",rgb(226,207,164),7);
+ for(int i=0;i<13;++i){unsigned h=unsigned(i*747796405u+2891336453u);int x=58+int(h%278),y=47+int((h>>11)%39),len=5+int((h>>19)%22);rect(x,y,len,1,(i%2)?black:rgb(74,47,28));}
+ text(61,101,"EXTRACTION COMPLEX / NIGHT SHIFT",muted,2);
+ text(61,126,"CONTAINMENT FAILURE",rust,2);
+ text(61,144,"SURFACE ROUTE / STATUS UNKNOWN",muted);
+ const char* labels[]={"NEW GAME","LOAD GAME","SETTINGS","QUIT"};
+ for(int row=0;row<TitleMenuLayout::Rows;++row){
+  int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();
+  wornPanel(TitleMenuLayout::X,y,TitleMenuLayout::Width,22,true,true);
+  if(selected){rect(TitleMenuLayout::X+1,y+2,3,18,amber);rect(TitleMenuLayout::X+7,y+2,TitleMenuLayout::Width-10,1,rgb(106,72,31));}
+  text(TitleMenuLayout::X+16,y+8,labels[row],selected?paper:muted,2);
+ }
+ wornPanel(386,190,196,106,false,true);
+ text(400,204,"SITE TELEMETRY",amber,2);text(400,226,"POWER / DEGRADED",paper);
+ text(400,242,"LIFT / EMERGENCY",paper);text(400,258,"CONTAINMENT / FAILED",rust);
+ text(400,283,"AUTHORIZED PERSONNEL",muted);text(400,296,"ONLY",muted);
+ text(58,m_height-26,"ARROWS / ENTER / MOUSE",muted);text(m_width-173,m_height-26,"DEPTHWORKS",paper);
+}
+
 void SoftwareRenderer::drawSettings(const Game& game){
  for(auto&pixel:m_pixels)pixel=shade(pixel,.25f);
  constexpr int x=MenuLayout::X,y=MenuLayout::Y;
  const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
  wornPanel(x,y,MenuLayout::Width,MenuLayout::Height,false,true);
  auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;
- const char* title=settingsPage?"RAWMETAL / PAUSED":page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
+ const char* title=settingsPage?(game.menuFromTitle()?"DEPTHWORKS / SETTINGS":"DEPTHWORKS / PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
  text(x+15,y+12,title,paper,2);text(x+15,y+29,settingsPage?"SETTINGS / SAVED GAMES":"GAMEPLAY IS PAUSED",amber);
  const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...","QUIT GAME"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   wornPanel(x+12,top,MenuLayout::Width-24,19,true,true);
   if(selected){rect(x+13,top+2,2,15,amber);rect(x+17,top+2,MenuLayout::Width-35,1,rgb(101,72,32));}
-  const char* label=settingsPage?labels[row]:(page==Game::MenuPage::Save||page==Game::MenuPage::Load)?(row==3?"BACK":game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
+  const char* label=settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):(page==Game::MenuPage::Save||page==Game::MenuPage::Load)?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
   text(x+23,top+7,label,selected?paper:muted);
   if(settingsPage&&row>=1&&row<=4){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:settings.sensitivity;
    float normalized=row==4?(value-.2f)/2.8f:value;
@@ -228,7 +258,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
   if(settingsPage&&row==5)text(MenuLayout::SliderX,top+7,settings.invertMouse?"ON":"OFF",paper);
  }
  if(!settingsPage){text(x+15,y+153,game.menuMessage().c_str(),amber);if(page==Game::MenuPage::Overwrite)text(x+15,y+177,"THE PREVIOUS SLOT WILL BE REPLACED",muted);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)text(x+15,y+177,"UNSAVED PROGRESS WILL BE LOST",muted);}
- text(x+15,y+MenuLayout::Height-23,"CLICK / ARROWS / ENTER",muted);text(x+15,y+MenuLayout::Height-13,settingsPage?"ESC TO RESUME":"ESC TO GO BACK",amber);
+ text(x+15,y+MenuLayout::Height-23,"CLICK / ARROWS / ENTER",muted);text(x+15,y+MenuLayout::Height-13,settingsPage?(game.menuFromTitle()?"ESC TO TITLE":"ESC TO RESUME"):"ESC TO GO BACK",amber);
 }
 void SoftwareRenderer::drawInventory(const Game& game){
  for(auto&pixel:m_pixels)pixel=shade(pixel,.22f);
@@ -272,7 +302,7 @@ void SoftwareRenderer::drawInventory(const Game& game){
 }
 void SoftwareRenderer::drawConsole(const Game& game){
  rect(0,0,m_width,152,rgb(10,14,16));rect(0,150,m_width,2,rgb(202,150,67));
- text(12,9,"RAWMETAL / DEVELOPER CONSOLE",rgb(218,172,89),2);
+ text(12,9,"DEPTHWORKS / DEVELOPER CONSOLE",rgb(218,172,89),2);
  auto&log=game.consoleLog();size_t first=log.size()>9?log.size()-9:0;
  int y=28;for(size_t i=first;i<log.size();++i,y+=11)text(12,y,log[i].substr(0,150).c_str(),rgb(188,204,196));
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
@@ -280,10 +310,10 @@ void SoftwareRenderer::drawConsole(const Game& game){
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
  int fullWidth=m_width,fullHeight=m_height;bool scaled=game.renderScale()<1;
  if(scaled){m_width=int(fullWidth*game.renderScale());m_height=int(fullHeight*game.renderScale());m_scenePixels.resize(size_t(m_width*m_height));m_sceneZ.resize(size_t(m_width*m_height));m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);}
- auto scene=[&]{bool parallel=m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
+ auto scene=[&]{bool parallel=!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{clear(rgb(12,16,18));drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}
-   if(parallel){m_animationWorker->wait();m_poseReady=true;}drawViewModel(game);m_poseReady=false;
+   if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen())drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{m_gpu->begin(m_width,m_height);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
@@ -291,7 +321,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  else scene();
  if(scaled){int sceneWidth=m_width,sceneHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*sceneHeight/m_height)*sceneWidth+x*sceneWidth/m_width)];}
- drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);
+ if(game.titleScreen())drawTitle(game);else {drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
  float ms=std::chrono::duration<float,std::milli>(std::chrono::steady_clock::now()-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",int(fullWidth*game.renderScale()),int(fullHeight*game.renderScale()),m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
 }

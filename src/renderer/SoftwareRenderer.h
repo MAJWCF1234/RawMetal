@@ -85,6 +85,7 @@ private:
     void put(int x,int y,std::uint32_t c);
     void rect(int x,int y,int w,int h,std::uint32_t c);
     void drawHud(const Game& game);
+    void drawTitle(const Game& game);
     void drawConsole(const Game& game);
     float m_frameMs=0;
     void drawSettings(const Game& game);

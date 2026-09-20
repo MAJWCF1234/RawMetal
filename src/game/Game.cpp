@@ -9,6 +9,11 @@
 namespace retro {
 
 Game::Game() { restart(); }
+void Game::showTitleScreen(){
+    m_titleScreen=true;m_titleSelection=0;m_titlePrevious={};m_menuFromTitle=false;
+    m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Settings;
+    m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
+}
 
 void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
@@ -223,6 +228,7 @@ bool Game::testPickups(){
 
 void Game::update(const InputState& input, float dt) {
     m_sounds.clear();
+    if(m_titleScreen){updateTitle(input);return;}
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
     if(consolePressed){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
     if(m_consoleOpen){updateConsole(input);return;}
@@ -230,7 +236,10 @@ void Game::update(const InputState& input, float dt) {
     bool inventoryPressed=input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
     if(m_inventoryOpen&&escapePressed){m_inventoryOpen=false;m_suppressFire=true;return;}
     if(escapePressed){
-     if(m_paused&&m_menuPage!=MenuPage::Settings){
+     if(m_paused&&m_menuFromTitle){
+      if(m_menuPage==MenuPage::ConfirmLoad){m_menuPage=MenuPage::Load;m_menuSelection=m_pendingSlot;m_menuMessage.clear();}
+      else showTitleScreen();
+     }else if(m_paused&&m_menuPage!=MenuPage::Settings){
       if(m_menuPage==MenuPage::Overwrite||m_menuPage==MenuPage::ConfirmLoad){m_menuPage=m_menuPage==MenuPage::Overwrite?MenuPage::Save:MenuPage::Load;m_menuSelection=m_pendingSlot;}
       else {m_menuSelection=m_menuPage==MenuPage::Save?7:m_menuPage==MenuPage::Load?8:6;m_menuPage=MenuPage::Settings;}
       m_menuMessage.clear();
