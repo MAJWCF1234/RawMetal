@@ -174,6 +174,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         out<<"P6\n"<<W<<" "<<H<<"\n255\n";
         for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
         auto saveFrame=[&](const char* name){std::ofstream frame(name,std::ios::binary);frame<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}};
+        {auto title=game;title.showTitleScreen();renderer.render(title);saveFrame("title-menu.ppm");}
         {auto inventory=game;retro::InputState open{};open.inventory=true;inventory.update(open,.01f);renderer.render(inventory);saveFrame("inventory-menu.ppm");}
         {auto console=game;retro::InputState consoleInput{};consoleInput.console=true;console.update(consoleInput,.01f);consoleInput={};consoleInput.textInput="maps\rmap reactor\r";console.update(consoleInput,.01f);renderer.render(console);saveFrame("developer-console.ppm");}
         for(int kind=0;kind<6;++kind)for(int stage=0;stage<3;++stage){auto scene=retro::Game::clutterInspection(kind,stage==0?0:stage==1?.3f:5.f);renderer.render(scene);saveFrame(("clutter-tumble-"+std::to_string(kind)+"-"+std::to_string(stage)+".ppm").c_str());}
