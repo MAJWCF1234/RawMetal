@@ -480,7 +480,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    // Narrow contact smears lead into the final collapse, not an even halo.
    quad({9.00f,7.58f,.011f},{9.20f,7.49f,.011f},{9.72f,8.28f,.011f},{9.55f,8.39f,.011f},m_blood,.82f);
    quad({9.49f,8.21f,.012f},{9.62f,8.15f,.012f},{9.94f,8.62f,.012f},{9.83f,8.69f,.012f},m_blood,.72f);
-   auto posed=corpse.skin();auto&vertices=Ragdoll::asset().vertices;objectLighting=true;objectLight=illumination({corpse.p[1].x,corpse.p[1].y,corpse.p[1].z},{0,0,1});
+   bool poseChanged=!m_hazmatPoseValid;
+   for(int joint=0;joint<Ragdoll::Count&&!poseChanged;++joint){auto a=corpse.p[joint],b=m_hazmatPoseJoints[joint];poseChanged=a.x!=b.x||a.y!=b.y||a.z!=b.z;}
+   if(poseChanged){corpse.skin(m_hazmatPose);m_hazmatPoseJoints=corpse.p;m_hazmatPoseValid=true;}
+   const auto&posed=m_hazmatPose;auto&vertices=Ragdoll::asset().vertices;objectLighting=true;objectLight=illumination({corpse.p[1].x,corpse.p[1].y,corpse.p[1].z},{0,0,1});
    for(size_t i=0;i<vertices.size();i+=3){MeshVertex face[3];for(int j=0;j<3;++j){auto p=posed[i+j];face[j]={{p.x,p.y,p.z},vertices[i+j].u,vertices[i+j].v};}
     tri(face[0],face[1],face[2],m_hazmatTextures[vertices[i].material],.95f);
     // The blood follows the skinned chest surface, not a floating world card.

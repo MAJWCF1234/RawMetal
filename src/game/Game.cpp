@@ -10,7 +10,7 @@ namespace retro {
 
 Game::Game() { restart(); }
 
-void Game::restart(){++m_sessionRevision;m_hazmat={};m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -52,7 +52,7 @@ void Game::loadLevel(int level,bool carry) {
     if(m_level==2)m_enemies={{{7.5f,4.5f}},{{16.5f,4.5f}},{{7.5f,12.5f}},{{3.5f,15.5f}},{{19.5f,15.5f}},{{21.5f,20.5f}}};
     if(m_level==3)m_enemies={{{5.5f,13.5f}},{{17.5f,19.5f}},{{21.5f,18.5f}}};
     for(size_t i=0;i<m_enemies.size();++i){auto&e=m_enemies[i];e.kind=i%3==1?Enemy::Kind::Wasp:i%3==2?Enemy::Kind::Brute:Enemy::Kind::Huntsman;e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:110.f;e.voiceTimer=.8f+float(i)*.9f;e.home=e.pos;e.lastKnown=e.pos;e.z=m_world.floorHeight(e.pos.x,e.pos.y);e.heading=kPi;}
-    if(m_level==3){auto&e=m_enemies.back();e.kind=Enemy::Kind::Warden;e.hp=e.maxHp=220;}
+    if(m_level==3){auto&e=m_enemies.back();e.kind=Enemy::Kind::Warden;e.hp=e.maxHp=320;}
     m_pickups = {
         {{4.5f, 7.5f}, Pickup::Kind::Ammo, true},
         {{13.5f, 5.5f}, Pickup::Kind::Health, true},
@@ -120,7 +120,7 @@ bool Game::testCombat(){
 }
 Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
  Game g;g.m_enemies.resize(1);auto&e=g.m_enemies[0];e.kind=kind;e.pos={6.2f,4.5f};e.heading=kPi;e.moving=true;e.gait=2.f;e.windup=windup;e.hp=e.maxHp=kind==Enemy::Kind::Brute?280.f:kind==Enemy::Kind::Wasp?85.f:110.f;
- e.alive=deathTime<0;e.deathTime=std::max(0.f,deathTime);g.m_player.angle=0;return g;
+ e.alive=deathTime<0;e.deathTime=std::max(0.f,deathTime);if(kind==Enemy::Kind::Warden)e.hp=e.maxHp=320;g.m_player.angle=0;return g;
 }
 Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly){Game game;game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?game.m_world.floorHeight(position.x,position.y):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
  if(sceneryOnly){game.m_enemies.clear();for(auto&chunk:game.m_chunks)chunk.enemies.clear();}
@@ -175,7 +175,7 @@ void Game::shoot() {
 Game Game::stalkerInspection(int clip,float phase,int view){
  auto game=mapInspection({18.6f,18.5f},0,clip==4?-35.f:0.f,3,true,-9,false);
  if(view){game.m_player.pos={21.5f,21.2f};game.m_player.angle=-kPi*.5f;}
- game.m_enemies.resize(1);auto& e=game.m_enemies[0];e={};e.kind=Enemy::Kind::Warden;e.pos={21.5f,18.5f};e.z=-9;e.home=e.pos;e.heading=kPi;e.hp=e.maxHp=220;
+ game.m_enemies.resize(1);auto& e=game.m_enemies[0];e={};e.kind=Enemy::Kind::Warden;e.pos={21.5f,18.5f};e.z=-9;e.home=e.pos;e.heading=kPi;e.hp=e.maxHp=320;
  game.m_elapsed=phase*2.5f-e.home.x*.25f;
  if(clip==1){e.moving=true;e.gait=phase*2*kPi;}
  if(clip==2){if(phase<.4f)e.windup=(1-phase/.4f)*.55f;else e.strike=1-(phase-.4f)/.6f;}
@@ -259,7 +259,16 @@ void Game::update(const InputState& input, float dt) {
 
         updateLift(dt);
         updateMovement(input,dt);
-        if(m_level==3){if(length(m_velocity)>.5f)for(int joint=0;joint<Ragdoll::Count;++joint){auto p=m_hazmat.p[joint];if(length(Vec2{p.x,p.y}-m_player.pos)<.4f&&p.z>m_player.z&&p.z<m_player.z+.7f)m_hazmat.impulse(joint,{m_velocity.x*.12f,m_velocity.y*.12f,.08f});}m_hazmat.update(m_world,dt);}
+        if(m_level==3){
+            m_hazmatPushCooldown=std::max(0.f,m_hazmatPushCooldown-dt);
+            if(m_hazmat.initialized&&length(m_velocity)>.5f&&m_hazmatPushCooldown<=0){
+                int nearest=-1;float nearestDistance=.4f*.4f;
+                for(int joint=0;joint<Ragdoll::Count;++joint){auto p=m_hazmat.p[joint];float distance=lengthSq(Vec2{p.x,p.y}-m_player.pos);
+                    if(distance<nearestDistance&&p.z>m_player.z&&p.z<m_player.z+.7f){nearest=joint;nearestDistance=distance;}}
+                if(nearest>=0){m_hazmat.impulse(nearest,{m_velocity.x*.12f,m_velocity.y*.12f,.08f});m_hazmatPushCooldown=.10f;}
+            }
+            m_hazmat.update(m_world,dt);
+        }
         crossChunkBoundary();
         updateInteraction(input,dt);
         updateStreaming(dt);

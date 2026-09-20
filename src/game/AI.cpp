@@ -44,8 +44,8 @@ void Game::updateEnemies(float dt){
   bool warden=e.kind==Enemy::Kind::Warden;
   float range=warden?1.1f:e.kind==Enemy::Kind::Brute?1.25f:1.05f;
   bool sameLevel=m_player.z<e.bodyTop()&&m_player.z+m_player.hullHeight()>e.bodyBottom();
-  if(e.windup>0){if(!warden&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=warden?.95f:e.kind==Enemy::Kind::Wasp?.8f:e.kind==Enemy::Kind::Huntsman?1.f:1.6f;
-    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,m_player.pos,m_player.z+.5f))receiveDamage(warden?24.f:e.kind==Enemy::Kind::Brute?18.f:9.f,e.pos);
+  if(e.windup>0){if(!warden&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=warden?1.05f:e.kind==Enemy::Kind::Wasp?.8f:e.kind==Enemy::Kind::Huntsman?1.f:1.6f;
+    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,m_player.pos,m_player.z+.5f))receiveDamage(warden?30.f:e.kind==Enemy::Kind::Brute?18.f:9.f,e.pos);
    }continue;
   }
   // Close-range committed swing: the player can backstep or circle behind it.
@@ -54,44 +54,64 @@ void Game::updateEnemies(float dt){
   }
   Vec2 goal=e.awareness>0?e.lastKnown:e.home;
   float stalkSpeed=2.1f;bool watching=false;
-  if(warden){e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
+  if(warden){
+   e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
    Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
    Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
-   bool observed=visible&&playerToWardenDistance>.001f&&dot(playerForward,playerToWarden*(1.f/playerToWardenDistance))>.65f;
+   bool playerLineOfSight=playerToWardenDistance<12.f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.85f);
+   bool observed=playerLineOfSight&&playerToWardenDistance>.001f&&dot(playerForward,playerToWarden*(1.f/playerToWardenDistance))>.72f;
    bool flat=std::fabs(e.z-m_player.z)<.23f;
+   bool freshContact=visible&&!hadAwareness;
 
-   // Fresh contact gets a readable stare-down instead of immediately skipping
-   // Watch because the default stalk timer starts at zero.
-   if(visible&&!hadAwareness){e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=observed?1.15f:.15f;}
+   // A rush is a short burst, never the Warden's permanent navigation speed.
+   // Losing sight cannot leave it sprinting forever.
+   if(e.stalkMode==Enemy::StalkMode::Rush&&e.stalkTimer<=0){
+    e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=.85f;
+   }
 
-   // Keep rush momentum through a short loss of sight. Previously the stalker
-   // dropped back to generic pursuit speed the instant cover broke LOS.
-   stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?4.6f:e.stalkMode==Enemy::StalkMode::Flank?1.8f:2.1f;
+   // First contact is a stare-down. Even if the player's back is turned, the
+   // Warden gets a stalking beat before it is allowed to charge.
+   if(freshContact){
+    e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=observed?1.6f:.75f;
+   }
+
+   // Catch it trying to circle you and it stops rather than cartoonishly
+   // continuing the flank in full view.
+   if(observed&&e.stalkMode==Enemy::StalkMode::Flank&&dist>2.6f){
+    e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=std::max(e.stalkTimer,.65f);
+   }
+
    if(visible&&flat){
-    if(e.stalkMode!=Enemy::StalkMode::Rush&&(!observed||m_reloadTimer>0||dist<2.4f||e.painFlash>.8f)){e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=2.8f;enemySound(e,1,.65f,.9f);}
-    else if(e.stalkTimer<=0){
-     if(e.stalkMode==Enemy::StalkMode::Watch){e.stalkMode=Enemy::StalkMode::Flank;e.stalkTimer=1.6f;e.stalkSide=-e.stalkSide;}
-     else if(e.stalkMode==Enemy::StalkMode::Flank){e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=2.8f;enemySound(e,1,.65f,.9f);}
-     else {e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=1.f;}
+    bool emergencyRush=!freshContact&&(m_reloadTimer>0||e.painFlash>.8f||dist<1.8f);
+    if(e.stalkMode!=Enemy::StalkMode::Rush&&emergencyRush){
+     e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=1.65f;enemySound(e,1,.65f,.9f);
+    }else if(e.stalkMode==Enemy::StalkMode::Watch){
+     if(observed&&dist>2.2f)e.stalkTimer=std::max(e.stalkTimer,.25f);
+     else if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Flank;e.stalkTimer=2.25f;e.stalkSide=-e.stalkSide;}
+    }else if(e.stalkMode==Enemy::StalkMode::Flank&&e.stalkTimer<=0){
+     e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=1.65f;enemySound(e,1,.65f,.9f);
     }
-    watching=observed&&e.stalkMode==Enemy::StalkMode::Watch&&dist>3.f&&dist<7.f;
-    stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?4.6f:e.stalkMode==Enemy::StalkMode::Flank?1.8f:1.1f;
 
-    // Prefer the valid flank that sits furthest outside the player's forward
-    // view, rather than blindly taking the first navigable side.
+    // Flanking targets the least visible valid side of the player.
     if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f){
      auto radial=normalized(e.pos-m_player.pos);auto side=Vec2{-radial.y,radial.x};
      Vec2 best=goal;float bestScore=9999.f;bool found=false;
-     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.7f+side*(sign*2.f);float z=navSupport(m_world,candidate,e.z+.215f);
+     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,e.z+.215f);
       if(std::fabs(z-e.z)>=.23f||!navFits(m_world,candidate,z,1.85f))continue;
       auto fromPlayer=candidate-m_player.pos;float candidateDistance=length(fromPlayer);
       float gaze=candidateDistance>.001f?dot(playerForward,fromPlayer*(1.f/candidateDistance)):1.f;
-      float score=gaze+lengthSq(candidate-e.pos)*.025f;
+      float score=gaze+lengthSq(candidate-e.pos)*.02f;
       if(score<bestScore){bestScore=score;best=candidate;found=true;}
      }
      if(found)goal=best;
     }
    }
+
+   // Watching is deliberately unnerving: if the player has it in clear view,
+   // it holds position. Looking away gives it permission to creep/flank.
+   watching=observed&&e.awareness>0&&e.stalkMode==Enemy::StalkMode::Watch&&dist>2.f&&dist<9.5f;
+   stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f;
+
    // Search the last witnessed area; never sample the hidden player's new position.
    if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,e.lastKnownZ+.215f);
     if(std::fabs(z-e.lastKnownZ)<.23f&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=1.4f;e.stalkSide=-e.stalkSide;
@@ -170,11 +190,13 @@ bool Game::testAI(){
   for(int i=0;i<60;++i)g.updateEnemies(1.f/120.f);
   debug<<"stalker watch mode "<<int(s.stalkMode)<<" moved "<<length(s.pos-start)<<" timer "<<s.stalkTimer<<'\n';
   if(s.stalkMode!=Enemy::StalkMode::Watch||length(s.pos-start)>.05f)return false;
-  g.m_player.angle=kPi;float before=length(s.pos-g.m_player.pos);g.updateEnemies(.02f);
-  if(s.stalkMode!=Enemy::StalkMode::Rush||s.stalkTimer<2.f)return false;
+  g.m_player.angle=kPi;s.stalkTimer=0;float before=length(s.pos-g.m_player.pos);g.updateEnemies(.02f);
+  if(s.stalkMode!=Enemy::StalkMode::Flank||s.stalkTimer<2.f)return false;
+  s.stalkTimer=0;g.updateEnemies(.02f);
+  if(s.stalkMode!=Enemy::StalkMode::Rush||s.stalkTimer<1.f)return false;
   for(int i=0;i<45;++i)g.updateEnemies(1.f/120.f);
-  float after=length(s.pos-g.m_player.pos);debug<<"stalker rush distance "<<before<<" -> "<<after<<'\n';
-  if(after>=before-.35f)return false;
+  float after=length(s.pos-g.m_player.pos);debug<<"stalker flank then rush distance "<<before<<" -> "<<after<<'\n';
+  if(after>=before-.25f)return false;
  }
  auto game=validationScene(Enemy::Kind::Huntsman);auto&e=game.m_enemies[0];e.pos={4.5f,9.5f};e.home=e.pos;e.lastKnown=e.pos;e.heading=-kPi*.5f;game.m_player.pos={4.5f,6.5f};auto original=e.pos;
  for(int i=0;i<120;++i)game.update({},1.f/120.f);debug<<"idle "<<int(e.state)<<' '<<length(e.pos-original)<<'\n';if(e.state!=Enemy::State::Idle||length(e.pos-original)>.05f)return false;

@@ -38,10 +38,11 @@ void Ragdoll::seed(const World& world){
 void Ragdoll::impulse(int joint,RagPoint velocity){if(!initialized||joint<0||joint>=Count)return;sleeping=false;quiet=0;previous[joint]=previous[joint]-velocity*(1.f/120);}
 void Ragdoll::update(const World&w,float dt){
  if(!initialized||sleeping)return;const auto&radii=collisionRadii();accumulator+=std::clamp(dt,0.f,.05f);constexpr float step=1.f/120;
+ std::vector<RagPoint> surface;surface.reserve(asset().vertices.size());
  while(accumulator>=step){accumulator-=step;auto before=p;
   // Ground support follows the oriented suit envelope. A spherical torso proxy
   // is useful for ray/wall tests but otherwise leaves a prone body hovering.
-  std::array<float,Count> support;support.fill(.015f);auto surface=skin();
+  std::array<float,Count> support;support.fill(.015f);skin(surface);
   for(size_t k=0;k<surface.size();++k){const auto&v=asset().vertices[k];for(int j:{int(v.a),int(v.b)}){
    if((j==v.a?v.weight:1-v.weight)<=0)continue;int end=ends[j];auto segment=p[end]-p[j];
    float t=std::clamp(dotR(surface[k]-p[j],segment)/std::max(.00001f,dotR(segment,segment)),0.f,1.f);
@@ -66,14 +67,14 @@ float Ragdoll::rayHit(RagPoint origin,RagPoint direction,int& joint)const{
  float nearest=1e9f;joint=-1;if(!initialized)return nearest;const auto&radii=collisionRadii();
  for(int i=0;i<Count;++i){auto delta=p[i]-origin;float along=dotR(delta,direction);if(along>0&&along<nearest&&lenR(delta-direction*along)<radii[i]){nearest=along;joint=i;}}return nearest;
 }
-std::vector<RagPoint> Ragdoll::skin()const{
+void Ragdoll::skin(std::vector<RagPoint>& result)const{
  struct Frame{RagPoint axis,front,side;};std::array<Frame,Count> restFrames,currentFrames;
  auto restAcross=asset().rest[3]-asset().rest[6],across=p[3]-p[6];
  auto restFront=unitR(crossR(restAcross,asset().rest[1]-asset().rest[0])),front=unitR(crossR(across,p[1]-p[0]));
  auto frame=[](RagPoint axis,RagPoint front,RagPoint across){axis=unitR(axis);auto v=front-axis*dotR(front,axis);if(lenR(v)<.01f)v=across-axis*dotR(across,axis);v=unitR(v);return Frame{axis,v,crossR(axis,v)};};
  for(int i=0;i<Count;++i){restFrames[i]=frame(asset().rest[ends[i]]-asset().rest[i],restFront,restAcross);currentFrames[i]=frame(p[ends[i]]-p[i],front,across);}
  auto deform=[&](RagPoint point,int joint){auto v=point-asset().rest[joint];auto a=restFrames[joint],b=currentFrames[joint];return p[joint]+b.axis*dotR(v,a.axis)+b.front*dotR(v,a.front)+b.side*dotR(v,a.side);};
- std::vector<RagPoint> result;result.reserve(asset().vertices.size());for(auto&v:asset().vertices)result.push_back(deform(v.p,v.a)*v.weight+deform(v.p,v.b)*(1-v.weight));return result;
+ result.clear();result.reserve(asset().vertices.size());for(auto&v:asset().vertices)result.push_back(deform(v.p,v.a)*v.weight+deform(v.p,v.b)*(1-v.weight));
 }
 bool Ragdoll::test(){World world(3);Ragdoll rag;rag.seed(world);auto initial=rag.p;rag.impulse(5,{1.5f,1.f,2.f});for(int i=0;i<480;++i)rag.update(world,1.f/120);
  std::ofstream report("hazmat-physics-test.txt");float error=0;for(auto&link:links)error=std::max(error,std::fabs(lenR(rag.p[link[1]]-rag.p[link[0]])-lenR(asset().rest[link[1]]-asset().rest[link[0]])));

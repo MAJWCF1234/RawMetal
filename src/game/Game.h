@@ -244,6 +244,7 @@ private:
 
     World m_world;
     Ragdoll m_hazmat;
+    float m_hazmatPushCooldown=0;
     Player m_player;
     std::vector<Enemy> m_enemies;
     std::vector<Pickup> m_pickups;
