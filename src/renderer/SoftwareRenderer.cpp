@@ -287,7 +287,7 @@ void SoftwareRenderer::drawInventory(const Game& game){
  if(game.weaponEquipped())icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
  text(76,123,game.weaponEquipped()?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
  text(76,173,"FISTS / CLICK TO HOLSTER",paper);text(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
- text(76,258,"ARMOR: EMPTY    TOOL: EMPTY",muted);
+ text(76,258,"ARMOR: EMPTY",muted);
  int keyY=273,shown=0;for(const auto&item:game.questItems()){if(shown>=2)break;std::string label=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");text(76,keyY+shown*11,label.c_str(),paper);++shown;}
  if(int(game.questItems().size())>shown){std::string more="+ "+std::to_string(int(game.questItems().size())-shown)+" MORE KEY ITEMS";text(76,keyY+shown*11,more.c_str(),muted);}
  for(int row=0;row<5;++row)for(int col=0;col<6;++col)wornPanel(350+col*34,94+row*29,31,26,true);

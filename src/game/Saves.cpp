@@ -80,7 +80,7 @@ bool Game::decodeSave(const std::string& data){
   if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>6))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
-  if(version<6){auto stage=next.m_chunks[3].world.reactorStage();if(stage==World::ReactorStage::DiskHeld)next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);}
+  auto reactorStage=next.m_chunks[3].world.reactorStage();if(reactorStage==World::ReactorStage::DiskHeld&&!next.hasQuestItem(ReactorAuthDisk))next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);
 
   // Saves store mutable gameplay state, but the executable owns the current
   // authored population. Reconcile old state onto today's baseline so content
