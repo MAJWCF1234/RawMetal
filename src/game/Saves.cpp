@@ -146,11 +146,25 @@ bool Game::testSaves(){
   if(!original.m_enemies.empty()){auto&stalker=original.m_enemies.back();if(stalker.kind==Enemy::Kind::Warden){stalker.stalkMode=Enemy::StalkMode::Flank;stalker.stalkTimer=.73f;stalker.stalkSide=-1.f;}}
   if(time==48){original.m_world.takeReactorDisk();original.m_world.useReactorTerminal(1);original.m_world.useReactorTerminal(2);}
   auto data=original.encodeSave();Game restored;restored.m_settings.master=.4f;
-  if(!check(restored.decodeSave(data)&&restored.encodeSave()==data&&restored.settings().master==.4f,"Exact dynamic-state roundtrip / settings preserved"))return false;
+  // liftInspection() is intentionally scenery-only and strips authored enemies.
+  // Loading now reconciles current authored content, so byte-for-byte equality is
+  // not expected for this synthetic save. Verify the mutable state that this
+  // test actually owns instead.
+  if(!check(restored.decodeSave(data)&&restored.settings().master==.4f&&
+      restored.player().health==original.player().health&&restored.player().ammo==original.player().ammo&&
+      restored.medkits()==original.medkits()&&restored.weaponEquipped()==original.weaponEquipped()&&
+      restored.world().liftPhase()==original.world().liftPhase()&&
+      std::fabs(restored.world().liftHeight()-original.world().liftHeight())<.0001f,
+      "Dynamic-state roundtrip / settings preserved"))return false;
   auto phase=original.world().liftPhase();restored.update({},.01f);original.update({},.01f);
   if(!check(restored.world().liftPhase()==original.world().liftPhase()&&std::fabs(restored.player().z-original.player().z)<.0001f,"Loaded lift resumes without moving the passenger incorrectly"))return false;
   if(time==39.5f&&!check(phase==World::LiftPhase::Caught,"Brake-catch save is covered"))return false;
   if(time==48){restored.m_world.useReactorTerminal(3);restored.m_world.useReactorTerminal(1);if(!check(restored.world().controlReleased(),"Loaded reactor puzzle can finish"))return false;}
+ }
+ // A normal current-build save with the complete authored population should
+ // still be canonical and re-encode exactly.
+ {Game current;auto data=current.encodeSave();Game restored;
+  if(!check(restored.decodeSave(data)&&restored.encodeSave()==data,"Current authored save remains byte-exact"))return false;
  }
  // Existing saves are reconciled with newly authored content. Simulate an
  // older build that did not yet contain the Reactor Stalker, the final pickup,
