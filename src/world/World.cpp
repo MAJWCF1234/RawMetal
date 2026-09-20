@@ -341,6 +341,12 @@ World::World(int level) {
  if(m_level==2){
   m_layers.push_back(TurbineGantryUpperLayer);
   m_internalWallHeight=2.7f;
+  // The ground-level transfer tunnels intentionally punch through the outer
+  // shell, but those openings must not continue above the door headers.
+  // Catwalk rails stay jumpable for parkour; these are visible upper walls at
+  // the two actual map exits so a successful jump cannot leave the level.
+  m_structures.push_back({2.f,0.f,5.f,.18f,2.5f,6.f,false,3});
+  m_structures.push_back({20.f,23.82f,23.f,24.f,2.5f,6.f,false,3});
   buildLayers(GantryStairs);
   m_doors={{2,5,.5f,0,false,false,true},{20,23,21.5f,0,false,true}};
   m_terminals={{{18.5f,9.5f},"GANTRY CONTROL / 05:42","TURBINE BRAKES RELEASED.","LOWER TRANSFER INTERLOCK UNSEALED.",3,true}};
