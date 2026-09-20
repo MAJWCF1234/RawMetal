@@ -3,6 +3,24 @@
 #include <fstream>
 #include <cmath>
 namespace retro {
+void Game::updateTitle(const InputState& input){
+ auto pressed=[](bool now,bool previous){return now&&!previous;};
+ if(pressed(input.menuUp,m_titlePrevious.menuUp))m_titleSelection=(m_titleSelection+TitleMenuLayout::Rows-1)%TitleMenuLayout::Rows;
+ if(pressed(input.menuDown,m_titlePrevious.menuDown))m_titleSelection=(m_titleSelection+1)%TitleMenuLayout::Rows;
+ bool inside=input.pointerX>=TitleMenuLayout::X&&input.pointerX<TitleMenuLayout::X+TitleMenuLayout::Width&&
+             input.pointerY>=TitleMenuLayout::Y&&input.pointerY<TitleMenuLayout::Y+TitleMenuLayout::Rows*TitleMenuLayout::RowHeight;
+ bool click=pressed(input.fire,m_titlePrevious.fire);
+ if(inside&&(input.pointerX!=m_pointerX||input.pointerY!=m_pointerY||click))m_titleSelection=(input.pointerY-TitleMenuLayout::Y)/TitleMenuLayout::RowHeight;
+ m_pointerX=input.pointerX;m_pointerY=input.pointerY;
+ bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
+ if(activate){
+  if(m_titleSelection==0){m_titleScreen=false;m_menuFromTitle=false;restart();m_suppressFire=true;}
+  else if(m_titleSelection==1){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
+  else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
+  else if(m_titleSelection==3)m_quitRequested=true;
+ }
+ m_titlePrevious=input;
+}
 void Game::updateMenu(const InputState& input){
  auto pressed=[](bool now,bool previous){return now&&!previous;};
  int rows=menuRows();
@@ -26,7 +44,7 @@ void Game::updateMenu(const InputState& input){
   if(activate){
    if(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load){
     bool saving=m_menuPage==MenuPage::Save;
-    if(m_menuSelection==3){m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}
+    if(m_menuSelection==3){if(m_menuFromTitle)showTitleScreen();else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}}
     else {m_pendingSlot=m_menuSelection;m_menuMessage.clear();
      if(saving){std::error_code error;bool exists=!m_saveDirectory.empty()&&std::filesystem::exists(std::filesystem::path(m_saveDirectory)/("slot-"+std::to_string(m_pendingSlot+1)+".rms"),error);
       if(exists){m_menuPage=MenuPage::Overwrite;m_menuSelection=0;}else saveSlot(m_pendingSlot);
@@ -50,7 +68,7 @@ void Game::updateMenu(const InputState& input){
   }
  }
  if(m_menuSelection==5&&(activate||direction))m_settings.invertMouse=!m_settings.invertMouse;
- if(activate&&m_menuSelection==0){m_paused=false;m_suppressFire=true;}
+ if(activate&&m_menuSelection==0){if(m_menuFromTitle)showTitleScreen();else {m_paused=false;m_suppressFire=true;}}
  if(activate&&m_menuSelection==6){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
  if(activate&&(m_menuSelection==7||m_menuSelection==8)){m_menuPage=m_menuSelection==7?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
  if(activate&&m_menuSelection==9)m_quitRequested=true;

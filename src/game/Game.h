@@ -96,10 +96,15 @@ struct Player {
 struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0;};
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;};
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-288)/2,Width=304,Height=288,RowTop=Y+46,RowHeight=21,Rows=10,SliderX=X+179,SliderWidth=75;};
+struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=4;};
 
 class Game {
 public:
     Game();
+    void showTitleScreen();
+    bool titleScreen()const{return m_titleScreen;}
+    int titleSelection()const{return m_titleSelection;}
+    bool menuFromTitle()const{return m_menuFromTitle;}
 
     void update(const InputState& input, float dt);
     void restart();
@@ -148,7 +153,7 @@ public:
     static bool testSaves();
     enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
     MenuPage menuPage()const{return m_menuPage;}
-    int menuRows()const{return m_menuPage==MenuPage::Settings?MenuLayout::Rows:(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load?4:2);}
+    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?6:MenuLayout::Rows):(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load?4:2);}
     const std::string& menuMessage()const{return m_menuMessage;}
     const std::string& slotLabel(int slot)const{return m_slotLabels[slot];}
     void setSaveDirectory(std::wstring path){m_saveDirectory=std::move(path);}
@@ -195,6 +200,10 @@ public:
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false);
 
 private:
+    bool m_titleScreen=false,m_menuFromTitle=false;
+    int m_titleSelection=0;
+    InputState m_titlePrevious;
+    void updateTitle(const InputState& input);
     MenuPage m_menuPage=MenuPage::Settings;
     std::wstring m_saveDirectory;
     std::array<std::string,3> m_slotLabels{"SLOT 1 / EMPTY","SLOT 2 / EMPTY","SLOT 3 / EMPTY"};
@@ -210,7 +219,7 @@ private:
     void executeConsole(std::string command);
     bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false;
     std::string m_consoleLine;
-    std::vector<std::string> m_consoleLog{"RAWMETAL DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
+    std::vector<std::string> m_consoleLog{"DEPTHWORKS DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
     std::vector<std::string> m_consoleHistory;
     int m_consoleHistoryIndex=0;
     float m_renderScale=1.f;

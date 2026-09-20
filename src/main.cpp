@@ -78,7 +78,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(std::wcsstr(commandLine,L"--audio-device-test"))return retro::AudioEngine::testDevice()?0:15;
     if(std::wcsstr(commandLine,L"--environment-inspection")){
-        retro::SoftwareRenderer renderer(W,H);
+        if(!directStart)game.showTitleScreen();
+    retro::SoftwareRenderer renderer(W,H);
         auto save=[&](const std::string&name){std::ofstream out(name+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
         const retro::Vec2 centers[]={{16.f,2.5f},{4.f,10.5f},{11.5f,11.f},{11.f,2.5f}};
         for(int target=0;target<4;++target)for(int side=0;side<4;++side){float a=side*retro::kPi*.5f+.3f;auto center=centers[target];auto position=center+retro::Vec2{std::cos(a),std::sin(a)}*2.8f;
@@ -244,11 +245,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         renderer.render(game);saveFrame("jump-look-frame.ppm");
         return out && game.player().health>0 ? 0 : 2;
     }
-    retro::Win32Window window(W,H,L"RawMetal");
+    retro::Win32Window window(W,H,L"Depthworks");
     if(!window.valid()) return 1;
     retro::Game game;
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
-    if(std::wcsstr(commandLine,L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
+    bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr;
+    if(directStart)game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);
     if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\\RawMetal\\saves");
@@ -259,17 +261,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();game.update(window.input(wasPaused||game.inventoryOpen()||game.consoleOpen()),dt);window.setMenu(game.paused()||game.inventoryOpen()||game.consoleOpen());
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.consoleOpen();game.update(window.input(menuOpen),dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.consoleOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,window.focused()); renderer.render(game); window.present(renderer.pixels(),renderer.width(),renderer.height());
-        titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128]; std::swprintf(t,128,L"RawMetal | HP %.0f | Shells %d | Monsters %d",game.player().health,game.player().ammo,game.enemiesRemaining());window.setCaption(t);}
+        titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128];if(game.titleScreen())std::swprintf(t,128,L"Depthworks");else std::swprintf(t,128,L"Depthworks | HP %.0f | Shells %d | Monsters %d",game.player().health,game.player().ammo,game.enemiesRemaining());window.setCaption(t);}
     }
     if(!settingsPath.empty())game.saveSettings(settingsPath);
     return 0;
     }catch(const std::exception& error){
         std::ofstream("RawMetal-error.txt")<<error.what();
-        if(!std::wcsstr(commandLine,L"--smoke-test"))MessageBoxA(nullptr,error.what(),"RawMetal could not start",MB_OK|MB_ICONERROR);
+        if(!std::wcsstr(commandLine,L"--smoke-test"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }
 }
