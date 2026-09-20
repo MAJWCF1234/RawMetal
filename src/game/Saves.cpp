@@ -49,7 +49,11 @@ template<class A> void Game::archiveSave(A& a,int version){
  auto list=[&](auto& values,auto visit){int count=int(values.size());a(count);if(count<0||count>1024)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(count);for(auto&v:values)visit(v);};
  for(int index=0;index<ChunkCount;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
-  int doors=int(w.m_doors.size());a(doors);if(doors!=int(w.m_doors.size()))throw std::runtime_error("door schema mismatch");for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
+  int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
+  if constexpr(A::reading){
+   for(int door=0;door<doors;++door){float open=0;bool opening=false;a(open,opening);if(open<0||open>1)throw std::runtime_error("invalid door");
+    if(door<int(w.m_doors.size())){w.m_doors[door].open=open;w.m_doors[door].opening=opening;}}
+  }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
   list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(int(e.kind)>(version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>5)throw std::runtime_error("invalid clutter");});
@@ -68,6 +72,38 @@ bool Game::decodeSave(const std::string& data){
   if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>5))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+
+  // Saves store mutable gameplay state, but the executable owns the current
+  // authored population. Reconcile old state onto today's baseline so content
+  // added by an update appears in existing saves instead of being erased by
+  // the older serialized vector lengths.
+  Game authored;
+  auto samePosition=[](Vec2 a,Vec2 b){return lengthSq(a-b)<.0004f;};
+  for(int level=0;level<ChunkCount;++level){
+   auto&saved=next.m_chunks[level];const auto&fresh=authored.m_chunks[level];
+
+   auto oldEnemies=std::move(saved.enemies);std::vector<bool> enemyUsed(oldEnemies.size(),false);saved.enemies.clear();saved.enemies.reserve(fresh.enemies.size());
+   for(const auto&spawn:fresh.enemies){
+    int match=-1;for(int i=0;i<int(oldEnemies.size());++i)if(!enemyUsed[i]&&oldEnemies[i].kind==spawn.kind&&samePosition(oldEnemies[i].home,spawn.home)){match=i;break;}
+    if(match>=0){enemyUsed[match]=true;auto state=oldEnemies[match];state.maxHp=spawn.maxHp;if(state.alive)state.hp=std::min(state.hp,state.maxHp);saved.enemies.push_back(state);}
+    else saved.enemies.push_back(spawn);
+   }
+
+   auto oldPickups=std::move(saved.pickups);std::vector<bool> pickupUsed(oldPickups.size(),false);saved.pickups.clear();saved.pickups.reserve(fresh.pickups.size());
+   for(const auto&spawn:fresh.pickups){
+    int match=-1;for(int i=0;i<int(oldPickups.size());++i)if(!pickupUsed[i]&&oldPickups[i].kind==spawn.kind&&samePosition(oldPickups[i].pos,spawn.pos)){match=i;break;}
+    if(match>=0){pickupUsed[match]=true;saved.pickups.push_back(oldPickups[match]);}else saved.pickups.push_back(spawn);
+   }
+
+   int heldOld=level==next.m_level?next.m_heldClutter:-1,heldNew=-1;
+   auto oldClutter=std::move(saved.clutter);std::vector<bool> clutterUsed(oldClutter.size(),false);saved.clutter.clear();saved.clutter.reserve(std::max(fresh.clutter.size(),oldClutter.size()));
+   for(const auto&spawn:fresh.clutter){
+    int match=-1;for(int i=0;i<int(oldClutter.size());++i)if(!clutterUsed[i]&&oldClutter[i].kind==spawn.kind){match=i;break;}
+    if(match>=0){clutterUsed[match]=true;if(match==heldOld)heldNew=int(saved.clutter.size());saved.clutter.push_back(oldClutter[match]);}
+    else saved.clutter.push_back(spawn);
+   }
+   if(level==next.m_level)next.m_heldClutter=heldNew;
+  }
   auto&p=next.m_player;
   if(next.m_level<0||next.m_level>=ChunkCount||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>1.1f||std::fabs(p.pitch)>100||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
@@ -115,6 +151,24 @@ bool Game::testSaves(){
   if(!check(restored.world().liftPhase()==original.world().liftPhase()&&std::fabs(restored.player().z-original.player().z)<.0001f,"Loaded lift resumes without moving the passenger incorrectly"))return false;
   if(time==39.5f&&!check(phase==World::LiftPhase::Caught,"Brake-catch save is covered"))return false;
   if(time==48){restored.m_world.useReactorTerminal(3);restored.m_world.useReactorTerminal(1);if(!check(restored.world().controlReleased(),"Loaded reactor puzzle can finish"))return false;}
+ }
+ // Existing saves are reconciled with newly authored content. Simulate an
+ // older build that did not yet contain the Reactor Stalker, the final pickup,
+ // one clutter item, or the newest gantry transfer door.
+ {Game legacy;legacy.m_chunks[3].enemies[0].alive=false;legacy.m_chunks[3].enemies[0].hp=0;
+  legacy.m_chunks[3].enemies.pop_back();legacy.m_chunks[3].pickups[0].active=false;legacy.m_chunks[3].pickups.pop_back();
+  legacy.m_chunks[3].clutter[0].pos={9.25f,18.75f};legacy.m_chunks[3].clutter.pop_back();
+  legacy.m_chunks[2].world.m_doors.pop_back();
+  Writer writer;legacy.archiveSave(writer,5);auto payload=writer.stream.str();
+  auto data=std::string("RAWMETAL_SAVE 5 ")+std::to_string(checksum(payload))+"\n"+payload;Game restored;
+  if(!check(restored.decodeSave(data),"Older content save loads after authored additions"))return false;
+  auto&reactor=restored.m_chunks[3];
+  bool hasWarden=std::any_of(reactor.enemies.begin(),reactor.enemies.end(),[](const Enemy&e){return e.kind==Enemy::Kind::Warden&&e.alive;});
+  bool oldDeathPreserved=!reactor.enemies.empty()&&!reactor.enemies[0].alive;
+  bool collectedPreserved=!reactor.pickups.empty()&&!reactor.pickups[0].active;
+  bool movedClutterPreserved=!reactor.clutter.empty()&&lengthSq(reactor.clutter[0].pos-Vec2{9.25f,18.75f})<.0001f;
+  if(!check(hasWarden&&oldDeathPreserved&&collectedPreserved&&movedClutterPreserved&&reactor.pickups.size()==Game{}.m_chunks[3].pickups.size()&&reactor.clutter.size()==Game{}.m_chunks[3].clutter.size(),"New enemies/items spawn while old dynamic state survives"))return false;
+  if(!check(restored.m_chunks[2].world.doors().size()==Game{}.m_chunks[2].world.doors().size(),"New doors use current map defaults instead of invalidating old saves"))return false;
  }
  // Version 4 saves remain loadable; new stalk state falls back to safe defaults.
  {Game legacy=stalkerInspection(0,0,0);legacy.storeChunk();Writer writer;legacy.archiveSave(writer,4);auto payload=writer.stream.str();
