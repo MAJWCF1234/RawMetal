@@ -11,7 +11,7 @@ void Game::executeConsole(std::string command){
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
   m_consoleLog.push_back("0 FOUNDRY / 1 PRESSUREWORKS / 2 GANTRY / 3 LIFT");
-  m_consoleLog.push_back("4 COOLANT / 5 CABLE / MAP REACTOR STARTS AFTER THE CRASH.");
+  m_consoleLog.push_back("4 SERVICE GALLERY / 5 COOLANT RETURN / MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
@@ -28,8 +28,8 @@ void Game::executeConsole(std::string command){
   else if(arg=="1"||arg=="pressureworks"||arg=="pressure")level=1;
   else if(arg=="2"||arg=="gantry")level=2;
   else if(arg=="3"||arg=="lift"||arg=="surface"||reactor)level=3;
-  else if(arg=="4"||arg=="coolant"||arg=="return")level=4;
-  else if(arg=="5"||arg=="cable"||arg=="vaults")level=5;
+  else if(arg=="4"||arg=="gallery"||arg=="service")level=4;
+  else if(arg=="5"||arg=="coolant"||arg=="return")level=5;
   if(level<0||!extra.empty())m_consoleLog.push_back("UNKNOWN MAP. TYPE MAPS FOR VALID NAMES / IDS.");
   else{
    m_level=level;restart();m_paused=false;m_inventoryOpen=false;
