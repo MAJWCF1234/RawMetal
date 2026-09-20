@@ -318,7 +318,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     if(h>west)quad({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h},m_metal,.9f);
     if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
    }
-   quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},m_facilityTextures.at("ceiling_1"),.6f);
+    quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},w.level()>=4?m_metal:m_facilityTextures.at("ceiling_1"),.6f);
    // Close ceiling height changes instead of exposing the void between sectors.
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
    if(Z>northCeiling&&w.tile(x,y-1)!='#')quad({X,Y,northCeiling},{X+1,Y,northCeiling},{X+1,Y,Z},{X,Y,Z},m_metal,.7f);
@@ -326,8 +326,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    float southCeiling=w.ceilingHeight(X+.5f,Y+1.01f),eastCeiling=w.ceilingHeight(X+1.01f,Y+.5f);
    if(Z>southCeiling&&w.tile(x,y+1)!='#')quad({X+1,Y+1,southCeiling},{X,Y+1,southCeiling},{X,Y+1,Z},{X+1,Y+1,Z},m_metal,.7f);
    if(Z>eastCeiling&&w.tile(x+1,y)!='#')quad({X+1,Y,eastCeiling},{X+1,Y+1,eastCeiling},{X+1,Y+1,Z},{X+1,Y,Z},m_metal,.7f);
-   if(y%4==0)box({X,Y+.12f,Z-.28f},{X+1,Y+.28f,Z-.03f},m_metal,.7f);
-   if(x==2||x==20){box({X+.06f,Y,Z-.5f},{X+.17f,Y+1,Z-.39f},m_metal,.8f);box({X+.28f,Y,Z-.5f},{X+.36f,Y+1,Z-.42f},m_metal,.65f);}
+   if(w.level()<4&&y%4==0)box({X,Y+.12f,Z-.28f},{X+1,Y+.28f,Z-.03f},m_metal,.7f);
+   if(w.level()<4&&(x==2||x==20)){box({X+.06f,Y,Z-.5f},{X+.17f,Y+1,Z-.39f},m_metal,.8f);box({X+.28f,Y,Z-.5f},{X+.36f,Y+1,Z-.42f},m_metal,.65f);}
    // Painted route edges and worn hazard stripes tie the loops together.
    // Route instruction paint removed; safety tape remains at machinery and doors.
    char tile=w.tile(x,y);

@@ -298,6 +298,18 @@ World::World(int level) {
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
   if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
+  // Temporary megamap chunks still need authored landmarks. Keep the seam
+  // open, but break the empty floor into readable service bays on either side.
+  m_structures.push_back({6.8f,2,7.05f,9.5f,0,2.55f,false,3});
+  m_structures.push_back({6.8f,14.5f,7.05f,22,0,2.55f,false,3});
+  m_structures.push_back({16.8f,2,17.05f,8.5f,0,2.55f,false,3});
+  m_structures.push_back({16.8f,15.5f,17.05f,22,0,2.55f,false,3});
+  m_props={{0,{4.3f,5.5f},1.35f,2.2f,0,{1.1f,.66f},0},
+           {1,{10.2f,18.5f},1.12f,2.f,kPi*.5f,{1.f,.31f},0},
+           {2,{19.5f,11.5f},.3f,4.2f,kPi*.5f,{2.1f,.15f},0}};
+  m_fixtures={{7,{1.28f,5.3f},0,2,.5f,1.8f,kPi*.5f,true},
+              {8,{21.7f,18.5f},.8f,.7f,.2f,1.f,0,true}};
+  m_terminals={{{9.4f,4.2f},m_level==4?"COOLANT RETURN / TEST SECTOR":"CABLE VAULTS / TEST SECTOR","MEGAMAP CHUNK ONLINE.","NORTH/SOUTH SEAM IS OPEN.",0,false}};
   buildLights();
   return;
  }
