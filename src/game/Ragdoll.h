@@ -17,7 +17,8 @@ struct Ragdoll {
  void update(const World& world,float dt);
  void impulse(int joint,RagPoint velocity);
  float rayHit(RagPoint origin,RagPoint direction,int& joint)const;
- std::vector<RagPoint> skin()const;
+ void skin(std::vector<RagPoint>& result)const;
+ std::vector<RagPoint> skin()const{std::vector<RagPoint> result;skin(result);return result;}
  static bool test();
 };
 }
