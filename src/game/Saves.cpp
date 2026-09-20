@@ -122,7 +122,19 @@ bool Game::decodeSave(const std::string& data){
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
   next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
   next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
-  next.updateStreaming(0);*this=std::move(next);return true;
+  next.updateStreaming(0);
+  // Old megamap builds had non-colliding partitions. Only relocate a saved
+  // player if the current authored geometry now overlaps their complete hull.
+  if(next.m_level>=4&&!next.hullFits(p.pos,p.z,p.hullHeight())){
+   Vec2 safe{};float safeZ=0,best=std::numeric_limits<float>::max();
+   for(float y=1.25f;y<23.75f;y+=.25f)for(float x=1.25f;x<23;x+=.25f){
+    Vec2 candidate{x,y};float z=next.m_world.floorHeight(x,y),distance=lengthSq(candidate-p.pos);
+    if(distance<best&&next.hullFits(candidate,z,p.hullHeight())){safe=candidate;safeZ=z;best=distance;}
+   }
+   if(best==std::numeric_limits<float>::max())return false;
+   p.pos=safe;p.z=safeZ;p.verticalVelocity=0;p.grounded=true;next.m_velocity={};
+  }
+  *this=std::move(next);return true;
  }catch(const std::exception&){return false;}
 }
 bool Game::saveSlot(int slot){
@@ -206,6 +218,12 @@ bool Game::testSaves(){
  {Game legacy=mapInspection({18.6f,18.5f},0,0,3,true,-9,false);legacy.storeChunk();Writer writer;legacy.archiveSave(writer,4);auto payload=writer.stream.str();
   auto data=std::string("RAWMETAL_SAVE 4 ")+std::to_string(checksum(payload))+"\n"+payload;Game restored;
   if(!check(restored.decodeSave(data)&&!restored.m_enemies.empty()&&restored.m_enemies.back().stalkMode==Enemy::StalkMode::Watch&&restored.m_enemies.back().stalkTimer==0&&restored.m_enemies.back().stalkSide==1,"Version 4 saves load with default stalk state"))return false;
+ }
+ for(int level:{4,5}){
+  Game legacy;legacy.loadLevel(level,false);legacy.m_player.pos=level==4?Vec2{6.9f,5}:Vec2{19.5f,23.8f};legacy.m_player.z=-9;legacy.m_player.health=63;
+  Game restored;if(!check(restored.decodeSave(legacy.encodeSave())&&restored.hullFits(restored.player().pos,restored.player().z,restored.player().hullHeight())&&restored.player().health==63&&length(restored.player().pos-legacy.player().pos)<1,"Old megamap saves escape corrected walls without losing health"))return false;
+  restored.m_player.pos={12,21};restored.m_player.z=-9;Game roundtrip;
+  if(!check(roundtrip.decodeSave(restored.encodeSave())&&lengthSq(roundtrip.player().pos-restored.player().pos)<.000001f&&roundtrip.player().z==restored.player().z,"Valid megamap positions remain unchanged on load"))return false;
  }
  Game game;auto pristine=game.encodeSave();auto corrupt=pristine;corrupt.back()='x';
  if(!check(!game.decodeSave(corrupt)&&!game.decodeSave(pristine.substr(0,pristine.size()/2))&&!game.decodeSave("RAWMETAL_SAVE 99 0\n")&&game.encodeSave()==pristine,"Corrupt / truncated / future saves leave the live game untouched"))return false;

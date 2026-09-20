@@ -50,6 +50,22 @@ bool Game::testStreaming(){
  Vec2 probe{12.f,24.1f};if(joined.worldAt(probe).level()!=5||std::fabs(probe.x-12.f)>.001f||std::fabs(probe.y-.1f)>.001f)return false;
  joined.m_player.pos={12.f,24.1f};joined.crossChunkBoundary();
  if(joined.level()!=5||std::fabs(joined.player().pos.x-12.f)>.001f||std::fabs(joined.player().pos.y-.1f)>.001f||!joined.chunkResident(4))return false;
- std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\n";return true;
+ // Exercise real movement in both directions, not just a boundary teleport.
+ joined.m_player.pos={12,1};joined.m_player.z=-9;joined.m_player.grounded=true;joined.m_player.angle=-kPi*.5f;joined.m_velocity={};
+ InputState walking{};walking.forward=true;
+ for(int i=0;i<90;++i)joined.update(walking,1.f/120);
+ if(joined.level()!=4||!joined.chunkResident(5)||std::fabs(joined.player().z+9)>.001f)return false;
+ joined.m_player.angle=kPi*.5f;joined.m_velocity={};
+ for(int i=0;i<110;++i)joined.update(walking,1.f/120);
+ if(joined.level()!=5||!joined.chunkResident(4)||std::fabs(joined.player().z+9)>.001f)return false;
+ // Closed endpoint must stop a running player before the world boundary.
+ joined.m_player.pos={19.5f,22};joined.m_velocity={};walking.sprint=true;
+ for(int i=0;i<120;++i)joined.update(walking,1.f/120);
+ if(joined.player().pos.y>23.451f||joined.player().pos.y<23.4f||!joined.hullFits(joined.player().pos,-9,1))return false;
+ // A player can walk out of the 18 cm flooded return without jumping.
+ joined.m_player.pos={9,9};joined.m_player.z=-9.18f;joined.m_player.angle=-kPi*.5f;joined.m_velocity={};walking.sprint=false;
+ for(int i=0;i<60;++i)joined.update(walking,1.f/120);
+ if(joined.player().pos.y>=8.3f||std::fabs(joined.player().z+9)>.001f)return false;
+ std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nEnd bulkhead collision and walking out of flooded returns: PASS\n";return true;
 }
 }
