@@ -126,8 +126,11 @@ public:
     void update(const InputState& input, float dt);
     void restart();
     int level()const{return m_level;}
-    static constexpr int ChunkCount=4;
-    static Vec2 chunkOffset(int level){return {18.f*level,24.f*level};}
+    static constexpr int ChunkCount=6;
+    static Vec2 chunkOffset(int level){
+        if(level<=3)return {18.f*level,24.f*level};
+        return level==4?Vec2{69.f,96.f}:Vec2{69.f,120.f};
+    }
     Game chunkView(int level)const;
     const World& worldAt(Vec2& local)const;
     bool chunkResident(int level)const{return level==m_level||m_chunks[level].resident;}

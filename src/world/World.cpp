@@ -59,6 +59,61 @@ constexpr MapRows PressureWorksGround = {
     "####################...#"
 };
 
+// Blank two-chunk megamap experiment. The shared 22-metre interior edge has
+// no wall, while the side perimeter walls continue through the seam.
+constexpr MapRows CoolantReturnGround = {
+    "#####...################",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#"
+};
+constexpr MapRows CableVaultsGround = {
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "##################...###"
+};
+
 // The gantry route includes orthogonal joins and a stair landing; the final exit is sealed.
 constexpr MapRows TurbineGantryGround = {
     "##...###################",
@@ -140,7 +195,7 @@ constexpr MapRows LiftShaftGround = {
     "#..............GG......#",
     "#......................#",
     "#....................X.#",
-    "########################",
+    "####################...#",
 };
 constexpr MapRows emptyDeck(){
  MapRows rows{};for(auto& row:rows)row="________________________";return rows;
@@ -237,7 +292,15 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
 }
 
 World::World(int level) {
- m_level=std::clamp(level,0,3);
+ m_level=std::clamp(level,0,5);
+ if(m_level>=4){
+  m_layers={{m_level==4?"Coolant Return / blank megamap":"Cable Vaults / blank megamap",0,0,m_level==4?CoolantReturnGround:CableVaultsGround}};
+  m_openNorthBoundary=m_level==5;
+  m_openSouthBoundary=m_level==4;
+  if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
+  buildLights();
+  return;
+ }
  if(m_level==3){
   m_layers={{"Reactor / lower containment",-9,0,LiftShaftGround},
             {"Reactor / upper manifold",-6,.3f,reactorDeck()},
@@ -375,6 +438,7 @@ void World::buildLights(){
   for(const auto&span:spansAt(x,y))if(span.ceiling-span.floor>1.8f)m_lights.push_back({{x+.5f,y+.35f},span.ceiling-.15f});
 }
 float World::floorHeight(float x,float y)const{
+ if(m_level>=4)return -9.f;
  if(m_level==3)return -9.f;
  if(m_level==2)return 0;
  if(m_level==1){
@@ -391,6 +455,7 @@ float World::floorHeight(float x,float y)const{
  return 0;
 }
 float World::ceilingHeight(float x,float y)const{
+ if(m_level>=4)return -4.8f;
  if(m_level==3)return 16.f;
  if(m_level==2)return 6.f;
  if(m_level==0&&y>=24&&x>=20&&x<23)return 3.4f;
