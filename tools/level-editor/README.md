@@ -177,3 +177,8 @@ The editor's vertical workflow is now designed around ordinary building drawings
 - Walk Preview turns on the ceiling/roof preview automatically so the interior reads like an enclosed building.
 
 The numerical height fields remain available for precision, but the normal workflow no longer requires an artist to think about a game-engine vertical axis.
+
+
+### Multi-chunk vertical preview
+
+The 3D floor filters use the active floor's **elevation**, not a per-chunk internal layer ID. That means **This Floor** and **Cut Above** work across a multi-chunk industrial district instead of accidentally isolating only one chunk. Walk Preview also starts in the center of the active chunk at the active floor's height, so upper floors and mezzanines can be inspected directly.
