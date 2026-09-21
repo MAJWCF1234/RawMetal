@@ -242,3 +242,10 @@ The editor now treats the 24 x 24 m engine pieces as an implementation detail in
 - Floor Snapshot totals now cover the whole active building elevation rather than only the currently selected 24 m area.
 
 The intended workflow for a building designer is now: enter the building dimensions, draw rooms and walls like a blueprint, place equipment and people, choose finishes, and use Live Split or 3D Preview. The underlying plan-area split is still visible when needed, but normal design work no longer has to stop at those boundaries.
+
+
+## Simplified artist surface
+
+The permanent toolbar is intentionally smaller now. The normal building workflow exposes Plan, Live Plan + 3D, 3D, Walk, Undo/Redo, New Building, Open, and Save. Less common operations are kept under **More** instead of competing for attention.
+
+The sticky left-side quick tools are the primary workflow: **Select, Room, Wall, Door, Equipment, People, Finishes**. The internal Plan Areas panel and the larger set of specialty drawing tools are collapsed by default. Nothing was removed, but the editor no longer presents engine-oriented controls as if the artist must understand them before drawing a building.
