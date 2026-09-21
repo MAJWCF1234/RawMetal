@@ -195,3 +195,16 @@ The editor is deliberately aimed at someone who designs physical buildings rathe
 - Every placed object now has a simple editable **Name** field so an artist can call things what they mean in the building rather than working from asset filenames.
 
 These are editor-only authoring improvements. They do not require rebuilding RawMetal or compiling the game.
+
+
+### Fast placement
+
+The 2D plan now behaves more like a simple drawing program when placing equipment:
+
+- Move the pointer over the blueprint to see a translucent **placement ghost** before clicking.
+- Choose 1 m, 0.5 m, 0.25 m, or free-form **Place Snap**.
+- Press **R** to turn the next placed prefab or primitive by 90 degrees before stamping it down.
+- With Select / Move active, **R** rotates the selected object by 90 degrees.
+- **Escape** returns to Select / Move without touching project data.
+
+This keeps ordinary prop and equipment layout mouse-driven instead of requiring coordinate entry.
