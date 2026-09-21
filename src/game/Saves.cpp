@@ -71,14 +71,14 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,7);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 7 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,8);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 8 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>7))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>8))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   auto reactorStage=next.m_chunks[3].world.reactorStage();if(reactorStage==World::ReactorStage::DiskHeld&&!next.hasQuestItem(ReactorAuthDisk))next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);
@@ -105,6 +105,8 @@ bool Game::decodeSave(const std::string& data){
     if(match>=0){pickupUsed[match]=true;saved.pickups.push_back(oldPickups[match]);}else saved.pickups.push_back(spawn);
    }
 
+   // Current saves own their dynamic clutter population, including imported objects.
+   if(version>=8)continue;
    int heldOld=level==next.m_level?next.m_heldClutter:-1,heldNew=-1;
    auto oldClutter=std::move(saved.clutter);std::vector<bool> clutterUsed(oldClutter.size(),false);saved.clutter.clear();saved.clutter.reserve(std::max(fresh.clutter.size(),oldClutter.size()));
    for(const auto&spawn:fresh.clutter){

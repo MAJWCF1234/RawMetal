@@ -37,12 +37,13 @@ private:
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0;
     bool m_poseReady=false;
-    struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint32_t> emission; };
+    struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint32_t> emission; bool transparent=false; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true);
     static Point3 sampleNormal(const Texture& texture,float u,float v,float lod);
     bool testNormalMapping();
     Texture m_muzzleFlash;
+    Texture m_water;
     Mesh m_consoleMesh{240};
     Texture m_consoleTexture;
     std::array<Texture,3> m_hazmatTextures;

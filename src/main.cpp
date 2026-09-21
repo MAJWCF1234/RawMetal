@@ -12,6 +12,14 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--water-wall-inspection")){
+     retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
+     for(int view=0;view<10;++view){auto scene=view<8?retro::Game::mapInspection({8,6},view*retro::kPi*.25f,0,3,false,0,true):retro::Game::mapInspection({9,7.8f},retro::kPi*.5f,-55,5,false,-9,true);
+      if(view==9)scene.update({},.05f);renderer.render(scene);
+      std::ofstream out("water-wall-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";
+      for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return 0;
+    }
     if(std::wcsstr(commandLine,L"--flashlight-test")){
      if(!retro::Game::testFlashlight())return 43;
      retro::SoftwareRenderer renderer(W,H);

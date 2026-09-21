@@ -330,6 +330,9 @@ World::World(int level) {
    for(float x:{18.f,20.9f})m_structures.push_back({x,23.5f,x+.1f,24,0,2.5f,false,2});
    m_terminals={{{10.4f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false}};
   }
+  // Wall-backed maintenance storage leaves the central route and both seams open.
+  for(float y:{10.5f,14.f})m_fixtures.push_back({7,{1.28f,y},0,2,.5f,1.8f,kPi*.5f,true});
+  m_fixtures.push_back({8,{22.89f,11.f},.8f,.7f,.2f,1.f,kPi*.5f,true});
   // Structures use absolute elevations; props/fixtures have floor-relative bases.
   for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
   buildLayers({}); // Build the collision/occlusion index for these structures too.
@@ -576,7 +579,8 @@ void World::buildLayers(std::span<const Staircase> stairs){
   for(auto row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Invalid map layer row width");
   if(layer.thickness<=0)continue; // Ground tiles are read directly by tile().
   const float z=layer.elevation, underside=z-layer.thickness;
-  const float railHeight=m_level==3&&z==0?2.1f:.55f;
+  const bool collarWall=m_level==3&&z==0;
+  const float railHeight=collarWall?2.7f:.55f;
   auto deck=[&](int x,int y){return x>=0&&y>=0&&x<Width&&y<Height&&layer.rows[y][x]=='=';};
   auto stairConnection=[&](float x,float y){
    if(m_level==3&&z==0&&x>=11&&x<=13&&y>=7.9f&&y<=10)return true;
@@ -596,21 +600,21 @@ void World::buildLayers(std::span<const Staircase> stairs){
    if(m_level!=3&&(x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,m_level==3?std::max(-9.f,z-3.f):floorHeight(x+.1f,y+.1f),underside});
    if(!deck(x-1,y)&&!(m_level==3&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
-    m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,true});
+    m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
     // Seal the upper catwalk against a lower-layer wall.  Without this
     // backing panel the rail leaves a one-cell sightline into the void.
     if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
    if(!deck(x+1,y)&&!(m_level==3&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
-    m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,true});
+    m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
     if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
    if(!deck(x,y-1)&&!(m_level==3&&tile(x,y-1)=='#')&&!stairConnection(x+.5f,y-.001f)){
-    m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,true});
+    m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:0});
     if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,m_level==3?z+2.7f:6.f,false});
    }
    if(!deck(x,y+1)&&!(m_level==3&&tile(x,y+1)=='#')&&!stairConnection(x+.5f,y+1.001f)){
-    m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,true});
+    m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
     if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
    }
   }

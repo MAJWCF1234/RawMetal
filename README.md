@@ -123,3 +123,6 @@ Main walls, grating and square steel bulkheads use the supplied PSX Texture pack
 including matching normal maps. Machinery retains its authored proportions and
 material assignments. See `src/assets/materials/SOURCES.md` and
 `src/assets/facility/SOURCES.md` for provenance.
+
+Coolant Return uses the purchased water color/normal textures with animated transparent surfaces and buoyancy/drag for loose junk. Carried and thrown objects cross adjacent chunk seams with the player; save format 8 preserves transferred objects. The lift boarding collar is sealed with solid walls.
+Run --water-wall-inspection (optionally --software) for water and lift-wall views.

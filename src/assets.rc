@@ -133,5 +133,7 @@
 245 RCDATA "assets/reactor/hazmat.bin"
 246 RCDATA "assets/reactor/hazmat-body.png"
 249 RCDATA "assets/reactor/blood-splotch.png"
+250 RCDATA "assets/materials/water.png"
+251 RCDATA "assets/materials/water-normal.png"
 
 

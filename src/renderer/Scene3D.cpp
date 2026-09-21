@@ -118,11 +118,11 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    }
    if(texture.additive){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f;unsigned result=0xff000000u;
     for(int channel=0;channel<3;++channel){float tint=channel==0?.35f:channel==1?.72f:1.f;unsigned value=std::min(255u,unsigned((old>>(channel*8))&255)+unsigned(((texel>>(channel*8))&255)*alpha*light*tint));result|=value<<(channel*8);}put(x,y,result);
-   }else{m_zbuffer[index]=z;auto color=shade(texel,light*vertexLight/(1.f+z*.018f));
+   }else{if(!texture.transparent)m_zbuffer[index]=z;auto color=shade(texel,light*vertexLight/(1.f+z*.018f));
     if(!texture.emission.empty()){
      int ex=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ey=std::min(texture.height-1,int((V-std::floor(V))*texture.height));auto glow=texture.emission[size_t(ey*texture.width+ex)];unsigned result=0xff000000u;
      for(int channel=0;channel<3;++channel){unsigned value=std::min(255u,unsigned((color>>(channel*8))&255)+unsigned(((glow>>(channel*8))&255)*1.6f*m_emissionScale));result|=value<<(channel*8);}color=result;
-    }put(x,y,color);}
+    }if(texture.transparent){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f;unsigned result=0xff000000u;for(int channel=0;channel<3;++channel){int shift=channel*8;result|=unsigned(((color>>shift)&255)*alpha+((old>>shift)&255)*(1-alpha))<<shift;}color=result;}put(x,y,color);}
    }
   }
  }
@@ -465,14 +465,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}objectLighting=false;
  }
- if(w.level()==5){
-  // Shallow flooded returns flank the continuous, dry centre walkway.
-  Texture water{1,1,{0xff203d40u}},ripple{1,1,{0xff496567u}};
-  for(float y:{9.f,15.f})for(float x:{8.f,13.f}){
-   quad({x,y-.5f,-9.055f},{x+3,y-.5f,-9.055f},{x+3,y+.5f,-9.055f},{x,y+.5f,-9.055f},water,.9f);
-   for(int i=0;i<4;++i){float offset=std::fmod(game.elapsed()*.12f+i*.24f, .9f);float line=y-.45f+offset;
-    quad({x+.12f,line,-9.05f},{x+2.87f,line,-9.05f},{x+2.87f,line+.008f,-9.05f},{x+.12f,line+.008f,-9.05f},ripple,.85f);}
+ if(w.level()>=4){
+  // Suspended return lines stay above the walking envelope, with visible hangers.
+  for(float x:{3.f,20.5f}){
+   cylinder({x,2.f,-6.55f},{x,22.f,-6.55f},.11f,m_pipeTexture);
+   for(float y:{3.f,7.f,11.f,15.f,19.f,21.f}){
+    float roof=w.ceilingHeight(x,y);
+    box({x-.18f,y-.05f,-6.72f},{x+.18f,y+.05f,-6.66f},iron,.8f);
+    for(float dx:{-.16f,.16f})box({x+dx-.025f,y-.025f,-6.7f},{x+dx+.025f,y+.025f,roof},iron,.8f);
+   }
   }
+ }
+ if(w.level()==5){
   // The sealed end bulkhead has visible reinforcement and an unpowered lock.
   for(float x:{18.45f,20.45f})box({x,23.58f,-8.9f},{x+.10f,23.65f,-6.65f},m_panelMetal,.9f);
   box({19.38f,23.52f,-8.2f},{19.62f,23.65f,-7.82f},iron,.9f);
@@ -722,6 +726,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  for(auto&p:game.pickups())if(p.active){
   bool health=p.kind==Pickup::Kind::Health;
   prop(health?m_medkitMesh:m_shellsMesh,health?m_medkitTexture:m_shellsTexture,p.pos.x,p.pos.y,health?.4f:.36f,-.3f,health?.65f:.48f);
+ }
+ // Translucent animated water, drawn after opaque geometry on both backends.
+ if(w.level()==5){
+  const auto&water=m_water;
+  auto wave=[&](float x,float y){float t=game.elapsed();float h=-9.055f+.008f*std::sin(x*5+t*1.8f)*std::cos(y*7-t);
+   auto p=game.player();float d=length(Vec2{x,y}-p.pos);if(w.waterSurface(p.pos.x,p.pos.y)>-100&&p.z<-9.02f)h+=.004f*std::sin(d*18-t*7)*std::exp(-d*2);
+   return Point3{x,y,h};};
+  for(float cy:{9.f,15.f})for(float cx:{8.f,13.f})for(int j=0;j<4;++j)for(int i=0;i<12;++i){float x=cx+i*.25f,y=cy-.5f+j*.25f;
+   quad(wave(x,y),wave(x+.25f,y),wave(x+.25f,y+.25f),wave(x,y+.25f),water,1.15f,{.5f,.5f},{x+game.elapsed()*.035f,y-game.elapsed()*.02f});}
  }
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){

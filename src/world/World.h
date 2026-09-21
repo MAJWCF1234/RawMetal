@@ -61,6 +61,7 @@ public:
     static constexpr float LiftRideComplete=48.f;
     LiftPhase liftPhase()const{return m_liftPhase;}
     float liftHeight()const{return m_liftHeight;}
+    float waterSurface(float x,float y)const{return m_level==5&&x>=8&&x<16&&(x<11||x>=13)&&((y>=8.5f&&y<9.5f)||(y>=14.5f&&y<15.5f))?-9.055f:-1000.f;}
     float liftPhaseTime()const{return m_liftTimer;}
     bool insideLift(float x,float y)const{return m_level==3&&x>=10&&x<14&&y>=10&&y<14;}
     bool liftMoving()const{return m_liftPhase!=LiftPhase::Ready&&m_liftPhase!=LiftPhase::Crashed;}
