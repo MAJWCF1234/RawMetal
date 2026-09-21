@@ -26,6 +26,7 @@ void Game::updateClutter(const InputState&input,float dt){
  }
  int steps=std::max(1,int(std::ceil(dt*180)));float step=dt/steps;
  for(int index=0;index<int(m_clutter.size());++index){if(index==m_heldClutter)continue;auto&c=m_clutter[index];
+  if(dormantEntity(c.z))continue;
   if(length(m_velocity)>.5f&&length(c.pos-m_player.pos)<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.sleeping)continue;
   auto impact=[&](float speed){if(speed<.65f||c.impactCooldown>0)return;float gain=std::clamp(speed*.12f,.12f,.85f);if(c.impactSound()==Sound::JunkSoft)gain*=.65f;
