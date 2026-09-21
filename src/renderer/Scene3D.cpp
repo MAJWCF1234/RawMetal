@@ -277,7 +277,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
   // Architectural repeats are measured in metres, never stretched over a deck.
-  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,w.level()>=3?Vec2{length3(B-A),length3(D-A)}:Vec2{1,1});};
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,w.level()>=3?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
   if(eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
   if(eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
   if(eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
@@ -330,14 +330,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(w.tile(x,y)!='#'){
    // Half-metre floor patches expose real stair risers and the sides of raised decks.
    for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
-    quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.level()==3?m_concrete:w.level()==1?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.level()==1?.9f:w.level()==3?.95f:w.metalFloor(x,y)?.8f:.95f);
+    quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.level()>=4?(w.metalFloor(x,y)?m_floor:m_pressureFloor):w.level()==3?m_concrete:w.level()==1?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.level()==1?.9f:w.level()==3?.95f:w.metalFloor(x,y)?.8f:.95f);
     float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
     if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
     if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
     if(h>west)quad({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h},m_metal,.9f);
     if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
    }
-    quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},w.level()>=4?m_metal:m_facilityTextures.at("ceiling_1"),.6f);
+    quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},m_facilityTextures.at("ceiling_1"),.6f);
    // Close ceiling height changes instead of exposing the void between sectors.
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
    if(Z>northCeiling&&w.tile(x,y-1)!='#')quad({X,Y,northCeiling},{X+1,Y,northCeiling},{X+1,Y,Z},{X,Y,Z},m_metal,.7f);
@@ -466,6 +466,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}objectLighting=false;
  }
  if(w.level()>=4){
+  // Headers tie the service bays into a supported industrial interior.
+  for(float y:{4.f,10.f,16.f,22.f}){float roof=w.ceilingHeight(12,y);
+   box({1,y-.1f,roof-.18f},{23,y+.1f,roof},m_panelMetal,.9f);
+  }
+  if(w.level()==5)for(float x:{8.5f,15.5f}){
+   cylinder({x,1.f,-6.25f},{x,22.5f,-6.25f},.16f,m_pipeTexture);
+   for(float y:{4.f,10.f,16.f,22.f}){
+    box({x-.025f,y-.035f,-6.45f},{x+.025f,y+.035f,-5.75f},iron,.9f);
+    box({x-.21f,y-.06f,-6.45f},{x+.21f,y+.06f,-6.40f},iron,.9f);
+   }
+  }
   // Suspended return lines stay above the walking envelope, with visible hangers.
   for(float x:{3.f,20.5f}){
    cylinder({x,2.f,-6.55f},{x,22.f,-6.55f},.11f,m_pipeTexture);
@@ -481,12 +492,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   for(float x:{18.45f,20.45f})box({x,23.58f,-8.9f},{x+.10f,23.65f,-6.65f},m_panelMetal,.9f);
   box({19.38f,23.52f,-8.2f},{19.62f,23.65f,-7.82f},iron,.9f);
   quad({18.1f,23.64f,-8.83f},{20.9f,23.64f,-8.83f},{20.9f,23.64f,-8.64f},{18.1f,23.64f,-8.64f},m_hazard,.85f);
-  cylinder({17.5f,18.2f,-8.88f},{17.5f,18.2f,-8.48f},.05f,m_pipeTexture);
+  cylinder({20.5f,18.2f,-9.f},{20.5f,18.2f,-6.55f},.11f,m_pipeTexture);
+  box({20.28f,17.98f,-9.f},{20.72f,18.42f,-8.88f},iron,.9f);
   static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=dx*dx+dy*dy;unsigned noise=unsigned(x+y*32+1)*747796405u+2891336453u;noise=((noise>>((noise>>28)+4))^noise)*277803737u;noise=((noise>>22)^noise)&255u;
     t.pixels[y*32+x]=d<1&&noise<190*(1-d)?0xff7f8e91u:0;}return t;}();
   Point3 side{-std::sin(game.player().angle),std::cos(game.player().angle),0};
-  for(int i=0;i<7;++i){float age=std::fmod(game.elapsed()*.55f+i/7.f,1.f),radius=.07f+age*.2f;Point3 p{17.5f+age*.28f,18.2f,-8.48f+age*1.05f},up{0,0,radius};
+  for(int i=0;i<7;++i){float age=std::fmod(game.elapsed()*.55f+i/7.f,1.f),radius=.07f+age*.2f;Point3 p{20.35f-age*.28f,18.2f,-7.8f+age*1.05f},up{0,0,radius};
    quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,steam,.9f);}
  }
  if(w.level()==0){

@@ -81,7 +81,7 @@ public:
     char tile(int x, int y) const;
     bool solid(float x, float y) const;
     bool isExit(float x, float y) const;
-    bool metalFloor(int x,int y)const{return m_level>=4||y>=8||x>=12;}
+    bool metalFloor(int x,int y)const{return m_level>=4?(x>=7&&x<=16):y>=8||x>=12;}
     std::vector<Vec2> machines()const;
     float floorHeight(float x,float y)const;
     float supportHeight(float x,float y,bool dynamic=true)const;
