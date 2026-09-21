@@ -89,6 +89,14 @@ FRIENDLY = {
 # old maps, but never expose it as a placeable editor asset or material.
 EDITOR_EXCLUDED_STEMS = {"crowbar"}
 
+DEFAULT_MOUNT = {
+    # Obvious architectural defaults. These are only editor conveniences;
+    # the artist can change Floor / Wall / Ceiling after placement.
+    "ceiling_lamp_fps_1": "ceiling",
+    "vent_fps_1": "ceiling",
+    "wall_box_2": "wall",
+}
+
 DEFAULT_SIZE = {
     "pump": (1.10, 0.66, 1.35),
     "compressor": (1.00, 0.62, 1.12),
@@ -222,6 +230,7 @@ def asset_manifest() -> dict:
             "textureUrl": texture["url"] if texture else None,
             "ext": model["ext"],
             "w": size[0], "d": size[1], "h": size[2],
+            "mount": DEFAULT_MOUNT.get(stem, "floor"),
         })
 
     # The paint palette is intentionally conservative. Most PNGs beside a
