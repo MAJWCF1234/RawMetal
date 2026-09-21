@@ -115,3 +115,10 @@ The Materials tab is now a visual paint workspace instead of a file-style list.
 Materials are no longer forced to use a square repeat. The artist can set a separate real-world **Width** and **Height** for one repeated panel, tile, sheet, or sign texture. The default lock keeps both values together for ordinary square materials, but it can be turned off for long wall panels, strips, grating, and other rectangular industrial finishes.
 
 The Materials panel also has simple arrow controls for **Align Pattern**. Each click nudges the texture by one quarter of its repeat size, allowing large panels and seams to be lined up around doors, equipment, and architectural boundaries without moving any geometry. Size, direction, and alignment are stored per painted tile and are preserved by the eyedropper.
+
+
+### Faster material selection and replacement
+
+The Materials filter now includes **Recent** and **Used On This Floor** alongside Favorites. Recently chosen materials are remembered locally, and materials already in use can be isolated immediately when revising a finished room.
+
+A new **Replace Material** mode works like color replacement in a paint program. Choose the new material, click one painted tile using the old material, and every use of that old material on the active floor is changed to the new one with the currently selected repeat size, direction, and alignment.
