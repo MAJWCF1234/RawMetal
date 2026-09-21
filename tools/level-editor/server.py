@@ -224,22 +224,40 @@ def asset_manifest() -> dict:
             "w": size[0], "d": size[1], "h": size[2],
         })
 
+    # The paint palette is intentionally conservative. Most PNGs beside a
+    # model are UV skins, not building finishes. Exposing those as paint made
+    # the artist choose things like medkit, creature, keyboard, and pump skins
+    # as if they were wall materials.
+    def paintable_material(texture: dict) -> tuple[bool, str]:
+        path = texture["path"].lower()
+        name = Path(path).name
+        if "/materials/" in path:
+            return True, "Construction"
+        if path in {"src/assets/floor.png", "src/assets/wall.png", "src/assets/metal.png"}:
+            return True, "Construction"
+        if "/pressureworks/" in path and name in {"floor.png", "wall.png", "metal.png"}:
+            return True, "Pressure Works"
+        if "/facility/" in path and (
+            name.startswith("wall_")
+            or name.startswith("floor_")
+            or name.startswith("ceiling_")
+            or name.startswith("metal_")
+            or name == "scifi_texture_1.png"
+        ):
+            return True, "Facility"
+        if "/environment/" in path and name in {
+            "panel-metal.png",
+            "straight-hazard-stripes.png",
+            "sign-rust.png",
+        }:
+            return True, "Markings"
+        return False, ""
+
     materials = []
     for texture in textures:
-        path = texture["path"].lower()
-        if any(tag in path for tag in ("normal.", "_normal.", "emission", "monster.png", "spider.png", "wasp.png", "scissors.png", "hazmat-body", "stalker.png", "remington.png", "/arms/")):
+        allowed, category = paintable_material(texture)
+        if not allowed:
             continue
-        category = "General"
-        if "/materials/" in path:
-            category = "Construction"
-        elif "/facility/" in path:
-            category = "Facility"
-        elif "/pressureworks/" in path:
-            category = "Pressure Works"
-        elif "/environment/" in path:
-            category = "Signs / Environment"
-        elif "/clutter/" in path or "/pickups/" in path:
-            category = "Object Skin"
         materials.append({
             "id": texture["path"],
             "name": texture["label"],
