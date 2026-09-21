@@ -1,22 +1,22 @@
 # Depthworks Level Editor
 
-Run `LevelEditor.cmd` from the repository root.
+Run \`LevelEditor.cmd\` from the repository root. No build step is required.
 
-The launcher starts a localhost-only Python server, opens the editor, and scans `src/assets` dynamically. New models and textures therefore appear in the asset browser without maintaining a second hard-coded manifest.
+The editor is intended for artists and designers, not programmers. The default asset browser shows **Prefabs** instead of loose source files. A prefab combines the real model, its game texture, a friendly name, and a useful default footprint. Click a prefab and then click the 2D map to place it. Materials work the same way: click a material and paint tiles.
 
-Current scope:
+## Main workflow
 
-- multi-chunk 24 x 24 top-down editing
-- multiple vertical layers per chunk
-- floor, wall, void and deck painting
-- box, stairs, door, light, terminal, hazard and spawn placement
-- live browsing of every file under `src/assets`
-- texture thumbnails and full preview
-- OBJ, FBX, GLB and GLTF model preview
-- model placement into the map and 3D scene
-- orbitable real-time 3D preview
-- JSON import/export for editor projects
+1. Run \`LevelEditor.cmd\`.
+2. Stay in **2D EDIT** for layout work.
+3. Paint Floor, Wall, Void, or Deck tiles.
+4. Open **PREFABS**, click Pump / Shelf / Crate / Computer / etc., and click the map to place it.
+5. Select placed objects to move, rotate, resize, duplicate, or delete them.
+6. Open **MATERIALS**, click a texture, and paint it onto floor/wall/deck tiles.
+7. Switch to **3D PREVIEW** at any time to inspect the same layout with real models and textures.
+8. Export the project JSON when ready.
 
-The browser preview is for layout and composition. RawMetal remains authoritative for exact game rendering, collision, animation, lighting and gameplay behavior.
+The **FILES** tab still exposes the underlying asset library for inspection, but artists should normally work from Prefabs and Materials.
 
-Three.js is loaded from a pinned CDN version for the 3D editor. If that dependency is unavailable, the 2D editor, asset browser, texture preview and JSON workflow still remain useful.
+The launcher caches the pinned Three.js editor runtime into \`tools/level-editor/vendor\` on first use. After that, the editor can reuse the local copy. If the 3D runtime cannot be downloaded, the 2D editor still works and reports the 3D problem instead of leaving the whole editor dead.
+
+RawMetal remains authoritative for exact rendering, collision, animation, lighting and gameplay.

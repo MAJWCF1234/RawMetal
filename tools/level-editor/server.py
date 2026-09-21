@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 import threading
 import time
+import urllib.request
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,6 +13,8 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_ROOT = ROOT / "src" / "assets"
+EDITOR_ROOT = ROOT / "tools" / "level-editor"
+VENDOR_ROOT = EDITOR_ROOT / "vendor"
 HOST = "127.0.0.1"
 PORT = 8008
 
@@ -18,8 +22,146 @@ MODEL_EXTENSIONS = {".obj", ".fbx", ".glb", ".gltf"}
 TEXTURE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tga"}
 AUDIO_EXTENSIONS = {".wav", ".ogg", ".mp3", ".flac"}
 
+VENDOR = {
+    "three.module.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js",
+    "loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/OBJLoader.js",
+    "loaders/FBXLoader.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/FBXLoader.js",
+    "loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js",
+    "curves/NURBSCurve.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/curves/NURBSCurve.js",
+    "curves/NURBSUtils.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/curves/NURBSUtils.js",
+    "utils/BufferGeometryUtils.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/utils/BufferGeometryUtils.js",
+}
+
+TEXTURE_OVERRIDES = {
+    "src/assets/models/PSX-Weapon-Pack/Remington-870/Remington-870.fbx": "src/assets/remington.png",
+    "src/assets/models/huntsman.fbx": "src/assets/spider.png",
+    "src/assets/models/wasp.fbx": "src/assets/wasp.png",
+    "src/assets/models/scissors.fbx": "src/assets/scissors.png",
+    "src/assets/models/arms_rig.fbx": "src/assets/arms/arms_gloves_01.png",
+    "src/assets/environment/generator.fbx": "src/assets/facility/generator_1.png",
+    "src/assets/clutter/bottle.obj": "src/assets/clutter/Bottles.png",
+    "src/assets/reactor/control-panel.obj": "src/assets/reactor/electronics.png",
+    "src/assets/reactor/stalker.obj": "src/assets/reactor/stalker.png",
+    "src/assets/facility/source/wall_6.fbx": "src/assets/facility/wall_6.png",
+    "src/assets/facility/source/wall_8.fbx": "src/assets/facility/wall_8.png",
+    "src/assets/facility/source/column_6.fbx": "src/assets/facility/metal_6.png",
+    "src/assets/facility/source/vent_fps_1.fbx": "src/assets/facility/vent_1.png",
+    "src/assets/facility/source/ceiling_lamp_fps_1.fbx": "src/assets/facility/ceiling_lamp_1.png",
+    "src/assets/facility/source/doorway_wide_1.fbx": "src/assets/facility/door_1.png",
+    "src/assets/facility/source/metal_shelf_1.fbx": "src/assets/facility/metal_4.png",
+    "src/assets/facility/source/wall_box_2.fbx": "src/assets/facility/wall_box_2.png",
+    "src/assets/facility/source/computer_1.fbx": "src/assets/facility/pc_1.png",
+}
+
+FRIENDLY = {
+    "Remington-870": "Remington 870",
+    "huntsman": "Huntsman",
+    "wasp": "Flying Creature",
+    "scissors": "Scissor Fiend",
+    "arms_rig": "Player Arms Rig",
+    "first-aid": "First Aid Kit",
+    "shells": "12 Gauge Shells",
+    "trash_1": "Trash",
+    "mre_1": "MRE",
+    "bottle": "Bottle",
+    "power_supply_1": "Power Supply",
+    "pcb_2": "Circuit Board",
+    "floppy_disc_2": "Floppy Disk",
+    "control-panel": "Reactor Control Panel",
+    "stalker": "Stalker",
+    "wall_6": "Facility Wall 6",
+    "wall_8": "Facility Wall 8",
+    "column_6": "Facility Column",
+    "vent_fps_1": "Vent",
+    "ceiling_lamp_fps_1": "Ceiling Lamp",
+    "doorway_wide_1": "Wide Doorway",
+    "metal_shelf_1": "Metal Shelf",
+    "wall_box_2": "Wall Cabinet",
+    "computer_1": "Facility Computer",
+}
+
+DEFAULT_SIZE = {
+    "pump": (1.10, 0.66, 1.35),
+    "compressor": (1.00, 0.62, 1.12),
+    "pipe": (4.20, 0.30, 0.30),
+    "gate": (2.00, 0.25, 2.40),
+    "barrel": (0.65, 0.65, 1.10),
+    "crate": (0.90, 0.90, 0.85),
+    "generator": (1.90, 1.10, 1.70),
+    "metal_shelf_1": (2.05, 0.61, 1.44),
+    "wall_box_2": (0.67, 0.20, 0.91),
+    "computer_1": (0.70, 0.55, 1.00),
+    "doorway_wide_1": (2.60, 0.30, 2.70),
+    "vent_fps_1": (0.70, 0.15, 0.70),
+    "ceiling_lamp_fps_1": (1.00, 0.30, 0.18),
+    "column_6": (0.30, 0.30, 3.00),
+    "first-aid": (0.65, 0.45, 0.40),
+    "shells": (0.48, 0.36, 0.36),
+    "trash_1": (0.55, 0.55, 0.35),
+    "mre_1": (0.45, 0.30, 0.10),
+    "bottle": (0.18, 0.18, 0.35),
+    "power_supply_1": (0.35, 0.45, 0.20),
+    "pcb_2": (0.35, 0.25, 0.04),
+    "floppy_disc_2": (0.28, 0.28, 0.03),
+    "control-panel": (0.70, 0.45, 1.20),
+    "stalker": (0.70, 0.70, 1.80),
+    "huntsman": (1.30, 1.30, 0.75),
+    "wasp": (1.20, 1.20, 1.00),
+    "scissors": (1.10, 1.10, 2.25),
+    "Remington-870": (1.10, 0.20, 0.20),
+    "arms_rig": (1.20, 0.70, 1.20),
+}
+
+def ensure_vendor() -> None:
+    VENDOR_ROOT.mkdir(parents=True, exist_ok=True)
+    for relative, url in VENDOR.items():
+        target = VENDOR_ROOT / relative
+        if target.exists() and target.stat().st_size > 100:
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            print(f"[LevelEditor] caching {relative}")
+            request = urllib.request.Request(url, headers={"User-Agent": "Depthworks-Level-Editor/1"})
+            with urllib.request.urlopen(request, timeout=12) as response:
+                target.write_bytes(response.read())
+        except Exception as exc:
+            print(f"[LevelEditor] 3D dependency unavailable ({relative}): {exc}")
+            try:
+                target.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+def pretty_name(path: Path) -> str:
+    stem = path.stem
+    if stem in FRIENDLY:
+        return FRIENDLY[stem]
+    return re.sub(r"\s+", " ", re.sub(r"[_-]+", " ", stem)).strip().title()
+
+def category_for(path: Path) -> str:
+    p = path.as_posix().lower()
+    if "/pressureworks/" in p:
+        return "Machinery"
+    if "/facility/source/" in p:
+        return "Architecture"
+    if "/environment/" in p:
+        return "Environment"
+    if "/clutter/" in p:
+        return "Clutter"
+    if "/pickups/" in p:
+        return "Pickups"
+    if "/reactor/" in p:
+        return "Reactor"
+    if "/models/" in p:
+        if any(x in p for x in ("huntsman", "wasp", "scissors")):
+            return "Creatures"
+        if "weapon" in p or "remington" in p:
+            return "Weapons"
+        return "Actors"
+    return "Other"
+
 def asset_manifest() -> dict:
-    items = []
+    files = []
     if ASSET_ROOT.exists():
         for path in sorted(ASSET_ROOT.rglob("*")):
             if not path.is_file():
@@ -27,8 +169,78 @@ def asset_manifest() -> dict:
             rel = path.relative_to(ROOT).as_posix()
             ext = path.suffix.lower()
             kind = "model" if ext in MODEL_EXTENSIONS else "texture" if ext in TEXTURE_EXTENSIONS else "audio" if ext in AUDIO_EXTENSIONS else "other"
-            items.append({"name": path.name, "path": rel, "url": "/" + rel, "kind": kind, "ext": ext, "bytes": path.stat().st_size})
-    return {"root": "src/assets", "count": len(items), "items": items}
+            files.append({
+                "name": path.name,
+                "label": pretty_name(path),
+                "path": rel,
+                "url": "/" + rel,
+                "kind": kind,
+                "ext": ext,
+                "bytes": path.stat().st_size,
+            })
+
+    by_path = {item["path"].lower(): item for item in files}
+    textures = [item for item in files if item["kind"] == "texture"]
+    prefabs = []
+    for model in (item for item in files if item["kind"] == "model"):
+        model_path = Path(model["path"])
+        texture_path = TEXTURE_OVERRIDES.get(model["path"])
+        if not texture_path:
+            candidates = []
+            stem = model_path.stem.lower()
+            for texture in textures:
+                tp = Path(texture["path"])
+                if tp.stem.lower() == stem and tp.parent == model_path.parent:
+                    candidates.append(texture["path"])
+            if candidates:
+                texture_path = candidates[0]
+        texture = by_path.get(texture_path.lower()) if texture_path else None
+        stem = model_path.stem
+        size = DEFAULT_SIZE.get(stem, (1.0, 1.0, 1.0))
+        prefabs.append({
+            "id": model["path"],
+            "name": FRIENDLY.get(stem, model["label"]),
+            "category": category_for(model_path),
+            "model": model["path"],
+            "modelUrl": model["url"],
+            "texture": texture["path"] if texture else None,
+            "textureUrl": texture["url"] if texture else None,
+            "ext": model["ext"],
+            "w": size[0], "d": size[1], "h": size[2],
+        })
+
+    materials = []
+    for texture in textures:
+        path = texture["path"].lower()
+        if any(tag in path for tag in ("normal.", "_normal.", "emission", "monster.png", "spider.png", "wasp.png", "scissors.png", "hazmat-body", "stalker.png", "remington.png", "/arms/")):
+            continue
+        category = "General"
+        if "/materials/" in path:
+            category = "Construction"
+        elif "/facility/" in path:
+            category = "Facility"
+        elif "/pressureworks/" in path:
+            category = "Pressure Works"
+        elif "/environment/" in path:
+            category = "Signs / Environment"
+        elif "/clutter/" in path or "/pickups/" in path:
+            category = "Object Skin"
+        materials.append({
+            "id": texture["path"],
+            "name": texture["label"],
+            "category": category,
+            "path": texture["path"],
+            "url": texture["url"],
+        })
+
+    return {
+        "root": "src/assets",
+        "count": len(files),
+        "prefabs": prefabs,
+        "materials": materials,
+        "files": files,
+        "threeReady": (VENDOR_ROOT / "three.module.js").exists(),
+    }
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -53,12 +265,13 @@ class Handler(SimpleHTTPRequestHandler):
         print("[LevelEditor] " + fmt % args)
 
 def open_browser():
-    time.sleep(0.4)
+    time.sleep(0.5)
     webbrowser.open(f"http://{HOST}:{PORT}/level-editor/")
 
 def main() -> int:
     mimetypes.add_type("model/gltf-binary", ".glb")
     mimetypes.add_type("model/gltf+json", ".gltf")
+    ensure_vendor()
     threading.Thread(target=open_browser, daemon=True).start()
     try:
         with ThreadingHTTPServer((HOST, PORT), Handler) as server:
