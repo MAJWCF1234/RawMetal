@@ -135,3 +135,21 @@ Placed editor objects can now be clicked directly in the 3D preview. The corresp
 Arrangement hierarchies can now be nested. An object placed on another object can itself be opened and decorated, so a crate on a table can have items placed on the crate while the whole assembly still travels together.
 
 An arranged item can also be raised or lowered in simple 5 cm steps. **Put On Floor** detaches it while preserving its world position.
+
+
+## Building section view
+
+The editor now has a **SECTION** button for vertical work without turning the workflow into a 3D modelling program.
+
+The section view is a blueprint-style side elevation of the active chunk. It shows every floor, each floor's ceiling, projected walls, stairs, equipment, wall-mounted items, and ceiling-mounted items. **X Section** and **Y Section** let the artist look through the building from either plan direction.
+
+The important part is that height can be edited visually:
+
+- drag a gold floor line up or down to move the whole building level
+- drag the blue ceiling line to change that floor's room height
+- ceiling-mounted objects follow the ceiling automatically
+- click a projected object to select it
+- **+ Empty Floor Above** creates the next level directly above the current ceiling
+- **Copy Plan Above** duplicates the current architectural plan and materials onto the next level without copying loose props
+
+This keeps the workflow in familiar floor-plan / section-drawing language. Raw XYZ coordinates remain available only as a fallback.
