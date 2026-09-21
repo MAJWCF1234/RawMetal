@@ -91,3 +91,20 @@ The editor now removes more vertical and alignment work from the artist:
 Wall-mounted objects now have simple **Low**, **Eye Level**, and **High** placement presets. This keeps signs, control boxes, lights, and other wall decor adjustable without exposing raw vertical coordinates.
 
 Smart door openings also preserve the wall above the doorway in 3D, so placing a door creates an opening with a proper lintel rather than deleting the entire wall column.
+
+
+## Materials workspace
+
+The Materials tab is now a visual paint workspace instead of a file-style list.
+
+- Materials display as large swatches.
+- Starred favorites stay at the front and can be isolated with the Favorites filter.
+- Each swatch shows how many tiles on the active floor currently use that material.
+- **Brush** paints normally.
+- **Fill Area** flood-fills a connected floor, wall, or deck region that shares the starting material.
+- **Pick From Plan** is an eyedropper that copies material, real-world repeat size, and direction from an existing painted tile.
+- **Erase Material** removes only the surface material while leaving the floor, wall, or deck geometry intact.
+- Material direction can be set to 0, 90, 180, or 270 degrees.
+- Repeat size and direction are stored per painted tile and carried into the 2D and 3D previews.
+- **Update Existing On This Floor** changes every tile using the selected material to the current size and direction.
+- **Clear This Material From Floor** removes that material from the active floor without deleting building geometry.
