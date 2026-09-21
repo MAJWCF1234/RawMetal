@@ -298,41 +298,35 @@ World::World(int level) {
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
   if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
-  // Keep the seam open, but give each side a distinct identity.
+  // Continuous walls define service bays and connected circulation loops.
+  const float roof=m_level==4?2.9f:3.4f;
+  auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
   if(m_level==4){
-   // Cramped gallery: offset partitions and service cabinets force a tight route.
-   m_structures.push_back({6.8f,2,7.05f,9.5f,0,2.55f,false,3});
-   m_structures.push_back({6.8f,14.5f,7.05f,22,0,2.55f,false,3});
-   m_structures.push_back({16.8f,2,17.05f,8.5f,0,2.55f,false,3});
-   m_structures.push_back({16.8f,15.5f,17.05f,22,0,2.55f,false,3});
-   m_structures.push_back({8.2f,10.2f,12.0f,10.45f,0,1.65f,false,2});
-   m_props={{0,{4.3f,5.5f},1.35f,2.2f,0,{1.1f,.66f},0},
-            {1,{10.2f,18.5f},1.12f,2.f,kPi*.5f,{1.f,.31f},0},
-            {2,{19.5f,11.5f},.3f,4.2f,kPi*.5f,{.15f,2.1f},0}};
-   m_fixtures={{7,{1.28f,5.3f},0,2,.5f,1.8f,kPi*.5f,true},
+   for(float x:{6.8f,16.8f}){wall(x,1,x+.25f,8.5f);wall(x,11.5f,x+.25f,17.5f);wall(x,20.5f,x+.25f,24);}
+   // Cross aisles link all three galleries; bay dividers meet the outer walls.
+   for(float y:{8.25f,17.25f}){wall(1,y,4.5f,y+.25f);wall(19.5f,y,23,y+.25f);}
+   wall(7.05f,14,10.5f,14.25f);wall(13.5f,14,16.8f,14.25f);
+   m_props={{0,{3.1f,5.3f},1.35f,2.2f,0,{1.1f,.66f},0},
+            {1,{14.7f,17.f},1.12f,2.f,kPi*.5f,{.31f,1.f},0},
+            {0,{20.5f,14.f},1.35f,2.2f,kPi,{1.1f,.66f},0}};
+   m_fixtures={{7,{1.28f,12.5f},0,2,.5f,1.8f,kPi*.5f,true},
+               {7,{1.28f,15.3f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,18.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
-   m_structures.push_back({7.05f,2,16.8f,22,2.65f,2.8f,false,2});
-   m_terminals={{{9.4f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false}};
+   m_terminals={{{8.f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false}};
   }else{
-   // Coolant Return: wide pipe corridors, valve banks and two visible trenches.
-   m_structures.push_back({4.8f,2,5.05f,9.2f,0,2.25f,false,2});
-   m_structures.push_back({18.8f,14.8f,19.05f,22,0,2.25f,false,2});
-   m_props={{0,{3.6f,6.5f},1.3f,2.1f,0,{1.05f,.64f},0},
-            {1,{9.5f,12.5f},1.1f,1.9f,kPi*.5f,{.95f,.30f},0},
-            {2,{16.5f,18.2f},.32f,4.6f,0,{2.3f,.16f},0},
-            {2,{12.5f,5.2f},.32f,4.6f,0,{2.3f,.16f},0}};
-   m_fixtures={{7,{1.28f,18.5f},0,2,.5f,1.8f,kPi*.5f,true},
+   // A dry central bridge runs between wet return trenches, flanked by pump bays.
+   for(float x:{6.8f,17.f}){wall(x,0,x+.25f,5.f);wall(x,8.f,x+.25f,11.f);wall(x,14.f,x+.25f,18.f);wall(x,21.f,x+.25f,23);}
+   for(float y:{10.75f,17.75f}){wall(1,y,4.5f,y+.25f);wall(19.5f,y,23,y+.25f);}
+   m_props={{0,{3.f,5.3f},1.5f,2.5f,0,{1.25f,.75f},0},
+            {0,{20.5f,11.8f},1.5f,2.5f,kPi,{1.25f,.75f},0},
+            {1,{3.f,16.f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0}};
+   m_fixtures={{7,{1.28f,20.5f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,5.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
-   // The prototype ends here. A fixed bulkhead seals the entire aperture;
-   // it has collision and no misleading open-door interaction into the void.
    m_structures.push_back({18,23.65f,21,24,0,2.5f,false,7});
-   m_structures.push_back({18,23.6f,21,24,2.5f,4.2f,false,2});
+   m_structures.push_back({18,23.6f,21,24,2.5f,roof,false,3});
    for(float x:{18.f,20.9f})m_structures.push_back({x,23.5f,x+.1f,24,0,2.5f,false,2});
-   m_terminals={{{10.4f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false}};
+   m_terminals={{{18.f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false}};
   }
-  // Wall-backed maintenance storage leaves the central route and both seams open.
-  for(float y:{10.5f,14.f})m_fixtures.push_back({7,{1.28f,y},0,2,.5f,1.8f,kPi*.5f,true});
-  m_fixtures.push_back({8,{22.89f,11.f},.8f,.7f,.2f,1.f,kPi*.5f,true});
   // Structures use absolute elevations; props/fixtures have floor-relative bases.
   for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
   buildLayers({}); // Build the collision/occlusion index for these structures too.
@@ -494,7 +488,7 @@ float World::floorHeight(float x,float y)const{
  return 0;
 }
 float World::ceilingHeight(float x,float y)const{
- if(m_level>=4)return -4.8f;
+ if(m_level>=4)return m_level==4?-6.1f:-5.6f;
  if(m_level==3)return 16.f;
  if(m_level==2)return 6.f;
  if(m_level==0&&y>=24&&x>=20&&x<23)return 3.4f;
