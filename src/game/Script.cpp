@@ -91,7 +91,13 @@ bool Game::testFlashlight(){
  game.update(key,.01f);if(!game.flashlightOn())return false;game.update({},.01f);game.update(key,.01f);if(game.flashlightOn())return false;
  game.setState(stateId("flashlight_on"),1);if(!game.takeQuestItem(Flashlight)||game.flashlightOn())return false;
  game.giveQuestItem(Flashlight);game.setState(stateId("flashlight_on"),1);Game restored;
- return restored.decodeSave(game.encodeSave())&&restored.hasFlashlight()&&restored.flashlightOn();
+ if(!restored.decodeSave(game.encodeSave())||!restored.hasFlashlight()||!restored.flashlightOn())return false;
+ restored.update({},.01f);InputState menu{};menu.escape=true;restored.update(menu,.01f);restored.update(key,.01f);
+ if(!restored.flashlightOn())return false;
+ restored.update(menu,.01f);restored.update(key,.01f);
+ if(restored.flashlightOn())return false;
+ restored.update({},.01f);menu={};menu.inventory=true;restored.update(menu,.01f);restored.update(key,.01f);
+ return !restored.flashlightOn();
 }
 
 bool Game::testSystems(){
