@@ -33,3 +33,20 @@ Select a placeable object such as a table, shelf, crate, machine, or blockout bo
 - automatic parent/child grouping so decorations follow the main object when it moves
 
 This is intentionally surface-based. Artists do not need to type vertical coordinates just to put a computer on a desk or a bottle on a crate.
+
+
+## Blueprint-first building workflow
+
+The main editor now treats vertical work like a building plan instead of a game-engine transform exercise:
+
+- **Room** is a drag tool. Drag a rectangle and it creates the room's perimeter walls and interior floor.
+- Floors are shown as named building levels with height in metres.
+- Each floor has a simple **ceiling height**.
+- **Floor Plan** places objects on the active floor.
+- **Ceiling Plan** automatically hangs placeable props and lights from that floor's ceiling.
+- Ceiling-mounted objects are visually distinguished in the 2D plan and can be switched between floor and ceiling from the selected-object panel.
+- The raw numerical measurements are still available, but are tucked under a **Measurements** disclosure instead of being the primary workflow.
+- Chunks can be added north, west, east, or south from the chunk list.
+- **Fit Plan** frames the whole multi-chunk building in the 2D editor.
+
+These controls are deliberately phrased for someone who thinks in floor plans, rooms, ceilings, equipment, and elevations rather than game-engine coordinates.
