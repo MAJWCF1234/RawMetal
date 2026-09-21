@@ -160,3 +160,20 @@ This keeps the workflow in familiar floor-plan / section-drawing language. Raw X
 The Materials tab now exposes only textures that make sense as architectural finishes: construction materials, facility wall/floor/ceiling/metal surfaces, the Pressure Works wall/floor/metal set, and a small set of paintable industrial markings.
 
 Textures that exist to skin models are no longer offered as wall or floor paint. Medkits, shells, pumps, generators, computers, creatures, clutter, and similar assets remain available through Prefabs instead of appearing as nonsensical paint choices.
+
+
+## Vertical placement without game-engine coordinates
+
+The editor's vertical workflow is now designed around ordinary building drawings rather than XYZ transforms.
+
+- **+ Floor Above** creates the next floor at the current room ceiling with no height dialog.
+- **Copy Plan Above** duplicates the architectural plan and finishes, but not loose props.
+- **Ceiling / RCP** is a reflected-ceiling-style plan. Place a light, pipe, sign, terminal, block, or prefab there and it hangs from the ceiling automatically.
+- **Hang Below** gives plain presets for flush, 25 cm, 50 cm, or 1 m below the ceiling.
+- A ceiling-mounted object's own panel has the same drop presets.
+- **Place Height Visually In Section** opens the building section with the object already selected.
+- In the section view, props and overhead equipment can be dragged vertically. Floor objects dragged upward become visually positioned room-height objects, wall items slide up and down the wall, and ceiling objects remain attached to the ceiling while their drop changes.
+- 3D Preview now has **All Floors**, **Cut Above**, **This Floor**, and **Show Ceilings** controls. Cut Above is useful while dressing an upper floor; Show Ceilings makes it possible to inspect lamps, pipes, and other equipment hanging under the roof.
+- Walk Preview turns on the ceiling/roof preview automatically so the interior reads like an enclosed building.
+
+The numerical height fields remain available for precision, but the normal workflow no longer requires an artist to think about a game-engine vertical axis.
