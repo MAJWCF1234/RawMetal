@@ -208,3 +208,14 @@ The 2D plan now behaves more like a simple drawing program when placing equipmen
 - **Escape** returns to Select / Move without touching project data.
 
 This keeps ordinary prop and equipment layout mouse-driven instead of requiring coordinate entry.
+
+
+## Blueprint ink and character-start dummies
+
+The 2D editor now has a **Blueprint Ink** view for the building designer. It hides finish textures without changing them, keeps the metre grid, adds 4 m rulers around the active plan area, and makes rooms, walls, doors, stairs, labels, and placement markers easier to read. **Show Finishes** switches the material preview back on instantly.
+
+**Export Plan PNG** temporarily frames the building in Blueprint Ink and saves a clean PNG of the current plan. This does not change project data or require RawMetal to be rebuilt.
+
+The old game-facing word "chunk" is de-emphasized in the artist UI. The same 24 x 24 m pieces are presented as **Plan Areas**, because they are contiguous pieces of one building rather than separate levels.
+
+The **People / Spawns** tool now works as a real blueprint placement tool. Choose Worker, Security, Scientist, generic NPC, Hostile, Creature, or Player Start, then click the plan. The marker has a facing arrow in 2D and a simple scale-reference dummy in 3D. These markers are deliberately editor-native and easy to reposition or rotate, so the artist can communicate intended population and spawn layout without knowing gameplay code.
