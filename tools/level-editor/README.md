@@ -219,3 +219,12 @@ The 2D editor now has a **Blueprint Ink** view for the building designer. It hid
 The old game-facing word "chunk" is de-emphasized in the artist UI. The same 24 x 24 m pieces are presented as **Plan Areas**, because they are contiguous pieces of one building rather than separate levels.
 
 The **People / Spawns** tool now works as a real blueprint placement tool. Choose Worker, Security, Scientist, generic NPC, Hostile, Creature, or Player Start, then click the plan. The marker has a facing arrow in 2D and a simple scale-reference dummy in 3D. These markers are deliberately editor-native and easy to reposition or rotate, so the artist can communicate intended population and spawn layout without knowing gameplay code.
+
+
+### Always-visible quick tools
+
+The left sidebar now keeps a small workflow strip pinned at the top while the asset browser scrolls. **Select, Room, Wall, Door, Equipment, People, and Finishes** are always one click away, so the artist does not have to scroll back through editor controls after browsing a long asset library.
+
+Placement rotation no longer depends on knowing the `R` shortcut. **Turn Left** and **Turn Right** buttons are visible beside placement snapping, with the current facing angle shown directly underneath. The keyboard shortcut still works for speed.
+
+The raw asset browser is now labeled **Advanced Files**. Normal building work should happen through Equipment/Prefabs and Finishes/Materials rather than source filenames.
