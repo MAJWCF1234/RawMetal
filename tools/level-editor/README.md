@@ -182,3 +182,16 @@ The numerical height fields remain available for precision, but the normal workf
 ### Multi-chunk vertical preview
 
 The 3D floor filters use the active floor's **elevation**, not a per-chunk internal layer ID. That means **This Floor** and **Cut Above** work across a multi-chunk industrial district instead of accidentally isolating only one chunk. Walk Preview also starts in the center of the active chunk at the active floor's height, so upper floors and mezzanines can be inspected directly.
+
+
+## Blueprint-first workflow
+
+The editor is deliberately aimed at someone who designs physical buildings rather than someone who knows Unity, Blender, or C++.
+
+- **LIVE SPLIT** keeps the 2D blueprint and the generated 3D space visible at the same time. Draw or move something in plan view and the 3D side updates from the same project data.
+- **MEASURE** is a non-destructive tape measure. Drag between two points to see total distance plus horizontal and vertical offsets in metres.
+- **ROOM LABEL** places a blueprint-only area label such as Pump Hall, Electrical, Office, Receiving, or Maintenance. Labels are saved with the project but do not create game geometry.
+- The **Floor Snapshot** panel shows the active floor's approximate floor/deck area, wall-grid occupancy, placed item count, and blueprint-label count.
+- Every placed object now has a simple editable **Name** field so an artist can call things what they mean in the building rather than working from asset filenames.
+
+These are editor-only authoring improvements. They do not require rebuilding RawMetal or compiling the game.
