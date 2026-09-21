@@ -107,6 +107,17 @@ bool Game::testLift(){
  std::ofstream report("lift-test.txt");
  auto check=[&](bool ok,const char* label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();return ok;};
  World world(3);
+ {auto staged=mapInspection({3.5f,2},0,0,3,false,0,false);
+  if(!check(staged.dormantBelow()==-4.5f&&staged.dormantEntity(-9),"Reactor dormant while boarding"))return false;
+  auto before=staged.m_enemies;for(int i=0;i<60;++i)staged.updateEnemies(1.f/60);
+  for(size_t i=0;i<before.size();++i)if(before[i].z<-2&&(length(before[i].pos-staged.m_enemies[i].pos)>0||before[i].voiceTimer!=staged.m_enemies[i].voiceTimer))return check(false,"Sleeping reactor AI changed");
+  staged.m_world.startLift();staged.m_world.updateLift(11.5f);
+  if(!check(staged.dormantBelow()<-4.5f&&staged.dormantBelow()>-10,"Reactor activation spreads across shake"))return false;
+  staged.m_world.updateLift(2);
+  if(!check(staged.dormantBelow()<=-10,"Reactor ready before descent"))return false;
+  staged.m_player.z=-9;
+  if(!check(staged.dormantBelow()<-100&&!staged.dormantEntity(-9),"Direct reactor entry bypasses staging"))return false;
+ }
  if(!check(world.layers().size()==7,"Seven stacked map layers"))return false;
  for(auto&layer:world.layers())if(layer.elevation==-3||layer.elevation>0){int tiles=0;for(auto row:layer.rows)tiles+=int(std::count(row.begin(),row.end(),'='));if(!check(tiles==28,"Passing storey is a compact shaft scenery ring"))return false;}
  for(auto&layer:world.layers())for(auto row:layer.rows)if(row.size()!=24)return check(false,"Map width");

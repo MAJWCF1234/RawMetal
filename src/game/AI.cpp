@@ -29,6 +29,7 @@ void Game::updateEnemies(float dt){
  bool footsteps=false,gunshot=false;for(auto&event:m_sounds){footsteps|=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;gunshot|=event.sound==Sound::Shot;}
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
  for(auto&e:m_enemies){
+  if(dormantEntity(e.z))continue;
   float support=groundHeight(e.pos,e.z+.01f);
   if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}
   if(!e.alive)continue;bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(e.kind==Enemy::Kind::Warden?1.f/.45f:4.f));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*5);

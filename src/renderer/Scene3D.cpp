@@ -245,12 +245,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  };
  bool objectLighting=false;float objectLight=1;
  auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
+  if(std::max({a.p.z,b.p.z,c.p.z})<game.dormantBelow())return;
   auto A=cameraPoint(a.p,game),B=cameraPoint(b.p,game),C=cameraPoint(c.p,game);if(outside(A)&outside(B)&outside(C))return;
   if(objectLighting)light*=objectLight;
   else if(light<1.5f){auto normal=cross3(b.p-a.p,c.p-a.p);a.light=illumination(a.p,normal);b.light=illumination(b.p,normal);c.light=illumination(c.p,normal);}
   a.p=A;b.p=B;c.p=C;triangle3D(a,b,c,t,light);
  };
  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
+  if(std::max({a.z,b.z,c.z,d.z})<game.dormantBelow())return;
   if(outside(cameraPoint(a,game))&outside(cameraPoint(b,game))&outside(cameraPoint(c,game))&outside(cameraPoint(d,game)))return;
   if(hidden({std::min({a.x,b.x,c.x,d.x}),std::min({a.y,b.y,c.y,d.y}),std::min({a.z,b.z,c.z,d.z})},{std::max({a.x,b.x,c.x,d.x}),std::max({a.y,b.y,c.y,d.y}),std::max({a.z,b.z,c.z,d.z})}))return;
   auto size=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
@@ -296,7 +298,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  };
  auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
-  if(base==-999.f)base=w.floorHeight(x,y);Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
+  if(base==-999.f)base=w.floorHeight(x,y);if(base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
   if(hidden({x-footprint,y-footprint,base},{x+footprint,y+footprint,base+height}))return;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
@@ -309,7 +311,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  };
  auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-  Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
+  if(base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
   float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   float c=std::cos(yaw),s=std::sin(yaw);
@@ -379,6 +381,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  }
  for(auto&s:w.structures()){
+  if(s.top<game.dormantBelow())continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.material==1){
@@ -670,6 +673,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  if(w.level()==3&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
  for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining()==0?m_routePaint:m_redPaint,1.f);}
  for(const auto&e:game.enemies()){
+  if(e.bodyTop()<game.dormantBelow())continue;
   if(!e.visible())continue;
   Point3 receiver{e.pos.x,e.pos.y,e.z+.85f};if(!sphereVisible(receiver,1.8f))continue;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;

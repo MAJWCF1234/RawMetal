@@ -223,6 +223,15 @@ public:
     bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0;}
     static bool testFlashlight();
     bool inventoryOpen()const{return m_inventoryOpen;}
+    // Reactor rendering wakes during the first lift shake, one vertical band
+    // at a time. Direct reactor entry and restored underground saves bypass it.
+    float dormantBelow()const{
+     if(m_level!=3||m_player.z<-2)return -1000.f;
+     if(m_world.liftPhase()==World::LiftPhase::Ready)return -4.5f;
+     if(m_world.liftPhase()==World::LiftPhase::Ascending)return -4.5f-5.5f*std::clamp((m_world.liftPhaseTime()-10.f)/3.f,0.f,1.f);
+     return -1000.f;
+    }
+    bool dormantEntity(float z)const{return m_level==3&&z<-2&&m_player.z>=-2&&m_world.liftPhase()!=World::LiftPhase::Crashed;}
     bool weaponEquipped()const{return m_weaponEquipped;}
     int medkits()const{return m_medkits;}
     int selectedItem()const{return m_selectedItem;}
