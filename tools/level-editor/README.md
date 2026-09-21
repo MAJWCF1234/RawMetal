@@ -153,3 +153,10 @@ The important part is that height can be edited visually:
 - **Copy Plan Above** duplicates the current architectural plan and materials onto the next level without copying loose props
 
 This keeps the workflow in familiar floor-plan / section-drawing language. Raw XYZ coordinates remain available only as a fallback.
+
+
+## Clean paint palette
+
+The Materials tab now exposes only textures that make sense as architectural finishes: construction materials, facility wall/floor/ceiling/metal surfaces, the Pressure Works wall/floor/metal set, and a small set of paintable industrial markings.
+
+Textures that exist to skin models are no longer offered as wall or floor paint. Medkits, shells, pumps, generators, computers, creatures, clutter, and similar assets remain available through Prefabs instead of appearing as nonsensical paint choices.
