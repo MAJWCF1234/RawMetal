@@ -83,6 +83,11 @@ FRIENDLY = {
     "computer_1": "Facility Computer",
 }
 
+# The editor catalog is intentionally curated. Crowbar and its matching atlas
+# came from an unwanted third-party kit; keep the runtime copy available for
+# old maps, but never expose it as a placeable editor asset or material.
+EDITOR_EXCLUDED_STEMS = {"crowbar"}
+
 DEFAULT_SIZE = {
     "pump": (1.10, 0.66, 1.35),
     "compressor": (1.00, 0.62, 1.12),
@@ -168,6 +173,8 @@ def asset_manifest() -> dict:
         for path in sorted(ASSET_ROOT.rglob("*")):
             if not path.is_file():
                 continue
+            if path.stem.lower() in EDITOR_EXCLUDED_STEMS:
+                continue
             rel = path.relative_to(ROOT).as_posix()
             ext = path.suffix.lower()
             kind = "model" if ext in MODEL_EXTENSIONS else "texture" if ext in TEXTURE_EXTENSIONS else "audio" if ext in AUDIO_EXTENSIONS else "other"
@@ -199,6 +206,8 @@ def asset_manifest() -> dict:
         texture = by_path.get(texture_path.lower()) if texture_path else None
         stem = model_path.stem
         size = DEFAULT_SIZE.get(stem, (1.0, 1.0, 1.0))
+        if model_path.stem.lower() in EDITOR_EXCLUDED_STEMS:
+            continue
         prefabs.append({
             "id": model["path"],
             "name": FRIENDLY.get(stem, model["label"]),
