@@ -228,3 +228,17 @@ The left sidebar now keeps a small workflow strip pinned at the top while the as
 Placement rotation no longer depends on knowing the `R` shortcut. **Turn Left** and **Turn Right** buttons are visible beside placement snapping, with the current facing angle shown directly underneath. The keyboard shortcut still works for speed.
 
 The raw asset browser is now labeled **Advanced Files**. Normal building work should happen through Equipment/Prefabs and Finishes/Materials rather than source filenames.
+
+
+## Whole-building canvas and New Building wizard
+
+The editor now treats the 24 x 24 m engine pieces as an implementation detail instead of an artist task.
+
+- **New Building** starts from real building dimensions, floor count, and floor height.
+- It generates however many internal plan areas are required and can create the exterior shell automatically.
+- **Room** and **Wall Line** can be dragged straight across old 24 m boundaries. Missing plan areas are created silently while drawing.
+- Matching floor elevations across neighboring plan areas are edited and displayed as one continuous floor plan.
+- New neighboring plan areas inherit the building's floor stack, so an upper floor does not suddenly disappear at an internal map seam.
+- Floor Snapshot totals now cover the whole active building elevation rather than only the currently selected 24 m area.
+
+The intended workflow for a building designer is now: enter the building dimensions, draw rooms and walls like a blueprint, place equipment and people, choose finishes, and use Live Split or 3D Preview. The underlying plan-area split is still visible when needed, but normal design work no longer has to stop at those boundaries.
