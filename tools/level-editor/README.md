@@ -50,3 +50,12 @@ The main editor now treats vertical work like a building plan instead of a game-
 - **Fit Plan** frames the whole multi-chunk building in the 2D editor.
 
 These controls are deliberately phrased for someone who thinks in floor plans, rooms, ceilings, equipment, and elevations rather than game-engine coordinates.
+
+
+## Material tile size
+
+Painted materials now have an adjustable real-world repeat size. This is separate from the 1 metre blueprint grid.
+
+When a material is selected, **Texture Size** offers 0.25 m, 0.5 m, 1 m, 2 m, 4 m, 8 m, or a custom value. A larger value makes the texture itself appear larger across the building instead of forcing every source image to repeat once per grid square.
+
+The chosen size is stored per painted tile, previews continuously across neighbouring cells in 2D, and is carried into the 3D preview. **Resize Existing On This Floor** changes every tile using the selected material on the current floor, so an artist can fix an already-painted wall or floor without repainting it.
