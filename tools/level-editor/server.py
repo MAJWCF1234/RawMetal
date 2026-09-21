@@ -9,12 +9,13 @@ import urllib.request
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_ROOT = ROOT / "src" / "assets"
 EDITOR_ROOT = ROOT / "tools" / "level-editor"
 VENDOR_ROOT = EDITOR_ROOT / "vendor"
+PROJECT_ROOT = EDITOR_ROOT / "projects"
 HOST = "127.0.0.1"
 PORT = 8008
 
@@ -256,12 +257,55 @@ def asset_manifest() -> dict:
         "threeReady": (VENDOR_ROOT / "three.module.js").exists(),
     }
 
+def project_filename(value: str) -> str:
+    stem = Path(str(value or "untitled")).stem
+    stem = re.sub(r"[^A-Za-z0-9 _.-]+", "", stem).strip().replace(" ", "-")
+    stem = stem[:80] or "untitled"
+    return stem + ".json"
+
+def project_index() -> list[dict]:
+    PROJECT_ROOT.mkdir(parents=True, exist_ok=True)
+    result = []
+    for path in sorted(PROJECT_ROOT.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            title = str(data.get("name") or path.stem) if isinstance(data, dict) else path.stem
+            chunks = len(data.get("chunks", [])) if isinstance(data, dict) else 0
+        except Exception:
+            title, chunks = path.stem, 0
+        result.append({"file": path.name, "name": title, "chunks": chunks, "modified": int(path.stat().st_mtime)})
+    return result
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
+    def send_json(self, payload, status=200):
+        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
-        route = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        route = parsed.path
+        if route == "/__depthworks_projects.json":
+            self.send_json({"projects": project_index()})
+            return
+        if route == "/__depthworks_project.json":
+            name = parse_qs(parsed.query).get("name", [""])[0]
+            path = PROJECT_ROOT / project_filename(name)
+            if not path.is_file():
+                self.send_json({"error": "Project not found"}, 404)
+                return
+            try:
+                self.send_json({"file": path.name, "project": json.loads(path.read_text(encoding="utf-8"))})
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
         if route.startswith('/__three/'):
             relative = route[len('/__three/'):]
             target = VENDOR_ROOT / relative
@@ -296,6 +340,27 @@ class Handler(SimpleHTTPRequestHandler):
             self.path = "/tools/level-editor/index.html"
         return super().do_GET()
 
+    def do_POST(self):
+        route = urlparse(self.path).path
+        if route != "/__depthworks_save_project":
+            self.send_json({"error": "Not found"}, 404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > 16 * 1024 * 1024:
+                raise ValueError("Invalid project payload size")
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            project = payload.get("project")
+            if not isinstance(project, dict) or not isinstance(project.get("chunks"), list) or not project["chunks"]:
+                raise ValueError("Invalid Depthworks project")
+            filename = project_filename(payload.get("file") or project.get("name") or "untitled")
+            PROJECT_ROOT.mkdir(parents=True, exist_ok=True)
+            path = PROJECT_ROOT / filename
+            path.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
+            self.send_json({"ok": True, "file": path.name})
+        except Exception as exc:
+            self.send_json({"error": str(exc)}, 400)
+
     def log_message(self, fmt, *args):
         print("[LevelEditor] " + fmt % args)
 
@@ -307,6 +372,7 @@ def main() -> int:
     mimetypes.add_type("model/gltf-binary", ".glb")
     mimetypes.add_type("model/gltf+json", ".gltf")
     ensure_vendor()
+    PROJECT_ROOT.mkdir(parents=True, exist_ok=True)
     threading.Thread(target=open_browser, daemon=True).start()
     try:
         with ThreadingHTTPServer((HOST, PORT), Handler) as server:
