@@ -1,12 +1,12 @@
 # Depthworks Level Editor
 
-Run \`LevelEditor.cmd\` from the repository root. No build step is required.
+Run `LevelEditor.cmd` from the repository root. No build step is required.
 
 The editor is intended for artists and designers, not programmers. The default asset browser shows **Prefabs** instead of loose source files. A prefab combines the real model, its game texture, a friendly name, and a useful default footprint. Click a prefab and then click the 2D map to place it. Materials work the same way: click a material and paint tiles.
 
 ## Main workflow
 
-1. Run \`LevelEditor.cmd\`.
+1. Run `LevelEditor.cmd`.
 2. Stay in **2D EDIT** for layout work.
 3. Paint Floor, Wall, Void, or Deck tiles.
 4. Open **PREFABS**, click Pump / Shelf / Crate / Computer / etc., and click the map to place it.
@@ -17,6 +17,6 @@ The editor is intended for artists and designers, not programmers. The default a
 
 The **FILES** tab still exposes the underlying asset library for inspection, but artists should normally work from Prefabs and Materials.
 
-The launcher caches the pinned Three.js editor runtime into \`tools/level-editor/vendor\` on first use. After that, the editor can reuse the local copy. If the 3D runtime cannot be downloaded, the 2D editor still works and reports the 3D problem instead of leaving the whole editor dead.
+The launcher caches the pinned Three.js editor runtime into `tools/level-editor/vendor` on first use. After that, the editor can reuse the local copy. If the 3D runtime cannot be downloaded, the 2D editor still works and reports the 3D problem instead of leaving the whole editor dead.
 
 RawMetal remains authoritative for exact rendering, collision, animation, lighting and gameplay.
