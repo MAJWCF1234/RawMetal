@@ -28,8 +28,14 @@ const World& Game::worldAt(Vec2& local)const{
 void Game::crossChunkBoundary(){
  int next=m_player.pos.y>=24&&m_level+1<ChunkCount?m_level+1:m_player.pos.y<0&&m_level>0?m_level-1:m_level;if(next==m_level)return;int previous=m_level;
  auto shift=chunkOffset(m_level)-chunkOffset(next);bool carried=holdingClutter();Clutter held;if(carried){held=m_clutter[m_heldClutter];m_clutter.erase(m_clutter.begin()+m_heldClutter);}m_heldClutter=-1;
+ // Loose objects can cross before the player. Transfer ownership at the seam
+ // while preserving velocity, rotation, sleep state and projectile state.
+ std::vector<Clutter> following;
+ for(auto it=m_clutter.begin();it!=m_clutter.end();){auto p=it->pos+shift;
+  if(p.y>=0&&p.y<24){auto item=*it;item.pos=p;following.push_back(item);it=m_clutter.erase(it);}else ++it;}
  ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
+ m_clutter.insert(m_clutter.end(),following.begin(),following.end());
  for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
  if(next>previous)saveCheckpoint();

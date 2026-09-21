@@ -21,10 +21,10 @@ struct GpuRenderer::Impl {
  VkInstance instance=VK_NULL_HANDLE;VkPhysicalDevice physical=VK_NULL_HANDLE;VkDevice device=VK_NULL_HANDLE;VkQueue queue=VK_NULL_HANDLE;uint32_t family=0;
  VkCommandPool pool=VK_NULL_HANDLE;VkCommandBuffer command=VK_NULL_HANDLE;VkFence fence=VK_NULL_HANDLE;
  VkDescriptorSetLayout setLayout=VK_NULL_HANDLE;VkDescriptorPool descriptors=VK_NULL_HANDLE;
- VkPipelineLayout pipelineLayout=VK_NULL_HANDLE;VkRenderPass renderPass=VK_NULL_HANDLE;VkPipeline opaque=VK_NULL_HANDLE,additive=VK_NULL_HANDLE;
+ VkPipelineLayout pipelineLayout=VK_NULL_HANDLE;VkRenderPass renderPass=VK_NULL_HANDLE;VkPipeline opaque=VK_NULL_HANDLE,additive=VK_NULL_HANDLE,transparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,depth;Buffer vertexBuffer,readback;
- struct Material {Image color,normal,emission;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false;};
+ struct Material {Image color,normal,emission;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;};
  std::unordered_map<uint64_t,Material> materials;
  struct Batch {uint64_t material;uint32_t start,count;bool clear=false;};
  std::vector<Vertex> vertices;std::vector<Batch> batches;
@@ -34,7 +34,7 @@ struct GpuRenderer::Impl {
   if(device){vkDeviceWaitIdle(device);if(framebuffer)vkDestroyFramebuffer(device,framebuffer,nullptr);
    destroy(target);destroy(depth);destroy(vertexBuffer);destroy(readback);
    for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);}
-   if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
+   if(transparent)vkDestroyPipeline(device,transparent,nullptr);if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
    if(renderPass)vkDestroyRenderPass(device,renderPass,nullptr);if(pipelineLayout)vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
    if(descriptors)vkDestroyDescriptorPool(device,descriptors,nullptr);if(setLayout)vkDestroyDescriptorSetLayout(device,setLayout,nullptr);
    if(wrap)vkDestroySampler(device,wrap,nullptr);if(clamp)vkDestroySampler(device,clamp,nullptr);
@@ -70,8 +70,8 @@ struct GpuRenderer::Impl {
   }catch(...){destroy(staging);throw;}destroy(staging);(void)pixelSize;
  }
  uint64_t material(const SoftwareRenderer::Texture&t){
-  uint64_t key=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&!t.additive?(uint64_t(t.pixels[0])<<32)|0xffffffffu:uint64_t(reinterpret_cast<uintptr_t>(t.pixels.data()));auto found=materials.find(key);if(found!=materials.end())return key;
-  auto&mat=materials[key];mat.additive=t.additive;
+  uint64_t key=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:uint64_t(reinterpret_cast<uintptr_t>(t.pixels.data()));auto found=materials.find(key);if(found!=materials.end())return key;
+  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
   std::vector<std::vector<uint8_t>> levels{bytes(t.pixels)};for(auto&level:t.mips)levels.push_back(bytes(level));upload(mat.color,t.width,t.height,VK_FORMAT_B8G8R8A8_UNORM,levels,4);
   if(!t.normalLevels.empty()){
@@ -115,7 +115,7 @@ GpuRenderer::GpuRenderer():m(std::make_unique<Impl>()){
   VkPipelineColorBlendAttachmentState blend{};blend.colorWriteMask=0xf;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;blend.srcAlphaBlendFactor=blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;blend.colorBlendOp=blend.alphaBlendOp=VK_BLEND_OP_ADD;VkPipelineColorBlendStateCreateInfo blending{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};blending.attachmentCount=1;blending.pAttachments=&blend;
   VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dynamic.dynamicStateCount=2;dynamic.pDynamicStates=states;
   VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};pipeline.stageCount=2;pipeline.pStages=stages;pipeline.pVertexInputState=&input;pipeline.pInputAssemblyState=&assembly;pipeline.pViewportState=&viewport;pipeline.pRasterizationState=&raster;pipeline.pMultisampleState=&samples;pipeline.pDepthStencilState=&depthState;pipeline.pColorBlendState=&blending;pipeline.pDynamicState=&dynamic;pipeline.layout=m->pipelineLayout;pipeline.renderPass=m->renderPass;
-  check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");
+  check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create water blend pipeline");
  }catch(...){if(vert)vkDestroyShaderModule(m->device,vert,nullptr);if(frag)vkDestroyShaderModule(m->device,frag,nullptr);throw;}vkDestroyShaderModule(m->device,vert,nullptr);vkDestroyShaderModule(m->device,frag,nullptr);
  m->vertices.reserve(150000);m->batches.reserve(4096);
 }
@@ -132,7 +132,7 @@ void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});}
 void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale){
  uint64_t key=m->material(texture);uint32_t start=uint32_t(m->vertices.size());
  for(auto v:{a,b,c}){Vertex out{};out.position[0]=v.p.x*1.3f;out.position[1]=-v.p.y*1.3f*float(m->width)/m->height;out.position[2]=v.p.z-.06f;out.position[3]=v.p.z;out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=normals?1.f:0.f;
-  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=texture.additive?1.f:0.f;m->vertices.push_back(out);
+  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=texture.transparent?2.f:texture.additive?1.f:0.f;m->vertices.push_back(out);
  }
  if(!m->batches.empty()&&!m->batches.back().clear&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false});
 }
@@ -144,7 +144,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  for(size_t begin=0;begin<m->batches.size();){
   if(m->batches[begin].clear){m->sortedBatches.push_back(m->batches[begin++]);continue;}
   size_t end=begin;while(end<m->batches.size()&&!m->batches[end].clear)++end;
-  std::stable_sort(m->batches.begin()+begin,m->batches.begin()+end,[&](const auto&a,const auto&b){bool aa=m->materials.at(a.material).additive,ba=m->materials.at(b.material).additive;return aa!=ba?aa<ba:a.material<b.material;});
+  std::stable_sort(m->batches.begin()+begin,m->batches.begin()+end,[&](const auto&a,const auto&b){bool aa=m->materials.at(a.material).additive||m->materials.at(a.material).transparent,ba=m->materials.at(b.material).additive||m->materials.at(b.material).transparent;return aa!=ba?aa<ba:a.material<b.material;});
   for(size_t i=begin;i<end;++i){auto batch=m->batches[i];uint32_t start=uint32_t(m->sortedVertices.size());m->sortedVertices.insert(m->sortedVertices.end(),m->vertices.begin()+batch.start,m->vertices.begin()+batch.start+batch.count);
    if(!m->sortedBatches.empty()&&!m->sortedBatches.back().clear&&m->sortedBatches.back().material==batch.material)m->sortedBatches.back().count+=batch.count;else m->sortedBatches.push_back({batch.material,start,batch.count,false});
   }begin=end;
@@ -155,7 +155,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  VkViewport viewport{0,0,float(m->width),float(m->height),0,1};VkRect2D scissor{{0,0},{uint32_t(m->width),uint32_t(m->height)}};vkCmdSetViewport(m->command,0,1,&viewport);vkCmdSetScissor(m->command,0,1,&scissor);VkDeviceSize offset=0;if(bytes)vkCmdBindVertexBuffers(m->command,0,1,&m->vertexBuffer.handle,&offset);
  VkPipeline previous=VK_NULL_HANDLE;
  for(auto&batch:m->batches){if(batch.clear){VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(m->command,1,&attachment,1,&rect);continue;}
-  auto&mat=m->materials.at(batch.material);auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(m->command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(m->command,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(m->command,batch.count,1,batch.start,0);
+  auto&mat=m->materials.at(batch.material);auto pipeline=mat.transparent?m->transparent:mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(m->command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(m->command,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(m->command,batch.count,1,batch.start,0);
  }
  vkCmdEndRenderPass(m->command);VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={uint32_t(m->width),uint32_t(m->height),1};vkCmdCopyImageToBuffer(m->command,m->target.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,m->readback.handle,1,&copy);
  VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;host.srcQueueFamilyIndex=host.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;host.buffer=m->readback.handle;host.size=VK_WHOLE_SIZE;vkCmdPipelineBarrier(m->command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,nullptr,1,&host,0,nullptr);m->submitCommands();pixels.resize(size_t(m->width*m->height));std::memcpy(pixels.data(),m->readback.mapped,pixels.size()*4);

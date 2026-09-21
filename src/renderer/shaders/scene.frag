@@ -17,8 +17,8 @@ void main(){
   float response=0.65+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
   vertexLight*=clamp(response/lighting.z,0.6,1.4);
  }
- if(surface.z>0.5){outColor=vec4(color.rgb*color.a*lighting.x*vec3(1,0.72,0.35),1);return;}
+ if(surface.z>0.5&&surface.z<1.5){outColor=vec4(color.rgb*color.a*lighting.x*vec3(1,0.72,0.35),1);return;}
  vec3 result=color.rgb*lighting.x*vertexLight/(1+surface.x*0.018);
  if(surface.y>0.0)result+=texture(emissionMap,uv).rgb*1.6*surface.y;
- outColor=vec4(clamp(result,0,1),1);
+ outColor=vec4(clamp(result,0,1),surface.z>1.5?color.a:1);
 }

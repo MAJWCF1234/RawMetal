@@ -20,7 +20,9 @@ void Game::updateClutter(const InputState&input,float dt){
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(holdingClutter()){
   auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;Vec2 target=m_player.pos+forward*.9f;float height=m_player.z+m_player.eye-.3f+std::sin(pitch)*.7f;
-  if(m_world.rayClear(m_player.pos,m_player.z+m_player.eye,target,height+c.height()*.5f)&&m_world.fits(target.x,target.y,height,c.height())){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
+  bool clear=true;for(int i=1;i<=12;++i){float t=float(i)/12;auto p=m_player.pos+(target-m_player.pos)*t;const auto&w=worldAt(p);float z=m_player.z+m_player.eye+(height+c.height()*.5f-m_player.z-m_player.eye)*t;clear&=w.fits(p.x,p.y,z,.02f)&&!w.doorBlocks(p.x,p.y,z,.02f);}
+  auto local=target;const auto&targetWorld=worldAt(local);
+  if(clear&&targetWorld.fits(local.x,local.y,height,c.height())){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
   else{m_heldClutter=-1;c.projectile=false;}
   if(holdingClutter()&&input.fire&&!m_previousFire&&!m_suppressFire){c.velocity=forward*(9.f*std::cos(pitch));c.vz=2.f+9.f*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
  }
@@ -37,10 +39,16 @@ void Game::updateClutter(const InputState&input,float dt){
    auto oldExtent=c.extent();float center=c.z+oldExtent[2],oldPitch=c.pitch,oldRoll=c.roll,oldYaw=c.yaw;
    c.pitch=wrapAngle(c.pitch+c.pitchSpeed*step);c.roll=wrapAngle(c.roll+c.rollSpeed*step);c.yaw=wrapAngle(c.yaw+c.spin*step);
    auto extent=c.extent();c.z=center-extent[2];
-   auto fits=[&](Vec2 p,float z){for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]})if(!m_world.fits(p.x+x,p.y+y,z,extent[2]*2)||m_world.doorBlocks(p.x+x,p.y+y,z,extent[2]*2))return false;return true;};
-   float floor=m_world.supportBelow(c.pos.x,c.pos.y,std::max(c.z,center-oldExtent[2])+.025f);
+   auto fits=[&](Vec2 p,float z){for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto local=p+Vec2{x,y};const auto&w=worldAt(local);if(!w.fits(local.x,local.y,z,extent[2]*2)||w.doorBlocks(local.x,local.y,z,extent[2]*2))return false;}return true;};
+   auto local=c.pos;const auto&supportWorld=worldAt(local);
+   float floor=supportWorld.supportBelow(local.x,local.y,std::max(c.z,center-oldExtent[2])+.025f);
    if(!fits(c.pos,std::max(c.z,floor))){c.pitch=oldPitch;c.roll=oldRoll;c.yaw=oldYaw;c.pitchSpeed*=-.2f;c.rollSpeed*=-.2f;c.spin*=-.2f;extent=oldExtent;c.z=center-extent[2];}
    c.vz-=14.f*step;
+   float water=supportWorld.waterSurface(local.x,local.y);
+   float immersed=std::clamp((water-c.z)/std::max(.01f,c.height()),0.f,1.f);
+   if(immersed>0){float buoyancy=c.kind==3||c.kind==4?8.f:24.f;c.vz+=buoyancy*immersed*step;
+    float drag=std::exp(-5.f*immersed*step);c.velocity=c.velocity*drag;c.vz*=drag;c.spin*=drag;c.pitchSpeed*=drag;c.rollSpeed*=drag;
+   }
    // Wall impulses affect the normal component, not tangential momentum.
    for(int axis=0;axis<2;++axis){auto next=c.pos;float& speed=axis==0?c.velocity.x:c.velocity.y;
     if(axis==0)next.x+=speed*step;else next.y+=speed*step;
@@ -48,7 +56,7 @@ void Game::updateClutter(const InputState&input,float dt){
     else{impact(std::fabs(speed));if(axis==0)c.pitchSpeed+=std::clamp(speed*1.5f,-8.f,8.f);else c.rollSpeed-=std::clamp(speed*1.5f,-8.f,8.f);speed*=-.25f;c.projectile=false;}
    }
    floor=-100;float ceiling=100;
-   for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){floor=std::max(floor,m_world.supportBelow(c.pos.x+x,c.pos.y+y,std::max(c.z,center-oldExtent[2])+.025f));ceiling=std::min(ceiling,m_world.clearanceAbove(c.pos.x+x,c.pos.y+y,c.z));}
+   for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto p=c.pos+Vec2{x,y};const auto&w=worldAt(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z));}
    float z=c.z+c.vz*step;
    if(c.vz>0&&z+c.height()>ceiling){impact(c.vz);c.z=std::max(floor,ceiling-c.height());c.vz=-c.vz*.2f;}
    else if(z<=floor+.001f){
@@ -74,6 +82,20 @@ void Game::updateClutter(const InputState&input,float dt){
  }
 }
 bool Game::testClutter(){
+ {auto g=mapInspection({12,23.5f},kPi*.5f,0,4,false,-9,true);g.m_clutter.clear();Clutter c;c.pos={12,23.8f};c.z=-8.5f;c.velocity={0,4};c.kind=2;g.m_clutter.push_back(c);
+  for(int i=0;i<20;++i)g.updateClutter({},1.f/120);
+  if(g.m_clutter.size()!=1||g.m_clutter[0].pos.y<=24)return false;
+  float speed=g.m_clutter[0].velocity.y;g.m_player.pos.y=24.1f;g.crossChunkBoundary();
+  if(g.m_clutter.size()!=1||g.m_clutter[0].pos.y<0||g.m_clutter[0].pos.y>2||g.m_clutter[0].velocity.y!=speed)return false;
+  Game restored;if(!restored.decodeSave(g.encodeSave())||restored.m_clutter.size()!=1||restored.m_clutter[0].velocity.y!=speed)return false;
+  g.m_player.pos={12,.3f};g.m_player.angle=-kPi*.5f;g.m_heldClutter=0;g.updateClutter({},.01f);
+  if(!g.holdingClutter()||g.m_clutter[0].pos.y>=0)return false;
+  g.m_player.pos.y=-.1f;g.crossChunkBoundary();if(g.level()!=4||!g.holdingClutter()||g.m_clutter.size()!=1)return false;
+ }
+ {auto g=mapInspection({9,9},0,0,5,false,-9.18f,true);g.m_clutter.clear();Clutter bottle;bottle.kind=2;bottle.pos={9,9};bottle.z=-9.17f;bottle.velocity={2,0};g.m_clutter.push_back(bottle);
+  g.updateClutter({},.02f);if(g.m_clutter[0].velocity.x>=2||!std::isfinite(g.m_clutter[0].z))return false;
+  if(g.world().waterSurface(12,9)>-100||g.world().waterSurface(9,9)<-10)return false;
+ }
  {auto slide=validationScene(Enemy::Kind::Huntsman);slide.m_enemies.clear();slide.m_clutter={{{1.14f,4.5f},{-4,2},1.f}};
   slide.updateClutter({},.025f);auto& c=slide.m_clutter[0];
   if(c.velocity.x<=0||c.velocity.y<1.9f||c.pos.y<=4.5f)return false;
