@@ -122,3 +122,16 @@ The Materials panel also has simple arrow controls for **Align Pattern**. Each c
 The Materials filter now includes **Recent** and **Used On This Floor** alongside Favorites. Recently chosen materials are remembered locally, and materials already in use can be isolated immediately when revising a finished room.
 
 A new **Replace Material** mode works like color replacement in a paint program. Choose the new material, click one painted tile using the old material, and every use of that old material on the active floor is changed to the new one with the currently selected repeat size, direction, and alignment.
+
+
+## Direct Save / Open
+
+The editor can save and reopen projects directly without making the artist manage browser downloads. **Save** writes project JSON under `tools/level-editor/projects`, **Open** lists those projects, and **Save As** creates a second project file. Ctrl+S saves and Ctrl+O opens the project list. Import and Export still exist for portable copies.
+
+## 3D selection and richer arrangements
+
+Placed editor objects can now be clicked directly in the 3D preview. The corresponding blueprint object becomes selected, and double-clicking an arrangeable object opens its arrangement workspace.
+
+Arrangement hierarchies can now be nested. An object placed on another object can itself be opened and decorated, so a crate on a table can have items placed on the crate while the whole assembly still travels together.
+
+An arranged item can also be raised or lowered in simple 5 cm steps. **Put On Floor** detaches it while preserving its world position.
