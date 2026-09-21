@@ -20,3 +20,16 @@ The **FILES** tab still exposes the underlying asset library for inspection, but
 The launcher caches the pinned Three.js editor runtime into `tools/level-editor/vendor` on first use. After that, the editor can reuse the local copy. If the 3D runtime cannot be downloaded, the 2D editor still works and reports the 3D problem instead of leaving the whole editor dead.
 
 RawMetal remains authoritative for exact rendering, collision, animation, lighting and gameplay.
+
+
+## Object arrangement workspace
+
+Select a placeable object such as a table, shelf, crate, machine, or blockout box and choose **ARRANGE ON / AROUND**. The editor opens a focused object workspace with:
+
+- a large orbitable 3D view of the selected object
+- simple quarter-metre plan slices for **On Top**, **Around It**, and **Under It**
+- a prefab picker for decorations and equipment
+- drag-to-position, 90-degree rotation, and removal
+- automatic parent/child grouping so decorations follow the main object when it moves
+
+This is intentionally surface-based. Artists do not need to type vertical coordinates just to put a computer on a desk or a bottle on a crate.
