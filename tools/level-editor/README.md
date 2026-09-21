@@ -59,3 +59,16 @@ Painted materials now have an adjustable real-world repeat size. This is separat
 When a material is selected, **Texture Size** offers 0.25 m, 0.5 m, 1 m, 2 m, 4 m, 8 m, or a custom value. A larger value makes the texture itself appear larger across the building instead of forcing every source image to repeat once per grid square.
 
 The chosen size is stored per painted tile, previews continuously across neighbouring cells in 2D, and is carried into the 3D preview. **Resize Existing On This Floor** changes every tile using the selected material on the current floor, so an artist can fix an already-painted wall or floor without repainting it.
+
+
+## Safety and fast editing
+
+The editor now behaves more like a forgiving drawing program:
+
+- **Undo / Redo** buttons are always visible. Ctrl+Z and Ctrl+Y work too.
+- An automatic browser-local recovery copy is saved after edits. When the editor opens after an interrupted session, it offers to recover the last autosave.
+- Ctrl+C / Ctrl+V copies and pastes the selected object.
+- Copying or duplicating an object also carries along decorations attached through the Arrange workspace, so a dressed desk or machine stays together.
+- Delete removes the selected object and its attached decoration assembly.
+- **Wall Line** draws a straight horizontal or vertical wall by dragging, with its length shown while drawing.
+- 3D wall height now follows the active floor's configured ceiling height instead of always being three metres.
