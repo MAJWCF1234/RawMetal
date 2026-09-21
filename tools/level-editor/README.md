@@ -254,3 +254,18 @@ The sticky left-side quick tools are the primary workflow: **Select, Room, Wall,
 ### Visible placement controls
 
 Character role, placement snapping, and the Turn Left / Turn Right controls now stay in the normal artist workflow instead of hiding inside the advanced drawing-tools section. Choosing **People** immediately reveals the Worker / Security / Scientist / NPC / Hostile / Creature / Player Start selector where the artist can actually see it.
+
+
+## Designer-first interaction pass
+
+The normal workflow has been pushed further toward drawing software instead of a game editor.
+
+- An always-visible **floor ribbon** sits on the blueprint. Floors switch like drawing sheets, and Floor / Ceiling plan modes are available there without hunting through panels.
+- **+ Floor** is available directly from that ribbon.
+- Equipment and props can be **dragged from the library straight onto the blueprint**. Clicking an asset and then stamping it still works.
+- Finishes can also be dragged onto a tile, after which the same finish remains active for ordinary brushing.
+- The quick tools now include a plain **Erase** tool. Click a placed object to remove it, or drag across building tiles to erase geometry and its finish together.
+- Obvious architectural prefabs can carry a sensible mounting default. Ceiling lamps and vents hang from the ceiling automatically, while wall cabinets try to snap to a nearby wall. The artist can still change Floor / Wall / Ceiling after placement.
+- Prefab cards say **WALL** or **CEILING** when the editor already knows the expected mounting surface.
+
+The intended mental model is a floor-plan drawing program: choose a thing, put it where it belongs, change floors like sheets of paper, and let the 3D view be generated from the plan.
