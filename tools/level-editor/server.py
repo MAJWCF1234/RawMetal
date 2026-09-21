@@ -108,14 +108,17 @@ DEFAULT_SIZE = {
     "trash_1": (0.55, 0.55, 0.35),
     "mre_1": (0.45, 0.30, 0.10),
     "bottle": (0.18, 0.18, 0.35),
-    "power_supply_1": (0.35, 0.45, 0.20),
+    # Meter-based calibration: a power supply is a floor appliance, not a
+    # palm-sized pickup. Keeping it around 0.6 m tall makes creature scale
+    # comparisons in the 3D preview read correctly.
+    "power_supply_1": (0.35, 0.45, 0.60),
     "pcb_2": (0.35, 0.25, 0.04),
     "floppy_disc_2": (0.28, 0.28, 0.03),
     "control-panel": (0.70, 0.45, 1.20),
     "stalker": (0.70, 0.70, 1.80),
     "huntsman": (1.30, 1.30, 0.75),
     "wasp": (1.20, 1.20, 1.00),
-    "scissors": (1.10, 1.10, 2.25),
+    "scissors": (1.10, 1.10, 1.80),
     "Remington-870": (1.10, 0.20, 0.20),
     "arms_rig": (1.20, 0.70, 1.20),
 }
