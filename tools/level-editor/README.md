@@ -84,3 +84,10 @@ The editor now removes more vertical and alignment work from the artist:
 - A selected stair has a plain **To Floor** control for choosing another upper floor.
 - Stair geometry in the 3D preview is now rendered as actual steps instead of a solid rectangular block.
 - Door and stair symbols in the 2D plan are more blueprint-like, so their direction is readable without opening the 3D view.
+
+
+### Wall mounting refinements
+
+Wall-mounted objects now have simple **Low**, **Eye Level**, and **High** placement presets. This keeps signs, control boxes, lights, and other wall decor adjustable without exposing raw vertical coordinates.
+
+Smart door openings also preserve the wall above the doorway in 3D, so placing a door creates an opening with a proper lintel rather than deleting the entire wall column.
