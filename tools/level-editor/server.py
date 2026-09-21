@@ -24,6 +24,7 @@ AUDIO_EXTENSIONS = {".wav", ".ogg", ".mp3", ".flac"}
 
 VENDOR = {
     "three.module.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three.core.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.core.js",
     "controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js",
     "loaders/OBJLoader.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/OBJLoader.js",
     "loaders/FBXLoader.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/FBXLoader.js",
@@ -31,6 +32,7 @@ VENDOR = {
     "curves/NURBSCurve.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/curves/NURBSCurve.js",
     "curves/NURBSUtils.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/curves/NURBSUtils.js",
     "utils/BufferGeometryUtils.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/utils/BufferGeometryUtils.js",
+    "libs/fflate.module.js": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/fflate.module.js",
 }
 
 TEXTURE_OVERRIDES = {
@@ -248,6 +250,27 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         route = urlparse(self.path).path
+        if route.startswith('/__three/'):
+            relative = route[len('/__three/'):]
+            target = VENDOR_ROOT / relative
+            if target.is_file() and target.resolve().is_relative_to(VENDOR_ROOT.resolve()):
+                data = target.read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+                self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            self.send_error(404)
+            return
+        # The editor is exposed at /level-editor/ for convenience, while its
+        # pinned modules live under tools/level-editor/vendor. Alias that
+        # public path so import maps work in browsers that resolve relative
+        # module URLs against the friendly route.
+        if route.startswith('/level-editor/vendor/'):
+            self.path = '/tools/level-editor/vendor/' + route[len('/level-editor/vendor/'):]
+            return super().do_GET()
         if route == "/__depthworks_assets.json":
             payload = json.dumps(asset_manifest(), separators=(",", ":")).encode("utf-8")
             self.send_response(200)
