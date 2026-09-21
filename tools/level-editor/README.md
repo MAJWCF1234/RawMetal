@@ -72,3 +72,15 @@ The editor now behaves more like a forgiving drawing program:
 - Delete removes the selected object and its attached decoration assembly.
 - **Wall Line** draws a straight horizontal or vertical wall by dragging, with its length shown while drawing.
 - 3D wall height now follows the active floor's configured ceiling height instead of always being three metres.
+
+
+## Smart architectural placement
+
+The editor now removes more vertical and alignment work from the artist:
+
+- **Smart Door** is placed by clicking a wall. It snaps to that wall, turns to match the wall direction, and the 3D preview automatically cuts the wall opening. Moving the door keeps it snapped to valid wall tiles.
+- Placeable props, blocks, lights, and terminals can be switched between **Floor**, **Wall**, and **Ceiling** from the selection panel. **Wall** finds the nearest wall, moves the object to the wall face, turns it correctly, and gives it a sensible mounting height.
+- **Stairs to Floor** automatically connect to the nearest floor above. Their rise, run, and step count are calculated from the actual floor elevations.
+- A selected stair has a plain **To Floor** control for choosing another upper floor.
+- Stair geometry in the 3D preview is now rendered as actual steps instead of a solid rectangular block.
+- Door and stair symbols in the 2D plan are more blueprint-like, so their direction is readable without opening the 3D view.
