@@ -183,6 +183,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float distance=std::sqrt(d2),along=(delta.x*flashForward.x+delta.y*flashForward.y+delta.z*flashForward.z)/distance;if(along<=.80f)return 0.f;
   float cone=std::clamp((along-.80f)/.16f,0.f,1.f);cone=cone*cone*(3.f-2.f*cone);
   float nl=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z),facing=.65f;if(nl>.00001f)facing=.30f+.70f*std::fabs((normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/(nl*distance));
+  // Never treat an untested receiver as visible when the ray budget runs out.
+  if(flashlightRayBudget<=0)return 0.f;
   if(flashlightRayBudget>0){--flashlightRayBudget;float startT=0.f;
    if(eye.x<.01f&&delta.x>0)startT=std::max(startT,(.01f-eye.x)/delta.x);if(eye.x>23.99f&&delta.x<0)startT=std::max(startT,(23.99f-eye.x)/delta.x);
    if(eye.y<.01f&&delta.y>0)startT=std::max(startT,(.01f-eye.y)/delta.y);if(eye.y>23.99f&&delta.y<0)startT=std::max(startT,(23.99f-eye.y)/delta.y);

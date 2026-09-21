@@ -12,6 +12,23 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--flashlight-test")){
+     if(!retro::Game::testFlashlight())return 43;
+     retro::SoftwareRenderer renderer(W,H);
+     if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
+     auto scene=retro::Game::mapInspection({6.5f,1.5f},1.4f,0,4,false,-9,true);
+     std::vector<std::uint32_t> before;std::ofstream report("flashlight-test.txt");
+     for(int on=0;on<2;++on){if(on){scene.giveQuestItem(retro::Game::Flashlight);retro::InputState key{};key.flashlight=true;scene.update(key,.01f);}
+      for(int warm=0;warm<8;++warm)renderer.render(scene);
+      auto start=std::chrono::steady_clock::now();for(int frame=0;frame<20;++frame)renderer.render(scene);
+      report<<"light "<<on<<" ms/frame "<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/20<<'\n';
+      std::ofstream out(on?"flashlight-on.ppm":"flashlight-off.ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";
+      for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+      if(!on)before.assign(renderer.pixels(),renderer.pixels()+W*H);
+     }
+     int brighter=0;for(int y=60;y<H-60;++y)for(int x=80;x<W-80;++x){int i=y*W+x;auto a=before[i],b=renderer.pixels()[i];if(int(b&255)+int((b>>8)&255)+int((b>>16)&255)>int(a&255)+int((a>>8)&255)+int((a>>16)&255)+12)++brighter;}
+     report<<"Brighter scene pixels: "<<brighter<<'\n';return brighter>100?0:43;
+    }
     if(std::wcsstr(commandLine,L"--megamap-inspection")){
      retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
      std::ofstream report("megamap-inspection.txt");bool ok=true;

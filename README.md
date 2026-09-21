@@ -1,5 +1,17 @@
 # RawMetal
 
+The flashlight is reserved for later chapters: scripts can grant the `flashlight`
+quest item, or use `give flashlight` in the developer console for testing.
+Press **F** after acquiring it. Ownership and its on/off state survive saves;
+removing the item turns it off. Menus pause flashlight input. The beam follows
+aim with a soft cone and a limited shadow-ray budget.
+
+Run `--flashlight-test` for Vulkan on/off captures, timings and save/toggle checks;
+add `--software` to test the CPU fallback. Lossless texture packing now compares
+PNG, reversible predictors and exact WebP, retaining the smallest result.
+The packer `--verify-exe src RawMetal.exe` mode compares every embedded asset
+against source pixels or bytes without executing the game.
+
 Movement now resolves wall contact without discarding the whole movement step,
 follows descending stairs, and preserves launch momentum with restrained air
 steering. Thrown clutter rebounds off the wall normal while keeping tangential
