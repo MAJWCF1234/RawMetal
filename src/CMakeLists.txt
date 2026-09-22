@@ -44,6 +44,7 @@ add_executable(RawMetal WIN32
     game/Console.cpp
     game/Streaming.cpp
     game/WorldIsolationTest.cpp
+    game/ServiceMapTest.cpp
     game/Clutter.cpp
     game/Ragdoll.cpp
     game/AI.cpp

@@ -108,6 +108,7 @@ public:
     explicit Game(WorldId id=WorldId::Campaign);
     WorldId worldId()const{return m_worldId;}
     static bool testWorldIsolation();
+    static bool testServiceMaps();
     void showTitleScreen();
     bool titleScreen()const{return m_titleScreen;}
     int titleSelection()const{return m_titleSelection;}

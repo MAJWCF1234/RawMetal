@@ -156,6 +156,22 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
             auto scene=retro::Game::mapInspection(position,-retro::kPi*.5f,std::atan2(light.z-feet-.78f,1.4f)*140,level,false,feet,true);renderer.render(scene);save("ceiling-light-"+std::to_string(level)+"-"+std::to_string(count));if(++count==2)break;}}
         return 0;
     }
+    if(std::wcsstr(commandLine,L"--service-inspection")){
+        retro::SoftwareRenderer renderer(W,H);
+        if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+        struct View{int level;retro::Vec2 position;float angle;};
+        const View views[]={
+            {4,{6.5f,2.5f},1.0f},{4,{12.f,7.f},1.57f},{4,{12.f,16.f},0.f},
+            {5,{12.f,2.5f},1.57f},{5,{11.5f,9.f},0.f},{5,{12.f,15.f},0.f},{5,{19.f,20.f},1.57f}};
+        for(int i=0;i<int(std::size(views));++i){const auto&v=views[i];
+            auto scene=retro::Game::mapInspection(v.position,v.angle,0,v.level,false,-9,true);
+            renderer.render(scene);std::ofstream out("service-"+std::to_string(i)+".ppm",std::ios::binary);
+            out<<"P6\n"<<W<<" "<<H<<"\n255\n";
+            for(int p=0;p<W*H;++p){auto color=renderer.pixels()[p];char rgb[]={char(color>>16),char(color>>8),char(color)};out.write(rgb,3);}
+        }
+        return 0;
+    }
+    if(std::wcsstr(commandLine,L"--service-map-test"))return retro::Game::testServiceMaps()?0:45;
     if(std::wcsstr(commandLine,L"--render-benchmark")){
         retro::SoftwareRenderer renderer(W,H);std::ofstream report("render-benchmark.txt");
         const retro::Vec2 positions[]={{3.5f,4.5f},{7.5f,12.5f},{20.5f,11.5f}};
@@ -191,6 +207,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(!retro::Game::testConsole())return 34;
         if(!retro::AudioEngine::testLiftMix())return 33;
         if(!retro::Game::testClutter())return 25;
+        if(!retro::Game::testServiceMaps())return 45;
         if(!retro::Game::testStreaming())return 26;
         if(!retro::Game::testUnarmed())return 22;
         {auto wide=retro::Win32Window::viewport(1280,600),normal=retro::Win32Window::viewport(960,540);

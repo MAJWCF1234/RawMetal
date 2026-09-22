@@ -368,28 +368,63 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
   if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
-  // Continuous walls define service bays and connected circulation loops.
+  // Concrete bay walls, real overhead transfer beams and pipe supports frame
+  // the service route. All structural solids share collision and rendering.
   const float roof=m_level==4?2.9f:3.4f;
   auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
+  for(float y:{3.8f,12.3f,20.2f}){
+   m_structures.push_back({1.2f,y,22.8f,y+.22f,roof-.54f,roof-.32f,false,2});
+   for(float x:{1.2f,22.4f})m_structures.push_back({x,y-.15f,x+.38f,y+.37f,0,roof-.32f,false,3});
+  }
   if(m_level==4){
    for(float x:{6.8f,16.8f}){wall(x,1,x+.25f,8.5f);wall(x,11.5f,x+.25f,17.5f);wall(x,20.5f,x+.25f,24);}
+   // Bolted cable trays follow the actual bay dividers rather than floating
+   // in space. Shallow steel service crossings break up the long floor run.
+   for(float y:{2.f,12.f,21.f}){
+    float end=y==2.f?8.f:y==12.f?17.f:23.f;
+    m_structures.push_back({7.04f,y,7.14f,end,1.92f,2.07f,false,2});
+    m_structures.push_back({16.70f,y,16.82f,end,1.92f,2.07f,false,2});
+    for(float bracket=y+.8f;bracket<end;bracket+=2.1f){
+     m_structures.push_back({7.02f,bracket,7.25f,bracket+.14f,1.62f,2.07f,false,2});
+     m_structures.push_back({16.59f,bracket,16.84f,bracket+.14f,1.62f,2.07f,false,2});
+    }
+   }
+   for(float y:{7.55f,15.85f})m_structures.push_back({7.3f,y,16.65f,y+.3f,0,.055f,false,2});
    // Cross aisles link all three galleries; bay dividers meet the outer walls.
    for(float y:{8.25f,17.25f}){wall(1,y,4.5f,y+.25f);wall(19.5f,y,23,y+.25f);}
    wall(7.05f,14,10.5f,14.25f);wall(13.5f,14,16.8f,14.25f);
    m_props={{0,{3.1f,5.3f},1.35f,2.2f,0,{1.1f,.66f},0},
             {1,{14.7f,17.f},1.12f,2.f,kPi*.5f,{.31f,1.f},0},
-            {0,{20.5f,14.f},1.35f,2.2f,kPi,{1.1f,.66f},0}};
+            {0,{20.5f,14.f},1.35f,2.2f,kPi,{1.1f,.66f},0},
+            {1,{3.2f,21.2f},1.12f,2.f,kPi*.5f,{.31f,1.f},0},
+            {0,{20.5f,5.9f},1.35f,2.2f,0,{1.1f,.66f},0}};
    m_fixtures={{7,{1.28f,12.5f},0,2,.5f,1.8f,kPi*.5f,true},
                {7,{1.28f,15.3f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,18.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
    m_terminals={{{8.f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false}};
   }else{
+   // Shallow ramps on all sides let the player walk out of either flooded
+   // trench. The middle bridge and both cross aisles remain dry.
+   m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-9.045f},
+                   {13.75f,7.8f,16.75f,10.7f,-9.40f,-9.045f},
+                   {7.25f,14.2f,10.25f,17.2f,-9.40f,-9.045f},
+                   {13.75f,14.2f,16.75f,17.2f,-9.40f,-9.045f}};
    // A dry central bridge runs between wet return trenches, flanked by pump bays.
    for(float x:{6.8f,17.f}){wall(x,0,x+.25f,5.f);wall(x,8.f,x+.25f,11.f);wall(x,14.f,x+.25f,18.f);wall(x,21.f,x+.25f,23);}
    for(float y:{10.75f,17.75f}){wall(1,y,4.5f,y+.25f);wall(19.5f,y,23,y+.25f);}
+   // One continuous raised grated spine reads as a bridge above four basins.
+   m_structures.push_back({10.5f,6.f,13.5f,19.f,0,.045f,false,2});
+   for(float y:{7.95f,14.35f})for(float x:{10.42f,13.50f})
+    m_structures.push_back({x,y,x+.08f,y+2.55f,.045f,.76f,true,2});
    m_props={{0,{3.f,5.3f},1.5f,2.5f,0,{1.25f,.75f},0},
             {0,{20.5f,11.8f},1.5f,2.5f,kPi,{1.25f,.75f},0},
-            {1,{3.f,16.f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0}};
+            {1,{3.f,16.f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0},
+            {0,{3.4f,21.2f},1.5f,2.5f,0,{1.25f,.75f},0}};
+   // Low curbs and supported safety rails outline flooded returns without
+   // covering their four sloped entry/exit ends.
+   for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2}){
+    m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
+   }
    m_fixtures={{7,{1.28f,20.5f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,5.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
    m_structures.push_back({18,23.65f,21,24,0,2.5f,false,7});
@@ -548,7 +583,10 @@ void World::buildLights(){
 }
 float World::floorHeight(float x,float y)const{
  if(outdoors())return m_layers.empty()?0.f:m_layers.front().elevation;
- if(m_level==5&&x>=8&&x<16&&(x<11||x>=13)&&((y>=8.5f&&y<9.5f)||(y>=14.5f&&y<15.5f)))return -9.18f;
+ for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2){
+  float shore=std::min({x-water.x1,water.x2-x,y-water.y1,water.y2-y});
+  return -9.f+(water.bed+9.f)*std::clamp(shore/.85f,0.f,1.f);
+ }
  if(m_level>=4)return -9.f;
  if(hasLift())return -9.f;
  if(m_level==2)return 0;
@@ -564,6 +602,10 @@ float World::floorHeight(float x,float y)const{
  // Lower storage landing with a separate four-step approach from the south.
  if(x>=1&&x<7&&y>=17&&y<21){if(x>=5&&y<19)return std::floor((7-x)*2)*.2f;if(y<19)return .8f;return std::min(.8f,std::floor((21-y)*2)*.2f);}
  return 0;
+}
+float World::waterSurface(float x,float y)const{
+ for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2)return water.surface;
+ return -1000.f;
 }
 float World::ceilingHeight(float x,float y)const{
  if(outdoors())return 128.f; // Traversable sky; no ceiling geometry.
