@@ -402,7 +402,37 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_fixtures={{7,{1.28f,12.5f},0,2,.5f,1.8f,kPi*.5f,true},
                {7,{1.28f,15.3f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,18.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
-   m_terminals={{{8.f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false}};
+   m_terminals={{{8.f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false},
+                {{20.2f,12.f},"CABLE GALLERY / HIGH VOLTAGE","BUS BARS LIVE ALONG THE TRAYS.","KEEP CLEAR OF THE DIVIDER RAILS.",0,false}};
+   // Authored maintenance machinery gives each bay a purpose and cover. Skids,
+   // control cabinets and coolant manifolds are floor-anchored solids (shifted
+   // to reactor elevation below); they sit inside bays, clear of the aisles.
+   for(auto skid:{Structure{4.55f,2.15f,5.65f,3.15f,0,1.0f,false,6},   // west-upper pump skid
+                  Structure{18.35f,2.15f,19.45f,3.05f,0,1.15f,false,6}, // east-upper control cabinet
+                  Structure{8.35f,3.15f,9.45f,4.45f,0,1.25f,false,6},   // middle-upper coolant manifold (west of spine)
+                  Structure{14.55f,3.15f,15.65f,4.45f,0,1.25f,false,6}, // middle-upper coolant manifold (east of spine)
+                  Structure{4.35f,13.35f,5.55f,14.45f,0,1.05f,false,6}, // mid-west junction box
+                  Structure{18.45f,13.35f,19.65f,14.45f,0,1.05f,false,6}, // mid-east junction box
+                  Structure{4.35f,21.55f,5.35f,22.45f,0,.85f,false,3},  // lower-west crate cover
+                  Structure{18.65f,21.55f,19.65f,22.45f,0,.85f,false,3}}) // lower-east crate cover
+    m_structures.push_back(skid);
+   // Extra authored props and wall equipment dress the galleries.
+   m_props.push_back({1,{20.4f,15.6f},1.12f,2.f,kPi*.5f,{.31f,1.f},0}); // east-mid standpipe
+   m_props.push_back({0,{5.0f,15.5f},1.35f,2.2f,0,{1.1f,.66f},0});      // west-mid generator
+   m_props.push_back({1,{9.3f,16.4f},1.12f,2.f,0,{.31f,.31f},0});       // middle-south standpipe (west of spine)
+   m_fixtures.push_back({7,{1.28f,3.4f},0,1.8f,.5f,1.8f,kPi*.5f,true}); // west-wall shelf
+   m_fixtures.push_back({8,{22.89f,3.2f},.8f,.7f,.2f,1.f,kPi*.5f,true}); // east-wall cabinet
+   m_fixtures.push_back({6,{20.3f,21.2f},0,1.87f,.55f,.99f,kPi*.5f,true}); // east-lower machine
+   // Live bus bars run beside the two cable-tray dividers. The zones are off
+   // the walkable galleries; brushing the trays hurts but never blocks a route.
+   m_hazards.push_back({Hazard::Kind::Electricity,6.55f,3.f,7.35f,7.f,-9.f,-7.6f,12.f});
+   m_hazards.push_back({Hazard::Kind::Electricity,16.55f,12.5f,17.35f,16.5f,-9.f,-7.6f,12.f});
+   // Spark and dust wisps read as live electrical service; purely visual.
+   m_particleEmitters.push_back({{7.1f,5.0f},-7.0f,{0.f,0.f},.6f,.5f,.05f,.15f,5});
+   m_particleEmitters.push_back({{16.75f,14.f},-7.0f,{0.f,0.f},.6f,.5f,.05f,.15f,5});
+   m_particleEmitters.push_back({{20.f,9.f},-7.5f,{-.15f,0.f}});
+   // Accent lights over the added machinery.
+   for(Vec2 p:{Vec2{5.f,2.6f},Vec2{19.f,2.6f},Vec2{5.f,14.f},Vec2{19.f,14.f}})m_lights.push_back({p,-6.3f});
   }else{
    // Shallow ramps on all sides let the player walk out of either flooded
    // trench. The middle bridge and both cross aisles remain dry.
@@ -439,7 +469,26 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
    m_clutterSpawns.push_back({3,{21.1f,21.8f}});
    m_clutterSpawns.push_back({2,{18.5f,21.7f}});
-   m_terminals={{{18.f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false}};
+   m_terminals={{{18.f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false},
+                {{5.5f,7.5f},"01 / COOLANT FEED","FEED PRESSURE NOMINAL.","VALVE LOCKED - SEE SECTOR CONTROL.",0,false},
+                {{18.5f,17.5f},"02 / COOLANT RETURN","RETURN LINE VENTING STEAM.","DO NOT WADE THE TRENCHES.",0,false}};
+   // Scalding steam vents from each flooded return. The zones sit below the dry
+   // floor/bridge line (top < -9.0), so they punish wading the trenches while
+   // leaving the raised walkway and cross aisles safe - hence "use the high
+   // walkway". Hazards never affect collision or routing.
+   for(const auto& water:m_waterVolumes)
+    m_hazards.push_back({Hazard::Kind::Steam,water.x1,water.y1,water.x2,water.y2,-9.5f,-9.06f,9.f});
+   // Visible steam rising off each basin makes the leaking returns readable.
+   for(const auto& water:m_waterVolumes)
+    m_particleEmitters.push_back({{(water.x1+water.x2)*.5f,(water.y1+water.y2)*.5f},-9.02f,{0.f,0.f},1.4f,.7f,.12f,.3f,12});
+   // Pump-bay machinery flanks the returns without narrowing the dry margins.
+   m_props.push_back({1,{5.4f,9.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});   // west-upper feed standpipe
+   m_props.push_back({1,{18.6f,9.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});  // east-upper return standpipe
+   m_props.push_back({0,{18.6f,15.8f},1.5f,2.5f,kPi,{1.25f,.75f},0});    // east-lower return pump
+   m_fixtures.push_back({6,{4.75f,12.5f},0,1.6f,.5f,.9f,kPi*.5f,true});  // west-mid coolant pump
+   m_fixtures.push_back({8,{22.89f,15.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}); // east-wall control cabinet
+   // Walkway and basin lighting.
+   for(Vec2 p:{Vec2{12.f,6.f},Vec2{12.f,12.f},Vec2{12.f,18.f},Vec2{5.f,12.5f},Vec2{19.f,12.5f}})m_lights.push_back({p,-5.75f});
   }
   // Structures use absolute elevations; props/fixtures have floor-relative bases.
   for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
