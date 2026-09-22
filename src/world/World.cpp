@@ -325,7 +325,8 @@ World::World(int level) {
   m_internalWallHeight=2.8f;
   m_structures={{5,1,5.25f,6,0,2.8f,false,3},{12,1,12.25f,6,0,2.8f,false,3},{19,1,19.25f,8,0,2.8f,false,3},{6,8,6.25f,12,0,2.8f,false,3},{13,8,13.25f,17,0,2.8f,false,3},{1,16,13,16.25f,0,2.8f,false,3}};
   float shift=float(m_level%3)*2.f;
-  m_props={{0,{3.5f+shift,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
+  // Keep the deployment pad completely clear: the player enters at 3.5, 4.5.
+  m_props={{0,{14.5f+shift*.25f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
   m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.8f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
   m_lights={{{3+shift,3},2.5f},{{17-shift,6},2.4f},{{10,14},2.5f}};
   m_terminals={{{10,3},"ASHFALL FIELD RELAY","OUTER PERIMETER COMPROMISED.","FOLLOW THE SOUTHERN BREACH.",0,false}};
