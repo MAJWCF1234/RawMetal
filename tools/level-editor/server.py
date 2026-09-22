@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import re
+import shutil
 import threading
 import time
 import urllib.request
@@ -383,7 +384,12 @@ class Handler(SimpleHTTPRequestHandler):
             filename = project_filename(payload.get("file") or project.get("name") or "untitled")
             PROJECT_ROOT.mkdir(parents=True, exist_ok=True)
             path = PROJECT_ROOT / filename
-            path.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
+            temp = path.with_suffix(path.suffix + ".tmp")
+            backup = path.with_suffix(path.suffix + ".bak")
+            temp.write_text(json.dumps(project, indent=2) + "\n", encoding="utf-8")
+            if path.exists():
+                shutil.copy2(path, backup)
+            temp.replace(path)
             self.send_json({"ok": True, "file": path.name})
         except Exception as exc:
             self.send_json({"error": str(exc)}, 400)
