@@ -315,7 +315,15 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  if(scaled){m_width=int(fullWidth*game.renderScale());m_height=int(fullHeight*game.renderScale());m_scenePixels.resize(size_t(m_width*m_height));m_sceneZ.resize(size_t(m_width*m_height));m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);}
  auto scene=[&]{bool parallel=!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
-  try{clear(rgb(12,16,18));drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}
+  try{
+   // Skybox assignment is deliberately data driven: the horror map selects
+   // the supplied Brutal Skyboxes palette while the normal campaign keeps its
+   // industrial night palette. The software renderer uses a cheap gradient
+   // fallback so it remains available on machines without the GPU path.
+   if(game.world().horrorMode()){
+    for(int y=0;y<m_height;++y){float t=float(y)/std::max(1,m_height-1);auto c=rgb(unsigned(22+18*t),unsigned(18+16*t),unsigned(20+20*t));for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=c;}
+   }else clear(rgb(12,16,18));
+   drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}
    if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen())drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };

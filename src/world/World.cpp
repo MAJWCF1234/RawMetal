@@ -1,4 +1,5 @@
 #include "World.h"
+#include <cstdlib>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -293,6 +294,24 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
 
 World::World(int level) {
  m_level=std::clamp(level,0,5);
+ m_horrorMode=std::getenv("RAWMETAL_HORROR")!=nullptr;
+ if(m_horrorMode&&m_level==0){
+  static constexpr MapRows Wasteland={
+   "########################","#....#......#.....#.....#","#....#......#.....#.....#","#.................#.....#",
+   "#..CCCC....GGG....#.....#","#.................#.....#","#####....##########.....#","#.......................#",
+   "#.....#......#..........#","#.....#......#.....GG...#","#.....#......#..........#","#.....######.#..........#",
+   "#.......................#","#...GG......#....CCC....#","#............#..........#","#............#..........#",
+   "#....#########..........#","#.......................#","#......CCC..............#","#.......................#",
+   "#...................X...#","#.......................#","#.......................#","########################"};
+  m_layers={{"Ashfall / ruined approach",0,0,Wasteland}}; m_openNorthBoundary=false; m_openSouthBoundary=true;
+  m_internalWallHeight=2.8f;
+  m_structures={{5,1,5.25f,6,0,2.8f,false,3},{12,1,12.25f,6,0,2.8f,false,3},{19,1,19.25f,8,0,2.8f,false,3},{6,8,6.25f,12,0,2.8f,false,3},{13,8,13.25f,17,0,2.8f,false,3},{1,16,13,16.25f,0,2.8f,false,3}};
+  m_props={{0,{3.5f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f},.35f,3.5f,.2f,{1.7f,.18f},0}};
+  m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.8f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
+  m_lights={{{3,3},2.5f},{{17,6},2.4f},{{10,14},2.5f}};
+  m_terminals={{{10,3},"ASHFALL CONTROL / 01","OUTER PERIMETER COMPROMISED.","EVACUATION ROUTE: SOUTH GATE.",0,false}};
+  buildLayers({});buildLights();return;
+ }
  if(m_level>=4){
   m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",-9,0,m_level==4?CoolantReturnGround:CableVaultsGround}};
   m_openNorthBoundary=m_level==5;
