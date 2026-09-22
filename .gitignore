@@ -11,3 +11,8 @@ RawMetal-audio.txt
 RawMetal-renderer.txt
 RawMetal-*.zip
 inventory.zip
+
+# Level Editor: cached Three.js runtime and Python bytecode (regenerated on demand)
+tools/level-editor/vendor/
+tools/level-editor/__pycache__/
+tools/level-editor/projects/

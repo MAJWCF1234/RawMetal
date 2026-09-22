@@ -1,0 +1,18 @@
+{
+  "name": "RawMetal",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "level-editor",
+      "command": "python3 tools/level-editor/server.py",
+      "description": "Depthworks Level Editor web server (http://127.0.0.1:8008/level-editor/). Serves the HTML/Three.js editor and reads assets from src/assets. The RawMetal game itself is Windows-only and cannot run here."
+    }
+  ],
+  "ports": [
+    {
+      "name": "level-editor",
+      "port": 8008
+    }
+  ]
+}
