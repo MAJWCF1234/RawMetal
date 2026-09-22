@@ -382,3 +382,19 @@ Favorites and recent equipment are local editor preferences, not level data. The
 Industrial equipment can now carry an optional blueprint **Service / Keep Clear** envelope without becoming game collision. Select a floor-mounted machine, cabinet, blockout, terminal, or hazard and choose **Off**, **0.5 m**, **1 m**, **1.5 m**, or type a custom clearance. The plan draws the envelope as a dashed amber box that moves and rotates with the equipment.
 
 **Design Check** understands these envelopes. It warns when a marked service zone runs into a wall or another floor-mounted piece of equipment, but keeps the result as drafting guidance rather than treating it as RawMetal navigation. This is meant for maintenance aisles, electrical access, machine service space, and other real-building layout concerns that an industrial designer already thinks about.
+
+
+## Reference blueprint underlay
+
+A building designer can attach a PNG, JPG, or WebP floor plan to the current building floor from **More -> Reference Plan** and trace directly over it.
+
+- The image sits underneath the normal blueprint drawing and never becomes RawMetal geometry.
+- Enter the real-world plan width in metres to calibrate the image without game-engine coordinates.
+- **Match Building Width**, **Center on Building**, 25 cm nudge buttons, and **Drag On Plan** make alignment visual.
+- Each floor elevation can carry its own reference image, so a multi-storey facility can trace different drawings.
+- Opacity and visibility are adjustable without changing authored geometry.
+- The browser compresses the image into the editor project JSON, so Save / Open, autosave recovery, Export JSON, and sharing the project keep the reference with the drawing.
+- Export Plan PNG stays clean by default. The underlay is included only when **Include reference in Export Plan PNG** is enabled.
+- Moving a whole building floor to another elevation carries that floor's reference with it.
+
+This is deliberately a tracing aid for an industrial building workflow, not a texture or game asset, and it does not require compiling RawMetal.
