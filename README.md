@@ -6,7 +6,11 @@ The water mesh, floor depth and debris buoyancy read the same basin records;
 light debris floats while heavy debris sinks. Quiet spatial water ambience
 comes from the supplied audio library. Run `--service-map-test` to check
 route access, water traversal, floating objects and save/restore, or
-`--service-inspection --vulkan` for seven diagnostic renders of the two rooms.
+`--service-inspection --vulkan` for eight diagnostic renders of the two rooms.
+
+Junk can be placed on the open tiers of the purchased metal shelves with **E**.
+The trays support loose items independently of the shelf frame, and placed
+items can be picked up again. The smoke suite checks shelf placement and retrieval.
 
 Campaign and Ashfall now have separate world identities, chunk origins and save
 ownership. See [world-system boundaries](docs/world-system-boundaries.md) for the

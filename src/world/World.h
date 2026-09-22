@@ -81,7 +81,7 @@ public:
     std::vector<Span> spansAt(int x,int y)const;
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;
-    bool fits(float x,float y,float feet,float height,bool dynamic=true)const;
+    bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
     bool railBlocksHull(float x,float y,float radius,float feet,float height)const;
     float wallHeight(int x,int y)const;
     bool controlReleased()const{return m_controlReleased;}
@@ -113,10 +113,10 @@ public:
     bool metalFloor(int x,int y)const{return !outdoors()&&(m_level>=4?(x>=7&&x<=16):y>=8||x>=12);}
     std::vector<Vec2> machines()const;
     float floorHeight(float x,float y)const;
-    float supportHeight(float x,float y,bool dynamic=true)const;
+    float supportHeight(float x,float y,bool dynamic=true,bool shelfCavities=false)const;
     float ceilingHeight(float x,float y)const;
     float clearanceHeight(float x,float y)const;
-    bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true)const;
+    bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true,bool shelfCavities=false)const;
     bool doorBlocks(float x,float y,float feet,float height)const;
     bool navigable(int x,int y,int nx,int ny,float height=1.f)const;
     void updateDoors(float dt);
