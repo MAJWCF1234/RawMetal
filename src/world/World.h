@@ -40,6 +40,8 @@ public:
     explicit World(int level=0);
     const std::vector<MapLayer>& layers()const{return m_layers;}
     int level()const{return m_level;}
+    bool horrorMode()const{return m_horrorMode;}
+    const char* skyboxId()const{return m_horrorMode?"brutal_wasteland":"industrial_night";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
     bool openSouthBoundary()const{return m_openSouthBoundary;}
     Vec2 exitPoint()const{return m_level==5?Vec2{19.5f,22.5f}:m_level==4?Vec2{12.f,22.5f}:Vec2{21.5f,22.5f};}
@@ -105,6 +107,7 @@ private:
     std::vector<MapLayer> m_layers;
     float m_internalWallHeight=0;
     int m_level=0;
+    bool m_horrorMode=false;
     bool m_openNorthBoundary=false,m_openSouthBoundary=false;
     std::vector<WorldProp> m_props;
     std::vector<Fixture> m_fixtures;
