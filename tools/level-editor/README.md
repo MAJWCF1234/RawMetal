@@ -269,3 +269,17 @@ The normal workflow has been pushed further toward drawing software instead of a
 - Prefab cards say **WALL** or **CEILING** when the editor already knows the expected mounting surface.
 
 The intended mental model is a floor-plan drawing program: choose a thing, put it where it belongs, change floors like sheets of paper, and let the 3D view be generated from the plan.
+
+
+## Artist placement pass
+
+The editor's normal workflow is now even less game-editor-like.
+
+- **Equipment**, **Finishes**, and **Files (Adv.)** replace developer-oriented asset terminology in the main palette.
+- The always-visible **Equipment Goes** control offers Auto, Floor, Wall, and Ceiling. Auto keeps sensible prefab defaults, while the other choices let a building designer override placement without touching XYZ values.
+- Reflected **Ceiling / RCP** mode still wins for overhead work, so dropping equipment there behaves like a ceiling plan.
+- Floor elevation and room-height numbers are now tucked under **Exact Heights (Optional)**. Normal floor changes happen from the floor ribbon, + Floor Above, Copy Plan Above, and the visual Building Section.
+- A selected prop, dummy, hazard, or other ordinary object gets a plain **Floor** selector, so moving something to a mezzanine or upper floor does not require recreating it or editing height coordinates.
+- Placement ghosts say whether an equipment item is going on the floor, wall, or ceiling before the artist clicks.
+
+These are editor-only HTML/JavaScript changes. They do not require rebuilding or compiling RawMetal.
