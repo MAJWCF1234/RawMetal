@@ -364,3 +364,9 @@ The finish tools now follow the same whole-building abstraction as floor sheets.
 - Internal RawMetal plan-area boundaries therefore no longer split an artist's paint operation or make material usage counts look incomplete.
 
 This is an editor-only authoring change and does not require compiling RawMetal.
+
+### Dragging wall equipment stays architectural
+
+Wall-mounted equipment now remains attached to a wall while it is dragged in the blueprint. Cabinets, wall boxes, control equipment, and other wall-mounted prefabs follow the nearest valid wall position instead of silently becoming free-floating objects. Their mounting height is preserved where possible and clamped to the destination room height when moving between floor-plan areas.
+
+This matches the existing nudge behavior and keeps ordinary mouse dragging safe for a building designer.
