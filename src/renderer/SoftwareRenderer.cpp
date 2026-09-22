@@ -218,7 +218,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  text(61,101,"EXTRACTION COMPLEX / NIGHT SHIFT",muted,2);
  text(61,126,"CONTAINMENT FAILURE",rust,2);
  text(61,144,"SURFACE ROUTE / STATUS UNKNOWN",muted);
- const char* labels[]={"NEW GAME","LOAD GAME","SETTINGS","QUIT"};
+ const char* labels[]={"NEW GAME","CUSTOM MAPS","LOAD GAME","SETTINGS","QUIT"};
  for(int row=0;row<TitleMenuLayout::Rows;++row){
   int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();
   wornPanel(TitleMenuLayout::X,y,TitleMenuLayout::Width,22,true,true);

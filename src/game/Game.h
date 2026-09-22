@@ -105,7 +105,7 @@ struct Player {
 struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0;};
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;};
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-288)/2,Width=304,Height=288,RowTop=Y+46,RowHeight=21,Rows=10,SliderX=X+179,SliderWidth=75;};
-struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=4;};
+struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
 
 struct ScriptAction {
  enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign};

@@ -14,10 +14,11 @@ void Game::updateTitle(const InputState& input){
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
  bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
  if(activate){
-  if(m_titleSelection==0){m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
-  else if(m_titleSelection==1){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
-  else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
-  else if(m_titleSelection==3)m_quitRequested=true;
+  if(m_titleSelection==0){_putenv_s("RAWMETAL_HORROR","");m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
+  else if(m_titleSelection==1){_putenv_s("RAWMETAL_HORROR","1");m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
+  else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
+  else if(m_titleSelection==3){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
+  else if(m_titleSelection==4)m_quitRequested=true;
  }
  m_titlePrevious=input;
 }
