@@ -122,6 +122,8 @@ public:
     void showTitleScreen();
     bool titleScreen()const{return m_titleScreen;}
     int titleSelection()const{return m_titleSelection;}
+    bool customMapsOpen()const{return m_customMapsOpen;}
+    int titleRows()const{return m_customMapsOpen?2:TitleMenuLayout::Rows;}
     bool menuFromTitle()const{return m_menuFromTitle;}
 
     void update(const InputState& input, float dt);
@@ -250,7 +252,7 @@ public:
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false);
 
 private:
-    bool m_titleScreen=false,m_menuFromTitle=false;
+    bool m_titleScreen=false,m_menuFromTitle=false,m_customMapsOpen=false;
     int m_titleSelection=0;
     InputState m_titlePrevious;
     void updateTitle(const InputState& input);

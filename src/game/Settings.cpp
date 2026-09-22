@@ -5,17 +5,21 @@
 namespace retro {
 void Game::updateTitle(const InputState& input){
  auto pressed=[](bool now,bool previous){return now&&!previous;};
- if(pressed(input.menuUp,m_titlePrevious.menuUp))m_titleSelection=(m_titleSelection+TitleMenuLayout::Rows-1)%TitleMenuLayout::Rows;
- if(pressed(input.menuDown,m_titlePrevious.menuDown))m_titleSelection=(m_titleSelection+1)%TitleMenuLayout::Rows;
+ int titleRowCount=titleRows();
+ if(pressed(input.menuUp,m_titlePrevious.menuUp))m_titleSelection=(m_titleSelection+titleRowCount-1)%titleRowCount;
+ if(pressed(input.menuDown,m_titlePrevious.menuDown))m_titleSelection=(m_titleSelection+1)%titleRowCount;
  bool inside=input.pointerX>=TitleMenuLayout::X&&input.pointerX<TitleMenuLayout::X+TitleMenuLayout::Width&&
-             input.pointerY>=TitleMenuLayout::Y&&input.pointerY<TitleMenuLayout::Y+TitleMenuLayout::Rows*TitleMenuLayout::RowHeight;
+             input.pointerY>=TitleMenuLayout::Y&&input.pointerY<TitleMenuLayout::Y+titleRowCount*TitleMenuLayout::RowHeight;
  bool click=pressed(input.fire,m_titlePrevious.fire);
  if(inside&&(input.pointerX!=m_pointerX||input.pointerY!=m_pointerY||click))m_titleSelection=(input.pointerY-TitleMenuLayout::Y)/TitleMenuLayout::RowHeight;
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
  bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
- if(activate){
+ if(activate&&m_customMapsOpen){
+  if(m_titleSelection==0){_putenv_s("RAWMETAL_HORROR","1");m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;m_level=0;restart();m_suppressFire=true;}
+  else {m_customMapsOpen=false;m_titleSelection=1;}
+ }else if(activate){
   if(m_titleSelection==0){_putenv_s("RAWMETAL_HORROR","");m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
-  else if(m_titleSelection==1){_putenv_s("RAWMETAL_HORROR","1");m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
+  else if(m_titleSelection==1){m_customMapsOpen=true;m_titleSelection=0;}
   else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
   else if(m_titleSelection==3){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
   else if(m_titleSelection==4)m_quitRequested=true;
@@ -73,7 +77,7 @@ void Game::updateMenu(const InputState& input){
  if(activate&&m_menuSelection==0){if(m_menuFromTitle)showTitleScreen();else {m_paused=false;m_suppressFire=true;}}
  if(activate&&m_menuSelection==6){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
  if(activate&&(m_menuSelection==7||m_menuSelection==8)){m_menuPage=m_menuSelection==7?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
- if(activate&&m_menuSelection==9)m_quitRequested=true;
+ if(activate&&m_menuSelection==9){if(m_menuFromTitle)m_quitRequested=true;else showTitleScreen();}
  m_menuPrevious=input;
 }
 void Game::loadSettings(const std::wstring& path){
@@ -88,8 +92,9 @@ void Game::saveSettings(const std::wstring& path)const{
 }
 bool Game::testSettings(){
  {Game title;title.m_level=3;title.showTitleScreen();InputState accept{};accept.menuAccept=true;title.update(accept,.02f);
-  if(title.titleScreen()||title.paused()||title.level()!=0)return false;
+ if(title.titleScreen()||title.paused()||title.level()!=0)return false;
  }
+ {Game title;title.showTitleScreen();InputState down{};down.menuDown=true;title.update(down,.02f);title.update({},.02f);InputState accept{};accept.menuAccept=true;title.update(accept,.02f);if(!title.titleScreen()||!title.customMapsOpen())return false;title.update({},.02f);title.update(accept,.02f);if(title.titleScreen()||!title.world().horrorMode())return false;}
  auto game=validationScene(Enemy::Kind::Huntsman);InputState escape{};escape.escape=true;game.update(escape,.02f);
  if(!game.paused()||game.quitRequested())return false;
  game.update(escape,.02f);if(!game.paused())return false;
