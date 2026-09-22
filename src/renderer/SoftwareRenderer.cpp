@@ -215,11 +215,13 @@ void SoftwareRenderer::drawTitle(const Game& game){
  for(int i=0;i<30;++i){unsigned h=unsigned(i*2654435761u+9137u);int x=38+int(h%560),y=20+int((h>>9)%318),len=3+int((h>>18)%34);rect(x,y,len,1,(i%3)?rgb(37,29,20):rgb(82,55,31));}
  text(58,48,"DEPTHWORKS",rgb(226,207,164),7);
  for(int i=0;i<13;++i){unsigned h=unsigned(i*747796405u+2891336453u);int x=58+int(h%278),y=47+int((h>>11)%39),len=5+int((h>>19)%22);rect(x,y,len,1,(i%2)?black:rgb(74,47,28));}
- text(61,101,"EXTRACTION COMPLEX / NIGHT SHIFT",muted,2);
- text(61,126,"CONTAINMENT FAILURE",rust,2);
- text(61,144,"SURFACE ROUTE / STATUS UNKNOWN",muted);
- const char* labels[]={"NEW GAME","CUSTOM MAPS","LOAD GAME","SETTINGS","QUIT"};
- for(int row=0;row<TitleMenuLayout::Rows;++row){
+ text(61,101,game.customMapsOpen()?"CUSTOM MAP ARCHIVE / PLAYER CONTENT":"EXTRACTION COMPLEX / NIGHT SHIFT",muted,2);
+ text(61,126,game.customMapsOpen()?"SELECT A DEPLOYMENT":"CONTAINMENT FAILURE",rust,2);
+ text(61,144,game.customMapsOpen()?"MAP FILES LIVE IN /CUSTOM MAPS":"SURFACE ROUTE / STATUS UNKNOWN",muted);
+ const char* normalLabels[]={"NEW GAME","CUSTOM MAPS","LOAD GAME","SETTINGS","QUIT"};
+ const char* customLabels[]={"ASHFALL EXCLUSION ZONE","BACK TO TITLE"};
+ const char* const* labels=game.customMapsOpen()?customLabels:normalLabels;
+ for(int row=0;row<game.titleRows();++row){
   int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();
   wornPanel(TitleMenuLayout::X,y,TitleMenuLayout::Width,22,true,true);
   if(selected){rect(TitleMenuLayout::X+1,y+2,3,18,amber);rect(TitleMenuLayout::X+7,y+2,TitleMenuLayout::Width-10,1,rgb(106,72,31));}
@@ -240,7 +242,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
  auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;
  const char* title=settingsPage?(game.menuFromTitle()?"DEPTHWORKS / SETTINGS":"DEPTHWORKS / PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
  text(x+15,y+12,title,paper,2);text(x+15,y+29,settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED"),amber);
- const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...","QUIT GAME"};
+ const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   wornPanel(x+12,top,MenuLayout::Width-24,19,true,true);

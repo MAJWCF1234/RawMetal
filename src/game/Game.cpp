@@ -10,7 +10,7 @@ namespace retro {
 
 Game::Game() { restart(); }
 void Game::showTitleScreen(){
-    m_titleScreen=true;m_titleSelection=0;m_titlePrevious={};m_menuFromTitle=false;
+    m_titleScreen=true;m_titleSelection=0;m_titlePrevious={};m_menuFromTitle=false;m_customMapsOpen=false;
     m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Settings;
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }

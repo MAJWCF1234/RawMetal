@@ -276,6 +276,23 @@ constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,Pressu
 constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
 constexpr MapLayer TurbineGantryUpperLayer{"Turbine Gantry / upper catwalk",3,.3f,TurbineGantryUpperCatwalk};
 constexpr std::array GantryStairs{Staircase{4,18,6,22,0,3,15,true,true}};
+// Six connected outdoor regions. Every north/south edge has the same broad
+// breach, so streaming joins terrain instead of reading as repeated rooms.
+constexpr MapRows ashfallRegion(int region){
+ MapRows rows={
+  "##########....##########","#......................#","#......................#","#....####..............#",
+  "#....#..#......####....#","#....#..#......#..#....#","#....####......####....#","#......................#",
+  "#..........####........#","#..........#..#........#","#....####..#..#..####..#","#....#..#..####..#..#..#",
+  "#....####........####..#","#......................#","#..####....####........#","#..#..#....#..#........#",
+  "#..####....####....##..#","#......................#","#....####..............#","#....#..#....####......#",
+  "#....####....#..#......#","#............####......#","#......................#","##########....##########"};
+ if(region==1){rows[3]="####....####....####....";rows[8]="#.......######.........#";rows[14]="#....####....####....##";rows[19]="#....#....####....#....#";}
+ if(region==2){rows[4]="#..####......####......#";rows[6]="#..#..#......#..#......#";rows[10]="#......####......####..#";rows[16]="#....####....####......#";}
+ if(region==3){rows[2]="#.....####.............#";rows[7]="#..####......####......#";rows[12]="#..#..#......#..#......#";rows[18]="#......####......####..#";}
+ if(region==4){rows[5]="#........####..........#";rows[9]="#....####....####......#";rows[15]="#....#..#....#..#......#";rows[20]="#....####....####......#";}
+ if(region==5){rows[3]="#..####....####........#";rows[11]="#..............####....#";rows[17]="#....####....####......#";rows[21]="#.......######.........#";}
+ return rows;
+}
 // Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
 // meet the wall at their backs; shelves have solid footprints on level floors.
 const std::array<std::vector<Fixture>,3> MapFixtures{{
@@ -303,13 +320,15 @@ World::World(int level) {
    "#......................#","#...GG......#....CCC...#","#............#.........#","#............#.........#",
    "#....#########.........#","#......................#","#......CCC.............#","#......................#",
    "#...................X..#","#......................#","#......................#","########################"};
-  m_layers={{m_level==0?"Ashfall / ruined approach":"Ashfall / stitched wasteland",0,0,Wasteland}}; m_openNorthBoundary=m_level>0; m_openSouthBoundary=m_level<5;
+  const char* regionNames[]={"Ashfall / perimeter ruins","Ashfall / collapsed highway","Ashfall / rusted yard","Ashfall / sunken district","Ashfall / radio spire","Ashfall / evacuation gate"};
+  m_layers={{regionNames[m_level],0,0,ashfallRegion(m_level)}}; m_openNorthBoundary=m_level>0; m_openSouthBoundary=m_level<5;
   m_internalWallHeight=2.8f;
   m_structures={{5,1,5.25f,6,0,2.8f,false,3},{12,1,12.25f,6,0,2.8f,false,3},{19,1,19.25f,8,0,2.8f,false,3},{6,8,6.25f,12,0,2.8f,false,3},{13,8,13.25f,17,0,2.8f,false,3},{1,16,13,16.25f,0,2.8f,false,3}};
-  m_props={{0,{3.5f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f},.35f,3.5f,.2f,{1.7f,.18f},0}};
+  float shift=float(m_level%3)*2.f;
+  m_props={{0,{3.5f+shift,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
   m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.8f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
-  m_lights={{{3,3},2.5f},{{17,6},2.4f},{{10,14},2.5f}};
-  m_terminals={{{10,3},"ASHFALL CONTROL / 01","OUTER PERIMETER COMPROMISED.","EVACUATION ROUTE: SOUTH GATE.",0,false}};
+  m_lights={{{3+shift,3},2.5f},{{17-shift,6},2.4f},{{10,14},2.5f}};
+  m_terminals={{{10,3},"ASHFALL FIELD RELAY","OUTER PERIMETER COMPROMISED.","FOLLOW THE SOUTHERN BREACH.",0,false}};
   buildLayers({});buildLights();return;
  }
  if(m_level>=4){
