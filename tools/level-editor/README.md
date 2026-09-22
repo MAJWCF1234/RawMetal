@@ -353,3 +353,14 @@ If a floor has no Player Start yet, the overlay uses the largest connected regio
 **Design Check** now uses the same analysis when a Player Start exists. It reports disconnected walkable floor and character-start dummies stranded in a disconnected region. **Show Me** centers the plan on the exact problem area, including issues that are not attached to a placed object.
 
 The point is to let a building artist answer “can the player actually get through this floor plan?” without learning navmeshes, pathfinding tools, or game-engine terminology.
+
+## Seamless finishes across the whole building
+
+The finish tools now follow the same whole-building abstraction as floor sheets.
+
+- **Fill Area** can flow through a continuous room even when that room crosses hidden 24 × 24 m plan-area seams.
+- **Replace Material** replaces the clicked finish across the entire active building floor, not only the internal plan area under the cursor.
+- **Used On This Floor**, **Update Existing On This Floor**, and **Clear This Material From Floor** all count or modify the complete active floor elevation.
+- Internal RawMetal plan-area boundaries therefore no longer split an artist's paint operation or make material usage counts look incomplete.
+
+This is an editor-only authoring change and does not require compiling RawMetal.
