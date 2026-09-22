@@ -321,3 +321,14 @@ The plan-only workflow also no longer rebuilds a hidden 3D scene after 3D has be
 The real-time 3D preview now batches repeated floor, wall, deck, doorway/window wall pieces, and ceiling cells with Three.js instancing instead of creating a separate scene object for every one-metre tile. Untextured construction materials are cached too, so a large plain industrial shell collapses into a small number of GPU batches.
 
 This does not change project data, tile behavior, materials, doors, windows, equipment, or RawMetal output. It only changes how the browser preview draws repeated architecture. Together with the plan-only rebuild guard, this keeps large multi-area buildings substantially lighter to orbit and inspect.
+
+
+## Blueprint dimensions and equipment arrays
+
+The blueprint workflow now supports two common building-drawing tasks without turning them into game-engine operations.
+
+- **Dimension** is a saved version of Measure. Drag between two points and the dimension stays on that floor's drawing, is saved with the project, appears in exported plan PNGs, and can be selected later to add a short note, flip its ends, or delete it. **Measure** remains temporary for quick checks.
+- Selected floor or ceiling equipment, blocks, lights, terminals, hazards, and character-start dummies expose **Repeat / Array**. Choose how many items go Across and Down plus centre-to-centre spacing in metres. The editor repeats the complete selected assembly, including decorations attached in Arrange, and silently creates additional internal plan areas when the row or grid crosses a 24 m engine boundary.
+- Repeat is intentionally unavailable for wall-mounted equipment, smart doors/windows, and stairs because those need architectural support or connection rules rather than blind duplication.
+
+This is aimed at industrial layouts where rows of racks, lights, machinery, cabinets, workstations, or spawn positions should take seconds instead of repeated copy/paste work.
