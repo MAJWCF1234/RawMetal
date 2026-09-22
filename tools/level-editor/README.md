@@ -370,3 +370,9 @@ This is an editor-only authoring change and does not require compiling RawMetal.
 Wall-mounted equipment now remains attached to a wall while it is dragged in the blueprint. Cabinets, wall boxes, control equipment, and other wall-mounted prefabs follow the nearest valid wall position instead of silently becoming free-floating objects. Their mounting height is preserved where possible and clamped to the destination room height when moving between floor-plan areas.
 
 This matches the existing nudge behavior and keeps ordinary mouse dragging safe for a building designer.
+
+## Service / keep-clear zones
+
+Industrial equipment can now carry an optional blueprint **Service / Keep Clear** envelope without becoming game collision. Select a floor-mounted machine, cabinet, blockout, terminal, or hazard and choose **Off**, **0.5 m**, **1 m**, **1.5 m**, or type a custom clearance. The plan draws the envelope as a dashed amber box that moves and rotates with the equipment.
+
+**Design Check** understands these envelopes. It warns when a marked service zone runs into a wall or another floor-mounted piece of equipment, but keeps the result as drafting guidance rather than treating it as RawMetal navigation. This is meant for maintenance aisles, electrical access, machine service space, and other real-building layout concerns that an industrial designer already thinks about.
