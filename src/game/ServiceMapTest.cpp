@@ -12,11 +12,31 @@ bool Game::testServiceMaps(){
  for(int level:{4,5}){
   Game game;game.loadLevel(level,false);game.updateStreaming(0);
   const auto& world=game.world();
+  for(const auto& fixture:world.fixtures())if(fixture.model==7){
+   bool clear=true;
+   for(int u=0;u<=16;++u)for(int v=0;v<=8;++v){
+    float x=(u/16.f-.5f)*fixture.width,y=(v/8.f-.5f)*fixture.depth;
+    float px=fixture.position.x+x*std::cos(fixture.yaw)+y*std::sin(fixture.yaw);
+    float py=fixture.position.y-x*std::sin(fixture.yaw)+y*std::cos(fixture.yaw);
+    if(world.tile(int(std::floor(px)),int(std::floor(py)))=='#')clear=false;
+    for(const auto& s:world.structures())if(px>s.x1&&px<s.x2&&py>s.y1&&py<s.y2&&s.top>-9+fixture.base+.02f&&s.bottom<-9+fixture.base+fixture.height)clear=false;
+   }
+   if(!check(clear,"Entire shelf footprint clears walls and structural columns"))return false;
+  }
+  World doorsOpen=world;
+  for(size_t d=0;d<world.doors().size();++d)doorsOpen.openDoor(int(d));
+  doorsOpen.updateDoors(2);
+  for(const auto& door:doorsOpen.doors()){
+   float x=(door.left+door.right)*.5f;
+   for(float y:{door.y-.45f,door.y,door.y+.45f})
+    if(!check(doorsOpen.fits(x,y,-9,1.7f)&&!doorsOpen.doorBlocks(x,y,-9,1.7f),"Opened door has standing clearance on both sides"))return false;
+  }
   if(!check(world.floorHeight(12,12)==-9&&world.ceilingHeight(12,12)>-6.2f,"Dry service bridge has headroom"))return false;
   // A quarter-metre walk grid uses the same full hull and step allowance as
   // movement. It catches sealed bays and one-way drops around water ramps.
   std::array<bool,N*N> reached{};std::queue<int> pending;
-  int start=6*N+48;reached[start]=true;pending.push(start);
+  auto spawn=world.definition().playerStart;
+  int start=int(spawn.y*4)*N+int(spawn.x*4);reached[start]=true;pending.push(start);
   auto point=[](int index){return Vec2{(index%N+.5f)*.25f,(index/N+.5f)*.25f};};
   auto floorAt=[&](Vec2 p){return game.groundHeight(p,-8.f);};
   while(!pending.empty()){
@@ -24,7 +44,7 @@ bool Game::testServiceMaps(){
    for(int offset:{-N,N,-1,1}){
     int to=from+offset;if(to<0||to>=N*N||(offset==-1&&from%N==0)||(offset==1&&from%N==N-1)||reached[to])continue;
     auto b=point(to);float bz=floorAt(b);
-    if(std::fabs(bz-az)>.215f||!game.hullFits(b,bz,1))continue;
+    if(std::fabs(bz-az)>.215f||!game.hullFits(b,bz,1.7f))continue;
     reached[to]=true;pending.push(to);
    }
   }
@@ -33,6 +53,7 @@ bool Game::testServiceMaps(){
    if(!check(reached[at],"Service route reaches exit and both maintenance bays"))return false;
   }
   if(level==5){
+   if(!check(world.particleEmitters().empty(),"Settling pools do not emit fountain jets"))return false;
    if(!check(world.waterVolumes().size()==4,"Four authored coolant basins"))return false;
    for(const auto& basin:world.waterVolumes()){
     float x=(basin.x1+basin.x2)*.5f,y=(basin.y1+basin.y2)*.5f;
