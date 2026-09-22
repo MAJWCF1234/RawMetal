@@ -332,3 +332,8 @@ The blueprint workflow now supports two common building-drawing tasks without tu
 - Repeat is intentionally unavailable for wall-mounted equipment, smart doors/windows, and stairs because those need architectural support or connection rules rather than blind duplication.
 
 This is aimed at industrial layouts where rows of racks, lights, machinery, cabinets, workstations, or spawn positions should take seconds instead of repeated copy/paste work.
+
+
+## Industrial-width doors and windows
+
+Smart doors and windows now cut the wall at their actual width instead of only removing one 1 m wall cell. Select an opening and use the visible **Width** presets (1 m, 2 m, 3 m, 4 m, or 6 m), or type an exact width. The 3D preview preserves partial wall pieces at the ends of the opening, keeps the lintel/sill, and can continue the cut across internal 24 m plan-area seams. Design Check reports openings that run beyond a continuous wall or overlap another opening. Smart openings stay aligned to their supporting wall, so the artist does not rotate them by hand.
