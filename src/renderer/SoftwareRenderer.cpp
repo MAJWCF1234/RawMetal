@@ -66,7 +66,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_muzzleFlash=loadTexture(139);m_muzzleFlash.additive=true;prepareDecal(m_muzzleFlash);
  m_pumpTexture=loadTexture(141);m_compressorTexture=loadTexture(143);m_pipeTexture=loadTexture(145);m_gateTexture=loadTexture(147);
  m_pressureWall=loadTexture(148);m_pressureFloor=loadTexture(149);m_pressureMetal=loadTexture(150);
- m_water=loadTexture(250);attachNormal(m_water,251);for(auto& pixel:m_water.pixels)pixel=(pixel&0xffffffu)|0xcc000000u;for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=(pixel&0xffffffu)|0xcc000000u;m_water.transparent=true;attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190);
+ m_water=loadTexture(250);attachNormal(m_water,251);for(auto& pixel:m_water.pixels)pixel|=0xff000000u;for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel|=0xff000000u;attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190);
  m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);

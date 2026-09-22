@@ -93,10 +93,13 @@ bool Game::testClutter(){
   for(int i=0;i<20;++i)g.updateClutter({},1.f/120);
   if(g.m_clutter.size()!=1||g.m_clutter[0].pos.y<=24)return false;
   float speed=g.m_clutter[0].velocity.y;g.m_player.pos.y=24.1f;g.crossChunkBoundary();
-  if(g.m_clutter.size()!=1||g.m_clutter[0].pos.y<0||g.m_clutter[0].pos.y>2||g.m_clutter[0].velocity.y!=speed)return false;
-  Game restored;if(!restored.decodeSave(g.encodeSave())||restored.m_clutter.size()!=1||restored.m_clutter[0].velocity.y!=speed)return false;
-  g.m_player.pos={12,.3f};g.m_player.angle=-kPi*.5f;g.m_heldClutter=0;g.updateClutter({},.01f);
-  if(!g.holdingClutter()||g.m_clutter[0].pos.y>=0)return false;
+  // The destination map may already contain authored debris; the crossing
+  // item is appended after that population and keeps its own motion state.
+  size_t transferred=g.m_clutter.size()-1;
+  if(g.m_clutter[transferred].pos.y<0||g.m_clutter[transferred].pos.y>2||g.m_clutter[transferred].velocity.y!=speed)return false;
+  Game restored;if(!restored.decodeSave(g.encodeSave())||restored.m_clutter.size()!=g.m_clutter.size()||restored.m_clutter[transferred].velocity.y!=speed)return false;
+  g.m_player.pos={12,.3f};g.m_player.angle=-kPi*.5f;g.m_heldClutter=int(transferred);g.updateClutter({},.01f);
+  if(!g.holdingClutter()||g.m_clutter[transferred].pos.y>=0)return false;
   g.m_player.pos.y=-.1f;g.crossChunkBoundary();if(g.level()!=4||!g.holdingClutter()||g.m_clutter.size()!=1)return false;
  }
  {auto g=mapInspection({9,9},0,0,5,false,-9.18f,true);g.m_clutter.clear();Clutter bottle;bottle.kind=2;bottle.pos={9,9};bottle.z=-9.17f;bottle.velocity={2,0};g.m_clutter.push_back(bottle);

@@ -427,9 +427,17 @@ World::World(int level,WorldId id):m_worldId(id) {
    }
    m_fixtures={{7,{1.28f,20.5f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,5.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
-   m_structures.push_back({18,23.65f,21,24,0,2.5f,false,7});
-   m_structures.push_back({18,23.6f,21,24,2.5f,roof,false,3});
-   for(float x:{18.f,20.9f})m_structures.push_back({x,23.5f,x+.1f,24,0,2.5f,false,2});
+   // Rear service store: the old sealed panel led nowhere. A personnel door
+   // now opens into an actual enclosed bay within this chunk.
+   wall(17.25f,20.65f,19.05f,20.87f);
+   wall(20.45f,20.65f,22.85f,20.87f);
+   wall(17.25f,22.85f,22.85f,23.08f);
+   Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;
+   m_doors.push_back(storeDoor);
+   m_fixtures.push_back({7,{21.55f,22.56f},0,1.6f,.48f,1.8f,0,true});
+   m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
+   m_clutterSpawns.push_back({3,{21.1f,21.8f}});
+   m_clutterSpawns.push_back({2,{18.5f,21.7f}});
    m_terminals={{{18.f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false}};
   }
   // Structures use absolute elevations; props/fixtures have floor-relative bases.
@@ -628,7 +636,16 @@ float World::supportHeight(float x,float y,bool dynamic)const{
  }
 }
 bool World::doorBlocks(float x,float y,float feet,float height)const{
- for(auto&door:m_doors){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f&&feet+height>base+door.open*2.65f+.015f&&feet<base+door.open*2.65f+2.48f)return true;}
+ for(auto&door:m_doors){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+  if(door.swinging){
+   float angle=door.open*kPi*.5f,width=door.right-door.left;
+   Vec2 hinge{door.left,door.y},axis{std::cos(angle),std::sin(angle)};
+   Vec2 delta=Vec2{x,y}-hinge;
+   float along=std::clamp(dot(delta,axis),0.f,width);
+   Vec2 nearest=hinge+axis*along;
+   if(lengthSq(Vec2{x,y}-nearest)<.15f*.15f&&feet+height>base+.015f&&feet<base+2.35f)return true;
+  }else if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f&&feet+height>base+door.open*2.65f+.015f&&feet<base+door.open*2.65f+2.48f)return true;
+ }
  return false;
 }
 float World::clearanceHeight(float x,float y)const{

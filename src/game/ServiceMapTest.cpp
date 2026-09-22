@@ -39,6 +39,9 @@ bool Game::testServiceMaps(){
     if(!check(world.waterSurface(x,y)==basin.surface&&std::fabs(world.floorHeight(x,y)-basin.bed)<.001f,"Render, bed and buoyancy share basin definition"))return false;
    }
    if(!check(world.waterSurface(12,9)<-100&&world.floorHeight(12,9)==-9,"Central walkway remains dry"))return false;
+   if(!check(world.doors().size()==1&&world.doors()[0].swinging&&world.doorBlocks(19.7f,20.76f,-9,1.7f),"Rear store has a closed swinging door"))return false;
+   World opened=world;opened.openDoor(0);opened.updateDoors(2);
+   if(!check(!opened.doorBlocks(19.7f,20.76f,-9,1.7f)&&opened.fits(19.7f,21.3f,-9,1.7f),"Swinging leaf clears a walkable store entrance"))return false;
   }
  }
  Game player;player.loadLevel(5,false);player.m_enemies.clear();player.m_player.pos={9.f,11.4f};player.m_player.z=-9;player.m_player.angle=-kPi*.5f;player.m_player.grounded=true;
