@@ -51,7 +51,7 @@ void Game::loadLevel(int level,bool carry) {
     m_player.ammo = 72;
     m_player.loaded = 6;
     if(carry){m_player.health=health;m_player.ammo=ammo;m_player.loaded=loaded;}
-    m_player.z = m_level>=4?-9.0f:0.0f;
+    m_player.z = m_world.horrorMode()?0.0f:(m_level>=4?-9.0f:0.0f);
     m_player.verticalVelocity = 0.0f;
     m_player.grounded = true;
     m_velocity = {};
@@ -63,7 +63,7 @@ void Game::loadLevel(int level,bool carry) {
     if(m_level==1)m_enemies={{{17.5f,4.5f}},{{6.5f,6.2f}},{{4.5f,14.5f}},{{9.5f,12.5f}},{{19.5f,12.5f}},{{21.5f,15.5f}},{{7.5f,19.5f}},{{15.5f,20.5f}},{{21.5f,19.5f}}};
     if(m_level==2)m_enemies={{{7.5f,4.5f}},{{16.5f,4.5f}},{{7.5f,12.5f}},{{3.5f,15.5f}},{{19.5f,15.5f}},{{21.5f,20.5f}}};
     if(m_level==3)m_enemies={{{5.5f,13.5f}},{{17.5f,19.5f}},{{21.5f,18.5f}}};
-    if(m_level>=4)m_enemies.clear();
+    if(m_level>=4&&!m_world.horrorMode())m_enemies.clear();
     for(size_t i=0;i<m_enemies.size();++i){auto&e=m_enemies[i];e.kind=i%3==1?Enemy::Kind::Wasp:i%3==2?Enemy::Kind::Brute:Enemy::Kind::Huntsman;e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:110.f;e.voiceTimer=.8f+float(i)*.9f;e.home=e.pos;e.lastKnown=e.pos;e.z=m_world.floorHeight(e.pos.x,e.pos.y);e.heading=kPi;}
     if(m_level==3){auto&e=m_enemies.back();e.kind=Enemy::Kind::Warden;e.hp=e.maxHp=320;}
     m_pickups = {
@@ -75,7 +75,7 @@ void Game::loadLevel(int level,bool carry) {
     if(m_level==1)m_pickups={{{4.5f,4.5f},Pickup::Kind::Ammo,true},{{16.5f,3.5f},Pickup::Kind::Health,true},{{2.5f,15.5f},Pickup::Kind::Ammo,true},{{21.5f,12.5f},Pickup::Kind::Ammo,true},{{7.5f,20.5f},Pickup::Kind::Health,true},{{17.5f,19.5f},Pickup::Kind::Ammo,true}};
     if(m_level==2)m_pickups={{{3.5f,3.5f},Pickup::Kind::Ammo,true},{{7.5f,15.5f},Pickup::Kind::Health,true},{{7.5f,19.5f},Pickup::Kind::Ammo,true},{{21.5f,18.5f},Pickup::Kind::Ammo,true}};
     if(m_level==3)m_pickups={{{12.5f,15.5f},Pickup::Kind::Ammo,true},{{15.5f,17.5f},Pickup::Kind::Health,true},{{21.5f,19.5f},Pickup::Kind::Ammo,true}};
-    if(m_level>=4)m_pickups.clear();
+    if(m_level>=4&&!m_world.horrorMode())m_pickups.clear();
 
     m_previousFire = false;
     m_previousReload = false;

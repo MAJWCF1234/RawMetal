@@ -295,7 +295,7 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
 World::World(int level) {
  m_level=std::clamp(level,0,5);
  m_horrorMode=std::getenv("RAWMETAL_HORROR")!=nullptr;
- if(m_horrorMode&&m_level==0){
+ if(m_horrorMode){
   static constexpr MapRows Wasteland={
    "########################","#....#......#.....#....#","#....#......#.....#....#","#.................#....#",
    "#..CCCC....GGG....#....#","#.................#....#","#####....##########....#","#......................#",
@@ -303,7 +303,7 @@ World::World(int level) {
    "#......................#","#...GG......#....CCC...#","#............#.........#","#............#.........#",
    "#....#########.........#","#......................#","#......CCC.............#","#......................#",
    "#...................X..#","#......................#","#......................#","########################"};
-  m_layers={{"Ashfall / ruined approach",0,0,Wasteland}}; m_openNorthBoundary=false; m_openSouthBoundary=true;
+  m_layers={{m_level==0?"Ashfall / ruined approach":"Ashfall / stitched wasteland",0,0,Wasteland}}; m_openNorthBoundary=m_level>0; m_openSouthBoundary=m_level<5;
   m_internalWallHeight=2.8f;
   m_structures={{5,1,5.25f,6,0,2.8f,false,3},{12,1,12.25f,6,0,2.8f,false,3},{19,1,19.25f,8,0,2.8f,false,3},{6,8,6.25f,12,0,2.8f,false,3},{13,8,13.25f,17,0,2.8f,false,3},{1,16,13,16.25f,0,2.8f,false,3}};
   m_props={{0,{3.5f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f},.35f,3.5f,.2f,{1.7f,.18f},0}};
