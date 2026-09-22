@@ -63,7 +63,7 @@ struct Enemy {
 };
 
 struct Pickup {
-    enum class Kind { Health, Ammo };
+    using Kind=PickupKind;
     Vec2 pos{};
     Kind kind = Kind::Health;
     bool active = true;
@@ -181,6 +181,7 @@ public:
     static Game liftInspection(float seconds,int view=0);
     static bool testReactor();
     const char* interactionHint()const;
+    bool doorLocked(const Door& door)const;
     int activeLog()const{return m_activeLog;}
     float logTime()const{return m_logTime;}
     const Pickup* nearbyPickup()const;
@@ -273,6 +274,7 @@ private:
     void updateScripts(float dt);
     void executeScriptAction(const ScriptAction& action);
     void spawnScriptEnemy(const ScriptAction& action);
+    void spawnCreature(const CreatureSpawn& spawn,float awareness=0,bool announce=false);
     void updateHazards(float dt);
     void loadLevel(int level,bool carry);
     int m_level=0;

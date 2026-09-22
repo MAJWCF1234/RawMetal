@@ -6,6 +6,32 @@ bool Game::testWorldIsolation(){
  std::ofstream out("world-isolation-test.txt");
  auto check=[&](bool ok,const char* label){out<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
  Game campaign;Game custom(WorldId::Ashfall);Game independent;
+ // Keep authored encounter composition stable while moving ownership out of Game.
+ constexpr int creatureCounts[]={8,9,6,3,0,0},pickupCounts[]={4,6,4,3,0,0};
+ for(int level=0;level<ChunkCount;++level){
+  const auto& chunk=campaign.m_chunks[level];
+  if(!check(int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&chunk.clutter.size()==(level<4?6u:0u),"Campaign population preserved"))return false;
+ }
+ const auto& warden=campaign.m_chunks[3].enemies.back();
+ if(!check(warden.kind==CreatureKind::Warden&&warden.hp==320&&warden.pos.x==21.5f&&warden.pos.y==18.5f,"Reactor encounter keeps its authored creature and health"))return false;
+ if(!check(campaign.m_chunks[2].clutter[4].z==3&&campaign.m_chunks[2].clutter[5].z==3,"Upper-deck clutter retains explicit elevation"))return false;
+ // Any map can author an ordinary locked door or an unrestricted transfer.
+ Game gate(WorldId::Ashfall);Door door{2,5,6};door.requireState=stateId("gate_power");door.requireValue=2;
+ gate.m_world.m_doors={door};gate.m_player.pos={3.5f,5.2f};gate.m_player.angle=kPi*.5f;
+ InputState use{};use.use=true;gate.updateInteraction(use,.01f);
+ if(!check(gate.doorLocked(door)&&!gate.world().doors()[0].opening,"Script-locked ordinary door rejects interaction"))return false;
+ gate.setState(door.requireState,1);
+ if(!check(gate.doorLocked(door),"Door requires the authored state value"))return false;
+ gate.setState(door.requireState,2);gate.updateInteraction({},.01f);gate.updateInteraction(use,.01f);
+ if(!check(!gate.doorLocked(door)&&gate.world().doors()[0].opening,"Script state unlocks ordinary door through player interaction"))return false;
+ Door transfer;transfer.transfer=true;
+ if(!check(gate.enemiesRemaining()>0&&!gate.doorLocked(transfer),"Transfer connection alone does not impose combat lock"))return false;
+ transfer.requireEnemiesClear=true;
+ if(!check(gate.doorLocked(transfer),"Map-authored combat lock is enforced"))return false;
+ gate.m_enemies.clear();transfer.requireControl=true;
+ if(!check(gate.doorLocked(transfer),"Map-authored control lock is enforced"))return false;
+ gate.m_world.releaseControl();
+ if(!check(!gate.doorLocked(transfer),"Cleared encounter and control release unlock door"))return false;
  if(!check(campaign.world().campaign()&&independent.world().campaign()&&!custom.world().campaign(),"Worlds coexist without global state"))return false;
  if(!check(custom.m_scriptEvents.empty()&&!campaign.m_scriptEvents.empty(),"Campaign script content is isolated"))return false;
  // The same trigger/action executor works in a custom world without level-ID branches.

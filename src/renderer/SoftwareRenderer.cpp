@@ -186,7 +186,9 @@ void SoftwareRenderer::drawHud(const Game& game){
   rect(x,y+8,130,5,rgb(10,7,5));rect(x+1,y+9,int(128*std::max(0.f,target->hp)/target->maxHp),3,target->windup>0?amber:red);
   if(target->windup>0)text(cx-22,cy-22,"INCOMING",amber);
  }
- if(game.world().campaign()&&game.enemiesRemaining()==0&&(game.level()<2||game.world().controlReleased())){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
+ bool transferReleased=false;
+ for(const auto& door:game.world().doors())if(door.transfer&&(door.requireEnemiesClear||door.requireControl||door.requireState)&&!game.doorLocked(door))transferReleased=true;
+ if(transferReleased){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
  if(game.dead()||game.won()){wornPanel(cx-100,cy-26,200,51);text(cx-68,cy-15,game.won()?"SECTOR CLEARED":"SIGNAL LOST",game.won()?amber:red,2);text(cx-63,cy+7,"ESC / RESTART GAME",paper);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
  if(game.audioMuted())text(10,43,"AUDIO MUTED / M",muted);

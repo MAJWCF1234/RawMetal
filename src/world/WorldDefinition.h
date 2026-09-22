@@ -7,6 +7,7 @@ namespace retro {
 enum class WorldId { Campaign, Ashfall };
 enum class Environment { Interior, Outdoor };
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden };
+enum class PickupKind { Health, Ammo }; // Values retain the existing save format.
 struct ChunkDefinition {
     Vec2 origin;
     Vec2 playerStart;

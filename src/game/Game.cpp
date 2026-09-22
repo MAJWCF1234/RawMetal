@@ -56,37 +56,10 @@ void Game::loadLevel(int level,bool carry) {
     m_player.grounded = true;
     m_velocity = {};
 
-    if(m_world.campaign()){
-    m_enemies = {
-        {{9.5f, 4.9f}}, {{15.5f, 2.5f}}, {{19.5f, 7.5f}}, {{8.5f, 11.5f}},
-        {{18.5f, 12.5f}}, {{5.5f, 15.5f}}, {{12.5f, 18.5f}}, {{19.5f, 20.5f}}
-    };
-    if(m_level==1)m_enemies={{{17.5f,4.5f}},{{6.5f,6.2f}},{{4.5f,14.5f}},{{9.5f,12.5f}},{{19.5f,12.5f}},{{21.5f,15.5f}},{{7.5f,19.5f}},{{15.5f,20.5f}},{{21.5f,19.5f}}};
-    if(m_level==2)m_enemies={{{7.5f,4.5f}},{{16.5f,4.5f}},{{7.5f,12.5f}},{{3.5f,15.5f}},{{19.5f,15.5f}},{{21.5f,20.5f}}};
-    if(m_world.hasLift())m_enemies={{{5.5f,13.5f}},{{17.5f,19.5f}},{{21.5f,18.5f}}};
-    if(m_level>=4&&!m_world.horrorMode())m_enemies.clear();
-    for(size_t i=0;i<m_enemies.size();++i){auto&e=m_enemies[i];e.kind=i%3==1?Enemy::Kind::Wasp:i%3==2?Enemy::Kind::Brute:Enemy::Kind::Huntsman;e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:110.f;e.voiceTimer=.8f+float(i)*.9f;e.home=e.pos;e.lastKnown=e.pos;e.z=m_world.floorHeight(e.pos.x,e.pos.y);e.heading=kPi;}
-    if(m_world.hasLift()){auto&e=m_enemies.back();e.kind=Enemy::Kind::Warden;e.hp=e.maxHp=320;}
-    m_pickups = {
-        {{4.5f, 7.5f}, Pickup::Kind::Ammo, true},
-        {{13.5f, 5.5f}, Pickup::Kind::Health, true},
-        {{22.5f, 10.5f}, Pickup::Kind::Ammo, true},
-        {{7.5f, 20.5f}, Pickup::Kind::Health, true}
-    };
-    if(m_level==1)m_pickups={{{4.5f,4.5f},Pickup::Kind::Ammo,true},{{16.5f,3.5f},Pickup::Kind::Health,true},{{2.5f,15.5f},Pickup::Kind::Ammo,true},{{21.5f,12.5f},Pickup::Kind::Ammo,true},{{7.5f,20.5f},Pickup::Kind::Health,true},{{17.5f,19.5f},Pickup::Kind::Ammo,true}};
-    if(m_level==2)m_pickups={{{3.5f,3.5f},Pickup::Kind::Ammo,true},{{7.5f,15.5f},Pickup::Kind::Health,true},{{7.5f,19.5f},Pickup::Kind::Ammo,true},{{21.5f,18.5f},Pickup::Kind::Ammo,true}};
-    if(m_world.hasLift())m_pickups={{{12.5f,15.5f},Pickup::Kind::Ammo,true},{{15.5f,17.5f},Pickup::Kind::Health,true},{{21.5f,19.5f},Pickup::Kind::Ammo,true}};
-    if(m_level>=4&&!m_world.horrorMode())m_pickups.clear();
-    }
-
-    if(!m_world.campaign()){
-        m_enemies.clear();m_pickups.clear();
-        for(const auto& spawn:m_world.creatureSpawns()){
-            ScriptAction action;action.enemyKind=spawn.kind;action.position=spawn.position;action.z=spawn.z;
-            spawnScriptEnemy(action);
-        }
-        m_pickups={{{3.5f,7.5f},Pickup::Kind::Ammo,true},{{20.5f,17.5f},Pickup::Kind::Health,true}};
-    }
+    m_enemies.clear();
+    for(const auto& spawn:m_world.creatureSpawns())spawnCreature(spawn);
+    m_pickups.clear();
+    for(const auto& spawn:m_world.pickupSpawns())m_pickups.push_back({spawn.position,spawn.kind,true});
 
     m_previousFire = false;
     m_previousReload = false;
