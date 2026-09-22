@@ -8,14 +8,14 @@
 
 namespace retro {
 
-Game::Game() { restart(); }
+Game::Game(WorldId id):m_worldId(id) { restart(); }
 void Game::showTitleScreen(){
     m_titleScreen=true;m_titleSelection=0;m_titlePrevious={};m_menuFromTitle=false;m_customMapsOpen=false;
     m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Settings;
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;seedScripts();int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);seedScripts();updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -42,30 +42,31 @@ void Game::crossChunkBoundary(){
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
-    m_level=std::clamp(level,0,ChunkCount-1);m_world=World{m_level};m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
+    m_level=std::clamp(level,0,ChunkCount-1);m_world=World{m_level,m_worldId};m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
-    m_player.pos = m_level==0?Vec2{3.5f,4.5f}:m_level==4?Vec2{6.5f,1.5f}:m_level==5?Vec2{12.f,2.f}:Vec2{3.5f,3.5f};
+    m_player.pos = m_world.definition().playerStart;
     m_player.angle = 0.08f;
     m_player.pitch = 0.0f;
     m_player.health = 100.0f;
     m_player.ammo = 72;
     m_player.loaded = 6;
     if(carry){m_player.health=health;m_player.ammo=ammo;m_player.loaded=loaded;}
-    m_player.z = m_world.horrorMode()?0.0f:(m_level>=4?-9.0f:0.0f);
+    m_player.z = m_world.definition().spawnHeight;
     m_player.verticalVelocity = 0.0f;
     m_player.grounded = true;
     m_velocity = {};
 
+    if(m_world.campaign()){
     m_enemies = {
         {{9.5f, 4.9f}}, {{15.5f, 2.5f}}, {{19.5f, 7.5f}}, {{8.5f, 11.5f}},
         {{18.5f, 12.5f}}, {{5.5f, 15.5f}}, {{12.5f, 18.5f}}, {{19.5f, 20.5f}}
     };
     if(m_level==1)m_enemies={{{17.5f,4.5f}},{{6.5f,6.2f}},{{4.5f,14.5f}},{{9.5f,12.5f}},{{19.5f,12.5f}},{{21.5f,15.5f}},{{7.5f,19.5f}},{{15.5f,20.5f}},{{21.5f,19.5f}}};
     if(m_level==2)m_enemies={{{7.5f,4.5f}},{{16.5f,4.5f}},{{7.5f,12.5f}},{{3.5f,15.5f}},{{19.5f,15.5f}},{{21.5f,20.5f}}};
-    if(m_level==3)m_enemies={{{5.5f,13.5f}},{{17.5f,19.5f}},{{21.5f,18.5f}}};
+    if(m_world.hasLift())m_enemies={{{5.5f,13.5f}},{{17.5f,19.5f}},{{21.5f,18.5f}}};
     if(m_level>=4&&!m_world.horrorMode())m_enemies.clear();
     for(size_t i=0;i<m_enemies.size();++i){auto&e=m_enemies[i];e.kind=i%3==1?Enemy::Kind::Wasp:i%3==2?Enemy::Kind::Brute:Enemy::Kind::Huntsman;e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:110.f;e.voiceTimer=.8f+float(i)*.9f;e.home=e.pos;e.lastKnown=e.pos;e.z=m_world.floorHeight(e.pos.x,e.pos.y);e.heading=kPi;}
-    if(m_level==3){auto&e=m_enemies.back();e.kind=Enemy::Kind::Warden;e.hp=e.maxHp=320;}
+    if(m_world.hasLift()){auto&e=m_enemies.back();e.kind=Enemy::Kind::Warden;e.hp=e.maxHp=320;}
     m_pickups = {
         {{4.5f, 7.5f}, Pickup::Kind::Ammo, true},
         {{13.5f, 5.5f}, Pickup::Kind::Health, true},
@@ -74,8 +75,18 @@ void Game::loadLevel(int level,bool carry) {
     };
     if(m_level==1)m_pickups={{{4.5f,4.5f},Pickup::Kind::Ammo,true},{{16.5f,3.5f},Pickup::Kind::Health,true},{{2.5f,15.5f},Pickup::Kind::Ammo,true},{{21.5f,12.5f},Pickup::Kind::Ammo,true},{{7.5f,20.5f},Pickup::Kind::Health,true},{{17.5f,19.5f},Pickup::Kind::Ammo,true}};
     if(m_level==2)m_pickups={{{3.5f,3.5f},Pickup::Kind::Ammo,true},{{7.5f,15.5f},Pickup::Kind::Health,true},{{7.5f,19.5f},Pickup::Kind::Ammo,true},{{21.5f,18.5f},Pickup::Kind::Ammo,true}};
-    if(m_level==3)m_pickups={{{12.5f,15.5f},Pickup::Kind::Ammo,true},{{15.5f,17.5f},Pickup::Kind::Health,true},{{21.5f,19.5f},Pickup::Kind::Ammo,true}};
+    if(m_world.hasLift())m_pickups={{{12.5f,15.5f},Pickup::Kind::Ammo,true},{{15.5f,17.5f},Pickup::Kind::Health,true},{{21.5f,19.5f},Pickup::Kind::Ammo,true}};
     if(m_level>=4&&!m_world.horrorMode())m_pickups.clear();
+    }
+
+    if(!m_world.campaign()){
+        m_enemies.clear();m_pickups.clear();
+        for(const auto& spawn:m_world.creatureSpawns()){
+            ScriptAction action;action.enemyKind=spawn.kind;action.position=spawn.position;action.z=spawn.z;
+            spawnScriptEnemy(action);
+        }
+        m_pickups={{{3.5f,7.5f},Pickup::Kind::Ammo,true},{{20.5f,17.5f},Pickup::Kind::Health,true}};
+    }
 
     m_previousFire = false;
     m_previousReload = false;
@@ -90,7 +101,7 @@ void Game::loadLevel(int level,bool carry) {
     m_sounds.clear();m_stepDistance=0;m_stepVariant=0;
     m_pickupNotice.clear();m_pickupNoticeTime=0;
     seedClutter();
-    if(m_level==3&&!m_hazmat.initialized)m_hazmat.seed(m_world);
+    if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
 }
 void Game::sound(Sound sound,float gain,float pitch){m_sounds.push_back({sound,{},gain,pitch,false});}
 void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int kind=enemy.kind==Enemy::Kind::Warden?2:int(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+kind*3+action),enemy.pos,gain,pitch*(enemy.kind==Enemy::Kind::Warden?.78f:1.f),true});}
@@ -136,7 +147,7 @@ Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
  Game g;g.m_enemies.resize(1);auto&e=g.m_enemies[0];e.kind=kind;e.pos={6.2f,4.5f};e.heading=kPi;e.moving=true;e.gait=2.f;e.windup=windup;e.hp=e.maxHp=kind==Enemy::Kind::Brute?280.f:kind==Enemy::Kind::Wasp?85.f:110.f;
  e.alive=deathTime<0;e.deathTime=std::max(0.f,deathTime);if(kind==Enemy::Kind::Warden)e.hp=e.maxHp=320;g.m_player.angle=0;return g;
 }
-Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly){Game game;game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?game.m_world.floorHeight(position.x,position.y):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
+Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly,WorldId id){Game game(id);game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?game.m_world.floorHeight(position.x,position.y):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
  if(sceneryOnly){game.m_enemies.clear();for(auto&chunk:game.m_chunks)chunk.enemies.clear();}
  if(openDoors){for(auto&chunk:game.m_chunks){for(int i=0;i<int(chunk.world.doors().size());++i)chunk.world.openDoor(i);chunk.world.updateDoors(2);}for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);game.m_world.updateDoors(2);}game.updateStreaming(0);return game;}
 
@@ -167,7 +178,7 @@ void Game::shoot() {
         if (along < bestAlong) { bestAlong = along; best = &e; }
     }
 
-    if(m_level==3){int joint=-1;float pitch=m_player.pitch/140.f;RagPoint direction{forward.x*std::cos(pitch),forward.y*std::cos(pitch),std::sin(pitch)};
+    if(m_world.hasLift()){int joint=-1;float pitch=m_player.pitch/140.f;RagPoint direction{forward.x*std::cos(pitch),forward.y*std::cos(pitch),std::sin(pitch)};
      float distance=m_hazmat.rayHit({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction,joint);
      if(joint>=0&&distance<bestAlong&&distance<18){auto p=m_hazmat.p[joint];if(m_world.rayClear(m_player.pos,m_player.z+m_player.eye,{p.x,p.y},p.z)){m_hazmat.impulse(joint,direction*2.5f+RagPoint{0,0,.7f});sound(Sound::PunchHit,.55f,.8f);return;}}
     }
@@ -283,7 +294,7 @@ void Game::update(const InputState& input, float dt) {
 
         updateLift(dt);
         updateMovement(input,dt);
-        if(m_level==3){
+        if(m_world.hasLift()){
             m_hazmatPushCooldown=std::max(0.f,m_hazmatPushCooldown-dt);
             if(m_hazmat.initialized&&length(m_velocity)>.5f&&m_hazmatPushCooldown<=0){
                 int nearest=-1;float nearestDistance=.4f*.4f;

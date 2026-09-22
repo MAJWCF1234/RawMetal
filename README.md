@@ -1,5 +1,12 @@
 # RawMetal
 
+Campaign and Ashfall now have separate world identities, chunk origins and save
+ownership. See [world-system boundaries](docs/world-system-boundaries.md) for the
+isolation fix, reusable spawn/effect/trigger records, tests and remaining legacy
+code. Custom Maps currently plays the built-in Ashfall world; loading arbitrary
+editor-exported map packages is not implemented yet. Save version 9 preserves
+world identity; older saves are interpreted as campaign saves.
+
 The flashlight is reserved for later chapters: scripts can grant the `flashlight`
 quest item, or use `give flashlight` in the developer console for testing.
 Press **F** after acquiring it. Ownership and its on/off state survive saves;

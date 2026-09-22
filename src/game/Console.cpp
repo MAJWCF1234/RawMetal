@@ -16,7 +16,7 @@ void Game::executeConsole(std::string command){
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
-  _putenv_s("RAWMETAL_HORROR","1");m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED CUSTOM WASTELAND / 6 STITCHED SURFACE CHUNKS.");
+  m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED CUSTOM WASTELAND / 6 STITCHED SURFACE CHUNKS.");
  }
  else if(verb=="give"&&arg=="flashlight"&&extra.empty()){giveQuestItem(Flashlight);m_consoleLog.push_back("FLASHLIGHT ADDED. F TO TOGGLE.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
@@ -37,7 +37,7 @@ void Game::executeConsole(std::string command){
   else if(arg=="5"||arg=="coolant"||arg=="return")level=5;
   if(level<0||!extra.empty())m_consoleLog.push_back("UNKNOWN MAP. TYPE MAPS FOR VALID NAMES / IDS.");
   else{
-   m_level=level;restart();m_paused=false;m_inventoryOpen=false;
+   if(verb!="reload")m_worldId=WorldId::Campaign;m_level=level;restart();m_paused=false;m_inventoryOpen=false;
    if(reactor){m_world.startLift();m_world.updateLift(World::LiftRideComplete);m_player.pos={12,15.5f};m_player.z=-9;m_player.angle=kPi*.5f;}
    m_consoleLog.push_back("LOADED "+(reactor?std::string("REACTOR"):std::to_string(level))+". PRESS ` OR ESC TO PLAY.");
   }

@@ -130,7 +130,7 @@ void Game::updateEnemies(float dt){
   // path every frame or continuing to push into the same corner forever.
   if(e.searchTime>.2f)direct=false;
   if(!direct&&e.repathTimer>0)destination=e.waypoint;
-  else if(!direct&&m_level>=2){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f);e.waypoint=destination;e.repathTimer=.35f;}
+  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f);e.waypoint=destination;e.repathTimer=.35f;}
   else if(!direct){
    int field[World::Height][World::Width];for(auto&row:field)for(auto&value:row)value=9999;
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){

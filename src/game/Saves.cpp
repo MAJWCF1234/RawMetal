@@ -38,6 +38,8 @@ std::string readFile(const std::filesystem::path& path){
 }
 }
 template<class A> void Game::archiveSave(A& a,int version){
+ if(version>=9){a(m_worldId);if(m_worldId!=WorldId::Campaign&&m_worldId!=WorldId::Ashfall)throw std::runtime_error("Unknown saved world");}
+ else if constexpr(A::reading)m_worldId=WorldId::Campaign;
  auto vec=[&](Vec2& v){a(v.x,v.y);};
  a(m_level,m_elapsed,m_won,m_medkits,m_weaponEquipped,m_heldClutter);
  if(version>=4){a(m_hazmat.initialized,m_hazmat.sleeping,m_hazmat.quiet,m_hazmat.accumulator);
@@ -56,7 +58,7 @@ template<class A> void Game::archiveSave(A& a,int version){
   list(m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});
  }
  int archivedChunks=version>=7?ChunkCount:4;
- for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index);auto&w=c.world;
+ for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index,m_worldId);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
   if constexpr(A::reading){
@@ -71,23 +73,25 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,8);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 8 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,9);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 9 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>8))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>9))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
-  auto reactorStage=next.m_chunks[3].world.reactorStage();if(reactorStage==World::ReactorStage::DiskHeld&&!next.hasQuestItem(ReactorAuthDisk))next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);
+  if(next.m_chunks[3].world.hasLift()){
+   auto reactorStage=next.m_chunks[3].world.reactorStage();if(reactorStage==World::ReactorStage::DiskHeld&&!next.hasQuestItem(ReactorAuthDisk))next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);
+  }
 
   // Saves store mutable gameplay state, but the executable owns the current
   // authored population. Reconcile old state onto today's baseline so content
   // added by an update appears in existing saves instead of being erased by
   // the older serialized vector lengths.
-  Game authored;
+  next.seedScripts();Game authored(next.m_worldId);
   auto samePosition=[](Vec2 a,Vec2 b){return lengthSq(a-b)<.0004f;};
   for(int level=0;level<ChunkCount;++level){
    auto&saved=next.m_chunks[level];const auto&fresh=authored.m_chunks[level];
@@ -120,14 +124,14 @@ bool Game::decodeSave(const std::string& data){
   if(next.m_level<0||next.m_level>=ChunkCount||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>1.1f||std::fabs(p.pitch)>100||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
-  if(next.m_level==3&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
+  if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
   next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
   next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
   next.updateStreaming(0);
   // Old megamap builds had non-colliding partitions. Only relocate a saved
   // player if the current authored geometry now overlaps their complete hull.
-  if(next.m_level>=4&&!next.hullFits(p.pos,p.z,p.hullHeight())){
+  if(next.m_world.campaign()&&next.m_level>=4&&!next.hullFits(p.pos,p.z,p.hullHeight())){
    Vec2 safe{};float safeZ=0,best=std::numeric_limits<float>::max();
    for(float y=1.25f;y<23.75f;y+=.25f)for(float x=1.25f;x<23;x+=.25f){
     Vec2 candidate{x,y};float z=next.m_world.floorHeight(x,y),distance=lengthSq(candidate-p.pos);

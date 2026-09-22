@@ -36,10 +36,9 @@ const char* Game::questItemName(StateId id){
 
 void Game::seedScripts(){
  m_scriptEvents.clear();
- ScriptEvent reactorExit;reactorExit.id=stateId("event_reactor_exit_checkpoint");reactorExit.level=3;
- reactorExit.x1=20.f;reactorExit.y1=21.f;reactorExit.x2=23.f;reactorExit.y2=24.f;reactorExit.bottom=-9.5f;reactorExit.top=-7.5f;
- reactorExit.requireState=stateId("reactor_bulkhead_released");reactorExit.requireValue=1;reactorExit.requireEnemiesClear=true;
- ScriptAction checkpoint;checkpoint.type=ScriptAction::Type::Checkpoint;reactorExit.actions.push_back(checkpoint);m_scriptEvents.push_back(std::move(reactorExit));
+ for(int chunk=0;chunk<ChunkCount;++chunk)for(auto event:m_chunks[chunk].world.scriptEvents()){
+  event.level=chunk;m_scriptEvents.push_back(std::move(event));
+ }
 }
 void Game::spawnScriptEnemy(const ScriptAction& action){
  Enemy e{};e.kind=action.enemyKind;e.pos=action.position;e.home=e.pos;e.lastKnown=e.pos;

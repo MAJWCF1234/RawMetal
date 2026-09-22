@@ -43,6 +43,7 @@ add_executable(RawMetal WIN32
     game/Reactor.cpp
     game/Console.cpp
     game/Streaming.cpp
+    game/WorldIsolationTest.cpp
     game/Clutter.cpp
     game/Ragdoll.cpp
     game/AI.cpp

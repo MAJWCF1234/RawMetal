@@ -12,11 +12,6 @@
 namespace retro {
 constexpr int DisplayWidth=640,DisplayHeight=360;
 
-using StateId=std::uint32_t;
-constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
-enum class ObjectiveStatus { Hidden, Active, Complete, Failed };
-struct StateValue {StateId id=0;int value=0;};
-struct QuestItemStack {StateId id=0;int count=0;};
 
 struct InputState {
     bool console=false;
@@ -43,7 +38,7 @@ struct InputState {
 };
 
 struct Enemy {
-    enum class Kind { Huntsman, Wasp, Brute, Warden };
+    using Kind=CreatureKind;
     Vec2 pos{};
     float hp = 110.0f;
     float attackCooldown = 0.0f;
@@ -107,18 +102,12 @@ struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMo
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-288)/2,Width=304,Height=288,RowTop=Y+46,RowHeight=21,Rows=10,SliderX=X+179,SliderWidth=75;};
 struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
 
-struct ScriptAction {
- enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign};
- Type type=Type::SetState;StateId id=0;int value=0,index=0;Enemy::Kind enemyKind=Enemy::Kind::Huntsman;Vec2 position{};float z=-999,amount=0;Sound sound=Sound::Exit;
-};
-struct ScriptEvent {
- StateId id=0;int level=0;float x1=0,y1=0,x2=0,y2=0,bottom=-100,top=100;StateId requireState=0;int requireValue=1;bool requireEnemiesClear=false,once=true;
- std::vector<ScriptAction> actions;
-};
 
 class Game {
 public:
-    Game();
+    explicit Game(WorldId id=WorldId::Campaign);
+    WorldId worldId()const{return m_worldId;}
+    static bool testWorldIsolation();
     void showTitleScreen();
     bool titleScreen()const{return m_titleScreen;}
     int titleSelection()const{return m_titleSelection;}
@@ -130,10 +119,7 @@ public:
     void restart();
     int level()const{return m_level;}
     static constexpr int ChunkCount=6;
-    static Vec2 chunkOffset(int level){
-        if(level<=3)return {18.f*level,24.f*level};
-        return level==4?Vec2{69.f,96.f}:Vec2{69.f,120.f};
-    }
+    Vec2 chunkOffset(int level)const{return chunkDefinition(m_worldId,level).origin;}
     Game chunkView(int level)const;
     const World& worldAt(Vec2& local)const;
     bool chunkResident(int level)const{return level==m_level||m_chunks[level].resident;}
@@ -228,12 +214,12 @@ public:
     // Reactor rendering wakes during the first lift shake, one vertical band
     // at a time. Direct reactor entry and restored underground saves bypass it.
     float dormantBelow()const{
-     if(m_level!=3||m_player.z<-2)return -1000.f;
+     if(!m_world.hasLift()||m_player.z<-2)return -1000.f;
      if(m_world.liftPhase()==World::LiftPhase::Ready)return -4.5f;
      if(m_world.liftPhase()==World::LiftPhase::Ascending)return -4.5f-5.5f*std::clamp((m_world.liftPhaseTime()-10.f)/3.f,0.f,1.f);
      return -1000.f;
     }
-    bool dormantEntity(float z)const{return m_level==3&&z<-2&&m_player.z>=-2&&m_world.liftPhase()!=World::LiftPhase::Crashed;}
+    bool dormantEntity(float z)const{return m_world.hasLift()&&z<-2&&m_player.z>=-2&&m_world.liftPhase()!=World::LiftPhase::Crashed;}
     bool weaponEquipped()const{return m_weaponEquipped;}
     int medkits()const{return m_medkits;}
     int selectedItem()const{return m_selectedItem;}
@@ -249,9 +235,10 @@ public:
     bool musicEnabled()const{return m_musicEnabled;}
     static Game validationScene(Enemy::Kind kind,float deathTime=-1,float windup=0);
     static Game stalkerInspection(int clip,float phase,int view=0);
-    static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false);
+    static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
 
 private:
+    WorldId m_worldId=WorldId::Campaign;
     bool m_titleScreen=false,m_menuFromTitle=false,m_customMapsOpen=false;
     int m_titleSelection=0;
     InputState m_titlePrevious;

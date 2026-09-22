@@ -5,6 +5,7 @@
 namespace retro {
 void Game::updateTitle(const InputState& input){
  auto pressed=[](bool now,bool previous){return now&&!previous;};
+ if(m_customMapsOpen&&pressed(input.escape,m_titlePrevious.escape)){m_customMapsOpen=false;m_titleSelection=1;m_titlePrevious=input;return;}
  int titleRowCount=titleRows();
  if(pressed(input.menuUp,m_titlePrevious.menuUp))m_titleSelection=(m_titleSelection+titleRowCount-1)%titleRowCount;
  if(pressed(input.menuDown,m_titlePrevious.menuDown))m_titleSelection=(m_titleSelection+1)%titleRowCount;
@@ -15,10 +16,10 @@ void Game::updateTitle(const InputState& input){
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
  bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
  if(activate&&m_customMapsOpen){
-  if(m_titleSelection==0){_putenv_s("RAWMETAL_HORROR","1");m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;m_level=0;restart();m_suppressFire=true;}
+  if(m_titleSelection==0){m_worldId=WorldId::Ashfall;m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;m_level=0;restart();m_suppressFire=true;}
   else {m_customMapsOpen=false;m_titleSelection=1;}
  }else if(activate){
-  if(m_titleSelection==0){_putenv_s("RAWMETAL_HORROR","");m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
+  if(m_titleSelection==0){m_worldId=WorldId::Campaign;m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
   else if(m_titleSelection==1){m_customMapsOpen=true;m_titleSelection=0;}
   else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
   else if(m_titleSelection==3){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
@@ -134,8 +135,9 @@ bool Game::testSettings(){
  game.update({},.02f);click.pointerY=MenuLayout::RowTop+6*MenuLayout::RowHeight+5;game.update(click,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+1*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(game.paused()||game.player().health!=100)return false;
  InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);
- if(!game.quitRequested())return false;
- std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence and explicit quit: PASS\n";
+ if(!game.titleScreen()||game.quitRequested())return false;
+ game.update({},.02f);game.m_titleSelection=4;InputState quit{};quit.menuAccept=true;game.update(quit,.02f);if(!game.quitRequested())return false;
+ std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS\n";
  return true;
 }
 }
