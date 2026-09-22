@@ -59,9 +59,9 @@ constexpr MapRows PressureWorksGround = {
     "####################...#"
 };
 
-// Blank two-chunk megamap experiment. The shared 22-metre interior edge has
-// no wall, while the side perimeter walls continue through the seam.
-constexpr MapRows CoolantReturnGround = {
+// Connected service floors. Equipment bays are authored below as structures;
+// the shared edge stays open so the maintenance routes continue across chunks.
+constexpr MapRows ReactorServiceGalleryGround = {
     "#####...################",
     "#......................#",
     "#......................#",
@@ -87,7 +87,7 @@ constexpr MapRows CoolantReturnGround = {
     "#......................#",
     "#......................#"
 };
-constexpr MapRows CableVaultsGround = {
+constexpr MapRows CoolantReturnGround = {
     "#......................#",
     "#......................#",
     "#......................#",
@@ -364,8 +364,7 @@ World::World(int level,WorldId id):m_worldId(id) {
   buildLayers({});return;
  }
  if(m_level>=4){
-  if(m_level==5)m_particleEmitters.push_back({{20.35f,18.2f},-7.8f,{-.28f,0}});
-  m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",-9,0,m_level==4?CoolantReturnGround:CableVaultsGround}};
+  m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",-9,0,m_level==4?ReactorServiceGalleryGround:CoolantReturnGround}};
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
   if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
@@ -378,11 +377,12 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(float x:{1.2f,22.4f})m_structures.push_back({x,y-.15f,x+.38f,y+.37f,0,roof-.32f,false,3});
   }
   if(m_level==4){
-   for(float x:{6.8f,16.8f}){wall(x,1,x+.25f,8.5f);wall(x,11.5f,x+.25f,17.5f);wall(x,20.5f,x+.25f,24);}
+   // A clear receiving lobby spans the reactor door before the bay dividers.
+   for(float x:{6.8f,16.8f}){wall(x,3,x+.25f,8.5f);wall(x,11.5f,x+.25f,17.5f);wall(x,20.5f,x+.25f,24);}
    // Bolted cable trays follow the actual bay dividers rather than floating
    // in space. Shallow steel service crossings break up the long floor run.
-   for(float y:{2.f,12.f,21.f}){
-    float end=y==2.f?8.f:y==12.f?17.f:23.f;
+   for(float y:{3.f,12.f,21.f}){
+    float end=y==3.f?8.f:y==12.f?17.f:23.f;
     m_structures.push_back({7.04f,y,7.14f,end,1.92f,2.07f,false,2});
     m_structures.push_back({16.70f,y,16.82f,end,1.92f,2.07f,false,2});
     for(float bracket=y+.8f;bracket<end;bracket+=2.1f){
@@ -393,14 +393,19 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(float y:{7.55f,15.85f})m_structures.push_back({7.3f,y,16.65f,y+.3f,0,.055f,false,2});
    // Cross aisles link all three galleries; bay dividers meet the outer walls.
    for(float y:{8.25f,17.25f}){wall(1,y,4.5f,y+.25f);wall(19.5f,y,23,y+.25f);}
+   // Pump workshop has a personnel doorway onto the first cross aisle.
+   wall(5.9f,8.25f,6.8f,8.5f);
+   Door workshopDoor{4.5f,5.9f,8.375f};workshopDoor.swinging=true;
+   m_doors.push_back(workshopDoor);
+   m_structures.push_back({4.5f,8.25f,5.9f,8.5f,2.55f,roof,false,3});
    wall(7.05f,14,10.5f,14.25f);wall(13.5f,14,16.8f,14.25f);
    m_props={{0,{3.1f,5.3f},1.35f,2.2f,0,{1.1f,.66f},0},
             {1,{14.7f,17.f},1.12f,2.f,kPi*.5f,{.31f,1.f},0},
             {0,{20.5f,14.f},1.35f,2.2f,kPi,{1.1f,.66f},0},
             {1,{3.2f,21.2f},1.12f,2.f,kPi*.5f,{.31f,1.f},0},
             {0,{20.5f,5.9f},1.35f,2.2f,0,{1.1f,.66f},0}};
-   m_fixtures={{7,{1.28f,12.5f},0,2,.5f,1.8f,kPi*.5f,true},
-               {7,{1.28f,15.3f},0,2,.5f,1.8f,kPi*.5f,true},
+   m_fixtures={{7,{1.8f,10.f},0,2,.5f,1.8f,kPi*.5f,true},
+               {7,{1.8f,15.3f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,18.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
    m_terminals={{{8.f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false},
                 {{20.2f,12.f},"CABLE GALLERY / HIGH VOLTAGE","BUS BARS LIVE ALONG THE TRAYS.","KEEP CLEAR OF THE DIVIDER RAILS.",0,false}};
@@ -420,7 +425,7 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_props.push_back({1,{20.4f,15.6f},1.12f,2.f,kPi*.5f,{.31f,1.f},0}); // east-mid standpipe
    m_props.push_back({0,{5.0f,15.5f},1.35f,2.2f,0,{1.1f,.66f},0});      // west-mid generator
    m_props.push_back({1,{9.3f,16.4f},1.12f,2.f,0,{.31f,.31f},0});       // middle-south standpipe (west of spine)
-   m_fixtures.push_back({7,{1.28f,3.4f},0,1.8f,.5f,1.8f,kPi*.5f,true}); // west-wall shelf
+   m_fixtures.push_back({7,{1.8f,2.2f},0,1.8f,.5f,1.8f,kPi*.5f,true});
    m_fixtures.push_back({8,{22.89f,3.2f},.8f,.7f,.2f,1.f,kPi*.5f,true}); // east-wall cabinet
    m_fixtures.push_back({6,{20.3f,21.2f},0,1.87f,.55f,.99f,kPi*.5f,true}); // east-lower machine
    // Live bus bars run beside the two cable-tray dividers. The zones are off
@@ -430,7 +435,6 @@ World::World(int level,WorldId id):m_worldId(id) {
    // Spark and dust wisps read as live electrical service; purely visual.
    m_particleEmitters.push_back({{7.1f,5.0f},-7.0f,{0.f,0.f},.6f,.5f,.05f,.15f,5});
    m_particleEmitters.push_back({{16.75f,14.f},-7.0f,{0.f,0.f},.6f,.5f,.05f,.15f,5});
-   m_particleEmitters.push_back({{20.f,9.f},-7.5f,{-.15f,0.f}});
    // Accent lights over the added machinery.
    for(Vec2 p:{Vec2{5.f,2.6f},Vec2{19.f,2.6f},Vec2{5.f,14.f},Vec2{19.f,14.f}})m_lights.push_back({p,-6.3f});
   }else{
@@ -456,31 +460,25 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2}){
     m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
    }
-   m_fixtures={{7,{1.28f,20.5f},0,2,.5f,1.8f,kPi*.5f,true},
+   m_fixtures={{7,{1.8f,19.3f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,5.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
    // Rear service store: the old sealed panel led nowhere. A personnel door
    // now opens into an actual enclosed bay within this chunk.
    wall(17.25f,20.65f,19.05f,20.87f);
    wall(20.45f,20.65f,22.85f,20.87f);
    wall(17.25f,22.85f,22.85f,23.08f);
+   wall(17.25f,20.87f,17.47f,22.85f);
+   m_structures.push_back({19.05f,20.65f,20.45f,20.87f,2.55f,roof,false,3});
    Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;
    m_doors.push_back(storeDoor);
-   m_fixtures.push_back({7,{21.55f,22.56f},0,1.6f,.48f,1.8f,0,true});
+   m_fixtures.push_back({7,{21.4f,22.48f},0,1.6f,.48f,1.8f,0,true});
    m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
    m_clutterSpawns.push_back({3,{21.1f,21.8f}});
    m_clutterSpawns.push_back({2,{18.5f,21.7f}});
-   m_terminals={{{18.f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: UNSTABLE.","STEAM LEAKS AHEAD. USE THE HIGH WALKWAY.",0,false},
+   m_terminals={{{18.f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: NOMINAL.","PUMP ACCESS ALONG THE OUTER AISLES.",0,false},
                 {{5.5f,7.5f},"01 / COOLANT FEED","FEED PRESSURE NOMINAL.","VALVE LOCKED - SEE SECTOR CONTROL.",0,false},
-                {{18.5f,17.5f},"02 / COOLANT RETURN","RETURN LINE VENTING STEAM.","DO NOT WADE THE TRENCHES.",0,false}};
-   // Scalding steam vents from each flooded return. The zones sit below the dry
-   // floor/bridge line (top < -9.0), so they punish wading the trenches while
-   // leaving the raised walkway and cross aisles safe - hence "use the high
-   // walkway". Hazards never affect collision or routing.
-   for(const auto& water:m_waterVolumes)
-    m_hazards.push_back({Hazard::Kind::Steam,water.x1,water.y1,water.x2,water.y2,-9.5f,-9.06f,9.f});
-   // Visible steam rising off each basin makes the leaking returns readable.
-   for(const auto& water:m_waterVolumes)
-    m_particleEmitters.push_back({{(water.x1+water.x2)*.5f,(water.y1+water.y2)*.5f},-9.02f,{0.f,0.f},1.4f,.7f,.12f,.3f,12});
+                {{18.5f,17.5f},"02 / COOLANT RETURN","SETTLING CHANNELS / RECIRCULATION.","ISOLATE PUMPS BEFORE SERVICING.",0,false}};
+   // Settling basins have a quiet liquid surface, not upward fountain emitters.
    // Pump-bay machinery flanks the returns without narrowing the dry margins.
    m_props.push_back({1,{5.4f,9.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});   // west-upper feed standpipe
    m_props.push_back({1,{18.6f,9.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});  // east-upper return standpipe
