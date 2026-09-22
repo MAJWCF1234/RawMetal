@@ -314,3 +314,10 @@ The blueprint toolset now includes **Window / Smart Window** beside Smart Door. 
 **More → Design Check** runs a non-destructive, plain-language pass over the current building. It catches common authoring mistakes such as character starts inside walls or over voids, doors/windows whose wall was erased, wall-mounted equipment whose supporting wall disappeared, ceiling equipment outside the room height, stairs that no longer reach an upper floor, empty floors, missing player starts, and inconsistent floor names. “Show Me” jumps directly to a problem instead of asking the artist to interpret engine coordinates.
 
 The plan-only workflow also no longer rebuilds a hidden 3D scene after 3D has been opened once. 3D is rebuilt when Live Plan + 3D, 3D, or Walk is actually active, keeping ordinary blueprint painting responsive on larger buildings.
+
+
+## Large-building 3D preview performance
+
+The real-time 3D preview now batches repeated floor, wall, deck, doorway/window wall pieces, and ceiling cells with Three.js instancing instead of creating a separate scene object for every one-metre tile. Untextured construction materials are cached too, so a large plain industrial shell collapses into a small number of GPU batches.
+
+This does not change project data, tile behavior, materials, doors, windows, equipment, or RawMetal output. It only changes how the browser preview draws repeated architecture. Together with the plan-only rebuild guard, this keeps large multi-area buildings substantially lighter to orbit and inspect.
