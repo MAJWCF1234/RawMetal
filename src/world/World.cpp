@@ -307,6 +307,7 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  float dx=x-fixture.position.x,dy=y-fixture.position.y,c=std::cos(fixture.yaw),s=std::sin(fixture.yaw);
  return std::fabs(dx*c-dy*s)<fixture.width*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*.5f+margin;
 }
+constexpr float ShelfTiers[]={.17f,.54f,.92f};
 }
 
 void World::buildPopulation(){
@@ -626,8 +627,11 @@ float World::ceilingHeight(float x,float y)const{
  if(int(x)==10&&int(y)==14)return .66f; // Crouch-only service bypass.
  return y<8?3.1f:y<16?4.2f:3.6f;
 }
-float World::supportHeight(float x,float y,bool dynamic)const{
- for(const auto&fixture:m_fixtures)if(fixture.solid&&fixture.base<.025f&&insideFixture(fixture,x,y))return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
+float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const{
+ for(const auto&fixture:m_fixtures)if(fixture.solid&&fixture.base<.025f&&insideFixture(fixture,x,y)){
+  if(shelfCavities&&fixture.model==7)continue;
+  return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
+ }
  for(auto&p:m_props)if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y)return floorHeight(p.position.x,p.position.y)+p.base+p.height;
  for(auto&terminal:m_terminals)if((dynamic||!hasLift()||!terminal.control)&&terminal.z==0&&std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<(terminal.control?.18f:.27f))return floorHeight(x,y)+.95f;
  float floor=floorHeight(x,y);switch(tile(int(std::floor(x)),int(std::floor(y)))){
@@ -654,10 +658,10 @@ float World::clearanceHeight(float x,float y)const{
  if(campaignChunk(0)&&x>20.17f&&x<22.83f&&y>22.90f&&y<23.04f)height=std::min(height,2.57f);
  return height;
 }
-bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic)const{
+bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic,bool shelfCavities)const{
  auto delta=b-a;float dz=bz-az;int steps=std::max(1,int(std::ceil(std::sqrt(lengthSq(delta)+dz*dz)/.12f)));
  for(int i=1;i<steps;++i){float t=float(i)/steps;auto p=a+delta*t;float z=az+(bz-az)*t;
-  if(!fits(p.x,p.y,z,.015f,dynamic)|| (doors&&doorBlocks(p.x,p.y,z,.015f)))return false;
+  if(!fits(p.x,p.y,z,.015f,dynamic,shelfCavities)|| (doors&&doorBlocks(p.x,p.y,z,.015f)))return false;
  }return true;
 }
 bool World::navigable(int x,int y,int nx,int ny,float height)const{
@@ -770,7 +774,11 @@ void World::buildLayers(std::span<const Staircase> stairs){
 float World::wallHeight(int x,int y)const{return outdoors()?m_internalWallHeight:m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
  float fixtureTop=-100;
- for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float top=floorHeight(f.position.x,f.position.y)+f.base+f.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
+ for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
+  float base=floorHeight(f.position.x,f.position.y)+f.base;
+  if(f.model==7)for(float tier:ShelfTiers){float top=base+f.height*tier;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
+  else if(base+f.height<=feet+.025f)fixtureTop=std::max(fixtureTop,base+f.height);
+ }
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
  float result=floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
  result=std::max(result,fixtureTop);
@@ -780,14 +788,18 @@ float World::supportBelow(float x,float y,float feet)const{
 }
 float World::clearanceAbove(float x,float y,float feet)const{
  float ceiling=clearanceHeight(x,y);
- for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float base=floorHeight(f.position.x,f.position.y)+f.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
+ for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
+  float base=floorHeight(f.position.x,f.position.y)+f.base;
+  if(f.model==7)for(float tier:ShelfTiers){float underside=base+f.height*tier-.045f;if(underside>feet+.025f)ceiling=std::min(ceiling,underside);}
+  else if(base>feet+.025f)ceiling=std::min(ceiling,base);
+ }
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
  for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f)ceiling=std::min(ceiling,base);}
  return ceiling;
 }
-bool World::fits(float x,float y,float feet,float height,bool dynamic)const{
+bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
  if(dynamic&&insideLift(x,y)&&feet<m_liftHeight+2.8f&&feet+height>m_liftHeight-.25f){
   if(feet<m_liftHeight-.025f||feet+height>m_liftHeight+2.605f)return false;
   if(x<10.12f||x>13.88f)return false;
@@ -795,8 +807,16 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic)const{
   bool southOpen=m_liftPhase==LiftPhase::Crashed&&m_liftTimer>=3.65f&&x>11&&x<13;
   if((y<10.12f&&!northOpen)||(y>13.88f&&!southOpen))return false;
  }
- if(feet<supportHeight(x,y,dynamic)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
- for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float base=floorHeight(f.position.x,f.position.y)+f.base;if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;}
+ if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
+ for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
+  float base=floorHeight(f.position.x,f.position.y)+f.base;
+  if(shelfCavities&&f.model==7){
+   for(float tier:ShelfTiers){float top=base+f.height*tier;if(feet<top-.005f&&feet+height>top-.045f)return false;}
+   float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw);
+   float localX=std::fabs(dx*c-dy*s),localY=std::fabs(dx*s+dy*c);
+   if(localX>f.width*.5f-.04f&&localY>f.depth*.5f-.04f&&feet<base+f.height&&feet+height>base)return false;
+  }else if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;
+ }
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
  for(auto&t:m_terminals){if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(t.z!=0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}

@@ -12,20 +12,21 @@ void Game::seedClutter(){
 int Game::nearbyClutter()const{
  int best=-1;float distance=1.5f;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  for(int i=0;i<int(m_clutter.size());++i){auto&c=m_clutter[i];auto delta=c.pos-m_player.pos;float d=length(delta);
-  if(d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<1.2f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c.pos,c.z+.15f)){best=i;distance=d;}}
+  if(d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<1.2f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c.pos,c.z+.15f,true,true,true)){best=i;distance=d;}}
  return best;
 }
 bool Game::interactClutter(){
- if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.velocity=m_velocity*.3f;c.pitchSpeed=1.2f;c.rollSpeed=.7f;c.sleeping=false;c.restTime=0;m_heldClutter=-1;return true;}
+ if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.velocity=m_velocity*.1f;c.vz=0;c.pitchSpeed=0;c.rollSpeed=0;c.sleeping=false;c.restTime=0;m_heldClutter=-1;return true;}
  m_heldClutter=nearbyClutter();if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.projectile=false;c.sleeping=false;c.restTime=0;sound(Sound::Pickup,.25f,.8f);return true;}return false;
 }
 void Game::updateClutter(const InputState&input,float dt){
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(holdingClutter()){
   auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;Vec2 target=m_player.pos+forward*.9f;float height=m_player.z+m_player.eye-.3f+std::sin(pitch)*.7f;
-  bool clear=true;for(int i=1;i<=12;++i){float t=float(i)/12;auto p=m_player.pos+(target-m_player.pos)*t;const auto&w=worldAt(p);float z=m_player.z+m_player.eye+(height+c.height()*.5f-m_player.z-m_player.eye)*t;clear&=w.fits(p.x,p.y,z,.02f)&&!w.doorBlocks(p.x,p.y,z,.02f);}
   auto local=target;const auto&targetWorld=worldAt(local);
-  if(clear&&targetWorld.fits(local.x,local.y,height,c.height())){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
+  height=std::max(height,targetWorld.supportBelow(local.x,local.y,height+c.height()*.5f+.025f)+.012f);
+  bool clear=true;for(int i=1;i<=12;++i){float t=float(i)/12;auto p=m_player.pos+(target-m_player.pos)*t;const auto&w=worldAt(p);float z=m_player.z+m_player.eye+(height+c.height()*.5f-m_player.z-m_player.eye)*t;clear&=w.fits(p.x,p.y,z,.02f,true,true)&&!w.doorBlocks(p.x,p.y,z,.02f);}
+  if(clear&&targetWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
   else{m_heldClutter=-1;c.projectile=false;}
   if(holdingClutter()&&input.fire&&!m_previousFire&&!m_suppressFire){c.velocity=forward*(9.f*std::cos(pitch));c.vz=2.f+9.f*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
  }
@@ -42,7 +43,7 @@ void Game::updateClutter(const InputState&input,float dt){
    auto oldExtent=c.extent();float center=c.z+oldExtent[2],oldPitch=c.pitch,oldRoll=c.roll,oldYaw=c.yaw;
    c.pitch=wrapAngle(c.pitch+c.pitchSpeed*step);c.roll=wrapAngle(c.roll+c.rollSpeed*step);c.yaw=wrapAngle(c.yaw+c.spin*step);
    auto extent=c.extent();c.z=center-extent[2];
-   auto fits=[&](Vec2 p,float z){for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto local=p+Vec2{x,y};const auto&w=worldAt(local);if(!w.fits(local.x,local.y,z,extent[2]*2)||w.doorBlocks(local.x,local.y,z,extent[2]*2))return false;}return true;};
+   auto fits=[&](Vec2 p,float z){for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto local=p+Vec2{x,y};const auto&w=worldAt(local);if(!w.fits(local.x,local.y,z,extent[2]*2,true,true)||w.doorBlocks(local.x,local.y,z,extent[2]*2))return false;}return true;};
    auto local=c.pos;const auto&supportWorld=worldAt(local);
    float floor=supportWorld.supportBelow(local.x,local.y,std::max(c.z,center-oldExtent[2])+.025f);
    if(!fits(c.pos,std::max(c.z,floor))){c.pitch=oldPitch;c.roll=oldRoll;c.yaw=oldYaw;c.pitchSpeed*=-.2f;c.rollSpeed*=-.2f;c.spin*=-.2f;extent=oldExtent;c.z=center-extent[2];}
@@ -89,6 +90,19 @@ void Game::updateClutter(const InputState&input,float dt){
  }
 }
 bool Game::testClutter(){
+ {auto g=mapInspection({21.55f,21.46f},kPi*.5f,160,5,true,-9,true);g.m_clutter.clear();
+  Clutter bottle;bottle.kind=2;bottle.pos={21.55f,21.8f};bottle.z=-8.3f;g.m_clutter.push_back(bottle);g.m_heldClutter=0;
+  g.updateClutter({},1.f/120);
+  if(!g.holdingClutter()||g.m_clutter[0].pos.y<22.32f||g.m_clutter[0].z<-7.95f)return false;
+  InputState use{};use.use=true;g.update(use,1.f/120);
+  if(g.holdingClutter())return false;
+  for(int i=0;i<300;++i)g.update({},1.f/120);
+  float tier=g.world().floorHeight(21.55f,22.56f)+1.8f*.54f;
+  if(std::fabs(g.m_clutter[0].z-tier)>.035f||g.m_clutter[0].pos.y<22.32f)return false;
+  g.update(use,1.f/120);
+  if(!g.holdingClutter())return false;
+  std::ofstream("shelf-test.txt")<<"Held bottle placed onto the purchased shelf, settles on a tray and can be picked up again: PASS\n";
+ }
  {auto g=mapInspection({12,23.5f},kPi*.5f,0,4,false,-9,true);g.m_clutter.clear();Clutter c;c.pos={12,23.8f};c.z=-8.5f;c.velocity={0,4};c.kind=2;g.m_clutter.push_back(c);
   for(int i=0;i<20;++i)g.updateClutter({},1.f/120);
   if(g.m_clutter.size()!=1||g.m_clutter[0].pos.y<=24)return false;
