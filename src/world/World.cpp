@@ -1,5 +1,4 @@
 #include "World.h"
-#include <cstdlib>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -293,6 +292,7 @@ constexpr MapRows ashfallRegion(int region){
  if(region==5){rows[3]="#..####....####........#";rows[11]="#..............####....#";rows[17]="#....####....####......#";rows[21]="#.......######.........#";}
  return rows;
 }
+static_assert([]{for(int i=0;i<6;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
 // Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
 // meet the wall at their backs; shelves have solid footprints on level floors.
 const std::array<std::vector<Fixture>,3> MapFixtures{{
@@ -309,30 +309,28 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
 }
 }
 
-World::World(int level) {
+World::World(int level,WorldId id):m_worldId(id) {
  m_level=std::clamp(level,0,5);
- m_horrorMode=std::getenv("RAWMETAL_HORROR")!=nullptr;
- if(m_horrorMode){
-  static constexpr MapRows Wasteland={
-   "########################","#....#......#.....#....#","#....#......#.....#....#","#.................#....#",
-   "#..CCCC....GGG....#....#","#.................#....#","#####....##########....#","#......................#",
-   "#.....#......#.........#","#.....#......#.....GG..#","#.....#......#.........#","#.....######.#.........#",
-   "#......................#","#...GG......#....CCC...#","#............#.........#","#............#.........#",
-   "#....#########.........#","#......................#","#......CCC.............#","#......................#",
-   "#...................X..#","#......................#","#......................#","########################"};
+ if(horrorMode()){
   const char* regionNames[]={"Ashfall / perimeter ruins","Ashfall / collapsed highway","Ashfall / rusted yard","Ashfall / sunken district","Ashfall / radio spire","Ashfall / evacuation gate"};
-  m_layers={{regionNames[m_level],0,0,ashfallRegion(m_level)}}; m_openNorthBoundary=m_level>0; m_openSouthBoundary=m_level<5;
+  auto rows=ashfallRegion(m_level);
+  if(m_level==0)rows[0]="########################";
+  if(m_level==5)rows[23]="########################";
+  m_layers={{regionNames[m_level],0,0,rows}}; m_openNorthBoundary=m_level>0; m_openSouthBoundary=m_level<5;
   m_internalWallHeight=2.8f;
-  m_structures={{5,1,5.25f,6,0,2.8f,false,3},{12,1,12.25f,6,0,2.8f,false,3},{19,1,19.25f,8,0,2.8f,false,3},{6,8,6.25f,12,0,2.8f,false,3},{13,8,13.25f,17,0,2.8f,false,3},{1,16,13,16.25f,0,2.8f,false,3}};
   float shift=float(m_level%3)*2.f;
   // Keep the deployment pad completely clear: the player enters at 3.5, 4.5.
   m_props={{0,{14.5f+shift*.25f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
   m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.8f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
-  m_lights={{{3+shift,3},2.5f},{{17-shift,6},2.4f},{{10,14},2.5f}};
+  // Outdoor ambient light needs no unsupported indoor ceiling fixtures.
   m_terminals={{{10,3},"ASHFALL FIELD RELAY","OUTER PERIMETER COMPROMISED.","FOLLOW THE SOUTHERN BREACH.",0,false}};
-  buildLayers({});buildLights();return;
+  m_creatureSpawns={{CreatureKind::Huntsman,{20.5f,7.5f}},
+                   {CreatureKind::Wasp,{3.5f,13.5f}},
+                   {CreatureKind::Brute,{20.5f,17.5f}}};
+  buildLayers({});return;
  }
  if(m_level>=4){
+  if(m_level==5)m_particleEmitters.push_back({{20.35f,18.2f},-7.8f,{-.28f,0}});
   m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",-9,0,m_level==4?CoolantReturnGround:CableVaultsGround}};
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
@@ -372,7 +370,11 @@ World::World(int level) {
   buildLights();
   return;
  }
- if(m_level==3){
+ if(hasLift()){
+  ScriptEvent reactorExit;reactorExit.id=stateId("event_reactor_exit_checkpoint");
+  reactorExit.x1=20;reactorExit.y1=21;reactorExit.x2=23;reactorExit.y2=24;reactorExit.bottom=-9.5f;reactorExit.top=-7.5f;
+  reactorExit.requireState=stateId("reactor_bulkhead_released");reactorExit.requireEnemiesClear=true;
+  ScriptAction checkpoint;checkpoint.type=ScriptAction::Type::Checkpoint;reactorExit.actions.push_back(checkpoint);m_scriptEvents.push_back(reactorExit);
   m_layers={{"Reactor / lower containment",-9,0,LiftShaftGround},
             {"Reactor / upper manifold",-6,.3f,reactorDeck()},
             {"Scenery / coolant risers",-3,.25f,shaftScenery()},
@@ -509,9 +511,10 @@ void World::buildLights(){
   for(const auto&span:spansAt(x,y))if(span.ceiling-span.floor>1.8f)m_lights.push_back({{x+.5f,y+.35f},span.ceiling-.15f});
 }
 float World::floorHeight(float x,float y)const{
+ if(outdoors())return m_layers.empty()?0.f:m_layers.front().elevation;
  if(m_level==5&&x>=8&&x<16&&(x<11||x>=13)&&((y>=8.5f&&y<9.5f)||(y>=14.5f&&y<15.5f)))return -9.18f;
  if(m_level>=4)return -9.f;
- if(m_level==3)return -9.f;
+ if(hasLift())return -9.f;
  if(m_level==2)return 0;
  if(m_level==1){
   if(x>=20&&x<23&&y>=21&&y<23)return std::max(0.f,.8f-std::floor((y-21)*2)*.2f);
@@ -527,8 +530,9 @@ float World::floorHeight(float x,float y)const{
  return 0;
 }
 float World::ceilingHeight(float x,float y)const{
+ if(outdoors())return 128.f; // Traversable sky; no ceiling geometry.
  if(m_level>=4)return m_level==4?-6.1f:-5.6f;
- if(m_level==3)return 16.f;
+ if(hasLift())return 16.f;
  if(m_level==2)return 6.f;
  if(m_level==0&&y>=24&&x>=20&&x<23)return 3.4f;
  if(m_level==1&&y<0&&x>=2&&x<5)return 3.6f;
@@ -539,7 +543,7 @@ float World::ceilingHeight(float x,float y)const{
 float World::supportHeight(float x,float y,bool dynamic)const{
  for(const auto&fixture:m_fixtures)if(fixture.solid&&fixture.base<.025f&&insideFixture(fixture,x,y))return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
  for(auto&p:m_props)if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y)return floorHeight(p.position.x,p.position.y)+p.base+p.height;
- for(auto&terminal:m_terminals)if((dynamic||m_level!=3||!terminal.control)&&terminal.z==0&&std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<(terminal.control?.18f:.27f))return floorHeight(x,y)+.95f;
+ for(auto&terminal:m_terminals)if((dynamic||!hasLift()||!terminal.control)&&terminal.z==0&&std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<(terminal.control?.18f:.27f))return floorHeight(x,y)+.95f;
  float floor=floorHeight(x,y);switch(tile(int(std::floor(x)),int(std::floor(y)))){
  case '#':return wallHeight(int(std::floor(x)),int(std::floor(y)));case 'C':return floor+.60f;case 'B':return floor+1.1f;
  case 'T':return floor+2.62f;default:return floor;
@@ -552,7 +556,7 @@ bool World::doorBlocks(float x,float y,float feet,float height)const{
 float World::clearanceHeight(float x,float y)const{
  float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f)height=std::min(height,floorHeight((door.left+door.right)*.5f,door.y)+door.z+2.5f);
  // The dispatch board hangs from the vestibule ceiling, above the walking route.
- if(m_level==0&&x>20.17f&&x<22.83f&&y>22.90f&&y<23.04f)height=std::min(height,2.57f);
+ if(campaignChunk(0)&&x>20.17f&&x<22.83f&&y>22.90f&&y<23.04f)height=std::min(height,2.57f);
  return height;
 }
 bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic)const{
@@ -612,11 +616,11 @@ void World::buildLayers(std::span<const Staircase> stairs){
   for(auto row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Invalid map layer row width");
   if(layer.thickness<=0)continue; // Ground tiles are read directly by tile().
   const float z=layer.elevation, underside=z-layer.thickness;
-  const bool collarWall=m_level==3&&z==0;
+  const bool collarWall=hasLift()&&z==0;
   const float railHeight=collarWall?2.7f:.55f;
   auto deck=[&](int x,int y){return x>=0&&y>=0&&x<Width&&y<Height&&layer.rows[y][x]=='=';};
   auto stairConnection=[&](float x,float y){
-   if(m_level==3&&z==0&&x>=11&&x<=13&&y>=7.9f&&y<=10)return true;
+   if(hasLift()&&z==0&&x>=11&&x<=13&&y>=7.9f&&y<=10)return true;
    for(const auto& stair:stairs)if(x>=stair.x1&&x<stair.x2&&y>=stair.y1&&y<stair.y2){
     float t=stair.alongY?(y-stair.y1)/(stair.y2-stair.y1):(x-stair.x1)/(stair.x2-stair.x1);
     if(!stair.ascending)t=1-t;
@@ -630,25 +634,25 @@ void World::buildLayers(std::span<const Staircase> stairs){
    m_structures.push_back({float(start),float(y),float(x),float(y+1),underside,z});
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
-   if(m_level!=3&&(x+y)%5==0&&tile(x,y)!='#')
-    m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,m_level==3?std::max(-9.f,z-3.f):floorHeight(x+.1f,y+.1f),underside});
-   if(!deck(x-1,y)&&!(m_level==3&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
+   if(!hasLift()&&(x+y)%5==0&&tile(x,y)!='#')
+    m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,hasLift()?std::max(-9.f,z-3.f):floorHeight(x+.1f,y+.1f),underside});
+   if(!deck(x-1,y)&&!(hasLift()&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
     // Seal the upper catwalk against a lower-layer wall.  Without this
     // backing panel the rail leaves a one-cell sightline into the void.
-    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
+    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,hasLift()?z+2.7f:6.f,false});
    }
-   if(!deck(x+1,y)&&!(m_level==3&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
+   if(!deck(x+1,y)&&!(hasLift()&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
     m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
+    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,hasLift()?z+2.7f:6.f,false});
    }
-   if(!deck(x,y-1)&&!(m_level==3&&tile(x,y-1)=='#')&&!stairConnection(x+.5f,y-.001f)){
+   if(!deck(x,y-1)&&!(hasLift()&&tile(x,y-1)=='#')&&!stairConnection(x+.5f,y-.001f)){
     m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,m_level==3?z+2.7f:6.f,false});
+    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,hasLift()?z+2.7f:6.f,false});
    }
-   if(!deck(x,y+1)&&!(m_level==3&&tile(x,y+1)=='#')&&!stairConnection(x+.5f,y+1.001f)){
+   if(!deck(x,y+1)&&!(hasLift()&&tile(x,y+1)=='#')&&!stairConnection(x+.5f,y+1.001f)){
     m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,m_level==3?z+2.7f:6.f,false});
+    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,hasLift()?z+2.7f:6.f,false});
    }
   }
  }
@@ -659,7 +663,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    stair.alongY?stair.x1:stair.x1+(stair.x2-stair.x1)*lo,
    stair.alongY?stair.y1+(stair.y2-stair.y1)*lo:stair.y1,
    stair.alongY?stair.x2:stair.x1+(stair.x2-stair.x1)*hi,
-   stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.bottom,top,false,m_level==3?4:0});
+   stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.bottom,top,false,hasLift()?4:0});
  }
  m_structureCells.resize(Width*Height);
  for(uint16_t index=0;index<m_structures.size();++index){
@@ -668,7 +672,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[y*Width+x].push_back(index);
  }
 }
-float World::wallHeight(int x,int y)const{return m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
+float World::wallHeight(int x,int y)const{return outdoors()?m_internalWallHeight:m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
  float fixtureTop=-100;
  for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float top=floorHeight(f.position.x,f.position.y)+f.base+f.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
@@ -700,7 +704,7 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic)const{
  for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){float base=floorHeight(f.position.x,f.position.y)+f.base;if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;}
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
- for(auto&t:m_terminals){if(!dynamic&&m_level==3&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(t.z!=0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
+ for(auto&t:m_terminals){if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(t.z!=0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
  return true;
 }
 bool World::railBlocksHull(float x,float y,float radius,float feet,float height)const{

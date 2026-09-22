@@ -158,8 +158,8 @@ void SoftwareRenderer::drawHud(const Game& game){
  const auto paper=rgb(222,206,164),muted=rgb(159,139,105),amber=rgb(210,145,54),red=rgb(180,55,36);
  const int sector=int(p.pos.y)/8;
  wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
- text(19,14,game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
- if(game.level()==3&&game.world().liftPhase()!=World::LiftPhase::Crashed)text(19,32,game.world().liftStatus(),amber);
+ text(19,14,!game.world().campaign()?"ASHFALL / SURFACE":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
+ if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)text(19,32,game.world().liftStatus(),amber);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
  // Compact map reveals nearby contacts and a fixed extraction marker.
  const int mx=m_width-57,my=8;
@@ -186,7 +186,7 @@ void SoftwareRenderer::drawHud(const Game& game){
   rect(x,y+8,130,5,rgb(10,7,5));rect(x+1,y+9,int(128*std::max(0.f,target->hp)/target->maxHp),3,target->windup>0?amber:red);
   if(target->windup>0)text(cx-22,cy-22,"INCOMING",amber);
  }
- if(game.enemiesRemaining()==0&&(game.level()<2||game.world().controlReleased())){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
+ if(game.world().campaign()&&game.enemiesRemaining()==0&&(game.level()<2||game.world().controlReleased())){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
  if(game.dead()||game.won()){wornPanel(cx-100,cy-26,200,51);text(cx-68,cy-15,game.won()?"SECTOR CLEARED":"SIGNAL LOST",game.won()?amber:red,2);text(cx-63,cy+7,"ESC / RESTART GAME",paper);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
  if(game.audioMuted())text(10,43,"AUDIO MUTED / M",muted);
@@ -313,15 +313,16 @@ void SoftwareRenderer::drawConsole(const Game& game){
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
+ if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
+  m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightingDoors={};m_chunkLightCells={};m_chunkLightCounts={};
+  m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
+ }
  int fullWidth=m_width,fullHeight=m_height;bool scaled=game.renderScale()<1;
  if(scaled){m_width=int(fullWidth*game.renderScale());m_height=int(fullHeight*game.renderScale());m_scenePixels.resize(size_t(m_width*m_height));m_sceneZ.resize(size_t(m_width*m_height));m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);}
  auto scene=[&]{bool parallel=!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
-   // Skybox assignment is deliberately data driven: the horror map selects
-   // the supplied Brutal Skyboxes palette while the normal campaign keeps its
-   // industrial night palette. The software renderer uses a cheap gradient
-   // fallback so it remains available on machines without the GPU path.
+   // Temporary software background. No skybox texture is loaded here yet.
    if(game.world().horrorMode()){
     for(int y=0;y<m_height;++y){float t=float(y)/std::max(1,m_height-1);auto c=rgb(unsigned(22+18*t),unsigned(18+16*t),unsigned(20+20*t));for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=c;}
    }else clear(rgb(12,16,18));

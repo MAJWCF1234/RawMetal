@@ -143,7 +143,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  if(lightCells.empty()||m_chunkLightCounts[w.level()]!=w.lights().size()){
  lightCells.assign(512,{});m_chunkLightCounts[w.level()]=w.lights().size();
  for(const auto& light:w.lights()){
-  if(w.level()==3&&&light==&w.lights().back())continue;
+  if(w.campaignChunk(3)&&&light==&w.lights().back())continue;
   for(int z=0;z<8;++z)for(int y=0;y<8;++y)for(int x=0;x<8;++x){
    auto separation=[](float p,int cell,float origin){float lo=cell==0?-1000.f:origin+cell*4,hi=cell==7?1000.f:origin+(cell+1)*4;return std::max({lo-p,0.f,p-hi});};
    float dx=separation(light.position.x,x,-4),dy=separation(light.position.y,y,-4),dz=separation(light.z,z,-12);
@@ -155,7 +155,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  // projected bounding box covered by one rectangle: shaft/stair openings stay
  // visible at every camera height, with no arbitrary floor-distance cutoff.
  std::vector<Structure> occluders;
- if(w.level()==3&&m_visibilityCulling)for(const auto&layer:w.layers())if(layer.thickness>0){
+ if(w.campaignChunk(3)&&m_visibilityCulling)for(const auto&layer:w.layers())if(layer.thickness>0){
   size_t first=occluders.size();
   for(int y=0;y<24;++y)for(int x=0;x<24;){if(layer.rows[y][x]!='='){++x;continue;}int begin=x;while(x<24&&layer.rows[y][x]=='=')++x;
    bool joined=false;for(size_t i=first;i<occluders.size();++i){auto&o=occluders[i];if(o.x1==begin&&o.x2==x&&o.y2==y){o.y2=float(y+1);joined=true;break;}}
@@ -204,7 +204,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float brightness=0;auto cached=m_lightingCache.find(key);
   if(cached!=m_lightingCache.end())brightness=cached->second;
   else{
-   brightness=.27f+.07f*std::fabs(normal.z);
+   brightness=(w.outdoors()?.48f:.27f)+.07f*std::fabs(normal.z);
    for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];float x=fixture.position.x,y=fixture.position.y;
     if(std::fabs(x-point.x)>5.5f||std::fabs(y-point.y)>5.5f)continue;
     Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>30||d2<.001f)continue;
@@ -277,7 +277,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
   // Architectural repeats are measured in metres, never stretched over a deck.
-  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,w.level()>=3?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,(w.campaign()&&w.level()>=3)?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
   if(eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
   if(eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
   if(eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
@@ -330,13 +330,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(w.tile(x,y)!='#'){
    // Half-metre floor patches expose real stair risers and the sides of raised decks.
    for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
-    quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.level()>=4?(w.metalFloor(x,y)?m_floor:m_pressureFloor):w.level()==3?m_concrete:w.level()==1?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.level()==1?.9f:w.level()==3?.95f:w.metalFloor(x,y)?.8f:.95f);
+    quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?m_floor:m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
     float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
     if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
     if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
     if(h>west)quad({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h},m_metal,.9f);
     if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
    }
+   if(!w.outdoors()){
     quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},m_facilityTextures.at("ceiling_1"),.6f);
    // Close ceiling height changes instead of exposing the void between sectors.
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
@@ -345,8 +346,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    float southCeiling=w.ceilingHeight(X+.5f,Y+1.01f),eastCeiling=w.ceilingHeight(X+1.01f,Y+.5f);
    if(Z>southCeiling&&w.tile(x,y+1)!='#')quad({X+1,Y+1,southCeiling},{X,Y+1,southCeiling},{X,Y+1,Z},{X+1,Y+1,Z},m_metal,.7f);
    if(Z>eastCeiling&&w.tile(x+1,y)!='#')quad({X+1,Y,eastCeiling},{X+1,Y+1,eastCeiling},{X+1,Y+1,Z},{X+1,Y,Z},m_metal,.7f);
-   if(w.level()<4&&y%4==0)box({X,Y+.12f,Z-.28f},{X+1,Y+.28f,Z-.03f},m_metal,.7f);
-   if(w.level()<4&&(x==2||x==20)){box({X+.06f,Y,Z-.5f},{X+.17f,Y+1,Z-.39f},m_metal,.8f);box({X+.28f,Y,Z-.5f},{X+.36f,Y+1,Z-.42f},m_metal,.65f);}
+   if((w.campaign()&&w.level()<4)&&y%4==0)box({X,Y+.12f,Z-.28f},{X+1,Y+.28f,Z-.03f},m_metal,.7f);
+   if((w.campaign()&&w.level()<4)&&(x==2||x==20)){box({X+.06f,Y,Z-.5f},{X+.17f,Y+1,Z-.39f},m_metal,.8f);box({X+.28f,Y,Z-.5f},{X+.36f,Y+1,Z-.42f},m_metal,.65f);}
+   }
    // Painted route edges and worn hazard stripes tie the loops together.
    // Route instruction paint removed; safety tape remains at machinery and doors.
    char tile=w.tile(x,y);
@@ -363,15 +365,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }
   }else{
    float roof=Z;Z=w.wallHeight(x,y);
-   if(Z<roof){quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
+   if(Z<roof){quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);if(!w.outdoors())quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
    auto wall=[&](float ax,float ay,float bx,float by,float light){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
-    auto&material=w.level()==0?m_wall:m_pressureWall;
+    auto&material=w.campaignChunk(0)?m_wall:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
-    float wallBase=w.level()>=3?-9.f:0.f;
+    float wallBase=(w.campaign()&&w.level()>=3)?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
-    if((x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
-    if(w.level()<3&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
+    if(w.campaign()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
+    if((w.campaign()&&w.level()<3)&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
     (void)light;
    };
    if(w.tile(x-1,y)!='#')wall(X,Y,X,Y+1,.90f);
@@ -401,9 +403,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.level()==3&&s.top-s.bottom>1.5f)?m_pressureWall:w.level()==3?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
-    if(w.level()==3){
+    if(w.campaignChunk(3)){
      // A safety cage must not become an opaque wall around every cab window.
      box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.bottom+.16f},m_panelMetal,.8f);
      box({s.x1,s.y1,s.bottom+.92f},{s.x2,s.y2,s.bottom+.96f},m_metal,.9f);
@@ -449,15 +451,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({switchX-.025f,face+side*.042f-.005f,h+1.17f},{switchX+.025f,face+side*.042f+.005f,h+1.20f},door.opening?blue:amber,1.55f);
   }
   // Compact sector label bolted directly to the header.
-  auto&front=door.transfer?(w.level()==0?m_transferSign:w.level()==1?m_gantrySign:w.level()==3?m_reactorSign:m_surfaceSign):w.level()==1?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
-  auto&back=door.transfer?front:w.level()==1?m_transferSign:(y<10?m_intakeSign:m_processingSign);
+  auto&front=door.transfer?(w.campaignChunk(0)?m_transferSign:w.campaignChunk(1)?m_gantrySign:w.campaignChunk(3)?m_reactorSign:m_surfaceSign):w.campaignChunk(1)?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
+  auto&back=door.transfer?front:w.campaignChunk(1)?m_transferSign:(y<10?m_intakeSign:m_processingSign);
   quad({x+.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.9575f},{x+.7f,y-.125f,base+2.9575f},front,.9f);
   quad({x-.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.9575f},{x-.7f,y+1.125f,base+2.9575f},back,.9f);
  }
  for(auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.
  // The light source sits 4 cm beneath the luminous underside.
- for(const auto&light:w.lights()){movingGeometry=w.level()==3&&&light==&w.lights().back();m_emissionScale=movingGeometry?w.liftLampPower():1.f;facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);}movingGeometry=false;m_emissionScale=1.f;
+ for(const auto&light:w.lights()){movingGeometry=w.campaignChunk(3)&&&light==&w.lights().back();m_emissionScale=movingGeometry?w.liftLampPower():1.f;facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);}movingGeometry=false;m_emissionScale=1.f;
  for(const auto&fixture:w.fixtures())facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
  for(auto&c:game.clutter()){
   auto&mesh=m_clutterMeshes[c.kind];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;auto size=c.size();float scale=std::max({size[0],size[1],size[2]})/std::max({range.x,range.y,range.z});
@@ -465,12 +467,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}objectLighting=false;
  }
- if(w.level()>=4){
+ if((w.campaign()&&w.level()>=4)){
   // Headers tie the service bays into a supported industrial interior.
   for(float y:{4.f,10.f,16.f,22.f}){float roof=w.ceilingHeight(12,y);
    box({1,y-.1f,roof-.18f},{23,y+.1f,roof},m_panelMetal,.9f);
   }
-  if(w.level()==5)for(float x:{8.5f,15.5f}){
+  if(w.campaignChunk(5))for(float x:{8.5f,15.5f}){
    cylinder({x,1.f,-6.25f},{x,22.5f,-6.25f},.16f,m_pipeTexture);
    for(float y:{4.f,10.f,16.f,22.f}){
     box({x-.025f,y-.035f,-6.45f},{x+.025f,y+.035f,-5.75f},iron,.9f);
@@ -487,21 +489,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }
   }
  }
- if(w.level()==5){
+ if(w.campaignChunk(5)){
   // The sealed end bulkhead has visible reinforcement and an unpowered lock.
   for(float x:{18.45f,20.45f})box({x,23.58f,-8.9f},{x+.10f,23.65f,-6.65f},m_panelMetal,.9f);
   box({19.38f,23.52f,-8.2f},{19.62f,23.65f,-7.82f},iron,.9f);
   quad({18.1f,23.64f,-8.83f},{20.9f,23.64f,-8.83f},{20.9f,23.64f,-8.64f},{18.1f,23.64f,-8.64f},m_hazard,.85f);
   cylinder({20.5f,18.2f,-9.f},{20.5f,18.2f,-6.55f},.11f,m_pipeTexture);
   box({20.28f,17.98f,-9.f},{20.72f,18.42f,-8.88f},iron,.9f);
+ }
+ for(const auto& emitter:w.particleEmitters()){
   static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=dx*dx+dy*dy;unsigned noise=unsigned(x+y*32+1)*747796405u+2891336453u;noise=((noise>>((noise>>28)+4))^noise)*277803737u;noise=((noise>>22)^noise)&255u;
     t.pixels[y*32+x]=d<1&&noise<190*(1-d)?0xff7f8e91u:0;}return t;}();
   Point3 side{-std::sin(game.player().angle),std::cos(game.player().angle),0};
-  for(int i=0;i<7;++i){float age=std::fmod(game.elapsed()*.55f+i/7.f,1.f),radius=.07f+age*.2f;Point3 p{20.35f-age*.28f,18.2f,-7.8f+age*1.05f},up{0,0,radius};
+  for(int i=0;i<emitter.count;++i){float age=std::fmod(game.elapsed()*emitter.rate+float(i)/emitter.count,1.f),radius=emitter.radius+age*emitter.growth;Point3 p{emitter.position.x+age*emitter.drift.x,emitter.position.y+age*emitter.drift.y,emitter.z+age*emitter.rise},up{0,0,radius};
    quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,steam,.9f);}
  }
- if(w.level()==0){
+ if(w.campaignChunk(0)){
  box({1.f,1.37f,1.27f},{1.055f,3.63f,2.03f},m_panelMetal,.9f);
  quad({1.06f,3.6f,1.3f},{1.06f,1.4f,1.3f},{1.06f,1.4f,2.f},{1.06f,3.6f,2.f},m_intakeSign,1.1f);
  // The former end wall is now a chunk opening. Suspend its dispatch board
@@ -527,7 +531,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  box({10,14,.66f},{11,15,3.2f},m_metal,.9f);
  quad({9.99f,14.15f,.83f},{9.99f,14.85f,.83f},{9.99f,14.85f,1.05f},{9.99f,14.15f,1.05f},m_serviceSign,1.1f);
  }
- if(w.level()==3){
+ if(w.campaignChunk(3)){
   // Boarding deck: freight holding on the west, traction plant on the east.
   const auto& corpse=game.hazmat();
   if(corpse.initialized&&sphereVisible({corpse.p[0].x,corpse.p[0].y,corpse.p[0].z},2.1f)){
@@ -654,7 +658,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   quad({13.8f,14.04f,10.5f},{10.2f,14.04f,10.5f},{10.2f,14.04f,11.3f},{13.8f,14.04f,11.3f},m_surfaceSign,1.1f);
  }
  movingGeometry=false;
- for(auto&terminal:w.terminals()){movingGeometry=w.level()==3&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
+ for(auto&terminal:w.terminals()){movingGeometry=w.campaignChunk(3)&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
   if(terminal.control){
    box({x-.27f,y-.18f,h},{x+.27f,y+.18f,h+.2f},m_panelMetal,.9f);
    facility(8,x,y,h+.2f,.36f,.54f,.75f,kPi*.5f);
@@ -686,8 +690,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  // Extraction floor remains readable even before its gate unlocks.
  movingGeometry=false;
- if(w.level()==3&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
- for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining()==0?m_routePaint:m_redPaint,1.f);}
+ if(w.campaignChunk(3)&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
+ if(w.campaign())for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining()==0?m_routePaint:m_redPaint,1.f);}
  for(const auto&e:game.enemies()){
   if(e.bodyTop()<game.dormantBelow())continue;
   if(!e.visible())continue;
@@ -740,7 +744,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   prop(health?m_medkitMesh:m_shellsMesh,health?m_medkitTexture:m_shellsTexture,p.pos.x,p.pos.y,health?.4f:.36f,-.3f,health?.65f:.48f);
  }
  // Translucent animated water, drawn after opaque geometry on both backends.
- if(w.level()==5){
+ if(w.campaignChunk(5)){
   const auto&water=m_water;
   auto wave=[&](float x,float y){float t=game.elapsed();float h=-9.055f+.008f*std::sin(x*5+t*1.8f)*std::cos(y*7-t);
    auto p=game.player();float d=length(Vec2{x,y}-p.pos);if(w.waterSurface(p.pos.x,p.pos.y)>-100&&p.z<-9.02f)h+=.004f*std::sin(d*18-t*7)*std::exp(-d*2);

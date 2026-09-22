@@ -106,6 +106,8 @@ private:
     std::array<std::vector<float>,Game::ChunkCount> m_chunkLightingDoors;
     std::array<std::vector<std::vector<size_t>>,Game::ChunkCount> m_chunkLightCells;
     std::array<size_t,Game::ChunkCount> m_chunkLightCounts{};
+    WorldId m_lightingWorld=WorldId::Campaign;
+    unsigned m_lightingSession=0;
     float m_gripError=0;
     bool m_inspectRig=false;
     float m_inspectYaw=0,m_inspectPitch=0;

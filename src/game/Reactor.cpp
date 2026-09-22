@@ -22,11 +22,11 @@ void World::refreshReactorTerminals(){
  }
 }
 bool World::takeReactorDisk(){
- if(m_level!=3||m_liftPhase!=LiftPhase::Crashed||m_reactorStage!=ReactorStage::NoDisk)return false;
+ if(!hasLift()||m_liftPhase!=LiftPhase::Crashed||m_reactorStage!=ReactorStage::NoDisk)return false;
  m_reactorStage=ReactorStage::DiskHeld;refreshReactorTerminals();return true;
 }
 void World::useReactorTerminal(int action){
- if(m_level!=3||m_liftPhase!=LiftPhase::Crashed)return;
+ if(!hasLift()||m_liftPhase!=LiftPhase::Crashed)return;
  if(action==1){
   if(m_reactorStage==ReactorStage::DiskHeld)m_reactorStage=ReactorStage::DiskLoaded;
   else if(m_reactorStage==ReactorStage::ReturnPrimed){m_reactorStage=ReactorStage::Released;m_controlReleased=true;}
@@ -45,7 +45,7 @@ void Game::useReactorAction(int action){
  if(m_world.reactorStage()==World::ReactorStage::Released){setState(stateId("reactor_bulkhead_released"),1);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Complete);}
 }
 bool Game::nearReactorDisk()const{
- if(m_level!=3||m_world.reactorStage()!=World::ReactorStage::NoDisk||std::fabs(m_player.z+6)>.4f)return false;
+ if(!m_world.hasLift()||m_world.reactorStage()!=World::ReactorStage::NoDisk||std::fabs(m_player.z+6)>.4f)return false;
  auto delta=World::reactorDiskPosition()-m_player.pos;float distance=length(delta);Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(distance>1.65f||dot(delta,forward)<distance*.65f)return false;
  auto face=World::reactorDiskPosition()-normalized(delta)*.38f;

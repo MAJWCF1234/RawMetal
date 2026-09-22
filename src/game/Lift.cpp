@@ -2,11 +2,11 @@
 #include <fstream>
 namespace retro {
 bool World::startLift(){
- if(m_level!=3||m_liftPhase!=LiftPhase::Ready)return false;
+ if(!hasLift()||m_liftPhase!=LiftPhase::Ready)return false;
  m_liftPhase=LiftPhase::Ascending;m_liftTimer=0;return true;
 }
 void World::updateLift(float dt){
- if(m_level!=3)return;
+ if(!hasLift())return;
  // Fixed substeps keep the entire room's descent deterministic at 30/60/120 Hz.
  int steps=std::max(1,int(std::ceil(dt*240)));float step=dt/steps;
  for(int i=0;i<steps;++i){
@@ -37,8 +37,8 @@ void World::updateLift(float dt){
 void World::restoreLift(const World& saved){
  m_liftPhase=saved.m_liftPhase;m_liftHeight=saved.m_liftHeight;m_liftTimer=saved.m_liftTimer;m_liftVelocity=saved.m_liftVelocity;
  m_liftCaught=saved.m_liftCaught;m_reactorStage=saved.m_reactorStage;m_reactorFault=saved.m_reactorFault;refreshReactorTerminals();
- if(m_level==3&&m_terminals.size()>1)m_terminals[1].z=9+m_liftHeight;
- if(m_level==3&&!m_lights.empty())m_lights.back().z=m_liftHeight+2.45f;
+ if(hasLift()&&m_terminals.size()>1)m_terminals[1].z=9+m_liftHeight;
+ if(hasLift()&&!m_lights.empty())m_lights.back().z=m_liftHeight+2.45f;
 }
 const char* World::liftStatus()const{
  switch(m_liftPhase){
@@ -64,7 +64,7 @@ float World::liftMotorGain()const{
  return 0.f;
 }
 void Game::updateLift(float dt){
- if(m_level!=3)return;
+ if(!m_world.hasLift())return;
  auto phase=m_world.liftPhase();float old=m_world.liftHeight(),oldTime=m_world.liftPhaseTime();
  bool passenger=m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.z>=old-.1f&&m_player.z<old+2.6f;
  m_world.updateLift(dt);float delta=m_world.liftHeight()-old;
