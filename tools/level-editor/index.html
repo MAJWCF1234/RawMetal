@@ -470,8 +470,10 @@ function designIssues(){
   const {c,o,l,z,zone}=entry,blockedWalls=[];
   const minX=Math.floor(zone.left),maxX=Math.floor(zone.right-.001),minY=Math.floor(zone.top),maxY=Math.floor(zone.bottom-.001);
   for(let wy=minY;wy<=maxY;wy++)for(let wx=minX;wx<=maxX;wx++){
-   const t=worldCellTarget(wx,wy,false);if(!t||Math.abs((Number(t.l.z)||0)-z)>=.06)continue;
-   if(tileChar(t.l,t.x,t.y)==='#'){
+   const gx=Math.floor(wx/T),gy=Math.floor(wy/T),area=areaAtGrid(gx,gy);if(!area)continue;
+   const floor=layerAtElevation(area,z);if(!floor)continue;
+   const tx=wx-gx*T,ty=wy-gy*T;
+   if(tileChar(floor,tx,ty)==='#'){
     const wall={left:wx,right:wx+1,top:wy,bottom:wy+1};
     if(boundsOverlap(zone,wall)&&!boundsOverlap(entry.body,wall))blockedWalls.push({wx,wy});
    }
