@@ -298,3 +298,10 @@ The floor ribbon now behaves like an actual building drawing set instead of expo
 - The editor prevents a floor from being dragged onto an elevation already occupied by another floor.
 
 This closes an important abstraction leak: the artist can think in Ground Floor, Mezzanine, Roof Level, and so on. Internal RawMetal plan-area boundaries remain implementation details.
+
+
+## Artist quick start
+
+The top bar now includes **? Quick Start**, and the same guide opens automatically on the first editor launch. It is written for a building artist rather than a game developer: draw rooms and walls, place real equipment, place people/spawn dummies, then inspect the same drawing immediately in Live Plan + 3D or Walk.
+
+The guide also introduces floor sheets, reflected ceiling plans, Building Section, and Finishes while explicitly keeping internal 24 × 24 m plan areas and raw coordinates out of the normal workflow. After the first dismissal it stays out of the way and can always be reopened manually.
