@@ -305,3 +305,12 @@ This closes an important abstraction leak: the artist can think in Ground Floor,
 The top bar now includes **? Quick Start**, and the same guide opens automatically on the first editor launch. It is written for a building artist rather than a game developer: draw rooms and walls, place real equipment, place people/spawn dummies, then inspect the same drawing immediately in Live Plan + 3D or Walk.
 
 The guide also introduces floor sheets, reflected ceiling plans, Building Section, and Finishes while explicitly keeping internal 24 × 24 m plan areas and raw coordinates out of the normal workflow. After the first dismissal it stays out of the way and can always be reopened manually.
+
+
+## Smart windows and building checks
+
+The blueprint toolset now includes **Window / Smart Window** beside Smart Door. Click on or near a wall and the window snaps to it, keeps its wall orientation when moved, and cuts a real opening in the 3D wall. The preview builds a simple metal frame and translucent glass, while the inspector exposes a plain sill-height measurement for unusual industrial glazing.
+
+**More → Design Check** runs a non-destructive, plain-language pass over the current building. It catches common authoring mistakes such as character starts inside walls or over voids, doors/windows whose wall was erased, wall-mounted equipment whose supporting wall disappeared, ceiling equipment outside the room height, stairs that no longer reach an upper floor, empty floors, missing player starts, and inconsistent floor names. “Show Me” jumps directly to a problem instead of asking the artist to interpret engine coordinates.
+
+The plan-only workflow also no longer rebuilds a hidden 3D scene after 3D has been opened once. 3D is rebuilt when Live Plan + 3D, 3D, or Walk is actually active, keeping ordinary blueprint painting responsive on larger buildings.
