@@ -41,11 +41,15 @@ void Game::seedScripts(){
  }
 }
 void Game::spawnScriptEnemy(const ScriptAction& action){
- Enemy e{};e.kind=action.enemyKind;e.pos=action.position;e.home=e.pos;e.lastKnown=e.pos;
+ spawnCreature({action.enemyKind,action.position,action.z},action.amount,true);
+}
+void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announce){
+ Enemy e{};e.kind=spawn.kind;e.pos=spawn.position;e.home=e.pos;e.lastKnown=e.pos;
  e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:e.kind==Enemy::Kind::Warden?320.f:110.f;
- e.z=action.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):action.z;e.lastKnownZ=e.z;e.heading=kPi;
- e.awareness=std::max(0.f,action.amount);e.state=e.awareness>0?Enemy::State::Investigate:Enemy::State::Idle;e.voiceTimer=.25f;m_enemies.push_back(e);
- if(e.kind==Enemy::Kind::Brute)sound(Sound::Land,.8f,.7f);else enemySound(m_enemies.back(),0,.55f,.9f);
+ e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.z;e.heading=kPi;
+ e.awareness=std::max(0.f,awareness);e.state=e.awareness>0?Enemy::State::Investigate:Enemy::State::Idle;
+ e.voiceTimer=announce?.25f:.8f+float(m_enemies.size())*.9f;m_enemies.push_back(e);
+ if(announce){if(e.kind==Enemy::Kind::Brute)sound(Sound::Land,.8f,.7f);else enemySound(m_enemies.back(),0,.55f,.9f);}
 }
 void Game::executeScriptAction(const ScriptAction& action){
  switch(action.type){

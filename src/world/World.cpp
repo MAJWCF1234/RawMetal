@@ -309,8 +309,44 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
 }
 }
 
+void World::buildPopulation(){
+ using C=CreatureKind;using P=PickupKind;
+ if(!campaign()){
+  m_creatureSpawns={{C::Huntsman,{20.5f,7.5f}},{C::Wasp,{3.5f,13.5f}},{C::Brute,{20.5f,17.5f}}};
+  m_pickupSpawns={{{3.5f,7.5f},P::Ammo},{{20.5f,17.5f},P::Health}};
+  for(int i=0;i<6;++i)m_clutterSpawns.push_back({i,{2.5f+i*.45f,7.5f},-999,i*.7f});
+  return;
+ }
+ // Population belongs to the map, just like its layers and fixtures.
+ switch(m_level){
+ case 0:
+  m_creatureSpawns={{C::Huntsman,{9.5f,4.9f}},{C::Wasp,{15.5f,2.5f}},{C::Brute,{19.5f,7.5f}},{C::Huntsman,{8.5f,11.5f}},
+                   {C::Wasp,{18.5f,12.5f}},{C::Brute,{5.5f,15.5f}},{C::Huntsman,{12.5f,18.5f}},{C::Wasp,{19.5f,20.5f}}};
+  m_pickupSpawns={{{4.5f,7.5f},P::Ammo},{{13.5f,5.5f},P::Health},{{22.5f,10.5f},P::Ammo},{{7.5f,20.5f},P::Health}};
+  break;
+ case 1:
+  m_creatureSpawns={{C::Huntsman,{17.5f,4.5f}},{C::Wasp,{6.5f,6.2f}},{C::Brute,{4.5f,14.5f}},{C::Huntsman,{9.5f,12.5f}},
+                   {C::Wasp,{19.5f,12.5f}},{C::Brute,{21.5f,15.5f}},{C::Huntsman,{7.5f,19.5f}},{C::Wasp,{15.5f,20.5f}},{C::Brute,{21.5f,19.5f}}};
+  m_pickupSpawns={{{4.5f,4.5f},P::Ammo},{{16.5f,3.5f},P::Health},{{2.5f,15.5f},P::Ammo},{{21.5f,12.5f},P::Ammo},{{7.5f,20.5f},P::Health},{{17.5f,19.5f},P::Ammo}};
+  break;
+ case 2:
+  m_creatureSpawns={{C::Huntsman,{7.5f,4.5f}},{C::Wasp,{16.5f,4.5f}},{C::Brute,{7.5f,12.5f}},
+                   {C::Huntsman,{3.5f,15.5f}},{C::Wasp,{19.5f,15.5f}},{C::Brute,{21.5f,20.5f}}};
+  m_pickupSpawns={{{3.5f,3.5f},P::Ammo},{{7.5f,15.5f},P::Health},{{7.5f,19.5f},P::Ammo},{{21.5f,18.5f},P::Ammo}};
+  break;
+ case 3:
+  m_creatureSpawns={{C::Huntsman,{5.5f,13.5f}},{C::Wasp,{17.5f,19.5f}},{C::Warden,{21.5f,18.5f}}};
+  m_pickupSpawns={{{12.5f,15.5f},P::Ammo},{{15.5f,17.5f},P::Health},{{21.5f,19.5f},P::Ammo}};
+  break;
+ default:return;
+ }
+ const Vec2 positions[3][6]={{{2.8f,5.9f},{3.1f,6.1f},{11.3f,4.3f},{11.7f,4.6f},{18.1f,19.9f},{18.8f,20.2f}},{{6.8f,3.2f},{7.1f,3.4f},{9.2f,12.2f},{9.5f,12.6f},{18.7f,19.8f},{19.1f,20.f}},{{7.3f,4.6f},{7.7f,4.8f},{7.2f,18.7f},{7.6f,19.f},{18.6f,9.7f},{19.5f,9.5f}}};
+ for(int i=0;i<6;++i)m_clutterSpawns.push_back({i,m_level==3?Vec2{3.5f+i*.45f,19.5f}:positions[m_level][i],m_level==2&&i>=4?3.f:-999.f,i*.7f});
+}
+
 World::World(int level,WorldId id):m_worldId(id) {
  m_level=std::clamp(level,0,5);
+ buildPopulation();
  if(horrorMode()){
   const char* regionNames[]={"Ashfall / perimeter ruins","Ashfall / collapsed highway","Ashfall / rusted yard","Ashfall / sunken district","Ashfall / radio spire","Ashfall / evacuation gate"};
   auto rows=ashfallRegion(m_level);
@@ -324,9 +360,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.8f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
   // Outdoor ambient light needs no unsupported indoor ceiling fixtures.
   m_terminals={{{10,3},"ASHFALL FIELD RELAY","OUTER PERIMETER COMPROMISED.","FOLLOW THE SOUTHERN BREACH.",0,false}};
-  m_creatureSpawns={{CreatureKind::Huntsman,{20.5f,7.5f}},
-                   {CreatureKind::Wasp,{3.5f,13.5f}},
-                   {CreatureKind::Brute,{20.5f,17.5f}}};
   buildLayers({});return;
  }
  if(m_level>=4){
@@ -441,6 +474,7 @@ World::World(int level,WorldId id):m_worldId(id) {
   }
   buildLayers(ReactorStairs);
   m_doors={{2,5,.5f,0,false,false,true,9},{20,23,21.5f,0,false,true}};
+  m_doors.back().requireEnemiesClear=true;m_doors.back().requireControl=true;
   m_terminals={{{4.5f,2.5f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","BOARD CAB. USE DISPATCH CONTROL.",9},
                {{13.35f,11.5f},"CAB CONTROL / DISPATCH","ASCENDING TO SURFACE.","WARNING: CABLE TENSION CRITICAL.",9,true},
                {{8.3f,21.2f},"MAINTENANCE / SHIFT LOG","RETURN TRIPPED AGAIN. NO FEED PRESSURE.","LEFT THE SERVICE DISK WITH THE SPARES.",3},
@@ -485,6 +519,7 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_structures.push_back({20.f,23.82f,23.f,24.f,2.5f,6.f,false,3});
   buildLayers(GantryStairs);
   m_doors={{2,5,.5f,0,false,false,true},{20,23,21.5f,0,false,true}};
+  m_doors.back().requireEnemiesClear=true;m_doors.back().requireControl=true;
   m_terminals={{{18.5f,9.5f},"GANTRY CONTROL / 05:42","TURBINE BRAKES RELEASED.","LOWER TRANSFER INTERLOCK UNSEALED.",3,true}};
   buildLights();m_lights.push_back({{5,20},5.85f});
   return;
@@ -499,6 +534,7 @@ World::World(int level,WorldId id):m_worldId(id) {
  }
  for(int y:m_level==0?std::initializer_list<int>{8,16}:std::initializer_list<int>{7,17})for(int x=1;x<Width-1;){if(solid(x+.5f,y+.5f)){++x;continue;}int start=x;while(x<Width-1&&!solid(x+.5f,y+.5f))++x;m_doors.push_back({float(start),float(x),float(y)+.5f});}
  m_doors.push_back({20,23,21.5f,0,false,true});
+ m_doors.back().requireEnemiesClear=true;
  if(m_level==1)m_doors.insert(m_doors.begin(),{2,5,.5f,0,false,false,true});
  m_terminals={{{2.2f,5.5f},"SHIFT LOG / 03:17","COOLANT FAILED. THE NIGHT CREW","SEALED FOUNDRY WITH US INSIDE."},
  {{16.5f,10.5f},"CONTAINMENT / 04:06","THE VESSELS WERE NOT EMPTY.","CLEAR THE HOSTILES. GET OUT."},

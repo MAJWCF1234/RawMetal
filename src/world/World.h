@@ -10,11 +10,18 @@
 #include "ScriptDefinition.h"
 
 namespace retro {
-struct Door {float left=0,right=0,y=0,open=0;bool opening=false,transfer=false,entry=false;float z=0;};
+struct Door {
+ float left=0,right=0,y=0,open=0;bool opening=false,transfer=false,entry=false;float z=0;
+ // Authored requirements are independent of whether a door connects chunks.
+ bool requireEnemiesClear=false,requireControl=false;
+ StateId requireState=0;int requireValue=1;
+};
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
 struct WorldLight {Vec2 position;float z;};
-struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=0;};
+struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
+struct PickupSpawn {Vec2 position;PickupKind kind;};
+struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
 // Content specifies emitters; rendering does not decide their positions from chunk IDs.
 struct ParticleEmitter {Vec2 position;float z;Vec2 drift;float rise=1.05f,rate=.55f,radius=.07f,growth=.2f;int count=7;};
 struct Hazard {
@@ -61,6 +68,8 @@ public:
     bool wallSpaceFree(Vec2 center,Vec2 along,float width,float bottom,float top)const;
     const std::vector<WorldLight>& lights()const{return m_lights;}
     const std::vector<CreatureSpawn>& creatureSpawns()const{return m_creatureSpawns;}
+    const std::vector<PickupSpawn>& pickupSpawns()const{return m_pickupSpawns;}
+    const std::vector<ClutterSpawn>& clutterSpawns()const{return m_clutterSpawns;}
     const std::vector<ParticleEmitter>& particleEmitters()const{return m_particleEmitters;}
     const std::vector<ScriptEvent>& scriptEvents()const{return m_scriptEvents;}
     const std::vector<Hazard>& hazards()const{return m_hazards;}
@@ -127,6 +136,9 @@ private:
     std::vector<Fixture> m_fixtures;
     std::vector<WorldLight> m_lights;
     std::vector<CreatureSpawn> m_creatureSpawns;
+    std::vector<PickupSpawn> m_pickupSpawns;
+    std::vector<ClutterSpawn> m_clutterSpawns;
+    void buildPopulation();
     std::vector<ParticleEmitter> m_particleEmitters;
     std::vector<ScriptEvent> m_scriptEvents;
     std::vector<Hazard> m_hazards;
