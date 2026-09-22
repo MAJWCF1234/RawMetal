@@ -59,14 +59,18 @@ bool Game::testStreaming(){
  joined.m_player.angle=kPi*.5f;joined.m_velocity={};
  for(int i=0;i<110;++i)joined.update(walking,1.f/120);
  if(joined.level()!=5||!joined.chunkResident(4)||std::fabs(joined.player().z+9)>.001f)return fail(12);
- // Closed endpoint must stop a running player before the world boundary.
- joined.m_player.pos={19.5f,22};joined.m_velocity={};walking.sprint=true;
+ // The rear service store has a real door. Its closed leaf blocks a sprint;
+ // once opened, the back wall still stops the player inside the chunk.
+ joined.m_player.pos={19.75f,19.2f};joined.m_player.z=-9;joined.m_velocity={};walking.sprint=true;
  for(int i=0;i<120;++i)joined.update(walking,1.f/120);
- if(joined.player().pos.y>23.451f||joined.player().pos.y<23.4f||!joined.hullFits(joined.player().pos,-9,1))return fail(13);
+ if(joined.player().pos.y>20.7f||joined.player().pos.y<20.2f||!joined.hullFits(joined.player().pos,-9,1))return fail(13);
+ joined.useDoor(0);joined.m_world.updateDoors(2);joined.m_velocity={};
+ for(int i=0;i<120;++i)joined.update(walking,1.f/120);
+ if(joined.player().pos.y<21.1f||joined.player().pos.y>22.8f||!joined.hullFits(joined.player().pos,-9,1))return fail(15);
  // A player can walk up the authored basin ramp without jumping.
  joined.m_player.pos={9,9};joined.m_player.z=joined.world().floorHeight(9,9);joined.m_player.angle=-kPi*.5f;joined.m_velocity={};walking.sprint=false;
  for(int i=0;i<100;++i)joined.update(walking,1.f/120);
  if(joined.player().pos.y>=7.7f||std::fabs(joined.player().z+9)>.08f)return fail(14);
- std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nEnd bulkhead collision and walking out of flooded returns: PASS\n";return true;
+ std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nRear store door and wall collision, then walking out of flooded returns: PASS\n";return true;
 }
 }

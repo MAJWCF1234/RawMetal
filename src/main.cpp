@@ -159,12 +159,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--service-inspection")){
         retro::SoftwareRenderer renderer(W,H);
         if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
-        struct View{int level;retro::Vec2 position;float angle;};
+        struct View{int level;retro::Vec2 position;float angle;bool openDoors=false;};
         const View views[]={
             {4,{6.5f,2.5f},1.0f},{4,{12.f,7.f},1.57f},{4,{12.f,16.f},0.f},
-            {5,{12.f,2.5f},1.57f},{5,{11.5f,9.f},0.f},{5,{12.f,15.f},0.f},{5,{19.f,20.f},1.57f}};
+            {5,{12.f,2.5f},1.57f},{5,{11.5f,9.f},0.f},{5,{12.f,15.f},0.f},
+            {5,{19.75f,19.2f},1.57f},{5,{19.75f,19.2f},1.57f,true}};
         for(int i=0;i<int(std::size(views));++i){const auto&v=views[i];
-            auto scene=retro::Game::mapInspection(v.position,v.angle,0,v.level,false,-9,true);
+            auto scene=retro::Game::mapInspection(v.position,v.angle,0,v.level,v.openDoors,-9,true);
             renderer.render(scene);std::ofstream out("service-"+std::to_string(i)+".ppm",std::ios::binary);
             out<<"P6\n"<<W<<" "<<H<<"\n255\n";
             for(int p=0;p<W*H;++p){auto color=renderer.pixels()[p];char rgb[]={char(color>>16),char(color>>8),char(color)};out.write(rgb,3);}

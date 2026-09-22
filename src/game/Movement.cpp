@@ -111,7 +111,7 @@ const char* Game::interactionHint()const{
  if(nearReactorDisk())return "E / TAKE REACTOR AUTH DISK";
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  int door=m_world.nearbyDoor(m_player.pos,forward,m_player.z);
- if(door>=0){auto&d=m_world.doors()[door];if(doorLocked(d))return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";return d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
+ if(door>=0){auto&d=m_world.doors()[door];if(doorLocked(d))return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";return d.swinging?(d.opening?"E / CLOSE SERVICE DOOR":"E / OPEN SERVICE DOOR"):d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
  if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.reactorAction)return t.reactorAction==1?"E / USE COMPUTER":"E / OPERATE VALVE";return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
  return nearbyClutter()>=0?"E / LIFT":nullptr;
 }

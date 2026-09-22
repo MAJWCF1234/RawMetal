@@ -425,7 +425,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float height=w.floorHeight((left+right)*.5f,centerY)+offset+.009f;
   quad({left,centerY-halfWidth,height},{right,centerY-halfWidth,height},{right,centerY+halfWidth,height},{left,centerY+halfWidth,height},m_hazard,.85f);
  };
- for(auto&door:w.doors())stripeBand(door.left,door.right,door.y,door.z);
+ for(auto&door:w.doors())if(!door.swinging)stripeBand(door.left,door.right,door.y,door.z);
  for(int y=1;y<World::Height-1;++y)for(int x=1;x<World::Width-1;){
   if(w.tile(x,y)!='G'){++x;continue;}
   int start=x;while(x<World::Width-1&&w.tile(x,y)=='G')++x;
@@ -435,6 +435,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  for(auto&door:w.doors()){
   float x=(door.left+door.right)*.5f,y=door.y-.5f,half=(door.right-door.left)*.5f;
   float base=w.floorHeight(x,door.y)+door.z;
+  if(door.swinging){
+   float angle=door.open*kPi*.5f,width=door.right-door.left;
+   Vec2 axis{std::cos(angle),std::sin(angle)},normal{-axis.y,axis.x};
+   Vec2 hinge{door.left,door.y},edge=hinge+axis*width;
+   auto point=[&](Vec2 p,float side,float z){return Point3{p.x+normal.x*side,p.y+normal.y*side,base+z};};
+   box({door.left-.09f,door.y-.17f,base},{door.left+.09f,door.y+.17f,base+2.48f},m_panelMetal,.85f);
+   box({door.right-.08f,door.y-.17f,base},{door.right+.08f,door.y+.17f,base+2.48f},m_panelMetal,.85f);
+   box({door.left,door.y-.17f,base+2.35f},{door.right,door.y+.17f,base+2.55f},m_panelMetal,.85f);
+   quad(point(edge,-.045f,0),point(hinge,-.045f,0),point(hinge,-.045f,2.35f),point(edge,-.045f,2.35f),m_bulkhead,1.f);
+   quad(point(hinge,.045f,0),point(edge,.045f,0),point(edge,.045f,2.35f),point(hinge,.045f,2.35f),m_bulkhead,1.f);
+   quad(point(edge,.045f,0),point(edge,-.045f,0),point(edge,-.045f,2.35f),point(edge,.045f,2.35f),m_panelMetal,.9f);
+   Vec2 latch=hinge+axis*(width-.18f);
+   box({latch.x-.045f,latch.y-.045f,base+1.02f},{latch.x+.045f,latch.y+.045f,base+1.13f},iron,1.1f);
+   continue;
+  }
   box({x-half,y-.12f,base+2.5f},{x+half,y+1.12f,base+3.f},m_metal,.8f);
   float bottom=base+door.open*2.65f;
   box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},m_bulkhead,1.f);
@@ -746,12 +761,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  // Water mesh uses the same authored basins as floor collision and buoyancy.
  if(!w.waterVolumes().empty()){
   const auto&water=m_water;
-  auto wave=[&](float x,float y,float surface){float t=game.elapsed();float h=surface+.012f*std::sin(x*3.5f+t*1.3f)*std::cos(y*4.2f-t*.85f);
-   auto p=game.player();float d=length(Vec2{x,y}-p.pos);if(w.waterSurface(p.pos.x,p.pos.y)>-100&&p.z<surface+.15f)h+=.006f*std::sin(d*18-t*7)*std::exp(-d*1.7f);
-   return Point3{x,y,h};};
-  for(const auto& basin:w.waterVolumes())for(float y=basin.y1;y<basin.y2-.001f;y+=.3f)for(float x=basin.x1;x<basin.x2-.001f;x+=.3f){
-   float right=std::min(x+.3f,basin.x2),far=std::min(y+.3f,basin.y2);
-   quad(wave(x,y,basin.surface),wave(right,y,basin.surface),wave(right,far,basin.surface),wave(x,far,basin.surface),water,1.35f,{.7f,.7f},{x+game.elapsed()*.035f,y-game.elapsed()*.02f});
+  // One continuous quad per basin avoids cracks between individually rasterized
+  // ripples. Moving normal-mapped UVs still gives the surface visible motion.
+  for(const auto& basin:w.waterVolumes()){
+   float left=basin.x1+.34f,right=basin.x2-.34f,near=basin.y1+.34f,far=basin.y2-.34f;
+   float z=basin.surface+.015f;
+   quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},water,1.35f,
+        {(right-left)*.7f,(far-near)*.7f},{left+game.elapsed()*.035f,near-game.elapsed()*.02f});
   }
  }
 }

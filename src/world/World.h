@@ -15,6 +15,7 @@ struct Door {
  // Authored requirements are independent of whether a door connects chunks.
  bool requireEnemiesClear=false,requireControl=false;
  StateId requireState=0;int requireValue=1;
+ bool swinging=false;
 };
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
