@@ -371,6 +371,12 @@ Wall-mounted equipment now remains attached to a wall while it is dragged in the
 
 This matches the existing nudge behavior and keeps ordinary mouse dragging safe for a building designer.
 
+## Equipment favorites and recent tools
+
+The Equipment library now remembers the things an artist actually reaches for. Star commonly used pumps, shelves, lamps, cabinets, computers, clutter, or other prefabs and use **★ Favorites** to turn the full asset catalog into a small personal tool shelf. **Recent** remembers the last sixteen equipment choices, and **Used In Building** shows only equipment already present in the current project with a placed-count badge.
+
+Favorites and recent equipment are local editor preferences, not level data. They do not alter exported projects or RawMetal. The Arrange workspace uses the same preference order, so frequently used dressing props naturally stay near the top there too.
+
 ## Service / keep-clear zones
 
 Industrial equipment can now carry an optional blueprint **Service / Keep Clear** envelope without becoming game collision. Select a floor-mounted machine, cabinet, blockout, terminal, or hazard and choose **Off**, **0.5 m**, **1 m**, **1.5 m**, or type a custom clearance. The plan draws the envelope as a dashed amber box that moves and rotates with the equipment.
