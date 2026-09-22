@@ -10,10 +10,14 @@ void Game::executeConsole(std::string command){
  for(auto&c:command)c=char(std::tolower(static_cast<unsigned char>(c)));
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
+  m_consoleLog.push_back("CUSTOM HORROR: MAP WASTELAND / MAP CUSTOM TO LOAD THE STITCHED SURFACE");
   m_consoleLog.push_back("0 FOUNDRY / 1 PRESSUREWORKS / 2 GANTRY / 3 LIFT");
   m_consoleLog.push_back("4 SERVICE GALLERY / 5 COOLANT RETURN / MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
+ else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
+  _putenv_s("RAWMETAL_HORROR","1");m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED CUSTOM WASTELAND / 6 STITCHED SURFACE CHUNKS.");
+ }
  else if(verb=="give"&&arg=="flashlight"&&extra.empty()){giveQuestItem(Flashlight);m_consoleLog.push_back("FLASHLIGHT ADDED. F TO TOGGLE.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
  else if(verb=="r_scale"){
