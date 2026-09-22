@@ -342,3 +342,14 @@ Smart doors and windows now cut the wall at their actual width instead of only r
 ## Blueprint nudge controls
 
 Selected objects now have visible arrow controls in the inspector. Each click moves the object by the current **Place Snap** amount, and the keyboard arrow keys do the same thing. Ordinary equipment can cross internal plan-area seams without changing its identity or attached arrangement. Smart doors and windows remain attached to walls while nudging, and stop with a plain message instead of drifting off their supporting wall. This gives precise placement without asking the building artist to edit X/Y coordinates.
+
+
+## Walkability overlay and non-level-designer route check
+
+**More → Walkability** adds a plain architectural connectivity overlay to the active floor plan. The editor flood-fills the drawn floor from the Player Start and shows connected floor in a light teal tint and disconnected floor in red with cross marks. Smart doors count as openings automatically, including wide doors that span multiple plan cells.
+
+If a floor has no Player Start yet, the overlay uses the largest connected region as the temporary main area and says so instead of pretending it knows the intended route. Loose equipment and dynamic gameplay are intentionally ignored: this is a fast blueprint sanity check, not a second implementation of RawMetal navigation.
+
+**Design Check** now uses the same analysis when a Player Start exists. It reports disconnected walkable floor and character-start dummies stranded in a disconnected region. **Show Me** centers the plan on the exact problem area, including issues that are not attached to a placed object.
+
+The point is to let a building artist answer “can the player actually get through this floor plan?” without learning navmeshes, pathfinding tools, or game-engine terminology.
