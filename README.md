@@ -1,5 +1,13 @@
 # RawMetal
 
+Reactor Service Gallery and Coolant Return now use supported utility runs,
+additional authored machinery, a grated bridge and four sloped coolant basins.
+The water mesh, floor depth and debris buoyancy read the same basin records;
+light debris floats while heavy debris sinks. Quiet spatial water ambience
+comes from the supplied audio library. Run `--service-map-test` to check
+route access, water traversal, floating objects and save/restore, or
+`--service-inspection --vulkan` for seven diagnostic renders of the two rooms.
+
 Campaign and Ashfall now have separate world identities, chunk origins and save
 ownership. See [world-system boundaries](docs/world-system-boundaries.md) for the
 isolation fix, reusable spawn/effect/trigger records, tests and remaining legacy

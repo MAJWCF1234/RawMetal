@@ -743,14 +743,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   bool health=p.kind==Pickup::Kind::Health;
   prop(health?m_medkitMesh:m_shellsMesh,health?m_medkitTexture:m_shellsTexture,p.pos.x,p.pos.y,health?.4f:.36f,-.3f,health?.65f:.48f);
  }
- // Translucent animated water, drawn after opaque geometry on both backends.
- if(w.campaignChunk(5)){
+ // Water mesh uses the same authored basins as floor collision and buoyancy.
+ if(!w.waterVolumes().empty()){
   const auto&water=m_water;
-  auto wave=[&](float x,float y){float t=game.elapsed();float h=-9.055f+.008f*std::sin(x*5+t*1.8f)*std::cos(y*7-t);
-   auto p=game.player();float d=length(Vec2{x,y}-p.pos);if(w.waterSurface(p.pos.x,p.pos.y)>-100&&p.z<-9.02f)h+=.004f*std::sin(d*18-t*7)*std::exp(-d*2);
+  auto wave=[&](float x,float y,float surface){float t=game.elapsed();float h=surface+.012f*std::sin(x*3.5f+t*1.3f)*std::cos(y*4.2f-t*.85f);
+   auto p=game.player();float d=length(Vec2{x,y}-p.pos);if(w.waterSurface(p.pos.x,p.pos.y)>-100&&p.z<surface+.15f)h+=.006f*std::sin(d*18-t*7)*std::exp(-d*1.7f);
    return Point3{x,y,h};};
-  for(float cy:{9.f,15.f})for(float cx:{8.f,13.f})for(int j=0;j<4;++j)for(int i=0;i<12;++i){float x=cx+i*.25f,y=cy-.5f+j*.25f;
-   quad(wave(x,y),wave(x+.25f,y),wave(x+.25f,y+.25f),wave(x,y+.25f),water,1.15f,{.5f,.5f},{x+game.elapsed()*.035f,y-game.elapsed()*.02f});}
+  for(const auto& basin:w.waterVolumes())for(float y=basin.y1;y<basin.y2-.001f;y+=.3f)for(float x=basin.x1;x<basin.x2-.001f;x+=.3f){
+   float right=std::min(x+.3f,basin.x2),far=std::min(y+.3f,basin.y2);
+   quad(wave(x,y,basin.surface),wave(right,y,basin.surface),wave(right,far,basin.surface),wave(x,far,basin.surface),water,1.35f,{.7f,.7f},{x+game.elapsed()*.035f,y-game.elapsed()*.02f});
+  }
  }
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){

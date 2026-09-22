@@ -33,6 +33,9 @@ content ownership bugs, not meshes mysteriously merging on disk.
 - `ParticleEmitter` supplies position, drift, rise, rate, count and size. Steam
   rendering consumes emitters; Coolant Return authors its own emitter. Creating
   a steam effect elsewhere does not require changing the renderer's level tests.
+- `WaterVolume` supplies a basin's rectangle, bed and surface. Sloped floor
+  queries, buoyancy, water rendering and spatial ambience consume the same
+  records. The coolant basins stay below the dry bridge and have walkable exits.
 - `ScriptDefinition` contains shared trigger/action types. Chunks author their
   events; `seedScripts` collects them and the shared executor processes them.
   The reactor checkpoint event now belongs to reactor content, not engine startup.

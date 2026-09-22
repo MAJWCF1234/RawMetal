@@ -22,6 +22,8 @@ struct WorldLight {Vec2 position;float z;};
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
 struct PickupSpawn {Vec2 position;PickupKind kind;};
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
+// One authored liquid basin controls the bed, physics surface and drawn mesh.
+struct WaterVolume {float x1,y1,x2,y2,bed,surface;};
 // Content specifies emitters; rendering does not decide their positions from chunk IDs.
 struct ParticleEmitter {Vec2 position;float z;Vec2 drift;float rise=1.05f,rate=.55f,radius=.07f,growth=.2f;int count=7;};
 struct Hazard {
@@ -70,6 +72,7 @@ public:
     const std::vector<CreatureSpawn>& creatureSpawns()const{return m_creatureSpawns;}
     const std::vector<PickupSpawn>& pickupSpawns()const{return m_pickupSpawns;}
     const std::vector<ClutterSpawn>& clutterSpawns()const{return m_clutterSpawns;}
+    const std::vector<WaterVolume>& waterVolumes()const{return m_waterVolumes;}
     const std::vector<ParticleEmitter>& particleEmitters()const{return m_particleEmitters;}
     const std::vector<ScriptEvent>& scriptEvents()const{return m_scriptEvents;}
     const std::vector<Hazard>& hazards()const{return m_hazards;}
@@ -86,7 +89,7 @@ public:
     static constexpr float LiftRideComplete=48.f;
     LiftPhase liftPhase()const{return m_liftPhase;}
     float liftHeight()const{return m_liftHeight;}
-    float waterSurface(float x,float y)const{return campaignChunk(5)&&x>=8&&x<16&&(x<11||x>=13)&&((y>=8.5f&&y<9.5f)||(y>=14.5f&&y<15.5f))?-9.055f:-1000.f;}
+    float waterSurface(float x,float y)const;
     float liftPhaseTime()const{return m_liftTimer;}
     bool insideLift(float x,float y)const{return hasLift()&&x>=10&&x<14&&y>=10&&y<14;}
     bool liftMoving()const{return m_liftPhase!=LiftPhase::Ready&&m_liftPhase!=LiftPhase::Crashed;}
@@ -138,6 +141,7 @@ private:
     std::vector<CreatureSpawn> m_creatureSpawns;
     std::vector<PickupSpawn> m_pickupSpawns;
     std::vector<ClutterSpawn> m_clutterSpawns;
+    std::vector<WaterVolume> m_waterVolumes;
     void buildPopulation();
     std::vector<ParticleEmitter> m_particleEmitters;
     std::vector<ScriptEvent> m_scriptEvents;

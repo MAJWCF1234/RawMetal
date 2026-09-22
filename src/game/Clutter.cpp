@@ -49,7 +49,11 @@ void Game::updateClutter(const InputState&input,float dt){
    c.vz-=14.f*step;
    float water=supportWorld.waterSurface(local.x,local.y);
    float immersed=std::clamp((water-c.z)/std::max(.01f,c.height()),0.f,1.f);
-   if(immersed>0){float buoyancy=c.kind==3||c.kind==4?8.f:24.f;c.vz+=buoyancy*immersed*step;
+   const bool buoyant=c.kind!=3&&c.kind!=4;
+   if(immersed>0){
+    if(buoyant){float floatHeight=water-c.height()*.5f;
+     c.vz+=(14.f+std::clamp((floatHeight-c.z)*80.f,-12.f,22.f))*step;
+    }else c.vz+=8.f*immersed*step;
     float drag=std::exp(-5.f*immersed*step);c.velocity=c.velocity*drag;c.vz*=drag;c.spin*=drag;c.pitchSpeed*=drag;c.rollSpeed*=drag;
    }
    // Wall impulses affect the normal component, not tangential momentum.
@@ -74,7 +78,7 @@ void Game::updateClutter(const InputState&input,float dt){
     c.rollSpeed+=std::clamp(-14*(plus-minus)/(.01f*ix),-35.f,35.f)*step;
     c.velocity=c.velocity*std::exp(-7.f*step);float damping=std::exp(-8.f*step);c.pitchSpeed*=damping;c.rollSpeed*=damping;c.spin*=damping;
     if(length(c.velocity)<.5f)c.projectile=false;
-    if(length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
+    if(!(immersed>0&&buoyant)&&length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
    }else{c.z=z;c.restTime=0;}
    if(c.projectile)for(auto&e:m_enemies)if(e.alive&&length(e.pos-c.pos)<.5f&&c.z+c.height()>e.bodyBottom()&&c.z<e.bodyTop()){

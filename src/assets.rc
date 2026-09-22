@@ -4,6 +4,7 @@
 236 RCDATA "assets/audio/lift-creak.wav"
 237 RCDATA "assets/audio/reactor.mp3"
 238 RCDATA "assets/audio/lift-snap.wav"
+239 RCDATA "assets/audio/water-return.wav"
 102 RCDATA "assets/materials/grating.png"
 103 RCDATA "assets/metal.png"
 106 RCDATA "assets/arms/arms_gloves_01.png"

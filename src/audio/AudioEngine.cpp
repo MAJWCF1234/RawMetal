@@ -27,7 +27,7 @@ AudioEngine::AudioEngine(bool device){
   if(!format||!pcm||bytes<4||bytes%(2*m_samples[i].channels))throw std::runtime_error("Audio must be PCM16 at 44100 Hz");
   auto&sample=m_samples[i];sample.pcm.resize(bytes/2);std::memcpy(sample.pcm.data(),pcm,bytes);
   // A short boundary taper suppresses clicks when ambience wraps.
-  if(i==size_t(Sound::Music)||i==size_t(Sound::Machine)||i==size_t(Sound::Wings)){
+  if(i==size_t(Sound::Music)||i==size_t(Sound::Machine)||i==size_t(Sound::Wings)||i==size_t(Sound::WaterReturn)){
    size_t fade=std::min(size_t(220),sample.frames()/2);
    for(size_t f=0;f<fade;++f)for(int c=0;c<sample.channels;++c){sample.pcm[f*sample.channels+c]=int16_t(sample.pcm[f*sample.channels+c]*float(f)/float(fade));auto end=(sample.frames()-1-f)*sample.channels+c;sample.pcm[end]=int16_t(sample.pcm[end]*float(f)/float(fade));}
   }
@@ -50,7 +50,7 @@ AudioEngine::~AudioEngine(){
 void AudioEngine::play(const SoundEvent& event,int emitter,bool loop){
  if(m_voices.size()>=48){auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop;});if(voice!=m_voices.end())m_voices.erase(voice);else return;}
  m_voices.push_back({event.sound,0,event.gain,event.pitch,1,1,event.position,event.spatial,loop,emitter});
- if(loop&&event.sound==Sound::Machine)m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
+ if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
 }
 void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  if(!voice.spatial){voice.left=voice.right=1;return;}
@@ -90,12 +90,14 @@ void AudioEngine::update(const Game& game,bool focused){
  auto loop=[&](int emitter,Sound sound,Vec2 pos,float gain){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
   if(it==m_voices.end()){play({sound,pos,gain,1,true},emitter,true);}else{it->position=pos;it->gain=gain;}
  };
- for(int level=0;level<Game::ChunkCount;++level){if(!game.chunkResident(level)){std::erase_if(m_voices,[&](auto&v){return (v.emitter>=100+level*100&&v.emitter<200+level*100)||(v.emitter<=-1000-level*100&&v.emitter>-1100-level*100);});continue;}auto chunk=game.chunkView(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
+ for(int level=0;level<Game::ChunkCount;++level){if(!game.chunkResident(level)){std::erase_if(m_voices,[&](auto&v){return (v.emitter>=100+level*100&&v.emitter<200+level*100)||(v.emitter<=-1000-level*100&&v.emitter>-1100-level*100)||(v.emitter<=-2000-level*100&&v.emitter>-2100-level*100);});continue;}auto chunk=game.chunkView(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
   for(size_t i=0;i<chunk.enemies().size();++i){auto&e=chunk.enemies()[i];int id=100+level*100+int(i);
    if(e.alive&&e.kind==Enemy::Kind::Wasp)loop(id,Sound::Wings,e.pos+shift,.3f);else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
   }
   float machineGain=.30f;if(chunk.world().hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
   int index=0;for(auto emitter:chunk.world().machines())loop(-1000-level*100-index++,Sound::Machine,emitter+shift,machineGain);
+  index=0;for(const auto& basin:chunk.world().waterVolumes())
+   loop(-2000-level*100-index++,Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,.18f);
  }
  for(auto&voice:m_voices)spatialize(voice,game,dt);
 }
@@ -111,13 +113,13 @@ void AudioEngine::mix(int16_t* output,size_t frames){
    if(m_paused&&!music)continue;auto&s=m_samples[size_t(v.sound)];size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
    size_t a=size_t(v.cursor),b=a+1<n?a+1:v.loop?0:a;float frac=float(v.cursor-double(a));
    auto sample=[&](int channel){float value=s.pcm[a*s.channels+channel]*(1-frac)+s.pcm[b*s.channels+channel]*frac;
-    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
+    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::WaterReturn)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
     return value/32768.f;};
    float blend=v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
    float gain=v.gain*(music?m_musicGain:m_effectsGain)*blend;
    v.smoothLeft+=(v.left*gain-v.smoothLeft)*.0015f;v.smoothRight+=(v.right*gain-v.smoothRight)*.0015f;
    left+=sample(0)*v.smoothLeft;right+=sample(s.channels-1)*v.smoothRight;v.cursor+=v.pitch;
-   if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
+   if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::WaterReturn)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
   m_master+=(m_targetMaster-m_master)*.002f;
   // Smooth limiter leaves headroom when footsteps, music and several attacks overlap.
@@ -178,6 +180,11 @@ bool AudioEngine::test(){
   if(!std::isfinite(total))return false;if(previous>=0)maxChange=std::max(maxChange,std::fabs(total-previous));previous=total;
  }if(maxChange>.08f)return false;
  auto machines=game.world().machines();for(size_t i=0;i<machines.size();++i)for(size_t j=i+1;j<machines.size();++j)if(length(machines[i]-machines[j])<1.01f)return false;
+ auto coolant=Game::mapInspection({12,9},0,0,5,false,-9,true);audio.update(coolant);
+ int waterVoices=0;for(const auto& voice:audio.m_voices)waterVoices+=voice.sound==Sound::WaterReturn;
+ if(waterVoices!=int(coolant.world().waterVolumes().size()))return false;
+ game=Game::validationScene(Enemy::Kind::Brute);audio.update(game);
+ for(const auto& voice:audio.m_voices)if(voice.sound==Sound::WaterReturn)return false;
  std::ofstream("generator-audio-test.txt")<<"Generator orbit: finite stereo gains, no duplicate machine emitters, maximum gain change "<<maxChange<<"; 50 ms seamless loop crossfade enabled.\n";
  audio.m_targetMaster=0;std::vector<int16_t> mute(Rate*2);audio.mix(mute.data(),Rate);
  for(size_t i=mute.size()-200;i<mute.size();++i)if(mute[i]!=0)return false;
