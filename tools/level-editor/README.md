@@ -283,3 +283,18 @@ The editor's normal workflow is now even less game-editor-like.
 - Placement ghosts say whether an equipment item is going on the floor, wall, or ceiling before the artist clicks.
 
 These are editor-only HTML/JavaScript changes. They do not require rebuilding or compiling RawMetal.
+
+
+## Whole-building floor sheets
+
+The floor ribbon now behaves like an actual building drawing set instead of exposing the engine's hidden 24 x 24 m storage pieces.
+
+- Renaming a floor renames that elevation across every connected plan area.
+- Moving a floor elevation moves the same floor across the whole building and carries its placed equipment with it.
+- Changing room height updates that elevation everywhere, including ceiling-mounted equipment.
+- **+ Floor Above** creates the new floor across every plan area that participates in the current floor.
+- **Copy Plan Above** copies each plan area's own architecture and finishes upward, so a multi-area warehouse becomes one coherent upper floor instead of only copying the currently selected engine chunk.
+- Building Section floor and ceiling drags use those same whole-building operations.
+- The editor prevents a floor from being dragged onto an elevation already occupied by another floor.
+
+This closes an important abstraction leak: the artist can think in Ground Floor, Mezzanine, Roof Level, and so on. Internal RawMetal plan-area boundaries remain implementation details.
