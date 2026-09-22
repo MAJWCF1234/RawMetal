@@ -337,3 +337,8 @@ This is aimed at industrial layouts where rows of racks, lights, machinery, cabi
 ## Industrial-width doors and windows
 
 Smart doors and windows now cut the wall at their actual width instead of only removing one 1 m wall cell. Select an opening and use the visible **Width** presets (1 m, 2 m, 3 m, 4 m, or 6 m), or type an exact width. The 3D preview preserves partial wall pieces at the ends of the opening, keeps the lintel/sill, and can continue the cut across internal 24 m plan-area seams. Design Check reports openings that run beyond a continuous wall or overlap another opening. Smart openings stay aligned to their supporting wall, so the artist does not rotate them by hand.
+
+
+## Blueprint nudge controls
+
+Selected objects now have visible arrow controls in the inspector. Each click moves the object by the current **Place Snap** amount, and the keyboard arrow keys do the same thing. Ordinary equipment can cross internal plan-area seams without changing its identity or attached arrangement. Smart doors and windows remain attached to walls while nudging, and stop with a plain message instead of drifting off their supporting wall. This gives precise placement without asking the building artist to edit X/Y coordinates.
