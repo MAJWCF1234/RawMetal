@@ -74,6 +74,9 @@ struct CustomTerminalData {
     std::string title,line1,line2;
     float z=0;
     bool control=false;
+    int reactorAction=0;
+    StateId activateState=0;
+    bool toggleState=false;
 };
 struct CustomMapData {
     std::string name;

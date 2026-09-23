@@ -656,7 +656,7 @@ World::World(int level,std::shared_ptr<const CustomMapData> customMap):m_level(l
   m_layers.push_back({source.name,source.elevation,source.thickness,rows});
  }
  m_terminals.reserve(m_customMap->terminals.size());
- for(const auto& source:m_customMap->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control});
+ for(const auto& source:m_customMap->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState});
  buildLayers(m_customMap->stairs);
 }
 

@@ -131,15 +131,19 @@ The editor can save and reopen projects directly without making the artist manag
 
 ## Installer-ready map payloads
 
-**MORE -> EXPORT INSTALLER TXT** turns the selected 24 x 24 plan area into the same self-contained `.txt` format consumed by the repository-root `InstallMap.cmd`.
+**MORE -> EXPORT INSTALLER TXT** creates the portable `.txt` format consumed by the repository-root `InstallMap.cmd`.
 
-Choose the map name, level ID, MAIN or CUSTOM default target, and the plan area to export. All floors in that plan area are included. The generated payload contains the metadata header, `MAP_CODE_START / MAP_CODE_END`, local ASCII slices, runtime layers, doors, stairs, structures, lights, terminals, hazards and the editor assets that already have RawMetal runtime mappings.
+Choose the map name, level ID, MAIN or CUSTOM default target, and the plan area used for the compile-time MAIN representation. The TXT contains both the familiar `MAP_CODE_START / MAP_CODE_END` section and a runtime `CUSTOM_CAMPAIGN_DATA` section.
+
+For **MAIN**, the selected 24 x 24 plan area becomes the source-injected map slot and dynamic campaign IDs start at 6.
+
+For **CUSTOM**, the runtime section contains the **entire editor project**, including every plan area and floor. One exported TXT is therefore one complete custom campaign package. Put it in `custom maps/` through `InstallMap.cmd` and it appears under **CUSTOM MAPS** without editing `World.cpp` or rebuilding the game.
 
 The exporter deliberately reports anything it cannot represent instead of silently discarding it. Current examples are vertical smart doors (the runtime Door type is horizontal-only), blueprint-only NPC role dummies, per-tile finish painting (the current World payload API has no material-override table), and arbitrary source assets without a runtime placement mapping. Window openings are preserved as sill/header wall apertures even though RawMetal does not yet have a dedicated glass entity.
 
-A building project may span many editor plan areas, but one installer payload is one RawMetal World chunk. Export each plan area separately when building a multi-map campaign route. MAIN payloads use dynamic campaign slots 6 and above. CUSTOM payloads use the same schema and can be archived through the installer's custom-map option.
+`META_DEFAULT_TARGET` is enforced by the installer. A TXT marked CUSTOM cannot accidentally overwrite a built-in campaign slot. Older hand-written CUSTOM payloads that only contain `MAP_CODE` are converted into a playable one-map runtime campaign when possible; unsupported advanced source-only scripting is rejected instead of being silently dropped.
 
-See `MAP_SYSTEM.md` for the installer contract and the remaining `WorldDefinition.h` requirement for brand-new campaign indices.
+See `MAP_SYSTEM.md` for the complete MAIN/CUSTOM contract, legacy conversion rules, and the `WorldDefinition.h` requirement that applies only to brand-new MAIN campaign indices.
 
 ## 3D selection and richer arrangements
 

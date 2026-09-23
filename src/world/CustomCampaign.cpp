@@ -86,7 +86,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
   }else if(tag=="DOOR"){
    if(f.size()<11)throw std::runtime_error("malformed DOOR record");auto map=mapAt(maps,f);
    Door d;d.left=number(f,2,"door left");d.right=number(f,3,"door right");d.y=number(f,4,"door y");d.z=number(f,5,"door z");
-   d.entry=boolean(f,6,"door entry");d.transfer=boolean(f,7,"door transfer");d.swinging=boolean(f,8,"door swinging");d.requireEnemiesClear=boolean(f,9,"door clear flag");d.sign=integer(f,10,"door sign");map->doors.push_back(d);
+   d.entry=boolean(f,6,"door entry");d.transfer=boolean(f,7,"door transfer");d.swinging=boolean(f,8,"door swinging");d.requireEnemiesClear=boolean(f,9,"door clear flag");d.sign=integer(f,10,"door sign");
+   if(f.size()>=12&&!f[11].empty())d.requireState=stateId(decode(f[11]));
+   if(f.size()>=13)d.requireValue=integer(f,12,"door require value");
+   map->doors.push_back(d);
   }else if(tag=="STRUCT"){
    if(f.size()<10)throw std::runtime_error("malformed STRUCT record");auto map=mapAt(maps,f);map->structures.push_back({
     number(f,2,"structure x1"),number(f,3,"structure y1"),number(f,4,"structure x2"),number(f,5,"structure y2"),
@@ -104,7 +107,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
   }else if(tag=="TERMINAL"){
    if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);CustomTerminalData t;
    t.position={number(f,2,"terminal x"),number(f,3,"terminal y")};t.z=number(f,4,"terminal z");t.control=boolean(f,5,"terminal control");
-   t.title=decode(f[6]);t.line1=decode(f[7]);t.line2=decode(f[8]);map->terminals.push_back(std::move(t));
+   t.title=decode(f[6]);t.line1=decode(f[7]);t.line2=decode(f[8]);
+   if(f.size()>=10&&!f[9].empty())t.activateState=stateId(decode(f[9]));
+   if(f.size()>=11)t.toggleState=boolean(f,10,"terminal toggle");
+   map->terminals.push_back(std::move(t));
   }else if(tag=="HAZARD"){
    if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});
