@@ -177,6 +177,13 @@ bool Game::testCampaignExtension(){
  for(int level=5;level<9;++level){
   Game seam;seam.loadLevel(level,false);seam.updateStreaming(0);const auto d=seam.world().doors().back();
   result&=check(d.transfer,"Last door transfers to the next chapter");
+  if(level==7){
+   result&=check(d.swinging&&std::fabs((d.right-d.left)-1.4f)<.01f,
+                 "Pump Annex to Utility Junction uses a normal framed personnel door");
+   World framed=seam.world();framed.openDoor(int(framed.doors().size())-1);framed.updateDoors(2);
+   result&=check(framed.fits(20.5f,23.45f,-4,1.7f)&&!framed.fits(19.35f,23.45f,-4,1.7f)&&!framed.fits(21.65f,23.45f,-4,1.7f),
+                 "Annex transfer vestibule leaves only the normal doorway open");
+  }
   seam.useDoor(int(seam.world().doors().size())-1);seam.m_world.updateDoors(2);seam.updateStreaming(0);
   float x=(d.left+d.right)*.5f,z=seam.world().floorHeight(x,d.y)+d.z;
   seam.m_player.pos={x,23.6f};seam.m_player.z=z;seam.m_player.grounded=true;seam.m_player.angle=kPi*.5f;seam.m_enemies.clear();
