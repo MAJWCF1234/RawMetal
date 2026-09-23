@@ -53,10 +53,11 @@ bool Game::testWorldIsolation(){
    for(auto d:std::array<Vec2,4>{{{1,0},{-1,0},{0,1},{0,-1}}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>=N||ny>=N)continue;int q=ny*N+nx;Vec2 probe{(nx+.5f)*.5f,(ny+.5f)*.5f};float feet=w.floorHeight(probe.x,probe.y);
     if(!seen[q]&&custom.hullFits(probe,feet,1)){seen[q]=true;pending.push(q);}}
   }
-  if(level%3<2&&!check(seen[24*N+46],"Spawn can reach eastern seam"))return false;
-  if(level%3>0&&!check(seen[24*N+1],"Spawn can reach western seam"))return false;
-  if(level<3&&!check(seen[46*N+24],"Spawn can reach southern seam"))return false;
-  if(level>=3&&!check(seen[1*N+24],"Spawn can reach northern seam"))return false;
+  int col=level%4,row=level/4;
+  if(col<3&&!check(seen[24*N+46],"Spawn can reach eastern seam"))return false;
+  if(col>0&&!check(seen[24*N+1],"Spawn can reach western seam"))return false;
+  if(row<2&&!check(seen[46*N+24],"Spawn can reach southern seam"))return false;
+  if(row>0&&!check(seen[1*N+24],"Spawn can reach northern seam"))return false;
  }
  auto campaignSave=campaign.encodeSave(),customSave=custom.encodeSave();
  if(!check(campaign.decodeSave(customSave)&&campaign.worldId()==WorldId::Ashfall&&campaign.world().outdoors()&&campaign.m_scriptEvents.empty(),"Custom save restores world in campaign session"))return false;
