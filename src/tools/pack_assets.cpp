@@ -60,8 +60,10 @@ int main(int argc,char** argv){try{
   std::ifstream manifest(fs::path(argv[2])/"assets.rc");if(!manifest)throw std::runtime_error("Missing asset manifest");
   std::regex pattern(R"rc((\d+)\s+\w+\s+"([^"]+)")rc");std::string line;int count=0;
   while(std::getline(manifest,line)){std::smatch match;if(!std::regex_search(line,match,pattern))continue;
-   auto path=fs::path(argv[2])/match[2].str();std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("Missing source asset");Bytes original((std::istreambuf_iterator<char>(file)),{});
-   auto decoded=retro::loadResourceFromModule(module,std::stoi(match[1].str()));
+   auto path=fs::path(argv[2])/match[2].str();std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("Missing source asset: "+path.string());Bytes original((std::istreambuf_iterator<char>(file)),{});
+   int resourceId=std::stoi(match[1].str());Bytes decoded;
+   try{decoded=retro::loadResourceFromModule(module,resourceId);}
+   catch(const std::exception& error){throw std::runtime_error("Embedded resource "+std::to_string(resourceId)+" ("+path.string()+"): "+error.what());}
    if(path.extension()==".png"){original=rawTexture(original);if(decoded.size()<12||std::memcmp(decoded.data(),"RMT1",4))decoded=rawTexture(decoded);}
    if(decoded!=original)throw std::runtime_error("Packaged resource mismatch: "+path.string());++count;
   }

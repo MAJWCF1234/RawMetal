@@ -23,10 +23,16 @@ set_target_properties(RawMetalCreatureBake PROPERTIES RUNTIME_OUTPUT_DIRECTORY "
 set_target_properties(RawMetalClutterImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 file(GLOB_RECURSE RAWMETAL_ASSETS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
 get_filename_component(RAWMETAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/packed")
+# Mirror the manifest into the build tree. configure_file tracks assets.rc by
+# content and refreshes this dependency when Git adds/removes resource IDs,
+# preventing a stale generated RC from surviving an incremental checkout.
+set(RAWMETAL_ASSET_MANIFEST_DEP "${CMAKE_BINARY_DIR}/packed/assets-manifest.rc")
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/assets.rc" "${RAWMETAL_ASSET_MANIFEST_DEP}" COPYONLY)
 set(RAWMETAL_PACKED_RC "${CMAKE_BINARY_DIR}/packed/assets-packed.rc")
 add_custom_command(OUTPUT "${RAWMETAL_PACKED_RC}"
     COMMAND $<TARGET_FILE:RawMetalAssetPacker> "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/packed" "${CMAKE_BINARY_DIR}/packed/unused-bundle.bin"
-    DEPENDS RawMetalAssetPacker assets.rc ${RAWMETAL_ASSETS}
+    DEPENDS RawMetalAssetPacker "${RAWMETAL_ASSET_MANIFEST_DEP}" ${RAWMETAL_ASSETS}
     COMMENT "Losslessly packing embedded assets" VERBATIM)
 add_executable(RawMetal WIN32
     main.cpp
