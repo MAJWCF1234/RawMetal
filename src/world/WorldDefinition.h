@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/Math.h"
 #include <array>
+#include <cstddef>
 
 namespace retro {
 // A chunk index is local to a world. Never use it as a global content identity.
@@ -45,6 +46,6 @@ inline constexpr std::array<ChunkDefinition,AshfallChunkCount> AshfallChunks{{
 }};
 inline constexpr int worldChunkCount(WorldId world){return world==WorldId::Campaign?CampaignChunkCount:AshfallChunkCount;}
 inline const ChunkDefinition& chunkDefinition(WorldId world,int chunk){
-    return world==WorldId::Campaign?CampaignChunks.at(size_t(chunk)):AshfallChunks.at(size_t(chunk));
+    return world==WorldId::Campaign?CampaignChunks.at(std::size_t(chunk)):AshfallChunks.at(std::size_t(chunk));
 }
 }
