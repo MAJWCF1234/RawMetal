@@ -135,7 +135,7 @@ The editor can save and reopen projects directly without making the artist manag
 
 Choose the map name, level ID, MAIN or CUSTOM default target, and the plan area to export. All floors in that plan area are included. The generated payload contains the metadata header, `MAP_CODE_START / MAP_CODE_END`, local ASCII slices, runtime layers, doors, stairs, structures, lights, terminals, hazards and the editor assets that already have RawMetal runtime mappings.
 
-The exporter deliberately reports anything it cannot represent instead of silently discarding it. Current examples are vertical smart doors (the runtime Door type is horizontal-only), blueprint-only NPC role dummies, and arbitrary source assets without a runtime placement mapping. Window openings are preserved as sill/header wall apertures even though RawMetal does not yet have a dedicated glass entity.
+The exporter deliberately reports anything it cannot represent instead of silently discarding it. Current examples are vertical smart doors (the runtime Door type is horizontal-only), blueprint-only NPC role dummies, per-tile finish painting (the current World payload API has no material-override table), and arbitrary source assets without a runtime placement mapping. Window openings are preserved as sill/header wall apertures even though RawMetal does not yet have a dedicated glass entity.
 
 A building project may span many editor plan areas, but one installer payload is one RawMetal World chunk. Export each plan area separately when building a multi-map campaign route. MAIN payloads use dynamic campaign slots 6 and above. CUSTOM payloads use the same schema and can be archived through the installer's custom-map option.
 
