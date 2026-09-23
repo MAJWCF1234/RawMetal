@@ -152,7 +152,7 @@ function Convert-LegacyCustomPayload {
     if(-not $codeMatch.Success) { throw "CUSTOM payload has neither runtime campaign data nor a MAP_CODE block to convert." }
     $code = $codeMatch.Groups[1].Value
 
-    foreach($unsupported in @('event\s*\(', '\bm_scriptEvents\b', '\bm_hazards\b', '\bm_compactors\b', '\bm_waterVolumes\b')) {
+    foreach($unsupported in @('event\s*\(', '\bm_scriptEvents\b', '\bm_hazards\b', '\bm_compactors\b', '\bm_waterVolumes\b', '\bm_props\b', '\bm_particleEmitters\b')) {
         if([regex]::IsMatch($code,$unsupported)) {
             throw "Legacy CUSTOM conversion found advanced runtime content ('$unsupported') that cannot be translated safely. Export this campaign from the Level Editor so the TXT contains CUSTOM_CAMPAIGN_DATA."
         }
@@ -202,12 +202,21 @@ function Convert-LegacyCustomPayload {
         foreach($entry in Get-BraceEntries $doorBody) {
             $f = Split-TopLevel $entry
             if($f.Count -lt 3) { throw "Malformed m_doors entry in legacy CUSTOM payload." }
+            $doorZ = if($f.Count -ge 8){Convert-MapScalar $f[7] $roof}else{0.0}
+            $doorEntry = if($f.Count -ge 7){Convert-MapBool $f[6]}else{$false}
+            $doorTransfer = if($f.Count -ge 6){Convert-MapBool $f[5]}else{$false}
             $door = [pscustomobject]@{
-                Left=(Convert-MapScalar $f[0] $roof); Right=(Convert-MapScalar $f[1] $roof); Y=(Convert-MapScalar $f[2] $roof)
-                Z=if($f.Count -ge 8){Convert-MapScalar $f[7] $roof}else{0.0}
-                Entry=if($f.Count -ge 7){Convert-MapBool $f[6]}else{$false}
-                Transfer=if($f.Count -ge 6){Convert-MapBool $f[5]}else{$false}
-                Swinging=$false; Clear=$false; Sign=-1; State=""; RequireValue=1
+                Left=(Convert-MapScalar $f[0] $roof)
+                Right=(Convert-MapScalar $f[1] $roof)
+                Y=(Convert-MapScalar $f[2] $roof)
+                Z=$doorZ
+                Entry=$doorEntry
+                Transfer=$doorTransfer
+                Swinging=$false
+                Clear=$false
+                Sign=-1
+                State=""
+                RequireValue=1
             }
             $doors.Add($door)
         }
