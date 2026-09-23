@@ -53,15 +53,10 @@ if errorlevel 4 goto :ABORT
 if errorlevel 3 goto :INSTALL_CUSTOM
 if errorlevel 2 goto :INSTALL_AUTO
 echo.
-echo [*] Installing according to META_DEFAULT_TARGET...
-powershell -NoProfile -ExecutionPolicy Bypass -File "tools\InstallMap.ps1" -Payload "%PAYLOAD_FILE%" -Mode Auto
-if errorlevel 1 (
-    echo [!] Automatic map installation failed.
-    popd
-    pause
-    exit /b 1
-)
-goto :END
+echo [*] Routing according to META_DEFAULT_TARGET...
+findstr /R /I /C:"^META_DEFAULT_TARGET:[ ]*CUSTOM[ ]*$" "%PAYLOAD_FILE%" >nul
+if not errorlevel 1 goto :INSTALL_CUSTOM
+goto :INSTALL_MAIN
 
 :INSTALL_MAIN
 if errorlevel 1 goto :INSTALL_AUTO
