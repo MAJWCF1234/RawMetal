@@ -711,6 +711,35 @@ document.querySelectorAll('[data-refmove]').forEach(b=>b.onclick=()=>{const ref=
 $('#referenceDrag').onclick=()=>{if(!referencePlan())return;$('#referenceDialog').close();S.tool='reference';S.sel=null;render();stat('Reference move: drag the image on the blueprint. It snaps in 25 cm steps.','ok')};
 $('#referenceRemove').onclick=()=>{const ref=referencePlan();if(!ref)return;if(!confirm('Remove the reference image from this floor?'))return;remember();delete S.p.referencePlans[referenceKey()];renderReferenceDialog();draw();scheduleRecovery();stat('Reference image removed from this floor.','ok')};
 $('#exportPlan').onclick=exportPlanPng;
+function openMapPayloadDialog(){
+ const c=C(),select=$('#payloadArea');select.innerHTML='';
+ for(const area of S.p.chunks){const option=document.createElement('option');option.value=area.id;option.textContent=(area.number||'?')+' '+(area.name||'Plan Area')+' ('+(area.layers||[]).length+' floor'+((area.layers||[]).length===1?'':'s')+')';option.selected=area.id===S.c;select.append(option)}
+ $('#payloadName').value=(c&&c.name)||S.p.name||'Depthworks Map';
+ $('#payloadLevel').value=String(Math.max(6,Math.round(Number(c&&c.number)||6)));
+ $('#payloadTarget').value='MAIN';
+ const count=S.p.chunks.length;$('#payloadHint').textContent=count>1?'This project has '+count+' plan areas. One installer payload is one 24 × 24 RawMetal World chunk, so this export contains the selected area and all of its floors.':'This payload contains this 24 × 24 plan area and all of its floors.';
+ const d=$('#payloadDialog');if(!d.open)d.showModal()
+}
+async function createMapPayload(){
+ const level=Math.round(Number($('#payloadLevel').value)),name=$('#payloadName').value.trim(),target=$('#payloadTarget').value,chunkId=$('#payloadArea').value;
+ if(!Number.isFinite(level)||level<0){stat('Map payload export needs a valid level ID.','bad');return}
+ if(target==='MAIN'&&level<6){stat('Main campaign payloads use dynamic level IDs 6 and above.','bad');return}
+ if(!name){stat('Give the installer map a name first.','bad');return}
+ try{
+  stat('Generating installer-ready map payload...','ok');
+  const response=await fetch('/__depthworks_map_payload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:S.p,chunk:chunkId,level,name,target})}),result=await response.json();
+  if(!response.ok||!result.ok)throw Error(result.error||('HTTP '+response.status));
+  const warnings=Array.isArray(result.warnings)?result.warnings:[];
+  if(warnings.length&&!confirm('The map payload was generated with '+warnings.length+' warning'+(warnings.length===1?'':'s')+':\n\n'+warnings.join('\n')+'\n\nDownload it anyway?')){stat('Payload export cancelled so you can fix the warnings first.','bad');return}
+  const blob=new Blob([result.payload],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=result.file||('Map_'+String(level).padStart(2,'0')+'_'+safeFilePart(name)+'.txt');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  if($('#payloadDialog').open)$('#payloadDialog').close();
+  stat('Exported '+a.download+' for InstallMap.cmd'+(warnings.length?' with '+warnings.length+' documented warning'+(warnings.length===1?'':'s'):'')+'.','ok')
+ }catch(e){stat('Map payload export failed: '+e.message,'bad')}
+}
+$('#exportMapPayload').onclick=openMapPayloadDialog;
+$('#payloadCreate').onclick=createMapPayload;
+$('#payloadClose').onclick=$('#payloadCancel').onclick=()=>$('#payloadDialog').close();
+$('#payloadTarget').onchange=()=>{if($('#payloadTarget').value==='MAIN'&&Number($('#payloadLevel').value)<6)$('#payloadLevel').value='6'};
 $('#new').onclick=openNewBuilding;$('#openProject').onclick=openProjectDialog;$('#saveProject').onclick=()=>saveProject(false);$('#saveAsProject').onclick=()=>saveProject(true);$('#projectClose').onclick=()=>$('#projectDialog').close();$('#pname').onchange=e=>{remember();S.p.name=e.target.value||'Depthworks Blockout';scheduleRecovery()};$('#ghost').onchange=draw;$('#grid').onchange=draw;
 function exportWorldCpp(){
  const q=v=>String(v??'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\r?\n/g,' ');
