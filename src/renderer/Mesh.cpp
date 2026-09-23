@@ -18,6 +18,11 @@ Mesh::Mesh(int id,const char* nodeFilter):m_materialParts((id>=163&&id<200)||(id
  // This supplied vent lies in the XZ ceiling plane, with its grille toward -Y.
  // Rotate it into a wall panel: grille toward +Z, horizontal texture louvers.
  if(id==166)for(auto&face:triangles)for(auto&v:face.v){auto p=v.p;v.p={-p.z,p.x,-p.y};}
+ // Both electrical cabinet assets were authored facing opposite RawMetal's
+ // fixture-forward convention. Normalize them once at import so every cabinet
+ // in every map, editor preview, and future placement uses the visible/control
+ // face as forward instead of showing the back/interior side.
+ if(id==171||id==258)for(auto&face:triangles)for(auto&v:face.v){v.p.x=-v.p.x;v.p.z=-v.p.z;}
  minimum={1e9f,1e9f,1e9f};maximum={-1e9f,-1e9f,-1e9f};
  for(auto&t:triangles)for(auto&v:t.v){minimum.x=std::min(minimum.x,v.p.x);minimum.y=std::min(minimum.y,v.p.y);minimum.z=std::min(minimum.z,v.p.z);maximum.x=std::max(maximum.x,v.p.x);maximum.y=std::max(maximum.y,v.p.y);maximum.z=std::max(maximum.z,v.p.z);}
  std::ostringstream info;info<<id<<": "<<triangles.size()<<" triangles; bounds "<<minimum.x<<","<<minimum.y<<","<<minimum.z<<" to "<<maximum.x<<","<<maximum.y<<","<<maximum.z<<"\n";
