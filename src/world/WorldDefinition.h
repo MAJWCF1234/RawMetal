@@ -2,10 +2,11 @@
 #include "../core/Math.h"
 #include <array>
 #include <cstddef>
+#include <stdexcept>
 
 namespace retro {
 // A chunk index is local to a world. Never use it as a global content identity.
-enum class WorldId { Campaign, Ashfall };
+enum class WorldId { Campaign, Ashfall, Custom };
 enum class Environment { Interior, Outdoor };
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden };
 enum class PickupKind { Health, Ammo }; // Values retain the existing save format.
@@ -20,7 +21,7 @@ struct ChunkDefinition {
 };
 inline constexpr int CampaignChunkCount=10;
 inline constexpr int AshfallChunkCount=12;
-inline constexpr int WorldChunkCapacity=12;
+inline constexpr int WorldChunkCapacity=32;
 inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     {{0,0},{3.5f,4.5f},0,Environment::Interior},
     {{18,24},{3.5f,3.5f},0,Environment::Interior},
@@ -50,8 +51,10 @@ inline constexpr std::array<ChunkDefinition,AshfallChunkCount> AshfallChunks{{
     {{48,48},{12.f,12.f},0,Environment::Outdoor},
     {{72,48},{12.f,12.f},0,Environment::Outdoor}
 }};
-inline constexpr int worldChunkCount(WorldId world){return world==WorldId::Campaign?CampaignChunkCount:AshfallChunkCount;}
+inline constexpr int worldChunkCount(WorldId world){return world==WorldId::Campaign?CampaignChunkCount:world==WorldId::Ashfall?AshfallChunkCount:0;}
 inline const ChunkDefinition& chunkDefinition(WorldId world,int chunk){
-    return world==WorldId::Campaign?CampaignChunks.at(std::size_t(chunk)):AshfallChunks.at(std::size_t(chunk));
+    if(world==WorldId::Campaign)return CampaignChunks.at(std::size_t(chunk));
+    if(world==WorldId::Ashfall)return AshfallChunks.at(std::size_t(chunk));
+    throw std::out_of_range("Custom worlds use runtime chunk definitions");
 }
 }

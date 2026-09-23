@@ -25,7 +25,8 @@ struct Reader {
  explicit Reader(const std::string& s):stream(s){stream.imbue(std::locale::classic());}
  template<class T> void one(T& v){
   if constexpr(std::is_enum_v<T>||std::is_same_v<T,bool>){int n=0;if(!(stream>>n)||n<0||n>(std::is_same_v<T,bool>?1:16))throw std::runtime_error("invalid enum");v=static_cast<T>(n);}
-  else {if(!(stream>>v)||!std::isfinite(double(v))||std::fabs(double(v))>10000000)throw std::runtime_error("invalid number");}
+  else if constexpr(std::is_floating_point_v<T>){if(!(stream>>v)||!std::isfinite(double(v))||std::fabs(double(v))>10000000)throw std::runtime_error("invalid number");}
+  else if(!(stream>>v))throw std::runtime_error("invalid integer");
  }
  template<class... T> void operator()(T&... v){(one(v),...);}
 };
@@ -38,8 +39,21 @@ std::string readFile(const std::filesystem::path& path){
 }
 }
 template<class A> void Game::archiveSave(A& a,int version){
- if(version>=9){a(m_worldId);if(m_worldId!=WorldId::Campaign&&m_worldId!=WorldId::Ashfall)throw std::runtime_error("Unknown saved world");}
- else if constexpr(A::reading)m_worldId=WorldId::Campaign;
+ if(version>=9){
+  a(m_worldId);
+  bool known=m_worldId==WorldId::Campaign||m_worldId==WorldId::Ashfall||(version>=12&&m_worldId==WorldId::Custom);
+  if(!known)throw std::runtime_error("Unknown saved world");
+ }else if constexpr(A::reading)m_worldId=WorldId::Campaign;
+ if(version>=12){
+  a(m_customCampaignKey);
+  if constexpr(A::reading){
+   if(m_worldId==WorldId::Custom){
+    auto found=std::find_if(m_customCampaigns.begin(),m_customCampaigns.end(),[&](const auto& campaign){return campaign&&campaign->key==m_customCampaignKey;});
+    if(found==m_customCampaigns.end())throw std::runtime_error("Custom campaign required by save is not installed");
+    m_customCampaign=*found;
+   }else {m_customCampaign.reset();m_customCampaignKey=0;}
+  }
+ }else if constexpr(A::reading){m_customCampaign.reset();m_customCampaignKey=0;}
  auto vec=[&](Vec2& v){a(v.x,v.y);};
  a(m_level,m_elapsed,m_won,m_medkits,m_weaponEquipped,m_heldClutter);
  if(version>=4){a(m_hazmat.initialized,m_hazmat.sleeping,m_hazmat.quiet,m_hazmat.accumulator);
@@ -57,9 +71,9 @@ template<class A> void Game::archiveSave(A& a,int version){
   list(m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});
   list(m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});
  }
- int archivedChunks=version>=11?worldChunkCount(m_worldId):version>=10?(m_worldId==WorldId::Campaign?6:12):version>=7?6:4;
- if(version>=11){a(archivedChunks);if(archivedChunks<1||archivedChunks>worldChunkCount(m_worldId))throw std::runtime_error("Invalid chunk count");}
- for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index,m_worldId);auto&w=c.world;
+ int archivedChunks=version>=12?chunkCount():version>=11?worldChunkCount(m_worldId):version>=10?(m_worldId==WorldId::Campaign?6:12):version>=7?6:4;
+ if(version>=11){a(archivedChunks);int available=version>=12?chunkCount():worldChunkCount(m_worldId);if(archivedChunks<1||archivedChunks>available||archivedChunks>MaxChunks)throw std::runtime_error("Invalid chunk count");}
+ for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=makeWorld(index);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
   if constexpr(A::reading){
@@ -74,17 +88,17 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,11);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 11 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,12);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 12 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>11))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>12))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
-  Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
-  if(next.m_chunks[3].world.hasLift()){
+  Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  if(next.chunkCount()>3&&next.m_chunks[3].world.hasLift()){
    auto reactorStage=next.m_chunks[3].world.reactorStage();if(reactorStage==World::ReactorStage::DiskHeld&&!next.hasQuestItem(ReactorAuthDisk))next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);
   }
 
@@ -92,7 +106,7 @@ bool Game::decodeSave(const std::string& data){
   // authored population. Reconcile old state onto today's baseline so content
   // added by an update appears in existing saves instead of being erased by
   // the older serialized vector lengths.
-  next.seedScripts();Game authored(next.m_worldId);
+  next.seedScripts();Game authored=next.m_worldId==WorldId::Custom?Game(next.m_customCampaign):Game(next.m_worldId);
   auto samePosition=[](Vec2 a,Vec2 b){return lengthSq(a-b)<.0004f;};
   for(int level=0;level<next.chunkCount();++level){
    auto&saved=next.m_chunks[level];const auto&fresh=authored.m_chunks[level];
@@ -165,11 +179,11 @@ void Game::refreshSaveSlots(){
  for(int slot=0;slot<3;++slot){auto&label=m_slotLabels[slot];label="SLOT "+std::to_string(slot+1)+" / ";
   if(m_saveDirectory.empty()){label+="UNAVAILABLE";continue;}
   auto path=slotPath(m_saveDirectory,slot);std::error_code error;if(!std::filesystem::exists(path,error)){label+=error?"UNAVAILABLE":"EMPTY";continue;}
-  try{Game preview;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);label+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else label+="INVALID SAVE";}catch(const std::exception&){label+="UNREADABLE";}
+  try{Game preview;preview.m_customCampaigns=m_customCampaigns;preview.m_customMapDirectory=m_customMapDirectory;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);label+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else label+="INVALID SAVE";}catch(const std::exception&){label+="UNREADABLE";}
  }
  m_checkpointLabel="AUTOSAVE / ";
  if(m_saveDirectory.empty())m_checkpointLabel+="UNAVAILABLE";
- else {auto path=checkpointPath(m_saveDirectory);std::error_code error;if(!std::filesystem::exists(path,error))m_checkpointLabel+=error?"UNAVAILABLE":"EMPTY";else try{Game preview;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);m_checkpointLabel+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else m_checkpointLabel+="INVALID";}catch(const std::exception&){m_checkpointLabel+="UNREADABLE";}}
+ else {auto path=checkpointPath(m_saveDirectory);std::error_code error;if(!std::filesystem::exists(path,error))m_checkpointLabel+=error?"UNAVAILABLE":"EMPTY";else try{Game preview;preview.m_customCampaigns=m_customCampaigns;preview.m_customMapDirectory=m_customMapDirectory;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);m_checkpointLabel+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else m_checkpointLabel+="INVALID";}catch(const std::exception&){m_checkpointLabel+="UNREADABLE";}}
 }
 bool Game::testSaves(){
  std::ofstream report("save-test.txt");auto check=[&](bool ok,const char* label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();return ok;};

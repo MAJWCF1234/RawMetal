@@ -3,15 +3,36 @@
 namespace retro {
 void Game::ensureChunk(int level){
  auto&chunk=m_chunks[level];if(chunk.resident)return;auto doors=chunk.world.doors();bool control=chunk.world.controlReleased();
- auto saved=chunk.world;chunk.world=World(level,m_worldId);chunk.world.restoreLift(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();chunk.resident=true;
+ auto saved=chunk.world;chunk.world=makeWorld(level);chunk.world.restoreLift(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();chunk.resident=true;
 }
 void Game::useDoor(int index){
  auto door=m_world.doors()[index];m_world.toggleDoor(index);bool opening=!door.opening;
- if(door.transfer&&m_level+1<chunkCount()){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,opening);}
- if(door.entry&&m_level>0){ensureChunk(m_level-1);auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,opening);}
+ if(m_worldId==WorldId::Custom&&(door.entry||door.transfer)){
+  // Custom campaign indices are authoring IDs, not spatial directions. Find
+  // the chunk on the opposite side of this boundary in world coordinates.
+  auto origin=chunkOffset(m_level);Vec2 probe{origin.x+(door.left+door.right)*.5f,origin.y+(door.entry?-.05f:24.05f)};
+  for(int level=0;level<chunkCount();++level)if(level!=m_level){auto otherOrigin=chunkOffset(level);
+   if(probe.x<otherOrigin.x||probe.x>=otherOrigin.x+World::Width||probe.y<otherOrigin.y||probe.y>=otherOrigin.y+World::Height)continue;
+   ensureChunk(level);auto& other=m_chunks[level].world;int best=-1;float distance=2.f;
+   for(int candidate=0;candidate<int(other.doors().size());++candidate){const auto& match=other.doors()[candidate];
+    if(!(match.entry||match.transfer))continue;float globalX=otherOrigin.x+(match.left+match.right)*.5f;
+    float d=std::fabs(globalX-probe.x);if(d<distance){distance=d;best=candidate;}}
+   if(best>=0)other.setDoor(best,door.open,opening);break;
+  }
+ }else{
+  if(door.transfer&&m_level+1<chunkCount()){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,opening);}
+  if(door.entry&&m_level>0){ensureChunk(m_level-1);auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,opening);}
+ }
  sound(Sound::Door,.65f);
 }
 void Game::updateStreaming(float dt){
+ if(m_worldId==WorldId::Custom){
+  // Runtime campaign packs are capped at 32 tiny 24 m chunks. Keep their
+  // authored geometry resident so arbitrary 2D layouts and non-sequential
+  // chunk numbering never depend on the built-in campaign's +/-1 streamer.
+  for(int level=0;level<chunkCount();++level)if(level!=m_level)ensureChunk(level);
+  (void)dt;return;
+ }
  if(m_worldId==WorldId::Ashfall){
   // Directional outdoor streaming. Keep a short safety bubble around the player
   // for seamless turns/crossings, then bias the remaining resident geometry into

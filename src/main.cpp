@@ -8,6 +8,7 @@
 #include <fstream>
 #include <queue>
 #include <exception>
+#include <filesystem>
 
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
@@ -343,6 +344,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     retro::Win32Window window(W,H,L"Depthworks");
     if(!window.valid()) return 1;
     retro::Game game;
+    game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
     bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr;
     if(directStart)game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);

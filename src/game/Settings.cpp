@@ -3,12 +3,43 @@
 #include <fstream>
 #include <cmath>
 namespace retro {
+int Game::titleRows()const{
+ if(!m_customMapsOpen)return TitleMenuLayout::Rows;
+ return std::min(6,std::max(1,customMenuItemCount()-m_customMenuOffset));
+}
+std::string Game::customMenuLabel(int row)const{
+ int item=customMenuLogicalIndex(row);
+ if(item==0)return "ASHFALL EXCLUSION ZONE";
+ if(item>=1&&item<=int(m_customCampaigns.size()))return m_customCampaigns[size_t(item-1)]->name;
+ return "BACK TO TITLE";
+}
+void Game::selectCustomCampaign(int index){
+ if(index<0||index>=int(m_customCampaigns.size()))return;
+ m_customCampaign=m_customCampaigns[size_t(index)];m_customCampaignKey=m_customCampaign->key;m_worldId=WorldId::Custom;
+ m_level=std::clamp(m_customCampaign->startMap,0,int(m_customCampaign->maps.size())-1);
+ m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;restart();m_suppressFire=true;
+}
 void Game::updateTitle(const InputState& input){
  auto pressed=[](bool now,bool previous){return now&&!previous;};
  if(m_customMapsOpen&&pressed(input.escape,m_titlePrevious.escape)){m_customMapsOpen=false;m_titleSelection=1;m_titlePrevious=input;return;}
  int titleRowCount=titleRows();
- if(pressed(input.menuUp,m_titlePrevious.menuUp))m_titleSelection=(m_titleSelection+titleRowCount-1)%titleRowCount;
- if(pressed(input.menuDown,m_titlePrevious.menuDown))m_titleSelection=(m_titleSelection+1)%titleRowCount;
+ if(m_customMapsOpen){
+  int total=customMenuItemCount();
+  if(pressed(input.menuUp,m_titlePrevious.menuUp)){
+   if(m_titleSelection>0)--m_titleSelection;
+   else if(m_customMenuOffset>0)--m_customMenuOffset;
+   else {m_customMenuOffset=std::max(0,total-6);m_titleSelection=titleRows()-1;}
+  }
+  if(pressed(input.menuDown,m_titlePrevious.menuDown)){
+   if(m_titleSelection+1<titleRows())++m_titleSelection;
+   else if(m_customMenuOffset+titleRows()<total)++m_customMenuOffset;
+   else {m_customMenuOffset=0;m_titleSelection=0;}
+  }
+  titleRowCount=titleRows();
+ }else{
+  if(pressed(input.menuUp,m_titlePrevious.menuUp))m_titleSelection=(m_titleSelection+titleRowCount-1)%titleRowCount;
+  if(pressed(input.menuDown,m_titlePrevious.menuDown))m_titleSelection=(m_titleSelection+1)%titleRowCount;
+ }
  bool inside=input.pointerX>=TitleMenuLayout::X&&input.pointerX<TitleMenuLayout::X+TitleMenuLayout::Width&&
              input.pointerY>=TitleMenuLayout::Y&&input.pointerY<TitleMenuLayout::Y+titleRowCount*TitleMenuLayout::RowHeight;
  bool click=pressed(input.fire,m_titlePrevious.fire);
@@ -16,11 +47,13 @@ void Game::updateTitle(const InputState& input){
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
  bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
  if(activate&&m_customMapsOpen){
-  if(m_titleSelection==0){m_worldId=WorldId::Ashfall;m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;m_level=0;restart();m_suppressFire=true;}
-  else {m_customMapsOpen=false;m_titleSelection=1;}
+  int item=customMenuLogicalIndex(m_titleSelection);
+  if(item==0){m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;m_level=0;restart();m_suppressFire=true;}
+  else if(item>=1&&item<=int(m_customCampaigns.size()))selectCustomCampaign(item-1);
+  else {m_customMapsOpen=false;m_customMenuOffset=0;m_titleSelection=1;}
  }else if(activate){
-  if(m_titleSelection==0){m_worldId=WorldId::Campaign;m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
-  else if(m_titleSelection==1){m_customMapsOpen=true;m_titleSelection=0;}
+  if(m_titleSelection==0){m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Campaign;m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}
+  else if(m_titleSelection==1){if(!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);m_customMapsOpen=true;m_customMenuOffset=0;m_titleSelection=0;}
   else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
   else if(m_titleSelection==3){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
   else if(m_titleSelection==4)m_quitRequested=true;
