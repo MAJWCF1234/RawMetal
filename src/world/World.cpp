@@ -857,6 +857,13 @@ World::World(int level,WorldId id):m_worldId(id) {
    // freight door used to stand by itself on a catwalk with only a handrail.
    wall(18.82f,1,19.04f,4.35f,-4,roof);wall(21.96f,1,22.18f,4.35f,-4,roof);
    wall(18.82f,1,22.18f,1.22f,-4,roof);
+   // The north mezzanine used to float over an unbounded black lower hall.
+   // Close the service volumes beneath both wings while keeping the bridge
+   // underside and central concourse open.
+   wall(1,6.78f,7.05f,7.06f,-9,-4);
+   wall(6.78f,1,7.06f,6.82f,-9,-4);
+   wall(18.78f,1,19.06f,6.82f,-9,-4);
+   wall(18.78f,6.78f,22.2f,7.06f,-9,-4);
    wall(1,17.35f,3,17.65f,-9,-5.5f);wall(5,17.35f,6,17.65f,-9,-5.5f);wall(6,17.35f,6.2f,23,-9,-5.5f);
    for(Vec2 p:{Vec2{2.3f,6.2f},Vec2{6.2f,6.2f},Vec2{10.2f,8.2f},Vec2{20.4f,8.2f}})
     post(p.x,p.y,-9,-4.25f,.11f);
@@ -867,6 +874,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    event("junction_arrival",2,1,6,4,-4.1f,-2,{action(A::Checkpoint)});
    for(Vec2 p:{Vec2{4,4},Vec2{12,8},Vec2{20,7},Vec2{18,13},Vec2{11,22},Vec2{21,21}})m_lights.push_back({p,-1.05f});
    m_lights.push_back({{18,12},-5.85f});
+   // Under-bridge task lighting keeps the lower concourse readable instead of
+   // falling into a near-black void beneath the -4 m deck.
+   for(Vec2 p:{Vec2{8,8.6f},Vec2{13,8.6f},Vec2{7.5f,14},Vec2{12.5f,19.5f}})
+    m_lights.push_back({p,-4.35f});
   }else{
    m_layers={{"Waste Handling / processing floor",-12,0,WasteHandlingLower},{"Waste Handling / sorting deck",-9,.25f,WasteHandlingSortingDeck}};
    m_doors={{2,5,.5f,0,false,false,true,3}};wall(2,0,5,1,-12,-9);
@@ -877,6 +888,14 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(float x:{12.65f,17.f})for(float y:{7.7f,12.95f})m_structures.push_back({x,y,x+.35f,y+.35f,-12,-6.1f,false,2});
    m_structures.push_back({12.65f,7.7f,17.35f,13.3f,-6.1f,-5.7f,false,2});
    m_structures.push_back({13,5,17,14,-12,-11.97f,false,2});
+   // Treat the sorting deck as rooms built over processing, not a collection
+   // of slabs floating over darkness. These retaining bulkheads follow the
+   // deck footprint but leave the central processing route and stair open.
+   wall(1,4.78f,12.2f,5.06f,-12,-9);
+   wall(17.8f,4.78f,23,5.06f,-12,-9);
+   wall(4.78f,5,5.06f,16.9f,-12,-9);
+   wall(1,19.72f,7.8f,20.0f,-12,-9);
+   wall(10.18f,17,10.46f,20.0f,-12,-9);
    for(float x:{7.f,19.f})m_pipes.push_back({{x,2},{x,22},-6.1f,.18f});
    m_terminals={{{10.8f,8},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / TOGGLE CONVEYOR AND PRESS.",0,false,0,stateId("compactor_isolated"),true},
                {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT CONNECTION SEALED / END OF CURRENT ROUTE.",0,false}};
@@ -894,6 +913,8 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_pickupSpawns={{{6,19},PickupKind::Ammo},{{20,18},PickupKind::Health}};
    event("waste_dispatch_checkpoint",19,20,22,23,-12.1f,-10,{action(A::Checkpoint)});
    for(Vec2 p:{Vec2{3,3},Vec2{3,12},Vec2{9,18},Vec2{15,6},Vec2{20,13},Vec2{20,21}})m_lights.push_back({p,-5.55f});
+   for(Vec2 p:{Vec2{6.5f,7},Vec2{7,14},Vec2{12,18},Vec2{19.5f,18.5f}})
+    m_lights.push_back({p,-9.25f});
   }
   for(auto& d:m_doors){if(d.entry)d.sign=m_level-1;else if(d.transfer)d.sign=m_level+1;}
   if(m_level==8){m_doors[1].sign=10;m_doors[2].sign=11;}
