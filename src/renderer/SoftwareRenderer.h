@@ -103,11 +103,11 @@ private:
     std::vector<float> m_sceneZ;
     bool m_visibilityCulling=true;
     int m_shadowBudgetLimit=2200;
-    std::array<std::unordered_map<std::uint64_t,float>,Game::ChunkCount> m_chunkLighting;
-    std::array<std::unordered_map<std::uint64_t,NormalLighting>,Game::ChunkCount> m_chunkNormalLighting;
-    std::array<std::vector<float>,Game::ChunkCount> m_chunkLightingDoors;
-    std::array<std::vector<std::vector<size_t>>,Game::ChunkCount> m_chunkLightCells;
-    std::array<size_t,Game::ChunkCount> m_chunkLightCounts{};
+    std::array<std::unordered_map<std::uint64_t,float>,Game::MaxChunks> m_chunkLighting;
+    std::array<std::unordered_map<std::uint64_t,NormalLighting>,Game::MaxChunks> m_chunkNormalLighting;
+    std::array<std::vector<float>,Game::MaxChunks> m_chunkLightingDoors;
+    std::array<std::vector<std::vector<size_t>>,Game::MaxChunks> m_chunkLightCells;
+    std::array<size_t,Game::MaxChunks> m_chunkLightCounts{};
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
     float m_gripError=0;
