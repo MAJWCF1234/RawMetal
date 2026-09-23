@@ -482,6 +482,7 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
         f"META_LEVEL_ID: {level_id}",
         f"META_LEVEL_NAME: {level_name}",
         f"META_DEFAULT_TARGET: {default_target}",
+        f"META_CAMPAIGN_NAME: {project.get('name') or level_name}",
         f"META_EDITOR_PROJECT: {project.get('name','Depthworks Level')}",
         f"META_EDITOR_PLAN_AREA: {chunk.get('name','Plan Area')}",
         "",
@@ -677,8 +678,8 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
         lines.append("   m_clutterSpawns={"+",".join(clutter_lines)+"};")
 
     # Keep the payload self-contained and explicit about editor-only omissions.
-    if len(chunks) > 1:
-        warnings.append(f"Project contains {len(chunks)} plan areas. This payload contains only '{chunk.get('name','Plan Area')}', because one campaign slot is one 24x24 World chunk.")
+    if len(chunks) > 1 and default_target == "MAIN":
+        warnings.append(f"Project contains {len(chunks)} plan areas. The MAIN campaign code slot contains only '{chunk.get('name','Plan Area')}'. The runtime custom-campaign block still contains the complete project.")
     if any((layer.get("materials") or {}) for layer in layers):
         warnings.append("Painted editor finishes are not encoded by the current World map payload API yet; geometry is exported, but per-tile material paint remains editor-only.")
     if any(o.get("type") == "window" for o in objects):
@@ -686,7 +687,15 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
 
     lines.append("  }")
     lines.append("--- MAP_CODE_END ---")
+    runtime_text,runtime_warnings=build_runtime_campaign(project,project.get("name") or level_name)
+    warnings.extend(runtime_warnings)
+    lines.extend(["","--- CUSTOM_CAMPAIGN_DATA_START ---"])
+    lines.extend(runtime_text.splitlines())
+    lines.append("--- CUSTOM_CAMPAIGN_DATA_END ---")
     if warnings:
+        # Preserve order but avoid repeating the same limitation once for the
+        # compile-time map block and again for the runtime campaign block.
+        warnings=list(dict.fromkeys(warnings))
         lines.extend(["", "--- EDITOR_EXPORT_WARNINGS ---"])
         lines.extend(f"- {warning}" for warning in warnings)
     lines.append("")
