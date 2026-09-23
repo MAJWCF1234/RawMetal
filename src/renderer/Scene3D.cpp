@@ -325,19 +325,30 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
   objectLighting=false;
  };
+ // Outdoor chunks carry an explicit low-poly mesh generated from the same
+ // height field used by collision. This replaces the old flat half-metre floor
+ // patches while leaving authored ruins, machinery and props on top.
+ if(w.hasTerrain())for(const auto&face:w.terrain()){
+  MeshVertex a{{face.a.x,face.a.y,face.a.z},face.a.u,face.a.v};
+  MeshVertex b{{face.b.x,face.b.y,face.b.z},face.b.u,face.b.v};
+  MeshVertex c{{face.c.x,face.c.y,face.c.z},face.c.u,face.c.v};
+  tri(a,b,c,m_concrete,.96f);
+ }
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.
   if(w.tile(x,y)!='#'){
-   // Half-metre floor patches expose real stair risers and the sides of raised decks.
-   for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
-    quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?m_floor:m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
-    float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
-    if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
-    if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
-    if(h>west)quad({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h},m_metal,.9f);
-    if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
-   }
    if(!w.outdoors()){
+    // Interior floors keep the dense half-metre patches needed for authored
+    // stairs, decks and water-bed transitions.
+    for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
+     quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?m_floor:m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
+     float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
+     if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
+     if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
+     if(h>west)quad({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h},m_metal,.9f);
+     if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
+    }
+
     quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},m_facilityTextures.at("ceiling_1"),.6f);
    // Close ceiling height changes instead of exposing the void between sectors.
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
@@ -370,7 +381,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
     auto&material=w.campaignChunk(0)?m_wall:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
-    float wallBase=(w.campaign()&&w.level()>=3)?-9.f:0.f;
+    float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if(w.campaign()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
     if((w.campaign()&&w.level()<3)&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
