@@ -365,16 +365,27 @@ World::World(int level,WorldId id):m_worldId(id) {
  if(horrorMode()){
   const char* regionNames[]={"Ashfall / perimeter ruins","Ashfall / collapsed highway","Ashfall / rusted yard","Ashfall / sunken district","Ashfall / radio spire","Ashfall / evacuation gate"};
   auto rows=ashfallRegion(m_level);
-  if(m_level==0)rows[0]="########################";
-  if(m_level==5)rows[23]="########################";
-  m_layers={{regionNames[m_level],0,0,rows}}; m_openNorthBoundary=m_level>0; m_openSouthBoundary=m_level<5;
+  m_layers={{regionNames[m_level],0,0,rows}};
+  // 0-2 are the north row, 3-5 the south row.
+  m_openWestBoundary=(m_level%3)>0;m_openEastBoundary=(m_level%3)<2;
+  m_openNorthBoundary=m_level>=3;m_openSouthBoundary=m_level<3;
   m_internalWallHeight=2.8f;
-  float shift=float(m_level%3)*2.f;
-  // Keep the deployment pad completely clear: the player enters at 3.5, 4.5.
-  m_props={{0,{14.5f+shift*.25f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},{1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},{2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
-  m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.8f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
+  buildTerrain();
+
+  float shift=float(m_level%3)*1.7f;
+  // Purchased machinery and facility pieces become distant landmarks rather
+  // than repeated room dressing. The terrain underneath determines their base.
+  m_props={{0,{14.5f+shift*.25f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},
+           {1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},
+           {2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
+  if(m_level==1||m_level==4)m_props.push_back({3,{6.5f,16.5f},1.6f,2.6f,kPi*.5f,{1.3f,.18f},0});
+  if(m_level==2||m_level==5)m_props.push_back({0,{4.8f,18.2f},1.35f,2.2f,kPi*.25f,{1.1f,.66f},0});
+  m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.2f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
+  if(m_level==4)m_fixtures.push_back({6,{12.f,12.f},0,2.4f,.75f,1.3f,.35f,true});
   // Outdoor ambient light needs no unsupported indoor ceiling fixtures.
-  m_terminals={{{10,3},"ASHFALL FIELD RELAY","OUTER PERIMETER COMPROMISED.","FOLLOW THE SOUTHERN BREACH.",0,false}};
+  const char* relayLines[]={"WEST GRID OPEN / HIGHWAY EAST.","HIGHWAY SPAN / MULTIPLE ROUTES.","YARD EDGE / SOUTH DISTRICT OPEN.",
+                            "LOW DISTRICT / RADIO EAST.","RADIO SPIRE / ALL GRIDS VISIBLE.","EVAC GATE / PERIMETER TERMINUS."};
+  m_terminals={{{10,3},"ASHFALL FIELD RELAY",relayLines[m_level],"TERRAIN LINK / LOCAL GRID ONLINE.",0,false}};
   buildLayers({});return;
  }
  if(m_level>=4){
@@ -651,8 +662,33 @@ void World::buildLights(){
  for(int y=1;y<Height-1;y+=4)for(int x=2;x<Width-1;x+=5)if(tile(x,y)!='#')
   for(const auto&span:spansAt(x,y))if(span.ceiling-span.floor>1.8f)m_lights.push_back({{x+.5f,y+.35f},span.ceiling-.15f});
 }
+void World::buildTerrain(){
+ m_terrain.clear();
+ const auto origin=definition().origin;
+ for(int y=0;y<=Height;++y)for(int x=0;x<=Width;++x)
+  m_terrainHeights[size_t(y*(Width+1)+x)]=ashfallHeight(origin.x+x,origin.y+y);
+
+ // The source field is metre-spaced like a voxel surface, then emitted as a
+ // faceted triangle mesh. Alternating diagonals keep long slopes from reading
+ // as one repeated grid direction while retaining exact seam vertices.
+ m_terrain.reserve(Width*Height*2);
+ for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){
+  auto v=[&](int px,int py){float z=m_terrainHeights[size_t(py*(Width+1)+px)];return TerrainVertex{float(px),float(py),z,float(origin.x+px)*.18f,float(origin.y+py)*.18f};};
+  auto a=v(x,y),b=v(x+1,y),c=v(x+1,y+1),d=v(x,y+1);
+  if((x+y)&1){m_terrain.push_back({a,b,d});m_terrain.push_back({b,c,d});}
+  else {m_terrain.push_back({a,b,c});m_terrain.push_back({a,c,d});}
+ }
+}
+float World::terrainHeight(float x,float y)const{
+ x=std::clamp(x,0.f,float(Width));y=std::clamp(y,0.f,float(Height));
+ int x0=std::min(Width-1,int(std::floor(x))),y0=std::min(Height-1,int(std::floor(y)));
+ int x1=x0+1,y1=y0+1;float tx=x-x0,ty=y-y0;
+ auto h=[&](int px,int py){return m_terrainHeights[size_t(py*(Width+1)+px)];};
+ float north=h(x0,y0)*(1-tx)+h(x1,y0)*tx,south=h(x0,y1)*(1-tx)+h(x1,y1)*tx;
+ return north*(1-ty)+south*ty;
+}
 float World::floorHeight(float x,float y)const{
- if(outdoors())return m_layers.empty()?0.f:m_layers.front().elevation;
+ if(outdoors())return hasTerrain()?terrainHeight(x,y):(m_layers.empty()?0.f:m_layers.front().elevation);
  for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2){
   float shore=std::min({x-water.x1,water.x2-x,y-water.y1,water.y2-y});
   return -9.f+(water.bed+9.f)*std::clamp(shore/.85f,0.f,1.f);
@@ -832,7 +868,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[y*Width+x].push_back(index);
  }
 }
-float World::wallHeight(int x,int y)const{return outdoors()?m_internalWallHeight:m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
+float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+m_internalWallHeight:m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
  float fixtureTop=-100;
  for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
