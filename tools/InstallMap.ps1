@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$Payload,
 
-    [ValidateSet("Info","Main","Custom")]
+    [ValidateSet("Info","Auto","Main","Custom")]
     [string]$Mode = "Info"
 )
 
@@ -36,13 +36,38 @@ if(-not [int]::TryParse($levelText, [ref]$level)) {
     throw "META_LEVEL_ID must be an integer."
 }
 $name = Read-Metadata "META_LEVEL_NAME"
-$defaultTarget = Read-Metadata "META_DEFAULT_TARGET"
+$defaultTarget = $defaultTarget.Trim().ToUpperInvariant()
+if($defaultTarget -ne "MAIN" -and $defaultTarget -ne "CUSTOM") {
+    throw "META_DEFAULT_TARGET must be MAIN or CUSTOM."
+}
+
+function Read-OptionalMetadata([string]$key) {
+    $pattern = "(?m)^\s*" + [regex]::Escape($key) + "\s*:\s*(.*?)\s*$"
+    $match = [regex]::Match($payloadText, $pattern)
+    if($match.Success) { return $match.Groups[1].Value.Trim() }
+    return $null
+}
+
+if($Mode -eq "Auto") {
+    $Mode = if($defaultTarget -eq "CUSTOM") { "Custom" } else { "Main" }
+}
 
 if($Mode -eq "Info") {
     Write-Host ("[*] Loaded Payload : " + [IO.Path]::GetFileName($payloadPath))
     Write-Host ("[*] Level Name     : " + $name)
-    Write-Host ("[*] Target Slot    : Level " + $level)
+    if($defaultTarget -eq "CUSTOM") {
+        Write-Host ("[*] Custom Map No. : " + $level + " (legacy metadata; does not target built-in campaign map " + $level + ")")
+    } else {
+        Write-Host ("[*] Target Slot    : Level " + $level)
+    }
     Write-Host ("[*] Default Target : " + $defaultTarget)
+    if($defaultTarget -eq "CUSTOM") {
+        if($payloadText -match '(?s)--- CUSTOM_CAMPAIGN_DATA_START ---.*?--- CUSTOM_CAMPAIGN_DATA_END ---') {
+            Write-Host "[*] Runtime Data   : Full custom campaign data already embedded"
+        } else {
+            Write-Host "[*] Runtime Data   : Legacy MAP_CODE payload; installer will convert it to a playable one-map custom campaign"
+        }
+    }
     exit 0
 }
 
@@ -50,15 +75,38 @@ if($Mode -eq "Custom") {
     if(-not (Test-Path -LiteralPath $customDir)) {
         New-Item -ItemType Directory -Path $customDir | Out-Null
     }
-    $safeName = $name -replace '[<>:"/\\|?*]', '_'
+
+    $campaignName = Read-OptionalMetadata "META_CAMPAIGN_NAME"
+    if([string]::IsNullOrWhiteSpace($campaignName)) { $campaignName = $name }
+    $safeName = $campaignName -replace '[<>:"/\\|?*]', '_'
     $safeName = ($safeName -replace '\s+', '_').Trim('_')
-    if([string]::IsNullOrWhiteSpace($safeName)) {
-        $safeName = "Map"
+    if([string]::IsNullOrWhiteSpace($safeName)) { $safeName = "Custom_Campaign" }
+    $destination = Join-Path $customDir ($safeName + ".txt")
+
+    $installedText = $payloadText
+    $hasRuntimeData = [regex]::IsMatch(
+        $payloadText,
+        '(?s)--- CUSTOM_CAMPAIGN_DATA_START ---\s*.*?\s*--- CUSTOM_CAMPAIGN_DATA_END ---'
+    )
+    if(-not $hasRuntimeData) {
+        . (Join-Path $PSScriptRoot "ConvertMapPayload.ps1")
+        Write-Host "[*] Converting legacy MAP_CODE payload into runtime custom-campaign data..."
+        $runtime = Convert-LegacyCustomPayload -PayloadText $payloadText -CampaignName $campaignName -MapName $name
+        $installedText = $payloadText.TrimEnd() + [Environment]::NewLine + [Environment]::NewLine +
+            "--- CUSTOM_CAMPAIGN_DATA_START ---" + [Environment]::NewLine +
+            $runtime + [Environment]::NewLine +
+            "--- CUSTOM_CAMPAIGN_DATA_END ---" + [Environment]::NewLine
     }
-    $destination = Join-Path $customDir ($safeName + "_Slot" + $level + ".txt")
-    Copy-Item -LiteralPath $payloadPath -Destination $destination -Force
-    Write-Host ("[OK] Custom map archived at " + $destination) -ForegroundColor Green
+
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($destination, $installedText, $utf8)
+    Write-Host ("[OK] Playable custom campaign installed at " + $destination) -ForegroundColor Green
+    Write-Host "[OK] It will appear under CUSTOM MAPS the next time the title menu refreshes." -ForegroundColor Green
     exit 0
+}
+
+if($Mode -eq "Main" -and $defaultTarget -eq "CUSTOM") {
+    throw "This payload declares META_DEFAULT_TARGET: CUSTOM. It will not patch World.cpp. Use Auto or Custom installation, or change the metadata to MAIN intentionally."
 }
 
 if($level -lt 6) {
