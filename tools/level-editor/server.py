@@ -776,7 +776,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         route = urlparse(self.path).path
-        if route != "/__depthworks_save_project":
+        if route not in {"/__depthworks_save_project", "/__depthworks_map_payload"}:
             self.send_json({"error": "Not found"}, 404)
             return
         try:
@@ -787,6 +787,23 @@ class Handler(SimpleHTTPRequestHandler):
             project = payload.get("project")
             if not isinstance(project, dict) or not isinstance(project.get("chunks"), list) or not project["chunks"]:
                 raise ValueError("Invalid Depthworks project")
+            if route == "/__depthworks_map_payload":
+                level = int(payload.get("level"))
+                name = str(payload.get("name") or project.get("name") or "Depthworks Map").strip()
+                if not name:
+                    raise ValueError("Map name is required")
+                target = str(payload.get("target") or "MAIN").upper()
+                text_payload, warnings = build_map_payload(
+                    project,
+                    str(payload.get("chunk") or ""),
+                    level,
+                    name,
+                    target,
+                )
+                filename = f"Map_{level:02d}_{re.sub(r'[^A-Za-z0-9_-]+', '_', name).strip('_') or 'Map'}.txt"
+                self.send_json({"ok": True, "file": filename, "payload": text_payload, "warnings": warnings})
+                return
+
             filename = project_filename(payload.get("file") or project.get("name") or "untitled")
             PROJECT_ROOT.mkdir(parents=True, exist_ok=True)
             path = PROJECT_ROOT / filename
