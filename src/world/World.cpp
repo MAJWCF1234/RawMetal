@@ -1019,14 +1019,14 @@ float World::supportBelow(float x,float y,float feet)const{
   else if(base+f.height<=feet+.025f)fixtureTop=std::max(fixtureTop,base+f.height);
  }
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
- float result=floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
+ float result=hasTerrain()?terrainSurfaceBelow(x,y,feet+.03f):floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
  result=std::max(result,fixtureTop);
  if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
 }
 float World::clearanceAbove(float x,float y,float feet)const{
- float ceiling=clearanceHeight(x,y);
+ float ceiling=hasTerrain()?std::min(clearanceHeight(x,y),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y);
  for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(f.model==7)for(float tier:ShelfTiers){float underside=base+f.height*tier-.045f;if(underside>feet+.025f)ceiling=std::min(ceiling,underside);}
@@ -1046,7 +1046,18 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelf
   bool southOpen=m_liftPhase==LiftPhase::Crashed&&m_liftTimer>=3.65f&&x>11&&x<13;
   if((y<10.12f&&!northOpen)||(y>13.88f&&!southOpen))return false;
  }
- if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
+ if(hasTerrain()){
+  float support=terrainSurfaceBelow(x,y,feet+.03f),ceiling=terrainSurfaceAbove(x,y,feet);
+  if(feet<support-.025f||feet+height>ceiling+.005f)return false;
+  // Density is authoritative for arbitrary overhangs and cavern walls. Sample
+  // through the hull vertically so a player cannot cross a thin voxel surface.
+  for(float z=feet+.04f;z<feet+height-.02f;z+=.16f)if(terrainDensity(x,y,z)>0)return false;
+  char terrainTile=tile(int(std::floor(x)),int(std::floor(y)));
+  if(terrainTile=='#'||terrainTile=='C'||terrainTile=='B'||terrainTile=='T'){
+   float base=floorHeight(x,y),top=terrainTile=='#'?wallHeight(int(std::floor(x)),int(std::floor(y))):base+(terrainTile=='C'?.60f:terrainTile=='B'?1.1f:2.62f);
+   if(feet<top-.025f&&feet+height>base+.005f)return false;
+  }
+ }else if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
  for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(shelfCavities&&f.model==7){
@@ -1058,7 +1069,7 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelf
  }
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
- for(auto&t:m_terminals){if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(t.z!=0&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
+ for(auto&t:m_terminals){if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
  return true;
 }
 bool World::railBlocksHull(float x,float y,float radius,float feet,float height)const{
