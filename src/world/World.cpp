@@ -275,24 +275,38 @@ constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,Pressu
 constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
 constexpr MapLayer TurbineGantryUpperLayer{"Turbine Gantry / upper catwalk",3,.3f,TurbineGantryUpperCatwalk};
 constexpr std::array GantryStairs{Staircase{4,18,6,22,0,3,15,true,true}};
-// Six connected outdoor regions. Every north/south edge has the same broad
-// breach, so streaming joins terrain instead of reading as repeated rooms.
+// Six stitched outdoor regions. Internal chunk edges are open terrain, not
+// corridors: the active chunk and its neighbours share one world-space height
+// field, so crossing a seam is visually and physically continuous.
 constexpr MapRows ashfallRegion(int region){
  MapRows rows={
-  "##########....##########","#......................#","#......................#","#....####..............#",
-  "#....#..#......####....#","#....#..#......#..#....#","#....####......####....#","#......................#",
-  "#..........####........#","#..........#..#........#","#....####..#..#..####..#","#....#..#..####..#..#..#",
-  "#....####........####..#","#......................#","#..####....####........#","#..#..#....#..#........#",
-  "#..####....####....##..#","#......................#","#....####..............#","#....#..#....####......#",
-  "#....####....#..#......#","#............####......#","#......................#","##########....##########"};
- if(region==1){rows[3]="####....####....####....";rows[8]="#.......######.........#";rows[14]="#....####....####....###";rows[19]="#....#....####....#....#";}
- if(region==2){rows[4]="#..####......####......#";rows[6]="#..#..#......#..#......#";rows[10]="#......####......####..#";rows[16]="#....####....####......#";}
- if(region==3){rows[2]="#.....####.............#";rows[7]="#..####......####......#";rows[12]="#..#..#......#..#......#";rows[18]="#......####......####..#";}
- if(region==4){rows[5]="#........####..........#";rows[9]="#....####....####......#";rows[15]="#....#..#....#..#......#";rows[20]="#....####....####......#";}
- if(region==5){rows[3]="#..####....####........#";rows[11]="#..............####....#";rows[17]="#....####....####......#";rows[21]="#.......######.........#";}
+  "........................","........................",".....####...............",".....#..#......####.....",
+  ".....#..#......#..#.....",".....####......####......","........................","..........####..........",
+  "..........#..#..........","....####..#..#..####....","....#..#..####..#..#....","....####........####.....",
+  "........................","..####....####..........","..#..#....#..#..........","..####....####....##.....",
+  "........................","....####................","....#..#....####........","....####....#..#........",
+  "............####........","........................","........................","........................"};
+ if(region==1){rows[3]="...####....####....####.";rows[8]=".......######...........";rows[14]="....####....####....###.";rows[19]="....#....####....#......";}
+ if(region==2){rows[4]="..####......####........";rows[6]="..#..#......#..#........";rows[10]="......####......####....";rows[16]="....####....####........";}
+ if(region==3){rows[2]=".....####...............";rows[7]="..####......####........";rows[12]="..#..#......#..#........";rows[18]="......####......####....";}
+ if(region==4){rows[5]="........####............";rows[9]="....####....####........";rows[15]="....#..#....#..#........";rows[20]="....####....####........";}
+ if(region==5){rows[3]="..####....####..........";rows[11]="..............####......";rows[17]="....####....####........";rows[21]=".......######...........";}
  return rows;
 }
 static_assert([]{for(int i=0;i<6;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
+
+float ashfallHeight(float worldX,float worldY){
+ // A low-frequency signed-density surface. Sampling in world coordinates makes
+ // neighbouring chunks agree exactly at their shared edge.
+ float h=.42f*std::sin(worldX*.095f)+.34f*std::cos(worldY*.115f)+.20f*std::sin((worldX+worldY)*.071f);
+ h+=.82f*std::exp(-((worldX-57.f)*(worldX-57.f)+(worldY-9.f)*(worldY-9.f))/180.f);
+ h-=.62f*std::exp(-((worldX-10.f)*(worldX-10.f)+(worldY-34.f)*(worldY-34.f))/150.f);
+ h+=.36f*std::exp(-((worldX-34.f)*(worldX-34.f)+(worldY-30.f)*(worldY-30.f))/95.f);
+ // Keep the deployment area readable while still belonging to the same field.
+ float d2=(worldX-4.f)*(worldX-4.f)+(worldY-5.f)*(worldY-5.f);
+ if(d2<36.f){float t=std::clamp((6.f-std::sqrt(d2))/6.f,0.f,1.f);h*=1.f-t*.78f;}
+ return h;
+}
 // Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
 // meet the wall at their backs; shelves have solid footprints on level floors.
 const std::array<std::vector<Fixture>,3> MapFixtures{{
