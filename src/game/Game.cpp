@@ -22,23 +22,36 @@ Game Game::chunkView(int level)const{
  view.m_clutter=chunk.clutter;view.m_heldClutter=-1;view.m_player.pos=m_player.pos+chunkOffset(m_level)-chunkOffset(level);return view;
 }
 const World& Game::worldAt(Vec2& local)const{
- int other=local.y>=24&&m_level+1<ChunkCount?m_level+1:local.y<0&&m_level>0?m_level-1:m_level;
- if(other==m_level)return m_world;local=local+chunkOffset(m_level)-chunkOffset(other);return m_chunks[other].world;
+ // Convert through world space rather than assuming chunk IDs run north/south.
+ // Campaign keeps its existing authored offsets; Ashfall can therefore form a
+ // genuine 2D grid with the same collision queries.
+ Vec2 global=local+chunkOffset(m_level);int other=m_level;
+ for(int level=0;level<ChunkCount;++level){auto origin=chunkOffset(level);
+  if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){other=level;break;}
+ }
+ if(other==m_level)return m_world;
+ local=global-chunkOffset(other);return m_chunks[other].world;
 }
 void Game::crossChunkBoundary(){
- int next=m_player.pos.y>=24&&m_level+1<ChunkCount?m_level+1:m_player.pos.y<0&&m_level>0?m_level-1:m_level;if(next==m_level)return;int previous=m_level;
+ Vec2 global=m_player.pos+chunkOffset(m_level);int next=m_level;
+ for(int level=0;level<ChunkCount;++level){auto origin=chunkOffset(level);
+  if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){next=level;break;}
+ }
+ if(next==m_level)return;int previous=m_level;
  auto shift=chunkOffset(m_level)-chunkOffset(next);bool carried=holdingClutter();Clutter held;if(carried){held=m_clutter[m_heldClutter];m_clutter.erase(m_clutter.begin()+m_heldClutter);}m_heldClutter=-1;
- // Loose objects can cross before the player. Transfer ownership at the seam
- // while preserving velocity, rotation, sleep state and projectile state.
+ // Loose objects can cross any stitched edge. Transfer ownership only when the
+ // object's world-space position belongs to the same destination as the player.
  std::vector<Clutter> following;
- for(auto it=m_clutter.begin();it!=m_clutter.end();){auto p=it->pos+shift;
-  if(p.y>=0&&p.y<24){auto item=*it;item.pos=p;following.push_back(item);it=m_clutter.erase(it);}else ++it;}
+ for(auto it=m_clutter.begin();it!=m_clutter.end();){Vec2 objectGlobal=it->pos+chunkOffset(previous);auto origin=chunkOffset(next);
+  if(objectGlobal.x>=origin.x&&objectGlobal.x<origin.x+World::Width&&objectGlobal.y>=origin.y&&objectGlobal.y<origin.y+World::Height){
+   auto item=*it;item.pos=objectGlobal-origin;following.push_back(item);it=m_clutter.erase(it);
+  }else ++it;}
  ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
  for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
- if(next>previous)saveCheckpoint();
+ if(m_worldId==WorldId::Campaign&&next>previous)saveCheckpoint();
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
