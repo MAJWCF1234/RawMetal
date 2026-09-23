@@ -1270,6 +1270,7 @@ float World::floorHeight(float x,float y)const{
   float bank=m_layers.empty()?-9.f:m_layers.front().elevation;
   return bank+(water.bed-bank)*std::clamp(shore/.85f,0.f,1.f);
  }
+ if(custom())return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
  if(m_level>=6)return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
  if(m_level>=4)return -9.f;
  if(hasLift())return -9.f;
@@ -1291,6 +1292,7 @@ float World::waterSurface(float x,float y)const{
 }
 float World::ceilingHeight(float x,float y)const{
  if(outdoors())return 128.f;
+ if(custom())return definition().ceiling;
  if(m_level>=6)return definition().ceiling;
  if(m_level>=4)return m_level==4?-6.1f:-5.6f;
  if(hasLift())return 16.f;
