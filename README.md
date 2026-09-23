@@ -1,5 +1,28 @@
 # RawMetal
 
+Release 0.5.0 adds Cable Vaults, Pump Annex, Utility Junction and Waste Handling.
+Open the new CABLE VAULTS bulkhead at the south-west end of Coolant Return
+(map index 5) to continue. All four chapters stream through the existing door
+system and remain part of the main campaign. The previous six maps and Ashfall
+are retained.
+
+Cable Vaults has a pulsing electrical trench, a local disconnect and a
+maintenance flashlight pickup. Pump Annex connects its lower manifold, main
+floor and upper observation route. Utility Junction has a waste dispatch
+control and suspended future connections. Waste Handling has an animated
+conveyor/compactor that affects the player, enemies and loose junk; its local
+isolator stops it safely. Freight Access remains a later chapter.
+
+Water uses a quieter tinted version of the supplied texture and normal map,
+with slower movement and a shoreline computed from the same sloped bed used
+by collision. Source assets remain unchanged and losslessly packed.
+
+Save version 11 records its chunk count and loads previous six-chunk campaign
+saves. Run `--campaign-extension-test` for route, seam, hazard and control
+checks; `--campaign-inspection` captures nine player-height views. Console
+shortcuts: `map cable`, `map annex`, `map junction`, `map waste`.
+
+
 Release 0.4.6 adds reversible first/second-order audio prediction and byte-plane
 packing. The build selects the smallest lossless encoding per WAV, preserving
 the entire original file. Texture dimensions/RGBA pixels and model/animation
@@ -37,7 +60,7 @@ Campaign and Ashfall now have separate world identities, chunk origins and save
 ownership. See [world-system boundaries](docs/world-system-boundaries.md) for the
 isolation fix, reusable spawn/effect/trigger records, tests and remaining legacy
 code. Custom Maps currently plays the built-in Ashfall world; loading arbitrary
-editor-exported map packages is not implemented yet. Save version 9 preserves
+editor-exported map packages is not implemented yet. Save versions 9 and later preserve
 world identity; older saves are interpreted as campaign saves.
 
 The flashlight is reserved for later chapters: scripts can grant the `flashlight`

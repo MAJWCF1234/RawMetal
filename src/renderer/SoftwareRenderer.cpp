@@ -72,7 +72,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_ashfallSky=loadTexture(252);if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4)m_ashfallSky.clampEdges=true;else prepareDecal(m_ashfallSky,false);
  m_terrainDirt=loadTexture(253);attachNormal(m_terrainDirt,254);
  m_terrainRock=loadTexture(255);attachNormal(m_terrainRock,256);
- m_water=loadTexture(250);attachNormal(m_water,251);for(auto& pixel:m_water.pixels)pixel|=0xff000000u;for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel|=0xff000000u;attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190);
+ m_water=loadTexture(250);attachNormal(m_water,251);m_water.transparent=true;auto coolantTint=[](uint32_t pixel){return 0xc4000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190);
  m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
@@ -85,6 +85,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
  m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
  m_diskSign=makeSign("MAINTENANCE","SERVICE BENCH",0xffd7ac64u);m_authSign=makeSign("CONTROL","R-03",0xff53aec4u);
+ const char* routes[]={"FOUNDRY","PRESSURE WORKS","TURBINE GANTRY","REACTOR COMPLEX","SERVICE GALLERY","COOLANT RETURN","CABLE VAULTS","PUMP ANNEX","UTILITY JUNCTION","WASTE HANDLING","FREIGHT SERVICES","PRIMARY UTILITIES"};
+ for(int i=0;i<12;++i)m_routeSigns[i]=makeSign(routes[i],i>=10?"ACCESS SUSPENDED":"SERVICE ACCESS",0xffa7a766u);
 }
 const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int part)const{
  if(mesh<0||mesh>=int(m_facilityMeshes.size()))throw std::runtime_error("Invalid facility mesh index "+std::to_string(mesh));
@@ -226,7 +228,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  const auto paper=rgb(222,206,164),muted=rgb(159,139,105),amber=rgb(210,145,54),red=rgb(180,55,36);
  const int sector=int(p.pos.y)/8;
  wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
- text(19,14,!game.world().campaign()?"ASHFALL / SURFACE":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
+ text(19,14,!game.world().campaign()?"ASHFALL / SURFACE":game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
  if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)text(19,32,game.world().liftStatus(),amber);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
  // Compact map reveals nearby contacts and a fixed extraction marker.

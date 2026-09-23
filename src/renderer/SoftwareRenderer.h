@@ -57,6 +57,7 @@ private:
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;
     Texture m_feedSign,m_returnSign,m_diskSign,m_authSign;
+    std::array<Texture,12> m_routeSigns;
     Texture m_wall, m_floor, m_metal, m_arms;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;

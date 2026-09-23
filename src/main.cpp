@@ -49,6 +49,22 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      int brighter=0;for(int y=60;y<H-60;++y)for(int x=80;x<W-80;++x){int i=y*W+x;auto a=before[i],b=renderer.pixels()[i];if(int(b&255)+int((b>>8)&255)+int((b>>16)&255)>int(a&255)+int((a>>8)&255)+int((a>>16)&255)+12)++brighter;}
      report<<"Brighter scene pixels: "<<brighter<<'\n';return brighter>100?0:43;
     }
+    if(std::wcsstr(commandLine,L"--campaign-extension-test"))return retro::Game::testCampaignExtension()?0:46;
+    if(std::wcsstr(commandLine,L"--campaign-inspection")){
+     retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 36;
+     struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
+     for(auto view:std::array<View,9>{{
+      {"cable-entry",6,{3.5f,4},-9,.5f,0},{"cable-trench",6,{13,7.5f},-9,retro::kPi*.5f,-10},
+      {"cable-breaker",6,{19,11},-9,0,0},{"annex-entry",7,{3.5f,3},-9,.55f,8},
+      {"annex-lower",7,{12,3},-12,1.5f,15},{"annex-upper",7,{20,18},-4,-2.5f,-30},
+      {"junction-bridge",8,{6,8},-4,.5f,-20},{"waste-deck",9,{3,6},-9,.4f,-20},
+      {"waste-press",9,{11,6},-12,.8f,6}
+     }}){
+      auto scene=retro::Game::mapInspection(view.p,view.yaw,view.pitch,view.level,false,view.z,true);renderer.render(scene);
+      std::ofstream frame(std::string(view.name)+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
+      for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+     }return 0;
+    }
     if(std::wcsstr(commandLine,L"--megamap-inspection")){
      retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
      std::ofstream report("megamap-inspection.txt");bool ok=true;

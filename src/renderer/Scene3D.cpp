@@ -205,7 +205,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float brightness=0;auto cached=m_lightingCache.find(key);
   if(cached!=m_lightingCache.end())brightness=cached->second;
   else{
-   brightness=(w.outdoors()?.48f:.27f)+.07f*std::fabs(normal.z);
+   brightness=(w.outdoors()?.48f:w.definition().ambient)+.07f*std::fabs(normal.z);
    for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];float x=fixture.position.x,y=fixture.position.y;
     if(std::fabs(x-point.x)>5.5f||std::fabs(y-point.y)>5.5f)continue;
     Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>30||d2<.001f)continue;
@@ -218,7 +218,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     }
     brightness+=(visibility/3.f)*(.12f+.88f*facing)*3.2f/(1+d2*.65f);if(!complete)break;
    }
-   brightness=std::sqrt(std::clamp(brightness,.24f,1.4f));if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
+   brightness=std::sqrt(std::clamp(brightness,std::min(.24f,w.definition().ambient),1.4f));if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
   }
   return std::clamp(brightness+flashlightContribution(point,normal),.24f,2.4f);
  };
@@ -478,7 +478,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({latch.x-.045f,latch.y-.045f,base+1.02f},{latch.x+.045f,latch.y+.045f,base+1.13f},iron,1.1f);
    continue;
   }
-  box({x-half,y-.12f,base+2.5f},{x+half,y+1.12f,base+3.f},m_metal,.8f);
+  float headerTop=std::min(base+3.f,w.ceilingHeight(x,door.y)),headerBottom=std::min(base+2.5f,headerTop-.44f);
+  box({x-half,y-.12f,headerBottom},{x+half,y+1.12f,headerTop},m_metal,.8f);
   float bottom=base+door.open*2.65f;
   box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},m_bulkhead,1.f);
   float stripeHeight=(door.right-door.left)*m_hazard.height/m_hazard.width;
@@ -494,10 +495,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({switchX-.025f,face+side*.042f-.005f,h+1.17f},{switchX+.025f,face+side*.042f+.005f,h+1.20f},door.opening?blue:amber,1.55f);
   }
   // Compact sector label bolted directly to the header.
-  auto&front=door.transfer?(w.campaignChunk(0)?m_transferSign:w.campaignChunk(1)?m_gantrySign:w.campaignChunk(3)?m_reactorSign:m_surfaceSign):w.campaignChunk(1)?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
+  auto&front=door.sign>=0&&door.sign<int(m_routeSigns.size())?m_routeSigns[door.sign]:door.transfer?(w.campaignChunk(0)?m_transferSign:w.campaignChunk(1)?m_gantrySign:w.campaignChunk(3)?m_reactorSign:m_surfaceSign):w.campaignChunk(1)?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
   auto&back=door.transfer?front:w.campaignChunk(1)?m_transferSign:(y<10?m_intakeSign:m_processingSign);
-  quad({x+.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.52f},{x-.7f,y-.125f,base+2.9575f},{x+.7f,y-.125f,base+2.9575f},front,.9f);
-  quad({x-.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.52f},{x+.7f,y+1.125f,base+2.9575f},{x-.7f,y+1.125f,base+2.9575f},back,.9f);
+  quad({x+.7f,y-.125f,headerBottom+.02f},{x-.7f,y-.125f,headerBottom+.02f},{x-.7f,y-.125f,headerTop-.04f},{x+.7f,y-.125f,headerTop-.04f},front,.9f);
+  quad({x-.7f,y+1.125f,headerBottom+.02f},{x+.7f,y+1.125f,headerBottom+.02f},{x+.7f,y+1.125f,headerTop-.04f},{x-.7f,y+1.125f,headerTop-.04f},door.sign>=0?front:back,.9f);
  }
  for(auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.
@@ -522,6 +523,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({p.x-.025f,p.y-.025f,pipe.z+pipe.radius},{p.x+.025f,p.y+.025f,roof},iron,.9f);
    box({p.x-pipe.radius-.04f,p.y-.045f,pipe.z-pipe.radius-.04f},{p.x+pipe.radius+.04f,p.y+.045f,pipe.z-pipe.radius},iron,.9f);
   }
+ }
+ for(const auto& press:w.compactors()){
+  float z=game.compactorHeight(press);
+  box({press.x1,press.y1,z},{press.x2,press.y2,z+.32f},m_panelMetal,.9f);
+  for(float x:{press.x1+.4f,press.x2-.4f})
+   cylinder({x,(press.y1+press.y2)*.5f,z+.32f},{x,(press.y1+press.y2)*.5f,w.ceilingHeight(x,press.y1)-.6f},.15f,m_pipeTexture);
+  bool isolated=game.state(press.stopState)!=0;
+  box({press.x1-.2f,press.y1-.1f,press.bed+1.7f},{press.x1,press.y1,press.bed+1.85f},isolated?lamp:amber,1.8f);
+  quad({press.x1,press.y1-2,press.bed+.035f},{press.x2,press.y1-2,press.bed+.035f},{press.x2,press.y2,press.bed+.035f},{press.x1,press.y2,press.bed+.035f},m_floor,.8f,{2,4},{0,isolated?0.f:-game.elapsed()*.12f});
+  quad({press.x1,press.y1-.06f,z},{press.x2,press.y1-.06f,z},{press.x2,press.y1-.06f,z+.25f},{press.x1,press.y1-.06f,z+.25f},m_hazard,.95f,{2,1});
+ }
+ for(const auto& hazard:w.hazards())if(hazard.kind==Hazard::Kind::Electricity&&game.hazardActive(hazard)){
+  float z=hazard.bottom+.45f;
+  for(int i=0;i<5;++i){float x=hazard.x1+(hazard.x2-hazard.x1)*(i+.5f)/5.f;
+   quad({x-.025f,hazard.y1,z},{x+.025f,hazard.y1,z},{x+.10f,hazard.y1+.35f,z+.28f},{x+.06f,hazard.y1+.35f,z+.28f},blue,1.8f);
+  }
+ }
+ for(const auto& terminal:w.terminals())if(terminal.activateState){
+  float z=w.floorHeight(terminal.position.x,terminal.position.y)+terminal.z;
+  box({terminal.position.x-.06f,terminal.position.y-.21f,z+.83f},{terminal.position.x+.06f,terminal.position.y-.19f,z+.9f},game.state(terminal.activateState)?lamp:amber,1.8f);
  }
  for(const auto& emitter:w.particleEmitters()){
   static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
@@ -775,10 +796,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   // One continuous quad per basin avoids cracks between individually rasterized
   // ripples. Moving normal-mapped UVs still gives the surface visible motion.
   for(const auto& basin:w.waterVolumes()){
-   float left=basin.x1+.34f,right=basin.x2-.34f,near=basin.y1+.34f,far=basin.y2-.34f;
-   float z=basin.surface+.015f;
-   quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},water,1.35f,
-        {(right-left)*.7f,(far-near)*.7f},{left+game.elapsed()*.035f,near-game.elapsed()*.02f});
+   float bank=w.layers().front().elevation;
+   float inset=.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
+   float left=basin.x1+inset,right=basin.x2-inset,near=basin.y1+inset,far=basin.y2-inset;
+   float z=basin.surface+.004f;
+   quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},water,1.05f,
+        {(right-left)*.45f,(far-near)*.45f},{left+game.elapsed()*.014f,near-game.elapsed()*.008f});
   }
  }
 }

@@ -109,6 +109,9 @@ public:
     WorldId worldId()const{return m_worldId;}
     static bool testWorldIsolation();
     static bool testServiceMaps();
+    static bool testCampaignExtension();
+    bool hazardActive(const Hazard& hazard)const;
+    float compactorHeight(const Compactor& machine)const;
     void showTitleScreen();
     bool titleScreen()const{return m_titleScreen;}
     int titleSelection()const{return m_titleSelection;}

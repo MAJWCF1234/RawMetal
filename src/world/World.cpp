@@ -111,7 +111,218 @@ constexpr MapRows CoolantReturnGround = {
     "#......................#",
     "#......................#",
     "#......................#",
-    "##################...###"
+    "########...#############"
+};
+
+
+// Utility expansion: ground footprints and sparse upper decks remain separate layers.
+constexpr MapRows CableVaultsGround = {
+    "##...###################",
+    "##...###################",
+    "##...###################",
+    "##...###################",
+    "##...###################",
+    "##....................##",
+    "##....................##",
+    "###...................##",
+    "######...##....##.....##",
+    "######...##....##.....##",
+    "######...##....##.....##",
+    "######...##....##.....##",
+    "######...##....##.....##",
+    "######...##....##.....##",
+    "######...##....##.....##",
+    "######................##",
+    "######................##",
+    "####...................#",
+    "####...................#",
+    "####...................#",
+    "####...................#",
+    "####...................#",
+    "####...................#",
+    "####################...#"
+};
+constexpr MapRows PumpAnnexLower = {
+    "##...###################",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "###################...##"
+};
+constexpr MapRows PumpAnnexMain = {
+    "__===___________________",
+    "_============______====_",
+    "_============______====_",
+    "_============______====_",
+    "_=___========______====_",
+    "_=___========______====_",
+    "_=___========______====_",
+    "_=___========______====_",
+    "_=___========______====_",
+    "_=___========______====_",
+    "_=___========______====_",
+    "_============______====_",
+    "_============______====_",
+    "_============______====_",
+    "_============______====_",
+    "_============______====_",
+    "_======================_",
+    "_======================_",
+    "_======================_",
+    "_======================_",
+    "_======================_",
+    "_======================_",
+    "_======================_",
+    "________________________"
+};
+constexpr MapRows PumpAnnexObservation = {
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__",
+    "_______________=======__",
+    "_______________=======__",
+    "________==============__",
+    "________==============__",
+    "________==============__",
+    "___________________===__",
+    "___________________===__",
+    "___________________===__"
+};
+constexpr MapRows UtilityJunctionGround = {
+    "##...###################",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "####################...#"
+};
+constexpr MapRows UtilityJunctionUpper = {
+    "__===___________________",
+    "_=======___________===__",
+    "_=======___________===__",
+    "_=======___________===__",
+    "_=======___________===__",
+    "_=======___________===__",
+    "_=======___________===__",
+    "_=====================__",
+    "_=====================__",
+    "_==========_____________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________"
+};
+constexpr MapRows WasteHandlingLower = {
+    "##...###################",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "########################"
+};
+constexpr MapRows WasteHandlingSortingDeck = {
+    "__===___________________",
+    "_======================_",
+    "_======================_",
+    "_======================_",
+    "_======================_",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_====___________________",
+    "_==========_____________",
+    "_==========_____________",
+    "_==========_____________",
+    "________________________",
+    "________________________",
+    "________________________",
+    "________________________"
 };
 
 // The gantry route includes orthogonal joins and a stair landing; the final exit is sealed.
@@ -562,7 +773,110 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_terminals={{{pad.x,pad.y-1.6f},"ASHFALL FIELD RELAY",relayLines[m_level],"96 X 72 M SURFACE GRID / LOCAL LINK.",0,false}};
   buildLayers({});return;
  }
- if(m_level>=4){
+ if(m_level>=6){
+  using A=ScriptAction::Type;
+  const float roof=definition().ceiling;
+  auto wall=[&](float x1,float y1,float x2,float y2,float bottom,float top){m_structures.push_back({x1,y1,x2,y2,bottom,top,false,3});};
+  auto shelf=[&](Vec2 p,float z=0.f){m_fixtures.push_back({7,p,z,1.8f,.5f,1.8f,0,true});};
+  auto cabinet=[&](Vec2 p,float yaw=0.f){m_fixtures.push_back({13,p,0,.9066f,.4956f,2.2f,yaw,true});};
+  auto tank=[&](Vec2 p,float height){float scale=height/2.390135f;m_fixtures.push_back({14,p,0,2.612115f*scale,2.874012f*scale,height,0,true});};
+  auto event=[&](const char* id,float x1,float y1,float x2,float y2,float lo,float hi,std::vector<ScriptAction> actions){
+   ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=lo;e.top=hi;e.actions=std::move(actions);m_scriptEvents.push_back(std::move(e));
+  };
+  auto action=[](A type,StateId id=0,int value=0,float amount=0.f){ScriptAction a;a.type=type;a.id=id;a.value=value;a.amount=amount;return a;};
+  std::vector<Staircase> stairs;
+  if(m_level==6){
+   m_layers={{"Cable Vaults / service passages",-9,0,CableVaultsGround}};
+   m_doors={{2,5,.5f,0,false,false,true},{20,23,23.5f,0,false,true}};
+   m_doors.back().requireState=stateId("vault_disconnect");
+   // Damaged main gallery, with two full-width service detours.
+   wall(11,11,15,11.35f,-9,-7.7f);
+   m_waterVolumes={{11,8.3f,15,10.7f,-9.35f,-9.03f}};
+   Hazard arc{Hazard::Kind::Electricity,11,8.3f,15,10.7f,-9.4f,-7.5f,22};
+   arc.enabledFlag=stateId("vault_disconnect");arc.invertFlag=true;arc.period=4;arc.onTime=1.2f;m_hazards.push_back(arc);
+   for(float y:{8.f,10.f,12.f,14.f}){cabinet({21.55f,y},-kPi*.5f);shelf({6.9f,y+.3f});}
+   for(float x:{11.12f,14.6f}){
+    m_structures.push_back({x,6,x+.25f,21,-7.05f,-6.9f,false,2});
+    for(float y:{6.f,9.f,12.f,15.f,18.f})m_structures.push_back({x,y,x+.25f,y+.08f,-6.9f,roof,false,2});
+   }
+   cabinet({6,20},kPi);cabinet({8,20},kPi);cabinet({10,20},kPi);
+   m_terminals={{{19.7f,14},"FEEDER 7A / REMOTE TRIP","LOWER UTILITY BUS ISOLATED.","E / THROW LOCAL DISCONNECT.",0,false,0,stateId("vault_disconnect")}};
+   shelf({17.7f,19.8f});m_clutterSpawns={{3,{18,19}},{0,{18.5f,19.2f}}};
+   event("vault_maintenance_kit",16.5f,18.5f,19,21,-9.2f,-7,{action(A::GiveItem,stateId("flashlight"),1)});
+   event("vault_relay_trip",2,2,5,4,-9.2f,-7,{action(A::PlaySound,0,0,.6f)});
+   m_scriptEvents.back().actions[0].sound=Sound::Door;
+   m_creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f},-9}};
+   m_pickupSpawns={{{18,21.5f},PickupKind::Ammo}};
+   // Deliberately sparse emergency lamps; the exits and turns stay readable.
+   for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22}})m_lights.push_back({p,-6.55f});
+  }else if(m_level==7){
+   m_layers={{"Pump Annex / lower manifold",-12,0,PumpAnnexLower},{"Pump Annex / main floor",-9,.25f,PumpAnnexMain},{"Pump Annex / observation",-4,.25f,PumpAnnexObservation}};
+   m_doors={{2,5,.5f,0,false,false,true,3},{19,22,23.5f,0,false,true,false,8}};
+   wall(2,0,5,1,-12,-9);wall(19,23,22,24,-12,-4);
+   stairs={{2,4,5,11,-12,-9,16,true,false},{15,2,18,6,-12,-9,16,true,true},{15,6,18,16,-9,-4,26,true,true}};
+   // Pumps occupy the full open volume and connect to the overhead header.
+   for(Vec2 p:{Vec2{8,6},Vec2{8,13},Vec2{12,19.5f}}){
+    tank(p,4.6f);m_pipes.push_back({p,{p.x,22},-2.4f,.28f});
+    m_pipes.push_back({p,p,-2.4f,.28f,-7.45f});
+   }
+   m_pipes.push_back({{8,22},{22,22},-2.4f,.28f});
+   // Raised foundations connect the main-floor machines to the lower gallery.
+   for(Vec2 p:{Vec2{8,6},Vec2{8,13},Vec2{12,19.5f}})wall(p.x-2.55f,p.y-2.8f,p.x+2.55f,p.y+2.8f,-12,-9);
+   // Models sit on those foundations, preserving their proportions.
+   for(auto& f:m_fixtures)if(f.model==14)f.base=3;
+   m_terminals={{{20.4f,17.2f},"PUMP ANNEX / OBSERVATION","DUTY PUMP RESTARTED BY REMOTE SEQUENCE.","UTILITY JUNCTION / UPPER SOUTH ACCESS.",8,false}};
+   event("annex_pump_restart",15,15,22,18,-4.1f,-2,{action(A::SetState,stateId("annex_running"),1),action(A::Shake,0,0,.35f),action(A::PlaySound,0,0,.75f),action(A::Checkpoint)});
+   m_scriptEvents.back().actions[2].sound=Sound::LiftMotor;
+   m_creatureSpawns={{CreatureKind::Wasp,{12,12},-6},{CreatureKind::Wasp,{20,13},-4},{CreatureKind::Huntsman,{11,10},-12}};
+   m_pickupSpawns={{{6,17},PickupKind::Health},{{20,20},PickupKind::Ammo}};
+   for(Vec2 p:{Vec2{3.5f,2},Vec2{4,14},Vec2{12,9},Vec2{20,7},Vec2{20,18}})m_lights.push_back({p,-1.3f});
+   for(Vec2 p:{Vec2{4,11},Vec2{12,3},Vec2{13,17}})m_lights.push_back({p,-9.35f});
+  }else if(m_level==8){
+   m_layers={{"Utility Junction / concourse",-9,0,UtilityJunctionGround},{"Utility Junction / maintenance bridge",-4,.25f,UtilityJunctionUpper}};
+   m_doors={{2,5,.5f,0,false,false,true,5},{19,22,4.5f,0,false,false,false,5},{3,5,17.5f},{20,23,23.5f,0,false,true}};
+   m_doors[1].requireState=stateId("freight_incident_clearance");m_doors[2].requireState=stateId("primary_utilities_permit");m_doors.back().requireState=stateId("waste_access");
+   wall(2,0,5,1,-9,-4);wall(19,4.35f,22,4.65f,-9,-4);
+   stairs={{8,10,11,20,-9,-4,26,true,false}};
+   // A glazed control booth: low sill plus lintel instead of a solid opaque box.
+   wall(15,10,15.2f,15,-9,-7.85f);wall(15,10,15.2f,15,-6.05f,-5.6f);
+   wall(15,10,22,10.2f,-9,-7.85f);wall(15,10,22,10.2f,-6.05f,-5.6f);
+   wall(22,10,22.2f,15,-9,-5.6f);wall(15,14.8f,17,15,-9,-5.6f);wall(19,14.8f,22,15,-9,-5.6f);
+   for(float x:{15.f,21.9f})for(float y:{10.f,14.8f})m_structures.push_back({x,y,x+.12f,y+.12f,-7.85f,-6.05f,false,2});
+   // Future branch doors have their own enclosed vestibules, not open voids.
+   wall(1,17.35f,3,17.65f,-9,-5.5f);wall(5,17.35f,6,17.65f,-9,-5.5f);wall(6,17.35f,6.2f,23,-9,-5.5f);
+   m_terminals={{{18,12.5f},"JUNCTION / WASTE DISPATCH","CREDENTIAL ACCEPTED / WASTE ROUTE AVAILABLE.","E / RELEASE WASTE HANDLING BULKHEAD.",0,false,0,stateId("waste_access")},
+               {{20.3f,6},"FREIGHT SERVICES / INCIDENT OVERRIDE","CREDENTIAL ACCEPTED. ACCESS SUSPENDED.","CONTROL AUTHORITY / CENTRAL RESPONSE.",5,false}};
+   shelf({13,2.2f});shelf({16,2.2f});m_fixtures.push_back({6,{13,20},0,1.87f,.55f,.99f,0,true});
+   m_pickupSpawns={{{17,13.5f},PickupKind::Health},{{16,3},PickupKind::Ammo}};
+   event("junction_arrival",2,1,6,4,-4.1f,-2,{action(A::Checkpoint)});
+   for(Vec2 p:{Vec2{4,4},Vec2{12,8},Vec2{20,7},Vec2{18,13},Vec2{11,22},Vec2{21,21}})m_lights.push_back({p,-1.05f});
+   m_lights.push_back({{18,12},-5.85f});
+  }else{
+   m_layers={{"Waste Handling / processing floor",-12,0,WasteHandlingLower},{"Waste Handling / sorting deck",-9,.25f,WasteHandlingSortingDeck}};
+   m_doors={{2,5,.5f,0,false,false,true,3}};wall(2,0,5,1,-12,-9);
+   stairs={{8,11,11,17,-12,-9,16,true,true}};
+   // Sorting pits flank a conveyor/press, leaving an always-safe service aisle.
+   m_waterVolumes={{14,16,18,21,-12.5f,-12.08f}};
+   m_compactors={{13,8,17,13,-12,-8.3f,9,stateId("compactor_isolated")}};
+   for(float x:{12.65f,17.f})for(float y:{7.7f,12.95f})m_structures.push_back({x,y,x+.35f,y+.35f,-12,-6.1f,false,2});
+   m_structures.push_back({12.65f,7.7f,17.35f,13.3f,-6.1f,-5.7f,false,2});
+   m_structures.push_back({13,5,17,14,-12,-11.97f,false,2});
+   for(float x:{7.f,19.f})m_pipes.push_back({{x,2},{x,22},-6.1f,.18f});
+   m_terminals={{{10.8f,8},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / TOGGLE CONVEYOR AND PRESS.",0,false,0,stateId("compactor_isolated"),true},
+               {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT CONNECTION SEALED / END OF CURRENT ROUTE.",0,false}};
+   for(int i=0;i<18;++i)m_clutterSpawns.push_back({i%6,{6.2f+float(i%3)*1.1f,5.5f+float(i/3)*2.5f}});
+   m_clutterSpawns.push_back({3,{15,7},-11.9f});
+   shelf({20,3});cabinet({22.4f,16},-kPi*.5f);
+   m_creatureSpawns={{CreatureKind::Huntsman,{19,10},-12},{CreatureKind::Huntsman,{8,21},-12},{CreatureKind::Wasp,{18,15},-9}};
+   m_pickupSpawns={{{6,19},PickupKind::Ammo},{{20,18},PickupKind::Health}};
+   event("waste_dispatch_checkpoint",19,20,22,23,-12.1f,-10,{action(A::Checkpoint)});
+   for(Vec2 p:{Vec2{3,3},Vec2{3,12},Vec2{9,18},Vec2{15,6},Vec2{20,13},Vec2{20,21}})m_lights.push_back({p,-5.55f});
+  }
+  for(auto& d:m_doors){if(d.entry)d.sign=m_level-1;else if(d.transfer)d.sign=m_level+1;}
+  if(m_level==8){m_doors[1].sign=10;m_doors[2].sign=11;}
+  buildLayers(stairs);return;
+ }
+ if(m_level==4||m_level==5){
   m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",-9,0,m_level==4?ReactorServiceGalleryGround:CoolantReturnGround}};
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
@@ -632,6 +946,7 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(17.25f,22.85f,22.85f,23.08f);wall(17.25f,20.87f,17.47f,22.85f);
    m_structures.push_back({19.05f,20.65f,20.45f,20.87f,2.55f,roof,false,3});
    Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;m_doors.push_back(storeDoor);
+   m_doors.push_back({8,11,23.5f,0,false,true});m_doors.back().sign=6;
    m_fixtures.push_back({7,{21.4f,22.48f},0,1.6f,.48f,1.8f,0,true});
    m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
    m_clutterSpawns.push_back({3,{21.1f,21.8f}});m_clutterSpawns.push_back({2,{18.5f,21.7f}});
@@ -915,8 +1230,10 @@ float World::floorHeight(float x,float y)const{
  if(outdoors())return hasTerrain()?terrainSurfaceBelow(x,y,float(TerrainMaxZ+1)):(m_layers.empty()?0.f:m_layers.front().elevation);
  for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2){
   float shore=std::min({x-water.x1,water.x2-x,y-water.y1,water.y2-y});
-  return -9.f+(water.bed+9.f)*std::clamp(shore/.85f,0.f,1.f);
+  float bank=m_layers.empty()?-9.f:m_layers.front().elevation;
+  return bank+(water.bed-bank)*std::clamp(shore/.85f,0.f,1.f);
  }
+ if(m_level>=6)return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
  if(m_level>=4)return -9.f;
  if(hasLift())return -9.f;
  if(m_level==2)return 0;
@@ -939,6 +1256,7 @@ float World::waterSurface(float x,float y)const{
 }
 float World::ceilingHeight(float x,float y)const{
  if(outdoors())return 128.f; // Traversable sky; no ceiling geometry.
+ if(m_level>=6)return definition().ceiling;
  if(m_level>=4)return m_level==4?-6.1f:-5.6f;
  if(hasLift())return 16.f;
  if(m_level==2)return 6.f;
@@ -1060,19 +1378,19 @@ void World::buildLayers(std::span<const Staircase> stairs){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
     // Seal the upper catwalk against a lower-layer wall.  Without this
     // backing panel the rail leaves a one-cell sightline into the void.
-    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,hasLift()?z+2.7f:6.f,false});
+    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
    }
    if(!deck(x+1,y)&&!(hasLift()&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
     m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,hasLift()?z+2.7f:6.f,false});
+    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
    }
    if(!deck(x,y-1)&&!(hasLift()&&tile(x,y-1)=='#')&&!stairConnection(x+.5f,y-.001f)){
     m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,hasLift()?z+2.7f:6.f,false});
+    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
    }
    if(!deck(x,y+1)&&!(hasLift()&&tile(x,y+1)=='#')&&!stairConnection(x+.5f,y+1.001f)){
     m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,hasLift()?z+2.7f:6.f,false});
+    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
    }
   }
  }
