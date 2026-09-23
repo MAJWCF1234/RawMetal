@@ -1,6 +1,6 @@
 # DEPTHWORKS ENGINE // MODULAR MAP INJECTION SYSTEM
 
-The campaign can now be edited as lightweight, self-contained map payloads instead of moving the whole `World.cpp` around for every level change.
+Depthworks uses one portable UTF-8 `.txt` payload format for both built-in campaign injection and runtime custom campaigns. A payload can patch a dynamic MAIN slot, or it can be installed as player content that appears under **CUSTOM MAPS** without recompiling the game.
 
 The public entry point is:
 
@@ -12,13 +12,20 @@ You can also drag a payload `.txt` file onto `InstallMap.cmd`.
 
 ## What it does
 
-The installer reads the payload metadata, validates the target level, and offers three choices:
+The installer reads the payload metadata and now treats `META_DEFAULT_TARGET` as an actual routing contract rather than a comment.
 
-1. Install into the main campaign, patching only that level's slot in `src/world/World.cpp`, then run `Build.cmd`.
-2. Copy the payload into `custom maps/` as a standalone archive.
-3. Abort without changing anything.
+The menu offers:
 
-Main-campaign injection creates `src/world/World.cpp.bak` before touching the source. The backup is ignored by Git so the normal sync workflow will not accidentally publish it.
+1. **Install using META_DEFAULT_TARGET**. This is the recommended path.
+2. Install into the built-in MAIN campaign.
+3. Install as a playable CUSTOM campaign.
+4. Abort.
+
+A payload declaring `META_DEFAULT_TARGET: CUSTOM` is protected from accidental MAIN injection. The MAIN path refuses it instead of allowing `if(m_level==1)` or another local custom-map number to be mistaken for a built-in campaign slot.
+
+MAIN installation patches the matching dynamic slot in `src/world/World.cpp` and then runs `Build.cmd`. It still creates `src/world/World.cpp.bak` before modifying source.
+
+CUSTOM installation never edits `World.cpp` and never requires a rebuild. It installs a playable campaign TXT under `custom maps/`. RawMetal scans that directory and lists valid campaigns under **CUSTOM MAPS** on the title screen.
 
 The implementation is split between:
 
@@ -79,9 +86,13 @@ META_DEFAULT_TARGET: MAIN
 
 Required metadata:
 
-- `META_LEVEL_ID` must be an integer.
-- `META_LEVEL_NAME` is used for display and custom-vault filenames.
-- `META_DEFAULT_TARGET` is informational metadata retained with the payload.
+- `META_LEVEL_ID` must be an integer. For MAIN it names the compiled campaign slot. For a legacy CUSTOM payload it is only compatibility metadata and does not address the built-in campaign.
+- `META_LEVEL_NAME` names the map.
+- `META_DEFAULT_TARGET` must be `MAIN` or `CUSTOM`. The installer enforces it. A CUSTOM payload cannot be injected into `World.cpp` unless its metadata is intentionally changed to MAIN.
+
+Optional metadata:
+
+- `META_CAMPAIGN_NAME` names the entry shown in the CUSTOM MAPS menu. If omitted, CUSTOM installation uses `META_LEVEL_NAME` as the campaign name. Level Editor exports fill this automatically from the project name.
 
 For main-campaign installation the code block must declare the same level as `META_LEVEL_ID`. The installer rejects mismatches.
 
@@ -171,21 +182,80 @@ src/world/World.cpp.bak
 
 This lets compiler diagnostics point at the actual payload code rather than silently discarding it.
 
-## Custom map vault
+## Runtime custom campaigns
 
-Choosing the custom-map option does not touch `World.cpp` and does not build the game. It archives the complete payload under:
+CUSTOM is now a runtime install target, not an archive-only folder.
+
+Choosing the custom-campaign option does not touch `World.cpp` and does not build the game. The installed file is written under:
 
 ```text
-custom maps/<Level_Name>_Slot<ID>.txt
+custom maps/<Campaign_Name>.txt
 ```
 
-This is useful for exchanging maps, keeping alternate revisions, or handing one level to an AI or collaborator without sending the whole world implementation.
+RawMetal scans `custom maps/` when it starts and again when the **CUSTOM MAPS** menu is opened. Valid campaign files become selectable deployments in that menu. Runtime-ready TXT files that already contain `CUSTOM_CAMPAIGN_DATA` may be copied there directly. Older `MAP_CODE`-only files should be passed through `InstallMap.cmd` once so the compatibility converter can add their runtime data.
 
-## Important scope note
+A runtime-ready payload contains:
 
-Installing a brand-new campaign slot only injects the level implementation. A truly new campaign index must also exist in `WorldDefinition.h` so the engine has a chunk origin, player start, spawn height and environment entry for that index.
+```text
+--- CUSTOM_CAMPAIGN_DATA_START ---
+CAMPAIGN|My Campaign|0
+MAP|0|First Map|...
+...
+--- CUSTOM_CAMPAIGN_DATA_END ---
+```
 
-Replacing an existing level does not require changing `WorldDefinition.h`.
+The runtime campaign data owns its own map indices, origins, player starts, layers, doors, structures, fixtures, props, lights, terminals, hazards, stairs, creatures, pickups, clutter, pipes, water and compactors. These indices are completely separate from the built-in campaign's `m_level` numbers.
+
+For example:
+
+```text
+META_LEVEL_ID: 1
+META_LEVEL_NAME: City Outskirts Sector
+META_DEFAULT_TARGET: CUSTOM
+```
+
+does **not** mean built-in campaign level 1. When installed as CUSTOM it becomes map 0 of its own one-map runtime campaign unless the TXT already contains a larger `CUSTOM_CAMPAIGN_DATA` block. The legacy `META_LEVEL_ID` is retained only so the same payload can still describe its old source-code slot.
+
+### Legacy MAP_CODE-only CUSTOM payloads
+
+Older or hand-written payloads may contain only:
+
+```text
+--- MAP_CODE_START ---
+if(m_level==1) {
+    ...
+}
+--- MAP_CODE_END ---
+```
+
+If such a payload declares `META_DEFAULT_TARGET: CUSTOM`, `InstallMap.cmd` now translates the supported map schema into runtime campaign records and appends a `CUSTOM_CAMPAIGN_DATA` block to the installed copy. The original source TXT is not modified.
+
+The compatibility converter supports the normal standalone-map authoring subset used by the documented schema:
+
+- local 24 x 24 `MapRows`
+- `m_layers`
+- doors, including `requireState` and swinging-door flags
+- `wall(...)`
+- stairs
+- pipes
+- direct fixtures plus `shelf(...)`, `cabinet(...)` and `tank(...)`
+- terminals, including simple `activateState` switches
+- creature spawns
+- pickups
+- clutter
+- direct lights and the common `for(Vec2 p : {...}) m_lights.push_back(...)` form
+
+It intentionally refuses advanced source-only constructs that cannot be translated without changing their meaning, such as arbitrary script events and hand-written hazard/compactor/water scripting. For those maps, export from the Level Editor or author an explicit runtime campaign block instead of silently losing gameplay.
+
+Legacy rows are validated during conversion. A row shorter than 24 characters is right-padded with an appropriate boundary/floor character and produces a visible installer warning; rows wider than 24 characters are rejected. This lets older hand-written CUSTOM maps survive simple off-by-one row mistakes without making MAIN source injection silently different.
+
+This compatibility path is primarily for older single-map payloads. Full multi-map custom campaigns should be exported by the Level Editor or authored directly as one TXT containing the complete runtime campaign block.
+
+## MAIN versus CUSTOM scope
+
+For **MAIN**, installing a brand-new built-in campaign slot still only injects the level implementation. A truly new MAIN campaign index must also exist in `WorldDefinition.h` so the compiled campaign has a chunk origin, player start, spawn height and environment entry. Replacing an existing MAIN slot does not require that edit.
+
+For **CUSTOM**, none of that applies. Runtime campaign TXT data carries its own map count, origins, starts and environment definitions. A custom campaign can therefore add its own maps without editing `WorldDefinition.h`, `World.cpp`, or rebuilding RawMetal.
 
 
 ## Level Editor payload export
@@ -205,7 +275,9 @@ The export dialog asks for:
 - default target: `MAIN` or `CUSTOM`
 - which 24 x 24 plan area to export
 
-One installer payload corresponds to one RawMetal `World` chunk. Every floor in the selected plan area is included. If a building project spans several plan areas, export each area as its own map payload/slot.
+For MAIN installation, the selected plan area supplies the compile-time map slot.
+
+For CUSTOM installation, the same exported TXT also contains a complete runtime campaign block for the **entire editor project**. All plan areas and their floors are serialized into that one file, so a multi-map custom campaign is uploaded and shared as one TXT rather than one TXT per chunk.
 
 The exporter converts editor data into normal `World.cpp` map content:
 
@@ -244,4 +316,6 @@ markers, so it can be dragged directly onto `InstallMap.cmd`.
 
 The editor refuses invalid MAIN IDs below level 6 and surfaces export warnings before download instead of silently dropping unsupported content. Current runtime limitations are called out in the payload itself. In particular, the engine's `Door` type is horizontal-only, so a vertical smart door is exported as a valid open passage with a warning, and smart windows export as wall apertures because there is not yet a dedicated runtime glass/window entity.
 
-Player Start markers are preserved in the generated payload as source comments, but campaign spawn coordinates still come from `WorldDefinition.h`. The same `WorldDefinition.h` rule above therefore still applies when creating an entirely new campaign index.
+For MAIN source injection, Player Start markers remain comments and compiled campaign starts still come from `WorldDefinition.h`.
+
+For CUSTOM runtime campaigns, Player Start markers are serialized into the runtime map definitions and are used directly. The custom campaign does not need a `WorldDefinition.h` entry.
