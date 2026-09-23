@@ -11,7 +11,7 @@ import urllib.request
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_ROOT = ROOT / "src" / "assets"
@@ -692,6 +692,176 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
     lines.append("")
     return "\n".join(lines), warnings
 
+
+
+def _runtime_string(value) -> str:
+    return quote(str(value or ""), safe=" _-./")
+
+def _runtime_rows(layer: dict, upper: bool) -> list[list[str]]:
+    result = []
+    source = layer.get("rows") or []
+    for y in range(24):
+        raw = str(source[y]) if y < len(source) else ""
+        row = list((raw + "_" * 24)[:24])
+        if upper:
+            row = ["_" if ch == "_" else "=" for ch in row]
+        result.append(row)
+    return result
+
+def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[str]]:
+    chunks = list(project.get("chunks") or [])
+    if not chunks:
+        raise ValueError("Project has no plan areas")
+    if len(chunks) > 32:
+        raise ValueError("A runtime custom campaign currently supports at most 32 map chunks")
+    chunks.sort(key=lambda c: (int(c.get("number") or 9999), int(c.get("gy") or 0), int(c.get("gx") or 0), str(c.get("name") or "")))
+    runtime_index = {str(c.get("id")): i for i, c in enumerate(chunks)}
+    grid = {(int(c.get("gx") or 0), int(c.get("gy") or 0)): i for i, c in enumerate(chunks)}
+    warnings = []
+    start_map = 0
+    for i,c in enumerate(chunks):
+        if any(o.get("type") == "spawn" and o.get("spawnKind") == "Player" for o in c.get("objects") or []):
+            start_map = i
+            break
+    lines = [f"CAMPAIGN|{_runtime_string(campaign_name)}|{start_map}"]
+    skybox = str(project.get("skybox") or "industrial_night")
+
+    for map_index, chunk in enumerate(chunks):
+        layers = list(chunk.get("layers") or [])
+        if not layers:
+            raise ValueError(f"{chunk.get('name','Plan Area')} has no floors")
+        layers.sort(key=lambda l: float(l.get("z") or 0))
+        base = layers[0]
+        base_z = float(base.get("z") or 0)
+        by_layer = {str(layer.get("id")): layer for layer in layers}
+        objects = list(chunk.get("objects") or [])
+        by_id = {str(o.get("id")): o for o in objects if o.get("id")}
+        gx,gy = int(chunk.get("gx") or 0),int(chunk.get("gy") or 0)
+        origin_x,origin_y = gx*24,gy*24
+        player = next((o for o in objects if o.get("type") == "spawn" and o.get("spawnKind") == "Player"), None)
+        if player:
+            pt = _resolve_editor_object(chunk,player,by_id)
+            spawn_x,spawn_y,spawn_z = pt["x"],pt["y"],pt["z"]
+        else:
+            spawn_x=spawn_y=3.5
+            source=base.get("rows") or []
+            found=False
+            for y in range(min(24,len(source))):
+                row=str(source[y])
+                for x,ch in enumerate(row[:24]):
+                    if ch not in {"#","_"}:
+                        spawn_x,spawn_y=x+.5,y+.5;found=True;break
+                if found:break
+            spawn_z=base_z
+        top = max(float(layer.get("z") or 0)+max(.5,float(layer.get("ceilingHeight") or 3)) for layer in layers)
+        environment = 1 if skybox in {"ashfall","brutal_wasteland"} else 0
+        north,south,west,east = (gx,gy-1) in grid,(gx,gy+1) in grid,(gx-1,gy) in grid,(gx+1,gy) in grid
+        lines.append("MAP|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|0".format(
+            map_index,_runtime_string(chunk.get("name") or f"Map {map_index}"),
+            origin_x,origin_y,_cpp_float(spawn_x)[:-1],_cpp_float(spawn_y)[:-1],_cpp_float(spawn_z)[:-1],
+            environment,_cpp_float(top)[:-1],"0.27",_runtime_string(skybox),
+            int(north),int(south),int(west),int(east)))
+
+        exported = {}
+        openings = {}
+        for li,layer in enumerate(layers):
+            exported[str(layer.get("id"))] = _runtime_rows(layer,li>0)
+        for obj in objects:
+            if obj.get("type") not in {"door","window"}: continue
+            layer=by_layer.get(str(obj.get("layerId")))
+            if not layer: continue
+            lid=str(layer.get("id"));src=layer.get("rows") or []
+            for cell in _opening_cells(obj):
+                x,y=cell["x"],cell["y"];raw=str(src[y]) if y<len(src) else ""
+                if x>=len(raw) or raw[x]!="#":continue
+                exported[lid][y][x]="." if layer is base else "="
+                openings[(lid,x,y)]=(obj,cell)
+
+        for li,layer in enumerate(layers):
+            lid=str(layer.get("id"));thickness=float(layer.get("thickness") or 0)
+            if li>0 and thickness<=0:thickness=.25
+            lines.append(f"LAYER|{map_index}|{li}|{_runtime_string(layer.get('name') or ('Floor '+str(li+1)))}|{_cpp_float(layer.get('z'))[:-1]}|{_cpp_float(thickness)[:-1]}")
+            for y,row in enumerate(exported[lid]):
+                lines.append(f"ROW|{map_index}|{li}|{y}|{''.join(row)}")
+
+        for li,layer in enumerate(layers):
+            lid=str(layer.get("id"));floor_z=float(layer.get("z") or 0);ceiling=floor_z+max(.5,float(layer.get("ceilingHeight") or 3));src=layer.get("rows") or []
+            if li>0:
+                for y in range(24):
+                    raw=str(src[y]) if y<len(src) else ""
+                    for x,ch in enumerate(raw[:24]):
+                        if ch=="#" and (lid,x,y) not in openings:
+                            lines.append(f"STRUCT|{map_index}|{x}|{y}|{x+1}|{y+1}|{floor_z}|{ceiling}|0|3")
+            for (ol,x,y),(opening,cell) in list(openings.items()):
+                if ol!=lid:continue
+                axis,a,b=cell["axis"],float(cell["start"]),float(cell["end"])
+                pieces=[]
+                if axis=="horizontal":
+                    if a>.001:pieces.append((x,y,x+a,y+1))
+                    if b<.999:pieces.append((x+b,y,x+1,y+1))
+                else:
+                    if a>.001:pieces.append((x,y,x+1,y+a))
+                    if b<.999:pieces.append((x,y+b,x+1,y+1))
+                for x1,y1,x2,y2 in pieces:lines.append(f"STRUCT|{map_index}|{x1}|{y1}|{x2}|{y2}|{floor_z}|{ceiling}|0|3")
+                if opening.get("type")=="window":
+                    sill=max(0,float(opening.get("sill") or .95));height=max(.2,float(opening.get("h") or 1.15));header=min(ceiling,floor_z+sill+height)
+                    if sill>.001:lines.append(f"STRUCT|{map_index}|{x}|{y}|{x+1}|{y+1}|{floor_z}|{floor_z+sill}|0|3")
+                    if header<ceiling-.001:lines.append(f"STRUCT|{map_index}|{x}|{y}|{x+1}|{y+1}|{header}|{ceiling}|0|3")
+
+        for obj in objects:
+            kind=obj.get("type");layer=by_layer.get(str(obj.get("layerId"))) or base;pt=_resolve_editor_object(chunk,obj,by_id)
+            if kind=="door":
+                axis=str(obj.get("wallAxis") or "horizontal")
+                if axis!="horizontal":
+                    warnings.append(f"{chunk.get('name','Map')}: vertical smart door '{obj.get('name','Door')}' is an open passage at runtime because Door is horizontal-only.")
+                    continue
+                width=max(.25,min(12,float(obj.get("w") or 1)));left,right=pt["x"]-width/2,pt["x"]+width/2
+                entry=pt["y"]<=1.25;transfer=pt["y"]>=22.75;zoff=float(layer.get("z") or 0)-base_z;swing=not entry and not transfer
+                lines.append(f"DOOR|{map_index}|{left}|{right}|{pt['y']}|{zoff}|{int(entry)}|{int(transfer)}|{int(swing)}|0|-1")
+            elif kind=="box":
+                rot=int(round((float(pt["rotation"])%360)/90))%4;w=max(.05,float(obj.get("w") or 1));d=max(.05,float(obj.get("d") or 1))
+                if rot%2:w,d=d,w
+                h=max(.05,float(obj.get("h") or 1))
+                lines.append(f"STRUCT|{map_index}|{pt['x']-w/2}|{pt['y']-d/2}|{pt['x']+w/2}|{pt['y']+d/2}|{pt['z']}|{pt['z']+h}|0|2")
+            elif kind=="stairs":
+                rot=int(round((float(pt["rotation"])%360)/90))%4;w=max(.4,float(obj.get("w") or 1.2));d=max(1,float(obj.get("d") or 5));bottom=float(layer.get("z") or 0)
+                target=by_layer.get(str(obj.get("targetLayerId")));topz=float(target.get("z")) if target else bottom+max(.25,float(obj.get("h") or 3));steps=max(3,min(64,int(round(float(obj.get("steps") or 17)))))
+                if rot in {0,2}:x1,x2,y1,y2,along,asc=pt["x"]-w/2,pt["x"]+w/2,pt["y"]-d/2,pt["y"]+d/2,1,int(rot==0)
+                else:x1,x2,y1,y2,along,asc=pt["x"]-d/2,pt["x"]+d/2,pt["y"]-w/2,pt["y"]+w/2,0,int(rot==3)
+                lines.append(f"STAIR|{map_index}|{x1}|{y1}|{x2}|{y2}|{bottom}|{topz}|{steps}|{along}|{asc}")
+            elif kind=="light":
+                lines.append(f"LIGHT|{map_index}|{pt['x']}|{pt['y']}|{pt['z']}")
+            elif kind=="terminal":
+                title=obj.get("title") or obj.get("name") or "TERMINAL"
+                lines.append(f"TERMINAL|{map_index}|{pt['x']}|{pt['y']}|{pt['z']-base_z}|0|{_runtime_string(title)}|{_runtime_string('AUTHORED IN LEVEL EDITOR.')}|{_runtime_string('LOCAL TERMINAL.')}")
+            elif kind=="hazard":
+                hazard_ids={"Electricity":0,"Steam":1,"Crusher":2,"Toxic":3,"Fire":4,"FallingDebris":5,"Pressure":6,"Anomaly":7}
+                hk=hazard_ids.get(str(obj.get("kind") or "Electricity"),0);w=max(.1,float(obj.get("w") or 2));d=max(.1,float(obj.get("d") or 2));h=max(.1,float(obj.get("h") or 1))
+                lines.append(f"HAZARD|{map_index}|{hk}|{pt['x']-w/2}|{pt['y']-d/2}|{pt['x']+w/2}|{pt['y']+d/2}|{pt['z']}|{pt['z']+h}|20")
+            elif kind=="spawn":
+                role=str(obj.get("spawnKind") or "Worker")
+                if role in {"Creature","Hostile"}:lines.append(f"CREATURE|{map_index}|0|{pt['x']}|{pt['y']}|{pt['z']}")
+                elif role not in {"Player"}:warnings.append(f"{chunk.get('name','Map')}: {role} dummy '{obj.get('name',role)}' remains blueprint-only; there is no runtime NPC type for that role.")
+            elif kind=="asset":
+                model=_normalize_model_path(obj.get("model"));yaw=math.radians(float(pt["rotation"]));scale=max(.01,float(obj.get("scale") or 1));w=max(.05,float(obj.get("w") or 1)*scale);d=max(.05,float(obj.get("d") or 1)*scale);h=max(.05,float(obj.get("h") or 1)*scale);baseoff=pt["z"]-base_z
+                if model in FACILITY_MODEL_INDEX:
+                    mi=FACILITY_MODEL_INDEX[model];solid=int(mi not in {3,4,5});lines.append(f"FIXTURE|{map_index}|{mi}|{pt['x']}|{pt['y']}|{baseoff}|{w}|{d}|{h}|{yaw}|{solid}")
+                elif model in WORLD_PROP_KIND:
+                    pk=WORLD_PROP_KIND[model];lines.append(f"PROP|{map_index}|{pk}|{pt['x']}|{pt['y']}|{h}|{max(w,d)}|{yaw}|{w/2}|{d/2}|{baseoff}")
+                elif model in CLUTTER_KIND:
+                    ck=CLUTTER_KIND[model];z=-999 if abs(pt["z"]-base_z)<.03 else pt["z"];lines.append(f"CLUTTER|{map_index}|{ck}|{pt['x']}|{pt['y']}|{z}|{yaw}")
+                elif model in PICKUP_KIND:
+                    pk=0 if PICKUP_KIND[model]=="Health" else 1;lines.append(f"PICKUP|{map_index}|{pk}|{pt['x']}|{pt['y']}")
+                elif model in CREATURE_MODEL_KIND:
+                    ids={"Huntsman":0,"Wasp":1,"Brute":2,"Warden":3};lines.append(f"CREATURE|{map_index}|{ids[CREATURE_MODEL_KIND[model]]}|{pt['x']}|{pt['y']}|{pt['z']}")
+                else:warnings.append(f"{chunk.get('name','Map')}: asset '{obj.get('name') or model}' has no RawMetal runtime placement mapping.")
+
+        if any((layer.get("materials") or {}) for layer in layers):
+            warnings.append(f"{chunk.get('name','Map')}: painted per-tile finishes remain editor-only until the World runtime has a material override table.")
+        if any(o.get("type")=="window" for o in objects):
+            warnings.append(f"{chunk.get('name','Map')}: window openings are preserved, but the runtime has no dedicated glass entity.")
+
+    return "\n".join(lines),warnings
 
 def project_filename(value: str) -> str:
     stem = Path(str(value or "untitled")).stem
