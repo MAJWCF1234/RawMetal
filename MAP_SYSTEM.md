@@ -243,6 +243,8 @@ The compatibility converter supports the normal standalone-map authoring subset 
 
 It intentionally refuses advanced source-only constructs that cannot be translated without changing their meaning, such as arbitrary script events and hand-written hazard/compactor/water scripting. For those maps, export from the Level Editor or author an explicit runtime campaign block instead of silently losing gameplay.
 
+Legacy rows are validated during conversion. A row shorter than 24 characters is right-padded with an appropriate boundary/floor character and produces a visible installer warning; rows wider than 24 characters are rejected. This lets older hand-written CUSTOM maps survive simple off-by-one row mistakes without making MAIN source injection silently different.
+
 This compatibility path is primarily for older single-map payloads. Full multi-map custom campaigns should be exported by the Level Editor or authored directly as one TXT containing the complete runtime campaign block.
 
 ## MAIN versus CUSTOM scope
