@@ -126,6 +126,7 @@ public:
     bool hasLift()const{return definition().lift;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
     const char* skyboxId()const{return m_customMap?m_customMap->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
+    const char* customMapName()const{return m_customMap?m_customMap->name.c_str():"";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
     bool openSouthBoundary()const{return m_openSouthBoundary;}
     bool openWestBoundary()const{return m_openWestBoundary;}
