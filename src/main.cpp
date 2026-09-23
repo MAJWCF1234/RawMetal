@@ -12,13 +12,13 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
-    if(std::wcsstr(commandLine,L"--world-isolation-test")){
-     if(!retro::Game::testWorldIsolation())return 44;
+    if(std::wcsstr(commandLine,L"--world-isolation-test")||std::wcsstr(commandLine,L"--ashfall-inspection")){
+     if(std::wcsstr(commandLine,L"--world-isolation-test")&&!retro::Game::testWorldIsolation())return 44;
      retro::SoftwareRenderer renderer(W,H);
      if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
-     for(int level=0;level<6;++level){
+     for(int level=0;level<retro::worldChunkCount(retro::WorldId::Ashfall);++level){
       auto spawn=retro::chunkDefinition(retro::WorldId::Ashfall,level).playerStart;
-      auto scene=retro::Game::mapInspection(spawn,.6f,25,level,false,0,true,retro::WorldId::Ashfall);renderer.render(scene);
+      auto scene=retro::Game::mapInspection(spawn,.6f,0,level,false,-999,true,retro::WorldId::Ashfall);renderer.render(scene);
       std::ofstream out("isolated-world-"+std::to_string(level)+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }

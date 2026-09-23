@@ -391,9 +391,7 @@ bool authoredAshfallVoxel(int worldX,int worldY,int worldZ){
 }
 std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
  int top=ashfallVoxelTop(worldX,worldY);
- if(worldZ<top-1)return 0;
- if(top>=5)return 2;
- return ((worldX*3+worldY*5)&15)==0?1:0;
+ return worldZ<top-1||top>=5?TerrainRock:TerrainSoil;
 }
 // Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
 // meet the wall at their backs; shelves have solid footprints on level floors.
@@ -511,7 +509,7 @@ World::World(int level,WorldId id):m_worldId(id) {
     break;
    case 4:
     junkShack(pad.x,pad.y,5.2f,4.4f,2.2f,2,0);
-    m_fixtures.push_back({7,{pad.x+2.5f,pad.y},0,1.7f,.5f,1.8f,kPi*.5f,true});
+    m_fixtures.push_back({7,{pad.x+1.9f,pad.y},0,1.7f,.5f,1.8f,kPi*.5f,true});
     break;
    case 5: // crossroads landmark: relay shack plus outside generator
     junkShack(pad.x,pad.y,6.0f,5.2f,2.45f,3,0);
@@ -547,6 +545,15 @@ World::World(int level,WorldId id):m_worldId(id) {
     break;
   }
 
+  // Each ground-level wall gets a buried footing. Sampling its footprint
+  // prevents floating wall bases where the authored pad meets a terrain slope.
+  const auto wallCount=m_structures.size();
+  for(size_t i=0;i<wallCount;++i){const auto wall=m_structures[i];if(std::fabs(wall.bottom-base)>.01f)continue;
+   float bottom=base;
+   for(float x=wall.x1;x<=wall.x2+.001f;x+=.2f)for(float y=wall.y1;y<=wall.y2+.001f;y+=.2f)
+    bottom=std::min(bottom,floorHeight(x,y)-.12f);
+   if(bottom<base-.02f)m_structures.push_back({wall.x1,wall.y1,wall.x2,wall.y2,bottom,base,false,3});
+  }
   const char* relayLines[]={
    "WEST APPROACH / NO CIVIL TRAFFIC.","RIDGE ROAD / POWER LINES DOWN.","DRY INTERCHANGE / EAST ROUTE OPEN.","EAST ESCARPMENT / LONG RANGE VISIBILITY.",
    "MOTEL FLATS / STRUCTURES UNSAFE.","RELAY CROSSROADS / GRID INTERMITTENT.","SCRAP BASIN / SALVAGE SCATTERED.","UTILITY MESA / SUBSTATION DEAD.",
@@ -652,7 +659,7 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2}){
     m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
    }
-   m_fixtures={{7,{1.8f,19.3f},0,2,.5f,1.8f,kPi*.5f,true},
+   m_fixtures={{7,{1.9f,19.3f},0,2,.5f,1.8f,kPi*.5f,true},
                {8,{22.89f,5.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
    // Rear service store: the old sealed panel led nowhere. A personnel door
    // now opens into an actual enclosed bay within this chunk.

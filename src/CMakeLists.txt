@@ -92,6 +92,12 @@ add_custom_command(TARGET RawMetal POST_BUILD
     VERBATIM)
 if(MSVC)
   target_compile_options(RawMetal PRIVATE /W4 /permissive- /EHsc)
+  # Reduce native code size without changing assets or floating-point semantics.
+  # Keep the renderer's hot loops optimized for speed; cold import/diagnostic
+  # code benefits from size-oriented inlining and COMDAT folding.
+  target_compile_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/Gy>" "$<$<CONFIG:Release>:/Gw>")
+  target_link_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>")
+  set_source_files_properties(ThirdParty/ufbx/ufbx.c PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/O1>")
 else()
   target_compile_options(RawMetal PRIVATE -Wall -Wextra -Wpedantic)
 endif()

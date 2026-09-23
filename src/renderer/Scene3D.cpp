@@ -333,12 +333,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   MeshVertex a{{face.a.x,face.a.y,face.a.z},0,0};
   MeshVertex b{{face.b.x,face.b.y,face.b.z},0,0};
   MeshVertex c{{face.c.x,face.c.y,face.c.z},0,0};
-  const Texture&terrainMaterial=face.material==1?m_pressureWall:face.material==2?m_floor:m_concrete;
   // Project texture coordinates on the triangle's dominant plane. The first
   // Surface Nets pass used XY UVs for everything, so near-vertical cliff faces
   // collapsed to a line in texture space and produced the long streaks seen in
   // Ashfall. World-aligned planar UVs keep one texel scale on floors and cliffs.
   Point3 n=cross3(b.p-a.p,c.p-a.p);float ax=std::fabs(n.x),ay=std::fabs(n.y),az=std::fabs(n.z);
+  // Exposed slopes use rock; flatter deposits use the purchased dirt material.
+  // Terrain never inherits industrial wall panels or metal floor grating.
+  const Texture&terrainMaterial=face.material==TerrainRock||az<std::max(ax,ay)*1.35f?m_terrainRock:m_terrainDirt;
   auto uv=[&](MeshVertex&v){float wx=v.p.x+w.definition().origin.x,wy=v.p.y+w.definition().origin.y,wz=v.p.z;
    constexpr float scale=.28f;
    if(az>=ax&&az>=ay){v.u=wx*scale;v.v=wy*scale;}

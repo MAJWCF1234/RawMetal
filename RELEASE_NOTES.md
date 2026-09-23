@@ -1,26 +1,17 @@
-# RawMetal v0.3.6 — Stalker Arms & Hazmat Casualty
+# RawMetal 0.4.6 — Terrain and lossless compression
 
-## Changes
+RawMetal 0.4.6 brings shared PSX soil/rock materials with matching normal maps, safer slope spawning, terrain-aware creature routing, twelve-chunk seam checks, and supported ruin walls. Reactor Service Gallery and Coolant Return include the latest shelf, doorway and quiet-basin repairs.
 
-- Corrected Stalker shoulder/elbow/wrist retargeting: arms follow the animation's actual limb directions instead of incompatible bone-roll axes. Idle, movement and melee remain articulated; there are no ranged attacks.
-- Added the supplied PSX Character_28_HM worker: olive protective suit, sealed gas mask, black gloves and boots (988 triangles). Replaced the rejected bulky yellow radiation worker.
-- Authored an asymmetric face-down collapse with an outstretched arm and unevenly folded legs. Blood follows the suit surface; a pool and narrow smears mark the floor.
-- Added a 15-joint, fixed-120-Hz ragdoll with floor/wall contact, impact response and sleeping. Oriented suit contact prevents both floor penetration and the hovering caused by oversized spherical ground proxies.
-- Save format 4 retains the ragdoll's pose and velocity and continues to read versions 1–3.
-- Added reversible texture prediction to lossless asset packing. Original texture resolution and decoded pixels are preserved; packing verifies round trips.
+Lossless size reduction:
+- The packer compares reversible sample predictors and byte-plane layouts for each WAV, keeping the smallest result. Decoded WAV files remain byte-identical.
+- Textures retain their full dimensions and exact RGBA pixels. Models and animations retain their original bytes.
+- Native code/data folding and size optimization of the FBX importer reduce executable overhead while preserving renderer speed optimization.
+- Completed resource manifests are published atomically so interrupted packing cannot publish a truncated manifest.
 
-## Verification
+Downloads: run RawMetal.exe directly, or extract RawMetal.zip and run the identical EXE inside it. All game assets are embedded.
 
-The hazmat test checks skin-floor clearance, joint lengths, impact response, settling, 60/120-Hz agreement, save/load and ray contact. Three in-engine views were inspected after settling. The Stalker baker checks arm-direction alignment in every sampled clip; front and side captures cover all five clips.
+Sizes: signed EXE **17,703,824 bytes**; ZIP **16,922,758 bytes**. The unsigned build decreased from 18,261,504 to 17,702,400 bytes, saving 559,104 bytes (3.06%) with no content removed.
 
-Vulkan and software smoke tests passed, as did targeted physics/AI, save/load, Stalker and Vulkan checks. All six culling/reference comparisons matched. The executable remains below the 19,800,000-byte limit.
+Validation: all 143 embedded resources match their sources; Vulkan smoke, twelve-chunk world isolation/seam checks, and performance tests passed. The reference smoke frame is byte-identical to the pre-compression build. Ashfall's 120-frame turning benchmark averaged 16.69 ms, with a 27.79 ms maximum on the test machine (RTX 5060 Ti); these are measured results, not universal hardware guarantees.
 
-## Performance limitation
-
-The final 1,680-frame Intel Graphics test at 640x360 recorded an awake-ragdoll average of 19.95 ms (50.1 FPS), with a 24.02 ms worst frame (41.6 FPS). However, two reactor-balcony frames exceeded 50 ms, peaking at 81.89 ms. The strict whole-game minimum-20-FPS test therefore failed; this release does not claim a universal minimum. Startup and OS presentation are excluded from these timings.
-
-## Download
-
-Extract RawMetal.zip and run RawMetal.exe. Use the backtick console and map lift for the casualty, or map reactor for the Stalker. Existing version-4 saves retain their saved corpse pose; load the map fresh to see the new authored collapse.
-
-The EXE is signed with the existing self-signed RawMetal Development Build certificate. Self-signing does not establish public publisher trust, SmartScreen reputation, or antivirus clearance. The EXE inside the ZIP matches the separately uploaded executable.
+The EXE uses the existing self-signed RawMetal Development certificate; this is not a publicly trusted publisher certificate.

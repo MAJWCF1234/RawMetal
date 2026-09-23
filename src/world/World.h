@@ -38,7 +38,9 @@ struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
 // Surface Nets removes the cube faces and emits the engine-native low-poly skin;
 // collision queries the same voxel density field.
 struct TerrainVertex {float x=0,y=0,z=0,u=0,v=0;};
-struct TerrainTriangle {TerrainVertex a,b,c;std::uint8_t material=0;};
+// Shared terrain material IDs, independent of campaign/custom world identity.
+enum TerrainMaterial : std::uint8_t { TerrainSoil, TerrainRock };
+struct TerrainTriangle {TerrainVertex a,b,c;std::uint8_t material=TerrainSoil;};
 struct Span {float floor,ceiling;uint16_t flags=0;};
 using MapRows = std::array<std::string_view,24>;
 struct MapLayer {

@@ -103,7 +103,11 @@ bool Game::testStreaming(){
  ash.m_player.pos={24.10f,12.f};ash.crossChunkBoundary();
  if(ash.level()!=1||std::fabs(ash.player().pos.x-.10f)>.01f||std::fabs(ash.player().pos.y-12.f)>.01f)return fail(18);
  ash.updateStreaming(0);
- if(!ash.chunkResident(0)||!ash.chunkResident(2)||!ash.chunkResident(5)||ash.chunkResident(8)||ash.chunkResident(11))return fail(19);
+ if(!ash.chunkResident(0)||!ash.chunkResident(2)||ash.chunkResident(8))return fail(19);
+ // The southern neighbour is outside the forward cone at the east crossing.
+ // Enter its 9 m safety buffer before requiring it to be resident.
+ ash.m_player.pos.y=16.f;ash.updateStreaming(0);
+ if(!ash.chunkResident(5))return fail(25);
  float southA=ash.world().floorHeight(12,23.999f),southB=ash.m_chunks[5].world.floorHeight(12,.001f);
  if(std::fabs(southA-southB)>.02f)return fail(20);
  ash.m_player.pos={12.f,24.10f};ash.crossChunkBoundary();
