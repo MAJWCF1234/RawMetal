@@ -455,32 +455,103 @@ void World::buildPopulation(){
 }
 
 World::World(int level,WorldId id):m_worldId(id) {
- m_level=std::clamp(level,0,5);
+ m_level=std::clamp(level,0,worldChunkCount(m_worldId)-1);
  buildPopulation();
  if(horrorMode()){
-  const char* regionNames[]={"Ashfall / perimeter ruins","Ashfall / collapsed highway","Ashfall / rusted yard","Ashfall / sunken district","Ashfall / radio spire","Ashfall / evacuation gate"};
+  const char* regionNames[]={
+   "Ashfall / west approach","Ashfall / ridge road","Ashfall / dry interchange","Ashfall / east escarpment",
+   "Ashfall / motel flats","Ashfall / relay crossroads","Ashfall / scrap basin","Ashfall / utility mesa",
+   "Ashfall / south wash","Ashfall / dead subdivision","Ashfall / breaker yard","Ashfall / evacuation edge"};
   auto rows=ashfallRegion(m_level);
   m_layers={{regionNames[m_level],0,0,rows}};
-  // 0-2 are the north row, 3-5 the south row.
-  m_openWestBoundary=(m_level%3)>0;m_openEastBoundary=(m_level%3)<2;
-  m_openNorthBoundary=m_level>=3;m_openSouthBoundary=m_level<3;
+  int col=m_level%4,row=m_level/4;
+  m_openWestBoundary=col>0;m_openEastBoundary=col<3;
+  m_openNorthBoundary=row>0;m_openSouthBoundary=row<2;
   m_internalWallHeight=2.8f;
   buildTerrain();
 
-  float shift=float(m_level%3)*1.7f;
-  // Purchased machinery and facility pieces become distant landmarks rather
-  // than repeated room dressing. The terrain underneath determines their base.
-  m_props={{0,{14.5f+shift*.25f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},
-           {1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},
-           {2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
-  if(m_level==1||m_level==4)m_props.push_back({3,{6.5f,16.5f},1.6f,2.6f,kPi*.5f,{1.3f,.18f},0});
-  if(m_level==2||m_level==5)m_props.push_back({0,{4.8f,18.2f},1.35f,2.2f,kPi*.25f,{1.1f,.66f},0});
-  m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.2f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
-  if(m_level==4)m_fixtures.push_back({6,{12.f,12.f},0,2.4f,.75f,1.3f,.35f,true});
-  // Outdoor ambient light needs no unsupported indoor ceiling fixtures.
-  const char* relayLines[]={"WEST GRID OPEN / HIGHWAY EAST.","HIGHWAY SPAN / MULTIPLE ROUTES.","YARD EDGE / SOUTH DISTRICT OPEN.",
-                            "LOW DISTRICT / RADIO EAST.","RADIO SPIRE / ALL GRIDS VISIBLE.","EVAC GATE / PERIMETER TERMINUS."};
-  m_terminals={{{10,3},"ASHFALL FIELD RELAY",relayLines[m_level],"TERRAIN LINK / LOCAL GRID ONLINE.",0,false}};
+  // Every substantial ruin sits on one of the deliberately flat voxel pads.
+  // The surrounding landscape stays empty enough to read as a wasteland rather
+  // than twelve industrial rooms placed outdoors.
+  constexpr Vec2 pads[]={{7,7},{15,8},{8,16},{16,9},{8,14},{16,16},{7,7},{16,15},{8,8},{16,10},{8,15},{16,8}};
+  auto pad=pads[m_level],base=floorHeight(pad.x,pad.y);
+  auto junkShack=[&](float cx,float cy,float width,float depth,float height,int material,int variant){
+   float x0=cx-width*.5f,x1=cx+width*.5f,y0=cy-depth*.5f,y1=cy+depth*.5f,t=.16f,door=.62f;
+   m_structures.push_back({x0,y1-t,x1,y1,base,base+height,false,material});
+   m_structures.push_back({x0,y0,x0+t,y1,base,base+height,false,material});
+   if(variant!=2)m_structures.push_back({x1-t,y0,x1,y1,base,base+height*(variant?0.72f:1.f),false,material});
+   m_structures.push_back({x0,y0,cx-door,y0+t,base,base+height,false,material});
+   m_structures.push_back({cx+door,y0,x1,y0+t,base,base+height,false,material});
+   if(variant==0)m_structures.push_back({x0+t,y0+t,cx-.15f,y1-t,base+height,base+height+.12f,false,2});
+   if(variant==1)m_structures.push_back({cx+.25f,y0+t,x1-t,y1-t,base+height*.82f,base+height*.94f,false,2});
+  };
+  auto junkWall=[&](float x,float y,float length,bool alongY){
+   if(alongY)m_structures.push_back({x-.10f,y,x+.10f,y+length,base,base+1.55f,false,3});
+   else m_structures.push_back({x,y-.10f,x+length,y+.10f,base,base+1.55f,false,3});
+  };
+
+  switch(m_level){
+   case 0: // a single ruined maintenance shack marks the starting outskirts
+    junkShack(pad.x,pad.y,5.6f,4.6f,2.35f,3,1);
+    m_props.push_back({1,{pad.x+2.8f,pad.y+1.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});
+    m_fixtures.push_back({8,{pad.x-2.35f,pad.y+.4f},.65f,.7f,.20f,1.f,kPi*.5f,true});
+    break;
+   case 1: // mostly road and rock, just a collapsed utility wall and abandoned machine
+    junkWall(pad.x-2.5f,pad.y+1.8f,5.f,false);
+    m_fixtures.push_back({6,{pad.x+1.3f,pad.y-.6f},0,1.8f,.55f,.95f,.25f,true});
+    break;
+   case 2:
+    junkShack(pad.x,pad.y,6.2f,5.2f,2.5f,3,2);
+    m_props.push_back({0,{pad.x-2.8f,pad.y+2.6f},1.35f,2.2f,.2f,{1.1f,.66f},0});
+    break;
+   case 3: // high eastern overlook, intentionally nearly empty
+    junkWall(pad.x-3.f,pad.y,6.f,false);
+    junkWall(pad.x+1.8f,pad.y-2.2f,4.4f,true);
+    break;
+   case 4:
+    junkShack(pad.x,pad.y,5.2f,4.4f,2.2f,2,0);
+    m_fixtures.push_back({7,{pad.x+2.5f,pad.y},0,1.7f,.5f,1.8f,kPi*.5f,true});
+    break;
+   case 5: // crossroads landmark: relay shack plus outside generator
+    junkShack(pad.x,pad.y,6.0f,5.2f,2.45f,3,0);
+    m_props.push_back({0,{pad.x+3.4f,pad.y-1.4f},1.45f,2.35f,kPi*.5f,{1.15f,.7f},0});
+    m_fixtures.push_back({8,{pad.x-2.55f,pad.y+.8f},.7f,.7f,.20f,1.f,kPi*.5f,true});
+    break;
+   case 6: // broad scrap basin with only a broken enclosure
+    junkWall(pad.x-2.6f,pad.y-2.f,5.2f,false);
+    junkWall(pad.x-2.6f,pad.y-2.f,4.f,true);
+    m_props.push_back({2,{pad.x+2.2f,pad.y+1.5f},.35f,3.5f,.4f,{1.7f,.18f},0});
+    break;
+   case 7:
+    junkShack(pad.x,pad.y,5.8f,5.f,2.5f,2,1);
+    m_fixtures.push_back({6,{pad.x-2.6f,pad.y+2.2f},0,1.7f,.55f,.95f,kPi*.5f,true});
+    break;
+   case 8: // south wash, almost pure terrain
+    m_props.push_back({1,{pad.x+1.8f,pad.y},1.05f,1.8f,.7f,{.28f,.9f},0});
+    break;
+   case 9:
+    junkShack(pad.x,pad.y,6.4f,4.8f,2.3f,3,2);
+    junkWall(pad.x-3.5f,pad.y+2.9f,4.5f,false);
+    break;
+   case 10: // breaker yard
+    junkWall(pad.x-3.f,pad.y-2.7f,6.f,false);
+    junkWall(pad.x-3.f,pad.y+2.7f,6.f,false);
+    m_fixtures.push_back({6,{pad.x,pad.y},0,2.2f,.7f,1.15f,.35f,true});
+    m_props.push_back({0,{pad.x+3.1f,pad.y+.8f},1.35f,2.2f,kPi*.5f,{1.1f,.66f},0});
+    break;
+   case 11: // evacuation edge gets the largest surviving shell
+    junkShack(pad.x,pad.y,7.2f,5.8f,2.65f,3,0);
+    junkWall(pad.x-4.f,pad.y+3.4f,8.f,false);
+    m_fixtures.push_back({7,{pad.x+3.2f,pad.y+1.5f},0,1.8f,.5f,1.8f,kPi*.5f,true});
+    break;
+  }
+
+  const char* relayLines[]={
+   "WEST APPROACH / NO CIVIL TRAFFIC.","RIDGE ROAD / POWER LINES DOWN.","DRY INTERCHANGE / EAST ROUTE OPEN.","EAST ESCARPMENT / LONG RANGE VISIBILITY.",
+   "MOTEL FLATS / STRUCTURES UNSAFE.","RELAY CROSSROADS / GRID INTERMITTENT.","SCRAP BASIN / SALVAGE SCATTERED.","UTILITY MESA / SUBSTATION DEAD.",
+   "SOUTH WASH / FLASH FLOOD CHANNEL.","DEAD SUBDIVISION / NO RESPONSE.","BREAKER YARD / HIGH VOLTAGE ISOLATED.","EVACUATION EDGE / OUTER GATE LOST."};
+  if(m_level==0||m_level==5||m_level==11)
+   m_terminals={{{pad.x,pad.y-1.6f},"ASHFALL FIELD RELAY",relayLines[m_level],"96 X 72 M SURFACE GRID / LOCAL LINK.",0,false}};
   buildLayers({});return;
  }
  if(m_level>=4){
