@@ -64,7 +64,7 @@ void Game::loadLevel(int level,bool carry) {
     m_player.ammo = 72;
     m_player.loaded = 6;
     if(carry){m_player.health=health;m_player.ammo=ammo;m_player.loaded=loaded;}
-    m_player.z = m_world.definition().spawnHeight;
+    m_player.z = m_world.outdoors()?m_world.floorHeight(m_player.pos.x,m_player.pos.y):m_world.definition().spawnHeight;
     m_player.verticalVelocity = 0.0f;
     m_player.grounded = true;
     m_velocity = {};
