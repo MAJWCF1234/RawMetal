@@ -222,7 +222,7 @@ The exporter converts editor data into normal `World.cpp` map content:
 - mapped facility equipment, Pressure Works props, pickups, clutter and creature assets
 - generic hostile/creature spawn markers
 
-Blueprint-only information such as room labels and dimensions is intentionally not emitted as runtime geometry.
+Blueprint-only information such as room labels and dimensions is intentionally not emitted as runtime geometry. Per-tile finish painting is also still editor-only because the current World payload API has no per-tile material override table; the exporter warns when a selected area uses painted finishes.
 
 The generated file is named like:
 
