@@ -86,7 +86,9 @@ if(MSVC)
   target_link_options(RawMetal PRIVATE /DELAYLOAD:vulkan-1.dll)
 endif()
 add_custom_command(TARGET RawMetal POST_BUILD
+    COMMAND $<TARGET_FILE:RawMetalAssetPacker> --verify-exe "${CMAKE_CURRENT_SOURCE_DIR}" "$<TARGET_FILE:RawMetal>"
     COMMAND ${CMAKE_COMMAND} "-DRAWMetalExecutable=$<TARGET_FILE:RawMetal>" -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_size.cmake"
+    COMMENT "Verifying embedded assets are lossless and release-size safe"
     VERBATIM)
 if(MSVC)
   target_compile_options(RawMetal PRIVATE /W4 /permissive- /EHsc)
