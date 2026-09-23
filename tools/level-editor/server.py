@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import math
 import re
 import shutil
 import threading
@@ -284,6 +285,411 @@ def asset_manifest() -> dict:
         "files": files,
         "threeReady": (VENDOR_ROOT / "three.module.js").exists(),
     }
+
+
+FACILITY_MODEL_INDEX = {
+    "src/assets/facility/source/wall_6.fbx": 0,
+    "src/assets/facility/source/wall_8.fbx": 1,
+    "src/assets/facility/source/column_6.fbx": 2,
+    "src/assets/facility/source/vent_fps_1.fbx": 3,
+    "src/assets/facility/source/ceiling_lamp_fps_1.fbx": 4,
+    "src/assets/facility/source/doorway_wide_1.fbx": 5,
+    "src/assets/environment/generator.fbx": 6,
+    "src/assets/facility/source/metal_shelf_1.fbx": 7,
+    "src/assets/facility/source/wall_box_2.fbx": 8,
+    "src/assets/facility/source/computer_1.fbx": 11,
+    "src/assets/facility/service/machinery_mx_1.fbx": 12,
+    "src/assets/facility/service/electrical_equipment_1.fbx": 13,
+    "src/assets/facility/service/tank_system_mx_1.fbx": 14,
+}
+WORLD_PROP_KIND = {
+    "src/assets/pressureworks/pump.fbx": 0,
+    "src/assets/pressureworks/compressor.fbx": 1,
+    "src/assets/pressureworks/pipe.fbx": 2,
+    "src/assets/pressureworks/gate.fbx": 3,
+}
+CLUTTER_KIND = {
+    "src/assets/clutter/trash_1.obj": 0,
+    "src/assets/clutter/mre_1.obj": 1,
+    "src/assets/clutter/bottle.obj": 2,
+    "src/assets/clutter/power_supply_1.obj": 3,
+    "src/assets/clutter/pcb_2.obj": 4,
+    "src/assets/clutter/floppy_disc_2.obj": 5,
+}
+PICKUP_KIND = {
+    "src/assets/pickups/first-aid.fbx": "Health",
+    "src/assets/pickups/shells.fbx": "Ammo",
+}
+CREATURE_MODEL_KIND = {
+    "src/assets/models/huntsman.fbx": "Huntsman",
+    "src/assets/models/wasp.fbx": "Wasp",
+    "src/assets/models/scissors.fbx": "Brute",
+    "src/assets/reactor/stalker.obj": "Warden",
+}
+HAZARD_KINDS = {"Electricity","Steam","Crusher","Toxic","Fire","FallingDebris","Pressure","Anomaly"}
+
+def _number(value, default=0.0) -> float:
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else float(default)
+    except (TypeError, ValueError):
+        return float(default)
+
+def _cpp_float(value) -> str:
+    n = _number(value)
+    if abs(n) < 0.0005:
+        n = 0.0
+    text = f"{n:.3f}".rstrip("0").rstrip(".")
+    if "." not in text:
+        text += ".0"
+    return text + "f"
+
+def _cpp_string(value) -> str:
+    return json.dumps(str(value or ""), ensure_ascii=False)
+
+def _cpp_id(value) -> str:
+    name = re.sub(r"[^A-Za-z0-9_]+", "_", str(value or "Layer")).strip("_")
+    if not name:
+        name = "Layer"
+    if name[0].isdigit():
+        name = "_" + name
+    return name
+
+def _normalize_model_path(value) -> str:
+    return str(value or "").replace("\\", "/").lower()
+
+def _resolve_editor_object(chunk: dict, obj: dict, by_id: dict, seen=None) -> dict:
+    seen = set() if seen is None else seen
+    oid = obj.get("id")
+    if not oid or oid in seen or not obj.get("parentId"):
+        return {
+            "x": _number(obj.get("x")),
+            "y": _number(obj.get("y")),
+            "z": _number(obj.get("z")),
+            "rotation": _number(obj.get("rotation")),
+        }
+    seen.add(oid)
+    parent = by_id.get(obj.get("parentId"))
+    if not parent:
+        return {
+            "x": _number(obj.get("x")),
+            "y": _number(obj.get("y")),
+            "z": _number(obj.get("z")),
+            "rotation": _number(obj.get("rotation")),
+        }
+    pt = _resolve_editor_object(chunk, parent, by_id, seen)
+    angle = math.radians(pt["rotation"])
+    lx, ly = _number(obj.get("localX")), _number(obj.get("localY"))
+    rx = lx * math.cos(angle) - ly * math.sin(angle)
+    ry = lx * math.sin(angle) + ly * math.cos(angle)
+    base = pt["z"]
+    if obj.get("surface") == "top":
+        base += _number(parent.get("h"))
+    elif obj.get("surface") == "custom":
+        base += _number(obj.get("surfaceHeight"))
+    base += _number(obj.get("heightOffset"))
+    return {
+        "x": pt["x"] + rx,
+        "y": pt["y"] + ry,
+        "z": base,
+        "rotation": pt["rotation"] + _number(obj.get("rotation")),
+    }
+
+def _opening_cells(obj: dict) -> list[dict]:
+    axis = str(obj.get("wallAxis") or "horizontal")
+    width = max(.25, min(12.0, _number(obj.get("w"), 1.0)))
+    x, y = _number(obj.get("x")), _number(obj.get("y"))
+    along = x if axis == "horizontal" else y
+    fixed = y if axis == "horizontal" else x
+    start, end = along - width / 2.0, along + width / 2.0
+    first = math.floor(start + 1e-7)
+    last = math.ceil(end - 1e-7) - 1
+    out = []
+    for a in range(first, last + 1):
+        ix = a if axis == "horizontal" else math.floor(fixed)
+        iy = math.floor(fixed) if axis == "horizontal" else a
+        if ix < 0 or iy < 0 or ix >= 24 or iy >= 24:
+            continue
+        out.append({
+            "x": ix, "y": iy, "axis": axis,
+            "start": max(0.0, start - a), "end": min(1.0, end - a),
+        })
+    return out
+
+def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: str, default_target: str) -> tuple[str,list[str]]:
+    if not isinstance(project, dict):
+        raise ValueError("Invalid Depthworks project")
+    chunks = project.get("chunks")
+    if not isinstance(chunks, list) or not chunks:
+        raise ValueError("Project has no plan areas")
+    chunk = next((c for c in chunks if str(c.get("id")) == str(chunk_id)), None)
+    if chunk is None:
+        raise ValueError("Selected plan area no longer exists")
+    if level_id < 0:
+        raise ValueError("Level ID must be zero or greater")
+    default_target = str(default_target or "MAIN").upper()
+    if default_target not in {"MAIN","CUSTOM"}:
+        raise ValueError("Default target must be MAIN or CUSTOM")
+    if default_target == "MAIN" and level_id < 6:
+        raise ValueError("Main campaign payloads use dynamic level slots 6 and above")
+
+    layers = list(chunk.get("layers") or [])
+    if not layers:
+        raise ValueError("Selected plan area has no floors")
+    layers.sort(key=lambda layer: _number(layer.get("z")))
+    base_layer = layers[0]
+    base_z = _number(base_layer.get("z"))
+    by_layer = {str(layer.get("id")): layer for layer in layers}
+    objects = list(chunk.get("objects") or [])
+    by_id = {str(o.get("id")): o for o in objects if o.get("id")}
+    warnings: list[str] = []
+
+    # Copy the 24x24 sheets, then cut smart-door/window openings. Upper editor
+    # floors become '=' decks because RawMetal's additional MapLayer sheets are
+    # structural decks, while their '#' cells are emitted as explicit walls.
+    exported_rows: dict[str,list[list[str]]] = {}
+    opening_by_cell: dict[tuple[str,int,int],tuple[dict,dict]] = {}
+    for index, layer in enumerate(layers):
+        src = layer.get("rows") or []
+        grid = []
+        for y in range(24):
+            raw = str(src[y]) if y < len(src) else ""
+            row = list((raw + "_" * 24)[:24])
+            if index > 0:
+                row = ["_" if ch == "_" else "=" for ch in row]
+            grid.append(row)
+        exported_rows[str(layer.get("id"))] = grid
+
+    for obj in objects:
+        if obj.get("type") not in {"door","window"}:
+            continue
+        layer = by_layer.get(str(obj.get("layerId")))
+        if not layer:
+            continue
+        lid = str(layer.get("id"))
+        source_rows = layer.get("rows") or []
+        for cell in _opening_cells(obj):
+            x, y = cell["x"], cell["y"]
+            raw = str(source_rows[y]) if y < len(source_rows) else ""
+            if x >= len(raw) or raw[x] != "#":
+                continue
+            exported_rows[lid][y][x] = "." if layer is base_layer else "="
+            opening_by_cell[(lid, x, y)] = (obj, cell)
+
+    ident_base = _cpp_id(level_name or chunk.get("name") or project.get("name") or "Map")
+    layer_names = {}
+    lines = [
+        f"META_LEVEL_ID: {level_id}",
+        f"META_LEVEL_NAME: {level_name}",
+        f"META_DEFAULT_TARGET: {default_target}",
+        f"META_EDITOR_PROJECT: {project.get('name','Depthworks Level')}",
+        f"META_EDITOR_PLAN_AREA: {chunk.get('name','Plan Area')}",
+        "",
+        "--- MAP_CODE_START ---",
+        f"  if(m_level=={level_id}){{",
+        f"   // Generated by Depthworks Level Editor from {chunk.get('name','Plan Area')}.",
+    ]
+
+    player_spawns = [o for o in objects if o.get("type") == "spawn" and o.get("spawnKind") == "Player"]
+    if player_spawns:
+        p = _resolve_editor_object(chunk, player_spawns[0], by_id)
+        lines.append(f"   // Player start marker: {{{_cpp_float(p['x'])},{_cpp_float(p['y'])},{_cpp_float(p['z'])}}}.")
+        if len(player_spawns) > 1:
+            warnings.append("More than one Player Start exists; only the first is recorded as a comment. Campaign spawn position still comes from WorldDefinition.h.")
+    else:
+        warnings.append("No Player Start marker is present. Campaign spawn position still comes from WorldDefinition.h.")
+
+    for index, layer in enumerate(layers):
+        lid = str(layer.get("id"))
+        ident = f"{ident_base}_L{index}_{_cpp_id(layer.get('name') or 'Floor')}"
+        layer_names[lid] = ident
+        lines.append(f"   static constexpr MapRows {ident} = {{")
+        for row in exported_rows[lid]:
+            lines.append(f'    "{"".join(row)}",')
+        lines.append("   };")
+
+    lines.append("")
+    lines.append("   m_layers={")
+    for index, layer in enumerate(layers):
+        lid = str(layer.get("id"))
+        name = f"{level_name} / {layer.get('name') or ('Floor '+str(index+1))}"
+        thickness = _number(layer.get("thickness"))
+        if index > 0 and thickness <= 0:
+            thickness = .25
+        lines.append(f"    {{{_cpp_string(name)},{_cpp_float(layer.get('z'))},{_cpp_float(thickness)},{layer_names[lid]}}},")
+    lines.append("   };")
+
+    # Upper-floor walls do not come from tile(), so emit them as normal world
+    # structures. Openings get side pieces and window sill/header pieces.
+    for index, layer in enumerate(layers):
+        lid, floor_z = str(layer.get("id")), _number(layer.get("z"))
+        ceiling = floor_z + max(.5, _number(layer.get("ceilingHeight"), 3.0))
+        source_rows = layer.get("rows") or []
+        if index > 0:
+            for y in range(24):
+                raw = str(source_rows[y]) if y < len(source_rows) else ""
+                for x in range(min(24, len(raw))):
+                    if raw[x] != "#" or (lid, x, y) in opening_by_cell:
+                        continue
+                    lines.append(f"   wall({_cpp_float(x)},{_cpp_float(y)},{_cpp_float(x+1)},{_cpp_float(y+1)},{_cpp_float(floor_z)},{_cpp_float(ceiling)});")
+
+        for (cell_lid, x, y), (opening, cell) in opening_by_cell.items():
+            if cell_lid != lid:
+                continue
+            axis, a, b = cell["axis"], cell["start"], cell["end"]
+            if axis == "horizontal":
+                if a > .001:
+                    lines.append(f"   wall({_cpp_float(x)},{_cpp_float(y)},{_cpp_float(x+a)},{_cpp_float(y+1)},{_cpp_float(floor_z)},{_cpp_float(ceiling)});")
+                if b < .999:
+                    lines.append(f"   wall({_cpp_float(x+b)},{_cpp_float(y)},{_cpp_float(x+1)},{_cpp_float(y+1)},{_cpp_float(floor_z)},{_cpp_float(ceiling)});")
+            else:
+                if a > .001:
+                    lines.append(f"   wall({_cpp_float(x)},{_cpp_float(y)},{_cpp_float(x+1)},{_cpp_float(y+a)},{_cpp_float(floor_z)},{_cpp_float(ceiling)});")
+                if b < .999:
+                    lines.append(f"   wall({_cpp_float(x)},{_cpp_float(y+b)},{_cpp_float(x+1)},{_cpp_float(y+1)},{_cpp_float(floor_z)},{_cpp_float(ceiling)});")
+            if opening.get("type") == "window":
+                sill = max(0.0, _number(opening.get("sill"), .95))
+                height = max(.2, _number(opening.get("h"), 1.15))
+                header = min(ceiling, floor_z + sill + height)
+                if sill > .001:
+                    lines.append(f"   wall({_cpp_float(x)},{_cpp_float(y)},{_cpp_float(x+1)},{_cpp_float(y+1)},{_cpp_float(floor_z)},{_cpp_float(floor_z+sill)});")
+                if header < ceiling - .001:
+                    lines.append(f"   wall({_cpp_float(x)},{_cpp_float(y)},{_cpp_float(x+1)},{_cpp_float(y+1)},{_cpp_float(header)},{_cpp_float(ceiling)});")
+
+    # Interactive horizontal smart doors. Vertical smart doors still carve a
+    # valid passage, but Door currently has no orientation field.
+    for obj in objects:
+        if obj.get("type") != "door":
+            continue
+        layer = by_layer.get(str(obj.get("layerId")))
+        if not layer:
+            continue
+        p = _resolve_editor_object(chunk, obj, by_id)
+        axis = str(obj.get("wallAxis") or "horizontal")
+        if axis != "horizontal":
+            warnings.append(f"Vertical smart door '{obj.get('name','Door')}' was exported as an open passage because the runtime Door type is horizontal-only.")
+            lines.append(f"   // Vertical smart door {_cpp_string(obj.get('name','Door'))}: opening preserved; runtime Door has no vertical orientation yet.")
+            continue
+        width = max(.25, min(12.0, _number(obj.get("w"), 1.0)))
+        left, right = p["x"] - width / 2, p["x"] + width / 2
+        entry = p["y"] <= 1.25
+        transfer = p["y"] >= 22.75
+        zoff = _number(layer.get("z")) - base_z
+        lines.append(f"   m_doors.push_back({{{_cpp_float(left)},{_cpp_float(right)},{_cpp_float(p['y'])},0,false,{str(transfer).lower()},{str(entry).lower()},{_cpp_float(zoff)}}});")
+        if not entry and not transfer:
+            lines.append("   m_doors.back().swinging=true;")
+
+    # Ordinary editor objects.
+    creature_lines, pickup_lines, clutter_lines = [], [], []
+    for obj in objects:
+        kind = obj.get("type")
+        if kind in {"door","window","dimension","label","stairs","light","terminal","hazard","box","spawn"}:
+            continue
+        if kind != "asset":
+            continue
+        layer = by_layer.get(str(obj.get("layerId"))) or base_layer
+        p = _resolve_editor_object(chunk, obj, by_id)
+        model = _normalize_model_path(obj.get("model"))
+        yaw = math.radians(p["rotation"])
+        w = max(.05, _number(obj.get("w"), 1.0) * max(.01, _number(obj.get("scale"), 1.0)))
+        d = max(.05, _number(obj.get("d"), 1.0) * max(.01, _number(obj.get("scale"), 1.0)))
+        h = max(.05, _number(obj.get("h"), 1.0) * max(.01, _number(obj.get("scale"), 1.0)))
+        base = p["z"] - base_z
+        if model in FACILITY_MODEL_INDEX:
+            mi = FACILITY_MODEL_INDEX[model]
+            solid = mi not in {3,4,5}
+            lines.append(f"   m_fixtures.push_back({{{mi},{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(base)},{_cpp_float(w)},{_cpp_float(d)},{_cpp_float(h)},{_cpp_float(yaw)},{str(solid).lower()}}});")
+        elif model in WORLD_PROP_KIND:
+            pk = WORLD_PROP_KIND[model]
+            lines.append(f"   m_props.push_back({{{pk},{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(h)},{_cpp_float(max(w,d))},{_cpp_float(yaw)},{{{_cpp_float(w/2)},{_cpp_float(d/2)}}},{_cpp_float(base)}}});")
+        elif model in CLUTTER_KIND:
+            ck = CLUTTER_KIND[model]
+            z = -999.0 if abs(p["z"] - base_z) < .03 else p["z"]
+            clutter_lines.append(f"{{{ck},{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(z)},{_cpp_float(yaw)}}}")
+        elif model in PICKUP_KIND:
+            pk = PICKUP_KIND[model]
+            pickup_lines.append(f"{{{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},PickupKind::{pk}}}")
+            if abs(p["z"] - base_z) > .25:
+                warnings.append(f"Pickup '{obj.get('name','Pickup')}' is above the base floor; PickupSpawn has no authored Z and will settle on floorHeight().")
+        elif model in CREATURE_MODEL_KIND:
+            ck = CREATURE_MODEL_KIND[model]
+            creature_lines.append(f"{{CreatureKind::{ck},{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(p['z'])}}}")
+        else:
+            warnings.append(f"Asset '{obj.get('name') or model}' has no runtime placement mapping yet and was preserved only as an export comment.")
+            lines.append(f"   // Unsupported editor asset: {_cpp_string(obj.get('name') or model)} ({model})")
+
+    for obj in objects:
+        kind = obj.get("type")
+        layer = by_layer.get(str(obj.get("layerId"))) or base_layer
+        p = _resolve_editor_object(chunk, obj, by_id)
+        if kind == "box":
+            rotation = int(round((_number(p["rotation"]) % 360) / 90.0)) % 4
+            w, d = max(.05, _number(obj.get("w"), 1)), max(.05, _number(obj.get("d"), 1))
+            if rotation % 2:
+                w, d = d, w
+            if abs((_number(p["rotation"]) % 90)) > .01:
+                warnings.append(f"Block '{obj.get('name','Block')}' uses a non-90-degree rotation; collision exported as its axis-aligned footprint.")
+            lines.append(f"   m_structures.push_back({{{_cpp_float(p['x']-w/2)},{_cpp_float(p['y']-d/2)},{_cpp_float(p['x']+w/2)},{_cpp_float(p['y']+d/2)},{_cpp_float(p['z'])},{_cpp_float(p['z']+max(.05,_number(obj.get('h'),1)))},false,2}});")
+        elif kind == "stairs":
+            rot = int(round((_number(p["rotation"]) % 360) / 90.0)) % 4
+            if abs((_number(p["rotation"]) % 90)) > .01:
+                warnings.append(f"Stairs '{obj.get('name','Stairs')}' were snapped to the nearest 90-degree runtime direction.")
+            w, d = max(.4, _number(obj.get("w"),1.2)), max(1.0, _number(obj.get("d"),5))
+            bottom = _number(layer.get("z"))
+            target = by_layer.get(str(obj.get("targetLayerId")))
+            top = _number(target.get("z")) if target else bottom + max(.25, _number(obj.get("h"),3))
+            steps = max(3, min(64, int(round(_number(obj.get("steps"),17)))))
+            if rot in {0,2}:
+                x1,x2,y1,y2 = p["x"]-w/2,p["x"]+w/2,p["y"]-d/2,p["y"]+d/2
+                along_y, ascending = True, rot == 0
+            else:
+                x1,x2,y1,y2 = p["x"]-d/2,p["x"]+d/2,p["y"]-w/2,p["y"]+w/2
+                along_y, ascending = False, rot == 3
+            lines.append(f"   stairs.push_back({{{_cpp_float(x1)},{_cpp_float(y1)},{_cpp_float(x2)},{_cpp_float(y2)},{_cpp_float(bottom)},{_cpp_float(top)},{steps},{str(along_y).lower()},{str(ascending).lower()}}});")
+        elif kind == "light":
+            lines.append(f"   m_lights.push_back({{{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(p['z'])}}});")
+        elif kind == "terminal":
+            title = obj.get("title") or obj.get("name") or "TERMINAL"
+            lines.append(f"   m_terminals.push_back({{{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_string(title)},\"AUTHORED IN LEVEL EDITOR.\",\"LOCAL TERMINAL.\",{_cpp_float(p['z']-base_z)},false}});")
+        elif kind == "hazard":
+            hk = str(obj.get("kind") or "Electricity")
+            if hk not in HAZARD_KINDS:
+                warnings.append(f"Hazard '{obj.get('name','Hazard')}' uses unknown kind '{hk}'; exported as Electricity.")
+                hk = "Electricity"
+            w,d,h = max(.1,_number(obj.get("w"),2)),max(.1,_number(obj.get("d"),2)),max(.1,_number(obj.get("h"),1))
+            lines.append(f"   m_hazards.push_back({{Hazard::Kind::{hk},{_cpp_float(p['x']-w/2)},{_cpp_float(p['y']-d/2)},{_cpp_float(p['x']+w/2)},{_cpp_float(p['y']+d/2)},{_cpp_float(p['z'])},{_cpp_float(p['z']+h)},20}});")
+        elif kind == "spawn":
+            role = str(obj.get("spawnKind") or "Worker")
+            if role in {"Creature","Hostile"}:
+                creature_lines.append(f"{{CreatureKind::Huntsman,{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(p['z'])}}}")
+                if role == "Hostile":
+                    warnings.append("Hostile dummy exported as Huntsman; the editor does not yet choose a runtime hostile species.")
+            elif role == "Player":
+                pass
+            else:
+                warnings.append(f"{role} dummy '{obj.get('name',role)}' is blueprint-only because RawMetal has no runtime NPC spawn type for that role yet.")
+
+    if creature_lines:
+        lines.append("   m_creatureSpawns={"+",".join(creature_lines)+"};")
+    if pickup_lines:
+        lines.append("   m_pickupSpawns={"+",".join(pickup_lines)+"};")
+    if clutter_lines:
+        lines.append("   m_clutterSpawns={"+",".join(clutter_lines)+"};")
+
+    # Keep the payload self-contained and explicit about editor-only omissions.
+    if len(chunks) > 1:
+        warnings.append(f"Project contains {len(chunks)} plan areas. This payload contains only '{chunk.get('name','Plan Area')}', because one campaign slot is one 24x24 World chunk.")
+    if any(o.get("type") == "window" for o in objects):
+        warnings.append("Smart windows export as collision-correct wall apertures; the current runtime has no dedicated glass/window entity.")
+
+    lines.append("  }")
+    lines.append("--- MAP_CODE_END ---")
+    if warnings:
+        lines.extend(["", "--- EDITOR_EXPORT_WARNINGS ---"])
+        lines.extend(f"- {warning}" for warning in warnings)
+    lines.append("")
+    return "\n".join(lines), warnings
+
 
 def project_filename(value: str) -> str:
     stem = Path(str(value or "untitled")).stem
