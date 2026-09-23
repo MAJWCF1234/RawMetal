@@ -43,7 +43,7 @@ bool SoftwareRenderer::enableHardware(){
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>();
-  for(const auto*texture:{&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_ashfallSky,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
   for(const auto*texture:{&m_blood,&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign})m_gpu->prepare(*texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
@@ -66,6 +66,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_muzzleFlash=loadTexture(139);m_muzzleFlash.additive=true;prepareDecal(m_muzzleFlash);
  m_pumpTexture=loadTexture(141);m_compressorTexture=loadTexture(143);m_pipeTexture=loadTexture(145);m_gateTexture=loadTexture(147);
  m_pressureWall=loadTexture(148);m_pressureFloor=loadTexture(149);m_pressureMetal=loadTexture(150);
+ m_ashfallSky=loadTexture(252);prepareDecal(m_ashfallSky,false);
  m_water=loadTexture(250);attachNormal(m_water,251);for(auto& pixel:m_water.pixels)pixel|=0xff000000u;for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel|=0xff000000u;attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190);
  m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
@@ -128,6 +129,33 @@ std::uint32_t SoftwareRenderer::sample(const Texture&t,float u,float v,float lod
  auto fetch=[&](int index){int width=std::max(1,t.width>>index),height=std::max(1,t.height>>index);auto&pixels=index?t.mips[index-1]:t.pixels;return pixels[size_t(std::min(height-1,int(v*height))*width+std::min(width-1,int(u*width)))];};
  auto a=fetch(level);if(size_t(level)==t.mips.size())return a;auto b=fetch(level+1);float blend=lod-level;std::uint32_t result=0;
  for(int channel=0;channel<4;++channel){int shift=channel*8;auto value=unsigned(((a>>shift)&255)*(1-blend)+((b>>shift)&255)*blend);result|=value<<shift;}return result;
+}
+void SoftwareRenderer::drawSky(const Game& game){
+ const auto& world=game.world();
+ if(!world.outdoors()||std::strcmp(world.skyboxId(),"brutal_wasteland")!=0||m_ashfallSky.pixels.empty())return;
+ // The embedded Ashfall image is an equirectangular panorama. Render it as a
+ // camera-centred sphere so the same path works in both software and Vulkan.
+ // Vertex light exactly cancels the normal distance falloff used by materials,
+ // keeping the sky pixel-for-pixel faithful apart from texture sampling.
+ constexpr int slices=32,bands=16;constexpr float radius=80.f;
+ const auto& player=game.player();Point3 eye{player.pos.x,player.pos.y,player.z+player.eye};
+ auto vertex=[&](float longitude,float latitude,float u,float v){
+  float ring=std::cos(latitude);
+  Point3 direction{ring*std::cos(longitude),ring*std::sin(longitude),std::sin(latitude)};
+  auto camera=cameraPoint(eye+direction*radius,game);
+  return MeshVertex{camera,u,v,1.f+std::max(0.f,camera.z)*.018f};
+ };
+ for(int y=0;y<bands;++y){
+  float v0=float(y)/bands,v1=float(y+1)/bands;
+  float lat0=kPi*.5f-v0*kPi,lat1=kPi*.5f-v1*kPi;
+  for(int x=0;x<slices;++x){
+   float u0=float(x)/slices,u1=float(x+1)/slices;
+   float lon0=(u0-.5f)*2*kPi,lon1=(u1-.5f)*2*kPi;
+   auto a=vertex(lon0,lat0,u0,v0),b=vertex(lon1,lat0,u1,v0);
+   auto c=vertex(lon1,lat1,u1,v1),d=vertex(lon0,lat1,u0,v1);
+   triangle3D(a,b,c,m_ashfallSky,1.f);triangle3D(a,c,d,m_ashfallSky,1.f);
+  }
+ }
 }
 void SoftwareRenderer::clear(std::uint32_t c){std::fill(m_pixels.begin(),m_pixels.end(),c);}
 void SoftwareRenderer::put(int x,int y,std::uint32_t c){if(x>=0&&y>=0&&x<m_width&&y<m_height)m_pixels[size_t(y*m_width+x)]=c;}
@@ -324,10 +352,8 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  auto scene=[&]{bool parallel=!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
-   // Temporary software background. No skybox texture is loaded here yet.
-   if(game.world().horrorMode()){
-    for(int y=0;y<m_height;++y){float t=float(y)/std::max(1,m_height-1);auto c=rgb(unsigned(22+18*t),unsigned(18+16*t),unsigned(20+20*t));for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=c;}
-   }else clear(rgb(12,16,18));
+   clear(rgb(12,16,18));
+   drawSky(game);
    drawScene(game);for(int level=0;level<Game::ChunkCount;++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}
    if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen())drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
