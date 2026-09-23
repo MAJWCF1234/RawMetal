@@ -82,7 +82,7 @@ bool Game::testStreaming(){
  if(ash.level()!=1||std::fabs(ash.player().pos.x-.10f)>.01f||std::fabs(ash.player().pos.y-12.f)>.01f)return fail(18);
  ash.updateStreaming(0);
  if(!ash.chunkResident(0)||!ash.chunkResident(2)||!ash.chunkResident(3)||!ash.chunkResident(4)||!ash.chunkResident(5))return fail(19);
- float southA=ash.world().floorHeight(12,23.999f),southB=ash.m_chunks[3].world.floorHeight(12,.001f);
+ float southA=ash.world().floorHeight(12,23.999f),southB=ash.m_chunks[4].world.floorHeight(12,.001f);
  if(std::fabs(southA-southB)>.02f)return fail(20);
  // Central Ashfall ridge contains a real subtractive cavern. At local 12,8
  // in chunk 4 there must be a walkable floor with a solid ceiling above it.
