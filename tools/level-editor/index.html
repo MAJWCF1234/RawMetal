@@ -45,7 +45,7 @@ body.draggingAsset #map{cursor:copy}.asset[draggable="true"],.materialCard[dragg
      profiles rewrite absolute /tools URLs and report a misleading 404. -->
 <script type="importmap">{"imports":{"three":"../__three/three.module.js","three/addons/":"../__three/"}}</script>
 </head><body><div class="app">
-<div class="top"><div class="brand">DEPTHWORKS // LEVEL EDITOR</div><button id="b2" class="active">PLAN</button><button id="bsplit">LIVE PLAN + 3D</button><button id="b3">3D</button><button id="bwalk">WALK</button><span class="grow"></span><button id="undo" disabled>UNDO</button><button id="redo" disabled>REDO</button><button id="new">NEW BUILDING</button><button id="openProject">OPEN</button><button id="saveProject">SAVE</button><button id="artistHelp" class="helpButton">? QUICK START</button><details class="topMenu"><summary>MORE</summary><div class="topMenuPanel"><button id="fitPlan">FIT BUILDING</button><button id="planInk">BLUEPRINT INK</button><button id="sectionView">BUILDING SECTION</button><button id="designCheck">DESIGN CHECK</button><button id="walkability">WALKABILITY</button><button id="referencePlan">REFERENCE PLAN</button><button id="exportPlan">EXPORT PLAN PNG</button><button id="exportWorldCpp">EXPORT WORLD.CPP</button><button id="saveAsProject">SAVE AS</button><button id="addLayer">+ FLOOR</button><button id="addChunk">+ PLAN AREA</button><button id="import">IMPORT JSON</button><button id="export" class="wide">EXPORT JSON</button></div></details><input id="file" type="file" accept=".json,application/json" hidden><span id="projectStatus" class="hint">UNSAVED PROJECT</span><span id="autosaveStatus" class="hint">AUTOSAVE</span><span id="count" class="hint">SCANNING ASSETS…</span></div>
+<div class="top"><div class="brand">DEPTHWORKS // LEVEL EDITOR</div><button id="b2" class="active">PLAN</button><button id="bsplit">LIVE PLAN + 3D</button><button id="b3">3D</button><button id="bwalk">WALK</button><span class="grow"></span><button id="undo" disabled>UNDO</button><button id="redo" disabled>REDO</button><button id="new">NEW BUILDING</button><button id="openProject">OPEN</button><button id="saveProject">SAVE</button><button id="artistHelp" class="helpButton">? QUICK START</button><details class="topMenu"><summary>MORE</summary><div class="topMenuPanel"><button id="fitPlan">FIT BUILDING</button><button id="planInk">BLUEPRINT INK</button><button id="sectionView">BUILDING SECTION</button><button id="designCheck">DESIGN CHECK</button><button id="walkability">WALKABILITY</button><button id="referencePlan">REFERENCE PLAN</button><button id="exportPlan">EXPORT PLAN PNG</button><button id="exportMapPayload">EXPORT INSTALLER TXT</button><button id="exportWorldCpp">EXPORT WORLD.CPP</button><button id="saveAsProject">SAVE AS</button><button id="addLayer">+ FLOOR</button><button id="addChunk">+ PLAN AREA</button><button id="import">IMPORT JSON</button><button id="export" class="wide">EXPORT JSON</button></div></details><input id="file" type="file" accept=".json,application/json" hidden><span id="projectStatus" class="hint">UNSAVED PROJECT</span><span id="autosaveStatus" class="hint">AUTOSAVE</span><span id="count" class="hint">SCANNING ASSETS…</span></div>
 <div class="work">
 <aside class="side left">
 <div class="sec"><h3>SKYBOX / ATMOSPHERE</h3><select id="skyboxSelect" style="width:100%"><option value="industrial_night">Industrial night</option><option value="brutal_wasteland">Brutal wasteland (Retro Official)</option><option value="ashfall">Ashfall overcast</option></select><div class="hint" style="margin-top:5px">Saved with the blueprint and shown in 3D preview.</div></div>
@@ -130,6 +130,20 @@ body.draggingAsset #map{cursor:copy}.asset[draggable="true"],.materialCard[dragg
   </div>
 </dialog>
 <dialog id="projectDialog" class="projectDialog"><div class="projectHead"><div class="grow"><b>OPEN LEVEL PROJECT</b><div class="hint">Projects saved by this editor live in tools/level-editor/projects.</div></div><button id="projectClose">CLOSE</button></div><div id="projectList" class="projectList"><div class="empty">No saved projects yet.</div></div></dialog>
+<dialog id="payloadDialog" class="buildingDialog">
+  <div class="projectHead"><div class="grow"><b>EXPORT INSTALLER MAP TXT</b><div class="hint">Build the self-contained .txt payload consumed by InstallMap.cmd.</div></div><button id="payloadClose">CLOSE</button></div>
+  <div class="buildingForm">
+    <div class="field"><label>MAP NAME</label><input id="payloadName" value="Depthworks Map"></div>
+    <div class="buildingGrid">
+      <div class="field"><label>LEVEL ID</label><input id="payloadLevel" type="number" min="0" step="1" value="6"></div>
+      <div class="field"><label>DEFAULT TARGET</label><select id="payloadTarget"><option value="MAIN">MAIN CAMPAIGN</option><option value="CUSTOM">CUSTOM MAP VAULT</option></select></div>
+    </div>
+    <div class="field"><label>24 × 24 PLAN AREA</label><select id="payloadArea"></select></div>
+    <div id="payloadHint" class="buildingPreview">One installer payload corresponds to one RawMetal World chunk. All floors in the selected plan area are included.</div>
+    <div class="hint" style="margin-top:8px">MAIN targets dynamic campaign slots 6 and above. CUSTOM creates the same portable payload with CUSTOM as its default target; InstallMap.cmd can archive it under custom maps/.</div>
+    <div class="buildingActions"><button id="payloadCreate">DOWNLOAD .TXT PAYLOAD</button><button id="payloadCancel">CANCEL</button></div>
+  </div>
+</dialog>
 <dialog id="repeatDialog" class="buildingDialog">
   <div class="projectHead"><div class="grow"><b id="repeatTitle">REPEAT EQUIPMENT</b><div class="hint">Make a neat row or grid from the selected item. Its attached decorations repeat with it, and the blueprint expands across plan-area boundaries automatically.</div></div><button id="repeatClose">CLOSE</button></div>
   <div class="buildingForm">
@@ -697,6 +711,35 @@ document.querySelectorAll('[data-refmove]').forEach(b=>b.onclick=()=>{const ref=
 $('#referenceDrag').onclick=()=>{if(!referencePlan())return;$('#referenceDialog').close();S.tool='reference';S.sel=null;render();stat('Reference move: drag the image on the blueprint. It snaps in 25 cm steps.','ok')};
 $('#referenceRemove').onclick=()=>{const ref=referencePlan();if(!ref)return;if(!confirm('Remove the reference image from this floor?'))return;remember();delete S.p.referencePlans[referenceKey()];renderReferenceDialog();draw();scheduleRecovery();stat('Reference image removed from this floor.','ok')};
 $('#exportPlan').onclick=exportPlanPng;
+function openMapPayloadDialog(){
+ const c=C(),select=$('#payloadArea');select.innerHTML='';
+ for(const area of S.p.chunks){const option=document.createElement('option');option.value=area.id;option.textContent=(area.number||'?')+' '+(area.name||'Plan Area')+' ('+(area.layers||[]).length+' floor'+((area.layers||[]).length===1?'':'s')+')';option.selected=area.id===S.c;select.append(option)}
+ $('#payloadName').value=(c&&c.name)||S.p.name||'Depthworks Map';
+ $('#payloadLevel').value=String(Math.max(6,Math.round(Number(c&&c.number)||6)));
+ $('#payloadTarget').value='MAIN';
+ const count=S.p.chunks.length;$('#payloadHint').textContent=count>1?'This project has '+count+' plan areas. One installer payload is one 24 × 24 RawMetal World chunk, so this export contains the selected area and all of its floors.':'This payload contains this 24 × 24 plan area and all of its floors.';
+ const d=$('#payloadDialog');if(!d.open)d.showModal()
+}
+async function createMapPayload(){
+ const level=Math.round(Number($('#payloadLevel').value)),name=$('#payloadName').value.trim(),target=$('#payloadTarget').value,chunkId=$('#payloadArea').value;
+ if(!Number.isFinite(level)||level<0){stat('Map payload export needs a valid level ID.','bad');return}
+ if(target==='MAIN'&&level<6){stat('Main campaign payloads use dynamic level IDs 6 and above.','bad');return}
+ if(!name){stat('Give the installer map a name first.','bad');return}
+ try{
+  stat('Generating installer-ready map payload...','ok');
+  const response=await fetch('/__depthworks_map_payload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:S.p,chunk:chunkId,level,name,target})}),result=await response.json();
+  if(!response.ok||!result.ok)throw Error(result.error||('HTTP '+response.status));
+  const warnings=Array.isArray(result.warnings)?result.warnings:[];
+  if(warnings.length&&!confirm('The map payload was generated with '+warnings.length+' warning'+(warnings.length===1?'':'s')+':\n\n'+warnings.join('\n')+'\n\nDownload it anyway?')){stat('Payload export cancelled so you can fix the warnings first.','bad');return}
+  const blob=new Blob([result.payload],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=result.file||('Map_'+String(level).padStart(2,'0')+'_'+safeFilePart(name)+'.txt');a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  if($('#payloadDialog').open)$('#payloadDialog').close();
+  stat('Exported '+a.download+' for InstallMap.cmd'+(warnings.length?' with '+warnings.length+' documented warning'+(warnings.length===1?'':'s'):'')+'.','ok')
+ }catch(e){stat('Map payload export failed: '+e.message,'bad')}
+}
+$('#exportMapPayload').onclick=openMapPayloadDialog;
+$('#payloadCreate').onclick=createMapPayload;
+$('#payloadClose').onclick=$('#payloadCancel').onclick=()=>$('#payloadDialog').close();
+$('#payloadTarget').onchange=()=>{if($('#payloadTarget').value==='MAIN'&&Number($('#payloadLevel').value)<6)$('#payloadLevel').value='6'};
 $('#new').onclick=openNewBuilding;$('#openProject').onclick=openProjectDialog;$('#saveProject').onclick=()=>saveProject(false);$('#saveAsProject').onclick=()=>saveProject(true);$('#projectClose').onclick=()=>$('#projectDialog').close();$('#pname').onchange=e=>{remember();S.p.name=e.target.value||'Depthworks Blockout';scheduleRecovery()};$('#ghost').onchange=draw;$('#grid').onchange=draw;
 function exportWorldCpp(){
  const q=v=>String(v??'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\r?\n/g,' ');
