@@ -51,7 +51,10 @@ choice /c 1234 /n /m " Select target destination [1, 2, 3, or 4]: "
 
 if errorlevel 4 goto :ABORT
 if errorlevel 3 goto :INSTALL_CUSTOM
-if errorlevel 2 goto :INSTALL_AUTO
+if errorlevel 2 goto :INSTALL_MAIN
+goto :INSTALL_AUTO
+
+:INSTALL_AUTO
 echo.
 echo [*] Routing according to META_DEFAULT_TARGET...
 findstr /R /I /C:"^META_DEFAULT_TARGET:[ ]*CUSTOM[ ]*$" "%PAYLOAD_FILE%" >nul
@@ -59,14 +62,11 @@ if not errorlevel 1 goto :INSTALL_CUSTOM
 goto :INSTALL_MAIN
 
 :INSTALL_MAIN
-if errorlevel 1 goto :INSTALL_AUTO
-
-:INSTALL_MAIN
 echo.
 echo [*] Installing payload into src\world\World.cpp...
 powershell -NoProfile -ExecutionPolicy Bypass -File "tools\InstallMap.ps1" -Payload "%PAYLOAD_FILE%" -Mode Main
 if errorlevel 1 (
-    echo [!] Injection failed. World.cpp was restored from its backup.
+    echo [!] Main-campaign injection failed. World.cpp was not changed, or was restored from backup.
     popd
     pause
     exit /b 1
@@ -85,11 +85,12 @@ if errorlevel 1 (
 )
 
 echo.
-echo [OK] Map installed and build completed.
+echo [OK] Main campaign map installed and build completed.
 goto :END
 
 :INSTALL_CUSTOM
 echo.
+echo [*] Installing playable custom campaign...
 powershell -NoProfile -ExecutionPolicy Bypass -File "tools\InstallMap.ps1" -Payload "%PAYLOAD_FILE%" -Mode Custom
 if errorlevel 1 (
     echo [!] Custom campaign installation failed.
