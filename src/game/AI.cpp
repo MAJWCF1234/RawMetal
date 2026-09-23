@@ -157,6 +157,23 @@ void Game::updateEnemies(float dt){
   e.searchTime=e.moving?0.f:std::min(1.f,e.searchTime+dt);
   if(e.moving&&e.kind==Enemy::Kind::Brute&&e.stepTimer<=0){m_sounds.push_back({Sound::Land,e.pos,.7f,.68f,true});e.stepTimer=.8f;}
  }
+ migrateEnemiesAcrossChunks();
+}
+void Game::migrateEnemiesAcrossChunks(){
+ if(m_worldId!=WorldId::Ashfall)return;
+ auto sourceOrigin=chunkOffset(m_level);
+ for(auto it=m_enemies.begin();it!=m_enemies.end();){
+  if(it->pos.x>=0&&it->pos.x<World::Width&&it->pos.y>=0&&it->pos.y<World::Height){++it;continue;}
+  Vec2 global=it->pos+sourceOrigin;int target=m_level;
+  for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
+   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){target=level;break;}
+  }
+  if(target==m_level){++it;continue;}
+  ensureChunk(target);auto origin=chunkOffset(target);auto enemy=*it;Vec2 shift=sourceOrigin-origin;
+  enemy.pos+=shift;enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;
+  enemy.z=m_chunks[target].world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;
+  m_chunks[target].enemies.push_back(enemy);it=m_enemies.erase(it);
+ }
 }
 bool Game::testAI(){
  std::ofstream debug("ai-diagnostic.txt");
