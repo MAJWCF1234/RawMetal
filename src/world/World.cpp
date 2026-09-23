@@ -275,25 +275,33 @@ constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,Pressu
 constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
 constexpr MapLayer TurbineGantryUpperLayer{"Turbine Gantry / upper catwalk",3,.3f,TurbineGantryUpperCatwalk};
 constexpr std::array GantryStairs{Staircase{4,18,6,22,0,3,15,true,true}};
-// Six stitched outdoor regions. Internal chunk edges are open terrain, not
-// corridors: the active chunk and its neighbours share one world-space height
-// field, so crossing a seam is visually and physically continuous.
+// Ashfall's tile layer is deliberately sparse. Terrain supplies the landscape;
+// only isolated junk, ruined wall fragments and build-site clutter live here.
 constexpr MapRows ashfallRegion(int region){
  MapRows rows={
-  "........................","........................",".....####...............",".....#..#......####.....",
-  ".....#..#......#..#.....",".....####......####.....","........................","..........####..........",
-  "..........#..#..........","....####..#..#..####....","....#..#..####..#..#....","....####........####....",
-  "........................","..####....####..........","..#..#....#..#..........","..####....####....##....",
-  "........................","....####................","....#..#....####........","....####....#..#........",
-  "............####........","........................","........................","........................"};
- if(region==1){rows[3]="...####....####....####.";rows[8]=".......######...........";rows[14]="....####....####....###.";rows[19]="....#....####....#......";}
- if(region==2){rows[4]="..####......####........";rows[6]="..#..#......#..#........";rows[10]="......####......####....";rows[16]="....####....####........";}
- if(region==3){rows[2]=".....####...............";rows[7]="..####......####........";rows[12]="..#..#......#..#........";rows[18]="......####......####....";}
- if(region==4){rows[5]="........####............";rows[9]="....####....####........";rows[15]="....#..#....#..#........";rows[20]="....####....####........";}
- if(region==5){rows[3]="..####....####..........";rows[11]="..............####......";rows[17]="....####....####........";rows[21]=".......######...........";}
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................"};
+ switch(region){
+  case 0: rows[10]="..................CC....";rows[18]=".....##.................";break;
+  case 1: rows[5]="...B....................";rows[17]="....................##..";break;
+  case 2: rows[11]="................CC......";rows[20]="..##....................";break;
+  case 3: rows[6]="....##..................";rows[18]="..................B.....";break;
+  case 4: rows[4]="...................##...";rows[19]="....CC..................";break;
+  case 5: rows[8]="..B.....................";rows[21]="..................##....";break;
+  case 6: rows[6]="................CC......";rows[17]="...##...................";break;
+  case 7: rows[9]="....................B...";rows[20]=".....##.................";break;
+  case 8: rows[7]="...CC...................";rows[18]="...................##...";break;
+  case 9: rows[5]="..................##....";rows[19]="....B...................";break;
+  case 10: rows[8]=".....##.................";rows[21]=".................CC.....";break;
+  case 11: rows[6]="....................##..";rows[18]="....CC..................";break;
+ }
  return rows;
 }
-static_assert([]{for(int i=0;i<6;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
+static_assert([]{for(int i=0;i<AshfallChunkCount;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
 
 // Ashfall's source terrain is a 96 x 72 field of authored one-metre voxel
 // columns. Surface Nets skins these block points; no smooth SDF primitives are
@@ -407,17 +415,16 @@ constexpr float ShelfTiers[]={.17f,.54f,.92f};
 void World::buildPopulation(){
  using C=CreatureKind;using P=PickupKind;
  if(!campaign()){
-  // Outdoor encounters are spread across the stitched grid instead of cloning
-  // one room's population six times.
-  switch(m_level){
-   case 0:m_creatureSpawns={{C::Huntsman,{18.5f,8.5f}},{C::Wasp,{9.5f,17.5f}}};m_pickupSpawns={{{6.5f,8.5f},P::Ammo}};break;
-   case 1:m_creatureSpawns={{C::Huntsman,{7.5f,6.5f}},{C::Brute,{18.5f,17.5f}}};m_pickupSpawns={{{12.5f,12.5f},P::Health}};break;
-   case 2:m_creatureSpawns={{C::Wasp,{5.5f,7.5f}},{C::Huntsman,{13.5f,11.5f}},{C::Brute,{19.5f,19.5f}}};m_pickupSpawns={{{6.5f,18.5f},P::Ammo}};break;
-   case 3:m_creatureSpawns={{C::Huntsman,{8.5f,15.5f}},{C::Wasp,{19.5f,5.5f}}};m_pickupSpawns={{{18.5f,17.5f},P::Health}};break;
-   case 4:m_creatureSpawns={{C::Brute,{9.5f,18.5f}},{C::Huntsman,{17.5f,7.5f}},{C::Wasp,{13.5f,15.5f}}};m_pickupSpawns={{{4.5f,5.5f},P::Ammo},{{20.5f,19.5f},P::Health}};break;
-   case 5:m_creatureSpawns={{C::Huntsman,{6.5f,8.5f}},{C::Brute,{17.5f,14.5f}}};m_pickupSpawns={{{18.5f,6.5f},P::Ammo}};break;
-  }
-  for(int i=0;i<4;++i)m_clutterSpawns.push_back({(i+m_level)%6,{4.f+i*3.1f,6.5f+float((i+m_level)%3)*4.2f},-999,(i+m_level)*.7f});
+  // Fallout-like spacing: most outdoor chunks carry one small encounter and a
+  // little salvage, leaving long quiet sight-lines between landmarks.
+  const Vec2 encounter[]={{18.5f,18.5f},{5.5f,18.5f},{18.5f,5.5f},{5.5f,5.5f}};
+  auto p=encounter[m_level%4];
+  if(m_level%5!=3)m_creatureSpawns.push_back({m_level%4==2?C::Wasp:m_level%6==5?C::Brute:C::Huntsman,p,-999});
+  if(m_level==6||m_level==10)m_creatureSpawns.push_back({C::Wasp,{19.5f,18.5f},-999});
+  if(m_level%3==0)m_pickupSpawns.push_back({{4.5f,19.5f},P::Ammo});
+  if(m_level==5||m_level==11)m_pickupSpawns.push_back({{20.5f,4.5f},P::Health});
+  int junk=2+(m_level%2);
+  for(int i=0;i<junk;++i)m_clutterSpawns.push_back({(i+m_level)%6,{3.5f+i*1.4f,20.5f-float((i+m_level)%2)*1.2f},-999,(i+m_level)*.7f});
   return;
  }
  // Population belongs to the map, just like its layers and fixtures.
