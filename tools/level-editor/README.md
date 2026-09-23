@@ -13,7 +13,7 @@ The editor is intended for artists and designers, not programmers. The default a
 5. Select placed objects to move, rotate, resize, duplicate, or delete them.
 6. Open **MATERIALS**, click a texture, and paint it onto floor/wall/deck tiles.
 7. Switch to **3D PREVIEW** at any time to inspect the same layout with real models and textures.
-8. Export the project JSON when ready.
+8. Use **MORE -> EXPORT INSTALLER TXT** when the plan is ready to become a RawMetal map. Export JSON remains available as a portable editor-project backup.
 
 The **FILES** tab still exposes the underlying asset library for inspection, but artists should normally work from Prefabs and Materials.
 
@@ -127,6 +127,19 @@ A new **Replace Material** mode works like color replacement in a paint program.
 ## Direct Save / Open
 
 The editor can save and reopen projects directly without making the artist manage browser downloads. **Save** writes project JSON under `tools/level-editor/projects`, **Open** lists those projects, and **Save As** creates a second project file. Ctrl+S saves and Ctrl+O opens the project list. Import and Export still exist for portable copies.
+
+
+## Installer-ready map payloads
+
+**MORE -> EXPORT INSTALLER TXT** turns the selected 24 x 24 plan area into the same self-contained `.txt` format consumed by the repository-root `InstallMap.cmd`.
+
+Choose the map name, level ID, MAIN or CUSTOM default target, and the plan area to export. All floors in that plan area are included. The generated payload contains the metadata header, `MAP_CODE_START / MAP_CODE_END`, local ASCII slices, runtime layers, doors, stairs, structures, lights, terminals, hazards and the editor assets that already have RawMetal runtime mappings.
+
+The exporter deliberately reports anything it cannot represent instead of silently discarding it. Current examples are vertical smart doors (the runtime Door type is horizontal-only), blueprint-only NPC role dummies, per-tile finish painting (the current World payload API has no material-override table), and arbitrary source assets without a runtime placement mapping. Window openings are preserved as sill/header wall apertures even though RawMetal does not yet have a dedicated glass entity.
+
+A building project may span many editor plan areas, but one installer payload is one RawMetal World chunk. Export each plan area separately when building a multi-map campaign route. MAIN payloads use dynamic campaign slots 6 and above. CUSTOM payloads use the same schema and can be archived through the installer's custom-map option.
+
+See `MAP_SYSTEM.md` for the installer contract and the remaining `WorldDefinition.h` requirement for brand-new campaign indices.
 
 ## 3D selection and richer arrangements
 

@@ -186,3 +186,62 @@ This is useful for exchanging maps, keeping alternate revisions, or handing one 
 Installing a brand-new campaign slot only injects the level implementation. A truly new campaign index must also exist in `WorldDefinition.h` so the engine has a chunk origin, player start, spawn height and environment entry for that index.
 
 Replacing an existing level does not require changing `WorldDefinition.h`.
+
+
+## Level Editor payload export
+
+The browser level editor can generate this exact installer format directly.
+
+Open `LevelEditor.cmd`, author the map normally, then use:
+
+```text
+MORE -> EXPORT INSTALLER TXT
+```
+
+The export dialog asks for:
+
+- map name
+- level ID
+- default target: `MAIN` or `CUSTOM`
+- which 24 x 24 plan area to export
+
+One installer payload corresponds to one RawMetal `World` chunk. Every floor in the selected plan area is included. If a building project spans several plan areas, export each area as its own map payload/slot.
+
+The exporter converts editor data into normal `World.cpp` map content:
+
+- the selected area's 24 x 24 ASCII floor/deck slices
+- additional floors as structural `=` decks
+- upper-floor wall geometry
+- smart horizontal doors, with north/south boundary doors inferred as entry/transfer doors
+- smart window openings as structural sill/header apertures
+- stairs
+- lights
+- terminals
+- hazards
+- blocks/structures
+- mapped facility equipment, Pressure Works props, pickups, clutter and creature assets
+- generic hostile/creature spawn markers
+
+Blueprint-only information such as room labels and dimensions is intentionally not emitted as runtime geometry. Per-tile finish painting is also still editor-only because the current World payload API has no per-tile material override table; the exporter warns when a selected area uses painted finishes.
+
+The generated file is named like:
+
+```text
+Map_07_Pump_Annex.txt
+```
+
+and already contains the required:
+
+```text
+META_LEVEL_ID
+META_LEVEL_NAME
+META_DEFAULT_TARGET
+--- MAP_CODE_START ---
+--- MAP_CODE_END ---
+```
+
+markers, so it can be dragged directly onto `InstallMap.cmd`.
+
+The editor refuses invalid MAIN IDs below level 6 and surfaces export warnings before download instead of silently dropping unsupported content. Current runtime limitations are called out in the payload itself. In particular, the engine's `Door` type is horizontal-only, so a vertical smart door is exported as a valid open passage with a warning, and smart windows export as wall apertures because there is not yet a dedicated runtime glass/window entity.
+
+Player Start markers are preserved in the generated payload as source comments, but campaign spawn coordinates still come from `WorldDefinition.h`. The same `WorldDefinition.h` rule above therefore still applies when creating an entirely new campaign index.
