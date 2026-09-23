@@ -10,7 +10,7 @@ void Game::executeConsole(std::string command){
  for(auto&c:command)c=char(std::tolower(static_cast<unsigned char>(c)));
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
-  m_consoleLog.push_back("CUSTOM HORROR: MAP WASTELAND / MAP CUSTOM TO LOAD THE STITCHED SURFACE");
+  m_consoleLog.push_back("CUSTOM HORROR: MAP WASTELAND / MAP CUSTOM TO TEST SURFACE NETS TERRAIN");
   m_consoleLog.push_back("0 FOUNDRY / 1 PRESSUREWORKS / 2 GANTRY / 3 LIFT");
   m_consoleLog.push_back("4 SERVICE GALLERY / 5 COOLANT RETURN / MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");

@@ -332,7 +332,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   MeshVertex a{{face.a.x,face.a.y,face.a.z},face.a.u,face.a.v};
   MeshVertex b{{face.b.x,face.b.y,face.b.z},face.b.u,face.b.v};
   MeshVertex c{{face.c.x,face.c.y,face.c.z},face.c.u,face.c.v};
-  tri(a,b,c,m_concrete,.96f);
+  const Texture&terrainMaterial=face.material==1?m_pressureWall:face.material==2?m_floor:m_concrete;
+  // Keep the extracted facets visible. Material IDs come from the authored
+  // source voxels, matching the NoCubes idea of block material -> smooth skin.
+  tri(a,b,c,terrainMaterial,.96f);
  }
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.

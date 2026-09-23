@@ -42,7 +42,7 @@ bool Game::testWorldIsolation(){
  custom.m_chunks[0].world.m_scriptEvents.clear();custom.seedScripts();
  for(int level=0;level<ChunkCount;++level){
   out<<"Chunk "<<level<<'\n';custom.loadLevel(level,false);custom.updateStreaming(0);const auto&w=custom.world();
-  if(!check(w.outdoors()&&!w.hasLift()&&!w.insideLift(12,12)&&w.hasTerrain()&&w.terrain().size()==size_t(World::Width*World::Height*2)&&w.ceilingHeight(12,12)>100&&w.waterSurface(9,9)<-100&&w.particleEmitters().empty(),"Outdoor world owns terrain, sky clearance and no campaign-only systems"))return false;
+  if(!check(w.outdoors()&&!w.hasLift()&&!w.insideLift(12,12)&&w.hasTerrain()&&w.terrain().size()>200&&w.ceilingHeight(12,12)>100&&w.waterSurface(9,9)<-100&&w.particleEmitters().empty(),"Outdoor world owns terrain, sky clearance and no campaign-only systems"))return false;
   if(!check(w.lights().empty(),"Outdoor map has no unsupported ceiling lamps"))return false;
   if(!check(std::fabs(custom.player().z-w.floorHeight(custom.player().pos.x,custom.player().pos.y))<.001f&&custom.hullFits(custom.player().pos,custom.player().z,1),"Whole player hull starts on generated terrain"))return false;
   for(const auto&e:custom.enemies())if(!check(w.fits(e.pos.x,e.pos.y,e.z,e.bodyTop()-e.z),"Creature spawn fits geometry"))return false;
@@ -63,7 +63,7 @@ bool Game::testWorldIsolation(){
  if(!check(custom.decodeSave(campaignSave)&&custom.worldId()==WorldId::Campaign&&custom.world().campaign()&&!custom.m_scriptEvents.empty(),"Campaign save restores world in custom session"))return false;
  // Reloading unloaded geometry must use the owning world, not the last menu choice.
  campaign.m_chunks[0].world.unloadGeometry();campaign.m_chunks[0].resident=false;campaign.ensureChunk(0);
- if(!check(campaign.m_chunks[0].world.worldId()==WorldId::Ashfall&&campaign.m_chunks[0].world.hasTerrain()&&campaign.m_chunks[0].world.terrain().size()==size_t(World::Width*World::Height*2),"Unloaded custom terrain restores from correct world"))return false;
+ if(!check(campaign.m_chunks[0].world.worldId()==WorldId::Ashfall&&campaign.m_chunks[0].world.hasTerrain()&&campaign.m_chunks[0].world.terrain().size()>200,"Unloaded custom terrain restores from correct world"))return false;
  Game menu;menu.showTitleScreen();menu.m_titleSelection=1;InputState accept{};accept.menuAccept=true;menu.update(accept,.01f);menu.update({},.01f);menu.update(accept,.01f);
  if(!check(menu.worldId()==WorldId::Ashfall&&!menu.titleScreen(),"Title browser loads custom world"))return false;
  menu.showTitleScreen();menu.update(accept,.01f);
