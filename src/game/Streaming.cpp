@@ -7,17 +7,17 @@ void Game::ensureChunk(int level){
 }
 void Game::useDoor(int index){
  auto door=m_world.doors()[index];m_world.toggleDoor(index);bool opening=!door.opening;
- if(door.transfer&&m_level+1<ChunkCount){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,opening);}
+ if(door.transfer&&m_level+1<chunkCount()){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,opening);}
  if(door.entry&&m_level>0){ensureChunk(m_level-1);auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,opening);}
  sound(Sound::Door,.65f);
 }
 void Game::updateStreaming(float dt){
  if(m_worldId==WorldId::Ashfall){
   // Keep the 3x3 neighbourhood around the active outdoor chunk resident.
-  // With the current 3x2 Ashfall layout this is at most six tiny regions, but
-  // the rule scales without hard-coding level-number adjacency.
+  // Ashfall is now 4x3, so distant wasteland chunks unload while the surrounding
+  // horizon stays continuous across the same 24 m streaming seams.
   auto current=chunkOffset(m_level);
-  for(int level=0;level<ChunkCount;++level)if(level!=m_level){auto origin=chunkOffset(level);
+  for(int level=0;level<chunkCount();++level)if(level!=m_level){auto origin=chunkOffset(level);
    bool needed=std::fabs(origin.x-current.x)<=World::Width+.01f&&std::fabs(origin.y-current.y)<=World::Height+.01f;
    if(needed)ensureChunk(level);
    else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
@@ -28,10 +28,10 @@ void Game::updateStreaming(float dt){
  // opaque leaves fully close, then release static geometry, retaining state.
  for(int index=0;index<int(m_world.doors().size());++index){auto door=m_world.doors()[index];
   if(!door.opening&&door.open>0&&m_player.pos.x>door.left-.25f&&m_player.pos.x<door.right+.25f&&std::fabs(m_player.pos.y-door.y)<.55f){m_world.openDoor(index);door=m_world.doors()[index];}
-  if(door.transfer&&m_level+1<ChunkCount){auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,door.opening);}
+  if(door.transfer&&m_level+1<chunkCount()){auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,door.opening);}
   if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
  }
- for(int level=0;level<ChunkCount;++level)if(level!=m_level){bool needed=false;
+ for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=false;
   if(level==m_level+1){
    needed=m_world.openSouthBoundary();
    if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().back();needed=d.transfer&&(d.opening||d.open>0);}
