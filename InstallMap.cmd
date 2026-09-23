@@ -42,15 +42,29 @@ echo.
 echo ---------------------------------------------------------------------
 echo  SELECT INSTALLATION DESTINATION:
 echo ---------------------------------------------------------------------
-echo   [1] Install into Main Campaign ^(World.cpp + rebuild^)
-echo   [2] Install into Custom Map Vault ^(archive payload only^)
-echo   [3] Abort Installation
+echo   [1] Install using META_DEFAULT_TARGET ^(recommended^)
+echo   [2] Install into Main Campaign ^(World.cpp + rebuild^)
+echo   [3] Install as Playable Custom Campaign ^(no rebuild^)
+echo   [4] Abort Installation
 echo ---------------------------------------------------------------------
-choice /c 123 /n /m " Select target destination [1, 2, or 3]: "
+choice /c 1234 /n /m " Select target destination [1, 2, 3, or 4]: "
 
-if errorlevel 3 goto :ABORT
-if errorlevel 2 goto :INSTALL_CUSTOM
-if errorlevel 1 goto :INSTALL_MAIN
+if errorlevel 4 goto :ABORT
+if errorlevel 3 goto :INSTALL_CUSTOM
+if errorlevel 2 goto :INSTALL_AUTO
+echo.
+echo [*] Installing according to META_DEFAULT_TARGET...
+powershell -NoProfile -ExecutionPolicy Bypass -File "tools\InstallMap.ps1" -Payload "%PAYLOAD_FILE%" -Mode Auto
+if errorlevel 1 (
+    echo [!] Automatic map installation failed.
+    popd
+    pause
+    exit /b 1
+)
+goto :END
+
+:INSTALL_MAIN
+if errorlevel 1 goto :INSTALL_AUTO
 
 :INSTALL_MAIN
 echo.
@@ -83,7 +97,7 @@ goto :END
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "tools\InstallMap.ps1" -Payload "%PAYLOAD_FILE%" -Mode Custom
 if errorlevel 1 (
-    echo [!] Custom-map archive failed.
+    echo [!] Custom campaign installation failed.
     popd
     pause
     exit /b 1
