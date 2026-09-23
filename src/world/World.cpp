@@ -692,8 +692,15 @@ float World::terrainHeight(float x,float y)const{
  int x0=std::min(Width-1,int(std::floor(x))),y0=std::min(Height-1,int(std::floor(y)));
  int x1=x0+1,y1=y0+1;float tx=x-x0,ty=y-y0;
  auto h=[&](int px,int py){return m_terrainHeights[size_t(py*(Width+1)+px)];};
- float north=h(x0,y0)*(1-tx)+h(x1,y0)*tx,south=h(x0,y1)*(1-tx)+h(x1,y1)*tx;
- return north*(1-ty)+south*ty;
+ float a=h(x0,y0),b=h(x1,y0),c=h(x1,y1),d=h(x0,y1);
+ // Match the exact two triangles emitted by buildTerrain(), not a separate
+ // bilinear approximation. Feet therefore touch the same faceted surface seen.
+ if((x0+y0)&1){
+  if(tx+ty<=1.f)return a*(1-tx-ty)+b*tx+d*ty;
+  return b*(1-ty)+c*(tx+ty-1.f)+d*(1-tx);
+ }
+ if(ty<=tx)return a*(1-tx)+b*(tx-ty)+c*ty;
+ return a*(1-ty)+c*tx+d*(ty-tx);
 }
 float World::floorHeight(float x,float y)const{
  if(outdoors())return hasTerrain()?terrainHeight(x,y):(m_layers.empty()?0.f:m_layers.front().elevation);
