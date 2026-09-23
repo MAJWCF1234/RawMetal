@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <memory>
+#include <string>
 #include <string_view>
 #include <span>
 #include <vector>
@@ -59,6 +61,49 @@ struct Staircase {
     bool alongY,ascending;
 };
 
+// Runtime-authored campaign data. The browser editor writes these records into
+// the same .txt payload used by InstallMap.cmd, so a player can drop a complete
+// campaign into /custom maps without compiling or editing WorldDefinition.h.
+struct CustomLayerData {
+    std::string name;
+    float elevation=0,thickness=0;
+    std::array<std::string,24> rows{};
+};
+struct CustomTerminalData {
+    Vec2 position{};
+    std::string title,line1,line2;
+    float z=0;
+    bool control=false;
+};
+struct CustomMapData {
+    std::string name;
+    std::string skybox="industrial_night";
+    ChunkDefinition definition{};
+    bool openNorth=false,openSouth=false,openWest=false,openEast=false;
+    std::vector<CustomLayerData> layers;
+    std::vector<Door> doors;
+    std::vector<WorldProp> props;
+    std::vector<Fixture> fixtures;
+    std::vector<PipeRun> pipes;
+    std::vector<WorldLight> lights;
+    std::vector<CreatureSpawn> creatureSpawns;
+    std::vector<PickupSpawn> pickupSpawns;
+    std::vector<ClutterSpawn> clutterSpawns;
+    std::vector<WaterVolume> waterVolumes;
+    std::vector<Hazard> hazards;
+    std::vector<Compactor> compactors;
+    std::vector<Structure> structures;
+    std::vector<Staircase> stairs;
+    std::vector<CustomTerminalData> terminals;
+};
+struct CustomCampaign {
+    std::string name;
+    std::string sourceFile;
+    std::uint64_t key=0;
+    int startMap=0;
+    std::vector<std::shared_ptr<const CustomMapData>> maps;
+};
+
 class World {
 public:
     static constexpr int Width = 24;
@@ -69,16 +114,18 @@ public:
     static constexpr int TerrainMaxZ = 20;
 
     explicit World(int level=0,WorldId id=WorldId::Campaign);
+    World(int level,std::shared_ptr<const CustomMapData> customMap);
     const std::vector<MapLayer>& layers()const{return m_layers;}
     int level()const{return m_level;}
     WorldId worldId()const{return m_worldId;}
     bool campaign()const{return m_worldId==WorldId::Campaign;}
+    bool custom()const{return m_worldId==WorldId::Custom;}
     bool campaignChunk(int index)const{return campaign()&&m_level==index;}
-    const ChunkDefinition& definition()const{return chunkDefinition(m_worldId,m_level);}
+    const ChunkDefinition& definition()const{return m_customMap?m_customMap->definition:chunkDefinition(m_worldId,m_level);}
     bool outdoors()const{return definition().environment==Environment::Outdoor;}
     bool hasLift()const{return definition().lift;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
-    const char* skyboxId()const{return horrorMode()?"brutal_wasteland":"industrial_night";}
+    const char* skyboxId()const{return m_customMap?m_customMap->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
     bool openSouthBoundary()const{return m_openSouthBoundary;}
     bool openWestBoundary()const{return m_openWestBoundary;}
@@ -157,6 +204,7 @@ private:
     float m_internalWallHeight=0;
     int m_level=0;
     WorldId m_worldId=WorldId::Campaign;
+    std::shared_ptr<const CustomMapData> m_customMap;
     bool m_openNorthBoundary=false,m_openSouthBoundary=false,m_openWestBoundary=false,m_openEastBoundary=false;
     std::vector<WorldProp> m_props;
     std::vector<Fixture> m_fixtures;
