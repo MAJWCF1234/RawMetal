@@ -708,40 +708,129 @@ void World::buildLights(){
  for(int y=1;y<Height-1;y+=4)for(int x=2;x<Width-1;x+=5)if(tile(x,y)!='#')
   for(const auto&span:spansAt(x,y))if(span.ceiling-span.floor>1.8f)m_lights.push_back({{x+.5f,y+.35f},span.ceiling-.15f});
 }
+std::size_t World::terrainSampleIndex(int sx,int sy,int sz)const{
+ return size_t((sz*TerrainSamplesY+sy)*TerrainSamplesX+sx);
+}
 void World::buildTerrain(){
  m_terrain.clear();
+ const size_t samples=size_t(TerrainSamplesX)*TerrainSamplesY*TerrainSamplesZ;
+ m_terrainDensity.assign(samples,0);m_terrainMaterial.assign(samples,0);
  const auto origin=definition().origin;
- for(int y=0;y<=Height;++y)for(int x=0;x<=Width;++x)
-  m_terrainHeights[size_t(y*(Width+1)+x)]=ashfallHeight(origin.x+x,origin.y+y);
+ for(int sz=0;sz<TerrainSamplesZ;++sz)for(int sy=0;sy<TerrainSamplesY;++sy)for(int sx=0;sx<TerrainSamplesX;++sx){
+  float lx=float(sx-TerrainBorder),ly=float(sy-TerrainBorder),z=float(TerrainMinZ-1+sz);
+  float wx=origin.x+lx,wy=origin.y+ly;
+  float d=authoredAshfallDensity(wx,wy,z);
+  m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=std::int8_t(std::clamp(int(std::lround(d*32.f)),-127,127));
+  m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=authoredAshfallMaterial(wx,wy,z);
+ }
 
- // The source field is metre-spaced like a voxel surface, then emitted as a
- // faceted triangle mesh. Alternating diagonals keep long slopes from reading
- // as one repeated grid direction while retaining exact seam vertices.
- m_terrain.reserve(Width*Height*2);
- for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){
-  auto v=[&](int px,int py){float z=m_terrainHeights[size_t(py*(Width+1)+px)];return TerrainVertex{float(px),float(py),z,float(origin.x+px)*.18f,float(origin.y+py)*.18f};};
-  auto a=v(x,y),b=v(x+1,y),c=v(x+1,y+1),d=v(x,y+1);
-  if((x+y)&1){m_terrain.push_back({a,b,d});m_terrain.push_back({b,c,d});}
-  else {m_terrain.push_back({a,b,c});m_terrain.push_back({a,c,d});}
+ constexpr int corner[8][3]={{0,0,0},{1,0,0},{0,1,0},{1,1,0},{0,0,1},{1,0,1},{0,1,1},{1,1,1}};
+ constexpr int edges[12][2]={{0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7}};
+ constexpr int cellsX=TerrainSamplesX-1,cellsY=TerrainSamplesY-1,cellsZ=TerrainSamplesZ-1;
+ auto cellSlot=[](int cx,int cy,int cz){return size_t((cz*cellsY+cy)*cellsX+cx);};
+ std::vector<int> cellVertex(size_t(cellsX)*cellsY*cellsZ,-1);
+ std::vector<TerrainVertex> vertices;
+ std::vector<std::uint8_t> materials;
+ vertices.reserve(Width*Height*10);materials.reserve(Width*Height*10);
+ auto sample=[&](int x,int y,int z){
+  int sx=x+TerrainBorder,sy=y+TerrainBorder,sz=z-(TerrainMinZ-1);
+  return float(m_terrainDensity[terrainSampleIndex(sx,sy,sz)])/32.f;
+ };
+ auto sampleMaterial=[&](int x,int y,int z){
+  int sx=x+TerrainBorder,sy=y+TerrainBorder,sz=z-(TerrainMinZ-1);
+  return m_terrainMaterial[terrainSampleIndex(sx,sy,sz)];
+ };
+ auto cellIndex=[&](int x,int y,int z)->int{
+  if(x<-1||x>Width||y<-1||y>Height||z<TerrainMinZ-1||z>TerrainMaxZ)return -1;
+  return cellVertex[cellSlot(x+1,y+1,z-(TerrainMinZ-1))];
+ };
+
+ // Surface Nets: each mixed voxel cell owns one vertex at the average of its
+ // edge intersections. This is the NoCubes-style "blocks authored, cubes gone"
+ // representation we want to carry into Dark Below.
+ for(int cz=0;cz<cellsZ;++cz)for(int cy=0;cy<cellsY;++cy)for(int cx=0;cx<cellsX;++cx){
+  int x=cx-1,y=cy-1,z=TerrainMinZ-1+cz;float d[8];bool positive=false,negative=false;
+  for(int i=0;i<8;++i){d[i]=sample(x+corner[i][0],y+corner[i][1],z+corner[i][2]);positive|=d[i]>0;negative|=d[i]<=0;}
+  if(!positive||!negative)continue;
+  float px=0,py=0,pz=0;int crossings=0;std::uint8_t material=0;float strongest=0;
+  for(int i=0;i<8;++i)if(d[i]>strongest){strongest=d[i];material=sampleMaterial(x+corner[i][0],y+corner[i][1],z+corner[i][2]);}
+  for(const auto&e:edges){
+   int a=e[0],b=e[1];if((d[a]>0)==(d[b]>0))continue;
+   float t=d[a]/(d[a]-d[b]);
+   px+=x+corner[a][0]+(corner[b][0]-corner[a][0])*t;
+   py+=y+corner[a][1]+(corner[b][1]-corner[a][1])*t;
+   pz+=z+corner[a][2]+(corner[b][2]-corner[a][2])*t;
+   ++crossings;
+  }
+  if(!crossings)continue;
+  float inv=1.f/crossings;TerrainVertex v{px*inv,py*inv,pz*inv,(origin.x+px*inv)*.18f,(origin.y+py*inv)*.18f};
+  int index=int(vertices.size());vertices.push_back(v);materials.push_back(material);cellVertex[cellSlot(cx,cy,cz)]=index;
+ }
+ auto emit=[&](int ia,int ib,int ic,int id,float nx,float ny,float nz,std::uint8_t material){
+  if(ia<0||ib<0||ic<0||id<0)return;
+  auto a=vertices[size_t(ia)],b=vertices[size_t(ib)],c=vertices[size_t(ic)],d=vertices[size_t(id)];
+  float ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z,vx=c.x-a.x,vy=c.y-a.y,vz=c.z-a.z;
+  float cx=uy*vz-uz*vy,cy=uz*vx-ux*vz,cz=ux*vy-uy*vx;
+  if(cx*nx+cy*ny+cz*nz>=0){m_terrain.push_back({a,b,c,material});m_terrain.push_back({a,c,d,material});}
+  else {m_terrain.push_back({a,d,c,material});m_terrain.push_back({a,c,b,material});}
+ };
+ // A sign-changing grid edge joins the four neighbouring Surface-Net cells.
+ // Edge ownership is half-open in X/Y, so adjacent streamed chunks generate
+ // matching seam vertices without drawing duplicate seam faces.
+ for(int z=TerrainMinZ;z<=TerrainMaxZ;++z)for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){
+  float a=sample(x,y,z),b=sample(x+1,y,z);if((a>0)!=(b>0)){
+   auto mat=a>0?sampleMaterial(x,y,z):sampleMaterial(x+1,y,z);float n=a>0?1.f:-1.f;
+   emit(cellIndex(x,y-1,z-1),cellIndex(x,y,z-1),cellIndex(x,y,z),cellIndex(x,y-1,z),n,0,0,mat);
+  }
+  a=sample(x,y,z);b=sample(x,y+1,z);if((a>0)!=(b>0)){
+   auto mat=a>0?sampleMaterial(x,y,z):sampleMaterial(x,y+1,z);float n=a>0?1.f:-1.f;
+   emit(cellIndex(x-1,y,z-1),cellIndex(x-1,y,z),cellIndex(x,y,z),cellIndex(x,y,z-1),0,n,0,mat);
+  }
+  if(z<TerrainMaxZ){a=sample(x,y,z);b=sample(x,y,z+1);if((a>0)!=(b>0)){
+   auto mat=a>0?sampleMaterial(x,y,z):sampleMaterial(x,y,z+1);float n=a>0?1.f:-1.f;
+   emit(cellIndex(x-1,y-1,z),cellIndex(x,y-1,z),cellIndex(x,y,z),cellIndex(x-1,y,z),0,0,n,mat);
+  }}
  }
 }
-float World::terrainHeight(float x,float y)const{
- x=std::clamp(x,0.f,float(Width));y=std::clamp(y,0.f,float(Height));
- int x0=std::min(Width-1,int(std::floor(x))),y0=std::min(Height-1,int(std::floor(y)));
- int x1=x0+1,y1=y0+1;float tx=x-x0,ty=y-y0;
- auto h=[&](int px,int py){return m_terrainHeights[size_t(py*(Width+1)+px)];};
- float a=h(x0,y0),b=h(x1,y0),c=h(x1,y1),d=h(x0,y1);
- // Match the exact two triangles emitted by buildTerrain(), not a separate
- // bilinear approximation. Feet therefore touch the same faceted surface seen.
- if((x0+y0)&1){
-  if(tx+ty<=1.f)return a*(1-tx-ty)+b*tx+d*ty;
-  return b*(1-ty)+c*(tx+ty-1.f)+d*(1-tx);
+float World::terrainDensity(float x,float y,float z)const{
+ if(m_terrainDensity.empty())return -1;
+ float sx=std::clamp(x+TerrainBorder,0.f,float(TerrainSamplesX-1));
+ float sy=std::clamp(y+TerrainBorder,0.f,float(TerrainSamplesY-1));
+ float sz=std::clamp(z-float(TerrainMinZ-1),0.f,float(TerrainSamplesZ-1));
+ int x0=std::min(TerrainSamplesX-2,int(std::floor(sx))),y0=std::min(TerrainSamplesY-2,int(std::floor(sy))),z0=std::min(TerrainSamplesZ-2,int(std::floor(sz)));
+ int x1=x0+1,y1=y0+1,z1=z0+1;float tx=sx-x0,ty=sy-y0,tz=sz-z0;
+ auto d=[&](int ix,int iy,int iz){return float(m_terrainDensity[terrainSampleIndex(ix,iy,iz)])/32.f;};
+ auto mix=[](float a,float b,float t){return a+(b-a)*t;};
+ float a=mix(d(x0,y0,z0),d(x1,y0,z0),tx),b=mix(d(x0,y1,z0),d(x1,y1,z0),tx);
+ float c=mix(d(x0,y0,z1),d(x1,y0,z1),tx),e=mix(d(x0,y1,z1),d(x1,y1,z1),tx);
+ return mix(mix(a,b,ty),mix(c,e,ty),tz);
+}
+float World::terrainSurfaceBelow(float x,float y,float feet)const{
+ if(m_terrainDensity.empty())return 0;
+ float high=std::min(feet+.04f,float(TerrainMaxZ+1)),highD=terrainDensity(x,y,high);
+ for(float low=high-.125f;low>=TerrainMinZ-1;low-=.125f){
+  float lowD=terrainDensity(x,y,low);
+  if(highD<=0&&lowD>0){
+   float solid=low,air=high;for(int i=0;i<8;++i){float mid=(solid+air)*.5f;if(terrainDensity(x,y,mid)>0)solid=mid;else air=mid;}return (solid+air)*.5f;
+  }
+  high=low;highD=lowD;
  }
- if(ty<=tx)return a*(1-tx)+b*(tx-ty)+c*ty;
- return a*(1-ty)+c*tx+d*(ty-tx);
+ return float(TerrainMinZ-1);
+}
+float World::terrainSurfaceAbove(float x,float y,float feet)const{
+ if(m_terrainDensity.empty())return 128.f;
+ float low=feet+.03f,lowD=terrainDensity(x,y,low);if(lowD>0)return feet;
+ for(float high=low+.125f;high<=TerrainMaxZ+1;high+=.125f){
+  float highD=terrainDensity(x,y,high);
+  if(lowD<=0&&highD>0){
+   float air=low,solid=high;for(int i=0;i<8;++i){float mid=(air+solid)*.5f;if(terrainDensity(x,y,mid)>0)solid=mid;else air=mid;}return (air+solid)*.5f;
+  }
+  low=high;lowD=highD;
+ }
+ return 128.f;
 }
 float World::floorHeight(float x,float y)const{
- if(outdoors())return hasTerrain()?terrainHeight(x,y):(m_layers.empty()?0.f:m_layers.front().elevation);
+ if(outdoors())return hasTerrain()?terrainSurfaceBelow(x,y,float(TerrainMaxZ+1)):(m_layers.empty()?0.f:m_layers.front().elevation);
  for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2){
   float shore=std::min({x-water.x1,water.x2-x,y-water.y1,water.y2-y});
   return -9.f+(water.bed+9.f)*std::clamp(shore/.85f,0.f,1.f);
