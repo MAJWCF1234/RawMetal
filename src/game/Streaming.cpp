@@ -74,7 +74,8 @@ bool Game::testStreaming(){
 
  // Ashfall uses the same resident-chunk renderer/collision path in two axes.
  Game ash(WorldId::Ashfall);
- if(!ash.chunkResident(1)||!ash.chunkResident(3)||!ash.chunkResident(4)||ash.chunkResident(2))return fail(16);
+ if(ash.world().terrain().size()!=size_t(World::Width*World::Height*2))return fail(16);
+ if(!ash.chunkResident(1)||!ash.chunkResident(3)||!ash.chunkResident(4)||ash.chunkResident(2))return fail(22);
  float eastA=ash.world().floorHeight(23.999f,12),eastB=ash.m_chunks[1].world.floorHeight(.001f,12);
  if(std::fabs(eastA-eastB)>.01f)return fail(17);
  ash.m_player.pos={24.10f,12.f};ash.crossChunkBoundary();
