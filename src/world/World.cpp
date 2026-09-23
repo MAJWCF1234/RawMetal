@@ -567,125 +567,77 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
   if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
-  // Concrete bay walls, real overhead transfer beams and pipe supports frame
-  // the service route. All structural solids share collision and rendering.
+  // Distinct rooms branch off a generous dry service route. Equipment is the
+  // purchased, proportion-preserving model, not a box or a scaled duct fitting.
   const float roof=m_level==4?2.9f:3.4f;
   auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
-  for(float y:{3.8f,12.3f,20.2f}){
-   m_structures.push_back({1.2f,y,22.8f,y+.22f,roof-.54f,roof-.32f,false,2});
-   for(float x:{1.2f,22.4f})m_structures.push_back({x,y-.15f,x+.38f,y+.37f,0,roof-.32f,false,3});
-  }
+  auto shelf=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({7,{x,y},0,1.8f,.5f,1.8f,yaw,true});};
+  auto machine=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({12,{x,y},0,3.060f,.940f,1.751f,yaw,true});};
+  auto switchgear=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({13,{x,y},0,.9066f,.4956f,2.2f,yaw,true});};
+  auto tank=[&](float x,float y){m_fixtures.push_back({14,{x,y},0,2.404f,2.645f,2.2f,0,true});};
   if(m_level==4){
-   // A clear receiving lobby spans the reactor door before the bay dividers.
-   for(float x:{6.8f,16.8f}){wall(x,3,x+.25f,8.5f);wall(x,11.5f,x+.25f,17.5f);wall(x,20.5f,x+.25f,24);}
-   // Bolted cable trays follow the actual bay dividers rather than floating
-   // in space. Shallow steel service crossings break up the long floor run.
-   for(float y:{3.f,12.f,21.f}){
-    float end=y==3.f?8.f:y==12.f?17.f:23.f;
-    m_structures.push_back({7.04f,y,7.14f,end,1.92f,2.07f,false,2});
-    m_structures.push_back({16.70f,y,16.82f,end,1.92f,2.07f,false,2});
-    for(float bracket=y+.8f;bracket<end;bracket+=2.1f){
-     m_structures.push_back({7.02f,bracket,7.25f,bracket+.14f,1.62f,2.07f,false,2});
-     m_structures.push_back({16.59f,bracket,16.84f,bracket+.14f,1.62f,2.07f,false,2});
-    }
-   }
-   for(float y:{7.55f,15.85f})m_structures.push_back({7.3f,y,16.65f,y+.3f,0,.055f,false,2});
-   // Cross aisles link all three galleries; bay dividers meet the outer walls.
-   for(float y:{8.25f,17.25f}){wall(1,y,4.5f,y+.25f);wall(19.5f,y,23,y+.25f);}
-   // Pump workshop has a personnel doorway onto the first cross aisle.
-   wall(5.9f,8.25f,6.8f,8.5f);
-   Door workshopDoor{4.5f,5.9f,8.375f};workshopDoor.swinging=true;
-   m_doors.push_back(workshopDoor);
-   m_structures.push_back({4.5f,8.25f,5.9f,8.5f,2.55f,roof,false,3});
-   wall(7.05f,14,10.5f,14.25f);wall(13.5f,14,16.8f,14.25f);
-   m_props={{0,{3.1f,5.3f},1.35f,2.2f,0,{1.1f,.66f},0},
-            {1,{14.7f,17.f},1.12f,2.f,kPi*.5f,{.31f,1.f},0},
-            {0,{20.5f,14.f},1.35f,2.2f,kPi,{1.1f,.66f},0},
-            {1,{3.2f,21.2f},1.12f,2.f,kPi*.5f,{.31f,1.f},0},
-            {0,{20.5f,5.9f},1.35f,2.2f,0,{1.1f,.66f},0}};
-   m_fixtures={{7,{1.8f,10.f},0,2,.5f,1.8f,kPi*.5f,true},
-               {7,{1.8f,15.3f},0,2,.5f,1.8f,kPi*.5f,true},
-               {8,{22.89f,18.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
-   m_terminals={{{8.f,4.2f},"REACTOR SERVICE / GALLERY 05","MAINTENANCE ROUTE BELOW REACTOR.","RETURN LINE ACCESS / KEEP CLEAR.",0,false},
-                {{20.2f,12.f},"CABLE GALLERY / HIGH VOLTAGE","BUS BARS LIVE ALONG THE TRAYS.","KEEP CLEAR OF THE DIVIDER RAILS.",0,false}};
-   // Authored maintenance machinery gives each bay a purpose and cover. Skids,
-   // control cabinets and coolant manifolds are floor-anchored solids (shifted
-   // to reactor elevation below); they sit inside bays, clear of the aisles.
-   for(auto skid:{Structure{4.55f,2.15f,5.65f,3.15f,0,1.0f,false,6},   // west-upper pump skid
-                  Structure{18.35f,2.15f,19.45f,3.05f,0,1.15f,false,6}, // east-upper control cabinet
-                  Structure{8.35f,3.15f,9.45f,4.45f,0,1.25f,false,6},   // middle-upper coolant manifold (west of spine)
-                  Structure{14.55f,3.15f,15.65f,4.45f,0,1.25f,false,6}, // middle-upper coolant manifold (east of spine)
-                  Structure{4.35f,13.35f,5.55f,14.45f,0,1.05f,false,6}, // mid-west junction box
-                  Structure{18.45f,13.35f,19.65f,14.45f,0,1.05f,false,6}, // mid-east junction box
-                  Structure{4.35f,21.55f,5.35f,22.45f,0,.85f,false,3},  // lower-west crate cover
-                  Structure{18.65f,21.55f,19.65f,22.45f,0,.85f,false,3}}) // lower-east crate cover
-    m_structures.push_back(skid);
-   // Extra authored props and wall equipment dress the galleries.
-   m_props.push_back({1,{20.4f,15.6f},1.12f,2.f,kPi*.5f,{.31f,1.f},0}); // east-mid standpipe
-   m_props.push_back({0,{5.0f,15.5f},1.35f,2.2f,0,{1.1f,.66f},0});      // west-mid generator
-   m_props.push_back({1,{9.3f,16.4f},1.12f,2.f,0,{.31f,.31f},0});       // middle-south standpipe (west of spine)
-   m_fixtures.push_back({7,{1.8f,2.2f},0,1.8f,.5f,1.8f,kPi*.5f,true});
-   m_fixtures.push_back({8,{22.89f,3.2f},.8f,.7f,.2f,1.f,kPi*.5f,true}); // east-wall cabinet
-   m_fixtures.push_back({6,{20.3f,21.2f},0,1.87f,.55f,.99f,kPi*.5f,true}); // east-lower machine
-   // Live bus bars run beside the two cable-tray dividers. The zones are off
-   // the walkable galleries; brushing the trays hurts but never blocks a route.
-   m_hazards.push_back({Hazard::Kind::Electricity,6.55f,3.f,7.35f,7.f,-9.f,-7.6f,12.f});
-   m_hazards.push_back({Hazard::Kind::Electricity,16.55f,12.5f,17.35f,16.5f,-9.f,-7.6f,12.f});
-   // Spark and dust wisps read as live electrical service; purely visual.
-   m_particleEmitters.push_back({{7.1f,5.0f},-7.0f,{0.f,0.f},.6f,.5f,.05f,.15f,5});
-   m_particleEmitters.push_back({{16.75f,14.f},-7.0f,{0.f,0.f},.6f,.5f,.05f,.15f,5});
-   // Accent lights over the added machinery.
-   for(Vec2 p:{Vec2{5.f,2.6f},Vec2{19.f,2.6f},Vec2{5.f,14.f},Vec2{19.f,14.f}})m_lights.push_back({p,-6.3f});
+   // Receiving lobby -> workshop / electrical room -> stores / plant room.
+   // Side openings connect the rooms back into the route, avoiding dead ends.
+   wall(1,4.5f,4.5f,4.75f);wall(5.9f,4.5f,9,4.75f);
+   wall(8.75f,4.75f,9,8.5f);wall(8.75f,11,9,13.25f);
+   wall(1,13,9,13.25f);
+   Door workshop{4.5f,5.9f,4.625f};workshop.swinging=true;m_doors.push_back(workshop);
+   m_structures.push_back({4.5f,4.5f,5.9f,4.75f,2.55f,roof,false,3});
+   // Switchgear room: cabinets against the outer wall, clear maintenance aisle.
+   wall(16,4.5f,19,4.75f);wall(21,4.5f,23,4.75f);
+   wall(16,4.75f,16.25f,8);wall(16,10.5f,16.25f,13.25f);
+   wall(16,13,23,13.25f);
+   for(float y:{6.f,7.5f,9.f,10.5f,12.f})switchgear(22.55f,y,kPi*.5f);
+   machine(4.6f,7.3f);machine(4.6f,11.5f);
+   shelf(1.65f,9.3f,kPi*.5f);shelf(7.9f,6.3f,kPi*.5f);
+   // Stores has a broad loading opening from the cross aisle and a side exit.
+   wall(1,16,4,16.25f);wall(7,16,9,16.25f);
+   wall(8.75f,16.25f,9,20);wall(8.75f,22,9,24);
+   shelf(1.65f,18,kPi*.5f);shelf(1.65f,21,kPi*.5f);
+   shelf(5.3f,23.2f);shelf(7.7f,18,kPi*.5f);
+   // The lower utility bay is open to the transfer apron, with actual generators.
+   wall(16,16,23,16.25f);wall(16,16.25f,16.25f,19);
+   for(float y:{18.f,21.f})m_fixtures.push_back({6,{21.3f,y},0,1.87f,.55f,.99f,0,true});
+   switchgear(17.5f,17.f);switchgear(18.9f,17.f);
+   m_terminals={{{14.4f,3.4f},"SERVICE GALLERY / WORK ORDER","PUMP ASSEMBLY MOVED TO WEST WORKSHOP.","ELECTRICAL ROOM MUST REMAIN DRY.",0,false}};
+   // Ceiling cable containment follows the central route and enters the electrical room.
+   m_structures.push_back({14.7f,1,15.1f,23,2.45f,2.57f,false,2});
+   m_structures.push_back({15.1f,6.2f,22.7f,6.6f,2.45f,2.57f,false,2});
+   for(float y:{2.f,6.f,10.f,14.f,18.f,22.f})
+    m_structures.push_back({14.87f,y,14.93f,y+.06f,2.57f,roof,false,2});
+   for(Vec2 p:{Vec2{5,9},Vec2{19,9},Vec2{5,20},Vec2{19,20}})m_lights.push_back({p,-6.25f});
   }else{
-   // Shallow ramps on all sides let the player walk out of either flooded
-   // trench. The middle bridge and both cross aisles remain dry.
+   // Two longitudinal return channels, each interrupted by a dry cross bridge.
+   // The central route and both outer equipment aisles connect at either end.
    m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-9.045f},
                    {13.75f,7.8f,16.75f,10.7f,-9.40f,-9.045f},
-                   {7.25f,14.2f,10.25f,17.2f,-9.40f,-9.045f},
-                   {13.75f,14.2f,16.75f,17.2f,-9.40f,-9.045f}};
-   // A dry central bridge runs between wet return trenches, flanked by pump bays.
-   for(float x:{6.8f,17.f}){wall(x,0,x+.25f,5.f);wall(x,8.f,x+.25f,11.f);wall(x,14.f,x+.25f,18.f);wall(x,21.f,x+.25f,23);}
-   for(float y:{10.75f,17.75f}){wall(1,y,4.5f,y+.25f);wall(19.5f,y,23,y+.25f);}
-   // One continuous raised grated spine reads as a bridge above four basins.
-   m_structures.push_back({10.5f,6.f,13.5f,19.f,0,.045f,false,2});
-   for(float y:{7.95f,14.35f})for(float x:{10.42f,13.50f})
-    m_structures.push_back({x,y,x+.08f,y+2.55f,.045f,.76f,true,2});
-   m_props={{0,{3.f,5.3f},1.5f,2.5f,0,{1.25f,.75f},0},
-            {0,{20.5f,11.8f},1.5f,2.5f,kPi,{1.25f,.75f},0},
-            {1,{3.f,16.f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0},
-            {0,{3.4f,21.2f},1.5f,2.5f,0,{1.25f,.75f},0}};
-   // Low curbs and supported safety rails outline flooded returns without
-   // covering their four sloped entry/exit ends.
-   for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2}){
+                   {7.25f,12.4f,10.25f,18.f,-9.40f,-9.045f},
+                   {13.75f,12.4f,16.75f,18.f,-9.40f,-9.045f}};
+   // A solid landing hosts the inlet vessels; the hall beyond is open, not partitioned.
+   tank(4.f,4.4f);tank(20.f,4.4f);
+   for(float y:{9.f,15.5f}){machine(3.8f,y,kPi*.5f);machine(20.2f,y,kPi*.5f);}
+   for(float x:{10.45f,13.45f})for(auto ends:{Vec2{8,10.5f},Vec2{12.6f,17.8f}})
+    m_structures.push_back({x,ends.x,x+.10f,ends.y,0,.9f,true,2});
+   for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2})
     m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
+   // Every header is authored with this hall and visibly hung from its ceiling.
+   for(float x:{3.8f,20.2f})m_pipes.push_back({{x,3.2f},{x,15.5f},-6.3f,.14f});
+   m_pipes.push_back({{3.8f,3.2f},{20.2f,3.2f},-6.3f,.14f});
+   for(float x:{3.8f,20.2f}){
+    m_pipes.push_back({{x,4.4f},{x,4.4f},-6.3f,.14f,-6.85f});
+    for(float y:{9.f,15.5f})m_pipes.push_back({{x,y},{x,y},-6.3f,.09f,-7.3f});
    }
-   m_fixtures={{7,{1.9f,19.3f},0,2,.5f,1.8f,kPi*.5f,true},
-               {8,{22.89f,5.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}};
-   // Rear service store: the old sealed panel led nowhere. A personnel door
-   // now opens into an actual enclosed bay within this chunk.
-   wall(17.25f,20.65f,19.05f,20.87f);
-   wall(20.45f,20.65f,22.85f,20.87f);
-   wall(17.25f,22.85f,22.85f,23.08f);
-   wall(17.25f,20.87f,17.47f,22.85f);
+   // Rear service store retains a real door, its swing and a usable interior.
+   wall(17.25f,20.65f,19.05f,20.87f);wall(20.45f,20.65f,22.85f,20.87f);
+   wall(17.25f,22.85f,22.85f,23.08f);wall(17.25f,20.87f,17.47f,22.85f);
    m_structures.push_back({19.05f,20.65f,20.45f,20.87f,2.55f,roof,false,3});
-   Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;
-   m_doors.push_back(storeDoor);
+   Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;m_doors.push_back(storeDoor);
    m_fixtures.push_back({7,{21.4f,22.48f},0,1.6f,.48f,1.8f,0,true});
    m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
-   m_clutterSpawns.push_back({3,{21.1f,21.8f}});
-   m_clutterSpawns.push_back({2,{18.5f,21.7f}});
-   m_terminals={{{18.f,4.2f},"COOLANT RETURN / SECTOR 06","RETURN PRESSURE: NOMINAL.","PUMP ACCESS ALONG THE OUTER AISLES.",0,false},
-                {{5.5f,7.5f},"01 / COOLANT FEED","FEED PRESSURE NOMINAL.","VALVE LOCKED - SEE SECTOR CONTROL.",0,false},
-                {{18.5f,17.5f},"02 / COOLANT RETURN","SETTLING CHANNELS / RECIRCULATION.","ISOLATE PUMPS BEFORE SERVICING.",0,false}};
-   // Settling basins have a quiet liquid surface, not upward fountain emitters.
-   // Pump-bay machinery flanks the returns without narrowing the dry margins.
-   m_props.push_back({1,{5.4f,9.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});   // west-upper feed standpipe
-   m_props.push_back({1,{18.6f,9.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});  // east-upper return standpipe
-   m_props.push_back({0,{18.6f,15.8f},1.5f,2.5f,kPi,{1.25f,.75f},0});    // east-lower return pump
-   m_fixtures.push_back({6,{4.75f,12.5f},0,1.6f,.5f,.9f,kPi*.5f,true});  // west-mid coolant pump
-   m_fixtures.push_back({8,{22.89f,15.5f},.8f,.7f,.2f,1.f,kPi*.5f,true}); // east-wall control cabinet
-   // Walkway and basin lighting.
-   for(Vec2 p:{Vec2{12.f,6.f},Vec2{12.f,12.f},Vec2{12.f,18.f},Vec2{5.f,12.5f},Vec2{19.f,12.5f}})m_lights.push_back({p,-5.75f});
+   m_clutterSpawns.push_back({3,{21.1f,21.8f}});m_clutterSpawns.push_back({2,{18.5f,21.7f}});
+   shelf(2,21,kPi*.5f);switchgear(1.5f,18.5f,-kPi*.5f);
+   m_terminals={{{12,4.4f},"RETURN HALL / LOCAL CONTROL","DUPLEX CIRCULATION / DUTY AND STANDBY.","DRAIN CHANNELS BEFORE MAINTENANCE.",0,false}};
+   for(Vec2 p:{Vec2{12,6},Vec2{12,12},Vec2{12,18},Vec2{5.7f,12},Vec2{18.3f,12}})m_lights.push_back({p,-5.75f});
   }
   // Structures use absolute elevations; props/fixtures have floor-relative bases.
   for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}

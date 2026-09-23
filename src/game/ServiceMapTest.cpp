@@ -12,7 +12,7 @@ bool Game::testServiceMaps(){
  for(int level:{4,5}){
   Game game;game.loadLevel(level,false);game.updateStreaming(0);
   const auto& world=game.world();
-  for(const auto& fixture:world.fixtures())if(fixture.model==7){
+  for(const auto& fixture:world.fixtures())if(fixture.solid){
    bool clear=true;
    for(int u=0;u<=16;++u)for(int v=0;v<=8;++v){
     float x=(u/16.f-.5f)*fixture.width,y=(v/8.f-.5f)*fixture.depth;
@@ -21,7 +21,7 @@ bool Game::testServiceMaps(){
     if(world.tile(int(std::floor(px)),int(std::floor(py)))=='#')clear=false;
     for(const auto& s:world.structures())if(px>s.x1&&px<s.x2&&py>s.y1&&py<s.y2&&s.top>-9+fixture.base+.02f&&s.bottom<-9+fixture.base+fixture.height)clear=false;
    }
-   if(!check(clear,"Entire shelf footprint clears walls and structural columns"))return false;
+   if(!check(clear,"Entire equipment footprint clears walls and structural columns"))return false;
   }
   World doorsOpen=world;
   for(size_t d=0;d<world.doors().size();++d)doorsOpen.openDoor(int(d));
@@ -52,6 +52,17 @@ bool Game::testServiceMaps(){
    int at=int(target.y*4)*N+int(target.x*4);
    if(!check(reached[at],"Service route reaches exit and both maintenance bays"))return false;
   }
+  if(level==4){
+   for(Vec2 target:{Vec2{5.5f,9.5f},Vec2{19.5f,9},Vec2{5.5f,20},Vec2{19,20}})
+    if(!check(reached[int(target.y*4)*N+int(target.x*4)],"Workshop, electrical room, stores and plant bay are accessible"))return false;
+  }
+  for(const auto& pipe:world.pipes()){
+   bool clear=true;
+   for(int i=0;i<=32;++i){auto p=pipe.start+(pipe.end-pipe.start)*(i/32.f);
+    clear&=pipe.z-pipe.radius>=-9+2.2f&&pipe.z+pipe.radius<world.ceilingHeight(p.x,p.y);
+   }
+   if(!check(clear,"Authored headers fit below ceiling and above standing clearance"))return false;
+  }
   if(level==5){
    if(!check(world.particleEmitters().empty(),"Settling pools do not emit fountain jets"))return false;
    if(!check(world.waterVolumes().size()==4,"Four authored coolant basins"))return false;
@@ -66,6 +77,16 @@ bool Game::testServiceMaps(){
   }
  }
  Game player;player.loadLevel(5,false);player.m_enemies.clear();player.m_player.pos={9.f,11.4f};player.m_player.z=-9;player.m_player.angle=-kPi*.5f;player.m_player.grounded=true;
+ World channelGeometry(5);
+ for(const auto& basin:channelGeometry.waterVolumes())for(float direction:{-1.f,1.f}){
+  Game escape;escape.loadLevel(5,false);escape.m_enemies.clear();
+  escape.m_player.pos={(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f};
+  escape.m_player.z=basin.bed;escape.m_player.grounded=true;escape.m_player.angle=direction*kPi*.5f;
+  InputState forward{};forward.forward=true;
+  float end=direction<0?basin.y1-.45f:basin.y2+.45f;
+  for(int frame=0;frame<600&&direction*(escape.player().pos.y-end)<0;++frame)escape.update(forward,1.f/120);
+  if(!check(direction*(escape.player().pos.y-end)>=0&&escape.player().z>-9.08f,"Each channel has walkable ramps at both ends"))return false;
+ }
  InputState walk{};walk.forward=true;float lowest=0;
  for(int i=0;i<110;++i){player.update(walk,1.f/120);lowest=std::min(lowest,player.player().z);}
  if(!check(lowest<-9.12f,"Player enters sloped flooded trench"))return false;

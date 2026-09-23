@@ -510,35 +510,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}objectLighting=false;
  }
- if((w.campaign()&&w.level()>=4)){
-  // Headers tie the service bays into a supported industrial interior.
-  for(float y:{4.f,10.f,16.f,22.f}){float roof=w.ceilingHeight(12,y);
-   box({1,y-.1f,roof-.18f},{23,y+.1f,roof},m_panelMetal,.9f);
+ // Services belong to the map; custom worlds never inherit campaign pipework.
+ for(const auto& pipe:w.pipes()){
+  float endZ=pipe.endZ>-999?pipe.endZ:pipe.z;
+  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,m_pipeTexture);
+  if(pipe.endZ>-999)continue; // Vertical drops terminate inside solid equipment.
+  float distance=length(pipe.end-pipe.start);int supports=std::max(1,int(std::ceil(distance/3.f)));
+  for(int i=0;i<=supports;++i){
+   Vec2 p=pipe.start+(pipe.end-pipe.start)*(float(i)/supports);
+   float roof=w.ceilingHeight(p.x,p.y);
+   box({p.x-.025f,p.y-.025f,pipe.z+pipe.radius},{p.x+.025f,p.y+.025f,roof},iron,.9f);
+   box({p.x-pipe.radius-.04f,p.y-.045f,pipe.z-pipe.radius-.04f},{p.x+pipe.radius+.04f,p.y+.045f,pipe.z-pipe.radius},iron,.9f);
   }
-  if(w.campaignChunk(5))for(float x:{8.5f,15.5f}){
-   cylinder({x,1.f,-6.25f},{x,22.5f,-6.25f},.16f,m_pipeTexture);
-   for(float y:{4.f,10.f,16.f,22.f}){
-    box({x-.025f,y-.035f,-6.45f},{x+.025f,y+.035f,-5.75f},iron,.9f);
-    box({x-.21f,y-.06f,-6.45f},{x+.21f,y+.06f,-6.40f},iron,.9f);
-   }
-  }
-  // Suspended return lines stay above the walking envelope, with visible hangers.
-  for(float x:{3.f,20.5f}){
-   cylinder({x,2.f,-6.55f},{x,22.f,-6.55f},.11f,m_pipeTexture);
-   for(float y:{3.f,7.f,11.f,15.f,19.f,21.f}){
-    float roof=w.ceilingHeight(x,y);
-    box({x-.18f,y-.05f,-6.72f},{x+.18f,y+.05f,-6.66f},iron,.8f);
-    for(float dx:{-.16f,.16f})box({x+dx-.025f,y-.025f,-6.7f},{x+dx+.025f,y+.025f,roof},iron,.8f);
-   }
-  }
- }
- if(w.campaignChunk(5)){
-  // The sealed end bulkhead has visible reinforcement and an unpowered lock.
-  for(float x:{18.45f,20.45f})box({x,23.58f,-8.9f},{x+.10f,23.65f,-6.65f},m_panelMetal,.9f);
-  box({19.38f,23.52f,-8.2f},{19.62f,23.65f,-7.82f},iron,.9f);
-  quad({18.1f,23.64f,-8.83f},{20.9f,23.64f,-8.83f},{20.9f,23.64f,-8.64f},{18.1f,23.64f,-8.64f},m_hazard,.85f);
-  cylinder({20.5f,18.2f,-9.f},{20.5f,18.2f,-6.55f},.11f,m_pipeTexture);
-  box({20.28f,17.98f,-9.f},{20.72f,18.42f,-8.88f},iron,.9f);
  }
  for(const auto& emitter:w.particleEmitters()){
   static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;

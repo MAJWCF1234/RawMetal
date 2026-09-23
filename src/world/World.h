@@ -20,6 +20,8 @@ struct Door {
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
 struct WorldLight {Vec2 position;float z;};
+// Authored overhead services, with absolute elevations. Kept above standing clearance.
+struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;};
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
 struct PickupSpawn {Vec2 position;PickupKind kind;};
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
@@ -81,6 +83,7 @@ public:
     Vec2 exitPoint()const{return m_level==5?Vec2{19.5f,22.5f}:m_level==4?Vec2{12.f,22.5f}:Vec2{21.5f,22.5f};}
     const std::vector<WorldProp>& props()const{return m_props;}
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}
+    const std::vector<PipeRun>& pipes()const{return m_pipes;}
     bool wallSpaceFree(Vec2 center,Vec2 along,float width,float bottom,float top)const;
     const std::vector<WorldLight>& lights()const{return m_lights;}
     const std::vector<CreatureSpawn>& creatureSpawns()const{return m_creatureSpawns;}
@@ -139,7 +142,7 @@ public:
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
     void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
-    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Terminal>{}.swap(m_terminals);}
+    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
@@ -153,6 +156,7 @@ private:
     bool m_openNorthBoundary=false,m_openSouthBoundary=false,m_openWestBoundary=false,m_openEastBoundary=false;
     std::vector<WorldProp> m_props;
     std::vector<Fixture> m_fixtures;
+    std::vector<PipeRun> m_pipes;
     std::vector<WorldLight> m_lights;
     std::vector<CreatureSpawn> m_creatureSpawns;
     std::vector<PickupSpawn> m_pickupSpawns;
