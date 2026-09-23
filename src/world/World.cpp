@@ -643,6 +643,23 @@ void World::buildPopulation(){
  for(int i=0;i<6;++i)m_clutterSpawns.push_back({i,m_level==3?Vec2{3.5f+i*.45f,19.5f}:positions[m_level][i],m_level==2&&i>=4?3.f:-999.f,i*.7f});
 }
 
+World::World(int level,std::shared_ptr<const CustomMapData> customMap):m_level(level),m_worldId(WorldId::Custom),m_customMap(std::move(customMap)){
+ if(!m_customMap)throw std::runtime_error("Missing custom map data");
+ m_openNorthBoundary=m_customMap->openNorth;m_openSouthBoundary=m_customMap->openSouth;
+ m_openWestBoundary=m_customMap->openWest;m_openEastBoundary=m_customMap->openEast;
+ m_doors=m_customMap->doors;m_props=m_customMap->props;m_fixtures=m_customMap->fixtures;m_pipes=m_customMap->pipes;m_lights=m_customMap->lights;
+ m_creatureSpawns=m_customMap->creatureSpawns;m_pickupSpawns=m_customMap->pickupSpawns;m_clutterSpawns=m_customMap->clutterSpawns;
+ m_waterVolumes=m_customMap->waterVolumes;m_hazards=m_customMap->hazards;m_compactors=m_customMap->compactors;m_structures=m_customMap->structures;
+ m_layers.reserve(m_customMap->layers.size());
+ for(const auto& source:m_customMap->layers){
+  MapRows rows{};for(size_t row=0;row<rows.size();++row)rows[row]=source.rows[row];
+  m_layers.push_back({source.name,source.elevation,source.thickness,rows});
+ }
+ m_terminals.reserve(m_customMap->terminals.size());
+ for(const auto& source:m_customMap->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control});
+ buildLayers(m_customMap->stairs);
+}
+
 World::World(int level,WorldId id):m_worldId(id) {
  m_level=std::clamp(level,0,worldChunkCount(m_worldId)-1);
  buildPopulation();
@@ -1388,7 +1405,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    m_structures.push_back({float(start),float(y),float(x),float(y+1),underside,z});
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
-   if(!hasLift()&&m_level<6&&(x+y)%5==0&&tile(x,y)!='#')
+   if(!hasLift()&&!custom()&&m_level<6&&(x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
    if(!deck(x-1,y)&&!(hasLift()&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
