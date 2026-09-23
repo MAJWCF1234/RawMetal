@@ -727,7 +727,7 @@ void World::buildTerrain(){
  constexpr int corner[8][3]={{0,0,0},{1,0,0},{0,1,0},{1,1,0},{0,0,1},{1,0,1},{0,1,1},{1,1,1}};
  constexpr int edges[12][2]={{0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7}};
  constexpr int cellsX=TerrainSamplesX-1,cellsY=TerrainSamplesY-1,cellsZ=TerrainSamplesZ-1;
- auto cellSlot=[](int cx,int cy,int cz){return size_t((cz*cellsY+cy)*cellsX+cx);};
+ auto cellSlot=[=](int cx,int cy,int cz){return size_t((cz*cellsY+cy)*cellsX+cx);};
  std::vector<int> cellVertex(size_t(cellsX)*cellsY*cellsZ,-1);
  std::vector<TerrainVertex> vertices;
  std::vector<std::uint8_t> materials;
