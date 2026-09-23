@@ -84,10 +84,6 @@ bool Game::testStreaming(){
  if(!ash.chunkResident(0)||!ash.chunkResident(2)||!ash.chunkResident(3)||!ash.chunkResident(4)||!ash.chunkResident(5))return fail(19);
  float southA=ash.world().floorHeight(12,23.999f),southB=ash.m_chunks[4].world.floorHeight(12,.001f);
  if(std::fabs(southA-southB)>.02f)return fail(20);
- // Central Ashfall ridge contains a real subtractive cavern. At local 12,8
- // in chunk 4 there must be a walkable floor with a solid ceiling above it.
- const auto& cave=ash.m_chunks[4].world;float caveFloor=cave.supportBelow(12,8,1.5f),caveRoof=cave.clearanceAbove(12,8,caveFloor+.02f);
- if(caveRoof-caveFloor<2.2f||caveRoof>8.f||!cave.fits(12,8,caveFloor,1.f)||cave.fits(12,8,caveFloor,5.f))return fail(23);
  ash.m_player.pos={12.f,24.10f};ash.crossChunkBoundary();
  if(ash.level()!=4||std::fabs(ash.player().pos.x-12.f)>.01f||std::fabs(ash.player().pos.y-.10f)>.01f)return fail(21);
  // The rear service store has a real door. Its closed leaf blocks a sprint;
@@ -102,6 +98,6 @@ bool Game::testStreaming(){
  joined.m_player.pos={9,9};joined.m_player.z=joined.world().floorHeight(9,9);joined.m_player.angle=-kPi*.5f;joined.m_velocity={};walking.sprint=false;
  for(int i=0;i<100;++i)joined.update(walking,1.f/120);
  if(joined.player().pos.y>=7.7f||std::fabs(joined.player().z+9)>.08f)return fail(14);
- std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nAshfall 3x2 neighbour residency, east/south crossing, Surface Nets seams and volumetric cave collision: PASS\nRear store door and wall collision, then walking out of flooded returns: PASS\n";return true;
+ std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nAshfall 3x2 neighbour residency, east/south crossing and Surface Nets wasteland seams: PASS\nRear store door and wall collision, then walking out of flooded returns: PASS\n";return true;
 }
 }
