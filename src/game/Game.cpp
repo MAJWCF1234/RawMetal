@@ -39,6 +39,21 @@ void Game::crossChunkBoundary(){
  }
  if(next==m_level)return;int previous=m_level;
  auto shift=chunkOffset(m_level)-chunkOffset(next);bool carried=holdingClutter();Clutter held;if(carried){held=m_clutter[m_heldClutter];m_clutter.erase(m_clutter.begin()+m_heldClutter);}m_heldClutter=-1;
+ // Outdoor pursuers standing at the seam hand off with the player. Without
+ // this, changing the active chunk froze an alerted creature one metre behind
+ // an invisible ownership boundary even though the terrain itself was seamless.
+ std::vector<Enemy> followers;
+ if(m_worldId==WorldId::Ashfall){
+  for(auto it=m_enemies.begin();it!=m_enemies.end();){
+   auto local=it->pos+shift;
+   float outsideX=local.x<0?-local.x:local.x>=World::Width?local.x-World::Width:0;
+   float outsideY=local.y<0?-local.y:local.y>=World::Height?local.y-World::Height:0;
+   if(it->alive&&it->awareness>0&&std::max(outsideX,outsideY)<1.6f){
+    auto enemy=*it;enemy.pos={std::clamp(local.x,.24f,23.76f),std::clamp(local.y,.24f,23.76f)};
+    enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;followers.push_back(enemy);it=m_enemies.erase(it);
+   }else ++it;
+  }
+ }
  // Loose objects can cross any stitched edge. Transfer ownership only when the
  // object's world-space position belongs to the same destination as the player.
  std::vector<Clutter> following;
@@ -49,6 +64,7 @@ void Game::crossChunkBoundary(){
  ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
+ for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
  for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
  if(m_worldId==WorldId::Campaign&&next>previous)saveCheckpoint();
