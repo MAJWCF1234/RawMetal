@@ -16,7 +16,7 @@ void Game::executeConsole(std::string command){
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
-  m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED CUSTOM WASTELAND / 6 STITCHED SURFACE CHUNKS.");
+  m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED CUSTOM WASTELAND / 12 STITCHED SURFACE CHUNKS.");
  }
  else if(verb=="give"&&arg=="flashlight"&&extra.empty()){giveQuestItem(Flashlight);m_consoleLog.push_back("FLASHLIGHT ADDED. F TO TOGGLE.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
@@ -65,11 +65,11 @@ bool Game::testConsole(){
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
  input={};input.textInput="map custom\r";game.update(input,.02f);
  if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().openEastBoundary()||game.world().openNorthBoundary()||game.world().openWestBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return false;
- for(int level=0;level<ChunkCount;++level){auto&w=game.m_chunks[level].world;bool north=level>=3,south=level<3,west=level%3>0,east=level%3<2;
+ for(int level=0;level<game.chunkCount();++level){auto&w=game.m_chunks[level].world;int col=level%4,row=level/4;bool north=row>0,south=row<2,west=col>0,east=col<3;
   if(!w.horrorMode()||w.openNorthBoundary()!=north||w.openSouthBoundary()!=south||w.openWestBoundary()!=west||w.openEastBoundary()!=east)return false;
  }
  input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
  input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return false;
- std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; Ashfall 3x2 boundaries; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
+ std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; Ashfall 4x3 boundaries; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
 }
 }

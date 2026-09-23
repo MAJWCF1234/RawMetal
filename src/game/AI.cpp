@@ -157,6 +157,23 @@ void Game::updateEnemies(float dt){
   e.searchTime=e.moving?0.f:std::min(1.f,e.searchTime+dt);
   if(e.moving&&e.kind==Enemy::Kind::Brute&&e.stepTimer<=0){m_sounds.push_back({Sound::Land,e.pos,.7f,.68f,true});e.stepTimer=.8f;}
  }
+ migrateEnemiesAcrossChunks();
+}
+void Game::migrateEnemiesAcrossChunks(){
+ if(m_worldId!=WorldId::Ashfall)return;
+ auto sourceOrigin=chunkOffset(m_level);
+ for(auto it=m_enemies.begin();it!=m_enemies.end();){
+  if(it->pos.x>=0&&it->pos.x<World::Width&&it->pos.y>=0&&it->pos.y<World::Height){++it;continue;}
+  Vec2 global=it->pos+sourceOrigin;int target=m_level;
+  for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
+   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){target=level;break;}
+  }
+  if(target==m_level){++it;continue;}
+  ensureChunk(target);auto origin=chunkOffset(target);auto enemy=*it;Vec2 shift=sourceOrigin-origin;
+  enemy.pos+=shift;enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;
+  enemy.z=m_chunks[target].world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;
+  m_chunks[target].enemies.push_back(enemy);it=m_enemies.erase(it);
+ }
 }
 bool Game::testAI(){
  std::ofstream debug("ai-diagnostic.txt");
@@ -221,9 +238,13 @@ bool Game::testAI(){
  auto falling=validationScene(Enemy::Kind::Brute);auto&body=falling.m_enemies[0];body.pos={7.5f,4.5f};body.z=1.2f;body.alive=false;
  falling.updateEnemies(.05f);if(body.z<=0||body.z>=1.2f||body.verticalVelocity>=0)return false;
  for(int i=0;i<120;++i)falling.updateEnemies(1.f/120);if(body.z!=0)return false;
+ // Outdoor pursuit ownership crosses the same seam as the player.
+ {Game seam(WorldId::Ashfall);seam.m_enemies.clear();Enemy pursuer{};pursuer.kind=Enemy::Kind::Huntsman;pursuer.pos={23.4f,12.f};pursuer.home=pursuer.pos;pursuer.lastKnown={24.1f,12.f};pursuer.awareness=5;pursuer.state=Enemy::State::Chase;pursuer.z=seam.world().floorHeight(pursuer.pos.x,pursuer.pos.y);pursuer.lastKnownZ=pursuer.z;seam.m_enemies.push_back(pursuer);
+  seam.m_player.pos={24.1f,12.f};seam.crossChunkBoundary();if(seam.level()!=1||seam.m_enemies.empty()||seam.m_enemies.back().pos.x<.2f||seam.m_enemies.back().pos.x>1.f)return false;
+ }
  auto crate=validationScene(Enemy::Kind::Huntsman);auto&crawler=crate.m_enemies[0];crawler.pos={5.7f,3.5f};crawler.home=crawler.pos;crawler.heading=kPi;crate.m_player.pos={3.5f,3.5f};crate.m_player.z=.6f;
  for(int i=0;i<240&&crawler.z<.59f;++i)crate.updateEnemies(1.f/120);
  debug<<"crate climb "<<crawler.z<<'\n';if(crawler.z<.59f)return false;
- std::ofstream("ai-test.txt")<<"Closed-door sight blocking, hearing/pursuit, reactor stalker watch/flank/rush behavior, committed melee dodging, all species climbing stairs, bugs tracking a circling target, falling bodies and huntsmen climbing crates: PASS\n";return true;
+ std::ofstream("ai-test.txt")<<"Closed-door sight blocking, hearing/pursuit, reactor stalker watch/flank/rush behavior, committed melee dodging, all species climbing stairs, bugs tracking a circling target, falling bodies, huntsmen climbing crates and outdoor cross-chunk pursuit: PASS\n";return true;
 }
 }

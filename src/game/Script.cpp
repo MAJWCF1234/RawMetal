@@ -36,7 +36,7 @@ const char* Game::questItemName(StateId id){
 
 void Game::seedScripts(){
  m_scriptEvents.clear();
- for(int chunk=0;chunk<ChunkCount;++chunk)for(auto event:m_chunks[chunk].world.scriptEvents()){
+ for(int chunk=0;chunk<chunkCount();++chunk)for(auto event:m_chunks[chunk].world.scriptEvents()){
   event.level=chunk;m_scriptEvents.push_back(std::move(event));
  }
 }

@@ -40,7 +40,7 @@ bool Game::testWorldIsolation(){
  trigger.actions.push_back(action);custom.m_chunks[0].world.m_scriptEvents.push_back(trigger);custom.seedScripts();custom.updateScripts(.01f);
  if(!check(custom.state(action.id)==7,"Reusable script executes custom-authored trigger"))return false;
  custom.m_chunks[0].world.m_scriptEvents.clear();custom.seedScripts();
- for(int level=0;level<ChunkCount;++level){
+ for(int level=0;level<custom.chunkCount();++level){
   out<<"Chunk "<<level<<'\n';custom.loadLevel(level,false);custom.updateStreaming(0);const auto&w=custom.world();
   if(!check(w.outdoors()&&!w.hasLift()&&!w.insideLift(12,12)&&w.hasTerrain()&&w.terrain().size()>200&&w.ceilingHeight(12,12)>100&&w.waterSurface(9,9)<-100&&w.particleEmitters().empty(),"Outdoor world owns terrain, sky clearance and no campaign-only systems"))return false;
   if(!check(w.lights().empty(),"Outdoor map has no unsupported ceiling lamps"))return false;
@@ -53,10 +53,11 @@ bool Game::testWorldIsolation(){
    for(auto d:std::array<Vec2,4>{{{1,0},{-1,0},{0,1},{0,-1}}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>=N||ny>=N)continue;int q=ny*N+nx;Vec2 probe{(nx+.5f)*.5f,(ny+.5f)*.5f};float feet=w.floorHeight(probe.x,probe.y);
     if(!seen[q]&&custom.hullFits(probe,feet,1)){seen[q]=true;pending.push(q);}}
   }
-  if(level%3<2&&!check(seen[24*N+46],"Spawn can reach eastern seam"))return false;
-  if(level%3>0&&!check(seen[24*N+1],"Spawn can reach western seam"))return false;
-  if(level<3&&!check(seen[46*N+24],"Spawn can reach southern seam"))return false;
-  if(level>=3&&!check(seen[1*N+24],"Spawn can reach northern seam"))return false;
+  int col=level%4,row=level/4;
+  if(col<3&&!check(seen[24*N+46],"Spawn can reach eastern seam"))return false;
+  if(col>0&&!check(seen[24*N+1],"Spawn can reach western seam"))return false;
+  if(row<2&&!check(seen[46*N+24],"Spawn can reach southern seam"))return false;
+  if(row>0&&!check(seen[1*N+24],"Spawn can reach northern seam"))return false;
  }
  auto campaignSave=campaign.encodeSave(),customSave=custom.encodeSave();
  if(!check(campaign.decodeSave(customSave)&&campaign.worldId()==WorldId::Ashfall&&campaign.world().outdoors()&&campaign.m_scriptEvents.empty(),"Custom save restores world in campaign session"))return false;
