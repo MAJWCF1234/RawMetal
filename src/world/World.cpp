@@ -295,57 +295,75 @@ constexpr MapRows ashfallRegion(int region){
 }
 static_assert([]{for(int i=0;i<6;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
 
-struct TerrainBrush {
- float x,y,z,rx,ry,rz;std::uint8_t material;
-};
-// Ashfall is the surface-terrain testbed for the later Dark Below technology.
-// For now it deliberately contains NO carved caverns. The source is still a
-// full 3D voxel density field, but this authored brush set only adds connected
-// rock masses to the wasteland so we can judge the NoCubes-style surface look,
-// streaming seams, materials and collision before introducing underground voids.
-constexpr TerrainBrush AshfallTerrainBrushes[]={
- // West side: low broken escarpments, kept away from the deployment pad.
- {13,10,1.4f,6.5f,4.2f,2.3f,1},
- {18,18,2.2f,7.5f,5.0f,3.6f,1},
- {11,31,2.8f,8.0f,6.0f,4.7f,2},
- // Centre: long rocky spine crossing chunk seams.
- {29,8,2.0f,8.5f,4.5f,3.5f,1},
- {34,18,3.2f,10.0f,6.0f,5.3f,1},
- {37,31,3.8f,12.0f,7.5f,6.2f,2},
- {30,42,1.9f,8.0f,4.5f,3.3f,1},
- // East: higher mesas and isolated outcrops for silhouette testing.
- {53,8,2.6f,7.5f,5.0f,4.4f,2},
- {59,18,1.6f,5.5f,4.0f,3.0f,1},
- {57,32,4.2f,10.0f,7.0f,6.8f,2},
- {67,39,2.2f,5.0f,4.5f,3.8f,1},
- // Small secondary masses break up the large smooth blobs into readable facets.
- {23,28,1.5f,3.8f,3.2f,2.7f,2},
- {45,12,1.7f,4.0f,3.0f,2.9f,1},
- {47,41,1.3f,4.2f,3.2f,2.5f,2},
-};
-float ellipsoidDensity(float x,float y,float z,const TerrainBrush&b){
- float dx=(x-b.x)/b.rx,dy=(y-b.y)/b.ry,dz=(z-b.z)/b.rz;
- float scale=std::min({b.rx,b.ry,b.rz});
- return (1.f-std::sqrt(dx*dx+dy*dy+dz*dz))*scale;
+// Ashfall's source terrain is literally a 72 x 48 field of authored 1 m
+// voxel columns. The digits are the top occupied voxel for each X/Y cell.
+// Surface Nets sees only solid/air samples from these cubes. There are no
+// ellipsoid SDF brushes here, so the source behaves like Minecraft terrain:
+// author cubes first, then throw the visible cube faces away and extract a mesh.
+constexpr std::array<std::string_view,48> AshfallVoxelTop{{
+ "000000000021333444333333221000000001214444444323333334443322110000001111",
+ "000000000033333444333333221100000001113322334333333333333212111001111112",
+ "000000000033334344333233322110001001122333333333233433332222212110110232",
+ "000000000044444444334332322110010010112222223433333222222222222223222222",
+ "000000000034544444433333322201001000111122332223322222222222322322222232",
+ "000000000055544344444333322111000000001111022222223222111332233333333343",
+ "000000000054555444444443332221100000000001111122222211111122333442344333",
+ "000000000066554444334543333221120000001100011133322111101121334444444333",
+ "000000000076655544454443333322111000000000000122231100000122344554434433",
+ "000000000066665565555553334331211100000000001122211110100121334444354443",
+ "333445576666666666552222222222221110000000000112201110000112333434444433",
+ "333544555556667566662222222222222110000000000112211110000112233333335443",
+ "333344444555566666662222222222222112000000000112211210001111223332334344",
+ "333333433445556666652222222222222221000000000000111110000111122223332344",
+ "333333332344556666666663336554443421100000000111111110000112112322233344",
+ "334322221245555665666663336656544422110000010101111110000002121111233344",
+ "334222211233445666666673336655555342310000001111101110100000111112223344",
+ "333322222233344555555663335556544331211000001111011111100112111112223344",
+ "332322222233334444555543334554444232212000011110121111110111111212233344",
+ "433333222133433343334433334444444332211100021111211211111121111113223444",
+ "333333433333333333433443233333323332211110101211222222222222211122234543",
+ "333334323323322222222233333333333322211111011122222222233222232322333444",
+ "222222222222221111222222222222212222111111110222222222222222222222222222",
+ "222222222222222111111111111222222221101121111222222222222222222222222222",
+ "222222222222222111111101111111222211111111122222222222222222222222222222",
+ "222222222222222111101111111112222222222222222222222222222222222222222222",
+ "333344444443332311110121111112222222222222223333334455555555555444444444",
+ "234334445444333223222121111222223223222222333233334555556676554655555444",
+ "233334445544433322222211112222333333333333333233334555556656665676555445",
+ "233344445444343333322221122223333333333333233333334455456676666666654544",
+ "123434435543434433442222122133344444453444333333334445555666666666655444",
+ "223354455555444444333222222333444444444444443333234444445556566666655443",
+ "223334445555555444433323223334444344444444443333333445455556666666655443",
+ "223333444444356564444333133354444344444344433333333335444555566666554443",
+ "223332334554445555444433333343444434444344334323333333344456555555543433",
+ "222333332344546556544443333444444444444444333321222333344555566666644333",
+ "222222222334345555534443334434444444454343333222223233244455566666634333",
+ "221132222232444555554443334444444444445443433222222122344444466666622222",
+ "232201101223344555454443334444444444444433332322222222244444444111122222",
+ "210111100122334555454443334445334334333333322232222223222221111001111012",
+ "221011110122334455444443335323433333333332322231122222222211100000001111",
+ "222111111122333444444443333433333333333332222221111232221111000001000011",
+ "222221111122232333444443232333322333433322232221111111111120000010000001",
+ "222221112122233323333333333433333322222221222210111111111100000000000000",
+ "322221111122223334333333233333432222232222222211111111111000000000100001",
+ "332322211112222433333423333333222222222122222311111111110000000010000001",
+ "333232221222222123333433333433222222222223221221111101000010000101010011",
+ "232312222212222222242333233332222222212120113122111110000000000000000011"
+}};
+static_assert([]{for(auto row:AshfallVoxelTop)if(row.size()!=72)return false;return true;}(),"Ashfall voxel rows must be 72 cells wide");
+int ashfallVoxelTop(int worldX,int worldY){
+ if(worldX<0||worldY<0||worldX>=72||worldY>=48)return 0;
+ char value=AshfallVoxelTop[size_t(worldY)][size_t(worldX)];
+ return value>='0'&&value<='9'?value-'0':0;
 }
-float authoredAshfallDensity(float worldX,float worldY,float worldZ){
- // Flat solid earth is the starting canvas. Every visible landform above it is
- // explicitly authored by the brush table, not generated by noise or a heightmap.
- float density=-worldZ;
- for(const auto&brush:AshfallTerrainBrushes)
-  density=std::max(density,ellipsoidDensity(worldX,worldY,worldZ,brush));
- return density;
+bool authoredAshfallVoxel(int worldX,int worldY,int worldZ){
+ return worldZ<=ashfallVoxelTop(worldX,worldY);
 }
-std::uint8_t authoredAshfallMaterial(float worldX,float worldY,float worldZ){
- std::uint8_t material=0;float best=0;
- for(const auto&brush:AshfallTerrainBrushes){
-  float d=ellipsoidDensity(worldX,worldY,worldZ,brush);
-  if(d>best){best=d;material=brush.material;}
- }
- // Sparse source-voxel variation lets us inspect the block-material patchwork
- // on the extracted surface without adding new texture assets yet.
- if(material==0&&((int(std::floor(worldX*.33f))+int(std::floor(worldY*.29f)))&7)==0)material=2;
- return material;
+std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
+ int top=ashfallVoxelTop(worldX,worldY);
+ if(worldZ<top-1)return 0; // buried rock
+ if(top>=5)return 2;       // exposed high ridge material
+ return ((worldX*3+worldY*5)&15)==0?1:0;
 }
 // Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
 // meet the wall at their backs; shelves have solid footprints on level floors.
@@ -719,10 +737,12 @@ void World::buildTerrain(){
  m_terrainDensity.assign(samples,0);m_terrainMaterial.assign(samples,0);
  const auto origin=definition().origin;
  for(int sz=0;sz<TerrainSamplesZ;++sz)for(int sy=0;sy<TerrainSamplesY;++sy)for(int sx=0;sx<TerrainSamplesX;++sx){
-  float lx=float(sx-TerrainBorder),ly=float(sy-TerrainBorder),z=float(TerrainMinZ-1+sz);
-  float wx=origin.x+lx,wy=origin.y+ly;
-  float d=authoredAshfallDensity(wx,wy,z);
-  m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=std::int8_t(std::clamp(int(std::lround(d*32.f)),-127,127));
+  int lx=sx-TerrainBorder,ly=sy-TerrainBorder,z=TerrainMinZ-1+sz;
+  int wx=int(origin.x)+lx,wy=int(origin.y)+ly;
+  bool solid=authoredAshfallVoxel(wx,wy,z);
+  // Binary +/- density makes every source sample a one-metre cube point.
+  // Surface Nets places the visible skin between occupied and empty samples.
+  m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=solid?32:-32;
   m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=authoredAshfallMaterial(wx,wy,z);
  }
 
