@@ -167,7 +167,15 @@ function Convert-LegacyCustomPayload {
             $rows.Add($rowMatch.Groups[1].Value)
         }
         if($rows.Count -ne 24) { throw "MapRows $name must contain exactly 24 rows for runtime custom maps." }
-        foreach($row in $rows) { if($row.Length -ne 24) { throw "MapRows $name contains a row that is not exactly 24 characters." } }
+        for($rowIndex=0; $rowIndex -lt $rows.Count; $rowIndex++) {
+            $row = $rows[$rowIndex]
+            if($row.Length -gt 24) { throw "MapRows $name row $rowIndex is wider than 24 characters." }
+            if($row.Length -lt 24) {
+                $fill = if($row.StartsWith("_")) { "_" } elseif($row.StartsWith("#") -or $row.EndsWith("#")) { "#" } else { "." }
+                Write-Warning "MapRows $name row $rowIndex is only $($row.Length) characters. CUSTOM compatibility import padded the right edge with '$fill' to 24."
+                $rows[$rowIndex] = $row.PadRight(24, [char]$fill)
+            }
+        }
         $rowTables[$name] = $rows.ToArray()
     }
 
@@ -264,7 +272,7 @@ function Convert-LegacyCustomPayload {
         $out.Add("PIPE|0|$(Format-MapNumber $a[0])|$(Format-MapNumber $a[1])|$(Format-MapNumber $b[0])|$(Format-MapNumber $b[1])|$(Format-MapNumber $z)|$(Format-MapNumber $radius)|$(Format-MapNumber $endZ)")
     }
 
-    foreach($m in [regex]::Matches($code,'m_fixtures\.push_back\s*\(\s*\{(.*?)\}\s*\)\s*;','Singleline')) {
+    foreach($m in [regex]::Matches($code,'(?s)m_fixtures\.push_back\s*\(\s*\{(.*?)\}\s*\)\s*;')) {
         $f=Split-TopLevel $m.Groups[1].Value;if($f.Count -lt 8){throw "Malformed m_fixtures.push_back entry in legacy CUSTOM payload."}
         $p=Parse-Vec2 $f[1] $roof
         $out.Add("FIXTURE|0|$([int](Convert-MapScalar $f[0] $roof))|$(Format-MapNumber $p[0])|$(Format-MapNumber $p[1])|$(Format-MapNumber (Convert-MapScalar $f[2] $roof))|$(Format-MapNumber (Convert-MapScalar $f[3] $roof))|$(Format-MapNumber (Convert-MapScalar $f[4] $roof))|$(Format-MapNumber (Convert-MapScalar $f[5] $roof))|$(Format-MapNumber (Convert-MapScalar $f[6] $roof))|$([int](Convert-MapBool $f[7]))")
