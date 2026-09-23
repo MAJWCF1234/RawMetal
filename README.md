@@ -1,5 +1,26 @@
 # RawMetal
 
+Release 0.4.6 adds reversible first/second-order audio prediction and byte-plane
+packing. The build selects the smallest lossless encoding per WAV, preserving
+the entire original file. Texture dimensions/RGBA pixels and model/animation
+bytes are checked against the final executable after every build. Native code
+size is reduced with function/data folding and size optimization of the FBX
+importer; renderer hot loops retain speed optimization.
+
+Ashfall tests shared Surface Nets terrain across twelve streamed chunks. Soil
+and rock use original PSX Textures v3.1 colour and normal maps, with stable
+world-space texture coordinates across seams. These terrain material IDs and
+the renderer are shared engine features for future campaign terrain too.
+Player spawns use the full body footprint on slopes; creature routes sample
+slopes and respect the direction of climb/drop limits. Ruin walls have buried
+footings, and the motel shelf sits clear of its wall.
+
+Run `--world-isolation-test --vulkan` for twelve-chunk traversal, seam-height,
+save and menu checks; `--physics-ai-test` checks movement and hill pursuit.
+`--ashfall-inspection --vulkan` captures all twelve regions independently of
+the test suite. Terrain source provenance is in
+`src/assets/materials/ASHFALL-SOURCE.md`.
+
 Reactor Service Gallery and Coolant Return now use supported utility runs,
 additional authored machinery, a grated bridge and four sloped coolant basins.
 The water mesh, floor depth and debris buoyancy read the same basin records;

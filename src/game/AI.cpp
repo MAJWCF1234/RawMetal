@@ -10,11 +10,11 @@ static float roughStep(Enemy::Kind kind){
 }
 // Surface Nets navigation follows the actual terrain support instead of comparing
 // one-metre cell centres. A one-metre voxel rise becomes a traversable slope when
-// its quarter-metre samples stay within the creature's step capability, while a
+// its short movement samples stay within the creature's step capability, while a
 // real cliff still fails the same test.
 static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr){
  auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height);}
- int samples=std::max(1,int(std::ceil(distance/.24f)));float z=fromZ;
+ int samples=std::max(1,int(std::ceil(distance/.08f)));float z=fromZ;
  for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f);
   float rise=ground-z,drop=z-ground;if(rise>stepHeight+.025f||drop>std::max(.48f,stepHeight*1.45f)||!navFits(w,p,ground,height))return false;z=ground;
  }
@@ -172,7 +172,9 @@ void Game::updateEnemies(float dt){
     Vec2 a{x+.5f,y+.5f},b{nx+.5f,ny+.5f};float az=navSupport(m_world,a,float(World::TerrainMaxZ+1));
     return roughSegment(m_world,a,az,b,hull,stepHeight);
    };
-   while(!queue.empty()){auto[x,y]=queue.front();queue.pop();for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<minCell||nx>maxCell||ny<minCell||ny>maxCell||field[ny][nx]!=9999||!edgeWalkable(x,y,nx,ny))continue;field[ny][nx]=field[y][x]+1;queue.push({nx,ny});}}
+   // Flooding outward from the goal must test travel TOWARD the goal. A
+   // traversable descent is not necessarily a climbable reverse edge.
+   while(!queue.empty()){auto[x,y]=queue.front();queue.pop();for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<minCell||nx>maxCell||ny<minCell||ny>maxCell||field[ny][nx]!=9999||!edgeWalkable(nx,ny,x,y))continue;field[ny][nx]=field[y][x]+1;queue.push({nx,ny});}}
    int x=std::clamp(int(e.pos.x),minCell,maxCell),y=std::clamp(int(e.pos.y),minCell,maxCell),best=field[y][x];destination=e.pos;
    for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx>=minCell&&nx<=maxCell&&ny>=minCell&&ny<=maxCell&&field[ny][nx]<best&&edgeWalkable(x,y,nx,ny)){best=field[ny][nx];destination={nx+.5f,ny+.5f};}}
    e.waypoint=destination;e.repathTimer=.25f;
@@ -277,13 +279,14 @@ bool Game::testAI(){
  // Huntsman and the heavier Brute must now follow the sampled ground profile.
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Brute}){
   Game rough(WorldId::Ashfall);rough.m_enemies.clear();rough.m_sounds.clear();
-  rough.m_player.pos={20.5f,12.5f};rough.m_player.z=rough.m_world.floorHeight(rough.m_player.pos.x,rough.m_player.pos.y);rough.m_player.angle=0;
-  Enemy climber{};climber.kind=kind;climber.pos={6.5f,12.5f};climber.z=rough.m_world.floorHeight(climber.pos.x,climber.pos.y);climber.home=climber.pos;climber.lastKnown=rough.m_player.pos;climber.lastKnownZ=rough.m_player.z;climber.awareness=40.f;climber.state=Enemy::State::Investigate;climber.heading=0;
+  rough.m_player.pos={20.5f,12.5f};rough.m_player.z=navSupport(rough.m_world,rough.m_player.pos,float(World::TerrainMaxZ+1));rough.m_player.angle=0;
+  Enemy climber{};climber.kind=kind;climber.pos={6.5f,12.5f};climber.z=navSupport(rough.m_world,climber.pos,float(World::TerrainMaxZ+1));climber.home=climber.pos;climber.lastKnown=rough.m_player.pos;climber.lastKnownZ=rough.m_player.z;climber.awareness=40.f;climber.state=Enemy::State::Investigate;climber.heading=0;
   float rise=rough.m_player.z-climber.z;if(rise<3.f)return false;rough.m_enemies.push_back(climber);
   if(!roughSegment(rough.m_world,climber.pos,climber.z,{12.5f,12.5f},kind==Enemy::Kind::Brute?1.85f:1.05f,roughStep(kind)))return false;
   for(int i=0;i<3600&&length(rough.m_enemies[0].pos-rough.m_player.pos)>1.5f;++i)rough.updateEnemies(1.f/120.f);
   auto&done=rough.m_enemies[0];debug<<"rough terrain "<<int(kind)<<" distance "<<length(done.pos-rough.m_player.pos)<<" z "<<done.z<<" target z "<<rough.m_player.z<<'\n';
-  if(length(done.pos-rough.m_player.pos)>1.8f||std::fabs(done.z-rough.m_player.z)>.8f)return false;
+  float support=navSupport(rough.m_world,done.pos,float(World::TerrainMaxZ+1));
+  if(length(done.pos-rough.m_player.pos)>1.8f||std::fabs(done.z-support)>.05f||!navFits(rough.m_world,done.pos,done.z,kind==Enemy::Kind::Brute?1.85f:1.05f))return false;
  }
  // Outdoor pursuit ownership crosses the same seam as the player.
  {Game seam(WorldId::Ashfall);seam.m_enemies.clear();Enemy pursuer{};pursuer.kind=Enemy::Kind::Huntsman;pursuer.pos={23.4f,12.f};pursuer.home=pursuer.pos;pursuer.lastKnown={24.1f,12.f};pursuer.awareness=5;pursuer.state=Enemy::State::Chase;pursuer.z=seam.world().floorHeight(pursuer.pos.x,pursuer.pos.y);pursuer.lastKnownZ=pursuer.z;seam.m_enemies.push_back(pursuer);

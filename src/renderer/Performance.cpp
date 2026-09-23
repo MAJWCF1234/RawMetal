@@ -62,6 +62,7 @@ bool SoftwareRenderer::testPerformance(){
  };
  measure("Foundry turn",Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true),120,false,true);
  measure("Gantry turn",Game::mapInspection({7.5f,12.5f},0,0,2,false,0,true),120,false,true);
+ measure("Ashfall terrain and streaming turn",Game(WorldId::Ashfall),120,true,true);
  measure("Lift entry turn",Game::mapInspection({3.5f,2},kPi*.5f,0,3,false,0,true),120,false,true);
  measure("Hazmat impact and settling",Game::hazmatInspection(3),120,true,false);
  measure("Ascent window",Game::liftInspection(5,3),240,true,false);

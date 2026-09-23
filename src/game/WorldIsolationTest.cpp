@@ -8,9 +8,9 @@ bool Game::testWorldIsolation(){
  Game campaign;Game custom(WorldId::Ashfall);Game independent;
  // Keep authored encounter composition stable while moving ownership out of Game.
  constexpr int creatureCounts[]={8,9,6,3,0,0},pickupCounts[]={4,6,4,3,0,0};
- for(int level=0;level<ChunkCount;++level){
+ for(int level=0;level<campaign.chunkCount();++level){
   const auto& chunk=campaign.m_chunks[level];
-  if(!check(int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&chunk.clutter.size()==(level<4?6u:0u),"Campaign population preserved"))return false;
+  if(!check(int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&chunk.clutter.size()==(level<4?6u:level==5?2u:0u),"Campaign population preserved"))return false;
  }
  const auto& warden=campaign.m_chunks[3].enemies.back();
  if(!check(warden.kind==CreatureKind::Warden&&warden.hp==320&&warden.pos.x==21.5f&&warden.pos.y==18.5f,"Reactor encounter keeps its authored creature and health"))return false;
@@ -18,6 +18,7 @@ bool Game::testWorldIsolation(){
  // Any map can author an ordinary locked door or an unrestricted transfer.
  Game gate(WorldId::Ashfall);Door door{2,5,6};door.requireState=stateId("gate_power");door.requireValue=2;
  gate.m_world.m_doors={door};gate.m_player.pos={3.5f,5.2f};gate.m_player.angle=kPi*.5f;
+ gate.m_player.z=gate.m_world.floorHeight(3.5f,6);
  InputState use{};use.use=true;gate.updateInteraction(use,.01f);
  if(!check(gate.doorLocked(door)&&!gate.world().doors()[0].opening,"Script-locked ordinary door rejects interaction"))return false;
  gate.setState(door.requireState,1);
@@ -44,16 +45,30 @@ bool Game::testWorldIsolation(){
   out<<"Chunk "<<level<<'\n';custom.loadLevel(level,false);custom.updateStreaming(0);const auto&w=custom.world();
   if(!check(w.outdoors()&&!w.hasLift()&&!w.insideLift(12,12)&&w.hasTerrain()&&w.terrain().size()>200&&w.ceilingHeight(12,12)>100&&w.waterSurface(9,9)<-100&&w.particleEmitters().empty(),"Outdoor world owns terrain, sky clearance and no campaign-only systems"))return false;
   if(!check(w.lights().empty(),"Outdoor map has no unsupported ceiling lamps"))return false;
-  if(!check(std::fabs(custom.player().z-w.floorHeight(custom.player().pos.x,custom.player().pos.y))<.001f&&custom.hullFits(custom.player().pos,custom.player().z,1),"Whole player hull starts on generated terrain"))return false;
+  if(!check(std::fabs(custom.player().z-custom.groundHeight(custom.player().pos,float(World::TerrainMaxZ+1)))<.001f&&custom.hullFits(custom.player().pos,custom.player().z,1),"Whole player hull starts on generated terrain"))return false;
   for(const auto&e:custom.enemies())if(!check(w.fits(e.pos.x,e.pos.y,e.z,e.bodyTop()-e.z),"Creature spawn fits geometry"))return false;
   // Flood-fill walkable half-metre cells using the terrain surface as feet.
   constexpr int N=48;std::array<bool,N*N> seen{};std::queue<int> pending;
   int start=int(custom.player().pos.y*2)*N+int(custom.player().pos.x*2);seen[start]=true;pending.push(start);
   while(!pending.empty()){int p=pending.front();pending.pop();int x=p%N,y=p/N;
-   for(auto d:std::array<Vec2,4>{{{1,0},{-1,0},{0,1},{0,-1}}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>=N||ny>=N)continue;int q=ny*N+nx;Vec2 probe{(nx+.5f)*.5f,(ny+.5f)*.5f};float feet=w.floorHeight(probe.x,probe.y);
-    if(!seen[q]&&custom.hullFits(probe,feet,1)){seen[q]=true;pending.push(q);}}
+   for(auto d:std::array<Vec2,4>{{{1,0},{-1,0},{0,1},{0,-1}}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>=N||ny>=N)continue;int q=ny*N+nx;
+    if(seen[q])continue;
+    Vec2 from{(x+.5f)*.5f,(y+.5f)*.5f};float feet=custom.groundHeight(from,float(World::TerrainMaxZ+1));bool clear=true;
+    // Match the full player footprint and sample the connecting slope, rather
+    // than embedding the uphill corners at the centre-point floor height.
+    for(int step=1;step<=8;++step){Vec2 probe=from+d*(step*.0625f);float ground=custom.groundHeight(probe,feet+.215f);
+     if(std::fabs(ground-feet)>.215f||!custom.hullFits(probe,ground,1)){clear=false;break;}feet=ground;}
+    if(clear){seen[q]=true;pending.push(q);}}
   }
   int col=level%4,row=level/4;
+  if(col<3){World neighbour(level+1,WorldId::Ashfall);
+   for(float y=.5f;y<24;y+=.5f)
+    if(!check(std::fabs(w.floorHeight(24,y)-neighbour.floorHeight(0,y))<.001f,"East/west terrain support agrees at chunk boundary"))return false;
+  }
+  if(row<2){World neighbour(level+4,WorldId::Ashfall);
+   for(float x=.5f;x<24;x+=.5f)
+    if(!check(std::fabs(w.floorHeight(x,24)-neighbour.floorHeight(x,0))<.001f,"North/south terrain support agrees at chunk boundary"))return false;
+  }
   if(col<3&&!check(seen[24*N+46],"Spawn can reach eastern seam"))return false;
   if(col>0&&!check(seen[24*N+1],"Spawn can reach western seam"))return false;
   if(row<2&&!check(seen[46*N+24],"Spawn can reach southern seam"))return false;

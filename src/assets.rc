@@ -137,3 +137,7 @@
 250 RCDATA "assets/materials/water.png"
 251 RCDATA "assets/materials/water-normal.png"
 252 RCDATA "assets/Skyboxes/skybox_plain_emx_14.png"
+253 RCDATA "assets/materials/ashfall-dirt.png"
+254 RCDATA "assets/materials/ashfall-dirt-normal.png"
+255 RCDATA "assets/materials/ashfall-rock.png"
+256 RCDATA "assets/materials/ashfall-rock-normal.png"

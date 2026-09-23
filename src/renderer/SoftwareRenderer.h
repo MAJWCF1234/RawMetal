@@ -44,6 +44,7 @@ private:
     bool testNormalMapping();
     Texture m_muzzleFlash;
     Texture m_water;
+    Texture m_terrainDirt,m_terrainRock;
     Texture m_ashfallSky;
     Mesh m_consoleMesh{240};
     Texture m_consoleTexture;
