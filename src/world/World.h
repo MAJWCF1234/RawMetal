@@ -37,7 +37,7 @@ struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
 // Outdoor terrain is stored as engine-native triangles, independent of the
 // renderer. Collision samples the same height lattice that produced this mesh.
 struct TerrainVertex {float x=0,y=0,z=0,u=0,v=0;};
-struct TerrainTriangle {TerrainVertex a,b,c;};
+struct TerrainTriangle {TerrainVertex a,b,c;std::uint8_t material=0;};
 struct Span {float floor,ceiling;uint16_t flags=0;};
 using MapRows = std::array<std::string_view,24>;
 struct MapLayer {
@@ -55,6 +55,10 @@ class World {
 public:
     static constexpr int Width = 24;
     static constexpr int Height = 24;
+    // The toy Ashfall world proves the same volumetric terrain representation
+    // intended for the later Dark Below cavern chapter.
+    static constexpr int TerrainMinZ = -12;
+    static constexpr int TerrainMaxZ = 20;
 
     explicit World(int level=0,WorldId id=WorldId::Campaign);
     const std::vector<MapLayer>& layers()const{return m_layers;}
@@ -132,7 +136,7 @@ public:
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
     void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
-    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Terminal>{}.swap(m_terminals);}
+    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
@@ -160,9 +164,19 @@ private:
     std::vector<Terminal> m_terminals;
     std::vector<Structure> m_structures;
     std::vector<TerrainTriangle> m_terrain;
-    std::array<float,(Width+1)*(Height+1)> m_terrainHeights{};
+    // One ghost sample on each horizontal side lets Surface Nets build seam
+    // faces from neighbouring voxel cells without storing duplicate world maps.
+    static constexpr int TerrainBorder=1;
+    static constexpr int TerrainSamplesX=Width+3;
+    static constexpr int TerrainSamplesY=Height+3;
+    static constexpr int TerrainSamplesZ=TerrainMaxZ-TerrainMinZ+3;
+    std::vector<std::int8_t> m_terrainDensity;
+    std::vector<std::uint8_t> m_terrainMaterial;
     void buildTerrain();
-    float terrainHeight(float x,float y)const;
+    std::size_t terrainSampleIndex(int sx,int sy,int sz)const;
+    float terrainDensity(float x,float y,float z)const;
+    float terrainSurfaceBelow(float x,float y,float feet)const;
+    float terrainSurfaceAbove(float x,float y,float feet)const;
     std::vector<std::vector<uint16_t>> m_structureCells;
     const std::vector<uint16_t>& structureIndices(float x,float y)const{static const std::vector<uint16_t> empty;int ix=int(std::floor(x)),iy=int(std::floor(y));return m_structureCells.empty()||ix<0||iy<0||ix>=Width||iy>=Height?empty:m_structureCells[iy*Width+ix];}
     bool m_controlReleased=false;
