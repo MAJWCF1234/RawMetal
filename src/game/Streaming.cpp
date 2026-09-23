@@ -13,13 +13,29 @@ void Game::useDoor(int index){
 }
 void Game::updateStreaming(float dt){
  if(m_worldId==WorldId::Ashfall){
-  // Keep the 3x3 neighbourhood around the active outdoor chunk resident.
-  // Ashfall is now 4x3, so distant wasteland chunks unload while the surrounding
-  // horizon stays continuous across the same 24 m streaming seams.
-  auto current=chunkOffset(m_level);
-  for(int level=0;level<chunkCount();++level)if(level!=m_level){auto origin=chunkOffset(level);
-   bool needed=std::fabs(origin.x-current.x)<=World::Width+.01f&&std::fabs(origin.y-current.y)<=World::Height+.01f;
-   if(needed)ensureChunk(level);
+  // Directional outdoor streaming. Keep a short safety bubble around the player
+  // for seamless turns/crossings, then bias the remaining resident geometry into
+  // a forward cone. Chunks well behind the camera release geometry but retain
+  // gameplay state, so turning around simply streams them back in.
+  Vec2 playerGlobal=chunkOffset(m_level)+m_player.pos;
+  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
+  for(int level=0;level<chunkCount();++level)if(level!=m_level){
+   auto origin=chunkOffset(level);
+   float dx=std::max({origin.x-playerGlobal.x,0.f,playerGlobal.x-(origin.x+World::Width)});
+   float dy=std::max({origin.y-playerGlobal.y,0.f,playerGlobal.y-(origin.y+World::Height)});
+   bool seamBuffer=dx*dx+dy*dy<=81.f; // 9 m around neighbouring chunk bounds
+   Vec2 center=origin+Vec2{World::Width*.5f,World::Height*.5f},to=center-playerGlobal;
+   float along=dot(to,forward),lateral=std::fabs(to.x*forward.y-to.y*forward.x);
+   float cone=17.f+std::max(0.f,along)*.42f;
+   bool inFront=along>-5.f&&along<70.f&&lateral<cone;
+   bool keepResident=inFront||seamBuffer;
+   if(m_chunks[level].resident){
+    // Hysteresis prevents rapid load/unload thrashing when the player looks
+    // sideways across a cone edge.
+    float keepCone=cone+8.f;
+    keepResident=seamBuffer||(along>-14.f&&along<78.f&&lateral<keepCone);
+   }
+   if(keepResident)ensureChunk(level);
    else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
   }
   (void)dt;return;
@@ -75,13 +91,19 @@ bool Game::testStreaming(){
  // Ashfall uses the same resident-chunk renderer/collision path in two axes.
  Game ash(WorldId::Ashfall);
  if(ash.world().terrain().size()<200)return fail(16);
- if(!ash.chunkResident(1)||!ash.chunkResident(4)||!ash.chunkResident(5)||ash.chunkResident(2)||ash.chunkResident(11))return fail(22);
+ // Default spawn faces roughly east: preload two chunks ahead, but not the far
+ // western/southern world. Turning south should drop distant east geometry and
+ // pull the southern corridor into memory on the next streaming update.
+ if(!ash.chunkResident(1)||!ash.chunkResident(2)||ash.chunkResident(8)||ash.chunkResident(11))return fail(22);
+ ash.m_player.angle=kPi*.5f;ash.updateStreaming(0);
+ if(!ash.chunkResident(4)||!ash.chunkResident(8)||ash.chunkResident(3))return fail(24);
+ ash.m_player.angle=.08f;ash.updateStreaming(0);
  float eastA=ash.world().floorHeight(23.999f,12),eastB=ash.m_chunks[1].world.floorHeight(.001f,12);
  if(std::fabs(eastA-eastB)>.01f)return fail(17);
  ash.m_player.pos={24.10f,12.f};ash.crossChunkBoundary();
  if(ash.level()!=1||std::fabs(ash.player().pos.x-.10f)>.01f||std::fabs(ash.player().pos.y-12.f)>.01f)return fail(18);
  ash.updateStreaming(0);
- if(!ash.chunkResident(0)||!ash.chunkResident(2)||!ash.chunkResident(4)||!ash.chunkResident(5)||!ash.chunkResident(6)||ash.chunkResident(3))return fail(19);
+ if(!ash.chunkResident(0)||!ash.chunkResident(2)||!ash.chunkResident(5)||ash.chunkResident(8)||ash.chunkResident(11))return fail(19);
  float southA=ash.world().floorHeight(12,23.999f),southB=ash.m_chunks[5].world.floorHeight(12,.001f);
  if(std::fabs(southA-southB)>.02f)return fail(20);
  ash.m_player.pos={12.f,24.10f};ash.crossChunkBoundary();
@@ -98,6 +120,6 @@ bool Game::testStreaming(){
  joined.m_player.pos={9,9};joined.m_player.z=joined.world().floorHeight(9,9);joined.m_player.angle=-kPi*.5f;joined.m_velocity={};walking.sprint=false;
  for(int i=0;i<100;++i)joined.update(walking,1.f/120);
  if(joined.player().pos.y>=7.7f||std::fabs(joined.player().z+9)>.08f)return fail(14);
- std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nAshfall 4x3 neighbour residency, east/south crossing and Surface Nets wasteland seams: PASS\nRear store door and wall collision, then walking out of flooded returns: PASS\n";return true;
+ std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nAshfall forward-biased residency, turning, east/south crossing and Surface Nets wasteland seams: PASS\nRear store door and wall collision, then walking out of flooded returns: PASS\n";return true;
 }
 }
