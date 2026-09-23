@@ -307,6 +307,7 @@ private:
     void punchImpact();
     void receiveDamage(float amount,Vec2 source);
     void updateEnemies(float dt);
+    void migrateEnemiesAcrossChunks();
     void updatePickups();
 
     World m_world;
