@@ -119,11 +119,15 @@ public:
     void update(const InputState& input, float dt);
     void restart();
     int level()const{return m_level;}
-    static constexpr int ChunkCount=6;
+    // ChunkCount remains the six-chunk campaign count for compatibility with
+    // existing campaign tests/saves. Ashfall can use the larger shared capacity.
+    static constexpr int ChunkCount=CampaignChunkCount;
+    static constexpr int MaxChunks=WorldChunkCapacity;
+    int chunkCount()const{return worldChunkCount(m_worldId);}
     Vec2 chunkOffset(int level)const{return chunkDefinition(m_worldId,level).origin;}
     Game chunkView(int level)const;
     const World& worldAt(Vec2& local)const;
-    bool chunkResident(int level)const{return level==m_level||m_chunks[level].resident;}
+    bool chunkResident(int level)const{return level>=0&&level<chunkCount()&&(level==m_level||m_chunks[size_t(level)].resident);}
 
     const World& world() const { return m_world; }
     const Player& player() const { return m_player; }
@@ -280,7 +284,7 @@ private:
     void loadLevel(int level,bool carry);
     int m_level=0;
     struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
-    std::array<ChunkState,ChunkCount> m_chunks;
+    std::array<ChunkState,MaxChunks> m_chunks;
     void storeChunk();
     void crossChunkBoundary();
     void ensureChunk(int level);
