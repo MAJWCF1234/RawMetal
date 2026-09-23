@@ -86,6 +86,22 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
  m_diskSign=makeSign("MAINTENANCE","SERVICE BENCH",0xffd7ac64u);m_authSign=makeSign("CONTROL","R-03",0xff53aec4u);
 }
+const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int part)const{
+ if(mesh<0||mesh>=int(m_facilityMeshes.size()))throw std::runtime_error("Invalid facility mesh index "+std::to_string(mesh));
+ const auto& model=m_facilityMeshes[size_t(mesh)];
+ if(part>=0&&part<int(model.materialNames.size())){
+  const auto& name=model.materialNames[size_t(part)];
+  auto found=m_facilityTextures.find(name);if(found!=m_facilityTextures.end())return found->second;
+ }
+ // The three service-map FBX files each ship with one documented texture, but
+ // their internal material labels are exporter metadata and are not guaranteed
+ // to match the PNG stem. Bind those meshes by authored asset identity instead
+ // of crashing when ufbx reports a different material name.
+ static constexpr const char* serviceTexture[]={"machinery_mx_1","transformer_box_hr_2","metal_hr_6_1"};
+ if(mesh>=12&&mesh<=14)return m_facilityTextures.at(serviceTexture[mesh-12]);
+ std::string material=part>=0&&part<int(model.materialNames.size())?model.materialNames[size_t(part)]:"<invalid part>";
+ throw std::runtime_error("Missing facility texture for mesh "+std::to_string(mesh)+", part "+std::to_string(part)+", material "+material);
+}
 SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
  Texture sign{256,80,std::vector<std::uint32_t>(256*80)};
  for(int y=0;y<80;++y)for(int x=0;x<256;++x){auto rust=sample(m_signRust,x/256.f,y/80.f),metal=sample(m_panelMetal,x/256.f,y/80.f);int edge=std::min({x,y,255-x,79-y});
