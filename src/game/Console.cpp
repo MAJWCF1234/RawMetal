@@ -10,15 +10,11 @@ void Game::executeConsole(std::string command){
  for(auto&c:command)c=char(std::tolower(static_cast<unsigned char>(c)));
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
-  m_consoleLog.push_back("CUSTOM HORROR: MAP WASTELAND / MAP CUSTOM / MAP CAVE FOR VOXEL TERRAIN TEST");
+  m_consoleLog.push_back("CUSTOM HORROR: MAP WASTELAND / MAP CUSTOM TO TEST SURFACE NETS TERRAIN");
   m_consoleLog.push_back("0 FOUNDRY / 1 PRESSUREWORKS / 2 GANTRY / 3 LIFT");
   m_consoleLog.push_back("4 SERVICE GALLERY / 5 COOLANT RETURN / MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
- else if(verb=="map"&&(arg=="cave"||arg=="voxel")){
-  m_worldId=WorldId::Ashfall;m_level=4;restart();m_player.pos={2.2f,8.f};m_player.z=m_world.supportBelow(m_player.pos.x,m_player.pos.y,1.5f);m_player.grounded=true;m_player.angle=0;
-  m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED SURFACE NETS CAVE TEST / WALK EAST INTO THE RIDGE.");
- }
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
   m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED CUSTOM WASTELAND / 6 STITCHED SURFACE CHUNKS.");
  }
