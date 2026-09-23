@@ -814,8 +814,13 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22}})m_lights.push_back({p,-6.55f});
   }else if(m_level==7){
    m_layers={{"Pump Annex / lower manifold",-12,0,PumpAnnexLower},{"Pump Annex / main floor",-9,.25f,PumpAnnexMain},{"Pump Annex / observation",-4,.25f,PumpAnnexObservation}};
-   m_doors={{2,5,.5f,0,false,false,true,3},{19,22,23.5f,0,false,true,false,8}};
+   // The Annex -> Junction seam is a normal personnel door inside a framed
+   // transfer vestibule, not a three-metre open portal into streamed space.
+   m_doors={{2,5,.5f,0,false,false,true,3},{19.8f,21.2f,23.5f,0,false,true,false,8}};
+   m_doors.back().swinging=true;
    wall(2,0,5,1,-12,-9);wall(19,23,22,24,-12,-4);
+   wall(19,23.15f,19.8f,24,-4,roof);wall(21.2f,23.15f,22,24,-4,roof);
+   wall(19.8f,23.15f,21.2f,24,-1.45f,roof);
    stairs={{2,4,5,11,-12,-9,16,true,false},{15,2,18,6,-12,-9,16,true,true},{15,6,18,16,-9,-4,26,true,true}};
    // Pumps occupy the full open volume and connect to the overhead header.
    for(Vec2 p:{Vec2{8,6},Vec2{8,13},Vec2{12,19.5f}}){
@@ -844,9 +849,12 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(Vec2 p:{Vec2{4,11},Vec2{12,3},Vec2{13,17}})m_lights.push_back({p,-9.35f});
   }else if(m_level==8){
    m_layers={{"Utility Junction / concourse",-9,0,UtilityJunctionGround},{"Utility Junction / maintenance bridge",-4,.25f,UtilityJunctionUpper}};
-   m_doors={{2,5,.5f,0,false,false,true,5},{19,22,4.5f,0,false,false,false,5},{3,5,17.5f},{20,23,23.5f,0,false,true}};
+   m_doors={{2.8f,4.2f,.5f,0,false,false,true,5},{19,22,4.5f,0,false,false,false,5},{3,5,17.5f},{20,23,23.5f,0,false,true}};
+   m_doors.front().swinging=true;
    m_doors[1].requireState=stateId("freight_incident_clearance");m_doors[2].requireState=stateId("primary_utilities_permit");m_doors.back().requireState=stateId("waste_access");
    wall(2,0,5,1,-9,-4);wall(19,4.35f,22,4.65f,-9,-4);
+   wall(2,0,2.8f,.85f,-4,roof);wall(4.2f,0,5,.85f,-4,roof);
+   wall(2.8f,0,4.2f,.85f,-1.45f,roof);
    stairs={{8,10,11,20,-9,-4,26,true,false}};
    // A glazed control booth: low sill plus lintel instead of a solid opaque box.
    wall(15,10,15.2f,15,-9,-7.85f);wall(15,10,15.2f,15,-6.05f,-5.6f);
