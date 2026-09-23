@@ -173,8 +173,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    if(std::min({y1,y2,y3,y4})>=o.y1+.005f&&std::max({y1,y2,y3,y4})<=o.y2-.005f)return true;
   }return false;
  };
- auto outside=[](Point3 p){unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;return mask;};
- auto sphereVisible=[&](Point3 point,float radius){auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
+ float farPlane=w.outdoors()?70.f:160.f;
+ auto outside=[&](Point3 p){unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
+ auto sphereVisible=[&](Point3 point,float radius){auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z-radius<farPlane&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
  auto flashPitch=game.player().pitch/140.f,flashCp=std::cos(flashPitch),flashSp=std::sin(flashPitch);
  Point3 flashForward{std::cos(game.player().angle)*flashCp,std::sin(game.player().angle)*flashCp,flashSp};
  bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
