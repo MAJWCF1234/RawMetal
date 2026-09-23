@@ -329,12 +329,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  // height field used by collision. This replaces the old flat half-metre floor
  // patches while leaving authored ruins, machinery and props on top.
  if(w.hasTerrain())for(const auto&face:w.terrain()){
-  MeshVertex a{{face.a.x,face.a.y,face.a.z},face.a.u,face.a.v};
-  MeshVertex b{{face.b.x,face.b.y,face.b.z},face.b.u,face.b.v};
-  MeshVertex c{{face.c.x,face.c.y,face.c.z},face.c.u,face.c.v};
+  MeshVertex a{{face.a.x,face.a.y,face.a.z},0,0};
+  MeshVertex b{{face.b.x,face.b.y,face.b.z},0,0};
+  MeshVertex c{{face.c.x,face.c.y,face.c.z},0,0};
   const Texture&terrainMaterial=face.material==1?m_pressureWall:face.material==2?m_floor:m_concrete;
-  // Keep the extracted facets visible. Material IDs come from the authored
-  // source voxels, matching the NoCubes idea of block material -> smooth skin.
+  // Project texture coordinates on the triangle's dominant plane. The first
+  // Surface Nets pass used XY UVs for everything, so near-vertical cliff faces
+  // collapsed to a line in texture space and produced the long streaks seen in
+  // Ashfall. World-aligned planar UVs keep one texel scale on floors and cliffs.
+  Point3 n=cross3(b.p-a.p,c.p-a.p);float ax=std::fabs(n.x),ay=std::fabs(n.y),az=std::fabs(n.z);
+  auto uv=[&](MeshVertex&v){float wx=v.p.x+w.definition().origin.x,wy=v.p.y+w.definition().origin.y,wz=v.p.z;
+   constexpr float scale=.28f;
+   if(az>=ax&&az>=ay){v.u=wx*scale;v.v=wy*scale;}
+   else if(ax>=ay){v.u=wy*scale;v.v=wz*scale;}
+   else {v.u=wx*scale;v.v=wz*scale;}
+  };
+  uv(a);uv(b);uv(c);
+  // Flat triangle lighting preserves the block-authored faceting.
   tri(a,b,c,terrainMaterial,.96f);
  }
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);

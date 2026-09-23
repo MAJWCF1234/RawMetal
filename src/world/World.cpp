@@ -275,94 +275,124 @@ constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,Pressu
 constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
 constexpr MapLayer TurbineGantryUpperLayer{"Turbine Gantry / upper catwalk",3,.3f,TurbineGantryUpperCatwalk};
 constexpr std::array GantryStairs{Staircase{4,18,6,22,0,3,15,true,true}};
-// Six stitched outdoor regions. Internal chunk edges are open terrain, not
-// corridors: the active chunk and its neighbours share one world-space height
-// field, so crossing a seam is visually and physically continuous.
+// Ashfall's tile layer is deliberately sparse. Terrain supplies the landscape;
+// only isolated junk, ruined wall fragments and build-site clutter live here.
 constexpr MapRows ashfallRegion(int region){
  MapRows rows={
-  "........................","........................",".....####...............",".....#..#......####.....",
-  ".....#..#......#..#.....",".....####......####.....","........................","..........####..........",
-  "..........#..#..........","....####..#..#..####....","....#..#..####..#..#....","....####........####....",
-  "........................","..####....####..........","..#..#....#..#..........","..####....####....##....",
-  "........................","....####................","....#..#....####........","....####....#..#........",
-  "............####........","........................","........................","........................"};
- if(region==1){rows[3]="...####....####....####.";rows[8]=".......######...........";rows[14]="....####....####....###.";rows[19]="....#....####....#......";}
- if(region==2){rows[4]="..####......####........";rows[6]="..#..#......#..#........";rows[10]="......####......####....";rows[16]="....####....####........";}
- if(region==3){rows[2]=".....####...............";rows[7]="..####......####........";rows[12]="..#..#......#..#........";rows[18]="......####......####....";}
- if(region==4){rows[5]="........####............";rows[9]="....####....####........";rows[15]="....#..#....#..#........";rows[20]="....####....####........";}
- if(region==5){rows[3]="..####....####..........";rows[11]="..............####......";rows[17]="....####....####........";rows[21]=".......######...........";}
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................",
+  "........................","........................","........................","........................"};
+ switch(region){
+  case 0: rows[10]="..................CC....";rows[18]=".....##.................";break;
+  case 1: rows[5]="...B....................";rows[17]="....................##..";break;
+  case 2: rows[11]="................CC......";rows[20]="..##....................";break;
+  case 3: rows[6]="....##..................";rows[18]="..................B.....";break;
+  case 4: rows[4]="...................##...";rows[19]="....CC..................";break;
+  case 5: rows[8]="..B.....................";rows[21]="..................##....";break;
+  case 6: rows[6]="................CC......";rows[17]="...##...................";break;
+  case 7: rows[9]="....................B...";rows[20]=".....##.................";break;
+  case 8: rows[7]="...CC...................";rows[18]="...................##...";break;
+  case 9: rows[5]="..................##....";rows[19]="....B...................";break;
+  case 10: rows[8]=".....##.................";rows[21]=".................CC.....";break;
+  case 11: rows[6]="....................##..";rows[18]="....CC..................";break;
+ }
  return rows;
 }
-static_assert([]{for(int i=0;i<6;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
+static_assert([]{for(int i=0;i<AshfallChunkCount;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
 
-// Ashfall's source terrain is literally a 72 x 48 field of authored 1 m
-// voxel columns. The digits are the top occupied voxel for each X/Y cell.
-// Surface Nets sees only solid/air samples from these cubes. There are no
-// ellipsoid SDF brushes here, so the source behaves like Minecraft terrain:
-// author cubes first, then throw the visible cube faces away and extract a mesh.
-constexpr std::array<std::string_view,48> AshfallVoxelTop{{
- "000000000021333444333333221000000001214444444323333334443322110000001111",
- "000000000033333444333333221100000001113322334333333333333212111001111112",
- "000000000033334344333233322110001001122333333333233433332222212110110232",
- "000000000044444444334332322110010010112222223433333222222222222223222222",
- "000000000034544444433333322201001000111122332223322222222222322322222232",
- "000000000055544344444333322111000000001111022222223222111332233333333343",
- "000000000054555444444443332221100000000001111122222211111122333442344333",
- "000000000066554444334543333221120000001100011133322111101121334444444333",
- "000000000076655544454443333322111000000000000122231100000122344554434433",
- "000000000066665565555553334331211100000000001122211110100121334444354443",
- "333445576666666666552222222222221110000000000112201110000112333434444433",
- "333544555556667566662222222222222110000000000112211110000112233333335443",
- "333344444555566666662222222222222112000000000112211210001111223332334344",
- "333333433445556666652222222222222221000000000000111110000111122223332344",
- "333333332344556666666663336554443421100000000111111110000112112322233344",
- "334322221245555665666663336656544422110000010101111110000002121111233344",
- "334222211233445666666673336655555342310000001111101110100000111112223344",
- "333322222233344555555663335556544331211000001111011111100112111112223344",
- "332322222233334444555543334554444232212000011110121111110111111212233344",
- "433333222133433343334433334444444332211100021111211211111121111113223444",
- "333333433333333333433443233333323332211110101211222222222222211122234543",
- "333334323323322222222233333333333322211111011122222222233222232322333444",
- "222222222222221111222222222222212222111111110222222222222222222222222222",
- "222222222222222111111111111222222221101121111222222222222222222222222222",
- "222222222222222111111101111111222211111111122222222222222222222222222222",
- "222222222222222111101111111112222222222222222222222222222222222222222222",
- "333344444443332311110121111112222222222222223333334455555555555444444444",
- "234334445444333223222121111222223223222222333233334555556676554655555444",
- "233334445544433322222211112222333333333333333233334555556656665676555445",
- "233344445444343333322221122223333333333333233333334455456676666666654544",
- "123434435543434433442222122133344444453444333333334445555666666666655444",
- "223354455555444444333222222333444444444444443333234444445556566666655443",
- "223334445555555444433323223334444344444444443333333445455556666666655443",
- "223333444444356564444333133354444344444344433333333335444555566666554443",
- "223332334554445555444433333343444434444344334323333333344456555555543433",
- "222333332344546556544443333444444444444444333321222333344555566666644333",
- "222222222334345555534443334434444444454343333222223233244455566666634333",
- "221132222232444555554443334444444444445443433222222122344444466666622222",
- "232201101223344555454443334444444444444433332322222222244444444111122222",
- "210111100122334555454443334445334334333333322232222223222221111001111012",
- "221011110122334455444443335323433333333332322231122222222211100000001111",
- "222111111122333444444443333433333333333332222221111232221111000001000011",
- "222221111122232333444443232333322333433322232221111111111120000010000001",
- "222221112122233323333333333433333322222221222210111111111100000000000000",
- "322221111122223334333333233333432222232222222211111111111000000000100001",
- "332322211112222433333423333333222222222122222311111111110000000010000001",
- "333232221222222123333433333433222222222223221221111101000010000101010011",
- "232312222212222222242333233332222222212120113122111110000000000000000011"
+// Ashfall's source terrain is a 96 x 72 field of authored one-metre voxel
+// columns. Surface Nets skins these block points; no smooth SDF primitives are
+// involved. Broad flats are intentional build pads for sparse wasteland ruins.
+constexpr std::array<std::string_view,72> AshfallVoxelTop{{
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111222221111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111122222223222222111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111222333333333332111111111111111111111111111111111111122222111111111",
+ "111111111111112222222221111112223333333333333111111111111222222222111111111111222222322222211111",
+ "111111111112222223332222222212233432222222223111111222222223333322222222111112223332222222221111",
+ "111111111112333333333333332222233432222222223111112222333333333333333222211122333332111111112111",
+ "111111111112334444444443333222334432222222223111112233334444444444433332221122334432111111112111",
+ "111111111112344455555444443322334432222222223111112333444445555544444333221122344532111111112111",
+ "111111111112355555555555443322334432222222223111112334445555555555544433221223344532111111112211",
+ "111111111112355666666655443332233432222222223111113333333333336665554433322223344532111111112211",
+ "111111222222355667776655544332233432222222223111113222222222237666554443322223344532111111112211",
+ "111111233333356677777665544333223333333333333211111211111111237766555443322122344532111111112111",
+ "111111223344555667776655544332222333333333332211111211111111237666554443322122334432222222222111",
+ "111111223334455666666655443332222222223222222211111211111111236665554433322122333333333333322111",
+ "111111122334455555555555443322111111222221111111111211111111235555544433221112223333333332221111",
+ "111111122334444455555444443322111111111111111111111211111111235544444333221111222222322222211111",
+ "111111122233334444444443333222111111111111111111111211111111234444433332221111111122222111111111",
+ "111111112223333333333333332221111111111111111111112211111111233333333222211111111111111111111111",
+ "111111111222222223332222222211111111111111111111111211111111233322222222111111111111111111111111",
+ "111111111111112222222221111111111111111111111111111111111222222222111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111222222211111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111122222222222222222111111111111111111111111111111111111111111122222111111111",
+ "111111111222111111112222223333333332222221111111111111111111111111111111111111222222222222211111",
+ "111111222222222111112233333333433333333221111111111112222222222211111111111122222233333222222111",
+ "112222222222222222222233344444444444333222111111222222222222222222222111111122233333333333222111",
+ "112222233333332222222333444455555444433322111122222111111111233332222221111222333334443333322211",
+ "112233333333333332222333445555555554433322211122222111111111233333333221111223334444444443332211",
+ "122233334444433332222334445566666554443322211222222111111111234444433222111223344445554444332211",
+ "111111111111111132223334455566666555443332211222111111111111111144433322111223344555555544332211",
+ "111111111111111111111111111111116554443322212222111111111111111111111111111111114555655544333221",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111222222221111",
+ "122211111111123311111111111111111111111111111111111333333333336511111111111111111111222222221111",
+ "122211111111123332222222223333331111111111111111111455666666666554443322211223341111222222221111",
+ "122211111111123332221122222222222222111111112211111455555666555554433322211223344443222222222211",
+ "112211111111123332211111111222222211111111111211111445555555555544433322111223334443222222222211",
+ "112211111111122222211111111111111111111111111211111444444444444444433222111222333333222222222211",
+ "112211111111122222211111111111111111111111111111111333344444443333333221111122233333222222222111",
+ "111111222222222111111111111111111111111111111111111233333333333332222221111122222233222222222111",
+ "111111111222111111111111111111111111111111111111111222222333222222222111111111222222222222211111",
+ "111111111111111111111111111111111111111111111111111112222222222211111111111111111122222111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111112222222111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111222222222222222221111111111111111111",
+ "111111111111111222222211111111111111111111111111111111111222222222333332222222221111111112111111",
+ "111111111112222222222222221111111111111111111111111111112222233333333333333322222111112222222111",
+ "111111112222222333333322222221111111111222222111111111112223333333444443333333222112222222222222",
+ "111111112222233333333333332221111112222222333111112211122233334444444444444333322212222222222222",
+ "111111111111233444444433333221111122233333333111112221122233344444455544444433322212111111112322",
+ "111111111111234444444444433222111222222222222222223322122233344455555555544433322222111111112332",
+ "111111111111234555555544433322111222111111112222223322222333444555556555554443332222111111112332",
+ "111111111111235555555554433322211222111111112222223322222333444555666665554443332222111111112332",
+ "111111111111235566666554443322212232111111112222223332223333333556666666555444333222111111112332",
+ "111111111111235566666555443332212232111111112222223222222222223555666665554443332222111111112333",
+ "111111111111235566666554443322212332111111112222223211111111123555556555554443332222111111112332",
+ "111111222222235555555554433322212232111111112322222211111111123455555555544433322222222222222332",
+ "111111122333334555555544433322112232111111112322222211111111123444455544444433322222333333333332",
+ "111111122233444444444444433222111222222222222322222211111111123444444444444333322222333344433332",
+ "111111112233333444444433333221111223333333333322222211111111123333444443333333222112233333333322",
+ "111111112223333333333333332221111223333444444422222211111111123333333333333322222112222333332222",
+ "111111112222222333333322222221111122233333333322222211111111122222333332222222221112222222222222",
+ "111111111112222222222222221111111112222222333222222211111111122222222222222221111111112222222111",
+ "111111111111111222222211111111111111111222222222111111111111111112222222111111111111111112111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+ "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
 }};
-static_assert([]{for(auto row:AshfallVoxelTop)if(row.size()!=72)return false;return true;}(),"Ashfall voxel rows must be 72 cells wide");
+static_assert([]{for(auto row:AshfallVoxelTop)if(row.size()!=96)return false;return true;}(),"Ashfall voxel rows must be 96 cells wide");
 int ashfallVoxelTop(int worldX,int worldY){
- if(worldX<0||worldY<0||worldX>=72||worldY>=48)return 0;
+ if(worldX<0||worldY<0||worldX>=96||worldY>=72)return 1;
  char value=AshfallVoxelTop[size_t(worldY)][size_t(worldX)];
- return value>='0'&&value<='9'?value-'0':0;
+ return value>='0'&&value<='9'?value-'0':1;
 }
 bool authoredAshfallVoxel(int worldX,int worldY,int worldZ){
  return worldZ<=ashfallVoxelTop(worldX,worldY);
 }
 std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
  int top=ashfallVoxelTop(worldX,worldY);
- if(worldZ<top-1)return 0; // buried rock
- if(top>=5)return 2;       // exposed high ridge material
+ if(worldZ<top-1)return 0;
+ if(top>=5)return 2;
  return ((worldX*3+worldY*5)&15)==0?1:0;
 }
 // Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
@@ -385,17 +415,16 @@ constexpr float ShelfTiers[]={.17f,.54f,.92f};
 void World::buildPopulation(){
  using C=CreatureKind;using P=PickupKind;
  if(!campaign()){
-  // Outdoor encounters are spread across the stitched grid instead of cloning
-  // one room's population six times.
-  switch(m_level){
-   case 0:m_creatureSpawns={{C::Huntsman,{18.5f,8.5f}},{C::Wasp,{9.5f,17.5f}}};m_pickupSpawns={{{6.5f,8.5f},P::Ammo}};break;
-   case 1:m_creatureSpawns={{C::Huntsman,{7.5f,6.5f}},{C::Brute,{18.5f,17.5f}}};m_pickupSpawns={{{12.5f,12.5f},P::Health}};break;
-   case 2:m_creatureSpawns={{C::Wasp,{5.5f,7.5f}},{C::Huntsman,{13.5f,11.5f}},{C::Brute,{19.5f,19.5f}}};m_pickupSpawns={{{6.5f,18.5f},P::Ammo}};break;
-   case 3:m_creatureSpawns={{C::Huntsman,{8.5f,15.5f}},{C::Wasp,{19.5f,5.5f}}};m_pickupSpawns={{{18.5f,17.5f},P::Health}};break;
-   case 4:m_creatureSpawns={{C::Brute,{9.5f,18.5f}},{C::Huntsman,{17.5f,7.5f}},{C::Wasp,{13.5f,15.5f}}};m_pickupSpawns={{{4.5f,5.5f},P::Ammo},{{20.5f,19.5f},P::Health}};break;
-   case 5:m_creatureSpawns={{C::Huntsman,{6.5f,8.5f}},{C::Brute,{17.5f,14.5f}}};m_pickupSpawns={{{18.5f,6.5f},P::Ammo}};break;
-  }
-  for(int i=0;i<4;++i)m_clutterSpawns.push_back({(i+m_level)%6,{4.f+i*3.1f,6.5f+float((i+m_level)%3)*4.2f},-999,(i+m_level)*.7f});
+  // Fallout-like spacing: most outdoor chunks carry one small encounter and a
+  // little salvage, leaving long quiet sight-lines between landmarks.
+  const Vec2 encounter[]={{18.5f,18.5f},{5.5f,18.5f},{18.5f,5.5f},{5.5f,5.5f}};
+  auto p=encounter[m_level%4];
+  if(m_level%5!=3)m_creatureSpawns.push_back({m_level%4==2?C::Wasp:m_level%6==5?C::Brute:C::Huntsman,p,-999});
+  if(m_level==6||m_level==10)m_creatureSpawns.push_back({C::Wasp,{19.5f,18.5f},-999});
+  if(m_level%3==0)m_pickupSpawns.push_back({{4.5f,19.5f},P::Ammo});
+  if(m_level==5||m_level==11)m_pickupSpawns.push_back({{20.5f,4.5f},P::Health});
+  int junk=2+(m_level%2);
+  for(int i=0;i<junk;++i)m_clutterSpawns.push_back({(i+m_level)%6,{3.5f+i*1.4f,20.5f-float((i+m_level)%2)*1.2f},-999,(i+m_level)*.7f});
   return;
  }
  // Population belongs to the map, just like its layers and fixtures.
@@ -426,32 +455,103 @@ void World::buildPopulation(){
 }
 
 World::World(int level,WorldId id):m_worldId(id) {
- m_level=std::clamp(level,0,5);
+ m_level=std::clamp(level,0,worldChunkCount(m_worldId)-1);
  buildPopulation();
  if(horrorMode()){
-  const char* regionNames[]={"Ashfall / perimeter ruins","Ashfall / collapsed highway","Ashfall / rusted yard","Ashfall / sunken district","Ashfall / radio spire","Ashfall / evacuation gate"};
+  const char* regionNames[]={
+   "Ashfall / west approach","Ashfall / ridge road","Ashfall / dry interchange","Ashfall / east escarpment",
+   "Ashfall / motel flats","Ashfall / relay crossroads","Ashfall / scrap basin","Ashfall / utility mesa",
+   "Ashfall / south wash","Ashfall / dead subdivision","Ashfall / breaker yard","Ashfall / evacuation edge"};
   auto rows=ashfallRegion(m_level);
   m_layers={{regionNames[m_level],0,0,rows}};
-  // 0-2 are the north row, 3-5 the south row.
-  m_openWestBoundary=(m_level%3)>0;m_openEastBoundary=(m_level%3)<2;
-  m_openNorthBoundary=m_level>=3;m_openSouthBoundary=m_level<3;
+  int col=m_level%4,row=m_level/4;
+  m_openWestBoundary=col>0;m_openEastBoundary=col<3;
+  m_openNorthBoundary=row>0;m_openSouthBoundary=row<2;
   m_internalWallHeight=2.8f;
   buildTerrain();
 
-  float shift=float(m_level%3)*1.7f;
-  // Purchased machinery and facility pieces become distant landmarks rather
-  // than repeated room dressing. The terrain underneath determines their base.
-  m_props={{0,{14.5f+shift*.25f,4.5f},1.4f,2.2f,0,{1.1f,.66f},0},
-           {1,{17.5f-shift,13.5f},1.2f,2.f,.4f,{1.f,.5f},0},
-           {2,{9.5f,19.5f-shift},.35f,3.5f,.2f,{1.7f,.18f},0}};
-  if(m_level==1||m_level==4)m_props.push_back({3,{6.5f,16.5f},1.6f,2.6f,kPi*.5f,{1.3f,.18f},0});
-  if(m_level==2||m_level==5)m_props.push_back({0,{4.8f,18.2f},1.35f,2.2f,kPi*.25f,{1.1f,.66f},0});
-  m_fixtures={{7,{2.3f,8.5f},0,2,.5f,1.8f,0,true},{8,{21.2f,9.5f},.8f,.7f,.2f,1.f,3.14f,true}};
-  if(m_level==4)m_fixtures.push_back({6,{12.f,12.f},0,2.4f,.75f,1.3f,.35f,true});
-  // Outdoor ambient light needs no unsupported indoor ceiling fixtures.
-  const char* relayLines[]={"WEST GRID OPEN / HIGHWAY EAST.","HIGHWAY SPAN / MULTIPLE ROUTES.","YARD EDGE / SOUTH DISTRICT OPEN.",
-                            "LOW DISTRICT / RADIO EAST.","RADIO SPIRE / ALL GRIDS VISIBLE.","EVAC GATE / PERIMETER TERMINUS."};
-  m_terminals={{{10,3},"ASHFALL FIELD RELAY",relayLines[m_level],"TERRAIN LINK / LOCAL GRID ONLINE.",0,false}};
+  // Every substantial ruin sits on one of the deliberately flat voxel pads.
+  // The surrounding landscape stays empty enough to read as a wasteland rather
+  // than twelve industrial rooms placed outdoors.
+  constexpr Vec2 pads[]={{7,7},{15,8},{8,16},{16,9},{8,14},{16,16},{7,7},{16,15},{8,8},{16,10},{8,15},{16,8}};
+  auto pad=pads[m_level],base=floorHeight(pad.x,pad.y);
+  auto junkShack=[&](float cx,float cy,float width,float depth,float height,int material,int variant){
+   float x0=cx-width*.5f,x1=cx+width*.5f,y0=cy-depth*.5f,y1=cy+depth*.5f,t=.16f,door=.62f;
+   m_structures.push_back({x0,y1-t,x1,y1,base,base+height,false,material});
+   m_structures.push_back({x0,y0,x0+t,y1,base,base+height,false,material});
+   if(variant!=2)m_structures.push_back({x1-t,y0,x1,y1,base,base+height*(variant?0.72f:1.f),false,material});
+   m_structures.push_back({x0,y0,cx-door,y0+t,base,base+height,false,material});
+   m_structures.push_back({cx+door,y0,x1,y0+t,base,base+height,false,material});
+   if(variant==0)m_structures.push_back({x0+t,y0+t,cx-.15f,y1-t,base+height,base+height+.12f,false,2});
+   if(variant==1)m_structures.push_back({cx+.25f,y0+t,x1-t,y1-t,base+height*.82f,base+height*.94f,false,2});
+  };
+  auto junkWall=[&](float x,float y,float length,bool alongY){
+   if(alongY)m_structures.push_back({x-.10f,y,x+.10f,y+length,base,base+1.55f,false,3});
+   else m_structures.push_back({x,y-.10f,x+length,y+.10f,base,base+1.55f,false,3});
+  };
+
+  switch(m_level){
+   case 0: // a single ruined maintenance shack marks the starting outskirts
+    junkShack(pad.x,pad.y,5.6f,4.6f,2.35f,3,1);
+    m_props.push_back({1,{pad.x+2.8f,pad.y+1.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});
+    m_fixtures.push_back({8,{pad.x-2.35f,pad.y+.4f},.65f,.7f,.20f,1.f,kPi*.5f,true});
+    break;
+   case 1: // mostly road and rock, just a collapsed utility wall and abandoned machine
+    junkWall(pad.x-2.5f,pad.y+1.8f,5.f,false);
+    m_fixtures.push_back({6,{pad.x+1.3f,pad.y-.6f},0,1.8f,.55f,.95f,.25f,true});
+    break;
+   case 2:
+    junkShack(pad.x,pad.y,6.2f,5.2f,2.5f,3,2);
+    m_props.push_back({0,{pad.x-2.8f,pad.y+2.6f},1.35f,2.2f,.2f,{1.1f,.66f},0});
+    break;
+   case 3: // high eastern overlook, intentionally nearly empty
+    junkWall(pad.x-3.f,pad.y,6.f,false);
+    junkWall(pad.x+1.8f,pad.y-2.2f,4.4f,true);
+    break;
+   case 4:
+    junkShack(pad.x,pad.y,5.2f,4.4f,2.2f,2,0);
+    m_fixtures.push_back({7,{pad.x+2.5f,pad.y},0,1.7f,.5f,1.8f,kPi*.5f,true});
+    break;
+   case 5: // crossroads landmark: relay shack plus outside generator
+    junkShack(pad.x,pad.y,6.0f,5.2f,2.45f,3,0);
+    m_props.push_back({0,{pad.x+3.4f,pad.y-1.4f},1.45f,2.35f,kPi*.5f,{1.15f,.7f},0});
+    m_fixtures.push_back({8,{pad.x-2.55f,pad.y+.8f},.7f,.7f,.20f,1.f,kPi*.5f,true});
+    break;
+   case 6: // broad scrap basin with only a broken enclosure
+    junkWall(pad.x-2.6f,pad.y-2.f,5.2f,false);
+    junkWall(pad.x-2.6f,pad.y-2.f,4.f,true);
+    m_props.push_back({2,{pad.x+2.2f,pad.y+1.5f},.35f,3.5f,.4f,{1.7f,.18f},0});
+    break;
+   case 7:
+    junkShack(pad.x,pad.y,5.8f,5.f,2.5f,2,1);
+    m_fixtures.push_back({6,{pad.x-2.6f,pad.y+2.2f},0,1.7f,.55f,.95f,kPi*.5f,true});
+    break;
+   case 8: // south wash, almost pure terrain
+    m_props.push_back({1,{pad.x+1.8f,pad.y},1.05f,1.8f,.7f,{.28f,.9f},0});
+    break;
+   case 9:
+    junkShack(pad.x,pad.y,6.4f,4.8f,2.3f,3,2);
+    junkWall(pad.x-3.5f,pad.y+2.9f,4.5f,false);
+    break;
+   case 10: // breaker yard
+    junkWall(pad.x-3.f,pad.y-2.7f,6.f,false);
+    junkWall(pad.x-3.f,pad.y+2.7f,6.f,false);
+    m_fixtures.push_back({6,{pad.x,pad.y},0,2.2f,.7f,1.15f,.35f,true});
+    m_props.push_back({0,{pad.x+3.1f,pad.y+.8f},1.35f,2.2f,kPi*.5f,{1.1f,.66f},0});
+    break;
+   case 11: // evacuation edge gets the largest surviving shell
+    junkShack(pad.x,pad.y,7.2f,5.8f,2.65f,3,0);
+    junkWall(pad.x-4.f,pad.y+3.4f,8.f,false);
+    m_fixtures.push_back({7,{pad.x+3.2f,pad.y+1.5f},0,1.8f,.5f,1.8f,kPi*.5f,true});
+    break;
+  }
+
+  const char* relayLines[]={
+   "WEST APPROACH / NO CIVIL TRAFFIC.","RIDGE ROAD / POWER LINES DOWN.","DRY INTERCHANGE / EAST ROUTE OPEN.","EAST ESCARPMENT / LONG RANGE VISIBILITY.",
+   "MOTEL FLATS / STRUCTURES UNSAFE.","RELAY CROSSROADS / GRID INTERMITTENT.","SCRAP BASIN / SALVAGE SCATTERED.","UTILITY MESA / SUBSTATION DEAD.",
+   "SOUTH WASH / FLASH FLOOD CHANNEL.","DEAD SUBDIVISION / NO RESPONSE.","BREAKER YARD / HIGH VOLTAGE ISOLATED.","EVACUATION EDGE / OUTER GATE LOST."};
+  if(m_level==0||m_level==5||m_level==11)
+   m_terminals={{{pad.x,pad.y-1.6f},"ASHFALL FIELD RELAY",relayLines[m_level],"96 X 72 M SURFACE GRID / LOCAL LINK.",0,false}};
   buildLayers({});return;
  }
  if(m_level>=4){

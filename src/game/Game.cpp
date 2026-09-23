@@ -15,7 +15,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<ChunkCount;++level){loadLevel(level,false);storeChunk();}loadLevel(start,false);seedScripts();updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -26,7 +26,7 @@ const World& Game::worldAt(Vec2& local)const{
  // Campaign keeps its existing authored offsets; Ashfall can therefore form a
  // genuine 2D grid with the same collision queries.
  Vec2 global=local+chunkOffset(m_level);int other=m_level;
- for(int level=0;level<ChunkCount;++level){auto origin=chunkOffset(level);
+ for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){other=level;break;}
  }
  if(other==m_level)return m_world;
@@ -34,11 +34,26 @@ const World& Game::worldAt(Vec2& local)const{
 }
 void Game::crossChunkBoundary(){
  Vec2 global=m_player.pos+chunkOffset(m_level);int next=m_level;
- for(int level=0;level<ChunkCount;++level){auto origin=chunkOffset(level);
+ for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){next=level;break;}
  }
  if(next==m_level)return;int previous=m_level;
  auto shift=chunkOffset(m_level)-chunkOffset(next);bool carried=holdingClutter();Clutter held;if(carried){held=m_clutter[m_heldClutter];m_clutter.erase(m_clutter.begin()+m_heldClutter);}m_heldClutter=-1;
+ // Outdoor pursuers standing at the seam hand off with the player. Without
+ // this, changing the active chunk froze an alerted creature one metre behind
+ // an invisible ownership boundary even though the terrain itself was seamless.
+ std::vector<Enemy> followers;
+ if(m_worldId==WorldId::Ashfall){
+  for(auto it=m_enemies.begin();it!=m_enemies.end();){
+   auto local=it->pos+shift;
+   float outsideX=local.x<0?-local.x:local.x>=World::Width?local.x-World::Width:0;
+   float outsideY=local.y<0?-local.y:local.y>=World::Height?local.y-World::Height:0;
+   if(it->alive&&it->awareness>0&&std::max(outsideX,outsideY)<1.6f){
+    auto enemy=*it;enemy.pos={std::clamp(local.x,.24f,23.76f),std::clamp(local.y,.24f,23.76f)};
+    enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;followers.push_back(enemy);it=m_enemies.erase(it);
+   }else ++it;
+  }
+ }
  // Loose objects can cross any stitched edge. Transfer ownership only when the
  // object's world-space position belongs to the same destination as the player.
  std::vector<Clutter> following;
@@ -49,13 +64,14 @@ void Game::crossChunkBoundary(){
  ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
+ for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
  for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
  if(m_worldId==WorldId::Campaign&&next>previous)saveCheckpoint();
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
-    m_level=std::clamp(level,0,ChunkCount-1);m_world=World{m_level,m_worldId};m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
+    m_level=std::clamp(level,0,chunkCount()-1);m_world=World{m_level,m_worldId};m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_world.definition().playerStart;
     m_player.angle = 0.08f;
