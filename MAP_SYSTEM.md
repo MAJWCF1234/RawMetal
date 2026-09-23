@@ -86,9 +86,13 @@ META_DEFAULT_TARGET: MAIN
 
 Required metadata:
 
-- `META_LEVEL_ID` must be an integer.
-- `META_LEVEL_NAME` is used for display and custom-vault filenames.
+- `META_LEVEL_ID` must be an integer. For MAIN it names the compiled campaign slot. For a legacy CUSTOM payload it is only compatibility metadata and does not address the built-in campaign.
+- `META_LEVEL_NAME` names the map.
 - `META_DEFAULT_TARGET` must be `MAIN` or `CUSTOM`. The installer enforces it. A CUSTOM payload cannot be injected into `World.cpp` unless its metadata is intentionally changed to MAIN.
+
+Optional metadata:
+
+- `META_CAMPAIGN_NAME` names the entry shown in the CUSTOM MAPS menu. If omitted, CUSTOM installation uses `META_LEVEL_NAME` as the campaign name. Level Editor exports fill this automatically from the project name.
 
 For main-campaign installation the code block must declare the same level as `META_LEVEL_ID`. The installer rejects mismatches.
 
