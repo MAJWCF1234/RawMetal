@@ -63,10 +63,13 @@ bool Game::testConsole(){
  input.textInput="map reactor\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Crashed||game.player().z!=-9)return false;
  input.textInput="map 99\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return false;
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
- input={};input.textInput="map custom\r";game.update(input,.02f);if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return false;
- for(int level=0;level<ChunkCount;++level)if(!game.m_chunks[level].world.horrorMode()||(level>0&&!game.m_chunks[level].world.openNorthBoundary())||(level<ChunkCount-1&&!game.m_chunks[level].world.openSouthBoundary()))return false;
+ input={};input.textInput="map custom\r";game.update(input,.02f);
+ if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().openEastBoundary()||game.world().openNorthBoundary()||game.world().openWestBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return false;
+ for(int level=0;level<ChunkCount;++level){auto&w=game.m_chunks[level].world;bool north=level>=3,south=level<3,west=level%3>0,east=level%3<2;
+  if(!w.horrorMode()||w.openNorthBoundary()!=north||w.openSouthBoundary()!=south||w.openWestBoundary()!=west||w.openEastBoundary()!=east)return false;
+ }
  input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
  input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return false;
- std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
+ std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; Ashfall 3x2 boundaries; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
 }
 }
