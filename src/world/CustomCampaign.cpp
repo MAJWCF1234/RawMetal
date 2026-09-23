@@ -1,6 +1,7 @@
 #include "CustomCampaign.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -12,7 +13,8 @@ constexpr std::string_view DataEnd="--- CUSTOM_CAMPAIGN_DATA_END ---";
 
 std::string readText(const std::filesystem::path& path){
  std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("cannot open custom campaign");
- file.seekg(0,std::ios::end);auto size=file.tellg();if(size<0||size>4*1024*1024)throw std::runtime_error("custom campaign is empty or larger than 4 MB");
+ file.seekg(0,std::ios::end);auto end=file.tellg();if(end<0)throw std::runtime_error("cannot size custom campaign");auto size=std::uint64_t(end);
+ if(size>4ull*1024ull*1024ull)throw std::runtime_error("custom campaign is larger than 4 MB");
  file.seekg(0);std::string text(size_t(size),'\0');if(!text.empty()&&!file.read(text.data(),std::streamsize(text.size())))throw std::runtime_error("cannot read custom campaign");
  return text;
 }
