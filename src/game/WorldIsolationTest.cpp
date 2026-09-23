@@ -40,7 +40,7 @@ bool Game::testWorldIsolation(){
  trigger.actions.push_back(action);custom.m_chunks[0].world.m_scriptEvents.push_back(trigger);custom.seedScripts();custom.updateScripts(.01f);
  if(!check(custom.state(action.id)==7,"Reusable script executes custom-authored trigger"))return false;
  custom.m_chunks[0].world.m_scriptEvents.clear();custom.seedScripts();
- for(int level=0;level<ChunkCount;++level){
+ for(int level=0;level<custom.chunkCount();++level){
   out<<"Chunk "<<level<<'\n';custom.loadLevel(level,false);custom.updateStreaming(0);const auto&w=custom.world();
   if(!check(w.outdoors()&&!w.hasLift()&&!w.insideLift(12,12)&&w.hasTerrain()&&w.terrain().size()>200&&w.ceilingHeight(12,12)>100&&w.waterSurface(9,9)<-100&&w.particleEmitters().empty(),"Outdoor world owns terrain, sky clearance and no campaign-only systems"))return false;
   if(!check(w.lights().empty(),"Outdoor map has no unsupported ceiling lamps"))return false;
