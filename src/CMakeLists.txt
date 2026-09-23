@@ -57,6 +57,7 @@ add_executable(RawMetal WIN32
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp
     world/World.cpp
+    world/CustomCampaign.cpp
     renderer/SoftwareRenderer.cpp
     renderer/NormalMapping.cpp
     renderer/Mesh.cpp

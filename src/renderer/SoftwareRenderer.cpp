@@ -228,7 +228,8 @@ void SoftwareRenderer::drawHud(const Game& game){
  const auto paper=rgb(222,206,164),muted=rgb(159,139,105),amber=rgb(210,145,54),red=rgb(180,55,36);
  const int sector=int(p.pos.y)/8;
  wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
- text(19,14,!game.world().campaign()?"ASHFALL / SURFACE":game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT"),paper,2);
+ const char* mapLabel=game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
+ text(19,14,mapLabel,paper,2);
  if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)text(19,32,game.world().liftStatus(),amber);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
  // Compact map reveals nearby contacts and a fixed extraction marker.
@@ -289,15 +290,14 @@ void SoftwareRenderer::drawTitle(const Game& game){
  for(int i=0;i<13;++i){unsigned h=unsigned(i*747796405u+2891336453u);int x=58+int(h%278),y=47+int((h>>11)%39),len=5+int((h>>19)%22);rect(x,y,len,1,(i%2)?black:rgb(74,47,28));}
  text(61,101,game.customMapsOpen()?"CUSTOM MAP ARCHIVE / PLAYER CONTENT":"EXTRACTION COMPLEX / NIGHT SHIFT",muted,2);
  text(61,126,game.customMapsOpen()?"SELECT A DEPLOYMENT":"CONTAINMENT FAILURE",rust,2);
- text(61,144,game.customMapsOpen()?"MAP FILES LIVE IN /CUSTOM MAPS":"SURFACE ROUTE / STATUS UNKNOWN",muted);
+ text(61,144,game.customMapsOpen()?"DROP CAMPAIGN .TXT FILES IN /CUSTOM MAPS":"SURFACE ROUTE / STATUS UNKNOWN",muted);
  const char* normalLabels[]={"NEW GAME","CUSTOM MAPS","LOAD GAME","SETTINGS","QUIT"};
- const char* customLabels[]={"ASHFALL EXCLUSION ZONE","BACK TO TITLE"};
- const char* const* labels=game.customMapsOpen()?customLabels:normalLabels;
  for(int row=0;row<game.titleRows();++row){
   int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();
   wornPanel(TitleMenuLayout::X,y,TitleMenuLayout::Width,22,true,true);
   if(selected){rect(TitleMenuLayout::X+1,y+2,3,18,amber);rect(TitleMenuLayout::X+7,y+2,TitleMenuLayout::Width-10,1,rgb(106,72,31));}
-  text(TitleMenuLayout::X+16,y+8,labels[row],selected?paper:muted,2);
+  std::string customLabel=game.customMapsOpen()?game.customMenuLabel(row):std::string{};
+  text(TitleMenuLayout::X+16,y+8,game.customMapsOpen()?customLabel.c_str():normalLabels[row],selected?paper:muted,2);
  }
  wornPanel(386,190,196,106,false,true);
  text(400,204,"SITE TELEMETRY",amber,2);text(400,226,"POWER / DEGRADED",paper);

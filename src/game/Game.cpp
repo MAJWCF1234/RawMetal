@@ -1,16 +1,37 @@
 #include "Game.h"
+#include "../world/CustomCampaign.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <queue>
 #include <fstream>
+#include <filesystem>
 
 namespace retro {
 
 Game::Game(WorldId id):m_worldId(id) { restart(); }
+Game::Game(std::shared_ptr<const CustomCampaign> campaign):m_worldId(WorldId::Custom),m_customCampaign(std::move(campaign)){
+ if(!m_customCampaign||m_customCampaign->maps.empty())throw std::runtime_error("Cannot start an empty custom campaign");
+ m_customCampaignKey=m_customCampaign->key;m_level=std::clamp(m_customCampaign->startMap,0,int(m_customCampaign->maps.size())-1);restart();
+}
+World Game::makeWorld(int level)const{
+ if(m_worldId==WorldId::Custom){
+  if(!m_customCampaign||level<0||level>=int(m_customCampaign->maps.size()))throw std::runtime_error("Custom campaign map index is unavailable");
+  return World(level,m_customCampaign->maps[size_t(level)]);
+ }
+ return World(level,m_worldId);
+}
+void Game::loadCustomCampaignDirectory(std::wstring directory){
+ m_customMapDirectory=std::move(directory);std::vector<std::string> errors;
+ m_customCampaigns=retro::loadCustomCampaignDirectory(std::filesystem::path(m_customMapDirectory),&errors);
+ std::ofstream report("RawMetal-custom-maps.txt",std::ios::trunc);
+ report<<"Loaded "<<m_customCampaigns.size()<<" custom campaign pack(s).\n";
+ for(const auto& campaign:m_customCampaigns)report<<"OK "<<campaign->sourceFile<<" / "<<campaign->name<<" / "<<campaign->maps.size()<<" map(s)\n";
+ for(const auto& error:errors)report<<"ERROR "<<error<<'\n';
+}
 void Game::showTitleScreen(){
-    m_titleScreen=true;m_titleSelection=0;m_titlePrevious={};m_menuFromTitle=false;m_customMapsOpen=false;
+    m_titleScreen=true;m_titleSelection=0;m_customMenuOffset=0;m_titlePrevious={};m_menuFromTitle=false;m_customMapsOpen=false;
     m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Settings;
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
@@ -67,11 +88,11 @@ void Game::crossChunkBoundary(){
  for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
  for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
- if(m_worldId==WorldId::Campaign&&next>previous)saveCheckpoint();
+ if((m_worldId==WorldId::Campaign&&next>previous)||m_worldId==WorldId::Custom)saveCheckpoint();
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
-    m_level=std::clamp(level,0,chunkCount()-1);m_world=World{m_level,m_worldId};m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
+    m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_world.definition().playerStart;
     m_player.angle = 0.08f;

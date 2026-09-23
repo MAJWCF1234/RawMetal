@@ -106,6 +106,7 @@ struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,R
 class Game {
 public:
     explicit Game(WorldId id=WorldId::Campaign);
+    explicit Game(std::shared_ptr<const CustomCampaign> campaign);
     WorldId worldId()const{return m_worldId;}
     static bool testWorldIsolation();
     static bool testServiceMaps();
@@ -116,7 +117,10 @@ public:
     bool titleScreen()const{return m_titleScreen;}
     int titleSelection()const{return m_titleSelection;}
     bool customMapsOpen()const{return m_customMapsOpen;}
-    int titleRows()const{return m_customMapsOpen?2:TitleMenuLayout::Rows;}
+    int titleRows()const;
+    std::string customMenuLabel(int row)const;
+    int customCampaignCount()const{return int(m_customCampaigns.size());}
+    void loadCustomCampaignDirectory(std::wstring directory);
     bool menuFromTitle()const{return m_menuFromTitle;}
 
     void update(const InputState& input, float dt);
@@ -126,8 +130,8 @@ public:
     // existing campaign tests/saves. Ashfall can use the larger shared capacity.
     static constexpr int ChunkCount=CampaignChunkCount;
     static constexpr int MaxChunks=WorldChunkCapacity;
-    int chunkCount()const{return worldChunkCount(m_worldId);}
-    Vec2 chunkOffset(int level)const{return chunkDefinition(m_worldId,level).origin;}
+    int chunkCount()const{return m_worldId==WorldId::Custom&&m_customCampaign?int(m_customCampaign->maps.size()):worldChunkCount(m_worldId);}
+    Vec2 chunkOffset(int level)const{return m_worldId==WorldId::Custom&&m_customCampaign?m_customCampaign->maps.at(size_t(level))->definition.origin:chunkDefinition(m_worldId,level).origin;}
     Game chunkView(int level)const;
     const World& worldAt(Vec2& local)const;
     bool chunkResident(int level)const{return level>=0&&level<chunkCount()&&(level==m_level||m_chunks[size_t(level)].resident);}
@@ -248,8 +252,12 @@ public:
 
 private:
     WorldId m_worldId=WorldId::Campaign;
+    std::shared_ptr<const CustomCampaign> m_customCampaign;
+    std::vector<std::shared_ptr<const CustomCampaign>> m_customCampaigns;
+    std::wstring m_customMapDirectory;
+    std::uint64_t m_customCampaignKey=0;
     bool m_titleScreen=false,m_menuFromTitle=false,m_customMapsOpen=false;
-    int m_titleSelection=0;
+    int m_titleSelection=0,m_customMenuOffset=0;
     InputState m_titlePrevious;
     void updateTitle(const InputState& input);
     MenuPage m_menuPage=MenuPage::Settings;
@@ -285,6 +293,10 @@ private:
     void spawnCreature(const CreatureSpawn& spawn,float awareness=0,bool announce=false);
     void updateHazards(float dt);
     void loadLevel(int level,bool carry);
+    World makeWorld(int level)const;
+    void selectCustomCampaign(int index);
+    int customMenuItemCount()const{return int(m_customCampaigns.size())+2;} // Ashfall + uploaded campaigns + Back
+    int customMenuLogicalIndex(int row)const{return m_customMenuOffset+row;}
     int m_level=0;
     struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
     std::array<ChunkState,MaxChunks> m_chunks;
