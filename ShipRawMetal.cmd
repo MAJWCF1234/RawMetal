@@ -3,17 +3,6 @@ setlocal EnableExtensions EnableDelayedExpansion
 title RawMetal Ship - source + one-file friend release
 cd /d "%~dp0"
 
-rem ============================================================
-rem RawMetal Ship
-rem Publishes:
-rem   1) current approved SOURCE changes to GitHub main
-rem   2) ONE release asset: RawMetal.exe
-rem GitHub automatically provides Source code (zip/tar.gz) for the tag.
-rem
-rem It deliberately ignores unrelated deleted docs locally:
-rem they are NOT restored, NOT staged, and NOT committed.
-rem ============================================================
-
 set "TARGET_BRANCH=main"
 set "EXPECTED_REPO=MAJWCF1234/RawMetal"
 set "MAX_BYTES=19000000"
@@ -32,7 +21,7 @@ if errorlevel 1 (
 
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Put this CMD in E:\rawmetal and run it there.
+    echo [ERROR] Run this script from the repository root.
     goto :fail
 )
 
@@ -73,9 +62,8 @@ echo [2/7] Ignoring unrelated local deletions...
 set "DELETED_COUNT=0"
 for /f "usebackq delims=" %%F in (`git ls-files -d`) do set /a DELETED_COUNT+=1
 if not "!DELETED_COUNT!"=="0" (
-    echo [INFO] !DELETED_COUNT! tracked docs/source-note files are deleted locally.
-    echo        This ship script will NOT restore them and will NOT commit those deletions.
-    echo        Their existing copies remain on GitHub.
+    echo [INFO] !DELETED_COUNT! tracked docs/notes are deleted locally.
+    echo        Left alone; existing copies remain on GitHub.
 ) else (
     echo [OK] No unrelated tracked deletions.
 )
@@ -96,12 +84,11 @@ for %%F in (
         if errorlevel 1 (
             echo [ERROR] Exists but is not tracked by Git: %%~F
             set "ASSET_ERROR=1"
-        ) else (
-            echo [OK] %%~F
         )
     )
 )
 if "!ASSET_ERROR!"=="1" goto :fail
+echo [OK] Assets verified.
 echo.
 
 echo [4/7] Building release EXE...
@@ -122,27 +109,22 @@ if not exist "RawMetal.exe" (
 for %%A in ("RawMetal.exe") do set "EXE_BYTES=%%~zA"
 echo [INFO] RawMetal.exe = !EXE_BYTES! bytes
 if !EXE_BYTES! GEQ %MAX_BYTES% (
-    echo [STOP] RawMetal.exe is not under 19,000,000 bytes.
-    echo        Nothing was committed or released.
+    echo [STOP] RawMetal.exe exceeds 19 MB (!EXE_BYTES! bytes^).
     goto :fail
 )
 echo [OK] Friend build is under 19 MB.
 echo.
 
-echo [5/7] Staging SOURCE changes only...
-echo        Allowed files:
-echo          src/CMakeLists.txt
-echo          src/game/AI.cpp
-echo          src/game/Game.h
-echo          src/game/Saves.cpp
-echo.
-git add -- src/CMakeLists.txt src/game/AI.cpp src/game/Game.h src/game/Saves.cpp
-if errorlevel 1 goto :fail
+echo [5/7] Staging APPROVED source changes...
+:: Added src/world files so map and engine edits actually get committed!
+set "APPROVED_FILES=src/CMakeLists.txt src/game/AI.cpp src/game/Game.h src/game/Saves.cpp src/world/World.cpp src/world/World.h src/world/WorldDefinition.h"
+
+git add -- %APPROVED_FILES% 2>nul
 
 git diff --cached --check
 if errorlevel 1 (
     echo [ERROR] Staged source failed git diff --check.
-    git reset -- src/CMakeLists.txt src/game/AI.cpp src/game/Game.h src/game/Saves.cpp
+    git reset -- %APPROVED_FILES%
     goto :fail
 )
 
@@ -159,15 +141,15 @@ choice /C YN /N /M "Commit these source changes to GitHub main? [Y/N] "
 if errorlevel 2 goto :fail
 
 set "COMMIT_MSG="
-set /p "COMMIT_MSG=Commit message [Finish Stalker AI and save integration]: "
-if not defined COMMIT_MSG set "COMMIT_MSG=Finish Stalker AI and save integration"
+set /p "COMMIT_MSG=Commit message [Update engine and map content]: "
+if not defined COMMIT_MSG set "COMMIT_MSG=Update engine and map content"
 
 git commit -m "%COMMIT_MSG%"
 if errorlevel 1 goto :fail
 
 git push origin %TARGET_BRANCH%
 if errorlevel 1 (
-    echo [ERROR] Push failed. Commit still exists locally.
+    echo [ERROR] Push failed.
     goto :fail
 )
 
@@ -179,47 +161,47 @@ echo [6/7] Preparing GitHub Release...
 where gh >nul 2>&1
 if errorlevel 1 (
     echo [STOP] GitHub CLI "gh" is not installed.
-    echo        Source IS synced, but the release asset was not uploaded.
-    echo        Install GitHub CLI, run "gh auth login", then rerun this CMD.
     goto :done
 )
 
 gh auth status >nul 2>&1
 if errorlevel 1 (
-    echo [STOP] GitHub CLI is installed but not authenticated.
-    echo        Run: gh auth login
-    echo        Then rerun this CMD.
+    echo [STOP] GitHub CLI is not authenticated. Run "gh auth login".
     goto :done
 )
 
+:: Automatically find latest git tag
+set "LAST_TAG=v0.3.7"
+for /f "delims=" %%T in ('git describe --tags --abbrev^=0 2^>nul') do set "LAST_TAG=%%T"
+
+echo [INFO] Latest release tag was: %LAST_TAG%
 set "TAG="
-set /p "TAG=Release tag [v0.3.7]: "
-if not defined TAG set "TAG=v0.3.7"
+set /p "TAG=New release tag (e.g. v0.3.8): "
+if not defined TAG (
+    echo [ERROR] Tag cannot be empty.
+    goto :done
+)
 
 gh release view "%TAG%" --repo "%EXPECTED_REPO%" >nul 2>&1
 if not errorlevel 1 (
-    echo [STOP] Release/tag "%TAG%" already exists.
+    echo [STOP] Release "%TAG%" already exists on GitHub!
     goto :done
 )
 
 echo.
-echo This will publish ONE downloadable friend file:
-echo   RawMetal.exe  (!EXE_BYTES! bytes)
-echo.
-echo GitHub will ALSO automatically show its normal:
-echo   Source code (zip)
-echo   Source code (tar.gz)
-echo for the same tag.
-echo.
+echo Publishing friend build: RawMetal.exe (!EXE_BYTES! bytes) to %TAG%
 choice /C YN /N /M "Publish release %TAG% now? [Y/N] "
 if errorlevel 2 goto :done
 
-echo [7/7] Publishing release...
+echo [7/7] Publishing release asset...
+set "NOTE_FLAG=--generate-notes"
+if exist "RELEASE_NOTES.md" set "NOTE_FLAG=--notes-file RELEASE_NOTES.md"
+
 gh release create "%TAG%" "RawMetal.exe" ^
     --repo "%EXPECTED_REPO%" ^
     --target "%TARGET_BRANCH%" ^
     --title "RawMetal %TAG%" ^
-    --generate-notes
+    !NOTE_FLAG!
 
 if errorlevel 1 (
     echo [ERROR] Release creation failed.
@@ -228,27 +210,19 @@ if errorlevel 1 (
 
 echo.
 echo ============================================================
-echo   SHIPPED
-echo   Source       : GitHub main
-echo   Friend build : RawMetal.exe (!EXE_BYTES! bytes)
-echo   Release      : %TAG%
+echo   SHIPPED SUCCESSFULLY!
+echo   Target : https://github.com/%EXPECTED_REPO%/releases/tag/%TAG%
 echo ============================================================
-echo.
 goto :done
 
 :done
-echo.
-echo Local deleted docs were left alone and were not published as deletions.
-echo.
 pause
 exit /b 0
 
 :fail
 echo.
 echo ============================================================
-echo   STOPPED SAFELY
+echo   STOPPED SAFELY - Nothing published.
 echo ============================================================
-echo Nothing unrelated was restored, staged, committed, or released.
-echo.
 pause
 exit /b 1

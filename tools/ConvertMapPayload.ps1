@@ -119,7 +119,8 @@ function Get-BraceEntries {
         }
     }
     if($depth -ne 0) { throw "Unbalanced brace initializer in legacy custom payload." }
-    return ,$result.ToArray()
+    # Emit each initializer separately for the callers' foreach loops.
+    return $result.ToArray()
 }
 
 function Get-AssignmentBody {

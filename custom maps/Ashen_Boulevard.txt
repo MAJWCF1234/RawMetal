@@ -1,0 +1,226 @@
+META_LEVEL_ID: 1
+META_LEVEL_NAME: Sector 04 Ashen Boulevard
+META_CAMPAIGN_NAME: Ashen Boulevard
+META_DEFAULT_TARGET: CUSTOM
+
+--- MAP_CODE_START ---
+  if(m_level==1){
+   // 1. GROUND LEVEL SLICE (Avenue, ruined tenement shells, and cross alley)
+   static constexpr MapRows CityGround = {
+    "########################",
+    "#......#...............#",
+    "#......#...CC..........#",
+    "#......#...............#",
+    "#..BB..#...............#",
+    "####.###...............#",
+    "#......................#",
+    "#..........TT..........#",
+    "#......................#",
+    "#####...CC........######",
+    "#......................#",
+    "#......................#",
+    "#......................#",
+    "#####...CC........######",
+    "#......................#",
+    "#..........TT..........#",
+    "#......................#",
+    "#..CCC...........######",
+    "#..CCC...........#.....#",
+    "#................#..BB.#",
+    "#..BB............#.....#",
+    "#................#.....#",
+    "#................#...X.#",
+    "####################...#"
+   };
+
+   // 2. UPPER SKYBRIDGE SLICE (Elevated catwalk spanning the street at z = 3.5m)
+   static constexpr MapRows CitySkybridge = {
+    "________________________",
+    "_======_________________",
+    "_======_________________",
+    "_======_________________",
+    "_======_________________",
+    "_______=________________",
+    "_______=________________",
+    "_______=________________",
+    "_______=________________",
+    "_______=________________",
+    "_______================_",
+    "_______================_",
+    "_______================_",
+    "_______=________________",
+    "_______=________________",
+    "_______=________________",
+    "_______=________________",
+    "_______=________________",
+    "_______=________________",
+    "_______=_________======_",
+    "_________________======_",
+    "_________________======_",
+    "_________________======_",
+    "________________________"
+   };
+
+   m_layers = {
+    {"Ashen Boulevard / street level", 0, 0,     CityGround},
+    {"Ashen Boulevard / skybridge",    3.5f, 0.25f, CitySkybridge}
+   };
+
+   // Perimeter doors: Entry on north street, exit into east transit bunker
+   m_doors = {
+    {2.0f, 5.0f, 0.5f, 0, false, false, true, 0},
+    {20.0f, 23.0f, 22.5f, 0, false, true, false, 2}
+   };
+   m_doors.back().requireState = stateId("metro_transit_unlocked");
+
+   // Doorway lintels (leaves lower 2.5m open to walk through)
+   wall(2, 0, 5, 1, 2.5f, roof);
+   wall(20, 22, 23, 23, 2.5f, roof);
+
+   // Concrete stairs leading from the avenue up to the skybridge landing
+   stairs = {
+    {7, 4, 9, 10, 0, 3.5f, 18, true, true}
+   };
+
+   // Overhead high-voltage utility cables strung between utility poles across the avenue
+   m_pipes.push_back({{11.5f, 7.5f}, {11.5f, 15.5f}, 5.2f, 0.08f});
+   m_pipes.push_back({{11.5f, 7.5f}, {6.5f, 11.5f},  4.8f, 0.06f});
+   m_pipes.push_back({{11.5f, 15.5f}, {17.5f, 11.5f}, 4.8f, 0.06f});
+
+   // Abandoned delivery truck / mobile generator parked in the avenue
+   m_fixtures.push_back({6, {12.0f, 4.5f}, 0, 3.4f, 1.0f, 1.8f, 0, true});
+
+   // Looted storefront interiors (shelves & counters flush with outer walls)
+   shelf({1.5f, 3.0f}, kPi * 0.5f);
+   shelf({1.5f, 5.0f}, kPi * 0.5f);
+   cabinet({6.4f, 2.0f}, kPi);
+
+   // Ruined substation switchgear on the street corner
+   cabinet({18.5f, 8.5f}, 0);
+   cabinet({20.0f, 8.5f}, 0);
+
+   // Civil Defense field terminals: lore relay and emergency gate breaker switch
+   m_terminals = {
+    {{10.2f, 8.5f}, "CIVIL DEFENSE / SECTOR 04", "SURFACE QUARANTINE PROTOCOL ACTIVE.", "WEST AVENUE SEALED BY ROADBLOCKS.", 0, false},
+    {{21.0f, 21.5f}, "METRO STATION / EVACUATION GATE", "TURNSTILE CLAMP POWER: BACKUP.", "E / RELEASE EMERGENCY TRANSIT BULKHEAD.", 0, false, 0, stateId("metro_transit_unlocked")}
+   };
+
+   // Street encounters
+   m_creatureSpawns = {
+    {CreatureKind::Brute,    {12.0f, 12.0f}, 0},    // Patrolling the avenue intersection
+    {CreatureKind::Huntsman, {3.0f, 11.5f},  0},    // Lurking in the dark west alley
+    {CreatureKind::Wasp,     {12.0f, 11.5f}, 3.5f}, // Perched high on the skybridge
+    {CreatureKind::Huntsman, {19.0f, 19.0f}, 0}     // Ambush near the subway exit
+   };
+
+   // Salvage supplies tucked behind roadblocks and on the skybridge
+   m_pickupSpawns = {
+    {{2.5f, 2.5f},   PickupKind::Ammo},
+    {{4.5f, 9.5f},   PickupKind::Health},
+    {{13.5f, 18.5f}, PickupKind::Ammo},
+    {{17.5f, 12.0f}, PickupKind::Health}
+   };
+
+   // Street debris clutter
+   m_clutterSpawns = {
+    {1, {11.2f, 8.2f},  0, 0.4f},
+    {2, {13.1f, 14.5f}, 0, 1.1f},
+    {3, {4.2f, 12.8f},  0, 0.8f}
+   };
+
+   // Flickering sodium streetlights casting eerie pools along the avenue
+   for(Vec2 p : {Vec2{10, 4}, Vec2{10, 16}, Vec2{4, 11.5f}, Vec2{20, 11.5f}, Vec2{20, 21}})
+    m_lights.push_back({p, 3.8f});
+
+   // Task lighting under the skybridge
+   m_lights.push_back({{12.0f, 11.5f}, 3.2f});
+  }
+--- MAP_CODE_END ---
+
+--- CUSTOM_CAMPAIGN_DATA_START ---
+CAMPAIGN|Ashen%20Boulevard|0
+MAP|0|Sector%2004%20Ashen%20Boulevard|0|0|3.5|1.5|0|0|7|0.27|industrial_night|0|0|0|0|0
+LAYER|0|0|Ashen%20Boulevard%20%2F%20street%20level|0|0
+ROW|0|0|0|########################
+ROW|0|0|1|#......#...............#
+ROW|0|0|2|#......#...CC..........#
+ROW|0|0|3|#......#...............#
+ROW|0|0|4|#..BB..#...............#
+ROW|0|0|5|####.###...............#
+ROW|0|0|6|#......................#
+ROW|0|0|7|#..........TT..........#
+ROW|0|0|8|#......................#
+ROW|0|0|9|#####...CC........######
+ROW|0|0|10|#......................#
+ROW|0|0|11|#......................#
+ROW|0|0|12|#......................#
+ROW|0|0|13|#####...CC........######
+ROW|0|0|14|#......................#
+ROW|0|0|15|#..........TT..........#
+ROW|0|0|16|#......................#
+ROW|0|0|17|#..CCC...........#######
+ROW|0|0|18|#..CCC...........#.....#
+ROW|0|0|19|#................#..BB.#
+ROW|0|0|20|#..BB............#.....#
+ROW|0|0|21|#................#.....#
+ROW|0|0|22|#................#...X.#
+ROW|0|0|23|####################...#
+LAYER|0|1|Ashen%20Boulevard%20%2F%20skybridge|3.5|0.25
+ROW|0|1|0|________________________
+ROW|0|1|1|_======_________________
+ROW|0|1|2|_======_________________
+ROW|0|1|3|_======_________________
+ROW|0|1|4|_======_________________
+ROW|0|1|5|_______=________________
+ROW|0|1|6|_______=________________
+ROW|0|1|7|_______=________________
+ROW|0|1|8|_______=________________
+ROW|0|1|9|_______=________________
+ROW|0|1|10|_______================_
+ROW|0|1|11|_______================_
+ROW|0|1|12|_______================_
+ROW|0|1|13|_______=________________
+ROW|0|1|14|_______=________________
+ROW|0|1|15|_______=________________
+ROW|0|1|16|_______=________________
+ROW|0|1|17|_______=________________
+ROW|0|1|18|_______=________________
+ROW|0|1|19|_______=_________======_
+ROW|0|1|20|_________________======_
+ROW|0|1|21|_________________======_
+ROW|0|1|22|_________________======_
+ROW|0|1|23|________________________
+DOOR|0|2|5|0.5|0|1|0|0|0|-1||1
+DOOR|0|20|23|22.5|2|0|1|0|0|-1|metro_transit_unlocked|1
+STRUCT|0|2|0|5|1|2.5|7|0|3
+STRUCT|0|20|22|23|23|2.5|7|0|3
+STAIR|0|7|4|9|10|0|3.5|18|1|1
+PIPE|0|11.5|7.5|11.5|15.5|5.2|0.08|-999
+PIPE|0|11.5|7.5|6.5|11.5|4.8|0.06|-999
+PIPE|0|11.5|15.5|17.5|11.5|4.8|0.06|-999
+FIXTURE|0|6|12|4.5|0|3.4|1|1.8|0|1
+FIXTURE|0|7|1.5|3|0|1.8|0.5|1.8|1.570796|1
+FIXTURE|0|7|1.5|5|0|1.8|0.5|1.8|1.570796|1
+FIXTURE|0|13|6.4|2|0|0.9066|0.4956|2.2|3.141593|1
+FIXTURE|0|13|18.5|8.5|0|0.9066|0.4956|2.2|0|1
+FIXTURE|0|13|20|8.5|0|0.9066|0.4956|2.2|0|1
+TERMINAL|0|10.2|8.5|0|0|CIVIL%20DEFENSE%20%2F%20SECTOR%2004|SURFACE%20QUARANTINE%20PROTOCOL%20ACTIVE.|WEST%20AVENUE%20SEALED%20BY%20ROADBLOCKS.||0
+TERMINAL|0|21|21.5|0|0|METRO%20STATION%20%2F%20EVACUATION%20GATE|TURNSTILE%20CLAMP%20POWER%3A%20BACKUP.|E%20%2F%20RELEASE%20EMERGENCY%20TRANSIT%20BULKHEAD.|metro_transit_unlocked|0
+CREATURE|0|2|12|12|0
+CREATURE|0|0|3|11.5|0
+CREATURE|0|1|12|11.5|3.5
+CREATURE|0|0|19|19|0
+PICKUP|0|1|2.5|2.5
+PICKUP|0|0|4.5|9.5
+PICKUP|0|1|13.5|18.5
+PICKUP|0|0|17.5|12
+CLUTTER|0|1|11.2|8.2|0|0.4
+CLUTTER|0|2|13.1|14.5|0|1.1
+CLUTTER|0|3|4.2|12.8|0|0.8
+LIGHT|0|12|11.5|3.2
+LIGHT|0|10|4|3.8
+LIGHT|0|10|16|3.8
+LIGHT|0|4|11.5|3.8
+LIGHT|0|20|11.5|3.8
+LIGHT|0|20|21|3.8
+--- CUSTOM_CAMPAIGN_DATA_END ---
