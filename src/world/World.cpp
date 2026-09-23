@@ -761,6 +761,10 @@ World::World(int level,WorldId id):m_worldId(id) {
   };
   auto action=[](A type,StateId id=0,int value=0,float amount=0.f){ScriptAction a;a.type=type;a.id=id;a.value=value;a.amount=amount;return a;};
   std::vector<Staircase> stairs;
+  // === DYNAMIC_CAMPAIGN_MAPS_START ===
+  // Each standalone slot is intentionally an independent if block so the
+  // injector can replace one level without rewriting adjacent campaign maps.
+  // === LEVEL_6_START ===
   if(m_level==6){
    m_layers={{"Cable Vaults / service passages",-9,0,CableVaultsGround}};
    m_doors={{2,5,.5f,0,false,false,true},{20,23,23.5f,0,false,true}};
@@ -787,7 +791,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f},-9}};
    m_pickupSpawns={{{18,21.5f},PickupKind::Ammo}};
    for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22}})m_lights.push_back({p,-6.55f});
-  }else if(m_level==7){
+  }
+  // === LEVEL_6_END ===
+  // === LEVEL_7_START ===
+  if(m_level==7){
    m_layers={{"Pump Annex / lower manifold",-12,0,PumpAnnexLower},{"Pump Annex / main floor",-9,.25f,PumpAnnexMain},{"Pump Annex / observation",-4,.25f,PumpAnnexObservation}};
    m_doors={{2,5,.5f,0,false,false,true,3},{19.8f,21.2f,23.5f,0,false,true,false,8}};
    m_doors.back().swinging=true;
@@ -825,7 +832,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_pickupSpawns={{{6,17},PickupKind::Health},{{20,20},PickupKind::Ammo}};
    for(Vec2 p:{Vec2{3.5f,2},Vec2{4,14},Vec2{12,9},Vec2{20,7},Vec2{20,18}})m_lights.push_back({p,-1.3f});
    for(Vec2 p:{Vec2{4,11},Vec2{12,3},Vec2{13,17}})m_lights.push_back({p,-9.35f});
-  }else if(m_level==8){
+  }
+  // === LEVEL_7_END ===
+  // === LEVEL_8_START ===
+  if(m_level==8){
    m_layers={{"Utility Junction / concourse",-9,0,UtilityJunctionGround},{"Utility Junction / maintenance bridge",-4,.25f,UtilityJunctionUpper}};
    m_doors={{2.8f,4.2f,.5f,0,false,false,true,5},{19,22,4.5f,0,false,false,false,5},{3,5,17.5f},{20,23,23.5f,0,false,true}};
    m_doors.front().swinging=true;
@@ -877,7 +887,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_lights.push_back({{18,12},-5.85f});
    for(Vec2 p:{Vec2{8,8.6f},Vec2{13,8.6f},Vec2{7.5f,14},Vec2{12.5f,19.5f}})
     m_lights.push_back({p,-4.35f});
-  }else{
+  }
+  // === LEVEL_8_END ===
+  // === LEVEL_9_START ===
+  if(m_level==9){
    m_layers={{"Waste Handling / processing floor",-12,0,WasteHandlingLower},{"Waste Handling / sorting deck",-9,.25f,WasteHandlingSortingDeck}};
    m_doors={{2,5,.5f,0,false,false,true,3}};
 
@@ -919,6 +932,8 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(Vec2 p:{Vec2{6.5f,7},Vec2{7,14},Vec2{12,18},Vec2{19.5f,18.5f}})
     m_lights.push_back({p,-9.25f});
   }
+  // === LEVEL_9_END ===
+  // === DYNAMIC_CAMPAIGN_MAPS_END ===
   for(auto& d:m_doors){if(d.entry)d.sign=m_level-1;else if(d.transfer)d.sign=m_level+1;}
   if(m_level==8){m_doors[1].sign=10;m_doors[2].sign=11;}
   buildLayers(stairs);return;
