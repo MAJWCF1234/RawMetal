@@ -34,7 +34,7 @@ const World& Game::worldAt(Vec2& local)const{
 }
 void Game::crossChunkBoundary(){
  Vec2 global=m_player.pos+chunkOffset(m_level);int next=m_level;
- for(int level=0;level<ChunkCount;++level){auto origin=chunkOffset(level);
+ for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){next=level;break;}
  }
  if(next==m_level)return;int previous=m_level;
