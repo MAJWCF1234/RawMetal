@@ -142,6 +142,35 @@ bool Game::testCampaignExtension(){
   for(auto target:targets){bool found=false;for(auto n:reachable)if(length(point(n)-target.p)<.45f&&std::fabs(n.z-target.z)<.03f){found=true;break;}
    out<<"target "<<target.p.x<<','<<target.p.y<<','<<target.z<<' ';result&=check(found,"Authored destination reachable without jumping");
   }
+  // Regression checks for the cleanup pass: imported furniture must face the
+  // aisle, upper decks use authored structure instead of procedural post spam,
+  // and the suspended freight branch ends in a real vestibule.
+  if(level==6){
+   bool panels=true,laneShelves=true;
+   for(const auto& f:game.world().fixtures()){
+    if(f.model==13&&f.position.x>21)panels&=std::fabs(f.yaw-kPi*.5f)<.01f;
+    if(f.model==7&&f.position.x>6.5f&&f.position.x<7.3f&&f.position.y<16)laneShelves&=std::fabs(f.yaw-kPi*.5f)<.01f;
+   }
+   result&=check(panels&&laneShelves,"Cable Vault wall equipment faces the service lanes");
+  }
+  if(level==7){
+   bool giantFoundation=false;
+   for(const auto& st:game.world().structures())if(st.bottom<-11.9f&&st.top>-9.05f&&st.x2-st.x1>4&&st.y2-st.y1>4)giantFoundation=true;
+   result&=check(!giantFoundation,"Pump Annex lower manifold is not buried under giant machine blocks");
+  }
+  if(level==8){
+   result&=check(!game.world().fits(18.93f,2.5f,-4,1.7f)&&game.world().fits(20.5f,2.5f,-4,1.7f),
+                 "Utility Junction freight branch has enclosing walls and usable interior");
+  }
+  if(level==9){
+   bool eastPanel=false,northShelf=false;
+   for(const auto& f:game.world().fixtures()){
+    if(f.model==13&&f.position.x>22)eastPanel=std::fabs(f.yaw-kPi*.5f)<.01f;
+    if(f.model==7&&f.position.y<4)northShelf=std::fabs(std::fabs(f.yaw)-kPi)<.01f;
+   }
+   result&=check(eastPanel&&northShelf&&game.world().clutterSpawns().size()==19,
+                 "Waste Handling keeps clear routes with correctly faced wall equipment");
+  }
   // Emit reached positions for diagnosing a failed stair or rail join.
   std::ofstream positions("campaign-reach-"+std::to_string(level)+".txt");for(auto n:reachable)positions<<point(n).x<<' '<<point(n).y<<' '<<n.z<<'\n';
  }
