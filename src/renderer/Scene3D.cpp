@@ -398,7 +398,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
     auto&material=w.campaignChunk(0)?m_wall:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
-    float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
+    float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if(w.campaign()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
     if((w.campaign()&&w.level()<3)&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
