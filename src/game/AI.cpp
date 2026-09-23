@@ -5,6 +5,21 @@
 namespace retro {
 static float navSupport(const World&w,Vec2 p,float feet){float z=w.supportBelow(p.x,p.y,feet);for(float x:{-.20f,.20f})for(float y:{-.20f,.20f})z=std::max(z,w.supportBelow(p.x+x,p.y+y,feet));return z;}
 static bool navFits(const World&w,Vec2 p,float z,float height){if(w.railBlocksHull(p.x,p.y,.20f,z,height))return false;for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
+static float roughStep(Enemy::Kind kind){
+ return kind==Enemy::Kind::Huntsman?.62f:kind==Enemy::Kind::Wasp?.46f:kind==Enemy::Kind::Warden?.38f:.34f;
+}
+// Outdoor navigation follows the actual Surface Nets support instead of comparing
+// one-metre cell centres. A one-metre voxel rise becomes a traversable slope when
+// its quarter-metre samples stay within the creature's step capability, while a
+// real cliff still fails the same test.
+static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr){
+ auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height);}
+ int samples=std::max(1,int(std::ceil(distance/.24f)));float z=fromZ;
+ for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f);
+  float rise=ground-z,drop=z-ground;if(rise>stepHeight+.025f||drop>std::max(.48f,stepHeight*1.45f)||!navFits(w,p,ground,height))return false;z=ground;
+ }
+ if(endZ)*endZ=z;return true;
+}
 static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height){
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
  for(int y=1;y<23;++y)for(int x=1;x<23;++x)for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
@@ -62,6 +77,7 @@ void Game::updateEnemies(float dt){
    bool playerLineOfSight=playerToWardenDistance<12.f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.85f);
    bool observed=playerLineOfSight&&playerToWardenDistance>.001f&&dot(playerForward,playerToWarden*(1.f/playerToWardenDistance))>.72f;
    bool flat=std::fabs(e.z-m_player.z)<.23f;
+   if(m_world.outdoors()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,1.85f,roughStep(e.kind));}
    bool freshContact=visible&&!hadAwareness;
 
    // A rush is a short burst, never the Warden's permanent navigation speed.
@@ -97,8 +113,9 @@ void Game::updateEnemies(float dt){
     if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f){
      auto radial=normalized(e.pos-m_player.pos);auto side=Vec2{-radial.y,radial.x};
      Vec2 best=goal;float bestScore=9999.f;bool found=false;
-     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,e.z+.215f);
-      if(std::fabs(z-e.z)>=.23f||!navFits(m_world,candidate,z,1.85f))continue;
+     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,m_world.outdoors()?float(World::TerrainMaxZ+1):e.z+.215f);
+      bool reachable=m_world.outdoors()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.z)<.23f;
+      if(!reachable||!navFits(m_world,candidate,z,1.85f))continue;
       auto fromPlayer=candidate-m_player.pos;float candidateDistance=length(fromPlayer);
       float gaze=candidateDistance>.001f?dot(playerForward,fromPlayer*(1.f/candidateDistance)):1.f;
       float score=gaze+lengthSq(candidate-e.pos)*.02f;
@@ -114,8 +131,9 @@ void Game::updateEnemies(float dt){
    stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f;
 
    // Search the last witnessed area; never sample the hidden player's new position.
-   if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,e.lastKnownZ+.215f);
-    if(std::fabs(z-e.lastKnownZ)<.23f&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=1.4f;e.stalkSide=-e.stalkSide;
+   if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.outdoors()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
+    bool reachable=m_world.outdoors()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
+    if(reachable&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=1.4f;e.stalkSide=-e.stalkSide;
    }
   }
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
@@ -124,7 +142,18 @@ void Game::updateEnemies(float dt){
   if(!warden&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=e.kind==Enemy::Kind::Brute?.8f:.32f;enemySound(e,1,.85f);continue;}
   if(watching||length(goal-e.pos)<.3f||(!warden&&visible&&dist<range*.82f)||e.painFlash>(warden?.85f:.65f))continue;
   Vec2 destination=goal;
-  bool direct=std::fabs((visible?m_player.z:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
+  float hull=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
+  float stepHeight=m_world.outdoors()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
+  bool direct=false;
+  if(m_world.outdoors()){
+   // Do not reject a hill merely because the target is several metres above us.
+   // Test only the terrain immediately ahead; if a cliff blocks progress the
+   // stuck timer falls back to routed navigation around it.
+   auto delta=goal-e.pos;float distance=length(delta);Vec2 probe=distance>1.6f?e.pos+delta*(1.6f/distance):goal;
+   direct=roughSegment(m_world,e.pos,e.z,probe,hull,stepHeight);
+  }else{
+   direct=std::fabs((visible?m_player.z:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
+  }
   if(e.kind==Enemy::Kind::Huntsman&&visible&&m_world.tile(int(goal.x),int(goal.y))=='C')direct=m_world.rayClear(e.pos,e.z+.7f,goal,m_player.z+.3f);
   // Repeated contact switches to routed movement instead of rebuilding a
   // path every frame or continuing to push into the same corner forever.
@@ -136,11 +165,16 @@ void Game::updateEnemies(float dt){
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
     int originX=gx,originY=gy;float best=999;for(int yy=originY-1;yy<=originY+1;++yy)for(int xx=originX-1;xx<=originX+1;++xx)if(!m_world.solid(xx+.5f,yy+.5f)){float d=lengthSq(Vec2{xx+.5f,yy+.5f}-goal);if(d<best){best=d;gx=xx;gy=yy;}}
    }
-   gx=std::clamp(gx,1,22);gy=std::clamp(gy,1,22);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
-   float hull=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
-   while(!queue.empty()){auto[x,y]=queue.front();queue.pop();for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<1||nx>22||ny<1||ny>22||field[ny][nx]!=9999||!m_world.navigable(x,y,nx,ny,hull))continue;field[ny][nx]=field[y][x]+1;queue.push({nx,ny});}}
-   int x=int(e.pos.x),y=int(e.pos.y),best=field[y][x];destination=e.pos;
-   for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx>0&&nx<23&&ny>0&&ny<23&&field[ny][nx]<best&&m_world.navigable(x,y,nx,ny,hull)){best=field[ny][nx];destination={nx+.5f,ny+.5f};}}
+   int minCell=m_world.outdoors()?0:1,maxCell=m_world.outdoors()?23:22;
+   gx=std::clamp(gx,minCell,maxCell);gy=std::clamp(gy,minCell,maxCell);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
+   auto edgeWalkable=[&](int x,int y,int nx,int ny){
+    if(!m_world.outdoors())return m_world.navigable(x,y,nx,ny,hull);
+    Vec2 a{x+.5f,y+.5f},b{nx+.5f,ny+.5f};float az=navSupport(m_world,a,float(World::TerrainMaxZ+1));
+    return roughSegment(m_world,a,az,b,hull,stepHeight);
+   };
+   while(!queue.empty()){auto[x,y]=queue.front();queue.pop();for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<minCell||nx>maxCell||ny<minCell||ny>maxCell||field[ny][nx]!=9999||!edgeWalkable(x,y,nx,ny))continue;field[ny][nx]=field[y][x]+1;queue.push({nx,ny});}}
+   int x=std::clamp(int(e.pos.x),minCell,maxCell),y=std::clamp(int(e.pos.y),minCell,maxCell),best=field[y][x];destination=e.pos;
+   for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx>=minCell&&nx<=maxCell&&ny>=minCell&&ny<=maxCell&&field[ny][nx]<best&&edgeWalkable(x,y,nx,ny)){best=field[ny][nx];destination={nx+.5f,ny+.5f};}}
    e.waypoint=destination;e.repathTimer=.25f;
   }
   Vec2 direction=normalized(destination-e.pos);
@@ -149,8 +183,8 @@ void Game::updateEnemies(float dt){
   direction=normalized(direction+separation*2.f);
   float speed=warden?stalkSpeed:e.kind==Enemy::Kind::Wasp?1.85f:e.kind==Enemy::Kind::Brute?.75f:1.4f;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
   auto old=e.pos;
-  auto move=[&](Vec2 next){float step=e.kind==Enemy::Kind::Huntsman?.65f:.215f;float ground=groundHeight(next,e.z+step),height=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
-   bool followStep=e.z-ground<=.24f&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);if(ground-e.z<=step+.01f&&hullFits(next,feet,height)){e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}}
+  auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight),height=hull;
+   bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);if(ground-e.z<=stepHeight+.01f&&hullFits(next,feet,height)){e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}}
   };
   move(e.pos+Vec2{direction.x*speed*dt,0});move(e.pos+Vec2{0,direction.y*speed*dt});
   float moved=length(e.pos-old);e.moving=moved>.0001f;e.gait+=moved*7;
@@ -238,6 +272,19 @@ bool Game::testAI(){
  auto falling=validationScene(Enemy::Kind::Brute);auto&body=falling.m_enemies[0];body.pos={7.5f,4.5f};body.z=1.2f;body.alive=false;
  falling.updateEnemies(.05f);if(body.z<=0||body.z>=1.2f||body.verticalVelocity>=0)return false;
  for(int i=0;i<120;++i)falling.updateEnemies(1.f/120);if(body.z!=0)return false;
+ // Surface Nets hill traversal: the old grid compared one-metre cell
+ // centre heights and treated this authored slope as a wall. Both a nimble
+ // Huntsman and the heavier Brute must now follow the sampled ground profile.
+ for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Brute}){
+  Game rough(WorldId::Ashfall);rough.m_enemies.clear();rough.m_sounds.clear();
+  rough.m_player.pos={20.5f,12.5f};rough.m_player.z=rough.m_world.floorHeight(rough.m_player.pos.x,rough.m_player.pos.y);rough.m_player.angle=0;
+  Enemy climber{};climber.kind=kind;climber.pos={6.5f,12.5f};climber.z=rough.m_world.floorHeight(climber.pos.x,climber.pos.y);climber.home=climber.pos;climber.lastKnown=rough.m_player.pos;climber.lastKnownZ=rough.m_player.z;climber.awareness=40.f;climber.state=Enemy::State::Investigate;climber.heading=0;
+  float rise=rough.m_player.z-climber.z;if(rise<3.f)return false;rough.m_enemies.push_back(climber);
+  if(!roughSegment(rough.m_world,climber.pos,climber.z,{12.5f,12.5f},kind==Enemy::Kind::Brute?1.85f:1.05f,roughStep(kind)))return false;
+  for(int i=0;i<3600&&length(rough.m_enemies[0].pos-rough.m_player.pos)>1.5f;++i)rough.updateEnemies(1.f/120.f);
+  auto&done=rough.m_enemies[0];debug<<"rough terrain "<<int(kind)<<" distance "<<length(done.pos-rough.m_player.pos)<<" z "<<done.z<<" target z "<<rough.m_player.z<<'\n';
+  if(length(done.pos-rough.m_player.pos)>1.8f||std::fabs(done.z-rough.m_player.z)>.8f)return false;
+ }
  // Outdoor pursuit ownership crosses the same seam as the player.
  {Game seam(WorldId::Ashfall);seam.m_enemies.clear();Enemy pursuer{};pursuer.kind=Enemy::Kind::Huntsman;pursuer.pos={23.4f,12.f};pursuer.home=pursuer.pos;pursuer.lastKnown={24.1f,12.f};pursuer.awareness=5;pursuer.state=Enemy::State::Chase;pursuer.z=seam.world().floorHeight(pursuer.pos.x,pursuer.pos.y);pursuer.lastKnownZ=pursuer.z;seam.m_enemies.push_back(pursuer);
   seam.m_player.pos={24.1f,12.f};seam.crossChunkBoundary();if(seam.level()!=1||seam.m_enemies.empty()||seam.m_enemies.back().pos.x<.2f||seam.m_enemies.back().pos.x>1.f)return false;
@@ -245,6 +292,6 @@ bool Game::testAI(){
  auto crate=validationScene(Enemy::Kind::Huntsman);auto&crawler=crate.m_enemies[0];crawler.pos={5.7f,3.5f};crawler.home=crawler.pos;crawler.heading=kPi;crate.m_player.pos={3.5f,3.5f};crate.m_player.z=.6f;
  for(int i=0;i<240&&crawler.z<.59f;++i)crate.updateEnemies(1.f/120);
  debug<<"crate climb "<<crawler.z<<'\n';if(crawler.z<.59f)return false;
- std::ofstream("ai-test.txt")<<"Closed-door sight blocking, hearing/pursuit, reactor stalker watch/flank/rush behavior, committed melee dodging, all species climbing stairs, bugs tracking a circling target, falling bodies, huntsmen climbing crates and outdoor cross-chunk pursuit: PASS\n";return true;
+ std::ofstream("ai-test.txt")<<"Closed-door sight blocking, hearing/pursuit, reactor stalker watch/flank/rush behavior, committed melee dodging, all species climbing stairs, bugs tracking a circling target, falling bodies, huntsmen climbing crates, rough Surface Nets hill traversal and outdoor cross-chunk pursuit: PASS\n";return true;
 }
 }
