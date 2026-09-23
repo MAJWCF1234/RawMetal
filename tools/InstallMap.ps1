@@ -36,6 +36,7 @@ if(-not [int]::TryParse($levelText, [ref]$level)) {
     throw "META_LEVEL_ID must be an integer."
 }
 $name = Read-Metadata "META_LEVEL_NAME"
+$defaultTarget = Read-Metadata "META_DEFAULT_TARGET"
 $defaultTarget = $defaultTarget.Trim().ToUpperInvariant()
 if($defaultTarget -ne "MAIN" -and $defaultTarget -ne "CUSTOM") {
     throw "META_DEFAULT_TARGET must be MAIN or CUSTOM."
