@@ -330,11 +330,11 @@ void World::buildPopulation(){
   // Outdoor encounters are spread across the stitched grid instead of cloning
   // one room's population six times.
   switch(m_level){
-   case 0:m_creatureSpawns={{C::Huntsman,{18.5f,8.5f}},{C::Wasp,{7.5f,17.5f}}};m_pickupSpawns={{{6.5f,8.5f},P::Ammo}};break;
+   case 0:m_creatureSpawns={{C::Huntsman,{18.5f,8.5f}},{C::Wasp,{9.5f,17.5f}}};m_pickupSpawns={{{6.5f,8.5f},P::Ammo}};break;
    case 1:m_creatureSpawns={{C::Huntsman,{7.5f,6.5f}},{C::Brute,{18.5f,17.5f}}};m_pickupSpawns={{{12.5f,12.5f},P::Health}};break;
-   case 2:m_creatureSpawns={{C::Wasp,{5.5f,7.5f}},{C::Huntsman,{16.5f,11.5f}},{C::Brute,{19.5f,19.5f}}};m_pickupSpawns={{{6.5f,18.5f},P::Ammo}};break;
+   case 2:m_creatureSpawns={{C::Wasp,{5.5f,7.5f}},{C::Huntsman,{13.5f,11.5f}},{C::Brute,{19.5f,19.5f}}};m_pickupSpawns={{{6.5f,18.5f},P::Ammo}};break;
    case 3:m_creatureSpawns={{C::Huntsman,{8.5f,15.5f}},{C::Wasp,{19.5f,5.5f}}};m_pickupSpawns={{{18.5f,17.5f},P::Health}};break;
-   case 4:m_creatureSpawns={{C::Brute,{7.5f,18.5f}},{C::Huntsman,{17.5f,7.5f}},{C::Wasp,{13.5f,15.5f}}};m_pickupSpawns={{{4.5f,5.5f},P::Ammo},{{20.5f,19.5f},P::Health}};break;
+   case 4:m_creatureSpawns={{C::Brute,{9.5f,18.5f}},{C::Huntsman,{17.5f,7.5f}},{C::Wasp,{13.5f,15.5f}}};m_pickupSpawns={{{4.5f,5.5f},P::Ammo},{{20.5f,19.5f},P::Health}};break;
    case 5:m_creatureSpawns={{C::Huntsman,{6.5f,8.5f}},{C::Brute,{17.5f,14.5f}}};m_pickupSpawns={{{18.5f,6.5f},P::Ammo}};break;
   }
   for(int i=0;i<4;++i)m_clutterSpawns.push_back({(i+m_level)%6,{4.f+i*3.1f,6.5f+float((i+m_level)%3)*4.2f},-999,(i+m_level)*.7f});
