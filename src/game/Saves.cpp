@@ -232,7 +232,7 @@ bool Game::testSaves(){
   if(!check(restored.decodeSave(data)&&!restored.m_enemies.empty()&&restored.m_enemies.back().stalkMode==Enemy::StalkMode::Watch&&restored.m_enemies.back().stalkTimer==0&&restored.m_enemies.back().stalkSide==1,"Version 4 saves load with default stalk state"))return false;
  }
  for(int level:{4,5}){
-  Game legacy;legacy.loadLevel(level,false);legacy.m_player.pos=level==4?Vec2{6.9f,5}:Vec2{19.5f,23.8f};legacy.m_player.z=-9;legacy.m_player.health=63;
+  Game legacy;legacy.loadLevel(level,false);legacy.m_player.pos=level==4?Vec2{8.9f,6}:Vec2{17.35f,22};legacy.m_player.z=-9;legacy.m_player.health=63;
   Game restored;if(!check(restored.decodeSave(legacy.encodeSave())&&restored.hullFits(restored.player().pos,restored.player().z,restored.player().hullHeight())&&restored.player().health==63&&length(restored.player().pos-legacy.player().pos)<1,"Old megamap saves escape corrected walls without losing health"))return false;
   restored.m_player.pos={12,21};restored.m_player.z=-9;Game roundtrip;
   if(!check(roundtrip.decodeSave(restored.encodeSave())&&lengthSq(roundtrip.player().pos-restored.player().pos)<.000001f&&roundtrip.player().z==restored.player().z,"Valid megamap positions remain unchanged on load"))return false;

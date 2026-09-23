@@ -58,6 +58,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
  m_facilityTextures.emplace("pc_1",loadTexture(192));m_facilityTextures.emplace("keyboard_1",loadTexture(193));
+ m_facilityTextures.emplace("machinery_mx_1",loadTexture(260));
+ m_facilityTextures.emplace("transformer_box_hr_2",loadTexture(261));
+ m_facilityTextures.emplace("metal_hr_6_1",loadTexture(262));
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
  m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);
  for(int i=0;i<6;++i)m_clutterTextures[i]=loadTexture(152+i*2);

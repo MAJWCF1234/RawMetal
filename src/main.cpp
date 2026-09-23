@@ -53,18 +53,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
      std::ofstream report("megamap-inspection.txt");bool ok=true;
      for(int level:{4,5}){retro::World w(level);for(auto&s:w.structures()){bool valid=s.bottom>=-9.01f&&s.top<=-4.79f;ok&=valid;report<<"map "<<level<<" structure "<<s.x1<<','<<s.y1<<" z "<<s.bottom<<".."<<s.top<<" in room "<<valid<<'\n';}
-      bool blocks=level==4?!w.fits(6.9f,5,-9,1):!w.fits(19.5f,23.8f,-9,1);ok&=blocks;report<<"collision present "<<blocks<<'\n';}
-     // Verify body-width routes to every maintenance bay, both seams and the exit.
-     for(int level:{4,5}){retro::World w(level);constexpr int N=96;std::array<bool,N*N> seen{};std::queue<int> q;
-      auto fits=[&](int x,int y){float px=(x+.5f)*.25f,py=(y+.5f)*.25f;for(float dx:{-.22f,0.f,.22f})for(float dy:{-.22f,0.f,.22f})if(!w.fits(px+dx,py+dy,-9.f,1.75f))return false;return true;};
-      int start=10*N+26;seen[start]=true;q.push(start);
-      while(!q.empty()){int i=q.front();q.pop();int x=i%N,y=i/N;for(auto d:std::array<retro::Vec2,4>{{{1,0},{-1,0},{0,1},{0,-1}}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>=N||ny>=N)continue;int j=ny*N+nx;if(!seen[j]&&fits(nx,ny)){seen[j]=true;q.push(j);}}}
-      for(auto p:std::array<retro::Vec2,8>{{{5.5f,4},{5.5f,13},{5.5f,21},{18.5f,4},{18.5f,12},{18.5f,21},{level==4?12.f:19.5f,22.5f},{12,6}}}){bool reachable=seen[int(p.y*4)*N+int(p.x*4)];report<<"map "<<level<<" route "<<p.x<<','<<p.y<<" reachable "<<reachable<<'\n';ok&=reachable;}
-     }
+      bool blocks=level==4?!w.fits(8.9f,6,-9,1):!w.fits(17.35f,22,-9,1);ok&=blocks;report<<"collision present "<<blocks<<'\n';}
+     // Exercise the real standing hull, step height, door swing and water bed.
+     // A fixed -9 flood-fill incorrectly rejects raised decks and ramps.
+     ok&=retro::Game::testServiceMaps();
      struct View{std::string name;int level;retro::Vec2 p;float yaw,pitch;};
-     std::vector<View> views={{"gallery-entry",4,{6.5f,1.5f},1.4f,0},{"gallery-bays",4,{11.f,12.f},2.65f,-8},{"gallery-seam",4,{12.f,22.f},retro::kPi*.5f,0},{"coolant-seam",5,{12.f,2.f},-retro::kPi*.5f,0},{"coolant-pools",5,{12.f,6.5f},retro::kPi*.5f,-14},{"coolant-equipment",5,{15.f,16.f},.75f,-15},{"coolant-bulkhead",5,{19.5f,21.3f},retro::kPi*.5f,0}};
+     std::vector<View> views={{"gallery-entry",4,{6.5f,1.5f},1.4f,0},{"gallery-bays",4,{11.f,12.f},2.65f,-8},{"gallery-seam",4,{12.f,22.f},retro::kPi*.5f,0},{"coolant-seam",5,{12.f,2.f},-retro::kPi*.5f,0},{"coolant-pools",5,{12.f,6.5f},retro::kPi*.5f,-14},{"coolant-equipment",5,{18.f,12.f},.9f,-6},{"coolant-bulkhead",5,{19.5f,21.3f},retro::kPi*.5f,0}};
      for(int level:{4,5})for(int angle=0;angle<8;++angle)views.push_back({std::string(level==4?"gallery":"coolant")+"-sweep-"+std::to_string(angle),level,{12,12},angle*retro::kPi*.25f,-8});
-     views.push_back({"gallery-workbay",4,{5.5f,7.f},-2.4f,-6});
+     views.push_back({"gallery-workbay",4,{6.5f,9.5f},-2.1f,-6});
      views.push_back({"coolant-riser",5,{19.f,20.f},-.8f,0});
      for(auto v:views){
       auto scene=retro::Game::mapInspection(v.p,v.yaw,v.pitch,v.level,false,-9,true);renderer.render(scene);
