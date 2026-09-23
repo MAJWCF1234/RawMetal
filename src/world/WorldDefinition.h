@@ -15,8 +15,10 @@ struct ChunkDefinition {
     float spawnHeight;
     Environment environment;
     bool lift=false;
+    float ceiling=3.4f;
+    float ambient=.27f;
 };
-inline constexpr int CampaignChunkCount=6;
+inline constexpr int CampaignChunkCount=10;
 inline constexpr int AshfallChunkCount=12;
 inline constexpr int WorldChunkCapacity=12;
 inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
@@ -25,7 +27,11 @@ inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     {{36,48},{3.5f,3.5f},0,Environment::Interior},
     {{54,72},{3.5f,3.5f},0,Environment::Interior,true},
     {{69,96},{6.5f,1.5f},-9,Environment::Interior},
-    {{69,120},{12,2},-9,Environment::Interior}
+    {{69,120},{12,2},-9,Environment::Interior},
+    {{74,144},{3.5f,2},-9,Environment::Interior,false,-6.35f,.09f},
+    {{92,168},{3.5f,2},-9,Environment::Interior,false,-1},
+    {{109,192},{3.5f,2},-4,Environment::Interior,false,-.8f},
+    {{127,216},{3.5f,2},-9,Environment::Interior,false,-5.3f}
 }};
 // Ashfall is a stitched 4 x 3 wasteland. Keeping 24 m chunks preserves the
 // proven service-map streaming granularity while allowing the surface world to

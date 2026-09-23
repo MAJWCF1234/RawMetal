@@ -1,17 +1,15 @@
-# RawMetal 0.4.6 â€” Terrain and lossless compression
+# RawMetal 0.5.0 — Utility campaign expansion
 
-RawMetal 0.4.6 brings shared PSX soil/rock materials with matching normal maps, safer slope spawning, terrain-aware creature routing, twelve-chunk seam checks, and supported ruin walls. Reactor Service Gallery and Coolant Return include the latest shelf, doorway and quiet-basin repairs.
+Continue through the new Cable Vaults bulkhead in Coolant Return (map index 5).
+Four connected chapters extend the main campaign:
 
-Lossless size reduction:
-- The packer compares reversible sample predictors and byte-plane layouts for each WAV, keeping the smallest result. Decoded WAV files remain byte-identical.
-- Textures retain their full dimensions and exact RGBA pixels. Models and animations retain their original bytes.
-- Native code/data folding and size optimization of the FBX importer reduce executable overhead while preserving renderer speed optimization.
-- Completed resource manifests are published atomically so interrupted packing cannot publish a truncated manifest.
+- **Cable Vaults:** low service passages, two detours around a damaged electrical trench, pulsing arcs, a local disconnect and a maintenance flashlight pickup.
+- **Pump Annex:** three playable elevations, large supplied machinery, lower manifold stairs, an upper observation route and a pump restart event.
+- **Utility Junction:** an elevated arrival bridge, control booth, waste dispatch control, checkpoint and locked future service connections.
+- **Waste Handling:** sorting deck, disposal basin, loose scrap and an animated conveyor/compactor. Its press crushes enemies and debris; a local isolator stops it in a raised position.
 
-Downloads: run RawMetal.exe directly, or extract RawMetal.zip and run the identical EXE inside it. All game assets are embedded.
+Water is less bright, moves more slowly and meets the sloped basin bed at the correct shoreline. Original asset pixels, model data and audio remain intact in the lossless package. The latest switchgear-facing fixes are retained.
 
-Sizes: signed EXE **17,703,824 bytes**; ZIP **16,922,758 bytes**. The unsigned build decreased from 18,261,504 to 17,702,400 bytes, saving 559,104 bytes (3.06%) with no content removed.
+Save version 11 retains prior six-chunk campaign saves, adds the new route to existing Coolant Return saves, and preserves machinery isolation state. Freight Access remains a future chapter; the new route ends at Waste Handling's dispatch area.
 
-Validation: all 143 embedded resources match their sources; Vulkan smoke, twelve-chunk world isolation/seam checks, and performance tests passed. The reference smoke frame is byte-identical to the pre-compression build. Ashfall's 120-frame turning benchmark averaged 16.69 ms, with a 27.79 ms maximum on the test machine (RTX 5060 Ti); these are measured results, not universal hardware guarantees.
-
-The EXE uses the existing self-signed RawMetal Development certificate; this is not a publicly trusted publisher certificate.
+Downloads: run RawMetal.exe directly, or extract RawMetal.zip and run the identical EXE. Assets are embedded. The executable uses the existing self-signed RawMetal Development certificate, not a publicly trusted publisher certificate.

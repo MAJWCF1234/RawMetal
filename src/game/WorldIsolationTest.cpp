@@ -7,10 +7,11 @@ bool Game::testWorldIsolation(){
  auto check=[&](bool ok,const char* label){out<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
  Game campaign;Game custom(WorldId::Ashfall);Game independent;
  // Keep authored encounter composition stable while moving ownership out of Game.
- constexpr int creatureCounts[]={8,9,6,3,0,0},pickupCounts[]={4,6,4,3,0,0};
+ constexpr int creatureCounts[]={8,9,6,3,0,0,1,3,0,3},pickupCounts[]={4,6,4,3,0,0,1,2,2,2};
+ constexpr int clutterCounts[]={6,6,6,6,0,2,2,0,0,19};
  for(int level=0;level<campaign.chunkCount();++level){
   const auto& chunk=campaign.m_chunks[level];
-  if(!check(int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&chunk.clutter.size()==(level<4?6u:level==5?2u:0u),"Campaign population preserved"))return false;
+  if(!check(int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&int(chunk.clutter.size())==clutterCounts[level],"Campaign population preserved"))return false;
  }
  const auto& warden=campaign.m_chunks[3].enemies.back();
  if(!check(warden.kind==CreatureKind::Warden&&warden.hp==320&&warden.pos.x==21.5f&&warden.pos.y==18.5f,"Reactor encounter keeps its authored creature and health"))return false;

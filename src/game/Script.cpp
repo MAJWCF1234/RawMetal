@@ -76,13 +76,40 @@ void Game::updateScripts(float){
   if(event.once)m_firedEvents.push_back(event.id);for(const auto&action:event.actions)executeScriptAction(action);
  }
 }
+bool Game::hazardActive(const Hazard& h)const{
+ bool enabled=!h.enabledFlag||state(h.enabledFlag)==h.enabledValue;if(h.invertFlag)enabled=!enabled;
+ return enabled&&(h.period<=0||std::fmod(m_elapsed+h.phase,h.period)<h.onTime);
+}
+float Game::compactorHeight(const Compactor& c)const{
+ if(state(c.stopState))return c.raised;
+ float t=std::fmod(m_elapsed,c.period)/c.period;
+ float stroke=t<.35f?0:t<.5f?(t-.35f)/.15f:t<.63f?1:t<.8f?1-(t-.63f)/.17f:0;
+ return c.raised+(c.bed+.12f-c.raised)*stroke;
+}
 void Game::updateHazards(float dt){
  m_hazardSoundTimer=std::max(0.f,m_hazardSoundTimer-dt);float damage=0;Hazard::Kind loudest=Hazard::Kind::Toxic;
  for(const auto&hazard:m_world.hazards()){
-  bool enabled=!hazard.enabledFlag||state(hazard.enabledFlag)==hazard.enabledValue;if(hazard.invertFlag)enabled=!enabled;if(!enabled)continue;
+  if(!hazardActive(hazard))continue;
+  if(hazard.period>0&&std::fmod(m_elapsed+hazard.phase,hazard.period)<dt)
+   m_sounds.push_back({Sound::Machine,{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f},.25f,1.3f,true});
   if(m_player.pos.x<hazard.x1||m_player.pos.x>hazard.x2||m_player.pos.y<hazard.y1||m_player.pos.y>hazard.y2)continue;
   if(m_player.z+m_player.hullHeight()<hazard.bottom||m_player.z>hazard.top)continue;
   damage+=std::max(0.f,hazard.damagePerSecond)*dt;loudest=hazard.kind;
+ }
+ for(const auto& c:m_world.compactors()){
+  float height=compactorHeight(c);
+  auto inside=[&](Vec2 p){return p.x>c.x1+.1f&&p.x<c.x2-.1f&&p.y>c.y1&&p.y<c.y2;};
+  bool running=!state(c.stopState);
+  if(running&&inside(m_player.pos)&&m_player.z<c.bed+.25f)tryMove({0,dt*.55f});
+  if(inside(m_player.pos)&&m_player.z<height&&m_player.z+m_player.hullHeight()>height){damage+=100*dt;loudest=Hazard::Kind::Crusher;}
+  for(auto& e:m_enemies)if(e.alive&&inside(e.pos)){
+   if(running&&e.z<c.bed+.25f)e.pos.y+=dt*.55f;
+   if(e.bodyTop()>height&&e.bodyBottom()<height){e.hp-=300*dt;e.painFlash=1;if(e.hp<=0){e.alive=false;e.deathTime=0;e.windup=0;++m_kills;enemySound(e,2);}}
+  }
+  for(int i=int(m_clutter.size())-1;i>=0;--i){auto& item=m_clutter[i];if(!inside(item.pos)||i==m_heldClutter)continue;
+   if(running&&item.z<c.bed+.3f){item.sleeping=false;item.velocity.y+=dt*2.f;}
+   if(height<c.bed+.3f&&item.z<c.bed+.35f){m_sounds.push_back({Sound::JunkMetal,item.pos,.4f,.7f,true});m_clutter.erase(m_clutter.begin()+i);if(m_heldClutter>i)--m_heldClutter;}
+  }
  }
  if(damage<=0)return;m_player.health=std::max(0.f,m_player.health-damage);m_damageFlash=std::max(m_damageFlash,.35f);
  if(m_hazardSoundTimer<=0){sound(loudest==Hazard::Kind::Crusher||loudest==Hazard::Kind::FallingDebris?Sound::JunkMetal:Sound::Hurt,.55f,loudest==Hazard::Kind::Anomaly?.72f:1.f);m_hazardSoundTimer=.35f;}

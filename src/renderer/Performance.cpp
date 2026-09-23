@@ -32,6 +32,8 @@ bool SoftwareRenderer::testHardware(){
  auto finish=[&]{renderer.m_gpu->finish(renderer.m_pixels);renderer.m_gpuFrame=false;return renderer.m_pixels[36*128+64]&0xffffffu;};
  begin();triangle(red,1);triangle(blue,2);auto pixel=finish();check((pixel&0xff0000u)>0xf00000u&&(pixel&255)==0,"Nearest surface wins depth test");
  begin();triangle(transparent,1);triangle(blue,2);pixel=finish();check((pixel&255)>240&&(pixel&0xff0000u)==0,"Alpha cutout keeps geometry behind visible");
+ Texture liquid{1,1,{0xc4ff0000u}};liquid.transparent=true;
+ begin();triangle(liquid,1);triangle(blue,2);pixel=finish();check(((pixel>>16)&255)>150&&(pixel&255)>20&&(pixel&255)<100,"Continuous water alpha blends the visible bed without cutout holes");
  begin();triangle(emissive,1,0);check(finish()==0xffffffu,"Emission survives zero ambient illumination");
  renderer.m_emissionScale=.1f;begin();triangle(emissive,1,0);pixel=finish();check((pixel&255)>30&&(pixel&255)<50,"Emergency lamp emission dims on the GPU");renderer.m_emissionScale=1.f;
  begin();triangle(normal,1,.5f);auto flat=finish();begin();triangle(normal,1,.5f,&lights);auto relief=finish();check((relief&255)>(flat&255),"Authored normal map affects hardware lighting");
@@ -70,6 +72,10 @@ bool SoftwareRenderer::testPerformance(){
  measure("Reactor balcony turn",Game::liftInspection(World::LiftRideComplete,2),180,false,true);
  auto combat=Game::mapInspection({18,17},kPi*.5f,0,3,false,-9,false);
  measure("Reactor active AI",combat,180,true,true);
+ for(int level=6;level<10;++level){const auto& def=chunkDefinition(WorldId::Campaign,level);
+  std::string name="Utility chapter "+std::to_string(level+1)+" turn";
+  measure(name.c_str(),Game::mapInspection(def.playerStart,.6f,0,level,false,def.spawnHeight,false),120,true,true);
+ }
  // Compare exact output with deck occlusion disabled. Geometry remains present;
  // the optimization must not change what is visible through shaft openings.
  SoftwareRenderer reference(DisplayWidth,DisplayHeight);reference.enableHardware();reference.m_shadowBudgetLimit=10000000;

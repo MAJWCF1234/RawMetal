@@ -57,7 +57,8 @@ template<class A> void Game::archiveSave(A& a,int version){
   list(m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});
   list(m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});
  }
- int archivedChunks=version>=10?worldChunkCount(m_worldId):version>=7?ChunkCount:4;
+ int archivedChunks=version>=11?worldChunkCount(m_worldId):version>=10?(m_worldId==WorldId::Campaign?6:12):version>=7?6:4;
+ if(version>=11){a(archivedChunks);if(archivedChunks<1||archivedChunks>worldChunkCount(m_worldId))throw std::runtime_error("Invalid chunk count");}
  for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=World(index,m_worldId);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
@@ -73,14 +74,14 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,10);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 10 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,11);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 11 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>10))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>11))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   if(next.m_chunks[3].world.hasLift()){
@@ -95,7 +96,7 @@ bool Game::decodeSave(const std::string& data){
   auto samePosition=[](Vec2 a,Vec2 b){return lengthSq(a-b)<.0004f;};
   for(int level=0;level<next.chunkCount();++level){
    auto&saved=next.m_chunks[level];const auto&fresh=authored.m_chunks[level];
-   if(version<10&&next.m_worldId==WorldId::Ashfall&&level>=ChunkCount){saved=fresh;continue;}
+   if(version<10&&next.m_worldId==WorldId::Ashfall&&level>=6){saved=fresh;continue;}
 
    auto oldEnemies=std::move(saved.enemies);std::vector<bool> enemyUsed(oldEnemies.size(),false);saved.enemies.clear();saved.enemies.reserve(fresh.enemies.size());
    for(const auto&spawn:fresh.enemies){
@@ -200,6 +201,11 @@ bool Game::testSaves(){
  // still be canonical and re-encode exactly.
  {Game current;auto data=current.encodeSave();Game restored;
   if(!check(restored.decodeSave(data)&&restored.encodeSave()==data,"Current authored save remains byte-exact"))return false;
+ }
+ // Existing saves are reconciled with newly authored content. Simulate an
+ {Game legacy;legacy.loadLevel(5,false);legacy.m_player.health=63;legacy.m_world.m_doors.pop_back();legacy.storeChunk();Writer writer;legacy.archiveSave(writer,10);auto payload=writer.stream.str();
+  auto data=std::string("RAWMETAL_SAVE 10 ")+std::to_string(checksum(payload))+"\n"+payload;Game restored;
+  if(!check(restored.decodeSave(data)&&restored.level()==5&&restored.player().health==63&&restored.world().doors().back().transfer&&restored.m_chunks[6].enemies.size()==1&&restored.m_chunks[9].clutter.size()==19,"Six-chunk version 10 saves gain the four new chapters and transfer door"))return false;
  }
  // Existing saves are reconciled with newly authored content. Simulate an
  // older build that did not yet contain the Reactor Stalker, the final pickup,

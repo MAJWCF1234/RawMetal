@@ -3,6 +3,7 @@
 #include <cmath>
 #include <fstream>
 #include <queue>
+#include <unordered_set>
 
 namespace retro {
 bool Game::testServiceMaps(){
@@ -71,7 +72,7 @@ bool Game::testServiceMaps(){
     if(!check(world.waterSurface(x,y)==basin.surface&&std::fabs(world.floorHeight(x,y)-basin.bed)<.001f,"Render, bed and buoyancy share basin definition"))return false;
    }
    if(!check(world.waterSurface(12,9)<-100&&world.floorHeight(12,9)==-9,"Central walkway remains dry"))return false;
-   if(!check(world.doors().size()==1&&world.doors()[0].swinging&&world.doorBlocks(19.7f,20.76f,-9,1.7f),"Rear store has a closed swinging door"))return false;
+   if(!check(world.doors().size()==2&&world.doors()[1].transfer&&world.doors()[0].swinging&&world.doorBlocks(19.7f,20.76f,-9,1.7f),"Rear store has a closed swinging door"))return false;
    World opened=world;opened.openDoor(0);opened.updateDoors(2);
    if(!check(!opened.doorBlocks(19.7f,20.76f,-9,1.7f)&&opened.fits(19.7f,21.3f,-9,1.7f),"Swinging leaf clears a walkable store entrance"))return false;
   }
@@ -108,4 +109,71 @@ bool Game::testServiceMaps(){
            "Saving and restoring retains basin geometry and debris state"))return false;
  return true;
 }
+bool Game::testCampaignExtension(){
+ std::ofstream out("campaign-extension-test.txt");
+ auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
+ bool result=true;
+ for(int level=6;level<10;++level){
+  Game game;game.loadLevel(level,false);game.updateStreaming(0);game.m_enemies.clear();
+  out<<"CHUNK "<<level<<'\n';
+  result&=check(game.hullFits(game.player().pos,game.player().z,1.7f),"Spawn has standing clearance");
+  // Search all reachable elevations. Each edge uses the game's standing hull
+  // and 21.5 cm step allowance, including stair-to-deck joins.
+  struct Node{int x,y;float z;};constexpr int N=96;
+  auto key=[](Node n){return (uint64_t(int(std::round((n.z+32)*100)))<<16)|uint64_t(n.y*96+n.x);};
+  auto point=[](Node n){return Vec2{(n.x+.5f)*.25f,(n.y+.5f)*.25f};};
+  Node start{int(game.player().pos.x*4),int(game.player().pos.y*4),game.player().z};
+  std::queue<Node> pending;std::unordered_set<uint64_t> seen;std::vector<Node> reachable;
+  pending.push(start);seen.insert(key(start));
+  while(!pending.empty()){
+   auto a=pending.front();pending.pop();reachable.push_back(a);
+   for(Vec2 direction:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){
+    Node b{a.x+int(direction.x),a.y+int(direction.y),a.z};if(b.x<0||b.x>=N||b.y<0||b.y>=N)continue;
+    auto pos=point(b);b.z=game.groundHeight(pos,a.z+.215f);
+    if(std::fabs(b.z-a.z)>.215f||!game.hullFits(pos,b.z,1.7f)||!seen.insert(key(b)).second)continue;
+    pending.push(b);
+   }
+  }
+  struct Target{Vec2 p;float z;};std::vector<Target> targets;
+  if(level==6)targets={{{20,13},-9},{{17.5f,19},-9},{{21.5f,22.5f},-9}};
+  if(level==7)targets={{{12,3},-12},{{16.5f,16.5f},-4},{{20.5f,22.5f},-4}};
+  if(level==8)targets={{{18,13.5f},-9},{{20,6.5f},-4},{{21.5f,22.5f},-9}};
+  if(level==9)targets={{{10.5f,8.8f},-12},{{20,20},-12},{{7,18},-9}};
+  for(auto target:targets){bool found=false;for(auto n:reachable)if(length(point(n)-target.p)<.45f&&std::fabs(n.z-target.z)<.03f){found=true;break;}
+   out<<"target "<<target.p.x<<','<<target.p.y<<','<<target.z<<' ';result&=check(found,"Authored destination reachable without jumping");
+  }
+  // Emit reached positions for diagnosing a failed stair or rail join.
+  std::ofstream positions("campaign-reach-"+std::to_string(level)+".txt");for(auto n:reachable)positions<<point(n).x<<' '<<point(n).y<<' '<<n.z<<'\n';
+ }
+ for(int level=5;level<9;++level){
+  Game seam;seam.loadLevel(level,false);seam.updateStreaming(0);const auto d=seam.world().doors().back();
+  result&=check(d.transfer,"Last door transfers to the next chapter");
+  seam.useDoor(int(seam.world().doors().size())-1);seam.m_world.updateDoors(2);seam.updateStreaming(0);
+  float x=(d.left+d.right)*.5f,z=seam.world().floorHeight(x,d.y)+d.z;
+  seam.m_player.pos={x,23.6f};seam.m_player.z=z;seam.m_player.grounded=true;seam.m_player.angle=kPi*.5f;seam.m_enemies.clear();
+  InputState walk{};walk.forward=true;
+  for(int i=0;i<70;++i)seam.update(walk,1.f/120);
+  result&=check(seam.level()==level+1&&std::fabs(seam.player().z-z)<.03f,"Walk through opened transfer at matching elevation");
+  seam.m_velocity={};seam.m_player.angle=-kPi*.5f;
+  for(int i=0;i<90;++i)seam.update(walk,1.f/120);
+  result&=check(seam.level()==level,"Return through the same seamless doorway");
+ }
+ Game cable;cable.loadLevel(6,false);auto h=cable.world().hazards().front();
+ for(int level:{6,8,9}){
+  Game control;control.loadLevel(level,false);auto terminal=control.world().terminals().front();
+  control.m_player.pos=terminal.position+Vec2{0,-.8f};control.m_player.z=control.world().floorHeight(terminal.position.x,terminal.position.y)+terminal.z;control.m_player.angle=kPi*.5f;
+  InputState use{};use.use=true;control.updateInteraction(use,.01f);
+  result&=check(control.state(terminal.activateState)==1,"Player E interaction operates the authored local control");
+ }
+ cable.m_elapsed=.5f;bool on=cable.hazardActive(h);cable.m_elapsed=2;bool off=!cable.hazardActive(h);cable.setState(stateId("vault_disconnect"),1);cable.m_elapsed=.5f;
+ result&=check(on&&off&&!cable.hazardActive(h),"Electrical arc pulses and local isolation disables it");
+ Game waste;waste.loadLevel(9,false);auto press=waste.world().compactors().front();
+ waste.m_enemies.clear();waste.spawnCreature({CreatureKind::Huntsman,{15,10},-12});waste.m_clutter.clear();Clutter junk;junk.pos={15,10};junk.z=-12;junk.kind=3;waste.m_clutter.push_back(junk);
+ waste.m_elapsed=press.period*.55f;waste.updateHazards(.5f);
+ result&=check(!waste.m_enemies[0].alive&&waste.m_clutter.empty(),"Closed press crushes creatures and loose scrap");
+ waste.setState(press.stopState,1);result&=check(waste.compactorHeight(press)==press.raised,"Isolator stops the press in a safe raised position");
+ Game restored;result&=check(restored.decodeSave(waste.encodeSave())&&restored.level()==9&&restored.state(press.stopState)==1,"New chapters and machinery state survive save/load");
+ return result;
+}
+
 }
