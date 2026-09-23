@@ -8,7 +8,7 @@ static bool navFits(const World&w,Vec2 p,float z,float height){if(w.railBlocksHu
 static float roughStep(Enemy::Kind kind){
  return kind==Enemy::Kind::Huntsman?.62f:kind==Enemy::Kind::Wasp?.46f:kind==Enemy::Kind::Warden?.38f:.34f;
 }
-// Outdoor navigation follows the actual Surface Nets support instead of comparing
+// Surface Nets navigation follows the actual terrain support instead of comparing
 // one-metre cell centres. A one-metre voxel rise becomes a traversable slope when
 // its quarter-metre samples stay within the creature's step capability, while a
 // real cliff still fails the same test.
@@ -77,7 +77,7 @@ void Game::updateEnemies(float dt){
    bool playerLineOfSight=playerToWardenDistance<12.f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.85f);
    bool observed=playerLineOfSight&&playerToWardenDistance>.001f&&dot(playerForward,playerToWarden*(1.f/playerToWardenDistance))>.72f;
    bool flat=std::fabs(e.z-m_player.z)<.23f;
-   if(m_world.outdoors()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,1.85f,roughStep(e.kind));}
+   if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,1.85f,roughStep(e.kind));}
    bool freshContact=visible&&!hadAwareness;
 
    // A rush is a short burst, never the Warden's permanent navigation speed.
@@ -113,8 +113,8 @@ void Game::updateEnemies(float dt){
     if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f){
      auto radial=normalized(e.pos-m_player.pos);auto side=Vec2{-radial.y,radial.x};
      Vec2 best=goal;float bestScore=9999.f;bool found=false;
-     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,m_world.outdoors()?float(World::TerrainMaxZ+1):e.z+.215f);
-      bool reachable=m_world.outdoors()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.z)<.23f;
+     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.z+.215f);
+      bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.z)<.23f;
       if(!reachable||!navFits(m_world,candidate,z,1.85f))continue;
       auto fromPlayer=candidate-m_player.pos;float candidateDistance=length(fromPlayer);
       float gaze=candidateDistance>.001f?dot(playerForward,fromPlayer*(1.f/candidateDistance)):1.f;
@@ -131,8 +131,8 @@ void Game::updateEnemies(float dt){
    stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f;
 
    // Search the last witnessed area; never sample the hidden player's new position.
-   if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.outdoors()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
-    bool reachable=m_world.outdoors()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
+   if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
+    bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
     if(reachable&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=1.4f;e.stalkSide=-e.stalkSide;
    }
   }
@@ -143,10 +143,10 @@ void Game::updateEnemies(float dt){
   if(watching||length(goal-e.pos)<.3f||(!warden&&visible&&dist<range*.82f)||e.painFlash>(warden?.85f:.65f))continue;
   Vec2 destination=goal;
   float hull=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
-  float stepHeight=m_world.outdoors()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
+  float stepHeight=m_world.hasTerrain()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
   bool direct=false;
-  if(m_world.outdoors()){
-   // Do not reject a hill merely because the target is several metres above us.
+  if(m_world.hasTerrain()){
+   // Terrain-aware AI must not reject a hill or cavern slope merely because the target is several metres above us.
    // Test only the terrain immediately ahead; if a cliff blocks progress the
    // stuck timer falls back to routed navigation around it.
    auto delta=goal-e.pos;float distance=length(delta);Vec2 probe=distance>1.6f?e.pos+delta*(1.6f/distance):goal;
@@ -165,10 +165,10 @@ void Game::updateEnemies(float dt){
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
     int originX=gx,originY=gy;float best=999;for(int yy=originY-1;yy<=originY+1;++yy)for(int xx=originX-1;xx<=originX+1;++xx)if(!m_world.solid(xx+.5f,yy+.5f)){float d=lengthSq(Vec2{xx+.5f,yy+.5f}-goal);if(d<best){best=d;gx=xx;gy=yy;}}
    }
-   int minCell=m_world.outdoors()?0:1,maxCell=m_world.outdoors()?23:22;
+   int minCell=m_world.hasTerrain()?0:1,maxCell=m_world.hasTerrain()?23:22;
    gx=std::clamp(gx,minCell,maxCell);gy=std::clamp(gy,minCell,maxCell);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
    auto edgeWalkable=[&](int x,int y,int nx,int ny){
-    if(!m_world.outdoors())return m_world.navigable(x,y,nx,ny,hull);
+    if(!m_world.hasTerrain())return m_world.navigable(x,y,nx,ny,hull);
     Vec2 a{x+.5f,y+.5f},b{nx+.5f,ny+.5f};float az=navSupport(m_world,a,float(World::TerrainMaxZ+1));
     return roughSegment(m_world,a,az,b,hull,stepHeight);
    };
@@ -272,7 +272,7 @@ bool Game::testAI(){
  auto falling=validationScene(Enemy::Kind::Brute);auto&body=falling.m_enemies[0];body.pos={7.5f,4.5f};body.z=1.2f;body.alive=false;
  falling.updateEnemies(.05f);if(body.z<=0||body.z>=1.2f||body.verticalVelocity>=0)return false;
  for(int i=0;i<120;++i)falling.updateEnemies(1.f/120);if(body.z!=0)return false;
- // Surface Nets hill traversal: the old grid compared one-metre cell
+ // Surface Nets terrain traversal: the old grid compared one-metre cell
  // centre heights and treated this authored slope as a wall. Both a nimble
  // Huntsman and the heavier Brute must now follow the sampled ground profile.
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Brute}){
