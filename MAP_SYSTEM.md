@@ -192,7 +192,7 @@ Choosing the custom-campaign option does not touch `World.cpp` and does not buil
 custom maps/<Campaign_Name>.txt
 ```
 
-RawMetal scans `custom maps/` when it starts and again when the **CUSTOM MAPS** menu is opened. Valid campaign files become selectable deployments in that menu.
+RawMetal scans `custom maps/` when it starts and again when the **CUSTOM MAPS** menu is opened. Valid campaign files become selectable deployments in that menu. Runtime-ready TXT files that already contain `CUSTOM_CAMPAIGN_DATA` may be copied there directly. Older `MAP_CODE`-only files should be passed through `InstallMap.cmd` once so the compatibility converter can add their runtime data.
 
 A runtime-ready payload contains:
 
