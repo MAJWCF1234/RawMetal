@@ -573,7 +573,12 @@ World::World(int level,WorldId id):m_worldId(id) {
   auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
   auto shelf=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({7,{x,y},0,1.8f,.5f,1.8f,yaw,true});};
   auto machine=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({12,{x,y},0,3.060f,.940f,1.751f,yaw,true});};
-  auto switchgear=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({13,{x,y},0,.9066f,.4956f,2.2f,yaw,true});};
+  auto switchgear=[&](float x,float y,float yaw=0.f){
+   // The supplied electrical cabinet's visible/front face points opposite the
+   // asset-space direction used by the generic fixture transform. Correct it
+   // once here so every authored panel faces the service aisle, not the wall.
+   m_fixtures.push_back({13,{x,y},0,.9066f,.4956f,2.2f,yaw+kPi,true});
+  };
   auto tank=[&](float x,float y){m_fixtures.push_back({14,{x,y},0,2.404f,2.645f,2.2f,0,true});};
   if(m_level==4){
    // Receiving lobby -> workshop / electrical room -> stores / plant room.
