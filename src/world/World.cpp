@@ -5,7 +5,6 @@
 
 namespace retro {
 namespace {
-// Authored maps: each array is one named layer, never a second world implementation.
 constexpr MapRows FoundryGround = {
     "########################",
     "#...........#..........#",
@@ -58,9 +57,6 @@ constexpr MapRows PressureWorksGround = {
     "#..........#....####.X.#",
     "####################...#"
 };
-
-// Connected service floors. Equipment bays are authored below as structures;
-// the shared edge stays open so the maintenance routes continue across chunks.
 constexpr MapRows ReactorServiceGalleryGround = {
     "#####...################",
     "#......................#",
@@ -113,9 +109,6 @@ constexpr MapRows CoolantReturnGround = {
     "#......................#",
     "########...#############"
 };
-
-
-// Utility expansion: ground footprints and sparse upper decks remain separate layers.
 constexpr MapRows CableVaultsGround = {
     "##...###################",
     "##...###################",
@@ -324,8 +317,6 @@ constexpr MapRows WasteHandlingSortingDeck = {
     "________________________",
     "________________________"
 };
-
-// The gantry route includes orthogonal joins and a stair landing; the final exit is sealed.
 constexpr MapRows TurbineGantryGround = {
     "##...###################",
     "#....#.................#",
@@ -380,8 +371,6 @@ constexpr MapRows TurbineGantryUpperCatwalk = {
 };
 
 constexpr MapLayer FoundryGroundLayer{"Foundry / ground",0,0,FoundryGround};
-// The lift room travels through one continuous shaft. The reactor has two
-// playable floors; upper floors are separate decks over the lower map.
 constexpr MapRows LiftShaftGround = {
     "##...###################",
     "#......................#",
@@ -474,7 +463,6 @@ constexpr MapRows collarDeck(){
  rows[9]="_========__SS__========_";
  return rows;
 }
-// Passing storeys are shallow scenery rings, not full exploration maps.
 constexpr MapRows shaftScenery(){
  MapRows rows{};for(auto&row:rows)row="________________________";
  rows[8]=rows[15]="________========________";
@@ -486,8 +474,7 @@ constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,Pressu
 constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
 constexpr MapLayer TurbineGantryUpperLayer{"Turbine Gantry / upper catwalk",3,.3f,TurbineGantryUpperCatwalk};
 constexpr std::array GantryStairs{Staircase{4,18,6,22,0,3,15,true,true}};
-// Ashfall's tile layer is deliberately sparse. Terrain supplies the landscape;
-// only isolated junk, ruined wall fragments and build-site clutter live here.
+
 constexpr MapRows ashfallRegion(int region){
  MapRows rows={
   "........................","........................","........................","........................",
@@ -514,9 +501,6 @@ constexpr MapRows ashfallRegion(int region){
 }
 static_assert([]{for(int i=0;i<AshfallChunkCount;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
 
-// Ashfall's source terrain is a 96 x 72 field of authored one-metre voxel
-// columns. Surface Nets skins these block points; no smooth SDF primitives are
-// involved. Broad flats are intentional build pads for sparse wasteland ruins.
 constexpr std::array<std::string_view,72> AshfallVoxelTop{{
  "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
  "111111111111111111111111111111111111222221111111111111111111111111111111111111111111111111111111",
@@ -604,8 +588,7 @@ std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
  int top=ashfallVoxelTop(worldX,worldY);
  return worldZ<top-1||top>=5?TerrainRock:TerrainSoil;
 }
-// Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
-// meet the wall at their backs; shelves have solid footprints on level floors.
+
 const std::array<std::vector<Fixture>,3> MapFixtures{{
  {{7,{1.27f,2.7f},0,2,.5f,1.8f,kPi*.5f,true},{7,{22.7f,18.8f},0,1.6f,.5f,1.8f,kPi*.5f,true},
   {8,{6.5f,1.10f},.75f,.7f,.20f,1.f,0},{8,{14.5f,9.10f},.7f,.7f,.20f,1.f,0}},
@@ -624,8 +607,6 @@ constexpr float ShelfTiers[]={.17f,.54f,.92f};
 void World::buildPopulation(){
  using C=CreatureKind;using P=PickupKind;
  if(!campaign()){
-  // Fallout-like spacing: most outdoor chunks carry one small encounter and a
-  // little salvage, leaving long quiet sight-lines between landmarks.
   const Vec2 encounter[]={{18.5f,18.5f},{5.5f,18.5f},{18.5f,5.5f},{5.5f,5.5f}};
   auto p=encounter[m_level%4];
   if(m_level%5!=3)m_creatureSpawns.push_back({m_level%4==2?C::Wasp:m_level%6==5?C::Brute:C::Huntsman,p,-999});
@@ -636,7 +617,6 @@ void World::buildPopulation(){
   for(int i=0;i<junk;++i)m_clutterSpawns.push_back({(i+m_level)%6,{3.5f+i*1.4f,20.5f-float((i+m_level)%2)*1.2f},-999,(i+m_level)*.7f});
   return;
  }
- // Population belongs to the map, just like its layers and fixtures.
  switch(m_level){
  case 0:
   m_creatureSpawns={{C::Huntsman,{9.5f,4.9f}},{C::Wasp,{15.5f,2.5f}},{C::Brute,{19.5f,7.5f}},{C::Huntsman,{8.5f,11.5f}},
@@ -679,9 +659,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_internalWallHeight=2.8f;
   buildTerrain();
 
-  // Every substantial ruin sits on one of the deliberately flat voxel pads.
-  // The surrounding landscape stays empty enough to read as a wasteland rather
-  // than twelve industrial rooms placed outdoors.
   constexpr Vec2 pads[]={{7,7},{15,8},{8,16},{16,9},{8,14},{16,16},{7,7},{16,15},{8,8},{16,10},{8,15},{16,8}};
   auto pad=pads[m_level];
   float base=floorHeight(pad.x,pad.y);
@@ -701,12 +678,12 @@ World::World(int level,WorldId id):m_worldId(id) {
   };
 
   switch(m_level){
-   case 0: // a single ruined maintenance shack marks the starting outskirts
+   case 0:
     junkShack(pad.x,pad.y,5.6f,4.6f,2.35f,3,1);
     m_props.push_back({1,{pad.x+2.8f,pad.y+1.2f},1.1f,1.9f,kPi*.5f,{.30f,.95f},0});
     m_fixtures.push_back({8,{pad.x-2.35f,pad.y+.4f},.65f,.7f,.20f,1.f,kPi*.5f,true});
     break;
-   case 1: // mostly road and rock, just a collapsed utility wall and abandoned machine
+   case 1:
     junkWall(pad.x-2.5f,pad.y+1.8f,5.f,false);
     m_fixtures.push_back({6,{pad.x+1.3f,pad.y-.6f},0,1.8f,.55f,.95f,.25f,true});
     break;
@@ -714,7 +691,7 @@ World::World(int level,WorldId id):m_worldId(id) {
     junkShack(pad.x,pad.y,6.2f,5.2f,2.5f,3,2);
     m_props.push_back({0,{pad.x-2.8f,pad.y+2.6f},1.35f,2.2f,.2f,{1.1f,.66f},0});
     break;
-   case 3: // high eastern overlook, intentionally nearly empty
+   case 3:
     junkWall(pad.x-3.f,pad.y,6.f,false);
     junkWall(pad.x+1.8f,pad.y-2.2f,4.4f,true);
     break;
@@ -722,12 +699,12 @@ World::World(int level,WorldId id):m_worldId(id) {
     junkShack(pad.x,pad.y,5.2f,4.4f,2.2f,2,0);
     m_fixtures.push_back({7,{pad.x+1.9f,pad.y},0,1.7f,.5f,1.8f,kPi*.5f,true});
     break;
-   case 5: // crossroads landmark: relay shack plus outside generator
+   case 5:
     junkShack(pad.x,pad.y,6.0f,5.2f,2.45f,3,0);
     m_props.push_back({0,{pad.x+3.4f,pad.y-1.4f},1.45f,2.35f,kPi*.5f,{1.15f,.7f},0});
     m_fixtures.push_back({8,{pad.x-2.55f,pad.y+.8f},.7f,.7f,.20f,1.f,kPi*.5f,true});
     break;
-   case 6: // broad scrap basin with only a broken enclosure
+   case 6:
     junkWall(pad.x-2.6f,pad.y-2.f,5.2f,false);
     junkWall(pad.x-2.6f,pad.y-2.f,4.f,true);
     m_props.push_back({2,{pad.x+2.2f,pad.y+1.5f},.35f,3.5f,.4f,{1.7f,.18f},0});
@@ -736,28 +713,26 @@ World::World(int level,WorldId id):m_worldId(id) {
     junkShack(pad.x,pad.y,5.8f,5.f,2.5f,2,1);
     m_fixtures.push_back({6,{pad.x-2.6f,pad.y+2.2f},0,1.7f,.55f,.95f,kPi*.5f,true});
     break;
-   case 8: // south wash, almost pure terrain
+   case 8:
     m_props.push_back({1,{pad.x+1.8f,pad.y},1.05f,1.8f,.7f,{.28f,.9f},0});
     break;
    case 9:
     junkShack(pad.x,pad.y,6.4f,4.8f,2.3f,3,2);
     junkWall(pad.x-3.5f,pad.y+2.9f,4.5f,false);
     break;
-   case 10: // breaker yard
+   case 10:
     junkWall(pad.x-3.f,pad.y-2.7f,6.f,false);
     junkWall(pad.x-3.f,pad.y+2.7f,6.f,false);
     m_fixtures.push_back({6,{pad.x,pad.y},0,2.2f,.7f,1.15f,.35f,true});
     m_props.push_back({0,{pad.x+3.1f,pad.y+.8f},1.35f,2.2f,kPi*.5f,{1.1f,.66f},0});
     break;
-   case 11: // evacuation edge gets the largest surviving shell
+   case 11:
     junkShack(pad.x,pad.y,7.2f,5.8f,2.65f,3,0);
     junkWall(pad.x-4.f,pad.y+3.4f,8.f,false);
     m_fixtures.push_back({7,{pad.x+3.2f,pad.y+1.5f},0,1.8f,.5f,1.8f,kPi*.5f,true});
     break;
   }
 
-  // Each ground-level wall gets a buried footing. Sampling its footprint
-  // prevents floating wall bases where the authored pad meets a terrain slope.
   const auto wallCount=m_structures.size();
   for(size_t i=0;i<wallCount;++i){const auto wall=m_structures[i];if(std::fabs(wall.bottom-base)>.01f)continue;
    float bottom=base;
@@ -790,19 +765,20 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_layers={{"Cable Vaults / service passages",-9,0,CableVaultsGround}};
    m_doors={{2,5,.5f,0,false,false,true},{20,23,23.5f,0,false,true}};
    m_doors.back().requireState=stateId("vault_disconnect");
-   // Damaged main gallery, with two full-width service detours.
    wall(11,11,15,11.35f,-9,-7.7f);
    m_waterVolumes={{11,8.3f,15,10.7f,-9.35f,-9.03f}};
    Hazard arc{Hazard::Kind::Electricity,11,8.3f,15,10.7f,-9.4f,-7.5f,22};
    arc.enabledFlag=stateId("vault_disconnect");arc.invertFlag=true;arc.period=4;arc.onTime=1.2f;m_hazards.push_back(arc);
-   // Keep the narrow west service lane readable: shelves run with the wall,
-   // while the east-wall switchgear presents its control face to the aisle.
-   for(float y:{8.f,10.f,12.f,14.f}){cabinet({21.55f,y},kPi*.5f);shelf({6.9f,y+.3f},kPi*.5f);}
+
+   // Shelves and switchgear neatly aligned to outer walls and piers (aisle kept clear)
+   for(float y:{8.f,10.f,12.f,14.f}){cabinet({21.55f,y},kPi*.5f);shelf({6.35f,y+.3f},kPi*.5f);}
    for(float x:{11.12f,14.6f}){
     m_structures.push_back({x,6,x+.25f,21,-7.05f,-6.9f,false,2});
     for(float y:{6.f,9.f,12.f,15.f,18.f})m_structures.push_back({x,y,x+.25f,y+.08f,-6.9f,roof,false,2});
    }
-   cabinet({6,20},kPi);cabinet({8,20},kPi);cabinet({10,20},kPi);
+   // Wall-backed cabinets along the west solid concrete perimeter wall
+   cabinet({4.45f,18.5f},kPi*.5f);cabinet({4.45f,20.0f},kPi*.5f);cabinet({4.45f,21.5f},kPi*.5f);
+
    m_terminals={{{19.7f,14},"FEEDER 7A / REMOTE TRIP","LOWER UTILITY BUS ISOLATED.","E / THROW LOCAL DISCONNECT.",0,false,0,stateId("vault_disconnect")}};
    shelf({17.7f,19.8f});m_clutterSpawns={{3,{18,19}},{0,{18.5f,19.2f}}};
    event("vault_maintenance_kit",16.5f,18.5f,19,21,-9.2f,-7,{action(A::GiveItem,stateId("flashlight"),1)});
@@ -810,35 +786,37 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_scriptEvents.back().actions[0].sound=Sound::Door;
    m_creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f},-9}};
    m_pickupSpawns={{{18,21.5f},PickupKind::Ammo}};
-   // Deliberately sparse emergency lamps; the exits and turns stay readable.
    for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22}})m_lights.push_back({p,-6.55f});
   }else if(m_level==7){
    m_layers={{"Pump Annex / lower manifold",-12,0,PumpAnnexLower},{"Pump Annex / main floor",-9,.25f,PumpAnnexMain},{"Pump Annex / observation",-4,.25f,PumpAnnexObservation}};
-   // The Annex -> Junction seam is a normal personnel door inside a framed
-   // transfer vestibule, not a three-metre open portal into streamed space.
    m_doors={{2,5,.5f,0,false,false,true,3},{19.8f,21.2f,23.5f,0,false,true,false,8}};
    m_doors.back().swinging=true;
-   wall(2,0,5,1,-12,-9);wall(19,23,22,24,-12,-4);
-   wall(19,23.15f,19.8f,24,-4,roof);wall(21.2f,23.15f,22,24,-4,roof);
+
+   // North entry vestibule: under floor sealed, overhead lintel sealed, passage completely clear
+   wall(2,0,5,1,-12,-9);
+   wall(2,0,5,0.85f,-6.5f,roof);
+
+   // South transfer vestibule: framed cleanly around the swinging door with overhead lintel
+   wall(19,23,22,24,-12,-4);
+   wall(19,23.15f,19.8f,24,-4,roof);
+   wall(21.2f,23.15f,22,24,-4,roof);
    wall(19.8f,23.15f,21.2f,24,-1.45f,roof);
+
+   // Retaining bulkheads under the observation wing to eliminate open sightlines under slabs
+   wall(8,18,8.25f,21,-9,-4);
+   wall(8,18,15,18.25f,-9,-4);
+
    stairs={{2,4,5,11,-12,-9,16,true,false},{15,2,18,6,-12,-9,16,true,true},{15,6,18,16,-9,-4,26,true,true}};
-   // Pumps occupy the full open volume and connect to the overhead header.
    for(Vec2 p:{Vec2{8,6},Vec2{8,13},Vec2{12,19.5f}}){
     tank(p,4.6f);m_pipes.push_back({p,{p.x,22},-2.4f,.28f});
     m_pipes.push_back({p,p,-2.4f,.28f,-7.45f});
    }
    m_pipes.push_back({{8,22},{22,22},-2.4f,.28f});
-   // The first pass put each pump on a five-metre-wide solid block, turning the
-   // lower manifold into three giant obstructions. Use compact equipment piers
-   // and a few deliberate deck columns instead; the lower floor stays readable.
    for(Vec2 p:{Vec2{8,6},Vec2{8,13},Vec2{12,19.5f}})wall(p.x-.48f,p.y-.48f,p.x+.48f,p.y+.48f,-12,-9);
    for(Vec2 p:{Vec2{6.2f,3.1f},Vec2{11.7f,8.7f},Vec2{6.2f,15.2f},Vec2{20.4f,10.5f},Vec2{4.4f,19.3f},Vec2{18.8f,20.3f}})
     post(p.x,p.y,-12,-9.25f,.14f);
-   // Observation supports are sparse enough to read as structure rather than a
-   // procedural picket fence.
    for(Vec2 p:{Vec2{19.5f,7.2f},Vec2{20.5f,13.6f},Vec2{16.2f,17.2f},Vec2{10.2f,19.2f}})
     post(p.x,p.y,-9,-4.25f,.11f);
-   // Models sit on the -9 m main deck, preserving their proportions.
    for(auto& f:m_fixtures)if(f.model==14)f.base=3;
    m_terminals={{{20.4f,17.2f},"PUMP ANNEX / OBSERVATION","DUTY PUMP RESTARTED BY REMOTE SEQUENCE.","UTILITY JUNCTION / UPPER SOUTH ACCESS.",8,false}};
    event("annex_pump_restart",15,15,22,18,-4.1f,-2,{action(A::SetState,stateId("annex_running"),1),action(A::Shake,0,0,.35f),action(A::PlaySound,0,0,.75f),action(A::Checkpoint)});
@@ -852,27 +830,42 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_doors={{2.8f,4.2f,.5f,0,false,false,true,5},{19,22,4.5f,0,false,false,false,5},{3,5,17.5f},{20,23,23.5f,0,false,true}};
    m_doors.front().swinging=true;
    m_doors[1].requireState=stateId("freight_incident_clearance");m_doors[2].requireState=stateId("primary_utilities_permit");m_doors.back().requireState=stateId("waste_access");
-   wall(2,0,5,1,-9,-4);wall(19,4.35f,22,4.65f,-9,-4);
-   wall(2,0,2.8f,.85f,-4,roof);wall(4.2f,0,5,.85f,-4,roof);
+
+   // North entrance bridge vestibule: walking opening completely clear, lintel overhead
+   wall(2,0,5,1,-9,-4);
+   wall(2,0,2.8f,.85f,-4,roof);
+   wall(4.2f,0,5,.85f,-4,roof);
    wall(2.8f,0,4.2f,.85f,-1.45f,roof);
+
+   // South exit to Waste Handling: side jambs and overhead lintel (walking doorway clear)
+   wall(19.2f,23,20.f,24,-9,roof);
+   wall(23.f,23,23.8f,24,-9,roof);
+   wall(20.f,23,23.f,24,-6.5f,roof);
+
    stairs={{8,10,11,20,-9,-4,26,true,false}};
-   // A glazed control booth: low sill plus lintel instead of a solid opaque box.
    wall(15,10,15.2f,15,-9,-7.85f);wall(15,10,15.2f,15,-6.05f,-5.6f);
    wall(15,10,22,10.2f,-9,-7.85f);wall(15,10,22,10.2f,-6.05f,-5.6f);
    wall(22,10,22.2f,15,-9,-5.6f);wall(15,14.8f,17,15,-9,-5.6f);wall(19,14.8f,22,15,-9,-5.6f);
    for(float x:{15.f,21.9f})for(float y:{10.f,14.8f})m_structures.push_back({x,y,x+.12f,y+.12f,-7.85f,-6.05f,false,2});
-   // Future branch doors terminate in actual service vestibules. The elevated
-   // freight door used to stand by itself on a catwalk with only a handrail.
-   wall(18.82f,1,19.04f,4.35f,-4,roof);wall(21.96f,1,22.18f,4.35f,-4,roof);
+
+   // Elevated freight vestibule
+   wall(19,1,22,4.65f,-9,-4);
+   wall(18.82f,1,19.04f,4.35f,-4,roof);
+   wall(21.96f,1,22.18f,4.35f,-4,roof);
    wall(18.82f,1,22.18f,1.22f,-4,roof);
-   // The north mezzanine used to float over an unbounded black lower hall.
-   // Close the service volumes beneath both wings while keeping the bridge
-   // underside and central concourse open.
+   wall(19.04f,4.35f,21.96f,4.65f,-1.5f,roof);
+
    wall(1,6.78f,7.05f,7.06f,-9,-4);
    wall(6.78f,1,7.06f,6.82f,-9,-4);
    wall(18.78f,1,19.06f,6.82f,-9,-4);
    wall(18.78f,6.78f,22.2f,7.06f,-9,-4);
-   wall(1,17.35f,3,17.65f,-9,-5.5f);wall(5,17.35f,6,17.65f,-9,-5.5f);wall(6,17.35f,6.2f,23,-9,-5.5f);
+
+   // West utility partition sealed up to roof with door lintel
+   wall(1,17.35f,3,17.65f,-9,roof);
+   wall(5,17.35f,6,17.65f,-9,roof);
+   wall(6,17.35f,6.2f,23,-9,roof);
+   wall(3,17.35f,5,17.65f,-6.5f,roof);
+
    for(Vec2 p:{Vec2{2.3f,6.2f},Vec2{6.2f,6.2f},Vec2{10.2f,8.2f},Vec2{20.4f,8.2f}})
     post(p.x,p.y,-9,-4.25f,.11f);
    m_terminals={{{18,12.5f},"JUNCTION / WASTE DISPATCH","CREDENTIAL ACCEPTED / WASTE ROUTE AVAILABLE.","E / RELEASE WASTE HANDLING BULKHEAD.",0,false,0,stateId("waste_access")},
@@ -882,33 +875,35 @@ World::World(int level,WorldId id):m_worldId(id) {
    event("junction_arrival",2,1,6,4,-4.1f,-2,{action(A::Checkpoint)});
    for(Vec2 p:{Vec2{4,4},Vec2{12,8},Vec2{20,7},Vec2{18,13},Vec2{11,22},Vec2{21,21}})m_lights.push_back({p,-1.05f});
    m_lights.push_back({{18,12},-5.85f});
-   // Under-bridge task lighting keeps the lower concourse readable instead of
-   // falling into a near-black void beneath the -4 m deck.
    for(Vec2 p:{Vec2{8,8.6f},Vec2{13,8.6f},Vec2{7.5f,14},Vec2{12.5f,19.5f}})
     m_lights.push_back({p,-4.35f});
   }else{
    m_layers={{"Waste Handling / processing floor",-12,0,WasteHandlingLower},{"Waste Handling / sorting deck",-9,.25f,WasteHandlingSortingDeck}};
-   m_doors={{2,5,.5f,0,false,false,true,3}};wall(2,0,5,1,-12,-9);
+   m_doors={{2,5,.5f,0,false,false,true,3}};
+
+   // North entry vestibule: under floor sealed, overhead lintel, doorway fully open
+   wall(2,0,5,1,-12,-9);
+   wall(2,0,5,0.85f,-6.8f,roof);
+
    stairs={{8,11,11,17,-12,-9,16,true,true}};
-   // Sorting pits flank a conveyor/press, leaving an always-safe service aisle.
    m_waterVolumes={{14,16,18,21,-12.5f,-12.08f}};
    m_compactors={{13,8,17,13,-12,-8.3f,9,stateId("compactor_isolated")}};
    for(float x:{12.65f,17.f})for(float y:{7.7f,12.95f})m_structures.push_back({x,y,x+.35f,y+.35f,-12,-6.1f,false,2});
    m_structures.push_back({12.65f,7.7f,17.35f,13.3f,-6.1f,-5.7f,false,2});
    m_structures.push_back({13,5,17,14,-12,-11.97f,false,2});
-   // Treat the sorting deck as rooms built over processing, not a collection
-   // of slabs floating over darkness. These retaining bulkheads follow the
-   // deck footprint but leave the central processing route and stair open.
+
+   // Sorting deck retaining bulkheads: conveyor chute drop and landing perimeter fully enclosed
    wall(1,4.78f,12.2f,5.06f,-12,-9);
+   wall(12.2f,4.78f,17.8f,5.06f,-12,-9);
    wall(17.8f,4.78f,23,5.06f,-12,-9);
    wall(4.78f,5,5.06f,16.9f,-12,-9);
-   wall(1,19.72f,7.8f,20.0f,-12,-9);
+   wall(1,17,8,17.25f,-12,-9);
+   wall(1,19.72f,10.46f,20.0f,-12,-9);
    wall(10.18f,17,10.46f,20.0f,-12,-9);
+
    for(float x:{7.f,19.f})m_pipes.push_back({{x,2},{x,22},-6.1f,.18f});
    m_terminals={{{10.8f,8},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / TOGGLE CONVEYOR AND PRESS.",0,false,0,stateId("compactor_isolated"),true},
                {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT CONNECTION SEALED / END OF CURRENT ROUTE.",0,false}};
-   // Scrap belongs in irregular sorting piles, not a perfect 3 x 6 object grid
-   // that reads like debug placement and chews up the service route.
    const Vec2 scrap[]={{5.7f,5.3f},{6.5f,5.6f},{7.2f,5.1f},{5.9f,8.5f},{6.8f,8.8f},{7.5f,8.2f},
                        {5.6f,12.8f},{6.4f,13.2f},{7.1f,12.5f},{6.0f,16.7f},{6.9f,17.1f},{7.7f,16.4f},
                        {9.4f,20.5f},{10.2f,20.9f},{11.0f,20.4f},{19.1f,4.2f},{20.0f,4.5f},{20.7f,4.0f}};
@@ -933,8 +928,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_openNorthBoundary=m_level==5;
   m_openSouthBoundary=m_level==4;
   if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
-  // Distinct rooms branch off a generous dry service route. Equipment is the
-  // purchased, proportion-preserving model, not a box or a scaled duct fitting.
   const float roof=m_level==4?2.9f:3.4f;
   auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
   auto shelf=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({7,{x,y},0,1.8f,.5f,1.8f,yaw,true});};
@@ -942,58 +935,47 @@ World::World(int level,WorldId id):m_worldId(id) {
   auto switchgear=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({13,{x,y},0,.9066f,.4956f,2.2f,yaw,true});};
   auto tank=[&](float x,float y){m_fixtures.push_back({14,{x,y},0,2.404f,2.645f,2.2f,0,true});};
   if(m_level==4){
-   // Receiving lobby -> workshop / electrical room -> stores / plant room.
-   // Side openings connect the rooms back into the route, avoiding dead ends.
    wall(1,4.5f,4.5f,4.75f);wall(5.9f,4.5f,9,4.75f);
    wall(8.75f,4.75f,9,8.5f);wall(8.75f,11,9,13.25f);
    wall(1,13,9,13.25f);
    Door workshop{4.5f,5.9f,4.625f};workshop.swinging=true;m_doors.push_back(workshop);
    m_structures.push_back({4.5f,4.5f,5.9f,4.75f,2.55f,roof,false,3});
-   // Switchgear room: cabinets against the outer wall, clear maintenance aisle.
    wall(16,4.5f,19,4.75f);wall(21,4.5f,23,4.75f);
    wall(16,4.75f,16.25f,8);wall(16,10.5f,16.25f,13.25f);
    wall(16,13,23,13.25f);
    for(float y:{6.f,7.5f,9.f,10.5f,12.f})switchgear(22.55f,y,kPi*.5f);
    machine(4.6f,7.3f);machine(4.6f,11.5f);
    shelf(1.65f,9.3f,kPi*.5f);shelf(7.9f,6.3f,kPi*.5f);
-   // Stores has a broad loading opening from the cross aisle and a side exit.
    wall(1,16,4,16.25f);wall(7,16,9,16.25f);
    wall(8.75f,16.25f,9,20);wall(8.75f,22,9,24);
    shelf(1.65f,18,kPi*.5f);shelf(1.65f,21,kPi*.5f);
    shelf(5.3f,23.2f);shelf(7.7f,18,kPi*.5f);
-   // The lower utility bay is open to the transfer apron, with actual generators.
    wall(16,16,23,16.25f);wall(16,16.25f,16.25f,19);
    for(float y:{18.f,21.f})m_fixtures.push_back({6,{21.3f,y},0,1.87f,.55f,.99f,0,true});
    switchgear(17.5f,17.f);switchgear(18.9f,17.f);
    m_terminals={{{14.4f,3.4f},"SERVICE GALLERY / WORK ORDER","PUMP ASSEMBLY MOVED TO WEST WORKSHOP.","ELECTRICAL ROOM MUST REMAIN DRY.",0,false}};
-   // Ceiling cable containment follows the central route and enters the electrical room.
    m_structures.push_back({14.7f,1,15.1f,23,2.45f,2.57f,false,2});
    m_structures.push_back({15.1f,6.2f,22.7f,6.6f,2.45f,2.57f,false,2});
    for(float y:{2.f,6.f,10.f,14.f,18.f,22.f})
     m_structures.push_back({14.87f,y,14.93f,y+.06f,2.57f,roof,false,2});
    for(Vec2 p:{Vec2{5,9},Vec2{19,9},Vec2{5,20},Vec2{19,20}})m_lights.push_back({p,-6.25f});
   }else{
-   // Two longitudinal return channels, each interrupted by a dry cross bridge.
-   // The central route and both outer equipment aisles connect at either end.
    m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-9.045f},
                    {13.75f,7.8f,16.75f,10.7f,-9.40f,-9.045f},
                    {7.25f,12.4f,10.25f,18.f,-9.40f,-9.045f},
                    {13.75f,12.4f,16.75f,18.f,-9.40f,-9.045f}};
-   // A solid landing hosts the inlet vessels; the hall beyond is open, not partitioned.
    tank(4.f,4.4f);tank(20.f,4.4f);
    for(float y:{9.f,15.5f}){machine(3.8f,y,kPi*.5f);machine(20.2f,y,kPi*.5f);}
    for(float x:{10.45f,13.45f})for(auto ends:{Vec2{8,10.5f},Vec2{12.6f,17.8f}})
     m_structures.push_back({x,ends.x,x+.10f,ends.y,0,.9f,true,2});
    for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2})
     m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
-   // Every header is authored with this hall and visibly hung from its ceiling.
    for(float x:{3.8f,20.2f})m_pipes.push_back({{x,3.2f},{x,15.5f},-6.3f,.14f});
    m_pipes.push_back({{3.8f,3.2f},{20.2f,3.2f},-6.3f,.14f});
    for(float x:{3.8f,20.2f}){
     m_pipes.push_back({{x,4.4f},{x,4.4f},-6.3f,.14f,-6.85f});
     for(float y:{9.f,15.5f})m_pipes.push_back({{x,y},{x,y},-6.3f,.09f,-7.3f});
    }
-   // Rear service store retains a real door, its swing and a usable interior.
    wall(17.25f,20.65f,19.05f,20.87f);wall(20.45f,20.65f,22.85f,20.87f);
    wall(17.25f,22.85f,22.85f,23.08f);wall(17.25f,20.87f,17.47f,22.85f);
    m_structures.push_back({19.05f,20.65f,20.45f,20.87f,2.55f,roof,false,3});
@@ -1006,9 +988,8 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_terminals={{{12,4.4f},"RETURN HALL / LOCAL CONTROL","DUPLEX CIRCULATION / DUTY AND STANDBY.","DRAIN CHANNELS BEFORE MAINTENANCE.",0,false}};
    for(Vec2 p:{Vec2{12,6},Vec2{12,12},Vec2{12,18},Vec2{5.7f,12},Vec2{18.3f,12}})m_lights.push_back({p,-5.75f});
   }
-  // Structures use absolute elevations; props/fixtures have floor-relative bases.
   for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
-  buildLayers({}); // Build the collision/occlusion index for these structures too.
+  buildLayers({});
   buildLights();
   return;
  }
@@ -1024,23 +1005,17 @@ World::World(int level,WorldId id):m_worldId(id) {
             {"Scenery / ventilation plant",3,.25f,shaftScenery()},
             {"Scenery / electrical service",6,.25f,shaftScenery()},
             {"Surface / sealed gates",9,.35f,shaftScenery()}};
-  // Entry bridge ends exactly at the lift's north door.
   m_structures.push_back({11,8,13,10,-.3f,0});
-  // Cage the boarding bridge so a missed jump cannot strand the player below
-  // the uncalled cab with no way to complete the mandatory descent sequence.
   m_structures.push_back({10.95f,8,11,10,0,2.1f,true});
   m_structures.push_back({13,8,13.05f,10,0,2.1f,true});
   m_structures.push_back({2,0,5,1,-9,-.3f});
   m_structures.push_back({10.5f,18.5f,13.5f,21.5f,-9,-3.4f,false,1});
-  // Only occupied spaces retain full room layouts.
   for(float z:{-9.f,-6.f,0.f}){
    m_structures.push_back({7,2,7.2f,5,z,z+2.65f,false,3});
    m_structures.push_back({7,7,7.2f,9,z,z+2.65f,false,3});
    m_structures.push_back({2,16,5,16.2f,z,z+2.65f,false,3});
    m_structures.push_back({7,16,9,16.2f,z,z+2.65f,false,3});
   }
-  // Cheap opaque ceilings preserve the boarding and reactor rooms below the
-  // scenery floors. The central shaft stays open; no distant upper rooms exist.
   for(float z:{-3.3f,2.7f}){
    m_structures.push_back({1,1,23,9,z,z+.12f,false,2});
    m_structures.push_back({1,15,23,23,z,z+.12f,false,2});
@@ -1048,7 +1023,6 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_structures.push_back({15,9,23,15,z,z+.12f,false,2});
   }
   for(float z:{-3.f,3.f,6.f,9.f}){
-   // Backing walls stop sightlines behind each one-metre-deep scenic bay.
    m_structures.push_back({7.8f,7.8f,8,16.2f,z,z+2.75f,false,3});
    m_structures.push_back({16,7.8f,16.2f,16.2f,z,z+2.75f,false,3});
    m_structures.push_back({8,7.8f,16,8,z,z+2.75f,false,3});
@@ -1058,15 +1032,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_structures.push_back({9,7.8f,15,9,z+2.65f,z+2.7f,false,2});
    m_structures.push_back({9,15,15,16.2f,z+2.65f,z+2.7f,false,2});
   }
-  // Deliberate perimeter piers replace the automatic forest of thin posts.
   for(float x:{1.3f,22.3f})for(float y:{16.7f,22.f})
    m_structures.push_back({x,y,x+.4f,y+.4f,-9,-3.3f,false,3});
   for(float y:{16.7f,22.f})m_structures.push_back({1.3f,y,22.7f,y+.4f,-3.65f,-3.3f,false,2});
-  // Console cabinets use the source model's proportions, with matching collision.
   for(float x:{17.35f,18.85f})m_structures.push_back({x-.313f,19.04f,x+.313f,19.46f,-9,-7.812f,false,6});
-  // Maintenance workbench, with open leg space and a correctly supported disk.
-  // Boarding-level freight and traction equipment. Bounds match visible props;
-  // the north approach and 11..13 metre boarding bridge remain unobstructed.
   for(Vec2 cargo:{Vec2{4.45f,7.9f},Vec2{5.75f,9.25f}})m_structures.push_back({cargo.x-.525f,cargo.y-.525f,cargo.x+.525f,cargo.y+.525f,0,.85f,false,6});
   m_structures.push_back({6.175f,13.075f,6.825f,13.725f,0,.95f,false,6});
   m_structures.push_back({15.97f,10.74f,17.9f,11.86f,0,1.71f,false,6});
@@ -1074,7 +1043,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_structures.push_back({4,12.4f,8.85f,12.95f,2.15f,2.55f,false,6});
   m_structures.push_back({5.1f,20.65f,6.9f,21.4f,-5.45f,-5.4f,false,2});
   for(float x:{5.15f,6.75f})for(float y:{20.7f,21.25f})m_structures.push_back({x,y,x+.08f,y+.08f,-6,-5.45f,false,2});
-  // Pump plinths, cable trunks and service-bay partitions leave the stair route clear.
   m_structures.push_back({2.8f,17.2f,5.5f,19.1f,-9,-8.85f,false,3});
   m_structures.push_back({15.2f,20.55f,18.2f,22.f,-9,-8.88f,false,3});
   for(float z:{-9.f,-6.f}){
@@ -1100,7 +1068,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_fixtures.push_back({7,{6.2f,11.f},9,2.052f,.61217f,1.44f,kPi*.5f,true});
   m_fixtures.push_back({6,{16.9f,13.2f},9,2.38f,.70f,1.26f,0,true});
   for(float x:{16.f,17.f,18.f})m_fixtures.push_back({8,{x,14.83f},9.7f,.66776f,.1156f,.90576f,0,true});
-  // Explicit ceiling-mounted lights: no fixtures generated from narrow rail spans.
   for(float z:{-9.f,-6.f,0.f})for(Vec2 p:{Vec2{4,6},Vec2{16,6},Vec2{21,6},Vec2{4,19},Vec2{8,22},Vec2{16,22},Vec2{21,19}}){
    float ceiling=clearanceAbove(p.x,p.y,z);if(ceiling-z>1.8f)m_lights.push_back({p,ceiling-.15f});
   }
@@ -1110,8 +1077,6 @@ World::World(int level,WorldId id):m_worldId(id) {
  }
  m_fixtures=MapFixtures[m_level];
  m_layers={m_level==0?FoundryGroundLayer:m_level==1?PressureWorksGroundLayer:TurbineGantryGroundLayer};
- // Each pair (or remaining single tile) owns one complete generator. Preserve
- // the supplied 3.4 x 1.0 x 1.8 metre proportions for rendering and collision.
  for(int y=0;y<Height;++y)for(int x=0;x<Width;){
   if(tile(x,y)!='G'){++x;continue;}
   int cells=tile(x+1,y)=='G'?2:1;float width=cells*.94f,scale=width/3.4f;
@@ -1120,10 +1085,6 @@ World::World(int level,WorldId id):m_worldId(id) {
  if(m_level==2){
   m_layers.push_back(TurbineGantryUpperLayer);
   m_internalWallHeight=2.7f;
-  // The ground-level transfer tunnels intentionally punch through the outer
-  // shell, but those openings must not continue above the door headers.
-  // Catwalk rails stay jumpable for parkour; these are visible upper walls at
-  // the two actual map exits so a successful jump cannot leave the level.
   m_structures.push_back({2.f,0.f,5.f,.18f,2.5f,6.f,false,3});
   m_structures.push_back({20.f,23.82f,23.f,24.f,2.5f,6.f,false,3});
   buildLayers(GantryStairs);
@@ -1167,8 +1128,6 @@ void World::buildTerrain(){
   int lx=sx-TerrainBorder,ly=sy-TerrainBorder,z=TerrainMinZ-1+sz;
   int wx=int(origin.x)+lx,wy=int(origin.y)+ly;
   bool solid=authoredAshfallVoxel(wx,wy,z);
-  // Binary +/- density makes every source sample a one-metre cube point.
-  // Surface Nets places the visible skin between occupied and empty samples.
   m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=solid?32:-32;
   m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=authoredAshfallMaterial(wx,wy,z);
  }
@@ -1194,9 +1153,6 @@ void World::buildTerrain(){
   return cellVertex[cellSlot(x+1,y+1,z-(TerrainMinZ-1))];
  };
 
- // Surface Nets: each mixed voxel cell owns one vertex at the average of its
- // edge intersections. This is the NoCubes-style "blocks authored, cubes gone"
- // representation we want to carry into Dark Below.
  for(int cz=0;cz<cellsZ;++cz)for(int cy=0;cy<cellsY;++cy)for(int cx=0;cx<cellsX;++cx){
   int x=cx-1,y=cy-1,z=TerrainMinZ-1+cz;float d[8];bool positive=false,negative=false;
   for(int i=0;i<8;++i){d[i]=sample(x+corner[i][0],y+corner[i][1],z+corner[i][2]);positive|=d[i]>0;negative|=d[i]<=0;}
@@ -1223,9 +1179,6 @@ void World::buildTerrain(){
   if(cx*nx+cy*ny+cz*nz>=0){m_terrain.push_back({a,b,c,material});m_terrain.push_back({a,c,d,material});}
   else {m_terrain.push_back({a,d,c,material});m_terrain.push_back({a,c,b,material});}
  };
- // A sign-changing grid edge joins the four neighbouring Surface-Net cells.
- // Edge ownership is half-open in X/Y, so adjacent streamed chunks generate
- // matching seam vertices without drawing duplicate seam faces.
  for(int z=TerrainMinZ;z<=TerrainMaxZ;++z)for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){
   float a=sample(x,y,z),b=sample(x+1,y,z);if((a>0)!=(b>0)){
    auto mat=a>0?sampleMaterial(x,y,z):sampleMaterial(x+1,y,z);float n=a>0?1.f:-1.f;
@@ -1296,9 +1249,7 @@ float World::floorHeight(float x,float y)const{
   if(x>=6&&x<9&&y>=10&&y<15)return y<11||y>=14?-.2f:-.4f;
   return 0;
  }
- // Foundry service deck: six 20 cm treads lead to a 1.2 m raised work area.
  if(x>=16&&x<23&&y>=9&&y<16){if(x<19&&y>=11&&y<13)return std::floor((x-16)*2)*.2f;if(y<13)return 1.2f;return std::min(1.2f,std::floor((16-y)*2)*.2f);}
- // Lower storage landing with a separate four-step approach from the south.
  if(x>=1&&x<7&&y>=17&&y<21){if(x>=5&&y<19)return std::floor((7-x)*2)*.2f;if(y<19)return .8f;return std::min(.8f,std::floor((21-y)*2)*.2f);}
  return 0;
 }
@@ -1307,7 +1258,7 @@ float World::waterSurface(float x,float y)const{
  return -1000.f;
 }
 float World::ceilingHeight(float x,float y)const{
- if(outdoors())return 128.f; // Traversable sky; no ceiling geometry.
+ if(outdoors())return 128.f;
  if(m_level>=6)return definition().ceiling;
  if(m_level>=4)return m_level==4?-6.1f:-5.6f;
  if(hasLift())return 16.f;
@@ -1315,7 +1266,7 @@ float World::ceilingHeight(float x,float y)const{
  if(m_level==0&&y>=24&&x>=20&&x<23)return 3.4f;
  if(m_level==1&&y<0&&x>=2&&x<5)return 3.6f;
  if(m_level==1)return y<7?3.4f:y<17?4.8f:3.8f;
- if(int(x)==10&&int(y)==14)return .66f; // Crouch-only service bypass.
+ if(int(x)==10&&int(y)==14)return .66f;
  return y<8?3.1f:y<16?4.2f:3.6f;
 }
 float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const{
@@ -1345,7 +1296,6 @@ bool World::doorBlocks(float x,float y,float feet,float height)const{
 }
 float World::clearanceHeight(float x,float y)const{
  float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f)height=std::min(height,floorHeight((door.left+door.right)*.5f,door.y)+door.z+2.5f);
- // The dispatch board hangs from the vestibule ceiling, above the walking route.
  if(campaignChunk(0)&&x>20.17f&&x<22.83f&&y>22.90f&&y<23.04f)height=std::min(height,2.57f);
  return height;
 }
@@ -1400,11 +1350,10 @@ bool World::isExit(float x, float y) const {
     return tile(static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y))) == 'X';
 }
 
-
 void World::buildLayers(std::span<const Staircase> stairs){
  for(const auto& layer:m_layers){
   for(auto row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Invalid map layer row width");
-  if(layer.thickness<=0)continue; // Ground tiles are read directly by tile().
+  if(layer.thickness<=0)continue;
   const float z=layer.elevation, underside=z-layer.thickness;
   const bool collarWall=hasLift()&&z==0;
   const float railHeight=collarWall?2.7f:.55f;
@@ -1424,15 +1373,10 @@ void World::buildLayers(std::span<const Staircase> stairs){
    m_structures.push_back({float(start),float(y),float(x),float(y+1),underside,z});
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
-   // Legacy gantries use the old regular support rhythm. Large utility decks
-   // (maps 6+) author their own columns so broad floors do not turn into a
-   // procedural forest of dozens of toothpick posts.
    if(!hasLift()&&m_level<6&&(x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
    if(!deck(x-1,y)&&!(hasLift()&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    // Seal the upper catwalk against a lower-layer wall.  Without this
-    // backing panel the rail leaves a one-cell sightline into the void.
     if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
    }
    if(!deck(x+1,y)&&!(hasLift()&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
@@ -1473,7 +1417,7 @@ float World::supportBelow(float x,float y,float feet)const{
   if(f.model==7)for(float tier:ShelfTiers){float top=base+f.height*tier;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
   else if(base+f.height<=feet+.025f)fixtureTop=std::max(fixtureTop,base+f.height);
  }
- for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
+ for(auto&p:m_props)if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
  float result=hasTerrain()?terrainSurfaceBelow(x,y,feet+.03f):floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
  result=std::max(result,fixtureTop);
  if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
@@ -1504,8 +1448,6 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelf
  if(hasTerrain()){
   float support=terrainSurfaceBelow(x,y,feet+.03f),ceiling=terrainSurfaceAbove(x,y,feet);
   if(feet<support-.025f||feet+height>ceiling+.005f)return false;
-  // Density is authoritative for arbitrary overhangs and cavern walls. Sample
-  // through the hull vertically so a player cannot cross a thin voxel surface.
   for(float z=feet+.04f;z<feet+height-.02f;z+=.16f)if(terrainDensity(x,y,z)>0)return false;
   char terrainTile=tile(int(std::floor(x)),int(std::floor(y)));
   if(terrainTile=='#'||terrainTile=='C'||terrainTile=='B'||terrainTile=='T'){
@@ -1548,4 +1490,3 @@ std::vector<Span> World::spansAt(int x,int y)const{
  if(bottom<roof)result.push_back({bottom,roof,0});return result;
 }
 }
-
