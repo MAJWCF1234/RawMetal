@@ -57,9 +57,16 @@ goto :INSTALL_AUTO
 :INSTALL_AUTO
 echo.
 echo [*] Routing according to META_DEFAULT_TARGET...
-findstr /R /I /C:"^META_DEFAULT_TARGET:[ ]*CUSTOM[ ]*$" "%PAYLOAD_FILE%" >nul
-if not errorlevel 1 goto :INSTALL_CUSTOM
-goto :INSTALL_MAIN
+rem Use the installer's metadata parser for encoding, whitespace and line endings.
+rem Never fall back to Main when metadata cannot be resolved.
+set "RESOLVED_TARGET="
+for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -File "tools\InstallMap.ps1" -Payload "%PAYLOAD_FILE%" -Mode Resolve') do set "RESOLVED_TARGET=%%T"
+if /i "%RESOLVED_TARGET%"=="CUSTOM" goto :INSTALL_CUSTOM
+if /i "%RESOLVED_TARGET%"=="MAIN" goto :INSTALL_MAIN
+echo [!] Could not resolve the installation destination. Nothing was installed.
+popd
+pause
+exit /b 1
 
 :INSTALL_MAIN
 echo.

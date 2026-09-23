@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$Payload,
 
-    [ValidateSet("Info","Auto","Main","Custom")]
+    [ValidateSet("Info","Resolve","Auto","Main","Custom")]
     [string]$Mode = "Info"
 )
 
@@ -47,6 +47,11 @@ function Read-OptionalMetadata([string]$key) {
     $match = [regex]::Match($payloadText, $pattern)
     if($match.Success) { return $match.Groups[1].Value.Trim() }
     return $null
+}
+
+if($Mode -eq "Resolve") {
+    Write-Output $defaultTarget
+    exit 0
 }
 
 if($Mode -eq "Auto") {
