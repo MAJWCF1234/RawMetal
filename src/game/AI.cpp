@@ -77,6 +77,7 @@ void Game::updateEnemies(float dt){
    bool playerLineOfSight=playerToWardenDistance<12.f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.85f);
    bool observed=playerLineOfSight&&playerToWardenDistance>.001f&&dot(playerForward,playerToWarden*(1.f/playerToWardenDistance))>.72f;
    bool flat=std::fabs(e.z-m_player.z)<.23f;
+   if(m_world.outdoors()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,1.85f,roughStep(e.kind));}
    bool freshContact=visible&&!hadAwareness;
 
    // A rush is a short burst, never the Warden's permanent navigation speed.
@@ -112,8 +113,9 @@ void Game::updateEnemies(float dt){
     if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f){
      auto radial=normalized(e.pos-m_player.pos);auto side=Vec2{-radial.y,radial.x};
      Vec2 best=goal;float bestScore=9999.f;bool found=false;
-     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,e.z+.215f);
-      if(std::fabs(z-e.z)>=.23f||!navFits(m_world,candidate,z,1.85f))continue;
+     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,m_world.outdoors()?float(World::TerrainMaxZ+1):e.z+.215f);
+      bool reachable=m_world.outdoors()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.z)<.23f;
+      if(!reachable||!navFits(m_world,candidate,z,1.85f))continue;
       auto fromPlayer=candidate-m_player.pos;float candidateDistance=length(fromPlayer);
       float gaze=candidateDistance>.001f?dot(playerForward,fromPlayer*(1.f/candidateDistance)):1.f;
       float score=gaze+lengthSq(candidate-e.pos)*.02f;
@@ -129,8 +131,9 @@ void Game::updateEnemies(float dt){
    stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f;
 
    // Search the last witnessed area; never sample the hidden player's new position.
-   if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,e.lastKnownZ+.215f);
-    if(std::fabs(z-e.lastKnownZ)<.23f&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=1.4f;e.stalkSide=-e.stalkSide;
+   if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.outdoors()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
+    bool reachable=m_world.outdoors()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
+    if(reachable&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=1.4f;e.stalkSide=-e.stalkSide;
    }
   }
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
