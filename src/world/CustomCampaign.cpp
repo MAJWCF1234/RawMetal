@@ -62,7 +62,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
  auto text=readText(path);auto start=text.find(DataStart),end=text.find(DataEnd);
  if(start==std::string::npos||end==std::string::npos||end<=start)throw std::runtime_error("missing CUSTOM_CAMPAIGN_DATA markers");
  start+=DataStart.size();std::istringstream stream(text.substr(start,end-start));std::string line;
- auto campaign=std::make_shared<CustomCampaign>();campaign->sourceFile=path.filename().u8string();campaign->key=campaignKey(path.filename().u8string());
+ auto campaign=std::make_shared<CustomCampaign>();campaign->sourceFile=path.filename().string();campaign->key=campaignKey(campaign->sourceFile);
  std::vector<std::shared_ptr<CustomMapData>> maps;bool sawCampaign=false;
  while(std::getline(stream,line)){
   if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#')continue;
@@ -94,20 +94,20 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),
     number(f,6,"fixture width"),number(f,7,"fixture depth"),number(f,8,"fixture height"),number(f,9,"fixture yaw"),boolean(f,10,"fixture solid")});
   }else if(tag=="PROP"){
-   if(f.size()<12)throw std::runtime_error("malformed PROP record");auto map=mapAt(maps,f);map->props.push_back({
+   if(f.size()<11)throw std::runtime_error("malformed PROP record");auto map=mapAt(maps,f);map->props.push_back({
     integer(f,2,"prop kind"),{number(f,3,"prop x"),number(f,4,"prop y")},number(f,5,"prop height"),number(f,6,"prop footprint"),number(f,7,"prop yaw"),
     {number(f,8,"prop half x"),number(f,9,"prop half y")},number(f,10,"prop base")});
   }else if(tag=="LIGHT"){
    if(f.size()<5)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);map->lights.push_back({{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")});
   }else if(tag=="TERMINAL"){
-   if(f.size()<10)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);CustomTerminalData t;
+   if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);CustomTerminalData t;
    t.position={number(f,2,"terminal x"),number(f,3,"terminal y")};t.z=number(f,4,"terminal z");t.control=boolean(f,5,"terminal control");
    t.title=decode(f[6]);t.line1=decode(f[7]);t.line2=decode(f[8]);map->terminals.push_back(std::move(t));
   }else if(tag=="HAZARD"){
-   if(f.size()<11)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
+   if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});
   }else if(tag=="STAIR"){
-   if(f.size()<12)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({
+   if(f.size()<11)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
     integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending")});
   }else if(tag=="CREATURE"){
