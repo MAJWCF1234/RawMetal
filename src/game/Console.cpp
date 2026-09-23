@@ -65,7 +65,7 @@ bool Game::testConsole(){
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
  input={};input.textInput="map custom\r";game.update(input,.02f);
  if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().openEastBoundary()||game.world().openNorthBoundary()||game.world().openWestBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return false;
- for(int level=0;level<ChunkCount;++level){auto&w=game.m_chunks[level].world;bool north=level>=3,south=level<3,west=level%3>0,east=level%3<2;
+ for(int level=0;level<game.chunkCount();++level){auto&w=game.m_chunks[level].world;int col=level%4,row=level/4;bool north=row>0,south=row<2,west=col>0,east=col<3;
   if(!w.horrorMode()||w.openNorthBoundary()!=north||w.openSouthBoundary()!=south||w.openWestBoundary()!=west||w.openEastBoundary()!=east)return false;
  }
  input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
