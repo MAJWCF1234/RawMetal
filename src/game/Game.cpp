@@ -88,7 +88,7 @@ void Game::crossChunkBoundary(){
  for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
  for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
- if(m_worldId==WorldId::Campaign&&next>previous)saveCheckpoint();
+ if((m_worldId==WorldId::Campaign&&next>previous)||m_worldId==WorldId::Custom)saveCheckpoint();
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
