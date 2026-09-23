@@ -679,6 +679,8 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
     # Keep the payload self-contained and explicit about editor-only omissions.
     if len(chunks) > 1:
         warnings.append(f"Project contains {len(chunks)} plan areas. This payload contains only '{chunk.get('name','Plan Area')}', because one campaign slot is one 24x24 World chunk.")
+    if any((layer.get("materials") or {}) for layer in layers):
+        warnings.append("Painted editor finishes are not encoded by the current World map payload API yet; geometry is exported, but per-tile material paint remains editor-only.")
     if any(o.get("type") == "window" for o in objects):
         warnings.append("Smart windows export as collision-correct wall apertures; the current runtime has no dedicated glass/window entity.")
 
