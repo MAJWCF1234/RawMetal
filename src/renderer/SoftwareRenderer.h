@@ -44,6 +44,7 @@ private:
     bool testNormalMapping();
     Texture m_muzzleFlash;
     Texture m_water;
+    Texture m_ashfallSky;
     Mesh m_consoleMesh{240};
     Texture m_consoleTexture;
     std::array<Texture,3> m_hazmatTextures;
@@ -75,6 +76,7 @@ private:
     Texture makeSign(const char* title,const char* subtitle,std::uint32_t accent);
     Texture makePaint(std::uint32_t color);
     static void prepareDecal(Texture& texture,bool clampEdges=true);
+    void drawSky(const Game& game);
     void drawScene(const Game& game,bool clearDepth=true);
     void drawViewModel(const Game& game);
     void prepareViewModel(const Game& game);
