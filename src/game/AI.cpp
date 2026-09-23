@@ -5,6 +5,21 @@
 namespace retro {
 static float navSupport(const World&w,Vec2 p,float feet){float z=w.supportBelow(p.x,p.y,feet);for(float x:{-.20f,.20f})for(float y:{-.20f,.20f})z=std::max(z,w.supportBelow(p.x+x,p.y+y,feet));return z;}
 static bool navFits(const World&w,Vec2 p,float z,float height){if(w.railBlocksHull(p.x,p.y,.20f,z,height))return false;for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
+static float roughStep(Enemy::Kind kind){
+ return kind==Enemy::Kind::Huntsman?.62f:kind==Enemy::Kind::Wasp?.46f:kind==Enemy::Kind::Warden?.38f:.34f;
+}
+// Outdoor navigation follows the actual Surface Nets support instead of comparing
+// one-metre cell centres. A one-metre voxel rise becomes a traversable slope when
+// its quarter-metre samples stay within the creature's step capability, while a
+// real cliff still fails the same test.
+static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr){
+ auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height);}
+ int samples=std::max(1,int(std::ceil(distance/.24f)));float z=fromZ;
+ for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f);
+  float rise=ground-z,drop=z-ground;if(rise>stepHeight+.025f||drop>std::max(.48f,stepHeight*1.45f)||!navFits(w,p,ground,height))return false;z=ground;
+ }
+ if(endZ)*endZ=z;return true;
+}
 static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height){
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
  for(int y=1;y<23;++y)for(int x=1;x<23;++x)for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
@@ -124,7 +139,18 @@ void Game::updateEnemies(float dt){
   if(!warden&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=e.kind==Enemy::Kind::Brute?.8f:.32f;enemySound(e,1,.85f);continue;}
   if(watching||length(goal-e.pos)<.3f||(!warden&&visible&&dist<range*.82f)||e.painFlash>(warden?.85f:.65f))continue;
   Vec2 destination=goal;
-  bool direct=std::fabs((visible?m_player.z:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
+  float hull=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
+  float stepHeight=m_world.outdoors()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
+  bool direct=false;
+  if(m_world.outdoors()){
+   // Do not reject a hill merely because the target is several metres above us.
+   // Test only the terrain immediately ahead; if a cliff blocks progress the
+   // stuck timer falls back to routed navigation around it.
+   auto delta=goal-e.pos;float distance=length(delta);Vec2 probe=distance>1.6f?e.pos+delta*(1.6f/distance):goal;
+   direct=roughSegment(m_world,e.pos,e.z,probe,hull,stepHeight);
+  }else{
+   direct=std::fabs((visible?m_player.z:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
+  }
   if(e.kind==Enemy::Kind::Huntsman&&visible&&m_world.tile(int(goal.x),int(goal.y))=='C')direct=m_world.rayClear(e.pos,e.z+.7f,goal,m_player.z+.3f);
   // Repeated contact switches to routed movement instead of rebuilding a
   // path every frame or continuing to push into the same corner forever.
@@ -136,11 +162,16 @@ void Game::updateEnemies(float dt){
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
     int originX=gx,originY=gy;float best=999;for(int yy=originY-1;yy<=originY+1;++yy)for(int xx=originX-1;xx<=originX+1;++xx)if(!m_world.solid(xx+.5f,yy+.5f)){float d=lengthSq(Vec2{xx+.5f,yy+.5f}-goal);if(d<best){best=d;gx=xx;gy=yy;}}
    }
-   gx=std::clamp(gx,1,22);gy=std::clamp(gy,1,22);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
-   float hull=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
-   while(!queue.empty()){auto[x,y]=queue.front();queue.pop();for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<1||nx>22||ny<1||ny>22||field[ny][nx]!=9999||!m_world.navigable(x,y,nx,ny,hull))continue;field[ny][nx]=field[y][x]+1;queue.push({nx,ny});}}
-   int x=int(e.pos.x),y=int(e.pos.y),best=field[y][x];destination=e.pos;
-   for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx>0&&nx<23&&ny>0&&ny<23&&field[ny][nx]<best&&m_world.navigable(x,y,nx,ny,hull)){best=field[ny][nx];destination={nx+.5f,ny+.5f};}}
+   int minCell=m_world.outdoors()?0:1,maxCell=m_world.outdoors()?23:22;
+   gx=std::clamp(gx,minCell,maxCell);gy=std::clamp(gy,minCell,maxCell);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
+   auto edgeWalkable=[&](int x,int y,int nx,int ny){
+    if(!m_world.outdoors())return m_world.navigable(x,y,nx,ny,hull);
+    Vec2 a{x+.5f,y+.5f},b{nx+.5f,ny+.5f};float az=navSupport(m_world,a,float(World::TerrainMaxZ+1));
+    return roughSegment(m_world,a,az,b,hull,stepHeight);
+   };
+   while(!queue.empty()){auto[x,y]=queue.front();queue.pop();for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<minCell||nx>maxCell||ny<minCell||ny>maxCell||field[ny][nx]!=9999||!edgeWalkable(x,y,nx,ny))continue;field[ny][nx]=field[y][x]+1;queue.push({nx,ny});}}
+   int x=std::clamp(int(e.pos.x),minCell,maxCell),y=std::clamp(int(e.pos.y),minCell,maxCell),best=field[y][x];destination=e.pos;
+   for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx>=minCell&&nx<=maxCell&&ny>=minCell&&ny<=maxCell&&field[ny][nx]<best&&edgeWalkable(x,y,nx,ny)){best=field[ny][nx];destination={nx+.5f,ny+.5f};}}
    e.waypoint=destination;e.repathTimer=.25f;
   }
   Vec2 direction=normalized(destination-e.pos);
@@ -149,8 +180,8 @@ void Game::updateEnemies(float dt){
   direction=normalized(direction+separation*2.f);
   float speed=warden?stalkSpeed:e.kind==Enemy::Kind::Wasp?1.85f:e.kind==Enemy::Kind::Brute?.75f:1.4f;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
   auto old=e.pos;
-  auto move=[&](Vec2 next){float step=e.kind==Enemy::Kind::Huntsman?.65f:.215f;float ground=groundHeight(next,e.z+step),height=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
-   bool followStep=e.z-ground<=.24f&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);if(ground-e.z<=step+.01f&&hullFits(next,feet,height)){e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}}
+  auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight),height=hull;
+   bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);if(ground-e.z<=stepHeight+.01f&&hullFits(next,feet,height)){e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}}
   };
   move(e.pos+Vec2{direction.x*speed*dt,0});move(e.pos+Vec2{0,direction.y*speed*dt});
   float moved=length(e.pos-old);e.moving=moved>.0001f;e.gait+=moved*7;
