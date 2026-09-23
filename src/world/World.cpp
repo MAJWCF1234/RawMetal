@@ -295,17 +295,55 @@ constexpr MapRows ashfallRegion(int region){
 }
 static_assert([]{for(int i=0;i<6;++i)for(auto row:ashfallRegion(i))if(row.size()!=24)return false;return true;}(),"Ashfall rows must be exactly 24 cells");
 
-float ashfallHeight(float worldX,float worldY){
- // A low-frequency signed-density surface. Sampling in world coordinates makes
- // neighbouring chunks agree exactly at their shared edge.
- float h=.42f*std::sin(worldX*.095f)+.34f*std::cos(worldY*.115f)+.20f*std::sin((worldX+worldY)*.071f);
- h+=.82f*std::exp(-((worldX-57.f)*(worldX-57.f)+(worldY-9.f)*(worldY-9.f))/180.f);
- h-=.62f*std::exp(-((worldX-10.f)*(worldX-10.f)+(worldY-34.f)*(worldY-34.f))/150.f);
- h+=.36f*std::exp(-((worldX-34.f)*(worldX-34.f)+(worldY-30.f)*(worldY-30.f))/95.f);
- // Keep the deployment area readable while still belonging to the same field.
- float d2=(worldX-4.f)*(worldX-4.f)+(worldY-5.f)*(worldY-5.f);
- if(d2<36.f){float t=std::clamp((6.f-std::sqrt(d2))/6.f,0.f,1.f);h*=1.f-t*.78f;}
- return h;
+enum class TerrainBrushOp : std::uint8_t { Add, Subtract };
+struct TerrainBrush {
+ TerrainBrushOp op;float x,y,z,rx,ry,rz;std::uint8_t material;
+};
+// Ashfall is the technology testbed for Dark Below. These are deliberately
+// authored volumetric strokes, not a final procedural heightmap: solid brushes
+// make ridges/arches and subtractive brushes cut true caves and overhangs.
+constexpr TerrainBrush AshfallTerrainBrushes[]={
+ {TerrainBrushOp::Add,31,10,2.2f,7,5,4,1},
+ {TerrainBrushOp::Add,36,32,2.6f,11,7,5.8f,1},
+ {TerrainBrushOp::Add,58,33,3.0f,10,7,6.5f,2},
+ {TerrainBrushOp::Add,16,31,2.7f,6.5f,4,4.8f,1},
+ {TerrainBrushOp::Add,49,17,1.8f,5.5f,4.5f,3.8f,2},
+ // A continuous test cavern through the central ridge.
+ {TerrainBrushOp::Subtract,30,32,1.6f,4.5f,2.5f,2.35f,0},
+ {TerrainBrushOp::Subtract,36,32,1.55f,4.8f,2.4f,2.45f,0},
+ {TerrainBrushOp::Subtract,42,32,1.5f,4.5f,2.5f,2.35f,0},
+ // Natural arch / undercut proving that terrain is no longer 2.5D.
+ {TerrainBrushOp::Subtract,16,31,2.15f,3.2f,2.35f,2.8f,0},
+ // Sinkhole mouth and a small side chamber for collision testing.
+ {TerrainBrushOp::Subtract,53,35,.4f,3.1f,3.1f,3.8f,0},
+ {TerrainBrushOp::Subtract,55,35,-1.8f,3.0f,3.0f,2.8f,0},
+};
+float ellipsoidDensity(float x,float y,float z,const TerrainBrush&b){
+ float dx=(x-b.x)/b.rx,dy=(y-b.y)/b.ry,dz=(z-b.z)/b.rz;
+ float scale=std::min({b.rx,b.ry,b.rz});
+ return (1.f-std::sqrt(dx*dx+dy*dy+dz*dz))*scale;
+}
+float authoredAshfallDensity(float worldX,float worldY,float worldZ){
+ // Start with a hand-controllable ground slab. Small broad undulation keeps the
+ // test landscape readable without being the terrain representation itself.
+ float ground=.10f+.18f*std::sin(worldX*.055f)+.12f*std::cos(worldY*.07f);
+ float density=ground-worldZ;
+ for(const auto&brush:AshfallTerrainBrushes){
+  float d=ellipsoidDensity(worldX,worldY,worldZ,brush);
+  density=brush.op==TerrainBrushOp::Add?std::max(density,d):std::min(density,-d);
+ }
+ return density;
+}
+std::uint8_t authoredAshfallMaterial(float worldX,float worldY,float worldZ){
+ std::uint8_t material=0;float best=0;
+ for(const auto&brush:AshfallTerrainBrushes)if(brush.op==TerrainBrushOp::Add){
+  float d=ellipsoidDensity(worldX,worldY,worldZ,brush);
+  if(d>best){best=d;material=brush.material;}
+ }
+ // Sparse material breakup keeps the extracted polygons readable, similar to
+ // block-authored terrain where neighbouring source voxels carry different rock.
+ if(material==0&&((int(std::floor(worldX*.33f))+int(std::floor(worldY*.29f)))&7)==0)material=2;
+ return material;
 }
 // Purchased pack fixtures: shelf=7, switch cabinet=8. Wall-mounted cabinets
 // meet the wall at their backs; shelves have solid footprints on level floors.
