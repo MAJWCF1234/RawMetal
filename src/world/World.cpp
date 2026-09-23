@@ -474,7 +474,8 @@ World::World(int level,WorldId id):m_worldId(id) {
   // The surrounding landscape stays empty enough to read as a wasteland rather
   // than twelve industrial rooms placed outdoors.
   constexpr Vec2 pads[]={{7,7},{15,8},{8,16},{16,9},{8,14},{16,16},{7,7},{16,15},{8,8},{16,10},{8,15},{16,8}};
-  auto pad=pads[m_level],base=floorHeight(pad.x,pad.y);
+  auto pad=pads[m_level];
+  float base=floorHeight(pad.x,pad.y);
   auto junkShack=[&](float cx,float cy,float width,float depth,float height,int material,int variant){
    float x0=cx-width*.5f,x1=cx+width*.5f,y0=cy-depth*.5f,y1=cy+depth*.5f,t=.16f,door=.62f;
    m_structures.push_back({x0,y1-t,x1,y1,base,base+height,false,material});
