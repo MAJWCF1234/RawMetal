@@ -34,6 +34,10 @@ struct Hazard {
 };
 struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;};
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
+// Outdoor terrain is stored as engine-native triangles, independent of the
+// renderer. Collision samples the same height lattice that produced this mesh.
+struct TerrainVertex {float x=0,y=0,z=0,u=0,v=0;};
+struct TerrainTriangle {TerrainVertex a,b,c;};
 struct Span {float floor,ceiling;uint16_t flags=0;};
 using MapRows = std::array<std::string_view,24>;
 struct MapLayer {
@@ -65,6 +69,8 @@ public:
     const char* skyboxId()const{return horrorMode()?"brutal_wasteland":"industrial_night";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
     bool openSouthBoundary()const{return m_openSouthBoundary;}
+    bool openWestBoundary()const{return m_openWestBoundary;}
+    bool openEastBoundary()const{return m_openEastBoundary;}
     Vec2 exitPoint()const{return m_level==5?Vec2{19.5f,22.5f}:m_level==4?Vec2{12.f,22.5f}:Vec2{21.5f,22.5f};}
     const std::vector<WorldProp>& props()const{return m_props;}
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}
@@ -78,6 +84,8 @@ public:
     const std::vector<ScriptEvent>& scriptEvents()const{return m_scriptEvents;}
     const std::vector<Hazard>& hazards()const{return m_hazards;}
     const std::vector<Structure>& structures()const{return m_structures;}
+    const std::vector<TerrainTriangle>& terrain()const{return m_terrain;}
+    bool hasTerrain()const{return !m_terrain.empty();}
     std::vector<Span> spansAt(int x,int y)const;
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;
@@ -124,7 +132,7 @@ public:
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
     void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
-    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Terminal>{}.swap(m_terminals);}
+    void unloadGeometry(){std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
@@ -135,7 +143,7 @@ private:
     float m_internalWallHeight=0;
     int m_level=0;
     WorldId m_worldId=WorldId::Campaign;
-    bool m_openNorthBoundary=false,m_openSouthBoundary=false;
+    bool m_openNorthBoundary=false,m_openSouthBoundary=false,m_openWestBoundary=false,m_openEastBoundary=false;
     std::vector<WorldProp> m_props;
     std::vector<Fixture> m_fixtures;
     std::vector<WorldLight> m_lights;
@@ -151,6 +159,10 @@ private:
     std::vector<Door> m_doors;
     std::vector<Terminal> m_terminals;
     std::vector<Structure> m_structures;
+    std::vector<TerrainTriangle> m_terrain;
+    std::array<float,(Width+1)*(Height+1)> m_terrainHeights{};
+    void buildTerrain();
+    float terrainHeight(float x,float y)const;
     std::vector<std::vector<uint16_t>> m_structureCells;
     const std::vector<uint16_t>& structureIndices(float x,float y)const{static const std::vector<uint16_t> empty;int ix=int(std::floor(x)),iy=int(std::floor(y));return m_structureCells.empty()||ix<0||iy<0||ix>=Width||iy>=Height?empty:m_structureCells[iy*Width+ix];}
     bool m_controlReleased=false;

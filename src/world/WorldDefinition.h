@@ -23,13 +23,16 @@ inline constexpr std::array<ChunkDefinition,6> CampaignChunks{{
     {{69,96},{6.5f,1.5f},-9,Environment::Interior},
     {{69,120},{12,2},-9,Environment::Interior}
 }};
+// Ashfall is a stitched 3 x 2 outdoor world. Chunk origins are real world-space
+// coordinates, so the same streaming/renderer path can grow to larger outdoor
+// grids later without treating the map index as a direction.
 inline constexpr std::array<ChunkDefinition,6> AshfallChunks{{
     {{0,0},{3.5f,4.5f},0,Environment::Outdoor},
-    {{0,24},{12,1.5f},0,Environment::Outdoor},
-    {{0,48},{12,1.5f},0,Environment::Outdoor},
-    {{0,72},{12,1.5f},0,Environment::Outdoor},
-    {{0,96},{12,1.5f},0,Environment::Outdoor},
-    {{0,120},{12,1.5f},0,Environment::Outdoor}
+    {{24,0},{1.5f,12.f},0,Environment::Outdoor},
+    {{48,0},{1.5f,12.f},0,Environment::Outdoor},
+    {{0,24},{12.f,1.5f},0,Environment::Outdoor},
+    {{24,24},{12.f,1.5f},0,Environment::Outdoor},
+    {{48,24},{12.f,1.5f},0,Environment::Outdoor}
 }};
 inline const ChunkDefinition& chunkDefinition(WorldId world,int chunk){
     return (world==WorldId::Campaign?CampaignChunks:AshfallChunks).at(chunk);
