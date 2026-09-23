@@ -34,8 +34,8 @@ struct Hazard {
 };
 struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;};
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
-// Outdoor terrain is stored as engine-native triangles, independent of the
-// renderer. Collision samples the same height lattice that produced this mesh.
+// Volumetric terrain is authored as solid/air voxels, extracted to engine-native
+// Surface Nets triangles, and queried from the same density field for collision.
 struct TerrainVertex {float x=0,y=0,z=0,u=0,v=0;};
 struct TerrainTriangle {TerrainVertex a,b,c;std::uint8_t material=0;};
 struct Span {float floor,ceiling;uint16_t flags=0;};
