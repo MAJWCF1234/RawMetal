@@ -249,9 +249,6 @@ void Game::shoot() {
             last=distance;
         }
     }
-    if(best){
-      for(int spray=0;spray<3;++spray){float a=m_player.angle+(spray-1)*25.f*kPi/180.f;Vec2 bloodNormal{-std::cos(a),-std::sin(a)};m_bulletImpacts.push_back({best->pos+Vec2{std::cos(a)*.12f,std::sin(a)*.12f},best->z+.55f,bloodNormal,m_elapsed,m_level,true,int(best->kind)});}
-    }
 }
 Game Game::stalkerInspection(int clip,float phase,int view){
  auto game=mapInspection({18.6f,18.5f},0,clip==4?-35.f:0.f,3,true,-9,false);
@@ -420,7 +417,6 @@ void Game::punchImpact(){
   if(e.alive&&range<nearest&&dot(normalized(delta),forward)>.72f&&height>=e.bodyBottom()-.1f&&height<=e.bodyTop()&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,height)){hit=&e;nearest=range;}
  }
  if(!hit)return;hit->hp-=28;hit->painFlash=1;m_hitFlash=1;sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;
- for(int spray=0;spray<3;++spray){float a=m_player.angle+(spray-1)*25.f*kPi/180.f;Vec2 n{-std::cos(a),-std::sin(a)};m_bulletImpacts.push_back({hit->pos+Vec2{std::cos(a)*.1f,std::sin(a)*.1f},hit->z+.5f,n,m_elapsed,m_level,true,int(hit->kind)});}
  if(hit->hp<=0){hit->alive=false;hit->deathTime=0;++m_kills;enemySound(*hit,2,.85f);m_bulletImpacts.push_back({hit->pos,m_world.floorHeight(hit->pos.x,hit->pos.y)+.012f,{0,0},m_elapsed,m_level,true,int(hit->kind)});}else enemySound(*hit,0,.45f,1.15f);
 }
 void Game::receiveDamage(float amount,Vec2 source){
