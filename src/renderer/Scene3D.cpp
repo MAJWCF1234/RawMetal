@@ -966,8 +966,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    float dx=beamLight.position.x-game.player().pos.x,dy=beamLight.position.y-game.player().pos.y;if(dx*dx+dy*dy>144.f)continue;
    float x=beamLight.position.x,y=beamLight.position.y,bottom=w.floorHeight(x,y)+.08f,top=std::min(beamLight.z,w.clearanceAbove(x,y,bottom)-.04f);
    if(top-bottom<1.f||top-bottom>10.f||!sphereVisible({x,y,(bottom+top)*.5f},top-bottom))continue;
-   float inv=1.f/std::sqrt(std::max(.0001f,dx*dx+dy*dy)),ux=-dy*inv,uy=dx*inv,wide=.32f,narrow=.045f;
-   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*narrow,y+uy*narrow,top},{x-ux*narrow,y-uy*narrow,top},dust,1.6f);
+   float inv=1.f/std::sqrt(std::max(.0001f,dx*dx+dy*dy)),ux=-dy*inv,uy=dx*inv,wide=.72f,fixtureHalfWidth=.42f;
+   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*fixtureHalfWidth,y+uy*fixtureHalfWidth,top},{x-ux*fixtureHalfWidth,y-uy*fixtureHalfWidth,top},dust,1.6f);
    if(++beams==6)break;
   }
  }

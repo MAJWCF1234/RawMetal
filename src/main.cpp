@@ -22,6 +22,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      struct View{retro::Vec2 position;float yaw,pitch;int level;float z;const char*name;};
      const View views[]={
       {{3.5f,5.35f},0,0,0,-999.f,"corridor-light"},
+      {{3.5f,5.35f},retro::kPi,130.f,0,-999.f,"fixture-shaft"},
       {{4.5f,6.5f},retro::kPi*.5f,-14.f,0,0.f,"fixture-depth"},
       {{8.5f,9.f},0,0,5,-9.4f,"coolant-depth"}
      };
