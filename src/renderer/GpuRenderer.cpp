@@ -8,6 +8,7 @@
 #include <limits>
 #include <bit>
 #include <cmath>
+#include <algorithm>
 namespace retro {
 namespace {
 void check(VkResult result,const char* operation){if(result!=VK_SUCCESS)throw std::runtime_error(std::string(operation)+" (Vulkan "+std::to_string(result)+")");}
@@ -35,18 +36,18 @@ struct GpuRenderer::Impl {
  VkPipelineLayout pipelineLayout=VK_NULL_HANDLE;VkRenderPass renderPass=VK_NULL_HANDLE;VkPipeline opaque=VK_NULL_HANDLE,additive=VK_NULL_HANDLE,transparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,depth;Buffer vertexBuffer,readback;
- struct Material {Image color,normal,emission;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;};
+ struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;};
  std::unordered_map<uint64_t,Material> materials;
  struct Batch {uint64_t material;uint32_t start,count;bool clear=false,cache=false;int cacheSlot=-1;};
  struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;};
- std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false;std::array<float,12> viewState{};std::uint64_t cacheHits=0;
+ std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
  std::vector<Vertex> vertices;std::vector<Batch> batches;
  std::vector<Vertex> sortedVertices;std::vector<Batch> sortedBatches;
  int width=0,height=0;std::string name;
  ~Impl(){
   if(device){vkDeviceWaitIdle(device);if(framebuffer)vkDestroyFramebuffer(device,framebuffer,nullptr);
    for(auto f:swapFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:swapViews)vkDestroyImageView(device,v,nullptr);if(swapchain)vkDestroySwapchainKHR(device,swapchain,nullptr);destroy(target);destroy(depth);destroy(overlay);destroy(vertexBuffer);destroy(readback);destroy(overlayStaging);for(auto&entry:staticCaches)destroy(entry.second.buffer);
-   for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);}
+   for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
    if(transparent)vkDestroyPipeline(device,transparent,nullptr);if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
    if(compositePipeline)vkDestroyPipeline(device,compositePipeline,nullptr);if(compositePass)vkDestroyRenderPass(device,compositePass,nullptr);if(compositeLayout)vkDestroyPipelineLayout(device,compositeLayout,nullptr);if(compositeSetLayout)vkDestroyDescriptorSetLayout(device,compositeSetLayout,nullptr);if(compositeDescriptors)vkDestroyDescriptorPool(device,compositeDescriptors,nullptr);if(renderPass)vkDestroyRenderPass(device,renderPass,nullptr);if(pipelineLayout)vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
    if(descriptors)vkDestroyDescriptorPool(device,descriptors,nullptr);if(setLayout)vkDestroyDescriptorSetLayout(device,setLayout,nullptr);
@@ -92,9 +93,10 @@ struct GpuRenderer::Impl {
    upload(mat.normal,t.width,t.height,VK_FORMAT_R16G16B16A16_SNORM,levels,8);
   }
   if(!t.emission.empty())upload(mat.emission,t.width,t.height,VK_FORMAT_B8G8R8A8_UNORM,{bytes(t.emission)},4);
+  if(!t.relief.empty())upload(mat.relief,t.width,t.height,VK_FORMAT_R8_UNORM,{bytes(t.relief)},1);
   VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};alloc.descriptorPool=descriptors;alloc.descriptorSetCount=1;alloc.pSetLayouts=&setLayout;check(vkAllocateDescriptorSets(device,&alloc,&mat.set),"Allocate material descriptors");
-  VkDescriptorImageInfo images[]={{t.clampEdges?clamp:wrap,mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.normal.view?mat.normal.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.emission.view?mat.emission.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
-  VkWriteDescriptorSet writes[3]{};for(uint32_t n=0;n<3;++n){writes[n].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[n].dstSet=mat.set;writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[n].pImageInfo=&images[n];}vkUpdateDescriptorSets(device,3,writes,0,nullptr);return key;
+  VkDescriptorImageInfo images[]={{t.clampEdges?clamp:wrap,mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.normal.view?mat.normal.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.emission.view?mat.emission.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.relief.view?mat.relief.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+  VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[n].dstSet=mat.set;writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[n].pImageInfo=&images[n];}vkUpdateDescriptorSets(device,4,writes,0,nullptr);return key;
  }
  void initPresentation(){
   VkSurfaceCapabilitiesKHR caps{};check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical,surface,&caps),"Query surface capabilities");uint32_t n=0;check(vkGetPhysicalDeviceSurfaceFormatsKHR(physical,surface,&n,nullptr),"Query surface formats");std::vector<VkSurfaceFormatKHR> formats(n);check(vkGetPhysicalDeviceSurfaceFormatsKHR(physical,surface,&n,formats.data()),"Query surface formats");
@@ -127,9 +129,9 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  if(!m->physical)throw std::runtime_error("No Vulkan hardware graphics adapter available");
  float priority=1;VkDeviceQueueCreateInfo queue{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};queue.queueFamilyIndex=m->family;queue.queueCount=1;queue.pQueuePriorities=&priority;const char* deviceExtensions[]={VK_KHR_SWAPCHAIN_EXTENSION_NAME};VkDeviceCreateInfo device{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};device.queueCreateInfoCount=1;device.pQueueCreateInfos=&queue;if(m->surface){device.enabledExtensionCount=1;device.ppEnabledExtensionNames=deviceExtensions;}check(vkCreateDevice(m->physical,&device,nullptr,&m->device),"Create Vulkan device");vkGetDeviceQueue(m->device,m->family,0,&m->queue);
  VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};pool.flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;pool.queueFamilyIndex=m->family;check(vkCreateCommandPool(m->device,&pool,nullptr,&m->pool),"Create graphics command pool");VkCommandBufferAllocateInfo command{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};command.commandPool=m->pool;command.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;command.commandBufferCount=1;check(vkAllocateCommandBuffers(m->device,&command,&m->command),"Allocate graphics commands");VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};check(vkCreateFence(m->device,&fence,nullptr,&m->fence),"Create graphics fence");
- VkDescriptorSetLayoutBinding bindings[3]{};for(uint32_t i=0;i<3;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
- VkDescriptorSetLayoutCreateInfo set{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};set.bindingCount=3;set.pBindings=bindings;check(vkCreateDescriptorSetLayout(m->device,&set,nullptr,&m->setLayout),"Create material layout");VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,6144};VkDescriptorPoolCreateInfo descriptors{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptors.maxSets=2048;descriptors.poolSizeCount=1;descriptors.pPoolSizes=&poolSize;check(vkCreateDescriptorPool(m->device,&descriptors,nullptr,&m->descriptors),"Create descriptor pool");
- VkPushConstantRange viewPush{VK_SHADER_STAGE_VERTEX_BIT,0,12*sizeof(float)};VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layout.setLayoutCount=1;layout.pSetLayouts=&m->setLayout;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
+ VkDescriptorSetLayoutBinding bindings[4]{};for(uint32_t i=0;i<4;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
+ VkDescriptorSetLayoutCreateInfo set{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};set.bindingCount=4;set.pBindings=bindings;check(vkCreateDescriptorSetLayout(m->device,&set,nullptr,&m->setLayout),"Create material layout");VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,8192};VkDescriptorPoolCreateInfo descriptors{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptors.maxSets=2048;descriptors.poolSizeCount=1;descriptors.pPoolSizes=&poolSize;check(vkCreateDescriptorPool(m->device,&descriptors,nullptr,&m->descriptors),"Create descriptor pool");
+ VkPushConstantRange viewPush{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,32*sizeof(float)};VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layout.setLayoutCount=1;layout.pSetLayouts=&m->setLayout;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
  VkAttachmentDescription attachments[2]{};attachments[0].format=VK_FORMAT_B8G8R8A8_UNORM;attachments[0].samples=VK_SAMPLE_COUNT_1_BIT;attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[0].storeOp=VK_ATTACHMENT_STORE_OP_STORE;attachments[0].stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[0].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachments[0].finalLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
  attachments[1]=attachments[0];attachments[1].format=VK_FORMAT_D32_SFLOAT;attachments[1].storeOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[1].finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
  VkAttachmentReference color{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},depth{1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};VkSubpassDescription subpass{};subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;subpass.colorAttachmentCount=1;subpass.pColorAttachments=&color;subpass.pDepthStencilAttachment=&depth;
@@ -167,7 +169,7 @@ std::pair<int,int> GpuRenderer::surfaceExtent()const{
 }
 void GpuRenderer::prepare(const SoftwareRenderer::Texture&texture){m->material(texture);}
 void GpuRenderer::begin(int width,int height){
- m->vertices.clear();m->batches.clear();m->capturing=false;m->captureSlot=-1;if(width==m->width&&height==m->height)return;
+ m->vertices.clear();m->batches.clear();m->capturing=false;m->captureSlot=-1;m->renderingViewmodel=false;if(width==m->width&&height==m->height)return;
  if(m->framebuffer){vkDestroyFramebuffer(m->device,m->framebuffer,nullptr);m->framebuffer=VK_NULL_HANDLE;}m->destroy(m->target);m->destroy(m->depth);m->destroy(m->readback);
  m->makeImage(m->target,width,height,1,VK_FORMAT_B8G8R8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);m->makeImage(m->depth,width,height,1,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,VK_IMAGE_ASPECT_DEPTH_BIT);m->makeBuffer(m->readback,VkDeviceSize(width)*height*4,VK_BUFFER_USAGE_TRANSFER_DST_BIT);
  VkImageView views[]={m->target.view,m->depth.view};VkFramebufferCreateInfo frame{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};frame.renderPass=m->renderPass;frame.attachmentCount=2;frame.pAttachments=views;frame.width=width;frame.height=height;frame.layers=1;check(vkCreateFramebuffer(m->device,&frame,nullptr,&m->framebuffer),"Create frame target");m->width=width;m->height=height;
@@ -176,6 +178,8 @@ void GpuRenderer::setView(float x,float y,float z,float yaw,float pitch,float as
  float cy=std::cos(yaw),sy=std::sin(yaw),cp=std::cos(pitch),sp=std::sin(pitch);
  m->viewState={x,y,z,cy,sy,cp,sp,aspect,flashlight?1.f:0.f,muzzleFlash,0.f,0.f};
 }
+void GpuRenderer::setFogLights(const std::array<float,16>& lights){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);}
+void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
 bool GpuRenderer::beginStaticCache(int slot,std::uint64_t key){
  auto found=m->staticCaches.find(slot);
  if(found!=m->staticCaches.end()&&found->second.key==key){++m->cacheHits;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return false;}
@@ -193,14 +197,14 @@ void GpuRenderer::endStaticCache(){
 }
 void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches)m->destroy(entry.second.buffer);m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
 std::uint64_t GpuRenderer::staticCacheHits()const{return m->cacheHits;}
-void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});}
+void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});m->renderingViewmodel=true;}
 void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale){
  uint64_t key=m->material(texture);auto&target=m->capturing?m->staticCaches.at(m->captureSlot).vertices:m->vertices;uint32_t start=uint32_t(target.size());
  auto worldPoint=[&](Point3 p){float cy=m->viewState[3],sy=m->viewState[4],cp=m->viewState[5],sp=m->viewState[6];float forward=p.z*cp-p.y*sp;return Point3{m->viewState[0]-p.x*sy+forward*cy,m->viewState[1]+p.x*cy+forward*sy,m->viewState[2]+p.y*cp+p.z*sp};};
  Point3 worldNormal{};if(m->capturing){auto e1=b.p-a.p,e2=c.p-a.p;Point3 n{e1.y*e2.z-e1.z*e2.y,e1.z*e2.x-e1.x*e2.z,e1.x*e2.y-e1.y*e2.x};float nl=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);if(nl>.00001f)n=n*(1.f/nl);worldNormal={-n.x*m->viewState[4]-n.y*m->viewState[6]*m->viewState[3]+n.z*m->viewState[5]*m->viewState[3],n.x*m->viewState[3]-n.y*m->viewState[6]*m->viewState[4]+n.z*m->viewState[5]*m->viewState[4],n.y*m->viewState[5]+n.z*m->viewState[6]};}
  for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{out.position[0]=v.p.x*1.3f;out.position[1]=-v.p.y*1.3f*float(m->width)/m->height;out.position[2]=v.p.z-.06f;out.position[3]=v.p.z;}
   out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=normals?1.f:0.f;
-  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=texture.transparent?2.f:texture.additive?1.f:0.f;out.surface[3]=m->capturing?1.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;target.push_back(out);
+  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;target.push_back(out);
  }
  if(m->capturing){auto&batches=m->staticCaches.at(m->captureSlot).batches;if(!batches.empty()&&!batches.back().clear&&batches.back().material==key)batches.back().count+=3;else batches.push_back({key,start,3,false});}
  else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false});
@@ -221,7 +225,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  m->vertices.swap(m->sortedVertices);m->batches.swap(m->sortedBatches);
  size_t bytes=m->vertices.size()*sizeof(Vertex);if(bytes>m->vertexBuffer.size){m->destroy(m->vertexBuffer);m->makeBuffer(m->vertexBuffer,std::max(bytes*2,size_t(1048576)),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);}if(bytes)std::memcpy(m->vertexBuffer.mapped,m->vertices.data(),bytes);
  m->startCommands();VkClearValue clear[2]{};clear[0].color={{12/255.f,16/255.f,18/255.f,1}};clear[1].depthStencil={1,0};VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=2;pass.pClearValues=clear;vkCmdBeginRenderPass(m->command,&pass,VK_SUBPASS_CONTENTS_INLINE);
- VkViewport viewport{0,0,float(m->width),float(m->height),0,1};VkRect2D scissor{{0,0},{uint32_t(m->width),uint32_t(m->height)}};vkCmdSetViewport(m->command,0,1,&viewport);vkCmdSetScissor(m->command,0,1,&scissor);VkDeviceSize offset=0;VkBuffer currentBuffer=VK_NULL_HANDLE;if(bytes){currentBuffer=m->vertexBuffer.handle;vkCmdBindVertexBuffers(m->command,0,1,&currentBuffer,&offset);}vkCmdPushConstants(m->command,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(m->viewState),m->viewState.data());
+ VkViewport viewport{0,0,float(m->width),float(m->height),0,1};VkRect2D scissor{{0,0},{uint32_t(m->width),uint32_t(m->height)}};vkCmdSetViewport(m->command,0,1,&viewport);vkCmdSetScissor(m->command,0,1,&scissor);VkDeviceSize offset=0;VkBuffer currentBuffer=VK_NULL_HANDLE;if(bytes){currentBuffer=m->vertexBuffer.handle;vkCmdBindVertexBuffers(m->command,0,1,&currentBuffer,&offset);}vkCmdPushConstants(m->command,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
  for(auto&batch:m->batches){if(batch.clear){VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(m->command,1,&attachment,1,&rect);continue;}
   if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(m->command,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto&mat=m->materials.at(cached.material);auto pipeline=mat.transparent?m->transparent:mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(m->command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(m->command,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(m->command,cached.count,1,cached.start,0);}continue;}

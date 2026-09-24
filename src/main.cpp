@@ -16,6 +16,20 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--shading-inspection")){
+     constexpr int inspectW=1920,inspectH=1080;retro::SoftwareRenderer renderer(inspectW,inspectH);
+     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     struct View{retro::Vec2 position;float yaw,pitch;int level;float z;const char*name;};
+     const View views[]={
+      {{3.5f,5.35f},0,0,0,-999.f,"corridor-light"},
+      {{4.5f,6.5f},retro::kPi*.5f,-14.f,0,0.f,"fixture-depth"},
+      {{8.5f,9.f},0,0,5,-9.4f,"coolant-depth"}
+     };
+     for(const auto&view:views){auto scene=retro::Game::mapInspection(view.position,view.yaw,view.pitch,view.level,false,view.z,true);renderer.render(scene);
+      std::ofstream out(std::string(view.name)+".ppm",std::ios::binary);out<<"P6\n"<<inspectW<<' '<<inspectH<<"\n255\n";
+      for(int i=0;i<inspectW*inspectH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--terrain-seam-inspection")){
      constexpr int testW=1920,testH=1080;retro::SoftwareRenderer renderer(testW,testH);
      if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
@@ -164,8 +178,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance"); if(!benchWindow.valid())return 1;
         retro::SoftwareRenderer benchRenderer(W,H); if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
         auto benchGame=retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true); std::vector<double> frameMs; frameMs.reserve(300);
+        auto coldBegin=std::chrono::steady_clock::now();benchRenderer.render(benchGame);double coldMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-coldBegin).count();
         for(int frame=0;frame<300&&benchWindow.pump();++frame){auto begin=std::chrono::steady_clock::now();benchGame.update({},1.f/60.f);benchRenderer.render(benchGame);auto end=std::chrono::steady_clock::now();frameMs.push_back(std::chrono::duration<double,std::milli>(end-begin).count());}
-        std::sort(frameMs.begin(),frameMs.end());double average=std::accumulate(frameMs.begin(),frameMs.end(),0.0)/frameMs.size(),p95=frameMs[frameMs.size()*95/100],maximum=frameMs.back();std::ofstream report("performance-window.txt");report<<benchRenderer.hardwareName()<<" / native Win32 swapchain\n"<<"Frames: "<<frameMs.size()<<"\nAverage: "<<average<<" ms / "<<1000.0/average<<" FPS\nP95: "<<p95<<" ms / "<<1000.0/p95<<" FPS\nMax: "<<maximum<<" ms / "<<1000.0/maximum<<" FPS\n";return 0;
+        std::sort(frameMs.begin(),frameMs.end());double average=std::accumulate(frameMs.begin(),frameMs.end(),0.0)/frameMs.size(),p95=frameMs[frameMs.size()*95/100],maximum=frameMs.back();std::ofstream report("performance-window.txt");report<<benchRenderer.hardwareName()<<" / native Win32 swapchain\n"<<"Cold first frame: "<<coldMs<<" ms (excluded from steady FPS)\n"<<"Frames: "<<frameMs.size()<<"\nAverage: "<<average<<" ms / "<<1000.0/average<<" FPS\nP95: "<<p95<<" ms / "<<1000.0/p95<<" FPS\nMax: "<<maximum<<" ms / "<<1000.0/maximum<<" FPS\n";return 0;
     }
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
@@ -361,6 +376,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         for(int kind=0;kind<3;++kind)for(int state=0;state<4;++state){auto scene=retro::Game::validationScene(static_cast<retro::Enemy::Kind>(kind),state==2?.35f:state==3?2.5f:-1.f,state==1?.4f:0);
             renderer.render(scene);saveFrame(("encounter-"+std::to_string(kind)+"-"+std::to_string(state)+".ppm").c_str());
         }
+        {auto scene=retro::Game::mapInspection({3.5f,5.35f},0,0,0,false,-999,true);renderer.render(scene);saveFrame("beam-inspection.ppm");}
         input.fire=true;game.update(input,1.f/60.f);renderer.render(game);saveFrame("firing-frame.ppm");
         input.fire=false;input.mouseDy=-90;input.jump=true;game.update(input,1.f/60.f);input.mouseDy=0;input.jump=false;
         for(int i=0;i<16;++i)game.update(input,1.f/60.f);

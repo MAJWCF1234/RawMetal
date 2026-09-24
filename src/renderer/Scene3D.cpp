@@ -201,7 +201,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto muzzleContribution=[&](Point3 point,Point3 normal){
   if(muzzleFlash<=0.f)return 0.f;auto delta=point-muzzlePoint;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>=144.f)return 0.f;
   float distance=std::sqrt(std::max(.001f,d2));float facing=.35f+.65f*std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
-  float edge=1.f-d2/144.f;return muzzleFlash*11.f*edge*edge*facing/(1.f+d2*.045f);
+  float edge=1.f-d2/144.f;return muzzleFlash*1.4f*edge*edge*facing/(1.f+d2*.045f);
  };
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
@@ -214,7 +214,31 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float brightness=0;auto cached=m_lightingCache.find(key);
   if(cached!=m_lightingCache.end())brightness=cached->second;
   else{
-   brightness=(w.outdoors()?.48f:w.definition().ambient)+.07f*std::fabs(normal.z);
+   // Probe the free hemisphere around the receiver. This darkens recesses and
+   // floor/wall junctions from the actual map solids, including terrain, while
+   // leaving open surfaces alone. The result is baked with the static vertices.
+   float accessibility=1.f;
+   // Terrain is already faceted by its mesh. World::fits performs a full
+   // volumetric terrain trace, so thousands of hemisphere probes during a
+   // streaming rebuild would stall the frame; reserve them for indoor solids.
+   if(!w.outdoors()){
+    Point3 outward=normal;
+    auto freeAt=[&](Point3 p){return w.fits(p.x,p.y,p.z,.01f,false,false);};
+    if(!freeAt(point+outward*.09f)&&freeAt(point-outward*.09f))outward=outward*-1.f;
+    Point3 reference=std::fabs(outward.z)<.82f?Point3{0,0,1}:Point3{0,1,0};
+    Point3 tangent=cross3(outward,reference);float tangentLength=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y+tangent.z*tangent.z);
+    if(tangentLength>.00001f)tangent=tangent*(1.f/tangentLength);
+    Point3 bitangent=cross3(outward,tangent);
+    float occlusion=0.f;
+    for(Point3 direction:{tangent,tangent*-1.f,bitangent,bitangent*-1.f}){
+     for(float radius:{.28f,.70f}){
+      Point3 probe=point+outward*(.09f+radius*.48f)+direction*radius;
+      if(!freeAt(probe)){occlusion+=radius<.5f?.65f:.35f;break;}
+     }
+    }
+    accessibility=1.f-.68f*occlusion*.25f;
+   }
+   brightness=((w.outdoors()?.48f:w.definition().ambient)+.07f*std::fabs(normal.z))*accessibility;
    for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];float x=fixture.position.x,y=fixture.position.y;
     if(std::fabs(x-point.x)>5.5f||std::fabs(y-point.y)>5.5f)continue;
     Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>30||d2<.001f)continue;
@@ -227,9 +251,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     }
     brightness+=(visibility/3.f)*(.12f+.88f*facing)*3.2f/(1+d2*.65f);if(!complete)break;
    }
-   brightness=std::sqrt(std::clamp(brightness,std::min(.24f,w.definition().ambient),1.4f));if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
+   brightness=std::clamp(brightness,.075f,1.4f);if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
   }
-  return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.24f,4.f);
+  return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f,4.f);
  };
  auto normalLightingAt=[&](Point3 center){
   auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
@@ -323,6 +347,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
   if(base==-999.f)base=w.floorHeight(x,y);if(!m_staticGeometryBuild&&base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
   if(hidden({x-footprint,y-footprint,base},{x+footprint,y+footprint,base+height}))return;
+  if(base-w.floorHeight(x,y)<.15f){
+   static const Texture contact=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
+    for(int row=0;row<16;++row)for(int column=0;column<16;++column){float u=(column-7.5f)/7.5f,v=(row-7.5f)/7.5f,r=u*u+v*v;
+     unsigned alpha=unsigned(std::clamp((1.f-r)*.42f,0.f,1.f)*255.f);t.pixels[size_t(row*16+column)]=alpha<<24;}return t;}();
+   float radius=footprint*.62f,z=w.floorHeight(x,y)+.019f;
+   quad({x-radius,y-radius,z},{x+radius,y-radius,z},{x+radius,y+radius,z},{x-radius,y+radius,z},contact,1.6f);
+  }
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   float scale=std::min(height/std::max(.001f,range.y),footprint/std::max(range.x,range.z));
@@ -360,7 +391,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
  }
  m_staticGeometryBuild=m_gpuFrame&&buildStaticGeometry;
- if(m_staticGeometryBuild)shadowBudget*=12;
+ // Static lighting is baked once per chunk. A frame-sized ray budget leaves
+ // later surfaces at ambient only, producing flat walls and missing shadows.
+ if(m_staticGeometryBuild)shadowBudget=400000;
  if(buildStaticGeometry){ // Outdoor chunks carry an explicit low-poly mesh generated from the same
  // height field used by collision. This replaces the old flat half-metre floor
  // patches while leaving authored ruins, machinery and props on top.
@@ -486,6 +519,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
  m_staticGeometryBuild=false;
+ // The one-time static bake has its own large shadow-ray allowance. Dynamic
+ // fixtures and objects still need their normal per-frame budget on that
+ // first frame, otherwise they visibly brighten when the cache is reused.
+ shadowBudget=m_shadowBudgetLimit;
  if(m_gpuFrame)for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){char tile=w.tile(x,y);if(tile=='C')prop(m_crateMesh,m_crateTexture,x+.5f,y+.5f,.85f,(x%2)*1.5708f);else if(tile=='B')prop(m_barrelMesh,m_barrelTexture,x+.5f,y+.5f,1.1f,float(x));}
  auto stripeBand=[&](float left,float right,float centerY,float offset=0.f){
   float halfWidth=(right-left)*m_hazard.height/m_hazard.width*.5f;
@@ -547,6 +584,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  for(auto&c:game.clutter()){
   bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},.4f))continue;
+  if(!w.outdoors()&&length(c.pos-game.player().pos)<15.f){const WorldLight* source=nullptr;float nearest=25.f;
+   for(const auto&candidate:w.lights()){float dx=candidate.position.x-c.pos.x,dy=candidate.position.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.z>mid+.2f&&d2<nearest){nearest=d2;source=&candidate;}}
+   if(source){static const Texture softShadow=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
+     for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/7.5f,dy=(y-7.5f)/7.5f,r=dx*dx+dy*dy;unsigned a=unsigned(std::clamp((1.f-r)*.30f,0.f,1.f)*255.f);t.pixels[size_t(y*16+x)]=a<<24;}return t;}();
+    float floor=w.floorHeight(c.pos.x,c.pos.y),factor=std::clamp((source->z-floor)/std::max(.25f,source->z-mid),1.f,3.f);
+    float x=source->position.x+(c.pos.x-source->position.x)*factor,y=source->position.y+(c.pos.y-source->position.y)*factor;
+    float radius=std::clamp(std::max(size[0],size[1])*.7f*factor,.08f,.75f),z=w.floorHeight(x,y)+.022f;
+    if(x>radius&&y>radius&&x<24.f-radius&&y<24.f-radius)quad({x-radius,y-radius,z},{x+radius,y-radius,z},{x+radius,y+radius,z},{x-radius,y+radius,z},softShadow,1.6f);
+   }
+  }
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
   if(woodShard){
    // Thin splinter with a broken point and irregular edges; use a strip from
@@ -827,6 +874,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(e.bodyTop()<game.dormantBelow())continue;
   if(!e.visible())continue;
   Point3 receiver{e.pos.x,e.pos.y,e.z+.85f};if(!sphereVisible(receiver,1.8f))continue;
+  const WorldLight* keyLight=nullptr;float keyDistance=36.f;
+  if(!w.outdoors()&&length(e.pos-game.player().pos)<15.f)for(const auto&source:w.lights()){
+   float dx=source.position.x-e.pos.x,dy=source.position.y-e.pos.y,d2=dx*dx+dy*dy;
+   if(source.z>e.bodyTop()+.2f&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
+  }
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   bool wasp=e.kind==Enemy::Kind::Wasp,warden=e.kind==Enemy::Kind::Warden,brute=e.kind==Enemy::Kind::Brute||warden;
   auto&mesh=warden?m_wardenMesh:wasp?m_waspMesh:brute?m_bruteMesh:m_enemyMesh;
@@ -869,7 +921,20 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+e.painFlash*.22f;
+   // Thin wasp wings transmit light from the far side of the membrane.
+   if(wasp&&face.part==1&&keyLight&&len>.00001f){Point3 toLamp{keyLight->position.x-receiver.x,keyLight->position.y-receiver.y,keyLight->z-receiver.z};float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
    tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:texture,e.alive?light:.65f);
+   if(e.alive&&keyLight){
+    static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
+    MeshVertex cast[3];bool valid=true;
+    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=keyLight->z-p.z;
+     if(denominator<.25f){valid=false;break;}float factor=(keyLight->z-floor)/denominator;
+     float x=keyLight->position.x+(p.x-keyLight->position.x)*factor,y=keyLight->position.y+(p.y-keyLight->position.y)*factor;
+     if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-e.pos.x,y-e.pos.y)>4.f){valid=false;break;}
+     cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};
+    }
+    if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadow,1.f);}
+   }
   }
   objectLighting=false;
  }
@@ -890,6 +955,20 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    float z=basin.surface+.004f;
    quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},water,1.05f,
         {(right-left)*.45f,(far-near)*.45f},{left+game.elapsed()*.014f,near-game.elapsed()*.008f});
+  }
+ }
+ // A single camera-facing tapered sheet gives each lamp a readable shaft.
+ // Multiple crossed sheets overlap into distracting round bright patches.
+ if(!m_gpuFrame&&!w.outdoors()){
+  static const Texture dust=[](){Texture t{32,32,std::vector<std::uint32_t>(32*32)};t.additive=true;t.clampEdges=true;
+   for(int y=0;y<32;++y)for(int x=0;x<32;++x){float u=(x+.5f)/32.f,v=(y+.5f)/32.f,r=std::fabs(u-.5f)*2.f;float feather=std::pow(std::max(0.f,1.f-r),2.f),end=std::min(1.f,std::min(v,1.f-v)*12.f);unsigned a=unsigned(std::clamp(feather*end*.06f,0.f,1.f)*255.f);t.pixels[size_t(y*32+x)]=(a<<24)|0x00d6b884u;}return t;}();
+  int beams=0;for(const auto&beamLight:w.lights()){
+   float dx=beamLight.position.x-game.player().pos.x,dy=beamLight.position.y-game.player().pos.y;if(dx*dx+dy*dy>144.f)continue;
+   float x=beamLight.position.x,y=beamLight.position.y,bottom=w.floorHeight(x,y)+.08f,top=std::min(beamLight.z,w.clearanceAbove(x,y,bottom)-.04f);
+   if(top-bottom<1.f||top-bottom>10.f||!sphereVisible({x,y,(bottom+top)*.5f},top-bottom))continue;
+   float inv=1.f/std::sqrt(std::max(.0001f,dx*dx+dy*dy)),ux=-dy*inv,uy=dx*inv,wide=.32f,narrow=.045f;
+   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*narrow,y+uy*narrow,top},{x-ux*narrow,y-uy*narrow,top},dust,1.6f);
+   if(++beams==6)break;
   }
  }
 }
