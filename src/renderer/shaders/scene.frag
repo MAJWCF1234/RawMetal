@@ -37,9 +37,13 @@ float shaftScattering(vec3 eye,vec3 endpoint,vec4 lamp){
   vec3 p=eye+direction*(start+(float(i)+jitter)*stepLength);
   float h=(p.z-lamp.w)/height;
   if(h<=0.0||h>=1.0)continue;
-  float radius=mix(1.05,0.10,h);
-  float radial=length(p.xy-lamp.xy)/radius;
-  float core=max(0.0,1.0-radial);core=core*core*(3.0-2.0*core);
+  // The luminous fixture is an 0.8 m square, not a point source. Keep its
+  // footprint broad at the ceiling and let the dusty volume spread gently
+  // below it. A circular, near-zero apex reads as a tiny spotlight cone.
+  float halfWidth=mix(0.72,0.42,h);
+  vec2 footprint=abs(p.xy-lamp.xy)/halfWidth;
+  float edge=max(footprint.x,footprint.y);
+  float core=1.0-smoothstep(0.58,1.08,edge);
   float ends=smoothstep(0.0,0.12,h)*smoothstep(0.0,0.07,1.0-h);
   float dust=0.82+0.18*sin(p.x*8.3+p.y*6.7+p.z*4.9)*sin(p.x*5.1-p.y*9.2+p.z*3.7);
   sum+=core*ends*dust;
