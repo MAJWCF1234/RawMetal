@@ -90,6 +90,12 @@ void Game::updateClutter(const InputState&input,float dt){
  }
 }
 bool Game::testClutter(){
+ {Game source;source.m_clutter.clear();Clutter shard;shard.kind=6;shard.pos={4,4};shard.z=source.world().floorHeight(4,4);source.m_clutter.push_back(shard);Game restored;
+  if(shard.impactSound()!=Sound::JunkSoft||shard.size()[0]<=shard.size()[1]||!restored.decodeSave(source.encodeSave())||restored.clutter().size()!=1||restored.clutter()[0].kind!=6)return false;
+ }
+ {Game legacy;legacy.m_clutter.clear();for(int kind=0;kind<4;++kind){Clutter old;old.kind=kind;old.pos={4,4};old.z=legacy.world().floorHeight(4,4);legacy.m_clutter.push_back(old);}Game restored;
+  if(!restored.decodeSave(legacy.encodeSave())||restored.clutter().size()!=4) return false;for(const auto&item:restored.clutter())if(item.kind!=6||item.sleeping)return false;
+ }
  {auto g=mapInspection({21.55f,21.46f},kPi*.5f,160,5,true,-9,true);g.m_clutter.clear();
   Clutter bottle;bottle.kind=2;bottle.pos={21.55f,21.8f};bottle.z=-8.3f;g.m_clutter.push_back(bottle);g.m_heldClutter=0;
   g.updateClutter({},1.f/120);

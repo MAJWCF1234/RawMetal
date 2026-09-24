@@ -392,9 +392,15 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  bool directPresentation=hardwarePresentsWindow();
  if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightingDoors={};m_chunkLightCells={};m_chunkLightCounts={};
+  if(m_gpu)m_gpu->clearStaticCaches();
   m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
  }
- int fullWidth=m_width,fullHeight=m_height;bool scaled=game.renderScale()<1;
+ int logicalWidth=m_width,logicalHeight=m_height;
+ bool nativeTarget=directPresentation&&m_gpu&&m_gpu->hasSurface();
+ int fullWidth=logicalWidth,fullHeight=logicalHeight;
+ if(nativeTarget){auto extent=m_gpu->surfaceExtent();m_width=std::max(1,int(extent.first*game.renderScale()));m_height=std::max(1,int(extent.second*game.renderScale()));}
+ bool scaled=!nativeTarget&&game.renderScale()<1;
+ int sceneWidth=m_width,sceneHeight=m_height;
  if(scaled){m_width=int(fullWidth*game.renderScale());m_height=int(fullHeight*game.renderScale());m_scenePixels.resize(size_t(m_width*m_height));m_sceneZ.resize(size_t(m_width*m_height));m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);}
  auto scene=[&]{bool parallel=!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
@@ -405,8 +411,8 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen())drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
- if(m_gpu){try{m_gpu->begin(m_width,m_height);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
-  catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';scene();}}
+ if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
+  catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
  else scene();
  bool underwater=!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f;
  if(!directPresentation&&underwater){
@@ -418,13 +424,14 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    }
   }
  }
- if(scaled){int sceneWidth=m_width,sceneHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);
-  for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*sceneHeight/m_height)*sceneWidth+x*sceneWidth/m_width)];}
+ if(scaled){int scaledWidth=m_width,scaledHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);
+  for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
+ if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
  if(game.titleScreen())drawTitle(game);else {drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
  float ms=std::chrono::duration<float,std::milli>(std::chrono::steady_clock::now()-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
- if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",int(fullWidth*game.renderScale()),int(fullHeight*game.renderScale()),m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
- if(directPresentation){float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim);}
+ if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
+ if(directPresentation){float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;float shotKick=std::max(std::clamp(1.f-game.shotAge()/.10f,0.f,1.f)*(game.weaponKick()>.85f&&!game.unarmed()?1.f:0.f),game.damageFlash()*.65f);m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim,game.damageFlash(),shotKick);}
 }
 }
 

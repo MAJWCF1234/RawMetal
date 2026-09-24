@@ -82,7 +82,7 @@ template<class A> void Game::archiveSave(A& a,int version){
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
   list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(int(e.kind)>(version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
-  list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>5)throw std::runtime_error("invalid clutter");});
+  list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>6)throw std::runtime_error("invalid clutter");});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
  }
@@ -98,6 +98,20 @@ bool Game::decodeSave(const std::string& data){
   if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>12))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  // Earlier builds represented a broken crate as four unrelated prop models
+  // (kinds 0-3) spawned together. Convert that recognizable saved quartet to
+  // the current textured splinter kind so existing saves receive the repair.
+  auto migrateCrateDebris=[](std::vector<Clutter>&items){std::vector<bool>used(items.size());
+   for(size_t i=0;i<items.size();++i){if(used[i]||items[i].kind!=0)continue;size_t group[4]={i};bool complete=true;
+    for(int kind=1;kind<4;++kind){float best=1.21f;size_t found=items.size();for(size_t j=0;j<items.size();++j){if(used[j]||int(j)==int(i)||items[j].kind!=kind||std::fabs(items[j].z-items[i].z)>.30f)continue;float d=lengthSq(items[j].pos-items[i].pos);if(d<best){best=d;found=j;}}
+     if(found==items.size()){complete=false;break;}group[kind]=found;}
+    if(!complete)continue;Vec2 center{};for(auto index:group)center+=items[index].pos*.25f;float spread=0;for(auto index:group)spread=std::max(spread,lengthSq(items[index].pos-center));
+    bool outward=items[group[0]].pos.x>center.x+.01f&&items[group[1]].pos.y>center.y+.01f&&items[group[2]].pos.x<center.x-.01f&&items[group[3]].pos.y<center.y-.01f;
+    if(spread>.0064f&&!outward)continue;
+    for(int part=0;part<4;++part){auto&shard=items[group[part]];float centerZ=shard.z+shard.height()*.5f;shard.kind=6;shard.z=centerZ-shard.height()*.5f;shard.yaw=part*1.5707963f;shard.pitch=part%2?-.14f:.14f;shard.roll=part%2?.10f:-.10f;shard.spin=part%2?2.5f:-2.5f;shard.pitchSpeed=part%2?1.5f:-1.5f;shard.rollSpeed=part%2?-1.5f:1.5f;shard.sleeping=false;shard.restTime=0;if(lengthSq(shard.velocity)<.01f)shard.velocity={std::cos(part*1.5707963f)*1.25f,std::sin(part*1.5707963f)*1.25f};if(std::fabs(shard.vz)<.1f)shard.vz=.75f;used[group[part]]=true;}
+   }
+  };
+  for(auto&chunk:next.m_chunks)migrateCrateDebris(chunk.clutter);
   if(next.chunkCount()>3&&next.m_chunks[3].world.hasLift()){
    auto reactorStage=next.m_chunks[3].world.reactorStage();if(reactorStage==World::ReactorStage::DiskHeld&&!next.hasQuestItem(ReactorAuthDisk))next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);
   }

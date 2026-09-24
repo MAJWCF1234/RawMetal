@@ -16,6 +16,20 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--terrain-seam-inspection")){
+     constexpr int testW=1920,testH=1080;retro::SoftwareRenderer renderer(testW,testH);
+     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     struct View{int level;retro::Vec2 local;float yaw;const char*name;};
+     const View views[]={
+      {0,{23.5f,12.f},0,"east-into-east-chunk"},{1,{.5f,12.f},retro::kPi,"west-into-west-chunk"},
+      {1,{23.5f,12.f},0,"east-into-next-chunk"},{2,{.5f,12.f},retro::kPi,"west-into-previous-chunk"},
+      {0,{12.f,23.5f},retro::kPi*.5f,"north-into-south-chunk"},{4,{12.f,.5f},-retro::kPi*.5f,"south-into-north-chunk"},
+      {4,{23.5f,12.f},0,"row-east-into-east-chunk"},{5,{.5f,12.f},retro::kPi,"row-west-into-west-chunk"}};
+     for(const auto&view:views){auto scene=retro::Game::mapInspection(view.local,view.yaw,0,view.level,false,-999,true,retro::WorldId::Ashfall);renderer.render(scene);
+      std::ofstream out(std::string(view.name)+".ppm",std::ios::binary);out<<"P6\n"<<testW<<' '<<testH<<"\n255\n";
+      for(int i=0;i<testW*testH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--world-isolation-test")||std::wcsstr(commandLine,L"--ashfall-inspection")){
      if(std::wcsstr(commandLine,L"--world-isolation-test")&&!retro::Game::testWorldIsolation())return 44;
      retro::SoftwareRenderer renderer(W,H);
@@ -285,7 +299,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         {auto title=game;title.showTitleScreen();renderer.render(title);saveFrame("title-menu.ppm");}
         {auto inventory=game;retro::InputState open{};open.inventory=true;inventory.update(open,.01f);renderer.render(inventory);saveFrame("inventory-menu.ppm");}
         {auto console=game;retro::InputState consoleInput{};consoleInput.console=true;console.update(consoleInput,.01f);consoleInput={};consoleInput.textInput="maps\rmap reactor\r";console.update(consoleInput,.01f);renderer.render(console);saveFrame("developer-console.ppm");}
-        for(int kind=0;kind<6;++kind)for(int stage=0;stage<3;++stage){auto scene=retro::Game::clutterInspection(kind,stage==0?0:stage==1?.3f:5.f);renderer.render(scene);saveFrame(("clutter-tumble-"+std::to_string(kind)+"-"+std::to_string(stage)+".ppm").c_str());}
+        for(int kind=0;kind<7;++kind)for(int stage=0;stage<3;++stage){auto scene=retro::Game::clutterInspection(kind,stage==0?0:stage==1?.3f:5.f);renderer.render(scene);saveFrame(("clutter-tumble-"+std::to_string(kind)+"-"+std::to_string(stage)+".ppm").c_str());}
         {const retro::Vec2 positions[]={{7.5f,4.5f},{4.8f,17.4f},{6.5f,20.5f},{6.5f,3.5f},{16.5f,11.5f},{17.5f,9.5f},{21.5f,20.5f}};
            const float yaw[]={2.3f,1.570796f,-.7f,.2f,-1.5f,0,1.570796f},pitch[]={50,45,-45,-45,-30,-90,15};
          for(int i=0;i<7;++i){auto scene=retro::Game::mapInspection(positions[i],yaw[i],pitch[i],2,true,i>=2&&i<=5?3.f:0.f);renderer.render(scene);saveFrame(("gantry-view-"+std::to_string(i)+".ppm").c_str());}

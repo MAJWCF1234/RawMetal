@@ -164,6 +164,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  Point3 eye{game.player().pos.x,game.player().pos.y,game.player().z+game.player().eye};
  auto hidden=[&](Point3 a,Point3 b){
+  if(m_staticGeometryBuild)return false;
   for(auto&o:occluders){float z=(o.bottom+o.top)*.5f;
    if(!((eye.z>o.top+.03f&&b.z<o.bottom-.03f)||(eye.z<o.bottom-.03f&&a.z>o.top+.03f)))continue;
    float t1=(z-eye.z)/(a.z-eye.z),t2=(z-eye.z)/(b.z-eye.z);
@@ -174,11 +175,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }return false;
  };
  float farPlane=w.outdoors()?70.f:160.f;
- auto outside=[&](Point3 p){unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
- auto sphereVisible=[&](Point3 point,float radius){auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z-radius<farPlane&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
+ auto outside=[&](Point3 p){if(m_staticGeometryBuild)return 0u;unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
+ auto sphereVisible=[&](Point3 point,float radius){if(m_staticGeometryBuild)return true;auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z-radius<farPlane&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
  auto flashPitch=game.player().pitch/140.f,flashCp=std::cos(flashPitch),flashSp=std::sin(flashPitch);
  Point3 flashForward{std::cos(game.player().angle)*flashCp,std::sin(game.player().angle)*flashCp,flashSp};
  bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
+ const float muzzleAge=game.shotAge();
+ const float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;
+ Point3 muzzlePoint{eye.x+flashForward.x*.42f,eye.y+flashForward.y*.42f,eye.z+flashForward.z*.42f-.10f};
  auto flashlightContribution=[&](Point3 point,Point3 normal){
   if(!flashlightEnabled)return 0.f;Point3 delta=point-eye;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2<.04f||d2>196.f)return 0.f;
   float distance=std::sqrt(d2),along=(delta.x*flashForward.x+delta.y*flashForward.y+delta.z*flashForward.z)/distance;if(along<=.80f)return 0.f;
@@ -194,9 +198,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
   return cone*facing*1.9f/(1.f+d2*.020f);
  };
+ auto muzzleContribution=[&](Point3 point,Point3 normal){
+  if(muzzleFlash<=0.f)return 0.f;auto delta=point-muzzlePoint;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>=144.f)return 0.f;
+  float distance=std::sqrt(std::max(.001f,d2));float facing=.35f+.65f*std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
+  float edge=1.f-d2/144.f;return muzzleFlash*11.f*edge*edge*facing/(1.f+d2*.045f);
+ };
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
-  if(movingGeometry){float base=(.82f+.12f*std::fabs(normal.z))*(.35f+.65f*w.liftLampPower());return std::clamp(base+flashlightContribution(point,normal),.24f,2.4f);}
+  if(movingGeometry){float base=(.82f+.12f*std::fabs(normal.z))*(.35f+.65f*w.liftLampPower());return std::clamp(base+flashlightContribution(point,normal)+muzzleContribution(point,normal),.24f,4.f);}
   // Static fixture lighting is cached; the player-mounted flashlight is added
   // afterward because its cone moves every frame with yaw and pitch.
   auto positionBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
@@ -220,7 +229,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }
    brightness=std::sqrt(std::clamp(brightness,std::min(.24f,w.definition().ambient),1.4f));if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
   }
-  return std::clamp(brightness+flashlightContribution(point,normal),.24f,2.4f);
+  return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.24f,4.f);
  };
  auto normalLightingAt=[&](Point3 center){
   auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
@@ -246,14 +255,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  };
  bool objectLighting=false;float objectLight=1;
  auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
-  if(std::max({a.p.z,b.p.z,c.p.z})<game.dormantBelow())return;
+  if(!m_staticGeometryBuild&&std::max({a.p.z,b.p.z,c.p.z})<game.dormantBelow())return;
   auto A=cameraPoint(a.p,game),B=cameraPoint(b.p,game),C=cameraPoint(c.p,game);if(outside(A)&outside(B)&outside(C))return;
   if(objectLighting)light*=objectLight;
   else if(light<1.5f){auto normal=cross3(b.p-a.p,c.p-a.p);a.light=illumination(a.p,normal);b.light=illumination(b.p,normal);c.light=illumination(c.p,normal);}
   a.p=A;b.p=B;c.p=C;triangle3D(a,b,c,t,light);
  };
  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
-  if(std::max({a.z,b.z,c.z,d.z})<game.dormantBelow())return;
+  if(!m_staticGeometryBuild&&std::max({a.z,b.z,c.z,d.z})<game.dormantBelow())return;
   if(outside(cameraPoint(a,game))&outside(cameraPoint(b,game))&outside(cameraPoint(c,game))&outside(cameraPoint(d,game)))return;
   if(hidden({std::min({a.x,b.x,c.x,d.x}),std::min({a.y,b.y,c.y,d.y}),std::min({a.z,b.z,c.z,d.z})},{std::max({a.x,b.x,c.x,d.x}),std::max({a.y,b.y,c.y,d.y}),std::max({a.z,b.z,c.z,d.z})}))return;
   auto size=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
@@ -292,12 +301,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(hidden(a,b))return;
   // Architectural repeats are measured in metres, never stretched over a deck.
   auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,(w.campaign()&&w.level()>=3)?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
-  if(eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
-  if(eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
-  if(eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
-  if(eye.x>=b.x)face({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},light);
-  if(eye.z>=b.z)face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},light*1.1f);
-  if(eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.65f);
+  if(m_staticGeometryBuild||eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
+  if(m_staticGeometryBuild||eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
+  if(m_staticGeometryBuild||eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
+  if(m_staticGeometryBuild||eye.x>=b.x)face({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},light);
+  if(m_staticGeometryBuild||eye.z>=b.z)face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},light*1.1f);
+  if(m_staticGeometryBuild||eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.65f);
  };
  // Low-sided, capped pipes retain a cylindrical silhouette without dense meshes.
  auto cylinder=[&](Point3 a,Point3 b,float radius,const Texture&texture){
@@ -312,7 +321,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  };
  auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
-  if(base==-999.f)base=w.floorHeight(x,y);if(base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
+  if(base==-999.f)base=w.floorHeight(x,y);if(!m_staticGeometryBuild&&base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
   if(hidden({x-footprint,y-footprint,base},{x+footprint,y+footprint,base+height}))return;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
@@ -325,7 +334,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  };
  auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-  if(base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
+  if(!m_staticGeometryBuild&&base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
   float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
   float c=std::cos(yaw),s=std::sin(yaw);
@@ -339,7 +348,20 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
   objectLighting=false;
  };
- // Outdoor chunks carry an explicit low-poly mesh generated from the same
+ bool buildStaticGeometry=!m_gpuFrame;
+ int cacheSlot=w.level();
+ if(m_gpuFrame){
+  std::uint64_t key=1469598103934665603ull;
+  auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
+  auto hashFloat=[&](float value){hash(std::uint64_t(std::int64_t(std::llround(value*1024.f))));};
+  hash(std::uint64_t(game.worldId()));hash(game.sessionRevision());hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
+  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){char tile=w.tile(x,y);hash(static_cast<unsigned char>(tile=='C'||tile=='B'?'.':tile));}
+  for(const auto&door:w.doors()){for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);hash(std::uint64_t(std::clamp(int(std::floor(door.open*8.f)),0,8)));}
+  buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
+ }
+ m_staticGeometryBuild=m_gpuFrame&&buildStaticGeometry;
+ if(m_staticGeometryBuild)shadowBudget*=12;
+ if(buildStaticGeometry){ // Outdoor chunks carry an explicit low-poly mesh generated from the same
  // height field used by collision. This replaces the old flat half-metre floor
  // patches while leaving authored ruins, machinery and props on top.
  if(w.hasTerrain())for(const auto&face:w.terrain()){
@@ -393,8 +415,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    // Painted route edges and worn hazard stripes tie the loops together.
    // Route instruction paint removed; safety tape remains at machinery and doors.
    char tile=w.tile(x,y);
-   if(tile=='C')prop(m_crateMesh,m_crateTexture,X+.5f,Y+.5f,.85f,(x%2)*1.5708f);
-   if(tile=='B')prop(m_barrelMesh,m_barrelTexture,X+.5f,Y+.5f,1.1f,float(x));
+   if(tile=='C'&&!m_staticGeometryBuild)prop(m_crateMesh,m_crateTexture,X+.5f,Y+.5f,.85f,(x%2)*1.5708f);
+   if(tile=='B'&&!m_staticGeometryBuild)prop(m_barrelMesh,m_barrelTexture,X+.5f,Y+.5f,1.1f,float(x));
    if(tile=='T'){
     // Six tall coolant vessels give the foundry a visible central landmark.
     for(int side=0;side<12;++side){float a=side*kPi/6,b=(side+1)*kPi/6;float ax=X+.5f+std::cos(a)*.47f,ay=Y+.5f+std::sin(a)*.47f,bx=X+.5f+std::cos(b)*.47f,by=Y+.5f+std::sin(b)*.47f;
@@ -424,7 +446,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  }
  for(auto&s:w.structures()){
-  if(s.top<game.dormantBelow())continue;
+  if(!m_staticGeometryBuild&&s.top<game.dormantBelow())continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.material==1){
@@ -461,6 +483,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
+ }
+ if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
+ m_staticGeometryBuild=false;
+ if(m_gpuFrame)for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){char tile=w.tile(x,y);if(tile=='C')prop(m_crateMesh,m_crateTexture,x+.5f,y+.5f,.85f,(x%2)*1.5708f);else if(tile=='B')prop(m_barrelMesh,m_barrelTexture,x+.5f,y+.5f,1.1f,float(x));}
  auto stripeBand=[&](float left,float right,float centerY,float offset=0.f){
   float halfWidth=(right-left)*m_hazard.height/m_hazard.width*.5f;
   float height=w.floorHeight((left+right)*.5f,centerY)+offset+.009f;
@@ -519,10 +545,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  for(const auto&light:w.lights()){movingGeometry=w.campaignChunk(3)&&&light==&w.lights().back();m_emissionScale=movingGeometry?w.liftLampPower():1.f;facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);}movingGeometry=false;m_emissionScale=1.f;
  for(const auto&fixture:w.fixtures())facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
  for(auto&c:game.clutter()){
-  auto&mesh=m_clutterMeshes[c.kind];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;auto size=c.size();float scale=std::max({size[0],size[1],size[2]})/std::max({range.x,range.y,range.z});
+  bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},.4f))continue;
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
-  for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}objectLighting=false;
+  if(woodShard){
+   // Thin splinter with a broken point and irregular edges; use a strip from
+   // the crate's own vertical-grain atlas instead of mapping a whole crate face.
+   constexpr int points=6;MeshVertex bottom[points],top[points];
+   const float x[points]={-.50f,-.29f,.28f,.50f,.31f,-.34f};
+   const float y[points]={-.30f,-.50f,-.42f,.02f,.50f,.34f};
+   for(int i=0;i<points;++i){float px=x[i]*size[0],py=y[i]*size[1];auto rb=c.rotate(px,py,-size[2]*.5f),rt=c.rotate(px,py,size[2]*.5f);
+    float across=.115f+std::clamp(y[i],-.5f,.5f)*.07f,along=.055f+std::clamp(x[i]+.5f,0.f,1.f)*.275f;
+    bottom[i]={{c.pos.x+rb[0],c.pos.y+rb[1],mid+rb[2]},across,along};top[i]={{c.pos.x+rt[0],c.pos.y+rt[1],mid+rt[2]},across,along};}
+   auto uvAt=[&](MeshVertex v,float u,float vv){v.u=u;v.v=vv;return v;};
+   for(int i=1;i<points-1;++i){tri(top[0],top[i],top[i+1],m_crateTexture,1.f);tri(bottom[0],bottom[i+1],bottom[i],m_crateTexture,1.f);}
+   for(int i=0;i<points;++i){int j=(i+1)%points;auto a=bottom[i],b=bottom[j],d=top[j],e=top[i];a=uvAt(a,.115f,.055f);b=uvAt(b,.185f,.055f);d=uvAt(d,.185f,.33f);e=uvAt(e,.115f,.33f);tri(a,b,d,m_crateTexture,1.f);tri(a,d,e,m_crateTexture,1.f);}
+  }else{
+   auto&mesh=m_clutterMeshes[c.kind];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;float scale=std::max({size[0],size[1],size[2]})/std::max({range.x,range.y,range.z});
+   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}
+  }
+  objectLighting=false;
  }
  // Services belong to the map; custom worlds never inherit campaign pipework.
  for(const auto& pipe:w.pipes()){

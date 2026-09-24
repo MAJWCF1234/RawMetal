@@ -35,6 +35,7 @@ private:
     std::unique_ptr<FrameWorker> m_animationWorker;
     std::string m_gpuName;
     bool m_gpuFrame=false;
+    bool m_staticGeometryBuild=false;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0;
     bool m_poseReady=false;

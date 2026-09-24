@@ -74,7 +74,7 @@ struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
- std::array<float,3> size()const{constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f}};return sizes[kind];}
+ std::array<float,3> size()const{constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
  std::array<float,3> rotate(float x,float y,float localZ)const{
   float cp=std::cos(pitch),sp=std::sin(pitch),cr=std::cos(roll),sr=std::sin(roll),cy=std::cos(yaw),sy=std::sin(yaw);
   float a=cp*x+sp*localZ,b=-sp*x+cp*localZ,c=cr*y-sr*b,d=sr*y+cr*b;
@@ -83,7 +83,7 @@ struct Clutter {
  std::array<float,3> extent()const{auto s=size(),a=rotate(s[0]*.5f,0,0),b=rotate(0,s[1]*.5f,0),c=rotate(0,0,s[2]*.5f);return {std::fabs(a[0])+std::fabs(b[0])+std::fabs(c[0]),std::fabs(a[1])+std::fabs(b[1])+std::fabs(c[1]),std::fabs(a[2])+std::fabs(b[2])+std::fabs(c[2])};}
  float height()const{return extent()[2]*2;}
  float footprint()const{auto s=size();return std::max(s[0],s[1]);}
- Sound impactSound()const{return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5?Sound::JunkSoft:Sound::JunkMetal;}
+ Sound impactSound()const{return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
 };
 
 struct Player {
@@ -344,6 +344,7 @@ private:
     float m_shotCooldown = 0.0f;
     Vec2 m_velocity{};
     float m_damageFlash = 0.0f;
+    float m_hitStopRemaining=0.f;
     float m_elapsed = 0.0f;
     int m_kills = 0;
     bool m_won = false;
