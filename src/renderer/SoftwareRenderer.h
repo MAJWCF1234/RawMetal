@@ -54,6 +54,7 @@ private:
     std::array<RagPoint,Ragdoll::Count> m_hazmatPoseJoints{};
     bool m_hazmatPoseValid=false;
     Texture m_blood;
+    std::array<Texture,4> m_bloodVariants;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;

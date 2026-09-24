@@ -766,8 +766,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   t.clampEdges=true;t.transparent=true;return t;}();
  for(const auto&mark:game.bulletImpacts())if(mark.level==game.level()){
   if(mark.blood){
-   float tint=mark.tint<=1?1.f:.65f;Texture blood=m_blood;
-   if(mark.tint==1||mark.tint==2){for(auto&px:blood.pixels){float r=float((px>>16)&255),g=float((px>>8)&255),b=float(px&255),a=float(px>>24);if(mark.tint==1){r*=.42f;g*=1.25f;b*=.28f;}else{r*=.72f;g*=.16f;b*=.12f;}px=(std::uint32_t(a)<<24)|(std::uint32_t(std::clamp(r,0.f,255.f))<<16)|(std::uint32_t(std::clamp(g,0.f,255.f))<<8)|std::uint32_t(std::clamp(b,0.f,255.f));}}
+   int species=std::clamp(mark.tint,0,3);float tint=species<=1?1.f:.9f;const Texture&blood=m_bloodVariants[size_t(species)];
    if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}
    float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
    quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},blood,tint);continue;
