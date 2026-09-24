@@ -403,6 +403,15 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  if(m_gpu){try{m_gpu->begin(m_width,m_height);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';scene();}}
  else scene();
+ if(!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f){
+  const auto source=m_pixels;
+  for(int y=0;y<m_height;++y){int wobble=int(std::sin(game.elapsed()*7.f+y*.055f)*2.f);
+   for(int x=0;x<m_width;++x){auto c=source[size_t(y*m_width+std::clamp(x+wobble,0,m_width-1))];
+    unsigned r=(c>>16&255u)*4/10,g=(c>>8&255u)*8/10,b=(c&255u)*9/10;
+    m_pixels[size_t(y*m_width+x)]=0xff000000u|(r<<16)|(g<<8)|b;
+   }
+  }
+ }
  if(scaled){int sceneWidth=m_width,sceneHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*sceneHeight/m_height)*sceneWidth+x*sceneWidth/m_width)];}
  if(game.titleScreen())drawTitle(game);else {drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}

@@ -10,7 +10,7 @@ layout(location=4) in vec4 surface;
 layout(location=0) out vec4 outColor;
 void main(){
  vec4 color=texture(colorMap,uv);
- if(color.a<0.5)discard;
+ if(color.a<(surface.z>1.5?0.01:0.5))discard;
  float vertexLight=lighting.y;
  if(lighting.w>0.5){
   vec3 n=normalize(texture(normalMap,uv).xyz);

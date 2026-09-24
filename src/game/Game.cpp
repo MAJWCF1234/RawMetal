@@ -36,7 +36,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_bulletImpacts.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -149,6 +149,8 @@ bool Game::testCombat(){
   if(shots!=expected||encounter.m_kills!=1)return false;
  }
  Game g;g.m_enemies.resize(1);g.m_player.pos={3.5f,4.5f};g.m_player.angle=0;g.m_enemies[0].pos={5.5f,4.5f};
+ auto scar=validationScene(Enemy::Kind::Huntsman);scar.m_enemies.clear();scar.m_player.pos={1.5f,1.5f};scar.m_player.angle=kPi;
+ scar.shoot();if(scar.bulletImpacts().empty()||scar.bulletImpacts().size()>6)return false;
  g.shoot();if(!g.m_enemies[0].alive||g.m_enemies[0].hp>=110)return false;
  g.shoot();g.shoot();if(!g.m_enemies[0].alive)return false;g.shoot();
  if(g.m_enemies[0].alive||g.m_kills!=1||!g.m_enemies[0].visible())return false;
@@ -218,6 +220,30 @@ void Game::shoot() {
             if(enemiesRemaining()==0)sound(Sound::Exit,.75f);
         }
         else enemySound(*best,0,.55f,1.22f);
+    }
+    // Render one clustered wall impact for the shotgun blast. Pellet damage is
+    // still resolved above, but separate decals created the visible dotted line.
+    for(int pellet=0;pellet<1;++pellet){
+        Vec2 direction{std::cos(m_player.angle),std::sin(m_player.angle)};
+        float last=0,limit=std::min(18.f,best?bestAlong:18.f);
+        for(float distance=.12f;distance<=limit;distance+=.06f){
+            Vec2 p=m_player.pos+direction*distance;
+            float z=m_player.z+m_player.eye+distance*std::tan(m_player.pitch/140.f);
+            if(!m_world.fits(p.x,p.y,z,.02f)||m_world.doorBlocks(p.x,p.y,z,.02f)){
+                Vec2 hit=m_player.pos+direction*last;
+                bool xFace=int(std::floor(hit.x))!=int(std::floor(p.x));
+                if(int(std::floor(hit.x))==int(std::floor(p.x))&&int(std::floor(hit.y))==int(std::floor(p.y)))xFace=std::fabs(direction.x)>=std::fabs(direction.y);
+                Vec2 normal=xFace?Vec2{-std::copysign(1.f,direction.x),0}:Vec2{0,-std::copysign(1.f,direction.y)};
+                if(m_world.tile(int(std::floor(p.x)),int(std::floor(p.y)))=='#'){
+                    if(xFace)hit.x=(direction.x>0?std::floor(p.x):std::ceil(p.x))+normal.x*.003f;
+                    else hit.y=(direction.y>0?std::floor(p.y):std::ceil(p.y))+normal.y*.003f;
+                }else hit+=normal*.01f;
+                m_bulletImpacts.push_back({hit,z,normal,m_elapsed,m_level});
+                if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
+                break;
+            }
+            last=distance;
+        }
     }
 }
 Game Game::stalkerInspection(int clip,float phase,int view){

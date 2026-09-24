@@ -55,6 +55,8 @@ struct Enemy {
     enum class State {Idle,Investigate,Chase,Search};State state=State::Idle;
     enum class StalkMode {Watch,Flank,Rush};StalkMode stalkMode=StalkMode::Watch;
     float stalkTimer=0,stalkSide=1;
+    int surfaceMode=0; // floor, wall, ceiling
+    Vec2 surfaceNormal{};
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
@@ -68,6 +70,7 @@ struct Pickup {
     Kind kind = Kind::Health;
     bool active = true;
 };
+struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
@@ -144,6 +147,7 @@ public:
     const std::vector<Enemy>& enemies() const { return m_enemies; }
     const std::vector<Pickup>& pickups() const { return m_pickups; }
     const std::vector<Clutter>& clutter()const{return m_clutter;}
+    const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
     bool holdingClutter()const{return m_heldClutter>=0;}
     static bool testClutter();
     static Game clutterInspection(int kind,float seconds);
@@ -332,6 +336,7 @@ private:
     std::vector<Enemy> m_enemies;
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
+    std::vector<BulletImpact> m_bulletImpacts;
     int m_heldClutter=-1;
     bool m_previousFire = false;
     bool m_previousReload = false;

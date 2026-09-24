@@ -110,7 +110,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
     float vx=(vDerivative.x-V*depthDerivative.x)*z*texture.height,vy=(vDerivative.y-V*depthDerivative.y)*z*texture.height;
     lod=std::max(0.f,.5f*std::log2(std::max({1.f,ux*ux+vx*vx,uy*uy+vy*vy})));
    }
-   auto texel=sample(texture,U,V,lod);if((texel>>24)<128)continue;
+   auto texel=sample(texture,U,V,lod);if((texel>>24)==0||(!texture.transparent&&(texel>>24)<128))continue;
    float vertexLight=(A.light*u+B.light*v+C.light*w)*z;
    if(normalActive){auto n=sampleNormal(texture,U,V,lod);float response=.65f;
     for(int i=0;i<2;++i)response+=normalLighting->weights[i]*std::max(0.f,dot(n,tangentLights[i]));
@@ -261,13 +261,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   // gradients do not expose the two triangles of an entire wall or door.
   int columns=1,rows=1;
   if(light<1.5f&&(t.mips.empty()||!t.normalLevels.empty())){columns=std::clamp(int(std::ceil(size(b-a))),1,16);rows=std::clamp(int(std::ceil(size(d-a))),1,16);}
+  bool floorFace=std::fabs(a.z-b.z)<.001f&&std::fabs(a.z-d.z)<.001f;
+  bool wallFace=std::fabs(a.x-d.x)<.001f&&std::fabs(a.y-d.y)<.001f&&d.z>a.z+.4f;
+  if(floorFace&&light<1.5f){auto center=(a+c)*.5f;
+   bool nearWall=false;for(auto offset:{Vec2{-.55f,0},Vec2{.55f,0},Vec2{0,-.55f},Vec2{0,.55f}})
+    nearWall|=w.tile(int(std::floor(center.x+offset.x)),int(std::floor(center.y+offset.y)))=='#';
+   if(nearWall){columns=std::max(columns,3);rows=std::max(rows,3);}
+  }
   auto normal=cross3(b-a,c-a);std::array<MeshVertex,289> vertices;
   for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){float u=float(x)/columns,v=float(y)/rows;auto p=a+(b-a)*u+(d-a)*v;
    vertices[size_t(y*(columns+1)+x)]={cameraPoint(p,game),u*uvScale.x+uvOffset.x,(1-v)*uvScale.y+uvOffset.y,-1.f};
   }
   for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){int i=y*(columns+1)+x;auto &A=vertices[i],&B=vertices[i+1],&C=vertices[i+columns+2],&D=vertices[i+columns+1];
    if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
-   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0)v.light=light<1.5f?illumination(a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows),normal):1.f;};
+   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0){auto p=a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows);v.light=light<1.5f?illumination(p,normal):1.f;
+    if(floorFace&&light<1.5f){bool nearWall=false;
+     for(auto offset:{Vec2{-.24f,0},Vec2{.24f,0},Vec2{0,-.24f},Vec2{0,.24f}})
+      nearWall|=w.tile(int(std::floor(p.x+offset.x)),int(std::floor(p.y+offset.y)))=='#';
+     if(nearWall)v.light*=.75f;
+    }else if(wallFace&&light<1.5f){v.light*=.72f+.28f*std::clamp((p.z-a.z)/.4f,0.f,1.f);}
+   }};
    illuminate(A,x,y);illuminate(B,x+1,y);illuminate(C,x+1,y+1);illuminate(D,x,y+1);
    NormalLighting lights;const NormalLighting* normalState=nullptr;
    if(!t.normalLevels.empty()&&!movingGeometry){lights=normalLightingAt(a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows));normalState=&lights;}
@@ -739,6 +752,29 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  movingGeometry=false;
  if(w.campaignChunk(3)&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
  if(w.campaign())for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining()==0?m_routePaint:m_redPaint,1.f);}
+ // Alpha-blend damage into the rendered wall so its grain and lighting remain visible.
+ static const Texture impact=[](){Texture t{24,24,std::vector<std::uint32_t>(24*24)};
+  for(int y=0;y<24;++y)for(int x=0;x<24;++x){float dx=(x-11.5f)/11.5f,dy=(y-11.5f)/11.5f;
+   unsigned noise=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x9e3779b9u);float jitter=float(noise%101u)/100.f;
+   float distance=std::sqrt(dx*dx+dy*dy)*(1.08f+(jitter-.5f)*.3f);
+   float soot=std::clamp((.76f-distance)*1.5f,0.f,1.f);
+   float chip=std::clamp((.20f-distance)*8.f,0.f,1.f);
+   bool exposed=chip>.28f&&jitter>.16f;
+   unsigned alpha=unsigned(std::clamp(soot*(.72f+jitter*.25f)+(exposed?chip*.18f:0.f),0.f,1.f)*170.f);
+   t.pixels[size_t(y*24+x)]=(alpha<<24)|(exposed?0x008b857bu:0x00070808u);
+  }
+  t.clampEdges=true;t.transparent=true;return t;}();
+ for(const auto&mark:game.bulletImpacts())if(mark.level==game.level()){
+  float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.035f;
+  Point3 p{mark.pos.x,mark.pos.y,mark.z};
+  quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},
+       {p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},impact,.9f);
+  float age=game.elapsed()-mark.time;
+  if(age>=0&&age<.18f)for(int i=0;i<6;++i){float phase=float(i)*1.0472f,flight=age*2.4f;
+   Point3 a{p.x+mark.normal.x*.03f+tangentX*std::cos(phase)*flight,p.y+mark.normal.y*.03f+tangentY*std::cos(phase)*flight,p.z+std::sin(phase)*flight-age*age*8.f};
+   quad(a,{a.x+.012f,a.y,a.z},{a.x+.012f,a.y,a.z+.025f},{a.x,a.y,a.z+.025f},amber,1.7f);
+  }
+ }
  for(const auto&e:game.enemies()){
   if(e.bodyTop()<game.dormantBelow())continue;
   if(!e.visible())continue;
@@ -777,7 +813,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
      localY-=e.painFlash*.035f;
     }else if(!e.alive&&!warden){height*=1-.88f*collapse;p.x+=std::sin(collapse*3.14f)*.1f*(p.x<0?-1.f:1.f);}
     p.x*=shrink;localY*=shrink;height*=shrink;
-    v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
+    if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode==1)
+     v.p={e.pos.x+e.surfaceNormal.x*(height-.5f)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-.5f)+p.x*std::cos(angle),e.z+localY+.5f};
+    else if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode==2)
+     v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+1.05f-height};
+    else v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
    }
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+e.painFlash*.22f;
