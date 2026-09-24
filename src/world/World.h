@@ -181,6 +181,7 @@ public:
     void useReactorTerminal(int action);
 
     char tile(int x, int y) const;
+    bool destroyTile(int x,int y);
     bool solid(float x, float y) const;
     bool isExit(float x, float y) const;
     bool metalFloor(int x,int y)const{return !outdoors()&&(m_level>=4?(x>=7&&x<=16):y>=8||x>=12);}
@@ -205,6 +206,7 @@ public:
 private:
     friend class Game; // Save codec persists dynamic state, never geometry or pointers.
     std::vector<MapLayer> m_layers;
+    std::vector<std::pair<int,int>> m_destroyedTiles;
     float m_internalWallHeight=0;
     int m_level=0;
     WorldId m_worldId=WorldId::Campaign;

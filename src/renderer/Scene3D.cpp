@@ -765,6 +765,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
   t.clampEdges=true;t.transparent=true;return t;}();
  for(const auto&mark:game.bulletImpacts())if(mark.level==game.level()){
+  if(mark.blood){
+   float tint=mark.tint<=1?1.f:.65f;
+   if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=.28f;quad({mark.pos.x-size,mark.pos.y-size,mark.z},{mark.pos.x+size,mark.pos.y-size,mark.z},{mark.pos.x+size,mark.pos.y+size,mark.z},{mark.pos.x-size,mark.pos.y+size,mark.z},m_blood,tint);continue;}
+   float size=.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
+   quad({p.x-size,p.y-size,p.z},{p.x+size,p.y-size,p.z},{p.x+size,p.y+size,p.z},{p.x-size,p.y+size,p.z},m_blood,tint);continue;
+  }
   float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.035f;
   Point3 p{mark.pos.x,mark.pos.y,mark.z};
   quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},
