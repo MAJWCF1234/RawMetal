@@ -1,2 +1,1 @@
-Loaded 1 custom campaign pack(s).
-OK Ashen_Boulevard.txt / Ashen Boulevard / 1 map(s)
+Loaded 0 custom campaign pack(s).

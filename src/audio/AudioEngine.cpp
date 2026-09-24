@@ -75,6 +75,7 @@ void AudioEngine::update(const Game& game,bool focused){
  if(game.elapsed()<m_lastTime||newSession){m_voices.clear();play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;}m_lastRevision=game.sessionRevision();
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=game.chunkOffset(m_lastChunk)-game.chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
+ m_submergedTarget=game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f?1.f:0.f;
  m_musicGain=game.musicEnabled()?(game.dead()||game.won()?.16f:.28f)*game.settings().music/.75f:0;
  m_effectsGain=game.settings().effects;m_paused=game.paused()||game.consoleOpen();
  auto phase=game.world().liftPhase();bool shaft=game.world().hasLift();
@@ -122,6 +123,11 @@ void AudioEngine::mix(int16_t* output,size_t frames){
    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::WaterReturn)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
   m_master+=(m_targetMaster-m_master)*.002f;
+  m_submerged+=(m_submergedTarget-m_submerged)*.0006f;
+  m_underwaterLeft+=(left-m_underwaterLeft)*.055f;
+  m_underwaterRight+=(right-m_underwaterRight)*.055f;
+  left+=m_submerged*(m_underwaterLeft-left);
+  right+=m_submerged*(m_underwaterRight-right);
   // Smooth limiter leaves headroom when footsteps, music and several attacks overlap.
   output[frame*2]=int16_t(std::tanh(left*.8f)*m_master*30000);output[frame*2+1]=int16_t(std::tanh(right*.8f)*m_master*30000);
  }
@@ -181,6 +187,10 @@ bool AudioEngine::test(){
  }if(maxChange>.08f)return false;
  auto machines=game.world().machines();for(size_t i=0;i<machines.size();++i)for(size_t j=i+1;j<machines.size();++j)if(length(machines[i]-machines[j])<1.01f)return false;
  auto coolant=Game::mapInspection({12,9},0,0,5,false,-9,true);audio.update(coolant);
+ auto submerged=Game::mapInspection({8.5f,9.f},0,0,5,false,-9.4f,true);InputState duck{};duck.crouch=true;
+ for(int i=0;i<30;++i)submerged.update(duck,1.f/60.f);
+ audio.update(submerged);if(audio.m_submergedTarget<.5f)return false;
+ audio.update(coolant);if(audio.m_submergedTarget>.5f)return false;
  int waterVoices=0;for(const auto& voice:audio.m_voices)waterVoices+=voice.sound==Sound::WaterReturn;
  if(waterVoices!=int(coolant.world().waterVolumes().size()))return false;
  game=Game::validationScene(Enemy::Kind::Brute);audio.update(game);

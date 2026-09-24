@@ -270,6 +270,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         out<<"P6\n"<<W<<" "<<H<<"\n255\n";
         for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
         auto saveFrame=[&](const char* name){std::ofstream frame(name,std::ios::binary);frame<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}};
+        {auto impact=retro::Game::mapInspection({3.5f,6.5f},retro::kPi,0,0,false,0,true);renderer.render(impact);saveFrame("impact-before.ppm");retro::InputState fire{};fire.fire=true;impact.update(fire,.02f);if(impact.bulletImpacts().empty())return 47;for(auto&mark:impact.bulletImpacts())if(retro::length(mark.pos-impact.player().pos)<.3f)return 47;for(int i=0;i<24;++i)impact.update({},1.f/60.f);renderer.render(impact);saveFrame("impact-inspection.ppm");}
+        {auto basin=retro::Game::mapInspection({8.5f,9.f},0,0,5,false,-9.4f,true);retro::InputState duck{};duck.crouch=true;for(int i=0;i<30;++i)basin.update(duck,1.f/60.f);renderer.render(basin);saveFrame("underwater-inspection.ppm");}
         {auto title=game;title.showTitleScreen();renderer.render(title);saveFrame("title-menu.ppm");}
         {auto inventory=game;retro::InputState open{};open.inventory=true;inventory.update(open,.01f);renderer.render(inventory);saveFrame("inventory-menu.ppm");}
         {auto console=game;retro::InputState consoleInput{};consoleInput.console=true;console.update(consoleInput,.01f);consoleInput={};consoleInput.textInput="maps\rmap reactor\r";console.update(consoleInput,.01f);renderer.render(console);saveFrame("developer-console.ppm");}

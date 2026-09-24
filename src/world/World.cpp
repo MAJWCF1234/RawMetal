@@ -992,10 +992,10 @@ World::World(int level,WorldId id):m_worldId(id) {
     m_structures.push_back({14.87f,y,14.93f,y+.06f,2.57f,roof,false,2});
    for(Vec2 p:{Vec2{5,9},Vec2{19,9},Vec2{5,20},Vec2{19,20}})m_lights.push_back({p,-6.25f});
   }else{
-   m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-9.045f},
-                   {13.75f,7.8f,16.75f,10.7f,-9.40f,-9.045f},
-                   {7.25f,12.4f,10.25f,18.f,-9.40f,-9.045f},
-                   {13.75f,12.4f,16.75f,18.f,-9.40f,-9.045f}};
+   m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-8.85f},
+                   {13.75f,7.8f,16.75f,10.7f,-9.40f,-8.85f},
+                   {7.25f,12.4f,10.25f,18.f,-9.40f,-8.85f},
+                   {13.75f,12.4f,16.75f,18.f,-9.40f,-8.85f}};
    tank(4.f,4.4f);tank(20.f,4.4f);
    for(float y:{9.f,15.5f}){machine(3.8f,y,kPi*.5f);machine(20.2f,y,kPi*.5f);}
    for(float x:{10.45f,13.45f})for(auto ends:{Vec2{8,10.5f},Vec2{12.6f,17.8f}})

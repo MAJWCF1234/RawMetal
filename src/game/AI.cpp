@@ -46,7 +46,7 @@ void Game::updateEnemies(float dt){
  for(auto&e:m_enemies){
   if(dormantEntity(e.z))continue;
   float support=groundHeight(e.pos,e.z+.01f);
-  if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}
+  if(e.surfaceMode==0){if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}}
   if(!e.alive)continue;bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(e.kind==Enemy::Kind::Warden?1.f/.45f:4.f));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*5);
   auto to=m_player.pos-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   bool visible=dist<11&&(dist<2.5f||dot(normalized(to),facing)>-.25f)&&m_world.rayClear(e.pos,e.z+.7f,m_player.pos,m_player.z+m_player.eye);
@@ -55,6 +55,22 @@ void Game::updateEnemies(float dt){
   if(visible){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=e.kind==Enemy::Kind::Warden?12.f:6.f;e.state=Enemy::State::Chase;}
   else if(heard){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=5.f;e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
+  if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
+   float ceiling=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
+   if(e.awareness<=0||m_world.outdoors()||ceiling-floor<2.15f||dist<2.2f){e.surfaceMode=0;e.verticalVelocity=0;}
+   else if(e.surfaceMode==1){
+    e.z=std::min(ceiling-1.05f,e.z+dt*2.1f);e.moving=true;e.gait+=dt*9.f;
+    if(e.z>=ceiling-1.06f)e.surfaceMode=2;
+    continue;
+   }else{
+    Vec2 toward=normalized(e.lastKnown-e.pos),next=e.pos+toward*(dt*1.6f);
+    float roof=m_world.clearanceHeight(next.x,next.y),nextZ=roof-1.05f;
+    if(roof-m_world.floorHeight(next.x,next.y)>2.15f&&std::fabs(nextZ-e.z)<.4f&&navFits(m_world,next,nextZ,1.05f)){
+     e.pos=next;e.z=nextZ;e.heading=std::atan2(toward.y,toward.x);e.moving=true;e.gait+=dt*9.f;
+    }else e.surfaceMode=0;
+    continue;
+   }
+  }
   e.voiceTimer-=dt;e.stepTimer-=dt;
   if(e.awareness>0&&e.voiceTimer<=0){enemySound(e,0,e.kind==Enemy::Kind::Warden?.28f:.65f);e.voiceTimer=(e.kind==Enemy::Kind::Warden?11.f:6.f)+float(int(e.home.x)%4);}
   bool warden=e.kind==Enemy::Kind::Warden;
@@ -191,6 +207,15 @@ void Game::updateEnemies(float dt){
   move(e.pos+Vec2{direction.x*speed*dt,0});move(e.pos+Vec2{0,direction.y*speed*dt});
   float moved=length(e.pos-old);e.moving=moved>.0001f;e.gait+=moved*7;
   e.searchTime=e.moving?0.f:std::min(1.f,e.searchTime+dt);
+  if(e.kind==Enemy::Kind::Huntsman&&!m_world.outdoors()&&e.awareness>0&&e.searchTime>.22f){
+   float roof=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
+   if(roof-floor>2.15f)for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){
+    auto probe=e.pos+d*.42f;
+    if(m_world.solid(probe.x,probe.y)&&m_world.wallSpaceFree(e.pos,Vec2{-d.y,d.x},.8f,e.z,e.z+1.05f)){
+     e.surfaceNormal=d*-1.f;e.surfaceMode=1;e.verticalVelocity=0;break;
+    }
+   }
+  }
   if(e.moving&&e.kind==Enemy::Kind::Brute&&e.stepTimer<=0){m_sounds.push_back({Sound::Land,e.pos,.7f,.68f,true});e.stepTimer=.8f;}
  }
  migrateEnemiesAcrossChunks();
@@ -295,6 +320,14 @@ bool Game::testAI(){
  auto crate=validationScene(Enemy::Kind::Huntsman);auto&crawler=crate.m_enemies[0];crawler.pos={5.7f,3.5f};crawler.home=crawler.pos;crawler.heading=kPi;crate.m_player.pos={3.5f,3.5f};crate.m_player.z=.6f;
  for(int i=0;i<240&&crawler.z<.59f;++i)crate.updateEnemies(1.f/120);
  debug<<"crate climb "<<crawler.z<<'\n';if(crawler.z<.59f)return false;
+ {auto walls=validationScene(Enemy::Kind::Huntsman);auto&spider=walls.m_enemies[0];
+  spider.pos={1.5f,4.5f};spider.z=walls.m_world.floorHeight(spider.pos.x,spider.pos.y);spider.surfaceMode=1;
+  spider.surfaceNormal={1,0};spider.awareness=8;spider.lastKnown={10,10};walls.m_player.pos={10,10};
+  for(int i=0;i<180&&spider.surfaceMode!=2;++i)walls.updateEnemies(1.f/120.f);
+  if(spider.surfaceMode!=2||spider.z<=walls.m_world.floorHeight(spider.pos.x,spider.pos.y)+.5f)return false;
+  walls.m_player.pos=spider.pos+Vec2{1,0};walls.updateEnemies(1.f/120.f);
+  if(spider.surfaceMode!=0)return false;
+ }
  std::ofstream("ai-test.txt")<<"Closed-door sight blocking, hearing/pursuit, reactor stalker watch/flank/rush behavior, committed melee dodging, all species climbing stairs, bugs tracking a circling target, falling bodies, huntsmen climbing crates, rough Surface Nets hill traversal and outdoor cross-chunk pursuit: PASS\n";return true;
 }
 }
