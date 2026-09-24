@@ -9,6 +9,9 @@
 #include <queue>
 #include <exception>
 #include <filesystem>
+#include <algorithm>
+#include <numeric>
+#include <vector>
 
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
@@ -143,6 +146,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--console-test"))return retro::Game::testConsole()?0:34;
     if(std::wcsstr(commandLine,L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
+    if(std::wcsstr(commandLine,L"--performance-window")){
+        retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance"); if(!benchWindow.valid())return 1;
+        retro::SoftwareRenderer benchRenderer(W,H); if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
+        auto benchGame=retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true); std::vector<double> frameMs; frameMs.reserve(300);
+        for(int frame=0;frame<300&&benchWindow.pump();++frame){auto begin=std::chrono::steady_clock::now();benchGame.update({},1.f/60.f);benchRenderer.render(benchGame);auto end=std::chrono::steady_clock::now();frameMs.push_back(std::chrono::duration<double,std::milli>(end-begin).count());}
+        std::sort(frameMs.begin(),frameMs.end());double average=std::accumulate(frameMs.begin(),frameMs.end(),0.0)/frameMs.size(),p95=frameMs[frameMs.size()*95/100],maximum=frameMs.back();std::ofstream report("performance-window.txt");report<<benchRenderer.hardwareName()<<" / native Win32 swapchain\n"<<"Frames: "<<frameMs.size()<<"\nAverage: "<<average<<" ms / "<<1000.0/average<<" FPS\nP95: "<<p95<<" ms / "<<1000.0/p95<<" FPS\nMax: "<<maximum<<" ms / "<<1000.0/maximum<<" FPS\n";return 0;
+    }
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
     if(std::wcsstr(commandLine,L"--lift-inspection")){
