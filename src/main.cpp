@@ -356,7 +356,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(!directStart)game.showTitleScreen();
     retro::SoftwareRenderer renderer(W,H);
     retro::AudioEngine audio;
-    if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
+    if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware(window.handle());
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
@@ -364,7 +364,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.consoleOpen();game.update(window.input(menuOpen),dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.consoleOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
-        audio.update(game,window.focused()); renderer.render(game); window.present(renderer.pixels(),renderer.width(),renderer.height());
+        audio.update(game,window.focused()); renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());
         titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128];if(game.titleScreen())std::swprintf(t,128,L"Depthworks");else std::swprintf(t,128,L"Depthworks | HP %.0f | Shells %d | Monsters %d",game.player().health,game.player().ammo,game.enemiesRemaining());window.setCaption(t);}
     }
     if(!settingsPath.empty())game.saveSettings(settingsPath);

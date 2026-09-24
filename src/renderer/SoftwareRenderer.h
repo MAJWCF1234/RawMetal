@@ -13,8 +13,9 @@ class SoftwareRenderer {
 public:
     SoftwareRenderer(int width, int height);
     ~SoftwareRenderer();
-    bool enableHardware();
+    bool enableHardware(void* window=nullptr);
     bool hardwareActive()const{return bool(m_gpu);}
+    bool hardwarePresentsWindow()const;
     const std::string& hardwareName()const{return m_gpuName;}
     void render(const Game& game);
     const std::uint32_t* pixels() const { return m_pixels.data(); }

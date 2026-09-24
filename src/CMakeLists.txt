@@ -80,11 +80,11 @@ list(APPEND CMAKE_PREFIX_PATH ${RAWMETAL_VULKAN_SDKS})
 find_package(Vulkan REQUIRED COMPONENTS glslc)
 set(RAWMETAL_SHADERS "${CMAKE_BINARY_DIR}/shaders")
 file(MAKE_DIRECTORY "${RAWMETAL_SHADERS}")
-foreach(STAGE vert frag)
-  add_custom_command(OUTPUT "${RAWMETAL_SHADERS}/scene.${STAGE}.inc"
-    COMMAND Vulkan::glslc --target-env=vulkan1.0 -O -mfmt=c "${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders/scene.${STAGE}" -o "${RAWMETAL_SHADERS}/scene.${STAGE}.inc"
-    DEPENDS "renderer/shaders/scene.${STAGE}" VERBATIM)
-  target_sources(RawMetal PRIVATE "${RAWMETAL_SHADERS}/scene.${STAGE}.inc")
+foreach(SHADER scene.vert scene.frag composite.vert composite.frag)
+  add_custom_command(OUTPUT "${RAWMETAL_SHADERS}/${SHADER}.inc"
+    COMMAND Vulkan::glslc --target-env=vulkan1.0 -O -mfmt=c "${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders/${SHADER}" -o "${RAWMETAL_SHADERS}/${SHADER}.inc"
+    DEPENDS "renderer/shaders/${SHADER}" VERBATIM)
+  target_sources(RawMetal PRIVATE "${RAWMETAL_SHADERS}/${SHADER}.inc")
 endforeach()
 target_include_directories(RawMetal PRIVATE "${RAWMETAL_SHADERS}")
 target_link_libraries(RawMetal PRIVATE user32 gdi32 winmm cabinet bcrypt Vulkan::Vulkan webpdecoder)

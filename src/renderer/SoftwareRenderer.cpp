@@ -37,12 +37,12 @@ int gi(char c){ if(c>='0'&&c<='9')return c-'0'; if(c>='A'&&c<='Z')return 10+c-'A
 }
 
 SoftwareRenderer::~SoftwareRenderer()=default;
-bool SoftwareRenderer::enableHardware(){
+bool SoftwareRenderer::enableHardware(void* window){
  if(m_gpu)return true;
  // Delay-load the system Vulkan loader so unsupported machines can still run.
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
- try{m_gpu=std::make_unique<GpuRenderer>();
+ try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
   for(const auto*texture:{&m_ashfallSky,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
   for(const auto*texture:{&m_blood,&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock})m_gpu->prepare(*texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
@@ -51,6 +51,7 @@ bool SoftwareRenderer::enableHardware(){
   m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
  catch(const std::exception&e){m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
 }
+bool SoftwareRenderer::hardwarePresentsWindow()const{return m_gpu&&m_gpu->hasSurface();}
 SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
  for(int i=0;i<15;++i)m_facilityTextures.emplace(materialNames[i],loadTexture(172+i));
@@ -385,6 +386,7 @@ void SoftwareRenderer::drawConsole(const Game& game){
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
+ bool directPresentation=hardwarePresentsWindow();
  if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightingDoors={};m_chunkLightCells={};m_chunkLightCounts={};
   m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
@@ -403,7 +405,8 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  if(m_gpu){try{m_gpu->begin(m_width,m_height);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';scene();}}
  else scene();
- if(!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f){
+ bool underwater=!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f;
+ if(!directPresentation&&underwater){
   const auto source=m_pixels;
   for(int y=0;y<m_height;++y){int wobble=int(std::sin(game.elapsed()*7.f+y*.055f)*2.f);
    for(int x=0;x<m_width;++x){auto c=source[size_t(y*m_width+std::clamp(x+wobble,0,m_width-1))];
@@ -414,9 +417,11 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  }
  if(scaled){int sceneWidth=m_width,sceneHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*sceneHeight/m_height)*sceneWidth+x*sceneWidth/m_width)];}
+ if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
  if(game.titleScreen())drawTitle(game);else {drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
  float ms=std::chrono::duration<float,std::milli>(std::chrono::steady_clock::now()-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",int(fullWidth*game.renderScale()),int(fullHeight*game.renderScale()),m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
+ if(directPresentation)m_gpu->present(m_pixels.data(),m_width,m_height,underwater);
 }
 }
 
