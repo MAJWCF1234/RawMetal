@@ -277,7 +277,7 @@ void SoftwareRenderer::drawHud(const Game& game){
 }
 
 void SoftwareRenderer::drawTitle(const Game& game){
- for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x){
+ if(!hardwarePresentsWindow())for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x){
   auto&p=m_pixels[size_t(y*m_width+x)];unsigned hash=unsigned(x*92837111u)^unsigned(y*689287499u);
   float dim=.17f+float((hash^(hash>>13))&7)*.008f;p=shade(p,dim);
   if((y%4)==0)p=shade(p,.78f);
@@ -308,7 +308,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
- for(auto&pixel:m_pixels)pixel=shade(pixel,.25f);
+ if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.25f);
  constexpr int x=MenuLayout::X,y=MenuLayout::Y;
  const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
  wornPanel(x,y,MenuLayout::Width,MenuLayout::Height,false,true);
@@ -337,7 +337,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
  text(x+15,y+MenuLayout::Height-23,"CLICK / ARROWS / ENTER",muted);text(x+15,y+MenuLayout::Height-13,settingsPage?(game.menuFromTitle()?"ESC TO TITLE":"ESC TO RESUME"):"ESC TO GO BACK",amber);
 }
 void SoftwareRenderer::drawInventory(const Game& game){
- for(auto&pixel:m_pixels)pixel=shade(pixel,.22f);
+ if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.22f);
  const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
  int x=48,y=28,w=m_width-96,h=m_height-56;wornPanel(x,y,w,h,false,true);
  text(x+16,y+12,"FIELD INVENTORY",paper,2);text(x+w-112,y+15,"I / CLOSE",muted);
@@ -421,7 +421,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  if(game.titleScreen())drawTitle(game);else {drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
  float ms=std::chrono::duration<float,std::milli>(std::chrono::steady_clock::now()-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",int(fullWidth*game.renderScale()),int(fullHeight*game.renderScale()),m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
- if(directPresentation)m_gpu->present(m_pixels.data(),m_width,m_height,underwater);
+ if(directPresentation){float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim);}
 }
 }
 
