@@ -16,6 +16,16 @@
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--barrel-inspection")){
+     constexpr int inspectW=1280,inspectH=720;retro::SoftwareRenderer renderer(inspectW,inspectH);
+     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     for(const auto&phase:std::array<std::pair<float,const char*>,3>{{{.06f,"barrel-fireball"},{.25f,"barrel-flames"},{.70f,"barrel-smoke"}}}){
+      auto scene=retro::Game::barrelInspection(phase.first);renderer.render(scene);
+      std::ofstream out(std::string(phase.second)+".ppm",std::ios::binary);out<<"P6\n"<<inspectW<<' '<<inspectH<<"\n255\n";
+      for(int i=0;i<inspectW*inspectH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--shading-inspection")){
      constexpr int inspectW=1920,inspectH=1080;retro::SoftwareRenderer renderer(inspectW,inspectH);
      if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;

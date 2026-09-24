@@ -870,6 +870,44 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    quad(a,{a.x+.012f,a.y,a.z},{a.x+.012f,a.y,a.z+.025f},{a.x,a.y,a.z+.025f},amber,1.7f);
   }
  }
+ // Short-lived barrel fire stays in world space, so walls and props occlude it.
+ // Both masks are generated here; no runtime image dependency is needed.
+ static const Texture fire=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
+  for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
+   unsigned hash=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x6d2b79f5u);hash=(hash^(hash>>13))*1274126177u;
+   float noise=float((hash>>24)&255u)/255.f,angle=std::atan2(dy,dx);
+   float boundary=.86f+.10f*std::sin(angle*5.f+1.4f)+.07f*std::sin(angle*11.f-2.1f)+.045f*std::sin(angle*17.f+.7f);
+   float edge=std::clamp((boundary-r)*9.f+(noise-.5f)*.28f,0.f,1.f);
+   float turbulence=std::sin(dx*13.f+std::sin(dy*9.f)*2.f)*std::sin(dy*11.f-dx*4.f);
+   float heat=std::clamp(.62f-r*.32f+turbulence*.20f+(noise-.5f)*.14f,0.f,1.f);
+   unsigned red=unsigned(210.f+45.f*heat),green=unsigned(78.f+147.f*heat),blue=unsigned(8.f+48.f*heat),alpha=unsigned(edge*220.f);
+   t.pixels[size_t(y*48+x)]=(alpha<<24)|(red<<16)|(green<<8)|blue;
+  }return t;}();
+ static const Texture smoke=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
+  for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
+   unsigned hash=(unsigned(x)*2654435761u^unsigned(y)*2246822519u^0xa8c3b75eu);hash=(hash^(hash>>15))*3266489917u;
+   float noise=float((hash>>24)&255u)/255.f,alpha=std::clamp((.95f-r)*1.55f+(noise-.5f)*.18f,0.f,1.f)*.48f;
+   t.pixels[size_t(y*48+x)]=(unsigned(alpha*255.f)<<24)|0x00645b53u;
+  }return t;}();
+ Point3 effectSide{-std::sin(game.player().angle),std::cos(game.player().angle),0};
+ auto effectCard=[&](Point3 center,float radius,const Texture&texture,float light){Point3 across=effectSide*radius,up{0,0,radius};quad(center-across-up,center+across-up,center+across+up,center-across+up,texture,light);};
+ for(const auto&blast:game.barrelExplosions())if(blast.level==game.level()){
+  float age=game.elapsed()-blast.time;if(age<0.f||age>1.25f)continue;
+  Point3 center{blast.pos.x,blast.pos.y,blast.z};
+  if(age<.55f){float life=std::clamp(1.f-age/.55f,0.f,1.f),growth=.70f+std::min(age/.09f,1.f)*.42f;
+   effectCard(center+Point3{0,0,.12f+age*.45f},.70f*growth*std::sqrt(life),fire,1.55f);
+   for(int i=0;i<4;++i){float phase=float(i)*2.399963f,spread=(.18f+age*.95f)*(i%2?.85f:1.f),size=(.24f+float(i%3)*.045f)*growth*life;
+    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.12f+age*(.75f+float(i%3)*.24f)};
+    effectCard(p,size,fire,1.4f);
+   }
+  }
+  if(age>.12f){float puff=std::clamp((age-.12f)/.2f,0.f,1.f)*std::clamp((1.25f-age)/.35f,0.f,1.f);
+   for(int i=0;i<4;++i){float phase=float(i)*1.5707963f,spread=.18f+age*.55f,radius=(.34f+age*.38f)*puff;
+    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.3f+age*(.65f+float(i)*.07f)};
+    effectCard(p,radius,smoke,1.6f);
+   }
+  }
+ }
  for(const auto&e:game.enemies()){
   if(e.bodyTop()<game.dormantBelow())continue;
   if(!e.visible())continue;

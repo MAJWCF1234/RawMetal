@@ -71,6 +71,7 @@ struct Pickup {
     bool active = true;
 };
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;};
+struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
@@ -148,6 +149,7 @@ public:
     const std::vector<Pickup>& pickups() const { return m_pickups; }
     const std::vector<Clutter>& clutter()const{return m_clutter;}
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
+    const std::vector<BarrelExplosion>& barrelExplosions()const{return m_barrelExplosions;}
     bool holdingClutter()const{return m_heldClutter>=0;}
     static bool testClutter();
     static Game clutterInspection(int kind,float seconds);
@@ -253,6 +255,7 @@ public:
     static Game validationScene(Enemy::Kind kind,float deathTime=-1,float windup=0);
     static Game stalkerInspection(int clip,float phase,int view=0);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
+    static Game barrelInspection(float age);
 
 private:
     WorldId m_worldId=WorldId::Campaign;
@@ -337,6 +340,7 @@ private:
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;
+    std::vector<BarrelExplosion> m_barrelExplosions;
     int m_heldClutter=-1;
     bool m_previousFire = false;
     bool m_previousReload = false;
