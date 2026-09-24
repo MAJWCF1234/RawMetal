@@ -6,7 +6,7 @@
 
 namespace retro {
 static Point3 unitNormal(Point3 n){float length=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);return length>.00001f?n*(1/length):Point3{0,0,1};}
-void SoftwareRenderer::attachNormal(Texture& texture,int resource,bool greenUp){
+void SoftwareRenderer::attachNormal(Texture& texture,int resource,bool greenUp,float reliefScale){
  auto source=loadTexture(resource);
  if(source.width!=texture.width||source.height!=texture.height)throw std::runtime_error("Normal map dimensions do not match the color map");
  prepareDecal(texture,false);texture.normalLevels.clear();std::vector<Point3> normals;normals.reserve(source.pixels.size());
@@ -19,6 +19,13 @@ void SoftwareRenderer::attachNormal(Texture& texture,int resource,bool greenUp){
   for(int y=0;y<nh;++y)for(int x=0;x<nw;++x){Point3 sum{};for(int j=0;j<2;++j)for(int i=0;i<2;++i)sum=sum+previous[std::min(height-1,y*2+j)*width+std::min(width-1,x*2+i)];next[y*nw+x]=unitNormal(sum);}
   texture.normalLevels.push_back(std::move(next));width=nw;height=nh;
  }
+ texture.parallaxScale=reliefScale;
+ if(reliefScale<=0)return;
+ // Normal Z describes slope, not height. Derive shallow relief once from
+ // local color contrast, keeping the authored normal map for lighting.
+ texture.relief.resize(texture.pixels.size());
+ auto luminance=[&](int x,int y){auto p=texture.pixels[size_t((y+texture.height)%texture.height*texture.width+(x+texture.width)%texture.width)];return (.2126f*float((p>>16)&255)+.7152f*float((p>>8)&255)+.0722f*float(p&255))/255.f;};
+ for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float mean=0;for(int j=-2;j<=2;++j)for(int i=-2;i<=2;++i)mean+=luminance(x+i,y+j);mean/=25.f;float reliefValue=std::clamp(.5f+(luminance(x,y)-mean)*1.35f,0.f,1.f);texture.relief[size_t(y*texture.width+x)]=std::uint8_t(std::round(reliefValue*255.f));}
 }
 Point3 SoftwareRenderer::sampleNormal(const Texture& texture,float u,float v,float lod){
  if(texture.normalLevels.empty())return {0,0,1};u-=std::floor(u);v-=std::floor(v);
@@ -35,6 +42,7 @@ bool SoftwareRenderer::testNormalMapping(){
  if(std::fabs(blended.x*blended.x+blended.y*blended.y+blended.z*blended.z-1)>.001f)return false;
  for(auto* texture:{&m_wall,&m_pressureWall,&m_bulkhead,&m_floor}){
   if(texture->normalLevels.size()!=texture->mips.size()+1)return false;
+  if((texture->parallaxScale>0&&texture->relief.size()!=texture->pixels.size())||(texture->parallaxScale==0&&!texture->relief.empty()))return false;
   for(auto n:texture->normalLevels[0])if(!std::isfinite(n.x+n.y+n.z)||std::fabs(n.x*n.x+n.y*n.y+n.z*n.z-1)>.001f)return false;
  }
  Texture material{16,16,std::vector<std::uint32_t>(256,0xff888888)};material.normalLevels={{}};

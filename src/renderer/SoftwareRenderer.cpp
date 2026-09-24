@@ -66,7 +66,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_facilityTextures.emplace("transformer_box_hr_2",loadTexture(261));
  m_facilityTextures.emplace("metal_hr_6_1",loadTexture(262));
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
- m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);
+ m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);m_bulkhead.glossStrength=.16f;
  for(int i=0;i<6;++i)m_clutterTextures[i]=loadTexture(152+i*2);
  m_medkitTexture=loadTexture(134);m_shellsTexture=loadTexture(136);
  m_terminalTexture=loadTexture(137);m_cautionSign=loadTexture(138);prepareDecal(m_cautionSign);
@@ -74,9 +74,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_pumpTexture=loadTexture(141);m_compressorTexture=loadTexture(143);m_pipeTexture=loadTexture(145);m_gateTexture=loadTexture(147);
  m_pressureWall=loadTexture(148);m_pressureFloor=loadTexture(149);m_pressureMetal=loadTexture(150);
  m_ashfallSky=loadTexture(252);if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4)m_ashfallSky.clampEdges=true;else prepareDecal(m_ashfallSky,false);
- m_terrainDirt=loadTexture(253);attachNormal(m_terrainDirt,254);
+ m_terrainDirt=loadTexture(253);attachNormal(m_terrainDirt,254,true,0);
  m_terrainRock=loadTexture(255);attachNormal(m_terrainRock,256);
- m_water=loadTexture(250);attachNormal(m_water,251);m_water.transparent=true;auto coolantTint=[](uint32_t pixel){return 0xc4000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190);
+ m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.glossStrength=.30f;auto coolantTint=[](uint32_t pixel){return 0xc4000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
  m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
@@ -411,7 +411,24 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen())drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
- if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
+ if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash);
+  std::array<float,16> fogLights{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
+  const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
+   float dx=lamp.position.x-game.player().pos.x,dy=lamp.position.y-game.player().pos.y,d2=dx*dx+dy*dy;
+   float floor=world.floorHeight(lamp.position.x,lamp.position.y)+.08f;
+   float top=std::min(lamp.z,world.clearanceAbove(lamp.position.x,lamp.position.y,floor)-.04f);
+   float bottom=std::max(floor,top-4.5f);
+   float ahead=dx*std::cos(game.player().angle)+dy*std::sin(game.player().angle);
+   float eyeZ=game.player().z+game.player().eye;
+   if(top-bottom<.8f||floor>eyeZ+2.f||top<eyeZ-2.f||ahead<-.5f||d2>=distances[3])continue;
+   int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
+   distances[slot]=d2;fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
+  }
+  m_gpu->setFogLights(fogLights);
+  std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
+  if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere={.39f,.39f,.40f,.012f};
+  if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
+  m_gpu->setAtmosphere(atmosphere);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
  else scene();
  bool underwater=!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f;

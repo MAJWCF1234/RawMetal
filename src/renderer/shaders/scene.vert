@@ -6,16 +6,19 @@ layout(location=3) in vec4 light0;
 layout(location=4) in vec4 light1;
 layout(location=5) in vec4 surface;
 layout(location=6) in vec4 worldNormal;
-layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects; } view;
+layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects; vec4 fogLights[4]; vec4 atmosphere; } view;
 layout(location=0) out vec2 outUV;
 layout(location=1) out vec4 outLighting;
 layout(location=2) out vec4 outLight0;
 layout(location=3) out vec4 outLight1;
 layout(location=4) out vec4 outSurface;
+layout(location=6) out vec3 outWorldPos;
+layout(location=7) out float outParallax;
 void main(){
  vec4 adjustedLighting=lighting;
  vec4 adjustedSurface=surface;
- if(surface.w>0.5){
+ vec3 worldPos=position.xyz;
+ if(surface.w>0.5&&surface.w<1.5){
   vec3 delta=position.xyz-view.eyeYaw.xyz;
   float right=-delta.x*view.basis.x+delta.y*view.eyeYaw.w;
   float forward=delta.x*view.eyeYaw.w+delta.y*view.basis.x;
@@ -38,9 +41,15 @@ void main(){
   if(view.effects.y>0.0){
    vec3 muzzle=eye+forwardWorld*0.42-vec3(0,0,0.10);vec3 toPoint=position.xyz-muzzle;float d2=dot(toPoint,toPoint);
    if(d2<144.0){float d=max(sqrt(d2),0.001);float facing=0.35+0.65*abs(dot(n,toPoint))/d;float edge=1.0-d2/144.0;
-    adjustedLighting.y+=view.effects.y*11.0*edge*edge*facing/(1.0+d2*0.045);
+    adjustedLighting.y+=view.effects.y*1.4*edge*edge*facing/(1.0+d2*0.045);
    }
   }
- }else gl_Position=position;
- outUV=uv;outLighting=adjustedLighting;outLight0=light0;outLight1=light1;outSurface=adjustedSurface;
+ }else{
+  gl_Position=position;
+  float right=position.x/1.3;
+  float cameraY=-position.y/(1.3*view.basis.w);
+  float forward=position.w*view.basis.y-cameraY*view.basis.z;
+  worldPos=view.eyeYaw.xyz+vec3(-right*view.basis.x+forward*view.eyeYaw.w,right*view.eyeYaw.w+forward*view.basis.x,cameraY*view.basis.y+position.w*view.basis.z);
+ }
+ outUV=uv;outLighting=adjustedLighting;outLight0=light0;outLight1=light1;outSurface=adjustedSurface;outWorldPos=worldPos;outParallax=worldNormal.w;
 }
