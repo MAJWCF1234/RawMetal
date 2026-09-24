@@ -36,7 +36,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -151,6 +151,7 @@ bool Game::testCombat(){
  Game g;g.m_enemies.resize(1);g.m_player.pos={3.5f,4.5f};g.m_player.angle=0;g.m_enemies[0].pos={5.5f,4.5f};
  auto scar=validationScene(Enemy::Kind::Huntsman);scar.m_enemies.clear();scar.m_player.pos={1.5f,1.5f};scar.m_player.angle=kPi;
  scar.shoot();if(scar.bulletImpacts().empty()||scar.bulletImpacts().size()>6)return false;
+ auto barrel=barrelInspection(.06f);if(barrel.world().tile(8,2)!='.'||barrel.barrelExplosions().size()!=1||barrel.barrelExplosions()[0].level!=0)return false;
  g.shoot();if(!g.m_enemies[0].alive||g.m_enemies[0].hp>=110)return false;
  g.shoot();g.shoot();if(!g.m_enemies[0].alive)return false;g.shoot();
  if(g.m_enemies[0].alive||g.m_kills!=1||!g.m_enemies[0].visible())return false;
@@ -183,6 +184,7 @@ Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
 Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly,WorldId id){Game game(id);game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?(game.m_world.hasTerrain()?game.groundHeight(position,float(World::TerrainMaxZ+1)):game.m_world.floorHeight(position.x,position.y)):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
  if(sceneryOnly){game.m_enemies.clear();for(auto&chunk:game.m_chunks)chunk.enemies.clear();}
  if(openDoors){for(auto&chunk:game.m_chunks){for(int i=0;i<int(chunk.world.doors().size());++i)chunk.world.openDoor(i);chunk.world.updateDoors(2);}for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);game.m_world.updateDoors(2);}game.updateStreaming(0);return game;}
+Game Game::barrelInspection(float age){auto game=mapInspection({8.5f,4.5f},-kPi*.5f,0,0,false,-999,true);game.shoot();game.m_elapsed=std::max(0.f,age);return game;}
 
 bool Game::lineOfSight(const Vec2& a,const Vec2& b)const{return m_world.rayClear(a,m_world.floorHeight(a.x,a.y)+.75f,b,m_world.floorHeight(b.x,b.y)+.75f);}
 
@@ -242,7 +244,7 @@ void Game::shoot() {
             if(!m_world.fits(p.x,p.y,z,.02f)||m_world.doorBlocks(p.x,p.y,z,.02f)){
                 int tx=int(std::floor(p.x)),ty=int(std::floor(p.y));
                 if(m_world.tile(tx,ty)=='C'){m_world.destroyTile(tx,ty);for(int i=0;i<4;++i){Clutter c;c.kind=6;c.pos={tx+.5f,ty+.5f};c.z=m_world.floorHeight(c.pos.x,c.pos.y);c.yaw=i*1.5707963f;c.pitch=(i%2?-.18f:.18f);c.roll=(i%2?.12f:-.12f);c.velocity={std::cos(i*1.5707963f)*3.f,std::sin(i*1.5707963f)*3.f};c.vz=2.f;c.spin=(i%2?1.f:-1.f)*3.f;c.pitchSpeed=(i%2?1.f:-1.f)*2.f;c.rollSpeed=(i%2?-1.f:1.f)*2.f;m_clutter.push_back(c);}sound(Sound::JunkSoft,.9f);break;}
-                if(m_world.tile(tx,ty)=='B'){m_world.destroyTile(tx,ty);m_verticalSpringVelocity-=1.5f;m_damageFlash=.8f;sound(Sound::LiftCrash,1.f,.8f);for(auto&e:m_enemies)if(e.alive&&length(e.pos-Vec2{tx+.5f,ty+.5f})<3.5f){e.hp-=150.f;if(e.hp<=0){e.hp=0;e.alive=false;e.deathTime=0;++m_kills;}}break;}
+                if(m_world.tile(tx,ty)=='B'){float floor=m_world.floorHeight(tx+.5f,ty+.5f);m_world.destroyTile(tx,ty);m_barrelExplosions.push_back({{tx+.5f,ty+.5f},floor+.55f,m_elapsed,m_level});if(m_barrelExplosions.size()>16)m_barrelExplosions.erase(m_barrelExplosions.begin());m_verticalSpringVelocity-=1.5f;m_damageFlash=.8f;sound(Sound::LiftCrash,1.f,.8f);for(auto&e:m_enemies)if(e.alive&&length(e.pos-Vec2{tx+.5f,ty+.5f})<3.5f){e.hp-=150.f;if(e.hp<=0){e.hp=0;e.alive=false;e.deathTime=0;++m_kills;}}break;}
                 Vec2 hit=m_player.pos+direction*last;
                 bool xFace=int(std::floor(hit.x))!=int(std::floor(p.x));
                 if(int(std::floor(hit.x))==int(std::floor(p.x))&&int(std::floor(hit.y))==int(std::floor(p.y)))xFace=std::fabs(direction.x)>=std::fabs(direction.y);
