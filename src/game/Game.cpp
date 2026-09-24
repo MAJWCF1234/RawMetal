@@ -36,7 +36,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_bulletImpacts.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
@@ -166,7 +166,15 @@ bool Game::testCombat(){
  reloadKey.reload=false;for(int i=0;i<80;++i)reload.update(reloadKey,.01f);
  if(reload.player().ammo!=8||reload.player().loaded!=6||lengthSq(reload.player().pos-position)>.0001f)return false;
  InputState scroll{};scroll.weaponScroll=-1;reload.update(scroll,.01f);if(reload.weaponEquipped())return false;
- scroll.weaponScroll=1;reload.update(scroll,.01f);return reload.weaponEquipped();
+ scroll.weaponScroll=1;reload.update(scroll,.01f);if(!reload.weaponEquipped())return false;
+ auto closeShot=validationScene(Enemy::Kind::Huntsman);closeShot.m_player.pos={4.5f,4.5f};closeShot.m_player.angle=0;closeShot.m_enemies[0].pos={5.3f,4.5f};closeShot.m_enemies[0].hp=20;closeShot.shoot();
+ if(closeShot.m_enemies[0].alive)return false;
+ closeShot.update({},1.f/60.f);closeShot.update({},1.f/60.f);if(closeShot.m_enemies[0].deathTime!=0)return false;
+ closeShot.update({},1.f/60.f);if(closeShot.m_enemies[0].deathTime<=0)return false;
+ auto closePunch=validationScene(Enemy::Kind::Huntsman);closePunch.m_player.pos={4.5f,4.5f};closePunch.m_player.angle=0;closePunch.m_enemies[0].pos={5.3f,4.5f};closePunch.m_enemies[0].hp=20;closePunch.punchImpact();
+ if(closePunch.m_enemies[0].alive)return false;
+ closePunch.update({},1.f/60.f);closePunch.update({},1.f/60.f);if(closePunch.m_enemies[0].deathTime!=0)return false;
+ closePunch.update({},1.f/60.f);return closePunch.m_enemies[0].deathTime>0;
 }
 Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
  Game g;g.m_enemies.resize(1);auto&e=g.m_enemies[0];e.kind=kind;e.pos={6.2f,4.5f};e.heading=kPi;e.moving=true;e.gait=2.f;e.windup=windup;e.hp=e.maxHp=kind==Enemy::Kind::Brute?280.f:kind==Enemy::Kind::Wasp?85.f:110.f;
@@ -219,6 +227,7 @@ void Game::shoot() {
             enemySound(*best,2,.85f,.9f);
             m_bulletImpacts.push_back({best->pos,m_world.floorHeight(best->pos.x,best->pos.y)+.012f,{0,0},m_elapsed,m_level,true,int(best->kind)});
             if(enemiesRemaining()==0)sound(Sound::Exit,.75f);
+            if(bestAlong<2.5f)m_hitStopRemaining=.03f;
         }
         else enemySound(*best,0,.55f,1.22f);
     }
@@ -232,7 +241,7 @@ void Game::shoot() {
             float z=m_player.z+m_player.eye+distance*std::tan(m_player.pitch/140.f);
             if(!m_world.fits(p.x,p.y,z,.02f)||m_world.doorBlocks(p.x,p.y,z,.02f)){
                 int tx=int(std::floor(p.x)),ty=int(std::floor(p.y));
-                if(m_world.tile(tx,ty)=='C'){m_world.destroyTile(tx,ty);for(int i=0;i<4;++i){Clutter c;c.kind=i%6;c.pos={tx+.5f,ty+.5f};c.z=m_world.floorHeight(c.pos.x,c.pos.y);c.velocity={std::cos(i*1.57f)*3.f,std::sin(i*1.57f)*3.f};c.vz=2.f;m_clutter.push_back(c);}sound(Sound::JunkSoft,.9f);break;}
+                if(m_world.tile(tx,ty)=='C'){m_world.destroyTile(tx,ty);for(int i=0;i<4;++i){Clutter c;c.kind=6;c.pos={tx+.5f,ty+.5f};c.z=m_world.floorHeight(c.pos.x,c.pos.y);c.yaw=i*1.5707963f;c.pitch=(i%2?-.18f:.18f);c.roll=(i%2?.12f:-.12f);c.velocity={std::cos(i*1.5707963f)*3.f,std::sin(i*1.5707963f)*3.f};c.vz=2.f;c.spin=(i%2?1.f:-1.f)*3.f;c.pitchSpeed=(i%2?1.f:-1.f)*2.f;c.rollSpeed=(i%2?-1.f:1.f)*2.f;m_clutter.push_back(c);}sound(Sound::JunkSoft,.9f);break;}
                 if(m_world.tile(tx,ty)=='B'){m_world.destroyTile(tx,ty);m_verticalSpringVelocity-=1.5f;m_damageFlash=.8f;sound(Sound::LiftCrash,1.f,.8f);for(auto&e:m_enemies)if(e.alive&&length(e.pos-Vec2{tx+.5f,ty+.5f})<3.5f){e.hp-=150.f;if(e.hp<=0){e.hp=0;e.alive=false;e.deathTime=0;++m_kills;}}break;}
                 Vec2 hit=m_player.pos+direction*last;
                 bool xFace=int(std::floor(hit.x))!=int(std::floor(p.x));
@@ -301,6 +310,7 @@ bool Game::testPickups(){
 
 void Game::update(const InputState& input, float dt) {
     m_sounds.clear();
+    if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}
     bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
     if(m_titleScreen){updateTitle(input);return;}
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
@@ -417,7 +427,7 @@ void Game::punchImpact(){
   if(e.alive&&range<nearest&&dot(normalized(delta),forward)>.72f&&height>=e.bodyBottom()-.1f&&height<=e.bodyTop()&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,height)){hit=&e;nearest=range;}
  }
  if(!hit)return;hit->hp-=28;hit->painFlash=1;m_hitFlash=1;sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;
- if(hit->hp<=0){hit->alive=false;hit->deathTime=0;++m_kills;enemySound(*hit,2,.85f);m_bulletImpacts.push_back({hit->pos,m_world.floorHeight(hit->pos.x,hit->pos.y)+.012f,{0,0},m_elapsed,m_level,true,int(hit->kind)});}else enemySound(*hit,0,.45f,1.15f);
+ if(hit->hp<=0){hit->alive=false;hit->deathTime=0;++m_kills;enemySound(*hit,2,.85f);m_bulletImpacts.push_back({hit->pos,m_world.floorHeight(hit->pos.x,hit->pos.y)+.012f,{0,0},m_elapsed,m_level,true,int(hit->kind)});m_hitStopRemaining=.03f;}else enemySound(*hit,0,.45f,1.15f);
 }
 void Game::receiveDamage(float amount,Vec2 source){
  Vec2 facing{std::cos(m_player.angle),std::sin(m_player.angle)};
