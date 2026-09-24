@@ -70,7 +70,7 @@ struct Pickup {
     Kind kind = Kind::Health;
     bool active = true;
 };
-struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;};
+struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;

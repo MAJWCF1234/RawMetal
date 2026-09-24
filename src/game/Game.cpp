@@ -217,6 +217,7 @@ void Game::shoot() {
             best->deathTime=0;best->windup=0;best->strike=0;
             ++m_kills;
             enemySound(*best,2,.85f,.9f);
+            m_bulletImpacts.push_back({best->pos,m_world.floorHeight(best->pos.x,best->pos.y)+.012f,{0,0},m_elapsed,m_level,true,int(best->kind)});
             if(enemiesRemaining()==0)sound(Sound::Exit,.75f);
         }
         else enemySound(*best,0,.55f,1.22f);
@@ -230,6 +231,9 @@ void Game::shoot() {
             Vec2 p=m_player.pos+direction*distance;
             float z=m_player.z+m_player.eye+distance*std::tan(m_player.pitch/140.f);
             if(!m_world.fits(p.x,p.y,z,.02f)||m_world.doorBlocks(p.x,p.y,z,.02f)){
+                int tx=int(std::floor(p.x)),ty=int(std::floor(p.y));
+                if(m_world.tile(tx,ty)=='C'){m_world.destroyTile(tx,ty);for(int i=0;i<4;++i){Clutter c;c.kind=i%6;c.pos={tx+.5f,ty+.5f};c.z=m_world.floorHeight(c.pos.x,c.pos.y);c.velocity={std::cos(i*1.57f)*3.f,std::sin(i*1.57f)*3.f};c.vz=2.f;m_clutter.push_back(c);}sound(Sound::JunkSoft,.9f);break;}
+                if(m_world.tile(tx,ty)=='B'){m_world.destroyTile(tx,ty);m_verticalSpringVelocity-=1.5f;m_damageFlash=.8f;sound(Sound::LiftCrash,1.f,.8f);for(auto&e:m_enemies)if(e.alive&&length(e.pos-Vec2{tx+.5f,ty+.5f})<3.5f){e.hp-=150.f;if(e.hp<=0){e.hp=0;e.alive=false;e.deathTime=0;++m_kills;}}break;}
                 Vec2 hit=m_player.pos+direction*last;
                 bool xFace=int(std::floor(hit.x))!=int(std::floor(p.x));
                 if(int(std::floor(hit.x))==int(std::floor(p.x))&&int(std::floor(hit.y))==int(std::floor(p.y)))xFace=std::fabs(direction.x)>=std::fabs(direction.y);
@@ -238,12 +242,15 @@ void Game::shoot() {
                     if(xFace)hit.x=(direction.x>0?std::floor(p.x):std::ceil(p.x))+normal.x*.003f;
                     else hit.y=(direction.y>0?std::floor(p.y):std::ceil(p.y))+normal.y*.003f;
                 }else hit+=normal*.01f;
-                m_bulletImpacts.push_back({hit,z,normal,m_elapsed,m_level});
+                m_bulletImpacts.push_back({hit,z,normal,m_elapsed,m_level,false,0});
                 if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
                 break;
             }
             last=distance;
         }
+    }
+    if(best){
+      for(int spray=0;spray<3;++spray){float a=m_player.angle+(spray-1)*25.f*kPi/180.f;Vec2 bloodNormal{-std::cos(a),-std::sin(a)};m_bulletImpacts.push_back({best->pos+Vec2{std::cos(a)*.12f,std::sin(a)*.12f},best->z+.55f,bloodNormal,m_elapsed,m_level,true,int(best->kind)});}
     }
 }
 Game Game::stalkerInspection(int clip,float phase,int view){
@@ -413,7 +420,8 @@ void Game::punchImpact(){
   if(e.alive&&range<nearest&&dot(normalized(delta),forward)>.72f&&height>=e.bodyBottom()-.1f&&height<=e.bodyTop()&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,height)){hit=&e;nearest=range;}
  }
  if(!hit)return;hit->hp-=28;hit->painFlash=1;m_hitFlash=1;sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;
- if(hit->hp<=0){hit->alive=false;hit->deathTime=0;++m_kills;enemySound(*hit,2,.85f);}else enemySound(*hit,0,.45f,1.15f);
+ for(int spray=0;spray<3;++spray){float a=m_player.angle+(spray-1)*25.f*kPi/180.f;Vec2 n{-std::cos(a),-std::sin(a)};m_bulletImpacts.push_back({hit->pos+Vec2{std::cos(a)*.1f,std::sin(a)*.1f},hit->z+.5f,n,m_elapsed,m_level,true,int(hit->kind)});}
+ if(hit->hp<=0){hit->alive=false;hit->deathTime=0;++m_kills;enemySound(*hit,2,.85f);m_bulletImpacts.push_back({hit->pos,m_world.floorHeight(hit->pos.x,hit->pos.y)+.012f,{0,0},m_elapsed,m_level,true,int(hit->kind)});}else enemySound(*hit,0,.45f,1.15f);
 }
 void Game::receiveDamage(float amount,Vec2 source){
  Vec2 facing{std::cos(m_player.angle),std::sin(m_player.angle)};

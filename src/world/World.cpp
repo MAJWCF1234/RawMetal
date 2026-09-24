@@ -1357,6 +1357,7 @@ int World::nearbyDoor(Vec2 position,Vec2 forward,float feet)const{
 
 char World::tile(int x, int y) const {
     if (x < 0 || y < 0 || x >= Width || y >= Height || m_layers.empty() || size_t(x)>=m_layers.front().rows[y].size()) return '#';
+    for(auto p:m_destroyedTiles)if(p.first==x&&p.second==y)return '.';
     return m_layers.front().rows[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)];
 }
 
@@ -1523,4 +1524,5 @@ std::vector<Span> World::spansAt(int x,int y)const{
  for(auto solid:solids){if(solid.first>bottom)result.push_back({bottom,solid.first,0});bottom=std::max(bottom,solid.second);}
  if(bottom<roof)result.push_back({bottom,roof,0});return result;
 }
+bool World::destroyTile(int x,int y){if(x<0||y<0||x>=Width||y>=Height||m_layers.empty()||tile(x,y)=='.')return false;if(tile(x,y)!='C'&&tile(x,y)!='B')return false;m_destroyedTiles.push_back({x,y});return true;}
 }
