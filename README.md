@@ -329,10 +329,9 @@ Build intermediates and generated diagnostics are not intended to be committed a
 
 RawMetal uses documented supplied and purchased asset libraries alongside original runtime code and generated data.
 
-Material and facility provenance is recorded under:
+Asset provenance is documented in:
 
-- [src/assets/materials/SOURCES.md](src/assets/materials/SOURCES.md)
-- [src/assets/facility/SOURCES.md](src/assets/facility/SOURCES.md)
+- [docs/ASSET_SOURCES.md](docs/ASSET_SOURCES.md)
 - [src/assets/materials/ASHFALL-SOURCE.md](src/assets/materials/ASHFALL-SOURCE.md)
 
 The project keeps source asset provenance separate from runtime packing and does not require players to install the original asset libraries.
