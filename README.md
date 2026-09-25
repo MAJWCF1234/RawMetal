@@ -1,191 +1,345 @@
 # RawMetal
 
-Release 0.5.0 adds Cable Vaults, Pump Annex, Utility Junction and Waste Handling.
-Open the new CABLE VAULTS bulkhead at the south-west end of Coolant Return
-(map index 5) to continue. All four chapters stream through the existing door
-system and remain part of the main campaign. The previous six maps and Ashfall
-are retained.
+RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-Cable Vaults has a pulsing electrical trench, a local disconnect and a
-maintenance flashlight pickup. Pump Annex connects its lower manifold, main
-floor and upper observation route. Utility Junction has a waste dispatch
-control and suspended future connections. Waste Handling has an animated
-conveyor/compactor that affects the player, enemies and loose junk; its local
-isolator stops it safely. Freight Access remains a later chapter.
+The current release is **v0.5.7, Ashfall Coast**. The published game remains a single executable with its runtime assets embedded.
 
-Water uses a quieter tinted version of the supplied texture and normal map,
-with slower movement and a shoreline computed from the same sloped bed used
-by collision. Source assets remain unchanged and losslessly packed.
+[Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
-Save version 11 records its chunk count and loads previous six-chunk campaign
-saves. Run `--campaign-extension-test` for route, seam, hazard and control
-checks; `--campaign-inspection` captures nine player-height views. Console
-shortcuts: `map cable`, `map annex`, `map junction`, `map waste`.
+## Current release
 
+v0.5.7 expands Ashfall from twelve streamed surface chunks to fifteen by adding a connected eastern coastline with:
 
-Release 0.4.6 adds reversible first/second-order audio prediction and byte-plane
-packing. The build selects the smallest lossless encoding per WAV, preserving
-the entire original file. Texture dimensions/RGBA pixels and model/animation
-bytes are checked against the final executable after every build. Native code
-size is reduced with function/data folding and size optimization of the FBX
-importer; renderer hot loops retain speed optimization.
+- three new coastal chunks
+- walkable rock and sand terrain
+- a real submerged seabed beneath the water
+- coastal water, materials, sky, and atmospheric tuning
+- save-compatible chunk expansion that preserves the original Ashfall chunk IDs
+- dedicated seam, traversal, renderer, save, and console validation
 
-Ashfall tests shared Surface Nets terrain across twelve streamed chunks. Soil
-and rock use original PSX Textures v3.1 colour and normal maps, with stable
-world-space texture coordinates across seams. These terrain material IDs and
-the renderer are shared engine features for future campaign terrain too.
-Player spawns use the full body footprint on slopes; creature routes sample
-slopes and respect the direction of climb/drop limits. Ruin walls have buried
-footings, and the motel shelf sits clear of its wall.
+Recent renderer work also added restrained contact shading, improved material response, parallax relief, filmic color handling, bright-pixel bloom, square-fixture volumetric shafts, world-space barrel fire and smoke, and depth-aware camera focus.
 
-Run `--world-isolation-test --vulkan` for twelve-chunk traversal, seam-height,
-save and menu checks; `--physics-ai-test` checks movement and hill pursuit.
-`--ashfall-inspection --vulkan` captures all twelve regions independently of
-the test suite. Terrain source provenance is in
-`src/assets/materials/ASHFALL-SOURCE.md`.
+See [RELEASE_NOTES_v0.5.7.md](RELEASE_NOTES_v0.5.7.md) for the current release notes.
 
-Reactor Service Gallery and Coolant Return now use supported utility runs,
-additional authored machinery, a grated bridge and four sloped coolant basins.
-The water mesh, floor depth and debris buoyancy read the same basin records;
-light debris floats while heavy debris sinks. Quiet spatial water ambience
-comes from the supplied audio library. Run `--service-map-test` to check
-route access, water traversal, floating objects and save/restore, or
-`--service-inspection --vulkan` for eight diagnostic renders of the two rooms.
+## Download and run
 
-Junk can be placed on the open tiers of the purchased metal shelves with **E**.
-The trays support loose items independently of the shelf frame, and placed
-items can be picked up again. The smoke suite checks shelf placement and retrieval.
+Download **RawMetal.zip** or **RawMetal.exe** from [GitHub Releases](https://github.com/MAJWCF1234/RawMetal/releases/latest).
 
-Campaign and Ashfall now have separate world identities, chunk origins and save
-ownership. See [world-system boundaries](docs/world-system-boundaries.md) for the
-isolation fix, reusable spawn/effect/trigger records, tests and remaining legacy
-code. Custom Maps currently plays the built-in Ashfall world; loading arbitrary
-editor-exported map packages is not implemented yet. Save versions 9 and later preserve
-world identity; older saves are interpreted as campaign saves.
+The release executable is self-contained. No loose asset package, shader folder, or runtime SDK is required.
 
-The flashlight is reserved for later chapters: scripts can grant the `flashlight`
-quest item, or use `give flashlight` in the developer console for testing.
-Press **F** after acquiring it. Ownership and its on/off state survive saves;
-removing the item turns it off. Menus pause flashlight input. The beam follows
-aim with a soft cone and a limited shadow-ray budget.
+Windows x64 is currently the supported platform.
 
-Run `--flashlight-test` for Vulkan on/off captures, timings and save/toggle checks;
-add `--software` to test the CPU fallback. Lossless texture packing now compares
-PNG, reversible predictors and exact WebP, retaining the smallest result.
-The packer `--verify-exe src RawMetal.exe` mode compares every embedded asset
-against source pixels or bytes without executing the game.
+Vulkan hardware rendering is the default. Use:
 
-Movement now resolves wall contact without discarding the whole movement step,
-follows descending stairs, and preserves launch momentum with restrained air
-steering. Thrown clutter rebounds off the wall normal while keeping tangential
-velocity. These are improvements to the existing jump/crouch controller, not
-a complete vaulting or wall-running system.
+\`\`\`text
+RawMetal.exe --software
+\`\`\`
 
-The reactor now contains a **Reactor Stalker**, a masked 1,386-triangle creature
-with retargeted skeletal idle, walk, melee, hit and death clips. It closes to
-melee range and commits to a dodgeable swing; it has no ranged attacks.
-The previous antlered Warden is replaced, including in existing saves.
-Bugs now separate only from creatures on
-overlapping floors, hear actual shots instead of reload animation, and request
-a new route when blocked.
+to force the CPU renderer.
 
-**R** reloads the six-round tube; mouse wheel up selects the shotgun and down
-selects fists. Restart is in Esc with confirmation. Save format 4 includes the
-hazmat ragdoll and still reads version 1/2/3 saves. Run `--physics-ai-test` for targeted
-movement, creature behavior and clutter checks, or `--stalker-test` for animation
-deformation checks and fifty front/side reactor pose captures.
+The renderer targets Vulkan 1.0 without vendor-specific extensions. The graphics layer is portable in design, but the current window, input, and audio platform layer is Win32.
 
-The Stalker's shoulder/elbow/wrist retargeting now follows the source limb
-directions instead of applying incompatible bone rolls. An olive-suited gas-mask
-worker lies in the lift boarding room, with blood on the suit and floor. This
-uses `Characters_psx/Models/Male/Character_28_HM.fbx` and its original matching
-texture from the supplied asset library (988 triangles), not the rejected heavy
-yellow radiation suit. The blood texture is `Textures/textures2/bloodsplotch_zdw3k.png`.
-Fifteen articulated joints react to bumps and shots; saves retain the pose and
-velocity. `--hazmat-test` checks floor clearance, constraints, fixed-step timing,
-save/load and ray contact, and captures three inspection views. Texture packing
-uses a verified reversible predictor without reducing texture resolution.
+## Main campaign
 
-Vulkan hardware rendering is now the default, at full **640x360** internal
-resolution. The GPU handles triangles, depth, textures, normal maps and emission;
-materials are uploaded at startup and geometry is batched by material. Conservative
-deck occlusion preserves shaft and stairwell views. Static lighting is cached,
-shadow sampling is budgeted, and animation reuses mesh topology. A persistent
-worker evaluates the arm rig in parallel with world geometry preparation.
+The built-in campaign is organized as streamed map chunks and multi-floor spaces.
 
-Windows x64 remains the supported game platform. A Vulkan-capable graphics driver
-is required for hardware acceleration; `--software` forces the CPU fallback.
-The renderer targets Vulkan 1.0 without vendor-specific extensions. Its portable
-graphics API does not yet make the Win32 window/input/audio layer cross-platform.
-`RawMetal-renderer.txt` records the selected GPU or fallback reason.
+Current campaign areas include:
 
-Surface Lift now follows Turbine Gantry. Seven full map floors surround a
-continuous shaft: the enclosed lift room rises three storeys, jams, then drops
-six into the two-floor reactor complex. The main OST fades into lift machinery,
-followed by cable creaking, a snap, impact and a darker reactor soundtrack.
+| Index | Area |
+| --- | --- |
+| 0 | Foundry |
+| 1 | Pressure Works |
+| 2 | Turbine Gantry |
+| 3 | Surface Lift / Reactor Complex |
+| 4 | Reactor Service Gallery |
+| 5 | Coolant Return |
+| 6 | Cable Vaults |
+| 7 | Pump Annex |
+| 8 | Utility Junction |
+| 9 | Waste Handling |
 
-Run `RawMetal.exe --surface-lift` to play the new section directly. E operates
-the cab control. After impact, leave through the opposite door; the east service
-stairs connect the reactor floors. Find the upper maintenance authorization disk,
-insert it in the lower computer's floppy drive, prime lower FEED, open upper
-RETURN, then confirm at the computer. Clear hostiles to open the authorized exit.
-The extended lift sequence includes interrupted ascents, a power failure, a
-temporary brake catch and a second fall before emergency egress.
-Passing shaft floors are compact scenic machinery bays rather than full maps;
-close guide rails, floor markers, sparks and a loose cable sell the movement.
-The boarding room and both reactor floors remain playable.
+The Surface Lift sequence links the industrial upper facility to the lower reactor complex through a continuous animated shaft. The reactor section includes a multi-stage authorization puzzle, hostile encounters, and a dedicated Reactor Stalker.
 
-Esc now includes **Save Game** and **Load Game** submenus with three slots.
-Click or use arrows/Enter; Esc goes back before resuming. Overwriting or loading
-requires confirmation. Saves retain all map progress, inventory, enemies, doors,
-the lift ride and reactor puzzle, in `%LOCALAPPDATA%\RawMetal\saves`.
-Invalid saves report an error without replacing the current game.
-Design notes and asset provenance are in `src/LIFT_DESIGN.md`.
+The later service maps add water basins, buoyant debris, electrical hazards, machinery, observation routes, utility connections, and the Waste Handling conveyor and compactor system.
 
-Press **backtick (`)** to open the developer console. Type `maps` or `help`,
-then use `map foundry`, `map pressureworks`, `map gantry`, `map lift`, or
-`map reactor`. IDs 0-3 also work. Map loading starts fresh; `map reactor` skips
-the lift sequence. `reload`, `where`, `fps`, and `clear` are available, along
-with `r_scale 50`, `r_scale 75`, and `r_scale 100` (the default). The view is
-never cropped and the HUD stays full-resolution. Up/Down recall commands;
-backtick or Esc closes the console. Gameplay pauses while it is open.
+Campaign chunks stream through the same world system used by the rest of the game. Carried and thrown clutter can cross adjacent chunk seams with the player.
 
-Download **RawMetal.zip** from [GitHub Releases](https://github.com/MAJWCF1234/RawMetal/releases/latest), extract it, and run **RawMetal.exe**. The ZIP contains one self-contained executable; no companion asset file is required. **RawMetal.cmd** is an optional launcher in the source checkout.
+## Ashfall
 
-Press **I** for inventory and **Esc** for settings (or to close inventory). Select an inventory item, then click an empty storage cell to move it. **E / Enter** equips or stows the selected shotgun, or consumes selected first aid. Item previews use the game models; ammo counts reflect your current supply.
+Ashfall is the outdoor terrain test world and now consists of fifteen connected chunks.
 
-The current renderer uses cached soft shadow samples, normal maps with normalized mip blending, and discrete door poses for shadow-cache updates.
+The original twelve chunks form a 4 x 3 wasteland region. v0.5.7 adds a fifth eastern column containing:
 
-The canonical build outputs are **RawMetal.exe** and **RawMetal.zip** in the project root. Binaries belong in GitHub Releases. Runtime audio/error logs and temporary archives are excluded from source control.
+- north headland
+- tidal shelf
+- south bluffs
 
-Build with **Build.cmd** (Visual Studio 2022 C++ tools, CMake and the Vulkan SDK
-with `glslc` required). Shaders compile to embedded SPIR-V; players do not need
-the SDK or loose shader files. Every configuration writes the same root
-executable. Close the game before rebuilding; do not create alternate executable
-folders to work around a running game.
+Ashfall uses shared Surface Nets terrain with continuous seam heights, world-space terrain UVs, slope-aware player and creature movement, and separate world identity from the main campaign.
 
-- `src/`: game source, embedded assets and detailed documentation.
-- `.build/`: disposable compiler intermediates and symbols.
-- `diagnostics/`: verification reports and inspection images.
+The coast reuses the existing terrain and water systems rather than introducing a separate outdoor renderer. Sand, pale coastal rock, seawater, and the coastal sky are derived or generated at runtime to preserve the executable size budget.
 
-For smoke verification, run `..\RawMetal.exe --smoke-test` from `diagnostics/`.
-`--vulkan-test` checks hardware materials, depth, alpha cutouts and near clipping.
-`--performance-test` measures update/audio/render time at full resolution across
-seven scenarios and compares six culled views pixel-for-pixel with an unculled
-reference. It fails if any measured gameplay frame exceeds 50 ms (20 FPS).
-Startup is reported separately; window presentation is not included. Results are
-machine/load-dependent, not a universal minimum-FPS guarantee.
+Use the developer console command:
 
-All map arrays and named layers are in `src/world/World.cpp`; layer types are in `World.h`. Turbine Gantry has a separate upper-catwalk array at 3 m. See `src/CHUNKS.md` for traversal and door-controlled streaming.
+\`\`\`text
+map coast
+\`\`\`
 
-E lifts/drops loose junk; left click punts it for 5 damage. PSX Bunkers debris, ration packs, power supplies, circuit boards and floppy disks accompany the purchased glass bottles. Objects tip, tumble, settle on their sides and make material-specific spatial impact sounds.
+to jump directly to the middle coastal chunk.
 
-The build losslessly compresses runtime assets into the executable and rejects it at or above **19,800,000 bytes** (decimal MB). Materials use supplied 256-pixel texture variants; the generator atlas has a documented 384-pixel runtime copy to meet that limit. Purchased originals remain unchanged. Packing tools and reports live under `.build/`.
+## Controls
 
-Main walls, grating and square steel bulkheads use the supplied PSX Texture packs,
-including matching normal maps. Machinery retains its authored proportions and
-material assignments. See `src/assets/materials/SOURCES.md` and
-`src/assets/facility/SOURCES.md` for provenance.
+| Input | Action |
+| --- | --- |
+| WASD | Move |
+| Mouse | Look |
+| Left click | Fire or punt held junk |
+| R | Reload shotgun |
+| Mouse wheel up | Select shotgun |
+| Mouse wheel down | Select fists |
+| E / Enter | Interact, operate, equip, place, or pick up |
+| F | Toggle flashlight after acquiring it |
+| I | Inventory |
+| Esc | Pause, settings, save/load, or back |
+| Backtick | Developer console |
 
-Coolant Return uses the purchased water color/normal textures with animated transparent surfaces and buoyancy/drag for loose junk. Carried and thrown objects cross adjacent chunk seams with the player; save format 8 preserves transferred objects. The lift boarding collar is sealed with solid walls.
-Run --water-wall-inspection (optionally --software) for water and lift-wall views.
+The shotgun uses a six-round tube. Inventory supports equipment, ammunition, first aid, and quest items.
+
+Loose junk can be lifted, dropped, thrown, placed on supported shelves and surfaces, and carried across streamed chunk boundaries. Objects use material-specific impact audio and simple rigid-body behavior.
+
+## Rendering
+
+RawMetal renders at a fixed **640 x 360 internal resolution** and keeps the HUD full resolution.
+
+The Vulkan path currently supports:
+
+- depth-tested triangle rendering
+- embedded textures
+- normal maps
+- emission maps
+- relief and parallax sampling
+- cached static lighting
+- budgeted shadow sampling
+- material batching
+- static geometry caching
+- conservative occlusion
+- atmospheric extinction
+- square-fixture volumetric light shafts
+- gloss and specular response
+- filmic color mapping
+- bright-pixel bloom
+- depth-aware camera focus
+- world-space fire and smoke effects
+- animated transparent water
+- underwater presentation effects
+
+The software renderer remains available as a fallback and for comparison testing.
+
+\`RawMetal-renderer.txt\` records the selected GPU or the reason hardware rendering fell back.
+
+## World and save architecture
+
+Campaign, Ashfall, and runtime custom campaigns have separate world identities and world-space chunk origins.
+
+World queries convert through world space instead of assuming that chunk IDs form a single linear strip. This allows Ashfall to form a real 2D streamed grid while retaining the campaign's authored layout.
+
+The save system stores chunk ownership and world identity. Current saves preserve campaign state, inventory, enemies, doors, clutter, lift state, reactor state, and custom world progress. Older supported save versions are migrated when possible.
+
+Save files are stored under:
+
+\`\`\`text
+%LOCALAPPDATA%\RawMetal\saves
+\`\`\`
+
+Invalid saves report an error without replacing the current session.
+
+## Level Editor
+
+Run:
+
+\`\`\`text
+LevelEditor.cmd
+\`\`\`
+
+from the repository root.
+
+The browser-based editor is designed around floor-plan and building-design workflows instead of exposing raw engine transforms as the primary interface.
+
+It includes:
+
+- 2D floor-plan editing
+- multi-floor buildings
+- named floors and ceiling heights
+- room drawing
+- straight wall drawing
+- smart doors
+- stairs that connect floors
+- floor, wall, and ceiling object placement
+- prefab placement using real game assets
+- material painting with real-world repeat size and alignment
+- 3D preview
+- section views for vertical editing
+- object arrangement workspaces for placing items on, under, and around furniture or machinery
+- nested arrangements
+- direct Save / Open
+- undo and redo
+- local recovery autosaves
+- multi-chunk layouts
+- installer-ready map export
+
+The editor intentionally hides much of the engine-specific complexity from artists. RawMetal remains authoritative for final rendering, collision, lighting, animation, and gameplay.
+
+See [tools/level-editor/README.md](tools/level-editor/README.md) for the full editor guide.
+
+## Custom maps
+
+RawMetal supports runtime custom campaigns without rebuilding the game.
+
+The portable map format is a UTF-8 \`.txt\` payload. Install one with:
+
+\`\`\`text
+InstallMap.cmd <path-to-map.txt>
+\`\`\`
+
+or drag the TXT file onto \`InstallMap.cmd\`.
+
+The installer supports two targets:
+
+**MAIN**
+
+Injects a supported dynamic map slot into the built-in campaign and rebuilds RawMetal.
+
+**CUSTOM**
+
+Installs the campaign under \`custom maps/\` without modifying \`World.cpp\` and without recompiling the game. Valid campaigns appear under **CUSTOM MAPS** on the title screen.
+
+A Level Editor export can contain an entire multi-map custom campaign, including all plan areas and floors, in one TXT file.
+
+\`META_DEFAULT_TARGET\` is enforced so a CUSTOM payload cannot accidentally overwrite a built-in campaign slot.
+
+See [MAP_SYSTEM.md](MAP_SYSTEM.md) for the complete payload format, runtime campaign schema, MAIN injection rules, and legacy payload conversion behavior.
+
+## Developer console
+
+Press **backtick** to open the console.
+
+Useful commands include:
+
+\`\`\`text
+help
+maps
+map foundry
+map pressureworks
+map gantry
+map lift
+map reactor
+map cable
+map annex
+map junction
+map waste
+map wasteland
+map coast
+reload
+where
+fps
+give flashlight
+r_scale 50
+r_scale 75
+r_scale 100
+clear
+\`\`\`
+
+Map commands start a fresh map session. Gameplay pauses while the console is open.
+
+## Building from source
+
+Requirements:
+
+- Windows x64
+- Visual Studio 2022 C++ build tools
+- CMake 3.20 or newer
+- Vulkan SDK with \`glslc\`
+
+Run:
+
+\`\`\`text
+Build.cmd
+\`\`\`
+
+The build produces the canonical \`RawMetal.exe\` in the repository root.
+
+Shaders are compiled to embedded SPIR-V. Runtime textures, models, audio, and other game data are losslessly packed into the executable.
+
+The build is intentionally size-constrained and rejects a release executable at or above **19,800,000 bytes**.
+
+Purchased source assets remain unchanged. Runtime packing selects compact lossless representations and verifies embedded asset data against source pixels or bytes.
+
+## Validation and diagnostics
+
+RawMetal includes targeted tests and inspection modes for gameplay, rendering, world seams, saves, and content.
+
+Common checks include:
+
+\`\`\`text
+--smoke-test
+--vulkan-test
+--performance-test
+--physics-ai-test
+--world-isolation-test
+--service-map-test
+--campaign-extension-test
+--flashlight-test
+--stalker-test
+--hazmat-test
+--ashfall-inspection
+--coast-inspection
+--campaign-inspection
+--service-inspection
+--water-wall-inspection
+--shading-inspection
+--terrain-seam-inspection
+\`\`\`
+
+Most visual inspection modes can be combined with \`--vulkan\` to capture the hardware-rendered path.
+
+The performance test records update, audio, render, and frame timing across representative scenes. Results are machine and workload dependent and should not be treated as universal hardware requirements.
+
+## Repository layout
+
+\`\`\`text
+src/
+  audio/        audio engine and decoding
+  game/         gameplay, movement, AI, saves, scripts, streaming
+  renderer/     software and Vulkan renderers, shaders, performance tests
+  world/        built-in worlds and runtime custom campaigns
+  assets/       embedded source assets and provenance records
+  tools/        build-time import and packing tools
+
+tools/
+  level-editor/ browser level editor
+  InstallMap.ps1
+  ConvertMapPayload.ps1
+
+custom maps/    installed runtime custom campaigns
+docs/           architecture and design documentation
+\`\`\`
+
+Build intermediates and generated diagnostics are not intended to be committed as source.
+
+## Asset provenance
+
+RawMetal uses documented supplied and purchased asset libraries alongside original runtime code and generated data.
+
+Material and facility provenance is recorded under:
+
+- [src/assets/materials/SOURCES.md](src/assets/materials/SOURCES.md)
+- [src/assets/facility/SOURCES.md](src/assets/facility/SOURCES.md)
+- [src/assets/materials/ASHFALL-SOURCE.md](src/assets/materials/ASHFALL-SOURCE.md)
+
+The project keeps source asset provenance separate from runtime packing and does not require players to install the original asset libraries.
+
+## More documentation
+
+- [MAP_SYSTEM.md](MAP_SYSTEM.md) for map injection and runtime custom campaigns
+- [tools/level-editor/README.md](tools/level-editor/README.md) for the Level Editor
+- [docs/world-system-boundaries.md](docs/world-system-boundaries.md) for world ownership and isolation
+- [RELEASE_NOTES_v0.5.7.md](RELEASE_NOTES_v0.5.7.md) for the latest release
