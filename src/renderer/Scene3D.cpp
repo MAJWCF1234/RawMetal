@@ -408,7 +408,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   Point3 n=cross3(b.p-a.p,c.p-a.p);float ax=std::fabs(n.x),ay=std::fabs(n.y),az=std::fabs(n.z);
   // Exposed slopes use rock; flatter deposits use the purchased dirt material.
   // Terrain never inherits industrial wall panels or metal floor grating.
-  const Texture&terrainMaterial=face.material==TerrainRock||az<std::max(ax,ay)*1.35f?m_terrainRock:m_terrainDirt;
+  bool rocky=face.material==TerrainRock||az<std::max(ax,ay)*1.35f;
+  const Texture&terrainMaterial=w.coast()?(rocky?m_coastRock:m_coastSand):(rocky?m_terrainRock:m_terrainDirt);
   auto uv=[&](MeshVertex&v){float wx=v.p.x+w.definition().origin.x,wy=v.p.y+w.definition().origin.y,wz=v.p.z;
    constexpr float scale=.28f;
    if(az>=ax&&az>=ay){v.u=wx*scale;v.v=wy*scale;}
@@ -417,7 +418,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   };
   uv(a);uv(b);uv(c);
   // Flat triangle lighting preserves the block-authored faceting.
-  tri(a,b,c,terrainMaterial,.96f);
+  tri(a,b,c,terrainMaterial,w.coast()?1.20f:.96f);
  }
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.
@@ -983,12 +984,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  }
  // Water mesh uses the same authored basins as floor collision and buoyancy.
  if(!w.waterVolumes().empty()){
-  const auto&water=m_water;
+  const auto&water=w.coast()?m_coastWater:m_water;
   // One continuous quad per basin avoids cracks between individually rasterized
   // ripples. Moving normal-mapped UVs still gives the surface visible motion.
   for(const auto& basin:w.waterVolumes()){
    float bank=w.layers().front().elevation;
-   float inset=.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
+   float inset=w.coast()?0.f:.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
    float left=basin.x1+inset,right=basin.x2-inset,near=basin.y1+inset,far=basin.y2-inset;
    float z=basin.surface+.004f;
    quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},water,1.05f,

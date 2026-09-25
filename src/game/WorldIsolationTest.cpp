@@ -44,7 +44,8 @@ bool Game::testWorldIsolation(){
  custom.m_chunks[0].world.m_scriptEvents.clear();custom.seedScripts();
  for(int level=0;level<custom.chunkCount();++level){
   out<<"Chunk "<<level<<'\n';custom.loadLevel(level,false);custom.updateStreaming(0);const auto&w=custom.world();
-  if(!check(w.outdoors()&&!w.hasLift()&&!w.insideLift(12,12)&&w.hasTerrain()&&w.terrain().size()>200&&w.ceilingHeight(12,12)>100&&w.waterSurface(9,9)<-100&&w.particleEmitters().empty(),"Outdoor world owns terrain, sky clearance and no campaign-only systems"))return false;
+  if(!check(w.outdoors()&&!w.hasLift()&&!w.insideLift(12,12)&&w.hasTerrain()&&w.terrain().size()>200&&w.ceilingHeight(12,12)>100&&(w.coast()?w.waterSurface(9,9)>-1.f:w.waterSurface(9,9)<-100.f)&&w.particleEmitters().empty(),"Outdoor world owns terrain, sky clearance and no campaign-only systems"))return false;
+  if(w.coast()&&!check(w.floorHeight(20,12)<w.waterSurface(20,12)-2.f&&w.floorHeight(2,12)>w.waterSurface(2,12)+.5f,"Coast has a dry bank and land beneath the sea"))return false;
   if(!check(w.lights().empty(),"Outdoor map has no unsupported ceiling lamps"))return false;
   if(!check(std::fabs(custom.player().z-custom.groundHeight(custom.player().pos,float(World::TerrainMaxZ+1)))<.001f&&custom.hullFits(custom.player().pos,custom.player().z,1),"Whole player hull starts on generated terrain"))return false;
   for(const auto&e:custom.enemies())if(!check(w.fits(e.pos.x,e.pos.y,e.z,e.bodyTop()-e.z),"Creature spawn fits geometry"))return false;
@@ -61,16 +62,16 @@ bool Game::testWorldIsolation(){
      if(std::fabs(ground-feet)>.215f||!custom.hullFits(probe,ground,1)){clear=false;break;}feet=ground;}
     if(clear){seen[q]=true;pending.push(q);}}
   }
-  int col=level%4,row=level/4;
-  if(col<3){World neighbour(level+1,WorldId::Ashfall);
+  int col=level>=12?4:level%4,row=level>=12?level-12:level/4;
+  if(col<4){World neighbour(col==3?12+row:level+1,WorldId::Ashfall);
    for(float y=.5f;y<24;y+=.5f)
     if(!check(std::fabs(w.floorHeight(24,y)-neighbour.floorHeight(0,y))<.001f,"East/west terrain support agrees at chunk boundary"))return false;
   }
-  if(row<2){World neighbour(level+4,WorldId::Ashfall);
+  if(row<2){World neighbour(col==4?level+1:level+4,WorldId::Ashfall);
    for(float x=.5f;x<24;x+=.5f)
     if(!check(std::fabs(w.floorHeight(x,24)-neighbour.floorHeight(x,0))<.001f,"North/south terrain support agrees at chunk boundary"))return false;
   }
-  if(col<3&&!check(seen[24*N+46],"Spawn can reach eastern seam"))return false;
+  if(col<4&&!check(seen[24*N+46],"Spawn can reach eastern seam"))return false;
   if(col>0&&!check(seen[24*N+1],"Spawn can reach western seam"))return false;
   if(row<2&&!check(seen[46*N+24],"Spawn can reach southern seam"))return false;
   if(row>0&&!check(seen[1*N+24],"Spawn can reach northern seam"))return false;

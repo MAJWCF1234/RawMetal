@@ -577,6 +577,16 @@ constexpr std::array<std::string_view,72> AshfallVoxelTop{{
 }};
 static_assert([]{for(auto row:AshfallVoxelTop)if(row.size()!=96)return false;return true;}(),"Ashfall voxel rows must be 96 cells wide");
 int ashfallVoxelTop(int worldX,int worldY){
+ if(worldX>=96){
+  // The old eastern seam remains at height one. A walkable stone shelf rises
+  // inland, then falls through sea level into an actual submerged seabed.
+  int x=worldX-96;
+  int shelf=std::clamp((x-2)/4,0,2);
+  int y=std::clamp(worldY,0,71);
+  int bend=int(std::round(1.5*std::sin(y*.19)+.7*std::sin(y*.47)));
+  int erosion=std::max(0,x-9+bend);
+  return std::clamp(1+shelf-(erosion*3)/4,-9,4);
+ }
  if(worldX<0||worldY<0||worldX>=96||worldY>=72)return 1;
  char value=AshfallVoxelTop[size_t(worldY)][size_t(worldX)];
  return value>='0'&&value<='9'?value-'0':1;
@@ -586,6 +596,7 @@ bool authoredAshfallVoxel(int worldX,int worldY,int worldZ){
 }
 std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
  int top=ashfallVoxelTop(worldX,worldY);
+ if(worldX>=96)return top<=1?TerrainSoil:TerrainRock;
  return worldZ<top-1||top>=5?TerrainRock:TerrainSoil;
 }
 
@@ -607,6 +618,13 @@ constexpr float ShelfTiers[]={.17f,.54f,.92f};
 void World::buildPopulation(){
  using C=CreatureKind;using P=PickupKind;
  if(!campaign()){
+  if(coast()){
+   // Keep encounters on the dry headland; the eastern half of each chunk is
+   // submerged and ordinary grounded actors cannot navigate its seabed.
+   m_creatureSpawns.push_back({C::Wasp,{5.5f,17.5f},-999});
+   if(m_level==13)m_pickupSpawns.push_back({{4.5f,7.5f},P::Ammo});
+   return;
+  }
   const Vec2 encounter[]={{18.5f,18.5f},{5.5f,18.5f},{18.5f,5.5f},{5.5f,5.5f}};
   auto p=encounter[m_level%4];
   if(m_level%5!=3)m_creatureSpawns.push_back({m_level%4==2?C::Wasp:m_level%6==5?C::Brute:C::Huntsman,p,-999});
@@ -667,14 +685,21 @@ World::World(int level,WorldId id):m_worldId(id) {
   const char* regionNames[]={
    "Ashfall / west approach","Ashfall / ridge road","Ashfall / dry interchange","Ashfall / east escarpment",
    "Ashfall / motel flats","Ashfall / relay crossroads","Ashfall / scrap basin","Ashfall / utility mesa",
-   "Ashfall / south wash","Ashfall / dead subdivision","Ashfall / breaker yard","Ashfall / evacuation edge"};
+   "Ashfall / south wash","Ashfall / dead subdivision","Ashfall / breaker yard","Ashfall / evacuation edge",
+   "Ashfall Coast / north headland","Ashfall Coast / tidal shelf","Ashfall Coast / south bluffs"};
   auto rows=ashfallRegion(m_level);
   m_layers={{regionNames[m_level],0,0,rows}};
-  int col=m_level%4,row=m_level/4;
-  m_openWestBoundary=col>0;m_openEastBoundary=col<3;
+  int col=m_level>=12?4:m_level%4,row=m_level>=12?m_level-12:m_level/4;
+  m_openWestBoundary=col>0;m_openEastBoundary=col<4;
   m_openNorthBoundary=row>0;m_openSouthBoundary=row<2;
   m_internalWallHeight=2.8f;
   buildTerrain();
+  if(coast()){
+   // One ocean record drives water physics and the visible sea; the terrain
+   // mesh continues several metres beneath it for a proper shallow shelf.
+   m_waterVolumes.push_back({0,0,24,24,-9.f,-.45f});
+   buildLayers({});return;
+  }
 
   constexpr Vec2 pads[]={{7,7},{15,8},{8,16},{16,9},{8,14},{16,16},{7,7},{16,15},{8,8},{16,10},{8,15},{16,8}};
   auto pad=pads[m_level];

@@ -45,9 +45,9 @@ private:
     static Point3 sampleNormal(const Texture& texture,float u,float v,float lod);
     bool testNormalMapping();
     Texture m_muzzleFlash;
-    Texture m_water;
-    Texture m_terrainDirt,m_terrainRock;
-    Texture m_ashfallSky;
+    Texture m_water,m_coastWater;
+    Texture m_terrainDirt,m_terrainRock,m_coastSand,m_coastRock;
+    Texture m_ashfallSky,m_coastSky;
     Mesh m_consoleMesh{240};
     Texture m_consoleTexture;
     std::array<Texture,3> m_hazmatTextures;

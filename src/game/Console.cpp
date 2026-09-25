@@ -10,14 +10,17 @@ void Game::executeConsole(std::string command){
  for(auto&c:command)c=char(std::tolower(static_cast<unsigned char>(c)));
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
-  m_consoleLog.push_back("CUSTOM HORROR: MAP WASTELAND / MAP CUSTOM TO TEST SURFACE NETS TERRAIN");
+  m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST TO VISIT THE NEW SHORE");
   m_consoleLog.push_back("0 FOUNDRY / 1 PRESSUREWORKS / 2 GANTRY / 3 LIFT");
   m_consoleLog.push_back("4 SERVICE GALLERY / 5 COOLANT RETURN / MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("6 CABLE VAULTS / 7 PUMP ANNEX / 8 UTILITY JUNCTION / 9 WASTE HANDLING");
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
-  m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL WASTELAND / 12 STITCHED SURFACE CHUNKS.");
+  m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL WASTELAND / 15 STITCHED SURFACE CHUNKS.");
+ }
+ else if(verb=="map"&&(arg=="coast"||arg=="shore")){
+  m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=13;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL COAST / WALK EAST TO THE WATER.");
  }
  else if(verb=="give"&&arg=="flashlight"&&extra.empty()){giveQuestItem(Flashlight);m_consoleLog.push_back("FLASHLIGHT ADDED. F TO TOGGLE.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
@@ -70,11 +73,13 @@ bool Game::testConsole(){
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
  input={};input.textInput="map custom\r";game.update(input,.02f);
  if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().openEastBoundary()||game.world().openNorthBoundary()||game.world().openWestBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return false;
- for(int level=0;level<game.chunkCount();++level){auto&w=game.m_chunks[level].world;int col=level%4,row=level/4;bool north=row>0,south=row<2,west=col>0,east=col<3;
+ for(int level=0;level<game.chunkCount();++level){auto&w=game.m_chunks[level].world;int col=level>=12?4:level%4,row=level>=12?level-12:level/4;bool north=row>0,south=row<2,west=col>0,east=col<4;
   if(!w.horrorMode()||w.openNorthBoundary()!=north||w.openSouthBoundary()!=south||w.openWestBoundary()!=west||w.openEastBoundary()!=east)return false;
  }
+ input.textInput="map coast\r";game.update(input,.02f);
+ if(game.level()!=13||!game.world().coast()||game.world().waterSurface(20,12)>0||game.world().floorHeight(20,12)>=game.world().waterSurface(20,12))return false;
  input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
  input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return false;
- std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; Ashfall 4x3 boundaries; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
+ std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; Ashfall 5x3 boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
 }
 }
