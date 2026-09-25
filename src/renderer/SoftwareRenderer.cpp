@@ -43,8 +43,8 @@ bool SoftwareRenderer::enableHardware(void* window){
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
-  for(const auto*texture:{&m_ashfallSky,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
+  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
@@ -76,7 +76,36 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_ashfallSky=loadTexture(252);if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4)m_ashfallSky.clampEdges=true;else prepareDecal(m_ashfallSky,false);
  m_terrainDirt=loadTexture(253);attachNormal(m_terrainDirt,254,true,0);
  m_terrainRock=loadTexture(255);attachNormal(m_terrainRock,256);
+ // Coastal materials retain the source's coarse texture and normal relief,
+ // but shift its albedo toward pale stone and sand without new packed assets.
+ auto coastalTint=[](Texture& texture,int red,int green,int blue){
+  auto remap=[&](std::uint32_t pixel){int gray=int(((pixel>>16)&255)*.30f+((pixel>>8)&255)*.58f+(pixel&255)*.12f);
+   float variation=(gray-100.f)*.60f;auto channel=[&](int base){return std::uint32_t(std::clamp(int(base+variation),0,255));};
+   return (pixel&0xff000000u)|(channel(red)<<16)|(channel(green)<<8)|channel(blue);
+  };
+  for(auto& pixel:texture.pixels)pixel=remap(pixel);
+  for(auto& mip:texture.mips)for(auto& pixel:mip)pixel=remap(pixel);
+ };
+ m_coastRock=m_terrainRock;coastalTint(m_coastRock,205,199,185);
+ m_coastSand=m_terrainDirt;coastalTint(m_coastSand,195,181,152);
+ // A lightweight wraparound panorama: bright coastal haze with broad cloud
+ // forms, generated here so the same sky ships inside the standalone EXE.
+ m_coastSky={512,256,std::vector<std::uint32_t>(512*256)};
+ for(int y=0;y<256;++y)for(int x=0;x<512;++x){
+  float v=float(y)/255.f,longitude=float(x)/512.f*2.f*kPi;
+  float cloud=.5f+.25f*std::sin(longitude*5.f+std::sin(v*23.f)*1.7f)*std::cos(v*19.f)
+                 +.16f*std::sin(longitude*11.f-v*31.f)*std::cos(longitude*7.f+v*17.f);
+  float cover=std::clamp((cloud-.47f)*3.3f,0.f,1.f)*std::clamp((.60f-v)*4.5f,0.f,1.f);
+  float horizon=std::clamp(1.f-std::fabs(v-.5f)*3.2f,0.f,1.f);
+  int r=int(113+70*horizon+104*cover),g=int(157+50*horizon+77*cover),b=int(199+34*horizon+42*cover);
+  m_coastSky.pixels[size_t(y*512+x)]=rgb(std::min(r,255),std::min(g,255),std::min(b,255));
+ }
+ prepareDecal(m_coastSky,false);
  m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.glossStrength=.30f;auto coolantTint=[](uint32_t pixel){return 0xc4000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
+ m_coastWater=loadTexture(250);attachNormal(m_coastWater,251,true,0);m_coastWater.transparent=true;m_coastWater.glossStrength=.48f;
+ auto seaTint=[](std::uint32_t pixel){int gray=int(((pixel>>16)&255)*.30f+((pixel>>8)&255)*.59f+(pixel&255)*.11f);int delta=(gray-100)/3;
+  return 0x66000000u|(std::uint32_t(std::clamp(79+delta,0,255))<<16)|(std::uint32_t(std::clamp(132+delta,0,255))<<8)|std::uint32_t(std::clamp(158+delta,0,255));};
+ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWater.mips)for(auto&pixel:mip)pixel=seaTint(pixel);
  m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
@@ -159,7 +188,9 @@ std::uint32_t SoftwareRenderer::sample(const Texture&t,float u,float v,float lod
 }
 void SoftwareRenderer::drawSky(const Game& game){
  const auto& world=game.world();
- if(!world.outdoors()||std::strcmp(world.skyboxId(),"brutal_wasteland")!=0||m_ashfallSky.pixels.empty())return;
+ if(!world.outdoors()||std::strcmp(world.skyboxId(),"brutal_wasteland")!=0)return;
+ const auto& sky=world.coast()?m_coastSky:m_ashfallSky;
+ if(sky.pixels.empty())return;
  // Support the two common single-image sky formats used by the supplied pack:
  // a 4x3 horizontal cube cross, or an equirectangular panorama. The sky is
  // camera-centred and goes through the normal triangle path, so software and
@@ -169,7 +200,7 @@ void SoftwareRenderer::drawSky(const Game& game){
   auto camera=cameraPoint(eye+direction*radius,game);
   return MeshVertex{camera,u,v,1.f+std::max(0.f,camera.z)*.018f};
  };
- if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4){
+ if(std::abs(sky.width*3-sky.height*4)<=4){
   struct Face{int column,row;Point3 tl,tr,br,bl;};
   // Standard horizontal cross, remapped from Y-up cubemap coordinates to the
   // game's Z-up world: up / left-front-right-back / down.
@@ -185,7 +216,7 @@ void SoftwareRenderer::drawSky(const Game& game){
   for(const auto& face:faces){
    float u0=face.column*du,u1=(face.column+1)*du,v0=face.row*dv,v1=(face.row+1)*dv;
    auto a=point(face.tl,u0,v0),b=point(face.tr,u1,v0),c=point(face.br,u1,v1),d=point(face.bl,u0,v1);
-   triangle3D(a,b,c,m_ashfallSky,1.f);triangle3D(a,c,d,m_ashfallSky,1.f);
+   triangle3D(a,b,c,sky,1.f);triangle3D(a,c,d,sky,1.f);
   }
   return;
  }
@@ -199,7 +230,7 @@ void SoftwareRenderer::drawSky(const Game& game){
    auto direction=[](float longitude,float latitude){float ring=std::cos(latitude);return Point3{ring*std::cos(longitude),ring*std::sin(longitude),std::sin(latitude)};};
    auto a=point(direction(lon0,lat0),u0,v0),b=point(direction(lon1,lat0),u1,v0);
    auto c=point(direction(lon1,lat1),u1,v1),d=point(direction(lon0,lat1),u0,v1);
-   triangle3D(a,b,c,m_ashfallSky,1.f);triangle3D(a,c,d,m_ashfallSky,1.f);
+   triangle3D(a,b,c,sky,1.f);triangle3D(a,c,d,sky,1.f);
   }
  }
 }
@@ -426,7 +457,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   }
   m_gpu->setFogLights(fogLights);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
-  if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere={.39f,.39f,.40f,.012f};
+  if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
   m_gpu->setAtmosphere(atmosphere);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}

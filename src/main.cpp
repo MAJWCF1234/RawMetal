@@ -41,6 +41,20 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<inspectW*inspectH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
+    if(std::wcsstr(commandLine,L"--coast-inspection")){
+     constexpr int testW=1280,testH=720;retro::SoftwareRenderer renderer(testW,testH);
+     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     struct View{int level;retro::Vec2 local;float yaw,pitch;const char*name;};
+     const View views[]={
+      {13,{8.f,12.f},0,-10.f,"coast-from-shelf"},
+      {13,{12.f,12.f},0,-22.f,"coast-underwater-terrain"},
+      {13,{19.f,12.f},retro::kPi,-8.f,"coast-from-water"},
+      {7,{21.f,12.f},0,0.f,"coast-from-ashfall"}};
+     for(const auto&view:views){auto scene=retro::Game::mapInspection(view.local,view.yaw,view.pitch,view.level,false,view.local.x>18.f&&view.level==13?4.f:-999.f,true,retro::WorldId::Ashfall);renderer.render(scene);
+      std::ofstream out(std::string(view.name)+".ppm",std::ios::binary);out<<"P6\n"<<testW<<' '<<testH<<"\n255\n";
+      for(int i=0;i<testW*testH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--terrain-seam-inspection")){
      constexpr int testW=1920,testH=1080;retro::SoftwareRenderer renderer(testW,testH);
      if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;

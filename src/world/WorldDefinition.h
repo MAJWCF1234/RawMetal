@@ -20,7 +20,7 @@ struct ChunkDefinition {
     float ambient=.27f;
 };
 inline constexpr int CampaignChunkCount=10;
-inline constexpr int AshfallChunkCount=12;
+inline constexpr int AshfallChunkCount=15;
 inline constexpr int WorldChunkCapacity=32;
 inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     {{0,0},{3.5f,4.5f},0,Environment::Interior},
@@ -34,9 +34,8 @@ inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     {{109,192},{3.5f,2},-4,Environment::Interior,false,-.8f},
     {{127,216},{3.5f,2},-9,Environment::Interior,false,-5.3f}
 }};
-// Ashfall is a stitched 4 x 3 wasteland. Keeping 24 m chunks preserves the
-// proven service-map streaming granularity while allowing the surface world to
-// grow into a sparse 96 x 72 m landscape.
+// Preserve the original 4 x 3 chunk IDs for old saves. Three new eastern
+// chunks extend the same stitched world into a 120 x 72 m coastline.
 inline constexpr std::array<ChunkDefinition,AshfallChunkCount> AshfallChunks{{
     {{0,0},{3.5f,4.5f},0,Environment::Outdoor},
     {{24,0},{12.f,12.f},0,Environment::Outdoor},
@@ -49,7 +48,10 @@ inline constexpr std::array<ChunkDefinition,AshfallChunkCount> AshfallChunks{{
     {{0,48},{12.f,12.f},0,Environment::Outdoor},
     {{24,48},{12.f,12.f},0,Environment::Outdoor},
     {{48,48},{12.f,12.f},0,Environment::Outdoor},
-    {{72,48},{12.f,12.f},0,Environment::Outdoor}
+    {{72,48},{12.f,12.f},0,Environment::Outdoor},
+    {{96,0},{3.5f,12.f},0,Environment::Outdoor},
+    {{96,24},{3.5f,12.f},0,Environment::Outdoor},
+    {{96,48},{3.5f,12.f},0,Environment::Outdoor}
 }};
 inline constexpr int worldChunkCount(WorldId world){return world==WorldId::Campaign?CampaignChunkCount:world==WorldId::Ashfall?AshfallChunkCount:0;}
 inline const ChunkDefinition& chunkDefinition(WorldId world,int chunk){

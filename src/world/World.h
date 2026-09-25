@@ -128,6 +128,7 @@ public:
     bool outdoors()const{return definition().environment==Environment::Outdoor;}
     bool hasLift()const{return definition().lift;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
+    bool coast()const{return horrorMode()&&m_level>=12;}
     const char* skyboxId()const{return m_customMap?m_customMap->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
     const char* customMapName()const{return m_customMap?m_customMap->name.c_str():"";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
