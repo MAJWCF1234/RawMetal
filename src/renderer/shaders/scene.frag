@@ -21,19 +21,47 @@ vec3 filmic(vec3 c){
  return clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14),vec3(0.0),vec3(1.0));
 }
 
+// GGX dielectric BRDF: rough paint retains a neutral grazing reflection.
+float dielectricSpecular(vec3 N,vec3 V,vec3 L,float roughness){
+ float NoL=max(dot(N,L),0.0),NoV=max(dot(N,V),0.001);
+ if(NoL<=0.0)return 0.0;
+ vec3 halfVector=L+V;
+ vec3 H=halfVector*inversesqrt(max(dot(halfVector,halfVector),0.000001));
+ float NoH=max(dot(N,H),0.0),VoH=max(dot(V,H),0.0);
+ float a=roughness*roughness,a2=a*a;
+ float denominator=NoH*NoH*(a2-1.0)+1.0;
+ float D=a2/(3.14159265*denominator*denominator);
+ float gv=NoL*sqrt(NoV*NoV*(1.0-a2)+a2);
+ float gl=NoV*sqrt(NoL*NoL*(1.0-a2)+a2);
+ float visibility=0.5/max(gv+gl,0.00001);
+ float F=0.04+0.96*pow(1.0-VoH,5.0);
+ return F*D*visibility*NoL;
+}
+
 float shaftScattering(vec3 eye,vec3 endpoint,vec4 lamp){
  float height=lamp.z-lamp.w;
  if(height<=0.0)return 0.0;
 
  vec3 ray=endpoint-eye;
- float rayLength=min(length(ray),16.0);
- if(rayLength<0.01)return 0.0;
+ float rayLength=length(ray);
+ if(rayLength<0.05)return 0.0;
 
- vec3 direction=normalize(ray);
- float horizontalSpeed=max(length(direction.xy),0.001);
- float along=dot(lamp.xy-eye.xy,direction.xy)/max(dot(direction.xy,direction.xy),0.000001);
- float start=max(0.0,along-1.3/horizontalSpeed);
- float finish=min(rayLength,along+1.3/horizontalSpeed);
+ vec3 direction=ray/rayLength;
+ float hSpeed=length(direction.xy);
+ if(hSpeed<0.001)return 0.0;
+
+ vec2 toLamp=lamp.xy-eye.xy;
+ vec2 dir2D=direction.xy/hSpeed;
+ float along=(toLamp.x*dir2D.x+toLamp.y*dir2D.y)/hSpeed;
+ vec2 closestPoint=toLamp-direction.xy*along;
+ float perpDist=length(closestPoint);
+
+ if(perpDist>1.25)return 0.0;
+
+ float coneRadius=1.20;
+ float halfSpan=coneRadius/hSpeed;
+ float start=max(0.0,along-halfSpan);
+ float finish=min(rayLength,along+halfSpan);
  if(finish<=start)return 0.0;
 
  float stepLength=(finish-start)/8.0;
@@ -45,18 +73,19 @@ float shaftScattering(vec3 eye,vec3 endpoint,vec4 lamp){
   float h=(p.z-lamp.w)/height;
   if(h<=0.0||h>=1.0)continue;
 
-  float halfWidth=mix(0.72,0.42,h);
-  vec2 footprint=abs(p.xy-lamp.xy)/halfWidth;
-  float edge=max(footprint.x,footprint.y);
-  float core=1.0-smoothstep(0.58,1.08,edge);
-  float ends=smoothstep(0.0,0.12,h)*smoothstep(0.0,0.07,1.0-h);
-  float dust=0.82+0.18*sin(p.x*8.3+p.y*6.7+p.z*4.9)*sin(p.x*5.1-p.y*9.2+p.z*3.7);
+  float r=mix(1.10,0.30,h);
+  float d=length(p.xy-lamp.xy);
+  if(d>r)continue;
+
+  float core=1.0-smoothstep(r*0.25,r,d);
+  float ends=smoothstep(0.0,0.12,h)*smoothstep(0.0,0.06,1.0-h);
+  float dust=0.88+0.12*sin(p.x*7.3+p.y*5.7+p.z*3.9)*sin(p.x*4.1-p.y*8.2+p.z*2.7);
   sum+=core*ends*dust;
  }
 
  float towardEye=max(0.0,dot(-direction,normalize(vec3(eye.xy-lamp.xy,eye.z-lamp.z))));
- float opticalDepth=sum*stepLength*(0.18+0.05*towardEye);
- return min(1.0-exp(-opticalDepth),0.055);
+ float opticalDepth=sum*stepLength*(0.04+0.14*towardEye*towardEye);
+ return min(1.0-exp(-opticalDepth),0.075);
 }
 
 void main(){
@@ -92,14 +121,14 @@ void main(){
  float specularLight=0.0;
  float waterFresnel=0.0;
 
- if(lighting.w>0.5){
-  vec3 n=normalize(textureGrad(normalMap,sampleUV,uvDx,uvDy).xyz);
+ if(lighting.w>0.5||light0.w+light1.w>0.0){
+  vec3 n=lighting.w>0.5?normalize(textureGrad(normalMap,sampleUV,uvDx,uvDy).xyz):vec3(0.0,0.0,1.0);
   float response=0.65+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
   vertexLight*=clamp(response/lighting.z,0.6,1.4);
 
   float gloss=fract(surface.z);
 
-  if(gloss>0.001){
+  {
    vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
    float determinant=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
 
@@ -109,21 +138,17 @@ void main(){
     vec3 normal=normalize(cross(tangent,bitangent));
     vec3 eyeDirection=normalize(view.eyeYaw.xyz-worldPos);
     vec3 viewTangent=normalize(vec3(dot(eyeDirection,tangent),dot(eyeDirection,bitangent),abs(dot(eyeDirection,normal))));
-    float sharpness=surface.z>1.5?64.0:30.0;
+    float roughness=clamp(1.0-gloss,0.18,0.96);
+    vec3 dnX=dFdx(n),dnY=dFdy(n);
+    roughness=sqrt(clamp(roughness*roughness+0.35*(dot(dnX,dnX)+dot(dnY,dnY)),0.0324,1.0));
 
     if(light0.w>0.0){
-     vec3 halfVector=light0.xyz+viewTangent;
-     halfVector*=inversesqrt(max(dot(halfVector,halfVector),0.000001));
-     specularLight+=light0.w*pow(max(dot(n,halfVector),0.0),sharpness);
+     specularLight+=light0.w*dielectricSpecular(n,viewTangent,light0.xyz,roughness);
     }
 
     if(light1.w>0.0){
-     vec3 halfVector=light1.xyz+viewTangent;
-     halfVector*=inversesqrt(max(dot(halfVector,halfVector),0.000001));
-     specularLight+=light1.w*pow(max(dot(n,halfVector),0.0),sharpness);
+     specularLight+=light1.w*dielectricSpecular(n,viewTangent,light1.xyz,roughness);
     }
-
-    specularLight=min(specularLight*gloss,0.32);
 
     if(surface.z>1.5){
      float NdotV=clamp(viewTangent.z,0.0,1.0);
@@ -138,14 +163,15 @@ void main(){
   return;
  }
 
- vec3 result=toLinear(color.rgb)*lighting.x*vertexLight/(1+surface.x*0.018);
+ // Dielectrics return approximately four percent through the specular lobe.
+ vec3 result=toLinear(color.rgb)*lighting.x*vertexLight*0.96/(1+surface.x*0.018);
 
  if(surface.z<0.5&&surface.w<1.5){
   float key=clamp((vertexLight-0.24)/0.75,0.0,1.0);
   result*=mix(vec3(0.82,0.88,0.97),vec3(1.04,0.98,0.90),key);
  }
 
- result+=specularLight*(surface.z>1.5?vec3(0.92,0.98,1.0):vec3(1.0,0.84,0.63));
+ result+=vec3(specularLight*lighting.x);
 
  if(surface.z>1.5){
   vec3 skySheen=toLinear(vec3(0.55,0.72,0.92));
@@ -156,30 +182,33 @@ void main(){
   result+=toLinear(textureGrad(emissionMap,sampleUV,uvDx,uvDy).rgb)*1.6*surface.y;
  }
 
+ // Fixture lighting is already visibility-tested in vertexLight and the two
+ // tangent-space lights. A second unshadowed lamp loop leaked through walls
+ // and incorrectly dotted tangent-space normals with world-space light vectors.
+
  if(surface.z<0.5&&surface.w<1.5&&view.atmosphere.w>0.0){
   float distance=length(worldPos-view.eyeYaw.xyz);
 
   if(distance<75.0){
+   float density=view.atmosphere.w;
    float heightDensity=exp(-max(worldPos.z*0.06,0.0));
-   float extinction=1.0-exp(-max(distance-4.0,0.0)*view.atmosphere.w*mix(0.80,1.20,heightDensity));
+   float extinction=1.0-exp(-max(distance-5.0,0.0)*density*mix(0.80,1.20,heightDensity));
    vec3 rayDir=normalize(worldPos-view.eyeYaw.xyz);
    vec3 sunDir=normalize(vec3(0.5,0.7,0.5));
    float cosTheta=dot(rayDir,sunDir);
    float phase=0.90+0.10*cosTheta*cosTheta;
-   result=mix(result,toLinear(view.atmosphere.rgb)*phase,min(extinction,0.58));
+   result=mix(result,toLinear(view.atmosphere.rgb)*phase,min(extinction,0.35));
   }
  }
 
  if(surface.z<0.5&&surface.w<1.5){
   float scatter=0.0;
-
   for(int light=0;light<4;++light){
    scatter+=shaftScattering(view.eyeYaw.xyz,worldPos,view.fogLights[light]);
   }
-
-  scatter=min(scatter,0.06);
-  result=mix(result,toLinear(vec3(0.79,0.74,0.65)),scatter);
+  scatter=min(scatter,0.09);
+  result+=toLinear(vec3(0.98,0.90,0.78))*scatter*1.0;
  }
 
- outColor=vec4(toDisplay(filmic(result*0.8)),surface.z>1.5?color.a:1);
+ outColor=vec4(toDisplay(filmic(result*0.95)),surface.z>1.5?color.a:1);
 }

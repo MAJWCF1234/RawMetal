@@ -822,17 +822,38 @@ World::World(int level,WorldId id):m_worldId(id) {
     m_structures.push_back({x,6,x+.25f,21,-7.05f,-6.9f,false,2});
     for(float y:{6.f,9.f,12.f,15.f,18.f})m_structures.push_back({x,y,x+.25f,y+.08f,-6.9f,roof,false,2});
    }
+   // Relay island breaks the rear sightline; both ends remain walkable.
+   wall(9.8f,17.6f,10.15f,20.4f,-9,-6.7f);
+   cabinet({10.5f,18.4f},-kPi*.5f);cabinet({10.5f,19.7f},-kPi*.5f);
    // Wall-backed cabinets along the west solid concrete perimeter wall
    cabinet({4.45f,18.5f},kPi*.5f);cabinet({4.45f,20.0f},kPi*.5f);cabinet({4.45f,21.5f},kPi*.5f);
 
-   m_terminals={{{19.7f,14},"FEEDER 7A / REMOTE TRIP","LOWER UTILITY BUS ISOLATED.","E / THROW LOCAL DISCONNECT.",0,false,0,stateId("vault_disconnect")}};
+   // Suspended high-voltage cable trays and distribution conduit headers
+   m_pipes.push_back({{11.25f,5.5f},{11.25f,21.5f},-6.95f,.09f});
+   m_pipes.push_back({{14.65f,5.5f},{14.65f,21.5f},-6.95f,.09f});
+   for(float y:{7.5f,12.f,16.5f})m_pipes.push_back({{11.25f,y},{14.65f,y},-6.92f,.07f});
+   m_pipes.push_back({{21.55f,6.f},{21.55f,21.5f},-6.8f,.10f});
+   m_pipes.push_back({{4.45f,6.f},{4.45f,17.5f},-6.85f,.09f});
+   m_pipes.push_back({{19.7f,14.f},{21.55f,14.f},-6.8f,.08f});
+   m_pipes.push_back({{19.7f,14.f},{19.7f,14.f},-6.8f,.08f,-8.2f});
+
+   // Wall-mounted breaker panels and ventilation grilles (non-solid, mounted flush)
+   m_fixtures.push_back({8,{2.15f,4.f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
+   m_fixtures.push_back({8,{6.15f,16.8f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
+   m_fixtures.push_back({8,{21.85f,16.5f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
+   m_fixtures.push_back({3,{6.15f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
+   m_fixtures.push_back({3,{21.85f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
+   m_fixtures.push_back({6,{18.2f,7.f},0,1.87f,.55f,.99f,0,true});
+
+   m_terminals={{{19.7f,14},"FEEDER 7A / REMOTE TRIP","LIVE TRENCH / USE THE OUTER SERVICE AISLES.","E / THROW LOCAL DISCONNECT.",0,false,0,stateId("vault_disconnect")}};
+   m_terminals.push_back({{7.5f,6.4f},"CABLE VAULTS / MAINTENANCE","LOCAL DISCONNECT: EAST SWITCHGEAR AISLE.","SPARE LAMP AND SHELLS: SOUTH SERVICE BAY."});
    shelf({17.7f,19.8f});m_clutterSpawns={{3,{18,19}},{0,{18.5f,19.2f}}};
    event("vault_maintenance_kit",16.5f,18.5f,19,21,-9.2f,-7,{action(A::GiveItem,stateId("flashlight"),1)});
    event("vault_relay_trip",2,2,5,4,-9.2f,-7,{action(A::PlaySound,0,0,.6f)});
    m_scriptEvents.back().actions[0].sound=Sound::Door;
-   m_creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f},-9}};
+   m_creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f},-9},{CreatureKind::Huntsman,{19.5f,8.5f},-9}};
    m_pickupSpawns={{{18,21.5f},PickupKind::Ammo}};
-   for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22}})m_lights.push_back({p,-6.55f});
+   for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22},Vec2{18.5f,9.5f},Vec2{4.5f,18.5f}})m_lights.push_back({p,-6.55f});
   }
   // === LEVEL_6_END ===
   // === LEVEL_7_START ===
@@ -867,13 +888,42 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(Vec2 p:{Vec2{19.5f,7.2f},Vec2{20.5f,13.6f},Vec2{16.2f,17.2f},Vec2{10.2f,19.2f}})
     post(p.x,p.y,-9,-4.25f,.11f);
    for(auto& f:m_fixtures)if(f.model==14)f.base=3;
+
+   // Low service dividers define pump bays while preserving the perimeter loop.
+   wall(5.4f,11.8f,7.3f,12.05f,-12,-10.95f);
+   wall(10.4f,15.5f,12.6f,15.75f,-12,-10.95f);
+   m_lights.push_back({{6.5f,9.5f},-9.55f});
+   m_lights.push_back({{11.5f,14},-9.55f});
+   // Lower manifold heavy machinery: centrifugal pumps and compressor
+   m_props.push_back({0,{6.5f,9.f},2.2f,1.4f,0,{.7f,.7f},0.f});
+   m_props.push_back({0,{11.5f,14.f},2.2f,1.4f,kPi*.5f,{.7f,.7f},0.f});
+   m_props.push_back({1,{6.5f,15.f},1.9f,1.3f,0,{.65f,.65f},0.f});
+
+   // Interconnecting pump manifold pipes and vertical risers
+   m_pipes.push_back({{6.5f,9.f},{6.5f,9.f},-11.8f,.18f,-7.45f});
+   m_pipes.push_back({{6.5f,9.f},{8.f,9.f},-7.45f,.18f});
+   m_pipes.push_back({{8.f,9.f},{8.f,6.f},-7.45f,.18f});
+   m_pipes.push_back({{6.5f,15.f},{6.5f,15.f},-11.8f,.18f,-7.45f});
+   m_pipes.push_back({{6.5f,15.f},{8.f,15.f},-7.45f,.18f});
+   m_pipes.push_back({{8.f,15.f},{8.f,13.f},-7.45f,.18f});
+
+   // Structural reinforced columns supporting mezzanine and roof
+   m_fixtures.push_back({2,{14.5f,6.5f},0.f,.8f,.8f,8.f,0,true});
+   m_fixtures.push_back({2,{14.5f,16.5f},0.f,.8f,.8f,8.f,0,true});
+
+   // Observation workstation CRT console and wall breaker panels
+   m_fixtures.push_back({11,{21.2f,18.2f},8.f,.8f,.8f,1.1f,-kPi*.5f,true});
+   m_fixtures.push_back({8,{21.85f,19.5f},8.f,.67f,.20f,.91f,kPi*.5f,false});
+   m_fixtures.push_back({8,{1.15f,8.f},0.f,.67f,.20f,.91f,kPi*.5f,false});
+
    m_terminals={{{20.4f,17.2f},"PUMP ANNEX / OBSERVATION","DUTY PUMP RESTARTED BY REMOTE SEQUENCE.","UTILITY JUNCTION / UPPER SOUTH ACCESS.",8,false}};
+   m_terminals.push_back({{12,1.5f},"LOWER MANIFOLD / SERVICE ROUTE","OBSERVATION ACCESS: EAST STAIR TOWER.","KEEP PUMP SERVICE AISLES CLEAR."});
    event("annex_pump_restart",15,15,22,18,-4.1f,-2,{action(A::SetState,stateId("annex_running"),1),action(A::Shake,0,0,.35f),action(A::PlaySound,0,0,.75f),action(A::Checkpoint)});
    m_scriptEvents.back().actions[2].sound=Sound::LiftMotor;
-   m_creatureSpawns={{CreatureKind::Wasp,{12,12},-6},{CreatureKind::Wasp,{20,13},-4},{CreatureKind::Huntsman,{11,10},-12}};
+   m_creatureSpawns={{CreatureKind::Wasp,{12,12},-6},{CreatureKind::Wasp,{20,13},-4},{CreatureKind::Huntsman,{11,10},-12},{CreatureKind::Huntsman,{8.5f,11.f},-12}};
    m_pickupSpawns={{{6,17},PickupKind::Health},{{20,20},PickupKind::Ammo}};
-   for(Vec2 p:{Vec2{3.5f,2},Vec2{4,14},Vec2{12,9},Vec2{20,7},Vec2{20,18}})m_lights.push_back({p,-1.3f});
-   for(Vec2 p:{Vec2{4,11},Vec2{12,3},Vec2{13,17}})m_lights.push_back({p,-9.35f});
+   for(Vec2 p:{Vec2{3.5f,2},Vec2{4,14},Vec2{12,9},Vec2{20,7},Vec2{20,18},Vec2{20.5f,17.5f}})m_lights.push_back({p,-1.3f});
+   for(Vec2 p:{Vec2{4,11},Vec2{12,3},Vec2{13,17},Vec2{8.f,11.f}})m_lights.push_back({p,-9.35f});
   }
   // === LEVEL_7_END ===
   // === LEVEL_8_START ===
@@ -920,9 +970,33 @@ World::World(int level,WorldId id):m_worldId(id) {
 
    for(Vec2 p:{Vec2{2.3f,6.2f},Vec2{6.2f,6.2f},Vec2{10.2f,8.2f},Vec2{20.4f,8.2f}})
     post(p.x,p.y,-9,-4.25f,.11f);
+
+   // Catwalk bridge reinforced columns
+   m_fixtures.push_back({2,{7.5f,7.5f},0.f,.7f,.7f,5.f,0,true});
+   m_fixtures.push_back({2,{14.f,7.5f},0.f,.7f,.7f,5.f,0,true});
+
+   // Major utility distribution pipelines spanning the concourse
+   m_pipes.push_back({{2.f,11.f},{22.f,11.f},-5.2f,.22f});
+   m_pipes.push_back({{2.f,11.f},{22.f,11.f},-4.7f,.15f});
+   m_pipes.push_back({{14.f,2.f},{14.f,22.f},-5.0f,.18f});
+   m_pipes.push_back({{14.f,11.f},{14.f,11.f},-5.0f,.18f,-8.5f});
+
+   // Staggered waist-high service islands split the open concourse into cover pockets.
+   wall(12.6f,16.2f,14.6f,16.65f,-9,-7.95f);
+   wall(17.2f,18.4f,19.4f,18.85f,-9,-7.95f);
+   m_lights.push_back({{18,16.3f},-6.3f});
+   m_lights.push_back({{21.5f,22},-6.3f});
+   // Concourse substation switchgear & dispatch workstation
+   cabinet({5.45f,19.5f},kPi*.5f);
+   cabinet({5.45f,21.0f},kPi*.5f);
+   m_fixtures.push_back({11,{16.8f,12.5f},0.f,.8f,.8f,1.1f,kPi*.5f,true});
+   m_fixtures.push_back({8,{19.2f,12.5f},0.f,.67f,.20f,.91f,0,false});
+   m_fixtures.push_back({8,{1.78f,3.5f},5.f,.67f,.20f,.91f,kPi*.5f,false});
+
    m_terminals={{{18,12.5f},"JUNCTION / WASTE DISPATCH","CREDENTIAL ACCEPTED / WASTE ROUTE AVAILABLE.","E / RELEASE WASTE HANDLING BULKHEAD.",0,false,0,stateId("waste_access")},
-               {{20.3f,6},"FREIGHT SERVICES / INCIDENT OVERRIDE","CREDENTIAL ACCEPTED. ACCESS SUSPENDED.","CONTROL AUTHORITY / CENTRAL RESPONSE.",5,false}};
+               {{20.3f,6},"FREIGHT SERVICES / INCIDENT OVERRIDE","CREDENTIAL ACCEPTED. ACCESS SUSPENDED.","WASTE DISPATCH: BOOTH BELOW / SOUTH DOOR.",5,false}};
    shelf({13,2.2f},kPi);shelf({16,2.2f},kPi);m_fixtures.push_back({6,{13,20},0,1.87f,.55f,.99f,0,true});
+   m_creatureSpawns={{CreatureKind::Huntsman,{10.5f,14.5f},-9},{CreatureKind::Wasp,{13,16},-6}};
    m_pickupSpawns={{{17,13.5f},PickupKind::Health},{{16,3},PickupKind::Ammo}};
    event("junction_arrival",2,1,6,4,-4.1f,-2,{action(A::Checkpoint)});
    for(Vec2 p:{Vec2{4,4},Vec2{12,8},Vec2{20,7},Vec2{18,13},Vec2{11,22},Vec2{21,21}})m_lights.push_back({p,-1.05f});
@@ -957,14 +1031,39 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(10.18f,17,10.46f,20.0f,-12,-9);
 
    for(float x:{7.f,19.f})m_pipes.push_back({{x,2},{x,22},-6.1f,.18f});
+
+   // Hydraulic lines to compactor press
+   m_pipes.push_back({{13.f,10.5f},{17.f,10.5f},-5.8f,.14f});
+   m_pipes.push_back({{15.f,10.5f},{15.f,10.5f},-5.8f,.14f,-7.5f});
+   m_pipes.push_back({{19.f,10.5f},{17.f,10.5f},-5.8f,.14f});
+
+   // Reinforced structural columns
+   m_fixtures.push_back({2,{11.5f,5.5f},0.f,.7f,.7f,6.5f,0,true});
+   m_fixtures.push_back({2,{18.5f,5.5f},0.f,.7f,.7f,6.5f,0,true});
+   m_fixtures.push_back({2,{11.5f,15.5f},0.f,.7f,.7f,6.5f,0,true});
+
+   // Press-side guards make the bypass legible without sealing the working belt.
+   wall(17.6f,9,17.85f,12,-12,-10.95f);
+   wall(12.15f,9.4f,12.4f,12,-12,-10.95f);
+   m_lights.push_back({{10.8f,8.8f},-9.55f});
+   m_lights.push_back({{20,16},-9.55f});
+   // Heavy industrial shredder machine along east lower wall (leaves wide open aisle)
+   m_fixtures.push_back({12,{20.5f,8.5f},0.f,.940f,3.060f,1.751f,kPi*.5f,true});
+
+   // Sorting deck control console and wall breaker boxes
+   m_fixtures.push_back({11,{2.6f,10.5f},3.f,.8f,.8f,1.1f,kPi*.5f,true});
+   m_fixtures.push_back({8,{10.8f,7.2f},0.f,.67f,.20f,.91f,0,false});
+   m_fixtures.push_back({8,{21.2f,21.5f},0.f,.67f,.20f,.91f,-kPi*.5f,false});
+
    m_terminals={{{10.8f,8},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / TOGGLE CONVEYOR AND PRESS.",0,false,0,stateId("compactor_isolated"),true},
                {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT CONNECTION SEALED / END OF CURRENT ROUTE.",0,false}};
+   m_terminals.push_back({{3.2f,7},"SORTING / SHIFT SAFETY","PRESS ISOLATOR AT FOOT OF SORTING STAIRS.","EAST AISLE BYPASSES PRESS / DISPATCH SOUTH.",3});
    const Vec2 scrap[]={{5.7f,5.3f},{6.5f,5.6f},{7.2f,5.1f},{5.9f,8.5f},{6.8f,8.8f},{7.5f,8.2f},
                        {5.6f,12.8f},{6.4f,13.2f},{7.1f,12.5f},{6.0f,16.7f},{6.9f,17.1f},{7.7f,16.4f},
                        {9.4f,20.5f},{10.2f,20.9f},{11.0f,20.4f},{19.1f,4.2f},{20.0f,4.5f},{20.7f,4.0f}};
    for(int i=0;i<18;++i)m_clutterSpawns.push_back({i%6,scrap[i],-999.f,.37f*i});
    m_clutterSpawns.push_back({3,{15,7},-11.9f});
-   shelf({20,3},kPi);cabinet({22.4f,16},kPi*.5f);
+   shelf({20,3},kPi,3);cabinet({22.4f,16},kPi*.5f);
    for(Vec2 p:{Vec2{2.6f,6.2f},Vec2{4.3f,12.2f},Vec2{4.3f,16.4f},Vec2{8.4f,18.5f}})
     post(p.x,p.y,-12,-9.25f,.11f);
    m_creatureSpawns={{CreatureKind::Huntsman,{19,10},-12},{CreatureKind::Huntsman,{8,21},-12},{CreatureKind::Wasp,{18,15},-9}};
