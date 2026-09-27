@@ -151,7 +151,7 @@ bool Game::decodeSave(const std::string& data){
    if(level==next.m_level)next.m_heldClutter=heldNew;
   }
   auto&p=next.m_player;
-  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>1.1f||std::fabs(p.pitch)>100||next.m_medkits<0)return false;
+  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>1.1f||std::fabs(p.pitch)>210.01f||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
@@ -201,6 +201,10 @@ void Game::refreshSaveSlots(){
 }
 bool Game::testSaves(){
  std::ofstream report("save-test.txt");auto check=[&](bool ok,const char* label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();return ok;};
+ for(float pitch:{-210.f,210.f}){
+  Game original,restored;original.m_player.pitch=pitch;
+  if(!check(restored.decodeSave(original.encodeSave())&&std::fabs(restored.player().pitch-pitch)<.001f,"Full vertical camera range survives save/load"))return false;
+ }
  for(float time:{0.f,7.f,21.f,34.f,39.5f,42.f,48.f}){
   auto original=liftInspection(time);original.m_player.health=63;original.m_player.ammo=17;original.m_medkits=2;original.m_weaponEquipped=false;original.m_world.setDoor(1,.35f,true);
   // liftInspection() deliberately removes enemies from every chunk, so do not
@@ -233,7 +237,7 @@ bool Game::testSaves(){
  // Existing saves are reconciled with newly authored content. Simulate an
  {Game legacy;legacy.loadLevel(5,false);legacy.m_player.health=63;legacy.m_world.m_doors.pop_back();legacy.storeChunk();Writer writer;legacy.archiveSave(writer,10);auto payload=writer.stream.str();
   auto data=std::string("RAWMETAL_SAVE 10 ")+std::to_string(checksum(payload))+"\n"+payload;Game restored;
-  if(!check(restored.decodeSave(data)&&restored.level()==5&&restored.player().health==63&&restored.world().doors().back().transfer&&restored.m_chunks[6].enemies.size()==1&&restored.m_chunks[9].clutter.size()==19,"Six-chunk version 10 saves gain the four new chapters and transfer door"))return false;
+  if(!check(restored.decodeSave(data)&&restored.level()==5&&restored.player().health==63&&restored.world().doors().back().transfer&&restored.m_chunks[6].enemies.size()==World(6).creatureSpawns().size()&&restored.m_chunks[9].clutter.size()==World(9).clutterSpawns().size(),"Six-chunk version 10 saves gain the four new chapters and transfer door"))return false;
  }
  // Existing saves are reconciled with newly authored content. Simulate an
  // older build that did not yet contain the Reactor Stalker, the final pickup,
