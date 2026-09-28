@@ -35,7 +35,11 @@ bool SoftwareRenderer::testHardware(){
  begin();triangle(red,1);triangle(blue,2);auto pixel=finish();check(redChannel(pixel)>80&&blueChannel(pixel)<redChannel(pixel)/4,"Nearest surface wins depth test");
  begin();triangle(transparent,1);triangle(blue,2);pixel=finish();check((pixel&255)>215&&(pixel&0xff0000u)==0,"Alpha cutout keeps geometry behind visible");
  Texture liquid{1,1,{0xc4ff0000u}};liquid.transparent=true;
- begin();triangle(liquid,1);triangle(blue,2);pixel=finish();check(((pixel>>16)&255)>150&&(pixel&255)>20&&(pixel&255)<100,"Continuous water alpha blends the visible bed without cutout holes");
+ begin();triangle(liquid,1);triangle(blue,2);pixel=finish();
+ // The HDR path blends linear radiance before tone mapping, so the blue bed
+ // contributes more display-space blue than the former gamma-space blend.
+ report<<"HDR water blend RGB: "<<((pixel>>16)&255)<<", "<<((pixel>>8)&255)<<", "<<(pixel&255)<<'\n';
+ check(((pixel>>16)&255)>150&&(pixel&255)>110&&(pixel&255)<200&&((pixel>>16)&255)>(pixel&255)+35,"Linear HDR water alpha blends the visible bed before tone mapping");
  begin();triangle(emissive,1,0);auto brightEmission=finish();check(blueChannel(brightEmission)>150,"Emission survives zero ambient illumination");
  renderer.m_emissionScale=.1f;begin();triangle(emissive,1,0);pixel=finish();
  // Compare against the documented linear emission -> filmic -> display path.

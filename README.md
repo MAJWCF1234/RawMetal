@@ -2,24 +2,20 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.5.7, Ashfall Coast**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.5.9.6, HDR Light Pipeline**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
 
-v0.5.7 expands Ashfall from twelve streamed surface chunks to fifteen by adding a connected eastern coastline with:
+v0.5.9.6 rebalances the service-map lighting and moves the Vulkan scene to a
+linear RGBA16F HDR target when supported. Water and emissive effects blend
+before one filmic presentation transform; the established LDR path remains
+available on older hardware. It also retains the industrial GGX material work
+and adds a focused Vulkan blending regression check.
 
-- three new coastal chunks
-- walkable rock and sand terrain
-- a real submerged seabed beneath the water
-- coastal water, materials, sky, and atmospheric tuning
-- save-compatible chunk expansion that preserves the original Ashfall chunk IDs
-- dedicated seam, traversal, renderer, save, and console validation
-
-Recent renderer work also added restrained contact shading, improved material response, parallax relief, filmic color handling, bright-pixel bloom, square-fixture volumetric shafts, world-space barrel fire and smoke, and depth-aware camera focus.
-
-See [RELEASE_NOTES_v0.5.7.md](RELEASE_NOTES_v0.5.7.md) for the current release notes.
+See [RELEASE_NOTES_v0.5.9.6.md](RELEASE_NOTES_v0.5.9.6.md) for this release's
+details and validation.
 
 ## Download and run
 

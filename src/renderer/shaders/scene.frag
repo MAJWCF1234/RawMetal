@@ -162,7 +162,8 @@ void main(){
  }
 
  if(surface.z>0.5&&surface.z<1.5){
-  outColor=vec4(color.rgb*color.a*lighting.x*vec3(1,0.72,0.35),1);
+  vec3 additive=color.rgb*color.a*lighting.x*vec3(1,0.72,0.35);
+  outColor=vec4(view.effects.w>0.5?toLinear(additive):additive,1);
   return;
  }
 
@@ -211,5 +212,6 @@ void main(){
   result+=toLinear(vec3(0.98,0.90,0.78))*scatter*1.0;
  }
 
- outColor=vec4(toDisplay(filmic(result*0.95)),surface.z>1.5?color.a:1);
+ float alpha=surface.z>1.5?color.a:1;
+ outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),alpha):vec4(toDisplay(filmic(result*0.95)),alpha);
 }

@@ -29,10 +29,10 @@ inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     {{54,72},{3.5f,3.5f},0,Environment::Interior,true},
     {{69,96},{6.5f,1.5f},-9,Environment::Interior},
     {{69,120},{12,2},-9,Environment::Interior},
-    {{74,144},{3.5f,2},-9,Environment::Interior,false,-6.35f,.09f},
-    {{92,168},{3.5f,2},-9,Environment::Interior,false,-1},
-    {{109,192},{3.5f,2},-4,Environment::Interior,false,-.8f},
-    {{127,216},{3.5f,2},-9,Environment::Interior,false,-5.3f}
+    {{74,144},{3.5f,2},-9,Environment::Interior,false,-6.35f,.18f},
+    {{92,168},{3.5f,2},-9,Environment::Interior,false,-1,.25f},
+    {{109,192},{3.5f,2},-4,Environment::Interior,false,-.8f,.23f},
+    {{127,216},{3.5f,2},-9,Environment::Interior,false,-5.3f,.26f}
 }};
 // Preserve the original 4 x 3 chunk IDs for old saves. Three new eastern
 // chunks extend the same stitched world into a 120 x 72 m coastline.
