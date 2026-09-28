@@ -1,7 +1,6 @@
 #version 450
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(set=0,binding=1) uniform sampler2D hudImage;
-layout(set=0,binding=2) uniform sampler2D sceneDepth;
 layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; } params;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 color;
@@ -10,7 +9,6 @@ vec3 highlight(vec2 p){
  return max(sampleColor-vec3(params.hdrScene>0.5?1.0:0.72),vec3(0.0));
 }
 vec3 filmic(vec3 c){c=max(c,vec3(0.0));return clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14),vec3(0.0),vec3(1.0));}
-float viewDistance(float depth){return 0.06/max(1.0-depth,0.00001);}
 vec3 focusedScene(vec2 p){
  // Fixed-distance depth of field created a visible world-space focus shell
  // around the player. Keep the low-resolution scene crisp and let material,

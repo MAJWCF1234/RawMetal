@@ -27,6 +27,18 @@ void SoftwareRenderer::attachNormal(Texture& texture,int resource,bool greenUp,f
  auto luminance=[&](int x,int y){auto p=texture.pixels[size_t((y+texture.height)%texture.height*texture.width+(x+texture.width)%texture.width)];return (.2126f*float((p>>16)&255)+.7152f*float((p>>8)&255)+.0722f*float(p&255))/255.f;};
  for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float mean=0;for(int j=-2;j<=2;++j)for(int i=-2;i<=2;++i)mean+=luminance(x+i,y+j);mean/=25.f;float reliefValue=std::clamp(.5f+(luminance(x,y)-mean)*1.35f,0.f,1.f);texture.relief[size_t(y*texture.width+x)]=std::uint8_t(std::round(reliefValue*255.f));}
 }
+void SoftwareRenderer::deriveSurfaceNormal(Texture& texture,float strength){
+ if(texture.width<2||texture.height<2)return;
+ prepareDecal(texture,false);
+ auto luminance=[&](int x,int y){x=(x%texture.width+texture.width)%texture.width;y=(y%texture.height+texture.height)%texture.height;auto p=texture.pixels[size_t(y*texture.width+x)];float r=std::pow(float((p>>16)&255)/255.f,2.2f),g=std::pow(float((p>>8)&255)/255.f,2.2f),b=std::pow(float(p&255)/255.f,2.2f);return .2126f*r+.7152f*g+.0722f*b;};
+ std::vector<float> height(texture.pixels.size());
+ for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float neighborhood=0;for(int oy=-2;oy<=2;++oy)for(int ox=-2;ox<=2;++ox)neighborhood+=luminance(x+ox,y+oy);height[size_t(y*texture.width+x)]=luminance(x,y)-neighborhood/25.f;}
+ auto sampleHeight=[&](int x,int y){x=(x%texture.width+texture.width)%texture.width;y=(y%texture.height+texture.height)%texture.height;return height[size_t(y*texture.width+x)];};
+ texture.normalLevels.clear();std::vector<Point3> normals;normals.reserve(height.size());
+ for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float dx=(sampleHeight(x+1,y)-sampleHeight(x-1,y))*.5f,dy=(sampleHeight(x,y+1)-sampleHeight(x,y-1))*.5f;Point3 n{-dx*strength,dy*strength,1.f};float length=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);normals.push_back(n*(1.f/length));}
+ texture.normalLevels.push_back(std::move(normals));int width=texture.width,heightPixels=texture.height;
+ while(width>1||heightPixels>1){int nw=std::max(1,width/2),nh=std::max(1,heightPixels/2);std::vector<Point3> next(size_t(nw*nh));auto&previous=texture.normalLevels.back();for(int y=0;y<nh;++y)for(int x=0;x<nw;++x){Point3 sum{};for(int j=0;j<2;++j)for(int i=0;i<2;++i)sum=sum+previous[std::min(heightPixels-1,y*2+j)*width+std::min(width-1,x*2+i)];float length=std::sqrt(sum.x*sum.x+sum.y*sum.y+sum.z*sum.z);next[size_t(y*nw+x)]=length>.00001f?sum*(1.f/length):Point3{0,0,1};}texture.normalLevels.push_back(std::move(next));width=nw;heightPixels=nh;}
+}
 Point3 SoftwareRenderer::sampleNormal(const Texture& texture,float u,float v,float lod){
  if(texture.normalLevels.empty())return {0,0,1};u-=std::floor(u);v-=std::floor(v);
  lod=std::clamp(lod,0.f,float(texture.normalLevels.size()-1));int level=int(lod);
@@ -40,7 +52,7 @@ bool SoftwareRenderer::testNormalMapping(){
  Texture blendTest{2,2,{}};blendTest.normalLevels={std::vector<Point3>(4,Point3{.6f,0,.8f}),{{0,0,1}}};
  auto blended=sampleNormal(blendTest,.2f,.3f,.5f);
  if(std::fabs(blended.x*blended.x+blended.y*blended.y+blended.z*blended.z-1)>.001f)return false;
- for(auto* texture:{&m_wall,&m_pressureWall,&m_bulkhead,&m_floor}){
+ for(auto* texture:{&m_wall,&m_pressureWall,&m_bulkhead,&m_floor,&m_pressureFloor}){
   if(texture->normalLevels.size()!=texture->mips.size()+1)return false;
   if((texture->parallaxScale>0&&texture->relief.size()!=texture->pixels.size())||(texture->parallaxScale==0&&!texture->relief.empty()))return false;
   for(auto n:texture->normalLevels[0])if(!std::isfinite(n.x+n.y+n.z)||std::fabs(n.x*n.x+n.y*n.y+n.z*n.z-1)>.001f)return false;

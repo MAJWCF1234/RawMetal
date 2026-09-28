@@ -75,11 +75,11 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  // Industrial painted steel catches broad fixture highlights without reading as chrome.
  m_pumpTexture.glossStrength=.28f;m_compressorTexture.glossStrength=.36f;
  m_pipeTexture.glossStrength=.42f;m_gateTexture.glossStrength=.32f;
- m_pressureWall=loadTexture(148);m_pressureFloor=loadTexture(149);m_pressureMetal=loadTexture(150);
+ m_pressureWall=loadTexture(148);m_pressureFloor=loadTexture(149);deriveSurfaceNormal(m_pressureFloor,2.6f);m_pressureMetal=loadTexture(150);
  // Worn paint/concrete remain dielectrics. Smoothness tunes GGX lobe width;
  // keep opaque values below .5 because surface.z also carries blend flags.
  m_wall.glossStrength=.16f;m_floor.glossStrength=.24f;
- m_pressureWall.glossStrength=.20f;m_pressureFloor.glossStrength=.30f;
+ m_pressureWall.glossStrength=.20f;m_pressureFloor.glossStrength=.32f;
  m_pressureMetal.glossStrength=.44f;m_concrete.glossStrength=.08f;
 
  m_ashfallSky=loadTexture(252);if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4)m_ashfallSky.clampEdges=true;else prepareDecal(m_ashfallSky,false);

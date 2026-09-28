@@ -2,19 +2,17 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.5.9.6, HDR Light Pipeline**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.5.9.7, Service Map Rendering**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
 
-v0.5.9.6 rebalances the service-map lighting and moves the Vulkan scene to a
-linear RGBA16F HDR target when supported. Water and emissive effects blend
-before one filmic presentation transform; the established LDR path remains
-available on older hardware. It also retains the industrial GGX material work
-and adds a focused Vulkan blending regression check.
+v0.5.9.7 adds hardware multisample scene rendering, raises service-map fill
+light, and gives the concrete pressure floor mipmapped surface normals. The
+Vulkan scene retains its linear HDR target and single filmic presentation pass.
 
-See [RELEASE_NOTES_v0.5.9.6.md](RELEASE_NOTES_v0.5.9.6.md) for this release's
+See [RELEASE_NOTES_v0.5.9.7.md](RELEASE_NOTES_v0.5.9.7.md) for this release's
 details and validation.
 
 ## Download and run
@@ -121,6 +119,7 @@ The Vulkan path currently supports:
 - atmospheric extinction
 - square-fixture volumetric light shafts
 - roughness-controlled GGX dielectric specular response
+- hardware 4x or 2x multisampling where supported, with a 1x compatibility path
 - trilinear filtering with supported anisotropy up to 8x
 - filmic color mapping
 - bright-pixel bloom

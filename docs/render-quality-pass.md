@@ -20,6 +20,12 @@ parity with or superiority over other shipped games.
   emission, additive effects and transparent water stay in linear HDR until
   the presentation composite applies bloom, filmic tone mapping and display
   encoding once. Unsupported hardware retains the prior LDR path.
+- The scene target uses 4x MSAA when color and depth formats support it, 2x on
+  narrower hardware, and 1x as a compatibility fallback. Resolve antialiases
+  geometry edges while leaving texture art and the full-resolution HUD crisp.
+- Service-map ambient values are now 0.48-0.55. The concrete pressure floor
+  gets a subtle tileable normal derived from its albedo and a full trilinear
+  mip chain.
 - Removed forced gameplay depth blur and noisy depth-only AO. The composite
   keeps the HUD crisp and limits bloom to bright emitters.
 - Matched mouse yaw/pitch angular sensitivity, +/-86 degree vertical look,
@@ -35,20 +41,23 @@ Run `--vulkan-test`, `--smoke-test --vulkan`, `--performance-test`,
 The window benchmark reports actual presentation dimensions, 30 warmup frames,
 120 measured frames and mean/p95/p99 latency. Headless timings include blocking
 readback and omit the presentation composite: they are not windowed FPS.
-On an RTX 5060 Ti at 1920 x 1080, the final measured turn averages for
-maps 6-9 were 123.8, 128.0, 135.4 and 135.9 FPS respectively. Map 6 p95
-was 13.54 ms, so turn spikes remain visible. Results depend on hardware and
-window load. The incomplete baseline means these results do not establish a
-speedup percentage.
+On an RTX 5060 Ti at 1920 x 1080 with 4x MSAA, maps 6-9 averaged 106.5,
+112.6, 127.8 and 124.2 FPS. Their p95 frame times were 16.81, 12.68, 10.53
+and 11.00 ms. Results depend on hardware and window load. The 4x resolve has
+a measurable cost, especially on Cable Vaults; it remains above 100 FPS on
+this test system.
 
-Ambient fill on maps 6-9 was reduced from 0.38-0.42 to 0.18-0.26 so fixture
-lighting and cached visibility shadows define the room instead of a uniform
-fill washing out the geometry. Inspection views frame the cable trench,
+Fixed-camera pixel comparisons use the same nine views at 640 x 360. In the
+scene crop with the header and HUD excluded, normalized mean absolute RGB
+difference against the v0.5.9.6 build ranges from 1.61% to 9.49% of full
+channel range (average 4.52%). This measures the image change; it does not
+measure similarity or parity with another game's artwork. The before/after
+panel is at `diagnostics/pixel-compare/service-maps-before-after.png`.
+
+Inspection views frame the cable trench,
 switchgear, pump machinery, observation console, bridge and compactor bypass.
-The new nine-view capture is
-`diagnostics/render-upgrade/after/maps-contrast.png`. It is for visual review;
-camera framing and map dressing changed during this pass, so its pixel delta
-against earlier montages is not a controlled renderer benchmark.
+The earlier `diagnostics/render-upgrade/after/maps-contrast.png` is still an
+art review capture; the pixel comparison above uses controlled fixed cameras.
 
 The baseline window benchmark failed with Vulkan device loss entering Ashfall
 following Gantry; the integrated run completed all twelve scenes. The baseline
