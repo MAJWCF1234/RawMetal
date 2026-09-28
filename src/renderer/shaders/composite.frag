@@ -11,35 +11,10 @@ vec3 highlight(vec2 p){
 }
 float viewDistance(float depth){return 0.06/max(1.0-depth,0.00001);}
 vec3 focusedScene(vec2 p){
- vec3 sharp=texture(sceneImage,p).rgb;
- float centerDepth=texture(sceneDepth,p).r;
- if(centerDepth>=0.99999)return sharp;
- float distance=viewDistance(centerDepth);
- // Bliss's 2.10 cm / f4.8 camera settings produce a small circle of
- // confusion. Keep nearby surfaces and the weapon crisp during combat.
- const float focalLength=0.021;
- const float aperture=2.10/4.8;
- const float focusDistance=4.0;
- float coc=abs(aperture*focalLength*(distance-focusDistance)
-              /(distance*(focusDistance-focalLength)));
- // The reference pack's camera operates on a different world scale. Calibrate
- // the circle of confusion in screen pixels so the far room reads as focused
- // through a lens while near combat detail stays clear.
- float radius=min(coc*float(textureSize(sceneImage,0).x)*1.75,7.0);
- radius*=smoothstep(focusDistance-0.3,focusDistance+0.7,distance);
- if(radius<0.35)return sharp;
- vec2 pixel=1.0/vec2(textureSize(sceneImage,0));
- const vec2 taps[8]=vec2[8](vec2(1,0),vec2(.707,.707),vec2(0,1),vec2(-.707,.707),
-                            vec2(-1,0),vec2(-.707,-.707),vec2(0,-1),vec2(.707,-.707));
- vec3 sum=sharp*2.0;float weight=2.0;
- for(int i=0;i<8;++i){
-  vec2 q=clamp(p+taps[i]*pixel*radius,vec2(0),vec2(1));
-  float sampleDistance=viewDistance(texture(sceneDepth,q).r);
-  // Do not smear a nearby silhouette or viewmodel across a distant wall.
-  if(sampleDistance<distance*0.82)continue;
-  sum+=texture(sceneImage,q).rgb;weight+=1.0;
- }
- return sum/weight;
+ // Fixed-distance depth of field created a visible world-space focus shell
+ // around the player. Keep the low-resolution scene crisp and let material,
+ // atmosphere and bloom provide depth without exposing an optimization radius.
+ return texture(sceneImage,p).rgb;
 }
 void main(){
  vec2 centered=(uv-.5)*2.0;float radius=length(centered);float edge=clamp((radius-.48)/.52,0.0,1.0);edge=edge*edge*(3.0-2.0*edge);
