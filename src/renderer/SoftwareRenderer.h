@@ -42,6 +42,7 @@ private:
     struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true,float reliefScale=.012f);
+    static void deriveSurfaceNormal(Texture& texture,float strength);
     static Point3 sampleNormal(const Texture& texture,float u,float v,float lod);
     bool testNormalMapping();
     Texture m_muzzleFlash;
