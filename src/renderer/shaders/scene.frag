@@ -92,7 +92,10 @@ void main(){
  vec2 sampleUV=uv;
  vec2 uvDx=dFdx(uv),uvDy=dFdy(uv);
 
- if(parallaxScale>0.0&&surface.z<0.5&&surface.x<6.0){
+ float materialDistance=length(worldPos-view.eyeYaw.xyz);
+ float parallaxFade=1.0-smoothstep(8.0,18.0,materialDistance);
+
+ if(parallaxScale>0.0&&surface.z<0.5&&parallaxFade>0.001){
   vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
   float determinant=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
 
@@ -102,7 +105,7 @@ void main(){
    vec3 geometricNormal=normalize(cross(tangent,bitangent));
    vec3 toEye=normalize(view.eyeYaw.xyz-worldPos);
    vec2 direction=vec2(dot(toEye,tangent),dot(toEye,bitangent))/max(abs(dot(toEye,geometricNormal)),0.35);
-   vec2 stepUV=clamp(direction,vec2(-2.0),vec2(2.0))*parallaxScale/4.0;
+   vec2 stepUV=clamp(direction,vec2(-2.0),vec2(2.0))*parallaxScale*parallaxFade/4.0;
 
    sampleUV=uv+stepUV*2.0;
 
@@ -188,17 +191,15 @@ void main(){
 
  if(surface.z<0.5&&surface.w<1.5&&view.atmosphere.w>0.0){
   float distance=length(worldPos-view.eyeYaw.xyz);
-
-  if(distance<75.0){
-   float density=view.atmosphere.w;
-   float heightDensity=exp(-max(worldPos.z*0.06,0.0));
-   float extinction=1.0-exp(-max(distance-5.0,0.0)*density*mix(0.80,1.20,heightDensity));
-   vec3 rayDir=normalize(worldPos-view.eyeYaw.xyz);
-   vec3 sunDir=normalize(vec3(0.5,0.7,0.5));
-   float cosTheta=dot(rayDir,sunDir);
-   float phase=0.90+0.10*cosTheta*cosTheta;
-   result=mix(result,toLinear(view.atmosphere.rgb)*phase,min(extinction,0.35));
-  }
+  float density=view.atmosphere.w;
+  float heightDensity=exp(-max(worldPos.z*0.06,0.0));
+  float nearWeight=smoothstep(0.75,7.0,distance);
+  float extinction=(1.0-exp(-distance*density*mix(0.80,1.20,heightDensity)))*nearWeight;
+  vec3 rayDir=(worldPos-view.eyeYaw.xyz)/max(distance,0.001);
+  vec3 sunDir=normalize(vec3(0.5,0.7,0.5));
+  float cosTheta=dot(rayDir,sunDir);
+  float phase=0.90+0.10*cosTheta*cosTheta;
+  result=mix(result,toLinear(view.atmosphere.rgb)*phase,min(extinction,0.35));
  }
 
  if(surface.z<0.5&&surface.w<1.5){
