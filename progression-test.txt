@@ -1,0 +1,1 @@
+Three connected chunks; locked transfer; continuous boundary crossing and return; health/ammo/door/pickup persistence; first two maps traversed with player controls; arrival in Turbine Gantry: PASS

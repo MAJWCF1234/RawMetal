@@ -1,1 +1,1 @@
-Backtick toggle; paused simulation; maps 0-5 and reactor; invalid map; fresh lift; FPS; Esc closes: PASS
+Backtick toggle; paused simulation; maps 0-5 and reactor; Ashfall 5x3 boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS

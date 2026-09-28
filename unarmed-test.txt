@@ -1,0 +1,1 @@
+Last shell lowers weapon, timed punch deals damage, walls block punches, ammo pickup restores shotgun, guard reduces frontal damage by 70 percent, rear damage stays full and guard prevents punching: PASS

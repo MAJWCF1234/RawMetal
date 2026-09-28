@@ -1,0 +1,81 @@
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Dry service bridge has headroom: PASS
+Service route reaches exit and both maintenance bays: PASS
+Service route reaches exit and both maintenance bays: PASS
+Service route reaches exit and both maintenance bays: PASS
+Workshop, electrical room, stores and plant bay are accessible: PASS
+Workshop, electrical room, stores and plant bay are accessible: PASS
+Workshop, electrical room, stores and plant bay are accessible: PASS
+Workshop, electrical room, stores and plant bay are accessible: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Entire equipment footprint clears walls and structural columns: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Opened door has standing clearance on both sides: PASS
+Dry service bridge has headroom: PASS
+Service route reaches exit and both maintenance bays: PASS
+Service route reaches exit and both maintenance bays: PASS
+Service route reaches exit and both maintenance bays: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Authored headers fit below ceiling and above standing clearance: PASS
+Settling pools do not emit fountain jets: PASS
+Four authored coolant basins: PASS
+Render, bed and buoyancy share basin definition: PASS
+Render, bed and buoyancy share basin definition: PASS
+Render, bed and buoyancy share basin definition: PASS
+Render, bed and buoyancy share basin definition: PASS
+Central walkway remains dry: PASS
+Rear store has a closed swinging door: PASS
+Swinging leaf clears a walkable store entrance: PASS
+Each channel has walkable ramps at both ends: PASS
+Each channel has walkable ramps at both ends: PASS
+Each channel has walkable ramps at both ends: PASS
+Each channel has walkable ramps at both ends: PASS
+Each channel has walkable ramps at both ends: PASS
+Each channel has walkable ramps at both ends: PASS
+Each channel has walkable ramps at both ends: PASS
+Each channel has walkable ramps at both ends: PASS
+Player enters sloped flooded trench: PASS
+Player walks back out without one-way drop: PASS
+Buoyant debris stays at the water surface: PASS
+Heavy debris settles against the sloped basin floor: PASS
+Saving and restoring retains basin geometry and debris state: PASS

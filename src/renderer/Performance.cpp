@@ -27,7 +27,7 @@ bool SoftwareRenderer::testHardware(){
  auto check=[&](bool condition,const char* label){report<<label<<": "<<(condition?"PASS":"FAIL")<<'\n';passed&=condition;};
  Texture red{1,1,{0xffff0000u}},blue{1,1,{0xff0000ffu}},transparent{1,1,{0x00ffffffu}},emissive{1,1,{0xff000000u}},normal{1,1,{0xffffffffu}};
  emissive.emission={0xffffffffu};normal.normalLevels={{{1,0,0}}};NormalLighting lights;lights.directions[0]={1,0,0};lights.weights[0]=1;
- auto begin=[&]{renderer.m_gpu->begin(128,72);renderer.m_gpuFrame=true;};
+ auto begin=[&]{renderer.m_gpu->begin(128,72);renderer.m_gpu->setView(0,0,0,0,0,128.f/72.f,false,0);renderer.m_gpuFrame=true;};
  auto triangle=[&](const Texture&t,float z,float light=1,const NormalLighting* nl=nullptr){renderer.triangle3D({{-.3f,-.3f,z},0,0},{{.3f,-.3f,z},1,0},{{0,.3f,z},.5f,1},t,light,nl);};
  auto finish=[&]{renderer.m_gpu->finish(renderer.m_pixels);renderer.m_gpuFrame=false;return renderer.m_pixels[36*128+64]&0xffffffu;};
  auto redChannel=[](std::uint32_t p){return int((p>>16)&255);};
@@ -37,8 +37,24 @@ bool SoftwareRenderer::testHardware(){
  Texture liquid{1,1,{0xc4ff0000u}};liquid.transparent=true;
  begin();triangle(liquid,1);triangle(blue,2);pixel=finish();check(((pixel>>16)&255)>150&&(pixel&255)>20&&(pixel&255)<100,"Continuous water alpha blends the visible bed without cutout holes");
  begin();triangle(emissive,1,0);auto brightEmission=finish();check(blueChannel(brightEmission)>150,"Emission survives zero ambient illumination");
- renderer.m_emissionScale=.1f;begin();triangle(emissive,1,0);pixel=finish();check(blueChannel(pixel)>8&&blueChannel(pixel)<blueChannel(brightEmission)/2,"Emergency lamp emission dims on the GPU");renderer.m_emissionScale=1.f;
+ renderer.m_emissionScale=.1f;begin();triangle(emissive,1,0);pixel=finish();
+ // Compare against the documented linear emission -> filmic -> display path.
+ // Display-encoded values are nonlinear: 10% radiance is not 10% pixel value.
+ auto expectedEmission=[](float scale){float linear=1.6f*scale*.95f;float mapped=std::clamp((linear*(2.51f*linear+.03f))/(linear*(2.43f*linear+.59f)+.14f),0.f,1.f);return int(std::round(std::pow(mapped,1.f/2.2f)*255.f));};
+ report<<"Emission display values: full "<<blueChannel(brightEmission)<<", dim "<<blueChannel(pixel)<<", expected "<<expectedEmission(.1f)<<'\n';
+ check(std::abs(blueChannel(pixel)-expectedEmission(.1f))<=2&&blueChannel(pixel)<blueChannel(brightEmission),"Emergency lamp emission matches linear dimming through display transform");renderer.m_emissionScale=1.f;
  begin();triangle(normal,1,.5f);auto flat=finish();begin();triangle(normal,1,.5f,&lights);auto relief=finish();check((relief&255)>(flat&255),"Authored normal map affects hardware lighting");
+ // A black dielectric isolates specular response from diffuse light. This also
+ // verifies flat-normal materials receive the same BRDF as authored neutral maps.
+ Texture roughDielectric{1,1,{0xff000000u}},smoothDielectric{1,1,{0xff000000u}},neutralDielectric{1,1,{0xff000000u}};
+ roughDielectric.glossStrength=.05f;smoothDielectric.glossStrength=.48f;neutralDielectric.glossStrength=.48f;
+ neutralDielectric.normalLevels={{{0,0,1}}};NormalLighting frontal;frontal.directions[0]={0,0,-1};frontal.weights[0]=1;
+ begin();triangle(roughDielectric,1,1,&frontal);auto roughHighlight=finish();
+ begin();triangle(smoothDielectric,1,1,&frontal);auto smoothHighlight=finish();
+ begin();triangle(neutralDielectric,1,1,&frontal);auto neutralHighlight=finish();
+ report<<"GGX highlight values: rough "<<blueChannel(roughHighlight)<<", smooth "<<blueChannel(smoothHighlight)<<", neutral normal "<<blueChannel(neutralHighlight)<<'\n';
+ check(blueChannel(smoothHighlight)>blueChannel(roughHighlight)+3,"GGX smoothness narrows and brightens dielectric highlights");
+ check(std::abs(blueChannel(neutralHighlight)-blueChannel(smoothHighlight))<=1,"Flat-normal GGX matches authored neutral normal map");
  begin();triangle(red,1);renderer.m_gpu->clearDepth();triangle(blue,2);pixel=finish();check(blueChannel(pixel)>80&&redChannel(pixel)<blueChannel(pixel)/4,"View-model depth range remains independent");
  begin();renderer.triangle3D({{-.3f,-.1f,-.2f},0,0},{{.3f,-.1f,1},1,0},{{0,.3f,1},.5f,1},red,1);finish();size_t coverage=0;for(auto p:renderer.m_pixels)coverage+=(p&0xffffffu)!=0x0c1012u;check(coverage>100,"Near-plane clipping keeps crossing geometry");
  renderer.m_shadowBudgetLimit=10000000;

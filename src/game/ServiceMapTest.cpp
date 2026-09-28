@@ -142,6 +142,18 @@ bool Game::testCampaignExtension(){
   for(auto target:targets){bool found=false;for(auto n:reachable)if(length(point(n)-target.p)<.45f&&std::fabs(n.z-target.z)<.03f){found=true;break;}
    out<<"target "<<target.p.x<<','<<target.p.y<<','<<target.z<<' ';result&=check(found,"Authored destination reachable without jumping");
   }
+  // Authored equipment offsets must keep meshes and collision above the base floor.
+  bool equipmentAboveFloor=true;
+  for(const auto& f:game.world().fixtures())equipmentAboveFloor&=f.base>=0;
+  for(const auto& p:game.world().props())equipmentAboveFloor&=p.base>=0;
+  result&=check(equipmentAboveFloor,"Service equipment is not buried below its owning floor");
+  // Every control/help station must be approachable with a standing player.
+  for(const auto& terminal:game.world().terminals()){
+   float z=game.world().floorHeight(terminal.position.x,terminal.position.y)+terminal.z;
+   bool accessible=false;
+   for(auto n:reachable)if(length(point(n)-terminal.position)<1.05f&&std::fabs(n.z-z)<.03f){accessible=true;break;}
+   result&=check(accessible,"Service terminal has a reachable standing interaction position");
+  }
   // Regression checks for the cleanup pass: imported furniture must face the
   // aisle, upper decks use authored structure instead of procedural post spam,
   // and the suspended freight branch ends in a real vestibule.

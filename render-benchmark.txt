@@ -1,0 +1,3 @@
+3.5, 4.5: 57.1384 ms/frame (render only)
+7.5, 12.5: 73.5572 ms/frame (render only)
+20.5, 11.5: 30.6701 ms/frame (render only)

@@ -1,0 +1,6 @@
+clip 0 maximum vertex motion 0.0593825 gameplay metres, non-rigid deformation 0.0833126
+clip 1 maximum vertex motion 0.696265 gameplay metres, non-rigid deformation 0.999678
+clip 2 maximum vertex motion 0.604539 gameplay metres, non-rigid deformation 1.04623
+clip 3 maximum vertex motion 0.364869 gameplay metres, non-rigid deformation 0.217043
+clip 4 maximum vertex motion 1.80837 gameplay metres, non-rigid deformation 2.2202
+PASS: five independently deforming skeletal clips, matching topology

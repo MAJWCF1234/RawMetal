@@ -53,19 +53,19 @@ Point3 SoftwareRenderer::cameraPoint(Point3 v,const Game& game)const{
  return {-x*sy+y*cy,z*cp-forward*sp,forward*cp+z*sp};
 }
 void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const Texture& texture,float light,const NormalLighting* normalLighting){
- bool normalActive=normalLighting&&!texture.normalLevels.empty();std::array<Point3,2> tangentLights{};float flatResponse=.65f;
+ bool tangentActive=normalLighting!=nullptr;bool normalActive=tangentActive&&!texture.normalLevels.empty();std::array<Point3,2> tangentLights{};float flatResponse=.65f;
  auto dot=[](Point3 p,Point3 q){return p.x*q.x+p.y*q.y+p.z*q.z;};
  auto unit=[&](Point3 v){return v*(1/std::sqrt(std::max(.000001f,dot(v,v))));};
- if(normalActive){
+ if(tangentActive){
   auto e1=b.p-a.p,e2=c.p-a.p;float du1=b.u-a.u,dv1=b.v-a.v,du2=c.u-a.u,dv2=c.v-a.v,det=du1*dv2-du2*dv1;
-  if(std::fabs(det)<.000001f)normalActive=false;
+  if(std::fabs(det)<.000001f){normalActive=false;tangentActive=false;}
   else{
    auto tangent=unit((e1*dv2-e2*dv1)*(1/det)),bitangent=unit((e2*du1-e1*du2)*(1/det)),normal=unit(cross3(e1,e2));
    if(dot(normal,a.p)>0)normal=normal*-1;
    for(int i=0;i<2;++i){auto lightDirection=normalLighting->directions[i];tangentLights[i]={dot(tangent,lightDirection),dot(bitangent,lightDirection),dot(normal,lightDirection)};flatResponse+=normalLighting->weights[i]*std::max(0.f,tangentLights[i].z);}
   }
  }
- if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,normalActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale);return;}
+ if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale);return;}
  // Clip in camera space before perspective division; preserve UVs at intersections.
  MeshVertex input[8]={a,b,c},output[8];int count=3;
  for(int plane=0;plane<5;++plane){
@@ -316,7 +316,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }};
    illuminate(A,x,y);illuminate(B,x+1,y);illuminate(C,x+1,y+1);illuminate(D,x,y+1);
    NormalLighting lights;const NormalLighting* normalState=nullptr;
-   if(!t.normalLevels.empty()&&!movingGeometry){lights=normalLightingAt(a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows));normalState=&lights;}
+   if((!t.normalLevels.empty()||t.glossStrength>0)&&!movingGeometry){lights=normalLightingAt(a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows));normalState=&lights;}
    triangle3D(A,B,C,t,light,normalState);triangle3D(A,C,D,t,light,normalState);}
  };
  Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};

@@ -1,0 +1,255 @@
+109: 1170 triangles; bounds -0.243123,-0.0030583,-4.64681 to 0.60236,1.75828,3.95702
+ mesh Barrel triangles 282
+ material remington-870_material
+ mesh Base triangles 304
+ material remington-870_material
+ mesh Bolt triangles 76
+ material remington-870_material
+ mesh Crosshair triangles 148
+ material remington-870_material
+ mesh PicatinnyRail triangles 284
+ material remington-870_material
+ mesh ShotgunBullet triangles 76
+ material remington-870_bullet_material
+Animation stacks: 0
+111: 1176 triangles; bounds -0.467054,1.37293,-0.101607 to 0.467054,1.65744,0.444739
+ bone root at -3.84493e-09,1.4657,-2.38793e-07
+ bone handIK.R at -0.306829,1.52378,0.246232
+ bone elbowIK.R at -0.640995,1.39039,-0.298068
+ bone handIK.L at 0.306829,1.52378,0.246232
+ bone elbowIK.L at 0.640995,1.39039,-0.298068
+ bone shoulder.R at -0.0183,1.6051,0.0683997
+ bone shoulder.L at 0.0183,1.6051,0.0683997
+ bone camera at -2.96815e-14,1.74316,-3.38019e-07
+ bone handIK.R_end at -0.280931,1.56232,0.350056
+ bone elbowIK.R_end at -0.640995,1.39039,-0.395009
+ bone handIK.L_end at 0.280931,1.56232,0.350056
+ bone elbowIK.L_end at 0.640995,1.39039,-0.395009
+ bone upper_arm.R at -0.196998,1.59402,-0.0267001
+ bone upper_arm.L at 0.196998,1.59402,-0.0267003
+ bone camera_end at -5.06002e-09,1.74316,-0.14678
+ bone forearm.R at -0.434887,1.40705,0.0841464
+ bone forearm.L at 0.434887,1.40705,0.0841461
+ bone hand.R at -0.306835,1.52377,0.246248
+ bone hand.L at 0.306835,1.52378,0.246248
+ bone palm.01.R at -0.27421,1.5446,0.272346
+ bone palm.02.R at -0.291913,1.54529,0.279617
+ bone palm.03.R at -0.307837,1.54166,0.282873
+ bone palm.04.R at -0.321796,1.53562,0.287459
+ bone palm.01.L at 0.274211,1.5446,0.272346
+ bone palm.02.L at 0.291914,1.54529,0.279617
+ bone palm.03.L at 0.307837,1.54166,0.282873
+ bone palm.04.L at 0.321796,1.53562,0.287459
+ bone f_index.01.R at -0.249378,1.57689,0.329917
+ bone thumb.01.R at -0.265662,1.52428,0.276683
+ bone f_middle.01.R at -0.273096,1.57197,0.341979
+ bone f_ring.01.R at -0.299202,1.56333,0.349494
+ bone f_pinky.01.R at -0.321406,1.55354,0.350071
+ bone f_index.01.L at 0.249378,1.57689,0.329917
+ bone thumb.01.L at 0.265662,1.52428,0.276683
+ bone f_middle.01.L at 0.273095,1.57197,0.341979
+ bone f_ring.01.L at 0.299201,1.56333,0.349493
+ bone f_pinky.01.L at 0.321405,1.55354,0.35007
+ bone f_index.02.R at -0.232769,1.57548,0.376099
+ bone thumb.02.R at -0.231077,1.53296,0.303742
+ bone f_middle.02.R at -0.256272,1.56302,0.393473
+ bone f_ring.02.R at -0.286494,1.54965,0.396444
+ bone f_pinky.02.R at -0.316123,1.53801,0.390152
+ bone f_index.02.L at 0.232769,1.57548,0.376099
+ bone thumb.02.L at 0.231077,1.53296,0.303742
+ bone f_middle.02.L at 0.256272,1.56303,0.393473
+ bone f_ring.02.L at 0.286494,1.54965,0.396444
+ bone f_pinky.02.L at 0.316123,1.53802,0.390151
+ bone f_index.03.R at -0.225233,1.57217,0.398446
+ bone thumb.03.R at -0.212315,1.53691,0.33408
+ bone f_middle.03.R at -0.247181,1.55096,0.419413
+ bone f_ring.03.R at -0.277727,1.53309,0.422302
+ bone f_pinky.03.R at -0.311032,1.52292,0.405702
+ bone f_index.03.L at 0.225233,1.57217,0.398445
+ bone thumb.03.L at 0.212315,1.53691,0.33408
+ bone f_middle.03.L at 0.247181,1.55096,0.419413
+ bone f_ring.03.L at 0.277726,1.5331,0.422302
+ bone f_pinky.03.L at 0.311032,1.52292,0.405702
+ bone f_index.03.R_end at -0.217643,1.56507,0.422072
+ bone thumb.03.R_end at -0.199675,1.54116,0.36792
+ bone f_middle.03.R_end at -0.239102,1.53406,0.440025
+ bone f_ring.03.R_end at -0.270487,1.51454,0.435596
+ bone f_pinky.03.R_end at -0.304442,1.50432,0.416074
+ bone f_index.03.L_end at 0.217643,1.56507,0.422072
+ bone thumb.03.L_end at 0.199675,1.54116,0.36792
+ bone f_middle.03.L_end at 0.239102,1.53406,0.440025
+ bone f_ring.03.L_end at 0.270487,1.51454,0.435595
+ bone f_pinky.03.L_end at 0.304442,1.50432,0.416074
+ mesh ArmsMesh triangles 1176
+ material Arms
+Animation stacks: 18
+ArmsRig|finger_gun_broken
+ArmsRig|finger_gun_fire
+ArmsRig|finger_gun_fix
+ArmsRig|finger_gun_idle
+ArmsRig|grab.L
+ArmsRig|grab.R
+ArmsRig|guard_draw
+ArmsRig|guard_idle
+ArmsRig|jab.L
+ArmsRig|jab.R
+ArmsRig|knife_draw
+ArmsRig|knife_hit_01
+ArmsRig|knife_hit_02
+ArmsRig|knife_idle
+ArmsRig|push.L
+ArmsRig|push.R
+ArmsRig|relax
+ArmsRig|rest
+Authored grab finger transforms: 30
+Arm opening rings: 2
+110: 2416 triangles; bounds -0.994579,-0.00398111,-0.921341 to 0.994579,1.27322,0.850171
+ mesh Eyes triangles 600
+ material Eyes
+ mesh HuntsmanSpider triangles 1816
+ material Body
+Animation stacks: 0
+114: 1424 triangles; bounds -1.24629,0.0552715,-3.01194 to 1.24629,3.33513,1.47246
+ mesh Body triangles 1008
+ material Insect
+ mesh Eyes triangles 384
+ material Eyes
+ mesh Wing.L triangles 16
+ material Wing
+ mesh Wing.R triangles 16
+ material Wing
+Animation stacks: 0
+116: 5960 triangles; bounds -2.22405,-1.76122,-1.15062 to 3.01207,4.0074,7.63717
+ mesh Cube triangles 5960
+ material Material
+Animation stacks: 0
+121: 380 triangles; bounds -0.336751,2.98023e-08,-0.336751 to 0.336751,1,0.336751
+ mesh metal_barrel_hr_1 triangles 380
+ material metal_barrel_hr_1
+Animation stacks: 0
+123: 108 triangles; bounds -0.75,0,-0.57 to 0.72,0.93,0.57
+ mesh wooden_crate_1 triangles 108
+ material wooden_crate_hr_1
+Animation stacks: 0
+133: 12 triangles; bounds -0.199997,0,-0.109997 to 0.200003,0.08,0.110003
+ mesh first_aid_kit_hr_1 triangles 12
+ material first_aid_kit_hr_1
+Animation stacks: 0
+135: 96 triangles; bounds -0.398334,-0.00100813,-0.179479 to 0.0649373,0.558878,0.247279
+ mesh 12g_box_Green triangles 96
+ material Material.002
+ material Material.004
+ material Material.003
+Animation stacks: 0
+140: 1020 triangles; bounds -0.57,-1.78814e-08,-0.34 to 0.57,0.64,0.34
+ mesh machinery_1 triangles 1020
+ material machinery_1
+Animation stacks: 0
+142: 4730 triangles; bounds -1.53,-4.90417e-05,-0.47 to 1.53,1.75106,0.470004
+ mesh machinery_mx_1 triangles 4730
+ material machinery_mx_1
+Animation stacks: 0
+144: 96 triangles; bounds -0.25,0,-3.51187 to 0.25,0.5,3.75
+ mesh pipe_ax_1 triangles 96
+ material pipe_hr_3
+Animation stacks: 0
+146: 36 triangles; bounds -3,-3.72529e-09,-1.50996e-07 to 2,1.6,0.0500002
+ mesh gate_1 triangles 36
+ material gate_hr_1
+Animation stacks: 0
+163: 36 triangles; bounds -1,1.6292e-08,-0.15 to 1,2,5.08624e-07
+ mesh wall_6 triangles 36
+ material wall_6
+Animation stacks: 0
+164: 112 triangles; bounds -1,-1.80001e-14,-0.1 to 1,2,5.4041e-07
+ mesh wall_8 triangles 112
+ material wall_7
+Animation stacks: 0
+165: 32 triangles; bounds -0.15,-1.78814e-08,-0.15 to 0.15,2,0.15
+ mesh column_6 triangles 32
+ material wall_6
+Animation stacks: 0
+166: 10 triangles; bounds -0.5,-0.5,-1.94211e-07 to 0.5,0.5,0.0500003
+ mesh vent_fps_1 triangles 10
+ material floor_1
+ material ceiling_1
+ material wall_7
+ material vent_1
+Animation stacks: 0
+167: 114 triangles; bounds -0.4,-0.0900001,-0.4 to 0.4,2.43982e-07,0.4
+ mesh ceiling_lamp_fps_1 triangles 114
+ material wall_7
+ material lamp_1_on
+ material wall_8
+Animation stacks: 0
+168: 76 triangles; bounds -1,-9.73539e-09,-0.0500001 to 1,2,0.0500006
+ mesh doorway_wide_1 triangles 76
+ material wall_5
+ mesh door_wide_1_bottom triangles 8
+ material door_1
+ mesh door_wide_1_top triangles 8
+ material door_1
+Animation stacks: 0
+169: 172 triangles; bounds -1.7,-5.62071e-08,-0.500001 to 1.7,1.8,0.499999
+ mesh generator_1 triangles 172
+ material generator_1
+ material metal_4
+Animation stacks: 0
+170: 2692 triangles; bounds -1.71014,-6.333e-08,-0.510141 to 1.71014,2.4,0.51014
+ mesh metal_shelf_1 triangles 2692
+ material metal_3
+ material metal_6
+Animation stacks: 0
+171: 522 triangles; bounds -0.1968,-0.2688,-0.068 to 0.196,0.264,1.03398e-07
+ mesh wall_box_2 triangles 282
+ material wall_box_2
+ mesh fuze_switch_8 triangles 30
+ material wall_box_2
+ mesh fuze_switch_6 triangles 30
+ material wall_box_2
+ mesh fuze_switch_7 triangles 30
+ material wall_box_2
+ mesh fuze_switch_5 triangles 30
+ material wall_box_2
+ mesh fuze_switch_4 triangles 30
+ material wall_box_2
+ mesh fuze_switch_2 triangles 30
+ material wall_box_2
+ mesh fuze_switch_3 triangles 30
+ material wall_box_2
+ mesh fuze_switch_1 triangles 30
+ material wall_box_2
+Animation stacks: 0
+168: 8 triangles; bounds -0.9,-2.43306e-07,-0.03 to 0.9,0.8,0.0300001
+ mesh doorway_wide_1 triangles 76
+ material wall_5
+ mesh door_wide_1_bottom triangles 8
+ material door_1
+ mesh door_wide_1_top triangles 8
+ material door_1
+Animation stacks: 0
+168: 8 triangles; bounds -0.9,0.8,-0.0299999 to 0.9,1.7,0.0300003
+ mesh doorway_wide_1 triangles 76
+ material wall_5
+ mesh door_wide_1_bottom triangles 8
+ material door_1
+ mesh door_wide_1_top triangles 8
+ material door_1
+Animation stacks: 0
+191: 958 triangles; bounds -0.297315,-7.39354e-08,3.17514e-08 to 0.297315,0.777,0.819
+ mesh computer_1 triangles 958
+ material pc_1
+ material keyboard_1
+Animation stacks: 0
+257: 4730 triangles; bounds -1.53,-4.90417e-05,-0.47 to 1.53,1.75106,0.470004
+ mesh machinery_mx_1 triangles 4730
+ material machinery_mx_1
+Animation stacks: 0
+258: 38 triangles; bounds -0.6,-1.19209e-07,-0.656 to 0.6,2.912,-0
+ mesh electrical_equipment_1 triangles 38
+ material transformer_box_hr_2
+Animation stacks: 0
+259: 4966 triangles; bounds -1.29288,-0.0101182,-1.64173 to 1.31924,2.38002,1.23229
+ mesh tank_system_mx_1 triangles 4966
+ material metal_hr_6_1
+Animation stacks: 0

@@ -1,0 +1,7 @@
+rail hull sides 0 0
+jump 1.01903 grounded 1
+rate 0 0.0687475 0.0687475
+stairs 12.025 1.2
+standing 9.79999
+duck 11.0666
+duck-jump cover 2.24 1.1 1

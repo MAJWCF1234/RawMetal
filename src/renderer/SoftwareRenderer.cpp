@@ -66,13 +66,19 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_facilityTextures.emplace("transformer_box_hr_2",loadTexture(261));
  m_facilityTextures.emplace("metal_hr_6_1",loadTexture(262));
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
- m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);m_bulkhead.glossStrength=.16f;
+ m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);m_bulkhead.glossStrength=.48f;
  for(int i=0;i<6;++i)m_clutterTextures[i]=loadTexture(152+i*2);
  m_medkitTexture=loadTexture(134);m_shellsTexture=loadTexture(136);
  m_terminalTexture=loadTexture(137);m_cautionSign=loadTexture(138);prepareDecal(m_cautionSign);
  m_muzzleFlash=loadTexture(139);m_muzzleFlash.additive=true;prepareDecal(m_muzzleFlash);
  m_pumpTexture=loadTexture(141);m_compressorTexture=loadTexture(143);m_pipeTexture=loadTexture(145);m_gateTexture=loadTexture(147);
  m_pressureWall=loadTexture(148);m_pressureFloor=loadTexture(149);m_pressureMetal=loadTexture(150);
+ // Worn paint/concrete remain dielectrics. Smoothness tunes GGX lobe width;
+ // keep opaque values below .5 because surface.z also carries blend flags.
+ m_wall.glossStrength=.16f;m_floor.glossStrength=.24f;
+ m_pressureWall.glossStrength=.20f;m_pressureFloor.glossStrength=.30f;
+ m_pressureMetal.glossStrength=.44f;m_concrete.glossStrength=.08f;
+
  m_ashfallSky=loadTexture(252);if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4)m_ashfallSky.clampEdges=true;else prepareDecal(m_ashfallSky,false);
  m_terrainDirt=loadTexture(253);attachNormal(m_terrainDirt,254,true,0);
  m_terrainRock=loadTexture(255);attachNormal(m_terrainRock,256);
@@ -91,21 +97,53 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  // A lightweight wraparound panorama: bright coastal haze with broad cloud
  // forms, generated here so the same sky ships inside the standalone EXE.
  m_coastSky={512,256,std::vector<std::uint32_t>(512*256)};
+ auto hash=[](int i,int j)->float{
+  unsigned n=unsigned(i*374761393+j*668265263);n=(n^(n>>13))*1274126177u;
+  return float(n&2047u)/2047.f;
+ };
+ auto vnoise=[&](float px,float py){
+  int ix=int(std::floor(px)),iy=int(std::floor(py));
+  float fx=px-float(ix),fy=py-float(iy);
+  fx=fx*fx*(3.f-2.f*fx);fy=fy*fy*(3.f-2.f*fy);
+  float bl=hash(ix,iy),br=hash(ix+1,iy),tl=hash(ix,iy+1),tr=hash(ix+1,iy+1);
+  return (bl*(1.f-fx)+br*fx)*(1.f-fy)+(tl*(1.f-fx)+tr*fx)*fy;
+ };
  for(int y=0;y<256;++y)for(int x=0;x<512;++x){
-  float v=float(y)/255.f,longitude=float(x)/512.f*2.f*kPi;
-  float cloud=.5f+.25f*std::sin(longitude*5.f+std::sin(v*23.f)*1.7f)*std::cos(v*19.f)
-                 +.16f*std::sin(longitude*11.f-v*31.f)*std::cos(longitude*7.f+v*17.f);
-  float cover=std::clamp((cloud-.47f)*3.3f,0.f,1.f)*std::clamp((.60f-v)*4.5f,0.f,1.f);
-  float horizon=std::clamp(1.f-std::fabs(v-.5f)*3.2f,0.f,1.f);
-  int r=int(113+70*horizon+104*cover),g=int(157+50*horizon+77*cover),b=int(199+34*horizon+42*cover);
-  m_coastSky.pixels[size_t(y*512+x)]=rgb(std::min(r,255),std::min(g,255),std::min(b,255));
+  float v=float(y)/255.f,lon=float(x)/512.f*2.f*kPi;
+  float skyH=std::clamp((.5f-v)*2.f,0.f,1.f);
+  float skyR=185.f+(52.f-185.f)*std::pow(skyH,.75f);
+  float skyG=212.f+(125.f-212.f)*std::pow(skyH,.75f);
+  float skyB=242.f+(220.f-242.f)*std::pow(skyH,.75f);
+  if(v>.5f){
+   float below=std::clamp((v-.5f)*4.f,0.f,1.f);
+   skyR=skyR*(1.f-below)+165.f*below;skyG=skyG*(1.f-below)+195.f*below;skyB=skyB*(1.f-below)+222.f*below;
+  }
+  float elev=(.5f-v)*kPi*.5f;
+  Point3 dir{std::cos(elev)*std::cos(lon),std::cos(elev)*std::sin(lon),std::sin(elev)};
+  Point3 sun{std::cos(.65f)*std::cos(1.8f),std::cos(.65f)*std::sin(1.8f),std::sin(.65f)};
+  float cosTheta=std::max(0.f,dir.x*sun.x+dir.y*sun.y+dir.z*sun.z);
+  float aureole=std::pow(cosTheta,14.f)*.45f+std::pow(cosTheta,64.f)*.65f;
+  skyR+=aureole*80.f;skyG+=aureole*65.f;skyB+=aureole*35.f;
+  if(v<.48f){
+   float planeDist=.20f/std::max(.5f-v,.04f);
+   float cx=lon*2.2f+dir.x*planeDist*.35f,cy=dir.y*planeDist*.35f;
+   float n=vnoise(cx*1.8f,cy*1.8f)*.58f+vnoise(cx*3.6f,cy*3.6f)*.28f+vnoise(cx*7.2f,cy*7.2f)*.14f;
+   float cloud=std::clamp((n-.47f)*4.2f,0.f,1.f)*std::clamp((.48f-v)*6.f,0.f,1.f);
+   if(cloud>0.f){
+    float lit=std::clamp(.65f+cosTheta*.35f+(n-.47f)*.8f,0.f,1.f);
+    float cr=180.f+lit*70.f,cg=198.f+lit*54.f,cb=225.f+lit*30.f;
+    skyR=skyR*(1.f-cloud)+cr*cloud;skyG=skyG*(1.f-cloud)+cg*cloud;skyB=skyB*(1.f-cloud)+cb*cloud;
+   }
+  }
+  int ir=std::clamp(int(skyR),0,255),ig=std::clamp(int(skyG),0,255),ib=std::clamp(int(skyB),0,255);
+  m_coastSky.pixels[size_t(y*512+x)]=rgb(ir,ig,ib);
  }
  prepareDecal(m_coastSky,false);
  m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.glossStrength=.30f;auto coolantTint=[](uint32_t pixel){return 0xc4000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
  m_coastWater=loadTexture(250);attachNormal(m_coastWater,251,true,0);m_coastWater.transparent=true;m_coastWater.glossStrength=.48f;
  auto seaTint=[](std::uint32_t pixel){int gray=int(((pixel>>16)&255)*.30f+((pixel>>8)&255)*.59f+(pixel&255)*.11f);int delta=(gray-100)/3;
-  return 0x66000000u|(std::uint32_t(std::clamp(79+delta,0,255))<<16)|(std::uint32_t(std::clamp(132+delta,0,255))<<8)|std::uint32_t(std::clamp(158+delta,0,255));};
- for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWater.mips)for(auto&pixel:mip)pixel=seaTint(pixel);
+  return 0x58000000u|(std::uint32_t(std::clamp(32+delta,0,255))<<16)|(std::uint32_t(std::clamp(92+delta,0,255))<<8)|std::uint32_t(std::clamp(148+delta,0,255));};
+for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWater.mips)for(auto&pixel:mip)pixel=seaTint(pixel);
  m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
@@ -442,7 +480,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen())drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
- if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash);
+ if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
   std::array<float,16> fogLights{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
   const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
    float dx=lamp.position.x-game.player().pos.x,dy=lamp.position.y-game.player().pos.y,d2=dx*dx+dy*dy;

@@ -355,7 +355,7 @@ void Game::update(const InputState& input, float dt) {
     if (!dead() && !m_won) {
         m_elapsed += dt;
         m_player.angle = wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
-        m_player.pitch = clamp(m_player.pitch - input.mouseDy * 0.55f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -95.0f, 95.0f);
+        m_player.pitch = clamp(m_player.pitch - input.mouseDy * 0.308f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -210.0f, 210.0f);
 
         updateLift(dt);
         updateMovement(input,dt);
@@ -403,7 +403,7 @@ void Game::updateWeaponMotion(const InputState& input,float dt){
  if(m_shotAge<.12f&&m_shotAge+dt>=.12f)sound(Sound::Pump,.65f);
  m_shotAge+=dt;
  float yawRate=input.mouseDx*.0022f*m_settings.sensitivity/std::max(dt,.001f);
- float pitchRate=input.mouseDy*.55f/140.f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f)/std::max(dt,.001f);
+ float pitchRate=input.mouseDy*.308f/140.f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f)/std::max(dt,.001f);
  Vec2 target{std::clamp(-yawRate*.042f,-.19f,.19f),std::clamp(pitchRate*.035f,-.15f,.15f)};
  // Damped springs are integrated with bounded substeps, independent of render rate.
  int steps=std::max(1,int(std::ceil(dt/.008f)));float step=dt/steps;

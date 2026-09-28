@@ -1,0 +1,5 @@
+Door streaming and state retention: PASS
+Aligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS
+Walking across the seam in both directions at reactor elevation: PASS
+Ashfall forward-biased residency, turning, east/south crossing and Surface Nets wasteland seams: PASS
+Rear store door and wall collision, then walking out of flooded returns: PASS

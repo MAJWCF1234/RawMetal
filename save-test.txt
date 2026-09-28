@@ -1,0 +1,48 @@
+Full vertical camera range survives save/load: PASS
+Full vertical camera range survives save/load: PASS
+Dynamic-state roundtrip / settings preserved: PASS
+Loaded lift resumes without moving the passenger incorrectly: PASS
+Dynamic-state roundtrip / settings preserved: PASS
+Loaded lift resumes without moving the passenger incorrectly: PASS
+Dynamic-state roundtrip / settings preserved: PASS
+Loaded lift resumes without moving the passenger incorrectly: PASS
+Dynamic-state roundtrip / settings preserved: PASS
+Loaded lift resumes without moving the passenger incorrectly: PASS
+Dynamic-state roundtrip / settings preserved: PASS
+Loaded lift resumes without moving the passenger incorrectly: PASS
+Brake-catch save is covered: PASS
+Dynamic-state roundtrip / settings preserved: PASS
+Loaded lift resumes without moving the passenger incorrectly: PASS
+Dynamic-state roundtrip / settings preserved: PASS
+Loaded lift resumes without moving the passenger incorrectly: PASS
+Loaded reactor puzzle can finish: PASS
+Current authored save remains byte-exact: PASS
+Six-chunk version 10 saves gain the four new chapters and transfer door: PASS
+Older content save loads after authored additions: PASS
+New enemies/items spawn while old dynamic state survives: PASS
+New doors use current map defaults instead of invalidating old saves: PASS
+Version 6 saves gain the new authored megamap chunks: PASS
+Version 4 saves load with default stalk state: PASS
+Old megamap saves escape corrected walls without losing health: PASS
+Valid megamap positions remain unchanged on load: PASS
+Old megamap saves escape corrected walls without losing health: PASS
+Valid megamap positions remain unchanged on load: PASS
+Corrupt / truncated / future saves leave the live game untouched: PASS
+Valid-checksum invalid gameplay data rejected: PASS
+Held and moving clutter roundtrip: PASS
+Esc menu opens Save submenu: PASS
+Save slot writes while simulation stays paused: PASS
+Existing slot requires overwrite confirmation: PASS
+Cancel preserves old save: PASS
+Confirmed overwrite replaces slot: PASS
+Failed temporary write preserves the previous slot: PASS
+Esc returns from submenu without resuming: PASS
+Empty slot reports load error without losing progress: PASS
+Load confirmation can be cancelled: PASS
+Confirmed load resumes and resets audio session: PASS
+Load click cannot fire the weapon: PASS
+All three slots support independent saves: PASS
+All three slots support independent saves: PASS
+Autosave checkpoint writes independently of manual slots: PASS
+Autosave restores flags, quest items and player state: PASS
+Invalid manual slots are rejected: PASS

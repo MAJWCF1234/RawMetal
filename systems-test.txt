@@ -1,0 +1,6 @@
+Named state, objective and quest-item stores: PASS
+Quest items are counted and consumable: PASS
+One-shot volume event sets state, spawns an alerted monster and shakes view: PASS
+Flag-gated hazard stays off: PASS
+Environmental hazard applies frame-rate-scaled damage: PASS
+Campaign completion is explicit, not tied to the highest compiled chunk: PASS
