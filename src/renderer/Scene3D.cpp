@@ -277,13 +277,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   for(auto&direction:result.directions)direction=cameraPoint(center+direction,game)-origin;
   return result;
  };
- bool objectLighting=false;float objectLight=1;
+ bool objectLighting=false;float objectLight=1;const NormalLighting*objectNormalLighting=nullptr;
  auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
   if(!m_staticGeometryBuild&&std::max({a.p.z,b.p.z,c.p.z})<game.dormantBelow())return;
   auto A=cameraPoint(a.p,game),B=cameraPoint(b.p,game),C=cameraPoint(c.p,game);if(outside(A)&outside(B)&outside(C))return;
   if(objectLighting)light*=objectLight;
   else if(light<1.5f){auto normal=cross3(b.p-a.p,c.p-a.p);a.light=illumination(a.p,normal);b.light=illumination(b.p,normal);c.light=illumination(c.p,normal);}
-  a.p=A;b.p=B;c.p=C;triangle3D(a,b,c,t,light);
+  a.p=A;b.p=B;c.p=C;
+  if(objectNormalLighting&&!movingGeometry&&t.glossStrength>0)triangle3D(a,b,c,t,light,objectNormalLighting);
+  else if(!objectLighting&&(!t.normalLevels.empty()||t.glossStrength>0)&&!movingGeometry){auto lights=normalLightingAt((a.p+b.p+c.p)*(1.f/3.f));triangle3D(a,b,c,t,light,&lights);}
+  else triangle3D(a,b,c,t,light);
  };
  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
   if(!m_staticGeometryBuild&&std::max({a.z,b.z,c.z,d.z})<game.dormantBelow())return;
@@ -330,7 +333,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(m_staticGeometryBuild||eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
   if(m_staticGeometryBuild||eye.x>=b.x)face({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},light);
   if(m_staticGeometryBuild||eye.z>=b.z)face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},light*1.1f);
-  if(m_staticGeometryBuild||eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.65f);
+  if(m_staticGeometryBuild||eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.88f);
  };
  // Low-sided, capped pipes retain a cylindrical silhouette without dense meshes.
  auto cylinder=[&](Point3 a,Point3 b,float radius,const Texture&texture){
@@ -355,19 +358,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    quad({x-radius,y-radius,z},{x+radius,y-radius,z},{x+radius,y+radius,z},{x-radius,y+radius,z},contact,1.6f);
   }
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
+  bool hasGloss=texture.glossStrength>0;
+  NormalLighting surfaceLights{};if(hasGloss)surfaceLights=normalLightingAt(receiver);objectNormalLighting=hasGloss?&surfaceLights:nullptr;
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   float scale=std::min(height/std::max(.001f,range.y),footprint/std::max(range.x,range.z));
   float cosine=std::cos(yaw),sine=std::sin(yaw);
   for(auto face:mesh.triangles){for(auto&vertex:face.v){auto p=(vertex.p-center)*scale;vertex.p={x+p.x*cosine+p.z*sine,y-p.x*sine+p.z*cosine,base+p.y+range.y*scale*.5f};}
    auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],texture,light);
   }
-  objectLighting=false;
+  objectLighting=false;objectNormalLighting=nullptr;
  };
  auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   if(!m_staticGeometryBuild&&base+height<game.dormantBelow())return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
   float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
   objectLighting=true;objectLight=(illumination(receiver,{0,0,1})+illumination(receiver,{1,0,0}))*.5f;
+  bool hasGloss=std::any_of(mesh.triangles.begin(),mesh.triangles.end(),[&](const auto&face){return facilityTexture(model,face.part).glossStrength>0;});
+  NormalLighting surfaceLights{};if(hasGloss)surfaceLights=normalLightingAt(receiver);objectNormalLighting=hasGloss?&surfaceLights:nullptr;
   float c=std::cos(yaw),s=std::sin(yaw);
   for(auto face:mesh.triangles){
    for(auto&v:face.v){auto p=v.p-center;p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};v.p={x+p.x*c+p.z*s,y-p.x*s+p.z*c,base+p.y+height*.5f};}
@@ -377,7 +384,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));
    tri(face.v[0],face.v[1],face.v[2],facilityTexture(model,face.part),light);
   }
-  objectLighting=false;
+  objectLighting=false;objectNormalLighting=nullptr;
  };
  bool buildStaticGeometry=!m_gpuFrame;
  int cacheSlot=w.level();

@@ -112,11 +112,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 36;
      struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
      for(auto view:std::array<View,9>{{
-      {"cable-entry",6,{3.5f,4},-9,.5f,0},{"cable-trench",6,{13,7.5f},-9,retro::kPi*.5f,-10},
-      {"cable-breaker",6,{19,11},-9,0,0},{"annex-entry",7,{3.5f,3},-9,.55f,8},
-      {"annex-lower",7,{12,3},-12,1.5f,15},{"annex-upper",7,{20,18},-4,-2.5f,-30},
-      {"junction-bridge",8,{6,8},-4,.5f,-20},{"waste-deck",9,{3,6},-9,.4f,-20},
-      {"waste-press",9,{11,6},-12,.8f,6}
+      {"cable-entry",6,{5.5f,5.5f},-9,.65f,-5},{"cable-trench",6,{13,6.8f},-9,retro::kPi*.5f,-8},
+      {"cable-breaker",6,{17.8f,11},-9,0,-4},{"annex-entry",7,{10,8},-9,-2.35f,-10},
+      {"annex-lower",7,{6.5f,5.5f},-12,retro::kPi*.5f,-6},{"annex-upper",7,{18.2f,18.2f},-4,0,-8},
+      {"junction-bridge",8,{5,8},-4,.35f,-12},{"waste-deck",9,{8,6.5f},-9,.85f,-12},
+      {"waste-press",9,{15,6.5f},-12,retro::kPi*.5f,-8}
      }}){
       auto scene=retro::Game::mapInspection(view.p,view.yaw,view.pitch,view.level,false,view.z,true);renderer.render(scene);
       std::ofstream frame(std::string(view.name)+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";

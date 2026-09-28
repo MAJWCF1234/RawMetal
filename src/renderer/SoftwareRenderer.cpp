@@ -72,6 +72,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_terminalTexture=loadTexture(137);m_cautionSign=loadTexture(138);prepareDecal(m_cautionSign);
  m_muzzleFlash=loadTexture(139);m_muzzleFlash.additive=true;prepareDecal(m_muzzleFlash);
  m_pumpTexture=loadTexture(141);m_compressorTexture=loadTexture(143);m_pipeTexture=loadTexture(145);m_gateTexture=loadTexture(147);
+ // Industrial painted steel catches broad fixture highlights without reading as chrome.
+ m_pumpTexture.glossStrength=.28f;m_compressorTexture.glossStrength=.36f;
+ m_pipeTexture.glossStrength=.42f;m_gateTexture.glossStrength=.32f;
  m_pressureWall=loadTexture(148);m_pressureFloor=loadTexture(149);m_pressureMetal=loadTexture(150);
  // Worn paint/concrete remain dielectrics. Smoothness tunes GGX lobe width;
  // keep opaque values below .5 because surface.z also carries blend flags.

@@ -2,13 +2,14 @@
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(set=0,binding=1) uniform sampler2D hudImage;
 layout(set=0,binding=2) uniform sampler2D sceneDepth;
-layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; } params;
+layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; } params;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 color;
 vec3 highlight(vec2 p){
  vec3 sampleColor=texture(sceneImage,clamp(p,vec2(0.0),vec2(1.0))).rgb;
- return max(sampleColor-vec3(0.72),vec3(0.0));
+ return max(sampleColor-vec3(params.hdrScene>0.5?1.0:0.72),vec3(0.0));
 }
+vec3 filmic(vec3 c){c=max(c,vec3(0.0));return clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14),vec3(0.0),vec3(1.0));}
 float viewDistance(float depth){return 0.06/max(1.0-depth,0.00001);}
 vec3 focusedScene(vec2 p){
  // Fixed-distance depth of field created a visible world-space focus shell
@@ -28,9 +29,12 @@ void main(){
            +highlight(uv+vec2(0.0,4.0)*glowPixel)+highlight(uv-vec2(0.0,4.0)*glowPixel);
  bloom+=0.5*(highlight(uv+vec2(11.0,7.0)*glowPixel)+highlight(uv-vec2(11.0,7.0)*glowPixel)
             +highlight(uv+vec2(11.0,-7.0)*glowPixel)+highlight(uv-vec2(11.0,-7.0)*glowPixel));
- scene+=min(bloom*0.10,vec3(0.12));scene*=params.sceneDim;
+ if(params.hdrScene>0.5)scene+=bloom*0.035;
+ else scene+=min(bloom*0.10,vec3(0.12));
+ scene*=params.sceneDim;
  scene*=1.0-0.06*smoothstep(0.45,1.3,radius);
  if(params.underwater>0.5)scene*=vec3(.4,.8,.9);
  float vignette=clamp(params.damageFlash,0.0,1.0)*edge*.78;scene=mix(scene,scene*vec3(.45,.07,.045),vignette);
- vec4 h=texture(hudImage,uv);color=vec4(mix(scene,h.rgb,h.a),1.0);
+ vec3 displayScene=params.hdrScene>0.5?pow(filmic(scene*0.95),vec3(1.0/2.2)):scene;
+ vec4 h=texture(hudImage,uv);color=vec4(mix(displayScene,h.rgb,h.a),1.0);
 }
