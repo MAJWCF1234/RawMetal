@@ -1,0 +1,1 @@
+Thin rail hull collision, crouched jump, airborne duck onto 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb, crouch tunnel and blocked standing: PASS

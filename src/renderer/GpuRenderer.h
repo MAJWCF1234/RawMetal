@@ -10,7 +10,7 @@ public:
  explicit GpuRenderer(void* window=nullptr);
  ~GpuRenderer();
  void begin(int width,int height);
- void setView(float eyeX,float eyeY,float eyeZ,float yaw,float pitch,float aspect,bool flashlight,float muzzleFlash);
+ void setView(float eyeX,float eyeY,float eyeZ,float yaw,float pitch,float aspect,bool flashlight,float muzzleFlash,float elapsed=0.f);
  void setFogLights(const std::array<float,16>& lights);
  void setAtmosphere(const std::array<float,4>& atmosphere);
  bool beginStaticCache(int slot,std::uint64_t key);

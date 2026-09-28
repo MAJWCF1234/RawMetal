@@ -42,3 +42,28 @@ Freight Access, a return elevator shortcut, a movable maintenance bridge and
 further narrative set pieces remain future additions. This release implements
 the connected playable route, rather than representing those future passages
 as open doors into absent maps.
+
+## Maps 6–9 rework
+
+These are four connected maps within Chapter 1, not four standalone chapters.
+This pass retains the existing transfer IDs and machinery state keys.
+
+- Cable Vaults: a rear relay island splits sightlines and preserves both service
+  loops. The entry maintenance station directs players to the disconnect and
+  south supply bay. Panels and vents sit inside the actual service passages.
+- Pump Annex: visible lower-floor pumps, short service-bay dividers and local
+  work lights anchor the descent. A lower-manifold station directs players to
+  the east observation stairs; the observation workstation sits on its deck.
+- Utility Junction: staggered low cover breaks up the concourse. Dispatch and
+  exit lighting mark the forward route. The flying enemy occupies the accessible
+  concourse instead of the sealed freight vestibule.
+- Waste Handling: short press guards distinguish the east bypass from the live
+  belt. Sorting-deck instructions identify the isolator and dispatch route.
+  The shredder, deck workstation and sorting shelf occupy their intended floors.
+
+Fixture and prop bases are offsets from the lowest map layer; pipes and
+structures use absolute elevations. The campaign test rejects buried equipment
+and checks standing access to every terminal, in addition to stairs, seams,
+controls, hazards and save restoration. Imported assets already present from
+PSX Mega Pack II, PSX Bunkers and Modular Retro FPS Kit are reused; this pass
+adds no external runtime dependencies or newly imported asset payloads.

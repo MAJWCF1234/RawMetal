@@ -1,0 +1,1 @@
+Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS

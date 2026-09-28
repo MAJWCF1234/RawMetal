@@ -49,7 +49,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       {13,{8.f,12.f},0,-10.f,"coast-from-shelf"},
       {13,{12.f,12.f},0,-22.f,"coast-underwater-terrain"},
       {13,{19.f,12.f},retro::kPi,-8.f,"coast-from-water"},
-      {7,{21.f,12.f},0,0.f,"coast-from-ashfall"}};
+      {7,{21.f,12.f},0,0.f,"coast-from-ashfall"},
+       {13,{10.f,12.f},0.f,-8.f,"coast-towards-ocean"}};
      for(const auto&view:views){auto scene=retro::Game::mapInspection(view.local,view.yaw,view.pitch,view.level,false,view.local.x>18.f&&view.level==13?4.f:-999.f,true,retro::WorldId::Ashfall);renderer.render(scene);
       std::ofstream out(std::string(view.name)+".ppm",std::ios::binary);out<<"P6\n"<<testW<<' '<<testH<<"\n255\n";
       for(int i=0;i<testW*testH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
@@ -200,12 +201,66 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
     if(std::wcsstr(commandLine,L"--performance-window")){
-        retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance"); if(!benchWindow.valid())return 1;
-        retro::SoftwareRenderer benchRenderer(W,H); if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
-        auto benchGame=retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true); std::vector<double> frameMs; frameMs.reserve(300);
-        auto coldBegin=std::chrono::steady_clock::now();benchRenderer.render(benchGame);double coldMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-coldBegin).count();
-        for(int frame=0;frame<300&&benchWindow.pump();++frame){auto begin=std::chrono::steady_clock::now();benchGame.update({},1.f/60.f);benchRenderer.render(benchGame);auto end=std::chrono::steady_clock::now();frameMs.push_back(std::chrono::duration<double,std::milli>(end-begin).count());}
-        std::sort(frameMs.begin(),frameMs.end());double average=std::accumulate(frameMs.begin(),frameMs.end(),0.0)/frameMs.size(),p95=frameMs[frameMs.size()*95/100],maximum=frameMs.back();std::ofstream report("performance-window.txt");report<<benchRenderer.hardwareName()<<" / native Win32 swapchain\n"<<"Cold first frame: "<<coldMs<<" ms (excluded from steady FPS)\n"<<"Frames: "<<frameMs.size()<<"\nAverage: "<<average<<" ms / "<<1000.0/average<<" FPS\nP95: "<<p95<<" ms / "<<1000.0/p95<<" FPS\nMax: "<<maximum<<" ms / "<<1000.0/maximum<<" FPS\n";return 0;
+        retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance");if(!benchWindow.valid())return 1;
+        retro::SoftwareRenderer benchRenderer(W,H);if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
+        std::ofstream report("performance-window.txt");
+        RECT benchmarkClient{};GetClientRect(static_cast<HWND>(benchWindow.handle()),&benchmarkClient);
+        report<<"Presentation: "<<benchmarkClient.right<<"x"<<benchmarkClient.bottom<<" / 30 warmup frames per scene / 120 measured frames\n";
+        report<<benchRenderer.hardwareName()<<" / native Win32 swapchain / async present (2 frames in flight)\n";
+        report<<"Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort\n\n";
+        // Same scenes as --performance-test but using the real windowed present path.
+        struct Scene{const char* name;retro::Game game;int frames;bool simulate;bool sweep;};
+        std::vector<Scene> scenes;
+        scenes.push_back({"Foundry turn",retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true),120,false,true});
+        scenes.push_back({"Gantry turn",retro::Game::mapInspection({7.5f,12.5f},0,0,2,false,0,true),120,false,true});
+        scenes.push_back({"Ashfall terrain + streaming",retro::Game(retro::WorldId::Ashfall),120,true,true});
+        scenes.push_back({"Lift entry turn",retro::Game::mapInspection({3.5f,2},retro::kPi*.5f,0,3,false,0,true),120,false,true});
+        scenes.push_back({"Hazmat settling",retro::Game::hazmatInspection(3),120,true,false});
+        scenes.push_back({"Ascent window",retro::Game::liftInspection(5,3),120,true,false});
+        scenes.push_back({"Reactor balcony turn",retro::Game::liftInspection(retro::World::LiftRideComplete,2),120,false,true});
+        scenes.push_back({"Reactor active AI",retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false),120,true,true});
+        for(int level=6;level<10;++level){
+            const auto& def=retro::chunkDefinition(retro::WorldId::Campaign,level);
+            scenes.push_back({nullptr,retro::Game::mapInspection(def.playerStart,.6f,0,level,false,def.spawnHeight,false),120,true,true});
+        }
+        std::vector<std::string> sceneNames{"Foundry turn","Gantry turn","Ashfall terrain + streaming","Lift entry turn","Hazmat settling","Ascent window","Reactor balcony turn","Reactor active AI","Utility chapter 7","Utility chapter 8","Utility chapter 9","Utility chapter 10"};
+        for(int s=0;s<int(scenes.size());++s){
+            auto& sc=scenes[s];
+            const char* sname=sc.name?sc.name:sceneNames[s].c_str();
+            // Update window title so we can see progress.
+            std::wstring title=L"RawMetal Benchmark [";title+=std::to_wstring(s+1);title+=L"/";title+=std::to_wstring(scenes.size());title+=L"] ";
+            for(const char* c=sname;*c;++c)title+=wchar_t(*c);
+            SetWindowTextW(static_cast<HWND>(benchWindow.handle()),title.c_str());
+            // Warm static caches and GPU pipelines before collecting frame times.
+            for(int warm=0;warm<30;++warm)benchRenderer.render(sc.game);
+            std::vector<double> frameMs;frameMs.reserve(sc.frames);
+            auto wallStart=std::chrono::steady_clock::now();
+            for(int frame=0;frame<sc.frames&&benchWindow.pump();++frame){
+                retro::InputState input{};
+                if(sc.sweep){input.mouseDx=11.f;input.mouseDy=std::sin(frame*.13f)*1.7f;}
+                auto begin=std::chrono::steady_clock::now();
+                if(sc.simulate||sc.sweep)sc.game.update(input,1.f/60.f);
+                benchRenderer.render(sc.game);
+                frameMs.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
+            }
+            double wallMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-wallStart).count();
+            if(frameMs.empty()){report<<sname<<": window closed early\n";break;}
+            std::sort(frameMs.begin(),frameMs.end());
+            double avg=std::accumulate(frameMs.begin(),frameMs.end(),0.0)/frameMs.size();
+            double p95=frameMs[frameMs.size()*95/100];
+            double p99=frameMs[frameMs.size()*99/100];
+            double peak=frameMs.back();
+            double wallFps=frameMs.size()*1000.0/wallMs;
+            report<<sname<<":\n";
+            report<<"  wall-clock FPS: "<<wallFps<<" (actual throughput)\n";
+            report<<"  avg frame time: "<<avg<<" ms = "<<1000.0/avg<<" FPS\n";
+            report<<"  p95 frame time: "<<p95<<" ms = "<<1000.0/p95<<" FPS\n";
+            report<<"  p99 frame time: "<<p99<<" ms\n";
+            report<<"  max frame time: "<<peak<<" ms = "<<1000.0/peak<<" FPS\n\n";
+            report.flush();
+        }
+        report<<"Done.\n";
+        return 0;
     }
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
@@ -436,7 +491,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     return 0;
     }catch(const std::exception& error){
         std::ofstream("RawMetal-error.txt")<<error.what();
-        if(!std::wcsstr(commandLine,L"--smoke-test"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
+        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }
 }

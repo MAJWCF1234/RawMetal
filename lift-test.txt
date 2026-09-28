@@ -1,0 +1,42 @@
+Reactor dormant while boarding: PASS
+Reactor activation spreads across shake: PASS
+Reactor ready before descent: PASS
+Direct reactor entry bypasses staging: PASS
+Seven stacked map layers: PASS
+Passing storey is a compact shaft scenery ring: PASS
+Passing storey is a compact shaft scenery ring: PASS
+Passing storey is a compact shaft scenery ring: PASS
+Passing storey is a compact shaft scenery ring: PASS
+Reactor stairs use explicit tread material; outer-wall duplicates removed: PASS
+Freight crate clears all fixed structure: PASS
+Two reactor floors at same XY: PASS
+Vertical sight rays cannot pass through decks: PASS
+Boarding route: PASS
+Boarding route: PASS
+Boarding route: PASS
+Boarding route: PASS
+Cab at collar height: PASS
+Dispatch via E inside cab: PASS
+Rise three / fall six / crash sound: PASS
+Brake catches once, crash permanent, puzzle remains locked: PASS
+Reactor stairs route: PASS
+Reactor stairs route: PASS
+Reactor stairs route: PASS
+Reactor stairs route: PASS
+Reactor stairs route: PASS
+Reactor stairs route: PASS
+Reactor upper floor reached: PASS
+Lift survives geometry unload: PASS
+Return to lower reactor exit: PASS
+Return to lower reactor exit: PASS
+Return to lower reactor exit: PASS
+Lower reactor interlock opens: PASS
+Lower reactor exit reached: PASS
+Reactor exit remains a campaign transfer, not an implicit ending: PASS
+Frame-rate independent ride: PASS
+Frame-rate independent ride: PASS
+Frame-rate independent ride: PASS
+Pause freezes lift: PASS
+Door collision and interaction use floor height: PASS
+Boarding cage prevents premature shaft fall: PASS
+Restart resets lift: PASS

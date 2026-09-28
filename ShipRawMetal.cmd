@@ -116,15 +116,20 @@ echo [OK] Friend build is under 19 MB.
 echo.
 
 echo [5/7] Staging APPROVED source changes...
-:: Added src/world files so map and engine edits actually get committed!
-set "APPROVED_FILES=src/CMakeLists.txt src/game/AI.cpp src/game/Game.h src/game/Saves.cpp src/world/World.cpp src/world/World.h src/world/WorldDefinition.h"
+:: Start from a clean staging area so stale staged files cannot contaminate this release.
+:: This does NOT discard working-tree edits.
+git restore --staged . >nul 2>&1
+
+:: Approved source files for this release.
+set "APPROVED_FILES=src/CMakeLists.txt src/game/AI.cpp src/game/Game.h src/game/Saves.cpp src/world/World.cpp src/world/World.h src/world/WorldDefinition.h src/renderer/shaders/scene.frag src/renderer/shaders/scene.vert"
 
 git add -- %APPROVED_FILES% 2>nul
 
-git diff --cached --check
+:: Check only the files this script intentionally staged.
+git diff --cached --check -- %APPROVED_FILES%
 if errorlevel 1 (
     echo [ERROR] Staged source failed git diff --check.
-    git reset -- %APPROVED_FILES%
+    git restore --staged -- %APPROVED_FILES% >nul 2>&1
     goto :fail
 )
 

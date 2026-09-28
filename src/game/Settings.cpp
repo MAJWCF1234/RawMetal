@@ -155,6 +155,13 @@ bool Game::testSettings(){
  auto normal=validationScene(Enemy::Kind::Huntsman,3),inverted=normal;inverted.m_settings.sensitivity=2;inverted.m_settings.invertMouse=true;
  InputState aim{};aim.mouseDx=10;aim.mouseDy=10;normal.update(aim,.02f);inverted.update(aim,.02f);
  if(std::fabs(inverted.player().angle-2*normal.player().angle)>.0001f||std::fabs(inverted.player().pitch+2*normal.player().pitch)>.0001f)return false;
+ // Equal mouse counts must rotate both axes by the same angular distance.
+ if(std::fabs(normal.player().angle+normal.player().pitch/140.f)>.0001f)return false;
+ auto looking=validationScene(Enemy::Kind::Huntsman,3);
+ aim.mouseDx=0;aim.mouseDy=-100000;looking.update(aim,.02f);
+ if(std::fabs(looking.player().pitch-210.f)>.001f)return false;
+ aim.mouseDy=100000;looking.update(aim,.02f);
+ if(std::fabs(looking.player().pitch+210.f)>.001f)return false;
  for(int row=1;row<=4;++row){game.update({},.02f);click.fire=true;click.pointerX=MenuLayout::SliderX+15;click.pointerY=MenuLayout::RowTop+row*MenuLayout::RowHeight+9;game.update(click,.02f);
   click.pointerX=MenuLayout::SliderX+60;click.pointerY+=50;game.update(click,.02f);
   float value=row==1?game.settings().master:row==2?game.settings().music:row==3?game.settings().effects:game.settings().sensitivity;

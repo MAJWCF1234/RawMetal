@@ -1,0 +1,1 @@
+Fast-turn yaw lag: 0.183921 / 0.184128 radians at 60/120 Hz; recoil and secondary motion settle.

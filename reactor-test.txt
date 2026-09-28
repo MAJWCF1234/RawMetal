@@ -1,0 +1,44 @@
+Crash does not bypass computer puzzle: PASS
+Computer and valves require authorization disk: PASS
+Workbench disk reachable from upper floor: PASS
+E collects a protected reusable quest item: PASS
+E inserts and consumes the authorization disk: PASS
+Wrong valve order stays locked and can be retried: PASS
+Lower feed primes first: PASS
+Upper return restores circulation: PASS
+Final computer confirmation is required: PASS
+Computer authorizes next bulkhead: PASS
+Puzzle persists across geometry reload: PASS
+Upper equipment does not block the lower floor: PASS
+Instrument cabinets collide but computer approach stays clear: PASS
+Upper opening exposes the lower containment hall: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Fixed light has a supporting ceiling: PASS
+Restart resets puzzle and disk: PASS

@@ -1,0 +1,65 @@
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 143.417 ms (startup, excluded)
+Foundry turn: avg 12.1839 ms, p95 14.6208 ms, max 16.0922 ms, worst 62.1419 FPS; >50ms 0/120
+  Stage maxima: update 0.3616, audio 0.3352, render 15.9659 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 186.907 ms (startup, excluded)
+Gantry turn: avg 11.1992 ms, p95 13.7686 ms, max 14.8895 ms, worst 67.1614 FPS; >50ms 0/120
+  Stage maxima: update 0.4252, audio 0.2931, render 14.5785 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 25.5516 ms (startup, excluded)
+Ashfall terrain and streaming turn: avg 14.95 ms, p95 20.5394 ms, max 26.094 ms, worst 38.323 FPS; >50ms 0/120
+  Stage maxima: update 4.2154, audio 4.5897, render 22.8187 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 231.127 ms (startup, excluded)
+Lift entry turn: avg 10.419 ms, p95 12.6064 ms, max 15.2005 ms, worst 65.7873 FPS; >50ms 0/120
+  Stage maxima: update 0.0611, audio 0.3736, render 14.9991 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 229.543 ms (startup, excluded)
+Hazmat impact and settling: avg 11.3135 ms, p95 14.0263 ms, max 18.0947 ms, worst 55.2648 FPS; >50ms 0/120
+  Stage maxima: update 1.1303, audio 0.4001, render 17.2959 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 224.899 ms (startup, excluded)
+Ascent window: avg 10.9588 ms, p95 13.0986 ms, max 15.2888 ms, worst 65.4074 FPS; >50ms 0/240
+  Stage maxima: update 0.1292, audio 0.4747, render 15.1448 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 216.048 ms (startup, excluded)
+Jam and six-floor fall: avg 10.9064 ms, p95 13.1709 ms, max 16.7924 ms, worst 59.5507 FPS; >50ms 0/600
+  Stage maxima: update 0.3915, audio 0.3609, render 16.6554 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 227.648 ms (startup, excluded)
+Reactor balcony turn: avg 10.6624 ms, p95 12.9043 ms, max 14.0672 ms, worst 71.0874 FPS; >50ms 0/180
+  Stage maxima: update 0.0826, audio 0.3588, render 13.928 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 235.2 ms (startup, excluded)
+Reactor active AI: avg 10.8393 ms, p95 12.9858 ms, max 16.6041 ms, worst 60.2261 FPS; >50ms 0/180
+  Stage maxima: update 0.5045, audio 0.3625, render 16.2212 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 198.958 ms (startup, excluded)
+Utility chapter 7 turn: avg 12.6217 ms, p95 20.874 ms, max 26.0712 ms, worst 38.3565 FPS; >50ms 0/120
+  Stage maxima: update 0.308, audio 0.4294, render 25.7121 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 136.613 ms (startup, excluded)
+Utility chapter 8 turn: avg 12.2581 ms, p95 17.2365 ms, max 19.4837 ms, worst 51.325 FPS; >50ms 0/120
+  Stage maxima: update 0.2015, audio 0.2962, render 19.1874 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 149.469 ms (startup, excluded)
+Utility chapter 9 turn: avg 11.2467 ms, p95 14.621 ms, max 17.1833 ms, worst 58.196 FPS; >50ms 0/120
+  Stage maxima: update 0.0978, audio 0.5216, render 17.0188 ms
+Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 128.532 ms (startup, excluded)
+Utility chapter 10 turn: avg 11.1377 ms, p95 13.5509 ms, max 17.5288 ms, worst 57.049 FPS; >50ms 0/120
+  Stage maxima: update 0.8099, audio 0.4947, render 16.7855 ms
+Cold/warm view 0: 0 changed pixels
+Culling/reference view 0: 0 changed pixels
+Cold/warm view 1: 0 changed pixels
+Culling/reference view 1: 0 changed pixels
+Cold/warm view 2: 0 changed pixels
+Culling/reference view 2: 0 changed pixels
+Cold/warm view 3: 0 changed pixels
+Culling/reference view 3: 0 changed pixels
+Cold/warm view 4: 0 changed pixels
+Culling/reference view 4: 0 changed pixels
+Cold/warm view 5: 0 changed pixels
+Culling/reference view 5: 0 changed pixels
+PASS: 50 ms total update/audio/render budget; conservative culling equivalence.

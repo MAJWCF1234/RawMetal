@@ -108,7 +108,7 @@ Loose junk can be lifted, dropped, thrown, placed on supported shelves and surfa
 
 ## Rendering
 
-RawMetal renders at a fixed **640 x 360 internal resolution** and keeps the HUD full resolution.
+The Vulkan window path renders at the native window resolution multiplied by the render-scale setting. Headless inspection captures use **640 x 360**. The HUD is composed separately.
 
 The Vulkan path currently supports:
 
@@ -124,10 +124,11 @@ The Vulkan path currently supports:
 - conservative occlusion
 - atmospheric extinction
 - square-fixture volumetric light shafts
-- gloss and specular response
+- roughness-controlled GGX dielectric specular response
+- trilinear filtering with supported anisotropy up to 8x
 - filmic color mapping
 - bright-pixel bloom
-- depth-aware camera focus
+- selective spatial edge antialiasing without forced gameplay depth blur
 - world-space fire and smoke effects
 - animated transparent water
 - underwater presentation effects
@@ -342,3 +343,5 @@ The project keeps source asset provenance separate from runtime packing and does
 - [tools/level-editor/README.md](tools/level-editor/README.md) for the Level Editor
 - [docs/world-system-boundaries.md](docs/world-system-boundaries.md) for world ownership and isolation
 - [RELEASE_NOTES_v0.5.7.md](RELEASE_NOTES_v0.5.7.md) for the latest release
+
+See [render quality and performance notes](docs/render-quality-pass.md) for the latest renderer changes, validation, and remaining limitations.
