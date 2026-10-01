@@ -1,1 +1,1 @@
-Thin rail hull collision, crouched jump, airborne duck onto 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb, crouch tunnel and blocked standing: PASS
+1.6 m standing hull, low crouch tunnel, crouched jump, airborne duck clearing 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb and blocked standing: PASS

@@ -10,9 +10,9 @@ void Game::seedClutter(){
  }
 }
 int Game::nearbyClutter()const{
- int best=-1;float distance=1.5f;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
+ int best=-1;float distance=1.5f,verticalReach=std::max(1.2f,m_player.hullHeight()+.3f);Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  for(int i=0;i<int(m_clutter.size());++i){auto&c=m_clutter[i];auto delta=c.pos-m_player.pos;float d=length(delta);
-  if(d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<1.2f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c.pos,c.z+.15f,true,true,true)){best=i;distance=d;}}
+  if(d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<verticalReach&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c.pos,c.z+.15f,true,true,true)){best=i;distance=d;}}
  return best;
 }
 bool Game::interactClutter(){
@@ -22,7 +22,7 @@ bool Game::interactClutter(){
 void Game::updateClutter(const InputState&input,float dt){
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(holdingClutter()){
-  auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;Vec2 target=m_player.pos+forward*.9f;float height=m_player.z+m_player.eye-.3f+std::sin(pitch)*.7f;
+  auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;Vec2 target=m_player.pos+forward*.9f;float handHeight=std::min(m_player.eye-.3f,.48f);float height=m_player.z+handHeight+std::sin(pitch)*.7f;
   auto local=target;const auto&targetWorld=worldAt(local);
   height=std::max(height,targetWorld.supportBelow(local.x,local.y,height+c.height()*.5f+.025f)+.012f);
   bool clear=true;for(int i=1;i<=12;++i){float t=float(i)/12;auto p=m_player.pos+(target-m_player.pos)*t;const auto&w=worldAt(p);float z=m_player.z+m_player.eye+(height+c.height()*.5f-m_player.z-m_player.eye)*t;clear&=w.fits(p.x,p.y,z,.02f,true,true)&&!w.doorBlocks(p.x,p.y,z,.02f);}
@@ -94,7 +94,7 @@ bool Game::testClutter(){
   if(shard.impactSound()!=Sound::JunkSoft||shard.size()[0]<=shard.size()[1]||!restored.decodeSave(source.encodeSave())||restored.clutter().size()!=1||restored.clutter()[0].kind!=6)return false;
  }
  {Game legacy;legacy.m_clutter.clear();for(int kind=0;kind<4;++kind){Clutter old;old.kind=kind;old.pos={4,4};old.z=legacy.world().floorHeight(4,4);legacy.m_clutter.push_back(old);}Game restored;
-  if(!restored.decodeSave(legacy.encodeSave())||restored.clutter().size()!=4) return false;for(const auto&item:restored.clutter())if(item.kind!=6||item.sleeping)return false;
+  if(!restored.decodeSave(legacy.encodeSave())||restored.clutter().size()!=4)return false;for(const auto&item:restored.clutter())if(item.kind!=6||item.sleeping)return false;
  }
  {auto g=mapInspection({21.55f,21.46f},kPi*.5f,160,5,true,-9,true);g.m_clutter.clear();
   Clutter bottle;bottle.kind=2;bottle.pos={21.55f,21.8f};bottle.z=-8.3f;g.m_clutter.push_back(bottle);g.m_heldClutter=0;

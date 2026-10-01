@@ -38,18 +38,18 @@ Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
 Initial material upload / first frame: 198.958 ms (startup, excluded)
 Utility chapter 7 turn: avg 12.6217 ms, p95 20.874 ms, max 26.0712 ms, worst 38.3565 FPS; >50ms 0/120
   Stage maxima: update 0.308, audio 0.4294, render 25.7121 ms
+VulkaVulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
+Initial material upload / first frame: 147.385 ms (startup, excluded)
+Utility chapter 8 turn: avg 12.5388 ms, p95 16.3929 ms, max 21.6846 ms, worst 46.1157 FPS; >50ms 0/120
+  Stage maxima: update 0.1289, audio 0.497, render 21.4807 ms
 Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
-Initial material upload / first frame: 136.613 ms (startup, excluded)
-Utility chapter 8 turn: avg 12.2581 ms, p95 17.2365 ms, max 19.4837 ms, worst 51.325 FPS; >50ms 0/120
-  Stage maxima: update 0.2015, audio 0.2962, render 19.1874 ms
+Initial material upload / first frame: 151.683 ms (startup, excluded)
+Utility chapter 9 turn: avg 10.5111 ms, p95 13.4789 ms, max 19.731 ms, worst 50.6817 FPS; >50ms 0/120
+  Stage maxima: update 0.1994, audio 0.3265, render 19.4879 ms
 Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
-Initial material upload / first frame: 149.469 ms (startup, excluded)
-Utility chapter 9 turn: avg 11.2467 ms, p95 14.621 ms, max 17.1833 ms, worst 58.196 FPS; >50ms 0/120
-  Stage maxima: update 0.0978, audio 0.5216, render 17.0188 ms
-Vulkan / NVIDIA GeForce RTX 5060 Ti / full-resolution 640x360
-Initial material upload / first frame: 128.532 ms (startup, excluded)
-Utility chapter 10 turn: avg 11.1377 ms, p95 13.5509 ms, max 17.5288 ms, worst 57.049 FPS; >50ms 0/120
-  Stage maxima: update 0.8099, audio 0.4947, render 16.7855 ms
+Initial material upload / first frame: 129.623 ms (startup, excluded)
+Utility chapter 10 turn: avg 10.4324 ms, p95 13.6829 ms, max 16.0784 ms, worst 62.1952 FPS; >50ms 0/120
+  Stage maxima: update 1.0537, audio 0.2683, render 15.453 ms
 Cold/warm view 0: 0 changed pixels
 Culling/reference view 0: 0 changed pixels
 Cold/warm view 1: 0 changed pixels

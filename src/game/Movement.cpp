@@ -44,12 +44,13 @@ void Game::updateMovement(const InputState& input,float dt){
  if(input.jump&&!m_previousJump)m_jumpBuffer=.12f;m_previousJump=input.jump;
  if(input.crouch&&!m_player.crouched){
   // Ducking in flight raises the feet while preserving the top of the hull.
-  if(!m_player.grounded)m_player.z+=.42f;m_player.crouched=true;
+  if(!m_player.grounded)m_player.z+=Player::StandingHeight-Player::CrouchedHeight;m_player.crouched=true;
  }else if(!input.crouch&&m_player.crouched){
-  float feet=m_player.grounded?m_player.z:std::max(groundHeight(m_player.pos),m_player.z-.42f);
-  if(hullFits(m_player.pos,feet,1.f)){m_player.crouched=false;m_player.z=feet;}
+  float heightDelta=Player::StandingHeight-Player::CrouchedHeight;
+  float feet=m_player.grounded?m_player.z:std::max(groundHeight(m_player.pos),m_player.z-heightDelta);
+  if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.z=feet;}
  }
- m_player.eye+=( (m_player.crouched?.48f:.78f)-m_player.eye)*std::min(1.f,dt*16.f);
+ m_player.eye+=((m_player.crouched?Player::CrouchedEye:Player::StandingEye)-m_player.eye)*std::min(1.f,dt*16.f);
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x},wish{};
  if(input.forward)wish+=forward;if(input.back)wish+=forward*-1;if(input.right)wish+=right;if(input.left)wish+=right*-1;
  if(lengthSq(wish)>0)wish=normalized(wish);
@@ -134,6 +135,9 @@ void Game::updateInteraction(const InputState& input,float dt){
 bool Game::testMovement(){
  std::ofstream debug("movement-diagnostic.txt");
  auto clean=[](){auto game=validationScene(Enemy::Kind::Huntsman,3);game.m_enemies.clear();return game;};
+ {auto size=clean();if(size.player().hullHeight()!=Player::StandingHeight||std::fabs(size.player().eye-Player::StandingEye)>.001f)return false;
+  InputState duck{};duck.crouch=true;size.update(duck,.1f);
+  if(size.player().hullHeight()!=Player::CrouchedHeight||size.player().eye>=Player::StandingEye)return false;}
  {auto slide=clean();slide.m_player.pos={1.3f,4.5f};slide.m_velocity={-4,2};slide.tryMove({-.6f,.1f});
   if(slide.player().pos.x<1.199f||slide.player().pos.x>1.21f||std::fabs(slide.player().pos.y-4.6f)>.001f||slide.m_velocity.x!=0||slide.m_velocity.y!=2)return false;
  }
@@ -156,11 +160,11 @@ bool Game::testMovement(){
  for(int i=0;i<60;++i)game.update(input,1.f/120.f);debug<<"standing "<<game.player().pos.x<<'\n';if(game.player().pos.x>9.81f)return false;
  input.crouch=true;for(int i=0;i<100;++i)game.update(input,1.f/120.f);debug<<"duck "<<game.player().pos.x<<'\n';if(game.player().pos.x<10.6f)return false;
  input={};game.update(input,.01f);if(game.player().pos.x<11.2f&&!game.player().crouched)return false;
- game=clean();game.m_player.pos={8.5f,4.4f};game.m_player.angle=-kPi*.5f;game.m_velocity={0,-3.6f};bool reachedCover=false;
+ game=clean();game.m_player.pos={8.5f,4.4f};game.m_player.angle=-kPi*.5f;game.m_velocity={0,-3.6f};bool clearedCover=false;
  for(int i=0;i<130;++i){input={};input.jump=i==0;input.crouch=i>=18;input.forward=game.player().pos.y>2.55f;game.update(input,1.f/120.f);
-  if(game.player().pos.y<3.f&&game.player().pos.y>2.f&&game.player().grounded&&std::fabs(game.player().z-1.1f)<.01f){reachedCover=true;break;}
- }debug<<"duck-jump cover "<<game.player().pos.y<<' '<<game.player().z<<' '<<reachedCover<<'\n';if(!reachedCover)return false;
- std::ofstream("movement-test.txt")<<"Thin rail hull collision, crouched jump, airborne duck onto 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb, crouch tunnel and blocked standing: PASS\n";return true;
+  if(game.player().pos.y<2.f&&game.player().grounded&&std::fabs(game.player().z)<.01f){clearedCover=true;break;}
+ }debug<<"duck-jump clear 1.1m cover "<<game.player().pos.y<<' '<<game.player().z<<' '<<clearedCover<<'\n';if(!clearedCover)return false;
+ std::ofstream("movement-test.txt")<<"1.6 m standing hull, low crouch tunnel, crouched jump, airborne duck clearing 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb and blocked standing: PASS\n";return true;
 }
 bool Game::testProgression(){
  auto game=validationScene(Enemy::Kind::Huntsman,3);game.m_enemies.clear();game.m_player.pos={4.5f,7.9f};game.m_player.angle=kPi*.5f;

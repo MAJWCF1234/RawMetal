@@ -5,6 +5,10 @@
 #include <limits>
 #include <stdexcept>
 namespace retro {
+// First-person weapon meshes are normalized to their physical footprint, not
+// to the player collision height. Scaling them with the taller world hull
+// made a standard rifle render almost two metres long on screen.
+namespace { constexpr float kViewModelScale=1.15f; }
 bool SoftwareRenderer::validate3D(){
  if(!testNormalMapping())return false;
  {auto&lamp=m_facilityTextures.at("lamp_1_on");if(lamp.emission.size()!=lamp.pixels.size()||std::none_of(lamp.emission.begin(),lamp.emission.end(),[](auto p){return (p&255)>128;}))return false;
@@ -430,11 +434,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.
   if(w.tile(x,y)!='#'){
+   bool serviceMap=w.campaign()&&w.level()>=6&&w.level()<=9;
    if(!w.outdoors()){
     // Interior floors keep the dense half-metre patches needed for authored
     // stairs, decks and water-bed transitions.
     for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
-     quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?m_floor:m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
+     quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
      float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
      if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
      if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
@@ -442,7 +447,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
      if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
     }
 
-    quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},m_facilityTextures.at("ceiling_1"),.6f);
+    quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},serviceMap?m_serviceCeiling:m_facilityTextures.at("ceiling_1"),serviceMap?.82f:.6f);
    // Close ceiling height changes instead of exposing the void between sectors.
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
    if(Z>northCeiling&&w.tile(x,y-1)!='#')quad({X,Y,northCeiling},{X+1,Y,northCeiling},{X+1,Y,Z},{X,Y,Z},m_metal,.7f);
@@ -634,25 +639,65 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({p.x-pipe.radius-.04f,p.y-.045f,pipe.z-pipe.radius-.04f},{p.x+pipe.radius+.04f,p.y+.045f,pipe.z-pipe.radius},iron,.9f);
   }
  }
- for(const auto& press:w.compactors()){
-  float z=game.compactorHeight(press);
-  box({press.x1,press.y1,z},{press.x2,press.y2,z+.32f},m_panelMetal,.9f);
-  for(float x:{press.x1+.4f,press.x2-.4f})
-   cylinder({x,(press.y1+press.y2)*.5f,z+.32f},{x,(press.y1+press.y2)*.5f,w.ceilingHeight(x,press.y1)-.6f},.15f,m_pipeTexture);
+  for(const auto& press:w.compactors()){
+   float z=game.compactorHeight(press);
+   box({press.x1,press.y1,z},{press.x2,press.y2,z+.32f},m_metal,.9f);
+   // The old press read as a floating sheet in wide map views. Give its
+   // moving platen a legible, walk-around gantry: four legs, paired head
+   // beams, ram guides and a telescoping hydraulic pair that follows the
+   // actual cycle height. Keep the complete frame inside the existing press
+   // footprint so the player route and crusher collision remain unchanged.
+   float frameTop=std::min(w.ceilingHeight((press.x1+press.x2)*.5f,(press.y1+press.y2)*.5f)-.32f,press.raised+.62f);
+   float frameBottom=press.bed+.08f;
+   for(float x:{press.x1+.16f,press.x2-.16f})for(float y:{press.y1+.12f,press.y2-.12f}){
+    box({x-.105f,y-.105f,frameBottom},{x+.105f,y+.105f,frameTop},iron,1.f);
+    box({x-.16f,y-.16f,frameBottom+.02f},{x+.16f,y+.16f,frameBottom+.17f},m_hazard,.95f);
+    box({x-.15f,y-.15f,frameTop-.2f},{x+.15f,y+.15f,frameTop},m_panelMetal,1.f);
+   }
+   box({press.x1+.08f,press.y1+.12f,frameTop-.28f},{press.x2-.08f,press.y1+.38f,frameTop-.08f},m_panelMetal,1.f);
+   box({press.x1+.08f,press.y2-.38f,frameTop-.28f},{press.x2-.08f,press.y2-.12f,frameTop-.08f},m_panelMetal,1.f);
+   for(float x:{(press.x1+press.x2)*.5f-.56f,(press.x1+press.x2)*.5f+.56f}){
+    cylinder({x,press.y1+.25f,frameTop-.25f},{x,press.y1+.25f,z+.42f},.12f,m_pipeTexture);
+    cylinder({x,press.y1+.25f,frameTop-.25f},{x,press.y1+.25f,frameTop-.06f},.205f,m_panelMetal);
+   }
+   // A segmented amber warning bar is visible from both the catwalk and the
+   // lower press aisle, making the active machinery state readable at range.
+   for(int segment=0;segment<5;++segment){float x=press.x1+.45f+segment*(press.x2-press.x1-.9f)/5.f;
+    box({x,press.y1+.025f,frameTop-.34f},{x+.32f,press.y1+.055f,frameTop-.29f},game.state(press.stopState)?lamp:amber,1.6f);
+   }
+   for(float x:{press.x1+.4f,press.x2-.4f})
+    cylinder({x,(press.y1+press.y2)*.5f,z+.32f},{x,(press.y1+press.y2)*.5f,w.ceilingHeight(x,press.y1)-.6f},.15f,m_pipeTexture);
   bool isolated=game.state(press.stopState)!=0;
   box({press.x1-.2f,press.y1-.1f,press.bed+1.7f},{press.x1,press.y1,press.bed+1.85f},isolated?lamp:amber,1.8f);
   quad({press.x1,press.y1-2,press.bed+.035f},{press.x2,press.y1-2,press.bed+.035f},{press.x2,press.y2,press.bed+.035f},{press.x1,press.y2,press.bed+.035f},m_floor,.8f,{2,4},{0,isolated?0.f:-game.elapsed()*.12f});
   quad({press.x1,press.y1-.06f,z},{press.x2,press.y1-.06f,z},{press.x2,press.y1-.06f,z+.25f},{press.x1,press.y1-.06f,z+.25f},m_hazard,.95f,{2,1});
  }
  for(const auto& hazard:w.hazards())if(hazard.kind==Hazard::Kind::Electricity&&game.hazardActive(hazard)){
-  float z=hazard.bottom+.45f;
+  // Cable Vault arcs skim the coolant; lifting them above the sump made them
+  // look like detached blue strips instead of live electrical discharge.
+  bool sumpArc=w.level()==6&&!w.waterVolumes().empty();
+  float z=sumpArc?w.waterVolumes().front().surface+.012f:hazard.bottom+.45f;
   for(int i=0;i<5;++i){float x=hazard.x1+(hazard.x2-hazard.x1)*(i+.5f)/5.f;
-   quad({x-.025f,hazard.y1,z},{x+.025f,hazard.y1,z},{x+.10f,hazard.y1+.35f,z+.28f},{x+.06f,hazard.y1+.35f,z+.28f},blue,1.8f);
+   float arcLength=sumpArc?.16f:.35f,arcHeight=sumpArc?.07f:.28f;
+   quad({x-.025f,hazard.y1,z},{x+.025f,hazard.y1,z},{x+.10f,hazard.y1+arcLength,z+arcHeight},{x+.06f,hazard.y1+arcLength,z+arcHeight},blue,1.8f);
   }
+ }
+ if(w.campaign()&&w.level()==6){
+  // Put a real high-voltage warning over the only control that isolates the
+  // live sump, then carry hazard tape along its two exposed concrete curbs.
+  quad({21.955f,12.50f,-6.34f},{21.955f,11.30f,-6.34f},
+       {21.955f,11.30f,-5.18f},{21.955f,12.50f,-5.18f},m_cautionSign,1.15f);
+  quad({10.952f,8.03f,-8.56f},{10.952f,11.31f,-8.56f},
+       {10.952f,11.31f,-8.39f},{10.952f,8.03f,-8.39f},m_hazard,.95f,{4,1});
+  quad({15.048f,11.31f,-8.56f},{15.048f,8.03f,-8.56f},
+       {15.048f,8.03f,-8.39f},{15.048f,11.31f,-8.39f},m_hazard,.95f,{4,1});
  }
  for(const auto& terminal:w.terminals())if(terminal.activateState){
   float z=w.floorHeight(terminal.position.x,terminal.position.y)+terminal.z;
-  box({terminal.position.x-.06f,terminal.position.y-.21f,z+.83f},{terminal.position.x+.06f,terminal.position.y-.19f,z+.9f},game.state(terminal.activateState)?lamp:amber,1.8f);
+  if(w.level()==6){
+   auto&statusLamp=game.state(terminal.activateState)?lamp:amber;
+   box({21.94f,11.83f,-6.52f},{21.985f,11.97f,-6.43f},statusLamp,1.8f);
+  }else box({terminal.position.x-.06f,terminal.position.y-.21f,z+.83f},{terminal.position.x+.06f,terminal.position.y-.19f,z+.9f},game.state(terminal.activateState)?lamp:amber,1.8f);
  }
  for(const auto& emitter:w.particleEmitters()){
   static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
@@ -839,9 +884,25 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    quad({x+.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.59f},{x+.15f,y-.01f,h+.59f},terminal.reactorAction==2?m_feedSign:m_returnSign,1.f);
   }else{
    // Personnel records belong on a computer, visually distinct from switchgear.
-   box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
-   box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
-   facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,kPi);
+   if(w.level()==6){
+    // A grounded service bench carries the CRT on four legs; the narrow post
+    // made the screen look perched in empty space. Its compact top also keeps
+    // the screen and keyboard readable from the aisle.
+    float deskTop=h+.75f;
+    box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
+    for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
+     box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
+    box({x+.30f,y-.27f,h+.16f},{x+.36f,y+.27f,h+.21f},m_metal,.85f);
+    // Both service consoles face the west-running access aisle.
+    float terminalYaw=-kPi*.5f;
+    float keyboardX=x-.22f,keyboardY=y;
+    box({keyboardX-.105f,keyboardY-.14f,deskTop+.07f},{keyboardX+.105f,keyboardY+.14f,deskTop+.10f},m_panelMetal,1.f);
+    facility(11,x,y,deskTop+.065f,.386509f,.53235f,.50505f,terminalYaw);
+   }else{
+    box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
+    box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
+    facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,kPi);
+   }
    if(terminal.reactorAction==1){box({x-.2f,y-.295f,h+.28f},{x+.2f,y-.24f,h+.39f},m_metal,1.f);box({x-.15f,y-.30f,h+.33f},{x+.11f,y-.296f,h+.345f},iron,1.f);box({x+.15f,y-.302f,h+.32f},{x+.17f,y-.295f,h+.34f},w.reactorStage()>=World::ReactorStage::DiskLoaded?blue:amber,1.8f);}
   }
  }
@@ -1021,12 +1082,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
 void SoftwareRenderer::prepareViewModel(const Game& game){
  const auto&motion=game.weaponMotion();
  if(game.unarmed()){bool jab=game.punchAge()<.48f&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/.48f:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
- auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=1.15f/std::max({range.x,range.y,range.z});
+ auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=kViewModelScale/std::max({range.x,range.y,range.z});
  auto local=[&](Point3 source){auto p=(source-center)*scale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
  const Point3 pivot{.15f,-.155f,.52f};
  auto animated=[&](Point3 p){p=p-pivot;float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;};
  auto armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;
- auto toRig=[&](Point3 view){auto p=(view-Point3{.15f,-.285f,.52f})*(1.f/1.15f);p.x=-p.x;return p+armCenter;};
+ auto toRig=[&](Point3 view){auto p=(view-Point3{.15f,-.285f,.52f})*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
  auto right=animated(local({.02f,.70f,1.10f})+Point3{.045f,-.105f,-.07f}),left=animated(local({.02f,1.10f,-1.15f})+Point3{-.085f,-.055f,-.03f});
  m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick());
 }
@@ -1037,7 +1098,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  const auto&motion=game.weaponMotion();
  Point3 gunCenter=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f;
  Point3 gunRange=m_weaponMesh.maximum-m_weaponMesh.minimum;
- float gunScale=1.15f/std::max({gunRange.x,gunRange.y,gunRange.z});
+ float gunScale=kViewModelScale/std::max({gunRange.x,gunRange.y,gunRange.z});
  auto gunLocal=[&](Point3 source){auto p=(source-gunCenter)*gunScale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
  const Point3 pivot{.15f,-.155f,.52f};
  auto animated=[&](Point3 p){
@@ -1052,7 +1113,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto leftWrist=animated(gunLocal(supportSocket)+Point3{-.085f,-.055f,-.03f});
  bool fists=game.unarmed();
  Point3 armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f,armOffset=fists?Point3{0,-.22f,.30f}:Point3{.15f,-.285f,.52f};
- auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*1.15f;p.x=-p.x;return p+armOffset;};
+ auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*kViewModelScale;p.x=-p.x;return p+armOffset;};
  if(!m_poseReady)prepareViewModel(game);
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
   return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-game.holster()*.85f),p.z};};

@@ -1,2 +1,2 @@
-Chunk 0 ticks 1302 waypoint 37/38 position 3.49987, 0.0211773 active 1
-Chunk 1 ticks 1494 waypoint 41/42 position 3.50075, 0.0250187 active 2
+Chunk 0 ticks 1374 waypoint 37/38 position 3.49956, 0.0250282 active 1
+Chunk 1 ticks 1525 waypoint 41/42 position 3.50056, 0.0250225 active 2

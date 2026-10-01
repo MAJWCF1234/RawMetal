@@ -43,7 +43,7 @@ bool SoftwareRenderer::enableHardware(void* window){
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
-  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
   for(const auto*texture:{&m_blood,&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
@@ -55,6 +55,10 @@ bool SoftwareRenderer::hardwarePresentsWindow()const{return m_gpu&&m_gpu->hasSur
 SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
  for(int i=0;i<15;++i)m_facilityTextures.emplace(materialNames[i],loadTexture(172+i));
+ m_serviceCeiling=m_facilityTextures.at("ceiling_1");
+ auto liftCeiling=[](std::uint32_t&pixel){for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*1.8f))<<shift);}};
+ for(auto&pixel:m_serviceCeiling.pixels)liftCeiling(pixel);for(auto&level:m_serviceCeiling.mips)for(auto&pixel:level)liftCeiling(pixel);
+ deriveSurfaceNormal(m_serviceCeiling,.75f);m_serviceCeiling.glossStrength=.24f;
  m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
@@ -66,7 +70,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_facilityTextures.emplace("transformer_box_hr_2",loadTexture(261));
  m_facilityTextures.emplace("metal_hr_6_1",loadTexture(262));
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
- m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);m_bulkhead=loadTexture(126);m_bulkhead.glossStrength=.48f;
+ m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);deriveSurfaceNormal(m_concrete,1.35f);m_bulkhead=loadTexture(126);m_bulkhead.glossStrength=.48f;
  for(int i=0;i<6;++i)m_clutterTextures[i]=loadTexture(152+i*2);
  m_medkitTexture=loadTexture(134);m_shellsTexture=loadTexture(136);
  m_terminalTexture=loadTexture(137);m_cautionSign=loadTexture(138);prepareDecal(m_cautionSign);
@@ -143,6 +147,10 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  }
  prepareDecal(m_coastSky,false);
  m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.glossStrength=.30f;auto coolantTint=[](uint32_t pixel){return 0xc4000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
+ m_serviceFloor=m_floor;
+ auto liftServiceFloor=[](std::uint32_t&pixel){for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*1.45f))<<shift);}};
+ for(auto&pixel:m_serviceFloor.pixels)liftServiceFloor(pixel);for(auto&level:m_serviceFloor.mips)for(auto&pixel:level)liftServiceFloor(pixel);
+ m_serviceFloor.glossStrength=.42f;
  m_coastWater=loadTexture(250);attachNormal(m_coastWater,251,true,0);m_coastWater.transparent=true;m_coastWater.glossStrength=.48f;
  auto seaTint=[](std::uint32_t pixel){int gray=int(((pixel>>16)&255)*.30f+((pixel>>8)&255)*.59f+(pixel&255)*.11f);int delta=(gray-100)/3;
   return 0x58000000u|(std::uint32_t(std::clamp(32+delta,0,255))<<16)|(std::uint32_t(std::clamp(92+delta,0,255))<<8)|std::uint32_t(std::clamp(148+delta,0,255));};
@@ -275,7 +283,14 @@ void SoftwareRenderer::drawSky(const Game& game){
   }
  }
 }
-void SoftwareRenderer::clear(std::uint32_t c){std::fill(m_pixels.begin(),m_pixels.end(),c);}
+void SoftwareRenderer::clear(std::uint32_t c){
+ // A Vulkan window frame clears the scene attachment in its render pass. The
+ // CPU pixel buffer is only the transparent HUD overlay and is cleared just
+ // before that overlay is drawn, so clearing it to the scene background here
+ // is a redundant full-frame write. Keep the clear for captures and software.
+ if(m_gpuFrame&&hardwarePresentsWindow())return;
+ std::fill(m_pixels.begin(),m_pixels.end(),c);
+}
 void SoftwareRenderer::put(int x,int y,std::uint32_t c){if(x>=0&&y>=0&&x<m_width&&y<m_height)m_pixels[size_t(y*m_width+x)]=c;}
 void SoftwareRenderer::rect(int x,int y,int w,int h,std::uint32_t c){for(int yy=std::max(0,y);yy<std::min(m_height,y+h);++yy)for(int xx=std::max(0,x);xx<std::min(m_width,x+w);++xx)put(xx,yy,c);}
 std::uint32_t SoftwareRenderer::shade(std::uint32_t c,float s)const{int r=int(((c>>16)&255)*s),g=int(((c>>8)&255)*s),b=int((c&255)*s);return rgb(std::clamp(r,0,255),std::clamp(g,0,255),std::clamp(b,0,255));}

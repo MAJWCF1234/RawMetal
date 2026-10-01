@@ -1,5 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
+set "GIT_PAGER=cat"
+set "GIT_TERMINAL_PROMPT=0"
 title RawMetal GitHub Sync v2
 cd /d "%~dp0"
 
@@ -163,17 +165,64 @@ if not "!BEHIND!"=="0" (
 )
 
 echo Staging all non-ignored changes so local and GitHub can mirror each other...
+rem ------------------------------------------------------------
+rem SAFE PRE-SYNC CLEANUP
+rem ------------------------------------------------------------
+
+echo.
+echo Resetting staging area while preserving local files...
+git reset -q
+if errorlevel 1 (
+    echo [STOP] Could not reset staging area.
+    goto :fail
+)
+
+echo Cleaning known generated test artifacts...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$root='%CD%';" ^
+  "$patterns=@('ai-diagnostic.txt','ai-test.txt','attachment-test.txt','audio-preview.wav','audio-test.txt','campaign-extension-test.txt','campaign-reach-*.txt','clutter-test.txt','clutter-tumble-*.txt','coast-*.png','gantry-test.txt','generator-audio-test.txt','hazmat-physics-test.txt','inventory-test.txt','lift-audio-preview.wav');" ^
+  "foreach($pattern in $patterns){Get-ChildItem -LiteralPath $root -Filter $pattern -File -ErrorAction SilentlyContinue | ForEach-Object {" ^
+  "  $rel=$_.Name; $tracked=(git -C $root ls-files -- $rel);" ^
+  "  if($tracked){git -C $root restore --worktree -- $rel | Out-Null}else{Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue}" ^
+  "}}"
+
+if errorlevel 1 (
+    echo [STOP] Could not clean generated test artifacts safely.
+    goto :fail
+)
+
+echo Checking for unresolved merge entries...
+for /f "delims=" %%U in ('git diff --name-only --diff-filter^=U') do (
+    echo [STOP] Unresolved merge entry: %%U
+    goto :fail
+)
+
+echo Checking tracked files for conflict markers...
+for /f "delims=" %%F in ('git ls-files') do (
+    findstr /C:"<<<<<<<" /C:"=======" /C:">>>>>>>" "%%F" >nul 2>&1
+    if not errorlevel 1 (
+        echo [STOP] Conflict marker found in %%F
+        goto :fail
+    )
+)
+
+git --no-pager diff --check
+if errorlevel 1 (
+    echo [STOP] Working tree has whitespace errors or conflict markers.
+    goto :fail
+)
+
 git add -A
 if errorlevel 1 exit /b 1
 
 echo.
 echo Changes ready for GitHub:
 echo ------------------------------------------------------------
-git diff --cached --name-status
+git --no-pager diff --cached --name-status
 echo ------------------------------------------------------------
 echo.
 
-git diff --cached --quiet
+git --no-pager diff --cached --quiet
 if not errorlevel 1 (
     call :counts
     if "!AHEAD!"=="0" (
@@ -194,7 +243,7 @@ if not errorlevel 1 (
     exit /b 0
 )
 
-git diff --cached --check
+git --no-pager diff --cached --check
 if errorlevel 1 (
     echo.
     echo [STOP] Git found a whitespace or patch-format problem.
@@ -303,4 +352,11 @@ echo   RawMetal GitHub Sync could not start
 echo ============================================================
 echo.
 pause
+exit /b 1
+
+:fail
+echo.
+echo ============================================================
+echo   STOPPED SAFELY
+echo ============================================================
 exit /b 1

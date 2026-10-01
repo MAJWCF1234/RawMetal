@@ -118,15 +118,15 @@ constexpr MapRows CableVaultsGround = {
     "##....................##",
     "##....................##",
     "###...................##",
-    "######...##....##.....##",
-    "######...##....##.....##",
-    "######...##....##.....##",
-    "######...##....##.....##",
-    "######...##....##.....##",
-    "######...##....##.....##",
-    "######...##....##.....##",
+    "###...................##",
+    "###...................##",
+    "###...................##",
+    "###...................##",
+    "###...................##",
+    "###...................##",
+    "###...................##",
     "######................##",
-    "######................##",
+    "####...................#",
     "####...................#",
     "####...................#",
     "####...................#",
@@ -796,7 +796,7 @@ World::World(int level,WorldId id):m_worldId(id) {
   auto wall=[&](float x1,float y1,float x2,float y2,float bottom,float top){m_structures.push_back({x1,y1,x2,y2,bottom,top,false,3});};
   auto shelf=[&](Vec2 p,float yaw=0.f,float z=0.f){m_fixtures.push_back({7,p,z,1.8f,.5f,1.8f,yaw,true});};
   auto cabinet=[&](Vec2 p,float yaw=0.f){m_fixtures.push_back({13,p,0,.9066f,.4956f,2.2f,yaw,true});};
-  auto tank=[&](Vec2 p,float height){float scale=height/2.390135f;m_fixtures.push_back({14,p,0,2.612115f*scale,2.874012f*scale,height,0,true});};
+  auto tank=[&](Vec2 p,float height){float scale=height/2.390135f;m_fixtures.push_back({14,p,0,1.58f*scale,1.62f*scale,height,0,true});};
   auto post=[&](float x,float y,float bottom,float top,float half=.12f){m_structures.push_back({x-half,y-half,x+half,y+half,bottom,top,false,2});};
   auto event=[&](const char* id,float x1,float y1,float x2,float y2,float lo,float hi,std::vector<ScriptAction> actions){
    ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=lo;e.top=hi;e.actions=std::move(actions);m_scriptEvents.push_back(std::move(e));
@@ -811,13 +811,22 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_layers={{"Cable Vaults / service passages",-9,0,CableVaultsGround}};
    m_doors={{2,5,.5f,0,false,false,true},{20,23,23.5f,0,false,true}};
    m_doors.back().requireState=stateId("vault_disconnect");
-   wall(11,11,15,11.35f,-9,-7.7f);
-   m_waterVolumes={{11,8.3f,15,10.7f,-9.35f,-9.03f}};
+   // Terminate the live run with short concrete cheeks rather than a solid
+   // bulkhead across the player's first sightline. The open center is a dry
+   // service crossing beyond the energized section of trough.
+   wall(11,11,11.48f,11.35f,-9,-7.7f);
+   wall(14.52f,11,15,11.35f,-9,-7.7f);
+   // The surface sits below the surrounding deck and inside the recessed bed;
+   // the renderer insets the water to the sloped shoreline.
+   m_waterVolumes={{11,8.3f,15,10.7f,-9.45f,-9.20f}};
+   wall(10.65f,8.f,10.95f,11.35f,-9.f,-8.35f);
+   wall(15.05f,8.f,15.35f,11.35f,-9.f,-8.35f);
    Hazard arc{Hazard::Kind::Electricity,11,8.3f,15,10.7f,-9.4f,-7.5f,22};
    arc.enabledFlag=stateId("vault_disconnect");arc.invertFlag=true;arc.period=4;arc.onTime=1.2f;m_hazards.push_back(arc);
 
    // Shelves and switchgear neatly aligned to outer walls and piers (aisle kept clear)
-   for(float y:{8.f,10.f,12.f,14.f}){cabinet({21.55f,y},kPi*.5f);shelf({6.35f,y+.3f},kPi*.5f);}
+   for(float y:{8.f,10.45f,13.35f})cabinet({21.55f,y},kPi*.5f);
+   for(float y:{8.f,10.f,12.f,14.f})shelf({6.35f,y+.3f},kPi*.5f);
    for(float x:{11.12f,14.6f}){
     m_structures.push_back({x,6,x+.25f,21,-7.05f,-6.9f,false,2});
     for(float y:{6.f,9.f,12.f,15.f,18.f})m_structures.push_back({x,y,x+.25f,y+.08f,-6.9f,roof,false,2});
@@ -828,24 +837,38 @@ World::World(int level,WorldId id):m_worldId(id) {
    // Wall-backed cabinets along the west solid concrete perimeter wall
    cabinet({4.45f,18.5f},kPi*.5f);cabinet({4.45f,20.0f},kPi*.5f);cabinet({4.45f,21.5f},kPi*.5f);
 
+   // The live cable trough divides the chamber, but it must not divide the
+   // play space into blind, parallel corridors. Heavy feeders make cover
+   // islands on its flanks and leave readable walk-around lanes.
+   m_fixtures.push_back({12,{8.45f,10.05f},0,2.0f,1.55f,1.75f,.10f,true});
+   m_fixtures.push_back({12,{17.35f,15.85f},0,2.0f,1.55f,1.75f,-.08f,true});
+   // Amber edge lights mark the two safe flanks at the live channel entrance.
+   for(float x:{9.7f,16.3f})for(float y:{7.6f,11.7f})m_lights.push_back({{x,y},-4.92f});
+
    // Suspended high-voltage cable trays and distribution conduit headers
-   m_pipes.push_back({{11.25f,5.5f},{11.25f,21.5f},-6.95f,.09f});
-   m_pipes.push_back({{14.65f,5.5f},{14.65f,21.5f},-6.95f,.09f});
-   for(float y:{7.5f,12.f,16.5f})m_pipes.push_back({{11.25f,y},{14.65f,y},-6.92f,.07f});
-   m_pipes.push_back({{21.55f,6.f},{21.55f,21.5f},-6.8f,.10f});
-   m_pipes.push_back({{4.45f,6.f},{4.45f,17.5f},-6.85f,.09f});
-   m_pipes.push_back({{19.7f,14.f},{21.55f,14.f},-6.8f,.08f});
-   m_pipes.push_back({{19.7f,14.f},{19.7f,14.f},-6.8f,.08f,-8.2f});
+   m_pipes.push_back({{11.25f,5.5f},{11.25f,21.5f},-5.35f,.09f});
+   m_pipes.push_back({{14.65f,5.5f},{14.65f,21.5f},-5.35f,.09f});
+   for(float y:{7.5f,12.f,16.5f})m_pipes.push_back({{11.25f,y},{14.65f,y},-5.32f,.07f});
+   m_pipes.push_back({{21.55f,6.f},{21.55f,21.5f},-5.2f,.10f});
+   m_pipes.push_back({{4.45f,6.f},{4.45f,17.5f},-5.25f,.09f});
+   m_pipes.push_back({{20.4f,11.9f},{21.55f,11.9f},-5.2f,.08f});
 
-   // Wall-mounted breaker panels and ventilation grilles (non-solid, mounted flush)
-   m_fixtures.push_back({8,{2.15f,4.f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
-   m_fixtures.push_back({8,{6.15f,16.8f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
+    // Wall-mounted breaker panels and ventilation grilles (non-solid, mounted flush)
+    m_fixtures.push_back({8,{2.15f,4.f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
+    m_fixtures.push_back({8,{6.15f,16.8f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
    m_fixtures.push_back({8,{21.85f,16.5f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
-   m_fixtures.push_back({3,{6.15f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
-   m_fixtures.push_back({3,{21.85f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
-   m_fixtures.push_back({6,{18.2f,7.f},0,1.87f,.55f,.99f,0,true});
+   m_fixtures.push_back({8,{21.85f,11.9f},1.15f,1.15f,.22f,1.25f,kPi*.5f,false});
+    m_fixtures.push_back({3,{6.15f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
+    m_fixtures.push_back({3,{21.85f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
+    // Make the electrified trench read as a maintained power channel: a pair
+    // of flush disconnects and cable terminations frame its far bulkhead.
+    for(float x:{12.15f,13.85f})
+     m_fixtures.push_back({8,{x,10.91f},.20f,.72f,.18f,.91f,0,false});
+    m_fixtures.push_back({3,{11.28f,10.88f},.18f,1.05f,.15f,.75f,0,false});
+    m_fixtures.push_back({3,{14.72f,10.88f},.18f,1.05f,.15f,.75f,0,false});
+    m_fixtures.push_back({6,{18.2f,7.f},0,1.87f,.55f,.99f,0,true});
 
-   m_terminals={{{19.7f,14},"FEEDER 7A / REMOTE TRIP","LIVE TRENCH / USE THE OUTER SERVICE AISLES.","E / THROW LOCAL DISCONNECT.",0,false,0,stateId("vault_disconnect")}};
+   m_terminals={{{20.4f,11.9f},"FEEDER 7A / REMOTE TRIP","LIVE TRENCH / CROSS AT THE DRY SERVICE BRIDGE.","E / THROW LOCAL DISCONNECT.",0,false,0,stateId("vault_disconnect")}};
    m_terminals.push_back({{7.5f,6.4f},"CABLE VAULTS / MAINTENANCE","LOCAL DISCONNECT: EAST SWITCHGEAR AISLE.","SPARE LAMP AND SHELLS: SOUTH SERVICE BAY."});
    shelf({17.7f,19.8f});m_clutterSpawns={{3,{18,19}},{0,{18.5f,19.2f}}};
    event("vault_maintenance_kit",16.5f,18.5f,19,21,-9.2f,-7,{action(A::GiveItem,stateId("flashlight"),1)});
@@ -853,7 +876,7 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_scriptEvents.back().actions[0].sound=Sound::Door;
    m_creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f},-9},{CreatureKind::Huntsman,{19.5f,8.5f},-9}};
    m_pickupSpawns={{{18,21.5f},PickupKind::Ammo}};
-   for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22},Vec2{18.5f,9.5f},Vec2{4.5f,18.5f}})m_lights.push_back({p,-6.55f});
+   for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{13,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{13,11.3f},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22},Vec2{18.5f,9.5f},Vec2{4.5f,18.5f}})m_lights.push_back({p,-5.02f});
   }
   // === LEVEL_6_END ===
   // === LEVEL_7_START ===
@@ -877,12 +900,14 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(8,18,15,18.25f,-9,-4);
 
    stairs={{2,4,5,11,-12,-9,16,true,false},{15,2,18,6,-12,-9,16,true,true},{15,6,18,16,-9,-4,26,true,true}};
-   for(Vec2 p:{Vec2{8,6},Vec2{8,13},Vec2{12,19.5f}}){
-    tank(p,4.6f);m_pipes.push_back({p,{p.x,22},-2.4f,.28f});
-    m_pipes.push_back({p,p,-2.4f,.28f,-7.45f});
-   }
+    // Set the entry vessel off the stair's center sightline. Its reduced
+    // diameter keeps a clear approach to the lower manifold and exit.
+    for(Vec2 p:{Vec2{7.5f,4},Vec2{8,13},Vec2{12,19.5f}}){
+     tank(p,4.6f);m_pipes.push_back({p,{p.x,22},-2.4f,.28f});
+     m_pipes.push_back({p,p,-2.4f,.28f,-7.45f});
+    }
    m_pipes.push_back({{8,22},{22,22},-2.4f,.28f});
-   for(Vec2 p:{Vec2{8,6},Vec2{8,13},Vec2{12,19.5f}})wall(p.x-.48f,p.y-.48f,p.x+.48f,p.y+.48f,-12,-9);
+   for(Vec2 p:{Vec2{7.5f,4},Vec2{8,13},Vec2{12,19.5f}})wall(p.x-.48f,p.y-.48f,p.x+.48f,p.y+.48f,-12,-9);
    for(Vec2 p:{Vec2{6.2f,3.1f},Vec2{11.7f,8.7f},Vec2{6.2f,15.2f},Vec2{20.4f,10.5f},Vec2{4.4f,19.3f},Vec2{18.8f,20.3f}})
     post(p.x,p.y,-12,-9.25f,.14f);
    for(Vec2 p:{Vec2{19.5f,7.2f},Vec2{20.5f,13.6f},Vec2{16.2f,17.2f},Vec2{10.2f,19.2f}})
@@ -902,14 +927,16 @@ World::World(int level,WorldId id):m_worldId(id) {
    // Interconnecting pump manifold pipes and vertical risers
    m_pipes.push_back({{6.5f,9.f},{6.5f,9.f},-11.8f,.18f,-7.45f});
    m_pipes.push_back({{6.5f,9.f},{8.f,9.f},-7.45f,.18f});
-   m_pipes.push_back({{8.f,9.f},{8.f,6.f},-7.45f,.18f});
+   m_pipes.push_back({{8.f,9.f},{7.5f,4.f},-7.45f,.18f});
    m_pipes.push_back({{6.5f,15.f},{6.5f,15.f},-11.8f,.18f,-7.45f});
    m_pipes.push_back({{6.5f,15.f},{8.f,15.f},-7.45f,.18f});
    m_pipes.push_back({{8.f,15.f},{8.f,13.f},-7.45f,.18f});
 
    // Structural reinforced columns supporting mezzanine and roof
-   m_fixtures.push_back({2,{14.5f,6.5f},0.f,.8f,.8f,8.f,0,true});
-   m_fixtures.push_back({2,{14.5f,16.5f},0.f,.8f,.8f,8.f,0,true});
+   // Keep the posts directly under the observation deck. Both positions are
+   // on the lower manifold footprint and overlap the deck above.
+   m_fixtures.push_back({2,{19.5f,6.5f},0.f,.8f,.8f,8.f,0,true});
+   m_fixtures.push_back({2,{15.5f,16.5f},0.f,.8f,.8f,8.f,0,true});
 
    // Observation workstation CRT console and wall breaker panels
    m_fixtures.push_back({11,{21.2f,18.2f},8.f,.8f,.8f,1.1f,-kPi*.5f,true});
@@ -923,7 +950,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_creatureSpawns={{CreatureKind::Wasp,{12,12},-6},{CreatureKind::Wasp,{20,13},-4},{CreatureKind::Huntsman,{11,10},-12},{CreatureKind::Huntsman,{8.5f,11.f},-12}};
    m_pickupSpawns={{{6,17},PickupKind::Health},{{20,20},PickupKind::Ammo}};
    for(Vec2 p:{Vec2{3.5f,2},Vec2{4,14},Vec2{12,9},Vec2{20,7},Vec2{20,18},Vec2{20.5f,17.5f}})m_lights.push_back({p,-1.3f});
-   for(Vec2 p:{Vec2{4,11},Vec2{12,3},Vec2{13,17},Vec2{8.f,11.f}})m_lights.push_back({p,-9.35f});
+   // This high-bay lamp belongs on the roof plane; -6.35 put it mid-room
+   // with no hanger or ceiling support.
+   m_lights.push_back({{10,8},-1.3f});m_lights.push_back({{18,18},-1.3f});
+   for(Vec2 p:{Vec2{4,11},Vec2{10,8},Vec2{12,3},Vec2{13,17},Vec2{8.f,11.f}})m_lights.push_back({p,-9.35f});
   }
   // === LEVEL_7_END ===
   // === LEVEL_8_START ===
@@ -968,31 +998,35 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(6,17.35f,6.2f,23,-9,roof);
    wall(3,17.35f,5,17.65f,-6.5f,roof);
 
-   for(Vec2 p:{Vec2{2.3f,6.2f},Vec2{6.2f,6.2f},Vec2{10.2f,8.2f},Vec2{20.4f,8.2f}})
+   for(Vec2 p:{Vec2{2.3f,6.2f},Vec2{6.2f,6.2f}})
     post(p.x,p.y,-9,-4.25f,.11f);
 
-   // Catwalk bridge reinforced columns
-   m_fixtures.push_back({2,{7.5f,7.5f},0.f,.7f,.7f,5.f,0,true});
-   m_fixtures.push_back({2,{14.f,7.5f},0.f,.7f,.7f,5.f,0,true});
+   // The bridge needs visible structure without putting bulky posts in the
+   // walking lane. Narrow steel columns sit directly under the bridge girders.
+   for(float x:{7.5f,20.f}){
+    m_structures.push_back({x-.16f,7.5f-.16f,x+.16f,7.5f+.16f,-9.f,-4.25f,false,2});
+    m_structures.push_back({x-.11f,7.f,x+.11f,9.f,-4.50f,-4.25f,false,2});
+   }
 
-   // Major utility distribution pipelines spanning the concourse
-   m_pipes.push_back({{2.f,11.f},{22.f,11.f},-5.2f,.22f});
-   m_pipes.push_back({{2.f,11.f},{22.f,11.f},-4.7f,.15f});
-   m_pipes.push_back({{14.f,2.f},{14.f,22.f},-5.0f,.18f});
-   m_pipes.push_back({{14.f,11.f},{14.f,11.f},-5.0f,.18f,-8.5f});
+   // Route the utility trunk along the north and east walls. The previous
+   // crossed mid-room rack had four-metre hangers through the bridge sightline.
+   m_pipes.push_back({{2.f,2.2f},{21.5f,2.2f},-1.35f,.16f});
+   m_pipes.push_back({{2.f,2.62f},{21.5f,2.62f},-1.35f,.10f});
+   m_pipes.push_back({{21.5f,2.2f},{21.5f,22.f},-1.35f,.12f});
+   m_pipes.push_back({{21.5f,12.5f},{21.5f,12.5f},-1.35f,.14f,-8.5f});
 
-   // Staggered waist-high service islands split the open concourse into cover pockets.
-   wall(12.6f,16.2f,14.6f,16.65f,-9,-7.95f);
-   wall(17.2f,18.4f,19.4f,18.85f,-9,-7.95f);
-   m_lights.push_back({{18,16.3f},-6.3f});
-   m_lights.push_back({{21.5f,22},-6.3f});
+   // Grounded pump drives turn the otherwise empty concourse into a readable
+   // service bay and give the lower route useful, waist-high combat cover.
+   m_fixtures.push_back({12,{13.6f,16.42f},0.f,1.8f,1.05f,1.45f,0.f,true});
+   m_fixtures.push_back({12,{18.3f,18.62f},0.f,1.8f,1.05f,1.45f,kPi*.5f,true});
+   m_lights.push_back({{18,16.3f},-1.05f});
+   m_lights.push_back({{19.5f,22},-1.05f});
    // Concourse substation switchgear & dispatch workstation
    cabinet({5.45f,19.5f},kPi*.5f);
    cabinet({5.45f,21.0f},kPi*.5f);
-   m_fixtures.push_back({11,{16.8f,12.5f},0.f,.8f,.8f,1.1f,kPi*.5f,true});
-   m_fixtures.push_back({8,{19.2f,12.5f},0.f,.67f,.20f,.91f,0,false});
-   m_fixtures.push_back({8,{1.78f,3.5f},5.f,.67f,.20f,.91f,kPi*.5f,false});
-
+    m_fixtures.push_back({11,{16.8f,12.5f},0.f,.8f,.8f,1.1f,kPi*.5f,true});
+    m_fixtures.push_back({8,{19.2f,12.5f},0.f,.67f,.20f,.91f,0,false});
+    m_fixtures.push_back({8,{1.78f,3.5f},5.f,.67f,.20f,.91f,kPi*.5f,false});
    m_terminals={{{18,12.5f},"JUNCTION / WASTE DISPATCH","CREDENTIAL ACCEPTED / WASTE ROUTE AVAILABLE.","E / RELEASE WASTE HANDLING BULKHEAD.",0,false,0,stateId("waste_access")},
                {{20.3f,6},"FREIGHT SERVICES / INCIDENT OVERRIDE","CREDENTIAL ACCEPTED. ACCESS SUSPENDED.","WASTE DISPATCH: BOOTH BELOW / SOUTH DOOR.",5,false}};
    shelf({13,2.2f},kPi);shelf({16,2.2f},kPi);m_fixtures.push_back({6,{13,20},0,1.87f,.55f,.99f,0,true});
@@ -1000,9 +1034,9 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_pickupSpawns={{{17,13.5f},PickupKind::Health},{{16,3},PickupKind::Ammo}};
    event("junction_arrival",2,1,6,4,-4.1f,-2,{action(A::Checkpoint)});
    for(Vec2 p:{Vec2{4,4},Vec2{12,8},Vec2{20,7},Vec2{18,13},Vec2{11,22},Vec2{21,21}})m_lights.push_back({p,-1.05f});
-   m_lights.push_back({{18,12},-5.85f});
-   for(Vec2 p:{Vec2{8,8.6f},Vec2{13,8.6f},Vec2{7.5f,14},Vec2{12.5f,19.5f}})
-    m_lights.push_back({p,-4.35f});
+   m_lights.push_back({{18,12},-1.05f});
+   for(Vec2 p:{Vec2{8,8.6f},Vec2{13,8.6f}})m_lights.push_back({p,-4.35f});
+   for(Vec2 p:{Vec2{7.5f,14},Vec2{12.5f,19.5f}})m_lights.push_back({p,-1.05f});
   }
   // === LEVEL_8_END ===
   // === LEVEL_9_START ===
@@ -1016,7 +1050,7 @@ World::World(int level,WorldId id):m_worldId(id) {
 
    stairs={{8,11,11,17,-12,-9,16,true,true}};
    m_waterVolumes={{14,16,18,21,-12.5f,-12.08f}};
-   m_compactors={{13,8,17,13,-12,-8.3f,9,stateId("compactor_isolated")}};
+    m_compactors={{13,8,17,13,-12,-10.9f,9,stateId("compactor_isolated")}};
    for(float x:{12.65f,17.f})for(float y:{7.7f,12.95f})m_structures.push_back({x,y,x+.35f,y+.35f,-12,-6.1f,false,2});
    m_structures.push_back({12.65f,7.7f,17.35f,13.3f,-6.1f,-5.7f,false,2});
    m_structures.push_back({13,5,17,14,-12,-11.97f,false,2});
@@ -1048,12 +1082,16 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_lights.push_back({{10.8f,8.8f},-9.55f});
    m_lights.push_back({{20,16},-9.55f});
    // Heavy industrial shredder machine along east lower wall (leaves wide open aisle)
-   m_fixtures.push_back({12,{20.5f,8.5f},0.f,.940f,3.060f,1.751f,kPi*.5f,true});
+    m_fixtures.push_back({12,{20.5f,8.5f},0.f,.940f,3.060f,1.751f,kPi*.5f,true});
 
    // Sorting deck control console and wall breaker boxes
    m_fixtures.push_back({11,{2.6f,10.5f},3.f,.8f,.8f,1.1f,kPi*.5f,true});
    m_fixtures.push_back({8,{10.8f,7.2f},0.f,.67f,.20f,.91f,0,false});
-   m_fixtures.push_back({8,{21.2f,21.5f},0.f,.67f,.20f,.91f,-kPi*.5f,false});
+    m_fixtures.push_back({8,{21.2f,21.5f},0.f,.67f,.20f,.91f,-kPi*.5f,false});
+    // Small control cabinets and a service rack make the otherwise broad
+    // sorting platform legible from the elevated west approach.
+    for(float y:{8.f,11.f,14.f})
+     m_fixtures.push_back({13,{1.62f,y},3.f,.9066f,.4956f,2.2f,kPi*.5f,true});
 
    m_terminals={{{10.8f,8},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / TOGGLE CONVEYOR AND PRESS.",0,false,0,stateId("compactor_isolated"),true},
                {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT CONNECTION SEALED / END OF CURRENT ROUTE.",0,false}};
@@ -1070,7 +1108,7 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_pickupSpawns={{{6,19},PickupKind::Ammo},{{20,18},PickupKind::Health}};
    event("waste_dispatch_checkpoint",19,20,22,23,-12.1f,-10,{action(A::Checkpoint)});
    for(Vec2 p:{Vec2{3,3},Vec2{3,12},Vec2{9,18},Vec2{15,6},Vec2{20,13},Vec2{20,21}})m_lights.push_back({p,-5.55f});
-   for(Vec2 p:{Vec2{6.5f,7},Vec2{7,14},Vec2{12,18},Vec2{19.5f,18.5f}})
+   for(Vec2 p:{Vec2{6.5f,7},Vec2{9,7},Vec2{7,14},Vec2{15,6.5f},Vec2{12,18},Vec2{19.5f,18.5f}})
     m_lights.push_back({p,-9.25f});
   }
   // === LEVEL_9_END ===
