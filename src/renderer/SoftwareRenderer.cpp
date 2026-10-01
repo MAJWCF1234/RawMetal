@@ -43,8 +43,8 @@ bool SoftwareRenderer::enableHardware(void* window){
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
-  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
+  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
@@ -59,16 +59,20 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  auto liftCeiling=[](std::uint32_t&pixel){for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*1.8f))<<shift);}};
  for(auto&pixel:m_serviceCeiling.pixels)liftCeiling(pixel);for(auto&level:m_serviceCeiling.mips)for(auto&pixel:level)liftCeiling(pixel);
  deriveSurfaceNormal(m_serviceCeiling,.75f);m_serviceCeiling.glossStrength=.24f;
- m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);
+ m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);m_mutantTexture=loadTexture(273);
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
  for(int species=0;species<4;++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=species==int(CreatureKind::Huntsman)||species==int(CreatureKind::Wasp);const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
   for(auto&pixel:variant.pixels){float intensity=float(std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u}))/255.f;auto r=std::uint32_t(tr*intensity),g=std::uint32_t(tg*intensity),b=std::uint32_t(tb*intensity);pixel=(pixel&0xff000000u)|(r<<16)|(g<<8)|b;}prepareDecal(variant);
  }
  m_facilityTextures.emplace("pc_1",loadTexture(192));m_facilityTextures.emplace("keyboard_1",loadTexture(193));
- m_facilityTextures.emplace("machinery_mx_1",loadTexture(260));
+ m_facilityTextures.emplace("machinery_mx_1",loadTexture(143));
  m_facilityTextures.emplace("transformer_box_hr_2",loadTexture(261));
  m_facilityTextures.emplace("metal_hr_6_1",loadTexture(262));
+ m_facilityTextures.emplace("wood_1",loadTexture(266));
+ m_facilityTextures.emplace("van_3",loadTexture(268));
+ m_facilityTextures.emplace("metal_2_1",loadTexture(269));
+ m_officeCarpet=loadTexture(270);deriveSurfaceNormal(m_officeCarpet,.6f);m_officeCarpet.glossStrength=.04f;
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
  m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);deriveSurfaceNormal(m_concrete,1.35f);m_bulkhead=loadTexture(126);m_bulkhead.glossStrength=.48f;
  for(int i=0;i<6;++i)m_clutterTextures[i]=loadTexture(152+i*2);
@@ -167,8 +171,11 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
  m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
  m_diskSign=makeSign("MAINTENANCE","SERVICE BENCH",0xffd7ac64u);m_authSign=makeSign("CONTROL","R-03",0xff53aec4u);
- const char* routes[]={"FOUNDRY","PRESSURE WORKS","TURBINE GANTRY","REACTOR COMPLEX","SERVICE GALLERY","COOLANT RETURN","CABLE VAULTS","PUMP ANNEX","UTILITY JUNCTION","WASTE HANDLING","FREIGHT SERVICES","PRIMARY UTILITIES"};
- for(int i=0;i<12;++i)m_routeSigns[i]=makeSign(routes[i],i>=10?"ACCESS SUSPENDED":"SERVICE ACCESS",0xffa7a766u);
+ for(int i=0;i<32;++i)m_routeSigns[i]=makeSign(CampaignMapNames[i],"SERVICE ACCESS",0xffa7a766u);
+ m_routeSigns[32]=makeSign("FREIGHT SERVICES","ACCESS SUSPENDED",0xffa7a766u);m_routeSigns[33]=makeSign("PRIMARY UTILITIES","SERVICE ACCESS",0xffa7a766u);
+ m_serviceAreaSigns[0]=makeSign("SERVICE STORES","SPARES / MAINTENANCE",0xff53aec4u);
+ m_serviceAreaSigns[1]=makeSign("PRIMARY UTILITIES","PERMIT REQUIRED",0xffd7ac64u);
+ m_serviceAreaSigns[2]=makeSign("SALVAGE DISPATCH","WASTE HANDLING",0xff9fceaeu);
 }
 const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int part)const{
  if(mesh<0||mesh>=int(m_facilityMeshes.size()))throw std::runtime_error("Invalid facility mesh index "+std::to_string(mesh));
@@ -183,6 +190,8 @@ const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int 
  // of crashing when ufbx reports a different material name.
  static constexpr const char* serviceTexture[]={"machinery_mx_1","transformer_box_hr_2","metal_hr_6_1"};
  if(mesh>=12&&mesh<=14)return m_facilityTextures.at(serviceTexture[mesh-12]);
+ if(mesh==15)return m_facilityTextures.at("wood_1");
+ if(mesh==16)return m_facilityTextures.at("van_3");
  std::string material=part>=0&&part<int(model.materialNames.size())?model.materialNames[size_t(part)]:"<invalid part>";
  throw std::runtime_error("Missing facility texture for mesh "+std::to_string(mesh)+", part "+std::to_string(part)+", material "+material);
 }
@@ -319,7 +328,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  const auto paper=rgb(222,206,164),muted=rgb(159,139,105),amber=rgb(210,145,54),red=rgb(180,55,36);
  const int sector=int(p.pos.y)/8;
  wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
- const char* mapLabel=game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
+ const char* mapLabel=game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
  text(19,14,mapLabel,paper,2);
  if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)text(19,32,game.world().liftStatus(),amber);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
@@ -478,7 +487,7 @@ void SoftwareRenderer::drawConsole(const Game& game){
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
  bool directPresentation=hardwarePresentsWindow();
  if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
-  m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightingDoors={};m_chunkLightCells={};m_chunkLightCounts={};
+  m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};
   if(m_gpu)m_gpu->clearStaticCaches();
   m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
  }

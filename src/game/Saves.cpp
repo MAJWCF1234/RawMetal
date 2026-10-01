@@ -80,7 +80,7 @@ template<class A> void Game::archiveSave(A& a,int version){
    for(int door=0;door<doors;++door){float open=0;bool opening=false;a(open,opening);if(open<0||open>1)throw std::runtime_error("invalid door");
     if(door<int(w.m_doors.size())){w.m_doors[door].open=open;w.m_doors[door].opening=opening;}}
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
-  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(int(e.kind)>(version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
+  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(int(e.kind)>(version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>6)throw std::runtime_error("invalid clutter");});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
@@ -88,14 +88,14 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,12);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 12 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,13);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 13 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>12))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>13))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   // Earlier builds represented a broken crate as four unrelated prop models
@@ -136,7 +136,11 @@ bool Game::decodeSave(const std::string& data){
    auto oldPickups=std::move(saved.pickups);std::vector<bool> pickupUsed(oldPickups.size(),false);saved.pickups.clear();saved.pickups.reserve(fresh.pickups.size());
    for(const auto&spawn:fresh.pickups){
     int match=-1;for(int i=0;i<int(oldPickups.size());++i)if(!pickupUsed[i]&&oldPickups[i].kind==spawn.kind&&samePosition(oldPickups[i].pos,spawn.pos)){match=i;break;}
-    if(match>=0){pickupUsed[match]=true;saved.pickups.push_back(oldPickups[match]);}else saved.pickups.push_back(spawn);
+    // Elevation belongs to authored geometry, while collection belongs to the
+    // save. This also upgrades old saves without changing the save format.
+    auto pickup=spawn;
+    if(match>=0){pickupUsed[match]=true;pickup.active=oldPickups[match].active;}
+    saved.pickups.push_back(pickup);
    }
 
    // Current saves own their dynamic clutter population, including imported objects.
@@ -159,6 +163,7 @@ bool Game::decodeSave(const std::string& data){
   next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
   next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
   next.updateStreaming(0);
+  next.updateMechanisms(0);
   // Ashfall saves from the flat-ground prototype keep their chunk-local X/Y,
   // but grounded feet now belong on the generated terrain surface.
   if(next.m_world.outdoors()&&p.grounded){

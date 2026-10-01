@@ -2,18 +2,20 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.5.9.7, Service Map Rendering**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.6.0, Freight District Playtest**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
 
-v0.5.9.7 adds hardware multisample scene rendering, raises service-map fill
-light, and gives the concrete pressure floor mipmapped surface normals. The
-Vulkan scene retains its linear HDR target and single filmic presentation pass.
+v0.6.0 adds eight freight areas across 22 connected campaign chunks, from
+Freight Access through the deep cargo junction. The district has its own
+industrial soundtrack and two animated mutated-human encounters in Warehouse C
+and Depot Trackside. Shared authored mechanisms support native and custom
+campaigns; imported cargo, service vans, office materials, signs and lighting
+make the locations more distinct. The executable budget is now 22 MB.
 
-See [RELEASE_NOTES_v0.5.9.7.md](RELEASE_NOTES_v0.5.9.7.md) for this release's
-details and validation.
+See [RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md) for details and validation.
 
 ## Download and run
 
@@ -265,9 +267,10 @@ The build produces the canonical \`RawMetal.exe\` in the repository root.
 
 Shaders are compiled to embedded SPIR-V. Runtime textures, models, audio, and other game data are losslessly packed into the executable.
 
-The build is intentionally size-constrained and rejects a release executable at or above **19,800,000 bytes**.
+The build is intentionally size-constrained and rejects a release executable at or above **22,000,000 bytes** (22 MB).
 
 Purchased source assets remain unchanged. Runtime packing selects compact lossless representations and verifies embedded asset data against source pixels or bytes.
+Model and animation files also compete against reversible byte-plane and XOR-predicted encodings before LZMS compression. Resources larger than 1 MiB additionally compete against an LZMS stream with a dictionary block covering the complete resource. The packer selects a new encoding only when it is smaller and verifies its exact byte round-trip; PNG textures retain pixel-exact lossless WebP and predictor options.
 
 ## Validation and diagnostics
 
@@ -337,6 +340,6 @@ The project keeps source asset provenance separate from runtime packing and does
 - [MAP_SYSTEM.md](MAP_SYSTEM.md) for map injection and runtime custom campaigns
 - [tools/level-editor/README.md](tools/level-editor/README.md) for the Level Editor
 - [docs/world-system-boundaries.md](docs/world-system-boundaries.md) for world ownership and isolation
-- [RELEASE_NOTES_v0.5.7.md](RELEASE_NOTES_v0.5.7.md) for the latest release
+- [RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md) for the latest release
 
 See [render quality and performance notes](docs/render-quality-pass.md) for the latest renderer changes, validation, and remaining limitations.

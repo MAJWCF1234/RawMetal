@@ -7,7 +7,7 @@
 #include <sstream>
 #include <map>
 namespace retro {
-Mesh::Mesh(int id,const char* nodeFilter):m_materialParts((id>=163&&id<200)||(id>=257&&id<=259)),m_nodeFilter(nodeFilter){
+Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||id==142),m_nodeFilter(nodeFilter){
  auto resource=loadResource(id);
  ufbx_load_opts opts{};opts.evaluate_skinning=true;opts.target_axes=ufbx_axes_right_handed_y_up;opts.target_unit_meters=1;
  if(!resource.empty()&&resource[0]=='#')opts.file_format=UFBX_FILE_FORMAT_OBJ;
@@ -28,7 +28,7 @@ Mesh::Mesh(int id,const char* nodeFilter):m_materialParts((id>=163&&id<200)||(id
  std::ostringstream info;info<<id<<": "<<triangles.size()<<" triangles; bounds "<<minimum.x<<","<<minimum.y<<","<<minimum.z<<" to "<<maximum.x<<","<<maximum.y<<","<<maximum.z<<"\n";
  for(auto node:m_scene->nodes)if(node->bone){++bones;info<<" bone "<<node->name.data<<" at "<<node->node_to_world.m03<<","<<node->node_to_world.m13<<","<<node->node_to_world.m23<<"\n";}
  description=info.str();if(triangles.empty())throw std::runtime_error("Mesh has no triangles");
- if(id==242){m_creatureFrames=loadResource(244);uint32_t vertices=0,clips=0;
+ if(id==242||animationResource){m_creatureFrames=loadResource(animationResource?animationResource:244);uint32_t vertices=0,clips=0;
   if(m_creatureFrames.size()<20||std::memcmp(m_creatureFrames.data(),"RMA2",4))throw std::runtime_error("Invalid creature animation");
   std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&m_creatureSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
   std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);

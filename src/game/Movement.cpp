@@ -96,8 +96,9 @@ int Game::nearbyTerminal()const{
  for(size_t i=0;i<m_world.terminals().size();++i){auto&t=m_world.terminals()[i];auto delta=t.position-m_player.pos;float distance=length(delta),along=dot(delta,forward),base=t.z+m_world.floorHeight(t.position.x,t.position.y);
   if(distance>=closest||along<=0||std::fabs(delta.x*forward.y-delta.y*forward.x)>.4f||std::fabs(m_player.z-base)>=.65f)continue;
   // Stop the sight ray before the computer's own collision housing.
-  auto face=t.position-normalized(delta)*.4f;
-  if(!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,face,base+.75f))continue;
+  bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction<2;
+  auto face=t.position-normalized(delta)*std::min(bench?.6f:.4f,distance*.8f);
+  if(!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,face,base+(bench?1.1f:.75f)))continue;
   closest=distance;nearest=int(i);
  }return nearest;
 }
@@ -127,7 +128,7 @@ void Game::updateInteraction(const InputState& input,float dt){
   else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].reactorAction)useReactorAction(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
-  }auto& control=m_world.terminals()[terminal];if(control.activateState){setState(control.activateState,control.toggleState?!state(control.activateState):1);m_logTime=0;m_activeLog=-1;sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
+  }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);m_logTime=0;m_activeLog=-1;sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
   if(!holdingClutter()&&door<0&&m_logTime==0)interactClutter();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);

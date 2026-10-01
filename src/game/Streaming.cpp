@@ -7,7 +7,7 @@ void Game::ensureChunk(int level){
 }
 void Game::useDoor(int index){
  auto door=m_world.doors()[index];m_world.toggleDoor(index);bool opening=!door.opening;
- if(m_worldId==WorldId::Custom&&(door.entry||door.transfer)){
+ if((m_worldId==WorldId::Custom||m_world.definition().residencyGroup>=0)&&(door.entry||door.transfer)){
   // Custom campaign indices are authoring IDs, not spatial directions. Find
   // the chunk on the opposite side of this boundary in world coordinates.
   auto origin=chunkOffset(m_level);Vec2 probe{origin.x+(door.left+door.right)*.5f,origin.y+(door.entry?-.05f:24.05f)};
@@ -26,6 +26,28 @@ void Game::useDoor(int index){
  sound(Sound::Door,.65f);
 }
 void Game::updateStreaming(float dt){
+ if(m_world.definition().residencyGroup>=0){
+  for(int index=0;index<int(m_world.doors().size());++index){const auto& door=m_world.doors()[index];
+   if(!door.opening&&door.open>0&&m_player.pos.x>door.left-.25f&&m_player.pos.x<door.right+.25f&&std::fabs(m_player.pos.y-door.y)<.55f)m_world.openDoor(index);
+  }
+  // Authored residency groups keep a contiguous hall loaded in either campaign.
+  auto origin=chunkOffset(m_level);auto global=origin+m_player.pos;
+  for(int level=0;level<chunkCount();++level)if(level!=m_level){auto other=chunkOffset(level);
+   bool needed=m_chunks[level].world.definition().residencyGroup==m_world.definition().residencyGroup;
+   float dx=std::max({other.x-global.x,0.f,global.x-other.x-24}),dy=std::max({other.y-global.y,0.f,global.y-other.y-24});
+   if(dx*dx+dy*dy<36)needed=true;
+   for(const auto& door:m_world.doors())if(door.entry||door.transfer){
+    Vec2 probe{origin.x+(door.left+door.right)*.5f,origin.y+(door.entry?-.05f:24.05f)};
+    if(probe.x<other.x||probe.x>=other.x+24||probe.y<other.y||probe.y>=other.y+24)continue;
+    needed|=door.opening||door.open>0;
+    if(needed){ensureChunk(level);auto& target=m_chunks[level].world;
+     for(int i=0;i<int(target.doors().size());++i){const auto& match=target.doors()[i];if((door.entry&&match.transfer)||(door.transfer&&match.entry)){target.setDoor(i,door.open,door.opening);break;}}
+    }
+   }
+   if(needed)ensureChunk(level);else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
+  }
+  (void)dt;return;
+ }
  if(m_worldId==WorldId::Custom){
   // Runtime campaign packs are capped at 32 tiny 24 m chunks. Keep their
   // authored geometry resident so arbitrary 2D layouts and non-sequential
@@ -69,13 +91,19 @@ void Game::updateStreaming(float dt){
   if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
  }
  for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=false;
+  auto approaching=[&](const Door& door){
+   float dx=std::max({door.left-m_player.pos.x,0.f,m_player.pos.x-door.right});
+   float dy=std::fabs(m_player.pos.y-door.y);
+   float base=m_world.floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+   return dx*dx+dy*dy<20.25f&&std::fabs(m_player.z-base)<2.f;
+  };
   if(level==m_level+1){
    needed=m_world.openSouthBoundary();
-   if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().back();needed=d.transfer&&(d.opening||d.open>0);}
+   if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().back();needed=d.transfer&&(d.opening||d.open>0||approaching(d));}
   }
   if(level==m_level-1){
    needed=m_world.openNorthBoundary();
-   if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().front();needed=d.entry&&(d.opening||d.open>0);}
+   if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().front();needed=d.entry&&(d.opening||d.open>0||approaching(d));}
   }
   if(needed)ensureChunk(level);
   else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
@@ -91,7 +119,13 @@ bool Game::testStreaming(){
  game.m_player.pos={21.5f,24.1f};game.crossChunkBoundary();if(game.level()!=1||!game.chunkResident(0))return fail(3);
  game.m_player.pos={3.5f,2.f};game.useDoor(0);game.updateStreaming(0);if(!game.chunkResident(0))return fail(4);
  for(int i=0;i<160;++i)game.update({},1.f/120);
+ // A closed gate retains its neighbour while approached, allowing the
+ // renderer to warm its cache before the player opens the leaf.
+ if(!game.chunkResident(0))return fail(26);
+ game.m_player.pos={12,12};game.updateStreaming(0);
  if(game.chunkResident(0)||!game.m_chunks[0].world.structures().empty()||game.m_chunks[0].world.tile(3,4)!='#')return fail(5);
+ game.m_player.pos={3.5f,2};game.updateStreaming(0);
+ if(!game.chunkResident(0)||game.m_chunks[0].world.tile(3,4)=='#')return fail(27);
  game.useDoor(0);game.updateStreaming(0);if(!game.chunkResident(0)||game.m_chunks[0].world.tile(3,4)=='#')return fail(6);
  for(int i=0;i<160;++i)game.update({},1.f/120);
  game.m_player.pos={3.5f,-.1f};game.crossChunkBoundary();if(game.level()!=0||!game.enemies().empty()||!game.pickups().empty())return fail(7);

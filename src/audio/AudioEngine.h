@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <cstdint>
 namespace retro {
 class Game;
 class AudioEngine {
@@ -22,7 +23,7 @@ public:
  static bool testLiftMix();
 private:
  struct Sample {std::vector<int16_t> pcm; int channels=1; size_t frames()const{return pcm.size()/channels;}};
- struct Voice {Sound sound; double cursor=0; float gain=1,pitch=1,left=1,right=1; Vec2 position{}; bool spatial=false,loop=false; int emitter=0;float smoothLeft=0,smoothRight=0,occlusion=1;};
+ struct Voice {Sound sound; double cursor=0; float gain=1,pitch=1,left=1,right=1; Vec2 position{}; bool spatial=false,loop=false; std::int64_t emitter=0;float smoothLeft=0,smoothRight=0,occlusion=1;};
  static constexpr int Rate=44100, Block=512;
  std::array<Sample,size_t(Sound::Count)> m_samples;
  std::vector<Voice> m_voices;
@@ -35,13 +36,14 @@ private:
  std::atomic<bool> m_stop=false;
  float m_master=1,m_targetMaster=1,m_musicGain=.28f,m_lastTime=-1;
  float m_effectsGain=1;
- float m_mainBlend=1,m_reactorBlend=0,m_motorBlend=0;
- float m_mainTarget=1,m_reactorTarget=0,m_motorTarget=0;
+ float m_mainBlend=1,m_reactorBlend=0,m_motorBlend=0,m_freightBlend=0;
+ float m_mainTarget=1,m_reactorTarget=0,m_motorTarget=0,m_freightTarget=0;
  float m_submerged=0,m_submergedTarget=0,m_underwaterLeft=0,m_underwaterRight=0;
  bool m_paused=false;
   int m_lastChunk=-1;
+  int m_lastWorld=-1;
   unsigned m_lastRevision=0;
- void play(const SoundEvent& event,int emitter=0,bool loop=false);
+ void play(const SoundEvent& event,std::int64_t emitter=0,bool loop=false);
  void mix(int16_t* output,size_t frames);
  void run();
  void spatialize(Voice& voice,const Game& game,float dt=1.f/60.f);

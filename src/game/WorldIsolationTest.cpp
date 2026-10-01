@@ -1,4 +1,6 @@
 #include "Game.h"
+#include "../world/CustomCampaign.h"
+#include <chrono>
 #include <fstream>
 #include <queue>
 namespace retro {
@@ -7,11 +9,34 @@ bool Game::testWorldIsolation(){
  auto check=[&](bool ok,const char* label){out<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
  Game campaign;Game custom(WorldId::Ashfall);Game independent;
  // Keep authored encounter composition stable while moving ownership out of Game.
- constexpr int creatureCounts[]={8,9,6,3,0,0,1,3,0,3},pickupCounts[]={4,6,4,3,0,0,1,2,2,2};
- constexpr int clutterCounts[]={6,6,6,6,0,2,2,0,0,19};
- for(int level=0;level<campaign.chunkCount();++level){
+ constexpr int creatureCounts[]={8,9,6,3,0,0,2,4,2,3},pickupCounts[]={4,6,4,3,0,0,1,2,4,2};
+ constexpr int clutterCounts[]={6,6,6,6,0,2,2,0,6,19};
+ for(int level=0;level<int(std::size(creatureCounts));++level){
   const auto& chunk=campaign.m_chunks[level];
   if(!check(int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&int(chunk.clutter.size())==clutterCounts[level],"Campaign population preserved"))return false;
+ }
+ auto invalidWorldRejected=[](){try{World invalid(0,WorldId::Custom);return false;}catch(const std::invalid_argument&){return true;}};
+ if(!check(invalidWorldRejected(),"Custom world construction requires explicit authored data"))return false;
+ auto authored=std::make_shared<AuthoredMapData>();AuthoredLayerData floor;for(auto& row:floor.rows)row=std::string(World::Width,'.');authored->layers.push_back(floor);
+ {World external(0,authored);World native(10);if(!check(external.custom()&&!external.campaign()&&native.campaign()&&!native.custom(),"Shared authored geometry preserves custom and native identities"))return false;}
+ auto rejected=[&](){try{World invalid(0,authored);return false;}catch(const std::runtime_error&){return true;}};
+ authored->fixtures.push_back({99,{3,3},0,1,1,1,0});if(!check(rejected(),"Invalid fixture model rejected before renderer access"))return false;authored->fixtures.clear();
+ authored->props.push_back({99,{3,3},1,1,0,{.5f,.5f}});if(!check(rejected(),"Invalid prop model rejected before renderer access"))return false;authored->props.clear();
+ authored->layers[0].rows[0]=".";if(!check(rejected(),"Malformed map row rejected before collision generation"))return false;authored->layers[0].rows[0]=std::string(World::Width,'.');
+ authored->structures.resize(65536);if(!check(rejected(),"Excess structures rejected without a wrapping collision index"))return false;authored->structures.clear();
+ {
+  auto path=std::filesystem::temp_directory_path()/("rawmetal-map-validation-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".txt");
+  auto records=[](int id,int x){std::string text="MAP|"+std::to_string(id)+"|Validation|"+std::to_string(x)+"|0|3|3|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|"+std::to_string(id)+"|0|Floor|0|0\n";for(int row=0;row<24;++row)text+="ROW|"+std::to_string(id)+"|0|"+std::to_string(row)+"|........................\n";return text;};
+  auto base=std::string("CAMPAIGN|Validation|0\n")+records(0,0);
+  auto load=[&](const std::string& text){std::ofstream file(path);file<<"--- CUSTOM_CAMPAIGN_DATA_START ---\n"<<text<<"--- CUSTOM_CAMPAIGN_DATA_END ---\n";file.close();return loadCustomCampaignFile(path);};
+  bool valid=false;try{valid=load(base)->maps.size()==1;
+   auto mechanisms=load(base+"CARGO_LIFT|0|8|8|12|12|0|3|1|call|release|position|down|arrived|descended\nTIMED_SEQUENCE|0|timer|finished|0|0|24|24|-1|4|1000|500|0|0|2|0.5|1\nTERMINAL|0|5|5|0|0|Test|Call|Local|call|0|brake\nSIGN|0|5|8|2|3|0.9|3.14159|PLATFORM 3|ARRIVED|13277517\n");
+   valid&=mechanisms->maps[0]->cargoLift.upper==3&&mechanisms->maps[0]->timedSequences.size()==1&&mechanisms->maps[0]->terminals[0].requireState==stateId("brake")&&mechanisms->maps[0]->signs.size()==1&&mechanisms->maps[0]->signs[0].title=="PLATFORM 3";
+  }catch(...){}
+  auto invalid=[&](const std::string& text){try{load(text);return false;}catch(const std::runtime_error&){return true;}};
+  bool guarded=invalid(base+records(0,0))&&invalid(base+records(1,12))&&invalid(base+"FIXTURE|0|99|3|3|0|1|1|1|0|1\n")&&invalid(base+"PROP|0|99|3|3|1|1|0|0.5|0.5|0\n");
+  std::error_code cleanup;std::filesystem::remove(path,cleanup);
+  if(!check(valid&&guarded,"Custom loader accepts valid records and rejects duplicate/overlapping maps and invalid models"))return false;
  }
  const auto& warden=campaign.m_chunks[3].enemies.back();
  if(!check(warden.kind==CreatureKind::Warden&&warden.hp==320&&warden.pos.x==21.5f&&warden.pos.y==18.5f,"Reactor encounter keeps its authored creature and health"))return false;

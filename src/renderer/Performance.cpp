@@ -20,7 +20,14 @@ bool SoftwareRenderer::testCreatureAnimation(){
   }
   movement*=1.8f/(mesh.maximum.y-mesh.minimum.y);report<<"clip "<<clip<<" maximum vertex motion "<<movement<<" gameplay metres, non-rigid deformation "<<deformation<<'\n';if(!std::isfinite(movement)||movement<.001f||movement>4||deformation<.001f)return false;
  }
- report<<"PASS: five independently deforming skeletal clips, matching topology\n";return true;
+ report<<"PASS: five independently deforming skeletal clips, matching topology\n";
+ Mesh mutant(272,"",274);std::ofstream mutantReport("mutant-animation-test.txt");
+ for(int clip=0;clip<5;++clip){mutant.poseCreature(clip,0);auto first=mutant.triangles;float motion=0;
+  for(float phase:{.25f,.5f,.75f,1.f}){mutant.poseCreature(clip,phase);for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=mutant.triangles[i].v[v].p,d=p-first[i].v[v].p;
+   if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z))return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
+  mutantReport<<"clip "<<clip<<" vertex motion "<<motion<<" metres\n";if(motion<.001f||motion>4)return false;
+ }
+ mutantReport<<"PASS: supplied rig clips and grounded death pose interpolate with matching topology\n";return true;
 }
 bool SoftwareRenderer::testHardware(){
  SoftwareRenderer renderer(128,72);std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;

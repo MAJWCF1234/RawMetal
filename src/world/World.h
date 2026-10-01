@@ -19,6 +19,7 @@ struct Door {
  StateId requireState=0;int requireValue=1;
  bool swinging=false;
  int sign=-1;
+ float maxOpen=1.f;
 };
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
@@ -26,7 +27,7 @@ struct WorldLight {Vec2 position;float z;};
 // Authored overhead services, with absolute elevations. Kept above standing clearance.
 struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;};
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
-struct PickupSpawn {Vec2 position;PickupKind kind;};
+struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
 // One authored liquid basin controls the bed, physics surface and drawn mesh.
 struct WaterVolume {float x1,y1,x2,y2,bed,surface;};
@@ -38,7 +39,11 @@ struct Hazard {
  std::uint32_t enabledFlag=0;int enabledValue=1;bool invertFlag=false;
  float period=0,onTime=0,phase=0;
 };
-struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;StateId activateState=0;bool toggleState=false;};
+struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;StateId activateState=0;bool toggleState=false;float yaw=kPi;StateId requireState=0;};
+struct CargoLift {
+ float x1=0,y1=0,x2=0,y2=0,lower=0,upper=0,speed=1.f;
+ StateId callState=0,releaseState=0,positionState=0,downState=0,arrivedState=0,descendedState=0;
+};
 struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
 // Terrain source points are one-metre solid/air voxels, Minecraft-style.
@@ -61,15 +66,15 @@ struct Staircase {
     bool alongY,ascending;
 };
 
-// Runtime-authored campaign data. The browser editor writes these records into
-// the same .txt payload used by InstallMap.cmd, so a player can drop a complete
-// campaign into /custom maps without compiling or editing WorldDefinition.h.
-struct CustomLayerData {
+// Shared geometry records for built-in and runtime-authored maps. Loading these
+// records never changes the world's campaign identity. CustomCampaign parses
+// the editor's .txt payload into the same representation.
+struct AuthoredLayerData {
     std::string name;
     float elevation=0,thickness=0;
     std::array<std::string,24> rows{};
 };
-struct CustomTerminalData {
+struct AuthoredTerminalData {
     Vec2 position{};
     std::string title,line1,line2;
     float z=0;
@@ -77,13 +82,20 @@ struct CustomTerminalData {
     int reactorAction=0;
     StateId activateState=0;
     bool toggleState=false;
+    StateId requireState=0;
 };
-struct CustomMapData {
+struct AuthoredSign {
+    Vec2 position{};
+    float z=0,width=3,height=.9f,yaw=kPi;
+    std::string title,subtitle;
+    std::uint32_t accent=0xffca994du;
+};
+struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
     ChunkDefinition definition{};
     bool openNorth=false,openSouth=false,openWest=false,openEast=false;
-    std::vector<CustomLayerData> layers;
+    std::vector<AuthoredLayerData> layers;
     std::vector<Door> doors;
     std::vector<WorldProp> props;
     std::vector<Fixture> fixtures;
@@ -97,14 +109,17 @@ struct CustomMapData {
     std::vector<Compactor> compactors;
     std::vector<Structure> structures;
     std::vector<Staircase> stairs;
-    std::vector<CustomTerminalData> terminals;
+    std::vector<AuthoredTerminalData> terminals;
+    std::vector<AuthoredSign> signs;
+    CargoLift cargoLift;
+    std::vector<TimedSequence> timedSequences;
 };
 struct CustomCampaign {
     std::string name;
     std::string sourceFile;
     std::uint64_t key=0;
     int startMap=0;
-    std::vector<std::shared_ptr<const CustomMapData>> maps;
+    std::vector<std::shared_ptr<const AuthoredMapData>> maps;
 };
 
 class World {
@@ -117,20 +132,20 @@ public:
     static constexpr int TerrainMaxZ = 20;
 
     explicit World(int level=0,WorldId id=WorldId::Campaign);
-    World(int level,std::shared_ptr<const CustomMapData> customMap);
+    World(int level,std::shared_ptr<const AuthoredMapData> customMap);
     const std::vector<MapLayer>& layers()const{return m_layers;}
     int level()const{return m_level;}
     WorldId worldId()const{return m_worldId;}
     bool campaign()const{return m_worldId==WorldId::Campaign;}
     bool custom()const{return m_worldId==WorldId::Custom;}
     bool campaignChunk(int index)const{return campaign()&&m_level==index;}
-    const ChunkDefinition& definition()const{return m_customMap?m_customMap->definition:chunkDefinition(m_worldId,m_level);}
+    const ChunkDefinition& definition()const{return m_mapData?m_mapData->definition:chunkDefinition(m_worldId,m_level);}
     bool outdoors()const{return definition().environment==Environment::Outdoor;}
     bool hasLift()const{return definition().lift;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
     bool coast()const{return horrorMode()&&m_level>=12;}
-    const char* skyboxId()const{return m_customMap?m_customMap->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
-    const char* customMapName()const{return m_customMap?m_customMap->name.c_str():"";}
+    const char* skyboxId()const{return m_mapData?m_mapData->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
+    const char* customMapName()const{return m_mapData?m_mapData->name.c_str():"";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
     bool openSouthBoundary()const{return m_openSouthBoundary;}
     bool openWestBoundary()const{return m_openWestBoundary;}
@@ -138,6 +153,7 @@ public:
     Vec2 exitPoint()const{return m_level==5?Vec2{19.5f,22.5f}:m_level==4?Vec2{12.f,22.5f}:Vec2{21.5f,22.5f};}
     const std::vector<WorldProp>& props()const{return m_props;}
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}
+    const std::vector<AuthoredSign>& signs()const{static const std::vector<AuthoredSign> empty;return m_mapData?m_mapData->signs:empty;}
     const std::vector<PipeRun>& pipes()const{return m_pipes;}
     bool wallSpaceFree(Vec2 center,Vec2 along,float width,float bottom,float top)const;
     const std::vector<WorldLight>& lights()const{return m_lights;}
@@ -156,6 +172,11 @@ public:
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;
     bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
+    const CargoLift& cargoLift()const{return m_cargoLift;}
+    const std::vector<TimedSequence>& timedSequences()const{static const std::vector<TimedSequence> empty;return m_mapData?m_mapData->timedSequences:empty;}
+    float cargoLiftHeight()const{return m_cargoLiftHeight;}
+    void setCargoLiftHeight(float z){m_cargoLiftHeight=z;}
+    bool insideCargoLift(float x,float y)const{return m_cargoLift.x2>m_cargoLift.x1&&x>=m_cargoLift.x1&&x<m_cargoLift.x2&&y>=m_cargoLift.y1&&y<m_cargoLift.y2;}
     bool railBlocksHull(float x,float y,float radius,float feet,float height)const;
     float wallHeight(int x,int y)const;
     bool controlReleased()const{return m_controlReleased;}
@@ -205,13 +226,16 @@ public:
     const std::vector<Terminal>& terminals()const{return m_terminals;}
 
 private:
+    CargoLift m_cargoLift{};
+    float m_cargoLiftHeight=0;
     friend class Game; // Save codec persists dynamic state, never geometry or pointers.
     std::vector<MapLayer> m_layers;
     std::vector<std::pair<int,int>> m_destroyedTiles;
     float m_internalWallHeight=0;
     int m_level=0;
     WorldId m_worldId=WorldId::Campaign;
-    std::shared_ptr<const CustomMapData> m_customMap;
+    std::shared_ptr<const AuthoredMapData> m_mapData;
+    void loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map);
     bool m_openNorthBoundary=false,m_openSouthBoundary=false,m_openWestBoundary=false,m_openEastBoundary=false;
     std::vector<WorldProp> m_props;
     std::vector<Fixture> m_fixtures;
@@ -256,5 +280,3 @@ private:
 };
 
 }
-
-

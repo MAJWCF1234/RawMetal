@@ -48,13 +48,13 @@ std::uint64_t campaignKey(std::string value){
  std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return char(std::tolower(c));});
  std::uint64_t h=1469598103934665603ull;for(unsigned char c:value){h^=c;h*=1099511628211ull;}return h;
 }
-std::shared_ptr<CustomMapData> mapAt(std::vector<std::shared_ptr<CustomMapData>>& maps,const std::vector<std::string>& f,size_t field=1){
+std::shared_ptr<AuthoredMapData> mapAt(std::vector<std::shared_ptr<AuthoredMapData>>& maps,const std::vector<std::string>& f,size_t field=1){
  int index=integer(f,field,"map index");if(index<0||index>=WorldChunkCapacity)throw std::runtime_error("custom campaign map index outside engine capacity");
  if(size_t(index)>=maps.size())maps.resize(size_t(index)+1);
- if(!maps[size_t(index)])maps[size_t(index)]=std::make_shared<CustomMapData>();
+ if(!maps[size_t(index)])maps[size_t(index)]=std::make_shared<AuthoredMapData>();
  return maps[size_t(index)];
 }
-CustomLayerData& layerAt(std::vector<std::shared_ptr<CustomMapData>>& maps,const std::vector<std::string>& f){
+AuthoredLayerData& layerAt(std::vector<std::shared_ptr<AuthoredMapData>>& maps,const std::vector<std::string>& f){
  auto map=mapAt(maps,f,1);int layer=integer(f,2,"layer index");if(layer<0||layer>31)throw std::runtime_error("invalid custom layer index");
  if(size_t(layer)>=map->layers.size())map->layers.resize(size_t(layer)+1);return map->layers[size_t(layer)];
 }
@@ -65,7 +65,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
  if(start==std::string::npos||end==std::string::npos||end<=start)throw std::runtime_error("missing CUSTOM_CAMPAIGN_DATA markers");
  start+=DataStart.size();std::istringstream stream(text.substr(start,end-start));std::string line;
  auto campaign=std::make_shared<CustomCampaign>();campaign->sourceFile=path.filename().string();campaign->key=campaignKey(campaign->sourceFile);
- std::vector<std::shared_ptr<CustomMapData>> maps;bool sawCampaign=false;
+ std::vector<std::shared_ptr<AuthoredMapData>> maps;bool sawCampaign=false;std::array<bool,WorldChunkCapacity> declared{};
  while(std::getline(stream,line)){
   if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#')continue;
   auto f=fields(line);if(f.empty())continue;const auto& tag=f[0];
@@ -73,12 +73,22 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()<3)throw std::runtime_error("malformed CAMPAIGN record");campaign->name=decode(f[1]);campaign->startMap=integer(f,2,"campaign start map");sawCampaign=true;
   }else if(tag=="MAP"){
    if(f.size()<17)throw std::runtime_error("malformed MAP record");auto map=mapAt(maps,f);map->name=decode(f[2]);
+   int index=integer(f,1,"map index");if(declared[size_t(index)])throw std::runtime_error("duplicate MAP record");declared[size_t(index)]=true;
    map->definition.origin={number(f,3,"origin x"),number(f,4,"origin y")};
    map->definition.playerStart={number(f,5,"spawn x"),number(f,6,"spawn y")};map->definition.spawnHeight=number(f,7,"spawn z");
    int environment=integer(f,8,"environment");if(environment<0||environment>1)throw std::runtime_error("invalid custom environment");map->definition.environment=Environment(environment);
    map->definition.ceiling=number(f,9,"ceiling");map->definition.ambient=number(f,10,"ambient");map->skybox=decode(f[11]);
    map->openNorth=boolean(f,12,"north boundary");map->openSouth=boolean(f,13,"south boundary");map->openWest=boolean(f,14,"west boundary");map->openEast=boolean(f,15,"east boundary");
    map->definition.lift=boolean(f,16,"lift flag");
+   if(f.size()>=18)map->definition.residencyGroup=integer(f,17,"residency group");
+   if(f.size()>=19){int style=integer(f,18,"floor material");if(style<0||style>1)throw std::runtime_error("invalid floor material");map->definition.floorMaterial=FloorMaterial(style);}
+   if(f.size()>=20){int cue=integer(f,19,"music cue");if(cue<0||cue>1)throw std::runtime_error("invalid music cue");map->definition.musicCue=MusicCue(cue);}
+  }else if(tag=="SIGN"){
+   if(f.size()!=11)throw std::runtime_error("malformed SIGN record");auto map=mapAt(maps,f);
+   AuthoredSign sign;sign.position={number(f,2,"sign x"),number(f,3,"sign y")};sign.z=number(f,4,"sign z");
+   sign.width=number(f,5,"sign width");sign.height=number(f,6,"sign height");sign.yaw=number(f,7,"sign yaw");
+   sign.title=decode(f[8]);sign.subtitle=decode(f[9]);sign.accent=std::uint32_t(integer(f,10,"sign accent"))|0xff000000u;
+   if(sign.width<=0||sign.height<=0)throw std::runtime_error("invalid sign dimensions");map->signs.push_back(std::move(sign));
   }else if(tag=="LAYER"){
    if(f.size()<6)throw std::runtime_error("malformed LAYER record");auto& layer=layerAt(maps,f);layer.name=decode(f[3]);layer.elevation=number(f,4,"layer elevation");layer.thickness=number(f,5,"layer thickness");
   }else if(tag=="ROW"){
@@ -98,19 +108,30 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()<11)throw std::runtime_error("malformed FIXTURE record");auto map=mapAt(maps,f);map->fixtures.push_back({
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),
     number(f,6,"fixture width"),number(f,7,"fixture depth"),number(f,8,"fixture height"),number(f,9,"fixture yaw"),boolean(f,10,"fixture solid")});
+   const auto& fixture=map->fixtures.back();if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("invalid fixture model or dimensions");
   }else if(tag=="PROP"){
    if(f.size()<11)throw std::runtime_error("malformed PROP record");auto map=mapAt(maps,f);map->props.push_back({
     integer(f,2,"prop kind"),{number(f,3,"prop x"),number(f,4,"prop y")},number(f,5,"prop height"),number(f,6,"prop footprint"),number(f,7,"prop yaw"),
     {number(f,8,"prop half x"),number(f,9,"prop half y")},number(f,10,"prop base")});
+   if(map->props.back().kind<0||map->props.back().kind>=4)throw std::runtime_error("invalid prop model");
   }else if(tag=="LIGHT"){
    if(f.size()<5)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);map->lights.push_back({{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")});
   }else if(tag=="TERMINAL"){
-   if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);CustomTerminalData t;
+   if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);AuthoredTerminalData t;
    t.position={number(f,2,"terminal x"),number(f,3,"terminal y")};t.z=number(f,4,"terminal z");t.control=boolean(f,5,"terminal control");
    t.title=decode(f[6]);t.line1=decode(f[7]);t.line2=decode(f[8]);
    if(f.size()>=10&&!f[9].empty())t.activateState=stateId(decode(f[9]));
    if(f.size()>=11)t.toggleState=boolean(f,10,"terminal toggle");
+   if(f.size()>=12&&!f[11].empty())t.requireState=stateId(decode(f[11]));
    map->terminals.push_back(std::move(t));
+  }else if(tag=="CARGO_LIFT"){
+   if(f.size()<15)throw std::runtime_error("malformed CARGO_LIFT record");auto map=mapAt(maps,f);
+   for(size_t key=9;key<15;++key)if(f[key].empty())throw std::runtime_error("cargo lift requires six named states");
+   map->cargoLift={number(f,2,"lift x1"),number(f,3,"lift y1"),number(f,4,"lift x2"),number(f,5,"lift y2"),number(f,6,"lift lower"),number(f,7,"lift upper"),number(f,8,"lift speed"),stateId(decode(f[9])),stateId(decode(f[10])),stateId(decode(f[11])),stateId(decode(f[12])),stateId(decode(f[13])),stateId(decode(f[14]))};
+  }else if(tag=="TIMED_SEQUENCE"){
+   if(f.size()<17||f[2].empty()||f[3].empty())throw std::runtime_error("malformed TIMED_SEQUENCE record");auto map=mapAt(maps,f);
+   int tick=integer(f,14,"sequence sound");if(tick<0||tick>=int(Sound::Count))throw std::runtime_error("invalid sequence sound");
+   map->timedSequences.push_back({stateId(decode(f[2])),stateId(decode(f[3])),number(f,4,"sequence x1"),number(f,5,"sequence y1"),number(f,6,"sequence x2"),number(f,7,"sequence y2"),number(f,8,"sequence bottom"),number(f,9,"sequence top"),integer(f,10,"sequence duration"),integer(f,11,"sequence finish time"),integer(f,12,"sequence sound interval"),integer(f,13,"sequence sound cutoff"),Sound(tick),number(f,15,"sequence gain"),number(f,16,"sequence pitch")});
   }else if(tag=="HAZARD"){
    if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});
@@ -119,7 +140,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
     integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending")});
   }else if(tag=="CREATURE"){
-   if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>int(CreatureKind::Warden))throw std::runtime_error("invalid creature kind");
+   if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>int(CreatureKind::Mutant))throw std::runtime_error("invalid creature kind");
    map->creatureSpawns.push_back({CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")});
   }else if(tag=="PICKUP"){
    if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::Ammo))throw std::runtime_error("invalid pickup kind");
@@ -141,12 +162,19 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
  if(!sawCampaign||campaign->name.empty())throw std::runtime_error("missing CAMPAIGN record");
  if(maps.empty()||maps.size()>WorldChunkCapacity)throw std::runtime_error("custom campaign has no maps or exceeds engine capacity");
  for(size_t i=0;i<maps.size();++i){
-  if(!maps[i])throw std::runtime_error("custom campaign map indices must be contiguous");
+  if(!maps[i]||!declared[i])throw std::runtime_error("custom campaign maps require contiguous MAP records");
   if(maps[i]->layers.empty())throw std::runtime_error("custom campaign map has no layers");
   for(auto& layer:maps[i]->layers){
    if(layer.name.empty())layer.name="Custom floor";
    for(auto& row:layer.rows)if(row.size()!=24)throw std::runtime_error("custom map rows must be exactly 24 characters");
   }
+  auto spawn=maps[i]->definition.playerStart;if(spawn.x<0||spawn.x>=World::Width||spawn.y<0||spawn.y>=World::Height)throw std::runtime_error("custom map spawn is outside its chunk");
+  for(size_t j=0;j<i;++j){auto a=maps[i]->definition.origin,b=maps[j]->definition.origin;
+   if(a.x<b.x+World::Width&&a.x+World::Width>b.x&&a.y<b.y+World::Height&&a.y+World::Height>b.y)throw std::runtime_error("custom map chunk footprints overlap");
+  }
+  // Reject malformed geometry during discovery, while the caller can report
+  // a per-file error, rather than crashing when a player selects the pack.
+  World validated(int(i),maps[i]);
  }
  if(campaign->startMap<0||campaign->startMap>=int(maps.size()))throw std::runtime_error("custom campaign start map is invalid");
  campaign->maps.reserve(maps.size());for(auto& map:maps)campaign->maps.push_back(std::move(map));

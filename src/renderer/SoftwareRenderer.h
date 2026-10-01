@@ -21,7 +21,7 @@ public:
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
     int height() const { return m_height; }
-    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
+    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
     void previewModel(int model,float angle);
     bool validate3D();
     static bool testPerformance();
@@ -29,6 +29,7 @@ public:
     static bool testHardware();
     static bool testCreatureAnimation();
     float gripError()const{return m_gripError;}
+    std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
     void inspectRig(const Game& game,float yaw,float pitch);
 private:
     friend class GpuRenderer;
@@ -37,6 +38,7 @@ private:
     std::string m_gpuName;
     bool m_gpuFrame=false;
     bool m_staticGeometryBuild=false;
+    std::uint64_t m_staticGeometryBuilds=0;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0;
     bool m_poseReady=false;
@@ -62,16 +64,18 @@ private:
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;
     Texture m_feedSign,m_returnSign,m_diskSign,m_authSign;
-    std::array<Texture,12> m_routeSigns;
-    Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms;
+    std::array<Texture,34> m_routeSigns;
+    std::array<Texture,3> m_serviceAreaSigns;
+    Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;
     Mesh m_weaponMesh{109},m_armsMesh{111},m_enemyMesh{110};
-    Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242};
-    Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture;
+    Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274};
+    Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture;
     Mesh m_barrelMesh{121},m_crateMesh{123};
-    std::array<Mesh,15> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191},Mesh{257},Mesh{258},Mesh{259}};
+    std::array<Mesh,FacilityModelCount> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191},Mesh{142},Mesh{258},Mesh{259},Mesh{263},Mesh{265}};
+    std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
     Mesh m_medkitMesh{133},m_shellsMesh{135};
@@ -112,7 +116,6 @@ private:
     int m_shadowBudgetLimit=2200;
     std::array<std::unordered_map<std::uint64_t,float>,Game::MaxChunks> m_chunkLighting;
     std::array<std::unordered_map<std::uint64_t,NormalLighting>,Game::MaxChunks> m_chunkNormalLighting;
-    std::array<std::vector<float>,Game::MaxChunks> m_chunkLightingDoors;
     std::array<std::vector<std::vector<size_t>>,Game::MaxChunks> m_chunkLightCells;
     std::array<size_t,Game::MaxChunks> m_chunkLightCounts{};
     WorldId m_lightingWorld=WorldId::Campaign;
