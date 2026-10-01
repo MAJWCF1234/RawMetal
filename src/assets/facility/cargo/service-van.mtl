@@ -1,0 +1,22 @@
+# Blender 5.0.1 MTL File: 'Rusty PSX Style Kidnapper's Van (source file).blend'
+# www.blender.org
+
+newmtl metal_2_1
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd metal_2_1.png
+
+newmtl van_3
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 1
+map_Kd van_3.png

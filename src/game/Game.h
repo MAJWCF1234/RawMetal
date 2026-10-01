@@ -60,8 +60,8 @@ struct Enemy {
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
-    float bodyTop()const{return z+(kind==Kind::Wasp?1.55f:kind==Kind::Brute||kind==Kind::Warden?1.85f:1.05f);}
-    const char* name()const{return kind==Kind::Warden?"REACTOR STALKER":kind==Kind::Wasp?"XENOWASP":kind==Kind::Brute?"SCISSOR FIEND":"HUNTSMAN";}
+    float bodyTop()const{return z+(kind==Kind::Wasp?1.55f:kind==Kind::Brute||kind==Kind::Warden||kind==Kind::Mutant?1.85f:1.05f);}
+    const char* name()const{return kind==Kind::Mutant?"MUTATED HUMAN":kind==Kind::Warden?"REACTOR STALKER":kind==Kind::Wasp?"XENOWASP":kind==Kind::Brute?"SCISSOR FIEND":"HUNTSMAN";}
 };
 
 struct Pickup {
@@ -69,6 +69,7 @@ struct Pickup {
     Vec2 pos{};
     Kind kind = Kind::Health;
     bool active = true;
+    float z = -999;
 };
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
@@ -134,8 +135,7 @@ public:
     void update(const InputState& input, float dt);
     void restart();
     int level()const{return m_level;}
-    // ChunkCount remains the six-chunk campaign count for compatibility with
-    // existing campaign tests/saves. Ashfall can use the larger shared capacity.
+    // Campaign content count; runtime custom packs use their authored map count.
     static constexpr int ChunkCount=CampaignChunkCount;
     static constexpr int MaxChunks=WorldChunkCapacity;
     int chunkCount()const{return m_worldId==WorldId::Custom&&m_customCampaign?int(m_customCampaign->maps.size()):worldChunkCount(m_worldId);}
@@ -151,6 +151,7 @@ public:
     static bool testHazmat();
     const std::vector<Enemy>& enemies() const { return m_enemies; }
     const std::vector<Pickup>& pickups() const { return m_pickups; }
+    float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
     const std::vector<BarrelExplosion>& barrelExplosions()const{return m_barrelExplosions;}
@@ -158,6 +159,9 @@ public:
     static bool testClutter();
     static Game clutterInspection(int kind,float seconds);
     static bool testStreaming();
+    static bool testCampaignMaps();
+    void updateMechanisms(float dt);
+    static bool testMechanisms();
 
     float weaponKick() const { return m_weaponKick; }
     const WeaponMotion& weaponMotion()const{return m_weaponMotion;}
@@ -257,7 +261,7 @@ public:
     bool audioMuted()const{return m_audioMuted;}
     bool musicEnabled()const{return m_musicEnabled;}
     static Game validationScene(Enemy::Kind kind,float deathTime=-1,float windup=0);
-    static Game stalkerInspection(int clip,float phase,int view=0);
+    static Game stalkerInspection(int clip,float phase,int view=0,Enemy::Kind kind=Enemy::Kind::Warden);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
     static Game barrelInspection(float age);
 

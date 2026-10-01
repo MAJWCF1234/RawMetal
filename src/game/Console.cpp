@@ -2,6 +2,7 @@
 #include <sstream>
 #include <cctype>
 #include <fstream>
+#include <charconv>
 namespace retro {
 void Game::executeConsole(std::string command){
  if(command.empty())return;
@@ -11,9 +12,9 @@ void Game::executeConsole(std::string command){
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
   m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST TO VISIT THE NEW SHORE");
-  m_consoleLog.push_back("0 FOUNDRY / 1 PRESSUREWORKS / 2 GANTRY / 3 LIFT");
-  m_consoleLog.push_back("4 SERVICE GALLERY / 5 COOLANT RETURN / MAP REACTOR STARTS AFTER THE CRASH.");
-  m_consoleLog.push_back("6 CABLE VAULTS / 7 PUMP ANNEX / 8 UTILITY JUNCTION / 9 WASTE HANDLING");
+  for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
+  m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
+  m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
@@ -43,6 +44,18 @@ void Game::executeConsole(std::string command){
   else if(arg=="8"||arg=="junction")level=8;
   else if(arg=="9"||arg=="waste")level=9;
   else if(arg=="5"||arg=="coolant"||arg=="return")level=5;
+  else if(arg=="freight")level=10;
+  else if(arg=="receiving")level=13;
+  else if(arg=="warehouse")level=16;
+  else if(arg=="manifest")level=20;
+  else if(arg=="yard")level=22;
+  else if(arg=="platform")level=25;
+  else if(arg=="depot")level=27;
+  else if(arg=="tunnels")level=30;
+  else if(!arg.empty()){
+   int candidate=-1;auto result=std::from_chars(arg.data(),arg.data()+arg.size(),candidate);
+   if(result.ec==std::errc{}&&result.ptr==arg.data()+arg.size()&&candidate>=0&&candidate<CampaignChunkCount)level=candidate;
+  }
   if(level<0||!extra.empty())m_consoleLog.push_back("UNKNOWN MAP. TYPE MAPS FOR VALID NAMES / IDS.");
   else{
    if(verb!="reload"){m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Campaign;}m_level=level;restart();m_paused=false;m_inventoryOpen=false;
@@ -68,6 +81,10 @@ bool Game::testConsole(){
  auto p=game.player();float time=game.elapsed();InputState input{};input.forward=true;input.fire=true;input.mouseDx=30;
  game.update(input,.02f);if(game.elapsed()!=time||game.player().ammo!=p.ammo||game.player().angle!=p.angle)return false;
  for(int level=0;level<ChunkCount;++level){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return false;}
+ for(const auto& alias:std::array<std::pair<const char*,int>,8>{{{"freight",10},{"receiving",13},{"warehouse",16},{"manifest",20},{"yard",22},{"platform",25},{"depot",27},{"tunnels",30}}}){
+  input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return false;
+ }
+ for(const char* invalid:{"32","-1","10junk","999999999999999999999999"}){int current=game.level();input.textInput=std::string("map ")+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return false;}
  input.textInput="map reactor\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Crashed||game.player().z!=-9)return false;
  input.textInput="map 99\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return false;
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
@@ -80,6 +97,6 @@ bool Game::testConsole(){
  if(game.level()!=13||!game.world().coast()||game.world().waterSurface(20,12)>0||game.world().floorHeight(20,12)>=game.world().waterSurface(20,12))return false;
  input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
  input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return false;
- std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; maps 0-5 and reactor; Ashfall 5x3 boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
+ std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; all campaign map IDs and reactor; Ashfall boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
 }
 }

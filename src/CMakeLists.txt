@@ -17,6 +17,8 @@ target_link_libraries(RawMetalAssetPacker PRIVATE cabinet bcrypt webp)
 set_target_properties(RawMetalAssetPacker PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 add_executable(RawMetalClutterImport EXCLUDE_FROM_ALL tools/import_clutter.cpp ThirdParty/ufbx/ufbx.c)
 add_executable(RawMetalCreatureBake EXCLUDE_FROM_ALL tools/bake_creature.cpp ThirdParty/ufbx/ufbx.c)
+add_executable(RawMetalAuthoredCreatureBake EXCLUDE_FROM_ALL tools/bake_authored_creature.cpp ThirdParty/ufbx/ufbx.c)
+set_target_properties(RawMetalAuthoredCreatureBake PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 add_executable(RawMetalHazmatImport EXCLUDE_FROM_ALL tools/import_hazmat.cpp ThirdParty/ufbx/ufbx.c)
 set_target_properties(RawMetalHazmatImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 set_target_properties(RawMetalCreatureBake PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
@@ -49,6 +51,8 @@ add_executable(RawMetal WIN32
     game/Reactor.cpp
     game/Console.cpp
     game/Streaming.cpp
+    game/Mechanisms.cpp
+    game/CampaignMapTest.cpp
     game/WorldIsolationTest.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
@@ -57,6 +61,7 @@ add_executable(RawMetal WIN32
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp
     world/World.cpp
+    world/CampaignMaps.cpp
     world/CustomCampaign.cpp
     renderer/SoftwareRenderer.cpp
     renderer/NormalMapping.cpp

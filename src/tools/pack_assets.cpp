@@ -34,11 +34,17 @@ Bytes losslessTexture(const Bytes& raw){
  Bytes encoded;if(ok)encoded.assign(writer.mem,writer.mem+writer.size);WebPMemoryWriterClear(&writer);WebPPictureFree(&picture);
  if(!ok||retro::decodeLosslessTexture(encoded)!=raw)throw std::runtime_error("Pixel-exact WebP round-trip failed");return encoded;
 }
-Bytes compress(const Bytes& input){
+Bytes compress(const Bytes& input,DWORD blockSize=0){
  COMPRESSOR_HANDLE encoder=nullptr;if(!CreateCompressor(COMPRESS_ALGORITHM_LZMS,nullptr,&encoder))throw std::runtime_error("Compressor creation failed");
+ if(blockSize&&!SetCompressorInformation(encoder,COMPRESS_INFORMATION_CLASS_BLOCK_SIZE,&blockSize,sizeof(blockSize))){CloseCompressor(encoder);throw std::runtime_error("Cannot configure lossless compression block size");}
  SIZE_T required=0;Compress(encoder,input.data(),input.size(),nullptr,0,&required);Bytes output(required);
  bool ok=Compress(encoder,input.data(),input.size(),output.data(),output.size(),&required)!=FALSE;CloseCompressor(encoder);
- if(!ok)throw std::runtime_error("Compression failed");output.resize(required);return output;
+ if(!ok)throw std::runtime_error("Compression failed");output.resize(required);
+ // Large textures/audio often cross the default LZMS block boundary. Let the
+ // dictionary cover this resource, then retain the smaller buffer-mode stream.
+ // The stream carries its block metadata; the existing decoder is unchanged.
+ if(!blockSize&&input.size()>1024*1024){auto whole=compress(input,DWORD(input.size()));if(whole.size()<output.size())output=std::move(whole);}
+ return output;
 }
 void verify(const Bytes& packed,const Bytes& original){
  DECOMPRESSOR_HANDLE decoder=nullptr;CreateDecompressor(COMPRESS_ALGORITHM_LZMS,nullptr,&decoder);Bytes decoded(original.size());SIZE_T actual=0;
@@ -49,6 +55,8 @@ int main(int argc,char** argv){try{
  // Exercise wraparound and odd lengths before packing or verifying real files.
  for(size_t length:{size_t(0),size_t(1),size_t(2),size_t(3),size_t(255),size_t(4096)}){
   Bytes probe(length);for(size_t i=0;i<length;++i)probe[i]=static_cast<unsigned char>(i*i*37+i*113);
+  for(bool predict:{false,true})if(retro::binaryPredict(retro::binaryPredict(probe,predict,false),predict,true)!=probe)
+   throw std::runtime_error("Binary predictor round-trip failed");
   for(bool second:{false,true})for(bool planar:{false,true})
    if(retro::audioPredict(retro::audioPredict(probe,second,planar,false),second,planar,true)!=probe)
     throw std::runtime_error("Audio predictor round-trip failed");
@@ -77,6 +85,13 @@ int main(int argc,char** argv){try{
   fs::path path=source/match[2].str();std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("Cannot read asset");Bytes original((std::istreambuf_iterator<char>(file)),{});
   Bytes chosen=original,packed=compress(original);uint32_t encoding=0;
   auto candidate=[&](const Bytes& data,uint32_t method){auto compressed=compress(data);if(compressed.size()<packed.size()){chosen=data;packed=std::move(compressed);encoding=method;}};
+  if(path.extension()==".fbx"||path.extension()==".bin"||path.extension()==".obj"||path.extension()==".glb"){
+   for(bool predict:{false,true}){
+    auto transformed=retro::binaryPredict(original,predict,false);
+    if(retro::binaryPredict(transformed,predict,true)!=original)throw std::runtime_error("Binary prediction changed source bytes");
+    candidate(transformed,predict?9:8);
+   }
+  }
   if(path.extension()==".wav"){
    Bytes delta=original;uint16_t previous=0;for(size_t i=0;i+1<delta.size();i+=2){uint16_t word;std::memcpy(&word,original.data()+i,2);auto difference=uint16_t(word-previous);std::memcpy(delta.data()+i,&difference,2);previous=word;}candidate(delta,1);
    for(uint32_t method:{5u,6u,7u}){

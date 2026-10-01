@@ -14,7 +14,7 @@ struct MeshVertex {Point3 p;float u=0,v=0,light=1;};
 struct MeshTriangle {MeshVertex v[3];int part=0;};
 class Mesh {
 public:
- explicit Mesh(int resource,const char* nodeFilter="");
+ explicit Mesh(int resource,const char* nodeFilter="",int animationResource=0);
  ~Mesh();
  Mesh(const Mesh&)=delete;
  Mesh& operator=(const Mesh&)=delete;

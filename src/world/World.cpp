@@ -1,4 +1,5 @@
 #include "World.h"
+#include "CampaignMaps.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -289,7 +290,7 @@ constexpr MapRows WasteHandlingLower = {
     "#......................#",
     "#......................#",
     "#......................#",
-    "########################"
+    "####################...#"
 };
 constexpr MapRows WasteHandlingSortingDeck = {
     "__===___________________",
@@ -613,6 +614,22 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  return std::fabs(dx*c-dy*s)<fixture.width*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*.5f+margin;
 }
 constexpr float ShelfTiers[]={.17f,.54f,.92f};
+bool benchTerminal(const World& world,const Terminal& terminal){return world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction<2;}
+bool insideTerminal(const World& world,const Terminal& terminal,float x,float y){
+ if(benchTerminal(world,terminal))return x>terminal.position.x-.48f&&x<terminal.position.x+.42f&&std::fabs(y-terminal.position.y)<.36f;
+ return std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<.18f;
+}
+float terminalHeight(const World& world,const Terminal& terminal,float x,float y){
+ if(!benchTerminal(world,terminal))return .95f;
+ float yaw=world.level()==6?-kPi*.5f:terminal.yaw,c=std::cos(yaw),s=std::sin(yaw);
+ float dx=x-terminal.position.x,dy=y-terminal.position.y;
+ // The monitor has its own narrow footprint. Treating its full height as a
+ // desk-sized box made objects stand on invisible space beside the screen.
+ if(std::fabs(dx*c-dy*s)<.1932545f&&std::fabs(dx*s+dy*c)<.266175f)return 1.32005f;
+ float frontX=std::sin(yaw)*.22f,frontY=std::cos(yaw)*.22f;
+ if(std::fabs((dx-frontX)*c-(dy-frontY)*s)<.14f&&std::fabs((dx-frontX)*s+(dy-frontY)*c)<.105f)return .85f;
+ return .815f;
+}
 }
 
 void World::buildPopulation(){
@@ -661,25 +678,44 @@ void World::buildPopulation(){
  for(int i=0;i<6;++i)m_clutterSpawns.push_back({i,m_level==3?Vec2{3.5f+i*.45f,19.5f}:positions[m_level][i],m_level==2&&i>=4?3.f:-999.f,i*.7f});
 }
 
-World::World(int level,std::shared_ptr<const CustomMapData> customMap):m_level(level),m_worldId(WorldId::Custom),m_customMap(std::move(customMap)){
- if(!m_customMap)throw std::runtime_error("Missing custom map data");
- m_openNorthBoundary=m_customMap->openNorth;m_openSouthBoundary=m_customMap->openSouth;
- m_openWestBoundary=m_customMap->openWest;m_openEastBoundary=m_customMap->openEast;
- m_doors=m_customMap->doors;m_props=m_customMap->props;m_fixtures=m_customMap->fixtures;m_pipes=m_customMap->pipes;m_lights=m_customMap->lights;
- m_creatureSpawns=m_customMap->creatureSpawns;m_pickupSpawns=m_customMap->pickupSpawns;m_clutterSpawns=m_customMap->clutterSpawns;
- m_waterVolumes=m_customMap->waterVolumes;m_hazards=m_customMap->hazards;m_compactors=m_customMap->compactors;m_structures=m_customMap->structures;
- m_layers.reserve(m_customMap->layers.size());
- for(const auto& source:m_customMap->layers){
+World::World(int level,std::shared_ptr<const AuthoredMapData> map):m_level(level),m_worldId(WorldId::Custom){loadAuthoredMap(std::move(map));}
+void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
+ if(!map)throw std::runtime_error("Missing authored map data");
+ if(map->layers.empty())throw std::runtime_error("Authored map has no floor layers");
+ const auto& lift=map->cargoLift;
+ if(lift.x1!=lift.x2||lift.y1!=lift.y2||lift.lower!=lift.upper){
+  if(lift.x1>=lift.x2||lift.y1>=lift.y2||lift.lower>=lift.upper||lift.speed<=0||!lift.callState||!lift.releaseState||!lift.positionState||!lift.downState||!lift.arrivedState||!lift.descendedState)throw std::runtime_error("Invalid authored cargo lift or control states");
+ }
+ for(const auto& sequence:map->timedSequences)if(!sequence.timerState||!sequence.finishState||sequence.durationMs<1||sequence.durationMs>3600000||sequence.finishAtMs<1||sequence.finishAtMs>sequence.durationMs||sequence.soundIntervalMs<0||sequence.x1>sequence.x2||sequence.y1>sequence.y2||sequence.bottom>sequence.top||sequence.gain<0||sequence.pitch<=0)throw std::runtime_error("Invalid authored timed sequence");
+ for(const auto& layer:map->layers){
+  if(!std::isfinite(layer.elevation)||!std::isfinite(layer.thickness)||layer.thickness<0)throw std::runtime_error("Invalid authored layer elevation or thickness");
+  for(const auto& row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Authored map rows must match the chunk width");
+ }
+ for(const auto& fixture:map->fixtures)if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("Invalid authored fixture model or dimensions");
+ for(const auto& sign:map->signs)if(!std::isfinite(sign.width)||!std::isfinite(sign.height)||!std::isfinite(sign.z)||!std::isfinite(sign.yaw)||!std::isfinite(sign.position.x)||!std::isfinite(sign.position.y)||sign.width<=0||sign.height<=0)throw std::runtime_error("Invalid authored sign dimensions");
+ for(const auto& prop:map->props)if(prop.kind<0||prop.kind>=4)throw std::runtime_error("Invalid authored prop model");
+ for(const auto& stair:map->stairs)if(stair.steps<1||stair.steps>4096||stair.x1>=stair.x2||stair.y1>=stair.y2||stair.bottom>stair.top)throw std::runtime_error("Invalid authored staircase");
+ m_mapData=std::move(map);
+ m_openNorthBoundary=m_mapData->openNorth;m_openSouthBoundary=m_mapData->openSouth;
+ m_openWestBoundary=m_mapData->openWest;m_openEastBoundary=m_mapData->openEast;
+ m_doors=m_mapData->doors;m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;
+ m_creatureSpawns=m_mapData->creatureSpawns;m_pickupSpawns=m_mapData->pickupSpawns;m_clutterSpawns=m_mapData->clutterSpawns;
+ m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
+ m_cargoLift=m_mapData->cargoLift;m_cargoLiftHeight=m_cargoLift.lower;
+ m_layers.reserve(m_mapData->layers.size());
+ for(const auto& source:m_mapData->layers){
   MapRows rows{};for(size_t row=0;row<rows.size();++row)rows[row]=source.rows[row];
   m_layers.push_back({source.name,source.elevation,source.thickness,rows});
  }
- m_terminals.reserve(m_customMap->terminals.size());
- for(const auto& source:m_customMap->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState});
- buildLayers(m_customMap->stairs);
+ m_terminals.reserve(m_mapData->terminals.size());
+ for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,kPi,source.requireState});
+ buildLayers(m_mapData->stairs);
 }
 
 World::World(int level,WorldId id):m_worldId(id) {
+ if(worldChunkCount(id)<=0)throw std::invalid_argument("Custom worlds require authored map data");
  m_level=std::clamp(level,0,worldChunkCount(m_worldId)-1);
+ if(campaign())if(auto map=campaignMap(m_level)){loadAuthoredMap(std::move(map));return;}
  buildPopulation();
  if(horrorMode()){
   const char* regionNames[]={
@@ -835,7 +871,7 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(9.8f,17.6f,10.15f,20.4f,-9,-6.7f);
    cabinet({10.5f,18.4f},-kPi*.5f);cabinet({10.5f,19.7f},-kPi*.5f);
    // Wall-backed cabinets along the west solid concrete perimeter wall
-   cabinet({4.45f,18.5f},kPi*.5f);cabinet({4.45f,20.0f},kPi*.5f);cabinet({4.45f,21.5f},kPi*.5f);
+   cabinet({4.45f,18.5f},-kPi*.5f);cabinet({4.45f,20.0f},-kPi*.5f);cabinet({4.45f,21.5f},-kPi*.5f);
 
    // The live cable trough divides the chamber, but it must not divide the
    // play space into blind, parallel corridors. Heavy feeders make cover
@@ -884,6 +920,7 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_layers={{"Pump Annex / lower manifold",-12,0,PumpAnnexLower},{"Pump Annex / main floor",-9,.25f,PumpAnnexMain},{"Pump Annex / observation",-4,.25f,PumpAnnexObservation}};
    m_doors={{2,5,.5f,0,false,false,true,3},{19.8f,21.2f,23.5f,0,false,true,false,8}};
    m_doors.back().swinging=true;
+   m_doors.back().requireState=stateId("annex_running");
 
    // North entry vestibule: under floor sealed, overhead lintel sealed, passage completely clear
    wall(2,0,5,1,-12,-9);
@@ -903,10 +940,16 @@ World::World(int level,WorldId id):m_worldId(id) {
     // Set the entry vessel off the stair's center sightline. Its reduced
     // diameter keeps a clear approach to the lower manifold and exit.
     for(Vec2 p:{Vec2{7.5f,4},Vec2{8,13},Vec2{12,19.5f}}){
-     tank(p,4.6f);m_pipes.push_back({p,{p.x,22},-2.4f,.28f});
-     m_pipes.push_back({p,p,-2.4f,.28f,-7.45f});
+     tank(p,4.6f);
+     // Keep the supply header tight to the roof; the old -2.4 m run cut
+     // through headroom over the -4 m observation deck.
+     constexpr float headerZ=-1.32f;
+     m_pipes.push_back({p,{p.x,22},headerZ,.28f});
+     // Only the two tanks outside the observation deck get down-feed risers.
+     // The former centre riser pierced the elevated walking surface.
+     if(p.x<10.f)m_pipes.push_back({p,p,headerZ,.28f,-7.45f});
     }
-   m_pipes.push_back({{8,22},{22,22},-2.4f,.28f});
+   m_pipes.push_back({{8,22},{22,22},-1.32f,.28f});
    for(Vec2 p:{Vec2{7.5f,4},Vec2{8,13},Vec2{12,19.5f}})wall(p.x-.48f,p.y-.48f,p.x+.48f,p.y+.48f,-12,-9);
    for(Vec2 p:{Vec2{6.2f,3.1f},Vec2{11.7f,8.7f},Vec2{6.2f,15.2f},Vec2{20.4f,10.5f},Vec2{4.4f,19.3f},Vec2{18.8f,20.3f}})
     post(p.x,p.y,-12,-9.25f,.14f);
@@ -924,36 +967,45 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_props.push_back({0,{11.5f,14.f},2.2f,1.4f,kPi*.5f,{.7f,.7f},0.f});
    m_props.push_back({1,{6.5f,15.f},1.9f,1.3f,0,{.65f,.65f},0.f});
 
-   // Interconnecting pump manifold pipes and vertical risers
-   m_pipes.push_back({{6.5f,9.f},{6.5f,9.f},-11.8f,.18f,-7.45f});
-   m_pipes.push_back({{6.5f,9.f},{8.f,9.f},-7.45f,.18f});
-   m_pipes.push_back({{8.f,9.f},{7.5f,4.f},-7.45f,.18f});
-   m_pipes.push_back({{6.5f,15.f},{6.5f,15.f},-11.8f,.18f,-7.45f});
-   m_pipes.push_back({{6.5f,15.f},{8.f,15.f},-7.45f,.18f});
-   m_pipes.push_back({{8.f,15.f},{8.f,13.f},-7.45f,.18f});
+   // Slim reinforced columns land directly on the observation deck. The old
+   // 0.8 m blocks swallowed the lower manifold sightlines.
+   m_fixtures.push_back({2,{19.5f,6.5f},0.f,.30f,.30f,8.f,0,true});
+   m_fixtures.push_back({2,{15.5f,16.5f},0.f,.30f,.30f,8.f,0,true});
 
-   // Structural reinforced columns supporting mezzanine and roof
-   // Keep the posts directly under the observation deck. Both positions are
-   // on the lower manifold footprint and overlap the deck above.
-   m_fixtures.push_back({2,{19.5f,6.5f},0.f,.8f,.8f,8.f,0,true});
-   m_fixtures.push_back({2,{15.5f,16.5f},0.f,.8f,.8f,8.f,0,true});
-
-   // Observation workstation CRT console and wall breaker panels
-   m_fixtures.push_back({11,{21.2f,18.2f},8.f,.8f,.8f,1.1f,-kPi*.5f,true});
+   // Glazed operator booth: an open doorway faces the stair landing, with
+   // a waist-high west sill preserving the view over the pump hall.
+   wall(19,17,19.6f,17.18f,-4,roof);wall(21.4f,17,22.6f,17.18f,-4,roof);
+   wall(19.6f,17,21.4f,17.18f,-1.5f,roof);
+   wall(22.4f,17,22.6f,21,-4,roof);
+   wall(19,20.8f,19.6f,21,-4,roof);wall(21.4f,20.8f,22.4f,21,-4,roof);
+   wall(19.6f,20.8f,21.4f,21,-1.5f,roof);
+   wall(19,18.2f,19.18f,20.8f,-4,-2.95f);wall(19,18.2f,19.18f,20.8f,-1.5f,roof);
+   for(float y:{18.2f,19.5f,20.65f})post(19.08f,y,-2.95f,-1.5f,.045f);
+   // Wall breakers remain equipment; the actual workstation is the terminal.
    m_fixtures.push_back({8,{21.85f,19.5f},8.f,.67f,.20f,.91f,kPi*.5f,false});
    m_fixtures.push_back({8,{1.15f,8.f},0.f,.67f,.20f,.91f,kPi*.5f,false});
 
-   m_terminals={{{20.4f,17.2f},"PUMP ANNEX / OBSERVATION","DUTY PUMP RESTARTED BY REMOTE SEQUENCE.","UTILITY JUNCTION / UPPER SOUTH ACCESS.",8,false}};
-   m_terminals.push_back({{12,1.5f},"LOWER MANIFOLD / SERVICE ROUTE","OBSERVATION ACCESS: EAST STAIR TOWER.","KEEP PUMP SERVICE AISLES CLEAR."});
-   event("annex_pump_restart",15,15,22,18,-4.1f,-2,{action(A::SetState,stateId("annex_running"),1),action(A::Shake,0,0,.35f),action(A::PlaySound,0,0,.75f),action(A::Checkpoint)});
-   m_scriptEvents.back().actions[2].sound=Sound::LiftMotor;
-   m_creatureSpawns={{CreatureKind::Wasp,{12,12},-6},{CreatureKind::Wasp,{20,13},-4},{CreatureKind::Huntsman,{11,10},-12},{CreatureKind::Huntsman,{8.5f,11.f},-12}};
-   m_pickupSpawns={{{6,17},PickupKind::Health},{{20,20},PickupKind::Ammo}};
+   m_terminals={{{21.4f,19.5f},"PUMP ANNEX / OBSERVATION","DUTY PUMP START: LOWER MANIFOLD CONTROL.","JUNCTION ACCESS: SOUTH OBSERVATION WALKWAY.",8,false}};
+   m_terminals.push_back({{11.5f,10.5f},"DUTY PUMPS / LOCAL START","RESTORE PRESSURE BEFORE LEAVING THE ANNEX.","E / START DUTY PUMPS. EXIT VIA EAST STAIRS.",0,false,0,stateId("annex_running"),false,-kPi*.5f});
+   event("annex_pump_restart",1,1,23,23,-12.1f,-2,{action(A::Shake,0,0,.18f),action(A::PlaySound,0,0,.75f),action(A::Checkpoint)});
+   m_scriptEvents.back().requireState=stateId("annex_running");
+   m_scriptEvents.back().actions[1].sound=Sound::LiftMotor;
+   // Service alcove behind the pump controls gives the lower loop a readable
+   // destination rather than another uninterrupted rectangle of concrete.
+   wall(9.2f,7.5f,12.9f,7.7f,-12,-9.25f);
+   wall(12.7f,7.7f,12.9f,11.8f,-12,-9.25f);
+   wall(9.2f,7.7f,9.4f,9.1f,-12,-9.25f);
+   shelf({12.2f,8.8f},kPi*.5f);
+   // Keep the south doorway open; the side cabinet stays outside its lane.
+   cabinet({22.f,20.2f},kPi*.5f);
+   m_lights.push_back({{11.3f,10},-9.4f});
+   m_creatureSpawns={{CreatureKind::Wasp,{12,12},-6},{CreatureKind::Wasp,{20,13},-4},{CreatureKind::Huntsman,{9.9f,11.3f},-12},{CreatureKind::Huntsman,{8.5f,11.f},-12}};
+   m_pickupSpawns={{{6,17},PickupKind::Health,-9},{{20,20},PickupKind::Ammo,-4}};
    for(Vec2 p:{Vec2{3.5f,2},Vec2{4,14},Vec2{12,9},Vec2{20,7},Vec2{20,18},Vec2{20.5f,17.5f}})m_lights.push_back({p,-1.3f});
    // This high-bay lamp belongs on the roof plane; -6.35 put it mid-room
    // with no hanger or ceiling support.
    m_lights.push_back({{10,8},-1.3f});m_lights.push_back({{18,18},-1.3f});
-   for(Vec2 p:{Vec2{4,11},Vec2{10,8},Vec2{12,3},Vec2{13,17},Vec2{8.f,11.f}})m_lights.push_back({p,-9.35f});
+   for(Vec2 p:{Vec2{4,11},Vec2{10,8},Vec2{12,3},Vec2{13,17},Vec2{8.f,11.f}})m_lights.push_back({p,-9.4f});
   }
   // === LEVEL_7_END ===
   // === LEVEL_8_START ===
@@ -987,7 +1039,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(18.82f,1,22.18f,1.22f,-4,roof);
    wall(19.04f,4.35f,21.96f,4.65f,-1.5f,roof);
 
-   wall(1,6.78f,7.05f,7.06f,-9,-4);
+   // The former sealed box below the arrival deck is now a walk-in service
+   // store. Its south doorway offers a useful optional loop and supplies.
+   wall(1,6.78f,3,7.06f,-9,-4);wall(4.6f,6.78f,7.05f,7.06f,-9,-4);
+   wall(3,6.78f,4.6f,7.06f,-6.5f,-4);
    wall(6.78f,1,7.06f,6.82f,-9,-4);
    wall(18.78f,1,19.06f,6.82f,-9,-4);
    wall(18.78f,6.78f,22.2f,7.06f,-9,-4);
@@ -1024,25 +1079,49 @@ World::World(int level,WorldId id):m_worldId(id) {
    // Concourse substation switchgear & dispatch workstation
    cabinet({5.45f,19.5f},kPi*.5f);
    cabinet({5.45f,21.0f},kPi*.5f);
+   cabinet({1.65f,19.5f},-kPi*.5f);cabinet({1.65f,21.f},-kPi*.5f);
+   shelf({2,3.8f},-kPi*.5f);shelf({5.8f,3.8f},kPi*.5f);
+   m_lights.push_back({{3.8f,4.8f},-4.4f});
+   // Central distribution spine separates dispatch and maintenance aisles.
+   // The ends stay open so fighting and exploration have two routes.
+   m_structures.push_back({12.8f,10.8f,13.12f,14.8f,-9,-7.85f,false,2});
+   for(float y:{11.f,14.6f})post(12.96f,y,-7.85f,-6.7f,.065f);
+   m_structures.push_back({12.8f,11.2f,13.12f,14.3f,-7.35f,-6.8f,false,2});
+   m_structures.push_back({12.86f,10.8f,13.06f,14.8f,-6.8f,-6.7f,false,2});
+   for(float y:{11.6f,13.3f}){
+    cabinet({12.35f,y},kPi*.5f);cabinet({13.57f,y},-kPi*.5f);
+   }
     m_fixtures.push_back({11,{16.8f,12.5f},0.f,.8f,.8f,1.1f,kPi*.5f,true});
     m_fixtures.push_back({8,{19.2f,12.5f},0.f,.67f,.20f,.91f,0,false});
     m_fixtures.push_back({8,{1.78f,3.5f},5.f,.67f,.20f,.91f,kPi*.5f,false});
-   m_terminals={{{18,12.5f},"JUNCTION / WASTE DISPATCH","CREDENTIAL ACCEPTED / WASTE ROUTE AVAILABLE.","E / RELEASE WASTE HANDLING BULKHEAD.",0,false,0,stateId("waste_access")},
-               {{20.3f,6},"FREIGHT SERVICES / INCIDENT OVERRIDE","CREDENTIAL ACCEPTED. ACCESS SUSPENDED.","WASTE DISPATCH: BOOTH BELOW / SOUTH DOOR.",5,false}};
+   m_terminals={{{18,12.5f},"JUNCTION / WASTE DISPATCH","DISPATCH INTERLOCK / SOUTH BULKHEAD.","E / RELEASE WASTE HANDLING ROUTE.",0,false,0,stateId("waste_access")},
+               {{17.2f,8},"FREIGHT SERVICES / INCIDENT OVERRIDE","FREIGHT ROUTE / LOCAL OVERRIDE.","E / CLEAR THE INCIDENT INTERLOCK.",5,false,0,stateId("freight_incident_clearance"),false,-kPi*.5f},
+               {{4,15},"PRIMARY UTILITIES / PERMIT DESK","WEST SERVICE GATE / LOCAL PERMIT.","E / RELEASE THE UTILITIES GATE.",0,false,0,stateId("primary_utilities_permit")}};
+   // The two side branches had state-locked doors but no controls capable of
+   // setting those states. These terminal controls are placed on the approach
+   // side of each gate, so the player can operate them before entering.
+   m_terminals.push_back({{20.5f,2.f},"FREIGHT / OUTGOING MANIFEST","RESEARCH CONTAINERS HELD AT THE NEXT TRANSFER.","SPARE SHELLS IN THIS BOOTH / WASTE DISPATCH BELOW.",5,false,0,0,false,0.f});
+   // Shelf stock uses the actual shelf tier height, not a floating prop offset.
+   m_clutterSpawns={{3,{2,3.25f},-8.028f},{1,{2,4.2f},-8.028f},
+                    {2,{5.8f,3.3f},-8.694f},{3,{5.8f,4.15f},-8.028f}};
+   // A back-wall service bench supplies a destination inside the stores.
+   m_fixtures.push_back({6,{3.8f,1.7f},0.f,1.87f,.55f,.99f,kPi,true});
+   m_clutterSpawns.push_back({3,{3.5f,1.7f},-8.01f});
+   m_clutterSpawns.push_back({1,{4.1f,1.7f},-8.01f});
    shelf({13,2.2f},kPi);shelf({16,2.2f},kPi);m_fixtures.push_back({6,{13,20},0,1.87f,.55f,.99f,0,true});
-   m_creatureSpawns={{CreatureKind::Huntsman,{10.5f,14.5f},-9},{CreatureKind::Wasp,{13,16},-6}};
-   m_pickupSpawns={{{17,13.5f},PickupKind::Health},{{16,3},PickupKind::Ammo}};
+   m_creatureSpawns={{CreatureKind::Huntsman,{11.8f,15.2f},-9},{CreatureKind::Wasp,{13,16},-6}};
+   m_pickupSpawns={{{17,13.5f},PickupKind::Health,-9},{{3.8f,3.2f},PickupKind::Ammo,-9},{{3.1f,21.f},PickupKind::Ammo,-9},{{20.5f,2.8f},PickupKind::Ammo,-4}};
    event("junction_arrival",2,1,6,4,-4.1f,-2,{action(A::Checkpoint)});
    for(Vec2 p:{Vec2{4,4},Vec2{12,8},Vec2{20,7},Vec2{18,13},Vec2{11,22},Vec2{21,21}})m_lights.push_back({p,-1.05f});
    m_lights.push_back({{18,12},-1.05f});
-   for(Vec2 p:{Vec2{8,8.6f},Vec2{13,8.6f}})m_lights.push_back({p,-4.35f});
+   for(Vec2 p:{Vec2{8,8.6f},Vec2{13,8.6f}})m_lights.push_back({p,-4.4f});
    for(Vec2 p:{Vec2{7.5f,14},Vec2{12.5f,19.5f}})m_lights.push_back({p,-1.05f});
   }
   // === LEVEL_8_END ===
   // === LEVEL_9_START ===
   if(m_level==9){
    m_layers={{"Waste Handling / processing floor",-12,0,WasteHandlingLower},{"Waste Handling / sorting deck",-9,.25f,WasteHandlingSortingDeck}};
-   m_doors={{2,5,.5f,0,false,false,true,3}};
+   m_doors={{2,5,.5f,0,false,false,true,3},{20,23,23.5f,0,false,true}};
 
    // North entry vestibule: under floor sealed, overhead lintel, doorway fully open
    wall(2,0,5,1,-12,-9);
@@ -1050,9 +1129,12 @@ World::World(int level,WorldId id):m_worldId(id) {
 
    stairs={{8,11,11,17,-12,-9,16,true,true}};
    m_waterVolumes={{14,16,18,21,-12.5f,-12.08f}};
-    m_compactors={{13,8,17,13,-12,-10.9f,9,stateId("compactor_isolated")}};
-   for(float x:{12.65f,17.f})for(float y:{7.7f,12.95f})m_structures.push_back({x,y,x+.35f,y+.35f,-12,-6.1f,false,2});
-   m_structures.push_back({12.65f,7.7f,17.35f,13.3f,-6.1f,-5.7f,false,2});
+   // The isolated platen clears a standing operator. The old 1.1 m raised
+   // stroke trapped even crouching players below an opaque oversized gantry.
+   m_compactors={{13,8,17,13,-12,-9.8f,9,stateId("compactor_isolated")}};
+   for(float x:{13.16f,16.84f})for(float y:{8.12f,12.88f})
+    m_structures.push_back({x-.105f,y-.105f,x+.105f,y+.105f,-12,-9.18f,false,2});
+   for(float y:{8.12f,12.62f})m_structures.push_back({13.08f,y,16.92f,y+.26f,-9.46f,-9.26f,false,2});
    m_structures.push_back({13,5,17,14,-12,-11.97f,false,2});
 
    // Sorting deck retaining bulkheads: conveyor chute drop and landing perimeter fully enclosed
@@ -1071,10 +1153,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_pipes.push_back({{15.f,10.5f},{15.f,10.5f},-5.8f,.14f,-7.5f});
    m_pipes.push_back({{19.f,10.5f},{17.f,10.5f},-5.8f,.14f});
 
-   // Reinforced structural columns
-   m_fixtures.push_back({2,{11.5f,5.5f},0.f,.7f,.7f,6.5f,0,true});
-   m_fixtures.push_back({2,{18.5f,5.5f},0.f,.7f,.7f,6.5f,0,true});
-   m_fixtures.push_back({2,{11.5f,15.5f},0.f,.7f,.7f,6.5f,0,true});
+   // Slim, evenly spaced roof supports keep the processing floor readable.
+   m_fixtures.push_back({2,{11.5f,5.5f},0.f,.26f,.26f,6.7f,0,true});
+   m_fixtures.push_back({2,{18.5f,5.5f},0.f,.26f,.26f,6.7f,0,true});
+   m_fixtures.push_back({2,{11.5f,15.5f},0.f,.26f,.26f,6.7f,0,true});
 
    // Press-side guards make the bypass legible without sealing the working belt.
    wall(17.6f,9,17.85f,12,-12,-10.95f);
@@ -1084,20 +1166,35 @@ World::World(int level,WorldId id):m_worldId(id) {
    // Heavy industrial shredder machine along east lower wall (leaves wide open aisle)
     m_fixtures.push_back({12,{20.5f,8.5f},0.f,.940f,3.060f,1.751f,kPi*.5f,true});
 
-   // Sorting deck control console and wall breaker boxes
-   m_fixtures.push_back({11,{2.6f,10.5f},3.f,.8f,.8f,1.1f,kPi*.5f,true});
+   // Sorting deck control station and lower wall breaker boxes.
    m_fixtures.push_back({8,{10.8f,7.2f},0.f,.67f,.20f,.91f,0,false});
     m_fixtures.push_back({8,{21.2f,21.5f},0.f,.67f,.20f,.91f,-kPi*.5f,false});
-    // Small control cabinets and a service rack make the otherwise broad
-    // sorting platform legible from the elevated west approach.
+    // West-wall lockers face east into the sorting-deck walkway. The mesh's
+    // door face is local -Z, so -pi/2 turns it away from the backing wall.
     for(float y:{8.f,11.f,14.f})
-     m_fixtures.push_back({13,{1.62f,y},3.f,.9066f,.4956f,2.2f,kPi*.5f,true});
+     m_fixtures.push_back({13,{1.62f,y},3.f,.9066f,.4956f,2.2f,-kPi*.5f,true});
 
    m_terminals={{{10.8f,8},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / TOGGLE CONVEYOR AND PRESS.",0,false,0,stateId("compactor_isolated"),true},
-               {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT CONNECTION SEALED / END OF CURRENT ROUTE.",0,false}};
-   m_terminals.push_back({{3.2f,7},"SORTING / SHIFT SAFETY","PRESS ISOLATOR AT FOOT OF SORTING STAIRS.","EAST AISLE BYPASSES PRESS / DISPATCH SOUTH.",3});
-   const Vec2 scrap[]={{5.7f,5.3f},{6.5f,5.6f},{7.2f,5.1f},{5.9f,8.5f},{6.8f,8.8f},{7.5f,8.2f},
-                       {5.6f,12.8f},{6.4f,13.2f},{7.1f,12.5f},{6.0f,16.7f},{6.9f,17.1f},{7.7f,16.4f},
+               {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT ACCESS / SOUTH DISPATCH BULKHEAD.",0,false}};
+   m_terminals.push_back({{3.2f,7},"SORTING / SHIFT SAFETY","PRESS ISOLATOR: NORTHWEST PRESS APPROACH.","EAST AISLE BYPASSES PRESS / DISPATCH SOUTH.",3});
+   // Two receiving bins give the west sorting approach a purpose, while the
+   // recovery lane runs around the press to a separate south dispatch room.
+   for(float y:{8.5f,12.8f}){
+    m_structures.push_back({5.35f,y,7.8f,y+.12f,-12,-10.9f,false,2});
+    m_structures.push_back({5.35f,y+2.f,7.8f,y+2.12f,-12,-10.9f,false,2});
+    m_structures.push_back({5.35f,y+.12f,5.47f,y+2.f,-12,-10.9f,false,2});
+   }
+   // Full-sized discarded drives make the receiving bins read as salvage,
+   // rather than empty architectural blocks with a few tiny floor objects.
+   for(float y:{9.55f,13.9f})m_fixtures.push_back({12,{6.6f,y},0.f,.43f,1.4f,.8f,kPi*.5f,true});
+   wall(17.8f,19.8f,19.1f,20,-12,-9.2f);wall(21.3f,19.8f,23,20,-12,-9.2f);
+   wall(19.1f,19.8f,21.3f,20,-9.6f,-9.2f);
+   wall(17.8f,20,18,23,-12,-9.2f);
+   m_structures.push_back({17.8f,19.8f,23,23,-9.2f,-9.f,false,2});
+   m_lights.push_back({{20.3f,21.5f},-9.36f});
+   shelf({22.35f,22.f},kPi*.5f);
+   const Vec2 scrap[]={{5.7f,5.3f},{6.5f,5.6f},{7.2f,5.4f},{5.9f,9.1f},{6.8f,10.2f},{7.3f,10.f},
+                       {5.9f,13.4f},{6.4f,14.45f},{7.1f,13.3f},{6.0f,16.7f},{6.9f,17.1f},{7.7f,16.4f},
                        {9.4f,20.5f},{10.2f,20.9f},{11.0f,20.4f},{19.1f,4.2f},{20.0f,4.5f},{20.7f,4.0f}};
    for(int i=0;i<18;++i)m_clutterSpawns.push_back({i%6,scrap[i],-999.f,.37f*i});
    m_clutterSpawns.push_back({3,{15,7},-11.9f});
@@ -1105,16 +1202,16 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(Vec2 p:{Vec2{2.6f,6.2f},Vec2{4.3f,12.2f},Vec2{4.3f,16.4f},Vec2{8.4f,18.5f}})
     post(p.x,p.y,-12,-9.25f,.11f);
    m_creatureSpawns={{CreatureKind::Huntsman,{19,10},-12},{CreatureKind::Huntsman,{8,21},-12},{CreatureKind::Wasp,{18,15},-9}};
-   m_pickupSpawns={{{6,19},PickupKind::Ammo},{{20,18},PickupKind::Health}};
+   m_pickupSpawns={{{6,19},PickupKind::Ammo,-9},{{20,18},PickupKind::Health,-12}};
    event("waste_dispatch_checkpoint",19,20,22,23,-12.1f,-10,{action(A::Checkpoint)});
-   for(Vec2 p:{Vec2{3,3},Vec2{3,12},Vec2{9,18},Vec2{15,6},Vec2{20,13},Vec2{20,21}})m_lights.push_back({p,-5.55f});
+   for(Vec2 p:{Vec2{3,3},Vec2{3,12},Vec2{9,18},Vec2{15,6},Vec2{20,13}})m_lights.push_back({p,-5.55f});
    for(Vec2 p:{Vec2{6.5f,7},Vec2{9,7},Vec2{7,14},Vec2{15,6.5f},Vec2{12,18},Vec2{19.5f,18.5f}})
     m_lights.push_back({p,-9.25f});
   }
   // === LEVEL_9_END ===
   // === DYNAMIC_CAMPAIGN_MAPS_END ===
   for(auto& d:m_doors){if(d.entry)d.sign=m_level-1;else if(d.transfer)d.sign=m_level+1;}
-  if(m_level==8){m_doors[1].sign=10;m_doors[2].sign=11;}
+  if(m_level==8){m_doors[1].sign=32;m_doors[2].sign=33;}
   buildLayers(stairs);return;
  }
  if(m_level==4||m_level==5){
@@ -1432,7 +1529,7 @@ float World::floorHeight(float x,float y)const{
   float bank=m_layers.empty()?-9.f:m_layers.front().elevation;
   return bank+(water.bed-bank)*std::clamp(shore/.85f,0.f,1.f);
  }
- if(custom())return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
+ if(m_mapData)return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
  if(m_level>=6)return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
  if(m_level>=4)return -9.f;
  if(hasLift())return -9.f;
@@ -1454,7 +1551,7 @@ float World::waterSurface(float x,float y)const{
 }
 float World::ceilingHeight(float x,float y)const{
  if(outdoors())return 128.f;
- if(custom())return definition().ceiling;
+ if(m_mapData)return definition().ceiling;
  if(m_level>=6)return definition().ceiling;
  if(m_level>=4)return m_level==4?-6.1f:-5.6f;
  if(hasLift())return 16.f;
@@ -1471,7 +1568,7 @@ float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const
   return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
  }
  for(auto&p:m_props)if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y)return floorHeight(p.position.x,p.position.y)+p.base+p.height;
- for(auto&terminal:m_terminals)if((dynamic||!hasLift()||!terminal.control)&&terminal.z==0&&std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<(terminal.control?.18f:.27f))return floorHeight(x,y)+.95f;
+ for(auto&terminal:m_terminals)if((dynamic||!hasLift()||!terminal.control)&&terminal.z==0&&insideTerminal(*this,terminal,x,y))return floorHeight(terminal.position.x,terminal.position.y)+terminalHeight(*this,terminal,x,y);
  float floor=floorHeight(x,y);switch(tile(int(std::floor(x)),int(std::floor(y)))){
  case '#':return wallHeight(int(std::floor(x)),int(std::floor(y)));case 'C':return floor+.60f;case 'B':return floor+1.1f;
  case 'T':return floor+2.62f;default:return floor;
@@ -1506,7 +1603,7 @@ bool World::navigable(int x,int y,int nx,int ny,float height)const{
  float floor=floorHeight(nx+.5f,ny+.5f);
  return std::fabs(floor-floorHeight(x+.5f,y+.5f))<=.45f&&clearanceHeight(nx+.5f,ny+.5f)-floor>=height&&!doorBlocks(nx+.5f,ny+.5f,floor,height);
 }
-void World::updateDoors(float dt){for(auto&door:m_doors)door.open=std::clamp(door.open+(door.opening?1.f:-1.f)*dt*.85f,0.f,1.f);}
+void World::updateDoors(float dt){for(auto&door:m_doors)door.open=std::clamp(door.open+(door.opening?1.f:-1.f)*dt*.85f,0.f,door.maxOpen);}
 bool World::openDoor(int index){if(index<0||size_t(index)>=m_doors.size()||m_doors[index].opening)return false;m_doors[index].opening=true;return true;}
 bool World::toggleDoor(int index){if(index<0||size_t(index)>=m_doors.size())return false;m_doors[index].opening=!m_doors[index].opening;return true;}
 int World::nearbyDoor(Vec2 position,Vec2 forward,float feet)const{
@@ -1561,7 +1658,9 @@ void World::buildLayers(std::span<const Staircase> stairs){
     float t=stair.alongY?(y-stair.y1)/(stair.y2-stair.y1):(x-stair.x1)/(stair.x2-stair.x1);
     if(!stair.ascending)t=1-t;
     float top=stair.bottom+(stair.top-stair.bottom)*(std::min(stair.steps-1,int(t*stair.steps))+1)/stair.steps;
-    if(std::fabs(top-z)<.025f)return true;
+    // The first/last tread can differ from the landing by one legal step.
+    // A guardrail across that connection seals otherwise walkable stairs.
+    if(std::fabs(top-z)<.215f)return true;
    }
    return false;
   };
@@ -1600,10 +1699,11 @@ void World::buildLayers(std::span<const Staircase> stairs){
    stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.bottom,top,false,hasLift()?4:0});
  }
  m_structureCells.resize(Width*Height);
- for(uint16_t index=0;index<m_structures.size();++index){
+ if(m_structures.size()>65535)throw std::runtime_error("Map exceeds the collision structure capacity");
+ for(size_t index=0;index<m_structures.size();++index){
   const auto&s=m_structures[index];
   for(int y=int(s.y1);y<int(std::ceil(s.y2));++y)for(int x=int(s.x1);x<int(std::ceil(s.x2));++x)
-   if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[y*Width+x].push_back(index);
+   if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[y*Width+x].push_back(static_cast<uint16_t>(index));
  }
 }
 float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+m_internalWallHeight:m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
@@ -1617,7 +1717,12 @@ float World::supportBelow(float x,float y,float feet)const{
  for(auto&p:m_props)if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
  float result=hasTerrain()?terrainSurfaceBelow(x,y,feet+.03f):floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
  result=std::max(result,fixtureTop);
+ for(const auto& terminal:m_terminals)if(insideTerminal(*this,terminal,x,y)){
+  float top=floorHeight(terminal.position.x,terminal.position.y)+terminal.z+terminalHeight(*this,terminal,x,y);
+  if(top<=feet+.025f)result=std::max(result,top);
+ }
  if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
+ if(insideCargoLift(x,y)&&m_cargoLiftHeight<=feet+.025f)result=std::max(result,m_cargoLiftHeight);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
 }
@@ -1631,10 +1736,11 @@ float World::clearanceAbove(float x,float y,float feet)const{
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
- for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f)ceiling=std::min(ceiling,base);}
+ for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
 bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
+ if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight-.025f&&feet+height>m_cargoLiftHeight-.18f)return false;
  if(dynamic&&insideLift(x,y)&&feet<m_liftHeight+2.8f&&feet+height>m_liftHeight-.25f){
   if(feet<m_liftHeight-.025f||feet+height>m_liftHeight+2.605f)return false;
   if(x<10.12f||x>13.88f)return false;
@@ -1663,7 +1769,7 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelf
  }
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
- for(auto&t:m_terminals){if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(std::fabs(x-t.position.x)<.27f&&std::fabs(y-t.position.y)<.18f&&feet<base+.95f&&feet+height>base)return false;}
+ for(auto&t:m_terminals){if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(insideTerminal(*this,t,x,y)&&feet<base+terminalHeight(*this,t,x,y)-.025f&&feet+height>base)return false;}
  return true;
 }
 bool World::railBlocksHull(float x,float y,float radius,float feet,float height)const{

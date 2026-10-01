@@ -77,7 +77,7 @@ void Game::updateEnemies(float dt){
   float range=warden?1.1f:e.kind==Enemy::Kind::Brute?1.25f:1.05f;
   bool sameLevel=m_player.z<e.bodyTop()&&m_player.z+m_player.hullHeight()>e.bodyBottom();
   if(e.windup>0){if(!warden&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=warden?1.05f:e.kind==Enemy::Kind::Wasp?.8f:e.kind==Enemy::Kind::Huntsman?1.f:1.6f;
-    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,m_player.pos,m_player.z+.5f))receiveDamage(warden?30.f:e.kind==Enemy::Kind::Brute?18.f:9.f,e.pos);
+    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,m_player.pos,m_player.z+.5f))receiveDamage(warden?30.f:e.kind==Enemy::Kind::Mutant?16.f:e.kind==Enemy::Kind::Brute?18.f:9.f,e.pos);
    }continue;
   }
   // Close-range committed swing: the player can backstep or circle behind it.
@@ -155,10 +155,10 @@ void Game::updateEnemies(float dt){
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
   auto look=visible?to:goal-e.pos;
   if(lengthSq(look)>.01f)e.heading+=wrapAngle(std::atan2(look.y,look.x)-e.heading)*std::min(1.f,dt*(e.kind==Enemy::Kind::Brute?3.5f:14.f));
-  if(!warden&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=e.kind==Enemy::Kind::Brute?.8f:.32f;enemySound(e,1,.85f);continue;}
+  if(!warden&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=e.kind==Enemy::Kind::Brute?.8f:e.kind==Enemy::Kind::Mutant?.55f:.32f;enemySound(e,1,.85f);continue;}
   if(watching||length(goal-e.pos)<.3f||(!warden&&visible&&dist<range*.82f)||e.painFlash>(warden?.85f:.65f))continue;
   Vec2 destination=goal;
-  float hull=(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
+  float hull=(e.kind==Enemy::Kind::Brute||warden||e.kind==Enemy::Kind::Mutant)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
   float stepHeight=m_world.hasTerrain()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
   bool direct=false;
   if(m_world.hasTerrain()){
@@ -175,7 +175,7 @@ void Game::updateEnemies(float dt){
   // path every frame or continuing to push into the same corner forever.
   if(e.searchTime>.2f)direct=false;
   if(!direct&&e.repathTimer>0)destination=e.waypoint;
-  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,(e.kind==Enemy::Kind::Brute||warden)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f);e.waypoint=destination;e.repathTimer=.35f;}
+  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,(e.kind==Enemy::Kind::Brute||warden||e.kind==Enemy::Kind::Mutant)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f);e.waypoint=destination;e.repathTimer=.35f;}
   else if(!direct){
    int field[World::Height][World::Width];for(auto&row:field)for(auto&value:row)value=9999;
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
@@ -199,7 +199,7 @@ void Game::updateEnemies(float dt){
   if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
   direction=normalized(direction+separation*2.f);
-  float speed=warden?stalkSpeed:e.kind==Enemy::Kind::Wasp?1.85f:e.kind==Enemy::Kind::Brute?.75f:1.4f;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
+  float speed=warden?stalkSpeed:e.kind==Enemy::Kind::Wasp?1.85f:e.kind==Enemy::Kind::Brute?.75f:e.kind==Enemy::Kind::Mutant?1.9f:1.4f;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
   auto old=e.pos;
   auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight),height=hull;
    bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);if(ground-e.z<=stepHeight+.01f&&hullFits(next,feet,height)){e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}}
@@ -281,11 +281,16 @@ bool Game::testAI(){
  for(int i=0;i<120;++i)game.update({},1.f/120.f);debug<<"idle "<<int(e.state)<<' '<<length(e.pos-original)<<'\n';if(e.state!=Enemy::State::Idle||length(e.pos-original)>.05f)return false;
  InputState fire{};fire.fire=true;game.update(fire,.02f);debug<<"heard "<<int(e.state)<<'\n';if(e.state!=Enemy::State::Investigate)return false;
  game.m_world.openDoor(0);for(int i=0;i<600;++i)game.update({},1.f/120.f);debug<<"pursuit "<<e.pos.x<<' '<<e.pos.y<<' '<<int(e.state)<<'\n';if(e.pos.y>9.f)return false;
+ {auto mutant=validationScene(Enemy::Kind::Mutant);auto&body=mutant.m_enemies[0];body.pos=mutant.m_player.pos+Vec2{.7f,0};body.heading=kPi;
+  mutant.updateEnemies(.01f);if(body.windup<=0)return false;
+  for(int i=0;i<72;++i)mutant.updateEnemies(1.f/120.f);
+  if(mutant.player().health>=100||mutant.player().health<70)return false;
+ }
  auto dodge=validationScene(Enemy::Kind::Brute);auto&attacker=dodge.m_enemies[0];attacker.pos=dodge.m_player.pos+Vec2{.7f,0};attacker.heading=kPi;
  dodge.update({},.01f);if(attacker.windup<=0)return false;
  dodge.m_player.pos=attacker.pos+Vec2{.7f,0};
  for(int i=0;i<70;++i)dodge.update({},1.f/120.f);if(dodge.player().health!=100)return false;
- for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute}){auto stairs=validationScene(kind);auto&climber=stairs.m_enemies[0];
+ for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant}){auto stairs=validationScene(kind);auto&climber=stairs.m_enemies[0];
   climber.pos={20.5f,15.5f};climber.home=climber.pos;climber.lastKnown=climber.pos;climber.z=stairs.groundHeight(climber.pos);climber.heading=-kPi*.5f;
   stairs.m_player.pos={20.5f,11.5f};stairs.m_player.z=1.2f;
   for(int i=0;i<1200&&climber.pos.y>=13.f;++i)stairs.update({},1.f/120.f);

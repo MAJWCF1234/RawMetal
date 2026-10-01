@@ -45,7 +45,7 @@ void Game::spawnScriptEnemy(const ScriptAction& action){
 }
 void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announce){
  Enemy e{};e.kind=spawn.kind;e.pos=spawn.position;e.home=e.pos;e.lastKnown=e.pos;
- e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:e.kind==Enemy::Kind::Warden?320.f:110.f;
+ e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:e.kind==Enemy::Kind::Warden?320.f:e.kind==Enemy::Kind::Mutant?180.f:110.f;
  e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.z;e.heading=kPi;
  e.awareness=std::max(0.f,awareness);e.state=e.awareness>0?Enemy::State::Investigate:Enemy::State::Idle;
  e.voiceTimer=announce?.25f:.8f+float(m_enemies.size())*.9f;m_enemies.push_back(e);

@@ -8,10 +8,17 @@
 #include <fstream>
 #include <chrono>
 namespace retro {
+namespace {
+enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3 };
+std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
+ return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
+}
+bool emitterInChunk(std::int64_t emitter,int level){return emitter>0&&int((std::uint64_t(emitter)>>32)&0xffffu)==level;}
+}
 std::vector<int16_t> decodeMusic(const unsigned char* data,size_t bytes);
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i==size_t(Sound::FreightMusic)?271:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
@@ -47,7 +54,7 @@ AudioEngine::~AudioEngine(){
  if(m_device){waveOutReset(m_device);for(auto&buffer:m_buffers)waveOutUnprepareHeader(m_device,&buffer.header,sizeof(WAVEHDR));waveOutClose(m_device);}
  if(m_wake)CloseHandle(m_wake);
 }
-void AudioEngine::play(const SoundEvent& event,int emitter,bool loop){
+void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  if(m_voices.size()>=48){auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop;});if(voice!=m_voices.end())m_voices.erase(voice);else return;}
  m_voices.push_back({event.sound,0,event.gain,event.pitch,1,1,event.position,event.spatial,loop,emitter});
  if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
@@ -71,34 +78,38 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
 void AudioEngine::update(const Game& game,bool focused){
  std::lock_guard lock(m_mutex);
  float dt=std::clamp(game.elapsed()-m_lastTime,0.f,.1f);
- bool newSession=game.sessionRevision()!=m_lastRevision;
- if(game.elapsed()<m_lastTime||newSession){m_voices.clear();play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;}m_lastRevision=game.sessionRevision();
+ bool newSession=game.sessionRevision()!=m_lastRevision||int(game.worldId())!=m_lastWorld;
+ m_lastWorld=int(game.worldId());
+ if(game.elapsed()<m_lastTime||newSession){m_voices.clear();m_lastChunk=-1;play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=m_freightBlend=0;}m_lastRevision=game.sessionRevision();
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=game.chunkOffset(m_lastChunk)-game.chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
  m_submergedTarget=game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f?1.f:0.f;
  m_musicGain=game.musicEnabled()?(game.dead()||game.won()?.16f:.28f)*game.settings().music/.75f:0;
  m_effectsGain=game.settings().effects;m_paused=game.paused()||game.consoleOpen();
  auto phase=game.world().liftPhase();bool shaft=game.world().hasLift();
- m_mainTarget=!shaft||phase==World::LiftPhase::Ready?1.f:0.f;
+ m_freightTarget=game.world().definition().musicCue==MusicCue::Freight?1.f:0.f;
+ m_mainTarget=m_freightTarget>0?0.f:!shaft||phase==World::LiftPhase::Ready?1.f:0.f;
  m_reactorTarget=shaft&&phase==World::LiftPhase::Crashed&&game.world().liftPhaseTime()>2?1.f:0.f;
  m_motorTarget=shaft?game.world().liftMotorGain():0.f;
- if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;}
+ if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;m_freightBlend=m_freightTarget;}
  auto sceneLoop=[&](Sound cue,int id){if(std::none_of(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==id;}))play({cue,{},1,1,false},id,true);};
  if(m_motorTarget>0)sceneLoop(Sound::LiftMotor,-2);
  for(auto&voice:m_voices)if(voice.emitter==-2)voice.pitch=m_motorTarget<.3f?.65f:game.world().liftPhaseTime()>24?.82f:1.f;
+ if(m_freightTarget>0)sceneLoop(Sound::FreightMusic,-4);
  if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
  for(const auto&event:game.sounds())play(event);
- auto loop=[&](int emitter,Sound sound,Vec2 pos,float gain){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
+ auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
   if(it==m_voices.end()){play({sound,pos,gain,1,true},emitter,true);}else{it->position=pos;it->gain=gain;}
  };
- for(int level=0;level<Game::ChunkCount;++level){if(!game.chunkResident(level)){std::erase_if(m_voices,[&](auto&v){return (v.emitter>=100+level*100&&v.emitter<200+level*100)||(v.emitter<=-1000-level*100&&v.emitter>-1100-level*100)||(v.emitter<=-2000-level*100&&v.emitter>-2100-level*100);});continue;}auto chunk=game.chunkView(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
-  for(size_t i=0;i<chunk.enemies().size();++i){auto&e=chunk.enemies()[i];int id=100+level*100+int(i);
+ std::erase_if(m_voices,[&](auto&v){int level=int((std::uint64_t(v.emitter)>>32)&0xffffu);return v.emitter>0&&!game.chunkResident(level);});
+ for(int level=0;level<game.chunkCount();++level){if(!game.chunkResident(level))continue;auto chunk=game.chunkView(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
+  for(size_t i=0;i<chunk.enemies().size();++i){auto&e=chunk.enemies()[i];auto id=ambientEmitter(AmbientKind::Wings,level,i);
    if(e.alive&&e.kind==Enemy::Kind::Wasp)loop(id,Sound::Wings,e.pos+shift,.3f);else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
   }
   float machineGain=.30f;if(chunk.world().hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
-  int index=0;for(auto emitter:chunk.world().machines())loop(-1000-level*100-index++,Sound::Machine,emitter+shift,machineGain);
+  size_t index=0;for(auto emitter:chunk.world().machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
   index=0;for(const auto& basin:chunk.world().waterVolumes())
-   loop(-2000-level*100-index++,Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,.18f);
+   loop(ambientEmitter(AmbientKind::Water,level,index++),Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,.18f);
  }
  for(auto&voice:m_voices)spatialize(voice,game,dt);
 }
@@ -108,19 +119,20 @@ void AudioEngine::mix(int16_t* output,size_t frames){
   // Per-sample envelopes: main track fades over roughly 2 seconds, motor
   // takes over quickly, and the reactor bed arrives slowly after the impact.
   m_mainBlend+=(m_mainTarget-m_mainBlend)/(.65f*Rate);
+  m_freightBlend+=(m_freightTarget-m_freightBlend)/(.65f*Rate);
   m_reactorBlend+=(m_reactorTarget-m_reactorBlend)/(1.2f*Rate);
   m_motorBlend+=(m_motorTarget-m_motorBlend)/(.18f*Rate);
-  for(auto&v:m_voices){bool music=v.sound==Sound::Music||v.sound==Sound::ReactorMusic;
+  for(auto&v:m_voices){bool music=v.sound==Sound::Music||v.sound==Sound::FreightMusic||v.sound==Sound::ReactorMusic;
    if(m_paused&&!music)continue;auto&s=m_samples[size_t(v.sound)];size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
    size_t a=size_t(v.cursor),b=a+1<n?a+1:v.loop?0:a;float frac=float(v.cursor-double(a));
    auto sample=[&](int channel){float value=s.pcm[a*s.channels+channel]*(1-frac)+s.pcm[b*s.channels+channel]*frac;
-    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::WaterReturn)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
+    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::FreightMusic||v.sound==Sound::WaterReturn)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
     return value/32768.f;};
-   float blend=v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
+   float blend=v.sound==Sound::FreightMusic?m_freightBlend:v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
    float gain=v.gain*(music?m_musicGain:m_effectsGain)*blend;
    v.smoothLeft+=(v.left*gain-v.smoothLeft)*.0015f;v.smoothRight+=(v.right*gain-v.smoothRight)*.0015f;
    left+=sample(0)*v.smoothLeft;right+=sample(s.channels-1)*v.smoothRight;v.cursor+=v.pitch;
-   if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::WaterReturn)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
+   if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::FreightMusic||v.sound==Sound::WaterReturn)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
   m_master+=(m_targetMaster-m_master)*.002f;
   m_submerged+=(m_submergedTarget-m_submerged)*.0006f;
@@ -165,7 +177,24 @@ bool AudioEngine::testLiftMix(){
  return true;
 }
 bool AudioEngine::test(){
+ std::ofstream diagnostic("audio-validation.txt");auto failure=[&](const char* reason){diagnostic<<"FAIL: "<<reason<<'\n';return false;};
+ // The old -2000-map*100 water IDs collided with machine IDs ten maps later.
+ auto waterKey=ambientEmitter(AmbientKind::Water,5,0),machineKey=ambientEmitter(AmbientKind::Machine,15,0);
+ if(waterKey==machineKey||emitterInChunk(waterKey,15)||!emitterInChunk(waterKey,5))return failure("ambient emitter namespace collision");
  AudioEngine audio(false);auto game=Game::validationScene(Enemy::Kind::Brute);
+ // Authored music coverage and seam continuity: map IDs do not route music.
+ {
+  AudioEngine district(false);std::array<int16_t,Rate*2> block{};
+  if(district.m_samples[size_t(Sound::FreightMusic)].frames()<Rate*20)return failure("freight track missing or truncated");
+  double cursor=-1;
+  for(int level=10;level<CampaignChunkCount;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
+   if(district.m_freightTarget!=1||district.m_mainTarget!=0)return failure("freight music coverage");
+   int count=0;for(const auto&v:district.m_voices)if(v.sound==Sound::FreightMusic){++count;if(v.cursor<=cursor)return failure("freight soundtrack restarts at seam");cursor=v.cursor;}
+   if(count!=1)return failure("duplicated freight music voice");
+  }
+  district.update(game);if(district.m_freightTarget!=0||district.m_mainTarget!=1)return failure("original soundtrack return");
+  diagnostic<<"Freight music covers all 22 chunks, retains its cursor across seams, and returns to original OST: PASS\n";
+ }
  std::vector<int16_t> output;output.reserve(Rate*2*12);size_t maxVoices=0;double energy=0;
  for(int frame=0;frame<720;++frame){InputState input{};input.forward=frame<95;input.back=frame>=95&&frame<185;input.jump=frame==125;input.fire=frame==220||frame==280||frame==340||frame==400;game.update(input,1.f/60.f);audio.update(game);
   if(frame==450)audio.play({Sound::WaspAttack,game.player().pos+Vec2{0,2},.8f,1,true});
@@ -179,22 +208,24 @@ bool AudioEngine::test(){
  // Positional cues must favor the correct speaker and decay with distance.
  Voice right{Sound::WaspCall};right.spatial=true;right.position=game.player().pos+Vec2{0,2};audio.spatialize(right,game);
  Voice distantVoice=right;distantVoice.position=game.player().pos+Vec2{0,15};audio.spatialize(distantVoice,game);
- if(right.right<=right.left||distantVoice.right>=right.right||maxVoices<4||energy<1e8)return false;
+ diagnostic<<"Spatial gains "<<right.left<<' '<<right.right<<" distant "<<distantVoice.right<<" voices "<<maxVoices<<" energy "<<energy<<'\n';
+ if(right.right<=right.left||distantVoice.right>=right.right||maxVoices<4||energy<1e8)return failure("spatial direction, attenuation, overlap or mix energy");
  Voice machine{Sound::Machine};machine.spatial=true;machine.position={4.f,10.5f};float previous=-1,maxChange=0;
  for(int i=0;i<720;++i){float angle=i*kTwoPi/720;auto orbit=Game::mapInspection({4.f+std::cos(angle)*1.5f,10.5f+std::sin(angle)*1.5f},angle+kPi*.5f);
   audio.spatialize(machine,orbit);float total=machine.left+machine.right;
-  if(!std::isfinite(total))return false;if(previous>=0)maxChange=std::max(maxChange,std::fabs(total-previous));previous=total;
- }if(maxChange>.08f)return false;
- auto machines=game.world().machines();for(size_t i=0;i<machines.size();++i)for(size_t j=i+1;j<machines.size();++j)if(length(machines[i]-machines[j])<1.01f)return false;
+  if(!std::isfinite(total))return failure("nonfinite machine spatial gain");if(previous>=0)maxChange=std::max(maxChange,std::fabs(total-previous));previous=total;
+ }if(maxChange>.08f)return failure("machine orbit gain discontinuity");
+ auto machines=game.world().machines();for(size_t i=0;i<machines.size();++i)for(size_t j=i+1;j<machines.size();++j)if(length(machines[i]-machines[j])<1.01f)return failure("duplicate machine emitters");
  auto coolant=Game::mapInspection({12,9},0,0,5,false,-9,true);audio.update(coolant);
  auto submerged=Game::mapInspection({8.5f,9.f},0,0,5,false,-9.4f,true);InputState duck{};duck.crouch=true;
  for(int i=0;i<30;++i)submerged.update(duck,1.f/60.f);
- audio.update(submerged);if(audio.m_submergedTarget<.5f)return false;
- audio.update(coolant);if(audio.m_submergedTarget>.5f)return false;
+ audio.update(submerged);if(audio.m_submergedTarget<.5f)return failure("underwater fixture camera is above water");
+ audio.update(coolant);if(audio.m_submergedTarget>.5f)return failure("dry camera remains submerged");
  int waterVoices=0;for(const auto& voice:audio.m_voices)waterVoices+=voice.sound==Sound::WaterReturn;
- if(waterVoices!=int(coolant.world().waterVolumes().size()))return false;
+ int expectedWaterVoices=0;for(int level=0;level<coolant.chunkCount();++level)if(coolant.chunkResident(level))expectedWaterVoices+=int(coolant.chunkView(level).world().waterVolumes().size());
+ if(waterVoices!=expectedWaterVoices)return failure("water voice count differs from resident authored volumes");
  game=Game::validationScene(Enemy::Kind::Brute);audio.update(game);
- for(const auto& voice:audio.m_voices)if(voice.sound==Sound::WaterReturn)return false;
+ for(const auto& voice:audio.m_voices)if(voice.sound==Sound::WaterReturn)return failure("water voices survive world change");
  std::ofstream("generator-audio-test.txt")<<"Generator orbit: finite stereo gains, no duplicate machine emitters, maximum gain change "<<maxChange<<"; 50 ms seamless loop crossfade enabled.\n";
  audio.m_targetMaster=0;std::vector<int16_t> mute(Rate*2);audio.mix(mute.data(),Rate);
  for(size_t i=mute.size()-200;i<mute.size();++i)if(mute[i]!=0)return false;

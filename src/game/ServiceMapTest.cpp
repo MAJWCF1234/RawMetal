@@ -1,8 +1,10 @@
 #include "Game.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fstream>
 #include <queue>
+#include <tuple>
 #include <unordered_set>
 
 namespace retro {
@@ -114,8 +116,14 @@ bool Game::testCampaignExtension(){
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
  bool result=true;
  for(int level=6;level<10;++level){
-  Game game;game.loadLevel(level,false);game.updateStreaming(0);game.m_enemies.clear();
+  Game game;game.loadLevel(level,false);game.updateStreaming(0);
   out<<"CHUNK "<<level<<'\n';
+  if(level>=7)for(const auto& enemy:game.m_enemies)
+   result&=check(game.hullFits(enemy.pos,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom()),"Creature spawns clear stairs, machinery and workstation collision");
+  game.m_enemies.clear();
+  // Test geometry with access gates open; the control and locked-door sequence
+  // is exercised separately below using a fresh game with closed gates.
+  for(int i=0;i<int(game.world().doors().size());++i)game.m_world.setDoor(i,1.f,true);
   result&=check(game.hullFits(game.player().pos,game.player().z,1.7f),"Spawn has standing clearance");
   // Search all reachable elevations. Each edge uses the game's standing hull
   // and 21.5 cm step allowance, including stair-to-deck joins.
@@ -136,34 +144,66 @@ bool Game::testCampaignExtension(){
   }
   struct Target{Vec2 p;float z;};std::vector<Target> targets;
   if(level==6)targets={{{20,13},-9},{{17.5f,19},-9},{{21.5f,22.5f},-9}};
-  if(level==7)targets={{{12,3},-12},{{16.5f,16.5f},-4},{{20.5f,22.5f},-4}};
-  if(level==8)targets={{{18,13.5f},-9},{{20,6.5f},-4},{{21.5f,22.5f},-9}};
+  if(level==7)targets={{{12,3},-12},{{10.5f,10.5f},-12},{{16.5f,16.5f},-4},{{20.4f,18.4f},-4},{{20.5f,22.5f},-4}};
+  if(level==8)targets={{{18,13.5f},-9},{{3.8f,4.8f},-9},{{20,6.5f},-4},{{21.5f,22.5f},-9}};
   if(level==9)targets={{{10.5f,8.8f},-12},{{20,20},-12},{{7,18},-9}};
   for(auto target:targets){bool found=false;for(auto n:reachable)if(length(point(n)-target.p)<.45f&&std::fabs(n.z-target.z)<.03f){found=true;break;}
    out<<"target "<<target.p.x<<','<<target.p.y<<','<<target.z<<' ';result&=check(found,"Authored destination reachable without jumping");
+  }
+  for(const auto& pickup:game.pickups()){
+   bool accessible=false;float z=game.pickupHeight(pickup);
+   for(auto n:reachable)if(length(point(n)-pickup.pos)<.4f&&std::fabs(n.z-z)<.03f){accessible=true;break;}
+   result&=check(accessible,"Supply can be reached on the same floor where it is rendered and collected");
   }
   // Authored equipment offsets must keep meshes and collision above the base floor.
   bool equipmentAboveFloor=true;
   for(const auto& f:game.world().fixtures())equipmentAboveFloor&=f.base>=0;
   for(const auto& p:game.world().props())equipmentAboveFloor&=p.base>=0;
   result&=check(equipmentAboveFloor,"Service equipment is not buried below its owning floor");
+   bool servicesClear=true;
+   for(const auto& pipe:game.world().pipes()){
+    const bool vertical=pipe.endZ> -999.f;
+    float high=vertical?std::max(pipe.z,pipe.endZ):pipe.z;
+    float low=vertical?std::min(pipe.z,pipe.endZ):pipe.z;
+    servicesClear&=high+pipe.radius<game.world().ceilingHeight(pipe.start.x,pipe.start.y);
+    float length=retro::length(pipe.end-pipe.start);int samples=std::max(1,int(std::ceil(length/.25f)));
+    for(int i=0;i<=samples;++i){auto p=pipe.start+(pipe.end-pipe.start)*(float(i)/samples);
+     for(const auto& layer:game.world().layers())if(layer.thickness>0){int x=int(std::floor(p.x)),y=int(std::floor(p.y));
+      if(x<0||y<0||y>=int(layer.rows.size())||x>=int(layer.rows[size_t(y)].size())||layer.rows[size_t(y)][size_t(x)]!='=')continue;
+      const float slabTop=layer.elevation,slabBottom=layer.elevation-layer.thickness;
+      if(vertical){if(high+pipe.radius>slabBottom&&low-pipe.radius<slabTop)servicesClear=false;}
+      else if(pipe.z-pipe.radius<slabTop+1.7f&&pipe.z+pipe.radius>slabBottom)servicesClear=false;
+     }
+    }
+   }
+  result&=check(servicesClear,"Overhead pipe runs clear every playable deck and roof");
+  if(level>=7){
+   bool lampsFit=true;for(const auto& light:game.world().lights())
+    lampsFit&=light.z+.13f<=game.world().clearanceAbove(light.position.x,light.position.y,light.z)+.005f;
+   result&=check(lampsFit,"Light housings fit below their actual mounting slab or roof");
+  }
   // Every control/help station must be approachable with a standing player.
-  for(const auto& terminal:game.world().terminals()){
+  for(size_t terminalIndex=0;terminalIndex<game.world().terminals().size();++terminalIndex){const auto& terminal=game.world().terminals()[terminalIndex];
    float z=game.world().floorHeight(terminal.position.x,terminal.position.y)+terminal.z;
    bool accessible=false;
-   for(auto n:reachable)if(length(point(n)-terminal.position)<1.05f&&std::fabs(n.z-z)<.03f){accessible=true;break;}
-   result&=check(accessible,"Service terminal has a reachable standing interaction position");
+   for(auto n:reachable){auto p=point(n),delta=terminal.position-p;if(length(delta)>=1.8f||std::fabs(n.z-z)>=.03f)continue;
+    game.m_player.pos=p;game.m_player.z=n.z;game.m_player.angle=std::atan2(delta.y,delta.x);
+    if(game.nearbyTerminal()==int(terminalIndex)){accessible=true;break;}
+   }
+  if(level==8)out<<"junction terminal "<<terminal.position.x<<','<<terminal.position.y<<" z "<<terminal.z<<" interaction "<<(accessible?"PASS":"FAIL")<<'\n';
+  result&=check(accessible,"Service terminal has a reachable standing interaction position");
   }
   // Regression checks for the cleanup pass: imported furniture must face the
   // aisle, upper decks use authored structure instead of procedural post spam,
   // and the suspended freight branch ends in a real vestibule.
   if(level==6){
-   bool panels=true,laneShelves=true;
+   bool panels=true,laneShelves=true,westLockers=true;
    for(const auto& f:game.world().fixtures()){
     if(f.model==13&&f.position.x>21)panels&=std::fabs(f.yaw-kPi*.5f)<.01f;
+    if(f.model==13&&f.position.x<5)westLockers&=std::fabs(f.yaw+kPi*.5f)<.01f;
     if(f.model==7&&f.position.x>6.5f&&f.position.x<7.3f&&f.position.y<16)laneShelves&=std::fabs(f.yaw-kPi*.5f)<.01f;
    }
-   result&=check(panels&&laneShelves,"Cable Vault wall equipment faces the service lanes");
+   result&=check(panels&&laneShelves&&westLockers,"Cable Vault wall equipment faces the service lanes");
    bool openChamber=true;
    for(int y=8;y<=14;++y)for(int x:{9,10,15,16})openChamber&=game.world().tile(x,y)!='#';
    auto routeReaches=[&](Vec2 p){for(const auto& n:reachable)if(length(point(n)-p)<.2f&&std::fabs(n.z+9.f)<.03f)return true;return false;};
@@ -196,7 +236,7 @@ bool Game::testCampaignExtension(){
     bool grounded=x>=0&&x<int(lower[y].size())&&lower[y][x]!='#'&&upper[y][x]=='=';
     bool spansFloors=std::fabs(game.world().floorHeight(f.position.x,f.position.y)+12.f)<.01f&&
                      std::fabs(game.world().floorHeight(f.position.x,f.position.y)+f.height+4.f)<.01f;
-    if(grounded&&spansFloors)++supportedDecks;
+    if(grounded&&spansFloors&&f.width<.35f&&f.depth<.35f)++supportedDecks;
    }
    result&=check(supportedDecks==2,"Pump Annex observation supports are grounded and meet the deck above");
    bool midairHighBay=false,roofHighBay=false;
@@ -205,13 +245,26 @@ bool Game::testCampaignExtension(){
     roofHighBay|=std::fabs(light.z+1.3f)<.01f;
    }
    result&=check(!midairHighBay&&roofHighBay,"Pump Annex high-bay light is mounted at the roof plane");
+   bool noDeckPiercingRiser=true;
+   for(const auto& pipe:game.world().pipes())if(std::fabs(pipe.start.x-12.f)<.01f&&std::fabs(pipe.start.y-19.5f)<.01f&&pipe.endZ> -999.f)noDeckPiercingRiser=false;
+   result&=check(noDeckPiercingRiser,"Pump Annex header avoids piercing the observation deck");
+   Game annex;annex.loadLevel(7,false);annex.m_enemies.clear();
+   result&=check(annex.doorLocked(annex.world().doors().back()),"Pump Annex transfer stays locked until duty pumps restart");
+   annex.m_player.pos={18.f,16.5f};annex.m_player.z=-4.f;annex.m_player.grounded=true;
+   annex.update({},1.f/60.f);
+   result&=check(annex.state("annex_running")==0&&annex.doorLocked(annex.world().doors().back()),
+                 "Walking onto the observation deck cannot silently skip the pump restart");
+   annex.m_player.pos={10.6f,10.5f};annex.m_player.z=-12.f;annex.m_player.angle=0;
+   InputState startPump{};startPump.use=true;annex.updateInteraction(startPump,.01f);
+   result&=check(annex.state("annex_running")==1&&!annex.doorLocked(annex.world().doors().back()),
+                 "Reachable lower pump control releases the Annex transfer through player interaction");
   }
   if(level==8){
    result&=check(!game.world().fits(18.93f,2.5f,-4,1.7f)&&game.world().fits(20.5f,2.5f,-4,1.7f),
                  "Utility Junction freight branch has enclosing walls and usable interior");
    bool lightsMounted=true;
    for(const auto& light:game.world().lights()){
-    if(std::fabs(light.z+4.35f)<.01f){
+    if(std::fabs(light.z+4.4f)<.01f){
      int x=int(std::floor(light.position.x)),y=int(std::floor(light.position.y));
      lightsMounted&=game.world().layers()[1].rows[y][x]=='=';
     }else lightsMounted&=std::fabs(light.z+1.05f)<.01f;
@@ -239,7 +292,24 @@ bool Game::testCampaignExtension(){
    result&=check(drives==2&&firstDrive&&secondDrive,"Utility Junction concourse equipment forms two grounded service bays");
    bool overheadTrunk=game.world().pipes().size()==4;
    for(const auto& pipe:game.world().pipes())if(pipe.endZ< -999.f)overheadTrunk&=pipe.z> -1.6f&&pipe.z< -1.1f;
-   result&=check(overheadTrunk,"Utility Junction services stay on a supported overhead perimeter route");
+  result&=check(overheadTrunk,"Utility Junction services stay on a supported overhead perimeter route");
+   bool freightControl=false,permitControl=false;
+   for(const auto& terminal:game.world().terminals()){
+    freightControl|=terminal.activateState==stateId("freight_incident_clearance");
+    permitControl|=terminal.activateState==stateId("primary_utilities_permit");
+   }
+   result&=check(freightControl&&permitControl,"Utility Junction has a local operator for each locked service branch");
+   for(auto [name,flag,doorIndex,position]:std::array<std::tuple<const char*,StateId,int,Vec2>,2>{{
+       {"freight override",stateId("freight_incident_clearance"),1,{17.2f,8.f}},
+       {"utilities permit",stateId("primary_utilities_permit"),2,{4.f,15.f}}}}){
+    Game branch;branch.loadLevel(8,false);branch.updateStreaming(0);branch.m_enemies.clear();
+    auto terminal=std::find_if(branch.world().terminals().begin(),branch.world().terminals().end(),[&](const auto& t){return t.activateState==flag;});
+    bool station=terminal!=branch.world().terminals().end()&&std::fabs(terminal->position.x-position.x)<.01f&&std::fabs(terminal->position.y-position.y)<.01f;
+    for(const auto& fixture:branch.world().fixtures())if(fixture.model==11&&length(fixture.position-position)<.05f)station=true;
+    branch.m_player.pos=position+Vec2{-.8f,0};branch.m_player.z=branch.world().floorHeight(position.x,position.y)+(terminal!=branch.world().terminals().end()?terminal->z:0.f);branch.m_player.angle=0;branch.m_player.grounded=true;
+    InputState use{};use.use=true;branch.updateInteraction(use,.01f);
+    result&=check(station&&branch.state(flag)==1&&!branch.doorLocked(branch.world().doors()[size_t(doorIndex)]),name);
+   }
   }
   if(level==9){
    bool eastPanel=false,northShelf=false;
@@ -249,6 +319,12 @@ bool Game::testCampaignExtension(){
    }
    result&=check(eastPanel&&northShelf&&game.world().clutterSpawns().size()==19,
                  "Waste Handling keeps clear routes with correctly faced wall equipment");
+   int roofSupports=0;bool groundedGrid=true;
+   for(const auto& f:game.world().fixtures())if(f.model==2){
+    ++roofSupports;float floor=game.world().floorHeight(f.position.x,f.position.y);
+    groundedGrid&=f.base==0.f&&f.width<=.27f&&f.depth<=.27f&&std::fabs(floor+f.height-game.world().ceilingHeight(f.position.x,f.position.y))<.03f;
+   }
+   result&=check(roofSupports==3&&groundedGrid,"Waste roof columns form a slim, grounded floor-to-ceiling support grid");
   }
   // Emit reached positions for diagnosing a failed stair or rail join.
   std::ofstream positions("campaign-reach-"+std::to_string(level)+".txt");for(auto n:reachable)positions<<point(n).x<<' '<<point(n).y<<' '<<n.z<<'\n';
@@ -286,8 +362,22 @@ bool Game::testCampaignExtension(){
  waste.m_enemies.clear();waste.spawnCreature({CreatureKind::Huntsman,{15,10},-12});waste.m_clutter.clear();Clutter junk;junk.pos={15,10};junk.z=-12;junk.kind=3;waste.m_clutter.push_back(junk);
  waste.m_elapsed=press.period*.55f;waste.updateHazards(.5f);
  result&=check(!waste.m_enemies[0].alive&&waste.m_clutter.empty(),"Closed press crushes creatures and loose scrap");
- waste.setState(press.stopState,1);result&=check(waste.compactorHeight(press)==press.raised,"Isolator stops the press in a safe raised position");
+ waste.setState(press.stopState,1);
+ waste.m_player.pos={15,10};waste.m_player.z=waste.groundHeight({15,10},press.bed+.1f);waste.m_player.health=100;waste.updateHazards(.25f);
+ result&=check(waste.compactorHeight(press)==press.raised&&press.raised-waste.m_player.z>=waste.m_player.hullHeight()+.15f&&waste.m_player.health==100&&waste.hullFits({15,10},waste.m_player.z,waste.m_player.hullHeight()),
+                "Isolated press has real standing clearance and does not injure the operator");
  Game restored;result&=check(restored.decodeSave(waste.encodeSave())&&restored.level()==9&&restored.state(press.stopState)==1,"New chapters and machinery state survive save/load");
+ for(int level:{7,8,9}){
+  Game supplies;supplies.loadLevel(level,false);supplies.m_enemies.clear();
+  for(size_t i=0;i<supplies.m_pickups.size();++i){auto& pickup=supplies.m_pickups[i];float z=supplies.pickupHeight(pickup),bottom=supplies.world().floorHeight(pickup.pos.x,pickup.pos.y);
+   if(std::fabs(z-bottom)<.5f)continue;
+   supplies.m_player.pos=pickup.pos;supplies.m_player.z=bottom;supplies.updatePickups();bool wrongFloorProtected=pickup.active;
+   supplies.m_player.z=z;supplies.updatePickups();
+   Game loaded;bool saved=loaded.decodeSave(supplies.encodeSave());
+   result&=check(wrongFloorProtected&&!pickup.active&&saved&&!loaded.m_pickups[i].active&&std::fabs(loaded.pickupHeight(loaded.m_pickups[i])-z)<.01f,
+                 "Elevated supply rejects collection from below and preserves its elevation and collected state after load");
+  }
+ }
  return result;
 }
 

@@ -56,6 +56,176 @@ static int cableWindowPerformance(){
        <<"This times the real windowed submission path; the offscreen readback benchmark is reported separately.\n";
  return 0;
 }
+__declspec(noinline) static int freightInspection(int W,int H){
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
+ std::filesystem::create_directories("diagnostics/freight-district");
+ std::ofstream("diagnostics/freight-district/model-report.txt")<<renderer->modelReport();
+ for(int level=10;level<retro::CampaignChunkCount;++level){
+  const auto& chunk=retro::CampaignChunks[level];
+  auto scene=retro::Game::mapInspection(chunk.playerStart,retro::kPi*.5f,-8,level,true,chunk.spawnHeight,true);
+  renderer->render(scene);std::ofstream frame("diagnostics/freight-district/map-"+std::to_string(level)+".ppm",std::ios::binary);
+  frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
+  for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+ }
+ return 0;
+}
+__declspec(noinline) static int freightDetailInspection(int W,int H){
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
+ std::filesystem::create_directories("diagnostics/freight-details");
+ struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
+ const View views[]={
+  {"receiving-van",14,{15,3},-25,.80f,-3},
+  {"intake-pallets",15,{10,9},-25,2.55f,-18},
+  {"warehouse-cargo",16,{6,3},-25,1.85f,-4},
+  {"manifest-office",20,{7,3},-7,1.9f,-18},
+  {"manifest-terminal-front",20,{5.5f,5},-7,retro::kPi*.5f,-35},
+  {"platform-board",25,{12,4.5f},-25,retro::kPi*.5f,12},
+  {"depot-engine",27,{12,7},-25,.55f,4},
+  {"inspection-chassis",28,{17,3},-28,retro::kPi*.5f,12},
+  {"depot-gantry",29,{20.8f,8},-19,retro::kPi,-90}
+ };
+ std::ofstream cacheReport("diagnostics/freight-details/static-cache.txt");cacheReport<<renderer->hardwareName()<<" / repeated fixed-camera screenshots\n";
+ for(const auto& view:views){
+  auto scene=retro::Game::mapInspection(view.p,view.yaw,view.pitch,view.level,true,view.z,true);
+  renderer->render(scene);auto builds=renderer->staticGeometryBuilds();
+  renderer->render(scene);renderer->render(scene);
+  auto rebuilds=renderer->staticGeometryBuilds()-builds;cacheReport<<view.name<<": static rebuilds "<<rebuilds<<'\n';if(rebuilds)return 35;
+  std::ofstream frame(std::string("diagnostics/freight-details/")+view.name+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
+  for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+ }
+ return 0;
+}
+__declspec(noinline) static int campaignInspection(int W,int H,bool lockersOnly=false,bool cableLockersOnly=false){
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
+     struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;bool openDoors=false;};
+     static constexpr std::array<View,26> views{{
+      {"cable-entry",6,{5.5f,5.5f},-9,.65f,-5},{"cable-trench",6,{13,6.8f},-9,retro::kPi*.5f,-8},
+      {"cable-breaker",6,{17.8f,11},-9,0,-4},{"annex-entry",7,{10,8},-9,-2.35f,-10},
+      {"annex-lower",7,{6.5f,5.5f},-12,retro::kPi*.5f,-6},{"annex-upper",7,{18.2f,18.2f},-4,0,-8},
+      {"junction-bridge",8,{5,8},-4,.35f,-12},{"waste-deck",9,{8,6.5f},-9,.85f,-12},
+      {"waste-press",9,{15,6.5f},-12,retro::kPi*.5f,-8},
+      {"waste-compactor",9,{11.f,6.5f},-12,.65f,-8},
+      {"annex-support-under",7,{17.2f,6.5f},-12,0,-3},
+      {"annex-support-deck",7,{21.5f,6.5f},-4,retro::kPi,0},
+      {"junction-support-under",8,{12,7.5f},-9,0,-3},
+      {"junction-service-bays",8,{11.f,14.f},-9,.55f,-4},
+      {"junction-bridge-lamps",8,{13,7},-4,0,0},
+      {"annex-pump-control",7,{10.25f,10.5f},-12,0,-8},
+      {"annex-operator-room",7,{20.4f,18.3f},-4,.85f,-10},
+      {"junction-distribution",8,{11.3f,9.5f},-9,1.f,-8},
+      {"junction-stores",8,{3.8f,6.1f},-9,-retro::kPi*.5f,-10},
+      {"junction-utilities",8,{3.1f,18.6f},-9,retro::kPi*.5f,-8,true},
+      {"junction-freight",8,{20.5f,3.3f},-4,-retro::kPi*.5f,-8,true},
+      {"waste-receiving",9,{8.8f,10.1f},-12,retro::kPi,-30},
+      {"waste-safe-press",9,{12,7},-12,.65f,-8},
+      {"waste-dispatch",9,{20.2f,19.2f},-12,retro::kPi*.5f,-8},
+      {"waste-lockers",9,{4.1f,9.2f},-9,2.5f,-4},
+      {"cable-west-lockers",6,{7.1f,20.f},-9,retro::kPi,-4}
+     }};
+     for(const auto& view:views){
+      if(lockersOnly&&std::string_view(view.name)!="waste-lockers")continue;
+      if(cableLockersOnly&&std::string_view(view.name)!="cable-west-lockers")continue;
+      auto scene=retro::Game::mapInspection(view.p,view.yaw,view.pitch,view.level,view.openDoors,view.z,true);renderer->render(scene);
+      std::ofstream frame(std::string(view.name)+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
+      for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+     }return 0;
+    }
+__declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int W,int H){
+        const bool doorsOnly=std::wcsstr(commandLine,L"--door-performance-window")!=nullptr;
+        const bool freightOnly=std::wcsstr(commandLine,L"--freight-performance-window")!=nullptr;
+        const bool servicesOnly=doorsOnly||freightOnly||std::wcsstr(commandLine,L"--service-performance-window")!=nullptr;
+        retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance");if(!benchWindow.valid())return 1;
+        retro::SoftwareRenderer benchRenderer(W,H);if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
+        std::ofstream report(doorsOnly?"door-performance-window.txt":freightOnly?"freight-performance-window.txt":servicesOnly?"service-performance-window.txt":"performance-window.txt");
+        RECT benchmarkClient{};GetClientRect(static_cast<HWND>(benchWindow.handle()),&benchmarkClient);
+        report<<"Presentation: "<<benchmarkClient.right<<"x"<<benchmarkClient.bottom<<" / 30 warmup frames per scene / "<<(doorsOnly?240:120)<<" measured frames\n";
+        report<<benchRenderer.hardwareName()<<" / native Win32 swapchain / async present (2 frames in flight)\n";
+        report<<"Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort\n\n";
+        // Same scenes as --performance-test but using the real windowed present path.
+        struct Scene{const char* name;retro::Game game;int frames;bool simulate;bool sweep;};
+        std::vector<Scene> scenes;
+        if(!servicesOnly){
+        scenes.push_back({"Foundry turn",retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true),120,false,true});
+        scenes.push_back({"Gantry turn",retro::Game::mapInspection({7.5f,12.5f},0,0,2,false,0,true),120,false,true});
+        scenes.push_back({"Ashfall terrain + streaming",retro::Game(retro::WorldId::Ashfall),120,true,true});
+        scenes.push_back({"Lift entry turn",retro::Game::mapInspection({3.5f,2},retro::kPi*.5f,0,3,false,0,true),120,false,true});
+        scenes.push_back({"Hazmat settling",retro::Game::hazmatInspection(3),120,true,false});
+        scenes.push_back({"Ascent window",retro::Game::liftInspection(5,3),120,true,false});
+        scenes.push_back({"Reactor balcony turn",retro::Game::liftInspection(retro::World::LiftRideComplete,2),120,false,true});
+        scenes.push_back({"Reactor active AI",retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false),120,true,true});
+        }
+        for(int level=servicesOnly?7:6;level<10;++level){
+            const auto& def=retro::chunkDefinition(retro::WorldId::Campaign,level);
+            scenes.push_back({nullptr,retro::Game::mapInspection(def.playerStart,.6f,0,level,false,def.spawnHeight,false),120,true,true});
+        }
+        std::vector<std::string> sceneNames{"Foundry turn","Gantry turn","Ashfall terrain + streaming","Lift entry turn","Hazmat settling","Ascent window","Reactor balcony turn","Reactor active AI","Utility chapter 7","Utility chapter 8","Utility chapter 9","Utility chapter 10"};
+        if(servicesOnly)sceneNames={"Pump Annex","Utility Junction","Waste Handling"};
+        if(freightOnly){
+            scenes.clear();sceneNames.clear();
+            for(int level:{13,14,16,20,25,27,28,29}){
+                const auto& def=retro::CampaignChunks[level];
+                scenes.push_back({nullptr,retro::Game::mapInspection(def.playerStart,.6f,-8,level,true,def.spawnHeight,false),120,true,true});
+                sceneNames.push_back(retro::CampaignMapNames[level]);
+            }
+        }
+        if(doorsOnly){
+            scenes.clear();sceneNames.clear();
+            for(int level:{0,2,6,7,8,9}){
+                auto world=std::make_unique<retro::World>(level);const auto& door=world->doors().front();
+                retro::Vec2 camera{(door.left+door.right)*.5f,door.y+2.f};
+                scenes.push_back({nullptr,retro::Game::mapInspection(camera,-retro::kPi*.5f,0,level,false,world->floorHeight(camera.x,camera.y)+door.z,true),240,false,false});
+                sceneNames.push_back("Door cycle / map "+std::to_string(level));
+            }
+            report<<"Door diagnostic: fixed camera, all leaves cycle closed/open/closed; no AI simulation.\n";
+        }
+        bool doorCacheStable=true;
+        for(int s=0;s<int(scenes.size());++s){
+            auto& sc=scenes[s];
+            const char* sname=sc.name?sc.name:sceneNames[s].c_str();
+            // Update window title so we can see progress.
+            std::wstring title=L"RawMetal Benchmark [";title+=std::to_wstring(s+1);title+=L"/";title+=std::to_wstring(scenes.size());title+=L"] ";
+            for(const char* c=sname;*c;++c)title+=wchar_t(*c);
+            SetWindowTextW(static_cast<HWND>(benchWindow.handle()),title.c_str());
+            // Warm static caches and GPU pipelines before collecting frame times.
+            for(int warm=0;warm<30;++warm)benchRenderer.render(sc.game);
+            auto buildsBefore=benchRenderer.staticGeometryBuilds();
+            std::vector<double> frameMs;frameMs.reserve(sc.frames);
+            auto wallStart=std::chrono::steady_clock::now();
+            for(int frame=0;frame<sc.frames&&benchWindow.pump();++frame){
+                retro::InputState input{};
+                if(sc.sweep){input.mouseDx=11.f;input.mouseDy=std::sin(frame*.13f)*1.7f;}
+                auto begin=std::chrono::steady_clock::now();
+                if(doorsOnly){
+                    // Only the inspection game is mutated: gameplay gates and streaming
+                    // are covered by the campaign/streaming tests separately.
+                    auto& world=const_cast<retro::World&>(sc.game.world());
+                    float pose=frame<120?float(frame)/119.f:float(239-frame)/119.f;
+                    for(int door=0;door<int(world.doors().size());++door)world.setDoor(door,pose,frame<120);
+                }
+                if(sc.simulate||sc.sweep)sc.game.update(input,1.f/60.f);
+                benchRenderer.render(sc.game);
+                frameMs.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
+            }
+            double wallMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-wallStart).count();
+            if(frameMs.size()!=size_t(sc.frames)){report<<sname<<": window closed early\n";return 1;}
+            std::sort(frameMs.begin(),frameMs.end());
+            double avg=std::accumulate(frameMs.begin(),frameMs.end(),0.0)/frameMs.size();
+            double p95=frameMs[frameMs.size()*95/100];
+            double p99=frameMs[frameMs.size()*99/100];
+            double peak=frameMs.back();
+            double wallFps=frameMs.size()*1000.0/wallMs;
+            report<<sname<<":\n";
+            report<<"  wall-clock FPS: "<<wallFps<<" (actual throughput)\n";
+            report<<"  avg frame time: "<<avg<<" ms = "<<1000.0/avg<<" FPS\n";
+            report<<"  p95 frame time: "<<p95<<" ms = "<<1000.0/p95<<" FPS\n";
+            report<<"  p99 frame time: "<<p99<<" ms\n";
+            report<<"  max frame time: "<<peak<<" ms = "<<1000.0/peak<<" FPS\n\n";
+            if(doorsOnly||freightOnly){auto rebuilds=benchRenderer.staticGeometryBuilds()-buildsBefore;doorCacheStable&=rebuilds==0;report<<"  static map rebuilds during motion: "<<rebuilds<<"\n\n";}
+            report.flush();
+        }
+        report<<"Done.\n";
+        return (doorsOnly||freightOnly)&&!doorCacheStable?35:0;
+}
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
@@ -114,7 +284,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      return 0;
     }
     if(std::wcsstr(commandLine,L"--world-isolation-test")||std::wcsstr(commandLine,L"--ashfall-inspection")){
-     if(std::wcsstr(commandLine,L"--world-isolation-test")&&!retro::Game::testWorldIsolation())return 44;
+     if(std::wcsstr(commandLine,L"--world-isolation-test"))return retro::Game::testWorldIsolation()?0:44;
      retro::SoftwareRenderer renderer(W,H);
      if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
      for(int level=0;level<retro::worldChunkCount(retro::WorldId::Ashfall);++level){
@@ -154,27 +324,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--cable-layout-inspection"))return cableLayoutInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-performance-test"))return retro::SoftwareRenderer::testCablePerformance()?0:35;
     if(std::wcsstr(commandLine,L"--cable-window-performance-test"))return cableWindowPerformance();
-    if(std::wcsstr(commandLine,L"--campaign-inspection")){
-     retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 36;
-     struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
-     for(auto view:std::array<View,15>{{
-      {"cable-entry",6,{5.5f,5.5f},-9,.65f,-5},{"cable-trench",6,{13,6.8f},-9,retro::kPi*.5f,-8},
-      {"cable-breaker",6,{17.8f,11},-9,0,-4},{"annex-entry",7,{10,8},-9,-2.35f,-10},
-      {"annex-lower",7,{6.5f,5.5f},-12,retro::kPi*.5f,-6},{"annex-upper",7,{18.2f,18.2f},-4,0,-8},
-      {"junction-bridge",8,{5,8},-4,.35f,-12},{"waste-deck",9,{8,6.5f},-9,.85f,-12},
-      {"waste-press",9,{15,6.5f},-12,retro::kPi*.5f,-8},
-      {"waste-compactor",9,{11.f,6.5f},-12,.65f,-8},
-      {"annex-support-under",7,{17.2f,6.5f},-12,0,-3},
-      {"annex-support-deck",7,{21.5f,6.5f},-4,retro::kPi,0},
-      {"junction-support-under",8,{12,7.5f},-9,0,-3},
-      {"junction-service-bays",8,{11.f,14.f},-9,.55f,-4},
-      {"junction-bridge-lamps",8,{13,7},-4,0,0}
-     }}){
-      auto scene=retro::Game::mapInspection(view.p,view.yaw,view.pitch,view.level,false,view.z,true);renderer.render(scene);
-      std::ofstream frame(std::string(view.name)+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
-      for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
-     }return 0;
-    }
+    if(std::wcsstr(commandLine,L"--freight-inspection"))return freightInspection(W,H);
+    if(std::wcsstr(commandLine,L"--freight-detail-inspection"))return freightDetailInspection(W,H);
+    if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
+    if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);
+    if(std::wcsstr(commandLine,L"--waste-locker-inspection"))return campaignInspection(W,H,true);
     if(std::wcsstr(commandLine,L"--megamap-inspection")){
      retro::SoftwareRenderer renderer(W,H);if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
      std::ofstream report("megamap-inspection.txt");bool ok=true;
@@ -211,6 +365,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }return 0;
     }
     if(std::wcsstr(commandLine,L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
+    if(std::wcsstr(commandLine,L"--mutant-inspection")){
+        retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 49;
+        const char* names[]={"mutant-baseline","mutant-walk","mutant-lunge","mutant-death","mutant-warehouse","mutant-depot","mutant-death-baseline"};
+        for(int view=0;view<7;++view){auto scene=view==0?retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true):view==3?retro::Game::stalkerInspection(4,.87f,0,retro::Enemy::Kind::Mutant):view==4?retro::Game::mapInspection({12,14.5f},-retro::kPi*.5f,-3,17,true,-25,false):view==5?retro::Game::mapInspection({17.3f,19},0,0,27,true,-25,false):view==6?retro::Game::mapInspection({18.6f,18.5f},0,-35,3,true,-9,true):retro::Game::validationScene(retro::Enemy::Kind::Mutant,-1.f,view==2?.22f:0.f);
+         renderer.render(scene);std::ofstream out(std::string(names[view])+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
+         for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+        }return 0;
+    }
     if(std::wcsstr(commandLine,L"--warden-inspection")){
         retro::SoftwareRenderer renderer(W,H);renderer.enableHardware();
         for(int view=0;view<2;++view){
@@ -252,68 +414,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--console-test"))return retro::Game::testConsole()?0:34;
     if(std::wcsstr(commandLine,L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
-    if(std::wcsstr(commandLine,L"--performance-window")){
-        retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance");if(!benchWindow.valid())return 1;
-        retro::SoftwareRenderer benchRenderer(W,H);if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
-        std::ofstream report("performance-window.txt");
-        RECT benchmarkClient{};GetClientRect(static_cast<HWND>(benchWindow.handle()),&benchmarkClient);
-        report<<"Presentation: "<<benchmarkClient.right<<"x"<<benchmarkClient.bottom<<" / 30 warmup frames per scene / 120 measured frames\n";
-        report<<benchRenderer.hardwareName()<<" / native Win32 swapchain / async present (2 frames in flight)\n";
-        report<<"Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort\n\n";
-        // Same scenes as --performance-test but using the real windowed present path.
-        struct Scene{const char* name;retro::Game game;int frames;bool simulate;bool sweep;};
-        std::vector<Scene> scenes;
-        scenes.push_back({"Foundry turn",retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true),120,false,true});
-        scenes.push_back({"Gantry turn",retro::Game::mapInspection({7.5f,12.5f},0,0,2,false,0,true),120,false,true});
-        scenes.push_back({"Ashfall terrain + streaming",retro::Game(retro::WorldId::Ashfall),120,true,true});
-        scenes.push_back({"Lift entry turn",retro::Game::mapInspection({3.5f,2},retro::kPi*.5f,0,3,false,0,true),120,false,true});
-        scenes.push_back({"Hazmat settling",retro::Game::hazmatInspection(3),120,true,false});
-        scenes.push_back({"Ascent window",retro::Game::liftInspection(5,3),120,true,false});
-        scenes.push_back({"Reactor balcony turn",retro::Game::liftInspection(retro::World::LiftRideComplete,2),120,false,true});
-        scenes.push_back({"Reactor active AI",retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false),120,true,true});
-        for(int level=6;level<10;++level){
-            const auto& def=retro::chunkDefinition(retro::WorldId::Campaign,level);
-            scenes.push_back({nullptr,retro::Game::mapInspection(def.playerStart,.6f,0,level,false,def.spawnHeight,false),120,true,true});
-        }
-        std::vector<std::string> sceneNames{"Foundry turn","Gantry turn","Ashfall terrain + streaming","Lift entry turn","Hazmat settling","Ascent window","Reactor balcony turn","Reactor active AI","Utility chapter 7","Utility chapter 8","Utility chapter 9","Utility chapter 10"};
-        for(int s=0;s<int(scenes.size());++s){
-            auto& sc=scenes[s];
-            const char* sname=sc.name?sc.name:sceneNames[s].c_str();
-            // Update window title so we can see progress.
-            std::wstring title=L"RawMetal Benchmark [";title+=std::to_wstring(s+1);title+=L"/";title+=std::to_wstring(scenes.size());title+=L"] ";
-            for(const char* c=sname;*c;++c)title+=wchar_t(*c);
-            SetWindowTextW(static_cast<HWND>(benchWindow.handle()),title.c_str());
-            // Warm static caches and GPU pipelines before collecting frame times.
-            for(int warm=0;warm<30;++warm)benchRenderer.render(sc.game);
-            std::vector<double> frameMs;frameMs.reserve(sc.frames);
-            auto wallStart=std::chrono::steady_clock::now();
-            for(int frame=0;frame<sc.frames&&benchWindow.pump();++frame){
-                retro::InputState input{};
-                if(sc.sweep){input.mouseDx=11.f;input.mouseDy=std::sin(frame*.13f)*1.7f;}
-                auto begin=std::chrono::steady_clock::now();
-                if(sc.simulate||sc.sweep)sc.game.update(input,1.f/60.f);
-                benchRenderer.render(sc.game);
-                frameMs.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
-            }
-            double wallMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-wallStart).count();
-            if(frameMs.empty()){report<<sname<<": window closed early\n";break;}
-            std::sort(frameMs.begin(),frameMs.end());
-            double avg=std::accumulate(frameMs.begin(),frameMs.end(),0.0)/frameMs.size();
-            double p95=frameMs[frameMs.size()*95/100];
-            double p99=frameMs[frameMs.size()*99/100];
-            double peak=frameMs.back();
-            double wallFps=frameMs.size()*1000.0/wallMs;
-            report<<sname<<":\n";
-            report<<"  wall-clock FPS: "<<wallFps<<" (actual throughput)\n";
-            report<<"  avg frame time: "<<avg<<" ms = "<<1000.0/avg<<" FPS\n";
-            report<<"  p95 frame time: "<<p95<<" ms = "<<1000.0/p95<<" FPS\n";
-            report<<"  p99 frame time: "<<p99<<" ms\n";
-            report<<"  max frame time: "<<peak<<" ms = "<<1000.0/peak<<" FPS\n\n";
-            report.flush();
-        }
-        report<<"Done.\n";
-        return 0;
-    }
+    if(std::wcsstr(commandLine,L"--performance-window")||std::wcsstr(commandLine,L"--service-performance-window")||std::wcsstr(commandLine,L"--door-performance-window")||std::wcsstr(commandLine,L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
     if(std::wcsstr(commandLine,L"--lift-inspection")){
@@ -357,6 +458,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         return 0;
     }
     if(std::wcsstr(commandLine,L"--service-map-test"))return retro::Game::testServiceMaps()?0:45;
+    if(std::wcsstr(commandLine,L"--mechanisms-test"))return retro::Game::testMechanisms()?0:39;
+    if(std::wcsstr(commandLine,L"--campaign-map-test")||std::wcsstr(commandLine,L"--freight-district-test"))return retro::Game::testCampaignMaps()?0:37;
+    if(std::wcsstr(commandLine,L"--streaming-test"))return retro::Game::testStreaming()?0:26;
     if(std::wcsstr(commandLine,L"--render-benchmark")){
         retro::SoftwareRenderer renderer(W,H);std::ofstream report("render-benchmark.txt");
         const retro::Vec2 positions[]={{3.5f,4.5f},{7.5f,12.5f},{20.5f,11.5f}};

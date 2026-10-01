@@ -9,6 +9,13 @@ using StateId=std::uint32_t;
 constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
 enum class ObjectiveStatus { Hidden, Active, Complete, Failed };
 struct StateValue {StateId id=0;int value=0;};
+// A saved, trigger-started timeline shared by main and custom campaigns.
+struct TimedSequence {
+ StateId timerState=0,finishState=0;
+ float x1=0,y1=0,x2=24,y2=24,bottom=-100,top=100;
+ int durationMs=30000,finishAtMs=16000,soundIntervalMs=1800,soundUntilMs=16000;
+ Sound tickSound=Sound::Metal1;float gain=.5f,pitch=.65f;
+};
 struct QuestItemStack {StateId id=0;int count=0;};
 struct ScriptAction {
  enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign};
