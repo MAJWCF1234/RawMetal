@@ -25,6 +25,7 @@ public:
     void previewModel(int model,float angle);
     bool validate3D();
     static bool testPerformance();
+    static bool testCablePerformance();
     static bool testHardware();
     static bool testCreatureAnimation();
     float gripError()const{return m_gripError;}
@@ -62,7 +63,7 @@ private:
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;
     Texture m_feedSign,m_returnSign,m_diskSign,m_authSign;
     std::array<Texture,12> m_routeSigns;
-    Texture m_wall, m_floor, m_metal, m_arms;
+    Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;

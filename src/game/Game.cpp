@@ -143,12 +143,12 @@ const Enemy* Game::targetEnemy()const{
 }
 bool Game::testCombat(){
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute}){
-  auto encounter=validationScene(kind);int shots=0;
+  auto encounter=validationScene(kind);encounter.m_player.pitch=-35;int shots=0;
   while(encounter.m_enemies[0].alive&&shots<10){encounter.shoot();++shots;if(encounter.m_player.loaded==0&&encounter.m_player.ammo>0)encounter.m_player.loaded=std::min(6,encounter.m_player.ammo);}
   int expected=kind==Enemy::Kind::Huntsman?4:kind==Enemy::Kind::Wasp?3:9;
   if(shots!=expected||encounter.m_kills!=1)return false;
  }
- Game g;g.m_enemies.resize(1);g.m_player.pos={3.5f,4.5f};g.m_player.angle=0;g.m_enemies[0].pos={5.5f,4.5f};
+ Game g;g.m_enemies.resize(1);g.m_player.pos={3.5f,4.5f};g.m_player.angle=0;g.m_player.pitch=-35;g.m_enemies[0].pos={5.5f,4.5f};
  auto scar=validationScene(Enemy::Kind::Huntsman);scar.m_enemies.clear();scar.m_player.pos={1.5f,1.5f};scar.m_player.angle=kPi;
  scar.shoot();if(scar.bulletImpacts().empty()||scar.bulletImpacts().size()>6)return false;
  auto barrel=barrelInspection(.06f);if(barrel.world().tile(8,2)!='.'||barrel.barrelExplosions().size()!=1||barrel.barrelExplosions()[0].level!=0)return false;
@@ -168,11 +168,11 @@ bool Game::testCombat(){
  if(reload.player().ammo!=8||reload.player().loaded!=6||lengthSq(reload.player().pos-position)>.0001f)return false;
  InputState scroll{};scroll.weaponScroll=-1;reload.update(scroll,.01f);if(reload.weaponEquipped())return false;
  scroll.weaponScroll=1;reload.update(scroll,.01f);if(!reload.weaponEquipped())return false;
- auto closeShot=validationScene(Enemy::Kind::Huntsman);closeShot.m_player.pos={4.5f,4.5f};closeShot.m_player.angle=0;closeShot.m_enemies[0].pos={5.3f,4.5f};closeShot.m_enemies[0].hp=20;closeShot.shoot();
+ auto closeShot=validationScene(Enemy::Kind::Huntsman);closeShot.m_player.pos={4.5f,4.5f};closeShot.m_player.angle=0;closeShot.m_player.pitch=-65;closeShot.m_enemies[0].pos={5.3f,4.5f};closeShot.m_enemies[0].hp=20;closeShot.shoot();
  if(closeShot.m_enemies[0].alive)return false;
  closeShot.update({},1.f/60.f);closeShot.update({},1.f/60.f);if(closeShot.m_enemies[0].deathTime!=0)return false;
  closeShot.update({},1.f/60.f);if(closeShot.m_enemies[0].deathTime<=0)return false;
- auto closePunch=validationScene(Enemy::Kind::Huntsman);closePunch.m_player.pos={4.5f,4.5f};closePunch.m_player.angle=0;closePunch.m_enemies[0].pos={5.3f,4.5f};closePunch.m_enemies[0].hp=20;closePunch.punchImpact();
+ auto closePunch=validationScene(Enemy::Kind::Huntsman);closePunch.m_player.pos={4.5f,4.5f};closePunch.m_player.angle=0;closePunch.m_player.pitch=-65;closePunch.m_enemies[0].pos={5.3f,4.5f};closePunch.m_enemies[0].hp=20;closePunch.punchImpact();
  if(closePunch.m_enemies[0].alive)return false;
  closePunch.update({},1.f/60.f);closePunch.update({},1.f/60.f);if(closePunch.m_enemies[0].deathTime!=0)return false;
  closePunch.update({},1.f/60.f);return closePunch.m_enemies[0].deathTime>0;
@@ -184,7 +184,7 @@ Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
 Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly,WorldId id){Game game(id);game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?(game.m_world.hasTerrain()?game.groundHeight(position,float(World::TerrainMaxZ+1)):game.m_world.floorHeight(position.x,position.y)):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
  if(sceneryOnly){game.m_enemies.clear();for(auto&chunk:game.m_chunks)chunk.enemies.clear();}
  if(openDoors){for(auto&chunk:game.m_chunks){for(int i=0;i<int(chunk.world.doors().size());++i)chunk.world.openDoor(i);chunk.world.updateDoors(2);}for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);game.m_world.updateDoors(2);}game.updateStreaming(0);return game;}
-Game Game::barrelInspection(float age){auto game=mapInspection({8.5f,4.5f},-kPi*.5f,0,0,false,-999,true);game.shoot();game.m_elapsed=std::max(0.f,age);return game;}
+Game Game::barrelInspection(float age){auto game=mapInspection({8.5f,4.5f},-kPi*.5f,-35,0,false,-999,true);game.shoot();game.m_elapsed=std::max(0.f,age);return game;}
 
 bool Game::lineOfSight(const Vec2& a,const Vec2& b)const{return m_world.rayClear(a,m_world.floorHeight(a.x,a.y)+.75f,b,m_world.floorHeight(b.x,b.y)+.75f);}
 
@@ -444,7 +444,7 @@ Game Game::weaponInspection(int mode,float age){auto game=validationScene(Enemy:
  return game;
 }
 bool Game::testUnarmed(){
- auto game=validationScene(Enemy::Kind::Huntsman);game.m_player.ammo=1;game.m_enemies[0].pos=game.m_player.pos+Vec2{.95f,0};
+ auto game=validationScene(Enemy::Kind::Huntsman);game.m_player.pitch=-65;game.m_player.ammo=1;game.m_enemies[0].pos=game.m_player.pos+Vec2{.95f,0};
  InputState input{};input.fire=true;game.update(input,.01f);if(game.player().ammo!=0)return false;
  input.fire=false;for(int i=0;i<110;++i)game.update(input,1.f/120.f);if(!game.unarmed())return false;
  float hp=game.m_enemies[0].hp;input.fire=true;game.update(input,.01f);input.fire=false;
@@ -478,7 +478,7 @@ bool Game::testAudioEvents(){
  }
  if(!steps||!jump||!land||!pump)return false;
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute}){
-  game=validationScene(kind);game.m_sounds.clear();game.shoot();
+  game=validationScene(kind);game.m_player.pitch=-35;game.m_sounds.clear();game.shoot();
   if(!contains(Sound::Shot)||!contains(Sound(int(Sound::SpiderCall)+int(kind)*3)))return false;
   for(int attempts=0;game.m_enemies[0].alive&&attempts<32;++attempts){
    if(game.m_player.loaded==0)game.m_player.loaded=std::min(6,game.m_player.ammo);
@@ -493,7 +493,3 @@ bool Game::testAudioEvents(){
 }
 
 }
-
-
-
-

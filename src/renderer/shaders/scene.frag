@@ -94,15 +94,22 @@ void main(){
 
  float materialDistance=length(worldPos-view.eyeYaw.xyz);
  float parallaxFade=1.0-smoothstep(8.0,18.0,materialDistance);
-
- if(parallaxScale>0.0&&surface.z<0.5&&parallaxFade>0.001){
+ bool parallaxMaterial=parallaxScale>0.0&&surface.z<0.5&&parallaxFade>0.001;
+ bool litMaterial=lighting.w>0.5||light0.w+light1.w>0.0;
+ vec3 tangent=vec3(0.0),bitangent=vec3(0.0),geometricNormal=vec3(0.0);
+ bool tangentFrameValid=false;
+ if(parallaxMaterial||litMaterial){
   vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
   float determinant=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
-
   if(abs(determinant)>0.00001){
-   vec3 tangent=normalize((dx*uvDy.y-dy*uvDx.y)/determinant);
-   vec3 bitangent=normalize((dy*uvDx.x-dx*uvDy.x)/determinant);
-   vec3 geometricNormal=normalize(cross(tangent,bitangent));
+   tangent=normalize((dx*uvDy.y-dy*uvDx.y)/determinant);
+   bitangent=normalize((dy*uvDx.x-dx*uvDy.x)/determinant);
+   geometricNormal=normalize(cross(tangent,bitangent));
+   tangentFrameValid=true;
+  }
+ }
+
+ if(parallaxMaterial&&tangentFrameValid){
    vec3 toEye=normalize(view.eyeYaw.xyz-worldPos);
    vec2 direction=vec2(dot(toEye,tangent),dot(toEye,bitangent))/max(abs(dot(toEye,geometricNormal)),0.35);
    vec2 stepUV=clamp(direction,vec2(-2.0),vec2(2.0))*parallaxScale*parallaxFade/4.0;
@@ -114,7 +121,6 @@ void main(){
     if(float(layer)/4.0>=height)break;
     sampleUV-=stepUV;
    }
-  }
  }
 
  vec4 color=textureGrad(colorMap,sampleUV,uvDx,uvDy);
@@ -131,13 +137,7 @@ void main(){
 
   float gloss=fract(surface.z);
 
-  {
-   vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
-   float determinant=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
-
-   if(abs(determinant)>0.00001){
-    vec3 tangent=normalize((dx*uvDy.y-dy*uvDx.y)/determinant);
-    vec3 bitangent=normalize((dy*uvDx.x-dx*uvDy.x)/determinant);
+  if(tangentFrameValid){
     vec3 normal=normalize(cross(tangent,bitangent));
     vec3 eyeDirection=normalize(view.eyeYaw.xyz-worldPos);
     vec3 viewTangent=normalize(vec3(dot(eyeDirection,tangent),dot(eyeDirection,bitangent),abs(dot(eyeDirection,normal))));
@@ -157,7 +157,6 @@ void main(){
      float NdotV=clamp(viewTangent.z,0.0,1.0);
      waterFresnel=0.04+0.96*pow(1.0-NdotV,5.0);
     }
-   }
   }
  }
 

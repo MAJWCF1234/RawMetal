@@ -10,9 +10,52 @@
 #include <exception>
 #include <filesystem>
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <vector>
 
+__declspec(noinline) static int cableLayoutInspection(int width,int height){
+ retro::SoftwareRenderer renderer(width,height);if(!renderer.enableHardware())return 36;
+ struct View{const char*name;retro::Vec2 p;float z,yaw,pitch;};
+ constexpr std::array<View,6> views{{
+  {"cable-entry",{5.5f,5.5f},-9,.65f,-5},
+  {"cable-trench",{13,6.8f},-9,retro::kPi*.5f,-8},
+  {"cable-breaker",{17.8f,11},-9,0,-4},
+  {"cable-south-route",{13,16.5f},-9,-retro::kPi*.5f,-5},
+  {"cable-terminal-remote",{18.6f,11.9f},-9,0,-3},
+  // Inspect the maintenance terminal head-on from the open west aisle.
+  {"cable-terminal-maintenance",{6.1f,6.4f},-9,0,-4}
+ }};
+ auto capture=[&](const std::string&name,const retro::Game&scene){renderer.render(scene);
+  std::ofstream frame(name+".ppm",std::ios::binary);frame<<"P6\n"<<width<<' '<<height<<"\n255\n";
+  for(int i=0;i<width*height;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+ };
+ for(const auto&view:views){
+  capture(view.name,retro::Game::mapInspection(view.p,view.yaw,view.pitch,6,false,view.z,true));
+  capture(std::string(view.name)+"-gameplay",retro::Game::mapInspection(view.p,view.yaw,view.pitch,6,false,view.z,false));
+ }
+ return 0;
+}
+static int cableWindowPerformance(){
+ retro::Win32Window window(retro::DisplayWidth,retro::DisplayHeight,L"RawMetal Map 6 Frame Test");
+ if(!window.valid())return 1;
+ retro::SoftwareRenderer renderer(retro::DisplayWidth,retro::DisplayHeight);
+ if(!renderer.enableHardware(window.handle()))return 36;
+ auto game=retro::Game::mapInspection({13.f,6.8f},retro::kPi*.5f,-8.f,6,false,-9.f,false);
+ for(int i=0;i<30&&window.pump();++i){game.update({},1.f/60.f);renderer.render(game);}
+ std::vector<double> frames;frames.reserve(120);
+ for(int i=0;i<120&&window.pump();++i){retro::InputState look{};look.mouseDx=2.f;look.mouseDy=std::sin(i*.13f);
+  game.update(look,1.f/60.f);auto start=std::chrono::steady_clock::now();renderer.render(game);
+  frames.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());}
+ if(frames.empty())return 1;std::sort(frames.begin(),frames.end());
+ std::ofstream report("diagnostics/pixel-compare/cable-vaults-layout-pass/cable-window-performance.txt");
+ report<<renderer.hardwareName()<<" / native window / "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<" / async presentation\n"
+       <<"Map 6 active sump sweep, 30 warmup + "<<frames.size()<<" measured frames\n"
+       <<"CPU frame submission avg/p50/p95/max: "
+       <<std::accumulate(frames.begin(),frames.end(),0.0)/frames.size()<<" / "<<frames[frames.size()/2]<<" / "<<frames[frames.size()*95/100]<<" / "<<frames.back()<<" ms\n"
+       <<"This times the real windowed submission path; the offscreen readback benchmark is reported separately.\n";
+ return 0;
+}
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
@@ -108,15 +151,24 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      report<<"Brighter scene pixels: "<<brighter<<'\n';return brighter>100?0:43;
     }
     if(std::wcsstr(commandLine,L"--campaign-extension-test"))return retro::Game::testCampaignExtension()?0:46;
+    if(std::wcsstr(commandLine,L"--cable-layout-inspection"))return cableLayoutInspection(W,H);
+    if(std::wcsstr(commandLine,L"--cable-performance-test"))return retro::SoftwareRenderer::testCablePerformance()?0:35;
+    if(std::wcsstr(commandLine,L"--cable-window-performance-test"))return cableWindowPerformance();
     if(std::wcsstr(commandLine,L"--campaign-inspection")){
      retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 36;
      struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
-     for(auto view:std::array<View,9>{{
+     for(auto view:std::array<View,15>{{
       {"cable-entry",6,{5.5f,5.5f},-9,.65f,-5},{"cable-trench",6,{13,6.8f},-9,retro::kPi*.5f,-8},
       {"cable-breaker",6,{17.8f,11},-9,0,-4},{"annex-entry",7,{10,8},-9,-2.35f,-10},
       {"annex-lower",7,{6.5f,5.5f},-12,retro::kPi*.5f,-6},{"annex-upper",7,{18.2f,18.2f},-4,0,-8},
       {"junction-bridge",8,{5,8},-4,.35f,-12},{"waste-deck",9,{8,6.5f},-9,.85f,-12},
-      {"waste-press",9,{15,6.5f},-12,retro::kPi*.5f,-8}
+      {"waste-press",9,{15,6.5f},-12,retro::kPi*.5f,-8},
+      {"waste-compactor",9,{11.f,6.5f},-12,.65f,-8},
+      {"annex-support-under",7,{17.2f,6.5f},-12,0,-3},
+      {"annex-support-deck",7,{21.5f,6.5f},-4,retro::kPi,0},
+      {"junction-support-under",8,{12,7.5f},-9,0,-3},
+      {"junction-service-bays",8,{11.f,14.f},-9,.55f,-4},
+      {"junction-bridge-lamps",8,{13,7},-4,0,0}
      }}){
       auto scene=retro::Game::mapInspection(view.p,view.yaw,view.pitch,view.level,false,view.z,true);renderer.render(scene);
       std::ofstream frame(std::string(view.name)+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";

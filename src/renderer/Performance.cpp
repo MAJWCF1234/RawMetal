@@ -42,9 +42,9 @@ bool SoftwareRenderer::testHardware(){
  check(((pixel>>16)&255)>150&&(pixel&255)>110&&(pixel&255)<200&&((pixel>>16)&255)>(pixel&255)+35,"Linear HDR water alpha blends the visible bed before tone mapping");
  begin();triangle(emissive,1,0);auto brightEmission=finish();check(blueChannel(brightEmission)>150,"Emission survives zero ambient illumination");
  renderer.m_emissionScale=.1f;begin();triangle(emissive,1,0);pixel=finish();
- // Compare against the documented linear emission -> filmic -> display path.
- // Display-encoded values are nonlinear: 10% radiance is not 10% pixel value.
- auto expectedEmission=[](float scale){float linear=1.6f*scale*.95f;float mapped=std::clamp((linear*(2.51f*linear+.03f))/(linear*(2.43f*linear+.59f)+.14f),0.f,1.f);return int(std::round(std::pow(mapped,1.f/2.2f)*255.f));};
+ // Match the headless capture and window composite exposure. Display-encoded
+ // values are nonlinear: 10% radiance is not 10% pixel value.
+ auto expectedEmission=[](float scale){float linear=1.6f*scale*1.05f;float mapped=std::clamp((linear*(2.51f*linear+.03f))/(linear*(2.43f*linear+.59f)+.14f),0.f,1.f);return int(std::round(std::pow(mapped,1.f/2.2f)*255.f));};
  report<<"Emission display values: full "<<blueChannel(brightEmission)<<", dim "<<blueChannel(pixel)<<", expected "<<expectedEmission(.1f)<<'\n';
  check(std::abs(blueChannel(pixel)-expectedEmission(.1f))<=2&&blueChannel(pixel)<blueChannel(brightEmission),"Emergency lamp emission matches linear dimming through display transform");renderer.m_emissionScale=1.f;
  begin();triangle(normal,1,.5f);auto flat=finish();begin();triangle(normal,1,.5f,&lights);auto relief=finish();check((relief&255)>(flat&255),"Authored normal map affects hardware lighting");
@@ -113,5 +113,22 @@ bool SoftwareRenderer::testPerformance(){
   report<<"Culling/reference view "<<view<<": "<<changed<<" changed pixels\n";report.flush();passed&=changed==0;
  }
  report<<(passed?"PASS":"FAIL")<<": 50 ms total update/audio/render budget; conservative culling equivalence.\n";return passed;
+}
+bool SoftwareRenderer::testCablePerformance(){
+ using Clock=std::chrono::steady_clock;std::ofstream report("diagnostics/pixel-compare/cable-vaults-layout-pass/cable-performance.txt");
+ Game game=Game::mapInspection({13.f,6.8f},kPi*.5f,-8.f,6,false,-9.f,false);
+ SoftwareRenderer renderer(DisplayWidth,DisplayHeight);if(!renderer.enableHardware()){report<<renderer.hardwareName()<<"\n";return false;}
+ std::vector<double> wall,scene,submit;wall.reserve(90);scene.reserve(90);submit.reserve(90);
+ for(int frame=0;frame<100;++frame){InputState look{};look.mouseDx=frame<10?0.f:2.f;look.mouseDy=std::sin(frame*.13f);game.update(look,1.f/60.f);
+  auto start=Clock::now();renderer.render(game);double elapsed=std::chrono::duration<double,std::milli>(Clock::now()-start).count();
+  if(frame>=10){wall.push_back(elapsed);scene.push_back(renderer.m_sceneMs);submit.push_back(renderer.m_submitMs);}
+ }
+ auto stats=[](std::vector<double>&values){std::sort(values.begin(),values.end());return std::array<double,3>{std::accumulate(values.begin(),values.end(),0.0)/values.size(),values[values.size()*95/100],values.back()};};
+ auto w=stats(wall),s=stats(scene),g=stats(submit);
+ report<<renderer.hardwareName()<<" / "<<DisplayWidth<<'x'<<DisplayHeight<<" / active Map 6 sump sweep\n"
+       <<"wall avg/p95/max: "<<w[0]<<" / "<<w[1]<<" / "<<w[2]<<" ms\n"
+       <<"scene-build avg/p95/max: "<<s[0]<<" / "<<s[1]<<" / "<<s[2]<<" ms\n"
+       <<"GPU submit+readback avg/p95/max: "<<g[0]<<" / "<<g[1]<<" / "<<g[2]<<" ms\n";
+ return w[1]<=50.f;
 }
 }

@@ -88,6 +88,10 @@ struct Clutter {
 };
 
 struct Player {
+    static constexpr float StandingHeight=1.6f;
+    static constexpr float CrouchedHeight=.58f;
+    static constexpr float StandingEye=1.42f;
+    static constexpr float CrouchedEye=.48f;
     Vec2 pos{2.5f, 2.5f};
     float angle = 0.0f;
     float pitch = 0.0f;
@@ -98,8 +102,8 @@ struct Player {
     float verticalVelocity = 0.0f;
     bool grounded = true;
     bool crouched = false;
-    float eye=.78f;
-    float hullHeight()const{return crouched?.58f:1.f;}
+    float eye=StandingEye;
+    float hullHeight()const{return crouched?CrouchedHeight:StandingHeight;}
 };
 struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0;};
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;};

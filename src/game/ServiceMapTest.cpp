@@ -164,15 +164,82 @@ bool Game::testCampaignExtension(){
     if(f.model==7&&f.position.x>6.5f&&f.position.x<7.3f&&f.position.y<16)laneShelves&=std::fabs(f.yaw-kPi*.5f)<.01f;
    }
    result&=check(panels&&laneShelves,"Cable Vault wall equipment faces the service lanes");
+   bool openChamber=true;
+   for(int y=8;y<=14;++y)for(int x:{9,10,15,16})openChamber&=game.world().tile(x,y)!='#';
+   auto routeReaches=[&](Vec2 p){for(const auto& n:reachable)if(length(point(n)-p)<.2f&&std::fabs(n.z+9.f)<.03f)return true;return false;};
+   bool bothTrenchFlanks=game.hullFits({10.25f,10.8f},-9,1.7f)&&game.hullFits({15.75f,10.8f},-9,1.7f)&&
+                        routeReaches({10.25f,10.8f})&&routeReaches({15.75f,10.8f});
+   auto terminal=game.world().terminals().front();
+   const auto& liveWater=game.world().waterVolumes().front();
+   bool raisedTrough=liveWater.surface-game.world().floorHeight(13,7)<-.1f&&liveWater.surface-liveWater.bed>.2f;
+   bool clearHighBay=game.world().ceilingHeight(5,5)-game.world().floorHeight(5,5)>4.3f;
+   bool retainingWalls=false;int retainingSides=0;
+   for(const auto& st:game.world().structures())if(st.top>-8.5f&&st.y1<=8.f&&st.y2>=11.f&&st.y2-st.y1>=3.f&&st.x2-st.x1<.5f)++retainingSides;
+   retainingWalls=retainingSides>=2;
+   bool dryBridge=game.world().fits(12.5f,11.2f,-9,1.7f)&&game.world().fits(13.5f,11.2f,-9,1.7f)&&
+                  routeReaches({12.5f,11.2f})&&routeReaches({13.5f,11.2f});
+   bool terminalAtEastAisle=length(terminal.position-Vec2{20.4f,11.9f})<.05f;
+   bool pipeClear=true;for(const auto& pipe:game.world().pipes())pipeClear&=length(pipe.start-terminal.position)>.15f||length(pipe.end-terminal.position)>.15f||pipe.endZ<-999.f;
+   result&=check(openChamber&&bothTrenchFlanks&&dryBridge&&terminalAtEastAisle&&raisedTrough&&retainingWalls&&clearHighBay&&pipeClear,"Cable chamber has a high bay, recessed sump, clear workstations and an east-aisle disconnect");
+   int feederAssemblies=0;for(const auto& f:game.world().fixtures())if(f.model==12&&f.solid)++feederAssemblies;
+   result&=check(feederAssemblies>=2,"Cable bypasses include grounded feeder machinery as combat cover");
   }
   if(level==7){
    bool giantFoundation=false;
    for(const auto& st:game.world().structures())if(st.bottom<-11.9f&&st.top>-9.05f&&st.x2-st.x1>4&&st.y2-st.y1>4)giantFoundation=true;
    result&=check(!giantFoundation,"Pump Annex lower manifold is not buried under giant machine blocks");
+   int supportedDecks=0;
+   for(const auto& f:game.world().fixtures())if(f.model==2&&std::fabs(f.height-8.f)<.01f){
+    int x=int(std::floor(f.position.x)),y=int(std::floor(f.position.y));
+    const auto& lower=game.world().layers()[0].rows;
+    const auto& upper=game.world().layers()[2].rows;
+    bool grounded=x>=0&&x<int(lower[y].size())&&lower[y][x]!='#'&&upper[y][x]=='=';
+    bool spansFloors=std::fabs(game.world().floorHeight(f.position.x,f.position.y)+12.f)<.01f&&
+                     std::fabs(game.world().floorHeight(f.position.x,f.position.y)+f.height+4.f)<.01f;
+    if(grounded&&spansFloors)++supportedDecks;
+   }
+   result&=check(supportedDecks==2,"Pump Annex observation supports are grounded and meet the deck above");
+   bool midairHighBay=false,roofHighBay=false;
+   for(const auto& light:game.world().lights())if(std::fabs(light.position.x-10.f)<.01f&&std::fabs(light.position.y-8.f)<.01f){
+    midairHighBay|=std::fabs(light.z+6.35f)<.01f;
+    roofHighBay|=std::fabs(light.z+1.3f)<.01f;
+   }
+   result&=check(!midairHighBay&&roofHighBay,"Pump Annex high-bay light is mounted at the roof plane");
   }
   if(level==8){
    result&=check(!game.world().fits(18.93f,2.5f,-4,1.7f)&&game.world().fits(20.5f,2.5f,-4,1.7f),
                  "Utility Junction freight branch has enclosing walls and usable interior");
+   bool lightsMounted=true;
+   for(const auto& light:game.world().lights()){
+    if(std::fabs(light.z+4.35f)<.01f){
+     int x=int(std::floor(light.position.x)),y=int(std::floor(light.position.y));
+     lightsMounted&=game.world().layers()[1].rows[y][x]=='=';
+    }else lightsMounted&=std::fabs(light.z+1.05f)<.01f;
+   }
+   result&=check(lightsMounted,"Utility Junction lamps attach to a deck underside or the roof");
+   int supportedBridgePosts=0;
+   for(const auto& s:game.world().structures())if(s.material==2&&std::fabs(s.bottom+9.f)<.01f&&std::fabs(s.top+4.25f)<.01f){
+    float x=(s.x1+s.x2)*.5f,y=(s.y1+s.y2)*.5f;int cellX=int(std::floor(x)),cellY=int(std::floor(y));
+    const auto& ground=game.world().layers()[0].rows;
+    const auto& bridge=game.world().layers()[1].rows;
+    if(std::fabs(x-7.5f)<.01f||std::fabs(x-20.f)<.01f)
+     if(std::fabs(y-7.5f)<.01f&&ground[cellY][cellX]!='#'&&bridge[cellY][cellX]=='='&&s.x2-s.x1<.4f&&s.y2-s.y1<.4f)++supportedBridgePosts;
+   }
+   result&=check(supportedBridgePosts==2,"Utility Junction bridge supports reach the floor below");
+   result&=check(game.world().fits(14.f,8.6f,-9.f,1.7f),"Utility Junction keeps a clear concourse sightline beneath the bridge");
+   bool clearBridge=true;for(const auto& f:game.world().fixtures())if(f.model==13&&f.position.y>8.f&&f.position.y<9.f&&f.position.x>11.f&&f.position.x<16.f)clearBridge=false;
+   result&=check(clearBridge,"Utility Junction bridge walking lane stays clear of cabinets");
+   bool firstDrive=false,secondDrive=false;int drives=0;
+   for(const auto& f:game.world().fixtures())if(f.model==12&&f.solid){
+    bool grounded=std::fabs(game.world().floorHeight(f.position.x,f.position.y)+9.f)<.01f&&f.base==0;
+    firstDrive|=grounded&&length(f.position-Vec2{13.6f,16.42f})<.02f;
+    secondDrive|=grounded&&length(f.position-Vec2{18.3f,18.62f})<.02f;
+    ++drives;
+   }
+   result&=check(drives==2&&firstDrive&&secondDrive,"Utility Junction concourse equipment forms two grounded service bays");
+   bool overheadTrunk=game.world().pipes().size()==4;
+   for(const auto& pipe:game.world().pipes())if(pipe.endZ< -999.f)overheadTrunk&=pipe.z> -1.6f&&pipe.z< -1.1f;
+   result&=check(overheadTrunk,"Utility Junction services stay on a supported overhead perimeter route");
   }
   if(level==9){
    bool eastPanel=false,northShelf=false;

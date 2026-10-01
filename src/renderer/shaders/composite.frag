@@ -33,6 +33,8 @@ void main(){
  scene*=1.0-0.06*smoothstep(0.45,1.3,radius);
  if(params.underwater>0.5)scene*=vec3(.4,.8,.9);
  float vignette=clamp(params.damageFlash,0.0,1.0)*edge*.78;scene=mix(scene,scene*vec3(.45,.07,.045),vignette);
- vec3 displayScene=params.hdrScene>0.5?pow(filmic(scene*0.95),vec3(1.0/2.2)):scene;
+ // The HDR scene attachment stores linear radiance. Apply the same exposure
+ // as the headless capture path before the display transfer.
+ vec3 displayScene=params.hdrScene>0.5?pow(filmic(scene*1.05),vec3(1.0/2.2)):scene;
  vec4 h=texture(hudImage,uv);color=vec4(mix(displayScene,h.rgb,h.a),1.0);
 }
