@@ -80,7 +80,7 @@ set_target_properties(RawMetal PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
     PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/symbols/$<CONFIG>")
 target_include_directories(RawMetal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(RawMetal PRIVATE NOMINMAX UNICODE _UNICODE)
+target_compile_definitions(RawMetal PRIVATE NOMINMAX UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00)
 file(GLOB RAWMETAL_VULKAN_SDKS "C:/VulkanSDK/*")
 list(APPEND CMAKE_PREFIX_PATH ${RAWMETAL_VULKAN_SDKS})
 find_package(Vulkan REQUIRED COMPONENTS glslc)
@@ -96,7 +96,8 @@ target_include_directories(RawMetal PRIVATE "${RAWMETAL_SHADERS}")
 target_link_libraries(RawMetal PRIVATE user32 gdi32 winmm cabinet bcrypt Vulkan::Vulkan webpdecoder)
 if(MSVC)
   target_link_libraries(RawMetal PRIVATE delayimp)
-  target_link_options(RawMetal PRIVATE /DELAYLOAD:vulkan-1.dll)
+  target_link_options(RawMetal PRIVATE /DELAYLOAD:vulkan-1.dll "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/app.manifest")
+  set_property(TARGET RawMetal APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest")
 endif()
 add_custom_command(TARGET RawMetal POST_BUILD
     COMMAND $<TARGET_FILE:RawMetalAssetPacker> --verify-exe "${CMAKE_CURRENT_SOURCE_DIR}" "$<TARGET_FILE:RawMetal>"
