@@ -161,6 +161,7 @@ public:
     static bool testStreaming();
     static bool testCampaignMaps();
     void updateMechanisms(float dt);
+    std::string_view actorCaption()const;
     static bool testMechanisms();
 
     float weaponKick() const { return m_weaponKick; }
@@ -315,7 +316,9 @@ private:
     int customMenuLogicalIndex(int row)const{return m_customMenuOffset+row;}
     int m_level=0;
     struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
-    std::array<ChunkState,MaxChunks> m_chunks;
+    // Chunk storage outlives a frame and can be large; keep it off the native
+    // stack, including nested save previews and campaign validation scenes.
+    std::vector<ChunkState> m_chunks=std::vector<ChunkState>(MaxChunks);
     void storeChunk();
     void crossChunkBoundary();
     void ensureChunk(int level);

@@ -61,6 +61,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  deriveSurfaceNormal(m_serviceCeiling,.75f);m_serviceCeiling.glossStrength=.24f;
  m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);m_mutantTexture=loadTexture(273);
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
+ for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
+ m_glassTexture={1,1,{0x203c5a58u}};m_glassTexture.transparent=true;m_glassTexture.glossStrength=.55f;
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
  for(int species=0;species<4;++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=species==int(CreatureKind::Huntsman)||species==int(CreatureKind::Wasp);const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
   for(auto&pixel:variant.pixels){float intensity=float(std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u}))/255.f;auto r=std::uint32_t(tr*intensity),g=std::uint32_t(tg*intensity),b=std::uint32_t(tb*intensity);pixel=(pixel&0xff000000u)|(r<<16)|(g<<8)|b;}prepareDecal(variant);
@@ -378,6 +380,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(game.audioMuted())text(10,43,"AUDIO MUTED / M",muted);
  else if(!game.musicEnabled())text(10,43,"MUSIC OFF / N",muted);
  if(game.pickupNoticeTime()>0){wornPanel(cx-88,m_height-81,176,16,true);text(cx-79,m_height-76,game.pickupNotice().c_str(),paper);}
+ if(auto caption=game.actorCaption();!caption.empty()){int width=std::min(m_width-24,int(caption.size())*6+16);rect(cx-width/2,m_height-108,width,20,0xff080b09u);text(cx-width/2+8,m_height-102,std::string(caption).c_str(),paper);}
  else if(auto pickup=game.nearbyPickup()){
   const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   wornPanel(cx-88,m_height-81,176,16,true);text(cx-79,m_height-76,message,amber);

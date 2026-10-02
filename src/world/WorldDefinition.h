@@ -24,6 +24,7 @@ struct ChunkDefinition {
     int residencyGroup=-1;
     FloorMaterial floorMaterial=FloorMaterial::Industrial;
     MusicCue musicCue=MusicCue::Default;
+    float spawnYaw=.08f,spawnPitch=0;
 };
 inline constexpr int CampaignChunkCount=32;
 inline constexpr int AshfallChunkCount=15;

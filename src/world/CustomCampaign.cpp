@@ -83,6 +83,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()>=18)map->definition.residencyGroup=integer(f,17,"residency group");
    if(f.size()>=19){int style=integer(f,18,"floor material");if(style<0||style>1)throw std::runtime_error("invalid floor material");map->definition.floorMaterial=FloorMaterial(style);}
    if(f.size()>=20){int cue=integer(f,19,"music cue");if(cue<0||cue>1)throw std::runtime_error("invalid music cue");map->definition.musicCue=MusicCue(cue);}
+   if(f.size()>=21)map->definition.spawnYaw=number(f,20,"spawn yaw");
+   if(f.size()>=22)map->definition.spawnPitch=number(f,21,"spawn pitch");
   }else if(tag=="SIGN"){
    if(f.size()!=11)throw std::runtime_error("malformed SIGN record");auto map=mapAt(maps,f);
    AuthoredSign sign;sign.position={number(f,2,"sign x"),number(f,3,"sign y")};sign.z=number(f,4,"sign z");
@@ -132,6 +134,23 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()<17||f[2].empty()||f[3].empty())throw std::runtime_error("malformed TIMED_SEQUENCE record");auto map=mapAt(maps,f);
    int tick=integer(f,14,"sequence sound");if(tick<0||tick>=int(Sound::Count))throw std::runtime_error("invalid sequence sound");
    map->timedSequences.push_back({stateId(decode(f[2])),stateId(decode(f[3])),number(f,4,"sequence x1"),number(f,5,"sequence y1"),number(f,6,"sequence x2"),number(f,7,"sequence y2"),number(f,8,"sequence bottom"),number(f,9,"sequence top"),integer(f,10,"sequence duration"),integer(f,11,"sequence finish time"),integer(f,12,"sequence sound interval"),integer(f,13,"sequence sound cutoff"),Sound(tick),number(f,15,"sequence gain"),number(f,16,"sequence pitch")});
+   if(f.size()>17)map->timedSequences.back().loop=boolean(f,17,"sequence loop");
+  }else if(tag=="ACTOR"){
+   if(f.size()!=8)throw std::runtime_error("malformed ACTOR record");auto map=mapAt(maps,f);int kind=integer(f,3,"actor visual");if(kind<0||kind>3||f[2].empty())throw std::runtime_error("invalid actor visual or timer");
+   if(integer(f,7,"actor index")!=int(map->actorTracks.size()))throw std::runtime_error("actor indices must be sequential");
+   map->actorTracks.push_back({stateId(decode(f[2])),ActorVisual(kind),number(f,4,"actor scale"),boolean(f,5,"actor loop"),boolean(f,6,"actor tool"),{}});
+  }else if(tag=="ACTOR_HEALTH"){
+   if(f.size()!=6||f[4].empty()||f[5].empty())throw std::runtime_error("malformed ACTOR_HEALTH record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("health has no actor");auto& t=map->actorTracks[size_t(index)];t.health=integer(f,3,"actor health");t.damageState=stateId(decode(f[4]));t.deadState=stateId(decode(f[5]));
+  }else if(tag=="ACTOR_SUSPEND"){
+   if(f.size()!=4)throw std::runtime_error("malformed ACTOR_SUSPEND record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("suspension has no actor");map->actorTracks[size_t(index)].suspensionTop=number(f,3,"suspension top");
+  }else if(tag=="ACTOR_PLATFORM"){
+   if(f.size()!=6)throw std::runtime_error("malformed ACTOR_PLATFORM record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("platform has no actor");auto& t=map->actorTracks[size_t(index)];t.platform=true;t.footprint={number(f,3,"platform width"),number(f,4,"platform depth")};t.thickness=number(f,5,"platform thickness");
+  }else if(tag=="ACTOR_KEY"){
+   if(f.size()!=10)throw std::runtime_error("malformed ACTOR_KEY record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("actor key has no actor");
+   map->actorTracks[size_t(index)].keys.push_back({integer(f,3,"actor time"),{number(f,4,"actor x"),number(f,5,"actor y")},number(f,6,"actor z"),number(f,7,"actor yaw"),integer(f,8,"actor clip"),number(f,9,"actor phase")});
+  }else if(tag=="SEQUENCE_CUE"){
+   if(f.size()!=10)throw std::runtime_error("malformed SEQUENCE_CUE record");auto map=mapAt(maps,f);int sound=integer(f,4,"cue sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid cue sound");
+   map->sequenceCues.push_back({stateId(decode(f[2])),integer(f,3,"cue time"),Sound(sound),{number(f,5,"cue x"),number(f,6,"cue y")},number(f,7,"cue gain"),number(f,8,"cue pitch"),decode(f[9])});
   }else if(tag=="HAZARD"){
    if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});

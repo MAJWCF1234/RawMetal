@@ -57,6 +57,25 @@ void container(Map& m,float x,float y,float floor,bool open=false,int material=1
  for(float yy:{y,y+5.86f})wall(m,x-.04f,yy,x+3.06f,yy+.12f,floor+2.7f,floor+2.86f,12);
 }
 void floorLine(Map& m,float x1,float y1,float x2,float y2,float floor,int material=14){wall(m,x1,y1,x2,y2,floor+.007f,floor+.015f,material);}
+void actor(Map& m,const char* timer,ActorVisual visual,float scale,std::initializer_list<ActorKey> keys,bool loop=false,bool tool=false){m.actorTracks.push_back({stateId(timer),visual,scale,loop,tool,keys});}
+void cue(Map& m,const char* timer,int time,Sound sound,Vec2 position,const char* caption="",float gain=1){m.sequenceCues.push_back({stateId(timer),time,sound,position,gain,1,caption});}
+void machineryClock(Map& m,const char* timer,int period){TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(std::string(timer)+"_cycled");s.durationMs=period;s.finishAtMs=period;s.soundIntervalMs=0;s.loop=true;m.timedSequences.push_back(s);}
+void handCart(Map& m,float x,float y,float floor){
+ wall(m,x-.42f,y-.6f,x+.42f,y+.6f,floor+.2f,floor+.29f,12);
+ for(float xx:{x-.47f,x+.37f})for(float yy:{y-.4f,y+.4f})m.pipes.push_back({{xx,yy},{xx+.1f,yy},floor+.14f,.14f,floor+.14f,1});
+ for(float xx:{x-.38f,x+.34f})wall(m,xx,y+.56f,xx+.04f,y+.6f,floor+.27f,floor+1.02f,12);
+ wall(m,x-.38f,y+.56f,x+.38f,y+.6f,floor+.97f,floor+1.02f,12);
+}
+void forklift(Map& m,float x,float y,float floor){
+ wall(m,x-.8f,y-.8f,x+.8f,y+1.f,floor+.32f,floor+.8f,12);
+ wall(m,x-.65f,y+.4f,x+.65f,y+1.f,floor+.8f,floor+1.1f,11);
+ for(float xx:{x-.9f,x+.7f})for(float yy:{y-.45f,y+.65f})m.pipes.push_back({{xx,yy},{xx+.2f,yy},floor+.32f,.32f,floor+.32f,1});
+ wall(m,x-.32f,y-.15f,x+.32f,y+.45f,floor+.8f,floor+.9f,8);wall(m,x-.32f,y+.35f,x+.32f,y+.45f,floor+.9f,floor+1.45f,8);
+ for(float xx:{x-.65f,x+.57f})for(float yy:{y-.65f,y+.8f})wall(m,xx,yy,xx+.08f,yy+.08f,floor+.78f,floor+2.1f,12);
+ wall(m,x-.75f,y-.7f,x+.75f,y+.95f,floor+2.1f,floor+2.2f,12);
+ for(float xx:{x-.6f,x+.45f})wall(m,xx,y-.95f,xx+.15f,y-.8f,floor+.05f,floor+2.65f,12);
+ for(float xx:{x-.6f,x+.45f})wall(m,xx,y-2.15f,xx+.15f,y-.8f,floor+.09f,floor+.16f,12);
+}
 void intakeBay(Map& m){
  for(float x:{6.f,17.6f})wall(m,x,22.8f,x+.4f,23.2f,-25,-18.5f,12);
  wall(m,6,22.8f,18,23.2f,-19,-18.5f,12);
@@ -136,6 +155,7 @@ void observationWindow(Map& m,float x,float y1,float y2,float floor){
  wall(m,x,y1,x+.12f,y2,floor,floor+.85f,3);
  wall(m,x,y1,x+.12f,y2,floor+2.65f,floor+3.3f,3);
  for(float y=y1;y<y2;y+=2.f)wall(m,x,y,x+.12f,y+.08f,floor+.85f,floor+2.65f,2);
+ wall(m,x+.045f,y1+.08f,x+.065f,y2,floor+.85f,floor+2.65f,17);
 }
 void climb(Map& m,float bottom,float top){
  float middle=(bottom+top)*.5f;
@@ -184,6 +204,9 @@ std::shared_ptr<const Map> make(int level){
   terminal(m,{20.8f,13},"LOADING SCHEDULE","SHIFT 02 / RECEIVING 01-03 ACTIVE.","RESTRICTED CARGO: MANIFEST AUTHORIZATION.");
   board(m,4,8,-9.7f,"PERSONNEL ROUTE","AUX BRAKE / WEST MACHINERY WALKWAY",3.8f);
   cargo(m,20,6,-12);cargo(m,20,8,-12,false);
+  handCart(m,19,11,-12);
+  board(m,19,3,-9.8f,"FREIGHT SAFETY","KEEP CLEAR / NO PASSENGERS ON LOADS",3.f);
+  for(float yy:{18.f,21.f})m.fixtures.push_back({7,{2,yy},0,1.5f,.65f,2.f,-kPi*.5f,true});
   for(float y:{3.f,7.f,11.f})m.pipes.push_back({{1.1f,y},{6.8f,y},-8.85f,.08f});
   m.fixtures.push_back({6,{10.5f,5.f},0,1.8f,.65f,.9f,0,true});
   m.pickupSpawns.push_back({{11,5.7f},PickupKind::Ammo,-12});
@@ -217,19 +240,57 @@ std::shared_ptr<const Map> make(int level){
   m.cargoLift={9.5f,10,14.5f,15,-19,-12,1.f,stateId("freight_call"),stateId("freight_release"),stateId("freight_lift_mm"),stateId("freight_lift_down"),stateId("freight_platform_arrived"),stateId("freight_descended")};
   m.lights.clear();m.lights.push_back({{12,6},-9.1f});m.lights.push_back({{19,12},-9.1f});
   for(float x:{9.25f,14.7f})wall(m,x,9,x+.12f,16,-25,0,2);
-  m.doors.back().requireState=stateId("freight_descended");
+ m.doors.back().requireState=stateId("freight_descended");
+ machineryClock(m,"lift_distant_motion",12000);
+ actor(m,"lift_distant_motion",ActorVisual::Huntsman,1.5f,{{0,{6,18},-16,0},{2000,{6,18},-16,0},{3600,{17,18},-16,0},{12000,{17,18},-16,0}});
+ deck(m,-16,6,17,18,19);cargo(m,17,18,-16);
   {Door gate{9.5f,14.5f,10.f,0,false,false,false,13.f};gate.requireState=stateId("freight_release");m.doors.insert(m.doors.begin(),gate);}
   break;
  case 13:
+  m.definition.playerStart={7.6f,9.5f};m.definition.spawnYaw=.69f;m.definition.spawnPitch=-62.f;
   board(m,12,6.5f,-17.9f,"RECEIVING 01","UNLOADING / KEEP CLEAR",6.4f);
-  m.timedSequences.push_back({stateId("freight_worker_ms"),stateId("freight_worker_dead"),0,0,24,9,-22,100});
+  m.timedSequences.push_back({stateId("receiving_worker_encounter_ms"),stateId("receiving_worker_encounter_complete"),6.4f,8,8.5f,10,-19.5f,-18.6f,30000,22000,0,0});
+  actor(m,"receiving_worker_encounter_ms",ActorVisual::Worker,1.7f,{
+   {0,{16.2f,16},-25,kPi,0,0},{3000,{16.2f,16},-25,kPi,0,1},
+   {4000,{16.2f,16},-25,kPi,5,0},{5000,{16.2f,16},-25,kPi,5,1},
+   {5100,{16.2f,16},-25,kPi,2,0},{6400,{16.2f,16},-25,kPi,2,1},
+   {6500,{16.2f,16},-25,kPi,1,0},{8500,{16.2f,17.5f},-25,kPi,1,1},
+   {10000,{16.2f,17.5f},-25,kPi,0,0},{11000,{16.2f,17.5f},-25,kPi*.5f,3,0},
+   {12500,{17,18.1f},-25,kPi*.5f,3,1},{12600,{17,18.1f},-25,kPi,2,0},
+   {14500,{17,18.1f},-25,kPi,2,1},{14501,{17,18.1f},-25,kPi,3,0},
+   {17000,{17.3f,18.3f},-25,kPi,3,1},{17001,{17.3f,18.3f},-25,kPi,2,0},
+   {18500,{17.3f,18.3f},-25,kPi,2,1},{18501,{17.3f,18.3f},-25,kPi,4,0},
+   {22000,{17.8f,19},-25,kPi,4,1},{30000,{17.8f,19},-25,kPi,4,1}},false,true);
+  actor(m,"receiving_worker_encounter_ms",ActorVisual::Wasp,1.15f,{
+   {0,{15,13},-23.4f,0},{3900,{16.2f,15},-23.5f,0},{5600,{16.2f,16},-23.8f,0},
+   {6400,{14.6f,16.4f},-24.9f,0,4},{9500,{14.6f,16.4f},-24.9f,0,4},
+   {15000,{16.3f,17.8f},-23.7f,0},{17000,{17.1f,18.1f},-23.8f,0},
+   {18500,{15.6f,19},-24.96f,0,4},{30000,{15.6f,19},-24.96f,0,4}});
+  actor(m,"receiving_worker_encounter_ms",ActorVisual::Wasp,1.15f,{
+   {0,{21,20},-23,0},{9500,{21,20},-23,0},{11000,{16.3f,17.5f},-23.7f,0},
+   {14500,{17.1f,18.1f},-23.9f,0},{20500,{17.5f,18.8f},-24.2f,0},
+   {23000,{17.8f,19},-24.5f,0},{26000,{22,22},-22.7f,0},{30000,{25,23},-22.7f,0}});
+  for(int time:{100,1400,2800})cue(m,"receiving_worker_encounter_ms",time,Sound::Metal1,{16.2f,16});
+  cue(m,"receiving_worker_encounter_ms",3000,Sound::Hurt,{16.2f,16},"WORKER: GET BACK!",1.5f);
+  cue(m,"receiving_worker_encounter_ms",6100,Sound::PunchHit,{16.2f,16});
+  cue(m,"receiving_worker_encounter_ms",6500,Sound::WaspDeath,{14.6f,16.4f});
+  cue(m,"receiving_worker_encounter_ms",11000,Sound::Hurt,{16.2f,17.5f},"WORKER: NO! GET OFF ME!",1.5f);
+  cue(m,"receiving_worker_encounter_ms",15000,Sound::WaspAttack,{17,18.1f});
+  cue(m,"receiving_worker_encounter_ms",18000,Sound::PunchHit,{17,18.1f});
+  cue(m,"receiving_worker_encounter_ms",18500,Sound::WaspDeath,{15.6f,19});
+  cue(m,"receiving_worker_encounter_ms",20000,Sound::Hurt,{17.8f,19},"WORKER: SOMEBODY...",1.5f);
   // First receiving balcony, above unloading lanes. The descent folds back
   // along the west side instead of allowing a straight drop into the scene.
   deck(m,-19,1,4,8,10);m.stairs.push_back({3,9,6,18,-25,-19,32,true,false});
   for(float x:{8.f,18.f})container(m,x,7,-25,x<10);
-  office(m,18.5f,18.5f,-25,"RECEIVING / WORKER NOTE","THEY ARE STILL DOWN HERE. KEEP THE RADIO ON.","WAREHOUSE INTAKE: FOLLOW THE WEST SERVICE AISLE.");
+  office(m,20.4f,20,-25,"RECEIVING / WORKER NOTE","THEY ARE STILL DOWN HERE. KEEP THE RADIO ON.","WAREHOUSE INTAKE: FOLLOW THE WEST SERVICE AISLE.");
   m.clutterSpawns.push_back({1,{17.5f,17.5f},-25});m.clutterSpawns.push_back({3,{19.7f,18.2f},-25});
-  m.creatureSpawns={{CreatureKind::Wasp,{18,17},-23.5f},{CreatureKind::Wasp,{20,18},-23.5f}};
+  cargo(m,18.7f,17.5f,-25);cargo(m,17.4f,21.2f,-25,false);
+  wall(m,18.9f,20,21.7f,20.12f,-25,-24.1f,10);
+  m.clutterSpawns.push_back({1,{18.8f,19.4f},-25});m.clutterSpawns.push_back({2,{20.8f,19.5f},-25});
+  m.pipes.push_back({{17.4f,19.2f},{18.1f,19.5f},-24.97f,.023f});
+  terminal(m,{20.8f,21},"WORKER / HANDWRITTEN ROUTE","I HAVE BEEN HERE SINCE SHIFT CHANGE. TWO DAYS.","WEST SERVICE STAIRS / RADIO CALLS: STILL NO ANSWER.");
+  m.lights.push_back({{16.5f,16.5f},-21.8f});
   m.pickupSpawns.push_back({{18.5f,20.5f},PickupKind::Health,-25});
   break;
  case 14:
@@ -271,12 +332,17 @@ std::shared_ptr<const Map> make(int level){
   if(level==18)deck(m,-13,0,9,11,24);
   if(level==19)climb(m,-13,-7);
   if(level==16){office(m,7.5f,14,-25,"WAREHOUSE / OPERATIONS","DO NOT SEND ANYTHING TO RECEIVING.","THEY ARE NOT ANSWERING.");m.fixtures.push_back({6,{7.5f,9.5f},0,2.4f,.9f,1.1f,kPi*.5f,true});}
+  if(level==16){forklift(m,20,17,-25);terminal(m,{21,20},"FORKLIFT / SHIFT REPORT","DRIVE MOTOR LEFT RUNNING. BATTERY EMPTY.","OPERATOR DID NOT CLOCK OUT.");}
+  if(level==17){machineryClock(m,"warehouse_car",26000);actor(m,"warehouse_car",ActorVisual::Cargo,1.f,{{0,{12,11},-25,0},{4000,{12,11},-25,0},{12000,{12,11},-7,0},{16000,{12,11},-7,0},{26000,{12,11},-25,0}},true);m.actorTracks.back().platform=true;m.actorTracks.back().footprint={3,3};m.actorTracks.back().suspensionTop=1;
+   for(float xx:{10.4f,13.4f})wall(m,xx,9.4f,xx+.2f,9.6f,-25,1,12);wall(m,10.4f,9.4f,13.6f,11.2f,.8f,1.1f,12);
+   board(m,12,16,-21.8f,"WAREHOUSE CARGO LIFT","AUTOMATIC INVENTORY TRANSFER",3.f);}
   // Tall aisle-end labels remain readable from the opposite rack balcony.
   board(m,3.35f,4.8f,-17.7f,level==16?"A / INDUSTRIAL PARTS":level==17?"C / CHEMICAL INVENTORY":level==18?"D / RESTRICTED FREIGHT":"E / LONG TERM STORAGE","BLOCK DIRECTORY / UPPER WALK",2.6f);
   if(level==16){bench(m,7,19,-25);terminal(m,{7,21},"WAREHOUSE / BREAK CORNER","RADIO CHECK 02:14 / NO REPLY FROM RECEIVING.","DO NOT USE THE FREIGHT AISLES FOR EVACUATION.");}
   if(level==17){m.fixtures.push_back({14,{16.1f,18.2f},0,1.3f,1.35f,2.f,0,true});board(m,20,20,-22.7f,"CHEMICAL HOLD","SEALED STOCK / NO TRANSFER",2.5f);}
   if(level==18){container(m,2,17,-25,true,7);terminal(m,{3.5f,19},"RESTRICTED / SEALED MANIFEST","CONTAINMENT HARDWARE / SAMPLE HANDLING.","CONTENTS NOT FOR LOCAL INSPECTION.",6);}
-  if(level==19){terminal(m,{12,22},"UPPER STORAGE / BREACH","RESTRICTED FREIGHT: MANIFEST CONTROL.","OFFICES ABOVE THE INTAKE END.",18);m.clutterSpawns.push_back({3,{13,22},-7});}
+  if(level==19){terminal(m,{12,22},"UPPER STORAGE / BREACH","RESTRICTED FREIGHT: MANIFEST CONTROL.","OFFICES ABOVE THE INTAKE END.",18);m.clutterSpawns.push_back({3,{13,22},-7});board(m,19,6,-4.8f,"E BLOCK","LONG TERM STORAGE",3.f);}
+  if(level==18){machineryClock(m,"upper_rack_noise",23000);cue(m,"upper_rack_noise",7000,Sound::JunkMetal,{19,14},"",.9f);cue(m,"upper_rack_noise",16000,Sound::SpiderCall,{19,14},"",.5f);for(float yy:{12.f,13.f,14.f})wall(m,18,yy,21,yy+.15f,-7,-6.85f,10);board(m,19.5f,16,-4.7f,"RACK ACCESS CLOSED","OVERHEAD STOCK DISPLACED",2.7f);}
   if(level==17||level==18)m.creatureSpawns={{CreatureKind::Huntsman,{20,11},entry},{CreatureKind::Wasp,{12,18},entry+2}};
   m.pickupSpawns.push_back({level==19?Vec2{21,12}:Vec2{12,3},PickupKind::Ammo,entry});
   m.lights.clear();for(float z:{-22.5f,-16.5f,-10.5f})for(float y:{6.f,14.f})for(float x:{6.6f,16.4f}){
@@ -300,13 +366,20 @@ std::shared_ptr<const Map> make(int level){
    wall(m,14.5f,y,22.8f,y+.12f,-7,-6.15f,3);
    wall(m,14.5f,y,22.8f,y+.12f,-4.4f,-3.4f,3);
    for(float x:{14.5f,18.5f,22.7f})wall(m,x,y,x+.08f,y+.12f,-6.15f,-4.4f,2);
+   wall(m,14.6f,y+.045f,22.7f,y+.065f,-6.15f,-4.4f,17);
   }
   bench(m,6,19,-7);
+  m.fixtures.push_back({6,{4.5f,12},0,2.4f,.75f,.9f,kPi*.5f,true});
+  wall(m,4.25f,11.9f,4.75f,12.4f,-6.1f,-5.86f,2);wall(m,4.32f,12,4.68f,12.25f,-5.86f,-5.82f,15);
+  m.clutterSpawns.push_back({0,{4.6f,12.4f},-6.1f});
   terminal(m,{6,16},"MANIFEST / MISSED CALLS","RECEIVING: 02:14 / 02:17 / 02:21 / NO ANSWER.","EMPLOYEE TRANSIT LOG: PLATFORM 3.");
   if(level==21){office(m,18,18,-7,"MANIFEST / ROUTING SHUTTERS","TRANSFER YARD: ROUTING AUTHORIZATION.","E / RELEASE THE DOWNSTREAM SHUTTERS.",stateId("freight_routing"),true);m.doors.back().requireState=stateId("freight_routing");}
   m.pickupSpawns.push_back({{6,18},PickupKind::Health,-7});
   break;
  case 22:
+  machineryClock(m,"transfer_belts",14000);
+  for(float y:{7.f,15.f})actor(m,"transfer_belts",ActorVisual::Cargo,.7f,{{0,{2,y+.35f},-4.7f,0},{4000,{8,y+.35f},-4.7f,0},{6500,{8,y+.35f},-4.7f,0},{12000,{21,y+.35f},-4.7f,0},{14000,{2,y+.35f},-4.7f,0}},true);
+  cue(m,"transfer_belts",100,Sound::Machine,{8,7},"",.35f);
   // Three stair flights carry the player down alongside live conveyor spines.
   m.stairs={{3,4,6,13,-13,-7,32,true,false},{8,13,17,16,-19,-13,32,false,false},{17,18,20,23,-25,-19,32,true,false}};
   deck(m,-13,3,13,11,16);deck(m,-19,17,13,20,20);
@@ -314,6 +387,12 @@ std::shared_ptr<const Map> make(int level){
   terminal(m,{22,21},"TRANSFER / CONVEYOR ROUTE","SORTING FLOOR BELOW / FOLLOW AMBER CLEARANCE.","DEPOT AND PLATFORMS: SOUTH RAIL SPUR.");
   break;
  case 23:
+  machineryClock(m,"sorting_crane",18000);
+  actor(m,"sorting_crane",ActorVisual::Cargo,1.2f,{{0,{13,8},-19,0},{4000,{13,8},-19,0},{10000,{13,17},-19,.35f},{14000,{13,17},-19,.35f},{18000,{13,8},-19,0}},true);
+  m.actorTracks.back().suspensionTop=-17.5f;
+  wall(m,12.8f,5,13.2f,21,-17.5f,-17.2f,12);
+  for(float y:{5.f,21.f})wall(m,12.8f,y,13.2f,y+.3f,-25,-17.2f,12);
+  cue(m,"sorting_crane",5000,Sound::LiftCreak,{13,12},"",.5f);
   board(m,13,20,-22.3f,"SORTING","DEPOT / PLATFORM 3",3.f);
   cargo(m,3,12,-25);cargo(m,5,12,-25,false);
   m.compactors.push_back({7,7,11,15,-25,-22.4f,8,stateId("sorting_gate_stop")});
@@ -322,6 +401,14 @@ std::shared_ptr<const Map> make(int level){
   m.pickupSpawns.push_back({{19,10},PickupKind::Ammo,-25});
   break;
  case 24:
+  machineryClock(m,"yard_cradle",20000);
+  actor(m,"yard_cradle",ActorVisual::Cargo,1.f,{{0,{4,16},-24.7f,0},{3000,{4,16},-24.7f,0},{10000,{11,16},-24.7f,0},{13000,{11,16},-24.7f,0},{20000,{4,16},-24.7f,0}},true);
+  m.actorTracks.back().platform=true;m.actorTracks.back().footprint={2.2f,2.2f};
+  m.actorTracks.back().suspensionTop=-17.7f;
+  wall(m,2.8f,15.9f,12.2f,16.1f,-18,-17.7f,12);
+  for(float x:{2.8f,12.f})wall(m,x,14.8f,x+.2f,15,-25,-17.7f,12);
+  for(float x:{2.8f,12.f})wall(m,x,14.8f,x+.2f,16.1f,-18,-17.7f,12);
+  board(m,5,18.5f,-22.5f,"MAINTENANCE CRADLE","AUTOMATIC TRANSFER / STAND CLEAR",2.4f);
   for(float x:{7.f,17.f})rail(m,x,1,23,-25);
   container(m,2,6,-25,false);office(m,20,18,-25,"TRANSFER / SIGNAL ROUTING","DEPOT / PLATFORMS / DEEP FREIGHT.","PLATFORM 3: SERVICE ACCESS ONLY.");
   wall(m,8,6,17,6.4f,-9,-8.7f,2);
@@ -339,6 +426,7 @@ std::shared_ptr<const Map> make(int level){
   for(float x:{9.f,16.f})m.structures.push_back({x,4,x+.07f,21,-25,-23.95f,true,2});
   m.fixtures.push_back({8,{22.7f,12},1.f,.7f,.15f,1.f,-kPi*.5f,false});
   if(level==25)terminal(m,{12,3},"PLATFORM 3 / DEPARTURES","TRAIN 27 / ARRIVED 02:13.","NO DEPARTURE RECORDED / TRACK CLEAR.");
+  if(level==25){m.fixtures.push_back({8,{1.25f,14},1.1f,.55f,.12f,.8f,-kPi*.5f,false});terminal(m,{2,14},"PLATFORM / EMERGENCY PHONE","DISPATCH LINE OPEN / NO OPERATOR RESPONSE.","HOLD THE PLATFORM. DO NOT ENTER THE TRACK.");board(m,20,13,-22.5f,"DEPTHWORKS EMPLOYEE TRANSIT","YOUR SHIFT / YOUR CONNECTION",3.f);}
   else {terminal(m,{12,18},"PLATFORM / SECURITY RECORD","02:12:51 ... 02:19:04 / BLOCK MISSING.","EMPLOYEE TRANSIT: ROLLING STOCK DEPOT.");for(int i=0;i<6;++i)m.clutterSpawns.push_back({i%4,{11.f+float(i%3),19.f+float(i/3)},-25});}
   m.lights.clear();for(float y:{3.f,12.f,21.f})m.lights.push_back({{12,y},-18.25f});
   for(float x:{9.15f,15.75f})floorLine(m,x,2,x+.10f,22,-25);
@@ -384,6 +472,9 @@ std::shared_ptr<const Map> make(int level){
   m.definition.ambient=.40f;
   break;
  case 29:
+  machineryClock(m,"depot_roof_movement",24000);actor(m,"depot_roof_movement",ActorVisual::Huntsman,1.5f,{{0,{19,6},-16,0},{6000,{19,6},-16,0},{8500,{19,14},-16,kPi*.5f},{11000,{19,17},-19,kPi*.5f},{24000,{19,17},-19,kPi*.5f}});
+  wall(m,18.6f,5.7f,19.4f,14.5f,-16.2f,-16,12);for(float yy:{6.f,14.f})wall(m,19.3f,yy,19.5f,yy+.15f,-25,-16,12);
+  cue(m,"depot_roof_movement",7000,Sound::JunkMetal,{19,12},"",.8f);
   deck(m,-19,1,4,7,22);deck(m,-19,17,4,23,22);
   m.stairs.push_back({3,13,6,22,-25,-19,32,true,false});
   for(float x:{7.f,17.f})rail(m,x,1,23,-25);
@@ -405,7 +496,10 @@ std::shared_ptr<const Map> make(int level){
    m.fixtures.push_back({13,{2,6},0,.9f,.5f,2.2f,-kPi*.5f,true});
   }
   else {wall(m,3,7,9,9,-25,-23.3f,3);wall(m,15,13,21,15,-25,-23.2f,3);
-   terminal(m,{12,21},"DEEP JUNCTION / SUBSTATION","FREIGHT MAIN LINE CONTINUES EAST.","POWER DISTRIBUTION: NEXT DISTRICT / ROUTE UNDER CONSTRUCTION.");
+   terminal(m,{12,21},"DEEP JUNCTION / SUBSTATION","FREIGHT MAIN LINE CONTINUES EAST.","POWER DISTRIBUTION / AUTHORIZED TECHNICIANS ONLY.");
+   for(float xx:{14.5f,15.7f,17.f})wall(m,xx,16.5f,xx+.75f,18.8f,-24.997f,-24.992f,16);
+   for(float xx:{11.3f,12.3f,13.3f})wall(m,xx,17.5f,xx+.22f,20,-24.99f,-24.98f,12);
+   Door forced{4,6,12,0,true,false,false};forced.swinging=true;forced.open=.8f;forced.opening=true;m.doors.push_back(forced);
    m.creatureSpawns={{CreatureKind::Huntsman,{18,19},-25}};
   }
   m.lights.clear();for(float y:{2.f,10.f,18.f})m.lights.push_back({{3,y},-19.45f});

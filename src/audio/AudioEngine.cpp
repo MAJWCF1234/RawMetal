@@ -57,12 +57,13 @@ AudioEngine::~AudioEngine(){
 void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  if(m_voices.size()>=48){auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop;});if(voice!=m_voices.end())m_voices.erase(voice);else return;}
  m_voices.push_back({event.sound,0,event.gain,event.pitch,1,1,event.position,event.spatial,loop,emitter});
+ m_voices.back().radius=std::max(.1f,event.radius);
  if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
 }
 void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  if(!voice.spatial){voice.left=voice.right=1;return;}
  auto delta=voice.position-game.player().pos;float distance=length(delta);
- float gain=std::pow(std::max(0.f,1-distance/17.f),2.f);
+ float gain=std::pow(std::max(0.f,1-distance/voice.radius),2.f);
  float pan=distance>.01f?dot(delta*(1/distance),Vec2{-std::sin(game.player().angle),std::cos(game.player().angle)}):0;
  pan=std::clamp(pan,-1.f,1.f); // Roundoff at full pan must never reach sqrt of a negative number.
  // Three rays and a slower occlusion envelope prevent abrupt volume pumping at corners.

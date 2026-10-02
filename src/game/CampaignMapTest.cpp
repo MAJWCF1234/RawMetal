@@ -107,6 +107,9 @@ bool Game::testMechanisms(){
   map->openEast=i<2;map->openWest=i>0;AuthoredLayerData layer;for(auto& row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
   if(i==0){map->cargoLift={8,8,12,12,0,3,1,stateId("demo_call"),stateId("demo_release"),stateId("demo_position"),stateId("demo_down"),stateId("demo_arrived"),stateId("demo_descended")};
    TimedSequence sequence;sequence.timerState=stateId("demo_timer");sequence.finishState=stateId("demo_finished");sequence.durationMs=1000;sequence.finishAtMs=500;sequence.soundIntervalMs=0;map->timedSequences.push_back(sequence);
+   TimedSequence motion;motion.timerState=stateId("demo_motion");motion.finishState=stateId("demo_cycle");motion.durationMs=4000;motion.finishAtMs=4000;motion.soundIntervalMs=0;motion.loop=true;map->timedSequences.push_back(motion);
+   ActorTrack platform;platform.timerState=motion.timerState;platform.visual=ActorVisual::Cargo;platform.scale=1;platform.keys={{0,{16,16},1,0},{2000,{20,16},1,0},{4000,{16,16},1,0}};platform.loop=true;platform.platform=true;platform.footprint={2,2};map->actorTracks.push_back(platform);
+   for(float x:{18.f,12.f}){ActorTrack target;target.timerState=motion.timerState;target.visual=ActorVisual::Wasp;target.scale=2;target.health=34;target.damageState=stateId(x>15?"far_damage":"near_damage");target.deadState=stateId(x>15?"far_dead":"near_dead");target.keys={{0,{x,6},0,0},{4000,{x,6},0,0}};map->actorTracks.push_back(target);}
   }campaign->maps.push_back(map);
  }
  Game game(campaign);check(game.chunkResident(1)&&!game.chunkResident(2),"Custom campaign uses authored residency groups without campaign map IDs");
@@ -118,6 +121,25 @@ bool Game::testMechanisms(){
  for(int i=0;i<180;++i)restored.updateMechanisms(1.f/60);
  check(restored.state("demo_descended")&&std::fabs(restored.player().z)<.01f,"Shared lift carries custom-campaign passenger to the lower landing");
  check(!game.state("freight_call")&&!game.state("freight_worker_dead"),"Engine mechanism updates create no campaign-specific state");
+ Game rider(campaign);rider.setState(stateId("demo_motion"),1);rider.updateMechanisms(0);rider.m_player.pos={16,16};rider.m_player.z=1;rider.m_player.grounded=true;
+ for(int i=0;i<60;++i)rider.updateMechanisms(1.f/60);
+ check(rider.player().pos.x>17.8f&&rider.player().pos.x<18.2f&&std::fabs(rider.player().z-1)<.01f,"Horizontal authored platform carries its passenger using shared collision");
+ check(std::fabs(rider.world().supportBelow(rider.player().pos.x,16,1)-1)<.01f&&!rider.world().fits(rider.player().pos.x,16,.85f,.1f),"Platform visible surface and solid underside agree with collision");
+ Game riderSave(campaign);check(riderSave.decodeSave(rider.encodeSave())&&std::fabs(riderSave.world().actorPose(0).position.x-rider.world().actorPose(0).position.x)<.001f,"Save/load restores platform and actor pose without restarting timeline");
+ for(int i=0;i<240;++i)rider.updateMechanisms(1.f/60);
+ check(rider.state("demo_motion")<=4000&&rider.state("demo_cycle"),"Looping machinery wraps safely and persists cycle completion");
+ ActorTrack poseTrack;poseTrack.keys={{0,{2,3},0,3.1f,0,0},{1000,{4,5},2,-3.1f,0,1},{2000,{4,5},2,-3.1f,4,1}};
+ auto halfway=sampleActor(poseTrack,500),end=sampleActor(poseTrack,9000);
+ check(std::fabs(halfway.position.x-3)<.001f&&std::fabs(halfway.z-1)<.001f&&std::fabs(halfway.phase-.5f)<.001f&&halfway.yaw>3.1f,"Actor sampler interpolates position, skeletal phase and shortest yaw path");
+ check(end.clip==4&&end.phase==1&&end.position.x==4,"Non-looping death pose remains present after sequence completion");
+ Game targets(campaign);targets.m_enemies.clear();targets.m_player.pos={8,6};targets.m_player.z=0;targets.m_player.angle=0;targets.m_player.pitch=0;targets.shoot();
+ check(targets.state("near_dead")&&!targets.state("far_damage"),"Actor hits select the nearest visible target rather than declaration order");
+ Game targetSave(campaign);check(targetSave.decodeSave(targets.encodeSave())&&targetSave.world().actorPose(2).clip==4&&std::fabs(targetSave.world().actorPose(2).position.x-12)<.001f,"Killed authored actor preserves its death position and pose through save/load");
+ auto invalid=std::make_shared<AuthoredMapData>(*campaign->maps[0]);invalid->actorTracks[0].keys[1].timeMs=0;bool rejected=false;try{World bad(0,invalid);}catch(const std::exception&){rejected=true;}check(rejected,"Malformed actor key ordering is rejected during campaign validation");
+ Game receiving;receiving.loadLevel(13,false);receiving.m_enemies.clear();receiving.m_player.pos={12,2};receiving.updateMechanisms(1.f/60);check(!receiving.state("receiving_worker_encounter_ms"),"Worker encounter waits for the actual overlook rather than starting behind the entrance");receiving.m_player.pos={7.6f,9.5f};receiving.m_player.z=-19;for(int i=0;i<400;++i)receiving.updateMechanisms(1.f/60);
+ Game receivingSave;check(receivingSave.decodeSave(receiving.encodeSave())&&receivingSave.state("receiving_worker_encounter_ms")==receiving.state("receiving_worker_encounter_ms"),"First worker encounter resumes from a saved skeletal timeline");
+ receivingSave.loadLevel(14,false);for(int i=0;i<1200;++i)receivingSave.updateMechanisms(1.f/60);
+ check(receivingSave.state("receiving_worker_encounter_complete"),"Receiving worker timeline continues across resident floor-level chunks");
  return pass;
 }
 }

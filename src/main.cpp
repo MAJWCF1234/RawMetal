@@ -121,6 +121,14 @@ __declspec(noinline) static int freightArtInspection(int W,int H){
  for(const auto&v:views){auto scene=retro::Game::mapInspection(v.p,v.yaw,v.pitch,v.level,true,v.z,true);renderer->render(scene);
   std::ofstream frame(std::string(v.name)+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
   for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+}return 0;
+}
+__declspec(noinline) static int freightActorInspection(int W,int H){
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+ for(int age:{1,4500,5700,12000,18000,23000})for(int view=0;view<2;++view){
+  auto scene=retro::Game::mapInspection(view?retro::Vec2{12.5f,13}:retro::Vec2{7.6f,9.5f},view?.7f:.69f,view?-15.f:-62.f,13,true,view?-25.f:-19.f,true);
+  scene.setState(retro::stateId("receiving_worker_encounter_ms"),age);scene.updateMechanisms(0);renderer->render(scene);
+  std::ofstream out("worker-"+std::to_string(age)+(view?"-close.ppm":"-balcony.ppm"),std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
  }return 0;
 }
 __declspec(noinline) static int campaignInspection(int W,int H,bool lockersOnly=false,bool cableLockersOnly=false){
@@ -355,6 +363,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--freight-inspection"))return freightInspection(W,H);
     if(std::wcsstr(commandLine,L"--freight-detail-inspection"))return freightDetailInspection(W,H);
     if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(W,H);
+    if(std::wcsstr(commandLine,L"--freight-actor-inspection"))return freightActorInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);
     if(std::wcsstr(commandLine,L"--waste-locker-inspection"))return campaignInspection(W,H,true);

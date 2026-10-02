@@ -96,8 +96,8 @@ void Game::loadLevel(int level,bool carry) {
     m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_world.definition().playerStart;
-    m_player.angle = 0.08f;
-    m_player.pitch = 0.0f;
+    m_player.angle = m_world.definition().spawnYaw;
+    m_player.pitch = m_world.definition().spawnPitch;
     m_player.health = 100.0f;
     m_player.ammo = 72;
     m_player.loaded = 6;
@@ -214,9 +214,22 @@ void Game::shoot() {
         if (along < bestAlong) { bestAlong = along; best = &e; }
     }
 
+    size_t bestActor=m_world.actorTracks().size();
+    for(size_t i=0;i<m_world.actorTracks().size();++i){const auto& actor=m_world.actorTracks()[i];if(!actor.health||state(actor.deadState))continue;auto pose=m_world.actorPose(i);if(pose.clip==4)continue;
+     Vec2 delta=pose.position-m_player.pos;float along=dot(delta,forward),lateral=std::fabs(delta.x*forward.y-delta.y*forward.x),rayHeight=m_player.z+m_player.eye+along*std::tan(m_player.pitch/140.f);
+     if(along<=0||along>18||along>=bestAlong||lateral>.4f+along*.018f||rayHeight<pose.z||rayHeight>pose.z+actor.scale||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,pose.position,rayHeight))continue;
+     bestAlong=along;bestActor=i;
+    }
     if(m_world.hasLift()){int joint=-1;float pitch=m_player.pitch/140.f;RagPoint direction{forward.x*std::cos(pitch),forward.y*std::cos(pitch),std::sin(pitch)};
      float distance=m_hazmat.rayHit({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction,joint);
      if(joint>=0&&distance<bestAlong&&distance<18){auto p=m_hazmat.p[joint];if(m_world.rayClear(m_player.pos,m_player.z+m_player.eye,{p.x,p.y},p.z)){m_hazmat.impulse(joint,direction*2.5f+RagPoint{0,0,.7f});sound(Sound::PunchHit,.55f,.8f);return;}}
+    }
+    if(bestActor<m_world.actorTracks().size()){
+     const auto& actor=m_world.actorTracks()[bestActor];auto pose=m_world.actorPose(bestActor);
+     int damage=state(actor.damageState)+34;setState(actor.damageState,damage);m_hitFlash=1;
+     bool killed=damage>=actor.health;
+     if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(m_world.floorHeight(pose.position.x,pose.position.y)*1000)));if(actor.visual!=ActorVisual::Worker)++m_kills;}
+     sound(actor.visual==ActorVisual::Worker?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,.8f);updateMechanisms(0);return;
     }
     if (best) {
         const float damage = bestAlong < 4.0f ? 34.0f : (bestAlong < 9.0f ? 28.0f : 21.0f);

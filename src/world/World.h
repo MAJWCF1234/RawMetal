@@ -25,7 +25,7 @@ struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSiz
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
 struct WorldLight {Vec2 position;float z;};
 // Authored overhead services, with absolute elevations. Kept above standing clearance.
-struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;};
+struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
@@ -113,6 +113,8 @@ struct AuthoredMapData {
     std::vector<AuthoredSign> signs;
     CargoLift cargoLift;
     std::vector<TimedSequence> timedSequences;
+    std::vector<ActorTrack> actorTracks;
+    std::vector<SequenceCue> sequenceCues;
 };
 struct CustomCampaign {
     std::string name;
@@ -174,6 +176,10 @@ public:
     bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
     const CargoLift& cargoLift()const{return m_cargoLift;}
     const std::vector<TimedSequence>& timedSequences()const{static const std::vector<TimedSequence> empty;return m_mapData?m_mapData->timedSequences:empty;}
+    const std::vector<ActorTrack>& actorTracks()const{static const std::vector<ActorTrack> empty;return m_mapData?m_mapData->actorTracks:empty;}
+    const ActorPose& actorPose(size_t index)const{return m_actorPoses.at(index);}
+    void setActorPose(size_t index,ActorPose pose){m_actorPoses.at(index)=pose;}
+    const std::vector<SequenceCue>& sequenceCues()const{static const std::vector<SequenceCue> empty;return m_mapData?m_mapData->sequenceCues:empty;}
     float cargoLiftHeight()const{return m_cargoLiftHeight;}
     void setCargoLiftHeight(float z){m_cargoLiftHeight=z;}
     bool insideCargoLift(float x,float y)const{return m_cargoLift.x2>m_cargoLift.x1&&x>=m_cargoLift.x1&&x<m_cargoLift.x2&&y>=m_cargoLift.y1&&y<m_cargoLift.y2;}
@@ -235,6 +241,7 @@ private:
     int m_level=0;
     WorldId m_worldId=WorldId::Campaign;
     std::shared_ptr<const AuthoredMapData> m_mapData;
+    std::vector<ActorPose> m_actorPoses;
     void loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map);
     bool m_openNorthBoundary=false,m_openSouthBoundary=false,m_openWestBoundary=false,m_openEastBoundary=false;
     std::vector<WorldProp> m_props;

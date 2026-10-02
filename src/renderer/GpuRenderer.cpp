@@ -376,16 +376,18 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  if(bytes){currentBuffer=vb.handle;vkCmdBindVertexBuffers(cmd,0,1,&currentBuffer,&offset);}
  vkCmdPushConstants(cmd,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
+ struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;};std::vector<TransparentDraw> transparentDraws;
+ auto flushTransparent=[&]{for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}if(previous!=m->transparent){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->transparent);previous=m->transparent;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
  for(auto&batch:m->batches){
-  if(batch.clear){VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
-  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto&mat=m->materials.at(cached.material);auto pipeline=mat.transparent?m->transparent:mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
+  if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
+  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto&mat=m->materials.at(cached.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
   if(currentBuffer!=vb.handle){vkCmdBindVertexBuffers(cmd,0,1,&vb.handle,&offset);currentBuffer=vb.handle;}
-  auto&mat=m->materials.at(batch.material);auto pipeline=mat.transparent?m->transparent:mat.additive?m->additive:m->opaque;
+  auto&mat=m->materials.at(batch.material);if(mat.transparent){transparentDraws.push_back({vb.handle,mat.set,batch.count,batch.start});continue;}auto pipeline=mat.additive?m->additive:m->opaque;
   if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}
   vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);
   vkCmdDraw(cmd,batch.count,1,batch.start,0);
  }
- vkCmdEndRenderPass(cmd);
+ flushTransparent();vkCmdEndRenderPass(cmd);
  if(m->surface){
   // Windowed path: leave command buffer open — present() will append the
   // composite pass and submit everything together in one async submit.
