@@ -131,7 +131,8 @@ void main(){
  float waterFresnel=0.0;
 
  if(lighting.w>0.5||light0.w+light1.w>0.0){
-  vec3 n=lighting.w>0.5?normalize(textureGrad(normalMap,sampleUV,uvDx,uvDy).xyz):vec3(0.0,0.0,1.0);
+  vec4 filteredNormal=lighting.w>0.5?textureGrad(normalMap,sampleUV,uvDx,uvDy):vec4(0.0,0.0,1.0,1.0);
+  vec3 n=normalize(filteredNormal.xyz);
   float response=0.65+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
   vertexLight*=clamp(response/lighting.z,0.6,1.4);
 
@@ -143,7 +144,8 @@ void main(){
     vec3 viewTangent=normalize(vec3(dot(eyeDirection,tangent),dot(eyeDirection,bitangent),abs(dot(eyeDirection,normal))));
     float roughness=clamp(1.0-gloss,0.18,0.96);
     vec3 dnX=dFdx(n),dnY=dFdy(n);
-    roughness=sqrt(clamp(roughness*roughness+0.35*(dot(dnX,dnX)+dot(dnY,dnY)),0.0324,1.0));
+    float normalVariance=(1.0-filteredNormal.w)/max(filteredNormal.w,0.05);
+    roughness=sqrt(clamp(roughness*roughness+normalVariance+0.35*(dot(dnX,dnX)+dot(dnY,dnY)),0.0324,1.0));
 
     if(light0.w>0.0){
      specularLight+=light0.w*dielectricSpecular(n,viewTangent,light0.xyz,roughness);
@@ -207,7 +209,8 @@ void main(){
   for(int light=0;light<4;++light){
    scatter+=shaftScattering(view.eyeYaw.xyz,worldPos,view.fogLights[light]);
   }
-  scatter=min(scatter,0.09);
+  // Keep shafts subordinate to surface lighting and architectural silhouettes.
+  scatter=min(scatter,0.045);
   result+=toLinear(vec3(0.98,0.90,0.78))*scatter*1.0;
  }
 

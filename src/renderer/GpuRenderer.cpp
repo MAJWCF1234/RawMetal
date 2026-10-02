@@ -159,7 +159,19 @@ struct GpuRenderer::Impl {
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
   std::vector<std::vector<uint8_t>> levels{bytes(t.pixels)};for(auto&level:t.mips)levels.push_back(bytes(level));upload(mat.color,t.width,t.height,VK_FORMAT_B8G8R8A8_UNORM,levels,4);
   if(!t.normalLevels.empty()){
-   levels.clear();for(auto&level:t.normalLevels){std::vector<std::array<int16_t,4>> normals;normals.reserve(level.size());for(auto n:level)normals.push_back({int16_t(std::clamp(n.x,-1.f,1.f)*32767),int16_t(std::clamp(n.y,-1.f,1.f)*32767),int16_t(std::clamp(n.z,-1.f,1.f)*32767),32767});levels.push_back(bytes(normals));}
+   // Preserve the length lost when normal-map mips normalize their average.
+   // Alpha carries that concentration, allowing GGX to filter subpixel relief
+   // without another texture or descriptor lookup.
+   levels.clear();std::vector<float> previousLengths;int previousWidth=t.width,previousHeight=t.height;
+   for(size_t mip=0;mip<t.normalLevels.size();++mip){const auto&level=t.normalLevels[mip];int mipWidth=std::max(1,t.width>>mip),mipHeight=std::max(1,t.height>>mip);
+    std::vector<float> lengths(level.size(),1.f);
+    if(mip){const auto&previous=t.normalLevels[mip-1];for(int y=0;y<mipHeight;++y)for(int x=0;x<mipWidth;++x){Point3 average{};
+     for(int j=0;j<2;++j)for(int i=0;i<2;++i){size_t index=size_t(std::min(previousHeight-1,y*2+j)*previousWidth+std::min(previousWidth-1,x*2+i));average=average+previous[index]*previousLengths[index];}
+     average=average*.25f;lengths[size_t(y*mipWidth+x)]=std::clamp(std::sqrt(average.x*average.x+average.y*average.y+average.z*average.z),0.f,1.f);
+    }}
+    std::vector<std::array<int16_t,4>> normals;normals.reserve(level.size());for(size_t i=0;i<level.size();++i){auto n=level[i];normals.push_back({int16_t(std::clamp(n.x,-1.f,1.f)*32767),int16_t(std::clamp(n.y,-1.f,1.f)*32767),int16_t(std::clamp(n.z,-1.f,1.f)*32767),int16_t(lengths[i]*32767)});}
+    levels.push_back(bytes(normals));previousLengths=std::move(lengths);previousWidth=mipWidth;previousHeight=mipHeight;
+   }
    upload(mat.normal,t.width,t.height,VK_FORMAT_R16G16B16A16_SNORM,levels,8);
   }
   if(!t.emission.empty())upload(mat.emission,t.width,t.height,VK_FORMAT_B8G8R8A8_UNORM,{bytes(t.emission)},4);

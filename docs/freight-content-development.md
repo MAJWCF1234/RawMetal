@@ -1,5 +1,8 @@
 # Freight content development — 2026-10-01
 
+The subsequent [Vulkan and freight art pass](freight-vulkan-art-pass.md) revises
+the warehouse galleries, pit, intake and shared materials described below.
+
 This development build continues the existing eight-area freight district.
 The campaign still contains 32 chunks; no maps were added. The published
 v0.6.1 release remains separate from this 0.6.2-dev iteration.

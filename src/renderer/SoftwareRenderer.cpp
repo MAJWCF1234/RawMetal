@@ -90,6 +90,13 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_wall.glossStrength=.16f;m_floor.glossStrength=.24f;
  m_pressureWall.glossStrength=.20f;m_pressureFloor.glossStrength=.32f;
  m_pressureMetal.glossStrength=.44f;m_concrete.glossStrength=.08f;
+ // Physical response is shared by every use of the imported material.
+ for(auto&[name,texture]:m_facilityTextures){
+  bool wood=name=="wood_1"||name=="wooden_crate_8";
+  bool wall=name.starts_with("wall_")&&name!="wall_box_2";
+  texture.glossStrength=wood?.06f:wall?.10f:name=="pc_1"?.20f:.32f;
+  deriveSurfaceNormal(texture,wood?.65f:wall?.8f:.45f);
+ }
 
  m_ashfallSky=loadTexture(252);if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4)m_ashfallSky.clampEdges=true;else prepareDecal(m_ashfallSky,false);
  m_terrainDirt=loadTexture(253);attachNormal(m_terrainDirt,254,true,0);
@@ -161,6 +168,10 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   return 0x58000000u|(std::uint32_t(std::clamp(32+delta,0,255))<<16)|(std::uint32_t(std::clamp(92+delta,0,255))<<8)|std::uint32_t(std::clamp(148+delta,0,255));};
 for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWater.mips)for(auto&pixel:mip)pixel=seaTint(pixel);
  m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
+ // Keep the source steel's rust, scratches and tonal variation. Compressing
+ // a dark panel into a narrow blue tint made structural beams look untextured.
+ m_framePaint=m_pressureMetal;
+ deriveSurfaceNormal(m_framePaint,.65f);m_framePaint.glossStrength=.18f;
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
  m_intakeSign=makeSign("01 / INTAKE","FREIGHT ACCESS",0xffca994du);m_processingSign=makeSign("02 / FOUNDRY","KEEP CLEAR",0xffd9984cu);
@@ -520,7 +531,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    clear(rgb(12,16,18));
    drawSky(game);
    drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level)){auto neighbor=game.chunkView(level);drawScene(neighbor,false);}
-   if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen())drawViewModel(game);m_poseReady=false;
+   if(parallel){m_animationWorker->wait();m_poseReady=true;}if(!game.titleScreen()&&!m_environmentInspection)drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
@@ -557,7 +568,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
- if(game.titleScreen())drawTitle(game);else {drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}
+ if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}}
  float ms=std::chrono::duration<float,std::milli>(std::chrono::steady_clock::now()-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
  if(directPresentation){float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;float shotKick=std::max(std::clamp(1.f-game.shotAge()/.10f,0.f,1.f)*(game.weaponKick()>.85f&&!game.unarmed()?1.f:0.f),game.damageFlash()*.65f);m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim,game.damageFlash(),shotKick);}
