@@ -133,6 +133,8 @@ std::shared_ptr<const Map> make(int level){
   for(float y:{4.f,7.f,13.f})m.fixtures.push_back({13,{1.6f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
   terminal(m,{4.5f,5},"FREIGHT / CLOCK-IN","EMPLOYEE TRANSIT / USE PERSONNEL ROUTE.","CARGO LIFTS: FOLLOW CLEARANCE MARKINGS.");
   terminal(m,{20.8f,13},"LOADING SCHEDULE","SHIFT 02 / RECEIVING 01-03 ACTIVE.","RESTRICTED CARGO: MANIFEST AUTHORIZATION.");
+  board(m,4,8,-9.7f,"PERSONNEL ROUTE","AUX BRAKE / WEST MACHINERY WALKWAY",3.8f);
+  cargo(m,20,6,-12);cargo(m,20,8,-12,false);
   for(float y:{3.f,7.f,11.f})m.pipes.push_back({{1.1f,y},{6.8f,y},-8.85f,.08f});
   m.fixtures.push_back({6,{10.5f,5.f},0,1.8f,.65f,.9f,0,true});
   m.pickupSpawns.push_back({{11,5.7f},PickupKind::Ammo,-12});
@@ -140,6 +142,12 @@ std::shared_ptr<const Map> make(int level){
  case 11:
   // Two dead main shafts remain visible around a fenced machinery route.
   deck(m,-12,1,4,6,24);deck(m,-12,18,4,23,24);deck(m,-12,6,20,18,24);
+  m.structures.push_back({6,3.9f,18,4,-12,-10.9f,true,2});
+  m.structures.push_back({5.9f,4,6,20,-12,-10.9f,true,2});
+  m.structures.push_back({18,4,18.1f,20,-12,-10.9f,true,2});
+  m.structures.push_back({6,19.9f,18,20,-12,-10.9f,true,2});
+  board(m,3.5f,15,-9.5f,"01 / AUX BRAKE","WEST PERSONNEL WALKWAY",2.f);
+  board(m,12,21,-9.5f,"AUXILIARY LIFT","LOCAL CONTROL / NEXT BAY",4.f);
   wall(m,6.5f,5,6.7f,17,-25,-9,2);wall(m,17.3f,5,17.5f,17,-25,-9,2);
   wall(m,7,5,11,11,-18.5f,-18.25f,2); // stalled freight car
   wall(m,13,6,17,6.2f,-25,-12,2);
@@ -153,6 +161,10 @@ std::shared_ptr<const Map> make(int level){
   terminal(m,{12,6},"AUXILIARY / CALL PLATFORM","03: CALL PLATFORM TO BOARDING LEVEL.","INTERLOCK: LOCAL CONTROL REQUIRED.",13,stateId("freight_call"),stateId("freight_local"));
   terminal(m,{18,6},"AUXILIARY / MANUAL DOOR RELEASE","04: RELEASE THE CAGE DOOR AFTER ARRIVAL.","BOARD THE PLATFORM TO DESCEND.",13,stateId("freight_release"),stateId("freight_platform_arrived"));
   deck(m,-19,8,15,16,24);
+  // A flush lower threshold leaves a real walk-off opening in the landing's
+  // automatic guardrail. Previously the descent ended behind a sealed rail.
+  m.stairs.push_back({10,14,14,16,-19,-19,1,true,true});
+  board(m,12,6.8f,-9.6f,"02 LOCAL > 03 CALL > 04 RELEASE","WAIT FOR PLATFORM / THEN BOARD",6.f);
   m.cargoLift={9.5f,10,14.5f,15,-19,-12,1.f,stateId("freight_call"),stateId("freight_release"),stateId("freight_lift_mm"),stateId("freight_lift_down"),stateId("freight_platform_arrived"),stateId("freight_descended")};
   m.lights.clear();m.lights.push_back({{12,6},-9.1f});m.lights.push_back({{19,12},-9.1f});
   for(float x:{9.25f,14.7f})wall(m,x,9,x+.12f,16,-25,0,2);

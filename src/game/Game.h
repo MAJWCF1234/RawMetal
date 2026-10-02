@@ -262,6 +262,7 @@ public:
     bool musicEnabled()const{return m_musicEnabled;}
     static Game validationScene(Enemy::Kind kind,float deathTime=-1,float windup=0);
     static Game stalkerInspection(int clip,float phase,int view=0,Enemy::Kind kind=Enemy::Kind::Warden);
+    static Game terminalInspection(int level,int terminal=0);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
     static Game barrelInspection(float age);
 

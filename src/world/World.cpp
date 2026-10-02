@@ -703,6 +703,12 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_cargoLift=m_mapData->cargoLift;m_cargoLiftHeight=m_cargoLift.lower;
  m_layers.reserve(m_mapData->layers.size());
+ // Boundary doors are bounded apertures. The tall hall above their frames is
+ // solid structure, not a second route over a locked door into another floor.
+ for(const auto& door:m_doors)if(door.entry||door.transfer){
+  float base=m_mapData->layers.front().elevation+door.z,top=m_mapData->definition.ceiling;
+  if(top>base+2.65f)m_structures.push_back({door.left,door.y-.14f,door.right,door.y+.14f,base+2.65f,top,false,3});
+ }
  for(const auto& source:m_mapData->layers){
   MapRows rows{};for(size_t row=0;row<rows.size();++row)rows[row]=source.rows[row];
   m_layers.push_back({source.name,source.elevation,source.thickness,rows});
@@ -1735,12 +1741,14 @@ float World::clearanceAbove(float x,float y,float feet)const{
  }
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
+ if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
  for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
 bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight-.025f&&feet+height>m_cargoLiftHeight-.18f)return false;
+ if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.52f&&feet+height>m_cargoLiftHeight+2.4f)return false;
  if(dynamic&&insideLift(x,y)&&feet<m_liftHeight+2.8f&&feet+height>m_liftHeight-.25f){
   if(feet<m_liftHeight-.025f||feet+height>m_liftHeight+2.605f)return false;
   if(x<10.12f||x>13.88f)return false;

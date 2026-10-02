@@ -2,20 +2,21 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.6.0, Freight District Playtest**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.6.1, Freight Repairs**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
 
-v0.6.0 adds eight freight areas across 22 connected campaign chunks, from
-Freight Access through the deep cargo junction. The district has its own
-industrial soundtrack and two animated mutated-human encounters in Warehouse C
-and Depot Trackside. Shared authored mechanisms support native and custom
-campaigns; imported cargo, service vans, office materials, signs and lighting
-make the locations more distinct. The executable budget is now 22 MB.
+v0.6.1 repairs the service van's wheel assembly, closes openings above boundary
+doors, and fixes the auxiliary lift's release and lower landing. Freight Access
+and Lift Machinery have clearer routing signs and shaft guards. Computer logs
+throughout the game now use a recessed black terminal with green text inside
+the existing metal housing. The executable remains below the 22 MB budget.
 
-See [RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md) for details and validation.
+See [RELEASE_NOTES_v0.6.1.md](RELEASE_NOTES_v0.6.1.md) for repairs and validation,
+and [RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md) for the freight district,
+soundtrack and two mutated-human encounters.
 
 ## Download and run
 

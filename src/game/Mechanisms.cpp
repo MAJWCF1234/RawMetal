@@ -10,6 +10,10 @@ void Game::updateMechanisms(float dt){
   float height=lift.lower+state(lift.positionState)*.001f;
   bool aboard=m_world.insideCargoLift(m_player.pos.x,m_player.pos.y)&&std::fabs(m_player.z-old)<.1f;
   if(state(lift.releaseState)&&aboard)setState(lift.downState,1);
+  // The manual release is an actuator, not an invisible permission followed
+  // by another E press at the gate. Open authored gates tied to that release.
+  if(state(lift.releaseState)&&!state(lift.downState))for(int i=0;i<int(m_world.doors().size());++i)
+   if(m_world.doors()[i].requireState==lift.releaseState)m_world.openDoor(i);
   float target=state(lift.downState)?lift.lower:state(lift.callState)?lift.upper:lift.lower;
   height=std::clamp(height+std::clamp(target-height,-lift.speed*dt,lift.speed*dt),lift.lower,lift.upper);
   m_world.setCargoLiftHeight(height);

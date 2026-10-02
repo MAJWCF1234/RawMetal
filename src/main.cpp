@@ -365,6 +365,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }return 0;
     }
     if(std::wcsstr(commandLine,L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
+    if(std::wcsstr(commandLine,L"--freight-repair-inspection")){
+     retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 36;
+     const char* names[]={"repair-van","repair-machinery","repair-cage","repair-intake-header","repair-terminal-warehouse","repair-terminal-legacy","repair-van-left","repair-van-right"};
+     for(int view=0;view<8;++view){auto scene=view==0?retro::Game::mapInspection({15,3},.8f,-3,14,true,-25,true):view==1?retro::Game::mapInspection({12,3},retro::kPi*.5f,-8,11,true,-12,true):view==2?retro::Game::mapInspection({12,7},retro::kPi*.5f,-15,12,true,-12,true):view==3?retro::Game::mapInspection({12,21},retro::kPi*.5f,55,15,true,-25,true):view==6?retro::Game::mapInspection({15.5f,8},0,-12,14,true,-25,true):view==7?retro::Game::mapInspection({22.5f,8},retro::kPi,-12,14,true,-25,true):retro::Game::terminalInspection(view==4?16:0);
+      renderer.render(scene);std::ofstream out(std::string(names[view])+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return 0;
+    }
     if(std::wcsstr(commandLine,L"--mutant-inspection")){
         retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware())return 49;
         const char* names[]={"mutant-baseline","mutant-walk","mutant-lunge","mutant-death","mutant-warehouse","mutant-depot","mutant-death-baseline"};

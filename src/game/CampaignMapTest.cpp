@@ -57,17 +57,37 @@ bool Game::testCampaignMaps(){
   if(level==22)check(low<=-24.98f,"Transfer stair route reaches the sorting floor");
   for(size_t t=0;t<controlsReached.size();++t){out<<game.world().terminals()[t].title<<" (nearest "<<nearest[t]<<"): ";check(controlsReached[t],"Control is approachable from the chunk entry with the standing player hull");}
  }
- Game lift;lift.loadLevel(12,false);lift.m_enemies.clear();
- const auto& controls=lift.world().terminals();
- check(controls.size()==3&&controls[0].requireState==stateId("freight_brake")&&controls[1].requireState==stateId("freight_local")&&controls[2].requireState==stateId("freight_platform_arrived"),"Local / call / door controls enforce the freight procedure");
- lift.setState(stateId("freight_brake"),1);lift.setState(stateId("freight_local"),1);lift.setState(stateId("freight_call"),1);
- for(int frame=0;frame<480;++frame)lift.updateMechanisms(1.f/60);
- check(lift.state(stateId("freight_platform_arrived"))&&std::fabs(lift.world().cargoLiftHeight()+12)<.02f,"Called freight platform reaches the upper landing");
- lift.m_player.pos={12,12};lift.m_player.z=-12;lift.setState(stateId("freight_release"),1);
- for(int frame=0;frame<240;++frame)lift.updateMechanisms(1.f/60);
- float mid=lift.world().cargoLiftHeight();Game restored;check(restored.decodeSave(lift.encodeSave())&&std::fabs(restored.world().cargoLiftHeight()-mid)<.01f,"Save/load preserves a freight lift in motion");
- for(int frame=0;frame<240;++frame)lift.updateMechanisms(1.f/60);
- check(lift.state(stateId("freight_descended"))&&std::fabs(lift.player().z+19)<.02f,"Cage carries a standing player down and unlocks receiving");
+ // Drive the real procedure through E and movement. State injection used to
+ // conceal a sealed lower landing and controls with no visible confirmation.
+ Game lift;lift.loadLevel(11,false);lift.m_enemies.clear();
+ auto moveTo=[&](Game& g,int level,Vec2 point){Vec2 target=g.chunkOffset(level)+point;InputState walking{};walking.forward=true;
+  for(int frame=0;frame<2400;++frame){Vec2 delta=target-(g.player().pos+g.chunkOffset(g.level()));if(length(delta)<.18f){for(int i=0;i<30;++i)g.update({},1.f/120);return true;}g.m_player.angle=std::atan2(delta.y,delta.x);g.update(walking,1.f/120);}
+  out<<"Movement stalled: map "<<g.level()<<" at "<<g.player().pos.x<<','<<g.player().pos.y<<','<<g.player().z<<" toward "<<point.x<<','<<point.y<<'\n';return false;
+ };
+ auto pressUse=[&](Game& g){InputState key{};key.use=true;g.updateInteraction({},.01f);if(g.logTime()>0){g.updateInteraction(key,.01f);g.updateInteraction({},.01f);}g.updateInteraction(key,.01f);g.updateInteraction({},.01f);};
+ if(!moveTo(lift,11,{2,2})||!moveTo(lift,11,{2,16.1f})||!moveTo(lift,11,{3.5f,16.1f})){check(false,"Walk west personnel route to brake console");return false;}
+ lift.m_player.angle=kPi*.5f;pressUse(lift);check(lift.state("freight_brake"),"E releases brake from actual west-side console");
+ if(!moveTo(lift,11,{2,16.1f})||!moveTo(lift,11,{2,21.5f})||!moveTo(lift,11,{12,21.5f})||!moveTo(lift,12,{12,2})){check(false,"Walk machinery route into auxiliary lift bay");return false;}
+ if(!moveTo(lift,12,{6.5f,4.7f})){check(false,"Reach local control");return false;}
+ lift.m_player.angle=kPi*.5f;pressUse(lift);check(lift.state("freight_local"),"E selects local control after brake release");
+ if(!moveTo(lift,12,{12,4.7f})){check(false,"Reach call control");return false;}
+ lift.m_player.angle=kPi*.5f;pressUse(lift);check(lift.state("freight_call"),"E calls platform through real control interaction");
+ for(int frame=0;frame<1000;++frame)lift.update({},1.f/120);
+ check(lift.state("freight_platform_arrived")&&std::fabs(lift.world().cargoLiftHeight()+12)<.02f,"Called platform reaches upper landing during gameplay");
+ if(!moveTo(lift,12,{18,4.7f})){check(false,"Reach release control");return false;}
+ lift.m_player.angle=kPi*.5f;pressUse(lift);check(lift.state("freight_release"),"E releases cage interlock after arrival");
+ if(!moveTo(lift,12,{20.5f,4.7f})||!moveTo(lift,12,{20.5f,7.8f})||!moveTo(lift,12,{12,7.8f})){check(false,"Reach cage entry");return false;}
+ for(int frame=0;frame<160;++frame)lift.update({},1.f/120);
+ check(lift.world().doors().front().open>.99f,"Manual release actually opens cage gate without a second hidden interaction");
+ if(!moveTo(lift,12,{12,11.3f})){check(false,"Walk through released cage door onto platform");return false;}
+ for(int frame=0;frame<300;++frame)lift.update({},1.f/120);
+ float mid=lift.world().cargoLiftHeight();Game restored;check(restored.decodeSave(lift.encodeSave())&&std::fabs(restored.world().cargoLiftHeight()-mid)<.01f,"Save/load preserves real passenger descent");
+ for(int frame=0;frame<1000;++frame)restored.update({},1.f/120);
+ check(restored.state("freight_descended")&&std::fabs(restored.player().z+19)<.02f,"Cage carries standing player to lower landing in normal gameplay");
+ check(moveTo(restored,12,{12,18}),"Standing player walks off cage through lower threshold without jumping");
+ // Above a tall doorway, the header must be shared visual/collision geometry.
+ for(int level:{10,11,12,15}){Game frame;frame.loadLevel(level,false);for(const auto& door:frame.world().doors())if(door.entry||door.transfer){float base=frame.world().floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+  check(!frame.hullFits({(door.left+door.right)*.5f,door.y},base+3.2f,Player::StandingHeight),"Upper doorway header cannot be used as an unintended drop or bypass");}}
  Game warehouse;warehouse.loadLevel(16,false);warehouse.m_enemies.clear();warehouse.updateStreaming(0);
  check(warehouse.chunkResident(17)&&warehouse.chunkResident(18)&&warehouse.chunkResident(19),"All four parts of the 48m warehouse are resident together");
  warehouse.m_player.pos={24.05f,12};warehouse.crossChunkBoundary();check(warehouse.level()==17&&std::fabs(warehouse.player().pos.x-.05f)<.01f,"East seam enters the adjacent warehouse chunk using world coordinates");

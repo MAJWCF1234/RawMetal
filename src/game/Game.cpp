@@ -273,6 +273,11 @@ Game Game::stalkerInspection(int clip,float phase,int view,Enemy::Kind kind){
  if(clip==4){e.alive=false;e.deathTime=phase*1.15f;}
  return game;
 }
+Game Game::terminalInspection(int level,int terminal){
+ Game game;game.loadLevel(level,false);const auto&t=game.world().terminals().at(size_t(terminal));
+ game.m_player.pos=t.position+Vec2{0,-1.5f};game.m_player.z=game.world().floorHeight(t.position.x,t.position.y)+t.z;game.m_player.angle=kPi*.5f;
+ game.m_activeLog=terminal;game.m_logTime=30;game.m_enemies.clear();return game;
+}
 void Game::reloadWeapon(){
  if(dead()||m_won||holdingClutter()||!m_weaponEquipped||m_reloadTimer>0||m_player.loaded>=6||m_player.ammo<=m_player.loaded)return;
  m_reloadTimer=.62f;m_shotCooldown=std::max(m_shotCooldown,m_reloadTimer);m_weaponKick=.18f;
