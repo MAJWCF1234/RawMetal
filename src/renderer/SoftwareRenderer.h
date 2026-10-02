@@ -28,9 +28,11 @@ public:
     static bool testPerformance();
     static bool testCablePerformance();
     static bool testHardware();
+    static bool testPresentationResize();
     static bool testCreatureAnimation();
     float gripError()const{return m_gripError;}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
+    std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
     void inspectRig(const Game& game,float yaw,float pitch);
 private:
     friend class GpuRenderer;
@@ -42,7 +44,7 @@ private:
     bool m_staticGeometryBuild=false;
     std::uint64_t m_staticGeometryBuilds=0;
     float m_emissionScale=1.f;
-    double m_sceneMs=0,m_submitMs=0;
+    double m_sceneMs=0,m_submitMs=0,m_presentMs=0;
     bool m_poseReady=false;
     struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};Point3 surfaceNormal{};};
@@ -118,6 +120,7 @@ private:
     std::vector<std::uint32_t> m_scenePixels;
     std::vector<float> m_sceneZ;
     bool m_visibilityCulling=true;
+    bool m_cacheFixedServices=true;
     int m_shadowBudgetLimit=2200;
     std::array<std::unordered_map<std::uint64_t,float>,Game::MaxChunks> m_chunkLighting;
     std::array<std::unordered_map<std::uint64_t,NormalLighting>,Game::MaxChunks> m_chunkNormalLighting;

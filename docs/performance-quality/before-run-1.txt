@@ -1,0 +1,89 @@
+Presentation: 1920x1080 / 30 warmup frames per scene / 120 measured frames
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native Win32 swapchain / async present (2 frames in flight)
+Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort
+
+Foundry turn:
+  wall-clock FPS: 89.739 (actual throughput)
+  avg frame time: 11.0271 ms = 90.6858 FPS
+  p95 frame time: 12.4196 ms = 80.5179 FPS
+  p99 frame time: 13.4024 ms
+  max frame time: 13.7616 ms = 72.666 FPS
+
+Gantry turn:
+  wall-clock FPS: 110.024 (actual throughput)
+  avg frame time: 9.08641 ms = 110.054 FPS
+  p95 frame time: 11.8233 ms = 84.5788 FPS
+  p99 frame time: 13.1732 ms
+  max frame time: 13.9716 ms = 71.5738 FPS
+
+Ashfall terrain + streaming:
+  wall-clock FPS: 93.198 (actual throughput)
+  avg frame time: 10.7252 ms = 93.2383 FPS
+  p95 frame time: 14.9739 ms = 66.7829 FPS
+  p99 frame time: 20.4859 ms
+  max frame time: 29.5507 ms = 33.8401 FPS
+
+Lift entry turn:
+  wall-clock FPS: 118.569 (actual throughput)
+  avg frame time: 8.43227 ms = 118.592 FPS
+  p95 frame time: 9.427 ms = 106.078 FPS
+  p99 frame time: 10.6182 ms
+  max frame time: 11.5637 ms = 86.4775 FPS
+
+Hazmat settling:
+  wall-clock FPS: 114.925 (actual throughput)
+  avg frame time: 8.69948 ms = 114.949 FPS
+  p95 frame time: 10.9176 ms = 91.5952 FPS
+  p99 frame time: 12.4418 ms
+  max frame time: 12.6231 ms = 79.2198 FPS
+
+Ascent window:
+  wall-clock FPS: 122.53 (actual throughput)
+  avg frame time: 8.15896 ms = 122.565 FPS
+  p95 frame time: 9.2825 ms = 107.73 FPS
+  p99 frame time: 9.7234 ms
+  max frame time: 10.479 ms = 95.429 FPS
+
+Reactor balcony turn:
+  wall-clock FPS: 123.789 (actual throughput)
+  avg frame time: 8.07582 ms = 123.826 FPS
+  p95 frame time: 9.0622 ms = 110.348 FPS
+  p99 frame time: 10.8439 ms
+  max frame time: 11.8927 ms = 84.0852 FPS
+
+Reactor active AI:
+  wall-clock FPS: 116.866 (actual throughput)
+  avg frame time: 8.55463 ms = 116.896 FPS
+  p95 frame time: 10.2174 ms = 97.8723 FPS
+  p99 frame time: 11.1011 ms
+  max frame time: 11.481 ms = 87.1004 FPS
+
+Utility chapter 7:
+  wall-clock FPS: 58.8536 (actual throughput)
+  avg frame time: 16.9174 ms = 59.1108 FPS
+  p95 frame time: 58.3955 ms = 17.1246 FPS
+  p99 frame time: 63.2124 ms
+  max frame time: 64.3298 ms = 15.5449 FPS
+
+Utility chapter 8:
+  wall-clock FPS: 98.6305 (actual throughput)
+  avg frame time: 10.1364 ms = 98.654 FPS
+  p95 frame time: 18.6375 ms = 53.6553 FPS
+  p99 frame time: 32.4391 ms
+  max frame time: 39.0146 ms = 25.6314 FPS
+
+Utility chapter 9:
+  wall-clock FPS: 120.021 (actual throughput)
+  avg frame time: 8.32965 ms = 120.053 FPS
+  p95 frame time: 9.5212 ms = 105.029 FPS
+  p99 frame time: 11.4728 ms
+  max frame time: 11.5235 ms = 86.7792 FPS
+
+Utility chapter 10:
+  wall-clock FPS: 80.199 (actual throughput)
+  avg frame time: 12.3949 ms = 80.678 FPS
+  p95 frame time: 37.3691 ms = 26.7601 FPS
+  p99 frame time: 41.9264 ms
+  max frame time: 43.522 ms = 22.9769 FPS
+
+Done.

@@ -2,11 +2,15 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.6.4, Windows Compatibility Patch**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.6.5, Performance and Frame Pacing**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
+
+v0.6.5 caches stationary service pipework, accelerates exact collision queries,
+and removes duplicate arm skinning without reducing render settings. See
+[release notes](RELEASE_NOTES_v0.6.5.md) and [performance validation](docs/performance-quality.md).
 
 v0.6.3 fixes cached material normals, expands fixture lighting to tall rooms,
 and applies visibility-tested room lighting to moving actors, doors, arms and

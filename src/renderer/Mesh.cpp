@@ -64,7 +64,7 @@ void Mesh::poseCreature(int clip,float phase){
  for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+(t*3+v)*2,2);triangles[t].v[v].p=posed[index];}
 }
 Point3 Mesh::bonePosition(const char* name)const{auto n=ufbx_find_node(m_scene,name);if(!n)return {};return {float(n->node_to_world.m03),float(n->node_to_world.m13),float(n->node_to_world.m23)};}
-void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw){
+void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool skin){
  auto add=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.x+b.x,a.y+b.y,a.z+b.z};};
  auto sub=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.x-b.x,a.y-b.y,a.z-b.z};};
  auto mul=[](ufbx_vec3 a,double s){return ufbx_vec3{a.x*s,a.y*s,a.z*s};};
@@ -102,14 +102,16 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw){
    else {auto parent=ufbx_matrix_to_transform(&hand->parent->node_to_world).rotation;parent={-parent.x,-parent.y,-parent.z,parent.w};auto tr=hand->local_transform;double angle=yaw;ufbx_quat turn{0,std::sin(angle*.5),0,std::cos(angle*.5)},tilt{std::sin(pitch*.5),0,0,std::cos(pitch*.5)};tr.rotation=ufbx_quat_mul(parent,ufbx_quat_mul(turn,ufbx_quat_mul(tilt,handRot[side])));changes.push_back({hand->typed_id,tr});}
   }
   for(auto n:m_scene->nodes)if(n->bone&&std::none_of(changes.begin(),changes.end(),[&](auto&c){return c.node_id==n->typed_id;}))changes.push_back({n->typed_id,n->local_transform});
-  ufbx_anim_opts ao{};ao.transform_overrides={changes.data(),changes.size()};auto anim=ufbx_create_anim(m_scene,&ao,nullptr);ufbx_evaluate_opts eo{};eo.evaluate_skinning=step==2;auto posed=ufbx_evaluate_scene(m_scene,anim,0,&eo,nullptr);ufbx_free_anim(anim);
+  ufbx_anim_opts ao{};ao.transform_overrides={changes.data(),changes.size()};auto anim=ufbx_create_anim(m_scene,&ao,nullptr);ufbx_evaluate_opts eo{};eo.evaluate_skinning=skin&&step==2;auto posed=ufbx_evaluate_scene(m_scene,anim,0,&eo,nullptr);ufbx_free_anim(anim);
   if(!posed)throw std::runtime_error("Arm IK evaluation failed");ufbx_free_scene(m_scene);m_scene=posed;
  }
 }
 void Mesh::poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil){
  if(!m_bindScene)return;
  ufbx_free_scene(m_scene);m_scene=m_bindScene;ufbx_retain_scene(m_scene);
- grip(right,left,elbowSwing,pitch,yaw);pose(phase,recoil);
+ // IK needs bone transforms only. The final finger/recoil pose skins all
+ // vertices once, avoiding the redundant skin pass at the end of IK.
+ grip(right,left,elbowSwing,pitch,yaw,false);pose(phase,recoil);
 }
 bool Mesh::poseAction(const char* action,float phase){
  if(!m_bindScene)return false;
@@ -119,6 +121,23 @@ bool Mesh::poseAction(const char* action,float phase){
    if(!frame)return false;ufbx_free_scene(m_scene);m_scene=frame;extract(frame);return true;
   }
  }return false;
+}
+__declspec(noinline) bool Mesh::testAttachedSkinning(){
+ Mesh optimized(111),reference(111);
+ for(int frame=0;frame<6;++frame){
+  Point3 right{-.025f+frame*.006f,1.55f,.223f},left{-.025f,1.60f,.49f-frame*.004f};
+  float elbow=frame*.02f,pitch=frame*.015f,yaw=-frame*.025f,phase=frame*.31f,recoil=frame*.04f;
+  optimized.poseAttached(right,left,elbow,pitch,yaw,phase,recoil);
+  ufbx_free_scene(reference.m_scene);reference.m_scene=reference.m_bindScene;ufbx_retain_scene(reference.m_scene);
+  reference.grip(right,left,elbow,pitch,yaw,true);reference.pose(phase,recoil);
+  if(optimized.triangles.size()!=reference.triangles.size())return false;
+  for(size_t i=0;i<optimized.triangles.size();++i)for(int v=0;v<3;++v){
+   const auto&a=optimized.triangles[i].v[v];const auto&b=reference.triangles[i].v[v];
+   if(a.p.x!=b.p.x||a.p.y!=b.p.y||a.p.z!=b.p.z||a.u!=b.u||a.v!=b.v)return false;
+  }
+  for(const char*name:{"hand.R","hand.L"}){auto a=optimized.bonePosition(name),b=reference.bonePosition(name);if(a.x!=b.x||a.y!=b.y||a.z!=b.z)return false;}
+ }
+ return true;
 }
 void Mesh::extract(ufbx_scene* scene){
  // Animation changes positions, not topology, UVs, materials or boundary

@@ -1,0 +1,188 @@
+﻿[
+    {
+        "View":  "annex-entry",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0.000549769
+    },
+    {
+        "View":  "annex-lower",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "annex-operator-room",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  7.37847E-05
+    },
+    {
+        "View":  "annex-pump-control",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "annex-support-deck",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  9027,
+        "MeanChannelError255":  0.678877
+    },
+    {
+        "View":  "annex-support-under",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "annex-upper",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "cable-breaker",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "cable-entry",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  12008,
+        "MeanChannelError255":  1.15294
+    },
+    {
+        "View":  "cable-trench",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  9020,
+        "MeanChannelError255":  0.866716
+    },
+    {
+        "View":  "cable-west-lockers",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "coolant-depth",
+        "Resolution":  "1920x1080",
+        "PixelsAbove4":  61027,
+        "MeanChannelError255":  0.918433
+    },
+    {
+        "View":  "corridor-light",
+        "Resolution":  "1920x1080",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "fixture-depth",
+        "Resolution":  "1920x1080",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "fixture-shaft",
+        "Resolution":  "1920x1080",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "junction-bridge-lamps",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  7735,
+        "MeanChannelError255":  0.981748
+    },
+    {
+        "View":  "junction-bridge",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  3519,
+        "MeanChannelError255":  0.379611
+    },
+    {
+        "View":  "junction-distribution",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  124,
+        "MeanChannelError255":  0.009932
+    },
+    {
+        "View":  "junction-freight",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "junction-service-bays",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "junction-stores",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "junction-support-under",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  498,
+        "MeanChannelError255":  0.0211473
+    },
+    {
+        "View":  "junction-utilities",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "warehouse-d-block",
+        "Resolution":  "1920x1080",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "waste-compactor",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  635,
+        "MeanChannelError255":  0.0308536
+    },
+    {
+        "View":  "waste-deck",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  7033,
+        "MeanChannelError255":  0.61213
+    },
+    {
+        "View":  "waste-dispatch",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "waste-lockers",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "waste-press",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "waste-receiving",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  0,
+        "MeanChannelError255":  0
+    },
+    {
+        "View":  "waste-safe-press",
+        "Resolution":  "640x360",
+        "PixelsAbove4":  27694,
+        "MeanChannelError255":  0.728532
+    }
+]

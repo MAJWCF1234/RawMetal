@@ -221,6 +221,7 @@ public:
     bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true,bool shelfCavities=false)const;
     // Static optical visibility: exact solid intersections, separate from player hull clearance.
     bool lightRayClear(Vec2 a,float az,Vec2 b,float bz)const;
+    static bool testCollisionCandidates();
     bool doorBlocks(float x,float y,float feet,float height)const;
     bool navigable(int x,int y,int nx,int ny,float height=1.f)const;
     void updateDoors(float dt);
@@ -228,7 +229,7 @@ public:
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
     void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
-    void unloadGeometry(){std::vector<LightSolid>{}.swap(m_lightSolids);std::vector<LightNode>{}.swap(m_lightNodes);std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Compactor>{}.swap(m_compactors);std::vector<Terminal>{}.swap(m_terminals);}
+    void unloadGeometry(){m_collisionCells={};m_collisionAll={};std::vector<LightSolid>{}.swap(m_lightSolids);std::vector<LightNode>{}.swap(m_lightNodes);std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Compactor>{}.swap(m_compactors);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
@@ -282,6 +283,11 @@ private:
     mutable std::vector<LightSolid> m_lightSolids;
     mutable std::vector<LightNode> m_lightNodes;
     void buildLightOcclusion()const;
+    mutable std::array<std::vector<std::vector<size_t>>,3> m_collisionCells;
+    mutable std::array<std::vector<size_t>,3> m_collisionAll;
+    bool m_collisionCandidatesEnabled=true;
+    void buildCollisionCandidates()const;
+    std::span<const size_t> collisionCandidates(int kind,float x,float y)const;
     std::vector<std::vector<uint16_t>> m_structureCells;
     const std::vector<uint16_t>& structureIndices(float x,float y)const{static const std::vector<uint16_t> empty;int ix=int(std::floor(x)),iy=int(std::floor(y));return m_structureCells.empty()||ix<0||iy<0||ix>=Width||iy>=Height?empty:m_structureCells[iy*Width+ix];}
     bool m_controlReleased=false;

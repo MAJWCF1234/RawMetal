@@ -422,6 +422,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  };
  bool buildStaticGeometry=!m_gpuFrame;
  int cacheSlot=w.level();
+ std::uint64_t geometryKey=0;
  if(m_gpuFrame){
   std::uint64_t key=1469598103934665603ull;
   auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
@@ -430,6 +431,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){char tile=w.tile(x,y);hash(static_cast<unsigned char>(tile=='C'||tile=='B'?'.':tile));}
   for(const auto&door:w.doors())for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);
   buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
+  geometryKey=key;
  }
  m_staticGeometryBuild=m_gpuFrame&&buildStaticGeometry;
  if(m_staticGeometryBuild)++m_staticGeometryBuilds;
@@ -697,7 +699,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
  }
  // Services belong to the map; custom worlds never inherit campaign pipework.
- for(const auto& pipe:w.pipes()){
+ // Pipes and their mounting brackets do not animate. Keep the complete
+ // geometry in a separate world-space VBO instead of retessellating cylinders,
+ // probing physical normals and resampling light as the camera turns.
+ const int pipeShadowBudget=shadowBudget;
+ const bool cachePipes=m_gpuFrame&&m_cacheFixedServices&&!w.pipes().empty();
+ const bool buildPipes=!cachePipes||m_gpu->beginStaticCache(Game::MaxChunks+w.level(),geometryKey);
+ if(cachePipes&&buildPipes){m_staticGeometryBuild=true;shadowBudget=400000;}
+ if(buildPipes)for(const auto& pipe:w.pipes()){
   float endZ=pipe.endZ>-999?pipe.endZ:pipe.z;
   cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==1?m_metal:m_pipeTexture);
   if(pipe.endZ>-999)continue; // Vertical drops terminate inside solid equipment.
@@ -709,6 +718,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({p.x-pipe.radius-.04f,p.y-.045f,pipe.z-pipe.radius-.04f},{p.x+pipe.radius+.04f,p.y+.045f,pipe.z-pipe.radius},iron,.9f);
   }
  }
+ if(cachePipes&&buildPipes){m_gpu->endStaticCache();m_staticGeometryBuild=false;shadowBudget=pipeShadowBudget;}
   for(const auto& press:w.compactors()){
    float z=game.compactorHeight(press);
    box({press.x1,press.y1,z},{press.x2,press.y2,z+.32f},m_metal,.9f);
