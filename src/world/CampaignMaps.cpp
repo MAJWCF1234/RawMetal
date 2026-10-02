@@ -246,39 +246,50 @@ std::shared_ptr<const Map> make(int level){
  deck(m,-16,6,17,18,19);cargo(m,17,18,-16);
   {Door gate{9.5f,14.5f,10.f,0,false,false,false,13.f};gate.requireState=stateId("freight_release");m.doors.insert(m.doors.begin(),gate);}
   break;
- case 13:
+ case 13:{
   m.definition.playerStart={7.6f,9.5f};m.definition.spawnYaw=.69f;m.definition.spawnPitch=-62.f;
   board(m,12,6.5f,-17.9f,"RECEIVING 01","UNLOADING / KEEP CLEAR",6.4f);
-  m.timedSequences.push_back({stateId("receiving_worker_encounter_ms"),stateId("receiving_worker_encounter_complete"),6.4f,8,8.5f,10,-19.5f,-18.6f,30000,22000,0,0});
+  m.timedSequences.push_back({stateId("receiving_worker_encounter_ms"),stateId("receiving_worker_encounter_complete"),6.4f,8,8.5f,10,-19.5f,-18.6f,18000,12500,0,0});
+  m.timedSequences.back().sightActor=0;
   actor(m,"receiving_worker_encounter_ms",ActorVisual::Worker,1.7f,{
-   {0,{16.2f,16},-25,kPi,0,0},{3000,{16.2f,16},-25,kPi,0,1},
-   {4000,{16.2f,16},-25,kPi,5,0},{5000,{16.2f,16},-25,kPi,5,1},
-   {5100,{16.2f,16},-25,kPi,2,0},{6400,{16.2f,16},-25,kPi,2,1},
-   {6500,{16.2f,16},-25,kPi,1,0},{8500,{16.2f,17.5f},-25,kPi,1,1},
-   {10000,{16.2f,17.5f},-25,kPi,0,0},{11000,{16.2f,17.5f},-25,kPi*.5f,3,0},
-   {12500,{17,18.1f},-25,kPi*.5f,3,1},{12600,{17,18.1f},-25,kPi,2,0},
-   {14500,{17,18.1f},-25,kPi,2,1},{14501,{17,18.1f},-25,kPi,3,0},
-   {17000,{17.3f,18.3f},-25,kPi,3,1},{17001,{17.3f,18.3f},-25,kPi,2,0},
-   {18500,{17.3f,18.3f},-25,kPi,2,1},{18501,{17.3f,18.3f},-25,kPi,4,0},
-   {22000,{17.8f,19},-25,kPi,4,1},{30000,{17.8f,19},-25,kPi,4,1}},false,true);
+   {0,{16.2f,16},-25,0,1,0},{5200,{16.2f,16},-25,0,0,0},
+   {6000,{16.2f,16},-25,0,0,0,1},
+   {6200,{16.2f,16},-25,0,5,0,1},{6500,{16.2f,16},-25,0,5,1,1},
+   {6501,{16.2f,16},-25,0,2,0,1},{7040,{16.2f,16},-25,0,2,1,1},
+   {7100,{16.2f,16},-25,0,1,0,1},{8200,{16.2f,17.2f},-25,0,1,2,1},
+   {8201,{16.2f,17.2f},-25,0,0,0,1},{9000,{16.2f,17.2f},-25,0,3,0,2},
+   {9450,{16.4f,17.5f},-25,0,3,1,2},{9451,{16.4f,17.5f},-25,0,2,0,2},
+   {9900,{16.4f,17.5f},-25,0,2,1,2},{9901,{16.4f,17.5f},-25,0,3,0,2},
+   {10400,{17,18.1f},-25,0,3,1,2},{10401,{17,18.1f},-25,0,2,0,1},
+   {10850,{17,18.1f},-25,0,2,1,1},{10851,{17,18.1f},-25,0,3,0,2},
+   {11300,{17.3f,18.3f},-25,0,3,1,2},{11301,{17.3f,18.3f},-25,0,4,0},
+   {12500,{17.8f,19},-25,0,4,1},{18000,{17.8f,19},-25,0,4,1}},false,true);
+  auto& worker=m.actorTracks.back();worker.idleUntilMs=3000;worker.approachUntilMs=5200;
+  worker.idleKeys={
+   {0,{14.6f,15},-25,.785f,1,0},{2600,{15.6f,16},-25,.785f,1,4},
+   {2601,{15.6f,16},-25,.785f,0,0},{3300,{15.6f,16},-25,-1.418f,1,0},
+   {5900,{14.3f,16.2f},-25,-1.418f,1,4},{5901,{14.3f,16.2f},-25,-1.418f,0,0},
+   {7000,{14.3f,16.2f},-25,2.897f,1,0},{9600,{14.6f,15},-25,2.897f,1,4},
+   {9601,{14.6f,15},-25,2.897f,0,0},{10000,{14.6f,15},-25,.785f,0,0}};
   actor(m,"receiving_worker_encounter_ms",ActorVisual::Wasp,1.15f,{
-   {0,{15,13},-23.4f,0},{3900,{16.2f,15},-23.5f,0},{5600,{16.2f,16},-23.8f,0},
-   {6400,{14.6f,16.4f},-24.9f,0,4},{9500,{14.6f,16.4f},-24.9f,0,4},
-   {15000,{16.3f,17.8f},-23.7f,0},{17000,{17.1f,18.1f},-23.8f,0},
-   {18500,{15.6f,19},-24.96f,0,4},{30000,{15.6f,19},-24.96f,0,4}});
+   {0,{23,13},-23.4f,0},{5600,{23,13},-23.4f,0},{6200,{16,15},-23.7f,0},
+   {6900,{16.2f,15.4f},-23.8f,0},{7040,{14.6f,16.4f},-24.9f,0,4},
+   {9300,{14.6f,16.4f},-24.9f,0,4},{10100,{16.8f,17.5f},-23.7f,0},
+   {10700,{16.8f,17.6f},-23.8f,0},{10900,{15.6f,19},-24.96f,0,4},{18000,{15.6f,19},-24.96f,0,4}});
   actor(m,"receiving_worker_encounter_ms",ActorVisual::Wasp,1.15f,{
-   {0,{21,20},-23,0},{9500,{21,20},-23,0},{11000,{16.3f,17.5f},-23.7f,0},
-   {14500,{17.1f,18.1f},-23.9f,0},{20500,{17.5f,18.8f},-24.2f,0},
-   {23000,{17.8f,19},-24.5f,0},{26000,{22,22},-22.7f,0},{30000,{25,23},-22.7f,0}});
-  for(int time:{100,1400,2800})cue(m,"receiving_worker_encounter_ms",time,Sound::Metal1,{16.2f,16});
-  cue(m,"receiving_worker_encounter_ms",3000,Sound::Hurt,{16.2f,16},"WORKER: GET BACK!",1.5f);
-  cue(m,"receiving_worker_encounter_ms",6100,Sound::PunchHit,{16.2f,16});
-  cue(m,"receiving_worker_encounter_ms",6500,Sound::WaspDeath,{14.6f,16.4f});
-  cue(m,"receiving_worker_encounter_ms",11000,Sound::Hurt,{16.2f,17.5f},"WORKER: NO! GET OFF ME!",1.5f);
-  cue(m,"receiving_worker_encounter_ms",15000,Sound::WaspAttack,{17,18.1f});
-  cue(m,"receiving_worker_encounter_ms",18000,Sound::PunchHit,{17,18.1f});
-  cue(m,"receiving_worker_encounter_ms",18500,Sound::WaspDeath,{15.6f,19});
-  cue(m,"receiving_worker_encounter_ms",20000,Sound::Hurt,{17.8f,19},"WORKER: SOMEBODY...",1.5f);
+   {0,{23,23},-23,0},{8800,{23,23},-23,0},{9300,{17.2f,17.5f},-23.7f,0},
+   {9800,{17.3f,17.7f},-23.8f,0},{10500,{17.8f,18.3f},-23.9f,0},
+   {11300,{17.7f,18.6f},-24.2f,0},{13000,{17.8f,19},-24.5f,0},
+   {15500,{22,22},-22.7f,0},{18000,{25,23},-22.7f,0}});
+  cue(m,"receiving_worker_encounter_ms",6100,Sound::WaspAttack,{16,15},"WORKER: GET BACK!",1.2f);
+  cue(m,"receiving_worker_encounter_ms",6900,Sound::PunchHit,{16.2f,16});
+  cue(m,"receiving_worker_encounter_ms",7040,Sound::Metal1,{14.6f,16.4f});
+  cue(m,"receiving_worker_encounter_ms",9150,Sound::Hurt,{16.2f,17.5f},"WORKER: NO! GET OFF ME!",1.5f);
+  cue(m,"receiving_worker_encounter_ms",9750,Sound::PunchHit,{17.2f,17.5f});
+  cue(m,"receiving_worker_encounter_ms",10100,Sound::WaspAttack,{16.8f,17.5f});
+  cue(m,"receiving_worker_encounter_ms",10700,Sound::PunchHit,{16.8f,17.6f});
+  cue(m,"receiving_worker_encounter_ms",10900,Sound::WaspDeath,{15.6f,19});
+  cue(m,"receiving_worker_encounter_ms",11400,Sound::Hurt,{17.8f,19},"WORKER: SOMEBODY...",1.5f);
   // First receiving balcony, above unloading lanes. The descent folds back
   // along the west side instead of allowing a straight drop into the scene.
   deck(m,-19,1,4,8,10);m.stairs.push_back({3,9,6,18,-25,-19,32,true,false});
@@ -293,6 +304,7 @@ std::shared_ptr<const Map> make(int level){
   m.lights.push_back({{16.5f,16.5f},-21.8f});
   m.pickupSpawns.push_back({{18.5f,20.5f},PickupKind::Health,-25});
   break;
+ }
  case 14:
   for(float x:{2.f,9.f})container(m,x,5,-25,x!=9);
   m.fixtures.push_back({16,{19.1f,8},0,2.05f,4.9f,2.15f,0,true});

@@ -145,9 +145,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_SUSPEND record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("suspension has no actor");map->actorTracks[size_t(index)].suspensionTop=number(f,3,"suspension top");
   }else if(tag=="ACTOR_PLATFORM"){
    if(f.size()!=6)throw std::runtime_error("malformed ACTOR_PLATFORM record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("platform has no actor");auto& t=map->actorTracks[size_t(index)];t.platform=true;t.footprint={number(f,3,"platform width"),number(f,4,"platform depth")};t.thickness=number(f,5,"platform thickness");
-  }else if(tag=="ACTOR_KEY"){
-   if(f.size()!=10)throw std::runtime_error("malformed ACTOR_KEY record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("actor key has no actor");
-   map->actorTracks[size_t(index)].keys.push_back({integer(f,3,"actor time"),{number(f,4,"actor x"),number(f,5,"actor y")},number(f,6,"actor z"),number(f,7,"actor yaw"),integer(f,8,"actor clip"),number(f,9,"actor phase")});
+  }else if(tag=="ACTOR_PRELUDE"){
+   if(f.size()!=5)throw std::runtime_error("malformed ACTOR_PRELUDE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("prelude has no actor");auto& actor=map->actorTracks[size_t(index)];actor.idleUntilMs=integer(f,3,"idle duration");actor.approachUntilMs=integer(f,4,"approach end");
+  }else if(tag=="SEQUENCE_SIGHT"){
+   if(f.size()!=5)throw std::runtime_error("malformed SEQUENCE_SIGHT record");auto map=mapAt(maps,f);int index=integer(f,2,"sequence index");if(index<0||index>=int(map->timedSequences.size()))throw std::runtime_error("sight has no sequence");map->timedSequences[size_t(index)].sightActor=integer(f,3,"sight actor");map->timedSequences[size_t(index)].sightDistance=number(f,4,"sight range");
+  }else if(tag=="ACTOR_KEY"||tag=="ACTOR_IDLE_KEY"){
+   if(f.size()!=10&&f.size()!=11)throw std::runtime_error("malformed actor key record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("actor key has no actor");
+   ActorKey key{integer(f,3,"actor time"),{number(f,4,"actor x"),number(f,5,"actor y")},number(f,6,"actor z"),number(f,7,"actor yaw"),integer(f,8,"actor clip"),number(f,9,"actor phase")};if(f.size()>10)key.lookAtActor=integer(f,10,"look target");
+   auto& actor=map->actorTracks[size_t(index)];(tag=="ACTOR_KEY"?actor.keys:actor.idleKeys).push_back(key);
   }else if(tag=="SEQUENCE_CUE"){
    if(f.size()!=10)throw std::runtime_error("malformed SEQUENCE_CUE record");auto map=mapAt(maps,f);int sound=integer(f,4,"cue sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid cue sound");
    map->sequenceCues.push_back({stateId(decode(f[2])),integer(f,3,"cue time"),Sound(sound),{number(f,5,"cue x"),number(f,6,"cue y")},number(f,7,"cue gain"),number(f,8,"cue pitch"),decode(f[9])});

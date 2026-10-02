@@ -31,7 +31,12 @@ void Game::updateMechanisms(float dt){
  auto& world=level==m_level?m_world:m_chunks[level].world;
  for(const auto& sequence:world.timedSequences()){
   int age=state(sequence.timerState);
-  if(age==0&&level==m_level&&m_player.pos.x>=sequence.x1&&m_player.pos.x<=sequence.x2&&m_player.pos.y>=sequence.y1&&m_player.pos.y<=sequence.y2&&m_player.z>=sequence.bottom&&m_player.z<=sequence.top)age=1;
+  bool seen=true;
+  if(age==0&&sequence.sightActor>=0){const auto& actor=world.actorTracks()[sequence.sightActor];auto pose=world.actorPose(sequence.sightActor);Vec2 delta=pose.position-m_player.pos;float height=pose.z+actor.scale*.65f-m_player.z-m_player.eye,range=std::sqrt(dot(delta,delta)+height*height),pitch=m_player.pitch/140.f;
+   float alignment=range>0?(delta.x*std::cos(m_player.angle)*std::cos(pitch)+delta.y*std::sin(m_player.angle)*std::cos(pitch)+height*std::sin(pitch))/range:1;
+   seen=range<=sequence.sightDistance&&alignment>.92f&&world.rayClear(m_player.pos,m_player.z+m_player.eye,pose.position,pose.z+actor.scale*.65f);
+  }
+  if(age==0&&seen&&level==m_level&&m_player.pos.x>=sequence.x1&&m_player.pos.x<=sequence.x2&&m_player.pos.y>=sequence.y1&&m_player.pos.y<=sequence.y2&&m_player.z>=sequence.bottom&&m_player.z<=sequence.top)age=1;
   if(age<=0)continue;
   int advanced=age+int(std::round(dt*1000));bool wrapped=sequence.loop&&advanced>sequence.durationMs;
   int next=sequence.loop?1+(advanced-1)%sequence.durationMs:std::min(sequence.durationMs,advanced);setState(sequence.timerState,next);
@@ -43,12 +48,26 @@ void Game::updateMechanisms(float dt){
   }
  }
  for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);
-  if(track.deadState&&state(track.deadState)){pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;pose.phase=1;world.setActorPose(i,pose);}
+  if(!track.idleKeys.empty()){
+   auto idleState=actorTrackState(track.timerState,i,"idle_ms");int idle=state(idleState)+int(std::round(dt*1000));idle%=track.idleKeys.back().timeMs;setState(idleState,idle);
+   int age=state(track.timerState);
+   if(age<track.idleUntilMs)pose=sampleActorKeys(track.idleKeys,idle,true);
+   else if(age<track.approachUntilMs){
+    auto captured=actorTrackState(track.timerState,i,"approach_saved");
+    if(!state(captured)){auto start=dt>0?old:sampleActorKeys(track.idleKeys,idle,true);setState(actorTrackState(track.timerState,i,"start_x"),int(std::round(start.position.x*1000)));setState(actorTrackState(track.timerState,i,"start_y"),int(std::round(start.position.y*1000)));setState(actorTrackState(track.timerState,i,"start_z"),int(std::round(start.z*1000)));setState(captured,1);}
+    Vec2 start{state(actorTrackState(track.timerState,i,"start_x"))*.001f,state(actorTrackState(track.timerState,i,"start_y"))*.001f};float startZ=state(actorTrackState(track.timerState,i,"start_z"))*.001f;
+    auto destination=sampleActor(track,track.approachUntilMs);float blend=float(age-track.idleUntilMs)/float(track.approachUntilMs-track.idleUntilMs);pose.position=start+(destination.position-start)*blend;pose.z=startZ+(destination.z-startZ)*blend;auto delta=destination.position-start;pose.yaw=std::atan2(delta.x,delta.y);pose.clip=1;pose.phase=std::fmod(float(age-track.idleUntilMs)/650.f,1.f);
+   }
+   world.setActorPose(i,pose);
+  }
+  if(pose.lookAtActor>=0&&dt>0){pose.yaw=old.yaw;world.setActorPose(i,pose);}
+  if(track.deadState&&state(track.deadState)){pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;pose.phase=1;pose.lookAtActor=-1;world.setActorPose(i,pose);}
   if(dt>0&&level==m_level&&track.platform&&std::fabs(m_player.z-old.z)<.04f&&std::fabs(m_player.pos.x-old.position.x)<track.footprint.x*.5f&&std::fabs(m_player.pos.y-old.position.y)<track.footprint.y*.5f){
    auto target=m_player.pos+pose.position-old.position;float z=m_player.z+pose.z-old.z;
    if(hullFits(target,z,m_player.hullHeight())){m_player.pos=target;m_player.z=z;m_player.verticalVelocity=0;m_player.grounded=true;}
   }
  }
+ for(size_t i=0;i<world.actorTracks().size();++i){auto pose=world.actorPose(i);if(pose.lookAtActor>=0){auto target=world.actorPose(pose.lookAtActor);auto delta=target.position-pose.position;if(dot(delta,delta)>.0025f){float yaw=std::atan2(delta.x,delta.y);pose.yaw=dt>0?pose.yaw+std::clamp(std::remainder(yaw-pose.yaw,2*kPi),-8*dt,8*dt):yaw;world.setActorPose(i,pose);}}}
  }
 }
 }
