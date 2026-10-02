@@ -100,6 +100,29 @@ __declspec(noinline) static int freightDetailInspection(int W,int H){
  }
  return 0;
 }
+__declspec(noinline) static int freightArtInspection(int W,int H){
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
+ renderer->setEnvironmentInspection(true);
+ struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
+ const View views[]={
+  {"intake-bay",15,{12,9},-25,retro::kPi*.5f,12},
+  {"warehouse-canyon",16,{12,3},-25,retro::kPi*.5f,32},
+  {"warehouse-aisle",16,{6,3},-25,1.85f,-4},
+  {"pit-workshop",28,{12,2},-28,1.25f,18},
+  {"pit-chassis",28,{17,3},-28,retro::kPi*.5f,12},
+  {"manifest-wing",20,{7,3},-7,1.9f,-18},
+  {"platform-axis",25,{12,3},-25,retro::kPi*.5f,0},
+  {"bore-axis",30,{12,2},-25,retro::kPi*.5f,0},
+  {"legacy-foundry",0,{3.5f,4.5f},0,.8f,-5},
+  {"legacy-cable",6,{13,6.8f},-9,retro::kPi*.5f,-8},
+  {"legacy-pump",7,{6.5f,5.5f},-12,retro::kPi*.5f,-6},
+  {"legacy-waste",9,{15,6.5f},-12,retro::kPi*.5f,-8}
+ };
+ for(const auto&v:views){auto scene=retro::Game::mapInspection(v.p,v.yaw,v.pitch,v.level,true,v.z,true);renderer->render(scene);
+  std::ofstream frame(std::string(v.name)+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
+  for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+ }return 0;
+}
 __declspec(noinline) static int campaignInspection(int W,int H,bool lockersOnly=false,bool cableLockersOnly=false){
      auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
      struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;bool openDoors=false;};
@@ -331,6 +354,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--cable-window-performance-test"))return cableWindowPerformance();
     if(std::wcsstr(commandLine,L"--freight-inspection"))return freightInspection(W,H);
     if(std::wcsstr(commandLine,L"--freight-detail-inspection"))return freightDetailInspection(W,H);
+    if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);
     if(std::wcsstr(commandLine,L"--waste-locker-inspection"))return campaignInspection(W,H,true);

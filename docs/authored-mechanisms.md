@@ -18,6 +18,12 @@ The optional nineteenth MAP field sets the floor material: 0 industrial (default
 
 The optional twelfth TERMINAL field names its prerequisite state. State names are campaign-authored identifiers; the existing state save codec persists platform positions and sequence timers. Platform position uses millimetres relative to the authored lower stop. Timelines start when the player enters the trigger volume, advance while that chunk is active, and set the completion state at the authored time. A zero sound interval disables the recurring sound.
 
+Structure materials 12, 13, 14 and 15 are weathered structural steel, hazard
+stripes, route paint and industrial concrete. Material 12 retains the original
+pressureworks steel texture's rust and scratches; it is not a flat color fill.
+These IDs are available to native maps and custom campaigns through the shared
+structure renderer.
+
 Existing payloads remain valid. Invalid mechanism definitions are rejected during campaign discovery. `--mechanisms-test` verifies shared mechanisms in a custom campaign with different map IDs and state names, including residency, passenger movement, timeline completion and save/load. `--campaign-map-test` verifies the main campaign traversal; its old `--freight-district-test` command is retained as a diagnostic alias.
 
 The optional twentieth MAP field chooses music: 0 original (default), 1 freight.

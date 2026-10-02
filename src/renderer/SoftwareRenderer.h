@@ -18,6 +18,7 @@ public:
     bool hardwarePresentsWindow()const;
     const std::string& hardwareName()const{return m_gpuName;}
     void render(const Game& game);
+    void setEnvironmentInspection(bool enabled){m_environmentInspection=enabled;}
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
     int height() const { return m_height; }
@@ -37,6 +38,7 @@ private:
     std::unique_ptr<FrameWorker> m_animationWorker;
     std::string m_gpuName;
     bool m_gpuFrame=false;
+    bool m_environmentInspection=false;
     bool m_staticGeometryBuild=false;
     std::uint64_t m_staticGeometryBuilds=0;
     float m_emissionScale=1.f;
@@ -66,7 +68,7 @@ private:
     Texture m_feedSign,m_returnSign,m_diskSign,m_authSign;
     std::array<Texture,34> m_routeSigns;
     std::array<Texture,3> m_serviceAreaSigns;
-    Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet;
+    Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet,m_framePaint;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;
