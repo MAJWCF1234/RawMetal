@@ -82,7 +82,12 @@ __declspec(noinline) static int freightDetailInspection(int W,int H){
   {"platform-board",25,{12,4.5f},-25,retro::kPi*.5f,12},
   {"depot-engine",27,{12,7},-25,.55f,4},
   {"inspection-chassis",28,{17,3},-28,retro::kPi*.5f,12},
-  {"depot-gantry",29,{20.8f,8},-19,retro::kPi,-90}
+  {"depot-gantry",29,{20.8f,8},-19,retro::kPi,-90},
+  {"warehouse-break-corner",16,{7,16},-25,retro::kPi*.5f,-8},
+  {"warehouse-chemical-hold",17,{14,18},-25,0,-6},
+  {"manifest-records-bays",20,{12,10},-7,0,-5},
+  {"platform-benches",25,{12,8},-25,1.f,-12},
+  {"tunnel-service-bypass",30,{9,10},-25,retro::kPi*.5f,-4}
  };
  std::ofstream cacheReport("diagnostics/freight-details/static-cache.txt");cacheReport<<renderer->hardwareName()<<" / repeated fixed-camera screenshots\n";
  for(const auto& view:views){

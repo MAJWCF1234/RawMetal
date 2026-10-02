@@ -14,7 +14,7 @@ TIMED_SEQUENCE|map|timerState|finishState|x1|y1|x2|y2|bottom|top|durationMs|fini
 SIGN|map|x|y|absoluteZ|width|height|yawRadians|title|subtitle|accentRGBDecimal
 ```
 
-The optional nineteenth MAP field sets the floor material: 0 industrial (default), 1 office carpet. Signs use absolute elevation and face along `{sin(yaw), cos(yaw)}`. Author their mounting structures separately; a sign is a surface, not collision geometry. Fixture models 15 and 16 are a wooden cargo pallet and service van. Structure materials 8, 9, 10 and 11 are dark steel, opaque cab glazing, cargo wood and rusty steel.
+The optional nineteenth MAP field sets the floor material: 0 industrial (default), 1 office carpet. Signs use absolute elevation and face along `{sin(yaw), cos(yaw)}`. Author their mounting structures separately; a sign is a surface, not collision geometry. Fixture models 15, 16 and 17 are a wooden cargo pallet, service van and wooden crate. The crate uses the original PSX Bunkers wooden_crate_8 model and texture and is available to native and custom campaigns through the same fixture record. Structure materials 8, 9, 10 and 11 are dark steel, opaque cab glazing, cargo wood and rusty steel.
 
 The optional twelfth TERMINAL field names its prerequisite state. State names are campaign-authored identifiers; the existing state save codec persists platform positions and sequence timers. Platform position uses millimetres relative to the authored lower stop. Timelines start when the player enters the trigger volume, advance while that chunk is active, and set the completion state at the authored time. A zero sound interval disables the recurring sound.
 
