@@ -64,8 +64,8 @@ delay expires. Approach origins and idle clocks persist through shared saved
 state IDs derived from the track, including in custom campaigns.
 
 The built-in receiving actors currently use an observational, fixed sequence;
-they are not autonomous enemy AI. Captions accompany existing pain and impact
-audio, rather than newly recorded spoken dialogue. Actor health is optional for
+they are not autonomous enemy AI. Captions accompany impact audio and the supplied worker voice; no new dialogue
+recording was commissioned. Actor health is optional for
 other authored encounters and is disabled for this fixed scene.
 
 ## Other content and rendering

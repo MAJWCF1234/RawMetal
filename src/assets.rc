@@ -164,3 +164,4 @@
 280 RCDATA "assets/actors/worker-gloves.png"
 281 RCDATA "assets/actors/worker-shoes.png"
 282 RCDATA "assets/actors/worker-animation.bin.anchors"
+283 RCDATA "assets/audio/worker-dying.wav"

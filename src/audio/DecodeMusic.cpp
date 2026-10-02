@@ -1,7 +1,6 @@
-// Use the already bundled miniaudio MP3 decoder; playback remains in our mixer.
+// Shared MP3 and compressed WAV decoding; playback remains in our mixer.
 #define MA_NO_DEVICE_IO
 #define MA_NO_ENCODING
-#define MA_NO_WAV
 #define MA_NO_FLAC
 #define MA_NO_RESOURCE_MANAGER
 #define MA_NO_ENGINE

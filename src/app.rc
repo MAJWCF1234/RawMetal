@@ -10,11 +10,11 @@ BEGIN
   BLOCK "040904B0"
   BEGIN
    VALUE "FileDescription", "RawMetal game\0"
-   VALUE "FileVersion", "0.6.2-dev\0"
+   VALUE "FileVersion", "0.6.2\0"
    VALUE "InternalName", "RawMetal\0"
    VALUE "OriginalFilename", "RawMetal.exe\0"
    VALUE "ProductName", "RawMetal\0"
-   VALUE "ProductVersion", "0.6.2-dev\0"
+   VALUE "ProductVersion", "0.6.2\0"
   END
  END
  BLOCK "VarFileInfo"

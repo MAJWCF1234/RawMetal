@@ -18,19 +18,20 @@ bool emitterInChunk(std::int64_t emitter,int level){return emitter>0&&int((std::
 std::vector<int16_t> decodeMusic(const unsigned char* data,size_t bytes);
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(i==size_t(Sound::FreightMusic)?271:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
    m_samples[i].pcm=decodeMusic(data,size);m_samples[i].channels=2;continue;
   }
-  const unsigned char* pcm=nullptr;size_t bytes=0;bool format=false;
+  const unsigned char* pcm=nullptr;size_t bytes=0;bool format=false,compressed=false;
   for(size_t offset=12;offset+8<=size;){size_t count=u32(data+offset+4);auto chunk=data+offset+8;
    if(count>size-offset-8)throw std::runtime_error("Truncated audio resource");
-   if(!std::memcmp(data+offset,"fmt ",4)&&count>=16){auto channels=u16(chunk+2);format=u16(chunk)==1&&(channels==1||channels==2)&&u32(chunk+4)==Rate&&u16(chunk+14)==16;m_samples[i].channels=int(channels);}
+   if(!std::memcmp(data+offset,"fmt ",4)&&count>=16){auto channels=u16(chunk+2);compressed=u16(chunk)!=1;format=u16(chunk)==1&&(channels==1||channels==2)&&u32(chunk+4)==Rate&&u16(chunk+14)==16;m_samples[i].channels=int(channels);}
    if(!std::memcmp(data+offset,"data",4)){pcm=chunk;bytes=count;}
    offset+=8+count+(count&1);
   }
+  if(compressed){m_samples[i].pcm=decodeMusic(data,size);m_samples[i].channels=2;continue;}
   if(!format||!pcm||bytes<4||bytes%(2*m_samples[i].channels))throw std::runtime_error("Audio must be PCM16 at 44100 Hz");
   auto&sample=m_samples[i];sample.pcm.resize(bytes/2);std::memcpy(sample.pcm.data(),pcm,bytes);
   // A short boundary taper suppresses clicks when ambience wraps.
@@ -183,6 +184,9 @@ bool AudioEngine::test(){
  auto waterKey=ambientEmitter(AmbientKind::Water,5,0),machineKey=ambientEmitter(AmbientKind::Machine,15,0);
  if(waterKey==machineKey||emitterInChunk(waterKey,15)||!emitterInChunk(waterKey,5))return failure("ambient emitter namespace collision");
  AudioEngine audio(false);auto game=Game::validationScene(Enemy::Kind::Brute);
+ const auto& worker=audio.m_samples[size_t(Sound::WorkerDying)];
+ if(worker.channels!=2||worker.frames()<Rate*9.3||worker.frames()>Rate*9.5||std::none_of(worker.pcm.begin(),worker.pcm.end(),[](int16_t p){return std::abs(int(p))>500;}))return failure("worker compressed WAV missing, silent or truncated");
+ diagnostic<<"Original 22.05 kHz IMA ADPCM worker voice decodes to full 44.1 kHz mixer audio: PASS\n";
  // Authored music coverage and seam continuity: map IDs do not route music.
  {
   AudioEngine district(false);std::array<int16_t,Rate*2> block{};

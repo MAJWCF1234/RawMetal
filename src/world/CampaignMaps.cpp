@@ -282,14 +282,15 @@ std::shared_ptr<const Map> make(int level){
    {11300,{17.7f,18.6f},-24.2f,0},{13000,{17.8f,19},-24.5f,0},
    {15500,{22,22},-22.7f,0},{18000,{25,23},-22.7f,0}});
   cue(m,"receiving_worker_encounter_ms",6100,Sound::WaspAttack,{16,15},"WORKER: GET BACK!",1.2f);
+  cue(m,"receiving_worker_encounter_ms",6200,Sound::WorkerDying,{16.2f,16},"",1.5f);
   cue(m,"receiving_worker_encounter_ms",6900,Sound::PunchHit,{16.2f,16});
   cue(m,"receiving_worker_encounter_ms",7040,Sound::Metal1,{14.6f,16.4f});
-  cue(m,"receiving_worker_encounter_ms",9150,Sound::Hurt,{16.2f,17.5f},"WORKER: NO! GET OFF ME!",1.5f);
+  cue(m,"receiving_worker_encounter_ms",9150,Sound::Hurt,{16.2f,17.5f},"WORKER: NO! GET OFF ME!",0);
   cue(m,"receiving_worker_encounter_ms",9750,Sound::PunchHit,{17.2f,17.5f});
   cue(m,"receiving_worker_encounter_ms",10100,Sound::WaspAttack,{16.8f,17.5f});
   cue(m,"receiving_worker_encounter_ms",10700,Sound::PunchHit,{16.8f,17.6f});
   cue(m,"receiving_worker_encounter_ms",10900,Sound::WaspDeath,{15.6f,19});
-  cue(m,"receiving_worker_encounter_ms",11400,Sound::Hurt,{17.8f,19},"WORKER: SOMEBODY...",1.5f);
+  cue(m,"receiving_worker_encounter_ms",11400,Sound::Hurt,{17.8f,19},"WORKER: SOMEBODY...",0);
   // First receiving balcony, above unloading lanes. The descent folds back
   // along the west side instead of allowing a straight drop into the scene.
   deck(m,-19,1,4,8,10);m.stairs.push_back({3,9,6,18,-25,-19,32,true,false});
