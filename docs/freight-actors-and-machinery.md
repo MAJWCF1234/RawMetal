@@ -22,6 +22,14 @@ encounter. Natural arrivals still follow the corridor to the overlook. Existing
 saves preserve the saved player position and sequence progress; a completed
 encounter does not automatically replay on loading a save.
 
+The worker wanders until the player actually faces him with an unobstructed
+view. Spotting him starts a three-second delay while he continues wandering,
+then a 2.2-second walk from his current position to the fight spot. The first
+attack starts at 6.2 seconds. Punch cycles now last 0.45–0.54 seconds, hit
+reactions about half a second, and the final fall 1.2 seconds. During combat his
+facing follows the authored target wasp's actual position rather than a fixed
+yaw. The attack, impact and death sounds follow the revised key times.
+
 Spawn yaw and pitch are authored metadata, usable by custom campaigns. The
 console regression test verifies that the encounter remains paused while the
 console is open and starts after Escape closes it.
@@ -34,6 +42,9 @@ zero-based in declaration order. Existing campaign payloads remain valid.
 ```text
 ACTOR|map|timerState|visual|scale|loop|tool|index
 ACTOR_KEY|map|index|timeMs|x|y|z|yawRadians|clip|phase
+ACTOR_IDLE_KEY|map|index|timeMs|x|y|z|yawRadians|clip|phase
+ACTOR_PRELUDE|map|index|idleUntilMs|approachUntilMs
+SEQUENCE_SIGHT|map|sequenceIndex|actorIndex|maxDistance
 ACTOR_PLATFORM|map|index|width|depth|thickness
 ACTOR_SUSPEND|map|index|absoluteTopZ
 ACTOR_HEALTH|map|index|health|damageState|deadState
@@ -44,7 +55,13 @@ Visual IDs are Worker=0, Wasp=1, Huntsman=2 and Cargo=3. Worker clips are idle=0
 walk=1, punch=2, hit=3, death=4 and crouch=5. A platform renders a steel deck
 instead of its visual model. Timed sequences accept an optional final loop flag.
 MAP accepts optional fields 21 and 22 for spawn yaw and pitch; pitch retains the
-game's camera units, where radians equal pitch / 140.
+game’s camera units, where radians equal pitch / 140.
+
+ACTOR_KEY accepts an optional final `lookAtActor` index. Phase values greater
+than one specify repeated animation cycles (up to 64), keeping walking cadence
+independent of a long movement segment. Idle keys loop before the observation
+delay expires. Approach origins and idle clocks persist through shared saved
+state IDs derived from the track, including in custom campaigns.
 
 The built-in receiving actors currently use an observational, fixed sequence;
 they are not autonomous enemy AI. Captions accompany existing pain and impact
@@ -86,3 +103,12 @@ Fresh Vulkan frames and a contact sheet are in
 at 1 ms and 4,500 ms differ in 2,244 of 230,400 pixels; at 23,000 ms they differ
 in 3,782 pixels. These are animation checks at a fixed camera, not before/after
 quality scores.
+
+The subsequent pacing patch passed the same checks, plus looking-away,
+three-second delay, continuous approach save/load, facing both wasps during
+strikes, and loading custom payloads for the new records. Its executable is
+21,836,800 bytes. Fresh close and overlook captures are in
+`diagnostics/freight-worker-pacing`; the contact sheet shows wandering, approach
+and both strikes. Matched old/new start frames differ in 24,509 pixels; the new
+wandering frames at 1 ms and 2,200 ms differ in 17,145 pixels of 230,400. These
+checks establish visible staging and motion changes, not a quality score.

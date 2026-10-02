@@ -125,9 +125,11 @@ __declspec(noinline) static int freightArtInspection(int W,int H){
 }
 __declspec(noinline) static int freightActorInspection(int W,int H){
  auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
- for(int age:{1,4500,5700,12000,18000,23000})for(int view=0;view<2;++view){
+ for(int age:{1,2200,4200,6300,6800,9700,10600,12500})for(int view=0;view<2;++view){
   auto scene=retro::Game::mapInspection(view?retro::Vec2{12.5f,13}:retro::Vec2{7.6f,9.5f},view?.7f:.69f,view?-15.f:-62.f,13,true,view?-25.f:-19.f,true);
-  scene.setState(retro::stateId("receiving_worker_encounter_ms"),age);scene.updateMechanisms(0);renderer->render(scene);
+  scene.setState(retro::stateId("receiving_worker_encounter_ms"),1);
+  for(int time=0;time<age;time+=10)scene.updateMechanisms(.01f);
+  renderer->render(scene);
   std::ofstream out("worker-"+std::to_string(age)+(view?"-close.ppm":"-balcony.ppm"),std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
  }return 0;
 }

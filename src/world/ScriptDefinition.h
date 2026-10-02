@@ -17,25 +17,29 @@ struct TimedSequence {
  int durationMs=30000,finishAtMs=16000,soundIntervalMs=1800,soundUntilMs=16000;
  Sound tickSound=Sound::Metal1;float gain=.5f,pitch=.65f;
  bool loop=false;
+ int sightActor=-1;float sightDistance=30;
 };
 struct QuestItemStack {StateId id=0;int count=0;};
 // Shared, saved actor and machinery timelines. Keys use absolute map elevation.
 enum class ActorVisual { Worker, Wasp, Huntsman, Cargo };
-struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;};
+struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 struct ActorTrack {
  StateId timerState=0;ActorVisual visual=ActorVisual::Worker;
  float scale=1.7f;bool loop=false,tool=false;std::vector<ActorKey> keys;
  bool platform=false;Vec2 footprint{1,1};float thickness=.2f;
  float suspensionTop=-999;
  StateId damageState=0,deadState=0;int health=0;
+ std::vector<ActorKey> idleKeys;int idleUntilMs=0,approachUntilMs=0;
 };
 struct SequenceCue {
  StateId timerState=0;int timeMs=0;Sound sound=Sound::Metal1;
  Vec2 position{};float gain=1,pitch=1;std::string caption;
 };
-struct ActorPose {Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;};
+struct ActorPose {Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
+inline StateId actorTrackState(StateId timer,size_t index,std::string_view field){return stateId("actor_track/"+std::to_string(timer)+"/"+std::to_string(index)+"/"+std::string(field));}
 inline StateId actorPositionState(StateId dead,int axis){return stateId("actor_position/"+std::to_string(dead)+"/"+std::to_string(axis));}
 ActorPose sampleActor(const ActorTrack& track,int ageMs);
+ActorPose sampleActorKeys(const std::vector<ActorKey>& keys,int ageMs,bool loop=false);
 struct ScriptAction {
  enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign};
  Type type=Type::SetState;StateId id=0;int value=0,index=0;CreatureKind enemyKind=CreatureKind::Huntsman;Vec2 position{};float z=-999,amount=0;Sound sound=Sound::Exit;
