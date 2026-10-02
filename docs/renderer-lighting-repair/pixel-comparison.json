@@ -1,0 +1,155 @@
+[
+  {
+    "view": "bore-axis",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 69.229,
+    "mean_channel_error_255": 11.365
+  },
+  {
+    "view": "coolant-depth",
+    "size": [
+      1920,
+      1080
+    ],
+    "changed_over_4_percent": 73.34,
+    "mean_channel_error_255": 17.857
+  },
+  {
+    "view": "corridor-light",
+    "size": [
+      1920,
+      1080
+    ],
+    "changed_over_4_percent": 72.454,
+    "mean_channel_error_255": 18.377
+  },
+  {
+    "view": "fixture-depth",
+    "size": [
+      1920,
+      1080
+    ],
+    "changed_over_4_percent": 89.77,
+    "mean_channel_error_255": 20.608
+  },
+  {
+    "view": "fixture-shaft",
+    "size": [
+      1920,
+      1080
+    ],
+    "changed_over_4_percent": 25.532,
+    "mean_channel_error_255": 5.285
+  },
+  {
+    "view": "intake-bay",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 90.312,
+    "mean_channel_error_255": 14.738
+  },
+  {
+    "view": "legacy-cable",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 70.849,
+    "mean_channel_error_255": 11.408
+  },
+  {
+    "view": "legacy-foundry",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 80.249,
+    "mean_channel_error_255": 20.167
+  },
+  {
+    "view": "legacy-pump",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 70.255,
+    "mean_channel_error_255": 10.337
+  },
+  {
+    "view": "legacy-waste",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 77.672,
+    "mean_channel_error_255": 9.804
+  },
+  {
+    "view": "manifest-wing",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 74.033,
+    "mean_channel_error_255": 12.662
+  },
+  {
+    "view": "pit-chassis",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 73.025,
+    "mean_channel_error_255": 18.871
+  },
+  {
+    "view": "pit-workshop",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 59.829,
+    "mean_channel_error_255": 12.67
+  },
+  {
+    "view": "platform-axis",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 39.283,
+    "mean_channel_error_255": 5.568
+  },
+  {
+    "view": "warehouse-aisle",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 73.165,
+    "mean_channel_error_255": 13.409
+  },
+  {
+    "view": "warehouse-canyon",
+    "size": [
+      640,
+      360
+    ],
+    "changed_over_4_percent": 55.97,
+    "mean_channel_error_255": 7.557
+  },
+  {
+    "view": "warehouse-d-block",
+    "size": [
+      1920,
+      1080
+    ],
+    "changed_over_4_percent": 73.077,
+    "mean_channel_error_255": 12.012
+  }
+]

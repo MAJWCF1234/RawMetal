@@ -1,0 +1,60 @@
+Presentation: 1920x1080 / 30 warmup frames per scene / 240 measured frames
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native Win32 swapchain / async present (2 frames in flight)
+Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort
+
+Door diagnostic: fixed camera, all leaves cycle closed/open/closed; no AI simulation.
+Door cycle / map 0:
+  wall-clock FPS: 115.755 (actual throughput)
+  avg frame time: 8.6372 ms = 115.778 FPS
+  p95 frame time: 10.1351 ms = 98.667 FPS
+  p99 frame time: 11.4292 ms
+  max frame time: 11.6365 ms = 85.9365 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 2:
+  wall-clock FPS: 130.759 (actual throughput)
+  avg frame time: 7.64702 ms = 130.77 FPS
+  p95 frame time: 9.2132 ms = 108.54 FPS
+  p99 frame time: 10.0746 ms
+  max frame time: 10.3451 ms = 96.6641 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 6:
+  wall-clock FPS: 96.815 (actual throughput)
+  avg frame time: 10.3282 ms = 96.8224 FPS
+  p95 frame time: 29.4615 ms = 33.9426 FPS
+  p99 frame time: 31.8681 ms
+  max frame time: 40.8217 ms = 24.4968 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 7:
+  wall-clock FPS: 114.497 (actual throughput)
+  avg frame time: 8.73313 ms = 114.506 FPS
+  p95 frame time: 9.3162 ms = 107.34 FPS
+  p99 frame time: 56.1687 ms
+  max frame time: 64.2507 ms = 15.564 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 8:
+  wall-clock FPS: 147.732 (actual throughput)
+  avg frame time: 6.76811 ms = 147.752 FPS
+  p95 frame time: 8.1259 ms = 123.063 FPS
+  p99 frame time: 8.6436 ms
+  max frame time: 9.0211 ms = 110.851 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 9:
+  wall-clock FPS: 137.964 (actual throughput)
+  avg frame time: 7.24766 ms = 137.976 FPS
+  p95 frame time: 8.7634 ms = 114.111 FPS
+  p99 frame time: 10.0631 ms
+  max frame time: 10.5447 ms = 94.8344 FPS
+
+  static map rebuilds during motion: 0
+
+Done.

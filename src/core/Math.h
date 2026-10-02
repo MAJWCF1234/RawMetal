@@ -7,6 +7,13 @@ namespace retro {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kTwoPi = kPi * 2.0f;
 
+struct Point3 {
+ float x=0,y=0,z=0;
+ Point3 operator+(Point3 b)const{return {x+b.x,y+b.y,z+b.z};}
+ Point3 operator-(Point3 b)const{return {x-b.x,y-b.y,z-b.z};}
+ Point3 operator*(float s)const{return {x*s,y*s,z*s};}
+};
+
 struct Vec2 {
     float x = 0.0f;
     float y = 0.0f;

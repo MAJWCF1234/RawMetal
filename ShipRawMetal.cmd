@@ -5,7 +5,7 @@ cd /d "%~dp0"
 
 set "TARGET_BRANCH=main"
 set "EXPECTED_REPO=MAJWCF1234/RawMetal"
-set "MAX_BYTES=19000000"
+set "MAX_BYTES=22000000"
 
 echo.
 echo ============================================================
