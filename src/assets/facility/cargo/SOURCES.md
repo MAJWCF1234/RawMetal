@@ -5,6 +5,7 @@ Imported unchanged from the user's `O:\retro official` collection:
 * `pallet.fbx`, `pallet.png`: PSX Bunkers v1.8.8, wood_pallet_1 / wood_1.
 * `service-van.obj`, `service-van.mtl`, `service-van.png`, `van-metal.png`: Pizza Doggy's Mystery Package vol. 8, Rusty PSX Style Kidnapper's Van, OBJ van_3 and textures van_3 / metal_2_1. Repurposed as a parked receiving maintenance vehicle; it is not rolling stock.
 * `office-carpet.png`: PSX Textures II v1.6, 256/Color Maps/carpet_pt_1_1.png.
+* `wooden-crate.obj`, `wooden-crate.png`: PSX Bunkers v1.8.8, OBJ wooden_crate_8 and its original texture. Used as loaded pallet and warehouse rack contents; original geometry and texture resolution retained.
 
 The asset packer verifies original model bytes and exact RGBA pixels in the executable. Existing compressor resources 142/143 also serve facility machinery model 12; duplicate resources 257/260 were removed without altering geometry or pixels.
 

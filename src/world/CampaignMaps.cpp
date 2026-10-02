@@ -18,7 +18,7 @@ AuthoredLayerData floorLayer(const char* name,float z,bool openNorth=false,bool 
 void wall(Map& m,float x1,float y1,float x2,float y2,float lo,float hi,int material=2){m.structures.push_back({x1,y1,x2,y2,lo,hi,false,material});}
 void cargo(Map& m,float x,float y,float floor,bool loaded=true,float yaw=0){
  m.fixtures.push_back({15,{x,y},floor-m.layers.front().elevation,1.2f,1.15f,.16f,yaw,true});
- if(loaded)wall(m,x-.55f,y-.5f,x+.55f,y+.5f,floor+.16f,floor+1.15f,10);
+ if(loaded)m.fixtures.push_back({17,{x,y},floor+.16f-m.layers.front().elevation,1.1f,1.f,.99f,yaw,true});
 }
 void board(Map& m,float x,float y,float z,const char* title,const char* subtitle,float width=3.f){
  // Every sign has a steel backing and two supports rooted in the floor.
@@ -39,7 +39,7 @@ void rack(Map& m,float x,float y,float floor,int tiers=4){
   wall(m,x,y,x+2.72f,y+4,z,z+.12f);
   for(int pallet=0;pallet<2;++pallet){float yy=y+.3f+pallet*1.8f;
    if(tier==0)cargo(m,x+1.36f,yy+.7f,z+.14f);
-   else wall(m,x+.22f,yy,x+2.5f,yy+1.4f,z+.14f,z+1.65f,10);
+   else for(float xx:{x+.8f,x+1.95f})m.fixtures.push_back({17,{xx,yy+.7f},z+.14f-m.layers.front().elevation,1.05f,1.3f,1.5f,0,true});
   }
  }
 }
@@ -81,12 +81,34 @@ void locomotive(Map& m,float x,float y,float floor,bool stripped=false){
  for(float dx:{-1.21f,1.19f})wall(m,x+dx,y+4.35f,x+dx+.02f,y+5.75f,floor+2.48f,floor+3.25f,9);
  for(float dx:{-1.5f,1.25f})wall(m,x+dx,y+4.2f,x+dx+.25f,y+6.5f,floor+.55f,floor+.72f,2);
 }
-void office(Map& m,float x,float y,float floor,const char* title,const char* line1,const char* line2,StateId state=0){
- wall(m,x-1.4f,y-1.5f,x-1.25f,y+2.f,floor,floor+2.7f,3);
- wall(m,x-1.4f,y+1.85f,x+2.3f,y+2.f,floor,floor+2.7f,3);
+void office(Map& m,float x,float y,float floor,const char* title,const char* line1,const char* line2,StateId state=0,bool observation=false){
+ if(observation){
+  for(auto span:{std::pair{floor,floor+.85f},std::pair{floor+2.45f,floor+2.7f}}){
+   wall(m,x-1.4f,y-1.5f,x-1.25f,y+2.f,span.first,span.second,3);
+   wall(m,x-1.4f,y+1.85f,x+2.3f,y+2.f,span.first,span.second,3);
+  }
+  for(float yy:{y-1.5f,y+.2f,y+1.85f})wall(m,x-1.4f,yy,x-1.25f,yy+.08f,floor+.85f,floor+2.45f,2);
+  for(float xx:{x-1.4f,x+.4f,x+2.2f})wall(m,xx,y+1.85f,xx+.08f,y+2.f,floor+.85f,floor+2.45f,2);
+ }else{
+  wall(m,x-1.4f,y-1.5f,x-1.25f,y+2.f,floor,floor+2.7f,3);
+  wall(m,x-1.4f,y+1.85f,x+2.3f,y+2.f,floor,floor+2.7f,3);
+ }
  terminal(m,{x,y},title,line1,line2,floor-m.layers.front().elevation,state);
  m.fixtures.push_back({7,{x+1.8f,y+1.35f},floor-m.layers.front().elevation,1.4f,.45f,1.6f,kPi,true});
  m.lights.push_back({{x,y},floor+2.55f});
+}
+void bench(Map& m,float x,float y,float floor){
+ // Open space below a seated-height bench, rather than a solid cargo block.
+ wall(m,x-1.35f,y-.25f,x+1.35f,y+.25f,floor+.43f,floor+.51f,10);
+ wall(m,x-1.35f,y+.20f,x+1.35f,y+.28f,floor+.55f,floor+1.05f,10);
+ for(float dx:{-1.f,1.f})wall(m,x+dx-.06f,y-.20f,x+dx+.06f,y+.20f,floor,floor+.43f,2);
+}
+void observationWindow(Map& m,float x,float y1,float y2,float floor){
+ // Framed, open observation apertures keep the warehouse visible; a solid
+ // opaque panel would hide the route the player has just climbed.
+ wall(m,x,y1,x+.12f,y2,floor,floor+.85f,3);
+ wall(m,x,y1,x+.12f,y2,floor+2.65f,floor+3.3f,3);
+ for(float y=y1;y<y2;y+=2.f)wall(m,x,y,x+.12f,y+.08f,floor+.85f,floor+2.65f,2);
 }
 void climb(Map& m,float bottom,float top){
  float middle=(bottom+top)*.5f;
@@ -193,6 +215,10 @@ std::shared_ptr<const Map> make(int level){
   terminal(m,{10.5f,18},"RESTRICTED MATERIAL INTAKE","DESTINATION: ENERGY RESEARCH.","TRANSFER AUTHORIZATION REQUIRED.");
   m.creatureSpawns={{CreatureKind::Huntsman,{14,15},-25}};
   m.pickupSpawns.push_back({{16,7},PickupKind::Ammo,-25});
+  // Inspection islands divide unloading from the through personnel aisle.
+  wall(m,13,12,15,14,-25,-24.35f,2);
+  cargo(m,13.9f,13,-24.35f);
+  board(m,5,21,-22.5f,"INSPECTION HOLD","RESEARCH RECEIVING / SEALED LOAD",3.f);
   break;
  case 15:
   board(m,12,5.5f,-22.3f,"RECEIVING 03","WAREHOUSE INTAKE",5.f);
@@ -215,6 +241,11 @@ std::shared_ptr<const Map> make(int level){
   if(level==18)deck(m,-13,0,9,11,24);
   if(level==19)climb(m,-13,-7);
   if(level==16){office(m,12,15,-25,"WAREHOUSE / OPERATIONS","DO NOT SEND ANYTHING TO RECEIVING.","THEY ARE NOT ANSWERING.");m.fixtures.push_back({6,{12,8},0,2.4f,.9f,1.1f,.15f,true});}
+  // Tall aisle-end labels remain readable from the opposite rack balcony.
+  board(m,3.35f,4.8f,-17.7f,level==16?"A / INDUSTRIAL PARTS":level==17?"C / CHEMICAL INVENTORY":level==18?"D / RESTRICTED FREIGHT":"E / LONG TERM STORAGE","BLOCK DIRECTORY / UPPER WALK",2.6f);
+  if(level==16){bench(m,7,19,-25);terminal(m,{7,21},"WAREHOUSE / BREAK CORNER","RADIO CHECK 02:14 / NO REPLY FROM RECEIVING.","DO NOT USE THE FREIGHT AISLES FOR EVACUATION.");}
+  if(level==17){m.fixtures.push_back({14,{16.1f,18.2f},0,1.3f,1.35f,2.f,0,true});board(m,20,20,-22.7f,"CHEMICAL HOLD","SEALED STOCK / NO TRANSFER",2.5f);}
+  if(level==18){container(m,2,17,-25,true,7);terminal(m,{3.5f,19},"RESTRICTED / SEALED MANIFEST","CONTAINMENT HARDWARE / SAMPLE HANDLING.","CONTENTS NOT FOR LOCAL INSPECTION.",6);}
   if(level==19){terminal(m,{12,22},"UPPER STORAGE / BREACH","RESTRICTED FREIGHT: MANIFEST CONTROL.","OFFICES ABOVE THE INTAKE END.",18);m.clutterSpawns.push_back({3,{13,22},-7});}
   if(level==17||level==18)m.creatureSpawns={{CreatureKind::Huntsman,{20,11},entry},{CreatureKind::Wasp,{12,18},entry+2}};
   m.pickupSpawns.push_back({level==19?Vec2{21,12}:Vec2{12,3},PickupKind::Ammo,entry});
@@ -223,10 +254,19 @@ std::shared_ptr<const Map> make(int level){
   m.definition.floorMaterial=FloorMaterial::OfficeCarpet;
   board(m,12,19.5f,-4.9f,"MANIFEST CONTROL","FREIGHT RECORDS / ROUTING",3.5f);
   for(float y:{6.f,12.f,17.f})m.fixtures.push_back({7,{1.5f,y},0,1.5f,.45f,1.8f,-kPi*.5f,true});
-  office(m,5.5f,7,-7,"MANIFEST / ORDINARY FREIGHT","BEARINGS / FILTERS / FOOD / MEDICAL SUPPLIES.","SPECIALIZED CONTAINMENT HARDWARE: RESEARCH RECEIVING.");
-  office(m,18,8,-7,"TRAIN 27 / ARRIVAL RECORD","PASSENGERS: 0 / CARGO: NONE / PLATFORM 3.","MANUAL ANNOTATION: THIS IS WRONG.");
-  wall(m,10,5,10.15f,18,-7,-5.8f,3);wall(m,10,5,10.15f,18,-4.35f,-3.4f,3);
-  if(level==21){office(m,18,18,-7,"MANIFEST / ROUTING SHUTTERS","TRANSFER YARD: ROUTING AUTHORIZATION.","E / RELEASE THE DOWNSTREAM SHUTTERS.",stateId("freight_routing"));m.doors.back().requireState=stateId("freight_routing");}
+  office(m,5.5f,7,-7,"MANIFEST / ORDINARY FREIGHT","BEARINGS / FILTERS / FOOD / MEDICAL SUPPLIES.","SPECIALIZED CONTAINMENT HARDWARE: RESEARCH RECEIVING.",0,true);
+  office(m,18,8,-7,"TRAIN 27 / ARRIVAL RECORD","PASSENGERS: 0 / CARGO: NONE / PLATFORM 3.","MANUAL ANNOTATION: THIS IS WRONG.",0,true);
+  observationWindow(m,10,5,18,-7);
+  // Records bays have an open frontage and carpeted circulation, leaving the
+  // central personnel route and the routing control's approach unobstructed.
+  for(float y:{6.f,12.f}){
+   wall(m,14.5f,y,22.8f,y+.12f,-7,-6.15f,3);
+   wall(m,14.5f,y,22.8f,y+.12f,-4.4f,-3.4f,3);
+   for(float x:{14.5f,18.5f,22.7f})wall(m,x,y,x+.08f,y+.12f,-6.15f,-4.4f,2);
+  }
+  bench(m,6,19,-7);
+  terminal(m,{6,16},"MANIFEST / MISSED CALLS","RECEIVING: 02:14 / 02:17 / 02:21 / NO ANSWER.","EMPLOYEE TRANSIT LOG: PLATFORM 3.");
+  if(level==21){office(m,18,18,-7,"MANIFEST / ROUTING SHUTTERS","TRANSFER YARD: ROUTING AUTHORIZATION.","E / RELEASE THE DOWNSTREAM SHUTTERS.",stateId("freight_routing"),true);m.doors.back().requireState=stateId("freight_routing");}
   m.pickupSpawns.push_back({{6,18},PickupKind::Health,-7});
   break;
  case 22:
@@ -248,12 +288,19 @@ std::shared_ptr<const Map> make(int level){
   for(float x:{7.f,17.f})rail(m,x,1,23,-25);
   container(m,2,6,-25,false);office(m,20,18,-25,"TRANSFER / SIGNAL ROUTING","DEPOT / PLATFORMS / DEEP FREIGHT.","PLATFORM 3: SERVICE ACCESS ONLY.");
   wall(m,8,6,17,6.4f,-9,-8.7f,2);
+  // A scale and sheltered signal desk establish the rail transfer function.
+  wall(m,14.5f,7,19.5f,12,-25,-24.88f,2);
+  cargo(m,17,9.5f,-24.88f);
+  board(m,6,18,-22.5f,"DEEP FREIGHT","WEIGHING / DEPOT / PLATFORM 3",3.f);
   break;
  case 25:case 26:
   board(m,12,8,-22.2f,"PLATFORM 3","TRAIN 27 / ARRIVED 02:13",4.2f);
   if(level==26)board(m,12,22,-22.3f,"DEPOT ACCESS","EMPLOYEE TRANSIT",3.f);
   rail(m,7,1,23,-25);rail(m,18,1,23,-25);
-  for(float y:{5.f,11.f,17.f})m.fixtures.push_back({6,{13,y},0,2.5f,.55f,.7f,0,true});
+  for(float y:{5.f,11.f,17.f})bench(m,13,y,-25);
+  // Trackside fences separate transit from freight, with gaps at entry/exit.
+  for(float x:{9.f,16.f})m.structures.push_back({x,4,x+.07f,21,-25,-23.95f,true,2});
+  m.fixtures.push_back({8,{22.7f,12},1.f,.7f,.15f,1.f,-kPi*.5f,false});
   if(level==25)terminal(m,{12,3},"PLATFORM 3 / DEPARTURES","TRAIN 27 / ARRIVED 02:13.","NO DEPARTURE RECORDED / TRACK CLEAR.");
   else {terminal(m,{12,18},"PLATFORM / SECURITY RECORD","02:12:51 ... 02:19:04 / BLOCK MISSING.","EMPLOYEE TRANSIT: ROLLING STOCK DEPOT.");for(int i=0;i<6;++i)m.clutterSpawns.push_back({i%4,{11.f+float(i%3),19.f+float(i/3)},-25});}
   m.lights.clear();for(float y:{3.f,12.f,21.f})m.lights.push_back({{12,y},-18.25f});
@@ -279,6 +326,8 @@ std::shared_ptr<const Map> make(int level){
   }
   climb(m,-28,-19);deck(m,-19,8,21,16,24);
   m.pickupSpawns.push_back({{12,3},PickupKind::Ammo,-28});
+  m.fixtures.push_back({12,{3,20},0,1.8f,1.4f,1.6f,0,true});
+  board(m,20,18,-25.4f,"INSPECTION PIT","JACKS ENGAGED / DO NOT LOWER",2.6f);
   break;
  case 29:
   deck(m,-19,1,4,7,22);deck(m,-19,17,4,23,22);
@@ -294,7 +343,12 @@ std::shared_ptr<const Map> make(int level){
   for(float x:{7.f,17.f})rail(m,x,1,23,-25);
   wall(m,11,1,11.2f,10,-25,-19,3);wall(m,11,14,11.2f,23,-25,-19,3);
   for(float y:{3.f,7.f,11.f,15.f,19.f})m.pipes.push_back({{1.2f,y},{22.8f,y},-19.4f,.06f});
-  if(level==30){m.waterVolumes.push_back({14,5,20,12,-25.35f,-25.1f});office(m,4,17,-25,"SIGNAL ROOM / TUNNEL 4A","MAIN LINE CLOSED / PARALLEL BORE AVAILABLE.","POWER DISTRIBUTION: DEEP JUNCTION.");}
+  if(level==30){m.waterVolumes.push_back({14,5,20,12,-25.35f,-25.1f});office(m,4,17,-25,"SIGNAL ROOM / TUNNEL 4A","MAIN LINE CLOSED / PARALLEL BORE AVAILABLE.","POWER DISTRIBUTION: DEEP JUNCTION.");
+   // Occlusion and a west-side bypass break the bore's repeated straight run.
+   wall(m,12.5f,13,22.8f,14.5f,-25,-22.9f,3);
+   board(m,5,12,-22.6f,"SERVICE BYPASS","MAIN BORE / COLLAPSE AHEAD",2.8f);
+   m.fixtures.push_back({13,{2,6},0,.9f,.5f,2.2f,-kPi*.5f,true});
+  }
   else {wall(m,3,7,9,9,-25,-23.3f,3);wall(m,15,13,21,15,-25,-23.2f,3);
    terminal(m,{12,21},"DEEP JUNCTION / SUBSTATION","FREIGHT MAIN LINE CONTINUES EAST.","POWER DISTRIBUTION: NEXT DISTRICT / ROUTE UNDER CONSTRUCTION.");
    m.creatureSpawns={{CreatureKind::Huntsman,{18,19},-25}};

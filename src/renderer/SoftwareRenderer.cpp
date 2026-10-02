@@ -69,7 +69,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_facilityTextures.emplace("machinery_mx_1",loadTexture(143));
  m_facilityTextures.emplace("transformer_box_hr_2",loadTexture(261));
  m_facilityTextures.emplace("metal_hr_6_1",loadTexture(262));
- m_facilityTextures.emplace("wood_1",loadTexture(266));
+  m_facilityTextures.emplace("wood_1",loadTexture(266));
+  m_facilityTextures.emplace("wooden_crate_8",loadTexture(276));
  m_facilityTextures.emplace("van_3",loadTexture(268));
  m_facilityTextures.emplace("metal_2_1",loadTexture(269));
  m_officeCarpet=loadTexture(270);deriveSurfaceNormal(m_officeCarpet,.6f);m_officeCarpet.glossStrength=.04f;
@@ -192,6 +193,7 @@ const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int 
  if(mesh>=12&&mesh<=14)return m_facilityTextures.at(serviceTexture[mesh-12]);
  if(mesh==15)return m_facilityTextures.at("wood_1");
  if(mesh==16)return m_facilityTextures.at("van_3");
+ if(mesh==17)return m_facilityTextures.at("wooden_crate_8");
  std::string material=part>=0&&part<int(model.materialNames.size())?model.materialNames[size_t(part)]:"<invalid part>";
  throw std::runtime_error("Missing facility texture for mesh "+std::to_string(mesh)+", part "+std::to_string(part)+", material "+material);
 }

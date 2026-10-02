@@ -156,3 +156,5 @@
 272 RCDATA "assets/mutant/MonsterPSX.fbx"
 273 RCDATA "assets/mutant/MonsterPSX_Diffuse.png"
 274 RCDATA "assets/mutant/animation.bin"
+275 RCDATA "assets/facility/cargo/wooden-crate.obj"
+276 RCDATA "assets/facility/cargo/wooden-crate.png"

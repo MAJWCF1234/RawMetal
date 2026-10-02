@@ -1,0 +1,2 @@
+# Preserve the collection model's original bytes through checkout.
+src/assets/facility/cargo/wooden-crate.obj -text
