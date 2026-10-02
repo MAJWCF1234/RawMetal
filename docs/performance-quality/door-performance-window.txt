@@ -1,0 +1,72 @@
+Presentation: 1920x1080 / 30 warmup frames per scene / 240 measured frames
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native Win32 swapchain / async present (2 frames in flight)
+Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort
+
+Door diagnostic: fixed camera, all leaves cycle closed/open/closed; no AI simulation.
+Door cycle / map 0 first render: 144.834 ms (cache construction; excluded from warm timing)
+Door cycle / map 0:
+  avg scene/submit/present: 5.666 / 0.219041 / 0.199867 ms
+  wall-clock FPS: 139.728 (actual throughput)
+  avg frame time: 7.1432 ms = 139.993 FPS
+  p95 frame time: 8.5269 ms = 117.276 FPS
+  p99 frame time: 9.1247 ms
+  max frame time: 9.6826 ms = 103.278 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 2 first render: 395.743 ms (cache construction; excluded from warm timing)
+Door cycle / map 2:
+  avg scene/submit/present: 5.0356 / 0.484026 / 0.200896 ms
+  wall-clock FPS: 148.571 (actual throughput)
+  avg frame time: 6.72966 ms = 148.596 FPS
+  p95 frame time: 8.3715 ms = 119.453 FPS
+  p99 frame time: 9.0198 ms
+  max frame time: 9.4053 ms = 106.323 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 6 first render: 3269.5 ms (cache construction; excluded from warm timing)
+Door cycle / map 6:
+  avg scene/submit/present: 4.80642 / 0.269312 / 0.20033 ms
+  wall-clock FPS: 156.539 (actual throughput)
+  avg frame time: 6.38728 ms = 156.561 FPS
+  p95 frame time: 7.8652 ms = 127.142 FPS
+  p99 frame time: 8.6137 ms
+  max frame time: 9.1762 ms = 108.978 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 7 first render: 242.221 ms (cache construction; excluded from warm timing)
+Door cycle / map 7:
+  avg scene/submit/present: 4.66406 / 0.245575 / 0.194812 ms
+  wall-clock FPS: 163.943 (actual throughput)
+  avg frame time: 6.09863 ms = 163.971 FPS
+  p95 frame time: 7.2648 ms = 137.65 FPS
+  p99 frame time: 7.7083 ms
+  max frame time: 8.0196 ms = 124.694 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 8 first render: 309.261 ms (cache construction; excluded from warm timing)
+Door cycle / map 8:
+  avg scene/submit/present: 4.75782 / 0.223123 / 0.205045 ms
+  wall-clock FPS: 158.658 (actual throughput)
+  avg frame time: 6.30176 ms = 158.686 FPS
+  p95 frame time: 7.9802 ms = 125.31 FPS
+  p99 frame time: 9.0959 ms
+  max frame time: 11.9793 ms = 83.4773 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 9 first render: 1431.97 ms (cache construction; excluded from warm timing)
+Door cycle / map 9:
+  avg scene/submit/present: 4.5643 / 0.269927 / 0.197483 ms
+  wall-clock FPS: 164.485 (actual throughput)
+  avg frame time: 6.07883 ms = 164.505 FPS
+  p95 frame time: 7.523 ms = 132.926 FPS
+  p99 frame time: 8.6826 ms
+  max frame time: 9.0445 ms = 110.564 FPS
+
+  static map rebuilds during motion: 0
+
+Done.

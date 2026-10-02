@@ -31,6 +31,7 @@ struct Image {VkImage handle=VK_NULL_HANDLE;VkImageView view=VK_NULL_HANDLE;VkDe
 struct GpuRenderer::Impl {
  VkInstance instance=VK_NULL_HANDLE;VkPhysicalDevice physical=VK_NULL_HANDLE;VkDevice device=VK_NULL_HANDLE;VkQueue queue=VK_NULL_HANDLE;uint32_t family=0;
  HWND hwnd=nullptr;VkSurfaceKHR surface=VK_NULL_HANDLE;VkSwapchainKHR swapchain=VK_NULL_HANDLE;VkFormat swapFormat=VK_FORMAT_UNDEFINED;VkExtent2D swapExtent{};std::vector<VkImage> swapImages;std::vector<VkImageView> swapViews;std::vector<VkFramebuffer> swapFrames;std::vector<VkSemaphore> readySemaphores;VkRenderPass compositePass=VK_NULL_HANDLE;VkDescriptorSetLayout compositeSetLayout=VK_NULL_HANDLE;VkPipelineLayout compositeLayout=VK_NULL_HANDLE;VkPipeline compositePipeline=VK_NULL_HANDLE;VkDescriptorPool compositeDescriptors=VK_NULL_HANDLE;Image overlay;bool overlayInitialized=false;int overlayWidth=0,overlayHeight=0;
+ int surfaceClientWidth=0,surfaceClientHeight=0;
  VkCommandPool pool=VK_NULL_HANDLE;
  // Two frames in flight: CPU prepares frame N while GPU renders frame N-1.
  // Each slot owns its command buffer, fence, dynamic vertex buffer, overlay
@@ -183,7 +184,7 @@ struct GpuRenderer::Impl {
  void initPresentation(){
   VkSurfaceCapabilitiesKHR caps{};check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical,surface,&caps),"Query surface capabilities");uint32_t n=0;check(vkGetPhysicalDeviceSurfaceFormatsKHR(physical,surface,&n,nullptr),"Query surface formats");std::vector<VkSurfaceFormatKHR> formats(n);check(vkGetPhysicalDeviceSurfaceFormatsKHR(physical,surface,&n,formats.data()),"Query surface formats");
   VkSurfaceFormatKHR chosen=formats.front();for(auto f:formats)if(f.format==VK_FORMAT_B8G8R8A8_UNORM){chosen=f;break;}if(chosen.format!=VK_FORMAT_B8G8R8A8_UNORM&&chosen.format!=VK_FORMAT_R8G8B8A8_UNORM)throw std::runtime_error("Display has no supported 8-bit Vulkan surface format");swapFormat=chosen.format;
-  RECT rect{};GetClientRect(hwnd,&rect);VkExtent2D extent=caps.currentExtent.width!=UINT32_MAX?caps.currentExtent:VkExtent2D{uint32_t(std::max<LONG>(1,rect.right)),uint32_t(std::max<LONG>(1,rect.bottom))};extent.width=std::clamp(extent.width,caps.minImageExtent.width,caps.maxImageExtent.width);extent.height=std::clamp(extent.height,caps.minImageExtent.height,caps.maxImageExtent.height);swapExtent=extent;
+  RECT rect{};GetClientRect(hwnd,&rect);surfaceClientWidth=rect.right;surfaceClientHeight=rect.bottom;VkExtent2D extent=caps.currentExtent.width!=UINT32_MAX?caps.currentExtent:VkExtent2D{uint32_t(std::max<LONG>(1,rect.right)),uint32_t(std::max<LONG>(1,rect.bottom))};extent.width=std::clamp(extent.width,caps.minImageExtent.width,caps.maxImageExtent.width);extent.height=std::clamp(extent.height,caps.minImageExtent.height,caps.maxImageExtent.height);swapExtent=extent;
   uint32_t imageCount=std::max(caps.minImageCount+1,2u);if(caps.maxImageCount&&imageCount>caps.maxImageCount)imageCount=caps.maxImageCount;
   uint32_t modeCount=0;vkGetPhysicalDeviceSurfacePresentModesKHR(physical,surface,&modeCount,nullptr);std::vector<VkPresentModeKHR> modes(modeCount);vkGetPhysicalDeviceSurfacePresentModesKHR(physical,surface,&modeCount,modes.data());
   // Preference order: IMMEDIATE (uncapped) → MAILBOX (low-latency vsync) → FIFO (vsync fallback).
@@ -282,6 +283,7 @@ std::pair<int,int> GpuRenderer::surfaceExtent()const{
  if(!m->surface||!m->swapExtent.width||!m->swapExtent.height)return {m->width,m->height};
  RECT client{};GetClientRect(m->hwnd,&client);
  if(client.right<=0||client.bottom<=0)return {int(m->swapExtent.width),int(m->swapExtent.height)};
+ if(client.right==m->surfaceClientWidth&&client.bottom==m->surfaceClientHeight)return {int(m->swapExtent.width),int(m->swapExtent.height)};
  VkSurfaceCapabilitiesKHR caps{};check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m->physical,m->surface,&caps),"Query render surface");
  VkExtent2D extent=caps.currentExtent.width!=UINT32_MAX?caps.currentExtent:VkExtent2D{uint32_t(client.right),uint32_t(client.bottom)};
  extent.width=std::clamp(extent.width,caps.minImageExtent.width,caps.maxImageExtent.width);
@@ -413,11 +415,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
 void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick){
  if(!m->surface)return;
  RECT client{};GetClientRect(m->hwnd,&client);if(client.right<=0||client.bottom<=0){m->submitCommandsAsync();return;}
- VkSurfaceCapabilitiesKHR caps{};check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m->physical,m->surface,&caps),"Query resized surface");
- VkExtent2D expected=caps.currentExtent.width!=UINT32_MAX?caps.currentExtent:VkExtent2D{uint32_t(client.right),uint32_t(client.bottom)};
- expected.width=std::clamp(expected.width,caps.minImageExtent.width,caps.maxImageExtent.width);
- expected.height=std::clamp(expected.height,caps.minImageExtent.height,caps.maxImageExtent.height);
- if(expected.width!=m->swapExtent.width||expected.height!=m->swapExtent.height)m->recreatePresentation();
+ if(client.right!=m->surfaceClientWidth||client.bottom!=m->surfaceClientHeight)m->recreatePresentation();
  // Resize overlay staging buffer for this frame slot if needed.
  auto& ob=m->overlayBuffers[m->frameIndex];
  if(m->overlayWidth!=overlayWidth||m->overlayHeight!=overlayHeight){
@@ -449,7 +447,9 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
  uint32_t imageIndex=0;
  VkResult acquire=vkAcquireNextImageKHR(m->device,m->swapchain,UINT64_MAX,m->acquiredSems[m->frameIndex],VK_NULL_HANDLE,&imageIndex);
  if(acquire==VK_ERROR_OUT_OF_DATE_KHR){m->submitCommandsAsync();m->recreatePresentation();return;}
- check(acquire,"Acquire swapchain image");
+ // A suboptimal image is still valid and its acquire semaphore must be
+ // consumed. Present it, then rebuild if presentation also requests it.
+ if(acquire!=VK_SUBOPTIMAL_KHR)check(acquire,"Acquire swapchain image");
  VkClearValue clear{};clear.color={{0,0,0,1}};
  VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->compositePass;pass.framebuffer=m->swapFrames[imageIndex];pass.renderArea.extent=m->swapExtent;pass.clearValueCount=1;pass.pClearValues=&clear;
  vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
@@ -466,7 +466,7 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
  // Present immediately.
  VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};present.waitSemaphoreCount=1;present.pWaitSemaphores=&m->readySemaphores[imageIndex];present.swapchainCount=1;present.pSwapchains=&m->swapchain;present.pImageIndices=&imageIndex;
  VkResult result=vkQueuePresentKHR(m->queue,&present);
- if(result==VK_ERROR_OUT_OF_DATE_KHR||result==VK_SUBOPTIMAL_KHR){
+ if(result==VK_ERROR_OUT_OF_DATE_KHR||result==VK_SUBOPTIMAL_KHR||acquire==VK_SUBOPTIMAL_KHR){
   // Need to drain before recreating swapchain.
   check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for present fence");
   m->frameInFlight[m->frameIndex]=false;

@@ -1,0 +1,4 @@
+Requested 1280x720; actual 1280x720
+Requested 960x540; actual 960x540
+Requested 1280x720; actual 1280x720
+PASS: repeated resize, minimize/restore and Vulkan presentation

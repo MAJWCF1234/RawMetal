@@ -15,6 +15,7 @@ public:
  Mesh& operator=(const Mesh&)=delete;
  void pose(float phase,float recoil);
     bool poseAction(const char* action,float phase);
+ static bool testAttachedSkinning();
     void poseCreature(int clip,float phase);
  void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil);
  Point3 bonePosition(const char* name)const;
@@ -38,7 +39,7 @@ private:
  bool m_materialParts=false;
  std::string m_nodeFilter;
  void extract(ufbx_scene* scene);
- void grip(Point3 right={-.025f,1.55f,.223f},Point3 left={-.025f,1.60f,.49f},float swing=0,float pitch=0,float yaw=0);
+ void grip(Point3 right={-.025f,1.55f,.223f},Point3 left={-.025f,1.60f,.49f},float swing=0,float pitch=0,float yaw=0,bool skin=true);
  ufbx_scene* m_scene=nullptr;
  ufbx_scene* m_bindScene=nullptr;
  std::vector<ufbx_transform_override> m_fingerGrip;

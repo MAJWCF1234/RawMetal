@@ -1,12 +1,27 @@
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
 #include "FrameWorker.h"
+#include "../platform/Win32Window.h"
 #include "../audio/AudioEngine.h"
 #include <chrono>
 #include <fstream>
 #include <numeric>
 #include <algorithm>
 namespace retro {
+__declspec(noinline) bool SoftwareRenderer::testPresentationResize(){
+ Win32Window window(DisplayWidth,DisplayHeight,L"RawMetal presentation check");if(!window.valid())return false;
+ auto storage=std::make_unique<SoftwareRenderer>(DisplayWidth,DisplayHeight);auto&renderer=*storage;if(!renderer.enableHardware(window.handle()))return false;
+ auto scene=Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true);std::ofstream report("presentation-resize-test.txt");
+ for(auto size:{std::array<int,2>{1280,720},std::array<int,2>{960,540},std::array<int,2>{1280,720}}){
+  if(!SetWindowPos(static_cast<HWND>(window.handle()),nullptr,0,0,size[0],size[1],SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE))return false;
+  for(int frame=0;frame<8;++frame){if(!window.pump())return false;renderer.render(scene);if(!renderer.hardwareActive())return false;}
+  auto actual=renderer.m_gpu->surfaceExtent();report<<"Requested "<<size[0]<<'x'<<size[1]<<"; actual "<<actual.first<<'x'<<actual.second<<'\n';
+  if(actual.first!=size[0]||actual.second!=size[1])return false;
+ }
+ ShowWindow(static_cast<HWND>(window.handle()),SW_MINIMIZE);for(int i=0;i<3;++i){window.pump();renderer.render(scene);}
+ ShowWindow(static_cast<HWND>(window.handle()),SW_RESTORE);for(int i=0;i<8;++i){window.pump();renderer.render(scene);}
+ bool passed=renderer.hardwareActive();report<<(passed?"PASS":"FAIL")<<": repeated resize, minimize/restore and Vulkan presentation\n";return passed;
+}
 bool SoftwareRenderer::testCreatureAnimation(){
  Mesh mesh(242);std::ofstream report("stalker-animation-test.txt");
  for(int clip=0;clip<5;++clip){mesh.poseCreature(clip,0);auto first=mesh.triangles;float movement=0,deformation=0;
@@ -35,8 +50,8 @@ bool SoftwareRenderer::testCreatureAnimation(){
  }
  workerReport<<"PASS: six skeletal clips, grounded poses and interpolated hand attachments\n";return true;
 }
-bool SoftwareRenderer::testHardware(){
- SoftwareRenderer renderer(128,72);std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;
+__declspec(noinline) bool SoftwareRenderer::testHardware(){
+ auto storage=std::make_unique<SoftwareRenderer>(128,72);auto&renderer=*storage;std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;
  auto check=[&](bool condition,const char* label){report<<label<<": "<<(condition?"PASS":"FAIL")<<'\n';passed&=condition;};
  Texture red{1,1,{0xffff0000u}},blue{1,1,{0xff0000ffu}},transparent{1,1,{0x00ffffffu}},emissive{1,1,{0xff000000u}},normal{1,1,{0xffffffffu}};
  emissive.emission={0xffffffffu};normal.normalLevels={{{1,0,0}}};NormalLighting lights;lights.directions[0]={1,0,0};lights.weights[0]=1;
@@ -83,6 +98,8 @@ bool SoftwareRenderer::testHardware(){
  begin();triangle(red,1);renderer.m_gpu->clearDepth();triangle(blue,2);pixel=finish();check(blueChannel(pixel)>80&&redChannel(pixel)<blueChannel(pixel)/4,"View-model depth range remains independent");
  begin();renderer.triangle3D({{-.3f,-.1f,-.2f},0,0},{{.3f,-.1f,1},1,0},{{0,.3f,1},.5f,1},red,1);finish();size_t coverage=0;for(auto p:renderer.m_pixels)coverage+=(p&0xffffffu)!=0x0c1012u;check(coverage>100,"Near-plane clipping keeps crossing geometry");
  renderer.m_shadowBudgetLimit=10000000;
+ check(Mesh::testAttachedSkinning(),"Single final skin pass matches redundant IK skinning exactly across six poses");
+ check(World::testCollisionCandidates(),"Spatial collision candidates match full scans across ten maps and fixture boundaries");
  for(int mode:{1,2,3}){auto scene=Game::weaponInspection(mode,.16f);renderer.m_animationWorker=std::make_unique<FrameWorker>();renderer.render(scene);auto parallel=renderer.m_pixels;renderer.m_animationWorker.reset();renderer.render(scene);check(parallel==renderer.m_pixels,"Parallel arm pose matches serial reference");check(renderer.gripError()<.025f,"Hardware weapon grip remains attached");}
  World warehouse(16);
  check(warehouse.lightRayClear({12,3},-23,{12,15},-23),"Warehouse open aisle transmits fixture light");
@@ -102,6 +119,16 @@ bool SoftwareRenderer::testHardware(){
  for(size_t i=0;i<oppositeFrame.size();++i){auto a=oppositeFrame[i],b=fresh->m_pixels[i];int peak=0;for(int shift:{0,8,16}){int difference=std::abs(int((a>>shift)&255)-int((b>>shift)&255));peak=std::max(peak,difference);bakeCameraError+=difference;}bakeCameraMismatch+=peak>4;}
  report<<"Different initial camera: pixels differing by >4/255 "<<bakeCameraMismatch<<", mean channel error "<<bakeCameraError/(turnedFrame.size()*3)<<'\n';
  check(bakeCameraMismatch<turnedFrame.size()/100&&bakeCameraError/(turnedFrame.size()*3)<.5,"Physical cached normals are independent of the first-load camera");
+ for(int level:{5,6,7,9}){
+  const auto&def=chunkDefinition(WorldId::Campaign,level);auto services=Game::mapInspection(def.playerStart,.6f,-10,level,false,def.spawnHeight,true);
+  renderer.m_gpu->clearStaticCaches();renderer.m_cacheFixedServices=true;renderer.render(services);auto serviceCold=renderer.m_pixels;renderer.render(services);
+  check(serviceCold==renderer.m_pixels,"Fixed service VBO remains identical on cache reuse");
+  renderer.m_cacheFixedServices=false;renderer.render(services);size_t changedServices=0;double serviceError=0;
+  for(size_t i=0;i<serviceCold.size();++i){int peak=0;for(int shift:{0,8,16}){int d=std::abs(int((serviceCold[i]>>shift)&255)-int((renderer.m_pixels[i]>>shift)&255));peak=std::max(peak,d);serviceError+=d;}changedServices+=peak>4;}
+  report<<"Service cache/reference map "<<level<<": "<<changedServices<<" pixels >4/255; mean error "<<serviceError/(serviceCold.size()*3)<<'\n';
+  check(changedServices<serviceCold.size()/100&&serviceError/(serviceCold.size()*3)<.5,"Fixed service cache preserves reference shading and visibility");
+ }
+ renderer.m_cacheFixedServices=true;
  auto reliefScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);float reliefScale=renderer.m_wall.parallaxScale;renderer.m_wall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_wall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(changed>8,"Nearby wall relief changes the Vulkan image");
  check(renderer.hardwareActive(),"Hardware remains active without fallback");report<<(passed?"PASS":"FAIL")<<": Vulkan material / depth / clipping checks\n";return passed;
 }

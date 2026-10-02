@@ -1,0 +1,98 @@
+[
+  {
+    "Scene": "Foundry turn",
+    "BeforeFps": 120.565,
+    "AfterFps": 128.485,
+    "Before95ms": 9.5956,
+    "After95ms": 9.0899,
+    "P95ReductionPercent": 5.3
+  },
+  {
+    "Scene": "Gantry turn",
+    "BeforeFps": 140.726,
+    "AfterFps": 156.086,
+    "Before95ms": 8.7526,
+    "After95ms": 8.0946,
+    "P95ReductionPercent": 7.5
+  },
+  {
+    "Scene": "Ashfall terrain + streaming",
+    "BeforeFps": 102.929,
+    "AfterFps": 102.961,
+    "Before95ms": 13.9201,
+    "After95ms": 14.7231,
+    "P95ReductionPercent": -5.8
+  },
+  {
+    "Scene": "Lift entry turn",
+    "BeforeFps": 141.371,
+    "AfterFps": 153.437,
+    "Before95ms": 8.1829,
+    "After95ms": 8.0092,
+    "P95ReductionPercent": 2.1
+  },
+  {
+    "Scene": "Hazmat settling",
+    "BeforeFps": 120.995,
+    "AfterFps": 134.829,
+    "Before95ms": 9.7945,
+    "After95ms": 8.7586,
+    "P95ReductionPercent": 10.6
+  },
+  {
+    "Scene": "Ascent window",
+    "BeforeFps": 142.646,
+    "AfterFps": 162.385,
+    "Before95ms": 8.1885,
+    "After95ms": 7.1862,
+    "P95ReductionPercent": 12.2
+  },
+  {
+    "Scene": "Reactor balcony turn",
+    "BeforeFps": 140.313,
+    "AfterFps": 154.189,
+    "Before95ms": 8.6623,
+    "After95ms": 7.3086,
+    "P95ReductionPercent": 15.6
+  },
+  {
+    "Scene": "Reactor active AI",
+    "BeforeFps": 134.425,
+    "AfterFps": 152.12,
+    "Before95ms": 8.75,
+    "After95ms": 8.0319,
+    "P95ReductionPercent": 8.2
+  },
+  {
+    "Scene": "Utility chapter 7",
+    "BeforeFps": 58.8536,
+    "AfterFps": 161.039,
+    "Before95ms": 58.3955,
+    "After95ms": 7.3445,
+    "P95ReductionPercent": 87.4
+  },
+  {
+    "Scene": "Utility chapter 8",
+    "BeforeFps": 100.016,
+    "AfterFps": 144.855,
+    "Before95ms": 18.7312,
+    "After95ms": 8.9403,
+    "P95ReductionPercent": 52.3
+  },
+  {
+    "Scene": "Utility chapter 9",
+    "BeforeFps": 138.541,
+    "AfterFps": 159.346,
+    "Before95ms": 8.8088,
+    "After95ms": 7.5929,
+    "P95ReductionPercent": 13.8
+  },
+  {
+    "Scene": "Utility chapter 10",
+    "BeforeFps": 88.2728,
+    "AfterFps": 146.623,
+    "Before95ms": 36.9048,
+    "After95ms": 9.9044,
+    "P95ReductionPercent": 73.2
+  }
+]
