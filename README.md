@@ -2,7 +2,7 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.6.3, Renderer Lighting Repair**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.6.4, Windows Compatibility Patch**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
@@ -14,6 +14,8 @@ weapons. Static optical visibility uses a shared acceleration structure, with
 light passing through real shelf and guardrail gaps. Crate materials and HDR
 bloom are adjusted while preserving the retro assets and the 22 MB budget.
 
+v0.6.4 adds an explicit Windows 10/11 compatibility manifest and documents the C++ runtime requirements. See [RELEASE_NOTES_v0.6.4.md](RELEASE_NOTES_v0.6.4.md).
+
 See [RELEASE_NOTES_v0.6.3.md](RELEASE_NOTES_v0.6.3.md) and
 [renderer validation](docs/renderer-lighting-repair.md).
 
@@ -21,9 +23,13 @@ See [RELEASE_NOTES_v0.6.3.md](RELEASE_NOTES_v0.6.3.md) and
 
 Download **RawMetal.zip** or **RawMetal.exe** from [GitHub Releases](https://github.com/MAJWCF1234/RawMetal/releases/latest).
 
-The release executable is self-contained. No loose asset package, shader folder, or runtime SDK is required.
+All game assets and shaders are embedded. No loose asset package, shader folder, or Vulkan SDK is required.
 
-Windows x64 is currently the supported platform.
+Windows 10 and Windows 11 x64 are the supported platforms. Install the
+[Microsoft Visual C++ x64 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
+(version 14.44 or later) and your GPU vendor's Windows-compatible graphics driver.
+The driver supplies the Vulkan runtime. Windows 10 binary compatibility checks
+and their limits are described in [Windows compatibility](docs/windows-compatibility.md).
 
 Vulkan hardware rendering is the default. Use:
 
