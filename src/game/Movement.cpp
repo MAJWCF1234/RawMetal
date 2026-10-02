@@ -128,7 +128,7 @@ void Game::updateInteraction(const InputState& input,float dt){
   else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].reactorAction)useReactorAction(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
-  }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);m_logTime=0;m_activeLog=-1;sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
+  }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
   if(!holdingClutter()&&door<0&&m_logTime==0)interactClutter();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);

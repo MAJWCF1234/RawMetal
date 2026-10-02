@@ -369,9 +369,23 @@ void SoftwareRenderer::drawHud(const Game& game){
   const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   wornPanel(cx-88,m_height-81,176,16,true);text(cx-79,m_height-76,message,amber);
  }
- if(auto hint=game.interactionHint()){wornPanel(cx-85,m_height-104,170,16,true);text(cx-75,m_height-99,hint,paper);}
+ if(auto hint=game.interactionHint();hint&&game.logTime()<=0){wornPanel(cx-85,m_height-104,170,16,true);text(cx-75,m_height-99,hint,paper);}
  if(game.logTime()>0&&game.activeLog()>=0){auto&log=game.world().terminals()[size_t(game.activeLog())];
-  wornPanel(cx-155,48,310,68,false,true);text(cx-141,59,log.title,amber,2);text(cx-141,84,log.line1,paper);text(cx-141,98,log.line2,paper);
+  const int left=cx-180,top=48,width=360,height=154;
+  wornPanel(left,top,width,height,false,true);
+  // Inset screen inside the existing metal housing, with a recessed bevel.
+  rect(left+8,top+8,width-16,height-16,rgb(18,22,20));
+  rect(left+9,top+9,width-18,1,rgb(0,0,0));rect(left+9,top+9,1,height-18,rgb(0,0,0));
+  rect(left+10,top+10,width-20,height-20,rgb(2,5,3));
+  rect(left+10,top+height-11,width-20,1,rgb(76,83,78));rect(left+width-11,top+10,1,height-20,rgb(76,83,78));
+  const auto green=rgb(87,225,123),bright=rgb(144,255,166),dimGreen=rgb(47,136,76);
+  text(left+18,top+17,"C:\\DEPTHWORKS\\LOGS> TYPE SHIFT.LOG",dimGreen);
+  text(left+18,top+31,log.title,bright);rect(left+18,top+43,width-36,1,rgb(24,66,36));
+  int row=top+51;
+  auto lines=[&](const char* value){std::string remaining=value;while(!remaining.empty()&&row<top+114){size_t n=std::min(size_t(52),remaining.size());if(n<remaining.size()){auto space=remaining.rfind(' ',n);if(space!=std::string::npos&&space>0)n=space;}text(left+18,row,remaining.substr(0,n).c_str(),green);remaining.erase(0,n);while(!remaining.empty()&&remaining.front()==' ')remaining.erase(0,1);row+=11;}};
+  lines(log.line1);row+=3;lines(log.line2);
+  if(log.activateState)text(left+18,top+117,game.state(log.activateState)?"STATUS: COMMAND ACCEPTED":log.requireState&&!game.state(log.requireState)?"STATUS: INTERLOCK BLOCKED / FOLLOW PROCEDURE":"STATUS: LOCAL CONTROL READY",green);
+  text(left+18,top+132,"> E TO CLOSE _",bright);
  }
 }
 

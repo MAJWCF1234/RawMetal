@@ -146,7 +146,7 @@
 261 RCDATA "assets/facility/service/transformer_box_hr_2.png"
 262 RCDATA "assets/facility/service/metal_hr_6_1.png"
 263 RCDATA "assets/facility/cargo/pallet.fbx"
-265 RCDATA "assets/facility/cargo/service-van.obj"
+265 RCDATA "assets/facility/cargo/service-van-assembled.obj"
 266 RCDATA "assets/facility/cargo/pallet.png"
 268 RCDATA "assets/facility/cargo/service-van.png"
 269 RCDATA "assets/facility/cargo/van-metal.png"
