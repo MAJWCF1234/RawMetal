@@ -687,6 +687,13 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   if(lift.x1>=lift.x2||lift.y1>=lift.y2||lift.lower>=lift.upper||lift.speed<=0||!lift.callState||!lift.releaseState||!lift.positionState||!lift.downState||!lift.arrivedState||!lift.descendedState)throw std::runtime_error("Invalid authored cargo lift or control states");
  }
  for(const auto& sequence:map->timedSequences)if(!sequence.timerState||!sequence.finishState||sequence.durationMs<1||sequence.durationMs>3600000||sequence.finishAtMs<1||sequence.finishAtMs>sequence.durationMs||sequence.soundIntervalMs<0||sequence.x1>sequence.x2||sequence.y1>sequence.y2||sequence.bottom>sequence.top||sequence.gain<0||sequence.pitch<=0)throw std::runtime_error("Invalid authored timed sequence");
+ auto timerExists=[&](StateId id){return std::any_of(map->timedSequences.begin(),map->timedSequences.end(),[&](const auto& s){return s.timerState==id;});};
+ for(const auto& track:map->actorTracks){
+  if(!timerExists(track.timerState)||track.scale<=0||track.scale>20||!std::isfinite(track.scale)||track.keys.size()<2||track.keys.front().timeMs!=0||track.footprint.x<=0||track.footprint.y<=0||track.thickness<=0||!std::isfinite(track.footprint.x)||!std::isfinite(track.footprint.y)||!std::isfinite(track.thickness))throw std::runtime_error("Invalid authored actor track");
+  int previous=-1;for(const auto& k:track.keys){if(k.timeMs<=previous||k.timeMs>3600000||!std::isfinite(k.position.x)||!std::isfinite(k.position.y)||!std::isfinite(k.z)||!std::isfinite(k.yaw)||!std::isfinite(k.phase)||k.phase<0||k.phase>1||k.clip<0||k.clip>(track.visual==ActorVisual::Worker?5:4))throw std::runtime_error("Invalid actor pose key");previous=k.timeMs;}
+  if(track.health<0||track.health>100000||(track.health&&(!track.damageState||!track.deadState)))throw std::runtime_error("Invalid actor health states");
+ }
+ for(const auto& cue:map->sequenceCues)if(!timerExists(cue.timerState)||cue.timeMs<0||int(cue.sound)<0||int(cue.sound)>=int(Sound::Count)||cue.gain<0||cue.pitch<=0||!std::isfinite(cue.gain)||!std::isfinite(cue.pitch))throw std::runtime_error("Invalid actor sequence cue");
  for(const auto& layer:map->layers){
   if(!std::isfinite(layer.elevation)||!std::isfinite(layer.thickness)||layer.thickness<0)throw std::runtime_error("Invalid authored layer elevation or thickness");
   for(const auto& row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Authored map rows must match the chunk width");
@@ -696,6 +703,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(const auto& prop:map->props)if(prop.kind<0||prop.kind>=4)throw std::runtime_error("Invalid authored prop model");
  for(const auto& stair:map->stairs)if(stair.steps<1||stair.steps>4096||stair.x1>=stair.x2||stair.y1>=stair.y2||stair.bottom>stair.top)throw std::runtime_error("Invalid authored staircase");
  m_mapData=std::move(map);
+ m_actorPoses.clear();for(const auto& track:m_mapData->actorTracks)m_actorPoses.push_back(sampleActor(track,0));
  m_openNorthBoundary=m_mapData->openNorth;m_openSouthBoundary=m_mapData->openSouth;
  m_openWestBoundary=m_mapData->openWest;m_openEastBoundary=m_mapData->openEast;
  m_doors=m_mapData->doors;m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;
@@ -1729,6 +1737,7 @@ float World::supportBelow(float x,float y,float feet)const{
  }
  if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
  if(insideCargoLift(x,y)&&m_cargoLiftHeight<=feet+.025f)result=std::max(result,m_cargoLiftHeight);
+ for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<=t.footprint.x*.5f&&std::fabs(y-p.position.y)<=t.footprint.y*.5f&&p.z<=feet+.025f)result=std::max(result,p.z);}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
 }
@@ -1747,6 +1756,7 @@ float World::clearanceAbove(float x,float y,float feet)const{
  return ceiling;
 }
 bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
+ if(dynamic)for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<t.footprint.x*.5f&&std::fabs(y-p.position.y)<t.footprint.y*.5f&&feet<p.z-.025f&&feet+height>p.z-t.thickness)return false;}
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight-.025f&&feet+height>m_cargoLiftHeight-.18f)return false;
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.52f&&feet+height>m_cargoLiftHeight+2.4f)return false;
  if(dynamic&&insideLift(x,y)&&feet<m_liftHeight+2.8f&&feet+height>m_liftHeight-.25f){

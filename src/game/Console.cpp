@@ -85,6 +85,9 @@ bool Game::testConsole(){
   input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return false;
  }
  for(const char* invalid:{"32","-1","10junk","999999999999999999999999"}){int current=game.level();input.textInput=std::string("map ")+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return false;}
+ input={};input.textInput="map receiving\r";game.update(input,.02f);if(game.state("receiving_worker_encounter_ms"))return false;
+ input={};input.escape=true;game.update(input,.02f);game.update({},.02f);if(!game.state("receiving_worker_encounter_ms")||game.player().pitch>-40)return false;
+ input={};input.console=true;game.update(input,.02f);if(!game.consoleOpen())return false;
  input.textInput="map reactor\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Crashed||game.player().z!=-9)return false;
  input.textInput="map 99\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return false;
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
@@ -97,6 +100,6 @@ bool Game::testConsole(){
  if(game.level()!=13||!game.world().coast()||game.world().waterSurface(20,12)>0||game.world().floorHeight(20,12)>=game.world().waterSurface(20,12))return false;
  input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
  input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return false;
- std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; all campaign map IDs and reactor; Ashfall boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
+ std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; all campaign map IDs and reactor; Receiving teleport starts visible encounter after console closes; Ashfall boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
 }
 }

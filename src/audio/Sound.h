@@ -6,5 +6,5 @@ enum class Sound {
  Jump, Land, Pickup, Hurt, SpiderCall, SpiderAttack, SpiderDeath, WaspCall, WaspAttack,
  WaspDeath, BruteCall, BruteAttack, BruteDeath, Music, Machine, Wings, Empty, Exit, Door, PunchSwing, PunchHit, JunkMetal, JunkGlass, JunkSoft, LiftCrash, LiftMotor, LiftCreak, ReactorMusic, LiftSnap, WaterReturn, FreightMusic, Count
 };
-struct SoundEvent { Sound sound; Vec2 position{}; float gain=1, pitch=1; bool spatial=false; };
+struct SoundEvent { Sound sound; Vec2 position{}; float gain=1, pitch=1; bool spatial=false; float radius=17; };
 }

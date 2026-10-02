@@ -27,7 +27,13 @@ bool SoftwareRenderer::testCreatureAnimation(){
    if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z))return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
   mutantReport<<"clip "<<clip<<" vertex motion "<<motion<<" metres\n";if(motion<.001f||motion>4)return false;
  }
- mutantReport<<"PASS: supplied rig clips and grounded death pose interpolate with matching topology\n";return true;
+ mutantReport<<"PASS: supplied rig clips and grounded death pose interpolate with matching topology\n";
+ Mesh worker(277,"",278);std::ofstream workerReport("worker-animation-test.txt");
+ for(int clip=0;clip<6;++clip){worker.poseCreature(clip,0);auto first=worker.triangles;float motion=0;
+  for(float phase:{.25f,.5f,.75f,1.f}){worker.poseCreature(clip,phase);auto hand=worker.poseAnchor(0);if(!std::isfinite(hand.y)||hand.y<-.002f)return false;for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=worker.triangles[i].v[v].p,d=p-first[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.002f)return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
+  workerReport<<"clip "<<clip<<" skeletal vertex motion "<<motion<<'\n';if(motion<.001f||motion>4)return false;
+ }
+ workerReport<<"PASS: six skeletal clips, grounded poses and interpolated hand attachments\n";return true;
 }
 bool SoftwareRenderer::testHardware(){
  SoftwareRenderer renderer(128,72);std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;

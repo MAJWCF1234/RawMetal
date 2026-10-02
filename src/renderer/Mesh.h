@@ -23,6 +23,7 @@ public:
     void poseCreature(int clip,float phase);
  void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil);
  Point3 bonePosition(const char* name)const;
+ Point3 poseAnchor(int index)const{return m_poseAnchors.at(size_t(index));}
  std::vector<MeshTriangle> triangles;
  std::vector<std::vector<MeshVertex>> openRings;
  Point3 minimum,maximum;
@@ -31,7 +32,9 @@ public:
  std::vector<std::string> materialNames;
 private:
  std::vector<unsigned char> m_creatureFrames;
- uint32_t m_creatureSamples=0,m_creatureVertices=0;
+ std::vector<unsigned char> m_anchorFrames;
+ std::array<Point3,2> m_poseAnchors{};
+ uint32_t m_creatureSamples=0,m_creatureVertices=0,m_creatureClips=0;
  struct CachedTriangle {uint32_t node;std::array<uint32_t,3> corners;MeshTriangle prototype;};
  struct CachedRing {uint32_t node;std::vector<uint32_t> corners;};
  std::vector<CachedTriangle> m_cachedTriangles;

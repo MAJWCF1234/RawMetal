@@ -3,6 +3,11 @@
 #include <cmath>
 #include <fstream>
 namespace retro {
+std::string_view Game::actorCaption()const{
+ for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;const auto& world=level==m_level?m_world:m_chunks[level].world;
+  for(const auto& cue:world.sequenceCues()){int age=state(cue.timerState)-cue.timeMs;if(!cue.caption.empty()&&age>=0&&age<2500)return cue.caption;}
+ }return {};
+}
 void Game::updateMechanisms(float dt){
  const auto& lift=m_world.cargoLift();
  if(lift.upper>lift.lower){
@@ -22,13 +27,28 @@ void Game::updateMechanisms(float dt){
   if(height>=lift.upper-.01f)setState(lift.arrivedState,1);
   if(state(lift.downState)&&height<=lift.lower+.01f)setState(lift.descendedState,1);
  }
- for(const auto& sequence:m_world.timedSequences()){
+ for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;
+ auto& world=level==m_level?m_world:m_chunks[level].world;
+ for(const auto& sequence:world.timedSequences()){
   int age=state(sequence.timerState);
-  if(age==0&&m_player.pos.x>=sequence.x1&&m_player.pos.x<=sequence.x2&&m_player.pos.y>=sequence.y1&&m_player.pos.y<=sequence.y2&&m_player.z>=sequence.bottom&&m_player.z<=sequence.top)age=1;
+  if(age==0&&level==m_level&&m_player.pos.x>=sequence.x1&&m_player.pos.x<=sequence.x2&&m_player.pos.y>=sequence.y1&&m_player.pos.y<=sequence.y2&&m_player.z>=sequence.bottom&&m_player.z<=sequence.top)age=1;
   if(age<=0)continue;
-  int next=std::min(sequence.durationMs,age+int(std::round(dt*1000)));setState(sequence.timerState,next);
+  int advanced=age+int(std::round(dt*1000));bool wrapped=sequence.loop&&advanced>sequence.durationMs;
+  int next=sequence.loop?1+(advanced-1)%sequence.durationMs:std::min(sequence.durationMs,advanced);setState(sequence.timerState,next);
   if(sequence.soundIntervalMs>0&&age/sequence.soundIntervalMs!=next/sequence.soundIntervalMs&&next<sequence.soundUntilMs)sound(sequence.tickSound,sequence.gain,sequence.pitch);
-  if(age<sequence.finishAtMs&&next>=sequence.finishAtMs)setState(sequence.finishState,1);
+  if((age<sequence.finishAtMs&&advanced>=sequence.finishAtMs)||wrapped)setState(sequence.finishState,1);
+  for(const auto& cue:world.sequenceCues())if(cue.timerState==sequence.timerState&&((age<=cue.timeMs&&advanced>cue.timeMs)||(wrapped&&next>cue.timeMs))){
+   auto position=chunkOffset(level)+cue.position-chunkOffset(m_level);
+   m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35});
+  }
+ }
+ for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);
+  if(track.deadState&&state(track.deadState)){pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;pose.phase=1;world.setActorPose(i,pose);}
+  if(dt>0&&level==m_level&&track.platform&&std::fabs(m_player.z-old.z)<.04f&&std::fabs(m_player.pos.x-old.position.x)<track.footprint.x*.5f&&std::fabs(m_player.pos.y-old.position.y)<track.footprint.y*.5f){
+   auto target=m_player.pos+pose.position-old.position;float z=m_player.z+pose.z-old.z;
+   if(hullFits(target,z,m_player.hullHeight())){m_player.pos=target;m_player.z=z;m_player.verticalVelocity=0;m_player.grounded=true;}
+  }
+ }
  }
 }
 }

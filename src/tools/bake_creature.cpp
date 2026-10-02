@@ -12,7 +12,8 @@
 // Offline skeletal retargeting. Bake skinned vertices in importer triangle order;
 // the runtime interpolates samples without evaluating an FBX scene per monster.
 int main(int argc,char**argv){
- if(argc!=4)return 1;
+ if(argc==2){ufbx_load_opts o{};auto s=ufbx_load_file(argv[1],&o,nullptr);if(!s)return 2;for(auto a:s->anim_stacks)std::cout<<a->name.data<<'\n';for(auto n:s->nodes)if(n->bone)std::cout<<"BONE "<<n->name.data<<'\n';ufbx_free_scene(s);return 0;}
+ if(argc!=4&&argc!=5)return 1;
  ufbx_load_opts options{};options.target_axes=ufbx_axes_right_handed_y_up;options.target_unit_meters=1;options.evaluate_skinning=true;
  auto target=ufbx_load_file(argv[1],&options,nullptr),source=ufbx_load_file(argv[2],&options,nullptr);if(!target||!source)return 2;
  const char* pairs[][2]={{"Hips","pelvis"},{"Spine","spine_01"},{"Spine1","spine_02"},{"Spine2","spine_03"},{"Neck","neck_01"},{"Head","Head"},{"LeftUpLeg","thigh_l"},{"RightUpLeg","thigh_r"},{"LeftLeg","calf_l"},{"RightLeg","calf_r"},{"LeftFoot","foot_l"},{"RightFoot","foot_r"},{"LeftToeBase","ball_l"},{"RightToeBase","ball_r"},{"LeftShoulder","clavicle_l"},{"RightShoulder","clavicle_r"},{"LeftArm","upperarm_l"},{"RightArm","upperarm_r"},{"LeftForeArm","lowerarm_l"},{"RightForeArm","lowerarm_r"},{"LeftHand","hand_l"},{"RightHand","hand_r"}};
@@ -31,15 +32,17 @@ int main(int argc,char**argv){
  ufbx_quat align{0,std::sin(yaw*.5),0,std::cos(yaw*.5)};
  std::vector<std::pair<uint32_t,uint32_t>> corners;
  for(auto n:target->nodes)if(auto mesh=n->mesh){std::vector<uint32_t> ids(mesh->max_face_triangles*3);for(auto face:mesh->faces){auto count=ufbx_triangulate_face(ids.data(),ids.size(),mesh,face);for(size_t i=0;i<count*3;++i)corners.push_back({n->typed_id,ids[i]});}}
- const char* clips[]={"Idle_Loop","Walk_Loop","Punch_Cross","Hit_Chest","Death01"};
+ std::vector<std::string> clips{"Idle_Loop","Walk_Loop","Punch_Cross","Hit_Chest","Death01"};
+ if(argc==5)clips.push_back("Crouch_Idle_Loop");
  std::vector<std::pair<uint32_t,uint32_t>> unique;std::vector<uint16_t> remap;std::map<std::pair<uint32_t,uint32_t>,uint16_t> lookup;
  for(auto [node,index]:corners){auto key=std::make_pair(node,target->nodes[node]->mesh->vertex_indices[index]);auto it=lookup.find(key);
   if(it==lookup.end()){uint16_t id=uint16_t(unique.size());lookup[key]=id;unique.push_back({node,index});remap.push_back(id);}else remap.push_back(it->second);
  }
- std::ofstream out(argv[3],std::ios::binary);out.write("RMA2",4);uint32_t vertices=uint32_t(corners.size()),frames=16,clipsCount=5;
+ std::ofstream out(argv[3],std::ios::binary);out.write("RMA2",4);uint32_t vertices=uint32_t(corners.size()),frames=16,clipsCount=uint32_t(clips.size());
  for(auto value:{vertices,frames,clipsCount})out.write(reinterpret_cast<char*>(&value),4);
  uint32_t count=uint32_t(unique.size());out.write(reinterpret_cast<char*>(&count),4);out.write(reinterpret_cast<char*>(remap.data()),remap.size()*2);
- for(auto name:clips){auto clip=stack(name);if(!clip)return 5;double minimumArmAlignment=1;
+ std::ofstream anchors;if(argc==5)anchors.open(std::string(argv[3])+".anchors",std::ios::binary);
+ for(auto& name:clips){auto clip=stack(name.c_str());if(!clip)return 5;double minimumArmAlignment=1;
   for(unsigned sample=0;sample<frames;++sample){double phase=double(sample)/(frames-1);auto pose=ufbx_evaluate_scene(source,clip->anim,clip->time_begin+phase*(clip->time_end-clip->time_begin),&eo,nullptr);if(!pose)return 6;
    std::vector<ufbx_quat> world(target->nodes.count);std::vector<bool> ready(target->nodes.count);std::vector<ufbx_transform_override> changes;
    std::function<ufbx_quat(ufbx_node*)> solve=[&](ufbx_node*n)->ufbx_quat{
@@ -68,6 +71,7 @@ int main(int argc,char**argv){
    std::vector<ufbx_vec3> positions;double floor=1e9;
    for(auto [node,index]:unique){auto n=skinned->nodes[node];auto p=ufbx_get_vertex_vec3(&n->mesh->skinned_position,index);if(n->mesh->skinned_is_local)p=ufbx_transform_position(&n->geometry_to_world,p);positions.push_back(p);floor=std::min(floor,double(p.y));}
    // These are grounded clips: correct proportion-related floor penetration.
+   if(anchors)for(const char* joint:{"mixamorig:RightHand","mixamorig:RightForeArm"}){auto n=ufbx_find_node(skinned,joint);float xyz[]={float(n->node_to_world.m03),float(n->node_to_world.m13-floor),float(n->node_to_world.m23)};anchors.write(reinterpret_cast<char*>(xyz),sizeof(xyz));}
    for(auto p:positions){p.y-=floor;
     for(double value:{p.x,p.y,p.z}){if(std::fabs(value)>32)return 8;int16_t q=int16_t(std::round(value*1000));out.write(reinterpret_cast<char*>(&q),2);}
    }

@@ -52,6 +52,7 @@ add_executable(RawMetal WIN32
     game/Console.cpp
     game/Streaming.cpp
     game/Mechanisms.cpp
+    game/ActorTimeline.cpp
     game/CampaignMapTest.cpp
     game/WorldIsolationTest.cpp
     game/ServiceMapTest.cpp

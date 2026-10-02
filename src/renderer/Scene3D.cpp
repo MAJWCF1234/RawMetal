@@ -531,7 +531,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.campaignChunk(3)){
      // A safety cage must not become an opaque wall around every cab window.
@@ -687,7 +687,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  // Services belong to the map; custom worlds never inherit campaign pipework.
  for(const auto& pipe:w.pipes()){
   float endZ=pipe.endZ>-999?pipe.endZ:pipe.z;
-  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,m_pipeTexture);
+  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==1?m_metal:m_pipeTexture);
   if(pipe.endZ>-999)continue; // Vertical drops terminate inside solid equipment.
   float distance=length(pipe.end-pipe.start);int supports=std::max(1,int(std::ceil(distance/3.f)));
   for(int i=0;i<=supports;++i){
@@ -1084,6 +1084,33 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }
   }
  }
+ movingGeometry=true;
+ for(size_t trackIndex=0;trackIndex<w.actorTracks().size();++trackIndex){const auto& track=w.actorTracks()[trackIndex];
+  auto pose=w.actorPose(trackIndex);
+    float radius=track.visual==ActorVisual::Worker?track.scale:track.scale*.8f;
+    if(track.platform)radius=std::max(radius,std::hypot(track.footprint.x,track.footprint.y)*.5f);
+  if(!sphereVisible({pose.position.x,pose.position.y,pose.z+radius*.5f},radius))continue;
+  if(track.suspensionTop>pose.z){float top=pose.z+(track.platform?0.f:track.scale);if(top<track.suspensionTop)cylinder({pose.position.x,pose.position.y,top},{pose.position.x,pose.position.y,track.suspensionTop},.035f,m_pressureMetal);}
+  if(track.platform){float x=pose.position.x,y=pose.position.y,halfWidth=track.footprint.x*.5f,d=track.footprint.y*.5f;box({x-halfWidth,y-d,pose.z-track.thickness},{x+halfWidth,y+d,pose.z},m_pressureMetal,1.f);quad({x-halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d+.12f,pose.z+.004f},{x-halfWidth,y-d+.12f,pose.z+.004f},m_hazard,1.f);continue;}
+  if(track.visual==ActorVisual::Cargo){prop(m_crateMesh,m_crateTexture,pose.position.x,pose.position.y,track.scale,pose.yaw,track.scale,pose.z);continue;}
+  bool human=track.visual==ActorVisual::Worker,wasp=track.visual==ActorVisual::Wasp;
+  auto& mesh=human?m_workerMesh:wasp?m_waspMesh:m_enemyMesh;
+  if(human)mesh.poseCreature(pose.clip,pose.phase);
+  float scale=track.scale/std::max(.01f,human?m_workerMesh.maximum.y-m_workerMesh.minimum.y:std::max({mesh.maximum.x-mesh.minimum.x,mesh.maximum.y-mesh.minimum.y,mesh.maximum.z-mesh.minimum.z}));
+  float c=std::cos(pose.yaw),s=std::sin(pose.yaw);
+  auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  objectLighting=true;objectNormalLighting=nullptr;
+  objectLight=illumination({pose.position.x,pose.position.y,pose.z+track.scale*.6f},{0,0,1});
+  for(auto face:mesh.triangles){
+   for(auto& v:face.v){auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
+    v.p=transform(p);}
+   int material=0;if(human&&face.part>=0&&face.part<int(mesh.materialNames.size())){auto name=mesh.materialNames[face.part];if(name.find("pies")!=std::string::npos)material=2;else if(name.find("mano")!=std::string::npos)material=1;}
+   tri(face.v[0],face.v[1],face.v[2],human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture,1.f);
+  }
+  objectLighting=false;
+  if(human&&track.tool&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
+ }
+ movingGeometry=false;
  for(const auto&e:game.enemies()){
   if(e.bodyTop()<game.dormantBelow())continue;
   if(!e.visible())continue;
