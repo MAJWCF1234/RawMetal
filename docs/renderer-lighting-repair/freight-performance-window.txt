@@ -1,0 +1,77 @@
+Presentation: 1920x1080 / 30 warmup frames per scene / 120 measured frames
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native Win32 swapchain / async present (2 frames in flight)
+Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort
+
+RECEIVING OVERLOOK:
+  wall-clock FPS: 122.591 (actual throughput)
+  avg frame time: 8.14176 ms = 122.824 FPS
+  p95 frame time: 9.9497 ms = 100.506 FPS
+  p99 frame time: 24.9333 ms
+  max frame time: 26.7494 ms = 37.384 FPS
+
+  static map rebuilds during motion: 0
+
+RECEIVING LANES:
+  wall-clock FPS: 145.87 (actual throughput)
+  avg frame time: 6.85346 ms = 145.912 FPS
+  p95 frame time: 8.444 ms = 118.427 FPS
+  p99 frame time: 9.1695 ms
+  max frame time: 9.5813 ms = 104.37 FPS
+
+  static map rebuilds during motion: 0
+
+WAREHOUSE / A-B:
+  wall-clock FPS: 134.646 (actual throughput)
+  avg frame time: 7.42528 ms = 134.675 FPS
+  p95 frame time: 10.0891 ms = 99.1169 FPS
+  p99 frame time: 10.7151 ms
+  max frame time: 11.9149 ms = 83.9285 FPS
+
+  static map rebuilds during motion: 0
+
+MANIFEST OFFICES:
+  wall-clock FPS: 159.076 (actual throughput)
+  avg frame time: 6.28453 ms = 159.121 FPS
+  p95 frame time: 7.264 ms = 137.665 FPS
+  p99 frame time: 8.0501 ms
+  max frame time: 8.3902 ms = 119.187 FPS
+
+  static map rebuilds during motion: 0
+
+EMPTY PLATFORM:
+  wall-clock FPS: 157.407 (actual throughput)
+  avg frame time: 6.35114 ms = 157.452 FPS
+  p95 frame time: 7.0592 ms = 141.659 FPS
+  p99 frame time: 7.8094 ms
+  max frame time: 7.8425 ms = 127.51 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / TRACKSIDE:
+  wall-clock FPS: 151.072 (actual throughput)
+  avg frame time: 6.61792 ms = 151.105 FPS
+  p95 frame time: 7.8205 ms = 127.869 FPS
+  p99 frame time: 9.1124 ms
+  max frame time: 9.3039 ms = 107.482 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / INSPECTION PITS:
+  wall-clock FPS: 155.999 (actual throughput)
+  avg frame time: 6.40838 ms = 156.046 FPS
+  p95 frame time: 7.3783 ms = 135.533 FPS
+  p99 frame time: 7.5992 ms
+  max frame time: 7.8312 ms = 127.694 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / GANTRIES:
+  wall-clock FPS: 152.091 (actual throughput)
+  avg frame time: 6.57324 ms = 152.132 FPS
+  p95 frame time: 10.3232 ms = 96.8692 FPS
+  p99 frame time: 11.9306 ms
+  max frame time: 12.8398 ms = 77.8828 FPS
+
+  static map rebuilds during motion: 0
+
+Done.

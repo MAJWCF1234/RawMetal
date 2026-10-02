@@ -23,11 +23,11 @@ void main(){
  // Only bright emitters bleed. Blur their highlights, never the base image or
  // the full-resolution HUD, so low-resolution textures stay visibly crisp.
  vec2 glowPixel=1.0/vec2(textureSize(sceneImage,0));
- vec3 bloom=highlight(uv+vec2(4.0,0.0)*glowPixel)+highlight(uv-vec2(4.0,0.0)*glowPixel)
-           +highlight(uv+vec2(0.0,4.0)*glowPixel)+highlight(uv-vec2(0.0,4.0)*glowPixel);
+ vec3 bloom=highlight(uv+vec2(2.0,0.0)*glowPixel)+highlight(uv-vec2(2.0,0.0)*glowPixel)
+           +highlight(uv+vec2(0.0,2.0)*glowPixel)+highlight(uv-vec2(0.0,2.0)*glowPixel);
  bloom+=0.5*(highlight(uv+vec2(11.0,7.0)*glowPixel)+highlight(uv-vec2(11.0,7.0)*glowPixel)
             +highlight(uv+vec2(11.0,-7.0)*glowPixel)+highlight(uv-vec2(11.0,-7.0)*glowPixel));
- if(params.hdrScene>0.5)scene+=bloom*0.035;
+ if(params.hdrScene>0.5)scene+=bloom*0.07;
  else scene+=min(bloom*0.10,vec3(0.12));
  scene*=params.sceneDim;
  scene*=1.0-0.06*smoothstep(0.45,1.3,radius);

@@ -1,0 +1,39 @@
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA
+Nearest surface wins depth test: PASS
+Alpha cutout keeps geometry behind visible: PASS
+HDR water blend RGB: 222, 0, 148
+Linear HDR water alpha blends the visible bed before tone mapping: PASS
+Emission survives zero ambient illumination: PASS
+Emission display values: full 242, dim 135, expected 135
+Emergency lamp emission matches linear dimming through display transform: PASS
+Authored normal map affects hardware lighting: PASS
+GGX highlight values: rough 12, smooth 58, neutral normal 58
+GGX smoothness narrows and brightens dielectric highlights: PASS
+Flat-normal GGX matches authored neutral normal map: PASS
+Opposite-side bake GGX: cached 58, fresh 58
+Static bake keeps physical normals when the first camera is behind a surface: PASS
+View-model depth range remains independent: PASS
+Near-plane clipping keeps crossing geometry: PASS
+Parallel arm pose matches serial reference: PASS
+Hardware weapon grip remains attached: PASS
+Parallel arm pose matches serial reference: PASS
+Hardware weapon grip remains attached: PASS
+Parallel arm pose matches serial reference: PASS
+Hardware weapon grip remains attached: PASS
+Warehouse open aisle transmits fixture light: PASS
+Thin rack post casts an exact shadow: PASS
+Open space beside the rack post stays lit: PASS
+Upper deck blocks light across storeys: PASS
+Guardrail gaps transmit light instead of using the player hull envelope: PASS
+Optical guardrail query remains separate from movement collision: PASS
+Static map scene pass: build 130.339 ms, cached 8.1199 ms
+Static chunk VBO is reused on the next frame: PASS
+Cached static chunk keeps the same rendered frame at nonzero pitch: PASS
+Static chunk VBO survives a camera turn: PASS
+Cached geometry transforms correctly after a camera turn: PASS
+Different initial camera: pixels differing by >4/255 1, mean channel error 0.000542535
+Physical cached normals are independent of the first-load camera: PASS
+Parallax material changed pixels at 128x72: 35
+Nearby wall relief changes the Vulkan image: PASS
+Hardware remains active without fallback: PASS
+PASS: Vulkan material / depth / clipping checks

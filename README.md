@@ -2,19 +2,20 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.6.2, Freight Worker Encounter**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.6.3, Renderer Lighting Repair**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
 
-v0.6.2 adds the first human encounter in Receiving: a wandering radiation worker,
-a sight-triggered delay, faster combat animations and the supplied worker voice
-at the first attack. Shared actor and machinery systems also support custom
-campaigns. Freight content and Vulkan materials receive further improvements;
-the self-contained executable remains below the 22 MB budget.
+v0.6.3 fixes cached material normals, expands fixture lighting to tall rooms,
+and applies visibility-tested room lighting to moving actors, doors, arms and
+weapons. Static optical visibility uses a shared acceleration structure, with
+light passing through real shelf and guardrail gaps. Crate materials and HDR
+bloom are adjusted while preserving the retro assets and the 22 MB budget.
 
-See [RELEASE_NOTES_v0.6.2.md](RELEASE_NOTES_v0.6.2.md) for changes and validation.
+See [RELEASE_NOTES_v0.6.3.md](RELEASE_NOTES_v0.6.3.md) and
+[renderer validation](docs/renderer-lighting-repair.md).
 
 ## Download and run
 

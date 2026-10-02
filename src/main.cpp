@@ -267,6 +267,14 @@ __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     try {
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--renderer-window-inspection")){
+     retro::Win32Window window(W,H,L"RawMetal / Renderer Inspection");if(!window.valid())return 1;
+     retro::SoftwareRenderer renderer(W,H);if(!renderer.enableHardware(window.handle()))return 36;
+     auto scene=std::wcsstr(commandLine,L"--fixture")?retro::Game::mapInspection({4.5f,6.5f},retro::kPi*.5f,-14,0,false,0,true):retro::Game::mapInspection({6.8f,12},.25f,12,18,false,-13,true);
+     std::filesystem::remove("window-inspection.ready");
+     for(int frame=0;frame<720&&window.pump();++frame){renderer.render(scene);if(frame==30)std::ofstream("window-inspection.ready")<<reinterpret_cast<std::uintptr_t>(window.handle());Sleep(16);}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--barrel-inspection")){
      constexpr int inspectW=1280,inspectH=720;retro::SoftwareRenderer renderer(inspectW,inspectH);
      if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
@@ -285,7 +293,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       {{3.5f,5.35f},0,0,0,-999.f,"corridor-light"},
       {{3.5f,5.35f},retro::kPi,130.f,0,-999.f,"fixture-shaft"},
       {{4.5f,6.5f},retro::kPi*.5f,-14.f,0,0.f,"fixture-depth"},
-      {{8.5f,9.f},0,0,5,-9.4f,"coolant-depth"}
+      {{8.5f,9.f},0,0,5,-9.4f,"coolant-depth"},
+      {{6.8f,12.f},.25f,12.f,18,-13.f,"warehouse-d-block"}
      };
      for(const auto&view:views){auto scene=retro::Game::mapInspection(view.position,view.yaw,view.pitch,view.level,false,view.z,true);renderer.render(scene);
       std::ofstream out(std::string(view.name)+".ppm",std::ios::binary);out<<"P6\n"<<inspectW<<' '<<inspectH<<"\n255\n";

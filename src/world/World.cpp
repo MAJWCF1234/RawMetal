@@ -680,6 +680,7 @@ void World::buildPopulation(){
 
 World::World(int level,std::shared_ptr<const AuthoredMapData> map):m_level(level),m_worldId(WorldId::Custom){loadAuthoredMap(std::move(map));}
 void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
+ m_lightSolids.clear();m_lightNodes.clear();
  if(!map)throw std::runtime_error("Missing authored map data");
  if(map->layers.empty())throw std::runtime_error("Authored map has no floor layers");
  const auto& lift=map->cargoLift;
@@ -1611,6 +1612,66 @@ float World::clearanceHeight(float x,float y)const{
  if(campaignChunk(0)&&x>20.17f&&x<22.83f&&y>22.90f&&y<23.04f)height=std::min(height,2.57f);
  return height;
 }
+void World::buildLightOcclusion()const{
+ m_lightSolids.clear();m_lightNodes.clear();
+ auto box=[&](float x1,float y1,float x2,float y2,float bottom,float top){if(x2<=x1||y2<=y1||top<=bottom)return;m_lightSolids.push_back({{(x1+x2)*.5f,(y1+y2)*.5f,(bottom+top)*.5f},{(x2-x1)*.5f,(y2-y1)*.5f,(top-bottom)*.5f}});};
+ auto oriented=[&](Vec2 p,float width,float depth,float bottom,float top,float yaw){m_lightSolids.push_back({{p.x,p.y,(bottom+top)*.5f},{width*.5f,depth*.5f,(top-bottom)*.5f},std::cos(yaw),std::sin(yaw)});};
+ if(m_mapData||level()>=6)box(0,0,Width,Height,-100,floorHeight(12,12)-.025f);
+ else for(int y=0;y<Height*2;++y)for(int x=0;x<Width*2;++x)box(x*.5f,y*.5f,(x+1)*.5f,(y+1)*.5f,-100,floorHeight(x*.5f+.25f,y*.5f+.25f)-.025f);
+ for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){float floor=floorHeight(x+.5f,y+.5f),ceiling=ceilingHeight(x+.5f,y+.5f);char t=tile(x,y);
+  box(float(x),float(y),float(x+1),float(y+1),ceiling,ceiling+1);
+  if(t=='#'||t=='C'||t=='B'||t=='T')box(float(x),float(y),float(x+1),float(y+1),floor,t=='#'?wallHeight(x,y):floor+(t=='C'?.60f:t=='B'?1.1f:2.62f));
+ }
+ for(const auto&s:m_structures){
+  // Glass and painted floor markings do not cast an opaque box shadow.
+  if(s.material==17||((s.material==16||s.material==14||s.material==13)&&s.top-s.bottom<.04f))continue;
+  if(!s.rail){box(s.x1,s.y1,s.x2,s.y2,s.bottom,s.top);continue;}
+  // Movement uses the whole guardrail envelope; light passes between its bars.
+  if(s.top-s.bottom>1.5f){
+   if(campaignChunk(3)){box(s.x1,s.y1,s.x2,s.y2,s.bottom,s.bottom+.16f);box(s.x1,s.y1,s.x2,s.y2,s.bottom+.92f,s.bottom+.96f);
+    int bars=std::max(1,int(std::max(s.x2-s.x1,s.y2-s.y1)/.4f));for(int i=1;i<=bars;++i){float t=float(i)/(bars+1),x=s.x1+(s.x2-s.x1)*t,y=s.y1+(s.y2-s.y1)*t;box(x-.012f,y-.012f,x+.012f,y+.012f,s.bottom+.16f,s.top-.07f);}
+   }else box(s.x1+.012f,s.y1+.012f,s.x2-.012f,s.y2-.012f,s.bottom+.012f,s.top-.08f);
+  }
+  box(s.x1,s.y1,s.x2,s.y2,s.top-.07f,s.top);box(s.x1,s.y1,s.x1+.055f,s.y1+.055f,s.bottom,s.top-.07f);box(s.x2-.055f,s.y2-.055f,s.x2,s.y2,s.bottom,s.top-.07f);
+ }
+ for(const auto&f:m_fixtures)if(f.solid){float base=floorHeight(f.position.x,f.position.y)+f.base;
+  if(f.model==7){for(float tier:ShelfTiers){float top=base+f.height*tier;oriented(f.position,f.width,f.depth,top-.045f,top,f.yaw);}
+   float c=std::cos(f.yaw),s=std::sin(f.yaw);for(float x:{-f.width*.5f+.02f,f.width*.5f-.02f})for(float y:{-f.depth*.5f+.02f,f.depth*.5f-.02f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.04f,.04f,base,base+f.height,f.yaw);
+  }else oriented(f.position,f.width,f.depth,base,base+f.height,f.yaw);
+ }
+ for(const auto&p:m_props){float base=floorHeight(p.position.x,p.position.y)+p.base;box(p.position.x-p.halfSize.x,p.position.y-p.halfSize.y,p.position.x+p.halfSize.x,p.position.y+p.halfSize.y,base,base+p.height);}
+ for(const auto&t:m_terminals){if(hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;
+  if(benchTerminal(*this,t)){box(t.position.x-.48f,t.position.y-.36f,t.position.x+.42f,t.position.y+.36f,base+.74f,base+.815f);oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6?-kPi*.5f:t.yaw);}
+  else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
+ }
+ for(const auto&d:m_doors){float base=floorHeight((d.left+d.right)*.5f,d.y)+d.z;box(d.left,d.y-.10f,d.right,d.y+.10f,base+2.5f,ceilingHeight((d.left+d.right)*.5f,d.y));}
+ auto bounds=[](const LightSolid&s){float hx=std::fabs(s.cosine)*s.half.x+std::fabs(s.sine)*s.half.y,hy=std::fabs(s.sine)*s.half.x+std::fabs(s.cosine)*s.half.y;return std::pair{s.center-Point3{hx,hy,s.half.z},s.center+Point3{hx,hy,s.half.z}};};
+ auto build=[&](auto&&self,int begin,int end)->int{int index=int(m_lightNodes.size());LightNode node;node.begin=begin;node.end=end;node.minimum={10000,10000,10000};node.maximum={-10000,-10000,-10000};
+  for(int i=begin;i<end;++i){auto [lo,hi]=bounds(m_lightSolids[i]);node.minimum={std::min(node.minimum.x,lo.x),std::min(node.minimum.y,lo.y),std::min(node.minimum.z,lo.z)};node.maximum={std::max(node.maximum.x,hi.x),std::max(node.maximum.y,hi.y),std::max(node.maximum.z,hi.z)};}
+  m_lightNodes.push_back(node);if(end-begin<=4)return index;
+  auto extent=node.maximum-node.minimum;int axis=extent.x>=extent.y&&extent.x>=extent.z?0:extent.y>=extent.z?1:2;auto coordinate=[&](const LightSolid&s){return axis==0?s.center.x:axis==1?s.center.y:s.center.z;};int middle=(begin+end)/2;
+  std::nth_element(m_lightSolids.begin()+begin,m_lightSolids.begin()+middle,m_lightSolids.begin()+end,[&](const auto&a,const auto&b){return coordinate(a)<coordinate(b);});
+  int left=self(self,begin,middle),right=self(self,middle,end);m_lightNodes[index].left=left;m_lightNodes[index].right=right;return index;
+ };
+ if(!m_lightSolids.empty())build(build,0,int(m_lightSolids.size()));
+}
+bool World::lightRayClear(Vec2 a,float az,Vec2 b,float bz)const{
+ // Terrain and shaped water beds retain the volumetric reference trace.
+ if(outdoors()||!m_waterVolumes.empty())return rayClear(a,az,b,bz,false,false,true);
+ if(m_lightNodes.empty())buildLightOcclusion();
+ Point3 origin{a.x,a.y,az},delta{b.x-a.x,b.y-a.y,bz-az};
+ auto intersects=[](Point3 o,Point3 d,Point3 lo,Point3 hi){float nearT=.0001f,farT=.9999f;
+  auto slab=[&](float p,float v,float lower,float upper){if(std::fabs(v)<.000001f)return p>=lower-.00001f&&p<=upper+.00001f;float t1=(lower-p)/v,t2=(upper-p)/v;if(t1>t2)std::swap(t1,t2);nearT=std::max(nearT,t1);farT=std::min(farT,t2);return farT>nearT;};
+  return slab(o.x,d.x,lo.x,hi.x)&&slab(o.y,d.y,lo.y,hi.y)&&slab(o.z,d.z,lo.z,hi.z);
+ };
+ if(m_lightNodes.empty())return true;std::array<int,64> pending{};int count=1;pending[0]=0;
+ while(count){const auto&node=m_lightNodes[pending[--count]];if(!intersects(origin,delta,node.minimum,node.maximum))continue;
+  if(node.left>=0){pending[count++]=node.left;pending[count++]=node.right;continue;}
+  for(int i=node.begin;i<node.end;++i){const auto&s=m_lightSolids[i];auto p=origin-s.center;Point3 local{p.x*s.cosine-p.y*s.sine,p.x*s.sine+p.y*s.cosine,p.z},direction{delta.x*s.cosine-delta.y*s.sine,delta.x*s.sine+delta.y*s.cosine,delta.z};
+   if(intersects(local,direction,s.half*-1.f,s.half))return false;
+  }
+ }return true;
+}
 bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic,bool shelfCavities)const{
  auto delta=b-a;float dz=bz-az;int steps=std::max(1,int(std::ceil(std::sqrt(lengthSq(delta)+dz*dz)/.12f)));
  for(int i=1;i<steps;++i){float t=float(i)/steps;auto p=a+delta*t;float z=az+(bz-az)*t;
@@ -1664,6 +1725,7 @@ bool World::isExit(float x, float y) const {
 }
 
 void World::buildLayers(std::span<const Staircase> stairs){
+ m_lightSolids.clear();m_lightNodes.clear();
  for(const auto& layer:m_layers){
   for(auto row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Invalid map layer row width");
   if(layer.thickness<=0)continue;

@@ -72,11 +72,36 @@ bool SoftwareRenderer::testHardware(){
  report<<"GGX highlight values: rough "<<blueChannel(roughHighlight)<<", smooth "<<blueChannel(smoothHighlight)<<", neutral normal "<<blueChannel(neutralHighlight)<<'\n';
  check(blueChannel(smoothHighlight)>blueChannel(roughHighlight)+3,"GGX smoothness narrows and brightens dielectric highlights");
  check(std::abs(blueChannel(neutralHighlight)-blueChannel(smoothHighlight))<=1,"Flat-normal GGX matches authored neutral normal map");
+ // A plane first baked from behind must retain its physical lit hemisphere
+ // when viewed from the front. The former eye-facing bake erased this highlight.
+ NormalLighting backBake;backBake.directions[0]={0,0,1};backBake.weights[0]=1;backBake.surfaceNormal={0,0,1};
+ begin();renderer.m_gpu->setView(2,0,0,kPi,0,128.f/72.f,false,0);renderer.m_gpu->beginStaticCache(999,1);triangle(neutralDielectric,1,1,&backBake);renderer.m_gpu->endStaticCache();finish();
+ begin();renderer.m_gpu->beginStaticCache(999,1);auto cachedHemisphere=finish();
+ begin();renderer.triangle3D({{.3f,-.3f,1},0,0},{{-.3f,-.3f,1},1,0},{{0,.3f,1},.5f,1},neutralDielectric,1,&frontal);auto freshHemisphere=finish();
+ report<<"Opposite-side bake GGX: cached "<<blueChannel(cachedHemisphere)<<", fresh "<<blueChannel(freshHemisphere)<<'\n';
+ check(std::abs(blueChannel(cachedHemisphere)-blueChannel(freshHemisphere))<=1&&blueChannel(cachedHemisphere)>30,"Static bake keeps physical normals when the first camera is behind a surface");
  begin();triangle(red,1);renderer.m_gpu->clearDepth();triangle(blue,2);pixel=finish();check(blueChannel(pixel)>80&&redChannel(pixel)<blueChannel(pixel)/4,"View-model depth range remains independent");
  begin();renderer.triangle3D({{-.3f,-.1f,-.2f},0,0},{{.3f,-.1f,1},1,0},{{0,.3f,1},.5f,1},red,1);finish();size_t coverage=0;for(auto p:renderer.m_pixels)coverage+=(p&0xffffffu)!=0x0c1012u;check(coverage>100,"Near-plane clipping keeps crossing geometry");
  renderer.m_shadowBudgetLimit=10000000;
  for(int mode:{1,2,3}){auto scene=Game::weaponInspection(mode,.16f);renderer.m_animationWorker=std::make_unique<FrameWorker>();renderer.render(scene);auto parallel=renderer.m_pixels;renderer.m_animationWorker.reset();renderer.render(scene);check(parallel==renderer.m_pixels,"Parallel arm pose matches serial reference");check(renderer.gripError()<.025f,"Hardware weapon grip remains attached");}
+ World warehouse(16);
+ check(warehouse.lightRayClear({12,3},-23,{12,15},-23),"Warehouse open aisle transmits fixture light");
+ check(!warehouse.lightRayClear({1.5f,5.08f},-20,{2.5f,5.08f},-20),"Thin rack post casts an exact shadow");
+ check(warehouse.lightRayClear({1.5f,5.4f},-20,{2.5f,5.4f},-20),"Open space beside the rack post stays lit");
+ check(!warehouse.lightRayClear({5.5f,10},-23,{5.5f,10},-21),"Upper deck blocks light across storeys");
+ check(warehouse.lightRayClear({5.5f,10.5f},-21.7f,{6.5f,10.5f},-21.7f),"Guardrail gaps transmit light instead of using the player hull envelope");
+ check(!warehouse.fits(5.97f,10.5f,-21.7f,.015f,false,true),"Optical guardrail query remains separate from movement collision");
  auto cachedScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);renderer.render(cachedScene);auto staticFrame=renderer.m_pixels;double cacheBuildMs=renderer.m_sceneMs;auto cacheHits=renderer.m_gpu->staticCacheHits();renderer.render(cachedScene);double cacheReuseMs=renderer.m_sceneMs;report<<"Static map scene pass: build "<<cacheBuildMs<<" ms, cached "<<cacheReuseMs<<" ms\n";check(renderer.m_gpu->staticCacheHits()>cacheHits,"Static chunk VBO is reused on the next frame");check(staticFrame==renderer.m_pixels,"Cached static chunk keeps the same rendered frame at nonzero pitch");InputState turn{};turn.mouseDx=80;turn.mouseDy=12;cachedScene.update(turn,1.f/60.f);renderer.render(cachedScene);auto turnedFrame=renderer.m_pixels;cacheHits=renderer.m_gpu->staticCacheHits();renderer.render(cachedScene);check(renderer.m_gpu->staticCacheHits()>cacheHits,"Static chunk VBO survives a camera turn");check(turnedFrame==renderer.m_pixels&&turnedFrame!=staticFrame,"Cached geometry transforms correctly after a camera turn");
+ // Baked shading must not depend on the camera used for first load. View B
+ // through A's reused VBO must match a fresh renderer that starts directly at B.
+ auto fresh=std::make_unique<SoftwareRenderer>(128,72);if(!fresh->enableHardware())return false;
+ auto bakeScene=Game::mapInspection({6,3},1.85f,-4,16,false,-25,true);renderer.render(bakeScene);
+ // Move only the inspection camera, preserving the world and VBO cache key.
+ auto&inspectionPlayer=const_cast<Player&>(bakeScene.player());inspectionPlayer.pos={16.5f,15.f};inspectionPlayer.angle=-2.1f;inspectionPlayer.pitch=5;
+ renderer.render(bakeScene);auto oppositeFrame=renderer.m_pixels;fresh->render(bakeScene);size_t bakeCameraMismatch=0;double bakeCameraError=0;
+ for(size_t i=0;i<oppositeFrame.size();++i){auto a=oppositeFrame[i],b=fresh->m_pixels[i];int peak=0;for(int shift:{0,8,16}){int difference=std::abs(int((a>>shift)&255)-int((b>>shift)&255));peak=std::max(peak,difference);bakeCameraError+=difference;}bakeCameraMismatch+=peak>4;}
+ report<<"Different initial camera: pixels differing by >4/255 "<<bakeCameraMismatch<<", mean channel error "<<bakeCameraError/(turnedFrame.size()*3)<<'\n';
+ check(bakeCameraMismatch<turnedFrame.size()/100&&bakeCameraError/(turnedFrame.size()*3)<.5,"Physical cached normals are independent of the first-load camera");
  auto reliefScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);float reliefScale=renderer.m_wall.parallaxScale;renderer.m_wall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_wall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(changed>8,"Nearby wall relief changes the Vulkan image");
  check(renderer.hardwareActive(),"Hardware remains active without fallback");report<<(passed?"PASS":"FAIL")<<": Vulkan material / depth / clipping checks\n";return passed;
 }

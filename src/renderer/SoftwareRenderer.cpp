@@ -77,6 +77,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_facilityTextures.emplace("metal_2_1",loadTexture(269));
  m_officeCarpet=loadTexture(270);deriveSurfaceNormal(m_officeCarpet,.6f);m_officeCarpet.glossStrength=.04f;
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
+ m_weaponTexture.glossStrength=.42f;m_arms.glossStrength=.06f;deriveSurfaceNormal(m_weaponTexture,.65f);
  m_barrelTexture=loadTexture(122);m_crateTexture=loadTexture(124);m_concrete=loadTexture(125);deriveSurfaceNormal(m_concrete,1.35f);m_bulkhead=loadTexture(126);m_bulkhead.glossStrength=.48f;
  for(int i=0;i<6;++i)m_clutterTextures[i]=loadTexture(152+i*2);
  m_medkitTexture=loadTexture(134);m_shellsTexture=loadTexture(136);
@@ -95,6 +96,10 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  // Physical response is shared by every use of the imported material.
  for(auto&[name,texture]:m_facilityTextures){
   bool wood=name=="wood_1"||name=="wooden_crate_8";
+  // This supplied crate atlas averages only 31/255 red. Calibrate its wood
+  // albedo before linear lighting; increasing room ambient hid every shadow.
+  if(name=="wooden_crate_8"){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*2.2f))<<shift);}prepareDecal(texture,false);}
+
   bool wall=name.starts_with("wall_")&&name!="wall_box_2";
   texture.glossStrength=wood?.06f:wall?.10f:name=="pc_1"?.20f:.32f;
   deriveSurfaceNormal(texture,wood?.65f:wall?.8f:.45f);

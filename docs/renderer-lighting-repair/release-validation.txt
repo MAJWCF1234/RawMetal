@@ -1,0 +1,6 @@
+--vulkan-test exit 0
+--smoke-test --vulkan exit 0
+--mechanisms-test exit 0
+--campaign-map-test exit 0
+--world-isolation-test exit 0
+--door-performance-window exit 0

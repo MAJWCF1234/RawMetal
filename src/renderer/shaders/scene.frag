@@ -133,8 +133,8 @@ void main(){
  if(lighting.w>0.5||light0.w+light1.w>0.0){
   vec4 filteredNormal=lighting.w>0.5?textureGrad(normalMap,sampleUV,uvDx,uvDy):vec4(0.0,0.0,1.0,1.0);
   vec3 n=normalize(filteredNormal.xyz);
-  float response=0.65+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
-  vertexLight*=clamp(response/lighting.z,0.6,1.4);
+  float response=0.22+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
+  vertexLight*=clamp(response/lighting.z,0.35,1.8);
 
   float gloss=fract(surface.z);
 
