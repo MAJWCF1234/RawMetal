@@ -2,21 +2,19 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The current release is **v0.6.1, Freight Repairs**. The published game remains a single executable with its runtime assets embedded.
+The current release is **v0.6.2, Freight Worker Encounter**. The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
 
-v0.6.1 repairs the service van's wheel assembly, closes openings above boundary
-doors, and fixes the auxiliary lift's release and lower landing. Freight Access
-and Lift Machinery have clearer routing signs and shaft guards. Computer logs
-throughout the game now use a recessed black terminal with green text inside
-the existing metal housing. The executable remains below the 22 MB budget.
+v0.6.2 adds the first human encounter in Receiving: a wandering radiation worker,
+a sight-triggered delay, faster combat animations and the supplied worker voice
+at the first attack. Shared actor and machinery systems also support custom
+campaigns. Freight content and Vulkan materials receive further improvements;
+the self-contained executable remains below the 22 MB budget.
 
-See [RELEASE_NOTES_v0.6.1.md](RELEASE_NOTES_v0.6.1.md) for repairs and validation,
-and [RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md) for the freight district,
-soundtrack and two mutated-human encounters.
+See [RELEASE_NOTES_v0.6.2.md](RELEASE_NOTES_v0.6.2.md) for changes and validation.
 
 ## Download and run
 
@@ -341,6 +339,6 @@ The project keeps source asset provenance separate from runtime packing and does
 - [MAP_SYSTEM.md](MAP_SYSTEM.md) for map injection and runtime custom campaigns
 - [tools/level-editor/README.md](tools/level-editor/README.md) for the Level Editor
 - [docs/world-system-boundaries.md](docs/world-system-boundaries.md) for world ownership and isolation
-- [RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md) for the latest release
+- [RELEASE_NOTES_v0.6.2.md](RELEASE_NOTES_v0.6.2.md) for the latest release
 
 See [render quality and performance notes](docs/render-quality-pass.md) for the latest renderer changes, validation, and remaining limitations.

@@ -143,14 +143,18 @@ bool Game::testMechanisms(){
  check(receiving.state("receiving_worker_encounter_ms")>0,"Actually looking at the visible worker starts the saved encounter delay");
  for(int i=0;i<250;++i)receiving.updateMechanisms(.01f);
  check(receiving.world().actorPose(0).clip!=2&&receiving.world().actorPose(0).clip!=4&&receiving.world().actorPose(1).position.x>22,"Three-second observation delay keeps worker wandering and bugs away");
+ auto workerVoiceCount=[&](){return std::count_if(receiving.m_sounds.begin(),receiving.m_sounds.end(),[](const auto& s){return s.sound==Sound::WorkerDying;});};
+ check(workerVoiceCount()==0,"Worker voice stays silent during the observation delay");
  for(int i=0;i<150;++i)receiving.updateMechanisms(.01f);
  auto approach=receiving.world().actorPose(0);Game approachSave;check(approachSave.decodeSave(receiving.encodeSave())&&length(approachSave.world().actorPose(0).position-approach.position)<.002f,"Wander-to-fight approach preserves its captured origin through save/load");
  for(int i=0;i<280;++i)receiving.updateMechanisms(.01f);
  auto fighter=receiving.world().actorPose(0),bug=receiving.world().actorPose(1);Vec2 forward{std::sin(fighter.yaw),std::cos(fighter.yaw)},toward=bug.position-fighter.position;
  check(fighter.clip==2&&fighter.phase>.4f&&fighter.phase<.8f&&dot(forward,toward)/std::max(.001f,length(toward))>.999f,"Worker faces the actual attacking bug during the first fast strike");
+ check(workerVoiceCount()==1,"Worker voice starts once at the first attack cue");
  for(int i=0;i<290;++i)receiving.updateMechanisms(.01f);
  fighter=receiving.world().actorPose(0);bug=receiving.world().actorPose(2);forward={std::sin(fighter.yaw),std::cos(fighter.yaw)};toward=bug.position-fighter.position;
  check(fighter.clip==2&&dot(forward,toward)/std::max(.001f,length(toward))>.98f,"Worker turns toward the second wasp for the next strike");
+ check(workerVoiceCount()==1,"Worker voice does not restart during the second attack");
  Game receivingSave;check(receivingSave.decodeSave(receiving.encodeSave())&&receivingSave.state("receiving_worker_encounter_ms")==receiving.state("receiving_worker_encounter_ms"),"First worker encounter resumes from a saved skeletal timeline");
  receivingSave.loadLevel(14,false);for(int i=0;i<1200;++i)receivingSave.updateMechanisms(1.f/60);
  check(receivingSave.state("receiving_worker_encounter_complete"),"Receiving worker timeline continues across resident floor-level chunks");
