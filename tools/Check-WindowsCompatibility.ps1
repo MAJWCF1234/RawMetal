@@ -24,7 +24,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot read dependencies.' }
 $dlls = @($dependencies | ForEach-Object {
     if ($_ -match '^\s+([\w.-]+\.dll)\s*$') { $Matches[1] }
 })
-$allowed = '^(USER32|GDI32|WINMM|Cabinet|KERNEL32|MSVCP140|VCRUNTIME140(_1)?|vulkan-1)\.dll$|^api-ms-win-crt-[\w-]+\.dll$'
+$allowed = '^(USER32|GDI32|WINMM|Cabinet|KERNEL32|ADVAPI32|COMCTL32|MSVCP140|VCRUNTIME140(_1)?|vulkan-1)\.dll$|^api-ms-win-crt-[\w-]+\.dll$'
 foreach ($dll in $dlls) {
     if ($dll -notmatch $allowed) { throw "Unexpected runtime dependency: $dll. Review Windows 10 availability before shipping." }
 }

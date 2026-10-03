@@ -16,9 +16,11 @@ public:
  void pose(float phase,float recoil);
     bool poseAction(const char* action,float phase);
  static bool testAttachedSkinning();
+ static bool testVrHands();
     void poseCreature(int clip,float phase);
  void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil);
  Point3 bonePosition(const char* name)const;
+ std::vector<MeshTriangle> trackedHand(bool left,const std::array<float,5>& curls);
  Point3 poseAnchor(int index)const{return m_poseAnchors.at(size_t(index));}
  std::vector<MeshTriangle> triangles;
  std::vector<std::vector<MeshVertex>> openRings;

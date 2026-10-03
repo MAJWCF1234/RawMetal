@@ -9,15 +9,16 @@ void Game::seedClutter(){
   m_clutter.push_back(c);
  }
 }
-int Game::nearbyClutter()const{
+int Game::nearbyClutter(int grabHand)const{
+ if(m_vrInputActive){int best=-1;float reach=.6f*.6f;for(int i=0;i<int(m_clutter.size());++i)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){const auto&c=m_clutter[i];auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(distance<reach&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c.pos,c.z+c.height()*.5f,true,true,true)){best=i;reach=distance;}}return best;}
  int best=-1;float distance=1.5f,verticalReach=std::max(1.2f,m_player.hullHeight()+.3f);Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  for(int i=0;i<int(m_clutter.size());++i){auto&c=m_clutter[i];auto delta=c.pos-m_player.pos;float d=length(delta);
   if(d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<verticalReach&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c.pos,c.z+.15f,true,true,true)){best=i;distance=d;}}
  return best;
 }
-bool Game::interactClutter(){
- if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.velocity=m_velocity*.1f;c.vz=0;c.pitchSpeed=0;c.rollSpeed=0;c.sleeping=false;c.restTime=0;m_heldClutter=-1;return true;}
- m_heldClutter=nearbyClutter();if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.projectile=false;c.sleeping=false;c.restTime=0;sound(Sound::Pickup,.25f,.8f);return true;}return false;
+bool Game::interactClutter(int grabHand){
+ if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.velocity=m_velocity*.1f;c.vz=0;if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=m_vrHandVelocity[m_vrCarryHand];c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}c.pitchSpeed=0;c.rollSpeed=0;c.sleeping=false;c.restTime=0;m_heldClutter=-1;return true;}
+ m_heldClutter=nearbyClutter(grabHand);if(holdingClutter()){auto&c=m_clutter[m_heldClutter];if(m_vrInputActive){float nearest=999;for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(distance<nearest){nearest=distance;m_vrCarryHand=hand;}}}c.projectile=false;c.sleeping=false;c.restTime=0;sound(Sound::Pickup,.25f,.8f);return true;}return false;
 }
 void Game::updateClutter(const InputState&input,float dt){
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
@@ -28,12 +29,13 @@ void Game::updateClutter(const InputState&input,float dt){
   constexpr float holdDistance=.9f;
   Vec2 target=m_player.pos+forward*(holdDistance*std::cos(pitch));
   float height=m_player.z+m_player.eye+holdDistance*std::sin(pitch)-c.height()*.5f;
+  if(m_vrInputActive){auto hand=m_vrHandPosition[m_vrCarryHand],direction=m_vrHandDirection[m_vrCarryHand];target={hand.x+direction.x*.12f,hand.y+direction.y*.12f};height=hand.z+direction.z*.12f-c.height()*.5f;pitch=std::asin(std::clamp(direction.z,-1.f,1.f));float yaw=std::atan2(direction.y,direction.x);forward={std::cos(yaw),std::sin(yaw)};}
   auto local=target;const auto&targetWorld=worldAt(local);
   height=std::max(height,targetWorld.supportBelow(local.x,local.y,height+c.height()*.5f+.025f)+.012f);
-  bool clear=true;for(int i=1;i<=12;++i){float t=float(i)/12;auto p=m_player.pos+(target-m_player.pos)*t;const auto&w=worldAt(p);float z=m_player.z+m_player.eye+(height+c.height()*.5f-m_player.z-m_player.eye)*t;clear&=w.fits(p.x,p.y,z,.02f,true,true)&&!w.doorBlocks(p.x,p.y,z,.02f);}
-  if(clear&&targetWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
+  bool clear=!m_vrInputActive||m_vrHandValid[m_vrCarryHand];for(int i=1;i<=12;++i){float t=float(i)/12;auto p=m_player.pos+(target-m_player.pos)*t;const auto&w=worldAt(p);float z=m_player.z+m_player.eye+(height+c.height()*.5f-m_player.z-m_player.eye)*t;clear&=w.fits(p.x,p.y,z,.02f,true,true)&&!w.doorBlocks(p.x,p.y,z,.02f);}
+  if(clear&&targetWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_vrInputActive?std::atan2(forward.y,forward.x):m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
   else{m_heldClutter=-1;c.projectile=false;}
-  if(holdingClutter()&&input.fire&&!m_previousFire&&!m_suppressFire){c.velocity=forward*(9.f*std::cos(pitch));c.vz=2.f+9.f*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
+  if(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1)&&input.fire&&!m_previousFire&&!m_suppressFire){c.velocity=forward*(9.f*std::cos(pitch));c.vz=2.f+9.f*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
  }
  int steps=std::max(1,int(std::ceil(dt*180)));float step=dt/steps;
  for(int index=0;index<int(m_clutter.size());++index){if(index==m_heldClutter)continue;auto&c=m_clutter[index];
@@ -95,6 +97,19 @@ void Game::updateClutter(const InputState&input,float dt){
  }
 }
 bool Game::testClutter(){
+ {auto vr=validationScene(Enemy::Kind::Huntsman);vr.m_clutter={{{4.2f,4.5f},{},.56f}};vr.m_clutter[0].kind=2;
+  vr.setVrHand(0,{4.2f,4.5f,.7f},{1,0,0},true);vr.setVrHand(1,{}, {},false);
+  if(!vr.interactClutter()||!vr.holdingClutter())return false;vr.updateClutter({},.01f);
+  if(!vr.holdingClutter()||std::fabs(vr.m_clutter[0].pos.x-4.32f)>.001f||std::fabs(vr.m_clutter[0].z+vr.m_clutter[0].height()*.5f-.7f)>.001f)return false;
+  vr.setVrHand(0,{}, {},false);vr.updateClutter({},.01f);if(vr.holdingClutter())return false;
+  auto pose=vr.m_player;int ammo=pose.ammo;vr.m_enemies[0].pos={5.2f,4.5f};vr.setVrAim({3.8f,4.5f,.6f},{1,0,0},true);vr.shoot();
+  if(vr.m_enemies[0].hp!=76||vr.m_player.ammo!=ammo-1||vr.m_player.pos.x!=pose.pos.x||vr.m_player.z!=pose.z||vr.m_player.angle!=pose.angle||vr.m_player.pitch!=pose.pitch)return false;
+ }
+ {auto grab=validationScene(Enemy::Kind::Huntsman);grab.m_enemies.clear();grab.m_clutter={{{4.2f,4.5f},{},.56f}};grab.m_clutter[0].kind=2;grab.setVrHand(0,{4.2f,4.5f,.7f},{1,0,0},true);grab.setVrHand(1,{2.5f,4.5f,1.f},{1,0,0},true);
+  InputState grip{};grip.vrTracked=true;grip.vrGrip[1]=true;grab.updateInteraction(grip,.01f);if(grab.holdingClutter())return false;
+  grip.vrGrip[0]=true;grab.updateInteraction(grip,.01f);if(!grab.holdingClutter()||grab.m_vrCarryHand!=0)return false;grab.updateInteraction(grip,.01f);if(!grab.holdingClutter())return false;
+  grab.setVrHand(0,{4.2f,4.5f,.7f},{1,0,0},true,{2,1,3});grip.vrGrip[0]=false;grab.updateInteraction(grip,.01f);if(grab.holdingClutter()||grab.m_clutter[0].velocity.x!=2||grab.m_clutter[0].vz!=3)return false;
+ }
  // All carryable shapes follow eye height and pitch rather than a feet-level
  // cap. Check both player stances and rotated bounds.
  for(int kind=0;kind<7;++kind)for(bool crouched:{false,true})for(float pitch:{-30.f,0.f,65.f}){

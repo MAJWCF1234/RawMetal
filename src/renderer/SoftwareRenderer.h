@@ -16,8 +16,11 @@ public:
     bool enableHardware(void* window=nullptr);
     bool hardwareActive()const{return bool(m_gpu);}
     bool hardwarePresentsWindow()const;
+    std::uint64_t vrMirrorFrames()const;
     const std::string& hardwareName()const{return m_gpuName;}
     void render(const Game& game);
+    void saveVrEye(const char* path);
+    void renderVrEye(const Game& game,int eye);
     void setEnvironmentInspection(bool enabled){m_environmentInspection=enabled;}
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
@@ -40,6 +43,9 @@ private:
     std::unique_ptr<FrameWorker> m_animationWorker;
     std::string m_gpuName;
     bool m_gpuFrame=false;
+    bool m_vrRendering=false;
+    std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
+    void drawTrackedHands(const Game& game);
     bool m_environmentInspection=false;
     bool m_staticGeometryBuild=false;
     std::uint64_t m_staticGeometryBuilds=0;
@@ -52,6 +58,7 @@ private:
     static void deriveSurfaceNormal(Texture& texture,float strength);
     static Point3 sampleNormal(const Texture& texture,float u,float v,float lod);
     bool testNormalMapping();
+    Texture m_vrWristTexture;
     Texture m_muzzleFlash;
     Texture m_water,m_coastWater;
     Texture m_terrainDirt,m_terrainRock,m_coastSand,m_coastRock;
@@ -105,6 +112,7 @@ private:
     void clear(std::uint32_t color);
     void put(int x,int y,std::uint32_t c);
     void rect(int x,int y,int w,int h,std::uint32_t c);
+    void drawVrStatus(const Game& game);
     void drawHud(const Game& game);
     void drawTitle(const Game& game);
     void drawConsole(const Game& game);
