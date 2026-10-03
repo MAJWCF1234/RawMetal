@@ -31,6 +31,7 @@ public:
  static std::pair<int,int> wristPointer(Point3 origin,Point3 direction);
  static bool shoulderSlot(Point3 offset,Point3 forward);
 private:
+ void suspendTracking(Game& game,InputState& input);
  struct Impl;std::unique_ptr<Impl> m;
 };
 }

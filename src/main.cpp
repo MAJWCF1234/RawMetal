@@ -120,6 +120,7 @@ __declspec(noinline) static int freightArtInspection(int W,int H){
   {"warehouse-aisle",16,{6,3},-25,1.85f,-4},
   {"pit-workshop",28,{12,2},-28,1.25f,18},
   {"pit-chassis",28,{17,3},-28,retro::kPi*.5f,12},
+  {"pit-toolbay",28,{20.5f,16},-25,-retro::kPi*.5f,-4},
   {"manifest-wing",20,{7,3},-7,1.9f,-18},
   {"platform-axis",25,{12,3},-25,retro::kPi*.5f,0},
   {"bore-axis",30,{12,2},-25,retro::kPi*.5f,0},

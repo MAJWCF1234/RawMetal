@@ -41,8 +41,22 @@ void rack(Map& m,float x,float y,float floor,int tiers=4){
   wall(m,x,y+3.86f,x+2.76f,y+4.02f,z+.12f,z+.30f,12);
   for(int pallet=0;pallet<2;++pallet){float yy=y+.3f+pallet*1.8f;
    if(tier==0)cargo(m,x+1.36f,yy+.7f,z+.14f);
-   else for(float xx:{x+.8f,x+1.95f})m.fixtures.push_back({17,{xx,yy+.7f},z+.14f-m.layers.front().elevation,1.05f,1.3f,1.5f,0,true});
+   else {
+    // Open stock slots and varied loads reveal the shelf depth; every load
+    // rests on a pallet rather than becoming an identical black wall.
+    int slot=tier*2+pallet;
+    if(slot%5==0){cargo(m,x+1.36f,yy+.7f,z+.14f,false);continue;}
+    for(int column=0;column<2;++column){float xx=x+.8f+column*1.15f;
+     m.fixtures.push_back({15,{xx,yy+.7f},z+.14f-m.layers.front().elevation,1.08f,1.38f,.16f,0,true});
+     float height=slot%3==0?.8f:slot%3==1?1.25f:1.65f;
+     m.fixtures.push_back({17,{xx,yy+.7f},z+.30f-m.layers.front().elevation,1.02f,1.28f,height,(slot+column)%2?kPi:0,true});
+    }
+   }
   }
+  // Rear diagonal bracing remains inside the rack footprint and clear of
+  // the personnel aisle and shelf lamps.
+  m.pipes.push_back({{x+.12f,y+3.9f},{x+2.6f,y+3.9f},z+.35f,.035f,z+2.8f,1});
+  m.pipes.push_back({{x+.12f,y+3.9f},{x+2.6f,y+3.9f},z+2.8f,.035f,z+.35f,1});
  }
 }
 void container(Map& m,float x,float y,float floor,bool open=false,int material=11){
@@ -483,6 +497,18 @@ std::shared_ptr<const Map> make(int level){
   }
   for(float y:{6.f,10.f}){wall(m,18.05f,y-.12f,19.15f,y+.12f,-25.53f,-25.43f,12);m.lights.push_back({{18.45f,y},-25.7f});}
   m.definition.ambient=.40f;
+  // Track-height workshop equipment gives the pit a visible maintenance
+  // purpose, while its entry, jacks and stairs retain their clearance.
+  for(float y:{5.5f,9.5f}){
+   m.fixtures.push_back({6,{21,y},3.f,2.4f,.8f,.9f,kPi*.5f,true});
+   wall(m,20.1f,y-.22f,21.9f,y+.22f,-24.1f,-23.98f,12);
+   for(float x:{20.35f,21.5f})m.pipes.push_back({{x,y-.16f},{x,y+.16f},-23.82f,.16f,-23.82f,1});
+  }
+  for(float y:{5.5f,9.f,12.5f}){
+   m.fixtures.push_back({7,{2,y},3.f,1.4f,.5f,1.8f,-kPi*.5f,true});
+   floorLine(m,1.3f,y-1,3.f,y-.9f,-25,13);
+  }
+  board(m,21,13,-22.8f,"ENGINE 04 / TOOL BAY","BOGIE SERVICE / RETURN TOOLS",2.8f);
   break;
  case 29:
   machineryClock(m,"depot_roof_movement",24000);actor(m,"depot_roof_movement",ActorVisual::Huntsman,1.5f,{{0,{19,6},-16,0},{6000,{19,6},-16,0},{8500,{19,14},-16,kPi*.5f},{11000,{19,17},-19,kPi*.5f},{24000,{19,17},-19,kPi*.5f}});

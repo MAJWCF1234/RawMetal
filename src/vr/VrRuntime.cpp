@@ -20,7 +20,7 @@ struct VrRuntime::Impl {
  std::array<vr::VRActionHandle_t,12> actions{};
  vr::VRActionSetHandle_t set=0;vr::VRActionHandle_t skeleton[2]{};vr::IVROverlay* overlay=nullptr;vr::VROverlayHandle_t panel=0,wrist=0;bool titlePanel=false,previousWristClick=false;
  std::array<vr::TrackedDevicePose_t,vr::k_unMaxTrackedDeviceCount> poses{};
- std::array<VrHand,2> hands{};uint32_t width=0,height=0;float yaw=0,headStartY=0;Point3 previousHead{};std::array<bool,2> previousGrip{},shoulderConsumed{};bool calibrated=false,menuWasOpen=false;int pointerX=-1,pointerY=-1;
+ std::array<VrHand,2> hands{};uint32_t width=0,height=0;float yaw=0,headStartY=0;Point3 previousHead{};std::array<bool,2> previousGrip{},shoulderConsumed{};bool calibrated=false,trackingInterrupted=false,menuWasOpen=false;int pointerX=-1,pointerY=-1;
  Point3 world(Point3 point,const Game&game)const{auto head=translation(poses[0].mDeviceToAbsoluteTracking);auto offset=rotateTracking(point-head,yaw);auto origin=game.chunkOffset(game.level());return offset+Point3{game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye};}
  ~Impl(){if(overlay&&wrist)overlay->DestroyOverlay(wrist);if(overlay&&panel)overlay->DestroyOverlay(panel);if(shutdown&&system)shutdown();if(dll)FreeLibrary(dll);}
 };
@@ -74,12 +74,25 @@ const std::array<VrHand,2>& VrRuntime::hands()const{return m->hands;}
 std::string VrRuntime::instanceExtensions()const{std::string s(m->compositor->GetVulkanInstanceExtensionsRequired(nullptr,0),'\0');m->compositor->GetVulkanInstanceExtensionsRequired(s.data(),uint32_t(s.size()));return s;}
 std::string VrRuntime::deviceExtensions(VkPhysicalDevice device)const{std::string s(m->compositor->GetVulkanDeviceExtensionsRequired(device,nullptr,0),'\0');m->compositor->GetVulkanDeviceExtensionsRequired(device,s.data(),uint32_t(s.size()));return s;}
 VkPhysicalDevice VrRuntime::outputDevice(VkInstance instance)const{uint64_t device=0;m->system->GetOutputDevice(&device,vr::TextureType_Vulkan,instance);return reinterpret_cast<VkPhysicalDevice>(device);}
+void VrRuntime::suspendTracking(Game&game,InputState&input){
+  // Keep tracked movement enabled but neutral: PC keys and stale controller
+  // actions must not move the player while the headset pose is unavailable.
+  input.vrTracked=true;input.vrYaw=game.player().angle;input.vrPitch=game.player().pitch;input.vrEye=game.player().eye;
+  input.vrMoveForward=input.vrMoveRight=0;input.vrGrip={};input.fire=input.use=input.jump=input.reload=false;
+  input.pointerX=input.pointerY=m->pointerX=m->pointerY=-1;
+  m->previousGrip={};m->shoulderConsumed={};m->previousWristClick=false;
+  for(auto&h:m->hands)h={};game.setVrAim({}, {},false);game.setVrHand(0,{}, {},false);game.setVrHand(1,{}, {},false);
+  // Resume at the recovered tracking origin rather than applying the whole
+  // unobserved head displacement as a room-scale collision move.
+  m->trackingInterrupted=true;
+}
 bool VrRuntime::update(Game&game,InputState&input,float dt){
  vr::VREvent_t event{};while(m->system->PollNextEvent(&event,sizeof(event)))if(event.eventType==vr::VREvent_Quit)return false;
  if(m->compositor->WaitGetPoses(m->poses.data(),uint32_t(m->poses.size()),nullptr,0)!=vr::VRCompositorError_None)throw std::runtime_error("SteamVR tracking/compositor disconnected.");
- if(!m->poses[0].bPoseIsValid){input.fire=input.use=false;for(auto&h:m->hands)h.tracked=false;game.setVrAim({}, {},false);game.setVrHand(0,{}, {},false);game.setVrHand(1,{}, {},false);return true;}
+ if(!m->poses[0].bPoseIsValid){suspendTracking(game,input);return true;}
  auto head=translation(m->poses[0].mDeviceToAbsoluteTracking);
  if(!m->calibrated){m->yaw=game.player().angle;m->headStartY=head.y;m->previousHead=head;m->calibrated=true;}
+ if(m->trackingInterrupted){m->previousHead=head;m->trackingInterrupted=false;}
  if(!game.paused()&&!game.titleScreen()){auto delta=rotateTracking(head-m->previousHead,m->yaw);game.moveVrRoom({delta.x,delta.y});}m->previousHead=head;
  vr::VRControllerState_t states[2]{};uint32_t devices[2]={m->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_LeftHand),m->system->GetTrackedDeviceIndexForControllerRole(vr::TrackedControllerRole_RightHand)};
  vr::VRControllerAxis_t sticks[2]{};
@@ -96,7 +109,9 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
   for(int side=0;side<2;++side){states[side].rAxis[1].x=digital(side,states[side].rAxis[1].x>.65f)?1.f:0.f;vr::InputAnalogActionData_t squeeze{};bool grip=digital(side+2,(states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))!=0);if(m->input->GetAnalogActionData(m->actions[4+side],&squeeze,sizeof(squeeze),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&squeeze.bActive)grip|=squeeze.x>.65f;if(grip)states[side].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_Grip);else states[side].ulButtonPressed&=~vr::ButtonMaskFromId(vr::k_EButton_Grip);vr::InputAnalogActionData_t move{};if(m->input->GetAnalogActionData(m->actions[6+side],&move,sizeof(move),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&move.bActive)sticks[side]={move.x,move.y};}
   if(digital(8,false))states[0].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_A);if(digital(9,false))states[1].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_A);input.inventory|=digital(11,false);if(digital(10,false))states[0].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_ApplicationMenu);
  }
- for(int side=0;side<2;++side)if(!m->hands[side].articulated){m->hands[side].curls.fill((states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))?.85f:.1f);m->hands[side].curls[1]=std::clamp(states[side].rAxis[1].x,0.f,1.f);}
+ // SteamVR action state can outlive its tracked device. Discard it before
+ // locomotion/menu/use processing, including the legacy input fallback.
+ for(int side=0;side<2;++side){if(!m->hands[side].tracked){states[side]={};sticks[side]={};}else if(!m->hands[side].articulated){m->hands[side].curls.fill((states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))?.85f:.1f);m->hands[side].curls[1]=std::clamp(states[side].rAxis[1].x,0.f,1.f);}}
  bool focused=m->system->IsInputAvailable();if(focused&&!game.paused()&&!game.titleScreen())m->yaw=wrapAngle(m->yaw+axis(sticks[1].x)*1.5707963f*std::min(dt,.05f));
  auto&pose=m->poses[0].mDeviceToAbsoluteTracking;auto forward=rotateTracking({-pose.m[0][2],-pose.m[1][2],-pose.m[2][2]},m->yaw);
  input.vrTracked=true;input.vrYaw=std::atan2(forward.y,forward.x);input.vrPitch=140.f*std::asin(std::clamp(forward.z,-1.f,1.f));input.vrEye=std::clamp(Player::StandingEye+head.y-m->headStartY,.15f,2.5f);
@@ -145,5 +160,15 @@ void VrRuntime::submitPanel(VkInstance instance,VkPhysicalDevice physical,VkDevi
 }
 std::pair<int,int> VrRuntime::wristPointer(Point3 origin,Point3 direction){origin={origin.x/WristScale,origin.y/WristScale,(origin.z-WristCenter)/WristScale+.13f};direction=direction*(1.f/WristScale);if(direction.y>=-.0001f)return {-1,-1};float distance=(.037f-origin.y)/direction.y;if(distance<0||distance>3.f)return {-1,-1};auto p=origin+direction*distance;if(p.x<-.11f||p.x>.11f||p.z<.068125f||p.z>.191875f)return {-1,-1};return {std::clamp(int((p.x+.11f)/.22f*DisplayWidth),0,DisplayWidth-1),std::clamp(int((p.z-.068125f)/.12375f*DisplayHeight),0,DisplayHeight-1)};}
 bool VrRuntime::shoulderSlot(Point3 offset,Point3 forward){float horizontal=std::hypot(forward.x,forward.y);if(horizontal<.1f)return false;forward.x/=horizontal;forward.y/=horizontal;float behind=offset.x*forward.x+offset.y*forward.y,side=-offset.x*forward.y+offset.y*forward.x;return behind<-.12f&&behind>-.65f&&std::fabs(side)<.55f&&offset.z>-.45f&&offset.z<.25f;}
-bool VrRuntime::testMath(){auto pixel=wristPointer(wristPoint({0,.4f,.13f}),{0,-1,0});if(pixel.first!=320||std::abs(pixel.second-180)>1||wristPointer(wristPoint({.2f,.4f,.13f}),{0,-1,0}).first!=-1||wristPointer(wristPoint({0,.4f,.13f}),{0,1,0}).first!=-1)return false;if(!shoulderSlot({-.3f,.2f,-.1f},{1,0,0})||!shoulderSlot({-.2f,-.3f,-.1f},{0,1,0})||shoulderSlot({.3f,.2f,-.1f},{1,0,0})||shoulderSlot({-.3f,.2f,-.8f},{1,0,0}))return false;Matrix a{};a[0]=a[5]=a[10]=a[15]=1;a[12]=4;a[13]=-2;a[14]=9;auto b=multiply(a,rigidInverse(a));for(int i=0;i<16;++i)if(std::fabs(b[i]-(i%5==0?1.f:0.f))>.00001f)return false;auto f=rotateTracking({0,0,-1},0);auto r=rotateTracking({1,0,0},0);auto up=rotateTracking({0,1,0},0);return f.x==1&&r.y==1&&up.z==1;}
+bool VrRuntime::testMath(){
+ {auto game=std::make_unique<Game>();VrRuntime runtime;InputState input{};
+  input.fire=input.use=input.jump=input.reload=true;input.vrGrip={true,true};
+  input.vrMoveForward=1;input.vrMoveRight=-1;input.pointerX=input.pointerY=42;
+  runtime.m->hands[0].tracked=runtime.m->hands[1].tracked=true;
+  runtime.m->previousGrip={true,true};runtime.m->shoulderConsumed={true,true};
+  runtime.m->previousWristClick=true;runtime.m->calibrated=true;runtime.m->headStartY=1.45f;
+  runtime.suspendTracking(*game,input);
+  if(!input.vrTracked||input.fire||input.use||input.jump||input.reload||input.vrGrip[0]||input.vrGrip[1]||input.vrMoveForward||input.vrMoveRight||input.pointerX!=-1||input.pointerY!=-1||runtime.m->hands[0].tracked||runtime.m->hands[1].tracked||runtime.m->previousGrip[0]||runtime.m->shoulderConsumed[1]||runtime.m->previousWristClick||!runtime.m->trackingInterrupted||!runtime.m->calibrated||runtime.m->headStartY!=1.45f)return false;
+ }
+ auto pixel=wristPointer(wristPoint({0,.4f,.13f}),{0,-1,0});if(pixel.first!=320||std::abs(pixel.second-180)>1||wristPointer(wristPoint({.2f,.4f,.13f}),{0,-1,0}).first!=-1||wristPointer(wristPoint({0,.4f,.13f}),{0,1,0}).first!=-1)return false;if(!shoulderSlot({-.3f,.2f,-.1f},{1,0,0})||!shoulderSlot({-.2f,-.3f,-.1f},{0,1,0})||shoulderSlot({.3f,.2f,-.1f},{1,0,0})||shoulderSlot({-.3f,.2f,-.8f},{1,0,0}))return false;Matrix a{};a[0]=a[5]=a[10]=a[15]=1;a[12]=4;a[13]=-2;a[14]=9;auto b=multiply(a,rigidInverse(a));for(int i=0;i<16;++i)if(std::fabs(b[i]-(i%5==0?1.f:0.f))>.00001f)return false;auto f=rotateTracking({0,0,-1},0);auto r=rotateTracking({1,0,0},0);auto up=rotateTracking({0,1,0},0);return f.x==1&&r.y==1&&up.z==1;}
 }
