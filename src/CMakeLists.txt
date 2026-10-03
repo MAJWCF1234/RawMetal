@@ -38,6 +38,7 @@ add_custom_command(OUTPUT "${RAWMETAL_PACKED_RC}"
     COMMENT "Losslessly packing embedded assets" VERBATIM)
 add_executable(RawMetal WIN32
     main.cpp
+    vr/VrRuntime.cpp
     app.rc
     "${RAWMETAL_PACKED_RC}"
     game/Game.cpp
@@ -93,7 +94,7 @@ foreach(SHADER scene.vert scene.frag composite.vert composite.frag)
   target_sources(RawMetal PRIVATE "${RAWMETAL_SHADERS}/${SHADER}.inc")
 endforeach()
 target_include_directories(RawMetal PRIVATE "${RAWMETAL_SHADERS}")
-target_link_libraries(RawMetal PRIVATE user32 gdi32 winmm cabinet bcrypt Vulkan::Vulkan webpdecoder)
+target_link_libraries(RawMetal PRIVATE user32 gdi32 winmm cabinet bcrypt advapi32 comctl32 Vulkan::Vulkan webpdecoder)
 if(MSVC)
   target_link_libraries(RawMetal PRIVATE delayimp)
   target_link_options(RawMetal PRIVATE /DELAYLOAD:vulkan-1.dll "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/app.manifest")
@@ -111,7 +112,7 @@ if(MSVC)
   # code benefits from size-oriented inlining and COMDAT folding.
   target_compile_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/Gy>" "$<$<CONFIG:Release>:/Gw>")
   target_link_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>")
-  set_source_files_properties(ThirdParty/ufbx/ufbx.c PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/O1>")
+  set_source_files_properties(vr/VrRuntime.cpp ThirdParty/ufbx/ufbx.c PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/O1>")
 else()
   target_compile_options(RawMetal PRIVATE -Wall -Wextra -Wpedantic)
 endif()

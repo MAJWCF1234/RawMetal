@@ -1,7 +1,7 @@
 #version 450
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(set=0,binding=1) uniform sampler2D hudImage;
-layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; } params;
+layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; float vrMode; } params;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 color;
 vec3 highlight(vec2 p){
@@ -36,5 +36,5 @@ void main(){
  // The HDR scene attachment stores linear radiance. Apply the same exposure
  // as the headless capture path before the display transfer.
  vec3 displayScene=params.hdrScene>0.5?pow(filmic(scene*1.05),vec3(1.0/2.2)):scene;
- vec4 h=texture(hudImage,uv);color=vec4(mix(displayScene,h.rgb,h.a),1.0);
+ vec4 h=params.vrMode>0.5?vec4(0.0):texture(hudImage,uv);color=vec4(mix(displayScene,h.rgb,h.a),1.0);
 }

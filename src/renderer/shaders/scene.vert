@@ -6,6 +6,7 @@ layout(location=3) in vec4 light0;
 layout(location=4) in vec4 light1;
 layout(location=5) in vec4 surface;
 layout(location=6) in vec4 worldNormal;
+layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;} stereo;
 
 layout(push_constant) uniform ViewState {
  vec4 eyeYaw;
@@ -87,6 +88,7 @@ void main(){
   );
  }
 
+ if(stereo.enabled.x>0.5)gl_Position=stereo.clip*vec4(worldPos,1.0);
  outUV=uv;
  outLighting=adjustedLighting;
  outLight0=light0;

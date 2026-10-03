@@ -64,6 +64,42 @@ void Mesh::poseCreature(int clip,float phase){
  for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+(t*3+v)*2,2);triangles[t].v[v].p=posed[index];}
 }
 Point3 Mesh::bonePosition(const char* name)const{auto n=ufbx_find_node(m_scene,name);if(!n)return {};return {float(n->node_to_world.m03),float(n->node_to_world.m13),float(n->node_to_world.m23)};}
+std::vector<MeshTriangle> Mesh::trackedHand(bool left,const std::array<float,5>& curls){
+ if(!m_bindScene)return {};
+ std::string suffix=left?".L":".R";std::vector<ufbx_transform_override> changes;
+ const char* fingers[]={"thumb","f_index","f_middle","f_ring","f_pinky"};
+ for(int finger=0;finger<5;++finger)for(int joint=1;joint<=3;++joint){
+  auto name=std::string(fingers[finger])+".0"+std::to_string(joint)+suffix;auto node=ufbx_find_node(m_bindScene,name.c_str());if(!node)continue;
+  auto transform=node->local_transform;float angle=std::clamp(curls[finger],0.f,1.f)*1.15f;
+  ufbx_quat bend{std::sin(angle*.5f),0,0,std::cos(angle*.5f)};transform.rotation=ufbx_quat_mul(transform.rotation,bend);changes.push_back({node->typed_id,transform});
+ }
+ ufbx_anim_opts options{};options.transform_overrides={changes.data(),changes.size()};auto anim=ufbx_create_anim(m_bindScene,&options,nullptr);ufbx_evaluate_opts evaluate{};evaluate.evaluate_skinning=true;auto scene=ufbx_evaluate_scene(m_bindScene,anim,0,&evaluate,nullptr);ufbx_free_anim(anim);if(!scene)return {};
+ auto hand=ufbx_find_node(scene,("hand"+suffix).c_str()),middle=ufbx_find_node(scene,("f_middle.01"+suffix).c_str()),index=ufbx_find_node(scene,("f_index.01"+suffix).c_str()),pinky=ufbx_find_node(scene,("f_pinky.01"+suffix).c_str());
+ auto position=[](ufbx_node*n){return Point3{float(n->node_to_world.m03),float(n->node_to_world.m13),float(n->node_to_world.m23)};};
+ auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};auto unit=[&](Point3 p){return p*(1/std::sqrt(std::max(.000001f,dot(p,p))));};
+ std::vector<MeshTriangle> result;if(hand&&middle&&index&&pinky){
+  auto cross3=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+  auto wrist=position(hand),forward=unit(position(middle)-wrist),across=unit(position(index)-position(pinky));auto palm=unit(cross3(across,forward)*(left?-1.f:1.f));across=unit(cross3(forward,palm));
+  // Clip exactly at the wrist plane. Triangles crossing it are split, so no
+  // forearm remains and the hand retains the authored texture coordinates.
+  for(const auto&cached:m_cachedTriangles){auto node=scene->nodes[cached.node];MeshVertex polygon[6]{};int count=3;float nearest=999;
+   for(int i=0;i<3;++i){auto p=ufbx_get_vertex_vec3(&node->mesh->skinned_position,cached.corners[i]);if(node->mesh->skinned_is_local)p=ufbx_transform_position(&node->geometry_to_world,p);polygon[i]=cached.prototype.v[i];polygon[i].p={float(p.x),float(p.y),float(p.z)};auto delta=polygon[i].p-wrist;nearest=std::min(nearest,dot(delta,delta));}
+   if(nearest>.25f*.25f)continue;
+   MeshVertex clipped[6]{};int output=0;for(int i=0;i<count;++i){auto a=polygon[i],b=polygon[(i+1)%count];float da=dot(a.p-wrist,forward),db=dot(b.p-wrist,forward);if(da>=0)clipped[output++]=a;if((da>=0)!=(db>=0)){float t=da/(da-db);clipped[output++]={a.p+(b.p-a.p)*t,a.u+(b.u-a.u)*t,a.v+(b.v-a.v)*t,1};}}
+   for(int i=0;i<output;++i){auto p=clipped[i].p-wrist;clipped[i].p={dot(p,across),dot(p,palm),-dot(p,forward)};}
+   for(int i=1;i+1<output;++i)result.push_back({{clipped[0],clipped[i],clipped[i+1]},cached.prototype.part});
+  }
+ }
+ ufbx_free_scene(scene);return result;
+}
+__declspec(noinline) bool Mesh::testVrHands(){
+ Mesh mesh(111);float changed=0;
+ for(bool left:{false,true}){auto open=mesh.trackedHand(left,{0,0,0,0,0}),closed=mesh.trackedHand(left,{1,1,1,1,1});if(open.size()<20||closed.size()<20)return false;
+  for(const auto&faces:{open,closed})for(const auto&face:faces)for(const auto&v:face.v)if(!std::isfinite(v.p.x)||!std::isfinite(v.p.y)||!std::isfinite(v.p.z)||std::fabs(v.p.x)>.3f||std::fabs(v.p.y)>.3f||v.p.z>.0001f||v.p.z<-.4f)return false;
+  for(size_t i=0;i<std::min(open.size(),closed.size());++i)for(int j=0;j<3;++j){auto d=open[i].v[j].p-closed[i].v[j].p;changed+=d.x*d.x+d.y*d.y+d.z*d.z;}
+ }
+ return changed>.0001f;
+}
 void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool skin){
  auto add=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.x+b.x,a.y+b.y,a.z+b.z};};
  auto sub=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.x-b.x,a.y-b.y,a.z-b.z};};

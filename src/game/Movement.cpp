@@ -50,10 +50,11 @@ void Game::updateMovement(const InputState& input,float dt){
   float feet=m_player.grounded?m_player.z:std::max(groundHeight(m_player.pos),m_player.z-heightDelta);
   if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.z=feet;}
  }
- m_player.eye+=((m_player.crouched?Player::CrouchedEye:Player::StandingEye)-m_player.eye)*std::min(1.f,dt*16.f);
+ if(input.vrTracked)m_player.eye=input.vrEye;else m_player.eye+=((m_player.crouched?Player::CrouchedEye:Player::StandingEye)-m_player.eye)*std::min(1.f,dt*16.f);
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x},wish{};
  if(input.forward)wish+=forward;if(input.back)wish+=forward*-1;if(input.right)wish+=right;if(input.left)wish+=right*-1;
- if(lengthSq(wish)>0)wish=normalized(wish);
+ if(input.vrTracked)wish=forward*input.vrMoveForward+right*input.vrMoveRight;
+ if(lengthSq(wish)>1||(!input.vrTracked&&lengthSq(wish)>0))wish=normalized(wish);
  int count=std::max(1,int(std::ceil(dt*120)));float step=dt/count;
  for(int tick=0;tick<count;++tick){
   bool grounded=m_player.grounded;auto old=m_player.pos;
@@ -119,6 +120,14 @@ const char* Game::interactionHint()const{
 }
 void Game::updateInteraction(const InputState& input,float dt){
  m_logTime=std::max(0.f,m_logTime-dt);
+ if(input.vrTracked){
+  auto previous=m_previousVrGrip;m_previousVrGrip=input.vrGrip;
+  if(holdingClutter()){
+   if(!input.vrGrip[m_vrCarryHand])interactClutter();
+   m_previousUse=input.use;m_world.updateDoors(dt);return;
+  }
+  if(m_logTime==0)for(int hand=0;hand<2;++hand)if(input.vrGrip[hand]&&!previous[hand]&&interactClutter(hand)){m_previousUse=input.use;m_world.updateDoors(dt);return;}
+ }
  if(input.use&&!m_previousUse&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
  if(input.use&&!m_previousUse&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(input.use&&!m_previousUse&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}

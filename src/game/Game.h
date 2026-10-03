@@ -35,6 +35,9 @@ struct InputState {
     int pointerX=-1,pointerY=-1;
     float mouseDx = 0.0f;
     float mouseDy = 0.0f;
+    bool vrTracked=false;
+    std::array<bool,2> vrGrip{};
+    float vrYaw=0,vrPitch=0,vrEye=1.42f,vrMoveForward=0,vrMoveRight=0;
 };
 
 struct Enemy {
@@ -133,6 +136,9 @@ public:
     bool menuFromTitle()const{return m_menuFromTitle;}
 
     void update(const InputState& input, float dt);
+    void moveVrRoom(Vec2 delta){tryMove(delta);}
+    void setVrAim(Point3 position,Point3 direction,bool valid){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;}
+    void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandValid[side]=valid;}
     void restart();
     int level()const{return m_level;}
     // Campaign content count; runtime custom packs use their authored map count.
@@ -156,6 +162,7 @@ public:
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
     const std::vector<BarrelExplosion>& barrelExplosions()const{return m_barrelExplosions;}
     bool holdingClutter()const{return m_heldClutter>=0;}
+    int vrCarryHand()const{return m_vrCarryHand;}
     static bool testClutter();
     static Game clutterInspection(int kind,float seconds);
     static bool testStreaming();
@@ -173,6 +180,7 @@ public:
     bool unarmed()const{return m_holster>=.98f;}
     bool guarding()const{return m_guarding;}
     static bool testUnarmed();
+    static bool testVrMelee();
     static Game weaponInspection(int mode,float age=0);
     float damageFlash() const { return m_damageFlash; }
     float elapsed() const { return m_elapsed; }
@@ -325,8 +333,8 @@ private:
     void updateStreaming(float dt);
     void useDoor(int index);
     void updateClutter(const InputState& input,float dt);
-    bool interactClutter();
-    int nearbyClutter()const;
+    bool interactClutter(int hand=-1);
+    int nearbyClutter(int hand=-1)const;
     void seedClutter();
     bool tryMove(Vec2 delta);
     bool hullFits(Vec2 position,float feet,float height)const;
@@ -339,6 +347,8 @@ private:
     void shoot();
     void reloadWeapon();
     void punchImpact();
+    void applyPunchHit(Enemy& enemy);
+    void updateVrMelee(const InputState& input,float dt);
     void receiveDamage(float amount,Vec2 source);
     void updateEnemies(float dt);
     void migrateEnemiesAcrossChunks();
@@ -354,6 +364,13 @@ private:
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<BarrelExplosion> m_barrelExplosions;
     int m_heldClutter=-1;
+    bool m_vrAimValid=false;
+    Point3 m_vrAimPosition{},m_vrAimDirection{};
+    bool m_vrInputActive=false;int m_vrCarryHand=1;
+    std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{};
+    std::array<bool,2> m_vrHandValid{},m_vrMeleeTracked{};
+    std::array<Point3,2> m_vrPreviousFist{};
+    std::array<float,2> m_vrFistCooldown{};
     bool m_previousFire = false;
     bool m_previousReload = false;
     float m_weaponKick = 0.0f,m_reloadTimer=0.0f;
@@ -384,6 +401,7 @@ private:
     Settings m_settings;
     bool m_paused=false,m_inventoryOpen=false,m_quitRequested=false,m_previousEscape=false,m_previousInventory=false,m_suppressFire=false;
     int m_menuSelection=0,m_pointerX=-1,m_pointerY=-1,m_dragSlider=-1;
+    std::array<bool,2> m_previousVrGrip{};
     InputState m_menuPrevious;
     void updateMenu(const InputState& input);
     void updateInventory(const InputState& input);

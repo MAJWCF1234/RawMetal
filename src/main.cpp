@@ -1,5 +1,8 @@
 #ifdef _WIN32
 #include "game/Game.h"
+#include "vr/VrRuntime.h"
+#include <windows.h>
+#include <commctrl.h>
 #include "renderer/SoftwareRenderer.h"
 #include "platform/Win32Window.h"
 #include "audio/AudioEngine.h"
@@ -14,6 +17,13 @@
 #include <numeric>
 #include <vector>
 
+__declspec(noinline) static int vrSmokeTest(int W,int H,bool inspect=false){
+     std::ofstream report("vr-smoke-test.txt");retro::VrRuntime runtime;std::string error;if(!runtime.initialize(error)){report<<"UNAVAILABLE: "<<error;return 61;}
+     retro::Win32Window mirror(W,H,L"Depthworks VR spectator test");auto scene=retro::Game::mapInspection({11.3f,3.5f},1.570796f);auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware(mirror.handle())){report<<renderer->hardwareName();return 36;}
+     auto start=std::chrono::steady_clock::now();int submitted=0;int limit=inspect?240:12;while(submitted<limit&&std::chrono::steady_clock::now()-start<std::chrono::seconds(15)){mirror.pump();retro::InputState input{};if(!runtime.update(scene,input,1.f/90))break;if(!runtime.trackingValid())continue;scene.update(input,1.f/90);renderer->renderVrEye(scene,0);renderer->renderVrEye(scene,1);++submitted;if(inspect&&submitted==1){renderer->saveVrEye("vr-eye.ppm");std::ofstream("vr-inspection-ready.txt")<<"ready";}}
+     auto extent=runtime.extent();report<<"Desktop mirror frames: "<<renderer->vrMirrorFrames()<<"\n";report<<renderer->hardwareName()<<"\nEye resolution: "<<extent.first<<" x "<<extent.second<<"\nStereo frames submitted: "<<submitted<<"\nMenu panel: 2 metres away / 1.4 metres wide\n";for(int hand=0;hand<2;++hand)report<<"Hand "<<hand<<": tracked="<<runtime.hands()[hand].tracked<<", articulated="<<runtime.hands()[hand].articulated<<"\n";report.flush();return submitted==limit&&renderer->vrMirrorFrames()>0?0:62;
+
+}
 __declspec(noinline) static int cableLayoutInspection(int width,int height){
  auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(width,height);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
  struct View{const char*name;retro::Vec2 p;float z,yaw,pitch;};
@@ -683,6 +693,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         renderer.render(game);saveFrame("jump-look-frame.ppm");
         return out && game.player().health>0 ? 0 : 2;
     }
+    if(std::wcsstr(commandLine,L"--vr-inspection-test"))return vrSmokeTest(W,H,true);
+    if(std::wcsstr(commandLine,L"--vr-smoke-test"))return vrSmokeTest(W,H);
+    if(std::wcsstr(commandLine,L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking coordinate axes, rigid-view inversion, wrist click mapping, shoulder slot, wrist clipping, articulated finger deformation and physical VR melee\n":"FAIL\n");return passed?0:60;}
+    bool vrMode=std::wcsstr(commandLine,L"--vr")!=nullptr;
+    if(!*commandLine){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
+    std::unique_ptr<retro::VrRuntime> vrRuntime;
+    if(vrMode){vrRuntime=std::make_unique<retro::VrRuntime>();std::string error;if(!vrRuntime->initialize(error))throw std::runtime_error(error);}
     retro::Win32Window window(W,H,L"Depthworks");
     if(!window.valid()) return 1;
     retro::Game game;
@@ -696,22 +713,22 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(!directStart)game.showTitleScreen();
     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
     retro::AudioEngine audio;
-    if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware(window.handle());
+    if(vrMode){if(!renderer.enableHardware(window.handle()))throw std::runtime_error("SteamVR requires Vulkan hardware rendering: "+renderer.hardwareName());}else if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware(window.handle());
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.consoleOpen();game.update(window.input(menuOpen),dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.consoleOpen());
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.consoleOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
-        audio.update(game,window.focused()); renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());
+        audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());
         titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128];if(game.titleScreen())std::swprintf(t,128,L"Depthworks");else std::swprintf(t,128,L"Depthworks | HP %.0f | Shells %d | Monsters %d",game.player().health,game.player().ammo,game.enemiesRemaining());window.setCaption(t);}
     }
     if(!settingsPath.empty())game.saveSettings(settingsPath);
     return 0;
     }catch(const std::exception& error){
         std::ofstream("RawMetal-error.txt")<<error.what();
-        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
+        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window")&&!std::wcsstr(commandLine,L"--vr-smoke-test"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }
 }

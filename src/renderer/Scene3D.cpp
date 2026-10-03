@@ -1,5 +1,6 @@
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
+#include "../vr/VrRuntime.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -1236,6 +1237,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*fixtureHalfWidth,y+uy*fixtureHalfWidth,top},{x-ux*fixtureHalfWidth,y-uy*fixtureHalfWidth,top},dust,1.6f);
    if(++beams==6)break;
   }
+ }
+}
+void SoftwareRenderer::drawTrackedHands(const Game&game){
+ auto origin=game.chunkOffset(game.level());const auto&hands=VrRuntime::active()->hands();
+ auto draw=[&](const MeshTriangle&face,const Texture&texture,const VrHand&hand){
+  MeshVertex vertices[3];for(int i=0;i<3;++i){vertices[i]=face.v[i];auto p=face.v[i].p;auto world=hand.position+hand.basis[0]*p.x+hand.basis[1]*p.y+hand.basis[2]*p.z;world.x-=origin.x;world.y-=origin.y;vertices[i].p=cameraPoint(world,game);}
+  triangle3D(vertices[0],vertices[1],vertices[2],texture,.85f);
+ };
+ for(int side=0;side<2;++side)if(hands[side].tracked)for(const auto&triangle:m_vrHandMeshes[side])draw(triangle,m_arms,hands[side]);
+ if(hands[0].tracked){
+  // Steel casing mounted behind the left hand; the tracked overlay is its recessed screen.
+  auto face=[&](Point3 a,Point3 b,Point3 c,Point3 d){a=VrRuntime::wristPoint(a);b=VrRuntime::wristPoint(b);c=VrRuntime::wristPoint(c);d=VrRuntime::wristPoint(d);MeshTriangle t{{{a,0,0},{b,1,0},{c,1,1}}};draw(t,m_panelMetal,hands[0]);t={{{a,0,0},{c,1,1},{d,0,1}}};draw(t,m_panelMetal,hands[0]);};
+  auto casing=[&](Point3 a,Point3 b){face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,b.y,a.z},{a.x,b.y,a.z});face({b.x,a.y,b.z},{a.x,a.y,b.z},{a.x,b.y,b.z},{b.x,b.y,b.z});face({a.x,a.y,b.z},{a.x,a.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z});face({b.x,a.y,a.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{b.x,b.y,a.z});face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{a.x,b.y,b.z});face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,a.y,a.z},{a.x,a.y,a.z});};
+  if(!m_vrWristTexture.pixels.empty()){MeshTriangle screen{{{{-.11f,.037f,.068125f},0,0},{{.11f,.037f,.068125f},1,0},{{.11f,.037f,.191875f},1,1}}};for(auto&v:screen.v)v.p=VrRuntime::wristPoint(v.p);draw(screen,m_vrWristTexture,hands[0]);screen={{{{-.11f,.037f,.068125f},0,0},{{.11f,.037f,.191875f},1,1},{{-.11f,.037f,.191875f},0,1}}};for(auto&v:screen.v)v.p=VrRuntime::wristPoint(v.p);draw(screen,m_vrWristTexture,hands[0]);}
+  casing({-.126f,-.035f,.045f},{.126f,.027f,.215f});casing({-.126f,.027f,.045f},{-.111f,.043f,.215f});casing({.111f,.027f,.045f},{.126f,.043f,.215f});casing({-.111f,.027f,.045f},{.111f,.043f,.065f});casing({-.111f,.027f,.195f},{.111f,.043f,.215f});
+ }
+
+ if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
+  auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=.85f/std::max({range.x,range.y,range.z});
+  for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-.055f,p.z-.25f};}draw(face,m_weaponTexture,hands[1]);}
  }
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){

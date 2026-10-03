@@ -18,10 +18,15 @@ public:
  void clearStaticCaches();
  std::uint64_t staticCacheHits()const;
  void prepare(const SoftwareRenderer::Texture& texture);
+ void captureVrEye(std::vector<std::uint32_t>& pixels);
+ void updateDynamic(const SoftwareRenderer::Texture& texture);
  void clearDepth();
  void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f);
  void finish(std::vector<std::uint32_t>& pixels);
  bool hasSurface()const;
+ bool vrActive()const;
+ std::uint64_t mirrorFrames()const;
+ void setVrEye(int eye,const std::array<float,16>& clip);
  std::pair<int,int> surfaceExtent()const;
  void present(const std::uint32_t* overlay,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick);
  const std::string& adapter()const;
