@@ -23,3 +23,5 @@ Finger articulation uses SteamVR skeletal summaries when available, with grip/tr
 Validation commands: `--vr-test` (coordinates, wrist hit mapping, shoulder slot, wrist-cut meshes, finger deformation, physical punches), `--vr-smoke-test` (12 live stereo and desktop frames), `--vr-inspection-test` (240 frames and a diagnostic eye capture), `--physics-ai-test`, and `--smoke-test --vulkan`. Eye readback exists only in the explicit inspection diagnostic.
 
 SteamVR releases its imported Vulkan resources before RawMetal destroys the device, preventing the shutdown crash found during live testing.
+
+Preview 2 neutralizes movement, grip, firing and controller actions when tracking is lost. Recovered headset tracking resets the room-scale movement reference while retaining the original eye-height calibration, so an unobserved displacement is not applied to the player. Controller action state is ignored until that controller has a valid pose. This recovery patch has offline regression coverage; reconnect behavior still needs a headset playtest.
