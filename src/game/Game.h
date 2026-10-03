@@ -181,6 +181,7 @@ public:
     bool guarding()const{return m_guarding;}
     static bool testUnarmed();
     static bool testVrMelee();
+    static bool testVrInteraction();
     static Game weaponInspection(int mode,float age=0);
     float damageFlash() const { return m_damageFlash; }
     float elapsed() const { return m_elapsed; }
@@ -334,6 +335,8 @@ private:
     void useDoor(int index);
     void updateClutter(const InputState& input,float dt);
     bool interactClutter(int hand=-1);
+    float vrInteractionDistance(Point3 target,float housingRadius)const;
+    int nearbyInteractionDoor()const;
     int nearbyClutter(int hand=-1)const;
     void seedClutter();
     bool tryMove(Vec2 delta);
@@ -366,7 +369,7 @@ private:
     int m_heldClutter=-1;
     bool m_vrAimValid=false;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
-    bool m_vrInputActive=false;int m_vrCarryHand=1;
+    bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;
     std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{};
     std::array<bool,2> m_vrHandValid{},m_vrMeleeTracked{};
     std::array<Point3,2> m_vrPreviousFist{};
