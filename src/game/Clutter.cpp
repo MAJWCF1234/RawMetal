@@ -22,7 +22,12 @@ bool Game::interactClutter(){
 void Game::updateClutter(const InputState&input,float dt){
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(holdingClutter()){
-  auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;Vec2 target=m_player.pos+forward*.9f;float handHeight=std::min(m_player.eye-.3f,.48f);float height=m_player.z+handHeight+std::sin(pitch)*.7f;
+  auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;
+  // Aim at the object's centre from the current camera, including crouching.
+  // The former .48 m feet-relative cap kept carried objects at knee height.
+  constexpr float holdDistance=.9f;
+  Vec2 target=m_player.pos+forward*(holdDistance*std::cos(pitch));
+  float height=m_player.z+m_player.eye+holdDistance*std::sin(pitch)-c.height()*.5f;
   auto local=target;const auto&targetWorld=worldAt(local);
   height=std::max(height,targetWorld.supportBelow(local.x,local.y,height+c.height()*.5f+.025f)+.012f);
   bool clear=true;for(int i=1;i<=12;++i){float t=float(i)/12;auto p=m_player.pos+(target-m_player.pos)*t;const auto&w=worldAt(p);float z=m_player.z+m_player.eye+(height+c.height()*.5f-m_player.z-m_player.eye)*t;clear&=w.fits(p.x,p.y,z,.02f,true,true)&&!w.doorBlocks(p.x,p.y,z,.02f);}
@@ -90,13 +95,24 @@ void Game::updateClutter(const InputState&input,float dt){
  }
 }
 bool Game::testClutter(){
+ // All carryable shapes follow eye height and pitch rather than a feet-level
+ // cap. Check both player stances and rotated bounds.
+ for(int kind=0;kind<7;++kind)for(bool crouched:{false,true})for(float pitch:{-30.f,0.f,65.f}){
+  auto held=validationScene(Enemy::Kind::Huntsman);held.m_enemies.clear();
+  held.m_player.crouched=crouched;held.m_player.eye=crouched?Player::CrouchedEye:Player::StandingEye;held.m_player.pitch=pitch;
+  Clutter item;item.kind=kind;item.pos=held.m_player.pos;item.pitch=.25f;item.roll=.2f;
+  held.m_clutter={item};held.m_heldClutter=0;held.updateClutter({},1.f/120);
+  const auto&c=held.m_clutter[0];float angle=pitch/140.f;
+  if(!held.holdingClutter()||std::fabs(length(c.pos-held.m_player.pos)-.9f*std::cos(angle))>.001f||
+     std::fabs(c.z+c.height()*.5f-held.m_player.z-held.m_player.eye-.9f*std::sin(angle))>.001f)return false;
+ }
  {Game source;source.m_clutter.clear();Clutter shard;shard.kind=6;shard.pos={4,4};shard.z=source.world().floorHeight(4,4);source.m_clutter.push_back(shard);Game restored;
   if(shard.impactSound()!=Sound::JunkSoft||shard.size()[0]<=shard.size()[1]||!restored.decodeSave(source.encodeSave())||restored.clutter().size()!=1||restored.clutter()[0].kind!=6)return false;
  }
  {Game legacy;legacy.m_clutter.clear();for(int kind=0;kind<4;++kind){Clutter old;old.kind=kind;old.pos={4,4};old.z=legacy.world().floorHeight(4,4);legacy.m_clutter.push_back(old);}Game restored;
   if(!restored.decodeSave(legacy.encodeSave())||restored.clutter().size()!=4)return false;for(const auto&item:restored.clutter())if(item.kind!=6||item.sleeping)return false;
  }
- {auto g=mapInspection({21.55f,21.46f},kPi*.5f,160,5,true,-9,true);g.m_clutter.clear();
+ {auto g=mapInspection({21.55f,21.46f},kPi*.5f,0,5,true,-9,true);g.m_clutter.clear();
   Clutter bottle;bottle.kind=2;bottle.pos={21.55f,21.8f};bottle.z=-8.3f;g.m_clutter.push_back(bottle);g.m_heldClutter=0;
   g.updateClutter({},1.f/120);
   if(!g.holdingClutter()||g.m_clutter[0].pos.y<22.32f||g.m_clutter[0].z<-7.95f)return false;
@@ -130,7 +146,7 @@ bool Game::testClutter(){
   slide.updateClutter({},.025f);auto& c=slide.m_clutter[0];
   if(c.velocity.x<=0||c.velocity.y<1.9f||c.pos.y<=4.5f)return false;
  }
- auto g=validationScene(Enemy::Kind::Huntsman);g.m_enemies[0].pos={5.2f,4.5f};g.m_clutter={{{4.2f,4.5f}}};
+ auto g=validationScene(Enemy::Kind::Huntsman);g.m_player.pitch=-85;g.m_enemies[0].pos={5.2f,4.5f};g.m_clutter={{{4.2f,4.5f}}};
  if(!g.interactClutter()||!g.holdingClutter())return false;g.updateClutter({},.01f);InputState fire{};fire.fire=true;g.updateClutter(fire,.01f);
  for(int i=0;i<90;++i)g.updateClutter({},1.f/120);if(g.m_enemies[0].hp!=105||g.holdingClutter())return false;
  g.m_clutter={{{6.5f,2.5f},{},4.f}};g.m_world=World(2);g.m_level=2;
