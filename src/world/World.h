@@ -25,6 +25,8 @@ struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSiz
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
 struct WorldLight {Vec2 position;float z;};
 // Authored overhead services, with absolute elevations. Kept above standing clearance.
+// Materials: 0 service pipe, 1 rusted metal, 2 panel steel. An explicit endZ
+// supplies equipment/bracing geometry without automatic ceiling hangers.
 struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};

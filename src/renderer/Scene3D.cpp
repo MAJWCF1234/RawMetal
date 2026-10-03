@@ -356,15 +356,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(m_staticGeometryBuild||eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.88f);
  };
  // Low-sided, capped pipes retain a cylindrical silhouette without dense meshes.
+ static const auto cylinderRing=[](){std::array<Vec2,11> ring{};for(int i=0;i<10;++i){float angle=i*kTwoPi/10;ring[i]={std::cos(angle),std::sin(angle)};}ring[10]=ring[0];return ring;}();
  auto cylinder=[&](Point3 a,Point3 b,float radius,const Texture&texture){
   Point3 axis=b-a;float length=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);if(length<.001f)return;
   axis=axis*(1.f/length);Point3 u=cross3(axis,std::fabs(axis.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
   u=u*(1.f/std::sqrt(u.x*u.x+u.y*u.y+u.z*u.z));Point3 v=cross3(axis,u);
   if(!sphereVisible((a+b)*.5f,length*.5f+radius))return;
   if(hidden({std::min(a.x,b.x)-radius,std::min(a.y,b.y)-radius,std::min(a.z,b.z)-radius},{std::max(a.x,b.x)+radius,std::max(a.y,b.y)+radius,std::max(a.z,b.z)+radius}))return;
-  for(int i=0;i<10;++i){float t=i*kTwoPi/10,n=(i+1)*kTwoPi/10;auto p=(u*std::cos(t)+v*std::sin(t))*radius,q=(u*std::cos(n)+v*std::sin(n))*radius;
+  for(int i=0;i<10;++i){const auto current=cylinderRing[i],next=cylinderRing[i+1];auto p=(u*current.x+v*current.y)*radius,q=(u*next.x+v*next.y)*radius;
    quad(a+p,a+q,b+q,b+p,texture,1.f,{radius*.63f,length});
-   tri({a,.5f,.5f},{a+q,1,1},{a+p,0,0},texture,.8f);tri({b,.5f,.5f},{b+p,0,0},{b+q,1,1},texture,.8f);
+   // Planar cap UVs preserve a continuous texture and a nonzero tangent
+   // determinant. The former centre/diagonal UVs were collinear, disabling
+   // normal/gloss lighting and stretching each cap triangle into a stripe.
+   Vec2 uvP{.5f+.5f*current.x,.5f+.5f*current.y},uvQ{.5f+.5f*next.x,.5f+.5f*next.y};
+   tri({a,.5f,.5f},{a+q,uvQ.x,uvQ.y},{a+p,uvP.x,uvP.y},texture,.8f);
+   tri({b,.5f,.5f},{b+p,uvP.x,uvP.y},{b+q,uvQ.x,uvQ.y},texture,.8f);
   }
  };
  struct ExteriorLight {std::array<Point3,6> normals;std::array<float,6> brightness{};std::array<NormalLighting,6> gloss{};bool hasGloss;};
@@ -709,7 +715,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  if(cachePipes&&buildPipes){m_staticGeometryBuild=true;shadowBudget=400000;}
  if(buildPipes)for(const auto& pipe:w.pipes()){
   float endZ=pipe.endZ>-999?pipe.endZ:pipe.z;
-  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==1?m_metal:m_pipeTexture);
+  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==2?m_panelMetal:pipe.material==1?m_metal:m_pipeTexture);
   if(pipe.endZ>-999)continue; // Vertical drops terminate inside solid equipment.
   float distance=length(pipe.end-pipe.start);int supports=std::max(1,int(std::ceil(distance/3.f)));
   for(int i=0;i<=supports;++i){

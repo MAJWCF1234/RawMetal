@@ -92,9 +92,39 @@ void Game::updateMovement(const InputState& input,float dt){
   }
  }
 }
+float Game::vrInteractionDistance(Point3 target,float housingRadius)const{
+ int hand=m_vrInteractionHand;if(!m_vrHandValid[hand])return 999.f;
+ auto origin=m_vrHandPosition[hand],delta=target-origin;
+ float distance=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
+ auto head=Point3{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye};
+ auto headDelta=target-head;float headDistance=std::sqrt(headDelta.x*headDelta.x+headDelta.y*headDelta.y+headDelta.z*headDelta.z);
+ if(distance>1.8f||headDistance>2.4f)return 999.f;
+ // Touch nearby controls directly; distant controls require the gripping
+ // controller to point at them. Head direction never substitutes for a hand.
+ auto direction=m_vrHandDirection[hand];float directionLength=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);
+ if(distance>.65f&&(directionLength<.001f||(delta.x*direction.x+delta.y*direction.y+delta.z*direction.z)<distance*directionLength*.94f))return 999.f;
+ auto face=target-delta*(std::min(housingRadius,distance*.8f)/std::max(.001f,distance));
+ auto headFace=target-headDelta*(std::min(housingRadius,headDistance*.8f)/std::max(.001f,headDistance));
+ if(!m_world.rayClear({origin.x,origin.y},origin.z,{face.x,face.y},face.z)||!m_world.rayClear(m_player.pos,head.z,{headFace.x,headFace.y},headFace.z))return 999.f;
+ return distance;
+}
+int Game::nearbyInteractionDoor()const{
+ if(!m_vrInputActive)return m_world.nearbyDoor(m_player.pos,{std::cos(m_player.angle),std::sin(m_player.angle)},m_player.z);
+ if(!m_vrHandValid[m_vrInteractionHand])return -1;
+ int best=-1;float nearest=1.8f;auto hand=m_vrHandPosition[m_vrInteractionHand];
+ for(int i=0;i<int(m_world.doors().size());++i){const auto&d=m_world.doors()[i];float base=m_world.floorHeight((d.left+d.right)*.5f,d.y)+d.z;
+  if(std::fabs(m_player.z-base)>1.25f)continue;
+  Point3 target{std::clamp(hand.x,d.left+.2f,d.right-.2f),d.y,std::clamp(hand.z,base+.45f,base+2.f)};
+  float distance=vrInteractionDistance(target,.15f);if(distance<nearest){best=i;nearest=distance;}
+ }return best;
+}
 int Game::nearbyTerminal()const{
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int nearest=-1;float closest=1.8f;
  for(size_t i=0;i<m_world.terminals().size();++i){auto&t=m_world.terminals()[i];auto delta=t.position-m_player.pos;float distance=length(delta),along=dot(delta,forward),base=t.z+m_world.floorHeight(t.position.x,t.position.y);
+  if(m_vrInputActive){bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction<2;
+   float reach=vrInteractionDistance({t.position.x,t.position.y,base+(bench?1.1f:.75f)},bench?.6f:.4f);
+   if(reach<closest){closest=reach;nearest=int(i);}continue;
+  }
   if(distance>=closest||along<=0||std::fabs(delta.x*forward.y-delta.y*forward.x)>.4f||std::fabs(m_player.z-base)>=.65f)continue;
   // Stop the sight ray before the computer's own collision housing.
   bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction<2;
@@ -109,17 +139,21 @@ bool Game::doorLocked(const Door& door)const{
         (door.requireState&&state(door.requireState)!=door.requireValue);
 }
 const char* Game::interactionHint()const{
- if(m_logTime>0)return "E / CLOSE LOG";
- if(holdingClutter())return "E / DROP     FIRE / PUNT";
+ if(m_logTime>0)return m_vrInputActive?"WRIST / CLOSE LOG":"E / CLOSE LOG";
+ if(holdingClutter())return m_vrInputActive?"RELEASE GRIP / DROP":"E / DROP     FIRE / PUNT";
  if(nearReactorDisk())return "E / TAKE REACTOR AUTH DISK";
- Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
- int door=m_world.nearbyDoor(m_player.pos,forward,m_player.z);
- if(door>=0){auto&d=m_world.doors()[door];if(doorLocked(d))return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";return d.swinging?(d.opening?"E / CLOSE SERVICE DOOR":"E / OPEN SERVICE DOOR"):d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
- if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.activateState)return state(t.activateState)?(t.toggleState?"E / RESUME MACHINERY":"CONTROL / RELEASED"):"E / OPERATE LOCAL CONTROL";if(t.reactorAction)return t.reactorAction==1?"E / USE COMPUTER":"E / OPERATE VALVE";return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
- return nearbyClutter()>=0?"E / LIFT":nullptr;
+ int door=nearbyInteractionDoor();
+ if(door>=0){auto&d=m_world.doors()[door];if(doorLocked(d))return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";
+  if(m_vrInputActive)return d.swinging?(d.opening?"GRIP / CLOSE SERVICE DOOR":"GRIP / OPEN SERVICE DOOR"):d.opening?"GRIP / CLOSE BULKHEAD":d.transfer?"GRIP / TRANSFER BULKHEAD":"GRIP / OPEN BULKHEAD";
+  return d.swinging?(d.opening?"E / CLOSE SERVICE DOOR":"E / OPEN SERVICE DOOR"):d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
+ if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.activateState)return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):"CONTROL / RELEASED"):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");
+  if(m_vrInputActive){if(t.reactorAction)return t.reactorAction==1?"GRIP / USE COMPUTER":"GRIP / OPERATE VALVE";return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";}
+  if(t.reactorAction)return t.reactorAction==1?"E / USE COMPUTER":"E / OPERATE VALVE";return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
+ return nearbyClutter()>=0?(m_vrInputActive?"GRIP / LIFT":"E / LIFT"):nullptr;
 }
 void Game::updateInteraction(const InputState& input,float dt){
  m_logTime=std::max(0.f,m_logTime-dt);
+ bool usePressed=input.use&&!m_previousUse;
  if(input.vrTracked){
   auto previous=m_previousVrGrip;m_previousVrGrip=input.vrGrip;
   if(holdingClutter()){
@@ -127,11 +161,12 @@ void Game::updateInteraction(const InputState& input,float dt){
    m_previousUse=input.use;m_world.updateDoors(dt);return;
   }
   if(m_logTime==0)for(int hand=0;hand<2;++hand)if(input.vrGrip[hand]&&!previous[hand]&&interactClutter(hand)){m_previousUse=input.use;m_world.updateDoors(dt);return;}
+  for(int hand=0;hand<2;++hand)if(input.use&&input.vrGrip[hand]&&!previous[hand]){m_vrInteractionHand=hand;usePressed=true;break;}
  }
- if(input.use&&!m_previousUse&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
- if(input.use&&!m_previousUse&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
- if(input.use&&!m_previousUse&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
- if(input.use&&!m_previousUse){Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int door=m_world.nearbyDoor(m_player.pos,forward,m_player.z);
+ if(usePressed&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
+ if(usePressed&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
+ if(usePressed&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
+ if(usePressed){int door=nearbyInteractionDoor();
   if(holdingClutter()){interactClutter();}
   else if(door>=0){if(!doorLocked(m_world.doors()[door]))useDoor(door);}
   else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].reactorAction)useReactorAction(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
@@ -141,6 +176,36 @@ void Game::updateInteraction(const InputState& input,float dt){
   if(!holdingClutter()&&door<0&&m_logTime==0)interactClutter();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);
+}
+__declspec(noinline) bool Game::testVrInteraction(){
+ auto g=std::make_unique<Game>();g->loadLevel(20,false);g->m_enemies.clear();g->m_clutter.clear();
+ g->m_player.pos={6,14.5f};g->m_player.z=-7;g->m_player.angle=-kPi*.5f;
+ g->setVrHand(0,{6,15,-5.9f},{0,1,0},true);g->m_vrInteractionHand=0;
+ if(g->nearbyTerminal()<0)return false;
+ InputState input{};input.vrTracked=true;input.vrGrip[0]=true;input.use=true;g->updateInteraction(input,.01f);
+ if(g->m_logTime<=0||g->m_activeLog<0)return false;
+ input.use=false;input.vrGrip[0]=false;g->updateInteraction(input,.01f);g->m_logTime=0;
+ g->setVrHand(0,{6,15,-5.9f},{0,-1,0},true);if(g->nearbyTerminal()>=0)return false;
+ g->setVrHand(0,{6,15,-5.9f},{0,1,0},false);if(g->nearbyTerminal()>=0)return false;
+ g->setVrHand(0,{6,15,-2.9f},{0,1,0},true);if(g->nearbyTerminal()>=0)return false;
+ // Touch a real campaign bulkhead with the left controller while looking
+ // away. Door lookup uses the same controller and visibility rules.
+ const auto&door=g->m_world.doors().front();float center=(door.left+door.right)*.5f;
+ float base=g->m_world.floorHeight(center,door.y)+door.z;
+ g->m_player.pos={center,door.y+1.f};g->m_player.z=base;g->m_player.angle=kPi*.5f;
+ g->setVrHand(0,{center,door.y+.4f,base+.95f},{0,-1,0},true);
+ int selected=g->nearbyInteractionDoor();if(selected<0)return false;
+ input.use=true;input.vrGrip[0]=true;g->updateInteraction(input,.01f);
+ if(!g->m_world.doors()[selected].opening)return false;
+ g->setVrHand(1,{center,door.y+.4f,base+.95f},{0,-1,0},true);input.vrGrip[1]=true;g->updateInteraction(input,.01f);
+ if(g->m_world.doors()[selected].opening||g->m_vrInteractionHand!=1)return false;
+ g->setVrHand(1,{center,door.y+.4f,base+.95f},{0,-1,0},false);if(g->nearbyInteractionDoor()>=0)return false;
+ // A hand pose beyond a wall must not grant access through it.
+ g->loadLevel(0,false);g->m_player.pos={4.5f,7.95f};g->m_player.z=0;
+ g->m_vrInteractionHand=0;g->setVrHand(0,{4.5f,8.6f,.7f},{0,1,0},true);
+ if(g->vrInteractionDistance({4.5f,9.1f,.7f},.1f)<999.f)return false;
+ std::ofstream("vr-interaction-test.txt")<<"PASS: controller terminal and door activation while looking away, aim rejection, lost pose, wrong elevation and wall occlusion\n";
+ return true;
 }
 bool Game::testMovement(){
  std::ofstream debug("movement-diagnostic.txt");

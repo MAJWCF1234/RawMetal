@@ -10,6 +10,7 @@ Controls:
 - Right trigger: fire the shotgun. Right A: reload. Left A (Touch: X): jump.
 - Left B (Touch: Y): pause. Right B: inventory. Vive application-menu buttons provide pause/reload; keyboard inventory remains available.
 - Reach near a physics object and squeeze either grip. Keep squeezing to hold it in that hand; release to drop or throw with tracked hand velocity. One physics object can be held at a time.
+- Grip beside a door or terminal to operate it. Within 65 cm, controls accept direct reach; farther away, point the gripping controller at the control (maximum 1.8 m hand reach). Wall visibility and head reach are checked. A nearby physics object takes priority. Either hand can operate a control, including a new grip with the other hand already closed. Wrist prompts show grip controls.
 - Squeeze near either shoulder, behind your head, to stow/equip the shotgun. A held object takes priority. This currently switches shotgun/empty hands, not a collection of firearms.
 - Close an empty fist with grip and physically swing into an enemy. Swept contact, speed threshold, wall visibility and per-hand cooldown determine hits. The shotgun hand and an occupied hand do not punch.
 - Raise the left wrist computer. Point the right controller at its screen and pull the trigger to click. Inventory and Menu / Save buttons open their respective pages. Click rows and drag sliders with the trigger held. The left stick can also select rows and adjust settings.

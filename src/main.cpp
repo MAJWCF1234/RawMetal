@@ -121,6 +121,8 @@ __declspec(noinline) static int freightArtInspection(int W,int H){
   {"pit-workshop",28,{12,2},-28,1.25f,18},
   {"pit-chassis",28,{17,3},-28,retro::kPi*.5f,12},
   {"pit-toolbay",28,{20.5f,16},-25,-retro::kPi*.5f,-4},
+  {"depot-railhead",27,{12,3},-25,1.0f,-4},
+  {"pit-frame",28,{14,4},-25,1.1f,-8},
   {"manifest-wing",20,{7,3},-7,1.9f,-18},
   {"platform-axis",25,{12,3},-25,retro::kPi*.5f,0},
   {"bore-axis",30,{12,2},-25,retro::kPi*.5f,0},
@@ -696,7 +698,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(std::wcsstr(commandLine,L"--vr-inspection-test"))return vrSmokeTest(W,H,true);
     if(std::wcsstr(commandLine,L"--vr-smoke-test"))return vrSmokeTest(W,H);
-    if(std::wcsstr(commandLine,L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking coordinate axes, rigid-view inversion, wrist click mapping, shoulder slot, wrist clipping, articulated finger deformation and physical VR melee\n":"FAIL\n");return passed?0:60;}
+    if(std::wcsstr(commandLine,L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
     bool vrMode=std::wcsstr(commandLine,L"--vr")!=nullptr;
     if(!*commandLine){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
     std::unique_ptr<retro::VrRuntime> vrRuntime;

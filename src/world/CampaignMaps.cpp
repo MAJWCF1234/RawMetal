@@ -119,22 +119,32 @@ void locomotive(Map& m,float x,float y,float floor,bool stripped=false){
  // Rail gauge, underframe and bogies share one centreline. The suspended
  // inspection chassis retains the same footprint as the complete engine.
  for(float yy:{y+1.5f,y+5.5f}){
-  wall(m,x-.9f,yy-.65f,x+.9f,yy+.65f,floor+.32f,floor+.78f,8);
-  for(float dx:{-.82f,.82f}){
-   wall(m,x+dx-.13f,yy-.52f,x+dx+.13f,yy+.52f,floor+.18f,floor+.82f,8);
-   wall(m,x+dx-.15f,yy-.30f,x+dx+.15f,yy+.30f,floor+.04f,floor+.96f,8);
+  wall(m,x-.65f,yy-.76f,x+.65f,yy+.76f,floor+.52f,floor+.78f,8);
+  for(float axle:{yy-.52f,yy+.52f}){
+   m.pipes.push_back({{x-.85f,axle},{x+.85f,axle},floor+.48f,.085f,floor+.48f,2});
+   for(float dx:{-.82f,.82f}){
+    m.pipes.push_back({{x+dx-.10f,axle},{x+dx+.10f,axle},floor+.48f,.44f,floor+.48f,2});
+    m.pipes.push_back({{x+dx-.12f,axle},{x+dx+.12f,axle},floor+.48f,.17f,floor+.48f,2});
+    wall(m,x+dx-.10f,axle-.11f,x+dx+.10f,axle+.11f,floor+.78f,floor+.99f,8);
+   }
   }
  }
- wall(m,x-1.25f,y,x+1.25f,y+7.f,floor+.96f,floor+1.22f,2);
+ if(!stripped)wall(m,x-1.25f,y,x+1.25f,y+7.f,floor+.96f,floor+1.22f,2);
  for(float yy:{y-.4f,y+7.f})wall(m,x-.28f,yy,x+.28f,yy+.4f,floor+.7f,floor+1.f,8);
  if(stripped){
-  for(float yy:{y+1.f,y+3.f,y+5.f})wall(m,x-.85f,yy,x+.85f,yy+.5f,floor+1.22f,floor+1.65f,2);
+  for(float dx:{-1.25f,1.03f})wall(m,x+dx,y,x+dx+.22f,y+7.f,floor+.96f,floor+1.3f,12);
+  for(float yy:{y+.15f,y+1.5f,y+3.5f,y+5.5f,y+6.65f})wall(m,x-1.25f,yy,x+1.25f,yy+.20f,floor+1.03f,floor+1.27f,12);
+  m.pipes.push_back({{x,y+.7f},{x,y+6.3f},floor+1.13f,.13f,floor+1.13f,1});
   return;
  }
- wall(m,x-1.08f,y+.3f,x+1.08f,y+3.7f,floor+1.22f,floor+2.65f,11);
+ wall(m,x-1.08f,y+.3f,x+1.08f,y+3.7f,floor+1.22f,floor+2.65f,2);
+ for(float dx:{-1.10f,1.08f}){
+  for(int vent=0;vent<5;++vent)wall(m,x+dx,y+.7f,x+dx+.02f,y+3.25f,floor+1.75f+vent*.14f,floor+1.79f+vent*.14f,8);
+  wall(m,x+dx,y+.45f,x+dx+.02f,y+3.55f,floor+1.48f,floor+1.60f,14);
+ }
  wall(m,x-.65f,y+1.f,x+.65f,y+2.9f,floor+2.65f,floor+2.88f,8);
  wall(m,x-.18f,y+2.5f,x+.18f,y+2.9f,floor+2.88f,floor+3.45f,8);
- wall(m,x-1.2f,y+4.f,x+1.2f,y+6.8f,floor+1.22f,floor+3.5f,11);
+ wall(m,x-1.2f,y+4.f,x+1.2f,y+6.8f,floor+1.22f,floor+3.5f,2);
  wall(m,x-1.3f,y+3.9f,x+1.3f,y+6.9f,floor+3.5f,floor+3.66f,2);
  wall(m,x-.96f,y+3.97f,x-.12f,y+4.01f,floor+2.48f,floor+3.25f,9);
  wall(m,x+.12f,y+3.97f,x+.96f,y+4.01f,floor+2.48f,floor+3.25f,9);
@@ -464,6 +474,7 @@ std::shared_ptr<const Map> make(int level){
   deck(m,-25,1,4,11,10);deck(m,-25,13,4,23,24);
   m.stairs.push_back({3,9,6,18,-28,-25,16,true,false});
   locomotive(m,17,8,-25);
+  m.lights.push_back({{14.5f,8},-22.f});
   m.lights.push_back({{17,11},-20.5f});
   for(float x:{15.2f,18.3f})wall(m,x,15.3f,x+.5f,16.3f,-25,-23.5f,3);
   terminal(m,{18,18},"DEPOT / MAINTENANCE LOG","ENGINE 04: DRIVER ATTEMPTED EVACUATION.","VEHICLE STOPPED AT THE BARRICADE.",3);
@@ -472,6 +483,7 @@ std::shared_ptr<const Map> make(int level){
   rail(m,7,1,23,-25);rail(m,17,1,23,-25);
   // A suspended chassis straddles the reachable inspection pit.
   locomotive(m,17,5,-25,true);
+  m.lights.push_back({{14.5f,7},-23.f});
   m.lights.push_back({{17,8},-20.5f});
   for(float x:{15.65f,18.13f})for(float y:{6.f,10.5f}){
    wall(m,x-.22f,y-.22f,x+.22f,y+.22f,-28,-27.6f,8);
