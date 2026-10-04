@@ -12,6 +12,7 @@
 #include <bit>
 #include <cmath>
 #include <algorithm>
+#include <chrono>
 namespace retro {
 namespace {
 void check(VkResult result,const char* operation){if(result!=VK_SUCCESS)throw std::runtime_error(std::string(operation)+" (Vulkan "+std::to_string(result)+")");}
@@ -31,13 +32,35 @@ struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4
 struct Buffer {VkBuffer handle=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;void* mapped=nullptr;VkDeviceSize size=0;};
 struct Image {VkImage handle=VK_NULL_HANDLE;VkImageView view=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;};
 struct EmissionLevel {int width,height;std::vector<std::array<float,4>> pixels;};
-// Decode before filtering: averaging encoded phosphor values darkens small CRT
-// text, and decoding after bilinear interpolation does not conserve radiance.
-std::vector<EmissionLevel> emissionMips(int width,int height,const std::vector<uint32_t>& pixels){
- if(width<1||height<1||pixels.size()!=size_t(width)*height)throw std::runtime_error("Invalid emission atlas dimensions");
- static const auto linear=[] {std::array<float,256> values{};for(size_t i=0;i<values.size();++i)values[i]=std::pow(float(i)/255.f,2.2f);return values;}();
- std::vector<EmissionLevel> result;result.push_back({width,height,{}});auto&base=result.back().pixels;base.reserve(pixels.size());
- for(auto p:pixels)base.push_back({linear[(p>>16)&255],linear[(p>>8)&255],linear[p&255],float(p>>24)/255.f});
+float srgbLinear(float encoded){return encoded<=.04045f?encoded/12.92f:std::pow((encoded+.055f)/1.055f,2.4f);}
+uint8_t srgbByteSlow(float linear){float encoded=linear<=.0031308f?linear*12.92f:1.055f*std::pow(linear,1.f/2.4f)-.055f;return uint8_t(std::lround(std::clamp(encoded,0.f,1.f)*255.f));}
+struct SrgbEncoding {std::array<uint8_t,4096> candidates;std::array<float,255> upper;};
+const SrgbEncoding&srgbEncoding(){
+ static const auto result=[] {SrgbEncoding table{};
+  for(size_t i=0;i<table.candidates.size();++i)table.candidates[i]=srgbByteSlow(float(i)/float(table.candidates.size()-1));
+  for(size_t code=0;code<table.upper.size();++code){
+   // The mathematical half-byte boundary seeds the search. Find the first
+   // float whose reference encoding rounds upward, retaining the old encoder's
+   // exact behaviour even at floating-point ties around that boundary.
+   double encoded=(double(code)+.5)/255.;double linear=encoded<=.04045?encoded/12.92:std::pow((encoded+.055)/1.055,2.4);
+   uint32_t seed=std::bit_cast<uint32_t>(float(linear)),lower=0,upper=std::bit_cast<uint32_t>(1.f);
+   if(srgbByteSlow(std::bit_cast<float>(seed))>code)upper=seed;else lower=seed;
+   while(upper-lower>1){uint32_t middle=lower+(upper-lower)/2;if(srgbByteSlow(std::bit_cast<float>(middle))>code)upper=middle;else lower=middle;}
+   table.upper[code]=std::bit_cast<float>(upper);
+  }
+  return table;
+ }();return result;
+}
+uint8_t srgbByte(float linear){
+ if(!(linear>0))return 0;if(linear>=1)return 255;const auto&table=srgbEncoding();
+ unsigned code=table.candidates[size_t(linear*float(table.candidates.size()-1))];
+ // Bins select a nearby code; exact monotonic cutpoints correct the candidate.
+ // There are no per-texel powers and no approximate uploaded colour values.
+ while(code<255&&linear>=table.upper[code])++code;
+ while(code>0&&linear<table.upper[code-1])--code;
+ return uint8_t(code);
+}
+void completeRadianceMips(std::vector<EmissionLevel>&result){
  while(result.back().width>1||result.back().height>1){
   const auto&previous=result.back();int w=previous.width,h=previous.height,nw=std::max(1,w/2),nh=std::max(1,h/2);EmissionLevel next{nw,nh,std::vector<std::array<float,4>>(size_t(nw)*nh)};
   // Equal-area footprints include odd last rows/columns. Integer overlap
@@ -50,6 +73,51 @@ std::vector<EmissionLevel> emissionMips(int width,int height,const std::vector<u
    auto&sample=next.pixels[size_t(y*nw+x)];for(size_t c=0;c<sum.size();++c)sample[c]=float(sum[c]/(double(w)*h));
   }
   result.push_back(std::move(next));
+ }
+}
+std::vector<EmissionLevel> diffuseMips(int width,int height,const std::vector<uint32_t>&pixels){
+ if(width<1||height<1||pixels.size()!=size_t(width)*height)throw std::runtime_error("Invalid diffuse atlas dimensions");
+ static const auto linear=[] {std::array<float,256> values{};for(size_t i=0;i<values.size();++i)values[i]=srgbLinear(float(i)/255.f);return values;}();
+ std::vector<EmissionLevel> result;result.push_back({width,height,{}});auto&base=result.back().pixels;base.reserve(pixels.size());
+ for(auto p:pixels)base.push_back({linear[(p>>16)&255],linear[(p>>8)&255],linear[p&255],float(p>>24)/255.f});
+ completeRadianceMips(result);return result;
+}
+std::vector<std::vector<uint8_t>> diffuseBytes(int width,int height,const std::vector<uint32_t>&pixels){
+ const auto radiance=diffuseMips(width,height,pixels);std::vector<std::vector<uint8_t>> result;result.reserve(radiance.size());
+ // Level zero remains the exact source atlas, including alpha and atlas seams.
+ result.emplace_back(pixels.size()*4);std::memcpy(result.back().data(),pixels.data(),result.back().size());
+ for(size_t level=1;level<radiance.size();++level){const auto&source=radiance[level].pixels;std::vector<uint8_t> bytes(source.size()*4);
+  for(size_t i=0;i<source.size();++i){bytes[i*4]=srgbByte(source[i][2]);bytes[i*4+1]=srgbByte(source[i][1]);bytes[i*4+2]=srgbByte(source[i][0]);bytes[i*4+3]=uint8_t(std::lround(std::clamp(source[i][3],0.f,1.f)*255.f));}
+  result.push_back(std::move(bytes));
+ }
+ return result;
+}
+// Decode before filtering: averaging encoded phosphor values darkens small CRT
+// text, and decoding after bilinear interpolation does not conserve radiance.
+std::vector<EmissionLevel> emissionMips(int width,int height,const std::vector<uint32_t>& pixels){
+ if(width<1||height<1||pixels.size()!=size_t(width)*height)throw std::runtime_error("Invalid emission atlas dimensions");
+ static const auto linear=[] {std::array<float,256> values{};for(size_t i=0;i<values.size();++i)values[i]=std::pow(float(i)/255.f,2.2f);return values;}();
+ std::vector<EmissionLevel> result;result.push_back({width,height,{}});auto&base=result.back().pixels;base.reserve(pixels.size());
+ for(auto p:pixels)base.push_back({linear[(p>>16)&255],linear[(p>>8)&255],linear[p&255],float(p>>24)/255.f});
+ completeRadianceMips(result);return result;
+}
+std::vector<EmissionLevel> normalMips(int width,int height,const std::vector<Point3>&normals){
+ if(width<1||height<1||normals.size()!=size_t(width)*height)throw std::runtime_error("Invalid normal atlas dimensions");
+ std::vector<EmissionLevel> result;result.push_back({width,height,{}});auto&base=result.back().pixels;base.reserve(normals.size());
+ // Keep unnormalized first moments through all mip reductions. Renormalizing
+ // intermediate levels biases later directions toward incoherent texel groups.
+ for(auto n:normals)base.push_back({n.x,n.y,n.z,1.f});completeRadianceMips(result);return result;
+}
+std::vector<std::vector<uint8_t>> normalBytes(int width,int height,const std::vector<Point3>&normals){
+ const auto moments=normalMips(width,height,normals);std::vector<std::vector<uint8_t>> result;result.reserve(moments.size());
+ for(const auto&level:moments){std::vector<uint8_t> bytes(level.pixels.size()*8);
+  for(size_t i=0;i<level.pixels.size();++i){auto sample=level.pixels[i];float length=std::sqrt(sample[0]*sample[0]+sample[1]*sample[1]+sample[2]*sample[2]);std::array<int16_t,4> encoded{};
+   // Filtering interpolates the true first moment directly, so cancellation
+   // and unequal coherence between neighbouring mip texels remain correct.
+   for(size_t c=0;c<3;++c)encoded[c]=int16_t(std::clamp(sample[c],-1.f,1.f)*32767.f);
+   encoded[3]=int16_t(std::clamp(length,0.f,1.f)*32767.f);std::memcpy(bytes.data()+i*8,encoded.data(),8);
+  }
+  result.push_back(std::move(bytes));
  }
  return result;
 }
@@ -68,6 +136,84 @@ std::vector<std::vector<uint8_t>> emissionBytes(const std::vector<EmissionLevel>
  for(const auto&level:levels){std::vector<uint8_t> bytes(level.pixels.size()*8);for(size_t i=0;i<level.pixels.size();++i)for(size_t c=0;c<4;++c){auto half=emissionHalf(level.pixels[i][c]);std::memcpy(bytes.data()+i*8+c*2,&half,2);}result.push_back(std::move(bytes));}
  return result;
 }
+}
+bool GpuRenderer::testDiffuseMips(){
+ // Dense samples, bin edges and adjacent floats at every byte transition must
+ // match the retained slow encoding, including its float tie behaviour.
+ for(uint32_t i=0;i<=1048576;++i){float value=float(i)/1048576.f;if(srgbByte(value)!=srgbByteSlow(value))return false;}
+ const auto&encoding=srgbEncoding();
+ for(size_t code=0;code<encoding.upper.size();++code){float boundary=encoding.upper[code];for(float value:{std::nextafter(boundary,0.f),boundary,std::nextafter(boundary,1.f)})if(srgbByte(value)!=srgbByteSlow(value))return false;
+  if(srgbByte(std::nextafter(boundary,0.f))!=code||srgbByte(boundary)!=code+1)return false;
+ }
+ for(size_t i=0;i<encoding.candidates.size();++i){float boundary=float(i)/float(encoding.candidates.size()-1);for(float value:{std::nextafter(boundary,0.f),boundary,std::nextafter(boundary,1.f)})if(srgbByte(value)!=srgbByteSlow(value))return false;}
+ // Validate the linear intermediate and the quantized sRGB upload separately.
+ for(auto size:{std::array<int,2>{1,1},{3,5},{5,3},{1,7},{7,1},{9,7},{32,32},{348,307}}){
+  int w=size[0],h=size[1];std::vector<uint32_t> source(size_t(w)*h);std::array<double,4> expected{};
+  for(size_t i=0;i<source.size();++i){uint32_t r=uint32_t((i*73+17)%256),g=uint32_t((i*19+63)%256),b=uint32_t((i*131+241)%256),a=uint32_t((i*7+29)%256);source[i]=(a<<24)|(r<<16)|(g<<8)|b;
+   expected[0]+=srgbLinear(float(r)/255.f);expected[1]+=srgbLinear(float(g)/255.f);expected[2]+=srgbLinear(float(b)/255.f);expected[3]+=double(a)/255.;
+  }
+  for(auto&channel:expected)channel/=source.size();auto levels=diffuseMips(w,h,source);auto bytes=diffuseBytes(w,h,source);
+  if(bytes[0].size()!=source.size()*4||std::memcmp(bytes[0].data(),source.data(),bytes[0].size())!=0)return false;
+  for(size_t mip=0;mip<levels.size();++mip){const auto&level=levels[mip];if(level.width!=std::max(1,w>>mip)||level.height!=std::max(1,h>>mip)||bytes[mip].size()!=level.pixels.size()*4)return false;
+   std::array<double,4> average{},uploaded{};
+   for(size_t i=0;i<level.pixels.size();++i)for(size_t c=0;c<4;++c){float value=level.pixels[i][c];uint8_t encoded=bytes[mip][i*4+(c==3?3:2-c)];float decoded=c==3?float(encoded)/255.f:srgbLinear(float(encoded)/255.f);
+    if(!std::isfinite(value)||value<0||value>1||std::fabs(value-decoded)>(c==3?.00197f:.0045f))return false;average[c]+=value;uploaded[c]+=decoded;
+   }
+   for(size_t c=0;c<4;++c)if(std::fabs(average[c]/level.pixels.size()-expected[c])>.000002||std::fabs(uploaded[c]/level.pixels.size()-expected[c])>(c==3?.00197:.0045))return false;
+  }
+  if(levels.back().width!=1||levels.back().height!=1)return false;
+ }
+ std::vector<uint32_t> checker(32*32);for(int y=0;y<32;++y)for(int x=0;x<32;++x)checker[size_t(y*32+x)]=((x+y)&1)?0xffffffffu:0xff000000u;
+ auto checkerLevels=diffuseMips(32,32,checker);auto checkerBytes=diffuseBytes(32,32,checker);
+ for(size_t level=1;level<checkerLevels.size();++level)for(size_t i=0;i<checkerLevels[level].pixels.size();++i){auto sample=checkerLevels[level].pixels[i];if(sample[0]!=.5f||sample[1]!=.5f||sample[2]!=.5f||sample[3]!=1)return false;auto offset=i*4;if(checkerBytes[level][offset]!=188||checkerBytes[level][offset+1]!=188||checkerBytes[level][offset+2]!=188||checkerBytes[level][offset+3]!=255)return false;}
+ auto neutral=diffuseBytes(7,5,std::vector<uint32_t>(35,0x49757575u));for(const auto&level:neutral)for(size_t i=0;i<level.size();i+=4)if(level[i]!=117||level[i+1]!=117||level[i+2]!=117||level[i+3]!=73)return false;
+ std::vector<uint32_t> edge(15,0xff000000u);edge.back()=0xffffffffu;for(const auto&level:diffuseMips(3,5,edge)){double mean=0;for(const auto&sample:level.pixels)mean+=sample[0];if(std::fabs(mean/level.pixels.size()-1./15.)>.000001)return false;}
+ return true;
+}
+bool GpuRenderer::testGameDiffuseEncoding(const std::vector<const SoftwareRenderer::Texture*>&textures,std::array<uint64_t,4>&statistics,std::array<double,2>&milliseconds){
+ statistics={0,0,14695981039346656037ull,14695981039346656037ull};milliseconds={};srgbByte(.5f);bool equal=true;
+ for(const auto*texture:textures){if(!texture||texture->additive||texture->width<1||texture->height<1||texture->pixels.empty())continue;
+  auto levels=diffuseMips(texture->width,texture->height,texture->pixels);size_t count=0;for(size_t mip=1;mip<levels.size();++mip)count+=levels[mip].pixels.size()*3;std::array<std::vector<uint8_t>,2> encoded;
+  for(int reference=0;reference<2;++reference){auto&bytes=encoded[reference];bytes.resize(count);size_t cursor=0;auto start=std::chrono::steady_clock::now();
+   if(reference){for(size_t mip=1;mip<levels.size();++mip)for(const auto&pixel:levels[mip].pixels)for(size_t channel=0;channel<3;++channel)bytes[cursor++]=srgbByteSlow(pixel[channel]);}
+   else{for(size_t mip=1;mip<levels.size();++mip)for(const auto&pixel:levels[mip].pixels)for(size_t channel=0;channel<3;++channel)bytes[cursor++]=srgbByte(pixel[channel]);}
+   milliseconds[reference]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+   for(auto byte:bytes){statistics[reference+2]^=byte;statistics[reference+2]*=1099511628211ull;}
+  }
+  equal&=encoded[0]==encoded[1];++statistics[0];statistics[1]+=count;
+ }
+ return equal;
+}
+bool GpuRenderer::testNormalMips(){
+ for(auto size:{std::array<int,2>{1,1},{3,5},{5,3},{1,7},{7,1},{9,7},{32,32}}){
+  int w=size[0],h=size[1];std::vector<Point3> source(size_t(w)*h);std::array<double,3> expected{};
+  for(size_t i=0;i<source.size();++i){float x=float(int((i*73+17)%201)-100)/125.f,y=float(int((i*19+63)%201)-100)/125.f,z=.4f;float inv=1.f/std::sqrt(x*x+y*y+z*z);source[i]={x*inv,y*inv,z*inv};expected[0]+=source[i].x;expected[1]+=source[i].y;expected[2]+=source[i].z;}
+  for(auto&channel:expected)channel/=source.size();auto levels=normalMips(w,h,source);auto bytes=normalBytes(w,h,source);
+  for(size_t mip=0;mip<levels.size();++mip){const auto&level=levels[mip];if(level.width!=std::max(1,w>>mip)||level.height!=std::max(1,h>>mip)||bytes[mip].size()!=level.pixels.size()*8)return false;std::array<double,3> average{};
+   for(size_t i=0;i<level.pixels.size();++i){const auto&moment=level.pixels[i];std::array<int16_t,4> encoded{};std::memcpy(encoded.data(),bytes[mip].data()+i*8,8);float alpha=float(encoded[3])/32767.f;
+    if(alpha<0||alpha>1)return false;
+    for(size_t c=0;c<3;++c){average[c]+=moment[c];float recovered=float(encoded[c])/32767.f;if(!std::isfinite(recovered)||std::fabs(recovered-moment[c])>.000065f)return false;}
+   }
+   for(size_t c=0;c<3;++c)if(std::fabs(average[c]/level.pixels.size()-expected[c])>.000002)return false;
+  }
+ }
+ // An incoherent group has a short mean vector, and must not have the same
+ // influence on the next direction as three coherent groups of equal area.
+ std::vector<Point3> pathological(16,{.6f,0,.8f});float x=std::sqrt(.96f);
+ pathological[0]={x,0,.2f};pathological[1]={-x,0,.2f};pathological[4]={x,0,.2f};pathological[5]={-x,0,.2f};
+ auto moments=normalMips(4,4,pathological);auto bytes=normalBytes(4,4,pathological);auto mean=moments.back().pixels[0];
+ if(std::fabs(mean[0]-.45f)>.000001f||std::fabs(mean[1])>.000001f||std::fabs(mean[2]-.65f)>.000001f)return false;
+ std::array<int16_t,4> encoded{};std::memcpy(encoded.data(),bytes.back().data(),8);float length=std::sqrt(.45f*.45f+.65f*.65f);
+ if(std::fabs(float(encoded[0])/32767.f-.45f)>.00004f||std::fabs(float(encoded[2])/32767.f-.65f)>.00004f||std::fabs(float(encoded[3])/32767.f-length)>.00004f)return false;
+ // Bilinear samples of groups with different coherence retain their weighted
+ // direction; unit RGB plus a separate interpolated length cannot do this.
+ std::array<int16_t,4> left{},right{};std::memcpy(left.data(),bytes[1].data(),8);std::memcpy(right.data(),bytes[1].data()+8,8);
+ float xMoment=float(left[0]+right[0])/(2.f*32767.f),zMoment=float(left[2]+right[2])/(2.f*32767.f);float bilinearLength=std::sqrt(xMoment*xMoment+zMoment*zMoment);
+ if(std::fabs(xMoment-.3f)>.00004f||std::fabs(zMoment-.5f)>.00004f||std::fabs(xMoment/bilinearLength-.51449575f)>.0001f||std::fabs(zMoment/bilinearLength-.85749293f)>.0001f)return false;
+ // Cancellation stays finite and fully rough, and an odd border survives.
+ auto cancelled=normalBytes(2,1,{{1,0,0},{-1,0,0}});std::memcpy(encoded.data(),cancelled.back().data(),8);if(encoded[0]!=0||encoded[1]!=0||encoded[2]!=0||encoded[3]!=0)return false;
+ std::vector<Point3> edge(15,{0,0,1});edge.back()={1,0,0};auto last=normalMips(3,5,edge).back().pixels[0];if(std::fabs(last[0]-1.f/15)>.000001f||std::fabs(last[2]-14.f/15)>.000001f)return false;
+ return true;
 }
 bool GpuRenderer::testEmissionMips(){
  for(auto size:{std::array<int,2>{1,1},{3,5},{5,3},{1,7},{7,1},{9,7},{32,32},{348,307}}){
@@ -98,7 +244,7 @@ struct GpuRenderer::Impl {
  HWND hwnd=nullptr;VkSurfaceKHR surface=VK_NULL_HANDLE;VkSwapchainKHR swapchain=VK_NULL_HANDLE;VkFormat swapFormat=VK_FORMAT_UNDEFINED;VkExtent2D swapExtent{};std::vector<VkImage> swapImages;std::vector<VkImageView> swapViews;std::vector<VkFramebuffer> swapFrames;std::vector<VkSemaphore> readySemaphores;VkRenderPass compositePass=VK_NULL_HANDLE;VkDescriptorSetLayout compositeSetLayout=VK_NULL_HANDLE;VkPipelineLayout compositeLayout=VK_NULL_HANDLE;VkPipeline compositePipeline=VK_NULL_HANDLE;VkDescriptorPool compositeDescriptors=VK_NULL_HANDLE;Image overlay;bool overlayInitialized=false;int overlayWidth=0,overlayHeight=0;
  int surfaceClientWidth=0,surfaceClientHeight=0;
  VkExtent2D mirrorExtent{};VkRenderPass mirrorPass=VK_NULL_HANDLE;VkPipeline mirrorPipeline=VK_NULL_HANDLE;std::vector<VkImageView> mirrorViews;std::vector<VkFramebuffer> mirrorFrames;std::uint64_t mirrorPresented=0;
- bool vrMode=false;int vrEye=0;std::array<Image,2> vrOutputs{};std::array<float,20> vrProjection{};VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
+ bool vrMode=false;int vrEye=0;std::array<Image,2> vrOutputs{};std::array<float,24> vrProjection{};VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
  VkCommandPool pool=VK_NULL_HANDLE;
  // Two frames in flight: CPU prepares frame N while GPU renders frame N-1.
  // Each slot owns its command buffer, fence, dynamic vertex buffer, overlay
@@ -117,14 +263,17 @@ struct GpuRenderer::Impl {
  // render target images, but we need separate sets so we can update them while
  // the other frame's set is still in use by the GPU).
  std::array<VkDescriptorSet,FrameCount> compositeSets{};
- // Dedicated fence + command buffer for one-shot uploads (texture streaming).
- // These are always waited on immediately and never overlap with frame work.
+ // Dedicated fence + command buffer for bounded batches of cold atlases.
+ // Flushes wait before staging reuse; warmed frames submit no upload work.
  VkCommandBuffer uploadCommand=VK_NULL_HANDLE;VkFence uploadFence=VK_NULL_HANDLE;
+ static constexpr size_t UploadBatchLimit=16*1024*1024;
+ struct PendingUpload {Image* image;std::vector<std::vector<uint8_t>> levels;std::vector<VkBufferImageCopy> copies;};
+ std::vector<PendingUpload> pendingUploads;size_t pendingUploadBytes=0;Buffer atlasStaging;std::array<std::uint64_t,4> uploadStats{};
  VkDescriptorSetLayout setLayout=VK_NULL_HANDLE;VkDescriptorPool descriptors=VK_NULL_HANDLE;
  VkPipelineLayout pipelineLayout=VK_NULL_HANDLE;VkRenderPass renderPass=VK_NULL_HANDLE;VkPipeline opaque=VK_NULL_HANDLE,additive=VK_NULL_HANDLE,transparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE,sceneSampler=VK_NULL_HANDLE,pointSampler=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
- struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;uint32_t sortKey=0;};
+ struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;uint32_t sortKey=0,colorLevels=1;};
  std::unordered_map<uint64_t,Material> materials;
  const void* lastPixels=nullptr;uint64_t lastGeneration=0,lastMaterial=0;uint32_t lastSort=0;
  struct Batch {uint64_t material;uint32_t start,count;bool clear=false,cache=false;int cacheSlot=-1;uint32_t sortKey=0;};
@@ -138,7 +287,7 @@ struct GpuRenderer::Impl {
    for(auto f:swapFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:swapViews)vkDestroyImageView(device,v,nullptr);for(auto&i:vrOutputs){i.view=VK_NULL_HANDLE;destroy(i);}if(swapchain)vkDestroySwapchainKHR(device,swapchain,nullptr);
    for(auto f:mirrorFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:mirrorViews)vkDestroyImageView(device,v,nullptr);if(mirrorPipeline)vkDestroyPipeline(device,mirrorPipeline,nullptr);if(mirrorPass)vkDestroyRenderPass(device,mirrorPass,nullptr);
    for(auto&b:projectionBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
-   destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);
+   destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
    for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(overlayBuffers[i]);}
    for(auto&entry:staticCaches)destroy(entry.second.buffer);
    for(auto&slot:retiredBuffers)for(auto&buffer:slot)destroy(buffer);
@@ -209,18 +358,31 @@ struct GpuRenderer::Impl {
   VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.srcAccessMask=source;b.dstAccessMask=dest;b.oldLayout=from;b.newLayout=to;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=i.handle;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,1};
   vkCmdPipelineBarrier(cmd,sourceStage,destStage,0,0,nullptr,0,nullptr,1,&b);
  }
- // ── Texture upload (blocking, uses dedicated upload command buffer) ───────
- void upload(Image&i,int w,int h,VkFormat format,const std::vector<std::vector<uint8_t>>& levels,int pixelSize){
-  makeImage(i,w,h,int(levels.size()),format,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
-  size_t size=0;for(auto&level:levels)size+=level.size();Buffer staging;
-  try{makeBuffer(staging,size,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);std::vector<VkBufferImageCopy> copies;size_t offset=0;
-   for(size_t level=0;level<levels.size();++level){std::memcpy(static_cast<char*>(staging.mapped)+offset,levels[level].data(),levels[level].size());VkBufferImageCopy copy{};copy.bufferOffset=offset;copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,uint32_t(level),0,1};copy.imageExtent={uint32_t(std::max(1,w>>int(level))),uint32_t(std::max(1,h>>int(level))),1};copies.push_back(copy);offset+=levels[level].size();}
-   startUploadCommands();
-   barrier(i,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,0,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,uint32_t(levels.size()),uploadCommand);
-   vkCmdCopyBufferToImage(uploadCommand,staging.handle,i.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,uint32_t(copies.size()),copies.data());
-   barrier(i,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,uint32_t(levels.size()),uploadCommand);
-   submitUploadCommands();
-  }catch(...){destroy(staging);throw;}destroy(staging);(void)pixelSize;
+ // Atlas payloads are owned until this synchronous flush completes. Material
+ // entries stay stable across unordered_map rehashes, so their image pointers
+ // remain valid while subsequent materials join the same transfer batch.
+ void flushUploads(){
+  if(pendingUploads.empty())return;
+  if(atlasStaging.size<pendingUploadBytes){destroy(atlasStaging);makeBuffer(atlasStaging,std::max(size_t(65536),std::bit_ceil(pendingUploadBytes)),VK_BUFFER_USAGE_TRANSFER_SRC_BIT);++uploadStats[2];}
+  for(const auto&upload:pendingUploads)for(size_t level=0;level<upload.levels.size();++level)std::memcpy(static_cast<char*>(atlasStaging.mapped)+upload.copies[level].bufferOffset,upload.levels[level].data(),upload.levels[level].size());
+  startUploadCommands();
+  std::vector<VkImageMemoryBarrier> transitions;transitions.reserve(pendingUploads.size());
+  for(const auto&upload:pendingUploads){VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=upload.image->handle;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,uint32_t(upload.levels.size()),0,1};transitions.push_back(b);}
+  vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,uint32_t(transitions.size()),transitions.data());
+  for(const auto&upload:pendingUploads)vkCmdCopyBufferToImage(uploadCommand,atlasStaging.handle,upload.image->handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,uint32_t(upload.copies.size()),upload.copies.data());
+  for(auto&b:transitions){b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;b.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
+  vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,uint32_t(transitions.size()),transitions.data());
+  submitUploadCommands();++uploadStats[1];pendingUploads.clear();pendingUploadBytes=0;
+ }
+ void upload(Image&i,int w,int h,VkFormat format,std::vector<std::vector<uint8_t>> levels,int pixelSize){
+  if(w<1||h<1||levels.empty()||levels.size()>std::bit_width(unsigned(std::max(w,h))))throw std::runtime_error("Invalid atlas upload dimensions");
+  size_t alignment=size_t(std::max(4,pixelSize));auto padded=[&](size_t offset){return (offset+alignment-1)&~(alignment-1);};
+  auto extent=[&](size_t level){return VkExtent3D{uint32_t(std::max(1,w>>int(level))),uint32_t(std::max(1,h>>int(level))),1};};
+  size_t end=pendingUploadBytes;for(size_t level=0;level<levels.size();++level){auto size=extent(level);if(levels[level].size()!=size_t(size.width)*size.height*pixelSize)throw std::runtime_error("Invalid atlas mip payload");end=padded(end)+levels[level].size();}
+  if(!pendingUploads.empty()&&end>UploadBatchLimit)flushUploads();
+  makeImage(i,w,h,int(levels.size()),format,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);PendingUpload pending{&i,std::move(levels),{}};
+  for(size_t level=0;level<pending.levels.size();++level){pendingUploadBytes=padded(pendingUploadBytes);VkBufferImageCopy copy{};copy.bufferOffset=pendingUploadBytes;copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,uint32_t(level),0,1};copy.imageExtent=extent(level);pending.copies.push_back(copy);pendingUploadBytes+=pending.levels[level].size();uploadStats[3]+=pending.levels[level].size();}
+  pendingUploads.push_back(std::move(pending));++uploadStats[0];if(pendingUploadBytes>=UploadBatchLimit)flushUploads();
  }
  uint64_t material(const SoftwareRenderer::Texture&t){
   // Plain constant colours share one image. Atlas keys use a lifetime token,
@@ -230,23 +392,17 @@ struct GpuRenderer::Impl {
   auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;
   mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
-  std::vector<std::vector<uint8_t>> levels{bytes(t.pixels)};for(auto&level:t.mips)levels.push_back(bytes(level));upload(mat.color,t.width,t.height,VK_FORMAT_B8G8R8A8_UNORM,levels,4);
-  if(!t.normalLevels.empty()){
-   // Preserve the length lost when normal-map mips normalize their average.
-   // Alpha carries that concentration, allowing GGX to filter subpixel relief
-   // without another texture or descriptor lookup.
-   levels.clear();std::vector<float> previousLengths;int previousWidth=t.width,previousHeight=t.height;
-   for(size_t mip=0;mip<t.normalLevels.size();++mip){const auto&level=t.normalLevels[mip];int mipWidth=std::max(1,t.width>>mip),mipHeight=std::max(1,t.height>>mip);
-    std::vector<float> lengths(level.size(),1.f);
-    if(mip){const auto&previous=t.normalLevels[mip-1];for(int y=0;y<mipHeight;++y)for(int x=0;x<mipWidth;++x){Point3 average{};
-     for(int j=0;j<2;++j)for(int i=0;i<2;++i){size_t index=size_t(std::min(previousHeight-1,y*2+j)*previousWidth+std::min(previousWidth-1,x*2+i));average=average+previous[index]*previousLengths[index];}
-     average=average*.25f;lengths[size_t(y*mipWidth+x)]=std::clamp(std::sqrt(average.x*average.x+average.y*average.y+average.z*average.z),0.f,1.f);
-    }}
-    std::vector<std::array<int16_t,4>> normals;normals.reserve(level.size());for(size_t i=0;i<level.size();++i){auto n=level[i];normals.push_back({int16_t(std::clamp(n.x,-1.f,1.f)*32767),int16_t(std::clamp(n.y,-1.f,1.f)*32767),int16_t(std::clamp(n.z,-1.f,1.f)*32767),int16_t(lengths[i]*32767)});}
-    levels.push_back(bytes(normals));previousLengths=std::move(lengths);previousWidth=mipWidth;previousHeight=mipHeight;
-   }
-   upload(mat.normal,t.width,t.height,VK_FORMAT_R16G16B16A16_SNORM,levels,8);
-  }
+  // sRGB formats decode before hardware bilinear/trilinear filtering. The
+  // software reference keeps its original atlases and mip representation.
+  std::vector<std::vector<uint8_t>> levels;
+  if(t.additive){levels.push_back(bytes(t.pixels));for(const auto&level:t.mips)levels.push_back(bytes(level));}
+  else levels=diffuseBytes(t.width,t.height,t.pixels);
+  mat.colorLevels=uint32_t(levels.size());
+  upload(mat.color,t.width,t.height,t.additive?VK_FORMAT_B8G8R8A8_UNORM:VK_FORMAT_B8G8R8A8_SRGB,std::move(levels),4);
+  // Store raw first moments so hardware interpolation also preserves variance.
+  // Generate this GPU chain from the original normals, leaving CPU source
+  // levels unchanged and including odd last rows/columns at every reduction.
+  if(!t.normalLevels.empty())upload(mat.normal,t.width,t.height,VK_FORMAT_R16G16B16A16_SNORM,normalBytes(t.width,t.height,t.normalLevels.front()),8);
   if(!t.emission.empty())upload(mat.emission,t.width,t.height,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(t.width,t.height,t.emission)),8);
   else if(!blackEmission.view)upload(blackEmission,1,1,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(1,1,{0xff000000u})),8);
   if(!t.relief.empty())upload(mat.relief,t.width,t.height,VK_FORMAT_R8_UNORM,{bytes(t.relief)},1);
@@ -342,7 +498,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  check(vkCreateFence(m->device,&fenceInfo,nullptr,&m->uploadFence),"Create upload fence");
  VkDescriptorSetLayoutBinding bindings[4]{};for(uint32_t i=0;i<4;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
  VkDescriptorSetLayoutCreateInfo set{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};set.bindingCount=4;set.pBindings=bindings;check(vkCreateDescriptorSetLayout(m->device,&set,nullptr,&m->setLayout),"Create material layout");VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,8192};VkDescriptorPoolCreateInfo descriptors{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptors.maxSets=2048;descriptors.poolSizeCount=1;descriptors.pPoolSizes=&poolSize;check(vkCreateDescriptorPool(m->device,&descriptors,nullptr,&m->descriptors),"Create descriptor pool");
- VkPushConstantRange viewPush{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,32*sizeof(float)};VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};VkDescriptorSetLayoutBinding projectionBinding{0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr};VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=1;projectionInfo.pBindings=&projectionBinding;check(vkCreateDescriptorSetLayout(m->device,&projectionInfo,nullptr,&m->projectionLayout),"Create stereo projection layout");VkDescriptorPoolSize projectionSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2};VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=2;projectionPool.poolSizeCount=1;projectionPool.pPoolSizes=&projectionSize;check(vkCreateDescriptorPool(m->device,&projectionPool,nullptr,&m->projectionPool),"Create stereo projection pool");VkDescriptorSetLayout projectionLayouts[]={m->projectionLayout,m->projectionLayout};VkDescriptorSetAllocateInfo projectionAllocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};projectionAllocate.descriptorPool=m->projectionPool;projectionAllocate.descriptorSetCount=2;projectionAllocate.pSetLayouts=projectionLayouts;check(vkAllocateDescriptorSets(m->device,&projectionAllocate,m->projectionSets.data()),"Allocate stereo projection descriptors");for(int i=0;i<2;++i){m->makeBuffer(m->projectionBuffers[i],sizeof(m->vrProjection),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);VkDescriptorBufferInfo buffer{m->projectionBuffers[i].handle,0,sizeof(m->vrProjection)};VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=m->projectionSets[i];write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffer;vkUpdateDescriptorSets(m->device,1,&write,0,nullptr);}VkDescriptorSetLayout pipelineSets[]={m->setLayout,m->projectionLayout};layout.setLayoutCount=2;layout.pSetLayouts=pipelineSets;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
+ VkPushConstantRange viewPush{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,32*sizeof(float)};VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};VkDescriptorSetLayoutBinding projectionBinding{0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=1;projectionInfo.pBindings=&projectionBinding;check(vkCreateDescriptorSetLayout(m->device,&projectionInfo,nullptr,&m->projectionLayout),"Create stereo projection layout");VkDescriptorPoolSize projectionSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2};VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=2;projectionPool.poolSizeCount=1;projectionPool.pPoolSizes=&projectionSize;check(vkCreateDescriptorPool(m->device,&projectionPool,nullptr,&m->projectionPool),"Create stereo projection pool");VkDescriptorSetLayout projectionLayouts[]={m->projectionLayout,m->projectionLayout};VkDescriptorSetAllocateInfo projectionAllocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};projectionAllocate.descriptorPool=m->projectionPool;projectionAllocate.descriptorSetCount=2;projectionAllocate.pSetLayouts=projectionLayouts;check(vkAllocateDescriptorSets(m->device,&projectionAllocate,m->projectionSets.data()),"Allocate stereo projection descriptors");for(int i=0;i<2;++i){m->makeBuffer(m->projectionBuffers[i],sizeof(m->vrProjection),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);VkDescriptorBufferInfo buffer{m->projectionBuffers[i].handle,0,sizeof(m->vrProjection)};VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=m->projectionSets[i];write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffer;vkUpdateDescriptorSets(m->device,1,&write,0,nullptr);}VkDescriptorSetLayout pipelineSets[]={m->setLayout,m->projectionLayout};layout.setLayoutCount=2;layout.pSetLayouts=pipelineSets;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
   const bool multisampled=m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT;uint32_t depthIndex=multisampled?2u:1u;VkAttachmentDescription attachments[3]{};attachments[0].format=m->sceneFormat;attachments[0].samples=m->sceneSamples;attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[0].storeOp=multisampled?VK_ATTACHMENT_STORE_OP_DONT_CARE:VK_ATTACHMENT_STORE_OP_STORE;attachments[0].stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[0].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachments[0].finalLayout=multisampled?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   if(multisampled){attachments[1]=attachments[0];attachments[1].samples=VK_SAMPLE_COUNT_1_BIT;attachments[1].loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[1].storeOp=VK_ATTACHMENT_STORE_OP_STORE;attachments[1].finalLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;}
  attachments[depthIndex]=attachments[0];attachments[depthIndex].format=VK_FORMAT_D32_SFLOAT;attachments[depthIndex].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[depthIndex].storeOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[depthIndex].finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -383,9 +539,25 @@ std::pair<int,int> GpuRenderer::surfaceExtent()const{
  extent.height=std::clamp(extent.height,caps.minImageExtent.height,caps.maxImageExtent.height);
  return {int(extent.width),int(extent.height)};
 }
-void GpuRenderer::captureVrEye(std::vector<std::uint32_t>&pixels){if(!m->vrMode)throw std::runtime_error("Eye capture requires VR");Buffer capture;try{m->makeBuffer(capture,VkDeviceSize(m->swapExtent.width)*m->swapExtent.height*4,VK_BUFFER_USAGE_TRANSFER_DST_BIT);m->startUploadCommands();VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={m->swapExtent.width,m->swapExtent.height,1};vkCmdCopyImageToBuffer(m->uploadCommand,m->vrOutputs[m->vrEye].handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,capture.handle,1,&copy);VkMemoryBarrier host{VK_STRUCTURE_TYPE_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;vkCmdPipelineBarrier(m->uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&host,0,nullptr,0,nullptr);m->submitUploadCommands();pixels.resize(size_t(m->swapExtent.width)*m->swapExtent.height);auto source=static_cast<const uint8_t*>(capture.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(uint32_t(source[i*4])<<16)|(uint32_t(source[i*4+1])<<8)|source[i*4+2];m->destroy(capture);}catch(...){m->destroy(capture);throw;}}
-void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){auto key=m->material(texture);auto&image=m->materials.at(key).color;VkDeviceSize size=VkDeviceSize(texture.width)*texture.height*4;if(m->dynamicUpload.size<size){m->destroy(m->dynamicUpload);m->makeBuffer(m->dynamicUpload,size,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);}std::memcpy(m->dynamicUpload.mapped,texture.pixels.data(),size);m->startUploadCommands();auto cmd=m->uploadCommand;m->barrier(image,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,1,cmd);VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={uint32_t(texture.width),uint32_t(texture.height),1};vkCmdCopyBufferToImage(cmd,m->dynamicUpload.handle,image.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);m->barrier(image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);m->submitUploadCommands();}
+void GpuRenderer::captureVrEye(std::vector<std::uint32_t>&pixels){if(!m->vrMode)throw std::runtime_error("Eye capture requires VR");Buffer capture;try{m->flushUploads();m->makeBuffer(capture,VkDeviceSize(m->swapExtent.width)*m->swapExtent.height*4,VK_BUFFER_USAGE_TRANSFER_DST_BIT);m->startUploadCommands();VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={m->swapExtent.width,m->swapExtent.height,1};vkCmdCopyImageToBuffer(m->uploadCommand,m->vrOutputs[m->vrEye].handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,capture.handle,1,&copy);VkMemoryBarrier host{VK_STRUCTURE_TYPE_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;vkCmdPipelineBarrier(m->uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&host,0,nullptr,0,nullptr);m->submitUploadCommands();pixels.resize(size_t(m->swapExtent.width)*m->swapExtent.height);auto source=static_cast<const uint8_t*>(capture.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(uint32_t(source[i*4])<<16)|(uint32_t(source[i*4+1])<<8)|source[i*4+2];m->destroy(capture);}catch(...){m->destroy(capture);throw;}}
+void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
+ auto key=m->material(texture);m->flushUploads();auto&material=m->materials.at(key);auto&image=material.color;
+ std::vector<std::vector<uint8_t>> levels;
+ if(texture.additive){auto bytes=[](const auto&pixels){std::vector<uint8_t> result(pixels.size()*4);std::memcpy(result.data(),pixels.data(),result.size());return result;};levels.push_back(bytes(texture.pixels));for(const auto&level:texture.mips)levels.push_back(bytes(level));}
+ else levels=diffuseBytes(texture.width,texture.height,texture.pixels);
+ if(levels.size()!=material.colorLevels)throw std::runtime_error("Dynamic atlas topology changed after upload");
+ VkDeviceSize size=0;std::vector<VkBufferImageCopy> copies;copies.reserve(levels.size());
+ for(size_t level=0;level<levels.size();++level){VkBufferImageCopy copy{};copy.bufferOffset=size;copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,uint32_t(level),0,1};copy.imageExtent={uint32_t(std::max(1,texture.width>>level)),uint32_t(std::max(1,texture.height>>level)),1};copies.push_back(copy);size+=levels[level].size();}
+ if(m->dynamicUpload.size<size){m->destroy(m->dynamicUpload);m->makeBuffer(m->dynamicUpload,size,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);}
+ for(size_t level=0;level<levels.size();++level)std::memcpy(static_cast<char*>(m->dynamicUpload.mapped)+copies[level].bufferOffset,levels[level].data(),levels[level].size());
+ m->startUploadCommands();auto cmd=m->uploadCommand;
+ m->barrier(image,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,material.colorLevels,cmd);
+ vkCmdCopyBufferToImage(cmd,m->dynamicUpload.handle,image.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,uint32_t(copies.size()),copies.data());
+ m->barrier(image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,material.colorLevels,cmd);m->submitUploadCommands();
+}
 void GpuRenderer::prepare(const SoftwareRenderer::Texture&texture){m->material(texture);}
+void GpuRenderer::flushUploads(){m->flushUploads();}
+std::array<std::uint64_t,4> GpuRenderer::uploadStatistics()const{return m->uploadStats;}
 void GpuRenderer::begin(int width,int height){
  // Advance to the next frame slot.
  m->frameIndex=(m->frameIndex+1)%Impl::FrameCount;
@@ -408,7 +580,7 @@ void GpuRenderer::setView(float x,float y,float z,float yaw,float pitch,float as
  float cy=std::cos(yaw),sy=std::sin(yaw),cp=std::cos(pitch),sp=std::sin(pitch);
  m->viewState={x,y,z,cy,sy,cp,sp,aspect,flashlight?1.f:0.f,muzzleFlash,elapsed,m->hdrScene?1.f:0.f};
 }
-void GpuRenderer::setFogLights(const std::array<float,16>& lights){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);}
+void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);}
 void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
 bool GpuRenderer::beginStaticCache(int slot,std::uint64_t key){
  auto found=m->staticCaches.find(slot);
@@ -443,6 +615,8 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false,false,-1,sortKey});
 }
 void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
+ // Complete atlas initialization before any descriptor is used by a draw.
+ m->flushUploads();
  // Batch opaque geometry by material, then additive effects, independently for
  // world and view-model depth ranges. Thousands of small modules become tens
  // of hardware draw calls without clipping the visible world.

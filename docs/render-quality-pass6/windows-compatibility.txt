@@ -1,0 +1,23 @@
+PASS: x64 binary; embedded Windows 10/11 manifest; reviewed runtime DLL dependencies.
+Requires Visual C++ x64 Redistributable 14.44 or later and a Vulkan-capable graphics driver.
+This binary audit does not replace a Windows 10 runtime playtest or per-function API review.
+USER32.dll
+GDI32.dll
+WINMM.dll
+Cabinet.dll
+ADVAPI32.dll
+COMCTL32.dll
+KERNEL32.dll
+MSVCP140.dll
+VCRUNTIME140_1.dll
+VCRUNTIME140.dll
+api-ms-win-crt-stdio-l1-1-0.dll
+api-ms-win-crt-heap-l1-1-0.dll
+api-ms-win-crt-runtime-l1-1-0.dll
+api-ms-win-crt-filesystem-l1-1-0.dll
+api-ms-win-crt-utility-l1-1-0.dll
+api-ms-win-crt-math-l1-1-0.dll
+api-ms-win-crt-string-l1-1-0.dll
+api-ms-win-crt-convert-l1-1-0.dll
+api-ms-win-crt-locale-l1-1-0.dll
+vulkan-1.dll

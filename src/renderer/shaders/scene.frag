@@ -4,6 +4,7 @@ layout(set=0,binding=1) uniform sampler2D normalMap;
 layout(set=0,binding=2) uniform sampler2D emissionMap;
 layout(set=0,binding=3) uniform sampler2D reliefMap;
 layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects; vec4 fogLights[4]; vec4 atmosphere; } view;
+layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;} stereo;
 layout(location=0) in vec2 uv;
 layout(location=1) in vec4 lighting;
 layout(location=2) in vec4 light0;
@@ -38,30 +39,27 @@ float dielectricSpecular(vec3 N,vec3 V,vec3 L,float roughness){
  return F*D*visibility*NoL;
 }
 
-float shaftScattering(vec3 eye,vec3 endpoint,vec4 lamp){
+float shaftScattering(vec3 eye,vec3 direction,float rayLength,vec4 lamp,float intensity){
  float height=lamp.z-lamp.w;
- if(height<=0.0)return 0.0;
-
- vec3 ray=endpoint-eye;
- float rayLength=length(ray);
- if(rayLength<0.05)return 0.0;
-
- vec3 direction=ray/rayLength;
- float hSpeed=length(direction.xy);
- if(hSpeed<0.001)return 0.0;
-
+ if(height<=0.0||intensity<=0.0)return 0.0;
+ float start=0.0,finish=rayLength;
+ // Intersect the ray with a conservative cylinder and the actual vertical
+ // extent. The old rectangular interval included empty space outside the
+ // shaft, and failed completely when looking straight along a ceiling light.
  vec2 toLamp=lamp.xy-eye.xy;
- vec2 dir2D=direction.xy/hSpeed;
- float along=(toLamp.x*dir2D.x+toLamp.y*dir2D.y)/hSpeed;
- vec2 closestPoint=toLamp-direction.xy*along;
- float perpDist=length(closestPoint);
-
- if(perpDist>1.25)return 0.0;
-
- float coneRadius=1.20;
- float halfSpan=coneRadius/hSpeed;
- float start=max(0.0,along-halfSpan);
- float finish=min(rayLength,along+halfSpan);
+ float horizontal2=dot(direction.xy,direction.xy);
+ if(horizontal2>0.000001){
+  float along=dot(toLamp,direction.xy)/horizontal2;
+  vec2 closest=toLamp-direction.xy*along;
+  float remaining=1.21-dot(closest,closest);
+  if(remaining<=0.0)return 0.0;
+  float halfSpan=sqrt(remaining/horizontal2);
+  start=max(start,along-halfSpan);finish=min(finish,along+halfSpan);
+ }else if(dot(toLamp,toLamp)>=1.21)return 0.0;
+ if(abs(direction.z)>0.000001){
+  float lower=(lamp.w-eye.z)/direction.z,upper=(lamp.z-eye.z)/direction.z;
+  start=max(start,min(lower,upper));finish=min(finish,max(lower,upper));
+ }else if(eye.z<=lamp.w||eye.z>=lamp.z)return 0.0;
  if(finish<=start)return 0.0;
 
  float stepLength=(finish-start)/8.0;
@@ -79,13 +77,14 @@ float shaftScattering(vec3 eye,vec3 endpoint,vec4 lamp){
 
   float core=1.0-smoothstep(r*0.25,r,d);
   float ends=smoothstep(0.0,0.12,h)*smoothstep(0.0,0.06,1.0-h);
-  float dust=0.88+0.12*sin(p.x*7.3+p.y*5.7+p.z*3.9)*sin(p.x*4.1-p.y*8.2+p.z*2.7);
-  sum+=core*ends*dust;
+  sum+=core*ends;
  }
-
- float towardEye=max(0.0,dot(-direction,normalize(vec3(eye.xy-lamp.xy,eye.z-lamp.z))));
- float opticalDepth=sum*stepLength*(0.04+0.14*towardEye*towardEye);
- return min(1.0-exp(-opticalDepth),0.075);
+ vec3 lightToEye=eye-vec3(lamp.xy,lamp.z);
+ float towardEye=max(0.0,dot(-direction,lightToEye*inversesqrt(max(dot(lightToEye,lightToEye),0.000001))));
+ // Medium density controls extinction; source power controls radiance.
+ // Neither can create a bright opaque shaft in an empty or unlit volume.
+ float opticalDepth=sum*stepLength*view.atmosphere.w;
+ return (1.0-exp(-opticalDepth))*(0.55+1.30*towardEye*towardEye)*intensity;
 }
 
 void main(){
@@ -100,14 +99,17 @@ void main(){
  vec3 tangent=vec3(0.0),bitangent=vec3(0.0),geometricNormal=vec3(0.0);
  bool tangentFrameValid=false;
  if(parallaxMaterial||litMaterial){
-  float determinant=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
+  float uvScale=max(max(abs(uvDx.x),abs(uvDx.y)),max(abs(uvDy.x),abs(uvDy.y)));
+  vec2 frameDx=uvScale>0.0?uvDx/uvScale:vec2(0.0),frameDy=uvScale>0.0?uvDy/uvScale:vec2(0.0);
+  float determinant=frameDx.x*frameDy.y-frameDx.y*frameDy.x;
   // The UV Jacobian shrinks as a surface fills more pixels. An absolute
   // epsilon disabled valid GGX/parallax frames on close walls and at higher
   // resolutions. Reject collapsed UV axes by their relative angle instead.
-  float uvAreaScale=dot(uvDx,uvDx)*dot(uvDy,uvDy);
+  float uvAreaScale=dot(frameDx,frameDx)*dot(frameDy,frameDy);
   if(uvAreaScale>0.0&&determinant*determinant>uvAreaScale*0.00000001){
-   tangent=normalize((dx*uvDy.y-dy*uvDx.y)/determinant);
-   bitangent=normalize((dy*uvDx.x-dx*uvDy.x)/determinant);
+   tangent=normalize((dx*frameDy.y-dy*frameDx.y)*sign(determinant));
+   vec3 rawBitangent=(dy*frameDx.x-dx*frameDy.x)*sign(determinant);
+   bitangent=normalize(rawBitangent-tangent*dot(tangent,rawBitangent));
    geometricNormal=normalize(cross(tangent,bitangent));
    tangentFrameValid=true;
   }
@@ -136,7 +138,8 @@ void main(){
 
  if(lighting.w>0.5||light0.w+light1.w>0.0){
   vec4 filteredNormal=lighting.w>0.5?textureGrad(normalMap,sampleUV,uvDx,uvDy):vec4(0.0,0.0,1.0,1.0);
-  vec3 n=normalize(filteredNormal.xyz);
+  float normalLength=length(filteredNormal.xyz);
+  vec3 n=normalLength>0.000001?filteredNormal.xyz/normalLength:vec3(0.0,0.0,1.0);
   float response=0.22+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
   vertexLight*=clamp(response/lighting.z,0.35,1.8);
 
@@ -148,7 +151,11 @@ void main(){
     vec3 viewTangent=normalize(vec3(dot(eyeDirection,tangent),dot(eyeDirection,bitangent),abs(dot(eyeDirection,normal))));
     float roughness=clamp(1.0-gloss,0.18,0.96);
     vec3 dnX=dFdx(n),dnY=dFdy(n);
-    float normalVariance=(1.0-filteredNormal.w)/max(filteredNormal.w,0.05);
+    // RGB stores the unnormalized first moment at every mip. Hardware filters
+    // those moments together, preserving both mean direction and unresolved
+    // variance through bilinear, trilinear and anisotropic sampling.
+    float concentration=clamp(normalLength,0.0,1.0);
+    float normalVariance=(1.0-concentration)/max(concentration,0.05);
     roughness=sqrt(clamp(roughness*roughness+normalVariance+0.35*(dot(dnX,dnX)+dot(dnY,dnY)),0.0324,1.0));
 
     if(light0.w>0.0){
@@ -173,7 +180,10 @@ void main(){
  }
 
  // Dielectrics return approximately four percent through the specular lobe.
- vec3 result=toLinear(color.rgb)*lighting.x*vertexLight*0.96/(1+surface.x*0.018);
+ // Diffuse atlases use sRGB images: hardware decodes each source texel before
+ // bilinear/trilinear filtering. Decoding the already-filtered sample twice
+ // would crush both midtones and minified material detail.
+ vec3 result=color.rgb*lighting.x*vertexLight*0.96/(1+surface.x*0.018);
 
  if(surface.z<0.5&&surface.w<1.5){
   float key=clamp((vertexLight-0.24)/0.75,0.0,1.0);
@@ -209,13 +219,15 @@ void main(){
   result=mix(result,toLinear(view.atmosphere.rgb)*phase,min(extinction,0.35));
  }
 
- if(surface.z<0.5&&surface.w<1.5){
+ if(surface.z<0.5&&surface.w<1.5&&view.atmosphere.w>0.0&&materialDistance>=0.05){
   float scatter=0.0;
+  vec3 direction=(worldPos-view.eyeYaw.xyz)/materialDistance;
   for(int light=0;light<4;++light){
-   scatter+=shaftScattering(view.eyeYaw.xyz,worldPos,view.fogLights[light]);
+   scatter+=shaftScattering(view.eyeYaw.xyz,direction,materialDistance,view.fogLights[light],stereo.fogIntensity[light]);
   }
   // Keep shafts subordinate to surface lighting and architectural silhouettes.
-  scatter=min(scatter,0.045);
+  // A smooth shoulder preserves gradients instead of creating a flat plateau.
+  scatter=0.025*(1.0-exp(-scatter/0.025));
   result+=toLinear(vec3(0.98,0.90,0.78))*scatter*1.0;
  }
 

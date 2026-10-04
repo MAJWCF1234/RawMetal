@@ -1,0 +1,80 @@
+Presentation: 1920x1080 / 30 warmup frames per scene / 240 measured frames
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native Win32 swapchain / async present (2 frames in flight)
+Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort
+
+Renderer asset construction: 1527.93 ms; hardware prepare: 1397.33 ms (excluded from warm timing)
+Door diagnostic: fixed camera, all leaves cycle closed/open/closed; no AI simulation.
+Door cycle / map 0 first render: 147.467 ms (cache construction; excluded from warm timing)
+Total cold renderer assets + hardware prepare + first frame: 3072.72 ms
+  atlas totals: 192 images / 12 transfer submissions / 2 staging allocations / 205561268 payload bytes
+Door cycle / map 0:
+  avg scene/submit/present: 6.01787 / 0.21046 / 0.200451 ms
+  wall-clock FPS: 133.274 (actual throughput)
+  avg frame time: 7.50142 ms = 133.308 FPS
+  p95 frame time: 8.8678 ms = 112.768 FPS
+  p99 frame time: 9.4212 ms
+  max frame time: 10.0643 ms = 99.3611 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 2 first render: 377.099 ms (cache construction; excluded from warm timing)
+  atlas totals: 192 images / 12 transfer submissions / 2 staging allocations / 205561268 payload bytes
+Door cycle / map 2:
+  avg scene/submit/present: 5.10843 / 0.455405 / 0.206075 ms
+  wall-clock FPS: 146.821 (actual throughput)
+  avg frame time: 6.80995 ms = 146.844 FPS
+  p95 frame time: 8.5354 ms = 117.159 FPS
+  p99 frame time: 9.5088 ms
+  max frame time: 10.3299 ms = 96.8064 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 6 first render: 3362.1 ms (cache construction; excluded from warm timing)
+  atlas totals: 196 images / 13 transfer submissions / 2 staging allocations / 206828264 payload bytes
+Door cycle / map 6:
+  avg scene/submit/present: 4.84351 / 0.178443 / 0.201315 ms
+  wall-clock FPS: 158.24 (actual throughput)
+  avg frame time: 6.31865 ms = 158.262 FPS
+  p95 frame time: 8.1381 ms = 122.879 FPS
+  p99 frame time: 8.9395 ms
+  max frame time: 9.2618 ms = 107.97 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 7 first render: 312.954 ms (cache construction; excluded from warm timing)
+  atlas totals: 198 images / 14 transfer submissions / 2 staging allocations / 206937480 payload bytes
+Door cycle / map 7:
+  avg scene/submit/present: 4.78721 / 0.227114 / 0.206534 ms
+  wall-clock FPS: 159.023 (actual throughput)
+  avg frame time: 6.28629 ms = 159.076 FPS
+  p95 frame time: 7.4909 ms = 133.495 FPS
+  p99 frame time: 7.9383 ms
+  max frame time: 8.1685 ms = 122.421 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 8 first render: 379.879 ms (cache construction; excluded from warm timing)
+  atlas totals: 198 images / 14 transfer submissions / 2 staging allocations / 206937480 payload bytes
+Door cycle / map 8:
+  avg scene/submit/present: 4.60755 / 0.187301 / 0.198632 ms
+  wall-clock FPS: 163.567 (actual throughput)
+  avg frame time: 6.11252 ms = 163.599 FPS
+  p95 frame time: 7.119 ms = 140.469 FPS
+  p99 frame time: 7.3185 ms
+  max frame time: 7.5895 ms = 131.761 FPS
+
+  static map rebuilds during motion: 0
+
+Door cycle / map 9 first render: 1731.49 ms (cache construction; excluded from warm timing)
+  atlas totals: 202 images / 15 transfer submissions / 2 staging allocations / 207374328 payload bytes
+Door cycle / map 9:
+  avg scene/submit/present: 4.64517 / 0.257793 / 0.19684 ms
+  wall-clock FPS: 163.107 (actual throughput)
+  avg frame time: 6.13018 ms = 163.127 FPS
+  p95 frame time: 7.009 ms = 142.674 FPS
+  p99 frame time: 7.381 ms
+  max frame time: 7.9248 ms = 126.186 FPS
+
+  static map rebuilds during motion: 0
+
+Done.

@@ -8,6 +8,7 @@
 #include <numeric>
 #include <algorithm>
 #include <type_traits>
+#include <stdexcept>
 namespace retro {
 __declspec(noinline) bool SoftwareRenderer::testPresentationResize(){
  Win32Window window(DisplayWidth,DisplayHeight,L"RawMetal presentation check");if(!window.valid())return false;
@@ -63,6 +64,49 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
   check(originalId!=copyId&&movedId==copyId&&copied.generation.value!=copyId&&assignedId!=originalId&&assignedId!=oldAssignedId&&moveAssigned.generation.value==movedId&&moved.generation.value!=movedId&&moveAssigned.pixels==original.pixels,"Texture copies create fresh generations and moves preserve the transferred atlas identity");
  }
  check(GpuRenderer::testEmissionMips(),"Every emission mip preserves linear intensity, odd edge texels, channel order and half precision");
+ check(GpuRenderer::testDiffuseMips(),"Diffuse sRGB mips preserve radiance, odd borders, neutral tint, linear alpha and exact source atlases");
+ check(GpuRenderer::testNormalMips(),"Normal mips preserve vector moments, coherence weights, odd edges and finite cancellation");
+ {
+  std::vector<const Texture*> gameAtlases{&renderer.m_vrWristTexture,&renderer.m_water,&renderer.m_glassTexture,&renderer.m_ashfallSky,&renderer.m_coastSky,&renderer.m_coastWater,&renderer.m_muzzleFlash,&renderer.m_pumpTexture,&renderer.m_compressorTexture,&renderer.m_pipeTexture,&renderer.m_gateTexture,&renderer.m_pressureWall,&renderer.m_pressureFloor,&renderer.m_pressureMetal,&renderer.m_transferSign,&renderer.m_pumpSign,&renderer.m_controlSign,&renderer.m_surfaceSign,&renderer.m_gantrySign,&renderer.m_reactorSign,&renderer.m_liftSign,&renderer.m_liftDispatch,&renderer.m_wall,&renderer.m_floor,&renderer.m_metal,&renderer.m_serviceFloor,&renderer.m_serviceCeiling,&renderer.m_officeCarpet,&renderer.m_arms,&renderer.m_weaponTexture,&renderer.m_enemyTexture,&renderer.m_waspTexture,&renderer.m_bruteTexture,&renderer.m_wingTexture,&renderer.m_medkitTexture,&renderer.m_shellsTexture,&renderer.m_barrelTexture,&renderer.m_crateTexture,&renderer.m_concrete,&renderer.m_bulkhead,&renderer.m_intakeSign,&renderer.m_processingSign,&renderer.m_containmentSign,&renderer.m_exitSign,&renderer.m_hazard,&renderer.m_chemicalSign,&renderer.m_machineSign,&renderer.m_confinedSign,&renderer.m_signRust,&renderer.m_panelMetal,&renderer.m_routePaint,&renderer.m_redPaint,&renderer.m_terminalTexture,&renderer.m_cautionSign,&renderer.m_serviceSign,&renderer.m_blood,&renderer.m_wardenTexture,&renderer.m_mutantTexture,&renderer.m_consoleTexture,&renderer.m_feedSign,&renderer.m_returnSign,&renderer.m_diskSign,&renderer.m_authSign,&renderer.m_terrainDirt,&renderer.m_terrainRock,&renderer.m_coastSand,&renderer.m_coastRock,&renderer.m_framePaint,&renderer.m_yellowSteel,&renderer.m_redSteel,&renderer.m_paleSteel};
+  for(const auto&texture:renderer.m_bloodVariants)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_hazmatTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_clutterTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_workerTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_routeSigns)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_serviceAreaSigns)gameAtlases.push_back(&texture);for(const auto&entry:renderer.m_facilityTextures)gameAtlases.push_back(&entry.second);
+  std::array<uint64_t,4> statistics{};std::array<double,2> milliseconds{};bool exact=GpuRenderer::testGameDiffuseEncoding(gameAtlases,statistics,milliseconds);
+  report<<"Game atlas sRGB encoding: "<<statistics[0]<<" atlases, "<<statistics[1]<<" mip channels; fast / slow "<<milliseconds[0]<<" / "<<milliseconds[1]<<" ms; byte hashes "<<statistics[2]<<" / "<<statistics[3]<<'\n';
+  check(exact&&statistics[0]>80&&statistics[1]>1000000&&statistics[2]==statistics[3],"Fast sRGB encoding is byte-identical to the slow reference across every loaded non-additive game atlas");
+ }
+
+ {
+  std::array<Texture,8> atlases;
+  for(size_t i=0;i<atlases.size();++i){auto&t=atlases[i];t=Texture{5,3,std::vector<uint32_t>(15)};
+   for(size_t p=0;p<t.pixels.size();++p)t.pixels[p]=0xff000000u|(uint32_t(30+i*19+p*3)<<16)|(uint32_t(43+i*11+p*2)<<8)|uint32_t(21+i*13+p*4);
+   prepareDecal(t,true);t.normalLevels.push_back(std::vector<Point3>(15,{.2f,0,std::sqrt(.96f)}));for(const auto&level:t.mips)t.normalLevels.push_back(std::vector<Point3>(level.size(),{.2f,0,std::sqrt(.96f)}));
+   t.emission.resize(15);t.relief.resize(15);t.parallaxScale=.008f;t.glossStrength=.32f;
+   for(size_t p=0;p<15;++p){t.emission[p]=0xff000000u|(uint32_t(i*23+p*2)<<16)|(uint32_t(17+i*17+p*3)<<8)|uint32_t(13+i*9+p*4);t.relief[p]=uint8_t(p*17);}
+  }
+  GpuRenderer grouped,immediate;
+  auto drawAtlases=[&](GpuRenderer&gpu){gpu.begin(128,72);gpu.setView(0,0,0,0,0,128.f/72.f,false,0);
+   for(size_t i=0;i<atlases.size();++i){float x=-.36f+float(i%4)*.18f,y=-.18f+float(i/4)*.18f;
+    MeshVertex a{{x,y,1},0,0},b{{x+.16f,y,1},8,0},c{{x+.16f,y+.16f,1},8,8},d{{x,y+.16f,1},0,8};std::array<Point3,2> directions{{{0,0,1},{}}};std::array<float,2> weights{.7f,0};
+    gpu.submit(a,b,c,atlases[i],.8f,directions,weights,.92f,true);gpu.submit(a,c,d,atlases[i],.8f,directions,weights,.92f,true);
+   }
+   std::vector<uint32_t> result;gpu.finish(result);return result;
+  };
+  auto uploadStart=std::chrono::steady_clock::now();for(const auto&t:atlases)grouped.prepare(t);auto batchedPixels=drawAtlases(grouped);double groupedMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-uploadStart).count();
+  uploadStart=std::chrono::steady_clock::now();for(const auto&t:atlases){immediate.prepare(t);immediate.flushUploads();}auto immediatePixels=drawAtlases(immediate);double immediateMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-uploadStart).count();
+  auto groupedStats=grouped.uploadStatistics(),immediateStats=immediate.uploadStatistics();
+  size_t coverage=std::count_if(batchedPixels.begin(),batchedPixels.end(),[&](auto p){return p!=batchedPixels.front();});
+  report<<"Atlas upload submissions: grouped "<<groupedStats[1]<<", individual "<<immediateStats[1]<<"; staging allocations "<<groupedStats[2]<<" / "<<immediateStats[2]<<"; images "<<groupedStats[0]<<"; bytes "<<groupedStats[3]<<"; prepare+draw "<<groupedMs<<" / "<<immediateMs<<" ms\n";
+  check(coverage>100&&batchedPixels==immediatePixels&&groupedStats[0]==32&&groupedStats[0]==immediateStats[0]&&groupedStats[3]==immediateStats[3]&&groupedStats[1]==1&&immediateStats[1]==8&&groupedStats[2]==1&&immediateStats[2]==1,"Batched transfers preserve every pixel of odd diffuse, normal, emission and relief mip payloads");
+  auto warmPixels=drawAtlases(grouped);check(warmPixels==batchedPixels&&grouped.uploadStatistics()==groupedStats,"Warmed atlas reuse submits no transfer work or staging allocations");
+  Texture dynamic{3,5,std::vector<uint32_t>(15,0xff000000u)};grouped.prepare(dynamic);immediate.prepare(dynamic);immediate.flushUploads();std::fill(dynamic.pixels.begin(),dynamic.pixels.end(),0xffff0000u);grouped.updateDynamic(dynamic);immediate.updateDynamic(dynamic);
+  auto drawDynamic=[&](GpuRenderer&gpu){gpu.begin(128,72);gpu.setView(0,0,0,0,0,128.f/72.f,false,0);gpu.submit({{-.3f,-.3f,1},.5f,.5f},{{.3f,-.3f,1},.5f,.5f},{{0,.3f,1},.5f,.5f},dynamic,1,{}, {},.22f,false);std::vector<uint32_t> pixels;gpu.finish(pixels);return pixels;};
+  auto dynamicGrouped=drawDynamic(grouped),dynamicImmediate=drawDynamic(immediate);auto dynamicPixel=dynamicGrouped[36*128+64];
+  check(dynamicGrouped==dynamicImmediate&&((dynamicPixel>>16)&255)>80&&(dynamicPixel&255)<2&&grouped.uploadStatistics()[2]==groupedStats[2],"Dynamic colour updates flush pending initialization safely and reuse the completed atlas staging buffer");
+  auto drawDynamicMinified=[&](GpuRenderer&gpu){gpu.begin(128,72);gpu.setView(0,0,0,0,0,128.f/72.f,false,0);gpu.submit({{-.3f,-.3f,1},0,0},{{.3f,-.3f,1},64,0},{{0,.3f,1},32,64},dynamic,1,{}, {},.22f,false);std::vector<uint32_t> pixels;gpu.finish(pixels);return pixels;};
+  auto minifiedDynamic=drawDynamicMinified(grouped),minifiedReference=drawDynamicMinified(immediate);auto minifiedPixel=minifiedDynamic[36*128+64];
+  check(minifiedDynamic==minifiedReference&&((minifiedPixel>>16)&255)>80&&(minifiedPixel&255)<2,"Dynamic colour updates regenerate distant mip levels rather than displaying stale black wrist screens");
+  {GpuRenderer abandoned;abandoned.prepare(atlases[0]);Texture malformed{2,2,{0xffabcdefu}};bool rejected=false;try{abandoned.prepare(malformed);}catch(const std::runtime_error&){rejected=true;}
+   check(rejected&&abandoned.uploadStatistics()[0]==4&&abandoned.uploadStatistics()[1]==0,"Queued atlases and malformed payload exceptions can be torn down before any transfer submission");}
+ }
  Texture red{1,1,{0xffff0000u}},blue{1,1,{0xff0000ffu}},transparent{1,1,{0x00ffffffu}},emissive{1,1,{0xff000000u}},normal{1,1,{0xffffffffu}};
  emissive.emission={0xffffffffu};normal.normalLevels={{{1,0,0}}};NormalLighting lights;lights.directions[0]={1,0,0};lights.weights[0]=1;
  auto begin=[&]{renderer.m_gpu->begin(128,72);renderer.m_gpu->setView(0,0,0,0,0,128.f/72.f,false,0);renderer.m_gpuFrame=true;};
@@ -70,6 +114,32 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  auto finish=[&]{renderer.m_gpu->finish(renderer.m_pixels);renderer.m_gpuFrame=false;return renderer.m_pixels[36*128+64]&0xffffffu;};
  auto redChannel=[](std::uint32_t p){return int((p>>16)&255);};
  auto blueChannel=[](std::uint32_t p){return int(p&255);};
+ {
+  Texture unpowered{2,2,{0xff647181u,0xff546071u,0xff8796a5u,0xff75818fu}};unpowered.normalLevels={{{.6f,0,.8f},{-.6f,0,.8f},{0,.6f,.8f},{0,-.6f,.8f}}};unpowered.relief={0,85,170,255};unpowered.parallaxScale=.018f;unpowered.glossStrength=.48f;
+  NormalLighting zeroPower;zeroPower.directions={{{1,0,0},{0,1,0}}};zeroPower.surfaceNormal={0,0,-1};
+  begin();triangle(unpowered,1,.6f,&zeroPower);finish();auto zeroFrame=renderer.m_pixels;
+  begin();triangle(unpowered,1,.6f);finish();
+  check(zeroFrame==renderer.m_pixels,"Zero-power opaque normal/relief materials match the no-fixture frame exactly");
+  Texture unlitWater{1,1,{0xc4000000u}};unlitWater.transparent=true;unlitWater.glossStrength=.48f;unlitWater.normalLevels={{{0,0,1}}};
+  begin();triangle(unlitWater,1,1,&zeroPower);auto waterReflection=finish();
+  begin();triangle(unlitWater,1,1);auto noWaterFrame=finish();
+  check(blueChannel(waterReflection)>blueChannel(noWaterFrame)+2,"Zero-power transparent water retains its Fresnel sky reflection");
+ }
+ {
+  Texture diffuseSplit{2,1,{0xffffffffu,0xff000000u}},diffuseChecker{32,32,std::vector<uint32_t>(32*32)},neutralTint{3,5,std::vector<uint32_t>(15,0xff757575u)};
+  for(int y=0;y<32;++y)for(int x=0;x<32;++x)diffuseChecker.pixels[size_t(y*32+x)]=((x+y)&1)?0xffffffffu:0xff000000u;
+  auto expectedDiffuse=[](float radiance){float linear=radiance*.96f/1.018f*1.05f;float mapped=std::clamp((linear*(2.51f*linear+.03f))/(linear*(2.43f*linear+.59f)+.14f),0.f,1.f);return int(std::round(std::pow(mapped,1.f/2.2f)*255.f));};
+  auto filteredDiffuse=[&](const Texture&t,float span,float phase){begin();renderer.m_gpu->clearDepth();MeshVertex a{{-.3f,-.3f,1},phase,phase},b{{.3f,-.3f,1},phase+span,phase},c{{.3f,.3f,1},phase+span,phase+span},d{{-.3f,.3f,1},phase,phase+span};renderer.triangle3D(a,b,c,t,1);renderer.triangle3D(a,c,d,t,1);return finish();};
+  auto bilinear=filteredDiffuse(diffuseSplit,0,.5f);int expected=expectedDiffuse(.5f);
+  report<<"Diffuse bilinear black/white display value: "<<blueChannel(bilinear)<<"; expected "<<expected<<'\n';
+  check(std::abs(blueChannel(bilinear)-expected)<=2&&std::abs(redChannel(bilinear)-blueChannel(bilinear))<=1,"Diffuse bilinear interpolation averages 50 percent linear radiance without a colour tint");
+  bool stable=true;report<<"Minified diffuse checker display values:";
+  for(float phase:{0.f,.031f,.487f}){auto filtered=filteredDiffuse(diffuseChecker,64,phase);report<<' '<<blueChannel(filtered);stable&=std::abs(blueChannel(filtered)-expected)<=2&&std::abs(redChannel(filtered)-blueChannel(filtered))<=1;}
+  report<<"; expected "<<expected<<'\n';check(stable,"Distant sRGB diffuse mip sampling preserves checker radiance across subtexel phases");
+  float encoded=117.f/255.f,neutralLinear=std::pow((encoded+.055f)/1.055f,2.4f);auto neutralPixel=filteredDiffuse(neutralTint,64,0);
+  check(std::abs(blueChannel(neutralPixel)-expectedDiffuse(neutralLinear))<=2&&redChannel(neutralPixel)==blueChannel(neutralPixel),"Uniform diffuse mip filtering preserves authored neutral sRGB tint");
+ }
+
  {
   const auto& pc=renderer.m_facilityTextures.at("pc_1");auto source=renderer.loadTexture(192);
   bool preserved=pc.width==source.width&&pc.height==source.height&&pc.emission.size()==pc.pixels.size();size_t greenPixels=0;
@@ -147,10 +217,32 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
   renderer.triangle3D(a,b,c,neutralDielectric,1,&frontal);renderer.triangle3D(a,c,d,neutralDielectric,1,&frontal);
   return blueChannel(finish());
  };
- auto compactPlane=planeHighlight(.3f,1.f),largePlane=planeHighlight(2.f,1.f),smallUvPlane=planeHighlight(2.f,.05f),mirroredPlane=planeHighlight(2.f,-1.f),collapsedPlane=planeHighlight(2.f,0.f);
- report<<"Magnified dielectric highlight values: compact "<<compactPlane<<", large "<<largePlane<<", small UV span "<<smallUvPlane<<", mirrored "<<mirroredPlane<<", collapsed "<<collapsedPlane<<'\n';
- check(compactPlane>30&&std::abs(largePlane-compactPlane)<=1&&std::abs(smallUvPlane-compactPlane)<=1&&std::abs(mirroredPlane-compactPlane)<=1,"Close surfaces retain GGX across magnification, small UV derivatives and mirrored UVs");
+ auto compactPlane=planeHighlight(.3f,1.f),largePlane=planeHighlight(2.f,1.f),smallUvPlane=planeHighlight(2.f,.05f),tinyUvPlane=planeHighlight(2.f,.0000001f),mirroredPlane=planeHighlight(2.f,-1.f),collapsedPlane=planeHighlight(2.f,0.f);
+ report<<"Magnified dielectric highlight values: compact "<<compactPlane<<", large "<<largePlane<<", small UV span "<<smallUvPlane<<", tiny UV span "<<tinyUvPlane<<", mirrored "<<mirroredPlane<<", collapsed "<<collapsedPlane<<'\n';
+ check(compactPlane>30&&std::abs(largePlane-compactPlane)<=1&&std::abs(smallUvPlane-compactPlane)<=1&&std::abs(tinyUvPlane-compactPlane)<=1&&std::abs(mirroredPlane-compactPlane)<=1,"Close surfaces retain GGX across magnification, small UV derivatives and mirrored UVs");
  check(collapsedPlane<3,"Collapsed UVs remain finite and do not fabricate a specular frame");
+ {
+  Texture skewMaterial{1,1,{0xff000000u}};skewMaterial.glossStrength=.48f;skewMaterial.normalLevels={{{.4f,.3f,std::sqrt(.75f)}}};NormalLighting skewLights;skewLights.directions[0]={.4f,.3f,-std::sqrt(.75f)};skewLights.weights[0]=1;
+  auto skewPlane=[&](float shear,bool mirrorU,bool mirrorV){begin();float u=mirrorU?-1.f:1.f,v=mirrorV?-1.f:1.f;MeshVertex a{{-.3f,-.3f,1},0,0},b{{.3f,-.3f,1},u,0},c{{.3f,.3f,1},u+shear,v},d{{-.3f,.3f,1},shear,v};renderer.triangle3D(a,b,c,skewMaterial,1,&skewLights);renderer.triangle3D(a,c,d,skewMaterial,1,&skewLights);return blueChannel(finish());};
+  auto reference=skewPlane(0,false,false),skewed=skewPlane(.8f,false,false),mirrorUReference=skewPlane(0,true,false),mirrorUSkewed=skewPlane(.8f,true,false),mirrorVReference=skewPlane(0,false,true),mirrorVSkewed=skewPlane(.8f,false,true);
+  report<<"Orthonormal/skew GGX: "<<reference<<" / "<<skewed<<"; mirrored U "<<mirrorUReference<<" / "<<mirrorUSkewed<<"; mirrored V "<<mirrorVReference<<" / "<<mirrorVSkewed<<'\n';
+  check(reference>5&&std::abs(reference-skewed)<=1&&std::abs(mirrorUReference-mirrorUSkewed)<=1&&std::abs(mirrorVReference-mirrorVSkewed)<=1,"Skewed UV charts retain the orthonormal normal/light response and mirrored axis handedness");
+ }
+ {
+  Texture fogReceiver{1,1,{0xff000000u}};
+  auto fogValue=[&](float intensity,float density,bool vertical){begin();if(vertical)renderer.m_gpu->setView(0,0,0,0,kPi*.5f,128.f/72.f,false,0);std::array<float,16> lamps{};lamps[0]=vertical?0.f:2.f;lamps[2]=3;lamps[3]=vertical?1.f:-1.f;renderer.m_gpu->setFogLights(lamps,{intensity,0,0,0});renderer.m_gpu->setAtmosphere({0,0,0,density});renderer.triangle3D({{-1,-1,4},0,0},{{1,-1,4},1,0},{{1,1,4},1,1},fogReceiver,1);renderer.triangle3D({{-1,-1,4},0,0},{{1,1,4},1,1},{{-1,1,4},0,1},fogReceiver,1);return blueChannel(finish());};
+  auto full=fogValue(1,.025f,false),dim=fogValue(.2f,.025f,false),disabled=fogValue(0,.025f,false),emptyMedium=fogValue(1,0,false),vertical=fogValue(1,.025f,true);
+  report<<"Shaft display values: full "<<full<<", dim "<<dim<<", disabled "<<disabled<<", zero density "<<emptyMedium<<", vertical "<<vertical<<'\n';
+  check(full>dim+3&&dim>disabled+3&&disabled==0&&emptyMedium==0&&vertical>3,"Volumetric shafts follow authored power and density, remain transparent when disabled, and work along vertical rays");
+ }
+
+ // Opposed filtered normals cancel exactly. The material must retain a
+ // finite fully rough lobe instead of normalizing a zero vector into NaN.
+ {
+  Texture opposingNormals{2,1,{0xff000000u,0xff000000u}};opposingNormals.glossStrength=.48f;opposingNormals.normalLevels={{{1,0,0},{-1,0,0}}};
+  auto cancellationPlane=[&](float span){begin();MeshVertex a{{-2,-2,1},0,.5f},b{{2,-2,1},span,.5f},c{{2,2,1},span,.5f+span},d{{-2,2,1},0,.5f+span};renderer.triangle3D(a,b,c,opposingNormals,1,&frontal);renderer.triangle3D(a,c,d,opposingNormals,1,&frontal);return blueChannel(finish());};
+  auto minified=cancellationPlane(1024);report<<"Cancelled normal mip highlight: "<<minified<<'\n';check(minified>4&&minified<blueChannel(smoothHighlight),"Fully cancelled normal mips remain finite and filter into a broad rough reflection");
+ }
  // A plane first baked from behind must retain its physical lit hemisphere
  // when viewed from the front. The former eye-facing bake erased this highlight.
  NormalLighting backBake;backBake.directions[0]={0,0,1};backBake.weights[0]=1;backBake.surfaceNormal={0,0,1};
@@ -183,16 +275,28 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  for(size_t i=0;i<oppositeFrame.size();++i){auto a=oppositeFrame[i],b=fresh->m_pixels[i];int peak=0;for(int shift:{0,8,16}){int difference=std::abs(int((a>>shift)&255)-int((b>>shift)&255));peak=std::max(peak,difference);bakeCameraError+=difference;}bakeCameraMismatch+=peak>4;}
  report<<"Different initial camera: pixels differing by >4/255 "<<bakeCameraMismatch<<", mean channel error "<<bakeCameraError/(turnedFrame.size()*3)<<'\n';
  check(bakeCameraMismatch<turnedFrame.size()/100&&bakeCameraError/(turnedFrame.size()*3)<.5,"Physical cached normals are independent of the first-load camera");
- for(int level:{5,6,7,9}){
+ for(int level:{5,6,7,9,16}){
   const auto&def=chunkDefinition(WorldId::Campaign,level);auto services=Game::mapInspection(def.playerStart,.6f,-10,level,false,def.spawnHeight,true);
-  renderer.m_gpu->clearStaticCaches();renderer.m_cacheFixedServices=true;renderer.render(services);auto serviceCold=renderer.m_pixels;renderer.render(services);
+  renderer.m_gpu->clearStaticCaches();renderer.m_cacheFixedServices=true;renderer.render(services);auto serviceCold=renderer.m_pixels;double serviceBuildMs=renderer.m_sceneMs;renderer.render(services);double serviceCachedMs=renderer.m_sceneMs;
   check(serviceCold==renderer.m_pixels,"Fixed service VBO remains identical on cache reuse");
-  renderer.m_cacheFixedServices=false;renderer.render(services);size_t changedServices=0;double serviceError=0;
+  renderer.m_cacheFixedServices=false;renderer.render(services);double serviceReferenceMs=renderer.m_sceneMs;size_t changedServices=0;double serviceError=0;
   for(size_t i=0;i<serviceCold.size();++i){int peak=0;for(int shift:{0,8,16}){int d=std::abs(int((serviceCold[i]>>shift)&255)-int((renderer.m_pixels[i]>>shift)&255));peak=std::max(peak,d);serviceError+=d;}changedServices+=peak>4;}
-  report<<"Service cache/reference map "<<level<<": "<<changedServices<<" pixels >4/255; mean error "<<serviceError/(serviceCold.size()*3)<<'\n';
+  report<<"Service cache/reference map "<<level<<": "<<changedServices<<" pixels >4/255; mean error "<<serviceError/(serviceCold.size()*3)<<"; scene build / cached / reference "<<serviceBuildMs<<" / "<<serviceCachedMs<<" / "<<serviceReferenceMs<<" ms\n";
   check(changedServices<serviceCold.size()/100&&serviceError/(serviceCold.size()*3)<.5,"Fixed service cache preserves reference shading and visibility");
+  renderer.m_cacheFixedServices=true;
+  auto&camera=const_cast<Player&>(services.player());camera.angle+=.45f;camera.pitch+=8;
+  renderer.render(services);auto turnedServices=renderer.m_pixels;auto hits=renderer.m_gpu->staticCacheHits();renderer.render(services);
+  check(hits<renderer.m_gpu->staticCacheHits()&&turnedServices==renderer.m_pixels,"Ceiling fixtures and services retain stable cached geometry after a camera turn");
+  services.giveQuestItem(Game::Flashlight);services.setState(stateId("flashlight_on"),1);renderer.render(services);auto litServices=renderer.m_pixels;renderer.render(services);
+  check(litServices==renderer.m_pixels&&litServices!=turnedServices,"Cached ceiling fixtures and services respond to the moving flashlight without rebaking it");
  }
  renderer.m_cacheFixedServices=true;
+ {
+  auto powered=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);renderer.m_gpu->clearStaticCaches();renderer.render(powered);auto bright=renderer.m_pixels;
+  auto&lamps=const_cast<std::vector<WorldLight>&>(powered.world().lights());for(auto&lamp:lamps)lamp.intensity=.125f;
+  auto builds=renderer.m_staticGeometryBuilds;renderer.render(powered);auto dim=renderer.m_pixels;renderer.render(powered);
+  check(renderer.m_staticGeometryBuilds>builds&&dim==renderer.m_pixels&&dim!=bright,"Exact authored lamp power invalidates cached emission and fixture illumination");
+ }
  auto reliefScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);float reliefScale=renderer.m_wall.parallaxScale;renderer.m_wall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_wall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(changed>8,"Nearby wall relief changes the Vulkan image");
  check(renderer.hardwareActive(),"Hardware remains active without fallback");report<<(passed?"PASS":"FAIL")<<": Vulkan material / depth / clipping checks\n";return passed;
 }
@@ -200,9 +304,10 @@ bool SoftwareRenderer::testPerformance(){
  using Clock=std::chrono::steady_clock;std::ofstream report("performance-test.txt");bool passed=true;
  auto measure=[&](const char* name,Game game,int frames,bool simulate,bool sweep){
   SoftwareRenderer renderer(DisplayWidth,DisplayHeight);AudioEngine audio(false);std::vector<double> timings;double updateMax=0,audioMax=0,renderMax=0;
-  if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';passed=false;return;}
+  auto hardwareStart=Clock::now();if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';passed=false;return;}double prepareMs=std::chrono::duration<double,std::milli>(Clock::now()-hardwareStart).count();
   report<<renderer.hardwareName()<<" / full-resolution "<<DisplayWidth<<'x'<<DisplayHeight<<'\n';
-  auto startup=Clock::now();renderer.render(game);report<<"Initial material upload / first frame: "<<std::chrono::duration<double,std::milli>(Clock::now()-startup).count()<<" ms (startup, excluded)\n";
+  auto startup=Clock::now();renderer.render(game);double firstMs=std::chrono::duration<double,std::milli>(Clock::now()-startup).count();auto uploadStats=renderer.m_gpu->uploadStatistics();report<<"Hardware prepare: "<<prepareMs<<" ms; initial material upload / first frame: "<<firstMs<<" ms; total cold GPU prepare+frame: "<<prepareMs+firstMs<<" ms (startup, excluded)\n";
+  report<<"Cold atlas transfers: "<<uploadStats[0]<<" images, "<<uploadStats[1]<<" submissions, "<<uploadStats[2]<<" staging allocations, "<<uploadStats[3]<<" payload bytes\n";
   for(int i=0;i<frames;++i){auto begin=Clock::now();InputState input{};
    if(sweep){input.mouseDx=11.f;input.mouseDy=std::sin(i*.13f)*1.7f;}
    if(simulate||sweep)game.update(input,1.f/60);auto updated=Clock::now();audio.update(game);auto mixed=Clock::now();renderer.render(game);auto rendered=Clock::now();

@@ -53,6 +53,7 @@ bool SoftwareRenderer::enableHardware(void* window){
  catch(const std::exception&e){m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
 }
 std::uint64_t SoftwareRenderer::vrMirrorFrames()const{return m_gpu?m_gpu->mirrorFrames():0;}
+std::array<std::uint64_t,4> SoftwareRenderer::atlasUploadStatistics()const{return m_gpu?m_gpu->uploadStatistics():std::array<std::uint64_t,4>{};}
 bool SoftwareRenderer::hardwarePresentsWindow()const{return m_gpu&&(m_gpu->hasSurface()||m_gpu->vrActive());}
 SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
@@ -620,7 +621,7 @@ void SoftwareRenderer::drawConsole(const Game& game){
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
  bool directPresentation=hardwarePresentsWindow();
  if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
-  m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};
+  m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};
   if(m_gpu)m_gpu->clearStaticCaches();
   m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
  }
@@ -641,7 +642,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
-  std::array<float,16> fogLights{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
+  std::array<float,16> fogLights{};std::array<float,4> fogPowers{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
   const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
    if(lamp.mount==WorldLightMount::Wall||lamp.intensity<=0)continue;
    float dx=lamp.position.x-game.player().pos.x,dy=lamp.position.y-game.player().pos.y,d2=dx*dx+dy*dy;
@@ -651,10 +652,10 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    float ahead=dx*std::cos(game.player().angle)+dy*std::sin(game.player().angle);
    float eyeZ=game.player().z+game.player().eye;
    if(top-bottom<.8f||floor>eyeZ+2.f||top<eyeZ-2.f||ahead<-.5f||d2>=distances[3])continue;
-   int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
-   distances[slot]=d2;fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
+   int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];fogPowers[slot]=fogPowers[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
+   distances[slot]=d2;fogPowers[slot]=lamp.intensity;fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
   }
-  m_gpu->setFogLights(fogLights);
+  m_gpu->setFogLights(fogLights,fogPowers);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};

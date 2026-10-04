@@ -1,0 +1,17 @@
+--vulkan-test : exit 0
+--world-isolation-test : exit 0
+--campaign-map-test : exit 0
+--streaming-test : exit 0
+--save-test : exit 0
+--service-map-test : exit 0
+--campaign-extension-test : exit 0
+--vr-test : exit 0
+--smoke-test --vulkan : exit 0
+Vulkan materials/cache suite: PASS
+Level editor payload: PASS
+Windows x64/10/11 manifest and DLL audit: PASS
+Embedded assets: 185 lossless matches
+Preview 5 / final fixed camera comparisons: 66
+Performance-only preview 5 comparisons: 38, exactly equal
+Packaged executable, working directory outside checkout: Vulkan smoke PASS
+Packaged executable, working directory outside checkout: offline VR PASS
