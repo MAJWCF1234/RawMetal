@@ -206,6 +206,22 @@ MAP|0|First Map|...
 
 The runtime campaign data owns its own map indices, origins, player starts, layers, doors, structures, fixtures, props, lights, terminals, hazards, stairs, creatures, pickups, clutter, pipes, water and compactors. These indices are completely separate from the built-in campaign's `m_level` numbers.
 
+An authored map with a nonnegative `MAP` residency group can retain other halls for observation windows or overlooks:
+
+```text
+VISIBLE_GROUP|mapIndex|group
+```
+
+For example, `VISIBLE_GROUP|0|2` keeps every chunk in residency group 2 loaded while map 0 is active, even with closed connecting doors or a distant view. This adds visibility residency; it does not open boundaries, join traversal groups, or create a connection. Repeat the record for additional groups. Groups must be nonnegative integers; duplicate records are harmless, and omitted records preserve existing streaming behavior. Once the player leaves the viewing map, ordinary group, proximity and door rules determine which chunks remain loaded. This optional record can be added to the runtime data block manually; the editor currently has no control for it.
+
+`TERMINAL` records accept an optional final yaw, in radians, to orient the console and its collision footprint:
+
+```text
+TERMINAL|mapIndex|x|y|z|control|title|line1|line2|activateState|toggleState|requireState|yaw
+```
+
+The default yaw is pi when the final field is absent or empty, preserving older packs. Yaw 0 faces the positive Y direction; pi faces negative Y. For example, `TERMINAL|0|5|5|0|0|SHIFT LOG|NO CALLS|LOCAL RECORD||0||0` places a console facing positive Y without an activation or prerequisite state. Nonfinite yaw values are rejected. The Level Editor exports an explicit terminal rotation in radians, including inherited placement rotation, and preserves pi for older objects without a rotation field.
+
 For example:
 
 ```text

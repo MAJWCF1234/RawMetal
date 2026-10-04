@@ -729,7 +729,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   m_layers.push_back({source.name,source.elevation,source.thickness,rows});
  }
  m_terminals.reserve(m_mapData->terminals.size());
- for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,kPi,source.requireState});
+ for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState});
  buildLayers(m_mapData->stairs);
 }
 
@@ -983,10 +983,25 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(10.4f,15.5f,12.6f,15.75f,-12,-10.95f);
    m_lights.push_back({{6.5f,9.5f},-9.55f});
    m_lights.push_back({{11.5f,14},-9.55f});
-   // Lower manifold heavy machinery: centrifugal pumps and compressor
-   m_props.push_back({0,{6.5f,9.f},2.2f,1.4f,0,{.7f,.7f},0.f});
-   m_props.push_back({0,{11.5f,14.f},2.2f,1.4f,kPi*.5f,{.7f,.7f},0.f});
-   m_props.push_back({1,{6.5f,15.f},1.9f,1.3f,0,{.65f,.65f},0.f});
+   // These bays are working pump sets, rather than enlarged cargo cases.
+   // Imported motors sit on steel sole plates, with suction/discharge runs
+   // terminating inside their housings. The lower loop remains outside them.
+   m_fixtures.push_back({12,{6.5f,9.f},.07f,2.45f,1.30f,1.40f,0,true});
+   m_fixtures.push_back({12,{11.5f,14.f},.07f,2.45f,1.30f,1.40f,kPi*.5f,true});
+   m_fixtures.push_back({12,{6.5f,15.f},.07f,1.90f,.85f,1.30f,0,true});
+   for(const auto& b:std::array<Structure,3>{{
+     {5.15f,8.25f,7.85f,9.75f,-12,-11.93f,false,2},
+     {10.75f,12.65f,12.25f,15.35f,-12,-11.93f,false,2},
+     {5.45f,14.47f,7.55f,15.53f,-12,-11.93f,false,2}}})m_structures.push_back(b);
+   m_pipes.push_back({{5.1f,9.f},{6.5f,9.f},-11.12f,.17f,-11.12f,2});
+   m_pipes.push_back({{5.1f,9.f},{5.1f,9.f},-11.12f,.17f,-11.90f,2});
+   m_pipes.push_back({{11.5f,14.f},{11.5f,15.7f},-11.12f,.17f,-11.12f,2});
+   m_pipes.push_back({{11.5f,15.7f},{11.5f,15.7f},-11.12f,.17f,-11.90f,2});
+   // Paired collars identify the pipe junctions and stay within each bay.
+   for(Vec2 p:{Vec2{5.25f,9.f},Vec2{5.75f,9.f}})
+    m_pipes.push_back({{p.x,p.y},{p.x+.07f,p.y},-11.12f,.245f,-11.12f,2});
+   for(float y:{14.85f,15.3f})
+    m_pipes.push_back({{11.5f,y},{11.5f,y+.07f},-11.12f,.245f,-11.12f,2});
 
    // Slim reinforced columns land directly on the observation deck. The old
    // 0.8 m blocks swallowed the lower manifold sightlines.
@@ -1002,6 +1017,8 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(19.6f,20.8f,21.4f,21,-1.5f,roof);
    wall(19,18.2f,19.18f,20.8f,-4,-2.95f);wall(19,18.2f,19.18f,20.8f,-1.5f,roof);
    for(float y:{18.2f,19.5f,20.65f})post(19.08f,y,-2.95f,-1.5f,.045f);
+   for(const auto& span:std::array<Vec2,2>{{{18.25f,19.45f},{19.55f,20.6f}}})
+    m_structures.push_back({19.065f,span.x,19.095f,span.y,-2.95f,-1.5f,false,17});
    // Wall breakers remain equipment; the actual workstation is the terminal.
    m_fixtures.push_back({8,{21.85f,19.5f},8.f,.67f,.20f,.91f,kPi*.5f,false});
    m_fixtures.push_back({8,{1.15f,8.f},0.f,.67f,.20f,.91f,kPi*.5f,false});
@@ -1052,6 +1069,12 @@ World::World(int level,WorldId id):m_worldId(id) {
    wall(15,10,22,10.2f,-9,-7.85f);wall(15,10,22,10.2f,-6.05f,-5.6f);
    wall(22,10,22.2f,15,-9,-5.6f);wall(15,14.8f,17,15,-9,-5.6f);wall(19,14.8f,22,15,-9,-5.6f);
    for(float x:{15.f,21.9f})for(float y:{10.f,14.8f})m_structures.push_back({x,y,x+.12f,y+.12f,-7.85f,-6.05f,false,2});
+   // Framed safety glazing makes dispatch a staffed observation booth. Its
+   // south personnel opening and all approach positions remain clear.
+   m_structures.push_back({15.075f,10.2f,15.105f,14.7f,-7.85f,-6.05f,false,17});
+   m_structures.push_back({15.2f,10.075f,21.9f,10.105f,-7.85f,-6.05f,false,17});
+   for(float y:{11.65f,13.2f})post(15.09f,y,-7.85f,-6.05f,.035f);
+   for(float x:{17.4f,19.65f})post(x,10.09f,-7.85f,-6.05f,.035f);
 
    // Elevated freight vestibule
    wall(19,1,22,4.65f,-9,-4);
@@ -1112,6 +1135,12 @@ World::World(int level,WorldId id):m_worldId(id) {
    for(float y:{11.6f,13.3f}){
     cabinet({12.35f,y},kPi*.5f);cabinet({13.57f,y},-kPi*.5f);
    }
+   // Access stripes mark the switchgear service envelope, without creating
+   // another obstacle across the concourse or the bridge underneath.
+   for(float x:{11.65f,14.25f})
+    m_structures.push_back({x-.075f,10.9f,x+.075f,14.6f,-8.993f,-8.985f,false,14});
+   for(float y:{10.9f,14.6f})
+    m_structures.push_back({11.575f,y-.075f,14.325f,y+.075f,-8.993f,-8.985f,false,14});
     m_fixtures.push_back({11,{16.8f,12.5f},0.f,.8f,.8f,1.1f,kPi*.5f,true});
     m_fixtures.push_back({8,{19.2f,12.5f},0.f,.67f,.20f,.91f,0,false});
     m_fixtures.push_back({8,{1.78f,3.5f},5.f,.67f,.20f,.91f,kPi*.5f,false});
@@ -1126,10 +1155,10 @@ World::World(int level,WorldId id):m_worldId(id) {
    m_clutterSpawns={{3,{2,3.25f},-8.028f},{1,{2,4.2f},-8.028f},
                     {2,{5.8f,3.3f},-8.694f},{3,{5.8f,4.15f},-8.028f}};
    // A back-wall service bench supplies a destination inside the stores.
-   m_fixtures.push_back({6,{3.8f,1.7f},0.f,1.87f,.55f,.99f,kPi,true});
+   m_fixtures.push_back({19,{3.8f,1.7f},0.f,1.87f,.55f,.99f,kPi,true});
    m_clutterSpawns.push_back({3,{3.5f,1.7f},-8.01f});
    m_clutterSpawns.push_back({1,{4.1f,1.7f},-8.01f});
-   shelf({13,2.2f},kPi);shelf({16,2.2f},kPi);m_fixtures.push_back({6,{13,20},0,1.87f,.55f,.99f,0,true});
+   shelf({13,2.2f},kPi);shelf({16,2.2f},kPi);m_fixtures.push_back({19,{13,20},0,1.87f,.55f,.99f,0,true});
    m_creatureSpawns={{CreatureKind::Huntsman,{11.8f,15.2f},-9},{CreatureKind::Wasp,{13,16},-6}};
    m_pickupSpawns={{{17,13.5f},PickupKind::Health,-9},{{3.8f,3.2f},PickupKind::Ammo,-9},{{3.1f,21.f},PickupKind::Ammo,-9},{{20.5f,2.8f},PickupKind::Ammo,-4}};
    event("junction_arrival",2,1,6,4,-4.1f,-2,{action(A::Checkpoint)});
@@ -1205,6 +1234,23 @@ World::World(int level,WorldId id):m_worldId(id) {
     m_structures.push_back({5.35f,y+2.f,7.8f,y+2.12f,-12,-10.9f,false,2});
     m_structures.push_back({5.35f,y+.12f,5.47f,y+2.f,-12,-10.9f,false,2});
    }
+   // Wall-mounted drop chutes link sorting above to the salvage bins below.
+   // A short steel discharge lip is carried by the housing. Keeping the
+   // descent vertical avoids a staircase of bright plates hovering over scrap.
+   for(float y:{9.55f,13.9f}){
+    m_structures.push_back({5.065f,y-.55f,5.125f,y+.55f,-10.88f,-9.12f,false,2});
+    for(float side:{-.55f,.49f})
+     m_structures.push_back({5.125f,y+side,5.65f,y+side+.06f,-10.88f,-9.12f,false,2});
+    m_structures.push_back({5.59f,y-.49f,5.65f,y+.49f,-10.25f,-9.12f,false,2});
+    m_structures.push_back({5.065f,y-.55f,5.95f,y+.55f,-10.94f,-10.88f,false,2});
+    m_structures.push_back({5.85f,y-.55f,5.95f,y+.55f,-10.99f,-10.94f,false,13});
+   }
+   // A flush warning border and low far-side curb contain the drainage sump.
+   // Its north edge stays open and the press bypass remains on the east.
+   for(float x:{13.85f,18.15f})
+    m_structures.push_back({x-.075f,15.75f,x+.075f,21.2f,-11.993f,-11.985f,false,14});
+   m_structures.push_back({13.775f,15.68f,18.225f,15.83f,-11.993f,-11.985f,false,14});
+   m_structures.push_back({13.92f,21.f,18.08f,21.16f,-12,-11.72f,false,2});
    // Full-sized discarded drives make the receiving bins read as salvage,
    // rather than empty architectural blocks with a few tiny floor objects.
    for(float y:{9.55f,13.9f})m_fixtures.push_back({12,{6.6f,y},0.f,.43f,1.4f,.8f,kPi*.5f,true});

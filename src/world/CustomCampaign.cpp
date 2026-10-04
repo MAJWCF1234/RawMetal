@@ -85,6 +85,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()>=20){int cue=integer(f,19,"music cue");if(cue<0||cue>1)throw std::runtime_error("invalid music cue");map->definition.musicCue=MusicCue(cue);}
    if(f.size()>=21)map->definition.spawnYaw=number(f,20,"spawn yaw");
    if(f.size()>=22)map->definition.spawnPitch=number(f,21,"spawn pitch");
+  }else if(tag=="VISIBLE_GROUP"){
+   if(f.size()!=3)throw std::runtime_error("malformed VISIBLE_GROUP record");auto map=mapAt(maps,f);
+   int group=integer(f,2,"visible residency group");if(group<0)throw std::runtime_error("visible residency group must be nonnegative");
+   auto& groups=map->visibleResidencyGroups;if(std::find(groups.begin(),groups.end(),group)==groups.end())groups.push_back(group);
   }else if(tag=="SIGN"){
    if(f.size()!=11)throw std::runtime_error("malformed SIGN record");auto map=mapAt(maps,f);
    AuthoredSign sign;sign.position={number(f,2,"sign x"),number(f,3,"sign y")};sign.z=number(f,4,"sign z");
@@ -125,6 +129,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()>=10&&!f[9].empty())t.activateState=stateId(decode(f[9]));
    if(f.size()>=11)t.toggleState=boolean(f,10,"terminal toggle");
    if(f.size()>=12&&!f[11].empty())t.requireState=stateId(decode(f[11]));
+   if(f.size()>=13&&!f[12].empty())t.yaw=number(f,12,"terminal yaw");
    map->terminals.push_back(std::move(t));
   }else if(tag=="CARGO_LIFT"){
    if(f.size()<15)throw std::runtime_error("malformed CARGO_LIFT record");auto map=mapAt(maps,f);

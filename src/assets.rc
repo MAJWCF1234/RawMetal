@@ -165,3 +165,5 @@
 281 RCDATA "assets/actors/worker-shoes.png"
 282 RCDATA "assets/actors/worker-animation.bin.anchors"
 283 RCDATA "assets/audio/worker-dying.wav"
+284 RCDATA "assets/facility/cargo/chair-wooden.fbx"
+285 RCDATA "assets/facility/cargo/table-wooden.fbx"

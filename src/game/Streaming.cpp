@@ -1,4 +1,5 @@
 #include "Game.h"
+#include <algorithm>
 #include <fstream>
 namespace retro {
 void Game::ensureChunk(int level){
@@ -32,8 +33,11 @@ void Game::updateStreaming(float dt){
   }
   // Authored residency groups keep a contiguous hall loaded in either campaign.
   auto origin=chunkOffset(m_level);auto global=origin+m_player.pos;
+  auto visibleGroups=m_world.visibleResidencyGroups();
   for(int level=0;level<chunkCount();++level)if(level!=m_level){auto other=chunkOffset(level);
-   bool needed=m_chunks[level].world.definition().residencyGroup==m_world.definition().residencyGroup;
+   int group=m_chunks[level].world.definition().residencyGroup;
+   bool needed=group==m_world.definition().residencyGroup;
+   if(group>=0)needed|=std::find(visibleGroups.begin(),visibleGroups.end(),group)!=visibleGroups.end();
    float dx=std::max({other.x-global.x,0.f,global.x-other.x-24}),dy=std::max({other.y-global.y,0.f,global.y-other.y-24});
    if(dx*dx+dy*dy<36)needed=true;
    for(const auto& door:m_world.doors())if(door.entry||door.transfer){
@@ -179,6 +183,20 @@ bool Game::testStreaming(){
  joined.m_player.pos={9,9};joined.m_player.z=joined.world().floorHeight(9,9);joined.m_player.angle=-kPi*.5f;joined.m_velocity={};walking.sprint=false;
  for(int i=0;i<100;++i)joined.update(walking,1.f/120);
  if(joined.player().pos.y>=7.7f||std::fabs(joined.player().z+9)>.08f)return fail(14);
- std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nAshfall forward-biased residency, turning, east/south crossing and Surface Nets wasteland seams: PASS\nRear store door and wall collision, then walking out of flooded returns: PASS\n";return true;
+ // A window can show a distant authored hall while traversal keeps separate
+ // residency groups. No open door or campaign-specific map index is required.
+ auto vista=std::make_shared<CustomCampaign>();vista->name="Visible hall test";vista->key=123456;
+ for(int i=0;i<4;++i){auto map=std::make_shared<AuthoredMapData>();map->name="Vista chunk";
+  map->definition={{float(i*72),0},{3,3},0,Environment::Interior,false,3.4f,.3f,i==0?7:i==3?9:8};
+  if(i==0)map->visibleResidencyGroups={8};
+  AuthoredLayerData floor;for(auto& row:floor.rows)row=std::string(24,'.');map->layers.push_back(std::move(floor));vista->maps.push_back(std::move(map));
+ }
+ auto view=std::make_unique<Game>(vista);view->updateStreaming(0);
+ if(!view->chunkResident(1)||!view->chunkResident(2)||view->chunkResident(3))return fail(28);
+ auto viewSave=std::make_unique<Game>(vista);
+ if(!viewSave->decodeSave(view->encodeSave())||!viewSave->chunkResident(1)||!viewSave->chunkResident(2)||viewSave->chunkResident(3))return fail(29);
+ view->loadLevel(3,false);view->updateStreaming(0);
+ if(view->chunkResident(0)||view->chunkResident(1)||view->chunkResident(2))return fail(30);
+ std::ofstream("streaming-test.txt")<<"Door streaming and state retention: PASS\nAligned 24x48 seam stays resident, side walls remain continuous, and crossing preserves X: PASS\nWalking across the seam in both directions at reactor elevation: PASS\nAshfall forward-biased residency, turning, east/south crossing and Surface Nets wasteland seams: PASS\nRear store door and wall collision, then walking out of flooded returns: PASS\nAuthored visible halls stay resident without doors, survive save/load, and unload after leaving their viewing map: PASS\n";return true;
 }
 }

@@ -30,15 +30,23 @@ bool Game::testWorldIsolation(){
   auto base=std::string("CAMPAIGN|Validation|0\n")+records(0,0);
   auto load=[&](const std::string& text){std::ofstream file(path);file<<"--- CUSTOM_CAMPAIGN_DATA_START ---\n"<<text<<"--- CUSTOM_CAMPAIGN_DATA_END ---\n";file.close();return loadCustomCampaignFile(path);};
   bool valid=false;try{valid=load(base)->maps.size()==1;
+   auto visibility=load(base+"VISIBLE_GROUP|0|2\nVISIBLE_GROUP|0|2\nVISIBLE_GROUP|0|3\n");
+   World visibleMap(0,visibility->maps[0]);auto groups=visibleMap.visibleResidencyGroups();
+   valid&=groups.size()==2&&groups[0]==2&&groups[1]==3;
    auto mechanisms=load(base+"CARGO_LIFT|0|8|8|12|12|0|3|1|call|release|position|down|arrived|descended\nTIMED_SEQUENCE|0|timer|finished|0|0|24|24|-1|4|1000|500|0|0|2|0.5|1\nTERMINAL|0|5|5|0|0|Test|Call|Local|call|0|brake\nSIGN|0|5|8|2|3|0.9|3.14159|PLATFORM 3|ARRIVED|13277517\n");
    valid&=mechanisms->maps[0]->cargoLift.upper==3&&mechanisms->maps[0]->timedSequences.size()==1&&mechanisms->maps[0]->terminals[0].requireState==stateId("brake")&&mechanisms->maps[0]->signs.size()==1&&mechanisms->maps[0]->signs[0].title=="PLATFORM 3";
+   World legacyTerminal(0,mechanisms->maps[0]);
+   auto oriented=load(base+"TERMINAL|0|5|5|0|0|Test|Call|Local||0||0\n");World orientedTerminal(0,oriented->maps[0]);
+   valid&=std::fabs(legacyTerminal.terminals()[0].yaw-kPi)<.001f&&oriented->maps[0]->terminals[0].yaw==0&&orientedTerminal.terminals()[0].yaw==0;
    auto actors=load(base+"TIMED_SEQUENCE|0|scene|finished|0|0|24|24|-1|4|10000|9000|0|0|2|0.5|1\nACTOR|0|scene|0|1.7|0|1|0\nACTOR_KEY|0|0|0|5|5|0|0|1|0|1\nACTOR_KEY|0|0|10000|6|5|0|0|1|4|1\nACTOR_IDLE_KEY|0|0|0|4|5|0|0|1|0\nACTOR_IDLE_KEY|0|0|2000|5|5|0|0|1|3\nACTOR_PRELUDE|0|0|1000|3000\nACTOR|0|scene|1|1|0|0|1\nACTOR_KEY|0|1|0|6|6|1|0|0|0\nACTOR_KEY|0|1|10000|6|6|1|0|0|1\nSEQUENCE_SIGHT|0|0|0|25\n");
    valid&=actors->maps[0]->actorTracks[0].idleKeys.size()==2&&actors->maps[0]->actorTracks[0].keys[0].lookAtActor==1&&actors->maps[0]->timedSequences[0].sightActor==0;
   }catch(...){}
   auto invalid=[&](const std::string& text){try{load(text);return false;}catch(const std::runtime_error&){return true;}};
   bool guarded=invalid(base+records(0,0))&&invalid(base+records(1,12))&&invalid(base+"FIXTURE|0|99|3|3|0|1|1|1|0|1\n")&&invalid(base+"PROP|0|99|3|3|1|1|0|0.5|0.5|0\n");
+  guarded&=invalid(base+"VISIBLE_GROUP|0|-1\n")&&invalid(base+"VISIBLE_GROUP|0\n")&&invalid(base+"VISIBLE_GROUP|0|2|extra\n")&&invalid(base+"VISIBLE_GROUP|0|hall\n");
+  guarded&=invalid(base+"TERMINAL|0|5|5|0|0|Test|Call|Local||0||nan\n");
   std::error_code cleanup;std::filesystem::remove(path,cleanup);
-  if(!check(valid&&guarded,"Custom loader accepts valid records and rejects duplicate/overlapping maps and invalid models"))return false;
+  if(!check(valid&&guarded,"Custom loader accepts valid records and rejects duplicate/overlapping maps, invalid models and malformed visible groups"))return false;
  }
  const auto& warden=campaign.m_chunks[3].enemies.back();
  if(!check(warden.kind==CreatureKind::Warden&&warden.hp==320&&warden.pos.x==21.5f&&warden.pos.y==18.5f,"Reactor encounter keeps its authored creature and health"))return false;
