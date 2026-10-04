@@ -211,7 +211,7 @@ const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int 
  // of crashing when ufbx reports a different material name.
  static constexpr const char* serviceTexture[]={"machinery_mx_1","transformer_box_hr_2","metal_hr_6_1"};
  if(mesh>=12&&mesh<=14)return m_facilityTextures.at(serviceTexture[mesh-12]);
- if(mesh==15)return m_facilityTextures.at("wood_1");
+ if(mesh==15||mesh==18||mesh==19)return m_facilityTextures.at("wood_1");
  if(mesh==16)return m_facilityTextures.at("van_3");
  if(mesh==17)return m_facilityTextures.at("wooden_crate_8");
  std::string material=part>=0&&part<int(model.materialNames.size())?model.materialNames[size_t(part)]:"<invalid part>";

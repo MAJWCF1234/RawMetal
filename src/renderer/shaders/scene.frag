@@ -91,6 +91,7 @@ float shaftScattering(vec3 eye,vec3 endpoint,vec4 lamp){
 void main(){
  vec2 sampleUV=uv;
  vec2 uvDx=dFdx(uv),uvDy=dFdy(uv);
+ vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
 
  float materialDistance=length(worldPos-view.eyeYaw.xyz);
  float parallaxFade=1.0-smoothstep(8.0,18.0,materialDistance);
@@ -99,9 +100,12 @@ void main(){
  vec3 tangent=vec3(0.0),bitangent=vec3(0.0),geometricNormal=vec3(0.0);
  bool tangentFrameValid=false;
  if(parallaxMaterial||litMaterial){
-  vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
   float determinant=uvDx.x*uvDy.y-uvDx.y*uvDy.x;
-  if(abs(determinant)>0.00001){
+  // The UV Jacobian shrinks as a surface fills more pixels. An absolute
+  // epsilon disabled valid GGX/parallax frames on close walls and at higher
+  // resolutions. Reject collapsed UV axes by their relative angle instead.
+  float uvAreaScale=dot(uvDx,uvDx)*dot(uvDy,uvDy);
+  if(uvAreaScale>0.0&&determinant*determinant>uvAreaScale*0.00000001){
    tangent=normalize((dx*uvDy.y-dy*uvDx.y)/determinant);
    bitangent=normalize((dy*uvDx.x-dx*uvDy.x)/determinant);
    geometricNormal=normalize(cross(tangent,bitangent));

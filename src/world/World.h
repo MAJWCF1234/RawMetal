@@ -85,6 +85,7 @@ struct AuthoredTerminalData {
     StateId activateState=0;
     bool toggleState=false;
     StateId requireState=0;
+    float yaw=kPi;
 };
 struct AuthoredSign {
     Vec2 position{};
@@ -96,6 +97,8 @@ struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
     ChunkDefinition definition{};
+    // Adjacent views can retain another hall without joining its traversal group.
+    std::vector<int> visibleResidencyGroups;
     bool openNorth=false,openSouth=false,openWest=false,openEast=false;
     std::vector<AuthoredLayerData> layers;
     std::vector<Door> doors;
@@ -144,6 +147,7 @@ public:
     bool custom()const{return m_worldId==WorldId::Custom;}
     bool campaignChunk(int index)const{return campaign()&&m_level==index;}
     const ChunkDefinition& definition()const{return m_mapData?m_mapData->definition:chunkDefinition(m_worldId,m_level);}
+    std::span<const int> visibleResidencyGroups()const{return m_mapData?std::span<const int>(m_mapData->visibleResidencyGroups):std::span<const int>{};}
     bool outdoors()const{return definition().environment==Environment::Outdoor;}
     bool hasLift()const{return definition().lift;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}

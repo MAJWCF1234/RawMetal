@@ -57,6 +57,8 @@ TEXTURE_OVERRIDES = {
     "src/assets/facility/source/metal_shelf_1.fbx": "src/assets/facility/metal_4.png",
     "src/assets/facility/source/wall_box_2.fbx": "src/assets/facility/wall_box_2.png",
     "src/assets/facility/source/computer_1.fbx": "src/assets/facility/pc_1.png",
+    "src/assets/facility/cargo/chair-wooden.fbx": "src/assets/facility/cargo/pallet.png",
+    "src/assets/facility/cargo/table-wooden.fbx": "src/assets/facility/cargo/pallet.png",
 }
 
 FRIENDLY = {
@@ -84,6 +86,8 @@ FRIENDLY = {
     "metal_shelf_1": "Metal Shelf",
     "wall_box_2": "Wall Cabinet",
     "computer_1": "Facility Computer",
+    "chair-wooden": "Wooden Chair",
+    "table-wooden": "Wooden Table",
 }
 
 # The editor catalog is intentionally curated. Crowbar and its matching atlas
@@ -301,6 +305,8 @@ FACILITY_MODEL_INDEX = {
     "src/assets/facility/service/machinery_mx_1.fbx": 12,
     "src/assets/facility/service/electrical_equipment_1.fbx": 13,
     "src/assets/facility/service/tank_system_mx_1.fbx": 14,
+    "src/assets/facility/cargo/chair-wooden.fbx": 18,
+    "src/assets/facility/cargo/table-wooden.fbx": 19,
 }
 WORLD_PROP_KIND = {
     "src/assets/pressureworks/pump.fbx": 0,
@@ -651,7 +657,8 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
             lines.append(f"   m_lights.push_back({{{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(p['z'])}}});")
         elif kind == "terminal":
             title = obj.get("title") or obj.get("name") or "TERMINAL"
-            lines.append(f"   m_terminals.push_back({{{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_string(title)},\"AUTHORED IN LEVEL EDITOR.\",\"LOCAL TERMINAL.\",{_cpp_float(p['z']-base_z)},false}});")
+            yaw = math.radians(p["rotation"]) if obj.get("rotation") is not None else math.pi
+            lines.append(f"   m_terminals.push_back({{{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_string(title)},\"AUTHORED IN LEVEL EDITOR.\",\"LOCAL TERMINAL.\",{_cpp_float(p['z']-base_z)},false,0,0,false,{_cpp_float(yaw)}}});")
         elif kind == "hazard":
             hk = str(obj.get("kind") or "Electricity")
             if hk not in HAZARD_KINDS:
@@ -842,7 +849,8 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                 lines.append(f"LIGHT|{map_index}|{pt['x']}|{pt['y']}|{pt['z']}")
             elif kind=="terminal":
                 title=obj.get("title") or obj.get("name") or "TERMINAL"
-                lines.append(f"TERMINAL|{map_index}|{pt['x']}|{pt['y']}|{pt['z']-base_z}|0|{_runtime_string(title)}|{_runtime_string('AUTHORED IN LEVEL EDITOR.')}|{_runtime_string('LOCAL TERMINAL.')}")
+                yaw=math.radians(float(pt["rotation"])) if obj.get("rotation") is not None else math.pi
+                lines.append(f"TERMINAL|{map_index}|{pt['x']}|{pt['y']}|{pt['z']-base_z}|0|{_runtime_string(title)}|{_runtime_string('AUTHORED IN LEVEL EDITOR.')}|{_runtime_string('LOCAL TERMINAL.')}||0||{yaw}")
             elif kind=="hazard":
                 hazard_ids={"Electricity":0,"Steam":1,"Crusher":2,"Toxic":3,"Fire":4,"FallingDebris":5,"Pressure":6,"Anomaly":7}
                 hk=hazard_ids.get(str(obj.get("kind") or "Electricity"),0);w=max(.1,float(obj.get("w") or 2));d=max(.1,float(obj.get("d") or 2));h=max(.1,float(obj.get("h") or 1))

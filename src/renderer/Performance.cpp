@@ -87,6 +87,19 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  report<<"GGX highlight values: rough "<<blueChannel(roughHighlight)<<", smooth "<<blueChannel(smoothHighlight)<<", neutral normal "<<blueChannel(neutralHighlight)<<'\n';
  check(blueChannel(smoothHighlight)>blueChannel(roughHighlight)+3,"GGX smoothness narrows and brightens dielectric highlights");
  check(std::abs(blueChannel(neutralHighlight)-blueChannel(smoothHighlight))<=1,"Flat-normal GGX matches authored neutral normal map");
+ // Magnifying a uniform black dielectric must preserve its highlight. The
+ // large plane's UVs change by less than 1/300 per pixel, reproducing close
+ // architectural surfaces whose valid derivative frame used to be rejected.
+ auto planeHighlight=[&](float extent,float uvSpan){
+  begin();
+  MeshVertex a{{-extent,-extent,1},0,0},b{{extent,-extent,1},uvSpan,0},c{{extent,extent,1},uvSpan,uvSpan},d{{-extent,extent,1},0,uvSpan};
+  renderer.triangle3D(a,b,c,neutralDielectric,1,&frontal);renderer.triangle3D(a,c,d,neutralDielectric,1,&frontal);
+  return blueChannel(finish());
+ };
+ auto compactPlane=planeHighlight(.3f,1.f),largePlane=planeHighlight(2.f,1.f),smallUvPlane=planeHighlight(2.f,.05f),mirroredPlane=planeHighlight(2.f,-1.f),collapsedPlane=planeHighlight(2.f,0.f);
+ report<<"Magnified dielectric highlight values: compact "<<compactPlane<<", large "<<largePlane<<", small UV span "<<smallUvPlane<<", mirrored "<<mirroredPlane<<", collapsed "<<collapsedPlane<<'\n';
+ check(compactPlane>30&&std::abs(largePlane-compactPlane)<=1&&std::abs(smallUvPlane-compactPlane)<=1&&std::abs(mirroredPlane-compactPlane)<=1,"Close surfaces retain GGX across magnification, small UV derivatives and mirrored UVs");
+ check(collapsedPlane<3,"Collapsed UVs remain finite and do not fabricate a specular frame");
  // A plane first baked from behind must retain its physical lit hemisphere
  // when viewed from the front. The former eye-facing bake erased this highlight.
  NormalLighting backBake;backBake.directions[0]={0,0,1};backBake.weights[0]=1;backBake.surfaceNormal={0,0,1};

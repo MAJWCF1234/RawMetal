@@ -9,6 +9,21 @@ bool Game::testCampaignMaps(){
  std::ofstream out("freight-district-test.txt");bool pass=true;
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};
  check(CampaignChunkCount==32,"Eight freight areas allocated across 22 additional stitched chunks");
+ {Game office;office.loadLevel(20,false);office.updateStreaming(0);
+  bool vista=true;for(int level=16;level<=19;++level)vista&=office.chunkResident(level);
+  check(vista,"Manifest overlook retains all four real warehouse chunks with the door closed");
+  office.loadLevel(21,false);office.updateStreaming(0);
+  vista=true;for(int level=16;level<=19;++level)vista&=office.chunkResident(level);
+  check(vista,"Adjacent Manifest routing wing retains the shared warehouse vista");
+  World upper(19),manifest(20);
+  check(upper.lightRayClear({4.5f,23.02f},-5.3f,{4.5f,23.98f},-5.3f)&&manifest.lightRayClear({4.5f,.3f},-5.3f,{4.5f,.001f},-5.3f),"Warehouse facade aperture and office glazing transmit the overlook sightline");
+  check(!upper.fits(4.5f,23.95f,-7,Player::StandingHeight)&&!manifest.fits(4.5f,.055f,-7,Player::StandingHeight),"Both sides of the overlook retain physical fall protection");
+ }
+ {Game signal;signal.loadLevel(31,false);signal.m_enemies.clear();
+  signal.m_player.pos={3.25f,11.65f};signal.m_player.z=-25;signal.m_player.angle=-kPi*.5f;
+  InputState use{};use.use=true;signal.updateInteraction(use,.01f);
+  check(signal.logTime()>0&&signal.world().terminals().front().yaw==0,"Signal alcove computer faces its entrance and its log opens through E");
+ }
  int mutants=0;for(int level=10;level<32;++level){Game area;area.loadLevel(level,false);
   check(area.world().definition().musicCue==MusicCue::Freight,"Freight section has dedicated authored soundtrack");
   for(const auto&e:area.enemies())if(e.kind==Enemy::Kind::Mutant){++mutants;check(e.maxHp==180&&std::fabs(e.bodyTop()-e.bodyBottom()-1.85f)<.001f,"Mutated human has authored health and standing hull");check(std::fabs(area.groundHeight(e.pos,e.z+.2f)-e.z)<.02f,"Mutated human stands on authored floor");}
