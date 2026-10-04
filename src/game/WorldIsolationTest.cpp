@@ -19,8 +19,30 @@ bool Game::testWorldIsolation(){
  if(!check(invalidWorldRejected(),"Custom world construction requires explicit authored data"))return false;
  auto authored=std::make_shared<AuthoredMapData>();AuthoredLayerData floor;for(auto& row:floor.rows)row=std::string(World::Width,'.');authored->layers.push_back(floor);
  {World external(0,authored);World native(10);if(!check(external.custom()&&!external.campaign()&&native.campaign()&&!native.custom(),"Shared authored geometry preserves custom and native identities"))return false;}
+ {
+  World flat(0,authored);flat.buildLightOcclusion();
+  if(!check(flat.m_lightSolids.size()==2&&flat.lightRayClear({2,2},3.2f,{20,20},3.2f)&&!flat.lightRayClear({2,2},3.6f,{20,20},3.6f),"Constant ceiling merges to one optical solid without changing its shadow"))return false;
+  // Isolate the Foundry's authored 3.1/4.2/3.6-metre height bands and its
+  // single low ceiling tile, so fixture shadows cannot mask a merge error.
+  World varied(0);std::array<std::string,24> rows;MapRows openRows{};for(size_t i=0;i<rows.size();++i){rows[i]=std::string(24,'.');openRows[i]=rows[i];}
+  varied.m_layers={{"Ceiling regression",0,0,openRows}};varied.m_structures.clear();varied.m_fixtures.clear();varied.m_props.clear();varied.m_terminals.clear();varied.m_doors.clear();varied.m_lightSolids.clear();varied.m_lightNodes.clear();
+  bool ceiling=varied.lightRayClear({1.5f,4.5f},2.8f,{22.5f,4.5f},2.8f)&&!varied.lightRayClear({1.5f,4.5f},3.2f,{22.5f,4.5f},3.2f)&&varied.lightRayClear({1.5f,4.5f},4.25f,{22.5f,4.5f},4.25f);
+  ceiling&=varied.lightRayClear({1.5f,11.5f},3.25f,{22.5f,11.5f},3.25f)&&!varied.lightRayClear({1.5f,11.5f},4.5f,{22.5f,11.5f},4.5f);
+  ceiling&=!varied.lightRayClear({4.5f,7.5f},3.5f,{4.5f,8.5f},3.5f)&&!varied.lightRayClear({4.5f,8.5f},3.5f,{4.5f,7.5f},3.5f)&&varied.lightRayClear({4.5f,7.5f},4.15f,{4.5f,8.5f},4.15f);
+  ceiling&=!varied.lightRayClear({9.5f,14.5f},1.1f,{11.5f,14.5f},1.1f)&&!varied.lightRayClear({11.5f,14.5f},1.1f,{9.5f,14.5f},1.1f)&&varied.lightRayClear({9.5f,13.5f},1.1f,{11.5f,13.5f},1.1f);
+  if(!check(ceiling,"Merged ceilings preserve height steps, thickness and isolated low tiles in both ray directions"))return false;
+ }
  auto rejected=[&](){try{World invalid(0,authored);return false;}catch(const std::runtime_error&){return true;}};
+ {
+  auto openMap=std::make_shared<AuthoredMapData>(*authored);
+  openMap->stairs.push_back({3,3,5,11,0,2,12,true,true,true,.12f,true});
+  World openStairs(0,openMap);auto solidMap=std::make_shared<AuthoredMapData>(*openMap);solidMap->stairs[0].openUnderside=false;World solidStairs(0,solidMap);
+  if(!check(openStairs.fits(4,10,0,1.6f)&&!solidStairs.fits(4,10,0,1.6f)&&openStairs.lightRayClear({4,9},1,{4,10},1)&&!solidStairs.lightRayClear({4,9},1,{4,10},1),"Open steel stairs preserve usable, lit space beneath treads; legacy stairs remain solid"))return false;
+  if(!check(openStairs.railBlocksHull(3.1f,10,.2f,1.833f,1.6f)&&!openStairs.railBlocksHull(4,10,.2f,1.833f,1.6f)&&!openStairs.railBlocksHull(3.1f,10,.2f,0,1.6f),"Stair side rails block falls while leaving the route and underside clear"))return false;
+ }
+ authored->stairs.push_back({3,3,5,11,0,2,12,true,true,true,-.1f});if(!check(rejected(),"Invalid stair tread thickness rejected"))return false;authored->stairs.clear();
  authored->fixtures.push_back({99,{3,3},0,1,1,1,0});if(!check(rejected(),"Invalid fixture model rejected before renderer access"))return false;authored->fixtures.clear();
+ authored->lights.push_back({{3,3},2,WorldLightMount::Wall,0,1,-1});if(!check(rejected(),"Invalid authored light range rejected before renderer binning"))return false;authored->lights.clear();
  authored->props.push_back({99,{3,3},1,1,0,{.5f,.5f}});if(!check(rejected(),"Invalid prop model rejected before renderer access"))return false;authored->props.clear();
  authored->layers[0].rows[0]=".";if(!check(rejected(),"Malformed map row rejected before collision generation"))return false;authored->layers[0].rows[0]=std::string(World::Width,'.');
  authored->structures.resize(65536);if(!check(rejected(),"Excess structures rejected without a wrapping collision index"))return false;authored->structures.clear();
@@ -29,10 +51,21 @@ bool Game::testWorldIsolation(){
   auto records=[](int id,int x){std::string text="MAP|"+std::to_string(id)+"|Validation|"+std::to_string(x)+"|0|3|3|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|"+std::to_string(id)+"|0|Floor|0|0\n";for(int row=0;row<24;++row)text+="ROW|"+std::to_string(id)+"|0|"+std::to_string(row)+"|........................\n";return text;};
   auto base=std::string("CAMPAIGN|Validation|0\n")+records(0,0);
   auto load=[&](const std::string& text){std::ofstream file(path);file<<"--- CUSTOM_CAMPAIGN_DATA_START ---\n"<<text<<"--- CUSTOM_CAMPAIGN_DATA_END ---\n";file.close();return loadCustomCampaignFile(path);};
-  bool valid=false;try{valid=load(base)->maps.size()==1;
+  bool valid=false,lightContract=false;try{valid=load(base)->maps.size()==1;
    auto visibility=load(base+"VISIBLE_GROUP|0|2\nVISIBLE_GROUP|0|2\nVISIBLE_GROUP|0|3\n");
    World visibleMap(0,visibility->maps[0]);auto groups=visibleMap.visibleResidencyGroups();
    valid&=groups.size()==2&&groups[0]==2&&groups[1]==3;
+   auto lamps=load(base+"LIGHT|0|5|5|3\nLIGHT|0|1|6|2|1|1.5707963|1.2|6\n");
+   const auto& ceiling=lamps->maps[0]->lights[0];const auto& wall=lamps->maps[0]->lights[1];
+   auto ceilingPoint=ceiling.emitter(),ceilingTarget=ceiling.shadowTarget(),wallPoint=wall.emitter(),wallTarget=wall.shadowTarget();
+   lightContract=ceiling.mount==WorldLightMount::Ceiling&&ceiling.intensity==1&&ceiling.range==12&&ceilingPoint.x==5&&ceilingPoint.y==5&&ceilingPoint.z==3&&std::fabs(ceilingTarget.z-2.96f)<.0001f;
+   lightContract&=wall.mount==WorldLightMount::Wall&&std::fabs(wallPoint.x-1)<.0001f&&std::fabs(wallPoint.y-6.16f)<.0001f&&wallTarget.z==2&&wall.range==6&&wall.intensity==1.2f;
+   lightContract&=std::fabs(ceiling.falloff(25)-3.2f*std::pow(1.f-25.f/144.f,2.f)/(1.f+25.f*.12f))<.000001f&&wall.falloff(36)==0&&wall.falloff(35)>0;
+   auto mounted=load(base+"STRUCT|0|0|1|1|20|0|3.4|0|2\nLIGHT|0|1|6|2|1|0|1.2|6\n");World mountedWall(0,mounted->maps[0]);auto target=mountedWall.lights()[0].shadowTarget();
+   lightContract&=mountedWall.lightRayClear({3,6},1.5f,{target.x,target.y},target.z)&&!mountedWall.lightRayClear({3,6},1.5f,{.98f,6},2);
+   valid&=lightContract;
+   auto stairs=load(base+"STAIR|0|3|3|5|11|0|2|12|1|1\nSTAIR|0|6|3|8|11|0|2|12|1|1|1|0.12|1\n");
+   valid&=!stairs->maps[0]->stairs[0].openUnderside&&!stairs->maps[0]->stairs[0].sideRails&&stairs->maps[0]->stairs[1].openUnderside&&stairs->maps[0]->stairs[1].sideRails&&stairs->maps[0]->stairs[1].treadThickness==.12f;
    auto mechanisms=load(base+"CARGO_LIFT|0|8|8|12|12|0|3|1|call|release|position|down|arrived|descended\nTIMED_SEQUENCE|0|timer|finished|0|0|24|24|-1|4|1000|500|0|0|2|0.5|1\nTERMINAL|0|5|5|0|0|Test|Call|Local|call|0|brake\nSIGN|0|5|8|2|3|0.9|3.14159|PLATFORM 3|ARRIVED|13277517\n");
    valid&=mechanisms->maps[0]->cargoLift.upper==3&&mechanisms->maps[0]->timedSequences.size()==1&&mechanisms->maps[0]->terminals[0].requireState==stateId("brake")&&mechanisms->maps[0]->signs.size()==1&&mechanisms->maps[0]->signs[0].title=="PLATFORM 3";
    World legacyTerminal(0,mechanisms->maps[0]);
@@ -45,7 +78,10 @@ bool Game::testWorldIsolation(){
   bool guarded=invalid(base+records(0,0))&&invalid(base+records(1,12))&&invalid(base+"FIXTURE|0|99|3|3|0|1|1|1|0|1\n")&&invalid(base+"PROP|0|99|3|3|1|1|0|0.5|0.5|0\n");
   guarded&=invalid(base+"VISIBLE_GROUP|0|-1\n")&&invalid(base+"VISIBLE_GROUP|0\n")&&invalid(base+"VISIBLE_GROUP|0|2|extra\n")&&invalid(base+"VISIBLE_GROUP|0|hall\n");
   guarded&=invalid(base+"TERMINAL|0|5|5|0|0|Test|Call|Local||0||nan\n");
+  guarded&=invalid(base+"STAIR|0|3|3|5|11|0|2|12|1|1|1|-0.1\n")&&invalid(base+"STAIR|0|3|3|5|11|0|2|12|1|1|2|0.12\n");
+  guarded&=invalid(base+"LIGHT|0|1|6|2|2\n")&&invalid(base+"LIGHT|0|1|6|2|1|nan\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|-1|6\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|0\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|25\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|6|extra\n");
   std::error_code cleanup;std::filesystem::remove(path,cleanup);
+  if(!check(lightContract,"Ceiling lights retain compatibility and wall emitters stay outside mounting solids"))return false;
   if(!check(valid&&guarded,"Custom loader accepts valid records and rejects duplicate/overlapping maps, invalid models and malformed visible groups"))return false;
  }
  const auto& warden=campaign.m_chunks[3].enemies.back();

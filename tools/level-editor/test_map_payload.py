@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import server
+import re
 
 
 def rows(fill: str = ".") -> list[str]:
@@ -63,6 +64,74 @@ def test_payload() -> None:
         raise AssertionError("MAIN payload below dynamic level 6 was accepted")
 
 
+def test_open_stair_exports() -> None:
+    # Both supported export formats must preserve thin open treads, including
+    # rotated stairs and legacy projects that have no new staircase fields.
+    for rotation in (0, 90, 180, 270):
+        for properties, expected_open, expected_thickness in (
+            ({}, False, .12),
+            ({"openUnderside": True, "treadThickness": .16, "sideRails": True}, True, .16),
+            ({"openUnderside": True, "treadThickness": 0}, True, .025),
+            ({"openUnderside": True, "treadThickness": 8}, True, .5),
+        ):
+            project = {"name": "Open Stairs", "chunks": [{
+                "id": "stairs", "name": "Open Stairs", "gx": 0, "gy": 0,
+                "layers": [
+                    {"id": "lower", "name": "Lower", "z": -9, "rows": rows()},
+                    {"id": "upper", "name": "Upper", "z": -4, "rows": rows("_")},
+                ],
+                "objects": [{"id": "spawn", "type": "spawn", "spawnKind": "Player", "layerId": "lower", "x": 3, "y": 3},
+                    {"id": "flight", "type": "stairs", "layerId": "lower",
+                    "x": 10, "y": 10, "w": 1.2, "d": 8, "h": 99, "steps": 28,
+                    "rotation": rotation, "targetLayerId": "upper", **properties}],
+            }]}
+            payload, warnings = server.build_map_payload(project, "stairs", 11, "Open Stairs", "MAIN")
+            assert not warnings
+            flight = re.search(r"stairs\.push_back\(\{([^}]+)\}\)", payload)
+            assert flight, payload
+            fields = flight.group(1).split(",")
+            assert fields[4:7] == ["-9.0f", "-4.0f", "28"]  # target floor, not stale authored height
+            assert fields[7] == str(rotation in (0, 180)).lower()
+            assert fields[8] == str(rotation in (0, 270)).lower()
+            assert fields[9] == str(expected_open).lower()
+            assert float(fields[10].removesuffix("f")) == expected_thickness
+            assert fields[11] == str(bool(properties.get("sideRails",False))).lower()
+
+            campaign, warnings = server.build_runtime_campaign(project, "Open Stairs")
+            assert not warnings
+            flight = next(line for line in campaign.splitlines() if line.startswith("STAIR|"))
+            fields = flight.split("|")
+            assert [float(value) for value in fields[6:8]] == [-9, -4]
+            assert int(fields[8]) == 28
+            assert int(fields[9]) == int(rotation in (0, 180))
+            assert int(fields[10]) == int(rotation in (0, 270))
+            assert int(fields[11]) == int(expected_open)
+            assert float(fields[12]) == expected_thickness
+            assert int(fields[13]) == int(bool(properties.get("sideRails",False)))
+
+
+def test_industrial_fixture_exports() -> None:
+    models = (("extraction-fan.obj", 20), ("packing-crate.fbx", 21),
+              ("control-console.fbx", 22), ("forklift.obj", 23))
+    project = {"chunks": [{"id": "cargo", "name": "Cargo", "gx": 0, "gy": 0,
+        "layers": [{"id": "floor", "z": 0, "rows": rows()}],
+        "objects": [{"id": "spawn", "type": "spawn", "spawnKind": "Player", "layerId": "floor", "x": 3, "y": 3}]
+            + [{"id": name, "type": "asset", "layerId": "floor",
+            "model": "src/assets/facility/cargo/" + name, "x": 4 + i * 4,
+            "y": 8, "w": 1, "d": 1, "h": 1} for i, (name, _) in enumerate(models)],
+    }]}
+    payload, warnings = server.build_map_payload(project, "cargo", 11, "Cargo", "MAIN")
+    assert not warnings
+    for _, fixture in models:
+        assert f"m_fixtures.push_back({{{fixture}," in payload
+    campaign, warnings = server.build_runtime_campaign(project, "Cargo")
+    assert not warnings
+    exported = [int(line.split("|")[2]) for line in campaign.splitlines() if line.startswith("FIXTURE|")]
+    assert exported == [fixture for _, fixture in models]
+
+
 if __name__ == "__main__":
     test_payload()
+    test_open_stair_exports()
+    test_industrial_fixture_exports()
     print("level-editor map payload export: PASS")

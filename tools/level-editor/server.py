@@ -59,6 +59,9 @@ TEXTURE_OVERRIDES = {
     "src/assets/facility/source/computer_1.fbx": "src/assets/facility/pc_1.png",
     "src/assets/facility/cargo/chair-wooden.fbx": "src/assets/facility/cargo/pallet.png",
     "src/assets/facility/cargo/table-wooden.fbx": "src/assets/facility/cargo/pallet.png",
+    "src/assets/facility/cargo/extraction-fan.obj": "src/assets/facility/cargo/extraction-fan.png",
+    "src/assets/facility/cargo/packing-crate.fbx": "src/assets/facility/cargo/packing-crate.png",
+    "src/assets/facility/cargo/control-console.fbx": "src/assets/facility/cargo/control-console.png",
 }
 
 FRIENDLY = {
@@ -88,6 +91,10 @@ FRIENDLY = {
     "computer_1": "Facility Computer",
     "chair-wooden": "Wooden Chair",
     "table-wooden": "Wooden Table",
+    "extraction-fan": "Caged Extraction Fan",
+    "packing-crate": "Painted Shipping Crate",
+    "control-console": "Industrial Control Console",
+    "forklift": "Warehouse Forklift",
 }
 
 # The editor catalog is intentionally curated. Crowbar and its matching atlas
@@ -99,6 +106,7 @@ DEFAULT_MOUNT = {
     # Obvious architectural defaults. These are only editor conveniences;
     # the artist can change Floor / Wall / Ceiling after placement.
     "ceiling_lamp_fps_1": "ceiling",
+    "extraction-fan": "ceiling",
     "vent_fps_1": "ceiling",
     "wall_box_2": "wall",
 }
@@ -114,6 +122,10 @@ DEFAULT_SIZE = {
     "metal_shelf_1": (2.05, 0.61, 1.44),
     "wall_box_2": (0.67, 0.20, 0.91),
     "computer_1": (0.70, 0.55, 1.00),
+    "extraction-fan": (1.40, 1.40, 0.234),
+    "packing-crate": (1.681, 1.680, 1.20),
+    "control-console": (0.718, 0.453, 1.20),
+    "forklift": (1.164, 3.620, 2.20),
     "doorway_wide_1": (2.60, 0.30, 2.70),
     "vent_fps_1": (0.70, 0.15, 0.70),
     "ceiling_lamp_fps_1": (1.00, 0.30, 0.18),
@@ -307,6 +319,10 @@ FACILITY_MODEL_INDEX = {
     "src/assets/facility/service/tank_system_mx_1.fbx": 14,
     "src/assets/facility/cargo/chair-wooden.fbx": 18,
     "src/assets/facility/cargo/table-wooden.fbx": 19,
+    "src/assets/facility/cargo/extraction-fan.obj": 20,
+    "src/assets/facility/cargo/packing-crate.fbx": 21,
+    "src/assets/facility/cargo/control-console.fbx": 22,
+    "src/assets/facility/cargo/forklift.obj": 23,
 }
 WORLD_PROP_KIND = {
     "src/assets/pressureworks/pump.fbx": 0,
@@ -652,7 +668,9 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
             else:
                 x1,x2,y1,y2 = p["x"]-d/2,p["x"]+d/2,p["y"]-w/2,p["y"]+w/2
                 along_y, ascending = False, rot == 3
-            lines.append(f"   stairs.push_back({{{_cpp_float(x1)},{_cpp_float(y1)},{_cpp_float(x2)},{_cpp_float(y2)},{_cpp_float(bottom)},{_cpp_float(top)},{steps},{str(along_y).lower()},{str(ascending).lower()}}});")
+            open_under=bool(obj.get("openUnderside",False));tread=max(.025,min(.5,_number(obj.get("treadThickness"),.12)))
+            side_rails=bool(obj.get("sideRails",False))
+            lines.append(f"   stairs.push_back({{{_cpp_float(x1)},{_cpp_float(y1)},{_cpp_float(x2)},{_cpp_float(y2)},{_cpp_float(bottom)},{_cpp_float(top)},{steps},{str(along_y).lower()},{str(ascending).lower()},{str(open_under).lower()},{_cpp_float(tread)},{str(side_rails).lower()}}});")
         elif kind == "light":
             lines.append(f"   m_lights.push_back({{{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(p['z'])}}});")
         elif kind == "terminal":
@@ -844,7 +862,8 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                 target=by_layer.get(str(obj.get("targetLayerId")));topz=float(target.get("z")) if target else bottom+max(.25,float(obj.get("h") or 3));steps=max(3,min(64,int(round(float(obj.get("steps") or 17)))))
                 if rot in {0,2}:x1,x2,y1,y2,along,asc=pt["x"]-w/2,pt["x"]+w/2,pt["y"]-d/2,pt["y"]+d/2,1,int(rot==0)
                 else:x1,x2,y1,y2,along,asc=pt["x"]-d/2,pt["x"]+d/2,pt["y"]-w/2,pt["y"]+w/2,0,int(rot==3)
-                lines.append(f"STAIR|{map_index}|{x1}|{y1}|{x2}|{y2}|{bottom}|{topz}|{steps}|{along}|{asc}")
+                open_under=int(bool(obj.get("openUnderside",False)));tread=max(.025,min(.5,float(obj.get("treadThickness",.12))))
+                lines.append(f"STAIR|{map_index}|{x1}|{y1}|{x2}|{y2}|{bottom}|{topz}|{steps}|{along}|{asc}|{open_under}|{tread}|{int(bool(obj.get('sideRails',False)))}")
             elif kind=="light":
                 lines.append(f"LIGHT|{map_index}|{pt['x']}|{pt['y']}|{pt['z']}")
             elif kind=="terminal":

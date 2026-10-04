@@ -30,6 +30,7 @@ public:
  std::pair<int,int> surfaceExtent()const;
  void present(const std::uint32_t* overlay,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick);
  const std::string& adapter()const;
+ static bool testEmissionMips();
 private:
  struct Impl;
  std::unique_ptr<Impl> m;

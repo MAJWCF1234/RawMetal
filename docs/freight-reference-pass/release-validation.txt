@@ -1,0 +1,6 @@
+--world-isolation-test final exit=0
+--campaign-map-test final exit=0
+--vulkan-test final exit=0
+--smoke-test --vulkan final exit=0
+--campaign-map-test pipe clearance exit=0
+--vulkan-test pipe clearance exit=0

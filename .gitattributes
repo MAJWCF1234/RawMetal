@@ -1,3 +1,6 @@
 # Preserve the collection model's original bytes through checkout.
 src/assets/facility/cargo/wooden-crate.obj -text
 src/assets/actors/freight-worker.obj -text
+src/assets/facility/cargo/extraction-fan.obj -text
+src/assets/facility/cargo/forklift.obj -text
+src/assets/facility/cargo/VEHICLE_Forklift.mtl -text

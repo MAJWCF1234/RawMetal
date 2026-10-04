@@ -2,7 +2,7 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview is **v0.7.0-preview.4**; see [VR controls](docs/vr.md) and [preview notes](RELEASE_NOTES_v0.7.0-preview.4.md). The published game remains a single executable with its runtime assets embedded.
+The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview is **v0.7.0-preview.5**; see [VR controls](docs/vr.md) and [preview notes](RELEASE_NOTES_v0.7.0-preview.5.md). The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 

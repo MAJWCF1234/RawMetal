@@ -706,9 +706,10 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   for(const auto& row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Authored map rows must match the chunk width");
  }
  for(const auto& fixture:map->fixtures)if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("Invalid authored fixture model or dimensions");
+ for(const auto& light:map->lights)if(!std::isfinite(light.position.x)||!std::isfinite(light.position.y)||!std::isfinite(light.z)||!std::isfinite(light.yaw)||!std::isfinite(light.intensity)||!std::isfinite(light.range)||int(light.mount)<0||int(light.mount)>1||light.intensity<0||light.intensity>8||light.range<=0||light.range>24)throw std::runtime_error("Invalid authored light mount or influence");
  for(const auto& sign:map->signs)if(!std::isfinite(sign.width)||!std::isfinite(sign.height)||!std::isfinite(sign.z)||!std::isfinite(sign.yaw)||!std::isfinite(sign.position.x)||!std::isfinite(sign.position.y)||sign.width<=0||sign.height<=0)throw std::runtime_error("Invalid authored sign dimensions");
  for(const auto& prop:map->props)if(prop.kind<0||prop.kind>=4)throw std::runtime_error("Invalid authored prop model");
- for(const auto& stair:map->stairs)if(stair.steps<1||stair.steps>4096||stair.x1>=stair.x2||stair.y1>=stair.y2||stair.bottom>stair.top)throw std::runtime_error("Invalid authored staircase");
+ for(const auto& stair:map->stairs)if(stair.steps<1||stair.steps>4096||stair.x1>=stair.x2||stair.y1>=stair.y2||stair.bottom>stair.top||!std::isfinite(stair.treadThickness)||stair.treadThickness<.025f||stair.treadThickness>.5f)throw std::runtime_error("Invalid authored staircase");
  m_mapData=std::move(map);
  m_actorPoses.clear();for(const auto& track:m_mapData->actorTracks)m_actorPoses.push_back(track.idleKeys.empty()?sampleActor(track,0):sampleActorKeys(track.idleKeys,0,true));
  m_openNorthBoundary=m_mapData->openNorth;m_openSouthBoundary=m_mapData->openSouth;
@@ -1699,8 +1700,19 @@ void World::buildLightOcclusion()const{
  auto oriented=[&](Vec2 p,float width,float depth,float bottom,float top,float yaw){m_lightSolids.push_back({{p.x,p.y,(bottom+top)*.5f},{width*.5f,depth*.5f,(top-bottom)*.5f},std::cos(yaw),std::sin(yaw)});};
  if(m_mapData||level()>=6)box(0,0,Width,Height,-100,floorHeight(12,12)-.025f);
  else for(int y=0;y<Height*2;++y)for(int x=0;x<Width*2;++x)box(x*.5f,y*.5f,(x+1)*.5f,(y+1)*.5f,-100,floorHeight(x*.5f+.25f,y*.5f+.25f)-.025f);
- for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){float floor=floorHeight(x+.5f,y+.5f),ceiling=ceilingHeight(x+.5f,y+.5f);char t=tile(x,y);
-  box(float(x),float(y),float(x+1),float(y+1),ceiling,ceiling+1);
+ // Adjacent ceiling cells at exactly the same height have one solid union.
+ // Keep every height boundary and the original one-metre thickness, while
+ // avoiding hundreds of redundant BVH leaves in large constant-height halls.
+ std::array<float,Width*Height> ceilings{};std::array<bool,Width*Height> covered{};
+ for(int y=0;y<Height;++y)for(int x=0;x<Width;++x)ceilings[size_t(y*Width+x)]=ceilingHeight(x+.5f,y+.5f);
+ for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){
+  if(covered[size_t(y*Width+x)])continue;float ceiling=ceilings[size_t(y*Width+x)];int right=x+1,bottom=y+1;
+  while(right<Width&&!covered[size_t(y*Width+right)]&&ceilings[size_t(y*Width+right)]==ceiling)++right;
+  while(bottom<Height){bool same=true;for(int column=x;column<right;++column)if(covered[size_t(bottom*Width+column)]||ceilings[size_t(bottom*Width+column)]!=ceiling){same=false;break;}if(!same)break;++bottom;}
+  for(int row=y;row<bottom;++row)for(int column=x;column<right;++column)covered[size_t(row*Width+column)]=true;
+  box(float(x),float(y),float(right),float(bottom),ceiling,ceiling+1);
+ }
+ for(int y=0;y<Height;++y)for(int x=0;x<Width;++x){float floor=floorHeight(x+.5f,y+.5f);char t=tile(x,y);
   if(t=='#'||t=='C'||t=='B'||t=='T')box(float(x),float(y),float(x+1),float(y+1),floor,t=='#'?wallHeight(x,y):floor+(t=='C'?.60f:t=='B'?1.1f:2.62f));
  }
  for(const auto&s:m_structures){
@@ -1858,7 +1870,17 @@ void World::buildLayers(std::span<const Staircase> stairs){
    stair.alongY?stair.x1:stair.x1+(stair.x2-stair.x1)*lo,
    stair.alongY?stair.y1+(stair.y2-stair.y1)*lo:stair.y1,
    stair.alongY?stair.x2:stair.x1+(stair.x2-stair.x1)*hi,
-   stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.bottom,top,false,hasLift()?4:0});
+   stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.openUnderside?top-stair.treadThickness:stair.bottom,top,false,stair.openUnderside?2:hasLift()?4:0});
+  if(stair.sideRails){
+   // Side guards have the same tread-local elevation in rendering, optical
+   // occlusion and hull collision. They leave the under-stair space open.
+   float x1=stair.alongY?stair.x1:stair.x1+(stair.x2-stair.x1)*lo;
+   float x2=stair.alongY?stair.x2:stair.x1+(stair.x2-stair.x1)*hi;
+   float y1=stair.alongY?stair.y1+(stair.y2-stair.y1)*lo:stair.y1;
+   float y2=stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2;
+   if(stair.alongY){m_structures.push_back({x1,y1,x1+.07f,y2,top,top+1.05f,true,2});m_structures.push_back({x2-.07f,y1,x2,y2,top,top+1.05f,true,2});}
+   else{m_structures.push_back({x1,y1,x2,y1+.07f,top,top+1.05f,true,2});m_structures.push_back({x1,y2-.07f,x2,y2,top,top+1.05f,true,2});}
+  }
  }
  m_structureCells.resize(Width*Height);
  if(m_structures.size()>65535)throw std::runtime_error("Map exceeds the collision structure capacity");

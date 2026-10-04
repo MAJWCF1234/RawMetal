@@ -7,7 +7,7 @@
 #include <sstream>
 #include <map>
 namespace retro {
-Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||id==142||id==277),m_nodeFilter(nodeFilter){
+Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277),m_nodeFilter(nodeFilter){
  auto resource=loadResource(id);
  ufbx_load_opts opts{};opts.evaluate_skinning=true;opts.target_axes=ufbx_axes_right_handed_y_up;opts.target_unit_meters=1;
  if(!resource.empty()&&resource[0]=='#')opts.file_format=UFBX_FILE_FORMAT_OBJ;
@@ -18,11 +18,11 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
  // This supplied vent lies in the XZ ceiling plane, with its grille toward -Y.
  // Rotate it into a wall panel: grille toward +Z, horizontal texture louvers.
  if(id==166)for(auto&face:triangles)for(auto&v:face.v){auto p=v.p;v.p={-p.z,p.x,-p.y};}
- // Both electrical cabinet assets were authored facing opposite RawMetal's
+ // These electrical cabinets and the forklift were authored facing opposite RawMetal's
  // fixture-forward convention. Normalize them once at import so every cabinet
  // in every map, editor preview, and future placement uses the visible/control
  // face as forward instead of showing the back/interior side.
- if(id==171||id==258)for(auto&face:triangles)for(auto&v:face.v){v.p.x=-v.p.x;v.p.z=-v.p.z;}
+ if(id==171||id==258||id==294)for(auto&face:triangles)for(auto&v:face.v){v.p.x=-v.p.x;v.p.z=-v.p.z;}
  minimum={1e9f,1e9f,1e9f};maximum={-1e9f,-1e9f,-1e9f};
  for(auto&t:triangles)for(auto&v:t.v){minimum.x=std::min(minimum.x,v.p.x);minimum.y=std::min(minimum.y,v.p.y);minimum.z=std::min(minimum.z,v.p.z);maximum.x=std::max(maximum.x,v.p.x);maximum.y=std::max(maximum.y,v.p.y);maximum.z=std::max(maximum.z,v.p.z);}
  std::ostringstream info;info<<id<<": "<<triangles.size()<<" triangles; bounds "<<minimum.x<<","<<minimum.y<<","<<minimum.z<<" to "<<maximum.x<<","<<maximum.y<<","<<maximum.z<<"\n";
