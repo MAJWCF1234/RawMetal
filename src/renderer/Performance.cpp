@@ -7,6 +7,7 @@
 #include <fstream>
 #include <numeric>
 #include <algorithm>
+#include <type_traits>
 namespace retro {
 __declspec(noinline) bool SoftwareRenderer::testPresentationResize(){
  Win32Window window(DisplayWidth,DisplayHeight,L"RawMetal presentation check");if(!window.valid())return false;
@@ -53,6 +54,15 @@ bool SoftwareRenderer::testCreatureAnimation(){
 __declspec(noinline) bool SoftwareRenderer::testHardware(){
  auto storage=std::make_unique<SoftwareRenderer>(128,72);auto&renderer=*storage;std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;
  auto check=[&](bool condition,const char* label){report<<label<<": "<<(condition?"PASS":"FAIL")<<'\n';passed&=condition;};
+ static_assert(std::is_aggregate_v<Texture>);
+ {
+  Texture original{2,1,{0xff010203u,0xff040506u}};auto originalId=original.generation.value;
+  Texture copied=original;auto copyId=copied.generation.value;Texture moved=std::move(copied);auto movedId=moved.generation.value;
+  Texture assigned;auto oldAssignedId=assigned.generation.value;assigned=original;auto assignedId=assigned.generation.value;
+  Texture moveAssigned;moveAssigned=std::move(moved);
+  check(originalId!=copyId&&movedId==copyId&&copied.generation.value!=copyId&&assignedId!=originalId&&assignedId!=oldAssignedId&&moveAssigned.generation.value==movedId&&moved.generation.value!=movedId&&moveAssigned.pixels==original.pixels,"Texture copies create fresh generations and moves preserve the transferred atlas identity");
+ }
+ check(GpuRenderer::testEmissionMips(),"Every emission mip preserves linear intensity, odd edge texels, channel order and half precision");
  Texture red{1,1,{0xffff0000u}},blue{1,1,{0xff0000ffu}},transparent{1,1,{0x00ffffffu}},emissive{1,1,{0xff000000u}},normal{1,1,{0xffffffffu}};
  emissive.emission={0xffffffffu};normal.normalLevels={{{1,0,0}}};NormalLighting lights;lights.directions[0]={1,0,0};lights.weights[0]=1;
  auto begin=[&]{renderer.m_gpu->begin(128,72);renderer.m_gpu->setView(0,0,0,0,0,128.f/72.f,false,0);renderer.m_gpuFrame=true;};
@@ -60,6 +70,23 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  auto finish=[&]{renderer.m_gpu->finish(renderer.m_pixels);renderer.m_gpuFrame=false;return renderer.m_pixels[36*128+64]&0xffffffu;};
  auto redChannel=[](std::uint32_t p){return int((p>>16)&255);};
  auto blueChannel=[](std::uint32_t p){return int(p&255);};
+ {
+  const auto& pc=renderer.m_facilityTextures.at("pc_1");auto source=renderer.loadTexture(192);
+  bool preserved=pc.width==source.width&&pc.height==source.height&&pc.emission.size()==pc.pixels.size();size_t greenPixels=0;
+  if(preserved)for(int y=0;y<pc.height;++y)for(int x=0;x<pc.width;++x){size_t i=size_t(y*pc.width+x);bool screen=x>=24&&x<=149&&y>=25&&y<=117;
+   if(!screen)preserved&=pc.pixels[i]==source.pixels[i]&&pc.emission[i]==0;
+   else greenPixels+=((pc.emission[i]>>8)&255)>70;
+  }
+  int screenFaces=0;bool bound=true;
+  for(const auto& face:renderer.m_facilityMeshes[11].triangles){float x1=9999,x2=-9999,y1=9999,y2=-9999;for(const auto& v:face.v){float x=v.u*pc.width,y=v.v*pc.height;x1=std::min(x1,x);x2=std::max(x2,x);y1=std::min(y1,y);y2=std::max(y2,y);}
+   if(x1<149&&x2>24&&y1<117&&y2>25){++screenFaces;bound&=&renderer.facilityTexture(11,face.part)==&pc;}
+  }
+  report<<"PC CRT atlas: "<<greenPixels<<" green phosphor pixels, "<<screenFaces<<" screen triangles\n";
+  check(preserved&&bound&&greenPixels>200&&screenFaces==2,"Native CRT display stays on its two physical screen triangles and preserves every casing/keyboard pixel");
+  float u=31.5f/pc.width,v=30.5f/pc.height;
+  begin();renderer.triangle3D({{-.3f,-.3f,1},u,v},{{.3f,-.3f,1},u,v},{{0,.3f,1},u,v},pc,0);auto phosphor=finish();int green=int((phosphor>>8)&255);
+  check(green>80&&green>redChannel(phosphor)*1.5f&&green>blueChannel(phosphor),"Green CRT phosphor remains visible with zero ambient illumination");
+ }
  begin();triangle(red,1);triangle(blue,2);auto pixel=finish();check(redChannel(pixel)>80&&blueChannel(pixel)<redChannel(pixel)/4,"Nearest surface wins depth test");
  begin();triangle(transparent,1);triangle(blue,2);pixel=finish();check((pixel&255)>215&&(pixel&0xff0000u)==0,"Alpha cutout keeps geometry behind visible");
  Texture liquid{1,1,{0xc4ff0000u}};liquid.transparent=true;
@@ -75,12 +102,36 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  auto expectedEmission=[](float scale){float linear=1.6f*scale*1.05f;float mapped=std::clamp((linear*(2.51f*linear+.03f))/(linear*(2.43f*linear+.59f)+.14f),0.f,1.f);return int(std::round(std::pow(mapped,1.f/2.2f)*255.f));};
  report<<"Emission display values: full "<<blueChannel(brightEmission)<<", dim "<<blueChannel(pixel)<<", expected "<<expectedEmission(.1f)<<'\n';
  check(std::abs(blueChannel(pixel)-expectedEmission(.1f))<=2&&blueChannel(pixel)<blueChannel(brightEmission),"Emergency lamp emission matches linear dimming through display transform");renderer.m_emissionScale=1.f;
+ // Keep uploaded source atlases alive throughout the hardware regression.
+ Texture split{2,1,{0xff000000u,0xff000000u}},checker{32,32,std::vector<uint32_t>(32*32,0xff000000u)};
+ {
+  split.emission={0xffffffffu,0xff000000u};
+  begin();renderer.triangle3D({{-.3f,-.3f,1},.5f,.5f},{{.3f,-.3f,1},.5f,.5f},{{0,.3f,1},.5f,.5f},split,0);auto bilinear=finish();
+  check(std::abs(blueChannel(bilinear)-expectedEmission(.5f))<=2,"Emission bilinear interpolation averages radiance before display encoding");
+  checker.emission.resize(32*32);
+  for(int y=0;y<32;++y)for(int x=0;x<32;++x)checker.emission[size_t(y*32+x)]=((x+y)&1)?0xffffffffu:0xff000000u;
+  bool stable=true;report<<"Distant emission checker display values:";
+  for(float phase:{0.f,.031f,.487f}){begin();MeshVertex a{{-.3f,-.3f,1},phase,phase},b{{.3f,-.3f,1},phase+64,phase},c{{.3f,.3f,1},phase+64,phase+64},d{{-.3f,.3f,1},phase,phase+64};renderer.triangle3D(a,b,c,checker,0);renderer.triangle3D(a,c,d,checker,0);auto filtered=finish();report<<' '<<blueChannel(filtered);stable&=std::abs(blueChannel(filtered)-expectedEmission(.5f))<=2;}
+  report<<"; expected "<<expectedEmission(.5f)<<'\n';check(stable,"Minified emission retains average brightness without phase-dependent CRT shimmer");
+ }
  begin();triangle(normal,1,.5f);auto flat=finish();begin();triangle(normal,1,.5f,&lights);auto relief=finish();check((relief&255)>(flat&255),"Authored normal map affects hardware lighting");
  // A black dielectric isolates specular response from diffuse light. This also
  // verifies flat-normal materials receive the same BRDF as authored neutral maps.
  Texture roughDielectric{1,1,{0xff000000u}},smoothDielectric{1,1,{0xff000000u}},neutralDielectric{1,1,{0xff000000u}};
  roughDielectric.glossStrength=.05f;smoothDielectric.glossStrength=.48f;neutralDielectric.glossStrength=.48f;
  neutralDielectric.normalLevels={{{0,0,1}}};NormalLighting frontal;frontal.directions[0]={0,0,-1};frontal.weights[0]=1;
+ {
+  std::vector<uint32_t> recycledPixels;const uint32_t* sharedAddress=nullptr;uint64_t oldGeneration=0;uint32_t oldGlow=0;
+  {
+   Texture oldAtlas{2,1,{0xff000000u,0xff000000u}};oldAtlas.normalLevels={{{1,0,0},{1,0,0}}};oldAtlas.emission={0xffff0000u,0xffff0000u};oldAtlas.glossStrength=.48f;
+   sharedAddress=oldAtlas.pixels.data();oldGeneration=oldAtlas.generation.value;begin();triangle(oldAtlas,1,0);oldGlow=finish();recycledPixels=std::move(oldAtlas.pixels);
+  }
+  Texture newAtlas{2,1,std::move(recycledPixels)};newAtlas.normalLevels={{{0,0,1},{0,0,1}}};newAtlas.emission={0xff0000ffu,0xff0000ffu};newAtlas.glossStrength=.48f;
+  bool recycled=newAtlas.pixels.data()==sharedAddress&&newAtlas.generation.value!=oldGeneration;
+  begin();triangle(newAtlas,1,0);auto newGlow=finish();
+  renderer.m_emissionScale=0;begin();triangle(newAtlas,1,1,&frontal);auto newNormal=finish();renderer.m_emissionScale=1;
+  check(recycled&&redChannel(oldGlow)>150&&blueChannel(oldGlow)<2&&blueChannel(newGlow)>150&&redChannel(newGlow)<2&&blueChannel(newNormal)>30,"Recycled identical pixel addresses bind fresh emission and normal maps instead of stale GPU cache entries");
+ }
  begin();triangle(roughDielectric,1,1,&frontal);auto roughHighlight=finish();
  begin();triangle(smoothDielectric,1,1,&frontal);auto smoothHighlight=finish();
  begin();triangle(neutralDielectric,1,1,&frontal);auto neutralHighlight=finish();

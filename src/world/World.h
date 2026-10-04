@@ -23,9 +23,27 @@ struct Door {
 };
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
-struct WorldLight {Vec2 position;float z;};
+enum class WorldLightMount { Ceiling, Wall };
+struct WorldLight {
+ Vec2 position;float z;
+ // Ceiling records retain the original source and fixture placement. For a
+ // wall lamp, position/z is the backing centre and yaw points into the room.
+ WorldLightMount mount=WorldLightMount::Ceiling;
+ float yaw=0,intensity=1,range=12;
+ Point3 emitter()const{
+  if(mount==WorldLightMount::Wall)return {position.x+std::cos(yaw)*.16f,position.y+std::sin(yaw)*.16f,z};
+  return {position.x,position.y,z};
+ }
+ Point3 shadowTarget()const{auto p=emitter();if(mount==WorldLightMount::Ceiling)p.z-=.04f;return p;}
+ float falloff(float squaredDistance)const{
+  float radiusSquared=range*range;if(squaredDistance>=radiusSquared)return 0.f;
+  float t=1.f-squaredDistance/radiusSquared;
+  return intensity*3.2f*t*t/(1.f+squaredDistance*.12f);
+ }
+};
 // Authored overhead services, with absolute elevations. Kept above standing clearance.
-// Materials: 0 service pipe, 1 rusted metal, 2 panel steel. An explicit endZ
+// Materials: 0 service pipe, 1 rusted metal, 2 panel steel, 3 yellow steel,
+// 4 red steel, 5 pale steel, 6 dark finish. An explicit endZ
 // supplies equipment/bracing geometry without automatic ceiling hangers.
 struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
@@ -66,6 +84,9 @@ struct Staircase {
     float x1,y1,x2,y2,bottom,top;
     int steps;
     bool alongY,ascending;
+    bool openUnderside=false;
+    float treadThickness=.12f;
+    bool sideRails=false;
 };
 
 // Shared geometry records for built-in and runtime-authored maps. Loading these

@@ -84,6 +84,15 @@ __declspec(noinline) static int freightDetailInspection(int W,int H){
  std::filesystem::create_directories("diagnostics/freight-details");
  struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
  const View views[]={
+  {"freight-service-corridor",10,{4.4f,3},-12,retro::kPi*.5f,8},
+  {"freight-equipment-bay",10,{15,9},-12,.65f,-8},
+  {"freight-service-ceiling",10,{3.8f,9.3f},-12,retro::kPi*.5f,100},
+  {"receiving-inspection-island",14,{12,10},-25,.65f,-4},
+  {"warehouse-vehicle-bay",16,{13.5f,3},-25,1.05f,-8},
+  {"warehouse-arrival",16,{12,2},-25,.85f,18},
+  {"warehouse-forklift-profile",16,{9.3f,4},-25,.37f,-10},
+  {"warehouse-dispatch",16,{10,11},-25,2.1f,-8},
+  {"warehouse-wall-services",17,{20.8f,3},-25,retro::kPi*.5f,18},
   {"receiving-van",14,{15,3},-25,.80f,-3},
   {"intake-pallets",15,{10,9},-25,2.55f,-18},
   {"warehouse-cargo",16,{6,3},-25,1.85f,-4},
@@ -115,6 +124,18 @@ __declspec(noinline) static int freightArtInspection(int W,int H){
  renderer->setEnvironmentInspection(true);
  struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
  const View views[]={
+  {"freight-service-corridor",10,{4.4f,3},-12,retro::kPi*.5f,8},
+  {"freight-equipment-bay",10,{15,9},-12,.65f,-8},
+  {"receiving-inspection-island",14,{12,10},-25,.65f,-4},
+  {"freight-service-ceiling",10,{3.8f,9.3f},-12,retro::kPi*.5f,100},
+  {"warehouse-vehicle-bay",16,{13.5f,3},-25,1.05f,-8},
+  {"warehouse-arrival",16,{12,2},-25,.85f,18},
+  {"warehouse-forklift-profile",16,{9.3f,4},-25,.37f,-10},
+  {"warehouse-dispatch",16,{10,11},-25,2.1f,-8},
+  {"transfer-stair-descent",22,{6.6f,3},-7,1.15f,-25},
+  {"sorting-pusher",23,{12,3},-25,retro::kPi*.5f,3},
+  {"yard-cradle",24,{4,13},-25,retro::kPi*.5f,10},
+  {"warehouse-wall-services",17,{20.8f,3},-25,retro::kPi*.5f,18},
   {"intake-bay",15,{12,9},-25,retro::kPi*.5f,12},
   {"warehouse-canyon",16,{12,3},-25,retro::kPi*.5f,32},
   {"warehouse-aisle",16,{6,3},-25,1.85f,-4},
@@ -403,8 +424,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--cable-performance-test"))return retro::SoftwareRenderer::testCablePerformance()?0:35;
     if(std::wcsstr(commandLine,L"--cable-window-performance-test"))return cableWindowPerformance();
     if(std::wcsstr(commandLine,L"--freight-inspection"))return freightInspection(W,H);
-    if(std::wcsstr(commandLine,L"--freight-detail-inspection"))return freightDetailInspection(W,H);
-    if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(W,H);
+    if(std::wcsstr(commandLine,L"--freight-detail-inspection"))return freightDetailInspection(std::wcsstr(commandLine,L"--native-capture")?1920:W,std::wcsstr(commandLine,L"--native-capture")?1080:H);
+    if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(std::wcsstr(commandLine,L"--native-capture")?1920:W,std::wcsstr(commandLine,L"--native-capture")?1080:H);
     if(std::wcsstr(commandLine,L"--freight-actor-inspection"))return freightActorInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);

@@ -30,7 +30,12 @@ void SoftwareRenderer::attachNormal(Texture& texture,int resource,bool greenUp,f
 void SoftwareRenderer::deriveSurfaceNormal(Texture& texture,float strength){
  if(texture.width<2||texture.height<2)return;
  prepareDecal(texture,false);
- auto luminance=[&](int x,int y){x=(x%texture.width+texture.width)%texture.width;y=(y%texture.height+texture.height)%texture.height;auto p=texture.pixels[size_t(y*texture.width+x)];float r=std::pow(float((p>>16)&255)/255.f,2.2f),g=std::pow(float((p>>8)&255)/255.f,2.2f),b=std::pow(float(p&255)/255.f,2.2f);return .2126f*r+.7152f*g+.0722f*b;};
+ // Every neighborhood reads the same gamma-decoded source pixels. Decode
+ // once per texel rather than repeating three pow calls for all 25 samples.
+ // Keep the original float expression and neighborhood summation order.
+ std::vector<float> linearLuminance(texture.pixels.size());
+ for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float r=std::pow(float((p>>16)&255)/255.f,2.2f),g=std::pow(float((p>>8)&255)/255.f,2.2f),b=std::pow(float(p&255)/255.f,2.2f);linearLuminance[i]=.2126f*r+.7152f*g+.0722f*b;}
+ auto luminance=[&](int x,int y){x=(x%texture.width+texture.width)%texture.width;y=(y%texture.height+texture.height)%texture.height;return linearLuminance[size_t(y*texture.width+x)];};
  std::vector<float> height(texture.pixels.size());
  for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float neighborhood=0;for(int oy=-2;oy<=2;++oy)for(int ox=-2;ox<=2;++ox)neighborhood+=luminance(x+ox,y+oy);height[size_t(y*texture.width+x)]=luminance(x,y)-neighborhood/25.f;}
  auto sampleHeight=[&](int x,int y){x=(x%texture.width+texture.width)%texture.width;y=(y%texture.height+texture.height)%texture.height;return height[size_t(y*texture.width+x)];};

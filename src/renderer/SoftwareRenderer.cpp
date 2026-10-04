@@ -45,7 +45,7 @@ bool SoftwareRenderer::enableHardware(void* window){
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
   for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
@@ -77,6 +77,33 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   m_facilityTextures.emplace("wooden_crate_8",loadTexture(276));
  m_facilityTextures.emplace("van_3",loadTexture(268));
  m_facilityTextures.emplace("metal_2_1",loadTexture(269));
+ m_facilityTextures.emplace("vent_4",loadTexture(287));
+ m_facilityTextures.emplace("wooden_crate_hx_2_1",loadTexture(289));
+ m_facilityTextures.emplace("electronics_etx_part_1",loadTexture(291));
+ m_facilityTextures.emplace("keypad_1",loadTexture(293));
+ const char* forkliftMaterials[]={"fl_tire.bmp_fl_tire.png","fl_back.bmp_fl_back.png","fl_front.bmp_fl_front.png","fl_grey.bmp_fl_grey.png","fl_lift.bmp_fl_lift.png","fl_top.bmp_fl_top.png","fl_side.bmp_fl_side.png","fl_gate.bmp_fl_gate.png"};
+ for(int i=0;i<8;++i)m_facilityTextures.emplace(forkliftMaterials[i],loadTexture(295+i));
+ // A pale painted shipping finish retains the supplied atlas's grain,
+ // seams and black shipment stamp; the embedded source pixels stay intact.
+ {auto&packing=m_facilityTextures.at("wooden_crate_hx_2_1");for(auto&pixel:packing.pixels){
+   unsigned gray=((pixel>>16&255)*30+(pixel>>8&255)*59+(pixel&255)*11)/100;
+   float variation=(float(gray)-92.f)*.82f;
+   auto channel=[&](int base){return unsigned(std::clamp(int(base+variation),0,255));};
+   if(gray>30)pixel=(pixel&0xff000000u)|(channel(184)<<16)|(channel(191)<<8)|channel(176);
+  }}
+ {auto&console=m_facilityTextures.at("electronics_etx_part_1");auto emission=loadTexture(292);
+  if(console.width!=emission.width||console.height!=emission.height)throw std::runtime_error("Console emission dimensions mismatch");
+  console.emission=std::move(emission.pixels);
+  // The CRT face is a separate material in the supplied mesh. Place native
+  // green status graphics inside its UV island, preserving the bezel atlas.
+  auto screen=console;screen.emission.assign(screen.pixels.size(),0);
+  for(int y=327;y<=370;++y)for(int x=377;x<=441;++x)screen.pixels[size_t(y*screen.width+x)]=rgb(8,19+(y%2)*2,14);
+  auto mark=[&](int x,int y,std::uint32_t color){size_t i=size_t(y*screen.width+x);screen.pixels[i]=color;screen.emission[i]=color;};
+  auto label=[&](int x,int y,const char*str){for(;*str;++str,x+=4){auto glyph=glyphs[size_t(gi(*str))];for(int row=0;row<5;++row)for(int col=0;col<3;++col)if(glyph[row]&(1<<(2-col)))mark(x+col,y+row,rgb(69,178,117));}};
+  label(382,332,"SYSTEM 02");label(382,343,"LINK READY");
+  for(int row=0;row<3;++row)for(int x=382;x<428-row*9;++x)mark(x,354+row*4,rgb(32,107,73));
+  m_facilityTextures.emplace("electronics_etx_part_1_screen",std::move(screen));
+ }
  m_officeCarpet=loadTexture(270);deriveSurfaceNormal(m_officeCarpet,.6f);m_officeCarpet.glossStrength=.04f;
  {auto emission=loadTexture(194);auto&lamp=m_facilityTextures.at("lamp_1_on");if(emission.width!=lamp.width||emission.height!=lamp.height)throw std::runtime_error("Lamp emission dimensions mismatch");lamp.emission=std::move(emission.pixels);}
  m_weaponTexture.glossStrength=.42f;m_arms.glossStrength=.06f;deriveSurfaceNormal(m_weaponTexture,.65f);
@@ -97,14 +124,37 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_pressureMetal.glossStrength=.44f;m_concrete.glossStrength=.08f;
  // Physical response is shared by every use of the imported material.
  for(auto&[name,texture]:m_facilityTextures){
-  bool wood=name=="wood_1"||name=="wooden_crate_8";
+  bool wood=name=="wood_1"||name=="wooden_crate_8"||name=="wooden_crate_hx_2_1";
   // This supplied crate atlas averages only 31/255 red. Calibrate its wood
   // albedo before linear lighting; increasing room ambient hid every shadow.
   if(name=="wooden_crate_8"){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*2.2f))<<shift);}prepareDecal(texture,false);}
 
   bool wall=name.starts_with("wall_")&&name!="wall_box_2";
   texture.glossStrength=wood?.06f:wall?.10f:name=="pc_1"?.20f:.32f;
-  deriveSurfaceNormal(texture,wood?.65f:wall?.8f:.45f);
+  deriveSurfaceNormal(texture,name=="fl_tire.bmp_fl_tire.png"?.18f:wood?.65f:wall?.8f:.45f);
+  if(name=="fl_tire.bmp_fl_tire.png")texture.glossStrength=.02f;
+  if(name=="electronics_etx_part_1_screen")texture.glossStrength=.34f;
+ }
+
+ {auto&computer=m_facilityTextures.at("pc_1");
+  if(computer.width!=348||computer.height!=307)throw std::runtime_error("Computer CRT atlas dimensions mismatch");
+  // Mesh 191's screen is polygon 86: sampled atlas coordinates
+  // x21.38..152.62, y22.72..120.46. No other polygon overlaps this island.
+  // Leave its dark rim, bezel, keyboard and casing pixels exactly as supplied.
+  // Add phosphor after deriving the original glass/case normals: glyphs must
+  // emit light from the display, rather than becoming embossed surface relief.
+  computer.emission.assign(computer.pixels.size(),0);
+  for(int y=25;y<=117;++y)for(int x=24;x<=149;++x){size_t index=size_t(y*computer.width+x);computer.pixels[index]=rgb(4,13+y%2,9);computer.emission[index]=rgb(1,4+y%2,2);}
+  auto mark=[&](int x,int y,std::uint32_t color,std::uint32_t glow){if(x<24||x>149||y<25||y>117)return;size_t index=size_t(y*computer.width+x);computer.pixels[index]=color;computer.emission[index]=glow;};
+  auto label=[&](int x,int y,const char* str,int scale,std::uint32_t color,std::uint32_t glow){for(;*str;++str,x+=4*scale){auto glyph=glyphs[size_t(gi(*str))];for(int row=0;row<5;++row)for(int col=0;col<3;++col)if(glyph[row]&(1<<(2-col)))for(int j=0;j<scale;++j)for(int i=0;i<scale;++i)mark(x+col*scale+i,y+row*scale+j,color,glow);}};
+  auto green=rgb(38,132,78),emission=rgb(19,93,49),dim=rgb(23,84,49),dimEmission=rgb(9,45,23);
+  label(30,30,"DEPTHWORKS",2,rgb(59,178,103),rgb(34,128,68));
+  for(int x=30;x<=143;++x)mark(x,43,dim,dimEmission);
+  label(30,48,"LOCAL RECORDS",1,green,emission);label(30,58,"> TERMINAL READY",1,green,emission);
+  label(34,73,"01 OPERATIONS",1,dim,dimEmission);label(34,83,"02 MAINTENANCE",1,dim,dimEmission);label(34,93,"03 TRANSFER LOG",1,dim,dimEmission);
+  for(int x=30;x<=143;++x)mark(x,104,dim,dimEmission);
+  label(30,109,">",1,green,emission);for(int y=109;y<114;++y)for(int x=38;x<41;++x)mark(x,y,green,emission);
+  prepareDecal(computer,false);
  }
 
  m_ashfallSky=loadTexture(252);if(std::abs(m_ashfallSky.width*3-m_ashfallSky.height*4)<=4)m_ashfallSky.clampEdges=true;else prepareDecal(m_ashfallSky,false);
@@ -180,7 +230,32 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  // Keep the source steel's rust, scratches and tonal variation. Compressing
  // a dark panel into a narrow blue tint made structural beams look untextured.
  m_framePaint=m_pressureMetal;
+ // Charcoal protective finish keeps rack uprights distinct from cargo and
+ // concrete. Preserve the oxide/scratch variation instead of flattening it.
+ for(auto& pixel:m_framePaint.pixels){
+  unsigned r=(pixel>>16)&255,g=(pixel>>8)&255,b=pixel&255;
+  unsigned gray=(r*30+g*59+b*11)/100;
+  pixel=0xff000000u|((unsigned(r*.22f+gray*.24f))<<16)|((unsigned(g*.25f+gray*.26f))<<8)|unsigned(b*.25f+gray*.26f);
+ }
  deriveSurfaceNormal(m_framePaint,.65f);m_framePaint.glossStrength=.18f;
+ // Opaque worn industrial paint. Broad housings need real material coverage;
+ // the transparent floor-marking decals are unsuitable for their surfaces.
+ auto paintedSteel=[&](unsigned pigment){
+  Texture result=m_panelMetal;
+  for(auto& pixel:result.pixels){
+   float grain=float(((pixel>>16)&255)+((pixel>>8)&255)+(pixel&255))/765.f;
+   unsigned value=0xff000000u;
+   for(int channel=0;channel<3;++channel){
+    float paint=float((pigment>>(channel*8))&255)*(.72f+grain*.45f);
+    float exposed=float((pixel>>(channel*8))&255);
+    value|=unsigned(std::clamp(paint*.86f+exposed*.14f,0.f,255.f))<<(channel*8);
+   }
+   pixel=value;
+  }
+  prepareDecal(result,true);deriveSurfaceNormal(result,.5f);result.glossStrength=.30f;
+  return result;
+ };
+ m_yellowSteel=paintedSteel(0xffb79b39u);m_redSteel=paintedSteel(0xffa34330u);m_paleSteel=paintedSteel(0xffb4bcb1u);
  for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
  m_intakeSign=makeSign("01 / INTAKE","FREIGHT ACCESS",0xffca994du);m_processingSign=makeSign("02 / FOUNDRY","KEEP CLEAR",0xffd9984cu);
@@ -214,6 +289,12 @@ const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int 
  if(mesh==15||mesh==18||mesh==19)return m_facilityTextures.at("wood_1");
  if(mesh==16)return m_facilityTextures.at("van_3");
  if(mesh==17)return m_facilityTextures.at("wooden_crate_8");
+ if(mesh==20)return m_facilityTextures.at("vent_4");
+ if(mesh==21)return m_facilityTextures.at("wooden_crate_hx_2_1");
+ // Blender's FBX includes an untextured lever material named "Material".
+ // Its handle and housing use the supplied console atlas, while the screen
+ // and keypad materials bind separately through their source names above.
+ if(mesh==22)return m_facilityTextures.at("electronics_etx_part_1");
  std::string material=part>=0&&part<int(model.materialNames.size())?model.materialNames[size_t(part)]:"<invalid part>";
  throw std::runtime_error("Missing facility texture for mesh "+std::to_string(mesh)+", part "+std::to_string(part)+", material "+material);
 }
@@ -562,6 +643,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
   std::array<float,16> fogLights{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
   const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
+   if(lamp.mount==WorldLightMount::Wall||lamp.intensity<=0)continue;
    float dx=lamp.position.x-game.player().pos.x,dy=lamp.position.y-game.player().pos.y,d2=dx*dx+dy*dy;
    float floor=world.floorHeight(lamp.position.x,lamp.position.y)+.08f;
    float top=std::min(lamp.z,world.clearanceAbove(lamp.position.x,lamp.position.y,floor)-.04f);

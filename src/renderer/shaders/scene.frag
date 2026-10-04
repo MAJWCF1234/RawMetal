@@ -188,7 +188,8 @@ void main(){
  }
 
  if(surface.y>0.0){
-  result+=toLinear(textureGrad(emissionMap,sampleUV,uvDx,uvDy).rgb)*1.6*surface.y;
+  // Emission atlases and their mip chains already contain linear radiance.
+  result+=textureGrad(emissionMap,sampleUV,uvDx,uvDy).rgb*1.6*surface.y;
  }
 
  // Fixture lighting is already visibility-tested in vertexLight and the two

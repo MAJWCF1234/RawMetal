@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <atomic>
 #include "Mesh.h"
 
 namespace retro {
@@ -52,7 +53,19 @@ private:
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0,m_presentMs=0;
     bool m_poseReady=false;
-    struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; };
+    struct TextureGeneration {
+        static std::uint64_t next(){static std::atomic<std::uint64_t> counter{1};return counter.fetch_add(1,std::memory_order_relaxed);}
+        std::uint64_t value=next();
+        TextureGeneration()=default;
+        TextureGeneration(const TextureGeneration&):value(next()){}
+        TextureGeneration& operator=(const TextureGeneration& other){if(this!=&other)value=next();return *this;}
+        TextureGeneration(TextureGeneration&& other)noexcept:value(other.value){other.value=next();}
+        TextureGeneration& operator=(TextureGeneration&& other)noexcept{if(this!=&other){value=other.value;other.value=next();}return *this;}
+    };
+    // GPU atlases are immutable after prepare/first submit; updateDynamic is
+    // the explicit exception for dynamic colour pixels. Copies own a fresh
+    // generation, while moves transfer it with the uploaded pixel allocation.
+    struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; TextureGeneration generation; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};Point3 surfaceNormal{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true,float reliefScale=.012f);
     static void deriveSurfaceNormal(Texture& texture,float strength);
@@ -78,6 +91,7 @@ private:
     std::array<Texture,34> m_routeSigns;
     std::array<Texture,3> m_serviceAreaSigns;
     Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet,m_framePaint;
+    Texture m_yellowSteel,m_redSteel,m_paleSteel;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;
@@ -88,7 +102,7 @@ private:
     Texture m_glassTexture;
     Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture;
     Mesh m_barrelMesh{121},m_crateMesh{123};
-    std::array<Mesh,FacilityModelCount> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191},Mesh{142},Mesh{258},Mesh{259},Mesh{263},Mesh{265},Mesh{275},Mesh{284},Mesh{285}};
+    std::array<Mesh,FacilityModelCount> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191},Mesh{142},Mesh{258},Mesh{259},Mesh{263},Mesh{265},Mesh{275},Mesh{284},Mesh{285},Mesh{286},Mesh{288},Mesh{290},Mesh{294}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;

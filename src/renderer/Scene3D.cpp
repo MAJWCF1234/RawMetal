@@ -151,10 +151,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  lightCells.assign(512,{});m_chunkLightCounts[w.level()]=w.lights().size();
  for(const auto& light:w.lights()){
   if(w.campaignChunk(3)&&&light==&w.lights().back())continue;
+  auto emitter=light.emitter();
   for(int z=0;z<8;++z)for(int y=0;y<8;++y)for(int x=0;x<8;++x){
    auto separation=[](float p,int cell,float origin){float lo=cell==0?-1000.f:origin+cell*4,hi=cell==7?1000.f:origin+(cell+1)*4;return std::max({lo-p,0.f,p-hi});};
-   float dx=separation(light.position.x,x,-4),dy=separation(light.position.y,y,-4),dz=separation(light.z,z,-12);
-   if(dx*dx+dy*dy+dz*dz<=144.01f)lightCells[(z*8+y)*8+x].push_back(size_t(&light-w.lights().data()));
+   float dx=separation(emitter.x,x,-4),dy=separation(emitter.y,y,-4),dz=separation(emitter.z,z,-12);
+   if(dx*dx+dy*dy+dz*dz<=light.range*light.range+.01f)lightCells[(z*8+y)*8+x].push_back(size_t(&light-w.lights().data()));
   }
  }
  }
@@ -214,10 +215,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
   if(movingGeometry){
    float brightness=(w.outdoors()?.48f:w.definition().ambient*.55f)+.04f*std::max(normal.z,0.f);
-   for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=Point3{fixture.position.x,fixture.position.y,fixture.z}-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2<.001f||d2>144)continue;
+   for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=fixture.emitter()-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(d2<.001f||weight<=0)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
-    if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance);float visibility=w.lightRayClear({start.x,start.y},start.z,fixture.position,fixture.z-.04f)?1.f:.04f;
-    brightness+=visibility*facing*3.2f*std::pow(1-d2/144.f,2.f)/(1+d2*.12f);
+    if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance),target=fixture.shadowTarget();float visibility=w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
+    brightness+=visibility*facing*weight;
    }
    return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f,4.f);
   }
@@ -254,14 +255,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     accessibility=1.f-.68f*occlusion*.25f;
    }
    brightness=((w.outdoors()?.48f:w.definition().ambient*.55f)+.04f*std::max(normal.z,0.f))*accessibility;
-   for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];float x=fixture.position.x,y=fixture.position.y;
-    if(std::fabs(x-point.x)>12.f||std::fabs(y-point.y)>12.f)continue;
-    Point3 light{x,y,fixture.z},delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>144||d2<.001f)continue;
+   for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];auto light=fixture.emitter();
+    if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
+    auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
     float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
     float visibility=0;
-    for(float offset:{-.18f,0.f,.18f}){if(shadowBudget<=0)continue;--shadowBudget;auto target=light+Point3{offset,0,-.04f};visibility+=w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
-    brightness+=(visibility/3.f)*(.04f+.96f*facing)*3.2f*std::pow(1-d2/144.f,2.f)/(1+d2*.12f);
+    Point3 spread=fixture.mount==WorldLightMount::Wall?Point3{-std::sin(fixture.yaw)*.45f,std::cos(fixture.yaw)*.45f,0}:Point3{1,0,0};
+    for(float offset:{-.18f,0.f,.18f}){if(shadowBudget<=0)continue;--shadowBudget;auto target=fixture.shadowTarget()+spread*offset;visibility+=w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
+    brightness+=(visibility/3.f)*(.04f+.96f*facing)*weight;
    }
    brightness=std::clamp(brightness,.075f,1.4f);if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
   }
@@ -274,11 +276,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(found==cache.end()){
    NormalLighting lights;
    for(auto source:lightCells[lightCell(center)]){const auto&fixture=w.lights()[source];
-    auto delta=Point3{fixture.position.x,fixture.position.y,fixture.z}-center;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
-    if(d2>144||d2<.001f)continue;float weight=3.2f*std::pow(1-d2/144.f,2.f)/(1+d2*.12f);
+    auto delta=fixture.emitter()-center;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
+    float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
+    // A visibility ray can only reduce this upper bound. If the lamp cannot
+    // beat the second retained light, it cannot affect either material slot.
+    if(weight<=lights.weights[1])continue;
     auto start=center+delta*(.04f/std::sqrt(d2));
     if(shadowBudget<=0)continue;
-    --shadowBudget;if(!w.lightRayClear({start.x,start.y},start.z,fixture.position,fixture.z-.04f))weight*=.04f;
+    auto target=fixture.shadowTarget();--shadowBudget;if(!w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z))weight*=.04f;
     if(weight<=lights.weights[1])continue;
     int slot=weight>lights.weights[0]?0:1;if(slot==0){lights.weights[1]=lights.weights[0];lights.directions[1]=lights.directions[0];}
     lights.weights[slot]=weight;lights.directions[slot]=delta*(1/std::sqrt(d2));
@@ -427,6 +432,42 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
   objectLighting=false;objectNormalLighting=nullptr;
  };
+ auto wallLamp=[&](const WorldLight& light){
+  // Backing, recessed diffuser and a real steel guard share the authored wall
+  // pose. Wall lamps are part of the static chunk, rather than animated meshes.
+  float cosine=std::cos(light.yaw),sine=std::sin(light.yaw);
+  auto point=[&](float side,float depth,float height){return Point3{light.position.x-sine*side+cosine*depth,light.position.y+cosine*side+sine*depth,light.z+height};};
+  if(!sphereVisible(point(0,.08f,0),.36f))return;
+  auto profile=[](float width,float height,float bevel){return std::array<Vec2,8>{{{-width+bevel,-height},{width-bevel,-height},{width,-height+bevel},{width,height-bevel},{width-bevel,height},{-width+bevel,height},{-width,height-bevel},{-width,-height+bevel}}};};
+  const auto outer=profile(.17f,.285f,.055f),inner=profile(.128f,.23f,.04f);
+  for(int i=0;i<8;++i){int next=(i+1)%8;auto a=outer[size_t(i)],b=outer[size_t(next)],u=inner[size_t(i)],v=inner[size_t(next)];
+   quad(point(a.x,.012f,a.y),point(b.x,.012f,b.y),point(b.x,.075f,b.y),point(a.x,.075f,a.y),m_panelMetal,.95f);
+   quad(point(a.x,.075f,a.y),point(b.x,.075f,b.y),point(v.x,.081f,v.y),point(u.x,.081f,u.y),m_panelMetal,1.f);
+   tri({point(0,.012f,0),.5f,.5f},{point(b.x,.012f,b.y),(b.x+.17f)/.34f,(b.y+.285f)/.57f},{point(a.x,.012f,a.y),(a.x+.17f)/.34f,(a.y+.285f)/.57f},m_panelMetal,.8f);
+  }
+  static const Texture diffuser=[](){Texture t{1,1,{0xfff9d9a1u}};t.emission={0xffffc873u};return t;}();
+  const Texture& lens=light.intensity>0?diffuser:cabWindow;
+  float previousEmission=m_emissionScale;m_emissionScale=light.intensity;
+  for(int i=0;i<8;++i){int next=(i+1)%8;auto a=inner[size_t(i)],b=inner[size_t(next)];
+   tri({point(0,.13f,0),.5f,.5f},{point(a.x,.105f,a.y),(a.x+.128f)/.256f,(a.y+.23f)/.46f},{point(b.x,.105f,b.y),(b.x+.128f)/.256f,(b.y+.23f)/.46f},lens,light.intensity>0?1.6f:.9f);
+  }
+  m_emissionScale=previousEmission;
+  auto guard=[&](float x1,float y1,float z1,float x2,float y2,float z2){
+   quad(point(x1,y1,z1),point(x2,y1,z1),point(x2,y1,z2),point(x1,y1,z2),m_panelMetal,.8f);
+   quad(point(x2,y2,z1),point(x1,y2,z1),point(x1,y2,z2),point(x2,y2,z2),m_panelMetal,.9f);
+   quad(point(x1,y2,z1),point(x1,y1,z1),point(x1,y1,z2),point(x1,y2,z2),m_panelMetal,.85f);
+   quad(point(x2,y1,z1),point(x2,y2,z1),point(x2,y2,z2),point(x2,y1,z2),m_panelMetal,.85f);
+   quad(point(x1,y1,z2),point(x2,y1,z2),point(x2,y2,z2),point(x1,y2,z2),m_panelMetal,.95f);
+   quad(point(x1,y2,z1),point(x2,y2,z1),point(x2,y1,z1),point(x1,y1,z1),m_panelMetal,.75f);
+  };
+  for(float side:{-.082f,.082f})guard(side-.009f,.143f,-.246f,side+.009f,.163f,.246f);
+  for(float height:{-.14f,0.f,.14f})guard(-.141f,.14f,height-.009f,.141f,.163f,height+.009f);
+  for(float height:{-.256f,.256f})guard(-.105f,.076f,height-.016f,.105f,.151f,height+.016f);
+  // Four fasteners and the conduit socket sit on the backing, with no rods
+  // extending toward a ceiling several storeys above the light.
+  for(float side:{-.132f,.132f})for(float height:{-.239f,.239f})guard(side-.015f,.076f,height-.015f,side+.015f,.088f,height+.015f);
+  guard(-.032f,.015f,.278f,.032f,.068f,.335f);
+ };
  bool buildStaticGeometry=!m_gpuFrame;
  int cacheSlot=w.level();
  std::uint64_t geometryKey=0;
@@ -552,7 +593,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.campaignChunk(3)){
      // A safety cage must not become an opaque wall around every cab window.
@@ -573,6 +614,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  const bool staticFixtures=!w.hasLift()&&w.cargoLift().upper<=w.cargoLift().lower;
  if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures())
   facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ if(buildStaticGeometry)for(const auto& light:w.lights())if(light.mount==WorldLightMount::Wall)wallLamp(light);
  if(buildStaticGeometry)for(const auto& sign:w.signs()){
   std::string key=sign.title+'\n'+sign.subtitle+'\n'+std::to_string(sign.accent);
   auto found=m_authoredSigns.find(key);
@@ -659,7 +701,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  // Original square fixture proportions, with its top 2 cm below its support.
  // The light source sits 4 cm beneath the luminous underside.
  for(const auto&light:w.lights()){
-  movingGeometry=w.campaignChunk(3)&&&light==&w.lights().back();m_emissionScale=movingGeometry?w.liftLampPower():1.f;
+  if(light.mount==WorldLightMount::Wall)continue;
+  movingGeometry=w.campaignChunk(3)&&&light==&w.lights().back();m_emissionScale=light.intensity*(movingGeometry?w.liftLampPower():1.f);
   facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);
   if(w.campaign()&&w.level()>=7){
    // The next slab or roof above this lamp is its actual mounting surface.
@@ -677,11 +720,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},.4f))continue;
   if(!w.outdoors()&&length(c.pos-game.player().pos)<15.f){const WorldLight* source=nullptr;float nearest=25.f;
-   for(const auto&candidate:w.lights()){float dx=candidate.position.x-c.pos.x,dy=candidate.position.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.z>mid+.2f&&d2<nearest){nearest=d2;source=&candidate;}}
+   for(const auto&candidate:w.lights()){auto emitter=candidate.emitter();float dx=emitter.x-c.pos.x,dy=emitter.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.intensity>0&&emitter.z>mid+.2f&&d2<candidate.range*candidate.range&&d2<nearest){nearest=d2;source=&candidate;}}
    if(source){static const Texture softShadow=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
      for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/7.5f,dy=(y-7.5f)/7.5f,r=dx*dx+dy*dy;unsigned a=unsigned(std::clamp((1.f-r)*.30f,0.f,1.f)*255.f);t.pixels[size_t(y*16+x)]=a<<24;}return t;}();
-    float floor=w.floorHeight(c.pos.x,c.pos.y),factor=std::clamp((source->z-floor)/std::max(.25f,source->z-mid),1.f,3.f);
-    float x=source->position.x+(c.pos.x-source->position.x)*factor,y=source->position.y+(c.pos.y-source->position.y)*factor;
+    auto emitter=source->emitter();float floor=w.floorHeight(c.pos.x,c.pos.y),factor=std::clamp((emitter.z-floor)/std::max(.25f,emitter.z-mid),1.f,3.f);
+    float x=emitter.x+(c.pos.x-emitter.x)*factor,y=emitter.y+(c.pos.y-emitter.y)*factor;
     float radius=std::clamp(std::max(size[0],size[1])*.7f*factor,.08f,.75f),z=w.floorHeight(x,y)+.022f;
     if(x>radius&&y>radius&&x<24.f-radius&&y<24.f-radius)quad({x-radius,y-radius,z},{x+radius,y-radius,z},{x+radius,y+radius,z},{x-radius,y+radius,z},softShadow,1.6f);
    }
@@ -715,7 +758,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
  if(cachePipes&&buildPipes){m_staticGeometryBuild=true;shadowBudget=400000;}
  if(buildPipes)for(const auto& pipe:w.pipes()){
   float endZ=pipe.endZ>-999?pipe.endZ:pipe.z;
-  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==2?m_panelMetal:pipe.material==1?m_metal:m_pipeTexture);
+  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==6?iron:pipe.material==5?m_paleSteel:pipe.material==4?m_redSteel:pipe.material==3?m_yellowSteel:pipe.material==2?m_panelMetal:pipe.material==1?m_metal:m_pipeTexture);
   if(pipe.endZ>-999)continue; // Vertical drops terminate inside solid equipment.
   float distance=length(pipe.end-pipe.start);int supports=std::max(1,int(std::ceil(distance/3.f)));
   for(int i=0;i<=supports;++i){
@@ -1147,8 +1190,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   Point3 receiver{e.pos.x,e.pos.y,e.z+.85f};if(!sphereVisible(receiver,1.8f))continue;
   const WorldLight* keyLight=nullptr;float keyDistance=36.f;
   if(!w.outdoors()&&length(e.pos-game.player().pos)<15.f)for(const auto&source:w.lights()){
-   float dx=source.position.x-e.pos.x,dy=source.position.y-e.pos.y,d2=dx*dx+dy*dy;
-   if(source.z>e.bodyTop()+.2f&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
+   auto emitter=source.emitter();float dx=emitter.x-e.pos.x,dy=emitter.y-e.pos.y,d2=dx*dx+dy*dy;
+   if(source.intensity>0&&emitter.z>e.bodyTop()+.2f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
   }
   movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
   bool mutant=e.kind==Enemy::Kind::Mutant;bool wasp=e.kind==Enemy::Kind::Wasp,warden=e.kind==Enemy::Kind::Warden,brute=e.kind==Enemy::Kind::Brute||warden;
@@ -1195,14 +1238,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    selectFaceLight(enemyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
    float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+e.painFlash*.22f;
    // Thin wasp wings transmit light from the far side of the membrane.
-   if(wasp&&face.part==1&&keyLight&&len>.00001f){Point3 toLamp{keyLight->position.x-receiver.x,keyLight->position.y-receiver.y,keyLight->z-receiver.z};float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
+   if(wasp&&face.part==1&&keyLight&&len>.00001f){auto toLamp=keyLight->emitter()-receiver;float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
    tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:texture,e.alive?light:.65f);
    if(e.alive&&keyLight){
     static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
-    MeshVertex cast[3];bool valid=true;
-    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=keyLight->z-p.z;
-     if(denominator<.25f){valid=false;break;}float factor=(keyLight->z-floor)/denominator;
-     float x=keyLight->position.x+(p.x-keyLight->position.x)*factor,y=keyLight->position.y+(p.y-keyLight->position.y)*factor;
+    MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
+    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
+     if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;
+     float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
      if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-e.pos.x,y-e.pos.y)>4.f){valid=false;break;}
      cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};
     }
@@ -1236,6 +1279,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   static const Texture dust=[](){Texture t{32,32,std::vector<std::uint32_t>(32*32)};t.additive=true;t.clampEdges=true;
    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float u=(x+.5f)/32.f,v=(y+.5f)/32.f,r=std::fabs(u-.5f)*2.f;float feather=std::pow(std::max(0.f,1.f-r),2.f),end=std::min(1.f,std::min(v,1.f-v)*12.f);unsigned a=unsigned(std::clamp(feather*end*.06f,0.f,1.f)*255.f);t.pixels[size_t(y*32+x)]=(a<<24)|0x00d6b884u;}return t;}();
   int beams=0;for(const auto&beamLight:w.lights()){
+   if(beamLight.mount==WorldLightMount::Wall||beamLight.intensity<=0)continue;
    float dx=beamLight.position.x-game.player().pos.x,dy=beamLight.position.y-game.player().pos.y;if(dx*dx+dy*dy>144.f)continue;
    float x=beamLight.position.x,y=beamLight.position.y,bottom=w.floorHeight(x,y)+.08f,top=std::min(beamLight.z,w.clearanceAbove(x,y,bottom)-.04f);
    if(top-bottom<1.f||top-bottom>10.f||!sphereVisible({x,y,(bottom+top)*.5f},top-bottom))continue;
@@ -1310,9 +1354,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  NormalLighting roomLights;float roomAmbient=std::max(.10f,game.world().definition().ambient*.55f);
  const auto&player=game.player();Point3 receiver{player.pos.x,player.pos.y,player.z+player.eye};
  for(const auto&source:game.world().lights()){
-  Point3 delta{source.position.x-receiver.x,source.position.y-receiver.y,source.z-receiver.z};float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2<.001f||d2>=144.f)continue;
-  float weight=3.2f*std::pow(1-d2/144.f,2.f)/(1+d2*.12f);
-  if(!game.world().lightRayClear(player.pos,receiver.z,source.position,source.z-.04f))continue;
+  auto delta=source.emitter()-receiver;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=source.falloff(d2);if(d2<.001f||weight<=0)continue;
+  auto target=source.shadowTarget();if(!game.world().lightRayClear(player.pos,receiver.z,{target.x,target.y},target.z))continue;
   int slot=weight>roomLights.weights[0]?0:1;if(weight<=roomLights.weights[slot])continue;
   if(slot==0){roomLights.weights[1]=roomLights.weights[0];roomLights.directions[1]=roomLights.directions[0];}
   roomLights.weights[slot]=weight;roomLights.directions[slot]=cameraPoint(receiver+delta*(1.f/std::sqrt(d2)),game);

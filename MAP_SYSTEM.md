@@ -222,6 +222,18 @@ TERMINAL|mapIndex|x|y|z|control|title|line1|line2|activateState|toggleState|requ
 
 The default yaw is pi when the final field is absent or empty, preserving older packs. Yaw 0 faces the positive Y direction; pi faces negative Y. For example, `TERMINAL|0|5|5|0|0|SHIFT LOG|NO CALLS|LOCAL RECORD||0||0` places a console facing positive Y without an activation or prerequisite state. Nonfinite yaw values are rejected. The Level Editor exports an explicit terminal rotation in radians, including inherited placement rotation, and preserves pi for older objects without a rotation field.
 
+`STAIR|mapIndex|x1|y1|x2|y2|bottom|top|steps|alongY|ascending|openUnderside|treadThickness|sideRails` supports open steel flights. The last three fields are optional: legacy stairs remain solid and have no added side rails, and tread thickness defaults to 0.12 metres. Open flights generate separate metal treads with matching collision and optical occlusion, leaving usable space underneath. Tread thickness must be finite and between 0.025 and 0.5 metres. The level editor preserves `openUnderside`, `treadThickness` and `sideRails` object properties on export. Side rails generate matching 1.05-metre tread-local guards for rendering, hull collision and optical occlusion. Stringers can be authored separately with ordinary pipe geometry.
+
+`PIPE|mapIndex|ax|ay|bx|by|z|radius|endZ|material` accepts an optional material field: 0 service pipe, 1 rusted metal, 2 steel, 3 yellow painted steel, 4 red painted steel, 5 pale painted steel, 6 dark finish. An explicit `endZ` defines the end elevation and prevents automatic ceiling hangers. Omitting material retains the original service pipe finish.
+
+`LIGHT` records support practical wall fixtures as well as the original ceiling lamps:
+
+```text
+LIGHT|mapIndex|x|y|z|mount|yaw|intensity|range
+```
+
+The final four fields are optional; absent or empty fields preserve a ceiling lamp with yaw 0, intensity 1 and a 12-metre influence radius. Mount 0 is a ceiling lamp. Mount 1 is a caged wall lamp: `x/y/z` locates the centre of its backing on the wall, and yaw points outward into the room (+X at 0, +Y at pi/2). The visible fixture is approximately 0.34 metres wide, 0.57 metres high and 0.16 metres deep. Its emitter and shadow probes sit in front of the backing, so authoring the backing on a solid wall does not bury the source inside that wall. For example, `LIGHT|0|1|6|2|1|0|1.2|6` mounts a wall lamp on the x=1 face, facing positive X, with a local six-metre pool. Wall lamps use static cached steel guards and warm emissive diffusers; they do not generate ceiling suspension rods or vertical light shafts. Intensity must be 0 through 8 and range must be greater than zero through 24 metres. These fields control direct material lighting and influence; they do not add an interaction or scripted switching state. Nonfinite values and unknown mounts are rejected. The optional fields can be authored in the runtime data block manually; the editor currently exports the original ceiling-only record.
+
 For example:
 
 ```text

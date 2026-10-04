@@ -9,7 +9,7 @@ namespace retro {
 enum class WorldId { Campaign, Ashfall, Custom };
 enum class Environment { Interior, Outdoor };
 enum class FloorMaterial { Industrial, OfficeCarpet };
-inline constexpr int FacilityModelCount=20;
+inline constexpr int FacilityModelCount=24;
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant };
 enum class MusicCue { Default, Freight };
 enum class PickupKind { Health, Ammo }; // Values retain the existing save format.

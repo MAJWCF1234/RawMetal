@@ -1,0 +1,96 @@
+Presentation: 1920x1080 / 30 warmup frames per scene / 120 measured frames
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native Win32 swapchain / async present (2 frames in flight)
+Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort
+
+RECEIVING OVERLOOK first render: 375.117 ms (cache construction; excluded from warm timing)
+  slow frame 5: total 26.0628 / scene 24.3504 / submit 0.4888 / present 0.1686 ms
+  slow frame 11: total 30.0312 / scene 27.5619 / submit 0.5575 / present 0.2314 ms
+  slow frame 15: total 29.9794 / scene 27.3793 / submit 0.6267 / present 0.274 ms
+RECEIVING OVERLOOK:
+  avg scene/submit/present: 7.05432 / 0.308225 / 0.212965 ms
+  wall-clock FPS: 115.372 (actual throughput)
+  avg frame time: 8.66415 ms = 115.418 FPS
+  p95 frame time: 10.0112 ms = 99.8881 FPS
+  p99 frame time: 29.9794 ms
+  max frame time: 30.0312 ms = 33.2987 FPS
+
+  static map rebuilds during motion: 0
+
+RECEIVING LANES first render: 45.2306 ms (cache construction; excluded from warm timing)
+RECEIVING LANES:
+  avg scene/submit/present: 5.19281 / 0.339946 / 0.201877 ms
+  wall-clock FPS: 148.207 (actual throughput)
+  avg frame time: 6.74613 ms = 148.233 FPS
+  p95 frame time: 9.2072 ms = 108.611 FPS
+  p99 frame time: 9.5946 ms
+  max frame time: 10.3323 ms = 96.7839 FPS
+
+  static map rebuilds during motion: 0
+
+WAREHOUSE / A-B first render: 1677 ms (cache construction; excluded from warm timing)
+WAREHOUSE / A-B:
+  avg scene/submit/present: 5.1225 / 0.304349 / 0.204084 ms
+  wall-clock FPS: 136.739 (actual throughput)
+  avg frame time: 7.31242 ms = 136.754 FPS
+  p95 frame time: 9.2043 ms = 108.645 FPS
+  p99 frame time: 9.939 ms
+  max frame time: 10.4783 ms = 95.4353 FPS
+
+  static map rebuilds during motion: 0
+
+MANIFEST OFFICES first render: 211.619 ms (cache construction; excluded from warm timing)
+MANIFEST OFFICES:
+  avg scene/submit/present: 4.70269 / 0.260564 / 0.204612 ms
+  wall-clock FPS: 157.634 (actual throughput)
+  avg frame time: 6.34246 ms = 157.667 FPS
+  p95 frame time: 7.6144 ms = 131.33 FPS
+  p99 frame time: 7.8385 ms
+  max frame time: 7.8456 ms = 127.46 FPS
+
+  static map rebuilds during motion: 0
+
+EMPTY PLATFORM first render: 155.06 ms (cache construction; excluded from warm timing)
+EMPTY PLATFORM:
+  avg scene/submit/present: 4.66729 / 0.186445 / 0.20644 ms
+  wall-clock FPS: 163.546 (actual throughput)
+  avg frame time: 6.11307 ms = 163.584 FPS
+  p95 frame time: 7.1861 ms = 139.158 FPS
+  p99 frame time: 7.531 ms
+  max frame time: 7.5911 ms = 131.733 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / TRACKSIDE first render: 697.123 ms (cache construction; excluded from warm timing)
+DEPOT / TRACKSIDE:
+  avg scene/submit/present: 4.97668 / 0.345427 / 0.205686 ms
+  wall-clock FPS: 153.123 (actual throughput)
+  avg frame time: 6.52995 ms = 153.141 FPS
+  p95 frame time: 8.2155 ms = 121.721 FPS
+  p99 frame time: 9.1315 ms
+  max frame time: 10.5575 ms = 94.7194 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / INSPECTION PITS first render: 223.283 ms (cache construction; excluded from warm timing)
+DEPOT / INSPECTION PITS:
+  avg scene/submit/present: 4.56702 / 0.211753 / 0.201502 ms
+  wall-clock FPS: 165.379 (actual throughput)
+  avg frame time: 6.04542 ms = 165.414 FPS
+  p95 frame time: 7.1772 ms = 139.33 FPS
+  p99 frame time: 7.4126 ms
+  max frame time: 7.5671 ms = 132.151 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / GANTRIES first render: 318.308 ms (cache construction; excluded from warm timing)
+DEPOT / GANTRIES:
+  avg scene/submit/present: 4.5407 / 0.234285 / 0.202806 ms
+  wall-clock FPS: 167.48 (actual throughput)
+  avg frame time: 5.96968 ms = 167.513 FPS
+  p95 frame time: 7.0372 ms = 142.102 FPS
+  p99 frame time: 7.3806 ms
+  max frame time: 8.2669 ms = 120.964 FPS
+
+  static map rebuilds during motion: 0
+
+Done.

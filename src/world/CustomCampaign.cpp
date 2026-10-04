@@ -121,7 +121,13 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
     {number(f,8,"prop half x"),number(f,9,"prop half y")},number(f,10,"prop base")});
    if(map->props.back().kind<0||map->props.back().kind>=4)throw std::runtime_error("invalid prop model");
   }else if(tag=="LIGHT"){
-   if(f.size()<5)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);map->lights.push_back({{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")});
+   if(f.size()<5||f.size()>9)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
+   WorldLight light{{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")};
+   if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>1)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
+   if(f.size()>=7&&!f[6].empty())light.yaw=number(f,6,"light yaw");
+   if(f.size()>=8&&!f[7].empty())light.intensity=number(f,7,"light intensity");
+   if(f.size()>=9&&!f[8].empty())light.range=number(f,8,"light range");
+   map->lights.push_back(light);
   }else if(tag=="TERMINAL"){
    if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);AuthoredTerminalData t;
    t.position={number(f,2,"terminal x"),number(f,3,"terminal y")};t.z=number(f,4,"terminal z");t.control=boolean(f,5,"terminal control");
@@ -165,9 +171,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});
   }else if(tag=="STAIR"){
-   if(f.size()<11)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({
+   if(f.size()<11||f.size()>14)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
-    integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending")});
+    integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending"),f.size()>11&&!f[11].empty()?boolean(f,11,"stair open underside"):false,f.size()>12&&!f[12].empty()?number(f,12,"stair tread thickness"):.12f,f.size()>13&&!f[13].empty()?boolean(f,13,"stair side rails"):false});
   }else if(tag=="CREATURE"){
    if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>int(CreatureKind::Mutant))throw std::runtime_error("invalid creature kind");
    map->creatureSpawns.push_back({CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")});
@@ -179,7 +185,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    map->clutterSpawns.push_back({kind,{number(f,3,"clutter x"),number(f,4,"clutter y")},number(f,5,"clutter z"),number(f,6,"clutter yaw")});
   }else if(tag=="PIPE"){
    if(f.size()<9)throw std::runtime_error("malformed PIPE record");auto map=mapAt(maps,f);map->pipes.push_back({
-    {number(f,2,"pipe x1"),number(f,3,"pipe y1")},{number(f,4,"pipe x2"),number(f,5,"pipe y2")},number(f,6,"pipe z"),number(f,7,"pipe radius"),number(f,8,"pipe end z")});
+    {number(f,2,"pipe x1"),number(f,3,"pipe y1")},{number(f,4,"pipe x2"),number(f,5,"pipe y2")},number(f,6,"pipe z"),number(f,7,"pipe radius"),number(f,8,"pipe end z"),f.size()>9?integer(f,9,"pipe material"):0});
+   if(map->pipes.back().material<0||map->pipes.back().material>6)throw std::runtime_error("invalid pipe material");
   }else if(tag=="WATER"){
    if(f.size()<8)throw std::runtime_error("malformed WATER record");auto map=mapAt(maps,f);map->waterVolumes.push_back({
     number(f,2,"water x1"),number(f,3,"water y1"),number(f,4,"water x2"),number(f,5,"water y2"),number(f,6,"water bed"),number(f,7,"water surface")});
