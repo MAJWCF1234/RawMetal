@@ -1,0 +1,106 @@
+Presentation: 1920x1080 / 30 warmup frames per scene / 120 measured frames
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native Win32 swapchain / async present (2 frames in flight)
+Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort
+
+Renderer asset construction: 1516.51 ms; hardware prepare: 1421.6 ms (excluded from warm timing)
+RECEIVING OVERLOOK first render: 409.849 ms (cache construction; excluded from warm timing)
+Total cold renderer assets + hardware prepare + first frame: 3347.96 ms
+  atlas totals: 200 images / 12 transfer submissions / 2 staging allocations / 206324400 payload bytes
+  slow frame 5: total 50.3299 / scene 46.1715 / submit 2.8893 / present 0.1766 ms
+  slow frame 11: total 44.755 / scene 40.292 / submit 3.0315 / present 0.2091 ms
+  slow frame 15: total 41.7263 / scene 37.7185 / submit 2.8238 / present 0.185 ms
+RECEIVING OVERLOOK:
+  avg scene/submit/present: 7.03156 / 0.34241 / 0.210301 ms
+  wall-clock FPS: 115.088 (actual throughput)
+  avg frame time: 8.68616 ms = 115.126 FPS
+  p95 frame time: 9.5579 ms = 104.625 FPS
+  p99 frame time: 44.755 ms
+  max frame time: 50.3299 ms = 19.8689 FPS
+
+  static map rebuilds during motion: 0
+
+RECEIVING LANES first render: 56.0374 ms (cache construction; excluded from warm timing)
+  atlas totals: 207 images / 16 transfer submissions / 2 staging allocations / 243256144 payload bytes
+RECEIVING LANES:
+  avg scene/submit/present: 5.06343 / 0.322255 / 0.208562 ms
+  wall-clock FPS: 150.955 (actual throughput)
+  avg frame time: 6.62333 ms = 150.981 FPS
+  p95 frame time: 8.3819 ms = 119.305 FPS
+  p99 frame time: 9.0358 ms
+  max frame time: 9.5146 ms = 105.102 FPS
+
+  static map rebuilds during motion: 0
+
+WAREHOUSE / A-B first render: 1781.87 ms (cache construction; excluded from warm timing)
+  atlas totals: 221 images / 18 transfer submissions / 2 staging allocations / 244677264 payload bytes
+WAREHOUSE / A-B:
+  avg scene/submit/present: 5.06468 / 0.273321 / 0.20976 ms
+  wall-clock FPS: 137.059 (actual throughput)
+  avg frame time: 7.29534 ms = 137.074 FPS
+  p95 frame time: 8.7716 ms = 114.004 FPS
+  p99 frame time: 9.2747 ms
+  max frame time: 9.3396 ms = 107.071 FPS
+
+  static map rebuilds during motion: 0
+
+MANIFEST OFFICES first render: 229.457 ms (cache construction; excluded from warm timing)
+  atlas totals: 223 images / 19 transfer submissions / 2 staging allocations / 244786480 payload bytes
+MANIFEST OFFICES:
+  avg scene/submit/present: 4.93419 / 0.258052 / 0.21027 ms
+  wall-clock FPS: 151.894 (actual throughput)
+  avg frame time: 6.58208 ms = 151.928 FPS
+  p95 frame time: 7.3614 ms = 135.844 FPS
+  p99 frame time: 7.9262 ms
+  max frame time: 7.9471 ms = 125.832 FPS
+
+  static map rebuilds during motion: 0
+
+EMPTY PLATFORM first render: 184.215 ms (cache construction; excluded from warm timing)
+  atlas totals: 229 images / 21 transfer submissions / 2 staging allocations / 245441752 payload bytes
+EMPTY PLATFORM:
+  avg scene/submit/present: 5.18993 / 0.192203 / 0.211796 ms
+  wall-clock FPS: 149.943 (actual throughput)
+  avg frame time: 6.66792 ms = 149.972 FPS
+  p95 frame time: 7.9051 ms = 126.501 FPS
+  p99 frame time: 8.0413 ms
+  max frame time: 8.0859 ms = 123.672 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / TRACKSIDE first render: 875.835 ms (cache construction; excluded from warm timing)
+  atlas totals: 234 images / 23 transfer submissions / 2 staging allocations / 245878604 payload bytes
+DEPOT / TRACKSIDE:
+  avg scene/submit/present: 6.10623 / 0.291503 / 0.214253 ms
+  wall-clock FPS: 129.795 (actual throughput)
+  avg frame time: 7.70362 ms = 129.809 FPS
+  p95 frame time: 8.9092 ms = 112.244 FPS
+  p99 frame time: 9.5819 ms
+  max frame time: 9.9476 ms = 100.527 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / INSPECTION PITS first render: 284.59 ms (cache construction; excluded from warm timing)
+  atlas totals: 235 images / 24 transfer submissions / 2 staging allocations / 245987816 payload bytes
+DEPOT / INSPECTION PITS:
+  avg scene/submit/present: 5.94495 / 0.199417 / 0.212972 ms
+  wall-clock FPS: 133.318 (actual throughput)
+  avg frame time: 7.49962 ms = 133.34 FPS
+  p95 frame time: 8.632 ms = 115.848 FPS
+  p99 frame time: 9.1848 ms
+  max frame time: 9.3999 ms = 106.384 FPS
+
+  static map rebuilds during motion: 0
+
+DEPOT / GANTRIES first render: 389.353 ms (cache construction; excluded from warm timing)
+  atlas totals: 237 images / 25 transfer submissions / 2 staging allocations / 246206240 payload bytes
+DEPOT / GANTRIES:
+  avg scene/submit/present: 5.87434 / 0.233675 / 0.205862 ms
+  wall-clock FPS: 136.379 (actual throughput)
+  avg frame time: 7.33049 ms = 136.416 FPS
+  p95 frame time: 8.2601 ms = 121.064 FPS
+  p99 frame time: 8.5163 ms
+  max frame time: 9.1891 ms = 108.825 FPS
+
+  static map rebuilds during motion: 0
+
+Done.

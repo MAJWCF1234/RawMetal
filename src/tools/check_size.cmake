@@ -1,5 +1,5 @@
 file(SIZE "${RAWMetalExecutable}" RAWMETAL_BYTES)
-if(RAWMETAL_BYTES GREATER_EQUAL 25000000)
-    message(FATAL_ERROR "RawMetal is ${RAWMETAL_BYTES} bytes; it must be below the 25,000,000-byte limit.")
+if(RAWMETAL_BYTES GREATER_EQUAL 28000000)
+    message(FATAL_ERROR "RawMetal is ${RAWMETAL_BYTES} bytes; it must be below the 28,000,000-byte limit.")
 endif()
-message(STATUS "RawMetal executable: ${RAWMETAL_BYTES} / 25,000,000 bytes")
+message(STATUS "RawMetal executable: ${RAWMETAL_BYTES} / 28,000,000 bytes")

@@ -218,12 +218,17 @@ __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int
         const bool freightOnly=std::wcsstr(commandLine,L"--freight-performance-window")!=nullptr;
         const bool servicesOnly=doorsOnly||freightOnly||std::wcsstr(commandLine,L"--service-performance-window")!=nullptr;
         retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance");if(!benchWindow.valid())return 1;
-        auto benchRendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& benchRenderer=*benchRendererStorage;if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
+        auto assetStart=std::chrono::steady_clock::now();
+        auto benchRendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& benchRenderer=*benchRendererStorage;
+        double assetMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-assetStart).count();
+        auto hardwareStart=std::chrono::steady_clock::now();if(!benchRenderer.enableHardware(benchWindow.handle()))return 36;
+        double hardwareMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-hardwareStart).count();
         std::ofstream report(doorsOnly?"door-performance-window.txt":freightOnly?"freight-performance-window.txt":servicesOnly?"service-performance-window.txt":"performance-window.txt");
         RECT benchmarkClient{};GetClientRect(static_cast<HWND>(benchWindow.handle()),&benchmarkClient);
         report<<"Presentation: "<<benchmarkClient.right<<"x"<<benchmarkClient.bottom<<" / 30 warmup frames per scene / "<<(doorsOnly?240:120)<<" measured frames\n";
         report<<benchRenderer.hardwareName()<<" / native Win32 swapchain / async present (2 frames in flight)\n";
         report<<"Present mode: IMMEDIATE preferred (uncapped), MAILBOX fallback, FIFO last resort\n\n";
+        report<<"Renderer asset construction: "<<assetMs<<" ms; hardware prepare: "<<hardwareMs<<" ms (excluded from warm timing)\n";
         // Same scenes as --performance-test but using the real windowed present path.
         struct Scene{const char* name;retro::Game game;int frames;bool simulate;bool sweep;};
         std::vector<Scene> scenes;
@@ -270,7 +275,12 @@ __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int
             for(const char* c=sname;*c;++c)title+=wchar_t(*c);
             SetWindowTextW(static_cast<HWND>(benchWindow.handle()),title.c_str());
             // Warm static caches and GPU pipelines before collecting frame times.
-            for(int warm=0;warm<30;++warm){auto warmStart=std::chrono::steady_clock::now();benchRenderer.render(sc.game);if(warm==0)report<<sname<<" first render: "<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-warmStart).count()<<" ms (cache construction; excluded from warm timing)\n";}
+            for(int warm=0;warm<30;++warm){auto warmStart=std::chrono::steady_clock::now();benchRenderer.render(sc.game);if(warm==0){
+                double coldMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-warmStart).count();
+                report<<sname<<" first render: "<<coldMs<<" ms (cache construction; excluded from warm timing)\n";
+                if(s==0)report<<"Total cold renderer assets + hardware prepare + first frame: "<<assetMs+hardwareMs+coldMs<<" ms\n";
+                auto uploads=benchRenderer.atlasUploadStatistics();report<<"  atlas totals: "<<uploads[0]<<" images / "<<uploads[1]<<" transfer submissions / "<<uploads[2]<<" staging allocations / "<<uploads[3]<<" payload bytes\n";
+            }}
             auto buildsBefore=benchRenderer.staticGeometryBuilds();
             std::vector<double> frameMs;frameMs.reserve(sc.frames);
             std::array<double,3> stageTotal{};

@@ -2,11 +2,15 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview is **v0.7.0-preview.5**; see [VR controls](docs/vr.md) and [preview notes](RELEASE_NOTES_v0.7.0-preview.5.md). The published game remains a single executable with its runtime assets embedded.
+The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview is **v0.7.0-preview.6**; see [VR controls](docs/vr.md) and [preview notes](RELEASE_NOTES_v0.7.0-preview.6.md). The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
 ## Current release
+
+v0.7.0-preview.6 corrects linear-light texture filtering, normal-map variance,
+and lamp scattering, and batches Vulkan atlas transfers. See
+[rendering and performance evidence](docs/render-quality-pass6.md).
 
 v0.6.6 fixes the knee-height carry cap: objects follow standing/crouched eye height
 and camera aim. See [release notes](RELEASE_NOTES_v0.6.6.md).
@@ -280,7 +284,7 @@ The build produces the canonical \`RawMetal.exe\` in the repository root.
 
 Shaders are compiled to embedded SPIR-V. Runtime textures, models, audio, and other game data are losslessly packed into the executable.
 
-The build is intentionally size-constrained and rejects a release executable at or above **25,000,000 bytes** (25 MB).
+The build is intentionally size-constrained and rejects a release executable at or above **28,000,000 bytes** (28 MB).
 
 Purchased source assets remain unchanged. Runtime packing selects compact lossless representations and verifies embedded asset data against source pixels or bytes.
 Model and animation files also compete against reversible byte-plane and XOR-predicted encodings before LZMS compression. Resources larger than 1 MiB additionally compete against an LZMS stream with a dictionary block covering the complete resource. The packer selects a new encoding only when it is smaller and verifies its exact byte round-trip; PNG textures retain pixel-exact lossless WebP and predictor options.

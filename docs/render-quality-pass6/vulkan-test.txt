@@ -1,0 +1,102 @@
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA
+Texture copies create fresh generations and moves preserve the transferred atlas identity: PASS
+Every emission mip preserves linear intensity, odd edge texels, channel order and half precision: PASS
+Diffuse sRGB mips preserve radiance, odd borders, neutral tint, linear alpha and exact source atlases: PASS
+Normal mips preserve vector moments, coherence weights, odd edges and finite cancellation: PASS
+Game atlas sRGB encoding: 159 atlases, 24461829 mip channels; fast / slow 177.152 / 337.188 ms; byte hashes 862865848526465126 / 862865848526465126
+Fast sRGB encoding is byte-identical to the slow reference across every loaded non-additive game atlas: PASS
+Atlas upload submissions: grouped 1, individual 8; staging allocations 1 / 1; images 32; bytes 3000; prepare+draw 10.7903 / 13.0697 ms
+Batched transfers preserve every pixel of odd diffuse, normal, emission and relief mip payloads: PASS
+Warmed atlas reuse submits no transfer work or staging allocations: PASS
+Dynamic colour updates flush pending initialization safely and reuse the completed atlas staging buffer: PASS
+Dynamic colour updates regenerate distant mip levels rather than displaying stale black wrist screens: PASS
+Queued atlases and malformed payload exceptions can be torn down before any transfer submission: PASS
+Zero-power opaque normal/relief materials match the no-fixture frame exactly: PASS
+Zero-power transparent water retains its Fresnel sky reflection: PASS
+Diffuse bilinear black/white display value: 204; expected 204
+Diffuse bilinear interpolation averages 50 percent linear radiance without a colour tint: PASS
+Minified diffuse checker display values: 205 205 205; expected 204
+Distant sRGB diffuse mip sampling preserves checker radiance across subtexel phases: PASS
+Uniform diffuse mip filtering preserves authored neutral sRGB tint: PASS
+PC CRT atlas: 623 green phosphor pixels, 2 screen triangles
+Native CRT display stays on its two physical screen triangles and preserves every casing/keyboard pixel: PASS
+Green CRT phosphor remains visible with zero ambient illumination: PASS
+Nearest surface wins depth test: PASS
+Alpha cutout keeps geometry behind visible: PASS
+HDR water blend RGB: 222, 0, 148
+Linear HDR water alpha blends the visible bed before tone mapping: PASS
+Emission survives zero ambient illumination: PASS
+Emission display values: full 242, dim 135, expected 135
+Emergency lamp emission matches linear dimming through display transform: PASS
+Emission bilinear interpolation averages radiance before display encoding: PASS
+Distant emission checker display values: 226 226 226; expected 226
+Minified emission retains average brightness without phase-dependent CRT shimmer: PASS
+Authored normal map affects hardware lighting: PASS
+Recycled identical pixel addresses bind fresh emission and normal maps instead of stale GPU cache entries: PASS
+GGX highlight values: rough 12, smooth 58, neutral normal 58
+GGX smoothness narrows and brightens dielectric highlights: PASS
+Flat-normal GGX matches authored neutral normal map: PASS
+Magnified dielectric highlight values: compact 58, large 58, small UV span 58, tiny UV span 58, mirrored 58, collapsed 0
+Close surfaces retain GGX across magnification, small UV derivatives and mirrored UVs: PASS
+Collapsed UVs remain finite and do not fabricate a specular frame: PASS
+Orthonormal/skew GGX: 27 / 27; mirrored U 7 / 7; mirrored V 10 / 10
+Skewed UV charts retain the orthonormal normal/light response and mirrored axis handedness: PASS
+Shaft display values: full 20, dim 10, disabled 0, zero density 0, vertical 26
+Volumetric shafts follow authored power and density, remain transparent when disabled, and work along vertical rays: PASS
+Cancelled normal mip highlight: 11
+Fully cancelled normal mips remain finite and filter into a broad rough reflection: PASS
+Opposite-side bake GGX: cached 58, fresh 58
+Static bake keeps physical normals when the first camera is behind a surface: PASS
+View-model depth range remains independent: PASS
+Near-plane clipping keeps crossing geometry: PASS
+Single final skin pass matches redundant IK skinning exactly across six poses: PASS
+Spatial collision candidates match full scans across ten maps and fixture boundaries: PASS
+Parallel arm pose matches serial reference: PASS
+Hardware weapon grip remains attached: PASS
+Parallel arm pose matches serial reference: PASS
+Hardware weapon grip remains attached: PASS
+Parallel arm pose matches serial reference: PASS
+Hardware weapon grip remains attached: PASS
+Warehouse open aisle transmits fixture light: PASS
+Thin rack post casts an exact shadow: PASS
+Open space beside the rack post stays lit: PASS
+Upper deck blocks light across storeys: PASS
+Guardrail gaps transmit light instead of using the player hull envelope: PASS
+Optical guardrail query remains separate from movement collision: PASS
+Static map scene pass: build 137.807 ms, cached 7.2564 ms
+Static chunk VBO is reused on the next frame: PASS
+Cached static chunk keeps the same rendered frame at nonzero pitch: PASS
+Static chunk VBO survives a camera turn: PASS
+Cached geometry transforms correctly after a camera turn: PASS
+Different initial camera: pixels differing by >4/255 0, mean channel error 0.000108507
+Physical cached normals are independent of the first-load camera: PASS
+Fixed service VBO remains identical on cache reuse: PASS
+Service cache/reference map 5: 0 pixels >4/255; mean error 0; scene build / cached / reference 2310.82 / 5.0494 / 5.4838 ms
+Fixed service cache preserves reference shading and visibility: PASS
+Ceiling fixtures and services retain stable cached geometry after a camera turn: PASS
+Cached ceiling fixtures and services respond to the moving flashlight without rebaking it: PASS
+Fixed service VBO remains identical on cache reuse: PASS
+Service cache/reference map 6: 0 pixels >4/255; mean error 0; scene build / cached / reference 1320.82 / 5.3991 / 7.0111 ms
+Fixed service cache preserves reference shading and visibility: PASS
+Ceiling fixtures and services retain stable cached geometry after a camera turn: PASS
+Cached ceiling fixtures and services respond to the moving flashlight without rebaking it: PASS
+Fixed service VBO remains identical on cache reuse: PASS
+Service cache/reference map 7: 0 pixels >4/255; mean error 0; scene build / cached / reference 316.818 / 5.1719 / 6.0222 ms
+Fixed service cache preserves reference shading and visibility: PASS
+Ceiling fixtures and services retain stable cached geometry after a camera turn: PASS
+Cached ceiling fixtures and services respond to the moving flashlight without rebaking it: PASS
+Fixed service VBO remains identical on cache reuse: PASS
+Service cache/reference map 9: 0 pixels >4/255; mean error 3.6169e-05; scene build / cached / reference 2037.55 / 6.1672 / 7.8383 ms
+Fixed service cache preserves reference shading and visibility: PASS
+Ceiling fixtures and services retain stable cached geometry after a camera turn: PASS
+Cached ceiling fixtures and services respond to the moving flashlight without rebaking it: PASS
+Fixed service VBO remains identical on cache reuse: PASS
+Service cache/reference map 16: 0 pixels >4/255; mean error 0; scene build / cached / reference 589.956 / 7.3488 / 13.3122 ms
+Fixed service cache preserves reference shading and visibility: PASS
+Ceiling fixtures and services retain stable cached geometry after a camera turn: PASS
+Cached ceiling fixtures and services respond to the moving flashlight without rebaking it: PASS
+Exact authored lamp power invalidates cached emission and fixture illumination: PASS
+Parallax material changed pixels at 128x72: 39
+Nearby wall relief changes the Vulkan image: PASS
+Hardware remains active without fallback: PASS
+PASS: Vulkan material / depth / clipping checks

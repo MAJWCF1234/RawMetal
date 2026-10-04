@@ -18,6 +18,7 @@ public:
     bool hardwareActive()const{return bool(m_gpu);}
     bool hardwarePresentsWindow()const;
     std::uint64_t vrMirrorFrames()const;
+    std::array<std::uint64_t,4> atlasUploadStatistics()const;
     const std::string& hardwareName()const{return m_gpuName;}
     void render(const Game& game);
     void saveVrEye(const char* path);
@@ -148,6 +149,7 @@ private:
     std::array<std::unordered_map<std::uint64_t,NormalLighting>,Game::MaxChunks> m_chunkNormalLighting;
     std::array<std::vector<std::vector<size_t>>,Game::MaxChunks> m_chunkLightCells;
     std::array<size_t,Game::MaxChunks> m_chunkLightCounts{};
+    std::array<std::uint64_t,Game::MaxChunks> m_chunkLightSourceKeys{};
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
     float m_gripError=0;
