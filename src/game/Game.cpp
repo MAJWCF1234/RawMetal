@@ -37,11 +37,11 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
-void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
+void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_humans.clear();m_heldHuman=-1;m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
+void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter,m_humans};}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
- view.m_clutter=chunk.clutter;view.m_heldClutter=-1;view.m_player.pos=m_player.pos+chunkOffset(m_level)-chunkOffset(level);return view;
+ view.m_humans=chunk.humans;view.m_heldHuman=-1;view.m_clutter=chunk.clutter;view.m_heldClutter=-1;view.m_player.pos=m_player.pos+chunkOffset(m_level)-chunkOffset(level);return view;
 }
 const World& Game::worldAt(Vec2& local)const{
  // Convert through world space rather than assuming chunk IDs run north/south.
@@ -83,7 +83,8 @@ void Game::crossChunkBoundary(){
   if(objectGlobal.x>=origin.x&&objectGlobal.x<origin.x+World::Width&&objectGlobal.y>=origin.y&&objectGlobal.y<origin.y+World::Height){
    auto item=*it;item.pos=objectGlobal-origin;following.push_back(item);it=m_clutter.erase(it);
   }else ++it;}
- ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;m_vrAimPosition.x+=shift.x;m_vrAimPosition.y+=shift.y;for(auto&hand:m_vrHandPosition){hand.x+=shift.x;hand.y+=shift.y;}for(auto&hand:m_vrPreviousFist){hand.x+=shift.x;hand.y+=shift.y;}
+ if(hasHumanShield())releaseHuman(false);
+ ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_humans=chunk.humans;m_heldHuman=-1;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;m_vrAimPosition.x+=shift.x;m_vrAimPosition.y+=shift.y;for(auto&hand:m_vrHandPosition){hand.x+=shift.x;hand.y+=shift.y;}for(auto&hand:m_vrPreviousFist){hand.x+=shift.x;hand.y+=shift.y;}
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
  for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
@@ -107,7 +108,7 @@ void Game::loadLevel(int level,bool carry) {
     m_player.grounded = true;
     m_velocity = {};
 
-    m_enemies.clear();
+    m_enemies.clear();m_humans.clear();m_heldHuman=-1;
     for(const auto& spawn:m_world.creatureSpawns())spawnCreature(spawn);
     m_pickups.clear();
     for(const auto& spawn:m_world.pickupSpawns())m_pickups.push_back({spawn.position,spawn.kind,true,spawn.z});
@@ -235,6 +236,22 @@ void Game::shoot() {
      bool killed=damage>=actor.health;
      if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(m_world.floorHeight(pose.position.x,pose.position.y)*1000)));if(actor.visual!=ActorVisual::Worker)++m_kills;}
      sound(actor.visual==ActorVisual::Worker?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,.8f);updateMechanisms(0);return;
+    }
+    // Dynamic human actors share the world ray/height test used for other targets.
+    int bestHuman=-1;float humanAlong=bestAlong;
+    for(int i=0;i<int(m_humans.size());++i){
+     auto&h=m_humans[i];if(h.mind==Human::Mind::Dead)continue;
+     Vec2 d=h.pos-m_player.pos;float along=dot(d,forward);
+     if(along<=0||along>=humanAlong||along>18.f)continue;
+     float lateral=std::fabs(d.x*forward.y-d.y*forward.x),rayZ=m_player.z+m_player.eye+along*std::tan(m_player.pitch/140.f);
+     if(lateral>.32f+along*.015f||rayZ<h.z||rayZ>h.z+1.75f||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,h.pos,rayZ))continue;
+     bestHuman=i;humanAlong=along;
+    }
+    if(bestHuman>=0){
+     auto&h=m_humans[bestHuman];h.health=std::max(0.f,h.health-34.f);h.alert=10.f;
+     h.mind=h.health==0?Human::Mind::Dead:(h.role==Human::Role::Guard?Human::Mind::Combat:Human::Mind::Investigate);
+     if(bestHuman==m_heldHuman&&h.health==0)m_heldHuman=-1;
+     m_hitFlash=1.f;sound(Sound::Hurt,.7f);return;
     }
     if (best) {
         const float damage = bestAlong < 4.0f ? 34.0f : (bestAlong < 9.0f ? 28.0f : 21.0f);
@@ -370,8 +387,7 @@ void Game::update(const InputState& input, float dt) {
     if(input.mute&&!m_previousMute)m_audioMuted=!m_audioMuted;
     if(input.music&&!m_previousMusic)m_musicEnabled=!m_musicEnabled;
     m_previousMute=input.mute;m_previousMusic=input.music;
-    if (input.reload && !m_previousReload) reloadWeapon();
-    m_previousReload = input.reload;
+    if (input.reload && !m_previousReload && !hasHumanShield()) reloadWeapon();
     if(input.weaponScroll){m_weaponEquipped=input.weaponScroll>0;m_holster=m_weaponEquipped&&m_player.ammo>0?0.f:1.f;m_suppressFire=true;}
     for(auto&e:m_enemies)if(!e.alive)e.deathTime+=dt;
     m_hitFlash=std::max(0.f,m_hitFlash-dt*5.f);
@@ -397,6 +413,7 @@ void Game::update(const InputState& input, float dt) {
         crossChunkBoundary();
         updateScripts(dt);
         updateHazards(dt);
+        if(input.use&&!m_previousUse&&interactHuman(input))m_previousUse=true;
         updateInteraction(input,dt);
         updateStreaming(dt);
         bool carryingAtStart=holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1);updateClutter(input,dt);
@@ -413,6 +430,8 @@ void Game::update(const InputState& input, float dt) {
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=.58f;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
         updateEnemies(dt);
+        updateHumans(input,dt);
+        m_previousReload=input.reload;
         updatePickups();
 
         // Campaign completion is explicit through scripted content. Reaching the

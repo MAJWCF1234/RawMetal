@@ -67,6 +67,16 @@ struct Enemy {
     const char* name()const{return kind==Kind::Mutant?"MUTATED HUMAN":kind==Kind::Warden?"REACTOR STALKER":kind==Kind::Wasp?"XENOWASP":kind==Kind::Brute?"SCISSOR FIEND":"HUNTSMAN";}
 };
 
+// One lightweight actor type for surviving staff and the company's cleanup squad.
+// Positions and alert state persist independently in each streamed chunk.
+struct Human {
+ enum class Role { Worker, Guard };
+ enum class Mind { Idle, Suspicious, Investigate, Combat, Unconscious, Grappled, Dead };
+ Vec2 pos{},home{},target{};float z=0,yaw=0,health=100,alert=0,search=0,shotTimer=0,walkPhase=0,downTimer=0;
+ Role role=Role::Worker;Mind mind=Mind::Idle;int uniform=0;bool armed=false;
+ bool conscious()const{return mind!=Mind::Unconscious&&mind!=Mind::Grappled&&mind!=Mind::Dead;}
+};
+
 struct Pickup {
     using Kind=PickupKind;
     Vec2 pos{};
@@ -156,6 +166,9 @@ public:
     static Game hazmatInspection(int view=0);
     static bool testHazmat();
     const std::vector<Enemy>& enemies() const { return m_enemies; }
+    const std::vector<Human>& humans() const { return m_humans; }
+    int heldHuman()const{return m_heldHuman;}
+    static bool testHumanStealth();
     const std::vector<Pickup>& pickups() const { return m_pickups; }
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
@@ -247,6 +260,7 @@ public:
     bool hasFlashlight()const{return hasQuestItem(Flashlight);}
     bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0;}
     static bool testFlashlight();
+    bool hasHumanShield()const{return m_heldHuman>=0&&m_heldHuman<int(m_humans.size());}
     bool inventoryOpen()const{return m_inventoryOpen;}
     // Reactor rendering wakes during the first lift shake, one vertical band
     // at a time. Direct reactor entry and restored underground saves bypass it.
@@ -324,7 +338,7 @@ private:
     int customMenuItemCount()const{return int(m_customCampaigns.size())+2;} // Ashfall + uploaded campaigns + Back
     int customMenuLogicalIndex(int row)const{return m_customMenuOffset+row;}
     int m_level=0;
-    struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
+    struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;std::vector<Human> humans;};
     // Chunk storage outlives a frame and can be large; keep it off the native
     // stack, including nested save previews and campaign validation scenes.
     std::vector<ChunkState> m_chunks=std::vector<ChunkState>(MaxChunks);
@@ -354,6 +368,10 @@ private:
     void updateVrMelee(const InputState& input,float dt);
     void receiveDamage(float amount,Vec2 source);
     void updateEnemies(float dt);
+    void updateHumans(const InputState& input,float dt);
+    bool interactHuman(const InputState& input);
+    int nearestRearHuman()const;
+    void releaseHuman(bool lethal);
     void migrateEnemiesAcrossChunks();
     void updatePickups();
 
@@ -362,6 +380,8 @@ private:
     float m_hazmatPushCooldown=0;
     Player m_player;
     std::vector<Enemy> m_enemies;
+    std::vector<Human> m_humans;
+    int m_heldHuman=-1;
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;

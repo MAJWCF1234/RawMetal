@@ -41,7 +41,7 @@ inline StateId actorPositionState(StateId dead,int axis){return stateId("actor_p
 ActorPose sampleActor(const ActorTrack& track,int ageMs);
 ActorPose sampleActorKeys(const std::vector<ActorKey>& keys,int ageMs,bool loop=false);
 struct ScriptAction {
- enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign};
+ enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign,SpawnHuman};
  Type type=Type::SetState;StateId id=0;int value=0,index=0;CreatureKind enemyKind=CreatureKind::Huntsman;Vec2 position{};float z=-999,amount=0;Sound sound=Sound::Exit;
 };
 struct ScriptEvent {

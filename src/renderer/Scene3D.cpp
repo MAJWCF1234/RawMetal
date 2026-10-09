@@ -1282,6 +1282,28 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(human&&track.tool&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
  }
  movingGeometry=false;
+ // Dynamic human actors use the existing skinned worker model and embedded textures.
+ for(const auto&h:game.humans()){
+  if(!sphereVisible({h.pos.x,h.pos.y,h.z+.85f},1.25f))continue;
+  int clip=h.mind==Human::Mind::Dead||h.mind==Human::Mind::Unconscious?4:h.mind==Human::Mind::Combat?2:h.mind==Human::Mind::Investigate?1:0;
+  m_workerMesh.poseCreature(clip,std::fmod(h.walkPhase,1.f));
+  float scale=1.75f/std::max(.01f,m_workerMesh.maximum.y-m_workerMesh.minimum.y),c=std::cos(h.yaw),s=std::sin(h.yaw);
+  auto transform=[&](Point3 p){return Point3{h.pos.x+(p.x*c+p.z*s)*scale,h.pos.y+(-p.x*s+p.z*c)*scale,h.z+p.y*scale};};
+  objectLighting=true;objectNormalLighting=nullptr;
+  auto lights=exteriorLight({h.pos.x,h.pos.y,h.z+.85f},.875f,.875f,1.75f,h.yaw,true);
+  for(auto face:m_workerMesh.triangles){
+   for(auto&v:face.v)v.p=transform(v.p);
+   auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
+   selectFaceLight(lights,cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),center-Point3{h.pos.x,h.pos.y,h.z+.85f});
+   int material=0;if(face.part>=0&&face.part<int(m_workerMesh.materialNames.size())){
+    const auto&name=m_workerMesh.materialNames[face.part];
+    if(name.find("pies")!=std::string::npos)material=2;
+    else if(name.find("mano")!=std::string::npos)material=1;
+   }
+   tri(face.v[0],face.v[1],face.v[2],m_workerTextures[material],1.f);
+  }
+  objectLighting=false;objectNormalLighting=nullptr;
+ }
  for(const auto&e:game.enemies()){
   if(e.bodyTop()<game.dormantBelow())continue;
   if(!e.visible())continue;
