@@ -79,7 +79,7 @@ void Game::updateEnemies(float dt){
   auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   bool visible=aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,11.f,-.25f,2.5f);
   float nearest=visible?dist:11.f;
-  for(size_t i=0;i<m_world.actorTracks().size();++i){const auto&track=m_world.actorTracks()[i];const auto&pose=m_world.actorPose(i);
+  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.level!=m_level)continue;const auto&track=npc.track();const auto&pose=npc.pose;
    if(track.ai.mode==ActorAiMode::Scripted||!track.health||state(track.deadState)||pose.clip==4||(track.ai.enableState&&!state(track.ai.enableState)))continue;
    float distance=length(pose.position-e.pos);if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,pose.position,pose.z+track.scale*.65f,11.f,-.25f,2.5f)){
     target=pose.position;targetFeet=pose.z;targetHull=track.scale;targetEye=track.scale*.65f;friendly=int(i);nearest=dist=distance;visible=true;to=target-e.pos;

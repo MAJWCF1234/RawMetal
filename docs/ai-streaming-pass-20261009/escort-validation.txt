@@ -1,0 +1,13 @@
+Escort streaming regression - October 9, 2026
+--physics-ai-test : exit 0
+--world-isolation-test : exit 0
+--mechanisms-test : exit 0
+--campaign-map-test : exit 0
+--save-test : exit 0
+--controls-test : exit 0
+--vr-test : exit 0
+--smoke-test --vulkan : exit 0
+EXE bytes: 23446528
+Friendly AI assertions: 52 passed
+Existing scripted worker Vulkan captures inspected: worker-1-close.png, worker-6300-close.png
+185 embedded resources verified lossless by Release build

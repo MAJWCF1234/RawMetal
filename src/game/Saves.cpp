@@ -168,6 +168,7 @@ bool Game::decodeSave(const std::string& data){
   next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
   next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
   next.updateStreaming(0);
+  next.rebuildFriendlyActors();
   next.updateMechanisms(0);
   // Ashfall saves from the flat-ground prototype keep their chunk-local X/Y,
   // but grounded feet now belong on the generated terrain surface.

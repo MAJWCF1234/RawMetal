@@ -49,6 +49,7 @@ void Game::updateMechanisms(float dt){
   }
  }
  for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);
+  if(autonomousActor(track)){world.setActorPose(i,old);continue;}
   if(!track.idleKeys.empty()){
    auto idleState=actorTrackState(track.timerState,i,"idle_ms");int idle=state(idleState)+int(std::round(dt*1000));idle%=track.idleKeys.back().timeMs;setState(idleState,idle);
    int age=state(track.timerState);
@@ -63,7 +64,6 @@ void Game::updateMechanisms(float dt){
   }
   if(pose.lookAtActor>=0&&dt>0){pose.yaw=old.yaw;world.setActorPose(i,pose);}
   if(track.deadState&&state(track.deadState)){pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;pose.phase=1;pose.lookAtActor=-1;world.setActorPose(i,pose);}
-  pose=updateFriendlyAI(world,level,i,old,pose,dt);
   pose=friendlyAwareness(world,level,i,old,pose,dt);world.setActorPose(i,pose);
   if(dt>0&&level==m_level&&track.platform&&std::fabs(m_player.z-old.z)<.04f&&std::fabs(m_player.pos.x-old.position.x)<track.footprint.x*.5f&&std::fabs(m_player.pos.y-old.position.y)<track.footprint.y*.5f){
    auto target=m_player.pos+pose.position-old.position;float z=m_player.z+pose.z-old.z;
@@ -72,5 +72,6 @@ void Game::updateMechanisms(float dt){
  }
  for(size_t i=0;i<world.actorTracks().size();++i){auto pose=world.actorPose(i);if(pose.lookAtActor>=0){auto target=world.actorPose(pose.lookAtActor);auto delta=target.position-pose.position;if(dot(delta,delta)>.0025f){float yaw=std::atan2(delta.x,delta.y);pose.yaw=dt>0?pose.yaw+std::clamp(std::remainder(yaw-pose.yaw,2*kPi),-8*dt,8*dt):yaw;world.setActorPose(i,pose);}}}
  }
+ updateFriendlyActors(dt);
 }
 }

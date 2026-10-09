@@ -1,0 +1,25 @@
+MSBuild version 17.14.60+43b635718 for .NET Framework
+
+  Checking File Globs
+  sharpyuv.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libsharpyuv.lib
+  webpdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdecode.dir\Release\webpdecode.lib
+  webpdsp.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdsp.dir\Release\webpdsp.lib
+  webpencode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpencode.dir\Release\webpencode.lib
+  webputils.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webputils.dir\Release\webputils.lib
+  webp.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libwebp.lib
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(538,5): warning MSB8028: The intermediate directory (RawMetalAssetPacker.dir\Release\) contains files shared from another project (RawMetalAssetPacker.vcxproj).  This can lead to incorrect clean and rebuild behavior. [N:\rawmetal\.build\vs2022\RawMetalAssetPacker.vcxproj]
+  RawMetalAssetPacker.vcxproj -> N:\rawmetal\.build\vs2022\tools\RawMetalAssetPacker.exe
+  webpdspdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdspdecode.dir\Release\webpdspdecode.lib
+  webputilsdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webputilsdecode.dir\Release\webputilsdecode.lib
+  webpdecoder.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libwebpdecoder.lib
+  FriendlyAI.cpp
+N:\rawmetal\src\game\FriendlyAI.cpp(203,62): warning C4244: '=': conversion from 'int' to 'float', possible loss of data [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+  Generating code
+  1 of 14813 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    206 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  RawMetal.vcxproj -> N:\rawmetal\RawMetal.exe
+  Verifying embedded assets are lossless and release-size safe
+  185 packaged resources match source: exact RGBA pixels/dimensions, byte-identical audio/models/animation
+  -- RawMetal executable: 23446528 / 28,000,000 bytes

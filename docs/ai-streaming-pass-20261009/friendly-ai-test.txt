@@ -1,0 +1,52 @@
+Living NPC body blocks player/enemy hulls without blocking another floor: PASS
+Escort follows and stops outside the player hull at both frame rates: PASS
+Save restores autonomous NPC position without timeline reset: PASS
+Escort follows and stops outside the player hull at both frame rates: PASS
+Save restores autonomous NPC position without timeline reset: PASS
+Civilian waits until asked to follow: PASS
+PC use command enables civilian following: PASS
+VR controller reach accepts Follow/Wait command: PASS
+Wait command stops following: PASS
+Escort routes around a wall instead of pushing into it: PASS
+Crowded scene limits route searches and keeps deferred actors stationary: PASS
+Reachable and unreachable goals do not starve later actors: PASS
+Crowded scene limits route searches and keeps deferred actors stationary: PASS
+Reachable and unreachable goals do not starve later actors: PASS
+AI opens ordinary doors and preserves locked-door requirements: PASS
+AI opens ordinary doors and preserves locked-door requirements: PASS
+Civilian flees a visible enemy: PASS
+Save restores fear memory: PASS
+Civilian continues escape briefly after losing the threat: PASS
+Death animation progresses and restores mid-animation: PASS
+Killed autonomous worker freezes at actual death position: PASS
+Enemy acquires a nearby friendly NPC: PASS
+Enemy contact attack damages the NPC, not a distant player: PASS
+NPC death clears targeting without awarding a player kill: PASS
+Escort physically enters non-sequential intermediate chunk without duplication: PASS
+Save restores escort location and identity after crossing a seam: PASS
+Escort follows across two stitched chunks with arbitrary authoring IDs: PASS
+Migrated escort still accepts commands in a chunk with no authored NPC slot: PASS
+Wait command retains the original NPC identity after migration: PASS
+Migrated NPC death restores in the destination chunk: PASS
+Escort can reverse direction and return through stitched seams: PASS
+Closed stitched edge stops the escort without teleporting: PASS
+Escort physically enters non-sequential intermediate chunk without duplication: PASS
+Save restores escort location and identity after crossing a seam: PASS
+Escort follows across two stitched chunks with arbitrary authoring IDs: PASS
+Migrated escort still accepts commands in a chunk with no authored NPC slot: PASS
+Wait command retains the original NPC identity after migration: PASS
+Migrated NPC death restores in the destination chunk: PASS
+Escort can reverse direction and return through stitched seams: PASS
+Closed stitched edge stops the escort without teleporting: PASS
+Escort stops outside the player hull when player occupies the seam: PASS
+Migrating NPC body blocks player collision across chunk ownership: PASS
+Follow/Wait works across an open seam before NPC ownership changes: PASS
+Escort uses open paired transfer doors and never forces a closed transfer: PASS
+Closed seam prevents remote NPC commands through its door: PASS
+Escort uses open paired transfer doors and never forces a closed transfer: PASS
+Unsafe elevation discontinuity stops NPC instead of teleporting or falling: PASS
+Save rejects an out-of-range physical NPC chunk: PASS
+Save rejects invalid NPC coordinates even for unloaded chunks: PASS
+Unloaded NPCs share the bounded portal-search budget without loading a closed route: PASS
+Failed unloaded portal searches back off and do not starve later actors: PASS
+Escort routes around a two-axis stitched turn with streaming enabled: PASS

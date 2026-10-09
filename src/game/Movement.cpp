@@ -22,7 +22,7 @@ bool Game::hullFits(Vec2 p,float feet,float height)const{
  // the narrow volume and become trapped inside it.
  auto center=p;const auto&w=worldAt(center);
  if(w.railBlocksHull(center.x,center.y,.20f,feet,height))return false;
- for(size_t i=0;i<w.actorTracks().size();++i){const auto&track=w.actorTracks()[i];const auto&actor=w.actorPose(i);
+ for(const auto&npc:m_friendlyActors){const auto&track=npc.track();auto actor=npc.pose;actor.position+=chunkOffset(npc.level)-chunkOffset(w.level());
   if(track.ai.mode==ActorAiMode::Scripted||actor.clip==4||(track.ai.enableState&&!state(track.ai.enableState)))continue;
   if(feet<actor.z+track.scale&&feet+height>actor.z&&std::fabs(center.x-actor.position.x)<.4f&&std::fabs(center.y-actor.position.y)<.4f)return false;
  }

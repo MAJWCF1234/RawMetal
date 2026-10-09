@@ -75,6 +75,13 @@ struct Pickup {
     bool active = true;
     float z = -999;
 };
+struct FriendlyActor {
+ // The authored identity owns state keys; level/pose describe physical location.
+ // Keep the immutable track alive when its home chunk releases geometry.
+ int homeLevel=0,level=0;size_t homeActor=0;ActorPose pose{};
+ std::shared_ptr<const AuthoredMapData> definition;
+ const ActorTrack& track()const{return definition->actorTracks.at(homeActor);}
+};
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct Clutter {
@@ -158,6 +165,9 @@ public:
     static Game hazmatInspection(int view=0);
     static bool testHazmat();
     const std::vector<Enemy>& enemies() const { return m_enemies; }
+    const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
+    bool autonomousActor(const ActorTrack& track)const{return track.ai.mode!=ActorAiMode::Scripted&&(!track.ai.enableState||state(track.ai.enableState)||(track.deadState&&state(track.deadState)));}
+    bool friendlyChunkNeeded(int level)const;
     const std::vector<Pickup>& pickups() const { return m_pickups; }
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
@@ -363,7 +373,16 @@ private:
     void receiveDamage(float amount,Vec2 source);
     void updateEnemies(float dt);
     ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
-    ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt);
+    ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt);
+    void rebuildFriendlyActors();
+    void updateFriendlyActors(float dt);
+    StateId friendlyKey(size_t actor,std::string_view field)const;
+    World& friendlyWorld(int level){return level==m_level?m_world:m_chunks[level].world;}
+    int friendlyChunkAt(Vec2 global,int preferred)const;
+    bool friendlyBoundaryOpen(int from,int to,Vec2 global)const;
+    bool friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float* endFeet=nullptr);
+    bool friendlyRayClear(Point3 from,Point3 to)const;
+    bool friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2& goal,float& goalFeet);
     int nearbyFriendly()const;
     bool commandFriendly();
     void requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal);
@@ -377,6 +396,7 @@ private:
     float m_hazmatPushCooldown=0;
     Player m_player;
     std::vector<Enemy> m_enemies;
+    std::vector<FriendlyActor> m_friendlyActors;
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;
