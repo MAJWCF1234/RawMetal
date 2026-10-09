@@ -697,10 +697,10 @@ namespace retro {
 void SoftwareRenderer::saveVrEye(const char*path){std::vector<uint32_t> pixels;m_gpu->captureVrEye(pixels);auto [width,height]=m_gpu->surfaceExtent();std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}}
 void SoftwareRenderer::renderVrEye(const Game&game,int eye){
  if(!m_gpu||!m_gpu->vrActive())throw std::runtime_error("VR requires the Vulkan renderer");
- m_vrRendering=true;bool culling=m_visibilityCulling;m_visibilityCulling=false;
+ m_vrRendering=true;
  try{m_gpu->setVrEye(eye,VrRuntime::active()->eye(eye,game).clip);if(eye==0){
   if(!game.titleScreen()){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawVrStatus(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);for(auto&pixel:m_pixels){unsigned intensity=std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u});pixel=0xff000000u|((intensity/4)<<16)|(intensity<<8)|(intensity/3);}auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-1,9,3,0xff80ffa0u);rect(x-1,y-4,3,9,0xff80ffa0u);}if(m_vrWristTexture.pixels.empty()){m_vrWristTexture={m_width,m_height,std::vector<uint32_t>(size_t(m_width*m_height))};m_vrWristTexture.clampEdges=true;}std::copy_n(m_pixels.begin(),m_vrWristTexture.pixels.size(),m_vrWristTexture.pixels.begin());m_gpu->updateDynamic(m_vrWristTexture);}
   const auto&hands=VrRuntime::active()->hands();for(int side=0;side<2;++side)m_vrHandMeshes[side]=hands[side].tracked?m_armsMesh.trackedHand(side==0,hands[side].curls):std::vector<MeshTriangle>{};}render(game);}
- catch(...){m_vrRendering=false;m_visibilityCulling=culling;throw;}
- m_vrRendering=false;m_visibilityCulling=culling;
+ catch(...){m_vrRendering=false;throw;}
+ m_vrRendering=false;
 }}

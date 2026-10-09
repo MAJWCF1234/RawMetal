@@ -1,0 +1,9 @@
+
+--physics-ai-test : exit 0
+--world-isolation-test : exit 0
+--mechanisms-test : exit 0
+--campaign-map-test : exit 0
+--save-test : exit 0
+--controls-test : exit 0
+--vr-test : exit 0
+--smoke-test --vulkan : exit 0

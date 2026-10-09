@@ -90,8 +90,8 @@ void Game::updateClutter(const InputState&input,float dt){
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
    }else{c.z=z;c.restTime=0;}
    if(c.projectile)for(auto&e:m_enemies)if(e.alive&&length(e.pos-c.pos)<.5f&&c.z+c.height()>e.bodyBottom()&&c.z<e.bodyTop()){
-    impact(length(c.velocity));e.hp-=5;e.painFlash=1;e.awareness=6;e.lastKnown=m_player.pos;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos,.6f,1,true});
-    if(e.hp<=0){e.alive=false;e.deathTime=0;e.windup=0;++m_kills;enemySound(e,2);}break;
+    impact(length(c.velocity));e.awareness=6;e.lastKnown=m_player.pos;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos,.6f,1,true});
+    if(applyEnemyDamage(e,kUnarmedMelee.clutterDamage,false,false))enemySound(e,2);break;
    }
   }
  }

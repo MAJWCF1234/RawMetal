@@ -22,6 +22,10 @@ bool Game::hullFits(Vec2 p,float feet,float height)const{
  // the narrow volume and become trapped inside it.
  auto center=p;const auto&w=worldAt(center);
  if(w.railBlocksHull(center.x,center.y,.20f,feet,height))return false;
+ for(size_t i=0;i<w.actorTracks().size();++i){const auto&track=w.actorTracks()[i];const auto&actor=w.actorPose(i);
+  if(track.ai.mode==ActorAiMode::Scripted||actor.clip==4||(track.ai.enableState&&!state(track.ai.enableState)))continue;
+  if(feet<actor.z+track.scale&&feet+height>actor.z&&std::fabs(center.x-actor.position.x)<.4f&&std::fabs(center.y-actor.position.y)<.4f)return false;
+ }
  return true;
 }
 bool Game::tryMove(Vec2 delta){
@@ -149,7 +153,9 @@ const char* Game::interactionHint()const{
  if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.activateState)return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):"CONTROL / RELEASED"):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");
   if(m_vrInputActive){if(t.reactorAction)return t.reactorAction==1?"GRIP / USE COMPUTER":"GRIP / OPERATE VALVE";return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";}
   if(t.reactorAction)return t.reactorAction==1?"E / USE COMPUTER":"E / OPERATE VALVE";return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
- return nearbyClutter()>=0?(m_vrInputActive?"GRIP / LIFT":"E / LIFT"):nullptr;
+ if(nearbyClutter()>=0)return m_vrInputActive?"GRIP / LIFT":"E / LIFT";
+ if(nearbyFriendly()>=0)return m_vrInputActive?"GRIP / FOLLOW OR WAIT":"E / FOLLOW OR WAIT";
+ return nullptr;
 }
 void Game::updateInteraction(const InputState& input,float dt){
  m_logTime=std::max(0.f,m_logTime-dt);
@@ -173,7 +179,7 @@ void Game::updateInteraction(const InputState& input,float dt){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
   }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
-  if(!holdingClutter()&&door<0&&m_logTime==0)interactClutter();
+  if(!holdingClutter()&&door<0&&m_logTime==0&&!interactClutter())commandFriendly();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);
 }

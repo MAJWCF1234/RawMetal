@@ -64,9 +64,14 @@ template<class A> void Game::archiveSave(A& a,int version){
  a(m_weaponKick,m_shotCooldown);if(version>=2)a(m_reloadTimer);a(m_shotAge,m_holster,m_punchAge,m_punchLeft,m_guarding,m_verticalSpring,m_verticalSpringVelocity,m_stepDistance,m_stepVariant,m_jumpBuffer,m_coyote);
  a(m_weaponMotion.yaw,m_weaponMotion.pitch,m_weaponMotion.bob,m_weaponMotion.back,m_weaponMotion.elbow,m_weaponMotion.bolt,m_weaponMotion.roll);vec(m_sway);vec(m_swayVelocity);a(m_elbowVelocity);
  for(auto& cell:m_itemCells)a(cell);
- auto list=[&](auto& values,auto visit){int count=int(values.size());a(count);if(count<0||count>1024)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(count);for(auto&v:values)visit(v);};
+ auto list=[&](auto& values,auto visit,int limit=1024){int count=int(values.size());a(count);if(count<0||count>limit)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(count);for(auto&v:values)visit(v);};
  if(version>=6){
-  list(m_states,[&](StateValue&v){a(v.id,v.value);if(v.id==0)throw std::runtime_error("invalid state id");});
+  list(m_states,[&](StateValue&v){a(v.id,v.value);if(v.id==0)throw std::runtime_error("invalid state id");},8192);
+  if constexpr(A::reading){
+   // Older saves kept insertion order. Normalize once before runtime lookups.
+   std::sort(m_states.begin(),m_states.end(),[](const StateValue&left,const StateValue&right){return left.id<right.id;});
+   if(std::adjacent_find(m_states.begin(),m_states.end(),[](const StateValue&left,const StateValue&right){return left.id==right.id;})!=m_states.end())throw std::runtime_error("duplicate saved state");
+  }
   list(m_objectives,[&](StateValue&v){a(v.id,v.value);if(v.id==0||v.value<0||v.value>3)throw std::runtime_error("invalid objective");});
   list(m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});
   list(m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});
@@ -88,7 +93,7 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,13);auto payload=writer.stream.str();
+ Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,13);auto payload=writer.stream.str();
  return "RAWMETAL_SAVE 13 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
@@ -97,7 +102,7 @@ bool Game::decodeSave(const std::string& data){
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
   if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>13))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
-  Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   // Earlier builds represented a broken crate as four unrelated prop models
   // (kinds 0-3) spawned together. Convert that recognizable saved quartet to
   // the current textured splinter kind so existing saves receive the repair.
@@ -155,7 +160,7 @@ bool Game::decodeSave(const std::string& data){
    if(level==next.m_level)next.m_heldClutter=heldNew;
   }
   auto&p=next.m_player;
-  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>Player::StandingEye+.2f||std::fabs(p.pitch)>210.01f||next.m_medkits<0)return false;
+  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>weaponDef(WeaponId::Shotgun).cycle.tubeCapacity||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>Player::StandingEye+.2f||std::fabs(p.pitch)>210.01f||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);

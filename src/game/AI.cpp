@@ -1,4 +1,6 @@
 #include "Game.h"
+#include "AIPerception.h"
+#include "AINavigation.h"
 #include <queue>
 #include <cmath>
 #include <fstream>
@@ -39,21 +41,55 @@ static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,floa
  }
  if(nodes[target].parent<0)return start;int next=target;while(nodes[next].parent!=origin&&next!=origin)next=nodes[next].parent;return nodes[next].p;
 }
+bool aiWalkSegment(const World&w,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){return roughSegment(w,start,feet,goal,height,w.hasTerrain()?.34f:.24f,endFeet);}
+Vec2 aiWalkWaypoint(const World&w,Vec2 start,float feet,Vec2 goal,float goalFeet,float height){
+ if(aiWalkSegment(w,start,feet,goal,height))return goal;
+ if(!w.hasTerrain())return stackedWaypoint(w,start,feet,goal,goalFeet,height);
+ std::array<int,24*24> field;field.fill(9999);std::queue<int> queue;
+ int gx=std::clamp(int(goal.x),0,23),gy=std::clamp(int(goal.y),0,23);field[gy*24+gx]=0;queue.push(gy*24+gx);
+ auto edge=[&](int a,int b){Vec2 p{a%24+.5f,a/24+.5f},q{b%24+.5f,b/24+.5f};return aiWalkSegment(w,p,navSupport(w,p,float(World::TerrainMaxZ+1)),q,height);};
+ while(!queue.empty()){int cell=queue.front();queue.pop();int x=cell%24,y=cell/24;
+  for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>23||ny>23)continue;int next=ny*24+nx;
+   if(field[next]==9999&&edge(next,cell)){field[next]=field[cell]+1;queue.push(next);}}
+ }
+ int x=std::clamp(int(start.x),0,23),y=std::clamp(int(start.y),0,23),best=field[y*24+x];Vec2 result=start;
+ for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>23||ny>23)continue;int next=ny*24+nx;
+  if(field[next]<best&&edge(y*24+x,next)){best=field[next];result={nx+.5f,ny+.5f};}}
+ return result;
+}
 void Game::updateEnemies(float dt){
  if(dead()||m_won)return;
- bool footsteps=false,gunshot=false;for(auto&event:m_sounds){footsteps|=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;gunshot|=event.sound==Sound::Shot;}
+ // Resolve sound origins once; actor footsteps must not reveal the player.
+ struct Stimulus {Vec2 source;float z,radius,gain;bool loud;};std::vector<Stimulus> stimuli;
+ for(const auto&event:m_sounds){
+  bool shot=event.sound==Sound::Shot,step=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;
+  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft;
+  if((!shot&&!step&&!impact)||event.gain<=0)continue;
+  auto source=event.spatial?event.position:m_player.pos;
+  float z=event.spatial?m_world.floorHeight(source.x,source.y)+.7f:m_player.z+m_player.eye;
+  stimuli.push_back({source,z,std::min(event.radius,shot?14.f:step?4.5f:6.f),event.gain,shot});
+ }
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
  for(auto&e:m_enemies){
   if(dormantEntity(e.z))continue;
   float support=groundHeight(e.pos,e.z+.01f);
   if(e.surfaceMode==0){if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}}
   if(!e.alive)continue;bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(e.kind==Enemy::Kind::Warden?1.f/.45f:4.f));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*5);
-  auto to=m_player.pos-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
-  bool visible=dist<11&&(dist<2.5f||dot(normalized(to),facing)>-.25f)&&m_world.rayClear(e.pos,e.z+.7f,m_player.pos,m_player.z+m_player.eye);
-  float soundDistance=std::sqrt(dist*dist+(m_player.z-e.z)*(m_player.z-e.z));
-  bool heard=(gunshot&&soundDistance<14)||(footsteps&&soundDistance<4.5f);
-  if(visible){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=e.kind==Enemy::Kind::Warden?12.f:6.f;e.state=Enemy::State::Chase;}
-  else if(heard){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=5.f;e.state=Enemy::State::Investigate;}
+  Vec2 target=m_player.pos;float targetFeet=m_player.z,targetEye=m_player.eye,targetHull=m_player.hullHeight();int friendly=-1;
+  auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
+  bool visible=aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,11.f,-.25f,2.5f);
+  float nearest=visible?dist:11.f;
+  for(size_t i=0;i<m_world.actorTracks().size();++i){const auto&track=m_world.actorTracks()[i];const auto&pose=m_world.actorPose(i);
+   if(track.ai.mode==ActorAiMode::Scripted||!track.health||state(track.deadState)||pose.clip==4||(track.ai.enableState&&!state(track.ai.enableState)))continue;
+   float distance=length(pose.position-e.pos);if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,pose.position,pose.z+track.scale*.65f,11.f,-.25f,2.5f)){
+    target=pose.position;targetFeet=pose.z;targetHull=track.scale;targetEye=track.scale*.65f;friendly=int(i);nearest=dist=distance;visible=true;to=target-e.pos;
+   }
+  }
+  const Stimulus* heard=nullptr;float strongest=0;
+  if(!visible)for(const auto&stimulus:stimuli){float strength=aiSoundStrength(m_world,e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud);
+   if(strength>strongest){strongest=strength;heard=&stimulus;}}
+  if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=e.kind==Enemy::Kind::Warden?12.f:6.f;e.state=Enemy::State::Chase;}
+  else if(heard){e.lastKnown=heard->source;e.lastKnownZ=m_world.supportBelow(heard->source.x,heard->source.y,heard->z);e.awareness=5.f;e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
   if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
    float ceiling=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
@@ -75,9 +111,12 @@ void Game::updateEnemies(float dt){
   if(e.awareness>0&&e.voiceTimer<=0){enemySound(e,0,e.kind==Enemy::Kind::Warden?.28f:.65f);e.voiceTimer=(e.kind==Enemy::Kind::Warden?11.f:6.f)+float(int(e.home.x)%4);}
   bool warden=e.kind==Enemy::Kind::Warden;
   float range=warden?1.1f:e.kind==Enemy::Kind::Brute?1.25f:1.05f;
-  bool sameLevel=m_player.z<e.bodyTop()&&m_player.z+m_player.hullHeight()>e.bodyBottom();
+  bool sameLevel=targetFeet<e.bodyTop()&&targetFeet+targetHull>e.bodyBottom();
   if(e.windup>0){if(!warden&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=warden?1.05f:e.kind==Enemy::Kind::Wasp?.8f:e.kind==Enemy::Kind::Huntsman?1.f:1.6f;
-    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,m_player.pos,m_player.z+.5f))receiveDamage(warden?30.f:e.kind==Enemy::Kind::Mutant?16.f:e.kind==Enemy::Kind::Brute?18.f:9.f,e.pos);
+    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,target,targetFeet+.5f)){
+     float damage=warden?30.f:e.kind==Enemy::Kind::Mutant?16.f:e.kind==Enemy::Kind::Brute?18.f:9.f;
+     if(friendly>=0)damageFriendly(size_t(friendly),damage,e.pos);else receiveDamage(damage,e.pos);
+    }
    }continue;
   }
   // Close-range committed swing: the player can backstep or circle behind it.
@@ -85,8 +124,9 @@ void Game::updateEnemies(float dt){
    e.heading=std::atan2(to.y,to.x);e.windup=.55f;enemySound(e,1,.9f);continue;
   }
   Vec2 goal=e.awareness>0?e.lastKnown:e.home;
+  if(e.awareness>0&&(e.kind==Enemy::Kind::Warden||e.kind==Enemy::Kind::Mutant))requestAiDoor(m_world,m_level,e.pos,e.z,goal);
   float stalkSpeed=2.1f;bool watching=false;
-  if(warden){
+  if(warden&&friendly<0){
    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
    Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
    Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
@@ -168,9 +208,9 @@ void Game::updateEnemies(float dt){
    auto delta=goal-e.pos;float distance=length(delta);Vec2 probe=distance>1.6f?e.pos+delta*(1.6f/distance):goal;
    direct=roughSegment(m_world,e.pos,e.z,probe,hull,stepHeight);
   }else{
-   direct=std::fabs((visible?m_player.z:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
+   direct=std::fabs((visible?targetFeet:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
   }
-  if(e.kind==Enemy::Kind::Huntsman&&visible&&m_world.tile(int(goal.x),int(goal.y))=='C')direct=m_world.rayClear(e.pos,e.z+.7f,goal,m_player.z+.3f);
+  if(e.kind==Enemy::Kind::Huntsman&&visible&&m_world.tile(int(goal.x),int(goal.y))=='C')direct=m_world.rayClear(e.pos,e.z+.7f,goal,targetFeet+.3f);
   // Repeated contact switches to routed movement instead of rebuilding a
   // path every frame or continuing to push into the same corner forever.
   if(e.searchTime>.2f)direct=false;
@@ -220,6 +260,16 @@ void Game::updateEnemies(float dt){
  }
  migrateEnemiesAcrossChunks();
 }
+ActorPose Game::friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const{
+ const auto&track=world.actorTracks()[actor];
+ if(dt<=0||track.visual!=ActorVisual::Worker||pose.clip!=0||pose.lookAtActor>=0||(track.deadState&&state(track.deadState)))return pose;
+ Vec2 facing{std::sin(old.yaw),std::cos(old.yaw)},target{};float nearest=64.f;bool found=false;
+ auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
+  if(distance<nearest&&aiCanSee(world,pose.position,pose.z+track.scale*.85f,facing,position,z,8.f,-.25f,2.f)){nearest=distance;target=position;found=true;}};
+ if(level==m_level)for(const auto&enemy:m_enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
+ if(found){auto toward=target-pose.position;float yaw=std::atan2(toward.x,toward.y);pose.yaw=old.yaw+std::clamp(std::remainder(yaw-old.yaw,2*kPi),-4.f*dt,4.f*dt);}
+ return pose;
+}
 void Game::migrateEnemiesAcrossChunks(){
  if(m_worldId!=WorldId::Ashfall)return;
  auto sourceOrigin=chunkOffset(m_level);
@@ -237,7 +287,25 @@ void Game::migrateEnemiesAcrossChunks(){
  }
 }
 bool Game::testAI(){
+ if(!testFriendlyAI())return false;
  std::ofstream debug("ai-diagnostic.txt");
+ // Spatial distractions lead to the noise, never the hidden player's pose.
+ for(int scenario=0;scenario<3;++scenario){auto g=validationScene(Enemy::Kind::Huntsman);auto&e=g.m_enemies[0];
+  e.pos={4.5f,9.5f};e.home=e.lastKnown=e.pos;e.heading=-kPi*.5f;g.m_player.pos={4.5f,6.5f};g.m_sounds.clear();
+  Vec2 source=scenario==2?g.m_player.pos:Vec2{6.5f,9.5f};g.m_sounds.push_back({Sound::Concrete1,source,scenario==1?0.f:1.f,1,true});g.updateEnemies(.01f);
+  if(scenario==0){if(e.state!=Enemy::State::Investigate||lengthSq(e.lastKnown-source)>.00001f)return false;}
+  else if(e.state!=Enemy::State::Idle||e.awareness!=0)return false;
+ }
+ // Friendly reactions run through the machinery update, respect walls/death,
+ // and never replace a scripted animation or explicit look-at target.
+ for(int scenario=0;scenario<4;++scenario){auto g=validationScene(Enemy::Kind::Huntsman);auto map=std::make_shared<AuthoredMapData>();
+  map->name="Friendly perception test";map->definition={{0,0},{3,3},0,Environment::Interior,false,8,.3f,42};
+  AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');if(scenario==1)layer.rows[6][7]='#';map->layers.push_back(layer);
+  ActorTrack worker;worker.timerState=stateId("friendly_test");worker.keys={{0,{6.5f,6.5f},0,0,scenario==3?1:0},{1000,{6.5f,6.5f},0,0,scenario==3?1:0}};map->actorTracks.push_back(worker);
+  TimedSequence timeline;timeline.timerState=worker.timerState;timeline.finishState=stateId("friendly_test_complete");timeline.soundIntervalMs=0;map->timedSequences.push_back(timeline);
+  g.m_world=World(0,map);g.m_enemies[0].pos={9.5f,6.5f};g.m_enemies[0].alive=scenario!=2;g.updateMechanisms(.1f);
+  float yaw=g.m_world.actorPose(0).yaw;if(scenario==0){if(yaw<=0||yaw>.401f)return false;}else if(yaw!=0)return false;
+ }
  // Real reactor stairwell, in both directions, not the shorter foundry steps.
  for(bool descend:{true,false}){auto g=mapInspection({20,descend?10.5f:19.5f},0,0,3,false,descend?-9.f:-6.f,false);g.m_enemies.resize(1);auto&e=g.m_enemies[0];e={};e.kind=Enemy::Kind::Warden;e.pos={20,descend?19.5f:10.5f};e.z=descend?-6.f:-9.f;e.home=e.pos;e.lastKnown=g.m_player.pos;e.lastKnownZ=g.m_player.z;e.awareness=60;e.heading=descend?-kPi*.5f:kPi*.5f;
   g.sound(Sound::Shot);for(int i=0;i<2400&&length(e.pos-g.m_player.pos)>1.2f;++i)g.updateEnemies(1.f/120);

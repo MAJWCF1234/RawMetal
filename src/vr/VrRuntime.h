@@ -30,6 +30,7 @@ public:
  static Point3 wristPoint(Point3 p){return {p.x*WristScale,p.y*WristScale,(p.z-.13f)*WristScale+WristCenter};}
  static std::pair<int,int> wristPointer(Point3 origin,Point3 direction);
  static bool shoulderSlot(Point3 offset,Point3 forward);
+ static bool foregripSupport(Point3 right,Point3 left,Point3 rightForward,bool gripped);
 private:
  void suspendTracking(Game& game,InputState& input);
  struct Impl;std::unique_ptr<Impl> m;

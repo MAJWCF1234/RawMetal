@@ -6,7 +6,7 @@ void Game::updateInventory(const InputState& input){
  m_inventoryClick=input.fire;m_inventoryUse=input.use||input.menuAccept;
  auto exists=[&](int item){return item==0|| (item==1?m_player.ammo>0:m_medkits>0);};
  auto activate=[&](){
-  if(m_selectedItem==0){m_weaponEquipped=!m_weaponEquipped;m_holster=m_weaponEquipped&&m_player.ammo>0?0.f:1.f;}
+  if(m_selectedItem==0)equipWeapon(m_weaponEquipped?WeaponId::Fists:m_equippedWeapon);
   if(m_selectedItem==2&&m_medkits>0&&m_player.health<100){--m_medkits;m_player.health=std::min(100.f,m_player.health+35);sound(Sound::Pickup,.6f);}
  };
  if(use)activate();
@@ -15,7 +15,7 @@ void Game::updateInventory(const InputState& input){
  if(x>=480&&x<586&&y>=36&&y<58){m_inventoryOpen=false;m_suppressFire=true;return;}
  if(x>=350&&x<574&&y>=280&&y<310){activate();return;}
  if(x>=62&&x<322&&y>=64&&y<136){m_selectedItem=0;if(!m_weaponEquipped)activate();return;}
- if(x>=62&&x<322&&y>=144&&y<216){m_weaponEquipped=false;m_holster=1;m_selectedItem=0;return;}
+ if(x>=62&&x<322&&y>=144&&y<216){equipWeapon(WeaponId::Fists);m_selectedItem=0;return;}
  if(x<350||x>=554||y<94||y>=239)return;
  int cell=(y-94)/29*6+(x-350)/34;
  auto width=[](int i){return i==0?4:i==1?1:2;};
@@ -26,7 +26,7 @@ void Game::updateInventory(const InputState& input){
  if(cell%6+w>6||cell/6+2>5)return;
  for(int dy=0;dy<2;++dy)for(int dx=0;dx<w;++dx)for(int i=0;i<3;++i)
   if(i!=item&&exists(i)&&!(i==0&&m_weaponEquipped)&&contains(i,cell+dy*6+dx))return;
- m_itemCells[item]=cell;if(item==0){m_weaponEquipped=false;m_holster=1;}
+ m_itemCells[item]=cell;if(item==0)equipWeapon(WeaponId::Fists);
 }
 bool Game::testInventory(){
  auto g=validationScene(Enemy::Kind::Huntsman);InputState i{};i.inventory=true;g.update(i,.02f);

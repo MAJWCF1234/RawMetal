@@ -150,6 +150,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()!=8)throw std::runtime_error("malformed ACTOR record");auto map=mapAt(maps,f);int kind=integer(f,3,"actor visual");if(kind<0||kind>3||f[2].empty())throw std::runtime_error("invalid actor visual or timer");
    if(integer(f,7,"actor index")!=int(map->actorTracks.size()))throw std::runtime_error("actor indices must be sequential");
    map->actorTracks.push_back({stateId(decode(f[2])),ActorVisual(kind),number(f,4,"actor scale"),boolean(f,5,"actor loop"),boolean(f,6,"actor tool"),{}});
+  }else if(tag=="ACTOR_AI"){
+   if(f.size()!=8)throw std::runtime_error("malformed ACTOR_AI record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),mode=integer(f,3,"actor AI mode");
+   if(index<0||index>=int(map->actorTracks.size())||mode<0||mode>2)throw std::runtime_error("invalid actor AI target or mode");
+   map->actorTracks[size_t(index)].ai={ActorAiMode(mode),f[4].empty()?0:stateId(decode(f[4])),number(f,5,"actor speed"),number(f,6,"follow distance"),number(f,7,"danger range")};
   }else if(tag=="ACTOR_HEALTH"){
    if(f.size()!=6||f[4].empty()||f[5].empty())throw std::runtime_error("malformed ACTOR_HEALTH record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("health has no actor");auto& t=map->actorTracks[size_t(index)];t.health=integer(f,3,"actor health");t.damageState=stateId(decode(f[4]));t.deadState=stateId(decode(f[5]));
   }else if(tag=="ACTOR_SUSPEND"){
