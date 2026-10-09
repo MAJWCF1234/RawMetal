@@ -692,6 +692,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(const auto& s:map->timedSequences)if(s.sightActor<-1||s.sightActor>=int(map->actorTracks.size())||!std::isfinite(s.sightDistance)||s.sightDistance<=0)throw std::runtime_error("Invalid sequence sight target");
  auto timerExists=[&](StateId id){return std::any_of(map->timedSequences.begin(),map->timedSequences.end(),[&](const auto& s){return s.timerState==id;});};
  for(const auto& track:map->actorTracks){
+  const auto& ai=track.ai;
+  if(int(ai.mode)<0||int(ai.mode)>2||!std::isfinite(ai.speed)||ai.speed<=0||ai.speed>4||!std::isfinite(ai.followDistance)||ai.followDistance<1.2f||ai.followDistance>5||!std::isfinite(ai.dangerRange)||ai.dangerRange<2||ai.dangerRange>20||(ai.mode!=ActorAiMode::Scripted&&(track.visual!=ActorVisual::Worker||track.platform)))throw std::runtime_error("Invalid actor AI configuration");
   if(!timerExists(track.timerState)||track.scale<=0||track.scale>20||!std::isfinite(track.scale)||track.keys.size()<2||track.keys.front().timeMs!=0||track.footprint.x<=0||track.footprint.y<=0||track.thickness<=0||!std::isfinite(track.footprint.x)||!std::isfinite(track.footprint.y)||!std::isfinite(track.thickness))throw std::runtime_error("Invalid authored actor track");
   int previous=-1;for(const auto& k:track.keys){if(k.timeMs<=previous||k.timeMs>3600000||!std::isfinite(k.position.x)||!std::isfinite(k.position.y)||!std::isfinite(k.z)||!std::isfinite(k.yaw)||!std::isfinite(k.phase)||k.phase<0||k.phase>64||k.lookAtActor<-1||k.lookAtActor>=int(map->actorTracks.size())||k.clip<0||k.clip>(track.visual==ActorVisual::Worker?5:4))throw std::runtime_error("Invalid actor pose key");previous=k.timeMs;}
   if(!track.idleKeys.empty()){

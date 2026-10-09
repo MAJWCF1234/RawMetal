@@ -73,6 +73,8 @@ bool Game::testWorldIsolation(){
    valid&=std::fabs(legacyTerminal.terminals()[0].yaw-kPi)<.001f&&oriented->maps[0]->terminals[0].yaw==0&&orientedTerminal.terminals()[0].yaw==0;
    auto actors=load(base+"TIMED_SEQUENCE|0|scene|finished|0|0|24|24|-1|4|10000|9000|0|0|2|0.5|1\nACTOR|0|scene|0|1.7|0|1|0\nACTOR_KEY|0|0|0|5|5|0|0|1|0|1\nACTOR_KEY|0|0|10000|6|5|0|0|1|4|1\nACTOR_IDLE_KEY|0|0|0|4|5|0|0|1|0\nACTOR_IDLE_KEY|0|0|2000|5|5|0|0|1|3\nACTOR_PRELUDE|0|0|1000|3000\nACTOR|0|scene|1|1|0|0|1\nACTOR_KEY|0|1|0|6|6|1|0|0|0\nACTOR_KEY|0|1|10000|6|6|1|0|0|1\nSEQUENCE_SIGHT|0|0|0|25\n");
    valid&=actors->maps[0]->actorTracks[0].idleKeys.size()==2&&actors->maps[0]->actorTracks[0].keys[0].lookAtActor==1&&actors->maps[0]->timedSequences[0].sightActor==0;
+   auto friendly=load(base+"TIMED_SEQUENCE|0|npc|done|0|0|24|24|-1|4|10000|9000|0|0|2|0.5|1\nACTOR|0|npc|0|1.7|0|0|0\nACTOR_KEY|0|0|0|5|5|0|0|0|0\nACTOR_KEY|0|0|10000|5|5|0|0|0|0\nACTOR_HEALTH|0|0|70|npc_damage|npc_dead\nACTOR_AI|0|0|2|npc_enabled|1.4|2|6\n");
+   valid&=friendly->maps[0]->actorTracks[0].ai.mode==ActorAiMode::Escort&&friendly->maps[0]->actorTracks[0].ai.enableState==stateId("npc_enabled");
   }catch(...){}
   auto invalid=[&](const std::string& text){try{load(text);return false;}catch(const std::runtime_error&){return true;}};
   bool guarded=invalid(base+records(0,0))&&invalid(base+records(1,12))&&invalid(base+"FIXTURE|0|99|3|3|0|1|1|1|0|1\n")&&invalid(base+"PROP|0|99|3|3|1|1|0|0.5|0.5|0\n");

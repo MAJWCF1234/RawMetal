@@ -241,8 +241,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }return false;
  };
  float farPlane=w.outdoors()?70.f:160.f;
- auto outside=[&](Point3 p){if(m_staticGeometryBuild)return 0u;unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*1.3f<0)mask|=2;if(p.z-p.x*1.3f<0)mask|=4;if(p.z+p.y*2.2f<0)mask|=8;if(p.z-p.y*2.2f<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
- auto sphereVisible=[&](Point3 point,float radius){if(m_staticGeometryBuild)return true;auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z-radius<farPlane&&p.z+p.x*1.3f+radius*1.65f>0&&p.z-p.x*1.3f+radius*1.65f>0&&p.z+p.y*2.2f+radius*2.42f>0&&p.z-p.y*2.2f+radius*2.42f>0;};
+ // VR headsets outrun the desktop frustum; keep sphere/edge culling but widen
+ // the planes so peripheral geometry does not pop at the HMD borders.
+ float hx=m_vrRendering?.72f:1.3f,hy=m_vrRendering?1.15f:2.2f,hr=m_vrRendering?1.95f:1.65f,vr=m_vrRendering?2.65f:2.42f;
+ auto outside=[&](Point3 p){if(m_staticGeometryBuild)return 0u;unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*hx<0)mask|=2;if(p.z-p.x*hx<0)mask|=4;if(p.z+p.y*hy<0)mask|=8;if(p.z-p.y*hy<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
+ auto sphereVisible=[&](Point3 point,float radius){if(m_staticGeometryBuild)return true;if(!m_visibilityCulling)return true;auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z-radius<farPlane&&p.z+p.x*hx+radius*hr>0&&p.z-p.x*hx+radius*hr>0&&p.z+p.y*hy+radius*vr>0&&p.z-p.y*hy+radius*vr>0;};
  auto flashPitch=game.player().pitch/140.f,flashCp=std::cos(flashPitch),flashSp=std::sin(flashPitch);
  Point3 flashForward{std::cos(game.player().angle)*flashCp,std::sin(game.player().angle)*flashCp,flashSp};
  bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
@@ -486,7 +489,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(!materials.ready){
    int lastPart=0;for(const auto&face:mesh.triangles)lastPart=std::max(lastPart,face.part);
    materials.parts.resize(size_t(lastPart)+1);
-   for(const auto&face:mesh.triangles){auto*&texture=materials.parts[size_t(face.part)];if(!texture)texture=&facilityTexture(model,face.part);materials.hasGloss|=texture->glossStrength>0;}
+   for(const auto&face:mesh.triangles){
+    auto*&texture=materials.parts[size_t(face.part)];
+    if(!texture){texture=&facilityTexture(model,face.part);materials.hasGloss|=texture->glossStrength>0;}
+   }
    materials.ready=true;
   }
   float c=std::cos(yaw),s=std::sin(yaw);
@@ -1403,13 +1409,21 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  }
 
  if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
+  VrHand gun=hands[1];
+  if(game.vrSupportGrip()&&hands[0].tracked){
+   auto delta=hands[0].position-hands[1].position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
+   if(length>.0001f){Point3 back={-delta.x/length,-delta.y/length,-delta.z/length},upHint=hands[1].basis[1];
+    Point3 side={upHint.y*back.z-upHint.z*back.y,upHint.z*back.x-upHint.x*back.z,upHint.x*back.y-upHint.y*back.x};float sideLength=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);
+    if(sideLength>.0001f){side=side*(1.f/sideLength);Point3 up={back.y*side.z-back.z*side.y,back.z*side.x-back.x*side.z,back.x*side.y-back.y*side.x};gun.basis={side,up,back};}
+   }
+  }
   auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=.85f/std::max({range.x,range.y,range.z});
-  for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-.055f,p.z-.25f};}draw(face,m_weaponTexture,hands[1]);}
+  for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-.055f,p.z-.25f};}draw(face,m_weaponTexture,gun);}
  }
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){
  const auto&motion=game.weaponMotion();
- if(game.unarmed()){bool jab=game.punchAge()<.48f&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/.48f:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
+ if(game.unarmed()){const auto&melee=game.unarmedMelee();bool jab=game.punchAge()<melee.animLen&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/melee.animLen:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
  auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=kViewModelScale/std::max({range.x,range.y,range.z});
  auto local=[&](Point3 source){auto p=(source-center)*scale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
  const Point3 pivot{.15f,-.155f,.52f};

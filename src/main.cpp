@@ -475,6 +475,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
+    if(std::wcsstr(commandLine,L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
     if(std::wcsstr(commandLine,L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
     if(std::wcsstr(commandLine,L"--freight-repair-inspection")){
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
@@ -591,6 +592,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(std::wcsstr(commandLine,L"--smoke-test")){
         retro::Game game;
+        game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
         if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
         std::ofstream("model-report.txt")<<renderer.modelReport();
@@ -740,7 +742,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(std::wcsstr(commandLine,L"--vr-inspection-test"))return vrSmokeTest(W,H,true);
     if(std::wcsstr(commandLine,L"--vr-smoke-test"))return vrSmokeTest(W,H);
-    if(std::wcsstr(commandLine,L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
+    if(std::wcsstr(commandLine,L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
     bool vrMode=std::wcsstr(commandLine,L"--vr")!=nullptr;
     if(!*commandLine){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
     std::unique_ptr<retro::VrRuntime> vrRuntime;

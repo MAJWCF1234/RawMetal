@@ -23,6 +23,8 @@ struct QuestItemStack {StateId id=0;int count=0;};
 // Shared, saved actor and machinery timelines. Keys use absolute map elevation.
 enum class ActorVisual { Worker, Wasp, Huntsman, Cargo };
 struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
+enum class ActorAiMode { Scripted, Civilian, Escort };
+struct ActorAiConfig {ActorAiMode mode=ActorAiMode::Scripted;StateId enableState=0;float speed=1.4f,followDistance=2.f,dangerRange=6.f;};
 struct ActorTrack {
  StateId timerState=0;ActorVisual visual=ActorVisual::Worker;
  float scale=1.7f;bool loop=false,tool=false;std::vector<ActorKey> keys;
@@ -30,6 +32,7 @@ struct ActorTrack {
  float suspensionTop=-999;
  StateId damageState=0,deadState=0;int health=0;
  std::vector<ActorKey> idleKeys;int idleUntilMs=0,approachUntilMs=0;
+ ActorAiConfig ai{};
 };
 struct SequenceCue {
  StateId timerState=0;int timeMs=0;Sound sound=Sound::Metal1;
@@ -38,6 +41,11 @@ struct SequenceCue {
 struct ActorPose {Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 inline StateId actorTrackState(StateId timer,size_t index,std::string_view field){return stateId("actor_track/"+std::to_string(timer)+"/"+std::to_string(index)+"/"+std::string(field));}
 inline StateId actorPositionState(StateId dead,int axis){return stateId("actor_position/"+std::to_string(dead)+"/"+std::to_string(axis));}
+inline StateId actorAiState(int level,size_t actor,StateId timer,std::string_view field){
+ auto text="npc/"+std::to_string(level)+"/"+std::to_string(actor)+"/"+std::to_string(timer)+"/"+std::string(field);StateId hash=2166136261u;
+ for(unsigned char c:text)hash=(hash^c)*16777619u;
+ return hash|0x80000000u; // Internal NPC keys cannot collide with authored stateId flags.
+}
 ActorPose sampleActor(const ActorTrack& track,int ageMs);
 ActorPose sampleActorKeys(const std::vector<ActorKey>& keys,int ageMs,bool loop=false);
 struct ScriptAction {

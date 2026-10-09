@@ -3,6 +3,7 @@
 #include <cmath>
 #include <fstream>
 #include <utility>
+#include <chrono>
 
 namespace retro {
 namespace {
@@ -14,8 +15,11 @@ bool containsEvent(const std::vector<StateId>& values,StateId id){
 }
 }
 
-int Game::state(StateId id)const{int index=findValue(m_states,id);return index<0?0:m_states[size_t(index)].value;}
-void Game::setState(StateId id,int value){if(!id)return;int index=findValue(m_states,id);if(index<0){if(value)m_states.push_back({id,value});}else if(value)m_states[size_t(index)].value=value;else m_states.erase(m_states.begin()+index);}
+int Game::state(StateId id)const{auto it=std::lower_bound(m_states.begin(),m_states.end(),id,[](const StateValue&value,StateId key){return value.id<key;});return it!=m_states.end()&&it->id==id?it->value:0;}
+void Game::setState(StateId id,int value){
+ if(!id)return;auto it=std::lower_bound(m_states.begin(),m_states.end(),id,[](const StateValue&entry,StateId key){return entry.id<key;});
+ if(it==m_states.end()||it->id!=id){if(value)m_states.insert(it,{id,value});}else if(value)it->value=value;else m_states.erase(it);
+}
 ObjectiveStatus Game::objective(StateId id)const{int index=findValue(m_objectives,id);return index<0?ObjectiveStatus::Hidden:static_cast<ObjectiveStatus>(m_objectives[size_t(index)].value);}
 void Game::setObjective(StateId id,ObjectiveStatus status){if(!id)return;int value=int(status),index=findValue(m_objectives,id);if(index<0){if(status!=ObjectiveStatus::Hidden)m_objectives.push_back({id,value});}else if(status==ObjectiveStatus::Hidden)m_objectives.erase(m_objectives.begin()+index);else m_objectives[size_t(index)].value=value;}
 int Game::questItemCount(StateId id)const{int index=findValue(m_questItems,id);return index<0?0:m_questItems[size_t(index)].count;}
@@ -132,6 +136,17 @@ bool Game::testFlashlight(){
 
 bool Game::testSystems(){
  std::ofstream out("systems-test.txt");auto check=[&](bool ok,const char*name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
+ {Game dense;dense.m_states.clear();for(int i=0;i<4096;++i){int index=(i*1543)%4096;dense.setState(StateId(index+1),index+1);}
+  dense.setState(4096,0);dense.setState(4000,-7);dense.setState(0,123);
+  if(!check(dense.state(4096)==0&&dense.state(4000)==-7&&dense.state(3999)==3999&&dense.state(0)==0,"Large state store supports unordered inserts, updates and removals"))return false;
+  using Clock=std::chrono::steady_clock;std::int64_t indexed=0,linear=0;std::uint32_t seed=17;auto start=Clock::now();
+  for(int i=0;i<250000;++i){seed=seed*1664525u+1013904223u;indexed+=dense.state((seed>>16)%4096+1);}auto middle=Clock::now();seed=17;
+  for(int i=0;i<250000;++i){seed=seed*1664525u+1013904223u;int index=findValue(dense.m_states,(seed>>16)%4096+1);if(index>=0)linear+=dense.m_states[size_t(index)].value;}auto finish=Clock::now();
+  out<<"250000 lookups / 4095 flags: indexed "<<std::chrono::duration<double,std::milli>(middle-start).count()<<" ms; linear reference "<<std::chrono::duration<double,std::milli>(finish-middle).count()<<" ms\n";
+  if(!check(indexed==linear,"Indexed state lookups exactly match the linear reference"))return false;
+  std::reverse(dense.m_states.begin(),dense.m_states.end());Game restored;
+  if(!check(restored.decodeSave(dense.encodeSave())&&restored.state(4000)==-7&&restored.state(3999)==3999&&restored.m_states.size()==4095,"Large unsorted legacy state payload loads and restores indexed lookup"))return false;
+ }
  Game game;auto power=stateId("power_restored"),objectiveId=stateId("reach_service_gallery"),fuse=stateId("fuse");
  game.setState(power,2);game.setObjective(objectiveId,ObjectiveStatus::Active);game.giveQuestItem(fuse,2);
  if(!check(game.state(power)==2&&game.objective(objectiveId)==ObjectiveStatus::Active&&game.questItemCount(fuse)==2,"Named state, objective and quest-item stores"))return false;

@@ -1,0 +1,10 @@
+Large state store supports unordered inserts, updates and removals: PASS
+250000 lookups / 4095 flags: indexed 12.6328 ms; linear reference 198.246 ms
+Indexed state lookups exactly match the linear reference: PASS
+Large unsorted legacy state payload loads and restores indexed lookup: PASS
+Named state, objective and quest-item stores: PASS
+Quest items are counted and consumable: PASS
+One-shot volume event sets state, spawns an alerted monster and shakes view: PASS
+Flag-gated hazard stays off: PASS
+Environmental hazard applies frame-rate-scaled damage: PASS
+Campaign completion is explicit, not tied to the highest compiled chunk: PASS

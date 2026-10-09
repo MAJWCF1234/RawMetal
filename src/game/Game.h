@@ -4,6 +4,7 @@
 #include "../world/World.h"
 #include <vector>
 #include "../audio/Sound.h"
+#include "Combat.h"
 #include <string>
 #include <string_view>
 #include <cstdint>
@@ -137,8 +138,9 @@ public:
 
     void update(const InputState& input, float dt);
     void moveVrRoom(Vec2 delta){tryMove(delta);}
-    void setVrAim(Point3 position,Point3 direction,bool valid){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;}
+    void setVrAim(Point3 position,Point3 direction,bool valid,bool support=false){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;m_vrSupportGrip=support&&valid;}
     void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandValid[side]=valid;}
+    bool vrSupportGrip()const{return m_vrSupportGrip;}
     void restart();
     int level()const{return m_level;}
     // Campaign content count; runtime custom packs use their authored map count.
@@ -212,6 +214,7 @@ public:
     static bool testMovement();
     static bool testProgression();
     static bool testAI();
+    static bool testFriendlyAI();
     static bool testGantry();
     static bool testLift();
     static Game liftInspection(float seconds,int view=0);
@@ -258,6 +261,10 @@ public:
     }
     bool dormantEntity(float z)const{return m_world.hasLift()&&z<-2&&m_player.z>=-2&&m_world.liftPhase()!=World::LiftPhase::Crashed;}
     bool weaponEquipped()const{return m_weaponEquipped;}
+    WeaponId equippedWeapon()const{return m_weaponEquipped?m_equippedWeapon:WeaponId::Fists;}
+    const WeaponDef& equippedWeaponDef()const{return weaponDef(m_equippedWeapon);}
+    const MeleeDef& unarmedMelee()const{return kUnarmedMelee;}
+    void equipWeapon(WeaponId id);
     int medkits()const{return m_medkits;}
     int selectedItem()const{return m_selectedItem;}
     int itemCell(int item)const{return m_itemCells[item];}
@@ -351,9 +358,17 @@ private:
     void reloadWeapon();
     void punchImpact();
     void applyPunchHit(Enemy& enemy);
+    bool applyEnemyDamage(Enemy& enemy,float amount,bool bloodDecal=true,bool closeHitStop=false);
     void updateVrMelee(const InputState& input,float dt);
     void receiveDamage(float amount,Vec2 source);
     void updateEnemies(float dt);
+    ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
+    ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt);
+    int nearbyFriendly()const;
+    bool commandFriendly();
+    void requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal);
+    bool aiDoorLocked(const World& world,int level,const Door& door)const;
+    void damageFriendly(size_t actor,float amount,Vec2 source);
     void migrateEnemiesAcrossChunks();
     void updatePickups();
 
@@ -367,7 +382,8 @@ private:
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<BarrelExplosion> m_barrelExplosions;
     int m_heldClutter=-1;
-    bool m_vrAimValid=false;
+    int m_npcNavBudget=4;
+    bool m_vrAimValid=false,m_vrSupportGrip=false;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;
     std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{};
@@ -409,6 +425,7 @@ private:
     void updateMenu(const InputState& input);
     void updateInventory(const InputState& input);
     bool m_weaponEquipped=true,m_inventoryClick=false,m_inventoryUse=false;
+    WeaponId m_equippedWeapon=WeaponId::Shotgun;
     int m_medkits=0,m_selectedItem=-1;
     std::array<int,3> m_itemCells{12,0,2};
     void sound(Sound sound,float gain=1,float pitch=1);
