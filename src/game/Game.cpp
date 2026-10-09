@@ -37,7 +37,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);}
+void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();}
 void Game::equipWeapon(WeaponId id){
  if(id==WeaponId::Fists){m_weaponEquipped=false;m_holster=1.f;return;}
  m_equippedWeapon=id;m_weaponEquipped=true;m_holster=m_player.ammo>0?0.f:1.f;
@@ -239,18 +239,24 @@ void Game::shoot() {
     }
 
     size_t bestActor=m_world.actorTracks().size();
-    for(size_t i=0;i<m_world.actorTracks().size();++i){const auto& actor=m_world.actorTracks()[i];if(!actor.health||state(actor.deadState))continue;auto pose=m_world.actorPose(i);if(pose.clip==4)continue;
+    for(size_t i=0;i<m_world.actorTracks().size();++i){const auto& actor=m_world.actorTracks()[i];if(autonomousActor(actor)||!actor.health||state(actor.deadState))continue;auto pose=m_world.actorPose(i);if(pose.clip==4)continue;
      Vec2 delta=pose.position-m_player.pos;float along=dot(delta,forward),lateral=std::fabs(delta.x*forward.y-delta.y*forward.x),rayHeight=m_player.z+m_player.eye+along*std::tan(m_player.pitch/140.f);
      if(along<=0||along>hit.maxRange||along>=bestAlong||lateral>.4f+along*hit.conePerMeter||rayHeight<pose.z||rayHeight>pose.z+actor.scale||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,pose.position,rayHeight))continue;
      bestAlong=along;bestActor=i;
+    }
+    size_t bestFriendly=m_friendlyActors.size();
+    for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&actor=npc.track();const auto&pose=npc.pose;if(npc.level!=m_level||!autonomousActor(actor)||!actor.health||state(actor.deadState)||pose.clip==4)continue;
+     auto delta=pose.position-m_player.pos;float along=dot(delta,forward),lateral=std::fabs(delta.x*forward.y-delta.y*forward.x),z=m_player.z+m_player.eye+along*std::tan(m_player.pitch/140.f);
+     if(along<=0||along>hit.maxRange||along>=bestAlong||lateral>.4f+along*hit.conePerMeter||z<pose.z||z>pose.z+actor.scale||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,pose.position,z))continue;
+     bestAlong=along;bestFriendly=i;
     }
     if(m_world.hasLift()){int joint=-1;float pitch=m_player.pitch/140.f;RagPoint direction{forward.x*std::cos(pitch),forward.y*std::cos(pitch),std::sin(pitch)};
      float distance=m_hazmat.rayHit({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction,joint);
      if(joint>=0&&distance<bestAlong&&distance<hit.maxRange){auto p=m_hazmat.p[joint];if(m_world.rayClear(m_player.pos,m_player.z+m_player.eye,{p.x,p.y},p.z)){m_hazmat.impulse(joint,direction*hit.ragdollImpulse+RagPoint{0,0,.7f});sound(Sound::PunchHit,.55f,.8f);return;}}
     }
+    if(bestFriendly<m_friendlyActors.size()){damageFriendly(bestFriendly,hit.actorDamage,m_player.pos);m_hitFlash=1;return;}
     if(bestActor<m_world.actorTracks().size()){
      const auto& actor=m_world.actorTracks()[bestActor];auto pose=m_world.actorPose(bestActor);
-     if(actor.ai.mode!=ActorAiMode::Scripted){damageFriendly(bestActor,hit.actorDamage,m_player.pos);m_hitFlash=1;return;}
      int damage=state(actor.damageState)+int(hit.actorDamage);setState(actor.damageState,damage);m_hitFlash=1;
      bool killed=damage>=actor.health;
      if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(m_world.floorHeight(pose.position.x,pose.position.y)*1000)));if(actor.visual!=ActorVisual::Worker)++m_kills;}

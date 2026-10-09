@@ -49,11 +49,28 @@ Navigation checks the full hull, support, rails and doors. Workers route around
 walls, request ordinary unlocked doors and retry blocked movement. State/control
 locks and transfer/entry doors retain their restrictions. Position, fear,
 commands and death animation restore through the normal save system. NPC keys
-include chunk and actor identity and use a separate namespace from authored flags.
+include the original chunk and actor identity and use a separate namespace from
+authored flags, even after the actor moves to another chunk.
 Living enabled workers block the player/enemy hull on their own floor; scripted
 actors keep their previous collision behavior.
-Following currently stays within the actor's authored chunk; automatic escort
-migration across stitched chunk boundaries remains unsupported.
+Escorts can follow through aligned 24 m chunks in both axes, including turns
+and non-sequential map IDs. The engine keeps one runtime actor with a stable
+authored identity, loads its current chunk and next portal when needed, and
+draws it in its physical chunk. Save/load restores physical ownership, commands
+and death without creating a second actor in the source map. Actors start
+following after the player encounters their chunk; remote unseen workers do
+not all start chasing the player.
+
+Paired open edges or physically open matching north/south transfer doors allow
+crossing. NPCs never force transfer doors. Actual movement samples support and
+full hull clearance on both sides; closed edges, steep drops and mismatched
+floors stop movement. Follow/Wait and player collision also work while a body
+straddles an open seam. Unreachable portal searches use staggered retries.
+
+This is ground navigation through cardinal aligned chunks. It does not add
+arbitrary overlapping portal spaces or automatic lift operation. Enemy updates
+and friendly combat targeting retain the active player chunk's simulation scope;
+this pass does not add full offscreen enemy simulation across the whole chapter.
 
 Full waypoint searches have a shared frame budget and staggered retry timers.
 Routine steering uses a short local ground probe; every actual movement step
@@ -74,4 +91,7 @@ alongside stairs, terrain, stalking and contact combat. `--mechanisms-test` and
 `--campaign-map-test` protect the worker encounter and saved actor timelines.
 `--friendly-ai-test` covers following at 60/120 Hz, PC/VR commands, wall detours,
 door permissions, fleeing, save restoration, animated death and enemy attacks
-on friendly actors. The Vulkan smoke suite includes the state-store benchmark.
+on friendly actors. It also covers streaming every frame, both directions across
+seams, a two-axis turn, open/closed paired transfers, a player in the doorway,
+invalid saves and migrated commands/corpses. The Vulkan smoke suite includes the
+state-store benchmark.

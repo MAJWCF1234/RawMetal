@@ -36,7 +36,7 @@ void Game::updateStreaming(float dt){
   auto visibleGroups=m_world.visibleResidencyGroups();
   for(int level=0;level<chunkCount();++level)if(level!=m_level){auto other=chunkOffset(level);
    int group=m_chunks[level].world.definition().residencyGroup;
-   bool needed=group==m_world.definition().residencyGroup;
+   bool needed=group==m_world.definition().residencyGroup||friendlyChunkNeeded(level);
    if(group>=0)needed|=std::find(visibleGroups.begin(),visibleGroups.end(),group)!=visibleGroups.end();
    float dx=std::max({other.x-global.x,0.f,global.x-other.x-24}),dy=std::max({other.y-global.y,0.f,global.y-other.y-24});
    if(dx*dx+dy*dy<36)needed=true;
@@ -75,12 +75,12 @@ void Game::updateStreaming(float dt){
    float along=dot(to,forward),lateral=std::fabs(to.x*forward.y-to.y*forward.x);
    float cone=17.f+std::max(0.f,along)*.42f;
    bool inFront=along>-5.f&&along<70.f&&lateral<cone;
-   bool keepResident=inFront||seamBuffer;
+   bool keepResident=inFront||seamBuffer||friendlyChunkNeeded(level);
    if(m_chunks[level].resident){
     // Hysteresis prevents rapid load/unload thrashing when the player looks
     // sideways across a cone edge.
     float keepCone=cone+8.f;
-    keepResident=seamBuffer||(along>-14.f&&along<78.f&&lateral<keepCone);
+    keepResident=friendlyChunkNeeded(level)||seamBuffer||(along>-14.f&&along<78.f&&lateral<keepCone);
    }
    if(keepResident)ensureChunk(level);
    else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
@@ -94,7 +94,7 @@ void Game::updateStreaming(float dt){
   if(door.transfer&&m_level+1<chunkCount()){auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,door.opening);}
   if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
  }
- for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=false;
+ for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=friendlyChunkNeeded(level);
   auto approaching=[&](const Door& door){
    float dx=std::max({door.left-m_player.pos.x,0.f,m_player.pos.x-door.right});
    float dy=std::fabs(m_player.pos.y-door.y);
@@ -102,11 +102,11 @@ void Game::updateStreaming(float dt){
    return dx*dx+dy*dy<20.25f&&std::fabs(m_player.z-base)<2.f;
   };
   if(level==m_level+1){
-   needed=m_world.openSouthBoundary();
+   needed|=m_world.openSouthBoundary();
    if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().back();needed=d.transfer&&(d.opening||d.open>0||approaching(d));}
   }
   if(level==m_level-1){
-   needed=m_world.openNorthBoundary();
+   needed|=m_world.openNorthBoundary();
    if(!needed&&!m_world.doors().empty()){auto&d=m_world.doors().front();needed=d.entry&&(d.opening||d.open>0||approaching(d));}
   }
   if(needed)ensureChunk(level);

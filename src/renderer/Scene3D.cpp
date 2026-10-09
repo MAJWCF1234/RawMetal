@@ -1261,14 +1261,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  }
  movingGeometry=true;
- for(size_t trackIndex=0;trackIndex<w.actorTracks().size();++trackIndex){const auto& track=w.actorTracks()[trackIndex];
-  auto pose=w.actorPose(trackIndex);
+ auto drawActor=[&](const ActorTrack&track,ActorPose pose){
     float radius=track.visual==ActorVisual::Worker?track.scale:track.scale*.8f;
     if(track.platform)radius=std::max(radius,std::hypot(track.footprint.x,track.footprint.y)*.5f);
-  if(!sphereVisible({pose.position.x,pose.position.y,pose.z+radius*.5f},radius))continue;
+  if(!sphereVisible({pose.position.x,pose.position.y,pose.z+radius*.5f},radius))return;
   if(track.suspensionTop>pose.z){float top=pose.z+(track.platform?0.f:track.scale);if(top<track.suspensionTop)cylinder({pose.position.x,pose.position.y,top},{pose.position.x,pose.position.y,track.suspensionTop},.035f,m_pressureMetal);}
-  if(track.platform){float x=pose.position.x,y=pose.position.y,halfWidth=track.footprint.x*.5f,d=track.footprint.y*.5f;box({x-halfWidth,y-d,pose.z-track.thickness},{x+halfWidth,y+d,pose.z},m_pressureMetal,1.f);quad({x-halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d+.12f,pose.z+.004f},{x-halfWidth,y-d+.12f,pose.z+.004f},m_hazard,1.f);continue;}
-  if(track.visual==ActorVisual::Cargo){prop(m_crateMesh,m_crateTexture,pose.position.x,pose.position.y,track.scale,pose.yaw,track.scale,pose.z);continue;}
+  if(track.platform){float x=pose.position.x,y=pose.position.y,halfWidth=track.footprint.x*.5f,d=track.footprint.y*.5f;box({x-halfWidth,y-d,pose.z-track.thickness},{x+halfWidth,y+d,pose.z},m_pressureMetal,1.f);quad({x-halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d+.12f,pose.z+.004f},{x-halfWidth,y-d+.12f,pose.z+.004f},m_hazard,1.f);return;}
+  if(track.visual==ActorVisual::Cargo){prop(m_crateMesh,m_crateTexture,pose.position.x,pose.position.y,track.scale,pose.yaw,track.scale,pose.z);return;}
   bool human=track.visual==ActorVisual::Worker,wasp=track.visual==ActorVisual::Wasp;
   auto& mesh=human?m_workerMesh:wasp?m_waspMesh:m_enemyMesh;
   if(human)mesh.poseCreature(pose.clip,pose.phase);
@@ -1286,7 +1285,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
   objectLighting=false;objectNormalLighting=nullptr;
   if(human&&track.tool&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
- }
+ };
+ for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i));
+ for(const auto&npc:game.friendlyActors())if(npc.level==game.level()&&game.autonomousActor(npc.track()))drawActor(npc.track(),npc.pose);
  movingGeometry=false;
  for(const auto&e:game.enemies()){
   if(e.bodyTop()<game.dormantBelow())continue;

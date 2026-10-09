@@ -30,7 +30,8 @@ offline VR and Vulkan smoke checks passed. Raw results are in
 [the evidence directory](ai-engine-pass-20261009/).
 
 See [AI authoring and behavior](ai-perception.md) for the `ACTOR_AI` record.
-Following currently operates within the NPC's authored chunk; automatic escort
-migration between stitched chunks is not implemented. Live controller testing
+Following operated within the NPC's authored chunk in this initial pass. The
+[subsequent streaming pass](ai-streaming-pass-20261009.md) adds escort migration
+between aligned stitched chunks. Live controller testing
 and a broader playtest remain necessary to assess overall AI quality against
 GoldSrc. This pass is a local build, not a newly published release.
