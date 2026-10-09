@@ -55,7 +55,7 @@ template<class A> void Game::archiveSave(A& a,int version){
   }
  }else if constexpr(A::reading){m_customCampaign.reset();m_customCampaignKey=0;}
  auto vec=[&](Vec2& v){a(v.x,v.y);};
- a(m_level,m_elapsed,m_won,m_medkits,m_weaponEquipped,m_heldClutter);
+ a(m_level,m_elapsed,m_won,m_medkits,m_weaponEquipped,m_heldClutter);if(version>=14)a(m_heldHuman);
  if(version>=4){a(m_hazmat.initialized,m_hazmat.sleeping,m_hazmat.quiet,m_hazmat.accumulator);
   for(auto&points:{&m_hazmat.p,&m_hazmat.previous})for(auto&p:*points){a(p.x,p.y,p.z);if(p.x<0||p.x>24||p.y<0||p.y>24||p.z<-12||p.z>20)throw std::runtime_error("Invalid hazmat pose");}
   if(m_hazmat.accumulator<0||m_hazmat.accumulator>.06f||m_hazmat.quiet<0||m_hazmat.quiet>10)throw std::runtime_error("Invalid hazmat simulation");
@@ -81,6 +81,10 @@ template<class A> void Game::archiveSave(A& a,int version){
     if(door<int(w.m_doors.size())){w.m_doors[door].open=open;w.m_doors[door].opening=opening;}}
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
   list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(int(e.kind)>(version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
+  if(version>=14){
+   list(c.humans,[&](Human&h){vec(h.pos);vec(h.home);vec(h.target);a(h.z,h.yaw,h.health,h.alert,h.search,h.shotTimer,h.walkPhase,h.downTimer,h.role,h.mind,h.uniform,h.armed);
+    if(int(h.role)>1||int(h.mind)>6||h.health<0||h.health>200||h.alert<0||h.alert>60||h.uniform<0||h.uniform>2)throw std::runtime_error("invalid human");});
+  }
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>6)throw std::runtime_error("invalid clutter");});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
@@ -88,14 +92,14 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,13);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 13 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,6));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,14);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 14 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>13))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>14))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(6,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   // Earlier builds represented a broken crate as four unrelated prop models
@@ -157,9 +161,10 @@ bool Game::decodeSave(const std::string& data){
   auto&p=next.m_player;
   if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>6||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>Player::StandingEye+.2f||std::fabs(p.pitch)>210.01f||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
-  next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
+  next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_humans=c.humans;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
+  if(next.m_heldHuman<-1||next.m_heldHuman>=int(next.m_humans.size()))return false;
   next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
   next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
   next.updateStreaming(0);
@@ -284,6 +289,11 @@ bool Game::testSaves(){
  if(!check(!game.decodeSave(corrupt)&&!game.decodeSave(pristine.substr(0,pristine.size()/2))&&!game.decodeSave("RAWMETAL_SAVE 99 0\n")&&game.encodeSave()==pristine,"Corrupt / truncated / future saves leave the live game untouched"))return false;
  auto invalid=game;invalid.m_player.ammo=-1;if(!check(!game.decodeSave(invalid.encodeSave()),"Valid-checksum invalid gameplay data rejected"))return false;
  game.m_heldClutter=0;game.m_clutter[0].projectile=true;game.m_clutter[0].velocity={2,3};Game held;if(!check(held.decodeSave(game.encodeSave())&&held.holdingClutter()&&held.m_clutter[0].velocity.x==2,"Held and moving clutter roundtrip"))return false;
+ {
+  Game source;Human guard;guard.role=Human::Role::Guard;guard.pos={5.5f,4.5f};guard.home=guard.pos;guard.yaw=1.25f;guard.alert=2.5f;guard.mind=Human::Mind::Suspicious;
+  source.m_humans.push_back(guard);source.m_heldHuman=-1;
+  Game loaded;if(!check(loaded.decodeSave(source.encodeSave())&&loaded.m_humans.size()==1&&loaded.m_humans[0].mind==Human::Mind::Suspicious&&std::fabs(loaded.m_humans[0].yaw-1.25f)<.001f,"Version 14 human actor state roundtrip"))return false;
+ }
  auto directory=std::filesystem::current_path()/("save-test-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));game.setSaveDirectory(directory.wstring());
  struct Cleanup {std::filesystem::path path;~Cleanup(){std::error_code e;for(int i=0;i<3;++i){auto p=slotPath(path.wstring(),i);std::filesystem::remove(p,e);p+=L".tmp";std::filesystem::remove(p,e);}auto c=checkpointPath(path.wstring());std::filesystem::remove(c,e);c+=L".tmp";std::filesystem::remove(c,e);std::filesystem::remove(path,e);}} cleanup{directory};
  InputState escape{};escape.escape=true;game.update(escape,.01f);game.update({},.01f);

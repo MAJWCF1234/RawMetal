@@ -149,6 +149,8 @@ const char* Game::interactionHint()const{
  if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.activateState)return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):"CONTROL / RELEASED"):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");
   if(m_vrInputActive){if(t.reactorAction)return t.reactorAction==1?"GRIP / USE COMPUTER":"GRIP / OPERATE VALVE";return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";}
   if(t.reactorAction)return t.reactorAction==1?"E / USE COMPUTER":"E / OPERATE VALVE";return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
+ if(nearestRearHuman()>=0)return m_player.crouched?"E / SILENT TAKEDOWN":"E / GRAPPLE";
+ if(hasHumanShield())return "E / RELEASE HOSTAGE";
  return nearbyClutter()>=0?(m_vrInputActive?"GRIP / LIFT":"E / LIFT"):nullptr;
 }
 void Game::updateInteraction(const InputState& input,float dt){

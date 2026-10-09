@@ -603,6 +603,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(!retro::Game::testSettings())return 16;
         if(!retro::Game::testInventory())return 31;
         if(!retro::Game::testFlashlight())return 43;
+        if(!retro::Game::testHumanStealth())return 44;
         if(!retro::Game::testPickups())return 18;
         if(!retro::Game::testMovement())return 19;
         if(!retro::Game::testProgression())return 20;

@@ -62,6 +62,13 @@ void Game::executeScriptAction(const ScriptAction& action){
   case ScriptAction::Type::ReleaseControl:m_world.releaseControl();break;
   case ScriptAction::Type::PlaySound:sound(action.sound,action.amount>0?action.amount:1.f);break;
   case ScriptAction::Type::SpawnEnemy:spawnScriptEnemy(action);break;
+  case ScriptAction::Type::SpawnHuman:{
+   Human h;h.role=action.index==1?Human::Role::Guard:Human::Role::Worker;
+   h.pos=action.position;h.home=h.target=h.pos;h.z=action.z==-999?m_world.floorHeight(h.pos.x,h.pos.y):action.z;
+   h.yaw=action.amount;h.uniform=std::clamp(action.value,0,2);h.armed=h.role==Human::Role::Guard;
+   m_humans.push_back(h);
+   break;
+  }
   case ScriptAction::Type::Shake:m_verticalSpringVelocity-=action.amount;m_damageFlash=std::max(m_damageFlash,std::min(1.f,action.amount*.2f));break;
   case ScriptAction::Type::Checkpoint:saveCheckpoint();break;
   case ScriptAction::Type::CompleteCampaign:m_won=true;break;
