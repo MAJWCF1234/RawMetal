@@ -2,6 +2,10 @@
 
 This file centralizes source/provenance notes that were previously scattered through `src/assets/**/SOURCES.md` and related notes.
 
+Availability note, October 10, 2026: the user has taken the external source drive
+away temporarily. Treat `O:/retro official` as offline; project copies and embedded
+resources remain the working asset set. See [project notes](PROJECT_NOTES.md).
+
 ## First-person arms
 Source archive: `psx-first-person-arms-free-game-assets.zip`.
 The supplied `arms_rig.glb` / `arms_rig.fbx` expose 18 clips including grab, guard, jab, knife, relax and rest motions. RawMetal uses the supplied rig data for firearm hand poses and unarmed animation.

@@ -6,6 +6,9 @@ The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
+[Project notes and campaign design reference](docs/PROJECT_NOTES.md) include the
+current planning brief and temporary external asset-drive availability.
+
 ## Current release
 
 v0.7.0-preview.6 corrects linear-light texture filtering, normal-map variance,
