@@ -161,6 +161,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("guard configuration has no actor");
    auto& ai=map->actorTracks[size_t(index)].ai;ai.sightRange=number(f,3,"guard sight range");ai.sightDot=number(f,4,"guard sight dot");ai.recognitionMs=integer(f,5,"guard recognition duration");ai.searchMs=integer(f,6,"guard search duration");ai.alertState=f[7].empty()?0:stateId(decode(f[7]));
    guardTargets.emplace_back(integer(f,1,"map index"),index);
+  }else if(tag=="ACTOR_WEAPON"){
+   if(f.size()!=8)throw std::runtime_error("malformed ACTOR_WEAPON record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
+   if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("weapon configuration has no actor");
+   if(integer(f,3,"actor weapon")!=1)throw std::runtime_error("invalid actor weapon; only Shotgun (1) is supported");
+   auto& ai=map->actorTracks[size_t(index)].ai;ai.armed=true;ai.aimMs=integer(f,4,"weapon aim duration");ai.recoveryMs=integer(f,5,"weapon recovery duration");ai.attackRange=number(f,6,"weapon attack range");ai.attackDamage=number(f,7,"weapon attack damage");
+   guardTargets.emplace_back(integer(f,1,"map index"),index);
   }else if(tag=="ACTOR_PATROL"){
    if(f.size()!=7)throw std::runtime_error("malformed ACTOR_PATROL record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
    if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("patrol point has no actor");
@@ -211,7 +217,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
     number(f,2,"compactor x1"),number(f,3,"compactor y1"),number(f,4,"compactor x2"),number(f,5,"compactor y2"),number(f,6,"compactor bed"),number(f,7,"compactor raised"),number(f,8,"compactor period"),0});
   }else throw std::runtime_error("unknown custom campaign record: "+tag);
  }
- for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration or patrol requires Guard actor AI mode");
+ for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration, weapon or patrol requires Guard actor AI mode");
  if(!sawCampaign||campaign->name.empty())throw std::runtime_error("missing CAMPAIGN record");
  if(maps.empty()||maps.size()>WorldChunkCapacity)throw std::runtime_error("custom campaign has no maps or exceeds engine capacity");
  for(size_t i=0;i<maps.size();++i){

@@ -22,6 +22,8 @@ public:
  Point3 bonePosition(const char* name)const;
  std::vector<MeshTriangle> trackedHand(bool left,const std::array<float,5>& curls);
  Point3 poseAnchor(int index)const{return m_poseAnchors.at(size_t(index));}
+ // Imported, normalized topology remains available after animation poses.
+ const std::vector<MeshTriangle>& bindTriangles()const;
  std::vector<MeshTriangle> triangles;
  std::vector<std::vector<MeshVertex>> openRings;
  Point3 minimum,maximum;
@@ -36,6 +38,7 @@ private:
  struct CachedTriangle {uint32_t node;std::array<uint32_t,3> corners;MeshTriangle prototype;};
  struct CachedRing {uint32_t node;std::vector<uint32_t> corners;};
  std::vector<CachedTriangle> m_cachedTriangles;
+ mutable std::vector<MeshTriangle> m_bindTriangles;
  std::vector<CachedRing> m_cachedRings;
  bool m_topologyReady=false;
  bool m_materialParts=false;

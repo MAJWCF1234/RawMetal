@@ -46,3 +46,8 @@ The current [guard lab](ashfall-playground.md) tests engine-owned patrol,
 recognition and distraction using the existing Worker visual rig. Its authored
 runtime records survive editor save/load/export. These are shared authoring
 records; there is no Ash-specific guard behavior or new custom human subsystem.
+
+On October 11 the same playground gained opt-in armed combat: shared explicit-origin
+ballistics, blocked shots, aim/recovery/reload timing, persistent ammunition and
+two-hand weapon rendering. The external asset drive remains unnecessary for this
+prototype. See [the combat verification report](guard-combat-pass-20261011.md).

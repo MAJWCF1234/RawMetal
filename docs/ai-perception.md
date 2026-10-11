@@ -120,7 +120,29 @@ Remembered sound/target positions use global coordinates; patrol points remain
 local to the actor's authored home. Save format 13 is unchanged. Partial recognition,
 patrol pauses, search and injury/death restore through the existing state store.
 
-This slice does not implement armed guards, faction tactics or stealth takedowns.
+Guards stay unarmed unless an `ACTOR_WEAPON` record equips them. The October 11
+combat pass adds shared first-hit ballistics, aiming/recovery, a six-round tube,
+reloads and attached weapon rendering. First-hit queries test world solids,
+current doors and live characters; a guard suppresses fire when a character or
+cover blocks its target. Player and tracked VR shots use the same explicit-origin
+resolver without temporarily changing the player's view/body pose. Guard bullet
+damage cannot be blocked by bare-handed melee guarding.
+
+```
+ACTOR_WEAPON|0|0|1|650|1000|9|18
+```
+
+Weapon 1 is the existing shotgun; the remaining fields are aiming milliseconds,
+recovery milliseconds, range in metres and damage. Empty tubes reload for 1800 ms.
+Recognition and weapon raising precede aiming. Fractional milliseconds carry
+between frames so higher frame rates do not shorten the attack clocks. Saves
+restore aim/recovery/reload and rounds. Armed guards count in the physical chunk's
+hostile contacts and enemy-clear gates; civilians/escorts remain separate.
+
+`--guard-combat-test` covers attack timing, interruption, blocking, ammunition,
+saves, contacts/gates, thin solids, glass, both door types and real neighbor shots.
+`--guard-combat-inspection` captures the actual Ash export from the project root.
+Faction tactics and stealth takedowns remain future work.
 The [custom Ash playground](ashfall-playground.md) uses the existing Worker rig
 to test these systems until the external asset library is available again.
 `--guard-ai-test` covers the shared state machine, real-frame sound ordering,

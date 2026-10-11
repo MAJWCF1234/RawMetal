@@ -48,6 +48,7 @@ its normal timeline first, then configure its AI and append patrol points:
 ACTOR_AI|map|actor|mode|enableFlag|speed|followDistance|dangerRange
 ACTOR_GUARD|map|actor|sightRange|sightDot|recognitionMs|searchMs|alertFlag
 ACTOR_PATROL|map|actor|x|y|absoluteZ|pauseMs
+ACTOR_WEAPON|map|actor|weapon|aimMs|recoveryMs|attackRange|attackDamage
 ```
 
 `ACTOR_GUARD` is optional: defaults are an 11 m sight range, a 0.65 sight-cone dot
@@ -65,3 +66,12 @@ chunk; they do not use escort chunk migration. A single point authors a stationa
 post with the configured pause. Sight range accepts 1–30 m, the sight dot threshold
 0–0.99, recognition 100–5000 ms and search 250–30000 ms. Existing actor records and
 save version 13 remain compatible.
+
+Guards are unarmed unless `ACTOR_WEAPON` is present. Weapon 1 selects the existing
+Shotgun; other values are rejected. The record has exactly eight fields and may
+appear anywhere after its actor's `ACTOR` record. Its final AI mode must be Guard,
+even if the weapon parameters are all defaults. Aim duration accepts 100–3000 ms,
+recovery 300–5000 ms, range 1–18 m and damage 1–100. Omitted weapon configuration
+defaults to 650 ms aim, 1000 ms recovery, 9 m range and 18 damage, but keeps the
+guard unarmed. Nonfinite range or damage is rejected. This record configures the
+engine's shared guard attack behavior; it adds no campaign-specific combat case.
