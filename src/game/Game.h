@@ -236,6 +236,8 @@ public:
     static bool testHearing();
     static bool testGuardAI();
     static bool testGuardCombat();
+    static bool testGuardTactics();
+    static Game guardTacticsInspection(int stage=0);
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
@@ -394,6 +396,9 @@ private:
     void validateGuardState(size_t actor)const;
     void updateGuardFlags();
     void updateGuardCombat(float dt);
+    NpcWeaponPose npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const;
+    ShotHit guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& weapon)const;
+    void guardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     int npcMilliseconds(size_t actor,float dt,std::string_view field);
     std::vector<AiStimulus> aiStimuli()const;
     void rebuildFriendlyActors();

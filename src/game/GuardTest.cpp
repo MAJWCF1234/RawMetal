@@ -4,6 +4,7 @@
 namespace retro {
 bool Game::testGuardAI(){
  if(!testGuardCombat())return false;
+ if(!testGuardTactics())return false;
  std::ofstream report("guard-ai-test.txt");bool passed=true;auto check=[&](bool ok,const char*label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();passed&=ok;};
  auto scene=[](bool wall=false,bool gate=false){auto campaign=std::make_shared<CustomCampaign>();campaign->name="Guard validation";campaign->key=728193;
   auto map=std::make_shared<AuthoredMapData>();map->name="Guard room";map->definition={{0,0},{18.5f,18.5f},0,Environment::Interior,false,8,.3f,42};AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);

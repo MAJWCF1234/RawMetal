@@ -3,19 +3,40 @@ namespace retro {
 namespace {
 Point3 unit(Point3 p){float length=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);return length>.0001f?p*(1/length):Point3{};}
 }
-NpcWeaponPose Game::npcWeaponPose(size_t actor)const{
- const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();const auto&pose=npc.pose;NpcWeaponPose weapon;
- if(track.ai.mode!=ActorAiMode::Guard||!track.ai.armed||!autonomousActor(track)||pose.clip==4||(track.deadState&&state(track.deadState)))return weapon;
- auto get=[&](const char*field){return state(friendlyKey(actor,field));};weapon.armed=true;weapon.raise=get("weapon_raise")*.001f;weapon.flash=get("weapon_flash")/80.f;weapon.recoil=get("weapon_recoil")/220.f;
+NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const{
+ const auto&track=m_friendlyActors.at(actor).track();NpcWeaponPose weapon;
+ if(track.ai.mode!=ActorAiMode::Guard||!track.ai.armed)return weapon;
+ weapon.armed=true;weapon.raise=std::clamp(raise,0.f,1.f);
  float scale=track.scale/1.6f;Point3 forward{std::sin(pose.yaw),std::cos(pose.yaw),0},right{forward.y,-forward.x,0};
  weapon.grip=Point3{pose.position.x,pose.position.y,pose.z}+right*(-.12f*scale)+forward*(.40f*scale)+Point3{0,0,(1.024f+.216f*weapon.raise)*scale};
  weapon.direction=unit(forward+Point3{0,0,-.32f});
- if(get("weapon_target")&&weapon.raise>0){auto shift=chunkOffset(npc.level);Point3 target{get("weapon_x")*.001f-shift.x,get("weapon_y")*.001f-shift.y,get("weapon_z")*.001f};auto aimed=unit(target-weapon.grip);
+ if(weapon.raise>0){auto aimed=unit(target-weapon.grip);
   for(int i=0;i<3;++i){float horizontal=std::hypot(aimed.x,aimed.y);auto r=horizontal>.001f?Point3{aimed.y/horizontal,-aimed.x/horizontal,0}:right;Point3 up{r.y*aimed.z,-r.x*aimed.z,r.x*aimed.y-r.y*aimed.x};aimed=unit(target-weapon.grip-up*(.058961f*scale)-r*(-.007496f*scale));}
   weapon.direction=unit(weapon.direction*(1-weapon.raise)+aimed*weapon.raise);
  }
  float horizontal=std::hypot(weapon.direction.x,weapon.direction.y);auto r=horizontal>.001f?Point3{weapon.direction.y/horizontal,-weapon.direction.x/horizontal,0}:right;Point3 up{r.y*weapon.direction.z,-r.x*weapon.direction.z,r.x*weapon.direction.y-r.y*weapon.direction.x};
  weapon.muzzle=weapon.grip+weapon.direction*(.500522f*scale)+up*(.058961f*scale)+r*(-.007496f*scale);return weapon;
+}
+NpcWeaponPose Game::npcWeaponPose(size_t actor)const{
+ const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();NpcWeaponPose weapon;
+ if(track.ai.mode!=ActorAiMode::Guard||!track.ai.armed||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))return weapon;
+ auto get=[&](const char*field){return state(friendlyKey(actor,field));};float raise=get("weapon_raise")*.001f;
+ if(get("weapon_target")){auto shift=chunkOffset(npc.level);Point3 target{get("weapon_x")*.001f-shift.x,get("weapon_y")*.001f-shift.y,get("weapon_z")*.001f};weapon=npcWeaponPoseAt(actor,npc.pose,target,raise);}
+ else{
+  // A raised saved pose without an aim target retains its low-ready direction.
+  weapon=npcWeaponPoseAt(actor,npc.pose,{},0);float lift=.216f*raise*track.scale/1.6f;weapon.grip.z+=lift;weapon.muzzle.z+=lift;weapon.raise=raise;
+ }
+ weapon.flash=get("weapon_flash")/80.f;weapon.recoil=get("weapon_recoil")/220.f;return weapon;
+}
+ShotHit Game::guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& weapon)const{
+ const auto&npc=m_friendlyActors.at(actor);if(!weapon.armed)return {};
+ auto shift=chunkOffset(npc.level)-chunkOffset(m_level);auto grip=weapon.grip+Point3{shift.x,shift.y,0},muzzle=weapon.muzzle+Point3{shift.x,shift.y,0};
+ auto segment=[&](Point3 from,Point3 to){auto direction=to-from;float distance=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(distance<=.0001f){ShotHit blocked;blocked.kind=ShotKind::Solid;blocked.level=npc.level;blocked.point=from;return blocked;}return traceShot(from,direction,distance,int(actor),false);};
+ // Both candidate evaluation and actual firing use the same physical barrel
+ // clearance, with this NPC's own hull ignored and all points in active space.
+ auto shoulder=Point3{pose.position.x+shift.x,pose.position.y+shift.y,grip.z};auto blocked=segment(shoulder,grip);if(blocked.kind!=ShotKind::None)return blocked;
+ blocked=segment(grip,muzzle);if(blocked.kind!=ShotKind::None)return blocked;
+ return traceShot(muzzle,weapon.direction,npc.track().ai.attackRange,int(actor),true);
 }
 void Game::updateGuardCombat(float dt){
  if(dt<=0)return;const auto&gun=weaponDef(WeaponId::Shotgun);
@@ -30,17 +51,12 @@ void Game::updateGuardCombat(float dt){
   auto to=m_player.pos-observer;float height=m_player.z+m_player.eye-eye;Vec2 forward{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)};
   bool visible=!dead()&&guardState(i)==GuardState::Alert&&lengthSq(to)+height*height<config.attackRange*config.attackRange&&dot(normalized(to),forward)>.8f&&soundRayClear(observer,eye,m_player.pos,m_player.z+m_player.eye);
   if(visible){auto global=m_player.pos+chunkOffset(m_level);put("weapon_target",1);put("weapon_x",int(std::round(global.x*1000)));put("weapon_y",int(std::round(global.y*1000)));put("weapon_z",int(std::round((m_player.z+m_player.hullHeight()*.6f)*1000)));}
-  int raised=visible&&!reload?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-ms*3,ms*3));
+  int raised=visible&&!reload&&npc.pose.clip!=1?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-ms*3,ms*3));
   if(!visible||reload||recovery||npc.pose.clip==1||get("weapon_raise")<1000){put("weapon_aim",0);continue;}
-  auto weapon=npcWeaponPose(i);auto origin=weapon.muzzle+Point3{shift.x,shift.y,0};auto grip=weapon.grip+Point3{shift.x,shift.y,0};
-  auto clearSegment=[&](Point3 from,Point3 to){auto direction=to-from;float distance=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);return distance>.0001f&&traceShot(from,direction,distance,int(i),false).kind==ShotKind::None;};
-  // A protruding muzzle cannot bypass cover crossed by the grip or barrel.
-  // Ignore this NPC's own hull while checking both segments in active space.
-  bool barrelClear=clearSegment({observer.x,observer.y,grip.z},grip)&&clearSegment(grip,origin);
-  auto hit=barrelClear?traceShot(origin,weapon.direction,config.attackRange,int(i),true):ShotHit{};
+  auto weapon=npcWeaponPose(i);auto origin=weapon.muzzle+Point3{shift.x,shift.y,0};auto hit=guardShot(i,npc.pose,weapon);
   // Seeing the head is insufficient: the barrel and its full shot line must
   // clear cover and intervening bodies. Cancel an interrupted aim completely.
-  bool ready=barrelClear&&visible&&!reload&&!recovery&&npc.pose.clip!=1&&weapon.raise>=.999f&&hit.kind==ShotKind::Player;
+  bool ready=visible&&!reload&&!recovery&&npc.pose.clip!=1&&weapon.raise>=.999f&&hit.kind==ShotKind::Player;
   int aim=ready?std::min(config.aimMs,get("weapon_aim")+ms):0;put("weapon_aim",aim);
   if(aim<config.aimMs)continue;
   put("weapon_aim",0);put("weapon_recovery",config.recoveryMs);put("weapon_flash",80);put("weapon_recoil",220);put("weapon_rounds",get("weapon_rounds")-1);

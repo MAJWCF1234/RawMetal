@@ -81,6 +81,20 @@ Worker suit is prototype art; it now holds the existing shotgun with two attache
 hands. This experiment does not implement faction tactics, stealth takedowns or
 human-shield controls.
 
+The cover-repositioning pass adds a 1.3 m tall metal panel at
+`X20.6–20.8, Y7.1–7.9`, directly across the first patrol leg. The normal navigator
+must also detour around it while patrolling. Stand near `(21.8, 7.5, 0)` to expose
+your head while the panel blocks the guard's barrel/body shot. After recognizing
+you, the guard should sidestep to a clear firing position, keep looking at you,
+stop, and complete its aiming delay before damaging you. Moving or loading a save
+must never allow a shot through the panel. The original taller hiding panel,
+throwables and four patrol points remain part of the same temporary encounter.
+
+Run `--guard-tactics-inspection` from the project directory for three fixed-camera
+Vulkan captures of the actual exported encounter: covered, repositioning and
+clear firing. These are observed after normal gameplay updates, with the real
+health change retained and only HUD/hands and damage flash hidden for inspection.
+
 ## Keep authoring and runtime in sync
 
 Geometry, player spawn, cover and throwable assets use supported editor objects.

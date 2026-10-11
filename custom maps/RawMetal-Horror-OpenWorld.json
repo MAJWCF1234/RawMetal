@@ -75,6 +75,19 @@
           "rotation": 0
         },
         {
+          "id": "ash-weapon-low-cover",
+          "type": "box",
+          "name": "Low cover / visible head / blocked barrel",
+          "layerId": "ashfall-ground",
+          "x": 20.7,
+          "y": 7.5,
+          "z": 0,
+          "w": 0.2,
+          "d": 0.8,
+          "h": 1.3,
+          "rotation": 0
+        },
+        {
           "id": "ash-throw-bottle",
           "type": "asset",
           "name": "Throwable bottle / distraction",
@@ -116,7 +129,7 @@
         {
           "id": "ash-lab-label",
           "type": "label",
-          "name": "REPLACEABLE GUARD LAB / cover + throw + search + save",
+          "name": "REPLACEABLE GUARD LAB / cover + reposition + throw + search + save",
           "x": 16.7,
           "y": 10.1,
           "z": 0,

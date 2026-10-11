@@ -102,7 +102,11 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   auto player=m_player.pos+chunkOffset(m_level)-chunkOffset(level);
   if(feet<m_player.z+m_player.hullHeight()&&feet+height>m_player.z&&std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;
   for(const auto&enemy:enemies)if(enemy.alive&&enemy.bodyBottom()<feet+height&&enemy.bodyTop()>feet&&lengthSq(next-enemy.pos)<.45f*.45f&&lengthSq(next-enemy.pos)<lengthSq(pose.position-enemy.pos))clear=false;
-  if(clear){pose.position=next;pose.z=feet;pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);}
+  if(clear){pose.position=next;pose.z=feet;
+   // An alerted armed guard can sidestep while keeping its eyes on the target.
+   // Guard intent has already applied the bounded facing turn for this frame.
+   if(config.mode!=ActorAiMode::Guard||!config.armed||guardState(actor)!=GuardState::Alert)pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);
+  }
  }
  float moved=length(pose.position-old.position);pose.clip=moved>.0001f?1:0;pose.phase=pose.clip?std::fmod(old.phase+moved*1.1f,1.f):0;
  if(config.mode==ActorAiMode::Guard&&moved>0){int steps=get("guard_step")+int(std::round(moved*1000));if(steps>=1000){auto material=!world.outdoors()&&world.metalFloor(int(pose.position.x),int(pose.position.y))?Sound::Metal1:Sound::Concrete1;m_sounds.push_back({material,pose.position+chunkOffset(level)-chunkOffset(m_level),.3f,.96f,true,17,pose.z+.04f});steps%=1000;}put("guard_step",steps);}
