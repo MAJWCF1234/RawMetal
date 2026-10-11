@@ -17,8 +17,7 @@ Launch `RawMetal.exe` from the project directory, choose **Custom Maps**, then
 is the older built-in world. Restart this custom map for a clean encounter;
 loading an older save restores that saved encounter's state.
 
-The ruined 24 m square remains the same layout, with all 24 rows verified to
-contain 24 cells. The two former Huntsman test spawns were removed so they
+The ruined 24 m square retains its original grid layout. The two former Huntsman test spawns were removed so they
 cannot interrupt guard observation.
 All new objects use existing project geometry or assets; the unavailable
 `O:\retro official` drive is not needed.
@@ -78,8 +77,8 @@ Stay hidden to observe patrols; sustained exposure now starts actual combat.
 Break sight or place cover/a character between the muzzle and your body to cancel
 the shot. Save during aiming, recovery or reload to test restoration. The existing
 Worker suit is prototype art; it now holds the existing shotgun with two attached
-hands. This experiment does not implement faction tactics, stealth takedowns or
-human-shield controls.
+hands. The southern experiment below now exercises factions and bounded squad
+tactics. Stealth takedowns and human-shield controls remain future work.
 
 The cover-repositioning pass adds a 1.3 m tall metal panel at
 `X20.6–20.8, Y7.1–7.9`, directly across the first patrol leg. The normal navigator
@@ -95,11 +94,42 @@ Vulkan captures of the actual exported encounter: covered, repositioning and
 clear firing. These are observed after normal gameplay updates, with the real
 health change retained and only HUD/hands and damage flash hidden for inspection.
 
+## Opt-in squad experiment, 11 October 2026
+
+The original guard now explicitly belongs to Raider faction 4 and squad
+`ash_raiders`. Its four-point patrol, health, weapon and starting encounter are
+preserved. Enter `X17–17.8, Y12–13` at ground level to start the authored
+`ash_team_start` sequence; after 100 ms it sets `ash_team_enabled`. Retreat to
+the original hiding position `(16.7, 10.1, 0)` to observe safely.
+
+That flag enables a second 1.6 m Worker guard at `(21.5, 12.5, 0)` facing south
+along +Y, with 70 health and the same shotgun settings/faction/squad. It also
+enables a stationary 1.2 m Wasp target with 250 health at `(21.5, 17.5, 0)`,
+explicitly Creature faction 3. A supported 2 m metal panel centred at
+`(20.8, 14.4)` provides physical retreat cover. No new assets or campaign maps
+are required. Blueprint labels describe the activation region and experiment.
+
+Observe recognition of the creature, a shared last-known sighting, actual target
+damage, separate firing positions and limited firing opportunities. On an empty
+tube or injury, a guard should seek reachable cover shielding its head and body.
+Nearby hostile contact also permits a telegraphed 12-damage bash without spending
+ammunition. Save during recognition, movement, aiming, recovery or reload;
+restoration should resume the same decisions rather than produce an instant hit.
+
+`--guard-policy-inspection` loads this actual export, activates its region through
+normal updates and captures activation, shared recognition, real firing and a
+protected reload. The final inspection deliberately empties the real shooter's
+tube after two damaging shots to show retreat before the test target dies.
+Observer placement occurs after each simulation milestone. See
+[shared policy behavior](ai-perception.md) and
+[the policy verification report](guard-policy-pass-20261011.md).
+The Worker appearance remains prototype art, and full GoldSrc parity is unproven.
+
 ## Keep authoring and runtime in sync
 
 Geometry, player spawn, cover and throwable assets use supported editor objects.
 The guard's `TIMED_SEQUENCE`, `ACTOR`, keys, health, AI, guard configuration and
-patrol points and weapon configuration are stored as top-level JSON `runtimeRecords`, then appended by
+patrol points, weapon and faction/squad configuration are stored as top-level JSON `runtimeRecords`, then appended by
 the generic exporter into the runtime campaign block. These are shared engine
 records, not map-specific code. The visual labels are only labels.
 

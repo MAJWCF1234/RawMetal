@@ -4,7 +4,7 @@ namespace retro {
 namespace {
 float magnitude(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
 }
-ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc,bool includePlayer,const HitscanDef* assist)const{
+ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc,bool includePlayer,const HitscanDef* assist,AiTargetRef ignoredEntity)const{
  ShotHit result;result.distance=result.damageDistance=range;result.level=m_level;
  float size=magnitude(direction);if(!std::isfinite(size)||size<.0001f||!std::isfinite(range)||range<=0||range>100||!std::isfinite(origin.x)||!std::isfinite(origin.y)||!std::isfinite(origin.z))return result;
  direction=direction*(1/size);auto activeOrigin=chunkOffset(m_level);
@@ -15,6 +15,7 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
    if(fraction*range<hit.distance){hit={ShotKind::Solid,level,-1,fraction*range,fraction*range,origin+ray*(fraction*range),n};}
   }
   auto body=[&](ShotKind kind,int level,int index,Vec2 position,float feet,float height,float radius){auto shift=chunkOffset(level)-activeOrigin;Point3 center{position.x+shift.x,position.y+shift.y,feet};Point3 n;
+   if(kind==ignoredEntity.kind&&index==ignoredEntity.index&&(kind==ShotKind::Npc||level==ignoredEntity.level))return;
    float distance=rayBoxFraction(origin,ray*range,center-Point3{radius,radius,0},center+Point3{radius,radius,height},&n)*range;
    if(distance<hit.distance-.0001f)hit={kind,level,index,distance,distance,origin+ray*distance,n};
   };
@@ -49,10 +50,10 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(int(i)!=ignoredNpc&&chunkResident(npc.level)&&autonomousActor(t)&&t.health&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState)))candidate(npc.pose.position+chunkOffset(npc.level)-activeOrigin,npc.pose.z,t.scale,.4f);}
  return result;
 }
-void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride){
+void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride,AiTargetRef attacker){
  auto source=Vec2{origin.x,origin.y};auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto&world=friendlyWorld(hit.level);
  if(hit.kind==ShotKind::Player){receiveDamage(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
- if(hit.kind==ShotKind::Npc){damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift);if(playerFired)m_hitFlash=1;return;}
+ if(hit.kind==ShotKind::Npc){if(playerFired)attacker={ShotKind::Player,m_level,0};damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift,attacker);if(playerFired)m_hitFlash=1;return;}
  if(hit.kind==ShotKind::Actor){const auto&actor=world.actorTracks().at(size_t(hit.index));if(!actor.health)return;const auto&pose=world.actorPose(size_t(hit.index));int previous=std::clamp(state(actor.damageState),0,actor.health);int damage=previous+std::min(actor.health-previous,int(std::ceil(std::min(damageOverride>0?damageOverride:definition.actorDamage,float(actor.health)))));setState(actor.damageState,damage);if(playerFired)m_hitFlash=1;
   bool killed=damage>=actor.health;if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(pose.z*1000)));if(actor.visual!=ActorVisual::Worker){if(hit.level==m_level)++m_kills;else ++m_chunks[hit.level].kills;}}
   m_sounds.push_back({actor.visual==ActorVisual::Worker?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,pose.position-shift,.8f,1,true,17,pose.z+actor.scale*.7f});updateMechanisms(0);return;

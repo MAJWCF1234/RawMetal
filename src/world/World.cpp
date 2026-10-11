@@ -694,6 +694,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(const auto& track:map->actorTracks){
   const auto& ai=track.ai;
   if(int(ai.mode)<0||int(ai.mode)>3||!std::isfinite(ai.speed)||ai.speed<=0||ai.speed>4||!std::isfinite(ai.followDistance)||ai.followDistance<1.2f||ai.followDistance>5||!std::isfinite(ai.dangerRange)||ai.dangerRange<2||ai.dangerRange>20||(ai.mode!=ActorAiMode::Scripted&&(track.visual!=ActorVisual::Worker||track.platform)))throw std::runtime_error("Invalid actor AI configuration");
+  if(int(ai.faction)<0||int(ai.faction)>5||(ai.squad&&ai.mode!=ActorAiMode::Guard))throw std::runtime_error("Invalid actor faction or guard squad");
   if(ai.mode==ActorAiMode::Guard){
    if(!std::isfinite(ai.sightRange)||ai.sightRange<1||ai.sightRange>30||!std::isfinite(ai.sightDot)||ai.sightDot<0||ai.sightDot>.99f||ai.recognitionMs<100||ai.recognitionMs>5000||ai.searchMs<250||ai.searchMs>30000||ai.patrol.empty()||ai.patrol.size()>64)throw std::runtime_error("Invalid guard AI configuration");
    for(const auto& point:ai.patrol)if(!std::isfinite(point.position.x)||!std::isfinite(point.position.y)||point.position.x<.25f||point.position.x>23.75f||point.position.y<.25f||point.position.y>23.75f||!std::isfinite(point.z)||std::fabs(point.z)>100||point.pauseMs<0||point.pauseMs>60000)throw std::runtime_error("Invalid guard patrol point");

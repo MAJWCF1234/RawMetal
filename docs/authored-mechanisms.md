@@ -49,14 +49,16 @@ ACTOR_AI|map|actor|mode|enableFlag|speed|followDistance|dangerRange
 ACTOR_GUARD|map|actor|sightRange|sightDot|recognitionMs|searchMs|alertFlag
 ACTOR_PATROL|map|actor|x|y|absoluteZ|pauseMs
 ACTOR_WEAPON|map|actor|weapon|aimMs|recoveryMs|attackRange|attackDamage
+ACTOR_FACTION|map|actor|faction|squad
 ```
 
 `ACTOR_GUARD` is optional: defaults are an 11 m sight range, a 0.65 sight-cone dot
 threshold, 600 ms recognition delay and 4000 ms search duration. An empty alert
 flag disables the authored alert output; an empty enable flag enables the AI
 immediately. These configuration records do not change an actor's AI mode.
-They require an existing actor whose final mode is Guard, including when records
-are reordered. Guard configuration or patrol points on another mode are rejected.
+Guard configuration, patrol and weapon records require an existing actor whose
+final mode is Guard, including when records are reordered. Faction configuration
+also accepts other actor modes; only nonempty squads require Guard mode.
 
 Guards must use the Worker visual and cannot be moving platforms. Author 1–64
 patrol points, visited in the listed order. Points use coordinates within the
@@ -75,3 +77,20 @@ recovery 300–5000 ms, range 1–18 m and damage 1–100. Omitted weapon config
 defaults to 650 ms aim, 1000 ms recovery, 9 m range and 18 damage, but keeps the
 guard unarmed. Nonfinite range or damage is rejected. This record configures the
 engine's shared guard attack behavior; it adds no campaign-specific combat case.
+
+`ACTOR_FACTION` has exactly five fields, must follow an existing `ACTOR`, and
+does not change its AI mode. Faction IDs are 0 default, 1 Player, 2 Facility,
+3 Creature, 4 Raider and 5 Neutral. Default guards are Raider; other Worker
+actors are Facility, Wasp/Huntsman actors Creature and other visuals Neutral.
+Player and Facility are allied. Creature and Raider oppose those allies and
+each other. Neutral actors are ignored as automatic threats, but a guard can
+retaliate against its explicitly identified personal attacker.
+
+An empty squad keeps independent behavior. A nonempty authored squad name is
+allowed only on Guard mode and groups guards of the same faction for fresh
+sight reports within 18 m, at most two firing leases and one bounded flank
+attempt per target encounter. Reports do not authorize shots through cover or
+bystanders. Patrol failure, confirmed threat memory, bash/reload/retreat clocks
+and squad decisions use shared engine state and persist without changing save
+version 13. See [AI behavior](ai-perception.md) and
+[the policy verification report](guard-policy-pass-20261011.md).

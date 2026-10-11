@@ -152,7 +152,7 @@ void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int 
 
 int Game::hostilesRemaining(int level)const{
  const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive;}));
- for(const auto&npc:m_friendlyActors){const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState)))++n;}return n;
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardHostileToPlayer(i))++n;}return n;
 }
 int Game::enemiesRemaining()const{return hostilesRemaining(m_level);}
 const Enemy* Game::targetEnemy()const{

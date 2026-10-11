@@ -20,6 +20,7 @@ RECORDS = [
     "ACTOR_AI|0|0|3||1.4|2|6",
     "ACTOR_GUARD|0|0|12|0.35|500|3000|test-alert",
     "ACTOR_WEAPON|0|0|1|650|1000|9|18",
+    "ACTOR_FACTION|0|0|2|test-security-squad",
     "ACTOR_PATROL|0|0|5|5|0|700",
     "ACTOR_PATROL|0|0|5|9|0|500",
 ]

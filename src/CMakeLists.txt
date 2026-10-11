@@ -63,6 +63,11 @@ add_executable(RawMetal WIN32
     game/GuardTactics.cpp
     game/GuardTacticsTest.cpp
     game/GuardTacticsInspection.cpp
+    game/GuardTargets.cpp
+    game/GuardSquads.cpp
+    game/GuardPolicyTest.cpp
+    game/GuardDefenseTest.cpp
+    game/GuardPolicyInspection.cpp
     game/Hitscan.cpp
     world/Ballistics.cpp
     game/CampaignMapTest.cpp

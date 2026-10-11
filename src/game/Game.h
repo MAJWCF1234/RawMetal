@@ -80,6 +80,11 @@ struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int n
 struct NpcWeaponPose {bool armed=false;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;};
 enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll};
 struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
+struct AiTargetRef {ShotKind kind=ShotKind::None;int level=0,index=-1;};
+struct AiTarget : AiTargetRef {
+ Vec2 position{};float feet=0,height=0,eye=0;AiFaction faction=AiFaction::Neutral;
+ bool valid()const{return kind==ShotKind::Player||kind==ShotKind::Enemy||kind==ShotKind::Npc||kind==ShotKind::Actor;}
+};
 struct FriendlyActor {
  // The authored identity owns state keys; level/pose describe physical location.
  // Keep the immutable track alive when its home chunk releases geometry.
@@ -237,6 +242,9 @@ public:
     static bool testGuardAI();
     static bool testGuardCombat();
     static bool testGuardTactics();
+    static bool testGuardPolicy();
+    static bool testGuardDefense();
+    static Game guardPolicyInspection(int stage=0);
     static Game guardTacticsInspection(int stage=0);
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
@@ -381,8 +389,8 @@ private:
     void updateInteraction(const InputState& input,float dt);
     bool lineOfSight(const Vec2& a, const Vec2& b) const;
     void shoot();
-    ShotHit traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc=-1,bool includePlayer=false,const HitscanDef* assist=nullptr)const;
-    void resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride=0);
+    ShotHit traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc=-1,bool includePlayer=false,const HitscanDef* assist=nullptr,AiTargetRef ignoredEntity={})const;
+    void resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride=0,AiTargetRef attacker={});
     void reloadWeapon();
     void punchImpact();
     void applyPunchHit(Enemy& enemy);
@@ -399,6 +407,23 @@ private:
     NpcWeaponPose npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const;
     ShotHit guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& weapon)const;
     void guardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
+    AiTarget resolveGuardTarget(size_t actor,AiTargetRef reference)const;
+    AiTarget guardThreat(size_t actor,const ActorPose& pose)const;
+    AiTarget guardTarget(size_t actor)const;
+    AiTarget guardAttacker(size_t actor)const;
+    bool guardCanSee(size_t actor,const ActorPose& pose,const AiTarget& target)const;
+    void rememberGuardTarget(size_t actor,const AiTarget& target);
+    AiTarget guardSquadReport(size_t actor)const;
+    bool guardShotMatches(size_t actor,const ShotHit& hit)const;
+    bool guardMeleeReady(size_t actor,const ActorPose& pose,const AiTarget& target)const;
+    void damageGuardTarget(size_t actor,float amount);
+    bool guardCovered(size_t actor,const ActorPose& pose,const AiTarget& target)const;
+    void updateGuardSquadSlots(float dt);
+    bool guardFireSlot(size_t actor)const;
+    int guardFlankSide(size_t actor)const;
+    bool guardPositionReserved(size_t actor,Vec2 position,float feet)const;
+    bool guardHostileToPlayer(size_t actor)const;
+    void validateGuardPolicyState(size_t actor)const;
     int npcMilliseconds(size_t actor,float dt,std::string_view field);
     std::vector<AiStimulus> aiStimuli()const;
     void rebuildFriendlyActors();
@@ -415,7 +440,7 @@ private:
     void requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal);
     bool aiDoorLocked(const World& world,int level,const Door& door)const;
     int hostilesRemaining(int level)const;
-    void damageFriendly(size_t actor,float amount,Vec2 source);
+    void damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef attacker={});
     void migrateEnemiesAcrossChunks();
     void updatePickups();
 
