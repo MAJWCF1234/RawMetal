@@ -697,7 +697,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   if(ai.mode==ActorAiMode::Guard){
    if(!std::isfinite(ai.sightRange)||ai.sightRange<1||ai.sightRange>30||!std::isfinite(ai.sightDot)||ai.sightDot<0||ai.sightDot>.99f||ai.recognitionMs<100||ai.recognitionMs>5000||ai.searchMs<250||ai.searchMs>30000||ai.patrol.empty()||ai.patrol.size()>64)throw std::runtime_error("Invalid guard AI configuration");
    for(const auto& point:ai.patrol)if(!std::isfinite(point.position.x)||!std::isfinite(point.position.y)||point.position.x<.25f||point.position.x>23.75f||point.position.y<.25f||point.position.y>23.75f||!std::isfinite(point.z)||std::fabs(point.z)>100||point.pauseMs<0||point.pauseMs>60000)throw std::runtime_error("Invalid guard patrol point");
-  }else if(!ai.patrol.empty()||ai.sightRange!=11||ai.sightDot!=.65f||ai.recognitionMs!=600||ai.searchMs!=4000||ai.alertState)throw std::runtime_error("Guard configuration requires Guard actor AI mode");
+   if(ai.aimMs<100||ai.aimMs>3000||ai.recoveryMs<300||ai.recoveryMs>5000||!std::isfinite(ai.attackRange)||ai.attackRange<1||ai.attackRange>18||!std::isfinite(ai.attackDamage)||ai.attackDamage<1||ai.attackDamage>100)throw std::runtime_error("Invalid guard weapon configuration");
+  }else if(!ai.patrol.empty()||ai.sightRange!=11||ai.sightDot!=.65f||ai.recognitionMs!=600||ai.searchMs!=4000||ai.alertState||ai.armed||ai.aimMs!=650||ai.recoveryMs!=1000||ai.attackRange!=9||ai.attackDamage!=18)throw std::runtime_error("Guard configuration requires Guard actor AI mode");
   if(!timerExists(track.timerState)||track.scale<=0||track.scale>20||!std::isfinite(track.scale)||track.keys.size()<2||track.keys.front().timeMs!=0||track.footprint.x<=0||track.footprint.y<=0||track.thickness<=0||!std::isfinite(track.footprint.x)||!std::isfinite(track.footprint.y)||!std::isfinite(track.thickness))throw std::runtime_error("Invalid authored actor track");
   int previous=-1;for(const auto& k:track.keys){if(k.timeMs<=previous||k.timeMs>3600000||!std::isfinite(k.position.x)||!std::isfinite(k.position.y)||!std::isfinite(k.z)||!std::isfinite(k.yaw)||!std::isfinite(k.phase)||k.phase<0||k.phase>64||k.lookAtActor<-1||k.lookAtActor>=int(map->actorTracks.size())||k.clip<0||k.clip>(track.visual==ActorVisual::Worker?5:4))throw std::runtime_error("Invalid actor pose key");previous=k.timeMs;}
   if(!track.idleKeys.empty()){
@@ -1986,5 +1987,5 @@ std::vector<Span> World::spansAt(int x,int y)const{
  for(auto solid:solids){if(solid.first>bottom)result.push_back({bottom,solid.first,0});bottom=std::max(bottom,solid.second);}
  if(bottom<roof)result.push_back({bottom,roof,0});return result;
 }
-bool World::destroyTile(int x,int y){if(x<0||y<0||x>=Width||y>=Height||m_layers.empty()||tile(x,y)=='.')return false;if(tile(x,y)!='C'&&tile(x,y)!='B')return false;m_destroyedTiles.push_back({x,y});return true;}
+bool World::destroyTile(int x,int y){if(x<0||y<0||x>=Width||y>=Height||m_layers.empty()||tile(x,y)=='.')return false;if(tile(x,y)!='C'&&tile(x,y)!='B')return false;m_destroyedTiles.push_back({x,y});m_lightSolids.clear();m_lightNodes.clear();return true;}
 }

@@ -37,19 +37,20 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();}
+void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();}
 void Game::equipWeapon(WeaponId id){
  if(id==WeaponId::Fists){m_weaponEquipped=false;m_holster=1.f;return;}
  m_equippedWeapon=id;m_weaponEquipped=true;m_holster=m_player.ammo>0?0.f:1.f;
 }
-bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeHitStop){
+bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeHitStop,int level){
+ if(level<0)level=m_level;
  if(!enemy.alive)return false;
  enemy.hp-=amount;enemy.painFlash=1;m_hitFlash=1;
  if(enemy.hp>0)return false;
- enemy.hp=0;enemy.alive=false;enemy.deathTime=0;enemy.windup=0;enemy.strike=0;++m_kills;
- if(bloodDecal)m_bulletImpacts.push_back({enemy.pos,m_world.floorHeight(enemy.pos.x,enemy.pos.y)+.012f,{0,0},m_elapsed,m_level,true,int(enemy.kind)});
+ enemy.hp=0;enemy.alive=false;enemy.deathTime=0;enemy.windup=0;enemy.strike=0;if(level==m_level)++m_kills;else ++m_chunks[level].kills;
+ if(bloodDecal)m_bulletImpacts.push_back({enemy.pos,friendlyWorld(level).floorHeight(enemy.pos.x,enemy.pos.y)+.012f,{0,0},m_elapsed,level,true,int(enemy.kind)});
  if(closeHitStop)m_hitStopRemaining=.03f;
- if(enemiesRemaining()==0)sound(Sound::Exit,.75f);
+ if(level==m_level&&enemiesRemaining()==0)sound(Sound::Exit,.75f);
  return true;
 }
 void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
@@ -149,11 +150,11 @@ void Game::sound(Sound sound,float gain,float pitch){
 }
 void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int kind=enemy.kind==Enemy::Kind::Warden||enemy.kind==Enemy::Kind::Mutant?2:int(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+kind*3+action),enemy.pos,gain,pitch*(enemy.kind==Enemy::Kind::Warden?.78f:1.f),true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
 
-int Game::enemiesRemaining() const {
-    int n = 0;
-    for (const auto& e : m_enemies) if (e.alive) ++n;
-    return n;
+int Game::hostilesRemaining(int level)const{
+ const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive;}));
+ for(const auto&npc:m_friendlyActors){const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState)))++n;}return n;
 }
+int Game::enemiesRemaining()const{return hostilesRemaining(m_level);}
 const Enemy* Game::targetEnemy()const{
  const Enemy* target=nullptr;float nearest=18;
  Vec2 f{std::cos(m_player.angle),std::sin(m_player.angle)};
@@ -212,89 +213,17 @@ Game Game::barrelInspection(float age){auto game=mapInspection({8.5f,4.5f},-kPi*
 
 bool Game::lineOfSight(const Vec2& a,const Vec2& b)const{return m_world.rayClear(a,m_world.floorHeight(a.x,a.y)+.75f,b,m_world.floorHeight(b.x,b.y)+.75f);}
 
-void Game::shoot() {
-    if(dead()||m_won)return;
-    const auto&gun=equippedWeaponDef();const auto&hit=gun.hitscan;const auto&cycle=gun.cycle;
-    if(m_player.ammo<=0||m_player.loaded<=0){sound(cycle.emptySound,.55f);return;}
-    --m_player.ammo;--m_player.loaded;
-    sound(cycle.fireSound,.95f);
-    m_weaponKick = 1.0f;
-    m_shotAge=0;
-
-    // Fire from the tracked weapon hand while locomotion and AI continue to
-    // use the player's head/body. Restore only the view pose, never ammunition.
-    struct AimRestore {Player&player;Vec2 pos;float z,yaw,pitch;~AimRestore(){player.pos=pos;player.z=z;player.angle=yaw;player.pitch=pitch;}} restore{m_player,m_player.pos,m_player.z,m_player.angle,m_player.pitch};
-    if(m_vrAimValid){m_player.pos={m_vrAimPosition.x,m_vrAimPosition.y};m_player.z=m_vrAimPosition.z-m_player.eye;m_player.angle=std::atan2(m_vrAimDirection.y,m_vrAimDirection.x);m_player.pitch=140.f*std::asin(std::clamp(m_vrAimDirection.z,-1.f,1.f));}
-
-    const Vec2 forward{std::cos(m_player.angle), std::sin(m_player.angle)};
-    Enemy* best = nullptr;
-    float bestAlong = std::numeric_limits<float>::max();
-
-    for (auto& e : m_enemies) {
-        if (!e.alive) continue;
-        const Vec2 to = e.pos - m_player.pos;
-        const float along = dot(to, forward);
-        if (along <= 0.0f || along > hit.maxRange) continue;
-        const float lateral = std::fabs(to.x * forward.y - to.y * forward.x);
-        const float allowance = hit.coneBase + along * hit.conePerMeter;
-        const float rayHeight=m_player.z+m_player.eye+along*std::tan(m_player.pitch/140.f);
-        if(rayHeight<e.bodyBottom()||rayHeight>e.bodyTop())continue;
-        if (lateral > allowance || !m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,rayHeight)) continue;
-        if (along < bestAlong) { bestAlong = along; best = &e; }
-    }
-
-    size_t bestActor=m_world.actorTracks().size();
-    for(size_t i=0;i<m_world.actorTracks().size();++i){const auto& actor=m_world.actorTracks()[i];if(autonomousActor(actor)||!actor.health||state(actor.deadState))continue;auto pose=m_world.actorPose(i);if(pose.clip==4)continue;
-     Vec2 delta=pose.position-m_player.pos;float along=dot(delta,forward),lateral=std::fabs(delta.x*forward.y-delta.y*forward.x),rayHeight=m_player.z+m_player.eye+along*std::tan(m_player.pitch/140.f);
-     if(along<=0||along>hit.maxRange||along>=bestAlong||lateral>.4f+along*hit.conePerMeter||rayHeight<pose.z||rayHeight>pose.z+actor.scale||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,pose.position,rayHeight))continue;
-     bestAlong=along;bestActor=i;
-    }
-    size_t bestFriendly=m_friendlyActors.size();
-    for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&actor=npc.track();const auto&pose=npc.pose;if(npc.level!=m_level||!autonomousActor(actor)||!actor.health||state(actor.deadState)||pose.clip==4)continue;
-     auto delta=pose.position-m_player.pos;float along=dot(delta,forward),lateral=std::fabs(delta.x*forward.y-delta.y*forward.x),z=m_player.z+m_player.eye+along*std::tan(m_player.pitch/140.f);
-     if(along<=0||along>hit.maxRange||along>=bestAlong||lateral>.4f+along*hit.conePerMeter||z<pose.z||z>pose.z+actor.scale||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,pose.position,z))continue;
-     bestAlong=along;bestFriendly=i;
-    }
-    if(m_world.hasLift()){int joint=-1;float pitch=m_player.pitch/140.f;RagPoint direction{forward.x*std::cos(pitch),forward.y*std::cos(pitch),std::sin(pitch)};
-     float distance=m_hazmat.rayHit({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction,joint);
-     if(joint>=0&&distance<bestAlong&&distance<hit.maxRange){auto p=m_hazmat.p[joint];if(m_world.rayClear(m_player.pos,m_player.z+m_player.eye,{p.x,p.y},p.z)){m_hazmat.impulse(joint,direction*hit.ragdollImpulse+RagPoint{0,0,.7f});sound(Sound::PunchHit,.55f,.8f);return;}}
-    }
-    if(bestFriendly<m_friendlyActors.size()){damageFriendly(bestFriendly,hit.actorDamage,m_player.pos);m_hitFlash=1;return;}
-    if(bestActor<m_world.actorTracks().size()){
-     const auto& actor=m_world.actorTracks()[bestActor];auto pose=m_world.actorPose(bestActor);
-     int damage=state(actor.damageState)+int(hit.actorDamage);setState(actor.damageState,damage);m_hitFlash=1;
-     bool killed=damage>=actor.health;
-     if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(m_world.floorHeight(pose.position.x,pose.position.y)*1000)));if(actor.visual!=ActorVisual::Worker)++m_kills;}
-     sound(actor.visual==ActorVisual::Worker?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,.8f);updateMechanisms(0);return;
-    }
-    if (best){bool killed=applyEnemyDamage(*best,hitscanDamageAt(hit,bestAlong),true,bestAlong<hit.closeHitStop);enemySound(*best,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);}
-    // One clustered wall impact. Hitscan damage is resolved above; separate
-    // pellet decals created a visible dotted line on walls.
-    for(int pellet=0;pellet<1;++pellet){
-        Vec2 direction{std::cos(m_player.angle),std::sin(m_player.angle)};
-        float last=0,limit=std::min(hit.maxRange,best?bestAlong:hit.maxRange);
-        for(float distance=.12f;distance<=limit;distance+=.06f){
-            Vec2 p=m_player.pos+direction*distance;
-            float z=m_player.z+m_player.eye+distance*std::tan(m_player.pitch/140.f);
-            if(!m_world.fits(p.x,p.y,z,.02f)||m_world.doorBlocks(p.x,p.y,z,.02f)){
-                int tx=int(std::floor(p.x)),ty=int(std::floor(p.y));
-                if(m_world.tile(tx,ty)=='C'){m_world.destroyTile(tx,ty);for(int i=0;i<4;++i){Clutter c;c.kind=6;c.pos={tx+.5f,ty+.5f};c.z=m_world.floorHeight(c.pos.x,c.pos.y);c.yaw=i*1.5707963f;c.pitch=(i%2?-.18f:.18f);c.roll=(i%2?.12f:-.12f);c.velocity={std::cos(i*1.5707963f)*3.f,std::sin(i*1.5707963f)*3.f};c.vz=2.f;c.spin=(i%2?1.f:-1.f)*3.f;c.pitchSpeed=(i%2?1.f:-1.f)*2.f;c.rollSpeed=(i%2?-1.f:1.f)*2.f;m_clutter.push_back(c);}m_sounds.push_back({Sound::JunkSoft,{tx+.5f,ty+.5f},.9f,1,true,17,m_world.floorHeight(tx+.5f,ty+.5f)+.3f});break;}
-                if(m_world.tile(tx,ty)=='B'){float floor=m_world.floorHeight(tx+.5f,ty+.5f);m_world.destroyTile(tx,ty);m_barrelExplosions.push_back({{tx+.5f,ty+.5f},floor+.55f,m_elapsed,m_level});if(m_barrelExplosions.size()>16)m_barrelExplosions.erase(m_barrelExplosions.begin());m_verticalSpringVelocity-=1.5f;m_damageFlash=.8f;sound(Sound::LiftCrash,1.f,.8f);const auto&aoe=kUnarmedMelee;for(auto&e:m_enemies)if(e.alive&&length(e.pos-Vec2{tx+.5f,ty+.5f})<aoe.barrelRadius)applyEnemyDamage(e,aoe.barrelDamage,false,false);break;}
-                Vec2 hitPoint=m_player.pos+direction*last;
-                bool xFace=int(std::floor(hitPoint.x))!=int(std::floor(p.x));
-                if(int(std::floor(hitPoint.x))==int(std::floor(p.x))&&int(std::floor(hitPoint.y))==int(std::floor(p.y)))xFace=std::fabs(direction.x)>=std::fabs(direction.y);
-                Vec2 normal=xFace?Vec2{-std::copysign(1.f,direction.x),0}:Vec2{0,-std::copysign(1.f,direction.y)};
-                if(m_world.tile(int(std::floor(p.x)),int(std::floor(p.y)))=='#'){
-                    if(xFace)hitPoint.x=(direction.x>0?std::floor(p.x):std::ceil(p.x))+normal.x*.003f;
-                    else hitPoint.y=(direction.y>0?std::floor(p.y):std::ceil(p.y))+normal.y*.003f;
-                }else hitPoint+=normal*.01f;
-                m_bulletImpacts.push_back({hitPoint,z,normal,m_elapsed,m_level,false,0});
-                if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
-                break;
-            }
-            last=distance;
-        }
-    }
+void Game::shoot(){
+ if(dead()||m_won)return;
+ const auto&gun=equippedWeaponDef();
+ if(m_player.ammo<=0||m_player.loaded<=0){sound(gun.cycle.emptySound,.55f);return;}
+ --m_player.ammo;--m_player.loaded;m_weaponKick=1;m_shotAge=0;
+ float pitch=m_player.pitch/140.f;Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction{std::cos(m_player.angle)*std::cos(pitch),std::sin(m_player.angle)*std::cos(pitch),std::sin(pitch)};
+ if(m_vrAimValid){origin=m_vrAimPosition;direction=m_vrAimDirection;}
+ float size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(size>.0001f)direction=direction*(1/size);
+ m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,1,false,17,origin.z});
+ auto hit=traceShot(origin,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);
+ resolveShot(hit,origin,direction,gun.hitscan,true);
 }
 Game Game::stalkerInspection(int clip,float phase,int view,Enemy::Kind kind){
  auto game=mapInspection({18.6f,18.5f},0,clip==4?-35.f:0.f,3,true,-9,false);
@@ -435,6 +364,7 @@ void Game::update(const InputState& input, float dt) {
         }
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);
+        updateGuardCombat(dt);
         updateEnemies(dt);
         updatePickups();
 
@@ -519,9 +449,9 @@ __declspec(noinline) bool Game::testVrMelee(){
  support.setVrHand(0,{5.1f,4.5f,.7f},{1,0,0},true,{3,0,0});support.updateVrMelee(input,.05f);if(support.m_enemies[0].hp!=28)return false;
  std::ofstream("vr-melee-test.txt")<<"PASS: gripped swept fist contact, open-hand rejection, cooldown, stationary rejection, lethal hit and wall occlusion\n";return true;
 }
-void Game::receiveDamage(float amount,Vec2 source){
+void Game::receiveDamage(float amount,Vec2 source,bool blockable){
  const auto&melee=kUnarmedMelee;Vec2 facing{std::cos(m_player.angle),std::sin(m_player.angle)};
- bool blocked=m_guarding&&unarmed()&&dot(normalized(source-m_player.pos),facing)>melee.guardFrontDot;
+ bool blocked=blockable&&m_guarding&&unarmed()&&dot(normalized(source-m_player.pos),facing)>melee.guardFrontDot;
  if(blocked){amount*=melee.guardScale;m_verticalSpringVelocity-=.45f;sound(Sound::PunchHit,.35f,.75f);}
  else sound(Sound::Hurt,.7f,.92f);
  m_player.health=std::max(0.f,m_player.health-amount);m_damageFlash=blocked?.25f:1.f;

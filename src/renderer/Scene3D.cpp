@@ -1216,11 +1216,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
   float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.035f;
   Point3 p{mark.pos.x,mark.pos.y,mark.z};
-  quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},
+  if(std::fabs(mark.normalZ)>.5f){
+   p.z+=mark.normalZ*.012f;
+   if(mark.normalZ>0)quad({p.x-size,p.y-size,p.z},{p.x+size,p.y-size,p.z},{p.x+size,p.y+size,p.z},{p.x-size,p.y+size,p.z},impact,.9f);
+   else quad({p.x-size,p.y+size,p.z},{p.x+size,p.y+size,p.z},{p.x+size,p.y-size,p.z},{p.x-size,p.y-size,p.z},impact,.9f);
+  }else quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},
        {p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},impact,.9f);
   float age=game.elapsed()-mark.time;
+  Point3 impactNormal{mark.normal.x,mark.normal.y,mark.normalZ},sparkTangent=std::fabs(mark.normalZ)>.5f?Point3{1,0,0}:Point3{tangentX,tangentY,0},sparkUp=cross3(impactNormal,sparkTangent);
   if(age>=0&&age<.18f)for(int i=0;i<6;++i){float phase=float(i)*1.0472f,flight=age*2.4f;
-   Point3 a{p.x+mark.normal.x*.03f+tangentX*std::cos(phase)*flight,p.y+mark.normal.y*.03f+tangentY*std::cos(phase)*flight,p.z+std::sin(phase)*flight-age*age*8.f};
+   auto a=p+impactNormal*(.03f+age*1.4f)+sparkTangent*(std::cos(phase)*flight)+sparkUp*(std::sin(phase)*flight)-Point3{0,0,age*age*8.f};
    quad(a,{a.x+.012f,a.y,a.z},{a.x+.012f,a.y,a.z+.025f},{a.x,a.y,a.z+.025f},amber,1.7f);
   }
  }
@@ -1263,7 +1268,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   }
  }
  movingGeometry=true;
- auto drawActor=[&](const ActorTrack&track,ActorPose pose){
+ auto drawActor=[&](const ActorTrack&track,ActorPose pose,const NpcWeaponPose* weapon=nullptr){
     float radius=track.visual==ActorVisual::Worker?track.scale:track.scale*.8f;
     if(track.platform)radius=std::max(radius,std::hypot(track.footprint.x,track.footprint.y)*.5f);
   if(!sphereVisible({pose.position.x,pose.position.y,pose.z+radius*.5f},radius))return;
@@ -1276,20 +1281,91 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float scale=track.scale/std::max(.01f,human?m_workerMesh.maximum.y-m_workerMesh.minimum.y:std::max({mesh.maximum.x-mesh.minimum.x,mesh.maximum.y-mesh.minimum.y,mesh.maximum.z-mesh.minimum.z}));
   float c=std::cos(pose.yaw),s=std::sin(pose.yaw);
   auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  const bool armed=human&&weapon&&weapon->armed&&pose.clip!=4;
+  Point3 gunForward{},gunRight{},gunUp{},gunGrip{},gunMuzzle{};float gunScale=0;
+  struct ArmAttachment {Point3 shoulder{},elbow{},hand{},targetElbow{},targetHand{};std::array<Point3,3> upper{},lower{},palm{};};
+  std::array<ArmAttachment,2> arms{};
+  // The full-body Worker uses baked vertex animation rather than a live rig.
+  // Use its imported standing upper body, with complete jacket sleeves and
+  // gauntlets attached to the gun. The distressed Worker's hunched idle puts
+  // its visor inside the weapon. Walking still uses the authored legs.
+  struct ArmedVertex {Point3 position{};int side=0;float influence=0,lower=0,palm=0;};
+  const std::vector<std::array<ArmedVertex,3>>* armedVertices=nullptr;
+  if(armed){
+   auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+   auto unit=[&](Point3 p){return p*(1.f/std::sqrt(std::max(.000001f,dot(p,p))));};
+   gunForward=unit(weapon->direction);gunRight=unit({gunForward.y,-gunForward.x,0});gunUp=unit(cross3(gunRight,gunForward));
+   float bodyScale=track.scale/1.6f;gunScale=.75f/(m_weaponMesh.maximum.z-m_weaponMesh.minimum.z)*bodyScale;
+   auto recoil=gunForward*(-.022f*weapon->recoil*bodyScale);
+   gunGrip=weapon->grip+recoil;gunMuzzle=weapon->muzzle+recoil;
+   // Source rig joint positions verified against the local retained FBX;
+   // its visor faces +Z, the same forward axis as the shared NPC yaw.
+   const std::array<Point3,2> shoulders={Point3{-.299655f,1.128231f,.062529f},Point3{.175621f,1.137175f,.208664f}};
+   const std::array<Point3,2> elbows={Point3{-.320979f,1.004710f,-.043664f},Point3{.235904f,.985455f,.190558f}};
+   const std::array<Point3,2> hands={Point3{-.455896f,.685732f,-.040689f},Point3{.244775f,.711805f,.402681f}};
+   static const auto bind=[&](){
+    const auto&rest=mesh.bindTriangles();std::vector<std::array<ArmedVertex,3>> result(rest.size());
+    auto segmentDistance=[&](Point3 p,Point3 a,Point3 b){auto line=b-a;auto delta=p-a;float t=std::clamp(dot(delta,line)/dot(line,line),0.f,1.f);auto d=delta-line*t;return std::sqrt(dot(d,d));};
+    for(size_t face=0;face<rest.size();++face){const auto&t=rest[face];bool glove=t.part>=0&&t.part<int(mesh.materialNames.size())&&mesh.materialNames[t.part].find("mano")!=std::string::npos;
+     for(int vertex=0;vertex<3;++vertex){auto p=t.v[vertex].p;auto&v=result[face][vertex];v.position=p;v.side=p.x<-.1f?0:1;
+      if(glove){v.influence=1;v.palm=1;continue;}
+      if(p.y<.55f||p.y>1.30f)continue;
+      auto S=shoulders[v.side],E=elbows[v.side],H=hands[v.side];float armDistance=std::min(segmentDistance(p,S,E),segmentDistance(p,E,H));
+      float torsoDistance=std::hypot(p.x+.085f,p.z-.10f);
+      v.influence=std::clamp((torsoDistance-armDistance-.04f)/.10f,0.f,1.f)*std::clamp((S.y+.13f-p.y)/.16f,0.f,1.f)*std::clamp((.18f-armDistance)/.06f,0.f,1.f);
+      v.lower=std::clamp((E.y+.09f-p.y)/.18f,0.f,1.f);v.palm=std::clamp((H.y+.06f-p.y)/.12f,0.f,1.f);
+     }
+    }return result;
+   }();armedVertices=&bind;
+   auto rotation=[&](Point3 from,Point3 to){
+    from=unit(from);to=unit(to);float cosine=std::clamp(dot(from,to),-1.f,1.f);auto axis=cross3(from,to);float sine=std::sqrt(dot(axis,axis));
+    if(sine<.00001f){if(cosine>0)return std::array<Point3,3>{Point3{1,0,0},Point3{0,1,0},Point3{0,0,1}};axis=unit(cross3(from,std::fabs(from.z)<.9f?Point3{0,0,1}:Point3{0,1,0}));}
+    else axis=axis*(1.f/sine);
+    auto rotate=[&](Point3 p){return p*cosine+cross3(axis,p)*sine+axis*(dot(axis,p)*(1-cosine));};
+    return std::array<Point3,3>{rotate({1,0,0}),rotate({0,1,0}),rotate({0,0,1})};
+   };
+   auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
+   for(int side=0;side<2;++side){auto&arm=arms[side];arm.shoulder=transform(shoulders[side]);arm.elbow=transform(elbows[side]);arm.hand=transform(hands[side]);
+    // Wrist offsets keep the curled gauntlets wrapped around the trigger and
+    // fore-end; the shotgun's barrel remains the common gameplay muzzle.
+    arm.targetHand=side?gunPoint({.02f,1.10f,-1.15f})+(gunRight*.085f-gunUp*.040f)*bodyScale:gunGrip+(gunRight*.008f-gunUp*.090f+gunForward*.010f)*bodyScale;
+    auto upper=arm.elbow-arm.shoulder,lower=arm.hand-arm.elbow,reach=arm.targetHand-arm.shoulder;float l1=std::sqrt(dot(upper,upper)),l2=std::sqrt(dot(lower,lower));
+    float distance=std::clamp(std::sqrt(dot(reach,reach)),std::fabs(l1-l2)+.001f,l1+l2-.001f);auto axis=unit(reach);float along=(l1*l1-l2*l2+distance*distance)/(2*distance),height=std::sqrt(std::max(0.f,l1*l1-along*along));
+    auto bend=gunRight*(side?.35f:-.35f)-gunUp*.30f-gunForward*.10f;bend=unit(bend-axis*dot(bend,axis));arm.targetElbow=arm.shoulder+axis*along+bend*height;
+    arm.upper=rotation(upper,arm.targetElbow-arm.shoulder);arm.lower=rotation(lower,arm.targetHand-arm.targetElbow);
+    Point3 sourcePalm=side?Point3{.020742f,-.075568f,.078422f}:Point3{-.017374f,-.105655f,.031950f};
+    auto sourceDirection=transform(hands[side]+sourcePalm)-arm.hand;
+    arm.palm=rotation(sourceDirection,side?gunRight*-.060f+gunUp*.025f:gunUp*.075f+gunForward*.025f);
+   }
+  }
   objectLighting=true;objectNormalLighting=nullptr;
   auto actorLights=exteriorLight({pose.position.x,pose.position.y,pose.z+track.scale*.5f},track.scale*.5f,track.scale*.5f,track.scale,pose.yaw,true);
+  size_t actorFace=0;
   for(auto face:mesh.triangles){
-   for(auto& v:face.v){auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
-    v.p=transform(p);}
+   int vertex=0;for(auto& v:face.v){auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
+    v.p=transform(p);
+    if(armedVertices){const auto&bind=(*armedVertices)[actorFace][vertex];auto source=transform(bind.position);float standing=std::clamp((bind.position.y-.66f)/.28f,0.f,1.f);v.p=v.p+(source-v.p)*standing;if(bind.influence>0){const auto&arm=arms[bind.side];
+     auto rotate=[](const std::array<Point3,3>&basis,Point3 p){return basis[0]*p.x+basis[1]*p.y+basis[2]*p.z;};
+     auto upper=arm.shoulder+rotate(arm.upper,source-arm.shoulder),lower=arm.targetElbow+rotate(arm.lower,source-arm.elbow),hand=arm.targetHand+rotate(arm.palm,source-arm.hand);
+     auto sleeve=upper+(lower-upper)*bind.lower;auto attached=sleeve+(hand-sleeve)*bind.palm;v.p=v.p+(attached-v.p)*bind.influence;
+    }}++vertex;}
    auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);selectFaceLight(actorLights,cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),center-Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f});
     int material=0;if(human&&face.part>=0&&face.part<int(mesh.materialNames.size())){auto name=mesh.materialNames[face.part];if(name.find("pies")!=std::string::npos)material=2;else if(name.find("mano")!=std::string::npos)material=1;}
    tri(face.v[0],face.v[1],face.v[2],human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture,1.f);
+   ++actorFace;
+  }
+  if(armed){
+   auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
+   for(auto face:m_weaponMesh.bindTriangles()){if(face.part==3)continue;for(auto&v:face.v)v.p=gunPoint(v.p);
+    auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);selectFaceLight(actorLights,cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),center-Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f});tri(face.v[0],face.v[1],face.v[2],m_weaponTexture,1.f);
+   }
   }
   objectLighting=false;objectNormalLighting=nullptr;
-  if(human&&track.tool&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
+  if(armed&&weapon->flash>0){float size=(.075f+.09f*weapon->flash)*track.scale/1.6f;Point3 across=effectSide*size,up{0,0,size};quad(gunMuzzle-across-up,gunMuzzle+across-up,gunMuzzle+across+up,gunMuzzle-across+up,m_muzzleFlash,2.4f*weapon->flash);}
+  if(human&&track.tool&&!armed&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
  };
  for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i));
- for(const auto&npc:game.friendlyActors())if(npc.level==game.level()&&game.autonomousActor(npc.track()))drawActor(npc.track(),npc.pose);
+ for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==game.level()&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon);}}
  movingGeometry=false;
  for(const auto&e:game.enemies()){
   if(e.bodyTop()<game.dormantBelow())continue;

@@ -29,6 +29,7 @@ struct ActorAiConfig {
  ActorAiMode mode=ActorAiMode::Scripted;StateId enableState=0;float speed=1.4f,followDistance=2.f,dangerRange=6.f;
  float sightRange=11,sightDot=.65f;int recognitionMs=600,searchMs=4000;StateId alertState=0;
  std::vector<ActorPatrolPoint> patrol;
+ bool armed=false;int aimMs=650,recoveryMs=1000;float attackRange=9,attackDamage=18;
 };
 struct ActorTrack {
  StateId timerState=0;ActorVisual visual=ActorVisual::Worker;

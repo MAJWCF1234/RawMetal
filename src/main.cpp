@@ -329,6 +329,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // many mutually exclusive inspection branches otherwise reserve their
     // large renderer objects in one native stack frame before dispatch.
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-combat-inspection")){
+     constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories("diagnostics/guard-combat-20261011");std::ofstream report("diagnostics/guard-combat-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"guard-unarmed-control","guard-low-ready","guard-aim","guard-fire","guard-fire-side"};
+     for(int stage=-1;stage<4;++stage){auto scene=retro::Game::guardCombatInspection(stage);auto weapon=scene.npcWeaponPose(0);bool passed=stage<0?!weapon.armed:weapon.armed&&(stage<2||weapon.flash>0&&scene.player().health==82);report<<names[stage+1]<<": "<<(passed?"PASS":"FAIL")<<" health="<<scene.player().health<<" raise="<<weapon.raise<<" flash="<<weapon.flash<<" muzzle="<<weapon.muzzle.x<<','<<weapon.muzzle.y<<','<<weapon.muzzle.z<<'\n';if(!passed)return 21;
+      renderer->render(scene);std::ofstream out(std::string("diagnostics/guard-combat-20261011/")+names[stage+1]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return 0;
+    }
     if(std::wcsstr(commandLine,L"--guard-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories("diagnostics/guard-pass-20261010");std::ofstream report("diagnostics/guard-pass-20261010/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';

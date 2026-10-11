@@ -248,6 +248,9 @@ public:
     bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true,bool shelfCavities=false)const;
     // Static optical visibility: exact solid intersections, separate from player hull clearance.
     bool lightRayClear(Vec2 a,float az,Vec2 b,float bz)const;
+    // Nearest physical shot obstruction on a finite 3D segment. Actor hulls
+    // are resolved by Game; this includes static and moving world geometry.
+    float shotFraction(Point3 from,Point3 to,Point3&normal)const;
     static bool testCollisionCandidates();
     bool doorBlocks(float x,float y,float feet,float height)const;
     bool navigable(int x,int y,int nx,int ny,float height=1.f)const;

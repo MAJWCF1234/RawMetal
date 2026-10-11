@@ -23,6 +23,9 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
  // in every map, editor preview, and future placement uses the visible/control
  // face as forward instead of showing the back/interior side.
  if(id==171||id==258||id==294)for(auto&face:triangles)for(auto&v:face.v){v.p.x=-v.p.x;v.p.z=-v.p.z;}
+ // Keep the importer normalization in the immutable prototypes too. The
+ // lazy bind snapshot does not depend on which animation was rendered first.
+ for(size_t i=0;i<triangles.size();++i)m_cachedTriangles[i].prototype=triangles[i];
  minimum={1e9f,1e9f,1e9f};maximum={-1e9f,-1e9f,-1e9f};
  for(auto&t:triangles)for(auto&v:t.v){minimum.x=std::min(minimum.x,v.p.x);minimum.y=std::min(minimum.y,v.p.y);minimum.z=std::min(minimum.z,v.p.z);maximum.x=std::max(maximum.x,v.p.x);maximum.y=std::max(maximum.y,v.p.y);maximum.z=std::max(maximum.z,v.p.z);}
  std::ostringstream info;info<<id<<": "<<triangles.size()<<" triangles; bounds "<<minimum.x<<","<<minimum.y<<","<<minimum.z<<" to "<<maximum.x<<","<<maximum.y<<","<<maximum.z<<"\n";
@@ -54,6 +57,10 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
  }
 }
 Mesh::~Mesh(){ufbx_free_scene(m_scene);ufbx_free_scene(m_bindScene);}
+const std::vector<MeshTriangle>& Mesh::bindTriangles()const{
+ if(m_bindTriangles.empty()){m_bindTriangles.reserve(m_cachedTriangles.size());for(const auto&face:m_cachedTriangles)m_bindTriangles.push_back(face.prototype);}
+ return m_bindTriangles;
+}
 void Mesh::poseCreature(int clip,float phase){
  if(m_creatureFrames.empty()||clip<0||clip>=int(m_creatureClips))throw std::runtime_error("Missing creature clip");
  float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;

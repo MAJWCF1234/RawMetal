@@ -68,14 +68,24 @@ Try these observations:
 
 The authored sight range is 11 m, the sight-cone dot threshold is 0.65, and the
 search duration is 4 seconds. The named states are `ash_guard_alert`,
-`ash_guard_damage`, and `ash_guard_dead`. This slice tests awareness/navigation;
-it does not author ranged weapons, stealth takedowns or human-shield behavior.
+`ash_guard_damage`, and `ash_guard_dead`. The October 11 pass equips this guard
+through the shared `ACTOR_WEAPON` record. The guard counts as one hostile contact
+and uses 18 damage, a six-round tube, 650 ms aiming, 1000 ms recovery and a 9 m
+attack range. It reloads for 1800 ms when empty. Recognition and raising the gun
+precede the aim delay, so the first shot has a readable warning.
+
+Stay hidden to observe patrols; sustained exposure now starts actual combat.
+Break sight or place cover/a character between the muzzle and your body to cancel
+the shot. Save during aiming, recovery or reload to test restoration. The existing
+Worker suit is prototype art; it now holds the existing shotgun with two attached
+hands. This experiment does not implement faction tactics, stealth takedowns or
+human-shield controls.
 
 ## Keep authoring and runtime in sync
 
 Geometry, player spawn, cover and throwable assets use supported editor objects.
 The guard's `TIMED_SEQUENCE`, `ACTOR`, keys, health, AI, guard configuration and
-patrol points are stored as top-level JSON `runtimeRecords`, then appended by
+patrol points and weapon configuration are stored as top-level JSON `runtimeRecords`, then appended by
 the generic exporter into the runtime campaign block. These are shared engine
 records, not map-specific code. The visual labels are only labels.
 

@@ -76,7 +76,10 @@ struct Pickup {
     float z = -999;
 };
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
-struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;};
+struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;};
+struct NpcWeaponPose {bool armed=false;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;};
+enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll};
+struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
 struct FriendlyActor {
  // The authored identity owns state keys; level/pose describe physical location.
  // Keep the immutable track alive when its home chunk releases geometry.
@@ -84,7 +87,7 @@ struct FriendlyActor {
  std::shared_ptr<const AuthoredMapData> definition;
  const ActorTrack& track()const{return definition->actorTracks.at(homeActor);}
 };
-struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;};
+struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
@@ -170,6 +173,7 @@ public:
     const std::vector<Enemy>& enemies() const { return m_enemies; }
     const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
     const std::vector<FriendlyActor>& npcActors()const{return m_friendlyActors;}
+    NpcWeaponPose npcWeaponPose(size_t actor)const;
     GuardState guardState(size_t actor)const{return GuardState(state(friendlyKey(actor,"guard_mode")));}
     bool autonomousActor(const ActorTrack& track)const{return track.ai.mode!=ActorAiMode::Scripted&&(!track.ai.enableState||state(track.ai.enableState)||(track.deadState&&state(track.deadState)));}
     bool friendlyChunkNeeded(int level)const;
@@ -231,6 +235,8 @@ public:
     static bool testAI();
     static bool testHearing();
     static bool testGuardAI();
+    static bool testGuardCombat();
+    static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
     static bool testGantry();
@@ -373,18 +379,22 @@ private:
     void updateInteraction(const InputState& input,float dt);
     bool lineOfSight(const Vec2& a, const Vec2& b) const;
     void shoot();
+    ShotHit traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc=-1,bool includePlayer=false,const HitscanDef* assist=nullptr)const;
+    void resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride=0);
     void reloadWeapon();
     void punchImpact();
     void applyPunchHit(Enemy& enemy);
-    bool applyEnemyDamage(Enemy& enemy,float amount,bool bloodDecal=true,bool closeHitStop=false);
+    bool applyEnemyDamage(Enemy& enemy,float amount,bool bloodDecal=true,bool closeHitStop=false,int level=-1);
     void updateVrMelee(const InputState& input,float dt);
-    void receiveDamage(float amount,Vec2 source);
+    void receiveDamage(float amount,Vec2 source,bool blockable=true);
     void updateEnemies(float dt);
     ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
     ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli=nullptr);
     void guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove);
     void validateGuardState(size_t actor)const;
     void updateGuardFlags();
+    void updateGuardCombat(float dt);
+    int npcMilliseconds(size_t actor,float dt,std::string_view field);
     std::vector<AiStimulus> aiStimuli()const;
     void rebuildFriendlyActors();
     void updateFriendlyActors(float dt,bool guards=false);
@@ -399,6 +409,7 @@ private:
     bool commandFriendly();
     void requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal);
     bool aiDoorLocked(const World& world,int level,const Door& door)const;
+    int hostilesRemaining(int level)const;
     void damageFriendly(size_t actor,float amount,Vec2 source);
     void migrateEnemiesAcrossChunks();
     void updatePickups();
@@ -409,6 +420,7 @@ private:
     Player m_player;
     std::vector<Enemy> m_enemies;
     std::vector<FriendlyActor> m_friendlyActors;
+    std::vector<AiStimulus> m_guardShots;
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;

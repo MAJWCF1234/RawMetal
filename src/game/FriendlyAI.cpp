@@ -6,14 +6,14 @@
 namespace retro {
 void Game::damageFriendly(size_t actor,float amount,Vec2 source){
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();auto pose=npc.pose;
- if(!track.health||state(track.deadState)||amount<=0)return;
- int damage=std::min(track.health,state(track.damageState)+int(std::ceil(amount)));setState(track.damageState,damage);
+ if(!track.health||state(track.deadState)||!std::isfinite(amount)||amount<=0)return;
+ int previous=std::clamp(state(track.damageState),0,track.health);int damage=previous+std::min(track.health-previous,int(std::ceil(std::min(amount,float(track.health)))));setState(track.damageState,damage);
  setState(friendlyKey(actor,"hit_x"),int(std::round(source.x*1000)));setState(friendlyKey(actor,"hit_y"),int(std::round(source.y*1000)));setState(friendlyKey(actor,"hit_source"),1);
  if(damage>=track.health){setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));updateMechanisms(0);}
  m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
 }
 bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
- int living=level==m_level?enemiesRemaining():int(std::count_if(m_chunks[level].enemies.begin(),m_chunks[level].enemies.end(),[](const Enemy&e){return e.alive;}));
+ int living=hostilesRemaining(level);
  return door.transfer||door.entry||(door.requireEnemiesClear&&living)||(door.requireControl&&!world.controlReleased())||(door.requireState&&state(door.requireState)!=door.requireValue);
 }
 void Game::requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal){
