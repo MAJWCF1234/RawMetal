@@ -5,6 +5,8 @@ namespace retro {
 bool Game::testGuardAI(){
  if(!testGuardCombat())return false;
  if(!testGuardTactics())return false;
+ if(!testGuardPolicy())return false;
+ if(!testGuardDefense())return false;
  std::ofstream report("guard-ai-test.txt");bool passed=true;auto check=[&](bool ok,const char*label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();passed&=ok;};
  auto scene=[](bool wall=false,bool gate=false){auto campaign=std::make_shared<CustomCampaign>();campaign->name="Guard validation";campaign->key=728193;
   auto map=std::make_shared<AuthoredMapData>();map->name="Guard room";map->definition={{0,0},{18.5f,18.5f},0,Environment::Interior,false,8,.3f,42};AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
@@ -82,6 +84,9 @@ bool Game::testGuardAI(){
  check(rejects("ACTOR_AI|0|0|2||1.4|2|6\nACTOR_WEAPON|0|0|1|650|1000|9|18\n"),"Weapon authoring rejects armed civilian/escort modes");
  check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|1|99|1000|9|18\n"),"Guard weapon authoring bounds reaction delay");
  check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|1|650|1000|9|101\n"),"Guard weapon authoring bounds damage");
+ try{auto authored=load("ACTOR_FACTION|0|0|2|security\n"+guard+point+ai);const auto&config=authored->maps[0]->actorTracks[0].ai;check(config.faction==AiFaction::Facility&&config.squad==stateId("security"),"Faction and squad authoring survive record ordering");}catch(const std::exception&){check(false,"Faction and squad authoring survive record ordering");}
+ check(rejects(ai+guard+point+"ACTOR_FACTION|0|0|6|\n"),"Faction authoring rejects unknown relationship groups");
+ check(rejects("ACTOR_AI|0|0|2||1.4|2|6\nACTOR_FACTION|0|0|2|security\n"),"Squad authoring rejects non-guard members");
  std::string points;for(int i=0;i<65;++i)points+=point;check(rejects(ai+guard+points),"Guard authoring rejects oversized patrol routes");
  return passed;
 }

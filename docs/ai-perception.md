@@ -111,7 +111,11 @@ Sight range is metres, sight cone is a forward dot threshold, recognition/search
 are milliseconds, and patrol Z is absolute feet height. The optional alert flag
 is set while a living enabled guard confirms a target. Multiple guards sharing
 that flag combine their alert state. Losing sight preserves the last observed
-position; a brief glimpse does not become an alert after the player hides. Guard
+position and confirmed entity across brief occlusion; an unconfirmed glimpse
+does not become an alert after the target hides. A confirmed target is recognised
+immediately when seen again, but interrupted weapon aim still starts afresh.
+Finishing investigation/search clears confirmation, so a later encounter needs
+the normal recognition delay. Guard
 perception runs after footsteps, thrown objects and shots are emitted this frame.
 
 Ordinary doors in resident neighboring chunks now animate for NPCs without the
@@ -136,13 +140,15 @@ Weapon 1 is the existing shotgun; the remaining fields are aiming milliseconds,
 recovery milliseconds, range in metres and damage. Empty tubes reload for 1800 ms.
 Recognition and weapon raising precede aiming. Fractional milliseconds carry
 between frames so higher frame rates do not shorten the attack clocks. Saves
-restore aim/recovery/reload and rounds. Armed guards count in the physical chunk's
-hostile contacts and enemy-clear gates; civilians/escorts remain separate.
+restore aim/recovery/reload and rounds. Enabled living armed guards hostile to the
+player count in the physical chunk's contacts and enemy-clear gates; allied guards
+and civilians/escorts do not.
 
 `--guard-combat-test` covers attack timing, interruption, blocking, ammunition,
 saves, contacts/gates, thin solids, glass, both door types and real neighbor shots.
 `--guard-combat-inspection` captures the actual Ash export from the project root.
-Faction tactics and stealth takedowns remain future work.
+Faction targeting and bounded squad tactics are implemented below; stealth
+takedowns remain future work.
 
 Armed guards now choose a firing position when they can see the player's head
 but cover or another body blocks the barrel. Candidate poses use the same
@@ -165,6 +171,60 @@ to test these systems until the external asset library is available again.
 save validation, locks, neighbor doors, navigation budget and authoring validation.
 `--guard-inspection` loads that actual exported custom map from the project root,
 checks its full four-point patrol behind cover and captures three states in Vulkan.
+
+## Factions, squads and recovery
+
+`ACTOR_FACTION|map|actor|faction|squad` accepts faction 0 (default), 1 (Player),
+2 (Facility), 3 (Creature), 4 (Raider) or 5 (Neutral). Omitted/default factions
+resolve guards to Raider, other Worker actors to Facility, Wasp/Huntsman actors
+to Creature and other visuals to Neutral. Player and Facility are allied; Creature
+and Raider are hostile to each other and to those allies. Neutral actors are not
+automatic targets. The last identified personal attacker can still provoke
+retaliation, including an actual creature attack from behind.
+
+Guards choose living entities through these relationships instead of always
+attacking the player. Target references retain entity kind, level and index;
+memory stores the last observed coordinates rather than revealing a hidden
+target's live position. A dead, disabled or unloaded target cannot be fired upon.
+The shared first-hit query protects intervening allies and neutral bystanders.
+
+A nonempty squad name groups guards of the same faction. Fresh personal sightings
+can inform a teammate within 18 m; a report supplies last-known information, not
+the receiver's own visibility. At most two eligible members hold firing leases.
+Leases last `max(1600, aimMs + 500)` milliseconds, allowing the maximum 3000 ms
+authored aim to complete, and rotate after firing or expiry. Dead, disabled,
+moving, recovering or reloading members release their opportunities. A solo guard
+does not require a lease.
+
+Squad roles attempt one flank per target encounter, reserve separate destinations
+and stop there before aiming. Searches retain the eight-candidate/four-search
+frame bounds. A flank abandons its destination after five seconds or if its walk
+becomes blocked, permitting normal combat instead of permanent suppression.
+A patrol point similarly advances after five seconds without meaningful progress;
+successful detours reset that clock and ordinary pauses remain intact.
+
+At close range, armed guards can bash through a 300 ms interruptible windup for
+12 damage, followed by 900 ms recovery. Bash checks the live target and first
+obstruction, spends no ammunition and never shares a frame with gunfire.
+Frontal bare-handed guarding reduces bash damage; it does not block bullets.
+
+Empty tubes, injuries within the last 1500 ms or health at/below 35% cause a
+bounded search for reachable cover that blocks both head and body from the
+remembered threat. Guards hold protected positions during reload instead of
+chasing back into exposure. Once transient defense ends, unseen low-health guards
+still reach the normal investigation/search deadline and forget their target.
+Movement still requires physical hull/support/door
+clearance. Threat references, clocks, leases, flank/recovery state and ammunition
+use the existing save store with bounds checks; save format 13 is unchanged.
+
+`--guard-policy-test` covers these decisions, 60/120 Hz timing, interrupted saves,
+three-second squad aiming and corrupt state rejection. `--guard-defense-test`
+covers bounded low-health memory, protected reloads and contradictory saved flags.
+The opt-in southern
+experiment in [the Ash custom playground](ashfall-playground.md) uses the same
+authoring and systems. See [the policy verification report](guard-policy-pass-20261011.md).
+Full GoldSrc AI parity remains unproven; these bounded behaviors do not establish
+equivalent content coverage, tactics or long-session reliability.
 
 ## State storage
 

@@ -24,12 +24,20 @@ struct QuestItemStack {StateId id=0;int count=0;};
 enum class ActorVisual { Worker, Wasp, Huntsman, Cargo };
 struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 enum class ActorAiMode { Scripted, Civilian, Escort, Guard=3 };
+enum class AiFaction { Unspecified, Player, Facility, Creature, Raider, Neutral };
+inline AiFaction actorFaction(const struct ActorTrack& track);
+inline bool factionsHostile(AiFaction a,AiFaction b){
+ if(a==b||a==AiFaction::Neutral||b==AiFaction::Neutral)return false;
+ if(a==AiFaction::Player||a==AiFaction::Facility)return b==AiFaction::Creature||b==AiFaction::Raider;
+ return a==AiFaction::Creature||a==AiFaction::Raider;
+}
 struct ActorPatrolPoint {Vec2 position{};float z=0;int pauseMs=1000;};
 struct ActorAiConfig {
  ActorAiMode mode=ActorAiMode::Scripted;StateId enableState=0;float speed=1.4f,followDistance=2.f,dangerRange=6.f;
  float sightRange=11,sightDot=.65f;int recognitionMs=600,searchMs=4000;StateId alertState=0;
  std::vector<ActorPatrolPoint> patrol;
  bool armed=false;int aimMs=650,recoveryMs=1000;float attackRange=9,attackDamage=18;
+ AiFaction faction=AiFaction::Unspecified;StateId squad=0;
 };
 struct ActorTrack {
  StateId timerState=0;ActorVisual visual=ActorVisual::Worker;
@@ -40,6 +48,12 @@ struct ActorTrack {
  std::vector<ActorKey> idleKeys;int idleUntilMs=0,approachUntilMs=0;
  ActorAiConfig ai{};
 };
+inline AiFaction actorFaction(const ActorTrack& track){
+ if(track.ai.faction!=AiFaction::Unspecified)return track.ai.faction;
+ if(track.ai.mode==ActorAiMode::Guard)return AiFaction::Raider;
+ if(track.visual==ActorVisual::Wasp||track.visual==ActorVisual::Huntsman)return AiFaction::Creature;
+ return track.visual==ActorVisual::Worker?AiFaction::Facility:AiFaction::Neutral;
+}
 struct SequenceCue {
  StateId timerState=0;int timeMs=0;Sound sound=Sound::Metal1;
  Vec2 position{};float gain=1,pitch=1;std::string caption;float z=std::numeric_limits<float>::quiet_NaN();

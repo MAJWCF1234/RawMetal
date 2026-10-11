@@ -156,6 +156,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    if(f.size()!=8)throw std::runtime_error("malformed ACTOR_AI record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),mode=integer(f,3,"actor AI mode");
    if(index<0||index>=int(map->actorTracks.size())||mode<0||mode>3)throw std::runtime_error("invalid actor AI target or mode");
    auto& ai=map->actorTracks[size_t(index)].ai;ai.mode=ActorAiMode(mode);ai.enableState=f[4].empty()?0:stateId(decode(f[4]));ai.speed=number(f,5,"actor speed");ai.followDistance=number(f,6,"follow distance");ai.dangerRange=number(f,7,"danger range");
+  }else if(tag=="ACTOR_FACTION"){
+   if(f.size()!=5)throw std::runtime_error("malformed ACTOR_FACTION record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),faction=integer(f,3,"actor faction");
+   if(index<0||index>=int(map->actorTracks.size())||faction<0||faction>5)throw std::runtime_error("invalid actor faction target or value");
+   auto&ai=map->actorTracks[size_t(index)].ai;ai.faction=AiFaction(faction);ai.squad=f[4].empty()?0:stateId(decode(f[4]));
   }else if(tag=="ACTOR_GUARD"){
    if(f.size()!=8)throw std::runtime_error("malformed ACTOR_GUARD record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
    if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("guard configuration has no actor");

@@ -4,11 +4,12 @@
 #include <optional>
 #include <fstream>
 namespace retro {
-void Game::damageFriendly(size_t actor,float amount,Vec2 source){
+void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef attacker){
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();auto pose=npc.pose;
  if(!track.health||state(track.deadState)||!std::isfinite(amount)||amount<=0)return;
  int previous=std::clamp(state(track.damageState),0,track.health);int damage=previous+std::min(track.health-previous,int(std::ceil(std::min(amount,float(track.health)))));setState(track.damageState,damage);
  setState(friendlyKey(actor,"hit_x"),int(std::round(source.x*1000)));setState(friendlyKey(actor,"hit_y"),int(std::round(source.y*1000)));setState(friendlyKey(actor,"hit_source"),1);
+ setState(friendlyKey(actor,"hit_kind"),int(attacker.kind));setState(friendlyKey(actor,"hit_level"),attacker.kind==ShotKind::None?0:attacker.level+1);setState(friendlyKey(actor,"hit_index"),attacker.kind==ShotKind::None?0:attacker.index+1);
  if(damage>=track.health){setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));updateMechanisms(0);}
  m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
 }
@@ -51,9 +52,9 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  int fear=std::max(0,std::clamp(get("fear"),0,4000)-ms);Vec2 threat{get("threat_x")*.001f,get("threat_y")*.001f};float nearest=config.dangerRange*config.dangerRange;bool danger=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
   if(distance<nearest&&aiCanSee(world,pose.position,pose.z+height*.85f,{std::sin(pose.yaw),std::cos(pose.yaw)},position,z,config.dangerRange,-.25f,2.5f)){nearest=distance;threat=position;danger=true;}};
- for(const auto&enemy:enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
+ if(factionsHostile(actorFaction(track),AiFaction::Creature))for(const auto&enemy:enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
  for(size_t i=0;i<world.actorTracks().size();++i){const auto&other=world.actorTracks()[i];if(other.visual!=ActorVisual::Wasp&&other.visual!=ActorVisual::Huntsman)continue;
-  const auto&target=world.actorPose(i);if(target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
+  const auto&target=world.actorPose(i);if(factionsHostile(actorFaction(track),actorFaction(other))&&target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
  int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:m_player.pos;}put("damage",damage);put("hit_source",0);
  if(danger){fear=4000;put("threat_x",int(std::round(threat.x*1000)));put("threat_y",int(std::round(threat.y*1000)));}put("fear",fear);
  bool follow=config.mode==ActorAiMode::Escort?!get("hold"):get("follow")!=0;
@@ -109,6 +110,19 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   }
  }
  float moved=length(pose.position-old.position);pose.clip=moved>.0001f?1:0;pose.phase=pose.clip?std::fmod(old.phase+moved*1.1f,1.f):0;
+ if(config.mode==ActorAiMode::Guard){
+  int point=get("guard_point");bool patrol=guardState(actor)==GuardState::Patrol;
+  if(!patrol||!wantsMove||get("guard_patrol_point_seen")!=point+1){put("guard_patrol_wait",0);put("guard_patrol_progress",0);put("guard_patrol_fraction",0);put("guard_patrol_movement_fraction",0);put("guard_patrol_point_seen",patrol?point+1:0);}
+  if(patrol&&wantsMove){
+   // Progress toward a route waypoint also counts when a legitimate detour
+   // temporarily moves farther from the final patrol point.
+   float advance=std::max(0.f,dot(pose.position-old.position,normalized(waypoint-old.position)));int movement=get("guard_patrol_movement_fraction")+int(std::round(advance*1000000));int progress=get("guard_patrol_progress")+movement/1000;movement%=1000;
+   int wait=std::min(5000,get("guard_patrol_wait")+npcMilliseconds(actor,dt,"guard_patrol_fraction"));
+   int meaningful=std::max(1,int(std::round(std::min(.1f,config.speed*2.f)*1000)));if(progress>=meaningful){progress=0;movement=0;wait=0;}
+   if(wait>=5000){put("guard_point",(point+1)%int(config.patrol.size()));put("guard_arrived",0);put("guard_pause",0);put("guard_patrol_point_seen",0);progress=0;movement=0;wait=0;timer=0;waypoint=pose.position;}
+   put("guard_patrol_progress",progress);put("guard_patrol_movement_fraction",movement);put("guard_patrol_wait",wait);
+  }
+ }
  if(config.mode==ActorAiMode::Guard&&moved>0){int steps=get("guard_step")+int(std::round(moved*1000));if(steps>=1000){auto material=!world.outdoors()&&world.metalFloor(int(pose.position.x),int(pose.position.y))?Sound::Metal1:Sound::Concrete1;m_sounds.push_back({material,pose.position+chunkOffset(level)-chunkOffset(m_level),.3f,.96f,true,17,pose.z+.04f});steps%=1000;}put("guard_step",steps);}
  int stuck=wantsMove&&moved<.0001f?std::clamp(get("stuck"),0,500)+ms:0;if(stuck>500){timer=0;stuck=0;}put("stuck",stuck);
  put("repath",int(std::round(timer*1000)));put("way_x",int(std::round(waypoint.x*1000)));put("way_y",int(std::round(waypoint.y*1000)));

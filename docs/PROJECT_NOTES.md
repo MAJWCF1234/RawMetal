@@ -56,3 +56,20 @@ The subsequent [cover-repositioning pass](guard-tactics-pass-20261011.md) repair
 armed guards stopping forever behind low cover. Shared shot geometry selects
 bounded local detours; movement keeps target-facing and uses a lowered weapon.
 The same custom Ash playground now includes low cover for runtime observation.
+
+## October 11, 2026 — shared guard policy and squad pass
+
+The [policy pass](guard-policy-pass-20261011.md) adds entity/faction targeting,
+identified-attacker retaliation, confirmed threat memory across short occlusion,
+search expiry and recovery from stalled patrol points. The shared engine now
+provides limited squad sight reports, two rotating fire leases, one bounded
+flank per encounter, an interruptible 12-damage bash and protected reload/injury
+retreat. These decisions and clocks restore through the existing save system.
+See [AI behavior](ai-perception.md) and the generic
+[`ACTOR_FACTION` schema](authored-mechanisms.md).
+
+The same [custom Ash playground](ashfall-playground.md) has an opt-in southern
+experiment: entering `X17–17.8, Y12–13` enables a second Raider guard and a
+Creature target. The original solo encounter remains available before activation.
+Existing Worker/Wasp/shotgun resources provide the demonstration; the external
+asset library is still unnecessary. Full GoldSrc AI parity remains unproven.
