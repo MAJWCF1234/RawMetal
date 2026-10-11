@@ -702,7 +702,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   }
   if(track.health<0||track.health>100000||(track.health&&(!track.damageState||!track.deadState)))throw std::runtime_error("Invalid actor health states");
  }
- for(const auto& cue:map->sequenceCues)if(!timerExists(cue.timerState)||cue.timeMs<0||int(cue.sound)<0||int(cue.sound)>=int(Sound::Count)||cue.gain<0||cue.pitch<=0||!std::isfinite(cue.gain)||!std::isfinite(cue.pitch))throw std::runtime_error("Invalid actor sequence cue");
+ for(const auto& cue:map->sequenceCues)if(!timerExists(cue.timerState)||cue.timeMs<0||int(cue.sound)<0||int(cue.sound)>=int(Sound::Count)||cue.gain<0||cue.pitch<=0||!std::isfinite(cue.gain)||!std::isfinite(cue.pitch)||std::isinf(cue.z))throw std::runtime_error("Invalid actor sequence cue");
  for(const auto& layer:map->layers){
   if(!std::isfinite(layer.elevation)||!std::isfinite(layer.thickness)||layer.thickness<0)throw std::runtime_error("Invalid authored layer elevation or thickness");
   for(const auto& row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Authored map rows must match the chunk width");

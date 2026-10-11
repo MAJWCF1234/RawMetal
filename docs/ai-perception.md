@@ -6,12 +6,27 @@ separation as well as horizontal distance.
 
 Enemies investigate the strongest audible stimulus at its actual origin.
 Supported stimuli are shots, footsteps and physics-object impacts. Silent
-events are ignored. Occlusion reduces shot range to 70% and quiet sound range
+events are ignored. Gain scales effective hearing radius, so quiet crouched
+footsteps have a shorter detection range than ordinary walking. Occlusion reduces shot range to 70% and quiet sound range
 to 35%. Visible targets take priority over distractions; losing visibility
 retains the existing last-known-position investigation/search behavior.
-Player-relative audio uses the player position and eye elevation. Spatial
-audio currently stores a 2D source, so perception estimates its elevation from
-the source floor; explicit sound elevations remain future engine work.
+Sound events capture source X/Y and absolute height when emitted. Player footsteps
+and landing use contact height; shots use the player view or tracked VR weapon.
+Object impacts capture their corrected collision height. NPC, sequence-tick and
+authored cue origins are separate from the player's position. A direct thrown-object
+hit records its impact without disclosing the hidden thrower.
+
+Hearing and playback share a static acoustic trace split at real chunk boundaries.
+Exact cached intersections catch thin decks and structures; bounded samples check
+doors and moving platforms. Investigation support comes from the source chunk and
+source height. Playback uses 3D distance and interpolated-height occlusion while
+retaining smooth stereo envelopes. Inaudible voices skip geometry tracing. This is
+stereo positional audio, not an HRTF/binaural implementation.
+
+Legacy events/cues without a height retain their fallback behavior. Ambient machine
+origins still contain only X/Y and retain planar playback; wasp and water loops use
+body-center and surface heights. New custom `SEQUENCE_CUE` records may append an
+absolute-height field after the caption; old records remain valid.
 
 Idle workers turn toward visible living enemies at up to four radians per
 second. Dead enemies, blocked sight and neighboring chunks cannot provide a
@@ -85,6 +100,11 @@ Older insertion-ordered state payloads are sorted on load; duplicate IDs are
 rejected. The systems regression compares indexed and linear results and loads
 a 4,095-flag unsorted payload.
 
+`--hearing-test` covers actual crouched/standing movement, captured gun and impact
+origins, stacked floors, thin decks, walls, neighboring chunks, actor ticks,
+strongest-stimulus selection, lost sight, invalid inputs and cue compatibility.
+`--audio-test` covers offline stereo playback, elevation, occlusion and source
+retention alongside existing mixing/ambience checks.
 `--physics-ai-test` covers real-source investigation, silent/occluded footsteps,
 friendly reactions, walls, dead targets and authored animation preservation,
 alongside stairs, terrain, stalking and contact combat. `--mechanisms-test` and

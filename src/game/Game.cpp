@@ -101,7 +101,7 @@ void Game::crossChunkBoundary(){
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
  for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
- for(auto&event:m_sounds)if(event.spatial)event.position+=shift;
+ for(auto&event:m_sounds)if(event.spatial||std::isfinite(event.z))event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
  if((m_worldId==WorldId::Campaign&&next>previous)||m_worldId==WorldId::Custom)saveCheckpoint();
 }
@@ -141,8 +141,13 @@ void Game::loadLevel(int level,bool carry) {
     seedClutter();
     if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
 }
-void Game::sound(Sound sound,float gain,float pitch){m_sounds.push_back({sound,{},gain,pitch,false});}
-void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int kind=enemy.kind==Enemy::Kind::Warden||enemy.kind==Enemy::Kind::Mutant?2:int(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+kind*3+action),enemy.pos,gain,pitch*(enemy.kind==Enemy::Kind::Warden?.78f:1.f),true});}
+void Game::sound(Sound sound,float gain,float pitch){
+ bool foot=(sound>=Sound::Metal1&&sound<=Sound::Concrete4)||sound==Sound::Land;
+ Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+(foot?.04f:m_player.eye)};
+ if(sound==Sound::Shot&&m_vrAimValid)origin=m_vrAimPosition;
+ m_sounds.push_back({sound,{origin.x,origin.y},gain,pitch,false,17,origin.z});
+}
+void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int kind=enemy.kind==Enemy::Kind::Warden||enemy.kind==Enemy::Kind::Mutant?2:int(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+kind*3+action),enemy.pos,gain,pitch*(enemy.kind==Enemy::Kind::Warden?.78f:1.f),true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
 
 int Game::enemiesRemaining() const {
     int n = 0;
@@ -273,7 +278,7 @@ void Game::shoot() {
             float z=m_player.z+m_player.eye+distance*std::tan(m_player.pitch/140.f);
             if(!m_world.fits(p.x,p.y,z,.02f)||m_world.doorBlocks(p.x,p.y,z,.02f)){
                 int tx=int(std::floor(p.x)),ty=int(std::floor(p.y));
-                if(m_world.tile(tx,ty)=='C'){m_world.destroyTile(tx,ty);for(int i=0;i<4;++i){Clutter c;c.kind=6;c.pos={tx+.5f,ty+.5f};c.z=m_world.floorHeight(c.pos.x,c.pos.y);c.yaw=i*1.5707963f;c.pitch=(i%2?-.18f:.18f);c.roll=(i%2?.12f:-.12f);c.velocity={std::cos(i*1.5707963f)*3.f,std::sin(i*1.5707963f)*3.f};c.vz=2.f;c.spin=(i%2?1.f:-1.f)*3.f;c.pitchSpeed=(i%2?1.f:-1.f)*2.f;c.rollSpeed=(i%2?-1.f:1.f)*2.f;m_clutter.push_back(c);}sound(Sound::JunkSoft,.9f);break;}
+                if(m_world.tile(tx,ty)=='C'){m_world.destroyTile(tx,ty);for(int i=0;i<4;++i){Clutter c;c.kind=6;c.pos={tx+.5f,ty+.5f};c.z=m_world.floorHeight(c.pos.x,c.pos.y);c.yaw=i*1.5707963f;c.pitch=(i%2?-.18f:.18f);c.roll=(i%2?.12f:-.12f);c.velocity={std::cos(i*1.5707963f)*3.f,std::sin(i*1.5707963f)*3.f};c.vz=2.f;c.spin=(i%2?1.f:-1.f)*3.f;c.pitchSpeed=(i%2?1.f:-1.f)*2.f;c.rollSpeed=(i%2?-1.f:1.f)*2.f;m_clutter.push_back(c);}m_sounds.push_back({Sound::JunkSoft,{tx+.5f,ty+.5f},.9f,1,true,17,m_world.floorHeight(tx+.5f,ty+.5f)+.3f});break;}
                 if(m_world.tile(tx,ty)=='B'){float floor=m_world.floorHeight(tx+.5f,ty+.5f);m_world.destroyTile(tx,ty);m_barrelExplosions.push_back({{tx+.5f,ty+.5f},floor+.55f,m_elapsed,m_level});if(m_barrelExplosions.size()>16)m_barrelExplosions.erase(m_barrelExplosions.begin());m_verticalSpringVelocity-=1.5f;m_damageFlash=.8f;sound(Sound::LiftCrash,1.f,.8f);const auto&aoe=kUnarmedMelee;for(auto&e:m_enemies)if(e.alive&&length(e.pos-Vec2{tx+.5f,ty+.5f})<aoe.barrelRadius)applyEnemyDamage(e,aoe.barrelDamage,false,false);break;}
                 Vec2 hitPoint=m_player.pos+direction*last;
                 bool xFace=int(std::floor(hitPoint.x))!=int(std::floor(p.x));

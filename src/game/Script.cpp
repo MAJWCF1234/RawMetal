@@ -95,7 +95,7 @@ void Game::updateHazards(float dt){
  for(const auto&hazard:m_world.hazards()){
   if(!hazardActive(hazard))continue;
   if(hazard.period>0&&std::fmod(m_elapsed+hazard.phase,hazard.period)<dt)
-   m_sounds.push_back({Sound::Machine,{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f},.25f,1.3f,true});
+   m_sounds.push_back({Sound::Machine,{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f},.25f,1.3f,true,17,(hazard.bottom+hazard.top)*.5f});
   if(m_player.pos.x<hazard.x1||m_player.pos.x>hazard.x2||m_player.pos.y<hazard.y1||m_player.pos.y>hazard.y2)continue;
   if(m_player.z+m_player.hullHeight()<hazard.bottom||m_player.z>hazard.top)continue;
   damage+=std::max(0.f,hazard.damagePerSecond)*dt;loudest=hazard.kind;
@@ -112,7 +112,7 @@ void Game::updateHazards(float dt){
   }
   for(int i=int(m_clutter.size())-1;i>=0;--i){auto& item=m_clutter[i];if(!inside(item.pos)||i==m_heldClutter)continue;
    if(running&&item.z<c.bed+.3f){item.sleeping=false;item.velocity.y+=dt*2.f;}
-   if(height<c.bed+.3f&&item.z<c.bed+.35f){m_sounds.push_back({Sound::JunkMetal,item.pos,.4f,.7f,true});m_clutter.erase(m_clutter.begin()+i);if(m_heldClutter>i)--m_heldClutter;}
+   if(height<c.bed+.3f&&item.z<c.bed+.35f){m_sounds.push_back({Sound::JunkMetal,item.pos,.4f,.7f,true,17,item.z+item.height()*.5f});m_clutter.erase(m_clutter.begin()+i);if(m_heldClutter>i)--m_heldClutter;}
   }
  }
  if(damage<=0)return;m_player.health=std::max(0.f,m_player.health-damage);m_damageFlash=std::max(m_damageFlash,.35f);

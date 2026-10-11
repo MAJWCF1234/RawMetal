@@ -43,7 +43,7 @@ void Game::updateClutter(const InputState&input,float dt){
   if(length(m_velocity)>.5f&&length(c.pos-m_player.pos)<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.sleeping)continue;
   auto impact=[&](float speed){if(speed<.65f||c.impactCooldown>0)return;float gain=std::clamp(speed*.12f,.12f,.85f);if(c.impactSound()==Sound::JunkSoft)gain*=.65f;
-   m_sounds.push_back({c.impactSound(),c.pos,gain,.94f+.1f*std::fabs(std::sin(c.yaw+index)),true});c.impactCooldown=.075f;
+   m_sounds.push_back({c.impactSound(),c.pos,gain,.94f+.1f*std::fabs(std::sin(c.yaw+index)),true,17,c.z+c.height()*.5f});c.impactCooldown=.075f;
   };
   for(int i=0;i<steps;++i){
    c.impactCooldown=std::max(0.f,c.impactCooldown-step);
@@ -73,9 +73,9 @@ void Game::updateClutter(const InputState&input,float dt){
    floor=-100;float ceiling=100;
    for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto p=c.pos+Vec2{x,y};const auto&w=worldAt(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z));}
    float z=c.z+c.vz*step;
-   if(c.vz>0&&z+c.height()>ceiling){impact(c.vz);c.z=std::max(floor,ceiling-c.height());c.vz=-c.vz*.2f;}
+   if(c.vz>0&&z+c.height()>ceiling){c.z=std::max(floor,ceiling-c.height());impact(c.vz);c.vz=-c.vz*.2f;}
    else if(z<=floor+.001f){
-    float speed=-c.vz;impact(speed);c.z=floor;float bounce=c.impactSound()==Sound::JunkSoft?.04f:.2f;c.vz=speed>1.f?speed*bounce:0;
+    float speed=-c.vz;c.z=floor;impact(speed);float bounce=c.impactSound()==Sound::JunkSoft?.04f:.2f;c.vz=speed>1.f?speed*bounce:0;
     if(speed>1.5f&&length(c.velocity)>.1f){c.pitchSpeed+=c.velocity.x*.4f;c.rollSpeed-=c.velocity.y*.4f;}
     // Gravity lowers the centre of mass about the contact edge. Friction then
     // damps tumbling; it never snaps an object back to its original upright pose.
@@ -90,7 +90,7 @@ void Game::updateClutter(const InputState&input,float dt){
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
    }else{c.z=z;c.restTime=0;}
    if(c.projectile)for(auto&e:m_enemies)if(e.alive&&length(e.pos-c.pos)<.5f&&c.z+c.height()>e.bodyBottom()&&c.z<e.bodyTop()){
-    impact(length(c.velocity));e.awareness=6;e.lastKnown=m_player.pos;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos,.6f,1,true});
+    impact(length(c.velocity));e.awareness=6;e.lastKnown=c.pos;e.lastKnownZ=m_world.supportBelow(c.pos.x,c.pos.y,c.z+c.height()*.5f);e.state=Enemy::State::Investigate;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos,.6f,1,true,17,c.z+c.height()*.5f});
     if(applyEnemyDamage(e,kUnarmedMelee.clutterDamage,false,false))enemySound(e,2);break;
    }
   }
