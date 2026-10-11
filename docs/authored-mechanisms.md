@@ -38,3 +38,30 @@ Music routes through authored metadata in native and custom campaigns and keeps 
 playback cursor across chunk seams. CREATURE kind 4 is the mutated human, with
 180 health and a 1.85 m standing hull. Save version 13 preserves this new kind;
 versions 1–12 remain readable and receive newly authored encounters automatically.
+
+Human guards use the shared actor AI rather than a campaign-specific NPC system.
+The existing `ACTOR_AI` record accepts mode 3 for Guard; modes 0 (Scripted),
+1 (Civilian) and 2 (Escort) retain their existing meanings. Define the actor and
+its normal timeline first, then configure its AI and append patrol points:
+
+```text
+ACTOR_AI|map|actor|mode|enableFlag|speed|followDistance|dangerRange
+ACTOR_GUARD|map|actor|sightRange|sightDot|recognitionMs|searchMs|alertFlag
+ACTOR_PATROL|map|actor|x|y|absoluteZ|pauseMs
+```
+
+`ACTOR_GUARD` is optional: defaults are an 11 m sight range, a 0.65 sight-cone dot
+threshold, 600 ms recognition delay and 4000 ms search duration. An empty alert
+flag disables the authored alert output; an empty enable flag enables the AI
+immediately. These configuration records do not change an actor's AI mode.
+They require an existing actor whose final mode is Guard, including when records
+are reordered. Guard configuration or patrol points on another mode are rejected.
+
+Guards must use the Worker visual and cannot be moving platforms. Author 1–64
+patrol points, visited in the listed order. Points use coordinates within the
+guard's home chunk (0.25–23.75 m on each horizontal axis) and absolute elevation
+(-100–100 m). Each point pauses for 0–60000 ms. Patrol routes remain in the home
+chunk; they do not use escort chunk migration. A single point authors a stationary
+post with the configured pause. Sight range accepts 1–30 m, the sight dot threshold
+0–0.99, recognition 100–5000 ms and search 250–30000 ms. Existing actor records and
+save version 13 remain compatible.

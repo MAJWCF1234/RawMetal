@@ -251,7 +251,7 @@ public:
     static bool testCollisionCandidates();
     bool doorBlocks(float x,float y,float feet,float height)const;
     bool navigable(int x,int y,int nx,int ny,float height=1.f)const;
-    void updateDoors(float dt);
+    void updateDoors(float dt,bool includeTransfers=true);
     bool openDoor(int index);
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}

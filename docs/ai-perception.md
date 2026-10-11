@@ -44,7 +44,7 @@ ACTOR_AI|0|0|2||1.4|2|6
 
 `ACTOR_AI` fields are map index, actor index, mode, optional enable-state name,
 walking speed, follow distance and danger range. Modes are 0 (scripted),
-1 (civilian) and 2 (escort). A named enable state keeps the authored timeline
+1 (civilian), 2 (escort) and 3 (guard). A named enable state keeps the authored timeline
 in control until that flag is set. Actors still need their normal `ACTOR`,
 `ACTOR_KEY` and `TIMED_SEQUENCE` records. Health is required for enemies to
 target a worker; omit health only for intentionally invulnerable actors.
@@ -90,6 +90,43 @@ this pass does not add full offscreen enemy simulation across the whole chapter.
 Full waypoint searches have a shared frame budget and staggered retry timers.
 Routine steering uses a short local ground probe; every actual movement step
 still checks collision, so budget delays do not permit walking through walls.
+
+## Guard patrol and investigation
+
+Guard mode uses the same runtime NPC registry, collision, door permissions,
+navigation budget, animation and save state as civilian/escort actors. It adds
+an authored patrol and pauses, a sight cone, recognition delay, actual sound-source
+investigation, bounded search and return to patrol. Guards cannot receive player
+Follow/Wait commands. They patrol within their home chunk and pause when that chunk
+is unloaded; they do not request follower residency or chase through the chapter.
+
+```
+ACTOR_AI|0|0|3||1.4|2|6
+ACTOR_GUARD|0|0|11|0.65|600|4000|guard_alert
+ACTOR_PATROL|0|0|6.5|6.5|0|900
+ACTOR_PATROL|0|0|9.5|6.5|0|600
+```
+
+Sight range is metres, sight cone is a forward dot threshold, recognition/search
+are milliseconds, and patrol Z is absolute feet height. The optional alert flag
+is set while a living enabled guard confirms a target. Multiple guards sharing
+that flag combine their alert state. Losing sight preserves the last observed
+position; a brief glimpse does not become an alert after the player hides. Guard
+perception runs after footsteps, thrown objects and shots are emitted this frame.
+
+Ordinary doors in resident neighboring chunks now animate for NPCs without the
+player entering that chunk. Transfer doors retain streaming synchronization.
+Remembered sound/target positions use global coordinates; patrol points remain
+local to the actor's authored home. Save format 13 is unchanged. Partial recognition,
+patrol pauses, search and injury/death restore through the existing state store.
+
+This slice does not implement armed guards, faction tactics or stealth takedowns.
+The [custom Ash playground](ashfall-playground.md) uses the existing Worker rig
+to test these systems until the external asset library is available again.
+`--guard-ai-test` covers the shared state machine, real-frame sound ordering,
+save validation, locks, neighbor doors, navigation budget and authoring validation.
+`--guard-inspection` loads that actual exported custom map from the project root,
+checks its full four-point patrol behind cover and captures three states in Vulkan.
 
 ## State storage
 

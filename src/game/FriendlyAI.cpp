@@ -24,7 +24,7 @@ void Game::requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 go
   if(world.rayClear(position,feet+.7f,face,feet+.7f))world.openDoor(int(i));
  }
 }
-ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt){
+ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli){
  const auto&config=track.ai;
  if(config.mode==ActorAiMode::Scripted)return pose;
  auto key=[&](std::string_view field){return friendlyKey(actor,field);};
@@ -35,6 +35,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  }
  if(pose.clip==4)return pose;
  if(config.enableState&&!state(config.enableState)){put("running",0);return pose;}
+ const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
  if(get("saved")){
   if(dt==0||!get("running")){pose.position={get("x")*.001f,get("y")*.001f};pose.z=get("z")*.001f;pose.yaw=get("yaw")*.0001f;pose.phase=get("phase")*.0001f;pose.clip=get("walking")?1:0;
    if(pose.position.x<0||pose.position.y<0||pose.position.x>=24||pose.position.y>=24||std::fabs(pose.z)>100||std::fabs(pose.yaw)>kPi+.001f||pose.phase<0||pose.phase>1)throw std::runtime_error("Invalid saved NPC pose");
@@ -44,17 +45,19 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  pose.lookAtActor=-1;
  if(dt<=0)return pose;
  put("running",1);float height=track.scale;int ms=std::max(1,int(std::round(dt*1000)));
+ Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;float speedScale=1;
+ if(config.mode==ActorAiMode::Guard){guardIntent(level,actor,track,pose,dt,*stimuli,goal,goalZ,wantsMove);}
+ else{
  int fear=std::max(0,std::clamp(get("fear"),0,4000)-ms);Vec2 threat{get("threat_x")*.001f,get("threat_y")*.001f};float nearest=config.dangerRange*config.dangerRange;bool danger=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
   if(distance<nearest&&aiCanSee(world,pose.position,pose.z+height*.85f,{std::sin(pose.yaw),std::cos(pose.yaw)},position,z,config.dangerRange,-.25f,2.5f)){nearest=distance;threat=position;danger=true;}};
- const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
  for(const auto&enemy:enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
  for(size_t i=0;i<world.actorTracks().size();++i){const auto&other=world.actorTracks()[i];if(other.visual!=ActorVisual::Wasp&&other.visual!=ActorVisual::Huntsman)continue;
   const auto&target=world.actorPose(i);if(target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
  int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:m_player.pos;}put("damage",damage);put("hit_source",0);
  if(danger){fear=4000;put("threat_x",int(std::round(threat.x*1000)));put("threat_y",int(std::round(threat.y*1000)));}put("fear",fear);
  bool follow=config.mode==ActorAiMode::Escort?!get("hold"):get("follow")!=0;
- Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;
+ speedScale=fear>0?1.5f:1.f;
  if(fear>0&&lengthSq(pose.position-threat)<25.f){
   Vec2 away=normalized(pose.position-threat);if(lengthSq(away)<.001f)away={std::sin(pose.yaw),std::cos(pose.yaw)};
   float best=-1e9f;
@@ -72,6 +75,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    if(!cached&&m_npcNavBudget>0&&(wait<=0||get("route_player")!=m_level+1||next>=0)){--m_npcNavBudget;cached=friendlyPortal(level,m_level,pose.position,pose.z,height,portal,z);next=cached?friendlyChunkAt(portal+chunkOffset(level),level):-1;wait=600+int(actor%7)*30;put("portal_x",int(std::round(portal.x*1000)));put("portal_y",int(std::round(portal.y*1000)));put("portal_z",int(std::round(z*1000)));put("route_player",m_level+1);put("route_next",next+1);}
    put("route_wait",wait);if(cached){goal=portal;goalZ=z;wantsMove=true;}
   }
+ }
  }
  float timer=std::max(0.f,std::clamp(get("repath"),0,4000)*.001f-dt);Vec2 waypoint=get("saved")?Vec2{get("way_x")*.001f,get("way_y")*.001f}:pose.position;
  if(lengthSq(goal-Vec2{get("goal_x")*.001f,get("goal_y")*.001f})>1.f)timer=0;
@@ -92,15 +96,16 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   for(size_t i=0;i<m_friendlyActors.size();++i)if(i!=actor&&m_friendlyActors[i].level==level&&autonomousActor(m_friendlyActors[i].track())){const auto&other=m_friendlyActors[i].pose;if(other.clip==4||std::fabs(other.z-pose.z)>height)continue;
    auto away=pose.position-other.position;float neighborDistance=length(away);if(neighborDistance>.001f&&neighborDistance<.7f)separation+=away*((.7f-neighborDistance)/neighborDistance);
   }
-  direction=normalized(direction+separation*2.f);float travel=std::min(length(waypoint-pose.position),config.speed*(fear>0?1.5f:1.f)*dt);
+  direction=normalized(direction+separation*2.f);float travel=std::min(length(waypoint-pose.position),config.speed*speedScale*dt);
   auto next=pose.position+direction*travel;float feet=pose.z;
   bool clear=travel>0&&friendlyWalkSegment(level,pose.position,pose.z,next,height,&feet);
   auto player=m_player.pos+chunkOffset(m_level)-chunkOffset(level);
-  if(std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;
+  if(feet<m_player.z+m_player.hullHeight()&&feet+height>m_player.z&&std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;
   for(const auto&enemy:enemies)if(enemy.alive&&enemy.bodyBottom()<feet+height&&enemy.bodyTop()>feet&&lengthSq(next-enemy.pos)<.45f*.45f&&lengthSq(next-enemy.pos)<lengthSq(pose.position-enemy.pos))clear=false;
   if(clear){pose.position=next;pose.z=feet;pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);}
  }
  float moved=length(pose.position-old.position);pose.clip=moved>.0001f?1:0;pose.phase=pose.clip?std::fmod(old.phase+moved*1.1f,1.f):0;
+ if(config.mode==ActorAiMode::Guard&&moved>0){int steps=get("guard_step")+int(std::round(moved*1000));if(steps>=1000){auto material=!world.outdoors()&&world.metalFloor(int(pose.position.x),int(pose.position.y))?Sound::Metal1:Sound::Concrete1;m_sounds.push_back({material,pose.position+chunkOffset(level)-chunkOffset(m_level),.3f,.96f,true,17,pose.z+.04f});steps%=1000;}put("guard_step",steps);}
  int stuck=wantsMove&&moved<.0001f?std::clamp(get("stuck"),0,500)+ms:0;if(stuck>500){timer=0;stuck=0;}put("stuck",stuck);
  put("repath",int(std::round(timer*1000)));put("way_x",int(std::round(waypoint.x*1000)));put("way_y",int(std::round(waypoint.y*1000)));
  put("x",int(std::round(pose.position.x*1000)));put("y",int(std::round(pose.position.y*1000)));put("z",int(std::round(pose.z*1000)));put("yaw",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("phase",int(std::round(pose.phase*10000)));put("walking",pose.clip==1);put("saved",1);
@@ -109,7 +114,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
 int Game::nearbyFriendly()const{
  int best=-1;float nearest=1.8f;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto pose=npc.pose;pose.position+=chunkOffset(npc.level)-chunkOffset(m_level);
-  if(track.ai.mode==ActorAiMode::Scripted||(track.ai.enableState&&!state(track.ai.enableState))||pose.clip==4||(track.deadState&&state(track.deadState)))continue;
+  if((track.ai.mode!=ActorAiMode::Civilian&&track.ai.mode!=ActorAiMode::Escort)||(track.ai.enableState&&!state(track.ai.enableState))||pose.clip==4||(track.deadState&&state(track.deadState)))continue;
   auto delta=pose.position-m_player.pos;float distance=length(delta);
   Point3 target{pose.position.x+chunkOffset(m_level).x,pose.position.y+chunkOffset(m_level).y,pose.z+track.scale*.7f};
   if(!friendlyRayClear({m_player.pos.x+chunkOffset(m_level).x,m_player.pos.y+chunkOffset(m_level).y,m_player.z+m_player.eye},target))continue;

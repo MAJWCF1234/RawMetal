@@ -329,6 +329,16 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // many mutually exclusive inspection branches otherwise reserve their
     // large renderer objects in one native stack frame before dispatch.
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--guard-inspection")){
+     constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories("diagnostics/guard-pass-20261010");std::ofstream report("diagnostics/guard-pass-20261010/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';
+     const char*names[]={"guard-patrol","guard-alert","guard-investigate"};
+     for(int stage=0;stage<3;++stage){auto scene=retro::Game::guardInspection(stage);auto expected=stage==0?retro::GuardState::Patrol:stage==1?retro::GuardState::Alert:retro::GuardState::Investigate;
+      bool passed=scene.npcActors().size()==1&&scene.guardState(0)==expected;report<<names[stage]<<": "<<(passed?"PASS":"FAIL")<<" state="<<int(scene.guardState(0))<<" pose="<<scene.npcActors()[0].pose.position.x<<','<<scene.npcActors()[0].pose.position.y<<'\n';if(!passed)return 21;
+      renderer->render(scene);std::ofstream out(std::string("diagnostics/guard-pass-20261010/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";
+      for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }report<<"Actual custom pack: complete patrol with hidden player, recognition, distraction: PASS\n";return 0;
+    }
     if(std::wcsstr(commandLine,L"--renderer-window-inspection")){
      retro::Win32Window window(W,H,L"RawMetal / Renderer Inspection");if(!window.valid())return 1;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware(window.handle()))return 36;
@@ -476,6 +486,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }return 0;
     }
     if(std::wcsstr(commandLine,L"--hearing-test"))return retro::Game::testHearing()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-ai-test"))return retro::Game::testGuardAI()?0:21;
     if(std::wcsstr(commandLine,L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
     if(std::wcsstr(commandLine,L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
     if(std::wcsstr(commandLine,L"--freight-repair-inspection")){

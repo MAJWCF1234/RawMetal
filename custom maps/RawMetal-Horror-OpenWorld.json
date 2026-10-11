@@ -1,12 +1,12 @@
 {
   "version": 5,
-  "name": "RawMetal // Ashfall Exclusion Zone",
+  "name": "RawMetal // Ashfall Guard Lab",
   "skybox": "brutal_wasteland",
   "chunks": [
     {
       "id": "ashfall-01",
       "number": 1,
-      "name": "Ashfall Exclusion Zone",
+      "name": "Ashfall / Guard Playground",
       "gx": 0,
       "gy": 0,
       "layers": [
@@ -51,10 +51,127 @@
         }
       ],
       "objects": [
-        {"id":"ash-spawn-1","type":"spawn","spawnKind":"Creature","x":9.5,"y":7.5,"z":0,"rotation":90},
-        {"id":"ash-spawn-2","type":"spawn","spawnKind":"Hostile","x":18.5,"y":15.5,"z":0,"rotation":180},
-        {"id":"ash-terminal","type":"label","name":"ASHFALL CONTROL / 01","x":10,"y":3,"z":0,"rotation":0}
+        {
+          "id": "ash-player",
+          "type": "spawn",
+          "spawnKind": "Player",
+          "name": "Start behind cover",
+          "x": 16.7,
+          "y": 10.1,
+          "z": 0,
+          "rotation": 0
+        },
+        {
+          "id": "ash-hide-cover",
+          "type": "box",
+          "name": "Guard sightline cover",
+          "layerId": "ashfall-ground",
+          "x": 18.4,
+          "y": 10,
+          "z": 0,
+          "w": 1.1,
+          "d": 3,
+          "h": 1.85,
+          "rotation": 0
+        },
+        {
+          "id": "ash-throw-bottle",
+          "type": "asset",
+          "name": "Throwable bottle / distraction",
+          "model": "src/assets/clutter/bottle.obj",
+          "layerId": "ashfall-ground",
+          "x": 17.4,
+          "y": 10.1,
+          "z": 0,
+          "w": 0.13,
+          "d": 0.13,
+          "h": 0.28,
+          "rotation": 0,
+          "scale": 1
+        },
+        {
+          "id": "ash-throw-electronics",
+          "type": "asset",
+          "name": "Throwable power supply / distraction",
+          "model": "src/assets/clutter/power_supply_1.obj",
+          "layerId": "ashfall-ground",
+          "x": 16.5,
+          "y": 9.4,
+          "z": 0,
+          "w": 0.25,
+          "d": 0.24,
+          "h": 0.18,
+          "rotation": 0,
+          "scale": 1
+        },
+        {
+          "id": "ash-guard-label",
+          "type": "label",
+          "name": "GUARD 01 / Worker rig / runtimeRecords",
+          "x": 19.5,
+          "y": 7.5,
+          "z": 0,
+          "rotation": 0
+        },
+        {
+          "id": "ash-lab-label",
+          "type": "label",
+          "name": "REPLACEABLE GUARD LAB / cover + throw + search + save",
+          "x": 16.7,
+          "y": 10.1,
+          "z": 0,
+          "rotation": 0
+        },
+        {
+          "id": "ash-patrol-label-0",
+          "type": "label",
+          "name": "PATROL 1 / pause 900 ms",
+          "x": 19.5,
+          "y": 7.5,
+          "z": 0,
+          "rotation": 0
+        },
+        {
+          "id": "ash-patrol-label-1",
+          "type": "label",
+          "name": "PATROL 2 / pause 600 ms",
+          "x": 21.5,
+          "y": 7.5,
+          "z": 0,
+          "rotation": 0
+        },
+        {
+          "id": "ash-patrol-label-2",
+          "type": "label",
+          "name": "PATROL 3 / pause 1200 ms",
+          "x": 21.5,
+          "y": 12.5,
+          "z": 0,
+          "rotation": 0
+        },
+        {
+          "id": "ash-patrol-label-3",
+          "type": "label",
+          "name": "PATROL 4 / pause 800 ms",
+          "x": 19.5,
+          "y": 12.5,
+          "z": 0,
+          "rotation": 0
+        }
       ]
     }
+  ],
+  "runtimeRecords": [
+    "TIMED_SEQUENCE|0|ash_guard_clock|ash_guard_clock_done|0|0|24|24|-0.2|3|60000|60000|0|0|0|0|1|1",
+    "ACTOR|0|ash_guard_clock|0|1.6|0|0|0",
+    "ACTOR_KEY|0|0|0|19.5|7.5|0|1.5707963|0|0",
+    "ACTOR_KEY|0|0|60000|19.5|7.5|0|1.5707963|0|1",
+    "ACTOR_HEALTH|0|0|70|ash_guard_damage|ash_guard_dead",
+    "ACTOR_AI|0|0|3||1.4|2|6",
+    "ACTOR_GUARD|0|0|11|0.65|600|4000|ash_guard_alert",
+    "ACTOR_PATROL|0|0|19.5|7.5|0|900",
+    "ACTOR_PATROL|0|0|21.5|7.5|0|600",
+    "ACTOR_PATROL|0|0|21.5|12.5|0|1200",
+    "ACTOR_PATROL|0|0|19.5|12.5|0|800"
   ]
 }

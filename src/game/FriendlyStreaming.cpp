@@ -10,6 +10,7 @@ void Game::rebuildFriendlyActors(){
   for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];if(track.ai.mode==ActorAiMode::Scripted)continue;
    FriendlyActor npc{level,level,i,world.actorPose(i),world.m_mapData};size_t index=m_friendlyActors.size();m_friendlyActors.push_back(npc);
    int saved=state(friendlyKey(index,"chunk"));if(saved<0||saved>chunkCount())throw std::runtime_error("Invalid saved NPC chunk");
+   if(track.ai.mode==ActorAiMode::Guard)validateGuardState(index);
    if(saved)m_friendlyActors[index].level=saved-1;
    if(m_friendlyActors[index].level==m_level)setState(friendlyKey(index,"engaged"),1);
    if(state(friendlyKey(index,"saved"))){auto&pose=m_friendlyActors[index].pose;pose.position={state(friendlyKey(index,"x"))*.001f,state(friendlyKey(index,"y"))*.001f};pose.z=state(friendlyKey(index,"z"))*.001f;pose.yaw=state(friendlyKey(index,"yaw"))*.0001f;pose.phase=state(friendlyKey(index,"phase"))*.0001f;pose.clip=state(friendlyKey(index,"walking"))?1:0;
@@ -22,6 +23,7 @@ void Game::rebuildFriendlyActors(){
 bool Game::friendlyChunkNeeded(int level)const{
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
   if(!autonomousActor(track)||npc.pose.clip==4||!state(friendlyKey(i,"engaged")))continue;
+  if(track.ai.mode==ActorAiMode::Guard)continue;
   bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;
   int next=state(friendlyKey(i,"route_next"))-1;
   if(follow&&next>=0&&(npc.level==level||next==level))return true;
@@ -82,11 +84,14 @@ bool Game::friendlyPortal(int from,int target,Vec2 position,float feet,float hei
  }
  return found;
 }
-void Game::updateFriendlyActors(float dt){
+void Game::updateFriendlyActors(float dt,bool guards){
+ auto stimuli=guards?aiStimuli():std::vector<AiStimulus>{};
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
-  if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);continue;}
+  if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
+  if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);}continue;}
   if(npc.level==m_level)setState(friendlyKey(i,"engaged"),1);
   if(!chunkResident(npc.level)){bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;Vec2 goal;float z;
+   if(track.ai.mode==ActorAiMode::Guard)continue;
    if(dt<=0||!follow||!state(friendlyKey(i,"engaged")))continue;
    int wait=std::max(0,state(friendlyKey(i,"route_wait"))-std::max(1,int(std::round(dt*1000))));setState(friendlyKey(i,"route_wait"),wait);
    if(wait>0&&state(friendlyKey(i,"route_player"))==m_level+1&&!state(friendlyKey(i,"route_next")))continue;
@@ -96,7 +101,7 @@ void Game::updateFriendlyActors(float dt){
    if(!found)continue;
    setState(friendlyKey(i,"portal_x"),int(std::round(goal.x*1000)));setState(friendlyKey(i,"portal_y"),int(std::round(goal.y*1000)));setState(friendlyKey(i,"portal_z"),int(std::round(z*1000)));
   }
-  auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt);
+  auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt,&stimuli);
   auto global=npc.pose.position+chunkOffset(npc.level);int destination=friendlyChunkAt(global,npc.level);
   if(destination<0)throw std::runtime_error("NPC left the stitched world");
   if(destination!=npc.level){auto shift=chunkOffset(npc.level)-chunkOffset(destination);npc.pose.position+=shift;
@@ -107,5 +112,6 @@ void Game::updateFriendlyActors(float dt){
   setState(friendlyKey(i,"chunk"),npc.level+1);setState(friendlyKey(i,"x"),int(std::round(npc.pose.position.x*1000)));setState(friendlyKey(i,"y"),int(std::round(npc.pose.position.y*1000)));setState(friendlyKey(i,"z"),int(std::round(npc.pose.z*1000)));setState(friendlyKey(i,"yaw"),int(std::round(std::remainder(npc.pose.yaw,2*kPi)*10000)));setState(friendlyKey(i,"phase"),int(std::round(npc.pose.phase*10000)));setState(friendlyKey(i,"walking"),npc.pose.clip==1);setState(friendlyKey(i,"saved"),1);
   auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);home.setActorPose(npc.homeActor,projected);
  }
+ if(guards||dt==0)updateGuardFlags();
 }
 }

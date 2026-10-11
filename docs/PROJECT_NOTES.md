@@ -34,3 +34,15 @@ archives, including `forklift.zip`, as offline until the user reports their retu
 Continue work with assets already present in the project and embedded runtime
 resources. New imports requiring that drive must wait for its return. Retain the
 existing source provenance in [ASSET_SOURCES.md](ASSET_SOURCES.md).
+
+## October 10, 2026 — evolving custom Ash playground
+
+The user clarified that the Ash testing area in **Custom Maps** is temporary
+experimental content that should change with engine updates. Use the existing
+`custom maps/RawMetal-Horror-OpenWorld.json` and matching TXT as the evolving
+testbed. This is separate from the built-in Ashfall world and campaign maps.
+
+The current [guard lab](ashfall-playground.md) tests engine-owned patrol,
+recognition and distraction using the existing Worker visual rig. Its authored
+runtime records survive editor save/load/export. These are shared authoring
+records; there is no Ash-specific guard behavior or new custom human subsystem.

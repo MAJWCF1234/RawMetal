@@ -23,8 +23,13 @@ struct QuestItemStack {StateId id=0;int count=0;};
 // Shared, saved actor and machinery timelines. Keys use absolute map elevation.
 enum class ActorVisual { Worker, Wasp, Huntsman, Cargo };
 struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
-enum class ActorAiMode { Scripted, Civilian, Escort };
-struct ActorAiConfig {ActorAiMode mode=ActorAiMode::Scripted;StateId enableState=0;float speed=1.4f,followDistance=2.f,dangerRange=6.f;};
+enum class ActorAiMode { Scripted, Civilian, Escort, Guard=3 };
+struct ActorPatrolPoint {Vec2 position{};float z=0;int pauseMs=1000;};
+struct ActorAiConfig {
+ ActorAiMode mode=ActorAiMode::Scripted;StateId enableState=0;float speed=1.4f,followDistance=2.f,dangerRange=6.f;
+ float sightRange=11,sightDot=.65f;int recognitionMs=600,searchMs=4000;StateId alertState=0;
+ std::vector<ActorPatrolPoint> patrol;
+};
 struct ActorTrack {
  StateId timerState=0;ActorVisual visual=ActorVisual::Worker;
  float scale=1.7f;bool loop=false,tool=false;std::vector<ActorKey> keys;
