@@ -143,6 +143,22 @@ hostile contacts and enemy-clear gates; civilians/escorts remain separate.
 saves, contacts/gates, thin solids, glass, both door types and real neighbor shots.
 `--guard-combat-inspection` captures the actual Ash export from the project root.
 Faction tactics and stealth takedowns remain future work.
+
+Armed guards now choose a firing position when they can see the player's head
+but cover or another body blocks the barrel. Candidate poses use the same
+torso/grip/muzzle and first-hit checks as actual shots. Each search tests at most
+eight nearby positions, shares the four-search navigation budget, and backs off
+for 600–780 ms. Every movement step still checks support, rails, doors and hull
+clearance. Guards keep facing their visible target while sidestepping, lower
+their weapon during movement, then raise it and complete the authored aim delay
+after stopping. If no direct sidestep
+works, ordinary navigation approaches the remembered position around obstacles;
+an impassable wall or locked door still blocks movement and shots.
+
+Repositioning goals and retry timing save through the existing state store;
+malformed values are rejected on load. `--guard-tactics-test` covers progress,
+safety, 60/120 Hz updates, save continuation and crowded navigation. The actual
+Ash export is inspected with `--guard-tactics-inspection` from the project root.
 The [custom Ash playground](ashfall-playground.md) uses the existing Worker rig
 to test these systems until the external asset library is available again.
 `--guard-ai-test` covers the shared state machine, real-frame sound ordering,

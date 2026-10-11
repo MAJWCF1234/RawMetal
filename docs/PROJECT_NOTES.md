@@ -51,3 +51,8 @@ On October 11 the same playground gained opt-in armed combat: shared explicit-or
 ballistics, blocked shots, aim/recovery/reload timing, persistent ammunition and
 two-hand weapon rendering. The external asset drive remains unnecessary for this
 prototype. See [the combat verification report](guard-combat-pass-20261011.md).
+
+The subsequent [cover-repositioning pass](guard-tactics-pass-20261011.md) repairs
+armed guards stopping forever behind low cover. Shared shot geometry selects
+bounded local detours; movement keeps target-facing and uses a lowered weapon.
+The same custom Ash playground now includes low cover for runtime observation.
