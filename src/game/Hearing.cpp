@@ -2,6 +2,17 @@
 #include "../world/CustomCampaign.h"
 #include <fstream>
 namespace retro {
+std::vector<AiStimulus> Game::aiStimuli()const{
+ std::vector<AiStimulus> out;
+ for(const auto&event:m_sounds){
+  bool shot=event.sound==Sound::Shot,step=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;
+  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft;
+  if((!shot&&!step&&!impact)||!std::isfinite(event.gain)||event.gain<=0||!std::isfinite(event.radius)||event.radius<=0||!std::isfinite(event.position.x)||!std::isfinite(event.position.y)||std::isinf(event.z))continue;
+  auto source=event.spatial||std::isfinite(event.z)?event.position:m_player.pos;auto local=source;const auto&world=worldAt(local);
+  float z=std::isfinite(event.z)?event.z:event.spatial?world.floorHeight(local.x,local.y)+.7f:m_player.z+m_player.eye;
+  float radius=std::min(event.radius,shot?14.f:step?4.5f:6.f)*std::sqrt(std::clamp(event.gain,0.f,1.f));out.push_back({source,z,radius,event.gain,shot});
+ }return out;
+}
 bool Game::soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim,float farTrim)const{
  auto delta=to-from;float dz=toZ-fromZ,distance=std::sqrt(lengthSq(delta)+dz*dz);if(distance<.001f)return true;
  float begin=std::max(0.f,nearTrim)/distance,finish=1-std::max(0.f,farTrim)/distance;

@@ -13,6 +13,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
+from runtime_records import runtime_records
+
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_ROOT = ROOT / "src" / "assets"
 EDITOR_ROOT = ROOT / "tools" / "level-editor"
@@ -743,6 +745,7 @@ def _runtime_rows(layer: dict, upper: bool) -> list[list[str]]:
     return result
 
 def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[str]]:
+    authored_records = runtime_records(project)
     chunks = list(project.get("chunks") or [])
     if not chunks:
         raise ValueError("Project has no plan areas")
@@ -897,6 +900,7 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
         if any(o.get("type")=="window" for o in objects):
             warnings.append(f"{chunk.get('name','Map')}: window openings are preserved, but the runtime has no dedicated glass entity.")
 
+    lines.extend(authored_records)
     return "\n".join(lines),warnings
 
 def project_filename(value: str) -> str:
@@ -944,7 +948,9 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "Project not found"}, 404)
                 return
             try:
-                self.send_json({"file": path.name, "project": json.loads(path.read_text(encoding="utf-8"))})
+                project = json.loads(path.read_text(encoding="utf-8"))
+                project["runtimeRecords"] = runtime_records(project)
+                self.send_json({"file": path.name, "project": project})
             except Exception as exc:
                 self.send_json({"error": str(exc)}, 500)
             return
@@ -995,6 +1001,7 @@ class Handler(SimpleHTTPRequestHandler):
             project = payload.get("project")
             if not isinstance(project, dict) or not isinstance(project.get("chunks"), list) or not project["chunks"]:
                 raise ValueError("Invalid Depthworks project")
+            project["runtimeRecords"] = runtime_records(project)
             if route == "/__depthworks_map_payload":
                 level = int(payload.get("level"))
                 name = str(payload.get("name") or project.get("name") or "Depthworks Map").strip()

@@ -693,7 +693,11 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  auto timerExists=[&](StateId id){return std::any_of(map->timedSequences.begin(),map->timedSequences.end(),[&](const auto& s){return s.timerState==id;});};
  for(const auto& track:map->actorTracks){
   const auto& ai=track.ai;
-  if(int(ai.mode)<0||int(ai.mode)>2||!std::isfinite(ai.speed)||ai.speed<=0||ai.speed>4||!std::isfinite(ai.followDistance)||ai.followDistance<1.2f||ai.followDistance>5||!std::isfinite(ai.dangerRange)||ai.dangerRange<2||ai.dangerRange>20||(ai.mode!=ActorAiMode::Scripted&&(track.visual!=ActorVisual::Worker||track.platform)))throw std::runtime_error("Invalid actor AI configuration");
+  if(int(ai.mode)<0||int(ai.mode)>3||!std::isfinite(ai.speed)||ai.speed<=0||ai.speed>4||!std::isfinite(ai.followDistance)||ai.followDistance<1.2f||ai.followDistance>5||!std::isfinite(ai.dangerRange)||ai.dangerRange<2||ai.dangerRange>20||(ai.mode!=ActorAiMode::Scripted&&(track.visual!=ActorVisual::Worker||track.platform)))throw std::runtime_error("Invalid actor AI configuration");
+  if(ai.mode==ActorAiMode::Guard){
+   if(!std::isfinite(ai.sightRange)||ai.sightRange<1||ai.sightRange>30||!std::isfinite(ai.sightDot)||ai.sightDot<0||ai.sightDot>.99f||ai.recognitionMs<100||ai.recognitionMs>5000||ai.searchMs<250||ai.searchMs>30000||ai.patrol.empty()||ai.patrol.size()>64)throw std::runtime_error("Invalid guard AI configuration");
+   for(const auto& point:ai.patrol)if(!std::isfinite(point.position.x)||!std::isfinite(point.position.y)||point.position.x<.25f||point.position.x>23.75f||point.position.y<.25f||point.position.y>23.75f||!std::isfinite(point.z)||std::fabs(point.z)>100||point.pauseMs<0||point.pauseMs>60000)throw std::runtime_error("Invalid guard patrol point");
+  }else if(!ai.patrol.empty()||ai.sightRange!=11||ai.sightDot!=.65f||ai.recognitionMs!=600||ai.searchMs!=4000||ai.alertState)throw std::runtime_error("Guard configuration requires Guard actor AI mode");
   if(!timerExists(track.timerState)||track.scale<=0||track.scale>20||!std::isfinite(track.scale)||track.keys.size()<2||track.keys.front().timeMs!=0||track.footprint.x<=0||track.footprint.y<=0||track.thickness<=0||!std::isfinite(track.footprint.x)||!std::isfinite(track.footprint.y)||!std::isfinite(track.thickness))throw std::runtime_error("Invalid authored actor track");
   int previous=-1;for(const auto& k:track.keys){if(k.timeMs<=previous||k.timeMs>3600000||!std::isfinite(k.position.x)||!std::isfinite(k.position.y)||!std::isfinite(k.z)||!std::isfinite(k.yaw)||!std::isfinite(k.phase)||k.phase<0||k.phase>64||k.lookAtActor<-1||k.lookAtActor>=int(map->actorTracks.size())||k.clip<0||k.clip>(track.visual==ActorVisual::Worker?5:4))throw std::runtime_error("Invalid actor pose key");previous=k.timeMs;}
   if(!track.idleKeys.empty()){
@@ -1778,7 +1782,7 @@ bool World::navigable(int x,int y,int nx,int ny,float height)const{
  float floor=floorHeight(nx+.5f,ny+.5f);
  return std::fabs(floor-floorHeight(x+.5f,y+.5f))<=.45f&&clearanceHeight(nx+.5f,ny+.5f)-floor>=height&&!doorBlocks(nx+.5f,ny+.5f,floor,height);
 }
-void World::updateDoors(float dt){for(auto&door:m_doors)door.open=std::clamp(door.open+(door.opening?1.f:-1.f)*dt*.85f,0.f,door.maxOpen);}
+void World::updateDoors(float dt,bool includeTransfers){for(auto&door:m_doors)if(includeTransfers||(!door.entry&&!door.transfer))door.open=std::clamp(door.open+(door.opening?1.f:-1.f)*dt*.85f,0.f,door.maxOpen);}
 bool World::openDoor(int index){if(index<0||size_t(index)>=m_doors.size()||m_doors[index].opening)return false;m_doors[index].opening=true;return true;}
 bool World::toggleDoor(int index){if(index<0||size_t(index)>=m_doors.size())return false;m_doors[index].opening=!m_doors[index].opening;return true;}
 int World::nearbyDoor(Vec2 position,Vec2 forward,float feet)const{
@@ -1892,7 +1896,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[y*Width+x].push_back(static_cast<uint16_t>(index));
  }
 }
-float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+m_internalWallHeight:m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
+float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+(m_internalWallHeight>0?m_internalWallHeight:definition().ceiling):m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
  float fixtureTop=-100;
  for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixture(f,x,y)){

@@ -595,9 +595,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   // Only resident chunks reach this renderer; reject off-screen modules early.
   if(w.tile(x,y)!='#'){
    bool serviceMap=w.campaign()&&w.level()>=6&&w.level()<=9;
-   if(!w.outdoors()){
-    // Interior floors keep the dense half-metre patches needed for authored
-    // stairs, decks and water-bed transitions.
+   if(!w.outdoors()||!w.hasTerrain()){
+    // Authored outdoor grid maps have no terrain mesh. Draw their floor just
+    // like collision does, while terrain worlds keep their existing mesh.
     for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
      quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
      float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
@@ -607,6 +607,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
      if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
     }
 
+    if(!w.outdoors()){
     quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},serviceMap?m_serviceCeiling:m_facilityTextures.at("ceiling_1"),serviceMap?.82f:.6f);
    // Close ceiling height changes instead of exposing the void between sectors.
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
@@ -617,6 +618,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    if(Z>eastCeiling&&w.tile(x+1,y)!='#')quad({X+1,Y,eastCeiling},{X+1,Y+1,eastCeiling},{X+1,Y+1,Z},{X+1,Y,Z},m_metal,.7f);
    if((w.campaign()&&w.level()<4)&&y%4==0)box({X,Y+.12f,Z-.28f},{X+1,Y+.28f,Z-.03f},m_metal,.7f);
    if((w.campaign()&&w.level()<4)&&(x==2||x==20)){box({X+.06f,Y,Z-.5f},{X+.17f,Y+1,Z-.39f},m_metal,.8f);box({X+.28f,Y,Z-.5f},{X+.36f,Y+1,Z-.42f},m_metal,.65f);}
+   }
    }
    // Painted route edges and worn hazard stripes tie the loops together.
    // Route instruction paint removed; safety tape remains at machinery and doors.

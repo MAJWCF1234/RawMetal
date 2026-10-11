@@ -416,6 +416,9 @@ void Game::update(const InputState& input, float dt) {
         updateHazards(dt);
         updateInteraction(input,dt);
         updateStreaming(dt);
+        // Resident NPCs can operate ordinary doors without the player entering
+        // their chunk. Transfer leaves are mirrored by the streamer instead.
+        for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))m_chunks[level].world.updateDoors(dt,false);
         bool carryingAtStart=holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1);updateClutter(input,dt);
 
         const auto&cycle=equippedWeaponDef().cycle;const auto&melee=kUnarmedMelee;
@@ -430,6 +433,8 @@ void Game::update(const InputState& input, float dt) {
             if(m_player.ammo>0&&m_player.loaded>0&&m_holster<cycle.raiseHolster){shoot();m_shotCooldown=cycle.fireCooldown;}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
+        // Guard perception consumes this frame's movement, throws and shots.
+        updateFriendlyActors(dt,true);
         updateEnemies(dt);
         updatePickups();
 

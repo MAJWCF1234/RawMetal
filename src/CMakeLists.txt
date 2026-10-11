@@ -56,6 +56,8 @@ add_executable(RawMetal WIN32
     game/ActorTimeline.cpp
     game/FriendlyAI.cpp
     game/FriendlyStreaming.cpp
+    game/GuardAI.cpp
+    game/GuardTest.cpp
     game/CampaignMapTest.cpp
     game/WorldIsolationTest.cpp
     game/ServiceMapTest.cpp

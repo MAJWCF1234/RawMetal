@@ -59,18 +59,7 @@ Vec2 aiWalkWaypoint(const World&w,Vec2 start,float feet,Vec2 goal,float goalFeet
 }
 void Game::updateEnemies(float dt){
  if(dead()||m_won)return;
- // Resolve sound origins once; actor footsteps must not reveal the player.
- struct Stimulus {Vec2 source;float z,radius,gain;bool loud;};std::vector<Stimulus> stimuli;
- for(const auto&event:m_sounds){
-  bool shot=event.sound==Sound::Shot,step=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;
-  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft;
-  if((!shot&&!step&&!impact)||!std::isfinite(event.gain)||event.gain<=0||!std::isfinite(event.radius)||event.radius<=0||!std::isfinite(event.position.x)||!std::isfinite(event.position.y)||std::isinf(event.z))continue;
-  auto source=event.spatial||std::isfinite(event.z)?event.position:m_player.pos;
-  auto localSource=source;const auto&sourceWorld=worldAt(localSource);
-  float z=std::isfinite(event.z)?event.z:event.spatial?sourceWorld.floorHeight(localSource.x,localSource.y)+.7f:m_player.z+m_player.eye;
-  float radius=std::min(event.radius,shot?14.f:step?4.5f:6.f)*std::sqrt(std::clamp(event.gain,0.f,1.f));
-  stimuli.push_back({source,z,radius,event.gain,shot});
- }
+ auto stimuli=aiStimuli();
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
  for(auto&e:m_enemies){
   if(dormantEntity(e.z))continue;
@@ -87,7 +76,7 @@ void Game::updateEnemies(float dt){
     target=pose.position;targetFeet=pose.z;targetHull=track.scale;targetEye=track.scale*.65f;friendly=int(i);nearest=dist=distance;visible=true;to=target-e.pos;
    }
   }
-  const Stimulus* heard=nullptr;float strongest=0;
+  const AiStimulus* heard=nullptr;float strongest=0;
   if(!visible)for(const auto&stimulus:stimuli){float dz=stimulus.z-e.z-.7f;if(lengthSq(stimulus.source-e.pos)+dz*dz>=stimulus.radius*stimulus.radius)continue;
    float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud,soundRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
    if(strength>strongest){strongest=strength;heard=&stimulus;}}
@@ -290,6 +279,7 @@ void Game::migrateEnemiesAcrossChunks(){
  }
 }
 bool Game::testAI(){
+ if(!testGuardAI())return false;
  if(!testHearing())return false;
  if(!testFriendlyAI())return false;
  std::ofstream debug("ai-diagnostic.txt");

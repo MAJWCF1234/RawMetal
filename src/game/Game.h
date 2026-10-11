@@ -75,6 +75,8 @@ struct Pickup {
     bool active = true;
     float z = -999;
 };
+enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
+struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;};
 struct FriendlyActor {
  // The authored identity owns state keys; level/pose describe physical location.
  // Keep the immutable track alive when its home chunk releases geometry.
@@ -167,6 +169,8 @@ public:
     static bool testHazmat();
     const std::vector<Enemy>& enemies() const { return m_enemies; }
     const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
+    const std::vector<FriendlyActor>& npcActors()const{return m_friendlyActors;}
+    GuardState guardState(size_t actor)const{return GuardState(state(friendlyKey(actor,"guard_mode")));}
     bool autonomousActor(const ActorTrack& track)const{return track.ai.mode!=ActorAiMode::Scripted&&(!track.ai.enableState||state(track.ai.enableState)||(track.deadState&&state(track.deadState)));}
     bool friendlyChunkNeeded(int level)const;
     const std::vector<Pickup>& pickups() const { return m_pickups; }
@@ -226,6 +230,8 @@ public:
     static bool testProgression();
     static bool testAI();
     static bool testHearing();
+    static bool testGuardAI();
+    static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
     static bool testGantry();
     static bool testLift();
@@ -375,9 +381,13 @@ private:
     void receiveDamage(float amount,Vec2 source);
     void updateEnemies(float dt);
     ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
-    ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt);
+    ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli=nullptr);
+    void guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove);
+    void validateGuardState(size_t actor)const;
+    void updateGuardFlags();
+    std::vector<AiStimulus> aiStimuli()const;
     void rebuildFriendlyActors();
-    void updateFriendlyActors(float dt);
+    void updateFriendlyActors(float dt,bool guards=false);
     StateId friendlyKey(size_t actor,std::string_view field)const;
     World& friendlyWorld(int level){return level==m_level?m_world:m_chunks[level].world;}
     int friendlyChunkAt(Vec2 global,int preferred)const;
