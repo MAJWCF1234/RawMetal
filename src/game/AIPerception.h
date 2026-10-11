@@ -8,11 +8,15 @@ inline bool aiCanSee(const World& world,Vec2 observer,float eye,Vec2 forward,Vec
  if(distanceSq>closeRange*closeRange&&dot(normalized(delta),forward)<=facingDot)return false;
  return world.rayClear(observer,eye,target,targetZ);
 }
-inline float aiSoundStrength(const World& world,Vec2 observer,float eye,Vec2 source,float sourceZ,float radius,float gain,bool loud){
+inline float aiSoundStrength(Vec2 observer,float eye,Vec2 source,float sourceZ,float radius,float gain,bool loud,bool clear){
  if(radius<=0||gain<=0)return 0;
  float distance=std::sqrt(lengthSq(source-observer)+(sourceZ-eye)*(sourceZ-eye));
  if(distance>=radius)return 0;
- if(!world.rayClear(observer,eye,source,sourceZ))radius*=loud?.7f:.35f;
+ if(!clear)radius*=loud?.7f:.35f;
  return distance<radius?gain*(1.f-distance/radius):0.f;
+}
+inline float aiSoundStrength(const World& world,Vec2 observer,float eye,Vec2 source,float sourceZ,float radius,float gain,bool loud){
+ float dz=sourceZ-eye;if(radius<=0||gain<=0||lengthSq(source-observer)+dz*dz>=radius*radius)return 0;
+ return aiSoundStrength(observer,eye,source,sourceZ,radius,gain,loud,world.rayClear(observer,eye,source,sourceZ));
 }
 }

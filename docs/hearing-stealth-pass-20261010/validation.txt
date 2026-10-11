@@ -1,0 +1,14 @@
+3D hearing and stealth slice - October 10, 2026
+--hearing-test : exit 0
+--audio-test : exit 0
+--physics-ai-test : exit 0
+--world-isolation-test : exit 0
+--mechanisms-test : exit 0
+--campaign-map-test : exit 0
+--save-test : exit 0
+--controls-test : exit 0
+--vr-test : exit 0
+--lift-audio-test : exit 0
+--smoke-test --vulkan : exit 0
+EXE bytes: 23472640
+Hearing assertions: 31 passed

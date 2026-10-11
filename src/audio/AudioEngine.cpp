@@ -59,21 +59,24 @@ void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  if(m_voices.size()>=48){auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop;});if(voice!=m_voices.end())m_voices.erase(voice);else return;}
  m_voices.push_back({event.sound,0,event.gain,event.pitch,1,1,event.position,event.spatial,loop,emitter});
  m_voices.back().radius=std::max(.1f,event.radius);
+ m_voices.back().z=event.z;
  if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
 }
 void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  if(!voice.spatial){voice.left=voice.right=1;return;}
- auto delta=voice.position-game.player().pos;float distance=length(delta);
+ auto delta=voice.position-game.player().pos;float planar=length(delta),listenerZ=game.player().z+game.player().eye;
+ float sourceZ=std::isfinite(voice.z)?voice.z:listenerZ;
+ float distance=std::sqrt(lengthSq(delta)+(sourceZ-listenerZ)*(sourceZ-listenerZ));
  float gain=std::pow(std::max(0.f,1-distance/voice.radius),2.f);
- float pan=distance>.01f?dot(delta*(1/distance),Vec2{-std::sin(game.player().angle),std::cos(game.player().angle)}):0;
+ // Inaudible voices need no geometry queries; keep their envelope for re-entry.
+ if(gain<=0||voice.gain<=0){voice.left=voice.right=0;return;}
+ float pan=planar>.01f?dot(delta*(1/planar),Vec2{-std::sin(game.player().angle),std::cos(game.player().angle)}):0;
  pan=std::clamp(pan,-1.f,1.f); // Roundoff at full pan must never reach sqrt of a negative number.
  // Three rays and a slower occlusion envelope prevent abrupt volume pumping at corners.
- Vec2 side=distance>.001f?Vec2{-delta.y/distance,delta.x/distance}:Vec2{};float blocked=0;
- for(float offset:{-.18f,0.f,.18f})for(float t=.25f;t<distance-.25f;t+=.2f){auto p=game.player().pos+delta*(t/distance)+side*offset;
-  if(voice.sound==Sound::Machine&&length(p-voice.position)<1.7f)continue;
-  float z=game.player().z+game.player().eye;
-  const auto&world=game.worldAt(p);if(world.supportHeight(p.x,p.y)>z||world.doorBlocks(p.x,p.y,z,.01f)){blocked+=1;break;}
- }
+ Vec2 side=planar>.001f?Vec2{-delta.y/planar,delta.x/planar}:Vec2{};float blocked=0;
+ // Generator origins sit inside their enclosures; retain the horizontal exemption.
+ float farTrim=voice.sound==Sound::Machine&&planar>.001f?std::max(.25f,1.7f*distance/planar):.25f;
+ if(distance>.5f)for(float offset:{-.18f,0.f,.18f})if(!game.soundRayClear(game.player().pos+side*offset,listenerZ,voice.position+side*offset,sourceZ,.25f,farTrim))blocked+=1;
  float target=1-blocked*(.68f/3.f);voice.occlusion+=(target-voice.occlusion)*(1-std::exp(-dt*7.f));gain*=voice.occlusion;
  voice.left=gain*std::sqrt((1-pan)*.5f);voice.right=gain*std::sqrt((1+pan)*.5f);
 }
@@ -100,18 +103,18 @@ void AudioEngine::update(const Game& game,bool focused){
  if(m_freightTarget>0)sceneLoop(Sound::FreightMusic,-4);
  if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
  for(const auto&event:game.sounds())play(event);
- auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
-  if(it==m_voices.end()){play({sound,pos,gain,1,true},emitter,true);}else{it->position=pos;it->gain=gain;}
+ auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain,float z=std::numeric_limits<float>::quiet_NaN()){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
+  if(it==m_voices.end()){play({sound,pos,gain,1,true,17,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;}
  };
  std::erase_if(m_voices,[&](auto&v){int level=int((std::uint64_t(v.emitter)>>32)&0xffffu);return v.emitter>0&&!game.chunkResident(level);});
  for(int level=0;level<game.chunkCount();++level){if(!game.chunkResident(level))continue;auto chunk=game.chunkView(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
   for(size_t i=0;i<chunk.enemies().size();++i){auto&e=chunk.enemies()[i];auto id=ambientEmitter(AmbientKind::Wings,level,i);
-   if(e.alive&&e.kind==Enemy::Kind::Wasp)loop(id,Sound::Wings,e.pos+shift,.3f);else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
+   if(e.alive&&e.kind==Enemy::Kind::Wasp)loop(id,Sound::Wings,e.pos+shift,.3f,e.z+.8f);else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
   }
   float machineGain=.30f;if(chunk.world().hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
   size_t index=0;for(auto emitter:chunk.world().machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
   index=0;for(const auto& basin:chunk.world().waterVolumes())
-   loop(ambientEmitter(AmbientKind::Water,level,index++),Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,.18f);
+   loop(ambientEmitter(AmbientKind::Water,level,index++),Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,.18f,basin.surface);
  }
  for(auto&voice:m_voices)spatialize(voice,game,dt);
 }
@@ -187,6 +190,62 @@ bool AudioEngine::test(){
  const auto& worker=audio.m_samples[size_t(Sound::WorkerDying)];
  if(worker.channels!=2||worker.frames()<Rate*9.3||worker.frames()>Rate*9.5||std::none_of(worker.pcm.begin(),worker.pcm.end(),[](int16_t p){return std::abs(int(p))>500;}))return failure("worker compressed WAV missing, silent or truncated");
  diagnostic<<"Original 22.05 kHz IMA ADPCM worker voice decodes to full 44.1 kHz mixer audio: PASS\n";
+ // Small asset-free rooms isolate elevation from attenuation and chunk transforms.
+ {
+  auto scene=[](bool deck=false,bool joined=false,bool remoteWall=false,int gate=0){
+   auto campaign=std::make_shared<CustomCampaign>();campaign->name="Audio height validation";campaign->key=781432;
+   for(int level=0;level<(joined?2:1);++level){auto map=std::make_shared<AuthoredMapData>();map->name="Audio room";
+    map->definition={{float(level*24),0},joined?Vec2{22.5f,6.5f}:Vec2{6.5f,6.5f},0,Environment::Interior,false,12,.3f,51};
+    map->definition.spawnYaw=0;
+    AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
+    map->openEast=joined&&level==0;map->openWest=joined&&level==1;
+    if(deck)map->structures.push_back({0,0,24,24,3,3.04f});
+    if(remoteWall&&level==1)map->structures.push_back({1,4,1.1f,9,0,8});
+    if(gate)map->doors.push_back({5,8,8,gate==2?1.f:0.f,gate==2});
+    campaign->maps.push_back(map);
+   }return Game(campaign);
+  };
+  AudioEngine spatial(false);auto room=scene();float eye=room.player().z+room.player().eye;
+  Voice flat{Sound::JunkMetal};flat.spatial=true;flat.position=room.player().pos+Vec2{3,0};flat.z=eye;
+  Voice legacy=flat;legacy.z=std::numeric_limits<float>::quiet_NaN();Voice elevated=flat;elevated.z=eye+6;
+  spatial.spatialize(flat,room,1);spatial.spatialize(legacy,room,1);spatial.spatialize(elevated,room,1);
+  float expected=std::pow(1-std::sqrt(45.f)/elevated.radius,2.f)*std::sqrt(.5f);
+  diagnostic<<"Elevation fixture yaw "<<room.player().angle<<" eye "<<eye<<" flat "<<flat.left<<" legacy "<<legacy.left<<" elevated "<<elevated.left<<" expected "<<expected<<" occlusion "<<elevated.occlusion<<'\n';
+  if(std::fabs(elevated.left-expected)>.0001f||elevated.left>=flat.left||std::fabs(legacy.left-flat.left)>.0001f)return failure("3D attenuation or legacy unspecified height");
+  diagnostic<<"Elevated voices attenuate by true 3D distance; unspecified height retains planar attenuation: PASS\n";
+  auto stacked=scene(true);Voice screened=elevated;screened.occlusion=1;spatial.spatialize(screened,stacked,1);
+  diagnostic<<"Deck occlusion "<<screened.occlusion<<" screened gain "<<screened.left<<'\n';
+  if(screened.occlusion>.33f||screened.left>=elevated.left*.34f)return failure("thin intervening floor does not occlude elevated sound");
+  Voice overhead=elevated;overhead.position=room.player().pos;spatial.spatialize(overhead,room,1);
+  if(!std::isfinite(overhead.left)||std::fabs(overhead.left-overhead.right)>.0001f)return failure("vertical-only sound pan");
+  diagnostic<<"Four-centimetre floor occludes an elevated emitter; directly overhead stereo remains finite and centered: PASS\n";
+  auto closed=scene(false,false,false,1),opened=scene(false,false,false,2);Voice door=flat;door.position={6.5f,10.5f};door.z=eye+.6f;
+  spatial.spatialize(door,closed,1);Voice clearDoor=door;clearDoor.occlusion=1;spatial.spatialize(clearDoor,opened,1);
+  diagnostic<<"Door occlusion closed "<<door.occlusion<<" opened "<<clearDoor.occlusion<<'\n';
+  if(door.occlusion>.33f||clearDoor.occlusion<.99f)return failure("door state or interpolated height occlusion");
+  diagnostic<<"Closed/open doors attenuate interpolated-height sound rays while preserving the smooth envelope: PASS\n";
+  Voice inaudible=elevated;inaudible.z=eye+30;inaudible.occlusion=.7f;spatial.spatialize(inaudible,stacked,1);
+  Voice silent=door;silent.gain=0;silent.occlusion=.7f;spatial.spatialize(silent,closed,1);
+  if(inaudible.left!=0||inaudible.right!=0||inaudible.occlusion!=.7f||silent.left!=0||silent.right!=0||silent.occlusion!=.7f)return failure("inaudible spatial voices still trace occlusion geometry");
+  diagnostic<<"Zero-gain and out-of-radius voices skip occlusion geometry without advancing the retained envelope: PASS\n";
+  spatial.m_voices.clear();spatial.play({Sound::JunkMetal,flat.position,.8f,1,true,17,elevated.z});
+  if(spatial.m_voices.back().z!=elevated.z)return failure("play drops captured sound height");
+  Voice centered{Sound::JunkMetal};centered.z=elevated.z;spatial.spatialize(centered,room);
+  if(centered.left!=1||centered.right!=1||centered.z!=elevated.z)return failure("nonspatial sound is no longer listener centered");
+  auto joined=scene(false,true),blockedJoin=scene(false,true,true);Voice remote=flat;remote.position={27.5f,6.5f};remote.z=eye+3;
+  spatial.spatialize(remote,joined,1);Voice occluded=remote;occluded.occlusion=1;spatial.spatialize(occluded,blockedJoin,1);
+  diagnostic<<"Joined chunk occlusion open "<<remote.occlusion<<" blocked "<<occluded.occlusion<<'\n';
+  if(remote.occlusion<.99f||occluded.occlusion>.33f)return failure("remote chunk geometry uses incorrect ray coordinates");
+  spatial.update(joined);spatial.play({Sound::JunkMetal,remote.position,.8f,1,true,17,remote.z});
+  auto next=joined.chunkView(1);spatial.update(next);auto emitted=std::find_if(spatial.m_voices.begin(),spatial.m_voices.end(),[](const auto&v){return v.sound==Sound::JunkMetal;});
+  if(emitted==spatial.m_voices.end()||emitted->z!=remote.z||length(emitted->position-Vec2{3.5f,6.5f})>.001f)return failure("chunk handoff drops or offsets sound height");
+  diagnostic<<"Playback keeps captured height, nonspatial cues remain centered, and chunk handoffs transform XY without changing Z: PASS\n";
+  diagnostic<<"Remote chunk structures occlude interpolated-height rays in their own local coordinates: PASS\n";
+  auto wasp=Game::validationScene(Enemy::Kind::Wasp);spatial.update(wasp);auto wings=std::find_if(spatial.m_voices.begin(),spatial.m_voices.end(),[](const auto&v){return v.sound==Sound::Wings;});
+  if(wings==spatial.m_voices.end()||std::fabs(wings->z-(wasp.enemies()[0].z+.8f))>.001f)return failure("wasp loop loses body center elevation");
+  for(const auto&v:spatial.m_voices)if(v.sound==Sound::Machine&&std::isfinite(v.z))return failure("legacy machine loop gains an invented elevation");
+  diagnostic<<"Wasp loops use body-center elevation; static machine loops retain unspecified height: PASS\n";
+ }
  // Authored music coverage and seam continuity: map IDs do not route music.
  {
   AudioEngine district(false);std::array<int16_t,Rate*2> block{};
@@ -227,6 +286,7 @@ bool AudioEngine::test(){
  audio.update(submerged);if(audio.m_submergedTarget<.5f)return failure("underwater fixture camera is above water");
  audio.update(coolant);if(audio.m_submergedTarget>.5f)return failure("dry camera remains submerged");
  int waterVoices=0;for(const auto& voice:audio.m_voices)waterVoices+=voice.sound==Sound::WaterReturn;
+ for(const auto& voice:audio.m_voices)if(voice.sound==Sound::WaterReturn&&!std::isfinite(voice.z))return failure("water loop has no surface elevation");
  int expectedWaterVoices=0;for(int level=0;level<coolant.chunkCount();++level)if(coolant.chunkResident(level))expectedWaterVoices+=int(coolant.chunkView(level).world().waterVolumes().size());
  if(waterVoices!=expectedWaterVoices)return failure("water voice count differs from resident authored volumes");
  game=Game::validationScene(Enemy::Kind::Brute);audio.update(game);

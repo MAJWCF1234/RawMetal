@@ -41,11 +41,15 @@ void Game::updateMechanisms(float dt){
   if(age<=0)continue;
   int advanced=age+int(std::round(dt*1000));bool wrapped=sequence.loop&&advanced>sequence.durationMs;
   int next=sequence.loop?1+(advanced-1)%sequence.durationMs:std::min(sequence.durationMs,advanced);setState(sequence.timerState,next);
-  if(sequence.soundIntervalMs>0&&age/sequence.soundIntervalMs!=next/sequence.soundIntervalMs&&next<sequence.soundUntilMs)sound(sequence.tickSound,sequence.gain,sequence.pitch);
+  if(sequence.soundIntervalMs>0&&age/sequence.soundIntervalMs!=next/sequence.soundIntervalMs&&next<sequence.soundUntilMs){
+   Vec2 position{(sequence.x1+sequence.x2)*.5f,(sequence.y1+sequence.y2)*.5f};float z=world.floorHeight(position.x,position.y)+.04f;
+   for(size_t i=0;i<world.actorTracks().size();++i)if(world.actorTracks()[i].timerState==sequence.timerState){auto pose=world.actorPose(i);position=pose.position;z=pose.z+.04f;break;}
+   m_sounds.push_back({sequence.tickSound,position+chunkOffset(level)-chunkOffset(m_level),sequence.gain,sequence.pitch,true,17,z});
+  }
   if((age<sequence.finishAtMs&&advanced>=sequence.finishAtMs)||wrapped)setState(sequence.finishState,1);
   for(const auto& cue:world.sequenceCues())if(cue.timerState==sequence.timerState&&((age<=cue.timeMs&&advanced>cue.timeMs)||(wrapped&&next>cue.timeMs))){
    auto position=chunkOffset(level)+cue.position-chunkOffset(m_level);
-   m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35});
+   m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35,cue.z});
   }
  }
  for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);

@@ -475,6 +475,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
+    if(std::wcsstr(commandLine,L"--hearing-test"))return retro::Game::testHearing()?0:21;
     if(std::wcsstr(commandLine,L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
     if(std::wcsstr(commandLine,L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
     if(std::wcsstr(commandLine,L"--freight-repair-inspection")){
@@ -544,6 +545,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
             for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
         return 0;
     }
+    if(std::wcsstr(commandLine,L"--audio-test"))return retro::AudioEngine::test()?0:13;
     if(std::wcsstr(commandLine,L"--audio-device-test"))return retro::AudioEngine::testDevice()?0:15;
     if(std::wcsstr(commandLine,L"--environment-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;

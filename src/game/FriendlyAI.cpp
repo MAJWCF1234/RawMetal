@@ -10,7 +10,7 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source){
  int damage=std::min(track.health,state(track.damageState)+int(std::ceil(amount)));setState(track.damageState,damage);
  setState(friendlyKey(actor,"hit_x"),int(std::round(source.x*1000)));setState(friendlyKey(actor,"hit_y"),int(std::round(source.y*1000)));setState(friendlyKey(actor,"hit_source"),1);
  if(damage>=track.health){setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));updateMechanisms(0);}
- m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true});
+ m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
 }
 bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
  int living=level==m_level?enemiesRemaining():int(std::count_if(m_chunks[level].enemies.begin(),m_chunks[level].enemies.end(),[](const Enemy&e){return e.alive;}));

@@ -11,12 +11,19 @@ Custom payload extensions (all numbers use metres except timeline milliseconds):
 ```text
 CARGO_LIFT|map|x1|y1|x2|y2|lower|upper|speed|callState|releaseState|positionState|downState|arrivedState|descendedState
 TIMED_SEQUENCE|map|timerState|finishState|x1|y1|x2|y2|bottom|top|durationMs|finishAtMs|soundIntervalMs|soundUntilMs|soundId|gain|pitch
+SEQUENCE_CUE|map|timerState|timeMs|soundId|x|y|gain|pitch|caption|absoluteZ
 SIGN|map|x|y|absoluteZ|width|height|yawRadians|title|subtitle|accentRGBDecimal
 ```
 
 The optional nineteenth MAP field sets the floor material: 0 industrial (default), 1 office carpet. Signs use absolute elevation and face along `{sin(yaw), cos(yaw)}`. Author their mounting structures separately; a sign is a surface, not collision geometry. Fixture models 15, 16 and 17 are a wooden cargo pallet, service van and wooden crate. The crate uses the original PSX Bunkers wooden_crate_8 model and texture and is available to native and custom campaigns through the same fixture record. Structure materials 8, 9, 10 and 11 are dark steel, opaque cab glazing, cargo wood and rusty steel.
 
 The optional twelfth TERMINAL field names its prerequisite state. State names are campaign-authored identifiers; the existing state save codec persists platform positions and sequence timers. Platform position uses millimetres relative to the authored lower stop. Timelines start when the player enters the trigger volume, advance while that chunk remains resident, and set the completion state at the authored time. A zero sound interval disables the recurring sound.
+
+The final `SEQUENCE_CUE` height field is optional. Supply absolute elevation for
+sounds on an upper deck, in a shaft or attached to machinery. The original
+ten-field format and caption position remain unchanged. Recurring sequence ticks
+use their associated actor's position/contact height; without an actor they use
+the trigger region's center and source floor. They do not use the player's position.
 
 Structure materials 12, 13, 14 and 15 are weathered structural steel, hazard
 stripes, route paint and industrial concrete. Material 12 retains the original

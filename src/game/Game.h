@@ -157,6 +157,7 @@ public:
     Vec2 chunkOffset(int level)const{return m_worldId==WorldId::Custom&&m_customCampaign?m_customCampaign->maps.at(size_t(level))->definition.origin:chunkDefinition(m_worldId,level).origin;}
     Game chunkView(int level)const;
     const World& worldAt(Vec2& local)const;
+    bool soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim=0,float farTrim=0)const;
     bool chunkResident(int level)const{return level>=0&&level<chunkCount()&&(level==m_level||m_chunks[size_t(level)].resident);}
 
     const World& world() const { return m_world; }
@@ -224,6 +225,7 @@ public:
     static bool testMovement();
     static bool testProgression();
     static bool testAI();
+    static bool testHearing();
     static bool testFriendlyAI();
     static bool testGantry();
     static bool testLift();

@@ -36,7 +36,7 @@ struct ActorTrack {
 };
 struct SequenceCue {
  StateId timerState=0;int timeMs=0;Sound sound=Sound::Metal1;
- Vec2 position{};float gain=1,pitch=1;std::string caption;
+ Vec2 position{};float gain=1,pitch=1;std::string caption;float z=std::numeric_limits<float>::quiet_NaN();
 };
 struct ActorPose {Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 inline StateId actorTrackState(StateId timer,size_t index,std::string_view field){return stateId("actor_track/"+std::to_string(timer)+"/"+std::to_string(index)+"/"+std::string(field));}

@@ -64,10 +64,12 @@ void Game::updateEnemies(float dt){
  for(const auto&event:m_sounds){
   bool shot=event.sound==Sound::Shot,step=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;
   bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft;
-  if((!shot&&!step&&!impact)||event.gain<=0)continue;
-  auto source=event.spatial?event.position:m_player.pos;
-  float z=event.spatial?m_world.floorHeight(source.x,source.y)+.7f:m_player.z+m_player.eye;
-  stimuli.push_back({source,z,std::min(event.radius,shot?14.f:step?4.5f:6.f),event.gain,shot});
+  if((!shot&&!step&&!impact)||!std::isfinite(event.gain)||event.gain<=0||!std::isfinite(event.radius)||event.radius<=0||!std::isfinite(event.position.x)||!std::isfinite(event.position.y)||std::isinf(event.z))continue;
+  auto source=event.spatial||std::isfinite(event.z)?event.position:m_player.pos;
+  auto localSource=source;const auto&sourceWorld=worldAt(localSource);
+  float z=std::isfinite(event.z)?event.z:event.spatial?sourceWorld.floorHeight(localSource.x,localSource.y)+.7f:m_player.z+m_player.eye;
+  float radius=std::min(event.radius,shot?14.f:step?4.5f:6.f)*std::sqrt(std::clamp(event.gain,0.f,1.f));
+  stimuli.push_back({source,z,radius,event.gain,shot});
  }
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
  for(auto&e:m_enemies){
@@ -86,10 +88,11 @@ void Game::updateEnemies(float dt){
    }
   }
   const Stimulus* heard=nullptr;float strongest=0;
-  if(!visible)for(const auto&stimulus:stimuli){float strength=aiSoundStrength(m_world,e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud);
+  if(!visible)for(const auto&stimulus:stimuli){float dz=stimulus.z-e.z-.7f;if(lengthSq(stimulus.source-e.pos)+dz*dz>=stimulus.radius*stimulus.radius)continue;
+   float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud,soundRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
    if(strength>strongest){strongest=strength;heard=&stimulus;}}
   if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=e.kind==Enemy::Kind::Warden?12.f:6.f;e.state=Enemy::State::Chase;}
-  else if(heard){e.lastKnown=heard->source;e.lastKnownZ=m_world.supportBelow(heard->source.x,heard->source.y,heard->z);e.awareness=5.f;e.state=Enemy::State::Investigate;}
+  else if(heard){e.lastKnown=heard->source;auto local=heard->source;const auto&sourceWorld=worldAt(local);e.lastKnownZ=sourceWorld.supportBelow(local.x,local.y,heard->z);e.awareness=5.f;e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
   if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
    float ceiling=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
@@ -256,7 +259,7 @@ void Game::updateEnemies(float dt){
     }
    }
   }
-  if(e.moving&&e.kind==Enemy::Kind::Brute&&e.stepTimer<=0){m_sounds.push_back({Sound::Land,e.pos,.7f,.68f,true});e.stepTimer=.8f;}
+  if(e.moving&&e.kind==Enemy::Kind::Brute&&e.stepTimer<=0){m_sounds.push_back({Sound::Land,e.pos,.7f,.68f,true,17,e.z+.04f});e.stepTimer=.8f;}
  }
  migrateEnemiesAcrossChunks();
 }
@@ -287,6 +290,7 @@ void Game::migrateEnemiesAcrossChunks(){
  }
 }
 bool Game::testAI(){
+ if(!testHearing())return false;
  if(!testFriendlyAI())return false;
  std::ofstream debug("ai-diagnostic.txt");
  // Spatial distractions lead to the noise, never the hidden player's pose.

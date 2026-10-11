@@ -62,6 +62,7 @@ add_executable(RawMetal WIN32
     game/Clutter.cpp
     game/Ragdoll.cpp
     game/AI.cpp
+    game/Hearing.cpp
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp
     world/World.cpp
