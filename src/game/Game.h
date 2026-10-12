@@ -7,6 +7,7 @@
 #include "Combat.h"
 #include "ai/guard/Config.h"
 #include "ai/guard/GuardCtx.h"
+#include "ai/guard/Schedule.h"
 #include "ai/engineer/Drones.h"
 #include <string>
 #include <string_view>
@@ -258,6 +259,7 @@ public:
     static bool testGuardRoles();
     static bool testEngineerDrones();
     static bool testGuardDanger();
+    static bool testGuardSchedule();
     static Game guardDangerInspection(int stage=0);
     static Game engineerSupportInspection(int stage=0);
     static Game guardPolicyInspection(int stage=0);
@@ -418,6 +420,14 @@ private:
     ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
     ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli=nullptr);
     void guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove);
+    void guardBaseIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
+    void runGuardSchedule(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
+    bool guardTaskAllows(size_t actor,GuardTask task)const;
+    void finishGuardTask(size_t actor);
+    void guardTaskMovement(size_t actor,const ActorPose& old,const ActorPose& pose,Vec2 waypoint,bool wanted,int ms);
+    void failGuardTask(size_t actor,GuardTaskReason reason);
+    void clearGuardSchedule(size_t actor);
+    void validateGuardSchedule(size_t actor)const;
     void civilianEscortIntent(World& world,int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<Enemy>& enemies,Vec2& goal,float& goalZ,bool& wantsMove,float& speedScale);
     GuardCtx makeGuardCtx(size_t actor,int level,const ActorTrack& track,ActorPose& pose){return {*this,actor,level,track,pose};}
     void validateGuardState(size_t actor)const;
@@ -446,9 +456,10 @@ private:
     void validateGuardActions(size_t actor)const;
     bool guardDangerIntent(size_t actor,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
     void validateGuardDanger(size_t actor)const;
-    void guardSupportIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
+    void guardSupportIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove,bool advanceWork=true);
     void guardEngineerIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     void validateGuardSupport(size_t actor)const;
+    void runGuardTreatment(size_t actor,int ms);
     void guardAvoidGrenade(size_t actor,const ActorPose& pose,Vec2& goal,float& goalZ,bool& wantsMove);
     void updateEngineerDrones(float dt);
     void validateEngineerDrones()const;

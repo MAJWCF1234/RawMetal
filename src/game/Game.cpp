@@ -366,6 +366,7 @@ void Game::update(const InputState& input, float dt) {
         updateFriendlyActors(dt,true);
         updateEngineerDrones(dt);
         updateGuardCombat(dt);
+        for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);
         updateTacticalGrenades(dt);
         updateEnemies(dt);
         updatePickups();

@@ -66,6 +66,7 @@ add_executable(RawMetal WIN32
     game/ai/guard/Targets.cpp
     game/ai/guard/Squads.cpp
     game/ai/guard/Danger.cpp
+    game/ai/guard/Schedule.cpp
     game/ai/guard/Support.cpp
     game/ai/guard/tests/GuardTest.cpp
     game/ai/guard/tests/CombatTest.cpp
@@ -76,6 +77,7 @@ add_executable(RawMetal WIN32
     game/ai/guard/tests/ActionTest.cpp
     game/ai/guard/tests/RoleTest.cpp
     game/ai/guard/tests/DangerTest.cpp
+    game/ai/guard/tests/ScheduleTest.cpp
     game/ai/engineer/Drones.cpp
     game/ai/engineer/Support.cpp
     game/ai/engineer/DronesTest.cpp

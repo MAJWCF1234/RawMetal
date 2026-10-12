@@ -11,7 +11,7 @@ AiTarget Game::guardSquadReport(size_t actor)const{
   if(!factionsHostile(faction,target.faction))continue;target.position+=chunkOffset(source.level)-origin;report=target;best=range;
  }return report;
 }
-bool Game::guardFireSlot(size_t actor)const{return !state(friendlyKey(actor,"guard_danger_ms"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
+bool Game::guardFireSlot(size_t actor)const{return guardTaskAllows(actor,GuardTask::Fire)&&!state(friendlyKey(actor,"guard_danger_ms"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
 bool Game::guardSuppressionPoint(size_t actor,Point3& point)const{
  const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto target=guardTarget(actor);
  if(!guardSuppressionEnabled(t.ai)||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!get("guard_confirmed")||!get("guard_memory")||!get("weapon_target")||get("guard_seen")||get("guard_suppress_ms")<=0||guardFlankSide(actor)!=0||guardCanSee(actor,npc.pose,target))return false;
@@ -41,7 +41,7 @@ void Game::updateGuardSquadSlots(float dt){
   Point3 cover;bool suppression=guardSuppressionPoint(i,cover);
   bool ordinary=guardState(i)==GuardState::Alert&&guardCanSee(i,npc.pose,target)&&guardShotMatches(i,guardShot(i,npc.pose,npcWeaponPoseAt(i,npc.pose,{target.position.x,target.position.y,target.feet+target.height*.6f},1)));
   bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&npc.pose.clip!=1&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_recovery"))&&!state(friendlyKey(i,"grenade_windup"))&&!guardMeleeReady(i,npc.pose,target)&&(ordinary||suppression);
-  eligible=eligible&&!state(friendlyKey(i,"guard_danger_ms"))&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"support_target"))&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
+  eligible=eligible&&guardTaskAllows(i,GuardTask::Fire)&&!state(friendlyKey(i,"guard_danger_ms"))&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"support_target"))&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
   auto key=squadKey(actorFaction(t),t.ai.squad);auto group=std::find_if(groups.begin(),groups.end(),[&](const Group&g){return g.key==key;});if(group==groups.end()){groups.push_back({key,{}});group=std::prev(groups.end());}group->actors.push_back(i);
  }
  for(const auto&group:groups){int occupied=0;for(auto i:group.actors)occupied+=state(friendlyKey(i,"guard_slot"))!=0;

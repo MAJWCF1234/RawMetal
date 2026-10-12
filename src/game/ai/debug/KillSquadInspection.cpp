@@ -31,6 +31,14 @@ Game Game::killSquadInspection(int stage){
  else if(stage==3){g.m_player.pos={21.5f,5.5f};g.m_player.angle=std::atan2(1.f-5.5f,18.5f-21.5f);}
  else{g.m_player.pos={6,18};g.m_player.angle=std::atan2(12.5f-18,8.5f-6);}
  if(!g.hullFits(g.player().pos,g.player().z,Player::StandingHeight))throw std::runtime_error("Cleanup inspection observer intersects geometry");
- g.m_player.pitch=stage>=4?-20.f:-8.f;g.m_damageFlash=0;g.m_weaponEquipped=false;g.m_holster=1;return g;
+ g.m_player.pitch=stage>=4?-20.f:-8.f;g.m_damageFlash=0;g.m_weaponEquipped=false;g.m_holster=1;
+ std::filesystem::create_directories("diagnostics/guard-schedule-20261012");std::ofstream tasks("diagnostics/guard-schedule-20261012/ash-task-ownership.csv",stage==0?std::ios::trunc:std::ios::app);
+ if(stage==0)tasks<<"stage,actor,schedule,step,task,status,subject,reason,failures,transitions\n";
+ for(size_t actor=2;actor<8;++actor){auto get=[&](const char*f){return g.state(g.friendlyKey(actor,f));};
+  if(get("support_ms")&&!g.guardTaskAllows(actor,GuardTask::Treat))throw std::runtime_error("Authored healing has no running treatment owner");
+  if(get("drone_busy")&&!g.guardTaskAllows(actor,get("drone_windup")?GuardTask::Deploy:GuardTask::Repair))throw std::runtime_error("Authored terminal has no running engineering owner");
+  tasks<<stage<<','<<actor;for(const char*f:{"schedule","schedule_step","task","task_status","task_subject","task_reason","task_failures","task_transitions"})tasks<<','<<get(f);tasks<<'\n';
+ }
+ return g;
 }
 }

@@ -64,7 +64,8 @@ Game Game::engineerSupportInspection(int stage){
  report<<names[stage]<<": PASS frames="<<frames<<" observerHealth="<<g.player().health<<" engineerHealth="<<npc.track().health-g.state(npc.track().damageState)
   <<" engineerPosition="<<npc.pose.position.x<<','<<npc.pose.position.y<<" supportMovement="<<length(npc.pose.position-initial.position)<<" owned="<<owned
   <<" spent="<<g.state(g.friendlyKey(engineer,"drone_used"))<<" terminal="<<weapon.engineering<<" maintenance="<<weapon.maintenance<<" handgun="<<weapon.handgun<<" pistolFlash="<<weapon.flash
-  <<" repairStock="<<g.state(g.friendlyKey(engineer,"drone_repair_charge"))<<" opponentDamage="<<g.state(opponent.damageState)<<'\n';
+  <<" repairStock="<<g.state(g.friendlyKey(engineer,"drone_repair_charge"))<<" opponentDamage="<<g.state(opponent.damageState)
+  <<" schedule="<<g.state(g.friendlyKey(engineer,"schedule"))<<" step="<<g.state(g.friendlyKey(engineer,"schedule_step"))<<" task="<<g.state(g.friendlyKey(engineer,"task"))<<" status="<<g.state(g.friendlyKey(engineer,"task_status"))<<" subject="<<g.state(g.friendlyKey(engineer,"task_subject"))<<'\n';
  for(const auto&drone:g.engineerDrones())if(drone.owner==int(engineer))report<<"drone="<<drone.slot<<" position="<<drone.position.x<<','<<drone.position.y<<','<<drone.position.z<<" health="<<drone.health<<'\n';
  return g;
 }

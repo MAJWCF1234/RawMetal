@@ -74,7 +74,8 @@ Game Game::guardDangerInspection(int stage){
        <<" grenades="<<g.tacticalGrenades().size()<<" engineerHealth="<<npc.track().health-g.state(npc.track().damageState)
        <<" engineer="<<npc.level<<'/'<<npc.pose.position.x<<','<<npc.pose.position.y
        <<" displacement="<<displacement<<" maximumEscape="<<maximumEscape<<" dangerMs="<<danger<<" guardMode="<<int(g.guardState(engineer))
-       <<" action="<<g.state(g.friendlyKey(engineer,"weapon_action"))<<" droneBusy="<<g.state(g.friendlyKey(engineer,"drone_busy"))<<'\n';
+       <<" action="<<g.state(g.friendlyKey(engineer,"weapon_action"))<<" droneBusy="<<g.state(g.friendlyKey(engineer,"drone_busy"))
+       <<" schedule="<<g.state(g.friendlyKey(engineer,"schedule"))<<" step="<<g.state(g.friendlyKey(engineer,"schedule_step"))<<" task="<<g.state(g.friendlyKey(engineer,"task"))<<" status="<<g.state(g.friendlyKey(engineer,"task_status"))<<'\n';
  return g;
 }
 }

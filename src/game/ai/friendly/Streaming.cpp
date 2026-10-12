@@ -18,6 +18,7 @@ void Game::rebuildFriendlyActors(){
     if(pose.position.x<0||pose.position.y<0||pose.position.x>=24||pose.position.y>=24||std::fabs(pose.z)>100||std::fabs(pose.yaw)>kPi+.001f||pose.phase<0||pose.phase>1)throw std::runtime_error("Invalid saved NPC pose");
    }
    if(track.deadState&&state(track.deadState)){auto&pose=m_friendlyActors[index].pose;pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;}
+   if(track.ai.mode==ActorAiMode::Guard&&(m_friendlyActors[index].pose.clip==4||!autonomousActor(track)))clearGuardSchedule(index);
   }
  }
 }
@@ -26,7 +27,8 @@ bool Game::friendlyChunkNeeded(int level)const{
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
   if(!autonomousActor(track)||npc.pose.clip==4)continue;
   if(track.ai.mode==ActorAiMode::Guard){
-   bool active=state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
+   auto schedule=GuardSchedule(state(friendlyKey(i,"schedule")));bool scheduled=schedule!=GuardSchedule::None&&schedule!=GuardSchedule::Patrol;
+   bool active=scheduled||state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
    int next=state(friendlyKey(i,"guard_route_next"))-1;if(active&&(npc.level==level||next==level))return true;continue;
   }
   if(!state(friendlyKey(i,"engaged")))continue;
@@ -114,11 +116,13 @@ void Game::updateFriendlyActors(float dt,bool guards){
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
   if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
-  if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){for(const char*field:{"guard_danger_ms","guard_danger_goal","guard_danger_wait","guard_danger_fraction","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","drone_repair_target","drone_repair_ms","drone_busy","drone_windup"})setState(friendlyKey(i,field),0);setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
+  if(track.ai.mode==ActorAiMode::Guard&&(npc.pose.clip==4||(track.deadState&&state(track.deadState))))clearGuardSchedule(i);
+  if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){clearGuardSchedule(i);for(const char*field:{"guard_danger_ms","guard_danger_goal","guard_danger_wait","guard_danger_fraction","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","drone_repair_target","drone_repair_ms","drone_busy","drone_windup"})setState(friendlyKey(i,field),0);setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
   if(npc.level==m_level)setState(friendlyKey(i,"engaged"),1);
   if(!chunkResident(npc.level)){bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;Vec2 goal;float z;
    if(track.ai.mode==ActorAiMode::Guard){
-    bool active=state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
+    auto schedule=GuardSchedule(state(friendlyKey(i,"schedule")));bool scheduled=schedule!=GuardSchedule::None&&schedule!=GuardSchedule::Patrol;
+    bool active=scheduled||state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
     if(dt<=0||!active||m_npcNavBudget<=0)continue;--m_npcNavBudget;ensureChunk(npc.level);
    }else{
    if(dt<=0||!follow||!state(friendlyKey(i,"engaged")))continue;

@@ -58,14 +58,7 @@ void Game::updateGuardCombat(float dt){
   auto get=[&](const char*field){return state(friendlyKey(i,field));};auto put=[&](const char*field,int value){setState(friendlyKey(i,field),value);};
   auto cancelAction=[&](){put("weapon_action",0);put("weapon_action_ms",0);put("weapon_action_events",0);put("weapon_bash",0);put("weapon_bash_pose",0);};
   if(!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState))){put("weapon_aim",0);put("weapon_raise",0);put("weapon_flash",0);put("weapon_recoil",0);put("guard_suppress_ms",0);put("weapon_reload",0);put("weapon_reloading",0);put("weapon_reload_events",0);cancelAction();continue;}
-  if(get("drone_busy")||get("support_ms")){put("weapon_aim",0);put("weapon_raise",0);continue;}
   int ms=npcMilliseconds(i,dt,"weapon_fraction");
-  if(get("guard_danger_ms")){
-   put("weapon_recovery",std::max(0,get("weapon_recovery")-ms));put("weapon_flash",std::max(0,get("weapon_flash")-ms));put("weapon_recoil",std::max(0,get("weapon_recoil")-ms));
-   // The pending reload is deliberately paused before any refill/event work.
-   // Consumed ammunition and attack recovery continue to describe the past.
-   put("weapon_aim",0);put("weapon_raise",0);continue;
-  }
   auto shift=chunkOffset(npc.level)-chunkOffset(m_level);
   auto pump=[&](float gain,float pitch){m_sounds.push_back({Sound::Pump,npc.pose.position+shift,gain,pitch,true,17,npc.pose.z+track.scale*.7f});};
   auto phase=[&](GuardAction action,int elapsed,unsigned consumed){put("weapon_action",int(action));put("weapon_action_ms",elapsed);put("weapon_action_events",int(consumed));};
@@ -84,8 +77,22 @@ void Game::updateGuardCombat(float dt){
   // A loaded tube cannot also be in its empty-tube reload interval. Normalize
   // stale in-memory flags as well as rejecting inconsistent saves on decode.
   if(get("weapon_rounds")>0&&(get("weapon_reload")||get("weapon_reloading"))){put("weapon_reload",0);put("weapon_reloading",0);put("weapon_reload_events",0);}
-  int recovery=std::max(0,get("weapon_recovery")-ms),oldReload=get("weapon_reload"),reload=std::max(0,oldReload-ms);put("weapon_recovery",recovery);put("weapon_reload",reload);put("weapon_flash",std::max(0,get("weapon_flash")-ms));put("weapon_recoil",std::max(0,get("weapon_recoil")-ms));
-  if(get("weapon_rounds")==0){
+  // Already committed animations and mechanical recovery describe past work,
+  // so they advance even when another task currently owns this guard.
+  int recovery=std::max(0,get("weapon_recovery")-ms),oldReload=get("weapon_reload");put("weapon_recovery",recovery);put("weapon_flash",std::max(0,get("weapon_flash")-ms));put("weapon_recoil",std::max(0,get("weapon_recoil")-ms));
+  auto target=guardTarget(i);int kind=target.valid()?int(target.kind):0,targetLevel=target.valid()?target.level+1:0,targetIndex=target.valid()?target.index+1:0;
+  if(kind!=get("weapon_target_kind")||targetLevel!=get("weapon_target_level")||targetIndex!=get("weapon_target_index")){put("weapon_aim",0);put("weapon_bash",0);put("guard_suppress_ms",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}put("weapon_target_kind",kind);put("weapon_target_level",targetLevel);put("weapon_target_index",targetIndex);}
+  Point3 aimPoint{target.position.x,target.position.y,target.feet+target.height*.6f};auto delta=aimPoint-Point3{npc.pose.position.x,npc.pose.position.y,npc.pose.z+track.scale*.85f};
+  bool visible=target.valid()&&guardState(i)==GuardState::Alert&&delta.x*delta.x+delta.y*delta.y+delta.z*delta.z<config.attackRange*config.attackRange&&guardCanSee(i,npc.pose,target);
+  bool workBlocked=get("guard_danger_ms")||get("drone_busy")||get("support_ms")||get("support_target");
+  bool close=visible&&guardMeleeReady(i,npc.pose,target),bashAllowed=!workBlocked&&guardTaskAllows(i,GuardTask::Bash);
+  // Contact defense can own Bash with an empty tube. Pause the reload before
+  // its event/refill boundary, preserving its remaining clock and event mask.
+  bool meleePreemptsReload=close&&bashAllowed&&!recovery&&npc.pose.clip!=1;
+  bool reloadAllowed=!workBlocked&&!meleePreemptsReload&&guardTaskAllows(i,GuardTask::Reload);
+  int reload=reloadAllowed?std::max(0,oldReload-ms):oldReload;put("weapon_reload",reload);
+  if(reloadAllowed&&get("weapon_reloading")&&!get("weapon_reload_events"))put("weapon_reload_events",int(guardActionMask(GuardAction::Reload,1800-oldReload)));
+  if(get("weapon_rounds")==0&&reloadAllowed){
    if(get("weapon_reloading")){
     unsigned reloadEvents=unsigned(get("weapon_reload_events"));if(!reloadEvents)reloadEvents=guardActionMask(GuardAction::Reload,1800-oldReload);
     auto events=consumeGuardAction(GuardAction::Reload,1800-reload,reloadEvents);put("weapon_reload_events",int(reloadEvents));
@@ -95,24 +102,23 @@ void Game::updateGuardCombat(float dt){
     put("weapon_reloading",1);put("weapon_reload",1800);put("weapon_reload_events",GuardActionStart);reload=1800;pump(.4f,.75f);
    }
   }
-  if(get("weapon_reloading")&&(action==GuardAction::None||action==GuardAction::Reload)){action=GuardAction::Reload;phase(action,1800-reload,unsigned(get("weapon_reload_events")));}
+  if(get("weapon_reloading")&&(reloadAllowed||get("weapon_reload_events"))&&(action==GuardAction::None||action==GuardAction::Reload)){action=GuardAction::Reload;phase(action,1800-reload,unsigned(get("weapon_reload_events")));}
   else if(!get("weapon_reloading")&&action==GuardAction::Reload){cancelAction();action=GuardAction::None;}
-  auto target=guardTarget(i);int kind=target.valid()?int(target.kind):0,targetLevel=target.valid()?target.level+1:0,targetIndex=target.valid()?target.index+1:0;
-  if(kind!=get("weapon_target_kind")||targetLevel!=get("weapon_target_level")||targetIndex!=get("weapon_target_index")){put("weapon_aim",0);put("weapon_bash",0);put("guard_suppress_ms",0);if(action==GuardAction::Bash){cancelAction();action=GuardAction::None;}put("weapon_target_kind",kind);put("weapon_target_level",targetLevel);put("weapon_target_index",targetIndex);}
-  Point3 aimPoint{target.position.x,target.position.y,target.feet+target.height*.6f};auto delta=aimPoint-Point3{npc.pose.position.x,npc.pose.position.y,npc.pose.z+track.scale*.85f};
-  bool visible=target.valid()&&guardState(i)==GuardState::Alert&&delta.x*delta.x+delta.y*delta.y+delta.z*delta.z<config.attackRange*config.attackRange&&guardCanSee(i,npc.pose,target);
   if(visible){auto global=target.position+chunkOffset(npc.level);put("weapon_target",1);put("weapon_x",int(std::round(global.x*1000)));put("weapon_y",int(std::round(global.y*1000)));put("weapon_z",int(std::round(aimPoint.z*1000)));}
   else if(!target.valid())put("weapon_target",0);
   put("guard_suppress_ms",guardSuppressionEnabled(config)&&visible?1200:std::max(0,get("guard_suppress_ms")-ms));
-  if(get("support_target")){put("weapon_aim",0);put("weapon_raise",0);put("weapon_bash",0);put("grenade_windup",0);if(action==GuardAction::Bash)cancelAction();continue;}
+  // Grenade cooldown and personal sighting clocks tick exactly once even when
+  // support, reload or movement owns the actor; the helper gates execution.
+  int grenadesUsed=get("grenade_used");tryGuardGrenade(i,dt);
+  if(workBlocked){put("weapon_aim",0);put("weapon_raise",0);put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300)cancelAction();continue;}
   Point3 coverPoint;bool suppress=!visible&&guardSuppressionPoint(i,coverPoint);
-  int grenadesUsed=get("grenade_used");tryGuardGrenade(i,dt);if(get("grenade_windup")>0||get("grenade_used")!=grenadesUsed){put("weapon_aim",0);put("weapon_raise",0);if(action==GuardAction::Bash){cancelAction();action=GuardAction::None;}continue;}
-  bool close=visible&&guardMeleeReady(i,npc.pose,target);
-  int raised=(visible||suppress)&&(!reload||close)&&npc.pose.clip!=1?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-ms*3,ms*3));
+  if(get("grenade_windup")>0||get("grenade_used")!=grenadesUsed){put("weapon_aim",0);put("weapon_raise",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
+  bool fireAllowed=guardTaskAllows(i,GuardTask::Fire);
+  int raised=(fireAllowed||bashAllowed)&&(visible||suppress)&&(!reload||close)&&npc.pose.clip!=1?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-ms*3,ms*3));
   // At contact range a finite, interruptible weapon bash takes precedence.
   // It is usable with an empty tube, and never spends ammunition or shares a
   // frame with a firearm attack. The live target/cover test runs every tick.
-  if(close&&!recovery&&npc.pose.clip!=1){
+  if(bashAllowed&&close&&!recovery&&npc.pose.clip!=1){
    put("weapon_aim",0);if(get("weapon_raise")<1000){put("weapon_bash",0);continue;}
    if(action!=GuardAction::Bash){action=GuardAction::Bash;elapsed=0;consumed=0;}
    elapsed=std::min(300,elapsed+std::min(ms,1800));auto events=consumeGuardAction(action,elapsed,consumed);phase(action,elapsed,consumed);put("weapon_bash",elapsed);
@@ -124,7 +130,7 @@ void Game::updateGuardCombat(float dt){
   }
   put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;if(get("weapon_reloading"))phase(GuardAction::Reload,1800-reload,unsigned(get("weapon_reload_events")));}
   bool pendingFlank=guardFlankSide(i)!=0&&!get("guard_flank_done");
-  if((!visible&&!suppress)||reload||recovery||npc.pose.clip==1||get("weapon_raise")<1000||!guardFireSlot(i)||pendingFlank){put("weapon_aim",0);continue;}
+  if(!fireAllowed||(!visible&&!suppress)||reload||recovery||npc.pose.clip==1||get("weapon_raise")<1000||!guardFireSlot(i)||pendingFlank){put("weapon_aim",0);continue;}
   auto weapon=suppress?npcWeaponPoseAt(i,npc.pose,coverPoint,1):npcWeaponPose(i);auto origin=weapon.muzzle+Point3{shift.x,shift.y,0};auto hit=guardShot(i,npc.pose,weapon);
   // Seeing the head is insufficient: the barrel and its full shot line must
   // clear cover and intervening bodies. Cancel an interrupted aim completely.
