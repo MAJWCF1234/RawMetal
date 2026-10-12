@@ -56,6 +56,12 @@ void Game::updateGuardCombat(float dt){
   if(!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState))){put("weapon_aim",0);put("weapon_raise",0);put("weapon_flash",0);put("weapon_recoil",0);put("guard_suppress_ms",0);put("weapon_reload",0);put("weapon_reloading",0);put("weapon_reload_events",0);cancelAction();continue;}
   if(get("drone_busy")||get("support_ms")){put("weapon_aim",0);put("weapon_raise",0);continue;}
   int ms=npcMilliseconds(i,dt,"weapon_fraction");
+  if(get("guard_danger_ms")){
+   put("weapon_recovery",std::max(0,get("weapon_recovery")-ms));put("weapon_flash",std::max(0,get("weapon_flash")-ms));put("weapon_recoil",std::max(0,get("weapon_recoil")-ms));
+   // The pending reload is deliberately paused before any refill/event work.
+   // Consumed ammunition and attack recovery continue to describe the past.
+   put("weapon_aim",0);put("weapon_raise",0);continue;
+  }
   auto shift=chunkOffset(npc.level)-chunkOffset(m_level);
   auto pump=[&](float gain,float pitch){m_sounds.push_back({Sound::Pump,npc.pose.position+shift,gain,pitch,true,17,npc.pose.z+track.scale*.7f});};
   auto phase=[&](GuardAction action,int elapsed,unsigned consumed){put("weapon_action",int(action));put("weapon_action_ms",elapsed);put("weapon_action_events",int(consumed));};

@@ -26,7 +26,7 @@ bool Game::friendlyChunkNeeded(int level)const{
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
   if(!autonomousActor(track)||npc.pose.clip==4)continue;
   if(track.ai.mode==ActorAiMode::Guard){
-   bool active=(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
+   bool active=state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
    int next=state(friendlyKey(i,"guard_route_next"))-1;if(active&&(npc.level==level||next==level))return true;continue;
   }
   if(!state(friendlyKey(i,"engaged")))continue;
@@ -114,11 +114,11 @@ void Game::updateFriendlyActors(float dt,bool guards){
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
   if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
-  if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
+  if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){for(const char*field:{"guard_danger_ms","guard_danger_goal","guard_danger_wait","guard_danger_fraction"})setState(friendlyKey(i,field),0);setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
   if(npc.level==m_level)setState(friendlyKey(i,"engaged"),1);
   if(!chunkResident(npc.level)){bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;Vec2 goal;float z;
    if(track.ai.mode==ActorAiMode::Guard){
-    bool active=(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
+    bool active=state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
     if(dt<=0||!active||m_npcNavBudget<=0)continue;--m_npcNavBudget;ensureChunk(npc.level);
    }else{
    if(dt<=0||!follow||!state(friendlyKey(i,"engaged")))continue;
