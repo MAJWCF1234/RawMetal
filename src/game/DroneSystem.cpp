@@ -56,7 +56,7 @@ void Game::updateEngineerDrones(float dt){
  for(size_t owner=0;owner<m_friendlyActors.size();++owner){const auto&npc=m_friendlyActors[owner];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard||t.ai.role!=GuardSquadRole::Engineer)continue;
   auto get=[&](const char*f){return state(friendlyKey(owner,f));};auto put=[&](const char*f,int v){setState(friendlyKey(owner,f),v);};put("drone_busy",0);int ms=npcMilliseconds(owner,dt,"drone_fraction");put("drone_cooldown",std::max(0,get("drone_cooldown")-ms));
   bool deployed=false;for(int slot=0;slot<EngineerDroneSlots;++slot)deployed|=state(droneKey(slot,"active"))&&state(droneKey(slot,"owner"))==int(owner)+1;
-  bool workAllowed=!get("weapon_reload")&&!get("weapon_reloading")&&!get("weapon_recovery")&&!get("weapon_bash")&&!get("weapon_bash_pose")&&!get("grenade_windup")&&get("weapon_action")==int(GuardAction::None);
+  bool workAllowed=!get("guard_danger_ms")&&!get("weapon_reload")&&!get("weapon_reloading")&&!get("weapon_recovery")&&!get("weapon_bash")&&!get("weapon_bash_pose")&&!get("grenade_windup")&&get("weapon_action")==int(GuardAction::None);
   auto target=guardTarget(owner);bool ready=!deployed&&get("drone_used")<2&&!get("drone_cooldown")&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&chunkResident(npc.level)&&get("guard_confirmed")&&get("guard_seen")&&target.valid()&&guardCanSee(owner,npc.pose,target)&&workAllowed;
   put("drone_windup",ready?std::min(1200,get("drone_windup")+ms):0);if(ready&&get("drone_windup")>0)put("drone_busy",1);
   if(ready&&get("drone_windup")>=1200&&m_npcNavBudget>0){--m_npcNavBudget;if(!deployEngineerDrone(owner)){put("drone_windup",0);put("drone_cooldown",1500);put("drone_busy",0);}}
@@ -81,7 +81,7 @@ void Game::updateEngineerDrones(float dt){
    }
   }else{put("aim",0);put("target_kind",0);put("target_level",0);put("target_index",0);}
   auto ownerGet=[&](const char*f){return state(friendlyKey(size_t(owner),f));};bool stationary=npc.pose.clip!=1&&!ownerGet("walking")&&!get("walking");
-  bool workAllowed=!ownerGet("weapon_reload")&&!ownerGet("weapon_reloading")&&!ownerGet("weapon_recovery")&&!ownerGet("weapon_bash")&&!ownerGet("weapon_bash_pose")&&!ownerGet("grenade_windup")&&ownerGet("weapon_action")==int(GuardAction::None);
+  bool workAllowed=!ownerGet("guard_danger_ms")&&!ownerGet("weapon_reload")&&!ownerGet("weapon_reloading")&&!ownerGet("weapon_recovery")&&!ownerGet("weapon_bash")&&!ownerGet("weapon_bash_pose")&&!ownerGet("grenade_windup")&&ownerGet("weapon_action")==int(GuardAction::None);
   bool repair=stationary&&workAllowed&&length(ownerLocal-here)<2&&std::fabs(npc.pose.z-p.z)<.3f&&get("hp")<EngineerDroneHealth&&ownerGet("drone_repair_charge")>0;
   Point3 hand{ownerLocal.x+shift.x,ownerLocal.y+shift.y,npc.pose.z+t.scale*.65f};if(repair&&traceEngineerDrone(hand,eye,size_t(owner)).kind==ShotKind::None){int clock=state(friendlyKey(size_t(owner),"drone_repair_ms"))+ms;
    setState(friendlyKey(size_t(owner),"drone_busy"),1);

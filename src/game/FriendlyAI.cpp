@@ -47,7 +47,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  if(dt<=0)return pose;
  put("running",1);float height=track.scale;int ms=std::max(1,int(std::round(dt*1000)));
  Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;float speedScale=1;
- if(config.mode==ActorAiMode::Guard){guardIntent(level,actor,track,pose,dt,*stimuli,goal,goalZ,wantsMove);}
+ if(config.mode==ActorAiMode::Guard){guardIntent(level,actor,track,pose,dt,*stimuli,goal,goalZ,wantsMove);if(get("guard_danger_ms"))speedScale=1.35f;}
  else{
  int fear=std::max(0,std::clamp(get("fear"),0,4000)-ms);Vec2 threat{get("threat_x")*.001f,get("threat_y")*.001f};float nearest=config.dangerRange*config.dangerRange;bool danger=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
@@ -106,11 +106,11 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   if(clear){pose.position=next;pose.z=feet;
    // An alerted armed guard can sidestep while keeping its eyes on the target.
    // Guard intent has already applied the bounded facing turn for this frame.
-   if(config.mode!=ActorAiMode::Guard||!config.armed||guardState(actor)!=GuardState::Alert)pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);
+   if(config.mode!=ActorAiMode::Guard||!config.armed||guardState(actor)!=GuardState::Alert||get("guard_danger_ms"))pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);
   }
  }
  float moved=length(pose.position-old.position);pose.clip=moved>.0001f?1:0;pose.phase=pose.clip?std::fmod(old.phase+moved*1.1f,1.f):0;
- if(config.mode==ActorAiMode::Guard){
+ if(config.mode==ActorAiMode::Guard&&!get("guard_danger_ms")){
   int point=get("guard_point");bool patrol=guardState(actor)==GuardState::Patrol;
   if(!patrol||!wantsMove||get("guard_patrol_point_seen")!=point+1){put("guard_patrol_wait",0);put("guard_patrol_progress",0);put("guard_patrol_fraction",0);put("guard_patrol_movement_fraction",0);put("guard_patrol_point_seen",patrol?point+1:0);}
   if(patrol&&wantsMove){

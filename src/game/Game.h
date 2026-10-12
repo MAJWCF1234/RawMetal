@@ -183,7 +183,7 @@ public:
     const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
     const std::vector<FriendlyActor>& npcActors()const{return m_friendlyActors;}
     NpcWeaponPose npcWeaponPose(size_t actor)const;
-    std::vector<TacticalGrenadePose> tacticalGrenades()const;
+    std::vector<TacticalGrenadePose> tacticalGrenades(bool dangerOnly=false)const;
     std::vector<EngineerDronePose> engineerDrones()const;
     AiTarget engineerDroneTarget(int slot,int observerLevel)const;
     GuardState guardState(size_t actor)const{return GuardState(state(friendlyKey(actor,"guard_mode")));}
@@ -256,6 +256,8 @@ public:
     static bool testTacticalGrenades();
     static bool testGuardRoles();
     static bool testEngineerDrones();
+    static bool testGuardDanger();
+    static Game guardDangerInspection(int stage=0);
     static Game guardPolicyInspection(int stage=0);
     static Game killSquadInspection(int stage=0);
     static Game guardTacticsInspection(int stage=0);
@@ -438,6 +440,8 @@ private:
     bool guardHostileToPlayer(size_t actor)const;
     void validateGuardPolicyState(size_t actor)const;
     void validateGuardActions(size_t actor)const;
+    bool guardDangerIntent(size_t actor,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
+    void validateGuardDanger(size_t actor)const;
     void guardSupportIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
     void validateGuardSupport(size_t actor)const;
     void guardAvoidGrenade(size_t actor,const ActorPose& pose,Vec2& goal,float& goalZ,bool& wantsMove);

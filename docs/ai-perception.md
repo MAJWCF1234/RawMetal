@@ -228,6 +228,15 @@ equivalent content coverage, tactics or long-session reliability.
 
 ## State storage
 
+Guards also interrupt ordinary tasks for locally perceived grenade danger.
+Slow projectiles or final-fuse warnings are sensed through clear blast rays;
+stationary guards react to hostile and allied grenades. A bounded physical
+escape releases attack slots and interrupts unspent attacks, Medic treatment
+and Engineer work. Reloads pause intact and resume after danger clears. Squad
+members reserve separate exits; protected guards keep their cover and trapped
+guards hold. See [the danger interruption report](guard-danger-pass-20261011.md)
+for timing, save/residency rules and the actual-campaign Vulkan inspection.
+
 The [cleanup squad pass](kill-squad-pass-20261011.md) adds shared guard pursuit
 through permitted chunk boundaries, home return, one-shot action timelines,
 opt-in observed-cover suppression and physical tactical grenades. Tests include

@@ -17,6 +17,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("weapon_aim")<0||get("weapon_aim")>config.aimMs||get("weapon_recovery")<0||get("weapon_recovery")>std::max(config.recoveryMs,900)||get("weapon_reload")<0||get("weapon_reload")>1800||get("weapon_rounds")<0||get("weapon_rounds")>weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun).cycle.tubeCapacity||get("weapon_raise")<0||get("weapon_raise")>1000||get("weapon_flash")<0||get("weapon_flash")>80||get("weapon_recoil")<0||get("weapon_recoil")>220)throw std::runtime_error("Invalid saved guard weapon state");
  if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>config.searchMs||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
  validateGuardPolicyState(actor);
+ validateGuardDanger(actor);
 }
 void Game::updateGuardFlags(){
  std::vector<StateValue> flags;
@@ -61,6 +62,9 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   else if(get("hit_source")){Vec2 hit{get("hit_x")*.001f,get("hit_y")*.001f};remember(hit+globalOrigin,friendlyWorld(level).supportBelow(hit.x,hit.y,pose.z+track.scale));mode=GuardState::Investigate;}
  }
  put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
+ // Local danger overrides tasks before their clocks or support work advance.
+ // Awareness above still belongs to fresh perception and last-known memory.
+ put("guard_mode",int(mode));if(guardDangerIntent(actor,pose,dt,goal,goalZ,wantsMove))return;
  Vec2 remembered{get("guard_x")*.001f-globalOrigin.x,get("guard_y")*.001f-globalOrigin.y};float rememberedZ=get("guard_z")*.001f;
  auto selected=guardTarget(actor);bool lowHealth=track.health>0&&track.health-damage<=track.health*.35f;
  bool transientDefense=get("weapon_reload")>0||get("weapon_reloading")||(get("weapon_saved")&&get("weapon_rounds")==0)||get("guard_under_fire")>0;

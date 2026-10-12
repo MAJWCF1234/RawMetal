@@ -336,6 +336,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--guard-pursuit-test"))return retro::Game::testGuardPursuit()?0:21;
     if(std::wcsstr(commandLine,L"--guard-actions-test"))return retro::Game::testGuardActions()?0:21;
     if(std::wcsstr(commandLine,L"--guard-roles-test"))return retro::Game::testGuardRoles()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-danger-test"))return retro::Game::testGuardDanger()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-danger-inspection")){
+     constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+     std::filesystem::create_directories("diagnostics/guard-danger-20261011");const char*names[]={"danger-ready","danger-escape","danger-clear"};
+     for(int stage=0;stage<3;++stage){auto scene=retro::Game::guardDangerInspection(stage);renderer->render(scene);std::ofstream out(std::string("diagnostics/guard-danger-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--engineer-drone-test"))return retro::Game::testEngineerDrones()?0:21;
     if(std::wcsstr(commandLine,L"--tactical-grenade-test"))return retro::Game::testTacticalGrenades()?0:21;
     if(std::wcsstr(commandLine,L"--kill-squad-inspection")){
