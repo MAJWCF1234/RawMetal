@@ -84,6 +84,7 @@ add_executable(RawMetal WIN32
     game/ai/debug/TacticsInspection.cpp
     game/ai/debug/PolicyInspection.cpp
     game/ai/debug/DangerInspection.cpp
+    game/ai/debug/EngineerInspection.cpp
     game/ai/debug/KillSquadInspection.cpp
     game/Hitscan.cpp
     world/Ballistics.cpp

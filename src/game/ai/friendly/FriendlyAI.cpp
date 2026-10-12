@@ -68,12 +68,18 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   for(size_t i=0;i<m_friendlyActors.size();++i)if(i!=actor&&m_friendlyActors[i].level==level&&autonomousActor(m_friendlyActors[i].track())){const auto&other=m_friendlyActors[i].pose;if(other.clip==4||std::fabs(other.z-pose.z)>height)continue;
    auto away=pose.position-other.position;float neighborDistance=length(away);if(neighborDistance>.001f&&neighborDistance<.7f)separation+=away*((.7f-neighborDistance)/neighborDistance);
   }
+  auto drones=engineerDrones();for(const auto&drone:drones){if(pose.z>=drone.position.z+EngineerDroneHeight||pose.z+height<=drone.position.z)continue;auto shift=chunkOffset(drone.level)-chunkOffset(level);
+   auto away=pose.position-Vec2{drone.position.x+shift.x,drone.position.y+shift.y};float distance=length(away);if(distance>.001f&&distance<1.05f)separation+=away*((1.05f-distance)/distance);
+  }
   direction=normalized(direction+separation*2.f);float travel=std::min(length(waypoint-pose.position),config.speed*speedScale*dt);
   auto next=pose.position+direction*travel;float feet=pose.z;
   bool clear=travel>0&&friendlyWalkSegment(level,pose.position,pose.z,next,height,&feet);
   auto player=m_player.pos+chunkOffset(m_level)-chunkOffset(level);
   if(feet<m_player.z+m_player.hullHeight()&&feet+height>m_player.z&&std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;
   for(const auto&enemy:enemies)if(enemy.alive&&enemy.bodyBottom()<feet+height&&enemy.bodyTop()>feet&&lengthSq(next-enemy.pos)<.45f*.45f&&lengthSq(next-enemy.pos)<lengthSq(pose.position-enemy.pos))clear=false;
+  for(const auto&drone:drones){if(feet>=drone.position.z+EngineerDroneHeight||feet+height<=drone.position.z)continue;auto shift=chunkOffset(drone.level)-chunkOffset(level);Vec2 body{drone.position.x+shift.x,drone.position.y+shift.y};
+   if(lengthSq(next-body)<.85f*.85f&&lengthSq(next-body)<lengthSq(pose.position-body))clear=false;
+  }
   if(clear){pose.position=next;pose.z=feet;
    // An alerted armed guard can sidestep while keeping its eyes on the target.
    // Guard intent has already applied the bounded facing turn for this frame.

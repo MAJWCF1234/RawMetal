@@ -259,6 +259,7 @@ public:
     static bool testEngineerDrones();
     static bool testGuardDanger();
     static Game guardDangerInspection(int stage=0);
+    static Game engineerSupportInspection(int stage=0);
     static Game guardPolicyInspection(int stage=0);
     static Game killSquadInspection(int stage=0);
     static Game guardTacticsInspection(int stage=0);
