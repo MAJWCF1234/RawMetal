@@ -1,4 +1,5 @@
 #include "../../Game.h"
+#include "../engineer/Drones.h"
 namespace retro {
 namespace {
 StateId squadKey(AiFaction faction,StateId squad){std::string value="npc/squad/"+std::to_string(int(faction))+"/"+std::to_string(squad)+"/cursor";StateId hash=2166136261u;for(unsigned char c:value)hash=(hash^c)*16777619u;return hash|0x80000000u;}
@@ -12,10 +13,31 @@ AiTarget Game::guardSquadReport(size_t actor)const{
  }return report;
 }
 bool Game::guardFireSlot(size_t actor)const{return guardTaskAllows(actor,GuardTask::Fire)&&!state(friendlyKey(actor,"guard_danger_ms"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
+int Game::guardCoveringPeer(size_t actor)const{
+ if(actor>=m_friendlyActors.size())return 0;const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto target=guardTarget(actor);
+ bool anchor=t.ai.role==GuardSquadRole::Heavy||t.ai.role==GuardSquadRole::Sharpshooter||(t.ai.role==GuardSquadRole::Default&&guardSuppressionEnabled(t.ai)&&!guardFlankSide(actor));
+ if(!anchor||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!state(friendlyKey(actor,"guard_confirmed"))||!state(friendlyKey(actor,"guard_memory")))return 0;
+ auto faction=actorFaction(t);auto origin=chunkOffset(npc.level);int chosen=0;float nearest=18.f*18.f;
+ auto livingPeer=[&](size_t peer){const auto&other=m_friendlyActors[peer];const auto&c=other.track();return c.ai.mode==ActorAiMode::Guard&&c.ai.squad==t.ai.squad&&actorFaction(c)==faction&&chunkResident(other.level)&&autonomousActor(c)&&other.pose.clip!=4&&(!c.deadState||!state(c.deadState));};
+ for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor||!livingPeer(i))continue;const auto&other=m_friendlyActors[i];const auto&c=other.track();auto get=[&](const char*f){return state(friendlyKey(i,f));};
+  auto delta=other.pose.position+chunkOffset(other.level)-origin-npc.pose.position;float height=other.pose.z-npc.pose.z,distance=lengthSq(delta)+height*height;if(distance>nearest||get("guard_danger_ms"))continue;
+  auto selected=guardTarget(i);if(selected.valid()&&(selected.kind!=target.kind||selected.index!=target.index||(selected.kind!=ShotKind::Npc&&selected.level!=target.level)))continue;
+  auto schedule=GuardSchedule(get("schedule"));auto task=GuardTask(get("task"));bool running=get("task_status")==int(GuardTaskStatus::Running),moving=running&&get("schedule_step")==1&&task==GuardTask::Move;
+  bool reload=c.ai.armed&&guardTaskAllows(i,GuardTask::Reload)&&(get("weapon_reload")||get("weapon_reloading")||(running&&get("schedule_step")==2&&get("weapon_saved")&&!get("weapon_rounds")));
+  bool retreat=moving&&schedule==GuardSchedule::Cover&&get("guard_cover_mode")==2&&get("guard_cover");
+  bool treating=false;int patient=get("support_target")-1;
+  if(c.ai.role==GuardSquadRole::Medic&&schedule==GuardSchedule::Medic&&running&&(moving||guardTaskAllows(i,GuardTask::Treat))&&patient>=0&&size_t(patient)<m_friendlyActors.size()&&size_t(patient)!=i&&get("task_subject")==patient+1&&!get("support_cooldown")&&get("support_used")<guardRoleProfile(c.ai.role).treatments&&livingPeer(size_t(patient))){const auto&p=m_friendlyActors[size_t(patient)];treating=p.track().health>0&&state(p.track().damageState)>=p.track().health*.5f;}
+  bool deploying=c.ai.role==GuardSquadRole::Engineer&&guardTaskAllows(i,GuardTask::Deploy)&&get("drone_windup")>0&&get("drone_used")<EngineerDroneCapacity;
+  bool repairing=c.ai.role==GuardSquadRole::Engineer&&guardTaskAllows(i,GuardTask::Repair)&&get("drone_busy")&&get("drone_repair_charge")>0&&get("drone_repair_target")>0&&get("drone_repair_target")==get("task_subject");
+  bool withdrawing=false;int medic=get("task_subject")-1;
+  if(moving&&schedule==GuardSchedule::Patient&&get("guard_patient_move")&&medic>=0&&size_t(medic)<m_friendlyActors.size()&&size_t(medic)!=i&&livingPeer(size_t(medic))){const auto&m=m_friendlyActors[size_t(medic)];auto mg=[&](const char*f){return state(friendlyKey(size_t(medic),f));};withdrawing=m.track().ai.role==GuardSquadRole::Medic&&mg("schedule")==int(GuardSchedule::Medic)&&mg("task_status")==int(GuardTaskStatus::Running)&&mg("support_target")==int(i)+1;}
+  if(!reload&&!retreat&&!treating&&!deploying&&!repairing&&!withdrawing)continue;chosen=int(i)+1;nearest=distance;
+ }return chosen;
+}
 bool Game::guardSuppressionPoint(size_t actor,Point3& point)const{
  const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto target=guardTarget(actor);
  if(!guardSuppressionEnabled(t.ai)||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!get("guard_confirmed")||!get("guard_memory")||!get("weapon_target")||get("guard_seen")||get("guard_suppress_ms")<=0||guardFlankSide(actor)!=0||guardCanSee(actor,npc.pose,target))return false;
- bool flank=false;auto faction=actorFaction(t);
+ bool flank=guardCoveringPeer(actor)!=0;auto faction=actorFaction(t);
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];const auto&c=other.track();
   if(c.ai.mode!=ActorAiMode::Guard||!c.ai.armed||c.ai.squad!=t.ai.squad||actorFaction(c)!=faction||!chunkResident(other.level)||!autonomousActor(c)||other.pose.clip==4||(c.deadState&&state(c.deadState))||!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")))continue;
   auto selected=guardTarget(i);if(selected.kind==target.kind&&selected.index==target.index&&selected.level==target.level){flank=true;break;}
@@ -40,17 +62,22 @@ void Game::updateGuardSquadSlots(float dt){
   int lease=std::max(0,state(friendlyKey(i,"guard_slot_ms"))-npcMilliseconds(i,dt,"squad_fraction"));auto target=guardTarget(i);
   Point3 cover;bool suppression=guardSuppressionPoint(i,cover);
   bool ordinary=guardState(i)==GuardState::Alert&&guardCanSee(i,npc.pose,target)&&guardShotMatches(i,guardShot(i,npc.pose,npcWeaponPoseAt(i,npc.pose,{target.position.x,target.position.y,target.feet+target.height*.6f},1)));
-  bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&npc.pose.clip!=1&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_recovery"))&&!state(friendlyKey(i,"grenade_windup"))&&!guardMeleeReady(i,npc.pose,target)&&(ordinary||suppression);
+  bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&npc.pose.clip!=1&&(!state(friendlyKey(i,"weapon_saved"))||state(friendlyKey(i,"weapon_rounds"))>0)&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_reloading"))&&!state(friendlyKey(i,"weapon_recovery"))&&!state(friendlyKey(i,"grenade_windup"))&&!guardMeleeReady(i,npc.pose,target)&&(ordinary||suppression);
   eligible=eligible&&guardTaskAllows(i,GuardTask::Fire)&&!state(friendlyKey(i,"guard_danger_ms"))&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"support_target"))&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
   auto key=squadKey(actorFaction(t),t.ai.squad);auto group=std::find_if(groups.begin(),groups.end(),[&](const Group&g){return g.key==key;});if(group==groups.end()){groups.push_back({key,{}});group=std::prev(groups.end());}group->actors.push_back(i);
  }
  for(const auto&group:groups){int occupied=0;for(auto i:group.actors)occupied+=state(friendlyKey(i,"guard_slot"))!=0;
-  int cursor=std::clamp(state(group.key),0,int(m_friendlyActors.size()));for(size_t pass=0;pass<group.actors.size()&&occupied<2;++pass){auto found=std::lower_bound(group.actors.begin(),group.actors.end(),size_t(cursor));if(found==group.actors.end())found=group.actors.begin();auto i=*found;cursor=int(i)+1;
+  int cursor=std::clamp(state(group.key),0,int(m_friendlyActors.size()));bool covered=false;for(auto i:group.actors)covered|=state(friendlyKey(i,"guard_slot"))&&guardCoveringPeer(i)!=0;
+  // Fill one free lease with a loaded covering anchor. Surviving leases keep
+  // their finite aim interval, and the other opportunity retains fair rotation.
+  if(occupied<2&&!covered){auto start=std::lower_bound(group.actors.begin(),group.actors.end(),size_t(cursor));size_t first=start==group.actors.end()?0:size_t(start-group.actors.begin());for(size_t pass=0;pass<group.actors.size();++pass){auto i=group.actors[(first+pass)%group.actors.size()];if(state(friendlyKey(i,"guard_slot"))||!guardCoveringPeer(i))continue;setState(friendlyKey(i,"guard_slot"),1);setState(friendlyKey(i,"guard_slot_ms"),std::max(1600,m_friendlyActors[i].track().ai.aimMs+500));++occupied;break;}}
+  for(size_t pass=0;pass<group.actors.size()&&occupied<2;++pass){auto found=std::lower_bound(group.actors.begin(),group.actors.end(),size_t(cursor));if(found==group.actors.end())found=group.actors.begin();auto i=*found;cursor=int(i)+1;
    if(state(friendlyKey(i,"guard_slot")))continue;setState(friendlyKey(i,"guard_slot"),1);setState(friendlyKey(i,"guard_slot_ms"),std::max(1600,m_friendlyActors[i].track().ai.aimMs+500));++occupied;
   }setState(group.key,cursor);
  }
 }
 int Game::guardFlankSide(size_t actor)const{
+ if(state(friendlyKey(actor,"schedule"))==int(GuardSchedule::Patient))return 0;
  const auto&npc=m_friendlyActors[actor];if(!npc.track().ai.squad)return 0;auto target=guardTarget(actor);if(!target.valid())return 0;
  if(npc.track().ai.role!=GuardSquadRole::Default){if(!guardRoleProfile(npc.track().ai.role).flanks)return 0;return npc.track().ai.role==GuardSquadRole::Rusher?1:-1;}
  int rank=0,count=0;

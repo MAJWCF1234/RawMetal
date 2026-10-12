@@ -6,11 +6,23 @@ std::vector<AiStimulus> Game::aiStimuli()const{
  std::vector<AiStimulus> out;
  for(const auto&event:m_sounds){
   bool shot=event.sound==Sound::Shot,step=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;
-  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft;
-  if((!shot&&!step&&!impact)||!std::isfinite(event.gain)||event.gain<=0||!std::isfinite(event.radius)||event.radius<=0||!std::isfinite(event.position.x)||!std::isfinite(event.position.y)||std::isinf(event.z))continue;
+  bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty||event.sound==Sound::PunchSwing;
+  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land;
+  bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
+  bool mechanism=event.sound==Sound::Door||event.sound==Sound::Machine||event.sound==Sound::LiftMotor||event.sound==Sound::LiftCreak;
+  // Continuous ambience has no discrete emitting position. Spatial machinery
+  // and authored/mechanism events still provide genuine world stimuli.
+  if(mechanism&&event.sound!=Sound::Door&&!event.spatial)continue;
+  if((!weapon&&!step&&!impact&&!danger&&!mechanism)||!std::isfinite(event.gain)||event.gain<=0||!std::isfinite(event.radius)||event.radius<=0||!std::isfinite(event.position.x)||!std::isfinite(event.position.y)||std::isinf(event.z))continue;
   auto source=event.spatial||std::isfinite(event.z)?event.position:m_player.pos;auto local=source;const auto&world=worldAt(local);
   float z=std::isfinite(event.z)?event.z:event.spatial?world.floorHeight(local.x,local.y)+.7f:m_player.z+m_player.eye;
-  float radius=std::min(event.radius,shot?14.f:step?4.5f:6.f)*std::sqrt(std::clamp(event.gain,0.f,1.f));out.push_back({source,z,radius,event.gain,shot});
+  float radius=std::min(event.radius,danger?20.f:weapon?14.f:step?4.5f:mechanism?8.f:6.f)*std::sqrt(std::clamp(event.gain,0.f,1.f));
+  int owner=-1;
+  // NPC firearm sounds also appear in the general mixer. Attribute their
+  // captured source so the duplicate cannot bypass own/friendly-shot filters.
+  if(shot){auto global=source+chunkOffset(m_level);for(const auto&guardShot:m_guardShots)if(lengthSq(guardShot.source-global)<.0025f&&std::fabs(guardShot.z-z)<.05f){owner=guardShot.npc;break;}}
+  unsigned category=danger?ai::SoundDanger:weapon?ai::SoundWeapon:impact?ai::SoundImpact:ai::SoundWorld;
+  out.push_back({source,z,radius,event.gain,weapon||danger,owner,category});
  }return out;
 }
 bool Game::soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim,float farTrim)const{

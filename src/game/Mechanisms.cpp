@@ -53,7 +53,7 @@ void Game::updateMechanisms(float dt){
   }
  }
  for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);
-  if(autonomousActor(track)){world.setActorPose(i,old);continue;}
+  if(autonomousActor(track)||scriptedHandoffActive(level,i)){world.setActorPose(i,old);continue;}
   if(!track.idleKeys.empty()){
    auto idleState=actorTrackState(track.timerState,i,"idle_ms");int idle=state(idleState)+int(std::round(dt*1000));idle%=track.idleKeys.back().timeMs;setState(idleState,idle);
    int age=state(track.timerState);

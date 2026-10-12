@@ -1,5 +1,6 @@
 #include "../../Game.h"
 #include "../Perception.h"
+#include "ScheduleTables.h"
 #include <fstream>
 #include "../../../world/CustomCampaign.h"
 namespace retro {
@@ -11,6 +12,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_cover")<0||get("guard_cover")>1||get("guard_cover_wait")<0||get("guard_cover_wait")>1000||get("guard_cover_x")<0||get("guard_cover_x")>24000||get("guard_cover_y")<0||get("guard_cover_y")>24000||get("guard_cover_z")< -100000||get("guard_cover_z")>100000)throw std::runtime_error("Invalid saved guard repositioning");
  if(get("guard_cover")&&(get("guard_cover_x")<350||get("guard_cover_x")>23650||get("guard_cover_y")<350||get("guard_cover_y")>23650))throw std::runtime_error("Invalid saved guard cover goal");
  if(get("guard_confirmed")<0||get("guard_confirmed")>1||get("guard_seen")<0||get("guard_seen")>1||get("guard_under_fire")<0||get("guard_under_fire")>1500)throw std::runtime_error("Invalid saved guard threat memory");
+ if(get("guard_heard")<0||get("guard_heard")>15||get("guard_hurt_amount")<0||get("guard_hurt_amount")>m_friendlyActors[actor].track().health||get("guard_enemy_dead")<0||get("guard_enemy_dead")>1)throw std::runtime_error("Invalid saved guard sensory conditions");
  if(get("guard_patrol_wait")<0||get("guard_patrol_wait")>5000||get("guard_patrol_progress")<0||get("guard_patrol_progress")>=100||get("guard_patrol_point_seen")<0||get("guard_patrol_point_seen")>int(config.patrol.size())||get("guard_patrol_fraction")<0||get("guard_patrol_fraction")>=1000||get("guard_patrol_movement_fraction")<0||get("guard_patrol_movement_fraction")>=1000)throw std::runtime_error("Invalid saved guard patrol recovery");
  if(get("guard_route_target")<0||get("guard_route_target")>chunkCount()||get("guard_route_next")<0||get("guard_route_next")>chunkCount()||get("guard_route_wait")<0||get("guard_route_wait")>1000||get("guard_portal_z")< -100000||get("guard_portal_z")>100000)throw std::runtime_error("Invalid saved guard pursuit route");
  if(get("guard_route_next")){float x=get("guard_portal_x")*.001f,y=get("guard_portal_y")*.001f;bool inside=false;for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);inside|=x>=origin.x-.36f&&x<=origin.x+24.36f&&y>=origin.y-.36f&&y<=origin.y+24.36f;}if(!inside)throw std::runtime_error("Invalid saved guard pursuit portal");}
@@ -31,7 +33,52 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
  auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;
  auto shift=chunkOffset(level)-chunkOffset(m_level),globalOrigin=chunkOffset(level);auto observer=pose.position+shift;
- float eye=pose.z+track.scale*.85f;auto previous=guardTarget(actor),target=guardThreat(actor,pose);bool visible=target.valid();
+ float eye=pose.z+friendlyHullHeight(actor,track)*.85f;auto previous=guardTarget(actor),target=guardThreat(actor,pose);bool visible=target.valid();
+ // A missing live target is not proof of death: streaming, disabling and
+ // occlusion can all invalidate its reference. Confirm only a known corpse
+ // which this guard can currently see in resident geometry.
+ auto corpseSeen=[&](){
+  if(!get("guard_memory")||!get("guard_target_kind"))return false;
+  auto kind=ShotKind(get("guard_target_kind"));int targetLevel=get("guard_target_level")-1,index=get("guard_target_index")-1;
+  Vec2 position{};float feet=0,corpseEye=.25f;
+  if(kind==ShotKind::Player){if(!dead())return false;targetLevel=m_level;position=m_player.pos;feet=m_player.z;}
+  else if(kind==ShotKind::Npc){
+   if(index<0||size_t(index)>=m_friendlyActors.size()||size_t(index)==actor)return false;
+   const auto&other=m_friendlyActors[size_t(index)];const auto&t=other.track();
+   if(t.health<=0||!(other.pose.clip==4||(t.deadState&&state(t.deadState))))return false;
+   targetLevel=other.level;position=other.pose.position;feet=other.pose.z;corpseEye=t.scale*.25f;
+  }
+  else if(kind==ShotKind::Enemy){
+   if(targetLevel<0||targetLevel>=chunkCount()||!chunkResident(targetLevel))return false;
+   const auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;
+   if(index<0||size_t(index)>=enemies.size())return false;const auto&enemy=enemies[size_t(index)];
+   if(enemy.alive||!enemy.visible())return false;position=enemy.pos;feet=enemy.z;
+  }
+  else if(kind==ShotKind::Actor){
+   if(targetLevel<0||targetLevel>=chunkCount()||!chunkResident(targetLevel))return false;
+   const auto&world=targetLevel==m_level?m_world:m_chunks[targetLevel].world;
+   if(index<0||size_t(index)>=world.actorTracks().size())return false;
+   const auto&t=world.actorTracks()[size_t(index)];const auto&p=world.actorPose(size_t(index));
+   if(t.ai.mode!=ActorAiMode::Scripted||!t.health||t.platform||!(p.clip==4||(t.deadState&&state(t.deadState))))return false;
+   position=p.position;feet=p.z;corpseEye=t.scale*.25f;
+  }else return false;
+  if(targetLevel<0||targetLevel>=chunkCount()||!chunkResident(targetLevel))return false;
+  position+=chunkOffset(targetLevel)-globalOrigin;auto delta=position-pose.position;float dz=feet+corpseEye-eye;
+  return lengthSq(delta)+dz*dz<config.sightRange*config.sightRange&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>config.sightDot&&soundRayClear(observer,eye,position+shift,feet+corpseEye);
+ };
+ bool enemyDead=corpseSeen();int deadKind=get("guard_target_kind"),deadLevel=get("guard_target_level"),deadIndex=get("guard_target_index");put("guard_enemy_dead",enemyDead);
+ auto schedule=GuardSchedule(get("schedule"));if(schedule==GuardSchedule::None)schedule=GuardSchedule::Patrol;
+ const auto soundMask=guardScheduleDefinition(schedule).schedule.soundMask;
+ const AiStimulus*heard=nullptr;float strongest=0;unsigned audible=0;
+ for(const auto&noise:stimuli){
+  if(!std::isfinite(noise.radius)||noise.radius<=0||!std::isfinite(noise.gain)||noise.gain<=0||!std::isfinite(noise.source.x)||!std::isfinite(noise.source.y)||!std::isfinite(noise.z))continue;
+  float height=noise.z-eye;if(lengthSq(noise.source-observer)+height*height>=noise.radius*noise.radius||noise.npc==int(actor))continue;
+  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&actorFaction(m_friendlyActors[size_t(noise.npc)].track())==actorFaction(track))continue;
+  float strength=aiSoundStrength(observer,eye,noise.source,noise.z,noise.radius,noise.gain,noise.loud,soundRayClear(observer,eye,noise.source,noise.z));
+  if(strength<=0)continue;audible|=noise.categories&15u;
+  if((noise.categories&soundMask)&&strength>strongest){strongest=strength;heard=&noise;}
+ }
+ put("guard_heard",int(audible));
  auto sameRef=[](const AiTarget&a,const AiTarget&b){return a.valid()&&b.valid()&&a.kind==b.kind&&a.level==b.level&&a.index==b.index;};
  auto remember=[&](Vec2 global,float feet){put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);};
  if(visible){
@@ -45,22 +92,26 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   recognition=confirmed?config.recognitionMs:0;
   if(mode==GuardState::Suspicious&&!confirmed){mode=GuardState::Patrol;put("guard_memory",0);rememberGuardTarget(actor,{});}
   else if(mode==GuardState::Alert){mode=GuardState::Investigate;put("guard_travel",0);}
-  const AiStimulus*heard=nullptr;float strongest=0;
-  for(const auto&noise:stimuli){float height=noise.z-eye;if(lengthSq(noise.source-observer)+height*height>=noise.radius*noise.radius)continue;
-   if(noise.npc==int(actor))continue;
-   float strength=aiSoundStrength(observer,eye,noise.source,noise.z,noise.radius,noise.gain,noise.loud,soundRayClear(observer,eye,noise.source,noise.z));if(strength>strongest){strongest=strength;heard=&noise;}}
-  if(heard){auto local=heard->source;const auto&world=worldAt(local);remember(heard->source+chunkOffset(m_level),world.supportBelow(local.x,local.y,heard->z));mode=GuardState::Investigate;}
+  bool supporting=schedule==GuardSchedule::Medic||schedule==GuardSchedule::Engineer||schedule==GuardSchedule::Patient;
+  if(heard&&!supporting&&!enemyDead){auto local=heard->source;const auto&world=worldAt(local);remember(heard->source+chunkOffset(m_level),world.supportBelow(local.x,local.y,heard->z));mode=GuardState::Investigate;}
   auto report=guardSquadReport(actor);auto remembered=Vec2{get("guard_x")*.001f-globalOrigin.x,get("guard_y")*.001f-globalOrigin.y};
   if(report.valid()&&(mode==GuardState::Patrol||mode==GuardState::Suspicious||!sameRef(previous,report)||lengthSq(report.position-remembered)>.25f*.25f||std::fabs(report.feet-get("guard_z")*.001f)>.3f)){
    // A teammate's sighting supplies last-known knowledge, never our own sight.
    rememberGuardTarget(actor,report);remember(report.position+globalOrigin,report.feet);confirmed=true;recognition=config.recognitionMs;mode=GuardState::Investigate;
   }
  }
- int damage=track.damageState?state(track.damageState):0;put("guard_under_fire",std::max(0,get("guard_under_fire")-ms));
+ int damage=track.damageState?state(track.damageState):0;int freshDamage=std::clamp(damage-get("guard_damage"),0,std::max(0,track.health));put("guard_hurt_amount",freshDamage);put("guard_under_fire",std::max(0,get("guard_under_fire")-ms));
  if(damage>get("guard_damage")){
   put("guard_under_fire",1500);auto attacker=guardAttacker(actor);
   if(attacker.valid()){target=attacker;rememberGuardTarget(actor,attacker);remember(attacker.position+globalOrigin,attacker.feet);confirmed=true;recognition=config.recognitionMs;visible=guardCanSee(actor,pose,attacker);mode=visible?GuardState::Alert:GuardState::Investigate;}
   else if(get("hit_source")){Vec2 hit{get("hit_x")*.001f,get("hit_y")*.001f};remember(hit+globalOrigin,friendlyWorld(level).supportBelow(hit.x,hit.y,pose.z+track.scale));mode=GuardState::Investigate;}
+ }
+ if(enemyDead&&!visible&&get("guard_target_kind")==deadKind&&get("guard_target_level")==deadLevel&&get("guard_target_index")==deadIndex){
+  // The corpse ends this reference's pursuit. Searching is bounded by the
+  // authored awareness deadline and cannot keep chasing its tomb location.
+  rememberGuardTarget(actor,{});put("guard_memory",0);put("guard_travel",0);put("guard_search",config.searchMs);
+  put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);put("guard_route_next",0);put("guard_route_wait",0);
+  confirmed=false;recognition=0;mode=GuardState::Search;
  }
  put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
  // Senses update independently of task ownership. Only the shared executor

@@ -9,6 +9,8 @@ void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,Acto
  if(get("support_used")<guardRoleProfile(track.ai.role).treatments&&!get("support_cooldown"))for(size_t i=0;i<m_friendlyActors.size();++i){
   const auto&patient=m_friendlyActors[i];const auto&t=patient.track();if(i==actor||!t.health||!chunkResident(patient.level)||!autonomousActor(t)||patient.pose.clip==4||state(t.deadState)||t.ai.squad!=track.ai.squad||actorFaction(t)!=actorFaction(track))continue;
   int damage=state(t.damageState);auto position=patient.pose.position+chunkOffset(patient.level)-origin;float distance=length(position-pose.position);if(damage<t.health*.50f||distance>12||std::fabs(patient.pose.z-pose.z)>.3f)continue;
+  if(state(friendlyKey(i,"guard_danger_ms"))||state(friendlyKey(i,"schedule"))==int(GuardSchedule::Recovery))continue;
+  if(t.ai.mode==ActorAiMode::Guard&&(state(friendlyKey(i,"guard_under_fire"))||state(friendlyKey(i,"hit_source"))||guardGrenadeExposed(i)||(get("schedule")!=int(GuardSchedule::None)&&damage>state(friendlyKey(i,"guard_damage")))))continue;
   bool reserved=false;for(size_t other=0;other<m_friendlyActors.size();++other)if(other!=actor&&m_friendlyActors[other].track().ai.role==GuardSquadRole::Medic&&m_friendlyActors[other].pose.clip!=4&&state(friendlyKey(other,"support_target"))==int(i)+1)reserved=true;
   if(reserved||!friendlyRayClear({pose.position.x+origin.x,pose.position.y+origin.y,pose.z+track.scale*.85f},{position.x+origin.x,position.y+origin.y,patient.pose.z+t.scale*.85f}))continue;
   float score=float(damage)/t.health-distance*.005f;if(int(i)+1==get("support_target"))score+=.2f;if(score>priority){target=int(i);priority=score;}
@@ -16,6 +18,8 @@ void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,Acto
  if(target<0){put("support_target",0);put("support_ms",0);return;}
  if(target+1!=get("support_target")){put("support_target",target+1);put("support_ms",0);}
  const auto&patient=m_friendlyActors[size_t(target)];const auto&t=patient.track();auto position=patient.pose.position+chunkOffset(patient.level)-origin;
+  bool rendezvous=state(friendlyKey(size_t(target),"schedule"))==int(GuardSchedule::Patient)&&state(friendlyKey(size_t(target),"task_subject"))==int(actor)+1&&state(friendlyKey(size_t(target),"guard_patient_move"))&&state(friendlyKey(size_t(target),"schedule_step"))==1;
+  if(rendezvous){goal=pose.position;goalZ=pose.z;wantsMove=false;put("support_ms",0);return;}
  auto toward=position-pose.position;if(lengthSq(toward)>.001f)pose.yaw+=std::clamp(std::remainder(std::atan2(toward.x,toward.y)-pose.yaw,2*kPi),-4.f*dt,4.f*dt);
  // Saved positions are millimetre-quantized. Keep a small work-distance
  // hysteresis so restoration at the approach threshold cannot cancel an
@@ -32,6 +36,9 @@ void Game::runGuardTreatment(size_t actor,int ms){
  int target=get("support_target")-1;if(target<0||size_t(target)>=m_friendlyActors.size()||!guardTaskAllows(actor,GuardTask::Treat))return;
  if(get("weapon_reload")||get("weapon_reloading")||get("weapon_recovery")||get("weapon_bash")||get("grenade_windup")||get("weapon_action")==int(GuardAction::Fire)||get("weapon_action")==int(GuardAction::Bash))return;
  const auto&patient=m_friendlyActors[size_t(target)];const auto&t=patient.track();auto origin=chunkOffset(ctx.level),position=patient.pose.position+chunkOffset(patient.level)-origin;
+ // Player hits precede the NPC pass. A provider authored before its patient
+ // must not heal over that unsensed hit and erase the patient's damage cue.
+ if(t.ai.mode==ActorAiMode::Guard&&(state(friendlyKey(size_t(target),"guard_under_fire"))||state(friendlyKey(size_t(target),"hit_source"))||guardGrenadeExposed(size_t(target))||(get("schedule")!=int(GuardSchedule::None)&&state(t.damageState)>state(friendlyKey(size_t(target),"guard_damage"))))){put("support_ms",0);return;}
  if(patient.pose.clip==4||!autonomousActor(t)||state(t.deadState)||length(position-ctx.pose.position)>1.31f)return;
  int treatment=std::min(2400,get("support_ms")+ms);put("support_ms",treatment);if(treatment<2400)return;
  setState(t.damageState,std::max(0,state(t.damageState)-30));put("support_used",get("support_used")+1);put("support_cooldown",6000);put("support_ms",0);put("support_target",0);put("weapon_recovery",std::max(get("weapon_recovery"),450));

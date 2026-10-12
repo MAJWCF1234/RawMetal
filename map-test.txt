@@ -1,1 +1,0 @@
-All 389 walkable tiles connected; every enemy, pickup and extraction reachable.

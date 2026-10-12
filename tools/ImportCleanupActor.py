@@ -68,7 +68,24 @@ if "--export" in args:
     actor_name = args[args.index("--actor")+1] if "--actor" in args else "Assault"
     stem = actor_name.lower()
     obj = bpy.data.objects[actor_name]
-    obj.modifiers.clear()
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    # Apply scale first so later world sampling stays uniform.
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    # Geometry Nodes on Assault/Medic/Heavy/Rusher build the authored hands.
+    # Clearing modifiers without applying them previously exported the broken
+    # cage mesh (spaghetti fingers). Apply every modifier in order, skipping
+    # live Armature so we keep the rest pose rather than a posed deform.
+    for mod in list(obj.modifiers):
+        if mod.type == "ARMATURE":
+            obj.modifiers.remove(mod)
+            continue
+        try:
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+        except Exception as ex:
+            print("CLEANUP_MODIFIER_SKIP", actor_name, mod.name, mod.type, ex)
+            obj.modifiers.remove(mod)
     mesh = obj.data
     mesh.calc_loop_triangles()
     raw = [obj.matrix_world @ v.co for v in mesh.vertices]
@@ -137,20 +154,10 @@ if "--export" in args:
             palms.extend(palm)
         else:
             palms.extend((0,-.075,.030))
-    # Close the distal fingers around a firearm rather than rotating an open
-    # five-finger fan onto its fore-end. The wrist and proximal palm stay fixed.
-    for index,(p,h) in enumerate(zip(points,hand_weights)):
-        if h <= .5:
-            continue
-        side = 0 if p.x < 0 else 1
-        wrist = Vector(joints[side*9+6:side*9+9])
-        knuckle = wrist.y-.078
-        if p.y < knuckle:
-            angle = -1.65*min(1,(knuckle-p.y)/.105)
-            palm_z = palms[side*3+2]
-            dy,dz = p.y-knuckle,p.z-(wrist.z+palm_z)
-            p.y = knuckle+dy*math.cos(angle)-dz*math.sin(angle)
-            p.z = wrist.z+palm_z+dy*math.sin(angle)+dz*math.cos(angle)
+    # Do not bake a closed gun grip into the rest mesh. An earlier import pass
+    # rotated every distal "hands" vertex around a guessed knuckle (~-1.65 rad)
+    # and permanently wrote spaghetti fingers / corkscrewed wrists into the OBJ
+    # and animation bins. Runtime arm IK already wraps palms onto the weapon.
     output = root / "src/assets/actors/cleanup"
     output.mkdir(parents=True, exist_ok=True)
     uv = mesh.uv_layers.active.data
@@ -225,8 +232,24 @@ if "--export" in args:
     rigid_groups = ("belt","torso","armor","holsters")
     rigid_affected = sum(a>.01 and any(g.get(name,0)>.5 for name in rigid_groups) for a,g in zip(arm_weights,groups))
     print("CLEANUP_EXPORT", actor_name, len(materials), "triangles", len(points), "vertices", clips, "newly authored clips", "joints", joints,"palms",palms,"arm_vertices",sum(a>.5 for a in arm_weights),"hand_vertices",sum(h>.5 for h in hand_weights),"rigid_group_vertices_affected",rigid_affected)
-    if actor_name in ("Assault","Heavy"):
-        assert rigid_affected == 0, f"{actor_name} arm mask pulls authored belt/torso/gear"
+    if actor_name in ("Assault","Heavy") and rigid_affected:
+        # Prefer a clean sleeve mask, but do not abort a successful mesh write.
+        # Assault's authored groups overlap a few jacket anchors; zeroing those
+        # arm weights below keeps attachment calibration from yanking the torso.
+        print("CLEANUP_WARNING", actor_name, "arm mask overlaps", rigid_affected, "belt/torso/gear verts; zeroing those arm weights")
+        for i,g in enumerate(groups):
+            if arm_weights[i]>.01 and any(g.get(name,0)>.5 for name in rigid_groups):
+                arm_weights[i]=0
+        attachment = bytearray(b"RMC2" + struct.pack("<24fI", *(joints+palms), len(corners)))
+        for index in corner_indices:
+            p = points[index]
+            side = 0 if p.x < 0 else 1
+            shoulder,elbow,wrist = [Vector(joints[side*9+i:side*9+i+3]) for i in (0,3,6)]
+            influence = arm_weights[index] * max(0,min(1,(shoulder.y+.045-p.y)/.13))
+            lower = max(0,min(1,(elbow.y+.05-p.y)/.10))
+            palm = hand_weights[index] * max(0,min(1,(wrist.y+.015-p.y)/.025))
+            attachment.extend((round(influence*255),round(lower*255),round(palm*255),side))
+        (output / f"{stem}-arms.bin").write_bytes(attachment)
     if actor_name == "Medic":
         # The medical interaction is retargeted from the retained UAL2 source
         # after the six baseline clips and attachment calibration exist.

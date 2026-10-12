@@ -111,13 +111,15 @@ def test_open_stair_exports() -> None:
 
 
 def test_industrial_fixture_exports() -> None:
-    models = (("extraction-fan.obj", 20), ("packing-crate.fbx", 21),
-              ("control-console.fbx", 22), ("forklift.obj", 23))
+    models = (("pallet.fbx", 15), ("service-van-assembled.obj", 16),
+              ("wooden-crate.obj", 17), ("extraction-fan.obj", 20),
+              ("packing-crate.fbx", 21), ("control-console.fbx", 22),
+              ("forklift.obj", 23))
     project = {"chunks": [{"id": "cargo", "name": "Cargo", "gx": 0, "gy": 0,
         "layers": [{"id": "floor", "z": 0, "rows": rows()}],
         "objects": [{"id": "spawn", "type": "spawn", "spawnKind": "Player", "layerId": "floor", "x": 3, "y": 3}]
             + [{"id": name, "type": "asset", "layerId": "floor",
-            "model": "src/assets/facility/cargo/" + name, "x": 4 + i * 4,
+            "model": "src/assets/facility/cargo/" + name, "x": 4 + i * 2,
             "y": 8, "w": 1, "d": 1, "h": 1} for i, (name, _) in enumerate(models)],
     }]}
     payload, warnings = server.build_map_payload(project, "cargo", 11, "Cargo", "MAIN")
@@ -130,8 +132,25 @@ def test_industrial_fixture_exports() -> None:
     assert exported == [fixture for _, fixture in models]
 
 
+def test_mutant_creature_export() -> None:
+    project = {"chunks": [{"id": "lab", "name": "Lab", "gx": 0, "gy": 0,
+        "layers": [{"id": "floor", "z": 0, "rows": rows()}],
+        "objects": [
+            {"id": "spawn", "type": "spawn", "spawnKind": "Player", "layerId": "floor", "x": 3, "y": 3},
+            {"id": "mutant", "type": "asset", "layerId": "floor", "model": "src/assets/mutant/MonsterPSX.fbx", "x": 10, "y": 10, "z": 0},
+        ],
+    }]}
+    payload, warnings = server.build_map_payload(project, "lab", 11, "Lab", "MAIN")
+    assert not warnings
+    assert "CreatureKind::Mutant" in payload
+    campaign, warnings = server.build_runtime_campaign(project, "Lab")
+    assert not warnings
+    assert any(line.startswith("CREATURE|0|4|") for line in campaign.splitlines())
+
+
 if __name__ == "__main__":
     test_payload()
     test_open_stair_exports()
     test_industrial_fixture_exports()
+    test_mutant_creature_export()
     print("level-editor map payload export: PASS")

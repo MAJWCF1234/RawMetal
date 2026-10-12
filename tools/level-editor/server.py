@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import argparse
 import json
 import mimetypes
 import math
 import re
 import shutil
+import sys
 import threading
 import time
 import urllib.request
@@ -64,6 +66,12 @@ TEXTURE_OVERRIDES = {
     "src/assets/facility/cargo/extraction-fan.obj": "src/assets/facility/cargo/extraction-fan.png",
     "src/assets/facility/cargo/packing-crate.fbx": "src/assets/facility/cargo/packing-crate.png",
     "src/assets/facility/cargo/control-console.fbx": "src/assets/facility/cargo/control-console.png",
+    "src/assets/facility/cargo/service-van-assembled.obj": "src/assets/facility/cargo/service-van.png",
+    "src/assets/facility/service/electrical_equipment_1.fbx": "src/assets/facility/service/transformer_box_hr_2.png",
+    "src/assets/facility/service/tank_system_mx_1.fbx": "src/assets/facility/service/metal_hr_6_1.png",
+    "src/assets/mutant/MonsterPSX.fbx": "src/assets/mutant/MonsterPSX_Diffuse.png",
+    "src/assets/actors/freight-worker.obj": "src/assets/actors/worker-body.png",
+    "src/assets/actors/source/freight-worker.fbx": "src/assets/actors/worker-body.png",
 }
 
 FRIENDLY = {
@@ -97,6 +105,22 @@ FRIENDLY = {
     "packing-crate": "Painted Shipping Crate",
     "control-console": "Industrial Control Console",
     "forklift": "Warehouse Forklift",
+    "pallet": "Wooden Pallet",
+    "wooden-crate": "Wooden Storage Crate",
+    "service-van": "Service Van",
+    "service-van-assembled": "Service Van (Parked)",
+    "electrical_equipment_1": "Electrical Transformer Box",
+    "machinery_mx_1": "Industrial Generator Machinery",
+    "tank_system_mx_1": "Pressurized Tank System",
+    "MonsterPSX": "Mutant (Infected)",
+    "freight-worker": "Freight Worker",
+    "barrel": "Explosive Barrel",
+    "crate": "Breakable Wooden Crate",
+    "broken-bottle": "Broken Glass Bottle",
+    "crushed-can": "Crushed Metal Can",
+    "garbage-bag": "Garbage Bag",
+    "newspapers": "Discarded Newspapers",
+    "bent-metal": "Bent Scrap Metal",
 }
 
 # The editor catalog is intentionally curated. Crowbar and its matching atlas
@@ -111,6 +135,7 @@ DEFAULT_MOUNT = {
     "extraction-fan": "ceiling",
     "vent_fps_1": "ceiling",
     "wall_box_2": "wall",
+    "electrical_equipment_1": "wall",
 }
 
 DEFAULT_SIZE = {
@@ -128,6 +153,15 @@ DEFAULT_SIZE = {
     "packing-crate": (1.681, 1.680, 1.20),
     "control-console": (0.718, 0.453, 1.20),
     "forklift": (1.164, 3.620, 2.20),
+    "pallet": (1.20, 0.80, 0.15),
+    "chair-wooden": (0.417, 0.525, 0.95),
+    "table-wooden": (1.402, 0.742, 0.80),
+    "wooden-crate": (0.90, 0.90, 0.85),
+    "service-van": (4.50, 2.00, 2.10),
+    "service-van-assembled": (4.50, 2.00, 2.10),
+    "electrical_equipment_1": (0.91, 0.50, 2.20),
+    "machinery_mx_1": (2.45, 1.30, 1.40),
+    "tank_system_mx_1": (2.40, 2.65, 2.20),
     "doorway_wide_1": (2.60, 0.30, 2.70),
     "vent_fps_1": (0.70, 0.15, 0.70),
     "ceiling_lamp_fps_1": (1.00, 0.30, 0.18),
@@ -148,6 +182,8 @@ DEFAULT_SIZE = {
     "huntsman": (1.30, 1.30, 0.75),
     "wasp": (1.20, 1.20, 1.00),
     "scissors": (1.10, 1.10, 1.80),
+    "MonsterPSX": (1.20, 1.20, 1.85),
+    "freight-worker": (0.70, 0.70, 1.80),
     "Remington-870": (1.10, 0.20, 0.20),
     "arms_rig": (1.20, 0.70, 1.20),
 }
@@ -179,10 +215,14 @@ def pretty_name(path: Path) -> str:
 
 def category_for(path: Path) -> str:
     p = path.as_posix().lower()
-    if "/pressureworks/" in p:
+    if "/facility/cargo/" in p:
+        return "Cargo"
+    if "/facility/service/" in p:
         return "Machinery"
     if "/facility/source/" in p:
         return "Architecture"
+    if "/pressureworks/" in p:
+        return "Machinery"
     if "/environment/" in p:
         return "Environment"
     if "/clutter/" in p:
@@ -191,6 +231,10 @@ def category_for(path: Path) -> str:
         return "Pickups"
     if "/reactor/" in p:
         return "Reactor"
+    if "/mutant/" in p:
+        return "Creatures"
+    if "/actors/" in p:
+        return "Actors"
     if "/models/" in p:
         if any(x in p for x in ("huntsman", "wasp", "scissors")):
             return "Creatures"
@@ -274,6 +318,10 @@ def asset_manifest() -> dict:
             or name == "scifi_texture_1.png"
         ):
             return True, "Facility"
+        if "/facility/cargo/" in path and name in {"office-carpet.png", "van-metal.png", "pallet.png"}:
+            return True, "Cargo & Finishes"
+        if "/facility/service/" in path and name in {"metal_hr_6_1.png", "transformer_box_hr_2.png"}:
+            return True, "Service & Metals"
         if "/environment/" in path and name in {
             "panel-metal.png",
             "straight-hazard-stripes.png",
@@ -316,14 +364,22 @@ FACILITY_MODEL_INDEX = {
     "src/assets/facility/source/metal_shelf_1.fbx": 7,
     "src/assets/facility/source/wall_box_2.fbx": 8,
     "src/assets/facility/source/computer_1.fbx": 11,
+    "src/assets/facility/source/computer_1_002.fbx": 11,
     "src/assets/facility/service/machinery_mx_1.fbx": 12,
+    "src/assets/facility/source/machinery_2.fbx": 12,
     "src/assets/facility/service/electrical_equipment_1.fbx": 13,
     "src/assets/facility/service/tank_system_mx_1.fbx": 14,
+    "src/assets/facility/cargo/pallet.fbx": 15,
+    "src/assets/facility/cargo/service-van-assembled.obj": 16,
+    "src/assets/facility/cargo/service-van.fbx": 16,
+    "src/assets/facility/cargo/service-van.obj": 16,
+    "src/assets/facility/cargo/wooden-crate.obj": 17,
     "src/assets/facility/cargo/chair-wooden.fbx": 18,
     "src/assets/facility/cargo/table-wooden.fbx": 19,
     "src/assets/facility/cargo/extraction-fan.obj": 20,
     "src/assets/facility/cargo/packing-crate.fbx": 21,
     "src/assets/facility/cargo/control-console.fbx": 22,
+    "src/assets/reactor/control-panel.obj": 22,
     "src/assets/facility/cargo/forklift.obj": 23,
 }
 WORLD_PROP_KIND = {
@@ -339,6 +395,11 @@ CLUTTER_KIND = {
     "src/assets/clutter/power_supply_1.obj": 3,
     "src/assets/clutter/pcb_2.obj": 4,
     "src/assets/clutter/floppy_disc_2.obj": 5,
+    "src/assets/clutter/crushed-can.obj": 0,
+    "src/assets/clutter/garbage-bag.obj": 0,
+    "src/assets/clutter/newspapers.obj": 0,
+    "src/assets/clutter/bent-metal.obj": 0,
+    "src/assets/clutter/broken-bottle.obj": 2,
 }
 PICKUP_KIND = {
     "src/assets/pickups/first-aid.fbx": "Health",
@@ -349,6 +410,7 @@ CREATURE_MODEL_KIND = {
     "src/assets/models/wasp.fbx": "Wasp",
     "src/assets/models/scissors.fbx": "Brute",
     "src/assets/reactor/stalker.obj": "Warden",
+    "src/assets/mutant/monsterpsx.fbx": "Mutant",
 }
 HAZARD_KINDS = {"Electricity","Steam","Crusher","Toxic","Fire","FallingDebris","Pressure","Anomaly"}
 
@@ -639,6 +701,22 @@ def build_map_payload(project: dict, chunk_id: str, level_id: int, level_name: s
         elif model in CREATURE_MODEL_KIND:
             ck = CREATURE_MODEL_KIND[model]
             creature_lines.append(f"{{CreatureKind::{ck},{{{_cpp_float(p['x'])},{_cpp_float(p['y'])}}},{_cpp_float(p['z'])}}}")
+        elif model in {"src/assets/environment/barrel.fbx", "barrel.fbx"}:
+            ix, iy = int(math.floor(p["x"])), int(math.floor(p["y"]))
+            lid = str(layer.get("id"))
+            if 0 <= ix < 24 and 0 <= iy < 24 and lid in exported_rows:
+                exported_rows[lid][iy][ix] = "B"
+                lines.append(f"   // Placed explosive barrel at ({ix}, {iy}).")
+            else:
+                warnings.append(f"Explosive barrel at ({p['x']}, {p['y']}) is outside grid bounds.")
+        elif model in {"src/assets/environment/crate.fbx", "crate.fbx"}:
+            ix, iy = int(math.floor(p["x"])), int(math.floor(p["y"]))
+            lid = str(layer.get("id"))
+            if 0 <= ix < 24 and 0 <= iy < 24 and lid in exported_rows:
+                exported_rows[lid][iy][ix] = "C"
+                lines.append(f"   // Placed breakable crate at ({ix}, {iy}).")
+            else:
+                warnings.append(f"Breakable crate at ({p['x']}, {p['y']}) is outside grid bounds.")
         else:
             warnings.append(f"Asset '{obj.get('name') or model}' has no runtime placement mapping yet and was preserved only as an export comment.")
             lines.append(f"   // Unsupported editor asset: {_cpp_string(obj.get('name') or model)} ({model})")
@@ -892,7 +970,21 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                 elif model in PICKUP_KIND:
                     pk=0 if PICKUP_KIND[model]=="Health" else 1;lines.append(f"PICKUP|{map_index}|{pk}|{pt['x']}|{pt['y']}")
                 elif model in CREATURE_MODEL_KIND:
-                    ids={"Huntsman":0,"Wasp":1,"Brute":2,"Warden":3};lines.append(f"CREATURE|{map_index}|{ids[CREATURE_MODEL_KIND[model]]}|{pt['x']}|{pt['y']}|{pt['z']}")
+                    ids={"Huntsman":0,"Wasp":1,"Brute":2,"Warden":3,"Mutant":4};lines.append(f"CREATURE|{map_index}|{ids[CREATURE_MODEL_KIND[model]]}|{pt['x']}|{pt['y']}|{pt['z']}")
+                elif model in {"src/assets/environment/barrel.fbx", "barrel.fbx"}:
+                    ix, iy = int(math.floor(pt["x"])), int(math.floor(pt["y"]))
+                    lid = str(layer.get("id"))
+                    if 0 <= ix < 24 and 0 <= iy < 24 and lid in exported:
+                        exported[lid][iy][ix] = "B"
+                    else:
+                        warnings.append(f"{chunk.get('name','Map')}: explosive barrel at ({pt['x']:.2f},{pt['y']:.2f}) is outside grid bounds.")
+                elif model in {"src/assets/environment/crate.fbx", "crate.fbx"}:
+                    ix, iy = int(math.floor(pt["x"])), int(math.floor(pt["y"]))
+                    lid = str(layer.get("id"))
+                    if 0 <= ix < 24 and 0 <= iy < 24 and lid in exported:
+                        exported[lid][iy][ix] = "C"
+                    else:
+                        warnings.append(f"{chunk.get('name','Map')}: breakable crate at ({pt['x']:.2f},{pt['y']:.2f}) is outside grid bounds.")
                 else:warnings.append(f"{chunk.get('name','Map')}: asset '{obj.get('name') or model}' has no RawMetal runtime placement mapping.")
 
         if any((layer.get("materials") or {}) for layer in layers):

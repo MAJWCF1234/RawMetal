@@ -7,7 +7,12 @@
 #include "Combat.h"
 #include "ai/guard/Config.h"
 #include "ai/guard/GuardCtx.h"
+#include "ai/Scheduler.h"
+#include "ai/Nodes.h"
 #include "ai/guard/Schedule.h"
+#include "ai/enemy/Schedule.h"
+#include "ai/friendly/Schedule.h"
+#include "ai/friendly/Mind.h"
 #include "ai/engineer/Drones.h"
 #include <string>
 #include <string_view>
@@ -65,6 +70,9 @@ struct Enemy {
     float stalkTimer=0,stalkSide=1;
     int surfaceMode=0; // floor, wall, ceiling
     Vec2 surfaceNormal{};
+    // Ephemeral MaintainSchedule mind. Rebuilt from state after load; not archived.
+    int schedule=0,scheduleStep=0,scheduleTask=0,scheduleStatus=0,scheduleMs=0,scheduleCursor=0,scheduleCursorSaved=0,scheduleTransitions=0;
+    unsigned scheduleConditions=0;
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
@@ -80,7 +88,7 @@ struct Pickup {
     float z = -999;
 };
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
-struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;};
+struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;unsigned categories=ai::SoundWorld;};
 struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false;float treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0;};
 enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone};
 struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
@@ -140,6 +148,7 @@ struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,R
 
 class Game {
     friend struct GuardCtx;
+    friend struct CivilianMindView;
 public:
     explicit Game(WorldId id=WorldId::Campaign);
     explicit Game(std::shared_ptr<const CustomCampaign> campaign);
@@ -190,6 +199,8 @@ public:
     AiTarget engineerDroneTarget(int slot,int observerLevel)const;
     GuardState guardState(size_t actor)const{return GuardState(state(friendlyKey(actor,"guard_mode")));}
     bool autonomousActor(const ActorTrack& track)const{return track.ai.mode!=ActorAiMode::Scripted&&(!track.ai.enableState||state(track.ai.enableState)||(track.deadState&&state(track.deadState)));}
+    bool scriptedHandoffActive(size_t actor)const;
+    bool scriptedHandoffActive(int level,size_t homeActor)const;
     bool friendlyChunkNeeded(int level)const;
     const std::vector<Pickup>& pickups() const { return m_pickups; }
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
@@ -260,6 +271,13 @@ public:
     static bool testEngineerDrones();
     static bool testGuardDanger();
     static bool testGuardSchedule();
+    static bool testGuardPatient();
+    static bool testGuardCover();
+    static bool testGuardTable();
+    static bool testNavGraph();
+    static bool testCreatureSchedule();
+    static bool testCivilianSchedule();
+    static Game squadSupportInspection(int stage=0);
     static Game guardDangerInspection(int stage=0);
     static Game engineerSupportInspection(int stage=0);
     static Game guardPolicyInspection(int stage=0);
@@ -384,10 +402,12 @@ private:
     int customMenuItemCount()const{return int(m_customCampaigns.size())+2;} // Ashfall + uploaded campaigns + Back
     int customMenuLogicalIndex(int row)const{return m_customMenuOffset+row;}
     int m_level=0;
-    struct ChunkState {World world;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
+    struct ChunkState {World world;ai::NodeGraph nav;bool navReady=false;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
     // Chunk storage outlives a frame and can be large; keep it off the native
     // stack, including nested save previews and campaign validation scenes.
     std::vector<ChunkState> m_chunks=std::vector<ChunkState>(MaxChunks);
+    ai::NodeGraph m_levelNav{};
+    bool m_levelNavReady=false;
     void storeChunk();
     void crossChunkBoundary();
     void ensureChunk(int level);
@@ -417,11 +437,17 @@ private:
     void updateVrMelee(const InputState& input,float dt);
     void receiveDamage(float amount,Vec2 source,bool blockable=true);
     void updateEnemies(float dt);
+    unsigned creatureConditions(const Enemy& enemy,bool visible,bool heard,bool canMelee,bool hurt)const;
+    CreatureScheduleChoice creatureScheduleChoice(const Enemy& enemy,unsigned conditions,bool arrive)const;
+    bool creatureTaskAllows(const Enemy& enemy,CreatureTask task)const;
+    void clearCreatureSchedule(Enemy& enemy)const;
+    void runCreatureSchedule(Enemy& enemy,int ms,bool visible,bool heard,bool canMelee,bool hurt,bool wantsMove);
     ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
     ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli=nullptr);
     void guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove);
     void guardBaseIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     void runGuardSchedule(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
+    GuardScheduleChoice guardScheduleChoice(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,int ms,Vec2& goal,float& goalZ,bool& wantsMove,unsigned& conditions,GuardSchedule previous,int oldSubject,int retry,bool changed,bool close,const AiTarget& target);
     bool guardTaskAllows(size_t actor,GuardTask task)const;
     void finishGuardTask(size_t actor);
     void guardTaskMovement(size_t actor,const ActorPose& old,const ActorPose& pose,Vec2 waypoint,bool wanted,int ms);
@@ -429,6 +455,9 @@ private:
     void clearGuardSchedule(size_t actor);
     void validateGuardSchedule(size_t actor)const;
     void civilianEscortIntent(World& world,int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<Enemy>& enemies,Vec2& goal,float& goalZ,bool& wantsMove,float& speedScale);
+    void scriptedHandoffIntent(World& world,int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<Enemy>& enemies,Vec2& goal,float& goalZ,bool& wantsMove,float& speedScale);
+    void runCivilianSchedule(size_t actor,int ms,unsigned conditions,bool wantsMove);
+    void clearCivilianSchedule(size_t actor);
     GuardCtx makeGuardCtx(size_t actor,int level,const ActorTrack& track,ActorPose& pose){return {*this,actor,level,track,pose};}
     void validateGuardState(size_t actor)const;
     void updateGuardFlags();
@@ -436,6 +465,11 @@ private:
     NpcWeaponPose npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const;
     ShotHit guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& weapon)const;
     void guardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
+    const ai::NodeGraph& navGraph(int level,float height);
+    bool findGuardGraphCover(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ);
+    bool findGuardLateralCover(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ,float sideSign=0.f);
+    bool findGuardCoverFromEnemy(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ,float sideSign=0.f);
+    Vec2 guardGraphWaypoint(int level,Vec2 start,float feet,Vec2 goal,float goalFeet,float height);
     AiTarget resolveGuardTarget(size_t actor,AiTargetRef reference)const;
     AiTarget guardThreat(size_t actor,const ActorPose& pose)const;
     AiTarget guardTarget(size_t actor)const;
@@ -455,11 +489,17 @@ private:
     void validateGuardPolicyState(size_t actor)const;
     void validateGuardActions(size_t actor)const;
     bool guardDangerIntent(size_t actor,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
+    bool guardGrenadeExposed(size_t actor)const;
     void validateGuardDanger(size_t actor)const;
     void guardSupportIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove,bool advanceWork=true);
     void guardEngineerIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     void validateGuardSupport(size_t actor)const;
     void runGuardTreatment(size_t actor,int ms);
+    bool guardPatientIntent(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove,int& medic);
+    int guardPatientMedic(size_t actor)const;
+    void releaseGuardPatient(size_t actor);
+    int guardCoveringPeer(size_t actor)const;
+    unsigned guardConditions(size_t actor,const ActorPose& pose)const;
     void guardAvoidGrenade(size_t actor,const ActorPose& pose,Vec2& goal,float& goalZ,bool& wantsMove);
     void updateEngineerDrones(float dt);
     void validateEngineerDrones()const;
@@ -484,6 +524,9 @@ private:
     int friendlyChunkAt(Vec2 global,int preferred)const;
     bool friendlyBoundaryOpen(int from,int to,Vec2 global)const;
     bool friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float* endFeet=nullptr);
+    float friendlySupportAt(int level,Vec2 position,float feet);
+    bool friendlyBodyFits(int level,Vec2 position,float feet,float height);
+    float friendlyHullHeight(size_t actor,const ActorTrack& track)const;
     bool friendlyRayClear(Point3 from,Point3 to)const;
     bool friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2& goal,float& goalFeet,float targetFeet=std::numeric_limits<float>::quiet_NaN());
     int nearbyFriendly()const;

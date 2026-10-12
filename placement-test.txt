@@ -1,1 +1,0 @@
-All machinery footprints rest on continuous floor; no wall intersections: PASS
