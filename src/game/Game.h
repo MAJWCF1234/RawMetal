@@ -5,9 +5,9 @@
 #include <vector>
 #include "../audio/Sound.h"
 #include "Combat.h"
-#include "GuardActions.h"
-#include "GuardRoles.h"
-#include "DroneSystem.h"
+#include "ai/guard/Config.h"
+#include "ai/guard/GuardCtx.h"
+#include "ai/engineer/Drones.h"
 #include <string>
 #include <string_view>
 #include <cstdint>
@@ -80,7 +80,7 @@ struct Pickup {
 };
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
 struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;};
-struct NpcWeaponPose {bool armed=false,handgun=false;float treatment=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0;};
+struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false;float treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0;};
 enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone};
 struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
 struct AiTargetRef {ShotKind kind=ShotKind::None;int level=0,index=-1;};
@@ -138,6 +138,7 @@ struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,R
 
 
 class Game {
+    friend struct GuardCtx;
 public:
     explicit Game(WorldId id=WorldId::Campaign);
     explicit Game(std::shared_ptr<const CustomCampaign> campaign);
@@ -416,6 +417,8 @@ private:
     ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
     ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli=nullptr);
     void guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove);
+    void civilianEscortIntent(World& world,int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<Enemy>& enemies,Vec2& goal,float& goalZ,bool& wantsMove,float& speedScale);
+    GuardCtx makeGuardCtx(size_t actor,int level,const ActorTrack& track,ActorPose& pose){return {*this,actor,level,track,pose};}
     void validateGuardState(size_t actor)const;
     void updateGuardFlags();
     void updateGuardCombat(float dt);
@@ -443,6 +446,7 @@ private:
     bool guardDangerIntent(size_t actor,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
     void validateGuardDanger(size_t actor)const;
     void guardSupportIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
+    void guardEngineerIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     void validateGuardSupport(size_t actor)const;
     void guardAvoidGrenade(size_t actor,const ActorPose& pose,Vec2& goal,float& goalZ,bool& wantsMove);
     void updateEngineerDrones(float dt);

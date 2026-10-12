@@ -1,6 +1,6 @@
 # Shared AI perception
 
-Enemy creatures and idle friendly workers use `src/game/AIPerception.h` for
+Enemy creatures and idle friendly workers use `src/game/ai/Perception.h` for
 range, field of view and geometry-based visibility. Detection uses vertical
 separation as well as horizontal distance.
 

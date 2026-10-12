@@ -54,32 +54,37 @@ add_executable(RawMetal WIN32
     game/Streaming.cpp
     game/Mechanisms.cpp
     game/ActorTimeline.cpp
-    game/FriendlyAI.cpp
-    game/FriendlyStreaming.cpp
-    game/GuardAI.cpp
-    game/GuardTest.cpp
-    game/GuardCombat.cpp
-    game/GuardCombatTest.cpp
-    game/GuardTactics.cpp
-    game/GuardTacticsTest.cpp
-    game/GuardTacticsInspection.cpp
-    game/GuardTargets.cpp
-    game/GuardSquads.cpp
-    game/GuardPolicyTest.cpp
-    game/GuardDefenseTest.cpp
-    game/GuardPursuitTest.cpp
-    game/GuardActionTest.cpp
-    game/GuardSupport.cpp
-    game/GuardRoleTest.cpp
-    game/GuardDanger.cpp
-    game/GuardDangerTest.cpp
-    game/GuardDangerInspection.cpp
-    game/DroneSystem.cpp
-    game/DroneSystemTest.cpp
-    game/TacticalGrenades.cpp
-    game/TacticalGrenadeTest.cpp
-    game/GuardPolicyInspection.cpp
-    game/KillSquadInspection.cpp
+    game/ai/Hearing.cpp
+    game/ai/enemy/EnemyAI.cpp
+    game/ai/friendly/FriendlyAI.cpp
+    game/ai/friendly/Streaming.cpp
+    game/ai/friendly/CivilianEscort.cpp
+    game/ai/guard/GuardCtx.cpp
+    game/ai/guard/Mind.cpp
+    game/ai/guard/Combat.cpp
+    game/ai/guard/Tactics.cpp
+    game/ai/guard/Targets.cpp
+    game/ai/guard/Squads.cpp
+    game/ai/guard/Danger.cpp
+    game/ai/guard/Support.cpp
+    game/ai/guard/tests/GuardTest.cpp
+    game/ai/guard/tests/CombatTest.cpp
+    game/ai/guard/tests/TacticsTest.cpp
+    game/ai/guard/tests/PolicyTest.cpp
+    game/ai/guard/tests/DefenseTest.cpp
+    game/ai/guard/tests/PursuitTest.cpp
+    game/ai/guard/tests/ActionTest.cpp
+    game/ai/guard/tests/RoleTest.cpp
+    game/ai/guard/tests/DangerTest.cpp
+    game/ai/engineer/Drones.cpp
+    game/ai/engineer/Support.cpp
+    game/ai/engineer/DronesTest.cpp
+    game/ai/grenades/TacticalGrenades.cpp
+    game/ai/grenades/TacticalGrenadeTest.cpp
+    game/ai/debug/TacticsInspection.cpp
+    game/ai/debug/PolicyInspection.cpp
+    game/ai/debug/DangerInspection.cpp
+    game/ai/debug/KillSquadInspection.cpp
     game/Hitscan.cpp
     world/Ballistics.cpp
     game/CampaignMapTest.cpp
@@ -87,8 +92,6 @@ add_executable(RawMetal WIN32
     game/ServiceMapTest.cpp
     game/Clutter.cpp
     game/Ragdoll.cpp
-    game/AI.cpp
-    game/Hearing.cpp
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp
     world/World.cpp
