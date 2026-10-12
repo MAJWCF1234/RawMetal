@@ -12,12 +12,36 @@ AiTarget Game::guardSquadReport(size_t actor)const{
  }return report;
 }
 bool Game::guardFireSlot(size_t actor)const{return !m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0;}
+bool Game::guardSuppressionPoint(size_t actor,Point3& point)const{
+ const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto target=guardTarget(actor);
+ if(!guardSuppressionEnabled(t.ai)||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!get("guard_confirmed")||!get("guard_memory")||!get("weapon_target")||get("guard_seen")||get("guard_suppress_ms")<=0||guardFlankSide(actor)!=0||guardCanSee(actor,npc.pose,target))return false;
+ bool flank=false;auto faction=actorFaction(t);
+ for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];const auto&c=other.track();
+  if(c.ai.mode!=ActorAiMode::Guard||!c.ai.armed||c.ai.squad!=t.ai.squad||actorFaction(c)!=faction||!chunkResident(other.level)||!autonomousActor(c)||other.pose.clip==4||(c.deadState&&state(c.deadState))||!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")))continue;
+  auto selected=guardTarget(i);if(selected.kind==target.kind&&selected.index==target.index&&selected.level==target.level){flank=true;break;}
+ }
+ if(!flank)return false;
+ // Probe only remembered cover. Never consult the concealed body's current
+ // coordinates for aim, nor shoot a character which enters the probe line.
+ auto origin=chunkOffset(npc.level);Point3 remembered{get("weapon_x")*.001f-origin.x,get("weapon_y")*.001f-origin.y,get("weapon_z")*.001f};
+ Point3 direction=remembered-Point3{npc.pose.position.x,npc.pose.position.y,npc.pose.z+t.scale*.7f};float horizontal=std::hypot(direction.x,direction.y);if(horizontal<.001f||horizontal>t.ai.attackRange)return false;
+ Point3 side{-direction.y/horizontal,direction.x/horizontal,0};auto shift=chunkOffset(npc.level)-chunkOffset(m_level);
+ // A small side probe supplies a reachable exposed edge of the obstruction.
+ // All three are tightly bounded around the last observed ray; open space,
+ // nearer barrels/shoulders and any intervening body fail closed.
+ for(float offset:{.25f,-.25f,0.f}){auto aim=remembered+side*offset;auto probe=npcWeaponPoseAt(actor,npc.pose,aim,1);auto delta=aim-probe.muzzle;float range=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);auto hit=guardShot(actor,npc.pose,probe);if(hit.kind!=ShotKind::Solid||hit.distance<.35f||hit.distance>range+.1f)continue;
+  auto local=hit.point-Point3{shift.x,shift.y,0}-hit.normal*.015f;auto weapon=npcWeaponPoseAt(actor,npc.pose,local,1);auto check=guardShot(actor,npc.pose,weapon);
+  if(check.kind!=ShotKind::Solid||check.distance<.35f)continue;point=local;return true;
+ }return false;
+}
 void Game::updateGuardSquadSlots(float dt){
  struct Group{StateId key;std::vector<size_t> actors;};std::vector<Group> groups;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard||!t.ai.squad)continue;
   int lease=std::max(0,state(friendlyKey(i,"guard_slot_ms"))-npcMilliseconds(i,dt,"squad_fraction"));auto target=guardTarget(i);
-  bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&guardState(i)==GuardState::Alert&&npc.pose.clip!=1&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_recovery"))&&!guardMeleeReady(i,npc.pose,target)&&guardCanSee(i,npc.pose,target)&&guardShotMatches(i,guardShot(i,npc.pose,npcWeaponPoseAt(i,npc.pose,{target.position.x,target.position.y,target.feet+target.height*.6f},1)));
-  eligible=eligible&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
+  Point3 cover;bool suppression=guardSuppressionPoint(i,cover);
+  bool ordinary=guardState(i)==GuardState::Alert&&guardCanSee(i,npc.pose,target)&&guardShotMatches(i,guardShot(i,npc.pose,npcWeaponPoseAt(i,npc.pose,{target.position.x,target.position.y,target.feet+target.height*.6f},1)));
+  bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&npc.pose.clip!=1&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_recovery"))&&!state(friendlyKey(i,"grenade_windup"))&&!guardMeleeReady(i,npc.pose,target)&&(ordinary||suppression);
+  eligible=eligible&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"support_target"))&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
   auto key=squadKey(actorFaction(t),t.ai.squad);auto group=std::find_if(groups.begin(),groups.end(),[&](const Group&g){return g.key==key;});if(group==groups.end()){groups.push_back({key,{}});group=std::prev(groups.end());}group->actors.push_back(i);
  }
  for(const auto&group:groups){int occupied=0;for(auto i:group.actors)occupied+=state(friendlyKey(i,"guard_slot"))!=0;
@@ -27,7 +51,9 @@ void Game::updateGuardSquadSlots(float dt){
  }
 }
 int Game::guardFlankSide(size_t actor)const{
- const auto&npc=m_friendlyActors[actor];if(!npc.track().ai.squad)return 0;auto target=guardTarget(actor);if(!target.valid())return 0;int rank=0,count=0;
+ const auto&npc=m_friendlyActors[actor];if(!npc.track().ai.squad)return 0;auto target=guardTarget(actor);if(!target.valid())return 0;
+ if(npc.track().ai.role!=GuardSquadRole::Default){if(!guardRoleProfile(npc.track().ai.role).flanks)return 0;return npc.track().ai.role==GuardSquadRole::Rusher?1:-1;}
+ int rank=0,count=0;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();if(t.ai.mode!=ActorAiMode::Guard||!t.ai.armed||t.ai.squad!=npc.track().ai.squad||actorFaction(t)!=actorFaction(npc.track())||!autonomousActor(t)||other.pose.clip==4||(t.deadState&&state(t.deadState))||!chunkResident(other.level))continue;
   auto selected=guardTarget(i);if(selected.kind!=target.kind||selected.index!=target.index||selected.level!=target.level)continue;auto delta=other.pose.position+chunkOffset(other.level)-chunkOffset(npc.level)-npc.pose.position;if(lengthSq(delta)>18*18)continue;if(i<actor)++rank;++count;
  }return count>1?(rank%3==1?-1:rank%3==2?1:0):0;

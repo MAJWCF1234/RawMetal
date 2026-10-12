@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "AINavigation.h"
 #include <queue>
 namespace retro {
 StateId Game::friendlyKey(size_t actor,std::string_view field)const{
@@ -21,9 +22,14 @@ void Game::rebuildFriendlyActors(){
  }
 }
 bool Game::friendlyChunkNeeded(int level)const{
+ if(engineerDroneChunkNeeded(level))return true;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
-  if(!autonomousActor(track)||npc.pose.clip==4||!state(friendlyKey(i,"engaged")))continue;
-  if(track.ai.mode==ActorAiMode::Guard)continue;
+  if(!autonomousActor(track)||npc.pose.clip==4)continue;
+  if(track.ai.mode==ActorAiMode::Guard){
+   bool active=(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
+   int next=state(friendlyKey(i,"guard_route_next"))-1;if(active&&(npc.level==level||next==level))return true;continue;
+  }
+  if(!state(friendlyKey(i,"engaged")))continue;
   bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;
   int next=state(friendlyKey(i,"route_next"))-1;
   if(follow&&next>=0&&(npc.level==level||next==level))return true;
@@ -41,14 +47,16 @@ bool Game::friendlyBoundaryOpen(int from,int to,Vec2 global)const{
  if(std::fabs(delta.x+24)<.01f&&std::fabs(delta.y)<.01f)return a.openWestBoundary()&&b.openEastBoundary();
  if(std::fabs(delta.x)>.01f||std::fabs(std::fabs(delta.y)-24)>.01f)return false;
  bool south=delta.y>0;if(south?(a.openSouthBoundary()&&b.openNorthBoundary()):(a.openNorthBoundary()&&b.openSouthBoundary()))return true;
- for(const auto&door:a.doors())if((south?door.transfer:door.entry)&&door.open>.05f&&global.x>origin.x+door.left+.2f&&global.x<origin.x+door.right-.2f)
-  for(const auto&match:b.doors())if((south?match.entry:match.transfer)&&match.open>.05f&&global.x>other.x+match.left+.2f&&global.x<other.x+match.right-.2f)return true;
+ auto permitted=[&](const World&w,int level,const Door&door){return !(door.requireEnemiesClear&&hostilesRemaining(level))&&!(door.requireControl&&!w.controlReleased())&&(!door.requireState||state(door.requireState)==door.requireValue);};
+ for(const auto&door:a.doors())if((south?door.transfer:door.entry)&&door.open>.05f&&permitted(a,from,door)&&global.x>origin.x+door.left+.2f&&global.x<origin.x+door.right-.2f)
+  for(const auto&match:b.doors())if((south?match.entry:match.transfer)&&match.open>.05f&&permitted(b,to,match)&&global.x>other.x+match.left+.2f&&global.x<other.x+match.right-.2f)return true;
  return false;
 }
 bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){
  auto origin=chunkOffset(level),delta=goal-start;int samples=std::max(1,int(std::ceil(length(delta)/.08f))),previous=level;float z=feet;
  for(int step=0;step<=samples;++step){Vec2 global=origin+start+delta*(float(step)/samples);int center=friendlyChunkAt(global,previous);
   if(center<0||!friendlyBoundaryOpen(previous,center,global))return false;ensureChunk(center);float ground=-10000;
+  if(step>0){auto before=origin+start+delta*(float(step-1)/samples),off=chunkOffset(center);if(!aiStructureSegment(friendlyWorld(center),before-off,z,global-off,height))return false;}
   for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);ground=std::max(ground,friendlyWorld(chunk).supportBelow(local.x,local.y,z+.265f));}
   float stepHeight=friendlyWorld(center).hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f)return false;
   for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);
@@ -64,7 +72,7 @@ bool Game::friendlyRayClear(Point3 from,Point3 to)const{
   if(!world.fits(local.x,local.y,point.z,.015f)||world.doorBlocks(local.x,local.y,point.z,.015f))return false;previous=level;
  }return true;
 }
-bool Game::friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2&goal,float&goalFeet){
+bool Game::friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2&goal,float&goalFeet,float targetFeet){
  if(from==target)return false;std::vector<int> parent(chunkCount(),-1);std::queue<int> queue;queue.push(from);parent[from]=from;
  while(!queue.empty()&&parent[target]<0){int current=queue.front();queue.pop();auto origin=chunkOffset(current);
   for(int next=0;next<chunkCount();++next)if(parent[next]<0){auto other=chunkOffset(next),delta=other-origin;if(!((std::fabs(std::fabs(delta.x)-24)<.01f&&std::fabs(delta.y)<.01f)||(std::fabs(std::fabs(delta.y)-24)<.01f&&std::fabs(delta.x)<.01f)))continue;
@@ -77,12 +85,29 @@ bool Game::friendlyPortal(int from,int target,Vec2 position,float feet,float hei
  for(int cell=-1;cell<24;++cell){float along=cell<0?(std::fabs(delta.x)>1?position.y:position.x):cell+.5f;along=std::clamp(along,.35f,23.65f);
   Vec2 inside=std::fabs(delta.x)>1?Vec2{delta.x>0?23.65f:.35f,along}:Vec2{along,delta.y>0?23.65f:.35f};auto outside=inside+normalized(delta)*.7f;
   if(!friendlyBoundaryOpen(from,next,origin+outside))continue;
-  for(float trial:{feet,m_player.z}){float z=friendlyWorld(from).supportBelow(inside.x,inside.y,trial+.265f),end=z;
+  for(float trial:{feet,std::isfinite(targetFeet)?targetFeet:m_player.z}){float z=friendlyWorld(from).supportBelow(inside.x,inside.y,trial+.265f),end=z;
    if(!friendlyWalkSegment(from,inside,z,outside,height,&end))continue;float score=lengthSq(inside-position)+std::fabs(z-feet)*8;
    if(score<best){best=score;goal=outside;goalFeet=z;found=true;}
   }
  }
  return found;
+}
+bool Game::guardRoute(int level,size_t actor,Vec2 globalGoal,float feet,int ms,Vec2&goal,float&goalFeet){
+ const auto&npc=m_friendlyActors.at(actor);auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto put=[&](const char*f,int v){setState(friendlyKey(actor,f),v);};
+ auto origin=chunkOffset(level);int target=friendlyChunkAt(globalGoal,level),next=get("guard_route_next")-1;goal=npc.pose.position;goalFeet=npc.pose.z;
+ if(target<0){put("guard_route_target",0);put("guard_route_next",0);put("guard_route_wait",0);return false;}
+ if(target==level){goal=globalGoal-origin;goalFeet=feet;put("guard_route_target",target+1);put("guard_route_next",0);put("guard_route_wait",0);return true;}
+ int wait=get("guard_route_target")==target+1?std::max(0,get("guard_route_wait")-ms):0;
+ Vec2 portalGlobal{get("guard_portal_x")*.001f,get("guard_portal_y")*.001f};
+ bool cached=get("guard_route_target")==target+1&&next>=0&&next<chunkCount()&&next!=level&&wait>0&&friendlyBoundaryOpen(level,next,portalGlobal);
+ if(!cached&&m_npcNavBudget>0&&(wait==0||next>=0||get("guard_route_target")!=target+1)){
+  --m_npcNavBudget;Vec2 localPortal;float z=feet;cached=friendlyPortal(level,target,npc.pose.position,npc.pose.z,npc.track().scale,localPortal,z,feet);
+  next=cached?friendlyChunkAt(localPortal+origin,level):-1;put("guard_route_next",next+1);
+  if(cached){portalGlobal=localPortal+origin;put("guard_portal_x",int(std::round(portalGlobal.x*1000)));put("guard_portal_y",int(std::round(portalGlobal.y*1000)));put("guard_portal_z",int(std::round(z*1000)));}
+  wait=600+int(actor%7)*30;
+ }
+ put("guard_route_target",target+1);put("guard_route_wait",wait);
+ if(cached){goal=portalGlobal-origin;goalFeet=get("guard_portal_z")*.001f;}return cached;
 }
 void Game::updateFriendlyActors(float dt,bool guards){
  auto stimuli=guards?aiStimuli():std::vector<AiStimulus>{};
@@ -92,7 +117,10 @@ void Game::updateFriendlyActors(float dt,bool guards){
   if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
   if(npc.level==m_level)setState(friendlyKey(i,"engaged"),1);
   if(!chunkResident(npc.level)){bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;Vec2 goal;float z;
-   if(track.ai.mode==ActorAiMode::Guard)continue;
+   if(track.ai.mode==ActorAiMode::Guard){
+    bool active=(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
+    if(dt<=0||!active||m_npcNavBudget<=0)continue;--m_npcNavBudget;ensureChunk(npc.level);
+   }else{
    if(dt<=0||!follow||!state(friendlyKey(i,"engaged")))continue;
    int wait=std::max(0,state(friendlyKey(i,"route_wait"))-std::max(1,int(std::round(dt*1000))));setState(friendlyKey(i,"route_wait"),wait);
    if(wait>0&&state(friendlyKey(i,"route_player"))==m_level+1&&!state(friendlyKey(i,"route_next")))continue;
@@ -101,6 +129,7 @@ void Game::updateFriendlyActors(float dt,bool guards){
    setState(friendlyKey(i,"route_player"),m_level+1);setState(friendlyKey(i,"route_wait"),600+int(i%7)*30);setState(friendlyKey(i,"route_next"),found?friendlyChunkAt(goal+chunkOffset(npc.level),npc.level)+1:0);
    if(!found)continue;
    setState(friendlyKey(i,"portal_x"),int(std::round(goal.x*1000)));setState(friendlyKey(i,"portal_y"),int(std::round(goal.y*1000)));setState(friendlyKey(i,"portal_z"),int(std::round(z*1000)));
+   }
   }
   auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt,&stimuli);
   auto global=npc.pose.position+chunkOffset(npc.level);int destination=friendlyChunkAt(global,npc.level);
@@ -108,6 +137,13 @@ void Game::updateFriendlyActors(float dt,bool guards){
   if(destination!=npc.level){auto shift=chunkOffset(npc.level)-chunkOffset(destination);npc.pose.position+=shift;
    for(auto field:std::array<std::array<const char*,2>,4>{{{"way_x","way_y"},{"goal_x","goal_y"},{"threat_x","threat_y"},{"hit_x","hit_y"}}}){setState(friendlyKey(i,field[0]),state(friendlyKey(i,field[0]))+int(std::round(shift.x*1000)));setState(friendlyKey(i,field[1]),state(friendlyKey(i,field[1]))+int(std::round(shift.y*1000)));}
    npc.level=destination;setState(friendlyKey(i,"repath"),0);
+   if(track.ai.mode==ActorAiMode::Guard){
+    setState(friendlyKey(i,"guard_route_next"),0);setState(friendlyKey(i,"guard_route_wait"),0);
+    Vec2 cover{state(friendlyKey(i,"guard_cover_x"))*.001f+shift.x,state(friendlyKey(i,"guard_cover_y"))*.001f+shift.y};
+    bool inside=cover.x>=.35f&&cover.x<=23.65f&&cover.y>=.35f&&cover.y<=23.65f;
+    if(!inside){setState(friendlyKey(i,"guard_cover"),0);setState(friendlyKey(i,"guard_cover_mode"),0);setState(friendlyKey(i,"guard_cover_wait"),0);}
+    setState(friendlyKey(i,"guard_cover_x"),int(std::round(std::clamp(cover.x,0.f,24.f)*1000)));setState(friendlyKey(i,"guard_cover_y"),int(std::round(std::clamp(cover.y,0.f,24.f)*1000)));
+   }
    if(npc.pose.clip==4&&track.deadState){setState(actorPositionState(track.deadState,0),int(std::round(npc.pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(npc.pose.position.y*1000)));}
   }
   setState(friendlyKey(i,"chunk"),npc.level+1);setState(friendlyKey(i,"x"),int(std::round(npc.pose.position.x*1000)));setState(friendlyKey(i,"y"),int(std::round(npc.pose.position.y*1000)));setState(friendlyKey(i,"z"),int(std::round(npc.pose.z*1000)));setState(friendlyKey(i,"yaw"),int(std::round(std::remainder(npc.pose.yaw,2*kPi)*10000)));setState(friendlyKey(i,"phase"),int(std::round(npc.pose.phase*10000)));setState(friendlyKey(i,"walking"),npc.pose.clip==1);setState(friendlyKey(i,"saved"),1);

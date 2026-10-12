@@ -50,6 +50,8 @@ ACTOR_GUARD|map|actor|sightRange|sightDot|recognitionMs|searchMs|alertFlag
 ACTOR_PATROL|map|actor|x|y|absoluteZ|pauseMs
 ACTOR_WEAPON|map|actor|weapon|aimMs|recoveryMs|attackRange|attackDamage
 ACTOR_FACTION|map|actor|faction|squad
+ACTOR_TACTICS|map|actor|suppress|grenades
+ACTOR_ROLE|map|actor|role
 ```
 
 `ACTOR_GUARD` is optional: defaults are an 11 m sight range, a 0.65 sight-cone dot
@@ -60,17 +62,20 @@ Guard configuration, patrol and weapon records require an existing actor whose
 final mode is Guard, including when records are reordered. Faction configuration
 also accepts other actor modes; only nonempty squads require Guard mode.
 
-Guards must use the Worker visual and cannot be moving platforms. Author 1–64
+Guards must use a human visual and cannot be moving platforms. Visual 0 is Worker,
+4 Cleanup Assault, 5 Cleanup Engineer, 6 Cleanup Sharpshooter, 7 Cleanup Heavy,
+8 Cleanup Medic and 9 Cleanup Rusher. Author 1–64
 patrol points, visited in the listed order. Points use coordinates within the
 guard's home chunk (0.25–23.75 m on each horizontal axis) and absolute elevation
 (-100–100 m). Each point pauses for 0–60000 ms. Patrol routes remain in the home
-chunk; they do not use escort chunk migration. A single point authors a stationary
+chunk. Threat pursuit may physically migrate through permitted seams/transfers;
+after its search expires the guard returns to its original home patrol. A single point authors a stationary
 post with the configured pause. Sight range accepts 1–30 m, the sight dot threshold
 0–0.99, recognition 100–5000 ms and search 250–30000 ms. Existing actor records and
 save version 13 remain compatible.
 
 Guards are unarmed unless `ACTOR_WEAPON` is present. Weapon 1 selects the existing
-Shotgun; other values are rejected. The record has exactly eight fields and may
+Shotgun; weapon 2 selects the shared Handgun. Other values are rejected. The record has exactly eight fields and may
 appear anywhere after its actor's `ACTOR` record. Its final AI mode must be Guard,
 even if the weapon parameters are all defaults. Aim duration accepts 100–3000 ms,
 recovery 300–5000 ms, range 1–18 m and damage 1–100. Omitted weapon configuration
@@ -80,7 +85,7 @@ engine's shared guard attack behavior; it adds no campaign-specific combat case.
 
 `ACTOR_FACTION` has exactly five fields, must follow an existing `ACTOR`, and
 does not change its AI mode. Faction IDs are 0 default, 1 Player, 2 Facility,
-3 Creature, 4 Raider and 5 Neutral. Default guards are Raider; other Worker
+3 Creature, 4 Raider and 5 Neutral. Default guards are Raider; other human
 actors are Facility, Wasp/Huntsman actors Creature and other visuals Neutral.
 Player and Facility are allied. Creature and Raider oppose those allies and
 each other. Neutral actors are ignored as automatic threats, but a guard can
@@ -94,3 +99,19 @@ bystanders. Patrol failure, confirmed threat memory, bash/reload/retreat clocks
 and squad decisions use shared engine state and persist without changing save
 version 13. See [AI behavior](ai-perception.md) and
 [the policy verification report](guard-policy-pass-20261011.md).
+
+`ACTOR_TACTICS` has exactly five fields, follows an existing actor and requires
+final Guard mode. Suppress is 0 or 1; grenades is 0–4. Active tactics require an
+equipped weapon. Defaults are both zero. Suppression needs a fresh observed solid
+cover point and a teammate still flanking that target. Grenades use finite shared
+projectile physics and saved inventory, with throw/reload exclusion and allied
+landing checks. See [the cleanup squad pass](kill-squad-pass-20261011.md).
+
+`ACTOR_ROLE` values are 0 Independent, 1 Assault, 2 Engineer, 3 Sharpshooter,
+4 Heavy, 5 Medic and 6 Rusher. Explicit roles require an armed Guard and a named
+squad. They select flank, spacing, suppression and support policies independently
+of visual appearance. Medic has two 30-point treatments with a 2400 ms stationary
+work interval and a six-second cooldown. Engineer has two drone deployments,
+one active drone at a time, 80 total repair points and a four-drone shared pool.
+Drones hold visible firing positions, follow their living Engineer through open
+seams, spend 24 cannon rounds, and retire when the owner dies or is disabled.

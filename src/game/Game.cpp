@@ -364,7 +364,9 @@ void Game::update(const InputState& input, float dt) {
         }
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);
+        updateEngineerDrones(dt);
         updateGuardCombat(dt);
+        updateTacticalGrenades(dt);
         updateEnemies(dt);
         updatePickups();
 

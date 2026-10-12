@@ -102,7 +102,7 @@ preserved. Enter `X17–17.8, Y12–13` at ground level to start the authored
 `ash_team_start` sequence; after 100 ms it sets `ash_team_enabled`. Retreat to
 the original hiding position `(16.7, 10.1, 0)` to observe safely.
 
-That flag enables a second 1.6 m Worker guard at `(21.5, 12.5, 0)` facing south
+That flag enables a second 1.6 m Cleanup Assault guard at `(21.5, 12.5, 0)` facing south
 along +Y, with 70 health and the same shotgun settings/faction/squad. It also
 enables a stationary 1.2 m Wasp target with 250 health at `(21.5, 17.5, 0)`,
 explicitly Creature faction 3. A supported 2 m metal panel centred at
@@ -123,7 +123,26 @@ tube after two damaging shots to show retreat before the test target dies.
 Observer placement occurs after each simulation milestone. See
 [shared policy behavior](ai-perception.md) and
 [the policy verification report](guard-policy-pass-20261011.md).
-The Worker appearance remains prototype art, and full GoldSrc parity is unproven.
+The original solo guard retains its Worker appearance; the second now uses the
+supplied cleanup model. Full GoldSrc parity is unproven.
+
+## Stitched cleanup squad experiment, 11 October 2026
+
+The same temporary custom pack now has three chunks. The original Ash chunk is
+followed by a cargo ambush at grid `(1,0)` and a pursuit refuge at `(1,1)`.
+Enter the original chunk's eastern opening at Y18–22 to activate six supplied
+cleanup members: Engineer with drones and grenades, Assault, Sharpshooter,
+Heavy, Medic and Rusher. All are 1.6 m tall, share a Raider squad, and use
+the Medic handgun or existing shotgun with distinct movement/aim/recovery/damage settings.
+The Limitator is not placed.
+
+Retreat through the cargo room's south opening at X17–20 to test observed-target
+pursuit, lost-sight search and physical return home. Use the tall metal panels
+for cover. Lamps attach to a supported concrete roof. The JSON/TXT pair has
+97 matching runtime records. `--kill-squad-inspection` exercises the actual
+activation, physical grenade, damaging shot and stitched pursuit in Vulkan.
+See [the cleanup squad report](kill-squad-pass-20261011.md) for systems,
+prototype-animation limits and validation evidence.
 
 ## Keep authoring and runtime in sync
 

@@ -149,7 +149,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
    map->timedSequences.push_back({stateId(decode(f[2])),stateId(decode(f[3])),number(f,4,"sequence x1"),number(f,5,"sequence y1"),number(f,6,"sequence x2"),number(f,7,"sequence y2"),number(f,8,"sequence bottom"),number(f,9,"sequence top"),integer(f,10,"sequence duration"),integer(f,11,"sequence finish time"),integer(f,12,"sequence sound interval"),integer(f,13,"sequence sound cutoff"),Sound(tick),number(f,15,"sequence gain"),number(f,16,"sequence pitch")});
    if(f.size()>17)map->timedSequences.back().loop=boolean(f,17,"sequence loop");
   }else if(tag=="ACTOR"){
-   if(f.size()!=8)throw std::runtime_error("malformed ACTOR record");auto map=mapAt(maps,f);int kind=integer(f,3,"actor visual");if(kind<0||kind>3||f[2].empty())throw std::runtime_error("invalid actor visual or timer");
+   if(f.size()!=8)throw std::runtime_error("malformed ACTOR record");auto map=mapAt(maps,f);int kind=integer(f,3,"actor visual");if(kind<0||kind>9||f[2].empty())throw std::runtime_error("invalid actor visual or timer");
    if(integer(f,7,"actor index")!=int(map->actorTracks.size()))throw std::runtime_error("actor indices must be sequential");
    map->actorTracks.push_back({stateId(decode(f[2])),ActorVisual(kind),number(f,4,"actor scale"),boolean(f,5,"actor loop"),boolean(f,6,"actor tool"),{}});
   }else if(tag=="ACTOR_AI"){
@@ -168,9 +168,15 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
   }else if(tag=="ACTOR_WEAPON"){
    if(f.size()!=8)throw std::runtime_error("malformed ACTOR_WEAPON record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
    if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("weapon configuration has no actor");
-   if(integer(f,3,"actor weapon")!=1)throw std::runtime_error("invalid actor weapon; only Shotgun (1) is supported");
+   int weapon=integer(f,3,"actor weapon");if(weapon<1||weapon>2)throw std::runtime_error("invalid actor weapon; use Shotgun (1) or Handgun (2)");map->actorTracks[size_t(index)].ai.weapon=weapon;
    auto& ai=map->actorTracks[size_t(index)].ai;ai.armed=true;ai.aimMs=integer(f,4,"weapon aim duration");ai.recoveryMs=integer(f,5,"weapon recovery duration");ai.attackRange=number(f,6,"weapon attack range");ai.attackDamage=number(f,7,"weapon attack damage");
    guardTargets.emplace_back(integer(f,1,"map index"),index);
+  }else if(tag=="ACTOR_ROLE"){
+   if(f.size()!=4)throw std::runtime_error("malformed ACTOR_ROLE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),role=integer(f,3,"squad role");if(index<0||index>=int(map->actorTracks.size())||role<0||role>6)throw std::runtime_error("invalid guard role");map->actorTracks[size_t(index)].ai.role=GuardSquadRole(role);guardTargets.emplace_back(integer(f,1,"map index"),index);
+  }else if(tag=="ACTOR_TACTICS"){
+   if(f.size()!=5)throw std::runtime_error("malformed ACTOR_TACTICS record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),suppress=integer(f,3,"suppress fire");
+   if(index<0||index>=int(map->actorTracks.size())||suppress<0||suppress>1)throw std::runtime_error("invalid actor tactics target or suppression");
+   auto&ai=map->actorTracks[size_t(index)].ai;ai.suppress=suppress!=0;ai.grenades=integer(f,4,"grenade inventory");guardTargets.emplace_back(integer(f,1,"map index"),index);
   }else if(tag=="ACTOR_PATROL"){
    if(f.size()!=7)throw std::runtime_error("malformed ACTOR_PATROL record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
    if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("patrol point has no actor");

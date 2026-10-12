@@ -7,7 +7,7 @@
 #include <sstream>
 #include <map>
 namespace retro {
-Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277),m_nodeFilter(nodeFilter){
+Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||(id>=303&&id<=313)),m_nodeFilter(nodeFilter){
  auto resource=loadResource(id);
  ufbx_load_opts opts{};opts.evaluate_skinning=true;opts.target_axes=ufbx_axes_right_handed_y_up;opts.target_unit_meters=1;
  if(!resource.empty()&&resource[0]=='#')opts.file_format=UFBX_FILE_FORMAT_OBJ;
@@ -38,6 +38,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
   if(vertices!=triangles.size()*3||m_creatureSamples<2||m_creatureSamples>128||clips<1||clips>32||m_creatureVertices==0||m_creatureVertices>65535||m_creatureFrames.size()!=20+size_t(vertices)*2+size_t(m_creatureVertices)*6*m_creatureSamples*clips)throw std::runtime_error("Creature animation topology mismatch");
   m_creatureClips=clips;
   if(id==277){m_anchorFrames=loadResource(282);if(m_anchorFrames.size()!=size_t(clips)*m_creatureSamples*24)throw std::runtime_error("Actor attachment topology mismatch");}
+    if(id==323){m_anchorFrames=loadResource(339);if(m_anchorFrames.size()!=size_t(clips)*m_creatureSamples*24)throw std::runtime_error("Medic treatment attachment topology mismatch");}
   for(size_t i=0;i<vertices;++i){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+i*2,2);if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");}
  }
  for(auto n:m_scene->nodes)if(n->mesh){description+=" mesh "+std::string(n->name.data)+" triangles "+std::to_string(n->mesh->num_triangles)+"\n";for(auto mat:n->materials)description+=" material "+std::string(mat->name.data)+"\n";}
