@@ -21,7 +21,18 @@
 namespace retro {
 namespace {
 constexpr float FOV = 75.0f * kPi / 180.0f;
+int g_texturePresentScale = 2;
 std::uint32_t rgb(int r,int g,int b){ return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
+std::uint32_t sampleBilinear(const std::vector<std::uint32_t>& pixels,int width,int height,float x,float y){
+ x=std::clamp(x,0.f,float(width-1));y=std::clamp(y,0.f,float(height-1));
+ int x0=int(x),y0=int(y),x1=std::min(width-1,x0+1),y1=std::min(height-1,y0+1);
+ float fx=x-x0,fy=y-y0;
+ auto mix=[](std::uint32_t a,std::uint32_t b,float t){std::uint32_t out=0;for(int c=0;c<4;++c){int shift=c*8;auto av=(a>>shift)&255u,bv=(b>>shift)&255u;out|=unsigned(av*(1-t)+bv*t)<<shift;}return out;};
+ auto a=mix(pixels[size_t(y0*width+x0)],pixels[size_t(y0*width+x1)],fx);
+ auto b=mix(pixels[size_t(y1*width+x0)],pixels[size_t(y1*width+x1)],fx);
+ return mix(a,b,fy);
+}
+}
 
 const std::array<std::array<unsigned char,5>, 46> glyphs = {{
 {{0x7,0x5,0x5,0x5,0x7}},{{0x2,0x6,0x2,0x2,0x7}},{{0x7,0x1,0x7,0x4,0x7}},{{0x7,0x1,0x7,0x1,0x7}},{{0x5,0x5,0x7,0x1,0x1}},
@@ -35,9 +46,13 @@ const std::array<std::array<unsigned char,5>, 46> glyphs = {{
 {{0x1,0x2,0x4,0x2,0x1}},{{0x5,0x1,0x2,0x4,0x5}},{{0x1,0x2,0x2,0x2,0x1}},{{0x4,0x2,0x2,0x2,0x4}}
 }};
 int gi(char c){ if(c>='0'&&c<='9')return c-'0'; if(c>='A'&&c<='Z')return 10+c-'A'; if(c==' ')return 36;const char* extra="/-.><%()";auto found=std::strchr(extra,c);return found?38+int(found-extra):37; }
-}
 
 SoftwareRenderer::~SoftwareRenderer()=default;
+void SoftwareRenderer::setTexturePresentScale(int scale){
+ if(scale!=1&&scale!=2&&scale!=4)return;
+ g_texturePresentScale=scale;
+}
+int SoftwareRenderer::texturePresentScale(){return g_texturePresentScale;}
 bool SoftwareRenderer::enableHardware(void* window){
  if(m_gpu)return true;
  // Delay-load the system Vulkan loader so unsupported machines can still run.

@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "../renderer/SoftwareRenderer.h"
 #include <sstream>
 #include <cctype>
 #include <fstream>
@@ -15,7 +16,7 @@ void Game::executeConsole(std::string command){
   for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
-  m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
+  m_consoleLog.push_back("RELOAD / WHERE / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
   m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL WASTELAND / 15 STITCHED SURFACE CHUNKS.");
@@ -28,6 +29,10 @@ void Game::executeConsole(std::string command){
  else if(verb=="r_scale"){
   if(arg=="50"||arg=="75"||arg=="100"){m_renderScale=arg=="50"?.5f:arg=="75"?.75f:1.f;m_consoleLog.push_back("3D RENDER SCALE "+arg+" PERCENT. HUD STAYS FULL RESOLUTION.");}
   else m_consoleLog.push_back("USE R_SCALE 50, 75 OR 100. 100 IS THE FULL-RES DEFAULT.");
+ }
+ else if(verb=="tex_up"){
+  if(arg=="1"||arg=="2"||arg=="4"){SoftwareRenderer::setTexturePresentScale(std::stoi(arg));m_consoleLog.push_back("TEXTURE PRESENT SCALE "+arg+"X (STORE-LOW / RUN-HIGH). ATLASES REBUILD ON NEXT DRAW.");}
+  else m_consoleLog.push_back("USE TEX_UP 1, 2 OR 4. DEFAULT IS 2X BILINEAR PRESENT.");
  }
  else if(verb=="where"){
   std::ostringstream out;out<<"MAP "<<m_level<<" X "<<m_player.pos.x<<" Y "<<m_player.pos.y<<" Z "<<m_player.z;m_consoleLog.push_back(out.str());

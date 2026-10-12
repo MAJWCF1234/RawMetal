@@ -422,6 +422,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    bool nearWall=false;for(auto offset:{Vec2{-.55f,0},Vec2{.55f,0},Vec2{0,-.55f},Vec2{0,.55f}})
     nearWall|=w.tile(int(std::floor(center.x+offset.x)),int(std::floor(center.y+offset.y)))=='#';
    if(nearWall){columns=std::max(columns,3);rows=std::max(rows,3);}
+   // Gloss/normal materials keep top-two fixture weights flat per cell. On a
+   // 1 m ceiling tile that snaps the corona to the map grid; denser samples
+   // let falloff cross tile seams instead of stair-stepping at each edge.
+   if(center.z>eye.z+.35f&&(!t.normalLevels.empty()||t.glossStrength>0)){
+    columns=std::max(columns,4);rows=std::max(rows,4);
+    for(const auto&fixture:w.lights()){
+     if(fixture.mount!=WorldLightMount::Ceiling)continue;
+     float dx=fixture.position.x-center.x,dy=fixture.position.y-center.y;
+     if(dx*dx+dy*dy<=fixture.range*fixture.range*.36f){columns=std::max(columns,6);rows=std::max(rows,6);break;}
+    }
+   }
   }
   auto normal=cross3(b-a,c-a);std::array<MeshVertex,289> vertices;
   for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){float u=float(x)/columns,v=float(y)/rows;auto p=a+(b-a)*u+(d-a)*v;
@@ -584,6 +595,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
   auto hashFloat=[&](float value){hash(std::uint64_t(std::int64_t(std::llround(value*1024.f))));};
   hash(std::uint64_t(game.worldId()));hash(game.sessionRevision());hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
+  // Revision: half-metre ceiling patches + denser overhead gloss sampling.
+  hash(3);
   for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){char tile=w.tile(x,y);hash(static_cast<unsigned char>(tile=='C'||tile=='B'?'.':tile));}
   for(const auto&door:w.doors())for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);
   // Authored lamp power may change independently of the map/session. Use exact
@@ -640,7 +653,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     }
 
     if(!w.outdoors()){
-    quad({X,Y+1,Z},{X+1,Y+1,Z},{X+1,Y,Z},{X,Y,Z},serviceMap?m_serviceCeiling:m_facilityTextures.at("ceiling_1"),serviceMap?.82f:.6f);
+    // Match floor half-metre patches so lighting probes and gloss weights are
+    // not locked to the full 1 m map tile under overhead fixtures.
+    const Texture&ceilingTexture=serviceMap?m_serviceCeiling:m_facilityTextures.at("ceiling_1");
+    float ceilingLight=serviceMap?.82f:.6f;
+    for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f;
+     quad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},ceilingTexture,ceilingLight);
+    }
    // Close ceiling height changes instead of exposing the void between sectors.
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
    if(Z>northCeiling&&w.tile(x,y-1)!='#')quad({X,Y,northCeiling},{X+1,Y,northCeiling},{X+1,Y,Z},{X,Y,Z},m_metal,.7f);
