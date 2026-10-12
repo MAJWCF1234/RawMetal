@@ -27,34 +27,45 @@ void Game::requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 go
 }
 ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli){
  const auto&config=track.ai;
- if(config.mode==ActorAiMode::Scripted)return pose;
  auto key=[&](std::string_view field){return friendlyKey(actor,field);};
  auto get=[&](std::string_view field){return state(key(field));};auto put=[&](std::string_view field,int value){setState(key(field),value);};
  if(track.deadState&&state(track.deadState)){
   if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);
+  if(config.mode==ActorAiMode::Civilian||config.mode==ActorAiMode::Escort||config.mode==ActorAiMode::Scripted)clearCivilianSchedule(actor);
   pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;
   int age=std::clamp(get("death_ms"),0,1000);if(dt>0)age=std::min(1000,age+std::max(1,int(std::round(dt*1000))));put("death_ms",age);pose.phase=age*.001f;return pose;
  }
- if(pose.clip==4){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);return pose;}
- if(config.enableState&&!state(config.enableState)){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);put("running",0);return pose;}
+ if(pose.clip==4){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);if(config.mode!=ActorAiMode::Guard)clearCivilianSchedule(actor);return pose;}
+ if(config.enableState&&!state(config.enableState)){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);clearCivilianSchedule(actor);put("running",0);return pose;}
  const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
  if(get("saved")){
-  if(dt==0||!get("running")){pose.position={get("x")*.001f,get("y")*.001f};pose.z=get("z")*.001f;pose.yaw=get("yaw")*.0001f;pose.phase=get("phase")*.0001f;pose.clip=get("walking")?1:0;
+  if(dt==0||!get("running")){pose.position={get("x")*.001f,get("y")*.001f};pose.z=get("z")*.001f;pose.yaw=get("yaw")*.0001f;pose.phase=get("phase")*.0001f;pose.clip=get("walking")?1:get("crouched")?5:0;
    if(pose.position.x<0||pose.position.y<0||pose.position.x>=24||pose.position.y>=24||std::fabs(pose.z)>100||std::fabs(pose.yaw)>kPi+.001f||pose.phase<0||pose.phase>1)throw std::runtime_error("Invalid saved NPC pose");
   }
   else pose=old;
  }
  pose.lookAtActor=-1;
  if(dt<=0)return pose;
- put("running",1);float height=track.scale;int ms=std::max(1,int(std::round(dt*1000)));
+ put("running",1);float standing=track.scale;bool crouched=get("crouched")!=0;float height=crouched?std::min(standing,Player::CrouchedHeight):standing;
+ bool grounded=get("grounded")!=0||!get("locomotion");float vv=get("vv")*.001f;int ms=std::max(1,int(std::round(dt*1000)));
  Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;float speedScale=1;
  int guardMs=0;
- if(config.mode==ActorAiMode::Guard){guardMs=(get("guard_fraction")+int(std::round(double(dt)*1000000)))/1000;guardIntent(level,actor,track,pose,dt,*stimuli,goal,goalZ,wantsMove);if(get("guard_danger_ms"))speedScale=1.35f;}
+ if(config.mode==ActorAiMode::Scripted)scriptedHandoffIntent(world,level,actor,track,pose,dt,enemies,goal,goalZ,wantsMove,speedScale);
+ else if(config.mode==ActorAiMode::Guard){guardMs=(get("guard_fraction")+int(std::round(double(dt)*1000000)))/1000;guardIntent(level,actor,track,pose,dt,*stimuli,goal,goalZ,wantsMove);if(get("guard_danger_ms"))speedScale=1.35f;}
  else civilianEscortIntent(world,level,actor,track,pose,dt,enemies,goal,goalZ,wantsMove,speedScale);
+ bool wantCrouch=false;
+ if(config.mode==ActorAiMode::Guard)wantCrouch=get("guard_cover_mode")==2||get("guard_under_fire")>0||get("weapon_reload")>0||get("weapon_reloading")||(track.health>0&&state(track.damageState)>=int(track.health*.65f));
+ if((config.mode==ActorAiMode::Escort||config.mode==ActorAiMode::Civilian)&&level==m_level&&m_player.crouched&&length(pose.position-m_player.pos)<3.5f)wantCrouch=true;
+ float crouchHeight=std::min(standing,Player::CrouchedHeight);
+ if(!wantCrouch&&grounded&&!friendlyBodyFits(level,pose.position,pose.z,standing)&&friendlyBodyFits(level,pose.position,pose.z,crouchHeight))wantCrouch=true;
+ if(wantCrouch&&!crouched){crouched=true;height=crouchHeight;}
+ else if(!wantCrouch&&crouched){if(friendlyBodyFits(level,pose.position,pose.z,standing)){crouched=false;height=standing;}else height=crouchHeight;}
+ if(crouched)speedScale*=.55f;
  float timer=std::max(0.f,std::clamp(get("repath"),0,4000)*.001f-dt);Vec2 waypoint=get("saved")?Vec2{get("way_x")*.001f,get("way_y")*.001f}:pose.position;
  bool navigationDeferred=config.mode==ActorAiMode::Guard&&m_npcNavBudget<=0&&get("guard_route_target")&&get("guard_route_target")!=level+1&&!get("guard_route_next")&&!get("guard_route_wait")&&lengthSq(goal-pose.position)<.00001f;
  if(lengthSq(goal-Vec2{get("goal_x")*.001f,get("goal_y")*.001f})>1.f)timer=0;
  put("goal_x",int(std::round(goal.x*1000)));put("goal_y",int(std::round(goal.y*1000)));
+ auto direction=Vec2{};
  if(wantsMove){
   requestAiDoor(world,level,pose.position,pose.z,goal);
   auto toward=goal-pose.position;float distance=length(toward);auto probe=pose.position+toward*(std::min(1.f,distance)/std::max(.001f,distance));
@@ -66,31 +77,56 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    // until a nearby request has physically opened the door.
    std::optional<World> planning;
    for(size_t i=0;i<world.doors().size();++i)if(!aiDoorLocked(world,level,world.doors()[i])&&world.doors()[i].open<world.doors()[i].maxOpen){if(!planning)planning=world;planning->setDoor(int(i),world.doors()[i].maxOpen,true);}
-   waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);timer=.3f+float((actor*17+size_t(level)*5)%11)*.02f;}
+   // Prefer the retained hint graph for guards; fall back to the span flood
+   // when the graph has no useful hop from the current feet.
+   if(config.mode==ActorAiMode::Guard){waypoint=guardGraphWaypoint(level,pose.position,pose.z,goal,goalZ,height);if(lengthSq(waypoint-pose.position)<.04f)waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);}
+   else waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);
+   timer=.3f+float((actor*17+size_t(level)*5)%11)*.02f;}
   }
-  auto direction=normalized(waypoint-pose.position);Vec2 separation{};
+  direction=normalized(waypoint-pose.position);Vec2 separation{};
   for(size_t i=0;i<m_friendlyActors.size();++i)if(i!=actor&&m_friendlyActors[i].level==level&&autonomousActor(m_friendlyActors[i].track())){const auto&other=m_friendlyActors[i].pose;if(other.clip==4||std::fabs(other.z-pose.z)>height)continue;
    auto away=pose.position-other.position;float neighborDistance=length(away);if(neighborDistance>.001f&&neighborDistance<.7f)separation+=away*((.7f-neighborDistance)/neighborDistance);
   }
   auto drones=engineerDrones();for(const auto&drone:drones){if(pose.z>=drone.position.z+EngineerDroneHeight||pose.z+height<=drone.position.z)continue;auto shift=chunkOffset(drone.level)-chunkOffset(level);
-   auto away=pose.position-Vec2{drone.position.x+shift.x,drone.position.y+shift.y};float distance=length(away);if(distance>.001f&&distance<1.05f)separation+=away*((1.05f-distance)/distance);
+   auto away=pose.position-Vec2{drone.position.x+shift.x,drone.position.y+shift.y};float droneDistance=length(away);if(droneDistance>.001f&&droneDistance<1.05f)separation+=away*((1.05f-droneDistance)/droneDistance);
   }
-  direction=normalized(direction+separation*2.f);float travel=std::min(length(waypoint-pose.position),config.speed*speedScale*dt);
+  direction=normalized(direction+separation*2.f);
+  auto climbable=[&](Vec2 at){float ground=friendlySupportAt(level,at,pose.z+.265f);float rise=ground-pose.z;float stepHeight=world.hasTerrain()?.34f:.24f;
+   return grounded&&rise>stepHeight+.025f&&rise<=1.05f&&friendlyBodyFits(level,at,ground,height);};
+  bool wantJump=false;
+  if(grounded&&lengthSq(direction)>.0001f)wantJump=climbable(pose.position+direction*.45f)||climbable(pose.position+direction*.7f);
+  if(!wantJump&&grounded&&goalZ-pose.z>.26f&&goalZ-pose.z<=1.05f&&length(goal-pose.position)<3.5f)wantJump=true;
+  if(!wantJump&&grounded&&(get("stuck")>120||!friendlyWalkSegment(level,pose.position,pose.z,pose.position+direction*.4f,height))&&lengthSq(goal-pose.position)>.01f)wantJump=climbable(pose.position+normalized(goal-pose.position)*.55f)||(goalZ-pose.z>.26f&&goalZ-pose.z<=1.05f);
+  if(wantJump){vv=5.4f;grounded=false;if(lengthSq(goal-pose.position)>.01f){direction=normalized(goal-pose.position);waypoint=goal;}}
+  float travel=std::min(std::max(length(waypoint-pose.position),grounded?0.f:.35f),config.speed*speedScale*dt);
   auto next=pose.position+direction*travel;float feet=pose.z;
-  bool clear=travel>0&&friendlyWalkSegment(level,pose.position,pose.z,next,height,&feet);
+  bool clear=false;
+  if(grounded)clear=travel>0&&friendlyWalkSegment(level,pose.position,pose.z,next,height,&feet);
+  else{if(!grounded&&goalZ>pose.z+.05f&&lengthSq(goal-pose.position)>.01f){direction=normalized(goal-pose.position);next=pose.position+direction*travel;}
+   clear=travel>0&&friendlyBodyFits(level,next,pose.z,height);}
   auto player=m_player.pos+chunkOffset(m_level)-chunkOffset(level);
   if(feet<m_player.z+m_player.hullHeight()&&feet+height>m_player.z&&std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;
   for(const auto&enemy:enemies)if(enemy.alive&&enemy.bodyBottom()<feet+height&&enemy.bodyTop()>feet&&lengthSq(next-enemy.pos)<.45f*.45f&&lengthSq(next-enemy.pos)<lengthSq(pose.position-enemy.pos))clear=false;
   for(const auto&drone:drones){if(feet>=drone.position.z+EngineerDroneHeight||feet+height<=drone.position.z)continue;auto shift=chunkOffset(drone.level)-chunkOffset(level);Vec2 body{drone.position.x+shift.x,drone.position.y+shift.y};
    if(lengthSq(next-body)<.85f*.85f&&lengthSq(next-body)<lengthSq(pose.position-body))clear=false;
   }
-  if(clear){pose.position=next;pose.z=feet;
+  if(clear){pose.position=next;if(grounded)pose.z=feet;
    // An alerted armed guard can sidestep while keeping its eyes on the target.
    // Guard intent has already applied the bounded facing turn for this frame.
    if(config.mode!=ActorAiMode::Guard||!config.armed||guardState(actor)!=GuardState::Alert||get("guard_danger_ms"))pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);
   }
  }
- float moved=length(pose.position-old.position);Vec2 movementWaypoint=waypoint;pose.clip=moved>.0001f?1:0;pose.phase=pose.clip?std::fmod(old.phase+moved*1.1f,1.f):0;
+ float support=friendlySupportAt(level,pose.position,pose.z+(grounded?.265f:.01f));
+ if(grounded&&pose.z>support+.03f){if(pose.z-support<=.24f&&friendlyBodyFits(level,pose.position,support,height))pose.z=support;else grounded=false;}
+ if(!grounded){float previousZ=pose.z;vv-=14.f*dt;pose.z+=vv*dt;support=friendlySupportAt(level,pose.position,std::max(previousZ,pose.z)+.265f);
+  if(vv<=0.f&&pose.z<=support+.005f&&previousZ>=support-.025f){pose.z=support;vv=0;grounded=true;}
+  else if(!friendlyBodyFits(level,pose.position,pose.z,height)){if(vv>0){vv=0;pose.z=previousZ;}else if(friendlyBodyFits(level,pose.position,support,height)){pose.z=support;vv=0;grounded=true;}}
+ }
+ float moved=length(pose.position-old.position);Vec2 movementWaypoint=waypoint;pose.clip=moved>.0001f?1:crouched?5:0;
+ // Idle/crouch must keep cycling phase or UAL loops stay stuck on sample 0 (bind).
+ if(pose.clip==1)pose.phase=std::fmod(old.phase+moved*1.1f,1.f);
+ else if(pose.clip==0||pose.clip==5)pose.phase=std::fmod(old.phase+dt*(pose.clip==5?.55f:.35f),1.f);
+ else pose.phase=0;
  if(config.mode==ActorAiMode::Guard&&!get("guard_danger_ms")){
   int point=get("guard_point");bool patrol=guardState(actor)==GuardState::Patrol&&(get("schedule")==int(GuardSchedule::None)||get("schedule")==int(GuardSchedule::Patrol));
   if(!patrol||!wantsMove||get("guard_patrol_point_seen")!=point+1){put("guard_patrol_wait",0);put("guard_patrol_progress",0);put("guard_patrol_fraction",0);put("guard_patrol_movement_fraction",0);put("guard_patrol_point_seen",patrol?point+1:0);}
@@ -107,7 +143,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  if(config.mode==ActorAiMode::Guard&&moved>0){int steps=get("guard_step")+int(std::round(moved*1000));if(steps>=1000){auto material=!world.outdoors()&&world.metalFloor(int(pose.position.x),int(pose.position.y))?Sound::Metal1:Sound::Concrete1;m_sounds.push_back({material,pose.position+chunkOffset(level)-chunkOffset(m_level),.3f,.96f,true,17,pose.z+.04f});steps%=1000;}put("guard_step",steps);}
  int stuck=wantsMove&&moved<.0001f?std::clamp(get("stuck"),0,500)+ms:0;if(stuck>500){timer=0;stuck=0;}put("stuck",stuck);
  put("repath",int(std::round(timer*1000)));put("way_x",int(std::round(waypoint.x*1000)));put("way_y",int(std::round(waypoint.y*1000)));
- put("x",int(std::round(pose.position.x*1000)));put("y",int(std::round(pose.position.y*1000)));put("z",int(std::round(pose.z*1000)));put("yaw",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("phase",int(std::round(pose.phase*10000)));put("walking",pose.clip==1);put("saved",1);
+ put("x",int(std::round(pose.position.x*1000)));put("y",int(std::round(pose.position.y*1000)));put("z",int(std::round(pose.z*1000)));put("yaw",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("phase",int(std::round(pose.phase*10000)));put("walking",pose.clip==1);put("crouched",crouched?1:0);put("grounded",grounded?1:0);put("vv",int(std::round(vv*1000)));put("locomotion",1);put("saved",1);
  // Watch actual local displacement before Streaming converts the actor into
  // another chunk. A deferred search charges no stall time; a searched route
  // or direct movement still reports its physical block with the real elapsed time.
@@ -244,6 +280,30 @@ bool Game::testFriendlyAI(){
   Game g(campaign);g.m_player.pos={30.5f,30.5f};g.crossChunkBoundary();tick(g,2400,1.f/60);
   check(g.friendlyActors()[0].level==1&&length(g.friendlyActors()[0].pose.position-g.player().pos)<2.4f,"Escort routes around a two-axis stitched turn with streaming enabled");
  }
+ try{
+  check(true,"NPC locomotion suite begins");
+  {auto original=scene(ActorAiMode::Escort);auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);
+   for(auto&key:map->actorTracks[0].keys)key.position={8.5f,6.5f};map->actorTracks[0].scale=1.6f;
+   map->fixtures.push_back({6,{11.5f,6.5f},0,1.8f,1.4f,.7f,0,true});campaign->maps[0]=map;Game g(campaign);
+   g.m_player.pos={12.4f,6.5f};g.m_player.z=.7f;tick(g,900,1.f/60);auto pose=g.world().actorPose(0);
+   check(pose.z>.55f&&pose.position.x>10.3f,"Escort jumps and climbs a .7 m solid ledge to follow the player");
+   Game restored(g.m_customCampaign);check(restored.decodeSave(g.encodeSave())&&std::fabs(restored.world().actorPose(0).z-pose.z)<.002f&&restored.state(restored.friendlyKey(0,"locomotion")),"Save restores NPC climb height and locomotion");
+  }
+  {auto original=scene(ActorAiMode::Escort);auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);
+   for(auto&key:map->actorTracks[0].keys)key.position={9.5f,6.5f};map->actorTracks[0].scale=1.6f;
+   map->fixtures.push_back({6,{12.5f,6.5f},.7f,3.2f,1.2f,.55f,0,true});campaign->maps[0]=map;Game g(campaign);
+   g.m_player.pos={14.5f,6.5f};g.m_player.crouched=true;g.m_player.eye=Player::CrouchedEye;tick(g,480,1.f/60);
+   check(g.state(g.friendlyKey(0,"crouched"))&&g.friendlyHullHeight(0,g.world().actorTracks()[0])<=Player::CrouchedHeight+.001f,"Escort ducks under a low beam and matches the player's crouched hull");
+   check(g.world().actorPose(0).position.x>11.5f,"Crouched escort advances through standing-blocked clearance");
+  }
+  {auto original=scene(ActorAiMode::Escort);auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);
+   for(auto&key:map->actorTracks[0].keys)key.position={6.5f,6.5f};map->actorTracks[0].ai.mode=ActorAiMode::Guard;map->actorTracks[0].ai.armed=true;map->actorTracks[0].scale=1.6f;map->actorTracks[0].health=100;map->actorTracks[0].ai.patrol={{{6.5f,6.5f},0,1000}};
+   map->fixtures.push_back({6,{6.5f,6.5f},.7f,2.4f,2.4f,.5f,0,true});campaign->maps[0]=map;Game g(campaign);
+   g.setState(g.friendlyKey(0,"guard_under_fire"),1500);g.setState(g.friendlyKey(0,"weapon_reload"),500);
+   for(int i=0;i<20;++i){g.updateStreaming(1.f/60);g.updateMechanisms(1.f/60);g.updateFriendlyActors(1.f/60,true);g.m_world.updateDoors(1.f/60);}
+   check(g.state(g.friendlyKey(0,"crouched"))&&g.friendlyHullHeight(0,g.world().actorTracks()[0])<=Player::CrouchedHeight+.001f,"Guard crouches under low cover while reloading or under fire");
+  }
+ }catch(const std::exception&ex){check(false,ex.what());}
  return passed;
 }
 }

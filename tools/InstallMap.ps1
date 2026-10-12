@@ -21,6 +21,34 @@ try {
 
 $payloadText = [IO.File]::ReadAllText($payloadPath)
 
+if ([IO.Path]::GetExtension($payloadPath) -eq ".json" -or $payloadText.TrimStart().StartsWith("{")) {
+    $serverPy = Join-Path $root "tools\level-editor\server.py"
+    $pyCmd = $null
+    if (Get-Command py -ErrorAction SilentlyContinue) { $pyCmd = "py" }
+    elseif (Get-Command python -ErrorAction SilentlyContinue) { $pyCmd = "python" }
+
+    if ($pyCmd -and (Test-Path $serverPy)) {
+        Write-Host "[*] Detected Level Editor project JSON. Converting to installer payload..." -ForegroundColor Cyan
+        $tempPayload = [IO.Path]::GetTempFileName()
+        try {
+            $pyEscapedRoot = $root.Replace('\', '/')
+            $pyEscapedPayload = $payloadPath.Replace('\', '/')
+            $pyEscapedTemp = $tempPayload.Replace('\', '/')
+            $convertCode = "import sys, json; sys.path.append(r'$pyEscapedRoot/tools/level-editor'); from server import build_map_payload; p = json.load(open(r'$pyEscapedPayload', encoding='utf-8')); cid = p['chunks'][0]['id'] if p.get('chunks') else ''; name = p.get('name') or 'Custom Map'; txt, w = build_map_payload(p, cid, 1, name, 'CUSTOM'); open(r'$pyEscapedTemp', 'w', encoding='utf-8').write(txt)"
+            & $pyCmd -c $convertCode
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $tempPayload)) {
+                $payloadText = [IO.File]::ReadAllText($tempPayload)
+            } else {
+                throw "Failed to convert Level Editor JSON project into installer payload."
+            }
+        } finally {
+            if (Test-Path $tempPayload) { Remove-Item $tempPayload -Force -ErrorAction SilentlyContinue }
+        }
+    } else {
+        throw "This file is a Depthworks Level Editor project (.json). Please export it via 'MORE -> EXPORT INSTALLER TXT' in the editor, or ensure Python is available."
+    }
+}
+
 function Read-Metadata([string]$key) {
     $pattern = "(?m)^\s*" + [regex]::Escape($key) + "\s*:\s*(.*?)\s*$"
     $match = [regex]::Match($payloadText, $pattern)

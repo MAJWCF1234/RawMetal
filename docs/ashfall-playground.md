@@ -144,6 +144,22 @@ activation, physical grenade, damaging shot and stitched pursuit in Vulkan.
 See [the cleanup squad report](kill-squad-pass-20261011.md) for systems,
 prototype-animation limits and validation evidence.
 
+## GoldSrc AI schedule / cover slice, 12 October 2026
+
+The same playground now authors the shared MaintainSchedule / cover catalogue
+systems that unit fixtures already proved:
+
+| Content | Where | What to observe |
+| --- | --- | --- |
+| `NAV_HINT` Path/Cover | Map 0 panels + map 1 cargo cover | Guards prefer authored Cover markers through FIND_*_COVER peers |
+| Facility escort | Map 0 at `(15.5, 9.5)` | Follow/Wait (E), Flee when the opted-in Wasp/threat is live |
+| Huntsman spawn | Map 1 at `(12.5, 20.5)` | Cleanup squad pursues under creature MaintainSchedule |
+| Existing guards + Wasp | Unchanged | Defensive reposition still uses the retained graph |
+
+`--nav-graph-test` loads this export and asserts NAV_HINT merge, escort mind
+keys and playground FIND_COVER_FROM_ENEMY cover. Play **Custom Maps → RawMetal
+// Ashfall Guard Lab** for live observation.
+
 ## Keep authoring and runtime in sync
 
 Geometry, player spawn, cover and throwable assets use supported editor objects.

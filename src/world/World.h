@@ -114,6 +114,11 @@ struct AuthoredSign {
     std::string title,subtitle;
     std::uint32_t accent=0xffca994du;
 };
+struct AuthoredNavHint {
+    Vec2 position{};
+    float z=0;
+    int hint=0; // 0 Path, 1 Cover — matches ai::NodeHint
+};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
@@ -141,6 +146,7 @@ struct AuthoredMapData {
     std::vector<TimedSequence> timedSequences;
     std::vector<ActorTrack> actorTracks;
     std::vector<SequenceCue> sequenceCues;
+    std::vector<AuthoredNavHint> navHints;
 };
 struct CustomCampaign {
     std::string name;

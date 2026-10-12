@@ -53,7 +53,10 @@ bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeH
  if(level==m_level&&enemiesRemaining()==0)sound(Sound::Exit,.75f);
  return true;
 }
-void Game::storeChunk(){m_chunks[m_level]={m_world,m_enemies,m_pickups,m_kills,true,m_clutter};}
+void Game::storeChunk(){
+ auto nav=std::move(m_chunks[m_level].nav);bool ready=m_chunks[m_level].navReady;
+ m_chunks[m_level]={m_world,std::move(nav),ready,m_enemies,m_pickups,m_kills,true,m_clutter};
+}
 Game Game::chunkView(int level)const{
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
  view.m_clutter=chunk.clutter;view.m_heldClutter=-1;view.m_player.pos=m_player.pos+chunkOffset(m_level)-chunkOffset(level);return view;
@@ -98,7 +101,7 @@ void Game::crossChunkBoundary(){
   if(objectGlobal.x>=origin.x&&objectGlobal.x<origin.x+World::Width&&objectGlobal.y>=origin.y&&objectGlobal.y<origin.y+World::Height){
    auto item=*it;item.pos=objectGlobal-origin;following.push_back(item);it=m_clutter.erase(it);
   }else ++it;}
- ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;m_vrAimPosition.x+=shift.x;m_vrAimPosition.y+=shift.y;for(auto&hand:m_vrHandPosition){hand.x+=shift.x;hand.y+=shift.y;}for(auto&hand:m_vrPreviousFist){hand.x+=shift.x;hand.y+=shift.y;}
+ ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_levelNav=std::move(chunk.nav);m_levelNavReady=chunk.navReady;chunk.nav={};chunk.navReady=false;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;m_vrAimPosition.x+=shift.x;m_vrAimPosition.y+=shift.y;for(auto&hand:m_vrHandPosition){hand.x+=shift.x;hand.y+=shift.y;}for(auto&hand:m_vrPreviousFist){hand.x+=shift.x;hand.y+=shift.y;}
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
  for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
@@ -108,7 +111,7 @@ void Game::crossChunkBoundary(){
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
-    m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
+    m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_levelNav={};m_levelNavReady=false;m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_world.definition().playerStart;
     m_player.angle = m_world.definition().spawnYaw;

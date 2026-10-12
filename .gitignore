@@ -9,6 +9,33 @@ RawMetal.assets
 RawMetal-error.txt
 RawMetal-audio.txt
 RawMetal-renderer.txt
+RawMetal-custom-maps.txt
 RawMetal-*.zip
 inventory.zip
 src/world/World.cpp.bak
+artifacts/
+__pycache__/
+*.tmp
+*.bak
+.vscode/
+
+# Local test / preview junk that tools dump in the repo root
+*-test.txt
+*-diagnostic.txt
+*-validation.txt
+*-fixture.txt
+*-preview.wav
+campaign-reach-*.txt
+campaign-extension-test.txt
+model-report.txt
+performance-window.txt
+render-benchmark.txt
+settings-roundtrip.ini
+water-wall-*.png
+title-menu.ppm
+underwater-inspection.ppm
+weapon-motion-*.ppm
+
+# Offline bake donors staged from O: — not embedded, not shipped
+source-assets/medic-motion/UAL1_Standard.fbx
+source-assets/medic-motion/UAL2_Standard.fbx

@@ -287,7 +287,7 @@ The build produces the canonical \`RawMetal.exe\` in the repository root.
 
 Shaders are compiled to embedded SPIR-V. Runtime textures, models, audio, and other game data are losslessly packed into the executable.
 
-The build is intentionally size-constrained and rejects a release executable at or above **28,000,000 bytes** (28 MB).
+The build is intentionally size-constrained and rejects a release executable at or above **33,554,432 bytes** — the Legend of Zelda: Ocarina of Time N64 cartridge (32 MiB). That ceiling is the point; do not raise it.
 
 Purchased source assets remain unchanged. Runtime packing selects compact lossless representations and verifies embedded asset data against source pixels or bytes.
 Model and animation files also compete against reversible byte-plane and XOR-predicted encodings before LZMS compression. Resources larger than 1 MiB additionally compete against an LZMS stream with a dictionary block covering the complete resource. The packer selects a new encoding only when it is smaller and verifies its exact byte round-trip; PNG textures retain pixel-exact lossless WebP and predictor options.

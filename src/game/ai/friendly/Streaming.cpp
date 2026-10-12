@@ -1,25 +1,45 @@
 #include "../../Game.h"
 #include "../Navigation.h"
+#include "Schedule.h"
 #include <queue>
 namespace retro {
 StateId Game::friendlyKey(size_t actor,std::string_view field)const{
  const auto&npc=m_friendlyActors.at(actor);return actorAiState(npc.homeLevel,npc.homeActor,npc.track().timerState,field);
 }
+bool Game::scriptedHandoffActive(size_t actor)const{
+ if(actor>=m_friendlyActors.size())return false;const auto&track=m_friendlyActors[actor].track();
+ return track.ai.mode==ActorAiMode::Scripted&&(state(friendlyKey(actor,"fear"))>0||state(friendlyKey(actor,"schedule"))==int(CivilianSchedule::Flee));
+}
+bool Game::scriptedHandoffActive(int level,size_t homeActor)const{
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.homeLevel==level&&npc.homeActor==homeActor)return scriptedHandoffActive(i);}
+ return false;
+}
 void Game::rebuildFriendlyActors(){
  m_friendlyActors.clear();
  for(int level=0;level<chunkCount();++level){const auto&world=level==m_level?m_world:m_chunks[level].world;
-  for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];if(track.ai.mode==ActorAiMode::Scripted)continue;
+  for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];
    FriendlyActor npc{level,level,i,world.actorPose(i),world.m_mapData};size_t index=m_friendlyActors.size();m_friendlyActors.push_back(npc);
    int saved=state(friendlyKey(index,"chunk"));if(saved<0||saved>chunkCount())throw std::runtime_error("Invalid saved NPC chunk");
    if(track.ai.mode==ActorAiMode::Guard)validateGuardState(index);
    if(saved)m_friendlyActors[index].level=saved-1;
    if(m_friendlyActors[index].level==m_level)setState(friendlyKey(index,"engaged"),1);
-   if(state(friendlyKey(index,"saved"))){auto&pose=m_friendlyActors[index].pose;pose.position={state(friendlyKey(index,"x"))*.001f,state(friendlyKey(index,"y"))*.001f};pose.z=state(friendlyKey(index,"z"))*.001f;pose.yaw=state(friendlyKey(index,"yaw"))*.0001f;pose.phase=state(friendlyKey(index,"phase"))*.0001f;pose.clip=state(friendlyKey(index,"walking"))?1:0;
+   if(state(friendlyKey(index,"saved"))){auto&pose=m_friendlyActors[index].pose;pose.position={state(friendlyKey(index,"x"))*.001f,state(friendlyKey(index,"y"))*.001f};pose.z=state(friendlyKey(index,"z"))*.001f;pose.yaw=state(friendlyKey(index,"yaw"))*.0001f;pose.phase=state(friendlyKey(index,"phase"))*.0001f;
+    int crouched=state(friendlyKey(index,"crouched")),grounded=state(friendlyKey(index,"grounded")),vv=state(friendlyKey(index,"vv"));
+    if(state(friendlyKey(index,"locomotion"))&&(crouched<0||crouched>1||grounded<0||grounded>1||vv<-20000||vv>10000))throw std::runtime_error("Invalid saved NPC locomotion");
+    pose.clip=state(friendlyKey(index,"walking"))?1:crouched?5:0;
     if(pose.position.x<0||pose.position.y<0||pose.position.x>=24||pose.position.y>=24||std::fabs(pose.z)>100||std::fabs(pose.yaw)>kPi+.001f||pose.phase<0||pose.phase>1)throw std::runtime_error("Invalid saved NPC pose");
    }
    if(track.deadState&&state(track.deadState)){auto&pose=m_friendlyActors[index].pose;pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;}
    if(track.ai.mode==ActorAiMode::Guard&&(m_friendlyActors[index].pose.clip==4||!autonomousActor(track)))clearGuardSchedule(index);
   }
+ }
+ // A legacy partial kit is evidence that its wound was already admitted.
+ // Adopt that baseline after the complete NPC collection is reconstructed;
+ // canonical pending hits and active under-fire cues still require defense.
+ for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&provider=m_friendlyActors[actor];
+  if(provider.track().ai.role!=GuardSquadRole::Medic||state(friendlyKey(actor,"schedule"))||!state(friendlyKey(actor,"support_ms")))continue;
+  int patient=state(friendlyKey(actor,"support_target"))-1;if(patient<0||size_t(patient)>=m_friendlyActors.size())continue;const auto&recipient=m_friendlyActors[size_t(patient)];
+  if(recipient.track().ai.mode==ActorAiMode::Guard&&!state(friendlyKey(size_t(patient),"hit_source"))&&!state(friendlyKey(size_t(patient),"guard_under_fire")))setState(friendlyKey(size_t(patient),"guard_damage"),state(recipient.track().damageState));
  }
 }
 bool Game::friendlyChunkNeeded(int level)const{
@@ -67,6 +87,21 @@ bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float h
  }
  if(endFeet)*endFeet=z;return true;
 }
+float Game::friendlyHullHeight(size_t actor,const ActorTrack&track)const{
+ float standing=track.scale;if(actor>=m_friendlyActors.size()||!state(friendlyKey(actor,"crouched")))return standing;
+ return std::min(standing,Player::CrouchedHeight);
+}
+float Game::friendlySupportAt(int level,Vec2 position,float feet){
+ auto origin=chunkOffset(level);Vec2 global=origin+position;int center=friendlyChunkAt(global,level);if(center<0)return feet;ensureChunk(center);float ground=-10000;
+ for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))continue;ensureChunk(chunk);auto local=point-chunkOffset(chunk);ground=std::max(ground,friendlyWorld(chunk).supportBelow(local.x,local.y,feet));}
+ return ground>-9999?ground:feet;
+}
+bool Game::friendlyBodyFits(int level,Vec2 position,float feet,float height){
+ auto origin=chunkOffset(level);Vec2 global=origin+position;int center=friendlyChunkAt(global,level);if(center<0||!friendlyBoundaryOpen(level,center,global))return false;ensureChunk(center);
+ for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);
+  auto localCenter=global-chunkOffset(chunk);if(!w.fits(local.x,local.y,feet,height)||w.doorBlocks(local.x,local.y,feet,height)||w.railBlocksHull(localCenter.x,localCenter.y,.2f,feet,height))return false;}
+ return true;
+}
 bool Game::friendlyRayClear(Point3 from,Point3 to)const{
  auto delta=to-from;int samples=std::max(1,int(std::ceil(std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z)/.04f)));int previous=friendlyChunkAt({from.x,from.y},m_level);if(previous<0)return false;
  for(int i=0;i<=samples;++i){auto point=from+delta*(float(i)/samples);int level=friendlyChunkAt({point.x,point.y},previous);if(level<0||!chunkResident(level)||!friendlyBoundaryOpen(previous,level,{point.x,point.y}))return false;
@@ -113,13 +148,18 @@ bool Game::guardRoute(int level,size_t actor,Vec2 globalGoal,float feet,int ms,V
 }
 void Game::updateFriendlyActors(float dt,bool guards){
  auto stimuli=guards?aiStimuli():std::vector<AiStimulus>{};
- if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);stimuli.push_back(shot);}m_guardShots.clear();}
+ if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);shot.categories=ai::SoundWeapon;stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
   if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
   if(track.ai.mode==ActorAiMode::Guard&&(npc.pose.clip==4||(track.deadState&&state(track.deadState))))clearGuardSchedule(i);
-  if(!autonomousActor(track)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){clearGuardSchedule(i);for(const char*field:{"guard_danger_ms","guard_danger_goal","guard_danger_wait","guard_danger_fraction","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","drone_repair_target","drone_repair_ms","drone_busy","drone_windup"})setState(friendlyKey(i,field),0);setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
+  bool scripted=track.ai.mode==ActorAiMode::Scripted;
+  if(scripted&&guards)continue;
+  if(!autonomousActor(track)&&!scripted){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){clearGuardSchedule(i);for(const char*field:{"guard_danger_ms","guard_danger_goal","guard_danger_wait","guard_danger_fraction","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","drone_repair_target","drone_repair_ms","drone_busy","drone_windup"})setState(friendlyKey(i,field),0);setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
+  if(scripted&&!scriptedHandoffActive(i)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"chunk"),npc.level+1);}
   if(npc.level==m_level)setState(friendlyKey(i,"engaged"),1);
-  if(!chunkResident(npc.level)){bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;Vec2 goal;float z;
+  if(!chunkResident(npc.level)){
+   if(scripted)continue;
+   bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;Vec2 goal;float z;
    if(track.ai.mode==ActorAiMode::Guard){
     auto schedule=GuardSchedule(state(friendlyKey(i,"schedule")));bool scheduled=schedule!=GuardSchedule::None&&schedule!=GuardSchedule::Patrol;
     bool active=scheduled||state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
@@ -136,6 +176,7 @@ void Game::updateFriendlyActors(float dt,bool guards){
    }
   }
   auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt,&stimuli);
+  if(scripted&&!scriptedHandoffActive(i)){setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);continue;}
   auto global=npc.pose.position+chunkOffset(npc.level);int destination=friendlyChunkAt(global,npc.level);
   if(destination<0)throw std::runtime_error("NPC left the stitched world");
   if(destination!=npc.level){auto shift=chunkOffset(npc.level)-chunkOffset(destination);npc.pose.position+=shift;

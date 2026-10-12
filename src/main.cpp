@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #include "game/Game.h"
+#include "world/CustomCampaign.h"
 #include "vr/VrRuntime.h"
 #include <windows.h>
 #include <commctrl.h>
@@ -336,6 +337,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--guard-pursuit-test"))return retro::Game::testGuardPursuit()?0:21;
     if(std::wcsstr(commandLine,L"--guard-actions-test"))return retro::Game::testGuardActions()?0:21;
     if(std::wcsstr(commandLine,L"--guard-roles-test"))return retro::Game::testGuardRoles()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-table-test"))return retro::Game::testGuardTable()?0:21;
+    if(std::wcsstr(commandLine,L"--nav-graph-test"))return retro::Game::testNavGraph()?0:21;
+    if(std::wcsstr(commandLine,L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
+    if(std::wcsstr(commandLine,L"--civilian-schedule-test"))return retro::Game::testCivilianSchedule()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-patient-test"))return retro::Game::testGuardPatient()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-cover-test"))return retro::Game::testGuardCover()?0:21;
     if(std::wcsstr(commandLine,L"--guard-schedule-test"))return retro::Game::testGuardSchedule()?0:21;
     if(std::wcsstr(commandLine,L"--guard-danger-test"))return retro::Game::testGuardDanger()?0:21;
     if(std::wcsstr(commandLine,L"--guard-danger-inspection")){
@@ -345,6 +352,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      return 0;
     }
     if(std::wcsstr(commandLine,L"--engineer-drone-test"))return retro::Game::testEngineerDrones()?0:21;
+    if(std::wcsstr(commandLine,L"--squad-support-inspection")){
+     constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+     std::filesystem::create_directories("diagnostics/squad-support-20261012");const char*names[]={"patient-withdraw","medic-kit","patient-resume"};
+     for(int stage=0;stage<3;++stage){auto scene=retro::Game::squadSupportInspection(stage);renderer->render(scene);std::ofstream out(std::string("diagnostics/squad-support-20261012/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--engineer-support-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/engineer-support-20261012");const char*names[]={"terminal-deploy","five-drone-fleet","terminal-maintenance","pistol-support"};
@@ -355,7 +368,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--kill-squad-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/kill-squad-20261011");std::ofstream report("diagnostics/kill-squad-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"cleanup-ready","cleanup-grenade","cleanup-fire","cleanup-pursuit","cleanup-engineer-throw","cleanup-assault-close","cleanup-sharpshooter-close","cleanup-heavy-close","cleanup-medic-close","cleanup-rusher-close","cleanup-drone","cleanup-medkit-opening","cleanup-medkit-treatment","cleanup-medkit-healed"};
-     for(int stage=0;stage<14;++stage){auto scene=retro::Game::killSquadInspection(stage);report<<names[stage]<<": PASS health="<<scene.player().health<<" grenades="<<scene.tacticalGrenades().size()<<" drones="<<scene.engineerDrones().size()<<" treatment="<<scene.npcWeaponPose(6).treatment<<" patientDamage="<<scene.state(retro::stateId("cleanup_damage_3"));for(size_t actor=2;actor<8;++actor){const auto&npc=scene.npcActors()[actor];report<<" npc"<<actor<<"="<<npc.level<<'/'<<npc.pose.position.x<<','<<npc.pose.position.y;}report<<'\n';report.flush();renderer->render(scene);std::ofstream out(std::string("diagnostics/kill-squad-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     for(int stage=0;stage<14;++stage){auto scene=retro::Game::killSquadInspection(stage);report<<names[stage]<<": PASS health="<<scene.player().health<<" grenades="<<scene.tacticalGrenades().size()<<" drones="<<scene.engineerDrones().size()<<" treatment="<<scene.npcWeaponPose(6).treatment<<" patientDamage="<<scene.state(retro::stateId("cleanup_damage_3"));for(size_t actor=2;actor<8;++actor){const auto&npc=scene.npcActors()[actor];report<<" npc"<<actor<<"="<<npc.level<<'/'<<npc.pose.position.x<<','<<npc.pose.position.y<<" clip="<<npc.pose.clip<<" phase="<<npc.pose.phase;}report<<'\n';report.flush();renderer->render(scene);std::ofstream out(std::string("diagnostics/kill-squad-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
     if(std::wcsstr(commandLine,L"--guard-policy-inspection")){
@@ -816,8 +829,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     retro::Game game;
     game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
-    bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr;
-    if(directStart)game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
+    bool guardLab=std::wcsstr(commandLine,L"--guard-lab")!=nullptr;
+    bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr||guardLab;
+    if(guardLab)game=retro::Game(retro::loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt"));
+    else if(std::wcsstr(commandLine,L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);
     if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\\RawMetal\\saves");

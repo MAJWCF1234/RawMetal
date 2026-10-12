@@ -20,7 +20,7 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
    if(distance<hit.distance-.0001f)hit={kind,level,index,distance,distance,origin+ray*distance,n};
   };
   if(includePlayer&&!dead())body(ShotKind::Player,m_level,0,m_player.pos,m_player.z,m_player.hullHeight(),.2f);
-  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(int(i)==ignoredNpc||!chunkResident(npc.level)||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))continue;body(ShotKind::Npc,npc.level,int(i),npc.pose.position,npc.pose.z,track.scale,.2f);}
+  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(int(i)==ignoredNpc||!chunkResident(npc.level)||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))continue;body(ShotKind::Npc,npc.level,int(i),npc.pose.position,npc.pose.z,friendlyHullHeight(i,track),.2f);}
   for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&world=level==m_level?m_world:m_chunks[level].world;const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
    for(size_t i=0;i<enemies.size();++i){const auto&e=enemies[i];if(e.alive)body(ShotKind::Enemy,level,int(i),e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom(),e.kind==Enemy::Kind::Wasp?.28f:.4f);}
    for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];const auto&pose=world.actorPose(i);if(track.platform||autonomousActor(track)||pose.clip==4||(track.deadState&&state(track.deadState)))continue;body(ShotKind::Actor,level,int(i),pose.position,pose.z,track.scale,track.visual==ActorVisual::Cargo?track.scale*.5f:.2f);}
@@ -48,7 +48,7 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
   for(const auto&e:enemies)if(e.alive)candidate(e.pos+shift,e.bodyBottom(),e.bodyTop()-e.bodyBottom(),assist->coneBase);
   for(size_t i=0;i<world.actorTracks().size();++i){const auto&t=world.actorTracks()[i];const auto&p=world.actorPose(i);if(!t.platform&&!autonomousActor(t)&&t.health&&p.clip!=4&&(!t.deadState||!state(t.deadState)))candidate(p.position+shift,p.z,t.scale,.4f);}
  }
- for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(int(i)!=ignoredNpc&&chunkResident(npc.level)&&autonomousActor(t)&&t.health&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState)))candidate(npc.pose.position+chunkOffset(npc.level)-activeOrigin,npc.pose.z,t.scale,.4f);}
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(int(i)!=ignoredNpc&&chunkResident(npc.level)&&autonomousActor(t)&&t.health&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState)))candidate(npc.pose.position+chunkOffset(npc.level)-activeOrigin,npc.pose.z,friendlyHullHeight(i,t),.4f);}
  for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())candidate(Vec2{drone.position.x,drone.position.y}+chunkOffset(drone.level)-activeOrigin,drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
  return result;
 }

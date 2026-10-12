@@ -55,10 +55,17 @@ add_executable(RawMetal WIN32
     game/Mechanisms.cpp
     game/ActorTimeline.cpp
     game/ai/Hearing.cpp
+    game/ai/Nodes.cpp
+    game/ai/NavGraph.cpp
     game/ai/enemy/EnemyAI.cpp
+    game/ai/enemy/Schedule.cpp
+    game/ai/enemy/ScheduleTest.cpp
     game/ai/friendly/FriendlyAI.cpp
     game/ai/friendly/Streaming.cpp
     game/ai/friendly/CivilianEscort.cpp
+    game/ai/friendly/Schedule.cpp
+    game/ai/friendly/ScheduleTest.cpp
+    game/ai/friendly/Mind.cpp
     game/ai/guard/GuardCtx.cpp
     game/ai/guard/Mind.cpp
     game/ai/guard/Combat.cpp
@@ -68,6 +75,9 @@ add_executable(RawMetal WIN32
     game/ai/guard/Danger.cpp
     game/ai/guard/Schedule.cpp
     game/ai/guard/Support.cpp
+    game/ai/guard/Casualties.cpp
+    game/ai/guard/Plans.cpp
+    game/ai/guard/Conditions.cpp
     game/ai/guard/tests/GuardTest.cpp
     game/ai/guard/tests/CombatTest.cpp
     game/ai/guard/tests/TacticsTest.cpp
@@ -78,6 +88,10 @@ add_executable(RawMetal WIN32
     game/ai/guard/tests/RoleTest.cpp
     game/ai/guard/tests/DangerTest.cpp
     game/ai/guard/tests/ScheduleTest.cpp
+    game/ai/guard/tests/PatientTest.cpp
+    game/ai/guard/tests/CoverTest.cpp
+    game/ai/guard/tests/TableTest.cpp
+    game/ai/guard/tests/NavGraphTest.cpp
     game/ai/engineer/Drones.cpp
     game/ai/engineer/Support.cpp
     game/ai/engineer/DronesTest.cpp
@@ -88,6 +102,7 @@ add_executable(RawMetal WIN32
     game/ai/debug/DangerInspection.cpp
     game/ai/debug/EngineerInspection.cpp
     game/ai/debug/KillSquadInspection.cpp
+    game/ai/debug/SquadSupportInspection.cpp
     game/Hitscan.cpp
     world/Ballistics.cpp
     game/CampaignMapTest.cpp

@@ -1,36 +1,32 @@
 #include "../../Game.h"
 namespace retro {
 void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove){
- auto get=[&](const char* field){return state(friendlyKey(actor,field));};
- auto put=[&](const char* field,int value){setState(friendlyKey(actor,field),value);};
+ auto ctx=makeGuardCtx(actor,level,track,const_cast<ActorPose&>(pose));
+ auto get=[&](const char* field){return ctx.get(field);};
+ auto put=[&](const char* field,int value){ctx.put(field,value);};
  auto selected=guardTarget(actor);if(selected.valid())target={selected.position.x,selected.position.y,selected.feet+selected.height*.6f};
  int role=guardFlankSide(actor);
  auto preferredSide=[&](Vec2 toward){Vec2 side{-toward.y,toward.x};if(role)side=side*float(-role);else if(actor%2)side=side*(-1);return side;};
  int damage=track.damageState?state(track.damageState):0;bool lowHealth=track.health>0&&track.health-damage<=track.health*.35f;
  bool defensive=get("weapon_reload")>0||get("weapon_reloading")||(get("weapon_saved")&&get("weapon_rounds")==0)||get("guard_under_fire")>0||lowHealth;
- int mode=get("guard_cover_mode");
+ int mode=ctx.coverMode();
  bool protectedNow=selected.valid()&&guardCovered(actor,pose,selected);
  // Complete a chosen retreat even if a short damage/reload timer expires
  // during the walk. Return to offense once the protected position is reached.
- defensive|=mode==2&&get("guard_cover")&&!protectedNow;
+ defensive|=mode==2&&ctx.hasCoverGoal()&&!protectedNow;
  if(defensive){
-  if(mode!=2){put("guard_cover",0);put("guard_cover_wait",0);}put("guard_cover_mode",2);
-  if(protectedNow){put("guard_cover",0);put("guard_cover_wait",0);wantsMove=false;return;}
-  int wait=std::max(0,get("guard_cover_wait")-ms);Vec2 cached{get("guard_cover_x")*.001f,get("guard_cover_y")*.001f};
-  if(get("guard_cover")){auto trial=pose;trial.position=cached;trial.z=get("guard_cover_z")*.001f;if(lengthSq(cached-pose.position)<.04f||!selected.valid()||!guardCovered(actor,trial,selected)||guardPositionReserved(actor,cached,trial.z)){put("guard_cover",0);wait=0;}}
+  if(mode!=2)ctx.clearCoverGoal();put("guard_cover_mode",2);
+  if(protectedNow){ctx.clearCoverGoal();wantsMove=false;return;}
+  int wait=std::max(0,get("guard_cover_wait")-ms);Vec2 cached=ctx.coverGoal();
+  if(ctx.hasCoverGoal()){auto trial=pose;trial.position=cached;trial.z=ctx.coverFeet();if(lengthSq(cached-pose.position)<.04f||!selected.valid()||!guardCovered(actor,trial,selected)||guardPositionReserved(actor,cached,trial.z)){ctx.clearCoverGoal();wait=0;}}
   if(wait==0&&m_npcNavBudget>0){
-   --m_npcNavBudget;put("guard_cover",0);Vec2 toward=normalized(Vec2{target.x,target.y}-pose.position),side=preferredSide(toward);
-   const std::array<Vec2,8> offsets={toward*(-.75f),toward*(-1.5f),side*.75f,side*(-.75f),toward*(-.65f)+side*1.2f,toward*(-.65f)-side*1.2f,side*2.f,side*(-2.f)};
-   float best=10000;Vec2 destination{};float destinationZ=pose.z;
-   for(auto offset:offsets){auto candidate=pose.position+offset;if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
-    float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
-    auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
-    if(!selected.valid()||!guardCovered(actor,trial,selected))continue;float score=lengthSq(offset);if(score>=best)continue;best=score;destination=candidate;destinationZ=feet;
-   }
-   if(best<10000){put("guard_cover",1);put("guard_cover_x",int(std::round(destination.x*1000)));put("guard_cover_y",int(std::round(destination.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));cached=destination;}
+   --m_npcNavBudget;ctx.clearCoverGoal();Vec2 destination{};float destinationZ=pose.z;
+   float sideSign=role?float(-role):(actor%2?-1.f:1.f);
+   bool found=findGuardCoverFromEnemy(level,actor,pose,target,destination,destinationZ,sideSign);
+   if(found){ctx.setCoverGoal(destination,destinationZ,2);cached=destination;}
    wait=600+int(actor%7)*30;
   }
-  put("guard_cover_wait",wait);wantsMove=get("guard_cover")!=0;if(wantsMove){goal=cached;goalZ=get("guard_cover_z")*.001f;}return;
+  put("guard_cover_wait",wait);wantsMove=ctx.hasCoverGoal();if(wantsMove){goal=cached;goalZ=ctx.coverFeet();}return;
  }
  if(mode==2){put("guard_cover",0);put("guard_cover_wait",0);}put("guard_cover_mode",0);
  if(guardMeleeReady(actor,pose,selected)){put("guard_cover",0);put("guard_cover_wait",0);wantsMove=false;return;}

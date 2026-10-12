@@ -1,4 +1,0 @@
-Main OST fades out; lift motor takes over: PASS
-Creak, snap, crash and sinister reactor music transition: PASS
-One reactor loop; music toggle preserves effects: PASS
-Restart restores main OST: PASS

@@ -7,6 +7,10 @@ namespace {
 constexpr float DangerRadius=4.5f;
 float norm3(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
 }
+bool Game::guardGrenadeExposed(size_t actor)const{
+ const auto&npc=m_friendlyActors.at(actor);auto shift=chunkOffset(npc.level)-chunkOffset(m_level);Point3 receiver{npc.pose.position.x+shift.x,npc.pose.position.y+shift.y,npc.pose.z+npc.track().scale*.5f};
+ for(const auto&grenade:tacticalGrenades(true)){auto offset=chunkOffset(grenade.level)-chunkOffset(m_level);auto hazard=grenade.position+Point3{offset.x,offset.y,0};if(norm3(receiver-hazard)<DangerRadius&&tacticalGrenadeTrace(hazard,receiver).kind!=ShotKind::Solid)return true;}return false;
+}
 bool Game::guardDangerIntent(size_t actor,ActorPose&pose,float dt,Vec2&goal,float&goalZ,bool&wantsMove){
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();
  auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto put=[&](const char*f,int v){setState(friendlyKey(actor,f),v);};

@@ -225,6 +225,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
   }else if(tag=="COMPACTOR"){
    if(f.size()<9)throw std::runtime_error("malformed COMPACTOR record");auto map=mapAt(maps,f);map->compactors.push_back({
     number(f,2,"compactor x1"),number(f,3,"compactor y1"),number(f,4,"compactor x2"),number(f,5,"compactor y2"),number(f,6,"compactor bed"),number(f,7,"compactor raised"),number(f,8,"compactor period"),0});
+  }else if(tag=="NAV_HINT"){
+   if(f.size()!=6)throw std::runtime_error("malformed NAV_HINT record");auto map=mapAt(maps,f);int hint=integer(f,5,"nav hint kind");
+   if(hint<0||hint>1)throw std::runtime_error("invalid nav hint kind; use Path (0) or Cover (1)");
+   map->navHints.push_back({{number(f,2,"nav hint x"),number(f,3,"nav hint y")},number(f,4,"nav hint z"),hint});
   }else throw std::runtime_error("unknown custom campaign record: "+tag);
  }
  for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration, weapon or patrol requires Guard actor AI mode");
