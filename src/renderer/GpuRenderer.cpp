@@ -32,6 +32,42 @@ struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4
 struct Buffer {VkBuffer handle=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;void* mapped=nullptr;VkDeviceSize size=0;};
 struct Image {VkImage handle=VK_NULL_HANDLE;VkImageView view=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;};
 struct EmissionLevel {int width,height;std::vector<std::array<float,4>> pixels;};
+// Store-low / run-high: cart atlases stay small; Vulkan presents a bilinear-
+// upsampled working set so trimming source resolution can be judged live.
+std::vector<uint32_t> upsamplePixels(const std::vector<uint32_t>& source,int width,int height,int scale){
+ if(scale<=1||width<1||height<1||source.size()!=size_t(width)*height)return source;
+ int outW=width*scale,outH=height*scale;std::vector<uint32_t> out(size_t(outW)*outH);
+ auto sample=[&](float x,float y){
+  x=std::clamp(x,0.f,float(width-1));y=std::clamp(y,0.f,float(height-1));
+  int x0=int(x),y0=int(y),x1=std::min(width-1,x0+1),y1=std::min(height-1,y0+1);float fx=x-x0,fy=y-y0;
+  auto mix=[](uint32_t a,uint32_t b,float t){uint32_t o=0;for(int c=0;c<4;++c){int s=c*8;auto av=(a>>s)&255u,bv=(b>>s)&255u;o|=unsigned(av*(1-t)+bv*t)<<s;}return o;};
+  auto a=mix(source[size_t(y0*width+x0)],source[size_t(y0*width+x1)],fx);auto b=mix(source[size_t(y1*width+x0)],source[size_t(y1*width+x1)],fx);return mix(a,b,fy);
+ };
+ for(int y=0;y<outH;++y)for(int x=0;x<outW;++x)out[size_t(y*outW+x)]=sample((x+.5f)/scale-.5f,(y+.5f)/scale-.5f);
+ return out;
+}
+std::vector<uint8_t> upsampleRelief(const std::vector<uint8_t>& source,int width,int height,int scale){
+ if(scale<=1||width<1||height<1||source.size()!=size_t(width)*height)return source;
+ int outW=width*scale,outH=height*scale;std::vector<uint8_t> out(size_t(outW)*outH);
+ for(int y=0;y<outH;++y)for(int x=0;x<outW;++x){
+  float sx=(x+.5f)/scale-.5f,sy=(y+.5f)/scale-.5f;sx=std::clamp(sx,0.f,float(width-1));sy=std::clamp(sy,0.f,float(height-1));
+  int x0=int(sx),y0=int(sy),x1=std::min(width-1,x0+1),y1=std::min(height-1,y0+1);float fx=sx-x0,fy=sy-y0;
+  float a=source[size_t(y0*width+x0)]*(1-fx)+source[size_t(y0*width+x1)]*fx;float b=source[size_t(y1*width+x0)]*(1-fx)+source[size_t(y1*width+x1)]*fx;
+  out[size_t(y*outW+x)]=uint8_t(std::lround(a*(1-fy)+b*fy));
+ }
+ return out;
+}
+std::vector<Point3> upsampleNormals(const std::vector<Point3>& source,int width,int height,int scale){
+ if(scale<=1||width<1||height<1||source.size()!=size_t(width)*height)return source;
+ int outW=width*scale,outH=height*scale;std::vector<Point3> out(size_t(outW)*outH);
+ auto at=[&](int x,int y)->Point3{return source[size_t(std::clamp(y,0,height-1)*width+std::clamp(x,0,width-1))];};
+ for(int y=0;y<outH;++y)for(int x=0;x<outW;++x){
+  float sx=(x+.5f)/scale-.5f,sy=(y+.5f)/scale-.5f;int x0=int(std::floor(sx)),y0=int(std::floor(sy));float fx=sx-x0,fy=sy-y0;
+  auto a=at(x0,y0)*(1-fx)+at(x0+1,y0)*fx,b=at(x0,y0+1)*(1-fx)+at(x0+1,y0+1)*fx,n=a*(1-fy)+b*fy;
+  float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);out[size_t(y*outW+x)]=len>.0001f?n*(1.f/len):Point3{0,0,1};
+ }
+ return out;
+}
 float srgbLinear(float encoded){return encoded<=.04045f?encoded/12.92f:std::pow((encoded+.055f)/1.055f,2.4f);}
 uint8_t srgbByteSlow(float linear){float encoded=linear<=.0031308f?linear*12.92f:1.055f*std::pow(linear,1.f/2.4f)-.055f;return uint8_t(std::lround(std::clamp(encoded,0.f,1.f)*255.f));}
 struct SrgbEncoding {std::array<uint8_t,4096> candidates;std::array<float,255> upper;};
@@ -275,7 +311,15 @@ struct GpuRenderer::Impl {
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
  struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;uint32_t sortKey=0,colorLevels=1;};
  std::unordered_map<uint64_t,Material> materials;
+ int presentScaleCached=0;
  const void* lastPixels=nullptr;uint64_t lastGeneration=0,lastMaterial=0;uint32_t lastSort=0;
+ void clearMaterials(){
+  vkDeviceWaitIdle(device);
+  for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
+  materials.clear();lastPixels=nullptr;lastGeneration=0;lastMaterial=0;lastSort=0;
+  for(auto&entry:staticCaches)destroy(entry.second.buffer);staticCaches.clear();
+  if(descriptors)vkResetDescriptorPool(device,descriptors,0);
+ }
  struct Batch {uint64_t material;uint32_t start,count;bool clear=false,cache=false;int cacheSlot=-1;uint32_t sortKey=0;};
  struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;};
  std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
@@ -385,27 +429,35 @@ struct GpuRenderer::Impl {
   pendingUploads.push_back(std::move(pending));++uploadStats[0];if(pendingUploadBytes>=UploadBatchLimit)flushUploads();
  }
  uint64_t material(const SoftwareRenderer::Texture&t){
+  int scale=SoftwareRenderer::texturePresentScale();if(scale!=1&&scale!=2&&scale!=4)scale=1;
+  if(presentScaleCached&&presentScaleCached!=scale)clearMaterials();
+  presentScaleCached=scale;
   // Plain constant colours share one image. Atlas keys use a lifetime token,
   // never an allocator address that can later belong to different maps.
   // Constant keys are odd and generation keys even, so the domains cannot alias.
-  uint64_t key=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;auto found=materials.find(key);if(found!=materials.end())return key;
+  // Present scale lives in high bits so store-low/run-high retunes invalidate cleanly.
+  uint64_t base=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;
+  uint64_t key=base^(uint64_t(unsigned(scale))<<56);auto found=materials.find(key);if(found!=materials.end())return key;
   auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;
   mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
+  int presentW=std::max(1,t.width*scale),presentH=std::max(1,t.height*scale);
+  auto color=upsamplePixels(t.pixels,t.width,t.height,scale);
+  auto emission=upsamplePixels(t.emission,t.width,t.height,scale);
   // sRGB formats decode before hardware bilinear/trilinear filtering. The
   // software reference keeps its original atlases and mip representation.
   std::vector<std::vector<uint8_t>> levels;
-  if(t.additive){levels.push_back(bytes(t.pixels));for(const auto&level:t.mips)levels.push_back(bytes(level));}
-  else levels=diffuseBytes(t.width,t.height,t.pixels);
+  if(t.additive){levels.push_back(bytes(color));if(scale==1)for(const auto&level:t.mips)levels.push_back(bytes(level));}
+  else levels=diffuseBytes(presentW,presentH,color);
   mat.colorLevels=uint32_t(levels.size());
-  upload(mat.color,t.width,t.height,t.additive?VK_FORMAT_B8G8R8A8_UNORM:VK_FORMAT_B8G8R8A8_SRGB,std::move(levels),4);
+  upload(mat.color,presentW,presentH,t.additive?VK_FORMAT_B8G8R8A8_UNORM:VK_FORMAT_B8G8R8A8_SRGB,std::move(levels),4);
   // Store raw first moments so hardware interpolation also preserves variance.
   // Generate this GPU chain from the original normals, leaving CPU source
   // levels unchanged and including odd last rows/columns at every reduction.
-  if(!t.normalLevels.empty())upload(mat.normal,t.width,t.height,VK_FORMAT_R16G16B16A16_SNORM,normalBytes(t.width,t.height,t.normalLevels.front()),8);
-  if(!t.emission.empty())upload(mat.emission,t.width,t.height,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(t.width,t.height,t.emission)),8);
+  if(!t.normalLevels.empty()){auto normals=upsampleNormals(t.normalLevels.front(),t.width,t.height,scale);upload(mat.normal,presentW,presentH,VK_FORMAT_R16G16B16A16_SNORM,normalBytes(presentW,presentH,normals),8);}
+  if(!t.emission.empty())upload(mat.emission,presentW,presentH,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(presentW,presentH,emission)),8);
   else if(!blackEmission.view)upload(blackEmission,1,1,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(1,1,{0xff000000u})),8);
-  if(!t.relief.empty())upload(mat.relief,t.width,t.height,VK_FORMAT_R8_UNORM,{bytes(t.relief)},1);
+  if(!t.relief.empty()){auto relief=upsampleRelief(t.relief,t.width,t.height,scale);upload(mat.relief,presentW,presentH,VK_FORMAT_R8_UNORM,{bytes(relief)},1);}
   VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};alloc.descriptorPool=descriptors;alloc.descriptorSetCount=1;alloc.pSetLayouts=&setLayout;check(vkAllocateDescriptorSets(device,&alloc,&mat.set),"Allocate material descriptors");
   VkDescriptorImageInfo images[]={{t.clampEdges?clamp:wrap,mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.normal.view?mat.normal.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{t.clampEdges?clamp:wrap,mat.emission.view?mat.emission.view:blackEmission.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.relief.view?mat.relief.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
   VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[n].dstSet=mat.set;writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[n].pImageInfo=&images[n];}vkUpdateDescriptorSets(device,4,writes,0,nullptr);return key;
@@ -542,12 +594,15 @@ std::pair<int,int> GpuRenderer::surfaceExtent()const{
 void GpuRenderer::captureVrEye(std::vector<std::uint32_t>&pixels){if(!m->vrMode)throw std::runtime_error("Eye capture requires VR");Buffer capture;try{m->flushUploads();m->makeBuffer(capture,VkDeviceSize(m->swapExtent.width)*m->swapExtent.height*4,VK_BUFFER_USAGE_TRANSFER_DST_BIT);m->startUploadCommands();VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={m->swapExtent.width,m->swapExtent.height,1};vkCmdCopyImageToBuffer(m->uploadCommand,m->vrOutputs[m->vrEye].handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,capture.handle,1,&copy);VkMemoryBarrier host{VK_STRUCTURE_TYPE_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;vkCmdPipelineBarrier(m->uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&host,0,nullptr,0,nullptr);m->submitUploadCommands();pixels.resize(size_t(m->swapExtent.width)*m->swapExtent.height);auto source=static_cast<const uint8_t*>(capture.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(uint32_t(source[i*4])<<16)|(uint32_t(source[i*4+1])<<8)|source[i*4+2];m->destroy(capture);}catch(...){m->destroy(capture);throw;}}
 void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
  auto key=m->material(texture);m->flushUploads();auto&material=m->materials.at(key);auto&image=material.color;
+ int scale=SoftwareRenderer::texturePresentScale();if(scale!=1&&scale!=2&&scale!=4)scale=1;
+ int presentW=std::max(1,texture.width*scale),presentH=std::max(1,texture.height*scale);
+ auto color=upsamplePixels(texture.pixels,texture.width,texture.height,scale);
  std::vector<std::vector<uint8_t>> levels;
- if(texture.additive){auto bytes=[](const auto&pixels){std::vector<uint8_t> result(pixels.size()*4);std::memcpy(result.data(),pixels.data(),result.size());return result;};levels.push_back(bytes(texture.pixels));for(const auto&level:texture.mips)levels.push_back(bytes(level));}
- else levels=diffuseBytes(texture.width,texture.height,texture.pixels);
+ if(texture.additive){auto bytes=[](const auto&pixels){std::vector<uint8_t> result(pixels.size()*4);std::memcpy(result.data(),pixels.data(),result.size());return result;};levels.push_back(bytes(color));if(scale==1)for(const auto&level:texture.mips)levels.push_back(bytes(level));}
+ else levels=diffuseBytes(presentW,presentH,color);
  if(levels.size()!=material.colorLevels)throw std::runtime_error("Dynamic atlas topology changed after upload");
  VkDeviceSize size=0;std::vector<VkBufferImageCopy> copies;copies.reserve(levels.size());
- for(size_t level=0;level<levels.size();++level){VkBufferImageCopy copy{};copy.bufferOffset=size;copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,uint32_t(level),0,1};copy.imageExtent={uint32_t(std::max(1,texture.width>>level)),uint32_t(std::max(1,texture.height>>level)),1};copies.push_back(copy);size+=levels[level].size();}
+ for(size_t level=0;level<levels.size();++level){VkBufferImageCopy copy{};copy.bufferOffset=size;copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,uint32_t(level),0,1};copy.imageExtent={uint32_t(std::max(1,presentW>>int(level))),uint32_t(std::max(1,presentH>>int(level))),1};copies.push_back(copy);size+=levels[level].size();}
  if(m->dynamicUpload.size<size){m->destroy(m->dynamicUpload);m->makeBuffer(m->dynamicUpload,size,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);}
  for(size_t level=0;level<levels.size();++level)std::memcpy(static_cast<char*>(m->dynamicUpload.mapped)+copies[level].bufferOffset,levels[level].data(),levels[level].size());
  m->startUploadCommands();auto cmd=m->uploadCommand;

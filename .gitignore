@@ -39,3 +39,6 @@ weapon-motion-*.ppm
 # Offline bake donors staged from O: — not embedded, not shipped
 source-assets/medic-motion/UAL1_Standard.fbx
 source-assets/medic-motion/UAL2_Standard.fbx
+
+# Local full-res texture backups kept beside half-res cart embeds
+*.fullres.bak

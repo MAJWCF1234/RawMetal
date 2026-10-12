@@ -35,6 +35,9 @@ public:
     static bool testHardware();
     static bool testPresentationResize();
     static bool testCreatureAnimation();
+    // Store-low / run-high: Vulkan presents bilinear-upsampled atlases (1/2/4).
+    static void setTexturePresentScale(int scale);
+    static int texturePresentScale();
     float gripError()const{return m_gripError;}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
