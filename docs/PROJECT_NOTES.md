@@ -73,3 +73,14 @@ experiment: entering `X17–17.8, Y12–13` enables a second Raider guard and a
 Creature target. The original solo encounter remains available before activation.
 Existing Worker/Wasp/shotgun resources provide the demonstration; the external
 asset library is still unnecessary. Full GoldSrc AI parity remains unproven.
+
+## October 11, 2026 — cleanup models and stitched kill squad
+
+The [cleanup squad pass](kill-squad-pass-20261011.md) adds six supplied cleanup
+visuals, shared cross-chunk guard pursuit/home return, timed combat events,
+observed-cover suppression and saved physical grenades. The evolving Ash pack
+now has a three-chunk test route with Assault, Engineer, Sharpshooter, Heavy,
+Medic and Rusher roles, finite Medic treatments and supervised Engineer drones. Limitator stays out of ordinary squads. Supplied originals are retained
+and verified; only the six requested Downloads originals were removed.
+The main campaign has no added maps. Animations are newly authored prototype
+vertex motion; full GoldSrc parity and physical VR playtesting remain unproven.

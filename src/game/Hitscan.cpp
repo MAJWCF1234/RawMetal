@@ -25,6 +25,7 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
    for(size_t i=0;i<enemies.size();++i){const auto&e=enemies[i];if(e.alive)body(ShotKind::Enemy,level,int(i),e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom(),e.kind==Enemy::Kind::Wasp?.28f:.4f);}
    for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];const auto&pose=world.actorPose(i);if(track.platform||autonomousActor(track)||pose.clip==4||(track.deadState&&state(track.deadState)))continue;body(ShotKind::Actor,level,int(i),pose.position,pose.z,track.scale,track.visual==ActorVisual::Cargo?track.scale*.5f:.2f);}
   }
+  for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())body(ShotKind::Drone,drone.level,drone.slot,{drone.position.x,drone.position.y},drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
   if(m_world.hasLift()&&m_hazmat.initialized){int joint=-1;float distance=m_hazmat.rayHit({origin.x,origin.y,origin.z},{ray.x,ray.y,ray.z},joint);if(joint>=0&&distance<hit.distance)hit={ShotKind::Ragdoll,m_level,joint,distance,distance,origin+ray*distance,{}};}
   return hit;
  };
@@ -48,15 +49,17 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
   for(size_t i=0;i<world.actorTracks().size();++i){const auto&t=world.actorTracks()[i];const auto&p=world.actorPose(i);if(!t.platform&&!autonomousActor(t)&&t.health&&p.clip!=4&&(!t.deadState||!state(t.deadState)))candidate(p.position+shift,p.z,t.scale,.4f);}
  }
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(int(i)!=ignoredNpc&&chunkResident(npc.level)&&autonomousActor(t)&&t.health&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState)))candidate(npc.pose.position+chunkOffset(npc.level)-activeOrigin,npc.pose.z,t.scale,.4f);}
+ for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())candidate(Vec2{drone.position.x,drone.position.y}+chunkOffset(drone.level)-activeOrigin,drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
  return result;
 }
 void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride,AiTargetRef attacker){
  auto source=Vec2{origin.x,origin.y};auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto&world=friendlyWorld(hit.level);
  if(hit.kind==ShotKind::Player){receiveDamage(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
+ if(hit.kind==ShotKind::Drone){damageEngineerDrone(hit.index,damageOverride>0?damageOverride:definition.actorDamage,attacker);if(playerFired)m_hitFlash=1;return;}
  if(hit.kind==ShotKind::Npc){if(playerFired)attacker={ShotKind::Player,m_level,0};damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift,attacker);if(playerFired)m_hitFlash=1;return;}
  if(hit.kind==ShotKind::Actor){const auto&actor=world.actorTracks().at(size_t(hit.index));if(!actor.health)return;const auto&pose=world.actorPose(size_t(hit.index));int previous=std::clamp(state(actor.damageState),0,actor.health);int damage=previous+std::min(actor.health-previous,int(std::ceil(std::min(damageOverride>0?damageOverride:definition.actorDamage,float(actor.health)))));setState(actor.damageState,damage);if(playerFired)m_hitFlash=1;
-  bool killed=damage>=actor.health;if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(pose.z*1000)));if(actor.visual!=ActorVisual::Worker){if(hit.level==m_level)++m_kills;else ++m_chunks[hit.level].kills;}}
-  m_sounds.push_back({actor.visual==ActorVisual::Worker?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,pose.position-shift,.8f,1,true,17,pose.z+actor.scale*.7f});updateMechanisms(0);return;
+  bool killed=damage>=actor.health;if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(pose.z*1000)));if(!humanActorVisual(actor.visual)){if(hit.level==m_level)++m_kills;else ++m_chunks[hit.level].kills;}}
+  m_sounds.push_back({humanActorVisual(actor.visual)?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,pose.position-shift,.8f,1,true,17,pose.z+actor.scale*.7f});updateMechanisms(0);return;
  }
  if(hit.kind==ShotKind::Enemy){auto&enemy=(hit.level==m_level?m_enemies:m_chunks[hit.level].enemies).at(size_t(hit.index));bool killed=applyEnemyDamage(enemy,damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);auto audible=enemy;audible.pos=audible.pos-shift;enemySound(audible,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);return;}
  if(hit.kind==ShotKind::Ragdoll){m_hazmat.impulse(hit.index,{direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.7f});m_sounds.push_back({Sound::PunchHit,{hit.point.x,hit.point.y},.55f,.8f,true,17,hit.point.z});return;}

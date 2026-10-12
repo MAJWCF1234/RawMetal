@@ -7,6 +7,9 @@ bool Game::testGuardAI(){
  if(!testGuardTactics())return false;
  if(!testGuardPolicy())return false;
  if(!testGuardDefense())return false;
+ if(!testGuardPursuit())return false;
+ if(!testGuardActions())return false;
+ if(!testTacticalGrenades())return false;
  std::ofstream report("guard-ai-test.txt");bool passed=true;auto check=[&](bool ok,const char*label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();passed&=ok;};
  auto scene=[](bool wall=false,bool gate=false){auto campaign=std::make_shared<CustomCampaign>();campaign->name="Guard validation";campaign->key=728193;
   auto map=std::make_shared<AuthoredMapData>();map->name="Guard room";map->definition={{0,0},{18.5f,18.5f},0,Environment::Interior,false,8,.3f,42};AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
@@ -80,12 +83,17 @@ bool Game::testGuardAI(){
  check(rejects(ai+"ACTOR_GUARD|0|0|11|0.65|99|4000|alert\n"+point),"Guard authoring bounds recognition delay");
  check(rejects(ai+guard+"ACTOR_PATROL|0|0|24|6.5|0|900\n"),"Guard authoring rejects patrol points outside the home chunk");
  try{auto authored=load("ACTOR_WEAPON|0|0|1|650|1000|9|18\n"+guard+point+ai);const auto&config=authored->maps[0]->actorTracks[0].ai;check(config.armed&&config.aimMs==650&&config.attackDamage==18,"Armed guard configuration survives record ordering");}catch(const std::exception&){check(false,"Armed guard configuration survives record ordering");}
- check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|2|650|1000|9|18\n"),"Guard weapon authoring rejects unsupported weapons");
+ check(load(ai+guard+point+"ACTOR_WEAPON|0|0|2|650|1000|9|8\n")->maps[0]->actorTracks[0].ai.weapon==2,"Guard weapon authoring accepts the shared handgun profile");
+ check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|3|650|1000|9|18\n"),"Guard weapon authoring rejects unsupported weapons");
  check(rejects("ACTOR_AI|0|0|2||1.4|2|6\nACTOR_WEAPON|0|0|1|650|1000|9|18\n"),"Weapon authoring rejects armed civilian/escort modes");
  check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|1|99|1000|9|18\n"),"Guard weapon authoring bounds reaction delay");
  check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|1|650|1000|9|101\n"),"Guard weapon authoring bounds damage");
  try{auto authored=load("ACTOR_FACTION|0|0|2|security\n"+guard+point+ai);const auto&config=authored->maps[0]->actorTracks[0].ai;check(config.faction==AiFaction::Facility&&config.squad==stateId("security"),"Faction and squad authoring survive record ordering");}catch(const std::exception&){check(false,"Faction and squad authoring survive record ordering");}
  check(rejects(ai+guard+point+"ACTOR_FACTION|0|0|6|\n"),"Faction authoring rejects unknown relationship groups");
+ try{auto authored=load(ai+guard+point+"ACTOR_WEAPON|0|0|1|650|1000|9|18\nACTOR_TACTICS|0|0|1|2\n");const auto&config=authored->maps[0]->actorTracks[0].ai;check(config.suppress&&config.grenades==2,"Tactical authoring configures suppression and finite grenade inventory");}catch(const std::exception&){check(false,"Tactical authoring configures suppression and finite grenade inventory");}
+ check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|1|650|1000|9|18\nACTOR_TACTICS|0|0|2|2\n"),"Tactical authoring rejects nonbinary suppression");
+ check(rejects(ai+guard+point+"ACTOR_WEAPON|0|0|1|650|1000|9|18\nACTOR_TACTICS|0|0|1|5\n"),"Tactical authoring rejects unbounded grenade inventory");
+ check(rejects(ai+guard+point+"ACTOR_TACTICS|0|0|1|2\n"),"Tactical authoring requires an equipped firearm");
  check(rejects("ACTOR_AI|0|0|2||1.4|2|6\nACTOR_FACTION|0|0|2|security\n"),"Squad authoring rejects non-guard members");
  std::string points;for(int i=0;i<65;++i)points+=point;check(rejects(ai+guard+points),"Guard authoring rejects oversized patrol routes");
  return passed;

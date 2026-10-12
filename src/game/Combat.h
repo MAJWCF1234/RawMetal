@@ -5,7 +5,7 @@ namespace retro {
 
 // Compact combat tables for industrial-horror loadouts. Add a WeaponDef row to
 // expand firearms; fists stay a MeleeDef so holster/stow does not need a gun stub.
-enum class WeaponId : std::uint8_t { Fists=0, Shotgun=1 };
+enum class WeaponId : std::uint8_t { Fists=0, Shotgun=1, Handgun=2 };
 
 struct HitscanDef {
  float maxRange=18.f;
@@ -62,8 +62,14 @@ inline constexpr WeaponDef kWeapons[]={
 };
 
 inline constexpr int weaponCount(){return int(sizeof(kWeapons)/sizeof(kWeapons[0]));}
+// NPC sidearm uses the same first-hit ballistics, with a compact magazine and
+// lower impulse. The player's authored firearm inventory remains separate.
+inline constexpr WeaponDef kGuardHandgun{WeaponId::Handgun,"HANDGUN",
+ {18.f,.05f,.004f,10.f,8.f,6.f,4.f,9.f,10.f,0.f,.7f},
+ {.32f,1.8f,.08f,0.f,0.f,0.f,.42f,.05f,12,12,Sound::Shot,Sound::Pump,Sound::Empty}};
 
 inline const WeaponDef& weaponDef(WeaponId id){
+ if(id==WeaponId::Handgun)return kGuardHandgun;
  for(const auto&def:kWeapons)if(def.id==id)return def;
  return kWeapons[0];
 }

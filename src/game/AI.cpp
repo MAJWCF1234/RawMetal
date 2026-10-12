@@ -14,15 +14,16 @@ static float roughStep(Enemy::Kind kind){
 // one-metre cell centres. A one-metre voxel rise becomes a traversable slope when
 // its short movement samples stay within the creature's step capability, while a
 // real cliff still fails the same test.
-static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr){
+static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr,bool sweep=false){
  auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height);}
  int samples=std::max(1,int(std::ceil(distance/.08f)));float z=fromZ;
  for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f);
+  if(sweep&&!aiStructureSegment(w,from+delta*(float(i-1)/samples),z,p,height))return false;
   float rise=ground-z,drop=z-ground;if(rise>stepHeight+.025f||drop>std::max(.48f,stepHeight*1.45f)||!navFits(w,p,ground,height))return false;z=ground;
  }
  if(endZ)*endZ=z;return true;
 }
-static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height){
+static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false){
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
  for(int y=1;y<23;++y)for(int x=1;x<23;++x)for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
   Vec2 p{x+.5f,y+.5f};float floor=navSupport(w,p,span.floor+.215f);if(!navFits(w,p,floor,height))continue;
@@ -39,12 +40,17 @@ static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,floa
    }
   }
  }
- if(nodes[target].parent<0)return start;int next=target;while(nodes[next].parent!=origin&&next!=origin)next=nodes[next].parent;return nodes[next].p;
+ if(nodes[target].parent<0)return start;int next=target;while(nodes[next].parent!=origin&&next!=origin)next=nodes[next].parent;
+ // The actor can enter a navigation cell near an obstacle corner. Its next
+ // cell-to-cell edge is safe from the cell centre, but the diagonal from the
+ // actor's actual feet may clip that corner. Reach the origin centre first.
+ if(human&&!aiWalkSegment(w,start,startZ,nodes[next].p,height)&&aiWalkSegment(w,start,startZ,nodes[origin].p,height))return nodes[origin].p;
+ return nodes[next].p;
 }
-bool aiWalkSegment(const World&w,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){return roughSegment(w,start,feet,goal,height,w.hasTerrain()?.34f:.24f,endFeet);}
+bool aiWalkSegment(const World&w,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){return roughSegment(w,start,feet,goal,height,w.hasTerrain()?.34f:.24f,endFeet,true);}
 Vec2 aiWalkWaypoint(const World&w,Vec2 start,float feet,Vec2 goal,float goalFeet,float height){
  if(aiWalkSegment(w,start,feet,goal,height))return goal;
- if(!w.hasTerrain())return stackedWaypoint(w,start,feet,goal,goalFeet,height);
+ if(!w.hasTerrain())return stackedWaypoint(w,start,feet,goal,goalFeet,height,true);
  std::array<int,24*24> field;field.fill(9999);std::queue<int> queue;
  int gx=std::clamp(int(goal.x),0,23),gy=std::clamp(int(goal.y),0,23);field[gy*24+gx]=0;queue.push(gy*24+gx);
  auto edge=[&](int a,int b){Vec2 p{a%24+.5f,a/24+.5f},q{b%24+.5f,b/24+.5f};return aiWalkSegment(w,p,navSupport(w,p,float(World::TerrainMaxZ+1)),q,height);};
@@ -254,7 +260,7 @@ void Game::updateEnemies(float dt){
 }
 ActorPose Game::friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const{
  const auto&track=world.actorTracks()[actor];
- if(dt<=0||track.visual!=ActorVisual::Worker||pose.clip!=0||pose.lookAtActor>=0||(track.deadState&&state(track.deadState)))return pose;
+ if(dt<=0||!humanActorVisual(track.visual)||pose.clip!=0||pose.lookAtActor>=0||(track.deadState&&state(track.deadState)))return pose;
  Vec2 facing{std::sin(old.yaw),std::cos(old.yaw)},target{};float nearest=64.f;bool found=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
   if(distance<nearest&&aiCanSee(world,pose.position,pose.z+track.scale*.85f,facing,position,z,8.f,-.25f,2.f)){nearest=distance;target=position;found=true;}};

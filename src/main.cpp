@@ -333,6 +333,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--guard-tactics-test"))return retro::Game::testGuardTactics()?0:21;
     if(std::wcsstr(commandLine,L"--guard-policy-test"))return retro::Game::testGuardPolicy()?0:21;
     if(std::wcsstr(commandLine,L"--guard-defense-test"))return retro::Game::testGuardDefense()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-pursuit-test"))return retro::Game::testGuardPursuit()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-actions-test"))return retro::Game::testGuardActions()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-roles-test"))return retro::Game::testGuardRoles()?0:21;
+    if(std::wcsstr(commandLine,L"--engineer-drone-test"))return retro::Game::testEngineerDrones()?0:21;
+    if(std::wcsstr(commandLine,L"--tactical-grenade-test"))return retro::Game::testTacticalGrenades()?0:21;
+    if(std::wcsstr(commandLine,L"--kill-squad-inspection")){
+     constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+     std::filesystem::create_directories("diagnostics/kill-squad-20261011");std::ofstream report("diagnostics/kill-squad-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"cleanup-ready","cleanup-grenade","cleanup-fire","cleanup-pursuit","cleanup-engineer-throw","cleanup-assault-close","cleanup-sharpshooter-close","cleanup-heavy-close","cleanup-medic-close","cleanup-rusher-close","cleanup-drone","cleanup-medkit-opening","cleanup-medkit-treatment","cleanup-medkit-healed"};
+     for(int stage=0;stage<14;++stage){auto scene=retro::Game::killSquadInspection(stage);report<<names[stage]<<": PASS health="<<scene.player().health<<" grenades="<<scene.tacticalGrenades().size()<<" drones="<<scene.engineerDrones().size()<<" treatment="<<scene.npcWeaponPose(6).treatment<<" patientDamage="<<scene.state(retro::stateId("cleanup_damage_3"));for(size_t actor=2;actor<8;++actor){const auto&npc=scene.npcActors()[actor];report<<" npc"<<actor<<"="<<npc.level<<'/'<<npc.pose.position.x<<','<<npc.pose.position.y;}report<<'\n';report.flush();renderer->render(scene);std::ofstream out(std::string("diagnostics/kill-squad-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--guard-policy-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/guard-policy-20261011");std::ofstream report("diagnostics/guard-policy-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"squad-activated","squad-alert","squad-fire","squad-reload-cover"};
@@ -814,7 +825,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     return 0;
     }catch(const std::exception& error){
         std::ofstream("RawMetal-error.txt")<<error.what();
-        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window")&&!std::wcsstr(commandLine,L"--vr-smoke-test"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
+        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window")&&!std::wcsstr(commandLine,L"--vr-smoke-test")&&!std::wcsstr(commandLine,L"--kill-squad-inspection"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }
 }

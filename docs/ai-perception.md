@@ -228,6 +228,13 @@ equivalent content coverage, tactics or long-session reliability.
 
 ## State storage
 
+The [cleanup squad pass](kill-squad-pass-20261011.md) adds shared guard pursuit
+through permitted chunk boundaries, home return, one-shot action timelines,
+opt-in observed-cover suppression and physical tactical grenades. Tests include
+streaming every frame, save restoration, 60/120 Hz timing, doors, bystander
+safety, finite inventory and rejection of corrupt action/projectile state.
+These systems are generic; the Ash custom map only authors their configuration.
+
 Script/NPC state uses sorted storage and binary search instead of scanning all
 flags on every query. Saves allow up to 8,192 state values while retaining the
 existing smaller limits for other collections and the overall 2 MB file limit.

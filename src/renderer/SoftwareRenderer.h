@@ -100,6 +100,16 @@ private:
     Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274};
     Mesh m_workerMesh{277,"",278};
     std::array<Texture,3> m_workerTextures;
+    Mesh m_cleanupMesh{303,"",304};
+    Mesh m_cleanupEngineer{308,"",309},m_cleanupSharpshooter{313,"",314};
+    Mesh m_cleanupHeavy{318,"",319},m_cleanupMedic{323,"",324},m_cleanupRusher{328,"",329};
+    Mesh m_engineerDrone{333,"",334};
+    Texture m_droneTexture,m_handgunTexture;
+    Mesh m_handgunMesh{337};
+    std::array<std::array<Texture,2>,6> m_cleanupTextures;
+    std::array<std::array<std::array<Point3,3>,2>,6> m_cleanupArms{};
+ std::array<std::array<Point3,2>,6> m_cleanupPalms{};
+ std::array<std::vector<std::array<std::uint8_t,4>>,6> m_cleanupWeights;
     Texture m_glassTexture;
     Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture;
     Mesh m_barrelMesh{121},m_crateMesh{123};

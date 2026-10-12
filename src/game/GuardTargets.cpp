@@ -7,6 +7,7 @@ AiTarget Game::resolveGuardTarget(size_t actor,AiTargetRef ref)const{
  else if(ref.kind==ShotKind::Npc){if(ref.index<0||size_t(ref.index)>=m_friendlyActors.size()||size_t(ref.index)==actor)return {};const auto&npc=m_friendlyActors[size_t(ref.index)];const auto&t=npc.track();if(!autonomousActor(t)||npc.pose.clip==4||!t.health||(t.deadState&&state(t.deadState)))return {};target.level=npc.level;target.position=npc.pose.position;target.feet=npc.pose.z;target.height=t.scale;target.eye=t.scale*.85f;target.faction=actorFaction(t);}
  else if(ref.kind==ShotKind::Enemy){if(ref.level<0||ref.level>=chunkCount()||!chunkResident(ref.level))return {};const auto&enemies=ref.level==m_level?m_enemies:m_chunks[ref.level].enemies;if(ref.index<0||size_t(ref.index)>=enemies.size()||!enemies[size_t(ref.index)].alive)return {};const auto&e=enemies[size_t(ref.index)];target.position=e.pos;target.feet=e.bodyBottom();target.height=e.bodyTop()-e.bodyBottom();target.eye=target.height*.65f;target.faction=AiFaction::Creature;}
  else if(ref.kind==ShotKind::Actor){if(ref.level<0||ref.level>=chunkCount()||!chunkResident(ref.level))return {};const auto&w=ref.level==m_level?m_world:m_chunks[ref.level].world;if(ref.index<0||size_t(ref.index)>=w.actorTracks().size())return {};const auto&t=w.actorTracks()[size_t(ref.index)];const auto&p=w.actorPose(size_t(ref.index));if(t.ai.mode!=ActorAiMode::Scripted||t.platform||!t.health||p.clip==4||(t.deadState&&state(t.deadState))||(t.ai.enableState&&!state(t.ai.enableState)))return {};target.position=p.position;target.feet=p.z;target.height=t.scale;target.eye=t.scale*.85f;target.faction=actorFaction(t);}
+ else if(ref.kind==ShotKind::Drone)return engineerDroneTarget(ref.index,m_friendlyActors[actor].level);
  else return {};
  if(!chunkResident(target.level))return {};target.position+=chunkOffset(target.level)-origin;return target;
 }
@@ -35,6 +36,7 @@ AiTarget Game::guardThreat(size_t actor,const ActorPose&pose)const{
  };
  consider({ShotKind::Player,m_level,0});
  for(size_t i=0;i<m_friendlyActors.size();++i)if(i!=actor)consider({ShotKind::Npc,m_friendlyActors[i].level,int(i)});
+ for(const auto&drone:engineerDrones())consider({ShotKind::Drone,drone.level,drone.slot});
  for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&w=level==m_level?m_world:m_chunks[level].world;const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
   auto center=chunkOffset(level)+Vec2{12,12}-chunkOffset(npc.level);if(length(center-pose.position)>npc.track().ai.sightRange+17)continue;
   for(size_t i=0;i<enemies.size();++i)consider({ShotKind::Enemy,level,int(i)});for(size_t i=0;i<w.actorTracks().size();++i)if(w.actorTracks()[i].ai.mode==ActorAiMode::Scripted)consider({ShotKind::Actor,level,int(i)});
@@ -63,13 +65,15 @@ bool Game::guardHostileToPlayer(size_t actor)const{
  auto target=guardTarget(actor);return factionsHostile(actorFaction(m_friendlyActors[actor].track()),AiFaction::Player)||(target.kind==ShotKind::Player&&state(friendlyKey(actor,"guard_confirmed")));
 }
 void Game::validateGuardPolicyState(size_t actor)const{
+ validateGuardActions(actor);
+ validateGuardSupport(actor);
  auto get=[&](const char*f){return state(friendlyKey(actor,f));};
- for(const char*f:{"guard_seen","guard_confirmed","guard_slot","guard_flank_done","weapon_saved","weapon_reloading"})if(get(f)<0||get(f)>1)throw std::runtime_error("Invalid saved guard policy flag");
+ for(const char*f:{"guard_return","guard_seen","guard_confirmed","guard_slot","guard_flank_done","weapon_saved","weapon_reloading"})if(get(f)<0||get(f)>1)throw std::runtime_error("Invalid saved guard policy flag");
  int saved=get("weapon_saved"),reloading=get("weapon_reloading"),rounds=get("weapon_rounds"),reload=get("weapon_reload");
  if((reloading&&(!saved||rounds!=0||reload<=0))||(!reloading&&reload!=0)||(!saved&&rounds!=0))throw std::runtime_error("Inconsistent saved guard reload state");
  if(get("guard_slot_ms")<0||get("guard_slot_ms")>3500||get("guard_flank_wait")<0||get("guard_flank_wait")>5000||get("squad_fraction")<0||get("squad_fraction")>=1000||get("weapon_bash")<0||get("weapon_bash")>300||get("weapon_bash_pose")<0||get("weapon_bash_pose")>220||get("guard_cover_mode")<0||get("guard_cover_mode")>2)throw std::runtime_error("Invalid saved guard policy clock");
  for(const char*prefix:{"guard_target","weapon_target","hit"}){auto kind=get((std::string(prefix)+"_kind").c_str()),level=get((std::string(prefix)+"_level").c_str()),index=get((std::string(prefix)+"_index").c_str());
-  if(kind!=0&&kind!=int(ShotKind::Enemy)&&kind!=int(ShotKind::Npc)&&kind!=int(ShotKind::Actor)&&kind!=int(ShotKind::Player))throw std::runtime_error("Invalid saved guard target kind");
+  if(kind!=0&&kind!=int(ShotKind::Enemy)&&kind!=int(ShotKind::Npc)&&kind!=int(ShotKind::Actor)&&kind!=int(ShotKind::Player)&&kind!=int(ShotKind::Drone))throw std::runtime_error("Invalid saved guard target kind");
   if(level<0||level>chunkCount()||index<0||index>65536||(kind&&(level==0||index==0)))throw std::runtime_error("Invalid saved guard target reference");
  }
 }

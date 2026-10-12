@@ -12,7 +12,9 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_cover")&&(get("guard_cover_x")<350||get("guard_cover_x")>23650||get("guard_cover_y")<350||get("guard_cover_y")>23650))throw std::runtime_error("Invalid saved guard cover goal");
  if(get("guard_confirmed")<0||get("guard_confirmed")>1||get("guard_seen")<0||get("guard_seen")>1||get("guard_under_fire")<0||get("guard_under_fire")>1500)throw std::runtime_error("Invalid saved guard threat memory");
  if(get("guard_patrol_wait")<0||get("guard_patrol_wait")>5000||get("guard_patrol_progress")<0||get("guard_patrol_progress")>=100||get("guard_patrol_point_seen")<0||get("guard_patrol_point_seen")>int(config.patrol.size())||get("guard_patrol_fraction")<0||get("guard_patrol_fraction")>=1000||get("guard_patrol_movement_fraction")<0||get("guard_patrol_movement_fraction")>=1000)throw std::runtime_error("Invalid saved guard patrol recovery");
- if(get("weapon_aim")<0||get("weapon_aim")>config.aimMs||get("weapon_recovery")<0||get("weapon_recovery")>std::max(config.recoveryMs,900)||get("weapon_reload")<0||get("weapon_reload")>1800||get("weapon_rounds")<0||get("weapon_rounds")>weaponDef(WeaponId::Shotgun).cycle.tubeCapacity||get("weapon_raise")<0||get("weapon_raise")>1000||get("weapon_flash")<0||get("weapon_flash")>80||get("weapon_recoil")<0||get("weapon_recoil")>220)throw std::runtime_error("Invalid saved guard weapon state");
+ if(get("guard_route_target")<0||get("guard_route_target")>chunkCount()||get("guard_route_next")<0||get("guard_route_next")>chunkCount()||get("guard_route_wait")<0||get("guard_route_wait")>1000||get("guard_portal_z")< -100000||get("guard_portal_z")>100000)throw std::runtime_error("Invalid saved guard pursuit route");
+ if(get("guard_route_next")){float x=get("guard_portal_x")*.001f,y=get("guard_portal_y")*.001f;bool inside=false;for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);inside|=x>=origin.x-.36f&&x<=origin.x+24.36f&&y>=origin.y-.36f&&y<=origin.y+24.36f;}if(!inside)throw std::runtime_error("Invalid saved guard pursuit portal");}
+ if(get("weapon_aim")<0||get("weapon_aim")>config.aimMs||get("weapon_recovery")<0||get("weapon_recovery")>std::max(config.recoveryMs,900)||get("weapon_reload")<0||get("weapon_reload")>1800||get("weapon_rounds")<0||get("weapon_rounds")>weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun).cycle.tubeCapacity||get("weapon_raise")<0||get("weapon_raise")>1000||get("weapon_flash")<0||get("weapon_flash")>80||get("weapon_recoil")<0||get("weapon_recoil")>220)throw std::runtime_error("Invalid saved guard weapon state");
  if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>config.searchMs||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
  validateGuardPolicyState(actor);
 }
@@ -66,7 +68,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  bool defensiveIntent=config.armed&&selected.valid()&&(transientDefense||lowHealth||finishingRetreat);
  auto face=[&](Vec2 target){auto toward=target-pose.position;if(lengthSq(toward)>.001f)pose.yaw+=std::clamp(std::remainder(std::atan2(toward.x,toward.y)-pose.yaw,2*kPi),-4.f*dt,4.f*dt);};
  if(mode==GuardState::Suspicious){face(remembered);wantsMove=false;}
- if(mode==GuardState::Alert||mode==GuardState::Investigate){goal={std::clamp(remembered.x,.35f,23.65f),std::clamp(remembered.y,.35f,23.65f)};goalZ=rememberedZ;
+ if(mode==GuardState::Alert||mode==GuardState::Investigate){goal=remembered;goalZ=rememberedZ;
   float distance=length(pose.position-goal);wantsMove=distance>(mode==GuardState::Alert?2.f:.35f)||std::fabs(pose.z-goalZ)>.3f;
   if(defensiveIntent){
    // Losing sight from a protected position must not make a reloading or
@@ -74,28 +76,36 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
    // remembered location; fresh visibility still belongs to guardThreat.
    face(remembered);guardReposition(level,actor,track,pose,{remembered.x,remembered.y,rememberedZ+selected.height*.6f},ms,goal,goalZ,wantsMove);
   }
-  else if(mode==GuardState::Alert&&config.armed){wantsMove=std::hypot(distance,pose.z-goalZ)>config.attackRange*.85f;face(remembered);
-   if(visible&&!wantsMove){Point3 aim{target.position.x,target.position.y,target.feet+target.height*.6f};guardReposition(level,actor,track,pose,aim,ms,goal,goalZ,wantsMove);}
+  else if(mode==GuardState::Alert&&config.armed){const auto profile=guardRoleProfile(config.role);float stop=config.role==GuardSquadRole::Rusher?1.1f:config.attackRange*profile.advanceFraction;wantsMove=std::hypot(distance,pose.z-goalZ)>stop;face(remembered);
+   if(visible&&profile.minimumDistance>0&&distance<profile.minimumDistance){auto away=normalized(pose.position-remembered);goal=pose.position+away*(profile.minimumDistance-distance+.35f);goalZ=pose.z;wantsMove=true;put("guard_cover",0);put("guard_cover_wait",0);}
+   else if(visible&&!wantsMove){Point3 aim{target.position.x,target.position.y,target.feet+target.height*.6f};guardReposition(level,actor,track,pose,aim,ms,goal,goalZ,wantsMove);}
    else{put("guard_cover",0);put("guard_cover_wait",0);}
   }
   if(!wantsMove&&!defensiveIntent&&!(mode==GuardState::Alert&&config.armed))face(remembered);
+  if(wantsMove&&!defensiveIntent&&friendlyChunkAt(remembered+globalOrigin,level)!=level)guardRoute(level,actor,remembered+globalOrigin,rememberedZ,ms,goal,goalZ);
+  else{put("guard_route_next",0);put("guard_route_wait",0);}
+  Point3 suppressPoint;bool suppressing=!defensiveIntent&&guardSuppressionPoint(actor,suppressPoint);
+  if(suppressing){face({suppressPoint.x,suppressPoint.y});wantsMove=false;put("guard_route_next",0);put("guard_route_wait",0);}
   // Reloading and fresh incoming damage justify a short protected pause.
   // Permanent injury does not provide fresh knowledge of a hidden foe: let
   // an unfinished retreat complete, but bound it by the normal investigation
   // deadline so low health cannot preserve an unseen target indefinitely.
   bool pauseInvestigation=defensiveIntent&&transientDefense;
   if(mode==GuardState::Investigate&&!pauseInvestigation){int travel=std::min(8000,get("guard_travel")+ms);put("guard_travel",travel);
-   if((!wantsMove&&!finishingRetreat)||travel>=8000){mode=GuardState::Search;put("guard_search",config.searchMs);put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
+   if((!wantsMove&&!finishingRetreat&&!suppressing)||travel>=8000){mode=GuardState::Search;put("guard_search",config.searchMs);put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
  }
  if(mode==GuardState::Search){int remaining=std::max(0,get("guard_search")-ms);put("guard_search",remaining);pose.yaw=get("guard_bearing")*.0001f+std::sin((config.searchMs-remaining)*.001f*2.4f)*1.2f;wantsMove=false;
-  if(remaining==0){mode=GuardState::Patrol;put("guard_arrived",0);put("guard_pause",0);put("repath",0);put("guard_memory",0);put("guard_confirmed",0);put("guard_recognition",0);rememberGuardTarget(actor,{});}}
+  if(remaining==0){mode=GuardState::Patrol;put("guard_arrived",0);put("guard_pause",0);put("repath",0);put("guard_memory",0);put("guard_confirmed",0);put("guard_recognition",0);put("guard_return",level!=m_friendlyActors[actor].homeLevel);rememberGuardTarget(actor,{});}}
  if(mode==GuardState::Patrol){auto home=chunkOffset(m_friendlyActors[actor].homeLevel)-globalOrigin;const auto&patrol=config.patrol.at(size_t(point));goal=patrol.position+home;goalZ=patrol.z;
   bool arrived=lengthSq(goal-pose.position)<.25f*.25f&&std::fabs(goalZ-pose.z)<.3f;
-  if(arrived){int pause=get("guard_pause");if(!get("guard_arrived")){put("guard_arrived",1);pause=patrol.pauseMs;}
+  if(arrived){put("guard_return",0);int pause=get("guard_pause");if(!get("guard_arrived")){put("guard_arrived",1);pause=patrol.pauseMs;}
    pause=std::max(0,pause-ms);put("guard_pause",pause);if(pause==0){point=(point+1)%int(config.patrol.size());put("guard_point",point);put("guard_arrived",0);goal=config.patrol[size_t(point)].position+home;goalZ=config.patrol[size_t(point)].z;}
-  }wantsMove=!arrived||!get("guard_arrived");
+  }wantsMove=!arrived||!get("guard_arrived");if(wantsMove)guardRoute(level,actor,goal+globalOrigin,goalZ,ms,goal,goalZ);
  }
+ if(mode==GuardState::Search||mode==GuardState::Suspicious){put("guard_route_next",0);put("guard_route_wait",0);}
  if(mode!=GuardState::Alert&&!defensiveIntent){put("guard_cover",0);put("guard_cover_wait",0);}
  put("guard_mode",int(mode));
+ guardSupportIntent(level,actor,track,pose,dt,goal,goalZ,wantsMove);
+ guardAvoidGrenade(actor,pose,goal,goalZ,wantsMove);
 }
 }

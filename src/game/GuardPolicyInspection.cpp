@@ -3,7 +3,7 @@
 namespace retro {
 Game Game::guardPolicyInspection(int stage){
  auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");Game g(campaign);
- if(stage<0||stage>3||g.npcActors().size()!=2||g.world().actorTracks().size()!=3)throw std::runtime_error("Ash policy inspection requires the actual opt-in squad/creature experiment");
+ if(stage<0||stage>3||g.npcActors().size()<2||g.world().actorTracks().size()!=3)throw std::runtime_error("Ash policy inspection requires the actual opt-in squad/creature experiment");
  if(g.state("ash_team_enabled")||g.guardTarget(1).valid())throw std::runtime_error("Ash squad experiment unexpectedly begins enabled");
  auto advance=[&](){g.update({},1.f/60);if(g.player().health!=100||g.state("ash_target_dead"))throw std::runtime_error("Ash squad inspection damaged the hidden player or killed its creature target");};
  // Use the same authored entry trigger as ordinary play. Do not manufacture

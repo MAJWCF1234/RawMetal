@@ -21,10 +21,12 @@ struct TimedSequence {
 };
 struct QuestItemStack {StateId id=0;int count=0;};
 // Shared, saved actor and machinery timelines. Keys use absolute map elevation.
-enum class ActorVisual { Worker, Wasp, Huntsman, Cargo };
+enum class ActorVisual { Worker, Wasp, Huntsman, Cargo, Cleanup, CleanupEngineer, CleanupSharpshooter, CleanupHeavy, CleanupMedic, CleanupRusher };
+constexpr bool humanActorVisual(ActorVisual visual){return visual==ActorVisual::Worker||(int(visual)>=4&&int(visual)<=9);}
 struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 enum class ActorAiMode { Scripted, Civilian, Escort, Guard=3 };
 enum class AiFaction { Unspecified, Player, Facility, Creature, Raider, Neutral };
+enum class GuardSquadRole { Default, Assault, Engineer, Sharpshooter, Heavy, Medic, Rusher };
 inline AiFaction actorFaction(const struct ActorTrack& track);
 inline bool factionsHostile(AiFaction a,AiFaction b){
  if(a==b||a==AiFaction::Neutral||b==AiFaction::Neutral)return false;
@@ -38,6 +40,9 @@ struct ActorAiConfig {
  std::vector<ActorPatrolPoint> patrol;
  bool armed=false;int aimMs=650,recoveryMs=1000;float attackRange=9,attackDamage=18;
  AiFaction faction=AiFaction::Unspecified;StateId squad=0;
+ bool suppress=false;int grenades=0;
+ GuardSquadRole role=GuardSquadRole::Default;
+ int weapon=1;
 };
 struct ActorTrack {
  StateId timerState=0;ActorVisual visual=ActorVisual::Worker;
@@ -52,7 +57,7 @@ inline AiFaction actorFaction(const ActorTrack& track){
  if(track.ai.faction!=AiFaction::Unspecified)return track.ai.faction;
  if(track.ai.mode==ActorAiMode::Guard)return AiFaction::Raider;
  if(track.visual==ActorVisual::Wasp||track.visual==ActorVisual::Huntsman)return AiFaction::Creature;
- return track.visual==ActorVisual::Worker?AiFaction::Facility:AiFaction::Neutral;
+ return humanActorVisual(track.visual)?AiFaction::Facility:AiFaction::Neutral;
 }
 struct SequenceCue {
  StateId timerState=0;int timeMs=0;Sound sound=Sound::Metal1;

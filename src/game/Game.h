@@ -5,6 +5,9 @@
 #include <vector>
 #include "../audio/Sound.h"
 #include "Combat.h"
+#include "GuardActions.h"
+#include "GuardRoles.h"
+#include "DroneSystem.h"
 #include <string>
 #include <string_view>
 #include <cstdint>
@@ -77,13 +80,14 @@ struct Pickup {
 };
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
 struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;};
-struct NpcWeaponPose {bool armed=false;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;};
-enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll};
+struct NpcWeaponPose {bool armed=false,handgun=false;float treatment=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0;};
+enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone};
 struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
 struct AiTargetRef {ShotKind kind=ShotKind::None;int level=0,index=-1;};
+struct TacticalGrenadePose {Point3 position{};float fuse=0;int level=0;};
 struct AiTarget : AiTargetRef {
  Vec2 position{};float feet=0,height=0,eye=0;AiFaction faction=AiFaction::Neutral;
- bool valid()const{return kind==ShotKind::Player||kind==ShotKind::Enemy||kind==ShotKind::Npc||kind==ShotKind::Actor;}
+ bool valid()const{return kind==ShotKind::Player||kind==ShotKind::Enemy||kind==ShotKind::Npc||kind==ShotKind::Actor||kind==ShotKind::Drone;}
 };
 struct FriendlyActor {
  // The authored identity owns state keys; level/pose describe physical location.
@@ -179,6 +183,9 @@ public:
     const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
     const std::vector<FriendlyActor>& npcActors()const{return m_friendlyActors;}
     NpcWeaponPose npcWeaponPose(size_t actor)const;
+    std::vector<TacticalGrenadePose> tacticalGrenades()const;
+    std::vector<EngineerDronePose> engineerDrones()const;
+    AiTarget engineerDroneTarget(int slot,int observerLevel)const;
     GuardState guardState(size_t actor)const{return GuardState(state(friendlyKey(actor,"guard_mode")));}
     bool autonomousActor(const ActorTrack& track)const{return track.ai.mode!=ActorAiMode::Scripted&&(!track.ai.enableState||state(track.ai.enableState)||(track.deadState&&state(track.deadState)));}
     bool friendlyChunkNeeded(int level)const;
@@ -244,7 +251,13 @@ public:
     static bool testGuardTactics();
     static bool testGuardPolicy();
     static bool testGuardDefense();
+    static bool testGuardPursuit();
+    static bool testGuardActions();
+    static bool testTacticalGrenades();
+    static bool testGuardRoles();
+    static bool testEngineerDrones();
     static Game guardPolicyInspection(int stage=0);
+    static Game killSquadInspection(int stage=0);
     static Game guardTacticsInspection(int stage=0);
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
@@ -424,6 +437,24 @@ private:
     bool guardPositionReserved(size_t actor,Vec2 position,float feet)const;
     bool guardHostileToPlayer(size_t actor)const;
     void validateGuardPolicyState(size_t actor)const;
+    void validateGuardActions(size_t actor)const;
+    void guardSupportIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
+    void validateGuardSupport(size_t actor)const;
+    void guardAvoidGrenade(size_t actor,const ActorPose& pose,Vec2& goal,float& goalZ,bool& wantsMove);
+    void updateEngineerDrones(float dt);
+    void validateEngineerDrones()const;
+    bool deployEngineerDrone(size_t owner);
+    void damageEngineerDrone(int slot,float amount,AiTargetRef attacker={});
+    ShotHit traceEngineerDrone(Point3 from,Point3 to,size_t owner)const;
+    bool engineerDroneChunkNeeded(int level)const;
+    bool guardSuppressionPoint(size_t actor,Point3& point)const;
+    bool guardRoute(int level,size_t actor,Vec2 globalGoal,float feet,int ms,Vec2& localGoal,float& goalFeet);
+    void updateTacticalGrenades(float dt);
+    void tryGuardGrenade(size_t actor,float dt);
+    void validateTacticalGrenades()const;
+    bool spawnTacticalGrenade(Point3 origin,Point3 velocity,AiTargetRef attacker,StateId squad=0,AiFaction faction=AiFaction::Neutral,int fuseMs=2400);
+    void explodeTacticalGrenade(int slot,Point3 globalPosition,AiTargetRef attacker);
+    ShotHit tacticalGrenadeTrace(Point3 from,Point3 to)const;
     int npcMilliseconds(size_t actor,float dt,std::string_view field);
     std::vector<AiStimulus> aiStimuli()const;
     void rebuildFriendlyActors();
@@ -434,7 +465,7 @@ private:
     bool friendlyBoundaryOpen(int from,int to,Vec2 global)const;
     bool friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float* endFeet=nullptr);
     bool friendlyRayClear(Point3 from,Point3 to)const;
-    bool friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2& goal,float& goalFeet);
+    bool friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2& goal,float& goalFeet,float targetFeet=std::numeric_limits<float>::quiet_NaN());
     int nearbyFriendly()const;
     bool commandFriendly();
     void requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal);
