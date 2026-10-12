@@ -67,7 +67,8 @@ void Game::updateEngineerDrones(float dt){
   // One selected physical repair task owns the owner's clock. Five nearby
   // drones cannot each advance that clock or multiply repair throughput.
   int repair=-1;float priority=-1;
-  if(autonomousActor(t)&&npc.pose.clip==0&&!get("walking")&&!get("drone_windup")&&workAllowed&&get("drone_repair_charge")>0)for(const auto&drone:engineerDrones()){
+  if(guardTaskAllows(owner,GuardTask::Repair)&&autonomousActor(t)&&npc.pose.clip==0&&!get("walking")&&!get("drone_windup")&&workAllowed&&get("drone_repair_charge")>0)for(const auto&drone:engineerDrones()){
+   if(get("schedule")!=int(GuardSchedule::None)&&drone.slot+1!=get("task_subject"))continue;
    if(drone.owner!=int(owner)||drone.walking||drone.health>=EngineerDroneHealth)continue;auto shift=chunkOffset(drone.level)-origin;Vec2 point{drone.position.x+shift.x,drone.position.y+shift.y};
    if(length(point-npc.pose.position)>=2||std::fabs(drone.position.z-npc.pose.z)>=.3f)continue;
    Point3 hand{npc.pose.position.x+origin.x-active.x,npc.pose.position.y+origin.y-active.y,npc.pose.z+t.scale*.65f},eye{point.x+origin.x-active.x,point.y+origin.y-active.y,drone.position.z+EngineerDroneHeight*.85f};
@@ -75,7 +76,7 @@ void Game::updateEngineerDrones(float dt){
   }
   if(get("drone_repair_target")&&get("drone_repair_target")!=repair+1)put("drone_repair_ms",0);put("drone_repair_target",repair+1);if(repair<0)put("drone_repair_ms",0);
   bool justified=get("guard_confirmed")&&get("guard_memory")&&target.valid()&&((get("guard_seen")&&guardCanSee(owner,npc.pose,target))||deployed>0);
-  bool ready=repair<0&&deployed<EngineerDroneCapacity&&get("drone_used")<EngineerDroneCapacity&&!get("drone_cooldown")&&autonomousActor(t)&&npc.pose.clip!=4&&npc.pose.clip!=1&&(!t.deadState||!state(t.deadState))&&chunkResident(npc.level)&&justified&&workAllowed;
+  bool ready=guardTaskAllows(owner,GuardTask::Deploy)&&repair<0&&deployed<EngineerDroneCapacity&&get("drone_used")<EngineerDroneCapacity&&!get("drone_cooldown")&&autonomousActor(t)&&npc.pose.clip!=4&&npc.pose.clip!=1&&(!t.deadState||!state(t.deadState))&&chunkResident(npc.level)&&justified&&workAllowed;
   put("drone_windup",ready?std::min(1200,get("drone_windup")+ms):0);if(ready&&get("drone_windup")>0)put("drone_busy",1);
   if(ready&&get("drone_windup")>=1200&&m_npcNavBudget>0){--m_npcNavBudget;if(!deployEngineerDrone(owner)){put("drone_windup",0);put("drone_cooldown",1500);put("drone_busy",0);}}
  }
@@ -100,7 +101,8 @@ void Game::updateEngineerDrones(float dt){
   }else{put("aim",0);put("target_kind",0);put("target_level",0);put("target_index",0);}
   auto ownerGet=[&](const char*f){return state(friendlyKey(size_t(owner),f));};bool stationary=npc.pose.clip!=1&&!ownerGet("walking")&&!get("walking");
   bool workAllowed=!ownerGet("guard_danger_ms")&&!ownerGet("weapon_reload")&&!ownerGet("weapon_reloading")&&!ownerGet("weapon_recovery")&&!ownerGet("weapon_bash")&&!ownerGet("weapon_bash_pose")&&!ownerGet("grenade_windup")&&ownerGet("weapon_action")==int(GuardAction::None);
-  bool repair=ownerGet("drone_repair_target")==slot+1&&stationary&&workAllowed&&!ownerGet("drone_windup")&&length(ownerLocal-here)<2&&std::fabs(npc.pose.z-p.z)<.3f&&get("hp")<EngineerDroneHealth&&ownerGet("drone_repair_charge")>0;
+  bool repair=guardTaskAllows(size_t(owner),GuardTask::Repair)&&ownerGet("drone_repair_target")==slot+1&&
+   (ownerGet("schedule")==int(GuardSchedule::None)||ownerGet("task_subject")==slot+1)&&stationary&&workAllowed&&!ownerGet("drone_windup")&&length(ownerLocal-here)<2&&std::fabs(npc.pose.z-p.z)<.3f&&get("hp")<EngineerDroneHealth&&ownerGet("drone_repair_charge")>0;
   Point3 hand{ownerLocal.x+shift.x,ownerLocal.y+shift.y,npc.pose.z+t.scale*.65f};if(repair&&traceEngineerDrone(hand,eye,size_t(owner)).kind==ShotKind::None){int clock=state(friendlyKey(size_t(owner),"drone_repair_ms"))+ms;
    setState(friendlyKey(size_t(owner),"drone_busy"),1);
    while(clock>=100&&get("hp")<EngineerDroneHealth&&state(friendlyKey(size_t(owner),"drone_repair_charge"))>0){clock-=100;put("hp",get("hp")+1);put("repair",200);setState(friendlyKey(size_t(owner),"drone_repair_charge"),state(friendlyKey(size_t(owner),"drone_repair_charge"))-1);}setState(friendlyKey(size_t(owner),"drone_repair_ms"),clock%100);

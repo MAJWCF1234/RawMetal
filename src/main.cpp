@@ -336,6 +336,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--guard-pursuit-test"))return retro::Game::testGuardPursuit()?0:21;
     if(std::wcsstr(commandLine,L"--guard-actions-test"))return retro::Game::testGuardActions()?0:21;
     if(std::wcsstr(commandLine,L"--guard-roles-test"))return retro::Game::testGuardRoles()?0:21;
+    if(std::wcsstr(commandLine,L"--guard-schedule-test"))return retro::Game::testGuardSchedule()?0:21;
     if(std::wcsstr(commandLine,L"--guard-danger-test"))return retro::Game::testGuardDanger()?0:21;
     if(std::wcsstr(commandLine,L"--guard-danger-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);

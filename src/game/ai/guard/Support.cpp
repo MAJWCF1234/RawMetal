@@ -1,6 +1,6 @@
 #include "../../Game.h"
 namespace retro {
-void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,float dt,Vec2&goal,float&goalZ,bool&wantsMove){
+void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,float dt,Vec2&goal,float&goalZ,bool&wantsMove,bool advanceWork){
  if(track.ai.role==GuardSquadRole::Engineer){guardEngineerIntent(level,actor,track,pose,std::max(1,int(std::round(dt*1000))),goal,goalZ,wantsMove);return;}
  if(track.ai.role!=GuardSquadRole::Medic)return;
  auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};int ms=npcMilliseconds(actor,dt,"support_fraction");
@@ -25,6 +25,14 @@ void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,Acto
  if(!wantsMove&&!friendlyRayClear({pose.position.x+origin.x,pose.position.y+origin.y,pose.z+track.scale*.6f},{position.x+origin.x,position.y+origin.y,patient.pose.z+t.scale*.6f}))wantsMove=true;
  if(wantsMove){put("support_ms",0);if(patient.level!=level)guardRoute(level,actor,position+origin,goalZ,ms,goal,goalZ);return;}
  if(get("weapon_reload")||get("weapon_reloading")||get("weapon_recovery")||get("weapon_bash")||get("grenade_windup")||get("weapon_action")==int(GuardAction::Fire)||get("weapon_action")==int(GuardAction::Bash)){put("support_ms",0);return;}
+ if(advanceWork)runGuardTreatment(actor,ms);
+}
+void Game::runGuardTreatment(size_t actor,int ms){
+ auto ctx=makeGuardCtx(actor,m_friendlyActors[actor].level,m_friendlyActors[actor].track(),m_friendlyActors[actor].pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};
+ int target=get("support_target")-1;if(target<0||size_t(target)>=m_friendlyActors.size()||!guardTaskAllows(actor,GuardTask::Treat))return;
+ if(get("weapon_reload")||get("weapon_reloading")||get("weapon_recovery")||get("weapon_bash")||get("grenade_windup")||get("weapon_action")==int(GuardAction::Fire)||get("weapon_action")==int(GuardAction::Bash))return;
+ const auto&patient=m_friendlyActors[size_t(target)];const auto&t=patient.track();auto origin=chunkOffset(ctx.level),position=patient.pose.position+chunkOffset(patient.level)-origin;
+ if(patient.pose.clip==4||!autonomousActor(t)||state(t.deadState)||length(position-ctx.pose.position)>1.31f)return;
  int treatment=std::min(2400,get("support_ms")+ms);put("support_ms",treatment);if(treatment<2400)return;
  setState(t.damageState,std::max(0,state(t.damageState)-30));put("support_used",get("support_used")+1);put("support_cooldown",6000);put("support_ms",0);put("support_target",0);put("weapon_recovery",std::max(get("weapon_recovery"),450));
  m_sounds.push_back({Sound::Pickup,position+origin-chunkOffset(m_level),.65f,.8f,true,10,patient.pose.z+t.scale*.6f});

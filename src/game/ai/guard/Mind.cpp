@@ -18,6 +18,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>config.searchMs||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
  validateGuardPolicyState(actor);
  validateGuardDanger(actor);
+ validateGuardSchedule(actor);
 }
 void Game::updateGuardFlags(){
  std::vector<StateValue> flags;
@@ -28,7 +29,7 @@ void Game::updateGuardFlags(){
 }
 void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove){
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
- auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition"),point=get("guard_point");bool confirmed=get("guard_confirmed")!=0;
+ auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;
  auto shift=chunkOffset(level)-chunkOffset(m_level),globalOrigin=chunkOffset(level);auto observer=pose.position+shift;
  float eye=pose.z+track.scale*.85f;auto previous=guardTarget(actor),target=guardThreat(actor,pose);bool visible=target.valid();
  auto sameRef=[](const AiTarget&a,const AiTarget&b){return a.valid()&&b.valid()&&a.kind==b.kind&&a.level==b.level&&a.index==b.index;};
@@ -62,9 +63,13 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   else if(get("hit_source")){Vec2 hit{get("hit_x")*.001f,get("hit_y")*.001f};remember(hit+globalOrigin,friendlyWorld(level).supportBelow(hit.x,hit.y,pose.z+track.scale));mode=GuardState::Investigate;}
  }
  put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
- // Local danger overrides tasks before their clocks or support work advance.
- // Awareness above still belongs to fresh perception and last-known memory.
- put("guard_mode",int(mode));if(guardDangerIntent(actor,pose,dt,goal,goalZ,wantsMove))return;
+ // Senses update independently of task ownership. Only the shared executor
+ // below may select movement or advance role work for this actor/frame.
+ put("guard_mode",int(mode));runGuardSchedule(level,actor,track,pose,dt,ms,goal,goalZ,wantsMove);
+}
+void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,int ms,Vec2&goal,float&goalZ,bool&wantsMove){
+ const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};
+ auto mode=GuardState(get("guard_mode"));int point=get("guard_point");auto globalOrigin=chunkOffset(level);auto target=guardTarget(actor);bool visible=get("guard_seen")!=0;float dt=ms*.001f;int damage=track.damageState?state(track.damageState):0;
  Vec2 remembered{get("guard_x")*.001f-globalOrigin.x,get("guard_y")*.001f-globalOrigin.y};float rememberedZ=get("guard_z")*.001f;
  auto selected=guardTarget(actor);bool lowHealth=track.health>0&&track.health-damage<=track.health*.35f;
  bool transientDefense=get("weapon_reload")>0||get("weapon_reloading")||(get("weapon_saved")&&get("weapon_rounds")==0)||get("guard_under_fire")>0;
@@ -109,7 +114,5 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  if(mode==GuardState::Search||mode==GuardState::Suspicious){put("guard_route_next",0);put("guard_route_wait",0);}
  if(mode!=GuardState::Alert&&!defensiveIntent){put("guard_cover",0);put("guard_cover_wait",0);}
  put("guard_mode",int(mode));
- guardSupportIntent(level,actor,track,pose,dt,goal,goalZ,wantsMove);
- guardAvoidGrenade(actor,pose,goal,goalZ,wantsMove);
 }
 }
