@@ -54,7 +54,7 @@ records += ["TIMED_SEQUENCE|1|cleanup_start|cleanup_enabled|1|18|3.5|22|-0.2|3|1
             "TIMED_SEQUENCE|1|cleanup_clock|cleanup_clock_done|0|0|24|24|-0.2|4|60000|60000|0|0|0|0|1|1"]
 for index,(x,y) in enumerate(((8.5,12.5),(14.5,11.5),(19.5,12.5),(11.5,8.5),(15.5,6.5),(20.5,16.5))):
     visual, speed, aim, recovery, damage, role = (
-        (5, 1.45, 800, 1200, 8, "Engineer / drone deployment and maintenance"),
+        (5, 1.45, 700, 1100, 6, "Engineer / terminal, pistol and five-drone support"),
         (4, 1.75, 550, 900, 8, "Assault / flanker"),
         (6, 1.55, 900, 1400, 12, "Sharpshooter / ranged anchor"),
         (7, 1.25, 650, 1000, 10, "Heavy / suppression anchor"),
@@ -65,7 +65,7 @@ for index,(x,y) in enumerate(((8.5,12.5),(14.5,11.5),(19.5,12.5),(11.5,8.5),(15.
     records += [f"ACTOR|1|cleanup_clock|{visual}|1.6|0|0|{index}",f"ACTOR_KEY|1|{index}|0|{x}|{y}|0|0|0|0",
                 f"ACTOR_KEY|1|{index}|60000|{x}|{y}|0|0|0|1",f"ACTOR_HEALTH|1|{index}|90|cleanup_damage_{index}|cleanup_dead_{index}",
                 f"ACTOR_AI|1|{index}|3|cleanup_enabled|{speed}|2|6",f"ACTOR_GUARD|1|{index}|18|0.3|600|5000|cleanup_alert",
-                f"ACTOR_PATROL|1|{index}|{x}|{y}|0|1000",f"ACTOR_WEAPON|1|{index}|{2 if index==4 else 1}|{aim}|{recovery}|18|{damage}",
+                f"ACTOR_PATROL|1|{index}|{x}|{y}|0|1000",f"ACTOR_WEAPON|1|{index}|{2 if index in (0,4) else 1}|{aim}|{recovery}|{12 if index==0 else 18}|{damage}",
                 f"ACTOR_FACTION|1|{index}|4|depthworks_cleanup",f"ACTOR_TACTICS|1|{index}|{1 if index==3 else 0}|{2 if index==0 else 0}",
                 f"ACTOR_ROLE|1|{index}|{(2,1,3,4,5,6)[index]}"]
 project["runtimeRecords"]=records

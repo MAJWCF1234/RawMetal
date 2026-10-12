@@ -237,6 +237,11 @@ members reserve separate exits; protected guards keep their cover and trapped
 guards hold. See [the danger interruption report](guard-danger-pass-20261011.md)
 for timing, save/residency rules and the actual-campaign Vulkan inspection.
 
+The Engineer now carries a terminal and pistol, deploys up to five finite drones
+and falls back to physical support positions. Protected reloads and close-threat
+retreat retain priority over work; maintenance advances one owned drone's clock
+and shared repair stock at a time. See [the Engineer review and runtime evidence](engineer-support-pass-20261012.md).
+
 The [cleanup squad pass](kill-squad-pass-20261011.md) adds shared guard pursuit
 through permitted chunk boundaries, home return, one-shot action timelines,
 opt-in observed-cover suppression and physical tactical grenades. Tests include

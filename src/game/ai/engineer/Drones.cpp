@@ -60,10 +60,13 @@ void Game::updateEngineerDrones(float dt){
  for(size_t owner=0;owner<m_friendlyActors.size();++owner){const auto&npc=m_friendlyActors[owner];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard||t.ai.role!=GuardSquadRole::Engineer)continue;
   auto get=[&](const char*f){return state(friendlyKey(owner,f));};auto put=[&](const char*f,int v){setState(friendlyKey(owner,f),v);};put("drone_busy",0);int ms=npcMilliseconds(owner,dt,"drone_fraction");put("drone_cooldown",std::max(0,get("drone_cooldown")-ms));
   int deployed=0;for(int slot=0;slot<EngineerDroneSlots;++slot)deployed+=state(droneKey(slot,"active"))&&state(droneKey(slot,"owner"))==int(owner)+1;
-  bool workAllowed=!get("guard_danger_ms")&&!get("weapon_reload")&&!get("weapon_reloading")&&!get("weapon_recovery")&&!get("weapon_bash")&&!get("weapon_bash_pose")&&!get("grenade_windup")&&get("weapon_action")==int(GuardAction::None);
+  auto target=guardTarget(owner);auto origin=chunkOffset(npc.level),active=chunkOffset(m_level);
+  Vec2 remembered{get("guard_x")*.001f-origin.x,get("guard_y")*.001f-origin.y};float standOff=std::min(8.f,std::max(6.f,t.ai.attackRange*.6f));
+  bool rearReady=!get("guard_engineer_active")||length(npc.pose.position-remembered)>=standOff-.5f||guardCovered(owner,npc.pose,target);
+  bool workAllowed=rearReady&&!get("guard_danger_ms")&&!get("weapon_reload")&&!get("weapon_reloading")&&!get("weapon_recovery")&&!get("weapon_bash")&&!get("weapon_bash_pose")&&!get("grenade_windup")&&get("weapon_action")==int(GuardAction::None);
   // One selected physical repair task owns the owner's clock. Five nearby
   // drones cannot each advance that clock or multiply repair throughput.
-  int repair=-1;float priority=-1;auto origin=chunkOffset(npc.level),active=chunkOffset(m_level);
+  int repair=-1;float priority=-1;
   if(autonomousActor(t)&&npc.pose.clip==0&&!get("walking")&&!get("drone_windup")&&workAllowed&&get("drone_repair_charge")>0)for(const auto&drone:engineerDrones()){
    if(drone.owner!=int(owner)||drone.walking||drone.health>=EngineerDroneHealth)continue;auto shift=chunkOffset(drone.level)-origin;Vec2 point{drone.position.x+shift.x,drone.position.y+shift.y};
    if(length(point-npc.pose.position)>=2||std::fabs(drone.position.z-npc.pose.z)>=.3f)continue;
@@ -71,7 +74,7 @@ void Game::updateEngineerDrones(float dt){
    if(traceEngineerDrone(hand,eye,owner).kind==ShotKind::Solid)continue;float score=EngineerDroneHealth-drone.health+(get("drone_repair_target")==drone.slot+1?1.f:0.f);if(score>priority){priority=score;repair=drone.slot;}
   }
   if(get("drone_repair_target")&&get("drone_repair_target")!=repair+1)put("drone_repair_ms",0);put("drone_repair_target",repair+1);if(repair<0)put("drone_repair_ms",0);
-  auto target=guardTarget(owner);bool justified=get("guard_confirmed")&&get("guard_memory")&&target.valid()&&((get("guard_seen")&&guardCanSee(owner,npc.pose,target))||deployed>0);
+  bool justified=get("guard_confirmed")&&get("guard_memory")&&target.valid()&&((get("guard_seen")&&guardCanSee(owner,npc.pose,target))||deployed>0);
   bool ready=repair<0&&deployed<EngineerDroneCapacity&&get("drone_used")<EngineerDroneCapacity&&!get("drone_cooldown")&&autonomousActor(t)&&npc.pose.clip!=4&&npc.pose.clip!=1&&(!t.deadState||!state(t.deadState))&&chunkResident(npc.level)&&justified&&workAllowed;
   put("drone_windup",ready?std::min(1200,get("drone_windup")+ms):0);if(ready&&get("drone_windup")>0)put("drone_busy",1);
   if(ready&&get("drone_windup")>=1200&&m_npcNavBudget>0){--m_npcNavBudget;if(!deployEngineerDrone(owner)){put("drone_windup",0);put("drone_cooldown",1500);put("drone_busy",0);}}
@@ -110,7 +113,7 @@ void Game::updateEngineerDrones(float dt){
   Vec2 goal=ownerLocal+(npc.level==level?formation:Vec2{});if(npc.level==level){goal.x=std::clamp(goal.x,EngineerDroneRadius,24-EngineerDroneRadius);goal.y=std::clamp(goal.y,EngineerDroneRadius,24-EngineerDroneRadius);}
   float goalFeet=npc.pose.z;bool moving=!seen&&(length(goal-here)>.25f||npc.level!=level);if(ownerGet("drone_repair_target")==slot+1)moving=false;int routeWait=std::max(0,get("route_wait")-ms),next=get("route_next")-1;
   if(moving&&npc.level!=level){Vec2 portal{get("portal_x")*.001f-origin.x,get("portal_y")*.001f-origin.y};bool cached=routeWait>0&&next>=0&&next<chunkCount()&&next!=level&&friendlyBoundaryOpen(level,next,portal+origin);
-   if(!cached&&m_npcNavBudget>0&&(routeWait==0||next>=0)){--m_npcNavBudget;cached=friendlyPortal(level,npc.level,here,p.z,EngineerDroneHeight,portal,goalFeet,npc.pose.z);next=cached?friendlyChunkAt(portal+origin,level):-1;put("route_next",next+1);routeWait=600+slot*30;if(cached){put("portal_x",int(std::round((portal.x+origin.x)*1000)));put("portal_y",int(std::round((portal.y+origin.y)*1000)));put("portal_z",int(std::round(goalFeet*1000)));}}
+   if(!cached&&m_npcNavBudget>0&&(routeWait==0||next>=0)){--m_npcNavBudget;cached=friendlyPortal(level,npc.level,here,p.z,EngineerDroneHeight,portal,goalFeet,npc.pose.z);next=cached?friendlyChunkAt(portal+origin,level):-1;put("route_next",next+1);routeWait=600+(slot%7)*30;if(cached){put("portal_x",int(std::round((portal.x+origin.x)*1000)));put("portal_y",int(std::round((portal.y+origin.y)*1000)));put("portal_z",int(std::round(goalFeet*1000)));}}
    moving=cached;if(cached){goal=portal;goalFeet=get("portal_z")*.001f;}
   }else put("route_next",0);put("route_wait",routeWait);
   Vec2 before=here,waypoint{get("way_x")*.001f-origin.x,get("way_y")*.001f-origin.y};int repath=std::max(0,get("repath")-ms);

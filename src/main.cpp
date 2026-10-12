@@ -344,6 +344,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      return 0;
     }
     if(std::wcsstr(commandLine,L"--engineer-drone-test"))return retro::Game::testEngineerDrones()?0:21;
+    if(std::wcsstr(commandLine,L"--engineer-support-inspection")){
+     constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+     std::filesystem::create_directories("diagnostics/engineer-support-20261012");const char*names[]={"terminal-deploy","five-drone-fleet","terminal-maintenance","pistol-support"};
+     for(int stage=0;stage<4;++stage){auto scene=retro::Game::engineerSupportInspection(stage);renderer->render(scene);std::ofstream out(std::string("diagnostics/engineer-support-20261012/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--tactical-grenade-test"))return retro::Game::testTacticalGrenades()?0:21;
     if(std::wcsstr(commandLine,L"--kill-squad-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);

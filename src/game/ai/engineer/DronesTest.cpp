@@ -56,6 +56,14 @@ bool Game::testEngineerDrones(){
   if(deployed){g.m_friendlyActors[0].level=1;g.m_friendlyActors[0].pose.position={6.5f,6.5f};tick(g,rate*8,rate);}
   check(deployed&&!g.engineerDrones().empty()&&g.engineerDrones()[0].level==1&&g.engineerDrones()[0].position.x>3,"Supervised drone physically follows its Engineer through a stitched seam at 60/120 Hz");
  }
+ {auto base=scene([](auto&map){map.openEast=true;auto prototype=map.actorTracks[0];map.actorTracks.clear();const Vec2 spots[]={{5.5f,5.5f},{17.5f,5.5f},{5.5f,17.5f},{17.5f,17.5f}};
+   for(int owner=0;owner<4;++owner){auto engineer=prototype;for(auto&key:engineer.keys)key.position=spots[owner];engineer.ai.patrol={{spots[owner],0,1000}};engineer.damageState=stateId("high_slot_damage/"+std::to_string(owner));engineer.deadState=stateId("high_slot_dead/"+std::to_string(owner));map.actorTracks.push_back(engineer);}});
+  auto campaign=std::make_shared<CustomCampaign>(*base.m_customCampaign);auto east=std::make_shared<AuthoredMapData>(*campaign->maps[0]);east->definition.origin={24,0};east->definition.residencyGroup=43;east->openEast=false;east->openWest=true;east->actorTracks.clear();east->timedSequences.clear();campaign->maps.push_back(east);
+  Game g(campaign);g.setState(stateId("drone_enabled"),1);g.ensureChunk(1);bool full=true;for(size_t owner=0;owner<4;++owner)for(int unit=0;unit<5;++unit)full&=g.deployEngineerDrone(owner);
+  g.setState(droneTestKey(19,"level"),2);g.setState(droneTestKey(19,"x"),27500);g.setState(droneTestKey(19,"y"),6500);tick(g,2);Game restored(campaign);
+  check(full&&g.state(droneTestKey(19,"route_wait"))>0&&g.state(droneTestKey(19,"route_wait"))<=1000&&restored.decodeSave(g.encodeSave()),
+   "The twentieth fleet slot can plan a real stitched return route and save it without exceeding the route timer's validation bound");
+ }
  {auto g=scene([](auto&map){map.definition.playerStart={10.5f,6.5f};map.actorTracks[0].ai.attackDamage=1;});bool deployed=false;
   for(int frame=0;frame<360&&!g.dead();++frame){tick(g,1,60,true);if(!g.engineerDrones().empty()){deployed=true;break;}}
   check(deployed&&g.state(g.friendlyKey(0,"drone_used"))==1,"Ordinary gameplay perception deploys a finite supervised drone without diagnostic state injection");
@@ -73,7 +81,8 @@ bool Game::testEngineerDrones(){
   for(auto&key:target.keys)key.position={12.5f,6.5f};map.actorTracks.push_back(target);
  };
  auto spaced=[](Game&g){auto drones=g.engineerDrones();bool safe=true;for(size_t i=0;i<drones.size();++i){const auto&a=drones[i];safe&=a.owner==0&&std::fabs(a.position.z)<.001f&&
-   g.friendlyWorld(a.level).fits(a.position.x,a.position.y,a.position.z,EngineerDroneHeight);
+   g.friendlyWorld(a.level).fits(a.position.x,a.position.y,a.position.z,EngineerDroneHeight);const auto&owner=g.npcActors()[size_t(a.owner)];auto ownerShift=g.chunkOffset(owner.level)-g.chunkOffset(a.level);
+   if(owner.pose.z<a.position.z+EngineerDroneHeight&&owner.pose.z+owner.track().scale>a.position.z)safe&=length(Vec2{a.position.x,a.position.y}-owner.pose.position-ownerShift)>=.835f;
    for(size_t j=i+1;j<drones.size();++j){const auto&b=drones[j];auto off=g.chunkOffset(b.level)-g.chunkOffset(a.level);
     safe&=std::hypot(a.position.x-b.position.x-off.x,a.position.y-b.position.y-off.y)>=EngineerDroneRadius*2-.015f;}}
   return safe;
@@ -122,7 +131,20 @@ bool Game::testEngineerDrones(){
    check(moved>.4f&&supportSafe&&g.state(droneTestKey(slot,"hp"))>40&&g.state(g.friendlyKey(0,"drone_repair_charge"))<80,"Engineer physically approaches a safely placed wounded fleet member and performs finite maintenance while retaining a supported body");
   }
  }
- for(const char*f:{"drone_repair_target","guard_engineer_goal","guard_engineer_wait","guard_engineer_x","guard_engineer_y","guard_engineer_z"}){
+ {auto g=scene([](auto&map){map.definition.playerStart={10.5f,6.5f};map.structures.push_back({8,5,8.2f,8,0,2.5f});});bool deployed=g.deployEngineerDrone(0);known(g);
+  g.setState(g.friendlyKey(0,"weapon_reload"),700);g.setState(g.friendlyKey(0,"guard_cover_mode"),2);auto&npc=g.m_friendlyActors[0];auto start=npc.pose.position;Vec2 goal=start;float feet=npc.pose.z;bool moving=false;
+  g.guardEngineerIntent(npc.level,0,npc.track(),npc.pose,17,goal,feet,moving);
+  check(deployed&&g.guardCovered(0,npc.pose,g.guardTarget(0))&&!moving&&length(goal-start)<.001f&&g.state(g.friendlyKey(0,"guard_cover_mode"))==2&&!g.state(g.friendlyKey(0,"guard_engineer_goal")),
+   "Engineer supervision preserves an actual protected reload instead of overriding shared defensive intent with a rear-position task");
+ }
+ {auto g=scene([](auto&){});bool deployed=g.deployEngineerDrone(0);g.m_player.pos={8.1f,6.5f};known(g);g.setState(g.friendlyKey(0,"drone_windup"),300);g.setState(g.friendlyKey(0,"drone_busy"),1);g.m_npcNavBudget=4;
+  auto&npc=g.m_friendlyActors[0];Vec2 goal=npc.pose.position;float feet=npc.pose.z;bool moving=false;g.guardEngineerIntent(npc.level,0,npc.track(),npc.pose,17,goal,feet,moving);
+  check(deployed&&moving&&length(goal-g.player().pos)>length(npc.pose.position-g.player().pos)&&!g.state(g.friendlyKey(0,"drone_windup"))&&!g.state(g.friendlyKey(0,"drone_busy"))&&g.state(g.friendlyKey(0,"drone_used"))==1,
+   "A nearby newly observed threat interrupts terminal work and chooses a physical retreat without spending the pending drone");
+  tick(g,1);check(!g.state(g.friendlyKey(0,"drone_windup"))&&!g.state(g.friendlyKey(0,"drone_busy"))&&g.state(g.friendlyKey(0,"drone_used"))==1,
+   "Deployment cannot reclaim the same threatened frame and restart terminal work before the Engineer has reached a safe support position");
+ }
+ for(const char*f:{"drone_repair_target","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","guard_engineer_chunk","guard_engineer_x","guard_engineer_y","guard_engineer_z"}){
   auto g=scene([](auto&){});g.setState(g.friendlyKey(0,f),std::numeric_limits<int>::max());Game restored(g.m_customCampaign);
   check(!restored.decodeSave(g.encodeSave()),"Malformed saved fleet repair recipient or Engineer support goal is rejected safely");
  }

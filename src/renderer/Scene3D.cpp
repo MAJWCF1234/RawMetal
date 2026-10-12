@@ -11,12 +11,40 @@ namespace retro {
 // First-person weapon meshes are normalized to their physical footprint, not
 // to the player collision height. Scaling them with the taller world hull
 // made a standard rifle render almost two metres long on screen.
-namespace { constexpr float kViewModelScale=1.15f; }
+namespace {
+constexpr float kViewModelScale=1.15f;
+// A field terminal is authored geometry in the actor's metre-sized frame.
+// Its working surface tilts toward both the operator and a standing observer.
+struct FieldTerminalFrame {
+ Point3 center{},right{},up{},normal{};float size=1;
+ Point3 point(float x,float y,float z=0)const{return center+(right*x+up*y+normal*z)*size;}
+};
+FieldTerminalFrame fieldTerminalFrame(const ActorPose&pose,float scale,bool working){
+ Point3 right{std::cos(pose.yaw),-std::sin(pose.yaw),0},forward{std::sin(pose.yaw),std::cos(pose.yaw),0},up{0,0,1};float size=scale/1.6f;
+ Point3 center=Point3{pose.position.x,pose.position.y,pose.z}+(right*(working?-.035f:-.29f)+forward*(working?.31f:.045f)+up*(working?1.02f:.86f))*size;
+ return working?FieldTerminalFrame{center,right,forward*-.8f+up*.6f,forward*.6f+up*.8f,size}:FieldTerminalFrame{center,forward,up,right*-1.f,size};
+}
+Point3 fieldTerminalHand(const FieldTerminalFrame&frame,int side,float touch){
+ return side?frame.point(.095f,-.035f,.037f+.010f*touch):frame.point(-.183f,-.02f,-.025f);
+}
+}
 bool SoftwareRenderer::validate3D(){
  if(!testNormalMapping())return false;
  {for(Mesh*cleanupMesh:{&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher}){const auto&rest=cleanupMesh->bindTriangles();cleanupMesh->poseCreature(0,0);for(size_t i=0;i<rest.size();++i)for(int v=0;v<3;++v){auto d=rest[i].v[v].p-cleanupMesh->triangles[i].v[v].p;if(std::fabs(d.x)+std::fabs(d.y)+std::fabs(d.z)>.004f)return false;}
   float walkMotion=0,deathTop=0;for(int clip=0;clip<6;++clip){cleanupMesh->poseCreature(clip,.6f);for(size_t i=0;i<rest.size();++i)for(int v=0;v<3;++v){auto p=cleanupMesh->triangles[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.003f||p.y>2.f)return false;if(clip==1)walkMotion+=std::fabs(p.z-rest[i].v[v].p.z);if(clip==4)deathTop=std::max(deathTop,p.y);}}if(walkMotion<1||deathTop>1)return false;}}
  {for(float phase:{0.f,.25f,.6f,1.f}){m_cleanupMedic.poseCreature(6,phase);for(const auto&t:m_cleanupMedic.triangles)for(const auto&v:t.v)if(!std::isfinite(v.p.x)||!std::isfinite(v.p.y)||!std::isfinite(v.p.z)||v.p.y<-.003f||v.p.y>2.1f)return false;}m_cleanupMedic.poseCreature(0,0);}
+ // Verify the terminal's physical grips against the imported Engineer's
+ // calibrated arm lengths, including scale and rotation. This catches a
+ // stretched or floating tool before relying on a favourable camera angle.
+ for(float yaw:{0.f,kPi*.5f,-kPi*.5f,kPi})for(float height:{.8f,1.6f,2.f}){
+  ActorPose pose;pose.position={8,8};pose.z=.5f;pose.yaw=yaw;auto terminal=fieldTerminalFrame(pose,height,true);
+  float c=std::cos(yaw),s=std::sin(yaw),scale=height/std::max(.01f,m_cleanupEngineer.maximum.y-m_cleanupEngineer.minimum.y);
+  auto world=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  for(int side=0;side<2;++side){const auto&joint=m_cleanupArms[1][side];auto shoulder=world(joint[0]),elbow=world(joint[1]),hand=world(joint[2]);
+   auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};float reach=length(elbow-shoulder)+length(hand-elbow);
+   for(float touch:{-1.f,0.f,1.f}){auto target=fieldTerminalHand(terminal,side,touch);if(!std::isfinite(target.x)||!std::isfinite(target.y)||!std::isfinite(target.z)||length(target-shoulder)>reach+.003f||target.z<pose.z+height*.40f||target.z>pose.z+height*.8f)return false;}
+  }
+ }
  {auto&lamp=m_facilityTextures.at("lamp_1_on");if(lamp.emission.size()!=lamp.pixels.size()||std::none_of(lamp.emission.begin(),lamp.emission.end(),[](auto p){return (p&255)>128;}))return false;
   Texture emissive{1,1,{0xff000000u}};emissive.emission={0xffffffffu};clear(0);std::fill(m_zbuffer.begin(),m_zbuffer.end(),9999.f);
   triangle3D({{-.3f,-.3f,1},0,0},{{.3f,-.3f,1},1,0},{{0,.3f,1},.5f,1},emissive,0);
@@ -1279,7 +1307,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   box(p+Point3{-.02f,-.035f,.079f},p+Point3{.02f,.075f,.091f},m_panelMetal,1.f);
   bool blink=int(fuse*8.f)%2==0;box(p+Point3{-.018f,-.066f,-.012f},p+Point3{.018f,-.062f,.012f},blink?red:m_panelMetal,blink?2.f:1.f);
  };
- auto drawActor=[&](const ActorTrack&track,ActorPose pose,const NpcWeaponPose* weapon=nullptr){
+ const auto engineerDrones=game.engineerDrones();
+ auto drawActor=[&](const ActorTrack&track,ActorPose pose,const NpcWeaponPose* weapon=nullptr,int actor=-1){
     float radius=humanActorVisual(track.visual)?track.scale:track.scale*.8f;
     if(track.platform)radius=std::max(radius,std::hypot(track.footprint.x,track.footprint.y)*.5f);
   if(!sphereVisible({pose.position.x,pose.position.y,pose.z+radius*.5f},radius))return;
@@ -1289,6 +1318,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   bool human=humanActorVisual(track.visual),cleanup=int(track.visual)>=4&&int(track.visual)<=9,wasp=track.visual==ActorVisual::Wasp;
   int cleanupRole=cleanup?int(track.visual)-4:0;Mesh*cleanupMeshes[]={&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher};auto& mesh=cleanup?*cleanupMeshes[cleanupRole]:human?m_workerMesh:wasp?m_waspMesh:m_enemyMesh;
   bool treating=human&&weapon&&weapon->treatment>0&&pose.clip!=4;
+  bool engineer=human&&weapon&&weapon->armed&&track.ai.role==GuardSquadRole::Engineer&&pose.clip!=4;
+  bool engineering=engineer&&(weapon->engineering>0||weapon->maintenance);
+  auto terminal=fieldTerminalFrame(pose,track.scale,engineering);
+  float terminalTouch=engineering?std::sin((weapon->maintenance?game.elapsed()*5.f:weapon->engineering*3.f)*kPi):0;
   if(human)mesh.poseCreature(treating&&track.visual==ActorVisual::CleanupMedic?6:pose.clip,treating?weapon->treatment:pose.phase);
   float scale=track.scale/std::max(.01f,human?mesh.maximum.y-mesh.minimum.y:std::max({mesh.maximum.x-mesh.minimum.x,mesh.maximum.y-mesh.minimum.y,mesh.maximum.z-mesh.minimum.z}));
   float c=std::cos(pose.yaw),s=std::sin(pose.yaw);
@@ -1346,13 +1379,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     if(weapon->handgun)arm.targetHand=gunGrip+(gunRight*(side?.055f:.008f)-gunUp*.065f+gunForward*(side?.025f:0.f))*bodyScale;
     if(side&&weapon->reload>0){float feed=std::sin(weapon->reload*3.f*kPi);arm.targetHand=gunGrip+(gunForward*(.10f+.06f*feed)-gunUp*(.10f+.05f*std::fabs(feed))+gunRight*.09f)*bodyScale;}
     if(!side&&weapon->grenadeThrow>0){float wind=std::sin(weapon->grenadeThrow*kPi);arm.targetHand=gunGrip+(gunRight*.12f-gunForward*(.12f*wind)+gunUp*(.08f+.12f*wind))*bodyScale;}
+    if(engineering)arm.targetHand=fieldTerminalHand(terminal,side,terminalTouch);
     auto upper=arm.elbow-arm.shoulder,lower=arm.hand-arm.elbow,reach=arm.targetHand-arm.shoulder;float l1=std::sqrt(dot(upper,upper)),l2=std::sqrt(dot(lower,lower));
     float distance=std::clamp(std::sqrt(dot(reach,reach)),std::fabs(l1-l2)+.001f,l1+l2-.001f);auto axis=unit(reach);float along=(l1*l1-l2*l2+distance*distance)/(2*distance),height=std::sqrt(std::max(0.f,l1*l1-along*along));
     auto bend=gunRight*(side?.35f:-.35f)-gunUp*.30f-gunForward*.10f;bend=unit(bend-axis*dot(bend,axis));arm.targetElbow=arm.shoulder+axis*along+bend*height;
     arm.upper=rotation(upper,arm.targetElbow-arm.shoulder);arm.lower=rotation(lower,arm.targetHand-arm.targetElbow);
     Point3 sourcePalm=cleanup?m_cleanupPalms[cleanupRole][side]:side?Point3{.020742f,-.075568f,.078422f}:Point3{-.017374f,-.105655f,.031950f};
     auto sourceDirection=transform(hands[side]+sourcePalm)-arm.hand;
-    arm.palm=rotation(sourceDirection,side?gunRight*-.060f+gunUp*.025f:gunUp*.075f+gunForward*.025f);
+    auto palmDirection=side?gunRight*-.060f+gunUp*.025f:gunUp*.075f+gunForward*.025f;
+    if(engineering)palmDirection=side?terminal.normal*-.055f+terminal.up*.012f:terminal.up*.05f-terminal.normal*.04f;
+    arm.palm=rotation(sourceDirection,palmDirection);
    }
   }
   objectLighting=true;objectNormalLighting=nullptr;
@@ -1376,11 +1412,58 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    if(weapon->grenadeThrow>0)drawTacticalGrenade(arms[0].targetHand+Point3{0,0,.025f},2.4f);
    auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
    const auto&gunMesh=weapon->handgun?m_handgunMesh:m_weaponMesh;
-   for(auto face:gunMesh.bindTriangles()){if(!weapon->handgun&&face.part==3)continue;for(auto&v:face.v)v.p=weapon->handgun?gunGrip+(gunRight*v.p.x+gunUp*v.p.y+gunForward*v.p.z)*gunScale:gunPoint(v.p);
+   Point3 holsterGrip=Point3{pose.position.x,pose.position.y,pose.z}+Point3{c,-s,0}*(.27f*track.scale/1.6f)+Point3{s,c,0}*(.025f*track.scale/1.6f)+Point3{0,0,.87f*track.scale/1.6f};
+   for(auto face:gunMesh.bindTriangles()){if(!weapon->handgun&&face.part==3)continue;for(auto&v:face.v){auto p=v.p;
+    if(engineering&&weapon->handgun)v.p=holsterGrip+(Point3{c,-s,0}*p.x+Point3{s,c,0}*p.y-Point3{0,0,1}*p.z)*gunScale;
+    else v.p=weapon->handgun?gunGrip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale:gunPoint(p);}
     auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);selectFaceLight(actorLights,cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),center-Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f});tri(face.v[0],face.v[1],face.v[2],weapon->handgun?m_handgunTexture:m_weaponTexture,1.f);
    }
   }
   objectLighting=false;objectNormalLighting=nullptr;
+  if(engineer){
+   static const Texture terminalCase{1,1,{0xff273334u}},terminalRubber{1,1,{0xff151b1au}},terminalStrap{1,1,{0xff493e2du}};
+   static const Texture terminalGlass{1,1,{0xff071b1cu}};
+   static const Texture terminalSignal=[](){Texture t{1,1,{0xff56d4b7u}};t.emission={0xff23705cu};return t;}();
+   static const Texture terminalRepair=[](){Texture t{1,1,{0xffe2b452u}};t.emission={0xff725423u};return t;}();
+   auto solid=[&](const FieldTerminalFrame&frame,Point3 low,Point3 high,const Texture&texture){
+    auto p=[&](float x,float y,float z){return frame.point(x,y,z);};
+    quad(p(low.x,low.y,low.z),p(high.x,low.y,low.z),p(high.x,high.y,low.z),p(low.x,high.y,low.z),texture,.85f);
+    quad(p(low.x,high.y,high.z),p(high.x,high.y,high.z),p(high.x,low.y,high.z),p(low.x,low.y,high.z),texture,1.f);
+    quad(p(low.x,low.y,high.z),p(high.x,low.y,high.z),p(high.x,low.y,low.z),p(low.x,low.y,low.z),texture,.9f);
+    quad(p(high.x,high.y,high.z),p(low.x,high.y,high.z),p(low.x,high.y,low.z),p(high.x,high.y,low.z),texture,.9f);
+    quad(p(low.x,high.y,high.z),p(low.x,low.y,high.z),p(low.x,low.y,low.z),p(low.x,high.y,low.z),texture,.9f);
+    quad(p(high.x,low.y,high.z),p(high.x,high.y,high.z),p(high.x,high.y,low.z),p(high.x,low.y,low.z),texture,.9f);
+   };
+   solid(terminal,{-.19f,-.14f,-.022f},{.19f,.14f,.022f},terminalCase);
+   for(float x:{-.173f,.173f})for(float y:{-.121f,.121f})solid(terminal,{x-.019f,y-.019f,-.025f},{x+.019f,y+.019f,.027f},terminalRubber);
+   auto panel=[&](float x1,float y1,float x2,float y2,const Texture&texture,float depth=.024f,float light=1.f){quad(terminal.point(x1,y1,depth),terminal.point(x2,y1,depth),terminal.point(x2,y2,depth),terminal.point(x1,y2,depth),texture,light);};
+   panel(-.155f,-.099f,.155f,.099f,terminalGlass);
+   if(engineering){
+    const auto&signal=weapon->maintenance?terminalRepair:terminalSignal;
+    // Five radio channels show the real owned drone count. The separate bar
+    // indicates assembly or maintenance activity, never a fabricated spawn.
+    int owned=0;for(const auto&drone:engineerDrones)owned+=actor>=0&&drone.owner==actor;
+    for(int channel=0;channel<5;++channel){float x=-.125f+channel*.0625f;const auto&status=channel<owned?terminalSignal:terminalCase;
+     panel(x-.017f,.038f,x+.017f,.056f,status,.025f,channel<owned?1.65f:1.f);
+     panel(x-.023f,.029f,x-.011f,.066f,status,.025f,channel<owned?1.65f:1.f);
+     panel(x+.011f,.029f,x+.023f,.066f,status,.025f,channel<owned?1.65f:1.f);
+    }
+    for(int row=0;row<3;++row){float y=.008f-row*.022f;panel(-.126f,y,.072f-row*.027f,y+.004f,signal,.025f,1.6f);}
+    float progress=weapon->maintenance?.5f+.45f*std::sin(game.elapsed()*4.f):std::clamp(weapon->engineering,0.f,1.f);
+    panel(-.127f,-.083f,.127f,-.069f,terminalCase,.025f);
+    panel(-.125f,-.081f,-.125f+.25f*progress,-.071f,signal,.026f,1.7f);
+    panel(.105f,-.039f,.123f,-.020f,signal,.026f,1.7f);
+    // Both hands use the same terminal frame as the case and screen. During
+    // work the pistol is visibly retained in its opposite hip holster.
+    FieldTerminalFrame holster{Point3{pose.position.x,pose.position.y,pose.z}+(Point3{c,-s,0}*.27f+Point3{s,c,0}*.025f+Point3{0,0,.75f})*(track.scale/1.6f),{c,-s,0},{0,0,1},{s,c,0},track.scale/1.6f};
+    solid(holster,{-.041f,-.115f,-.037f},{.041f,.07f,.026f},terminalStrap);
+   }else{
+    // The terminal stays visible on the Engineer's left hip while his pistol
+    // and combat hands use the existing firearm attachment and action pose.
+    panel(-.035f,-.14f,.035f,.14f,terminalStrap,.027f);
+    panel(-.046f,.076f,.046f,.090f,terminalCase,.029f);
+   }
+  }
   if(treating){
    static const Texture kitWhite{1,1,{0xffdbddd3u}},kitInside{1,1,{0xff354038u}},kitRed{1,1,{0xffb43432u}};
    auto center=track.visual==ActorVisual::CleanupMedic?transform((mesh.poseAnchor(0)+mesh.poseAnchor(1))*.5f):transform({0,.9f,.35f});
@@ -1402,12 +1485,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    cylinder(casePoint(-.07f,-.02f,-.09f),casePoint(-.07f,-.02f,-.025f),.026f*size,kitWhite);
    quad(casePoint(.015f,-.06f,-.025f),casePoint(.12f,-.06f,-.025f),casePoint(.12f,.07f,-.025f),casePoint(.015f,.07f,-.025f),kitWhite,1.f);
   }
-  if(armed&&weapon->flash>0){float size=(.075f+.09f*weapon->flash)*track.scale/1.6f;Point3 across=effectSide*size,up{0,0,size};quad(gunMuzzle-across-up,gunMuzzle+across-up,gunMuzzle+across+up,gunMuzzle-across+up,m_muzzleFlash,2.4f*weapon->flash);}
+  if(armed&&!engineering&&weapon->flash>0){float size=(.075f+.09f*weapon->flash)*track.scale/1.6f;Point3 across=effectSide*size,up{0,0,size};quad(gunMuzzle-across-up,gunMuzzle+across-up,gunMuzzle+across+up,gunMuzzle-across+up,m_muzzleFlash,2.4f*weapon->flash);}
   if(human&&track.tool&&!armed&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
  };
  for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i));
- for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==game.level()&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon);}}
- for(const auto&drone:game.engineerDrones())if(drone.level==game.level()){
+ for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==game.level()&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i));}}
+ for(const auto&drone:engineerDrones)if(drone.level==game.level()){
   if(!sphereVisible(drone.position+Point3{0,0,EngineerDroneHeight*.5f},1.2f))continue;
   m_engineerDrone.poseCreature(drone.walking?1:0,drone.phase);
   prop(m_engineerDrone,m_droneTexture,drone.position.x,drone.position.y,EngineerDroneHeight,drone.yaw,.90f,drone.position.z);
