@@ -1416,7 +1416,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   for(auto face:mesh.triangles){
    int vertex=0;for(auto& v:face.v){auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
     v.p=transform(p);
-    if(armedVertices){const auto&bind=(*armedVertices)[actorFace][vertex];auto source=transform(bind.position);float standing=std::clamp((bind.position.y-.66f)/.28f,0.f,1.f);v.p=v.p+(source-v.p)*standing;if(bind.influence>0){const auto&arm=arms[bind.side];
+    if(armedVertices){const auto&bind=(*armedVertices)[actorFace][vertex];auto source=transform(bind.position);
+     // Worker hunched idle used to bury the visor in the gun, so the jacket is
+     // pulled toward bind. Cleanup UAL / Worker walk already clear the weapon —
+     // keep most of the posed body so idle and legs read as motion.
+     float bindPull=std::clamp((bind.position.y-.66f)/.28f,0.f,1.f);
+     if(cleanup)bindPull*=.18f;
+     else if(pose.clip==1||pose.clip==5)bindPull*=.4f;
+     else if(pose.clip==0)bindPull*=.55f;
+     v.p=v.p+(source-v.p)*bindPull;if(bind.influence>0){const auto&arm=arms[bind.side];
      auto rotate=[](const std::array<Point3,3>&basis,Point3 p){return basis[0]*p.x+basis[1]*p.y+basis[2]*p.z;};
      auto upper=arm.shoulder+rotate(arm.upper,source-arm.shoulder),lower=arm.targetElbow+rotate(arm.lower,source-arm.elbow),hand=arm.targetHand+rotate(arm.palm,source-arm.hand);
      auto sleeve=upper+(lower-upper)*bind.lower;auto attached=sleeve+(hand-sleeve)*bind.palm;v.p=v.p+(attached-v.p)*bind.influence;

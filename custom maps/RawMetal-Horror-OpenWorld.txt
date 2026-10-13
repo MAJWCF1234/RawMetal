@@ -213,7 +213,7 @@ STRUCT|2|13.55|11.55|14.45|12.45|0.0|0.85|0|2
 STRUCT|2|18.55|16.55|19.45|17.45|0.0|0.85|0|2
 STRUCT|2|16.85|6.75|17.15|9.25|0.0|1.85|0|2
 TIMED_SEQUENCE|0|ash_guard_clock|ash_guard_clock_done|0|0|24|24|-0.2|3|60000|60000|0|0|0|0|1|1
-ACTOR|0|ash_guard_clock|0|1.6|0|0|0
+ACTOR|0|ash_guard_clock|4|1.6|0|0|0
 ACTOR_KEY|0|0|0|19.5|7.5|0|1.5707963|0|0
 ACTOR_KEY|0|0|60000|19.5|7.5|0|1.5707963|0|1
 ACTOR_HEALTH|0|0|70|ash_guard_damage|ash_guard_dead

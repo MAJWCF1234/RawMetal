@@ -154,7 +154,19 @@ void Game::updateFriendlyActors(float dt,bool guards){
   if(track.ai.mode==ActorAiMode::Guard&&(npc.pose.clip==4||(track.deadState&&state(track.deadState))))clearGuardSchedule(i);
   bool scripted=track.ai.mode==ActorAiMode::Scripted;
   if(scripted&&guards)continue;
-  if(!autonomousActor(track)&&!scripted){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);if(track.ai.mode==ActorAiMode::Guard){clearGuardSchedule(i);for(const char*field:{"guard_danger_ms","guard_danger_goal","guard_danger_wait","guard_danger_fraction","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","drone_repair_target","drone_repair_ms","drone_busy","drone_windup"})setState(friendlyKey(i,field),0);setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}continue;}
+  if(!autonomousActor(track)&&!scripted){
+   npc.level=npc.homeLevel;auto staged=home.actorPose(npc.homeActor);
+   // Enable-gated squads are not AI-autonomous yet, but they stay on stage.
+   // Keep UAL idle cycling instead of freezing on authored key phase 0 (bind).
+   if(dt>0&&humanActorVisual(track.visual)&&staged.clip!=4){
+    float previous=state(friendlyKey(i,"saved"))?state(friendlyKey(i,"phase"))*.0001f:staged.phase;
+    staged.clip=0;staged.phase=std::fmod(previous+dt*.45f,1.f);
+    setState(friendlyKey(i,"phase"),int(std::round(staged.phase*10000)));setState(friendlyKey(i,"walking"),0);setState(friendlyKey(i,"saved"),1);
+   }else setState(friendlyKey(i,"saved"),0);
+   npc.pose=staged;setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);
+   if(track.ai.mode==ActorAiMode::Guard){clearGuardSchedule(i);for(const char*field:{"guard_danger_ms","guard_danger_goal","guard_danger_wait","guard_danger_fraction","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","drone_repair_target","drone_repair_ms","drone_busy","drone_windup"})setState(friendlyKey(i,field),0);setState(friendlyKey(i,"guard_mode"),0);setState(friendlyKey(i,"guard_recognition"),0);setState(friendlyKey(i,"guard_seen"),0);setState(friendlyKey(i,"guard_confirmed"),0);rememberGuardTarget(i,{});}
+   continue;
+  }
   if(scripted&&!scriptedHandoffActive(i)){npc.level=npc.homeLevel;npc.pose=home.actorPose(npc.homeActor);setState(friendlyKey(i,"chunk"),npc.level+1);}
   if(npc.level==m_level)setState(friendlyKey(i,"engaged"),1);
   if(!chunkResident(npc.level)){
