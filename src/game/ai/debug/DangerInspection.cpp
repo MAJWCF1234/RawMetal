@@ -6,8 +6,10 @@ namespace retro {
 Game Game::guardDangerInspection(int stage){
  if(stage<0||stage>2)throw std::runtime_error("Unknown guard danger inspection stage");
  auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");Game g(campaign);
- constexpr size_t engineer=2;
- if(g.chunkCount()!=3||g.npcActors().size()!=8||g.npcActors()[engineer].track().ai.role!=GuardSquadRole::Engineer)
+ size_t engineer=g.npcActors().size();
+ for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel==1&&npc.track().ai.mode==ActorAiMode::Guard&&npc.track().ai.role==GuardSquadRole::Engineer){
+  if(engineer!=g.npcActors().size())throw std::runtime_error("Danger inspection has duplicate cargo Engineers");engineer=actor;}}
+ if(g.chunkCount()!=3||engineer==g.npcActors().size())
   throw std::runtime_error("Guard danger inspection requires the actual stitched cleanup squad export");
 
  // Cross the ordinary western entrance and run its real activation trigger.

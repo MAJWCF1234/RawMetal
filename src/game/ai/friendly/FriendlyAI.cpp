@@ -317,13 +317,26 @@ bool Game::testFriendlyAI(){
    check(g.state(g.friendlyKey(0,"crouched"))&&g.friendlyHullHeight(0,g.world().actorTracks()[0])<=Player::CrouchedHeight+.001f,"Guard crouches under low cover while reloading or under fire");
   }
   {auto original=scene(ActorAiMode::Escort);auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);
-   for(auto&key:map->actorTracks[0].keys){key.position={8.5f,8.5f};key.clip=0;key.phase=0;}
+   for(auto&key:map->actorTracks[0].keys){key.position={8.5f,8.5f};key.z=1.25f;key.clip=0;key.phase=0;}
+   map->layers[0].elevation=1.25f;map->definition.spawnHeight=1.25f;
    map->actorTracks[0].ai.mode=ActorAiMode::Guard;map->actorTracks[0].ai.armed=true;map->actorTracks[0].ai.enableState=stateId("lab_squad_enabled");
-   map->actorTracks[0].ai.patrol={{{8.5f,8.5f},0,1000}};map->actorTracks[0].scale=1.6f;campaign->maps[0]=map;Game g(campaign);
+   map->actorTracks[0].ai.patrol={{{8.5f,8.5f},1.25f,1000}};map->actorTracks[0].scale=1.6f;campaign->maps[0]=map;Game g(campaign);
    float phase=g.friendlyActors()[0].pose.phase;
    for(int i=0;i<45;++i){g.updateStreaming(1.f/60);g.updateMechanisms(1.f/60);g.updateFriendlyActors(1.f/60,true);}
    check(g.friendlyActors()[0].pose.clip==0&&g.friendlyActors()[0].pose.phase>phase+.1f&&!g.state("lab_squad_enabled"),"Disabled Guard Lab squad members still advance idle phase before their enable trigger");
+    auto staged=g.friendlyActors()[0].pose;
+    check(length(staged.position-Vec2{8.5f,8.5f})<.001f&&std::fabs(staged.z-1.25f)<.001f&&g.state(g.friendlyKey(0,"saved"))&&g.state(g.friendlyKey(0,"x"))==8500&&g.state(g.friendlyKey(0,"y"))==8500&&g.state(g.friendlyKey(0,"z"))==1250,
+     "Disabled squad staging publishes complete authored nonzero XYZ before marking its animated pose saved");
+    Game restored(campaign);bool decoded=restored.decodeSave(g.encodeSave());
+    check(decoded&&length(restored.friendlyActors()[0].pose.position-staged.position)<.002f&&std::fabs(restored.friendlyActors()[0].pose.z-staged.z)<.002f&&!restored.state("lab_squad_enabled"),
+     "A disabled elevated squad member restores at its authored physical position before activation");
    g.setState(stateId("lab_squad_enabled"),1);float armedPhase=g.friendlyActors()[0].pose.phase;
+    g.updateStreaming(1.f/60);g.updateMechanisms(1.f/60);g.updateFriendlyActors(1.f/60,true);
+    check(length(g.friendlyActors()[0].pose.position-staged.position)<.05f&&std::fabs(g.friendlyActors()[0].pose.z-staged.z)<.002f,
+     "First activation restores the complete staged pose rather than an origin pose with an idle phase");
+    if(decoded){restored.setState(stateId("lab_squad_enabled"),1);restored.updateStreaming(1.f/60);restored.updateMechanisms(1.f/60);restored.updateFriendlyActors(1.f/60,true);
+     check(length(restored.friendlyActors()[0].pose.position-staged.position)<.05f&&std::fabs(restored.friendlyActors()[0].pose.z-staged.z)<.002f,
+      "A restored staged guard activates at the same nonzero authored XYZ without a teleport");}
    for(int i=0;i<90;++i){g.updateStreaming(1.f/60);g.updateMechanisms(1.f/60);g.updateFriendlyActors(1.f/60,true);}
    check(g.friendlyActors()[0].pose.phase!=armedPhase||g.friendlyActors()[0].pose.clip==1,"Enabled idle/patrol guards keep cycling animation phase");
   }

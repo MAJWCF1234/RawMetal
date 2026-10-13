@@ -30,7 +30,10 @@ Point3 fieldTerminalHand(const FieldTerminalFrame&frame,int side,float touch){
 }
 bool SoftwareRenderer::validate3D(){
  if(!testNormalMapping())return false;
- {for(Mesh*cleanupMesh:{&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher}){const auto&rest=cleanupMesh->bindTriangles();cleanupMesh->poseCreature(0,0);for(size_t i=0;i<rest.size();++i)for(int v=0;v<3;++v){auto d=rest[i].v[v].p-cleanupMesh->triangles[i].v[v].p;if(std::fabs(d.x)+std::fabs(d.y)+std::fabs(d.z)>.004f)return false;}
+ {for(Mesh*cleanupMesh:{&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher}){const auto&rest=cleanupMesh->bindTriangles();
+  bool head=false,body=false;for(const auto&face:rest){if(face.part<0||size_t(face.part)>=cleanupMesh->materialNames.size())return false;const auto&name=cleanupMesh->materialNames[size_t(face.part)];head|=name.find("head")!=std::string::npos;body|=name.find("body")!=std::string::npos;}
+  if(!head||!body)return false;
+  cleanupMesh->poseCreature(0,0);for(size_t i=0;i<rest.size();++i)for(int v=0;v<3;++v){auto d=rest[i].v[v].p-cleanupMesh->triangles[i].v[v].p;if(std::fabs(d.x)+std::fabs(d.y)+std::fabs(d.z)>.004f)return false;}
   float walkMotion=0,deathTop=0;for(int clip=0;clip<6;++clip){cleanupMesh->poseCreature(clip,.6f);for(size_t i=0;i<rest.size();++i)for(int v=0;v<3;++v){auto p=cleanupMesh->triangles[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.003f||p.y>2.f)return false;if(clip==1)walkMotion+=std::fabs(p.z-rest[i].v[v].p.z);if(clip==4)deathTop=std::max(deathTop,p.y);}}if(walkMotion<1||deathTop>1)return false;}}
  {for(float phase:{0.f,.25f,.6f,1.f}){m_cleanupMedic.poseCreature(6,phase);for(const auto&t:m_cleanupMedic.triangles)for(const auto&v:t.v)if(!std::isfinite(v.p.x)||!std::isfinite(v.p.y)||!std::isfinite(v.p.z)||v.p.y<-.003f||v.p.y>2.1f)return false;}m_cleanupMedic.poseCreature(0,0);}
  // Verify the terminal's physical grips against the imported Engineer's
