@@ -9,11 +9,14 @@ also moved the actor. Height-only ownership assigned most fingers to the legs.
 Idle substituted bind geometry for its first key; positive aim pitch rotated
 downward. Weapon placement followed finger averages independently of hitscan.
 
-The corrected bake uses 16 in-place samples, closed idle/walk/crouch loops,
+The initial repair used 16 in-place samples, closed idle/walk/crouch loops,
 full donor forearm orientation and rigid hands. Death sampling follows donor
 angular motion to avoid shrinking fingers during collapse. Rifle roles use
 rifle motion; Medic and Engineer use pistol motion. Treatment retains UAL2
 Chest_Open on immutable Medic geometry.
+
+The current bake uses 32 samples; see the
+[sampling follow-up](cleanup-animation-quality-20261013.md).
 
 Optional RML1 frames carry pelvis, spine, shoulder, elbow, wrist and palm
 direction beside RMA2 vertices. The runtime aligns the halves at the moving
@@ -27,7 +30,7 @@ NPC kneeling uses a 1.36 m hull at 1.6 m scale. Aimed crouch mesh maxima range
 from 1.133 to 1.267 m. The player's crouch is unchanged. Guard grips, collision,
 hitscan and perception share the NPC height.
 
-## Verified
+## Initial repair verification
 
 - Release build: **25,604,608 bytes**, below 33,554,432 bytes. All **222** embedded resources match their source losslessly.
 - **103** native split checks pass across all six roles: feet, waist, head/hand edges, Fire upper layer, aim signs/clamps, crouch bounds, loops, legacy fallback and Medic anchors.

@@ -16,7 +16,7 @@ if not ual1.exists():
     shutil.copyfile(ual1_origin, ual1)
 
 ROLES = ("assault", "engineer", "sharpshooter", "heavy", "medic", "rusher")
-SAMPLES = 16
+SAMPLES = 32
 
 # Runtime clip order stays fixed.
 MIXAMO_CLIPS = {
@@ -181,7 +181,7 @@ def assign_action(rig, action):
             pass
 
 
-def load_rest_from_obj(stem, count, indices, corners, fallback):
+def load_rest_from_obj(stem, count, indices, corners):
     lines = (root / "src/assets/actors/cleanup" / f"{stem}.obj").read_text(encoding="utf-8").splitlines()
     corner_points = []
     for line in lines:
@@ -195,7 +195,10 @@ def load_rest_from_obj(stem, count, indices, corners, fallback):
             points[index] = corner_points[corner].copy()
     for i, p in enumerate(points):
         if p is None:
-            points[i] = fallback[i].copy()
+            # Repaired topology can leave unused IDs in the retained index
+            # bank. Duplicate a real bind vertex rather than rebaking a posed
+            # frame as bind, which accumulates deformation on every rebuild.
+            points[i] = points[indices[0]].copy()
     return points
 
 
@@ -205,9 +208,7 @@ def load_topology(stem):
     corners, samples, clips, count = struct.unpack_from("<4I", data, 4)
     assert data[:4] == b"RMA2"
     indices = struct.unpack_from(f"<{corners}H", data, 20)
-    offset = 20 + corners * 2
-    fallback = [Vector(tuple(v * 0.001 for v in struct.unpack_from("<3h", data, offset + i * 6))) for i in range(count)]
-    points = load_rest_from_obj(stem, count, indices, corners, fallback)
+    points = load_rest_from_obj(stem, count, indices, corners)
     calibration = (root / "src/assets/actors/cleanup" / f"{stem}-arms.bin").read_bytes()
     assert calibration[:4] == b"RMC2"
     joints = struct.unpack_from("<18f", calibration, 4)
@@ -219,7 +220,7 @@ def load_topology(stem):
         weights[index] = tuple(v / 255 for v in weight[:3]) + (weight[3],)
     for i, w in enumerate(weights):
         if w is None:
-            weights[i] = (0.0, 0.0, 0.0, 0 if points[i].x < 0 else 1)
+            weights[i] = weights[indices[0]]
     return path, data, corners, samples, clips, count, indices, points, joints, palms, weights
 
 
@@ -396,7 +397,7 @@ def main():
     collapse_phases = collapse_samples(ual_rig, find_ual_action("Death01"), SAMPLES)
 
     evidence = {
-        "method": "16 in-place grounded samples; calibrated RMC2 limbs and rigid hands; RML1 body frame; 1 mm vertex quantization; closed forward loops; UAL1 death",
+        "method": f"{SAMPLES} in-place grounded samples; calibrated RMC2 limbs and rigid hands; RML1 body frame; 1 mm vertex quantization; closed forward loops; UAL1 death",
         "samples": SAMPLES,
         "mixamo": {str(k): str(v.relative_to(root)) for k, v in MIXAMO_CLIPS.items()},
         "ual1": str(ual1.relative_to(root)),

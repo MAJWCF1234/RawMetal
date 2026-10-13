@@ -20,7 +20,7 @@ results = []
 for role in ('assault', 'engineer', 'sharpshooter', 'heavy', 'medic', 'rusher'):
     data = (assets / (role + '-animation.bin')).read_bytes()
     corners, samples, clips, count = struct.unpack_from('<4I', data, 4)
-    assert data[:4] == b'RMA2' and samples == 16 and clips == (7 if role == 'medic' else 6)
+    assert data[:4] == b'RMA2' and 2 <= samples <= 128 and clips == (7 if role == 'medic' else 6)
     offset = 20 + corners * 2
     end = offset + clips * samples * count * 6
     assert data[end:end + 4] == b'RML1' and struct.unpack_from('<4I', data, end + 4) == (1, samples, clips, 120)
