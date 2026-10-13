@@ -7,6 +7,13 @@
 namespace retro {
 struct MeshVertex {Point3 p;float u=0,v=0,light=1;};
 struct MeshTriangle {MeshVertex v[3];int part=0;};
+// RML1 stores actor-space, metre-sized joints beside each baked vertex frame.
+// Palm directions are vectors, rather than positions.
+struct CreatureLayerPose {
+ Point3 pelvis{},spine{};
+ std::array<std::array<Point3,4>,2> arms{}; // shoulder, elbow, wrist, palm direction
+};
+static_assert(sizeof(CreatureLayerPose)==120);
 class Mesh {
 public:
  explicit Mesh(int resource,const char* nodeFilter="",int animationResource=0);
@@ -18,6 +25,12 @@ public:
  static bool testAttachedSkinning();
  static bool testVrHands();
     void poseCreature(int clip,float phase);
+ // Tank split: legs from lowerClip, torso/arms from upperClip (blend at waist),
+ // then restricted mid/head aim yaw+pitch toward the look target.
+ void poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float upperPhase,float aimYaw,float aimPitch);
+ bool hasCreatureLayerPose()const{return !m_creatureLayerFrames.empty();}
+ const CreatureLayerPose& creatureLayerPose()const{return m_creatureLayerPose;}
+ static bool testCleanupTankAim();
  void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil);
  Point3 bonePosition(const char* name)const;
  std::vector<MeshTriangle> trackedHand(bool left,const std::array<float,5>& curls);
@@ -34,8 +47,19 @@ private:
  std::vector<unsigned char> m_creatureFrames;
  std::vector<unsigned char> m_anchorFrames;
  std::array<Point3,2> m_poseAnchors{};
+ std::vector<CreatureLayerPose> m_creatureLayerFrames;
+ CreatureLayerPose m_creatureLayerPose{};
+ std::vector<uint16_t> m_creatureIndices;
+ std::vector<Point3> m_creatureBindUnique;
+ std::vector<float> m_creatureUpperMask,m_creatureHeadMask,m_creatureArmMask;
+ std::vector<unsigned char> m_creatureHandSide;
  uint32_t m_creatureSamples=0,m_creatureVertices=0,m_creatureClips=0;
  mutable std::vector<Point3> m_creaturePoseScratch;
+ mutable std::vector<Point3> m_creaturePoseScratchB;
+ void sampleCreatureClip(int clip,float phase,std::vector<Point3>& out)const;
+ CreatureLayerPose sampleCreatureLayerPose(int clip,float phase)const;
+ void sampleCreatureAnchors(int clip,float phase);
+ void publishCreatureVertices();
  struct CachedTriangle {uint32_t node;std::array<uint32_t,3> corners;MeshTriangle prototype;};
  struct CachedRing {uint32_t node;std::vector<uint32_t> corners;};
  std::vector<CachedTriangle> m_cachedTriangles;

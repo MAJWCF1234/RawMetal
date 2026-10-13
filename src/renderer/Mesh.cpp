@@ -5,8 +5,34 @@
 #include <algorithm>
 #include <cmath>
 #include <sstream>
+#include <fstream>
+#include <limits>
 #include <map>
 namespace retro {
+namespace {
+float layerLength(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
+bool finiteLayerPoint(Point3 p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z)&&std::fabs(p.x)<64&&std::fabs(p.y)<64&&std::fabs(p.z)<64;}
+float layerSmooth(float a,float b,float value){float t=std::clamp((value-a)/(b-a),0.f,1.f);return t*t*(3-2*t);}
+struct LayerRotation {
+ float cy,sy,cp,sp;
+ LayerRotation(float yaw,float pitch):cy(std::cos(yaw)),sy(std::sin(yaw)),cp(std::cos(pitch)),sp(std::sin(pitch)){}
+ Point3 operator()(Point3 p)const{
+  // Engine meshes face +Z with +Y up. Pitch upward around local right,
+  // then yaw that right axis with the body: Ry(yaw) * Rx(-pitch).
+  Point3 raised{p.x,p.y*cp+p.z*sp,-p.y*sp+p.z*cp};
+  return {raised.x*cy+raised.z*sy,raised.y,-raised.x*sy+raised.z*cy};
+ }
+};
+bool validLayerPose(const CreatureLayerPose&pose){
+ if(!finiteLayerPoint(pose.pelvis)||!finiteLayerPoint(pose.spine))return false;
+ for(const auto&arm:pose.arms){
+  for(auto point:arm)if(!finiteLayerPoint(point))return false;
+  float upper=layerLength(arm[1]-arm[0]),lower=layerLength(arm[2]-arm[1]),palm=layerLength(arm[3]);
+  if(upper<.001f||upper>4||lower<.001f||lower>4||palm<.00001f)return false;
+ }
+ return true;
+}
+}
 Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328),m_nodeFilter(nodeFilter){
  auto resource=loadResource(id);
  ufbx_load_opts opts{};opts.evaluate_skinning=true;opts.target_axes=ufbx_axes_right_handed_y_up;opts.target_unit_meters=1;
@@ -35,11 +61,52 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
   if(m_creatureFrames.size()<20||std::memcmp(m_creatureFrames.data(),"RMA2",4))throw std::runtime_error("Invalid creature animation");
   std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&m_creatureSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
   std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);
-  if(vertices!=triangles.size()*3||m_creatureSamples<2||m_creatureSamples>128||clips<1||clips>32||m_creatureVertices==0||m_creatureVertices>65535||m_creatureFrames.size()!=20+size_t(vertices)*2+size_t(m_creatureVertices)*6*m_creatureSamples*clips)throw std::runtime_error("Creature animation topology mismatch");
+  size_t payload=20+size_t(vertices)*2+size_t(m_creatureVertices)*6*m_creatureSamples*clips;
+  if(vertices!=triangles.size()*3||m_creatureSamples<2||m_creatureSamples>128||clips<1||clips>32||m_creatureVertices==0||m_creatureVertices>65535||m_creatureFrames.size()<payload)throw std::runtime_error("Creature animation topology mismatch");
   m_creatureClips=clips;
+  if(m_creatureFrames.size()!=payload){
+   if(m_creatureFrames.size()<payload+20||std::memcmp(m_creatureFrames.data()+payload,"RML1",4))throw std::runtime_error("Invalid creature layer trailer");
+   uint32_t version=0,samples=0,layerClips=0,stride=0;
+   std::memcpy(&version,m_creatureFrames.data()+payload+4,4);std::memcpy(&samples,m_creatureFrames.data()+payload+8,4);
+   std::memcpy(&layerClips,m_creatureFrames.data()+payload+12,4);std::memcpy(&stride,m_creatureFrames.data()+payload+16,4);
+   if(version!=1||samples!=m_creatureSamples||layerClips!=clips||stride!=sizeof(CreatureLayerPose)||m_creatureFrames.size()!=payload+20+size_t(samples)*layerClips*stride)throw std::runtime_error("Creature layer topology mismatch");
+   m_creatureLayerFrames.resize(size_t(samples)*layerClips);
+   std::memcpy(m_creatureLayerFrames.data(),m_creatureFrames.data()+payload+20,m_creatureLayerFrames.size()*sizeof(CreatureLayerPose));
+   for(const auto&pose:m_creatureLayerFrames)if(!validLayerPose(pose))throw std::runtime_error("Invalid creature layer joints");
+   m_creatureLayerPose=m_creatureLayerFrames.front();
+  }
   if(id==277){m_anchorFrames=loadResource(282);if(m_anchorFrames.size()!=size_t(clips)*m_creatureSamples*24)throw std::runtime_error("Actor attachment topology mismatch");}
     if(id==323){m_anchorFrames=loadResource(339);if(m_anchorFrames.size()!=size_t(clips)*m_creatureSamples*24)throw std::runtime_error("Medic treatment attachment topology mismatch");}
-  for(size_t i=0;i<vertices;++i){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+i*2,2);if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");}
+  m_creatureIndices.resize(vertices);std::memcpy(m_creatureIndices.data(),m_creatureFrames.data()+20,size_t(vertices)*2);
+  for(auto index:m_creatureIndices)if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");
+  if(id==303||id==308||id==313||id==318||id==323||id==328){
+   auto calibration=loadResource(id+4);uint32_t corners=0;
+   if(calibration.size()<104||std::memcmp(calibration.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup layer calibration");
+   std::memcpy(&corners,calibration.data()+100,4);
+   if(corners!=vertices||calibration.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup layer calibration topology mismatch");
+   // Cache immutable bind positions and semantic ownership once. Hand vertices
+   // below the belt still belong to the upper layer, including whole fingers.
+   sampleCreatureClip(0,0,m_creatureBindUnique);
+   m_creatureArmMask.assign(m_creatureVertices,0);m_creatureHandSide.assign(m_creatureVertices,0);
+   for(size_t corner=0;corner<vertices;++corner){
+    auto index=m_creatureIndices[corner];m_creatureBindUnique[index]=m_cachedTriangles[corner/3].prototype.v[corner%3].p;
+    const auto*weight=calibration.data()+104+corner*4;
+    if(weight[3]>1)throw std::runtime_error("Invalid cleanup layer arm side");
+    float influence=weight[0]/255.f,palm=weight[2]/255.f;
+    m_creatureArmMask[index]=std::max(m_creatureArmMask[index],influence);
+    if(influence*palm>.15f)m_creatureHandSide[index]=weight[3]+1;
+   }
+   m_creatureUpperMask.resize(m_creatureVertices);m_creatureHeadMask.resize(m_creatureVertices);
+   for(size_t i=0;i<m_creatureVertices;++i){auto p=m_creatureBindUnique[i];
+    m_creatureUpperMask[i]=std::max(layerSmooth(.75f,.97f,p.y),m_creatureArmMask[i]);
+    m_creatureHeadMask[i]=std::fabs(p.x)<.16f&&m_creatureArmMask[i]<.01f?layerSmooth(1.20f,1.34f,p.y):0;
+    if(m_creatureHandSide[i]){m_creatureUpperMask[i]=1;m_creatureHeadMask[i]=0;}
+   }
+   for(size_t face=0;face<triangles.size();++face){int part=triangles[face].part;
+    if(part<0||size_t(part)>=materialNames.size()||materialNames[size_t(part)].find("head")==std::string::npos)continue;
+    for(int vertex=0;vertex<3;++vertex){auto index=m_creatureIndices[face*3+vertex];m_creatureHeadMask[index]=1;m_creatureUpperMask[index]=1;}
+   }
+  }
  }
  for(auto n:m_scene->nodes)if(n->mesh){description+=" mesh "+std::string(n->name.data)+" triangles "+std::to_string(n->mesh->num_triangles)+"\n";for(auto mat:n->materials)description+=" material "+std::string(mat->name.data)+"\n";}
  description+="Animation stacks: "+std::to_string(m_scene->anim_stacks.count)+"\n";
@@ -62,14 +129,161 @@ const std::vector<MeshTriangle>& Mesh::bindTriangles()const{
  if(m_bindTriangles.empty()){m_bindTriangles.reserve(m_cachedTriangles.size());for(const auto&face:m_cachedTriangles)m_bindTriangles.push_back(face.prototype);}
  return m_bindTriangles;
 }
-void Mesh::poseCreature(int clip,float phase){
+void Mesh::sampleCreatureClip(int clip,float phase,std::vector<Point3>& out)const{
  if(m_creatureFrames.empty()||clip<0||clip>=int(m_creatureClips))throw std::runtime_error("Missing creature clip");
+ if(!std::isfinite(phase))throw std::runtime_error("Invalid creature phase");
+ float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
+ size_t stride=size_t(m_creatureVertices)*6,base=20+triangles.size()*6+size_t(clip)*m_creatureSamples*stride;
+ if(out.size()<m_creatureVertices)out.resize(m_creatureVertices);
+ for(size_t i=0;i<m_creatureVertices;++i){float xyz[3];for(int axis=0;axis<3;++axis){size_t offset=i*6+axis*2;int16_t x,y;std::memcpy(&x,m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,m_creatureFrames.data()+base+b*stride+offset,2);xyz[axis]=(x+(y-x)*blend)*.001f;}out[i]={xyz[0],xyz[1],xyz[2]};}
+}
+CreatureLayerPose Mesh::sampleCreatureLayerPose(int clip,float phase)const{
+ if(!hasCreatureLayerPose()||clip<0||clip>=int(m_creatureClips)||!std::isfinite(phase))throw std::runtime_error("Missing creature layer pose");
+ float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
+ const auto&A=m_creatureLayerFrames[size_t(clip)*m_creatureSamples+a];const auto&B=m_creatureLayerFrames[size_t(clip)*m_creatureSamples+b];
+ CreatureLayerPose pose;pose.pelvis=A.pelvis+(B.pelvis-A.pelvis)*blend;pose.spine=A.spine+(B.spine-A.spine)*blend;
+ for(int side=0;side<2;++side)for(int joint=0;joint<4;++joint)pose.arms[side][joint]=A.arms[side][joint]+(B.arms[side][joint]-A.arms[side][joint])*blend;
+ for(int side=0;side<2;++side){auto&direction=pose.arms[side][3];float size=layerLength(direction);
+  if(size<.00001f){direction=A.arms[side][3];size=layerLength(direction);}direction=direction*(1.f/size);
+ }
+ return pose;
+}
+void Mesh::sampleCreatureAnchors(int clip,float phase){
  float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
  if(!m_anchorFrames.empty())for(int joint=0;joint<2;++joint){Point3 A,B;size_t offset=size_t(clip)*m_creatureSamples*24+size_t(joint)*12;std::memcpy(&A,m_anchorFrames.data()+offset+a*24,12);std::memcpy(&B,m_anchorFrames.data()+offset+b*24,12);m_poseAnchors[joint]=A+(B-A)*blend;}
- size_t stride=size_t(m_creatureVertices)*6,base=20+triangles.size()*6+size_t(clip)*m_creatureSamples*stride;
- if(m_creaturePoseScratch.size()<m_creatureVertices)m_creaturePoseScratch.resize(m_creatureVertices);
- for(size_t i=0;i<m_creatureVertices;++i){float xyz[3];for(int axis=0;axis<3;++axis){size_t offset=i*6+axis*2;int16_t x,y;std::memcpy(&x,m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,m_creatureFrames.data()+base+b*stride+offset,2);xyz[axis]=(x+(y-x)*blend)*.001f;}m_creaturePoseScratch[i]={xyz[0],xyz[1],xyz[2]};}
- for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+(t*3+v)*2,2);triangles[t].v[v].p=m_creaturePoseScratch[index];}
+}
+void Mesh::publishCreatureVertices(){
+ for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v)triangles[t].v[v].p=m_creaturePoseScratch[m_creatureIndices[t*3+v]];
+}
+void Mesh::poseCreature(int clip,float phase){
+ sampleCreatureClip(clip,phase,m_creaturePoseScratch);
+ sampleCreatureAnchors(clip,phase);
+ if(hasCreatureLayerPose())m_creatureLayerPose=sampleCreatureLayerPose(clip,phase);
+ publishCreatureVertices();
+}
+void Mesh::poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float upperPhase,float aimYaw,float aimPitch){
+ // Old animation resources have no joint frames. Preserve their ordinary
+ // full-body motion instead of guessing a split pivot or hand ownership.
+ if(!hasCreatureLayerPose()||m_creatureUpperMask.empty()){poseCreature(lowerClip,lowerPhase);return;}
+ if(!std::isfinite(aimYaw)||!std::isfinite(aimPitch))throw std::runtime_error("Invalid creature layer aim");
+ aimYaw=std::clamp(aimYaw,-.70f,.70f);aimPitch=std::clamp(aimPitch,-.45f,.55f);
+ sampleCreatureClip(lowerClip,lowerPhase,m_creaturePoseScratch);
+ sampleCreatureClip(upperClip,upperPhase,m_creaturePoseScratchB);
+ auto lower=sampleCreatureLayerPose(lowerClip,lowerPhase),upper=sampleCreatureLayerPose(upperClip,upperPhase);
+ Point3 rebase=lower.pelvis-upper.pelvis,pivot=upper.spine+rebase;
+ LayerRotation bodyAim(aimYaw*.85f,aimPitch*.85f),headAim(aimYaw,aimPitch);
+ auto aimPoint=[&](Point3 p){return pivot+bodyAim(p+rebase-pivot);};
+ for(size_t i=0;i<m_creatureVertices;++i){
+  Point3 local=m_creaturePoseScratchB[i]+rebase-pivot;
+  Point3 body=pivot+bodyAim(local),head=pivot+headAim(local);
+  Point3 posed=body+(head-body)*m_creatureHeadMask[i];
+  m_creaturePoseScratch[i]=m_creaturePoseScratch[i]+(posed-m_creaturePoseScratch[i])*m_creatureUpperMask[i];
+ }
+ m_creatureLayerPose=upper;m_creatureLayerPose.pelvis=lower.pelvis;m_creatureLayerPose.spine=pivot;
+ for(int side=0;side<2;++side){for(int joint=0;joint<3;++joint)m_creatureLayerPose.arms[side][joint]=aimPoint(upper.arms[side][joint]);m_creatureLayerPose.arms[side][3]=bodyAim(upper.arms[side][3]);}
+ sampleCreatureAnchors(upperClip,upperPhase);
+ if(!m_anchorFrames.empty())for(auto&anchor:m_poseAnchors)anchor=aimPoint(anchor);
+ publishCreatureVertices();
+}
+bool Mesh::testCleanupTankAim(){
+ std::ofstream report("cleanup-tank-aim-test.txt");bool passed=true;int checks=0;
+ auto check=[&](bool condition,const char*name,int role){++checks;report<<(condition?"PASS: ":"FAIL: ")<<role<<' '<<name<<'\n';passed&=condition;};
+ const float phases[]={0.f,.125f,.25f,.5f,.75f,.875f,1.f};
+ const Point3 angles[]={{0,0,0},{.7f,.55f,0},{-.7f,-.45f,0},{.55f,-.35f,0},{-.5f,.45f,0}};
+ const char*roles[]={"Assault","Engineer","Sharpshooter","Heavy","Medic","Rusher"};
+ struct Edge {uint16_t a,b;float bind;};
+ for(int role=0;role<6;++role){
+  Mesh mesh(303+role*5,"",304+role*5);report<<"ROLE "<<roles[role]<<'\n';
+  check(mesh.hasCreatureLayerPose(),"real RML1 joints are present",role);if(!mesh.hasCreatureLayerPose())continue;
+  const auto&bind=mesh.bindTriangles();auto calibration=loadResource(307+role*5);
+  std::vector<Edge>handEdges,fingerEdges,headEdges,waistEdges;int hands[2]{};
+  for(auto side:mesh.m_creatureHandSide)if(side)++hands[side-1];
+  bool handOwned=hands[0]>20&&hands[1]>20;
+  for(size_t i=0;i<mesh.m_creatureVertices;++i)if(mesh.m_creatureHandSide[i])handOwned&=mesh.m_creatureUpperMask[i]==1&&mesh.m_creatureHeadMask[i]==0;
+  check(handOwned,"whole hands belong to the upper layer",role);
+  for(size_t face=0;face<bind.size();++face)for(int vertex=0;vertex<3;++vertex){
+   int next=(vertex+1)%3;auto a=mesh.m_creatureIndices[face*3+vertex],b=mesh.m_creatureIndices[face*3+next];
+   Edge edge{a,b,layerLength(bind[face].v[vertex].p-bind[face].v[next].p)};
+   if(mesh.m_creatureHandSide[a]&&mesh.m_creatureHandSide[a]==mesh.m_creatureHandSide[b])handEdges.push_back(edge);
+   const auto*AWeight=calibration.data()+104+(face*3+vertex)*4;const auto*BWeight=calibration.data()+104+(face*3+next)*4;
+   if(AWeight[0]>250&&AWeight[2]>250&&BWeight[0]>250&&BWeight[2]>250&&AWeight[3]==BWeight[3])fingerEdges.push_back(edge);
+   if(mesh.m_creatureHeadMask[a]==1&&mesh.m_creatureHeadMask[b]==1)headEdges.push_back(edge);
+   auto A=mesh.m_creatureBindUnique[a],B=mesh.m_creatureBindUnique[b];
+   if(edge.bind>.001f&&A.y>.75f&&A.y<.97f&&B.y>.75f&&B.y<.97f&&mesh.m_creatureArmMask[a]<.01f&&mesh.m_creatureArmMask[b]<.01f)waistEdges.push_back(edge);
+  }
+  float footError=0,handChange=0,handBindError=0,headChange=0,waistStretch=1,jointLengthError=0,crouchTop=0;
+  bool finite=true,grounded=true;
+  std::vector<Point3>lowerVertices,upperVertices;
+  for(int lowerClip:{1,5})for(int upperClip:{0,2,5})for(float phase:phases){
+   if((lowerClip==5)!=(upperClip==5))continue;
+   float upperPhase=phase;
+   mesh.sampleCreatureClip(lowerClip,phase,lowerVertices);mesh.sampleCreatureClip(upperClip,upperPhase,upperVertices);
+   auto upperPose=mesh.sampleCreatureLayerPose(upperClip,upperPhase);
+   for(auto angle:angles){
+    mesh.poseCreatureTank(lowerClip,phase,upperClip,upperPhase,angle.x,angle.y);
+    const auto&posed=mesh.m_creaturePoseScratch;
+    finite&=validLayerPose(mesh.creatureLayerPose());
+    for(size_t i=0;i<mesh.m_creatureVertices;++i){
+     finite&=finiteLayerPoint(posed[i]);grounded&=posed[i].y>=-.003f&&posed[i].y<=2.1f;
+     if(lowerClip==5)crouchTop=std::max(crouchTop,posed[i].y);
+     if(mesh.m_creatureBindUnique[i].y<.13f&&mesh.m_creatureArmMask[i]<.01f)footError=std::max(footError,layerLength(posed[i]-lowerVertices[i]));
+    }
+    for(auto edge:handEdges){float length=layerLength(posed[edge.a]-posed[edge.b]);
+     handChange=std::max(handChange,std::fabs(length-layerLength(upperVertices[edge.a]-upperVertices[edge.b])));
+    }
+    for(auto edge:fingerEdges)handBindError=std::max(handBindError,std::fabs(layerLength(posed[edge.a]-posed[edge.b])-edge.bind));
+    for(auto edge:headEdges)headChange=std::max(headChange,std::fabs(layerLength(posed[edge.a]-posed[edge.b])-layerLength(upperVertices[edge.a]-upperVertices[edge.b])));
+    for(auto edge:waistEdges){float baseline=std::max({edge.bind,layerLength(lowerVertices[edge.a]-lowerVertices[edge.b]),layerLength(upperVertices[edge.a]-upperVertices[edge.b])});waistStretch=std::max(waistStretch,layerLength(posed[edge.a]-posed[edge.b])/baseline);}
+    for(int side=0;side<2;++side)for(int joint=0;joint<2;++joint){const auto&arm=mesh.creatureLayerPose().arms[side];jointLengthError=std::max(jointLengthError,std::fabs(layerLength(arm[joint+1]-arm[joint])-layerLength(upperPose.arms[side][joint+1]-upperPose.arms[side][joint])));}
+   }
+  }
+  report<<"hand split error mm "<<handChange*1000<<" bind error mm "<<handBindError*1000<<" waist stretch "<<waistStretch<<" crouch top "<<crouchTop<<'\n';
+  check(footError<.000001f,"feet retain exact lower-layer vertices",role);
+  check(handChange<.00001f,"split and aim preserve every hand edge",role);
+  check(handBindError<.006f,"baked looping hands preserve authored finger geometry",role);
+  check(headChange<.00001f,"aim preserves rigid head geometry",role);
+  check(waistStretch<3.f,"waist edges remain bounded across gait and aim",role);
+  check(jointLengthError<.00001f,"composed arm metadata preserves limb lengths",role);
+  check(finite&&grounded,"all combined poses and joints remain finite and grounded",role);
+  check(crouchTop<=1.363f,"aimed crouch stays inside the 1.36 metre NPC hull",role);
+  float identicalError=0,loopError=0,rootDrift=0,clampError=0;
+  for(int clip:{0,1,5}){
+   auto start=mesh.sampleCreatureLayerPose(clip,0),end=mesh.sampleCreatureLayerPose(clip,1);auto rootDelta=end.pelvis-start.pelvis;
+   rootDrift=std::max(rootDrift,std::hypot(rootDelta.x,rootDelta.z));
+   mesh.sampleCreatureClip(clip,0,lowerVertices);mesh.sampleCreatureClip(clip,1,upperVertices);
+   for(size_t i=0;i<mesh.m_creatureVertices;++i)loopError=std::max(loopError,layerLength(lowerVertices[i]-upperVertices[i]));
+   for(float phase:phases){mesh.sampleCreatureClip(clip,phase,upperVertices);mesh.poseCreatureTank(clip,phase,clip,phase,0,0);
+    for(size_t i=0;i<mesh.m_creatureVertices;++i)identicalError=std::max(identicalError,layerLength(mesh.m_creaturePoseScratch[i]-upperVertices[i]));
+   }
+  }
+  check(rootDrift<.004f&&loopError<.006f,"idle walk and crouch loops have no planar root reset",role);
+  check(identicalError<.000001f,"identical layers reproduce the original baked pose",role);
+  mesh.poseCreatureTank(1,.5f,0,.5f,.7f,.55f);upperVertices=mesh.m_creaturePoseScratch;
+  mesh.poseCreatureTank(1,.5f,0,.5f,2.f,2.f);
+  for(size_t i=0;i<mesh.m_creatureVertices;++i)clampError=std::max(clampError,layerLength(mesh.m_creaturePoseScratch[i]-upperVertices[i]));
+  mesh.poseCreatureTank(1,.5f,0,.5f,-.7f,-.45f);upperVertices=mesh.m_creaturePoseScratch;
+  mesh.poseCreatureTank(1,.5f,0,.5f,-2.f,-2.f);
+  for(size_t i=0;i<mesh.m_creatureVertices;++i)clampError=std::max(clampError,layerLength(mesh.m_creaturePoseScratch[i]-upperVertices[i]));
+  check(clampError<.000001f,"yaw and pitch limits apply to the complete composed pose",role);
+  auto headCenter=[&](){Point3 sum{};int count=0;for(size_t i=0;i<mesh.m_creatureVertices;++i)if(mesh.m_creatureHeadMask[i]==1){sum=sum+mesh.m_creaturePoseScratch[i];++count;}return sum*(1.f/std::max(1,count));};
+  mesh.poseCreatureTank(1,.5f,0,.5f,0,0);auto neutral=headCenter();
+  mesh.poseCreatureTank(1,.5f,0,.5f,0,.45f);auto raised=headCenter();
+  mesh.poseCreatureTank(1,.5f,0,.5f,0,-.35f);auto lowered=headCenter();
+  check(raised.z<neutral.z-.02f&&lowered.z>neutral.z+.02f,"positive elevation raises the upper look direction",role);
+  auto direction=LayerRotation(.55f,.3f)({0,0,1});
+  check(std::fabs(direction.x-std::sin(.55f)*std::cos(.3f))<.000001f&&std::fabs(direction.y-std::sin(.3f))<.000001f&&std::fabs(direction.z-std::cos(.55f)*std::cos(.3f))<.000001f,"combined yaw and pitch use the yawed local right axis",role);
+  auto savedFrames=std::move(mesh.m_creatureLayerFrames);mesh.sampleCreatureClip(1,.5f,upperVertices);mesh.poseCreatureTank(1,.5f,0,.8f,.7f,.55f);float legacyError=0;
+  for(size_t i=0;i<mesh.m_creatureVertices;++i)legacyError=std::max(legacyError,layerLength(mesh.m_creaturePoseScratch[i]-upperVertices[i]));
+  mesh.m_creatureLayerFrames=std::move(savedFrames);check(legacyError<.000001f,"legacy RMA2 safely falls back to whole-body motion",role);
+  bool rejected=false;try{mesh.poseCreatureTank(1,.5f,0,.5f,std::numeric_limits<float>::quiet_NaN(),0);}catch(const std::runtime_error&){rejected=true;}
+  auto invalid=mesh.m_creatureLayerFrames.front();invalid.pelvis.x=std::numeric_limits<float>::quiet_NaN();
+  check(rejected&&!validLayerPose(invalid)&&!validLayerPose({}),"nonfinite aim and malformed zero joints are rejected",role);
+  if(role==4){mesh.poseCreatureTank(1,.5f,6,.5f,.4f,.2f);float anchorError=0;
+   for(int side=0;side<2;++side)anchorError=std::max(anchorError,layerLength(mesh.poseAnchor(side)-mesh.creatureLayerPose().arms[side][2]));
+   check(anchorError<.02f,"Medic kit anchors share composed wrist transforms",role);
+  }
+ }
+ report<<"CHECKS "<<checks<<'\n';return passed;
 }
 Point3 Mesh::bonePosition(const char* name)const{auto n=ufbx_find_node(m_scene,name);if(!n)return {};return {float(n->node_to_world.m03),float(n->node_to_world.m13),float(n->node_to_world.m23)};}
 std::vector<MeshTriangle> Mesh::trackedHand(bool left,const std::array<float,5>& curls){

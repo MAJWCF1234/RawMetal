@@ -39,6 +39,7 @@ public:
     static void setTexturePresentScale(int scale);
     static int texturePresentScale();
     float gripError()const{return m_gripError;}
+    std::array<float,3> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError};}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
     void inspectRig(const Game& game,float yaw,float pitch);
@@ -166,6 +167,7 @@ private:
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
     float m_gripError=0;
+    float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0;
     bool m_inspectRig=false;
     float m_inspectYaw=0,m_inspectPitch=0;
     Point3 inspectionPoint(Point3 p)const;

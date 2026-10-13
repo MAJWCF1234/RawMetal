@@ -1,100 +1,96 @@
-"""Blender -b --python tools/BakeMedicTreatment.py
+"""Append UAL2 Chest_Open using immutable repaired Medic geometry.
 
-Retarget Quaternius UAL2 Chest_Open onto the supplied unrigged Medic, then
-append a seventh compact vertex clip without altering the six existing clips.
+The six RMA2 clips and their RML1 poses remain byte-for-byte intact. Treatment
+gets the same calibrated, grounded joint metadata and actual wrist anchors.
 """
-import bpy, math, struct, shutil, json
+import bpy, struct, shutil, json, math, importlib.util
 from pathlib import Path
 from mathutils import Vector, Quaternion
-root=Path(__file__).resolve().parents[1]
-source=root/'source-assets/medic-motion'
-source.mkdir(parents=True,exist_ok=True)
-donor=source/'UAL2_Standard.fbx'
+
+root = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("cleanup_bake", root / "tools/BakeCleanupMixamo.py")
+bake = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bake)
+source = root / "source-assets/medic-motion"
+source.mkdir(parents=True, exist_ok=True)
+donor = source / "UAL2_Standard.fbx"
 if not donor.exists():
-    shutil.copyfile(Path(r'O:\retro official\Animations\Universal Animation Library 2[Standard]\Unity\UAL2_Standard.fbx'),donor)
-bpy.ops.import_scene.fbx(filepath=str(donor))
-rig=next(o for o in bpy.data.objects if o.type=='ARMATURE')
-action=next(a for a in bpy.data.actions if a.name.endswith('|Chest_Open'))
-rig.animation_data.action=action
-if action.slots:rig.animation_data.action_slot=action.slots[0]
-def engine(p):return Vector((p.x,p.z,-p.y))
-def joint(name,posed=False):
-    return engine((rig.pose.bones[name].head if posed else rig.data.bones[name].head_local))
-def direction(name,posed=False):
-    b=rig.pose.bones[name] if posed else rig.data.bones[name]
-    return engine((b.tail-b.head) if posed else (b.tail_local-b.head_local)).normalized()
-path=root/'src/assets/actors/cleanup/medic-animation.bin'
-data=path.read_bytes()
-corners,samples,clips,count=struct.unpack_from('<4I',data,4)
-assert clips in (6,7)
-offset=20+corners*2
-base=data[:offset+6*samples*count*6]
-points=[Vector(tuple(v*.001 for v in struct.unpack_from('<3h',data,offset+i*6))) for i in range(count)]
-indices=struct.unpack_from(f'<{corners}H',data,20)
-calibration=(root/'src/assets/actors/cleanup/medic-arms.bin').read_bytes()
-joints=struct.unpack_from('<18f',calibration,4)
-weights=[None]*count
-for corner,index in enumerate(indices):weights[index]=tuple(v/255 for v in calibration[104+corner*4:107+corner*4])
-identity=Quaternion((1,0,0,0))
-pelvis=Vector((0,.78,0));chest=Vector((0,1.1,0))
-restPelvis=joint('pelvis')
-frames=[];anchors=[]
+    shutil.copyfile(Path(r"O:\retro official\Animations\Universal Animation Library 2[Standard]\Unity\UAL2_Standard.fbx"), donor)
+bake.clear_scene()
+rig, actions = bake.import_rig(donor)
+action = next(a for a in actions if a.name.endswith("|Chest_Open"))
+bake.assign_action(rig, action)
+path, data, corners, samples, clips, count, indices, points, joints, palms, weights = bake.load_topology("medic")
+assert clips in (6, 7) and samples == bake.SAMPLES
+offset = 20 + corners * 2
+vertex_end = offset + clips * samples * count * 6
+assert data[vertex_end:vertex_end + 4] == b"RML1", "Rebake core Mixamo clips before appending treatment"
+version, pose_samples, pose_clips, stride = struct.unpack_from("<4I", data, vertex_end + 4)
+assert (version, pose_samples, pose_clips, stride) == (1, samples, clips, 120)
+assert len(data) == vertex_end + 20 + clips * samples * stride
+core = data[:offset + 6 * samples * count * 6]
+core_poses = data[vertex_end + 20:vertex_end + 20 + 6 * samples * 120]
+identity = Quaternion((1, 0, 0, 0))
+bind_layer = [Vector((0, .78, 0)), Vector((0, .92, 0))]
+for side in range(2):
+    bind_layer.extend(Vector(joints[side * 9 + i:side * 9 + i + 3]) for i in (0, 3, 6))
+    bind_layer.append(Vector(palms[side * 3:side * 3 + 3]).normalized())
+frames, layers = [], []
 for sample in range(samples):
-    phase=sample/(samples-1)
-    start,end=action.frame_range
-    frame=start+(end-start)*phase
-    bpy.context.scene.frame_set(int(frame),subframe=frame-int(frame))
-    blend=min(1,phase/.18,(1-phase)/.14)
-    blend=max(0,blend);blend=blend*blend*(3-2*blend)
-    rootDelta=(joint('pelvis',True)-restPelvis)*.9
-    torsoRotation=direction('spine_02').rotation_difference(direction('spine_02',True))
-    rootRotation=direction('pelvis').rotation_difference(direction('pelvis',True))
-    def torso(p):return pelvis+rootDelta+torsoRotation@(p-pelvis)
-    arms=[];legs=[]
-    for side,suffix in enumerate(('r','l')):
-        S,E,H=(Vector(joints[side*9+i:side*9+i+3]) for i in (0,3,6))
-        targetS=torso(S)
-        upper=(E-S).normalized().rotation_difference(direction('upperarm_'+suffix,True))
-        lower=(H-E).normalized().rotation_difference(direction('lowerarm_'+suffix,True))
-        targetE=targetS+upper@(E-S);targetH=targetE+lower@(H-E)
-        arms.append((S,E,H,targetS,targetE,targetH,upper,lower))
-        sign=-1 if side==0 else 1
-        hip=Vector((sign*.12,.78,0));knee=Vector((sign*.12,.40,0));ankle=Vector((sign*.12,.08,0))
-        targetHip=pelvis+rootDelta+rootRotation@(hip-pelvis)
-        thigh=(knee-hip).normalized().rotation_difference(direction('thigh_'+suffix,True))
-        calf=(ankle-knee).normalized().rotation_difference(direction('calf_'+suffix,True))
-        targetKnee=targetHip+thigh@(knee-hip);targetAnkle=targetKnee+calf@(ankle-knee)
-        foot=direction('foot_'+suffix).rotation_difference(direction('foot_'+suffix,True))
-        legs.append((hip,knee,ankle,targetHip,targetKnee,targetAnkle,thigh,calf,foot))
-    posed=[]
-    for index,p in enumerate(points):
-        side=0 if p.x<0 else 1
-        target=torso(p)
-        if p.y<.79:
-            hip,knee,ankle,H,K,A,thigh,calf,foot=legs[side]
-            upper=H+thigh@(p-hip);lower=K+calf@(p-knee)
-            bend=max(0,min(1,(.46-p.y)/.12));target=upper.lerp(lower,bend)
-            if p.y<.13:target=target.lerp(A+foot@(p-ankle),max(0,min(1,(.13-p.y)/.06)))
-        influence,lowerWeight,palmWeight=weights[index]
-        if influence>0:
-            S,E,H,tS,tE,tH,upper,lower=arms[side]
-            arm=(tS+upper@(p-S)).lerp(tE+lower@(p-E),lowerWeight)
-            arm=arm.lerp(tH+lower@(p-H),palmWeight)
-            target=target.lerp(arm,influence)
-        posed.append(p.lerp(target,blend))
-    ground=min(p.y for p in posed)
-    frames.append([Vector((p.x,p.y-ground,p.z)) for p in posed])
-    anchors.append([Vector((p.x,p.y-ground,p.z)) for p in (arms[0][2].lerp(arms[0][5],blend),arms[1][2].lerp(arms[1][5],blend))])
-result=bytearray(base);struct.pack_into('<I',result,12,7)
+    phase = sample / (samples - 1)
+    blend = max(0, min(1, phase / .18, (1 - phase) / .14))
+    blend = blend * blend * (3 - 2 * blend)
+    full, layer = bake.anatomical_frame(rig, points, joints, palms, weights, action, phase)
+    posed_layer = [a.lerp(b, blend) for a, b in zip(bind_layer, layer)]
+    hand_rotations = []
+    for side, suffix in enumerate(("r", "l")):
+        E = Vector(joints[side * 9 + 3:side * 9 + 6])
+        H = Vector(joints[side * 9 + 6:side * 9 + 9])
+        lower = bake.limb_rotation(rig, "lowerarm_" + suffix, H - E)
+        rotation = identity.slerp(lower, blend)
+        hand_rotations.append(rotation)
+        posed_layer[5 + side * 4] = (rotation @ bind_layer[5 + side * 4]).normalized()
+    frame = []
+    for index, p in enumerate(points):
+        influence, lower_weight, palm_weight, side = weights[index]
+        if influence * palm_weight > .15:
+            H = Vector(joints[side * 9 + 6:side * 9 + 9])
+            frame.append(posed_layer[4 + side * 4] + hand_rotations[side] @ (p - H))
+        else:
+            frame.append(p.lerp(full[index], blend))
+    ground = min(p.y for p in frame)
+    for p in frame:
+        p.y -= ground
+    for index, p in enumerate(posed_layer):
+        if index not in (5, 9):
+            p.y -= ground
+    frames.append(frame)
+    layers.append(posed_layer)
+
+result = bytearray(core)
+struct.pack_into("<I", result, 12, 7)
 for frame in frames:
-    for p in frame:result.extend(struct.pack('<3h',*(round(v*1000) for v in p)))
-path.write_bytes(result)
-anchorData=bytearray()
+    for p in frame:
+        assert all(math.isfinite(v) and abs(v) < 32 for v in p)
+        result.extend(struct.pack("<3h", *(round(v * 1000) for v in p)))
+result.extend(b"RML1" + struct.pack("<4I", 1, samples, 7, 120))
+result.extend(core_poses)
+for layer in layers:
+    result.extend(struct.pack("<30f", *(v for p in layer for v in p)))
+bake.atomic_write(path, result)
+
+anchor_data = bytearray()
+all_poses = core_poses + b"".join(struct.pack("<30f", *(v for p in layer for v in p)) for layer in layers)
 for clip in range(7):
     for sample in range(samples):
-        for p in anchors[sample] if clip==6 else (Vector(joints[6:9]),Vector(joints[15:18])):
-            anchorData.extend(struct.pack('<3f',*p))
-(root/'src/assets/actors/cleanup/medic-treatment-anchors.bin').write_bytes(anchorData)
-evidence={'source':str(donor.relative_to(root)),'action':action.name,'frames':list(action.frame_range),'samples':samples,'vertices':count,'runtime_clip':6,'method':'anatomical limb retarget with existing calibrated sleeve/palm weights, source joint rotations and grounded vertex bake'}
-(root/'diagnostics/medic-treatment-bake.json').write_text(json.dumps(evidence,indent=2))
+        pose = struct.unpack_from("<30f", all_poses, (clip * samples + sample) * 120)
+        anchor_data.extend(struct.pack("<6f", *pose[12:15], *pose[24:27]))
+(root / "src/assets/actors/cleanup/medic-treatment-anchors.bin").write_bytes(anchor_data)
+evidence = {
+    "source": str(donor.relative_to(root)), "action": action.name,
+    "frames": list(action.frame_range), "samples": samples, "vertices": count,
+    "runtime_clip": 6, "preserved_core_clips": 6, "preserved_core_layer_poses": 6,
+    "method": "immutable repaired OBJ; calibrated RMC2 side ownership; rigid whole hands; in-place grounded UAL2; matching RML1 wrists and anchors",
+}
+(root / "diagnostics/medic-treatment-bake.json").write_text(json.dumps(evidence, indent=2))
 print(json.dumps(evidence))

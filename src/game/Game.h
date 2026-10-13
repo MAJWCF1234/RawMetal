@@ -282,6 +282,7 @@ public:
     static Game engineerSupportInspection(int stage=0);
     static Game guardPolicyInspection(int stage=0);
     static Game killSquadInspection(int stage=0);
+    static Game cleanupLayerInspection(int role,int sample,int view=0);
     static Game guardTacticsInspection(int stage=0);
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
@@ -526,6 +527,9 @@ private:
     bool friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float* endFeet=nullptr);
     float friendlySupportAt(int level,Vec2 position,float feet);
     bool friendlyBodyFits(int level,Vec2 position,float feet,float height);
+    // Cleanup's kneeling bodies stay near standing height; the player's deep
+    // crouch is a separate pose and cannot describe an NPC's physical hull.
+    static float npcCrouchedHeight(const ActorTrack& track){return track.scale*.85f;}
     float friendlyHullHeight(size_t actor,const ActorTrack& track)const;
     bool friendlyRayClear(Point3 from,Point3 to)const;
     bool friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2& goal,float& goalFeet,float targetFeet=std::numeric_limits<float>::quiet_NaN());

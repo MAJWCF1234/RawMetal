@@ -89,7 +89,7 @@ bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float h
 }
 float Game::friendlyHullHeight(size_t actor,const ActorTrack&track)const{
  float standing=track.scale;if(actor>=m_friendlyActors.size()||!state(friendlyKey(actor,"crouched")))return standing;
- return std::min(standing,Player::CrouchedHeight);
+ return npcCrouchedHeight(track);
 }
 float Game::friendlySupportAt(int level,Vec2 position,float feet){
  auto origin=chunkOffset(level);Vec2 global=origin+position;int center=friendlyChunkAt(global,level);if(center<0)return feet;ensureChunk(center);float ground=-10000;
@@ -138,7 +138,7 @@ bool Game::guardRoute(int level,size_t actor,Vec2 globalGoal,float feet,int ms,V
  Vec2 portalGlobal{get("guard_portal_x")*.001f,get("guard_portal_y")*.001f};
  bool cached=get("guard_route_target")==target+1&&next>=0&&next<chunkCount()&&next!=level&&wait>0&&friendlyBoundaryOpen(level,next,portalGlobal);
  if(!cached&&m_npcNavBudget>0&&(wait==0||next>=0||get("guard_route_target")!=target+1)){
-  --m_npcNavBudget;Vec2 localPortal;float z=feet;cached=friendlyPortal(level,target,npc.pose.position,npc.pose.z,npc.track().scale,localPortal,z,feet);
+  --m_npcNavBudget;Vec2 localPortal;float z=feet;cached=friendlyPortal(level,target,npc.pose.position,npc.pose.z,friendlyHullHeight(actor,npc.track()),localPortal,z,feet);
   next=cached?friendlyChunkAt(localPortal+origin,level):-1;put("guard_route_next",next+1);
   if(cached){portalGlobal=localPortal+origin;put("guard_portal_x",int(std::round(portalGlobal.x*1000)));put("guard_portal_y",int(std::round(portalGlobal.y*1000)));put("guard_portal_z",int(std::round(z*1000)));}
   wait=600+int(actor%7)*30;
@@ -186,7 +186,7 @@ void Game::updateFriendlyActors(float dt,bool guards){
    int wait=std::max(0,state(friendlyKey(i,"route_wait"))-std::max(1,int(std::round(dt*1000))));setState(friendlyKey(i,"route_wait"),wait);
    if(wait>0&&state(friendlyKey(i,"route_player"))==m_level+1&&!state(friendlyKey(i,"route_next")))continue;
    if(m_npcNavBudget<=0)continue;--m_npcNavBudget;
-   bool found=friendlyPortal(npc.level,m_level,npc.pose.position,npc.pose.z,track.scale,goal,z);
+   bool found=friendlyPortal(npc.level,m_level,npc.pose.position,npc.pose.z,friendlyHullHeight(i,track),goal,z);
    setState(friendlyKey(i,"route_player"),m_level+1);setState(friendlyKey(i,"route_wait"),600+int(i%7)*30);setState(friendlyKey(i,"route_next"),found?friendlyChunkAt(goal+chunkOffset(npc.level),npc.level)+1:0);
    if(!found)continue;
    setState(friendlyKey(i,"portal_x"),int(std::round(goal.x*1000)));setState(friendlyKey(i,"portal_y"),int(std::round(goal.y*1000)));setState(friendlyKey(i,"portal_z"),int(std::round(z*1000)));
