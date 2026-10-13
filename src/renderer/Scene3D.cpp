@@ -1424,7 +1424,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
      if(cleanup)bindPull*=.18f;
      else if(pose.clip==1||pose.clip==5)bindPull*=.4f;
      else if(pose.clip==0)bindPull*=.55f;
-     v.p=v.p+(source-v.p)*bindPull;if(bind.influence>0){const auto&arm=arms[bind.side];
+     if(bindPull>.001f)v.p=v.p+(source-v.p)*bindPull;
+     if(bind.influence>.001f){const auto&arm=arms[bind.side];
      auto rotate=[](const std::array<Point3,3>&basis,Point3 p){return basis[0]*p.x+basis[1]*p.y+basis[2]*p.z;};
      auto upper=arm.shoulder+rotate(arm.upper,source-arm.shoulder),lower=arm.targetElbow+rotate(arm.lower,source-arm.elbow),hand=arm.targetHand+rotate(arm.palm,source-arm.hand);
      auto sleeve=upper+(lower-upper)*bind.lower;auto attached=sleeve+(hand-sleeve)*bind.palm;v.p=v.p+(attached-v.p)*bind.influence;

@@ -67,9 +67,9 @@ void Mesh::poseCreature(int clip,float phase){
  float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
  if(!m_anchorFrames.empty())for(int joint=0;joint<2;++joint){Point3 A,B;size_t offset=size_t(clip)*m_creatureSamples*24+size_t(joint)*12;std::memcpy(&A,m_anchorFrames.data()+offset+a*24,12);std::memcpy(&B,m_anchorFrames.data()+offset+b*24,12);m_poseAnchors[joint]=A+(B-A)*blend;}
  size_t stride=size_t(m_creatureVertices)*6,base=20+triangles.size()*6+size_t(clip)*m_creatureSamples*stride;
- std::vector<Point3> posed(m_creatureVertices);
- for(size_t i=0;i<posed.size();++i){float xyz[3];for(int axis=0;axis<3;++axis){size_t offset=i*6+axis*2;int16_t x,y;std::memcpy(&x,m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,m_creatureFrames.data()+base+b*stride+offset,2);xyz[axis]=(x+(y-x)*blend)*.001f;}posed[i]={xyz[0],xyz[1],xyz[2]};}
- for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+(t*3+v)*2,2);triangles[t].v[v].p=posed[index];}
+ if(m_creaturePoseScratch.size()<m_creatureVertices)m_creaturePoseScratch.resize(m_creatureVertices);
+ for(size_t i=0;i<m_creatureVertices;++i){float xyz[3];for(int axis=0;axis<3;++axis){size_t offset=i*6+axis*2;int16_t x,y;std::memcpy(&x,m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,m_creatureFrames.data()+base+b*stride+offset,2);xyz[axis]=(x+(y-x)*blend)*.001f;}m_creaturePoseScratch[i]={xyz[0],xyz[1],xyz[2]};}
+ for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v){uint16_t index;std::memcpy(&index,m_creatureFrames.data()+20+(t*3+v)*2,2);triangles[t].v[v].p=m_creaturePoseScratch[index];}
 }
 Point3 Mesh::bonePosition(const char* name)const{auto n=ufbx_find_node(m_scene,name);if(!n)return {};return {float(n->node_to_world.m03),float(n->node_to_world.m13),float(n->node_to_world.m23)};}
 std::vector<MeshTriangle> Mesh::trackedHand(bool left,const std::array<float,5>& curls){

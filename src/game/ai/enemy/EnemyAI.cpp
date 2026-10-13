@@ -282,7 +282,10 @@ ActorPose Game::friendlyAwareness(const World& world,int level,size_t actor,cons
  Vec2 facing{std::sin(old.yaw),std::cos(old.yaw)},target{};float nearest=64.f;bool found=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
   if(distance<nearest&&aiCanSee(world,pose.position,pose.z+track.scale*.85f,facing,position,z,8.f,-.25f,2.f)){nearest=distance;target=position;found=true;}};
- if(level==m_level)for(const auto&enemy:m_enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
+ const std::vector<Enemy>* enemies=nullptr;
+ if(level==m_level)enemies=&m_enemies;
+ else if(level>=0&&level<chunkCount()&&chunkResident(level))enemies=&m_chunks[level].enemies;
+ if(enemies)for(const auto&enemy:*enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
  if(found){auto toward=target-pose.position;float yaw=std::atan2(toward.x,toward.y);pose.yaw=old.yaw+std::clamp(std::remainder(yaw-old.yaw,2*kPi),-4.f*dt,4.f*dt);}
  return pose;
 }
