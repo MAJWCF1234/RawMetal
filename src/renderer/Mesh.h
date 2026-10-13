@@ -35,6 +35,7 @@ private:
  std::vector<unsigned char> m_anchorFrames;
  std::array<Point3,2> m_poseAnchors{};
  uint32_t m_creatureSamples=0,m_creatureVertices=0,m_creatureClips=0;
+ mutable std::vector<Point3> m_creaturePoseScratch;
  struct CachedTriangle {uint32_t node;std::array<uint32_t,3> corners;MeshTriangle prototype;};
  struct CachedRing {uint32_t node;std::vector<uint32_t> corners;};
  std::vector<CachedTriangle> m_cachedTriangles;

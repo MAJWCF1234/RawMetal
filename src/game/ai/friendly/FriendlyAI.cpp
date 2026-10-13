@@ -37,7 +37,8 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  }
  if(pose.clip==4){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);if(config.mode!=ActorAiMode::Guard)clearCivilianSchedule(actor);return pose;}
  if(config.enableState&&!state(config.enableState)){
-  if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);clearCivilianSchedule(actor);put("running",0);
+  if(config.mode==ActorAiMode::Guard&&(get("schedule")||get("guard_danger_ms")||get("guard_mode")||get("guard_target_kind")||get("support_target")))clearGuardSchedule(actor);
+  if(config.mode==ActorAiMode::Civilian||config.mode==ActorAiMode::Escort)clearCivilianSchedule(actor);put("running",0);
   // Stage idle still cycles so Guard Lab / ambush squads read as alive before
   // their enable trigger, instead of freezing on UAL sample 0 (bind).
   if(dt>0&&pose.clip!=4){
@@ -151,6 +152,8 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   }
  }
  if(config.mode==ActorAiMode::Guard&&moved>0){int steps=get("guard_step")+int(std::round(moved*1000));if(steps>=1000){auto material=!world.outdoors()&&world.metalFloor(int(pose.position.x),int(pose.position.y))?Sound::Metal1:Sound::Concrete1;m_sounds.push_back({material,pose.position+chunkOffset(level)-chunkOffset(m_level),.3f,.96f,true,17,pose.z+.04f});steps%=1000;}put("guard_step",steps);}
+ if(pose.clip==0&&!get("guard_danger_ms")&&moved<.0001f&&(config.mode==ActorAiMode::Civilian||config.mode==ActorAiMode::Escort||(config.mode==ActorAiMode::Guard&&guardState(actor)==GuardState::Patrol)))
+  pose=friendlyAwareness(world,level,m_friendlyActors[actor].homeActor,old,pose,dt);
  int stuck=wantsMove&&moved<.0001f?std::clamp(get("stuck"),0,500)+ms:0;if(stuck>500){timer=0;stuck=0;}put("stuck",stuck);
  put("repath",int(std::round(timer*1000)));put("way_x",int(std::round(waypoint.x*1000)));put("way_y",int(std::round(waypoint.y*1000)));
  put("x",int(std::round(pose.position.x*1000)));put("y",int(std::round(pose.position.y*1000)));put("z",int(std::round(pose.z*1000)));put("yaw",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("phase",int(std::round(pose.phase*10000)));put("walking",pose.clip==1);put("crouched",crouched?1:0);put("grounded",grounded?1:0);put("vv",int(std::round(vv*1000)));put("locomotion",1);put("saved",1);
