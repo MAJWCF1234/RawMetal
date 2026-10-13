@@ -209,7 +209,7 @@ def load_topology(stem):
     assert data[:4] == b"RMA2"
     indices = struct.unpack_from(f"<{corners}H", data, 20)
     points = load_rest_from_obj(stem, count, indices, corners)
-    calibration = (root / "src/assets/actors/cleanup" / f"{stem}-arms.bin").read_bytes()
+    calibration = (root / "src/assets/actors/cleanup" / f"{stem}-skin.bin").read_bytes()
     assert calibration[:4] == b"RMC2"
     joints = struct.unpack_from("<18f", calibration, 4)
     palms = struct.unpack_from("<6f", calibration, 76)
@@ -217,7 +217,8 @@ def load_topology(stem):
     for corner, index in enumerate(indices):
         weight = calibration[104 + corner * 4 : 108 + corner * 4]
         assert len(weight) == 4 and weight[3] in (0, 1)
-        weights[index] = tuple(v / 255 for v in weight[:3]) + (weight[3],)
+        influence, lower, palm = (v / 255 for v in weight[:3])
+        weights[index] = (influence, lower, palm, weight[3])
     for i, w in enumerate(weights):
         if w is None:
             weights[i] = weights[indices[0]]
@@ -225,6 +226,9 @@ def load_topology(stem):
 
 
 def atomic_write(path, data):
+    if path.exists() and path.read_bytes() == data:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_bytes(data)
     # Windows resource compilation can briefly hold a shared asset handle.
@@ -280,14 +284,19 @@ def anatomical_frame(rig, points, joints, palms, weights, action, phase):
         influence, lower_weight, palm_weight, arm_side = weights[index]
         side = 0 if p.x < 0 else 1
         target = torso(p)
-        if p.y < 0.79 and influence <= 0:
+        if p.y < 0.88 and influence <= 0:
             hip, knee, ankle, H, K, A, thigh, calf, foot = legs[side]
             upper = H + thigh @ (p - hip)
             lower = K + calf @ (p - knee)
             bend = max(0, min(1, (0.46 - p.y) / 0.12))
-            target = upper.lerp(lower, bend)
+            leg_target = upper.lerp(lower, bend)
             if p.y < 0.13:
-                target = target.lerp(A + foot @ (p - ankle), max(0, min(1, (0.13 - p.y) / 0.06)))
+                leg_target = leg_target.lerp(A + foot @ (p - ankle), max(0, min(1, (0.13 - p.y) / 0.06)))
+            # A hard .79 m torso/leg cutoff tears the crouched waistband.
+            # Blend the donor pelvis and spine frames across the whole waist.
+            waist = max(0.0, min(1.0, (p.y - .70) / .18))
+            waist = waist * waist * (3.0 - 2.0 * waist)
+            target = leg_target.lerp(target, waist)
         if influence > 0:
             S, E, H, tS, tE, tH, upper, lower = arms[arm_side]
             if influence * palm_weight > 0.15:
@@ -357,7 +366,7 @@ def bake_role(stem, ual_rig, mixamo_actions, collapse_phases):
         else:
             action = find_ual_action(UAL_CLIPS[clip])
             # Death01 spends its last half nearly motionless. Allocate the
-            # same bounded 16 samples to its actual collapse so interpolated
+            # bounded sample budget to its actual collapse so interpolated
             # rigid hands do not flatten through an under-sampled rotation.
             motion, clip_layers, height = bake_clip(out, ual_rig, action, points, joints, palms, weights, samples, source_phases=collapse_phases)
             evidence_clips.append({"clip": clip, "source": "ual1", "action": action.name, "source_phases": collapse_phases, "motion": round(motion, 4), "height": round(height, 5)})
@@ -368,11 +377,16 @@ def bake_role(stem, ual_rig, mixamo_actions, collapse_phases):
         values = tuple(v for p in layer for v in p)
         assert len(values) == 30 and all(math.isfinite(v) for v in values)
         out.extend(struct.pack("<30f", *values))
-    atomic_write(path, out)
+    # The Medic's treatment append must finish before publishing its runtime
+    # file. Never expose a temporary six-clip Medic to the resource packer.
+    target = root / "diagnostics/medic-core-animation.bin" if stem == "medic" else path
+    atomic_write(target, out)
     return {"stem": stem, "vertices": count, "corners": corners, "samples": samples, "clips": evidence_clips}
 
 
 def main():
+    import runpy
+    runpy.run_path(str(root / "tools/BuildCleanupSkin.py"))
     sources = set(MIXAMO_CLIPS.values()) | set(PISTOL_CLIPS.values())
     for path in sources:
         if not path.exists():
@@ -397,7 +411,7 @@ def main():
     collapse_phases = collapse_samples(ual_rig, find_ual_action("Death01"), SAMPLES)
 
     evidence = {
-        "method": f"{SAMPLES} in-place grounded samples; calibrated RMC2 limbs and rigid hands; RML1 body frame; 1 mm vertex quantization; closed forward loops; UAL1 death",
+        "method": f"{SAMPLES} in-place grounded samples; connected skin bindings and calibrated RMC2 limbs; rigid hands; blended waist; RML1 body frame; 1 mm vertex quantization; closed forward loops; UAL1 death",
         "samples": SAMPLES,
         "mixamo": {str(k): str(v.relative_to(root)) for k, v in MIXAMO_CLIPS.items()},
         "ual1": str(ual1.relative_to(root)),
@@ -410,7 +424,7 @@ def main():
     import subprocess, sys
 
     blender = Path(bpy.app.binary_path)
-    medic = subprocess.run([str(blender), "-b", "--python-exit-code", "1", "--python", str(root / "tools" / "BakeMedicTreatment.py")], check=False)
+    medic = subprocess.run([str(blender), "-b", "--python-exit-code", "1", "--python", str(root / "tools" / "BakeMedicTreatment.py"), "--", "--core", str(root / "diagnostics/medic-core-animation.bin")], check=False)
     if medic.returncode != 0:
         raise RuntimeError(f"BakeMedicTreatment failed with {medic.returncode}")
     out = root / "diagnostics" / "cleanup-mixamo-bake.json"

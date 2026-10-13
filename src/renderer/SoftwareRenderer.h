@@ -39,7 +39,10 @@ public:
     static void setTexturePresentScale(int scale);
     static int texturePresentScale();
     float gripError()const{return m_gripError;}
-    std::array<float,3> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError};}
+    std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
+    // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,
+    // 0 = final attachment (ordinary gameplay).
+    void setCleanupInspectionStage(int stage){m_cleanupInspectionStage=stage;}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
     void inspectRig(const Game& game,float yaw,float pitch);
@@ -167,7 +170,8 @@ private:
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
     float m_gripError=0;
-    float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0;
+    int m_cleanupInspectionStage=0;
+    float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0,m_cleanupEdgeStretch=1;
     bool m_inspectRig=false;
     float m_inspectYaw=0,m_inspectPitch=0;
     Point3 inspectionPoint(Point3 p)const;

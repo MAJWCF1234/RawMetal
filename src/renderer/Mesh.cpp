@@ -1,5 +1,6 @@
 #include "Mesh.h"
 #include "../core/PackedResource.h"
+#include "../core/ActorBodyAim.h"
 #include <windows.h>
 #include <stdexcept>
 #include <algorithm>
@@ -80,7 +81,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
   m_creatureIndices.resize(vertices);std::memcpy(m_creatureIndices.data(),m_creatureFrames.data()+20,size_t(vertices)*2);
   for(auto index:m_creatureIndices)if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");
   if(id==303||id==308||id==313||id==318||id==323||id==328){
-   auto calibration=loadResource(id+4);uint32_t corners=0;
+   auto calibration=loadResource(340+(id-303)/5);uint32_t corners=0;
    if(calibration.size()<104||std::memcmp(calibration.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup layer calibration");
    std::memcpy(&corners,calibration.data()+100,4);
    if(corners!=vertices||calibration.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup layer calibration topology mismatch");
@@ -98,7 +99,10 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
    }
    m_creatureUpperMask.resize(m_creatureVertices);m_creatureHeadMask.resize(m_creatureVertices);
    for(size_t i=0;i<m_creatureVertices;++i){auto p=m_creatureBindUnique[i];
-    m_creatureUpperMask[i]=std::max(layerSmooth(.75f,.97f,p.y),m_creatureArmMask[i]);
+    // An arm is a member of the upper clip, not a fractional blend with a
+    // second arm from the walking clip. Fractional ownership below the waist
+    // produced long sheets between the upper wrist and lower-clip sleeve.
+    m_creatureUpperMask[i]=m_creatureArmMask[i]>.001f?1.f:layerSmooth(.75f,.97f,p.y);
     m_creatureHeadMask[i]=std::fabs(p.x)<.16f&&m_creatureArmMask[i]<.01f?layerSmooth(1.20f,1.34f,p.y):0;
     if(m_creatureHandSide[i]){m_creatureUpperMask[i]=1;m_creatureHeadMask[i]=0;}
    }
@@ -171,11 +175,13 @@ void Mesh::poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float u
  sampleCreatureClip(upperClip,upperPhase,m_creaturePoseScratchB);
  auto lower=sampleCreatureLayerPose(lowerClip,lowerPhase),upper=sampleCreatureLayerPose(upperClip,upperPhase);
  Point3 rebase=lower.pelvis-upper.pelvis,pivot=upper.spine+rebase;
- LayerRotation bodyAim(aimYaw*.85f,aimPitch*.85f),headAim(aimYaw,aimPitch);
+ ActorBodyAimRotation bodyAim(aimYaw,aimPitch);LayerRotation headAim(aimYaw,aimPitch*.55f);
+ Point3 neckLocal=(upper.arms[0][0]+upper.arms[1][0])*.5f-upper.spine+Point3{0,.02f,0};
+ Point3 neck=pivot+bodyAim(neckLocal);
  auto aimPoint=[&](Point3 p){return pivot+bodyAim(p+rebase-pivot);};
  for(size_t i=0;i<m_creatureVertices;++i){
   Point3 local=m_creaturePoseScratchB[i]+rebase-pivot;
-  Point3 body=pivot+bodyAim(local),head=pivot+headAim(local);
+  Point3 body=pivot+bodyAim(local),head=neck+headAim(local-neckLocal);
   Point3 posed=body+(head-body)*m_creatureHeadMask[i];
   m_creaturePoseScratch[i]=m_creaturePoseScratch[i]+(posed-m_creaturePoseScratch[i])*m_creatureUpperMask[i];
  }

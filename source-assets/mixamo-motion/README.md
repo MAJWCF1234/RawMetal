@@ -14,6 +14,13 @@ The repaired OBJ and
 RMC2 arm calibration remain the geometry authority. Donor arm/finger meshes
 are never substituted. Medic treatment retains UAL2 Chest_Open.
 
+The bake first runs `tools/BuildCleanupSkin.py` to derive connected arm
+membership into separate `*-skin.bin` resources. It preserves the original
+calibration and repaired geometry, rejects isolated false hand assignments,
+and gives sleeves coherent ownership. Pelvis/spine deformation blends across
+the waist rather than using a horizontal hard cutoff. See the
+[visual repair report](../../docs/cleanup-animation-visual-fix-20261013.md).
+
 RMA2 carries compact baked vertices. Its optional RML1 trailer stores pelvis,
 spine and calibrated shoulder/elbow/wrist/palm-direction frames. Runtime joins
 the layers at the posed pelvis, aims about the posed spine, and attaches the

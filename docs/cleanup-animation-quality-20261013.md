@@ -1,5 +1,13 @@
 # Cleanup motion sampling — 13 October 2026
 
+**Historical visual acceptance failed.** The subsequent
+[photo audit](cleanup-photo-audit-20261013.md) found stretched arm/torso geometry,
+Medic case penetration and poor gun/shoulder seating. The numerical results
+below do not establish that the rendered animation looks good.
+
+The later [visual correction](cleanup-animation-visual-fix-20261013.md)
+documents the repaired binding/attachment faults and fresh validation.
+
 The current cleanup bake stores **32 samples per clip**, with runtime
 interpolation. The initial repair stored 16. Sampling follows the donor cycle;
 it does not blindly discard alternating frames. Death retains sampling based

@@ -83,7 +83,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
  for(int role=0;role<6;++role){for(int i=0;i<2;++i){auto&texture=m_cleanupTextures[role][i];texture=loadTexture(305+role*5+i);deriveSurfaceNormal(texture,.25f);texture.glossStrength=.12f;}
-   auto joints=loadResource(307+role*5);uint32_t corners=0;if(joints.size()<104||std::memcmp(joints.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup attachment calibration");std::memcpy(&corners,joints.data()+100,4);
+   auto joints=loadResource(340+role);uint32_t corners=0;if(joints.size()<104||std::memcmp(joints.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup attachment calibration");std::memcpy(&corners,joints.data()+100,4);
    const Mesh*meshes[]={&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher};const auto&mesh=*meshes[role];if(corners!=mesh.triangles.size()*3||joints.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup attachment topology mismatch");
    std::memcpy(m_cleanupArms[role].data(),joints.data()+4,72);std::memcpy(m_cleanupPalms[role].data(),joints.data()+76,24);m_cleanupWeights[role].resize(corners);std::memcpy(m_cleanupWeights[role].data(),joints.data()+104,size_t(corners)*4);for(const auto&weight:m_cleanupWeights[role])if(weight[3]>1)throw std::runtime_error("Invalid cleanup arm side");}
  m_handgunTexture=loadTexture(338);deriveSurfaceNormal(m_handgunTexture,.3f);m_handgunTexture.glossStrength=.25f;
@@ -644,6 +644,7 @@ void SoftwareRenderer::drawConsole(const Game& game){
 }
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
+ m_cleanupEdgeStretch=1;
  bool directPresentation=hardwarePresentsWindow();
  if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};

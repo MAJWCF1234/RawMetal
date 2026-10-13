@@ -1,5 +1,12 @@
 # Cleanup animation repair — 13 October 2026
 
+**Visual acceptance was withdrawn after the
+[photo audit](cleanup-photo-audit-20261013.md).** Passing geometry/attachment
+checks missed visible arm deformation, prop penetration and poor pose design.
+
+The later [visual correction](cleanup-animation-visual-fix-20261013.md)
+documents the repaired faults and fresh validation.
+
 The six cleanup characters retain their repaired OBJ geometry, RMC2 arm
 calibration, textures and existing save clip IDs. All 26 protected asset hashes
 match the pre-repair snapshot. The first-person arm rig hash is also unchanged.
