@@ -643,6 +643,7 @@ void SoftwareRenderer::drawConsole(const Game& game){
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
+ m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  bool directPresentation=hardwarePresentsWindow();
  if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};

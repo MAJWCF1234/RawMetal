@@ -377,6 +377,20 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       report<<'\n';report.flush();renderer->render(scene);std::ofstream out(std::string("diagnostics/kill-squad-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
+    if(std::wcsstr(commandLine,L"--cleanup-layer-inspection")){
+     constexpr int width=960,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+     std::filesystem::create_directories("diagnostics/animation-repair-20261013/native");
+     const char*roles[]={"assault","engineer","sharpshooter","heavy","medic","rusher"};const char*poses[]={"idle","walk","walk-wrap","aim-up","aim-down","aim-left","aim-right","crouch","fire","reload","support","death","crouch-aim-up","crouch-aim-down","low-ready"};
+     auto filter=[&](const wchar_t*prefix,int maximum){auto flag=std::wcsstr(commandLine,prefix);if(!flag)return -1;auto value=flag+std::wcslen(prefix);wchar_t*end=nullptr;long selected=std::wcstol(value,&end,10);return end==value||selected<0||selected>maximum?-2:int(selected);};
+     int roleFilter=filter(L"--cleanup-layer-role=",5),sampleFilter=filter(L"--cleanup-layer-sample=",14);if(roleFilter<-1||sampleFilter<-1)return 21;
+     std::string reportName="diagnostics/animation-repair-20261013/native/attachments";if(roleFilter>=0)reportName+="-role-"+std::to_string(roleFilter);if(sampleFilter>=0)reportName+="-sample-"+std::to_string(sampleFilter);
+     std::ofstream report(reportName+".csv");report<<"role,pose,view,wristReachError,fingerEdgeError,barrelError\n";bool passed=true;
+     for(int role=0;role<6;++role)for(int sample=0;sample<15;++sample)for(int view=0;view<2;++view){if(roleFilter>=0&&role!=roleFilter||sampleFilter>=0&&sample!=sampleFilter)continue;auto scene=retro::Game::cleanupLayerInspection(role,sample,view);renderer->render(scene);
+      auto errors=renderer->cleanupAttachmentErrors();report<<roles[role]<<','<<poses[sample]<<','<<view<<','<<errors[0]<<','<<errors[1]<<','<<errors[2]<<'\n';report.flush();passed&=errors[0]<.02f&&errors[1]<.00002f&&errors[2]<.002f;
+      auto name=std::string("diagnostics/animation-repair-20261013/native/")+roles[role]+"-"+poses[sample]+(view?"-side":"-front")+".ppm";std::ofstream out(name,std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";
+      for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return passed?0:47;
+    }
     if(std::wcsstr(commandLine,L"--guard-policy-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/guard-policy-20261011");std::ofstream report("diagnostics/guard-policy-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"squad-activated","squad-alert","squad-fire","squad-reload-cover"};
@@ -618,6 +632,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
     if(std::wcsstr(commandLine,L"--performance-window")||std::wcsstr(commandLine,L"--service-performance-window")||std::wcsstr(commandLine,L"--door-performance-window")||std::wcsstr(commandLine,L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
+    if(std::wcsstr(commandLine,L"--cleanup-split-test"))return retro::Mesh::testCleanupTankAim()?0:47;
     if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
     if(std::wcsstr(commandLine,L"--lift-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();int index=0;
@@ -682,6 +697,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(!renderer.validate3D())return 7;
         if(!retro::Game::testHazmat())return 41;
         if(!retro::SoftwareRenderer::testCreatureAnimation())return 40;
+        if(!retro::Mesh::testCleanupTankAim())return 47;
         if(!retro::Game::testCombat())return 9;
         if(!retro::Game::testWeaponMotion())return 11;
         if(!retro::Game::testAudioEvents())return 12;
@@ -860,7 +876,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     return 0;
     }catch(const std::exception& error){
         std::ofstream("RawMetal-error.txt")<<error.what();
-        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window")&&!std::wcsstr(commandLine,L"--vr-smoke-test")&&!std::wcsstr(commandLine,L"--kill-squad-inspection"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
+        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window")&&!std::wcsstr(commandLine,L"--vr-smoke-test")&&!std::wcsstr(commandLine,L"--kill-squad-inspection")&&!std::wcsstr(commandLine,L"--cleanup-layer-inspection")&&!std::wcsstr(commandLine,L"--cleanup-split-test"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }
 }

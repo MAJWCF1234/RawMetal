@@ -8,8 +8,11 @@ NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 ta
  if(track.ai.mode!=ActorAiMode::Guard||!track.ai.armed)return weapon;
  weapon.armed=true;weapon.handgun=guardHandgun(track.ai);weapon.raise=std::clamp(raise,0.f,1.f);
  float scale=track.scale/1.6f;Point3 forward{std::sin(pose.yaw),std::cos(pose.yaw),0},right{forward.y,-forward.x,0};
- float gripForward=track.visual==ActorVisual::Worker?.40f:.31f;
- weapon.grip=Point3{pose.position.x,pose.position.y,pose.z}+right*(-.12f*scale)+forward*(gripForward*scale)+Point3{0,0,(1.024f+.216f*weapon.raise)*scale};
+ // The cleanup shotgun sits close enough for the retained short forearms to
+ // support its receiver. Rendering and shot clearance share this same grip.
+ float gripForward=track.visual==ActorVisual::Worker?.40f:weapon.handgun?.31f:.23f;
+ float bodyHeight=pose.clip==5?npcCrouchedHeight(track):friendlyHullHeight(actor,track),crouchDrop=std::max(0.f,track.scale-bodyHeight);
+ weapon.grip=Point3{pose.position.x,pose.position.y,pose.z}+right*(-.12f*scale)+forward*(gripForward*scale)+Point3{0,0,(1.024f+.216f*weapon.raise)*scale-crouchDrop};
  weapon.direction=unit(forward+Point3{0,0,-.32f});
  if(weapon.raise>0){auto aimed=unit(target-weapon.grip);
   for(int i=0;i<3;++i){float horizontal=std::hypot(aimed.x,aimed.y);auto r=horizontal>.001f?Point3{aimed.y/horizontal,-aimed.x/horizontal,0}:right;Point3 up{r.y*aimed.z,-r.x*aimed.z,r.x*aimed.y-r.y*aimed.x};aimed=unit(target-weapon.grip-up*((weapon.handgun?.035f:.058961f)*scale)-r*((weapon.handgun?0.f:-.007496f)*scale));}

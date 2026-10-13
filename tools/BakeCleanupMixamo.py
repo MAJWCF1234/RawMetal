@@ -1,13 +1,11 @@
-"""Blender -b --python tools/BakeCleanupMixamo.py
+"""Bake donor motion onto immutable repaired cleanup geometry.
 
-Retarget Mixamo donor packs onto each cleanup mesh with the same anatomical
-limb/skin path as BakeCleanupSkin.py. Idle / walk / hit / crouch come from
-Mixamo; punch and death stay on Quaternius UAL1 (no usable Mixamo donors).
-Medic treatment clip 7 is re-appended from UAL2 afterward.
+RMA2 vertices retain their corner map. RML1 describes the same grounded,
+in-place calibrated joints so upper/lower composition has a shared body frame.
 """
-import bpy, struct, shutil, json
+import bpy, struct, shutil, json, math, time, bisect
 from pathlib import Path
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 root = Path(__file__).resolve().parents[1]
 mixamo = root / "source-assets" / "mixamo-motion"
@@ -18,18 +16,25 @@ if not ual1.exists():
     shutil.copyfile(ual1_origin, ual1)
 
 ROLES = ("assault", "engineer", "sharpshooter", "heavy", "medic", "rusher")
-SAMPLES = 8
+SAMPLES = 16
 
-# Runtime clip order stays fixed. Mixamo fills the ones that read as armed
-# guards; UAL keeps melee and death.
+# Runtime clip order stays fixed.
 MIXAMO_CLIPS = {
     0: mixamo / "basic-shooter" / "rifle aiming idle.fbx",  # Idle
     1: mixamo / "basic-shooter" / "walking.fbx",  # Walk
+    2: mixamo / "basic-shooter" / "firing rifle.fbx",  # Punch / fire telegraph
     3: mixamo / "basic-shooter" / "hit reaction.fbx",  # Hit
-    5: mixamo / "pistol-handgun" / "pistol kneeling idle.fbx",  # Crouch
+    5: mixamo / "pro-rifle" / "idle crouching aiming.fbx",  # Crouch
+}
+PISTOL_CLIPS = {
+    0: mixamo / "pistol-handgun" / "pistol idle.fbx",
+    1: mixamo / "pistol-handgun" / "pistol walk.fbx",
+    # This official pack has no firing take. Retain its handgun carry pose;
+    # the live handgun action supplies recoil rather than a rifle hand pose.
+    2: mixamo / "pistol-handgun" / "pistol idle.fbx",
+    5: mixamo / "pistol-handgun" / "pistol kneeling idle.fbx",
 }
 UAL_CLIPS = {
-    2: "Punch_Cross",
     4: "Death01",
 }
 
@@ -99,6 +104,52 @@ def direction(rig, logical, posed=False):
     return engine((b.tail - b.head) if posed else (b.tail_local - b.head_local)).normalized()
 
 
+def orientation(rig, logical, posed=False):
+    name = bone_name(rig, logical)
+    matrix = rig.pose.bones[name].matrix if posed else rig.data.bones[name].matrix_local
+    if is_mixamo(rig):
+        matrix = rig.matrix_world @ matrix
+    axes = [engine(matrix.to_3x3().col[i]).normalized() for i in range(3)]
+    return Matrix(axes).transposed().to_quaternion()
+
+
+def limb_rotation(rig, logical, calibrated_direction):
+    # Use the donor's full rest-relative basis, including roll. A shortest
+    # vector-only rotation flips its roll when the forearm passes 180 degrees.
+    rest = orientation(rig, logical)
+    posed = orientation(rig, logical, True)
+    alignment = calibrated_direction.normalized().rotation_difference(direction(rig, logical))
+    return posed @ rest.conjugated() @ alignment
+
+
+def collapse_samples(rig, action, samples):
+    """Bounded forward samples derived from the donor's actual hand rotation."""
+    assign_action(rig, action)
+    start, end = action.frame_range
+    steps = 200
+    cumulative, previous = [0.0], None
+    for index in range(steps + 1):
+        frame = start + (end - start) * index / steps
+        bpy.context.scene.frame_set(int(frame), subframe=frame - int(frame))
+        rotations = [orientation(rig, "lowerarm_" + suffix, True) for suffix in ("r", "l")]
+        if previous is not None:
+            angles = [a.rotation_difference(b).angle for a, b in zip(previous, rotations)]
+            travel = max(min(angle, 2 * math.pi - angle) for angle in angles)
+            # Retain a little timing resolution through the static tail.
+            cumulative.append(cumulative[-1] + travel + .1 / steps)
+        previous = rotations
+    phases = [0.0]
+    for index in range(1, samples - 1):
+        target = cumulative[-1] * index / (samples - 1)
+        high = bisect.bisect_left(cumulative, target)
+        low = high - 1
+        fraction = (target - cumulative[low]) / (cumulative[high] - cumulative[low])
+        phases.append((low + fraction) / steps)
+    phases.append(1.0)
+    print("UAL_COLLAPSE_SAMPLES", "angular_travel", cumulative[-1], "phases", phases)
+    return phases
+
+
 def import_rig(path, strip_mesh=True):
     before = set(bpy.data.objects)
     before_actions = set(bpy.data.actions)
@@ -158,20 +209,35 @@ def load_topology(stem):
     fallback = [Vector(tuple(v * 0.001 for v in struct.unpack_from("<3h", data, offset + i * 6))) for i in range(count)]
     points = load_rest_from_obj(stem, count, indices, corners, fallback)
     calibration = (root / "src/assets/actors/cleanup" / f"{stem}-arms.bin").read_bytes()
+    assert calibration[:4] == b"RMC2"
     joints = struct.unpack_from("<18f", calibration, 4)
+    palms = struct.unpack_from("<6f", calibration, 76)
     weights = [None] * count
     for corner, index in enumerate(indices):
-        weights[index] = tuple(v / 255 for v in calibration[104 + corner * 4 : 107 + corner * 4])
+        weight = calibration[104 + corner * 4 : 108 + corner * 4]
+        assert len(weight) == 4 and weight[3] in (0, 1)
+        weights[index] = tuple(v / 255 for v in weight[:3]) + (weight[3],)
     for i, w in enumerate(weights):
         if w is None:
-            weights[i] = (0.0, 0.0, 0.0)
-    return path, data, corners, samples, clips, count, indices, points, joints, weights
+            weights[i] = (0.0, 0.0, 0.0, 0 if points[i].x < 0 else 1)
+    return path, data, corners, samples, clips, count, indices, points, joints, palms, weights
 
 
-def anatomical_frame(rig, points, joints, weights, action, phase, idle_rest=False):
-    # Runtime bind check requires idle phase 0 == mesh rest within 4 mm.
-    if idle_rest and phase <= 0:
-        return [p.copy() for p in points]
+def atomic_write(path, data):
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(data)
+    # Windows resource compilation can briefly hold a shared asset handle.
+    for attempt in range(30):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError:
+            if attempt == 29:
+                raise
+            time.sleep(.1)
+
+
+def anatomical_frame(rig, points, joints, palms, weights, action, phase):
     start, end = action.frame_range
     frame = start + (end - start) * phase
     bpy.context.scene.frame_set(int(frame), subframe=frame - int(frame))
@@ -179,6 +245,8 @@ def anatomical_frame(rig, points, joints, weights, action, phase, idle_rest=Fals
     rest_pelvis = joint(rig, "pelvis")
     pelvis = Vector((0, 0.78, 0))
     root_delta = (joint(rig, "pelvis", True) - rest_pelvis) * 0.9
+    # Runtime navigation owns planar travel. Keep donor vertical articulation.
+    root_delta.x = root_delta.z = 0.0
     torso_rotation = direction(rig, "spine_02").rotation_difference(direction(rig, "spine_02", True))
     root_rotation = direction(rig, "pelvis").rotation_difference(direction(rig, "pelvis", True))
 
@@ -189,8 +257,8 @@ def anatomical_frame(rig, points, joints, weights, action, phase, idle_rest=Fals
     for side, suffix in enumerate(("r", "l")):
         S, E, H = (Vector(joints[side * 9 + i : side * 9 + i + 3]) for i in (0, 3, 6))
         target_s = torso(S)
-        upper = (E - S).normalized().rotation_difference(direction(rig, "upperarm_" + suffix, True))
-        lower = (H - E).normalized().rotation_difference(direction(rig, "lowerarm_" + suffix, True))
+        upper = limb_rotation(rig, "upperarm_" + suffix, E - S)
+        lower = limb_rotation(rig, "lowerarm_" + suffix, H - E)
         target_e = target_s + upper @ (E - S)
         target_h = target_e + lower @ (H - E)
         arms.append((S, E, H, target_s, target_e, target_h, upper, lower))
@@ -208,9 +276,10 @@ def anatomical_frame(rig, points, joints, weights, action, phase, idle_rest=Fals
 
     posed = []
     for index, p in enumerate(points):
+        influence, lower_weight, palm_weight, arm_side = weights[index]
         side = 0 if p.x < 0 else 1
         target = torso(p)
-        if p.y < 0.79:
+        if p.y < 0.79 and influence <= 0:
             hip, knee, ankle, H, K, A, thigh, calf, foot = legs[side]
             upper = H + thigh @ (p - hip)
             lower = K + calf @ (p - knee)
@@ -218,58 +287,93 @@ def anatomical_frame(rig, points, joints, weights, action, phase, idle_rest=Fals
             target = upper.lerp(lower, bend)
             if p.y < 0.13:
                 target = target.lerp(A + foot @ (p - ankle), max(0, min(1, (0.13 - p.y) / 0.06)))
-        influence, lower_weight, palm_weight = weights[index]
         if influence > 0:
-            S, E, H, tS, tE, tH, upper, lower = arms[side]
-            arm = (tS + upper @ (p - S)).lerp(tE + lower @ (p - E), lower_weight)
-            arm = arm.lerp(tH + lower @ (p - H), palm_weight)
-            target = target.lerp(arm, influence)
+            S, E, H, tS, tE, tH, upper, lower = arms[arm_side]
+            if influence * palm_weight > 0.15:
+                # Fingers remain one rigid hand, including repaired geometry
+                # crossing the centre plane. RMC2 supplies its actual owner.
+                target = tH + lower @ (p - H)
+            else:
+                arm = (tS + upper @ (p - S)).lerp(tE + lower @ (p - E), lower_weight)
+                arm = arm.lerp(tH + lower @ (p - H), palm_weight)
+                target = target.lerp(arm, influence)
         posed.append(p.lerp(target, blend))
     ground = min(p.y for p in posed)
-    return [Vector((p.x, p.y - ground, p.z)) for p in posed]
+    def grounded(p):
+        return Vector((p.x, p.y - ground, p.z))
+    layer = [grounded(pelvis + root_delta), grounded(torso(Vector((0, 0.92, 0))))]
+    for side, arm in enumerate(arms):
+        S, E, H, tS, tE, tH, upper, lower = arm
+        palm = Vector(palms[side * 3:side * 3 + 3])
+        layer.extend((grounded(tS), grounded(tE), grounded(tH), (lower @ palm).normalized()))
+    return [grounded(p) for p in posed], layer
 
 
-def bake_clip(out, rig, action, points, joints, weights, samples, idle_rest=False):
+def bake_clip(out, rig, action, points, joints, palms, weights, samples, loop=False, source_phases=None):
     assign_action(rig, action)
     motion = 0.0
     rest = points
+    frames, layers = [], []
     for sample in range(samples):
-        phase = sample / (samples - 1)
-        frame = anatomical_frame(rig, points, joints, weights, action, phase, idle_rest=idle_rest)
+        phase = source_phases[sample] if source_phases else sample / (samples - 1) if samples > 1 else 0.0
+        frame, layer = anatomical_frame(rig, points, joints, palms, weights, action, phase)
+        frames.append(frame)
+        layers.append(layer)
         if sample == samples // 2:
             motion = max((frame[i] - rest[i]).length for i in range(len(points)))
+    if loop:
+        # Sample a forward donor cycle; close its tiny residual wrap without
+        # reversing the walk or substituting bind geometry for idle frame zero.
+        frames[-1] = [p.copy() for p in frames[0]]
+        layers[-1] = [p.copy() for p in layers[0]]
+    for frame in frames:
         for p in frame:
-            out.extend(struct.pack("<3h", *(int(round(v * 500)) * 2 for v in p)))
-    return motion
+            assert all(math.isfinite(v) and abs(v) < 32 for v in p)
+            out.extend(struct.pack("<3h", *(int(round(v * 1000)) for v in p)))
+    return motion, layers, max(p.y for f in frames for p in f)
 
 
-def bake_role(stem, ual_rig, mixamo_actions):
-    path, data, corners, _old_samples, clips, count, indices, points, joints, weights = load_topology(stem)
+def bake_role(stem, ual_rig, mixamo_actions, collapse_phases):
+    path, data, corners, _old_samples, clips, count, indices, points, joints, palms, weights = load_topology(stem)
     assert clips >= 6
     samples = SAMPLES
     out = bytearray(data[: 20 + corners * 2])
     struct.pack_into("<I", out, 8, samples)
     struct.pack_into("<I", out, 12, 6)
     evidence_clips = []
+    layers = []
+    sources = dict(MIXAMO_CLIPS)
+    if stem in ("medic", "engineer"):
+        sources.update(PISTOL_CLIPS)
     for clip in range(6):
-        if clip in MIXAMO_CLIPS:
-            rig, action = mixamo_actions[clip]
-            motion = bake_clip(out, rig, action, points, joints, weights, samples, idle_rest=(clip == 0))
-            evidence_clips.append({"clip": clip, "source": "mixamo", "file": MIXAMO_CLIPS[clip].name, "action": action.name, "motion": round(motion, 4)})
-            print("CLEANUP_MIXAMO_CLIP", stem, clip, MIXAMO_CLIPS[clip].name, "motion", round(motion, 4))
+        if clip in sources:
+            rig, action = mixamo_actions[sources[clip]]
+            # RML1 describes these exact calibrated limbs for runtime layer
+            # composition, torso aim, and final posed weapon attachment.
+            motion, clip_layers, height = bake_clip(out, rig, action, points, joints, palms, weights, samples, loop=clip in (0, 1, 5))
+            evidence_clips.append({"clip": clip, "source": "mixamo", "file": str(sources[clip].relative_to(root)), "action": action.name, "motion": round(motion, 4), "height": round(height, 5)})
+            print("CLEANUP_MIXAMO_CLIP", stem, clip, sources[clip].name, "motion", round(motion, 4), "height", round(height, 5))
         else:
             action = find_ual_action(UAL_CLIPS[clip])
-            motion = bake_clip(out, ual_rig, action, points, joints, weights, samples, idle_rest=False)
-            evidence_clips.append({"clip": clip, "source": "ual1", "action": action.name, "motion": round(motion, 4)})
+            # Death01 spends its last half nearly motionless. Allocate the
+            # same bounded 16 samples to its actual collapse so interpolated
+            # rigid hands do not flatten through an under-sampled rotation.
+            motion, clip_layers, height = bake_clip(out, ual_rig, action, points, joints, palms, weights, samples, source_phases=collapse_phases)
+            evidence_clips.append({"clip": clip, "source": "ual1", "action": action.name, "source_phases": collapse_phases, "motion": round(motion, 4), "height": round(height, 5)})
             print("CLEANUP_MIXAMO_CLIP", stem, clip, UAL_CLIPS[clip], "motion", round(motion, 4))
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_bytes(out)
-    temporary.replace(path)
+        layers.extend(clip_layers)
+    out.extend(b"RML1" + struct.pack("<4I", 1, samples, 6, 120))
+    for layer in layers:
+        values = tuple(v for p in layer for v in p)
+        assert len(values) == 30 and all(math.isfinite(v) for v in values)
+        out.extend(struct.pack("<30f", *values))
+    atomic_write(path, out)
     return {"stem": stem, "vertices": count, "corners": corners, "samples": samples, "clips": evidence_clips}
 
 
 def main():
-    for path in MIXAMO_CLIPS.values():
+    sources = set(MIXAMO_CLIPS.values()) | set(PISTOL_CLIPS.values())
+    for path in sources:
         if not path.exists():
             raise FileNotFoundError(path)
 
@@ -277,33 +381,35 @@ def main():
     # resident so role bakes can switch without re-importing four times.
     clear_scene()
     mixamo_actions = {}
-    for clip, path in sorted(MIXAMO_CLIPS.items()):
+    for path in sorted(sources):
         rig, actions = import_rig(path)
         if not actions:
             raise RuntimeError(f"No action imported from {path}")
         action = next((a for a in actions if "mixamo" in a.name.lower()), actions[0])
-        mixamo_actions[clip] = (rig, action)
-        print("MIXAMO_IMPORT", clip, path.name, action.name, tuple(action.frame_range))
+        mixamo_actions[path] = (rig, action)
+        print("MIXAMO_IMPORT", path.name, action.name, tuple(action.frame_range))
 
     ual_rig, _ = import_rig(ual1)
     tpose = find_ual_action("A_TPose")
     assign_action(ual_rig, tpose)
     bpy.context.scene.frame_set(int(tpose.frame_range[0]))
+    collapse_phases = collapse_samples(ual_rig, find_ual_action("Death01"), SAMPLES)
 
     evidence = {
-        "method": "Mixamo anatomical limb retarget (idle/walk/hit/crouch) + UAL1 punch/death",
+        "method": "16 in-place grounded samples; calibrated RMC2 limbs and rigid hands; RML1 body frame; 1 mm vertex quantization; closed forward loops; UAL1 death",
+        "samples": SAMPLES,
         "mixamo": {str(k): str(v.relative_to(root)) for k, v in MIXAMO_CLIPS.items()},
         "ual1": str(ual1.relative_to(root)),
         "roles": [],
     }
     for stem in ROLES:
-        evidence["roles"].append(bake_role(stem, ual_rig, mixamo_actions))
+        evidence["roles"].append(bake_role(stem, ual_rig, mixamo_actions, collapse_phases))
 
     # Fresh Blender process so Mixamo armatures cannot steal UAL2 bone lookups.
     import subprocess, sys
 
     blender = Path(bpy.app.binary_path)
-    medic = subprocess.run([str(blender), "-b", "--python", str(root / "tools" / "BakeMedicTreatment.py")], check=False)
+    medic = subprocess.run([str(blender), "-b", "--python-exit-code", "1", "--python", str(root / "tools" / "BakeMedicTreatment.py")], check=False)
     if medic.returncode != 0:
         raise RuntimeError(f"BakeMedicTreatment failed with {medic.returncode}")
     out = root / "diagnostics" / "cleanup-mixamo-bake.json"
