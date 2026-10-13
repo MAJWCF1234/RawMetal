@@ -11,7 +11,10 @@ Game Game::engineerSupportInspection(int stage){
  ActorTrack opponent=cargo->actorTracks.front();opponent.visual=ActorVisual::Worker;opponent.tool=false;opponent.ai={};opponent.ai.faction=AiFaction::Facility;
  opponent.health=5000;opponent.damageState=stateId("engineer_inspection_damage");opponent.deadState=stateId("engineer_inspection_dead");
  for(auto&key:opponent.keys){key.position={6,18};key.yaw=kPi;key.clip=0;}cargo->actorTracks.push_back(opponent);campaign->maps[1]=cargo;
- Game g(campaign);constexpr size_t engineer=2;
+ Game g(campaign);size_t engineer=g.npcActors().size();
+ for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel==1&&npc.track().ai.mode==ActorAiMode::Guard&&npc.track().ai.role==GuardSquadRole::Engineer){
+  if(engineer!=g.npcActors().size())throw std::runtime_error("Engineer inspection has duplicate cargo Engineers");engineer=actor;}}
+ if(engineer==g.npcActors().size())throw std::runtime_error("Engineer inspection requires the authored cargo Engineer");
  g.m_player.pos={26,20};g.crossChunkBoundary();g.updateStreaming(0);for(int frame=0;frame<12;++frame)g.update({},1.f/60);
  if(g.level()!=1||!g.state("cleanup_enabled")||g.npcActors()[engineer].track().ai.role!=GuardSquadRole::Engineer)throw std::runtime_error("Engineer encounter did not enter its real activation trigger");
  g.m_player.pos={1.5f,1.5f};g.m_player.z=0;if(!g.hullFits(g.player().pos,0,Player::StandingHeight))throw std::runtime_error("Engineer observer intersects geometry");

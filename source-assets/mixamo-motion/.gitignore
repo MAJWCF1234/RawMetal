@@ -1,0 +1,5 @@
+# Keep the original downloaded donor motion local. Runtime character bakes
+# and source provenance are tracked separately.
+*.zip
+**/*.fbx
+**/*.FBX

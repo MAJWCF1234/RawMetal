@@ -7,7 +7,7 @@
 #include <sstream>
 #include <map>
 namespace retro {
-Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||(id>=303&&id<=313)),m_nodeFilter(nodeFilter){
+Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328),m_nodeFilter(nodeFilter){
  auto resource=loadResource(id);
  ufbx_load_opts opts{};opts.evaluate_skinning=true;opts.target_axes=ufbx_axes_right_handed_y_up;opts.target_unit_meters=1;
  if(!resource.empty()&&resource[0]=='#')opts.file_format=UFBX_FILE_FORMAT_OBJ;
