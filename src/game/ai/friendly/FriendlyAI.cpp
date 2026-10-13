@@ -36,7 +36,17 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   int age=std::clamp(get("death_ms"),0,1000);if(dt>0)age=std::min(1000,age+std::max(1,int(std::round(dt*1000))));put("death_ms",age);pose.phase=age*.001f;return pose;
  }
  if(pose.clip==4){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);if(config.mode!=ActorAiMode::Guard)clearCivilianSchedule(actor);return pose;}
- if(config.enableState&&!state(config.enableState)){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);clearCivilianSchedule(actor);put("running",0);return pose;}
+ if(config.enableState&&!state(config.enableState)){
+  if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);clearCivilianSchedule(actor);put("running",0);
+  // Stage idle still cycles so Guard Lab / ambush squads read as alive before
+  // their enable trigger, instead of freezing on UAL sample 0 (bind).
+  if(dt>0&&pose.clip!=4){
+   float previous=get("saved")?get("phase")*.0001f:old.phase;
+   pose.clip=0;pose.phase=std::fmod(previous+dt*.45f,1.f);
+   put("phase",int(std::round(pose.phase*10000)));put("walking",0);put("crouched",0);put("saved",1);
+  }
+  return pose;
+ }
  const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
  if(get("saved")){
   if(dt==0||!get("running")){pose.position={get("x")*.001f,get("y")*.001f};pose.z=get("z")*.001f;pose.yaw=get("yaw")*.0001f;pose.phase=get("phase")*.0001f;pose.clip=get("walking")?1:get("crouched")?5:0;
@@ -125,7 +135,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  float moved=length(pose.position-old.position);Vec2 movementWaypoint=waypoint;pose.clip=moved>.0001f?1:crouched?5:0;
  // Idle/crouch must keep cycling phase or UAL loops stay stuck on sample 0 (bind).
  if(pose.clip==1)pose.phase=std::fmod(old.phase+moved*1.1f,1.f);
- else if(pose.clip==0||pose.clip==5)pose.phase=std::fmod(old.phase+dt*(pose.clip==5?.55f:.35f),1.f);
+ else if(pose.clip==0||pose.clip==5)pose.phase=std::fmod(old.phase+dt*(pose.clip==5?.55f:.45f),1.f);
  else pose.phase=0;
  if(config.mode==ActorAiMode::Guard&&!get("guard_danger_ms")){
   int point=get("guard_point");bool patrol=guardState(actor)==GuardState::Patrol&&(get("schedule")==int(GuardSchedule::None)||get("schedule")==int(GuardSchedule::Patrol));
@@ -302,6 +312,17 @@ bool Game::testFriendlyAI(){
    g.setState(g.friendlyKey(0,"guard_under_fire"),1500);g.setState(g.friendlyKey(0,"weapon_reload"),500);
    for(int i=0;i<20;++i){g.updateStreaming(1.f/60);g.updateMechanisms(1.f/60);g.updateFriendlyActors(1.f/60,true);g.m_world.updateDoors(1.f/60);}
    check(g.state(g.friendlyKey(0,"crouched"))&&g.friendlyHullHeight(0,g.world().actorTracks()[0])<=Player::CrouchedHeight+.001f,"Guard crouches under low cover while reloading or under fire");
+  }
+  {auto original=scene(ActorAiMode::Escort);auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);
+   for(auto&key:map->actorTracks[0].keys){key.position={8.5f,8.5f};key.clip=0;key.phase=0;}
+   map->actorTracks[0].ai.mode=ActorAiMode::Guard;map->actorTracks[0].ai.armed=true;map->actorTracks[0].ai.enableState=stateId("lab_squad_enabled");
+   map->actorTracks[0].ai.patrol={{{8.5f,8.5f},0,1000}};map->actorTracks[0].scale=1.6f;campaign->maps[0]=map;Game g(campaign);
+   float phase=g.friendlyActors()[0].pose.phase;
+   for(int i=0;i<45;++i){g.updateStreaming(1.f/60);g.updateMechanisms(1.f/60);g.updateFriendlyActors(1.f/60,true);}
+   check(g.friendlyActors()[0].pose.clip==0&&g.friendlyActors()[0].pose.phase>phase+.1f&&!g.state("lab_squad_enabled"),"Disabled Guard Lab squad members still advance idle phase before their enable trigger");
+   g.setState(stateId("lab_squad_enabled"),1);float armedPhase=g.friendlyActors()[0].pose.phase;
+   for(int i=0;i<90;++i){g.updateStreaming(1.f/60);g.updateMechanisms(1.f/60);g.updateFriendlyActors(1.f/60,true);}
+   check(g.friendlyActors()[0].pose.phase!=armedPhase||g.friendlyActors()[0].pose.clip==1,"Enabled idle/patrol guards keep cycling animation phase");
   }
  }catch(const std::exception&ex){check(false,ex.what());}
  return passed;
