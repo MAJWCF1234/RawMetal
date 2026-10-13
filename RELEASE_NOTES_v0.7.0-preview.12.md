@@ -1,6 +1,7 @@
 ## Summary
 
 - Cleanup locomotion removes donor planar root travel and closes loop endpoints.
+- The current 32-sample bake preserves more donor detail than the initial 16-sample repair.
 - Baked pelvis/spine and calibrated arm joints keep the upper and lower layers joined while walking and aiming.
 - Arm ownership includes the hands even below the waist; repaired fingers receive rigid aim and attachment transforms.
 - Positive aim pitch raises the torso around its posed spine. Natural idle uses the full loop.
@@ -18,7 +19,9 @@
 
 Verified: 103 split checks, 180 native pose/view checks, beam/hitscan/gameplay tests
 and live Engineer deployment/maintenance inspection. Release executable:
-25,604,608 bytes; all 222 embedded resources verified lossless.
+28,488,192 bytes; all 222 embedded resources verified lossless. The
+[sampling comparison](docs/cleanup-animation-quality-20261013.md) records the
+16/32 quality measurements and repeatable-bake check.
 
 Full smoke still fails the existing authored-save byte-exact check. The existing
 Medic detour/healing and four Vulkan radiance-filtering checks also remain

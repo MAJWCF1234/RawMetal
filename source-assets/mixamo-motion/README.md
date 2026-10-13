@@ -9,7 +9,8 @@ Official downloads use FBX Binary, No Character, 30 fps, no key reduction:
 - Pistol/Handgun Locomotion Pack: 20 clips, including kneel transitions; archive SHA256 `e857a7d3b45a3e0e0e7c0bdd214337c9681cfafa23b95c1b93d55d0d3a651acf`.
 - Pro Rifle Pack: 49 clips, including crouch locomotion, turns and deaths; archive SHA256 `eaa67336b0bf7bf755b0136d4d0b1a3550c50f724d49ca832bf57ccb3d38a91a`.
 
-Cleanup clips bake through `tools/BakeCleanupMixamo.py`. The repaired OBJ and
+Cleanup clips bake through `tools/BakeCleanupMixamo.py` at 32 samples per clip.
+The repaired OBJ and
 RMC2 arm calibration remain the geometry authority. Donor arm/finger meshes
 are never substituted. Medic treatment retains UAL2 Chest_Open.
 
@@ -18,3 +19,8 @@ spine and calibrated shoulder/elbow/wrist/palm-direction frames. Runtime joins
 the layers at the posed pelvis, aims about the posed spine, and attaches the
 composed arms to the same grip and muzzle used by gameplay. Whole repaired
 hands receive rigid transforms. Donor planar travel is removed before baking.
+
+The 32-sample choice was compared with the original 16-sample bake against
+exact donor poses between keys. Walking and foot motion track the donor more
+closely while remaining below the executable's 32 MiB ceiling. See the
+[quality report](../../docs/cleanup-animation-quality-20261013.md).

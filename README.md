@@ -13,7 +13,8 @@ current planning brief and temporary external asset-drive availability.
 
 v0.7.0-preview.12 repairs the cleanup split-body bake: in-place locomotion,
 posed waist/spine joints, semantic arm ownership and rigid repaired fingers.
-Final weapon attachment uses the composed pose and gameplay barrel. See
+The current bake retains 32 samples per clip for smoother motion. Final weapon
+attachment uses the composed pose and gameplay barrel. See
 [release notes](RELEASE_NOTES_v0.7.0-preview.12.md).
 
 v0.7.0-preview.11 baked Mixamo idle/walk/hit/crouch onto cleanup meshes
