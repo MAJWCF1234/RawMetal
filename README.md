@@ -2,7 +2,7 @@
 
 RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
 
-The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview is **v0.7.0-preview.10**; see [VR controls](docs/vr.md) and [preview notes](RELEASE_NOTES_v0.7.0-preview.10.md). The published game remains a single executable with its runtime assets embedded.
+The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview is **v0.7.0-preview.11**; see [VR controls](docs/vr.md) and [preview notes](RELEASE_NOTES_v0.7.0-preview.11.md). The published game remains a single executable with its runtime assets embedded.
 
 [Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
 
@@ -10,6 +10,10 @@ The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview
 current planning brief and temporary external asset-drive availability.
 
 ## Current release
+
+v0.7.0-preview.11 bakes Mixamo idle/walk/hit/crouch onto cleanup squad meshes
+while keeping UAL punch, death, and Medic treatment. See
+[release notes](RELEASE_NOTES_v0.7.0-preview.11.md).
 
 v0.7.0-preview.10 keeps staged enable-gated guards at their authored XYZ through
 save/activate, and retargets cleanup inspections to role lookup after Guard Lab
