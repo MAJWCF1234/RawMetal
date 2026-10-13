@@ -7,9 +7,9 @@
 namespace retro {
 // Isolated poses exercise the actual drawActor path; this fixture deliberately
 // does not claim AI encounter progress from manufactured animation states.
-Game Game::cleanupLayerInspection(int role,int sample,int view){
+Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
  auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");
- if(role<0||role>5||sample<0||sample>14||authored->maps[0]->actorTracks.empty())throw std::runtime_error("Invalid cleanup layer inspection");
+ if(role<0||role>5||sample<0||sample>15||authored->maps[0]->actorTracks.empty())throw std::runtime_error("Invalid cleanup layer inspection");
  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Cleanup animation inspection";campaign->key=883013;
  auto map=std::make_shared<AuthoredMapData>();map->name="Unobstructed pose inspection";map->definition={{0,0},{10.5f,9.5f},0,Environment::Interior,false,8,.7f,42};
  AuthoredLayerData floor;for(auto&row:floor.rows)row=std::string(24,'.');map->layers.push_back(floor);
@@ -19,16 +19,16 @@ Game Game::cleanupLayerInspection(int role,int sample,int view){
  constexpr GuardSquadRole roles[]={GuardSquadRole::Assault,GuardSquadRole::Engineer,GuardSquadRole::Sharpshooter,GuardSquadRole::Heavy,GuardSquadRole::Medic,GuardSquadRole::Rusher};
  track.ai.role=roles[role];track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.enableState=0;track.ai.weapon=1;
  map->actorTracks={track};campaign->maps.push_back(map);Game g(campaign);auto&npc=g.m_friendlyActors.at(0);auto&pose=npc.pose;
- pose.yaw=0;pose.phase=sample==2?.99f:.5f;pose.clip=sample==0?0:(sample==7||sample==12||sample==13)?5:sample==11?4:1;
+ pose.yaw=0;pose.phase=phase<0?(sample==2?.99f:.5f):std::clamp(phase,0.f,1.f);pose.clip=sample==0?0:(sample==7||sample==12||sample==13)?5:sample==11?4:1;
  auto put=[&](const char*key,int value){g.setState(g.friendlyKey(0,key),value);};
  float yaw=sample==5?-.55f:sample==6?.55f:sample==12?.70f:sample==13?-.70f:0,pitch=sample==3?.50f:sample==4?-.50f:sample==12?.55f:sample==13?-.45f:0;
  Point3 direction{std::sin(yaw)*std::cos(pitch),std::cos(yaw)*std::cos(pitch),std::sin(pitch)};
  auto target=Point3{pose.position.x,pose.position.y,pose.z+1.24f}+direction*5.f;
  put("weapon_raise",1000);put("weapon_target",1);put("weapon_x",int(std::lround(target.x*1000)));put("weapon_y",int(std::lround(target.y*1000)));put("weapon_z",int(std::lround(target.z*1000)));
- put("crouched",pose.clip==5);if(sample==14){put("weapon_raise",0);put("weapon_target",0);}if(sample==8){put("weapon_action",int(GuardAction::Fire));put("weapon_action_ms",100);put("weapon_recoil",110);put("weapon_flash",50);}
+ put("crouched",pose.clip==5||sample==15);if(sample==14){put("weapon_raise",0);put("weapon_target",0);}if(sample==8){put("weapon_action",int(GuardAction::Fire));put("weapon_action_ms",100);put("weapon_recoil",110);put("weapon_flash",50);}
  if(sample==9){put("weapon_action",int(GuardAction::Reload));put("weapon_action_ms",900);put("weapon_reloading",1);put("weapon_reload",900);}
- if(sample==10&&role==1){put("drone_busy",1);put("drone_windup",600);}
- if(sample==10&&role==4){put("support_ms",1200);pose.clip=0;}
+ if(sample==10&&role==1){put("drone_busy",1);put("drone_windup",600);pose.clip=0;}
+ if(sample==10&&role==4){put("support_ms",phase<0?1200:std::max(1,int(pose.phase*2400)));pose.clip=0;}
  Vec2 forward{std::sin(pose.yaw),std::cos(pose.yaw)},right{forward.y,-forward.x};
  g.m_player.pos=pose.position+(view?right*2.4f+forward*.35f:forward*2.5f+right*.6f);g.m_player.z=pose.z;
  g.m_player.angle=std::atan2(pose.position.y-g.m_player.pos.y,pose.position.x-g.m_player.pos.x);g.m_player.pitch=-30;

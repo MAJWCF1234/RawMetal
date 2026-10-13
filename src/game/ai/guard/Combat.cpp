@@ -1,7 +1,26 @@
 #include "../../Game.h"
+#include "../../../core/PackedResource.h"
+#include "../../../core/ActorBodyAim.h"
 namespace retro {
 namespace {
 Point3 unit(Point3 p){float length=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);return length>.0001f?p*(1/length):Point3{};}
+struct CleanupBodyFrame {Point3 pelvis{},spine{},rightShoulder{},leftShoulder{};};
+CleanupBodyFrame cleanupBodyFrame(int role,int clip,float phase){
+ struct Frames {unsigned samples=0,clips=0;std::vector<CleanupBodyFrame> poses;};
+ // Share the baked body frame with physical weapon placement. A fixed root
+ // offset cannot seat a stock on a leaning or deeply kneeling shoulder.
+ static const auto frames=[](){std::array<Frames,6> result;
+  for(int role=0;role<6;++role){auto data=loadResource(304+role*5);uint32_t header[4]{};
+   if(data.size()<20||std::memcmp(data.data(),"RMA2",4))throw std::runtime_error("Missing cleanup stance animation");std::memcpy(header,data.data()+4,16);
+   auto [corners,samples,clips,vertices]=std::array<uint32_t,4>{header[0],header[1],header[2],header[3]};size_t payload=20+size_t(corners)*2+size_t(samples)*clips*vertices*6;
+   uint32_t trailer[4]{};if(samples<2||samples>128||clips<6||clips>64||!vertices||vertices>65536||corners>1000000||payload+20>data.size()||std::memcmp(data.data()+payload,"RML1",4))throw std::runtime_error("Invalid cleanup stance animation");std::memcpy(trailer,data.data()+payload+4,16);
+   if(trailer[0]!=1||trailer[1]!=samples||trailer[2]!=clips||trailer[3]!=120||data.size()!=payload+20+size_t(samples)*clips*120)throw std::runtime_error("Invalid cleanup stance layer frames");
+   auto&table=result[role];table.samples=samples;table.clips=clips;table.poses.resize(size_t(samples)*clips);
+   for(size_t frame=0;frame<table.poses.size();++frame){size_t base=payload+20+frame*120;auto&pose=table.poses[frame];std::memcpy(&pose.pelvis,data.data()+base,12);std::memcpy(&pose.spine,data.data()+base+12,12);std::memcpy(&pose.rightShoulder,data.data()+base+24,12);std::memcpy(&pose.leftShoulder,data.data()+base+72,12);for(auto point:{pose.pelvis,pose.spine,pose.rightShoulder,pose.leftShoulder})if(!std::isfinite(point.x)||!std::isfinite(point.y)||!std::isfinite(point.z))throw std::runtime_error("Invalid cleanup body frame");}
+  }return result;
+ }();
+ if(!std::isfinite(phase))throw std::runtime_error("Invalid cleanup stance phase");const auto&table=frames.at(size_t(role));if(clip<0||unsigned(clip)>=table.clips)throw std::runtime_error("Invalid cleanup stance clip");float frame=std::clamp(phase,0.f,1.f)*float(table.samples-1);unsigned a=unsigned(frame),b=std::min(a+1,table.samples-1);const auto&A=table.poses[size_t(clip)*table.samples+a];const auto&B=table.poses[size_t(clip)*table.samples+b];float blend=frame-a;return {A.pelvis+(B.pelvis-A.pelvis)*blend,A.spine+(B.spine-A.spine)*blend,A.rightShoulder+(B.rightShoulder-A.rightShoulder)*blend,A.leftShoulder+(B.leftShoulder-A.leftShoulder)*blend};
+}
 }
 NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const{
  const auto&track=m_friendlyActors.at(actor).track();NpcWeaponPose weapon;
@@ -12,12 +31,34 @@ NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 ta
  // support its receiver. Rendering and shot clearance share this same grip.
  float gripForward=track.visual==ActorVisual::Worker?.40f:weapon.handgun?.31f:.23f;
  float bodyHeight=pose.clip==5?npcCrouchedHeight(track):friendlyHullHeight(actor,track),crouchDrop=std::max(0.f,track.scale-bodyHeight);
+ weapon.crouched=bodyHeight<track.scale-.01f;
+ const bool cleanup=int(track.visual)>=4&&int(track.visual)<=9;
+ CleanupBodyFrame upperBody{},lowerBody{};bool layerAim=pose.clip<=1||pose.clip==5;
+ if(cleanup){int upperClip=pose.clip,lowerClip=pose.clip;float upperPhase=pose.phase;
+  if(layerAim){upperClip=weapon.crouched?5:0;lowerClip=weapon.crouched?5:pose.clip;
+   if(!weapon.crouched&&!weapon.handgun&&state(friendlyKey(actor,"weapon_action"))==int(GuardAction::Fire)){upperClip=2;upperPhase=float(state(friendlyKey(actor,"weapon_action_ms")))/guardActionDuration(GuardAction::Fire);}}
+  upperBody=cleanupBodyFrame(int(track.visual)-4,upperClip,upperPhase);lowerBody=cleanupBodyFrame(int(track.visual)-4,lowerClip,pose.phase);
+  if(weapon.crouched){auto standing=cleanupBodyFrame(int(track.visual)-4,0,pose.phase);crouchDrop=std::max(0.f,((standing.rightShoulder.y+standing.leftShoulder.y)-(upperBody.rightShoulder.y+upperBody.leftShoulder.y))*.5f)*scale;}
+ }
  weapon.grip=Point3{pose.position.x,pose.position.y,pose.z}+right*(-.12f*scale)+forward*(gripForward*scale)+Point3{0,0,(1.024f+.216f*weapon.raise)*scale-crouchDrop};
+ const auto carryGrip=weapon.grip;
+ // The imported Remington butt centre is .249 m behind the grip, with
+ // its centre .0065 m below it. Rotate around that shoulder contact when
+ // aiming, rather than lifting the butt above the shoulder on downward aim.
+ const bool shoulderWeapon=!weapon.handgun&&cleanup;
+ auto seatStock=[&](Point3 direction){if(!shoulderWeapon)return;float h=std::hypot(direction.x,direction.y);auto r=h>.001f?Point3{direction.y/h,-direction.x/h,0}:right;Point3 u{r.y*direction.z,-r.x*direction.z,r.x*direction.y-r.y*direction.x};
+  Point3 rebase=lowerBody.pelvis-upperBody.pelvis,pivot=upperBody.spine+rebase,local=upperBody.rightShoulder+rebase-pivot;
+  float yaw=layerAim?std::remainder(std::atan2(direction.x,direction.y)-pose.yaw,2*kPi)*weapon.raise:0,pitch=layerAim?std::asin(std::clamp(direction.z,-1.f,1.f))*weapon.raise:0;
+  auto shoulder=pivot+actorBodyAim(local,yaw,pitch);
+  auto contact=Point3{pose.position.x,pose.position.y,pose.z}+(right*(shoulder.x+.025f)+forward*(shoulder.z+.025f)+Point3{0,0,shoulder.y-.04f})*scale;
+  auto seated=contact+direction*(.249f*scale)+u*(.0065f*scale)+r*(.0073f*scale);weapon.grip=carryGrip+(seated-carryGrip)*weapon.raise;
+ };
  weapon.direction=unit(forward+Point3{0,0,-.32f});
  if(weapon.raise>0){auto aimed=unit(target-weapon.grip);
-  for(int i=0;i<3;++i){float horizontal=std::hypot(aimed.x,aimed.y);auto r=horizontal>.001f?Point3{aimed.y/horizontal,-aimed.x/horizontal,0}:right;Point3 up{r.y*aimed.z,-r.x*aimed.z,r.x*aimed.y-r.y*aimed.x};aimed=unit(target-weapon.grip-up*((weapon.handgun?.035f:.058961f)*scale)-r*((weapon.handgun?0.f:-.007496f)*scale));}
+  for(int i=0;i<6;++i){seatStock(aimed);float horizontal=std::hypot(aimed.x,aimed.y);auto r=horizontal>.001f?Point3{aimed.y/horizontal,-aimed.x/horizontal,0}:right;Point3 up{r.y*aimed.z,-r.x*aimed.z,r.x*aimed.y-r.y*aimed.x};aimed=unit(target-weapon.grip-up*((weapon.handgun?.035f:.058961f)*scale)-r*((weapon.handgun?0.f:-.007496f)*scale));}
   weapon.direction=unit(weapon.direction*(1-weapon.raise)+aimed*weapon.raise);
  }
+ seatStock(weapon.direction);
  float horizontal=std::hypot(weapon.direction.x,weapon.direction.y);auto r=horizontal>.001f?Point3{weapon.direction.y/horizontal,-weapon.direction.x/horizontal,0}:right;Point3 up{r.y*weapon.direction.z,-r.x*weapon.direction.z,r.x*weapon.direction.y-r.y*weapon.direction.x};
  weapon.muzzle=weapon.grip+weapon.direction*((weapon.handgun?.172f:.500522f)*scale)+up*((weapon.handgun?.035f:.058961f)*scale)+r*((weapon.handgun?0.f:-.007496f)*scale);return weapon;
 }

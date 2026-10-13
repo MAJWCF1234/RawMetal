@@ -379,15 +379,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(std::wcsstr(commandLine,L"--cleanup-layer-inspection")){
      constexpr int width=960,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
-     std::filesystem::create_directories("diagnostics/animation-repair-20261013/native");
-     const char*roles[]={"assault","engineer","sharpshooter","heavy","medic","rusher"};const char*poses[]={"idle","walk","walk-wrap","aim-up","aim-down","aim-left","aim-right","crouch","fire","reload","support","death","crouch-aim-up","crouch-aim-down","low-ready"};
+     int inspectionStage=0;if(auto flag=std::wcsstr(commandLine,L"--cleanup-layer-stage="))inspectionStage=int(std::wcstol(flag+22,nullptr,10));if(inspectionStage<0||inspectionStage>3)return 21;renderer->setCleanupInspectionStage(inspectionStage);
+     std::string inspectionDirectory="diagnostics/animation-repair-20261013/native";if(inspectionStage)inspectionDirectory+="-stage-"+std::to_string(inspectionStage);std::filesystem::create_directories(inspectionDirectory);
+     const char*roles[]={"assault","engineer","sharpshooter","heavy","medic","rusher"};const char*poses[]={"idle","walk","walk-wrap","aim-up","aim-down","aim-left","aim-right","crouch","fire","reload","support","death","crouch-aim-up","crouch-aim-down","low-ready","crouch-walk"};
      auto filter=[&](const wchar_t*prefix,int maximum){auto flag=std::wcsstr(commandLine,prefix);if(!flag)return -1;auto value=flag+std::wcslen(prefix);wchar_t*end=nullptr;long selected=std::wcstol(value,&end,10);return end==value||selected<0||selected>maximum?-2:int(selected);};
-     int roleFilter=filter(L"--cleanup-layer-role=",5),sampleFilter=filter(L"--cleanup-layer-sample=",14);if(roleFilter<-1||sampleFilter<-1)return 21;
-     std::string reportName="diagnostics/animation-repair-20261013/native/attachments";if(roleFilter>=0)reportName+="-role-"+std::to_string(roleFilter);if(sampleFilter>=0)reportName+="-sample-"+std::to_string(sampleFilter);
-     std::ofstream report(reportName+".csv");report<<"role,pose,view,wristReachError,fingerEdgeError,barrelError\n";bool passed=true;
-     for(int role=0;role<6;++role)for(int sample=0;sample<15;++sample)for(int view=0;view<2;++view){if(roleFilter>=0&&role!=roleFilter||sampleFilter>=0&&sample!=sampleFilter)continue;auto scene=retro::Game::cleanupLayerInspection(role,sample,view);renderer->render(scene);
-      auto errors=renderer->cleanupAttachmentErrors();report<<roles[role]<<','<<poses[sample]<<','<<view<<','<<errors[0]<<','<<errors[1]<<','<<errors[2]<<'\n';report.flush();passed&=errors[0]<.02f&&errors[1]<.00002f&&errors[2]<.002f;
-      auto name=std::string("diagnostics/animation-repair-20261013/native/")+roles[role]+"-"+poses[sample]+(view?"-side":"-front")+".ppm";std::ofstream out(name,std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";
+     int roleFilter=filter(L"--cleanup-layer-role=",5),sampleFilter=filter(L"--cleanup-layer-sample=",15);if(roleFilter<-1||sampleFilter<-1)return 21;
+     float phase=-1;if(auto flag=std::wcsstr(commandLine,L"--cleanup-layer-phase=")){wchar_t*end=nullptr;phase=float(std::wcstod(flag+22,&end));if(end==flag+22||!std::isfinite(phase)||phase<0||phase>1)return 21;inspectionDirectory+="-phase-"+std::to_string(phase);std::filesystem::create_directories(inspectionDirectory);}
+     std::string reportName=inspectionDirectory+"/attachments";if(roleFilter>=0)reportName+="-role-"+std::to_string(roleFilter);if(sampleFilter>=0)reportName+="-sample-"+std::to_string(sampleFilter);
+     std::ofstream report(reportName+".csv");report<<"role,pose,view,wristReachError,fingerEdgeError,barrelError,wholeMeshEdgeStretch\n";bool passed=true;
+     for(int role=0;role<6;++role)for(int sample=0;sample<16;++sample)for(int view=0;view<2;++view){if(roleFilter>=0&&role!=roleFilter||sampleFilter>=0&&sample!=sampleFilter)continue;auto scene=retro::Game::cleanupLayerInspection(role,sample,view,phase);renderer->render(scene);
+      auto errors=renderer->cleanupAttachmentErrors();report<<roles[role]<<','<<poses[sample]<<','<<view<<','<<errors[0]<<','<<errors[1]<<','<<errors[2]<<','<<errors[3]<<'\n';report.flush();passed&=errors[0]<.02f&&errors[1]<.00002f&&errors[2]<.002f&&errors[3]<8.f;
+      auto name=inspectionDirectory+"/"+roles[role]+"-"+poses[sample]+(view?"-side":"-front")+".ppm";std::ofstream out(name,std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";
       for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return passed?0:47;
     }

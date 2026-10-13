@@ -3,7 +3,7 @@
 The six RMA2 clips and their RML1 poses remain byte-for-byte intact. Treatment
 gets the same calibrated, grounded joint metadata and actual wrist anchors.
 """
-import bpy, struct, shutil, json, math, importlib.util
+import bpy, struct, shutil, json, math, importlib.util, sys
 from pathlib import Path
 from mathutils import Vector, Quaternion
 
@@ -21,6 +21,15 @@ rig, actions = bake.import_rig(donor)
 action = next(a for a in actions if a.name.endswith("|Chest_Open"))
 bake.assign_action(rig, action)
 path, data, corners, samples, clips, count, indices, points, joints, palms, weights = bake.load_topology("medic")
+if "--" in sys.argv:
+    arguments = sys.argv[sys.argv.index("--") + 1:]
+    if len(arguments) != 2 or arguments[0] != "--core":
+        raise ValueError("Expected --core <staged animation>")
+    staged = Path(arguments[1]).read_bytes()
+    staged_corners, samples, clips, staged_count = struct.unpack_from("<4I", staged, 4)
+    assert staged[:4] == b"RMA2" and staged_corners == corners and staged_count == count
+    assert staged[20:20 + corners * 2] == data[20:20 + corners * 2]
+    data = staged
 assert clips in (6, 7) and samples == bake.SAMPLES
 offset = 20 + corners * 2
 vertex_end = offset + clips * samples * count * 6
@@ -85,7 +94,7 @@ for clip in range(7):
     for sample in range(samples):
         pose = struct.unpack_from("<30f", all_poses, (clip * samples + sample) * 120)
         anchor_data.extend(struct.pack("<6f", *pose[12:15], *pose[24:27]))
-(root / "src/assets/actors/cleanup/medic-treatment-anchors.bin").write_bytes(anchor_data)
+bake.atomic_write(root / "src/assets/actors/cleanup/medic-treatment-anchors.bin", anchor_data)
 evidence = {
     "source": str(donor.relative_to(root)), "action": action.name,
     "frames": list(action.frame_range), "samples": samples, "vertices": count,

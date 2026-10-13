@@ -31,9 +31,11 @@ struct MedicalCaseFrame {
  Point3 center{},right{},forward{},up{0,0,1};float size=1;
  Point3 point(float x,float y,float z)const{return center+(right*x+forward*y+up*z)*size;}
 };
-MedicalCaseFrame medicalCaseFrame(Point3 carryingPalm,float yaw,float size){
+MedicalCaseFrame medicalCaseFrame(Point3 actorBase,float yaw,float size){
  Point3 right{std::cos(yaw),-std::sin(yaw),0},forward{std::sin(yaw),std::cos(yaw),0},up{0,0,1};
- return {carryingPalm+(right*.18f+forward*.13f-up*.02f)*size,right,forward,up,size};
+ // Place the entire open box ahead of the chest; fit the hands to its rim.
+ // A box hung from an arbitrary donor palm could pass through the abdomen.
+ return {actorBase+(forward*.35f+up*.99f)*size,right,forward,up,size};
 }
 }
 bool SoftwareRenderer::validate3D(){
@@ -45,7 +47,7 @@ bool SoftwareRenderer::validate3D(){
   if(!cleanupMesh->hasCreatureLayerPose())return false;
   float walkMotion=0,deathTop=0;for(int clip=0;clip<6;++clip){cleanupMesh->poseCreature(clip,.6f);for(size_t i=0;i<rest.size();++i)for(int v=0;v<3;++v){auto p=cleanupMesh->triangles[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.003f||p.y>2.f)return false;if(clip==1)walkMotion+=std::fabs(p.z-rest[i].v[v].p.z);if(clip==4)deathTop=std::max(deathTop,p.y);}}if(walkMotion<1||deathTop>1)return false;}}
  {for(float phase:{0.f,.25f,.6f,1.f}){m_cleanupMedic.poseCreature(6,phase);for(const auto&t:m_cleanupMedic.triangles)for(const auto&v:t.v)if(!std::isfinite(v.p.x)||!std::isfinite(v.p.y)||!std::isfinite(v.p.z)||v.p.y<-.003f||v.p.y>2.1f)return false;
-  for(float yaw:{0.f,kPi*.5f,-kPi*.5f,kPi})for(float size:{.5f,1.f,1.25f}){auto palm=m_cleanupMedic.poseAnchor(0);auto kit=medicalCaseFrame(palm,yaw,size);auto error=kit.point(-.18f,-.13f,.02f)-palm;if(std::fabs(error.x)+std::fabs(error.y)+std::fabs(error.z)>.000001f)return false;}
+  for(float yaw:{0.f,kPi*.5f,-kPi*.5f,kPi})for(float size:{.5f,1.f,1.25f}){Point3 base{2,3,.2f};auto kit=medicalCaseFrame(base,yaw,size);for(float x:{-.18f,.18f})for(float y:{-.13f,.13f})for(float z:{-.13f,.25f}){auto delta=kit.point(x,y,z)-base;float clearance=delta.x*kit.forward.x+delta.y*kit.forward.y;if(clearance<.219f*size)return false;}}
  }m_cleanupMedic.poseCreature(0,0);}
  // Verify the terminal's physical grips against the imported Engineer's
  // calibrated arm lengths, including scale and rotation. This catches a
@@ -1357,7 +1359,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   float terminalTouch=engineering?std::sin((weapon->maintenance?game.elapsed()*5.f:weapon->engineering*3.f)*kPi):0;
   if(human){
    if(treating&&track.visual==ActorVisual::CleanupMedic)mesh.poseCreature(6,weapon->treatment);
-   else if(cleanup&&pose.clip!=4){
+   else if(cleanup&&pose.clip!=4&&m_cleanupInspectionStage!=1){
     // Tank layering: walk/crouch legs maneuver while the aim-idle upper holds
     // the gun; restricted mid/head twist looks toward the combat aim.
     float aimYaw=0,aimPitch=0;
@@ -1372,21 +1374,31 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     float aimPhase=pose.phase;
     int upperClip=0;
     if(weapon&&weapon->action==GuardAction::Fire&&!weapon->handgun&&!engineering){upperClip=2;aimPhase=std::clamp(weapon->actionProgress,0.f,1.f);}
-    if(pose.clip==1)mesh.poseCreatureTank(1,pose.phase,upperClip,aimPhase,aimYaw,aimPitch);
-    else if(pose.clip==5)mesh.poseCreatureTank(5,pose.phase,5,pose.phase,aimYaw,aimPitch);
+    if(pose.clip==5||(weapon&&weapon->crouched&&pose.clip<=1))mesh.poseCreatureTank(5,pose.phase,5,pose.phase,aimYaw,aimPitch);
+    else if(pose.clip==1)mesh.poseCreatureTank(1,pose.phase,upperClip,aimPhase,aimYaw,aimPitch);
     else if(pose.clip==0)mesh.poseCreatureTank(0,pose.phase,upperClip,aimPhase,aimYaw,aimPitch);
     else mesh.poseCreature(pose.clip,pose.phase);
    }else mesh.poseCreature(pose.clip,pose.phase);
+   if(cleanup&&m_cleanupInspectionStage==3)mesh.triangles=mesh.bindTriangles();
   }
   float scale=track.scale/std::max(.01f,human?mesh.maximum.y-mesh.minimum.y:std::max({mesh.maximum.x-mesh.minimum.x,mesh.maximum.y-mesh.minimum.y,mesh.maximum.z-mesh.minimum.z}));
   float c=std::cos(pose.yaw),s=std::sin(pose.yaw);
   auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  auto medicalKit=medicalCaseFrame({pose.position.x,pose.position.y,pose.z},pose.yaw,track.scale/1.6f);
+  if(treating&&cleanup){
+   // Chest_Open bends the chest forward over the abdomen. Clear the actual
+   // posed torso, including the raised lid, rather than a standing hull.
+   float front=.22f*medicalKit.size;const auto&rest=mesh.bindTriangles();
+   for(size_t face=0;face<mesh.triangles.size();++face)for(int vertex=0;vertex<3;++vertex){auto bind=rest[face].v[vertex].p;const auto&weight=m_cleanupWeights[cleanupRole][face*3+vertex];if(weight[0]>32||bind.y<.75f||bind.y>1.32f)continue;auto point=transform(mesh.triangles[face].v[vertex].p);auto delta=point-Point3{pose.position.x,pose.position.y,pose.z};front=std::max(front,delta.x*medicalKit.forward.x+delta.y*medicalKit.forward.y);}
+   const auto&shoulders=mesh.creatureLayerPose().arms;float height=(shoulders[0][0].y+shoulders[1][0].y)*.5f*scale-.26f*medicalKit.size;
+   auto base=Point3{pose.position.x,pose.position.y,pose.z};medicalKit.center=base+medicalKit.forward*(front+.155f*medicalKit.size)+medicalKit.up*height;
+  }
   const bool armed=human&&weapon&&weapon->armed&&pose.clip!=4&&!treating;
   // Final attachment starts from the composed bake and keeps the physical
   // gameplay grip/barrel authoritative. It never resets cleanup arms to bind.
   const bool posedArms=cleanup&&mesh.hasCreatureLayerPose();
   Point3 gunForward{},gunRight{},gunUp{},gunGrip{},gunMuzzle{};float gunScale=0;
-  struct ArmAttachment {Point3 shoulder{},elbow{},hand{},targetElbow{},targetHand{};std::array<Point3,3> upper{},lower{},palm{};};
+  struct ArmAttachment {Point3 shoulder{},elbow{},hand{},targetShoulder{},targetElbow{},targetHand{};std::array<Point3,3> upper{},lower{},palm{};};
   std::array<ArmAttachment,2> arms{};
   // The full-body Worker uses baked vertex animation rather than a live rig.
   // Use its imported standing upper body, with complete jacket sleeves and
@@ -1394,7 +1406,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   // its visor inside the weapon. Walking still uses the authored legs.
   struct ArmedVertex {Point3 position{};int side=0;float influence=0,lower=0,palm=0;};
   const std::vector<std::array<ArmedVertex,3>>* armedVertices=nullptr;
-  if(armed){
+  if(armed||(treating&&cleanup)){
    auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
    auto unit=[&](Point3 p){return p*(1.f/std::sqrt(std::max(.000001f,dot(p,p))));};
    gunForward=unit(weapon->direction);gunRight=unit({gunForward.y,-gunForward.x,0});gunUp=unit(cross3(gunRight,gunForward));
@@ -1440,31 +1452,39 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     if(side&&weapon->reload>0){float feed=std::sin(weapon->reload*3.f*kPi);arm.targetHand=gunGrip+(gunForward*(.10f+.06f*feed)-gunUp*(.10f+.05f*std::fabs(feed))+gunRight*.09f)*bodyScale;}
     if(!side&&weapon->grenadeThrow>0){float wind=std::sin(weapon->grenadeThrow*kPi);arm.targetHand=gunGrip+(gunRight*.12f-gunForward*(.12f*wind)+gunUp*(.08f+.12f*wind))*bodyScale;}
     if(engineering)arm.targetHand=fieldTerminalHand(terminal,side,terminalTouch);
+    if(treating)arm.targetHand=side?medicalKit.point(.055f,.005f,.045f+.035f*std::sin(weapon->treatment*4*kPi)):medicalKit.point(-.235f,0,.035f);
     auto upper=arm.elbow-arm.shoulder,lower=arm.hand-arm.elbow;float l1=std::sqrt(dot(upper,upper)),l2=std::sqrt(dot(lower,lower));
-    if(posedArms&&side&&!weapon->handgun&&weapon->reload<=0&&!engineering){
+    if(posedArms&&side&&!weapon->handgun&&weapon->reload<=0&&!engineering&&!treating){
      // The receiver/linkage and pump form a continuous support surface from
-     // .09-.363 m ahead of the grip. Extreme aim can move a short arm back
+     // 0-.363 m ahead of the grip. Extreme aim can move a short arm back
      // from the bulky pump onto the receiver without stretching its cuff.
      float preferred=2.25f*gunScale;auto base=arm.targetHand-gunForward*preferred;auto delta=base-arm.shoulder;float axial=dot(delta,gunForward),perpendicular=dot(delta,delta)-axial*axial;
      float reachLimit=l1+l2-.005f,furthest=-axial+std::sqrt(std::max(0.f,reachLimit*reachLimit-perpendicular));
-     arm.targetHand=base+gunForward*std::clamp(furthest,.09f*bodyScale,.363f*bodyScale);
+     arm.targetHand=base+gunForward*std::clamp(furthest,0.f,.363f*bodyScale);
     }
     float supportRelease=0;
-    if(posedArms&&side&&weapon->handgun&&weapon->reload<=0&&!engineering){auto delta=arm.targetHand-arm.shoulder;float limit=l1+l2-.005f;
+    if(posedArms&&side&&weapon->handgun&&weapon->reload<=0&&!engineering&&!treating){auto delta=arm.targetHand-arm.shoulder;float limit=l1+l2-.005f;
      supportRelease=std::clamp((std::sqrt(dot(delta,delta))-(limit-.06f))/.06f,0.f,1.f);supportRelease*=supportRelease*(3-2*supportRelease);
      if(supportRelease>0){auto rest=transform(mesh.creatureLayerPose().pelvis+Point3{.22f,.15f,.10f});arm.targetHand=arm.targetHand+(rest-arm.targetHand)*supportRelease;}
     }
+    arm.targetShoulder=arm.shoulder;
     auto reach=arm.targetHand-arm.shoulder;
+    // A small clavicle reach accompanies extreme crouched aim. Keep the arm
+    // bones at their imported lengths and the trigger hand on the real grip;
+    // silently clamping the wrist left short characters off their trigger.
+    float reachLength=std::sqrt(dot(reach,reach));
+    if(posedArms&&reachLength>l1+l2-.005f){arm.targetShoulder=arm.shoulder+unit(reach)*std::min(.045f*bodyScale,reachLength-(l1+l2-.005f));reach=arm.targetHand-arm.targetShoulder;}
     float distance=std::clamp(std::sqrt(dot(reach,reach)),std::fabs(l1-l2)+.001f,l1+l2-.001f);auto axis=unit(reach);
-    auto reachable=arm.shoulder+axis*distance;if(posedArms){auto error=arm.targetHand-reachable;m_cleanupReachError=std::max(m_cleanupReachError,std::sqrt(dot(error,error)));arm.targetHand=reachable;}
+    auto reachable=arm.targetShoulder+axis*distance;if(posedArms){auto error=arm.targetHand-reachable;m_cleanupReachError=std::max(m_cleanupReachError,std::sqrt(dot(error,error)));arm.targetHand=reachable;}
     float along=(l1*l1-l2*l2+distance*distance)/(2*distance),height=std::sqrt(std::max(0.f,l1*l1-along*along));
-    auto bend=gunRight*(side?.35f:-.35f)-gunUp*.30f-gunForward*.10f;bend=unit(bend-axis*dot(bend,axis));arm.targetElbow=arm.shoulder+axis*along+bend*height;
-    arm.upper=rotation(upper,arm.targetElbow-arm.shoulder);arm.lower=rotation(lower,arm.targetHand-arm.targetElbow);
+    auto bend=gunRight*(side?.35f:-.35f)-gunUp*.30f-gunForward*.10f;bend=unit(bend-axis*dot(bend,axis));arm.targetElbow=arm.targetShoulder+axis*along+bend*height;
+    arm.upper=rotation(upper,arm.targetElbow-arm.targetShoulder);arm.lower=rotation(lower,arm.targetHand-arm.targetElbow);
     Point3 sourcePalm=posedArms?mesh.creatureLayerPose().arms[side][3]:cleanup?m_cleanupPalms[cleanupRole][side]:side?Point3{.020742f,-.075568f,.078422f}:Point3{-.017374f,-.105655f,.031950f};
     auto sourceDirection=transform(hands[side]+sourcePalm)-arm.hand;
     auto palmDirection=side?gunRight*-.060f+gunUp*.025f:gunUp*.075f+gunForward*.025f;
     if(supportRelease>0)palmDirection=palmDirection+(Point3{0,0,-.08f}-palmDirection)*supportRelease;
     if(engineering)palmDirection=side?terminal.normal*-.055f+terminal.up*.012f:terminal.up*.05f-terminal.normal*.04f;
+    if(treating)palmDirection=side?medicalKit.up*-.055f+medicalKit.forward*.025f:medicalKit.right*.065f+medicalKit.up*-.045f;
     arm.palm=rotation(sourceDirection,palmDirection);
    }
   }
@@ -1474,7 +1494,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   for(auto face:mesh.triangles){
    int vertex=0;for(auto& v:face.v){auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
     v.p=transform(p);
-    if(armedVertices){const auto&bind=(*armedVertices)[actorFace][vertex];auto source=posedArms?v.p:transform(bind.position);
+    if(armedVertices&&m_cleanupInspectionStage==0){const auto&bind=(*armedVertices)[actorFace][vertex];auto source=posedArms?v.p:transform(bind.position);
      // Worker hunched idle used to bury the visor in the gun, so the jacket is
      // pulled toward bind. Cleanup UAL / Worker walk already clear the weapon —
      // keep most of the posed body so idle and legs read as motion.
@@ -1486,13 +1506,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
      if(bindPull>.001f)v.p=v.p+(source-v.p)*bindPull;
      if(bind.influence>.001f){const auto&arm=arms[bind.side];
      auto rotate=[](const std::array<Point3,3>&basis,Point3 p){return basis[0]*p.x+basis[1]*p.y+basis[2]*p.z;};
-     auto upper=arm.shoulder+rotate(arm.upper,source-arm.shoulder),lower=arm.targetElbow+rotate(arm.lower,source-arm.elbow),hand=arm.targetHand+rotate(arm.palm,source-arm.hand);
+     auto upper=arm.targetShoulder+rotate(arm.upper,source-arm.shoulder),lower=arm.targetElbow+rotate(arm.lower,source-arm.elbow),hand=arm.targetHand+rotate(arm.palm,source-arm.hand);
      // A repaired hand is one rigid piece. Partial sleeve weights must never
      // bend individual fingers during this final attachment.
      bool rigidHand=cleanup&&bind.influence*bind.palm>.15f;
      auto sleeve=upper+(lower-upper)*bind.lower;auto attached=rigidHand?hand:sleeve+(hand-sleeve)*bind.palm;v.p=v.p+(attached-v.p)*(rigidHand?1.f:bind.influence);
     }}++vertex;}
    if(posedArms&&armedVertices)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
+   if(cleanup){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
    auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);selectFaceLight(actorLights,cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),center-Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f});
     int material=0;if(human&&face.part>=0&&face.part<int(mesh.materialNames.size())){auto name=mesh.materialNames[face.part];if(name.find("pies")!=std::string::npos)material=2;else if(name.find("mano")!=std::string::npos)material=1;}
    if(cleanup&&face.part>=0&&face.part<int(mesh.materialNames.size()))material=mesh.materialNames[face.part].find("head")!=std::string::npos?1:0;
@@ -1555,14 +1576,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
     panel(-.046f,.076f,.046f,.090f,terminalCase,.029f);
    }
   }
-  if(treating){
+  if(treating&&m_cleanupInspectionStage==0){
    static const Texture kitWhite{1,1,{0xffdbddd3u}},kitInside{1,1,{0xff354038u}},kitRed{1,1,{0xffb43432u}};
    Point3 forward{s,c,0},up{0,0,1};float size=track.scale/1.6f;
-   auto palm=transform({0,.9f,.35f});
-   if(track.visual==ActorVisual::CleanupMedic){auto sourcePalm=m_cleanupPalms[cleanupRole][0];float length=std::sqrt(sourcePalm.x*sourcePalm.x+sourcePalm.y*sourcePalm.y+sourcePalm.z*sourcePalm.z);palm=transform(mesh.poseAnchor(0)+mesh.creatureLayerPose().arms[0][3]*length);}
-   // Chest_Open's opposite hand reaches toward the patient. Keep the case on
-   // its carrying palm instead of floating halfway between separated wrists.
-   auto kit=medicalCaseFrame(palm,pose.yaw,size);
+   auto kit=medicalKit;
    auto casePoint=[&](float x,float y,float z){return kit.point(x,y,z);};
    auto A=casePoint(-.18f,-.13f,-.13f),B=casePoint(.18f,-.13f,-.13f),C=casePoint(.18f,.13f,-.13f),D=casePoint(-.18f,.13f,-.13f);
    auto a=casePoint(-.18f,-.13f,-.02f),b=casePoint(.18f,-.13f,-.02f),d=casePoint(-.18f,.13f,-.02f),e=casePoint(.18f,.13f,-.02f);
@@ -1571,8 +1588,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    quad(casePoint(.181f,-.075f,-.09f),casePoint(.181f,.075f,-.09f),casePoint(.181f,.075f,-.06f),casePoint(.181f,-.075f,-.06f),kitRed,1.f);
    quad(casePoint(.181f,-.018f,-.12f),casePoint(.181f,.018f,-.12f),casePoint(.181f,.018f,-.03f),casePoint(.181f,-.018f,-.03f),kitRed,1.f);
    float open=std::clamp(std::min(weapon->treatment/.25f,(1-weapon->treatment)/.16f),0.f,1.f),angle=open*1.5f;
-   auto lid=[&](float x,float y){return casePoint(x,-.13f+y*std::cos(angle),-.018f+y*std::sin(angle));};
-   auto marking=[&](float x,float y){return lid(x,y)+(up*std::cos(angle)-forward*std::sin(angle))*.0015f;};
+   // The far hinge opens toward the patient, clearing the operator's leaning
+   // chest and mask while leaving the near rim accessible to both hands.
+   auto lid=[&](float x,float y){return casePoint(x,.13f-y*std::cos(angle),-.018f+y*std::sin(angle));};
+   auto marking=[&](float x,float y){return lid(x,y)+(up*std::cos(angle)+forward*std::sin(angle))*.0015f;};
    quad(lid(-.18f,0),lid(.18f,0),lid(.18f,.26f),lid(-.18f,.26f),kitWhite,1.f);
    quad(marking(-.075f,.105f),marking(.075f,.105f),marking(.075f,.155f),marking(-.075f,.155f),kitRed,1.f);
    quad(marking(-.025f,.055f),marking(.025f,.055f),marking(.025f,.205f),marking(-.025f,.205f),kitRed,1.f);

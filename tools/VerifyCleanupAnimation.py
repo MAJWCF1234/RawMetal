@@ -49,6 +49,20 @@ for role in ('assault', 'engineer', 'sharpshooter', 'heavy', 'medic', 'rusher'):
     weights = np.frombuffer((assets / (role + '-arms.bin')).read_bytes(), dtype=np.uint8, offset=104).reshape(corners, 4)
     owned = weights[:, 0] / 255 * weights[:, 2] / 255 > .15
     points = np.array([list(map(float, line.split()[1:4])) for line in (assets / (role + '.obj')).read_text().splitlines() if line.startswith('v ')])
+    skin_data = (assets / (role + '-skin.bin')).read_bytes()
+    assert skin_data[:104] == (assets / (role + '-arms.bin')).read_bytes()[:104]
+    assert len(skin_data) == 104 + corners * 4
+    # Inspect all edges, not only pairs already labelled as fingers. That old
+    # subset missed hanging sleeve sheets and a thigh mislabelled as a hand.
+    faces = indices.reshape(-1, 3)
+    bind_faces = points.reshape(-1, 3, 3)
+    mesh_stretch = 1.0
+    for corner in range(3):
+        next_corner = (corner + 1) % 3
+        rest_length = np.maximum(.01, np.linalg.norm(bind_faces[:, corner] - bind_faces[:, next_corner], axis=-1))
+        posed_length = np.linalg.norm(vertices[:, :, faces[:, corner]] - vertices[:, :, faces[:, next_corner]], axis=-1)
+        mesh_stretch = max(mesh_stretch, float(np.max(posed_length / rest_length)))
+    assert mesh_stretch < 8, (role, 'whole mesh stretch', mesh_stretch)
     edges = []
     for a in range(corners):
         b = a // 3 * 3 + (a + 1) % 3
@@ -66,7 +80,7 @@ for role in ('assault', 'engineer', 'sharpshooter', 'heavy', 'medic', 'rusher'):
         anchors = np.frombuffer((assets / 'medic-treatment-anchors.bin').read_bytes(), dtype='<f4').reshape(clips, samples, 2, 3)
         assert np.max(np.abs(anchors - poses[:, :, [4, 8]])) == 0
     crouch = vertices[5, :, :, 1].max(axis=1)
-    results.append({'role': role, 'bytes': len(data), 'samples': samples, 'clips': clips, 'loop_error_mm': loop * 1000, 'planar_pelvis_drift_mm': root_drift * 1000, 'all_hand_keyframe_error_mm': error * 1000, 'all_hand_midframe_error_mm': mid_error * 1000, 'crouch_height_min_m': float(crouch.min()), 'crouch_height_max_m': float(crouch.max()), 'death_end_height_m': float(vertices[4, -1, :, 1].max()), 'finite_metadata': True})
+    results.append({'role': role, 'bytes': len(data), 'samples': samples, 'clips': clips, 'loop_error_mm': loop * 1000, 'planar_pelvis_drift_mm': root_drift * 1000, 'all_hand_keyframe_error_mm': error * 1000, 'all_hand_midframe_error_mm': mid_error * 1000, 'whole_mesh_edge_stretch': mesh_stretch, 'crouch_height_min_m': float(crouch.min()), 'crouch_height_max_m': float(crouch.max()), 'death_end_height_m': float(vertices[4, -1, :, 1].max()), 'finite_metadata': True})
 report = {'protected_files_unchanged': len(manifest) if args.baseline else None, 'roles': results}
 print(json.dumps(report, indent=2, default=float))
 if args.output:
