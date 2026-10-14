@@ -1,0 +1,12 @@
+{
+  "donor_triangles": 789,
+  "removed_stub_triangles": 35,
+  "cuff_points": 13,
+  "retained_triangles": 4087,
+  "new_triangles": 4876,
+  "corner_count": 14628,
+  "animation_vertices": 2472,
+  "donor_uvs_preserved": true,
+  "reflected_winding_reversed": true,
+  "body_and_donor_preserved": true
+}
