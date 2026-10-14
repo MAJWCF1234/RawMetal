@@ -27,3 +27,23 @@ local procedural curl. See the diagnostics in `assault-finger-rig-20261013`.
 Keep the corrected rig and the downloaded character-specific animations
 together when baking. The game's existing rigid-hand attachment must not
 replace these finger poses during the later integration.
+
+## Engineer fingers
+
+Engineer keeps both authored hands. The user's marker placement produced a
+57-bone Mixamo rig with four finger chains per hand and no pinkies.
+`engineer-original-mixamo.fbx` preserves that original export.
+`engineer-full-fingers.fbx` adds only the two missing pinky chains and fits
+their skin weights, retaining every original bone and mesh vertex. All ten
+independent finger curl checks passed; details are in
+`engineer-finger-rig-report.json`.
+
+Reproduce using Blender:
+
+```
+blender -b --python-exit-code 1 --python tools/RigEngineerPinkies.py -- --source source-assets/cleanup-repairs/engineer-original-mixamo.fbx --output diagnostics/engineer-pinky-rebuild
+```
+
+The fixed rig was reuploaded to Mixamo before collecting the Engineer
+library in `source-assets/mixamo-motion/engineer-direct`. These remain source
+assets pending a matching in-game bake.
