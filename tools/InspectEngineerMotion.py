@@ -13,7 +13,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--library', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter'), default='engineer')
+parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter', 'heavy'), default='engineer')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 catalog = json.loads((args.library / 'clip-catalog.json').read_text())
@@ -37,6 +37,14 @@ elif args.character == 'sharpshooter':
         ('rifle-aim', '@pro-rifle-pack/idle aiming.fbx', [.5]),
         ('crouch-aim', '@pro-rifle-pack/idle crouching aiming.fbx', [.5]),
         ('prone-aim', 'Prone Idle - Lying Down Prone With Rifle', [.5]),
+    ]
+elif args.character == 'heavy':
+    base = args.library / 'pro-rifle-pack/heavy-full-fingers.fbx'
+    selections = [
+        ('rifle-aim', '@pro-rifle-pack/idle aiming.fbx', [.5]),
+        ('crouch-aim', '@pro-rifle-pack/idle crouching aiming.fbx', [.5]),
+        ('rifle-walk', '@pro-rifle-pack/walk forward.fbx', [.5]),
+        ('rifle-block', 'Block With Rifle - Blocking With Rifle', [.5]),
     ]
 trajectories = []
 for label, group, phases in selections:
@@ -145,7 +153,7 @@ for label, group, phases in selections:
             camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
             scene.render.filepath = str(args.output / 'pistol-fingers.png')
             bpy.ops.render.render(write_still=True)
-        elif args.character == 'sharpshooter' and label == 'rifle-aim':
+        elif args.character in ('sharpshooter', 'heavy') and label == 'rifle-aim':
             center = rig.matrix_world @ rig.pose.bones['mixamorig:RightHand'].head
             camera_data.ortho_scale = .32
             camera.location = center + Vector((-.30, -.45, .25))

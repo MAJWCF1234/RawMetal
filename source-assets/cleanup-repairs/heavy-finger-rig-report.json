@@ -1,0 +1,69 @@
+{
+  "bones": 65,
+  "preserved_existing_bones": 57,
+  "mesh_vertices_preserved": true,
+  "added_pinky_chains": 2,
+  "changed_pinky_vertices": 1144,
+  "independent_curl_checks": [
+    {
+      "side": "Left",
+      "finger": "Thumb",
+      "moved_vertices": 503,
+      "max_motion_m": 0.10569575143046005
+    },
+    {
+      "side": "Left",
+      "finger": "Index",
+      "moved_vertices": 287,
+      "max_motion_m": 0.06472338254565427
+    },
+    {
+      "side": "Left",
+      "finger": "Middle",
+      "moved_vertices": 259,
+      "max_motion_m": 0.06513463093987051
+    },
+    {
+      "side": "Left",
+      "finger": "Ring",
+      "moved_vertices": 256,
+      "max_motion_m": 0.05278727940028969
+    },
+    {
+      "side": "Left",
+      "finger": "Pinky",
+      "moved_vertices": 419,
+      "max_motion_m": 0.09059325856873714
+    },
+    {
+      "side": "Right",
+      "finger": "Thumb",
+      "moved_vertices": 484,
+      "max_motion_m": 0.11495826620850651
+    },
+    {
+      "side": "Right",
+      "finger": "Index",
+      "moved_vertices": 337,
+      "max_motion_m": 0.07651078096504184
+    },
+    {
+      "side": "Right",
+      "finger": "Middle",
+      "moved_vertices": 321,
+      "max_motion_m": 0.07712144642186079
+    },
+    {
+      "side": "Right",
+      "finger": "Ring",
+      "moved_vertices": 266,
+      "max_motion_m": 0.058443979134253594
+    },
+    {
+      "side": "Right",
+      "finger": "Pinky",
+      "moved_vertices": 419,
+      "max_motion_m": 0.0905927784396074
+    }
+  ]
+}
