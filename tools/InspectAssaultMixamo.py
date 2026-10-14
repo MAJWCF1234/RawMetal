@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--library', type=Path, required=True)
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 manifest = json.loads((args.library / 'manifest.json').read_text())
+expected_bones = 78 if manifest['character'] == 'limitator' else 65
 results = []
 required = [f'mixamorig:{side}Hand{finger}{joint}' for side in ('Left', 'Right')
             for finger in ('Thumb', 'Index', 'Middle', 'Ring', 'Pinky') for joint in (1, 2, 3)]
@@ -24,10 +25,16 @@ for group in manifest['packs']:
         bpy.context.scene.render.fps = 24
         bpy.ops.import_scene.fbx(filepath=str(args.library / entry['file']))
         rig = next(o for o in bpy.context.scene.objects if o.type == 'ARMATURE')
-        assert len(rig.data.bones) == 65, (entry['file'], len(rig.data.bones))
+        assert len(rig.data.bones) == expected_bones, (entry['file'], len(rig.data.bones))
         assert all(name in rig.data.bones for name in required), entry['file']
         actions = list(bpy.data.actions)
         character_file = Path(entry['file']).stem.lower() == manifest['character'].lower()
+        if not character_file:
+            # Skinned originals can contain old object-control actions and a
+            # nested T-pose take. Audit the direct downloaded motion, not those.
+            motion_actions = [a for a in actions if a.name.endswith('|mixamo.com|Layer0')]
+            assert motion_actions, entry['file']
+            actions = [min(motion_actions, key=lambda a: a.name.count('|'))]
         item = dict(file=entry['file'], group=group['name'], bones=len(rig.data.bones),
                     kind='character' if character_file else 'animation',
                     fps=bpy.context.scene.render.fps, actions=[])
@@ -69,4 +76,4 @@ report = dict(character=manifest['character'], requested_export_fps=24, target_b
               full_finger_skeleton_verified=True, finite_sampled_poses=True, clips=results)
 (args.library / 'clip-catalog.json').write_text(json.dumps(report, indent=2))
 print('PASS', report['files'], 'FBX files;', report['animated_files'],
-      'animated files; 65 bones; source timing preserved; target bake 24 fps')
+      f'animated files; {expected_bones} bones; source timing preserved; target bake 24 fps')

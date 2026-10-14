@@ -13,7 +13,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--library', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter', 'heavy', 'rusher', 'investigator'), default='engineer')
+parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter', 'heavy', 'rusher', 'investigator', 'limitator'), default='engineer')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 catalog = json.loads((args.library / 'clip-catalog.json').read_text())
@@ -64,6 +64,15 @@ elif args.character == 'investigator':
         ('awareness', 'Looking Around - Idle Stand Looking Around', [.5]),
         ('prone-aim', 'Prone Idle - Lying Down Prone With Rifle', [.5]),
     ]
+elif args.character == 'limitator':
+    base = args.library / 'pro-rifle-pack/limitator.fbx'
+    selections = [
+        ('rifle-aim', '@pro-rifle-pack/idle aiming.fbx', [.5]),
+        ('crouch-aim', '@pro-rifle-pack/idle crouching aiming.fbx', [.5]),
+        ('rifle-walk', '@pro-rifle-pack/walk forward.fbx', [.5]),
+        ('cross-punch', 'Cross Punch - A Cross Punch', [.25, .5, .75]),
+        ('front-kick', 'Kicking - Male Thrust Kick With The Lead Foot', [.5]),
+    ]
 trajectories = []
 for label, group, phases in selections:
     entry = next(c for c in catalog['clips']
@@ -71,7 +80,11 @@ for label, group, phases in selections:
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.fbx(filepath=str(args.library / entry['file']))
     target_rig = next(o for o in bpy.context.scene.objects if o.type == 'ARMATURE')
-    action = target_rig.animation_data.action
+    motion_actions = [a for a in bpy.data.actions if a.name.endswith('|mixamo.com|Layer0')]
+    action = min(motion_actions, key=lambda a: a.name.count('|'))
+    target_rig.animation_data.action = action
+    if getattr(action, 'slots', None):
+        target_rig.animation_data.action_slot = action.slots[0]
     meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH']
     transferred = not meshes
     if not meshes:
@@ -127,8 +140,12 @@ for label, group, phases in selections:
                 else:
                     bone.matrix_basis = bone.bone.convert_local_to_pose(desired[bone.name], rest, invert=True)
             bpy.context.view_layer.update()
-            assert max(max(abs(v) for row in (b.matrix - desired[b.name]) for v in row)
-                       for b in rig.pose.bones) < .001
+            errors = {b.name: max(abs(v) for row in (b.matrix - desired[b.name]) for v in row)
+                      for b in rig.pose.bones}
+            # The 78-bone Limitator has additional end bones and centimetre
+            # coordinates; accumulated float roundoff is about 10 micrometres.
+            tolerance = .002 if args.character == 'limitator' else .001
+            assert max(errors.values()) < tolerance, sorted(errors.items(), key=lambda x: -x[1])[:3]
     samples = []
     for i in range(101):
         phase = i / 100
@@ -174,10 +191,11 @@ for label, group, phases in selections:
             camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
             scene.render.filepath = str(args.output / 'pistol-fingers.png')
             bpy.ops.render.render(write_still=True)
-        elif args.character in ('sharpshooter', 'heavy') and label == 'rifle-aim':
+        elif args.character in ('sharpshooter', 'heavy', 'limitator') and label == 'rifle-aim':
             center = rig.matrix_world @ rig.pose.bones['mixamorig:RightHand'].head
-            camera_data.ortho_scale = .32
-            camera.location = center + Vector((-.30, -.45, .25))
+            closeup_scale = .8 if args.character == 'limitator' else .32
+            camera_data.ortho_scale = closeup_scale
+            camera.location = center + Vector((-.94, -1.4, .78)) * closeup_scale
             camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
             scene.render.filepath = str(args.output / 'rifle-fingers.png')
             bpy.ops.render.render(write_still=True)

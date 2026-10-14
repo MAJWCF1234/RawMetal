@@ -63,4 +63,7 @@ alignment, waist aiming, transitions and timing in native gameplay.
 clips: 241 animation FBXs plus one static character, including overlaps.
 Its original existing 65-bone rig and both authored hands are preserved.
 Selected crouch/prone poses expose sharp coat folds requiring integration work.
-Limitator remains a separate sparse-use actor; its intake is not completed here.
+[Limitator](limitator-direct/README.md) now has nine packs and 14 individual
+clips: 227 animation FBXs plus one static character. Its original 78-bone rig
+and both authored hands are preserved. This source intake does not change
+its intended sparse use or the current game animation bank.
