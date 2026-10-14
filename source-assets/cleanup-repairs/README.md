@@ -47,3 +47,15 @@ blender -b --python-exit-code 1 --python tools/RigEngineerPinkies.py -- --source
 The fixed rig was reuploaded to Mixamo before collecting the Engineer
 library in `source-assets/mixamo-motion/engineer-direct`. These remain source
 assets pending a matching in-game bake.
+
+## Medic fingers
+
+Medic keeps both authored hands. Its marker-placed Mixamo rig returned 33
+bones with only index chains. `medic-original-mixamo.fbx` preserves that
+export; `medic-full-fingers.fbx` fits all five digit chains per hand without
+changing the mesh. All ten independent finger bend checks passed, recorded
+in `medic-finger-rig-report.json`.
+
+The shared `tools/RigAssaultFingers.py` now accepts `--character medic` to
+reproduce this repair. Reuploaded Medic sources are catalogued under
+`source-assets/mixamo-motion/medic-direct`; they await the later game bake.

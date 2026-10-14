@@ -1,4 +1,4 @@
-"""Repair the downloaded Assault Mixamo rig's missing finger chains.
+"""Repair a downloaded squad Mixamo rig's missing finger chains.
 
 Run in Blender with -- --source <rigged FBX> --output <output directory>.
 Preserves the user's body rig and mesh; fits five finger chains to the actual
@@ -17,6 +17,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--character', choices=('assault', 'medic'), default='assault')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='SELECT')
@@ -24,6 +25,8 @@ bpy.ops.object.delete(use_global=False)
 bpy.ops.import_scene.fbx(filepath=str(args.source))
 rig = next(o for o in bpy.context.scene.objects if o.type == 'ARMATURE')
 mesh = next(o for o in bpy.context.scene.objects if o.type == 'MESH')
+if rig.animation_data:
+    rig.animation_data.action = None
 # Mixamo treated the meter-sized OBJ coordinates as centimeters in its FBX.
 # Normalize the rig object before re-export so animated preview and character
 # framing agree on scale. The parented mesh follows without changing vertices.
@@ -33,13 +36,18 @@ mesh_to_rig = rig.matrix_world.inverted() @ mesh.matrix_world
 points = np.array([list(mesh_to_rig @ v.co) for v in mesh.data.vertices])
 original_points = points.copy()
 root = Path(__file__).resolve().parents[1]
+source_folder = root / ('source-assets/cleanup-repairs' if args.character == 'assault'
+                        else 'src/assets/actors/cleanup')
 source_points = np.array([list(map(float, line.split()[1:4])) for line in
-                         (root / 'source-assets/cleanup-repairs/assault.obj').read_text().splitlines()
+                         (source_folder / (args.character + '.obj')).read_text().splitlines()
                          if line.startswith('v ')])
-cal = np.frombuffer((root / 'source-assets/cleanup-repairs/assault-arms.bin').read_bytes(),
+cal = np.frombuffer((source_folder / (args.character + '-arms.bin')).read_bytes(),
                    dtype='u1', offset=104).reshape(-1, 4)
-protected = {tuple(p): w for p, w in zip(np.round(source_points, 6), cal) if w[2] > 128}
-hand_mask = np.array([tuple(p) in protected for p in np.round(points, 6)])
+assert points.shape == source_points.shape
+assert np.max(np.abs(points - source_points)) < .000002
+# Exported corner order is checked above. This avoids rounding ties in FBX
+# unit conversion dropping otherwise identical authored hand corners.
+hand_mask = cal[:, 2] > 128
 assert hand_mask.sum() > 4000
 old_groups = {group.index: group.name for group in mesh.vertex_groups}
 old_weights = [{old_groups[g.group]: g.weight for g in vertex.groups}
@@ -51,7 +59,8 @@ hand_mask |= np.array([any('Hand' in name and not name.endswith('Hand') and valu
 # Fit to the original intact hand, represented on the positive side here.
 hand = np.unique(np.round(points[hand_mask & (points[:, 0] < 0)] * [-1, 1, 1], 6), axis=0)
 fingers = {}
-for name, center in [('Index', .129), ('Middle', .107), ('Ring', .085), ('Pinky', .065)]:
+centers = (.129, .107, .085, .065) if args.character == 'assault' else (.108, .088, .066, .045)
+for name, center in zip(('Index', 'Middle', 'Ring', 'Pinky'), centers):
     distal = hand[(hand[:, 1] < .705) & (hand[:, 0] > .25) & (np.abs(hand[:, 2] - center) < .012)]
     assert len(distal) > 30, name
     # Distal geometry exposes four distinct fingers below the shared web.
@@ -64,7 +73,9 @@ for name, center in [('Index', .129), ('Middle', .107), ('Ring', .085), ('Pinky'
     chain = np.array([[np.polyval(xs, y), y, np.polyval(zs, y)] for y in ys])
     fingers[name] = chain
 fingers['Thumb'] = np.array([[.259, .777, .123], [.237, .757, .140],
-                            [.222, .745, .152], [.208, .735, .153]])
+                            [.222, .745, .152], [.208, .735, .153]] if args.character == 'assault'
+                           else [[.270, .754, .102], [.253, .743, .115],
+                                 [.239, .727, .124], [.223, .722, .125]])
 
 bpy.ops.object.select_all(action='DESELECT')
 rig.select_set(True)
@@ -77,7 +88,8 @@ for bone in list(rig.data.edit_bones):
         rig.data.edit_bones.remove(bone)
 for side, sign in [('Left', 1), ('Right', -1)]:
     wrist = rig.data.edit_bones[f'mixamorig:{side}Hand']
-    wrist.tail = Vector((.273 * sign, .735, .095))
+    wrist.tail = Vector((.273 * sign, .735, .095) if args.character == 'assault'
+                        else (.280 * sign, .720, .071))
     for name, fitted in fingers.items():
         chain = fitted * [sign, 1, 1]
         parent = wrist
@@ -122,8 +134,9 @@ for index in np.flatnonzero(hand_mask):
     # Keep the palm and cuff on the hand. Smooth the knuckle transition;
     # distal fingers receive only their own chain, never another digit's.
     if name == 'Thumb':
-        influence = float(np.clip((.780 - p[1]) / .028, 0, 1))
-        influence *= float(np.clip((.262 - p[0]) / .028, 0, 1))
+        base_y, base_x = (.780, .262) if args.character == 'assault' else (.760, .270)
+        influence = float(np.clip((base_y - p[1]) / .028, 0, 1))
+        influence *= float(np.clip((base_x - p[0]) / .028, 0, 1))
     else:
         influence = float(np.clip((.715 - p[1]) / .016, 0, 1))
     influence = influence * influence * (3 - 2 * influence)
@@ -173,11 +186,11 @@ for pb in rig.pose.bones:
 bpy.context.view_layer.update()
 bpy.ops.object.select_all(action='DESELECT')
 rig.select_set(True); mesh.select_set(True)
-target = args.output / 'assault-full-fingers.fbx'
+target = args.output / (args.character + '-full-fingers.fbx')
 bpy.ops.export_scene.fbx(filepath=str(target), use_selection=True, object_types={'ARMATURE', 'MESH'},
                          add_leaf_bones=False, bake_anim=False, use_armature_deform_only=False,
                          axis_forward='-Z', axis_up='Y')
-bpy.ops.wm.save_as_mainfile(filepath=str(args.output / 'assault-full-fingers.blend'))
+bpy.ops.wm.save_as_mainfile(filepath=str(args.output / (args.character + '-full-fingers.blend')))
 world_points = np.array([list(mesh.matrix_world @ v.co) for v in mesh.data.vertices])
 report = dict(bones=len(rig.data.bones), geometry_preserved=True, body_rig_preserved=True,
               normalized_height_m=float(np.ptp(world_points[:, 2])),
