@@ -1,9 +1,11 @@
-# Mixamo donor motion (local)
+# Mixamo sources (local)
 
 Dropped Mixamo rifle/pistol packs live here as **source donors**. FBX and zip
 files are gitignored.
 
-Official downloads use FBX Binary, No Character, 30 fps, no key reduction:
+## Existing runtime donors
+
+These original donor downloads use FBX Binary, No Character, 30 fps, no key reduction:
 
 - Basic Shooter Pack: 16 clips; archive SHA256 `f6d87cf307fecda5b61cadda87789e6cb10e806202a9358bbcb9f07d33e1c6c5`.
 - Pistol/Handgun Locomotion Pack: 20 clips, including kneel transitions; archive SHA256 `e857a7d3b45a3e0e0e7c0bdd214337c9681cfafa23b95c1b93d55d0d3a651acf`.
@@ -31,3 +33,26 @@ The 32-sample choice was compared with the original 16-sample bake against
 exact donor poses between keys. Walking and foot motion track the donor more
 closely while remaining below the executable's 32 MiB ceiling. See the
 [quality report](../../docs/cleanup-animation-quality-20261013.md).
+
+## Character-specific intake: pending game bake
+
+All six main squad members now have their own repaired 65-bone source rig
+and audited direct Mixamo library. These new collections requested 24 fps
+and uniform key reduction; some packs retain 30 fps, recorded in their catalogs.
+The raw animation FBXs and archives remain local and ignored. Repaired source
+rigs, manifests, catalogs and verification reports are tracked.
+
+| Character | Animation FBX files | Library |
+| --- | ---: | --- |
+| Assault | 311 | [assault-direct](assault-direct/README.md) |
+| Engineer | 118 | [engineer-direct](engineer-direct/README.md) |
+| Medic | 121 | [medic-direct](medic-direct/README.md) |
+| Sharpshooter | 196 | [sharpshooter-direct](sharpshooter-direct/README.md) |
+| Heavy | 191 | [heavy-direct](heavy-direct/README.md) |
+| Rusher | 156 | [rusher-direct](rusher-direct/README.md) |
+
+Counts include pack overlaps, not distinct moves; each library also contains
+one static character FBX. The game still uses the existing donor bake above.
+Publish matching mesh/bindings/animation data together in the later bake,
+retain evaluated bone poses and animated fingers, then verify weapon/prop
+alignment, waist aiming, transitions and timing in native gameplay.
