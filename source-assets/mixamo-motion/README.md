@@ -56,3 +56,11 @@ one static character FBX. The game still uses the existing donor bake above.
 Publish matching mesh/bindings/animation data together in the later bake,
 retain evaluated bone poses and animated fingers, then verify weapon/prop
 alignment, waist aiming, transitions and timing in native gameplay.
+
+## Additional actors: pending game bake
+
+[Investigator](investigator-direct/README.md) now has nine packs and 28 special
+clips: 241 animation FBXs plus one static character, including overlaps.
+Its original existing 65-bone rig and both authored hands are preserved.
+Selected crouch/prone poses expose sharp coat folds requiring integration work.
+Limitator remains a separate sparse-use actor; its intake is not completed here.
