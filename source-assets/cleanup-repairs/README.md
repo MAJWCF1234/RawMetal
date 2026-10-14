@@ -69,3 +69,12 @@ and passes ten independent bend checks, recorded in
 `sharpshooter-finger-rig-report.json`. Reproduce with the shared rig tool's
 `--character sharpshooter` option. The complete source animation library is
 under `source-assets/mixamo-motion/sharpshooter-direct`, pending the later bake.
+
+## Heavy pinkies
+
+Heavy's original 57-bone export is `heavy-original-mixamo.fbx`. The repaired
+`heavy-full-fingers.fbx` retains every existing bone position and both authored
+hands, adding the two missing pinky chains. All ten finger checks passed;
+details are in `heavy-finger-rig-report.json`. Reproduce with the shared
+`tools/RigEngineerPinkies.py --character heavy` option. Its source library is
+under `source-assets/mixamo-motion/heavy-direct`, awaiting the later game bake.

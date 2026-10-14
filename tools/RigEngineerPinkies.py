@@ -1,4 +1,4 @@
-"""Add the two missing pinky chains to Engineer's user-placed Mixamo rig.
+"""Add two missing pinky chains to a user's marker-placed squad Mixamo rig.
 
 Run in Blender with -- --source <original FBX> --output <directory>.
 All existing bones and mesh vertices are preserved. Only pinky-region skin
@@ -16,6 +16,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--character', choices=('engineer', 'heavy'), default='engineer')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -25,14 +26,16 @@ mesh = next(o for o in bpy.context.scene.objects if o.type == 'MESH')
 rig.scale = (1, 1, 1)
 if rig.animation_data:
     rig.animation_data.action = None
+for bone in rig.pose.bones:
+    bone.matrix_basis.identity()
 bpy.context.view_layer.update()
 mesh_to_rig = rig.matrix_world.inverted() @ mesh.matrix_world
 points = np.array([list(mesh_to_rig @ v.co) for v in mesh.data.vertices])
 root = Path(__file__).resolve().parents[1]
 source = root / 'src/assets/actors/cleanup'
-rest = np.array([list(map(float, line.split()[1:4])) for line in (source / 'engineer.obj').read_text().splitlines()
+rest = np.array([list(map(float, line.split()[1:4])) for line in (source / (args.character + '.obj')).read_text().splitlines()
                  if line.startswith('v ')])
-cal = np.frombuffer((source / 'engineer-arms.bin').read_bytes(), dtype='u1', offset=104).reshape(-1, 4)
+cal = np.frombuffer((source / (args.character + '-arms.bin')).read_bytes(), dtype='u1', offset=104).reshape(-1, 4)
 # Mixamo retains this OBJ's corner order but its unit conversion introduces
 # sub-micrometer float differences. Validate correspondence instead of
 # rounded-coordinate dictionary keys, which lose points at rounding ties.
@@ -47,7 +50,8 @@ triangles = inverse.reshape(-1, 3)
 edges = np.unique(np.sort(np.concatenate([triangles[:, [0, 1]], triangles[:, [1, 2]],
                                          triangles[:, [2, 0]]]), axis=1), axis=0)
 parent = list(range(len(hand)))
-distal = (hand[:, 1] < .710) & (hand[:, 0] > .23)
+distal_cut = .700 if args.character == 'heavy' else .710
+distal = (hand[:, 1] < distal_cut) & (hand[:, 0] > .23)
 def find(index):
     while parent[index] != index:
         parent[index] = parent[parent[index]]
@@ -176,11 +180,11 @@ bpy.context.view_layer.update()
 assert np.max(np.abs(points - np.array([list(mesh_to_rig @ v.co) for v in mesh.data.vertices]))) == 0
 bpy.ops.object.select_all(action='DESELECT')
 rig.select_set(True); mesh.select_set(True)
-bpy.ops.export_scene.fbx(filepath=str(args.output / 'engineer-full-fingers.fbx'), use_selection=True,
+bpy.ops.export_scene.fbx(filepath=str(args.output / (args.character + '-full-fingers.fbx')), use_selection=True,
                          object_types={'ARMATURE', 'MESH'}, add_leaf_bones=False, bake_anim=False,
                          use_armature_deform_only=False, axis_forward='-Z', axis_up='Y')
-bpy.ops.wm.save_as_mainfile(filepath=str(args.output / 'engineer-full-fingers.blend'))
+bpy.ops.wm.save_as_mainfile(filepath=str(args.output / (args.character + '-full-fingers.blend')))
 report = dict(bones=65, preserved_existing_bones=len(before_bones), mesh_vertices_preserved=True,
               added_pinky_chains=2, changed_pinky_vertices=len(changed), independent_curl_checks=checks)
-(args.output / 'engineer-finger-rig-report.json').write_text(json.dumps(report, indent=2))
+(args.output / (args.character + '-finger-rig-report.json')).write_text(json.dumps(report, indent=2))
 print(json.dumps(report, indent=2))
