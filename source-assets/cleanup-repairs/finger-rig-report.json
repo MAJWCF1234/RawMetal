@@ -1,0 +1,106 @@
+{
+  "bones": 65,
+  "geometry_preserved": true,
+  "body_rig_preserved": true,
+  "normalized_height_m": 1.6,
+  "finger_weights": {
+    "mixamorig:LeftHand": 968,
+    "mixamorig:LeftForeArm": 276,
+    "mixamorig:RightHand": 732,
+    "mixamorig:RightForeArm": 138,
+    "mixamorig:RightArm": 30,
+    "mixamorig:RightHandThumb1": 158,
+    "mixamorig:RightHandThumb2": 253,
+    "mixamorig:RightHandThumb3": 222,
+    "mixamorig:RightHandIndex2": 240,
+    "mixamorig:RightHandIndex3": 180,
+    "mixamorig:RightHandIndex1": 155,
+    "mixamorig:RightHandMiddle1": 150,
+    "mixamorig:RightHandMiddle2": 242,
+    "mixamorig:RightHandMiddle3": 204,
+    "mixamorig:RightHandRing1": 147,
+    "mixamorig:RightHandRing2": 230,
+    "mixamorig:RightHandRing3": 180,
+    "mixamorig:RightHandPinky2": 302,
+    "mixamorig:RightHandPinky3": 216,
+    "mixamorig:RightHandPinky1": 197,
+    "mixamorig:LeftHandThumb1": 208,
+    "mixamorig:LeftHandThumb2": 315,
+    "mixamorig:LeftHandThumb3": 258,
+    "mixamorig:LeftHandIndex2": 240,
+    "mixamorig:LeftHandIndex3": 180,
+    "mixamorig:LeftHandIndex1": 155,
+    "mixamorig:LeftHandMiddle1": 150,
+    "mixamorig:LeftHandMiddle2": 242,
+    "mixamorig:LeftHandMiddle3": 204,
+    "mixamorig:LeftHandRing1": 147,
+    "mixamorig:LeftHandRing2": 230,
+    "mixamorig:LeftHandRing3": 180,
+    "mixamorig:LeftHandPinky2": 302,
+    "mixamorig:LeftHandPinky3": 216,
+    "mixamorig:LeftHandPinky1": 197
+  },
+  "independent_curl_checks": [
+    {
+      "side": "Left",
+      "finger": "Index",
+      "moved_vertices": 312,
+      "max_motion_m": 0.1109106265536012
+    },
+    {
+      "side": "Left",
+      "finger": "Middle",
+      "moved_vertices": 330,
+      "max_motion_m": 0.1206709762784234
+    },
+    {
+      "side": "Left",
+      "finger": "Ring",
+      "moved_vertices": 309,
+      "max_motion_m": 0.11461432536566464
+    },
+    {
+      "side": "Left",
+      "finger": "Pinky",
+      "moved_vertices": 380,
+      "max_motion_m": 0.08412548455774217
+    },
+    {
+      "side": "Left",
+      "finger": "Thumb",
+      "moved_vertices": 454,
+      "max_motion_m": 0.09728416248558415
+    },
+    {
+      "side": "Right",
+      "finger": "Index",
+      "moved_vertices": 312,
+      "max_motion_m": 0.11091066987569213
+    },
+    {
+      "side": "Right",
+      "finger": "Middle",
+      "moved_vertices": 330,
+      "max_motion_m": 0.12067092050670826
+    },
+    {
+      "side": "Right",
+      "finger": "Ring",
+      "moved_vertices": 309,
+      "max_motion_m": 0.1146142704569377
+    },
+    {
+      "side": "Right",
+      "finger": "Pinky",
+      "moved_vertices": 380,
+      "max_motion_m": 0.08412560202623563
+    },
+    {
+      "side": "Right",
+      "finger": "Thumb",
+      "moved_vertices": 368,
+      "max_motion_m": 0.09728410135681058
+    }
+  ],
+  "exported": "diagnostics\\assault-finger-rig-20261013\\fixed\\assault-full-fingers.fbx"
+}

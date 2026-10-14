@@ -1,0 +1,5 @@
+# Local browser download paths are transient; manifest.json is provenance.
+downloads.json
+**/*.fbx
+**/*.FBX
+**/*.zip
