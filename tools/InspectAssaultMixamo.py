@@ -1,4 +1,4 @@
-"""Audit downloaded Assault clips and catalogue their actual durations.
+"""Audit downloaded character clips and catalogue their actual durations.
 
 Run in Blender with -- --library <assault-direct directory>. The manifest
 is generated from verified browser downloads. This checks every FBX's full
@@ -27,7 +27,7 @@ for group in manifest['packs']:
         assert len(rig.data.bones) == 65, (entry['file'], len(rig.data.bones))
         assert all(name in rig.data.bones for name in required), entry['file']
         actions = list(bpy.data.actions)
-        character_file = 'assault-full-fingers' in entry['file']
+        character_file = Path(entry['file']).stem.lower() == manifest['character'].lower()
         item = dict(file=entry['file'], group=group['name'], bones=len(rig.data.bones),
                     kind='character' if character_file else 'animation',
                     fps=bpy.context.scene.render.fps, actions=[])
@@ -58,7 +58,7 @@ for group in manifest['packs']:
                                         duration_seconds=float((end - start) / item['fps']),
                                         max_finger_rotation_degrees=math.degrees(max(angles))))
         if not actions:
-            assert 'assault-full-fingers' in entry['file'], entry['file']
+            assert character_file, entry['file']
         results.append(item)
         print('AUDITED', entry['file'], len(actions), flush=True)
 report = dict(character=manifest['character'], requested_export_fps=24, target_bake_fps=24,
