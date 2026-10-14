@@ -13,7 +13,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--library', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter', 'heavy', 'rusher'), default='engineer')
+parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter', 'heavy', 'rusher', 'investigator'), default='engineer')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 catalog = json.loads((args.library / 'clip-catalog.json').read_text())
@@ -54,6 +54,16 @@ elif args.character == 'rusher':
         ('unarmed-run', '@male-locomotion-pack/standard run.fbx', [.5]),
         ('front-kick', 'Kicking - Male Thrust Kick With The Lead Foot', [.5]),
     ]
+elif args.character == 'investigator':
+    base = args.library / 'pro-rifle-pack/investigator.fbx'
+    selections = [
+        ('coat-walk', '@male-locomotion-pack/walking.fbx', [.25, .5, .75]),
+        ('pistol', '@pistol-handgun-locomotion-pack/pistol idle.fbx', [.5]),
+        ('rifle-aim', '@pro-rifle-pack/idle aiming.fbx', [.5]),
+        ('crouch-aim', '@pro-rifle-pack/idle crouching aiming.fbx', [.5]),
+        ('awareness', 'Looking Around - Idle Stand Looking Around', [.5]),
+        ('prone-aim', 'Prone Idle - Lying Down Prone With Rifle', [.5]),
+    ]
 trajectories = []
 for label, group, phases in selections:
     entry = next(c for c in catalog['clips']
@@ -69,7 +79,7 @@ for label, group, phases in selections:
         # Pack exports use the pack character's bind pose. Mixing that action
         # with a separately exported clip's skin can rotate limbs incorrectly.
         skin_source = (args.library / Path(group[1:]).parent /
-                       (args.character + '-full-fingers.fbx') if group.startswith('@') else base)
+                       (catalog['character'] + '.fbx') if group.startswith('@') else base)
         if not skin_source.exists():
             skin_source = base
         bpy.ops.import_scene.fbx(filepath=str(skin_source))
@@ -155,11 +165,12 @@ for label, group, phases in selections:
             light_data.size = 2
         scene.render.filepath = str(args.output / f'{label}-{round(phase * 100):03d}.png')
         bpy.ops.render.render(write_still=True)
-        if args.character == 'medic' and label == 'pistol':
+        if args.character in ('medic', 'investigator') and label == 'pistol':
             center = rig.matrix_world @ ((rig.pose.bones['mixamorig:LeftHand'].head
                                           + rig.pose.bones['mixamorig:RightHand'].head) / 2)
-            camera_data.ortho_scale = .35
-            camera.location = center + Vector((.35, -.45, .20))
+            closeup_scale = .9 if args.character == 'investigator' else .35
+            camera_data.ortho_scale = closeup_scale
+            camera.location = center + Vector((1, -1.3, .57)) * closeup_scale
             camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
             scene.render.filepath = str(args.output / 'pistol-fingers.png')
             bpy.ops.render.render(write_still=True)
