@@ -78,3 +78,12 @@ hands, adding the two missing pinky chains. All ten finger checks passed;
 details are in `heavy-finger-rig-report.json`. Reproduce with the shared
 `tools/RigEngineerPinkies.py --character heavy` option. Its source library is
 under `source-assets/mixamo-motion/heavy-direct`, awaiting the later game bake.
+
+## Rusher fingers
+
+`rusher-original-mixamo.fbx` preserves the user's marker-placed 33-bone export.
+`rusher-full-fingers.fbx` fits all five digit chains to each original hand;
+geometry and the body rig are preserved. All ten finger checks passed,
+recorded in `rusher-finger-rig-report.json`. Reproduce with the shared
+`tools/RigAssaultFingers.py --character rusher` option. Its verified source
+library is under `source-assets/mixamo-motion/rusher-direct`, pending baking.

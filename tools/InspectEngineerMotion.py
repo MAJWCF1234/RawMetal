@@ -13,7 +13,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--library', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter', 'heavy'), default='engineer')
+parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter', 'heavy', 'rusher'), default='engineer')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 catalog = json.loads((args.library / 'clip-catalog.json').read_text())
@@ -46,6 +46,14 @@ elif args.character == 'heavy':
         ('rifle-walk', '@pro-rifle-pack/walk forward.fbx', [.5]),
         ('rifle-block', 'Block With Rifle - Blocking With Rifle', [.5]),
     ]
+elif args.character == 'rusher':
+    base = args.library / 'special/cross-punch.fbx'
+    selections = [
+        ('cross-punch', 'Cross Punch', [.25, .5, .75]),
+        ('rifle-run', '@pro-rifle-pack/run forward.fbx', [.5]),
+        ('unarmed-run', '@male-locomotion-pack/standard run.fbx', [.5]),
+        ('front-kick', 'Kicking - Male Thrust Kick With The Lead Foot', [.5]),
+    ]
 trajectories = []
 for label, group, phases in selections:
     entry = next(c for c in catalog['clips']
@@ -62,6 +70,8 @@ for label, group, phases in selections:
         # with a separately exported clip's skin can rotate limbs incorrectly.
         skin_source = (args.library / Path(group[1:]).parent /
                        (args.character + '-full-fingers.fbx') if group.startswith('@') else base)
+        if not skin_source.exists():
+            skin_source = base
         bpy.ops.import_scene.fbx(filepath=str(skin_source))
         rig = next(o for o in bpy.context.scene.objects if o.type == 'ARMATURE' and o != target_rig)
         rig.animation_data.action = None
@@ -159,6 +169,13 @@ for label, group, phases in selections:
             camera.location = center + Vector((-.30, -.45, .25))
             camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
             scene.render.filepath = str(args.output / 'rifle-fingers.png')
+            bpy.ops.render.render(write_still=True)
+        elif args.character == 'rusher' and label == 'cross-punch' and phase == .5:
+            center = rig.matrix_world @ rig.pose.bones['mixamorig:RightHand'].head
+            camera_data.ortho_scale = .32
+            camera.location = center + Vector((-.35, -.45, .20))
+            camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
+            scene.render.filepath = str(args.output / 'punch-fingers.png')
             bpy.ops.render.render(write_still=True)
 (args.output / 'hand-trajectories.json').write_text(json.dumps(trajectories, indent=2))
 print('PASS: rendered original skinned poses and sampled both hand trajectories')

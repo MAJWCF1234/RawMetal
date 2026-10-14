@@ -17,7 +17,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--character', choices=('assault', 'medic', 'sharpshooter'), default='assault')
+parser.add_argument('--character', choices=('assault', 'medic', 'sharpshooter', 'rusher'), default='assault')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='SELECT')
@@ -62,11 +62,14 @@ hand_mask |= np.array([any('Hand' in name and not name.endswith('Hand') and valu
 hand = np.unique(np.round(points[hand_mask & (points[:, 0] < 0)] * [-1, 1, 1], 6), axis=0)
 fingers = {}
 centers = {'assault': (.129, .107, .085, .065), 'medic': (.108, .088, .066, .045),
-           'sharpshooter': (.151, .129, .105, .081)}[args.character]
-finger_base_y = .675 if args.character == 'sharpshooter' else .715
+           'sharpshooter': (.151, .129, .105, .081),
+           'rusher': (.077, .059, .041, .023)}[args.character]
+finger_base_y = {'assault': .715, 'medic': .715, 'sharpshooter': .675,
+                 'rusher': .780}[args.character]
 for name, center in zip(('Index', 'Middle', 'Ring', 'Pinky'), centers):
     distal = hand[(hand[:, 1] < finger_base_y - .010) &
-                  (hand[:, 0] > (.22 if args.character == 'sharpshooter' else .25)) &
+                  (hand[:, 0] > {'assault': .25, 'medic': .25, 'sharpshooter': .22,
+                                 'rusher': .21}[args.character]) &
                   (np.abs(hand[:, 2] - center) < .012)]
     assert len(distal) > 30, name
     # Distal geometry exposes four distinct fingers below the shared web.
@@ -85,6 +88,9 @@ fingers['Thumb'] = np.array([[.259, .777, .123], [.237, .757, .140],
 if args.character == 'sharpshooter':
     fingers['Thumb'] = np.array([[.262, .737, .129], [.238, .717, .146],
                                  [.222, .704, .154], [.209, .697, .156]])
+elif args.character == 'rusher':
+    fingers['Thumb'] = np.array([[.224, .825, .057], [.207, .807, .072],
+                                 [.192, .791, .079], [.181, .786, .082]])
 
 bpy.ops.object.select_all(action='DESELECT')
 rig.select_set(True)
@@ -98,7 +104,8 @@ for bone in list(rig.data.edit_bones):
 for side, sign in [('Left', 1), ('Right', -1)]:
     wrist = rig.data.edit_bones[f'mixamorig:{side}Hand']
     wrist_center = {'assault': (.273, .735, .095), 'medic': (.280, .720, .071),
-                    'sharpshooter': (.274, .695, .098)}[args.character]
+                    'sharpshooter': (.274, .695, .098),
+                    'rusher': (.240, .795, .033)}[args.character]
     wrist.tail = Vector((wrist_center[0] * sign, wrist_center[1], wrist_center[2]))
     for name, fitted in fingers.items():
         chain = fitted * [sign, 1, 1]
@@ -147,6 +154,8 @@ for index in np.flatnonzero(hand_mask):
         base_y, base_x = (.780, .262) if args.character == 'assault' else (.760, .270)
         if args.character == 'sharpshooter':
             base_y, base_x = .740, .265
+        elif args.character == 'rusher':
+            base_y, base_x = .829, .228
         influence = float(np.clip((base_y - p[1]) / .028, 0, 1))
         influence *= float(np.clip((base_x - p[0]) / .028, 0, 1))
     else:
