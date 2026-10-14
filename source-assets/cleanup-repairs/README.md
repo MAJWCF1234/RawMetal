@@ -59,3 +59,13 @@ in `medic-finger-rig-report.json`.
 The shared `tools/RigAssaultFingers.py` now accepts `--character medic` to
 reproduce this repair. Reuploaded Medic sources are catalogued under
 `source-assets/mixamo-motion/medic-direct`; they await the later game bake.
+
+## Sharpshooter fingers
+
+Sharpshooter keeps both original hands. Its marker-placed 33-bone export is
+saved as `sharpshooter-original-mixamo.fbx`. The repaired
+`sharpshooter-full-fingers.fbx` supplies all five fitted digit chains per hand
+and passes ten independent bend checks, recorded in
+`sharpshooter-finger-rig-report.json`. Reproduce with the shared rig tool's
+`--character sharpshooter` option. The complete source animation library is
+under `source-assets/mixamo-motion/sharpshooter-direct`, pending the later bake.

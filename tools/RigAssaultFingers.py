@@ -17,7 +17,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--character', choices=('assault', 'medic'), default='assault')
+parser.add_argument('--character', choices=('assault', 'medic', 'sharpshooter'), default='assault')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='SELECT')
@@ -27,6 +27,8 @@ rig = next(o for o in bpy.context.scene.objects if o.type == 'ARMATURE')
 mesh = next(o for o in bpy.context.scene.objects if o.type == 'MESH')
 if rig.animation_data:
     rig.animation_data.action = None
+for bone in rig.pose.bones:
+    bone.matrix_basis.identity()
 # Mixamo treated the meter-sized OBJ coordinates as centimeters in its FBX.
 # Normalize the rig object before re-export so animated preview and character
 # framing agree on scale. The parented mesh follows without changing vertices.
@@ -59,16 +61,20 @@ hand_mask |= np.array([any('Hand' in name and not name.endswith('Hand') and valu
 # Fit to the original intact hand, represented on the positive side here.
 hand = np.unique(np.round(points[hand_mask & (points[:, 0] < 0)] * [-1, 1, 1], 6), axis=0)
 fingers = {}
-centers = (.129, .107, .085, .065) if args.character == 'assault' else (.108, .088, .066, .045)
+centers = {'assault': (.129, .107, .085, .065), 'medic': (.108, .088, .066, .045),
+           'sharpshooter': (.151, .129, .105, .081)}[args.character]
+finger_base_y = .675 if args.character == 'sharpshooter' else .715
 for name, center in zip(('Index', 'Middle', 'Ring', 'Pinky'), centers):
-    distal = hand[(hand[:, 1] < .705) & (hand[:, 0] > .25) & (np.abs(hand[:, 2] - center) < .012)]
+    distal = hand[(hand[:, 1] < finger_base_y - .010) &
+                  (hand[:, 0] > (.22 if args.character == 'sharpshooter' else .25)) &
+                  (np.abs(hand[:, 2] - center) < .012)]
     assert len(distal) > 30, name
     # Distal geometry exposes four distinct fingers below the shared web.
     # Fit centerlines from the actual surface rings, rather than the broken
     # autorigger's single oversized index chain.
     xs = np.polyfit(distal[:, 1], distal[:, 0], 1)
     zs = np.polyfit(distal[:, 1], distal[:, 2], 1)
-    base_y, tip_y = .715, float(distal[:, 1].min()) + .002
+    base_y, tip_y = finger_base_y, float(distal[:, 1].min()) + .002
     ys = np.linspace(base_y, tip_y, 4)
     chain = np.array([[np.polyval(xs, y), y, np.polyval(zs, y)] for y in ys])
     fingers[name] = chain
@@ -76,6 +82,9 @@ fingers['Thumb'] = np.array([[.259, .777, .123], [.237, .757, .140],
                             [.222, .745, .152], [.208, .735, .153]] if args.character == 'assault'
                            else [[.270, .754, .102], [.253, .743, .115],
                                  [.239, .727, .124], [.223, .722, .125]])
+if args.character == 'sharpshooter':
+    fingers['Thumb'] = np.array([[.262, .737, .129], [.238, .717, .146],
+                                 [.222, .704, .154], [.209, .697, .156]])
 
 bpy.ops.object.select_all(action='DESELECT')
 rig.select_set(True)
@@ -88,8 +97,9 @@ for bone in list(rig.data.edit_bones):
         rig.data.edit_bones.remove(bone)
 for side, sign in [('Left', 1), ('Right', -1)]:
     wrist = rig.data.edit_bones[f'mixamorig:{side}Hand']
-    wrist.tail = Vector((.273 * sign, .735, .095) if args.character == 'assault'
-                        else (.280 * sign, .720, .071))
+    wrist_center = {'assault': (.273, .735, .095), 'medic': (.280, .720, .071),
+                    'sharpshooter': (.274, .695, .098)}[args.character]
+    wrist.tail = Vector((wrist_center[0] * sign, wrist_center[1], wrist_center[2]))
     for name, fitted in fingers.items():
         chain = fitted * [sign, 1, 1]
         parent = wrist
@@ -135,10 +145,12 @@ for index in np.flatnonzero(hand_mask):
     # distal fingers receive only their own chain, never another digit's.
     if name == 'Thumb':
         base_y, base_x = (.780, .262) if args.character == 'assault' else (.760, .270)
+        if args.character == 'sharpshooter':
+            base_y, base_x = .740, .265
         influence = float(np.clip((base_y - p[1]) / .028, 0, 1))
         influence *= float(np.clip((base_x - p[0]) / .028, 0, 1))
     else:
-        influence = float(np.clip((.715 - p[1]) / .016, 0, 1))
+        influence = float(np.clip((finger_base_y - p[1]) / .016, 0, 1))
     influence = influence * influence * (3 - 2 * influence)
     retained = {name: weight for name, weight in old_weights[index].items() if 'Hand' not in name}
     hand_total = 1 - sum(retained.values())
@@ -171,6 +183,7 @@ for side in ('Left', 'Right'):
     for name in fingers:
         for pb in rig.pose.bones:
             pb.rotation_mode = 'XYZ'; pb.rotation_euler = (0, 0, 0)
+            pb.location = (0, 0, 0); pb.scale = (1, 1, 1)
         bpy.context.view_layer.update()
         before = np.array([list(v.co) for v in mesh.evaluated_get(depsgraph).data.vertices])
         for i, angle in enumerate((45, 55, 40)):
@@ -183,6 +196,7 @@ for side in ('Left', 'Right'):
         checks.append(dict(side=side, finger=name, moved_vertices=moved, max_motion_m=maximum))
 for pb in rig.pose.bones:
     pb.rotation_euler = (0, 0, 0)
+    pb.location = (0, 0, 0); pb.scale = (1, 1, 1)
 bpy.context.view_layer.update()
 bpy.ops.object.select_all(action='DESELECT')
 rig.select_set(True); mesh.select_set(True)

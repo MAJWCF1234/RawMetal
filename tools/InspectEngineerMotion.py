@@ -13,7 +13,7 @@ from mathutils import Vector
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--library', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--character', choices=('engineer', 'medic'), default='engineer')
+parser.add_argument('--character', choices=('engineer', 'medic', 'sharpshooter'), default='engineer')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 args.output.mkdir(parents=True, exist_ok=True)
 catalog = json.loads((args.library / 'clip-catalog.json').read_text())
@@ -31,6 +31,13 @@ if args.character == 'medic':
         ('cpr', 'Administering Cpr - Administering Cpr To A Victim On The Ground', [.25, .5, .75]),
         ('pistol', '@pistol-handgun-locomotion-pack/pistol idle.fbx', [.5]),
     ]
+elif args.character == 'sharpshooter':
+    base = args.library / 'special/prone-idle-lying-down-prone-with-rifle.fbx'
+    selections = [
+        ('rifle-aim', '@pro-rifle-pack/idle aiming.fbx', [.5]),
+        ('crouch-aim', '@pro-rifle-pack/idle crouching aiming.fbx', [.5]),
+        ('prone-aim', 'Prone Idle - Lying Down Prone With Rifle', [.5]),
+    ]
 trajectories = []
 for label, group, phases in selections:
     entry = next(c for c in catalog['clips']
@@ -45,7 +52,7 @@ for label, group, phases in selections:
         target_rig.hide_render = True
         # Pack exports use the pack character's bind pose. Mixing that action
         # with a separately exported clip's skin can rotate limbs incorrectly.
-        skin_source = (args.library / 'pistol-handgun-locomotion-pack' /
+        skin_source = (args.library / Path(group[1:]).parent /
                        (args.character + '-full-fingers.fbx') if group.startswith('@') else base)
         bpy.ops.import_scene.fbx(filepath=str(skin_source))
         rig = next(o for o in bpy.context.scene.objects if o.type == 'ARMATURE' and o != target_rig)
@@ -137,6 +144,13 @@ for label, group, phases in selections:
             camera.location = center + Vector((.35, -.45, .20))
             camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
             scene.render.filepath = str(args.output / 'pistol-fingers.png')
+            bpy.ops.render.render(write_still=True)
+        elif args.character == 'sharpshooter' and label == 'rifle-aim':
+            center = rig.matrix_world @ rig.pose.bones['mixamorig:RightHand'].head
+            camera_data.ortho_scale = .32
+            camera.location = center + Vector((-.30, -.45, .25))
+            camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
+            scene.render.filepath = str(args.output / 'rifle-fingers.png')
             bpy.ops.render.render(write_still=True)
 (args.output / 'hand-trajectories.json').write_text(json.dumps(trajectories, indent=2))
 print('PASS: rendered original skinned poses and sampled both hand trajectories')
