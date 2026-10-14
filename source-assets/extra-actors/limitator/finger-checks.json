@@ -1,0 +1,62 @@
+[
+  {
+    "side": "Left",
+    "finger": "Thumb",
+    "moved_vertices": 62,
+    "max_motion_m": 0.18421364185055464
+  },
+  {
+    "side": "Left",
+    "finger": "Index",
+    "moved_vertices": 32,
+    "max_motion_m": 0.0958929193012626
+  },
+  {
+    "side": "Left",
+    "finger": "Middle",
+    "moved_vertices": 25,
+    "max_motion_m": 0.11934223319518147
+  },
+  {
+    "side": "Left",
+    "finger": "Ring",
+    "moved_vertices": 32,
+    "max_motion_m": 0.11468006450239625
+  },
+  {
+    "side": "Left",
+    "finger": "Pinky",
+    "moved_vertices": 28,
+    "max_motion_m": 0.06246044465971266
+  },
+  {
+    "side": "Right",
+    "finger": "Thumb",
+    "moved_vertices": 53,
+    "max_motion_m": 0.18352469454342893
+  },
+  {
+    "side": "Right",
+    "finger": "Index",
+    "moved_vertices": 45,
+    "max_motion_m": 0.09782375907401793
+  },
+  {
+    "side": "Right",
+    "finger": "Middle",
+    "moved_vertices": 35,
+    "max_motion_m": 0.11543324701887246
+  },
+  {
+    "side": "Right",
+    "finger": "Ring",
+    "moved_vertices": 37,
+    "max_motion_m": 0.10620134928430888
+  },
+  {
+    "side": "Right",
+    "finger": "Pinky",
+    "moved_vertices": 25,
+    "max_motion_m": 0.050655504066612796
+  }
+]

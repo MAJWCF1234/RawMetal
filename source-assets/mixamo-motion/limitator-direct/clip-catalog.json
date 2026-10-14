@@ -1,0 +1,3713 @@
+{
+  "character": "limitator",
+  "requested_export_fps": 24,
+  "target_bake_fps": 24,
+  "source_timeline_counts": {
+    "24": 178,
+    "30": 50
+  },
+  "individual_source_fps": 24,
+  "files": 228,
+  "animated_files": 227,
+  "full_finger_skeleton_verified": true,
+  "finite_sampled_poses": true,
+  "clips": [
+    {
+      "file": "pro-rifle-pack/crouching turn 90 left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 39.0,
+          "duration_seconds": 1.2666666666666666,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/crouching turn 90 right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 39.0,
+          "duration_seconds": 1.2666666666666666,
+          "max_finger_rotation_degrees": 114.16143469337226
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/death crouching headshot front.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 58.0,
+          "duration_seconds": 1.9,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/death from back headshot.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 112.0,
+          "duration_seconds": 3.7,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/death from front headshot.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 86.0,
+          "duration_seconds": 2.8333333333333335,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/death from right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 100.0,
+          "duration_seconds": 3.3,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/death from the back.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 90.0,
+          "duration_seconds": 2.966666666666667,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/death from the front.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 104.0,
+          "duration_seconds": 3.433333333333333,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/idle aiming.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 64.0,
+          "duration_seconds": 2.1,
+          "max_finger_rotation_degrees": 114.16130491977803
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/idle crouching aiming.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 63.0,
+          "duration_seconds": 2.066666666666667,
+          "max_finger_rotation_degrees": 114.16142786318309
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/idle crouching.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 63.0,
+          "duration_seconds": 2.066666666666667,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/idle.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 63.0,
+          "duration_seconds": 2.066666666666667,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/jump down.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 21.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/jump loop.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 29.0,
+          "duration_seconds": 0.9333333333333333,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/jump up.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.5333333333333333,
+          "max_finger_rotation_degrees": 114.1615166556423
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/Limitator.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "character",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|Armature|Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 2.0,
+          "duration_seconds": 0.03333333333333333,
+          "max_finger_rotation_degrees": 27.94449638524574
+        },
+        {
+          "name": "Armature|Armature|MCH_Rotation_target.001Action",
+          "first_frame": 1.0,
+          "last_frame": 250.0,
+          "duration_seconds": 8.3,
+          "max_finger_rotation_degrees": 27.94449638524574
+        },
+        {
+          "name": "Armature|Armature|MCH_Rotation_target.002Action",
+          "first_frame": 1.0,
+          "last_frame": 250.0,
+          "duration_seconds": 8.3,
+          "max_finger_rotation_degrees": 27.94449638524574
+        },
+        {
+          "name": "Armature|Armature|MCH_Rotation_targetAction",
+          "first_frame": 1.0,
+          "last_frame": 250.0,
+          "duration_seconds": 8.3,
+          "max_finger_rotation_degrees": 27.94449638524574
+        },
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 2.0,
+          "duration_seconds": 0.03333333333333333,
+          "max_finger_rotation_degrees": 27.94978465921062
+        },
+        {
+          "name": "MCH_Rotation_target.002|MCH_Rotation_target.002|MCH_Rotation_target.001Action",
+          "first_frame": 1.0,
+          "last_frame": 250.0,
+          "duration_seconds": 8.3,
+          "max_finger_rotation_degrees": 27.94978465921062
+        },
+        {
+          "name": "MCH_Rotation_target.002|MCH_Rotation_target.002|MCH_Rotation_target.002Action",
+          "first_frame": 1.0,
+          "last_frame": 250.0,
+          "duration_seconds": 8.3,
+          "max_finger_rotation_degrees": 27.94978465921062
+        },
+        {
+          "name": "MCH_Rotation_target.002|MCH_Rotation_target.002|MCH_Rotation_targetAction",
+          "first_frame": 1.0,
+          "last_frame": 250.0,
+          "duration_seconds": 8.3,
+          "max_finger_rotation_degrees": 27.94978465921062
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run backward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run backward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150299526396
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run backward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run forward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 68.9695563518746
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run forward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150299526396
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run forward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/run right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint backward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint backward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150299526396
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint backward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint forward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint forward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint forward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/sprint right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150982545314
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/turn 90 left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 30.0,
+          "duration_seconds": 0.9666666666666667,
+          "max_finger_rotation_degrees": 114.1615166556423
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/turn 90 right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk backward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 30.0,
+          "duration_seconds": 0.9666666666666667,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk backward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16152348583147
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk backward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching backward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching backward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching backward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16138688204808
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching forward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching forward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching forward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16154397639899
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16140737261559
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk crouching right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146884431811
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk forward left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16155080658815
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk forward right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk forward.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16153714620981
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk left.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16140737261559
+        }
+      ]
+    },
+    {
+      "file": "pro-rifle-pack/walk right.fbx",
+      "group": "Pro Rifle Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 30,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146884431811
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/crouching turn 90 left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.25,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/crouching turn 90 right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.25,
+          "max_finger_rotation_degrees": 114.16143469337226
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/death crouching headshot front.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 47.0,
+          "duration_seconds": 1.9166666666666667,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/death from back headshot.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 90.0,
+          "duration_seconds": 3.7083333333333335,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/death from front headshot.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 69.0,
+          "duration_seconds": 2.8333333333333335,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/death from right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 80.0,
+          "duration_seconds": 3.2916666666666665,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/death from the back.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 72.0,
+          "duration_seconds": 2.9583333333333335,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/death from the front.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 83.0,
+          "duration_seconds": 3.4166666666666665,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/idle aiming.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 49.0,
+          "duration_seconds": 2.0,
+          "max_finger_rotation_degrees": 114.16130491977803
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/idle crouching aiming.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 48.0,
+          "duration_seconds": 1.9583333333333333,
+          "max_finger_rotation_degrees": 114.16142786318309
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/idle crouching.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 51.0,
+          "duration_seconds": 2.0833333333333335,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/idle.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 51.0,
+          "duration_seconds": 2.0833333333333335,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/jump down.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/jump loop.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 23.0,
+          "duration_seconds": 0.9166666666666666,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/jump up.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 14.0,
+          "duration_seconds": 0.5416666666666666,
+          "max_finger_rotation_degrees": 114.1615166556423
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run backward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run backward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150299526396
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run backward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run forward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 68.9695563518746
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run forward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150299526396
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run forward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/run right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint backward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint backward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150299526396
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint backward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint forward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint forward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint forward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/sprint right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 114.16150982545314
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/turn 90 left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.1615166556423
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/turn 90 right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk backward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk backward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16152348583147
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk backward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.1614483537506
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching backward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching backward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16148933488563
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching backward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16138688204808
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching forward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146201412894
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching forward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching forward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16154397639899
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16140737261559
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk crouching right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146884431811
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk forward left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16155080658815
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk forward right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16147567450729
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk forward.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16153714620981
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk left.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16140737261559
+        }
+      ]
+    },
+    {
+      "file": "rifle-8-way-locomotion-pack/walk right.fbx",
+      "group": "Rifle 8-Way Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 114.16146884431811
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/firing rifle.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 7.0,
+          "duration_seconds": 0.25,
+          "max_finger_rotation_degrees": 110.92305076257246
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/hit reaction.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 11.0,
+          "duration_seconds": 0.4166666666666667,
+          "max_finger_rotation_degrees": 110.57225907698977
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/reloading.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 80.0,
+          "duration_seconds": 3.2916666666666665,
+          "max_finger_rotation_degrees": 110.57227273736811
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/rifle aiming idle.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 75.0,
+          "duration_seconds": 3.0833333333333335,
+          "max_finger_rotation_degrees": 110.6477804786426
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/rifle jump.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 110.57613179424916
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/rifle run.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 18.0,
+          "duration_seconds": 0.7083333333333334,
+          "max_finger_rotation_degrees": 110.59356243701104
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/run backwards.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 14.0,
+          "duration_seconds": 0.5416666666666666,
+          "max_finger_rotation_degrees": 110.57225907698977
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/strafe (2).fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 14.0,
+          "duration_seconds": 0.5416666666666666,
+          "max_finger_rotation_degrees": 110.65150293174025
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/strafe left.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 110.59714145613613
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/strafe right.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 35.0,
+          "duration_seconds": 1.4166666666666667,
+          "max_finger_rotation_degrees": 110.65598353583579
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/strafe.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 110.57220443547641
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/toss grenade.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 78.0,
+          "duration_seconds": 3.2083333333333335,
+          "max_finger_rotation_degrees": 110.70929999249691
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/turn left.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 110.57227273736811
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/turning right 45 degrees.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 110.585646247763
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/walking backwards.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 35.0,
+          "duration_seconds": 1.4166666666666667,
+          "max_finger_rotation_degrees": 113.10952408948776
+        }
+      ]
+    },
+    {
+      "file": "basic-shooter-pack/walking.fbx",
+      "group": "Basic Shooter Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 34.0,
+          "duration_seconds": 1.375,
+          "max_finger_rotation_degrees": 110.57223858642226
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/cover to stand (2).fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 35.0,
+          "duration_seconds": 1.4166666666666667,
+          "max_finger_rotation_degrees": 91.84401014640903
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/cover to stand.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 37.0,
+          "duration_seconds": 1.5,
+          "max_finger_rotation_degrees": 68.23047524216585
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/crouched sneaking left.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.25,
+          "max_finger_rotation_degrees": 54.11652452992732
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/crouched sneaking right.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 45.55609476389401
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/falling idle.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 46.86164444260693
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/falling to roll.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 44.0,
+          "duration_seconds": 1.7916666666666667,
+          "max_finger_rotation_degrees": 81.2987103320971
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/hard landing.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 49.0,
+          "duration_seconds": 2.0,
+          "max_finger_rotation_degrees": 72.78352715422055
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/idle (2).fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 240.0,
+          "duration_seconds": 9.958333333333334,
+          "max_finger_rotation_degrees": 44.42269658811668
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/idle (3).fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 79.0,
+          "duration_seconds": 3.25,
+          "max_finger_rotation_degrees": 90.49620891749042
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/idle (4).fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 62.0,
+          "duration_seconds": 2.5416666666666665,
+          "max_finger_rotation_degrees": 40.070715199943415
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/idle (5).fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 54.0,
+          "duration_seconds": 2.2083333333333335,
+          "max_finger_rotation_degrees": 57.810605021772034
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/idle.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 93.0,
+          "duration_seconds": 3.8333333333333335,
+          "max_finger_rotation_degrees": 89.92463136698707
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/jumping up.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 6.0,
+          "duration_seconds": 0.20833333333333334,
+          "max_finger_rotation_degrees": 41.732903206168544
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/left cover sneak.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 28.0,
+          "duration_seconds": 1.125,
+          "max_finger_rotation_degrees": 37.403587800755965
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/left turn.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 55.745251439408555
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/right cover sneak.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 28.0,
+          "duration_seconds": 1.125,
+          "max_finger_rotation_degrees": 38.420459534198294
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/right turn.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 60.788745084816014
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/run to stop.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 23.0,
+          "duration_seconds": 0.9166666666666666,
+          "max_finger_rotation_degrees": 98.71912147059297
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/running.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 18.0,
+          "duration_seconds": 0.7083333333333334,
+          "max_finger_rotation_degrees": 99.3433871003538
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/stand to cover (2).fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 31.0,
+          "duration_seconds": 1.25,
+          "max_finger_rotation_degrees": 59.89315019027643
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/stand to cover.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 28.0,
+          "duration_seconds": 1.125,
+          "max_finger_rotation_degrees": 57.810605021772034
+        }
+      ]
+    },
+    {
+      "file": "action-adventure-pack/walking.fbx",
+      "group": "Action Adventure Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 105.36777787284511
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/idle.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 185.0,
+          "duration_seconds": 7.666666666666667,
+          "max_finger_rotation_degrees": 37.51651473339837
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/jump.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 53.0,
+          "duration_seconds": 2.1666666666666665,
+          "max_finger_rotation_degrees": 45.06058161508251
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/left strafe walking.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 39.51570768836652
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/left strafe.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 95.91075258955883
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/left turn 90.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 23.0,
+          "duration_seconds": 0.9166666666666666,
+          "max_finger_rotation_degrees": 37.518785771297395
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/right strafe walking.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 39.80164672777993
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/right strafe.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 95.58254833956137
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/right turn 90.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 23.0,
+          "duration_seconds": 0.9166666666666666,
+          "max_finger_rotation_degrees": 37.51674695983015
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/standard run.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 18.0,
+          "duration_seconds": 0.7083333333333334,
+          "max_finger_rotation_degrees": 88.3563379712821
+        }
+      ]
+    },
+    {
+      "file": "male-locomotion-pack/walking.fbx",
+      "group": "Male Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 47.67544782183561
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured backwards turn left.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 19.0,
+          "duration_seconds": 0.75,
+          "max_finger_rotation_degrees": 96.19028491153077
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured backwards turn right.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 18.0,
+          "duration_seconds": 0.7083333333333334,
+          "max_finger_rotation_degrees": 57.333024534626404
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured hurting idle.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 144.0,
+          "duration_seconds": 5.958333333333333,
+          "max_finger_rotation_degrees": 43.08920802060383
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured idle.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 225.0,
+          "duration_seconds": 9.333333333333334,
+          "max_finger_rotation_degrees": 94.69249955862784
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured run backwards left turn.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 94.31917507897327
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured run backwards right turn.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 14.0,
+          "duration_seconds": 0.5416666666666666,
+          "max_finger_rotation_degrees": 99.52666839654191
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured run backwards.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 98.49599285078699
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured run jump.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 18.0,
+          "duration_seconds": 0.7083333333333334,
+          "max_finger_rotation_degrees": 100.49864529656975
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured run left turn.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 109.19496509123505
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured run right turn.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.625,
+          "max_finger_rotation_degrees": 105.8433434541856
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured run.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.625,
+          "max_finger_rotation_degrees": 94.5425427554002
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured standing jump.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 47.0,
+          "duration_seconds": 1.9166666666666667,
+          "max_finger_rotation_degrees": 47.199906146157225
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured stumble idle.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 121.99999237060547,
+          "duration_seconds": 5.041666348775228,
+          "max_finger_rotation_degrees": 70.63066518821087
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured turn left.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 22.0,
+          "duration_seconds": 0.875,
+          "max_finger_rotation_degrees": 107.7543757424418
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured turn right.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 95.31697692425293
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured walk backwards.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 41.0,
+          "duration_seconds": 1.6666666666666667,
+          "max_finger_rotation_degrees": 86.33447903355328
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured walk left turn.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 49.0,
+          "duration_seconds": 2.0,
+          "max_finger_rotation_degrees": 44.831848825062536
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured walk right turn.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 45.0,
+          "duration_seconds": 1.8333333333333333,
+          "max_finger_rotation_degrees": 100.69349693321188
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured walk.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 40.0,
+          "duration_seconds": 1.625,
+          "max_finger_rotation_degrees": 88.73140414917502
+        }
+      ]
+    },
+    {
+      "file": "male-injured-pack/injured wave idle.fbx",
+      "group": "Male Injured Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 121.99999237060547,
+          "duration_seconds": 5.041666348775228,
+          "max_finger_rotation_degrees": 64.26093322109453
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/acknowledging.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 36.0,
+          "duration_seconds": 1.4583333333333333,
+          "max_finger_rotation_degrees": 46.76301992608653
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/angry gesture.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 54.0,
+          "duration_seconds": 2.2083333333333335,
+          "max_finger_rotation_degrees": 37.51806518633996
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/annoyed head shake.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 62.0,
+          "duration_seconds": 2.5416666666666665,
+          "max_finger_rotation_degrees": 37.51649082773627
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/being cocky.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 58.0,
+          "duration_seconds": 2.375,
+          "max_finger_rotation_degrees": 52.753447582929965
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/dismissing gesture.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 78.0,
+          "duration_seconds": 3.2083333333333335,
+          "max_finger_rotation_degrees": 37.516938205126905
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/happy hand gesture.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 69.0,
+          "duration_seconds": 2.8333333333333335,
+          "max_finger_rotation_degrees": 37.5238196207157
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/hard head nod.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 40.0,
+          "duration_seconds": 1.625,
+          "max_finger_rotation_degrees": 37.519806884578315
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/head nod yes.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 55.0,
+          "duration_seconds": 2.25,
+          "max_finger_rotation_degrees": 37.533436527067074
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/lengthy head nod.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 42.0,
+          "duration_seconds": 1.7083333333333333,
+          "max_finger_rotation_degrees": 37.51778856367857
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/look away gesture.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 56.0,
+          "duration_seconds": 2.2916666666666665,
+          "max_finger_rotation_degrees": 37.51649082773627
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/relieved sigh.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 73.0,
+          "duration_seconds": 3.0,
+          "max_finger_rotation_degrees": 37.5165762051009
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/sarcastic head nod.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 32.0,
+          "duration_seconds": 1.2916666666666667,
+          "max_finger_rotation_degrees": 37.51651473339837
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/shaking head no.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 44.0,
+          "duration_seconds": 1.7916666666666667,
+          "max_finger_rotation_degrees": 37.548551735700315
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/thoughtful head shake.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 68.0,
+          "duration_seconds": 2.7916666666666665,
+          "max_finger_rotation_degrees": 37.52143929978995
+        }
+      ]
+    },
+    {
+      "file": "gestures-pack-basic/weight shift.fbx",
+      "group": "Gestures Pack Basic",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 223.0,
+          "duration_seconds": 9.25,
+          "max_finger_rotation_degrees": 40.62189097539593
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol idle.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 33.0,
+          "duration_seconds": 1.3333333333333333,
+          "max_finger_rotation_degrees": 111.76836863463157
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol jump (2).fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 20.0,
+          "duration_seconds": 0.7916666666666666,
+          "max_finger_rotation_degrees": 111.76831399311821
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol jump.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 49.0,
+          "duration_seconds": 2.0,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol kneel to stand.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 33.0,
+          "duration_seconds": 1.3333333333333333,
+          "max_finger_rotation_degrees": 111.76833448368572
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol kneeling idle.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 91.0,
+          "duration_seconds": 3.75,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol run arc (2).fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 16.0,
+          "duration_seconds": 0.625,
+          "max_finger_rotation_degrees": 111.76830033273987
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol run arc.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol run backward arc (2).fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol run backward arc.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 111.76831399311821
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol run backward.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 14.0,
+          "duration_seconds": 0.5416666666666666,
+          "max_finger_rotation_degrees": 111.76833448368572
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol run.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 13.0,
+          "duration_seconds": 0.5,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol stand to kneel.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 22.0,
+          "duration_seconds": 0.875,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol strafe (2).fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 111.76833448368572
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol strafe.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol walk arc (2).fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 19.0,
+          "duration_seconds": 0.75,
+          "max_finger_rotation_degrees": 111.76836863463157
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol walk arc.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 19.0,
+          "duration_seconds": 0.75,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol walk backward arc (2).fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol walk backward arc.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 15.0,
+          "duration_seconds": 0.5833333333333334,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol walk backward.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 25.0,
+          "duration_seconds": 1.0,
+          "max_finger_rotation_degrees": 111.76832765349656
+        }
+      ]
+    },
+    {
+      "file": "pistol-handgun-locomotion-pack/pistol walk.fbx",
+      "group": "Pistol/Handgun Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 20.0,
+          "duration_seconds": 0.7916666666666666,
+          "max_finger_rotation_degrees": 111.7683413138749
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/idle.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 185.0,
+          "duration_seconds": 7.666666666666667,
+          "max_finger_rotation_degrees": 37.51651473339837
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/jump.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 53.0,
+          "duration_seconds": 2.1666666666666665,
+          "max_finger_rotation_degrees": 45.06058161508251
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/left strafe walking.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 39.51570768836652
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/left strafe.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 95.91075258955883
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/left turn 90.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 23.0,
+          "duration_seconds": 0.9166666666666666,
+          "max_finger_rotation_degrees": 37.518785771297395
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/left turn.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 39.0,
+          "duration_seconds": 1.5833333333333333,
+          "max_finger_rotation_degrees": 39.058515315893374
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/right strafe walking.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 39.80164672777993
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/right strafe.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 17.0,
+          "duration_seconds": 0.6666666666666666,
+          "max_finger_rotation_degrees": 95.58254833956137
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/right turn 90.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 23.0,
+          "duration_seconds": 0.9166666666666666,
+          "max_finger_rotation_degrees": 37.51674695983015
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/right turn.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 38.0,
+          "duration_seconds": 1.5416666666666667,
+          "max_finger_rotation_degrees": 42.48021469382715
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/running.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 18.0,
+          "duration_seconds": 0.7083333333333334,
+          "max_finger_rotation_degrees": 91.43766170211747
+        }
+      ]
+    },
+    {
+      "file": "locomotion-pack/walking.fbx",
+      "group": "Locomotion Pack",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 26.0,
+          "duration_seconds": 1.0416666666666667,
+          "max_finger_rotation_degrees": 47.67544782183561
+        }
+      ]
+    },
+    {
+      "file": "special/cross-punch-a-cross-punch.fbx",
+      "group": "Cross Punch - A Cross Punch",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 49.0,
+          "duration_seconds": 2.0,
+          "max_finger_rotation_degrees": 150.82313076157604
+        }
+      ]
+    },
+    {
+      "file": "special/illegal-elbow-punch-illegal-cross-elbow.fbx",
+      "group": "Illegal Elbow Punch - Illegal Cross Elbow",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 49.0,
+          "duration_seconds": 2.0,
+          "max_finger_rotation_degrees": 119.24145619046095
+        }
+      ]
+    },
+    {
+      "file": "special/kicking-male-thrust-kick-with-the-lead-foot.fbx",
+      "group": "Kicking - Male Thrust Kick With The Lead Foot",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 48.0,
+          "duration_seconds": 1.9583333333333333,
+          "max_finger_rotation_degrees": 93.92832433390846
+        }
+      ]
+    },
+    {
+      "file": "special/rifle-turn-and-kick-rifle-turn-and-kick-in-door.fbx",
+      "group": "Rifle Turn And Kick - Rifle Turn And Kick In Door",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 67.0,
+          "duration_seconds": 2.75,
+          "max_finger_rotation_degrees": 109.29454241914466
+        }
+      ]
+    },
+    {
+      "file": "special/getting-up-getting-up-from-back.fbx",
+      "group": "Getting Up - Getting Up From Back",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 194.99998474121094,
+          "duration_seconds": 8.083332697550455,
+          "max_finger_rotation_degrees": 91.170321267814
+        }
+      ]
+    },
+    {
+      "file": "special/getting-up-getting-up-from-stomach.fbx",
+      "group": "Getting Up - Getting Up From Stomach",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 206.99998474121094,
+          "duration_seconds": 8.583332697550455,
+          "max_finger_rotation_degrees": 84.31096719004529
+        }
+      ]
+    },
+    {
+      "file": "special/start-climbing-ladder-standing-to-climb-ladder-quickly.fbx",
+      "group": "Start Climbing Ladder - Standing To Climb Ladder Quickly",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 50.0,
+          "duration_seconds": 2.0416666666666665,
+          "max_finger_rotation_degrees": 89.9870114846768
+        }
+      ]
+    },
+    {
+      "file": "special/climbing-ladder-climbing-up-a-ladder.fbx",
+      "group": "Climbing Ladder - Climbing Up A Ladder",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 19.0,
+          "duration_seconds": 0.75,
+          "max_finger_rotation_degrees": 76.25988853608193
+        }
+      ]
+    },
+    {
+      "file": "special/climbing-to-top-climbing-up-a-ladder-to-standing.fbx",
+      "group": "Climbing To Top - Climbing Up A Ladder To Standing",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 97.0,
+          "duration_seconds": 4.0,
+          "max_finger_rotation_degrees": 87.56942504681577
+        }
+      ]
+    },
+    {
+      "file": "special/dying-dying-shot-to-the-chest-falling-on-two-knees.fbx",
+      "group": "Dying - Dying Shot To The Chest Falling On Two Knees",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 90.0,
+          "duration_seconds": 3.7083333333333335,
+          "max_finger_rotation_degrees": 30.690857393899922
+        }
+      ]
+    },
+    {
+      "file": "special/dying-backwards-shot-to-the-chest-falling-backwards.fbx",
+      "group": "Dying Backwards - Shot To The Chest Falling Backwards",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 111.0,
+          "duration_seconds": 4.583333333333333,
+          "max_finger_rotation_degrees": 29.03528101079136
+        }
+      ]
+    },
+    {
+      "file": "special/crouch-death-dying-from-a-crouched-position.fbx",
+      "group": "Crouch Death - Dying From A Crouched Position",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 57.0,
+          "duration_seconds": 2.3333333333333335,
+          "max_finger_rotation_degrees": 114.87229346143052
+        }
+      ]
+    },
+    {
+      "file": "special/looking-around-idle-stand-looking-around.fbx",
+      "group": "Looking Around - Idle Stand Looking Around",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 140.0,
+          "duration_seconds": 5.791666666666667,
+          "max_finger_rotation_degrees": 42.82940811514405
+        }
+      ]
+    },
+    {
+      "file": "special/crouch-look-around-corner-crouch-looking-around-corner.fbx",
+      "group": "Crouch Look Around Corner - Crouch Looking Around Corner",
+      "bones": 78,
+      "kind": "animation",
+      "fps": 24,
+      "actions": [
+        {
+          "name": "Armature|mixamo.com|Layer0",
+          "first_frame": 1.0,
+          "last_frame": 69.0,
+          "duration_seconds": 2.8333333333333335,
+          "max_finger_rotation_degrees": 47.95046197367159
+        }
+      ]
+    }
+  ]
+}
