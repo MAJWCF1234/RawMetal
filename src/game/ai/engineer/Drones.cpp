@@ -77,8 +77,22 @@ void Game::updateEngineerDrones(float dt){
   if(get("drone_repair_target")&&get("drone_repair_target")!=repair+1)put("drone_repair_ms",0);put("drone_repair_target",repair+1);if(repair<0)put("drone_repair_ms",0);
   bool justified=get("guard_confirmed")&&get("guard_memory")&&target.valid()&&((get("guard_seen")&&guardCanSee(owner,npc.pose,target))||deployed>0);
   bool ready=guardTaskAllows(owner,GuardTask::Deploy)&&repair<0&&deployed<EngineerDroneCapacity&&get("drone_used")<EngineerDroneCapacity&&!get("drone_cooldown")&&autonomousActor(t)&&npc.pose.clip!=4&&npc.pose.clip!=1&&(!t.deadState||!state(t.deadState))&&chunkResident(npc.level)&&justified&&workAllowed;
-  put("drone_windup",ready?std::min(1200,get("drone_windup")+ms):0);if(ready&&get("drone_windup")>0)put("drone_busy",1);
-  if(ready&&get("drone_windup")>=1200&&m_npcNavBudget>0){--m_npcNavBudget;if(!deployEngineerDrone(owner)){put("drone_windup",0);put("drone_cooldown",1500);put("drone_busy",0);}}
+  // The directly rigged Engineer owns a short pad equip/use/stow timeline.
+  // Resource clocks begin only after equip, and normal completion stows the
+  // device before firearms can resume. Physical escape always wins immediately.
+  bool direct=t.visual==ActorVisual::CleanupEngineer&&cleanupAnimationDuration(t.visual,8)>0,animationReady=true;
+  if(direct){int stage=get("engineer_pad_stage"),clock=get("engineer_pad_ms");bool requested=ready||repair>=0;
+   bool interrupted=!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip!=0||get("walking")||(get("locomotion")&&!get("grounded"))||get("guard_danger_ms")||!workAllowed;
+   if(interrupted){stage=0;clock=0;}
+   else if(stage==0){if(requested){stage=1;clock=0;}}
+   else if(stage==1){if(!requested){stage=3;clock=0;}else{clock+=ms;int duration=int(std::round(cleanupAnimationDuration(t.visual,6)*1000));if(clock>=duration){stage=2;clock=0;}}}
+   else if(stage==2){if(!requested){stage=3;clock=0;}else{int duration=std::max(1,int(std::round(cleanupAnimationDuration(t.visual,7)*1000)));clock=(clock+ms)%duration;}}
+   else{clock+=ms;int duration=int(std::round(cleanupAnimationDuration(t.visual,8)*1000));if(clock>=duration){stage=0;clock=0;}}
+   put("engineer_pad_stage",stage);put("engineer_pad_ms",clock);animationReady=stage==2;
+   if(stage==1||stage==2)put("drone_busy",1);
+  }else{put("engineer_pad_stage",0);put("engineer_pad_ms",0);}
+  put("drone_windup",ready&&animationReady?std::min(1200,get("drone_windup")+ms):0);if(ready&&get("drone_windup")>0)put("drone_busy",1);
+  if(ready&&animationReady&&get("drone_windup")>=1200&&m_npcNavBudget>0){--m_npcNavBudget;if(!deployEngineerDrone(owner)){put("drone_windup",0);put("drone_cooldown",1500);put("drone_busy",0);}}
  }
  for(int slot=0;slot<EngineerDroneSlots;++slot){auto get=[&](const char*f){return state(droneKey(slot,f));};auto put=[&](const char*f,int v){setState(droneKey(slot,f),v);};if(!get("active"))continue;int owner=get("owner")-1,level=get("level")-1;
   if(owner<0||size_t(owner)>=m_friendlyActors.size()||level<0||level>=chunkCount()){put("active",0);continue;}const auto&npc=m_friendlyActors[size_t(owner)];const auto&t=npc.track();
@@ -103,6 +117,7 @@ void Game::updateEngineerDrones(float dt){
   bool workAllowed=!ownerGet("guard_danger_ms")&&!ownerGet("weapon_reload")&&!ownerGet("weapon_reloading")&&!ownerGet("weapon_recovery")&&!ownerGet("weapon_bash")&&!ownerGet("weapon_bash_pose")&&!ownerGet("grenade_windup")&&ownerGet("weapon_action")==int(GuardAction::None);
   bool repair=guardTaskAllows(size_t(owner),GuardTask::Repair)&&ownerGet("drone_repair_target")==slot+1&&
    (ownerGet("schedule")==int(GuardSchedule::None)||ownerGet("task_subject")==slot+1)&&stationary&&workAllowed&&!ownerGet("drone_windup")&&length(ownerLocal-here)<2&&std::fabs(npc.pose.z-p.z)<.3f&&get("hp")<EngineerDroneHealth&&ownerGet("drone_repair_charge")>0;
+  if(t.visual==ActorVisual::CleanupEngineer&&cleanupAnimationDuration(t.visual,8)>0)repair&=ownerGet("engineer_pad_stage")==2;
   Point3 hand{ownerLocal.x+shift.x,ownerLocal.y+shift.y,npc.pose.z+t.scale*.65f};if(repair&&traceEngineerDrone(hand,eye,size_t(owner)).kind==ShotKind::None){int clock=state(friendlyKey(size_t(owner),"drone_repair_ms"))+ms;
    setState(friendlyKey(size_t(owner),"drone_busy"),1);
    while(clock>=100&&get("hp")<EngineerDroneHealth&&state(friendlyKey(size_t(owner),"drone_repair_charge"))>0){clock-=100;put("hp",get("hp")+1);put("repair",200);setState(friendlyKey(size_t(owner),"drone_repair_charge"),state(friendlyKey(size_t(owner),"drone_repair_charge"))-1);}setState(friendlyKey(size_t(owner),"drone_repair_ms"),clock%100);
@@ -145,6 +160,8 @@ void Game::validateEngineerDrones()const{
   int kind=get("target_kind");if(kind&&kind!=int(ShotKind::Player)&&kind!=int(ShotKind::Npc)&&kind!=int(ShotKind::Actor)&&kind!=int(ShotKind::Enemy)&&kind!=int(ShotKind::Drone))throw std::runtime_error("Invalid saved drone target kind");if(get("target_level")<0||get("target_level")>chunkCount()||get("target_index")<0||get("target_index")>65536||(kind&&(!get("target_level")||!get("target_index")))||(kind==int(ShotKind::Drone)&&get("target_index")>EngineerDroneSlots))throw std::runtime_error("Invalid saved drone target reference");
  }
  for(size_t owner=0;owner<m_friendlyActors.size();++owner){auto get=[&](const char*f){return state(friendlyKey(owner,f));};if(get("drone_used")<owners[owner]||get("drone_used")>EngineerDroneCapacity||get("drone_cooldown")<0||get("drone_cooldown")>8000||get("drone_windup")<0||get("drone_windup")>1200||get("drone_fraction")<0||get("drone_fraction")>=1000||get("drone_repair_saved")<0||get("drone_repair_saved")>1||get("drone_busy")<0||get("drone_busy")>1||get("drone_repair_charge")<0||get("drone_repair_charge")>80||get("drone_repair_ms")<0||get("drone_repair_ms")>=100||get("drone_repair_target")<0||get("drone_repair_target")>EngineerDroneSlots)throw std::runtime_error("Invalid saved Engineer deployment/repair resources");
+  int stage=get("engineer_pad_stage"),clock=get("engineer_pad_ms");const auto&track=m_friendlyActors[owner].track();int clip=stage==1?6:stage==2?7:8;float duration=cleanupAnimationDuration(track.visual,clip);
+  if(stage<0||stage>3||clock<0||(!stage&&clock)||(stage&&(track.ai.role!=GuardSquadRole::Engineer||track.visual!=ActorVisual::CleanupEngineer||duration<=0||clock>=int(std::round(duration*1000)))))throw std::runtime_error("Invalid saved Engineer pad animation");
   if(get("drone_repair_target")&&(!state(droneKey(get("drone_repair_target")-1,"active"))||state(droneKey(get("drone_repair_target")-1,"owner"))!=int(owner)+1))throw std::runtime_error("Saved Engineer repair target is not owned and active");
   if(get("guard_engineer_active")<0||get("guard_engineer_active")>1||get("guard_engineer_goal")<0||get("guard_engineer_goal")>1||get("guard_engineer_wait")<0||get("guard_engineer_wait")>700||get("guard_engineer_chunk")<0||get("guard_engineer_chunk")>chunkCount())throw std::runtime_error("Invalid saved Engineer support task");
   for(const char*f:{"guard_engineer_x","guard_engineer_y","guard_engineer_z"})if(get(f)<-100000||get(f)>100000)throw std::runtime_error("Invalid saved Engineer support destination");

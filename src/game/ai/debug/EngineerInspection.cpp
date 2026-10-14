@@ -3,7 +3,7 @@
 #include <fstream>
 namespace retro {
 Game Game::engineerSupportInspection(int stage){
- if(stage<0||stage>3)throw std::runtime_error("Unknown Engineer inspection stage");
+ if(stage<0||stage>5)throw std::runtime_error("Unknown Engineer inspection stage");
  auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");
  auto campaign=std::make_shared<CustomCampaign>(*authored);auto cargo=std::make_shared<AuthoredMapData>(*campaign->maps.at(1));
  // Keep the actual supplied squad, cargo geometry and activation trigger. A
@@ -19,23 +19,25 @@ Game Game::engineerSupportInspection(int stage){
  if(g.level()!=1||!g.state("cleanup_enabled")||g.npcActors()[engineer].track().ai.role!=GuardSquadRole::Engineer)throw std::runtime_error("Engineer encounter did not enter its real activation trigger");
  g.m_player.pos={1.5f,1.5f};g.m_player.z=0;if(!g.hullFits(g.player().pos,0,Player::StandingHeight))throw std::runtime_error("Engineer observer intersects geometry");
  const auto initial=g.npcActors()[engineer].pose;int frames=0;bool reached=false;
+ if(stage>=4&&cleanupAnimationDuration(g.npcActors()[engineer].track().visual,8)<=0)throw std::runtime_error("Engineer pad inspection requires the direct animation bank");
  for(;frames<3600;++frames){g.update({},1.f/60);if(g.dead()||g.npcActors()[engineer].pose.clip==4)throw std::runtime_error("Engineer encounter killed its remote observer or Engineer");
   auto weapon=g.npcWeaponPose(engineer);size_t owned=0;for(const auto&drone:g.engineerDrones())owned+=drone.owner==int(engineer);
-  if(stage==0?weapon.engineering>=.45f:owned==EngineerDroneCapacity){reached=true;break;}
+  bool milestone=stage==0?weapon.engineering>=.45f:stage==4?weapon.supportAnimation&&weapon.supportClip==6&&weapon.supportPhase>=.65f:stage==5?weapon.supportAnimation&&weapon.supportClip==8&&weapon.supportPhase>=.25f&&weapon.padVisible:owned==EngineerDroneCapacity;
+  if(milestone){reached=true;break;}
  }
- if(!reached)throw std::runtime_error("Engineer did not reach terminal assembly or its five-unit fleet through normal gameplay");
+ if(!reached)throw std::runtime_error("Engineer did not reach its authored pad or fleet milestone through normal gameplay");
  int repairedSlot=-1,damagedHealth=0;
  if(stage==2){float nearest=10000;const auto&npc=g.npcActors()[engineer];for(const auto&drone:g.engineerDrones())if(drone.owner==int(engineer)&&drone.level==npc.level){float distance=length(Vec2{drone.position.x,drone.position.y}-npc.pose.position);if(distance<nearest){nearest=distance;repairedSlot=drone.slot;}}
   if(repairedSlot<0)throw std::runtime_error("Engineer fleet has no physical repair candidate");g.damageEngineerDrone(repairedSlot,18);for(const auto&drone:g.engineerDrones())if(drone.slot==repairedSlot)damagedHealth=int(drone.health);
  }
- if(stage>=2){reached=false;for(int work=0;work<1800;++work){g.update({},1.f/60);++frames;auto weapon=g.npcWeaponPose(engineer);
+ if(stage==2||stage==3){reached=false;for(int work=0;work<1800;++work){g.update({},1.f/60);++frames;auto weapon=g.npcWeaponPose(engineer);
    if(g.dead()||g.npcActors()[engineer].pose.clip==4)throw std::runtime_error("Engineer support work killed its remote observer or Engineer");
    bool pulse=false;for(const auto&drone:g.engineerDrones())if(drone.slot==repairedSlot)pulse=drone.health>damagedHealth&&drone.health<EngineerDroneHealth;
    if(stage==2?weapon.maintenance&&pulse:weapon.flash>0&&!weapon.engineering&&!weapon.maintenance){reached=true;break;}}
   if(!reached)throw std::runtime_error("Engineer did not physically repair its fleet or resume actual pistol fire");
  }
  const auto&npc=g.npcActors()[engineer];auto weapon=g.npcWeaponPose(engineer);int owned=0;for(const auto&drone:g.engineerDrones())owned+=drone.owner==int(engineer);
- if(!weapon.handgun||(stage>0&&owned!=EngineerDroneCapacity)||length(npc.pose.position-initial.position)<(stage?0.1f:0.f))throw std::runtime_error("Engineer encounter lost its pistol, full fleet or physical support movement");
+ if(!weapon.handgun||(stage>0&&stage<4&&owned!=EngineerDroneCapacity)||length(npc.pose.position-initial.position)<(stage>0&&stage<4?0.1f:0.f))throw std::runtime_error("Engineer encounter lost its pistol, full fleet or physical support movement");
  // Camera placement follows the completed gameplay milestone. It does not
  // change work clocks, damage, resources, enemies or the Engineer's position.
  Point3 focus{npc.pose.position.x,npc.pose.position.y,npc.pose.z+1.05f};if(stage==1){for(const auto&drone:g.engineerDrones())if(drone.owner==int(engineer))focus=focus+drone.position+Point3{0,0,EngineerDroneHeight*.5f};focus=focus*(1.f/(owned+1));}
@@ -62,11 +64,12 @@ Game Game::engineerSupportInspection(int stage){
  if(!positioned)throw std::runtime_error("No hull-safe observer can see the Engineer support milestone");
  g.m_player.angle=cameraYaw;g.m_player.pitch=cameraPitch*140.f;
  g.m_weaponEquipped=false;g.m_holster=1;
- const char*names[]={"terminal-deploy","five-drone-fleet","terminal-maintenance","pistol-support"};std::filesystem::create_directories("diagnostics/engineer-support-20261012");
+ const char*names[]={"terminal-deploy","five-drone-fleet","terminal-maintenance","pistol-support","pad-equip","pad-stow"};std::filesystem::create_directories("diagnostics/engineer-support-20261012");
  std::ofstream report(std::string("diagnostics/engineer-support-20261012/")+names[stage]+"-runtime.txt");
  report<<names[stage]<<": PASS frames="<<frames<<" observerHealth="<<g.player().health<<" engineerHealth="<<npc.track().health-g.state(npc.track().damageState)
   <<" engineerPosition="<<npc.pose.position.x<<','<<npc.pose.position.y<<" supportMovement="<<length(npc.pose.position-initial.position)<<" owned="<<owned
   <<" spent="<<g.state(g.friendlyKey(engineer,"drone_used"))<<" terminal="<<weapon.engineering<<" maintenance="<<weapon.maintenance<<" handgun="<<weapon.handgun<<" pistolFlash="<<weapon.flash
+  <<" supportClip="<<weapon.supportClip<<" supportPhase="<<weapon.supportPhase<<" padVisible="<<weapon.padVisible<<" pistolVisible="<<weapon.pistolVisible
   <<" repairStock="<<g.state(g.friendlyKey(engineer,"drone_repair_charge"))<<" opponentDamage="<<g.state(opponent.damageState)
   <<" schedule="<<g.state(g.friendlyKey(engineer,"schedule"))<<" step="<<g.state(g.friendlyKey(engineer,"schedule_step"))<<" task="<<g.state(g.friendlyKey(engineer,"task"))<<" status="<<g.state(g.friendlyKey(engineer,"task_status"))<<" subject="<<g.state(g.friendlyKey(engineer,"task_subject"))<<'\n';
  for(const auto&drone:g.engineerDrones())if(drone.owner==int(engineer))report<<"drone="<<drone.slot<<" position="<<drone.position.x<<','<<drone.position.y<<','<<drone.position.z<<" health="<<drone.health<<'\n';

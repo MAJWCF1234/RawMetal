@@ -58,26 +58,49 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
  std::ostringstream info;info<<id<<": "<<triangles.size()<<" triangles; bounds "<<minimum.x<<","<<minimum.y<<","<<minimum.z<<" to "<<maximum.x<<","<<maximum.y<<","<<maximum.z<<"\n";
  for(auto node:m_scene->nodes)if(node->bone){++bones;info<<" bone "<<node->name.data<<" at "<<node->node_to_world.m03<<","<<node->node_to_world.m13<<","<<node->node_to_world.m23<<"\n";}
  description=info.str();if(triangles.empty())throw std::runtime_error("Mesh has no triangles");
- if(id==242||animationResource){m_creatureFrames=loadResource(animationResource?animationResource:244);uint32_t vertices=0,clips=0;
-  if(m_creatureFrames.size()<20||std::memcmp(m_creatureFrames.data(),"RMA2",4))throw std::runtime_error("Invalid creature animation");
-  std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&m_creatureSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
+ if(id==242||animationResource){m_creatureFrames=loadResource(animationResource?animationResource:244);uint32_t vertices=0,clips=0,headerSamples=0;
+  bool compact=m_creatureFrames.size()>=20&&!std::memcmp(m_creatureFrames.data(),"RMA3",4);
+  if(m_creatureFrames.size()<20||(!compact&&std::memcmp(m_creatureFrames.data(),"RMA2",4)))throw std::runtime_error("Invalid creature animation");
+  std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&headerSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
   std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);
-  size_t payload=20+size_t(vertices)*2+size_t(m_creatureVertices)*6*m_creatureSamples*clips;
-  if(vertices!=triangles.size()*3||m_creatureSamples<2||m_creatureSamples>128||clips<1||clips>32||m_creatureVertices==0||m_creatureVertices>65535||m_creatureFrames.size()<payload)throw std::runtime_error("Creature animation topology mismatch");
+  if(vertices!=triangles.size()*3||clips<1||clips>32||m_creatureVertices==0||m_creatureVertices>65535)throw std::runtime_error("Creature animation topology mismatch");
+  m_creatureFrameOffset=20+size_t(vertices)*2+(compact?size_t(clips)*4:0);
+  if(m_creatureFrames.size()<m_creatureFrameOffset)throw std::runtime_error("Missing creature sample table");
+  m_creatureSampleCounts.resize(clips);m_creatureSampleOffsets.resize(clips);
+  uint32_t totalSamples=0;
+  for(uint32_t clip=0;clip<clips;++clip){uint32_t count=headerSamples;
+   if(compact)std::memcpy(&count,m_creatureFrames.data()+20+size_t(vertices)*2+size_t(clip)*4,4);
+   if(count<2||count>512)throw std::runtime_error("Invalid creature clip sample count");
+   m_creatureSampleCounts[clip]=count;m_creatureSampleOffsets[clip]=totalSamples;totalSamples+=count;
+   m_creatureSamples=std::max(m_creatureSamples,count);
+  }
+  if(compact&&totalSamples!=headerSamples)throw std::runtime_error("Creature sample table total mismatch");
+  size_t payload=m_creatureFrameOffset+size_t(m_creatureVertices)*6*totalSamples;
+  if(m_creatureFrames.size()<payload)throw std::runtime_error("Creature animation topology mismatch");
   m_creatureClips=clips;
   if(m_creatureFrames.size()!=payload){
    if(m_creatureFrames.size()<payload+20||std::memcmp(m_creatureFrames.data()+payload,"RML1",4))throw std::runtime_error("Invalid creature layer trailer");
    uint32_t version=0,samples=0,layerClips=0,stride=0;
    std::memcpy(&version,m_creatureFrames.data()+payload+4,4);std::memcpy(&samples,m_creatureFrames.data()+payload+8,4);
    std::memcpy(&layerClips,m_creatureFrames.data()+payload+12,4);std::memcpy(&stride,m_creatureFrames.data()+payload+16,4);
-   if(version!=1||samples!=m_creatureSamples||layerClips!=clips||stride!=sizeof(CreatureLayerPose)||m_creatureFrames.size()!=payload+20+size_t(samples)*layerClips*stride)throw std::runtime_error("Creature layer topology mismatch");
-   m_creatureLayerFrames.resize(size_t(samples)*layerClips);
+   size_t layerEnd=payload+20+size_t(totalSamples)*stride;
+   if(version!=(compact?2u:1u)||samples!=headerSamples||layerClips!=clips||stride!=sizeof(CreatureLayerPose)||m_creatureFrames.size()<layerEnd)throw std::runtime_error("Creature layer topology mismatch");
+   m_creatureLayerFrames.resize(totalSamples);
    std::memcpy(m_creatureLayerFrames.data(),m_creatureFrames.data()+payload+20,m_creatureLayerFrames.size()*sizeof(CreatureLayerPose));
    for(const auto&pose:m_creatureLayerFrames)if(!validLayerPose(pose))throw std::runtime_error("Invalid creature layer joints");
    m_creatureLayerPose=m_creatureLayerFrames.front();
+   if(m_creatureFrames.size()!=layerEnd){
+    uint32_t durationClips=0;
+    if(m_creatureFrames.size()<layerEnd+8||std::memcmp(m_creatureFrames.data()+layerEnd,"RMD1",4))throw std::runtime_error("Invalid creature duration trailer");
+    std::memcpy(&durationClips,m_creatureFrames.data()+layerEnd+4,4);
+    if(durationClips!=clips||m_creatureFrames.size()!=layerEnd+8+size_t(clips)*sizeof(float))throw std::runtime_error("Creature duration topology mismatch");
+    m_creatureDurations.resize(clips);
+    std::memcpy(m_creatureDurations.data(),m_creatureFrames.data()+layerEnd+8,size_t(clips)*sizeof(float));
+    for(float duration:m_creatureDurations)if(!std::isfinite(duration)||duration<=0||duration>120)throw std::runtime_error("Invalid creature clip duration");
+   }
   }
-  if(id==277){m_anchorFrames=loadResource(282);if(m_anchorFrames.size()!=size_t(clips)*m_creatureSamples*24)throw std::runtime_error("Actor attachment topology mismatch");}
-    if(id==323){m_anchorFrames=loadResource(339);if(m_anchorFrames.size()!=size_t(clips)*m_creatureSamples*24)throw std::runtime_error("Medic treatment attachment topology mismatch");}
+  if(id==277){m_anchorFrames=loadResource(282);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Actor attachment topology mismatch");}
+    if(id==323){m_anchorFrames=loadResource(339);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Medic treatment attachment topology mismatch");}
   m_creatureIndices.resize(vertices);std::memcpy(m_creatureIndices.data(),m_creatureFrames.data()+20,size_t(vertices)*2);
   for(auto index:m_creatureIndices)if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");
   if(id==303||id==308||id==313||id==318||id==323||id==328){
@@ -133,18 +156,25 @@ const std::vector<MeshTriangle>& Mesh::bindTriangles()const{
  if(m_bindTriangles.empty()){m_bindTriangles.reserve(m_cachedTriangles.size());for(const auto&face:m_cachedTriangles)m_bindTriangles.push_back(face.prototype);}
  return m_bindTriangles;
 }
+float Mesh::creatureClipDuration(int clip)const{
+ if(clip<0||clip>=int(m_creatureClips))throw std::runtime_error("Missing creature clip duration");
+ return hasDirectCreatureMotion()?m_creatureDurations[size_t(clip)]:0.f;
+}
 void Mesh::sampleCreatureClip(int clip,float phase,std::vector<Point3>& out)const{
  if(m_creatureFrames.empty()||clip<0||clip>=int(m_creatureClips))throw std::runtime_error("Missing creature clip");
  if(!std::isfinite(phase))throw std::runtime_error("Invalid creature phase");
- float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
- size_t stride=size_t(m_creatureVertices)*6,base=20+triangles.size()*6+size_t(clip)*m_creatureSamples*stride;
+ unsigned samples=m_creatureSampleCounts[size_t(clip)];
+ float frame=std::clamp(phase,0.f,1.f)*(samples-1);unsigned a=unsigned(frame),b=std::min(a+1,samples-1);float blend=frame-a;
+ size_t stride=size_t(m_creatureVertices)*6,base=m_creatureFrameOffset+size_t(m_creatureSampleOffsets[size_t(clip)])*stride;
  if(out.size()<m_creatureVertices)out.resize(m_creatureVertices);
  for(size_t i=0;i<m_creatureVertices;++i){float xyz[3];for(int axis=0;axis<3;++axis){size_t offset=i*6+axis*2;int16_t x,y;std::memcpy(&x,m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,m_creatureFrames.data()+base+b*stride+offset,2);xyz[axis]=(x+(y-x)*blend)*.001f;}out[i]={xyz[0],xyz[1],xyz[2]};}
 }
 CreatureLayerPose Mesh::sampleCreatureLayerPose(int clip,float phase)const{
  if(!hasCreatureLayerPose()||clip<0||clip>=int(m_creatureClips)||!std::isfinite(phase))throw std::runtime_error("Missing creature layer pose");
- float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
- const auto&A=m_creatureLayerFrames[size_t(clip)*m_creatureSamples+a];const auto&B=m_creatureLayerFrames[size_t(clip)*m_creatureSamples+b];
+ unsigned samples=m_creatureSampleCounts[size_t(clip)];
+ float frame=std::clamp(phase,0.f,1.f)*(samples-1);unsigned a=unsigned(frame),b=std::min(a+1,samples-1);float blend=frame-a;
+ size_t first=m_creatureSampleOffsets[size_t(clip)];
+ const auto&A=m_creatureLayerFrames[first+a];const auto&B=m_creatureLayerFrames[first+b];
  CreatureLayerPose pose;pose.pelvis=A.pelvis+(B.pelvis-A.pelvis)*blend;pose.spine=A.spine+(B.spine-A.spine)*blend;
  for(int side=0;side<2;++side)for(int joint=0;joint<4;++joint)pose.arms[side][joint]=A.arms[side][joint]+(B.arms[side][joint]-A.arms[side][joint])*blend;
  for(int side=0;side<2;++side){auto&direction=pose.arms[side][3];float size=layerLength(direction);
@@ -153,8 +183,9 @@ CreatureLayerPose Mesh::sampleCreatureLayerPose(int clip,float phase)const{
  return pose;
 }
 void Mesh::sampleCreatureAnchors(int clip,float phase){
- float frame=std::clamp(phase,0.f,1.f)*(m_creatureSamples-1);unsigned a=unsigned(frame),b=std::min(a+1,m_creatureSamples-1);float blend=frame-a;
- if(!m_anchorFrames.empty())for(int joint=0;joint<2;++joint){Point3 A,B;size_t offset=size_t(clip)*m_creatureSamples*24+size_t(joint)*12;std::memcpy(&A,m_anchorFrames.data()+offset+a*24,12);std::memcpy(&B,m_anchorFrames.data()+offset+b*24,12);m_poseAnchors[joint]=A+(B-A)*blend;}
+ unsigned samples=m_creatureSampleCounts[size_t(clip)];
+ float frame=std::clamp(phase,0.f,1.f)*(samples-1);unsigned a=unsigned(frame),b=std::min(a+1,samples-1);float blend=frame-a;
+ if(!m_anchorFrames.empty())for(int joint=0;joint<2;++joint){Point3 A,B;size_t offset=size_t(m_creatureSampleOffsets[size_t(clip)])*24+size_t(joint)*12;std::memcpy(&A,m_anchorFrames.data()+offset+a*24,12);std::memcpy(&B,m_anchorFrames.data()+offset+b*24,12);m_poseAnchors[joint]=A+(B-A)*blend;}
 }
 void Mesh::publishCreatureVertices(){
  for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v)triangles[t].v[v].p=m_creaturePoseScratch[m_creatureIndices[t*3+v]];
@@ -201,6 +232,11 @@ bool Mesh::testCleanupTankAim(){
  for(int role=0;role<6;++role){
   Mesh mesh(303+role*5,"",304+role*5);report<<"ROLE "<<roles[role]<<'\n';
   check(mesh.hasCreatureLayerPose(),"real RML1 joints are present",role);if(!mesh.hasCreatureLayerPose())continue;
+  if(mesh.hasDirectCreatureMotion()){
+   bool timed=true;
+   for(unsigned clip=0;clip<mesh.creatureClipCount();++clip){float seconds=mesh.creatureClipDuration(int(clip));timed&=std::isfinite(seconds)&&seconds>0&&float(mesh.m_creatureSampleCounts[clip]-1)/seconds>=23.9f;}
+   check(timed,"direct character clips retain at least 24 source samples per second",role);
+  }else check(mesh.creatureClipDuration(0)==0,"legacy banks retain their existing playback clock",role);
   const auto&bind=mesh.bindTriangles();auto calibration=loadResource(307+role*5);
   std::vector<Edge>handEdges,fingerEdges,headEdges,waistEdges;int hands[2]{};
   for(auto side:mesh.m_creatureHandSide)if(side)++hands[side-1];
@@ -246,7 +282,9 @@ bool Mesh::testCleanupTankAim(){
   report<<"hand split error mm "<<handChange*1000<<" bind error mm "<<handBindError*1000<<" waist stretch "<<waistStretch<<" crouch top "<<crouchTop<<'\n';
   check(footError<.000001f,"feet retain exact lower-layer vertices",role);
   check(handChange<.00001f,"split and aim preserve every hand edge",role);
-  check(handBindError<.006f,"baked looping hands preserve authored finger geometry",role);
+  // Direct skinning bends fingers across their joints. Compare against the
+  // selected source pose above, rather than demanding T-pose edge lengths.
+  if(!mesh.hasDirectCreatureMotion())check(handBindError<.006f,"legacy looping hands preserve authored rigid finger geometry",role);
   check(headChange<.00001f,"aim preserves rigid head geometry",role);
   check(waistStretch<3.f,"waist edges remain bounded across gait and aim",role);
   check(jointLengthError<.00001f,"composed arm metadata preserves limb lengths",role);

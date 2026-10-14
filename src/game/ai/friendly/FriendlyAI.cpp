@@ -33,7 +33,9 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);
   if(config.mode==ActorAiMode::Civilian||config.mode==ActorAiMode::Escort||config.mode==ActorAiMode::Scripted)clearCivilianSchedule(actor);
   pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;
-  int age=std::clamp(get("death_ms"),0,1000);if(dt>0)age=std::min(1000,age+std::max(1,int(std::round(dt*1000))));put("death_ms",age);pose.phase=age*.001f;return pose;
+  float sourceDuration=cleanupAnimationDuration(track.visual,4);int duration=sourceDuration>0?std::max(1,int(std::round(sourceDuration*1000))):1000;
+  if(sourceDuration>0&&(get("death_fraction")<0||get("death_fraction")>=1000))throw std::runtime_error("Invalid saved NPC death clock");
+  int age=std::clamp(get("death_ms"),0,duration);if(dt>0)age=std::min(duration,age+(sourceDuration>0?npcMilliseconds(actor,dt,"death_fraction"):std::max(1,int(std::round(dt*1000)))));put("death_ms",age);pose.phase=float(age)/duration;return pose;
  }
  if(pose.clip==4){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);if(config.mode!=ActorAiMode::Guard)clearCivilianSchedule(actor);return pose;}
  if(config.enableState&&!state(config.enableState)){
@@ -43,7 +45,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   // their enable trigger, instead of freezing on UAL sample 0 (bind).
   if(dt>0&&pose.clip!=4){
    float previous=get("saved")?get("phase")*.0001f:old.phase;
-   pose.clip=0;pose.phase=std::fmod(previous+dt*.45f,1.f);
+   float duration=cleanupAnimationDuration(track.visual,0);pose.clip=0;pose.phase=std::fmod(previous+dt*(duration>0?1/duration:.45f),1.f);
    put("phase",int(std::round(pose.phase*10000)));put("walking",0);put("crouched",0);put("saved",1);
   }
   return pose;
@@ -141,7 +143,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  float moved=length(pose.position-old.position);Vec2 movementWaypoint=waypoint;pose.clip=moved>.0001f?1:crouched?5:0;
  // Idle/crouch must keep cycling phase or UAL loops stay stuck on sample 0 (bind).
  if(pose.clip==1)pose.phase=std::fmod(old.phase+moved*1.1f,1.f);
- else if(pose.clip==0||pose.clip==5)pose.phase=std::fmod(old.phase+dt*(pose.clip==5?.55f:.45f),1.f);
+ else if(pose.clip==0||pose.clip==5){float duration=cleanupAnimationDuration(track.visual,pose.clip);pose.phase=std::fmod(old.phase+dt*(duration>0?1/duration:pose.clip==5?.55f:.45f),1.f);}
  else pose.phase=0;
  if(config.mode==ActorAiMode::Guard&&!get("guard_danger_ms")){
   int point=get("guard_point");bool patrol=guardState(actor)==GuardState::Patrol&&(get("schedule")==int(GuardSchedule::None)||get("schedule")==int(GuardSchedule::Patrol));

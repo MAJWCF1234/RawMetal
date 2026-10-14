@@ -12,7 +12,7 @@ AiTarget Game::guardSquadReport(size_t actor)const{
   if(!factionsHostile(faction,target.faction))continue;target.position+=chunkOffset(source.level)-origin;report=target;best=range;
  }return report;
 }
-bool Game::guardFireSlot(size_t actor)const{return guardTaskAllows(actor,GuardTask::Fire)&&!state(friendlyKey(actor,"guard_danger_ms"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
+bool Game::guardFireSlot(size_t actor)const{return guardTaskAllows(actor,GuardTask::Fire)&&!state(friendlyKey(actor,"guard_danger_ms"))&&!state(friendlyKey(actor,"engineer_pad_stage"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
 int Game::guardCoveringPeer(size_t actor)const{
  if(actor>=m_friendlyActors.size())return 0;const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto target=guardTarget(actor);
  bool anchor=t.ai.role==GuardSquadRole::Heavy||t.ai.role==GuardSquadRole::Sharpshooter||(t.ai.role==GuardSquadRole::Default&&guardSuppressionEnabled(t.ai)&&!guardFlankSide(actor));
@@ -29,9 +29,10 @@ int Game::guardCoveringPeer(size_t actor)const{
   if(c.ai.role==GuardSquadRole::Medic&&schedule==GuardSchedule::Medic&&running&&(moving||guardTaskAllows(i,GuardTask::Treat))&&patient>=0&&size_t(patient)<m_friendlyActors.size()&&size_t(patient)!=i&&get("task_subject")==patient+1&&!get("support_cooldown")&&get("support_used")<guardRoleProfile(c.ai.role).treatments&&livingPeer(size_t(patient))){const auto&p=m_friendlyActors[size_t(patient)];treating=p.track().health>0&&state(p.track().damageState)>=p.track().health*.5f;}
   bool deploying=c.ai.role==GuardSquadRole::Engineer&&guardTaskAllows(i,GuardTask::Deploy)&&get("drone_windup")>0&&get("drone_used")<EngineerDroneCapacity;
   bool repairing=c.ai.role==GuardSquadRole::Engineer&&guardTaskAllows(i,GuardTask::Repair)&&get("drone_busy")&&get("drone_repair_charge")>0&&get("drone_repair_target")>0&&get("drone_repair_target")==get("task_subject");
+  bool padBusy=c.visual==ActorVisual::CleanupEngineer&&c.ai.role==GuardSquadRole::Engineer&&get("engineer_pad_stage")>0;
   bool withdrawing=false;int medic=get("task_subject")-1;
   if(moving&&schedule==GuardSchedule::Patient&&get("guard_patient_move")&&medic>=0&&size_t(medic)<m_friendlyActors.size()&&size_t(medic)!=i&&livingPeer(size_t(medic))){const auto&m=m_friendlyActors[size_t(medic)];auto mg=[&](const char*f){return state(friendlyKey(size_t(medic),f));};withdrawing=m.track().ai.role==GuardSquadRole::Medic&&mg("schedule")==int(GuardSchedule::Medic)&&mg("task_status")==int(GuardTaskStatus::Running)&&mg("support_target")==int(i)+1;}
-  if(!reload&&!retreat&&!treating&&!deploying&&!repairing&&!withdrawing)continue;chosen=int(i)+1;nearest=distance;
+  if(!reload&&!retreat&&!treating&&!deploying&&!repairing&&!padBusy&&!withdrawing)continue;chosen=int(i)+1;nearest=distance;
  }return chosen;
 }
 bool Game::guardSuppressionPoint(size_t actor,Point3& point)const{
@@ -63,7 +64,7 @@ void Game::updateGuardSquadSlots(float dt){
   Point3 cover;bool suppression=guardSuppressionPoint(i,cover);
   bool ordinary=guardState(i)==GuardState::Alert&&guardCanSee(i,npc.pose,target)&&guardShotMatches(i,guardShot(i,npc.pose,npcWeaponPoseAt(i,npc.pose,{target.position.x,target.position.y,target.feet+target.height*.6f},1)));
   bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&npc.pose.clip!=1&&(!state(friendlyKey(i,"weapon_saved"))||state(friendlyKey(i,"weapon_rounds"))>0)&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_reloading"))&&!state(friendlyKey(i,"weapon_recovery"))&&!state(friendlyKey(i,"grenade_windup"))&&!guardMeleeReady(i,npc.pose,target)&&(ordinary||suppression);
-  eligible=eligible&&guardTaskAllows(i,GuardTask::Fire)&&!state(friendlyKey(i,"guard_danger_ms"))&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"support_target"))&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
+  eligible=eligible&&guardTaskAllows(i,GuardTask::Fire)&&!state(friendlyKey(i,"guard_danger_ms"))&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"engineer_pad_stage"))&&!state(friendlyKey(i,"support_target"))&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
   auto key=squadKey(actorFaction(t),t.ai.squad);auto group=std::find_if(groups.begin(),groups.end(),[&](const Group&g){return g.key==key;});if(group==groups.end()){groups.push_back({key,{}});group=std::prev(groups.end());}group->actors.push_back(i);
  }
  for(const auto&group:groups){int occupied=0;for(auto i:group.actors)occupied+=state(friendlyKey(i,"guard_slot"))!=0;

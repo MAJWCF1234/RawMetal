@@ -3,7 +3,7 @@
 Dropped Mixamo rifle/pistol packs live here as **source donors**. FBX and zip
 files are gitignored.
 
-## Existing runtime donors
+## Historical runtime donors — 13 October 2026
 
 These original donor downloads use FBX Binary, No Character, 30 fps, no key reduction:
 
@@ -34,7 +34,7 @@ exact donor poses between keys. Walking and foot motion track the donor more
 closely while remaining below the executable's 32 MiB ceiling. See the
 [quality report](../../docs/cleanup-animation-quality-20261013.md).
 
-## Character-specific intake: pending game bake
+## Character-specific intake and selected runtime bake
 
 All six main squad members now have their own repaired 65-bone source rig
 and audited direct Mixamo library. These new collections requested 24 fps
@@ -52,12 +52,16 @@ rigs, manifests, catalogs and verification reports are tracked.
 | Rusher | 156 | [rusher-direct](rusher-direct/README.md) |
 
 Counts include pack overlaps, not distinct moves; each library also contains
-one static character FBX. The game still uses the existing donor bake above.
-Publish matching mesh/bindings/animation data together in the later bake,
-retain evaluated bone poses and animated fingers, then verify weapon/prop
-alignment, waist aiming, transitions and timing in native gameplay.
+one static character FBX. The source intake milestone left the game bank
+unchanged. A selected direct bake is now prepared for the six main members:
+**40 clips**, with 6/9/6/6/7/6 clips for Assault/Engineer/Sharpshooter/Heavy/Medic/Rusher.
+Only the core motions, Medic treatment and Engineer pad sections are included.
+RMA3 uses per-clip sample counts and actual source timing at 24 fps; the
+evaluated skin retains bending fingers and semantic upper-body ownership.
+Native build, visual review and gameplay verification remain pending. See
+the [direct bake report](../../docs/direct-squad-animation-20261014.md).
 
-## Additional actors: pending game bake
+## Additional actors: outside the current runtime selection
 
 [Investigator](investigator-direct/README.md) now has nine packs and 28 special
 clips: 241 animation FBXs plus one static character, including overlaps.
@@ -66,4 +70,5 @@ Selected crouch/prone poses expose sharp coat folds requiring integration work.
 [Limitator](limitator-direct/README.md) now has nine packs and 14 individual
 clips: 227 animation FBXs plus one static character. Its original 78-bone rig
 and both authored hands are preserved. This source intake does not change
-its intended sparse use or the current game animation bank.
+its intended sparse use. Both actors remain outside the selected 40-clip
+runtime bake.

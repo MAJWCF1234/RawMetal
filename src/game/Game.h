@@ -21,6 +21,9 @@
 
 namespace retro {
 constexpr int DisplayWidth=640,DisplayHeight=360;
+// Zero denotes an older animation bank whose legacy simulation clocks remain valid.
+float cleanupAnimationDuration(ActorVisual visual,int clip);
+int guardTreatmentDuration(const ActorTrack& track);
 
 
 struct InputState {
@@ -89,7 +92,7 @@ struct Pickup {
 };
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
 struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;unsigned categories=ai::SoundWorld;};
-struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false,crouched=false;float treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0;};
+struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false,crouched=false,supportAnimation=false,padVisible=false,pistolVisible=false;int supportClip=6;float supportPhase=0,treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0;};
 enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone};
 struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
 struct AiTargetRef {ShotKind kind=ShotKind::None;int level=0,index=-1;};

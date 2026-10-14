@@ -5,22 +5,36 @@ namespace retro {
 namespace {
 Point3 unit(Point3 p){float length=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);return length>.0001f?p*(1/length):Point3{};}
 struct CleanupBodyFrame {Point3 pelvis{},spine{},rightShoulder{},leftShoulder{};};
-CleanupBodyFrame cleanupBodyFrame(int role,int clip,float phase){
- struct Frames {unsigned samples=0,clips=0;std::vector<CleanupBodyFrame> poses;};
+struct CleanupBodyFrames {unsigned clips=0;std::vector<unsigned> counts,offsets;std::vector<CleanupBodyFrame> poses;std::vector<float> durations;};
+const std::array<CleanupBodyFrames,6>& cleanupBodyFrames(){
  // Share the baked body frame with physical weapon placement. A fixed root
  // offset cannot seat a stock on a leaning or deeply kneeling shoulder.
- static const auto frames=[](){std::array<Frames,6> result;
+ static const auto frames=[](){std::array<CleanupBodyFrames,6> result;
   for(int role=0;role<6;++role){auto data=loadResource(304+role*5);uint32_t header[4]{};
-   if(data.size()<20||std::memcmp(data.data(),"RMA2",4))throw std::runtime_error("Missing cleanup stance animation");std::memcpy(header,data.data()+4,16);
-   auto [corners,samples,clips,vertices]=std::array<uint32_t,4>{header[0],header[1],header[2],header[3]};size_t payload=20+size_t(corners)*2+size_t(samples)*clips*vertices*6;
-   uint32_t trailer[4]{};if(samples<2||samples>128||clips<6||clips>64||!vertices||vertices>65536||corners>1000000||payload+20>data.size()||std::memcmp(data.data()+payload,"RML1",4))throw std::runtime_error("Invalid cleanup stance animation");std::memcpy(trailer,data.data()+payload+4,16);
-   if(trailer[0]!=1||trailer[1]!=samples||trailer[2]!=clips||trailer[3]!=120||data.size()!=payload+20+size_t(samples)*clips*120)throw std::runtime_error("Invalid cleanup stance layer frames");
-   auto&table=result[role];table.samples=samples;table.clips=clips;table.poses.resize(size_t(samples)*clips);
+   bool compact=data.size()>=20&&!std::memcmp(data.data(),"RMA3",4);
+   if(data.size()<20||(!compact&&std::memcmp(data.data(),"RMA2",4)))throw std::runtime_error("Missing cleanup stance animation");std::memcpy(header,data.data()+4,16);
+   auto [corners,samples,clips,vertices]=std::array<uint32_t,4>{header[0],header[1],header[2],header[3]};size_t frameStart=20+size_t(corners)*2+(compact?size_t(clips)*4:0);
+   if((!compact&&(samples<2||samples>512))||(compact&&(!samples||samples>32*512))||clips<6||clips>32||!vertices||vertices>65536||corners>1000000||frameStart>data.size())throw std::runtime_error("Invalid cleanup stance animation");
+   auto&table=result[role];table.clips=clips;table.counts.assign(clips,samples);table.offsets.resize(clips);
+   if(compact)std::memcpy(table.counts.data(),data.data()+20+size_t(corners)*2,size_t(clips)*4);
+   size_t total=0;for(unsigned clip=0;clip<clips;++clip){unsigned count=table.counts[clip];if(count<2||count>512)throw std::runtime_error("Invalid cleanup stance clip count");table.offsets[clip]=unsigned(total);total+=count;}
+   if(compact&&total!=samples)throw std::runtime_error("Invalid cleanup stance total count");
+   size_t payload=frameStart+total*vertices*6;uint32_t trailer[4]{};
+   if(payload+20>data.size()||std::memcmp(data.data()+payload,"RML1",4))throw std::runtime_error("Invalid cleanup stance layers");std::memcpy(trailer,data.data()+payload+4,16);
+   size_t layerEnd=payload+20+total*120;
+   if(trailer[0]!=(compact?2u:1u)||trailer[1]!=samples||trailer[2]!=clips||trailer[3]!=120||data.size()<layerEnd)throw std::runtime_error("Invalid cleanup stance layer frames");
+   table.poses.resize(total);
+   if(data.size()!=layerEnd){uint32_t count=0;if(data.size()!=layerEnd+8+size_t(clips)*4||std::memcmp(data.data()+layerEnd,"RMD1",4))throw std::runtime_error("Invalid cleanup animation durations");std::memcpy(&count,data.data()+layerEnd+4,4);if(count!=clips)throw std::runtime_error("Invalid cleanup animation duration count");table.durations.resize(clips);std::memcpy(table.durations.data(),data.data()+layerEnd+8,size_t(clips)*4);for(float duration:table.durations)if(!std::isfinite(duration)||duration<=0||duration>120)throw std::runtime_error("Invalid cleanup animation duration");}
    for(size_t frame=0;frame<table.poses.size();++frame){size_t base=payload+20+frame*120;auto&pose=table.poses[frame];std::memcpy(&pose.pelvis,data.data()+base,12);std::memcpy(&pose.spine,data.data()+base+12,12);std::memcpy(&pose.rightShoulder,data.data()+base+24,12);std::memcpy(&pose.leftShoulder,data.data()+base+72,12);for(auto point:{pose.pelvis,pose.spine,pose.rightShoulder,pose.leftShoulder})if(!std::isfinite(point.x)||!std::isfinite(point.y)||!std::isfinite(point.z))throw std::runtime_error("Invalid cleanup body frame");}
   }return result;
- }();
- if(!std::isfinite(phase))throw std::runtime_error("Invalid cleanup stance phase");const auto&table=frames.at(size_t(role));if(clip<0||unsigned(clip)>=table.clips)throw std::runtime_error("Invalid cleanup stance clip");float frame=std::clamp(phase,0.f,1.f)*float(table.samples-1);unsigned a=unsigned(frame),b=std::min(a+1,table.samples-1);const auto&A=table.poses[size_t(clip)*table.samples+a];const auto&B=table.poses[size_t(clip)*table.samples+b];float blend=frame-a;return {A.pelvis+(B.pelvis-A.pelvis)*blend,A.spine+(B.spine-A.spine)*blend,A.rightShoulder+(B.rightShoulder-A.rightShoulder)*blend,A.leftShoulder+(B.leftShoulder-A.leftShoulder)*blend};
+ }();return frames;
 }
+CleanupBodyFrame cleanupBodyFrame(int role,int clip,float phase){
+ if(!std::isfinite(phase))throw std::runtime_error("Invalid cleanup stance phase");const auto&table=cleanupBodyFrames().at(size_t(role));if(clip<0||unsigned(clip)>=table.clips)throw std::runtime_error("Invalid cleanup stance clip");unsigned count=table.counts[size_t(clip)],offset=table.offsets[size_t(clip)];float frame=std::clamp(phase,0.f,1.f)*float(count-1);unsigned a=unsigned(frame),b=std::min(a+1,count-1);const auto&A=table.poses[offset+a];const auto&B=table.poses[offset+b];float blend=frame-a;return {A.pelvis+(B.pelvis-A.pelvis)*blend,A.spine+(B.spine-A.spine)*blend,A.rightShoulder+(B.rightShoulder-A.rightShoulder)*blend,A.leftShoulder+(B.leftShoulder-A.leftShoulder)*blend};
+}
+}
+float cleanupAnimationDuration(ActorVisual visual,int clip){
+ int role=int(visual)-int(ActorVisual::Cleanup);if(role<0||role>=6)return 0;const auto&table=cleanupBodyFrames()[size_t(role)];return clip>=0&&size_t(clip)<table.durations.size()?table.durations[size_t(clip)]:0;
 }
 NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const{
  const auto&track=m_friendlyActors.at(actor).track();NpcWeaponPose weapon;
@@ -36,7 +50,7 @@ NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 ta
  CleanupBodyFrame upperBody{},lowerBody{};bool layerAim=pose.clip<=1||pose.clip==5;
  if(cleanup){int upperClip=pose.clip,lowerClip=pose.clip;float upperPhase=pose.phase;
   if(layerAim){upperClip=weapon.crouched?5:0;lowerClip=weapon.crouched?5:pose.clip;
-   if(!weapon.crouched&&!weapon.handgun&&state(friendlyKey(actor,"weapon_action"))==int(GuardAction::Fire)){upperClip=2;upperPhase=float(state(friendlyKey(actor,"weapon_action_ms")))/guardActionDuration(GuardAction::Fire);}}
+   if(!weapon.crouched&&(!weapon.handgun||cleanupAnimationDuration(track.visual,2)>0)&&state(friendlyKey(actor,"weapon_action"))==int(GuardAction::Fire)){upperClip=2;upperPhase=float(state(friendlyKey(actor,"weapon_action_ms")))/guardActionDuration(GuardAction::Fire);}}
   upperBody=cleanupBodyFrame(int(track.visual)-4,upperClip,upperPhase);lowerBody=cleanupBodyFrame(int(track.visual)-4,lowerClip,pose.phase);
   if(weapon.crouched){auto standing=cleanupBodyFrame(int(track.visual)-4,0,pose.phase);crouchDrop=std::max(0.f,((standing.rightShoulder.y+standing.leftShoulder.y)-(upperBody.rightShoulder.y+upperBody.leftShoulder.y))*.5f)*scale;}
  }
@@ -73,9 +87,12 @@ NpcWeaponPose Game::npcWeaponPose(size_t actor)const{
   weapon=npcWeaponPoseAt(actor,npc.pose,{},0);float lift=.216f*raise*track.scale/1.6f;weapon.grip.z+=lift;weapon.muzzle.z+=lift;weapon.raise=raise;
  }
  weapon.flash=get("weapon_flash")/80.f;weapon.recoil=get("weapon_recoil")/220.f;
- weapon.treatment=get("support_ms")/2400.f;
+ weapon.treatment=float(get("support_ms"))/guardTreatmentDuration(track);
  weapon.engineering=track.ai.role==GuardSquadRole::Engineer?std::clamp(get("drone_windup")/1200.f,0.f,1.f):0;
  weapon.maintenance=track.ai.role==GuardSquadRole::Engineer&&get("drone_busy")&&get("drone_repair_target")>0&&!get("drone_windup");
+ int padStage=get("engineer_pad_stage");weapon.supportAnimation=track.visual==ActorVisual::CleanupEngineer&&track.ai.role==GuardSquadRole::Engineer&&padStage>0&&npc.pose.clip==0&&!get("guard_danger_ms");
+ if(weapon.supportAnimation){weapon.supportClip=padStage==1?6:padStage==2?7:8;float duration=cleanupAnimationDuration(track.visual,weapon.supportClip);weapon.supportPhase=duration>0?std::clamp(get("engineer_pad_ms")/(duration*1000),0.f,1.f):0;weapon.padVisible=padStage==2||(padStage==1&&weapon.supportPhase>=.6f)||(padStage==3&&weapon.supportPhase<.5f);weapon.raise=0;weapon.flash=0;weapon.recoil=0;}
+ weapon.pistolVisible=weapon.armed&&weapon.handgun&&!weapon.supportAnimation&&weapon.treatment<=0;
  if(engineering){weapon.flash=0;weapon.recoil=0;}
  weapon.action=GuardAction(get("weapon_action"));weapon.actionProgress=guardActionDuration(weapon.action)?float(get("weapon_action_ms"))/guardActionDuration(weapon.action):0;
  weapon.reload=get("weapon_reloading")?1.f-get("weapon_reload")/1800.f:0;
@@ -128,7 +145,7 @@ void Game::updateGuardCombat(float dt){
   if(kind!=get("weapon_target_kind")||targetLevel!=get("weapon_target_level")||targetIndex!=get("weapon_target_index")){put("weapon_aim",0);put("weapon_bash",0);put("guard_suppress_ms",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}put("weapon_target_kind",kind);put("weapon_target_level",targetLevel);put("weapon_target_index",targetIndex);}
   Point3 aimPoint{target.position.x,target.position.y,target.feet+target.height*.6f};auto delta=aimPoint-Point3{npc.pose.position.x,npc.pose.position.y,npc.pose.z+track.scale*.85f};
   bool visible=target.valid()&&guardState(i)==GuardState::Alert&&delta.x*delta.x+delta.y*delta.y+delta.z*delta.z<config.attackRange*config.attackRange&&guardCanSee(i,npc.pose,target);
-  bool workBlocked=get("guard_danger_ms")||get("drone_busy")||get("support_ms")||get("support_target");
+  bool workBlocked=get("guard_danger_ms")||get("drone_busy")||get("engineer_pad_stage")||get("support_ms")||get("support_target");
   bool close=visible&&guardMeleeReady(i,npc.pose,target),bashAllowed=!workBlocked&&guardTaskAllows(i,GuardTask::Bash);
   // Contact defense can own Bash with an empty tube. Pause the reload before
   // its event/refill boundary, preserving its remaining clock and event mask.

@@ -29,7 +29,13 @@ public:
  // then restricted mid/head aim yaw+pitch toward the look target.
  void poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float upperPhase,float aimYaw,float aimPitch);
  bool hasCreatureLayerPose()const{return !m_creatureLayerFrames.empty();}
+ // RMD1 is emitted by the direct character bake. Legacy banks have no
+ // authored playback duration and continue to use their existing phase clock.
+ bool hasDirectCreatureMotion()const{return !m_creatureDurations.empty();}
+ float creatureClipDuration(int clip)const;
+ unsigned creatureClipCount()const{return m_creatureClips;}
  const CreatureLayerPose& creatureLayerPose()const{return m_creatureLayerPose;}
+ CreatureLayerPose creatureLayerPoseAt(int clip,float phase)const{return sampleCreatureLayerPose(clip,phase);}
  static bool testCleanupTankAim();
  void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil);
  Point3 bonePosition(const char* name)const;
@@ -48,12 +54,15 @@ private:
  std::vector<unsigned char> m_anchorFrames;
  std::array<Point3,2> m_poseAnchors{};
  std::vector<CreatureLayerPose> m_creatureLayerFrames;
+ std::vector<float> m_creatureDurations;
  CreatureLayerPose m_creatureLayerPose{};
  std::vector<uint16_t> m_creatureIndices;
  std::vector<Point3> m_creatureBindUnique;
  std::vector<float> m_creatureUpperMask,m_creatureHeadMask,m_creatureArmMask;
  std::vector<unsigned char> m_creatureHandSide;
  uint32_t m_creatureSamples=0,m_creatureVertices=0,m_creatureClips=0;
+ std::vector<uint32_t> m_creatureSampleCounts,m_creatureSampleOffsets;
+ size_t m_creatureFrameOffset=0;
  mutable std::vector<Point3> m_creaturePoseScratch;
  mutable std::vector<Point3> m_creaturePoseScratchB;
  void sampleCreatureClip(int clip,float phase,std::vector<Point3>& out)const;

@@ -32,8 +32,15 @@ was imported and audited: all have the full 65-bone skeleton, with all 30
 finger joints present and finite bone transforms at sampled poses. The
 corrected skinned character is in `basic-shooter-pack/assault-full-fingers.fbx`.
 
-The FBXs and downloaded archives remain local and are ignored by Git. These
-are source assets, not additional embedded runtime resources. The new mesh
-and animations still need a coordinated in-game bake. Preserve the source
-finger deformation in that bake; the current game's rigid-hand attachment
-must not overwrite it.
+The FBXs and downloaded archives remain local and are ignored by Git. At the
+source intake milestone, the new mesh and animations awaited a coordinated
+in-game bake.
+
+## Integration status — 14 October 2026
+
+Six core clips are now prepared from this character's evaluated skin: idle,
+walk, fire, hit, death and crouch. RMA3 retains source timing with per-clip
+24 fps samples, bending fingers and full-hand upper-layer ownership. The rest
+of this library remains available for later action selection. Native build,
+visual review and gameplay verification are pending; see the
+[direct bake report](../../../docs/direct-squad-animation-20261014.md).
