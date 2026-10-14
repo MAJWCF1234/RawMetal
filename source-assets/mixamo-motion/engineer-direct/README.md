@@ -4,8 +4,8 @@ Downloaded on the repaired `engineer-full-fingers` character after the user
 placed its body rig markers. Both original hands are retained. The original
 Mixamo export omitted the pinkies; the repaired source has all 65 bones.
 
-Six packs and 23 individual downloads contain 122 animation FBXs and one
-character FBX. Packs overlap; this is a file count, not 122 distinct actions.
+Six packs and 19 individual downloads contain 118 animation FBXs and one
+character FBX. Packs overlap; this is a file count, not 118 distinct actions.
 The original downloads and extracted FBXs are local, ignored assets. The
 manifest preserves paths, sizes and SHA-256 hashes; the clip catalog records
 each imported file's actual FPS and duration.
@@ -16,10 +16,13 @@ character FBX. Resample by elapsed source time to 24 fps when baking.
 
 ## Engineer behavior requested by the user
 
-- Standing support idle: `Texting While Standing`, operating a data pad.
-- Walking with the pad: male `Walk With Briefcase`, with its matching turns.
-- Draw/stow: reach behind, hiding the pad and showing the pistol at a hand
-  attachment event. Never show both props together.
+- Pad equip/use/unequip: use the built-in pocket reach, texting section and
+  return-to-pocket sequence of `Texting While Standing`. Source renders
+  confirm all three sections. Loop only the use section during support idle.
+- Briefcase walk and turns were rejected by the user and removed from this
+  selected source library. Do not use them for Engineer locomotion.
+- Pistol draw/stow: use a separate equip gesture, with the pad's own unequip
+  section completed first. Never show both props together.
 - Before a jump or evasive maneuver, stow the pad. If armed, use pistol
   movement and pistol jump clips. Ladders require both hands free.
 - Device work, pickup and case opening/closing support drone deployment,

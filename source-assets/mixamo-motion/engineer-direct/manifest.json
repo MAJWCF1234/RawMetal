@@ -5,54 +5,6 @@
   "keyframeReduction": "uniform",
   "packs": [
     {
-      "name": "Walk With Briefcase - Male Walk With Briefcase",
-      "kind": "clip",
-      "download_sha256": "2c0fd2d897029c0818de2c42cdc33d164a366ac66b97d08c770da317ebb445af",
-      "files": [
-        {
-          "file": "special/walk-with-briefcase-male-walk-with-briefcase.fbx",
-          "bytes": 857200,
-          "sha256": "2c0fd2d897029c0818de2c42cdc33d164a366ac66b97d08c770da317ebb445af"
-        }
-      ]
-    },
-    {
-      "name": "Right Turn W/ Briefcase - Male Right Turn With Briefcase",
-      "kind": "clip",
-      "download_sha256": "5786bd8592302ffb5d964f323312aac3bd264b0d6c2e26f5838187c15cf59472",
-      "files": [
-        {
-          "file": "special/right-turn-w-briefcase-male-right-turn-with-briefcase.fbx",
-          "bytes": 402080,
-          "sha256": "5786bd8592302ffb5d964f323312aac3bd264b0d6c2e26f5838187c15cf59472"
-        }
-      ]
-    },
-    {
-      "name": "Left Turn W/Briefcase - Male Left Turn With Briefcase",
-      "kind": "clip",
-      "download_sha256": "1bf93d8e4cc7f5816b5d15dc0b24091943ddb76c1d05afee6db3e098f6883fb4",
-      "files": [
-        {
-          "file": "special/left-turn-w-briefcase-male-left-turn-with-briefcase.fbx",
-          "bytes": 430704,
-          "sha256": "1bf93d8e4cc7f5816b5d15dc0b24091943ddb76c1d05afee6db3e098f6883fb4"
-        }
-      ]
-    },
-    {
-      "name": "180 Turn W/ Briefcase - Male 180 Turn With Briefcase",
-      "kind": "clip",
-      "download_sha256": "f99bcbd67a735af1b50e348f4331a98ce7d57b6afef3d7396d0e83e3ecf1dfd4",
-      "files": [
-        {
-          "file": "special/180-turn-w-briefcase-male-180-turn-with-briefcase.fbx",
-          "bytes": 403568,
-          "sha256": "f99bcbd67a735af1b50e348f4331a98ce7d57b6afef3d7396d0e83e3ecf1dfd4"
-        }
-      ]
-    },
-    {
       "name": "Texting While Standing - Texting On A Smart Phone While Standing",
       "kind": "clip",
       "download_sha256": "7b73030cb66c4bc0d4dfe94c9efff1c22ed66360bca198bee7b2bd663524131a",
@@ -823,5 +775,5 @@
       ]
     }
   ],
-  "fbx_files": 123
+  "fbx_files": 119
 }

@@ -18,8 +18,8 @@ args.output.mkdir(parents=True, exist_ok=True)
 catalog = json.loads((args.library / 'clip-catalog.json').read_text())
 base = args.library / 'special/texting-while-standing-texting-on-a-smart-phone-while-standing.fbx'
 selections = [
-    ('texting', 'Texting While Standing - Texting On A Smart Phone While Standing', [0, .5]),
-    ('carry', 'Walk With Briefcase - Male Walk With Briefcase', [0, .5]),
+    ('texting', 'Texting While Standing - Texting On A Smart Phone While Standing',
+     [0, .03, .06, .09, .12, .5, .88, .91, .94, .97, 1]),
     ('reach-underarm', 'Unarmed Equip Underarm', [0, .25, .5, .75, 1]),
     ('reach-shoulder', 'Unarmed Equip Over Shoulder', [0, .25, .5, .75, 1]),
 ]

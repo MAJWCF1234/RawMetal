@@ -12,13 +12,13 @@ The original export, fixed FBX and repair report are retained in
 
 ## Animation collection
 
-Six packs and 23 individual clips provide 123 FBX files: 122 animation
-files and one static character. All 123 were imported and checked for 65
+Six packs and 19 individual clips now provide 119 FBX files: 118 animation
+files and one static character. All retained files were imported and checked for 65
 bones, all 30 finger joints, valid animation ranges and finite poses at
 three sample times. SHA-256 hashes verify the local archive and file copies.
 This structural audit is not a visual pass for every animation.
 
-102 animated FBXs use 24 fps. The pistol pack's 20 motions and its static
+98 animated FBXs use 24 fps. The pistol pack's 20 motions and its static
 character retain 30 fps despite the browser's 24 fps setting. The catalog
 preserves actual source timing; the final bake must resample to 24 fps.
 
@@ -29,11 +29,19 @@ and final transition timing have not been applied in these source renders.
 
 ![Original Engineer skinned source poses](images/engineer-mixamo-source-poses-20261013.png)
 
-The requested sequence is pad texting while standing, briefcase carry while
-walking, then a reach-behind prop swap to the pistol. The pad must be stowed
-before jumps or evasive movement, or those actions use pistol animations
-when already armed. Both hands must be free for ladders. Generic axe equip
-gestures need adaptation; they are not a finished pistol draw.
+The user corrected the selection: `Texting While Standing` already has pad
+equip and unequip. Eleven rendered phases confirm the initial pocket reach,
+the middle texting section and the final return-to-pocket/idle. Use these
+sections for pad equip, support idle and stow. The four briefcase walk/turn
+source files were hash-checked and removed from the selected library and
+catalog. The earlier image above records the original intake selection.
+
+![Texting clip including equip and unequip](images/engineer-texting-transitions-20261013.png)
+
+The pad must be stowed before jumps or evasive movement, or those actions
+use pistol animations when already armed. Both hands must be free for
+ladders. A separate pistol draw follows pad stow. Generic axe equip gestures
+still need adaptation for that draw; final prop event timing remains pending.
 
 The source library also includes turns, pistol strafing/running/kneeling,
 pistol jumps, cover, falls, landing/roll recovery, injury locomotion, death
