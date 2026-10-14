@@ -1,0 +1,110 @@
+{
+  "bones": 65,
+  "geometry_preserved": true,
+  "body_rig_preserved": true,
+  "normalized_height_m": 1.6000000227087599,
+  "finger_weights": {
+    "mixamorig:LeftHand": 834,
+    "mixamorig:LeftArm": 54,
+    "mixamorig:LeftForeArm": 144,
+    "mixamorig:Hips": 12,
+    "mixamorig:LeftUpLeg": 6,
+    "mixamorig:LeftHandThumb1": 213,
+    "mixamorig:LeftHandThumb2": 313,
+    "mixamorig:LeftHandPinky1": 211,
+    "mixamorig:LeftHandRing1": 161,
+    "mixamorig:LeftHandThumb3": 240,
+    "mixamorig:LeftHandIndex2": 191,
+    "mixamorig:LeftHandIndex3": 173,
+    "mixamorig:LeftHandIndex1": 96,
+    "mixamorig:LeftHandMiddle1": 171,
+    "mixamorig:LeftHandMiddle2": 255,
+    "mixamorig:LeftHandMiddle3": 199,
+    "mixamorig:LeftHandRing2": 266,
+    "mixamorig:LeftHandRing3": 228,
+    "mixamorig:LeftHandPinky2": 344,
+    "mixamorig:LeftHandPinky3": 264,
+    "mixamorig:RightHand": 833,
+    "mixamorig:RightArm": 72,
+    "mixamorig:RightForeArm": 186,
+    "mixamorig:RightUpLeg": 6,
+    "mixamorig:RightHandThumb1": 213,
+    "mixamorig:RightHandThumb2": 313,
+    "mixamorig:RightHandPinky1": 211,
+    "mixamorig:RightHandRing1": 162,
+    "mixamorig:RightHandThumb3": 240,
+    "mixamorig:RightHandIndex2": 191,
+    "mixamorig:RightHandIndex3": 173,
+    "mixamorig:RightHandIndex1": 96,
+    "mixamorig:RightHandMiddle1": 171,
+    "mixamorig:RightHandMiddle2": 255,
+    "mixamorig:RightHandMiddle3": 199,
+    "mixamorig:RightHandRing2": 266,
+    "mixamorig:RightHandRing3": 228,
+    "mixamorig:RightHandPinky2": 343,
+    "mixamorig:RightHandPinky3": 264
+  },
+  "independent_curl_checks": [
+    {
+      "side": "Left",
+      "finger": "Index",
+      "moved_vertices": 263,
+      "max_motion_m": 0.10484132344567855
+    },
+    {
+      "side": "Left",
+      "finger": "Middle",
+      "moved_vertices": 359,
+      "max_motion_m": 0.11920850444224197
+    },
+    {
+      "side": "Left",
+      "finger": "Ring",
+      "moved_vertices": 363,
+      "max_motion_m": 0.11906936065260297
+    },
+    {
+      "side": "Left",
+      "finger": "Pinky",
+      "moved_vertices": 467,
+      "max_motion_m": 0.09492238764036952
+    },
+    {
+      "side": "Left",
+      "finger": "Thumb",
+      "moved_vertices": 447,
+      "max_motion_m": 0.08873644074015945
+    },
+    {
+      "side": "Right",
+      "finger": "Index",
+      "moved_vertices": 263,
+      "max_motion_m": 0.10484161825341026
+    },
+    {
+      "side": "Right",
+      "finger": "Middle",
+      "moved_vertices": 359,
+      "max_motion_m": 0.11920842378307628
+    },
+    {
+      "side": "Right",
+      "finger": "Ring",
+      "moved_vertices": 364,
+      "max_motion_m": 0.11906965217958122
+    },
+    {
+      "side": "Right",
+      "finger": "Pinky",
+      "moved_vertices": 468,
+      "max_motion_m": 0.09492245306063266
+    },
+    {
+      "side": "Right",
+      "finger": "Thumb",
+      "moved_vertices": 448,
+      "max_motion_m": 0.08873688243539574
+    }
+  ],
+  "exported": "N:\\rawmetal\\diagnostics\\sharpshooter-mixamo-20261013\\fixed\\sharpshooter-full-fingers.fbx"
+}
