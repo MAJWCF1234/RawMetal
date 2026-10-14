@@ -26,5 +26,13 @@ blender -b --python-exit-code 1 --python tools/InspectEngineerMotion.py -- --cha
 ```
 
 The native source renderer preserves evaluated bone matrices across FBX
-bind poses. These sources await slicing, final weapon alignment and in-game
-verification; the existing game animation bank remains unchanged.
+bind poses. The source intake milestone left the game animation bank unchanged.
+
+## Integration status — 14 October 2026
+
+Six core clips are now prepared from this character's evaluated skin: idle,
+walk, fire, hit, death and crouch. RMA3 retains source timing with per-clip
+24 fps samples, bending fingers and full-hand upper-layer ownership. The rest
+of this library remains available for later action selection. Native build,
+weapon/aim review and gameplay verification are pending; see the
+[direct bake report](../../../docs/direct-squad-animation-20261014.md).

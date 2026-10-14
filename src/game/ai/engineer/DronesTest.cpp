@@ -16,6 +16,27 @@ bool Game::testEngineerDrones(){
   auto poses=g.engineerDrones();check(poses.size()==1&&poses[0].owner==0&&poses[0].health==EngineerDroneHealth&&std::fabs(poses[0].position.z)<.001f,"Confirmed Engineer assembles one actual grounded drone at 60/120 Hz");
   check(g.state(g.friendlyKey(0,"drone_used"))==1&&g.state(g.friendlyKey(0,"drone_repair_charge"))==80,"Deployment spends finite stock and initializes a finite maintenance reservoir");
  }
+ for(int rate:{60,120}){
+  auto g=scene([](auto&map){map.definition.playerStart={10.5f,6.5f};map.actorTracks[0].visual=ActorVisual::CleanupEngineer;});known(g);
+  float entry=cleanupAnimationDuration(ActorVisual::CleanupEngineer,6),stow=cleanupAnimationDuration(ActorVisual::CleanupEngineer,8);
+  check(entry>0&&stow>0,"Direct Engineer bank carries authored equip and stow durations");if(entry<=0||stow<=0)continue;
+  tick(g,rate,rate);auto equip=g.npcWeaponPose(0);
+  check(equip.supportAnimation&&equip.supportClip==6&&!equip.pistolVisible&&g.engineerDrones().empty()&&!g.state(g.friendlyKey(0,"drone_windup")),"Direct Engineer equips the pad before assembly advances or any drone stock is committed");
+  Game restored(g.m_customCampaign);bool decoded=restored.decodeSave(g.encodeSave());
+  check(decoded&&restored.state(restored.friendlyKey(0,"engineer_pad_stage"))==g.state(g.friendlyKey(0,"engineer_pad_stage"))&&restored.state(restored.friendlyKey(0,"engineer_pad_ms"))==g.state(g.friendlyKey(0,"engineer_pad_ms")),"Saving during pad equip restores its exact owned transition and clock");
+  int frame=0;bool exclusive=true,useSeen=false;
+  while(frame++<rate*6&&g.engineerDrones().empty()){tick(g,1,rate);if(decoded)tick(restored,1,rate);auto pose=g.npcWeaponPose(0);exclusive&=pose.supportAnimation&&!pose.pistolVisible&&!pose.flash;useSeen|=pose.supportClip==7&&pose.padVisible;}
+  check(exclusive&&useSeen&&g.engineerDrones().size()==1&&g.state(g.friendlyKey(0,"drone_used"))==1,"Native pad use owns one real deployment with mutually exclusive pistol and pad visibility");
+  check(decoded&&restored.engineerDrones().size()==1&&restored.state(restored.friendlyKey(0,"drone_used"))==1,"Saved and uninterrupted pad entry and assembly commit the same single drone");
+  g.setState(g.friendlyKey(0,"guard_confirmed"),0);tick(g,1,rate);g.setState(g.friendlyKey(0,"guard_slot"),1);g.setState(g.friendlyKey(0,"guard_slot_ms"),1600);auto tail=g.npcWeaponPose(0);
+  check(tail.supportAnimation&&tail.supportClip==8&&!tail.pistolVisible&&!g.guardFireSlot(0),"Normal deployment completion plays the pad's own stow before exposing the pistol or reserving a squad fire slot");
+  g.updateGuardCombat(1.f/rate);int rounds=g.state(g.friendlyKey(0,"weapon_rounds"));float health=g.player().health;
+  check(!g.state(g.friendlyKey(0,"guard_slot")),"Pad stow releases a stale persisted squad fire lease for its covering teammates");
+  tick(g,int(std::ceil(stow*rate))+2,rate);auto armed=g.npcWeaponPose(0);
+  check(!armed.supportAnimation&&!armed.padVisible&&armed.pistolVisible&&g.player().health==health&&g.state(g.friendlyKey(0,"weapon_rounds"))==rounds,"Stow releases the handgun without consuming a shot or leaving a visible pad");
+  auto threatened=scene([](auto&map){map.definition.playerStart={10.5f,6.5f};map.actorTracks[0].visual=ActorVisual::CleanupEngineer;});known(threatened);tick(threatened,rate,rate);threatened.setState(threatened.friendlyKey(0,"guard_danger_ms"),1000);tick(threatened,1,rate);
+  check(!threatened.npcWeaponPose(0).supportAnimation&&!threatened.npcWeaponPose(0).padVisible&&!threatened.state(threatened.friendlyKey(0,"engineer_pad_stage"))&&threatened.engineerDrones().empty()&&!threatened.state(threatened.friendlyKey(0,"drone_used")),"Physical danger cancels pad equip immediately before spending the pending drone");
+ }
  {auto g=scene([](auto&){});tick(g,240,60,true);check(g.engineerDrones().empty()&&!g.state(g.friendlyKey(0,"drone_used")),"Engineer without any personally observed threat never fabricates a deployed drone");}
  {auto g=scene([](auto&map){map.actorTracks[0].ai.role=GuardSquadRole::Assault;});check(!g.deployEngineerDrone(0)&&!g.deployEngineerDrone(99),"Drone deployment rejects non-Engineer and nonexistent owners");}
  {auto g=scene([](auto&map){map.actorTracks[0].ai.faction=AiFaction::Facility;});g.deployEngineerDrone(0);auto drones=g.engineerDrones();auto target=g.engineerDroneTarget(0,g.level());
@@ -72,7 +93,7 @@ bool Game::testEngineerDrones(){
  for(int rate:{60,120}){auto g=scene([](auto&){});g.deployEngineerDrone(0);auto&npc=g.m_friendlyActors[0];npc.pose.position={12.5f,6.5f};Vec2 start{g.engineerDrones()[0].position.x,g.engineerDrones()[0].position.y};bool safe=true;for(int frame=0;frame<rate*2;++frame){auto before=g.engineerDrones()[0].position;tick(g,1,rate);auto after=g.engineerDrones()[0].position;safe&=norm3(after-before)<=1.6f/rate+.003f&&std::fabs(after.z)<.001f&&g.world().fits(after.x,after.y,after.z,EngineerDroneHeight);}auto pose=g.engineerDrones()[0];motion.push_back(pose.position);check(safe&&length(Vec2{pose.position.x,pose.position.y}-start)>2.8f&&pose.walking,"Supervised drone walks physically toward its Engineer with bounded speed and floor support");}
  if(motion.size()==2)check(norm3(motion[0]-motion[1])<.025f,"Saved movement fractions keep grounded drone travel consistent at 60/120 Hz");
  for(const char*field:{"active","owner","level","hp","ammo","x","z","aim","fraction","x_fraction","route_next"}){auto g=scene([](auto&){});g.deployEngineerDrone(0);g.setState(droneTestKey(0,field),std::numeric_limits<int>::max());Game restored(g.m_customCampaign);check(!restored.decodeSave(g.encodeSave()),"Corrupt saved drone body, identity, movement or ammunition is rejected safely");}
- for(const char*field:{"drone_used","drone_repair_charge","drone_windup","drone_fraction","drone_busy"}){auto g=scene([](auto&){});g.setState(g.friendlyKey(0,field),std::numeric_limits<int>::max());Game restored(g.m_customCampaign);check(!restored.decodeSave(g.encodeSave()),"Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits");}
+ for(const char*field:{"drone_used","drone_repair_charge","drone_windup","drone_fraction","drone_busy","engineer_pad_stage","engineer_pad_ms"}){auto g=scene([](auto&){});g.setState(g.friendlyKey(0,field),std::numeric_limits<int>::max());Game restored(g.m_customCampaign);check(!restored.decodeSave(g.encodeSave()),"Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits");}
  auto fleetScene=[](auto&map){
   auto&engineer=map.actorTracks[0];engineer.ai.attackRange=12;engineer.ai.attackDamage=1;engineer.ai.patrol={{{6.5f,6.5f},0,60000}};
   // A durable real opponent lets ordinary perception, assembly and cannon

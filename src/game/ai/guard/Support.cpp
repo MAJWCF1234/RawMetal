@@ -1,5 +1,6 @@
 #include "../../Game.h"
 namespace retro {
+int guardTreatmentDuration(const ActorTrack&track){float duration=track.visual==ActorVisual::CleanupMedic?cleanupAnimationDuration(track.visual,6):0;return duration>0?std::max(1,int(std::round(duration*1000))):2400;}
 void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,float dt,Vec2&goal,float&goalZ,bool&wantsMove,bool advanceWork){
  if(track.ai.role==GuardSquadRole::Engineer){guardEngineerIntent(level,actor,track,pose,std::max(1,int(std::round(dt*1000))),goal,goalZ,wantsMove);return;}
  if(track.ai.role!=GuardSquadRole::Medic)return;
@@ -40,13 +41,13 @@ void Game::runGuardTreatment(size_t actor,int ms){
  // must not heal over that unsensed hit and erase the patient's damage cue.
  if(t.ai.mode==ActorAiMode::Guard&&(state(friendlyKey(size_t(target),"guard_under_fire"))||state(friendlyKey(size_t(target),"hit_source"))||guardGrenadeExposed(size_t(target))||(get("schedule")!=int(GuardSchedule::None)&&state(t.damageState)>state(friendlyKey(size_t(target),"guard_damage"))))){put("support_ms",0);return;}
  if(patient.pose.clip==4||!autonomousActor(t)||state(t.deadState)||length(position-ctx.pose.position)>1.31f)return;
- int treatment=std::min(2400,get("support_ms")+ms);put("support_ms",treatment);if(treatment<2400)return;
+ int duration=guardTreatmentDuration(ctx.track),treatment=std::min(duration,get("support_ms")+ms);put("support_ms",treatment);if(treatment<duration)return;
  setState(t.damageState,std::max(0,state(t.damageState)-30));put("support_used",get("support_used")+1);put("support_cooldown",6000);put("support_ms",0);put("support_target",0);put("weapon_recovery",std::max(get("weapon_recovery"),450));
  m_sounds.push_back({Sound::Pickup,position+origin-chunkOffset(m_level),.65f,.8f,true,10,patient.pose.z+t.scale*.6f});
 }
 void Game::validateGuardSupport(size_t actor)const{
  auto get=[&](const char*f){return state(friendlyKey(actor,f));};const auto&track=m_friendlyActors[actor].track();
- if(get("support_target")<0||get("support_target")>4096||get("support_used")<0||get("support_used")>guardRoleProfile(track.ai.role).treatments||get("support_ms")<0||get("support_ms")>2400||get("support_fraction")<0||get("support_fraction")>=1000||get("support_cooldown")<0||get("support_cooldown")>6000||(get("support_ms")&&!get("support_target")))throw std::runtime_error("Invalid saved squad treatment");
+ if(get("support_target")<0||get("support_target")>4096||get("support_used")<0||get("support_used")>guardRoleProfile(track.ai.role).treatments||get("support_ms")<0||get("support_ms")>guardTreatmentDuration(track)||get("support_fraction")<0||get("support_fraction")>=1000||get("support_cooldown")<0||get("support_cooldown")>6000||(get("support_ms")&&!get("support_target")))throw std::runtime_error("Invalid saved squad treatment");
  if(track.ai.role!=GuardSquadRole::Medic&&(get("support_target")||get("support_ms")||get("support_used")))throw std::runtime_error("Saved treatment requires Medic profile");
 }
 }

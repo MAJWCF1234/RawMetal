@@ -39,4 +39,14 @@ blender -b --python-exit-code 1 --python tools/InspectEngineerMotion.py -- --cha
 
 Do not transfer raw animation F-curves between imported FBX bind poses. The
 source renderer preserves full evaluated bone matrices and checks the result.
-The current game assets are unchanged; slicing and integration remain later.
+The source intake milestone left the game assets unchanged.
+
+## Integration status — 14 October 2026
+
+Seven clips are now prepared: the six core motions and the full **8.9167 s**
+`Opening A Lid` take for case opening/treatment (clip 6). RMA3 retains actual
+source timing, bending fingers and matching wrist anchors with per-clip
+24 fps samples. Medic retains the pistol. The rest of this library remains
+available for later action selection. Native build, case/patient alignment
+review and live healing verification are pending; see the
+[direct bake report](../../../docs/direct-squad-animation-20261014.md).

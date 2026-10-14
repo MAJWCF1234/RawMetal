@@ -25,7 +25,7 @@ unsigned Game::guardConditions(size_t actor,const ActorPose&pose)const{
  // Attack conditions report physically possible work. They do not depend on
  // the current task lease or already advanced aim/raise clocks, and cannot
  // reveal a remembered target through occlusion.
- bool recovered=!get("weapon_recovery")&&!get("weapon_bash_pose")&&!get("grenade_windup")&&!get("drone_busy")&&!get("support_target");
+ bool recovered=!get("weapon_recovery")&&!get("weapon_bash_pose")&&!get("grenade_windup")&&!get("drone_busy")&&!get("engineer_pad_stage")&&!get("support_target");
  bool actionReady=get("weapon_action")==int(GuardAction::None);
  if(track.ai.armed&&seen&&get("guard_confirmed")&&recovered&&close&&(actionReady||get("weapon_action")==int(GuardAction::Reload)))conditions|=GuardCanMeleeAttack;
  if(!track.ai.armed||!seen||!get("guard_confirmed")||!recovered||!actionReady)return conditions;

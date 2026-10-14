@@ -27,8 +27,8 @@ Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
  put("weapon_raise",1000);put("weapon_target",1);put("weapon_x",int(std::lround(target.x*1000)));put("weapon_y",int(std::lround(target.y*1000)));put("weapon_z",int(std::lround(target.z*1000)));
  put("crouched",pose.clip==5||sample==15);if(sample==14){put("weapon_raise",0);put("weapon_target",0);}if(sample==8){put("weapon_action",int(GuardAction::Fire));put("weapon_action_ms",100);put("weapon_recoil",110);put("weapon_flash",50);}
  if(sample==9){put("weapon_action",int(GuardAction::Reload));put("weapon_action_ms",900);put("weapon_reloading",1);put("weapon_reload",900);}
- if(sample==10&&role==1){put("drone_busy",1);put("drone_windup",600);pose.clip=0;}
- if(sample==10&&role==4){put("support_ms",phase<0?1200:std::max(1,int(pose.phase*2400)));pose.clip=0;}
+ if(sample==10&&role==1){put("drone_busy",1);put("drone_windup",600);if(cleanupAnimationDuration(track.visual,7)>0){put("engineer_pad_stage",2);put("engineer_pad_ms",int(pose.phase*cleanupAnimationDuration(track.visual,7)*1000));}pose.clip=0;}
+ if(sample==10&&role==4){put("support_ms",std::max(1,int(pose.phase*guardTreatmentDuration(track))));pose.clip=0;}
  Vec2 forward{std::sin(pose.yaw),std::cos(pose.yaw)},right{forward.y,-forward.x};
  g.m_player.pos=pose.position+(view?right*2.4f+forward*.35f:forward*2.5f+right*.6f);g.m_player.z=pose.z;
  g.m_player.angle=std::atan2(pose.position.y-g.m_player.pos.y,pose.position.x-g.m_player.pos.x);g.m_player.pitch=-30;

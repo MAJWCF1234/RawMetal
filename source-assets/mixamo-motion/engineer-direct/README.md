@@ -46,4 +46,14 @@ blender -b --python-exit-code 1 --python tools/InspectEngineerMotion.py -- --lib
 ```
 
 The historical auditor filename now supports both character libraries.
-This source intake does not replace the game's existing animation bank.
+The source intake milestone left the game's existing animation bank unchanged.
+
+## Integration status — 14 October 2026
+
+Nine clips are now prepared: the six core motions and `Texting While Standing`
+sections for pad equip (clip 6, 2.5 s), use (clip 7, 2.0 s) and stow
+(clip 8, 2.5 s). RMA3 retains actual source timing and bending fingers with
+per-clip 24 fps samples. Engineer retains the pistol and five-drone limit.
+The rest of this library remains available for later action selection.
+Native build, prop-transition review and gameplay verification are pending;
+see the [direct bake report](../../../docs/direct-squad-animation-20261014.md).
