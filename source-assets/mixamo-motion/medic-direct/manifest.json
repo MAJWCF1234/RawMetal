@@ -1,0 +1,815 @@
+{
+  "character": "medic-full-fingers",
+  "format": "FBX Binary",
+  "fps": 24,
+  "keyframeReduction": "uniform",
+  "packs": [
+    {
+      "name": "Pistol/Handgun Locomotion Pack",
+      "kind": "pack",
+      "download_sha256": "3d9ba7ab18ffa7e68cbeda7265c13d195dc1e7467211b970f7aa640522f2fc24",
+      "files": [
+        {
+          "file": "pistol-handgun-locomotion-pack/medic-full-fingers.fbx",
+          "bytes": 771665,
+          "sha256": "1f22f7eb25c9d39014f11e56332a6aa5a6a86c9308c0a23f98894c7449fd1f71"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol idle.fbx",
+          "bytes": 355585,
+          "sha256": "9daaa7bb5b48da775b6c3e741a5df2591cc5d52aacb70a0264ca7fe5efde0437"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol jump (2).fbx",
+          "bytes": 329985,
+          "sha256": "b6d2cd7846fde704cd9a59f19e95dbd2ff8e03a134677fdcdb706adba460ae95"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol jump.fbx",
+          "bytes": 414833,
+          "sha256": "17d08a6e4ebb182bf4e7b8818eaeef5320b83574f59aea42488925b2341ef0fb"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol kneel to stand.fbx",
+          "bytes": 362033,
+          "sha256": "1814058925e1cfbeca04a74e00f6f9ccf9c0d66adf6f529748a16834afd955c4"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol kneeling idle.fbx",
+          "bytes": 514017,
+          "sha256": "93da27a14fc6bac8f4046f1ace3d4764352fdddba85a722a5f55bdc1e8eab3b4"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol run arc (2).fbx",
+          "bytes": 316049,
+          "sha256": "e45a7c35f4b89bb179bcfa32162f4bbcb75f10f792027f8fb1b55b8809900297"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol run arc.fbx",
+          "bytes": 314401,
+          "sha256": "7c262d307c461d8f6d19f0fe52ac22a9a8ddac8c2f91f1c33e11ad4c990e833b"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol run backward arc (2).fbx",
+          "bytes": 383809,
+          "sha256": "50f0d6fe5a1b68089349e0b9af81017d5e46801358b6b4390180b2762b403418"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol run backward arc.fbx",
+          "bytes": 384065,
+          "sha256": "33d3bf98416c477e36cb4067aca3bb80bee895ebf0d634396c7d4bc701f3a509"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol run backward.fbx",
+          "bytes": 311953,
+          "sha256": "0ab10280ed2f9a496f07ed1cea9f70e1ac03223c218b85ffac9db5e31ca3f447"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol run.fbx",
+          "bytes": 384385,
+          "sha256": "48f7aff2434deb3e18ae8a5ae4d151c65baf3eaf3ee3d3ed08ad1d073a6ad417"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol stand to kneel.fbx",
+          "bytes": 338705,
+          "sha256": "d023cdcc8217eba411dc9b52254254d8a3b20af3870f760cc3de9cba1206962d"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol strafe (2).fbx",
+          "bytes": 316673,
+          "sha256": "672fb595f021b3dbea119959feea4ac5685545738807ba4cb2aa3c42c4b3fcf3"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol strafe.fbx",
+          "bytes": 314577,
+          "sha256": "5c01b0dc314c80a62ecd4f48b2b38ac6a06614b773c3f73df1afbd7ce59ac2b5"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol walk arc (2).fbx",
+          "bytes": 327105,
+          "sha256": "e2a59fb337ac13cdc6d5080261a433cca635cd1b06999cc29eee9b4ae70c049f"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol walk arc.fbx",
+          "bytes": 324113,
+          "sha256": "41486796182943b2662e92eab8a7c22d3b38dda54abb887eccb8f93799c1197f"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol walk backward arc (2).fbx",
+          "bytes": 314257,
+          "sha256": "62a6111f85721ae868052e7005f550f3f9e3a42cf247903b21074c1b99341dca"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol walk backward arc.fbx",
+          "bytes": 316417,
+          "sha256": "166f326a5698092da67a168fc8a353ed2a9b5f1dd253781e669d0e86da2ecc2e"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol walk backward.fbx",
+          "bytes": 344609,
+          "sha256": "1e791b313b4e8ec80c9d15618796f595535d1c20cbea22626e86d841fcc6382e"
+        },
+        {
+          "file": "pistol-handgun-locomotion-pack/pistol walk.fbx",
+          "bytes": 328945,
+          "sha256": "e9517f8d9da3a9cd336087501e181c2913afb7e30fb80c107e79edeac8aff56e"
+        }
+      ]
+    },
+    {
+      "name": "Action Adventure Pack",
+      "kind": "pack",
+      "download_sha256": "21d75f1e529595d1828f9187426c050fe333fbb0b972d94ede8e0d3c5fb93900",
+      "files": [
+        {
+          "file": "action-adventure-pack/cover to stand (2).fbx",
+          "bytes": 369761,
+          "sha256": "ac86be3cab7b9315f366333e4ad824ae96a6c63ed332bd522fb4900788058374"
+        },
+        {
+          "file": "action-adventure-pack/cover to stand.fbx",
+          "bytes": 379153,
+          "sha256": "d44fc8040ad2daf1a9185e60f14fd4edb93f2575fc4d407ba32219ec7645285e"
+        },
+        {
+          "file": "action-adventure-pack/crouched sneaking left.fbx",
+          "bytes": 361153,
+          "sha256": "7401476906e7712be5aba36d11ba0bf94a53f27546b79b6278cdac693a455499"
+        },
+        {
+          "file": "action-adventure-pack/crouched sneaking right.fbx",
+          "bytes": 348529,
+          "sha256": "600c10c5e709079eafba4d8ffc2f9412a44cb2e5e47c62fdd831670236eb9f0a"
+        },
+        {
+          "file": "action-adventure-pack/falling idle.fbx",
+          "bytes": 332545,
+          "sha256": "3c5fbe6a3df59e7328ae83550ff1da70c6544427c8f31bab130012e283adb0da"
+        },
+        {
+          "file": "action-adventure-pack/falling to roll.fbx",
+          "bytes": 400401,
+          "sha256": "fa6c09bb78693da24562e438b35cebcd47f1329d9b753ab81fc41f892283ce46"
+        },
+        {
+          "file": "action-adventure-pack/hard landing.fbx",
+          "bytes": 417793,
+          "sha256": "b205b90feda75b911ef08c759243f5d184c205a20288cd0c53cbaa5d1bc78c26"
+        },
+        {
+          "file": "action-adventure-pack/idle (2).fbx",
+          "bytes": 762497,
+          "sha256": "6bc460da00a3f630576d52d8683b0a0bf1dff01a7eff5f3914099e42cb56e962"
+        },
+        {
+          "file": "action-adventure-pack/idle (3).fbx",
+          "bytes": 493857,
+          "sha256": "c57c5e8dffb9906ffc1665047f882bf37a6d9268f560ce62252df826444b375c"
+        },
+        {
+          "file": "action-adventure-pack/idle (4).fbx",
+          "bytes": 413217,
+          "sha256": "7ce890c4c4440463ff16512952885b18bc137445b8e06f783c33991768bacc07"
+        },
+        {
+          "file": "action-adventure-pack/idle (5).fbx",
+          "bytes": 403393,
+          "sha256": "0beaf98b2107502b2110fca8d6f0aa902319072e56f7f22ba59cdcc80d8768d0"
+        },
+        {
+          "file": "action-adventure-pack/idle.fbx",
+          "bytes": 528593,
+          "sha256": "86f7898d28c60ef4a32609717e6305158ed77a5110fdc849988794e05660815c"
+        },
+        {
+          "file": "action-adventure-pack/jumping up.fbx",
+          "bytes": 314897,
+          "sha256": "0820494668a83fe159f08f91f2f13fbf86551fa2aea470752f49b6c7a77f60f0"
+        },
+        {
+          "file": "action-adventure-pack/left cover sneak.fbx",
+          "bytes": 344929,
+          "sha256": "24a4d7a6c7b77ac3a1d7388c4f363051e3fd26563cd2f20e7c672f10c78b4e59"
+        },
+        {
+          "file": "action-adventure-pack/left turn.fbx",
+          "bytes": 339377,
+          "sha256": "c4a6a70e6bfda5c4f07eef47b55281a28038a3cc4da863af502a4d84d10cc029"
+        },
+        {
+          "file": "action-adventure-pack/right cover sneak.fbx",
+          "bytes": 347409,
+          "sha256": "3af0a3f5c2b67873084c2bf61a3237f3c1d62a9522fa46d09b414449ad9426d6"
+        },
+        {
+          "file": "action-adventure-pack/right turn.fbx",
+          "bytes": 340417,
+          "sha256": "54c8c04c3772bd600e518642f9990ba723741ee25231aa4043c76b454c84b9da"
+        },
+        {
+          "file": "action-adventure-pack/run to stop.fbx",
+          "bytes": 339089,
+          "sha256": "dde0f5fa9227dec3d4d0441de9d07a516be70afa1c3ec3a67bd86a363134bfa2"
+        },
+        {
+          "file": "action-adventure-pack/running.fbx",
+          "bytes": 328577,
+          "sha256": "a48870c9caa5595a9c370673bfa6971e4c81367d457a9d3c0d437536b109a20d"
+        },
+        {
+          "file": "action-adventure-pack/stand to cover (2).fbx",
+          "bytes": 357697,
+          "sha256": "f7d6fd63fa6f1fdb6513810931f6a8a19b6eb15d3f34104abb09544986dae303"
+        },
+        {
+          "file": "action-adventure-pack/stand to cover.fbx",
+          "bytes": 352017,
+          "sha256": "2c6722c81ae75784e1a2f22d9d9e367503442b9f19e14e6f71032d512d0df66f"
+        },
+        {
+          "file": "action-adventure-pack/walking.fbx",
+          "bytes": 341713,
+          "sha256": "2b5a54e77cd68d3498c055b4006c162eef9d2d2562a4c1814581888ab97d35e7"
+        }
+      ]
+    },
+    {
+      "name": "Male Injured Pack",
+      "kind": "pack",
+      "download_sha256": "9d696ba6943fc60027f68229c241847b97bf081000d3f8338b5ef358ffe6f6a2",
+      "files": [
+        {
+          "file": "male-injured-pack/injured backwards turn left.fbx",
+          "bytes": 335825,
+          "sha256": "403dfeff90d8b8c617cd1e06a0234b1d083a4b9ad3ccc074fec8960e5add24e4"
+        },
+        {
+          "file": "male-injured-pack/injured backwards turn right.fbx",
+          "bytes": 338561,
+          "sha256": "61365ca14a964a127b7ec43082d14498b978c3f0a6e998c487037e1b53683281"
+        },
+        {
+          "file": "male-injured-pack/injured hurting idle.fbx",
+          "bytes": 656689,
+          "sha256": "2cb3f5990cc8dfee4e13e027385cd4c72610003553c22ea7dacb794d73d9be0b"
+        },
+        {
+          "file": "male-injured-pack/injured idle.fbx",
+          "bytes": 702417,
+          "sha256": "5a10a6075da7794dcaf5ffd19198173b7a1648400509017f1299509b7f09861d"
+        },
+        {
+          "file": "male-injured-pack/injured run backwards left turn.fbx",
+          "bytes": 395041,
+          "sha256": "b57dc80c2ee71e7d31aa19849ea2e407f35c1304c3c5a30beb42e51481b86e99"
+        },
+        {
+          "file": "male-injured-pack/injured run backwards right turn.fbx",
+          "bytes": 400833,
+          "sha256": "aa8ec9dacd33e191c8493fba476c8f39da5ac131d2d759e775ca8e286d138e3e"
+        },
+        {
+          "file": "male-injured-pack/injured run backwards.fbx",
+          "bytes": 416033,
+          "sha256": "51d4d7f6127e230f58c3ce19c8812e27302e275af14fb9c8d9c929483c3c437a"
+        },
+        {
+          "file": "male-injured-pack/injured run jump.fbx",
+          "bytes": 335345,
+          "sha256": "7a1494daedbebeda2dbd3b086e9542b917a2b749402fcb47ca3a43a6e8d04f7c"
+        },
+        {
+          "file": "male-injured-pack/injured run left turn.fbx",
+          "bytes": 413441,
+          "sha256": "943bdfb2f12afd74d2851f1881b263d883be71915688d643e7932d97ed80dd3a"
+        },
+        {
+          "file": "male-injured-pack/injured run right turn.fbx",
+          "bytes": 422465,
+          "sha256": "726aa63f039cbdb59508037ba11f6a38560532f19049ba959a2f0ca517a32219"
+        },
+        {
+          "file": "male-injured-pack/injured run.fbx",
+          "bytes": 424193,
+          "sha256": "b41863fd418edd5da8e91bdeca50ba2dd90ad281d1c8b441ed4edb93f9d58a9c"
+        },
+        {
+          "file": "male-injured-pack/injured standing jump.fbx",
+          "bytes": 418225,
+          "sha256": "f0ff3e600c950371ab52dbd2401fef52e891d7d5f54355d708b8c06f566b8c06"
+        },
+        {
+          "file": "male-injured-pack/injured stumble idle.fbx",
+          "bytes": 624753,
+          "sha256": "576a7fe326a932e4375402617bdca01f409eb7b8be1107e5368f700f103b6cd0"
+        },
+        {
+          "file": "male-injured-pack/injured turn left.fbx",
+          "bytes": 337697,
+          "sha256": "99db38ef6064db2e9c2e862934746c23c586bc42c5971b525acbd3d97d2f6d21"
+        },
+        {
+          "file": "male-injured-pack/injured turn right.fbx",
+          "bytes": 335745,
+          "sha256": "295321537670dc3eac6055ebcc96415b32d54c2b6875ae4f3c0112f9d01299c6"
+        },
+        {
+          "file": "male-injured-pack/injured walk backwards.fbx",
+          "bytes": 401777,
+          "sha256": "0144d2d0498ac5d2511c9082c5ca1fdf18d459a5ec6ab215b4b99202a840e02e"
+        },
+        {
+          "file": "male-injured-pack/injured walk left turn.fbx",
+          "bytes": 432017,
+          "sha256": "f3378f7731e4a6e5197b3fd91dc0b733427ecbb5bf7e3f02c3a66589d99a6d64"
+        },
+        {
+          "file": "male-injured-pack/injured walk right turn.fbx",
+          "bytes": 419665,
+          "sha256": "e399f616bb0f77dcfc7667df904f40f605a8ef619b712b4a1c67be4c3e91bd66"
+        },
+        {
+          "file": "male-injured-pack/injured walk.fbx",
+          "bytes": 402017,
+          "sha256": "fc889d01b0fc277025b4a241732bd92e653789dc2454d2a2b94bf18b7ac97a51"
+        },
+        {
+          "file": "male-injured-pack/injured wave idle.fbx",
+          "bytes": 594625,
+          "sha256": "8af75a5e9d6f1dfeda56e81908f9c41c209b8a072a0958f352030c77fcab76c7"
+        }
+      ]
+    },
+    {
+      "name": "Locomotion Pack",
+      "kind": "pack",
+      "download_sha256": "50ce6ec2f11760413aa73db26ca3b18129e3477ab25455bb2160c5a3884d9a19",
+      "files": [
+        {
+          "file": "locomotion-pack/idle.fbx",
+          "bytes": 628913,
+          "sha256": "d8dd0fbd7fa2a9dcac8a7eb397b82f2c4ede0acb4d8eb590b8d8c6a383c58cbc"
+        },
+        {
+          "file": "locomotion-pack/jump.fbx",
+          "bytes": 446945,
+          "sha256": "c30384cb5c572bc87b677b0ec3075e1cc9bb28f1a79c44630e089dca89be0361"
+        },
+        {
+          "file": "locomotion-pack/left strafe walking.fbx",
+          "bytes": 352945,
+          "sha256": "ab37ba7e3e19222df40a33d8545fe294dc65dec9ebd2dd628b345b78759473cf"
+        },
+        {
+          "file": "locomotion-pack/left strafe.fbx",
+          "bytes": 335057,
+          "sha256": "8c1ef6a39703ec013ff1091c2f0321147c6148a1f92402bb570debc9c341d997"
+        },
+        {
+          "file": "locomotion-pack/left turn 90.fbx",
+          "bytes": 341425,
+          "sha256": "b95c8b296d882313c1124a2812d87106db6745938e02e0cdb28074d4043e3975"
+        },
+        {
+          "file": "locomotion-pack/left turn.fbx",
+          "bytes": 395905,
+          "sha256": "2033742a241179ca47947ac31844e14eb42ec0d2978b72549091b0df3b441f3d"
+        },
+        {
+          "file": "locomotion-pack/right strafe walking.fbx",
+          "bytes": 351585,
+          "sha256": "4dcfaeea245be83a77e394f7049d27c7c3a61986780b4976f9e225ff1685abc1"
+        },
+        {
+          "file": "locomotion-pack/right strafe.fbx",
+          "bytes": 335089,
+          "sha256": "a254605001f689e81009246d505b8a25648eb95061807e5b6003477575565f8a"
+        },
+        {
+          "file": "locomotion-pack/right turn 90.fbx",
+          "bytes": 339841,
+          "sha256": "9761366581eb6375480b2aff451a8787df3e410c5ab43583695b6befb8b39247"
+        },
+        {
+          "file": "locomotion-pack/right turn.fbx",
+          "bytes": 394065,
+          "sha256": "d001c1a3a22b8d98fc950e58a904e50e6654a0eb851d86fd5e9ae3b5e95b084a"
+        },
+        {
+          "file": "locomotion-pack/running.fbx",
+          "bytes": 337217,
+          "sha256": "5065dbf79cc881d874a8c8eef135b5d428912f2dc35231fc39ea531241819584"
+        },
+        {
+          "file": "locomotion-pack/walking.fbx",
+          "bytes": 352849,
+          "sha256": "49fae4a1ecfe400da293e54b3f6b13b23a11c6b6947545a9ba1fd1886604bef4"
+        }
+      ]
+    },
+    {
+      "name": "Male Locomotion Pack",
+      "kind": "pack",
+      "download_sha256": "3550932b1e9beadeb29998d6321cb8be9666f8f7499a9749b30d449b8f55768d",
+      "files": [
+        {
+          "file": "male-locomotion-pack/idle.fbx",
+          "bytes": 628913,
+          "sha256": "cc282a1a4882e1368316c13554a1d5b84292095d4b559c9bc1b1dbf3f536876a"
+        },
+        {
+          "file": "male-locomotion-pack/jump.fbx",
+          "bytes": 446945,
+          "sha256": "d47d2bf2be7af50a06e14ae2d8cf07bff67cf0dc3c68879edb34f98616963cc6"
+        },
+        {
+          "file": "male-locomotion-pack/left strafe walking.fbx",
+          "bytes": 352961,
+          "sha256": "c8582b44975da2dc933885d6399028a95c09a0749b7349373270127f89eef9da"
+        },
+        {
+          "file": "male-locomotion-pack/left strafe.fbx",
+          "bytes": 335057,
+          "sha256": "07f64855a5aeb00dcc0711c9c8a7cd5bc4aacc5a243c46582bdb67bb3fc3cde7"
+        },
+        {
+          "file": "male-locomotion-pack/left turn 90.fbx",
+          "bytes": 341441,
+          "sha256": "030252394e8d60ab159adec91560cf10c57e33346abf9097d277819f390d8bbe"
+        },
+        {
+          "file": "male-locomotion-pack/right strafe walking.fbx",
+          "bytes": 351585,
+          "sha256": "72328c095871425db833577532e54dffb6da821c80050becd73b31a528b0c343"
+        },
+        {
+          "file": "male-locomotion-pack/right strafe.fbx",
+          "bytes": 335105,
+          "sha256": "837af5180a673b6af904d9fb8dbf33b80af6af14cf741a3066bccaa433963b27"
+        },
+        {
+          "file": "male-locomotion-pack/right turn 90.fbx",
+          "bytes": 339857,
+          "sha256": "5dfdee6b24d3abfdef9e9dc2b794af82592079c476725075eaa60012497e55c8"
+        },
+        {
+          "file": "male-locomotion-pack/standard run.fbx",
+          "bytes": 337761,
+          "sha256": "6aae94c75562f29f19f123db6d18a164941a95d4ad510c424d0f616852b8c3d2"
+        },
+        {
+          "file": "male-locomotion-pack/walking.fbx",
+          "bytes": 352849,
+          "sha256": "0a83c1b2f2e81c2c6af9763d9221358dd89dd3f2cc6d6d1dc5110eaf0f2882ab"
+        }
+      ]
+    },
+    {
+      "name": "Gestures Pack Basic",
+      "kind": "pack",
+      "download_sha256": "72aa4f1a984c2f44ab01c5c20726640b1b3118f931605a2aba1ab0bbbe7332cf",
+      "files": [
+        {
+          "file": "gestures-pack-basic/acknowledging.fbx",
+          "bytes": 388529,
+          "sha256": "4edb6641e083e6c2382f4c52d8136062e5bfa1e6e812af218e458bcd87653831"
+        },
+        {
+          "file": "gestures-pack-basic/angry gesture.fbx",
+          "bytes": 420961,
+          "sha256": "f92ba0e914b946a1ce3a82ef54eb218f9da94000b5fdde85b32750d1f4226f62"
+        },
+        {
+          "file": "gestures-pack-basic/annoyed head shake.fbx",
+          "bytes": 410161,
+          "sha256": "d3fb40ee188b9d977635b00aedc1c59421a2e15d9ba7b35c5e919816ea7dd236"
+        },
+        {
+          "file": "gestures-pack-basic/being cocky.fbx",
+          "bytes": 466753,
+          "sha256": "1bea9ec0af7959241e43b3ad80d016fc100c809101928a7f2936322f92499970"
+        },
+        {
+          "file": "gestures-pack-basic/dismissing gesture.fbx",
+          "bytes": 489649,
+          "sha256": "ae3c255cf551266ab277597038234f10fc5c96e4d472fc4adb66ea160460c907"
+        },
+        {
+          "file": "gestures-pack-basic/happy hand gesture.fbx",
+          "bytes": 459121,
+          "sha256": "37517b5c340392a68ccd50dc191b44b25d3a29c9cdfc73f45f0e2e87b7b3aad5"
+        },
+        {
+          "file": "gestures-pack-basic/hard head nod.fbx",
+          "bytes": 375169,
+          "sha256": "085acdf4c8d50fce9fa4d48f58c286ba19882623cb52f308bb51ca9229f82ff9"
+        },
+        {
+          "file": "gestures-pack-basic/head nod yes.fbx",
+          "bytes": 434321,
+          "sha256": "0d5891ad20e6caf685f49e8bf9f45ada87424991aedd947520dba8763cdb5ba9"
+        },
+        {
+          "file": "gestures-pack-basic/lengthy head nod.fbx",
+          "bytes": 377073,
+          "sha256": "4b136b7e4ec98acf8ae6c12e806e2a227b5e6ff43861fce1811d8e8fc6c12db8"
+        },
+        {
+          "file": "gestures-pack-basic/look away gesture.fbx",
+          "bytes": 424769,
+          "sha256": "f87a44d6547c500aeeab3781c516fa5b3f10d763aa366fb231386bfd4f63bb45"
+        },
+        {
+          "file": "gestures-pack-basic/relieved sigh.fbx",
+          "bytes": 459121,
+          "sha256": "283cc8174443a4f21eb7adaba0b3b5ae8652da1f50798e269371f4f201463fce"
+        },
+        {
+          "file": "gestures-pack-basic/sarcastic head nod.fbx",
+          "bytes": 409505,
+          "sha256": "66930cc8913690d41cbc78fbc1f9bc7145af6f2fb907e05ad30536391be78259"
+        },
+        {
+          "file": "gestures-pack-basic/shaking head no.fbx",
+          "bytes": 394241,
+          "sha256": "708c19687cd4d8296cee3cea315fedab258c8aec9998341ea92a39b5b54e00e4"
+        },
+        {
+          "file": "gestures-pack-basic/thoughtful head shake.fbx",
+          "bytes": 464849,
+          "sha256": "29a9840631aed57038640996d4d858a0fa386d2f6a56385c503c8c335ff10a41"
+        },
+        {
+          "file": "gestures-pack-basic/weight shift.fbx",
+          "bytes": 782689,
+          "sha256": "4dbed368ad382bab896d0005985ecfc38153e89c3d5f49042a4b1cc218645c5c"
+        }
+      ]
+    },
+    {
+      "name": "Opening A Lid - Opening The Lid On A Chest Or Box",
+      "kind": "clip",
+      "download_sha256": "7521a4f2bbd9ea50f9a849fd4f88cd31e2b95817b752025ec3acab84d6573271",
+      "files": [
+        {
+          "file": "special/opening-a-lid-opening-the-lid-on-a-chest-or-box.fbx",
+          "bytes": 1297136,
+          "sha256": "7521a4f2bbd9ea50f9a849fd4f88cd31e2b95817b752025ec3acab84d6573271"
+        }
+      ]
+    },
+    {
+      "name": "Closing A Lid - Closing The Lid On A Chest Or Box",
+      "kind": "clip",
+      "download_sha256": "8fe9224cb973a97f965387b4b76cf4310116268682aeab5f07e11a533cb5bd7d",
+      "files": [
+        {
+          "file": "special/closing-a-lid-closing-the-lid-on-a-chest-or-box.fbx",
+          "bytes": 882944,
+          "sha256": "8fe9224cb973a97f965387b4b76cf4310116268682aeab5f07e11a533cb5bd7d"
+        }
+      ]
+    },
+    {
+      "name": "Helping Out - Helping Someone Into A Vehicle",
+      "kind": "clip",
+      "download_sha256": "22d4c146897946334047e7da48291194634a4a7aca8a6ee4d43e0d268f4be7c2",
+      "files": [
+        {
+          "file": "special/helping-out-helping-someone-into-a-vehicle.fbx",
+          "bytes": 715072,
+          "sha256": "22d4c146897946334047e7da48291194634a4a7aca8a6ee4d43e0d268f4be7c2"
+        }
+      ]
+    },
+    {
+      "name": "Start Climbing Ladder - Standing To Climb Ladder Quickly",
+      "kind": "clip",
+      "download_sha256": "e21faaac67f186d4d2bd14cbcb1b84f14bde35e6921de1296224ac1dbdd154d1",
+      "files": [
+        {
+          "file": "special/start-climbing-ladder-standing-to-climb-ladder-quickly.fbx",
+          "bytes": 426928,
+          "sha256": "e21faaac67f186d4d2bd14cbcb1b84f14bde35e6921de1296224ac1dbdd154d1"
+        }
+      ]
+    },
+    {
+      "name": "Climbing Ladder - Climbing Up A Ladder",
+      "kind": "clip",
+      "download_sha256": "73f04111a21dfcc206713f29ebc423b3dc30a124a6c63b8808bec6aa2eccc6a3",
+      "files": [
+        {
+          "file": "special/climbing-ladder-climbing-up-a-ladder.fbx",
+          "bytes": 331824,
+          "sha256": "73f04111a21dfcc206713f29ebc423b3dc30a124a6c63b8808bec6aa2eccc6a3"
+        }
+      ]
+    },
+    {
+      "name": "Climbing To Top - Climbing Up A Ladder To Standing",
+      "kind": "clip",
+      "download_sha256": "f1d5abed8d22fe59728b9932b52ef63715f5d0485e1ee2619ceb7a1dc670cd0a",
+      "files": [
+        {
+          "file": "special/climbing-to-top-climbing-up-a-ladder-to-standing.fbx",
+          "bytes": 558000,
+          "sha256": "f1d5abed8d22fe59728b9932b52ef63715f5d0485e1ee2619ceb7a1dc670cd0a"
+        }
+      ]
+    },
+    {
+      "name": "Administering Cpr - Administering Cpr To A Victim On The Ground",
+      "kind": "clip",
+      "download_sha256": "38e757cc20f1953b90bc10a2cc9d7445a4aa571518b677d4ab61a8f81da76707",
+      "files": [
+        {
+          "file": "special/administering-cpr-administering-cpr-to-a-victim-on-the-ground.fbx",
+          "bytes": 1228704,
+          "sha256": "38e757cc20f1953b90bc10a2cc9d7445a4aa571518b677d4ab61a8f81da76707"
+        }
+      ]
+    },
+    {
+      "name": "Receiving Cpr - Receiving Cpr On The Ground",
+      "kind": "clip",
+      "download_sha256": "4e72eb2c429837dda7816bfa72447ad08acd92acc8ef4c30a6d8a1e4bfd8a240",
+      "files": [
+        {
+          "file": "special/receiving-cpr-receiving-cpr-on-the-ground.fbx",
+          "bytes": 626832,
+          "sha256": "4e72eb2c429837dda7816bfa72447ad08acd92acc8ef4c30a6d8a1e4bfd8a240"
+        }
+      ]
+    },
+    {
+      "name": "Holding Down - Kneeling To Holding Down Moving Object",
+      "kind": "clip",
+      "download_sha256": "9eb07d85f174e0d0fea3efd4f3e205a6b6f3829233a422f43b693698ab38547f",
+      "files": [
+        {
+          "file": "special/holding-down-kneeling-to-holding-down-moving-object.fbx",
+          "bytes": 406816,
+          "sha256": "9eb07d85f174e0d0fea3efd4f3e205a6b6f3829233a422f43b693698ab38547f"
+        }
+      ]
+    },
+    {
+      "name": "Carrying - Carrying Someone Idle",
+      "kind": "clip",
+      "download_sha256": "f637a4d8e8bd2a3ffbec13ecd91e80f915e785347c6d739d1120cd58a09710b7",
+      "files": [
+        {
+          "file": "special/carrying-carrying-someone-idle.fbx",
+          "bytes": 787264,
+          "sha256": "f637a4d8e8bd2a3ffbec13ecd91e80f915e785347c6d739d1120cd58a09710b7"
+        }
+      ]
+    },
+    {
+      "name": "Running - Running While Carrying Someone",
+      "kind": "clip",
+      "download_sha256": "fc79434a42747b3bad5e250bb3f40acf9e4f7351b40365c829e417f623f62a57",
+      "files": [
+        {
+          "file": "special/running-running-while-carrying-someone.fbx",
+          "bytes": 365952,
+          "sha256": "fc79434a42747b3bad5e250bb3f40acf9e4f7351b40365c829e417f623f62a57"
+        }
+      ]
+    },
+    {
+      "name": "Picking Up - Picking Up An Object",
+      "kind": "clip",
+      "download_sha256": "f5117c8b16681be91da74653ec9a61e7c36e50390cca43c01af11a896182ebe0",
+      "files": [
+        {
+          "file": "special/picking-up-picking-up-an-object.fbx",
+          "bytes": 776336,
+          "sha256": "f5117c8b16681be91da74653ec9a61e7c36e50390cca43c01af11a896182ebe0"
+        }
+      ]
+    },
+    {
+      "name": "Picking Up Object - Picking Up An Object With One Hand",
+      "kind": "clip",
+      "download_sha256": "cdb6077b3bc4fac75301ed6c5c01c1adc0900e09e579cf0d4c8b27cf341eaa75",
+      "files": [
+        {
+          "file": "special/picking-up-object-picking-up-an-object-with-one-hand.fbx",
+          "bytes": 489104,
+          "sha256": "cdb6077b3bc4fac75301ed6c5c01c1adc0900e09e579cf0d4c8b27cf341eaa75"
+        }
+      ]
+    },
+    {
+      "name": "Shooting Pistol - Shooting A Pistol From Behind Cover",
+      "kind": "clip",
+      "download_sha256": "30322455cff78cd5a3fee61119474e8999b4273cd6cbe790fccedd7dce04cd24",
+      "files": [
+        {
+          "file": "special/shooting-pistol-shooting-a-pistol-from-behind-cover.fbx",
+          "bytes": 926352,
+          "sha256": "30322455cff78cd5a3fee61119474e8999b4273cd6cbe790fccedd7dce04cd24"
+        }
+      ]
+    },
+    {
+      "name": "Pistol Whip",
+      "kind": "clip",
+      "download_sha256": "16eb9838742f728a9350a6bf10cba595ea5664a32eefe970bf88234a1ea7f4b7",
+      "files": [
+        {
+          "file": "special/pistol-whip.fbx",
+          "bytes": 451232,
+          "sha256": "16eb9838742f728a9350a6bf10cba595ea5664a32eefe970bf88234a1ea7f4b7"
+        }
+      ]
+    },
+    {
+      "name": "Dying - Dying Shot To The Chest Falling On Two Knees",
+      "kind": "clip",
+      "download_sha256": "e5a44914df34cb9fc93f3889f0c16b0d9cd339a70633f5cbf5a39a72140b1039",
+      "files": [
+        {
+          "file": "special/dying-dying-shot-to-the-chest-falling-on-two-knees.fbx",
+          "bytes": 569168,
+          "sha256": "e5a44914df34cb9fc93f3889f0c16b0d9cd339a70633f5cbf5a39a72140b1039"
+        }
+      ]
+    },
+    {
+      "name": "Dying Backwards - Shot To The Chest Falling Backwards",
+      "kind": "clip",
+      "download_sha256": "973bea9d40aa8838dd38cc42606c32d7192d31f78410d5512f0d8d93cc173dc3",
+      "files": [
+        {
+          "file": "special/dying-backwards-shot-to-the-chest-falling-backwards.fbx",
+          "bytes": 593440,
+          "sha256": "973bea9d40aa8838dd38cc42606c32d7192d31f78410d5512f0d8d93cc173dc3"
+        }
+      ]
+    },
+    {
+      "name": "Crouch Death - Dying From A Crouched Position",
+      "kind": "clip",
+      "download_sha256": "a1c444abf176b9736965f75abe6e0535395a57cd27216a9792102f2d8fdbed04",
+      "files": [
+        {
+          "file": "special/crouch-death-dying-from-a-crouched-position.fbx",
+          "bytes": 457248,
+          "sha256": "a1c444abf176b9736965f75abe6e0535395a57cd27216a9792102f2d8fdbed04"
+        }
+      ]
+    },
+    {
+      "name": "Getting Up - Getting Up From Back",
+      "kind": "clip",
+      "download_sha256": "eb955fa81ec206890618b461b39a419101bec281ed44d621e5f95a43d18cd7c4",
+      "files": [
+        {
+          "file": "special/getting-up-getting-up-from-back.fbx",
+          "bytes": 754560,
+          "sha256": "eb955fa81ec206890618b461b39a419101bec281ed44d621e5f95a43d18cd7c4"
+        }
+      ]
+    },
+    {
+      "name": "Getting Up - Getting Up From Stomach",
+      "kind": "clip",
+      "download_sha256": "535e4419bdda76a7bc89f4442b23bf0bb21dc93a093aaebce6cb70698375971f",
+      "files": [
+        {
+          "file": "special/getting-up-getting-up-from-stomach.fbx",
+          "bytes": 750080,
+          "sha256": "535e4419bdda76a7bc89f4442b23bf0bb21dc93a093aaebce6cb70698375971f"
+        }
+      ]
+    },
+    {
+      "name": "Unarmed Equip Underarm - Equipping Axe Underarm",
+      "kind": "clip",
+      "download_sha256": "39b94a9c5eba23566ad4ebe1a39377f59ac546acfec1520dcbc20da67a9da65c",
+      "files": [
+        {
+          "file": "special/unarmed-equip-underarm-equipping-axe-underarm.fbx",
+          "bytes": 368784,
+          "sha256": "39b94a9c5eba23566ad4ebe1a39377f59ac546acfec1520dcbc20da67a9da65c"
+        }
+      ]
+    },
+    {
+      "name": "Unarmed Equip Over Shoulder - Equipping Axe Over The Shoulder",
+      "kind": "clip",
+      "download_sha256": "35b820a22118d8cc8804e2c43ef81742b641c29ae390687d98108cf0411a2b8e",
+      "files": [
+        {
+          "file": "special/unarmed-equip-over-shoulder-equipping-axe-over-the-shoulder.fbx",
+          "bytes": 400720,
+          "sha256": "35b820a22118d8cc8804e2c43ef81742b641c29ae390687d98108cf0411a2b8e"
+        }
+      ]
+    }
+  ],
+  "fbx_files": 122
+}

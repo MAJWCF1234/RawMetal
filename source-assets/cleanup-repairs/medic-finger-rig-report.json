@@ -1,0 +1,106 @@
+{
+  "bones": 65,
+  "geometry_preserved": true,
+  "body_rig_preserved": true,
+  "normalized_height_m": 1.6000000297266177,
+  "finger_weights": {
+    "mixamorig:LeftHand": 774,
+    "mixamorig:LeftForeArm": 91,
+    "mixamorig:LeftHandThumb1": 189,
+    "mixamorig:LeftHandThumb2": 273,
+    "mixamorig:LeftHandPinky1": 230,
+    "mixamorig:LeftHandRing1": 149,
+    "mixamorig:LeftHandMiddle1": 171,
+    "mixamorig:LeftHandThumb3": 246,
+    "mixamorig:LeftHandIndex2": 204,
+    "mixamorig:LeftHandIndex3": 192,
+    "mixamorig:LeftHandIndex1": 101,
+    "mixamorig:LeftHandMiddle2": 254,
+    "mixamorig:LeftHandMiddle3": 204,
+    "mixamorig:LeftHandRing2": 230,
+    "mixamorig:LeftHandRing3": 204,
+    "mixamorig:LeftHandPinky3": 269,
+    "mixamorig:LeftHandPinky2": 315,
+    "mixamorig:RightHand": 774,
+    "mixamorig:RightArm": 18,
+    "mixamorig:RightForeArm": 121,
+    "mixamorig:RightHandThumb1": 190,
+    "mixamorig:RightHandThumb2": 274,
+    "mixamorig:RightHandPinky1": 230,
+    "mixamorig:RightHandRing1": 150,
+    "mixamorig:RightHandMiddle1": 171,
+    "mixamorig:RightHandThumb3": 246,
+    "mixamorig:RightHandIndex2": 204,
+    "mixamorig:RightHandIndex3": 192,
+    "mixamorig:RightHandIndex1": 101,
+    "mixamorig:RightHandMiddle2": 254,
+    "mixamorig:RightHandMiddle3": 204,
+    "mixamorig:RightHandRing2": 230,
+    "mixamorig:RightHandRing3": 204,
+    "mixamorig:RightHandPinky3": 269,
+    "mixamorig:RightHandPinky2": 315
+  },
+  "independent_curl_checks": [
+    {
+      "side": "Left",
+      "finger": "Index",
+      "moved_vertices": 282,
+      "max_motion_m": 0.11150307631466427
+    },
+    {
+      "side": "Left",
+      "finger": "Middle",
+      "moved_vertices": 364,
+      "max_motion_m": 0.12319583316687285
+    },
+    {
+      "side": "Left",
+      "finger": "Ring",
+      "moved_vertices": 327,
+      "max_motion_m": 0.11847277073978359
+    },
+    {
+      "side": "Left",
+      "finger": "Pinky",
+      "moved_vertices": 466,
+      "max_motion_m": 0.09073392673668598
+    },
+    {
+      "side": "Left",
+      "finger": "Thumb",
+      "moved_vertices": 389,
+      "max_motion_m": 0.07957884765352831
+    },
+    {
+      "side": "Right",
+      "finger": "Index",
+      "moved_vertices": 282,
+      "max_motion_m": 0.11150317280559452
+    },
+    {
+      "side": "Right",
+      "finger": "Middle",
+      "moved_vertices": 364,
+      "max_motion_m": 0.12319565378053769
+    },
+    {
+      "side": "Right",
+      "finger": "Ring",
+      "moved_vertices": 328,
+      "max_motion_m": 0.11847270874015424
+    },
+    {
+      "side": "Right",
+      "finger": "Pinky",
+      "moved_vertices": 466,
+      "max_motion_m": 0.09073357570733745
+    },
+    {
+      "side": "Right",
+      "finger": "Thumb",
+      "moved_vertices": 389,
+      "max_motion_m": 0.07957899537524091
+    }
+  ],
+  "exported": "N:\\rawmetal\\diagnostics\\medic-mixamo-20261013\\fixed\\medic-full-fingers.fbx"
+}
