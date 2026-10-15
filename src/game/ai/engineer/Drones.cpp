@@ -42,7 +42,8 @@ bool Game::deployEngineerDrone(size_t owner){
  for(const char*f:{"aim","cooldown","flash","repair","phase","walking","fraction","x_fraction","y_fraction","route_next","route_wait","way_x","way_y","repath","target_kind","target_level","target_index"})put(f,0);
  setState(friendlyKey(owner,"drone_used"),state(friendlyKey(owner,"drone_used"))+1);setState(friendlyKey(owner,"drone_cooldown"),2200);setState(friendlyKey(owner,"drone_windup"),0);
  if(!state(friendlyKey(owner,"drone_repair_saved"))){setState(friendlyKey(owner,"drone_repair_saved"),1);setState(friendlyKey(owner,"drone_repair_charge"),80);}
- m_sounds.push_back({Sound::JunkMetal,chosen+shift,.6f,.7f,true,17,z+.5f});return true;
+ m_sounds.push_back({Sound::JunkMetal,chosen+shift,.6f,.7f,true,17,z+.5f});
+ setState(friendlyKey(owner,"voice_drone"),slot+1);setState(friendlyKey(owner,"voice_pending"),int(NpcVoiceCue::Deploy)+1);setState(friendlyKey(owner,"voice_pending_ms"),4000);return true;
 }
 void Game::damageEngineerDrone(int slot,float amount,AiTargetRef){
  if(slot<0||slot>=EngineerDroneSlots||!state(droneKey(slot,"active"))||!std::isfinite(amount)||amount<=0)return;

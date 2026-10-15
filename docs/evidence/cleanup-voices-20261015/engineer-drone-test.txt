@@ -1,0 +1,137 @@
+Engineer deployment requires both personal recognition and a visible 1.2-second assembly interval: PASS
+Confirmed Engineer assembles one actual grounded drone at 60/120 Hz: PASS
+Deployment spends finite stock and initializes a finite maintenance reservoir: PASS
+Engineer deployment requires both personal recognition and a visible 1.2-second assembly interval: PASS
+Confirmed Engineer assembles one actual grounded drone at 60/120 Hz: PASS
+Deployment spends finite stock and initializes a finite maintenance reservoir: PASS
+Direct Engineer bank carries authored equip and stow durations: PASS
+Direct Engineer equips the pad before assembly advances or any drone stock is committed: PASS
+Saving during pad equip restores its exact owned transition and clock: PASS
+Native pad use owns one real deployment with mutually exclusive pistol and pad visibility: PASS
+Saved and uninterrupted pad entry and assembly commit the same single drone: PASS
+Normal deployment completion plays the pad's own stow before exposing the pistol or reserving a squad fire slot: PASS
+Pad stow releases a stale persisted squad fire lease for its covering teammates: PASS
+Stow releases the handgun without consuming a shot or leaving a visible pad: PASS
+Physical danger cancels pad equip immediately before spending the pending drone: PASS
+Direct Engineer bank carries authored equip and stow durations: PASS
+Direct Engineer equips the pad before assembly advances or any drone stock is committed: PASS
+Saving during pad equip restores its exact owned transition and clock: PASS
+Native pad use owns one real deployment with mutually exclusive pistol and pad visibility: PASS
+Saved and uninterrupted pad entry and assembly commit the same single drone: PASS
+Normal deployment completion plays the pad's own stow before exposing the pistol or reserving a squad fire slot: PASS
+Pad stow releases a stale persisted squad fire lease for its covering teammates: PASS
+Stow releases the handgun without consuming a shot or leaving a visible pad: PASS
+Physical danger cancels pad equip immediately before spending the pending drone: PASS
+Engineer without any personally observed threat never fabricates a deployed drone: PASS
+Drone deployment rejects non-Engineer and nonexistent owners: PASS
+Generic AI target exposes the physical drone's stable slot, owner faction and correct body geometry: PASS
+Drone target lookup rejects invalid slots and observer chunks: PASS
+Disabled owner's drone immediately stops being a valid AI target before cleanup: PASS
+Committed assembly publishes a persisted busy flag before weapon combat: PASS
+Weapon recovery interrupts assembly and releases the Engineer's busy state: PASS
+Incompatible reload, bash or grenade stage prevents simultaneous drone assembly: PASS
+Incompatible reload, bash or grenade stage prevents simultaneous drone assembly: PASS
+Incompatible reload, bash or grenade stage prevents simultaneous drone assembly: PASS
+Incompatible reload, bash or grenade stage prevents simultaneous drone assembly: PASS
+Incompatible reload, bash or grenade stage prevents simultaneous drone assembly: PASS
+A committed attack/action cannot be replaced by drone assembly in the same frame: PASS
+A committed attack/action cannot be replaced by drone assembly in the same frame: PASS
+A committed attack/action cannot be replaced by drone assembly in the same frame: PASS
+An Engineer spends finite stock to deploy an actual owned physical drone: PASS
+Nearby Engineer visibly repairs damaged drone health over time: PASS
+Save restores a live drone's body, ownership, repair phase and finite resources: PASS
+Repair heals only the missing health and spends one saved charge per health point: PASS
+Saved and uninterrupted repair have the same health and resource outcome: PASS
+An exhausted maintenance reservoir cannot regenerate more health: PASS
+Shared ballistic first-hit tracing sees the deployed drone's real body: PASS
+A traced player hit damages and destroys the physical drone through shared combat: PASS
+Destroyed drones never replenish the Engineer's finite five-unit deployment stock: PASS
+An Engineer spends finite stock to deploy an actual owned physical drone: PASS
+Nearby Engineer visibly repairs damaged drone health over time: PASS
+Save restores a live drone's body, ownership, repair phase and finite resources: PASS
+Repair heals only the missing health and spends one saved charge per health point: PASS
+Saved and uninterrupted repair have the same health and resource outcome: PASS
+An exhausted maintenance reservoir cannot regenerate more health: PASS
+Shared ballistic first-hit tracing sees the deployed drone's real body: PASS
+A traced player hit damages and destroys the physical drone through shared combat: PASS
+Destroyed drones never replenish the Engineer's finite five-unit deployment stock: PASS
+A walking Engineer cannot perform physical maintenance while moving: PASS
+Stationary maintenance claims busy before its first repair pulse: PASS
+Incompatible weapon recovery interrupts active maintenance immediately: PASS
+Repair obstruction fixture starts with an open physical door: PASS
+A closed door blocks remote repair without consuming maintenance resources: PASS
+Drone cannon refuses every blocked first hit through solid cover or a neutral living body: PASS
+Drone cannon refuses every blocked first hit through solid cover or a neutral living body: PASS
+Personally visible hostile receives delayed drone cannon fire which spends saved ammunition: PASS
+Hidden target movement cancels cannon aim and cannot be followed through last-known knowledge: PASS
+Dead or disabled Engineer safely releases its deployed drone and residency: PASS
+Dead or disabled Engineer safely releases its deployed drone and residency: PASS
+Four five-unit Engineer fleets fill the shared twenty-body pool and prevent overflow by a fifth owner: PASS
+Save accepts a full bounded pool containing several valid drones per Engineer: PASS
+Supervised drone physically follows its Engineer through a stitched seam at 60/120 Hz: PASS
+Supervised drone physically follows its Engineer through a stitched seam at 60/120 Hz: PASS
+The twentieth fleet slot can plan a real stitched return route and save it without exceeding the route timer's validation bound: PASS
+Ordinary gameplay perception deploys a finite supervised drone without diagnostic state injection: PASS
+Shared occluded tactical blast damages the physical drone body: PASS
+Supervised drone walks physically toward its Engineer with bounded speed and floor support: PASS
+Supervised drone walks physically toward its Engineer with bounded speed and floor support: PASS
+Saved movement fractions keep grounded drone travel consistent at 60/120 Hz: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved drone body, identity, movement or ammunition is rejected safely: PASS
+Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits: PASS
+Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits: PASS
+Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits: PASS
+Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits: PASS
+Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits: PASS
+Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits: PASS
+Corrupt saved Engineer stock or maintenance cannot bypass finite resource limits: PASS
+Ordinary gameplay creates several simultaneous drones and exposes the next terminal assembly interval at 60/120 Hz: PASS
+Engineer uses its handgun and physically retreats toward its support stand-off after deploying the first drone: PASS
+Save restores a multi-drone owner and its finite stock during a later assembly instead of rejecting duplicate ownership: PASS
+fleet Hz=60 size=5 stock=5 position=5.663,8.652
+Gameplay fills one five-unit fleet and refuses a sixth deployment without replenishing spent stock: PASS
+Multi-drone gameplay keeps distinct supported bodies and respects the shared navigation search budget: PASS
+Saved and uninterrupted fleet growth reach the same finite capacity and preserve body health and cannon ammunition within one attack event: PASS
+Destroying an exhausted five-unit fleet never fabricates a replacement or resets total stock: PASS
+Ordinary gameplay creates several simultaneous drones and exposes the next terminal assembly interval at 60/120 Hz: PASS
+Engineer uses its handgun and physically retreats toward its support stand-off after deploying the first drone: PASS
+Save restores a multi-drone owner and its finite stock during a later assembly instead of rejecting duplicate ownership: PASS
+fleet Hz=120 size=5 stock=5 position=5.663,8.652
+Gameplay fills one five-unit fleet and refuses a sixth deployment without replenishing spent stock: PASS
+Multi-drone gameplay keeps distinct supported bodies and respects the shared navigation search budget: PASS
+Saved and uninterrupted fleet growth reach the same finite capacity and preserve body health and cannon ammunition within one attack event: PASS
+Destroying an exhausted five-unit fleet never fabricates a replacement or resets total stock: PASS
+Direct deployment admits all five simultaneous units for one owner: PASS
+Saved active fleet count cannot exceed spent stock and spent stock cannot exceed five: PASS
+Saved active fleet count cannot exceed spent stock and spent stock cannot exceed five: PASS
+Saved active fleet count cannot exceed spent stock and spent stock cannot exceed five: PASS
+A malformed sixth active drone attributed to one Engineer is rejected even when the shared twenty-unit pool has room: PASS
+Shared maintenance fixture creates two physical drones owned by the same Engineer: PASS
+One physical maintenance pulse selects one recipient and spends one point from the shared reservoir instead of multiplying work across the fleet: PASS
+Active danger inhibits fleet repair without spending or duplicating the shared maintenance resource: PASS
+Shared maintenance fixture creates two physical drones owned by the same Engineer: PASS
+One physical maintenance pulse selects one recipient and spends one point from the shared reservoir instead of multiplying work across the fleet: PASS
+Active danger inhibits fleet repair without spending or duplicating the shared maintenance resource: PASS
+Support maintenance fixture starts with one actual damaged drone: PASS
+Engineer physically approaches a safely placed wounded fleet member and performs finite maintenance while retaining a supported body: PASS
+Engineer supervision preserves an actual protected reload instead of overriding shared defensive intent with a rear-position task: PASS
+A nearby newly observed threat interrupts terminal work and chooses a physical retreat without spending the pending drone: PASS
+Deployment cannot reclaim the same threatened frame and restart terminal work before the Engineer has reached a safe support position: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+Malformed saved fleet repair recipient or Engineer support goal is rejected safely: PASS
+checks=134 result=PASS

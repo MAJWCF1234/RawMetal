@@ -610,6 +610,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--lift-test"))return retro::Game::testLift()?0:32;
     if(std::wcsstr(commandLine,L"--reactor-test"))return retro::Game::testReactor()?0:37;
     if(std::wcsstr(commandLine,L"--save-test"))return retro::Game::testSaves()?0:38;
+    if(std::wcsstr(commandLine,L"--npc-voice-test"))return retro::Game::testNpcVoices()?0:13;
     if(std::wcsstr(commandLine,L"--shaft-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();int index=0;
         for(float seconds:{0.f,9.f,17.f,25.f,29.f,35.f,38.7f,39.6f,42.f,48.f}){auto scene=retro::Game::liftInspection(seconds,8);renderer.render(scene);std::ofstream out("shaft-"+std::to_string(index++)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
@@ -734,6 +735,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          if(wide.left!=320||wide.top!=120||wide.right-wide.left!=640||wide.bottom-wide.top!=360||normal.left!=160||normal.top!=90||normal.right!=800||normal.bottom!=450)return 17;
         }
         if(!retro::AudioEngine::test())return 13;
+        if(!retro::Game::testNpcVoices())return 13;
         for(int model=0;model<27;++model){
             renderer.previewModel(model,1.1f);
             std::ofstream preview("model-"+std::to_string(model)+".ppm",std::ios::binary);preview<<"P6\n"<<W<<" "<<H<<"\n255\n";

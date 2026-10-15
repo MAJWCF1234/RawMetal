@@ -4,6 +4,7 @@
 #include "../world/World.h"
 #include <vector>
 #include "../audio/Sound.h"
+#include "../audio/NpcVoiceCatalog.h"
 #include "Combat.h"
 #include "ai/guard/Config.h"
 #include "ai/guard/GuardCtx.h"
@@ -249,6 +250,7 @@ public:
     static bool testAudioEvents();
     static bool testSettings();
     static bool testSaves();
+    static bool testNpcVoices();
     enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
     MenuPage menuPage()const{return m_menuPage;}
     int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?6:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:2;}
@@ -547,6 +549,9 @@ private:
     std::vector<AiStimulus> aiStimuli()const;
     void rebuildFriendlyActors();
     void updateFriendlyActors(float dt,bool guards=false);
+    void updateNpcVoices(float dt);
+    bool npcVoice(size_t actor,NpcVoiceCue cue);
+    bool npcHasVoice(size_t actor)const;
     StateId friendlyKey(size_t actor,std::string_view field)const;
     World& friendlyWorld(int level){return level==m_level?m_world:m_chunks[level].world;}
     int friendlyChunkAt(Vec2 global,int preferred)const;

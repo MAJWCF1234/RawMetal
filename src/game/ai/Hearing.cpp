@@ -5,6 +5,7 @@ namespace retro {
 std::vector<AiStimulus> Game::aiStimuli()const{
  std::vector<AiStimulus> out;
  for(const auto&event:m_sounds){
+  if(event.speech>=0)continue; // Radio dialogue is not a new perception stimulus.
   bool shot=event.sound==Sound::Shot,step=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;
   bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty||event.sound==Sound::PunchSwing;
   bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land;

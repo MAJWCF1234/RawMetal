@@ -34,6 +34,10 @@ closes the pressure door. This is an early disaster; other Cleanup squads remain
 part of the facility. Reach it on the main route, or use console `MAP 14` for a
 direct test. See the [breach validation](docs/receiving-breach-20261015.md).
 
+The six Cleanup roles and Witness now have **80 embedded ElevenLabs voice takes**,
+with equipment-specific mask effects and contextual patrol, combat, support and
+escort responses. [Voice details and audition](docs/cleanup-voices-20261015.md).
+
 The route starts behind the west cover screen:
 
 1. Use the **arrival cache** to read the brief and collect its flashlight. Press

@@ -1,0 +1,487 @@
+Eight freight areas allocated across 22 additional stitched chunks: PASS
+Manifest overlook retains all four real warehouse chunks with the door closed: PASS
+Adjacent Manifest routing wing retains the shared warehouse vista: PASS
+Warehouse facade aperture and office glazing transmit the overlook sightline: PASS
+Both sides of the overlook retain physical fall protection: PASS
+Signal alcove computer faces its entrance and its log opens through E: PASS
+Receiving Cleanup spawn has physical standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup spawn has physical standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving support roles retain pistols: PASS
+Receiving Cleanup spawn has physical standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup spawn has physical standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup spawn has physical standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving support roles retain pistols: PASS
+Receiving Cleanup spawn has physical standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Receiving Cleanup patrol pause has standing clearance: PASS
+Existing Receiving 02 hosts exactly the six baked Cleanup roles: PASS
+Main-route physical cache grants the same owned flashlight: PASS
+Main-route encounter and cache survive save/load: PASS
+Main-route chain distraction is operated through E: PASS
+One player pick does not start the squad wipeout: PASS
+Two player picks release real entities and select one living evacuee: PASS
+Active breach and authored evacuation save cleanly: PASS
+Reload retains the six breach creatures without duplicating them: PASS
+Breach member 0 level=14 damage=90 evac=0
+Breach member 1 level=15 damage=0 evac=1
+Breach member 2 level=14 damage=90 evac=0
+Breach member 3 level=14 damage=90 evac=0
+Breach member 4 level=14 damage=90 evac=0
+Breach member 5 level=14 damage=90 evac=0
+Entities kill the three remaining fighters while one survivor physically retreats into Receiving 03: PASS
+The lone survivor and sealed retreat persist across save/load: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Mutated human has authored health and standing hull: PASS
+Mutated human stands on authored floor: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Mutated human has authored health and standing hull: PASS
+Mutated human stands on authored floor: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Freight section has dedicated authored soundtrack: PASS
+Exactly two mutated humans across the new freight section: PASS
+Mutated human damage survives save/load: PASS
+Waste Handling dispatch door opens through E and walking reaches Freight Access: PASS
+Freight Access permits walking back into Waste Handling: PASS
+MAP 10 / FREIGHT ACCESS
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 28374 nodes; elevation -12 to -11.84
+FREIGHT / CLOCK-IN (nearest 0.563749): Control is approachable from the chunk entry with the standing player hull: PASS
+LOADING SCHEDULE (nearest 0.562639): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 11 / LIFT MACHINERY
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 18860 nodes; elevation -12 to -12
+AUXILIARY / BRAKE RELEASE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 12 / AUXILIARY FREIGHT LIFT
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 13404 nodes; elevation -12 to -12
+AUXILIARY / LOCAL CONTROL (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+AUXILIARY / CALL PLATFORM (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+AUXILIARY / MANUAL DOOR RELEASE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 13 / RECEIVING OVERLOOK
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 35196 nodes; elevation -25 to -19
+RECEIVING / WORKER NOTE (nearest 0.563749): Control is approachable from the chunk entry with the standing player hull: PASS
+WORKER / HANDWRITTEN ROUTE (nearest 0.620736): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 14 / RECEIVING LANES
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 23549 nodes; elevation -25 to -24.84
+RESTRICTED MATERIAL INTAKE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+INSPECTION / FIELD CACHE (nearest 0.61568): Control is approachable from the chunk entry with the standing player hull: PASS
+INSPECTION / CHAIN TEST (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 15 / WAREHOUSE INTAKE
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 28113 nodes; elevation -25 to -24.84
+WAREHOUSE / TRACK DAMAGE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 16 / WAREHOUSE / A-B
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 29000 nodes; elevation -25 to -24.7
+WAREHOUSE / OPERATIONS (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+FORKLIFT / SHIFT REPORT (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+WAREHOUSE / BREAK CORNER (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 17 / WAREHOUSE / C BLOCK
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Authored enemy has clearance: PASS
+Authored enemy has clearance: PASS
+Authored enemy has clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 34770 nodes; elevation -25 to -19
+Stair route reaches its upper exit landing: PASS
+MAP 18 / WAREHOUSE / D BLOCK
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Authored enemy has clearance: PASS
+Authored enemy has clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 21094 nodes; elevation -19 to -12.7
+Stair route reaches its upper exit landing: PASS
+RESTRICTED / SEALED MANIFEST (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 19 / WAREHOUSE / UPPER RACKS
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 12825 nodes; elevation -13 to -7
+Stair route reaches its upper exit landing: PASS
+UPPER STORAGE / BREACH (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 20 / MANIFEST OFFICES
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 27933 nodes; elevation -7 to -7
+MANIFEST / ORDINARY FREIGHT (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+TRAIN 27 / ARRIVAL RECORD (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MANIFEST / MISSED CALLS (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 21 / MANIFEST ROUTING
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 27130 nodes; elevation -7 to -7
+MANIFEST / ORDINARY FREIGHT (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+TRAIN 27 / ARRIVAL RECORD (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MANIFEST / MISSED CALLS (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MANIFEST / ROUTING SHUTTERS (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 22 / TRANSFER / CONVEYORS
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 39444 nodes; elevation -25 to -7
+Transfer stair route reaches the sorting floor: PASS
+TRANSFER / CONVEYOR ROUTE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 23 / TRANSFER / SORTING
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Authored enemy has clearance: PASS
+Authored enemy has clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 30801 nodes; elevation -25 to -24.84
+SORTING / CARGO GATE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 24 / TRANSFER / RAIL YARD
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 28648 nodes; elevation -25 to -24.88
+TRANSFER / SIGNAL ROUTING (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 25 / EMPTY PLATFORM
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 29328 nodes; elevation -25 to -24.93
+PLATFORM 3 / DEPARTURES (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+PLATFORM / EMERGENCY PHONE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 26 / PLATFORM / SERVICE END
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 29408 nodes; elevation -25 to -24.93
+PLATFORM / SECURITY RECORD (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 27 / DEPOT / TRACKSIDE
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Authored enemy has clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 48844 nodes; elevation -28 to -24.93
+DEPOT / MAINTENANCE LOG (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 28 / DEPOT / INSPECTION PITS
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 35984 nodes; elevation -28 to -19
+Stair route reaches its upper exit landing: PASS
+MAP 29 / DEPOT / GANTRIES
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Authored enemy has clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 45664 nodes; elevation -25 to -19
+DEEP CARGO ROUTE (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 30 / CARGO / MAINTENANCE BORE
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 28817 nodes; elevation -25.35 to -24.92
+SIGNAL ROOM / TUNNEL 4A (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+MAP 31 / CARGO / DEEP JUNCTION
+Freight geometry keeps native campaign identity: PASS
+Spawn has standing clearance: PASS
+Authored enemy has clearance: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Lamp fits under its support: PASS
+Route visited 27276 nodes; elevation -25 to -24.93
+SIGNAL / BLOCK 4A (nearest 0.615681): Control is approachable from the chunk entry with the standing player hull: PASS
+DEEP JUNCTION / SUBSTATION (nearest 0.565962): Control is approachable from the chunk entry with the standing player hull: PASS
+E releases brake from actual west-side console: PASS
+E selects local control after brake release: PASS
+E calls platform through real control interaction: PASS
+Called platform reaches upper landing during gameplay: PASS
+E releases cage interlock after arrival: PASS
+Manual release actually opens cage gate without a second hidden interaction: PASS
+Save/load preserves real passenger descent: PASS
+Cage carries standing player to lower landing in normal gameplay: PASS
+Standing player walks off cage through lower threshold without jumping: PASS
+Upper doorway header cannot be used as an unintended drop or bypass: PASS
+Upper doorway header cannot be used as an unintended drop or bypass: PASS
+Upper doorway header cannot be used as an unintended drop or bypass: PASS
+All four parts of the 48m warehouse are resident together: PASS
+East seam enters the adjacent warehouse chunk using world coordinates: PASS
+Seam 16 -> 17: Actual movement crosses the hall seam without a collision or floor-height jump: PASS
+Seam 17 -> 18: Actual movement crosses the hall seam without a collision or floor-height jump: PASS
+Seam 18 -> 19: Actual movement crosses the hall seam without a collision or floor-height jump: PASS
+Seam 13 -> 14: Actual movement crosses the hall seam without a collision or floor-height jump: PASS
+Seam 14 -> 15: Actual movement crosses the hall seam without a collision or floor-height jump: PASS

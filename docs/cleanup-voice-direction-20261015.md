@@ -1,12 +1,15 @@
 # Cleanup dialogue and casting
 
-Production preparation only: these are proposed casts and authored lines, not
-generated or integrated audio. Voice names are available ElevenLabs defaults;
-final casting needs audition against the skinned character and in-game mix.
+The API follow-up generated 80 takes using these ElevenLabs voices and applied
+equipment-specific effects. The runtime uses the finished bank for Cleanup and
+the Witness. The authored script below includes production direction; the exact
+shipped wording and cue mapping live in [the catalog](../source-assets/cleanup-voices/catalog.json).
+Some action claims were tightened before generation, including wounded cover,
+pad supervision and damage absorbed by armor. See [validation](cleanup-voices-20261015.md).
 The source of visual direction is the native stage-3 front/side skinned render,
 not texture thumbnails alone.
 
-| Role | Visible equipment and delivery | Proposed voice | Mask treatment |
+| Role | Visible equipment and delivery | Voice | Mask treatment |
 |---|---|---|---|
 | Assault | Helmet, red goggles, full respirator; rough, clipped orders | Harry | Firm midrange filter and light radio breakup |
 | Sharpshooter | Hood and gasmask; husky, quiet, precise | Callum | Narrower, restrained filter |

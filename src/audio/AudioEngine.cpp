@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "NpcVoiceCatalog.h"
 #include "../core/PackedResource.h"
 #include "../game/Game.h"
 #include <algorithm>
@@ -14,6 +15,11 @@ std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
  return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
 }
 bool emitterInChunk(std::int64_t emitter,int level){return emitter>0&&int((std::uint64_t(emitter)>>32)&0xffffu)==level;}
+bool writeVoicePreview(const std::vector<int16_t>& pcm){
+ std::ofstream file("npc-voice-preview.wav",std::ios::binary);auto write=[&](auto value){file.write(reinterpret_cast<const char*>(&value),sizeof(value));};
+ file.write("RIFF",4);write(uint32_t(pcm.size()*2+36));file.write("WAVEfmt ",8);write(uint32_t(16));write(uint16_t(1));write(uint16_t(2));
+ write(uint32_t(44100));write(uint32_t(176400));write(uint16_t(4));write(uint16_t(16));file.write("data",4);write(uint32_t(pcm.size()*2));file.write(reinterpret_cast<const char*>(pcm.data()),pcm.size()*2);return bool(file);
+}
 }
 std::vector<int16_t> decodeMusic(const unsigned char* data,size_t bytes);
 AudioEngine::AudioEngine(bool device){
@@ -40,6 +46,11 @@ AudioEngine::AudioEngine(bool device){
    for(size_t f=0;f<fade;++f)for(int c=0;c<sample.channels;++c){sample.pcm[f*sample.channels+c]=int16_t(sample.pcm[f*sample.channels+c]*float(f)/float(fade));auto end=(sample.frames()-1-f)*sample.channels+c;sample.pcm[end]=int16_t(sample.pcm[end]*float(f)/float(fade));}
   }
  }
+ auto bank=loadResource(347);auto word=[&](size_t offset){uint32_t v=0;if(offset+4>bank.size())throw std::runtime_error("Truncated NPC voice bank");std::memcpy(&v,bank.data()+offset,4);return v;};
+ if(bank.size()<8||std::memcmp(bank.data(),"RVB1",4)||word(4)!=NpcVoiceClips.size())throw std::runtime_error("Invalid NPC voice bank");
+ size_t offset=8;for(size_t i=0;i<NpcVoiceClips.size();++i){size_t count=word(offset);offset+=4;if(count>bank.size()-offset)throw std::runtime_error("Truncated NPC voice clip");
+  Sample sample;sample.channels=2;sample.pcm=decodeMusic(bank.data()+offset,count);if(sample.frames()<Rate/5||sample.frames()>Rate*12)throw std::runtime_error("Invalid NPC voice duration");m_speech.push_back(std::move(sample));offset+=count;}
+ if(offset!=bank.size())throw std::runtime_error("Trailing NPC voice data");
  play({Sound::Music,{},1,1,false},-1,true);
  if(!device)return;
  m_wake=CreateEventW(nullptr,FALSE,FALSE,nullptr);
@@ -56,10 +67,17 @@ AudioEngine::~AudioEngine(){
  if(m_wake)CloseHandle(m_wake);
 }
 void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
+ if(event.speech>=0){if(size_t(event.speech)>=m_speech.size()||!event.speaker)return;
+  std::erase_if(m_voices,[&](const auto&voice){return voice.speech>=0&&voice.speaker==event.speaker;});
+  if(std::count_if(m_voices.begin(),m_voices.end(),[](const auto&v){return v.speech>=0;})>=2){
+   auto victim=m_voices.end();for(auto it=m_voices.begin();it!=m_voices.end();++it)if(it->speech>=0&&(victim==m_voices.end()||it->speechPriority<victim->speechPriority))victim=it;
+   if(victim!=m_voices.end()){if(victim->speechPriority>event.speechPriority)return;m_voices.erase(victim);}}
+ }
  if(m_voices.size()>=48){auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop;});if(voice!=m_voices.end())m_voices.erase(voice);else return;}
  m_voices.push_back({event.sound,0,event.gain,event.pitch,1,1,event.position,event.spatial,loop,emitter});
  m_voices.back().radius=std::max(.1f,event.radius);
  m_voices.back().z=event.z;
+ m_voices.back().speech=event.speech;m_voices.back().speaker=event.speaker;m_voices.back().speechPriority=event.speechPriority;
  if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
 }
 void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
@@ -102,7 +120,15 @@ void AudioEngine::update(const Game& game,bool focused){
  for(auto&voice:m_voices)if(voice.emitter==-2)voice.pitch=m_motorTarget<.3f?.65f:game.world().liftPhaseTime()>24?.82f:1.f;
  if(m_freightTarget>0)sceneLoop(Sound::FreightMusic,-4);
  if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
- for(const auto&event:game.sounds())play(event);
+ std::erase_if(m_voices,[&](const auto&voice){if(voice.speech<0)return false;if(!voice.speaker||voice.speaker>game.npcActors().size())return true;
+  size_t actor=voice.speaker-1;const auto&npc=game.npcActors()[actor];return !game.chunkResident(npc.level)||(voice.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(npc.track().deadState)));});
+ for(const auto&event:game.sounds()){
+  if(event.speech>=0){if(!event.speaker||event.speaker>game.npcActors().size())continue;size_t actor=event.speaker-1;
+   if(event.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(game.npcActors()[actor].track().deadState)))continue;}
+  play(event);
+ }
+ for(auto&voice:m_voices)if(voice.speech>=0&&voice.speaker&&voice.speaker<=game.npcActors().size()){
+  const auto&npc=game.npcActors()[voice.speaker-1];voice.position=npc.pose.position+game.chunkOffset(npc.level)-game.chunkOffset(game.level());voice.z=npc.pose.z+npc.track().scale*.85f;}
  auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain,float z=std::numeric_limits<float>::quiet_NaN()){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
   if(it==m_voices.end()){play({sound,pos,gain,1,true,17,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;}
  };
@@ -128,7 +154,7 @@ void AudioEngine::mix(int16_t* output,size_t frames){
   m_reactorBlend+=(m_reactorTarget-m_reactorBlend)/(1.2f*Rate);
   m_motorBlend+=(m_motorTarget-m_motorBlend)/(.18f*Rate);
   for(auto&v:m_voices){bool music=v.sound==Sound::Music||v.sound==Sound::FreightMusic||v.sound==Sound::ReactorMusic;
-   if(m_paused&&!music)continue;auto&s=m_samples[size_t(v.sound)];size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
+   if(m_paused&&!music)continue;const auto&s=sampleFor(v);size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
    size_t a=size_t(v.cursor),b=a+1<n?a+1:v.loop?0:a;float frac=float(v.cursor-double(a));
    auto sample=[&](int channel){float value=s.pcm[a*s.channels+channel]*(1-frac)+s.pcm[b*s.channels+channel]*frac;
     if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::FreightMusic||v.sound==Sound::WaterReturn)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
@@ -148,7 +174,7 @@ void AudioEngine::mix(int16_t* output,size_t frames){
   // Smooth limiter leaves headroom when footsteps, music and several attacks overlap.
   output[frame*2]=int16_t(std::tanh(left*.8f)*m_master*30000);output[frame*2+1]=int16_t(std::tanh(right*.8f)*m_master*30000);
  }
- std::erase_if(m_voices,[&](auto&v){return !v.loop&&v.cursor>=m_samples[size_t(v.sound)].frames();});
+ std::erase_if(m_voices,[&](auto&v){return !v.loop&&v.cursor>=sampleFor(v).frames();});
 }
 void AudioEngine::run(){
  while(!m_stop){for(auto&buffer:m_buffers)if(!(buffer.header.dwFlags&WHDR_INQUEUE)){
@@ -187,6 +213,23 @@ bool AudioEngine::test(){
  auto waterKey=ambientEmitter(AmbientKind::Water,5,0),machineKey=ambientEmitter(AmbientKind::Machine,15,0);
  if(waterKey==machineKey||emitterInChunk(waterKey,15)||!emitterInChunk(waterKey,5))return failure("ambient emitter namespace collision");
  AudioEngine audio(false);auto game=Game::validationScene(Enemy::Kind::Brute);
+ if(audio.m_speech.size()!=NpcVoiceClips.size())return failure("NPC voice bank count");
+ for(size_t i=0;i<audio.m_speech.size();++i){const auto&clip=audio.m_speech[i];
+  if(std::fabs(double(clip.frames())/Rate-NpcVoiceClips[i].seconds)>.15||std::none_of(clip.pcm.begin(),clip.pcm.end(),[](int16_t p){return std::abs(int(p))>500;}))return failure("NPC voice silent or truncated");}
+ {
+  AudioEngine voices(false);voices.m_voices.clear();SoundEvent event{Sound::WorkerDying};event.speech=0;event.speaker=1;event.speechPriority=1;voices.play(event);voices.play(event);
+  if(std::count_if(voices.m_voices.begin(),voices.m_voices.end(),[](const auto&v){return v.speech>=0;})!=1)return failure("same-speaker voice overlap");
+  event.speaker=2;voices.play(event);event.speaker=3;event.speechPriority=2;voices.play(event);
+  if(std::count_if(voices.m_voices.begin(),voices.m_voices.end(),[](const auto&v){return v.speech>=0;})!=2)return failure("NPC speech concurrency cap");
+  std::vector<int16_t> mixed(Rate*2*3);voices.mix(mixed.data(),Rate*3);
+  if(std::none_of(mixed.begin(),mixed.end(),[](int16_t p){return std::abs(int(p))>300;}))return failure("NPC speech mixer output");
+  voices.m_voices.clear();std::vector<int16_t> audition;
+  for(int role=1;role<=7;++role){size_t clip=0;while(clip<NpcVoiceClips.size()&&NpcVoiceClips[clip].role!=role)++clip;if(clip==NpcVoiceClips.size())return failure("missing voice role");
+   event.speaker=size_t(role);event.speech=int(clip);event.speechPriority=1;voices.play(event);size_t frames=voices.m_speech[clip].frames()+Rate/3;
+   std::vector<int16_t> rendered(frames*2);voices.mix(rendered.data(),frames);audition.insert(audition.end(),rendered.begin(),rendered.end());}
+  if(!writeVoicePreview(audition))return failure("NPC voice audition export");
+ }
+ diagnostic<<"All "<<audio.m_speech.size()<<" NPC takes decode with expected duration and signal; mixer replacement and two-speaker cap: PASS\n";
  const auto& worker=audio.m_samples[size_t(Sound::WorkerDying)];
  if(worker.channels!=2||worker.frames()<Rate*9.3||worker.frames()>Rate*9.5||std::none_of(worker.pcm.begin(),worker.pcm.end(),[](int16_t p){return std::abs(int(p))>500;}))return failure("worker compressed WAV missing, silent or truncated");
  diagnostic<<"Original 22.05 kHz IMA ADPCM worker voice decodes to full 44.1 kHz mixer audio: PASS\n";

@@ -382,6 +382,7 @@ void Game::update(const InputState& input, float dt) {
         for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);
         updateTacticalGrenades(dt);
         updateEnemies(dt);
+        updateNpcVoices(dt);
         updatePickups();
 
         // Campaign completion is explicit through scripted content. Reaching the

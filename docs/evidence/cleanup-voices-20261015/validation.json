@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-15",
+  "executable_bytes": 26510336,
+  "ceiling_bytes": 33554432,
+  "headroom_bytes": 7044096,
+  "sha256": "a4580fa6c4a4f93abf3d3336e814f2b3b0d725bd54c34fb478c604ddd92017ee",
+  "embedded_resources": 230,
+  "voice_clips": 80,
+  "bank_source_bytes": 1231528,
+  "tests": {
+    "npc-voice-test.txt": {
+      "exit_code": 0,
+      "pass_lines": 35
+    },
+    "audio-validation.txt": {
+      "exit_code": 0,
+      "pass_lines": 10
+    },
+    "freight-district-test.txt": {
+      "exit_code": 0,
+      "pass_lines": 437
+    },
+    "guard-role-test.txt": {
+      "exit_code": 0,
+      "pass_lines": 44
+    },
+    "guard-patient-test.txt": {
+      "exit_code": 0,
+      "pass_lines": 60
+    },
+    "engineer-drone-test.txt": {
+      "exit_code": 0,
+      "pass_lines": 134
+    },
+    "exclusion-test.txt": {
+      "exit_code": 0,
+      "pass_lines": 47
+    },
+    "stealth-test.txt": {
+      "exit_code": 0,
+      "pass_lines": 36
+    }
+  },
+  "full_vulkan_smoke_exit_code": 0,
+  "credits_used_generation_and_intelligibility": 1983,
+  "credential_scan": "clean",
+  "audition_order": [
+    "Assault",
+    "Engineer",
+    "Sharpshooter",
+    "Heavy",
+    "Medic",
+    "Rusher",
+    "Witness"
+  ],
+  "human_listening_approval": false
+}
