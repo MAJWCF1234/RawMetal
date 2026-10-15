@@ -9,13 +9,13 @@ int Game::titleRows()const{
 }
 std::string Game::customMenuLabel(int row)const{
  int item=customMenuLogicalIndex(row);
- if(item==0)return "ASHFALL EXCLUSION ZONE";
- if(item>=1&&item<=int(m_customCampaigns.size()))return m_customCampaigns[size_t(item-1)]->name;
+ if(item>=0&&item<int(m_customCampaigns.size()))return m_customCampaigns[size_t(item)]->name;
  return "BACK TO TITLE";
 }
 void Game::selectCustomCampaign(int index){
  if(index<0||index>=int(m_customCampaigns.size()))return;
- m_customCampaign=m_customCampaigns[size_t(index)];m_customCampaignKey=m_customCampaign->key;m_worldId=WorldId::Custom;
+ auto campaign=m_customCampaigns[size_t(index)];
+ m_customCampaign=campaign;m_customCampaignKey=campaign->key;m_worldId=WorldId::Custom;
  m_level=std::clamp(m_customCampaign->startMap,0,int(m_customCampaign->maps.size())-1);
  m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;restart();m_suppressFire=true;
 }
@@ -48,8 +48,7 @@ void Game::updateTitle(const InputState& input){
  bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
  if(activate&&m_customMapsOpen){
   int item=customMenuLogicalIndex(m_titleSelection);
-  if(item==0){m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;m_level=0;restart();m_suppressFire=true;}
-  else if(item>=1&&item<=int(m_customCampaigns.size()))selectCustomCampaign(item-1);
+  if(item>=0&&item<int(m_customCampaigns.size()))selectCustomCampaign(item);
   else {m_customMapsOpen=false;m_customMenuOffset=0;m_titleSelection=1;}
  }else if(activate){
   if(m_titleSelection==0){m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Campaign;m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;}

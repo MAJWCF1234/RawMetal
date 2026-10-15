@@ -12,5 +12,5 @@ std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(
 std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesystem::path& path);
 std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,std::string sourceFile);
 // Embedded one-file release payload (assets.rc id 346).
-std::shared_ptr<const CustomCampaign> loadEmbeddedGuardLabCampaign();
+std::shared_ptr<const CustomCampaign> loadEmbeddedExclusionZoneCampaign();
 }

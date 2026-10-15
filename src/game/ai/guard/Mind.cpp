@@ -158,7 +158,12 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
   if(remaining==0){mode=GuardState::Patrol;put("guard_arrived",0);put("guard_pause",0);put("repath",0);put("guard_memory",0);put("guard_confirmed",0);put("guard_recognition",0);put("guard_return",level!=m_friendlyActors[actor].homeLevel);rememberGuardTarget(actor,{});}}
  if(mode==GuardState::Patrol){auto home=chunkOffset(m_friendlyActors[actor].homeLevel)-globalOrigin;const auto&patrol=config.patrol.at(size_t(point));goal=patrol.position+home;goalZ=patrol.z;
   bool arrived=lengthSq(goal-pose.position)<.25f*.25f&&std::fabs(goalZ-pose.z)<.3f;
-  if(arrived){put("guard_return",0);int pause=get("guard_pause");if(!get("guard_arrived")){put("guard_arrived",1);pause=patrol.pauseMs;}
+  if(arrived){put("guard_return",0);int pause=get("guard_pause");if(!get("guard_arrived")){
+   put("guard_arrived",1);
+   // Multi-point routes skip the spawn freeze when authored keys sit on patrol[0].
+   // Single-point holds keep their authored pause for standing posts.
+   if(config.patrol.size()>1&&!get("patrol_booted")){pause=0;put("patrol_booted",1);}else pause=patrol.pauseMs;
+  }
    pause=std::max(0,pause-ms);put("guard_pause",pause);if(pause==0){point=(point+1)%int(config.patrol.size());put("guard_point",point);put("guard_arrived",0);goal=config.patrol[size_t(point)].position+home;goalZ=config.patrol[size_t(point)].z;}
   }wantsMove=!arrived||!get("guard_arrived");if(wantsMove)guardRoute(level,actor,goal+globalOrigin,goalZ,ms,goal,goalZ);
  }

@@ -8,7 +8,7 @@ namespace retro {
 // Isolated poses exercise the actual drawActor path; this fixture deliberately
 // does not claim AI encounter progress from manufactured animation states.
 Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
- auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");
+ auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");
  if(role<0||role>5||sample<0||sample>15||authored->maps[0]->actorTracks.empty())throw std::runtime_error("Invalid cleanup layer inspection");
  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Cleanup animation inspection";campaign->key=883013;
  auto map=std::make_shared<AuthoredMapData>();map->name="Unobstructed pose inspection";map->definition={{0,0},{10.5f,9.5f},0,Environment::Interior,false,8,.7f,42};
@@ -35,18 +35,18 @@ Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
  g.m_weaponEquipped=false;g.m_holster=1;g.m_damageFlash=0;return g;
 }
 Game Game::killSquadInspection(int stage){
- auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");Game g(campaign);
- if(stage<0||stage>13||g.chunkCount()!=3)throw std::runtime_error("Kill squad inspection requires the actual stitched Ash export");
+ auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");Game g(campaign);
+ if(stage<0||stage>13||g.chunkCount()<3)throw std::runtime_error("Kill squad inspection requires the Exclusion Zone wasteland export");
  constexpr std::array<GuardSquadRole,6> roles={GuardSquadRole::Engineer,GuardSquadRole::Assault,GuardSquadRole::Sharpshooter,GuardSquadRole::Heavy,GuardSquadRole::Medic,GuardSquadRole::Rusher};
  std::array<size_t,6> members;members.fill(g.npcActors().size());
- for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel!=1||npc.track().ai.mode!=ActorAiMode::Guard)continue;
-  for(size_t role=0;role<roles.size();++role)if(npc.track().ai.role==roles[role]){if(members[role]!=g.npcActors().size())throw std::runtime_error("Cleanup inspection has duplicate cargo squad roles");members[role]=actor;}}
- for(size_t actor:members)if(actor==g.npcActors().size())throw std::runtime_error("Cleanup inspection requires all six authored cargo squad roles");
+ for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel!=0||npc.track().ai.mode!=ActorAiMode::Guard)continue;
+  for(size_t role=0;role<roles.size();++role)if(npc.track().ai.role==roles[role]){if(members[role]!=g.npcActors().size())throw std::runtime_error("Cleanup inspection has duplicate facility squad roles");members[role]=actor;}}
+ for(size_t actor:members)if(actor==g.npcActors().size())throw std::runtime_error("Cleanup inspection requires all six authored facility squad roles");
  const size_t engineer=members[0],heavy=members[3],medic=members[4];
- // Enter the real authoring trigger; no manufactured alert/target/weapon state.
- g.m_player.pos={26,20};g.crossChunkBoundary();g.updateStreaming(0);for(int i=0;i<12;++i)g.update({},1.f/60);
- if(g.level()!=1||!g.state("cleanup_enabled"))throw std::runtime_error("Cleanup entry did not enable the authored kill squad");
- g.m_player.pos={6,20};
+ // Exclusion Zone keeps the cleanup squad live on the wasteland facility chunk.
+ g.m_player.pos={4.5f,6.5f};g.updateStreaming(0);for(int i=0;i<12;++i)g.update({},1.f/60);
+ if(g.level()!=0)throw std::runtime_error("Exclusion Zone inspection did not remain on the facility chunk");
+ g.m_player.pos={4.5f,20.f};
  auto dumpFailure=[&](const char*name,bool milestone){
   std::filesystem::create_directories("diagnostics/kill-squad-20261011");
   std::ofstream report(std::string("diagnostics/kill-squad-20261011/")+name+"-runtime-failure.txt");
@@ -68,10 +68,9 @@ Game Game::killSquadInspection(int stage){
   }
  };
  if(stage>=11){
-  // Wound the Heavy in view, then leave the cargo bay so the Medic can own
-  // treatment without continuous Player fire interleaved with the Creature.
+  // Wound the Heavy in view, then back off so the Medic can own treatment.
   g.m_player.pos={6,20};g.damageFriendly(heavy,60,g.player().pos,{});
-  g.m_player.pos={1.5f,1.5f};g.m_player.z=0;bool reached=false;
+  g.m_player.pos={2.5f,3.5f};g.m_player.z=0;bool reached=false;
   for(int i=0;i<2400&&!g.dead();++i){g.update({},1.f/60);float work=g.npcWeaponPose(medic).treatment;if(stage==11?work>=.18f:stage==12?work>=.55f:g.state(g.friendlyKey(medic,"support_used"))>0){reached=true;break;}}
   if(!reached){std::ofstream log("diagnostics/kill-squad-20261011/medic-runtime-failure.txt");for(size_t actor:{heavy,medic}){const auto&npc=g.npcActors()[actor];log<<"actor="<<actor<<" level="<<npc.level<<" position="<<npc.pose.position.x<<','<<npc.pose.position.y<<" health="<<npc.track().health-g.state(npc.track().damageState)<<" clip="<<npc.pose.clip<<'\n';for(const char*field:{"support_target","support_ms","support_used","support_cooldown","weapon_recovery","weapon_action","weapon_reload","grenade_windup","guard_mode","stuck","repath","way_x","way_y","schedule","task"})log<<field<<'='<<g.state(g.friendlyKey(actor,field))<<'\n';}throw std::runtime_error("Authored Medic did not physically open its kit and treat the injured squadmate");}
  }
@@ -116,16 +115,16 @@ Game Game::killSquadInspection(int stage){
   // Remaining at the old western observer point lets these members correctly
   // prefer the nearer authored Creature, so it does not test Player pursuit.
   bool positioned=false;Vec2 cargoContact{};
-  for(Vec2 point:{Vec2{20.5f,19.f},Vec2{19.5f,19.f},Vec2{18.5f,19.5f},Vec2{20.5f,20.f}}){float feet=g.friendlyWorld(1).supportBelow(point.x,point.y,g.player().z+.265f);
+  for(Vec2 point:{Vec2{20.5f,19.f},Vec2{19.5f,19.f},Vec2{18.5f,19.5f},Vec2{20.5f,20.f}}){float feet=g.friendlyWorld(0).supportBelow(point.x,point.y,g.player().z+.265f);
    if(!g.hullFits(point,feet,Player::StandingHeight))continue;g.m_player.pos=point;g.m_player.z=feet;cargoContact=point;positioned=true;break;}
-  if(!positioned){dumpFailure("player-contact-position",false);throw std::runtime_error("No hull-safe cargo observer position could establish the Player-contact prerequisite");}
+  if(!positioned){dumpFailure("player-contact-position",false);throw std::runtime_error("No hull-safe facility observer position could establish the Player-contact prerequisite");}
   auto personallySeesPlayer=[&](size_t actor){const auto&npc=g.npcActors()[actor];return g.state(g.friendlyKey(actor,"guard_seen"))&&g.state(g.friendlyKey(actor,"guard_confirmed"))&&
    g.guardTarget(actor).kind==ShotKind::Player&&g.guardCanSee(actor,npc.pose,g.guardTarget(actor));};
   size_t pursuer=g.npcActors().size();int cargoContactFrames=0;
   for(;cargoContactFrames<600&&!g.dead();++cargoContactFrames){g.update({},1.f/60);for(size_t actor:{members[5],members[1]})if(personallySeesPlayer(actor)){pursuer=actor;break;}if(pursuer!=g.npcActors().size())break;}
-  if(pursuer==g.npcActors().size()){dumpFailure("player-contact-before-pursuit",false);throw std::runtime_error("A mobile cargo squad member did not personally confirm the Player; south pursuit was not tested");}
+  if(pursuer==g.npcActors().size()){dumpFailure("player-contact-before-pursuit",false);throw std::runtime_error("A mobile facility squad member did not personally confirm the Player; south pursuit was not tested");}
   const Vec2 acrossSeam{20.f,25.5f};float seamFeet=g.player().z;
-  if(!g.friendlyWalkSegment(1,g.player().pos,g.player().z,acrossSeam,Player::StandingHeight,&seamFeet)){
+  if(!g.friendlyWalkSegment(0,g.player().pos,g.player().z,acrossSeam,Player::StandingHeight,&seamFeet)){
    dumpFailure("south-opening-observer-path",true);throw std::runtime_error("The observer's south-seam contact path was not physically open");}
   g.m_player.pos=acrossSeam;g.m_player.z=seamFeet;g.crossChunkBoundary();g.updateStreaming(0);
   bool seamContact=false,seamApproach=false;int seamContactFrames=-1,seamApproachFrames=0;

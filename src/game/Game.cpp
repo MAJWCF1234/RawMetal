@@ -409,17 +409,35 @@ void Game::updateWeaponMotion(const InputState& input,float dt){
  m_weaponMotion.bolt=m_shotAge>cycle.boltStart&&m_shotAge<cycle.boltEnd?std::sin((m_shotAge-cycle.boltStart)/boltSpan*kPi)*.06f:0;
 }
 void Game::punchImpact(){
- const auto&melee=kUnarmedMelee;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};Enemy* hit=nullptr;float nearest=melee.range;
+ const auto&melee=kUnarmedMelee;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};Enemy* hitEnemy=nullptr;int hitNpc=-1;float nearest=melee.range;
  for(auto&e:m_enemies){auto delta=e.pos-m_player.pos;float range=length(delta);
   float height=m_player.z+m_player.eye+range*std::tan(m_player.pitch/140.f);
-  if(e.alive&&range<nearest&&dot(normalized(delta),forward)>melee.facingDot&&height>=e.bodyBottom()-.1f&&height<=e.bodyTop()&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,height)){hit=&e;nearest=range;}
+  if(e.alive&&range<nearest&&dot(normalized(delta),forward)>melee.facingDot&&height>=e.bodyBottom()-.1f&&height<=e.bodyTop()&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,height)){hitEnemy=&e;hitNpc=-1;nearest=range;}
  }
- if(hit)applyPunchHit(*hit);
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
+  if(npc.level!=m_level||!track.health||npc.pose.clip==4||(track.deadState&&state(track.deadState))||(track.ai.enableState&&!state(track.ai.enableState)))continue;
+  auto delta=npc.pose.position-m_player.pos;float range=length(delta);float body=friendlyHullHeight(i,track);
+  float height=m_player.z+m_player.eye+range*std::tan(m_player.pitch/140.f);
+  if(range<nearest&&dot(normalized(delta),forward)>melee.facingDot&&height>=npc.pose.z-.1f&&height<=npc.pose.z+body&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,npc.pose.position,height)){hitNpc=int(i);hitEnemy=nullptr;nearest=range;}
+ }
+ if(hitEnemy)applyPunchHit(*hitEnemy);else if(hitNpc>=0)applyNpcPunchHit(size_t(hitNpc));
 }
 void Game::applyPunchHit(Enemy&enemy){
  sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;
  bool killed=applyEnemyDamage(enemy,kUnarmedMelee.damage,true,true);
  enemySound(enemy,killed?2:0,killed?.85f:.45f,killed?1.f:1.15f);
+}
+void Game::applyNpcPunchHit(size_t actor){
+ if(actor>=m_friendlyActors.size())return;const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
+ sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;
+ // Stealth kill: from behind an unaware guard/civilian is lethal. Frontal punches
+ // still hurt and raise the target through normal damage response.
+ Vec2 facing{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)};
+ bool fromBehind=dot(normalized(m_player.pos-npc.pose.position),facing)<0.f;
+ bool unaware=track.ai.mode!=ActorAiMode::Guard||guardState(actor)==GuardState::Patrol||guardState(actor)==GuardState::Suspicious;
+ float damage=(fromBehind&&unaware)?float(track.health):kUnarmedMelee.damage;
+ damageFriendly(actor,damage,m_player.pos,{ShotKind::Player,m_level,0});
+ if(fromBehind&&unaware)m_hitStopRemaining=std::max(m_hitStopRemaining,2.5f);
 }
 void Game::updateVrMelee(const InputState&input,float dt){
  const auto&melee=kUnarmedMelee;
@@ -428,13 +446,21 @@ void Game::updateVrMelee(const InputState&input,float dt){
   auto sweep=end-start;float distance=std::sqrt(sweep.x*sweep.x+sweep.y*sweep.y+sweep.z*sweep.z);auto velocity=m_vrHandVelocity[hand];float speed=std::sqrt(velocity.x*velocity.x+velocity.y*velocity.y+velocity.z*velocity.z);
   if(distance<.008f||distance>.65f||std::max(speed,distance/std::max(.001f,dt))<melee.vrMinSpeed)continue;
   if(!m_world.rayClear({start.x,start.y},start.z,{end.x,end.y},end.z,true,true,true))continue;
-  Enemy* hit=nullptr;float nearest=2.f;
+  Enemy* hitEnemy=nullptr;int hitNpc=-1;float nearest=2.f;
   for(auto&e:m_enemies)if(e.alive){float horizontal=sweep.x*sweep.x+sweep.y*sweep.y;float t=horizontal>.000001f?std::clamp(((e.pos.x-start.x)*sweep.x+(e.pos.y-start.y)*sweep.y)/horizontal,0.f,1.f):1.f;auto contact=start+sweep*t;
    if(lengthSq(Vec2{contact.x-e.pos.x,contact.y-e.pos.y})>.38f*.38f||contact.z<e.bodyBottom()-.10f||contact.z>e.bodyTop()+.10f||t>=nearest)continue;
    if((e.pos.x-start.x)*sweep.x+(e.pos.y-start.y)*sweep.y<=0||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,{contact.x,contact.y},contact.z,true,true,true))continue;
-   hit=&e;nearest=t;
+   hitEnemy=&e;hitNpc=-1;nearest=t;
   }
-  if(hit){applyPunchHit(*hit);m_vrFistCooldown[hand]=melee.vrCooldown;m_punchLeft=hand==0;sound(Sound::PunchSwing,.35f);}
+  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
+   if(npc.level!=m_level||!track.health||npc.pose.clip==4||(track.deadState&&state(track.deadState))||(track.ai.enableState&&!state(track.ai.enableState)))continue;
+   float body=friendlyHullHeight(i,track);float horizontal=sweep.x*sweep.x+sweep.y*sweep.y;float t=horizontal>.000001f?std::clamp(((npc.pose.position.x-start.x)*sweep.x+(npc.pose.position.y-start.y)*sweep.y)/horizontal,0.f,1.f):1.f;auto contact=start+sweep*t;
+   if(lengthSq(Vec2{contact.x-npc.pose.position.x,contact.y-npc.pose.position.y})>.38f*.38f||contact.z<npc.pose.z-.10f||contact.z>npc.pose.z+body+.10f||t>=nearest)continue;
+   if((npc.pose.position.x-start.x)*sweep.x+(npc.pose.position.y-start.y)*sweep.y<=0||!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,{contact.x,contact.y},contact.z,true,true,true))continue;
+   hitNpc=int(i);hitEnemy=nullptr;nearest=t;
+  }
+  if(hitEnemy){applyPunchHit(*hitEnemy);m_vrFistCooldown[hand]=melee.vrCooldown;m_punchLeft=hand==0;sound(Sound::PunchSwing,.35f);}
+  else if(hitNpc>=0){applyNpcPunchHit(size_t(hitNpc));m_vrFistCooldown[hand]=melee.vrCooldown;m_punchLeft=hand==0;sound(Sound::PunchSwing,.35f);}
  }
 }
 __declspec(noinline) bool Game::testVrMelee(){

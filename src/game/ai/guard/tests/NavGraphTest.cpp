@@ -84,25 +84,23 @@ bool Game::testNavGraph(){
   check(ctx.confirmed()&&length(ctx.lastKnown()-Vec2{12.5f,6.5f})<.01f&&g.state(g.friendlyKey(0,"guard_confirmed"))==1,
    "Typed GuardCtx awareness accessors preserve save-compatible state keys");
  }
- {auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");
-  check(campaign&&!campaign->maps.empty()&&campaign->maps[0]->navHints.size()>=4,"Ashfall Guard Lab authors Path/Cover NAV_HINT markers on the playground chunk");
-  check(campaign->maps.size()>1&&!campaign->maps[1]->creatureSpawns.empty(),"Ashfall Guard Lab authors a cargo-chunk creature for MaintainSchedule observation");
+ {auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");
+  check(campaign&&!campaign->maps.empty()&&campaign->maps[0]->navHints.size()>=4,"Exclusion Zone authors Path/Cover NAV_HINT markers on the wasteland facility");
+  check(campaign->maps.size()>1&&!campaign->maps[1]->creatureSpawns.empty(),"Exclusion Zone authors a scrap-basin creature for MaintainSchedule observation");
   bool escort=false;for(const auto&track:campaign->maps[0]->actorTracks)escort|=track.ai.mode==ActorAiMode::Escort;
-  check(escort,"Ashfall Guard Lab authors a Facility escort for civilian schedule observation");
+  check(escort,"Exclusion Zone authors a Facility escort for civilian schedule observation");
   Game g(campaign);const auto&graph=g.navGraph(0,1.6f);int authoredCover=0;
-  for(const auto&n:graph.nodes)if(n.hint==ai::NodeHint::Cover&&(length(n.position-Vec2{17.4f,10.f})<.7f||length(n.position-Vec2{19.3f,8.f})<.7f||length(n.position-Vec2{20.f,14.9f})<.7f))++authoredCover;
-  check(authoredCover>=2,"Playground NAV_HINT Cover markers merge into the live retained graph");
-  AiTarget threat;threat.kind=ShotKind::Player;threat.level=0;threat.index=0;threat.position={16.7f,10.1f};threat.height=1.6f;threat.eye=1.42f;threat.faction=AiFaction::Player;
-  g.rememberGuardTarget(0,threat);g.setState(g.friendlyKey(0,"guard_confirmed"),1);g.setState(g.friendlyKey(0,"guard_memory"),1);g.setState(g.friendlyKey(0,"guard_seen"),1);
-  g.m_player.pos={16.7f,10.1f};Vec2 goal{};float feet=0;
-  bool found=g.findGuardCoverFromEnemy(0,0,g.npcActors()[0].pose,{16.7f,10.1f,1.f},goal,feet);
-  ActorPose sheltered=g.npcActors()[0].pose;sheltered.position=goal;sheltered.z=feet;
-  check(found&&g.guardCovered(0,sheltered,g.guardTarget(0)),"Playground solo guard resolves FIND_COVER_FROM_ENEMY peer cover against the player start");
+  for(const auto&n:graph.nodes)if(n.hint==ai::NodeHint::Cover&&(length(n.position-Vec2{3.3f,10.f})<.7f||length(n.position-Vec2{19.f,9.1f})<.7f||length(n.position-Vec2{19.3f,15.5f})<.7f||length(n.position-Vec2{10.f,5.f})<.7f))++authoredCover;
+  check(authoredCover>=2,"Exclusion Zone NAV_HINT Cover markers merge into the live retained graph");
+  size_t assault=0;bool foundAssault=false;
+  for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].track().ai.role==GuardSquadRole::Assault){assault=i;foundAssault=true;break;}
+  check(foundAssault,"Exclusion Zone rebuild exposes the authored Assault");
+  check(foundAssault&&g.npcActors()[assault].track().ai.armed&&g.npcActors()[assault].homeLevel==0,"Exclusion Zone Assault is an armed facility-chunk Guard");
   size_t escortIndex=0;bool foundEscort=false;
   for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].track().ai.mode==ActorAiMode::Escort){escortIndex=i;foundEscort=true;break;}
-  check(foundEscort,"Playground rebuild exposes the authored escort in the friendly actor list");
-  if(foundEscort){CivilianMindView mind{g,escortIndex};mind.setFear(2000);mind.setThreat({21.5f,17.5f});
-   check(mind.fear()==2000&&g.state(g.friendlyKey(escortIndex,"fear"))==2000,"Playground escort typed mind writes the same fear save keys");}
+  check(foundEscort,"Exclusion Zone rebuild exposes the authored escort in the friendly actor list");
+  if(foundEscort){CivilianMindView mind{g,escortIndex};mind.setFear(2000);mind.setThreat({20.5f,20.5f});
+   check(mind.fear()==2000&&g.state(g.friendlyKey(escortIndex,"fear"))==2000,"Exclusion Zone escort typed mind writes the same fear save keys");}
  }
  report<<"checks="<<checks<<" result="<<(passed?"PASS":"FAIL")<<'\n';return passed;
 }

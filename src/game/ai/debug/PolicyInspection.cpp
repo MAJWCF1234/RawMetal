@@ -2,34 +2,38 @@
 #include "../../../world/CustomCampaign.h"
 namespace retro {
 Game Game::guardPolicyInspection(int stage){
- auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");Game g(campaign);
- if(stage<0||stage>3||g.npcActors().size()<2||g.world().actorTracks().size()!=3)throw std::runtime_error("Ash policy inspection requires the actual opt-in squad/creature experiment");
- if(g.state("ash_team_enabled")||g.guardTarget(1).valid())throw std::runtime_error("Ash squad experiment unexpectedly begins enabled");
- auto advance=[&](){g.update({},1.f/60);if(g.player().health!=100||g.state("ash_target_dead"))throw std::runtime_error("Ash squad inspection damaged the hidden player or killed its creature target");};
- // Use the same authored entry trigger as ordinary play. Do not manufacture
- // alerted states, target references, squad leases or initial shots.
- g.m_player.pos={17.2f,12.4f};g.m_player.z=0;
- if(!g.hullFits(g.player().pos,0,Player::StandingHeight))throw std::runtime_error("Ash squad activation entry intersects geometry");
+ // Exclusion Zone wasteland facility: live cleanup squad on the open yard.
+ auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");Game g(campaign);
+ size_t assault=g.npcActors().size(),engineer=assault;
+ for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];
+  if(npc.homeLevel!=0||npc.track().ai.mode!=ActorAiMode::Guard)continue;
+  if(npc.track().ai.role==GuardSquadRole::Assault)assault=actor;
+  if(npc.track().ai.role==GuardSquadRole::Engineer)engineer=actor;}
+ if(stage<0||stage>3||assault==g.npcActors().size()||engineer==g.npcActors().size())
+  throw std::runtime_error("Exclusion Zone policy inspection requires the authored facility Assault and Engineer");
+ auto advance=[&](){g.update({},1.f/60);};
+ // Observe from the west approach; stay clear of the eastern scrap dens.
+ g.m_player.pos={2.5f,4.5f};g.m_player.z=0;
+ if(!g.hullFits(g.player().pos,0,Player::StandingHeight))throw std::runtime_error("Exclusion Zone policy entry intersects geometry");
  for(int i=0;i<12;++i)advance();
- if(!g.state("ash_team_enabled"))throw std::runtime_error("Ash authored entry did not enable the squad experiment");
- g.m_player.pos={16.7f,10.1f};g.m_player.z=0;
- if(stage>=1){bool reached=false;for(int i=0;i<600;++i){advance();auto learned=g.guardTarget(0);if(g.guardState(1)==GuardState::Alert&&learned.kind==ShotKind::Actor&&learned.index==2){reached=true;break;}}
-  if(!reached)throw std::runtime_error("Ash guard failed to recognise its creature target and share the sighting with its squadmate");
+ if(g.level()!=0)throw std::runtime_error("Policy inspection left the wasteland facility chunk");
+ if(stage>=1){bool reached=false;g.m_player.pos={6.5f,10.5f};g.m_player.z=0;
+  for(int i=0;i<900;++i){advance();auto learned=g.guardTarget(assault);
+   if(learned.kind==ShotKind::Player&&g.guardState(assault)==GuardState::Alert){reached=true;break;}}
+  if(!reached)throw std::runtime_error("Facility Assault failed to recognise the player in the wasteland yard");
  }
- if(stage>=2){bool reached=false;for(int i=0;i<1200;++i){advance();if(g.state("ash_target_damage")>=36&&(g.npcWeaponPose(0).flash>0||g.npcWeaponPose(1).flash>0)){reached=true;break;}}
-  if(!reached)throw std::runtime_error("Ash authored squad failed to produce two real damaging shots with a visible muzzle flash");
+ if(stage>=2){bool reached=false;for(int i=0;i<1200;++i){advance();
+  if((g.npcWeaponPose(assault).flash>0||g.npcWeaponPose(engineer).flash>0)&&g.player().health<100){reached=true;break;}}
+  if(!reached)throw std::runtime_error("Facility squad failed to produce damaging fire in the wasteland yard");
  }
  if(stage==3){
-  // Interrupt the actual shooter with an empty tube to inspect defensive
-  // movement without waiting for enough natural shots to kill the target.
-  g.setState(g.friendlyKey(1,"weapon_rounds"),0);g.setState(g.friendlyKey(1,"weapon_saved"),1);bool protectedReload=false;
-  for(int i=0;i<300;++i){advance();const auto&npc=g.npcActors()[1];auto target=g.guardTarget(1);if(target.kind==ShotKind::Actor&&target.index==2&&g.state(g.friendlyKey(1,"weapon_reload"))>0&&g.guardCovered(1,npc.pose,target)){protectedReload=true;break;}}
-  if(!protectedReload)throw std::runtime_error("Ash guard failed to retreat into physical head/body cover while reloading");
+  g.setState(g.friendlyKey(assault,"weapon_rounds"),0);g.setState(g.friendlyKey(assault,"weapon_saved"),1);bool protectedReload=false;
+  for(int i=0;i<300;++i){advance();const auto&npc=g.npcActors()[assault];auto target=g.guardTarget(assault);
+   if(target.kind==ShotKind::Player&&g.state(g.friendlyKey(assault,"weapon_reload"))>0&&g.guardCovered(assault,npc.pose,target)){protectedReload=true;break;}}
+  if(!protectedReload)throw std::runtime_error("Facility Assault failed to use cover while reloading");
  }
- // Position the observer only after the real simulation reaches its milestone.
- // All stages share this camera so captures can be compared directly.
- Vec2 camera{22.5f,10};if(!g.hullFits(camera,0,Player::StandingHeight))throw std::runtime_error("Ash policy inspection camera intersects map geometry");
- g.m_player.pos=camera;g.m_player.z=0;g.m_player.angle=std::atan2(15.f-camera.y,21.5f-camera.x);g.m_player.pitch=-5;g.m_weaponEquipped=false;g.m_holster=1;g.m_damageFlash=0;
+ Vec2 camera{2.5f,8.5f};if(!g.hullFits(camera,0,Player::StandingHeight))throw std::runtime_error("Policy inspection camera intersects map geometry");
+ g.m_player.pos=camera;g.m_player.z=0;g.m_player.angle=std::atan2(14.f-camera.y,11.f-camera.x);g.m_player.pitch=-8;g.m_weaponEquipped=false;g.m_holster=1;g.m_damageFlash=0;
  return g;
 }
 }

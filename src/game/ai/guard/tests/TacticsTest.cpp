@@ -63,8 +63,8 @@ bool Game::testGuardTactics(){
   check(serviced==511,"All nine unreachable guards receive a tactical search and back off without starving later actors");
   check(shots==0&&g.player().health==100,"Budget-limited unreachable guards keep shots blocked by the continuous cover");
  }
- {auto original=scene(false);auto g=changed(original,[](auto&map){map.structures.clear();map.definition.playerStart={18.5f,18.5f};map.actorTracks[0].ai.patrol={{{6.5f,6.5f},0,1000},{{9.5f,6.5f},0,600},{{9.5f,9.5f},0,600},{{6.5f,9.5f},0,600}};});tick(g,20);bool paused=length(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})<.001f;int shots=tick(g,360);
-  check(paused&&g.state(g.friendlyKey(0,"guard_point"))>0&&length(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})>1,"Existing unarmed guards preserve authored pauses and patrol movement");
+ {auto original=scene(false);auto g=changed(original,[](auto&map){map.structures.clear();map.definition.playerStart={18.5f,18.5f};map.actorTracks[0].ai.patrol={{{6.5f,6.5f},0,1000},{{9.5f,6.5f},0,600},{{9.5f,9.5f},0,600},{{6.5f,9.5f},0,600}};});tick(g,20);bool walking=g.state(g.friendlyKey(0,"guard_point"))>0||length(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})>.05f;int shots=tick(g,360);
+  check(walking&&g.state(g.friendlyKey(0,"guard_point"))>0&&length(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})>1,"Existing unarmed guards boot into patrol movement instead of spawn-idling");
   check(shots==0&&g.player().health==100&&!g.npcWeaponPose(0).armed&&g.state(g.friendlyKey(0,"guard_cover"))==0,"Existing unarmed guards acquire neither weapons nor tactical cover movement");
  }
  for(const char*field:{"guard_cover","guard_cover_wait","guard_cover_x","guard_cover_y","guard_cover_z"}){auto g=scene();g.setState(g.friendlyKey(0,field),std::numeric_limits<int>::max());Game loaded(g.m_customCampaign);check(!loaded.decodeSave(g.encodeSave()),"Malformed saved repositioning state is rejected safely");}

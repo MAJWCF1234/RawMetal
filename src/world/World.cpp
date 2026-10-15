@@ -600,6 +600,23 @@ std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
  if(worldX>=96)return top<=1?TerrainSoil:TerrainRock;
  return worldZ<top-1||top>=5?TerrainRock:TerrainSoil;
 }
+// Exclusion Zone outdoor packs sample world XY (origin+local) so stitched custom
+// chunks share one continuous Surface Nets field. Keep gradients soft — steep
+// authored cliffs explode triangle count and tear at chunk seams.
+int exclusionVoxelTop(int worldX,int worldY){
+ // Forward facility pad on map 0 stays level so walls and NPCs sit cleanly.
+ if(worldX>=5&&worldX<=17&&worldY>=10&&worldY<=19)return 2;
+ float hx=worldX*.19f,hy=worldY*.15f;
+ float wave=std::sin(hx)*.55f+std::cos(hy)*.45f+std::sin((hx+hy)*.33f)*.35f;
+ return std::clamp(2+int(std::lround(wave)),1,3);
+}
+bool authoredExclusionVoxel(int worldX,int worldY,int worldZ){
+ return worldZ<=exclusionVoxelTop(worldX,worldY);
+}
+std::uint8_t authoredExclusionMaterial(int worldX,int worldY,int worldZ){
+ int top=exclusionVoxelTop(worldX,worldY);
+ return worldZ<top-1||top>=3?TerrainRock:TerrainSoil;
+}
 
 const std::array<std::vector<Fixture>,3> MapFixtures{{
  {{7,{1.27f,2.7f},0,2,.5f,1.8f,kPi*.5f,true},{7,{22.7f,18.8f},0,1.6f,.5f,1.8f,kPi*.5f,true},
@@ -679,6 +696,35 @@ void World::buildPopulation(){
 }
 
 World::World(int level,std::shared_ptr<const AuthoredMapData> map):m_level(level),m_worldId(WorldId::Custom){loadAuthoredMap(std::move(map));}
+void World::settleExclusionFacilityOnTerrain(){
+ if(!m_exclusionTerrain||!m_mapData)return;
+ // Authored facility geometry sits on z=0; raise it onto the Surface Nets pad.
+ float base=terrainSurfaceBelow(11.f,15.f,float(TerrainMaxZ+1));
+ auto lift=[&](float z){return z+base;};
+ for(auto&s:m_structures){s.bottom=lift(s.bottom);s.top=lift(s.top);}
+ for(auto&p:m_props)p.base=lift(p.base);
+ for(auto&f:m_fixtures)f.base=lift(f.base);
+ for(auto&c:m_clutterSpawns)if(c.z>-100)c.z=lift(c.z);
+ auto data=std::make_shared<AuthoredMapData>(*m_mapData);
+ data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
+ for(auto&term:data->terminals)term.z=lift(term.z);
+ for(auto&track:data->actorTracks){
+  for(auto&key:track.keys)key.z=terrainSurfaceBelow(key.position.x,key.position.y,float(TerrainMaxZ+1));
+  for(auto&point:track.ai.patrol)point.z=terrainSurfaceBelow(point.position.x,point.position.y,float(TerrainMaxZ+1));
+  for(auto&key:track.idleKeys)key.z=terrainSurfaceBelow(key.position.x,key.position.y,float(TerrainMaxZ+1));
+ }
+ m_mapData=std::move(data);
+ // Rebuild terminal views from the settled map so title strings stay owned.
+ m_terminals.clear();m_terminals.reserve(m_mapData->terminals.size());
+ for(const auto&source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState});
+ m_actorPoses.clear();for(const auto&track:m_mapData->actorTracks)m_actorPoses.push_back(track.idleKeys.empty()?sampleActor(track,0):sampleActorKeys(track.idleKeys,0,true));
+ m_structureCells.assign(size_t(Width*Height),{});
+ if(m_structures.size()>65535)throw std::runtime_error("Exclusion facility exceeds the collision structure capacity");
+ for(size_t index=0;index<m_structures.size();++index){const auto&s=m_structures[index];
+  for(int y=int(s.y1);y<int(std::ceil(s.y2));++y)for(int x=int(s.x1);x<int(std::ceil(s.x2));++x)
+   if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[size_t(y*Width+x)].push_back(static_cast<uint16_t>(index));}
+ m_collisionCells={};m_collisionAll={};
+}
 void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_lightSolids.clear();m_lightNodes.clear();
  m_collisionCells={};m_collisionAll={};
@@ -743,6 +789,11 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState});
  buildLayers(m_mapData->stairs);
+ // Outdoor wasteland custom packs own a world-space Surface Nets heightfield so
+ // the facility and NPCs sit on dirt/rock instead of a flat authored slab.
+ if(outdoors()&&m_mapData->skybox=="brutal_wasteland"){
+  m_exclusionTerrain=true;m_internalWallHeight=2.8f;buildTerrain();settleExclusionFacilityOnTerrain();
+ }
 }
 
 World::World(int level,WorldId id):m_worldId(id) {
@@ -1497,9 +1548,9 @@ void World::buildTerrain(){
  for(int sz=0;sz<TerrainSamplesZ;++sz)for(int sy=0;sy<TerrainSamplesY;++sy)for(int sx=0;sx<TerrainSamplesX;++sx){
   int lx=sx-TerrainBorder,ly=sy-TerrainBorder,z=TerrainMinZ-1+sz;
   int wx=int(origin.x)+lx,wy=int(origin.y)+ly;
-  bool solid=authoredAshfallVoxel(wx,wy,z);
+  bool solid=m_exclusionTerrain?authoredExclusionVoxel(wx,wy,z):authoredAshfallVoxel(wx,wy,z);
   m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=solid?32:-32;
-  m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=authoredAshfallMaterial(wx,wy,z);
+  m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=m_exclusionTerrain?authoredExclusionMaterial(wx,wy,z):authoredAshfallMaterial(wx,wy,z);
  }
 
  constexpr int corner[8][3]={{0,0,0},{1,0,0},{0,1,0},{1,1,0},{0,0,1},{1,0,1},{0,1,1},{1,1,1}};

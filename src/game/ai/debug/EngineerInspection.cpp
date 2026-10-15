@@ -4,20 +4,20 @@
 namespace retro {
 Game Game::engineerSupportInspection(int stage){
  if(stage<0||stage>5)throw std::runtime_error("Unknown Engineer inspection stage");
- auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");
- auto campaign=std::make_shared<CustomCampaign>(*authored);auto cargo=std::make_shared<AuthoredMapData>(*campaign->maps.at(1));
- // Keep the actual supplied squad, cargo geometry and activation trigger. A
- // durable authored opponent permits fleet growth without resetting health.
- ActorTrack opponent=cargo->actorTracks.front();opponent.visual=ActorVisual::Worker;opponent.tool=false;opponent.ai={};opponent.ai.faction=AiFaction::Facility;
+ auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");
+ auto campaign=std::make_shared<CustomCampaign>(*authored);auto facility=std::make_shared<AuthoredMapData>(*campaign->maps.at(0));
+ // Keep the Exclusion Zone wasteland squad and facility geometry. A durable
+ // authored opponent permits fleet growth without resetting health.
+ ActorTrack opponent=facility->actorTracks.front();opponent.visual=ActorVisual::Worker;opponent.tool=false;opponent.ai={};opponent.ai.faction=AiFaction::Raider;
  opponent.health=5000;opponent.damageState=stateId("engineer_inspection_damage");opponent.deadState=stateId("engineer_inspection_dead");
- for(auto&key:opponent.keys){key.position={6,18};key.yaw=kPi;key.clip=0;}cargo->actorTracks.push_back(opponent);campaign->maps[1]=cargo;
+ for(auto&key:opponent.keys){key.position={6,20};key.yaw=kPi;key.clip=0;}facility->actorTracks.push_back(opponent);campaign->maps[0]=facility;
  Game g(campaign);size_t engineer=g.npcActors().size();
- for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel==1&&npc.track().ai.mode==ActorAiMode::Guard&&npc.track().ai.role==GuardSquadRole::Engineer){
-  if(engineer!=g.npcActors().size())throw std::runtime_error("Engineer inspection has duplicate cargo Engineers");engineer=actor;}}
- if(engineer==g.npcActors().size())throw std::runtime_error("Engineer inspection requires the authored cargo Engineer");
- g.m_player.pos={26,20};g.crossChunkBoundary();g.updateStreaming(0);for(int frame=0;frame<12;++frame)g.update({},1.f/60);
- if(g.level()!=1||!g.state("cleanup_enabled")||g.npcActors()[engineer].track().ai.role!=GuardSquadRole::Engineer)throw std::runtime_error("Engineer encounter did not enter its real activation trigger");
- g.m_player.pos={1.5f,1.5f};g.m_player.z=0;if(!g.hullFits(g.player().pos,0,Player::StandingHeight))throw std::runtime_error("Engineer observer intersects geometry");
+ for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel==0&&npc.track().ai.mode==ActorAiMode::Guard&&npc.track().ai.role==GuardSquadRole::Engineer){
+  if(engineer!=g.npcActors().size())throw std::runtime_error("Engineer inspection has duplicate facility Engineers");engineer=actor;}}
+ if(engineer==g.npcActors().size())throw std::runtime_error("Engineer inspection requires the authored facility Engineer");
+ g.m_player.pos={4.5f,6.5f};g.updateStreaming(0);for(int frame=0;frame<12;++frame)g.update({},1.f/60);
+ if(g.level()!=0||g.npcActors()[engineer].track().ai.role!=GuardSquadRole::Engineer)throw std::runtime_error("Engineer encounter did not remain on the Exclusion Zone facility");
+ g.m_player.pos={2.5f,3.5f};g.m_player.z=0;if(!g.hullFits(g.player().pos,0,Player::StandingHeight))throw std::runtime_error("Engineer observer intersects geometry");
  const auto initial=g.npcActors()[engineer].pose;int frames=0;bool reached=false;
  if(stage>=4&&cleanupAnimationDuration(g.npcActors()[engineer].track().visual,8)<=0)throw std::runtime_error("Engineer pad inspection requires the direct animation bank");
  for(;frames<3600;++frames){g.update({},1.f/60);if(g.dead()||g.npcActors()[engineer].pose.clip==4)throw std::runtime_error("Engineer encounter killed its remote observer or Engineer");
