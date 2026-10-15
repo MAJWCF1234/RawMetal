@@ -713,6 +713,7 @@ void World::settleExclusionFacilityOnTerrain(){
  for(auto&p:m_pickupSpawns)if(p.z>-100)p.z+=ground(p.position.x,p.position.y);
  auto data=std::make_shared<AuthoredMapData>(*m_mapData);
  data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
+ for(auto&sign:data->signs)sign.z+=ground(sign.position.x,sign.position.y);
  for(auto&hint:data->navHints)hint.z+=ground(hint.position.x,hint.position.y);
  for(auto&light:m_lights)light.z+=ground(light.position.x,light.position.y);
  for(auto&sequence:data->timedSequences)if(sequence.x1>=0&&sequence.y1>=0&&sequence.x2<=Width&&sequence.y2<=Height){

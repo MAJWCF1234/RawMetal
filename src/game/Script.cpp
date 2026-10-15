@@ -140,16 +140,18 @@ bool Game::testFlashlight(){
 
 bool Game::testSystems(){
  std::ofstream out("systems-test.txt");auto check=[&](bool ok,const char*name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
- {Game dense;dense.m_states.clear();for(int i=0;i<4096;++i){int index=(i*1543)%4096;dense.setState(StateId(index+1),index+1);}
+ {Game dense;for(int i=0;i<4096;++i){int index=(i*1543)%4096;dense.setState(StateId(index+1),index+1);}
   dense.setState(4096,0);dense.setState(4000,-7);dense.setState(0,123);
   if(!check(dense.state(4096)==0&&dense.state(4000)==-7&&dense.state(3999)==3999&&dense.state(0)==0,"Large state store supports unordered inserts, updates and removals"))return false;
   using Clock=std::chrono::steady_clock;std::int64_t indexed=0,linear=0;std::uint32_t seed=17;auto start=Clock::now();
   for(int i=0;i<250000;++i){seed=seed*1664525u+1013904223u;indexed+=dense.state((seed>>16)%4096+1);}auto middle=Clock::now();seed=17;
   for(int i=0;i<250000;++i){seed=seed*1664525u+1013904223u;int index=findValue(dense.m_states,(seed>>16)%4096+1);if(index>=0)linear+=dense.m_states[size_t(index)].value;}auto finish=Clock::now();
-  out<<"250000 lookups / 4095 flags: indexed "<<std::chrono::duration<double,std::milli>(middle-start).count()<<" ms; linear reference "<<std::chrono::duration<double,std::milli>(finish-middle).count()<<" ms\n";
+  out<<"250000 lookups / "<<dense.m_states.size()<<" flags: indexed "<<std::chrono::duration<double,std::milli>(middle-start).count()<<" ms; linear reference "<<std::chrono::duration<double,std::milli>(finish-middle).count()<<" ms\n";
   if(!check(indexed==linear,"Indexed state lookups exactly match the linear reference"))return false;
-  std::reverse(dense.m_states.begin(),dense.m_states.end());Game restored;
-  if(!check(restored.decodeSave(dense.encodeSave())&&restored.state(4000)==-7&&restored.state(3999)==3999&&restored.m_states.size()==4095,"Large unsorted legacy state payload loads and restores indexed lookup"))return false;
+  const auto expected=dense.m_states;std::reverse(dense.m_states.begin(),dense.m_states.end());Game restored;
+  bool exact=restored.decodeSave(dense.encodeSave())&&restored.m_states.size()==expected.size();
+  if(exact)for(size_t i=0;i<expected.size();++i)exact&=restored.m_states[i].id==expected[i].id&&restored.m_states[i].value==expected[i].value;
+  if(!check(exact&&restored.state(4000)==-7&&restored.state(3999)==3999&&restored.state(4096)==0,"Large unsorted legacy state payload loads and restores indexed lookup"))return false;
  }
  Game game;auto power=stateId("power_restored"),objectiveId=stateId("reach_service_gallery"),fuse=stateId("fuse");
  game.setState(power,2);game.setObjective(objectiveId,ObjectiveStatus::Active);game.giveQuestItem(fuse,2);

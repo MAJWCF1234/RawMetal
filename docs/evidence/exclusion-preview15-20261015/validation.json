@@ -1,0 +1,61 @@
+{
+  "version": "0.7.0-preview.15",
+  "validatedAt": "2026-10-15T14:03:53",
+  "exeBytes": 25629184,
+  "ceilingBytes": 33554432,
+  "headroomBytes": 7925248,
+  "exeSha256": "7d595d3241975dd94936374da972baa67e9bd73c137111776bf8a4bcdd5cc9fd",
+  "mapSha256": "c64c1bc8f6c738945f41cfa9586da7fc612254c4fc8cf9df03fa7ba5e392bba2",
+  "embeddedResourcesVerified": 229,
+  "commands": [
+    {
+      "command": "--exclusion-authoring-test",
+      "exit": 0
+    },
+    {
+      "command": "--stealth-test",
+      "exit": 0
+    },
+    {
+      "command": "--campaign-map-test",
+      "exit": 0
+    },
+    {
+      "command": "--guard-roles-test",
+      "exit": 0
+    },
+    {
+      "command": "--guard-patient-test",
+      "exit": 0
+    },
+    {
+      "command": "--engineer-drone-test",
+      "exit": 0
+    },
+    {
+      "command": "--exclusion-inspection",
+      "exit": 0
+    },
+    {
+      "exit": 0,
+      "command": "--smoke-test --vulkan",
+      "embeddedOnly": true
+    },
+    {
+      "exit": 0,
+      "command": "--exclusion-test --smoke-test",
+      "embeddedOnly": true
+    }
+  ],
+  "focusedChecks": {
+    "exclusion-test.txt": 47,
+    "exclusion-authoring-test.txt": 38,
+    "stealth-test.txt": 36,
+    "freight-district-test.txt": 431,
+    "guard-role-test.txt": 44,
+    "guard-patient-test.txt": 60,
+    "engineer-drone-test.txt": 134
+  },
+  "focusedChecksTotal": 790,
+  "playtestMethod": "Native Vulkan developer walkthrough and physical input replays; no recruited participants."
+}

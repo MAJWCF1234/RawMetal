@@ -8,18 +8,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 Ashfall Exclusion Zone becomes a short authored stealth/combat loop on the existing three chunks and six Cleanup roles.
 
-**Play:** Custom Maps ? ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
+**Play:** Custom Maps -> ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
 
 - Arrival cache, north scrap-rig distraction, facility relay, east winch, South Wash departure; optional witness escort / Scrap Basin
 - Bounded custom objective/event/action records for interlocks, item grants, objectives, checkpoints, and completion
 - Rear **Q knockout** / **E grab** (Fire kills while held); sound-only Search keeps a narrow yaw sweep; north lure second clatter
 - Procedural flashlight housing after cache pickup; CRT status lamp stays on the bezel, not the phosphor
 - Terrain anchoring: props/terminals keep local floor offsets; cover follows footprint
-- Native `--exclusion-test` 43/43, `--stealth-test` 36/36, `--exclusion-authoring-test` 38/38
+- Readable cover materials, hazard caps, numbered signs, task lamps and reused industrial props
+- East winch west-flank rear KO physically replayed; north checked at three approach timings
+- Existing Receiving 02 campaign inspection hold with all six Cleanup roles, a field cache and chain distraction
+- Script exit-42 and console tick-1 fixtures corrected; full Vulkan smoke passes without quarantine
+- Native `--exclusion-test` 47/47, `--stealth-test` 36/36, `--exclusion-authoring-test` 38/38
 
 No new areas or animation banks. Hard **32 MiB** ceiling unchanged. See [README](README.md) and [encounter notes](docs/exclusion-encounter-slice-20261015.md).
 
-**Validation:** EXE 25,609,216 / 33,554,432 bytes (~7.6 MiB headroom).
+**Validation:** EXE 25,629,184 / 33,554,432 bytes (7.56 MiB headroom).
 
 ---
 
@@ -47,7 +51,7 @@ Ashfall Exclusion Zone replaces Guard Lab / Horror OpenWorld as the wasteland fe
 - Throw distract and lose-interest (Investigate ? Search ? Patrol) remain wired
 - Exclusion Zone campaign embedded in the EXE (resource 346); Custom Maps, `MAP EXCLUSION`, or `--exclusion-zone`
 
-**Play:** Custom Maps ? ASHFALL EXCLUSION ZONE.
+**Play:** Custom Maps -> ASHFALL EXCLUSION ZONE.
 
 ---
 

@@ -153,7 +153,7 @@ const char* Game::interactionHint()const{
  if(m_logTime>0)return m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL";
  if(heldNpc()>=0)return "E / RELEASE    Q / KNOCK OUT    FIRE / KILL";
  if(holdingClutter())return m_vrInputActive?"RELEASE GRIP / DROP":"E / DROP     FIRE / PUNT";
- if(!m_vrInputActive&&nearbyTakedown()>=0)return "E / GRAB    Q / KNOCK OUT    FISTS / REAR KILL";
+ if(!m_vrInputActive&&nearbyTakedown()>=0)return "Q / REAR KNOCKOUT    E / GRAB    FISTS / KILL";
  if(nearReactorDisk())return m_vrInputActive?"GRIP / TAKE AUTH FLOPPY":"E / TAKE AUTH FLOPPY";
  int door=nearbyInteractionDoor();
  if(door>=0){auto&d=m_world.doors()[door];if(doorLocked(d))return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";
@@ -161,7 +161,7 @@ const char* Game::interactionHint()const{
   return d.swinging?(d.opening?"E / CLOSE SERVICE DOOR":"E / OPEN SERVICE DOOR"):d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
  if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];
   if(t.activateState){
-   if(t.requireState&&!state(t.requireState))return m_vrInputActive?"GRIP / READ CONTROL INTERLOCK":"E / READ CONTROL INTERLOCK";
+   if(t.requireState&&!state(t.requireState))return m_vrInputActive?"GRIP / READ WHY LOCKED":"E / READ WHY LOCKED";
    return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):(m_vrInputActive?"GRIP / READ COMPLETED CONTROL":"E / READ COMPLETED CONTROL")):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");
   }
   if(t.reactorAction){auto stage=m_world.reactorStage();

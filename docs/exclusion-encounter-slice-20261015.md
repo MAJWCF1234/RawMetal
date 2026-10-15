@@ -1,7 +1,7 @@
 # Exclusion encounter authoring slice
 
 The existing three chunks and six Cleanup roles remain the encounter. This pass
-adds twenty cover screens, makes every role patrol, and authors two local
+adds cover screens and industrial set dressing, makes every role patrol, and authors two local
 distractions using existing terminals, saved timelines, spatial cues, and guard
 investigation. Tracks 0–5 retain their original role IDs, 90 health, damage/death
 state names, squad, firearms, and `exclusion_clock` identity. Track 6 remains the
@@ -22,7 +22,7 @@ state names, squad, firearms, and `exclusion_clock` identity. Track 6 remains th
    beyond hearing range and has its own intervening screen. The facility shell
    isolates the support roles. Sound-only Search keeps a narrow yaw sweep so a
    rear approach stays viable after the distraction.
-3. Crouch around the west screen's south end, through (5.0, 11.35), wait until
+3. Crouch around the west screen's south end, through (5.35, 11.45), wait until
    the Assault is busy at the lure facing away, then approach from behind.
    A failed approach can become a normal fight. The authored lane permits
    either outcome; no actor is teleported or killed by a timeline. The north
@@ -33,8 +33,8 @@ state names, squad, firearms, and `exclusion_clock` identity. Track 6 remains th
    east-winch objective, checkpoints progress, and authorizes the east console
    and witness's existing Escort behavior.
 5. Operate the east winch at (17.3, 19.7), from approximately (17.3, 20.5).
-   `exclusion_east_lure` emits Machine at (21.0, 15.0) after 1600 ms. Gain .64
-   gives an effective machinery hearing radius of 6.4 m. The Rusher's rectangular
+   `exclusion_east_lure` emits JunkMetal at (21.0, 17.0) after 1600 ms, then a second
+   ratchet at 3200 ms. Gain .64 gives an effective impact hearing radius of 4.8 m. The Rusher's rectangular
    patrol can investigate the source through the clear east bay. The player
    follows the staging screen's west end via x16.5; there is 1.1 m between the
    screen and the facility's east wall. This approaches the east-facing
@@ -58,10 +58,10 @@ The Heavy's spawn and the interior fixture were moved clear of one another.
 
 - Arrival: (4.1, 6.2), looking at (4.1, 5.1). The first control must be usable
   immediately; the west screen should protect the cache interaction.
-- North beat: (5.0, 11.35), looking at (9.6, 10.2), after the north terminal cue.
+- North beat: (5.35, 11.45), looking at (9.6, 10.2), after the north terminal cue.
   The patrol must turn toward the rig rather than tracking the hidden player.
 - Facility: (12.0, 19.5), looking at (12.0, 14.0), through the south doorway.
-- East beat: (16.5, 17.8), looking at (21.0, 15.0), after the east terminal cue.
+- East beat: (16.5, 17.8), looking at (21.0, 17.0), after the east terminal cue.
   Check the complete standing/crouched west flank around the staging screen.
 
 Parser/record checks alone do not prove either beat. Native validation must
@@ -113,3 +113,35 @@ condition is added; the six-role combat route and witness escort remain choices.
 cache and terminal gates, saved objective/item progression, protected staging
 checkpoints, and final completion after checkpoint reload. It uses temporary
 saves and the same three-chunk exported map, without adding a gameplay test area.
+
+
+## Preview .15 readability follow-up
+
+The same cover footprints now distinguish low steel from high concrete screens;
+yellow hazard caps identify the silhouettes. Numbered signs and local task lamps
+mark the cache, rig, field relay, winch, and exit. Existing cargo, scrap and a
+small winch housing supply industrial context without another animation bank.
+Signs use local terrain elevation once, like actors and navigation hints.
+
+The east Rusher now patrols the winch bay. A north-side screen breaks the
+Sharpshooter sightline across the approach; the west end stays open. The winch
+emits metal impacts at (21,17) at 1.6 and 3.2 seconds, matching the north beat's
+real hearing stimulus. The walking test starts at the concealed console, uses E,
+walks around the west end while crouched, and requires Q to incapacitate the
+investigating Rusher with player health still 100. It never moves the NPC or
+sets its awareness, target or schedule.
+
+## Existing campaign route / Receiving 02
+
+Main campaign map 14 now has an inspection hold occupied by the same six Cleanup
+roles. The Medic and Engineer carry pistols; the Engineer's existing drone
+support and the Medic's existing treatment work remain available during combat.
+Six short patrols cover the personnel aisle, truck lane and support position.
+The old lone Huntsman is removed from this hold to prevent an unseen faction
+fight before the player arrives. Campaign chunk count and progression gates stay
+unchanged.
+
+A field-cache terminal at (7,21.2) grants the owned flashlight once. A chain-test
+terminal at (7,19.5) emits a real impact near the Assault at (8.5,14.5). The
+inspection screen offers concealment and a west flank; the through aisle remains
+open. Reach it through normal campaign travel or use console `MAP 14`.

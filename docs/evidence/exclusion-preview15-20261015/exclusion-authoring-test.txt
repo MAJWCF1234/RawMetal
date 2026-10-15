@@ -1,0 +1,39 @@
+PASS Named objectives and the five bounded action kinds parse into existing engine data
+PASS Parser preserves completion-before-checkpoint action order
+PASS Unknown action kinds are rejected
+PASS Actions require an existing named event in their map
+PASS Named actions require the exact field count
+PASS Checkpoint actions reject extra fields
+PASS Event regions cannot leave their chunk
+PASS Degenerate event regions are rejected
+PASS Inverted vertical event regions are rejected
+PASS Nonfinite event coordinates are rejected
+PASS Enemy-clear gate must be a boolean
+PASS Duplicate event names are rejected
+PASS Events require at least one action
+PASS Item grants are bounded to one through ninety-nine
+PASS Objective actions reject unknown statuses
+PASS State actions reject out-of-range values
+PASS Every objective action requires a display label
+PASS Duplicate objective labels are rejected
+PASS Objective labels reject excessive length and decoded control characters
+PASS Event action count is bounded
+PASS Authored intro starts facing its usable arrival cache within the original three chunks
+PASS Arrival displays the named cache objective without silently granting a flashlight
+PASS North control respects the physical briefing/cache prerequisite
+PASS Real E interaction at the entry cache grants one owned flashlight
+PASS Cache acquisition advances the objective and writes a real checkpoint
+PASS Repeated briefing interaction cannot duplicate the cache item
+PASS The authored cache checkpoint restores item ownership and objective progression
+PASS Facility relay stays gated until the north distraction completes
+PASS Early arrival at South Wash cannot bypass east-winch clearance or complete the map
+PASS Briefed players start the authored north distraction through E
+PASS Existing mechanism timeline supplies the north completion gate
+PASS Securing the actual facility relay advances to the east-winch objective
+PASS Relay authorization enables the real east-winch terminal
+PASS East-winch completion displays the cross-map departure objective without prematurely winning
+PASS Protected south staging writes a checkpoint with the extraction objective
+PASS Authorized departure terminal completes the existing ScriptEvent campaign arc
+PASS Completion precedes checkpoint so reloading the final autosave remains won
+PASS Restored once-only events preserve completion and never replay the item award
+38/38 checks passed

@@ -90,29 +90,32 @@ void Game::updateConsole(const InputState& input){
  m_consoleUp=input.menuUp;m_consoleDown=input.menuDown;
 }
 bool Game::testConsole(){
- Game game;InputState toggle{};toggle.console=true;game.update(toggle,.02f);if(!game.consoleOpen())return false;
+ std::ofstream report("console-test.txt");
+ Game game;auto fail=[&](int line){report<<"FAIL at Console.cpp:"<<line<<" level="<<game.level()<<" z="<<game.player().z<<'\n';return false;};
+ InputState toggle{};toggle.console=true;game.update(toggle,.02f);if(!game.consoleOpen())return fail(__LINE__);
  auto p=game.player();float time=game.elapsed();InputState input{};input.forward=true;input.fire=true;input.mouseDx=30;
- game.update(input,.02f);if(game.elapsed()!=time||game.player().ammo!=p.ammo||game.player().angle!=p.angle)return false;
- for(int level=0;level<ChunkCount;++level){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return false;}
+ game.update(input,.02f);if(game.elapsed()!=time||game.player().ammo!=p.ammo||game.player().angle!=p.angle)return fail(__LINE__);
+ for(int level=0;level<ChunkCount;++level){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return fail(__LINE__);}
  for(const auto& alias:std::array<std::pair<const char*,int>,8>{{{"freight",10},{"receiving",13},{"warehouse",16},{"manifest",20},{"yard",22},{"platform",25},{"depot",27},{"tunnels",30}}}){
-  input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return false;
+  input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return fail(__LINE__);
  }
- for(const char* invalid:{"32","-1","10junk","999999999999999999999999"}){int current=game.level();input.textInput=std::string("map ")+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return false;}
- input={};input.textInput="map receiving\r";game.update(input,.02f);if(game.state("receiving_worker_encounter_ms"))return false;
- input={};input.escape=true;game.update(input,.02f);game.update({},.02f);if(!game.state("receiving_worker_encounter_ms")||game.player().pitch>-40)return false;
- input={};input.console=true;game.update(input,.02f);if(!game.consoleOpen())return false;
- input.textInput="map reactor\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Crashed||game.player().z!=-9)return false;
- input.textInput="map 99\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return false;
- input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return false;
+ for(const char* invalid:{"32","-1","10junk","999999999999999999999999"}){int current=game.level();input.textInput=std::string("map ")+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return fail(__LINE__);}
+ // Restart canonicalizes the visible encounter at t=1; the console must freeze it.
+ input={};input.textInput="map receiving\r";game.update(input,.02f);if(game.state("receiving_worker_encounter_ms")!=1)return fail(__LINE__);
+ input={};input.escape=true;game.update(input,.02f);game.update({},.02f);if(game.state("receiving_worker_encounter_ms")<=1||game.player().pitch>-40)return fail(__LINE__);
+ input={};input.console=true;game.update(input,.02f);if(!game.consoleOpen())return fail(__LINE__);
+ input.textInput="map reactor\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Crashed||game.player().z!=-9)return fail(__LINE__);
+ input.textInput="map 99\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return fail(__LINE__);
+ input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return fail(__LINE__);
  input={};input.textInput="map custom\r";game.update(input,.02f);
- if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().openEastBoundary()||game.world().openNorthBoundary()||game.world().openWestBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return false;
+ if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().openEastBoundary()||game.world().openNorthBoundary()||game.world().openWestBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return fail(__LINE__);
  for(int level=0;level<game.chunkCount();++level){auto&w=game.m_chunks[level].world;int col=level>=12?4:level%4,row=level>=12?level-12:level/4;bool north=row>0,south=row<2,west=col>0,east=col<4;
-  if(!w.horrorMode()||w.openNorthBoundary()!=north||w.openSouthBoundary()!=south||w.openWestBoundary()!=west||w.openEastBoundary()!=east)return false;
+  if(!w.horrorMode()||w.openNorthBoundary()!=north||w.openSouthBoundary()!=south||w.openWestBoundary()!=west||w.openEastBoundary()!=east)return fail(__LINE__);
  }
  input.textInput="map coast\r";game.update(input,.02f);
- if(game.level()!=13||!game.world().coast()||game.world().waterSurface(20,12)>0||game.world().floorHeight(20,12)>=game.world().waterSurface(20,12))return false;
- input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return false;
- input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return false;
- std::ofstream("console-test.txt")<<"Backtick toggle; paused simulation; all campaign map IDs and reactor; Receiving teleport starts visible encounter after console closes; Ashfall boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
+ if(game.level()!=13||!game.world().coast()||game.world().waterSurface(20,12)>0||game.world().floorHeight(20,12)>=game.world().waterSurface(20,12))return fail(__LINE__);
+ input.textInput="fps\r";game.update(input,.02f);if(!game.showFps())return fail(__LINE__);
+ input={};input.escape=true;game.update(input,.02f);if(game.consoleOpen()||game.paused())return fail(__LINE__);
+ report<<"Backtick toggle; paused simulation; all campaign map IDs and reactor; Receiving teleport starts visible encounter after console closes; Ashfall boundaries and coast shortcut; invalid map; fresh lift; FPS; Esc closes: PASS\n";return true;
 }
 }
