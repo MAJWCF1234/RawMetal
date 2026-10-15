@@ -1,5 +1,7 @@
 #include "Game.h"
+#include "../world/CustomCampaign.h"
 #include <windows.h>
+#undef PlaySound
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -166,9 +168,14 @@ bool Game::decodeSave(const std::string& data){
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
   next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
-  next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
+  next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousSubdue=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
   next.updateStreaming(0);
   next.rebuildFriendlyActors();
+  int heldCount=0;
+  for(size_t actor=0;actor<next.m_friendlyActors.size();++actor){const auto&npc=next.m_friendlyActors[actor];
+   if(next.npcIncapacitated(actor)&&npc.track().deadState&&next.state(npc.track().deadState))return false;
+   if(next.npcHeld(actor)&&(++heldCount>1||npc.level!=next.m_level))return false;
+  }
   next.validateTacticalGrenades();
   next.validateEngineerDrones();
   next.updateMechanisms(0);
@@ -246,6 +253,47 @@ bool Game::testSaves(){
  // still be canonical and re-encode exactly.
  {Game current;auto data=current.encodeSave();Game restored;
   if(!check(restored.decodeSave(data)&&restored.encodeSave()==data,"Current authored save remains byte-exact"))return false;
+ }
+ {Game current(loadEmbeddedExclusionZoneCampaign());auto data=current.encodeSave();Game restored(current.m_customCampaign);
+  bool decoded=restored.decodeSave(data);auto canonical=decoded?restored.encodeSave():std::string{};
+  if(!decoded||canonical!=data){
+   report<<"Exclusion canonical probe decoded="<<decoded<<" original_bytes="<<data.size()<<" restored_bytes="<<canonical.size()<<" original_states="<<current.m_states.size()<<" restored_states="<<restored.m_states.size()<<'\n';
+   if(decoded){std::istringstream originalLines(data.substr(data.find('\n')+1)),restoredLines(canonical.substr(canonical.find('\n')+1));std::string originalLine,restoredLine;int line=0;
+    while(std::getline(originalLines,originalLine)&&std::getline(restoredLines,restoredLine)){++line;if(originalLine==restoredLine)continue;report<<"First differing payload line="<<line<<" original="<<originalLine.substr(0,400)<<" restored="<<restoredLine.substr(0,400)<<'\n';break;}
+    report<<"Original player="<<current.player().pos.x<<','<<current.player().pos.y<<','<<current.player().z<<" restored player="<<restored.player().pos.x<<','<<restored.player().pos.y<<','<<restored.player().z<<'\n';
+   }
+  }
+  if(!check(decoded&&canonical==data,"Fresh embedded Exclusion save remains byte-exact"))return false;
+  Game again(current.m_customCampaign);if(!check(again.decodeSave(restored.encodeSave())&&again.encodeSave()==data,"Repeated Exclusion restoration does not add machinery or NPC state"))return false;
+  size_t heavy=current.m_friendlyActors.size();for(size_t actor=0;actor<current.m_friendlyActors.size();++actor)if(current.m_friendlyActors[actor].track().ai.role==GuardSquadRole::Heavy){heavy=actor;break;}
+  if(!check(heavy<current.m_friendlyActors.size(),"Exclusion contains its authored Heavy for signed-pi save coverage"))return false;
+  for(int endpoint:{-31416,31416}){auto source=current;source.setState(source.friendlyKey(heavy,"yaw"),endpoint);auto bytes=source.encodeSave();Game first(current.m_customCampaign),second(current.m_customCampaign);
+   if(!check(first.decodeSave(bytes)&&first.encodeSave()==bytes&&second.decodeSave(first.encodeSave())&&second.encodeSave()==bytes,"Both saved signed-pi NPC endpoints remain byte-exact over repeated restoration"))return false;
+  }
+  bool rejects=true;
+  for(int invalid:{0,1,2}){auto malformed=current;malformed.setState(malformed.friendlyKey(0,"restraint"),2);
+   if(invalid==0)malformed.setState(malformed.friendlyKey(1,"restraint"),2);
+   else if(invalid==1)malformed.setState(malformed.friendlyKey(0,"chunk"),2);
+   else malformed.setState(malformed.npcActors()[0].track().deadState,1);
+   Game rejected(current.m_customCampaign);rejects&=!rejected.decodeSave(malformed.encodeSave());
+  }
+  if(!check(rejects,"Multiple held guards, a remote held guard and dead restraint identities are rejected"))return false;
+ }
+ // Zero-time initialization restores machinery/poses, but one-shot authored
+ // script events still belong to the live script pass, exactly once.
+ {auto campaign=std::make_shared<CustomCampaign>();campaign->name="Save initialization fixture";campaign->key=883017;
+  auto map=std::make_shared<AuthoredMapData>();map->name="Script room";map->definition={{0,0},{6.5f,6.5f},0,Environment::Interior,false,8,.3f,42};
+  AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
+  TimedSequence sequence;sequence.timerState=stateId("save_init_clock");sequence.finishState=stateId("save_init_done");sequence.soundIntervalMs=0;map->timedSequences.push_back(sequence);
+  ScriptEvent event;event.id=stateId("save_init_once");event.x1=event.y1=6;event.x2=event.y2=7;
+  ScriptAction item;item.type=ScriptAction::Type::GiveItem;item.id=stateId("save_init_item");event.actions.push_back(item);
+  ScriptAction cue;cue.type=ScriptAction::Type::PlaySound;cue.sound=Sound::Pickup;event.actions.push_back(cue);map->scriptEvents.push_back(event);campaign->maps.push_back(map);
+  Game current(campaign);
+  if(!check(current.state(sequence.timerState)==1&&current.questItemCount(item.id)==0&&current.m_firedEvents.empty()&&current.sounds().empty(),"Fresh initialization seeds its timeline without executing a one-shot script or sound"))return false;
+  current.updateScripts(0);current.m_sounds.clear();auto data=current.encodeSave();Game restored(campaign);
+  if(!check(current.questItemCount(item.id)==1&&restored.decodeSave(data)&&restored.encodeSave()==data&&restored.questItemCount(item.id)==1&&restored.sounds().empty(),"Loading a fired one-shot preserves its single item award and silent canonical state"))return false;
+  restored.updateScripts(0);
+  if(!check(restored.questItemCount(item.id)==1&&restored.m_firedEvents.size()==1&&restored.sounds().empty(),"Restored one-shot events never replay an item award or sound"))return false;
  }
  // Existing saves are reconciled with newly authored content. Simulate an
  {Game legacy;legacy.loadLevel(5,false);legacy.m_player.health=63;legacy.m_world.m_doors.pop_back();legacy.storeChunk();Writer writer;legacy.archiveSave(writer,10);auto payload=writer.stream.str();

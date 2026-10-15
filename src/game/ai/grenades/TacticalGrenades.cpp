@@ -51,7 +51,7 @@ void Game::explodeTacticalGrenade(int slot,Point3 globalPosition,AiTargetRef att
  };
  if(!dead())blast(ShotKind::Player,m_level,0,m_player.pos,m_player.z,m_player.hullHeight());
  for(const auto&drone:engineerDrones())if(chunkResident(drone.level))blast(ShotKind::Drone,drone.level,drone.slot,{drone.position.x,drone.position.y},drone.position.z,EngineerDroneHeight);
- for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(chunkResident(npc.level)&&autonomousActor(t)&&t.health&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState)))blast(ShotKind::Npc,npc.level,int(i),npc.pose.position,npc.pose.z,t.scale);}
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(chunkResident(npc.level)&&autonomousActor(t)&&t.health&&(npc.pose.clip!=4||npcIncapacitated(i))&&(!t.deadState||!state(t.deadState)))blast(ShotKind::Npc,npc.level,int(i),npc.pose.position,npc.pose.z,friendlyHullHeight(i,t));}
  for(int targetLevel=0;targetLevel<chunkCount();++targetLevel)if(chunkResident(targetLevel)){auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;for(size_t i=0;i<enemies.size();++i){const auto&e=enemies[i];if(e.alive)blast(ShotKind::Enemy,targetLevel,int(i),e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom());}
   const auto&world=friendlyWorld(targetLevel);for(size_t i=0;i<world.actorTracks().size();++i){const auto&t=world.actorTracks()[i];const auto&p=world.actorPose(i);if(t.ai.mode==ActorAiMode::Scripted&&!t.platform&&t.health&&p.clip!=4&&(!t.deadState||!state(t.deadState))&&(!t.ai.enableState||state(t.ai.enableState)))blast(ShotKind::Actor,targetLevel,int(i),p.position,p.z,t.scale);}
  }
@@ -68,6 +68,7 @@ void Game::updateTacticalGrenades(float dt){
  }
 }
 void Game::tryGuardGrenade(size_t actor,float dt){
+ if(npcIncapacitated(actor)){setState(friendlyKey(actor,"grenade_windup"),0);return;}
  auto&npc=m_friendlyActors[actor];const auto&t=npc.track();const auto&c=t.ai;if(c.mode!=ActorAiMode::Guard||c.grenades==0)return;
  auto get=[&](std::string_view f){return state(friendlyKey(actor,f));};auto put=[&](std::string_view f,int v){setState(friendlyKey(actor,f),v);};int ms=npcMilliseconds(actor,dt,"grenade_fraction");put("grenade_cooldown",std::max(0,get("grenade_cooldown")-ms));
  auto target=guardTarget(actor);bool same=target.valid()&&get("grenade_target_kind")==int(target.kind)&&get("grenade_target_level")==target.level+1&&get("grenade_target_index")==target.index+1;

@@ -698,16 +698,27 @@ void World::buildPopulation(){
 World::World(int level,std::shared_ptr<const AuthoredMapData> map):m_level(level),m_worldId(WorldId::Custom){loadAuthoredMap(std::move(map));}
 void World::settleExclusionFacilityOnTerrain(){
  if(!m_exclusionTerrain||!m_mapData)return;
- // Authored facility geometry sits on z=0; raise it onto the Surface Nets pad.
- float base=terrainSurfaceBelow(11.f,15.f,float(TerrainMaxZ+1));
- auto lift=[&](float z){return z+base;};
- for(auto&s:m_structures){s.bottom=lift(s.bottom);s.top=lift(s.top);}
- for(auto&p:m_props)p.base=lift(p.base);
- for(auto&f:m_fixtures)f.base=lift(f.base);
- for(auto&c:m_clutterSpawns)if(c.z>-100)c.z=lift(c.z);
+ auto ground=[&](float x,float y){return terrainSurfaceBelow(x,y,float(TerrainMaxZ+1));};
+ // Structures use absolute heights, while props/fixtures/terminals already add
+ // their local floor in rendering AND collision. Lifting those offsets again
+ // placed the controls in mid-air. Ground screens on their own footprint;
+ // a sloping approach must not bury most of its intended concealment height.
+ for(auto&s:m_structures){float low=1000,high=-1000;
+  int nx=std::max(1,int(std::ceil((s.x2-s.x1)*2))),ny=std::max(1,int(std::ceil((s.y2-s.y1)*2)));
+  for(int y=0;y<=ny;++y)for(int x=0;x<=nx;++x){float z=ground(s.x1+(s.x2-s.x1)*float(x)/nx,s.y1+(s.y2-s.y1)*float(y)/ny);low=std::min(low,z);high=std::max(high,z);}
+  s.bottom+=low;s.top+=high;
+ }
+ for(auto&c:m_clutterSpawns)if(c.z>-100)c.z+=ground(c.position.x,c.position.y);
+ for(auto&c:m_creatureSpawns)if(c.z>-100)c.z+=ground(c.position.x,c.position.y);
+ for(auto&p:m_pickupSpawns)if(p.z>-100)p.z+=ground(p.position.x,p.position.y);
  auto data=std::make_shared<AuthoredMapData>(*m_mapData);
  data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
- for(auto&term:data->terminals)term.z=lift(term.z);
+ for(auto&hint:data->navHints)hint.z+=ground(hint.position.x,hint.position.y);
+ for(auto&light:m_lights)light.z+=ground(light.position.x,light.position.y);
+ for(auto&sequence:data->timedSequences)if(sequence.x1>=0&&sequence.y1>=0&&sequence.x2<=Width&&sequence.y2<=Height){
+  float low=1000,high=-1000;for(float y=sequence.y1;y<=sequence.y2;y+=.5f)for(float x=sequence.x1;x<=sequence.x2;x+=.5f){float z=ground(x,y);low=std::min(low,z);high=std::max(high,z);}
+  sequence.bottom+=low;sequence.top+=high;
+ }
  for(auto&track:data->actorTracks){
   for(auto&key:track.keys)key.z=terrainSurfaceBelow(key.position.x,key.position.y,float(TerrainMaxZ+1));
   for(auto&point:track.ai.patrol)point.z=terrainSurfaceBelow(point.position.x,point.position.y,float(TerrainMaxZ+1));
@@ -774,6 +785,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_doors=m_mapData->doors;m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;
  m_creatureSpawns=m_mapData->creatureSpawns;m_pickupSpawns=m_mapData->pickupSpawns;m_clutterSpawns=m_mapData->clutterSpawns;
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
+ m_scriptEvents=m_mapData->scriptEvents;
  m_cargoLift=m_mapData->cargoLift;m_cargoLiftHeight=m_cargoLift.lower;
  m_layers.reserve(m_mapData->layers.size());
  // Boundary doors are bounded apertures. The tall hall above their frames is

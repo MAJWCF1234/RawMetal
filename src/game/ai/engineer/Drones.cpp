@@ -16,7 +16,7 @@ std::vector<EngineerDronePose> Game::engineerDrones()const{
 AiTarget Game::engineerDroneTarget(int slot,int observerLevel)const{
  if(slot<0||slot>=EngineerDroneSlots||observerLevel<0||observerLevel>=chunkCount()||!state(droneKey(slot,"active"))||state(droneKey(slot,"hp"))<=0)return {};
  int owner=state(droneKey(slot,"owner"))-1,level=state(droneKey(slot,"level"))-1;if(owner<0||size_t(owner)>=m_friendlyActors.size()||level<0||level>=chunkCount()||!chunkResident(level))return {};
- const auto&npc=m_friendlyActors[size_t(owner)];const auto&t=npc.track();if(t.ai.role!=GuardSquadRole::Engineer||!autonomousActor(t)||npc.pose.clip==4||(t.deadState&&state(t.deadState)))return {};
+ const auto&npc=m_friendlyActors[size_t(owner)];const auto&t=npc.track();if(npcIncapacitated(size_t(owner))||t.ai.role!=GuardSquadRole::Engineer||!autonomousActor(t)||npc.pose.clip==4||(t.deadState&&state(t.deadState)))return {};
  auto origin=chunkOffset(observerLevel);AiTarget target;target.kind=ShotKind::Drone;target.level=level;target.index=slot;target.position={state(droneKey(slot,"x"))*.001f-origin.x+state(droneKey(slot,"x_fraction"))*.000001f,state(droneKey(slot,"y"))*.001f-origin.y+state(droneKey(slot,"y_fraction"))*.000001f};target.feet=state(droneKey(slot,"z"))*.001f;target.height=EngineerDroneHeight;target.eye=EngineerDroneHeight*.85f;target.faction=actorFaction(t);return target;
 }
 bool Game::engineerDroneChunkNeeded(int level)const{
@@ -25,7 +25,7 @@ bool Game::engineerDroneChunkNeeded(int level)const{
 ShotHit Game::traceEngineerDrone(Point3 from,Point3 to,size_t)const{return tacticalGrenadeTrace(from,to);}
 bool Game::deployEngineerDrone(size_t owner){
  if(owner>=m_friendlyActors.size())return false;const auto&npc=m_friendlyActors[owner];const auto&t=npc.track();
- if(t.ai.mode!=ActorAiMode::Guard||t.ai.role!=GuardSquadRole::Engineer||!autonomousActor(t)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!chunkResident(npc.level)||state(friendlyKey(owner,"drone_used"))>=EngineerDroneCapacity)return false;
+ if(npcIncapacitated(owner)||t.ai.mode!=ActorAiMode::Guard||t.ai.role!=GuardSquadRole::Engineer||!autonomousActor(t)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!chunkResident(npc.level)||state(friendlyKey(owner,"drone_used"))>=EngineerDroneCapacity)return false;
  int slot=-1,owned=0;for(int i=0;i<EngineerDroneSlots;++i){if(state(droneKey(i,"active"))&&state(droneKey(i,"owner"))==int(owner)+1)++owned;if(slot<0&&!state(droneKey(i,"active")))slot=i;}if(slot<0||owned>=EngineerDroneCapacity)return false;
  auto origin=chunkOffset(npc.level),active=chunkOffset(m_level),shift=origin-active;Vec2 chosen;float z=npc.pose.z;bool found=false;
  for(float radius:{1.45f,2.3f})for(float turn:{kPi*.5f,-kPi*.5f,0.f,kPi,kPi*.25f,-kPi*.25f,kPi*.75f,-kPi*.75f}){auto facing=Vec2{std::sin(npc.pose.yaw+turn),std::cos(npc.pose.yaw+turn)};auto candidate=npc.pose.position+facing*radius;
@@ -58,6 +58,9 @@ void Game::updateEngineerDrones(float dt){
  // begin with personal threat recognition. An existing fleet may continue
  // using confirmed memory, without acquiring hidden enemy coordinates.
  for(size_t owner=0;owner<m_friendlyActors.size();++owner){const auto&npc=m_friendlyActors[owner];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard||t.ai.role!=GuardSquadRole::Engineer)continue;
+  if(npcIncapacitated(owner)){
+   for(const char*f:{"drone_repair_target","drone_repair_ms","drone_busy","drone_windup","guard_engineer_active","guard_engineer_goal","guard_engineer_wait","engineer_pad_stage","engineer_pad_ms"})setState(friendlyKey(owner,f),0);continue;
+  }
   auto get=[&](const char*f){return state(friendlyKey(owner,f));};auto put=[&](const char*f,int v){setState(friendlyKey(owner,f),v);};put("drone_busy",0);int ms=npcMilliseconds(owner,dt,"drone_fraction");put("drone_cooldown",std::max(0,get("drone_cooldown")-ms));
   int deployed=0;for(int slot=0;slot<EngineerDroneSlots;++slot)deployed+=state(droneKey(slot,"active"))&&state(droneKey(slot,"owner"))==int(owner)+1;
   auto target=guardTarget(owner);auto origin=chunkOffset(npc.level),active=chunkOffset(m_level);
@@ -96,7 +99,7 @@ void Game::updateEngineerDrones(float dt){
  }
  for(int slot=0;slot<EngineerDroneSlots;++slot){auto get=[&](const char*f){return state(droneKey(slot,f));};auto put=[&](const char*f,int v){setState(droneKey(slot,f),v);};if(!get("active"))continue;int owner=get("owner")-1,level=get("level")-1;
   if(owner<0||size_t(owner)>=m_friendlyActors.size()||level<0||level>=chunkCount()){put("active",0);continue;}const auto&npc=m_friendlyActors[size_t(owner)];const auto&t=npc.track();
-  if(t.ai.role!=GuardSquadRole::Engineer||!autonomousActor(t)||npc.pose.clip==4||(t.deadState&&state(t.deadState))){put("active",0);for(const char*f:{"drone_repair_target","drone_repair_ms","drone_busy","drone_windup","guard_engineer_active","guard_engineer_goal","guard_engineer_wait"})setState(friendlyKey(size_t(owner),f),0);continue;}
+  if(npcIncapacitated(size_t(owner))||t.ai.role!=GuardSquadRole::Engineer||!autonomousActor(t)||npc.pose.clip==4||(t.deadState&&state(t.deadState))){put("active",0);for(const char*f:{"drone_repair_target","drone_repair_ms","drone_busy","drone_windup","guard_engineer_active","guard_engineer_goal","guard_engineer_wait"})setState(friendlyKey(size_t(owner),f),0);continue;}
   int micros=get("fraction")+int(std::round(dt*1000000)),ms=micros/1000;put("fraction",micros%1000);put("cooldown",std::max(0,get("cooldown")-ms));put("flash",std::max(0,get("flash")-ms));put("repair",std::max(0,get("repair")-ms));
   if(!chunkResident(level)){if(m_npcNavBudget<=0)continue;--m_npcNavBudget;ensureChunk(level);}auto origin=chunkOffset(level),active=chunkOffset(m_level),shift=origin-active;
   Point3 p{get("x")*.001f-origin.x+get("x_fraction")*.000001f,get("y")*.001f-origin.y+get("y_fraction")*.000001f,get("z")*.001f};Vec2 here{p.x,p.y},ownerLocal=npc.pose.position+chunkOffset(npc.level)-origin;

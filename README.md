@@ -1,387 +1,164 @@
 # RawMetal
 
-RawMetal is a compact C++20 game and engine project built around a self-contained Windows executable, a native Vulkan renderer, streamed modular worlds, and a deliberately small release footprint.
+RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
+streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
+The current tester target is **v0.7.0-preview.15 / ASHFALL EXCLUSION ZONE**.
+See the consolidated [release notes](RELEASE_NOTES.md).
 
-The stable release is **v0.6.6, Eye-Level Carry Fix**. The current PC/VR preview is **v0.7.0-preview.12**; see [VR controls](docs/vr.md) and [preview notes](RELEASE_NOTES_v0.7.0-preview.12.md). The published game remains a single executable with its runtime assets embedded.
+## Start the Exclusion playtest
 
-[Download the latest release](https://github.com/MAJWCF1234/RawMetal/releases/latest)
+Run `RawMetal.exe`, choose desktop play, then **Custom Maps -> ASHFALL EXCLUSION ZONE**.
+For a direct desktop launch:
 
-[Project notes and campaign design reference](docs/PROJECT_NOTES.md) include the
-current planning brief and temporary external asset-drive availability.
+```text
+RawMetal.exe --pc --exclusion-zone
+```
 
-## Current release
+The executable includes the campaign. The direct launch uses
+`custom maps/RawMetal-Ashfall-Exclusion-Zone.txt` when installed and otherwise loads
+the embedded fallback. A loose asset folder or map download is unnecessary for
+the embedded playtest.
 
-v0.7.0-preview.12 repairs the cleanup split-body bake: in-place locomotion,
-posed waist/spine joints, semantic arm ownership and rigid repaired fingers.
-The current bake retains 32 samples per clip for smoother motion. Final weapon
-attachment uses the composed pose and gameplay barrel. See
-[release notes](RELEASE_NOTES_v0.7.0-preview.12.md).
+This pass develops the same three connected chunks: **Forward Facility, Scrap
+Basin, and South Wash**. The six existing Cleanup roles remain Assault,
+Sharpshooter, Rusher, Heavy, Engineer, and Medic. Existing patrol, hearing,
+awareness, firearms, support, and movement systems drive the encounter. No new
+areas or animation banks are added.
 
-v0.7.0-preview.11 baked Mixamo idle/walk/hit/crouch onto cleanup meshes
-(8 samples; arms fought runtime IK). See
-[release notes](RELEASE_NOTES_v0.7.0-preview.11.md).
+The route starts behind the west cover screen:
 
-v0.7.0-preview.10 keeps staged enable-gated guards at their authored XYZ through
-save/activate, and retargets cleanup inspections to role lookup after Guard Lab
-gained extra map-0 actors. See [release notes](RELEASE_NOTES_v0.7.0-preview.10.md).
+1. Use the **arrival cache** to read the brief and collect its flashlight. Press
+   **F** to toggle it.
+2. Use the **north scrap rig** to draw the north patrol toward the clatter. Crouch
+   around the screen's south end for a rear approach, or accept a normal fight.
+3. Enter the facility and secure the **field relay**. It authorizes the east
+   winch and lets the waiting witness follow or wait.
+4. Cycle the **east winch** and use the staging screen's west end to approach
+   its distracted patrol.
+5. Follow the south connection into **South Wash** and register departure at its
+   relay. Escorting the witness is optional; Scrap Basin remains an optional
+   salvage and combat route.
 
-v0.7.0-preview.9 cuts NPC pose allocation cost, skips empty armed bind work,
-and gives idle / pre-enable squads threat head-tracking across streamed chunks.
-See [release notes](RELEASE_NOTES_v0.7.0-preview.9.md).
+Objectives, terminal interlocks, and checkpoints track these steps. Terrain
+anchors keep local controls and cover on their actual ground. The flashlight
+uses the existing beam and lighting, with a small gun or forearm housing.
+The reactor's existing floppy puzzle also has clearer insertion and valve-order
+prompts. [Encounter authoring notes](docs/exclusion-encounter-slice-20261015.md)
+describe the route and its bounded script records.
 
-v0.7.0-preview.8 fixes Guard Lab NPC idle freezing (enable-gated UAL phase
-advance and softer armed bindPull) and puts the playground primary guard on
-Cleanup Assault. See [release notes](RELEASE_NOTES_v0.7.0-preview.8.md).
-
-v0.7.0-preview.6 corrects linear-light texture filtering, normal-map variance,
-and lamp scattering, and batches Vulkan atlas transfers. See
-[rendering and performance evidence](docs/render-quality-pass6.md).
-
-v0.6.6 fixes the knee-height carry cap: objects follow standing/crouched eye height
-and camera aim. See [release notes](RELEASE_NOTES_v0.6.6.md).
-
-v0.6.5 caches stationary service pipework, accelerates exact collision queries,
-and removes duplicate arm skinning without reducing render settings. See
-[release notes](RELEASE_NOTES_v0.6.5.md) and [performance validation](docs/performance-quality.md).
-
-v0.6.3 fixes cached material normals, expands fixture lighting to tall rooms,
-and applies visibility-tested room lighting to moving actors, doors, arms and
-weapons. Static optical visibility uses a shared acceleration structure, with
-light passing through real shelf and guardrail gaps. Crate materials and HDR
-bloom are adjusted while preserving the retro assets and the 25 MB budget.
-
-v0.6.4 adds an explicit Windows 10/11 compatibility manifest and documents the C++ runtime requirements. See [RELEASE_NOTES_v0.6.4.md](RELEASE_NOTES_v0.6.4.md).
-
-See [RELEASE_NOTES_v0.6.3.md](RELEASE_NOTES_v0.6.3.md) and
-[renderer validation](docs/renderer-lighting-repair.md).
-
-## Download and run
-
-Download **RawMetal.zip** or **RawMetal.exe** from [GitHub Releases](https://github.com/MAJWCF1234/RawMetal/releases/latest).
-
-All game assets and shaders are embedded. No loose asset package, shader folder, or Vulkan SDK is required.
-
-Windows 10 and Windows 11 x64 are the supported platforms. Install the
-[Microsoft Visual C++ x64 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
-(version 14.44 or later) and your GPU vendor's Windows-compatible graphics driver.
-The driver supplies the Vulkan runtime. Windows 10 binary compatibility checks
-and their limits are described in [Windows compatibility](docs/windows-compatibility.md).
-
-Vulkan hardware rendering is the default. Use:
-
-\`\`\`text
-RawMetal.exe --software
-\`\`\`
-
-to force the CPU renderer.
-
-The renderer targets Vulkan 1.0 without vendor-specific extensions. The graphics layer is portable in design, but the current window, input, and audio platform layer is Win32.
-
-## Main campaign
-
-The built-in campaign is organized as streamed map chunks and multi-floor spaces.
-
-Current campaign areas include:
-
-| Index | Area |
-| --- | --- |
-| 0 | Foundry |
-| 1 | Pressure Works |
-| 2 | Turbine Gantry |
-| 3 | Surface Lift / Reactor Complex |
-| 4 | Reactor Service Gallery |
-| 5 | Coolant Return |
-| 6 | Cable Vaults |
-| 7 | Pump Annex |
-| 8 | Utility Junction |
-| 9 | Waste Handling |
-
-The Surface Lift sequence links the industrial upper facility to the lower reactor complex through a continuous animated shaft. The reactor section includes a multi-stage authorization puzzle, hostile encounters, and a dedicated Reactor Stalker.
-
-The later service maps add water basins, buoyant debris, electrical hazards, machinery, observation routes, utility connections, and the Waste Handling conveyor and compactor system.
-
-Campaign chunks stream through the same world system used by the rest of the game. Carried and thrown clutter can cross adjacent chunk seams with the player.
-
-## Ashfall
-
-Ashfall is the outdoor terrain test world and now consists of fifteen connected chunks.
-
-The original twelve chunks form a 4 x 3 wasteland region. v0.5.7 adds a fifth eastern column containing:
-
-- north headland
-- tidal shelf
-- south bluffs
-
-Ashfall uses shared Surface Nets terrain with continuous seam heights, world-space terrain UVs, slope-aware player and creature movement, and separate world identity from the main campaign.
-
-The coast reuses the existing terrain and water systems rather than introducing a separate outdoor renderer. Sand, pale coastal rock, seawater, and the coastal sky are derived or generated at runtime to preserve the executable size budget.
-
-Use the developer console command:
-
-\`\`\`text
-map coast
-\`\`\`
-
-to jump directly to the middle coastal chunk.
-
-## Controls
+## Desktop controls
 
 | Input | Action |
 | --- | --- |
-| WASD | Move |
-| Mouse | Look |
-| Left click | Fire or punt held junk |
-| R | Reload shotgun |
-| Mouse wheel up | Select shotgun |
-| Mouse wheel down | Select fists |
-| E / Enter | Interact, operate, equip, place, or pick up |
-| F | Toggle flashlight after acquiring it |
-| I | Inventory |
+| WASD / mouse | Move / look |
+| Shift / Space / C or Ctrl | Sprint / jump / crouch |
+| Left click | Fire shotgun, punch with fists, or punt held junk |
+| Right click with fists | Guard |
+| R | Reload the six-round shotgun tube |
+| Mouse wheel up / down | Select shotgun / fists |
+| E | Use doors, terminals, items, and friendly commands |
+| Q behind an unaware hostile guard | Nonlethal knockout |
+| E behind an unaware hostile guard | Grab and hold the guard in front |
+| Fire with fists from behind | Existing lethal rear melee |
+| E / Q / Fire while holding a guard | Release / knock out / kill |
+| F | Toggle an acquired flashlight |
+| I | Inventory, equipment, and stored first aid |
 | Esc | Pause, settings, save/load, or back |
+| Arrow keys / Enter | Navigate / accept menu choices |
 | Backtick | Developer console |
 
-The shotgun uses a six-round tube. Inventory supports equipment, ammunition, first aid, and quest items.
+Rear actions require reach, clear space, and an unaware target. Holding slows
+movement and occupies the hands. The held body physically blocks shots that
+reach it; ordinary guards avoid firing through a teammate and may reposition.
+Unconscious guards remain alive and stop acting. Loose junk can be lifted,
+dropped, thrown, placed on supported surfaces, and carried between chunks.
 
-Loose junk can be lifted, dropped, thrown, placed on supported shelves and surfaces, and carried across streamed chunk boundaries. Objects use material-specific impact audio and simple rigid-body behavior.
+## Saves and menus
 
-## Rendering
+**Esc -> Save / Load** provides three manual slots and an autosave entry.
+Exclusion writes checkpoints after its cache, relay, protected staging, and
+departure steps. Saves retain world identity, objectives, inventory, machinery,
+NPC state, unconscious bodies, and a held guard. Loading does not replay one-shot
+item awards or sounds. Invalid saves leave the current session intact.
 
-The Vulkan window path renders at the native window resolution multiplied by the render-scale setting. Headless inspection captures use **640 x 360**. The HUD is composed separately.
-
-The Vulkan path currently supports:
-
-- depth-tested triangle rendering
-- embedded textures
-- normal maps
-- emission maps
-- relief and parallax sampling
-- cached static lighting
-- budgeted shadow sampling
-- material batching
-- static geometry caching
-- conservative occlusion
-- atmospheric extinction
-- square-fixture volumetric light shafts
-- roughness-controlled GGX dielectric specular response
-- hardware 4x or 2x multisampling where supported, with a 1x compatibility path
-- trilinear filtering with supported anisotropy up to 8x
-- filmic color mapping
-- bright-pixel bloom
-- selective spatial edge antialiasing without forced gameplay depth blur
-- world-space fire and smoke effects
-- animated transparent water
-- underwater presentation effects
-
-The software renderer remains available as a fallback and for comparison testing.
-
-\`RawMetal-renderer.txt\` records the selected GPU or the reason hardware rendering fell back.
-
-## World and save architecture
-
-Campaign, Ashfall, and runtime custom campaigns have separate world identities and world-space chunk origins.
-
-World queries convert through world space instead of assuming that chunk IDs form a single linear strip. This allows Ashfall to form a real 2D streamed grid while retaining the campaign's authored layout.
-
-The save system stores chunk ownership and world identity. Current saves preserve campaign state, inventory, enemies, doors, clutter, lift state, reactor state, and custom world progress. Older supported save versions are migrated when possible.
-
-Save files are stored under:
-
-\`\`\`text
+```text
 %LOCALAPPDATA%\RawMetal\saves
-\`\`\`
+```
 
-Invalid saves report an error without replacing the current session.
+An installed custom campaign is needed to load its corresponding custom save;
+the embedded Exclusion campaign remains available in a standalone executable.
+Supported older saves are migrated where possible.
 
-## Level Editor
+## Running and PCVR
 
-Run:
+Windows 10/11 x64, the Microsoft Visual C++ x64 runtime, and a compatible graphics
+driver are required. Vulkan hardware rendering is the default; the driver
+supplies its Vulkan runtime. No Vulkan SDK is needed to play. Use
+`RawMetal.exe --pc --software` for the CPU renderer. `RawMetal-renderer.txt`
+records the renderer or fallback reason. See [Windows compatibility](docs/windows-compatibility.md).
 
-\`\`\`text
-LevelEditor.cmd
-\`\`\`
+Double-click the executable to choose PC or VR play. `--pc` bypasses the chooser;
+`--vr` launches the SteamVR preview. VR requires SteamVR and a connected headset.
+Tracked hands, grip interaction, shoulder weapon stow, physical fists, and the
+wrist computer use the existing PCVR path. The new Q/E rear-action guide above
+describes desktop input. See [SteamVR setup and controls](docs/vr.md) for controller
+bindings and the remaining headset playtest limits.
 
-from the repository root.
+The main industrial campaign and the wider Ashfall world remain available.
+The console supports `maps`, `map exclusion`, `map reactor`, `map coast`,
+`give flashlight`, `fps`, and `r_scale 50`, `75`, or `100`. Map commands start a
+fresh map session; opening the console pauses gameplay.
 
-The browser-based editor is designed around floor-plan and building-design workflows instead of exposing raw engine transforms as the primary interface.
+## Build and validate
 
-It includes:
+Build on Windows x64 with Visual Studio 2022 C++ tools, CMake 3.20+, and a Vulkan
+SDK containing `glslc`:
 
-- 2D floor-plan editing
-- multi-floor buildings
-- named floors and ceiling heights
-- room drawing
-- straight wall drawing
-- smart doors
-- stairs that connect floors
-- floor, wall, and ceiling object placement
-- prefab placement using real game assets
-- material painting with real-world repeat size and alignment
-- 3D preview
-- section views for vertical editing
-- object arrangement workspaces for placing items on, under, and around furniture or machinery
-- nested arrangements
-- direct Save / Open
-- undo and redo
-- local recovery autosaves
-- multi-chunk layouts
-- installer-ready map export
-
-The editor intentionally hides much of the engine-specific complexity from artists. RawMetal remains authoritative for final rendering, collision, lighting, animation, and gameplay.
-
-See [tools/level-editor/README.md](tools/level-editor/README.md) for the full editor guide.
-
-## Custom maps
-
-RawMetal supports runtime custom campaigns without rebuilding the game.
-
-The portable map format is a UTF-8 \`.txt\` payload. Install one with:
-
-\`\`\`text
-InstallMap.cmd <path-to-map.txt>
-\`\`\`
-
-or drag the TXT file onto \`InstallMap.cmd\`.
-
-The installer supports two targets:
-
-**MAIN**
-
-Injects a supported dynamic map slot into the built-in campaign and rebuilds RawMetal.
-
-**CUSTOM**
-
-Installs the campaign under \`custom maps/\` without modifying \`World.cpp\` and without recompiling the game. Valid campaigns appear under **CUSTOM MAPS** on the title screen.
-
-A Level Editor export can contain an entire multi-map custom campaign, including all plan areas and floors, in one TXT file.
-
-\`META_DEFAULT_TARGET\` is enforced so a CUSTOM payload cannot accidentally overwrite a built-in campaign slot.
-
-See [MAP_SYSTEM.md](MAP_SYSTEM.md) for the complete payload format, runtime campaign schema, MAIN injection rules, and legacy payload conversion behavior.
-
-## Developer console
-
-Press **backtick** to open the console.
-
-Useful commands include:
-
-\`\`\`text
-help
-maps
-map foundry
-map pressureworks
-map gantry
-map lift
-map reactor
-map cable
-map annex
-map junction
-map waste
-map wasteland
-map coast
-reload
-where
-fps
-give flashlight
-r_scale 50
-r_scale 75
-r_scale 100
-clear
-\`\`\`
-
-Map commands start a fresh map session. Gameplay pauses while the console is open.
-
-## Building from source
-
-Requirements:
-
-- Windows x64
-- Visual Studio 2022 C++ build tools
-- CMake 3.20 or newer
-- Vulkan SDK with \`glslc\`
-
-Run:
-
-\`\`\`text
+```text
 Build.cmd
-\`\`\`
+```
 
-The build produces the canonical \`RawMetal.exe\` in the repository root.
+The Release build produces `RawMetal.exe` in the repository root, with shaders
+and runtime assets embedded. The build rejects an executable at or above
+**33,554,432 bytes (32 MiB)**. That ceiling is unchanged. Current binary size and
+test totals must come from the fresh follow-on verification; earlier release
+figures in the changelog are historical.
 
-Shaders are compiled to embedded SPIR-V. Runtime textures, models, audio, and other game data are losslessly packed into the executable.
+Targeted diagnostics include:
 
-The build is intentionally size-constrained and rejects a release executable at or above **33,554,432 bytes** — the Legend of Zelda: Ocarina of Time N64 cartridge (32 MiB). That ceiling is the point; do not raise it.
+```text
+RawMetal.exe --exclusion-test
+RawMetal.exe --exclusion-authoring-test
+RawMetal.exe --stealth-test
+RawMetal.exe --exclusion-inspection
+RawMetal.exe --flashlight-test
+RawMetal.exe --reactor-test
+RawMetal.exe --save-test
+RawMetal.exe --controls-test
+RawMetal.exe --guard-ai-test
+RawMetal.exe --smoke-test --vulkan
+RawMetal.exe --vr-test
+```
 
-Purchased source assets remain unchanged. Runtime packing selects compact lossless representations and verifies embedded asset data against source pixels or bytes.
-Model and animation files also compete against reversible byte-plane and XOR-predicted encodings before LZMS compression. Resources larger than 1 MiB additionally compete against an LZMS stream with a dictionary block covering the complete resource. The packer selects a new encoding only when it is smaller and verifies its exact byte round-trip; PNG textures retain pixel-exact lossless WebP and predictor options.
+Exclusion inspection writes native encounter captures under `.build/exclusion-preview/`.
+Automated logic checks and captures have separate roles; headset/controller
+comfort still requires a live PCVR playtest.
 
-## Validation and diagnostics
+## Maps, editor, and source
 
-RawMetal includes targeted tests and inspection modes for gameplay, rendering, world seams, saves, and content.
+`LevelEditor.cmd` opens the browser editor. Runtime custom campaigns use one
+UTF-8 TXT payload, installed with `InstallMap.cmd <path-to-map.txt>` or by
+dragging it onto the installer. **CUSTOM** installs under `custom maps/` and
+appears on the title screen without recompiling. **MAIN** injects a supported
+built-in slot and rebuilds. The payload's default target prevents accidental
+cross-installation.
 
-Common checks include:
+- [Map format and installation](MAP_SYSTEM.md)
+- [Level Editor guide](tools/level-editor/README.md)
+- [World ownership and isolation](docs/world-system-boundaries.md)
+- [Asset provenance](docs/ASSET_SOURCES.md)
+- [Release history and current follow-on work](RELEASE_NOTES.md)
 
-\`\`\`text
---smoke-test
---vulkan-test
---performance-test
---physics-ai-test
---world-isolation-test
---service-map-test
---campaign-extension-test
---flashlight-test
---stalker-test
---hazmat-test
---ashfall-inspection
---coast-inspection
---campaign-inspection
---service-inspection
---water-wall-inspection
---shading-inspection
---terrain-seam-inspection
-\`\`\`
-
-Most visual inspection modes can be combined with \`--vulkan\` to capture the hardware-rendered path.
-
-The performance test records update, audio, render, and frame timing across representative scenes. Results are machine and workload dependent and should not be treated as universal hardware requirements.
-
-## Repository layout
-
-\`\`\`text
-src/
-  audio/        audio engine and decoding
-  game/         gameplay, movement, AI, saves, scripts, streaming
-  renderer/     software and Vulkan renderers, shaders, performance tests
-  world/        built-in worlds and runtime custom campaigns
-  assets/       embedded source assets and provenance records
-  tools/        build-time import and packing tools
-
-tools/
-  level-editor/ browser level editor
-  InstallMap.ps1
-  ConvertMapPayload.ps1
-
-custom maps/    installed runtime custom campaigns
-docs/           architecture and design documentation
-\`\`\`
-
-Build intermediates and generated diagnostics are not intended to be committed as source.
-
-## Asset provenance
-
-RawMetal uses documented supplied and purchased asset libraries alongside original runtime code and generated data.
-
-Asset provenance is documented in:
-
-- [docs/ASSET_SOURCES.md](docs/ASSET_SOURCES.md)
-- [src/assets/materials/ASHFALL-SOURCE.md](src/assets/materials/ASHFALL-SOURCE.md)
-
-The project keeps source asset provenance separate from runtime packing and does not require players to install the original asset libraries.
-
-## More documentation
-
-- [MAP_SYSTEM.md](MAP_SYSTEM.md) for map injection and runtime custom campaigns
-- [tools/level-editor/README.md](tools/level-editor/README.md) for the Level Editor
-- [docs/world-system-boundaries.md](docs/world-system-boundaries.md) for world ownership and isolation
-- [RELEASE_NOTES_v0.6.2.md](RELEASE_NOTES_v0.6.2.md) for the latest release
-
-See [render quality and performance notes](docs/render-quality-pass.md) for the latest renderer changes, validation, and remaining limitations.
+`src/game/`, `src/world/`, `src/renderer/`, and `src/audio/` contain the runtime;
+`src/assets/` contains embedded source assets and `tools/` contains authoring and
+import utilities. Generated diagnostics and build intermediates are local output.

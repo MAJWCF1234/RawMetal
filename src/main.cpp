@@ -330,6 +330,15 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // many mutually exclusive inspection branches otherwise reserve their
     // large renderer objects in one native stack frame before dispatch.
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--stealth-test"))return retro::Game::testStealth()?0:21;
+    if(std::wcsstr(commandLine,L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
+    if(std::wcsstr(commandLine,L"--exclusion-authoring-test"))return retro::Game::testExclusionAuthoring()?0:21;
+    if(std::wcsstr(commandLine,L"--exclusion-inspection")){
+     constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/exclusion-preview");std::ofstream report(".build/exclusion-preview/runtime.txt");report<<renderer->hardwareName()<<'\n';
+     for(int stage=0;stage<7;++stage){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
     if(std::wcsstr(commandLine,L"--guard-tactics-test"))return retro::Game::testGuardTactics()?0:21;
     if(std::wcsstr(commandLine,L"--guard-policy-test"))return retro::Game::testGuardPolicy()?0:21;
@@ -855,7 +864,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
     bool exclusionZone=std::wcsstr(commandLine,L"--exclusion-zone")!=nullptr||std::wcsstr(commandLine,L"--guard-lab")!=nullptr;
     bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr||exclusionZone;
-    if(exclusionZone)game=retro::Game(retro::loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt"));
+    if(exclusionZone){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";game=retro::Game(std::filesystem::exists(path)?retro::loadCustomCampaignFile(path):retro::loadEmbeddedExclusionZoneCampaign());}
     else if(std::wcsstr(commandLine,L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);

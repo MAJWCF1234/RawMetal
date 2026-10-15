@@ -16,6 +16,7 @@
 #include "ai/engineer/Drones.h"
 #include <string>
 #include <string_view>
+#include <utility>
 #include <cstdint>
 #include "Ragdoll.h"
 
@@ -42,6 +43,7 @@ struct InputState {
     int weaponScroll=0;
     bool use=false;
     bool flashlight=false;
+    bool subdue=false;
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
     bool inventory=false;
@@ -290,6 +292,14 @@ public:
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
+    static bool testExclusion();
+    static bool testExclusionAuthoring();
+    static Game exclusionInspection(int stage=0);
+    static bool testStealth();
+    bool npcIncapacitated(size_t actor)const;
+    bool npcHeld(size_t actor)const;
+    int heldNpc()const;
+    std::array<Point3,2> heldNpcGrips()const;
     static bool testGantry();
     static bool testLift();
     static Game liftInspection(float seconds,int view=0);
@@ -313,6 +323,7 @@ public:
     int state(std::string_view name)const{return state(stateId(name));}
     void setState(StateId id,int value=1);
     ObjectiveStatus objective(StateId id)const;
+    std::string_view activeObjectiveText()const;
     void setObjective(StateId id,ObjectiveStatus status);
     bool hasQuestItem(StateId id,int count=1)const;
     int questItemCount(StateId id)const;
@@ -359,6 +370,14 @@ public:
     static Game barrelInspection(float age);
 
 private:
+    int nearbyTakedown()const;
+    bool canTakedown(size_t actor)const;
+    void restrainNpc(size_t actor,bool held);
+    void releaseNpc(bool unconscious=false);
+    void updateStealth(const InputState& input,float dt);
+    void saveRestrainedPose(size_t actor);
+    std::pair<Point3,Point3> friendlyShotBounds(size_t actor)const;
+    bool m_previousSubdue=false;
     WorldId m_worldId=WorldId::Campaign;
     std::shared_ptr<const CustomCampaign> m_customCampaign;
     std::vector<std::shared_ptr<const CustomCampaign>> m_customCampaigns;

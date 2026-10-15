@@ -1072,12 +1072,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
   if(w.level()==6){
    auto&statusLamp=game.state(terminal.activateState)?lamp:amber;
    box({21.94f,11.83f,-6.52f},{21.985f,11.97f,-6.43f},statusLamp,1.8f);
-  }else if(w.campaign()&&w.level()>=7&&w.level()<=9){
-   // Put the indicator on the desk edge, clear of the screen and keyboard.
-   Vec2 front{std::sin(terminal.yaw),std::cos(terminal.yaw)},side{front.y,-front.x};
+  }else{
+   // Keep the status lamp on the desk/bezel edge. A fixed -Y offset lands on
+   // the CRT phosphor for pedestal terminals that face -Y / authored yaw.
+   float yaw=terminal.yaw;if(w.campaign()&&w.level()>=6&&w.level()<=9){if(w.level()==6)yaw=-kPi*.5f;}
+   else if(std::fabs(yaw)<1e-4f)yaw=kPi;
+   Vec2 front{std::sin(yaw),std::cos(yaw)},side{front.y,-front.x};
    Vec2 p=terminal.position+front*.29f+side*.20f;
-   box({p.x-.025f,p.y-.025f,z+.832f},{p.x+.025f,p.y+.025f,z+.855f},game.state(terminal.activateState)?lamp:amber,1.8f);
-  }else box({terminal.position.x-.06f,terminal.position.y-.21f,z+.83f},{terminal.position.x+.06f,terminal.position.y-.19f,z+.9f},game.state(terminal.activateState)?lamp:amber,1.8f);
+   float lampZ=z+((w.campaign()&&w.level()>=6)?.832f:.70f);
+   box({p.x-.025f,p.y-.025f,lampZ},{p.x+.025f,p.y+.025f,lampZ+.023f},game.state(terminal.activateState)?lamp:amber,1.8f);
+  }
  }
  for(const auto& emitter:w.particleEmitters()){
   static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
@@ -1282,7 +1286,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth){
    }else{
     box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
     box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
-    facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,kPi);
+    // Honor authored yaw so Exclusion/custom CRTs face their controls; legacy
+    // zero-yaw terminals keep the original -Y facing.
+    float terminalYaw=std::fabs(terminal.yaw)<1e-4f?kPi:terminal.yaw;
+    facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,terminalYaw);
    }
    if(terminal.reactorAction==1){box({x-.2f,y-.295f,h+.28f},{x+.2f,y-.24f,h+.39f},m_metal,1.f);box({x-.15f,y-.30f,h+.33f},{x+.11f,y-.296f,h+.345f},iron,1.f);box({x+.15f,y-.302f,h+.32f},{x+.17f,y-.295f,h+.34f},w.reactorStage()>=World::ReactorStage::DiskLoaded?blue:amber,1.8f);}
   }
@@ -1803,6 +1810,11 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){
  const auto&motion=game.weaponMotion();
+ if(game.heldNpc()>=0){
+  auto center=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;auto grips=game.heldNpcGrips();
+  auto toRig=[&](Point3 world){auto p=(cameraPoint(world,game)-Point3{0,-.22f,.30f})*(1.f/kViewModelScale);p.x=-p.x;return p+center;};
+  m_armsMesh.poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
+ }
  if(game.unarmed()){const auto&melee=game.unarmedMelee();bool jab=game.punchAge()<melee.animLen&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/melee.animLen:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
  auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=kViewModelScale/std::max({range.x,range.y,range.z});
  auto local=[&](Point3 source){auto p=(source-center)*scale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
@@ -1838,8 +1850,10 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*kViewModelScale;p.x=-p.x;return p+armOffset;};
  if(!m_poseReady)prepareViewModel(game);
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
+  if(game.heldNpc()>=0)return p;
   return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-game.holster()*.85f),p.z};};
  m_gripError=0;
+ if(game.heldNpc()>=0){auto grips=game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
  for(int side=0;side<2&&!fists;++side){auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
   auto d=p-(side?leftWrist:rightWrist);m_gripError=std::max(m_gripError,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
  }
@@ -1874,6 +1888,72 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   }
  };
  draw(m_armsMesh,m_arms,true);if(!fists)draw(m_weaponMesh,m_weaponTexture,false);
+ if(game.hasFlashlight()){
+  // A small rail torch follows the gun assembly; empty hands keep it strapped
+  // to the animated left forearm so neither fist loses its existing action.
+  auto unit=[](Point3 p){return p*(1.f/std::sqrt(std::max(.000001f,p.x*p.x+p.y*p.y+p.z*p.z)));};
+  // The imported gun is over eight source units long. Its narrow side rail
+  // needs a full source-unit offset to put the housing outside the receiver.
+  Point3 axis{0,0,1},side{1,0,0},up{0,1,0},mount=gunLocal({1.02f,1.25f,-1.45f}),forearm{};
+  if(fists){
+   auto wrist=fromRig(m_armsMesh.bonePosition("hand.L")),elbow=fromRig(m_armsMesh.bonePosition("forearm.L"));
+   axis=unit(wrist-elbow);side=unit(cross3(std::fabs(axis.y)>.95f?Point3{0,0,1}:Point3{0,1,0},axis));up=unit(cross3(axis,side));
+   // Anchor beside the visible wrist, not the elbow that leaves the desktop
+   // frustum in the guard pose. The inboard saddle keeps the fist clear.
+   forearm=wrist-axis*.025f;mount=wrist+axis*.035f+side*.105f+up*.025f;
+  }
+  float torchScale=fists?.60f:.68f;
+  auto point=[&](Point3 p){p=assembly(fists?p:animated(p));return m_inspectRig?inspectionPoint(p):p;};
+  auto tri=[&](Point3 a,Point3 b,Point3 c,const Texture&texture,float emission=0.f){
+   a=point(a);b=point(b);c=point(c);auto normal=unit(cross3(b-a,c-a));
+   float light=roomAmbient+.18f;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
+   light=std::clamp(std::max(light,emission),.25f,2.5f);
+   triangle3D({a,0,0,light},{b,1,0,light},{c,1,1,light},texture,1.f,&roomLights);
+  };
+  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&texture,float emission=0.f){tri(a,b,c,texture,emission);tri(a,c,d,texture,emission);};
+  constexpr int segments=10;
+  auto tube=[&](Point3 center,float start,float end,float radiusA,float radiusB,const Texture&texture,float size=1.f){
+   for(int i=0;i<segments;++i){float a=float(i)*kPi*2/segments,b=float(i+1)*kPi*2/segments;
+    auto radialA=side*std::cos(a)+up*std::sin(a),radialB=side*std::cos(b)+up*std::sin(b);
+    quad(center+(axis*start+radialA*radiusA)*size,center+(axis*start+radialB*radiusA)*size,center+(axis*end+radialB*radiusB)*size,center+(axis*end+radialA*radiusB)*size,texture);
+   }
+  };
+  static const Texture rubber{1,1,{0xff202522u}},housing{1,1,{0xff353e37u}},strap{1,1,{0xff33392fu}},identification{1,1,{0xff8c783fu}},reflector{1,1,{0xff707b72u}},lensOff{1,1,{0xff263834u}},lensOn{1,1,{0xffc8dec1u}};
+  if(fists){
+   for(float z:{-.025f,.025f})tube(forearm,z-.009f,z+.009f,.049f,.049f,strap);
+   // A short saddle connects the offset torch to its wrist straps.
+   auto back=forearm+up*.025f,edge=mount-up*.016f;
+   quad(back-axis*.022f,edge-axis*.022f,edge+axis*.022f,back+axis*.022f,m_panelMetal);
+  }
+  else{
+   // Closed side brackets join the receiver to the outboard housing.
+   for(float z:{-.055f,.045f}){auto p=mount+axis*(z*torchScale);
+    auto a=p-side*.094f-up*.015f,b=p-side*.025f-up*.015f,c=p-side*.025f+up*.015f,d=p-side*.094f+up*.015f;
+    quad(a-axis*.009f,b-axis*.009f,c-axis*.009f,d-axis*.009f,m_panelMetal);
+    quad(d+axis*.009f,c+axis*.009f,b+axis*.009f,a+axis*.009f,m_panelMetal);
+    quad(a-axis*.009f,a+axis*.009f,b+axis*.009f,b-axis*.009f,m_metal);
+    quad(d-axis*.009f,c-axis*.009f,c+axis*.009f,d+axis*.009f,m_metal);
+    tube(mount,z-.009f,z+.009f,.038f,.038f,reflector,torchScale);
+   }
+  }
+  tube(mount,-.096f,-.074f,.028f,.032f,reflector,torchScale);
+  tube(mount,-.074f,.071f,.032f,.032f,housing,torchScale);
+  tube(mount,-.071f,-.061f,.033f,.033f,identification,torchScale);
+  for(float z:{-.034f,-.006f,.022f})tube(mount,z,z+.005f,.034f,.034f,m_panelMetal,torchScale);
+  tube(mount,.071f,.096f,.033f,.044f,reflector,torchScale);
+  tube(mount,.096f,.118f,.044f,.044f,housing,torchScale);
+  tube(mount,.118f,.122f,.044f,.038f,reflector,torchScale);
+  for(int i=0;i<segments;++i){float a=float(i)*kPi*2/segments,b=float(i+1)*kPi*2/segments;
+   auto radialA=side*std::cos(a)+up*std::sin(a),radialB=side*std::cos(b)+up*std::sin(b);
+   tri(mount-axis*(.097f*torchScale),mount+(axis*-.097f+radialB*.028f)*torchScale,mount+(axis*-.097f+radialA*.028f)*torchScale,rubber);
+   auto front=mount+axis*(.121f*torchScale);
+   quad(front+radialA*(.038f*torchScale),front+radialB*(.038f*torchScale),front+(axis*-.006f+radialB*.029f)*torchScale,front+(axis*-.006f+radialA*.029f)*torchScale,reflector);
+   tri(front-axis*(.005f*torchScale),front+(axis*-.005f+radialA*.029f)*torchScale,front+(axis*-.005f+radialB*.029f)*torchScale,game.flashlightOn()?lensOn:lensOff,game.flashlightOn()?1.8f:0.f);
+  }
+  // The small top switch remains visible from behind the forward-facing bezel.
+  auto toggle=mount+(axis*-.045f+up*.035f)*torchScale;
+  quad(toggle+(side*-.009f-axis*.012f)*torchScale,toggle+(side*.009f-axis*.012f)*torchScale,toggle+(side*.009f+axis*.012f)*torchScale,toggle+(side*-.009f+axis*.012f)*torchScale,game.flashlightOn()?lensOn:strap,game.flashlightOn()?1.4f:0.f);
+ }
  // The source arms end in open shoulder rings. Continue those rings into dark
  // sleeves behind the camera, closing the model rather than exposing its interior.
  Texture sleeve{1,1,{0xff302c27u}};

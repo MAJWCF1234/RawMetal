@@ -110,6 +110,9 @@ add_executable(RawMetal WIN32
     world/Ballistics.cpp
     game/CampaignMapTest.cpp
     game/WorldIsolationTest.cpp
+    game/ExclusionTest.cpp
+    game/ExclusionAuthoringTest.cpp
+    game/Stealth.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
     game/Ragdoll.cpp

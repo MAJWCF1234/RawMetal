@@ -10,7 +10,12 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
  int previous=std::clamp(state(track.damageState),0,track.health);int damage=previous+std::min(track.health-previous,int(std::ceil(std::min(amount,float(track.health)))));setState(track.damageState,damage);
  setState(friendlyKey(actor,"hit_x"),int(std::round(source.x*1000)));setState(friendlyKey(actor,"hit_y"),int(std::round(source.y*1000)));setState(friendlyKey(actor,"hit_source"),1);
  setState(friendlyKey(actor,"hit_kind"),int(attacker.kind));setState(friendlyKey(actor,"hit_level"),attacker.kind==ShotKind::None?0:attacker.level+1);setState(friendlyKey(actor,"hit_index"),attacker.kind==ShotKind::None?0:attacker.index+1);
- if(damage>=track.health){setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));if(track.ai.mode==ActorAiMode::Guard)clearGuardSchedule(actor);updateMechanisms(0);}
+ if(damage>=track.health){
+  if(npcIncapacitated(actor)&&!npcHeld(actor)){setState(friendlyKey(actor,"death_ms"),state(friendlyKey(actor,"restraint_ms")));setState(friendlyKey(actor,"death_fraction"),state(friendlyKey(actor,"restraint_fraction")));}
+  int heldWeapon=state(friendlyKey(actor,"restraint_weapon"));if(npcHeld(actor)&&heldWeapon>0&&heldWeapon<weaponCount())equipWeapon(WeaponId(heldWeapon));
+  for(const char*field:{"restraint","restraint_ms","restraint_fraction","restraint_weapon"})setState(friendlyKey(actor,field),0);
+  setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));if(track.ai.mode==ActorAiMode::Guard)clearGuardSchedule(actor);updateMechanisms(0);
+ }
  m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
 }
 bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
@@ -37,6 +42,22 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   if(sourceDuration>0&&(get("death_fraction")<0||get("death_fraction")>=1000))throw std::runtime_error("Invalid saved NPC death clock");
   int age=std::clamp(get("death_ms"),0,duration);if(dt>0)age=std::min(duration,age+(sourceDuration>0?npcMilliseconds(actor,dt,"death_fraction"):std::max(1,int(std::round(dt*1000)))));put("death_ms",age);pose.phase=float(age)/duration;return pose;
  }
+ if(npcIncapacitated(actor)){
+  // Restraint is a living state. Stop every pending action without spending
+  // ammunition, support charges or death events, and keep the placed body.
+  if(get("schedule")||get("task")||get("support_target")||get("drone_windup")||get("drone_busy")||get("guard_slot")){
+   if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);else clearCivilianSchedule(actor);
+  }
+  for(const char*field:{"running","walking","weapon_aim","weapon_raise","weapon_flash","weapon_recoil","weapon_reload","weapon_reloading","weapon_reload_events","weapon_action","weapon_action_ms","weapon_action_events","weapon_bash","weapon_bash_pose","grenade_windup","guard_mode","guard_seen","guard_confirmed","guard_memory","guard_suppress_ms"})put(field,0);
+  if(get("guard_target_kind"))rememberGuardTarget(actor,{});
+  pose=old;pose.lookAtActor=-1;
+  if(npcHeld(actor)){pose.clip=0;pose.phase=0;}
+  else{
+   float sourceDuration=cleanupAnimationDuration(track.visual,4);int duration=sourceDuration>0?std::max(1,int(std::round(sourceDuration*1000))):1000;
+   int age=std::clamp(get("restraint_ms"),0,duration);if(dt>0)age=std::min(duration,age+npcMilliseconds(actor,dt,"restraint_fraction"));put("restraint_ms",age);pose.clip=4;pose.phase=float(age)/duration;
+  }
+  return pose;
+ }
  if(pose.clip==4){if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);if(config.mode!=ActorAiMode::Guard)clearCivilianSchedule(actor);return pose;}
  if(config.enableState&&!state(config.enableState)){
   if(config.mode==ActorAiMode::Guard&&(get("schedule")||get("guard_danger_ms")||get("guard_mode")||get("guard_target_kind")||get("support_target")))clearGuardSchedule(actor);
@@ -54,6 +75,9 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  if(get("saved")){
   if(dt==0||!get("running")){pose.position={get("x")*.001f,get("y")*.001f};pose.z=get("z")*.001f;pose.yaw=get("yaw")*.0001f;pose.phase=get("phase")*.0001f;pose.clip=get("walking")?1:get("crouched")?5:0;
    if(pose.position.x<0||pose.position.y<0||pose.position.x>=24||pose.position.y>=24||std::fabs(pose.z)>100||std::fabs(pose.yaw)>kPi+.001f||pose.phase<0||pose.phase>1)throw std::runtime_error("Invalid saved NPC pose");
+   // Keep the saved signed pi endpoint inside the angle domain after
+   // angle quantization, rather than wrapping it on each load.
+   pose.yaw=std::clamp(pose.yaw,-kPi,kPi);
   }
   else pose=old;
  }
@@ -101,6 +125,10 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    else waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);
    timer=.3f+float((actor*17+size_t(level)*5)%11)*.02f;}
   }
+  // A saved pose can exist before its first route search. When the shared
+  // budget defers that search, no old/default waypoint may move or jump it.
+  if(navigationDeferred)waypoint=pose.position;
+  else{
   direction=normalized(waypoint-pose.position);Vec2 separation{};
   for(size_t i=0;i<m_friendlyActors.size();++i)if(i!=actor&&m_friendlyActors[i].level==level&&autonomousActor(m_friendlyActors[i].track())){const auto&other=m_friendlyActors[i].pose;if(other.clip==4||std::fabs(other.z-pose.z)>height)continue;
    auto away=pose.position-other.position;float neighborDistance=length(away);if(neighborDistance>.001f&&neighborDistance<.7f)separation+=away*((.7f-neighborDistance)/neighborDistance);
@@ -132,6 +160,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    // An alerted armed guard can sidestep while keeping its eyes on the target.
    // Guard intent has already applied the bounded facing turn for this frame.
    if(config.mode!=ActorAiMode::Guard||!config.armed||guardState(actor)!=GuardState::Alert||get("guard_danger_ms"))pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);
+  }
   }
  }
  float support=friendlySupportAt(level,pose.position,pose.z+(grounded?.265f:.01f));
@@ -179,7 +208,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
 int Game::nearbyFriendly()const{
  int best=-1;float nearest=1.8f;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto pose=npc.pose;pose.position+=chunkOffset(npc.level)-chunkOffset(m_level);
-  if((track.ai.mode!=ActorAiMode::Civilian&&track.ai.mode!=ActorAiMode::Escort)||(track.ai.enableState&&!state(track.ai.enableState))||pose.clip==4||(track.deadState&&state(track.deadState)))continue;
+  if((track.ai.mode!=ActorAiMode::Civilian&&track.ai.mode!=ActorAiMode::Escort)||npcIncapacitated(i)||(track.ai.enableState&&!state(track.ai.enableState))||pose.clip==4||(track.deadState&&state(track.deadState)))continue;
   auto delta=pose.position-m_player.pos;float distance=length(delta);
   Point3 target{pose.position.x+chunkOffset(m_level).x,pose.position.y+chunkOffset(m_level).y,pose.z+track.scale*.7f};
   if(!friendlyRayClear({m_player.pos.x+chunkOffset(m_level).x,m_player.pos.y+chunkOffset(m_level).y,m_player.z+m_player.eye},target))continue;
@@ -222,7 +251,8 @@ bool Game::testFriendlyAI(){
  for(bool unreachable:{false,true}){auto original=scene(ActorAiMode::Escort,true);auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);auto worker=map->actorTracks[0];map->actorTracks.clear();
   if(unreachable)for(int y=11;y<24;++y)map->layers[0].rows[y][10]='#';
   for(int i=0;i<9;++i){auto npc=worker;for(auto&key:npc.keys)key.position={9.3f,6.5f+i*.25f};map->actorTracks.push_back(npc);}campaign->maps[0]=map;Game crowd(campaign);crowd.updateMechanisms(1.f/60);
-  int planned=0;bool stationary=true;for(size_t i=0;i<9;++i){planned+=crowd.state(actorAiState(0,i,worker.timerState,"repath"))>0;if(i>=4)stationary&=length(crowd.world().actorPose(i).position-map->actorTracks[i].keys[0].position)<.001f;}
+  int planned=0;bool stationary=true;float deferredMotion=0;for(size_t i=0;i<9;++i){planned+=crowd.state(actorAiState(0,i,worker.timerState,"repath"))>0;if(i>=4){float moved=length(crowd.world().actorPose(i).position-map->actorTracks[i].keys[0].position);deferredMotion=std::max(deferredMotion,moved);stationary&=moved<.001f;}}
+  report<<"crowd unreachable="<<unreachable<<" planned="<<planned<<" budget="<<crowd.m_npcNavBudget<<" deferred_motion="<<deferredMotion<<'\n';
   check(planned==4&&crowd.m_npcNavBudget==0&&stationary,"Crowded scene limits route searches and keeps deferred actors stationary");
   crowd.updateMechanisms(1.f/60);crowd.updateMechanisms(1.f/60);planned=0;for(size_t i=0;i<9;++i)planned+=crowd.state(actorAiState(0,i,worker.timerState,"repath"))>0;
   check(planned==9,"Reachable and unreachable goals do not starve later actors");

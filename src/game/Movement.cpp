@@ -26,7 +26,7 @@ bool Game::hullFits(Vec2 p,float feet,float height)const{
   if(feet<drone.position.z+EngineerDroneHeight&&feet+height>drone.position.z&&std::fabs(center.x-drone.position.x-off.x)<radius&&std::fabs(center.y-drone.position.y-off.y)<radius)return false;
  }
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto actor=npc.pose;actor.position+=chunkOffset(npc.level)-chunkOffset(w.level());
-  if(track.ai.mode==ActorAiMode::Scripted||actor.clip==4||(track.ai.enableState&&!state(track.ai.enableState)))continue;
+  if(track.ai.mode==ActorAiMode::Scripted||npcHeld(i)||actor.clip==4||(track.ai.enableState&&!state(track.ai.enableState)))continue;
   float body=friendlyHullHeight(i,track);
   if(feet<actor.z+body&&feet+height>actor.z&&std::fabs(center.x-actor.position.x)<.4f&&std::fabs(center.y-actor.position.y)<.4f)return false;
  }
@@ -68,7 +68,7 @@ void Game::updateMovement(const InputState& input,float dt){
   bool grounded=m_player.grounded;auto old=m_player.pos;
   m_jumpBuffer=std::max(0.f,m_jumpBuffer-step);m_coyote=grounded?.075f:std::max(0.f,m_coyote-step);
   if(m_jumpBuffer>0&&m_coyote>0){m_player.verticalVelocity=5.4f;m_player.grounded=false;m_jumpBuffer=0;m_coyote=0;m_verticalSpringVelocity-=.45f;sound(Sound::Jump,.38f,.97f+(m_stepVariant%3)*.025f);}
-  float speed=length(m_velocity),wishSpeed=m_player.crouched?1.65f:input.sprint?5.4f:3.6f;
+  float speed=length(m_velocity),wishSpeed=heldNpc()>=0?1.4f:m_player.crouched?1.65f:input.sprint?5.4f:3.6f;
   if(m_player.grounded&&speed>0){float remaining=std::max(0.f,speed-std::max(1.5f,speed)*6.f*step);m_velocity=m_velocity*(remaining/speed);}
   if(lengthSq(wish)>0){
    float acceleration=m_player.grounded?12.f:3.f;
@@ -95,7 +95,10 @@ void Game::updateMovement(const InputState& input,float dt){
   if(grounded&&m_player.grounded){m_stepDistance+=length(m_player.pos-old);
    if(m_stepDistance>(m_player.crouched?.85f:input.sprint?1.45f:1.22f)){
     m_stepDistance=0;unsigned variation=(m_stepVariant++*3)%4;auto base=m_world.metalFloor(int(m_player.pos.x),int(m_player.pos.y))?Sound::Metal1:Sound::Concrete1;
-    sound(Sound(int(base)+variation),m_player.crouched?.20f:input.sprint?.65f:.48f,.95f+variation*.035f);
+    // A deliberate crouched step is audible only inside roughly one metre;
+    // the former two-metre cue turned an investigating guard before a rear
+    // melee approach could enter its 1.25 m physical reach.
+    sound(Sound(int(base)+variation),m_player.crouched?.045f:input.sprint?.65f:.48f,.95f+variation*.035f);
    }
   }
  }
@@ -147,16 +150,39 @@ bool Game::doorLocked(const Door& door)const{
         (door.requireState&&state(door.requireState)!=door.requireValue);
 }
 const char* Game::interactionHint()const{
- if(m_logTime>0)return m_vrInputActive?"WRIST / CLOSE LOG":"E / CLOSE LOG";
+ if(m_logTime>0)return m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL";
+ if(heldNpc()>=0)return "E / RELEASE    Q / KNOCK OUT    FIRE / KILL";
  if(holdingClutter())return m_vrInputActive?"RELEASE GRIP / DROP":"E / DROP     FIRE / PUNT";
- if(nearReactorDisk())return "E / TAKE REACTOR AUTH DISK";
+ if(!m_vrInputActive&&nearbyTakedown()>=0)return "E / GRAB    Q / KNOCK OUT    FISTS / REAR KILL";
+ if(nearReactorDisk())return m_vrInputActive?"GRIP / TAKE AUTH FLOPPY":"E / TAKE AUTH FLOPPY";
  int door=nearbyInteractionDoor();
  if(door>=0){auto&d=m_world.doors()[door];if(doorLocked(d))return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";
   if(m_vrInputActive)return d.swinging?(d.opening?"GRIP / CLOSE SERVICE DOOR":"GRIP / OPEN SERVICE DOOR"):d.opening?"GRIP / CLOSE BULKHEAD":d.transfer?"GRIP / TRANSFER BULKHEAD":"GRIP / OPEN BULKHEAD";
   return d.swinging?(d.opening?"E / CLOSE SERVICE DOOR":"E / OPEN SERVICE DOOR"):d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
- if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];if(t.activateState)return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):"CONTROL / RELEASED"):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");
-  if(m_vrInputActive){if(t.reactorAction)return t.reactorAction==1?"GRIP / USE COMPUTER":"GRIP / OPERATE VALVE";return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";}
-  if(t.reactorAction)return t.reactorAction==1?"E / USE COMPUTER":"E / OPERATE VALVE";return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
+ if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];
+  if(t.activateState){
+   if(t.requireState&&!state(t.requireState))return m_vrInputActive?"GRIP / READ CONTROL INTERLOCK":"E / READ CONTROL INTERLOCK";
+   return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):(m_vrInputActive?"GRIP / READ COMPLETED CONTROL":"E / READ COMPLETED CONTROL")):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");
+  }
+  if(t.reactorAction){auto stage=m_world.reactorStage();
+   if(t.reactorAction==1){
+    switch(stage){
+     case World::ReactorStage::NoDisk:return m_vrInputActive?"GRIP / READ FLOPPY REQUIREMENT":"E / READ FLOPPY REQUIREMENT";
+     case World::ReactorStage::DiskHeld:return m_vrInputActive?"GRIP / INSERT AUTH FLOPPY":"E / INSERT AUTH FLOPPY";
+     case World::ReactorStage::DiskLoaded:return m_vrInputActive?"GRIP / CHECK COOLANT FEED":"E / CHECK COOLANT FEED";
+     case World::ReactorStage::FeedPrimed:return m_vrInputActive?"GRIP / CHECK COOLANT RETURN":"E / CHECK COOLANT RETURN";
+     case World::ReactorStage::ReturnPrimed:return m_vrInputActive?"GRIP / RESET REACTOR INTERLOCK":"E / RESET REACTOR INTERLOCK";
+     case World::ReactorStage::Released:return m_vrInputActive?"GRIP / READ REACTOR STATUS":"E / READ REACTOR STATUS";
+    }
+   }
+   if(stage<World::ReactorStage::DiskLoaded)return m_vrInputActive?"GRIP / READ VALVE AUTH LOCK":"E / READ VALVE AUTH LOCK";
+   if(stage==World::ReactorStage::Released)return m_vrInputActive?"GRIP / READ VALVE STATUS":"E / READ VALVE STATUS";
+   if(t.reactorAction==2)return stage==World::ReactorStage::ReturnPrimed?(m_vrInputActive?"GRIP / REPRIME FEED / RESETS RETURN":"E / REPRIME FEED / RESETS RETURN"):(m_vrInputActive?"GRIP / PRIME COOLANT FEED":"E / PRIME COOLANT FEED");
+   if(stage==World::ReactorStage::DiskLoaded)return m_vrInputActive?"GRIP / RETURN LOCKED / PRIME FEED FIRST":"E / RETURN LOCKED / PRIME FEED FIRST";
+   return m_vrInputActive?"GRIP / PRIME COOLANT RETURN":"E / PRIME COOLANT RETURN";
+  }
+  if(m_vrInputActive)return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";
+  return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
  if(nearbyClutter()>=0)return m_vrInputActive?"GRIP / LIFT":"E / LIFT";
  if(nearbyFriendly()>=0)return m_vrInputActive?"GRIP / FOLLOW OR WAIT":"E / FOLLOW OR WAIT";
  return nullptr;
@@ -174,6 +200,8 @@ void Game::updateInteraction(const InputState& input,float dt){
   for(int hand=0;hand<2;++hand)if(input.use&&input.vrGrip[hand]&&!previous[hand]){m_vrInteractionHand=hand;usePressed=true;break;}
  }
  if(usePressed&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
+ if(usePressed&&heldNpc()>=0){releaseNpc(false);m_previousUse=true;m_world.updateDoors(dt);return;}
+ if(usePressed&&!input.vrTracked&&nearbyTakedown()>=0){restrainNpc(size_t(nearbyTakedown()),true);m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
  if(usePressed){int door=nearbyInteractionDoor();

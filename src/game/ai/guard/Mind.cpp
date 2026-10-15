@@ -26,10 +26,11 @@ void Game::updateGuardFlags(){
  std::vector<StateValue> flags;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(track.ai.mode!=ActorAiMode::Guard||!track.ai.alertState)continue;
   auto it=std::lower_bound(flags.begin(),flags.end(),track.ai.alertState,[](const auto&v,StateId id){return v.id<id;});if(it==flags.end()||it->id!=track.ai.alertState)it=flags.insert(it,{track.ai.alertState,0});
-  if((!track.ai.enableState||state(track.ai.enableState))&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardState(i)==GuardState::Alert)it->value=1;
+  if(!npcIncapacitated(i)&&(!track.ai.enableState||state(track.ai.enableState))&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardState(i)==GuardState::Alert)it->value=1;
  }for(const auto&flag:flags)setState(flag.id,flag.value);
 }
 void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove){
+ if(npcIncapacitated(actor)){wantsMove=false;return;}
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
  auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;
  auto shift=chunkOffset(level)-chunkOffset(m_level),globalOrigin=chunkOffset(level);auto observer=pose.position+shift;
@@ -43,7 +44,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   Vec2 position{};float feet=0,corpseEye=.25f;
   if(kind==ShotKind::Player){if(!dead())return false;targetLevel=m_level;position=m_player.pos;feet=m_player.z;}
   else if(kind==ShotKind::Npc){
-   if(index<0||size_t(index)>=m_friendlyActors.size()||size_t(index)==actor)return false;
+   if(index<0||size_t(index)>=m_friendlyActors.size()||size_t(index)==actor||npcIncapacitated(size_t(index)))return false;
    const auto&other=m_friendlyActors[size_t(index)];const auto&t=other.track();
    if(t.health<=0||!(other.pose.clip==4||(t.deadState&&state(t.deadState))))return false;
    targetLevel=other.level;position=other.pose.position;feet=other.pose.z;corpseEye=t.scale*.25f;
@@ -59,7 +60,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
    const auto&world=targetLevel==m_level?m_world:m_chunks[targetLevel].world;
    if(index<0||size_t(index)>=world.actorTracks().size())return false;
    const auto&t=world.actorTracks()[size_t(index)];const auto&p=world.actorPose(size_t(index));
-   if(t.ai.mode!=ActorAiMode::Scripted||!t.health||t.platform||!(p.clip==4||(t.deadState&&state(t.deadState))))return false;
+   if(t.ai.mode!=ActorAiMode::Scripted||state(actorAiState(targetLevel,size_t(index),t.timerState,"restraint"))||!t.health||t.platform||!(p.clip==4||(t.deadState&&state(t.deadState))))return false;
    position=p.position;feet=p.z;corpseEye=t.scale*.25f;
   }else return false;
   if(targetLevel<0||targetLevel>=chunkCount()||!chunkResident(targetLevel))return false;
@@ -154,7 +155,11 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
   if(mode==GuardState::Investigate&&!pauseInvestigation){int travel=std::min(8000,get("guard_travel")+ms);put("guard_travel",travel);
    if((!wantsMove&&!finishingRetreat&&!suppressing)||travel>=8000){mode=GuardState::Search;put("guard_search",config.searchMs);put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
  }
- if(mode==GuardState::Search){int remaining=std::max(0,get("guard_search")-ms);put("guard_search",remaining);pose.yaw=get("guard_bearing")*.0001f+std::sin((config.searchMs-remaining)*.001f*2.4f)*1.2f;wantsMove=false;
+ if(mode==GuardState::Search){int remaining=std::max(0,get("guard_search")-ms);put("guard_search",remaining);
+  // Confirmed foes get a wide sweep. Sound-only searches stay focused on the
+  // noise bearing so a rear approach after a distraction remains possible.
+  float sweep=get("guard_confirmed")?1.2f:.45f;
+  pose.yaw=get("guard_bearing")*.0001f+std::sin((config.searchMs-remaining)*.001f*2.4f)*sweep;wantsMove=false;
   if(remaining==0){mode=GuardState::Patrol;put("guard_arrived",0);put("guard_pause",0);put("repath",0);put("guard_memory",0);put("guard_confirmed",0);put("guard_recognition",0);put("guard_return",level!=m_friendlyActors[actor].homeLevel);rememberGuardTarget(actor,{});}}
  if(mode==GuardState::Patrol){auto home=chunkOffset(m_friendlyActors[actor].homeLevel)-globalOrigin;const auto&patrol=config.patrol.at(size_t(point));goal=patrol.position+home;goalZ=patrol.z;
   bool arrived=lengthSq(goal-pose.position)<.25f*.25f&&std::fabs(goalZ-pose.z)<.3f;
