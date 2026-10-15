@@ -9,7 +9,20 @@ namespace {
 auto exclusionCampaign(){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";return std::filesystem::exists(path)?loadCustomCampaignFile(path):loadEmbeddedExclusionZoneCampaign();}
 }
 Game Game::exclusionInspection(int stage){
- if(stage<0||stage>9)throw std::runtime_error("Unknown Exclusion encounter view");
+ if(stage<0||stage>11)throw std::runtime_error("Unknown Exclusion encounter view");
+ if(stage>=10){
+  Game g;g.loadLevel(14,false);g.updateStreaming(0);g.m_player.pos={1.4f,20};g.m_player.z=-25;
+  std::vector<size_t> detail;for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].homeLevel==14&&g.npcActors()[i].track().ai.squad==stateId("receiving_cleanup"))detail.push_back(i);
+  if(detail.size()!=6)throw std::runtime_error("Receiving breach preview requires the authored detail");
+  // Stage the two opening player kills through the real damage path; the
+  // remaining deaths and retreat are produced by ordinary combat/navigation.
+  for(auto index:{detail[0],detail[2]})g.damageFriendly(index,1000,{7,22},{ShotKind::Player,14,0});
+  g.updateScripts(0);for(int frame=0;frame<3600;++frame)g.update({},1.f/60);
+  if(!g.state("receiving_retreat_sealed"))throw std::runtime_error("Receiving retreat did not complete");
+  if(stage==10){g.m_player.pos={10.8f,21.8f};g.m_player.angle=std::atan2(16.f-21.8f,13.f-10.8f);g.m_player.pitch=-12;}
+  else{g.loadLevel(15,false);g.m_player.pos={12,14};g.m_player.angle=kPi*.5f;g.m_player.pitch=-6;}
+  g.m_player.z=-25;g.m_logTime=0;g.m_activeLog=-1;g.equipWeapon(WeaponId::Fists);return g;
+ }
  if(stage==8){Game g;g.loadLevel(14,false);g.updateStreaming(0);g.m_player.pos={10.8f,21.8f};g.m_player.z=-25;g.m_player.angle=std::atan2(16.f-21.8f,13.f-10.8f);g.m_player.pitch=-6;g.equipWeapon(WeaponId::Fists);return g;}
  Game g(exclusionCampaign());
  if(stage==9){std::ostringstream trace;if(!g.walkExclusionEast(trace))throw std::runtime_error("East walking proof failed: "+trace.str());

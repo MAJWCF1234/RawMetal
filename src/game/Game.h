@@ -79,6 +79,7 @@ struct Enemy {
     // Ephemeral MaintainSchedule mind. Rebuilt from state after load; not archived.
     int schedule=0,scheduleStep=0,scheduleTask=0,scheduleStatus=0,scheduleMs=0,scheduleCursor=0,scheduleCursorSaved=0,scheduleTransitions=0;
     unsigned scheduleConditions=0;
+    bool scriptSpawned=false; // Persistent population owned by a script, not the authored baseline.
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
@@ -417,6 +418,7 @@ private:
     float m_hazardSoundTimer=0;
     void seedScripts();
     void updateScripts(float dt);
+    void updateReceivingBreach();
     void executeScriptAction(const ScriptAction& action);
     void spawnScriptEnemy(const ScriptAction& action);
     void spawnCreature(const CreatureSpawn& spawn,float awareness=0,bool announce=false);

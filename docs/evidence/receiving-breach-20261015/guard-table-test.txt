@@ -1,0 +1,83 @@
+All eleven named schedule definitions expose valid distinct task lists, compatible phases and explicit ordinary failure destinations: PASS
+Danger and failure recovery have genuinely different declarative execution lists and Recovery declares its seven-hundred-millisecond wait: PASS
+The catalog gives ordinary investigation, armed combat and support work distinct sensory interests with danger retained for every support role: PASS
+The shared table executor starts Prepare, Move and actual work in catalog order within the bounded transition budget: PASS
+Running table work retains its original elapsed time and commits one finite event when its adapter reports completion: PASS
+Maintaining a completed table cursor cannot restart its action adapter or replay the consumed work event: PASS
+One-transition maintenance resumes the next listed task without skipping or duplicating Prepare, Move or work: PASS
+A genuine longer task list defers its next New task at the transition boundary and starts that work exactly once on the next maintenance pass: PASS
+A listed movement task failure returns the catalog fallback before any work event and repeated maintenance cannot restart failed work: PASS
+The shared executor honors the actual Recovery row's wait argument before releasing its single task: PASS
+An invalid table cursor fails before an action adapter is called: PASS
+An invalid table cursor fails before an action adapter is called: PASS
+An actual audible world, weapon or impact event interrupts Patrol and executes the table's Move task toward the captured source at both frame rates: PASS
+An actual audible world, weapon or impact event interrupts Patrol and executes the table's Move task toward the captured source at both frame rates: PASS
+An actual audible world, weapon or impact event interrupts Patrol and executes the table's Move task toward the captured source at both frame rates: PASS
+An actual audible world, weapon or impact event interrupts Patrol and executes the table's Move task toward the captured source at both frame rates: PASS
+An actual audible world, weapon or impact event interrupts Patrol and executes the table's Move task toward the captured source at both frame rates: PASS
+An actual audible world, weapon or impact event interrupts Patrol and executes the table's Move task toward the captured source at both frame rates: PASS
+A quiet impact behind a full wall does not fabricate an audible condition or interrupt the patrol task: PASS
+Sound fixture reaches actual scheduler-owned treatment through normal updates: PASS
+The working Medic and its holding Patient hear ordinary sounds but their table filters preserve the same unspent treatment and reciprocal claim: PASS
+A physical exposed grenade bypasses the support sound filter and replaces treatment with the one-task Escape list before spending a charge: PASS
+Sound fixture reaches actual scheduler-owned treatment through normal updates: PASS
+The working Medic and its holding Patient hear ordinary sounds but their table filters preserve the same unspent treatment and reciprocal claim: PASS
+A physical exposed grenade bypasses the support sound filter and replaces treatment with the one-task Escape list before spending a charge: PASS
+Ordinary audible events cannot reset the Engineer's live deployment adapter or spend stock before its terminal event at either rate: PASS
+The same Engineer support mask always yields assembly to an exposed physical grenade before any deployment stock is committed: PASS
+Ordinary audible events cannot reset the Engineer's live deployment adapter or spend stock before its terminal event at either rate: PASS
+The same Engineer support mask always yields assembly to an exposed physical grenade before any deployment stock is committed: PASS
+An actual audible danger event cancels the same near-complete treatment work before its heal boundary even if the chooser keeps that Medic job: PASS
+audible danger treatment Hz=60 before=2367 after=17
+An actual audible danger event cancels the same near-complete treatment work before its heal boundary even if the chooser keeps that Medic job: PASS
+audible danger treatment Hz=120 before=2366 after=9
+An actual audible danger event cancels the same near-complete assembly before its deployment event or stock spend at both frame rates: PASS
+audible danger assembly Hz=60 before=1167 after=16
+An actual audible danger event cancels the same near-complete assembly before its deployment event or stock spend at both frame rates: PASS
+audible danger assembly Hz=120 before=1167 after=8
+weapon interruption bash Hz=60 ready=1 before=267 after=17 damage=0
+A real accepted weapon interruption restarts an uncommitted contact strike before its impact while preserving ammunition: PASS
+weapon interruption bash Hz=120 ready=1 before=267 after=8 damage=0
+A real accepted weapon interruption restarts an uncommitted contact strike before its impact while preserving ammunition: PASS
+Real owned firearm aim continues through audible world and impact events excluded by the Combat table instead of restarting its attack task: PASS
+A distinct audible weapon event actually interrupts Combat's listed running Fire task before its long aim commits a shot: PASS
+Real owned firearm aim continues through audible world and impact events excluded by the Combat table instead of restarting its attack task: PASS
+A distinct audible weapon event actually interrupts Combat's listed running Fire task before its long aim commits a shot: PASS
+Real confirmed targets publish firearm readiness, contact readiness or neither according to physical range instead of treating all visible enemies as attackable: PASS
+Real confirmed targets publish firearm readiness, contact readiness or neither according to physical range instead of treating all visible enemies as attackable: PASS
+Real confirmed targets publish firearm readiness, contact readiness or neither according to physical range instead of treating all visible enemies as attackable: PASS
+Real confirmed targets publish firearm readiness, contact readiness or neither according to physical range instead of treating all visible enemies as attackable: PASS
+Real confirmed targets publish firearm readiness, contact readiness or neither according to physical range instead of treating all visible enemies as attackable: PASS
+Real confirmed targets publish firearm readiness, contact readiness or neither according to physical range instead of treating all visible enemies as attackable: PASS
+A personally visible enemy behind a neutral body fails the exact barrel-hit readiness condition without firing through the intervening actor: PASS
+A known live opponent entering real occluding geometry retains only the witnessed location and loses both physical attack conditions without becoming dead: PASS
+An unseen opponent's hidden death cannot publish a witnessed-death condition or reveal its hidden position: PASS
+witnessed corpse known=1 bits=4096 seen=0 dead=1 mode=3 confirmed=0 target=0 corpse=12.5,6.5,0 clip=4
+A witnessed known opponent corpse produces a distinct dead condition and releases the stale attack reference rather than investigating it as a live occluded enemy: PASS
+Fresh-damage fixture reaches the final uncommitted kit interval: PASS
+Actual light or heavy fresh damage interrupts near-complete support work once without committing its heal or charge: PASS
+Fresh damage classifications clear on the next unchanged-health frame while the existing transient under-fire memory continues: PASS
+Fresh-damage fixture reaches the final uncommitted kit interval: PASS
+Actual light or heavy fresh damage interrupts near-complete support work once without committing its heal or charge: PASS
+Fresh damage classifications clear on the next unchanged-health frame while the existing transient under-fire memory continues: PASS
+Actual sealed-wall movement fails into the catalog's distinct Recovery cursor and physical Wait phase while remaining inside navigation and hull limits: PASS
+blocked patrol frame=313 held=1 safe=1 bounded=1 schedule=9 cursor=0 phase=2 reason=6 fails=1 fail-dest=1 task=3 wait=0 stall=0 position=7.8,6.5
+A saved live Recovery wait resumes its remaining clock and releases once without replaying the failed movement event: PASS
+recovery save decoded=1 final schedule=1,1 fails=1,1
+Cursor save fixture reaches actual treatment halfway through its finite event: PASS
+Saving real role work preserves its declarative cursor, failure destination and original resource baseline: PASS
+An older save with absent cursor and failure metadata adopts its existing treatment phase and completes exactly one identical heal without replay: PASS
+A live completed firearm event and its four-transition list restart both save with matching cursor/phase and a new baseline without replaying the spent round or damage: PASS
+Malformed table identity or expanded sensory fields are rejected before saved work can execute: PASS
+Malformed table identity or expanded sensory fields are rejected before saved work can execute: PASS
+Malformed table identity or expanded sensory fields are rejected before saved work can execute: PASS
+Malformed table identity or expanded sensory fields are rejected before saved work can execute: PASS
+Malformed table identity or expanded sensory fields are rejected before saved work can execute: PASS
+Malformed table identity or expanded sensory fields are rejected before saved work can execute: PASS
+Malformed table identity or expanded sensory fields are rejected before saved work can execute: PASS
+A syntactically bounded saved cursor that disagrees with its live treatment phase is rejected rather than rerunning Prepare or dropping the resource baseline: PASS
+A terminal completed cursor must agree with the final listed task instead of claiming that Prepare completed the whole treatment list: PASS
+Partial new table metadata cannot use a missing saved-cursor marker to bypass validation as a legacy save: PASS
+Partial new table metadata cannot use a missing saved-cursor marker to bypass validation as a legacy save: PASS
+A marked live cursor pointing at Prepare cannot acquire Fire ownership from stale compatible work-phase fields or advance an ammunition event: PASS
+checks=73 result=PASS

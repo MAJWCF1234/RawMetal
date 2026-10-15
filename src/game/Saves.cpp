@@ -87,7 +87,7 @@ template<class A> void Game::archiveSave(A& a,int version){
    for(int door=0;door<doors;++door){float open=0;bool opening=false;a(open,opening);if(open<0||open>1)throw std::runtime_error("invalid door");
     if(door<int(w.m_doors.size())){w.m_doors[door].open=open;w.m_doors[door].opening=opening;}}
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
-  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(int(e.kind)>(version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
+  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(int(e.kind)>(version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>6)throw std::runtime_error("invalid clutter");});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
@@ -95,14 +95,14 @@ template<class A> void Game::archiveSave(A& a,int version){
  }
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,13);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 13 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,14);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 14 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>13))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>14))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   // Earlier builds represented a broken crate as four unrelated prop models
@@ -135,10 +135,14 @@ bool Game::decodeSave(const std::string& data){
 
    auto oldEnemies=std::move(saved.enemies);std::vector<bool> enemyUsed(oldEnemies.size(),false);saved.enemies.clear();saved.enemies.reserve(fresh.enemies.size());
    for(const auto&spawn:fresh.enemies){
-    int match=-1;for(int i=0;i<int(oldEnemies.size());++i)if(!enemyUsed[i]&&oldEnemies[i].kind==spawn.kind&&samePosition(oldEnemies[i].home,spawn.home)){match=i;break;}
+    int match=-1;for(int i=0;i<int(oldEnemies.size());++i)if(!enemyUsed[i]&&!oldEnemies[i].scriptSpawned&&oldEnemies[i].kind==spawn.kind&&samePosition(oldEnemies[i].home,spawn.home)){match=i;break;}
     if(match>=0){enemyUsed[match]=true;auto state=oldEnemies[match];state.maxHp=spawn.maxHp;if(state.alive)state.hp=std::min(state.hp,state.maxHp);saved.enemies.push_back(state);}
     else saved.enemies.push_back(spawn);
    }
+
+   // Dynamic waves retain both living and dead members instead of vanishing
+   // when content updates reconcile the authored population.
+   for(const auto&enemy:oldEnemies)if(enemy.scriptSpawned)saved.enemies.push_back(enemy);
 
    auto oldPickups=std::move(saved.pickups);std::vector<bool> pickupUsed(oldPickups.size(),false);saved.pickups.clear();saved.pickups.reserve(fresh.pickups.size());
    for(const auto&spawn:fresh.pickups){
@@ -362,6 +366,11 @@ bool Game::testSaves(){
  if(!check(game.saveCheckpoint(),"Autosave checkpoint writes independently of manual slots"))return false;
  game.setState(stateId("checkpoint_test"),0);game.takeQuestItem(stateId("test_fuse"));game.m_player.health=99;
  if(!check(game.loadCheckpoint()&&game.player().health==42&&game.state("checkpoint_test")==37&&game.hasQuestItem(stateId("test_fuse")),"Autosave restores flags, quest items and player state"))return false;
+ {Game wave;ScriptAction spawn;spawn.type=ScriptAction::Type::SpawnEnemy;spawn.enemyKind=CreatureKind::Huntsman;spawn.position={6.5f,6.5f};spawn.z=wave.groundHeight(spawn.position);wave.spawnScriptEnemy(spawn);wave.m_enemies.back().hp=37;
+  spawn.position={7.5f,6.5f};wave.spawnScriptEnemy(spawn);wave.m_enemies.back().alive=false;wave.m_enemies.back().hp=0;Game loaded;
+  bool ok=loaded.decodeSave(wave.encodeSave());int scripted=0,dead=0;bool injured=false;for(const auto&e:loaded.enemies())if(e.scriptSpawned){++scripted;dead+=!e.alive;injured|=e.alive&&e.hp==37;}
+  if(!check(ok&&scripted==2&&dead==1&&injured,"Version 14 retains living, injured and dead script-spawned creatures without resurrecting them"))return false;
+ }
  return check(!game.saveSlot(-1)&&!game.loadSlot(3),"Invalid manual slots are rejected");
 }
 }

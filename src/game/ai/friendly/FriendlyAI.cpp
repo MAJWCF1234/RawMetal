@@ -11,6 +11,7 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
  setState(friendlyKey(actor,"hit_x"),int(std::round(source.x*1000)));setState(friendlyKey(actor,"hit_y"),int(std::round(source.y*1000)));setState(friendlyKey(actor,"hit_source"),1);
  setState(friendlyKey(actor,"hit_kind"),int(attacker.kind));setState(friendlyKey(actor,"hit_level"),attacker.kind==ShotKind::None?0:attacker.level+1);setState(friendlyKey(actor,"hit_index"),attacker.kind==ShotKind::None?0:attacker.index+1);
  if(damage>=track.health){
+  setState(friendlyKey(actor,"killed_by_player"),attacker.kind==ShotKind::Player?1:0);
   if(npcIncapacitated(actor)&&!npcHeld(actor)){setState(friendlyKey(actor,"death_ms"),state(friendlyKey(actor,"restraint_ms")));setState(friendlyKey(actor,"death_fraction"),state(friendlyKey(actor,"restraint_fraction")));}
   int heldWeapon=state(friendlyKey(actor,"restraint_weapon"));if(npcHeld(actor)&&heldWeapon>0&&heldWeapon<weaponCount())equipWeapon(WeaponId(heldWeapon));
   for(const char*field:{"restraint","restraint_ms","restraint_fraction","restraint_weapon"})setState(friendlyKey(actor,field),0);
@@ -88,10 +89,10 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;float speedScale=1;
  int guardMs=0;
  if(config.mode==ActorAiMode::Scripted)scriptedHandoffIntent(world,level,actor,track,pose,dt,enemies,goal,goalZ,wantsMove,speedScale);
- else if(config.mode==ActorAiMode::Guard){guardMs=(get("guard_fraction")+int(std::round(double(dt)*1000000)))/1000;guardIntent(level,actor,track,pose,dt,*stimuli,goal,goalZ,wantsMove);if(get("guard_danger_ms"))speedScale=1.35f;}
+ else if(config.mode==ActorAiMode::Guard){guardMs=(get("guard_fraction")+int(std::round(double(dt)*1000000)))/1000;guardIntent(level,actor,track,pose,dt,*stimuli,goal,goalZ,wantsMove);if(get("guard_danger_ms"))speedScale=1.35f;if(get("evac_level"))speedScale=1.8f;}
  else civilianEscortIntent(world,level,actor,track,pose,dt,enemies,goal,goalZ,wantsMove,speedScale);
  bool wantCrouch=false;
- if(config.mode==ActorAiMode::Guard)wantCrouch=get("guard_cover_mode")==2||get("guard_under_fire")>0||get("weapon_reload")>0||get("weapon_reloading")||(track.health>0&&state(track.damageState)>=int(track.health*.65f));
+ if(config.mode==ActorAiMode::Guard&&!get("evac_level"))wantCrouch=get("guard_cover_mode")==2||get("guard_under_fire")>0||get("weapon_reload")>0||get("weapon_reloading")||(track.health>0&&state(track.damageState)>=int(track.health*.65f));
  if((config.mode==ActorAiMode::Escort||config.mode==ActorAiMode::Civilian)&&level==m_level&&m_player.crouched&&length(pose.position-m_player.pos)<3.5f)wantCrouch=true;
  float crouchHeight=npcCrouchedHeight(track);
  if(!wantCrouch&&grounded&&!friendlyBodyFits(level,pose.position,pose.z,standing)&&friendlyBodyFits(level,pose.position,pose.z,crouchHeight))wantCrouch=true;
@@ -159,7 +160,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   if(clear){pose.position=next;if(grounded)pose.z=feet;
    // An alerted armed guard can sidestep while keeping its eyes on the target.
    // Guard intent has already applied the bounded facing turn for this frame.
-   if(config.mode!=ActorAiMode::Guard||!config.armed||guardState(actor)!=GuardState::Alert||get("guard_danger_ms"))pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);
+   if(config.mode!=ActorAiMode::Guard||!config.armed||guardState(actor)!=GuardState::Alert||get("guard_danger_ms")||get("evac_level"))pose.yaw=old.yaw+std::clamp(std::remainder(std::atan2(direction.x,direction.y)-old.yaw,2*kPi),-6.f*dt,6.f*dt);
   }
   }
  }

@@ -27,9 +27,12 @@ Sharpshooter, Rusher, Heavy, Engineer, and Medic. Existing patrol, hearing,
 awareness, firearms, support, and movement systems drive the encounter. No new
 areas or animation banks are added.
 
-The existing **Receiving 02** campaign area also hosts a six-role inspection hold,
-a field cache and a chain distraction. Reach it on the main route, or use console
-`MAP 14` for a direct test.
+The existing **Receiving 02** campaign area hosts a doomed six-role containment
+detail, a field cache and a chain distraction. After two player kills, real
+entities overrun its fighters while one survivor retreats into Receiving 03 and
+closes the pressure door. This is an early disaster; other Cleanup squads remain
+part of the facility. Reach it on the main route, or use console `MAP 14` for a
+direct test. See the [breach validation](docs/receiving-breach-20261015.md).
 
 The route starts behind the west cover screen:
 

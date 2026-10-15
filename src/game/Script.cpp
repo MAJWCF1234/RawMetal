@@ -49,7 +49,7 @@ void Game::seedScripts(){
  }
 }
 void Game::spawnScriptEnemy(const ScriptAction& action){
- spawnCreature({action.enemyKind,action.position,action.z},action.amount,true);
+ spawnCreature({action.enemyKind,action.position,action.z},action.amount,true);m_enemies.back().scriptSpawned=true;
 }
 void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announce){
  Enemy e{};e.kind=spawn.kind;e.pos=spawn.position;e.home=e.pos;e.lastKnown=e.pos;
@@ -75,7 +75,38 @@ void Game::executeScriptAction(const ScriptAction& action){
   case ScriptAction::Type::CompleteCampaign:m_won=true;break;
  }
 }
+void Game::updateReceivingBreach(){
+ if(!m_world.campaign()||m_level!=14)return;
+ const auto squad=stateId("receiving_cleanup");int picked=0;std::vector<size_t> living;
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();
+  if(npc.homeLevel!=14||t.ai.squad!=squad)continue;
+  if(state(t.deadState)){picked+=state(friendlyKey(i,"killed_by_player"))!=0;}
+  else if(!npcIncapacitated(i))living.push_back(i);
+ }
+ if(!state("receiving_breach")&&picked>=2&&!living.empty()){
+  // Prefer the technical specialist, then the living member nearest the exit.
+  size_t survivor=living.front();float best=1e9f;
+  for(auto i:living){const auto&npc=m_friendlyActors[i];float score=length(npc.pose.position-Vec2{12,23});if(npc.track().ai.role==GuardSquadRole::Engineer)score-=100;
+   if(score<best){best=score;survivor=i;}}
+  setState(stateId("receiving_breach"),1);setState(stateId("receiving_survivor"),int(m_friendlyActors[survivor].homeActor)+1);
+  for(auto pair:{std::pair{"evac_level",16},std::pair{"evac_x",12000},std::pair{"evac_y",18000},std::pair{"evac_z",-25000}})setState(friendlyKey(survivor,pair.first),pair.second);
+  clearGuardSchedule(survivor);setState(friendlyKey(survivor,"repath"),0);
+  // These creatures use ordinary perception, navigation and melee damage.
+  // No surviving guard is killed by a script action or made invulnerable.
+  const Vec2 positions[]={{8.3f,14.5f},{20.5f,12.5f},{11,20.8f},{7.6f,11.5f},{15.8f,20.5f},{20.5f,10.5f}};
+  for(int i=0;i<6;++i){ScriptAction spawn;spawn.type=ScriptAction::Type::SpawnEnemy;spawn.enemyKind=i<3?CreatureKind::Brute:CreatureKind::Huntsman;spawn.position=positions[i];spawn.z=-25;spawn.amount=8;executeScriptAction(spawn);}
+  m_pickupNotice="CONTAINMENT BREACH / THE DETAIL IS BEING OVERRUN";m_pickupNoticeTime=4;sound(Sound::LiftCrash,.65f,.8f);
+ }
+ if(state("receiving_breach")&&!state("receiving_retreat_sealed")){
+  int track=state("receiving_survivor")-1;
+  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.homeLevel!=14||int(npc.homeActor)!=track||state(npc.track().deadState)||npc.level!=15||npc.pose.position.y<.8f)continue;
+   for(size_t door=0;door<m_world.doors().size();++door)if(std::fabs(m_world.doors()[door].y-23.5f)<.01f)m_world.setDoor(int(door),0,false);
+   setState(stateId("receiving_retreat_sealed"),1);m_pickupNotice="ONE CONTACT RETREATING / PRESSURE DOOR CLOSED";m_pickupNoticeTime=3;
+  }
+ }
+}
 void Game::updateScripts(float){
+ updateReceivingBreach();
  for(const auto&event:m_scriptEvents){
   if(event.level!=m_level||!event.id||(event.once&&containsEvent(m_firedEvents,event.id)))continue;
   if(event.requireState&&state(event.requireState)!=event.requireValue)continue;

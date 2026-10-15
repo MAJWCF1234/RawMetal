@@ -1,0 +1,13 @@
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA
+view 0 health=100 npcs=7 gripError=0
+view 1 health=100 npcs=7 gripError=0
+view 2 health=100 npcs=7 gripError=0
+view 3 health=100 npcs=7 gripError=7.15605e-08
+view 4 health=100 npcs=7 gripError=0
+view 5 health=100 npcs=7 gripError=6.8691e-08
+view 6 health=100 npcs=7 gripError=6.8691e-08
+view 7 health=100 npcs=7 gripError=0
+view 8 health=100 npcs=16 gripError=0
+view 9 health=100 npcs=7 gripError=0
+view 10 health=100 npcs=16 gripError=0
+view 11 health=100 npcs=16 gripError=0
