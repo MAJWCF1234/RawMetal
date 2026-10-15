@@ -1,0 +1,135 @@
+{
+  "before_exe_bytes": 30843392,
+  "after_exe_bytes": 25499648,
+  "saved_exe_bytes": 5343744,
+  "hard_ceiling_bytes": 33554432,
+  "before_headroom_bytes": 2711040,
+  "after_headroom_bytes": 8054784,
+  "source_assets_modified": false,
+  "embedded_resources_verified": 229,
+  "codec_checks": 199,
+  "real_animation_banks_tested": 10,
+  "native_split_checks": 103,
+  "engineer_checks": 134,
+  "changed_encodings": [
+    {
+      "id": 244,
+      "path": "assets/reactor/stalker-animation.bin",
+      "before_packed_bytes": 198362,
+      "after_packed_bytes": 130262,
+      "encoding": 10
+    },
+    {
+      "id": 274,
+      "path": "assets/mutant/animation.bin",
+      "before_packed_bytes": 244760,
+      "after_packed_bytes": 199368,
+      "encoding": 10
+    },
+    {
+      "id": 278,
+      "path": "assets/actors/worker-animation.bin",
+      "before_packed_bytes": 606272,
+      "after_packed_bytes": 287086,
+      "encoding": 10
+    },
+    {
+      "id": 291,
+      "path": "assets/facility/cargo/control-console.png",
+      "before_packed_bytes": 317640,
+      "after_packed_bytes": 8,
+      "encoding": 11
+    },
+    {
+      "id": 304,
+      "path": "assets/actors/cleanup/assault-animation.bin",
+      "before_packed_bytes": 1059116,
+      "after_packed_bytes": 534812,
+      "encoding": 10
+    },
+    {
+      "id": 309,
+      "path": "assets/actors/cleanup/engineer-animation.bin",
+      "before_packed_bytes": 1927354,
+      "after_packed_bytes": 882578,
+      "encoding": 10
+    },
+    {
+      "id": 314,
+      "path": "assets/actors/cleanup/sharpshooter-animation.bin",
+      "before_packed_bytes": 1045246,
+      "after_packed_bytes": 515738,
+      "encoding": 10
+    },
+    {
+      "id": 319,
+      "path": "assets/actors/cleanup/heavy-animation.bin",
+      "before_packed_bytes": 964196,
+      "after_packed_bytes": 480606,
+      "encoding": 10
+    },
+    {
+      "id": 324,
+      "path": "assets/actors/cleanup/medic-animation.bin",
+      "before_packed_bytes": 2420492,
+      "after_packed_bytes": 1003462,
+      "encoding": 10
+    },
+    {
+      "id": 329,
+      "path": "assets/actors/cleanup/rusher-animation.bin",
+      "before_packed_bytes": 1053918,
+      "after_packed_bytes": 484742,
+      "encoding": 10
+    },
+    {
+      "id": 334,
+      "path": "assets/actors/drone/military-drone-animation.bin",
+      "before_packed_bytes": 18280,
+      "after_packed_bytes": 13246,
+      "encoding": 10
+    },
+    {
+      "id": 340,
+      "path": "assets/actors/cleanup/assault-skin.bin",
+      "before_packed_bytes": 3982,
+      "after_packed_bytes": 8,
+      "encoding": 11
+    },
+    {
+      "id": 341,
+      "path": "assets/actors/cleanup/engineer-skin.bin",
+      "before_packed_bytes": 4480,
+      "after_packed_bytes": 8,
+      "encoding": 11
+    },
+    {
+      "id": 342,
+      "path": "assets/actors/cleanup/sharpshooter-skin.bin",
+      "before_packed_bytes": 3584,
+      "after_packed_bytes": 8,
+      "encoding": 11
+    },
+    {
+      "id": 343,
+      "path": "assets/actors/cleanup/heavy-skin.bin",
+      "before_packed_bytes": 3026,
+      "after_packed_bytes": 8,
+      "encoding": 11
+    },
+    {
+      "id": 344,
+      "path": "assets/actors/cleanup/medic-skin.bin",
+      "before_packed_bytes": 3504,
+      "after_packed_bytes": 8,
+      "encoding": 11
+    },
+    {
+      "id": 345,
+      "path": "assets/actors/cleanup/rusher-skin.bin",
+      "before_packed_bytes": 4260,
+      "after_packed_bytes": 8,
+      "encoding": 11
+    }
+  ]
+}

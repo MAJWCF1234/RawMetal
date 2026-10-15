@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <regex>
+#include <map>
 #include <vector>
 #include <cstring>
 #include <iostream>
@@ -79,6 +80,7 @@ int main(int argc,char** argv){try{
  }
  if(argc!=4)throw std::runtime_error("Usage: pack_assets source-dir output-dir bundle-path");fs::path source=argv[1],out=argv[2];fs::create_directories(out);
  struct Entry{uint32_t id;Bytes bytes;};std::vector<Entry> entries;
+ std::map<std::array<unsigned char,32>,size_t> canonicalResources;
  std::ifstream manifest(source/"assets.rc");std::ofstream rc(out/"assets-packed.rc.tmp"),report(out/"compression-report.txt.tmp");
  std::regex pattern(R"rc((\d+)\s+\w+\s+"([^"]+)")rc");std::string line;size_t total=0,originalTotal=0;
  while(std::getline(manifest,line)){std::smatch match;if(!std::regex_search(line,match,pattern))continue;
@@ -90,6 +92,12 @@ int main(int argc,char** argv){try{
     auto transformed=retro::binaryPredict(original,predict,false);
     if(retro::binaryPredict(transformed,predict,true)!=original)throw std::runtime_error("Binary prediction changed source bytes");
     candidate(transformed,predict?9:8);
+   }
+   retro::AnimationPredictionLayout layout;
+   if(retro::animationPredictionLayout(original,layout)){
+    auto predicted=retro::animationPredict(original,false);
+    if(retro::animationPredict(predicted,true)!=original)throw std::runtime_error("Animation prediction changed source bytes");
+    candidate(predicted,10);
    }
   }
   if(path.extension()==".wav"){
@@ -108,14 +116,20 @@ int main(int argc,char** argv){try{
    auto predicted=retro::texturePredict(raw,false);if(retro::texturePredict(predicted,true)!=raw)throw std::runtime_error("Texture predictor round-trip failed");candidate(predicted,3);
    candidate(losslessTexture(raw),4);
   }
-  verify(packed,chosen);fs::path destination=out/(match[1].str()+".rmz"),temporary=destination.wstring()+L".tmp";std::ofstream asset(temporary,std::ios::binary);
-  uint32_t size=uint32_t(chosen.size());asset.write("RMZ1",4);asset.write(reinterpret_cast<char*>(&size),4);asset.write(reinterpret_cast<char*>(&encoding),4);asset.write(reinterpret_cast<char*>(packed.data()),packed.size());
-  asset.close();if(!asset)throw std::runtime_error("Cannot write packed resource");publish(temporary,destination);
-  Bytes record(12+packed.size());std::memcpy(record.data(),"RMZ1",4);std::memcpy(record.data()+4,&size,4);std::memcpy(record.data()+8,&encoding,4);std::memcpy(record.data()+12,packed.data(),packed.size());entries.push_back({uint32_t(std::stoul(match[1].str())),std::move(record)});
+  verify(packed,chosen);uint32_t size=uint32_t(chosen.size());
+  Bytes record(12+packed.size());std::memcpy(record.data(),"RMZ1",4);std::memcpy(record.data()+4,&size,4);std::memcpy(record.data()+8,&encoding,4);std::memcpy(record.data()+12,packed.data(),packed.size());
+  auto hash=retro::assetHash(record);auto existing=canonicalResources.find(hash);
+  if(existing!=canonicalResources.end()&&entries[existing->second].bytes==record){
+   uint32_t target=entries[existing->second].id;record.resize(8);std::memcpy(record.data(),"RMR1",4);std::memcpy(record.data()+4,&target,4);encoding=11;
+  }else canonicalResources.emplace(hash,entries.size());
+  const size_t packedSize=record.size();fs::path destination=out/(match[1].str()+".rmz"),temporary=destination.wstring()+L".tmp";
+  std::ofstream asset(temporary,std::ios::binary);asset.write(reinterpret_cast<const char*>(record.data()),record.size());asset.close();
+  if(!asset)throw std::runtime_error("Cannot write packed resource");publish(temporary,destination);
+  entries.push_back({uint32_t(std::stoul(match[1].str())),std::move(record)});
   rc<<match[1].str()<<" RCDATA \""<<destination.generic_string()<<"\"\n";
-  report<<match[1].str()<<" "<<match[2].str()<<": "<<original.size()<<" -> "<<packed.size()+12<<" bytes; transform "<<encoding<<"; round-trip PASS\n";
-  total+=packed.size()+12;originalTotal+=original.size();
-  std::cout<<match[1].str()<<": "<<packed.size()+12<<" bytes, encoding "<<encoding<<std::endl;
+  report<<match[1].str()<<" "<<match[2].str()<<": "<<original.size()<<" -> "<<packedSize<<" bytes; transform "<<encoding<<"; round-trip PASS\n";
+  total+=packedSize;originalTotal+=original.size();
+  std::cout<<match[1].str()<<": "<<packedSize<<" bytes, encoding "<<encoding<<std::endl;
  }
  Bytes bundle(8+entries.size()*12);std::memcpy(bundle.data(),"RMA1",4);uint32_t entryCount=uint32_t(entries.size());std::memcpy(bundle.data()+4,&entryCount,4);
  for(size_t i=0;i<entries.size();++i){auto&e=entries[i];uint32_t offset=uint32_t(bundle.size()),size=uint32_t(e.bytes.size());std::memcpy(bundle.data()+8+i*12,&e.id,4);std::memcpy(bundle.data()+12+i*12,&offset,4);std::memcpy(bundle.data()+16+i*12,&size,4);bundle.insert(bundle.end(),e.bytes.begin(),e.bytes.end());}
