@@ -1,3 +1,4 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "../Navigation.h"
 #include "Schedule.h"
@@ -160,6 +161,7 @@ bool Game::guardRoute(int level,size_t actor,Vec2 globalGoal,float feet,int ms,V
  if(cached){goal=portalGlobal-origin;goalFeet=get("guard_portal_z")*.001f;}return cached;
 }
 void Game::updateFriendlyActors(float dt,bool guards){
+ perf::Scope frameProfile(perf::Friendly);
  auto stimuli=guards?aiStimuli():std::vector<AiStimulus>{};
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);shot.categories=ai::SoundWeapon;stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);

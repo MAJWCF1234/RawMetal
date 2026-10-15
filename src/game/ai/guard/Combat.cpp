@@ -1,3 +1,4 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "../../../core/PackedResource.h"
 #include "../../../core/ActorBodyAim.h"
@@ -138,6 +139,7 @@ ShotHit Game::guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& 
  return traceShot(muzzle,weapon.direction,npc.track().ai.attackRange,int(actor),true);
 }
 void Game::updateGuardCombat(float dt){
+ perf::Scope frameProfile(perf::Combat);
  if(dt<=0)return;updateGuardSquadSlots(dt);
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();const auto&config=track.ai;if(config.mode!=ActorAiMode::Guard||!config.armed||!chunkResident(npc.level))continue;
   const auto&gun=weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun);

@@ -1,3 +1,4 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "../Perception.h"
 #include "../Navigation.h"
@@ -65,6 +66,7 @@ Vec2 aiWalkWaypoint(const World&w,Vec2 start,float feet,Vec2 goal,float goalFeet
  return result;
 }
 void Game::updateEnemies(float dt){
+ perf::Scope frameProfile(perf::Enemies);
  if(dead()||m_won)return;
  auto stimuli=aiStimuli();
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};

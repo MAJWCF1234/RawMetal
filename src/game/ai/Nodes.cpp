@@ -1,3 +1,4 @@
+#include "../../core/FrameProfile.h"
 #include "Nodes.h"
 #include <algorithm>
 #include <array>
@@ -22,6 +23,7 @@ int addNode(NodeGraph& graph,Vec2 p,float feet,NodeHint hint){
 }
 }
 NodeGraph buildNodeGraph(const World& world,float height,const WalkProbe& walk,std::span<const AuthoredHint> authored){
+ perf::Scope frameProfile(perf::GraphBuild);
  NodeGraph graph;
  for(const auto&hint:authored){
   float feet=hint.feet;Vec2 p=hint.position;
@@ -127,32 +129,47 @@ bool findCoverFromSound(const NodeGraph& graph,Vec2 from,float fromFeet,Vec2 sou
  return findCoverNode(graph,from,fromFeet,sound,height,walk,covered,reserved,goal,goalFeet,maxRange,minDist);
 }
 Vec2 graphWaypoint(const NodeGraph& graph,Vec2 from,float fromFeet,Vec2 goal,float goalFeet,float height,const WalkProbe& walk){
+ perf::Scope frameProfile(perf::GraphPath);
  if(graph.nodes.empty())return goal;
  float direct=fromFeet;if(walk(from,fromFeet,goal,height,&direct)&&std::fabs(direct-goalFeet)<.45f)return goal;
- int origin=-1,target=-1;float originDist=1e9f,targetDist=1e9f;
- for(int i=0;i<int(graph.nodes.size());++i){
-  const auto&n=graph.nodes[size_t(i)];
-  float da=lengthSq(n.position-from)+std::fabs(n.feet-fromFeet)*8.f;
-  float db=lengthSq(n.position-goal)+std::fabs(n.feet-goalFeet)*8.f;
-  float end=fromFeet;
-  if(da<originDist&&walk(from,fromFeet,n.position,height,&end)&&std::fabs(end-n.feet)<.4f){originDist=da;origin=i;}
-  end=n.feet;if(db<targetDist&&walk(n.position,n.feet,goal,height,&end)&&std::fabs(end-goalFeet)<.45f){targetDist=db;target=i;}
- }
- if(origin<0||target<0)return goal;
+ // Select the nearest reachable connectors first. The former insertion-order
+ // scan swept many successively closer nodes before reaching the same answer.
+ auto connector=[&](bool source){std::vector<std::pair<float,int>> order;order.reserve(graph.nodes.size());
+  for(int i=0;i<int(graph.nodes.size());++i){const auto&n=graph.nodes[size_t(i)];order.push_back({lengthSq(n.position-(source?from:goal))+std::fabs(n.feet-(source?fromFeet:goalFeet))*8.f,i});}
+  std::sort(order.begin(),order.end());
+  for(auto [distance,index]:order){const auto&n=graph.nodes[size_t(index)];float end=source?fromFeet:n.feet;
+   if(source?walk(from,fromFeet,n.position,height,&end)&&std::fabs(end-n.feet)<.4f:walk(n.position,n.feet,goal,height,&end)&&std::fabs(end-goalFeet)<.45f)return index;}
+  return -1;
+ };
+ int origin=connector(true),target=connector(false);if(origin<0||target<0)return goal;
  if(origin==target)return graph.nodes[size_t(origin)].position;
- std::vector<int> parent(graph.nodes.size(),-1);std::queue<int> queue;queue.push(origin);parent[size_t(origin)]=origin;
- while(!queue.empty()&&parent[size_t(target)]<0){
-  int current=queue.front();queue.pop();const auto&n=graph.nodes[size_t(current)];
-  for(int i=0;i<n.linkCount;++i){
-   const auto&link=graph.links[size_t(n.firstLink+i)];
-   if(parent[size_t(link.dest)]>=0)continue;
-   const auto&next=graph.nodes[size_t(link.dest)];float end=n.feet;
-   if(!walk(n.position,n.feet,next.position,height,&end)||std::fabs(end-next.feet)>.4f)continue;
-   parent[size_t(link.dest)]=current;queue.push(link.dest);
+ // Search retained topology cheaply, then certify only its candidate route.
+ // A blocked live edge is excluded and the same BFS is retried. Validation is
+ // local to this query, so doors, lifts and changed hulls cannot go stale.
+ std::vector<signed char> valid(graph.links.size(),-1);
+ std::vector<int> parent(graph.nodes.size()),via(graph.nodes.size()),path;
+ for(;;){
+  std::fill(parent.begin(),parent.end(),-1);std::queue<int> queue;queue.push(origin);parent[size_t(origin)]=origin;
+  while(!queue.empty()&&parent[size_t(target)]<0){int current=queue.front();queue.pop();const auto&n=graph.nodes[size_t(current)];
+   for(int i=0;i<n.linkCount;++i){int edge=n.firstLink+i;int next=graph.links[size_t(edge)].dest;
+    if(valid[size_t(edge)]==0||parent[size_t(next)]>=0)continue;
+    parent[size_t(next)]=current;via[size_t(next)]=edge;queue.push(next);
+   }
   }
+  if(parent[size_t(target)]<0)return goal;
+  path.clear();for(int node=target;node!=origin;node=parent[size_t(node)])path.push_back(node);
+  bool blocked=false;
+  for(auto it=path.rbegin();it!=path.rend();++it){int node=*it,edge=via[size_t(node)];if(valid[size_t(edge)]>=0)continue;
+   const auto&a=graph.nodes[size_t(parent[size_t(node)])];const auto&b=graph.nodes[size_t(node)];float end=a.feet;
+   valid[size_t(edge)]=walk(a.position,a.feet,b.position,height,&end)&&std::fabs(end-b.feet)<.4f?1:0;
+   if(!valid[size_t(edge)]){blocked=true;break;}
+  }
+  if(blocked)continue;
+  const auto&next=graph.nodes[size_t(path.back())];float end=fromFeet;
+  // The actor may stand off-centre beside a corner. A valid node-to-node edge
+  // does not prove the diagonal from its actual feet; reach the origin first.
+  if(!walk(from,fromFeet,next.position,height,&end)||std::fabs(end-next.feet)>.4f)return graph.nodes[size_t(origin)].position;
+  return next.position;
  }
- if(parent[size_t(target)]<0)return goal;
- int step=target;while(parent[size_t(step)]!=origin&&step!=origin)step=parent[size_t(step)];
- return graph.nodes[size_t(step)].position;
 }
 }

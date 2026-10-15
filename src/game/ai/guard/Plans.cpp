@@ -1,3 +1,4 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "../engineer/Drones.h"
 #include "ScheduleTables.h"
@@ -9,6 +10,7 @@ constexpr std::array<GuardSchedule,5> guardModeSchedules={GuardSchedule::Patrol,
 constexpr std::array<GuardRolePlan,7> guardRolePlans={GuardRolePlan::Ordinary,GuardRolePlan::Ordinary,GuardRolePlan::Engineer,GuardRolePlan::Ordinary,GuardRolePlan::Ordinary,GuardRolePlan::Medic,GuardRolePlan::Ordinary};
 }
 GuardScheduleChoice Game::guardScheduleChoice(int level,size_t actor,const ActorTrack&track,ActorPose&pose,float dt,int ms,Vec2&goal,float&goalZ,bool&wantsMove,unsigned&conditions,GuardSchedule previous,int oldSubject,int retry,bool changed,bool close,const AiTarget&target){
+ perf::Scope frameProfile(perf::Intent);
  auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};GuardScheduleChoice choice;
  // Authored evacuation uses the existing exclusive Escape task and physical
  // stitched navigator. It never changes an actor's health or teleports it.

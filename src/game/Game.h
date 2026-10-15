@@ -189,6 +189,10 @@ public:
     int chunkCount()const{return m_worldId==WorldId::Custom&&m_customCampaign?int(m_customCampaign->maps.size()):worldChunkCount(m_worldId);}
     Vec2 chunkOffset(int level)const{return m_worldId==WorldId::Custom&&m_customCampaign?m_customCampaign->maps.at(size_t(level))->definition.origin:chunkDefinition(m_worldId,level).origin;}
     Game chunkView(int level)const;
+    const World& chunkWorld(int level)const{return level==m_level?m_world:m_chunks.at(size_t(level)).world;}
+    const std::vector<Enemy>& chunkEnemies(int level)const{return level==m_level?m_enemies:m_chunks.at(size_t(level)).enemies;}
+    const std::vector<Pickup>& chunkPickups(int level)const{return level==m_level?m_pickups:m_chunks.at(size_t(level)).pickups;}
+    const std::vector<Clutter>& chunkClutter(int level)const{return level==m_level?m_clutter:m_chunks.at(size_t(level)).clutter;}
     const World& worldAt(Vec2& local)const;
     bool soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim=0,float farTrim=0)const;
     bool chunkResident(int level)const{return level>=0&&level<chunkCount()&&(level==m_level||m_chunks[size_t(level)].resident);}
@@ -243,6 +247,7 @@ public:
     bool won() const { return m_won; }
     bool dead() const { return m_player.health <= 0.0f; }
     int enemiesRemaining() const;
+    int enemiesRemaining(int level)const{return hostilesRemaining(level);}
     float hitFlash()const{return m_hitFlash;}
     const Enemy* targetEnemy()const;
     static bool testCombat();
@@ -344,10 +349,12 @@ public:
     bool inventoryOpen()const{return m_inventoryOpen;}
     // Reactor rendering wakes during the first lift shake, one vertical band
     // at a time. Direct reactor entry and restored underground saves bypass it.
-    float dormantBelow()const{
-     if(!m_world.hasLift()||m_player.z<-2)return -1000.f;
-     if(m_world.liftPhase()==World::LiftPhase::Ready)return -4.5f;
-     if(m_world.liftPhase()==World::LiftPhase::Ascending)return -4.5f-5.5f*std::clamp((m_world.liftPhaseTime()-10.f)/3.f,0.f,1.f);
+    float dormantBelow()const{return dormantBelow(m_level);}
+    float dormantBelow(int level)const{
+     const auto&world=chunkWorld(level);
+     if(!world.hasLift()||m_player.z<-2)return -1000.f;
+     if(world.liftPhase()==World::LiftPhase::Ready)return -4.5f;
+     if(world.liftPhase()==World::LiftPhase::Ascending)return -4.5f-5.5f*std::clamp((world.liftPhaseTime()-10.f)/3.f,0.f,1.f);
      return -1000.f;
     }
     bool dormantEntity(float z)const{return m_world.hasLift()&&z<-2&&m_player.z>=-2&&m_world.liftPhase()!=World::LiftPhase::Crashed;}
