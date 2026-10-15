@@ -5,20 +5,21 @@ namespace {
 StateId squadKey(AiFaction faction,StateId squad){std::string value="npc/squad/"+std::to_string(int(faction))+"/"+std::to_string(squad)+"/cursor";StateId hash=2166136261u;for(unsigned char c:value)hash=(hash^c)*16777619u;return hash|0x80000000u;}
 }
 AiTarget Game::guardSquadReport(size_t actor)const{
+ if(npcIncapacitated(actor))return {};
  const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;if(!c.squad)return {};auto faction=actorFaction(npc.track());AiTarget report;float best=1e9f;auto origin=chunkOffset(npc.level);
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&source=m_friendlyActors[i];const auto&t=source.track();
-  if(t.ai.mode!=ActorAiMode::Guard||t.ai.squad!=c.squad||actorFaction(t)!=faction||!chunkResident(source.level)||!autonomousActor(t)||source.pose.clip==4||(t.deadState&&state(t.deadState))||guardState(i)!=GuardState::Alert||!state(friendlyKey(i,"guard_seen")))continue;
+  if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||t.ai.squad!=c.squad||actorFaction(t)!=faction||!chunkResident(source.level)||!autonomousActor(t)||source.pose.clip==4||(t.deadState&&state(t.deadState))||guardState(i)!=GuardState::Alert||!state(friendlyKey(i,"guard_seen")))continue;
   auto delta=source.pose.position+chunkOffset(source.level)-origin-npc.pose.position;float height=source.pose.z-npc.pose.z,range=lengthSq(delta)+height*height;if(range>18*18||range>=best)continue;auto target=guardTarget(i);if(!guardCanSee(i,source.pose,target))continue;
   if(!factionsHostile(faction,target.faction))continue;target.position+=chunkOffset(source.level)-origin;report=target;best=range;
  }return report;
 }
 bool Game::guardFireSlot(size_t actor)const{return guardTaskAllows(actor,GuardTask::Fire)&&!state(friendlyKey(actor,"guard_danger_ms"))&&!state(friendlyKey(actor,"engineer_pad_stage"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
 int Game::guardCoveringPeer(size_t actor)const{
- if(actor>=m_friendlyActors.size())return 0;const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto target=guardTarget(actor);
+ if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return 0;const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto target=guardTarget(actor);
  bool anchor=t.ai.role==GuardSquadRole::Heavy||t.ai.role==GuardSquadRole::Sharpshooter||(t.ai.role==GuardSquadRole::Default&&guardSuppressionEnabled(t.ai)&&!guardFlankSide(actor));
  if(!anchor||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!state(friendlyKey(actor,"guard_confirmed"))||!state(friendlyKey(actor,"guard_memory")))return 0;
  auto faction=actorFaction(t);auto origin=chunkOffset(npc.level);int chosen=0;float nearest=18.f*18.f;
- auto livingPeer=[&](size_t peer){const auto&other=m_friendlyActors[peer];const auto&c=other.track();return c.ai.mode==ActorAiMode::Guard&&c.ai.squad==t.ai.squad&&actorFaction(c)==faction&&chunkResident(other.level)&&autonomousActor(c)&&other.pose.clip!=4&&(!c.deadState||!state(c.deadState));};
+ auto livingPeer=[&](size_t peer){const auto&other=m_friendlyActors[peer];const auto&c=other.track();return !npcIncapacitated(peer)&&c.ai.mode==ActorAiMode::Guard&&c.ai.squad==t.ai.squad&&actorFaction(c)==faction&&chunkResident(other.level)&&autonomousActor(c)&&other.pose.clip!=4&&(!c.deadState||!state(c.deadState));};
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor||!livingPeer(i))continue;const auto&other=m_friendlyActors[i];const auto&c=other.track();auto get=[&](const char*f){return state(friendlyKey(i,f));};
   auto delta=other.pose.position+chunkOffset(other.level)-origin-npc.pose.position;float height=other.pose.z-npc.pose.z,distance=lengthSq(delta)+height*height;if(distance>nearest||get("guard_danger_ms"))continue;
   auto selected=guardTarget(i);if(selected.valid()&&(selected.kind!=target.kind||selected.index!=target.index||(selected.kind!=ShotKind::Npc&&selected.level!=target.level)))continue;
@@ -36,11 +37,12 @@ int Game::guardCoveringPeer(size_t actor)const{
  }return chosen;
 }
 bool Game::guardSuppressionPoint(size_t actor,Point3& point)const{
+ if(npcIncapacitated(actor))return false;
  const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto target=guardTarget(actor);
  if(!guardSuppressionEnabled(t.ai)||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!get("guard_confirmed")||!get("guard_memory")||!get("weapon_target")||get("guard_seen")||get("guard_suppress_ms")<=0||guardFlankSide(actor)!=0||guardCanSee(actor,npc.pose,target))return false;
  bool flank=guardCoveringPeer(actor)!=0;auto faction=actorFaction(t);
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];const auto&c=other.track();
-  if(c.ai.mode!=ActorAiMode::Guard||!c.ai.armed||c.ai.squad!=t.ai.squad||actorFaction(c)!=faction||!chunkResident(other.level)||!autonomousActor(c)||other.pose.clip==4||(c.deadState&&state(c.deadState))||!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")))continue;
+  if(npcIncapacitated(i)||c.ai.mode!=ActorAiMode::Guard||!c.ai.armed||c.ai.squad!=t.ai.squad||actorFaction(c)!=faction||!chunkResident(other.level)||!autonomousActor(c)||other.pose.clip==4||(c.deadState&&state(c.deadState))||!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")))continue;
   auto selected=guardTarget(i);if(selected.kind==target.kind&&selected.index==target.index&&selected.level==target.level){flank=true;break;}
  }
  if(!flank)return false;
@@ -60,6 +62,7 @@ bool Game::guardSuppressionPoint(size_t actor,Point3& point)const{
 void Game::updateGuardSquadSlots(float dt){
  struct Group{StateId key;std::vector<size_t> actors;};std::vector<Group> groups;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard||!t.ai.squad)continue;
+  if(npcIncapacitated(i)){setState(friendlyKey(i,"guard_slot"),0);setState(friendlyKey(i,"guard_slot_ms"),0);continue;}
   int lease=std::max(0,state(friendlyKey(i,"guard_slot_ms"))-npcMilliseconds(i,dt,"squad_fraction"));auto target=guardTarget(i);
   Point3 cover;bool suppression=guardSuppressionPoint(i,cover);
   bool ordinary=guardState(i)==GuardState::Alert&&guardCanSee(i,npc.pose,target)&&guardShotMatches(i,guardShot(i,npc.pose,npcWeaponPoseAt(i,npc.pose,{target.position.x,target.position.y,target.feet+target.height*.6f},1)));
@@ -78,17 +81,19 @@ void Game::updateGuardSquadSlots(float dt){
  }
 }
 int Game::guardFlankSide(size_t actor)const{
+ if(npcIncapacitated(actor))return 0;
  if(state(friendlyKey(actor,"schedule"))==int(GuardSchedule::Patient))return 0;
  const auto&npc=m_friendlyActors[actor];if(!npc.track().ai.squad)return 0;auto target=guardTarget(actor);if(!target.valid())return 0;
  if(npc.track().ai.role!=GuardSquadRole::Default){if(!guardRoleProfile(npc.track().ai.role).flanks)return 0;return npc.track().ai.role==GuardSquadRole::Rusher?1:-1;}
  int rank=0,count=0;
- for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();if(t.ai.mode!=ActorAiMode::Guard||!t.ai.armed||t.ai.squad!=npc.track().ai.squad||actorFaction(t)!=actorFaction(npc.track())||!autonomousActor(t)||other.pose.clip==4||(t.deadState&&state(t.deadState))||!chunkResident(other.level))continue;
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||!t.ai.armed||t.ai.squad!=npc.track().ai.squad||actorFaction(t)!=actorFaction(npc.track())||!autonomousActor(t)||other.pose.clip==4||(t.deadState&&state(t.deadState))||!chunkResident(other.level))continue;
   auto selected=guardTarget(i);if(selected.kind!=target.kind||selected.index!=target.index||selected.level!=target.level)continue;auto delta=other.pose.position+chunkOffset(other.level)-chunkOffset(npc.level)-npc.pose.position;if(lengthSq(delta)>18*18)continue;if(i<actor)++rank;++count;
  }return count>1?(rank%3==1?-1:rank%3==2?1:0):0;
 }
 bool Game::guardPositionReserved(size_t actor,Vec2 position,float feet)const{
+ if(npcIncapacitated(actor))return false;
  const auto&npc=m_friendlyActors[actor];if(!npc.track().ai.squad)return false;auto origin=chunkOffset(npc.level);
- for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];if(!chunkResident(other.level)||!autonomousActor(other.track())||other.pose.clip==4||(other.track().deadState&&state(other.track().deadState))||other.track().ai.squad!=npc.track().ai.squad||actorFaction(other.track())!=actorFaction(npc.track()))continue;
+ for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];if(npcIncapacitated(i)||!chunkResident(other.level)||!autonomousActor(other.track())||other.pose.clip==4||(other.track().deadState&&state(other.track().deadState))||other.track().ai.squad!=npc.track().ai.squad||actorFaction(other.track())!=actorFaction(npc.track()))continue;
   auto current=other.pose.position+chunkOffset(other.level)-origin;if(std::fabs(feet-other.pose.z)<npc.track().scale&&lengthSq(current-position)<.7f*.7f)return true;
   if(state(friendlyKey(i,"guard_danger_ms"))&&state(friendlyKey(i,"guard_danger_goal"))){Vec2 escape{state(friendlyKey(i,"guard_danger_goal_x"))*.001f-origin.x,state(friendlyKey(i,"guard_danger_goal_y"))*.001f-origin.y};if(std::fabs(feet-state(friendlyKey(i,"guard_danger_goal_z"))*.001f)<npc.track().scale&&lengthSq(escape-position)<.7f*.7f)return true;}
   if(!state(friendlyKey(i,"guard_cover")))continue;

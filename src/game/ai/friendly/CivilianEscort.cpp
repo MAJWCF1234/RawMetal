@@ -4,6 +4,7 @@
 #include "ScheduleTables.h"
 namespace retro {
 void Game::civilianEscortIntent(World& world,int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<Enemy>& enemies,Vec2& goal,float& goalZ,bool& wantsMove,float& speedScale){
+ if(npcIncapacitated(actor)){wantsMove=false;return;}
  const auto&config=track.ai;CivilianMindView mind{*this,actor};
  auto get=[&](std::string_view field){return mind.get(field);};auto put=[&](std::string_view field,int value){mind.put(field,value);};
  float height=track.scale;int ms=std::max(1,int(std::round(dt*1000)));
@@ -56,6 +57,7 @@ void Game::civilianEscortIntent(World& world,int level,size_t actor,const ActorT
  if(!scheduleMove)wantsMove=false;
 }
 void Game::scriptedHandoffIntent(World& world,int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<Enemy>& enemies,Vec2& goal,float& goalZ,bool& wantsMove,float& speedScale){
+ if(npcIncapacitated(actor)){wantsMove=false;return;}
  CivilianMindView mind{*this,actor};
  auto get=[&](std::string_view field){return mind.get(field);};auto put=[&](std::string_view field,int value){mind.put(field,value);};
  wantsMove=false;speedScale=1.f;

@@ -21,6 +21,10 @@ void Game::setState(StateId id,int value){
  if(it==m_states.end()||it->id!=id){if(value)m_states.insert(it,{id,value});}else if(value)it->value=value;else m_states.erase(it);
 }
 ObjectiveStatus Game::objective(StateId id)const{int index=findValue(m_objectives,id);return index<0?ObjectiveStatus::Hidden:static_cast<ObjectiveStatus>(m_objectives[size_t(index)].value);}
+std::string_view Game::activeObjectiveText()const{
+ if(m_customCampaign)for(const auto&map:m_customCampaign->maps)for(const auto&label:map->objectiveTexts)if(objective(label.id)==ObjectiveStatus::Active)return label.text;
+ return {};
+}
 void Game::setObjective(StateId id,ObjectiveStatus status){if(!id)return;int value=int(status),index=findValue(m_objectives,id);if(index<0){if(status!=ObjectiveStatus::Hidden)m_objectives.push_back({id,value});}else if(status==ObjectiveStatus::Hidden)m_objectives.erase(m_objectives.begin()+index);else m_objectives[size_t(index)].value=value;}
 int Game::questItemCount(StateId id)const{int index=findValue(m_questItems,id);return index<0?0:m_questItems[size_t(index)].count;}
 bool Game::hasQuestItem(StateId id,int count)const{return count>0&&questItemCount(id)>=count;}

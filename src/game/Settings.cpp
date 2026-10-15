@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "../world/CustomCampaign.h"
 #include <filesystem>
 #include <fstream>
 #include <cmath>
@@ -127,7 +128,20 @@ bool Game::testSettings(){
  {Game title;title.m_level=3;title.showTitleScreen();InputState accept{};accept.menuAccept=true;title.update(accept,.02f);
  if(title.titleScreen()||title.paused()||title.level()!=0)return false;
  }
- {Game title;title.showTitleScreen();InputState down{};down.menuDown=true;title.update(down,.02f);title.update({},.02f);InputState accept{};accept.menuAccept=true;title.update(accept,.02f);if(!title.titleScreen()||!title.customMapsOpen())return false;title.update({},.02f);title.update(accept,.02f);if(title.titleScreen()||!title.world().horrorMode())return false;}
+ // Custom Maps lists installed campaigns and Back. An empty catalog must
+ // return to the title, while an installed pack launches its own world.
+ for(bool installed:{false,true}){Game title;
+  std::shared_ptr<CustomCampaign> campaign;
+  if(installed){campaign=std::make_shared<CustomCampaign>();campaign->name="Settings menu fixture";campaign->key=883016;
+   auto map=std::make_shared<AuthoredMapData>();map->name="Menu room";map->definition={{0,0},{6.5f,6.5f},0,Environment::Interior,false,8,.3f,42};
+   AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);campaign->maps.push_back(map);title.m_customCampaigns.push_back(campaign);
+  }
+  title.showTitleScreen();InputState down{};down.menuDown=true;title.update(down,.02f);title.update({},.02f);InputState accept{};accept.menuAccept=true;title.update(accept,.02f);
+  if(!title.titleScreen()||!title.customMapsOpen()||title.customMenuLabel(0)!=(installed?"Settings menu fixture":"BACK TO TITLE"))return false;
+  title.update({},.02f);title.update(accept,.02f);
+  if(installed){if(title.titleScreen()||title.worldId()!=WorldId::Custom||title.m_customCampaign!=campaign)return false;}
+  else if(!title.titleScreen()||title.customMapsOpen())return false;
+ }
  auto game=validationScene(Enemy::Kind::Huntsman);InputState escape{};escape.escape=true;game.update(escape,.02f);
  if(!game.paused()||game.quitRequested())return false;
  game.update(escape,.02f);if(!game.paused())return false;

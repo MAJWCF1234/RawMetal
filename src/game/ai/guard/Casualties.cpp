@@ -2,10 +2,10 @@
 namespace retro {
 int Game::guardPatientMedic(size_t actor)const{
  const auto&patient=m_friendlyActors.at(actor);const auto&track=patient.track();
- if(!track.health||!track.ai.squad||!autonomousActor(track)||patient.pose.clip==4||(track.deadState&&state(track.deadState))||state(track.damageState)<track.health*.5f)return -1;
+ if(npcIncapacitated(actor)||!track.health||!track.ai.squad||!autonomousActor(track)||patient.pose.clip==4||(track.deadState&&state(track.deadState))||state(track.damageState)<track.health*.5f)return -1;
  auto origin=chunkOffset(patient.level);int chosen=-1;float nearest=10000;
  for(size_t medic=0;medic<m_friendlyActors.size();++medic){const auto&npc=m_friendlyActors[medic];const auto&t=npc.track();auto get=[&](const char*f){return state(friendlyKey(medic,f));};
-  if(medic==actor||t.ai.mode!=ActorAiMode::Guard||t.ai.role!=GuardSquadRole::Medic||t.ai.squad!=track.ai.squad||actorFaction(t)!=actorFaction(track)||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||get("support_target")!=int(actor)+1||get("support_used")>=guardRoleProfile(t.ai.role).treatments||get("support_cooldown")||get("guard_danger_ms")||get("guard_under_fire"))continue;
+  if(medic==actor||npcIncapacitated(medic)||t.ai.mode!=ActorAiMode::Guard||t.ai.role!=GuardSquadRole::Medic||t.ai.squad!=track.ai.squad||actorFaction(t)!=actorFaction(track)||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||get("support_target")!=int(actor)+1||get("support_used")>=guardRoleProfile(t.ai.role).treatments||get("support_cooldown")||get("guard_danger_ms")||get("guard_under_fire"))continue;
   if(get("schedule")!=int(GuardSchedule::None)&&get("schedule")!=int(GuardSchedule::Medic))continue;
   float distance=length(npc.pose.position+chunkOffset(npc.level)-origin-patient.pose.position);
   if(distance>12||std::fabs(npc.pose.z-patient.pose.z)>.3f||distance>=nearest)continue;

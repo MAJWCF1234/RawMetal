@@ -37,7 +37,12 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();}
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+ // Fresh worlds and restored saves share one zero-time pose initialization.
+ // This stamps canonical machinery/NPC state without executing script events
+ // or advancing AI work, sounds, healing or finite resource clocks.
+ updateMechanisms(0);
+}
 void Game::equipWeapon(WeaponId id){
  if(id==WeaponId::Fists){m_weaponEquipped=false;m_holster=1.f;return;}
  m_equippedWeapon=id;m_weaponEquipped=true;m_holster=m_player.ammo>0?0.f:1.f;
@@ -78,6 +83,9 @@ void Game::crossChunkBoundary(){
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){next=level;break;}
  }
  if(next==m_level)return;int previous=m_level;
+ // Release a captive while their local coordinates still belong to this
+ // chunk, before the seam checkpoint serializes the new player ownership.
+ if(heldNpc()>=0)releaseNpc(true);
  auto shift=chunkOffset(m_level)-chunkOffset(next);bool carried=holdingClutter();Clutter held;if(carried){held=m_clutter[m_heldClutter];m_clutter.erase(m_clutter.begin()+m_heldClutter);}m_heldClutter=-1;
  // Outdoor pursuers standing at the seam hand off with the player. Without
  // this, changing the active chunk froze an alerted creature one metre behind
@@ -155,7 +163,7 @@ void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int 
 
 int Game::hostilesRemaining(int level)const{
  const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive;}));
- for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardHostileToPlayer(i))++n;}return n;
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&!npcIncapacitated(i)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardHostileToPlayer(i))++n;}return n;
 }
 int Game::enemiesRemaining()const{return hostilesRemaining(m_level);}
 const Enemy* Game::targetEnemy()const{
@@ -332,7 +340,9 @@ void Game::update(const InputState& input, float dt) {
 
         updateMechanisms(dt);
         updateLift(dt);
-        updateMovement(input,dt);
+        auto movement=input;if(heldNpc()>=0){movement.sprint=false;movement.jump=false;movement.crouch=false;}
+        updateMovement(movement,dt);
+        updateStealth(input,dt);
         if(m_world.hasLift()){
             m_hazmatPushCooldown=std::max(0.f,m_hazmatPushCooldown-dt);
             if(m_hazmat.initialized&&length(m_velocity)>.5f&&m_hazmatPushCooldown<=0){
@@ -351,13 +361,13 @@ void Game::update(const InputState& input, float dt) {
         // Resident NPCs can operate ordinary doors without the player entering
         // their chunk. Transfer leaves are mirrored by the streamer instead.
         for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))m_chunks[level].world.updateDoors(dt,false);
-        bool carryingAtStart=holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1);updateClutter(input,dt);
+        bool carryingAtStart=heldNpc()>=0||(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1));updateClutter(input,dt);
 
         const auto&cycle=equippedWeaponDef().cycle;const auto&melee=kUnarmedMelee;
         float oldReload=m_reloadTimer;m_reloadTimer=std::max(0.f,m_reloadTimer-dt);
         if(oldReload>0&&m_reloadTimer==0){m_player.loaded=std::min(cycle.tubeCapacity,m_player.ammo);m_shotAge=0;}
         m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
-        m_guarding=input.guard&&unarmed();if(m_guarding)m_punchAge=10;
+        m_guarding=heldNpc()<0&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
         float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
         float lower=(!m_weaponEquipped||m_player.ammo<=0)&&m_shotAge>cycle.autoHolsterAfter?1.f:0.f;
         m_holster+=std::clamp(lower-m_holster,-dt*2.6f,dt*2.6f);
@@ -378,6 +388,7 @@ void Game::update(const InputState& input, float dt) {
         // numerically last compiled chunk is never an implicit ending.
     }
 
+    if(dead()&&heldNpc()>=0)releaseNpc(true);
     m_previousFire = input.fire;
     m_weaponKick = std::max(0.0f, m_weaponKick - dt * 3.0f);
     m_damageFlash = std::max(0.0f, m_damageFlash - dt * 3.0f);
@@ -428,18 +439,15 @@ void Game::applyPunchHit(Enemy&enemy){
  enemySound(enemy,killed?2:0,killed?.85f:.45f,killed?1.f:1.15f);
 }
 void Game::applyNpcPunchHit(size_t actor){
- if(actor>=m_friendlyActors.size())return;const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
+ if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return;const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
  sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;
- // Stealth kill: from behind an unaware guard/civilian is lethal. Frontal punches
- // still hurt and raise the target through normal damage response.
- Vec2 facing{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)};
- bool fromBehind=dot(normalized(m_player.pos-npc.pose.position),facing)<0.f;
- bool unaware=track.ai.mode!=ActorAiMode::Guard||guardState(actor)==GuardState::Patrol||guardState(actor)==GuardState::Suspicious;
- float damage=(fromBehind&&unaware)?float(track.health):kUnarmedMelee.damage;
+ bool rearTakedown=canTakedown(actor);
+ float damage=rearTakedown?float(track.health):kUnarmedMelee.damage;
  damageFriendly(actor,damage,m_player.pos,{ShotKind::Player,m_level,0});
- if(fromBehind&&unaware)m_hitStopRemaining=std::max(m_hitStopRemaining,2.5f);
+ if(rearTakedown)m_hitStopRemaining=std::max(m_hitStopRemaining,.06f);
 }
 void Game::updateVrMelee(const InputState&input,float dt){
+ if(heldNpc()>=0)return;
  const auto&melee=kUnarmedMelee;
  for(int hand=0;hand<2;++hand){m_vrFistCooldown[hand]=std::max(0.f,m_vrFistCooldown[hand]-dt);auto end=m_vrHandPosition[hand],start=m_vrPreviousFist[hand];bool tracked=m_vrHandValid[hand],continuous=m_vrMeleeTracked[hand];m_vrPreviousFist[hand]=end;m_vrMeleeTracked[hand]=tracked;
   if(!tracked||!continuous||!input.vrGrip[hand]||m_vrFistCooldown[hand]>0||(holdingClutter()&&m_vrCarryHand==hand)||(hand==1&&m_weaponEquipped&&!unarmed())||(hand==0&&m_vrSupportGrip))continue;

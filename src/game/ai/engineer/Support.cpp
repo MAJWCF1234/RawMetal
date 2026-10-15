@@ -2,6 +2,7 @@
 #include "Drones.h"
 namespace retro {
 void Game::guardEngineerIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,int ms,Vec2&goal,float&goalZ,bool&wantsMove){
+ if(npcIncapacitated(actor)){wantsMove=false;return;}
  auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};
  auto target=guardTarget(actor);Vec2 remembered{get("guard_x")*.001f-chunkOffset(level).x,get("guard_y")*.001f-chunkOffset(level).y};float rememberedFeet=get("guard_z")*.001f;
  const float distance=length(pose.position-remembered),standOff=std::min(8.f,std::max(6.f,track.ai.attackRange*.6f));

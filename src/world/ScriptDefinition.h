@@ -10,6 +10,7 @@ using StateId=std::uint32_t;
 constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
 enum class ObjectiveStatus { Hidden, Active, Complete, Failed };
 struct StateValue {StateId id=0;int value=0;};
+struct ObjectiveText {StateId id=0;std::string text;};
 // A saved, trigger-started timeline shared by main and custom campaigns.
 struct TimedSequence {
  StateId timerState=0,finishState=0;

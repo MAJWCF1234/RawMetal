@@ -146,6 +146,8 @@ struct AuthoredMapData {
     std::vector<TimedSequence> timedSequences;
     std::vector<ActorTrack> actorTracks;
     std::vector<SequenceCue> sequenceCues;
+    std::vector<ScriptEvent> scriptEvents;
+    std::vector<ObjectiveText> objectiveTexts;
     std::vector<AuthoredNavHint> navHints;
 };
 struct CustomCampaign {

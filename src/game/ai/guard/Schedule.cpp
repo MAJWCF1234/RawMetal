@@ -7,6 +7,7 @@ StateId taskDroneKey(int slot,std::string_view field){auto text="drone/slot/"+st
 }
 GuardTaskPolicy guardTaskPolicy(GuardSchedule schedule){const auto&row=guardScheduleDefinition(schedule);return {row.schedule.interruptMask,row.work};}
 bool Game::guardTaskAllows(size_t actor,GuardTask task)const{
+ if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return false;
  auto get=[&](const char*f){return state(friendlyKey(actor,f));};
  // Direct mechanical helpers and older saves retain their existing contract
  // until the live intent pass adopts them.
@@ -42,6 +43,7 @@ void Game::failGuardTask(size_t actor,GuardTaskReason reason){
  put("task_retry",reason==GuardTaskReason::Unavailable?std::min(5000,ctx.track.ai.aimMs+1000):700);
 }
 void Game::runGuardSchedule(int level,size_t actor,const ActorTrack&track,ActorPose&pose,float dt,int ms,Vec2&goal,float&goalZ,bool&wantsMove){
+ if(npcIncapacitated(actor)){wantsMove=false;return;}
  auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};
  auto previous=GuardSchedule(get("schedule"));int oldSubject=get("task_subject");unsigned oldConditions=unsigned(get("task_conditions"));
  auto target=guardTarget(actor);unsigned conditions=guardConditions(actor,pose);

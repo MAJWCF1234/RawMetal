@@ -46,6 +46,11 @@ float number(const std::vector<std::string>& f,size_t index,const char* label){
 bool boolean(const std::vector<std::string>& f,size_t index,const char* label){
  int v=integer(f,index,label);if(v!=0&&v!=1)throw std::runtime_error(std::string("invalid ")+label);return v!=0;
 }
+StateId scriptName(const std::vector<std::string>& f,size_t index,const char* label){
+ if(index>=f.size())throw std::runtime_error(std::string("missing ")+label);auto value=decode(f[index]);
+ if(value.empty()||value.size()>96||!std::all_of(value.begin(),value.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.'||c=='/';}))throw std::runtime_error(std::string("invalid ")+label);
+ return stateId(value);
+}
 std::uint64_t campaignKey(std::string value){
  std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return char(std::tolower(c));});
  std::uint64_t h=1469598103934665603ull;for(unsigned char c:value){h^=c;h*=1099511628211ull;}return h;
@@ -92,6 +97,32 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()!=3)throw std::runtime_error("malformed VISIBLE_GROUP record");auto map=mapAt(maps,f);
    int group=integer(f,2,"visible residency group");if(group<0)throw std::runtime_error("visible residency group must be nonnegative");
    auto& groups=map->visibleResidencyGroups;if(std::find(groups.begin(),groups.end(),group)==groups.end())groups.push_back(group);
+  }else if(tag=="OBJECTIVE_TEXT"){
+   if(f.size()!=4)throw std::runtime_error("malformed OBJECTIVE_TEXT record");auto map=mapAt(maps,f);auto id=scriptName(f,2,"objective name");auto label=decode(f[3]);
+   if(label.empty()||label.size()>80||!std::all_of(label.begin(),label.end(),[](unsigned char c){return c>=32&&c<=126;})||std::all_of(label.begin(),label.end(),[](char c){return c==' ';}))throw std::runtime_error("invalid objective text; use 1 to 80 printable ASCII characters");
+   for(const auto&other:maps)if(other)for(const auto&text:other->objectiveTexts)if(text.id==id)throw std::runtime_error("duplicate objective name");
+   if(map->objectiveTexts.size()>=128)throw std::runtime_error("too many objective texts");map->objectiveTexts.push_back({id,std::move(label)});
+  }else if(tag=="SCRIPT_EVENT"){
+   if(f.size()!=12)throw std::runtime_error("malformed SCRIPT_EVENT record");auto map=mapAt(maps,f);ScriptEvent event;event.id=scriptName(f,2,"script event name");event.level=integer(f,1,"map index");
+   for(const auto&other:maps)if(other)for(const auto&previous:other->scriptEvents)if(previous.id==event.id)throw std::runtime_error("duplicate script event name");
+   event.x1=number(f,3,"event x1");event.y1=number(f,4,"event y1");event.x2=number(f,5,"event x2");event.y2=number(f,6,"event y2");event.bottom=number(f,7,"event bottom");event.top=number(f,8,"event top");
+   if(event.x1<0||event.y1<0||event.x2>World::Width||event.y2>World::Height||event.x1>=event.x2||event.y1>=event.y2||event.bottom>=event.top)throw std::runtime_error("invalid script event region");
+   if(!f[9].empty())event.requireState=scriptName(f,9,"event gate state");event.requireValue=integer(f,10,"event gate value");
+   if(event.requireValue< -100000||event.requireValue>100000||(!event.requireState&&event.requireValue!=1))throw std::runtime_error("invalid script event gate");event.requireEnemiesClear=boolean(f,11,"event enemy-clear gate");event.once=true;
+   if(map->scriptEvents.size()>=128)throw std::runtime_error("too many script events");map->scriptEvents.push_back(std::move(event));
+  }else if(tag=="SCRIPT_ACTION"){
+   if(f.size()<4)throw std::runtime_error("malformed SCRIPT_ACTION record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"action event name");
+   auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("script action references an undeclared event");
+   ScriptAction action;const auto&kind=f[3];
+   if(kind=="STATE"||kind=="OBJECTIVE"||kind=="ITEM"){
+    if(f.size()!=6)throw std::runtime_error("malformed named SCRIPT_ACTION record");action.id=scriptName(f,4,"action name");action.value=integer(f,5,"action value");
+    if(kind=="STATE"){if(action.value< -100000||action.value>100000)throw std::runtime_error("invalid script state value");action.type=ScriptAction::Type::SetState;}
+    else if(kind=="OBJECTIVE"){if(action.value<0||action.value>3)throw std::runtime_error("invalid script objective status");action.type=ScriptAction::Type::SetObjective;}
+    else{if(action.value<1||action.value>99)throw std::runtime_error("invalid script item count");action.type=ScriptAction::Type::GiveItem;}
+   }else if(kind=="CHECKPOINT"||kind=="COMPLETE"){
+    if(f.size()!=4)throw std::runtime_error("malformed terminal SCRIPT_ACTION record");action.type=kind=="CHECKPOINT"?ScriptAction::Type::Checkpoint:ScriptAction::Type::CompleteCampaign;
+   }else throw std::runtime_error("unknown script action type");
+   if(event->actions.size()>=16)throw std::runtime_error("too many actions for script event");event->actions.push_back(action);
   }else if(tag=="SIGN"){
    if(f.size()!=11)throw std::runtime_error("malformed SIGN record");auto map=mapAt(maps,f);
    AuthoredSign sign;sign.position={number(f,2,"sign x"),number(f,3,"sign y")};sign.z=number(f,4,"sign z");
@@ -238,6 +269,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  for(size_t i=0;i<maps.size();++i){
   if(!maps[i]||!declared[i])throw std::runtime_error("custom campaign maps require contiguous MAP records");
   if(maps[i]->layers.empty())throw std::runtime_error("custom campaign map has no layers");
+  for(const auto&event:maps[i]->scriptEvents){
+   if(event.actions.empty())throw std::runtime_error("script event requires at least one action");
+   for(const auto&action:event.actions)if(action.type==ScriptAction::Type::SetObjective){bool named=false;for(const auto&other:maps)if(other)for(const auto&label:other->objectiveTexts)named|=label.id==action.id;if(!named)throw std::runtime_error("script objective has no OBJECTIVE_TEXT");}
+  }
   for(auto& layer:maps[i]->layers){
    if(layer.name.empty())layer.name="Custom floor";
    for(auto& row:layer.rows)if(row.size()!=24)throw std::runtime_error("custom map rows must be exactly 24 characters");

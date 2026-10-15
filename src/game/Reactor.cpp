@@ -5,19 +5,19 @@ void World::refreshReactorTerminals(){
  for(auto&t:m_terminals){
   if(t.reactorAction==1){t.title="R-03 / CONTAINMENT CONTROL";
    switch(m_reactorStage){
-    case ReactorStage::NoDisk:t.line1="DRIVE A: NOT READY.";t.line2="CONTAINMENT INTERLOCK: FAIL-SAFE.";break;
-    case ReactorStage::DiskHeld:t.line1="REMOVABLE MEDIA DETECTED.";t.line2="DRIVE A: STANDBY.";break;
-    case ReactorStage::DiskLoaded:t.line1=m_reactorFault?"RETURN TRIP / INLET PRESSURE LOW.":"SERVICE SESSION ACTIVE.";t.line2="FEED: 0 BAR. RETURN: ISOLATED.";break;
-    case ReactorStage::FeedPrimed:t.line1="FEED: 4.2 BAR. RETURN: ISOLATED.";t.line2="CONTAINMENT INTERLOCK: NO CIRCULATION.";break;
-    case ReactorStage::ReturnPrimed:t.line1="COOLANT CIRCULATION: NOMINAL.";t.line2="E / ACKNOWLEDGE INTERLOCK RESET.";break;
+    case ReactorStage::NoDisk:t.line1="DRIVE A: AUTH FLOPPY REQUIRED.";t.line2="TAKE THE AUTH FLOPPY FROM THE UPPER WORKBENCH.";break;
+    case ReactorStage::DiskHeld:t.line1="AUTH FLOPPY RECOVERED. DRIVE A: EMPTY.";t.line2="USE THIS COMPUTER TO INSERT THE FLOPPY.";break;
+    case ReactorStage::DiskLoaded:t.line1=m_reactorFault?"RETURN TRIPPED / FEED PRESSURE TOO LOW.":"AUTH FLOPPY ACCEPTED / SERVICE SESSION ACTIVE.";t.line2="NEXT: PRIME P-01 COOLANT FEED ON THE LOWER FLOOR.";break;
+    case ReactorStage::FeedPrimed:t.line1="P-01 FEED PRIMED: 4.2 BAR. RETURN: ISOLATED.";t.line2="NEXT: PRIME P-02 COOLANT RETURN ON THE UPPER FLOOR.";break;
+    case ReactorStage::ReturnPrimed:t.line1="COOLANT CIRCULATION: NOMINAL.";t.line2="USE THIS COMPUTER TO RESET THE INTERLOCK.";break;
     case ReactorStage::Released:t.line1="INTERLOCK RESET ACCEPTED.";t.line2="BULKHEAD: LOCAL CONTROL ENABLED.";break;
    }
   }else if(t.reactorAction==2){
    t.line1=m_reactorStage<ReactorStage::DiskLoaded?"REMOTE SERVICE LOCK.":m_reactorStage>=ReactorStage::FeedPrimed?"INLET PRESSURE: 4.2 BAR.":"INLET PRESSURE: 0 BAR.";
-   t.line2="P-01 / PRIMARY COOLANT FEED.";
+   t.line2=m_reactorStage<ReactorStage::DiskLoaded?"INSERT THE AUTH FLOPPY AT THE R-03 COMPUTER FIRST.":m_reactorStage==ReactorStage::ReturnPrimed?"REPRIMING THE FEED RESETS RETURN. RESET AT R-03.":m_reactorStage==ReactorStage::FeedPrimed?"NEXT: PRIME P-02 RETURN ON THE UPPER FLOOR.":m_reactorStage==ReactorStage::Released?"P-01 / CIRCULATION AUTHORIZED.":"P-01 / PRIME FEED BEFORE THE P-02 RETURN.";
   }else if(t.reactorAction==3){
    t.line1=m_reactorStage<ReactorStage::DiskLoaded?"REMOTE SERVICE LOCK.":m_reactorFault?"TRIPPED: INLET PRESSURE LOW.":m_reactorStage>=ReactorStage::ReturnPrimed?"RETURN FLOW: NOMINAL.":"RETURN FLOW: ISOLATED.";
-   t.line2="P-02 / PRIMARY COOLANT RETURN.";
+   t.line2=m_reactorStage<ReactorStage::DiskLoaded?"INSERT THE AUTH FLOPPY AT THE R-03 COMPUTER FIRST.":m_reactorStage==ReactorStage::DiskLoaded?"PRIME P-01 FEED ON THE LOWER FLOOR FIRST.":m_reactorStage==ReactorStage::Released?"P-02 / CIRCULATION AUTHORIZED.":m_reactorStage==ReactorStage::ReturnPrimed?"NEXT: CONFIRM THE INTERLOCK RESET AT R-03.":"P-02 / PRIME RETURN, THEN RESET THE R-03 COMPUTER.";
   }
  }
 }

@@ -5,7 +5,7 @@ namespace retro {
 namespace {
 Point3 unit(Point3 p){float length=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);return length>.0001f?p*(1/length):Point3{};}
 struct CleanupBodyFrame {Point3 pelvis{},spine{},rightShoulder{},leftShoulder{};};
-struct CleanupBodyFrames {unsigned clips=0;std::vector<unsigned> counts,offsets;std::vector<CleanupBodyFrame> poses;std::vector<float> durations;};
+struct CleanupBodyFrames {unsigned clips=0;std::vector<unsigned> counts,offsets;std::vector<CleanupBodyFrame> poses;std::vector<float> durations;std::vector<std::pair<Point3,Point3>> fallBounds;};
 const std::array<CleanupBodyFrames,6>& cleanupBodyFrames(){
  // Share the baked body frame with physical weapon placement. A fixed root
  // offset cannot seat a stock on a leaning or deeply kneeling shoulder.
@@ -24,6 +24,14 @@ const std::array<CleanupBodyFrames,6>& cleanupBodyFrames(){
    size_t layerEnd=payload+20+total*120;
    if(trailer[0]!=(compact?2u:1u)||trailer[1]!=samples||trailer[2]!=clips||trailer[3]!=120||data.size()<layerEnd)throw std::runtime_error("Invalid cleanup stance layer frames");
    table.poses.resize(total);
+   // The existing falling clip moves the torso away from the standing root.
+   // Retain its small per-sample bounds so shots hit the visible unconscious
+   // body, including during the fall, rather than an empty ankle-sized box.
+   table.fallBounds.resize(table.counts[4]);
+   for(unsigned frame=0;frame<table.counts[4];++frame){Point3 low{1000,1000,1000},high{-1000,-1000,-1000};size_t base=frameStart+size_t(table.offsets[4]+frame)*vertices*6;
+    for(unsigned vertex=0;vertex<vertices;++vertex){int16_t xyz[3];std::memcpy(xyz,data.data()+base+size_t(vertex)*6,6);Point3 p{xyz[0]*.001f,xyz[1]*.001f,xyz[2]*.001f};low={std::min(low.x,p.x),std::min(low.y,p.y),std::min(low.z,p.z)};high={std::max(high.x,p.x),std::max(high.y,p.y),std::max(high.z,p.z)};}
+    table.fallBounds[frame]={low,high};
+   }
    if(data.size()!=layerEnd){uint32_t count=0;if(data.size()!=layerEnd+8+size_t(clips)*4||std::memcmp(data.data()+layerEnd,"RMD1",4))throw std::runtime_error("Invalid cleanup animation durations");std::memcpy(&count,data.data()+layerEnd+4,4);if(count!=clips)throw std::runtime_error("Invalid cleanup animation duration count");table.durations.resize(clips);std::memcpy(table.durations.data(),data.data()+layerEnd+8,size_t(clips)*4);for(float duration:table.durations)if(!std::isfinite(duration)||duration<=0||duration>120)throw std::runtime_error("Invalid cleanup animation duration");}
    for(size_t frame=0;frame<table.poses.size();++frame){size_t base=payload+20+frame*120;auto&pose=table.poses[frame];std::memcpy(&pose.pelvis,data.data()+base,12);std::memcpy(&pose.spine,data.data()+base+12,12);std::memcpy(&pose.rightShoulder,data.data()+base+24,12);std::memcpy(&pose.leftShoulder,data.data()+base+72,12);for(auto point:{pose.pelvis,pose.spine,pose.rightShoulder,pose.leftShoulder})if(!std::isfinite(point.x)||!std::isfinite(point.y)||!std::isfinite(point.z))throw std::runtime_error("Invalid cleanup body frame");}
   }return result;
@@ -36,9 +44,26 @@ CleanupBodyFrame cleanupBodyFrame(int role,int clip,float phase){
 float cleanupAnimationDuration(ActorVisual visual,int clip){
  int role=int(visual)-int(ActorVisual::Cleanup);if(role<0||role>=6)return 0;const auto&table=cleanupBodyFrames()[size_t(role)];return clip>=0&&size_t(clip)<table.durations.size()?table.durations[size_t(clip)]:0;
 }
+std::pair<Point3,Point3> Game::friendlyShotBounds(size_t actor)const{
+ const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();Point3 center{npc.pose.position.x,npc.pose.position.y,npc.pose.z};
+ int role=int(track.visual)-int(ActorVisual::Cleanup);
+ if(!npcIncapacitated(actor)||npcHeld(actor)||role<0||role>=6)return {center-Point3{.2f,.2f,0},center+Point3{.2f,.2f,friendlyHullHeight(actor,track)}};
+ const auto&bounds=cleanupBodyFrames()[size_t(role)].fallBounds;float frame=std::clamp(npc.pose.phase,0.f,1.f)*(bounds.size()-1);size_t a=size_t(frame),b=std::min(a+1,bounds.size()-1);
+ auto [lo,hi]=bounds[a];const auto&next=bounds[b];lo={std::min(lo.x,next.first.x),std::min(lo.y,next.first.y),std::min(lo.z,next.first.z)};hi={std::max(hi.x,next.second.x),std::max(hi.y,next.second.y),std::max(hi.z,next.second.z)};
+ float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=track.scale/1.6f;Point3 low{1000,1000,1000},high{-1000,-1000,-1000};
+ for(float x:{lo.x,hi.x})for(float y:{lo.y,hi.y})for(float z:{lo.z,hi.z}){auto p=center+Point3{(x*c+z*s)*scale,(-x*s+z*c)*scale,y*scale};low={std::min(low.x,p.x),std::min(low.y,p.y),std::min(low.z,p.z)};high={std::max(high.x,p.x),std::max(high.y,p.y),std::max(high.z,p.z)};}
+ return {low-Point3{.02f,.02f,.02f},high+Point3{.02f,.02f,.02f}};
+}
+std::array<Point3,2> Game::heldNpcGrips()const{
+ int actor=heldNpc();if(actor<0)return {};const auto&npc=m_friendlyActors[size_t(actor)];int role=int(npc.track().visual)-int(ActorVisual::Cleanup);
+ Point3 right{-.18f,1.24f,0},left{.18f,1.24f,0};if(role>=0&&role<6){auto frame=cleanupBodyFrame(role,0,0);right=frame.rightShoulder;left=frame.leftShoulder;}
+ float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=npc.track().scale/1.6f;
+ auto grip=[&](Point3 p){p.y+=.05f;p.z-=.07f;return Point3{npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};};
+ return {grip(right),grip(left)};
+}
 NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const{
  const auto&track=m_friendlyActors.at(actor).track();NpcWeaponPose weapon;
- if(track.ai.mode!=ActorAiMode::Guard||!track.ai.armed)return weapon;
+ if(npcIncapacitated(actor)||track.ai.mode!=ActorAiMode::Guard||!track.ai.armed)return weapon;
  weapon.armed=true;weapon.handgun=guardHandgun(track.ai);weapon.raise=std::clamp(raise,0.f,1.f);
  float scale=track.scale/1.6f;Point3 forward{std::sin(pose.yaw),std::cos(pose.yaw),0},right{forward.y,-forward.x,0};
  // The cleanup shotgun sits close enough for the retained short forearms to
@@ -78,7 +103,7 @@ NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 ta
 }
 NpcWeaponPose Game::npcWeaponPose(size_t actor)const{
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();NpcWeaponPose weapon;
- if(track.ai.mode!=ActorAiMode::Guard||!track.ai.armed||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))return weapon;
+ if(npcIncapacitated(actor)||track.ai.mode!=ActorAiMode::Guard||!track.ai.armed||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))return weapon;
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};float raise=get("weapon_raise")*.001f;
  bool engineering=track.ai.role==GuardSquadRole::Engineer&&(get("drone_windup")||get("drone_busy"));if(engineering)raise=0;
  if(get("weapon_target")){auto shift=chunkOffset(npc.level);Point3 target{get("weapon_x")*.001f-shift.x,get("weapon_y")*.001f-shift.y,get("weapon_z")*.001f},cover;if(guardSuppressionPoint(actor,cover))target=cover;weapon=npcWeaponPoseAt(actor,npc.pose,target,raise);}
@@ -118,7 +143,7 @@ void Game::updateGuardCombat(float dt){
   const auto&gun=weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun);
   auto get=[&](const char*field){return state(friendlyKey(i,field));};auto put=[&](const char*field,int value){setState(friendlyKey(i,field),value);};
   auto cancelAction=[&](){put("weapon_action",0);put("weapon_action_ms",0);put("weapon_action_events",0);put("weapon_bash",0);put("weapon_bash_pose",0);};
-  if(!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState))){put("weapon_aim",0);put("weapon_raise",0);put("weapon_flash",0);put("weapon_recoil",0);put("guard_suppress_ms",0);put("weapon_reload",0);put("weapon_reloading",0);put("weapon_reload_events",0);cancelAction();continue;}
+  if(npcIncapacitated(i)||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState))){put("weapon_aim",0);put("weapon_raise",0);put("weapon_flash",0);put("weapon_recoil",0);put("guard_suppress_ms",0);put("weapon_reload",0);put("weapon_reloading",0);put("weapon_reload_events",0);cancelAction();continue;}
   int ms=npcMilliseconds(i,dt,"weapon_fraction");
   auto shift=chunkOffset(npc.level)-chunkOffset(m_level);
   auto pump=[&](float gain,float pitch){m_sounds.push_back({Sound::Pump,npc.pose.position+shift,gain,pitch,true,17,npc.pose.z+track.scale*.7f});};

@@ -8,7 +8,7 @@ META_EDITOR_PLAN_AREA: Ashfall / Forward Facility
 --- MAP_CODE_START ---
   if(m_level==1){
    // Ashfall Exclusion Zone — wasteland yard with forward facility and cleanup humans.
-   // Player start marker: {4.5f,6.5f,0.0f}.
+   // Player start marker: {4.1f,6.2f,0.0f}; face the arrival briefing cache.
    static constexpr MapRows RawMetal_Ashfall_Exclusion_Zone_L0_Wasteland_Yard = {
     "........................",
     ".GG.................CC..",
@@ -22,12 +22,12 @@ META_EDITOR_PLAN_AREA: Ashfall / Forward Facility
     "...GG..............CC...",
     "........................",
     "........................",
-    "......##########........",
-    "......#........#........",
-    "......#........#........",
-    "......#........#........",
-    "......#........#........",
-    "......####..####........",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
     "........................",
     "...CC..............GG...",
     "........................",
@@ -43,7 +43,7 @@ META_EDITOR_PLAN_AREA: Ashfall / Forward Facility
 
 --- CUSTOM_CAMPAIGN_DATA_START ---
 CAMPAIGN|ASHFALL EXCLUSION ZONE|0
-MAP|0|Ashfall / Forward Facility|0|0|4.5|6.5|0.0|1|2.8|0.27|brutal_wasteland|0|1|0|1|0
+MAP|0|Ashfall / Forward Facility|0|0|4.1|6.2|0.0|1|2.8|0.27|brutal_wasteland|0|1|0|1|0|-1|0|0|-1.5707963
 LAYER|0|0|Wasteland Yard|0.0|0.0
 ROW|0|0|0|........................
 ROW|0|0|1|.GG.................CC..
@@ -57,19 +57,19 @@ ROW|0|0|8|........................
 ROW|0|0|9|...GG..............CC...
 ROW|0|0|10|........................
 ROW|0|0|11|........................
-ROW|0|0|12|......##########........
-ROW|0|0|13|......#........#........
-ROW|0|0|14|......#........#........
-ROW|0|0|15|......#........#........
-ROW|0|0|16|......#........#........
-ROW|0|0|17|......####..####........
+ROW|0|0|12|........................
+ROW|0|0|13|........................
+ROW|0|0|14|........................
+ROW|0|0|15|........................
+ROW|0|0|16|........................
+ROW|0|0|17|........................
 ROW|0|0|18|........................
 ROW|0|0|19|...CC..............GG...
 ROW|0|0|20|........................
 ROW|0|0|21|........................
 ROW|0|0|22|.X......................
 ROW|0|0|23|........................
-# Forward facility shell (open south door at 11–13).
+# Forward facility shell. Keep the full two-metre south doorway at x11..13 open.
 STRUCT|0|6.0|12.0|16.0|12.16|0.0|2.65|0|3
 STRUCT|0|6.0|12.0|6.16|18.0|0.0|2.65|0|3
 STRUCT|0|15.84|12.0|16.0|18.0|0.0|2.65|0|3
@@ -79,29 +79,57 @@ STRUCT|0|6.16|12.16|15.84|17.84|2.55|2.7|0|2
 # Scrap walls / cover in the open yard.
 STRUCT|0|3.2|8.5|3.4|11.5|0.0|1.55|0|3
 STRUCT|0|18.5|9.0|20.5|9.2|0.0|1.45|0|3
-STRUCT|0|19.2|14.0|19.4|17.5|0.0|1.7|0|3
-STRUCT|0|8.5|4.8|11.5|5.0|0.0|1.35|0|3
+STRUCT|0|22.2|14.0|22.4|17.5|0.0|1.7|0|3
+STRUCT|0|8.0|5.6|8.2|7.0|0.0|1.35|0|3
+# West screen hides the arrival and witness bay; leave the south end walkable.
+STRUCT|0|5.7|3.0|5.9|10.9|0.0|1.85|0|3
+# Separate the north patrol bay from the sharpshooter lane.
+STRUCT|0|13.0|8.7|13.2|11.3|0.0|1.85|0|3
+STRUCT|0|16.7|7.6|19.7|7.8|0.0|1.35|0|3
+STRUCT|0|20.8|10.4|21.0|11.5|0.0|1.35|0|3
+# South staging screen leaves the facility doorway and both ends open.
+STRUCT|0|17.1|18.7|20.3|18.9|0.0|1.85|0|3
+STRUCT|0|4.4|19.3|8.0|19.5|0.0|1.35|0|3
+STRUCT|0|14.0|21.0|17.0|21.2|0.0|1.35|0|3
+STRUCT|0|22.4|7.3|22.6|10.5|0.0|1.35|0|3
 PROP|0|0|2.8|19.5|1.35|2.2|1.5707963|1.1|0.66|0
 PROP|0|1|20.5|5.5|1.1|1.9|0.7|0.30|0.95|0
 PROP|0|2|21.2|18.5|0.35|3.2|0.4|1.5|0.18|0
 FIXTURE|0|8|2.4|10.2|0.65|0.7|0.20|1.0|1.5707963|1
 FIXTURE|0|6|17.8|6.5|0.0|1.8|0.55|0.95|0.25|1
-FIXTURE|0|7|14.2|14.5|0.0|1.7|0.5|1.8|1.5707963|1
-TERMINAL|0|11.0|13.5|0.0|0|ASHFALL FIELD RELAY|EXCLUSION ZONE / FORWARD FACILITY|96 X 72 M SURFACE GRID / LOCAL LINK.
+FIXTURE|0|7|14.5|13.1|0.0|1.7|0.5|1.8|1.5707963|1
+# Player-operated saved timelines. Unreachable trigger boxes prevent automatic playback.
+TERMINAL|0|4.1|5.1|0.0|0|ARRIVAL CACHE / FIELD BRIEF|E: READ BRIEF AND TAKE THE CACHE FLASHLIGHT. F: LIGHT.|TEST NORTH RIG. SECURE RELAY. TEST EAST WINCH. EXIT.|exclusion_brief_read|0
+TERMINAL|0|4.3|7.8|0.0|0|NORTH SCRAP RIG / TEST|E: RATTLE THE RIG EAST OF THE NORTH PATROL.|CROUCH. USE THE SCREEN'S SOUTH END FOR A REAR ROUTE.|exclusion_north_lure|0|exclusion_cache_taken|1.5707963
+TERMINAL|0|11.0|13.5|0.0|0|ASHFALL FIELD RELAY|LOCAL ROUTE UNLOCK: EAST WINCH / SOUTH WASH.|E: AUTHORIZE WINCH. WITNESS CAN NOW FOLLOW OR WAIT.|exclusion_relay_secured|0|exclusion_north_lure_done
+TERMINAL|0|17.3|19.7|0.0|0|EAST WINCH / TEST|RELAY AUTH REQUIRED. E: CYCLE THE EAST WINCH.|TAKE THE SCREEN'S WEST END. PATROL LOOKS EAST.|exclusion_east_lure|0|exclusion_relay_secured
+TIMED_SEQUENCE|0|exclusion_north_lure|exclusion_north_lure_done|-2|-2|-1|-1|-100|100|10000|5000|0|0|31|0.6|1
+SEQUENCE_CUE|0|exclusion_north_lure|800|27|9.6|10.2|0.15|1|NORTH RIG SPINNING UP. STAY BEHIND THE SCREEN.
+SEQUENCE_CUE|0|exclusion_north_lure|1600|31|9.6|10.2|0.6|1|METAL CLATTER / NORTH BAY. WATCH THE PATROL TURN.
+SEQUENCE_CUE|0|exclusion_north_lure|3200|31|9.6|10.2|0.45|1|SECOND CLATTER. KEEP LOW ALONG THE SCREEN'S SOUTH END.
+SEQUENCE_CUE|0|exclusion_north_lure|5200|27|9.6|10.2|0.15|1|REAR APPROACH OPEN. FIELD RELAY IS INSIDE THE FACILITY.
+TIMED_SEQUENCE|0|exclusion_east_lure|exclusion_east_lure_done|-2|-2|-1|-1|-100|100|10000|5000|0|0|24|0.64|1
+SEQUENCE_CUE|0|exclusion_east_lure|800|27|21.0|15.0|0.15|1|EAST WINCH SPINNING UP. USE THE WEST FLANK.
+SEQUENCE_CUE|0|exclusion_east_lure|1600|24|21.0|15.0|0.64|0.8|WINCH CLATTER / EAST BAY. APPROACH FROM THE WEST.
+SEQUENCE_CUE|0|exclusion_east_lure|5200|27|21.0|15.0|0.15|1|SOUTH WASH RELAY AUTHORIZED. FIGHT OR SLIP OUT SOUTH.
 CLUTTER|0|2|5.2|7.2|-999|0.4
 CLUTTER|0|3|6.1|5.8|-999|1.1
 CLUTTER|0|1|18.2|11.5|-999|0.2
 CLUTTER|0|4|16.5|19.8|-999|2.0
-CLUTTER|0|0|9.5|10.2|-999|0.8
+CLUTTER|0|0|4.0|9.8|-999|0.8
+CLUTTER|0|1|4.2|9.1|-999|0.3
+CLUTTER|0|2|16.7|20.4|-999|1.2
 PICKUP|0|1|5.5|14.5
-PICKUP|0|0|15.5|10.5
+PICKUP|0|0|17.7|8.9
 NAV_HINT|0|10.5|11.5|0|0
-NAV_HINT|0|3.3|10.0|0|1
-NAV_HINT|0|19.0|9.1|0|1
-NAV_HINT|0|19.3|15.5|0|1
-NAV_HINT|0|10.0|5.0|0|1
-CREATURE|0|0|20.5|20.5|0
-CREATURE|0|1|21.5|3.5|0
+NAV_HINT|0|4.8|9.9|0|1
+NAV_HINT|0|19.0|8.6|0|1
+NAV_HINT|0|21.7|15.5|0|1
+NAV_HINT|0|7.4|6.4|0|1
+NAV_HINT|0|12.0|18.8|0|0
+NAV_HINT|0|16.0|19.8|0|0
+NAV_HINT|0|17.4|19.4|0|1
+NAV_HINT|0|23.0|12.5|0|0
 MAP|1|Ashfall / Scrap Basin|24|0|3.5|12.5|0.0|1|2.8|0.27|brutal_wasteland|0|1|1|0|0
 LAYER|1|0|Scrap Basin|0.0|0.0
 ROW|1|0|0|........................
@@ -129,14 +157,25 @@ ROW|1|0|21|........................
 ROW|1|0|22|........................
 ROW|1|0|23|........................
 STRUCT|1|8.0|10.5|8.2|14.5|0.0|1.6|0|3
-STRUCT|1|14.5|16.0|18.5|16.2|0.0|1.5|0|3
+STRUCT|1|14.5|14.0|18.5|14.2|0.0|1.5|0|3
+# Basin cover keeps the west entry and continuous north/south bypasses open.
+STRUCT|1|4.5|11.1|6.8|11.3|0.0|1.35|0|3
+STRUCT|1|10.1|9.5|10.3|12.8|0.0|1.65|0|3
+STRUCT|1|12.0|5.5|15.8|5.7|0.0|1.35|0|3
+STRUCT|1|19.0|11.6|21.7|11.8|0.0|1.35|0|3
+STRUCT|1|6.6|17.1|9.8|17.3|0.0|1.35|0|3
+STRUCT|1|17.8|18.7|18.0|21.2|0.0|1.65|0|3
+TERMINAL|1|3.8|14.7|0.0|0|SCRAP BASIN / ROUTE LOG|FACILITY RELAY TO THE WEST. SALVAGE PATHS RUN WIDE.|SHORT METAL SCREENS BREAK SIGHT. KEEP BOTH ENDS OPEN.
 PROP|1|0|20.0|8.0|1.4|2.3|0.2|1.15|0.7|0
 PROP|1|1|5.5|18.5|1.05|1.8|1.1|0.28|0.9|0
 CLUTTER|1|2|10.5|12.5|-999|0.5
 CLUTTER|1|3|16.5|7.5|-999|1.4
-CREATURE|1|0|18.5|18.5|0
-NAV_HINT|1|8.1|12.5|0|1
-NAV_HINT|1|16.5|16.1|0|1
+CREATURE|1|0|20.5|4.5|0
+CREATURE|1|0|20.5|19.5|0
+NAV_HINT|1|7.5|12.5|0|1
+NAV_HINT|1|16.5|13.5|0|1
+NAV_HINT|1|3.5|12.5|0|0
+NAV_HINT|1|11.4|14.7|0|0
 MAP|2|Ashfall / South Wash|0|24|12.5|3.5|0.0|1|2.8|0.27|brutal_wasteland|1|0|0|0|0
 LAYER|2|0|South Wash|0.0|0.0
 ROW|2|0|0|........................
@@ -164,10 +203,21 @@ ROW|2|0|21|........................
 ROW|2|0|22|........................
 ROW|2|0|23|........................
 STRUCT|2|10.0|8.0|14.0|8.2|0.0|1.45|0|3
+# Wash cover frames a southbound route without sealing the drainage lanes.
+STRUCT|2|9.7|4.8|9.9|6.7|0.0|1.35|0|3
+STRUCT|2|14.8|5.2|18.0|5.4|0.0|1.35|0|3
+STRUCT|2|10.0|11.0|10.2|13.6|0.0|1.65|0|3
+STRUCT|2|15.0|10.5|18.4|10.7|0.0|1.35|0|3
+STRUCT|2|4.3|15.6|7.8|15.8|0.0|1.35|0|3
+STRUCT|2|18.7|18.0|18.9|20.7|0.0|1.65|0|3
+TERMINAL|2|12.3|4.7|0.0|0|SOUTH WASH / EXTRACTION RELAY|EAST WINCH CLEARANCE REQUIRED. WASH IS YOUR WAY OUT.|E: REGISTER DEPARTURE. YOUR WITNESS CAN FOLLOW.|exclusion_extract_logged|0|exclusion_east_lure_done
 PROP|2|2|18.5|14.5|0.4|3.0|0.5|1.6|0.2|0
 CLUTTER|2|1|6.5|10.5|-999|0.9
 CREATURE|2|2|16.5|16.5|0
-NAV_HINT|2|12.0|8.1|0|1
+CREATURE|2|1|20.5|21.5|0
+NAV_HINT|2|12.0|7.5|0|1
+NAV_HINT|2|12.5|6.2|0|0
+NAV_HINT|2|11.3|14.8|0|0
 TIMED_SEQUENCE|0|exclusion_clock|exclusion_clock_done|0|0|24|24|-0.2|3|60000|60000|0|0|0|0|1|1
 # Cleanup Engineer
 ACTOR|0|exclusion_clock|5|1.6|0|0|0
@@ -184,7 +234,7 @@ ACTOR_WEAPON|0|0|2|700|1100|12|6
 ACTOR_FACTION|0|0|4|exclusion_cleanup
 ACTOR_TACTICS|0|0|0|2
 ACTOR_ROLE|0|0|2
-# Cleanup Assault
+# Cleanup Assault / isolated north-bay patrol. Distraction lands to its east.
 ACTOR|0|exclusion_clock|4|1.6|0|0|1
 ACTOR_KEY|0|1|0|7.5|10.5|0|1.5707963|0|0
 ACTOR_KEY|0|1|60000|7.5|10.5|0|1.5707963|0|1
@@ -198,7 +248,7 @@ ACTOR_WEAPON|0|1|1|550|900|18|8
 ACTOR_FACTION|0|1|4|exclusion_cleanup
 ACTOR_TACTICS|0|1|0|0
 ACTOR_ROLE|0|1|1
-# Cleanup Sharpshooter
+# Cleanup Sharpshooter / east sightline, screened from the first distraction.
 ACTOR|0|exclusion_clock|6|1.6|0|0|2
 ACTOR_KEY|0|2|0|14.5|10.5|0|0|0|0
 ACTOR_KEY|0|2|60000|14.5|10.5|0|0|0|1
@@ -213,12 +263,15 @@ ACTOR_TACTICS|0|2|0|0
 ACTOR_ROLE|0|2|3
 # Cleanup Heavy
 ACTOR|0|exclusion_clock|7|1.6|0|0|3
-ACTOR_KEY|0|3|0|15.5|15.5|0|3.1415927|0|0
-ACTOR_KEY|0|3|60000|15.5|15.5|0|3.1415927|0|1
+ACTOR_KEY|0|3|0|14.8|15.5|0|3.1415927|0|0
+ACTOR_KEY|0|3|60000|14.8|15.5|0|3.1415927|0|1
 ACTOR_HEALTH|0|3|90|exclusion_damage_3|exclusion_dead_3
 ACTOR_AI|0|3|3||1.25|2|6
 ACTOR_GUARD|0|3|18|0.3|600|5000|exclusion_alert
-ACTOR_PATROL|0|3|15.5|15.5|0|1000
+ACTOR_PATROL|0|3|14.8|15.5|0|1000
+ACTOR_PATROL|0|3|14.8|16.8|0|1000
+ACTOR_PATROL|0|3|13.8|16.8|0|700
+ACTOR_PATROL|0|3|13.8|15.5|0|700
 ACTOR_WEAPON|0|3|1|650|1000|18|10
 ACTOR_FACTION|0|3|4|exclusion_cleanup
 ACTOR_TACTICS|0|3|1|0
@@ -231,6 +284,9 @@ ACTOR_HEALTH|0|4|90|exclusion_damage_4|exclusion_dead_4
 ACTOR_AI|0|4|3||1.55|2|6
 ACTOR_GUARD|0|4|18|0.3|600|5000|exclusion_alert
 ACTOR_PATROL|0|4|11.0|15.5|0|1000
+ACTOR_PATROL|0|4|11.0|16.5|0|900
+ACTOR_PATROL|0|4|10.0|16.5|0|900
+ACTOR_PATROL|0|4|10.0|15.5|0|700
 ACTOR_WEAPON|0|4|2|800|1200|18|6
 ACTOR_FACTION|0|4|4|exclusion_cleanup
 ACTOR_TACTICS|0|4|0|0
@@ -245,16 +301,44 @@ ACTOR_GUARD|0|5|18|0.3|600|5000|exclusion_alert
 ACTOR_PATROL|0|5|18.5|12.5|0|700
 ACTOR_PATROL|0|5|20.5|12.5|0|600
 ACTOR_PATROL|0|5|20.5|16.5|0|800
+ACTOR_PATROL|0|5|18.5|16.5|0|700
 ACTOR_WEAPON|0|5|1|450|850|18|6
 ACTOR_FACTION|0|5|4|exclusion_cleanup
 ACTOR_TACTICS|0|5|0|0
 ACTOR_ROLE|0|5|6
-# Facility escort for civilian schedule observation
+# Witness waits in the screened arrival bay until the field relay is secured.
 TIMED_SEQUENCE|0|exclusion_civ_clock|exclusion_civ_clock_done|0|0|24|24|-0.2|3|60000|60000|0|0|0|0|1|1
 ACTOR|0|exclusion_civ_clock|0|1.6|0|0|6
-ACTOR_KEY|0|6|0|11.0|11.5|0|0|0|0
-ACTOR_KEY|0|6|60000|11.0|11.5|0|0|0|1
+ACTOR_KEY|0|6|0|3.5|4.5|0|0|0|0
+ACTOR_KEY|0|6|60000|3.5|4.5|0|0|0|1
 ACTOR_HEALTH|0|6|70|exclusion_civ_damage|exclusion_civ_dead
-ACTOR_AI|0|6|2||1.4|2|6
+ACTOR_AI|0|6|2|exclusion_relay_secured|1.4|2|6
 ACTOR_FACTION|0|6|2|
+# This objective arc uses the engine's existing once-only ScriptEvent executor.
+OBJECTIVE_TEXT|0|exclusion_cache_objective|Read the arrival cache brief and collect its flashlight
+OBJECTIVE_TEXT|0|exclusion_relay_objective|Test the north scrap rig, then secure the facility relay
+OBJECTIVE_TEXT|0|exclusion_winch_objective|Use the east winch to draw its patrol out of position
+OBJECTIVE_TEXT|2|exclusion_extract_objective|Reach South Wash and register departure at its relay
+SCRIPT_EVENT|0|exclusion_arrival|0|0|24|24|-100|100||1|0
+SCRIPT_ACTION|0|exclusion_arrival|OBJECTIVE|exclusion_cache_objective|1
+SCRIPT_EVENT|0|exclusion_cache_taken|2.7|3.5|5.3|7.3|-100|100|exclusion_brief_read|1|0
+SCRIPT_ACTION|0|exclusion_cache_taken|ITEM|flashlight|1
+SCRIPT_ACTION|0|exclusion_cache_taken|STATE|exclusion_cache_taken|1
+SCRIPT_ACTION|0|exclusion_cache_taken|OBJECTIVE|exclusion_cache_objective|2
+SCRIPT_ACTION|0|exclusion_cache_taken|OBJECTIVE|exclusion_relay_objective|1
+SCRIPT_ACTION|0|exclusion_cache_taken|CHECKPOINT
+SCRIPT_EVENT|0|exclusion_relay_checkpoint|0|0|24|24|-100|100|exclusion_relay_secured|1|0
+SCRIPT_ACTION|0|exclusion_relay_checkpoint|OBJECTIVE|exclusion_relay_objective|2
+SCRIPT_ACTION|0|exclusion_relay_checkpoint|OBJECTIVE|exclusion_winch_objective|1
+SCRIPT_ACTION|0|exclusion_relay_checkpoint|CHECKPOINT
+SCRIPT_EVENT|0|exclusion_winch_complete|0|0|24|24|-100|100|exclusion_east_lure_done|1|0
+SCRIPT_ACTION|0|exclusion_winch_complete|OBJECTIVE|exclusion_winch_objective|2
+SCRIPT_ACTION|0|exclusion_winch_complete|OBJECTIVE|exclusion_extract_objective|1
+SCRIPT_EVENT|0|exclusion_south_staging_checkpoint|17.0|19.0|20.5|21.0|-100|100|exclusion_east_lure_done|1|0
+SCRIPT_ACTION|0|exclusion_south_staging_checkpoint|CHECKPOINT
+SCRIPT_EVENT|2|exclusion_departed|10.8|2.8|14.0|6.2|-100|100|exclusion_extract_logged|1|0
+SCRIPT_ACTION|2|exclusion_departed|OBJECTIVE|exclusion_extract_objective|2
+SCRIPT_ACTION|2|exclusion_departed|STATE|exclusion_complete|1
+SCRIPT_ACTION|2|exclusion_departed|COMPLETE
+SCRIPT_ACTION|2|exclusion_departed|CHECKPOINT
 --- CUSTOM_CAMPAIGN_DATA_END ---

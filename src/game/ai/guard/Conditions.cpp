@@ -2,7 +2,7 @@
 #include "ScheduleTables.h"
 namespace retro {
 unsigned Game::guardConditions(size_t actor,const ActorPose&pose)const{
- if(actor>=m_friendlyActors.size())return 0;
+ if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return 0;
  const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};
  unsigned conditions=0;auto target=guardTarget(actor);

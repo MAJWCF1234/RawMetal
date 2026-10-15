@@ -7,7 +7,7 @@ StateId Game::friendlyKey(size_t actor,std::string_view field)const{
  const auto&npc=m_friendlyActors.at(actor);return actorAiState(npc.homeLevel,npc.homeActor,npc.track().timerState,field);
 }
 bool Game::scriptedHandoffActive(size_t actor)const{
- if(actor>=m_friendlyActors.size())return false;const auto&track=m_friendlyActors[actor].track();
+ if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return false;const auto&track=m_friendlyActors[actor].track();
  return track.ai.mode==ActorAiMode::Scripted&&(state(friendlyKey(actor,"fear"))>0||state(friendlyKey(actor,"schedule"))==int(CivilianSchedule::Flee));
 }
 bool Game::scriptedHandoffActive(int level,size_t homeActor)const{
@@ -20,6 +20,9 @@ void Game::rebuildFriendlyActors(){
   for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];
    FriendlyActor npc{level,level,i,world.actorPose(i),world.m_mapData};size_t index=m_friendlyActors.size();m_friendlyActors.push_back(npc);
    int saved=state(friendlyKey(index,"chunk"));if(saved<0||saved>chunkCount())throw std::runtime_error("Invalid saved NPC chunk");
+   int restraint=state(friendlyKey(index,"restraint")),restraintMs=state(friendlyKey(index,"restraint_ms"));
+   int restraintFraction=state(friendlyKey(index,"restraint_fraction"));
+   if(restraint<0||restraint>2||restraintMs<0||restraintMs>120000||restraintFraction<0||restraintFraction>=1000||(restraint&&!state(friendlyKey(index,"saved"))))throw std::runtime_error("Invalid saved NPC restraint");
    if(track.ai.mode==ActorAiMode::Guard)validateGuardState(index);
    if(saved)m_friendlyActors[index].level=saved-1;
    if(m_friendlyActors[index].level==m_level)setState(friendlyKey(index,"engaged"),1);
@@ -28,24 +31,28 @@ void Game::rebuildFriendlyActors(){
     if(state(friendlyKey(index,"locomotion"))&&(crouched<0||crouched>1||grounded<0||grounded>1||vv<-20000||vv>10000))throw std::runtime_error("Invalid saved NPC locomotion");
     pose.clip=state(friendlyKey(index,"walking"))?1:crouched?5:0;
     if(pose.position.x<0||pose.position.y<0||pose.position.x>=24||pose.position.y>=24||std::fabs(pose.z)>100||std::fabs(pose.yaw)>kPi+.001f||pose.phase<0||pose.phase>1)throw std::runtime_error("Invalid saved NPC pose");
+    // Quantized +/-31416 is slightly outside +/-pi. Restore the endpoint
+    // before re-encoding so remainder() cannot flip its serialized sign.
+    pose.yaw=std::clamp(pose.yaw,-kPi,kPi);
    }
    if(track.deadState&&state(track.deadState)){auto&pose=m_friendlyActors[index].pose;pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;}
-   if(track.ai.mode==ActorAiMode::Guard&&(m_friendlyActors[index].pose.clip==4||!autonomousActor(track)))clearGuardSchedule(index);
+   else if(restraint){auto&pose=m_friendlyActors[index].pose;pose.lookAtActor=-1;pose.clip=restraint==2?0:4;float duration=cleanupAnimationDuration(track.visual,4);pose.phase=restraint==2?0:std::clamp(restraintMs/(duration>0?duration*1000:1000.f),0.f,1.f);}
+   if(track.ai.mode==ActorAiMode::Guard&&(npcIncapacitated(index)||m_friendlyActors[index].pose.clip==4||!autonomousActor(track)))clearGuardSchedule(index);
   }
  }
  // A legacy partial kit is evidence that its wound was already admitted.
  // Adopt that baseline after the complete NPC collection is reconstructed;
  // canonical pending hits and active under-fire cues still require defense.
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&provider=m_friendlyActors[actor];
-  if(provider.track().ai.role!=GuardSquadRole::Medic||state(friendlyKey(actor,"schedule"))||!state(friendlyKey(actor,"support_ms")))continue;
-  int patient=state(friendlyKey(actor,"support_target"))-1;if(patient<0||size_t(patient)>=m_friendlyActors.size())continue;const auto&recipient=m_friendlyActors[size_t(patient)];
+  if(npcIncapacitated(actor)||provider.track().ai.role!=GuardSquadRole::Medic||state(friendlyKey(actor,"schedule"))||!state(friendlyKey(actor,"support_ms")))continue;
+  int patient=state(friendlyKey(actor,"support_target"))-1;if(patient<0||size_t(patient)>=m_friendlyActors.size()||npcIncapacitated(size_t(patient)))continue;const auto&recipient=m_friendlyActors[size_t(patient)];
   if(recipient.track().ai.mode==ActorAiMode::Guard&&!state(friendlyKey(size_t(patient),"hit_source"))&&!state(friendlyKey(size_t(patient),"guard_under_fire")))setState(friendlyKey(size_t(patient),"guard_damage"),state(recipient.track().damageState));
  }
 }
 bool Game::friendlyChunkNeeded(int level)const{
  if(engineerDroneChunkNeeded(level))return true;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
-  if(!autonomousActor(track)||npc.pose.clip==4)continue;
+  if(npcIncapacitated(i)||!autonomousActor(track)||npc.pose.clip==4)continue;
   if(track.ai.mode==ActorAiMode::Guard){
    auto schedule=GuardSchedule(state(friendlyKey(i,"schedule")));bool scheduled=schedule!=GuardSchedule::None&&schedule!=GuardSchedule::Patrol;
    bool active=scheduled||state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
@@ -88,6 +95,7 @@ bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float h
  if(endFeet)*endFeet=z;return true;
 }
 float Game::friendlyHullHeight(size_t actor,const ActorTrack&track)const{
+ if(actor<m_friendlyActors.size()&&npcIncapacitated(actor))return npcHeld(actor)?track.scale:.35f;
  float standing=track.scale;if(actor>=m_friendlyActors.size()||!state(friendlyKey(actor,"crouched")))return standing;
  return npcCrouchedHeight(track);
 }
@@ -156,6 +164,13 @@ void Game::updateFriendlyActors(float dt,bool guards){
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);shot.categories=ai::SoundWeapon;stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
   if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
+  if(npcIncapacitated(i)){
+   // Root-controlled held placement and a dropped unconscious body bypass
+   // patrol, scripted stage resets and autonomous chunk migration.
+   auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt,&stimuli);
+   setState(friendlyKey(i,"phase"),int(std::round(npc.pose.phase*10000)));setState(friendlyKey(i,"saved"),1);
+   auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);home.setActorPose(npc.homeActor,projected);continue;
+  }
   if(track.ai.mode==ActorAiMode::Guard&&(npc.pose.clip==4||(track.deadState&&state(track.deadState))))clearGuardSchedule(i);
   bool scripted=track.ai.mode==ActorAiMode::Scripted;
   if(scripted&&guards)continue;
@@ -218,7 +233,7 @@ void Game::updateFriendlyActors(float dt,bool guards){
     if(!inside){setState(friendlyKey(i,"guard_cover"),0);setState(friendlyKey(i,"guard_cover_mode"),0);setState(friendlyKey(i,"guard_cover_wait"),0);}
     setState(friendlyKey(i,"guard_cover_x"),int(std::round(std::clamp(cover.x,0.f,24.f)*1000)));setState(friendlyKey(i,"guard_cover_y"),int(std::round(std::clamp(cover.y,0.f,24.f)*1000)));
    }
-   if(npc.pose.clip==4&&track.deadState){setState(actorPositionState(track.deadState,0),int(std::round(npc.pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(npc.pose.position.y*1000)));}
+   if(npc.pose.clip==4&&track.deadState&&state(track.deadState)){setState(actorPositionState(track.deadState,0),int(std::round(npc.pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(npc.pose.position.y*1000)));}
   }
   setState(friendlyKey(i,"chunk"),npc.level+1);setState(friendlyKey(i,"x"),int(std::round(npc.pose.position.x*1000)));setState(friendlyKey(i,"y"),int(std::round(npc.pose.position.y*1000)));setState(friendlyKey(i,"z"),int(std::round(npc.pose.z*1000)));setState(friendlyKey(i,"yaw"),int(std::round(std::remainder(npc.pose.yaw,2*kPi)*10000)));setState(friendlyKey(i,"phase"),int(std::round(npc.pose.phase*10000)));setState(friendlyKey(i,"walking"),npc.pose.clip==1);setState(friendlyKey(i,"saved"),1);
   auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);home.setActorPose(npc.homeActor,projected);

@@ -23,6 +23,39 @@ namespace {
 constexpr float FOV = 75.0f * kPi / 180.0f;
 int g_texturePresentScale = 2;
 std::uint32_t rgb(int r,int g,int b){ return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
+std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t limit=3){
+ std::vector<std::string> lines;columns=std::max(size_t(1),columns);
+ while(!remaining.empty()&&lines.size()<limit){size_t count=std::min(columns,remaining.size());
+  if(count<remaining.size()){auto space=remaining.rfind(' ',count);if(space!=std::string::npos&&space>0)count=space;}
+  lines.push_back(remaining.substr(0,count));remaining.erase(0,count);while(!remaining.empty()&&remaining.front()==' ')remaining.erase(0,1);
+ }
+ if(!remaining.empty()&&!lines.empty()&&columns>=3){auto&last=lines.back();last.resize(std::min(last.size(),columns-3));last+="...";}
+ return lines;
+}
+const char* terminalHeader(const Terminal& terminal){
+ if(terminal.reactorAction==1)return "C:\\DEPTHWORKS\\CONTROL> R03.EXE";
+ if(terminal.reactorAction)return "C:\\DEPTHWORKS\\CONTROL> COOLANT.EXE";
+ if(terminal.activateState)return "C:\\DEPTHWORKS\\CONTROL> LOCAL.EXE";
+ if(terminal.control)return "C:\\DEPTHWORKS\\CONTROL> DISPATCH.EXE";
+ return "C:\\DEPTHWORKS\\LOGS> TYPE SHIFT.LOG";
+}
+const char* terminalStatus(const Game& game,const Terminal& terminal){
+ if(terminal.activateState){
+  if(terminal.requireState&&!game.state(terminal.requireState))return "STATUS: INTERLOCK BLOCKED / FOLLOW PROCEDURE";
+  if(game.state(terminal.activateState))return terminal.toggleState?"STATUS: MACHINERY PAUSED / USE CONTROL TO RESUME":"STATUS: COMMAND ACCEPTED";
+  return "STATUS: LOCAL CONTROL READY";
+ }
+ if(terminal.reactorAction){switch(game.world().reactorStage()){
+  case World::ReactorStage::NoDisk:return "NEXT: TAKE AUTH FLOPPY FROM UPPER WORKBENCH";
+  case World::ReactorStage::DiskHeld:return "NEXT: INSERT AUTH FLOPPY AT THE R-03 COMPUTER";
+  case World::ReactorStage::DiskLoaded:return "NEXT: PRIME P-01 FEED ON LOWER FLOOR";
+  case World::ReactorStage::FeedPrimed:return "NEXT: PRIME P-02 RETURN ON UPPER FLOOR";
+  case World::ReactorStage::ReturnPrimed:return "NEXT: RESET INTERLOCK AT THE R-03 COMPUTER";
+  case World::ReactorStage::Released:return "STATUS: CIRCULATION ACCEPTED / BULKHEAD RELEASED";
+ }}
+ if(terminal.control)return game.world().hasLift()?"STATUS: LIFT DISPATCH / FOLLOW CAB PROCEDURE":game.world().controlReleased()?"STATUS: GANTRY CONTROL RELEASED":"STATUS: GANTRY CONTROL READY";
+ return "STATUS: SHIFT LOG / READ ONLY";
+}
 std::uint32_t sampleBilinear(const std::vector<std::uint32_t>& pixels,int width,int height,float x,float y){
  x=std::clamp(x,0.f,float(width-1));y=std::clamp(y,0.f,float(height-1));
  int x0=int(x),y0=int(y),x1=std::min(width-1,x0+1),y1=std::min(height-1,y0+1);
@@ -489,17 +522,24 @@ void SoftwareRenderer::drawHud(const Game& game){
  bool transferReleased=false;
  for(const auto& door:game.world().doors())if(door.transfer&&(door.requireEnemiesClear||door.requireControl||door.requireState)&&!game.doorLocked(door))transferReleased=true;
  if(transferReleased){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
+ if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()){int width=std::min(m_width-24,int(goal.size())*6+20);wornPanel(cx-width/2,44,width,17,true);text(cx-width/2+10,49,std::string(goal).c_str(),amber);}
  if(game.dead()||game.won()){wornPanel(cx-100,cy-26,200,51);text(cx-68,cy-15,game.won()?"SECTOR CLEARED":"SIGNAL LOST",game.won()?amber:red,2);text(cx-63,cy+7,"ESC / RESTART GAME",paper);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
  if(game.audioMuted())text(10,43,"AUDIO MUTED / M",muted);
  else if(!game.musicEnabled())text(10,43,"MUSIC OFF / N",muted);
- if(game.pickupNoticeTime()>0){wornPanel(cx-88,m_height-81,176,16,true);text(cx-79,m_height-76,game.pickupNotice().c_str(),paper);}
- if(auto caption=game.actorCaption();!caption.empty()){int width=std::min(m_width-24,int(caption.size())*6+16);rect(cx-width/2,m_height-108,width,20,0xff080b09u);text(cx-width/2+8,m_height-102,std::string(caption).c_str(),paper);}
+ auto promptPanel=[&](int bottom,const char* message,std::uint32_t color){
+  int maxWidth=std::max(24,m_width-24);auto rows=wrapUiText(message,size_t(std::max(1,(maxWidth-20)/4)));
+  size_t longest=0;for(const auto&line:rows)longest=std::max(longest,line.size());
+  int width=std::min(maxWidth,std::max(170,int(longest)*4+20)),height=8+int(rows.size())*8,left=cx-width/2,top=bottom-height;
+  wornPanel(left,top,width,height,true);for(size_t i=0;i<rows.size();++i)text(left+10,top+6+int(i)*8,rows[i].c_str(),color);
+ };
+ if(game.pickupNoticeTime()>0)promptPanel(m_height-65,game.pickupNotice().c_str(),paper);
+ if(auto caption=game.actorCaption();!caption.empty())promptPanel(m_height-112,std::string(caption).c_str(),paper);
  else if(auto pickup=game.nearbyPickup()){
   const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
-  wornPanel(cx-88,m_height-81,176,16,true);text(cx-79,m_height-76,message,amber);
+  promptPanel(m_height-65,message,amber);
  }
- if(auto hint=game.interactionHint();hint&&game.logTime()<=0){wornPanel(cx-85,m_height-104,170,16,true);text(cx-75,m_height-99,hint,paper);}
+ if(auto hint=game.interactionHint();hint&&game.logTime()<=0)promptPanel(m_height-88,hint,paper);
  if(game.logTime()>0&&game.activeLog()>=0){auto&log=game.world().terminals()[size_t(game.activeLog())];
   const int left=cx-180,top=48,width=360,height=154;
   wornPanel(left,top,width,height,false,true);
@@ -509,19 +549,23 @@ void SoftwareRenderer::drawHud(const Game& game){
   rect(left+10,top+10,width-20,height-20,rgb(2,5,3));
   rect(left+10,top+height-11,width-20,1,rgb(76,83,78));rect(left+width-11,top+10,1,height-20,rgb(76,83,78));
   const auto green=rgb(87,225,123),bright=rgb(144,255,166),dimGreen=rgb(47,136,76);
-  text(left+18,top+17,"C:\\DEPTHWORKS\\LOGS> TYPE SHIFT.LOG",dimGreen);
+  text(left+18,top+17,terminalHeader(log),dimGreen);
   text(left+18,top+31,log.title,bright);rect(left+18,top+43,width-36,1,rgb(24,66,36));
   int row=top+51;
   auto lines=[&](const char* value){std::string remaining=value;while(!remaining.empty()&&row<top+114){size_t n=std::min(size_t(52),remaining.size());if(n<remaining.size()){auto space=remaining.rfind(' ',n);if(space!=std::string::npos&&space>0)n=space;}text(left+18,row,remaining.substr(0,n).c_str(),green);remaining.erase(0,n);while(!remaining.empty()&&remaining.front()==' ')remaining.erase(0,1);row+=11;}};
   lines(log.line1);row+=3;lines(log.line2);
-  if(log.activateState)text(left+18,top+117,game.state(log.activateState)?"STATUS: COMMAND ACCEPTED":log.requireState&&!game.state(log.requireState)?"STATUS: INTERLOCK BLOCKED / FOLLOW PROCEDURE":"STATUS: LOCAL CONTROL READY",green);
-  text(left+18,top+132,"> E TO CLOSE _",bright);
+  text(left+18,top+117,terminalStatus(game,log),green);
+  text(left+18,top+132,"> E TO CLOSE TERMINAL _",bright);
  }
 }
 
 void SoftwareRenderer::drawVrStatus(const Game&game){
  rect(0,0,m_width,m_height,0xff000000u);constexpr auto green=0xff69ff8au;char data[100];
- if(game.logTime()>0&&game.activeLog()>=0){const auto&log=game.world().terminals()[game.activeLog()];text(24,20,"TERMINAL / RECEIVED LOG",green,3);text(24,60,log.title,green,2);int row=95;auto lines=[&](const char*value){std::string remaining=value;while(!remaining.empty()&&row<270){size_t n=std::min(size_t(70),remaining.size());if(n<remaining.size()){auto space=remaining.rfind(' ',n);if(space!=std::string::npos&&space>0)n=space;}text(24,row,remaining.substr(0,n).c_str(),green,2);remaining.erase(0,n);while(!remaining.empty()&&remaining.front()==' ')remaining.erase(0,1);row+=22;}};lines(log.line1);row+=12;lines(log.line2);text(24,307,"CLOSE LOG",green,3);return;}
+ if(game.logTime()>0&&game.activeLog()>=0){const auto&log=game.world().terminals()[game.activeLog()];
+  text(24,20,log.reactorAction||log.activateState||log.control?"TERMINAL / LOCAL CONTROL":"TERMINAL / SHIFT LOG",green,3);
+  text(24,60,log.title,green,2);int row=95;auto lines=[&](const char*value){for(const auto&line:wrapUiText(value,70,4)){if(row>=250)break;text(24,row,line.c_str(),green,2);row+=22;}};
+  lines(log.line1);row+=12;lines(log.line2);text(24,270,terminalStatus(game,log),green);text(24,307,"CLOSE TERMINAL",green,3);return;
+ }
  text(24,20,"DEPTHWORKS / FIELD TERMINAL",green,3);rect(24,46,592,2,green);
  std::snprintf(data,sizeof(data),"HEALTH %03d",int(game.player().health));text(24,67,data,green,5);
  rect(24,106,592,16,0xff082510u);rect(24,106,int(592*std::clamp(game.player().health/100.f,0.f,1.f)),16,green);

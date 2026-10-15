@@ -20,7 +20,11 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
    if(distance<hit.distance-.0001f)hit={kind,level,index,distance,distance,origin+ray*distance,n};
   };
   if(includePlayer&&!dead())body(ShotKind::Player,m_level,0,m_player.pos,m_player.z,m_player.hullHeight(),.2f);
-  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(int(i)==ignoredNpc||!chunkResident(npc.level)||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))continue;body(ShotKind::Npc,npc.level,int(i),npc.pose.position,npc.pose.z,friendlyHullHeight(i,track),.2f);}
+  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(int(i)==ignoredNpc||!chunkResident(npc.level)||!autonomousActor(track)||(npc.pose.clip==4&&!npcIncapacitated(i))||(track.deadState&&state(track.deadState)))continue;
+   if(ignoredEntity.kind==ShotKind::Npc&&ignoredEntity.index==int(i))continue;
+   auto [low,high]=friendlyShotBounds(i);auto shift=chunkOffset(npc.level)-activeOrigin;Point3 offset{shift.x,shift.y,0},normal;float distance=rayBoxFraction(origin,ray*range,low+offset,high+offset,&normal)*range;
+   if(distance<hit.distance-.0001f)hit={ShotKind::Npc,npc.level,int(i),distance,distance,origin+ray*distance,normal};
+  }
   for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&world=level==m_level?m_world:m_chunks[level].world;const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
    for(size_t i=0;i<enemies.size();++i){const auto&e=enemies[i];if(e.alive)body(ShotKind::Enemy,level,int(i),e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom(),e.kind==Enemy::Kind::Wasp?.28f:.4f);}
    for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];const auto&pose=world.actorPose(i);if(track.platform||autonomousActor(track)||pose.clip==4||(track.deadState&&state(track.deadState)))continue;body(ShotKind::Actor,level,int(i),pose.position,pose.z,track.scale,track.visual==ActorVisual::Cargo?track.scale*.5f:.2f);}
