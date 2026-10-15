@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.1
+
+Preview toward the next complete NPC radio patch. Builds on 0.7.1 chatter election with Search cues, AllyDown cooldown, longer reply timing, and channel holds so delayed copies do not expire while someone else is talking.
+
+- Lost-contact **Search** elects one Investigate bark; Investigate?Search stays quiet
+- Reply delay stretched (~1.1–2.2 s) so the optional copy lands after the contact call
+- Pending tactical / work / AllyDown claims hold the channel while `npc_voice_busy` instead of timing out mid-sentence
+- AllyDown picks the nearest living voice, arms a squad cooldown immediately, priority above patrol chatter
+- `--npc-voice-test` covers Search bark, Investigate?Search silence, AllyDown election/cooldown
+
+Save format still 14. Hard **32 MiB** ceiling unchanged. Confirm in play, then cut **v0.7.2** when radio feels done.
+
+**Validation:** EXE 26,533,888 / 33,554,432 bytes (6.70 MiB headroom). `--npc-voice-test`, `--exclusion-test`, `--stealth-test`, `--guard-roles-test` PASS.
+
+---
+
 ## v0.7.1
 
 Patch on the 0.7 line: Cleanup / Witness NPCs were already in the Exclusion loop; this fixes their placeholder radio behavior so squad contact sounds like chatter instead of a roll call. Exits the `0.7.0-preview.N` series — same playable loop, versioned as a normal patch.

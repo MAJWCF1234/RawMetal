@@ -20,10 +20,18 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
  }
  bool voiced=damage>=track.health?std::any_of(m_sounds.begin(),m_sounds.end(),[&](const auto&e){return e.speech>=0&&e.speaker==actor+1;}):npcVoice(actor,NpcVoiceCue::Hurt);
  if(!voiced&&!npcHasVoice(actor))m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
- if(damage>=track.health&&track.ai.squad)for(size_t other=0;other<m_friendlyActors.size();++other){const auto&buddy=m_friendlyActors[other];
-  if(other==actor||buddy.track().ai.squad!=track.ai.squad||state(buddy.track().deadState)||npcIncapacitated(other))continue;
-  auto delta=buddy.pose.position+chunkOffset(buddy.level)-pose.position-chunkOffset(npc.level);if(lengthSq(delta)>15*15)continue;
-  setState(friendlyKey(other,"voice_pending"),int(NpcVoiceCue::AllyDown)+1);setState(friendlyKey(other,"voice_pending_ms"),4000);break;
+ if(damage>=track.health&&track.ai.squad&&state(stateId("npc_voice_cd_allydown"))<=0){
+  size_t reporter=SIZE_MAX;float best=15.f*15.f;
+  for(size_t other=0;other<m_friendlyActors.size();++other){const auto&buddy=m_friendlyActors[other];
+   if(other==actor||buddy.track().ai.squad!=track.ai.squad||!npcHasVoice(other)||state(buddy.track().deadState)||npcIncapacitated(other))continue;
+   auto delta=buddy.pose.position+chunkOffset(buddy.level)-pose.position-chunkOffset(npc.level);float dist=lengthSq(delta);if(dist>best)continue;
+   best=dist;reporter=other;
+  }
+  if(reporter!=SIZE_MAX){
+   setState(friendlyKey(reporter,"voice_pending"),int(NpcVoiceCue::AllyDown)+1);setState(friendlyKey(reporter,"voice_pending_ms"),4500);setState(friendlyKey(reporter,"voice_reply_wait"),0);
+   // Reserve the channel immediately so a multi-kill frame cannot queue several reports.
+   setState(stateId("npc_voice_cd_allydown"),9000);
+  }
  }
 }
 bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
