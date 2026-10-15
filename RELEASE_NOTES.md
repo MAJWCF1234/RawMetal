@@ -14,9 +14,9 @@ Patch on the 0.7 line: Cleanup / Witness NPCs were already in the Exclusion loop
 - Optional `--ashfall-performance` frame profile harness and cheaper nav connector selection for profiling passes
 - Native `--npc-voice-test` covers one-speaker contact + optional reply
 
-No new maps or animation banks. Save format still 14. Hard **32 MiB** ceiling unchanged. Play: Custom Maps ? ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
+No new maps or animation banks. Save format still 14. Hard **32 MiB** ceiling unchanged. Play: Custom Maps -> ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
 
-**Validation:** EXE size and headroom recorded at ship; `--npc-voice-test` PASS; `--exclusion-test` PASS.
+**Validation:** EXE 26,530,304 / 33,554,432 bytes (6.70 MiB headroom). `--npc-voice-test` PASS.
 
 ---
 
