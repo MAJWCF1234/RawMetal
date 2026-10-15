@@ -16,6 +16,7 @@
 #include "ai/engineer/Drones.h"
 #include <string>
 #include <string_view>
+#include <iosfwd>
 #include <utility>
 #include <cstdint>
 #include "Ragdoll.h"
@@ -292,6 +293,7 @@ public:
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
+    bool walkExclusionEast(std::ostream& report);
     static bool testExclusion();
     static bool testExclusionAuthoring();
     static Game exclusionInspection(int stage=0);

@@ -41,7 +41,7 @@ const char* terminalHeader(const Terminal& terminal){
 }
 const char* terminalStatus(const Game& game,const Terminal& terminal){
  if(terminal.activateState){
-  if(terminal.requireState&&!game.state(terminal.requireState))return "STATUS: INTERLOCK BLOCKED / FOLLOW PROCEDURE";
+  if(terminal.requireState&&!game.state(terminal.requireState))return "LOCKED / SEE REQUIRED STEP ABOVE";
   if(game.state(terminal.activateState))return terminal.toggleState?"STATUS: MACHINERY PAUSED / USE CONTROL TO RESUME":"STATUS: COMMAND ACCEPTED";
   return "STATUS: LOCAL CONTROL READY";
  }

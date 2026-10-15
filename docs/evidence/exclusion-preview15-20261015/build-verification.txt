@@ -1,0 +1,2 @@
+229 packaged resources match source: exact RGBA pixels/dimensions, byte-identical audio/models/animation
+-- RawMetal executable: 25629184 / 33,554,432 bytes; headroom 7925248 bytes (OoT 32 MiB)

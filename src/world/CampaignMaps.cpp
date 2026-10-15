@@ -128,6 +128,33 @@ void warehouseServices(Map& m,float floor,float roof){
 void actor(Map& m,const char* timer,ActorVisual visual,float scale,std::initializer_list<ActorKey> keys,bool loop=false,bool tool=false){m.actorTracks.push_back({stateId(timer),visual,scale,loop,tool,keys});}
 void cue(Map& m,const char* timer,int time,Sound sound,Vec2 position,const char* caption="",float gain=1,float z=std::numeric_limits<float>::quiet_NaN()){m.sequenceCues.push_back({stateId(timer),time,sound,position,gain,1,caption,z});}
 void machineryClock(Map& m,const char* timer,int period){TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(std::string(timer)+"_cycled");s.durationMs=period;s.finishAtMs=period;s.soundIntervalMs=0;s.loop=true;m.timedSequences.push_back(s);}
+// A compact inspection hold on the existing main route; all six visuals and
+// support behaviors reuse the Cleanup banks already shipped for Exclusion.
+void receivingCleanup(Map& m){
+ machineryClock(m,"receiving_cleanup_clock",60000);
+ const Vec2 starts[]={{7.8f,16},{14.6f,18.2f},{21,10.5f},{12,20},{15,20.5f},{7.5f,12}};
+ const Vec2 ends[]={{7.8f,14.5f},{15.5f,18.2f},{21,12},{12,21.5f},{15.8f,21.5f},{7.5f,13.5f}};
+ for(int i=0;i<6;++i){
+  ActorTrack t;t.timerState=stateId("receiving_cleanup_clock");t.visual=ActorVisual(4+i);t.scale=1.6f;t.health=90;
+  t.damageState=stateId("receiving_cleanup_damage_"+std::to_string(i));t.deadState=stateId("receiving_cleanup_dead_"+std::to_string(i));
+  t.keys={{0,starts[i],-25,kPi},{60000,starts[i],-25,kPi,0,1}};
+  auto& ai=t.ai;ai.mode=ActorAiMode::Guard;ai.role=GuardSquadRole(i+1);ai.faction=AiFaction::Raider;ai.squad=stateId("receiving_cleanup");ai.armed=true;
+  ai.weapon=(i==1||i==4)?2:1;ai.sightRange=14;ai.sightDot=.45f;ai.searchMs=6000;
+  ai.speed=i==3?1.25f:i==5?2.1f:1.55f;ai.suppress=i==3;
+  ai.patrol={{starts[i],-25,1500},{ends[i],-25,1200}};m.actorTracks.push_back(std::move(t));
+ }
+ // No extra progression gate: the personnel aisle remains an escape route.
+ terminal(m,{7,21.2f},"INSPECTION / FIELD CACHE","E: TAKE FLASHLIGHT. F: TOGGLE OWNED LIGHT.","SIX CLEANUP ROLES AHEAD. CROUCH / REAR Q KO / E GRAB.",0,stateId("receiving_cache_read"));
+ terminal(m,{7,19.5f},"INSPECTION / CHAIN TEST","E: RATTLE THE CHAIN NORTH OF THE AISLE.","WAIT FOR HIS BACK. CROUCH CLOSE. Q KO / E GRAB.",0,stateId("receiving_inspection_lure"));
+ TimedSequence lure;lure.timerState=stateId("receiving_inspection_lure");lure.finishState=stateId("receiving_inspection_lure_done");lure.x1=-2;lure.y1=-2;lure.x2=-1;lure.y2=-1;lure.durationMs=10000;lure.finishAtMs=5000;lure.soundIntervalMs=0;m.timedSequences.push_back(lure);
+ cue(m,"receiving_inspection_lure",1600,Sound::JunkMetal,{8.5f,14.5f},"CHAIN TEST / INSPECTION AISLE. WATCH THE PATROL TURN.",.6f,-24.3f);
+ cue(m,"receiving_inspection_lure",3200,Sound::JunkMetal,{8.5f,14.5f},"CROUCH / WAIT FOR HIS BACK / Q WHEN CLOSE.",.5f,-24.3f);
+ ScriptEvent cache;cache.id=stateId("receiving_cache_award");cache.level=14;cache.x1=0;cache.y1=0;cache.x2=24;cache.y2=24;cache.requireState=stateId("receiving_cache_read");
+ ScriptAction item;item.type=ScriptAction::Type::GiveItem;item.id=stateId("flashlight");item.value=1;cache.actions.push_back(item);m.scriptEvents.push_back(cache);
+ wall(m,6.1f,17.3f,9,17.5f,-25,-23.15f,15);wall(m,6.1f,17.3f,9,17.5f,-23.25f,-23.15f,13);
+ m.signs.push_back({{7.5f,17.52f},-23.8f,2.7f,.5f,0,"CLEANUP / HOLD","WEST / Q KO / E GRAB"});
+ wallLamp(m,7.5f,17.56f,-23.4f,kPi*.5f,1.3f,5);
+}
 void handCart(Map& m,float x,float y,float floor){
  wall(m,x-.42f,y-.6f,x+.42f,y+.6f,floor+.2f,floor+.29f,12);
  for(float xx:{x-.47f,x+.37f})for(float yy:{y-.4f,y+.4f})m.pipes.push_back({{xx,yy},{xx+.1f,yy},floor+.14f,.14f,floor+.14f,1});
@@ -446,7 +473,9 @@ std::shared_ptr<const Map> make(int level){
   container(m,17,15,-25,true);container(m,2,15,-25,false);
   for(float y:{4.f,13.f})wall(m,2,y,6.5f,y+1.2f,-25,-24.1f,3);
   terminal(m,{10.5f,18},"RESTRICTED MATERIAL INTAKE","DESTINATION: ENERGY RESEARCH.","TRANSFER AUTHORIZATION REQUIRED.");
-  m.creatureSpawns={{CreatureKind::Huntsman,{14,15},-25}};
+  // Cleanup now owns this existing hold; avoid an offscreen creature fight.
+  m.creatureSpawns.clear();
+  receivingCleanup(m);
   m.pickupSpawns.push_back({{16,7},PickupKind::Ammo,-25});
   // Inspection islands divide unloading from the through personnel aisle.
   board(m,5,21,-22.5f,"INSPECTION HOLD","RESEARCH RECEIVING / SEALED LOAD",3.f);

@@ -1,0 +1,47 @@
+Direct Medic treatment uses the complete authored opening duration: PASS
+Direct Medic visibly opens its case at source speed before healing or spending its charge: PASS
+A native Medic opening beyond the legacy 2400ms clock saves and restores its exact work: PASS
+Saved and uninterrupted native openings finish one real thirty-point heal with one finite charge and no concurrent pistol: PASS
+Direct Medic treatment uses the complete authored opening duration: PASS
+Direct Medic visibly opens its case at source speed before healing or spending its charge: PASS
+A native Medic opening beyond the legacy 2400ms clock saves and restores its exact work: PASS
+Saved and uninterrupted native openings finish one real thirty-point heal with one finite charge and no concurrent pistol: PASS
+Medic reserves its kit for squadmates at half health or lower: PASS
+Medic uses a physically short handgun with a twelve-round magazine and real first-hit damage: PASS
+Medic handgun magazine and physical weapon selection survive saves: PASS
+Default roles retain the previous leader and alternating flank behavior: PASS
+Legacy role-default guards do not acquire support actions or charges: PASS
+Explicit mixed-team roles preserve anchors and Assault/Rusher flanks when authoring order changes: PASS
+An anchor casualty does not reassign surviving explicit flank and support roles: PASS
+Explicit mixed-team roles preserve anchors and Assault/Rusher flanks when authoring order changes: PASS
+An anchor casualty does not reassign surviving explicit flank and support roles: PASS
+Rusher physically closes toward its target instead of stopping at the ordinary gun range: PASS
+Sharpshooter holds a clear distant firing post and performs real attacks: PASS
+Sharpshooter backs away from close contact without advancing through the player: PASS
+medic detour Hz=60 position=9.58025,5.75345 detour=2.52584 safe=1 damage=20 target=0 work=0
+Medic detours around low cover and spends one charge to heal thirty damage at 60/120 Hz: PASS
+Treatment occurs beside the actual living patient rather than remotely through the wall: PASS
+medic detour Hz=120 position=9.57454,5.74832 detour=2.52439 safe=1 damage=20 target=0 work=0
+Medic detours around low cover and spends one charge to heal thirty damage at 60/120 Hz: PASS
+Treatment occurs beside the actual living patient rather than remotely through the wall: PASS
+Treatment has a readable delay before healing or spending its charge: PASS
+Save preserves the separate support target and interrupted treatment: PASS
+Restored treatment heals and spends exactly once without duplicating its completion event: PASS
+Treatment cooldown resumes within one simulation frame after saving: PASS
+Medic has two finite charges and never regenerates a third healing event: PASS
+Medic does not resurrect dead teammates or spend charges treating corpses: PASS
+Medic refuses enemies, neutrals and members of another squad: PASS
+Medic refuses enemies, neutrals and members of another squad: PASS
+Medic refuses enemies, neutrals and members of another squad: PASS
+Busy Medic keeps its hostile combat reference separate and releases shooting leases without spending ammunition: PASS
+Corrupt saved support targets, charges or clocks are rejected safely: PASS
+Corrupt saved support targets, charges or clocks are rejected safely: PASS
+Corrupt saved support targets, charges or clocks are rejected safely: PASS
+Corrupt saved support targets, charges or clocks are rejected safely: PASS
+Corrupt saved support targets, charges or clocks are rejected safely: PASS
+Explicit role survives record ordering before AI, faction and weapon configuration: PASS
+Role authoring rejects unsupported role values: PASS
+Active role authoring rejects an unarmed guard: PASS
+Active role authoring requires a named squad: PASS
+Active role authoring rejects civilian or escort modes: PASS
+checks=44 result=PASS

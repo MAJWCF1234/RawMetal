@@ -4,6 +4,8 @@ RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
 streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
 The current tester target is **v0.7.0-preview.15 / ASHFALL EXCLUSION ZONE**.
 See the consolidated [release notes](RELEASE_NOTES.md).
+The [native walkthrough notes](docs/exclusion-preview15-playtest-20261015.md) cover
+readability changes and the physical north/east approach checks.
 
 ## Start the Exclusion playtest
 
@@ -24,6 +26,10 @@ Basin, and South Wash**. The six existing Cleanup roles remain Assault,
 Sharpshooter, Rusher, Heavy, Engineer, and Medic. Existing patrol, hearing,
 awareness, firearms, support, and movement systems drive the encounter. No new
 areas or animation banks are added.
+
+The existing **Receiving 02** campaign area also hosts a six-role inspection hold,
+a field cache and a chain distraction. Reach it on the main route, or use console
+`MAP 14` for a direct test.
 
 The route starts behind the west cover screen:
 

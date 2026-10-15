@@ -24,6 +24,20 @@ bool Game::testCampaignMaps(){
   InputState use{};use.use=true;signal.updateInteraction(use,.01f);
   check(signal.logTime()>0&&signal.world().terminals().front().yaw==0,"Signal alcove computer faces its entrance and its log opens through E");
  }
+ {Game hold;hold.loadLevel(14,false);hold.updateStreaming(0);unsigned roles=0;int count=0;
+  for(size_t i=0;i<hold.npcActors().size();++i){const auto& npc=hold.npcActors()[i];if(npc.homeLevel!=14||npc.track().ai.mode!=ActorAiMode::Guard)continue;++count;roles|=1u<<(int(npc.track().ai.role)-1);
+   check(hold.friendlyBodyFits(14,npc.pose.position,npc.pose.z,npc.track().scale),"Receiving Cleanup spawn has physical standing clearance");
+   for(const auto& p:npc.track().ai.patrol)check(hold.friendlyBodyFits(14,p.position,p.z,npc.track().scale),"Receiving Cleanup patrol pause has standing clearance");
+   if(npc.track().ai.role==GuardSquadRole::Engineer||npc.track().ai.role==GuardSquadRole::Medic)check(npc.track().ai.weapon==2,"Receiving support roles retain pistols");
+  }
+  check(count==6&&roles==63,"Existing Receiving 02 hosts exactly the six baked Cleanup roles");
+  hold.m_player.pos={7,22.1f};hold.m_player.z=-25;hold.m_player.angle=-kPi*.5f;InputState use;use.use=true;hold.update(use,1.f/60);hold.update({},1.f/60);
+  check(hold.state("receiving_cache_read")&&hold.hasFlashlight(),"Main-route physical cache grants the same owned flashlight");
+  Game saved;check(saved.decodeSave(hold.encodeSave())&&saved.hasFlashlight()&&saved.state("receiving_cache_read"),"Main-route encounter and cache survive save/load");
+  hold.update(use,1.f/60);hold.update({},1.f/60); // E closes the cache log before the next control.
+  hold.m_player.pos={7,20.4f};hold.m_player.angle=-kPi*.5f;hold.update(use,1.f/60);
+  check(hold.state("receiving_inspection_lure")>0,"Main-route chain distraction is operated through E");
+ }
  int mutants=0;for(int level=10;level<32;++level){Game area;area.loadLevel(level,false);
   check(area.world().definition().musicCue==MusicCue::Freight,"Freight section has dedicated authored soundtrack");
   for(const auto&e:area.enemies())if(e.kind==Enemy::Kind::Mutant){++mutants;check(e.maxHp==180&&std::fabs(e.bodyTop()-e.bodyBottom()-1.85f)<.001f,"Mutated human has authored health and standing hull");check(std::fabs(area.groundHeight(e.pos,e.z+.2f)-e.z)<.02f,"Mutated human stands on authored floor");}
