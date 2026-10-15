@@ -1,0 +1,260 @@
+META_LEVEL_ID: 1
+META_LEVEL_NAME: ASHFALL EXCLUSION ZONE
+META_DEFAULT_TARGET: CUSTOM
+META_CAMPAIGN_NAME: ASHFALL EXCLUSION ZONE
+META_EDITOR_PROJECT: ASHFALL EXCLUSION ZONE
+META_EDITOR_PLAN_AREA: Ashfall / Forward Facility
+
+--- MAP_CODE_START ---
+  if(m_level==1){
+   // Ashfall Exclusion Zone — wasteland yard with forward facility and cleanup humans.
+   // Player start marker: {4.5f,6.5f,0.0f}.
+   static constexpr MapRows RawMetal_Ashfall_Exclusion_Zone_L0_Wasteland_Yard = {
+    "........................",
+    ".GG.................CC..",
+    "........................",
+    "..........####..........",
+    "..........#..#..........",
+    "..........#..#..........",
+    "..........#..#..........",
+    "..........####..........",
+    "........................",
+    "...GG..............CC...",
+    "........................",
+    "........................",
+    "......##########........",
+    "......#........#........",
+    "......#........#........",
+    "......#........#........",
+    "......#........#........",
+    "......####..####........",
+    "........................",
+    "...CC..............GG...",
+    "........................",
+    "........................",
+    ".X......................",
+    "........................",
+   };
+   m_layers={
+    {"ASHFALL EXCLUSION ZONE / Wasteland Yard",0.0f,0.0f,RawMetal_Ashfall_Exclusion_Zone_L0_Wasteland_Yard},
+   };
+  }
+--- MAP_CODE_END ---
+
+--- CUSTOM_CAMPAIGN_DATA_START ---
+CAMPAIGN|ASHFALL EXCLUSION ZONE|0
+MAP|0|Ashfall / Forward Facility|0|0|4.5|6.5|0.0|1|2.8|0.27|brutal_wasteland|0|1|0|1|0
+LAYER|0|0|Wasteland Yard|0.0|0.0
+ROW|0|0|0|........................
+ROW|0|0|1|.GG.................CC..
+ROW|0|0|2|........................
+ROW|0|0|3|..........####..........
+ROW|0|0|4|..........#..#..........
+ROW|0|0|5|..........#..#..........
+ROW|0|0|6|..........#..#..........
+ROW|0|0|7|..........####..........
+ROW|0|0|8|........................
+ROW|0|0|9|...GG..............CC...
+ROW|0|0|10|........................
+ROW|0|0|11|........................
+ROW|0|0|12|......##########........
+ROW|0|0|13|......#........#........
+ROW|0|0|14|......#........#........
+ROW|0|0|15|......#........#........
+ROW|0|0|16|......#........#........
+ROW|0|0|17|......####..####........
+ROW|0|0|18|........................
+ROW|0|0|19|...CC..............GG...
+ROW|0|0|20|........................
+ROW|0|0|21|........................
+ROW|0|0|22|.X......................
+ROW|0|0|23|........................
+# Forward facility shell (open south door at 11–13).
+STRUCT|0|6.0|12.0|16.0|12.16|0.0|2.65|0|3
+STRUCT|0|6.0|12.0|6.16|18.0|0.0|2.65|0|3
+STRUCT|0|15.84|12.0|16.0|18.0|0.0|2.65|0|3
+STRUCT|0|6.0|17.84|11.0|18.0|0.0|2.65|0|3
+STRUCT|0|13.0|17.84|16.0|18.0|0.0|2.65|0|3
+STRUCT|0|6.16|12.16|15.84|17.84|2.55|2.7|0|2
+# Scrap walls / cover in the open yard.
+STRUCT|0|3.2|8.5|3.4|11.5|0.0|1.55|0|3
+STRUCT|0|18.5|9.0|20.5|9.2|0.0|1.45|0|3
+STRUCT|0|19.2|14.0|19.4|17.5|0.0|1.7|0|3
+STRUCT|0|8.5|4.8|11.5|5.0|0.0|1.35|0|3
+PROP|0|0|2.8|19.5|1.35|2.2|1.5707963|1.1|0.66|0
+PROP|0|1|20.5|5.5|1.1|1.9|0.7|0.30|0.95|0
+PROP|0|2|21.2|18.5|0.35|3.2|0.4|1.5|0.18|0
+FIXTURE|0|8|2.4|10.2|0.65|0.7|0.20|1.0|1.5707963|1
+FIXTURE|0|6|17.8|6.5|0.0|1.8|0.55|0.95|0.25|1
+FIXTURE|0|7|14.2|14.5|0.0|1.7|0.5|1.8|1.5707963|1
+TERMINAL|0|11.0|13.5|0.0|0|ASHFALL FIELD RELAY|EXCLUSION ZONE / FORWARD FACILITY|96 X 72 M SURFACE GRID / LOCAL LINK.
+CLUTTER|0|2|5.2|7.2|-999|0.4
+CLUTTER|0|3|6.1|5.8|-999|1.1
+CLUTTER|0|1|18.2|11.5|-999|0.2
+CLUTTER|0|4|16.5|19.8|-999|2.0
+CLUTTER|0|0|9.5|10.2|-999|0.8
+PICKUP|0|1|5.5|14.5
+PICKUP|0|0|15.5|10.5
+NAV_HINT|0|10.5|11.5|0|0
+NAV_HINT|0|3.3|10.0|0|1
+NAV_HINT|0|19.0|9.1|0|1
+NAV_HINT|0|19.3|15.5|0|1
+NAV_HINT|0|10.0|5.0|0|1
+CREATURE|0|0|20.5|20.5|0
+CREATURE|0|1|21.5|3.5|0
+MAP|1|Ashfall / Scrap Basin|24|0|3.5|12.5|0.0|1|2.8|0.27|brutal_wasteland|0|1|1|0|0
+LAYER|1|0|Scrap Basin|0.0|0.0
+ROW|1|0|0|........................
+ROW|1|0|1|........................
+ROW|1|0|2|..GG..............CC....
+ROW|1|0|3|........................
+ROW|1|0|4|........................
+ROW|1|0|5|.....####...............
+ROW|1|0|6|.....#..#...............
+ROW|1|0|7|.....#..#...............
+ROW|1|0|8|.....####...............
+ROW|1|0|9|........................
+ROW|1|0|10|........................
+ROW|1|0|11|..CC..............GG....
+ROW|1|0|12|........................
+ROW|1|0|13|........................
+ROW|1|0|14|........................
+ROW|1|0|15|............####........
+ROW|1|0|16|............#..#........
+ROW|1|0|17|............#..#........
+ROW|1|0|18|............####........
+ROW|1|0|19|........................
+ROW|1|0|20|..GG..............CC....
+ROW|1|0|21|........................
+ROW|1|0|22|........................
+ROW|1|0|23|........................
+STRUCT|1|8.0|10.5|8.2|14.5|0.0|1.6|0|3
+STRUCT|1|14.5|16.0|18.5|16.2|0.0|1.5|0|3
+PROP|1|0|20.0|8.0|1.4|2.3|0.2|1.15|0.7|0
+PROP|1|1|5.5|18.5|1.05|1.8|1.1|0.28|0.9|0
+CLUTTER|1|2|10.5|12.5|-999|0.5
+CLUTTER|1|3|16.5|7.5|-999|1.4
+CREATURE|1|0|18.5|18.5|0
+NAV_HINT|1|8.1|12.5|0|1
+NAV_HINT|1|16.5|16.1|0|1
+MAP|2|Ashfall / South Wash|0|24|12.5|3.5|0.0|1|2.8|0.27|brutal_wasteland|1|0|0|0|0
+LAYER|2|0|South Wash|0.0|0.0
+ROW|2|0|0|........................
+ROW|2|0|1|........................
+ROW|2|0|2|..GG..............CC....
+ROW|2|0|3|........................
+ROW|2|0|4|........................
+ROW|2|0|5|........................
+ROW|2|0|6|.....####...............
+ROW|2|0|7|.....#..#...............
+ROW|2|0|8|.....#..#...............
+ROW|2|0|9|.....####...............
+ROW|2|0|10|........................
+ROW|2|0|11|........................
+ROW|2|0|12|........................
+ROW|2|0|13|..CC..............GG....
+ROW|2|0|14|........................
+ROW|2|0|15|........................
+ROW|2|0|16|........................
+ROW|2|0|17|............####........
+ROW|2|0|18|............#..#........
+ROW|2|0|19|............####........
+ROW|2|0|20|........................
+ROW|2|0|21|........................
+ROW|2|0|22|........................
+ROW|2|0|23|........................
+STRUCT|2|10.0|8.0|14.0|8.2|0.0|1.45|0|3
+PROP|2|2|18.5|14.5|0.4|3.0|0.5|1.6|0.2|0
+CLUTTER|2|1|6.5|10.5|-999|0.9
+CREATURE|2|2|16.5|16.5|0
+NAV_HINT|2|12.0|8.1|0|1
+TIMED_SEQUENCE|0|exclusion_clock|exclusion_clock_done|0|0|24|24|-0.2|3|60000|60000|0|0|0|0|1|1
+# Cleanup Engineer
+ACTOR|0|exclusion_clock|5|1.6|0|0|0
+ACTOR_KEY|0|0|0|9.5|14.5|0|0|0|0
+ACTOR_KEY|0|0|60000|9.5|14.5|0|0|0|1
+ACTOR_HEALTH|0|0|90|exclusion_damage_0|exclusion_dead_0
+ACTOR_AI|0|0|3||1.45|2|6
+ACTOR_GUARD|0|0|18|0.3|600|5000|exclusion_alert
+ACTOR_PATROL|0|0|9.5|14.5|0|1000
+ACTOR_PATROL|0|0|12.5|14.5|0|800
+ACTOR_PATROL|0|0|12.5|16.5|0|900
+ACTOR_PATROL|0|0|9.5|16.5|0|700
+ACTOR_WEAPON|0|0|2|700|1100|12|6
+ACTOR_FACTION|0|0|4|exclusion_cleanup
+ACTOR_TACTICS|0|0|0|2
+ACTOR_ROLE|0|0|2
+# Cleanup Assault
+ACTOR|0|exclusion_clock|4|1.6|0|0|1
+ACTOR_KEY|0|1|0|7.5|10.5|0|1.5707963|0|0
+ACTOR_KEY|0|1|60000|7.5|10.5|0|1.5707963|0|1
+ACTOR_HEALTH|0|1|90|exclusion_damage_1|exclusion_dead_1
+ACTOR_AI|0|1|3||1.75|2|6
+ACTOR_GUARD|0|1|18|0.3|600|5000|exclusion_alert
+ACTOR_PATROL|0|1|7.5|10.5|0|900
+ACTOR_PATROL|0|1|7.5|8.5|0|700
+ACTOR_PATROL|0|1|10.5|8.5|0|800
+ACTOR_WEAPON|0|1|1|550|900|18|8
+ACTOR_FACTION|0|1|4|exclusion_cleanup
+ACTOR_TACTICS|0|1|0|0
+ACTOR_ROLE|0|1|1
+# Cleanup Sharpshooter
+ACTOR|0|exclusion_clock|6|1.6|0|0|2
+ACTOR_KEY|0|2|0|14.5|10.5|0|0|0|0
+ACTOR_KEY|0|2|60000|14.5|10.5|0|0|0|1
+ACTOR_HEALTH|0|2|90|exclusion_damage_2|exclusion_dead_2
+ACTOR_AI|0|2|3||1.55|2|6
+ACTOR_GUARD|0|2|18|0.3|600|5000|exclusion_alert
+ACTOR_PATROL|0|2|14.5|10.5|0|1000
+ACTOR_PATROL|0|2|17.5|10.5|0|800
+ACTOR_WEAPON|0|2|1|900|1400|18|12
+ACTOR_FACTION|0|2|4|exclusion_cleanup
+ACTOR_TACTICS|0|2|0|0
+ACTOR_ROLE|0|2|3
+# Cleanup Heavy
+ACTOR|0|exclusion_clock|7|1.6|0|0|3
+ACTOR_KEY|0|3|0|15.5|15.5|0|3.1415927|0|0
+ACTOR_KEY|0|3|60000|15.5|15.5|0|3.1415927|0|1
+ACTOR_HEALTH|0|3|90|exclusion_damage_3|exclusion_dead_3
+ACTOR_AI|0|3|3||1.25|2|6
+ACTOR_GUARD|0|3|18|0.3|600|5000|exclusion_alert
+ACTOR_PATROL|0|3|15.5|15.5|0|1000
+ACTOR_WEAPON|0|3|1|650|1000|18|10
+ACTOR_FACTION|0|3|4|exclusion_cleanup
+ACTOR_TACTICS|0|3|1|0
+ACTOR_ROLE|0|3|4
+# Cleanup Medic
+ACTOR|0|exclusion_clock|8|1.6|0|0|4
+ACTOR_KEY|0|4|0|11.0|15.5|0|0|0|0
+ACTOR_KEY|0|4|60000|11.0|15.5|0|0|0|1
+ACTOR_HEALTH|0|4|90|exclusion_damage_4|exclusion_dead_4
+ACTOR_AI|0|4|3||1.55|2|6
+ACTOR_GUARD|0|4|18|0.3|600|5000|exclusion_alert
+ACTOR_PATROL|0|4|11.0|15.5|0|1000
+ACTOR_WEAPON|0|4|2|800|1200|18|6
+ACTOR_FACTION|0|4|4|exclusion_cleanup
+ACTOR_TACTICS|0|4|0|0
+ACTOR_ROLE|0|4|5
+# Cleanup Rusher
+ACTOR|0|exclusion_clock|9|1.6|0|0|5
+ACTOR_KEY|0|5|0|18.5|12.5|0|1.5707963|0|0
+ACTOR_KEY|0|5|60000|18.5|12.5|0|1.5707963|0|1
+ACTOR_HEALTH|0|5|90|exclusion_damage_5|exclusion_dead_5
+ACTOR_AI|0|5|3||2.1|2|6
+ACTOR_GUARD|0|5|18|0.3|600|5000|exclusion_alert
+ACTOR_PATROL|0|5|18.5|12.5|0|700
+ACTOR_PATROL|0|5|20.5|12.5|0|600
+ACTOR_PATROL|0|5|20.5|16.5|0|800
+ACTOR_WEAPON|0|5|1|450|850|18|6
+ACTOR_FACTION|0|5|4|exclusion_cleanup
+ACTOR_TACTICS|0|5|0|0
+ACTOR_ROLE|0|5|6
+# Facility escort for civilian schedule observation
+TIMED_SEQUENCE|0|exclusion_civ_clock|exclusion_civ_clock_done|0|0|24|24|-0.2|3|60000|60000|0|0|0|0|1|1
+ACTOR|0|exclusion_civ_clock|0|1.6|0|0|6
+ACTOR_KEY|0|6|0|11.0|11.5|0|0|0|0
+ACTOR_KEY|0|6|60000|11.0|11.5|0|0|0|1
+ACTOR_HEALTH|0|6|70|exclusion_civ_damage|exclusion_civ_dead
+ACTOR_AI|0|6|2||1.4|2|6
+ACTOR_FACTION|0|6|2|
+--- CUSTOM_CAMPAIGN_DATA_END ---

@@ -5,24 +5,23 @@
 namespace retro {
 Game Game::guardDangerInspection(int stage){
  if(stage<0||stage>2)throw std::runtime_error("Unknown guard danger inspection stage");
- auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");Game g(campaign);
+ auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");Game g(campaign);
  size_t engineer=g.npcActors().size();
- for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel==1&&npc.track().ai.mode==ActorAiMode::Guard&&npc.track().ai.role==GuardSquadRole::Engineer){
-  if(engineer!=g.npcActors().size())throw std::runtime_error("Danger inspection has duplicate cargo Engineers");engineer=actor;}}
- if(g.chunkCount()!=3||engineer==g.npcActors().size())
-  throw std::runtime_error("Guard danger inspection requires the actual stitched cleanup squad export");
+ for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel==0&&npc.track().ai.mode==ActorAiMode::Guard&&npc.track().ai.role==GuardSquadRole::Engineer){
+  if(engineer!=g.npcActors().size())throw std::runtime_error("Danger inspection has duplicate facility Engineers");engineer=actor;}}
+ if(g.chunkCount()<2||engineer==g.npcActors().size())
+  throw std::runtime_error("Guard danger inspection requires the Exclusion Zone wasteland cleanup export");
 
- // Cross the ordinary western entrance and run its real activation trigger.
- // Health, targets, action clocks and finite resources remain gameplay-owned.
- g.m_player.pos={26,20};g.crossChunkBoundary();g.updateStreaming(0);
+ // Facility squad is live on map 0; keep the observer clear of the wasteland yard.
+ g.m_player.pos={4.5f,6.5f};g.updateStreaming(0);
  for(int frame=0;frame<12;++frame)g.update({},1.f/60);
- if(g.level()!=1||!g.state("cleanup_enabled")||g.dead())throw std::runtime_error("Cleanup entry did not safely activate its authored squad");
- Vec2 observer{1.5f,1.5f};
+ if(g.level()!=0||g.dead())throw std::runtime_error("Exclusion Zone danger entry did not remain on the facility chunk");
+ Vec2 observer{2.5f,3.5f};
  if(!g.hullFits(observer,0,Player::StandingHeight))throw std::runtime_error("Danger encounter observer intersects geometry");
  g.m_player.pos=observer;g.m_player.z=0;
 
  const auto start=g.npcActors()[engineer].pose;
- if(g.npcActors()[engineer].level!=g.level())throw std::runtime_error("Authored Engineer is outside the inspected cargo chunk");
+ if(g.npcActors()[engineer].level!=g.level())throw std::runtime_error("Authored Engineer is outside the inspected facility chunk");
  // A real stationary player-attributed projectile just west of the Engineer
  // permits an exposed reaction without guessing a concealed enemy position.
  Point3 hazard{start.position.x-1.25f,start.position.y,start.z+.15f};

@@ -1,9 +1,11 @@
 #include "Game.h"
 #include "../renderer/SoftwareRenderer.h"
+#include "../world/CustomCampaign.h"
 #include <sstream>
 #include <cctype>
 #include <fstream>
 #include <charconv>
+#include <algorithm>
 namespace retro {
 void Game::executeConsole(std::string command){
  if(command.empty())return;
@@ -12,7 +14,7 @@ void Game::executeConsole(std::string command){
  for(auto&c:command)c=char(std::tolower(static_cast<unsigned char>(c)));
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  if(verb=="help"||verb=="maps"){
-  m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST TO VISIT THE NEW SHORE");
+  m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST / MAP EXCLUSION");
   for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
@@ -20,6 +22,12 @@ void Game::executeConsole(std::string command){
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
   m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL WASTELAND / 15 STITCHED SURFACE CHUNKS.");
+ }
+ else if(verb=="map"&&(arg=="exclusion"||arg=="facility")){
+  if(m_customCampaigns.empty()&&!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);
+  auto found=std::find_if(m_customCampaigns.begin(),m_customCampaigns.end(),[](const auto&c){return c&&c->sourceFile=="RawMetal-Ashfall-Exclusion-Zone.txt";});
+  if(found==m_customCampaigns.end()){try{m_customCampaigns.push_back(loadEmbeddedExclusionZoneCampaign());found=m_customCampaigns.end()-1;}catch(...){m_consoleLog.push_back("EXCLUSION ZONE PACK MISSING.");return;}}
+  selectCustomCampaign(int(found-m_customCampaigns.begin()));m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL EXCLUSION ZONE / GENERATED WASTELAND TERRAIN + FORWARD FACILITY.");
  }
  else if(verb=="map"&&(arg=="coast"||arg=="shore")){
   m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=13;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL COAST / WALK EAST TO THE WATER.");

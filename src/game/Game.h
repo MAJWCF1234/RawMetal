@@ -403,7 +403,7 @@ private:
     void loadLevel(int level,bool carry);
     World makeWorld(int level)const;
     void selectCustomCampaign(int index);
-    int customMenuItemCount()const{return int(m_customCampaigns.size())+2;} // Ashfall + uploaded campaigns + Back
+    int customMenuItemCount()const{return int(m_customCampaigns.size())+1;} // uploaded campaigns + Back
     int customMenuLogicalIndex(int row)const{return m_customMenuOffset+row;}
     int m_level=0;
     struct ChunkState {World world;ai::NodeGraph nav;bool navReady=false;std::vector<Enemy> enemies;std::vector<Pickup> pickups;int kills=0;bool resident=true;std::vector<Clutter> clutter;};
@@ -437,6 +437,7 @@ private:
     void reloadWeapon();
     void punchImpact();
     void applyPunchHit(Enemy& enemy);
+    void applyNpcPunchHit(size_t actor);
     bool applyEnemyDamage(Enemy& enemy,float amount,bool bloodDecal=true,bool closeHitStop=false,int level=-1);
     void updateVrMelee(const InputState& input,float dt);
     void receiveDamage(float amount,Vec2 source,bool blockable=true);

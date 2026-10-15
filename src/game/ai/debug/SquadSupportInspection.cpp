@@ -6,25 +6,24 @@
 namespace retro {
 Game Game::squadSupportInspection(int stage){
  if(stage<0||stage>2)throw std::runtime_error("Unknown squad support inspection stage");
- auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");
- auto campaign=std::make_shared<CustomCampaign>(*authored);auto cargo=std::make_shared<AuthoredMapData>(*campaign->maps.at(1));
- // Keep the supplied six roles, their starting poses and the real cargo
- // geometry/activation trigger. A durable scripted Facility opponent gives
- // the ordinary Rusher a continuing threat without resetting its health.
- const Vec2 threatPosition{20.5f,21.5f};const size_t opponentIndex=cargo->actorTracks.size();
- ActorTrack opponent=cargo->actorTracks.front();opponent.visual=ActorVisual::Worker;opponent.tool=false;opponent.ai={};opponent.ai.faction=AiFaction::Facility;
+ auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");
+ auto campaign=std::make_shared<CustomCampaign>(*authored);auto facility=std::make_shared<AuthoredMapData>(*campaign->maps.at(0));
+ // Keep the Exclusion Zone wasteland squad and facility. A durable scripted
+ // Raider opponent gives the ordinary Rusher a continuing threat.
+ const Vec2 threatPosition{20.5f,21.5f};const size_t opponentIndex=facility->actorTracks.size();
+ ActorTrack opponent=facility->actorTracks.front();opponent.visual=ActorVisual::Worker;opponent.tool=false;opponent.ai={};opponent.ai.faction=AiFaction::Raider;
  opponent.health=5000;opponent.damageState=stateId("squad_support_opponent_damage");opponent.deadState=stateId("squad_support_opponent_dead");
  for(auto&key:opponent.keys){key.position=threatPosition;key.yaw=kPi;key.clip=0;key.lookAtActor=-1;}
- cargo->actorTracks.push_back(opponent);campaign->maps[1]=cargo;Game g(campaign);
+ facility->actorTracks.push_back(opponent);campaign->maps[0]=facility;Game g(campaign);
  size_t patient=std::numeric_limits<size_t>::max(),medic=patient;
- for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel!=1)continue;
+ for(size_t actor=0;actor<g.npcActors().size();++actor){const auto&npc=g.npcActors()[actor];if(npc.homeLevel!=0)continue;
   if(npc.track().ai.role==GuardSquadRole::Rusher)patient=actor;if(npc.track().ai.role==GuardSquadRole::Medic)medic=actor;}
  if(patient==std::numeric_limits<size_t>::max()||medic==std::numeric_limits<size_t>::max()||g.npcActors()[patient].track().health!=90)
-  throw std::runtime_error("Squad support inspection requires the actual ninety-health cargo Rusher and Medic");
- g.m_player.pos={26,20};g.crossChunkBoundary();g.updateStreaming(0);
+  throw std::runtime_error("Squad support inspection requires the Exclusion Zone ninety-health Rusher and Medic");
+ g.m_player.pos={4.5f,6.5f};g.updateStreaming(0);
  for(int frame=0;frame<12;++frame)g.update({},1.f/60);
- if(g.level()!=1||!g.state("cleanup_enabled"))throw std::runtime_error("Squad support did not enter its real cleanup activation trigger");
- g.m_player.pos={1.5f,1.5f};g.m_player.z=0;
+ if(g.level()!=0)throw std::runtime_error("Squad support did not remain on the Exclusion Zone facility");
+ g.m_player.pos={2.5f,3.5f};g.m_player.z=0;
  if(!g.hullFits(g.player().pos,0,Player::StandingHeight))throw std::runtime_error("Squad support remote observer intersects geometry");
  const char*names[]={"patient-withdraw","medic-kit","patient-resume"};
  std::filesystem::create_directories("diagnostics/squad-support-20261012");
@@ -36,7 +35,7 @@ Game Game::squadSupportInspection(int stage){
    for(const char*field:{"schedule","schedule_step","task","task_status","task_subject","guard_under_fire","guard_patient_move","support_ms","support_used","task_failures","task_reason"})timeline<<','<<get(actor,field);timeline<<'\n';}timeline.flush();};
  auto advance=[&](){g.update({},1.f/60);++frames;budgetSafe&=g.m_npcNavBudget>=0&&g.m_npcNavBudget<=4;
   if(g.dead()||g.npcActors()[patient].pose.clip==4||g.npcActors()[medic].pose.clip==4)throw std::runtime_error("Squad support killed its remote observer, patient or Medic");
-  if(g.npcActors()[patient].level!=1||g.npcActors()[medic].level!=1)throw std::runtime_error("Squad support pair left the actual cargo encounter");
+  if(g.npcActors()[patient].level!=0||g.npcActors()[medic].level!=0)throw std::runtime_error("Squad support pair left the Exclusion Zone facility");
   if(frames%10==0)record();};
  auto pairDistance=[&](){return length(g.npcActors()[patient].pose.position-g.npcActors()[medic].pose.position);};
  const auto originalPatient=g.npcActors()[patient].pose.position;bool rushing=false;
@@ -65,7 +64,7 @@ Game Game::squadSupportInspection(int stage){
  record();
  if(!reached||!budgetSafe){std::ofstream failure(std::string("diagnostics/squad-support-20261012/")+names[stage]+"-failure.txt");
   failure<<"frames="<<frames<<" wound="<<woundFrame<<" withdraw="<<withdrawFrame<<" kit="<<kitFrame<<" heal="<<healFrame<<" resume="<<resumeFrame<<" maximumRearMovement="<<withdrawal<<" pairDistance="<<pairDistance()<<" navigationBudgetSafe="<<budgetSafe<<'\n';
-  throw std::runtime_error("Actual cargo squad did not reach reciprocal withdrawal, physical kit treatment or resumed Rusher advance; inspect squad support timeline");}
+  throw std::runtime_error("Exclusion Zone squad did not reach reciprocal withdrawal, physical kit treatment or resumed Rusher advance; inspect squad support timeline");}
  // Capture placement happens after the observed gameplay milestone. Nothing
  // alters either actor's job, movement, resources or damage for the image.
  const auto&receiver=g.npcActors()[patient];const auto&provider=g.npcActors()[medic];

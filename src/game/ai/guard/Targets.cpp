@@ -25,7 +25,10 @@ void Game::rememberGuardTarget(size_t actor,const AiTarget&target){
 }
 bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)const{
  if(!target.valid())return false;auto live=resolveGuardTarget(actor,{target.kind,target.level,target.index});if(!live.valid())return false;const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;float eye=friendlyHullHeight(actor,npc.track())*.85f;auto delta=live.position-pose.position;float z=live.feet+live.eye-pose.z-eye;
- auto shift=chunkOffset(npc.level)-chunkOffset(m_level);return lengthSq(delta)+z*z<c.sightRange*c.sightRange&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>c.sightDot&&soundRayClear(pose.position+shift,pose.z+eye,live.position+shift,live.feet+live.eye);
+ // Crouched targets present a smaller silhouette; shrink recognition range so
+ // sneaking closer is required before the cone can lock on.
+ float range=c.sightRange;if(live.kind==ShotKind::Player&&m_player.crouched)range*=.55f;else if(live.height<Player::StandingHeight*.75f)range*=.55f;
+ auto shift=chunkOffset(npc.level)-chunkOffset(m_level);return lengthSq(delta)+z*z<range*range&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>c.sightDot&&soundRayClear(pose.position+shift,pose.z+eye,live.position+shift,live.feet+live.eye);
 }
 AiTarget Game::guardThreat(size_t actor,const ActorPose&pose)const{
  AiTarget best;float score=1e9f;const auto&npc=m_friendlyActors[actor];auto faction=actorFaction(npc.track());auto previous=guardTarget(actor);

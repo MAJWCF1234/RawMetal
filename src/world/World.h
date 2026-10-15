@@ -309,7 +309,11 @@ private:
     static constexpr int TerrainSamplesZ=TerrainMaxZ-TerrainMinZ+3;
     std::vector<std::int8_t> m_terrainDensity;
     std::vector<std::uint8_t> m_terrainMaterial;
+    // Custom outdoor wasteland packs (Exclusion Zone) sample a local heightfield
+    // instead of the stitched Ashfall world voxels.
+    bool m_exclusionTerrain=false;
     void buildTerrain();
+    void settleExclusionFacilityOnTerrain();
     std::size_t terrainSampleIndex(int sx,int sy,int sz)const;
     float terrainDensity(float x,float y,float z)const;
     float terrainSurfaceBelow(float x,float y,float feet)const;

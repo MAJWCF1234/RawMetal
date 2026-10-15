@@ -19,8 +19,8 @@ bool Game::testGuardAI(){
   actor.ai.patrol={{{6.5f,6.5f},0,1000},{{9.5f,6.5f},0,600},{{9.5f,9.5f},0,600},{{6.5f,9.5f},0,600}};map->actorTracks.push_back(actor);campaign->maps.push_back(map);return Game(campaign);
  };
  auto tick=[](Game&g,int count,int rate=60){for(int i=0;i<count;++i)g.update({},1.f/rate);};
- for(int rate:{60,120}){auto g=scene();tick(g,rate/3,rate);check(lengthSq(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})<.001f,"Guard respects authored pause at 60/120 Hz");
-  Game paused(g.m_customCampaign);check(paused.decodeSave(g.encodeSave())&&paused.state(paused.friendlyKey(0,"guard_pause"))==g.state(g.friendlyKey(0,"guard_pause")),"Save restores an interrupted patrol pause");
+ for(int rate:{60,120}){auto g=scene();tick(g,rate/3,rate);check(g.state(g.friendlyKey(0,"guard_point"))>0||lengthSq(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})>.01f,"Multi-point patrol boots walking instead of freezing on spawn at 60/120 Hz");
+  Game paused(g.m_customCampaign);check(paused.decodeSave(g.encodeSave())&&paused.state(paused.friendlyKey(0,"guard_point"))==g.state(g.friendlyKey(0,"guard_point")),"Save restores an interrupted patrol boot");
   tick(g,rate*7,rate);check(g.state(g.friendlyKey(0,"guard_point"))>0&&lengthSq(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})>1,"Guard follows authored patrol points and walk animation");
   g=scene();g.m_player.pos={8.5f,6.5f};tick(g,rate/5,rate);check(g.guardState(0)==GuardState::Suspicious&&!g.state("guard_alert"),"Visible player raises suspicion before recognition delay expires");
   Game suspicious(g.m_customCampaign);bool loaded=suspicious.decodeSave(g.encodeSave());check(loaded&&suspicious.state(suspicious.friendlyKey(0,"guard_recognition"))==g.state(g.friendlyKey(0,"guard_recognition")),"Save restores partial recognition without instant alert");
@@ -99,7 +99,7 @@ bool Game::testGuardAI(){
  return passed;
 }
 Game Game::guardInspection(int stage){
- auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt");Game g(campaign);if(g.npcActors().empty())throw std::runtime_error("Ash custom playground has no authored guard");
+ auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");Game g(campaign);if(g.npcActors().empty())throw std::runtime_error("Ash custom playground has no authored guard");
  auto pose=g.npcActors()[0].pose;
  if(stage==0){unsigned visited=0;for(int i=0;i<1800;++i){g.update({},1.f/60);visited|=1u<<g.state(g.friendlyKey(0,"guard_point"));if(g.guardState(0)!=GuardState::Patrol)throw std::runtime_error("Custom playground guard saw through hiding cover");}if((visited&15)!=15)throw std::runtime_error("Custom playground patrol did not visit all four points");}
  if(stage==1){g.m_player.pos=pose.position+Vec2{std::sin(pose.yaw),std::cos(pose.yaw)}*2;g.m_player.z=pose.z;for(int i=0;i<70;++i)g.update({},1.f/60);}

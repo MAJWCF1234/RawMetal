@@ -257,9 +257,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
 std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesystem::path& path){
  return loadCustomCampaignText(readText(path),path.filename().string());
 }
-std::shared_ptr<const CustomCampaign> loadEmbeddedGuardLabCampaign(){
- // Packed resource 346 is the Ashfall Guard Lab custom campaign TXT.
- auto bytes=loadResource(346);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),"RawMetal-Horror-OpenWorld.txt");
+std::shared_ptr<const CustomCampaign> loadEmbeddedExclusionZoneCampaign(){
+ // Packed resource 346 is the Ashfall Exclusion Zone wasteland custom campaign TXT.
+ auto bytes=loadResource(346);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),"RawMetal-Ashfall-Exclusion-Zone.txt");
 }
 std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(const std::filesystem::path& directory,std::vector<std::string>* errors){
  std::vector<std::shared_ptr<const CustomCampaign>> result;std::error_code ec;
@@ -268,12 +268,12 @@ std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(c
   try{result.push_back(loadCustomCampaignFile(entry.path()));}
   catch(const std::exception& error){if(errors)errors->push_back(entry.path().filename().string()+": "+error.what());}
  }
- // One-file friend builds have no sidecar custom-maps folder. Keep Guard Lab
+ // One-file friend builds have no sidecar custom-maps folder. Keep Exclusion Zone
  // available from the embedded payload unless a disk copy already wins.
- bool hasGuardLab=false;for(const auto& campaign:result)hasGuardLab|=campaign->sourceFile=="RawMetal-Horror-OpenWorld.txt";
- if(!hasGuardLab){
-  try{result.push_back(loadEmbeddedGuardLabCampaign());}
-  catch(const std::exception& error){if(errors)errors->push_back(std::string("embedded Guard Lab: ")+error.what());}
+ bool hasExclusionZone=false;for(const auto& campaign:result)hasExclusionZone|=campaign->sourceFile=="RawMetal-Ashfall-Exclusion-Zone.txt";
+ if(!hasExclusionZone){
+  try{result.push_back(loadEmbeddedExclusionZoneCampaign());}
+  catch(const std::exception& error){if(errors)errors->push_back(std::string("embedded Exclusion Zone: ")+error.what());}
  }
  std::sort(result.begin(),result.end(),[](auto&a,auto&b){return a->name<b->name;});return result;
 }

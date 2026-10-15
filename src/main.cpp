@@ -853,9 +853,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     retro::Game game;
     game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
-    bool guardLab=std::wcsstr(commandLine,L"--guard-lab")!=nullptr;
-    bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr||guardLab;
-    if(guardLab)game=retro::Game(retro::loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Horror-OpenWorld.txt"));
+    bool exclusionZone=std::wcsstr(commandLine,L"--exclusion-zone")!=nullptr||std::wcsstr(commandLine,L"--guard-lab")!=nullptr;
+    bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr||exclusionZone;
+    if(exclusionZone)game=retro::Game(retro::loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt"));
     else if(std::wcsstr(commandLine,L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);
