@@ -37,6 +37,22 @@ bool Game::testCampaignMaps(){
   hold.update(use,1.f/60);hold.update({},1.f/60); // E closes the cache log before the next control.
   hold.m_player.pos={7,20.4f};hold.m_player.angle=-kPi*.5f;hold.update(use,1.f/60);
   check(hold.state("receiving_inspection_lure")>0,"Main-route chain distraction is operated through E");
+  hold.update({},1.f/60);hold.m_player.pos={1.4f,20};hold.m_player.z=-25;
+  std::vector<size_t> detail;for(size_t i=0;i<hold.npcActors().size();++i)if(hold.npcActors()[i].homeLevel==14&&hold.npcActors()[i].track().ai.squad==stateId("receiving_cleanup"))detail.push_back(i);
+  if(detail.size()==6){
+   AiTargetRef playerHit{ShotKind::Player,14,0};hold.damageFriendly(detail[0],1000,{7,22},playerHit);hold.updateScripts(0);
+   check(!hold.state("receiving_breach")&&hold.enemies().empty(),"One player pick does not start the squad wipeout");
+   hold.damageFriendly(detail[2],1000,{7,22},playerHit);hold.updateScripts(0);
+   check(hold.state("receiving_breach")&&hold.enemies().size()==6&&hold.state("receiving_survivor")>0,"Two player picks release real entities and select one living evacuee");
+   Game resumed;bool loaded=resumed.decodeSave(hold.encodeSave());check(loaded,"Active breach and authored evacuation save cleanly");
+   if(loaded){resumed.updateScripts(0);check(resumed.enemies().size()==6,"Reload retains the six breach creatures without duplicating them");hold=std::move(resumed);}
+   for(int frame=0;frame<3600;++frame)hold.update({},1.f/60);
+   int dead=0,living=0,escaped=0;for(size_t i=0;i<hold.npcActors().size();++i){const auto& npc=hold.npcActors()[i];if(npc.homeLevel!=14||npc.track().ai.squad!=stateId("receiving_cleanup"))continue;
+    bool killed=hold.state(npc.track().deadState)!=0;dead+=killed;living+=!killed;escaped+=!killed&&npc.level==15;out<<"Breach member "<<npc.homeActor<<" level="<<npc.level<<" damage="<<hold.state(npc.track().damageState)<<" evac="<<hold.state(hold.friendlyKey(i,"evacuated"))<<'\n';}
+   check(dead==5&&living==1&&escaped==1&&hold.state("receiving_retreat_sealed"),"Entities kill the three remaining fighters while one survivor physically retreats into Receiving 03");
+   Game after;check(after.decodeSave(hold.encodeSave())&&after.state("receiving_retreat_sealed"),"The lone survivor and sealed retreat persist across save/load");
+  }
+
  }
  int mutants=0;for(int level=10;level<32;++level){Game area;area.loadLevel(level,false);
   check(area.world().definition().musicCue==MusicCue::Freight,"Freight section has dedicated authored soundtrack");

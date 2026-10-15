@@ -1,0 +1,75 @@
+Scheduler preparation and movement phases deny every work consumer before the actor owns a running work task: PASS
+A running treatment phase permits exactly its owned work consumer: PASS
+A failed work task cannot commit its pending treatment event: PASS
+One live Medic treatment owns the actor's work before completion and excludes shooting, assembly and grenade release at 60/120 Hz: PASS
+Real treatment is executed by the shared scheduler's running Medic work phase with its distinct patient subject: PASS
+Danger preempts nearly completed support work without replaying its heal or spending ammunition: PASS
+The escape schedule becomes the actor's sole owner and denies old work consumers immediately: PASS
+One live Medic treatment owns the actor's work before completion and excludes shooting, assembly and grenade release at 60/120 Hz: PASS
+Real treatment is executed by the shared scheduler's running Medic work phase with its distinct patient subject: PASS
+Danger preempts nearly completed support work without replaying its heal or spending ammunition: PASS
+The escape schedule becomes the actor's sole owner and denies old work consumers immediately: PASS
+Saving during actual work preserves scheduler ownership, phase, subject, clocks and resource commitment: PASS
+Saved and uninterrupted treatment schedules finish the same single heal and spend exactly one charge: PASS
+Saving during actual work preserves scheduler ownership, phase, subject, clocks and resource commitment: PASS
+Saved and uninterrupted treatment schedules finish the same single heal and spend exactly one charge: PASS
+A valid older save without scheduler keys can restore its existing partial mechanical treatment: PASS
+Legacy adoption claims the existing treatment phase without resetting its work or replaying a completion: PASS
+Adopted legacy treatment still commits one finite heal rather than duplicating the old progress: PASS
+blocked Medic Hz=60 failures=1 x=7.7981
+A physically blocked support approach fails into a bounded recovery schedule and releases its patient and firing reservations: PASS
+Failed support movement preserves collision, search budgets and finite work resources instead of healing through a wall: PASS
+blocked Medic Hz=120 failures=1 x=7.79417
+A physically blocked support approach fails into a bounded recovery schedule and releases its patient and firing reservations: PASS
+Failed support movement preserves collision, search budgets and finite work resources instead of healing through a wall: PASS
+Fresh incoming damage interrupts role work through defensive scheduling before treatment can commit: PASS
+An ordinary scheduler-owned attack consumes one real round and damages the first-hit target: PASS
+Restoring a consumed fire event never replays its damage or ammunition spend on the next schedule tick: PASS
+unsafe grenade landing aim-ms=800 first-fire-frame=191 failures=1
+A real unsafe grenade landing fails into recovery, then preserves long firearm aim ownership until an actual safe shot instead of retry-starving combat: PASS
+unsafe grenade landing aim-ms=1500 first-fire-frame=233 failures=1
+A real unsafe grenade landing fails into recovery, then preserves long firearm aim ownership until an actual safe shot instead of retry-starving combat: PASS
+Throw-capacity fixture fills all eight global projectile slots with far unrelated player grenades: PASS
+full grenade pool first-fire-frame=233 failures=1 active=8
+A full-pool release failure times out even at 450ms windup and reaches an owned firearm shot before capacity clears without spending grenade stock: PASS
+Danger owns the actor while preserving a committed reload's consumed events and remaining mechanical time: PASS
+After escape and bounded recovery the committed reload resumes through scheduling and refills exactly one finite tube: PASS
+Danger owns the actor while preserving a committed reload's consumed events and remaining mechanical time: PASS
+After escape and bounded recovery the committed reload resumes through scheduling and refills exactly one finite tube: PASS
+An owned pre-impact Bash pauses a one-millisecond legacy reload before both refill and zero-mask adoption: PASS
+Returning ownership to Reload adopts the consumed legacy phase and fills once without replaying chamber, pump or attack events: PASS
+Live contact-defense fixture recognizes its real close opponent before an attack event: PASS
+Actual intent scheduling lets contact Bash preempt cover movement and a near-complete empty reload while consuming exactly one physical strike at 60/120 Hz: PASS
+Saving immediately after scheduler-owned Bash preserves its consumed impact and never replays damage on the next tick: PASS
+Live contact-defense fixture recognizes its real close opponent before an attack event: PASS
+Actual intent scheduling lets contact Bash preempt cover movement and a near-complete empty reload while consuming exactly one physical strike at 60/120 Hz: PASS
+Saving immediately after scheduler-owned Bash preserves its consumed impact and never replays damage on the next tick: PASS
+Actual multi-drone terminal work is owned by Engineer deployment scheduling and excludes incompatible work consumers: PASS
+Disabling an actor releases scheduler ownership and preserves a decodable inactive save: PASS
+A work-owning actor's death releases its subject and scheduler without committing another resource event or invalidating the corpse save: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+Malformed scheduler identity, phase, clock, reason, goal, subject, condition or commitment state is rejected safely: PASS
+A denied first navigation search advances neither patrol nor task failure clocks: PASS
+schedule blocked searches failures-mask=511
+Crowded scheduled movement remains within the shared four-search budget and never crosses a sealed wall: PASS
+All nine budget-limited movement tasks eventually receive a real attempt and bounded failure recovery without starvation: PASS
+checks=68 result=PASS

@@ -7,6 +7,7 @@ namespace retro {
 int Game::npcMilliseconds(size_t actor,float dt,std::string_view field){auto key=friendlyKey(actor,field);int micros=state(key)+int(std::round(double(dt)*1000000));setState(key,micros%1000);return micros/1000;}
 void Game::validateGuardState(size_t actor)const{
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};const auto&config=m_friendlyActors[actor].track().ai;
+ if(get("evac_level")<0||get("evac_level")>chunkCount()||get("evac_x")<0||get("evac_x")>24000||get("evac_y")<0||get("evac_y")>24000||(get("evac_z")< -100000||get("evac_z")>100000)||get("evacuated")<0||get("evacuated")>1||get("killed_by_player")<0||get("killed_by_player")>1)throw std::runtime_error("Invalid saved NPC evacuation");
  if(get("guard_fraction")<0||get("guard_fraction")>=1000||get("weapon_fraction")<0||get("weapon_fraction")>=1000)throw std::runtime_error("Invalid saved guard clock fraction");
  if(get("guard_step")<0||get("guard_step")>=1000||get("guard_bearing")< -31416||get("guard_bearing")>31416)throw std::runtime_error("Invalid saved guard motion");
  if(get("guard_cover")<0||get("guard_cover")>1||get("guard_cover_wait")<0||get("guard_cover_wait")>1000||get("guard_cover_x")<0||get("guard_cover_x")>24000||get("guard_cover_y")<0||get("guard_cover_y")>24000||get("guard_cover_z")< -100000||get("guard_cover_z")>100000)throw std::runtime_error("Invalid saved guard repositioning");

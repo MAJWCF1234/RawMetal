@@ -336,7 +336,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--exclusion-inspection")){
      constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/exclusion-preview");std::ofstream report(".build/exclusion-preview/runtime.txt");report<<renderer->hardwareName()<<'\n';
-     for(int stage=0;stage<10;++stage){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
+     for(int stage=0;stage<12;++stage){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
      return 0;
     }
     if(std::wcsstr(commandLine,L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;

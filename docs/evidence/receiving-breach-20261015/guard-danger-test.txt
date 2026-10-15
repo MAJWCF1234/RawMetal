@@ -1,0 +1,86 @@
+Danger fixture starts with a stationary guard on an authored patrol pause: PASS
+Stationary guard receives a real hostile or allied grenade with a finite warning fuse: PASS
+escape Hz=60 allied=0 move=3.73501 radius=4.43501 damage=0
+Stationary guards interrupt their task and physically flee hostile and allied grenades at 60/120 Hz: PASS
+Grenade escape preserves floor support, authored bounds and a finite movement speed at 60/120 Hz: PASS
+Physical escape survives the real detonation outside its damage radius: PASS
+Danger fixture starts with a stationary guard on an authored patrol pause: PASS
+Stationary guard receives a real hostile or allied grenade with a finite warning fuse: PASS
+escape Hz=60 allied=1 move=3.73501 radius=4.43501 damage=0
+Stationary guards interrupt their task and physically flee hostile and allied grenades at 60/120 Hz: PASS
+Grenade escape preserves floor support, authored bounds and a finite movement speed at 60/120 Hz: PASS
+Physical escape survives the real detonation outside its damage radius: PASS
+Danger fixture starts with a stationary guard on an authored patrol pause: PASS
+Stationary guard receives a real hostile or allied grenade with a finite warning fuse: PASS
+escape Hz=120 allied=0 move=3.73501 radius=4.43501 damage=0
+Stationary guards interrupt their task and physically flee hostile and allied grenades at 60/120 Hz: PASS
+Grenade escape preserves floor support, authored bounds and a finite movement speed at 60/120 Hz: PASS
+Physical escape survives the real detonation outside its damage radius: PASS
+Danger fixture starts with a stationary guard on an authored patrol pause: PASS
+Stationary guard receives a real hostile or allied grenade with a finite warning fuse: PASS
+escape Hz=120 allied=1 move=3.73501 radius=4.43501 damage=0
+Stationary guards interrupt their task and physically flee hostile and allied grenades at 60/120 Hz: PASS
+Grenade escape preserves floor support, authored bounds and a finite movement speed at 60/120 Hz: PASS
+Physical escape survives the real detonation outside its damage radius: PASS
+Escape outcomes stay consistent between 60 and 120 Hz: PASS
+A fast grenade still in flight with more than one second of fuse does not cause an immediate stationary blast panic: PASS
+The same exposed moving grenade becomes a perceived danger during its final fuse warning: PASS
+Second grenade fixture is audible nearby but starts outside the guard's danger radius: PASS
+Two independent physical grenades share the room and retain their real warning fuses: PASS
+Escape endpoint accounts for the second clear fuse instead of choosing the radial route into its blast: PASS
+two-fuse Hz=60 endpoint=4.724,1.933 final=4.50592,2.95189
+Physical two-grenade escape avoids entering the second damage radius and survives both detonations at 60/120 Hz: PASS
+Second grenade fixture is audible nearby but starts outside the guard's danger radius: PASS
+Two independent physical grenades share the room and retain their real warning fuses: PASS
+Escape endpoint accounts for the second clear fuse instead of choosing the radial route into its blast: PASS
+two-fuse Hz=120 endpoint=4.724,1.933 final=4.52198,2.96761
+Physical two-grenade escape avoids entering the second damage radius and survives both detonations at 60/120 Hz: PASS
+A full-height wall occludes the fuse cue and blast without a phantom escape or wall crossing: PASS
+A full-height wall occludes the fuse cue and blast without a phantom escape or wall crossing: PASS
+A blocked radial exit selects an angled physical escape without entering the obstruction: PASS
+A blocked radial exit selects an angled physical escape without entering the obstruction: PASS
+danger door locked=0 open=1 y=10.2283
+Normal escape movement requests and opens an ordinary door before physically walking through it: PASS
+danger door locked=1 open=0 y=6.5
+A permission-locked door stays closed and physically blocks the escape without hull penetration: PASS
+A trapped guard holds a valid hull and releases aim, throw windup and its firing lease instead of attacking during danger: PASS
+A trapped guard holds a valid hull and releases aim, throw windup and its firing lease instead of attacking during danger: PASS
+Danger cancels a pre-impact bash on the frame that would otherwise damage the player: PASS
+Danger interrupts a 2390ms treatment before its same-frame heal or finite charge is committed: PASS
+After escaping, the Medic reapproaches its living patient and spends exactly one charge on one thirty-point treatment without replaying the interrupted heal: PASS
+Danger cancels 1190ms assembly before the same-frame deployment spends drone stock: PASS
+Repair interruption fixture deploys an actual owned drone: PASS
+Danger cancels a 99ms maintenance pulse without healing the drone or consuming repair stock: PASS
+Danger pauses a canonical partial reload clock and its already-consumed animation events without refilling ammunition: PASS
+After danger expires the same partial reload resumes and completes with one finite magazine fill: PASS
+Danger pauses a canonical partial reload clock and its already-consumed animation events without refilling ammunition: PASS
+After danger expires the same partial reload resumes and completes with one finite magazine fill: PASS
+Save fixture interrupts a real escape with an active grenade and physical walking pose: PASS
+Save restores the physical grenade, danger memory, cached escape and walking position: PASS
+Saved and uninterrupted escapes detonate once and survive with matching physical continuation: PASS
+Save fixture interrupts a real escape with an active grenade and physical walking pose: PASS
+Save restores the physical grenade, danger memory, cached escape and walking position: PASS
+Saved and uninterrupted escapes detonate once and survive with matching physical continuation: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+Malformed saved danger clocks, flags, hazard or escape coordinates are rejected safely: PASS
+An idle home Patrol without threat memory does not hold extra friendly residency: PASS
+An active danger response holds the guard's physical chunk resident even while Patrol has no enemy memory: PASS
+Ending the danger response releases residency once the home Patrol has no other active task: PASS
+Disable fixture begins with a genuine active danger goal: PASS
+Disabling an escaping guard clears danger clocks, cached goal and residency while preserving a decodable save: PASS
+Re-enabling the guard detects the still-exposed real grenade through a fresh danger response: PASS
+A named peer's active global escape destination reserves nearby space in the correct physical chunk and floor: PASS
+Expired peer danger releases its escape destination reservation: PASS
+danger searches serviced-mask=511
+Crowded grenade responses keep navigation within the shared four-search frame budget and preserve valid physical hulls: PASS
+All nine threatened guards receive a bounded escape search without starvation: PASS
+Nine members of a named squad reserve separate active escape destinations rather than converging on the same close point: PASS
+checks=76 result=PASS

@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-15",
+  "executable_bytes": 25639424,
+  "ceiling_bytes": 33554432,
+  "headroom_bytes": 7915008,
+  "sha256": "98252715750c4f91c1dc09448624ad4fbeb54061a90e69698a9b27af87b42cc2",
+  "embedded_resources": 229,
+  "tests": {
+    "save": {
+      "exit_code": 0,
+      "pass_lines": 58,
+      "fail_lines": 0
+    },
+    "campaign": {
+      "exit_code": 0,
+      "pass_lines": 437,
+      "fail_lines": 0
+    },
+    "guard-danger": {
+      "exit_code": 0,
+      "pass_lines": 76,
+      "fail_lines": 0
+    },
+    "guard-schedule": {
+      "exit_code": 0,
+      "pass_lines": 68,
+      "fail_lines": 0
+    },
+    "guard-table": {
+      "exit_code": 0,
+      "pass_lines": 73,
+      "fail_lines": 0
+    },
+    "guard-role": {
+      "exit_code": 0,
+      "pass_lines": 44,
+      "fail_lines": 0
+    },
+    "exclusion": {
+      "exit_code": 0,
+      "pass_lines": 47,
+      "fail_lines": 0
+    }
+  },
+  "full_vulkan_smoke_exit_code": 0,
+  "native_inspection_exit_code": 0,
+  "new_voice_audio_generated": false,
+  "voice_blocker": "ElevenLabs voice library and settings fail to load despite available workspace credits",
+  "replay": "Two lethal player damage events are staged. Active breach is saved and reloaded; sixty seconds of ordinary AI produce five dead squad members and one live evacuee in Receiving 03. Inspection stills use the same staged opening but reposition the camera after simulation."
+}

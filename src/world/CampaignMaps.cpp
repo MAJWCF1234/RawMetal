@@ -128,8 +128,8 @@ void warehouseServices(Map& m,float floor,float roof){
 void actor(Map& m,const char* timer,ActorVisual visual,float scale,std::initializer_list<ActorKey> keys,bool loop=false,bool tool=false){m.actorTracks.push_back({stateId(timer),visual,scale,loop,tool,keys});}
 void cue(Map& m,const char* timer,int time,Sound sound,Vec2 position,const char* caption="",float gain=1,float z=std::numeric_limits<float>::quiet_NaN()){m.sequenceCues.push_back({stateId(timer),time,sound,position,gain,1,caption,z});}
 void machineryClock(Map& m,const char* timer,int period){TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(std::string(timer)+"_cycled");s.durationMs=period;s.finishAtMs=period;s.soundIntervalMs=0;s.loop=true;m.timedSequences.push_back(s);}
-// A compact inspection hold on the existing main route; all six visuals and
-// support behaviors reuse the Cleanup banks already shipped for Exclusion.
+// Early contact is a doomed containment detail, not the main Cleanup battle.
+// Entities take the remaining squad while one living member evacuates.
 void receivingCleanup(Map& m){
  machineryClock(m,"receiving_cleanup_clock",60000);
  const Vec2 starts[]={{7.8f,16},{14.6f,18.2f},{21,10.5f},{12,20},{15,20.5f},{7.5f,12}};
@@ -144,7 +144,7 @@ void receivingCleanup(Map& m){
   ai.patrol={{starts[i],-25,1500},{ends[i],-25,1200}};m.actorTracks.push_back(std::move(t));
  }
  // No extra progression gate: the personnel aisle remains an escape route.
- terminal(m,{7,21.2f},"INSPECTION / FIELD CACHE","E: TAKE FLASHLIGHT. F: TOGGLE OWNED LIGHT.","SIX CLEANUP ROLES AHEAD. CROUCH / REAR Q KO / E GRAB.",0,stateId("receiving_cache_read"));
+ terminal(m,{7,21.2f},"INSPECTION / FIELD CACHE","E: TAKE FLASHLIGHT. F: TOGGLE OWNED LIGHT.","CONTAINMENT DETAIL AHEAD. WATCH THE SEALED LOADS.",0,stateId("receiving_cache_read"));
  terminal(m,{7,19.5f},"INSPECTION / CHAIN TEST","E: RATTLE THE CHAIN NORTH OF THE AISLE.","WAIT FOR HIS BACK. CROUCH CLOSE. Q KO / E GRAB.",0,stateId("receiving_inspection_lure"));
  TimedSequence lure;lure.timerState=stateId("receiving_inspection_lure");lure.finishState=stateId("receiving_inspection_lure_done");lure.x1=-2;lure.y1=-2;lure.x2=-1;lure.y2=-1;lure.durationMs=10000;lure.finishAtMs=5000;lure.soundIntervalMs=0;m.timedSequences.push_back(lure);
  cue(m,"receiving_inspection_lure",1600,Sound::JunkMetal,{8.5f,14.5f},"CHAIN TEST / INSPECTION AISLE. WATCH THE PATROL TURN.",.6f,-24.3f);
@@ -154,6 +154,10 @@ void receivingCleanup(Map& m){
  wall(m,6.1f,17.3f,9,17.5f,-25,-23.15f,15);wall(m,6.1f,17.3f,9,17.5f,-23.25f,-23.15f,13);
  m.signs.push_back({{7.5f,17.52f},-23.8f,2.7f,.5f,0,"CLEANUP / HOLD","WEST / Q KO / E GRAB"});
  wallLamp(m,7.5f,17.56f,-23.4f,kPi*.5f,1.3f,5);
+ // A real, player-operable pressure door gives the fleeing member a head start.
+ wall(m,1,23.4f,10.5f,23.6f,-25,-22,15);wall(m,13.5f,23.4f,23,23.6f,-25,-22,15);
+ Door retreat{10.5f,13.5f,23.5f,0};retreat.open=1;retreat.opening=true;m.doors.push_back(retreat);
+
 }
 void handCart(Map& m,float x,float y,float floor){
  wall(m,x-.42f,y-.6f,x+.42f,y+.6f,floor+.2f,floor+.29f,12);

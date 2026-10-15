@@ -10,6 +10,16 @@ constexpr std::array<GuardRolePlan,7> guardRolePlans={GuardRolePlan::Ordinary,Gu
 }
 GuardScheduleChoice Game::guardScheduleChoice(int level,size_t actor,const ActorTrack&track,ActorPose&pose,float dt,int ms,Vec2&goal,float&goalZ,bool&wantsMove,unsigned&conditions,GuardSchedule previous,int oldSubject,int retry,bool changed,bool close,const AiTarget&target){
  auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};GuardScheduleChoice choice;
+ // Authored evacuation uses the existing exclusive Escape task and physical
+ // stitched navigator. It never changes an actor's health or teleports it.
+ if(int destination=get("evac_level")-1;destination>=0&&destination<chunkCount()){
+  Vec2 local{get("evac_x")*.001f,get("evac_y")*.001f};float feet=get("evac_z")*.001f;
+  bool arrived=level==destination&&length(pose.position-local)<.35f&&std::fabs(pose.z-feet)<.3f;
+  ctx.put("evacuated",arrived?1:0);wantsMove=!arrived;
+  if(wantsMove)guardRoute(level,actor,chunkOffset(destination)+local,feet,ms,goal,goalZ);
+  else{goal=pose.position;goalZ=pose.z;}
+  choice.danger=true;conditions|=GuardInDanger;choice.schedule=GuardSchedule::Danger;choice.work=GuardTask::Escape;return choice;
+ }
  // Perception chooses intent before any task can own movement or spend work.
  choice.danger=guardDangerIntent(actor,pose,dt,goal,goalZ,wantsMove);
  if(choice.danger){conditions|=GuardInDanger;choice.schedule=GuardSchedule::Danger;choice.work=GuardTask::Escape;return choice;}

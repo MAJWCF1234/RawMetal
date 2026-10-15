@@ -1,0 +1,71 @@
+PASS Wayfinding signs and task lamps are present in the loaded campaign payload
+PASS Encounter stays within the existing three Exclusion chunks
+PASS Entry hull is clear of authored cover
+PASS Existing cleanup health remains compatible with support encounters
+PASS Squad spawn has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Existing cleanup health remains compatible with support encounters
+PASS Squad spawn has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Existing cleanup health remains compatible with support encounters
+PASS Squad spawn has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Existing cleanup health remains compatible with support encounters
+PASS Squad spawn has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Existing cleanup health remains compatible with support encounters
+PASS Squad spawn has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Existing cleanup health remains compatible with support encounters
+PASS Squad spawn has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS Patrol pause has a clear standing hull
+PASS All six baked cleanup roles participate
+PASS North distraction control is physically usable from concealment
+PASS E starts the authored north distraction
+PASS The north machinery lure causes a real investigation without revealing the concealed player
+north timer=10000 done=1
+north start delay frames=0
+route 5.35,8.4 reached=1 at=5.32135,8.3109,3.49976 guard=0 gpos=7.5,8.72086
+route 5.35,11.45 reached=1 at=5.35344,11.3355,2.52417 guard=3 gpos=9.33611,10.0141
+lure commit=1 facingAway=1 after staging
+physical approach player=8.11827,9.83465 health=100 guard=0 gpos=9.33611,10.0141 yaw=0.728327
+PASS Actual crouched movement around the west screen reaches a rear knockout after the authored distraction
+north start delay frames=15
+route 5.35,8.4 reached=1 at=5.32135,8.3109,3.49976 guard=0 gpos=7.5,8.72086
+route 5.35,11.45 reached=1 at=5.35344,11.3355,2.52417 guard=3 gpos=9.33611,10.0141
+lure commit=1 facingAway=1 after staging
+physical approach player=8.14385,9.77436 health=100 guard=0 gpos=9.33611,10.0141 yaw=0.874371
+PASS Actual crouched movement around the west screen reaches a rear knockout after the authored distraction
+north start delay frames=30
+route 5.35,8.4 reached=1 at=5.32135,8.3109,3.49976 guard=2 gpos=7.85768,8.97279
+route 5.35,11.45 reached=1 at=5.35344,11.3355,2.52417 guard=3 gpos=9.33611,10.0141
+lure commit=1 facingAway=1 after staging
+physical approach player=8.14299,9.76324 health=100 guard=0 gpos=9.33611,10.0141 yaw=1.11696
+PASS Actual crouched movement around the west screen reaches a rear knockout after the authored distraction
+east route 16.45,20.3 reached=1 at=16.5489,20.3233 hp=100
+east route 16.45,18 reached=1 at=16.4375,18.1163 hp=100
+east t=0 mode=3 g=20.7753,16.9302 yaw=2.0606 p=16.4375,18.1163
+east t=60 mode=3 g=20.7753,16.9302 yaw=1.6233 p=17.9842,17.6077
+east t=120 mode=3 g=20.7753,16.9302 yaw=1.79422 p=19.5709,17.168
+east final player=19.5963,17.1659 hp=100 guard=0 pos=20.7753,16.9302 yaw=1.79422
+east physical KO=1 real noise memory=1
+PASS Real east winch hearing, crouched west-flank movement and Q produce a rear knockout at 100 health
+PASS Native encounter preview remains alive
+PASS Native encounter preview remains alive
+PASS Native encounter preview remains alive
+47/47 checks passed
