@@ -24,6 +24,7 @@ __pycache__/
 *-diagnostic.txt
 *-validation.txt
 *-fixture.txt
+*-out.txt
 *-preview.wav
 campaign-reach-*.txt
 campaign-extension-test.txt
