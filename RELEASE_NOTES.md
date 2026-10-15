@@ -4,9 +4,9 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v0.7.0-preview.16
+## v0.7.1
 
-Squad tactical VO stops roll-calling — contact sounds like chatter instead of every Cleanup repeating the same cue in actor order.
+Patch on the 0.7 line: Cleanup / Witness NPCs were already in the Exclusion loop; this fixes their placeholder radio behavior so squad contact sounds like chatter instead of a roll call. Exits the `0.7.0-preview.N` series — same playable loop, versioned as a normal patch.
 
 - Shared Alert / Investigate / Retreat elect one radio voice per squad (spotter wins contact); at most one delayed copy answers
 - Cue cooldowns keep the rest quiet after a call; pending claims no longer drain as a sequential queue
@@ -14,7 +14,21 @@ Squad tactical VO stops roll-calling — contact sounds like chatter instead of ev
 - Optional `--ashfall-performance` frame profile harness and cheaper nav connector selection for profiling passes
 - Native `--npc-voice-test` covers one-speaker contact + optional reply
 
-No new maps or animation banks. Hard **32 MiB** ceiling unchanged. Play the same Exclusion loop as preview.15.
+No new maps or animation banks. Save format still 14. Hard **32 MiB** ceiling unchanged. Play: Custom Maps ? ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
+
+**Validation:** EXE size and headroom recorded at ship; `--npc-voice-test` PASS; `--exclusion-test` PASS.
+
+---
+
+## v0.7.0-preview.16
+
+Same VO chatter fix shipped under the preview label before graduating to **v0.7.1**. Superseded for testers by 0.7.1.
+
+- Shared Alert / Investigate / Retreat elect one radio voice per squad (spotter wins contact); at most one delayed copy answers
+- Cue cooldowns keep the rest quiet after a call; pending claims no longer drain as a sequential queue
+- Multi-chunk ambient audio uses resident world/enemy views instead of copying whole chunks each frame
+- Optional `--ashfall-performance` frame profile harness and cheaper nav connector selection for profiling passes
+- Native `--npc-voice-test` covers one-speaker contact + optional reply
 
 **Validation:** EXE 26,530,304 / 33,554,432 bytes (6.70 MiB headroom). `--npc-voice-test` PASS; `--exclusion-test` PASS.
 
