@@ -1,0 +1,37 @@
+PASS Rear Q incapacitates without a lethal flag, health loss or kill credit at 60/120 Hz
+PASS Unconscious guards stay down, cannot fire and satisfy hostile-clear gates
+PASS Unconscious identity and living health survive save/load
+PASS A loaded unconscious guard does not resume its schedule
+PASS Lethal damage to an unconscious body preserves its fallen animation instead of standing it up again
+PASS Rear E captures and disarms a living guard
+PASS Shield physically intercepts frontal fire while side fire still reaches the player
+PASS Intercepted fire damages the hostage instead of applying a player damage discount
+PASS A living held identity survives save/load
+PASS Held body follows real slow movement after load
+PASS Q ends a grab with a nonlethal knockout
+PASS Existing rear lethal melee remains available
+PASS Rear Q incapacitates without a lethal flag, health loss or kill credit at 60/120 Hz
+PASS Unconscious guards stay down, cannot fire and satisfy hostile-clear gates
+PASS Unconscious identity and living health survive save/load
+PASS A loaded unconscious guard does not resume its schedule
+PASS Lethal damage to an unconscious body preserves its fallen animation instead of standing it up again
+PASS Rear E captures and disarms a living guard
+PASS Shield physically intercepts frontal fire while side fire still reaches the player
+PASS Intercepted fire damages the hostage instead of applying a player damage discount
+PASS A living held identity survives save/load
+PASS Held body follows real slow movement after load
+PASS Q ends a grab with a nonlethal knockout
+PASS Existing rear lethal melee remains available
+PASS Frontal approaches cannot capture or silently knock out
+PASS Rear knockout during a real Medic kit cancels treatment across save/load without healing or spending stock
+PASS A guard with a confirmed hostile memory cannot be silently captured
+PASS A noise investigator is vulnerable from behind before identifying the player
+PASS Rear actions respect physical reach
+PASS A narrow wall blocks a rear action even within arm's reach
+PASS Executing a held guard clears the living restraint and remains saveable
+PASS Turning a captive into a wall releases them at the last collision-safe position
+PASS A captive's full swept legs cannot pass through a low obstacle below the chest ray
+PASS A clear turn repositions the held body without leaving its shield behind
+PASS E release returns a living, alerted opponent to ordinary AI
+PASS Crossing a stitched seam releases the captive before its automatic checkpoint, which loads successfully
+36/36 checks passed

@@ -11,13 +11,20 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
  setState(friendlyKey(actor,"hit_x"),int(std::round(source.x*1000)));setState(friendlyKey(actor,"hit_y"),int(std::round(source.y*1000)));setState(friendlyKey(actor,"hit_source"),1);
  setState(friendlyKey(actor,"hit_kind"),int(attacker.kind));setState(friendlyKey(actor,"hit_level"),attacker.kind==ShotKind::None?0:attacker.level+1);setState(friendlyKey(actor,"hit_index"),attacker.kind==ShotKind::None?0:attacker.index+1);
  if(damage>=track.health){
+  npcVoice(actor,NpcVoiceCue::Down);
   setState(friendlyKey(actor,"killed_by_player"),attacker.kind==ShotKind::Player?1:0);
   if(npcIncapacitated(actor)&&!npcHeld(actor)){setState(friendlyKey(actor,"death_ms"),state(friendlyKey(actor,"restraint_ms")));setState(friendlyKey(actor,"death_fraction"),state(friendlyKey(actor,"restraint_fraction")));}
   int heldWeapon=state(friendlyKey(actor,"restraint_weapon"));if(npcHeld(actor)&&heldWeapon>0&&heldWeapon<weaponCount())equipWeapon(WeaponId(heldWeapon));
   for(const char*field:{"restraint","restraint_ms","restraint_fraction","restraint_weapon"})setState(friendlyKey(actor,field),0);
   setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));if(track.ai.mode==ActorAiMode::Guard)clearGuardSchedule(actor);updateMechanisms(0);
  }
- m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
+ bool voiced=damage>=track.health?std::any_of(m_sounds.begin(),m_sounds.end(),[&](const auto&e){return e.speech>=0&&e.speaker==actor+1;}):npcVoice(actor,NpcVoiceCue::Hurt);
+ if(!voiced&&!npcHasVoice(actor))m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
+ if(damage>=track.health&&track.ai.squad)for(size_t other=0;other<m_friendlyActors.size();++other){const auto&buddy=m_friendlyActors[other];
+  if(other==actor||buddy.track().ai.squad!=track.ai.squad||state(buddy.track().deadState)||npcIncapacitated(other))continue;
+  auto delta=buddy.pose.position+chunkOffset(buddy.level)-pose.position-chunkOffset(npc.level);if(lengthSq(delta)>15*15)continue;
+  setState(friendlyKey(other,"voice_pending"),int(NpcVoiceCue::AllyDown)+1);setState(friendlyKey(other,"voice_pending_ms"),4000);break;
+ }
 }
 bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
  int living=hostilesRemaining(level);

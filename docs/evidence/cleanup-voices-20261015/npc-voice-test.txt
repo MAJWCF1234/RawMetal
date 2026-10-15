@@ -1,0 +1,35 @@
+Receiving uses six distinct skinned voice roles: PASS
+Alert selects the actor's actual skinned voice: PASS
+Patrol cannot interrupt an active tactical call: PASS
+Injury replaces the same speaker instead of overlapping: PASS
+Rapid damage cannot spam injury takes: PASS
+Alert selects the actor's actual skinned voice: PASS
+Patrol cannot interrupt an active tactical call: PASS
+Injury replaces the same speaker instead of overlapping: PASS
+Rapid damage cannot spam injury takes: PASS
+Alert selects the actor's actual skinned voice: PASS
+Patrol cannot interrupt an active tactical call: PASS
+Injury replaces the same speaker instead of overlapping: PASS
+Rapid damage cannot spam injury takes: PASS
+Alert selects the actor's actual skinned voice: PASS
+Patrol cannot interrupt an active tactical call: PASS
+Injury replaces the same speaker instead of overlapping: PASS
+Rapid damage cannot spam injury takes: PASS
+Alert selects the actor's actual skinned voice: PASS
+Patrol cannot interrupt an active tactical call: PASS
+Injury replaces the same speaker instead of overlapping: PASS
+Rapid damage cannot spam injury takes: PASS
+Alert selects the actor's actual skinned voice: PASS
+Patrol cannot interrupt an active tactical call: PASS
+Injury replaces the same speaker instead of overlapping: PASS
+Rapid damage cannot spam injury takes: PASS
+A lethal hit emits the dying line before the actor becomes dead: PASS
+Dead speakers cannot emit tactical dialogue: PASS
+Voice cooldown and event history survive save/load: PASS
+Reload preserves variant selection: PASS
+Spoken investigation does not recursively alert the AI hearing system: PASS
+Distant actors do not reserve the local dialogue channel: PASS
+Exclusion witness has the hazmat escort voice: PASS
+Witness acknowledges the actual follow state transition: PASS
+Witness acknowledges the actual wait state transition: PASS
+Witness danger uses its own frightened masked take: PASS

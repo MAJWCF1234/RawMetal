@@ -23,9 +23,11 @@ public:
  static bool testLiftMix();
 private:
  struct Sample {std::vector<int16_t> pcm; int channels=1; size_t frames()const{return pcm.size()/channels;}};
- struct Voice {Sound sound; double cursor=0; float gain=1,pitch=1,left=1,right=1; Vec2 position{}; bool spatial=false,loop=false; std::int64_t emitter=0;float smoothLeft=0,smoothRight=0,occlusion=1,radius=17,z=std::numeric_limits<float>::quiet_NaN();};
+ struct Voice {Sound sound; double cursor=0; float gain=1,pitch=1,left=1,right=1; Vec2 position{}; bool spatial=false,loop=false; std::int64_t emitter=0;float smoothLeft=0,smoothRight=0,occlusion=1,radius=17,z=std::numeric_limits<float>::quiet_NaN();int speech=-1;size_t speaker=0;int speechPriority=0;};
  static constexpr int Rate=44100, Block=512;
  std::array<Sample,size_t(Sound::Count)> m_samples;
+ std::vector<Sample> m_speech;
+ const Sample& sampleFor(const Voice& voice)const{return voice.speech>=0?m_speech.at(size_t(voice.speech)):m_samples[size_t(voice.sound)];}
  std::vector<Voice> m_voices;
  HWAVEOUT m_device=nullptr;
  HANDLE m_wake=nullptr;

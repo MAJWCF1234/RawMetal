@@ -1,0 +1,580 @@
+{
+  "cues": [
+    "Patrol",
+    "Investigate",
+    "Alert",
+    "Hurt",
+    "Down",
+    "Retreat",
+    "AllyDown",
+    "Support",
+    "Deploy",
+    "Repair",
+    "Treat",
+    "Follow",
+    "Wait",
+    "Danger"
+  ],
+  "clips": [
+    {
+      "id": "assault-patrol-0",
+      "role": 1,
+      "cue": "Patrol",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Sector clear. Keep moving."
+    },
+    {
+      "id": "assault-patrol-1",
+      "role": 1,
+      "cue": "Patrol",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Check the corners. Keep your spacing."
+    },
+    {
+      "id": "assault-investigate-0",
+      "role": 1,
+      "cue": "Investigate",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Heard that. Checking."
+    },
+    {
+      "id": "assault-investigate-1",
+      "role": 1,
+      "cue": "Investigate",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Hold here. I'll look."
+    },
+    {
+      "id": "assault-alert-0",
+      "role": 1,
+      "cue": "Alert",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Contact! Closing!"
+    },
+    {
+      "id": "assault-alert-1",
+      "role": 1,
+      "cue": "Alert",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Move up! Cover the flank!"
+    },
+    {
+      "id": "assault-hurt-0",
+      "role": 1,
+      "cue": "Hurt",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "I'm hit!"
+    },
+    {
+      "id": "assault-hurt-1",
+      "role": 1,
+      "cue": "Hurt",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Still in it!"
+    },
+    {
+      "id": "assault-down-0",
+      "role": 1,
+      "cue": "Down",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "I'm down—keep moving!"
+    },
+    {
+      "id": "assault-retreat-0",
+      "role": 1,
+      "cue": "Retreat",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "Detail's gone! Falling back!"
+    },
+    {
+      "id": "assault-allydown-0",
+      "role": 1,
+      "cue": "AllyDown",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "text": "We've lost one. Close the gap!"
+    },
+    {
+      "id": "sharpshooter-patrol-0",
+      "role": 3,
+      "cue": "Patrol",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Lane's covered."
+    },
+    {
+      "id": "sharpshooter-patrol-1",
+      "role": 3,
+      "cue": "Patrol",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Clear sightline. Holding."
+    },
+    {
+      "id": "sharpshooter-investigate-0",
+      "role": 3,
+      "cue": "Investigate",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Heard something. Holding angle."
+    },
+    {
+      "id": "sharpshooter-investigate-1",
+      "role": 3,
+      "cue": "Investigate",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Movement at the edge. Checking."
+    },
+    {
+      "id": "sharpshooter-alert-0",
+      "role": 3,
+      "cue": "Alert",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Target marked. Taking the shot."
+    },
+    {
+      "id": "sharpshooter-alert-1",
+      "role": 3,
+      "cue": "Alert",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Keep them in the open."
+    },
+    {
+      "id": "sharpshooter-hurt-0",
+      "role": 3,
+      "cue": "Hurt",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Winged—still up."
+    },
+    {
+      "id": "sharpshooter-hurt-1",
+      "role": 3,
+      "cue": "Hurt",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Lost the angle. Moving."
+    },
+    {
+      "id": "sharpshooter-down-0",
+      "role": 3,
+      "cue": "Down",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "I'm out. Cover the lane."
+    },
+    {
+      "id": "sharpshooter-retreat-0",
+      "role": 3,
+      "cue": "Retreat",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "Position lost. Breaking contact."
+    },
+    {
+      "id": "sharpshooter-allydown-0",
+      "role": 3,
+      "cue": "AllyDown",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "text": "One down. Watch their lane."
+    },
+    {
+      "id": "rusher-patrol-0",
+      "role": 6,
+      "cue": "Patrol",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Eyes forward."
+    },
+    {
+      "id": "rusher-patrol-1",
+      "role": 6,
+      "cue": "Patrol",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Don't bunch up."
+    },
+    {
+      "id": "rusher-investigate-0",
+      "role": 6,
+      "cue": "Investigate",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Something moved. I'm on it."
+    },
+    {
+      "id": "rusher-investigate-1",
+      "role": 6,
+      "cue": "Investigate",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Cover me. I'll flush it out."
+    },
+    {
+      "id": "rusher-alert-0",
+      "role": 6,
+      "cue": "Alert",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Rushing! Get clear!"
+    },
+    {
+      "id": "rusher-alert-1",
+      "role": 6,
+      "cue": "Alert",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "I'm going through!"
+    },
+    {
+      "id": "rusher-hurt-0",
+      "role": 6,
+      "cue": "Hurt",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Keep going!"
+    },
+    {
+      "id": "rusher-hurt-1",
+      "role": 6,
+      "cue": "Hurt",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Not stopping!"
+    },
+    {
+      "id": "rusher-down-0",
+      "role": 6,
+      "cue": "Down",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "Can't—keep moving!"
+    },
+    {
+      "id": "rusher-retreat-0",
+      "role": 6,
+      "cue": "Retreat",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "We're overrun! Moving back!"
+    },
+    {
+      "id": "rusher-allydown-0",
+      "role": 6,
+      "cue": "AllyDown",
+      "voice_id": "IKne3meq5aSn9XLyUdCD",
+      "text": "They're down! Don't stop here!"
+    },
+    {
+      "id": "heavy-patrol-0",
+      "role": 4,
+      "cue": "Patrol",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Holding the door."
+    },
+    {
+      "id": "heavy-patrol-1",
+      "role": 4,
+      "cue": "Patrol",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Stay behind the armor."
+    },
+    {
+      "id": "heavy-investigate-0",
+      "role": 4,
+      "cue": "Investigate",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Noise. Nobody run past me."
+    },
+    {
+      "id": "heavy-investigate-1",
+      "role": 4,
+      "cue": "Investigate",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Watch the gap. I'll hold."
+    },
+    {
+      "id": "heavy-alert-0",
+      "role": 4,
+      "cue": "Alert",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Suppressing! Stay behind me!"
+    },
+    {
+      "id": "heavy-alert-1",
+      "role": 4,
+      "cue": "Alert",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Keep your heads down!"
+    },
+    {
+      "id": "heavy-hurt-0",
+      "role": 4,
+      "cue": "Hurt",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Taking hits."
+    },
+    {
+      "id": "heavy-hurt-1",
+      "role": 4,
+      "cue": "Hurt",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "That got through."
+    },
+    {
+      "id": "heavy-down-0",
+      "role": 4,
+      "cue": "Down",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "I'm down—door's open!"
+    },
+    {
+      "id": "heavy-retreat-0",
+      "role": 4,
+      "cue": "Retreat",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Line's broken. Pulling back."
+    },
+    {
+      "id": "heavy-allydown-0",
+      "role": 4,
+      "cue": "AllyDown",
+      "voice_id": "nPczCjzI2devNBz1zQrb",
+      "text": "Lost one. Get behind me."
+    },
+    {
+      "id": "engineer-patrol-0",
+      "role": 2,
+      "cue": "Patrol",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Kit's ready."
+    },
+    {
+      "id": "engineer-patrol-1",
+      "role": 2,
+      "cue": "Patrol",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Connections look good."
+    },
+    {
+      "id": "engineer-investigate-0",
+      "role": 2,
+      "cue": "Investigate",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Could be a short. Checking."
+    },
+    {
+      "id": "engineer-investigate-1",
+      "role": 2,
+      "cue": "Investigate",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Keep watch while I check this."
+    },
+    {
+      "id": "engineer-alert-0",
+      "role": 2,
+      "cue": "Alert",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Contact! Cover me!"
+    },
+    {
+      "id": "engineer-alert-1",
+      "role": 2,
+      "cue": "Alert",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Need room to work!"
+    },
+    {
+      "id": "engineer-deploy-0",
+      "role": 2,
+      "cue": "Deploy",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Drone out! Cover me!"
+    },
+    {
+      "id": "engineer-deploy-1",
+      "role": 2,
+      "cue": "Deploy",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Drone's live. Watch your fire."
+    },
+    {
+      "id": "engineer-repair-0",
+      "role": 2,
+      "cue": "Repair",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Hold them off. I'm repairing it."
+    },
+    {
+      "id": "engineer-support-0",
+      "role": 2,
+      "cue": "Support",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Checking the pad. Cover me."
+    },
+    {
+      "id": "engineer-hurt-0",
+      "role": 2,
+      "cue": "Hurt",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Tools first—then me."
+    },
+    {
+      "id": "engineer-hurt-1",
+      "role": 2,
+      "cue": "Hurt",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "I'm hit. Kit's still working."
+    },
+    {
+      "id": "engineer-down-0",
+      "role": 2,
+      "cue": "Down",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "I'm down. Save the kit."
+    },
+    {
+      "id": "engineer-retreat-0",
+      "role": 2,
+      "cue": "Retreat",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "They're all gone. Falling back deeper!"
+    },
+    {
+      "id": "engineer-allydown-0",
+      "role": 2,
+      "cue": "AllyDown",
+      "voice_id": "iP95p4xoKVk53GoZ742B",
+      "text": "Lost another. We need to move!"
+    },
+    {
+      "id": "medic-patrol-0",
+      "role": 5,
+      "cue": "Patrol",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "All quiet."
+    },
+    {
+      "id": "medic-patrol-1",
+      "role": 5,
+      "cue": "Patrol",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "Keep a dressing where you can reach it."
+    },
+    {
+      "id": "medic-investigate-0",
+      "role": 5,
+      "cue": "Investigate",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "That didn't sound good."
+    },
+    {
+      "id": "medic-investigate-1",
+      "role": 5,
+      "cue": "Investigate",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "Checking. Stay in sight."
+    },
+    {
+      "id": "medic-alert-0",
+      "role": 5,
+      "cue": "Alert",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "Stay low! Wounded need cover!"
+    },
+    {
+      "id": "medic-alert-1",
+      "role": 5,
+      "cue": "Alert",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "Cover the wounded!"
+    },
+    {
+      "id": "medic-treat-0",
+      "role": 5,
+      "cue": "Treat",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "Hold still. I've got you."
+    },
+    {
+      "id": "medic-treat-1",
+      "role": 5,
+      "cue": "Treat",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "Pressure on. Keep breathing."
+    },
+    {
+      "id": "medic-hurt-0",
+      "role": 5,
+      "cue": "Hurt",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "Medic's hit—still working."
+    },
+    {
+      "id": "medic-hurt-1",
+      "role": 5,
+      "cue": "Hurt",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "I can wait. Cover the patient."
+    },
+    {
+      "id": "medic-down-0",
+      "role": 5,
+      "cue": "Down",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "I'm down. Self-treat."
+    },
+    {
+      "id": "medic-retreat-0",
+      "role": 5,
+      "cue": "Retreat",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "No one left to pull out. Falling back!"
+    },
+    {
+      "id": "medic-allydown-0",
+      "role": 5,
+      "cue": "AllyDown",
+      "voice_id": "cjVigY5qzO86Huf0OWal",
+      "text": "We've lost them. Stay together."
+    },
+    {
+      "id": "witness-follow-0",
+      "role": 7,
+      "cue": "Follow",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "I'm with you. Don't leave me."
+    },
+    {
+      "id": "witness-follow-1",
+      "role": 7,
+      "cue": "Follow",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "Just keep going. I'm right here."
+    },
+    {
+      "id": "witness-wait-0",
+      "role": 7,
+      "cue": "Wait",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "I'll stay put. Be quick."
+    },
+    {
+      "id": "witness-wait-1",
+      "role": 7,
+      "cue": "Wait",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "Here? All right. Hurry back."
+    },
+    {
+      "id": "witness-danger-0",
+      "role": 7,
+      "cue": "Danger",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "They're coming—please—"
+    },
+    {
+      "id": "witness-danger-1",
+      "role": 7,
+      "cue": "Danger",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "I can hear them. We have to go!"
+    },
+    {
+      "id": "witness-hurt-0",
+      "role": 7,
+      "cue": "Hurt",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "Ah—don't let them take me."
+    },
+    {
+      "id": "witness-hurt-1",
+      "role": 7,
+      "cue": "Hurt",
+      "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+      "text": "I'm hurt. Please, wait!"
+    }
+  ]
+}

@@ -38,7 +38,7 @@ is physically inside Receiving 03. The camera for these stills is repositioned
 after the replay; it is not a continuous human playthrough. The body count is
 proven by the actor-state trace, rather than by counting bodies in these views.
 
-Current release: **25,639,424 bytes**, leaving **7,915,008 bytes** below the
+Encounter-only build: **25,639,424 bytes**, leaving **7,915,008 bytes** below the
 unchanged 32 MiB ceiling. All **229** embedded resources verify against source.
 Save, campaign, guard danger, schedule, table, role and Exclusion regressions
 exit 0, as does full Vulkan smoke. The active breach is actually reloaded before
@@ -55,6 +55,7 @@ they did not record dynamic provenance and cannot recover waves already lost.
 Actual skinned front and side renders were inspected before casting. Engineer
 is bare-faced; the others have different degrees of face covering. The
 [dialogue and casting sheet](cleanup-voice-direction-20261015.md) records those
-differences. ElevenLabs showed available credits, but its voice library and
-settings failed to load. No new voice audio has been generated or shipped in
-this pass. Existing audio remains in use.
+differences. The initial browser attempt failed to load voice settings. The
+subsequent API pass generated and embedded 80 takes with equipment-specific
+processing. See [current voice validation](cleanup-voices-20261015.md) for the
+updated executable, audition and production provenance.

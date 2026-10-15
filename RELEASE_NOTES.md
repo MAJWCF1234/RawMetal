@@ -19,12 +19,13 @@ Ashfall Exclusion Zone becomes a short authored stealth/combat loop on the exist
 - East winch west-flank rear KO physically replayed; north checked at three approach timings
 - Receiving 02 containment detail is overrun after two player kills; real entities kill its remaining fighters while one survivor physically retreats into Receiving 03
 - Save format 14 preserves living and dead script-spawned creatures; legacy versions 1-13 remain readable
+- 80 ElevenLabs voice takes for the six Cleanup roles and Witness, with model-specific mask effects, positional playback, priorities and saved cooldowns
 - Script exit-42 and console tick-1 fixtures corrected; full Vulkan smoke passes without quarantine
 - Native `--exclusion-test` 47/47, `--stealth-test` 36/36, `--exclusion-authoring-test` 38/38
 
 No new areas or animation banks. Hard **32 MiB** ceiling unchanged. See [README](README.md) and [encounter notes](docs/exclusion-encounter-slice-20261015.md).
 
-**Validation:** EXE 25,639,424 / 33,554,432 bytes (7.55 MiB headroom). Full Vulkan smoke passes. See [Receiving breach evidence](docs/receiving-breach-20261015.md). New ElevenLabs dialogue remains pending voice-library access; casting and lines are prepared, with no new voice audio claimed.
+**Validation:** EXE 26,510,336 / 33,554,432 bytes (6.72 MiB headroom), 230 verified embedded resources. Full Vulkan smoke passes. [Receiving breach evidence](docs/receiving-breach-20261015.md) and [voice validation](docs/cleanup-voices-20261015.md).
 
 ---
 
