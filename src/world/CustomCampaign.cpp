@@ -1,4 +1,5 @@
 #include "CustomCampaign.h"
+#include "../core/PackedResource.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -61,11 +62,11 @@ AuthoredLayerData& layerAt(std::vector<std::shared_ptr<AuthoredMapData>>& maps,c
 }
 }
 
-std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesystem::path& path){
- auto text=readText(path);auto start=text.find(DataStart),end=text.find(DataEnd);
+std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,std::string sourceFile){
+ auto start=text.find(DataStart),end=text.find(DataEnd);
  if(start==std::string::npos||end==std::string::npos||end<=start)throw std::runtime_error("missing CUSTOM_CAMPAIGN_DATA markers");
  start+=DataStart.size();std::istringstream stream(text.substr(start,end-start));std::string line;
- auto campaign=std::make_shared<CustomCampaign>();campaign->sourceFile=path.filename().string();campaign->key=campaignKey(campaign->sourceFile);
+ auto campaign=std::make_shared<CustomCampaign>();campaign->sourceFile=std::move(sourceFile);campaign->key=campaignKey(campaign->sourceFile);
  std::vector<std::shared_ptr<AuthoredMapData>> maps;bool sawCampaign=false;std::array<bool,WorldChunkCapacity> declared{};
  std::vector<std::pair<int,int>> guardTargets;
  while(std::getline(stream,line)){
@@ -253,12 +254,26 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesyst
  campaign->maps.reserve(maps.size());for(auto& map:maps)campaign->maps.push_back(std::move(map));
  return campaign;
 }
+std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesystem::path& path){
+ return loadCustomCampaignText(readText(path),path.filename().string());
+}
+std::shared_ptr<const CustomCampaign> loadEmbeddedGuardLabCampaign(){
+ // Packed resource 346 is the Ashfall Guard Lab custom campaign TXT.
+ auto bytes=loadResource(346);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),"RawMetal-Horror-OpenWorld.txt");
+}
 std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(const std::filesystem::path& directory,std::vector<std::string>* errors){
- std::vector<std::shared_ptr<const CustomCampaign>> result;std::error_code ec;if(!std::filesystem::exists(directory,ec))return result;
- for(auto& entry:std::filesystem::directory_iterator(directory,ec)){
+ std::vector<std::shared_ptr<const CustomCampaign>> result;std::error_code ec;
+ if(std::filesystem::exists(directory,ec))for(auto& entry:std::filesystem::directory_iterator(directory,ec)){
   if(ec)break;if(!entry.is_regular_file()||entry.path().extension()!=L".txt")continue;
   try{result.push_back(loadCustomCampaignFile(entry.path()));}
   catch(const std::exception& error){if(errors)errors->push_back(entry.path().filename().string()+": "+error.what());}
+ }
+ // One-file friend builds have no sidecar custom-maps folder. Keep Guard Lab
+ // available from the embedded payload unless a disk copy already wins.
+ bool hasGuardLab=false;for(const auto& campaign:result)hasGuardLab|=campaign->sourceFile=="RawMetal-Horror-OpenWorld.txt";
+ if(!hasGuardLab){
+  try{result.push_back(loadEmbeddedGuardLabCampaign());}
+  catch(const std::exception& error){if(errors)errors->push_back(std::string("embedded Guard Lab: ")+error.what());}
  }
  std::sort(result.begin(),result.end(),[](auto&a,auto&b){return a->name<b->name;});return result;
 }

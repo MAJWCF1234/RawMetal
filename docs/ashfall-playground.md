@@ -12,10 +12,12 @@ under `custom maps/`.
 
 ## Open the current encounter
 
-Launch `RawMetal.exe` from the project directory, choose **Custom Maps**, then
-**RawMetal // Ashfall Guard Lab**. The separate **ASHFALL EXCLUSION ZONE** entry
-is the older built-in world. Restart this custom map for a clean encounter;
-loading an older save restores that saved encounter's state.
+Launch `RawMetal.exe`, choose **Custom Maps**, then **RawMetal // Ashfall Guard
+Lab**. Friend/playtester builds embed this campaign in the EXE, so no sidecar
+`custom maps/` folder is required. A disk copy under `custom maps/` still wins
+when present. The separate **ASHFALL EXCLUSION ZONE** entry is the older built-in
+world. Restart this custom map for a clean encounter; loading an older save
+restores that saved encounter's state.
 
 The ruined 24 m square retains its original grid layout. The two former Huntsman test spawns were removed so they
 cannot interrupt guard observation.
