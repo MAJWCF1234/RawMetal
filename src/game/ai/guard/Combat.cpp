@@ -150,7 +150,11 @@ void Game::updateGuardCombat(float dt){
   // Contact defense can own Bash with an empty tube. Pause the reload before
   // its event/refill boundary, preserving its remaining clock and event mask.
   bool meleePreemptsReload=close&&bashAllowed&&!recovery&&npc.pose.clip!=1;
-  bool reloadAllowed=!workBlocked&&!meleePreemptsReload&&guardTaskAllows(i,GuardTask::Reload);
+  // A committed reload (events already consumed) must keep ticking after Danger
+  // even while Recovery/Hold owns the schedule; only a fresh empty-tube start
+  // still requires live Reload task ownership.
+  bool reloadCommitted=get("weapon_reloading")&&get("weapon_reload_events")!=0;
+  bool reloadAllowed=!workBlocked&&!meleePreemptsReload&&(guardTaskAllows(i,GuardTask::Reload)||reloadCommitted);
   int reload=reloadAllowed?std::max(0,oldReload-ms):oldReload;put("weapon_reload",reload);
   if(reloadAllowed&&get("weapon_reloading")&&!get("weapon_reload_events"))put("weapon_reload_events",int(guardActionMask(GuardAction::Reload,1800-oldReload)));
   if(get("weapon_rounds")==0&&reloadAllowed){

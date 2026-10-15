@@ -57,12 +57,10 @@ clean Git HEAD plus only this feature patch. That clean exporter preserves all
 11 playground runtime records and reproduces the TXT payload with zero warnings.
 Unrelated local editor changes were not needed and are not part of this slice.
 
-Evidence is kept under `diagnostics/guard-pass-20261010/`, including the build,
-guard tests, suite outputs, clean-editor parity and `guard-patrol.png`,
-`guard-alert.png`, `guard-investigate.png`. Initial captures exposed the absent
-ground/walls. Their camera was also corrected after walls became solid, so those
-before/after images are diagnostic evidence rather than a controlled pixel score
-or a rendering-quality percentage.
+Pass evidence was local diagnostics (build, guard tests, suite outputs, and
+patrol/alert/investigate captures). Initial captures exposed the absent
+ground/walls; camera correction after walls became solid makes those images
+diagnostic rather than a controlled pixel score or rendering-quality percentage.
 
 ## Playtesting
 

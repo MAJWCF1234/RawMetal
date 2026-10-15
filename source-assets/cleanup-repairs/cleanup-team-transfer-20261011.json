@@ -1,0 +1,38 @@
+[
+  {
+    "Name": "KommaBlackFinalCombinedt.png",
+    "Sha256": "0456974C9FD9103C138C7210D2CD84E5E183F7D6E421AAA5B3D75D965933D3DB",
+    "Bytes": 1614088,
+    "RetainedPath": "N:\\rawmetal\\source-assets\\cleanup-team\\KommaBlackFinalCombinedt.png"
+  },
+  {
+    "Name": "LimitatorBodyFinalGreyCombinedt1.png",
+    "Sha256": "5FD5A32361828BB61073E6EEFED9CB887D38198EAB639B1A9BEEAEEA9C77F2FD",
+    "Bytes": 439142,
+    "RetainedPath": "N:\\rawmetal\\source-assets\\cleanup-team\\LimitatorBodyFinalGreyCombinedt1.png"
+  },
+  {
+    "Name": "LimitatorHeadFinalCombined1.png",
+    "Sha256": "C437BE5C5EC0C68F76B8895517843F74C44AF432F26498E608BCC16045670E80",
+    "Bytes": 290425,
+    "RetainedPath": "N:\\rawmetal\\source-assets\\cleanup-team\\LimitatorHeadFinalCombined1.png"
+  },
+  {
+    "Name": "Investigator.fbx",
+    "Sha256": "0A0DF604365720EE49D99D59E2BA7F03FAA71B1C10DE7E15DDD06E51682B27BA",
+    "Bytes": 449664,
+    "RetainedPath": "N:\\rawmetal\\source-assets\\cleanup-team\\Investigator.fbx"
+  },
+  {
+    "Name": "Limitator.fbx",
+    "Sha256": "3D29C6939A1B571DF7529C1E4A05B23D4E2F42CF5EE73B25E894C5DC2C168B4F",
+    "Bytes": 1658028,
+    "RetainedPath": "N:\\rawmetal\\source-assets\\cleanup-team\\Limitator.fbx"
+  },
+  {
+    "Name": "Cleanupteam.zip",
+    "Sha256": "37D5A73EB1252088977FA022C36DB470842CAAC25A4CAC58B3C9229E7DF45FAD",
+    "Bytes": 2620798,
+    "RetainedPath": "N:\\rawmetal\\source-assets\\cleanup-team\\Cleanupteam.zip"
+  }
+]

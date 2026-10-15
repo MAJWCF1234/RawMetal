@@ -7,8 +7,8 @@ guard pass.
 
 The actual custom-map files are `custom maps/RawMetal-Horror-OpenWorld.json`
 (editor source) and `custom maps/RawMetal-Horror-OpenWorld.txt` (runtime export).
-Before this pass both files were copied to
-`diagnostics/guard-pass-20261010/playground-backup/`.
+Before this pass both files were backed up locally; the durable sources remain
+under `custom maps/`.
 
 ## Open the current encounter
 

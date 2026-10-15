@@ -137,11 +137,16 @@ bool Game::guardRoute(int level,size_t actor,Vec2 globalGoal,float feet,int ms,V
  int wait=get("guard_route_target")==target+1?std::max(0,get("guard_route_wait")-ms):0;
  Vec2 portalGlobal{get("guard_portal_x")*.001f,get("guard_portal_y")*.001f};
  bool cached=get("guard_route_target")==target+1&&next>=0&&next<chunkCount()&&next!=level&&wait>0&&friendlyBoundaryOpen(level,next,portalGlobal);
- if(!cached&&m_npcNavBudget>0&&(wait==0||next>=0||get("guard_route_target")!=target+1)){
-  --m_npcNavBudget;Vec2 localPortal;float z=feet;cached=friendlyPortal(level,target,npc.pose.position,npc.pose.z,friendlyHullHeight(actor,npc.track()),localPortal,z,feet);
-  next=cached?friendlyChunkAt(localPortal+origin,level):-1;put("guard_route_next",next+1);
-  if(cached){portalGlobal=localPortal+origin;put("guard_portal_x",int(std::round(portalGlobal.x*1000)));put("guard_portal_y",int(std::round(portalGlobal.y*1000)));put("guard_portal_z",int(std::round(z*1000)));}
-  wait=600+int(actor%7)*30;
+ if(!cached){
+  if(m_npcNavBudget>0&&(wait==0||next>=0||get("guard_route_target")!=target+1)){
+   --m_npcNavBudget;Vec2 localPortal;float z=feet;cached=friendlyPortal(level,target,npc.pose.position,npc.pose.z,friendlyHullHeight(actor,npc.track()),localPortal,z,feet);
+   next=cached?friendlyChunkAt(localPortal+origin,level):-1;put("guard_route_next",next+1);
+   if(cached){portalGlobal=localPortal+origin;put("guard_portal_x",int(std::round(portalGlobal.x*1000)));put("guard_portal_y",int(std::round(portalGlobal.y*1000)));put("guard_portal_z",int(std::round(z*1000)));}
+   wait=600+int(actor%7)*30;
+  }else if(wait==0){
+   // Same backoff as flank/cover: empty budget must not pin wait at 0 forever.
+   wait=600+int(actor%7)*30;
+  }
  }
  put("guard_route_target",target+1);put("guard_route_wait",wait);
  if(cached){goal=portalGlobal-origin;goalFeet=get("guard_portal_z")*.001f;}return cached;
@@ -161,7 +166,8 @@ void Game::updateFriendlyActors(float dt,bool guards){
    if(dt>0&&humanActorVisual(track.visual)&&staged.clip!=4){
     auto previousPose=staged;
     float previous=state(friendlyKey(i,"saved"))?state(friendlyKey(i,"phase"))*.0001f:staged.phase;
-    staged.clip=0;staged.phase=std::fmod(previous+dt*.45f,1.f);
+    float duration=cleanupAnimationDuration(track.visual,0);
+    staged.clip=0;staged.phase=std::fmod(previous+dt*(duration>0?1/duration:.45f),1.f);
     staged=friendlyAwareness(home,npc.homeLevel,npc.homeActor,previousPose,staged,dt);
     setState(friendlyKey(i,"x"),int(std::round(staged.position.x*1000)));setState(friendlyKey(i,"y"),int(std::round(staged.position.y*1000)));setState(friendlyKey(i,"z"),int(std::round(staged.z*1000)));
     setState(friendlyKey(i,"phase"),int(std::round(staged.phase*10000)));setState(friendlyKey(i,"yaw"),int(std::round(std::remainder(staged.yaw,2*kPi)*10000)));setState(friendlyKey(i,"walking"),0);setState(friendlyKey(i,"saved"),1);
@@ -184,12 +190,18 @@ void Game::updateFriendlyActors(float dt,bool guards){
    }else{
    if(dt<=0||!follow||!state(friendlyKey(i,"engaged")))continue;
    int wait=std::max(0,state(friendlyKey(i,"route_wait"))-std::max(1,int(std::round(dt*1000))));setState(friendlyKey(i,"route_wait"),wait);
-   if(wait>0&&state(friendlyKey(i,"route_player"))==m_level+1&&!state(friendlyKey(i,"route_next")))continue;
-   if(m_npcNavBudget<=0)continue;--m_npcNavBudget;
-   bool found=friendlyPortal(npc.level,m_level,npc.pose.position,npc.pose.z,friendlyHullHeight(i,track),goal,z);
-   setState(friendlyKey(i,"route_player"),m_level+1);setState(friendlyKey(i,"route_wait"),600+int(i%7)*30);setState(friendlyKey(i,"route_next"),found?friendlyChunkAt(goal+chunkOffset(npc.level),npc.level)+1:0);
-   if(!found)continue;
-   setState(friendlyKey(i,"portal_x"),int(std::round(goal.x*1000)));setState(friendlyKey(i,"portal_y"),int(std::round(goal.y*1000)));setState(friendlyKey(i,"portal_z"),int(std::round(z*1000)));
+   // During portal backoff keep ticking AI so escorts do not freeze mid-idle.
+   // Only skip the actor when a fresh search is needed and the budget is empty.
+   // Failed-search backoff: keep AI ticking so idle does not freeze, but do not
+   // spend another portal search until wait elapses.
+   bool waiting=wait>0&&state(friendlyKey(i,"route_player"))==m_level+1&&!state(friendlyKey(i,"route_next"));
+   if(!waiting){
+    if(m_npcNavBudget<=0)continue;--m_npcNavBudget;
+    bool found=friendlyPortal(npc.level,m_level,npc.pose.position,npc.pose.z,friendlyHullHeight(i,track),goal,z);
+    setState(friendlyKey(i,"route_player"),m_level+1);setState(friendlyKey(i,"route_wait"),600+int(i%7)*30);setState(friendlyKey(i,"route_next"),found?friendlyChunkAt(goal+chunkOffset(npc.level),npc.level)+1:0);
+    if(!found)continue;
+    setState(friendlyKey(i,"portal_x"),int(std::round(goal.x*1000)));setState(friendlyKey(i,"portal_y"),int(std::round(goal.y*1000)));setState(friendlyKey(i,"portal_z"),int(std::round(z*1000)));
+   }
    }
   }
   auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt,&stimuli);

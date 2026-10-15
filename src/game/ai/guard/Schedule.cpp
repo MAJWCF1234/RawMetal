@@ -129,7 +129,10 @@ void Game::finishGuardTask(size_t actor){
  // Failed placement/arc work releases its job. The retry interval leaves
  // firearms enough time to finish their authored aim instead of starving.
  bool unavailable=task==GuardTask::Throw&&get("task_ms")>=750;
- unavailable|=task==GuardTask::Deploy&&!get("drone_windup")&&get("drone_cooldown")>0;
+ // Deploy finishes windup then waits on the shared nav budget; without a
+ // deadline that stand mutes the engineer forever. Repair likewise.
+ unavailable|=task==GuardTask::Deploy&&((!get("drone_windup")&&get("drone_cooldown")>0)||(get("drone_windup")>=1200&&get("task_ms")>=2500));
+ unavailable|=task==GuardTask::Repair&&get("task_ms")>=4000;
  if(unavailable)failGuardTask(actor,GuardTaskReason::Unavailable);
 }
 void Game::guardTaskMovement(size_t actor,const ActorPose&old,const ActorPose&pose,Vec2 waypoint,bool wanted,int ms){
@@ -139,14 +142,18 @@ void Game::guardTaskMovement(size_t actor,const ActorPose&old,const ActorPose&po
  // do not look like failure merely because target distance grows.
  auto direction=normalized(waypoint-old.position);float advance=std::max(0.f,dot(pose.position-old.position,direction));int progress=get("task_progress")+int(std::round(advance*1000));
  if(progress>=100){put("task_progress",progress%100);put("task_stall",0);return;}put("task_progress",progress);
- bool patrol=get("schedule")==int(GuardSchedule::Patrol);int stall=patrol?get("guard_patrol_wait"):std::min(5000,get("task_stall")+ms);put("task_stall",stall);int deadline=patrol?5000:2500;if(stall>=deadline)failGuardTask(actor,GuardTaskReason::Blocked);
+ bool patrol=get("schedule")==int(GuardSchedule::Patrol);
+ int stall=patrol?get("guard_patrol_wait"):std::min(8000,get("task_stall")+ms);put("task_stall",stall);
+ // Every role can need a cover/portal detour under the four-search budget;
+ // give the same stall window so combat Move does not wedge into Recovery early.
+ int deadline=5000;if(stall>=deadline)failGuardTask(actor,GuardTaskReason::Blocked);
 }
 void Game::validateGuardSchedule(size_t actor)const{
  auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto range=[&](const char*f,int lo,int hi){if(get(f)<lo||get(f)>hi)throw std::runtime_error("Invalid saved guard schedule");};
  // Reconstruction validates guards in authoring order. Count the complete
  // authored collection so a subject appearing later can restore normally.
  size_t npcCount=0;for(int level=0;level<chunkCount();++level)for(const auto&track:(level==m_level?m_world:m_chunks[level].world).actorTracks())npcCount+=track.ai.mode!=ActorAiMode::Scripted;
- range("schedule",0,int(GuardSchedule::Patient));range("schedule_step",0,2);range("task",0,int(GuardTask::Escape));range("task_status",0,int(GuardTaskStatus::Failed));range("task_ms",0,60000);range("task_fraction",0,999);range("task_stall",0,5000);range("task_progress",0,99);range("task_retry",0,5000);range("task_failures",0,255);range("task_reason",0,int(GuardTaskReason::Disabled));range("task_goal_x",-10000000,10000000);range("task_goal_y",-10000000,10000000);range("task_goal_z",-100000,100000);range("task_subject",0,4096);range("task_work_start",0,65535);range("task_conditions",0,int(GuardAllConditions));range("task_transitions",0,4);range("task_enemy_level",0,chunkCount());range("task_enemy_index",0,65536);range("guard_patient_move",0,1);range("task_cursor",0,ai::MaximumScheduleTasks);range("task_cursor_saved",0,1);range("task_fail_schedule",0,int(GuardSchedule::Patient));
+ range("schedule",0,int(GuardSchedule::Patient));range("schedule_step",0,2);range("task",0,int(GuardTask::Escape));range("task_status",0,int(GuardTaskStatus::Failed));range("task_ms",0,60000);range("task_fraction",0,999);range("task_stall",0,8000);range("task_progress",0,99);range("task_retry",0,5000);range("task_failures",0,255);range("task_reason",0,int(GuardTaskReason::Disabled));range("task_goal_x",-10000000,10000000);range("task_goal_y",-10000000,10000000);range("task_goal_z",-100000,100000);range("task_subject",0,4096);range("task_work_start",0,65535);range("task_conditions",0,int(GuardAllConditions));range("task_transitions",0,4);range("task_enemy_level",0,chunkCount());range("task_enemy_index",0,65536);range("guard_patient_move",0,1);range("task_cursor",0,ai::MaximumScheduleTasks);range("task_cursor_saved",0,1);range("task_fail_schedule",0,int(GuardSchedule::Patient));
  int kind=get("task_enemy_kind");if(kind&&kind!=int(ShotKind::Player)&&kind!=int(ShotKind::Npc)&&kind!=int(ShotKind::Actor)&&kind!=int(ShotKind::Enemy)&&kind!=int(ShotKind::Drone))throw std::runtime_error("Invalid saved scheduled threat");
  if((kind&&(!get("task_enemy_level")||!get("task_enemy_index")))||(!kind&&(get("task_enemy_level")||get("task_enemy_index"))))throw std::runtime_error("Inconsistent scheduled threat reference");
  if((kind==int(ShotKind::Npc)&&size_t(get("task_enemy_index"))>npcCount)||(kind==int(ShotKind::Player)&&get("task_enemy_index")!=1)||(kind==int(ShotKind::Drone)&&get("task_enemy_index")>EngineerDroneSlots))throw std::runtime_error("Scheduled threat is outside its collection");

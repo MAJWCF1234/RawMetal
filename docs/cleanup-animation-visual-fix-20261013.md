@@ -55,8 +55,7 @@ Reproduce with `RawMetal.exe --cleanup-layer-inspection`. Optional
 `--cleanup-layer-phase=0..1` select cases. `--cleanup-layer-stage=1`, `2`, or `3`
 isolates the donor bake, composed layers, or immutable bind mesh; ordinary
 rendering uses stage `0`. Local captures and logs are under
-`diagnostics/photo-audit-20261013` and
-`diagnostics/animation-repair-20261013/native`.
+`docs/images/cleanup-visual-fix-20261013.png`.
 
 ## Limits still present
 

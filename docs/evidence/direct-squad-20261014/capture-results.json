@@ -1,0 +1,113 @@
+[
+  {
+    "Label": "assault-walk-source",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=1",
+      "--cleanup-layer-stage=1"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:08.2091936-05:00",
+    "ElapsedSeconds": 6.8663865
+  },
+  {
+    "Label": "assault-walk",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=1"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:15.1037494-05:00",
+    "ElapsedSeconds": 6.7559311
+  },
+  {
+    "Label": "assault-yaw",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=5"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:21.8627463-05:00",
+    "ElapsedSeconds": 6.5201284
+  },
+  {
+    "Label": "assault-crouch",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=7"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:28.3844787-05:00",
+    "ElapsedSeconds": 6.5993612
+  },
+  {
+    "Label": "medic-case-grasp",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=4",
+      "--cleanup-layer-sample=10",
+      "--cleanup-layer-phase=0.25"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:34.9856860-05:00",
+    "ElapsedSeconds": 6.6164457
+  },
+  {
+    "Label": "medic-case-lift",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=4",
+      "--cleanup-layer-sample=10",
+      "--cleanup-layer-phase=0.6"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:41.6038004-05:00",
+    "ElapsedSeconds": 6.848558
+  },
+  {
+    "Label": "sharpshooter-crouch",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=2",
+      "--cleanup-layer-sample=7"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:48.4540648-05:00",
+    "ElapsedSeconds": 6.7227833
+  },
+  {
+    "Label": "heavy-walk",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=3",
+      "--cleanup-layer-sample=1"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:05:55.1785008-05:00",
+    "ElapsedSeconds": 6.8028904
+  },
+  {
+    "Label": "rusher-walk",
+    "Arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=5",
+      "--cleanup-layer-sample=1"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:06:01.9830773-05:00",
+    "ElapsedSeconds": 6.7066263
+  },
+  {
+    "Label": "engineer-gameplay",
+    "Arguments": [
+      "--engineer-support-inspection"
+    ],
+    "ExitCode": 0,
+    "Started": "2026-10-14T16:06:08.6917896-05:00",
+    "ElapsedSeconds": 22.5519794
+  }
+]

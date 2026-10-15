@@ -63,21 +63,19 @@ the source endpoint correction is reported separately.
 
 ## Native validation
 
-Native captures under `diagnostics/direct-animation-20261014` and live play
-confirm waist aiming, fingers, weapons and support props for this bake.
-Engineer drones and guard actions pass. Remaining Medic detour/patient
-assertions in `RoleTest`/`PatientTest` are the same AI pathfinding fixtures
-from mid-October and are **not** animation bake regressions — track them as
-separate Medic AI work if they still matter in-game.
+Live play and the salvaged validator/capture records under
+`docs/evidence/direct-squad-20261014/` confirm waist aiming, fingers, weapons
+and support props for this bake. Engineer drones and guard actions pass.
+Remaining Medic detour/patient assertions in `RoleTest`/`PatientTest` are old
+AI pathfinding fixtures, not animation bake regressions.
 
 ## Reproduce
 
 ```powershell
-py -3 tools/VerifyCleanupAnimation.py --output diagnostics/direct-animation-20261014/direct-validator-rma3.json
-py -3 tools/VerifyCleanupAnimation.py --assets .build/direct-motion-before --output diagnostics/direct-animation-20261014/legacy-validator-rma3-compatibility.json
+py -3 tools/VerifyCleanupAnimation.py --output docs/evidence/direct-squad-20261014/direct-validator-rma3.json
+py -3 tools/VerifyCleanupAnimation.py --assets .build/direct-motion-before --output docs/evidence/direct-squad-20261014/legacy-validator-rma3-compatibility.json
 ```
 
 `src/assets/actors/cleanup/direct-motion.json` records selected source files,
-hashes, clocks, sample counts, output hashes and measured bake errors. Local
-validation evidence is under `diagnostics/direct-animation-20261014`.
+hashes, clocks, sample counts, output hashes and measured bake errors.
 Historical donor-bake reports describe the earlier RMA2 implementation.

@@ -55,7 +55,7 @@ and reachable wrists aligned within floating-point precision.
 Reproduce asset checks with `py -3 tools/VerifyCleanupAnimation.py`; native
 layering and attachment checks use `RawMetal.exe --cleanup-split-test` and
 `RawMetal.exe --cleanup-layer-inspection`. Local measurement logs are under
-`diagnostics/animation-quality-20261013`.
+`docs/evidence/animation-quality-20261013/`.
 
 Full smoke still exits 38 at the authored-save byte-exact check; the four
 Medic detour/healing assertions also still fail. The earlier Vulkan

@@ -1,0 +1,89 @@
+{
+  "protected_files_unchanged": 26,
+  "roles": [
+    {
+      "role": "assault",
+      "bytes": 2480836,
+      "samples": 32,
+      "clips": 6,
+      "loop_error_mm": 0.0,
+      "planar_pelvis_drift_mm": 0.0,
+      "all_hand_keyframe_error_mm": 1.5973374682749768,
+      "all_hand_midframe_error_mm": 1.227633490058777,
+      "crouch_height_min_m": 1.027,
+      "crouch_height_max_m": 1.047,
+      "death_end_height_m": 0.481,
+      "finite_metadata": true
+    },
+    {
+      "role": "engineer",
+      "bytes": 2981392,
+      "samples": 32,
+      "clips": 6,
+      "loop_error_mm": 0.0,
+      "planar_pelvis_drift_mm": 0.0,
+      "all_hand_keyframe_error_mm": 1.461602682432993,
+      "all_hand_midframe_error_mm": 1.2212636164916921,
+      "crouch_height_min_m": 1.222,
+      "crouch_height_max_m": 1.224,
+      "death_end_height_m": 0.486,
+      "finite_metadata": true
+    },
+    {
+      "role": "sharpshooter",
+      "bytes": 2767870,
+      "samples": 32,
+      "clips": 6,
+      "loop_error_mm": 0.0,
+      "planar_pelvis_drift_mm": 0.0,
+      "all_hand_keyframe_error_mm": 1.4509497376031313,
+      "all_hand_midframe_error_mm": 1.2929353265764432,
+      "crouch_height_min_m": 1.056,
+      "crouch_height_max_m": 1.076,
+      "death_end_height_m": 0.467,
+      "finite_metadata": true
+    },
+    {
+      "role": "heavy",
+      "bytes": 2616976,
+      "samples": 32,
+      "clips": 6,
+      "loop_error_mm": 0.0,
+      "planar_pelvis_drift_mm": 0.0,
+      "all_hand_keyframe_error_mm": 1.4873815545612856,
+      "all_hand_midframe_error_mm": 1.2596639335660902,
+      "crouch_height_min_m": 1.045,
+      "crouch_height_max_m": 1.065,
+      "death_end_height_m": 0.41400000000000003,
+      "finite_metadata": true
+    },
+    {
+      "role": "medic",
+      "bytes": 3439768,
+      "samples": 32,
+      "clips": 7,
+      "loop_error_mm": 0.0,
+      "planar_pelvis_drift_mm": 0.0,
+      "all_hand_keyframe_error_mm": 1.4281417952702256,
+      "all_hand_midframe_error_mm": 1.2960122323610879,
+      "crouch_height_min_m": 1.227,
+      "crouch_height_max_m": 1.23,
+      "death_end_height_m": 0.435,
+      "finite_metadata": true
+    },
+    {
+      "role": "rusher",
+      "bytes": 2815180,
+      "samples": 32,
+      "clips": 6,
+      "loop_error_mm": 0.0,
+      "planar_pelvis_drift_mm": 0.0,
+      "all_hand_keyframe_error_mm": 1.4910005723127269,
+      "all_hand_midframe_error_mm": 1.2029581678743901,
+      "crouch_height_min_m": 1.0190000000000001,
+      "crouch_height_max_m": 1.038,
+      "death_end_height_m": 0.376,
+      "finite_metadata": true
+    }
+  ]
+}

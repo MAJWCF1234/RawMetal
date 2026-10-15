@@ -1,0 +1,30 @@
+[
+  {
+    "Path": "N:\\rawmetal\\src\\assets\\actors\\cleanup\\assault-animation.bin",
+    "Hash": "BFB62B9F3047D24DA61E7954D5FBB3E895EF60F55990B9F0218DA7B0A5A6EE3D"
+  },
+  {
+    "Path": "N:\\rawmetal\\src\\assets\\actors\\cleanup\\engineer-animation.bin",
+    "Hash": "0D4F2640DEE0DB041A63E13F7C6D393FE17BD97FC7E2C0BAFB58265C2A095C59"
+  },
+  {
+    "Path": "N:\\rawmetal\\src\\assets\\actors\\cleanup\\heavy-animation.bin",
+    "Hash": "426F630181D5ADBAC64F6354062D5CFDA607C7F3B8979A3B98456C7FBDFA91B9"
+  },
+  {
+    "Path": "N:\\rawmetal\\src\\assets\\actors\\cleanup\\medic-animation.bin",
+    "Hash": "2986F23F49727F8A900427D4B41D49EA3C5F7462FF8C9D26307BC57B1C80F142"
+  },
+  {
+    "Path": "N:\\rawmetal\\src\\assets\\actors\\cleanup\\medic-treatment-anchors.bin",
+    "Hash": "C96FBC22475BAFD3EA90FFA456FAA58A640CC442E2E565C968F52FDBC33E22F3"
+  },
+  {
+    "Path": "N:\\rawmetal\\src\\assets\\actors\\cleanup\\rusher-animation.bin",
+    "Hash": "278960D886D1797516C5C421228CD1AE005F282A9531209BCA43D8EAA9A84162"
+  },
+  {
+    "Path": "N:\\rawmetal\\src\\assets\\actors\\cleanup\\sharpshooter-animation.bin",
+    "Hash": "ADD88D4605D659027BC0E965445368CEEE676606EE4A41F0FD2CB304226B8D57"
+  }
+]

@@ -68,7 +68,7 @@ Source: `E:/retro official/PSX Tech v1.2.3.zip`.
 User supplied `Cleanupteam.zip` from Downloads on October 11, 2026. Originals
 are retained under `source-assets/cleanup-team/`; SHA256 and byte counts were
 verified before removing the six specifically requested Downloads originals.
-`diagnostics/kill-squad-20261011/asset-transfer.json` records the transfer.
+`source-assets/cleanup-repairs/cleanup-team-transfer-20261011.json` records the transfer.
 
 The archive's `MercenariesPack/final.blend` supplies Assault, Engineer and
 Sharpshooter, Heavy, Medic and Rusher meshes. Their corresponding body/head PNGs are copied unchanged.

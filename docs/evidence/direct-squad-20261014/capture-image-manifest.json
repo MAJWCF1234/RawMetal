@@ -1,0 +1,224 @@
+[
+  {
+    "file": "assault-walk-source-front.png",
+    "sha256": "45d24daf06b916aa29a6967fe1edfdf51d237ff8b3271fc9be3213963dd7c46e",
+    "pixel_sha256": "43bd398ad6105aed20b6fc4be37a24084d7cb3e1e8449cf5e0626c02a5006300",
+    "source": "diagnostics\\animation-repair-20261013\\native-stage-1\\assault-walk-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=1",
+      "--cleanup-layer-stage=1"
+    ]
+  },
+  {
+    "file": "assault-walk-source-side.png",
+    "sha256": "a0711ca96a98e874d3677fb36209ac7c2430a8e3d6aed89fa2ef87a36b3d601e",
+    "pixel_sha256": "eb81913b91a1ea87d7a1fa96ed8557ca1473047907248d090acdd56ae6cd9dbb",
+    "source": "diagnostics\\animation-repair-20261013\\native-stage-1\\assault-walk-side.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=1",
+      "--cleanup-layer-stage=1"
+    ]
+  },
+  {
+    "file": "assault-walk-front.png",
+    "sha256": "e9d5d934cd9060290e441107fb51fba5b6f6075a99ea4503589de665c574a41c",
+    "pixel_sha256": "cbf7a1d9cbd38d2310ff144889477a549dca8556f6e8884c642fa51f82784b18",
+    "source": "diagnostics\\animation-repair-20261013\\native\\assault-walk-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=1"
+    ]
+  },
+  {
+    "file": "assault-walk-side.png",
+    "sha256": "81f974018a8af23dc49f07cfd3213713412f91acc361a251c59abea4a3c9d0b0",
+    "pixel_sha256": "b16c494ba04219c5caa7288449f092fd88e93bf4bbbffeb76c6245617ea6ad3a",
+    "source": "diagnostics\\animation-repair-20261013\\native\\assault-walk-side.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=1"
+    ]
+  },
+  {
+    "file": "assault-yaw-front.png",
+    "sha256": "b75e2a28a82c1a932e4bad83f5a7e9f24d5d573f63b27df5df40dc92c569ea03",
+    "pixel_sha256": "a8fa0272298214c75604dbf47602b0b6ff227c5490434556808370816bae8061",
+    "source": "diagnostics\\animation-repair-20261013\\native\\assault-aim-left-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=5"
+    ]
+  },
+  {
+    "file": "assault-crouch-front.png",
+    "sha256": "694921797e95c9a7749eb88db10f87a75e09092f50861705084a2df05b697c52",
+    "pixel_sha256": "692f69d49fc3b98389463167c65b52825296526c21d1f1762a0544aebd366b14",
+    "source": "diagnostics\\animation-repair-20261013\\native\\assault-crouch-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=0",
+      "--cleanup-layer-sample=7"
+    ]
+  },
+  {
+    "file": "medic-case-grasp-front.png",
+    "sha256": "edb61ef05df40be39b69319e2345488baf31248ac4a7a7614eabe630a298f761",
+    "pixel_sha256": "8ad1e8c417e960053f9930a89d70e9086e4eed14f18fa283f210f671e2f04c24",
+    "source": "diagnostics\\animation-repair-20261013\\native-phase-0.250000\\medic-support-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=4",
+      "--cleanup-layer-sample=10",
+      "--cleanup-layer-phase=0.25"
+    ]
+  },
+  {
+    "file": "medic-case-grasp-side.png",
+    "sha256": "d1caf229a9693e15295dfbb6886342af28c840601eef09c354c5b7048c72ed77",
+    "pixel_sha256": "8f469d64724ac91f4b94d5cc9467f5e39df0b57624171e6202ccb9c691d46a18",
+    "source": "diagnostics\\animation-repair-20261013\\native-phase-0.250000\\medic-support-side.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=4",
+      "--cleanup-layer-sample=10",
+      "--cleanup-layer-phase=0.25"
+    ]
+  },
+  {
+    "file": "medic-case-lift-front.png",
+    "sha256": "75859647e6534503ff03e6daa4fc03bab5a61f04fd19bcdd964c8b38dc705af2",
+    "pixel_sha256": "0ae9986fb6524fd62144515d87711e7d5ecb3f4e7b4bdd25cccf071e66308f05",
+    "source": "diagnostics\\animation-repair-20261013\\native-phase-0.600000\\medic-support-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=4",
+      "--cleanup-layer-sample=10",
+      "--cleanup-layer-phase=0.6"
+    ]
+  },
+  {
+    "file": "medic-case-lift-side.png",
+    "sha256": "49babdf64304735d9492bd8a671d863f975c0e39ee575b0528af33a328eca844",
+    "pixel_sha256": "18c3a097eb20977699a0cf2467e85544340337ab229154d9d9da1d66263c0256",
+    "source": "diagnostics\\animation-repair-20261013\\native-phase-0.600000\\medic-support-side.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=4",
+      "--cleanup-layer-sample=10",
+      "--cleanup-layer-phase=0.6"
+    ]
+  },
+  {
+    "file": "sharpshooter-crouch-front.png",
+    "sha256": "4356869b4289f8488c95253f55b8acbd238b580bb29701f2c583e66017d412c9",
+    "pixel_sha256": "fda408f717c635c93282d255b7b6a3bbc04ee1663066e0bfcbf3730a906d30e6",
+    "source": "diagnostics\\animation-repair-20261013\\native\\sharpshooter-crouch-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=2",
+      "--cleanup-layer-sample=7"
+    ]
+  },
+  {
+    "file": "heavy-walk-front.png",
+    "sha256": "9b076242df55b5d1137c528225f803998d36c856886b2d2f29da11874f8ae869",
+    "pixel_sha256": "0679d95caf08247322132578e81af6d1cbc8f03f528bda1435ec937cd7340dbc",
+    "source": "diagnostics\\animation-repair-20261013\\native\\heavy-walk-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=3",
+      "--cleanup-layer-sample=1"
+    ]
+  },
+  {
+    "file": "rusher-walk-front.png",
+    "sha256": "1b38d2462d3a06c45a5ef8f26bef1d537019a86fc3c8b947847b86378e2f4914",
+    "pixel_sha256": "7433af0551a9d834c9be3a883c8356ba00e095de035493752cad1f4f083173cf",
+    "source": "diagnostics\\animation-repair-20261013\\native\\rusher-walk-front.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--cleanup-layer-inspection",
+      "--cleanup-layer-role=5",
+      "--cleanup-layer-sample=1"
+    ]
+  },
+  {
+    "file": "engineer-terminal-deploy.png",
+    "sha256": "46247b17baee64f02a007e2a8bc3d98562bf4667e42a4ae19aab2bcd149f5c40",
+    "pixel_sha256": "4c8e47c27fc4cf1e01564a8410ce8da36bb3a6bd549cb12a4dfacae2fbaac2b4",
+    "source": "diagnostics\\engineer-support-20261012\\terminal-deploy.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--engineer-support-inspection"
+    ]
+  },
+  {
+    "file": "engineer-five-drone-fleet.png",
+    "sha256": "d7ad3c9fb9000f0edab510a877c1c34484f28c90ea6b030f3d3f085d37a243f5",
+    "pixel_sha256": "eb05c59fbe4125e30e2a9e66c84d0f5c27f25fc8a4a0a0b78d99e9f652c370e3",
+    "source": "diagnostics\\engineer-support-20261012\\five-drone-fleet.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--engineer-support-inspection"
+    ]
+  },
+  {
+    "file": "engineer-terminal-maintenance.png",
+    "sha256": "e7f00faaf42a405b4c88682929753f9322cfaf8efd07722a5e9bbbb3f0fd284e",
+    "pixel_sha256": "070ded9f04142c2deaa1d17dc71d5372a8a57a280ee7f953f829db1cb482ab66",
+    "source": "diagnostics\\engineer-support-20261012\\terminal-maintenance.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--engineer-support-inspection"
+    ]
+  },
+  {
+    "file": "engineer-pistol-support.png",
+    "sha256": "4d36d845eb8716e44d2bf4a297e4407fe45e726db7c24ff77852a0f29d09e2b9",
+    "pixel_sha256": "919751080f38cc19c5a63437ff452e172572e310c6b55a4586e624292e680f6f",
+    "source": "diagnostics\\engineer-support-20261012\\pistol-support.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--engineer-support-inspection"
+    ]
+  },
+  {
+    "file": "engineer-pad-equip.png",
+    "sha256": "d6ae6d749dde9ee2892d16c8e5212495bc6e7a98daf3bed2017f40c2c592d9cf",
+    "pixel_sha256": "88ac33abcd392b2af800b8da7465fa0fcda1763aacf183be63c49a3597db74aa",
+    "source": "diagnostics\\engineer-support-20261012\\pad-equip.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--engineer-support-inspection"
+    ]
+  },
+  {
+    "file": "engineer-pad-stow.png",
+    "sha256": "da044a4d5228a44b7274fb044dc509a9300437c44e2aaac4e6e6d32a0ef57cec",
+    "pixel_sha256": "cfabf74f5cf06d1a5fe75fa34824e9e22e3d258167cfe29be9fb53102141fd63",
+    "source": "diagnostics\\engineer-support-20261012\\pad-stow.ppm",
+    "capture_exit": 0,
+    "arguments": [
+      "--engineer-support-inspection"
+    ]
+  }
+]

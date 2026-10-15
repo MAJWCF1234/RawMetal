@@ -142,9 +142,15 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  }
  float moved=length(pose.position-old.position);Vec2 movementWaypoint=waypoint;pose.clip=moved>.0001f?1:crouched?5:0;
  // Idle/crouch must keep cycling phase or UAL loops stay stuck on sample 0 (bind).
- if(pose.clip==1)pose.phase=std::fmod(old.phase+moved*1.1f,1.f);
+ // Walk usually advances from displacement; when the clip is walk but feet have
+ // not moved yet, keep a source-timed fallback so the stride does not freeze.
+ if(pose.clip==1){float duration=cleanupAnimationDuration(track.visual,1);float rate=moved>.0001f?moved*1.1f:dt*(duration>0?1/duration:.9f);pose.phase=std::fmod(old.phase+rate,1.f);}
  else if(pose.clip==0||pose.clip==5){float duration=cleanupAnimationDuration(track.visual,pose.clip);pose.phase=std::fmod(old.phase+dt*(duration>0?1/duration:pose.clip==5?.55f:.45f),1.f);}
  else pose.phase=0;
+ // Pausing stall clocks while nav budget is empty is fine during an active hop
+ // or a single denied search frame. A deferred actor that stays physically stuck
+ // must still charge stall/patrol wait or Move tasks never fail.
+ bool stallPaused=navigationDeferred&&!(wantsMove&&moved<.0001f&&get("stuck")>120);
  if(config.mode==ActorAiMode::Guard&&!get("guard_danger_ms")){
   int point=get("guard_point");bool patrol=guardState(actor)==GuardState::Patrol&&(get("schedule")==int(GuardSchedule::None)||get("schedule")==int(GuardSchedule::Patrol));
   if(!patrol||!wantsMove||get("guard_patrol_point_seen")!=point+1){put("guard_patrol_wait",0);put("guard_patrol_progress",0);put("guard_patrol_fraction",0);put("guard_patrol_movement_fraction",0);put("guard_patrol_point_seen",patrol?point+1:0);}
@@ -152,7 +158,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    // Progress toward a route waypoint also counts when a legitimate detour
    // temporarily moves farther from the final patrol point.
    float advance=std::max(0.f,dot(pose.position-old.position,normalized(waypoint-old.position)));int movement=get("guard_patrol_movement_fraction")+int(std::round(advance*1000000));int progress=get("guard_patrol_progress")+movement/1000;movement%=1000;
-   int wait=std::min(5000,get("guard_patrol_wait")+npcMilliseconds(actor,navigationDeferred?0.f:dt,"guard_patrol_fraction"));
+   int wait=std::min(5000,get("guard_patrol_wait")+npcMilliseconds(actor,stallPaused?0.f:dt,"guard_patrol_fraction"));
    int meaningful=std::max(1,int(std::round(std::min(.1f,config.speed*2.f)*1000)));if(progress>=meaningful){progress=0;movement=0;wait=0;}
    if(wait>=5000&&get("schedule")==int(GuardSchedule::None)){put("guard_point",(point+1)%int(config.patrol.size()));put("guard_arrived",0);put("guard_pause",0);put("guard_patrol_point_seen",0);progress=0;movement=0;wait=0;timer=0;waypoint=pose.position;}
    put("guard_patrol_progress",progress);put("guard_patrol_movement_fraction",movement);put("guard_patrol_wait",wait);
@@ -167,7 +173,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  // Watch actual local displacement before Streaming converts the actor into
  // another chunk. A deferred search charges no stall time; a searched route
  // or direct movement still reports its physical block with the real elapsed time.
- if(config.mode==ActorAiMode::Guard)guardTaskMovement(actor,old,pose,movementWaypoint,wantsMove,navigationDeferred?0:guardMs);
+ if(config.mode==ActorAiMode::Guard)guardTaskMovement(actor,old,pose,movementWaypoint,wantsMove,stallPaused?0:guardMs);
  return pose;
 }
 int Game::nearbyFriendly()const{

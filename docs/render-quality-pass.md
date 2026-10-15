@@ -52,12 +52,12 @@ scene crop with the header and HUD excluded, normalized mean absolute RGB
 difference against the v0.5.9.6 build ranges from 1.61% to 9.49% of full
 channel range (average 4.52%). This measures the image change; it does not
 measure similarity or parity with another game's artwork. The before/after
-panel is at `diagnostics/pixel-compare/service-maps-before-after.png`.
+panel was a local pixel-compare dump from that pass.
 
 Inspection views frame the cable trench,
 switchgear, pump machinery, observation console, bridge and compactor bypass.
-The earlier `diagnostics/render-upgrade/after/maps-contrast.png` is still an
-art review capture; the pixel comparison above uses controlled fixed cameras.
+Earlier render-upgrade contrast captures were local art-review dumps; the
+pixel comparison above uses controlled fixed cameras.
 
 The baseline window benchmark failed with Vulkan device loss entering Ashfall
 following Gantry; the integrated run completed all twelve scenes. The baseline
