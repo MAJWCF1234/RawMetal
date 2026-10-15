@@ -18,7 +18,15 @@ int voiceRole(const ActorTrack& track){
  }
 }
 int voicePriority(NpcVoiceCue cue){return cue==NpcVoiceCue::Down?3:cue==NpcVoiceCue::Hurt?2:cue==NpcVoiceCue::Patrol?0:1;}
+bool sharedTactical(NpcVoiceCue cue){return cue==NpcVoiceCue::Alert||cue==NpcVoiceCue::Investigate||cue==NpcVoiceCue::Retreat;}
+StateId cueCooldownId(NpcVoiceCue cue){
+ if(cue==NpcVoiceCue::Alert)return stateId("npc_voice_cd_alert");
+ if(cue==NpcVoiceCue::Investigate)return stateId("npc_voice_cd_investigate");
+ if(cue==NpcVoiceCue::Retreat)return stateId("npc_voice_cd_retreat");
+ return 0;
 }
+}
+
 bool Game::npcHasVoice(size_t actor)const{return actor<m_friendlyActors.size()&&voiceRole(m_friendlyActors[actor].track())!=0;}
 bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  if(actor>=m_friendlyActors.size())return false;const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
@@ -34,30 +42,70 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  int duration=int(std::ceil(NpcVoiceClips[size_t(clip)].seconds*1000))+180;
  put("voice_lock",duration);put("voice_priority",priority);if(cue==NpcVoiceCue::Hurt)put("voice_hurt_wait",1800);
  setState(stateId("npc_voice_busy"),duration+350);
+ if(StateId cooldown=cueCooldownId(cue))setState(cooldown,cue==NpcVoiceCue::Alert?10000:cue==NpcVoiceCue::Retreat?12000:8000);
  // A single speaker cannot overlap its previous take, even within one frame.
  std::erase_if(m_sounds,[&](const auto&event){return event.speech>=0&&event.speaker==actor+1;});
  m_sounds.push_back({Sound::WorkerDying,position,.95f,1,true,22,npc.pose.z+track.scale*.85f,clip,actor+1,priority});return true;
 }
 void Game::updateNpcVoices(float dt){
  int ms=std::max(0,int(std::round(dt*1000)));setState(stateId("npc_voice_busy"),std::max(0,state("npc_voice_busy")-ms));
+ for(StateId id:{stateId("npc_voice_cd_alert"),stateId("npc_voice_cd_investigate"),stateId("npc_voice_cd_retreat"),stateId("npc_voice_reply_ms")})
+  setState(id,std::max(0,state(id)-ms));
+ auto sameRadio=[&](size_t a,size_t b){
+  const auto&left=m_friendlyActors[a].track(),&right=m_friendlyActors[b].track();
+  if(left.ai.squad&&left.ai.squad==right.ai.squad)return true;
+  return left.ai.mode==ActorAiMode::Guard&&right.ai.mode==ActorAiMode::Guard&&left.ai.faction==right.ai.faction;
+ };
+ auto pendingCue=[&](size_t actor){return state(friendlyKey(actor,"voice_pending"))-1;};
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
   if(!voiceRole(track)||!autonomousActor(track)||!chunkResident(npc.level))continue;
   auto get=[&](const char*field){return state(friendlyKey(actor,field));};auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
-  for(const char*field:{"voice_lock","voice_hurt_wait","voice_patrol","voice_pending_ms"})put(field,std::max(0,get(field)-ms));
-  if(state(track.deadState)||npcIncapacitated(actor)){put("voice_pending",0);continue;}
-  auto pending=[&](NpcVoiceCue cue){int old=get("voice_pending")-1;if(old<0||voicePriority(cue)>=voicePriority(NpcVoiceCue(old))){put("voice_pending",int(cue)+1);put("voice_pending_ms",4000);}};
+  for(const char*field:{"voice_lock","voice_hurt_wait","voice_patrol","voice_pending_ms","voice_reply_wait"})put(field,std::max(0,get(field)-ms));
+  if(state(track.deadState)||npcIncapacitated(actor)){put("voice_pending",0);put("voice_reply_wait",0);continue;}
+  auto pending=[&](NpcVoiceCue cue,int holdMs=4000){int old=get("voice_pending")-1;if(old<0||voicePriority(cue)>=voicePriority(NpcVoiceCue(old))){put("voice_pending",int(cue)+1);put("voice_pending_ms",holdMs);}};
+  // Shared tactical calls elect one radio voice. Everyone else stays quiet so a
+  // squad contact sounds like chatter, not a roll call down the actor list.
+  auto claimShared=[&](NpcVoiceCue cue){
+   if(StateId cooldown=cueCooldownId(cue);cooldown&&state(cooldown)>0)return;
+   if(cue==NpcVoiceCue::Investigate&&state(stateId("npc_voice_cd_alert"))>0){
+    // At most one delayed "copy" after someone already called contact.
+    if(state(stateId("npc_voice_reply_ms"))>0)return;
+    for(size_t other=0;other<m_friendlyActors.size();++other)if(other!=actor&&sameRadio(actor,other)&&pendingCue(other)==int(NpcVoiceCue::Investigate))return;
+    int wait=650+int(actor*419%900);pending(NpcVoiceCue::Investigate,3500);put("voice_reply_wait",wait);setState(stateId("npc_voice_reply_ms"),wait+2200);return;
+   }
+   bool spotter=cue==NpcVoiceCue::Alert&&(get("guard_seen")||guardState(actor)==GuardState::Alert);
+   for(size_t other=0;other<m_friendlyActors.size();++other){
+    if(other==actor||!sameRadio(actor,other))continue;int claim=pendingCue(other);
+    if(claim<0||!sharedTactical(NpcVoiceCue(claim)))continue;
+    if(cue==NpcVoiceCue::Alert&&claim==int(NpcVoiceCue::Alert)){
+     if(!spotter||state(friendlyKey(other,"guard_seen")))return;
+     setState(friendlyKey(other,"voice_pending"),0);setState(friendlyKey(other,"voice_reply_wait"),0);continue;
+    }
+    if(cue==NpcVoiceCue::Alert&&claim==int(NpcVoiceCue::Investigate)){
+     if(state(stateId("npc_voice_reply_ms"))<=0){int wait=650+int(other*419%900);setState(friendlyKey(other,"voice_reply_wait"),wait);setState(stateId("npc_voice_reply_ms"),wait+2200);}
+     else{setState(friendlyKey(other,"voice_pending"),0);setState(friendlyKey(other,"voice_reply_wait"),0);}
+     continue;
+    }
+    if(claim==int(cue))return;
+    if(cue==NpcVoiceCue::Investigate&&claim==int(NpcVoiceCue::Alert)){
+     if(state(stateId("npc_voice_reply_ms"))>0)return;
+     int wait=650+int(actor*419%900);pending(NpcVoiceCue::Investigate,3500);put("voice_reply_wait",wait);setState(stateId("npc_voice_reply_ms"),wait+2200);return;
+    }
+   }
+   pending(cue,cue==NpcVoiceCue::Alert?2500:3200);
+  };
   if(!get("voice_initialized")){put("voice_initialized",1);put("voice_patrol",12000+int(actor*1703%13000));
    put("voice_mode",int(guardState(actor)));put("voice_hold",get("hold"));put("voice_engaged",get("engaged"));
-   if(track.ai.mode==ActorAiMode::Guard&&guardState(actor)==GuardState::Alert)pending(NpcVoiceCue::Alert);
+   // Seed current mode quietly. Spawning already-alerted squads must not roll-call.
    if(track.ai.mode==ActorAiMode::Escort&&get("engaged"))pending(get("hold")?NpcVoiceCue::Wait:NpcVoiceCue::Follow);
   }
   if(track.ai.mode==ActorAiMode::Guard){
    int mode=int(guardState(actor));if(mode!=get("voice_mode")){
-    if(mode==int(GuardState::Alert))pending(NpcVoiceCue::Alert);
-    else if(mode==int(GuardState::Investigate))pending(NpcVoiceCue::Investigate);
+    if(mode==int(GuardState::Alert))claimShared(NpcVoiceCue::Alert);
+    else if(mode==int(GuardState::Investigate))claimShared(NpcVoiceCue::Investigate);
     put("voice_mode",mode);
    }
-   bool retreat=get("evac_level")!=0;if(retreat&&!get("voice_retreat"))pending(NpcVoiceCue::Retreat);put("voice_retreat",retreat);
+   bool retreat=get("evac_level")!=0;if(retreat&&!get("voice_retreat"))claimShared(NpcVoiceCue::Retreat);put("voice_retreat",retreat);
    bool treating=get("support_ms")>0&&get("support_target")>0;
    if(treating&&!get("voice_treating"))pending(NpcVoiceCue::Treat);put("voice_treating",treating);
    int repairSlot=get("drone_repair_target")-1;bool repairing=false;
@@ -77,8 +125,10 @@ void Game::updateNpcVoices(float dt){
    if(get("fear")>0&&!get("voice_fear"))pending(NpcVoiceCue::Danger);
    put("voice_fear",get("fear")>0);put("voice_hold",hold);put("voice_engaged",engaged);
   }
-  int request=get("voice_pending")-1;if(request>=0){if(!get("voice_pending_ms"))put("voice_pending",0);
-   else if(request<=int(NpcVoiceCue::Danger)&&npcVoice(actor,NpcVoiceCue(request)))put("voice_pending",0);}
+  int request=get("voice_pending")-1;if(request>=0){if(!get("voice_pending_ms")){put("voice_pending",0);put("voice_reply_wait",0);}
+   else if(get("voice_reply_wait")>0){}
+   else if(request<=int(NpcVoiceCue::Danger)&&npcVoice(actor,NpcVoiceCue(request))){put("voice_pending",0);put("voice_reply_wait",0);}
+  }
  }
 }
 
@@ -103,6 +153,26 @@ bool Game::testNpcVoices(){
  if(detail.size()>1){auto actor=detail[1];game.m_sounds.clear();game.setState(stateId("npc_voice_busy"),0);game.setState(game.friendlyKey(actor,"voice_lock"),0);
   check(game.npcVoice(actor,NpcVoiceCue::Investigate)&&game.aiStimuli().empty(),"Spoken investigation does not recursively alert the AI hearing system");
   game.setState(stateId("npc_voice_busy"),0);game.setState(game.friendlyKey(actor,"voice_lock"),0);game.m_player.pos={100,100};check(!game.npcVoice(actor,NpcVoiceCue::Patrol),"Distant actors do not reserve the local dialogue channel");
+ }
+ if(detail.size()>2){
+  Game radio;radio.loadLevel(14,false);radio.updateStreaming(0);radio.m_player.pos={13,19};radio.m_player.z=-25;
+  std::vector<size_t> squad;for(size_t i=0;i<radio.npcActors().size();++i)if(radio.npcActors()[i].homeLevel==14&&voiceRole(radio.npcActors()[i].track())&&radio.npcActors()[i].track().ai.mode==ActorAiMode::Guard)squad.push_back(i);
+  check(squad.size()>=3,"Receiving has a multi-guard radio net for chatter tests");
+  if(squad.size()>=3){
+   for(auto actor:squad){radio.setState(radio.friendlyKey(actor,"voice_initialized"),1);radio.setState(radio.friendlyKey(actor,"voice_mode"),int(GuardState::Patrol));radio.setState(radio.friendlyKey(actor,"voice_pending"),0);radio.setState(radio.friendlyKey(actor,"guard_mode"),int(GuardState::Investigate));}
+   radio.setState(radio.friendlyKey(squad[0],"guard_mode"),int(GuardState::Alert));radio.setState(radio.friendlyKey(squad[0],"guard_seen"),1);
+   radio.setState(stateId("npc_voice_busy"),0);radio.setState(stateId("npc_voice_cd_alert"),0);radio.setState(stateId("npc_voice_cd_investigate"),0);radio.setState(stateId("npc_voice_reply_ms"),0);
+   radio.m_sounds.clear();radio.updateNpcVoices(.016f);
+   int pendingAlert=0,pendingInvestigate=0,spokenAlert=0;for(auto actor:squad){int cue=radio.state(radio.friendlyKey(actor,"voice_pending"))-1;pendingAlert+=cue==int(NpcVoiceCue::Alert);pendingInvestigate+=cue==int(NpcVoiceCue::Investigate);}
+   for(const auto&event:radio.sounds())if(event.speech>=0&&NpcVoiceClips[size_t(event.speech)].cue==NpcVoiceCue::Alert)++spokenAlert;
+   check(pendingAlert+spokenAlert==1,"Only one squadmate claims the contact call");
+   check(pendingInvestigate<=1,"At most one delayed copy answers an investigation fan-out");
+   for(int i=0;i<400&&(pendingAlert||pendingInvestigate||radio.state(stateId("npc_voice_busy")));++i){radio.updateNpcVoices(.05f);
+    pendingAlert=0;pendingInvestigate=0;for(auto actor:squad){int cue=radio.state(radio.friendlyKey(actor,"voice_pending"))-1;pendingAlert+=cue==int(NpcVoiceCue::Alert);pendingInvestigate+=cue==int(NpcVoiceCue::Investigate);}
+   }
+   int spoken=0;for(const auto&event:radio.sounds())if(event.speech>=0)++spoken;
+   check(spoken>=1&&spoken<=2,"Squad contact resolves to a call and optional reply, not a roll call");
+  }
  }
  {auto escort=exclusionInspection(2);escort.setState(stateId("exclusion_relay_secured"),1);size_t witness=0;while(witness<escort.npcActors().size()&&voiceRole(escort.npcActors()[witness].track())!=7)++witness;
   check(witness<escort.npcActors().size(),"Exclusion witness has the hazmat escort voice");

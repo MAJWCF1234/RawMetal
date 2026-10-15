@@ -133,13 +133,13 @@ void AudioEngine::update(const Game& game,bool focused){
   if(it==m_voices.end()){play({sound,pos,gain,1,true,17,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;}
  };
  std::erase_if(m_voices,[&](auto&v){int level=int((std::uint64_t(v.emitter)>>32)&0xffffu);return v.emitter>0&&!game.chunkResident(level);});
- for(int level=0;level<game.chunkCount();++level){if(!game.chunkResident(level))continue;auto chunk=game.chunkView(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
-  for(size_t i=0;i<chunk.enemies().size();++i){auto&e=chunk.enemies()[i];auto id=ambientEmitter(AmbientKind::Wings,level,i);
+ for(int level=0;level<game.chunkCount();++level){if(!game.chunkResident(level))continue;const auto&world=game.chunkWorld(level);const auto&enemies=game.chunkEnemies(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
+  for(size_t i=0;i<enemies.size();++i){auto&e=enemies[i];auto id=ambientEmitter(AmbientKind::Wings,level,i);
    if(e.alive&&e.kind==Enemy::Kind::Wasp)loop(id,Sound::Wings,e.pos+shift,.3f,e.z+.8f);else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
   }
-  float machineGain=.30f;if(chunk.world().hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
-  size_t index=0;for(auto emitter:chunk.world().machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
-  index=0;for(const auto& basin:chunk.world().waterVolumes())
+  float machineGain=.30f;if(world.hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
+  size_t index=0;for(auto emitter:world.machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
+  index=0;for(const auto& basin:world.waterVolumes())
    loop(ambientEmitter(AmbientKind::Water,level,index++),Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,.18f,basin.surface);
  }
  for(auto&voice:m_voices)spatialize(voice,game,dt);

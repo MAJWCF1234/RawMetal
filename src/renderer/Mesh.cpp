@@ -1,3 +1,4 @@
+#include "../core/FrameProfile.h"
 #include "Mesh.h"
 #include "../core/PackedResource.h"
 #include "../core/ActorBodyAim.h"
@@ -197,6 +198,7 @@ void Mesh::poseCreature(int clip,float phase){
  publishCreatureVertices();
 }
 void Mesh::poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float upperPhase,float aimYaw,float aimPitch){
+ perf::Scope frameProfile(perf::Skin);
  // Old animation resources have no joint frames. Preserve their ordinary
  // full-body motion instead of guessing a split pivot or hand ownership.
  if(!hasCreatureLayerPose()||m_creatureUpperMask.empty()){poseCreature(lowerClip,lowerPhase);return;}

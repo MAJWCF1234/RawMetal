@@ -1,3 +1,4 @@
+#include "core/FrameProfile.h"
 #ifdef _WIN32
 #include "game/Game.h"
 #include "world/CustomCampaign.h"
@@ -44,6 +45,30 @@ __declspec(noinline) static int cableLayoutInspection(int width,int height){
  for(const auto&view:views){
   capture(view.name,retro::Game::mapInspection(view.p,view.yaw,view.pitch,6,false,view.z,true));
   capture(std::string(view.name)+"-gameplay",retro::Game::mapInspection(view.p,view.yaw,view.pitch,6,false,view.z,false));
+ }
+ return 0;
+}
+__declspec(noinline) static int ashfallPerformance(){
+ using Clock=std::chrono::steady_clock;auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};
+ retro::Win32Window window(retro::DisplayWidth,retro::DisplayHeight,L"Depthworks Ashfall frame profile");if(!window.valid())return 1;ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(retro::DisplayWidth,retro::DisplayHeight);if(!renderer->enableHardware(window.handle()))return 36;
+ retro::AudioEngine audio(false);std::ofstream report("ashfall-performance.txt"),csv("ashfall-performance.csv");
+ report<<renderer->hardwareName()<<" / native window / "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<" / 30 simulated warmup + 240 measured frames\nCPU wall timings, including native window presentation; not GPU timestamps. Audio update included; device mixing is tested separately.\n";
+ csv<<"scene,frame,total_ms,simulation_ms,audio_ms,scene_ms,submit_ms,present_ms,health";for(auto name:retro::perf::names)csv<<","<<name;csv<<",static_builds,atlas_images,atlas_submissions,atlas_bytes\n";
+ struct Case{const char*name;int kind;};
+ for(auto test:{Case{"exclusion-arrival",0},Case{"exclusion-yard",2},Case{"exclusion-lure",1},Case{"ashfall-terrain",-1},Case{"campaign-receiving",-2},Case{"campaign-reactor",-3}}){
+  auto start=Clock::now();auto game=test.kind>=0?retro::Game::exclusionInspection(test.kind):test.kind==-1?retro::Game(retro::WorldId::Ashfall):test.kind==-2?retro::Game::mapInspection({1.4f,20},0,0,14,false,-25,false):retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false);
+  report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<'\n';std::array<std::vector<double>,6> samples;
+  for(int frame=-30;frame<240&&window.pump();++frame){retro::InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;
+   retro::perf::enabled=true;retro::perf::costs.fill(0);auto a=Clock::now();game.update(input,1.f/60);auto b=Clock::now();audio.update(game);auto c=Clock::now();renderer->render(game);auto d=Clock::now();auto stages=renderer->frameStages();
+   if(frame<0){if(frame==-30)report<<"first_frame_ms="<<ms(a,d)<<'\n';continue;}
+   std::array<double,6> values={ms(a,d),ms(a,b),ms(b,c),stages[0],stages[1],stages[2]};
+   csv<<test.name<<','<<frame;for(auto value:values)csv<<','<<value;csv<<','<<game.player().health;for(auto value:retro::perf::costs)csv<<','<<value;auto uploads=renderer->atlasUploadStatistics();csv<<','<<renderer->staticGeometryBuilds()<<','<<uploads[0]<<','<<uploads[1]<<','<<uploads[3]<<'\n';
+   for(size_t i=0;i<values.size();++i)samples[i].push_back(values[i]);
+  }
+  const char* names[]={"total","simulation","audio","scene","submit","present"};
+  for(size_t i=0;i<samples.size();++i){auto&v=samples[i];if(v.size()!=240)return 1;std::sort(v.begin(),v.end());report<<names[i]<<" avg/p50/p95/p99/max_ms="<<std::accumulate(v.begin(),v.end(),0.)/v.size()<<'/'<<v[v.size()/2]<<'/'<<v[v.size()*95/100]<<'/'<<v[v.size()*99/100]<<'/'<<v.back()<<'\n';}
+  report<<"final_health="<<game.player().health<<"\n\n";report.flush();csv.flush();
  }
  return 0;
 }
@@ -642,6 +667,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
     if(std::wcsstr(commandLine,L"--presentation-resize-test"))return retro::SoftwareRenderer::testPresentationResize()?0:36;
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
+    if(std::wcsstr(commandLine,L"--ashfall-performance"))return ashfallPerformance();
     if(std::wcsstr(commandLine,L"--performance-window")||std::wcsstr(commandLine,L"--service-performance-window")||std::wcsstr(commandLine,L"--door-performance-window")||std::wcsstr(commandLine,L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--cleanup-split-test"))return retro::Mesh::testCleanupTankAim()?0:47;

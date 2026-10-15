@@ -1,3 +1,4 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "Drones.h"
 #include "../Navigation.h"
@@ -54,6 +55,7 @@ void Game::damageEngineerDrone(int slot,float amount,AiTargetRef){
  }
 }
 void Game::updateEngineerDrones(float dt){
+ perf::Scope frameProfile(perf::Drones);
  if(!std::isfinite(dt)||dt<=0)return;dt=std::min(dt,.05f);
  // Deployment belongs to an explicitly authored Engineer, is finite and must
  // begin with personal threat recognition. An existing fleet may continue

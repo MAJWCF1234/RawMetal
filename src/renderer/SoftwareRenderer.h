@@ -134,11 +134,12 @@ private:
     Texture makePaint(std::uint32_t color);
     static void prepareDecal(Texture& texture,bool clampEdges=true);
     void drawSky(const Game& game);
-    void drawScene(const Game& game,bool clearDepth=true);
+    void drawScene(const Game& game,bool clearDepth=true,int level=-1);
     void drawViewModel(const Game& game);
     void prepareViewModel(const Game& game);
     void triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const Texture& texture,float light,const NormalLighting* normalLighting=nullptr);
     Point3 cameraPoint(Point3 p,const Game& game)const;
+    Point3 cameraPoint(Point3 p,const Player& player)const;
     static Texture loadTexture(int id);
     static std::uint32_t sample(const Texture& texture,float u,float v,float lod=0);
     void clear(std::uint32_t color);

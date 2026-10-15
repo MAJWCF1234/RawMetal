@@ -1,3 +1,4 @@
+#include "../core/FrameProfile.h"
 #include "Game.h"
 #include "../world/CustomCampaign.h"
 
@@ -63,6 +64,7 @@ void Game::storeChunk(){
  m_chunks[m_level]={m_world,std::move(nav),ready,m_enemies,m_pickups,m_kills,true,m_clutter};
 }
 Game Game::chunkView(int level)const{
+ perf::Scope frameProfile(perf::ChunkCopy);
  Game view=*this;if(level==m_level)return view;auto&chunk=m_chunks[level];view.m_level=level;view.m_world=chunk.world;view.m_enemies=chunk.enemies;view.m_pickups=chunk.pickups;view.m_kills=chunk.kills;
  view.m_clutter=chunk.clutter;view.m_heldClutter=-1;view.m_player.pos=m_player.pos+chunkOffset(m_level)-chunkOffset(level);return view;
 }

@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.0-preview.16
+
+Squad tactical VO stops roll-calling — contact sounds like chatter instead of every Cleanup repeating the same cue in actor order.
+
+- Shared Alert / Investigate / Retreat elect one radio voice per squad (spotter wins contact); at most one delayed copy answers
+- Cue cooldowns keep the rest quiet after a call; pending claims no longer drain as a sequential queue
+- Multi-chunk ambient audio uses resident world/enemy views instead of copying whole chunks each frame
+- Optional `--ashfall-performance` frame profile harness and cheaper nav connector selection for profiling passes
+- Native `--npc-voice-test` covers one-speaker contact + optional reply
+
+No new maps or animation banks. Hard **32 MiB** ceiling unchanged. Play the same Exclusion loop as preview.15.
+
+**Validation:** EXE 26,530,304 / 33,554,432 bytes (6.70 MiB headroom). `--npc-voice-test` PASS; `--exclusion-test` PASS.
+
+---
+
 ## v0.7.0-preview.15
 
 Ashfall Exclusion Zone becomes a short authored stealth/combat loop on the existing three chunks and six Cleanup roles.
