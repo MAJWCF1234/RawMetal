@@ -8,6 +8,7 @@
 #include "TextureCodec.h"
 #include "AudioPredictor.h"
 #include "BinaryPredictor.h"
+#include "AnimationPredictor.h"
 #include "../ThirdParty/libwebp/src/webp/decode.h"
 namespace retro {
 inline std::vector<unsigned char> decodeLosslessTexture(const std::vector<unsigned char>& input){
@@ -19,13 +20,20 @@ inline std::vector<unsigned char> decodeLosslessTexture(const std::vector<unsign
  if(!WebPDecodeRGBAInto(input.data(),input.size(),raw.data()+12,raw.size()-12,features.width*4))throw std::runtime_error("Lossless texture decode failed");
  return raw;
 }
-inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id) {
+inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,int aliasDepth=0) {
  auto res=FindResourceW(module,MAKEINTRESOURCEW(id),MAKEINTRESOURCEW(10));
  if(!res)throw std::runtime_error("Missing embedded resource");
  auto bytes=static_cast<const unsigned char*>(LockResource(LoadResource(module,res)));size_t size=SizeofResource(module,res);
+ if(bytes&&size==8&&!std::memcmp(bytes,"RMR1",4)){
+  uint32_t target=0;std::memcpy(&target,bytes+4,4);
+  // References always point directly to an ordinary packed resource. Reject
+  // self references/chains, including cycles in a malformed executable.
+  if(aliasDepth||!target||target>65535||target==uint32_t(id))throw std::runtime_error("Invalid resource reference");
+  return loadResourceFromModule(module,int(target),1);
+ }
  if(!bytes||size<12||std::memcmp(bytes,"RMZ1",4))throw std::runtime_error("Invalid packed resource");
  uint32_t count=0,transform=0;std::memcpy(&count,bytes+4,4);std::memcpy(&transform,bytes+8,4);
- if(!count||count>128*1024*1024||transform>9)throw std::runtime_error("Invalid resource size or encoding");
+ if(!count||count>128*1024*1024||transform>10)throw std::runtime_error("Invalid resource size or encoding");
  std::vector<unsigned char> decoded(count);DECOMPRESSOR_HANDLE decoder=nullptr;
  if(!CreateDecompressor(COMPRESS_ALGORITHM_LZMS,nullptr,&decoder))throw std::runtime_error("Cannot create resource decoder");
  SIZE_T actual=0;bool ok=Decompress(decoder,bytes+12,size-12,decoded.data(),count,&actual)!=FALSE;CloseDecompressor(decoder);
@@ -36,6 +44,7 @@ inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id) 
  if(transform==4)decoded=decodeLosslessTexture(decoded);
  if(transform>=5&&transform<=7)decoded=audioPredict(decoded,transform!=6,transform!=5,true);
  if(transform==8||transform==9)decoded=binaryPredict(decoded,transform==9,true);
+ if(transform==10)decoded=animationPredict(decoded,true);
  return decoded;
 }
 inline std::vector<unsigned char> loadResource(int id){return loadResourceFromModule(GetModuleHandleW(nullptr),id);}
