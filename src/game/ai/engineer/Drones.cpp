@@ -130,7 +130,10 @@ void Game::updateEngineerDrones(float dt){
   Vec2 goal=ownerLocal+(npc.level==level?formation:Vec2{});if(npc.level==level){goal.x=std::clamp(goal.x,EngineerDroneRadius,24-EngineerDroneRadius);goal.y=std::clamp(goal.y,EngineerDroneRadius,24-EngineerDroneRadius);}
   float goalFeet=npc.pose.z;bool moving=!seen&&(length(goal-here)>.25f||npc.level!=level);if(ownerGet("drone_repair_target")==slot+1)moving=false;int routeWait=std::max(0,get("route_wait")-ms),next=get("route_next")-1;
   if(moving&&npc.level!=level){Vec2 portal{get("portal_x")*.001f-origin.x,get("portal_y")*.001f-origin.y};bool cached=routeWait>0&&next>=0&&next<chunkCount()&&next!=level&&friendlyBoundaryOpen(level,next,portal+origin);
-   if(!cached&&m_npcNavBudget>0&&(routeWait==0||next>=0)){--m_npcNavBudget;cached=friendlyPortal(level,npc.level,here,p.z,EngineerDroneHeight,portal,goalFeet,npc.pose.z);next=cached?friendlyChunkAt(portal+origin,level):-1;put("route_next",next+1);routeWait=600+(slot%7)*30;if(cached){put("portal_x",int(std::round((portal.x+origin.x)*1000)));put("portal_y",int(std::round((portal.y+origin.y)*1000)));put("portal_z",int(std::round(goalFeet*1000)));}}
+   if(!cached){
+    if(m_npcNavBudget>0&&(routeWait==0||next>=0)){--m_npcNavBudget;cached=friendlyPortal(level,npc.level,here,p.z,EngineerDroneHeight,portal,goalFeet,npc.pose.z);next=cached?friendlyChunkAt(portal+origin,level):-1;put("route_next",next+1);routeWait=600+(slot%7)*30;if(cached){put("portal_x",int(std::round((portal.x+origin.x)*1000)));put("portal_y",int(std::round((portal.y+origin.y)*1000)));put("portal_z",int(std::round(goalFeet*1000)));}}
+    else if(routeWait==0)routeWait=600+(slot%7)*30;
+   }
    moving=cached;if(cached){goal=portal;goalFeet=get("portal_z")*.001f;}
   }else put("route_next",0);put("route_wait",routeWait);
   Vec2 before=here,waypoint{get("way_x")*.001f-origin.x,get("way_y")*.001f-origin.y};int repath=std::max(0,get("repath")-ms);

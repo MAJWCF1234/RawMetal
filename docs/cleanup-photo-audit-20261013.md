@@ -10,8 +10,7 @@ confused numerical consistency with convincing deformation and attachment.
 
 Reviewed all six role sheets and closer crops of the current 32-sample native
 captures, timestamped 13 October around 12:33. Source captures are under
-`diagnostics/animation-repair-20261013/native`. Uniformly zoomed evidence and
-annotated regions are under `diagnostics/photo-audit-20261013`. Crops preserve
+the repair captures and `docs/images/`. Crops preserve
 aspect ratio and use original pixels without exposure correction or generated
 detail. These are staged pose inspections, not proof of live AI behavior.
 

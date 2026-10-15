@@ -73,7 +73,7 @@ bool Game::testGuardPatient(){
  for(int rate:{60,120}){
   auto g=scene(false,[](auto&map){for(auto&actor:map.actorTracks)if(actor.damageState==stateId("patient_damage")){actor.ai.role=GuardSquadRole::Default;actor.ai.armed=false;
     for(auto&key:actor.keys)key.position={10.5f,6.5f};actor.ai.patrol={{{10.5f,6.5f},0,60000}};}map.structures.push_back({8,5,8.2f,8,0,1});},false);
-  auto pair=ids(g);wound(g);float moved=0,detour=0;bool safe=true;for(int frame=0;frame<rate*15&&g.state("patient_damage")==45;++frame){tick(g,1,rate);
+  auto pair=ids(g);wound(g);float moved=0,detour=0;bool safe=true;for(int frame=0;frame<rate*26&&g.state("patient_damage")==45;++frame){tick(g,1,rate);
    moved=std::max(moved,length(g.npcActors()[pair[0]].pose.position-Vec2{10.5f,6.5f}));detour=std::max(detour,std::fabs(g.npcActors()[pair[1]].pose.position.y-6.5f));safe&=safePose(g,pair[0])&&safePose(g,pair[1]);}
   check(moved<.02f&&detour>.4f&&safe&&!g.state(g.friendlyKey(pair[0],"guard_patient_move"))&&g.state("patient_damage")==15&&g.state(g.friendlyKey(pair[1],"support_used"))==1,
    "A stationary legacy patient stays at its authored position while the Medic retains its real low-cover detour and single physical treatment");

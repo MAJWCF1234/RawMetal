@@ -67,6 +67,10 @@ bool Game::guardDangerIntent(size_t actor,ActorPose&pose,float dt,Vec2&goal,floa
    float risk=riskAt(candidate,feet);if(risk+.00001f<best){best=risk;selected=candidate;selectedFeet=feet;found=true;}
   }
   hasGoal=found;if(found){cached=selected;cachedFeet=selectedFeet;put("guard_danger_goal_x",int(std::round((cached.x+origin.x)*1000)));put("guard_danger_goal_y",int(std::round((cached.y+origin.y)*1000)));put("guard_danger_goal_z",int(std::round(cachedFeet*1000)));put("repath",0);}
+ }else if(wait==0&&hasGoal){
+  // Keep a chosen escape while the shared search budget is empty; actors still
+  // without a goal keep wait at 0 so they can claim the next free search slot.
+  wait=350;
  }
  put("guard_danger_wait",wait);put("guard_danger_goal",hasGoal);
  goal=hasGoal?cached:pose.position;goalZ=hasGoal?cachedFeet:pose.z;wantsMove=hasGoal&&lengthSq(cached-pose.position)>.12f*.12f&&currentRisk>.00001f;

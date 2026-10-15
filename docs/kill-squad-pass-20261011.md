@@ -69,9 +69,9 @@ compares the three matched cargo-room views and all six individual role closeups
 camera and is excluded from pixel comparisons. Pixel changes demonstrate
 visible encounter behavior, not an overall rendering-quality score.
 
-Validation logs and captures are retained under
-`diagnostics/kill-squad-20261011/`. Physical headset testing and full GoldSrc AI
-parity are not established by this pass.
+Transfer hashes for retained originals live in
+`source-assets/cleanup-repairs/cleanup-team-transfer-20261011.json`. Physical
+headset testing and full GoldSrc AI parity are not established by this pass.
 
 ## Full squad and Engineer integration
 

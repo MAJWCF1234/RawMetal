@@ -19,11 +19,15 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
   if(protectedNow){ctx.clearCoverGoal();wantsMove=false;return;}
   int wait=std::max(0,get("guard_cover_wait")-ms);Vec2 cached=ctx.coverGoal();
   if(ctx.hasCoverGoal()){auto trial=pose;trial.position=cached;trial.z=ctx.coverFeet();if(lengthSq(cached-pose.position)<.04f||!selected.valid()||!guardCovered(actor,trial,selected)||guardPositionReserved(actor,cached,trial.z)){ctx.clearCoverGoal();wait=0;}}
-  if(wait==0&&m_npcNavBudget>0){
-   --m_npcNavBudget;ctx.clearCoverGoal();Vec2 destination{};float destinationZ=pose.z;
-   float sideSign=role?float(-role):(actor%2?-1.f:1.f);
-   bool found=findGuardCoverFromEnemy(level,actor,pose,target,destination,destinationZ,sideSign);
-   if(found){ctx.setCoverGoal(destination,destinationZ,2);cached=destination;}
+  if(wait==0){
+   if(m_npcNavBudget>0){
+    --m_npcNavBudget;ctx.clearCoverGoal();Vec2 destination{};float destinationZ=pose.z;
+    float sideSign=role?float(-role):(actor%2?-1.f:1.f);
+    bool found=findGuardCoverFromEnemy(level,actor,pose,target,destination,destinationZ,sideSign);
+    if(found){ctx.setCoverGoal(destination,destinationZ,2);cached=destination;}
+   }
+   // Budget starvation must still back off; otherwise wait stays 0 and a
+   // defensive actor with no cover goal stands still forever.
    wait=600+int(actor%7)*30;
   }
   put("guard_cover_wait",wait);wantsMove=ctx.hasCoverGoal();if(wantsMove){goal=cached;goalZ=ctx.coverFeet();}return;
@@ -51,19 +55,21 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
   }
   if(flank){
    int wait=std::max(0,get("guard_cover_wait")-ms);
-   if(wait==0&&m_npcNavBudget>0){
-    --m_npcNavBudget;Vec2 toward=normalized(Vec2{target.x,target.y}-pose.position),side=preferredSide(toward);
-    const std::array<Vec2,8> offsets={side*1.5f,side*.75f,side*2.f,toward*.65f+side*1.2f,side*1.5f-toward*.5f,side*.75f-toward*.75f,side*(-.75f),side*(-1.5f)};
-    bool found=false;
-    for(auto offset:offsets){auto candidate=pose.position+offset;if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
-     float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
-     auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
-     if(!guardShotMatches(actor,guardShot(actor,trial,npcWeaponPoseAt(actor,trial,target,1))))continue;
-     put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(candidate.x*1000)));put("guard_cover_y",int(std::round(candidate.y*1000)));put("guard_cover_z",int(std::round(feet*1000)));goal=candidate;goalZ=feet;found=true;break;
+   if(wait==0){
+    if(m_npcNavBudget>0){
+     --m_npcNavBudget;Vec2 toward=normalized(Vec2{target.x,target.y}-pose.position),side=preferredSide(toward);
+     const std::array<Vec2,8> offsets={side*1.5f,side*.75f,side*2.f,toward*.65f+side*1.2f,side*1.5f-toward*.5f,side*.75f-toward*.75f,side*(-.75f),side*(-1.5f)};
+     bool found=false;
+     for(auto offset:offsets){auto candidate=pose.position+offset;if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
+      float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
+      auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
+      if(!guardShotMatches(actor,guardShot(actor,trial,npcWeaponPoseAt(actor,trial,target,1))))continue;
+      put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(candidate.x*1000)));put("guard_cover_y",int(std::round(candidate.y*1000)));put("guard_cover_z",int(std::round(feet*1000)));goal=candidate;goalZ=feet;found=true;break;
+     }
+     if(found){put("guard_flank_wait",5000);put("guard_cover_wait",600+int(actor%7)*30);wantsMove=true;return;}
     }
-    if(found){put("guard_flank_wait",5000);put("guard_cover_wait",600+int(actor%7)*30);wantsMove=true;return;}
-    // A blocked room should not leave a flanker repeatedly orbiting or
-    // monopolizing the four-search budget. It can use normal firing tactics.
+    // Blocked room or a starved search frame must not mute fire forever while
+    // pendingFlank keeps wantsMove false. Same backoff either way.
     put("guard_flank_done",1);put("guard_flank_wait",0);flank=false;wait=600+int(actor%7)*30;
    }
    put("guard_cover_wait",wait);if(flank){wantsMove=false;return;}
@@ -76,19 +82,23 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
  Vec2 cached{get("guard_cover_x")*.001f,get("guard_cover_y")*.001f};
  if(get("guard_cover")&&guardPositionReserved(actor,cached,get("guard_cover_z")*.001f)){put("guard_cover",0);wait=0;}
  if(get("guard_cover")&&lengthSq(cached-pose.position)<.04f)wait=0;
- if(wait==0&&m_npcNavBudget>0){
-  --m_npcNavBudget;put("guard_cover",0);
-  Vec2 toward=normalized(Vec2{target.x,target.y}-pose.position),side=preferredSide(toward);
-  const std::array<Vec2,8> offsets={side*.75f,side*(-.75f),side*1.5f,side*(-1.5f),side*2.f,side*(-2.f),toward*.65f+side*1.2f,toward*.65f-side*1.2f};
-  float best=10000;Vec2 destination{};float destinationZ=pose.z;
-  for(auto offset:offsets){auto candidate=pose.position+offset;
-   if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
-   float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
-   auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
-   if(!guardShotMatches(actor,guardShot(actor,trial,npcWeaponPoseAt(actor,trial,target,1))))continue;
-   float score=lengthSq(offset);if(score>=best)continue;best=score;destination=candidate;destinationZ=feet;
+ if(wait==0){
+  if(m_npcNavBudget>0){
+   --m_npcNavBudget;put("guard_cover",0);
+   Vec2 toward=normalized(Vec2{target.x,target.y}-pose.position),side=preferredSide(toward);
+   const std::array<Vec2,8> offsets={side*.75f,side*(-.75f),side*1.5f,side*(-1.5f),side*2.f,side*(-2.f),toward*.65f+side*1.2f,toward*.65f-side*1.2f};
+   float best=10000;Vec2 destination{};float destinationZ=pose.z;
+   for(auto offset:offsets){auto candidate=pose.position+offset;
+    if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
+    float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
+    auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
+    if(!guardShotMatches(actor,guardShot(actor,trial,npcWeaponPoseAt(actor,trial,target,1))))continue;
+    float score=lengthSq(offset);if(score>=best)continue;best=score;destination=candidate;destinationZ=feet;
+   }
+   if(best<10000){put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(destination.x*1000)));put("guard_cover_y",int(std::round(destination.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));cached=destination;}
   }
-  if(best<10000){put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(destination.x*1000)));put("guard_cover_y",int(std::round(destination.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));cached=destination;}
+  // Starved frames still back off so every role keeps trying locomotion toward
+  // the remembered target instead of spinning on wait==0 with no search.
   wait=600+int(actor%7)*30;
  }
  put("guard_cover_wait",wait);

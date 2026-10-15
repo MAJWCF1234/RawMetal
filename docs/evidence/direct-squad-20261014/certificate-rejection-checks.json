@@ -1,0 +1,22 @@
+[
+  {
+    "invalid_certificate": "output",
+    "exit_code": 1,
+    "rejected_for": "stale output certificate"
+  },
+  {
+    "invalid_certificate": "source",
+    "exit_code": 1,
+    "rejected_for": "source SHA-256"
+  },
+  {
+    "invalid_certificate": "total-count",
+    "exit_code": 1,
+    "rejected_for": "total sample count"
+  },
+  {
+    "invalid_certificate": "clip-count",
+    "exit_code": 1,
+    "rejected_for": "per-clip sample count"
+  }
+]

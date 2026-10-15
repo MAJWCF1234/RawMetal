@@ -28,7 +28,23 @@ void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,Acto
  float reach=get("support_ms")>0?1.3f:1.2f;
  goal=position;goalZ=patient.pose.z;wantsMove=lengthSq(toward)>reach*reach;put("guard_cover",0);put("guard_cover_wait",0);
  if(!wantsMove&&!friendlyRayClear({pose.position.x+origin.x,pose.position.y+origin.y,pose.z+track.scale*.6f},{position.x+origin.x,position.y+origin.y,patient.pose.z+t.scale*.6f}))wantsMove=true;
- if(wantsMove){put("support_ms",0);if(patient.level!=level)guardRoute(level,actor,position+origin,goalZ,ms,goal,goalZ);return;}
+ if(wantsMove){
+  put("support_ms",0);
+  // Eye-height acquisition can see over low cover while the standing hull
+  // cannot. Step off the cover footprint first, then run the clear flank to
+  // the patient so movement does not wedge and stall into Recovery.
+  if(patient.level==level&&!friendlyWalkSegment(level,pose.position,pose.z,position,track.scale)){
+   Vec2 delta=position-pose.position;float span=length(delta);Vec2 along=span>.001f?delta*(1.f/span):Vec2{1,0};Vec2 perp{-along.y,along.x};
+   float side=dot(pose.position-position,perp);if(std::fabs(side)<.05f)side=pose.position.y<=position.y?-1.f:1.f;else side=side>=0?1.f:-1.f;
+   Vec2 clear=pose.position+perp*(side*1.35f);
+   Vec2 flank=position+perp*(side*2.2f);
+   if(friendlyWalkSegment(level,pose.position,pose.z,clear,track.scale))goal=clear;
+   else if(lengthSq(flank-pose.position)>.4f*.4f)goal=guardGraphWaypoint(level,pose.position,pose.z,flank,goalZ,track.scale);
+   if(lengthSq(goal-pose.position)<.04f)goal=flank;
+  }
+  if(patient.level!=level)guardRoute(level,actor,position+origin,goalZ,ms,goal,goalZ);
+  return;
+ }
  if(get("weapon_reload")||get("weapon_reloading")||get("weapon_recovery")||get("weapon_bash")||get("grenade_windup")||get("weapon_action")==int(GuardAction::Fire)||get("weapon_action")==int(GuardAction::Bash)){put("support_ms",0);return;}
  if(advanceWork)runGuardTreatment(actor,ms);
 }

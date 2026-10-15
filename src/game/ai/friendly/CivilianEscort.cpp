@@ -31,7 +31,16 @@ void Game::civilianEscortIntent(World& world,int level,size_t actor,const ActorT
   else{
    int next=get("route_next")-1,wait=std::max(0,get("route_wait")-ms);Vec2 portal{get("portal_x")*.001f,get("portal_y")*.001f};float z=get("portal_z")*.001f;
    bool cached=next>=0&&next<chunkCount()&&next!=level&&get("route_player")==m_level+1&&wait>0&&friendlyBoundaryOpen(level,next,portal+chunkOffset(level));
-   if(!cached&&m_npcNavBudget>0&&(wait<=0||get("route_player")!=m_level+1||next>=0)){--m_npcNavBudget;cached=friendlyPortal(level,m_level,pose.position,pose.z,height,portal,z);next=cached?friendlyChunkAt(portal+chunkOffset(level),level):-1;wait=600+int(actor%7)*30;put("portal_x",int(std::round(portal.x*1000)));put("portal_y",int(std::round(portal.y*1000)));put("portal_z",int(std::round(z*1000)));put("route_player",m_level+1);put("route_next",next+1);}
+   if(!cached){
+    if(m_npcNavBudget>0&&(wait<=0||get("route_player")!=m_level+1||next>=0)){
+     --m_npcNavBudget;cached=friendlyPortal(level,m_level,pose.position,pose.z,height,portal,z);next=cached?friendlyChunkAt(portal+chunkOffset(level),level):-1;wait=600+int(actor%7)*30;
+     put("portal_x",int(std::round(portal.x*1000)));put("portal_y",int(std::round(portal.y*1000)));put("portal_z",int(std::round(z*1000)));put("route_player",m_level+1);put("route_next",next+1);
+    }else if(wait<=0&&get("route_player")==m_level+1){
+     // Only actors that already spent a search back off when the budget is empty.
+     // First-timers must keep wait at 0 so the shared four-search mask stays honest.
+     wait=600+int(actor%7)*30;
+    }
+   }
    put("route_wait",wait);if(cached){goal=portal;goalZ=z;wantsMove=true;}
   }
  }

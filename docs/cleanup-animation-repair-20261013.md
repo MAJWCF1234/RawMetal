@@ -57,7 +57,8 @@ py -3 tools/VerifyCleanupAnimation.py
 
 The Python check requires NumPy. `--baseline` accepts a saved Name/Sha256 JSON
 manifest; `--output` writes its results. Native captures and attachment CSVs
-are written under `diagnostics/animation-repair-20261013/native`.
+were captured during that repair; durable notes and images live under `docs/`
+and `docs/images/`.
 
 ## Remaining failures
 

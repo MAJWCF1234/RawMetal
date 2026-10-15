@@ -76,11 +76,10 @@ Reproduce the new suite with:
 .\RawMetal.exe --guard-schedule-test --smoke-test
 ```
 
-Evidence is local under `diagnostics/guard-schedule-20261012/`, plus native
-inspection captures and logs under `diagnostics/kill-squad-20261011/`,
-`diagnostics/engineer-support-20261012/` and
-`diagnostics/guard-danger-20261011/`. Ash task ownership CSV rows include the
-schedule, phase, task, status, subject, reason, failures and bounded transitions.
+Evidence for this pass was local diagnostics; durable behavior is covered by
+`--guard-schedule-test` and related guards. Ash task ownership CSV rows include
+the schedule, phase, task, status, subject, reason, failures and bounded
+transitions.
 The rendered observation sheet shows actual firing, pursuit, kit opening and
 treatment; screenshots are visual evidence, not a pixel-score parity claim.
 
