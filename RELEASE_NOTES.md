@@ -4,9 +4,19 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.2
+
+Synced tester build of the NPC radio polish from preview.1. Repo root hygiene: ignore ashfall performance dumps; no gameplay change.
+
+Same radio behavior as preview.1 (Search bark, AllyDown cooldown, reply timing, channel holds). Confirm in play, then cut **v0.7.2**.
+
+**Validation:** EXE 26,533,888 / 33,554,432 bytes (6.70 MiB headroom). `--npc-voice-test` PASS.
+
+---
+
 ## v0.7.2-preview.1
 
-Preview toward the next complete NPC radio patch. Builds on 0.7.1 chatter election with Search cues, AllyDown cooldown, longer reply timing, and channel holds so delayed copies do not expire while someone else is talking.
+Preview toward the next complete NPC radio patch. Builds on 0.7.1 chatter election with Search cues, AllyDown cooldown, longer reply timing, and channel holds so delayed copies do not expire while someone else is talking. Superseded for testers by preview.2.
 
 - Lost-contact **Search** elects one Investigate bark; Investigate?Search stays quiet
 - Reply delay stretched (~1.1–2.2 s) so the optional copy lands after the contact call

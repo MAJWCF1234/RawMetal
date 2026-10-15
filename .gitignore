@@ -26,6 +26,8 @@ __pycache__/
 *-fixture.txt
 *-out.txt
 *-preview.wav
+ashfall-performance.csv
+ashfall-performance.txt
 campaign-reach-*.txt
 campaign-extension-test.txt
 model-report.txt
