@@ -6,7 +6,16 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
  auto put=[&](const char* field,int value){ctx.put(field,value);};
  auto selected=guardTarget(actor);if(selected.valid())target={selected.position.x,selected.position.y,selected.feet+selected.height*.6f};
  int role=guardFlankSide(actor);
- auto preferredSide=[&](Vec2 toward){Vec2 side{-toward.y,toward.x};if(role)side=side*float(-role);else if(actor%2)side=side*(-1);return side;};
+ Vec2 towardThreat=normalized(Vec2{target.x,target.y}-pose.position);if(lengthSq(towardThreat)<.001f)towardThreat={0,1};
+ Vec2 left{-towardThreat.y,towardThreat.x},right=left*(-1.f);
+ float leftClear=guardLateralClearance(level,actor,pose,left),rightClear=guardLateralClearance(level,actor,pose,right);
+ // Role/rank picks a side; corridors flip to whichever side still has room.
+ float sideSign=role?float(-role):(actor%2?-1.f:1.f);
+ if(sideSign>0&&rightClear<.55f&&leftClear>rightClear+.15f)sideSign=-1.f;
+ if(sideSign<0&&leftClear<.55f&&rightClear>leftClear+.15f)sideSign=1.f;
+ float room=std::max(leftClear,rightClear);
+ float stepScale=std::clamp(room>0.f?room/1.5f:.55f,.45f,1.35f);
+ auto preferredSide=[&](){Vec2 side=left;if(sideSign)side=side*sideSign;else if(actor%2)side=side*(-1);return side;};
  int damage=track.damageState?state(track.damageState):0;bool lowHealth=track.health>0&&track.health-damage<=track.health*.35f;
  bool defensive=get("weapon_reload")>0||get("weapon_reloading")||(get("weapon_saved")&&get("weapon_rounds")==0)||get("guard_under_fire")>0||lowHealth;
  int mode=ctx.coverMode();
@@ -22,7 +31,6 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
   if(wait==0){
    if(m_npcNavBudget>0){
     --m_npcNavBudget;ctx.clearCoverGoal();Vec2 destination{};float destinationZ=pose.z;
-    float sideSign=role?float(-role):(actor%2?-1.f:1.f);
     bool found=findGuardCoverFromEnemy(level,actor,pose,target,destination,destinationZ,sideSign);
     if(found){ctx.setCoverGoal(destination,destinationZ,2);cached=destination;}
    }
@@ -46,10 +54,17 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
    if(lengthSq(cached-pose.position)<.04f&&std::fabs(feet-pose.z)<.3f){put("guard_flank_done",1);put("guard_flank_wait",0);put("guard_cover",0);put("guard_cover_wait",0);flank=false;}
    else{
     float endFeet=pose.z;
-    bool reachable=remaining>0&&!guardPositionReserved(actor,cached,feet)&&friendlyWalkSegment(level,pose.position,pose.z,cached,track.scale,&endFeet)&&std::fabs(endFeet-feet)<.3f;
-    if(reachable){put("guard_cover_mode",1);goal=cached;goalZ=feet;wantsMove=true;return;}
-    // A closed doorway, newly occupied endpoint or stalled movement must not
-    // permanently suppress the guard's firing opportunity after this flank.
+    bool reserved=guardPositionReserved(actor,cached,feet);
+    bool direct=remaining>0&&!reserved&&friendlyWalkSegment(level,pose.position,pose.z,cached,track.scale,&endFeet)&&std::fabs(endFeet-feet)<.3f;
+    if(direct){put("guard_cover_mode",1);goal=cached;goalZ=feet;wantsMove=true;return;}
+    // Door/body can block the straight span — hop the retained graph instead
+    // of abandoning the flank until the wait actually expires.
+    if(remaining>0&&!reserved){
+     auto hop=guardGraphWaypoint(level,pose.position,pose.z,cached,feet,track.scale);
+     if(lengthSq(hop-pose.position)>.04f){put("guard_cover_mode",1);goal=hop;goalZ=pose.z;wantsMove=true;return;}
+     wantsMove=false;return;
+    }
+    // Wait elapsed with no path: release the flank so fire leases can resume.
     put("guard_flank_done",1);put("guard_flank_wait",0);put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",600+int(actor%7)*30);flank=false;
    }
   }
@@ -57,16 +72,18 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
    int wait=std::max(0,get("guard_cover_wait")-ms);
    if(wait==0){
     if(m_npcNavBudget>0){
-     --m_npcNavBudget;Vec2 toward=normalized(Vec2{target.x,target.y}-pose.position),side=preferredSide(toward);
-     const std::array<Vec2,8> offsets={side*1.5f,side*.75f,side*2.f,toward*.65f+side*1.2f,side*1.5f-toward*.5f,side*.75f-toward*.75f,side*(-.75f),side*(-1.5f)};
-     bool found=false;
-     for(auto offset:offsets){auto candidate=pose.position+offset;if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
-      float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
-      auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
-      if(!guardShotMatches(actor,guardShot(actor,trial,npcWeaponPoseAt(actor,trial,target,1))))continue;
-      put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(candidate.x*1000)));put("guard_cover_y",int(std::round(candidate.y*1000)));put("guard_cover_z",int(std::round(feet*1000)));goal=candidate;goalZ=feet;found=true;break;
+     --m_npcNavBudget;Vec2 side=preferredSide();
+     Vec2 destination{};float destinationZ=pose.z;bool found=findGuardCombatPost(level,actor,pose,target,destination,destinationZ,sideSign);
+     if(!found){
+      const std::array<Vec2,8> offsets={side*1.5f*stepScale,side*.75f*stepScale,side*2.f*stepScale,towardThreat*.65f+side*1.2f*stepScale,side*1.5f*stepScale-towardThreat*.5f,side*.75f*stepScale-towardThreat*.75f,side*(-.75f*stepScale),side*(-1.5f*stepScale)};
+      for(auto offset:offsets){auto candidate=pose.position+offset;if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
+       float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
+       auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
+       if(!guardShotMatches(actor,guardShot(actor,trial,npcWeaponPoseAt(actor,trial,target,1))))continue;
+       destination=candidate;destinationZ=feet;found=true;break;
+      }
      }
-     if(found){put("guard_flank_wait",5000);put("guard_cover_wait",600+int(actor%7)*30);wantsMove=true;return;}
+     if(found){put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(destination.x*1000)));put("guard_cover_y",int(std::round(destination.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));put("guard_flank_wait",5000);put("guard_cover_wait",600+int(actor%7)*30);goal=destination;goalZ=destinationZ;wantsMove=true;return;}
     }
     // Blocked room or a starved search frame must not mute fire forever while
     // pendingFlank keeps wantsMove false. Same backoff either way.
@@ -85,17 +102,18 @@ void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const 
  if(wait==0){
   if(m_npcNavBudget>0){
    --m_npcNavBudget;put("guard_cover",0);
-   Vec2 toward=normalized(Vec2{target.x,target.y}-pose.position),side=preferredSide(toward);
-   const std::array<Vec2,8> offsets={side*.75f,side*(-.75f),side*1.5f,side*(-1.5f),side*2.f,side*(-2.f),toward*.65f+side*1.2f,toward*.65f-side*1.2f};
-   float best=10000;Vec2 destination{};float destinationZ=pose.z;
+   Vec2 side=preferredSide();Vec2 destination{};float destinationZ=pose.z;bool found=findGuardCombatPost(level,actor,pose,target,destination,destinationZ,sideSign);
+   float best=found?lengthSq(destination-pose.position):10000;
+   if(found)cached=destination;
+   const std::array<Vec2,8> offsets={side*.75f*stepScale,side*(-.75f*stepScale),side*1.5f*stepScale,side*(-1.5f*stepScale),side*2.f*stepScale,side*(-2.f*stepScale),towardThreat*.65f+side*1.2f*stepScale,towardThreat*.65f-side*1.2f*stepScale};
    for(auto offset:offsets){auto candidate=pose.position+offset;
     if(candidate.x<.35f||candidate.y<.35f||candidate.x>23.65f||candidate.y>23.65f)continue;
     float feet=pose.z;if(!friendlyWalkSegment(level,pose.position,pose.z,candidate,track.scale,&feet)||guardPositionReserved(actor,candidate,feet))continue;
     auto trial=pose;trial.position=candidate;trial.z=feet;auto facing=Vec2{target.x,target.y}-candidate;trial.yaw=std::atan2(facing.x,facing.y);
     if(!guardShotMatches(actor,guardShot(actor,trial,npcWeaponPoseAt(actor,trial,target,1))))continue;
-    float score=lengthSq(offset);if(score>=best)continue;best=score;destination=candidate;destinationZ=feet;
+    float score=lengthSq(offset);if(score>=best)continue;best=score;destination=candidate;destinationZ=feet;found=true;cached=destination;
    }
-   if(best<10000){put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(destination.x*1000)));put("guard_cover_y",int(std::round(destination.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));cached=destination;}
+   if(found){put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(cached.x*1000)));put("guard_cover_y",int(std::round(cached.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));}
   }
   // Starved frames still back off so every role keeps trying locomotion toward
   // the remembered target instead of spinning on wait==0 with no search.

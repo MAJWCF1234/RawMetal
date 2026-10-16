@@ -43,6 +43,7 @@ public:
  Point3 poseAnchor(int index)const{return m_poseAnchors.at(size_t(index));}
  // Imported, normalized topology remains available after animation poses.
  const std::vector<MeshTriangle>& bindTriangles()const;
+ const std::vector<uint16_t>& creatureVertexIndices()const{return m_creatureIndices;}
  std::vector<MeshTriangle> triangles;
  std::vector<std::vector<MeshVertex>> openRings;
  Point3 minimum,maximum;

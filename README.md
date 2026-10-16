@@ -2,10 +2,11 @@
 
 RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
 streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
-The current tester target is **v0.7.2-preview.2 / ASHFALL EXCLUSION ZONE**.
+The current tester target is **v0.7.2-preview.3 / ASHFALL EXCLUSION ZONE**.
 See the consolidated [release notes](RELEASE_NOTES.md).
-The [native walkthrough notes](docs/exclusion-preview15-playtest-20261015.md) cover
-readability changes and the physical north/east approach checks.
+Docs vault: open [`docs/`](docs/Home.md) in Obsidian. The
+[native walkthrough notes](docs/Content/Exclusion/exclusion-preview15-playtest-20261015.md)
+cover readability changes and the physical north/east approach checks.
 
 ## Start the Exclusion playtest
 
@@ -32,11 +33,11 @@ detail, a field cache and a chain distraction. After two player kills, real
 entities overrun its fighters while one survivor retreats into Receiving 03 and
 closes the pressure door. This is an early disaster; other Cleanup squads remain
 part of the facility. Reach it on the main route, or use console `MAP 14` for a
-direct test. See the [breach validation](docs/receiving-breach-20261015.md).
+direct test. See the [breach validation](docs/Content/Exclusion/receiving-breach-20261015.md).
 
 The six Cleanup roles and Witness now have **80 embedded ElevenLabs voice takes**,
 with equipment-specific mask effects and contextual patrol, combat, support and
-escort responses. [Voice details and audition](docs/cleanup-voices-20261015.md).
+escort responses. [Voice details and audition](docs/Content/Cleanup/cleanup-voices-20261015.md).
 
 The route starts behind the west cover screen:
 

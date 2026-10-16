@@ -219,6 +219,7 @@ public:
     void setCargoLiftHeight(float z){m_cargoLiftHeight=z;}
     bool insideCargoLift(float x,float y)const{return m_cargoLift.x2>m_cargoLift.x1&&x>=m_cargoLift.x1&&x<m_cargoLift.x2&&y>=m_cargoLift.y1&&y<m_cargoLift.y2;}
     bool railBlocksHull(float x,float y,float radius,float feet,float height)const;
+    bool structureSegmentClear(Vec2 start,float feet,Vec2 goal,float height,bool indexed=true)const;
     float wallHeight(int x,int y)const;
     bool controlReleased()const{return m_controlReleased;}
     void releaseControl(){m_controlReleased=true;}
@@ -267,7 +268,7 @@ public:
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
     void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
-    void unloadGeometry(){m_collisionCells={};m_collisionAll={};std::vector<LightSolid>{}.swap(m_lightSolids);std::vector<LightNode>{}.swap(m_lightNodes);std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Compactor>{}.swap(m_compactors);std::vector<Terminal>{}.swap(m_terminals);}
+    void unloadGeometry(){m_collisionCells={};m_collisionAll={};std::vector<LightSolid>{}.swap(m_lightSolids);std::vector<LightNode>{}.swap(m_lightNodes);std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainTops);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Compactor>{}.swap(m_compactors);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
@@ -310,11 +311,16 @@ private:
     static constexpr int TerrainSamplesY=Height+3;
     static constexpr int TerrainSamplesZ=TerrainMaxZ-TerrainMinZ+3;
     std::vector<std::int8_t> m_terrainDensity;
+    float supportBelowUncached(float x,float y,float feet)const;
+    bool fitsUncached(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const;
+    // Highest positive sample per XY column; conservative empty-air bounds.
+    std::vector<std::uint8_t> m_terrainTops;
     std::vector<std::uint8_t> m_terrainMaterial;
     // Custom outdoor wasteland packs (Exclusion Zone) sample a local heightfield
     // instead of the stitched Ashfall world voxels.
     bool m_exclusionTerrain=false;
     void buildTerrain();
+    void buildTerrainBounds();
     void settleExclusionFacilityOnTerrain();
     std::size_t terrainSampleIndex(int sx,int sy,int sz)const;
     float terrainDensity(float x,float y,float z)const;

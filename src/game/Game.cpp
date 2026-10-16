@@ -342,7 +342,7 @@ void Game::update(const InputState& input, float dt) {
 
         updateMechanisms(dt);
         updateLift(dt);
-        auto movement=input;if(heldNpc()>=0){movement.sprint=false;movement.jump=false;movement.crouch=false;}
+        auto movement=input;if(heldNpc()>=0||takedownActive()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         updateMovement(movement,dt);
         updateStealth(input,dt);
         if(m_world.hasLift()){
@@ -369,8 +369,8 @@ void Game::update(const InputState& input, float dt) {
         float oldReload=m_reloadTimer;m_reloadTimer=std::max(0.f,m_reloadTimer-dt);
         if(oldReload>0&&m_reloadTimer==0){m_player.loaded=std::min(cycle.tubeCapacity,m_player.ammo);m_shotAge=0;}
         m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
-        m_guarding=heldNpc()<0&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
-        float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
+        m_guarding=heldNpc()<0&&!takedownActive()&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
+        float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&!takedownActive()&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
         float lower=(!m_weaponEquipped||m_player.ammo<=0)&&m_shotAge>cycle.autoHolsterAfter?1.f:0.f;
         m_holster+=std::clamp(lower-m_holster,-dt*2.6f,dt*2.6f);
         if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f) {
@@ -379,6 +379,7 @@ void Game::update(const InputState& input, float dt) {
         }
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);
+        updateTakedown(dt);
         updateEngineerDrones(dt);
         updateGuardCombat(dt);
         for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);

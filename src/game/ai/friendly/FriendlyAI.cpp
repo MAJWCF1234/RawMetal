@@ -1,8 +1,10 @@
 #include "../../Game.h"
 #include "../Navigation.h"
 #include "../Perception.h"
+#include "../../../world/CollisionQueryBatch.h"
 #include <optional>
 #include <fstream>
+#include <chrono>
 namespace retro {
 void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef attacker){
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();auto pose=npc.pose;
@@ -99,6 +101,9 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  }
  pose.lookAtActor=-1;
  if(dt<=0)return pose;
+ // Decision, route and local movement probes read one settled collision
+ // state. The cache expires on return, before another actor or physics step.
+ CollisionQueryBatch queries(&world,m_aiQueryCaching);
  put("running",1);float standing=track.scale;bool crouched=get("crouched")!=0;float height=crouched?npcCrouchedHeight(track):standing;
  bool grounded=get("grounded")!=0||!get("locomotion");float vv=get("vv")*.001f;int ms=std::max(1,int(std::round(dt*1000)));
  Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;float speedScale=1;
@@ -127,8 +132,12 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  if(wantsMove){
   requestAiDoor(world,level,pose.position,pose.z,goal);
   auto toward=goal-pose.position;float distance=length(toward);auto probe=pose.position+toward*(std::min(1.f,distance)/std::max(.001f,distance));
-  if((world.hasTerrain()||std::fabs(goalZ-pose.z)<.3f)&&friendlyWalkSegment(level,pose.position,pose.z,probe,height))waypoint=goal;
-  else if(timer<=0||(get("walking")&&lengthSq(waypoint-pose.position)<.04f)){
+  // A direct goal probe is expensive. Reuse the current validated waypoint
+  // while its route timer is live; recheck immediately when the goal changes,
+  // the route expires, or the actor reaches its waypoint.
+  bool routeExpired=timer<=0||(get("walking")&&lengthSq(waypoint-pose.position)<.04f);
+  if(routeExpired&&(world.hasTerrain()||std::fabs(goalZ-pose.z)<.3f)&&friendlyWalkSegment(level,pose.position,pose.z,probe,height))waypoint=goal;
+  else if(routeExpired){
    if(m_npcNavBudget<=0)navigationDeferred=true;
    else{--m_npcNavBudget;
    // Plan through doors this actor may operate; actual movement still collides
@@ -234,6 +243,49 @@ int Game::nearbyFriendly()const{
   }else if(dot(normalized(delta),forward)<.6f||std::fabs(pose.z-m_player.z)>.6f)continue;
   if(distance<nearest){best=int(i);nearest=distance;}
  }return best;
+}
+__declspec(noinline) bool Game::testAiQueryBatch(){
+ std::ofstream report("ai-query-test.txt");bool passed=true;
+ auto check=[&](bool good,const char*name){report<<(good?"PASS ":"FAIL ")<<name<<'\n';report.flush();passed&=good;};
+ CollisionQueryBatch::resetStatistics();
+ for(int level:{0,1,3,6,-1}){
+  World world(level<0?0:level,level<0?WorldId::Ashfall:WorldId::Campaign);bool exact=true;
+  CollisionQueryBatch batch(&world);
+  for(int y=-1;y<26;y+=3)for(int x=-1;x<26;x+=3)for(float offset:{-.03f,.02f,.3f,1.1f}){
+   float px=x+.137f,py=y+.713f,feet=world.floorHeight(px,py)+offset;
+   for(bool dynamic:{false,true})for(bool cavities:{false,true})for(float height:{.015f,.8f,1.6f}){
+    bool a=world.fits(px,py,feet,height,dynamic,cavities),b=world.fits(px,py,feet,height,dynamic,cavities);float support=world.supportBelow(px,py,feet),again=world.supportBelow(px,py,feet);
+    CollisionQueryBatch reference(&world,false);
+    exact&=a==b&&b==world.fits(px,py,feet,height,dynamic,cavities)&&std::bit_cast<uint32_t>(support)==std::bit_cast<uint32_t>(again)&&std::bit_cast<uint32_t>(support)==std::bit_cast<uint32_t>(world.supportBelow(px,py,feet));
+   }
+  }
+  check(exact,"Exact query keys preserve height, shelf, dynamic and support results");
+ }
+ auto initialStats=CollisionQueryBatch::statistics();
+ for(int scenario=0;scenario<3;++scenario){
+  auto cached=scenario==0?exclusionInspection(12):scenario==1?mapInspection({18,17},kPi*.5f,0,3,false,-9,false):mapInspection({1.4f,20},0,0,14,false,-25,false);
+  cached.m_player.health=100;auto reference=cached;cached.m_aiQueryCaching=true;reference.m_aiQueryCaching=false;
+  std::array<std::vector<double>,2> timings;
+  bool same=true,restored=true;
+  for(int frame=0;frame<360&&same;++frame){InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;
+   float dt=scenario==1?1.f/120:1.f/60;cached.m_player.health=reference.m_player.health=100;
+   for(int pass=0;pass<2;++pass){int mode=(pass+(frame&1))&1;auto begin=std::chrono::steady_clock::now();
+    if(mode)cached.update(input,dt);else reference.update(input,dt);
+    if(frame>=30)timings[mode].push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
+   }
+   same=cached.m_states.size()==reference.m_states.size()&&std::equal(cached.m_states.begin(),cached.m_states.end(),reference.m_states.begin(),[](const StateValue&a,const StateValue&b){return a.id==b.id&&a.value==b.value;});
+   if(frame%30==0||frame==359)same&=cached.encodeSave()==reference.encodeSave();
+   if(frame==180&&same){auto a=cached.encodeSave(),b=reference.encodeSave();restored=cached.decodeSave(a)&&reference.decodeSave(b);cached.m_aiQueryCaching=true;reference.m_aiQueryCaching=false;same&=restored;}
+   if(!same)report<<"scenario "<<scenario<<" diverged at frame "<<frame<<'\n';
+  }
+  check(same&&restored,"Cached/uncached AI state and full saves match throughout replay and restoration");
+  for(int mode=0;mode<2;++mode)if(!timings[mode].empty()){auto&v=timings[mode];std::sort(v.begin(),v.end());double sum=0;for(auto ms:v)sum+=ms;
+   report<<"scenario "<<scenario<<(mode?" cached":" reference")<<" simulation avg/p95_ms="<<sum/v.size()<<'/'<<v[v.size()*95/100]<<'\n';
+  }
+ }
+ auto stats=CollisionQueryBatch::statistics();report<<"replay queries="<<stats.queries-initialStats.queries<<" hits="<<stats.hits-initialStats.hits<<'\n';
+ check(stats.hits-initialStats.hits>100,"Replay actually reuses exact collision queries");
+ return passed;
 }
 bool Game::commandFriendly(){
  int actor=nearbyFriendly();if(actor<0)return false;const auto&track=m_friendlyActors[size_t(actor)].track();bool escort=track.ai.mode==ActorAiMode::Escort;

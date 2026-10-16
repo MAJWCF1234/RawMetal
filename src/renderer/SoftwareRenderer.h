@@ -31,6 +31,9 @@ public:
     void previewModel(int model,float angle);
     bool validate3D();
     static bool testPerformance();
+    static bool testVisibility();
+    static bool testGpuActors();
+    void setGpuActorPreparation(bool enabled){m_gpuActorPreparation=enabled;}
     static bool testCablePerformance();
     static bool testHardware();
     static bool testPresentationResize();
@@ -52,6 +55,7 @@ private:
     std::unique_ptr<FrameWorker> m_animationWorker;
     std::string m_gpuName;
     bool m_gpuFrame=false;
+    bool m_gpuActorPreparation=true;
     bool m_vrRendering=false;
     std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
     void drawTrackedHands(const Game& game);
@@ -130,8 +134,10 @@ private:
     Texture m_intakeSign,m_processingSign,m_containmentSign,m_exitSign;
     Texture m_hazard,m_chemicalSign,m_machineSign,m_confinedSign,m_signRust,m_panelMetal,m_routePaint,m_redPaint;
     Texture m_terminalTexture,m_cautionSign,m_serviceSign;
+    Texture m_logo;
     Texture makeSign(const char* title,const char* subtitle,std::uint32_t accent);
     Texture makePaint(std::uint32_t color);
+    static Texture loadEmbeddedPng(int id);
     static void prepareDecal(Texture& texture,bool clampEdges=true);
     void drawSky(const Game& game);
     void drawScene(const Game& game,bool clearDepth=true,int level=-1);

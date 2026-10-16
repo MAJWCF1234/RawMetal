@@ -2,6 +2,7 @@
 #include "../../Game.h"
 #include "../Navigation.h"
 #include "Schedule.h"
+#include <cmath>
 #include <queue>
 namespace retro {
 StateId Game::friendlyKey(size_t actor,std::string_view field)const{
@@ -83,10 +84,27 @@ bool Game::friendlyBoundaryOpen(int from,int to,Vec2 global)const{
  return false;
 }
 bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){
- auto origin=chunkOffset(level),delta=goal-start;int samples=std::max(1,int(std::ceil(length(delta)/.08f))),previous=level;float z=feet;
+ perf::Scope walkProfile(perf::Walk);
+ // A convex segment whose complete footprint stays inside this chunk cannot
+ // cross a seam. Same support/sweep/door predicates as before; sample pitch is
+ // hull-scale so short locomotion steps pay one endpoint, not an 8 cm lattice.
+ if(std::min(start.x,goal.x)>=.2f&&std::min(start.y,goal.y)>=.2f&&std::max(start.x,goal.x)<23.8f&&std::max(start.y,goal.y)<23.8f){
+  ensureChunk(level);const auto&w=friendlyWorld(level);auto delta=goal-start;float pitch=aiWalkSamplePitch(w.hasTerrain());
+  int samples=std::max(1,int(std::ceil(length(delta)/pitch)));float z=feet;
+  for(int step=0;step<=samples;++step){auto point=start+delta*(float(step)/samples);
+   if(step>0&&!aiStructureSegment(w,start+delta*(float(step-1)/samples),z,point,height,m_aiQueryCaching))return false;
+   float ground=-10000;for(float x:{-.2f,.2f})for(float y:{-.2f,.2f})ground=std::max(ground,w.supportBelow(point.x+x,point.y+y,z+.265f));
+   float stepHeight=w.hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f||w.railBlocksHull(point.x,point.y,.2f,ground,height))return false;
+   for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f})if(!w.fits(point.x+x,point.y+y,ground,height)||w.doorBlocks(point.x+x,point.y+y,ground,height))return false;
+   z=ground;
+  }
+  if(endFeet)*endFeet=z;return true;
+ }
+ auto origin=chunkOffset(level),delta=goal-start;ensureChunk(level);float pitch=aiWalkSamplePitch(friendlyWorld(level).hasTerrain());
+ int samples=std::max(1,int(std::ceil(length(delta)/pitch))),previous=level;float z=feet;
  for(int step=0;step<=samples;++step){Vec2 global=origin+start+delta*(float(step)/samples);int center=friendlyChunkAt(global,previous);
   if(center<0||!friendlyBoundaryOpen(previous,center,global))return false;ensureChunk(center);float ground=-10000;
-  if(step>0){auto before=origin+start+delta*(float(step-1)/samples),off=chunkOffset(center);if(!aiStructureSegment(friendlyWorld(center),before-off,z,global-off,height))return false;}
+  if(step>0){auto before=origin+start+delta*(float(step-1)/samples),off=chunkOffset(center);if(!aiStructureSegment(friendlyWorld(center),before-off,z,global-off,height,m_aiQueryCaching))return false;}
   for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);ground=std::max(ground,friendlyWorld(chunk).supportBelow(local.x,local.y,z+.265f));}
   float stepHeight=friendlyWorld(center).hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f)return false;
   for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);
@@ -102,11 +120,26 @@ float Game::friendlyHullHeight(size_t actor,const ActorTrack&track)const{
 }
 float Game::friendlySupportAt(int level,Vec2 position,float feet){
  auto origin=chunkOffset(level);Vec2 global=origin+position;int center=friendlyChunkAt(global,level);if(center<0)return feet;ensureChunk(center);float ground=-10000;
+ auto offset=chunkOffset(center);
+ // Use the actual rounded global corners for this test. Keep the original
+ // global+corner-origin arithmetic, including on chunks far from the origin.
+ if(m_aiQueryCaching&&global.x-.2f>=offset.x&&global.y-.2f>=offset.y&&global.x+.2f<offset.x+24&&global.y+.2f<offset.y+24){
+  const auto&w=friendlyWorld(center);
+  for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){auto local=global+Vec2{x,y}-offset;ground=std::max(ground,w.supportBelow(local.x,local.y,feet));}
+  return ground>-9999?ground:feet;
+ }
  for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))continue;ensureChunk(chunk);auto local=point-chunkOffset(chunk);ground=std::max(ground,friendlyWorld(chunk).supportBelow(local.x,local.y,feet));}
  return ground>-9999?ground:feet;
 }
 bool Game::friendlyBodyFits(int level,Vec2 position,float feet,float height){
  auto origin=chunkOffset(level);Vec2 global=origin+position;int center=friendlyChunkAt(global,level);if(center<0||!friendlyBoundaryOpen(level,center,global))return false;ensureChunk(center);
+ auto offset=chunkOffset(center);
+ if(m_aiQueryCaching&&global.x-.2f>=offset.x&&global.y-.2f>=offset.y&&global.x+.2f<offset.x+24&&global.y+.2f<offset.y+24){
+  const auto&w=friendlyWorld(center);auto localCenter=global-offset;
+  if(w.railBlocksHull(localCenter.x,localCenter.y,.2f,feet,height))return false;
+  for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){auto local=global+Vec2{x,y}-offset;if(!w.fits(local.x,local.y,feet,height)||w.doorBlocks(local.x,local.y,feet,height))return false;}
+  return true;
+ }
  for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);
   auto localCenter=global-chunkOffset(chunk);if(!w.fits(local.x,local.y,feet,height)||w.doorBlocks(local.x,local.y,feet,height)||w.railBlocksHull(localCenter.x,localCenter.y,.2f,feet,height))return false;}
  return true;
@@ -164,6 +197,16 @@ void Game::updateFriendlyActors(float dt,bool guards){
  perf::Scope frameProfile(perf::Friendly);
  auto stimuli=guards?aiStimuli():std::vector<AiStimulus>{};
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);shot.categories=ai::SoundWeapon;stimuli.push_back(shot);}m_guardShots.clear();}
+ // GoldSrc-style think LOD: calm patrol only. Combat/search/danger/stimuli keep
+ // full rate. Deferred frames bank dt so timers stay honest on the next think.
+ auto calmPatrolLod=[&](size_t actor){
+  if(dt<=0||!stimuli.empty()||actor>=m_friendlyActors.size())return false;
+  if(m_friendlyActors[actor].track().ai.mode!=ActorAiMode::Guard||guardState(actor)!=GuardState::Patrol)return false;
+  auto schedule=GuardSchedule(state(friendlyKey(actor,"schedule")));
+  if(schedule!=GuardSchedule::None&&schedule!=GuardSchedule::Patrol)return false;
+  if(state(friendlyKey(actor,"guard_danger_ms"))||state(friendlyKey(actor,"guard_under_fire"))||state(friendlyKey(actor,"support_target"))||state(friendlyKey(actor,"evac_level"))||state(friendlyKey(actor,"guard_confirmed")))return false;
+  int parity=int(std::floor(m_elapsed*60.f+1e-4f));return ((int(actor)+parity)&1)!=0;
+ };
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
   if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
   if(npcIncapacitated(i)){
@@ -221,7 +264,22 @@ void Game::updateFriendlyActors(float dt,bool guards){
    }
    }
   }
-  auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt,&stimuli);
+  if(calmPatrolLod(i)){
+   int debt=state(friendlyKey(i,"think_debt_us"));
+   setState(friendlyKey(i,"think_debt_us"),debt+std::max(1,int(std::round(dt*1e6f))));
+   // Keep authored idle/walk cycles alive on deferred thinks.
+   if(humanActorVisual(track.visual)&&npc.pose.clip!=4){
+    float duration=cleanupAnimationDuration(track.visual,npc.pose.clip==1?1:npc.pose.clip==5?5:0);
+    float rate=npc.pose.clip==1?(duration>0?1/duration:.9f):(duration>0?1/duration:npc.pose.clip==5?.55f:.45f);
+    npc.pose.phase=std::fmod(npc.pose.phase+dt*rate,1.f);
+    setState(friendlyKey(i,"phase"),int(std::round(npc.pose.phase*10000)));setState(friendlyKey(i,"walking"),npc.pose.clip==1);setState(friendlyKey(i,"saved"),1);
+    auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);home.setActorPose(npc.homeActor,projected);
+   }
+   setState(friendlyKey(i,"chunk"),npc.level+1);continue;
+  }
+  float thinkDt=dt;int debt=state(friendlyKey(i,"think_debt_us"));
+  if(debt>0){thinkDt=std::min(thinkDt+debt*1e-6f,3.f/60.f);setState(friendlyKey(i,"think_debt_us"),0);}
+  auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,thinkDt,&stimuli);
   if(scripted&&!scriptedHandoffActive(i)){setState(friendlyKey(i,"saved"),0);setState(friendlyKey(i,"running"),0);setState(friendlyKey(i,"chunk"),npc.level+1);continue;}
   auto global=npc.pose.position+chunkOffset(npc.level);int destination=friendlyChunkAt(global,npc.level);
   if(destination<0)throw std::runtime_error("NPC left the stitched world");

@@ -74,20 +74,26 @@ NodeGraph buildNodeGraph(const World& world,float height,const WalkProbe& walk,s
 }
 bool findCoverNode(const NodeGraph& graph,Vec2 from,float fromFeet,Vec2 threat,float height,
  const WalkProbe& walk,const CoverProbe& covered,const ReservedProbe& reserved,Vec2& goal,float& goalFeet,float maxRange,float minDist){
- float best=1e9f;bool found=false;float currentExposure=length(from-threat);
- for(const auto&node:graph.nodes){
+ float currentExposure=length(from-threat);std::vector<std::pair<float,size_t>> ranked;ranked.reserve(graph.nodes.size());
+ for(size_t index=0;index<graph.nodes.size();++index){const auto&node=graph.nodes[index];
   if(node.hint!=NodeHint::Cover)continue;
   float reach=length(node.position-from);
   if(reach<minDist||reach>maxRange||std::fabs(node.feet-fromFeet)>.5f)continue;
-  float end=fromFeet;if(!walk(from,fromFeet,node.position,height,&end)||std::fabs(end-node.feet)>.35f)continue;
-  if(reserved(node.position,end)||!covered(node.position,end))continue;
   // Occlusion owns validity. Approaching a wall between the actor and its
   // threat is legitimate cover, so range-to-threat is only a soft preference
   // that keeps open-field retreats from walking into the enemy.
   float exposure=length(node.position-threat);float score=reach+std::max(0.f,currentExposure-exposure)*.35f;
-  if(score>=best)continue;best=score;goal=node.position;goalFeet=end;found=true;
+  ranked.push_back({score,index});
  }
- return found;
+ // Scoring has no collision side effects. Preserve its exact minimum and
+ // original tie order while sweeping only until the best valid post is found.
+ std::sort(ranked.begin(),ranked.end());
+ for(auto [score,index]:ranked){const auto&node=graph.nodes[index];float end=fromFeet;
+  if(!walk(from,fromFeet,node.position,height,&end)||std::fabs(end-node.feet)>.35f)continue;
+  if(reserved(node.position,end)||!covered(node.position,end))continue;
+  goal=node.position;goalFeet=end;return true;
+ }
+ return false;
 }
 bool findLateralCover(Vec2 from,float fromFeet,Vec2 threat,float height,
  const WalkProbe& walk,const CoverProbe& covered,const ReservedProbe& reserved,
@@ -159,6 +165,9 @@ Vec2 graphWaypoint(const NodeGraph& graph,Vec2 from,float fromFeet,Vec2 goal,flo
   if(parent[size_t(target)]<0)return goal;
   path.clear();for(int node=target;node!=origin;node=parent[size_t(node)])path.push_back(node);
   bool blocked=false;
+  // Baked links already paid the lattice at build. Live certify is the same
+  // walk probe (doors/rails/dynamics), now at hull-scale pitch — do not rebuild
+  // an 8 cm density check along every retained edge each hop.
   for(auto it=path.rbegin();it!=path.rend();++it){int node=*it,edge=via[size_t(node)];if(valid[size_t(edge)]>=0)continue;
    const auto&a=graph.nodes[size_t(parent[size_t(node)])];const auto&b=graph.nodes[size_t(node)];float end=a.feet;
    valid[size_t(edge)]=walk(a.position,a.feet,b.position,height,&end)&&std::fabs(end-b.feet)<.4f?1:0;

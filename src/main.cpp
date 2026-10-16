@@ -1,6 +1,8 @@
+#include "renderer/RenderProfile.h"
 #include "core/FrameProfile.h"
 #ifdef _WIN32
 #include "game/Game.h"
+#include "world/CollisionQueryBatch.h"
 #include "world/CustomCampaign.h"
 #include "vr/VrRuntime.h"
 #include <windows.h>
@@ -48,26 +50,57 @@ __declspec(noinline) static int cableLayoutInspection(int width,int height){
  }
  return 0;
 }
-__declspec(noinline) static int ashfallPerformance(){
+__declspec(noinline) static int gpuActorPerformance(){
+ using Clock=std::chrono::steady_clock;
+ retro::Win32Window window(retro::DisplayWidth,retro::DisplayHeight,L"Depthworks actor comparison");if(!window.valid())return 1;
+ ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(retro::DisplayWidth,retro::DisplayHeight);if(!renderer->enableHardware(window.handle()))return 36;
+ auto game=retro::Game::exclusionInspection(12);retro::AudioEngine audio(true);retro::perf::enabled=false;
+ std::ofstream report("gpu-actor-performance.txt"),csv("gpu-actor-performance.csv");
+ report<<renderer->hardwareName()<<" / paired native renders of the same simulation state, alternating order\n";
+ csv<<"frame,cpu_scene,cpu_submit,cpu_present,cpu_render,gpu_scene,gpu_submit,gpu_present,gpu_render\n";
+ std::array<std::array<std::vector<double>,4>,2> samples;
+ for(int frame=-30;frame<720&&window.pump();++frame){
+  retro::InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;game.update(input,1.f/60);audio.update(game,false);
+  std::array<std::array<double,4>,2> timings{};
+  for(int pass=0;pass<2;++pass){int mode=(pass+(frame&1))&1;renderer->setGpuActorPreparation(mode!=0);auto start=Clock::now();renderer->render(game);auto stages=renderer->frameStages();
+   timings[mode]={stages[0],stages[1],stages[2],std::chrono::duration<double,std::milli>(Clock::now()-start).count()};
+  }
+  if(frame<0)continue;
+  csv<<frame;for(int mode=0;mode<2;++mode)for(int stage=0;stage<4;++stage){samples[mode][stage].push_back(timings[mode][stage]);csv<<','<<timings[mode][stage];}csv<<'\n';
+ }
+ for(int mode=0;mode<2;++mode)for(int stage=0;stage<4;++stage){auto&values=samples[mode][stage];if(values.size()!=720)return 1;std::sort(values.begin(),values.end());
+  report<<(mode?"GPU ":"CPU ")<<std::array<const char*,4>{"scene","submit","present","render"}[stage]<<" avg/p95/p99_ms="<<std::accumulate(values.begin(),values.end(),0.)/values.size()<<'/'<<values[values.size()*95/100]<<'/'<<values[values.size()*99/100]<<'\n';
+ }
+ report<<"final_health="<<game.player().health<<"\n";
+ return renderer->hardwareActive()?0:36;
+}
+__declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sustained=false,bool cpuActors=false,bool uncachedAi=false){
  using Clock=std::chrono::steady_clock;auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};
  retro::Win32Window window(retro::DisplayWidth,retro::DisplayHeight,L"Depthworks Ashfall frame profile");if(!window.valid())return 1;ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
  auto renderer=std::make_unique<retro::SoftwareRenderer>(retro::DisplayWidth,retro::DisplayHeight);if(!renderer->enableHardware(window.handle()))return 36;
- retro::AudioEngine audio(false);std::ofstream report("ashfall-performance.txt"),csv("ashfall-performance.csv");
- report<<renderer->hardwareName()<<" / native window / "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<" / 30 simulated warmup + 240 measured frames\nCPU wall timings, including native window presentation; not GPU timestamps. Audio update included; device mixing is tested separately.\n";
- csv<<"scene,frame,total_ms,simulation_ms,audio_ms,scene_ms,submit_ms,present_ms,health";for(auto name:retro::perf::names)csv<<","<<name;csv<<",static_builds,atlas_images,atlas_submissions,atlas_bytes\n";
+ renderer->setGpuActorPreparation(!cpuActors);
+ const int measured=sustained?3600:240;
+ retro::AudioEngine audio(sustained);std::ofstream report("ashfall-performance.txt"),csv("ashfall-performance.csv");
+ report<<renderer->hardwareName()<<" / native window / "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<" / 30 simulated warmup + "<<measured<<" measured frames\nCPU wall timings, including native window presentation; not GPU timestamps.\n";
+ if(sustained)report<<"Sustained lab: 60 simulated seconds; extended player health; live muted device mixer; deep instrumentation disabled. Device="<<audio.available()<<'\n';
+ csv<<"scene,frame,total_ms,simulation_ms,audio_ms,scene_ms,submit_ms,present_ms,health";for(auto name:retro::perf::names)csv<<","<<name;csv<<",static_builds,atlas_images,atlas_submissions,atlas_bytes,actor_lighting,actor_mesh,actor_triangle_sample_ms\n";
  struct Case{const char*name;int kind;};
  for(auto test:{Case{"exclusion-arrival",0},Case{"exclusion-yard",2},Case{"exclusion-lure",1},Case{"ashfall-terrain",-1},Case{"campaign-receiving",-2},Case{"campaign-reactor",-3}}){
-  auto start=Clock::now();auto game=test.kind>=0?retro::Game::exclusionInspection(test.kind):test.kind==-1?retro::Game(retro::WorldId::Ashfall):test.kind==-2?retro::Game::mapInspection({1.4f,20},0,0,14,false,-25,false):retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false);
-  report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<'\n';std::array<std::vector<double>,6> samples;
-  for(int frame=-30;frame<240&&window.pump();++frame){retro::InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;
-   retro::perf::enabled=true;retro::perf::costs.fill(0);auto a=Clock::now();game.update(input,1.f/60);auto b=Clock::now();audio.update(game);auto c=Clock::now();renderer->render(game);auto d=Clock::now();auto stages=renderer->frameStages();
+  if((yardOnly||sustained)&&test.kind!=2)continue;auto start=Clock::now();auto game=test.kind>=0?retro::Game::exclusionInspection(sustained?12:test.kind):test.kind==-1?retro::Game(retro::WorldId::Ashfall):test.kind==-2?retro::Game::mapInspection({1.4f,20},0,0,14,false,-25,false):retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false);
+  game.setAiQueryCaching(!uncachedAi);
+  report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<" ai_query_cache="<<!uncachedAi<<'\n';std::array<std::vector<double>,6> samples;
+  for(int frame=-30;frame<measured&&window.pump();++frame){retro::InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;
+   if(frame==0)retro::CollisionQueryBatch::resetStatistics();
+   retro::perf::enabled=!sustained;retro::perf::costs.fill(0);retro::perf::actorCosts.fill(0);retro::perf::actorTriangleCounter=0;auto a=Clock::now();game.update(input,1.f/60);auto b=Clock::now();audio.update(game,!sustained);auto c=Clock::now();renderer->render(game);auto d=Clock::now();auto stages=renderer->frameStages();
    if(frame<0){if(frame==-30)report<<"first_frame_ms="<<ms(a,d)<<'\n';continue;}
    std::array<double,6> values={ms(a,d),ms(a,b),ms(b,c),stages[0],stages[1],stages[2]};
-   csv<<test.name<<','<<frame;for(auto value:values)csv<<','<<value;csv<<','<<game.player().health;for(auto value:retro::perf::costs)csv<<','<<value;auto uploads=renderer->atlasUploadStatistics();csv<<','<<renderer->staticGeometryBuilds()<<','<<uploads[0]<<','<<uploads[1]<<','<<uploads[3]<<'\n';
+   csv<<test.name<<','<<frame;for(auto value:values)csv<<','<<value;csv<<','<<game.player().health;for(auto value:retro::perf::costs)csv<<','<<value;auto uploads=renderer->atlasUploadStatistics();csv<<','<<renderer->staticGeometryBuilds()<<','<<uploads[0]<<','<<uploads[1]<<','<<uploads[3]<<','<<retro::perf::actorCosts[0]<<','<<retro::perf::actorCosts[1]<<','<<retro::perf::actorCosts[2]<<'\n';
    for(size_t i=0;i<values.size();++i)samples[i].push_back(values[i]);
   }
   const char* names[]={"total","simulation","audio","scene","submit","present"};
-  for(size_t i=0;i<samples.size();++i){auto&v=samples[i];if(v.size()!=240)return 1;std::sort(v.begin(),v.end());report<<names[i]<<" avg/p50/p95/p99/max_ms="<<std::accumulate(v.begin(),v.end(),0.)/v.size()<<'/'<<v[v.size()/2]<<'/'<<v[v.size()*95/100]<<'/'<<v[v.size()*99/100]<<'/'<<v.back()<<'\n';}
+  for(size_t i=0;i<samples.size();++i){auto&v=samples[i];if(v.size()!=size_t(measured))return 1;std::sort(v.begin(),v.end());report<<names[i]<<" avg/p50/p95/p99/max_ms="<<std::accumulate(v.begin(),v.end(),0.)/v.size()<<'/'<<v[v.size()/2]<<'/'<<v[v.size()*95/100]<<'/'<<v[v.size()*99/100]<<'/'<<v.back()<<'\n';}
+  auto queryStats=retro::CollisionQueryBatch::statistics();report<<"ai_queries="<<queryStats.queries<<" hits="<<queryStats.hits<<'\n';
   report<<"final_health="<<game.player().health<<"\n\n";report.flush();csv.flush();
  }
  return 0;
@@ -365,6 +398,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      return 0;
     }
     if(std::wcsstr(commandLine,L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
+    if(std::wcsstr(commandLine,L"--terrain-query-test"))return retro::World::testCollisionCandidates()?0:21;
+    if(std::wcsstr(commandLine,L"--ai-query-test"))return retro::Game::testAiQueryBatch()?0:21;
     if(std::wcsstr(commandLine,L"--guard-tactics-test"))return retro::Game::testGuardTactics()?0:21;
     if(std::wcsstr(commandLine,L"--guard-policy-test"))return retro::Game::testGuardPolicy()?0:21;
     if(std::wcsstr(commandLine,L"--guard-defense-test"))return retro::Game::testGuardDefense()?0:21;
@@ -666,8 +701,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--console-test"))return retro::Game::testConsole()?0:34;
     if(std::wcsstr(commandLine,L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
     if(std::wcsstr(commandLine,L"--presentation-resize-test"))return retro::SoftwareRenderer::testPresentationResize()?0:36;
+    if(std::wcsstr(commandLine,L"--gpu-actor-test"))return retro::SoftwareRenderer::testGpuActors()?0:35;
+    if(std::wcsstr(commandLine,L"--gpu-actor-performance"))return gpuActorPerformance();
+    if(std::wcsstr(commandLine,L"--visibility-test"))return retro::SoftwareRenderer::testVisibility()?0:35;
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
-    if(std::wcsstr(commandLine,L"--ashfall-performance"))return ashfallPerformance();
+    if(std::wcsstr(commandLine,L"--lab-performance"))return ashfallPerformance(true,true,std::wcsstr(commandLine,L"--cpu-actor-preparation")!=nullptr,std::wcsstr(commandLine,L"--uncached-ai-queries")!=nullptr);
+    if(std::wcsstr(commandLine,L"--ashfall-performance"))return ashfallPerformance(std::wcsstr(commandLine,L"--ashfall-performance-yard")!=nullptr,false,std::wcsstr(commandLine,L"--cpu-actor-preparation")!=nullptr,std::wcsstr(commandLine,L"--uncached-ai-queries")!=nullptr);
     if(std::wcsstr(commandLine,L"--performance-window")||std::wcsstr(commandLine,L"--service-performance-window")||std::wcsstr(commandLine,L"--door-performance-window")||std::wcsstr(commandLine,L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(std::wcsstr(commandLine,L"--cleanup-split-test"))return retro::Mesh::testCleanupTankAim()?0:47;
@@ -900,6 +939,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(!directStart)game.showTitleScreen();
     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
     retro::AudioEngine audio;
+    renderer.setGpuActorPreparation(std::wcsstr(commandLine,L"--cpu-actor-preparation")==nullptr);
+    game.setAiQueryCaching(std::wcsstr(commandLine,L"--uncached-ai-queries")==nullptr);
     if(vrMode){if(!renderer.enableHardware(window.handle()))throw std::runtime_error("SteamVR requires Vulkan hardware rendering: "+renderer.hardwareName());}else if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware(window.handle());
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;

@@ -199,6 +199,7 @@ bool Game::decodeSave(const std::string& data){
    if(best==std::numeric_limits<float>::max())return false;
    p.pos=safe;p.z=safeZ;p.verticalVelocity=0;p.grounded=true;next.m_velocity={};
   }
+  next.m_aiQueryCaching=m_aiQueryCaching;
   *this=std::move(next);return true;
  }catch(const std::exception&){return false;}
 }

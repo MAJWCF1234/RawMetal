@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+ <defs>
+  <linearGradient id="metal" x2="0" y2="1"><stop stop-color="#39434b"/><stop offset="1" stop-color="#151b20"/></linearGradient>
+  <linearGradient id="amber" x2="0" y2="1"><stop stop-color="#ffc96b"/><stop offset="1" stop-color="#bd742c"/></linearGradient>
+ </defs>
+ <rect x="8" y="8" width="240" height="240" rx="31" fill="#0a0e12"/>
+ <rect x="15" y="15" width="226" height="226" rx="25" fill="url(#metal)" stroke="#697079" stroke-width="4"/>
+ <path d="M40 84V41H84M172 215H215V172" fill="none" stroke="#e3aa53" stroke-width="7"/>
+ <path d="M68 51H130L187 91V165L130 205H68ZM100 84V172H120L153 149V107L120 84Z" fill="url(#amber)" fill-rule="evenodd"/>
+ <path d="M61 125H108V134H61ZM149 125H195V134H149Z" fill="#232b31"/>
+ <g fill="#8a9194"><circle cx="32" cy="32" r="4"/><circle cx="224" cy="32" r="4"/><circle cx="32" cy="224" r="4"/><circle cx="224" cy="224" r="4"/></g>
+</svg>

@@ -237,6 +237,8 @@ public:
     bool punchLeft()const{return m_punchLeft;}
     bool unarmed()const{return m_holster>=.98f;}
     bool guarding()const{return m_guarding;}
+    bool takedownActive()const{return m_takedownActor>=0;}
+    std::array<Point3,2> takedownGrips()const;
     static bool testUnarmed();
     static bool testVrMelee();
     static bool testVrInteraction();
@@ -301,6 +303,8 @@ public:
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
+    static bool testAiQueryBatch();
+    void setAiQueryCaching(bool enabled){m_aiQueryCaching=enabled;}
     bool walkExclusionEast(std::ostream& report);
     static bool testExclusion();
     static bool testExclusionAuthoring();
@@ -310,6 +314,7 @@ public:
     bool npcHeld(size_t actor)const;
     int heldNpc()const;
     std::array<Point3,2> heldNpcGrips()const;
+    void updateTakedown(float dt);
     static bool testGantry();
     static bool testLift();
     static Game liftInspection(float seconds,int view=0);
@@ -390,6 +395,8 @@ private:
     void saveRestrainedPose(size_t actor);
     std::pair<Point3,Point3> friendlyShotBounds(size_t actor)const;
     bool m_previousSubdue=false;
+    int m_takedownActor=-1;
+    float m_takedownAge=0;
     WorldId m_worldId=WorldId::Campaign;
     std::shared_ptr<const CustomCampaign> m_customCampaign;
     std::vector<std::shared_ptr<const CustomCampaign>> m_customCampaigns;
@@ -506,6 +513,10 @@ private:
     bool findGuardGraphCover(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ);
     bool findGuardLateralCover(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ,float sideSign=0.f);
     bool findGuardCoverFromEnemy(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ,float sideSign=0.f);
+    // Cover/path post with a clear raised shot — used for flank and offense in
+    // rooms that already expose structure Cover on the retained nav graph.
+    bool findGuardCombatPost(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ,float sideSign=0.f);
+    float guardLateralClearance(int level,size_t actor,const ActorPose& pose,Vec2 direction)const;
     Vec2 guardGraphWaypoint(int level,Vec2 start,float feet,Vec2 goal,float goalFeet,float height);
     AiTarget resolveGuardTarget(size_t actor,AiTargetRef reference)const;
     AiTarget guardThreat(size_t actor,const ActorPose& pose)const;
@@ -594,6 +605,7 @@ private:
     std::vector<BarrelExplosion> m_barrelExplosions;
     int m_heldClutter=-1;
     int m_npcNavBudget=4;
+    bool m_aiQueryCaching=true;
     bool m_vrAimValid=false,m_vrSupportGrip=false;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;

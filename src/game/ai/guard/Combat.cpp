@@ -62,6 +62,16 @@ std::array<Point3,2> Game::heldNpcGrips()const{
  auto grip=[&](Point3 p){p.y+=.05f;p.z-=.07f;return Point3{npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};};
  return {grip(right),grip(left)};
 }
+std::array<Point3,2> Game::takedownGrips()const{
+ if(m_takedownActor<0||size_t(m_takedownActor)>=m_friendlyActors.size())return {};
+ const auto&npc=m_friendlyActors[size_t(m_takedownActor)];int role=int(npc.track().visual)-int(ActorVisual::Cleanup);
+ // Wrap the neck/upper shoulders from behind — not a jab aimed at the ankles.
+ Point3 right{-.12f,1.48f,-.04f},left{.12f,1.48f,-.04f};
+ if(role>=0&&role<6){auto frame=cleanupBodyFrame(role,0,0);right=frame.rightShoulder;left=frame.leftShoulder;right.y=left.y=std::max(right.y,left.y)+.22f;right.z=left.z=-.05f;right.x=-.11f;left.x=.11f;}
+ float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=npc.track().scale/1.6f;
+ auto grip=[&](Point3 p){return Point3{npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};};
+ return {grip(right),grip(left)};
+}
 NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 target,float raise)const{
  const auto&track=m_friendlyActors.at(actor).track();NpcWeaponPose weapon;
  if(npcIncapacitated(actor)||track.ai.mode!=ActorAiMode::Guard||!track.ai.armed)return weapon;

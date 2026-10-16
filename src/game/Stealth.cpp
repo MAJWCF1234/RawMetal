@@ -32,15 +32,45 @@ void Game::saveRestrainedPose(size_t actor){
  auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);friendlyWorld(npc.homeLevel).setActorPose(npc.homeActor,projected);
 }
 void Game::restrainNpc(size_t actor,bool held){
- if(!canTakedown(actor)||heldNpc()>=0)return;
+ if(!canTakedown(actor)||heldNpc()>=0||m_takedownActor>=0)return;
  auto&npc=m_friendlyActors[actor];clearGuardSchedule(actor);
  setState(friendlyKey(actor,"restraint"),held?2:1);setState(friendlyKey(actor,"restraint_ms"),0);setState(friendlyKey(actor,"restraint_fraction"),0);
  for(const char*field:{"weapon_aim","weapon_recovery","weapon_bash","weapon_bash_pose","grenade_windup","support_ms","drone_windup","drone_busy","engineer_pad_stage","engineer_pad_ms","guard_seen","guard_slot"})setState(friendlyKey(actor,field),0);
  if(held)setState(friendlyKey(actor,"restraint_weapon"),m_weaponEquipped?int(m_equippedWeapon):0);
- equipWeapon(WeaponId::Fists);npc.pose.clip=held?0:4;npc.pose.phase=0;npc.pose.lookAtActor=-1;saveRestrainedPose(actor);
- m_punchAge=0;m_shotCooldown=.5f;m_suppressFire=true;sound(Sound::PunchHit,.30f,.8f);
- m_pickupNotice=held?"GUARD HELD / KEEP THEM BETWEEN YOU AND FIRE":"GUARD UNCONSCIOUS";m_pickupNoticeTime=2;
+ equipWeapon(WeaponId::Fists);npc.pose.lookAtActor=-1;
+ if(held){
+  npc.pose.clip=0;npc.pose.phase=0;saveRestrainedPose(actor);
+  m_punchAge=10;m_shotCooldown=.5f;m_suppressFire=true;sound(Sound::PunchHit,.30f,.8f);
+  m_pickupNotice="GUARD HELD / KEEP THEM BETWEEN YOU AND FIRE";m_pickupNoticeTime=2;
+ }else{
+  // Standing rear choke: wrap the neck, then drop them. Do not fire the jab
+  // animation — crouched punches read as ankle hits. The struggle is a real
+  // spatial impact so nearby detail can investigate before the body is found.
+  if(m_player.crouched){float feet=groundHeight(m_player.pos);if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.z=feet;}}
+  m_player.pitch*=.2f;m_takedownActor=int(actor);m_takedownAge=0;
+  npc.pose.clip=0;npc.pose.phase=0;saveRestrainedPose(actor);
+  m_punchAge=10;m_shotCooldown=.55f;m_suppressFire=true;
+  float neck=npc.pose.z+npc.track().scale*.85f;m_sounds.push_back({Sound::PunchHit,npc.pose.position,.85f,.72f,true,14,neck});
+  m_pickupNotice="GUARD UNCONSCIOUS";m_pickupNoticeTime=2;
+ }
  updateGuardFlags();
+}
+void Game::updateTakedown(float dt){
+ if(m_takedownActor<0)return;
+ if(size_t(m_takedownActor)>=m_friendlyActors.size()||dead()){m_takedownActor=-1;m_takedownAge=0;return;}
+ auto&npc=m_friendlyActors[size_t(m_takedownActor)];
+ if(npc.level!=m_level||state(npc.track().deadState)||!npcIncapacitated(size_t(m_takedownActor))||npcHeld(size_t(m_takedownActor))){m_takedownActor=-1;m_takedownAge=0;return;}
+ m_takedownAge+=std::max(0.f,dt);
+ if(m_player.crouched){float feet=groundHeight(m_player.pos);if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.z=feet;}}
+ m_player.pitch+=(0.f-m_player.pitch)*std::min(1.f,dt*10.f);
+ // Keep them upright and facing away while the arms lock around the neck.
+ setState(friendlyKey(size_t(m_takedownActor),"restraint_ms"),0);setState(friendlyKey(size_t(m_takedownActor),"restraint_fraction"),0);
+ npc.pose.yaw=wrapAngle(kPi*.5f-m_player.angle);npc.pose.clip=0;npc.pose.phase=0;npc.pose.lookAtActor=-1;
+ if(m_takedownAge>=.42f){
+  npc.pose.clip=4;npc.pose.phase=0;saveRestrainedPose(size_t(m_takedownActor));
+  m_sounds.push_back({Sound::Land,npc.pose.position,.55f,.88f,true,10,npc.pose.z+.04f});
+  m_takedownActor=-1;m_takedownAge=0;
+ }else saveRestrainedPose(size_t(m_takedownActor));
 }
 void Game::releaseNpc(bool unconscious){
  int index=heldNpc();if(index<0)return;size_t actor=size_t(index);auto&npc=m_friendlyActors[actor];
@@ -62,8 +92,8 @@ void Game::updateStealth(const InputState&input,float){
  if(index>=0){
   auto&npc=m_friendlyActors[size_t(index)];
   if(dead()||npc.level!=m_level||state(npc.track().deadState)||input.jump||!m_player.grounded){releaseNpc(true);return;}
-  if(subdue){releaseNpc(true);m_punchAge=0;sound(Sound::PunchHit,.3f,.8f);return;}
-  if(input.fire&&!m_previousFire&&!m_suppressFire){size_t actor=size_t(index);releaseNpc(true);damageFriendly(actor,float(npc.track().health),m_player.pos,{ShotKind::Player,m_level,0});m_punchAge=0;return;}
+  if(subdue){releaseNpc(true);m_punchAge=10;sound(Sound::PunchHit,.3f,.8f);return;}
+  if(input.fire&&!m_previousFire&&!m_suppressFire){size_t actor=size_t(index);releaseNpc(true);damageFriendly(actor,float(npc.track().health),m_player.pos,{ShotKind::Player,m_level,0});m_punchAge=10;return;}
   Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},target=m_player.pos+forward*.62f;
   float feet=groundHeight(target);auto old=npc.pose.position;
   bool clear=target.x>=.25f&&target.y>=.25f&&target.x<23.75f&&target.y<23.75f&&std::fabs(feet-m_player.z)<.28f&&friendlyWalkSegment(m_level,old,npc.pose.z,target,npc.track().scale)&&
@@ -118,6 +148,27 @@ bool Game::testStealth(){
  }
  {auto g=scene();g.setState(g.friendlyKey(0,"guard_confirmed"),1);check(g.nearbyTakedown()<0,"A guard with a confirmed hostile memory cannot be silently captured");}
  {auto g=scene();g.setState(g.friendlyKey(0,"guard_mode"),int(GuardState::Investigate));check(g.nearbyTakedown()==0,"A noise investigator is vulnerable from behind before identifying the player");}
+ {
+  auto original=scene();auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);
+  auto&victim=map->actorTracks[0];for(auto&key:victim.keys){key.position={8.5f,6.5f};key.yaw=-kPi*.5f;}victim.ai.patrol={{{8.5f,6.5f},0,5000}};
+  auto witness=victim;witness.damageState=stateId("stealth_witness_damage");witness.deadState=stateId("stealth_witness_dead");
+  for(auto&key:witness.keys){key.position={5.5f,6.5f};key.yaw=kPi*.5f;}witness.ai.patrol={{{5.5f,6.5f},0,5000}};map->actorTracks.push_back(witness);campaign->maps[0]=map;
+  Game g(campaign);g.m_player.pos={9.4f,6.5f};g.m_player.angle=kPi;InputState q;q.subdue=true;g.update(q,1.f/60);
+  for(int i=0;i<90;++i)g.update({},1.f/60);
+  g.m_player.pos={4.55f,6.5f};g.m_player.angle=0;
+  check(g.npcIncapacitated(0)&&g.state(g.friendlyKey(1,"guard_confirmed"))&&g.nearbyTakedown()<0,"Seeing a fallen colleague confirms a hostile and bars the next silent rear takedown");
+ }
+ {
+  auto original=scene();auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);
+  auto&victim=map->actorTracks[0];for(auto&key:victim.keys){key.position={8.5f,6.5f};key.yaw=-kPi*.5f;}victim.ai.patrol={{{8.5f,6.5f},0,5000}};
+  auto listener=victim;listener.damageState=stateId("stealth_listen_damage");listener.deadState=stateId("stealth_listen_dead");
+  // Face away so sight cannot steal the frame — the choke must carry on sound alone.
+  for(auto&key:listener.keys){key.position={14.5f,6.5f};key.yaw=kPi*.5f;}listener.ai.patrol={{{14.5f,6.5f},0,5000}};map->actorTracks.push_back(listener);campaign->maps[0]=map;
+  Game g(campaign);g.m_player.pos={9.4f,6.5f};g.m_player.angle=kPi;InputState q;q.subdue=true;g.update(q,1.f/60);
+  auto choke=std::find_if(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return e.sound==Sound::PunchHit&&e.spatial;});
+  check(choke!=g.m_sounds.end()&&choke->gain>=.8f,"A rear knockout emits a loud spatial struggle at the victim");
+  check(g.guardState(1)==GuardState::Investigate,"A nearby guard investigates the choke instead of remaining on patrol");
+ }
  {auto g=scene();g.m_player.pos={3.5f,6.5f};check(g.nearbyTakedown()<0,"Rear actions respect physical reach");}
  {auto original=scene();auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);map->structures.push_back({4.95f,6,5.05f,7,0,2});campaign->maps[0]=map;Game g(campaign);check(g.nearbyTakedown()<0,"A narrow wall blocks a rear action even within arm's reach");}
  {auto g=scene();g.restrainNpc(0,true);g.update({},.01f);InputState fire;fire.fire=true;g.update(fire,.01f);Game loaded(g.m_customCampaign);check(g.state("stealth_dead")==1&&!g.npcIncapacitated(0)&&loaded.decodeSave(g.encodeSave()),"Executing a held guard clears the living restraint and remains saveable");}

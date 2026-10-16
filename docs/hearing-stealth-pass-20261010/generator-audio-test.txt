@@ -1,1 +1,0 @@
-Generator orbit: finite stereo gains, no duplicate machine emitters, maximum gain change 0.000202954; 50 ms seamless loop crossfade enabled.

@@ -5,6 +5,7 @@
 #include "../audio/AudioEngine.h"
 #include <chrono>
 #include <fstream>
+#include <filesystem>
 #include <numeric>
 #include <algorithm>
 #include <type_traits>
@@ -53,6 +54,13 @@ bool SoftwareRenderer::testCreatureAnimation(){
  workerReport<<"PASS: six skeletal clips, grounded poses and interpolated hand attachments\n";return true;
 }
 __declspec(noinline) bool SoftwareRenderer::testHardware(){
+ // Analytic texel/radiance expectations describe native source atlases.
+ // Presentation upsampling is exercised by the ordinary gameplay smoke.
+ struct NativeAtlasScope {
+  int previous=SoftwareRenderer::texturePresentScale();
+  NativeAtlasScope(){SoftwareRenderer::setTexturePresentScale(1);}
+  ~NativeAtlasScope(){SoftwareRenderer::setTexturePresentScale(previous);}
+ } nativeAtlases;
  auto storage=std::make_unique<SoftwareRenderer>(128,72);auto&renderer=*storage;std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;
  auto check=[&](bool condition,const char* label){report<<label<<": "<<(condition?"PASS":"FAIL")<<'\n';passed&=condition;};
  static_assert(std::is_aggregate_v<Texture>);
@@ -299,6 +307,54 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  }
  auto reliefScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);float reliefScale=renderer.m_wall.parallaxScale;renderer.m_wall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_wall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(changed>8,"Nearby wall relief changes the Vulkan image");
  check(renderer.hardwareActive(),"Hardware remains active without fallback");report<<(passed?"PASS":"FAIL")<<": Vulkan material / depth / clipping checks\n";return passed;
+}
+bool SoftwareRenderer::testGpuActors(){
+ std::filesystem::create_directories(".build/gpu-actor-compare");
+ std::ofstream report("gpu-actor-test.txt");bool passed=true;uint64_t triangles=0;int view=0;
+ auto storage=std::make_unique<SoftwareRenderer>(960,540);auto&renderer=*storage;
+ if(!renderer.enableHardware())return false;
+ report<<renderer.hardwareName()<<" / Vulkan 1.0 actor vertex work\n";
+ auto save=[&](const std::vector<uint32_t>&pixels,const char*mode){std::ofstream out(".build/gpu-actor-compare/"+std::to_string(view)+"-"+mode+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
+ auto compare=[&](Game scene){
+  renderer.m_gpuActorPreparation=false;renderer.render(scene);renderer.render(scene);auto reference=renderer.m_pixels;
+  renderer.m_gpuActorPreparation=true;renderer.render(scene);auto work=renderer.m_gpu->actorStatistics();triangles+=work[1];
+  size_t changed=0,severe=0;uint64_t error=0;int peak=0;
+  for(size_t i=0;i<reference.size();++i){int largest=0;for(int shift:{0,8,16}){int d=std::abs(int((reference[i]>>shift)&255)-int((renderer.m_pixels[i]>>shift)&255));largest=std::max(largest,d);error+=d;}changed+=largest>0;severe+=largest>8;peak=std::max(peak,largest);}
+  double mean=double(error)/(reference.size()*3);
+  // Shader arithmetic may move a few texture-edge samples. Large image or
+  // lighting changes fail; retain paired captures for inspection on failure.
+  bool same=mean<=.01&&severe<=reference.size()*.0001;
+  report<<"View "<<view<<": changed="<<changed<<" >8="<<severe<<" max="<<peak<<" mean="<<mean<<" actors="<<work[0]<<" triangles="<<work[1]<<' '<<(same?"PASS":"FAIL")<<'\n';report.flush();
+  if(view<6||!same){save(reference,"cpu");save(renderer.m_pixels,"gpu");}
+  passed&=same&&renderer.hardwareActive();++view;
+ };
+ for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,0));
+ for(int sample:{8,10,11,12,13})for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,sample));
+ for(int sample:{12,13})for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,sample,1));
+ for(int stage:{0,1,2,7,8,9,10,11})compare(Game::exclusionInspection(stage));
+ passed&=triangles>1000;
+ report<<(passed?"PASS":"FAIL")<<": GPU actor geometry/material/lighting reference; "<<triangles<<" hardware triangles\n";
+ return passed;
+}
+bool SoftwareRenderer::testVisibility(){
+ std::ofstream report("visibility-test.txt");bool passed=true;
+ auto storage=std::make_unique<SoftwareRenderer>(960,540);auto&renderer=*storage;
+ if(!renderer.enableHardware())return false;
+ renderer.m_shadowBudgetLimit=10000000;
+ int count=0;
+ auto compare=[&](Game scene){
+  renderer.m_visibilityCulling=false;renderer.render(scene);renderer.render(scene);auto reference=renderer.m_pixels;
+  renderer.m_visibilityCulling=true;renderer.render(scene);size_t changed=0;
+  for(size_t i=0;i<reference.size();++i)changed+=reference[i]!=renderer.m_pixels[i];
+  report<<"View "<<count++<<": "<<changed<<" changed pixels\n";report.flush();passed&=changed==0&&renderer.hardwareActive();
+ };
+ for(int stage=0;stage<12;++stage)compare(Game::exclusionInspection(stage));
+ for(int level:{0,3,6,14})for(float angle:{0.f,1.57f,3.14f,4.71f}){
+  const auto&def=chunkDefinition(WorldId::Campaign,level);
+  compare(Game::mapInspection(def.playerStart,angle,0,level,false,def.spawnHeight,true));
+ }
+ report<<(passed?"PASS":"FAIL")<<": opaque occlusion preserves reference pixels\n";
+ return passed;
 }
 bool SoftwareRenderer::testPerformance(){
  using Clock=std::chrono::steady_clock;std::ofstream report("performance-test.txt");bool passed=true;
