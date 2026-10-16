@@ -15,7 +15,7 @@ Exclusion yard CPU pass + docs vault reorg. Lab `--lab-performance` on RTX 5060 
 
 **Play:** Custom Maps ? ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
 
-**Validation:** filled after Release build (EXE size + smoke / exclusion / stealth as run).
+**Validation:** EXE 26,665,984 / 33,554,432 bytes (6.57 MiB headroom). `--smoke-test --vulkan`, `--exclusion-test`, `--stealth-test`, `--friendly-ai-test` PASS.
 
 ---
 
