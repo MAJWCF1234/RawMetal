@@ -68,6 +68,33 @@ bool Game::testGuardTactics(){
   check(shots==0&&g.player().health==100&&!g.npcWeaponPose(0).armed&&g.state(g.friendlyKey(0,"guard_cover"))==0,"Existing unarmed guards acquire neither weapons nor tactical cover movement");
  }
  for(const char*field:{"guard_cover","guard_cover_wait","guard_cover_x","guard_cover_y","guard_cover_z"}){auto g=scene();g.setState(g.friendlyKey(0,field),std::numeric_limits<int>::max());Game loaded(g.m_customCampaign);check(!loaded.decodeSave(g.encodeSave()),"Malformed saved repositioning state is rejected safely");}
+ {
+  // Narrow corridor: north wall at y=7, south at y=6 — lateral room is tiny.
+  auto original=scene();auto g=changed(original,[](auto&map){map.structures.clear();map.structures.push_back({4,7,14,7.15f,0,3});map.structures.push_back({4,5.85f,14,6,0,3});
+   for(auto&key:map.actorTracks[0].keys){key.position={6.5f,6.5f};key.yaw=kPi*.5f;}map.actorTracks[0].ai.patrol={{{6.5f,6.5f},0,1000}};map.definition.playerStart={12.5f,6.5f};});
+  const auto&pose=g.npcActors()[0].pose;float north=g.guardLateralClearance(0,0,pose,{0,1}),south=g.guardLateralClearance(0,0,pose,{0,-1}),east=g.guardLateralClearance(0,0,pose,{1,0});
+  report<<"corridor clearance N/S/E="<<north<<','<<south<<','<<east<<'\n';
+  check(north<.6f&&south<.6f&&east>1.2f,"Corridor clearance shrinks sideways steps while the long axis stays open");
+ }
+ {
+  // Low cover from the main fixture: seed a live target, then ask for a combat post.
+  auto g=scene();AiTarget threat;threat.kind=ShotKind::Player;threat.level=0;threat.index=0;threat.position=g.player().pos;threat.feet=g.player().z;threat.height=g.player().hullHeight();threat.eye=g.player().eye;threat.faction=AiFaction::Player;
+  g.rememberGuardTarget(0,threat);g.setState(g.friendlyKey(0,"guard_mode"),int(GuardState::Alert));g.setState(g.friendlyKey(0,"guard_confirmed"),1);g.setState(g.friendlyKey(0,"guard_memory"),1);g.setState(g.friendlyKey(0,"guard_seen"),1);
+  Vec2 post{};float feet=0;const auto&pose=g.npcActors()[0].pose;bool found=g.findGuardCombatPost(0,0,pose,{10.5f,6.5f,.96f},post,feet,1.f);
+  check(found&&length(post-Vec2{6.5f,6.5f})>.2f,"Combat posts pick a walkable clear-shot offset around authored cover");
+ }
+ {
+  auto original=scene();auto g=changed(original,[](auto&map){map.structures.clear();
+   map.definition.playerStart={12.5f,6.5f};map.actorTracks[0].ai.squad=stateId("tactics_flank_squad");map.actorTracks[0].ai.role=GuardSquadRole::Assault;
+   auto peer=map.actorTracks[0];peer.ai.role=GuardSquadRole::Rusher;peer.damageState=stateId("tactics_flank_peer_damage");peer.deadState=stateId("tactics_flank_peer_dead");
+   for(auto&key:peer.keys)key.position={6.5f,8.5f};peer.ai.patrol={{{6.5f,8.5f},0,1000}};map.actorTracks.push_back(peer);});
+  for(size_t actor=0;actor<2;++actor){AiTarget threat;threat.kind=ShotKind::Player;threat.level=0;threat.index=0;threat.position=g.player().pos;threat.feet=g.player().z;threat.height=g.player().hullHeight();threat.eye=g.player().eye;threat.faction=AiFaction::Player;
+   g.rememberGuardTarget(actor,threat);g.setState(g.friendlyKey(actor,"guard_mode"),int(GuardState::Alert));g.setState(g.friendlyKey(actor,"guard_confirmed"),1);g.setState(g.friendlyKey(actor,"guard_memory"),1);g.setState(g.friendlyKey(actor,"guard_seen"),1);
+   g.setState(g.friendlyKey(actor,"guard_x"),int(std::round(g.player().pos.x*1000)));g.setState(g.friendlyKey(actor,"guard_y"),int(std::round(g.player().pos.y*1000)));g.setState(g.friendlyKey(actor,"guard_z"),0);}
+  tick(g,2);bool hopped=false;Vec2 start=g.npcActors()[0].pose.position;int flank=g.guardFlankSide(0);
+  for(int i=0;i<360;++i){tick(g,1);hopped|=length(g.npcActors()[0].pose.position-start)>.25f;if(g.state(g.friendlyKey(0,"guard_flank_done"))&&hopped)break;}
+  check(flank!=0&&hopped,"Assigned flankers physically leave their spawn to take an environment-aware post");
+ }
  report<<"checks="<<checks<<" result="<<(passed?"PASS":"FAIL")<<'\n';return passed;
 }
 }

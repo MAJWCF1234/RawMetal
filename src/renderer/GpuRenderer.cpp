@@ -29,6 +29,9 @@ const uint32_t compositeFragmentShader[]=
 #include "composite.frag.inc"
 ;
 struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
+struct ActorLighting {std::array<std::array<float,4>,6> normalBrightness,light0,light1,surfaceNormal;std::array<float,4> originEye;};
+static_assert(sizeof(ActorLighting)==400);
+constexpr size_t MaxGpuActors=1024;
 struct Buffer {VkBuffer handle=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;void* mapped=nullptr;VkDeviceSize size=0;};
 struct Image {VkImage handle=VK_NULL_HANDLE;VkImageView view=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;};
 struct EmissionLevel {int width,height;std::vector<std::array<float,4>> pixels;};
@@ -324,13 +327,16 @@ struct GpuRenderer::Impl {
  struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;};
  std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
  std::vector<Vertex> vertices;std::vector<Batch> batches;
+ std::array<Buffer,FrameCount> actorBuffers{};
+ std::vector<ActorLighting> actorLights;
+ std::uint64_t actorTriangles=0;
  std::vector<Vertex> sortedVertices;std::vector<Batch> sortedBatches;
  int width=0,height=0;VkFormat sceneFormat=VK_FORMAT_B8G8R8A8_UNORM;VkSampleCountFlagBits sceneSamples=VK_SAMPLE_COUNT_1_BIT;bool hdrScene=false;std::string name;
  ~Impl(){
   if(device){vkDeviceWaitIdle(device);if(vrMode&&VrRuntime::active())VrRuntime::active()->shutdownGraphics();if(framebuffer)vkDestroyFramebuffer(device,framebuffer,nullptr);
    for(auto f:swapFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:swapViews)vkDestroyImageView(device,v,nullptr);for(auto&i:vrOutputs){i.view=VK_NULL_HANDLE;destroy(i);}if(swapchain)vkDestroySwapchainKHR(device,swapchain,nullptr);
    for(auto f:mirrorFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:mirrorViews)vkDestroyImageView(device,v,nullptr);if(mirrorPipeline)vkDestroyPipeline(device,mirrorPipeline,nullptr);if(mirrorPass)vkDestroyRenderPass(device,mirrorPass,nullptr);
-   for(auto&b:projectionBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
+   for(auto&b:projectionBuffers)destroy(b);for(auto&b:actorBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
    destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
    for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(overlayBuffers[i]);}
    for(auto&entry:staticCaches)destroy(entry.second.buffer);
@@ -550,7 +556,26 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  check(vkCreateFence(m->device,&fenceInfo,nullptr,&m->uploadFence),"Create upload fence");
  VkDescriptorSetLayoutBinding bindings[4]{};for(uint32_t i=0;i<4;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
  VkDescriptorSetLayoutCreateInfo set{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};set.bindingCount=4;set.pBindings=bindings;check(vkCreateDescriptorSetLayout(m->device,&set,nullptr,&m->setLayout),"Create material layout");VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,8192};VkDescriptorPoolCreateInfo descriptors{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptors.maxSets=2048;descriptors.poolSizeCount=1;descriptors.pPoolSizes=&poolSize;check(vkCreateDescriptorPool(m->device,&descriptors,nullptr,&m->descriptors),"Create descriptor pool");
- VkPushConstantRange viewPush{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,32*sizeof(float)};VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};VkDescriptorSetLayoutBinding projectionBinding{0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=1;projectionInfo.pBindings=&projectionBinding;check(vkCreateDescriptorSetLayout(m->device,&projectionInfo,nullptr,&m->projectionLayout),"Create stereo projection layout");VkDescriptorPoolSize projectionSize{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2};VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=2;projectionPool.poolSizeCount=1;projectionPool.pPoolSizes=&projectionSize;check(vkCreateDescriptorPool(m->device,&projectionPool,nullptr,&m->projectionPool),"Create stereo projection pool");VkDescriptorSetLayout projectionLayouts[]={m->projectionLayout,m->projectionLayout};VkDescriptorSetAllocateInfo projectionAllocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};projectionAllocate.descriptorPool=m->projectionPool;projectionAllocate.descriptorSetCount=2;projectionAllocate.pSetLayouts=projectionLayouts;check(vkAllocateDescriptorSets(m->device,&projectionAllocate,m->projectionSets.data()),"Allocate stereo projection descriptors");for(int i=0;i<2;++i){m->makeBuffer(m->projectionBuffers[i],sizeof(m->vrProjection),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);VkDescriptorBufferInfo buffer{m->projectionBuffers[i].handle,0,sizeof(m->vrProjection)};VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=m->projectionSets[i];write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffer;vkUpdateDescriptorSets(m->device,1,&write,0,nullptr);}VkDescriptorSetLayout pipelineSets[]={m->setLayout,m->projectionLayout};layout.setLayoutCount=2;layout.pSetLayouts=pipelineSets;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
+ VkPushConstantRange viewPush{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,32*sizeof(float)};
+ VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+ VkDescriptorSetLayoutBinding projectionBindings[]={
+  {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
+  {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr}};
+ VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=2;projectionInfo.pBindings=projectionBindings;
+ check(vkCreateDescriptorSetLayout(m->device,&projectionInfo,nullptr,&m->projectionLayout),"Create view and actor layout");
+ VkDescriptorPoolSize projectionSizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2}};
+ VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=2;projectionPool.poolSizeCount=2;projectionPool.pPoolSizes=projectionSizes;
+ check(vkCreateDescriptorPool(m->device,&projectionPool,nullptr,&m->projectionPool),"Create view and actor pool");
+ VkDescriptorSetLayout projectionLayouts[]={m->projectionLayout,m->projectionLayout};VkDescriptorSetAllocateInfo projectionAllocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};projectionAllocate.descriptorPool=m->projectionPool;projectionAllocate.descriptorSetCount=2;projectionAllocate.pSetLayouts=projectionLayouts;
+ check(vkAllocateDescriptorSets(m->device,&projectionAllocate,m->projectionSets.data()),"Allocate view and actor descriptors");
+ for(int i=0;i<Impl::FrameCount;++i){
+  m->makeBuffer(m->projectionBuffers[i],sizeof(m->vrProjection),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+  m->makeBuffer(m->actorBuffers[i],MaxGpuActors*sizeof(ActorLighting),VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+  VkDescriptorBufferInfo buffers[]={{m->projectionBuffers[i].handle,0,sizeof(m->vrProjection)},{m->actorBuffers[i].handle,0,MaxGpuActors*sizeof(ActorLighting)}};
+  VkWriteDescriptorSet writes[2]{};for(int binding=0;binding<2;++binding){auto&write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=m->projectionSets[i];write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=binding?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffers[binding];}
+  vkUpdateDescriptorSets(m->device,2,writes,0,nullptr);
+ }
+ VkDescriptorSetLayout pipelineSets[]={m->setLayout,m->projectionLayout};layout.setLayoutCount=2;layout.pSetLayouts=pipelineSets;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
   const bool multisampled=m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT;uint32_t depthIndex=multisampled?2u:1u;VkAttachmentDescription attachments[3]{};attachments[0].format=m->sceneFormat;attachments[0].samples=m->sceneSamples;attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[0].storeOp=multisampled?VK_ATTACHMENT_STORE_OP_DONT_CARE:VK_ATTACHMENT_STORE_OP_STORE;attachments[0].stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[0].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachments[0].finalLayout=multisampled?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   if(multisampled){attachments[1]=attachments[0];attachments[1].samples=VK_SAMPLE_COUNT_1_BIT;attachments[1].loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[1].storeOp=VK_ATTACHMENT_STORE_OP_STORE;attachments[1].finalLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;}
  attachments[depthIndex]=attachments[0];attachments[depthIndex].format=VK_FORMAT_D32_SFLOAT;attachments[depthIndex].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[depthIndex].storeOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[depthIndex].finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -623,7 +648,7 @@ void GpuRenderer::begin(int width,int height){
   m->frameInFlight[m->frameIndex]=false;
  }
  for(auto&buffer:m->retiredBuffers[m->frameIndex])m->destroy(buffer);m->retiredBuffers[m->frameIndex].clear();
- m->vertices.clear();m->batches.clear();m->capturing=false;m->captureSlot=-1;m->renderingViewmodel=false;
+ m->vertices.clear();m->batches.clear();m->actorLights.clear();m->actorTriangles=0;m->capturing=false;m->captureSlot=-1;m->renderingViewmodel=false;
  if(width==m->width&&height==m->height)return;
  // Render target size changed — must drain GPU fully before resize.
  vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
@@ -655,6 +680,33 @@ void GpuRenderer::endStaticCache(){
 void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches)m->retire(entry.second.buffer);m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
 std::uint64_t GpuRenderer::staticCacheHits()const{return m->cacheHits;}
 void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});m->renderingViewmodel=true;}
+int GpuRenderer::beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye){
+ if(m->capturing||m->actorLights.size()>=MaxGpuActors)return -1;
+ ActorLighting record{};record.originEye={origin.x,origin.y,eye.x,eye.y};
+ for(size_t side=0;side<6;++side){auto n=normals[side];record.normalBrightness[side]={n.x,n.y,n.z,brightness[side]};
+  const auto&source=lights[side];auto a=source.directions[0],b=source.directions[1],normal=source.surfaceNormal;
+  record.light0[side]={a.x,a.y,a.z,source.weights[0]};record.light1[side]={b.x,b.y,b.z,source.weights[1]};record.surfaceNormal[side]={normal.x,normal.y,normal.z,0};
+ }
+ int index=int(m->actorLights.size());m->actorLights.push_back(record);return index;
+}
+std::array<std::uint64_t,2> GpuRenderer::actorStatistics()const{return {m->actorLights.size(),m->actorTriangles};}
+void GpuRenderer::submitActor(MeshVertex a,MeshVertex b,MeshVertex c,Point3 outward,int actor,const SoftwareRenderer::Texture&texture,float emissionScale){
+ uint64_t key;uint32_t sortKey;
+ if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
+ else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
+ uint32_t start=uint32_t(m->vertices.size());auto e1=b.p-a.p,e2=c.p-a.p;
+ Vertex common{};
+ common.lighting[0]=outward.x;common.lighting[1]=outward.y;common.lighting[2]=outward.z;common.lighting[3]=texture.emission.empty()?0.f:emissionScale;
+ common.light0[0]=e1.x;common.light0[1]=e1.y;common.light0[2]=e1.z;common.light0[3]=b.u-a.u;
+ common.light1[0]=e2.x;common.light1[1]=e2.y;common.light1[2]=e2.z;common.light1[3]=b.v-a.v;
+ common.worldNormal[0]=c.u-a.u;common.worldNormal[1]=c.v-a.v;
+ common.worldNormal[2]=!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f;common.worldNormal[3]=texture.parallaxScale;
+ common.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;common.surface[3]=3.f+actor;
+ for(const auto&v:{a,b,c}){auto out=common;out.position[0]=v.p.x;out.position[1]=v.p.y;out.position[2]=v.p.z;out.position[3]=v.light;out.uv[0]=v.u;out.uv[1]=v.v;m->vertices.push_back(out);}
+ if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().material==key)m->batches.back().count+=3;
+ else m->batches.push_back({key,start,3,false,false,-1,sortKey});
+ ++m->actorTriangles;
+}
 void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale){
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
@@ -670,6 +722,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false,false,-1,sortKey});
 }
 void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
+ if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
  m->flushUploads();
  // Batch opaque geometry by material, then additive effects, independently for

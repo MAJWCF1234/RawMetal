@@ -17,7 +17,9 @@ std::vector<AiStimulus> Game::aiStimuli()const{
   if((!weapon&&!step&&!impact&&!danger&&!mechanism)||!std::isfinite(event.gain)||event.gain<=0||!std::isfinite(event.radius)||event.radius<=0||!std::isfinite(event.position.x)||!std::isfinite(event.position.y)||std::isinf(event.z))continue;
   auto source=event.spatial||std::isfinite(event.z)?event.position:m_player.pos;auto local=source;const auto&world=worldAt(local);
   float z=std::isfinite(event.z)?event.z:event.spatial?world.floorHeight(local.x,local.y)+.7f:m_player.z+m_player.eye;
-  float radius=std::min(event.radius,danger?20.f:weapon?14.f:step?4.5f:mechanism?8.f:6.f)*std::sqrt(std::clamp(event.gain,0.f,1.f));
+  // Choke/takedown PunchHits carry farther than tossed junk — still under gunshot range.
+  float impactCap=event.sound==Sound::PunchHit?10.f:6.f;
+  float radius=std::min(event.radius,danger?20.f:weapon?14.f:step?4.5f:mechanism?8.f:impactCap)*std::sqrt(std::clamp(event.gain,0.f,1.f));
   int owner=-1;
   // NPC firearm sounds also appear in the general mixer. Attribute their
   // captured source so the duplicate cannot bypass own/friendly-shot filters.

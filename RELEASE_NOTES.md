@@ -4,6 +4,21 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.3
+
+Exclusion yard CPU pass + docs vault reorg. Lab `--lab-performance` on RTX 5060 Ti settled ~**8.4 ms** (~**119 FPS**) after hull-scale walk pitch and static crate/prop VBO bake; calm-patrol think LOD ships for idle friendlies (combat yard totals noise-flat). GoldSrc cost-model notes live in the Obsidian vault under `docs/`.
+
+- Indoor/terrain `aiWalkSamplePitch` coarsened; static C/B + props baked into scene VBO (cache rev 4)
+- Calm patrol AI think LOD + `think_debt_us` bank; stealth/guard/tactics follow-ons from the same arc
+- Depthworks branding resources in `src/branding/`; docs flattened to topic folders with `Home.md`
+- Hard **32 MiB** ceiling unchanged
+
+**Play:** Custom Maps ? ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
+
+**Validation:** filled after Release build (EXE size + smoke / exclusion / stealth as run).
+
+---
+
 ## v0.7.2-preview.2
 
 Synced tester build of the NPC radio polish from preview.1. Repo root hygiene: ignore ashfall performance dumps; no gameplay change.

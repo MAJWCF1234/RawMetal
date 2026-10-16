@@ -18,7 +18,7 @@ static float roughStep(Enemy::Kind kind){
 // real cliff still fails the same test.
 static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr,bool sweep=false){
  auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height);}
- int samples=std::max(1,int(std::ceil(distance/.08f)));float z=fromZ;
+ float pitch=aiWalkSamplePitch(w.hasTerrain());int samples=std::max(1,int(std::ceil(distance/pitch)));float z=fromZ;
  for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f);
   if(sweep&&!aiStructureSegment(w,from+delta*(float(i-1)/samples),z,p,height))return false;
   float rise=ground-z,drop=z-ground;if(rise>stepHeight+.025f||drop>std::max(.48f,stepHeight*1.45f)||!navFits(w,p,ground,height))return false;z=ground;
@@ -36,7 +36,7 @@ static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,floa
  while(!queue.empty()&&nodes[target].parent<0){int current=queue.front();queue.pop();auto n=nodes[current];int x=int(n.p.x),y=int(n.p.y);
   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
    for(int next:cells[ny*24+nx]){if(nodes[next].parent>=0)continue;float feet=n.z;bool clear=true;
-    for(int sample=1;sample<=8;++sample){Vec2 p=n.p+d*(sample/8.f);float ground=navSupport(w,p,feet+.215f);
+    for(int sample=1;sample<=4;++sample){Vec2 p=n.p+d*(sample/4.f);float ground=navSupport(w,p,feet+.215f);
      if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height)){clear=false;break;}feet=ground;}
     if(clear&&std::fabs(feet-nodes[next].z)<.03f){nodes[next].parent=current;queue.push(next);}
    }

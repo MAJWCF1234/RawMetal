@@ -1,3 +1,0 @@
-Loaded 42 embedded samples.
-12 second gameplay mix; peak voices: 15
-Stereo direction, distance attenuation, overlap, mute and PCM output: PASS

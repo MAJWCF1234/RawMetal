@@ -9,6 +9,7 @@ namespace {
 auto exclusionCampaign(){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";return std::filesystem::exists(path)?loadCustomCampaignFile(path):loadEmbeddedExclusionZoneCampaign();}
 }
 Game Game::exclusionInspection(int stage){
+ const bool endurance=stage==12;if(endurance)stage=2;
  if(stage<0||stage>11)throw std::runtime_error("Unknown Exclusion encounter view");
  if(stage>=10){
   Game g;g.loadLevel(14,false);g.updateStreaming(0);g.m_player.pos={1.4f,20};g.m_player.z=-25;
@@ -60,6 +61,8 @@ Game Game::exclusionInspection(int stage){
  g.m_player.angle=std::atan2(targets[stage].y-cameras[stage].y,targets[stage].x-cameras[stage].x);g.m_player.pitch=-6;
  if(!g.hullFits(g.player().pos,g.player().z,Player::StandingHeight))throw std::runtime_error("Exclusion preview camera intersects cover");
  g.equipWeapon(WeaponId::Fists);
+ // Benchmark only: keep the target alive through a sustained squad encounter.
+ if(endurance)g.m_player.health=100000;
  for(int i=0;i<12;++i)g.update({},1.f/60);
  return g;
 }

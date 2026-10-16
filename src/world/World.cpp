@@ -1,8 +1,12 @@
+#include "../core/FrameProfile.h"
 #include "World.h"
+#include "CollisionQueryBatch.h"
+#include "../core/Ray.h"
 #include "CampaignMaps.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <limits>
 
 namespace retro {
 namespace {
@@ -733,7 +737,7 @@ void World::settleExclusionFacilityOnTerrain(){
  m_structureCells.assign(size_t(Width*Height),{});
  if(m_structures.size()>65535)throw std::runtime_error("Exclusion facility exceeds the collision structure capacity");
  for(size_t index=0;index<m_structures.size();++index){const auto&s=m_structures[index];
-  for(int y=int(s.y1);y<int(std::ceil(s.y2));++y)for(int x=int(s.x1);x<int(std::ceil(s.x2));++x)
+  for(int y=int(std::floor(s.y1-.001f));y<=int(std::floor(s.y2+.001f));++y)for(int x=int(std::floor(s.x1-.001f));x<=int(std::floor(s.x2+.001f));++x)
    if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[size_t(y*Width+x)].push_back(static_cast<uint16_t>(index));}
  m_collisionCells={};m_collisionAll={};
 }
@@ -1553,6 +1557,11 @@ void World::buildLights(){
 std::size_t World::terrainSampleIndex(int sx,int sy,int sz)const{
  return size_t((sz*TerrainSamplesY+sy)*TerrainSamplesX+sx);
 }
+void World::buildTerrainBounds(){
+ m_terrainTops.assign(size_t(TerrainSamplesX)*TerrainSamplesY,255);
+ for(int z=0;z<TerrainSamplesZ;++z)for(int y=0;y<TerrainSamplesY;++y)for(int x=0;x<TerrainSamplesX;++x)
+  if(m_terrainDensity[terrainSampleIndex(x,y,z)]>0)m_terrainTops[size_t(y*TerrainSamplesX+x)]=static_cast<std::uint8_t>(z);
+}
 void World::buildTerrain(){
  m_terrain.clear();
  const size_t samples=size_t(TerrainSamplesX)*TerrainSamplesY*TerrainSamplesZ;
@@ -1566,6 +1575,7 @@ void World::buildTerrain(){
   m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=m_exclusionTerrain?authoredExclusionMaterial(wx,wy,z):authoredAshfallMaterial(wx,wy,z);
  }
 
+ buildTerrainBounds();
  constexpr int corner[8][3]={{0,0,0},{1,0,0},{0,1,0},{1,1,0},{0,0,1},{1,0,1},{0,1,1},{1,1,1}};
  constexpr int edges[12][2]={{0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7}};
  constexpr int cellsX=TerrainSamplesX-1,cellsY=TerrainSamplesY-1,cellsZ=TerrainSamplesZ-1;
@@ -1641,29 +1651,96 @@ float World::terrainDensity(float x,float y,float z)const{
  float c=mix(d(x0,y0,z1),d(x1,y0,z1),tx),e=mix(d(x0,y1,z1),d(x1,y1,z1),tx);
  return mix(mix(a,b,ty),mix(c,e,ty),tz);
 }
-float World::terrainSurfaceBelow(float x,float y,float feet)const{
- if(m_terrainDensity.empty())return 0;
- float high=std::min(feet+.04f,float(TerrainMaxZ+1)),highD=terrainDensity(x,y,high);
- for(float low=high-.125f;low>=TerrainMinZ-1;low-=.125f){
-  float lowD=terrainDensity(x,y,low);
+namespace {
+// One vertical query reuses its exact XY interpolation and density layers.
+// The cache lives only on this query's stack: edits, chunks and callers cannot
+// observe stale terrain, and concurrent read-only queries never share state.
+class TerrainColumn {
+ static constexpr int X=World::Width+3,Y=World::Height+3,Z=World::TerrainMaxZ-World::TerrainMinZ+3;
+ const std::vector<std::int8_t>& samples;
+ int base;float tx,ty;
+ float upperAir=std::numeric_limits<float>::infinity();
+ mutable std::array<float,Z> layers;
+ mutable std::uint64_t ready=0;
+ float layer(int z)const{
+  auto bit=std::uint64_t{1}<<z;if(ready&bit)return layers[size_t(z)];
+  int at=z*X*Y+base;
+  auto d=[&](int offset){return float(samples[size_t(at+offset)])/32.f;};
+  auto mix=[](float a,float b,float t){return a+(b-a)*t;};
+  float a=mix(d(0),d(1),tx),b=mix(d(X),d(X+1),tx);
+  float value=mix(a,b,ty);layers[size_t(z)]=value;ready|=bit;return value;
+ }
+public:
+ TerrainColumn(const std::vector<std::int8_t>& data,const std::vector<std::uint8_t>& tops,float x,float y):samples(data){
+  float sx=std::clamp(x+1,0.f,float(X-1)),sy=std::clamp(y+1,0.f,float(Y-1));
+  int ix=std::min(X-2,int(std::floor(sx))),iy=std::min(Y-2,int(std::floor(sy)));
+  base=iy*X+ix;tx=sx-ix;ty=sy-iy;
+  if(tops.size()==size_t(X*Y)){int highest=-1;
+   for(int offset:{0,1,X,X+1})if(tops[size_t(base+offset)]!=255)highest=std::max(highest,int(tops[size_t(base+offset)]));
+   // Tighten the conservative corner bound at this exact XY, using the
+   // same interpolated layers as the reference density. Above the highest
+   // positive layer the field is linear, so its zero crossing bounds air.
+   // A positive final layer remains solid under clamped queries above it.
+   if(highest==Z-1&&layer(highest)>0)return;
+   while(highest>=0&&layer(highest)<=0)--highest;
+   if(highest<0)upperAir=float(World::TerrainMinZ-1);
+   else{float solid=layer(highest),air=layer(highest+1);
+    upperAir=float(World::TerrainMinZ-1+highest)+solid/(solid-air)+.001f;
+   }
+  }
+ }
+ float airTop()const{return upperAir;}
+ float operator()(float z)const{
+  float sz=std::clamp(z-float(World::TerrainMinZ-1),0.f,float(Z-1));
+  int iz=std::min(Z-2,int(std::floor(sz)));float tz=sz-iz;
+  float a=layer(iz),b=layer(iz+1);return a+(b-a)*tz;
+ }
+};
+template<class Density> float terrainFloor(float feet,const Density& density,float airTop=std::numeric_limits<float>::infinity()){
+ float high=std::min(feet+.04f,float(World::TerrainMaxZ+1));
+ if(high>airTop)high-=std::floor((high-airTop)*8)*.125f;
+ float highD=density(high);
+ while(high-.125f>=World::TerrainMinZ-1){
+  // Density is linear between integer Z samples. Skip only samples in
+  // that same slab, retaining the original eighth-metre query lattice.
+  int steps=std::max(1,int((high-std::floor(high))*8));
+  float low=high-steps*.125f,lowD=density(low);
   if(highD<=0&&lowD>0){
-   float solid=low,air=high;for(int i=0;i<8;++i){float mid=(solid+air)*.5f;if(terrainDensity(x,y,mid)>0)solid=mid;else air=mid;}return (solid+air)*.5f;
+   for(float probe=high-.125f;probe>low;probe-=.125f){if(density(probe)>0){low=probe;break;}high=probe;}
+   float solid=low,air=high;for(int i=0;i<8;++i){float mid=(solid+air)*.5f;if(density(mid)>0)solid=mid;else air=mid;}return (solid+air)*.5f;
   }
   high=low;highD=lowD;
  }
- return float(TerrainMinZ-1);
+ return float(World::TerrainMinZ-1);
 }
-float World::terrainSurfaceAbove(float x,float y,float feet)const{
- if(m_terrainDensity.empty())return 128.f;
- float low=feet+.03f,lowD=terrainDensity(x,y,low);if(lowD>0)return feet;
- for(float high=low+.125f;high<=TerrainMaxZ+1;high+=.125f){
-  float highD=terrainDensity(x,y,high);
+template<class Density> float terrainCeiling(float feet,float limit,const Density& density){
+ float low=feet+.03f,lowD=density(low);if(lowD>0)return feet;
+ // Only a surface below the hull's top can reject that hull. Keep one
+ // full original sample beyond the limit to retain crossing/refinement ties.
+ float end=std::min(float(World::TerrainMaxZ+1),limit+.125f);
+ while(low+.125f<=end){
+  int steps=std::max(1,int((std::floor(low)+1-low)*8));
+  steps=std::min(steps,int((end-low)*8));
+  float high=low+steps*.125f,highD=density(high);
   if(lowD<=0&&highD>0){
-   float air=low,solid=high;for(int i=0;i<8;++i){float mid=(air+solid)*.5f;if(terrainDensity(x,y,mid)>0)solid=mid;else air=mid;}return (air+solid)*.5f;
+   for(float probe=low+.125f;probe<high;probe+=.125f){if(density(probe)>0){high=probe;break;}low=probe;}
+   float air=low,solid=high;for(int i=0;i<8;++i){float mid=(air+solid)*.5f;if(density(mid)>0)solid=mid;else air=mid;}return (air+solid)*.5f;
   }
   low=high;lowD=highD;
  }
  return 128.f;
+}
+}
+float World::terrainSurfaceBelow(float x,float y,float feet)const{
+ if(m_terrainDensity.empty())return 0;
+ TerrainColumn density(m_terrainDensity,m_terrainTops,x,y);
+ return terrainFloor(feet,density,density.airTop());
+}
+float World::terrainSurfaceAbove(float x,float y,float feet)const{
+ if(m_terrainDensity.empty())return 128.f;
+ TerrainColumn density(m_terrainDensity,m_terrainTops,x,y);
+ if(feet+.03f>=density.airTop())return 128.f;
+ return terrainCeiling(feet,128.f,density);
 }
 float World::floorHeight(float x,float y)const{
  if(outdoors())return hasTerrain()?terrainSurfaceBelow(x,y,float(TerrainMaxZ+1)):(m_layers.empty()?0.f:m_layers.front().elevation);
@@ -1735,6 +1812,58 @@ __declspec(noinline) bool World::testCollisionCandidates(){
    float feet=world.floorHeight(p.x,p.y)+offset;world.m_collisionCandidatesEnabled=true;bool optimized=world.fits(p.x,p.y,feet,.015f,false,cavities);float support=world.supportHeight(p.x,p.y,false,cavities),below=world.supportBelow(p.x,p.y,feet);
    world.m_collisionCandidatesEnabled=false;bool reference=world.fits(p.x,p.y,feet,.015f,false,cavities);
    if(optimized!=reference||support!=world.supportHeight(p.x,p.y,false,cavities)||below!=world.supportBelow(p.x,p.y,feet))return false;
+  }
+  world.m_collisionCandidatesEnabled=true;
+  uint32_t random=uint32_t(level+1);auto unit=[&]{random=random*1664525u+1013904223u;return float(random>>8)/16777216.f;};
+  for(int sample=0;sample<10000;++sample){Vec2 from{unit()*26-1,unit()*26-1},to=from+Vec2{unit()*8-4,unit()*8-4};float feet=world.floorHeight(from.x,from.y)+unit()*3-.1f,height=.3f+unit()*1.8f;
+   if(world.structureSegmentClear(from,feet,to,height)!=world.structureSegmentClear(from,feet,to,height,false))return false;
+  }
+  for(const auto&s:world.structures())for(float offset:{-.2001f,-.1999f,0.f,.1999f,.2001f}){
+   Vec2 from{s.x1+offset,(s.y1+s.y2)*.5f},to{s.x2+offset,from.y};float feet=s.bottom+.03f;
+   if(world.structureSegmentClear(from,feet,to,1.6f)!=world.structureSegmentClear(from,feet,to,1.6f,false))return false;
+  }
+ }
+ // Compare terrain acceleration against the original fixed-step queries,
+ // including synthetic stacked floors/overhangs and fractional starts.
+ World terrain(0,WorldId::Ashfall);
+ auto reference=[&](float x,float y,float feet,bool above){
+  float start=above?feet+.03f:std::min(feet+.04f,float(TerrainMaxZ+1));
+  float previous=start,d=terrain.terrainDensity(x,y,start);
+  if(above&&d>0)return feet;
+  for(float z=start+(above?.125f:-.125f);above?z<=TerrainMaxZ+1:z>=TerrainMinZ-1;z+=above?.125f:-.125f){
+   float next=terrain.terrainDensity(x,y,z);
+   if(d<=0&&next>0){float air=previous,solid=z;for(int i=0;i<8;++i){float mid=(air+solid)*.5f;if(terrain.terrainDensity(x,y,mid)>0)solid=mid;else air=mid;}return (air+solid)*.5f;}
+   previous=z;d=next;
+  }
+  return above?128.f:float(TerrainMinZ-1);
+ };
+ for(int shape=0;shape<3;++shape){
+  if(shape)for(int z=0;z<TerrainSamplesZ;++z)for(int y=0;y<TerrainSamplesY;++y)for(int x=0;x<TerrainSamplesX;++x){
+   int value=shape==1?(((z+x/3+y/4)%7)<3?32:-32):((x*17+y*23+z*13)%65-32);
+   terrain.m_terrainDensity[terrain.terrainSampleIndex(x,y,z)]=static_cast<int8_t>(value);
+  }
+  terrain.buildTerrainBounds();
+  for(float x:{-100.f,-.1f,.001f,1.137f,7.51f,12.f,23.999f,24.1f,100.f})for(float y:{.013f,3.71f,12.5f,23.99f}){
+   TerrainColumn column(terrain.m_terrainDensity,terrain.m_terrainTops,x,y);
+   float surface=reference(x,y,float(TerrainMaxZ+1),false);
+   for(float offset:{-.030f,-.02501f,-.025f,-.02499f,0.f,.030f}){float feet=surface+offset;
+    if(terrain.terrainSurfaceBelow(x,y,feet+.03f)!=reference(x,y,feet+.03f,false))return false;
+   }
+   for(int z=-105;z<=176;++z){float feet=z*.125f+.037f;
+    if(column(feet)!=terrain.terrainDensity(x,y,feet))return false;
+    if(feet>=column.airTop()&&column(feet)>0)return false;
+    float originalFloor=reference(x,y,feet+.03f,false);
+    if(feet-.125f>=column.airTop()){
+     if(feet<originalFloor-.025f||reference(x,y,feet,true)!=128.f)return false;
+     for(float z=feet+.04f;z<feet+5.f;z+=.16f)if(terrain.terrainDensity(x,y,z)>0)return false;
+    }
+    if(terrain.terrainSurfaceBelow(x,y,feet)!=reference(x,y,feet,false)||terrain.terrainSurfaceAbove(x,y,feet)!=reference(x,y,feet,true))return false;
+    float full=reference(x,y,feet,true);
+    for(float height:{.01f,.4f,1.1f,1.6f,2.4f,5.f}){
+     float bounded=terrainCeiling(feet,feet+height,[&](float probe){return terrain.terrainDensity(x,y,probe);});
+     if((feet+height>full+.005f)!=(feet+height>bounded+.005f))return false;
+    }
+   }
   }
  }
  return true;
@@ -1961,12 +2090,20 @@ void World::buildLayers(std::span<const Staircase> stairs){
  if(m_structures.size()>65535)throw std::runtime_error("Map exceeds the collision structure capacity");
  for(size_t index=0;index<m_structures.size();++index){
   const auto&s=m_structures[index];
-  for(int y=int(s.y1);y<int(std::ceil(s.y2));++y)for(int x=int(s.x1);x<int(std::ceil(s.x2));++x)
+  for(int y=int(std::floor(s.y1-.001f));y<=int(std::floor(s.y2+.001f));++y)for(int x=int(std::floor(s.x1-.001f));x<=int(std::floor(s.x2+.001f));++x)
    if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[y*Width+x].push_back(static_cast<uint16_t>(index));
  }
 }
 float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+(m_internalWallHeight>0?m_internalWallHeight:definition().ceiling):m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
+ perf::Scope queryProfile(perf::Support);
+ auto*batch=CollisionQueryBatch::active(this);float value;
+ if(batch&&batch->find(CollisionQueryBatch::SupportBelow,x,y,feet,0,0,value))return value;
+ value=supportBelowUncached(x,y,feet);
+ if(batch)batch->store(CollisionQueryBatch::SupportBelow,x,y,feet,0,0,value);
+ return value;
+}
+float World::supportBelowUncached(float x,float y,float feet)const{
  float fixtureTop=-100;
  for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixture(f,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
@@ -2001,6 +2138,14 @@ float World::clearanceAbove(float x,float y,float feet)const{
  return ceiling;
 }
 bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
+ perf::Scope queryProfile(perf::Fits);
+ auto*batch=CollisionQueryBatch::active(this);float value;uint32_t flags=uint32_t(dynamic)|(uint32_t(shelfCavities)<<1);
+ if(batch&&batch->find(CollisionQueryBatch::Fits,x,y,feet,height,flags,value))return value!=0;
+ bool result=fitsUncached(x,y,feet,height,dynamic,shelfCavities);
+ if(batch)batch->store(CollisionQueryBatch::Fits,x,y,feet,height,flags,result?1.f:0.f);
+ return result;
+}
+bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
  if(dynamic)for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<t.footprint.x*.5f&&std::fabs(y-p.position.y)<t.footprint.y*.5f&&feet<p.z-.025f&&feet+height>p.z-t.thickness)return false;}
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight-.025f&&feet+height>m_cargoLiftHeight-.18f)return false;
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.52f&&feet+height>m_cargoLiftHeight+2.4f)return false;
@@ -2012,9 +2157,12 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelf
   if((y<10.12f&&!northOpen)||(y>13.88f&&!southOpen))return false;
  }
  if(hasTerrain()){
-  float support=terrainSurfaceBelow(x,y,feet+.03f),ceiling=terrainSurfaceAbove(x,y,feet);
-  if(feet<support-.025f||feet+height>ceiling+.005f)return false;
-  for(float z=feet+.04f;z<feet+height-.02f;z+=.16f)if(terrainDensity(x,y,z)>0)return false;
+  TerrainColumn density(m_terrainDensity,m_terrainTops,x,y);
+  if(feet-.125f<density.airTop()||feet+height>128.f+.005f){
+   float support=terrainFloor(feet+.03f,density),ceiling=terrainCeiling(feet,feet+height,density);
+   if(feet<support-.025f||feet+height>ceiling+.005f)return false;
+   for(float z=feet+.04f;z<feet+height-.02f;z+=.16f)if(density(z)>0)return false;
+  }
   char terrainTile=tile(int(std::floor(x)),int(std::floor(y)));
   if(terrainTile=='#'||terrainTile=='C'||terrainTile=='B'||terrainTile=='T'){
    float base=floorHeight(x,y),top=terrainTile=='#'?wallHeight(int(std::floor(x)),int(std::floor(y))):base+(terrainTile=='C'?.60f:terrainTile=='B'?1.1f:2.62f);
@@ -2033,6 +2181,22 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelf
  for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
  for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(insideTerminal(*this,t,x,y)&&feet<base+terminalHeight(*this,t,x,y)-.025f&&feet+height>base)return false;}
+ return true;
+}
+bool World::structureSegmentClear(Vec2 start,float feet,Vec2 goal,float height,bool indexed)const{
+ auto clear=[&](const Structure&s){
+  if(s.top<=feet+.265f||s.bottom>=feet+height-.005f)return true;
+  return !(rayBoxFraction({start.x,start.y,feet},{goal.x-start.x,goal.y-start.y,0},
+   {s.x1-.1999f,s.y1-.1999f,s.bottom-height+.005f},{s.x2+.1999f,s.y2+.1999f,s.top-.025f})<1);
+ };
+ float lowX=std::min(start.x,goal.x)-.2001f,lowY=std::min(start.y,goal.y)-.2001f;
+ float highX=std::max(start.x,goal.x)+.2001f,highY=std::max(start.y,goal.y)+.2001f;
+ auto all=[&]{for(const auto&s:m_structures)if(!clear(s))return false;return true;};
+ // Sweeps outside the indexed map and long diagonals use the full reference.
+ if(!indexed||!m_collisionCandidatesEnabled||m_structureCells.size()!=Width*Height||!(lowX>=0&&lowY>=0&&highX<Width&&highY<Height))return all();
+ int x0=int(std::floor(lowX)),y0=int(std::floor(lowY)),x1=int(std::floor(highX)),y1=int(std::floor(highY));
+ if((x1-x0+1)*(y1-y0+1)>64)return all();
+ for(int y=y0;y<=y1;++y)for(int x=x0;x<=x1;++x)for(auto index:m_structureCells[y*Width+x])if(!clear(m_structures[index]))return false;
  return true;
 }
 bool World::railBlocksHull(float x,float y,float radius,float feet,float height)const{

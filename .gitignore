@@ -30,6 +30,8 @@ ashfall-performance.csv
 ashfall-performance.txt
 campaign-reach-*.txt
 campaign-extension-test.txt
+clutter-tumble-*.txt
+clutter-held.ppm
 model-report.txt
 performance-window.txt
 render-benchmark.txt
@@ -38,6 +40,11 @@ water-wall-*.png
 title-menu.ppm
 underwater-inspection.ppm
 weapon-motion-*.ppm
+
+# Obsidian session state (keep vault settings)
+docs/.obsidian/workspace.json
+docs/.obsidian/workspace-mobile.json
+docs/Inbox/
 
 # Offline bake donors staged from O: — not embedded, not shipped
 source-assets/medic-motion/UAL1_Standard.fbx

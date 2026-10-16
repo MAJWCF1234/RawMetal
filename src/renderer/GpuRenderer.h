@@ -25,6 +25,11 @@ public:
  void captureVrEye(std::vector<std::uint32_t>& pixels);
  void updateDynamic(const SoftwareRenderer::Texture& texture);
  void clearDepth();
+ // Vulkan 1.0 vertex-stage work. One six-sided light record per actor,
+ // shared by every triangle; final attachment positions remain authoritative.
+ int beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye);
+ void submitActor(MeshVertex a,MeshVertex b,MeshVertex c,Point3 outward,int actor,const SoftwareRenderer::Texture& texture,float emissionScale=1.f);
+ std::array<std::uint64_t,2> actorStatistics()const;
  void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f);
  void finish(std::vector<std::uint32_t>& pixels);
  bool hasSurface()const;

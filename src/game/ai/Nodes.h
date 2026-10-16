@@ -7,8 +7,9 @@
 #include <vector>
 namespace retro::ai {
 // Retained navigation/hint graph for GoldSrc-style cover and path queries.
-// Nodes are local to one chunk. Links are topological; live walk tests still
-// own collision, doors and dynamic bodies at query time.
+// Nodes are local to one chunk. Links are the walkability authority at build
+// time; live hull moves recheck doors/rails/dynamics at hull-scale pitch, not
+// an 8 cm density lattice.
 enum class NodeHint : std::uint8_t {Path=0,Cover=1};
 struct NavNode {
  Vec2 position{};

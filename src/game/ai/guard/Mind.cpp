@@ -45,9 +45,10 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   Vec2 position{};float feet=0,corpseEye=.25f;
   if(kind==ShotKind::Player){if(!dead())return false;targetLevel=m_level;position=m_player.pos;feet=m_player.z;}
   else if(kind==ShotKind::Npc){
-   if(index<0||size_t(index)>=m_friendlyActors.size()||size_t(index)==actor||npcIncapacitated(size_t(index)))return false;
+   if(index<0||size_t(index)>=m_friendlyActors.size()||size_t(index)==actor)return false;
    const auto&other=m_friendlyActors[size_t(index)];const auto&t=other.track();
-   if(t.health<=0||!(other.pose.clip==4||(t.deadState&&state(t.deadState))))return false;
+   // Knocked-out and dead squadmates both count as bodies once they are down.
+   if(!(npcIncapacitated(size_t(index))||(t.deadState&&state(t.deadState))||other.pose.clip==4))return false;
    targetLevel=other.level;position=other.pose.position;feet=other.pose.z;corpseEye=t.scale*.25f;
   }
   else if(kind==ShotKind::Enemy){
@@ -83,12 +84,34 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  put("guard_heard",int(audible));
  auto sameRef=[](const AiTarget&a,const AiTarget&b){return a.valid()&&b.valid()&&a.kind==b.kind&&a.level==b.level&&a.index==b.index;};
  auto remember=[&](Vec2 global,float feet){put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);};
+ // Fallen colleagues are not loot — seeing one confirms a hostile was here and
+ // bars silent rear takedowns until the detail clears its memory.
+ bool casualty=false;
+ if(mode!=GuardState::Alert){
+  Vec2 facing{std::sin(pose.yaw),std::cos(pose.yaw)};
+  for(size_t i=0;i<m_friendlyActors.size();++i){
+   if(i==actor)continue;const auto&buddy=m_friendlyActors[i];const auto&bt=buddy.track();
+   if(bt.ai.mode!=ActorAiMode::Guard||actorFaction(bt)!=actorFaction(track)||!chunkResident(buddy.level))continue;
+   if(config.squad&&bt.ai.squad&&bt.ai.squad!=config.squad)continue;
+   bool down=npcIncapacitated(i)||buddy.pose.clip==4||(bt.deadState&&state(bt.deadState));if(!down)continue;
+   auto bodyLocal=buddy.pose.position+chunkOffset(buddy.level)-globalOrigin;auto delta=bodyLocal-pose.position;
+   float bodyEye=buddy.pose.z+bt.scale*.25f,dz=bodyEye-eye;
+   if(lengthSq(delta)+dz*dz>=config.sightRange*config.sightRange||dot(normalized(delta),facing)<=config.sightDot)continue;
+   auto worldBody=buddy.pose.position+chunkOffset(buddy.level)-chunkOffset(m_level);
+   if(!soundRayClear(observer,eye,worldBody,bodyEye))continue;
+   remember(buddy.pose.position+chunkOffset(buddy.level),buddy.pose.z);
+   AiTarget blame{ShotKind::Player,m_level,0};blame.position=m_player.pos+chunkOffset(m_level)-globalOrigin;blame.feet=m_player.z;blame.height=m_player.hullHeight();blame.eye=m_player.eye;blame.faction=AiFaction::Player;
+   rememberGuardTarget(actor,blame);previous=blame;confirmed=true;recognition=config.recognitionMs;casualty=true;
+   mode=visible?GuardState::Alert:GuardState::Investigate;break;
+  }
+ }
  if(visible){
   // Recognition belongs to an entity reference, not merely a recent alert.
   // Brief occlusion preserves a confirmed foe; a new foe starts fresh.
-  if(!sameRef(previous,target)){confirmed=false;recognition=0;}
+  // A just-found body already blamed the player — keep that confirm.
+  if(!sameRef(previous,target)&&!casualty){confirmed=false;recognition=0;}
   rememberGuardTarget(actor,target);remember(target.position+globalOrigin,target.feet);
-  recognition=confirmed?config.recognitionMs:std::min(config.recognitionMs,recognition+ms);confirmed=recognition>=config.recognitionMs;mode=confirmed?GuardState::Alert:GuardState::Suspicious;
+  recognition=confirmed||casualty?config.recognitionMs:std::min(config.recognitionMs,recognition+ms);confirmed=recognition>=config.recognitionMs||casualty;mode=confirmed?GuardState::Alert:GuardState::Suspicious;
  }
  else{
   recognition=confirmed?config.recognitionMs:0;
@@ -138,10 +161,32 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
    // remembered location; fresh visibility still belongs to guardThreat.
    face(remembered);guardReposition(level,actor,track,pose,{remembered.x,remembered.y,rememberedZ+selected.height*.6f},ms,goal,goalZ,wantsMove);
   }
-  else if(mode==GuardState::Alert&&config.armed){const auto profile=guardRoleProfile(config.role);float stop=config.role==GuardSquadRole::Rusher?1.1f:config.attackRange*profile.advanceFraction;wantsMove=std::hypot(distance,pose.z-goalZ)>stop;face(remembered);
+  else if(mode==GuardState::Alert&&config.armed){const auto profile=guardRoleProfile(config.role);float stop=config.role==GuardSquadRole::Rusher?1.1f:config.attackRange*profile.advanceFraction;
+   // Corridors pull the hold-up closer; open floors keep the authored standoff.
+   Vec2 towardMem=distance>.001f?normalized(remembered-pose.position):Vec2{std::sin(pose.yaw),std::cos(pose.yaw)};
+   Vec2 side{-towardMem.y,towardMem.x};float room=std::max(guardLateralClearance(level,actor,pose,side),guardLateralClearance(level,actor,pose,side*(-1.f)));
+   if(room<.85f)stop=std::min(stop,1.35f);else if(room>2.2f)stop=std::max(stop,config.attackRange*std::min(1.f,profile.advanceFraction+.12f));
+   wantsMove=std::hypot(distance,pose.z-goalZ)>stop;face(remembered);
    if(visible&&profile.minimumDistance>0&&distance<profile.minimumDistance){auto away=normalized(pose.position-remembered);goal=pose.position+away*(profile.minimumDistance-distance+.35f);goalZ=pose.z;wantsMove=true;put("guard_cover",0);put("guard_cover_wait",0);}
    else if(visible&&!wantsMove){Point3 aim{target.position.x,target.position.y,target.feet+target.height*.6f};guardReposition(level,actor,track,pose,aim,ms,goal,goalZ,wantsMove);}
    else{put("guard_cover",0);put("guard_cover_wait",0);}
+  }
+  else if(mode==GuardState::Investigate&&config.armed&&wantsMove&&distance>3.5f&&m_npcNavBudget>0){
+   // Soft approach: take a Cover node that still closes on the memory instead
+   // of sprinting the open span of a room. Live shot matching is Alert work.
+   --m_npcNavBudget;const auto&graph=navGraph(level,track.scale);std::vector<std::pair<float,size_t>> posts;posts.reserve(graph.nodes.size());
+   for(size_t index=0;index<graph.nodes.size();++index){const auto&node=graph.nodes[index];
+    if(node.hint!=ai::NodeHint::Cover||std::fabs(node.feet-pose.z)>.5f)continue;
+    float toMem=length(node.position-remembered);if(toMem+.4f>=distance||length(node.position-pose.position)<.35f)continue;
+    posts.push_back({toMem+length(node.position-pose.position)*.3f,index});
+   }
+   // The scoring policy is unchanged. Rank it before collision sweeps so
+   // every worse Cover post does not repeat a long hull path each frame.
+   std::sort(posts.begin(),posts.end());
+   for(auto [score,index]:posts){const auto&node=graph.nodes[index];float end=pose.z;
+    if(!friendlyWalkSegment(level,pose.position,pose.z,node.position,track.scale,&end)||std::fabs(end-node.feet)>.35f||guardPositionReserved(actor,node.position,end))continue;
+    goal=node.position;goalZ=end;break;
+   }
   }
   if(!wantsMove&&!defensiveIntent&&!(mode==GuardState::Alert&&config.armed))face(remembered);
   if(wantsMove&&!defensiveIntent&&friendlyChunkAt(remembered+globalOrigin,level)!=level)guardRoute(level,actor,remembered+globalOrigin,rememberedZ,ms,goal,goalZ);

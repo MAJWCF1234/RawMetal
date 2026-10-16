@@ -7,6 +7,24 @@ namespace retro {
 bool Game::testNavGraph(){
  std::ofstream report("nav-graph-test.txt");bool passed=true;int checks=0;
  auto check=[&](bool ok,std::string_view label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();passed&=ok;++checks;};
+ {
+  ai::NodeGraph graph;for(int y=0;y<11;++y)for(int x=0;x<11;++x)graph.nodes.push_back({{1.5f+x*2,1.5f+y*2},0,ai::NodeHint::Path});
+  for(int i=0;i<121;++i){auto&node=graph.nodes[size_t(i)];node.firstLink=int(graph.links.size());int x=i%11,y=i/11;
+   for(auto d:{Vec2{1,0},Vec2{0,1},Vec2{-1,0},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx>=0&&nx<11&&ny>=0&&ny<11)graph.links.push_back({ny*11+nx,2});}node.linkCount=int(graph.links.size())-node.firstLink;}
+  int probes=0;auto walk=[&](Vec2 from,float feet,Vec2 to,float,float*end){++probes;if(end)*end=feet;return length(to-from)<=2.01f;};
+  auto hop=ai::graphWaypoint(graph,{1.5f,1.5f},0,{21.5f,21.5f},0,1.6f,walk);
+  check(length(hop-Vec2{3.5f,1.5f})<.001f&&probes<=28,"A 121-node route certifies its path with at most 28 live sweeps instead of sweeping the explored graph");
+ }
+ {
+  ai::NodeGraph graph;graph.nodes={{{1,1},0,ai::NodeHint::Path,0,2},{{3,1},0,ai::NodeHint::Path,2,1},{{1,3},0,ai::NodeHint::Path,3,1},{{3,3},0,ai::NodeHint::Path,4,0}};graph.links={{1,2},{2,2},{3,2},{3,2}};
+  bool closed=false;auto walk=[&](Vec2 from,float feet,Vec2 to,float,float*end){if(end)*end=feet;
+   if(std::fabs(from.x-to.x)>.01f&&std::fabs(from.y-to.y)>.01f&&length(to-from)>.3f)return false;
+   return !closed||!(std::fabs(from.x-3)<.01f&&std::fabs(to.x-3)<.01f&&from.y<2&&to.y>2);};
+  auto open=ai::graphWaypoint(graph,{1,1},0,{3,3},0,1.6f,walk);closed=true;auto shut=ai::graphWaypoint(graph,{1,1},0,{3,3},0,1.6f,walk);
+  check(length(open-Vec2{3,1})<.001f&&length(shut-Vec2{1,3})<.001f,"Closing a live edge reroutes the next query without retaining stale collision validation");
+  closed=false;auto corner=ai::graphWaypoint(graph,{.8f,.8f},0,{3,3},0,1.6f,walk);
+  check(length(corner-Vec2{1,1})<.001f,"An off-centre actor reaches its connector before a blocked diagonal to the next hop");
+ }
  auto scene=[](bool wall){
   auto campaign=std::make_shared<CustomCampaign>();campaign->name="Nav graph validation";campaign->key=882760;
   auto map=std::make_shared<AuthoredMapData>();map->name="Cover lattice room";map->definition={{0,0},{6.5f,6.5f},0,Environment::Interior,false,8,.3f,42};
@@ -90,7 +108,9 @@ bool Game::testNavGraph(){
   bool escort=false;for(const auto&track:campaign->maps[0]->actorTracks)escort|=track.ai.mode==ActorAiMode::Escort;
   check(escort,"Exclusion Zone authors a Facility escort for civilian schedule observation");
   Game g(campaign);const auto&graph=g.navGraph(0,1.6f);int authoredCover=0;
-  for(const auto&n:graph.nodes)if(n.hint==ai::NodeHint::Cover&&(length(n.position-Vec2{3.3f,10.f})<.7f||length(n.position-Vec2{19.f,9.1f})<.7f||length(n.position-Vec2{19.3f,15.5f})<.7f||length(n.position-Vec2{10.f,5.f})<.7f))++authoredCover;
+  for(const auto&hint:campaign->maps[0]->navHints)if(hint.hint){
+   for(const auto&n:graph.nodes)if(n.hint==ai::NodeHint::Cover&&length(n.position-hint.position)<.7f){++authoredCover;break;}
+  }
   check(authoredCover>=2,"Exclusion Zone NAV_HINT Cover markers merge into the live retained graph");
   size_t assault=0;bool foundAssault=false;
   for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].track().ai.role==GuardSquadRole::Assault){assault=i;foundAssault=true;break;}

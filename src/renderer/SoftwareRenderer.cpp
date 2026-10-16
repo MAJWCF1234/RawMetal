@@ -1,3 +1,4 @@
+#include "../core/FrameProfile.h"
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
 #include "../vr/VrRuntime.h"
@@ -95,6 +96,10 @@ bool SoftwareRenderer::enableHardware(void* window){
   for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
   for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
+  // Worker/Witness materials are large too. Deferring their mip construction
+  // until the first visible limb caused quarter-second gameplay stalls.
+  for(const auto&texture:m_workerTextures)m_gpu->prepare(texture);
+  if(!m_logo.pixels.empty())m_gpu->prepare(m_logo);
   m_gpu->prepare(m_droneTexture);m_gpu->prepare(m_handgunTexture);
   for(const auto&role:m_cleanupTextures)for(const auto&texture:role)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
@@ -330,6 +335,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  m_serviceAreaSigns[0]=makeSign("SERVICE STORES","SPARES / MAINTENANCE",0xff53aec4u);
  m_serviceAreaSigns[1]=makeSign("PRIMARY UTILITIES","PERMIT REQUIRED",0xffd7ac64u);
  m_serviceAreaSigns[2]=makeSign("SALVAGE DISPATCH","WASTE HANDLING",0xff9fceaeu);
+ m_logo=loadEmbeddedPng(2);m_logo.clampEdges=true;
 }
 const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int part)const{
  if(mesh<0||mesh>=int(m_facilityMeshes.size()))throw std::runtime_error("Invalid facility mesh index "+std::to_string(mesh));
@@ -396,6 +402,18 @@ SoftwareRenderer::Texture SoftwareRenderer::loadTexture(int id){
  t.pixels.resize(size_t(t.width)*size_t(t.height));
  for(size_t i=0;i<t.pixels.size();++i)t.pixels[i]=(std::uint32_t(pixels[i*4+3])<<24)|(rgb(pixels[i*4],pixels[i*4+1],pixels[i*4+2])&0xffffffu);
  if(!raw)stbi_image_free(pixels); return t;
+}
+SoftwareRenderer::Texture SoftwareRenderer::loadEmbeddedPng(int id){
+ // Branding assets ride as raw RCDATA beside the ICON — not RMZ1 pack slots.
+ auto module=GetModuleHandleW(nullptr);auto res=FindResourceW(module,MAKEINTRESOURCEW(id),RT_RCDATA);
+ if(!res)throw std::runtime_error("Missing embedded branding PNG");
+ auto handle=LoadResource(module,res);auto bytes=static_cast<const unsigned char*>(LockResource(handle));auto size=SizeofResource(module,res);
+ if(!bytes||!size)throw std::runtime_error("Empty embedded branding PNG");
+ Texture t;int channels=0;auto pixels=stbi_load_from_memory(bytes,int(size),&t.width,&t.height,&channels,4);
+ if(!pixels||t.width<=0||t.height<=0)throw std::runtime_error("Invalid embedded branding PNG");
+ t.pixels.resize(size_t(t.width)*size_t(t.height));
+ for(size_t i=0;i<t.pixels.size();++i)t.pixels[i]=(std::uint32_t(pixels[i*4+3])<<24)|(rgb(pixels[i*4],pixels[i*4+1],pixels[i*4+2])&0xffffffu);
+ stbi_image_free(pixels);return t;
 }
 std::uint32_t SoftwareRenderer::sample(const Texture&t,float u,float v,float lod){
  if(t.clampEdges){u=std::clamp(u,0.f,1.f);v=std::clamp(v,0.f,1.f);}else{u-=std::floor(u);v-=std::floor(v);}
@@ -706,9 +724,9 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
    clear(rgb(12,16,18));
-   drawSky(game);
+   {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level))drawScene(game,false,level);
-   if(parallel){m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection)drawViewModel(game);m_poseReady=false;
+   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection)drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
