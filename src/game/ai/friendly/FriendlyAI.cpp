@@ -1,6 +1,7 @@
 #include "../../Game.h"
 #include "../Navigation.h"
 #include "../Perception.h"
+#include "../StateLookupHints.h"
 #include "../../../world/CollisionQueryBatch.h"
 #include <optional>
 #include <fstream>
@@ -247,6 +248,30 @@ int Game::nearbyFriendly()const{
 __declspec(noinline) bool Game::testAiQueryBatch(){
  std::ofstream report("ai-query-test.txt");bool passed=true;
  auto check=[&](bool good,const char*name){report<<(good?"PASS ":"FAIL ")<<name<<'\n';report.flush();passed&=good;};
+ {
+  auto reference=[](int level,size_t actor,StateId timer,std::string_view field){auto text="npc/"+std::to_string(level)+"/"+std::to_string(actor)+"/"+std::to_string(timer)+"/"+std::string(field);StateId hash=2166136261u;for(unsigned char c:text)hash=(hash^c)*16777619u;return hash|0x80000000u;};
+  bool exact=true;std::array<std::string,7> fields{"","x","guard_route_next","support_target",std::string(256,'q'),std::string("a\0b",3),std::string("\xc3\xa9\xff",3)};
+  for(int level:{std::numeric_limits<int>::min(),-1,0,1,14,std::numeric_limits<int>::max()})
+   for(size_t actor:{size_t(0),size_t(1),size_t(63),size_t(128),size_t(UINT32_MAX),std::numeric_limits<size_t>::max()})
+    for(StateId timer:{StateId(0),StateId(1),StateId(0x7fffff),StateId(0x80000000u),StateId(UINT32_MAX)})for(const auto&field:fields)
+     exact&=actorAiState(level,actor,timer,field)==reference(level,actor,timer,field);
+  uint32_t random=0x529b34u;auto next=[&]{random=random*1664525u+1013904223u;return random;};
+  for(int i=0;i<10000;++i){int level=int(next()%1000)-500;size_t actor=(size_t(next())<<32)|next();StateId timer=next();std::string field(next()%80,' ');for(auto&c:field)c=char(next()>>24);
+   auto full=reference(level,actor,timer,field);exact&=actorAiState(level,actor,timer,field)==full&&actorAiState(level,actor,timer,field)==full;
+  }
+  check(exact,"NPC state keys match legacy decimal formatting and hashing, including limits, arbitrary bytes and prefix collisions");
+ }
+ {
+  std::array<std::vector<StateValue>,2> banks;bool exact=true;uint32_t seed=0x1654ac78u;
+  auto next=[&]{seed=seed*1664525u+1013904223u;return seed;};
+  for(int i=0;i<30000;++i){auto&values=banks[(next()>>17)&1];StateId id=next()%1536u;if(i&1)id|=0x80000000u;
+   auto reference=std::lower_bound(values.begin(),values.end(),id,[](const StateValue&value,StateId key){return value.id<key;});
+   exact&=ai::StateLookupHints::lowerBound(values,id)==size_t(reference-values.begin());
+   if(next()&1){if(reference==values.end()||reference->id!=id)values.insert(reference,{id,int(next()%3000)-1500});else values.erase(reference);}
+   if(i%311==0)std::swap(banks[0],banks[1]);if(i%997==0)banks[1].clear();
+  }
+  check(exact&&ai::StateLookupHints::statistics.hits>100,"State index hints match lower_bound through insert/erase, missing keys, collisions, vector swaps and clears");
+ }
  CollisionQueryBatch::resetStatistics();
  for(int level:{0,1,3,6,-1}){
   World world(level<0?0:level,level<0?WorldId::Ashfall:WorldId::Campaign);bool exact=true;
