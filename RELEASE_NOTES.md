@@ -4,6 +4,27 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.5 - Performance hotfix
+
+Promotes the validated round-two support/door broad-phase winner to the root EXE.
+Fresh three-run Exclusion medians: average **161.74 -> 163.51 FPS** (+1.1%),
+1% lows **95.41 -> 105.14 FPS** (+10.2%), P99 **9.471 -> 8.997 ms**,
+and frame-time spread **8% narrower**. RTX 5060 Ti, 640 x 360, Vulkan HDR / 4x MSAA.
+
+- Reject irrelevant door footprints before terrain-height queries
+- Use existing spatial indices for prop/terminal support, retaining exact live tests
+- 21 regression commands passed, including full Vulkan smoke
+- 28 visibility/reference views and 12 direct EXE comparison captures: zero changed pixels
+- 56 GPU actor comparisons passed; nine combat replays kept identical gameplay counters
+- No additional runtime cache, no reduced visuals/behavior, unchanged 32 MiB ceiling
+
+EXE: **26,896,896 bytes**. SHA-256:
+`35c12d64d450e86271eba3365fe4eb24ec4c9fe1c85a354046299d33dfc2534d`.
+
+[Full round-two results](docs/Performance/Competitive%20Round%202%2020261017.md).
+
+---
+
 ## v0.7.2-preview.4 - Performance hotfix
 
 Promotes the validated competitive winner to the canonical root executable.
