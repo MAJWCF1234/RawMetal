@@ -2,14 +2,11 @@
 
 RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
 streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
-The current tester target is **v0.7.2-preview.5 / ASHFALL EXCLUSION ZONE — performance hotfix**.
-The controlled three-run Exclusion comparison improved average FPS **140 → 164**
-and 1% lows **92 → 104**, with matching gameplay results and zero changed pixels
-in the cache reference views. Frame-time spread remains unfinished.
-The second competitive round improves 1% lows **95 -> 105 FPS** and narrows
-frame-time spread **8%**; average FPS changes modestly, **162 -> 164**.
-See the [round-two results](docs/Performance/Competitive%20Round%202%2020261017.md).
-See the [competitive results](docs/Performance/Competitive%20Round%2020261017.md).
+The current tester target is **v0.7.2-preview.6 / ASHFALL EXCLUSION ZONE — performance hotfix**.
+The latest controlled three-run comparison improves average FPS **160.6 → 186.5**
+and 1% lows **94.6 → 107.7**, with exact state/save comparisons and zero changed
+pixels across twelve encounter views. This is a 640 × 360 lab average, not a
+minimum frame rate. See the [round-three results](docs/Performance/Competitive%20Round%203%2020261017.md).
 See the consolidated [release notes](RELEASE_NOTES.md).
 Docs vault: open [`docs/`](docs/Home.md) in Obsidian. The
 [native walkthrough notes](docs/Content/Exclusion/exclusion-preview15-playtest-20261015.md)

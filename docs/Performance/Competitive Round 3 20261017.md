@@ -14,8 +14,9 @@ Before this competition, the round-two winner was promoted to the root EXE and
 published as [v0.7.2-preview.5 — Performance hotfix](https://github.com/MAJWCF1234/RawMetal/releases/tag/v0.7.2-preview.5).
 Its source is on `main` at `fb954980be93cfce0f103810d0233ae891d3c4ab`.
 The uploaded EXE digest matches the root copy; the superseded preview.4 release
-was removed while retaining source history. The root remains this published
-hotfix. The next, faster candidate is separate on `codex/performance-round3`.
+was removed while retaining source history. The round-three combined winner is now promoted to the root copy and published
+as [preview.6](https://github.com/MAJWCF1234/RawMetal/releases/tag/v0.7.2-preview.6).
+Its tested binary is unchanged; preview.5 is superseded.
 
 ## Competition
 
