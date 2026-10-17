@@ -5,6 +5,8 @@
 #include <string_view>
 #include <string>
 #include <vector>
+#include <array>
+#include <charconv>
 namespace retro {
 using StateId=std::uint32_t;
 constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
@@ -68,8 +70,19 @@ struct ActorPose {Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int l
 inline StateId actorTrackState(StateId timer,size_t index,std::string_view field){return stateId("actor_track/"+std::to_string(timer)+"/"+std::to_string(index)+"/"+std::string(field));}
 inline StateId actorPositionState(StateId dead,int axis){return stateId("actor_position/"+std::to_string(dead)+"/"+std::to_string(axis));}
 inline StateId actorAiState(int level,size_t actor,StateId timer,std::string_view field){
- auto text="npc/"+std::to_string(level)+"/"+std::to_string(actor)+"/"+std::to_string(timer)+"/"+std::string(field);StateId hash=2166136261u;
- for(unsigned char c:text)hash=(hash^c)*16777619u;
+ // Cache only the pure identity prefix. Full identity checks make collisions,
+ // rebuilt worlds and different Game instances safe; field bytes stay exact.
+ struct Prefix {size_t actor=0;int level=0;StateId timer=0,hash=0;bool ready=false;};
+ static thread_local std::array<Prefix,128> prefixes{};
+ uint32_t slot=uint32_t(actor)*0x9e3779b9u^uint32_t(level)*0x85ebca6bu^timer;slot^=slot>>16;
+ auto&prefix=prefixes[slot&(prefixes.size()-1)];
+ if(!prefix.ready||prefix.actor!=actor||prefix.level!=level||prefix.timer!=timer){
+  StateId hash=2166136261u;auto append=[&](std::string_view text){for(unsigned char c:text)hash=(hash^c)*16777619u;};
+  auto number=[&](auto value){char buffer[32];auto result=std::to_chars(buffer,buffer+sizeof(buffer),value);append(std::string_view(buffer,size_t(result.ptr-buffer)));};
+  append("npc/");number(level);append("/");number(actor);append("/");number(timer);append("/");
+  prefix={actor,level,timer,hash,true};
+ }
+ StateId hash=prefix.hash;for(unsigned char c:field)hash=(hash^c)*16777619u;
  return hash|0x80000000u; // Internal NPC keys cannot collide with authored stateId flags.
 }
 ActorPose sampleActor(const ActorTrack& track,int ageMs);

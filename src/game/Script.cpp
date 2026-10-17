@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "ai/StateLookupHints.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -15,9 +16,9 @@ bool containsEvent(const std::vector<StateId>& values,StateId id){
 }
 }
 
-int Game::state(StateId id)const{auto it=std::lower_bound(m_states.begin(),m_states.end(),id,[](const StateValue&value,StateId key){return value.id<key;});return it!=m_states.end()&&it->id==id?it->value:0;}
+int Game::state(StateId id)const{auto index=ai::StateLookupHints::lowerBound(m_states,id,m_aiQueryCaching);return index<m_states.size()&&m_states[index].id==id?m_states[index].value:0;}
 void Game::setState(StateId id,int value){
- if(!id)return;auto it=std::lower_bound(m_states.begin(),m_states.end(),id,[](const StateValue&entry,StateId key){return entry.id<key;});
+ if(!id)return;auto it=m_states.begin()+ai::StateLookupHints::lowerBound(m_states,id,m_aiQueryCaching);
  if(it==m_states.end()||it->id!=id){if(value)m_states.insert(it,{id,value});}else if(value)it->value=value;else m_states.erase(it);
 }
 ObjectiveStatus Game::objective(StateId id)const{int index=findValue(m_objectives,id);return index<0?ObjectiveStatus::Hidden:static_cast<ObjectiveStatus>(m_objectives[size_t(index)].value);}

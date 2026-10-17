@@ -4,6 +4,7 @@
 #include "game/Game.h"
 #include "game/ai/DecisionClock.h"
 #include "game/ai/WalkQueryCache.h"
+#include "game/ai/StateLookupHints.h"
 #include "world/CollisionQueryBatch.h"
 #include "world/TerrainSurfaceCache.h"
 #include "renderer/MinimapCache.h"
@@ -89,7 +90,7 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
  retro::AudioEngine audio(sustained);std::ofstream report("ashfall-performance.txt"),csv("ashfall-performance.csv");
  report<<renderer->hardwareName()<<" / native window / "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<" / 30 simulated warmup + "<<measured<<" measured frames\nCPU wall timings, including native window presentation; not GPU timestamps.\n";
  if(sustained)report<<"Sustained lab: 60 simulated seconds; extended player health; live muted device mixer; deep instrumentation "<<(deepProfile?"enabled":"disabled")<<". Device="<<audio.available()<<'\n';
- csv<<"scene,frame,total_ms,simulation_ms,audio_ms,scene_ms,submit_ms,present_ms,health";for(auto name:retro::perf::names)csv<<","<<name;csv<<",static_builds,atlas_images,atlas_submissions,atlas_bytes,actor_lighting,actor_mesh,actor_triangle_sample_ms,route_queries,route_hits,terrain_queries,terrain_hits,cpu_growth_frames,gpu_buffer_growths,minimap_queries,minimap_rebuilds\n";
+ csv<<"scene,frame,total_ms,simulation_ms,audio_ms,scene_ms,submit_ms,present_ms,health";for(auto name:retro::perf::names)csv<<","<<name;csv<<",static_builds,atlas_images,atlas_submissions,atlas_bytes,actor_lighting,actor_mesh,actor_triangle_sample_ms,route_queries,route_hits,terrain_queries,terrain_hits,cpu_growth_frames,gpu_buffer_growths,minimap_queries,minimap_rebuilds,state_queries,state_hint_hits\n";
  struct Case{const char*name;int kind;};
  for(auto test:{Case{"exclusion-arrival",0},Case{"exclusion-yard",2},Case{"exclusion-lure",1},Case{"ashfall-terrain",-1},Case{"campaign-receiving",-2},Case{"campaign-reactor",-3}}){
   if((yardOnly||sustained)&&test.kind!=2)continue;auto start=Clock::now();auto game=test.kind>=0?retro::Game::exclusionInspection(sustained?12:test.kind):test.kind==-1?retro::Game(retro::WorldId::Ashfall):test.kind==-2?retro::Game::mapInspection({1.4f,20},0,0,14,false,-25,false):retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false);
@@ -97,11 +98,11 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
   game.setAiDecisionScheduling(!fullRateAi);
   report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<" ai_query_cache="<<!uncachedAi<<'\n';std::array<std::vector<double>,6> samples;
   for(int frame=-30;frame<measured&&window.pump();++frame){retro::InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;
-   if(frame==0){retro::CollisionQueryBatch::resetStatistics();retro::ai::DecisionClock::resetStatistics();retro::ai::WalkQueryCache::resetStatistics();retro::TerrainSurfaceCache::resetStatistics();retro::MinimapCache::resetStatistics();retro::perf::cpuGrowthFrames=retro::perf::gpuBufferGrowths=0;}
+   if(frame==0){retro::CollisionQueryBatch::resetStatistics();retro::ai::DecisionClock::resetStatistics();retro::ai::WalkQueryCache::resetStatistics();retro::TerrainSurfaceCache::resetStatistics();retro::ai::StateLookupHints::resetStatistics();retro::MinimapCache::resetStatistics();retro::perf::cpuGrowthFrames=retro::perf::gpuBufferGrowths=0;}
    retro::perf::enabled=!sustained||deepProfile;retro::perf::costs.fill(0);retro::perf::actorCosts.fill(0);retro::perf::actorTriangleCounter=0;auto a=Clock::now();game.update(input,1.f/60);auto b=Clock::now();audio.update(game,!sustained);auto c=Clock::now();renderer->render(game);auto d=Clock::now();auto stages=renderer->frameStages();
    if(frame<0){if(frame==-30)report<<"first_frame_ms="<<ms(a,d)<<'\n';continue;}
    std::array<double,6> values={ms(a,d),ms(a,b),ms(b,c),stages[0],stages[1],stages[2]};
-   csv<<test.name<<','<<frame;for(auto value:values)csv<<','<<value;csv<<','<<game.player().health;for(auto value:retro::perf::costs)csv<<','<<value;auto uploads=renderer->atlasUploadStatistics();auto terrain=retro::TerrainSurfaceCache::statistics();auto minimap=retro::MinimapCache::statistics();csv<<','<<renderer->staticGeometryBuilds()<<','<<uploads[0]<<','<<uploads[1]<<','<<uploads[3]<<','<<retro::perf::actorCosts[0]<<','<<retro::perf::actorCosts[1]<<','<<retro::perf::actorCosts[2]<<','<<retro::ai::WalkQueryCache::statistics.queries<<','<<retro::ai::WalkQueryCache::statistics.hits<<','<<terrain.queries<<','<<terrain.hits<<','<<retro::perf::cpuGrowthFrames<<','<<retro::perf::gpuBufferGrowths<<','<<minimap.queries<<','<<minimap.rebuilds<<'\n';
+   csv<<test.name<<','<<frame;for(auto value:values)csv<<','<<value;csv<<','<<game.player().health;for(auto value:retro::perf::costs)csv<<','<<value;auto uploads=renderer->atlasUploadStatistics();auto terrain=retro::TerrainSurfaceCache::statistics();auto minimap=retro::MinimapCache::statistics();csv<<','<<renderer->staticGeometryBuilds()<<','<<uploads[0]<<','<<uploads[1]<<','<<uploads[3]<<','<<retro::perf::actorCosts[0]<<','<<retro::perf::actorCosts[1]<<','<<retro::perf::actorCosts[2]<<','<<retro::ai::WalkQueryCache::statistics.queries<<','<<retro::ai::WalkQueryCache::statistics.hits<<','<<terrain.queries<<','<<terrain.hits<<','<<retro::perf::cpuGrowthFrames<<','<<retro::perf::gpuBufferGrowths<<','<<minimap.queries<<','<<minimap.rebuilds<<','<<retro::ai::StateLookupHints::statistics.queries<<','<<retro::ai::StateLookupHints::statistics.hits<<'\n';
    for(size_t i=0;i<values.size();++i)samples[i].push_back(values[i]);
   }
   const char* names[]={"total","simulation","audio","scene","submit","present"};
@@ -109,6 +110,7 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
   auto queryStats=retro::CollisionQueryBatch::statistics();report<<"ai_queries="<<queryStats.queries<<" hits="<<queryStats.hits<<'\n';
   auto routeStats=retro::ai::WalkQueryCache::statistics;report<<"route_queries="<<routeStats.queries<<" hits="<<routeStats.hits<<" invalidations="<<routeStats.invalidations<<'\n';
   auto terrainStats=retro::TerrainSurfaceCache::statistics();report<<"terrain_queries="<<terrainStats.queries<<" hits="<<terrainStats.hits<<" cpu_growth_frames="<<retro::perf::cpuGrowthFrames<<" gpu_buffer_growths="<<retro::perf::gpuBufferGrowths<<'\n';
+  auto stateStats=retro::ai::StateLookupHints::statistics;report<<"state_queries="<<stateStats.queries<<" hint_hits="<<stateStats.hits<<'\n';
   auto minimapStats=retro::MinimapCache::statistics();report<<"minimap_queries="<<minimapStats.queries<<" rebuilds="<<minimapStats.rebuilds<<'\n';
   for(int lane=0;lane<2;++lane){auto stats=retro::ai::DecisionClock::statistics[size_t(lane)];report<<(lane?"planning":"sensing")<<" polls="<<stats.polls<<" runs="<<stats.runs<<" wakes="<<stats.wakes<<'\n';}
   report<<"final_health="<<game.player().health<<"\n\n";report.flush();csv.flush();
