@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.6 - Performance hotfix (2026-10-17)
+
+Promotes the validated round-three winner unchanged to the canonical root executable.
+Exact NPC state-key prefix hashing and validated sorted-state lookup hints remove
+repeated bookkeeping without changing AI behavior, state IDs, save data or visuals.
+
+Three-run Exclusion median: 160.6 -> 186.5 FPS; 1% lows 94.6 -> 107.7 FPS.
+Measured at 640x360, Vulkan HDR/4x MSAA; CPU wall time including presentation.
+This is an average throughput improvement, not a minimum FPS guarantee.
+
+Validation: state-key/property and cached/reference replay tests, 24 regression/profile
+commands, twelve exact cross-build encounter views, 28 visibility views, GPU actor
+comparisons, packaged resources, full Vulkan smoke and save checks all passed.
+Executable: 26,939,904 bytes (25.69 MiB), below the unchanged 32 MiB ceiling.
+SHA256: 1d4c6fd9da0d471d9fb1924ef0230606ec22cb493b443577f4782b92a27536e9
+
 ## v0.7.2-preview.5 - Performance hotfix
 
 Promotes the validated round-two support/door broad-phase winner to the root EXE.
