@@ -6,11 +6,8 @@ layout(location=2) in vec4 corner2;
 layout(location=3) in vec2 uv0;
 layout(location=4) in vec2 uv1;
 layout(location=5) in vec2 uv2;
-layout(location=6) in vec4 lighting;
-layout(location=7) in vec4 light0;
-layout(location=8) in vec4 light1;
-layout(location=9) in vec4 surface;
-layout(location=10) in vec4 worldNormal;
+layout(location=6) in vec4 settings;
+layout(location=7) in float actorIndex;
 #else
 layout(location=0) in vec4 position;
 layout(location=1) in vec2 uv;
@@ -56,6 +53,17 @@ void main(){
 #ifdef RAWMETAL_ACTOR_INSTANCES
  vec4 position=gl_VertexIndex==0?corner0:gl_VertexIndex==1?corner1:corner2;
  vec2 uv=gl_VertexIndex==0?uv0:gl_VertexIndex==1?uv1:uv2;
+ // Preserve the CPU operation order and float precision. No packed positions,
+ // reduced UVs or changed normals; only redundant derivatives move to Vulkan.
+ precise vec3 center=(corner0.xyz+corner1.xyz+corner2.xyz)*(1.0/3.0);
+ int actorSlot=int(actorIndex);
+ vec3 bodyCenter=vec3(actors.actor[actorSlot].surfaceNormal[0].w,actors.actor[actorSlot].surfaceNormal[1].w,actors.actor[actorSlot].surfaceNormal[2].w);
+ precise vec3 outward=center-bodyCenter;
+ vec4 lighting=vec4(outward,settings.x);
+ precise vec4 light0=vec4(corner1.xyz-corner0.xyz,uv1.x-uv0.x);
+ precise vec4 light1=vec4(corner2.xyz-corner0.xyz,uv1.y-uv0.y);
+ precise vec4 worldNormal=vec4(uv2-uv0,settings.yz);
+ vec4 surface=vec4(0.0,0.0,settings.w,3.0+actorIndex);
 #endif
  vec4 adjustedLighting=lighting;
  vec4 adjustedSurface=surface;

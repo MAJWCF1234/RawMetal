@@ -1595,15 +1595,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Preserve the existing per-triangle distance rejection near a chunk's
   // far limit; ordinary nearby actors use hardware projection and clipping.
   const bool nearFarLimit=cameraPoint({pose.position.x,pose.position.y,pose.z+radius*.5f},game).z+radius*4.f>=farPlane;
-  const int gpuActor=m_gpuFrame&&m_gpuActorPreparation&&!nearFarLimit?m_gpu->beginActor(actorLights.normals,actorLights.brightness,actorLights.gloss,game.chunkOffset(level),player.pos):-1;
-  auto actorTriangle=[&](const MeshTriangle&face,const Texture&texture){
+  const Point3 actorCenter{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
+  const int gpuActor=m_gpuFrame&&m_gpuActorPreparation&&!nearFarLimit?m_gpu->beginActor(actorLights.normals,actorLights.brightness,actorLights.gloss,game.chunkOffset(level),player.pos,actorCenter):-1;
+  std::array<GpuRenderer::ActorMaterial,3> gpuMaterials{};
+  std::array<bool,3> gpuMaterialReady{};
+  auto actorTriangle=[&](const MeshTriangle&face,const Texture&texture,GpuRenderer::ActorMaterial&material,bool&ready){
    perf::ActorTriangleScope submissionProfile(gpuActor>=0);
-   auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
-   auto outward=center-Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
    if(gpuActor>=0){
-    if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor)
-     m_gpu->submitActor(face.v[0],face.v[1],face.v[2],outward,gpuActor,texture,m_emissionScale);
+    if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
+     // Resolve on the first submitted face, retaining material creation order.
+     if(!ready){material=m_gpu->prepareActorMaterial(texture,m_emissionScale);ready=true;}
+     m_gpu->submitActor(face.v[0],face.v[1],face.v[2],gpuActor,material);
+    }
    }else{
+    auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
+    auto outward=center-actorCenter;
     selectFaceLight(actorLights,cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),outward);
     tri(face.v[0],face.v[1],face.v[2],texture,1.f);
    }
@@ -1653,7 +1659,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(m_environmentInspection&&posedArms&&armedVertices)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
    if(m_environmentInspection&&cleanup){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
    int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
-   actorTriangle(face,cleanup?m_cleanupTextures[cleanupRole][material]:human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture);
+   actorTriangle(face,cleanup?m_cleanupTextures[cleanupRole][material]:human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture,gpuMaterials[material],gpuMaterialReady[material]);
    ++actorFace;
   }
   }
@@ -1661,11 +1667,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(weapon->grenadeThrow>0)drawTacticalGrenade(arms[0].targetHand+Point3{0,0,.025f},2.4f);
    auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
    const auto&gunMesh=weapon->handgun?m_handgunMesh:m_weaponMesh;
+   const auto&gunTexture=weapon->handgun?m_handgunTexture:m_weaponTexture;
+   GpuRenderer::ActorMaterial gunMaterial{};bool gunMaterialReady=false;
    Point3 holsterGrip=Point3{pose.position.x,pose.position.y,pose.z}+Point3{c,-s,0}*(.27f*track.scale/1.6f)+Point3{s,c,0}*(.025f*track.scale/1.6f)+Point3{0,0,.87f*track.scale/1.6f};
    for(auto face:gunMesh.bindTriangles()){if(!weapon->handgun&&face.part==3)continue;for(auto&v:face.v){auto p=v.p;
     if(engineering&&weapon->handgun)v.p=holsterGrip+(Point3{c,-s,0}*p.x+Point3{s,c,0}*p.y-Point3{0,0,1}*p.z)*gunScale;
     else v.p=weapon->handgun?gunGrip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale:gunPoint(p);}
-    actorTriangle(face,weapon->handgun?m_handgunTexture:m_weaponTexture);
+    actorTriangle(face,gunTexture,gunMaterial,gunMaterialReady);
    }
   }
   objectLighting=false;objectNormalLighting=nullptr;

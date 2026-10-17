@@ -33,10 +33,10 @@ const uint32_t compositeFragmentShader[]=
 #include "composite.frag.inc"
 ;
 struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
-// One complete triangle per Vulkan instance. Shared face attributes are stored
-// once, with exactly the same float values as the expanded vertex stream.
-struct ActorTriangle {float position[3][4],uv[3][2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
-static_assert(sizeof(ActorTriangle)==152&&sizeof(Vertex)*3==312);
+// Keep every position/UV/light at full precision. The vertex shader derives
+// edges, UV differences and outward vectors instead of streaming duplicates.
+struct ActorTriangle {float position[3][4],uv[3][2],settings[4],actor;ActorTriangle()noexcept{}};
+static_assert(sizeof(ActorTriangle)==92&&sizeof(Vertex)*3==312);
 struct ActorLighting {std::array<std::array<float,4>,6> normalBrightness,light0,light1,surfaceNormal;std::array<float,4> originEye;};
 static_assert(sizeof(ActorLighting)==400);
 constexpr size_t MaxGpuActors=1024;
@@ -615,9 +615,8 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkVertexInputAttributeDescription actorAttrs[]={
    {0,0,VK_FORMAT_R32G32B32A32_SFLOAT,0},{1,0,VK_FORMAT_R32G32B32A32_SFLOAT,16},{2,0,VK_FORMAT_R32G32B32A32_SFLOAT,32},
    {3,0,VK_FORMAT_R32G32_SFLOAT,48},{4,0,VK_FORMAT_R32G32_SFLOAT,56},{5,0,VK_FORMAT_R32G32_SFLOAT,64},
-   {6,0,VK_FORMAT_R32G32B32A32_SFLOAT,72},{7,0,VK_FORMAT_R32G32B32A32_SFLOAT,88},{8,0,VK_FORMAT_R32G32B32A32_SFLOAT,104},
-   {9,0,VK_FORMAT_R32G32B32A32_SFLOAT,120},{10,0,VK_FORMAT_R32G32B32A32_SFLOAT,136}};
-  input.vertexAttributeDescriptionCount=11;input.pVertexAttributeDescriptions=actorAttrs;
+   {6,0,VK_FORMAT_R32G32B32A32_SFLOAT,72},{7,0,VK_FORMAT_R32_SFLOAT,88}};
+  input.vertexAttributeDescriptionCount=8;input.pVertexAttributeDescriptions=actorAttrs;
   blend.blendEnable=VK_FALSE;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_TRUE;
   check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorOpaque),"Create opaque actor pipeline");
   blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorAdditive),"Create additive actor pipeline");
@@ -708,33 +707,33 @@ void GpuRenderer::endStaticCache(){
 void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches)m->retire(entry.second.buffer);m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
 std::uint64_t GpuRenderer::staticCacheHits()const{return m->cacheHits;}
 void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});m->renderingViewmodel=true;}
-int GpuRenderer::beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye){
+int GpuRenderer::beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye,Point3 center){
  if(m->capturing||m->actorLights.size()>=MaxGpuActors)return -1;
  ActorLighting record{};record.originEye={origin.x,origin.y,eye.x,eye.y};
  for(size_t side=0;side<6;++side){auto n=normals[side];record.normalBrightness[side]={n.x,n.y,n.z,brightness[side]};
   const auto&source=lights[side];auto a=source.directions[0],b=source.directions[1],normal=source.surfaceNormal;
   record.light0[side]={a.x,a.y,a.z,source.weights[0]};record.light1[side]={b.x,b.y,b.z,source.weights[1]};record.surfaceNormal[side]={normal.x,normal.y,normal.z,0};
  }
+ // Lighting reads only the XYZ surface normal. Its spare W lanes retain the
+ // full-float body center without changing the ordinary scene shader's ABI.
+ record.surfaceNormal[0][3]=center.x;record.surfaceNormal[1][3]=center.y;record.surfaceNormal[2][3]=center.z;
  int index=int(m->actorLights.size());m->actorLights.push_back(record);return index;
 }
 std::array<std::uint64_t,2> GpuRenderer::actorStatistics()const{return {m->actorLights.size(),m->actorTriangles};}
-void GpuRenderer::submitActor(MeshVertex a,MeshVertex b,MeshVertex c,Point3 outward,int actor,const SoftwareRenderer::Texture&texture,float emissionScale){
+GpuRenderer::ActorMaterial GpuRenderer::prepareActorMaterial(const SoftwareRenderer::Texture&texture,float emissionScale){
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
  else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
- uint32_t start=uint32_t(m->actorVertices.size());auto e1=b.p-a.p,e2=c.p-a.p;
- ActorTriangle common{};
- common.lighting[0]=outward.x;common.lighting[1]=outward.y;common.lighting[2]=outward.z;common.lighting[3]=texture.emission.empty()?0.f:emissionScale;
- common.light0[0]=e1.x;common.light0[1]=e1.y;common.light0[2]=e1.z;common.light0[3]=b.u-a.u;
- common.light1[0]=e2.x;common.light1[1]=e2.y;common.light1[2]=e2.z;common.light1[3]=b.v-a.v;
- common.worldNormal[0]=c.u-a.u;common.worldNormal[1]=c.v-a.v;
- common.worldNormal[2]=!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f;common.worldNormal[3]=texture.parallaxScale;
- common.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;common.surface[3]=3.f+actor;
- const MeshVertex points[]={a,b,c};
- for(size_t i=0;i<3;++i){const auto&v=points[i];auto&out=common.position[i];out[0]=v.p.x;out[1]=v.p.y;out[2]=v.p.z;out[3]=v.light;common.uv[i][0]=v.u;common.uv[i][1]=v.v;}
- m->actorVertices.push_back(common);
- if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().actor&&m->batches.back().material==key)++m->batches.back().count;
- else m->batches.push_back({key,start,1,false,false,-1,sortKey,true});
+ return {key,sortKey,texture.emission.empty()?0.f:emissionScale,!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f,texture.parallaxScale,(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength};
+}
+void GpuRenderer::submitActor(const MeshVertex&a,const MeshVertex&b,const MeshVertex&c,int actor,const ActorMaterial&material){
+ uint32_t start=uint32_t(m->actorVertices.size());
+ auto&common=m->actorVertices.emplace_back();
+ common.settings[0]=material.emission;common.settings[1]=material.normal;common.settings[2]=material.parallax;common.settings[3]=material.surface;common.actor=float(actor);
+ const MeshVertex* points[]={&a,&b,&c};
+ for(size_t i=0;i<3;++i){const auto&v=*points[i];auto&out=common.position[i];out[0]=v.p.x;out[1]=v.p.y;out[2]=v.p.z;out[3]=v.light;common.uv[i][0]=v.u;common.uv[i][1]=v.v;}
+ if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().actor&&m->batches.back().material==material.key)++m->batches.back().count;
+ else m->batches.push_back({material.key,start,1,false,false,-1,material.sortKey,true});
  ++m->actorTriangles;
 }
 void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale){
