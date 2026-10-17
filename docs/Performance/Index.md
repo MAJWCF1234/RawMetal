@@ -5,6 +5,7 @@ aliases: [Performance]
 
 # Performance
 
+- [[Performance/Competitive Round 2 20261017|Round two candidate]] — published baseline retained; better lows from support/door broad phase
 - [[Performance/Competitive Round 20261017|Latest competitive round]] — 140 → 164 FPS; 1% lows 92 → 104; spread still flat
 - [[Performance/Ultrakill Bar|Ultrakill bar]] — fresh three-run lab vs ~500 FPS Unity bar
 - [[Performance/Exclusion Zone|Exclusion Zone]] — canonical FPS / CPU story
