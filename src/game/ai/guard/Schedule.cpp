@@ -22,6 +22,7 @@ bool Game::guardTaskAllows(size_t actor,GuardTask task)const{
 }
 void Game::clearGuardSchedule(size_t actor){
  releaseGuardPatient(actor);
+ for(const char*f:{"sense_ready","plan_ready","tactic_ready","room_ready","sense_age","plan_age","tactic_age"})setState(friendlyKey(actor,f),0);
  for(const char*f:{"engineer_pad_stage","engineer_pad_ms"})setState(friendlyKey(actor,f),0);
  for(const char*f:{"task_cursor","task_cursor_saved","task_fail_schedule","guard_heard","guard_hurt_amount","guard_enemy_dead"})setState(friendlyKey(actor,f),0);
  for(const char*f:{"schedule","schedule_step","task","task_status","task_ms","task_fraction","task_stall","task_progress","task_retry","task_failures","task_reason","task_goal_x","task_goal_y","task_goal_z","task_enemy_kind","task_enemy_level","task_enemy_index","task_subject","task_work_start","task_conditions","task_transitions","support_target","support_ms","drone_windup","drone_busy","drone_repair_target","drone_repair_ms","guard_slot","guard_slot_ms"})setState(friendlyKey(actor,f),0);

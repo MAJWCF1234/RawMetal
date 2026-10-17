@@ -8,6 +8,7 @@ Short stubs for dated passes. Canonical narrative: [[Performance/Exclusion Zone]
 
 ## 2026-10-16
 
+- [[Performance/Archive/walk-start-skip-20261016|Walk start-footprint skip]]
 - [[Performance/Archive/nav-walk-pitch-20261016|Hull-scale walk pitch]]
 - [[Performance/Archive/static-prop-cache-20261016|Static crates/props]]
 - [[Performance/Archive/ai-think-lod-20261016|Calm patrol think LOD]]

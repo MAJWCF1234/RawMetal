@@ -96,6 +96,7 @@ add_executable(RawMetal WIN32
     game/ai/guard/tests/CoverTest.cpp
     game/ai/guard/tests/TableTest.cpp
     game/ai/guard/tests/NavGraphTest.cpp
+    game/ai/guard/tests/DecisionTest.cpp
     game/ai/engineer/Drones.cpp
     game/ai/engineer/Support.cpp
     game/ai/engineer/DronesTest.cpp
@@ -150,6 +151,10 @@ foreach(SHADER scene.vert scene.frag composite.vert composite.frag)
     DEPENDS "renderer/shaders/${SHADER}" VERBATIM)
   target_sources(RawMetal PRIVATE "${RAWMETAL_SHADERS}/${SHADER}.inc")
 endforeach()
+add_custom_command(OUTPUT "${RAWMETAL_SHADERS}/actor.vert.inc"
+  COMMAND Vulkan::glslc --target-env=vulkan1.0 -O -DRAWMETAL_ACTOR_INSTANCES -mfmt=c "${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders/scene.vert" -o "${RAWMETAL_SHADERS}/actor.vert.inc"
+  DEPENDS "renderer/shaders/scene.vert" VERBATIM)
+target_sources(RawMetal PRIVATE "${RAWMETAL_SHADERS}/actor.vert.inc")
 target_include_directories(RawMetal PRIVATE "${RAWMETAL_SHADERS}")
 target_link_libraries(RawMetal PRIVATE user32 gdi32 winmm cabinet bcrypt advapi32 comctl32 Vulkan::Vulkan webpdecoder)
 if(MSVC)

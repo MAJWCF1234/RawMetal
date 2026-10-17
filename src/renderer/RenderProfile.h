@@ -11,7 +11,7 @@ struct ActorScope {
 };
 struct ActorTriangleScope {
  bool active;std::chrono::steady_clock::time_point start;
- ActorTriangleScope():active(enabled&&actorMeshActive&&((actorTriangleCounter++&63u)==0)){if(active)start=std::chrono::steady_clock::now();}
+ explicit ActorTriangleScope(bool eligible=true):active(enabled&&eligible&&actorMeshActive&&((actorTriangleCounter++&63u)==0)){if(active)start=std::chrono::steady_clock::now();}
  ~ActorTriangleScope(){if(active)actorCosts[2]+=64*std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();}
 };
 }

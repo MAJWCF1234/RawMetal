@@ -1,4 +1,5 @@
 #include "GpuRenderer.h"
+#include "../core/FrameProfile.h"
 
 #include <sstream>
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -19,6 +20,9 @@ void check(VkResult result,const char* operation){if(result!=VK_SUCCESS)throw st
 const uint32_t vertexShader[]=
 #include "scene.vert.inc"
 ;
+const uint32_t actorVertexShader[]=
+#include "actor.vert.inc"
+;
 const uint32_t fragmentShader[]=
 #include "scene.frag.inc"
 ;
@@ -29,6 +33,10 @@ const uint32_t compositeFragmentShader[]=
 #include "composite.frag.inc"
 ;
 struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
+// One complete triangle per Vulkan instance. Shared face attributes are stored
+// once, with exactly the same float values as the expanded vertex stream.
+struct ActorTriangle {float position[3][4],uv[3][2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
+static_assert(sizeof(ActorTriangle)==152&&sizeof(Vertex)*3==312);
 struct ActorLighting {std::array<std::array<float,4>,6> normalBrightness,light0,light1,surfaceNormal;std::array<float,4> originEye;};
 static_assert(sizeof(ActorLighting)==400);
 constexpr size_t MaxGpuActors=1024;
@@ -291,10 +299,12 @@ struct GpuRenderer::Impl {
  // the other for write access to these mutable resources.
  static constexpr int FrameCount=2;
  int frameIndex=0;
+ size_t frameVertexCapacity=0,frameActorCapacity=0;
  std::array<VkCommandBuffer,FrameCount> commands{};
  std::array<VkFence,FrameCount> fences{};
  std::array<bool,FrameCount> frameInFlight{};
  std::array<Buffer,FrameCount> vertexBuffers{};
+ std::array<Buffer,FrameCount> actorVertexBuffers{};
  std::array<std::vector<Buffer>,FrameCount> retiredBuffers{};
  std::array<Buffer,FrameCount> overlayBuffers{};
  std::array<VkSemaphore,FrameCount> acquiredSems{};
@@ -310,6 +320,7 @@ struct GpuRenderer::Impl {
  std::vector<PendingUpload> pendingUploads;size_t pendingUploadBytes=0;Buffer atlasStaging;std::array<std::uint64_t,4> uploadStats{};
  VkDescriptorSetLayout setLayout=VK_NULL_HANDLE;VkDescriptorPool descriptors=VK_NULL_HANDLE;
  VkPipelineLayout pipelineLayout=VK_NULL_HANDLE;VkRenderPass renderPass=VK_NULL_HANDLE;VkPipeline opaque=VK_NULL_HANDLE,additive=VK_NULL_HANDLE,transparent=VK_NULL_HANDLE;
+ VkPipeline actorOpaque=VK_NULL_HANDLE,actorAdditive=VK_NULL_HANDLE,actorTransparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE,sceneSampler=VK_NULL_HANDLE,pointSampler=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
  struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;uint32_t sortKey=0,colorLevels=1;};
@@ -323,10 +334,11 @@ struct GpuRenderer::Impl {
   for(auto&entry:staticCaches)destroy(entry.second.buffer);staticCaches.clear();
   if(descriptors)vkResetDescriptorPool(device,descriptors,0);
  }
- struct Batch {uint64_t material;uint32_t start,count;bool clear=false,cache=false;int cacheSlot=-1;uint32_t sortKey=0;};
+ struct Batch {uint64_t material;uint32_t start,count;bool clear=false,cache=false;int cacheSlot=-1;uint32_t sortKey=0;bool actor=false;};
  struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;};
  std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
  std::vector<Vertex> vertices;std::vector<Batch> batches;
+ std::vector<ActorTriangle> actorVertices;
  std::array<Buffer,FrameCount> actorBuffers{};
  std::vector<ActorLighting> actorLights;
  std::uint64_t actorTriangles=0;
@@ -338,11 +350,12 @@ struct GpuRenderer::Impl {
    for(auto f:mirrorFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:mirrorViews)vkDestroyImageView(device,v,nullptr);if(mirrorPipeline)vkDestroyPipeline(device,mirrorPipeline,nullptr);if(mirrorPass)vkDestroyRenderPass(device,mirrorPass,nullptr);
    for(auto&b:projectionBuffers)destroy(b);for(auto&b:actorBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
    destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
-   for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(overlayBuffers[i]);}
+   for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(actorVertexBuffers[i]);destroy(overlayBuffers[i]);}
    for(auto&entry:staticCaches)destroy(entry.second.buffer);
    for(auto&slot:retiredBuffers)for(auto&buffer:slot)destroy(buffer);
    for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
    if(transparent)vkDestroyPipeline(device,transparent,nullptr);if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
+   if(actorTransparent)vkDestroyPipeline(device,actorTransparent,nullptr);if(actorOpaque)vkDestroyPipeline(device,actorOpaque,nullptr);if(actorAdditive)vkDestroyPipeline(device,actorAdditive,nullptr);
    if(compositePipeline)vkDestroyPipeline(device,compositePipeline,nullptr);if(compositePass)vkDestroyRenderPass(device,compositePass,nullptr);if(compositeLayout)vkDestroyPipelineLayout(device,compositeLayout,nullptr);if(compositeSetLayout)vkDestroyDescriptorSetLayout(device,compositeSetLayout,nullptr);if(compositeDescriptors)vkDestroyDescriptorPool(device,compositeDescriptors,nullptr);if(renderPass)vkDestroyRenderPass(device,renderPass,nullptr);if(pipelineLayout)vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
    if(descriptors)vkDestroyDescriptorPool(device,descriptors,nullptr);if(setLayout)vkDestroyDescriptorSetLayout(device,setLayout,nullptr);
    if(wrap)vkDestroySampler(device,wrap,nullptr);if(clamp)vkDestroySampler(device,clamp,nullptr);if(sceneSampler)vkDestroySampler(device,sceneSampler,nullptr);if(pointSampler)vkDestroySampler(device,pointSampler,nullptr);
@@ -585,7 +598,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};sampler.magFilter=sampler.minFilter=VK_FILTER_LINEAR;sampler.anisotropyEnable=enabled.samplerAnisotropy;sampler.maxAnisotropy=enabled.samplerAnisotropy?std::min(8.f,deviceProperties.limits.maxSamplerAnisotropy):1.f;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR;sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_REPEAT;sampler.maxLod=VK_LOD_CLAMP_NONE;check(vkCreateSampler(m->device,&sampler,nullptr,&m->wrap),"Create texture sampler");sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;check(vkCreateSampler(m->device,&sampler,nullptr,&m->clamp),"Create decal sampler");
  sampler.anisotropyEnable=VK_FALSE;sampler.maxAnisotropy=1.f;sampler.maxLod=0.f;check(vkCreateSampler(m->device,&sampler,nullptr,&m->sceneSampler),"Create scene presentation sampler");
  sampler.magFilter=sampler.minFilter=VK_FILTER_NEAREST;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;check(vkCreateSampler(m->device,&sampler,nullptr,&m->pointSampler),"Create HUD and depth sampler");
- VkShaderModule vert=VK_NULL_HANDLE,frag=VK_NULL_HANDLE;
+ VkShaderModule vert=VK_NULL_HANDLE,frag=VK_NULL_HANDLE,actorVert=VK_NULL_HANDLE;
  try{
   VkShaderModuleCreateInfo shader{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};shader.codeSize=sizeof(vertexShader);shader.pCode=vertexShader;check(vkCreateShaderModule(m->device,&shader,nullptr,&vert),"Create vertex shader");shader.codeSize=sizeof(fragmentShader);shader.pCode=fragmentShader;check(vkCreateShaderModule(m->device,&shader,nullptr,&frag),"Create fragment shader");
   VkPipelineShaderStageCreateInfo stages[2]{};for(auto&s:stages){s.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;s.pName="main";}stages[0].stage=VK_SHADER_STAGE_VERTEX_BIT;stages[0].module=vert;stages[1].stage=VK_SHADER_STAGE_FRAGMENT_BIT;stages[1].module=frag;
@@ -597,9 +610,21 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dynamic.dynamicStateCount=2;dynamic.pDynamicStates=states;
   VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};pipeline.stageCount=2;pipeline.pStages=stages;pipeline.pVertexInputState=&input;pipeline.pInputAssemblyState=&assembly;pipeline.pViewportState=&viewport;pipeline.pRasterizationState=&raster;pipeline.pMultisampleState=&samples;pipeline.pDepthStencilState=&depthState;pipeline.pColorBlendState=&blending;pipeline.pDynamicState=&dynamic;pipeline.layout=m->pipelineLayout;pipeline.renderPass=m->renderPass;
   check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create water blend pipeline");
- }catch(...){if(vert)vkDestroyShaderModule(m->device,vert,nullptr);if(frag)vkDestroyShaderModule(m->device,frag,nullptr);throw;}vkDestroyShaderModule(m->device,vert,nullptr);vkDestroyShaderModule(m->device,frag,nullptr);
+  shader.codeSize=sizeof(actorVertexShader);shader.pCode=actorVertexShader;check(vkCreateShaderModule(m->device,&shader,nullptr,&actorVert),"Create instanced actor shader");stages[0].module=actorVert;
+  binding={0,sizeof(ActorTriangle),VK_VERTEX_INPUT_RATE_INSTANCE};
+  VkVertexInputAttributeDescription actorAttrs[]={
+   {0,0,VK_FORMAT_R32G32B32A32_SFLOAT,0},{1,0,VK_FORMAT_R32G32B32A32_SFLOAT,16},{2,0,VK_FORMAT_R32G32B32A32_SFLOAT,32},
+   {3,0,VK_FORMAT_R32G32_SFLOAT,48},{4,0,VK_FORMAT_R32G32_SFLOAT,56},{5,0,VK_FORMAT_R32G32_SFLOAT,64},
+   {6,0,VK_FORMAT_R32G32B32A32_SFLOAT,72},{7,0,VK_FORMAT_R32G32B32A32_SFLOAT,88},{8,0,VK_FORMAT_R32G32B32A32_SFLOAT,104},
+   {9,0,VK_FORMAT_R32G32B32A32_SFLOAT,120},{10,0,VK_FORMAT_R32G32B32A32_SFLOAT,136}};
+  input.vertexAttributeDescriptionCount=11;input.pVertexAttributeDescriptions=actorAttrs;
+  blend.blendEnable=VK_FALSE;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_TRUE;
+  check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorOpaque),"Create opaque actor pipeline");
+  blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorAdditive),"Create additive actor pipeline");
+  blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorTransparent),"Create transparent actor pipeline");
+ }catch(...){if(vert)vkDestroyShaderModule(m->device,vert,nullptr);if(frag)vkDestroyShaderModule(m->device,frag,nullptr);if(actorVert)vkDestroyShaderModule(m->device,actorVert,nullptr);throw;}vkDestroyShaderModule(m->device,vert,nullptr);vkDestroyShaderModule(m->device,frag,nullptr);vkDestroyShaderModule(m->device,actorVert,nullptr);
  if(m->surface||m->vrMode)m->initPresentation();
- m->vertices.reserve(150000);m->batches.reserve(4096);
+ m->vertices.reserve(150000);m->actorVertices.reserve(40000);m->batches.reserve(4096);
 }
 GpuRenderer::~GpuRenderer()=default;
 const std::string& GpuRenderer::adapter()const{return m->name;}
@@ -644,11 +669,14 @@ void GpuRenderer::begin(int width,int height){
  // If this slot was in flight (submitted two frames ago), wait for it to finish
  // before we overwrite its command buffer and vertex buffer.
  if(m->frameInFlight[m->frameIndex]){
+  auto waitStart=std::chrono::steady_clock::now();
   check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for frame fence");
+  perf::costs[perf::FenceWait]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-waitStart).count();
   m->frameInFlight[m->frameIndex]=false;
  }
  for(auto&buffer:m->retiredBuffers[m->frameIndex])m->destroy(buffer);m->retiredBuffers[m->frameIndex].clear();
- m->vertices.clear();m->batches.clear();m->actorLights.clear();m->actorTriangles=0;m->capturing=false;m->captureSlot=-1;m->renderingViewmodel=false;
+ m->vertices.clear();m->actorVertices.clear();m->batches.clear();m->actorLights.clear();m->actorTriangles=0;m->capturing=false;m->captureSlot=-1;m->renderingViewmodel=false;
+ m->frameVertexCapacity=m->vertices.capacity();m->frameActorCapacity=m->actorVertices.capacity();
  if(width==m->width&&height==m->height)return;
  // Render target size changed — must drain GPU fully before resize.
  vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
@@ -694,17 +722,19 @@ void GpuRenderer::submitActor(MeshVertex a,MeshVertex b,MeshVertex c,Point3 outw
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
  else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
- uint32_t start=uint32_t(m->vertices.size());auto e1=b.p-a.p,e2=c.p-a.p;
- Vertex common{};
+ uint32_t start=uint32_t(m->actorVertices.size());auto e1=b.p-a.p,e2=c.p-a.p;
+ ActorTriangle common{};
  common.lighting[0]=outward.x;common.lighting[1]=outward.y;common.lighting[2]=outward.z;common.lighting[3]=texture.emission.empty()?0.f:emissionScale;
  common.light0[0]=e1.x;common.light0[1]=e1.y;common.light0[2]=e1.z;common.light0[3]=b.u-a.u;
  common.light1[0]=e2.x;common.light1[1]=e2.y;common.light1[2]=e2.z;common.light1[3]=b.v-a.v;
  common.worldNormal[0]=c.u-a.u;common.worldNormal[1]=c.v-a.v;
  common.worldNormal[2]=!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f;common.worldNormal[3]=texture.parallaxScale;
  common.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;common.surface[3]=3.f+actor;
- for(const auto&v:{a,b,c}){auto out=common;out.position[0]=v.p.x;out.position[1]=v.p.y;out.position[2]=v.p.z;out.position[3]=v.light;out.uv[0]=v.u;out.uv[1]=v.v;m->vertices.push_back(out);}
- if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().material==key)m->batches.back().count+=3;
- else m->batches.push_back({key,start,3,false,false,-1,sortKey});
+ const MeshVertex points[]={a,b,c};
+ for(size_t i=0;i<3;++i){const auto&v=points[i];auto&out=common.position[i];out[0]=v.p.x;out[1]=v.p.y;out[2]=v.p.z;out[3]=v.light;common.uv[i][0]=v.u;common.uv[i][1]=v.v;}
+ m->actorVertices.push_back(common);
+ if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().actor&&m->batches.back().material==key)++m->batches.back().count;
+ else m->batches.push_back({key,start,1,false,false,-1,sortKey,true});
  ++m->actorTriangles;
 }
 void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale){
@@ -719,7 +749,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
   for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;target.push_back(out);
  }
  if(m->capturing){auto&batches=m->staticCaches.at(m->captureSlot).batches;if(!batches.empty()&&!batches.back().clear&&batches.back().material==key)batches.back().count+=3;else batches.push_back({key,start,3,false,false,-1,sortKey});}
- else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false,false,-1,sortKey});
+ else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&!m->batches.back().actor&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false,false,-1,sortKey});
 }
 void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
@@ -730,18 +760,22 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  // of hardware draw calls without clipping the visible world.
  auto& vb=m->vertexBuffers[m->frameIndex];
  size_t bytes=m->vertices.size()*sizeof(Vertex);
- if(bytes>vb.size){m->destroy(vb);m->makeBuffer(vb,std::max(bytes*2,size_t(1048576)),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);}
+ if(bytes>vb.size){auto allocationStart=std::chrono::steady_clock::now();m->destroy(vb);m->makeBuffer(vb,std::max(bytes*2,size_t(1048576)),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);++perf::gpuBufferGrowths;perf::costs[perf::GpuAllocation]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-allocationStart).count();}
  Vertex* dest=static_cast<Vertex*>(vb.mapped);uint32_t vertexOffset=0;
+ auto& ab=m->actorVertexBuffers[m->frameIndex];size_t actorBytes=m->actorVertices.size()*sizeof(ActorTriangle);
+ if(actorBytes>ab.size){auto allocationStart=std::chrono::steady_clock::now();m->destroy(ab);m->makeBuffer(ab,std::max(actorBytes*2,size_t(1048576)),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);++perf::gpuBufferGrowths;perf::costs[perf::GpuAllocation]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-allocationStart).count();}
+ if(m->frameVertexCapacity!=m->vertices.capacity()||m->frameActorCapacity!=m->actorVertices.capacity())++perf::cpuGrowthFrames;
+ auto* actorDest=static_cast<ActorTriangle*>(ab.mapped);uint32_t actorOffset=0;
  m->sortedBatches.clear();
  for(size_t begin=0;begin<m->batches.size();){
   if(m->batches[begin].clear||m->batches[begin].cache){m->sortedBatches.push_back(m->batches[begin++]);continue;}
   size_t end=begin;while(end<m->batches.size()&&!m->batches[end].clear&&!m->batches[end].cache)++end;
   std::stable_sort(m->batches.begin()+begin,m->batches.begin()+end,[](const auto&a,const auto&b){return a.sortKey<b.sortKey;});
   for(size_t i=begin;i<end;++i){auto batch=m->batches[i];uint32_t start=vertexOffset;
-   if(dest)std::memcpy(dest+vertexOffset,m->vertices.data()+batch.start,batch.count*sizeof(Vertex));
-   vertexOffset+=batch.count;
-   if(!m->sortedBatches.empty()&&!m->sortedBatches.back().clear&&m->sortedBatches.back().material==batch.material)m->sortedBatches.back().count+=batch.count;
-   else m->sortedBatches.push_back({batch.material,start,batch.count,false,false,-1,batch.sortKey});
+   if(batch.actor){start=actorOffset;if(actorDest)std::memcpy(actorDest+actorOffset,m->actorVertices.data()+batch.start,batch.count*sizeof(ActorTriangle));actorOffset+=batch.count;}
+   else{if(dest)std::memcpy(dest+vertexOffset,m->vertices.data()+batch.start,batch.count*sizeof(Vertex));vertexOffset+=batch.count;}
+   if(!m->sortedBatches.empty()&&!m->sortedBatches.back().clear&&!m->sortedBatches.back().cache&&m->sortedBatches.back().actor==batch.actor&&m->sortedBatches.back().material==batch.material)m->sortedBatches.back().count+=batch.count;
+   else m->sortedBatches.push_back({batch.material,start,batch.count,false,false,-1,batch.sortKey,batch.actor});
   }begin=end;
  }
  m->batches.swap(m->sortedBatches);
@@ -757,16 +791,16 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  std::memcpy(m->projectionBuffers[m->frameIndex].mapped,m->vrProjection.data(),sizeof(m->vrProjection));vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,1,1,&m->projectionSets[m->frameIndex],0,nullptr);
  vkCmdPushConstants(cmd,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
- struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;};std::vector<TransparentDraw> transparentDraws;
- auto flushTransparent=[&]{for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}if(previous!=m->transparent){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->transparent);previous=m->transparent;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
+ struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false;};std::vector<TransparentDraw> transparentDraws;
+ auto flushTransparent=[&]{for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}auto pipeline=draw.actor?m->actorTransparent:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);if(draw.actor)vkCmdDraw(cmd,3,draw.count,0,draw.start);else vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
  for(auto&batch:m->batches){
   if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
   if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto&mat=m->materials.at(cached.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
-  if(currentBuffer!=vb.handle){vkCmdBindVertexBuffers(cmd,0,1,&vb.handle,&offset);currentBuffer=vb.handle;}
-  auto&mat=m->materials.at(batch.material);if(mat.transparent){transparentDraws.push_back({vb.handle,mat.set,batch.count,batch.start});continue;}auto pipeline=mat.additive?m->additive:m->opaque;
+  auto buffer=batch.actor?ab.handle:vb.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}
+  auto&mat=m->materials.at(batch.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
   if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}
   vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);
-  vkCmdDraw(cmd,batch.count,1,batch.start,0);
+  if(batch.actor)vkCmdDraw(cmd,3,batch.count,0,batch.start);else vkCmdDraw(cmd,batch.count,1,batch.start,0);
  }
  flushTransparent();vkCmdEndRenderPass(cmd);
  if(m->surface||m->vrMode){

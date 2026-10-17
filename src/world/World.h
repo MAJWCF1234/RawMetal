@@ -315,6 +315,7 @@ private:
     bool fitsUncached(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const;
     // Highest positive sample per XY column; conservative empty-air bounds.
     std::vector<std::uint8_t> m_terrainTops;
+    uint64_t m_terrainRevision=0;
     std::vector<std::uint8_t> m_terrainMaterial;
     // Custom outdoor wasteland packs (Exclusion Zone) sample a local heightfield
     // instead of the stitched Ashfall world voxels.
