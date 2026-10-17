@@ -304,7 +304,9 @@ public:
     static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
     static bool testAiQueryBatch();
+    static bool testAiDecisionClock();
     void setAiQueryCaching(bool enabled){m_aiQueryCaching=enabled;}
+    void setAiDecisionScheduling(bool enabled){m_aiDecisionScheduling=enabled;}
     bool walkExclusionEast(std::ostream& report);
     static bool testExclusion();
     static bool testExclusionAuthoring();
@@ -490,6 +492,7 @@ private:
     ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli=nullptr);
     void guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove);
     void guardBaseIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
+    void planGuardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     void runGuardSchedule(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     GuardScheduleChoice guardScheduleChoice(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,int ms,Vec2& goal,float& goalZ,bool& wantsMove,unsigned& conditions,GuardSchedule previous,int oldSubject,int retry,bool changed,bool close,const AiTarget& target);
     bool guardTaskAllows(size_t actor,GuardTask task)const;
@@ -606,6 +609,7 @@ private:
     int m_heldClutter=-1;
     int m_npcNavBudget=4;
     bool m_aiQueryCaching=true;
+    bool m_aiDecisionScheduling=true;
     bool m_vrAimValid=false,m_vrSupportGrip=false;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;

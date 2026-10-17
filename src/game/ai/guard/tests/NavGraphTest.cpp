@@ -1,5 +1,6 @@
 #include "../../../Game.h"
 #include "../../Nodes.h"
+#include "../../WalkQueryCache.h"
 #include "../../friendly/Mind.h"
 #include "../../../../world/CustomCampaign.h"
 #include <fstream>
@@ -36,6 +37,43 @@ bool Game::testNavGraph(){
   if(wall)map->structures.push_back({8,4,8.25f,9,0,1.4f});
   campaign->maps.push_back(map);return Game(campaign);
  };
+ {auto seed=scene(false);auto map=std::make_shared<AuthoredMapData>(*seed.m_customCampaign->maps[0]);
+  map->doors.push_back({5,8,6.5f});map->cargoLift={10,10,13,13,0,2,1,stateId("cache_call"),stateId("cache_release"),stateId("cache_position"),stateId("cache_down"),stateId("cache_arrived"),stateId("cache_descended")};map->layers[0].rows[6][10]='B';
+  map->structures.push_back({4,14,8,18,1.1f,1.2f});
+  ActorTrack platform;platform.timerState=map->timedSequences[0].timerState;platform.platform=true;platform.footprint={2,2};platform.keys={{0,{16,11},0,0},{60000,{16,11},0,0}};map->actorTracks.push_back(platform);
+  auto campaign=std::make_shared<CustomCampaign>(*seed.m_customCampaign);campaign->maps[0]=map;Game g(campaign);
+  ai::WalkQueryCache cache;int probes=0;auto live=[&](Vec2 a,float z,Vec2 b,float h,float*end){++probes;return g.friendlyWalkSegment(0,a,z,b,h,end);};
+  auto query=[&](Vec2 a,Vec2 b,float h=1.6f){cache.begin(g.m_world,g.m_world.m_mapData);float end=-123;return cache.walk(a,0,b,h,&end,live);};
+  bool closed=query({6.5f,5.5f},{6.5f,7.5f});int before=probes;bool repeat=query({6.5f,5.5f},{6.5f,7.5f});
+  check(!closed&&!repeat&&probes==before,"An unchanged blocked route reuses its exact collision result");
+  g.m_world.setDoor(0,1,false);bool open=query({6.5f,5.5f},{6.5f,7.5f});g.m_world.setDoor(0,0,false);
+  check(open&&!query({6.5f,5.5f},{6.5f,7.5f}),"Opening and closing a door invalidate retained route probes");
+  bool low=query({10.5f,11.5f},{12.5f,11.5f});g.m_world.setCargoLiftHeight(1);bool raised=query({10.5f,11.5f},{12.5f,11.5f});g.m_world.setCargoLiftHeight(0);
+  check(low&&!raised&&query({10.5f,11.5f},{12.5f,11.5f}),"Cargo lift motion invalidates both successful and failed route probes");
+  size_t index=map->actorTracks.size()-1;auto pose=g.m_world.actorPose(index);pose.position={16,11};pose.z=0;g.m_world.setActorPose(index,pose);
+  low=query({15.5f,11},{16.5f,11});pose.z=1;g.m_world.setActorPose(index,pose);raised=query({15.5f,11},{16.5f,11});pose.z=0;g.m_world.setActorPose(index,pose);
+  check(low&&!raised&&query({15.5f,11},{16.5f,11}),"Moving platform collision invalidates retained route probes");
+  pose.z=.2f;g.m_world.setActorPose(index,pose);cache.begin(g.m_world,g.m_world.m_mapData);float firstFeet=-123,repeatFeet=-456;
+  bool first=cache.walk({15.5f,11},0,{16.5f,11},1.6f,&firstFeet,live);before=probes;
+  bool again=cache.walk({15.5f,11},0,{16.5f,11},1.6f,&repeatFeet,live);
+  check(first&&again&&firstFeet==.2f&&std::bit_cast<uint32_t>(firstFeet)==std::bit_cast<uint32_t>(repeatFeet)&&probes==before,"A retained successful sweep restores the exact nonzero destination support height");
+  bool blocked=query({9.5f,6.5f},{11.5f,6.5f});g.m_world.destroyTile(10,6);
+  check(!blocked&&query({9.5f,6.5f},{11.5f,6.5f}),"Destroying cover immediately opens the retained route query");
+  check(!query({4.5f,16},{7.5f,16})&&query({4.5f,16},{7.5f,16},.8f),"Standing and crouching hulls have distinct exact route keys");
+  before=probes;query({.1f,5},{1,5});query({.1f,5},{1,5});check(probes==before+2,"Seam-adjacent sweeps always retain live neighbour and permission validation");
+  cache.begin(g.m_world,g.m_world.m_mapData,false);float end=0;before=probes;cache.walk({4,4},0,{5,4},1.6f,&end,live);cache.walk({4,4},0,{5,4},1.6f,&end,live);
+  check(probes==before+2,"The uncached reference bypasses retained route probes");
+  auto other=scene(false);cache.begin(other.m_world,other.m_world.m_mapData);before=probes;
+  bool otherClear=cache.walk({4.5f,16},0,{7.5f,16},1.6f,&end,[&](Vec2 a,float z,Vec2 b,float h,float*result){++probes;return other.friendlyWalkSegment(0,a,z,b,h,result);});
+  check(otherClear&&probes==before+1,"A different world and authored definition cannot reuse another world's route result");
+ }
+ {auto seed=scene(false);auto map=std::make_shared<AuthoredMapData>(*seed.m_customCampaign->maps[0]);map->definition.lift=true;World world(0,map);ai::WalkQueryCache cache;
+  auto fits=[&](Vec2 at){cache.begin(world,world.m_mapData);float end=0;return cache.walk(at,0,at,1.6f,&end,[&](Vec2 p,float z,Vec2,float h,float*out){*out=z;return world.fits(p.x,p.y,z,h);});};
+  bool northReady=fits({12,10.05f});world.m_liftPhase=World::LiftPhase::Crashed;world.m_liftTimer=3.64f;bool southShut=fits({12,13.95f});
+  check(northReady&&!fits({12,10.05f})&&!southShut,"Changing lift phase invalidates the cab entrance collision result");
+  world.m_liftTimer=3.65f;check(fits({12,13.95f}),"The crashed lift exit timer threshold invalidates the closed exit probe");
+  world.m_liftHeight=1;check(!fits({12,12}),"Lift elevation invalidates retained cab floor and ceiling collision");
+ }
  {auto g=scene(false);const auto&graph=g.navGraph(0,1.6f);int cover=0;for(const auto&n:graph.nodes)cover+=n.hint==ai::NodeHint::Cover;
   check(!graph.empty()&&cover==0,"An empty interior still builds a walkable lattice without inventing cover hints");
  }

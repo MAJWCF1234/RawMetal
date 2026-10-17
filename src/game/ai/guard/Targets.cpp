@@ -51,7 +51,9 @@ bool Game::guardShotMatches(size_t actor,const ShotHit&hit)const{
  auto t=guardTarget(actor);return t.valid()&&hit.kind==t.kind&&hit.index==t.index&&(t.kind==ShotKind::Npc||hit.level==t.level);
 }
 bool Game::guardMeleeReady(size_t actor,const ActorPose&pose,const AiTarget&t)const{
- if(!t.valid()||!guardCanSee(actor,pose,t)||std::hypot(length(t.position-pose.position),t.feet-pose.z)>1.25f||t.feet>=pose.z+m_friendlyActors[actor].track().scale||t.feet+t.height<=pose.z)return false;
+ // Contact safety stays live each tick; reject distant targets before tracing
+ // LOS so full-rate execution does not repeat a ray for an impossible melee.
+ if(!t.valid()||std::hypot(length(t.position-pose.position),t.feet-pose.z)>1.25f||t.feet>=pose.z+m_friendlyActors[actor].track().scale||t.feet+t.height<=pose.z||!guardCanSee(actor,pose,t))return false;
  auto shift=chunkOffset(m_friendlyActors[actor].level)-chunkOffset(m_level);Point3 from{pose.position.x+shift.x,pose.position.y+shift.y,pose.z+m_friendlyActors[actor].track().scale*.65f},to{t.position.x+shift.x,t.position.y+shift.y,t.feet+t.height*.6f},direction=to-from;float range=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);
  return range>.001f&&guardShotMatches(actor,traceShot(from,direction,range+.1f,int(actor),true));
 }

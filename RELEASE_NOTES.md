@@ -4,6 +4,32 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.4 - Performance hotfix
+
+Promotes the validated competitive winner to the canonical root executable.
+Fresh three-run Exclusion medians on RTX 5060 Ti at 640 x 360 improve average
+FPS **140.2 -> 163.6** (+16.7%), 1% lows **92.2 -> 103.6** (+12.4%) and P99 frame
+time **10.108 -> 9.039 ms**. Frame-time spread remains essentially unchanged;
+this release does not claim hitch elimination or 500 FPS.
+
+- Exact terrain-height reuse, retained minimap occupancy and decorative panel pixels
+- Includes the validated decision clock, retained route queries and GPU actor preparation
+- Preserves the walk-start optimization and existing gameplay/content edits
+- No reduced animation samples, lighting, geometry or AI decision rates in this round
+- Hard **32 MiB** executable ceiling unchanged
+
+**Validation:** 26 commands passed, including full `--smoke-test --vulkan`;
+28 cache reference views had zero changed pixels, and 56 GPU actor comparisons passed.
+The final six competitive replays retained identical gameplay counters.
+Full results: [competitive round](docs/Performance/Competitive%20Round%2020261017.md).
+
+**Canonical EXE:** 26,896,896 bytes (25.65 MiB; 6.35 MiB headroom).
+SHA-256: `17059affba29ab4e694d7e0177cdee69c35829c86510d1ec3985813c04277c0a`.
+
+**Play:** Custom Maps -> ASHFALL EXCLUSION ZONE, or `RawMetal.exe --pc --exclusion-zone`.
+
+---
+
 ## v0.7.2-preview.3
 
 Exclusion yard CPU pass + docs vault reorg. Lab `--lab-performance` on RTX 5060 Ti settled ~**8.4 ms** (~**119 FPS**) after hull-scale walk pitch and static crate/prop VBO bake; calm-patrol think LOD ships for idle friendlies (combat yard totals noise-flat). GoldSrc cost-model notes live in the Obsidian vault under `docs/`.

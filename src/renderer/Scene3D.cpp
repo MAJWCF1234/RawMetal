@@ -1597,6 +1597,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const bool nearFarLimit=cameraPoint({pose.position.x,pose.position.y,pose.z+radius*.5f},game).z+radius*4.f>=farPlane;
   const int gpuActor=m_gpuFrame&&m_gpuActorPreparation&&!nearFarLimit?m_gpu->beginActor(actorLights.normals,actorLights.brightness,actorLights.gloss,game.chunkOffset(level),player.pos):-1;
   auto actorTriangle=[&](const MeshTriangle&face,const Texture&texture){
+   perf::ActorTriangleScope submissionProfile(gpuActor>=0);
    auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
    auto outward=center-Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
    if(gpuActor>=0){

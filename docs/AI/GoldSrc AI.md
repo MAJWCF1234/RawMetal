@@ -37,7 +37,7 @@ GoldSrc was cheap because of **sparse queries**, not free schedules.
 | --- | --- |
 | Node graph is walkability | Live `fits`/`support` still own steps |
 | One hull move | Hull-scale pitch landed; not TraceHull authority |
-| Sparse LOS / think intervals | Calm patrol LOD only |
+| Sparse LOS / think intervals | Staggered guard selection/tactics; live target LOS and task execution |
 | BSP + PVS | Not done |
 | Studio models | CPU attachment remains |
 

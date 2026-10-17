@@ -1,4 +1,17 @@
 #version 450
+#ifdef RAWMETAL_ACTOR_INSTANCES
+layout(location=0) in vec4 corner0;
+layout(location=1) in vec4 corner1;
+layout(location=2) in vec4 corner2;
+layout(location=3) in vec2 uv0;
+layout(location=4) in vec2 uv1;
+layout(location=5) in vec2 uv2;
+layout(location=6) in vec4 lighting;
+layout(location=7) in vec4 light0;
+layout(location=8) in vec4 light1;
+layout(location=9) in vec4 surface;
+layout(location=10) in vec4 worldNormal;
+#else
 layout(location=0) in vec4 position;
 layout(location=1) in vec2 uv;
 layout(location=2) in vec4 lighting;
@@ -6,6 +19,7 @@ layout(location=3) in vec4 light0;
 layout(location=4) in vec4 light1;
 layout(location=5) in vec4 surface;
 layout(location=6) in vec4 worldNormal;
+#endif
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;} stereo;
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
 layout(std430,set=1,binding=1) readonly buffer ActorLights {ActorLighting actor[];} actors;
@@ -39,6 +53,10 @@ vec3 stableUnit(vec3 v){
 }
 
 void main(){
+#ifdef RAWMETAL_ACTOR_INSTANCES
+ vec4 position=gl_VertexIndex==0?corner0:gl_VertexIndex==1?corner1:corner2;
+ vec2 uv=gl_VertexIndex==0?uv0:gl_VertexIndex==1?uv1:uv2;
+#endif
  vec4 adjustedLighting=lighting;
  vec4 adjustedSurface=surface;
  vec3 worldPos=position.xyz;

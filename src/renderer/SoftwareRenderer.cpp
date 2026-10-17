@@ -3,6 +3,7 @@
 #include "GpuRenderer.h"
 #include "../vr/VrRuntime.h"
 #include "FrameWorker.h"
+#include "MinimapCache.h"
 #include <fstream>
 #include "../core/PackedResource.h"
 #include "../core/Math.h"
@@ -488,6 +489,14 @@ void SoftwareRenderer::text(int x,int y,const char* s,std::uint32_t c,int sc){fo
 void SoftwareRenderer::wornPanel(int x,int y,int width,int height,bool recess,bool materialPanel){
  if(m_vrRendering){rect(x,y,width,height,0xff041008u);rect(x+1,y+1,width-2,height-2,0xff000000u);return;}
  rect(x+2,y+3,width,height,rgb(5,4,3));
+ const auto&texture=materialPanel?(recess?m_panelMetal:m_signRust):m_metal;
+ std::array<int,6> key{x,y,width,height,int(recess),int(materialPanel)};
+ PanelRaster* retained=nullptr;bool reuse=false;
+ if(m_panelCaching&&width>0&&height>0&&int64_t(width)*height<=65536){
+  for(auto&entry:m_panelRasters)if(entry.key==key&&entry.textureGeneration==texture.generation.value&&!entry.pixels.empty()){retained=&entry;reuse=true;break;}
+  if(!retained){retained=&m_panelRasters[m_nextPanelRaster++%m_panelRasters.size()];retained->key=key;retained->textureGeneration=texture.generation.value;retained->pixels.resize(size_t(width)*height);}
+ }
+ if(!reuse){
  for(int yy=0;yy<height;++yy)for(int xx=0;xx<width;++xx){
   unsigned grain=unsigned((xx+x)*7349)^unsigned((yy+y)*19391);grain=(grain^(grain>>7))*1597;
   auto c=materialPanel?sample(recess?m_panelMetal:m_signRust,(xx+x)/256.f,(yy+y)/180.f):sample(m_metal,(xx+x)/91.f,(yy+y)/67.f);
@@ -496,7 +505,12 @@ void SoftwareRenderer::wornPanel(int x,int y,int width,int height,bool recess,bo
   if(edge==0)c=rgb(24,17,12),light=1;
   else if(edge==1)c=yy<height/2?rgb(113,96,71):rgb(27,22,17),light=1;
   else if(edge<4&&grain%9==0)c=rgb(126,81,42),light=.9f;
-  put(x+xx,y+yy,shade(c,light));
+  auto pixel=shade(c,light);if(retained)retained->pixels[size_t(yy)*width+xx]=pixel;else put(x+xx,y+yy,pixel);
+ }
+ }
+ if(retained){int left=std::max(0,x),right=std::min(m_width,x+width);
+  if(right>left)for(int yy=std::max(0,y);yy<std::min(m_height,y+height);++yy)
+   std::copy_n(retained->pixels.data()+size_t(yy-y)*width+left-x,right-left,m_pixels.data()+size_t(yy)*m_width+left);
  }
  if(width>40&&height>20){for(int dx:{5,width-6})for(int dy:{5,height-6}){
   rect(x+dx-2,y+dy-2,5,5,rgb(17,13,9));rect(x+dx-1,y+dy-1,3,3,rgb(96,86,69));
@@ -515,7 +529,8 @@ void SoftwareRenderer::drawHud(const Game& game){
  // Compact map reveals nearby contacts and a fixed extraction marker.
  const int mx=m_width-57,my=8;
  wornPanel(mx-5,my-5,58,58);rect(mx-1,my-1,50,50,rgb(19,18,10));
- for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(game.world().solid(x+.5f,y+.5f))rect(mx+x*2,my+y*2,2,2,game.world().tile(x,y)=='#'?rgb(85,78,45):rgb(58,52,35));
+ static thread_local MinimapCache minimap;const auto&occupancy=minimap.cells(game.world());
+ for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(occupancy[size_t(y*24+x)])rect(mx+x*2,my+y*2,2,2,game.world().tile(x,y)=='#'?rgb(85,78,45):rgb(58,52,35));
  for(auto&e:game.enemies())if(e.alive&&lengthSq(e.pos-p.pos)<36)rect(mx+int(e.pos.x*2),my+int(e.pos.y*2),2,2,red);
  auto exit=game.world().exitPoint();rect(mx+int(exit.x*2),my+int(exit.y*2),2,2,game.enemiesRemaining()==0?rgb(225,183,70):muted);
  rect(mx+int(p.pos.x*2)-1,my+int(p.pos.y*2)-1,3,3,amber);
@@ -704,7 +719,7 @@ void SoftwareRenderer::drawConsole(const Game& game){
  int y=28;for(size_t i=first;i<log.size();++i,y+=11)text(12,y,log[i].substr(0,150).c_str(),rgb(188,204,196));
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
-void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();
+void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();auto afterSubmission=start;
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  m_cleanupEdgeStretch=1;
  bool directPresentation=hardwarePresentsWindow();
@@ -747,7 +762,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
-  m_gpu->setAtmosphere(atmosphere);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
+  m_gpu->setAtmosphere(atmosphere);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
  else scene();
  bool underwater=!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f;
@@ -767,7 +782,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering)drawVrStatus(game);else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}}
  if(m_vrRendering){for(auto&pixel:m_pixels){unsigned intensity=std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u});pixel=0xff000000u|((intensity/4)<<16)|(intensity<<8)|(intensity/3);}}
  if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xff7aff9au);rect(x-1,y-3,3,7,0xff7aff9au);}}
- float ms=std::chrono::duration<float,std::milli>(std::chrono::steady_clock::now()-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
+ auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
  m_presentMs=0;
  if(directPresentation){auto presentStart=std::chrono::steady_clock::now();float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;float shotKick=std::max(std::clamp(1.f-game.shotAge()/.10f,0.f,1.f)*(game.weaponKick()>.85f&&!game.unarmed()?1.f:0.f),game.damageFlash()*.65f);m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim,game.damageFlash(),shotKick);m_presentMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-presentStart).count();}

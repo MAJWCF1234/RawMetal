@@ -1,6 +1,23 @@
 #include "../../Game.h"
 namespace retro {
 void Game::guardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove){
+ auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto put=[&](const char*f,int v){setState(friendlyKey(actor,f),v);};
+ int flags=int(guardState(actor))|((get("guard_under_fire")>0)<<3)|((get("weapon_reload")>0||get("weapon_reloading"))<<4)|((get("weapon_saved")&&!get("weapon_rounds"))<<5)|(get("guard_cover_mode")<<6);
+ Vec2 remembered{get("tactic_x")*.001f,get("tactic_y")*.001f};float z=get("tactic_z")*.001f;
+ bool changed=flags!=get("tactic_flags")||get("guard_target_kind")!=get("tactic_kind")||get("guard_target_level")!=get("tactic_level")||get("guard_target_index")!=get("tactic_index")||lengthSq(Vec2{target.x-get("tactic_target_x")*.001f,target.y-get("tactic_target_y")*.001f})>.75f*.75f;
+ bool reached=get("tactic_move")&&lengthSq(remembered-pose.position)<.04f;
+ bool invalid=get("tactic_move")&&guardPositionReserved(actor,remembered,z);
+ if(m_aiDecisionScheduling&&get("plan_ready")&&!get("plan_due")&&get("tactic_ready")&&!changed&&!reached&&!invalid){
+  put("tactic_age",std::min(1000,get("tactic_age")+ms));goal=remembered;goalZ=z;wantsMove=get("tactic_move")!=0;return;
+ }
+ int elapsed=std::min(1000,ms+get("tactic_age"));put("tactic_age",0);
+ planGuardReposition(level,actor,track,pose,target,elapsed,goal,goalZ,wantsMove);
+ flags=int(guardState(actor))|((get("guard_under_fire")>0)<<3)|((get("weapon_reload")>0||get("weapon_reloading"))<<4)|((get("weapon_saved")&&!get("weapon_rounds"))<<5)|(get("guard_cover_mode")<<6);
+ put("tactic_ready",1);put("tactic_flags",flags);put("tactic_kind",get("guard_target_kind"));put("tactic_level",get("guard_target_level"));put("tactic_index",get("guard_target_index"));
+ put("tactic_target_x",int(std::round(target.x*1000)));put("tactic_target_y",int(std::round(target.y*1000)));
+ put("tactic_x",int(std::round(goal.x*1000)));put("tactic_y",int(std::round(goal.y*1000)));put("tactic_z",int(std::round(goalZ*1000)));put("tactic_move",wantsMove);
+}
+void Game::planGuardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove){
  auto ctx=makeGuardCtx(actor,level,track,const_cast<ActorPose&>(pose));
  auto get=[&](const char* field){return ctx.get(field);};
  auto put=[&](const char* field,int value){ctx.put(field,value);};

@@ -1,6 +1,7 @@
 #include "../core/FrameProfile.h"
 #include "World.h"
 #include "CollisionQueryBatch.h"
+#include "TerrainSurfaceCache.h"
 #include "../core/Ray.h"
 #include "CampaignMaps.h"
 #include <algorithm>
@@ -10,6 +11,7 @@
 
 namespace retro {
 namespace {
+std::atomic<uint64_t> nextTerrainRevision{1};
 constexpr MapRows FoundryGround = {
     "########################",
     "#...........#..........#",
@@ -1558,6 +1560,7 @@ std::size_t World::terrainSampleIndex(int sx,int sy,int sz)const{
  return size_t((sz*TerrainSamplesY+sy)*TerrainSamplesX+sx);
 }
 void World::buildTerrainBounds(){
+ m_terrainRevision=nextTerrainRevision.fetch_add(1,std::memory_order_relaxed);
  m_terrainTops.assign(size_t(TerrainSamplesX)*TerrainSamplesY,255);
  for(int z=0;z<TerrainSamplesZ;++z)for(int y=0;y<TerrainSamplesY;++y)for(int x=0;x<TerrainSamplesX;++x)
   if(m_terrainDensity[terrainSampleIndex(x,y,z)]>0)m_terrainTops[size_t(y*TerrainSamplesX+x)]=static_cast<std::uint8_t>(z);
@@ -1733,8 +1736,7 @@ template<class Density> float terrainCeiling(float feet,float limit,const Densit
 }
 float World::terrainSurfaceBelow(float x,float y,float feet)const{
  if(m_terrainDensity.empty())return 0;
- TerrainColumn density(m_terrainDensity,m_terrainTops,x,y);
- return terrainFloor(feet,density,density.airTop());
+ return TerrainSurfaceCache::below(m_terrainRevision,x,y,feet,[&]{TerrainColumn density(m_terrainDensity,m_terrainTops,x,y);return terrainFloor(feet,density,density.airTop());});
 }
 float World::terrainSurfaceAbove(float x,float y,float feet)const{
  if(m_terrainDensity.empty())return 128.f;
@@ -1865,6 +1867,23 @@ __declspec(noinline) bool World::testCollisionCandidates(){
     }
    }
   }
+ }
+ // Retained height results are exact, copy-safe and invalidated when an
+ // immutable density field is rebuilt. A reference query bypasses all memos.
+ if(TerrainSurfaceCache::enabled.load(std::memory_order_relaxed)){
+  TerrainSurfaceCache::resetStatistics();World original(0,WorldId::Ashfall);
+  for(int i=0;i<1000;++i){float x=float(i%31)*.731f-.15f,y=float(i%29)*.811f-.2f,z=float(i%7)-2.037f;
+   float cached=original.terrainSurfaceBelow(x,y,z),again=original.terrainSurfaceBelow(x,y,z);
+   CollisionQueryBatch reference(&original,false);float full=original.terrainSurfaceBelow(x,y,z);
+   if(std::bit_cast<uint32_t>(cached)!=std::bit_cast<uint32_t>(again)||std::bit_cast<uint32_t>(cached)!=std::bit_cast<uint32_t>(full))return false;
+  }
+  if(TerrainSurfaceCache::statistics().hits<1000)return false;
+  float before=original.terrainSurfaceBelow(12,12,13);World copy=original;
+  auto hits=TerrainSurfaceCache::statistics().hits;if(copy.terrainSurfaceBelow(12,12,13)!=before||TerrainSurfaceCache::statistics().hits!=hits+1)return false;
+  std::fill(copy.m_terrainDensity.begin(),copy.m_terrainDensity.end(),int8_t(-32));copy.buildTerrainBounds();
+  if(copy.terrainSurfaceBelow(12,12,13)!=float(TerrainMinZ-1)||original.terrainSurfaceBelow(12,12,13)!=before)return false;
+  auto queries=TerrainSurfaceCache::statistics().queries;{CollisionQueryBatch reference(&original,false);original.terrainSurfaceBelow(12,12,13);}
+  if(TerrainSurfaceCache::statistics().queries!=queries)return false;
  }
  return true;
 }

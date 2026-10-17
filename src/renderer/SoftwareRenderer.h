@@ -34,6 +34,7 @@ public:
     static bool testVisibility();
     static bool testGpuActors();
     void setGpuActorPreparation(bool enabled){m_gpuActorPreparation=enabled;}
+    void setPanelCaching(bool enabled){m_panelCaching=enabled;}
     static bool testCablePerformance();
     static bool testHardware();
     static bool testPresentationResize();
@@ -56,6 +57,15 @@ private:
     std::string m_gpuName;
     bool m_gpuFrame=false;
     bool m_gpuActorPreparation=true;
+    bool m_panelCaching=true;
+    struct PanelRaster {
+        std::array<int,6> key{};
+        std::uint64_t textureGeneration=0;
+        std::vector<std::uint32_t> pixels;
+    };
+    // Bounded retained decoration only; live text, meters and prompts draw over it.
+    std::array<PanelRaster,16> m_panelRasters;
+    size_t m_nextPanelRaster=0;
     bool m_vrRendering=false;
     std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
     void drawTrackedHands(const Game& game);

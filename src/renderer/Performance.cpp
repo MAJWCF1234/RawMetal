@@ -1,6 +1,8 @@
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
 #include "FrameWorker.h"
+#include "MinimapCache.h"
+#include "../world/TerrainSurfaceCache.h"
 #include "../platform/Win32Window.h"
 #include "../audio/AudioEngine.h"
 #include <chrono>
@@ -347,12 +349,27 @@ bool SoftwareRenderer::testVisibility(){
   renderer.m_visibilityCulling=true;renderer.render(scene);size_t changed=0;
   for(size_t i=0;i<reference.size();++i)changed+=reference[i]!=renderer.m_pixels[i];
   report<<"View "<<count++<<": "<<changed<<" changed pixels\n";report.flush();passed&=changed==0&&renderer.hardwareActive();
+  auto retained=renderer.m_pixels;
+  renderer.setPanelCaching(false);
+  bool terrainEnabled=TerrainSurfaceCache::enabled.exchange(false),minimapEnabled=MinimapCache::enabled.exchange(false);
+  renderer.render(scene);
+  TerrainSurfaceCache::enabled=terrainEnabled;MinimapCache::enabled=minimapEnabled;
+  renderer.setPanelCaching(true);
+  size_t cacheChanged=0;for(size_t i=0;i<retained.size();++i)cacheChanged+=retained[i]!=renderer.m_pixels[i];
+  report<<"  Terrain/minimap/panel live reference: "<<cacheChanged<<" changed pixels\n";report.flush();passed&=cacheChanged==0&&renderer.hardwareActive();
  };
  for(int stage=0;stage<12;++stage)compare(Game::exclusionInspection(stage));
  for(int level:{0,3,6,14})for(float angle:{0.f,1.57f,3.14f,4.71f}){
   const auto&def=chunkDefinition(WorldId::Campaign,level);
   compare(Game::mapInspection(def.playerStart,angle,0,level,false,def.spawnHeight,true));
  }
+ for(int i=0;i<24;++i){int x=i%3==0?-11:i%3==1?renderer.m_width-41:17+i,y=i%2?-9:renderer.m_height-37;
+  auto background=0xff17324au;std::fill(renderer.m_pixels.begin(),renderer.m_pixels.end(),background);
+  renderer.setPanelCaching(false);renderer.wornPanel(x,y,73+i,59,i&1,i&2);auto reference=renderer.m_pixels;
+  renderer.setPanelCaching(true);
+  for(int pass=0;pass<2;++pass){std::fill(renderer.m_pixels.begin(),renderer.m_pixels.end(),background);renderer.wornPanel(x,y,73+i,59,i&1,i&2);passed&=reference==renderer.m_pixels;}
+ }
+ report<<(passed?"PASS":"FAIL")<<": retained panels preserve clipping, texture variants and eviction across 24 layouts\n";
  report<<(passed?"PASS":"FAIL")<<": opaque occlusion preserves reference pixels\n";
  return passed;
 }

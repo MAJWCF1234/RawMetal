@@ -1,12 +1,15 @@
 #include "../../Game.h"
 #include "../Perception.h"
 #include "ScheduleTables.h"
+#include "../DecisionClock.h"
 #include <fstream>
 #include "../../../world/CustomCampaign.h"
 namespace retro {
 int Game::npcMilliseconds(size_t actor,float dt,std::string_view field){auto key=friendlyKey(actor,field);int micros=state(key)+int(std::round(double(dt)*1000000));setState(key,micros%1000);return micros/1000;}
 void Game::validateGuardState(size_t actor)const{
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};const auto&config=m_friendlyActors[actor].track().ai;
+ for(const char*f:{"sense_ready","plan_ready","tactic_ready","room_ready","sense_due","plan_due"})if(get(f)<0||get(f)>1)throw std::runtime_error("Invalid saved AI decision flag");
+ for(const char*f:{"sense_wait","plan_wait","sense_age","plan_age","tactic_age"})if(get(f)<0||get(f)>1000)throw std::runtime_error("Invalid saved AI decision clock");
  if(get("evac_level")<0||get("evac_level")>chunkCount()||get("evac_x")<0||get("evac_x")>24000||get("evac_y")<0||get("evac_y")>24000||(get("evac_z")< -100000||get("evac_z")>100000)||get("evacuated")<0||get("evacuated")>1||get("killed_by_player")<0||get("killed_by_player")>1)throw std::runtime_error("Invalid saved NPC evacuation");
  if(get("guard_fraction")<0||get("guard_fraction")>=1000||get("weapon_fraction")<0||get("weapon_fraction")>=1000)throw std::runtime_error("Invalid saved guard clock fraction");
  if(get("guard_step")<0||get("guard_step")>=1000||get("guard_bearing")< -31416||get("guard_bearing")>31416)throw std::runtime_error("Invalid saved guard motion");
@@ -35,7 +38,34 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
  auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;
  auto shift=chunkOffset(level)-chunkOffset(m_level),globalOrigin=chunkOffset(level);auto observer=pose.position+shift;
- float eye=pose.z+friendlyHullHeight(actor,track)*.85f;auto previous=guardTarget(actor),target=guardThreat(actor,pose);bool visible=target.valid();
+ float eye=pose.z+friendlyHullHeight(actor,track)*.85f;auto previous=guardTarget(actor);
+ bool freshHit=(track.damageState&&state(track.damageState)>get("guard_damage"))||get("hit_source");
+ Vec2 playerLocal=m_player.pos+chunkOffset(m_level)-globalOrigin;
+ bool nearThreat=(factionsHostile(actorFaction(track),AiFaction::Player)&&lengthSq(playerLocal-pose.position)<3.f*3.f&&std::fabs(m_player.z-pose.z)<track.scale)||(previous.valid()&&lengthSq(previous.position-pose.position)<3.f*3.f);
+ if(!nearThreat)for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();
+  if(i==actor||!t.health||npcIncapacitated(i)||(t.deadState&&state(t.deadState))||!factionsHostile(actorFaction(track),actorFaction(t)))continue;
+  if(lengthSq(other.pose.position+chunkOffset(other.level)-globalOrigin-pose.position)<9.f&&std::fabs(other.pose.z-pose.z)<track.scale){nearThreat=true;break;}
+ }
+ if(!nearThreat&&factionsHostile(actorFaction(track),AiFaction::Creature))for(int other=0;other<chunkCount()&&!nearThreat;++other)if(chunkResident(other)){
+  const auto&enemies=other==m_level?m_enemies:m_chunks[other].enemies;auto offset=chunkOffset(other)-globalOrigin;
+  for(const auto&enemy:enemies)if(enemy.alive&&lengthSq(enemy.pos+offset-pose.position)<9.f&&std::fabs(enemy.bodyBottom()-pose.z)<track.scale){nearThreat=true;break;}
+ }
+ bool noiseWake=false;
+ for(const auto&noise:stimuli){
+  if(noise.npc==int(actor)||!(noise.radius>0)||!(noise.gain>0))continue;
+  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&actorFaction(m_friendlyActors[size_t(noise.npc)].track())==actorFaction(track))continue;
+  float dz=noise.z-eye;if(lengthSq(noise.source-observer)+dz*dz<noise.radius*noise.radius){noiseWake=true;break;}
+ }
+ auto clock=[&](const char*wait,const char*age,const char*ready,int period,bool wake,int lane){
+  ai::DecisionClock::State state{get(wait),get(age),get(ready)};
+  auto step=ai::DecisionClock::advance(state,ms,period,int((actor*37+size_t(level)*11)%size_t(period)),wake,lane);
+  put(wait,state.remaining);put(age,state.elapsed);put(ready,state.ready);return step.due;
+ };
+ bool senseDue=!m_aiDecisionScheduling||clock("sense_wait","sense_age","sense_ready",mode==GuardState::Patrol?100:50,freshHit||noiseWake||nearThreat||(!previous.valid()&&get("guard_target_kind")),0);
+ put("sense_due",senseDue);
+ // Selecting among all possible threats is scheduled. Tracking the current
+ // reference and its live LOS remain immediate, including losing it to cover.
+ auto target=senseDue?guardThreat(actor,pose):(previous.valid()&&guardCanSee(actor,pose,previous)?resolveGuardTarget(actor,{previous.kind,previous.level,previous.index}):AiTarget{});bool visible=target.valid();
  // A missing live target is not proof of death: streaming, disabling and
  // occlusion can all invalidate its reference. Confirm only a known corpse
  // which this guard can currently see in resident geometry.
@@ -69,7 +99,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   position+=chunkOffset(targetLevel)-globalOrigin;auto delta=position-pose.position;float dz=feet+corpseEye-eye;
   return lengthSq(delta)+dz*dz<config.sightRange*config.sightRange&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>config.sightDot&&soundRayClear(observer,eye,position+shift,feet+corpseEye);
  };
- bool enemyDead=corpseSeen();int deadKind=get("guard_target_kind"),deadLevel=get("guard_target_level"),deadIndex=get("guard_target_index");put("guard_enemy_dead",enemyDead);
+ bool enemyDead=senseDue&&corpseSeen();int deadKind=get("guard_target_kind"),deadLevel=get("guard_target_level"),deadIndex=get("guard_target_index");put("guard_enemy_dead",enemyDead);
  auto schedule=GuardSchedule(get("schedule"));if(schedule==GuardSchedule::None)schedule=GuardSchedule::Patrol;
  const auto soundMask=guardScheduleDefinition(schedule).schedule.soundMask;
  const AiStimulus*heard=nullptr;float strongest=0;unsigned audible=0;
@@ -87,7 +117,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  // Fallen colleagues are not loot — seeing one confirms a hostile was here and
  // bars silent rear takedowns until the detail clears its memory.
  bool casualty=false;
- if(mode!=GuardState::Alert){
+ if(senseDue&&mode!=GuardState::Alert){
   Vec2 facing{std::sin(pose.yaw),std::cos(pose.yaw)};
   for(size_t i=0;i<m_friendlyActors.size();++i){
    if(i==actor)continue;const auto&buddy=m_friendlyActors[i];const auto&bt=buddy.track();
@@ -138,10 +168,16 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);put("guard_route_next",0);put("guard_route_wait",0);
   confirmed=false;recognition=0;mode=GuardState::Search;
  }
- put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
+ int oldSeen=get("guard_seen");put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
  // Senses update independently of task ownership. Only the shared executor
  // below may select movement or advance role work for this actor/frame.
- put("guard_mode",int(mode));runGuardSchedule(level,actor,track,pose,dt,ms,goal,goalZ,wantsMove);
+ put("guard_mode",int(mode));
+ int planFlags=(get("guard_under_fire")>0)|((get("weapon_reload")>0||get("weapon_reloading"))<<1)|((get("weapon_saved")&&!get("weapon_rounds"))<<2);
+ bool changedThreat=target.valid()&&(previous.kind!=target.kind||previous.level!=target.level||previous.index!=target.index);
+ bool planWake=freshHit||noiseWake||nearThreat||enemyDead||changedThreat||int(mode)!=get("plan_mode")||visible!=bool(oldSeen)||planFlags!=get("plan_flags")||get("stuck")>0;
+ bool planDue=!m_aiDecisionScheduling||clock("plan_wait","plan_age","plan_ready",100,planWake,1);
+ put("plan_due",planDue);put("plan_mode",int(mode));put("plan_flags",planFlags);
+ runGuardSchedule(level,actor,track,pose,dt,ms,goal,goalZ,wantsMove);
 }
 void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,int ms,Vec2&goal,float&goalZ,bool&wantsMove){
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};
@@ -164,7 +200,8 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
   else if(mode==GuardState::Alert&&config.armed){const auto profile=guardRoleProfile(config.role);float stop=config.role==GuardSquadRole::Rusher?1.1f:config.attackRange*profile.advanceFraction;
    // Corridors pull the hold-up closer; open floors keep the authored standoff.
    Vec2 towardMem=distance>.001f?normalized(remembered-pose.position):Vec2{std::sin(pose.yaw),std::cos(pose.yaw)};
-   Vec2 side{-towardMem.y,towardMem.x};float room=std::max(guardLateralClearance(level,actor,pose,side),guardLateralClearance(level,actor,pose,side*(-1.f)));
+   Vec2 side{-towardMem.y,towardMem.x};float room=get("plan_room")*.0001f;
+   if(!m_aiDecisionScheduling||get("plan_due")||!get("room_ready")){room=std::max(guardLateralClearance(level,actor,pose,side),guardLateralClearance(level,actor,pose,side*(-1.f)));put("plan_room",int(std::round(room*10000)));put("room_ready",1);}
    if(room<.85f)stop=std::min(stop,1.35f);else if(room>2.2f)stop=std::max(stop,config.attackRange*std::min(1.f,profile.advanceFraction+.12f));
    wantsMove=std::hypot(distance,pose.z-goalZ)>stop;face(remembered);
    if(visible&&profile.minimumDistance>0&&distance<profile.minimumDistance){auto away=normalized(pose.position-remembered);goal=pose.position+away*(profile.minimumDistance-distance+.35f);goalZ=pose.z;wantsMove=true;put("guard_cover",0);put("guard_cover_wait",0);}
