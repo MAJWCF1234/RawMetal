@@ -11,9 +11,10 @@ The first-round winner was promoted and published before this competition:
 The GitHub asset's SHA-256 and size match the canonical root EXE. The superseded
 preview.3 GitHub release was removed; its source tag/history were retained.
 
-The root EXE remains that published first-round winner. Round-two development
-and its next candidate are kept separately on `codex/performance-round2` and
-in `.build/competitive-round2-20261017/`; this candidate is not the published hotfix.
+After validation, the user requested promotion: the round-two winner is now the
+canonical root EXE, published as **v0.7.2-preview.5 - Performance hotfix**.
+The earlier first-round hotfix is superseded. Raw experiments remain in
+`.build/competitive-round2-20261017/`.
 
 ## Result
 
@@ -110,10 +111,10 @@ All nine compared combat replays retain identical gameplay fingerprints:
 14,029,424 collision queries / 1,790,181 hits; 23,829 route queries / 16,696 hits;
 sensing 11,831 runs, planning 9,493 runs; final health 99,158. The asset packer
 verified all 230 resources exactly. The default build output was restored to the
-repository root after the experiment; the canonical root binary was never replaced.
+repository root after the experiment; the root binary remained unchanged during the experiment and was promoted afterward.
 
 Raw CSVs, logs, binary copies, the body-cache patch and `analyze.py` live in
-`.build/competitive-round2-20261017/`. The root canonical hash remains:
+`.build/competitive-round2-20261017/`. The previous first-round canonical hash was:
 `17059affba29ab4e694d7e0177cdee69c35829c86510d1ec3985813c04277c0a`.
 
 The tested broad-phase executable is `broadphase.exe`, SHA-256:
