@@ -1900,15 +1900,19 @@ float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const
  }
 }
 bool World::doorBlocks(float x,float y,float feet,float height)const{
- for(auto&door:m_doors){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+ for(auto&door:m_doors){
   if(door.swinging){
    float angle=door.open*kPi*.5f,width=door.right-door.left;
    Vec2 hinge{door.left,door.y},axis{std::cos(angle),std::sin(angle)};
    Vec2 delta=Vec2{x,y}-hinge;
    float along=std::clamp(dot(delta,axis),0.f,width);
    Vec2 nearest=hinge+axis*along;
-   if(lengthSq(Vec2{x,y}-nearest)<.15f*.15f&&feet+height>base+.015f&&feet<base+2.35f)return true;
-  }else if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f&&feet+height>base+door.open*2.65f+.015f&&feet<base+door.open*2.65f+2.48f)return true;
+   if(lengthSq(Vec2{x,y}-nearest)<.15f*.15f){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+    if(feet+height>base+.015f&&feet<base+2.35f)return true;
+   }
+  }else if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+   if(feet+height>base+door.open*2.65f+.015f&&feet<base+door.open*2.65f+2.48f)return true;
+  }
  }
  return false;
 }
@@ -2129,13 +2133,13 @@ float World::supportBelowUncached(float x,float y,float feet)const{
   if(f.model==7)for(float tier:ShelfTiers){float top=base+f.height*tier;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
   else if(base+f.height<=feet+.025f)fixtureTop=std::max(fixtureTop,base+f.height);
  }}
- for(auto&p:m_props)if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
+ for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float top=floorHeight(p.position.x,p.position.y)+p.base+p.height;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}}
  float result=hasTerrain()?terrainSurfaceBelow(x,y,feet+.03f):floorHeight(x,y),base=supportHeight(x,y);if(base<=feet+.025f)result=base;
  result=std::max(result,fixtureTop);
- for(const auto& terminal:m_terminals)if(insideTerminal(*this,terminal,x,y)){
+ for(auto index:collisionCandidates(2,x,y)){const auto&terminal=m_terminals[index];if(insideTerminal(*this,terminal,x,y)){
   float top=floorHeight(terminal.position.x,terminal.position.y)+terminal.z+terminalHeight(*this,terminal,x,y);
   if(top<=feet+.025f)result=std::max(result,top);
- }
+ }}
  if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
  if(insideCargoLift(x,y)&&m_cargoLiftHeight<=feet+.025f)result=std::max(result,m_cargoLiftHeight);
  for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<=t.footprint.x*.5f&&std::fabs(y-p.position.y)<=t.footprint.y*.5f&&p.z<=feet+.025f)result=std::max(result,p.z);}
