@@ -4,6 +4,24 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.7 - Performance hotfix (2026-10-17)
+
+Promotes the validated round-four winner to the canonical root executable: compact
+Vulkan actor triangle stream (**152 ? 92 bytes**, full float precision) with the
+original lighting ABI via unused W channels, plus MSVC **/Ob3** inlining. Same
+meshes, animation, materials, AI rates and save rules — render/compiler savings only.
+
+Fresh interleaved promote check (this session): root preview.6 median **189.8 FPS**
+vs winner **205.9 FPS** (+8.5%); scene **2.83 ? 2.48 ms**. Identical AI queries
+**14,029,424** and final health **99158**. Smoke / exclusion / friendly / stealth PASS.
+Competition batch met the **200 FPS** average target (median **202.3 FPS**).
+
+Executable: **27,405,312 bytes** (26.14 MiB), **5.86 MiB** under the unchanged 32 MiB
+ceiling. SHA256:
+`661b557e7d73275327d2ed81edca4d2f6c9b9a9d9bff1ec0a40c3d02c7d69d34`.
+
+[Full round-four results](docs/Performance/Competitive%20Round%204%2020261017.md).
+
 ## v0.7.2-preview.6 - Performance hotfix (2026-10-17)
 
 Promotes the validated round-three winner unchanged to the canonical root executable.

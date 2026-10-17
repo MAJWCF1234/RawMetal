@@ -27,8 +27,12 @@ public:
  void clearDepth();
  // Vulkan 1.0 vertex-stage work. One six-sided light record per actor,
  // shared by every triangle; final attachment positions remain authoritative.
- int beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye);
- void submitActor(MeshVertex a,MeshVertex b,MeshVertex c,Point3 outward,int actor,const SoftwareRenderer::Texture& texture,float emissionScale=1.f);
+ int beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye,Point3 center);
+ // Immutable for one draw: resolve texture ownership and surface constants
+ // outside the per-triangle loop. Positions and UV arithmetic stay unchanged.
+ struct ActorMaterial {std::uint64_t key=0;std::uint32_t sortKey=0;float emission=0,normal=-1,parallax=0,surface=0;};
+ ActorMaterial prepareActorMaterial(const SoftwareRenderer::Texture& texture,float emissionScale=1.f);
+ void submitActor(const MeshVertex& a,const MeshVertex& b,const MeshVertex& c,int actor,const ActorMaterial& material);
  std::array<std::uint64_t,2> actorStatistics()const;
  void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f);
  void finish(std::vector<std::uint32_t>& pixels);

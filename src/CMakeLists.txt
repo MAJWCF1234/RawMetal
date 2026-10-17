@@ -169,10 +169,12 @@ add_custom_command(TARGET RawMetal POST_BUILD
     VERBATIM)
 if(MSVC)
   target_compile_options(RawMetal PRIVATE /W4 /permissive- /EHsc)
-  # Reduce native code size without changing assets or floating-point semantics.
-  # Keep the renderer's hot loops optimized for speed; cold import/diagnostic
-  # code benefits from size-oriented inlining and COMDAT folding.
+  # Fold unused/identical native code without changing assets or FP semantics.
+  # Cold import sources below retain their size-oriented /O1 optimizations.
   target_compile_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/Gy>" "$<$<CONFIG:Release>:/Gw>")
+  # Spend native-code headroom on inlining, retaining precise floating point
+  # and the existing baseline ISA. The executable size verifier still applies.
+  target_compile_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/Ob3>")
   target_link_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>")
   set_source_files_properties(vr/VrRuntime.cpp ThirdParty/ufbx/ufbx.c PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/O1>")
 else()
