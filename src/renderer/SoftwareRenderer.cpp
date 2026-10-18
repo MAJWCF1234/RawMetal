@@ -481,7 +481,13 @@ void SoftwareRenderer::clear(std::uint32_t c){
  std::fill(m_pixels.begin(),m_pixels.end(),c);
 }
 void SoftwareRenderer::put(int x,int y,std::uint32_t c){if(x>=0&&y>=0&&x<m_width&&y<m_height)m_pixels[size_t(y*m_width+x)]=c;}
-void SoftwareRenderer::rect(int x,int y,int w,int h,std::uint32_t c){for(int yy=std::max(0,y);yy<std::min(m_height,y+h);++yy)for(int xx=std::max(0,x);xx<std::min(m_width,x+w);++xx)put(xx,yy,c);}
+void SoftwareRenderer::rect(int x,int y,int w,int h,std::uint32_t c){
+ if(w<=0||h<=0)return;
+ int left=std::max(0,x),top=std::max(0,y);
+ int right=int(std::min<int64_t>(m_width,int64_t(x)+w)),bottom=int(std::min<int64_t>(m_height,int64_t(y)+h));
+ if(left>=right||top>=bottom)return;
+ for(int row=top;row<bottom;++row)std::fill_n(m_pixels.data()+size_t(row)*m_width+left,right-left,c);
+}
 std::uint32_t SoftwareRenderer::shade(std::uint32_t c,float s)const{int r=int(((c>>16)&255)*s),g=int(((c>>8)&255)*s),b=int((c&255)*s);return rgb(std::clamp(r,0,255),std::clamp(g,0,255),std::clamp(b,0,255));}
 void SoftwareRenderer::text(int x,int y,const char* s,std::uint32_t c,int sc){for(;*s;++s,x+=4*sc){auto g=glyphs[size_t(gi(char(std::toupper((unsigned char)*s))))];for(int yy=0;yy<5;++yy)for(int xx=0;xx<3;++xx)if(g[size_t(yy)]&(1<<(2-xx)))rect(x+xx*sc,y+yy*sc,sc,sc,c);}}
 
@@ -762,7 +768,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
-  m_gpu->setAtmosphere(atmosphere);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
+  m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
  else scene();
  bool underwater=!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f;

@@ -37,6 +37,13 @@ bool Game::testNavGraph(){
   if(wall)map->structures.push_back({8,4,8.25f,9,0,1.4f});
   campaign->maps.push_back(map);return Game(campaign);
  };
+ {auto open=scene(false),blocked=scene(true);float end=0;
+  ai::WalkQueryCache::Scope outer(open.m_world,open.m_world.m_mapData);
+  bool clear=open.friendlyWalkSegment(0,{6.5f,6.5f},0,{10.5f,6.5f},1.6f,&end);
+  bool nested=false;{ai::WalkQueryCache::Scope inner(blocked.m_world,blocked.m_world.m_mapData);
+   nested=blocked.friendlyWalkSegment(0,{6.5f,6.5f},0,{10.5f,6.5f},1.6f,&end);}
+  check(clear&&!nested&&open.friendlyWalkSegment(0,{6.5f,6.5f},0,{10.5f,6.5f},1.6f,&end),"Nested worlds cannot reuse another world's live route memo and restore the outer scope");
+ }
  {auto seed=scene(false);auto map=std::make_shared<AuthoredMapData>(*seed.m_customCampaign->maps[0]);
   map->doors.push_back({5,8,6.5f});map->cargoLift={10,10,13,13,0,2,1,stateId("cache_call"),stateId("cache_release"),stateId("cache_position"),stateId("cache_down"),stateId("cache_arrived"),stateId("cache_descended")};map->layers[0].rows[6][10]='B';
   map->structures.push_back({4,14,8,18,1.1f,1.2f});

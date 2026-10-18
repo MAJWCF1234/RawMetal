@@ -21,6 +21,6 @@ public:
   size_t index=size_t(it-values.begin());if(enabled)hint=index;return index;
  }
 private:
- inline static thread_local std::array<size_t,1024> s_indices{};
+ inline static thread_local std::array<size_t,4096> s_indices{};
 };
 }

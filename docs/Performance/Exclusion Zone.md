@@ -117,13 +117,12 @@ Capability gap (schedules/cover): [[AI/GoldSrc AI]]. Capability ≠ cost.
 
 ## Remaining work
 
-1. **Nav as authority** — largest sim cut left  
-2. **Broader retained spatial queries** — graph probes now have exact invalidation
-3. **Broader scheduled planning** — support jobs and creature sensing
-4. **Cross-frame idle actor draw cache**  
-5. **GPU attachment / bones** — skin alone is not the bill  
-6. **Sim/render overlap**  
-7. **BSP/PVS**
+1. ~~**Nav as authority**~~ — [[Performance/Competitive Round 6 20261017|round six]]
+2. ~~**Live walk-segment memo**~~ — [[Performance/Competitive Round 7 20261017|round seven]]
+3. ~~**PGO + animation/retreat**~~ — [[Performance/Competitive Round 9 20261018|round nine]] / preview.8 (~304 FPS lab)
+4. ~~**Cross-frame idle actor draw cache**~~ — [[Performance/Competitive Round 5 20261017|round five]]
+5. **Broader scheduled planning** — support jobs and creature sensing
+6. **Path to ~2 ms / Ultrakill play bar** — hitch hunt, sim/render overlap, BSP/PVS
 
 Cheap one-liners on Exclusion are largely exhausted after pitch + static props.
 

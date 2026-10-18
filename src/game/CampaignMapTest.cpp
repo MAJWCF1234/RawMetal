@@ -31,6 +31,8 @@ bool Game::testCampaignMaps(){
    if(npc.track().ai.role==GuardSquadRole::Engineer||npc.track().ai.role==GuardSquadRole::Medic)check(npc.track().ai.weapon==2,"Receiving support roles retain pistols");
   }
   check(count==6&&roles==63,"Existing Receiving 02 hosts exactly the six baked Cleanup roles");
+  {Vec2 portal;float feet=-25;bool found=hold.friendlyPortal(14,15,{14.6f,18.2f},-25,1.6f,portal,feet,-25);
+   check(found&&portal.x>10.7f&&portal.x<13.3f&&hold.friendlyBodyFits(14,{portal.x,23.65f},feet,1.6f),"Receiving retreat selects the pressure-door opening rather than a portal footprint embedded in its side wall");}
   hold.m_player.pos={7,22.1f};hold.m_player.z=-25;hold.m_player.angle=-kPi*.5f;InputState use;use.use=true;hold.update(use,1.f/60);hold.update({},1.f/60);
   check(hold.state("receiving_cache_read")&&hold.hasFlashlight(),"Main-route physical cache grants the same owned flashlight");
   Game saved;check(saved.decodeSave(hold.encodeSave())&&saved.hasFlashlight()&&saved.state("receiving_cache_read"),"Main-route encounter and cache survive save/load");

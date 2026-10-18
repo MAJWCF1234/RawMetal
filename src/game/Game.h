@@ -307,6 +307,7 @@ public:
     static bool testAiDecisionClock();
     void setAiQueryCaching(bool enabled){m_aiQueryCaching=enabled;}
     void setAiDecisionScheduling(bool enabled){m_aiDecisionScheduling=enabled;}
+    void setNavAuthority(bool enabled){m_navAuthority=enabled;}
     bool walkExclusionEast(std::ostream& report);
     static bool testExclusion();
     static bool testExclusionAuthoring();
@@ -578,6 +579,7 @@ private:
     int friendlyChunkAt(Vec2 global,int preferred)const;
     bool friendlyBoundaryOpen(int from,int to,Vec2 global)const;
     bool friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float* endFeet=nullptr);
+    bool friendlyWalkSegmentUncached(int level,Vec2 start,float feet,Vec2 goal,float height,float* endFeet=nullptr);
     float friendlySupportAt(int level,Vec2 position,float feet);
     bool friendlyBodyFits(int level,Vec2 position,float feet,float height);
     // Cleanup's kneeling bodies stay near standing height; the player's deep
@@ -610,6 +612,7 @@ private:
     int m_npcNavBudget=4;
     bool m_aiQueryCaching=true;
     bool m_aiDecisionScheduling=true;
+    bool m_navAuthority=true;
     bool m_vrAimValid=false,m_vrSupportGrip=false;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;

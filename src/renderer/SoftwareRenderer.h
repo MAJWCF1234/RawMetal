@@ -35,6 +35,7 @@ public:
     static bool testGpuActors();
     void setGpuActorPreparation(bool enabled){m_gpuActorPreparation=enabled;}
     void setPanelCaching(bool enabled){m_panelCaching=enabled;}
+    void setActorEmitCaching(bool enabled){m_actorEmitCaching=enabled;}
     static bool testCablePerformance();
     static bool testHardware();
     static bool testPresentationResize();
@@ -58,6 +59,8 @@ private:
     bool m_gpuFrame=false;
     bool m_gpuActorPreparation=true;
     bool m_panelCaching=true;
+    bool m_actorEmitCaching=true;
+    bool m_actorStreamWriting=true;
     struct PanelRaster {
         std::array<int,6> key{};
         std::uint64_t textureGeneration=0;

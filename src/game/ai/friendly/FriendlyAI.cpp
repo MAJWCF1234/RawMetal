@@ -2,6 +2,7 @@
 #include "../Navigation.h"
 #include "../Perception.h"
 #include "../StateLookupHints.h"
+#include "../WalkQueryCache.h"
 #include "../../../world/CollisionQueryBatch.h"
 #include <optional>
 #include <fstream>
@@ -105,6 +106,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  // Decision, route and local movement probes read one settled collision
  // state. The cache expires on return, before another actor or physics step.
  CollisionQueryBatch queries(&world,m_aiQueryCaching);
+ ai::WalkQueryCache::Scope walkMemo(world,world.m_mapData,m_aiQueryCaching);
  put("running",1);float standing=track.scale;bool crouched=get("crouched")!=0;float height=crouched?npcCrouchedHeight(track):standing;
  bool grounded=get("grounded")!=0||!get("locomotion");float vv=get("vv")*.001f;int ms=std::max(1,int(std::round(dt*1000)));
  Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;float speedScale=1;
@@ -260,6 +262,11 @@ __declspec(noinline) bool Game::testAiQueryBatch(){
    auto full=reference(level,actor,timer,field);exact&=actorAiState(level,actor,timer,field)==full&&actorAiState(level,actor,timer,field)==full;
   }
   check(exact,"NPC state keys match legacy decimal formatting and hashing, including limits, arbitrary bytes and prefix collisions");
+  std::array<char,80> mutableField{};
+  for(int iteration=0;iteration<1000;++iteration){for(size_t i=0;i<mutableField.size();++i)mutableField[i]=char((iteration*37+int(i)*11)&255);
+   std::string_view field(mutableField.data(),size_t(iteration)%mutableField.size());auto expected=reference(14,3,12345,field);
+   exact&=actorAiState(14,3,12345,field)==expected&&actorAiState(14,3,12345,field)==expected;}
+  check(exact,"Full-field ID memo validates changing bytes at the same address, embedded zero bytes, lengths and uncached long fields");
  }
  {
   std::array<std::vector<StateValue>,2> banks;bool exact=true;uint32_t seed=0x1654ac78u;

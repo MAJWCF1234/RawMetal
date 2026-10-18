@@ -35,7 +35,7 @@ const uint32_t compositeFragmentShader[]=
 struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
 // Keep every position/UV/light at full precision. The vertex shader derives
 // edges, UV differences and outward vectors instead of streaming duplicates.
-struct ActorTriangle {float position[3][4],uv[3][2],settings[4],actor;ActorTriangle()noexcept{}};
+using ActorTriangle=GpuRenderer::ActorTriangle;
 static_assert(sizeof(ActorTriangle)==92&&sizeof(Vertex)*3==312);
 struct ActorLighting {std::array<std::array<float,4>,6> normalBrightness,light0,light1,surfaceNormal;std::array<float,4> originEye;};
 static_assert(sizeof(ActorLighting)==400);
@@ -342,6 +342,9 @@ struct GpuRenderer::Impl {
  std::array<Buffer,FrameCount> actorBuffers{};
  std::vector<ActorLighting> actorLights;
  std::uint64_t actorTriangles=0;
+ struct ActorEmitBatch {uint64_t material;uint32_t sortKey,start,count;};
+ struct ActorEmitCache {uint64_t identity=0;std::vector<ActorTriangle> triangles;std::vector<ActorEmitBatch> batches;};
+ std::unordered_map<uint64_t,ActorEmitCache> actorEmitCaches;bool actorEmitCaching=true;std::uint64_t actorEmitHits=0;
  std::vector<Vertex> sortedVertices;std::vector<Batch> sortedBatches;
  int width=0,height=0;VkFormat sceneFormat=VK_FORMAT_B8G8R8A8_UNORM;VkSampleCountFlagBits sceneSamples=VK_SAMPLE_COUNT_1_BIT;bool hdrScene=false;std::string name;
  ~Impl(){
@@ -719,7 +722,42 @@ int GpuRenderer::beginActor(const std::array<Point3,6>& normals,const std::array
  record.surfaceNormal[0][3]=center.x;record.surfaceNormal[1][3]=center.y;record.surfaceNormal[2][3]=center.z;
  int index=int(m->actorLights.size());m->actorLights.push_back(record);return index;
 }
-std::array<std::uint64_t,2> GpuRenderer::actorStatistics()const{return {m->actorLights.size(),m->actorTriangles};}
+std::array<std::uint64_t,3> GpuRenderer::actorStatistics()const{return {m->actorLights.size(),m->actorTriangles,m->actorEmitHits};}
+void GpuRenderer::setActorEmitCaching(bool enabled){m->actorEmitCaching=enabled;if(!enabled){m->actorEmitCaches.clear();m->actorEmitHits=0;}}
+void GpuRenderer::clearActorEmitCache(){m->actorEmitCaches.clear();m->actorEmitHits=0;}
+bool GpuRenderer::replayActorEmit(std::uint64_t slot,std::uint64_t identity,int actor){
+ if(!m->actorEmitCaching||actor<0)return false;
+ auto found=m->actorEmitCaches.find(slot);if(found==m->actorEmitCaches.end()||found->second.identity!=identity||found->second.triangles.empty())return false;
+ uint32_t base=uint32_t(m->actorVertices.size());
+ m->actorVertices.resize(base+found->second.triangles.size());
+ std::memcpy(m->actorVertices.data()+base,found->second.triangles.data(),found->second.triangles.size()*sizeof(ActorTriangle));
+ for(size_t i=0;i<found->second.triangles.size();++i)m->actorVertices[base+i].actor=float(actor);
+ for(const auto&batch:found->second.batches){
+  uint32_t start=base+batch.start;
+  if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().actor&&m->batches.back().material==batch.material)m->batches.back().count+=batch.count;
+  else m->batches.push_back({batch.material,start,batch.count,false,false,-1,batch.sortKey,true});
+ }
+ m->actorTriangles+=found->second.triangles.size();++m->actorEmitHits;return true;
+}
+void GpuRenderer::commitActorEmit(std::uint64_t slot,std::uint64_t identity,std::uint32_t startTriangle){
+ if(!m->actorEmitCaching||startTriangle>m->actorVertices.size())return;
+ if(startTriangle==m->actorVertices.size()){m->actorEmitCaches.erase(slot);return;}
+ if(m->actorEmitCaches.size()>=128&&!m->actorEmitCaches.count(slot))m->actorEmitCaches.clear();
+ auto&entry=m->actorEmitCaches[slot];
+ // Moving poses cannot replay their predecessor. Admit only after the same
+ // identity repeats; preserve vector capacity instead of allocating/copying
+ // a full body on every frame of an animation that never hits this cache.
+ if(entry.identity!=identity){entry.identity=identity;entry.triangles.clear();entry.batches.clear();return;}
+ entry.batches.clear();
+ entry.triangles.assign(m->actorVertices.begin()+startTriangle,m->actorVertices.end());
+ for(auto&tri:entry.triangles)tri.actor=0;
+ for(const auto&batch:m->batches){
+  if(!batch.actor||batch.clear||batch.cache||batch.start+batch.count<=startTriangle)continue;
+  uint32_t begin=batch.start<startTriangle?startTriangle:batch.start;
+  uint32_t end=batch.start+batch.count;if(end<=begin)continue;
+  entry.batches.push_back({batch.material,batch.sortKey,begin-startTriangle,end-begin});
+ }
+}
 GpuRenderer::ActorMaterial GpuRenderer::prepareActorMaterial(const SoftwareRenderer::Texture&texture,float emissionScale){
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
@@ -735,6 +773,18 @@ void GpuRenderer::submitActor(const MeshVertex&a,const MeshVertex&b,const MeshVe
  if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().actor&&m->batches.back().material==material.key)++m->batches.back().count;
  else m->batches.push_back({material.key,start,1,false,false,-1,material.sortKey,true});
  ++m->actorTriangles;
+}
+GpuRenderer::ActorStream GpuRenderer::beginActorStream(size_t maximum){
+ uint32_t start=uint32_t(m->actorVertices.size());m->actorVertices.resize(size_t(start)+maximum);
+ return {std::span<ActorTriangle>(m->actorVertices.data()+start,maximum),start};
+}
+void GpuRenderer::actorStreamRun(uint32_t start,uint32_t count,const ActorMaterial&material){
+ if(!count)return;
+ if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().actor&&m->batches.back().material==material.key)m->batches.back().count+=count;
+ else m->batches.push_back({material.key,start,count,false,false,-1,material.sortKey,true});
+}
+void GpuRenderer::endActorStream(const ActorStream&stream,uint32_t count){
+ m->actorVertices.resize(size_t(stream.start)+count);m->actorTriangles+=count;
 }
 void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale){
  uint64_t key;uint32_t sortKey;

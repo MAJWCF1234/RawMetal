@@ -70,12 +70,17 @@ Those moved the needle (batch averages into the low hundreds of FPS). They do **
 
 ## What closes the gap
 
-1. **Nav as authority** — node hop + sparse TraceHull / LOS (GoldSrc cost model), not continuous lattice for every walk
-2. **Kill remaining live probe storms** outside the planning memo
-3. **Cross-frame idle actor draw cache** / less CPU mesh emit
-4. Hitch hunt (run 1’s 170 ms frame) — presentation / scene prep stalls still open
+1. ~~**Nav as authority**~~ — [[Performance/Competitive Round 6 20261017|round six]]
+2. ~~**Live walk-segment memo**~~ — [[Performance/Competitive Round 7 20261017|round seven]]
+3. ~~**Cross-frame idle actor draw cache**~~ — [[Performance/Competitive Round 5 20261017|round five]]
+4. ~~**PGO + animation/retreat correctness**~~ — [[Performance/Competitive Round 9 20261018|round nine]]
+   promoted as **preview.8**: competition median **304.3 FPS** / promote-check
+   **306.3 FPS** vs prior root. Midpoint **~300 FPS sustained lab average** is met.
+5. Hitch hunt and path to the **~2 ms / ~500 FPS** play bar remain open
 
-Target for “Ultrakill-class headroom” on this hardware: sustained lab mean **≤ ~3 ms** (~300+ FPS) as a midpoint; **≤ ~2 ms** to match the cited play bar. That requires cost-model change, not more LOD knobs.
+Target for “Ultrakill-class headroom” on this hardware: sustained lab mean
+**≤ ~3 ms** (~300+ FPS) midpoint — **landed in round nine**; **≤ ~2 ms** to match
+the cited play bar.
 
 ## Commands
 

@@ -89,9 +89,8 @@ bool Game::findGuardCombatPost(int level,size_t actor,const ActorPose&pose,Point
 }
 Vec2 Game::guardGraphWaypoint(int level,Vec2 start,float feet,Vec2 goal,float goalFeet,float height){
  const auto&graph=navGraph(level,height);
- static thread_local ai::WalkQueryCache cache;const auto&world=friendlyWorld(level);cache.begin(world,world.m_mapData,m_aiQueryCaching);
- auto live=[&](Vec2 from,float fromFeet,Vec2 to,float hull,float*endFeet){return friendlyWalkSegment(level,from,fromFeet,to,hull,endFeet);};
- auto walk=[&](Vec2 from,float fromFeet,Vec2 to,float hull,float*endFeet){return cache.walk(from,fromFeet,to,hull,endFeet,live);};
+ const auto&world=friendlyWorld(level);ai::WalkQueryCache::Scope walkMemo(world,world.m_mapData,m_aiQueryCaching);
+ auto walk=[&](Vec2 from,float fromFeet,Vec2 to,float hull,float*endFeet){return friendlyWalkSegment(level,from,fromFeet,to,hull,endFeet);};
  return ai::graphWaypoint(graph,start,feet,goal,goalFeet,height,walk);
 }
 }

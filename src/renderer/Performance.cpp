@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <type_traits>
 #include <stdexcept>
+#include <climits>
 namespace retro {
 __declspec(noinline) bool SoftwareRenderer::testPresentationResize(){
  Win32Window window(DisplayWidth,DisplayHeight,L"RawMetal presentation check");if(!window.valid())return false;
@@ -264,7 +265,7 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  begin();triangle(red,1);renderer.m_gpu->clearDepth();triangle(blue,2);pixel=finish();check(blueChannel(pixel)>80&&redChannel(pixel)<blueChannel(pixel)/4,"View-model depth range remains independent");
  begin();renderer.triangle3D({{-.3f,-.1f,-.2f},0,0},{{.3f,-.1f,1},1,0},{{0,.3f,1},.5f,1},red,1);finish();size_t coverage=0;for(auto p:renderer.m_pixels)coverage+=(p&0xffffffu)!=0x0c1012u;check(coverage>100,"Near-plane clipping keeps crossing geometry");
  renderer.m_shadowBudgetLimit=10000000;
- check(Mesh::testAttachedSkinning(),"Single final skin pass matches redundant IK skinning exactly across six poses");
+ check(Mesh::testAttachedSkinning(),"Position-only skinning matches full skinning across six firearm and fifteen idle/punch poses");
  check(World::testCollisionCandidates(),"Spatial collision candidates match full scans across ten maps and fixture boundaries");
  for(int mode:{1,2,3}){auto scene=Game::weaponInspection(mode,.16f);renderer.m_animationWorker=std::make_unique<FrameWorker>();renderer.render(scene);auto parallel=renderer.m_pixels;renderer.m_animationWorker.reset();renderer.render(scene);check(parallel==renderer.m_pixels,"Parallel arm pose matches serial reference");check(renderer.gripError()<.025f,"Hardware weapon grip remains attached");}
  World warehouse(16);
@@ -319,22 +320,49 @@ bool SoftwareRenderer::testGpuActors(){
  auto save=[&](const std::vector<uint32_t>&pixels,const char*mode){std::ofstream out(".build/gpu-actor-compare/"+std::to_string(view)+"-"+mode+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
  auto compare=[&](Game scene){
   renderer.m_gpuActorPreparation=false;renderer.render(scene);renderer.render(scene);auto reference=renderer.m_pixels;
-  renderer.m_gpuActorPreparation=true;renderer.render(scene);auto work=renderer.m_gpu->actorStatistics();triangles+=work[1];
+  renderer.m_gpuActorPreparation=true;renderer.m_actorStreamWriting=false;renderer.render(scene);auto scalar=renderer.m_pixels;
+  renderer.m_actorStreamWriting=true;renderer.render(scene);auto work=renderer.m_gpu->actorStatistics();triangles+=work[1];
+  size_t streamChanged=0;for(size_t i=0;i<scalar.size();++i)streamChanged+=scalar[i]!=renderer.m_pixels[i];
   size_t changed=0,severe=0;uint64_t error=0;int peak=0;
   for(size_t i=0;i<reference.size();++i){int largest=0;for(int shift:{0,8,16}){int d=std::abs(int((reference[i]>>shift)&255)-int((renderer.m_pixels[i]>>shift)&255));largest=std::max(largest,d);error+=d;}changed+=largest>0;severe+=largest>8;peak=std::max(peak,largest);}
   double mean=double(error)/(reference.size()*3);
   // Shader arithmetic may move a few texture-edge samples. Large image or
   // lighting changes fail; retain paired captures for inspection on failure.
-  bool same=mean<=.01&&severe<=reference.size()*.0001;
-  report<<"View "<<view<<": changed="<<changed<<" >8="<<severe<<" max="<<peak<<" mean="<<mean<<" actors="<<work[0]<<" triangles="<<work[1]<<' '<<(same?"PASS":"FAIL")<<'\n';report.flush();
+  bool same=mean<=.01&&severe<=reference.size()*.0001&&streamChanged==0;
+  report<<"View "<<view<<": changed="<<changed<<" >8="<<severe<<" max="<<peak<<" mean="<<mean<<" stream_changed="<<streamChanged<<" actors="<<work[0]<<" triangles="<<work[1]<<' '<<(same?"PASS":"FAIL")<<'\n';report.flush();
   if(view<6||!same){save(reference,"cpu");save(renderer.m_pixels,"gpu");}
   passed&=same&&renderer.hardwareActive();++view;
  };
+ renderer.setActorEmitCaching(false);
  for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,0));
  for(int sample:{8,10,11,12,13})for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,sample));
  for(int sample:{12,13})for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,sample,1));
  for(int stage:{0,1,2,7,8,9,10,11})compare(Game::exclusionInspection(stage));
  passed&=triangles>1000;
+ for(int role=0;role<6;++role)for(int sample:{0,7,11}){
+  renderer.setActorEmitCaching(true);renderer.m_gpu->clearActorEmitCache();
+  for(float phase:{.11f,.41f,.79f}){
+   auto scene=Game::cleanupLayerInspection(role,sample,0,phase);
+   renderer.render(scene);auto retained=renderer.m_pixels;
+   renderer.setActorEmitCaching(false);renderer.render(scene);auto live=renderer.m_pixels;
+   renderer.setActorEmitCaching(true);renderer.render(scene);renderer.render(scene);
+   size_t changed=0;for(size_t i=0;i<live.size();++i)changed+=live[i]!=retained[i];
+   report<<"Animation phase reuse role="<<role<<" sample="<<sample<<" phase="<<phase<<" changed="<<changed<<' '<<(changed==0?"PASS":"FAIL")<<'\n';report.flush();
+   passed&=changed==0&&renderer.hardwareActive();
+  }
+ }
+ {
+  auto scene=Game::cleanupLayerInspection(0,0);
+  renderer.m_gpuActorPreparation=true;renderer.setActorEmitCaching(false);renderer.m_gpu->clearActorEmitCache();
+  renderer.render(scene);renderer.render(scene);auto live=renderer.m_pixels;
+  renderer.setActorEmitCaching(true);renderer.m_gpu->clearActorEmitCache();
+  renderer.render(scene);renderer.render(scene);auto cold=renderer.m_gpu->actorStatistics();
+  renderer.render(scene);auto warm=renderer.m_gpu->actorStatistics();
+  size_t changed=0;for(size_t i=0;i<live.size();++i)changed+=live[i]!=renderer.m_pixels[i];
+  bool reused=warm[2]>cold[2]&&changed==0;
+  report<<"Idle emit reuse: hits "<<cold[2]<<"->"<<warm[2]<<" changed_pixels="<<changed<<' '<<(reused?"PASS":"FAIL")<<'\n';
+  passed&=reused&&renderer.hardwareActive();
+ }
  report<<(passed?"PASS":"FAIL")<<": GPU actor geometry/material/lighting reference; "<<triangles<<" hardware triangles\n";
  return passed;
 }
@@ -369,6 +397,13 @@ bool SoftwareRenderer::testVisibility(){
   renderer.setPanelCaching(true);
   for(int pass=0;pass<2;++pass){std::fill(renderer.m_pixels.begin(),renderer.m_pixels.end(),background);renderer.wornPanel(x,y,73+i,59,i&1,i&2);passed&=reference==renderer.m_pixels;}
  }
+ for(auto bounds:{std::array<int,4>{-2,-2,8,9},{renderer.m_width-3,renderer.m_height-2,10,10},{-10,20,5,5},{5,5,-3,5},{0,0,renderer.m_width,renderer.m_height},{renderer.m_width,0,3,3},{3,4,17,11},{5,5,0,10},{5,5,10,-3},{-3,2,INT_MAX,3}}){
+  std::fill(renderer.m_pixels.begin(),renderer.m_pixels.end(),0xff123456u);auto reference=renderer.m_pixels;
+  for(int64_t y=std::max(0,bounds[1]);y<std::min<int64_t>(renderer.m_height,int64_t(bounds[1])+bounds[3]);++y)
+   for(int64_t x=std::max(0,bounds[0]);x<std::min<int64_t>(renderer.m_width,int64_t(bounds[0])+bounds[2]);++x)reference[size_t(y)*renderer.m_width+size_t(x)]=0xff765432u;
+  renderer.rect(bounds[0],bounds[1],bounds[2],bounds[3],0xff765432u);passed&=reference==renderer.m_pixels;
+ }
+ report<<(passed?"PASS":"FAIL")<<": row rectangle fills match scalar clipping across 10 edge/empty/large-extent cases\n";
  report<<(passed?"PASS":"FAIL")<<": retained panels preserve clipping, texture variants and eviction across 24 layouts\n";
  report<<(passed?"PASS":"FAIL")<<": opaque occlusion preserves reference pixels\n";
  return passed;

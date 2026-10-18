@@ -36,6 +36,7 @@ bool validLayerPose(const CreatureLayerPose&pose){
 }
 }
 Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328),m_nodeFilter(nodeFilter){
+ m_positionOnlySkinning=id==111;
  auto resource=loadResource(id);
  ufbx_load_opts opts{};opts.evaluate_skinning=true;opts.target_axes=ufbx_axes_right_handed_y_up;opts.target_unit_meters=1;
  if(!resource.empty()&&resource[0]=='#')opts.file_format=UFBX_FILE_FORMAT_OBJ;
@@ -205,17 +206,20 @@ void Mesh::poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float u
  if(!std::isfinite(aimYaw)||!std::isfinite(aimPitch))throw std::runtime_error("Invalid creature layer aim");
  aimYaw=std::clamp(aimYaw,-.70f,.70f);aimPitch=std::clamp(aimPitch,-.45f,.55f);
  sampleCreatureClip(lowerClip,lowerPhase,m_creaturePoseScratch);
- sampleCreatureClip(upperClip,upperPhase,m_creaturePoseScratchB);
- auto lower=sampleCreatureLayerPose(lowerClip,lowerPhase),upper=sampleCreatureLayerPose(upperClip,upperPhase);
+ const bool sameSample=lowerClip==upperClip&&lowerPhase==upperPhase;
+ if(!sameSample)sampleCreatureClip(upperClip,upperPhase,m_creaturePoseScratchB);
+ const auto&upperVertices=sameSample?m_creaturePoseScratch:m_creaturePoseScratchB;
+ auto lower=sampleCreatureLayerPose(lowerClip,lowerPhase),upper=sameSample?lower:sampleCreatureLayerPose(upperClip,upperPhase);
  Point3 rebase=lower.pelvis-upper.pelvis,pivot=upper.spine+rebase;
  ActorBodyAimRotation bodyAim(aimYaw,aimPitch);LayerRotation headAim(aimYaw,aimPitch*.55f);
  Point3 neckLocal=(upper.arms[0][0]+upper.arms[1][0])*.5f-upper.spine+Point3{0,.02f,0};
  Point3 neck=pivot+bodyAim(neckLocal);
  auto aimPoint=[&](Point3 p){return pivot+bodyAim(p+rebase-pivot);};
  for(size_t i=0;i<m_creatureVertices;++i){
-  Point3 local=m_creaturePoseScratchB[i]+rebase-pivot;
-  Point3 body=pivot+bodyAim(local),head=neck+headAim(local-neckLocal);
-  Point3 posed=body+(head-body)*m_creatureHeadMask[i];
+  if(m_creatureUpperMask[i]==0.f)continue;
+  Point3 local=upperVertices[i]+rebase-pivot;
+  Point3 body=pivot+bodyAim(local),posed=body;
+  if(m_creatureHeadMask[i]!=0.f){Point3 head=neck+headAim(local-neckLocal);posed=body+(head-body)*m_creatureHeadMask[i];}
   m_creaturePoseScratch[i]=m_creaturePoseScratch[i]+(posed-m_creaturePoseScratch[i])*m_creatureUpperMask[i];
  }
  m_creatureLayerPose=upper;m_creatureLayerPose.pelvis=lower.pelvis;m_creatureLayerPose.spine=pivot;
@@ -256,18 +260,25 @@ bool Mesh::testCleanupTankAim(){
    if(edge.bind>.001f&&A.y>.75f&&A.y<.97f&&B.y>.75f&&B.y<.97f&&mesh.m_creatureArmMask[a]<.01f&&mesh.m_creatureArmMask[b]<.01f)waistEdges.push_back(edge);
   }
   float footError=0,handChange=0,handBindError=0,headChange=0,waistStretch=1,jointLengthError=0,crouchTop=0;
-  bool finite=true,grounded=true;
+  bool finite=true,grounded=true,compositionExact=true;
   std::vector<Point3>lowerVertices,upperVertices;
-  for(int lowerClip:{1,5})for(int upperClip:{0,2,5})for(float phase:phases){
+  for(int lowerClip:{0,1,5})for(int upperClip:{0,2,5})for(float phase:phases){
    if((lowerClip==5)!=(upperClip==5))continue;
    float upperPhase=phase;
    mesh.sampleCreatureClip(lowerClip,phase,lowerVertices);mesh.sampleCreatureClip(upperClip,upperPhase,upperVertices);
    auto upperPose=mesh.sampleCreatureLayerPose(upperClip,upperPhase);
    for(auto angle:angles){
+    auto lowerPose=mesh.sampleCreatureLayerPose(lowerClip,phase);
+    Point3 rebase=lowerPose.pelvis-upperPose.pelvis,pivot=upperPose.spine+rebase;
+    ActorBodyAimRotation bodyAim(angle.x,angle.y);LayerRotation headAim(angle.x,angle.y*.55f);
+    Point3 neckLocal=(upperPose.arms[0][0]+upperPose.arms[1][0])*.5f-upperPose.spine+Point3{0,.02f,0},neck=pivot+bodyAim(neckLocal);
     mesh.poseCreatureTank(lowerClip,phase,upperClip,upperPhase,angle.x,angle.y);
     const auto&posed=mesh.m_creaturePoseScratch;
     finite&=validLayerPose(mesh.creatureLayerPose());
     for(size_t i=0;i<mesh.m_creatureVertices;++i){
+     auto local=upperVertices[i]+rebase-pivot;auto body=pivot+bodyAim(local),head=neck+headAim(local-neckLocal);
+     auto reference=lowerVertices[i]+(body+(head-body)*mesh.m_creatureHeadMask[i]-lowerVertices[i])*mesh.m_creatureUpperMask[i];
+     compositionExact&=posed[i].x==reference.x&&posed[i].y==reference.y&&posed[i].z==reference.z;
      finite&=finiteLayerPoint(posed[i]);grounded&=posed[i].y>=-.003f&&posed[i].y<=2.1f;
      if(lowerClip==5)crouchTop=std::max(crouchTop,posed[i].y);
      if(mesh.m_creatureBindUnique[i].y<.13f&&mesh.m_creatureArmMask[i]<.01f)footError=std::max(footError,layerLength(posed[i]-lowerVertices[i]));
@@ -283,6 +294,7 @@ bool Mesh::testCleanupTankAim(){
   }
   report<<"hand split error mm "<<handChange*1000<<" bind error mm "<<handBindError*1000<<" waist stretch "<<waistStretch<<" crouch top "<<crouchTop<<'\n';
   check(footError<.000001f,"feet retain exact lower-layer vertices",role);
+  check(compositionExact,"Zero-weight layer fast paths match the full float composition for every vertex",role);
   check(handChange<.00001f,"split and aim preserve every hand edge",role);
   // Direct skinning bends fingers across their joints. Compare against the
   // selected source pose above, rather than demanding T-pose edge lengths.
@@ -420,14 +432,15 @@ void Mesh::poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,fl
 bool Mesh::poseAction(const char* action,float phase){
  if(!m_bindScene)return false;
  for(auto stack:m_bindScene->anim_stacks){std::string name=stack->name.data;
-  if(name.ends_with(action)){ufbx_evaluate_opts opts{};opts.evaluate_skinning=true;
+  if(name.ends_with(action)){ufbx_evaluate_opts opts{};opts.evaluate_skinning=!m_positionOnlySkinning;
    auto frame=ufbx_evaluate_scene(m_bindScene,stack->anim,stack->time_begin+(stack->time_end-stack->time_begin)*std::clamp(phase,0.f,1.f),&opts,nullptr);
-   if(!frame)return false;ufbx_free_scene(m_scene);m_scene=frame;extract(frame);return true;
+   if(!frame)return false;ufbx_free_scene(m_scene);m_scene=frame;extract(frame,m_positionOnlySkinning);return true;
   }
  }return false;
 }
 __declspec(noinline) bool Mesh::testAttachedSkinning(){
  Mesh optimized(111),reference(111);
+ reference.m_positionOnlySkinning=false;
  for(int frame=0;frame<6;++frame){
   Point3 right{-.025f+frame*.006f,1.55f,.223f},left{-.025f,1.60f,.49f-frame*.004f};
   float elbow=frame*.02f,pitch=frame*.015f,yaw=-frame*.025f,phase=frame*.31f,recoil=frame*.04f;
@@ -441,13 +454,34 @@ __declspec(noinline) bool Mesh::testAttachedSkinning(){
   }
   for(const char*name:{"hand.R","hand.L"}){auto a=optimized.bonePosition(name),b=reference.bonePosition(name);if(a.x!=b.x||a.y!=b.y||a.z!=b.z)return false;}
  }
+ for(const char*action:{"guard_idle","jab.L","jab.R"})for(float phase:{0.f,.17f,.37f,.79f,1.f}){
+  if(!optimized.poseAction(action,phase)||!reference.poseAction(action,phase)||optimized.triangles.size()!=reference.triangles.size())return false;
+  for(size_t i=0;i<optimized.triangles.size();++i)for(int v=0;v<3;++v){const auto&a=optimized.triangles[i].v[v];const auto&b=reference.triangles[i].v[v];
+   if(a.p.x!=b.p.x||a.p.y!=b.p.y||a.p.z!=b.p.z||a.u!=b.u||a.v!=b.v)return false;}
+  for(const char*name:{"hand.R","hand.L"}){auto a=optimized.bonePosition(name),b=reference.bonePosition(name);if(a.x!=b.x||a.y!=b.y||a.z!=b.z)return false;}
+ }
  return true;
 }
-void Mesh::extract(ufbx_scene* scene){
+void Mesh::extract(ufbx_scene* scene,bool positionsOnly){
  // Animation changes positions, not topology, UVs, materials or boundary
  // connectivity. Triangulate and discover shoulder rings only once per asset.
  if(m_topologyReady){
-  auto position=[&](uint32_t nodeId,uint32_t corner){auto node=scene->nodes[nodeId];auto p=ufbx_get_vertex_vec3(&node->mesh->skinned_position,corner);if(node->mesh->skinned_is_local)p=ufbx_transform_position(&node->geometry_to_world,p);return Point3{float(p.x),float(p.y),float(p.z)};};
+  if(positionsOnly){m_skinPositionScratch.resize(scene->meshes.count);m_skinPositionReady.assign(scene->meshes.count,0);}
+  auto position=[&](uint32_t nodeId,uint32_t corner){auto node=scene->nodes[nodeId];auto*mesh=node->mesh;
+   ufbx_vec3 p;bool local=mesh->skinned_is_local;
+   if(positionsOnly&&(mesh->skin_deformers.count||mesh->blend_deformers.count)){
+    auto&vertices=m_skinPositionScratch[mesh->typed_id];
+    if(!m_skinPositionReady[mesh->typed_id]){
+     vertices.resize(mesh->num_vertices);std::memcpy(vertices.data(),mesh->vertices.data,vertices.size()*sizeof(ufbx_vec3));
+     for(auto*blend:mesh->blend_deformers)ufbx_add_blend_vertex_offsets(blend,vertices.data(),vertices.size(),1.0f);
+     if(mesh->skin_deformers.count){const auto*fallback=mesh->instances.count?&mesh->instances.data[0]->geometry_to_world:nullptr;auto*skin=mesh->skin_deformers.data[0];
+      for(size_t i=0;i<vertices.size();++i){auto matrix=ufbx_get_skin_vertex_matrix(skin,i,fallback);vertices[i]=ufbx_transform_position(&matrix,vertices[i]);}}
+     m_skinPositionReady[mesh->typed_id]=1;
+    }
+    p=vertices[mesh->skinned_position.indices.data[corner]];local=mesh->skin_deformers.count==0;
+   }else p=ufbx_get_vertex_vec3(&mesh->skinned_position,corner);
+   if(local)p=ufbx_transform_position(&node->geometry_to_world,p);return Point3{float(p.x),float(p.y),float(p.z)};
+  };
   triangles.resize(m_cachedTriangles.size());for(size_t i=0;i<triangles.size();++i){auto&source=m_cachedTriangles[i];triangles[i]=source.prototype;for(int c=0;c<3;++c)triangles[i].v[c].p=position(source.node,source.corners[c]);}
   openRings.resize(m_cachedRings.size());for(size_t i=0;i<openRings.size();++i){auto&source=m_cachedRings[i];auto&ring=openRings[i];ring.resize(source.corners.size());for(size_t j=0;j<ring.size();++j)ring[j]={position(source.node,source.corners[j]),0,0};}
   return;
@@ -513,8 +547,8 @@ void Mesh::pose(float phase,float recoil){
  }
  ufbx_anim_opts animOpts{};animOpts.transform_overrides={overrides.data(),overrides.size()};
  auto anim=ufbx_create_anim(m_scene,&animOpts,nullptr);if(!anim)throw std::runtime_error("Rig animation creation failed");
- ufbx_evaluate_opts opts{};opts.evaluate_skinning=true;
+ ufbx_evaluate_opts opts{};opts.evaluate_skinning=!m_positionOnlySkinning;
  auto evaluated=ufbx_evaluate_scene(m_scene,anim,0,&opts,nullptr);
- if(evaluated){extract(evaluated);ufbx_free_scene(evaluated);}ufbx_free_anim(anim);
+ if(evaluated){extract(evaluated,m_positionOnlySkinning);ufbx_free_scene(evaluated);}ufbx_free_anim(anim);
 }
 }
