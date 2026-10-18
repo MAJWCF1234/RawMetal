@@ -2,16 +2,17 @@
 
 This file centralizes small version/provenance notes that were previously scattered across several ThirdParty README files. License text that must travel with vendored code remains beside that dependency.
 
-## OpenKTG
-Vendored public-domain OpenKTG by Fabian "ryg" Giesen (2007) under
-`src/ThirdParty/openktg/`, synced from the local
+## OpenKTG (retired in preview.11)
+Preview.10 used public-domain OpenKTG by Fabian "ryg" Giesen (2007), synced from the local
 `kkrieger-werkkzeug3-master/ktg` checkout (also
 https://github.com/farbrausch/fr_public/tree/master/ktg).
 
-RawMetal builds only `gentexture.cpp` into `RawMetalTextureGenerator`. Recipe
-authorship and material kinds live in `src/core/ProceduralTexture.cpp`. See
-`src/ThirdParty/openktg/RAWMETAL.md` and
-[[Assets/procedural-textures-20261018]].
+The vendored source, recipe generator and experiments are now preserved in
+`H:\Archives\RawMetal\texture-recipes-20261018`, including the original license
+and provenance notes. They are no longer built or shipped. See
+[[Assets/neural-textures-expanded-20261018]] and the historical
+[[Assets/procedural-textures-20261018]]. The neural implementation and weights
+are project-authored; no third-party model weights are shipped.
 
 ## meshoptimizer
 Vendored decoder subset of meshoptimizer v0.25, pinned to commit:

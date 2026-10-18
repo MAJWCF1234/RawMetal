@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.11 - Performance and bloat reduction patch (2026-10-18)
+
+Seven reduced surface/prop textures reconstruct once with a small shared neural model and remain cached at their authored dimensions. Odd-sized atlases preserve their UV layout. Retired OpenKTG/recipe experiments are archived; no new animation banks or runtime frameworks are added. Fine grain is slightly softer.
+
+- **24.29 MiB EXE (25,468,416 bytes)**: **943 KiB / 3.65% smaller** than preview.10.
+- **7.71 MiB free** under the unchanged 32 MiB ceiling.
+- Matched trained-PGO ABBA comparison: **315.28 versus 318.69 FPS** (1.07% lower FPS for the size reduction); frame time 3.1718 versus 3.1378 ms. This patch does not claim an FPS gain over preview.10.
+- **750 decoder checks**, **231 embedded-resource checks**, full **Vulkan smoke** and **28 visibility views** passed. Twelve Exclusion and eight service captures inspected.
+- Zero reconstruction during 240 tested gameplay frames or atlas scale changes.
+
+The release asset is byte-identical to the tested root executable.
+
+SHA-256: `7C96C14B434CA63F3D71BD2A96EA72C947A47871327BE3A923BF53D470F10D42`
+
+[Measurements and visual comparisons](docs/Assets/neural-textures-expanded-20261018.md)
+
 ## v0.7.2-preview.10 - Procedural textures (2026-10-18)
 
 Replaces five photographic environment materials with OpenKTG-backed **RMP1**

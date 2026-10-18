@@ -1,0 +1,19 @@
+Vulkan / NVIDIA GeForce RTX 5060 Ti / linear HDR / 4x MSAA / native window / 640x360 / 30 simulated warmup + 3600 measured frames
+CPU wall timings, including native window presentation; not GPU timestamps.
+Sustained lab: 60 simulated seconds; extended player health; live muted device mixer; deep instrumentation disabled. Device=1
+exclusion-yard construction_ms=185.004 ai_query_cache=1 nav_authority=1
+first_frame_ms=80.7828
+total avg/p50/p95/p99/max_ms=3.16172/3.2277/4.2076/4.8561/5.8809
+simulation avg/p50/p95/p99/max_ms=0.724355/0.6976/1.076/1.3391/1.7837
+audio avg/p50/p95/p99/max_ms=0.152372/0.1428/0.2381/0.3365/0.6852
+scene avg/p50/p95/p99/max_ms=1.71326/1.7963/2.437/2.7411/3.1189
+submit avg/p50/p95/p99/max_ms=0.344605/0.3793/0.4961/0.6096/1.3225
+present avg/p50/p95/p99/max_ms=0.140094/0.1291/0.2144/0.3147/0.512
+ai_queries=4081122 hits=469619
+route_queries=274140 hits=160268 invalidations=0
+terrain_queries=3977244 hits=2983234 cpu_growth_frames=1 gpu_buffer_growths=2
+state_queries=24986067 hint_hits=21403496
+minimap_queries=3600 rebuilds=0
+sensing polls=21600 runs=11831 wakes=6948
+planning polls=21600 runs=9493 wakes=7067
+final_health=99158

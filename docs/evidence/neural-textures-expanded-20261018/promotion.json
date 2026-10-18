@@ -1,0 +1,10 @@
+{
+  "Root": "N:\\rawmetal\\RawMetal.exe",
+  "SHA256": "7C96C14B434CA63F3D71BD2A96EA72C947A47871327BE3A923BF53D470F10D42",
+  "Bytes": 25468416,
+  "PreviousBytes": 26434048,
+  "SavedBytes": 965632,
+  "HeadroomBytes": 8086016,
+  "PreviousSHA256": "8AF412E7214016E025B7FEDEF937A618AD9B15368AE329362FF292FDC3A9970C",
+  "Rollback": "N:\\rawmetal\\.build\\neural-props\\procedural-baseline.exe"
+}

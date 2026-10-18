@@ -52,6 +52,12 @@ void verify(const Bytes& packed,const Bytes& original){
  bool ok=Decompress(decoder,packed.data(),packed.size(),decoded.data(),decoded.size(),&actual)!=FALSE;CloseDecompressor(decoder);
  if(!ok||actual!=original.size()||decoded!=original)throw std::runtime_error("Lossless round-trip failed");
 }
+Bytes neuralPixels(const fs::path&source,const Bytes&packet){
+ uint32_t modelId=retro::neuralTextureModelResource(packet);std::ifstream manifest(source/"assets.rc");std::regex pattern(R"rc((\d+)\s+\w+\s+"([^"]+)")rc");std::string line;
+ while(std::getline(manifest,line)){std::smatch match;if(!std::regex_search(line,match,pattern)||std::stoul(match[1].str())!=modelId)continue;
+  fs::path path=source/match[2].str();std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("Missing neural model");Bytes model((std::istreambuf_iterator<char>(file)),{});return retro::reconstructNeuralTexture(packet,model);
+ }throw std::runtime_error("Neural model resource absent from manifest");
+}
 int main(int argc,char** argv){try{
  // Exercise wraparound and odd lengths before packing or verifying real files.
  for(size_t length:{size_t(0),size_t(1),size_t(2),size_t(3),size_t(255),size_t(4096)}){
@@ -74,10 +80,10 @@ int main(int argc,char** argv){try{
    try{decoded=retro::loadResourceFromModule(module,resourceId);}
    catch(const std::exception& error){throw std::runtime_error("Embedded resource "+std::to_string(resourceId)+" ("+path.string()+"): "+error.what());}
    if(path.extension()==".png"){original=rawTexture(original);if(decoded.size()<12||std::memcmp(decoded.data(),"RMT1",4))decoded=rawTexture(decoded);}
-   if(path.extension()==".rmp"){original=retro::generateProceduralTexture(original);++generated;}
+   if(path.extension()==".ntx"){original=neuralPixels(argv[2],original);++generated;}
    if(decoded!=original)throw std::runtime_error("Packaged resource mismatch: "+path.string());++count;
   }
-  if(!count)throw std::runtime_error("Empty asset manifest");std::cout<<count<<" packaged resources match source: exact RGBA pixels/dimensions, byte-identical audio/models/animation; "<<generated<<" procedural recipes verified\n";return 0;
+  if(!count)throw std::runtime_error("Empty asset manifest");std::cout<<count<<" packaged resources match source: PNG pixels/dimensions, byte-identical audio/models/animation; "<<generated<<" neural reconstructions match native decoded output\n";return 0;
  }
  if(argc!=4)throw std::runtime_error("Usage: pack_assets source-dir output-dir bundle-path");fs::path source=argv[1],out=argv[2];fs::create_directories(out);
  struct Entry{uint32_t id;Bytes bytes;};std::vector<Entry> entries;
@@ -87,7 +93,7 @@ int main(int argc,char** argv){try{
  while(std::getline(manifest,line)){std::smatch match;if(!std::regex_search(line,match,pattern))continue;
   fs::path path=source/match[2].str();std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("Cannot read asset");Bytes original((std::istreambuf_iterator<char>(file)),{});
   Bytes chosen=original,packed=compress(original);uint32_t encoding=0;
-  if(path.extension()==".rmp"){retro::generateProceduralTexture(original);encoding=12;}
+  if(path.extension()==".ntx"){neuralPixels(source,original);encoding=13;}
   auto candidate=[&](const Bytes& data,uint32_t method){auto compressed=compress(data);if(compressed.size()<packed.size()){chosen=data;packed=std::move(compressed);encoding=method;}};
   if(path.extension()==".fbx"||path.extension()==".bin"||path.extension()==".obj"||path.extension()==".glb"){
    for(bool predict:{false,true}){

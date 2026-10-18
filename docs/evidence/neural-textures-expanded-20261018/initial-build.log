@@ -1,0 +1,269 @@
+MSBuild version 17.14.60+43b635718 for .NET Framework
+
+  Checking File Globs
+  webpdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdecode.dir\Release\webpdecode.lib
+  sharpyuv.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libsharpyuv.lib
+  webpdspdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdspdecode.dir\Release\webpdspdecode.lib
+  webpencode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpencode.dir\Release\webpencode.lib
+  webpdsp.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdsp.dir\Release\webpdsp.lib
+  webputils.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webputils.dir\Release\webputils.lib
+  webputilsdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webputilsdecode.dir\Release\webputilsdecode.lib
+  webp.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libwebp.lib
+  webpdecoder.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libwebpdecoder.lib
+  RawMetalNeuralTextures.vcxproj -> N:\rawmetal\.build\vs2022\Release\RawMetalNeuralTextures.lib
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(538,5): warning MSB8028: The intermediate directory (RawMetalAssetPacker.dir\Release\) contains files shared from another project (RawMetalAssetPacker.vcxproj).  This can lead to incorrect clean and rebuild behavior. [N:\rawmetal\.build\vs2022\RawMetalAssetPacker.vcxproj]
+  RawMetalAssetPacker.vcxproj -> N:\rawmetal\.build\vs2022\tools\RawMetalAssetPacker.exe
+  Losslessly packing embedded assets
+  101: 80178 bytes, encoding 4
+  234: 58248 bytes, encoding 7
+  235: 205120 bytes, encoding 7
+  236: 43186 bytes, encoding 7
+  237: 471496 bytes, encoding 0
+  238: 39148 bytes, encoding 7
+  239: 217424 bytes, encoding 7
+  102: 87264 bytes, encoding 4
+  103: 65818 bytes, encoding 4
+  106: 148634 bytes, encoding 4
+  109: 34834 bytes, encoding 0
+  110: 67860 bytes, encoding 0
+  111: 572278 bytes, encoding 0
+  112: 762082 bytes, encoding 4
+  113: 231218 bytes, encoding 4
+  114: 44968 bytes, encoding 0
+  115: 327028 bytes, encoding 4
+  116: 195650 bytes, encoding 0
+  117: 1065890 bytes, encoding 4
+  118: 26042 bytes, encoding 4
+  121: 14014 bytes, encoding 0
+  122: 55480 bytes, encoding 13
+  123: 7372 bytes, encoding 0
+  124: 122724 bytes, encoding 13
+  125: 103650 bytes, encoding 4
+  126: 87286 bytes, encoding 4
+  127: 2788 bytes, encoding 4
+  128: 6710 bytes, encoding 4
+  129: 8206 bytes, encoding 4
+  130: 7304 bytes, encoding 4
+  131: 75552 bytes, encoding 13
+  132: 56770 bytes, encoding 13
+  133: 4688 bytes, encoding 0
+  134: 14236 bytes, encoding 4
+  135: 9684 bytes, encoding 0
+  136: 41656 bytes, encoding 4
+  137: 5102 bytes, encoding 4
+  138: 5566 bytes, encoding 4
+  139: 606 bytes, encoding 4
+  140: 31696 bytes, encoding 0
+  141: 67820 bytes, encoding 13
+  142: 119418 bytes, encoding 0
+  143: 141934 bytes, encoding 4
+  144: 7246 bytes, encoding 0
+  145: 91822 bytes, encoding 4
+  146: 5806 bytes, encoding 0
+  147: 199518 bytes, encoding 4
+  148: 72808 bytes, encoding 4
+  149: 49480 bytes, encoding 4
+  150: 66900 bytes, encoding 3
+  151: 1496 bytes, encoding 0
+  152: 53754 bytes, encoding 4
+  153: 5390 bytes, encoding 0
+  154: 13902 bytes, encoding 4
+  155: 3684 bytes, encoding 0
+  156: 7256 bytes, encoding 4
+  157: 594 bytes, encoding 0
+  158: 21278 bytes, encoding 4
+  159: 2726 bytes, encoding 0
+  160: 5324 bytes, encoding 4
+  161: 5352 bytes, encoding 0
+  162: 2588 bytes, encoding 4
+  163: 5692 bytes, encoding 0
+  164: 7548 bytes, encoding 0
+  165: 5242 bytes, encoding 0
+  166: 5344 bytes, encoding 0
+  167: 8074 bytes, encoding 0
+  168: 7628 bytes, encoding 0
+  169: 10114 bytes, encoding 0
+  170: 64806 bytes, encoding 0
+  171: 14004 bytes, encoding 0
+  172: 20218 bytes, encoding 4
+  173: 22030 bytes, encoding 4
+  174: 19658 bytes, encoding 4
+  175: 19836 bytes, encoding 4
+  176: 19768 bytes, encoding 4
+  177: 19536 bytes, encoding 4
+  178: 4200 bytes, encoding 4
+  179: 3986 bytes, encoding 4
+  180: 8914 bytes, encoding 4
+  181: 127054 bytes, encoding 4
+  182: 15030 bytes, encoding 4
+  183: 18266 bytes, encoding 4
+  184: 36930 bytes, encoding 4
+  185: 57100 bytes, encoding 4
+  186: 19404 bytes, encoding 4
+  187: 103968 bytes, encoding 4
+  188: 112056 bytes, encoding 4
+  189: 113748 bytes, encoding 4
+  190: 116906 bytes, encoding 4
+  191: 27844 bytes, encoding 0
+  192: 88592 bytes, encoding 4
+  193: 103756 bytes, encoding 4
+  194: 6256 bytes, encoding 4
+  200: 67496 bytes, encoding 7
+  201: 45966 bytes, encoding 6
+  202: 22610 bytes, encoding 6
+  203: 21616 bytes, encoding 6
+  204: 22118 bytes, encoding 7
+  205: 22116 bytes, encoding 6
+  206: 23282 bytes, encoding 6
+  207: 22706 bytes, encoding 6
+  208: 22150 bytes, encoding 6
+  209: 22826 bytes, encoding 6
+  210: 20976 bytes, encoding 6
+  211: 24514 bytes, encoding 6
+  212: 33950 bytes, encoding 6
+  213: 29378 bytes, encoding 6
+  214: 49692 bytes, encoding 5
+  215: 114358 bytes, encoding 7
+  216: 66322 bytes, encoding 7
+  217: 82746 bytes, encoding 5
+  218: 38692 bytes, encoding 5
+  219: 133370 bytes, encoding 7
+  220: 82676 bytes, encoding 5
+  221: 89436 bytes, encoding 5
+  222: 69108 bytes, encoding 5
+  223: 215136 bytes, encoding 0
+  224: 394692 bytes, encoding 6
+  225: 195222 bytes, encoding 7
+  226: 25042 bytes, encoding 1
+  227: 10254 bytes, encoding 7
+  228: 53098 bytes, encoding 7
+  229: 25864 bytes, encoding 7
+  230: 17042 bytes, encoding 6
+  231: 31276 bytes, encoding 7
+  232: 36734 bytes, encoding 6
+  233: 24166 bytes, encoding 6
+  240: 9380 bytes, encoding 0
+  241: 317640 bytes, encoding 4
+  242: 57608 bytes, encoding 0
+  243: 163806 bytes, encoding 4
+  244: 130262 bytes, encoding 10
+  245: 12136 bytes, encoding 0
+  246: 156460 bytes, encoding 4
+  249: 1138 bytes, encoding 4
+  250: 12480 bytes, encoding 13
+  251: 65922 bytes, encoding 4
+  252: 303252 bytes, encoding 4
+  253: 102384 bytes, encoding 4
+  254: 136524 bytes, encoding 4
+  255: 80276 bytes, encoding 4
+  256: 123690 bytes, encoding 4
+  258: 5462 bytes, encoding 0
+  259: 163422 bytes, encoding 0
+  261: 186324 bytes, encoding 4
+  262: 67028 bytes, encoding 4
+  263: 12042 bytes, encoding 0
+  265: 124598 bytes, encoding 0
+  266: 80504 bytes, encoding 4
+  268: 217762 bytes, encoding 4
+  269: 37018 bytes, encoding 4
+  270: 35022 bytes, encoding 4
+  271: 439132 bytes, encoding 0
+  272: 389586 bytes, encoding 0
+  273: 26524 bytes, encoding 4
+  274: 199368 bytes, encoding 10
+  275: 3632 bytes, encoding 0
+  276: 60928 bytes, encoding 4
+  277: 122046 bytes, encoding 0
+  278: 287086 bytes, encoding 10
+  279: 149468 bytes, encoding 4
+  280: 63790 bytes, encoding 4
+  281: 33662 bytes, encoding 4
+  282: 2166 bytes, encoding 0
+  283: 79322 bytes, encoding 0
+  284: 15812 bytes, encoding 0
+  285: 9772 bytes, encoding 0
+  286: 18376 bytes, encoding 0
+  287: 42208 bytes, encoding 4
+  288: 8020 bytes, encoding 0
+  289: 140338 bytes, encoding 13
+  290: 36146 bytes, encoding 0
+  291: 8 bytes, encoding 11
+  292: 4776 bytes, encoding 4
+  293: 15380 bytes, encoding 4
+  294: 7114 bytes, encoding 0
+  295: 1142 bytes, encoding 4
+  296: 3116 bytes, encoding 4
+  297: 2174 bytes, encoding 4
+  298: 902 bytes, encoding 4
+  299: 6082 bytes, encoding 4
+  300: 15334 bytes, encoding 4
+  301: 17412 bytes, encoding 4
+  302: 13014 bytes, encoding 4
+  303: 104096 bytes, encoding 0
+  304: 534812 bytes, encoding 10
+  305: 42472 bytes, encoding 4
+  306: 56004 bytes, encoding 4
+  307: 3982 bytes, encoding 8
+  308: 105782 bytes, encoding 0
+  309: 882578 bytes, encoding 10
+  310: 46072 bytes, encoding 4
+  311: 51284 bytes, encoding 4
+  312: 4480 bytes, encoding 9
+  313: 151166 bytes, encoding 0
+  314: 515738 bytes, encoding 10
+  315: 40426 bytes, encoding 4
+  316: 26972 bytes, encoding 4
+  317: 3584 bytes, encoding 8
+  318: 148858 bytes, encoding 0
+  319: 480606 bytes, encoding 10
+  320: 43780 bytes, encoding 4
+  321: 43972 bytes, encoding 4
+  322: 3026 bytes, encoding 9
+  323: 106714 bytes, encoding 0
+  324: 1003462 bytes, encoding 10
+  325: 44374 bytes, encoding 4
+  326: 31830 bytes, encoding 4
+  327: 3504 bytes, encoding 9
+  328: 103288 bytes, encoding 0
+  329: 484742 bytes, encoding 10
+  330: 44908 bytes, encoding 4
+  331: 40808 bytes, encoding 4
+  332: 4260 bytes, encoding 9
+  333: 9530 bytes, encoding 0
+  334: 13246 bytes, encoding 10
+  335: 202840 bytes, encoding 4
+  336: 84 bytes, encoding 0
+  337: 60812 bytes, encoding 0
+  338: 28324 bytes, encoding 4
+  339: 8510 bytes, encoding 8
+  340: 8 bytes, encoding 11
+  341: 8 bytes, encoding 11
+  342: 8 bytes, encoding 11
+  343: 8 bytes, encoding 11
+  344: 8 bytes, encoding 11
+  345: 8 bytes, encoding 11
+  346: 5022 bytes, encoding 0
+  347: 837978 bytes, encoding 0
+  348: 2196 bytes, encoding 0
+  Packed assets: 20863836 bytes
+PGOMGR : warning PG0188: No .PGC files matching 'N:\rawmetal\.build\neural-textures\RawMetal!*.pgc' were found. [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+    Reading PGD file 1: N:\rawmetal\.build\neural-textures\RawMetal.pgd
+LINK : warning C4744: 'static struct std::atomic<bool> retro::MinimapCache::enabled' has different type in 'n:\rawmetal\src\renderer\softwarerenderer.cpp' and 'n:\rawmetal\src\main.cpp': 'struct (1 bytes)' and '__declspec(align(1)) struct (1 bytes)' [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+LINK : warning C4744: 'static struct std::atomic<bool> retro::TerrainSurfaceCache::enabled' has different type in 'n:\rawmetal\src\renderer\performance.cpp' and 'n:\rawmetal\src\main.cpp': '__declspec(align(1)) struct (1 bytes)' and 'struct (1 bytes)' [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+LINK : warning C4744: 'static struct std::atomic<bool> retro::MinimapCache::enabled' has different type in 'n:\rawmetal\src\renderer\performance.cpp' and 'n:\rawmetal\src\main.cpp': 'struct (1 bytes)' and '__declspec(align(1)) struct (1 bytes)' [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+  Generating code
+
+  0 of 0 ( 0.0%) original invalid call sites were matched.
+  0 new call sites were added.
+  17163 of 19206 ( 89.36%) profiled functions will be compiled for speed, and the rest of the functions will be compiled for size
+  15976 of 66802 inline instances were from dead/cold paths
+  19206 of 19206 functions (100.0%) were optimized using profile data
+  316700390365 of 316700390365 instructions (100.0%) were optimized using profile data
+  2 of 19253 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    287 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  RawMetal.vcxproj -> N:\rawmetal\.build\neural-props\game\RawMetal.exe
+  Verifying embedded assets are lossless and release-size safe
+  231 packaged resources match source: PNG pixels/dimensions, byte-identical audio/models/animation; 7 neural reconstructions match native decoded output
+  -- RawMetal executable: 25560576 / 33,554,432 bytes; headroom 7993856 bytes (OoT 32 MiB)

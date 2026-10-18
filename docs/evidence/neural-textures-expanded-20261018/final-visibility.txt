@@ -1,0 +1,59 @@
+View 0: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 1: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 2: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 3: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 4: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 5: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 6: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 7: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 8: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 9: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 10: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 11: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 12: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 13: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 14: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 15: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 16: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 17: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 18: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 19: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 20: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 21: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 22: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 23: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 24: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 25: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 26: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+View 27: 0 changed pixels
+  Terrain/minimap/panel live reference: 0 changed pixels
+PASS: row rectangle fills match scalar clipping across 10 edge/empty/large-extent cases
+PASS: retained panels preserve clipping, texture variants and eviction across 24 layouts
+PASS: opaque occlusion preserves reference pixels

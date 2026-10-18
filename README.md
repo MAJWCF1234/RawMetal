@@ -2,15 +2,18 @@
 
 RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
 streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
-The current tester target is **v0.7.2-preview.10 / ASHFALL EXCLUSION ZONE -
-procedural textures**. Five environment materials (concrete, sign rust, panel
-metal, service floor, weathered metal) now load from OpenKTG **RMP1** recipes
-instead of photographic PNGs, cutting about **783 KiB** from the executable
-while keeping the same runtime dimensions. All **25** release regression checks
-passed. Preview.9's lab FPS story is unchanged; see the
-[round-ten results](docs/Performance/Competitive%20Round%2010%2020261018.md) and
-the [procedural texture report](docs/Assets/procedural-textures-20261018.md).
-See the consolidated [release notes](RELEASE_NOTES.md).
+The current tester is **v0.7.2-preview.11 / ASHFALL EXCLUSION ZONE — performance
+and bloat reduction patch**.
+Seven reduced surface and prop textures reconstruct at load time into cached
+full-resolution images. The root executable is **24.29 MiB**, **943 KiB smaller
+than the procedural preview.10 build**, leaving **7.71 MiB** of growth room.
+The matched trained-PGO comparison averaged **315 versus 319 FPS** (about 1.1%
+slower). Native decoder checks, Vulkan smoke, resource verification and all 28
+visibility views passed. See the
+[expanded neural texture report](docs/Assets/neural-textures-expanded-20261018.md).
+Retired recipe/OpenKTG experiments are preserved in hash-verified cold storage.
+For published release history, see the [release notes](RELEASE_NOTES.md) and
+[round-ten results](docs/Performance/Competitive%20Round%2010%2020261018.md).
 Docs vault: open [`docs/`](docs/Home.md) in Obsidian. The
 [native walkthrough notes](docs/Content/Exclusion/exclusion-preview15-playtest-20261015.md)
 cover readability changes and the physical north/east approach checks.

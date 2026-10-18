@@ -1,0 +1,9 @@
+[
+  {"id":122,"source":"assets/environment/barrel.png","factor":2},
+  {"id":124,"source":"assets/environment/crate.png","factor":2},
+  {"id":131,"source":"assets/environment/sign-rust.png","factor":2},
+  {"id":132,"source":"assets/environment/panel-metal.png","factor":2},
+  {"id":141,"source":"assets/pressureworks/pump.png","factor":2},
+  {"id":250,"source":"assets/materials/water.png","factor":2},
+  {"id":289,"source":"assets/facility/cargo/packing-crate.png","factor":2}
+]

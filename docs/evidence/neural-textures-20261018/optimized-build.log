@@ -1,0 +1,35 @@
+MSBuild version 17.14.60+43b635718 for .NET Framework
+
+  Checking File Globs
+  webpdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdecode.dir\Release\webpdecode.lib
+  sharpyuv.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libsharpyuv.lib
+  webpdspdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdspdecode.dir\Release\webpdspdecode.lib
+  webpencode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpencode.dir\Release\webpencode.lib
+  webpdsp.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webpdsp.dir\Release\webpdsp.lib
+  webputils.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webputils.dir\Release\webputils.lib
+  webputilsdecode.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\webputilsdecode.dir\Release\webputilsdecode.lib
+  webp.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libwebp.lib
+  webpdecoder.vcxproj -> N:\rawmetal\.build\vs2022\ThirdParty\libwebp\Release\libwebpdecoder.lib
+  RawMetalNeuralTextures.vcxproj -> N:\rawmetal\.build\vs2022\Release\RawMetalNeuralTextures.lib
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(538,5): warning MSB8028: The intermediate directory (RawMetalAssetPacker.dir\Release\) contains files shared from another project (RawMetalAssetPacker.vcxproj).  This can lead to incorrect clean and rebuild behavior. [N:\rawmetal\.build\vs2022\RawMetalAssetPacker.vcxproj]
+  RawMetalAssetPacker.vcxproj -> N:\rawmetal\.build\vs2022\tools\RawMetalAssetPacker.exe
+PGOMGR : warning PG0188: No .PGC files matching 'N:\rawmetal\.build\neural-textures\RawMetal!*.pgc' were found. [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+    Reading PGD file 1: N:\rawmetal\.build\neural-textures\RawMetal.pgd
+LINK : warning C4744: 'static struct std::atomic<bool> retro::MinimapCache::enabled' has different type in 'n:\rawmetal\src\renderer\softwarerenderer.cpp' and 'n:\rawmetal\src\main.cpp': 'struct (1 bytes)' and '__declspec(align(1)) struct (1 bytes)' [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+LINK : warning C4744: 'static struct std::atomic<bool> retro::TerrainSurfaceCache::enabled' has different type in 'n:\rawmetal\src\renderer\performance.cpp' and 'n:\rawmetal\src\main.cpp': '__declspec(align(1)) struct (1 bytes)' and 'struct (1 bytes)' [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+LINK : warning C4744: 'static struct std::atomic<bool> retro::MinimapCache::enabled' has different type in 'n:\rawmetal\src\renderer\performance.cpp' and 'n:\rawmetal\src\main.cpp': 'struct (1 bytes)' and '__declspec(align(1)) struct (1 bytes)' [N:\rawmetal\.build\vs2022\RawMetal.vcxproj]
+  Generating code
+  Previous IPDB and IOBJ mismatch, fall back to full compilation.
+
+  0 of 0 ( 0.0%) original invalid call sites were matched.
+  0 new call sites were added.
+  17163 of 19206 ( 89.36%) profiled functions will be compiled for speed, and the rest of the functions will be compiled for size
+  60695 of 264636 inline instances were from dead/cold paths
+  19206 of 19206 functions (100.0%) were optimized using profile data
+  316700390365 of 316700390365 instructions (100.0%) were optimized using profile data
+  All 19253 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  RawMetal.vcxproj -> N:\rawmetal\.build\neural-textures\optimized\RawMetal.exe
+  Verifying embedded assets are lossless and release-size safe
+  231 packaged resources match source: PNG pixels/dimensions, byte-identical audio/models/animation; 2 neural reconstructions match native decoded output
+  -- RawMetal executable: 27063808 / 33,554,432 bytes; headroom 6490624 bytes (OoT 32 MiB)
