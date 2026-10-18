@@ -13,3 +13,13 @@ Laplacian HF energy (higher = crunchier microdetail).
 Generator: src/core/ProceduralTexture.cpp
 Recipes: src/assets/materials/procedural/*.rmp
 Contact sheet: before-after.png (PNG top, procedural bottom)
+
+## ProceduralTextureTest
+
+```
+concrete-floor: deterministic opaque 256x256 range 36-135; malformed recipes rejected PASS
+sign-rust: deterministic opaque 512x512 range 23-120; malformed recipes rejected PASS
+panel-metal: deterministic opaque 512x512 range 19-37; malformed recipes rejected PASS
+service-floor: deterministic opaque 256x256 range 30-166; malformed recipes rejected PASS
+weathered-metal: deterministic opaque 256x256 range 89-202; malformed recipes rejected PASS
+```
