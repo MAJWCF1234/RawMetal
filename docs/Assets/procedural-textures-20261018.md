@@ -68,4 +68,4 @@ non-flat, malformed recipes rejected.
 Full release suite (**25/25 PASS**, each with `--smoke-test --vulkan`):
 [release-checks.txt](../evidence/procedural-textures-20261018/release-checks.txt).
 Unit test log:
-[procedural-texture-test.txt](../evidence/procedural-textures-20261018/procedural-texture-test.txt).
+[QUALITY.md](../evidence/procedural-textures-20261018/QUALITY.md) (unit-test log section).
