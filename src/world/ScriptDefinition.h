@@ -7,6 +7,7 @@
 #include <vector>
 #include <array>
 #include <charconv>
+#include <cstring>
 namespace retro {
 using StateId=std::uint32_t;
 constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
@@ -70,8 +71,8 @@ struct ActorPose {Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int l
 inline StateId actorTrackState(StateId timer,size_t index,std::string_view field){return stateId("actor_track/"+std::to_string(timer)+"/"+std::to_string(index)+"/"+std::string(field));}
 inline StateId actorPositionState(StateId dead,int axis){return stateId("actor_position/"+std::to_string(dead)+"/"+std::to_string(axis));}
 inline StateId actorAiState(int level,size_t actor,StateId timer,std::string_view field){
- // Cache only the pure identity prefix. Full identity checks make collisions,
- // rebuilt worlds and different Game instances safe; field bytes stay exact.
+ // Pure IDs only: neither cache retains Game pointers, state values or views
+ // into caller-owned text. Validate complete suffix bytes even at one address.
  struct Prefix {size_t actor=0;int level=0;StateId timer=0,hash=0;bool ready=false;};
  static thread_local std::array<Prefix,128> prefixes{};
  uint32_t slot=uint32_t(actor)*0x9e3779b9u^uint32_t(level)*0x85ebca6bu^timer;slot^=slot>>16;
@@ -82,8 +83,16 @@ inline StateId actorAiState(int level,size_t actor,StateId timer,std::string_vie
   append("npc/");number(level);append("/");number(actor);append("/");number(timer);append("/");
   prefix={actor,level,timer,hash,true};
  }
+ struct Field {StateId prefix=0,value=0;size_t size=0;std::array<char,48> text{};};
+ static thread_local std::array<Field,2048> fields{};
+ auto fieldSlot=(reinterpret_cast<std::uintptr_t>(field.data())>>3)^prefix.hash;fieldSlot^=fieldSlot>>16;
+ auto&cached=fields[fieldSlot&(fields.size()-1)];
+ if(field.size()<=cached.text.size()&&cached.value&&cached.prefix==prefix.hash&&cached.size==field.size()&&
+    (field.empty()||std::memcmp(cached.text.data(),field.data(),field.size())==0))return cached.value;
  StateId hash=prefix.hash;for(unsigned char c:field)hash=(hash^c)*16777619u;
- return hash|0x80000000u; // Internal NPC keys cannot collide with authored stateId flags.
+ StateId value=hash|0x80000000u; // Preserve every existing serialized state ID.
+ if(field.size()<=cached.text.size()){cached.prefix=prefix.hash;cached.value=value;cached.size=field.size();if(!field.empty())std::memcpy(cached.text.data(),field.data(),field.size());}
+ return value;
 }
 ActorPose sampleActor(const ActorTrack& track,int ageMs);
 ActorPose sampleActorKeys(const std::vector<ActorKey>& keys,int ageMs,bool loop=false);

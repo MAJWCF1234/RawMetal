@@ -2,6 +2,7 @@
 #include "SoftwareRenderer.h"
 #include <memory>
 #include <utility>
+#include <span>
 namespace retro {
 // Hardware rasterization; CPU scene/animation code and the deterministic
 // software reference share the same triangle stream and authored materials.
@@ -31,9 +32,24 @@ public:
  // Immutable for one draw: resolve texture ownership and surface constants
  // outside the per-triangle loop. Positions and UV arithmetic stay unchanged.
  struct ActorMaterial {std::uint64_t key=0;std::uint32_t sortKey=0;float emission=0,normal=-1,parallax=0,surface=0;};
+ struct ActorTriangle {float position[3][4],uv[3][2],settings[4],actor;ActorTriangle()noexcept{}};
+ struct ActorStream {std::span<ActorTriangle> triangles;std::uint32_t start=0;};
+ ActorStream beginActorStream(size_t maximum);
+ void actorStreamRun(std::uint32_t start,std::uint32_t count,const ActorMaterial&material);
+ void endActorStream(const ActorStream&stream,std::uint32_t count);
+ static void writeActorTriangle(ActorTriangle&out,const MeshTriangle&face,int actor,const ActorMaterial&material){
+  out.settings[0]=material.emission;out.settings[1]=material.normal;out.settings[2]=material.parallax;out.settings[3]=material.surface;out.actor=float(actor);
+  for(size_t i=0;i<3;++i){const auto&v=face.v[i];auto&p=out.position[i];p[0]=v.p.x;p[1]=v.p.y;p[2]=v.p.z;p[3]=v.light;out.uv[i][0]=v.u;out.uv[i][1]=v.v;}
+ }
  ActorMaterial prepareActorMaterial(const SoftwareRenderer::Texture& texture,float emissionScale=1.f);
  void submitActor(const MeshVertex& a,const MeshVertex& b,const MeshVertex& c,int actor,const ActorMaterial& material);
- std::array<std::uint64_t,2> actorStatistics()const;
+ // Cross-frame body/gun triangle reuse. Identity is exact float bits from the
+ // caller; a hit resubmits retained world-space triangles with a fresh light slot.
+ bool replayActorEmit(std::uint64_t slot,std::uint64_t identity,int actor);
+ void commitActorEmit(std::uint64_t slot,std::uint64_t identity,std::uint32_t startTriangle);
+ void clearActorEmitCache();
+ void setActorEmitCaching(bool enabled);
+ std::array<std::uint64_t,3> actorStatistics()const;
  void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f);
  void finish(std::vector<std::uint32_t>& pixels);
  bool hasSurface()const;

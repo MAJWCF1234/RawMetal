@@ -1,6 +1,7 @@
 #include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "../Navigation.h"
+#include "../WalkQueryCache.h"
 #include "Schedule.h"
 #include <cmath>
 #include <queue>
@@ -84,6 +85,15 @@ bool Game::friendlyBoundaryOpen(int from,int to,Vec2 global)const{
  return false;
 }
 bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){
+ // Exact memo for in-chunk sweeps while a WalkQueryCache::Scope is live.
+ // Same answers as the uncached body; seam-crossing probes stay live.
+ if(auto*cache=ai::WalkQueryCache::active(friendlyWorld(level))){
+  auto live=[&](Vec2 from,float fromFeet,Vec2 to,float hull,float*out){return friendlyWalkSegmentUncached(level,from,fromFeet,to,hull,out);};
+  return cache->walk(start,feet,goal,height,endFeet,live);
+ }
+ return friendlyWalkSegmentUncached(level,start,feet,goal,height,endFeet);
+}
+bool Game::friendlyWalkSegmentUncached(int level,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){
  perf::Scope walkProfile(perf::Walk);
  // TraceHull-style: the actor already occupies `start`. Re-proving that
  // footprint every probe doubled short locomotion cost for free. Same support,
@@ -91,13 +101,22 @@ bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float h
  // Matches enemy `roughSegment`, which already samples from i=1.
  auto delta=goal-start;float distance=length(delta);
  if(distance<.001f){if(endFeet)*endFeet=feet;return true;}
+ auto doorLine=[&](const World&w,Vec2 from,Vec2 to,float z,float lattice){
+  if(!m_navAuthority||lattice<.001f)return true;auto span=to-from;float spanLength=length(span);
+  if(spanLength<.001f)return true;int doors=std::max(1,int(std::ceil(spanLength/lattice)));
+  for(int i=1;i<doors;++i){auto at=from+span*(float(i)/doors);if(w.doorBlocks(at.x,at.y,z,height))return false;}
+  return true;
+ };
  // A convex segment whose complete footprint stays inside this chunk cannot
- // cross a seam. Sample pitch is hull-scale so short steps pay one endpoint.
+ // cross a seam. Nav authority uses TraceHull-scale footprint sites; the dense
+ // lattice remains available via --lattice-walk-probes.
  if(std::min(start.x,goal.x)>=.2f&&std::min(start.y,goal.y)>=.2f&&std::max(start.x,goal.x)<23.8f&&std::max(start.y,goal.y)<23.8f){
-  ensureChunk(level);const auto&w=friendlyWorld(level);float pitch=aiWalkSamplePitch(w.hasTerrain());
+  ensureChunk(level);const auto&w=friendlyWorld(level);float lattice=aiWalkSamplePitch(w.hasTerrain());
+  float pitch=m_navAuthority?aiWalkAuthorityPitch(w.hasTerrain()):lattice;
   int samples=std::max(1,int(std::ceil(distance/pitch)));float z=feet;
   for(int step=1;step<=samples;++step){auto point=start+delta*(float(step)/samples);auto previous=start+delta*(float(step-1)/samples);
    if(!aiStructureSegment(w,previous,z,point,height,m_aiQueryCaching))return false;
+   if(!doorLine(w,previous,point,z,lattice))return false;
    float ground=-10000;for(float x:{-.2f,.2f})for(float y:{-.2f,.2f})ground=std::max(ground,w.supportBelow(point.x+x,point.y+y,z+.265f));
    float stepHeight=w.hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f||w.railBlocksHull(point.x,point.y,.2f,ground,height))return false;
    for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f})if(!w.fits(point.x+x,point.y+y,ground,height)||w.doorBlocks(point.x+x,point.y+y,ground,height))return false;
@@ -105,13 +124,16 @@ bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float h
   }
   if(endFeet)*endFeet=z;return true;
  }
- auto origin=chunkOffset(level);ensureChunk(level);float pitch=aiWalkSamplePitch(friendlyWorld(level).hasTerrain());
+ auto origin=chunkOffset(level);ensureChunk(level);bool terrain=friendlyWorld(level).hasTerrain();float lattice=aiWalkSamplePitch(terrain);
+ float pitch=m_navAuthority?aiWalkAuthorityPitch(terrain):lattice;
  int samples=std::max(1,int(std::ceil(distance/pitch))),previous=level;float z=feet;
  for(int step=1;step<=samples;++step){Vec2 global=origin+start+delta*(float(step)/samples);Vec2 before=origin+start+delta*(float(step-1)/samples);
   int center=friendlyChunkAt(global,previous);if(center<0||!friendlyBoundaryOpen(previous,center,global))return false;ensureChunk(center);float ground=-10000;
-  auto off=chunkOffset(center);if(!aiStructureSegment(friendlyWorld(center),before-off,z,global-off,height,m_aiQueryCaching))return false;
+  auto off=chunkOffset(center);const auto&centerWorld=friendlyWorld(center);
+  if(!aiStructureSegment(centerWorld,before-off,z,global-off,height,m_aiQueryCaching))return false;
+  if(!doorLine(centerWorld,before-off,global-off,z,lattice))return false;
   for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);ground=std::max(ground,friendlyWorld(chunk).supportBelow(local.x,local.y,z+.265f));}
-  float stepHeight=friendlyWorld(center).hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f)return false;
+  float stepHeight=centerWorld.hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f)return false;
   for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);
    auto localCenter=global-chunkOffset(chunk);if(!w.fits(local.x,local.y,ground,height)||w.doorBlocks(local.x,local.y,ground,height)||w.railBlocksHull(localCenter.x,localCenter.y,.2f,ground,height))return false;}
   z=ground;previous=center;
@@ -170,6 +192,9 @@ bool Game::friendlyPortal(int from,int target,Vec2 position,float feet,float hei
   Vec2 inside=std::fabs(delta.x)>1?Vec2{delta.x>0?23.65f:.35f,along}:Vec2{along,delta.y>0?23.65f:.35f};auto outside=inside+normalized(delta)*.7f;
   if(!friendlyBoundaryOpen(from,next,origin+outside))continue;
   for(float trial:{feet,std::isfinite(targetFeet)?targetFeet:m_player.z}){float z=friendlyWorld(from).supportBelow(inside.x,inside.y,trial+.265f),end=z;
+   // This is a hypothetical planner start, not an already occupied actor
+   // footprint. A seam sweep alone can start behind a wall and look clear.
+   if(!friendlyBodyFits(from,inside,z,height))continue;
    if(!friendlyWalkSegment(from,inside,z,outside,height,&end))continue;float score=lengthSq(inside-position)+std::fabs(z-feet)*8;
    if(score<best){best=score;goal=outside;goalFeet=z;found=true;}
   }

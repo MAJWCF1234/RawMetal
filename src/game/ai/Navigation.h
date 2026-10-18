@@ -9,6 +9,10 @@ namespace retro {
 // re-fitting the occupied start (enemy roughSegment already did); destination
 // and intervening structure still prove the move.
 inline float aiWalkSamplePitch(bool terrain){return terrain?.16f:.28f;}
+// Nav-as-authority locomotion/planning pitch: one TraceHull-scale hop instead of
+// densifying every retained graph edge and long probe. Door centerlines still
+// sample at aiWalkSamplePitch so thin leaves cannot slip between footprint sites.
+inline float aiWalkAuthorityPitch(bool terrain){return terrain?.55f:.95f;}
 inline bool aiStructureSegment(const World& world,Vec2 start,float feet,Vec2 goal,float height,bool indexed=true){
  perf::Scope queryProfile(perf::Structure);
  return world.structureSegmentClear(start,feet,goal,height,indexed);

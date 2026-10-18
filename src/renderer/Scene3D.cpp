@@ -1421,7 +1421,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   bool blink=int(fuse*8.f)%2==0;box(p+Point3{-.018f,-.066f,-.012f},p+Point3{.018f,-.062f,.012f},blink?red:m_panelMetal,blink?2.f:1.f);
  };
  const auto engineerDrones=game.engineerDrones();
- auto drawActor=[&](const ActorTrack&track,ActorPose pose,const NpcWeaponPose* weapon=nullptr,int actor=-1){
+ auto drawActor=[&](const ActorTrack&track,ActorPose pose,const NpcWeaponPose* weapon,int actor,std::uint64_t emitSlot){
  perf::Scope actorProfile(perf::Actor);
     float radius=humanActorVisual(track.visual)?track.scale:track.scale*.8f;
     if(track.platform)radius=std::max(radius,std::hypot(track.footprint.x,track.footprint.y)*.5f);
@@ -1614,6 +1614,24 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     tri(face.v[0],face.v[1],face.v[2],texture,1.f);
    }
   };
+  // A rooted actor still animates. Every clip phase participates in retained
+  // geometry identity, including idle, crouch and a progressing death fall.
+  auto mixBits=[&](std::uint64_t&h,std::uint32_t v){h^=std::uint64_t(v)+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2);};
+  auto mixFloat=[&](std::uint64_t&h,float v){mixBits(h,std::bit_cast<std::uint32_t>(v));};
+  std::uint64_t emitIdentity=0xC6A4A7935BD1E995ull;
+  mixFloat(emitIdentity,dormantFloor);mixFloat(emitIdentity,m_emissionScale);
+  mixBits(emitIdentity,std::uint32_t(track.visual));mixFloat(emitIdentity,track.scale);mixFloat(emitIdentity,pose.position.x);mixFloat(emitIdentity,pose.position.y);
+  mixFloat(emitIdentity,pose.z);mixFloat(emitIdentity,pose.yaw);mixBits(emitIdentity,std::uint32_t(pose.clip));mixBits(emitIdentity,std::uint32_t(m_cleanupInspectionStage));
+  mixFloat(emitIdentity,pose.phase);if(wasp)mixFloat(emitIdentity,game.elapsed());
+  if(weapon){mixBits(emitIdentity,weapon->armed);mixBits(emitIdentity,weapon->handgun);mixBits(emitIdentity,weapon->crouched);mixBits(emitIdentity,weapon->maintenance);
+   mixBits(emitIdentity,weapon->supportAnimation);mixBits(emitIdentity,weapon->padVisible);mixBits(emitIdentity,weapon->pistolVisible);mixBits(emitIdentity,std::uint32_t(weapon->supportClip));
+   mixBits(emitIdentity,std::uint32_t(weapon->action));mixFloat(emitIdentity,weapon->supportPhase);mixFloat(emitIdentity,weapon->treatment);mixFloat(emitIdentity,weapon->engineering);
+   mixFloat(emitIdentity,weapon->grip.x);mixFloat(emitIdentity,weapon->grip.y);mixFloat(emitIdentity,weapon->grip.z);mixFloat(emitIdentity,weapon->muzzle.x);mixFloat(emitIdentity,weapon->muzzle.y);mixFloat(emitIdentity,weapon->muzzle.z);
+   mixFloat(emitIdentity,weapon->direction.x);mixFloat(emitIdentity,weapon->direction.y);mixFloat(emitIdentity,weapon->direction.z);mixFloat(emitIdentity,weapon->raise);mixFloat(emitIdentity,weapon->flash);
+   mixFloat(emitIdentity,weapon->recoil);mixFloat(emitIdentity,weapon->actionProgress);mixFloat(emitIdentity,weapon->reload);mixFloat(emitIdentity,weapon->grenadeThrow);}
+  const std::uint32_t emitStart=gpuActor>=0?std::uint32_t(m_gpu->actorStatistics()[1]):0;
+  const bool replayedEmit=m_actorEmitCaching&&gpuActor>=0&&m_gpu->replayActorEmit(emitSlot,emitIdentity,gpuActor);
+  if(!replayedEmit){
   // Material ownership is immutable during this draw. Resolve each name
   // once instead of copying/searching strings for every animated triangle.
   std::vector<int> actorMaterials(mesh.materialNames.size());
@@ -1628,6 +1646,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   static thread_local std::vector<unsigned char> attachmentReady;
   if(reuseAttachment){attachmentPositions.resize(attachmentGroups);attachmentReady.assign(attachmentGroups,0);}
   size_t actorFace=0;
+  const bool streamBody=gpuActor>=0&&m_actorStreamWriting;
+  GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(mesh.triangles.size());
+  uint32_t emitted=0,runStart=0;int runMaterial=-1;
+  auto flushRun=[&]{if(runMaterial>=0)m_gpu->actorStreamRun(stream.start+runStart,emitted-runStart,gpuMaterials[runMaterial]);runStart=emitted;};
   {perf::ActorScope profile(1);
   for(auto face:mesh.triangles){
    int vertex=0;for(auto& v:face.v){
@@ -1659,9 +1681,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(m_environmentInspection&&posedArms&&armedVertices)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
    if(m_environmentInspection&&cleanup){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
    int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
-   actorTriangle(face,cleanup?m_cleanupTextures[cleanupRole][material]:human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture,gpuMaterials[material],gpuMaterialReady[material]);
+   if(streamBody){
+    if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
+     if(!gpuMaterialReady[material]){const auto&texture=cleanup?m_cleanupTextures[cleanupRole][material]:human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture;
+      gpuMaterials[material]=m_gpu->prepareActorMaterial(texture,m_emissionScale);gpuMaterialReady[material]=true;}
+     if(runMaterial!=material){flushRun();runMaterial=material;}
+     GpuRenderer::writeActorTriangle(stream.triangles[emitted++],face,gpuActor,gpuMaterials[material]);
+    }
+   }else actorTriangle(face,cleanup?m_cleanupTextures[cleanupRole][material]:human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture,gpuMaterials[material],gpuMaterialReady[material]);
    ++actorFace;
   }
+  if(streamBody){flushRun();m_gpu->endActorStream(stream,emitted);}
   }
   if(armed){
    if(weapon->grenadeThrow>0)drawTacticalGrenade(arms[0].targetHand+Point3{0,0,.025f},2.4f);
@@ -1675,6 +1705,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     else v.p=weapon->handgun?gunGrip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale:gunPoint(p);}
     actorTriangle(face,gunTexture,gunMaterial,gunMaterialReady);
    }
+  }
+  if(m_actorEmitCaching&&gpuActor>=0)m_gpu->commitActorEmit(emitSlot,emitIdentity,emitStart);
   }
   objectLighting=false;objectNormalLighting=nullptr;
   if(engineer&&(!mesh.hasDirectCreatureMotion()||(directSupport&&weapon->padVisible))){
@@ -1758,8 +1790,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(armed&&!engineering&&weapon->flash>0){float size=(.075f+.09f*weapon->flash)*track.scale/1.6f;Point3 across=effectSide*size,up{0,0,size};quad(gunMuzzle-across-up,gunMuzzle+across-up,gunMuzzle+across+up,gunMuzzle-across+up,m_muzzleFlash,2.4f*weapon->flash);}
   if(human&&track.tool&&!armed&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
  };
- for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i));
- for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i));}}
+ for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i),nullptr,-1,0xB000000000000000ull|i);
+ for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i),0xA000000000000000ull|i);}}
  for(const auto&drone:engineerDrones)if(drone.level==level){
   if(!sphereVisible(drone.position+Point3{0,0,EngineerDroneHeight*.5f},1.2f))continue;
   m_engineerDrone.poseCreature(drone.walking?1:0,drone.phase);

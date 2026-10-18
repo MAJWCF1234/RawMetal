@@ -78,7 +78,12 @@ private:
  bool m_topologyReady=false;
  bool m_materialParts=false;
  std::string m_nodeFilter;
- void extract(ufbx_scene* scene);
+ // The arms use the library's position skinning formula without generating
+ // normals/topology that this renderer never consumes.
+ bool m_positionOnlySkinning=false;
+ std::vector<std::vector<ufbx_vec3>> m_skinPositionScratch;
+ std::vector<unsigned char> m_skinPositionReady;
+ void extract(ufbx_scene* scene,bool positionsOnly=false);
  void grip(Point3 right={-.025f,1.55f,.223f},Point3 left={-.025f,1.60f,.49f},float swing=0,float pitch=0,float yaw=0,bool skin=true);
  ufbx_scene* m_scene=nullptr;
  ufbx_scene* m_bindScene=nullptr;

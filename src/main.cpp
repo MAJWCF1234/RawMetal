@@ -86,6 +86,7 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
  auto renderer=std::make_unique<retro::SoftwareRenderer>(retro::DisplayWidth,retro::DisplayHeight);if(!renderer->enableHardware(window.handle()))return 36;
  renderer->setGpuActorPreparation(!cpuActors);
  renderer->setPanelCaching(std::wcsstr(GetCommandLineW(),L"--uncached-panels")==nullptr);
+ renderer->setActorEmitCaching(std::wcsstr(GetCommandLineW(),L"--uncached-actor-emit")==nullptr);
  const int measured=sustained?3600:240;
  retro::AudioEngine audio(sustained);std::ofstream report("ashfall-performance.txt"),csv("ashfall-performance.csv");
  report<<renderer->hardwareName()<<" / native window / "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<" / 30 simulated warmup + "<<measured<<" measured frames\nCPU wall timings, including native window presentation; not GPU timestamps.\n";
@@ -96,7 +97,8 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
   if((yardOnly||sustained)&&test.kind!=2)continue;auto start=Clock::now();auto game=test.kind>=0?retro::Game::exclusionInspection(sustained?12:test.kind):test.kind==-1?retro::Game(retro::WorldId::Ashfall):test.kind==-2?retro::Game::mapInspection({1.4f,20},0,0,14,false,-25,false):retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false);
   game.setAiQueryCaching(!uncachedAi);
   game.setAiDecisionScheduling(!fullRateAi);
-  report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<" ai_query_cache="<<!uncachedAi<<'\n';std::array<std::vector<double>,6> samples;
+  game.setNavAuthority(std::wcsstr(GetCommandLineW(),L"--lattice-walk-probes")==nullptr);
+  report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<" ai_query_cache="<<!uncachedAi<<" nav_authority="<<(std::wcsstr(GetCommandLineW(),L"--lattice-walk-probes")==nullptr)<<'\n';std::array<std::vector<double>,6> samples;
   for(int frame=-30;frame<measured&&window.pump();++frame){retro::InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;
    if(frame==0){retro::CollisionQueryBatch::resetStatistics();retro::ai::DecisionClock::resetStatistics();retro::ai::WalkQueryCache::resetStatistics();retro::TerrainSurfaceCache::resetStatistics();retro::ai::StateLookupHints::resetStatistics();retro::MinimapCache::resetStatistics();retro::perf::cpuGrowthFrames=retro::perf::gpuBufferGrowths=0;}
    retro::perf::enabled=!sustained||deepProfile;retro::perf::costs.fill(0);retro::perf::actorCosts.fill(0);retro::perf::actorTriangleCounter=0;auto a=Clock::now();game.update(input,1.f/60);auto b=Clock::now();audio.update(game,!sustained);auto c=Clock::now();renderer->render(game);auto d=Clock::now();auto stages=renderer->frameStages();
@@ -959,6 +961,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     renderer.setGpuActorPreparation(std::wcsstr(commandLine,L"--cpu-actor-preparation")==nullptr);
     game.setAiQueryCaching(std::wcsstr(commandLine,L"--uncached-ai-queries")==nullptr);
     game.setAiDecisionScheduling(std::wcsstr(commandLine,L"--full-rate-ai-decisions")==nullptr);
+    game.setNavAuthority(std::wcsstr(commandLine,L"--lattice-walk-probes")==nullptr);
     if(vrMode){if(!renderer.enableHardware(window.handle()))throw std::runtime_error("SteamVR requires Vulkan hardware rendering: "+renderer.hardwareName());}else if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware(window.handle());
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
