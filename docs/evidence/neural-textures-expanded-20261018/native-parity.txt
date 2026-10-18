@@ -1,0 +1,5 @@
+PyTorch parity: max 1 LSB, 2 / 969000 channels differ; 510x475 median 14.9299 ms, p89 16.5437 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 8 / 1807480 channels differ; 619x730 median 29.5301 ms, p89 30.578 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 3 / 1048576 channels differ; 512x512 median 15.9882 ms, p89 16.5009 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 2 / 1234944 channels differ; 512x603 median 18.9685 ms, p89 21.5347 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 8 / 2240000 channels differ; 700x800 median 33.3211 ms, p89 37.35 ms; 9 repeat decodes PASS

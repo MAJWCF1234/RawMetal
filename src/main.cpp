@@ -1,5 +1,6 @@
 #include "renderer/RenderProfile.h"
 #include "core/FrameProfile.h"
+#include "core/NeuralTexture.h"
 #ifdef _WIN32
 #include "game/Game.h"
 #include "game/ai/DecisionClock.h"
@@ -26,6 +27,19 @@
 #include <numeric>
 #include <vector>
 
+__declspec(noinline) static int neuralTextureRuntimeTest(int W,int H,bool vulkan){
+ std::ofstream report("neural-texture-runtime-test.txt");
+ auto before=retro::neuralTextureReconstructionCount();auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);
+ if(vulkan&&!renderer->enableHardware())return 36;
+ auto scene=retro::Game::exclusionInspection(2);renderer->render(scene);
+ auto loaded=retro::neuralTextureReconstructionCount();
+ for(int frame=0;frame<240;++frame){retro::InputState input{};input.mouseDx=3;scene.update(input,1.f/60);renderer->render(scene);}
+ auto afterFrames=retro::neuralTextureReconstructionCount();int scale=retro::SoftwareRenderer::texturePresentScale();
+ retro::SoftwareRenderer::setTexturePresentScale(scale==1?2:1);renderer->render(scene);retro::SoftwareRenderer::setTexturePresentScale(scale);renderer->render(scene);
+ auto afterAtlasChanges=retro::neuralTextureReconstructionCount();
+ report<<"Startup neural reconstructions: "<<loaded-before<<"\nAdditional reconstructions across 240 frames: "<<afterFrames-loaded<<"\nAdditional reconstructions across atlas scale changes: "<<afterAtlasChanges-afterFrames<<"\n";
+ bool passed=loaded>before&&afterFrames==loaded&&afterAtlasChanges==afterFrames;report<<(passed?"PASS":"FAIL")<<'\n';return passed?0:75;
+}
 __declspec(noinline) static int vrSmokeTest(int W,int H,bool inspect=false){
      std::ofstream report("vr-smoke-test.txt");retro::VrRuntime runtime;std::string error;if(!runtime.initialize(error)){report<<"UNAVAILABLE: "<<error;return 61;}
      retro::Win32Window mirror(W,H,L"Depthworks VR spectator test");auto scene=retro::Game::mapInspection({11.3f,3.5f},1.570796f);auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware(mirror.handle())){report<<renderer->hardwareName();return 36;}
@@ -405,6 +419,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // many mutually exclusive inspection branches otherwise reserve their
     // large renderer objects in one native stack frame before dispatch.
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    if(std::wcsstr(commandLine,L"--neural-texture-runtime-test"))return neuralTextureRuntimeTest(W,H,std::wcsstr(commandLine,L"--vulkan")!=nullptr);
     if(std::wcsstr(commandLine,L"--stealth-test"))return retro::Game::testStealth()?0:21;
     if(std::wcsstr(commandLine,L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
     if(std::wcsstr(commandLine,L"--exclusion-authoring-test"))return retro::Game::testExclusionAuthoring()?0:21;

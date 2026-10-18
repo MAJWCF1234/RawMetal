@@ -7,17 +7,19 @@ aliases: [Documentation Hub, Index]
 
 | | |
 | --- | --- |
-| Performance | [[Performance/Competitive Round 10 20261018\|Round 10 / preview.9]] · [[Performance/Exclusion Zone\|Exclusion Zone]] |
+| Performance | [[Assets/neural-textures-expanded-20261018\|Performance/bloat patch / preview.11]] · [[Performance/Exclusion Zone\|Exclusion Zone]] |
 | AI | [[AI/GoldSrc AI\|GoldSrc]] · [[AI/ai-perception\|Perception]] |
 | Design | [[Design/PROJECT_NOTES\|Project notes]] |
 | Systems | [[Systems/Index\|Systems]] |
 | Content | [[Content/Index\|Content]] |
-| Assets | [[Assets/Index\|Assets]] · [[Assets/procedural-textures-20261018\|Procedural textures / preview.10]] |
+| Assets | [[Assets/Index\|Assets]] · [[Assets/neural-textures-expanded-20261018\|Neural textures / preview.11]] |
 | Archive | [[Archive/Index\|Archive]] |
 
-Shipped **v0.7.2-preview.10** (2026-10-18): five OpenKTG procedural materials;
-EXE **26.43 MiB** (−783 KiB vs preview.9); 25 checks passed —
-[[Assets/procedural-textures-20261018]]. Prior lab round: **308.4 to 314.2 FPS**,
+Shipped **v0.7.2-preview.11** (2026-10-18): seven cached neural texture
+reconstructions; EXE **24.29 MiB**, **943 KiB smaller than preview.10**, with
+**7.71 MiB** free. Matched lab comparison **315.28 vs 318.69 FPS** (1.07% slower
+for the size reduction). Decoder/resource checks, Vulkan smoke and 28 visibility
+views passed — [[Assets/neural-textures-expanded-20261018]]. Prior lab round: **308.4 to 314.2 FPS**,
 1% lows **187.8 to 199.9**; 330 FPS remains unmet —
 [[Performance/Competitive Round 10 20261018]].
 

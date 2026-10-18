@@ -9,7 +9,8 @@
 #include "AudioPredictor.h"
 #include "BinaryPredictor.h"
 #include "AnimationPredictor.h"
-#include "ProceduralTexture.h"
+#include "NeuralTexture.h"
+
 #include "../ThirdParty/libwebp/src/webp/decode.h"
 namespace retro {
 inline std::vector<unsigned char> decodeLosslessTexture(const std::vector<unsigned char>& input){
@@ -21,7 +22,7 @@ inline std::vector<unsigned char> decodeLosslessTexture(const std::vector<unsign
  if(!WebPDecodeRGBAInto(input.data(),input.size(),raw.data()+12,raw.size()-12,features.width*4))throw std::runtime_error("Lossless texture decode failed");
  return raw;
 }
-inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,int aliasDepth=0) {
+inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,int aliasDepth=0,int neuralDepth=0) {
  auto res=FindResourceW(module,MAKEINTRESOURCEW(id),MAKEINTRESOURCEW(10));
  if(!res)throw std::runtime_error("Missing embedded resource");
  auto bytes=static_cast<const unsigned char*>(LockResource(LoadResource(module,res)));size_t size=SizeofResource(module,res);
@@ -30,11 +31,11 @@ inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,i
   // References always point directly to an ordinary packed resource. Reject
   // self references/chains, including cycles in a malformed executable.
   if(aliasDepth||!target||target>65535||target==uint32_t(id))throw std::runtime_error("Invalid resource reference");
-  return loadResourceFromModule(module,int(target),1);
+  return loadResourceFromModule(module,int(target),1,neuralDepth);
  }
  if(!bytes||size<12||std::memcmp(bytes,"RMZ1",4))throw std::runtime_error("Invalid packed resource");
  uint32_t count=0,transform=0;std::memcpy(&count,bytes+4,4);std::memcpy(&transform,bytes+8,4);
- if(!count||count>128*1024*1024||transform>12||transform==11)throw std::runtime_error("Invalid resource size or encoding");
+ if(!count||count>128*1024*1024||transform>13||transform==11||transform==12)throw std::runtime_error("Invalid resource size or encoding");
  std::vector<unsigned char> decoded(count);DECOMPRESSOR_HANDLE decoder=nullptr;
  if(!CreateDecompressor(COMPRESS_ALGORITHM_LZMS,nullptr,&decoder))throw std::runtime_error("Cannot create resource decoder");
  SIZE_T actual=0;bool ok=Decompress(decoder,bytes+12,size-12,decoded.data(),count,&actual)!=FALSE;CloseDecompressor(decoder);
@@ -46,7 +47,14 @@ inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,i
  if(transform>=5&&transform<=7)decoded=audioPredict(decoded,transform!=6,transform!=5,true);
  if(transform==8||transform==9)decoded=binaryPredict(decoded,transform==9,true);
  if(transform==10)decoded=animationPredict(decoded,true);
- if(transform==12)decoded=generateProceduralTexture(decoded);
+ if(transform==13){
+  if(neuralDepth)throw std::runtime_error("Neural texture model recursion");
+  uint32_t modelId=neuralTextureModelResource(decoded);
+  if(modelId==uint32_t(id))throw std::runtime_error("Neural texture references itself");
+  auto model=loadResourceFromModule(module,int(modelId),0,1);
+  decoded=reconstructNeuralTexture(decoded,model);
+ }
+
  return decoded;
 }
 inline std::vector<unsigned char> loadResource(int id){return loadResourceFromModule(GetModuleHandleW(nullptr),id);}

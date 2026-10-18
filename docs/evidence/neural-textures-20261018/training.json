@@ -1,0 +1,34 @@
+{
+  "seed": 1337,
+  "steps": 4000,
+  "model_bytes": 2204,
+  "parameters": 1084,
+  "heldout_policy": "right quarter + 8-pixel margin never used for training; wall-painted/panel-metal/water entirely unseen",
+  "validation_mse": 0.0009195545547603009,
+  "bilinear_mse": 0.0009985709298234724,
+  "train_assets": [
+    "assets/materials/wall-grey.png",
+    "assets/metal.png",
+    "assets/materials/concrete-floor.png",
+    "assets/materials/bulkhead.png",
+    "assets/pressureworks/pipe.png",
+    "assets/pressureworks/floor.png",
+    "assets/pressureworks/metal.png",
+    "assets/materials/ashfall-dirt.png",
+    "assets/materials/ashfall-rock.png"
+  ],
+  "all_assets": [
+    "assets/materials/wall-grey.png",
+    "assets/metal.png",
+    "assets/materials/concrete-floor.png",
+    "assets/materials/bulkhead.png",
+    "assets/environment/panel-metal.png",
+    "assets/pressureworks/pipe.png",
+    "assets/materials/wall-painted.png",
+    "assets/pressureworks/floor.png",
+    "assets/pressureworks/metal.png",
+    "assets/materials/water.png",
+    "assets/materials/ashfall-dirt.png",
+    "assets/materials/ashfall-rock.png"
+  ]
+}

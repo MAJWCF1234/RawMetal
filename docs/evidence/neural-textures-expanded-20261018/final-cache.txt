@@ -1,0 +1,4 @@
+Startup neural reconstructions: 8
+Additional reconstructions across 240 frames: 0
+Additional reconstructions across atlas scale changes: 0
+PASS
