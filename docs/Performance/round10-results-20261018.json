@@ -1,0 +1,190 @@
+{
+  "B": {
+    "runs": [
+      {
+        "label": "B1",
+        "mean_ms": 3.242241027777778,
+        "fps": 308.4286428530568,
+        "p99_ms": 5.1082,
+        "max_ms": 5.8272,
+        "one_percent_low_fps": 187.76325973708973,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.746349,
+        "audio_ms": 0.1609255,
+        "scene_ms": 1.7384535833333334,
+        "submit_ms": 0.3516296666666667,
+        "present_ms": 0.14911427777777778
+      },
+      {
+        "label": "B2",
+        "mean_ms": 3.389574861111111,
+        "fps": 295.0222493897649,
+        "p99_ms": 5.2411,
+        "max_ms": 10.6577,
+        "one_percent_low_fps": 168.86725720171944,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.7708999444444444,
+        "audio_ms": 0.16217852777777778,
+        "scene_ms": 1.8167936111111112,
+        "submit_ms": 0.36519644444444443,
+        "present_ms": 0.16793977777777777
+      },
+      {
+        "label": "B3",
+        "mean_ms": 3.1965716944444447,
+        "fps": 312.83515453070333,
+        "p99_ms": 4.6444,
+        "max_ms": 7.6279,
+        "one_percent_low_fps": 201.4984770073446,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.7371709722222223,
+        "audio_ms": 0.15820666666666666,
+        "scene_ms": 1.715356388888889,
+        "submit_ms": 0.35066619444444447,
+        "present_ms": 0.14330386111111112
+      }
+    ],
+    "median": {
+      "mean_ms": 3.242241027777778,
+      "fps": 308.4286428530568,
+      "p99_ms": 5.1082,
+      "max_ms": 7.6279,
+      "one_percent_low_fps": 187.76325973708973,
+      "frames_over_50ms": 0,
+      "simulation_ms": 0.746349,
+      "audio_ms": 0.1609255,
+      "scene_ms": 1.7384535833333334,
+      "submit_ms": 0.3516296666666667,
+      "present_ms": 0.14911427777777778
+    },
+    "worst_ms": 10.6577
+  },
+  "S": {
+    "runs": [
+      {
+        "label": "S1",
+        "mean_ms": 3.182424277777778,
+        "fps": 314.2258582498873,
+        "p99_ms": 4.6311,
+        "max_ms": 5.5698,
+        "one_percent_low_fps": 203.0730594817914,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.7386682222222222,
+        "audio_ms": 0.16077355555555556,
+        "scene_ms": 1.6985246111111112,
+        "submit_ms": 0.34815575,
+        "present_ms": 0.1444408888888889
+      },
+      {
+        "label": "S2",
+        "mean_ms": 3.1831653055555558,
+        "fps": 314.15270776378065,
+        "p99_ms": 4.6368,
+        "max_ms": 10.399,
+        "one_percent_low_fps": 199.92325168504755,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.7282689166666667,
+        "audio_ms": 0.15907455555555555,
+        "scene_ms": 1.7055788333333333,
+        "submit_ms": 0.34990947222222224,
+        "present_ms": 0.14656711111111112
+      },
+      {
+        "label": "S3",
+        "mean_ms": 3.2637128611111113,
+        "fps": 306.39950343534696,
+        "p99_ms": 4.9334,
+        "max_ms": 5.9227,
+        "one_percent_low_fps": 192.31015782253618,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.74350925,
+        "audio_ms": 0.1592937222222222,
+        "scene_ms": 1.757052361111111,
+        "submit_ms": 0.3531639166666667,
+        "present_ms": 0.15167972222222223
+      }
+    ],
+    "median": {
+      "mean_ms": 3.1831653055555558,
+      "fps": 314.15270776378065,
+      "p99_ms": 4.6368,
+      "max_ms": 5.9227,
+      "one_percent_low_fps": 199.92325168504755,
+      "frames_over_50ms": 0,
+      "simulation_ms": 0.7386682222222222,
+      "audio_ms": 0.1592937222222222,
+      "scene_ms": 1.7055788333333333,
+      "submit_ms": 0.34990947222222224,
+      "present_ms": 0.14656711111111112
+    },
+    "worst_ms": 10.399
+  },
+  "Q": {
+    "runs": [
+      {
+        "label": "Q1",
+        "mean_ms": 3.3317793333333334,
+        "fps": 300.1399252331437,
+        "p99_ms": 5.7228,
+        "max_ms": 9.0654,
+        "one_percent_low_fps": 153.95148561045397,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.7681000555555556,
+        "audio_ms": 0.1613783888888889,
+        "scene_ms": 1.7785677777777777,
+        "submit_ms": 0.3618023888888889,
+        "present_ms": 0.1601918611111111
+      },
+      {
+        "label": "Q2",
+        "mean_ms": 3.175332611111111,
+        "fps": 314.9276382892312,
+        "p99_ms": 4.7094,
+        "max_ms": 9.2345,
+        "one_percent_low_fps": 196.01875028245757,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.7298166111111111,
+        "audio_ms": 0.15881583333333332,
+        "scene_ms": 1.6971448333333334,
+        "submit_ms": 0.3485626111111111,
+        "present_ms": 0.14788308333333333
+      },
+      {
+        "label": "Q3",
+        "mean_ms": 3.18952875,
+        "fps": 313.52594015652,
+        "p99_ms": 4.8504,
+        "max_ms": 5.8025,
+        "one_percent_low_fps": 194.04131462990662,
+        "frames_over_50ms": 0,
+        "simulation_ms": 0.7568634444444444,
+        "audio_ms": 0.15746402777777777,
+        "scene_ms": 1.6849242222222223,
+        "submit_ms": 0.34843894444444445,
+        "present_ms": 0.15154883333333333
+      }
+    ],
+    "median": {
+      "mean_ms": 3.18952875,
+      "fps": 313.52594015652,
+      "p99_ms": 4.8504,
+      "max_ms": 9.0654,
+      "one_percent_low_fps": 194.04131462990662,
+      "frames_over_50ms": 0,
+      "simulation_ms": 0.7568634444444444,
+      "audio_ms": 0.15881583333333332,
+      "scene_ms": 1.6971448333333334,
+      "submit_ms": 0.3485626111111111,
+      "present_ms": 0.15154883333333333
+    },
+    "worst_ms": 9.2345
+  },
+  "fps_gain_percent": 1.6526666448069438,
+  "simd_fps_gain_percent": 1.8558798099211904,
+  "all_gameplay_fingerprints_match": true,
+  "candidate_sha256": "2fa8026da1be3273b55433f1d953ca57c56c7fae6c6de5f2cddabe99faa73aec",
+  "winning_family": "S",
+  "simd_sha256": "75774028ee7f71f6f1c94775abdda08ce83a50723f4936013dedf9249735b812",
+  "baseline_sha256": "e708b9f1e44e015b24cf5db1d4c14fae3f2a25cd0add6ed919450973f0aa5fd2",
+  "map_sha256": "c64c1bc8f6c738945f41cfa9586da7fc612254c4fc8cf9df03fa7ba5e392bba2"
+}

@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.9 - Performance hotfix (2026-10-18)
+
+Promotes the tested round-ten SIMD animation winner unchanged. Same clip samples,
+waist/hand behavior, graphics, AI cadence and 2015-compatible x64 baseline.
+Interleaved preview.8 comparison: **308.4 to 314.2 FPS** (+1.86%); 1% lows
+**187.8 to 199.9 FPS**. All nine runs match gameplay fingerprints. **330 FPS
+remains unmet.** All **25 regression checks PASS**, including full smoke.
+
+Executable **27,236,352 bytes / 25.975 MiB**; **6.025 MiB headroom** under 32 MiB.
+All 230 packaged resources unchanged; winner is 7 KiB smaller than preview.8.
+SHA256 `75774028EE7F71F6F1C94775ABDDA08CE83A50723F4936013DEDF9249735B812`.
+
+[Round-ten results](docs/Performance/Competitive%20Round%2010%2020261018.md).
+
 ## v0.7.2-preview.7 - Performance hotfix (2026-10-17)
 
 Promotes the validated round-four winner to the canonical root executable: compact

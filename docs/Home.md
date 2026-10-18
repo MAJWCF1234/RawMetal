@@ -7,7 +7,7 @@ aliases: [Documentation Hub, Index]
 
 | | |
 | --- | --- |
-| Performance | [[Performance/Competitive Round 9 20261018\|Round 9 / preview.8]] · [[Performance/Exclusion Zone\|Exclusion Zone]] |
+| Performance | [[Performance/Competitive Round 10 20261018\|Round 10 / preview.9]] · [[Performance/Exclusion Zone\|Exclusion Zone]] |
 | AI | [[AI/GoldSrc AI\|GoldSrc]] · [[AI/ai-perception\|Perception]] |
 | Design | [[Design/PROJECT_NOTES\|Project notes]] |
 | Systems | [[Systems/Index\|Systems]] |

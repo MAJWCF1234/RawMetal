@@ -10,6 +10,7 @@
 #include <fstream>
 #include <limits>
 #include <map>
+#include <emmintrin.h>
 namespace retro {
 namespace {
 float layerLength(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
@@ -169,7 +170,26 @@ void Mesh::sampleCreatureClip(int clip,float phase,std::vector<Point3>& out)cons
  float frame=std::clamp(phase,0.f,1.f)*(samples-1);unsigned a=unsigned(frame),b=std::min(a+1,samples-1);float blend=frame-a;
  size_t stride=size_t(m_creatureVertices)*6,base=m_creatureFrameOffset+size_t(m_creatureSampleOffsets[size_t(clip)])*stride;
  if(out.size()<m_creatureVertices)out.resize(m_creatureVertices);
- for(size_t i=0;i<m_creatureVertices;++i){float xyz[3];for(int axis=0;axis<3;++axis){size_t offset=i*6+axis*2;int16_t x,y;std::memcpy(&x,m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,m_creatureFrames.data()+base+b*stride+offset,2);xyz[axis]=(x+(y-x)*blend)*.001f;}out[i]={xyz[0],xyz[1],xyz[2]};}
+ // Eight signed coordinates at a time, using only the x64 baseline SSE2.
+ // Subtract as int32 before conversion, retaining the scalar operation order.
+ static_assert(sizeof(Point3)==3*sizeof(float));
+ const auto*first=m_creatureFrames.data()+base+a*stride;
+ const auto*second=m_creatureFrames.data()+base+b*stride;
+ auto*destination=reinterpret_cast<unsigned char*>(out.data());
+ const __m128 factor=_mm_set1_ps(blend),metres=_mm_set1_ps(.001f);
+ auto interpolate=[&](__m128i x,__m128i y){
+  return _mm_mul_ps(_mm_add_ps(_mm_cvtepi32_ps(x),_mm_mul_ps(_mm_cvtepi32_ps(_mm_sub_epi32(y,x)),factor)),metres);
+ };
+ size_t coordinate=0,count=size_t(m_creatureVertices)*3;
+ for(;coordinate+8<=count;coordinate+=8){
+  auto x=_mm_loadu_si128(reinterpret_cast<const __m128i*>(first+coordinate*2));
+  auto y=_mm_loadu_si128(reinterpret_cast<const __m128i*>(second+coordinate*2));
+  auto signX=_mm_srai_epi16(x,15),signY=_mm_srai_epi16(y,15);
+  auto low=interpolate(_mm_unpacklo_epi16(x,signX),_mm_unpacklo_epi16(y,signY));
+  auto high=interpolate(_mm_unpackhi_epi16(x,signX),_mm_unpackhi_epi16(y,signY));
+  std::memcpy(destination+coordinate*4,&low,16);std::memcpy(destination+(coordinate+4)*4,&high,16);
+ }
+ for(;coordinate<count;++coordinate){int16_t x,y;std::memcpy(&x,first+coordinate*2,2);std::memcpy(&y,second+coordinate*2,2);float value=(x+(y-x)*blend)*.001f;std::memcpy(destination+coordinate*4,&value,4);}
 }
 CreatureLayerPose Mesh::sampleCreatureLayerPose(int clip,float phase)const{
  if(!hasCreatureLayerPose()||clip<0||clip>=int(m_creatureClips)||!std::isfinite(phase))throw std::runtime_error("Missing creature layer pose");
@@ -237,6 +257,14 @@ bool Mesh::testCleanupTankAim(){
  struct Edge {uint16_t a,b;float bind;};
  for(int role=0;role<6;++role){
   Mesh mesh(303+role*5,"",304+role*5);report<<"ROLE "<<roles[role]<<'\n';
+  bool decodedExact=true;std::vector<Point3> decoded;
+  for(unsigned clip=0;clip<mesh.m_creatureClips;++clip)for(float phase:{-.1f,0.f,.013f,.125f,.333f,.5f,.999f,1.f,1.1f}){
+   mesh.sampleCreatureClip(int(clip),phase,decoded);
+   unsigned samples=mesh.m_creatureSampleCounts[clip];float frame=std::clamp(phase,0.f,1.f)*(samples-1);unsigned a=unsigned(frame),b=std::min(a+1,samples-1);float blend=frame-a;
+   size_t stride=size_t(mesh.m_creatureVertices)*6,base=mesh.m_creatureFrameOffset+size_t(mesh.m_creatureSampleOffsets[clip])*stride;
+   for(size_t i=0;i<mesh.m_creatureVertices;++i)for(int axis=0;axis<3;++axis){int16_t x,y;size_t offset=i*6+axis*2;std::memcpy(&x,mesh.m_creatureFrames.data()+base+a*stride+offset,2);std::memcpy(&y,mesh.m_creatureFrames.data()+base+b*stride+offset,2);float expected=(x+(y-x)*blend)*.001f,actual;std::memcpy(&actual,reinterpret_cast<const unsigned char*>(decoded.data())+(i*3+axis)*4,4);decodedExact&=actual==expected;}
+  }
+  check(decodedExact,"SSE2 decoding matches scalar coordinates for every clip, including clamped endpoints and tails",role);
   check(mesh.hasCreatureLayerPose(),"real RML1 joints are present",role);if(!mesh.hasCreatureLayerPose())continue;
   if(mesh.hasDirectCreatureMotion()){
    bool timed=true;
