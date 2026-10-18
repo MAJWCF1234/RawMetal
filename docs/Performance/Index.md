@@ -5,6 +5,8 @@ aliases: [Performance]
 
 # Performance
 
+- [[Performance/Competitive Round 10 20261018|Round ten]] - **314.2 FPS**, 199.9 FPS 1% low; exact SSE2 animation; preview.9
+
 - [[Performance/Competitive Round 9 20261018|Round nine]] — **304.3 FPS**; animation/retreat fixes + PGO micro-pass; promoted as preview.8
 - [[Performance/Competitive Round 8 20261018|Round eight]] — 243 → 272 FPS; profile-guided native build
 - [[Performance/Competitive Round 7 20261017|Round seven]] — 240.3 -> 246.4 FPS; live walk-segment memo; AI queries −29%
