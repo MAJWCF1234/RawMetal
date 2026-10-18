@@ -4,6 +4,26 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.10 - Procedural textures (2026-10-18)
+
+Replaces five photographic environment materials with OpenKTG-backed **RMP1**
+recipes that expand to ordinary **RMT1** RGBA at load. Resource IDs **125 /
+131 / 132 / 149 / 150** (concrete floor, sign rust, panel metal, service floor,
+weathered metal). Original PNGs archived under `src/assets/texture-old/`.
+
+Package: five PNGs (~1.13 MiB) ? 160 bytes of recipes; root EXE **27,236,352 ?
+26,434,048 bytes (?783 KiB)** vs preview.9. Runtime atlases keep the same
+dimensions. Visual HF energy improved vs the first procedural previews;
+accepted for in-game look. All **25** release regression checks PASS; procedural
+texture unit test PASS; pack verifier reports **5** procedural recipes among
+**230** packaged resources.
+
+Executable SHA-256
+`8AF412E7214016E025B7FEDEF937A618AD9B15368AE329362FF292FDC3A9970C`.
+**7.12 MiB** headroom under 32 MiB.
+
+[Procedural texture report](docs/Assets/procedural-textures-20261018.md).
+
 ## v0.7.2-preview.9 - Performance hotfix (2026-10-18)
 
 Promotes the tested round-ten SIMD animation winner unchanged. Same clip samples,

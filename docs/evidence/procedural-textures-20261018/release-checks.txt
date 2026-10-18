@@ -1,0 +1,26 @@
+
+--ai-query-test exit=0
+--ai-decision-test exit=0
+--nav-graph-test exit=0
+--guard-pursuit-test exit=0
+--guard-roles-test exit=0
+--guard-patient-test exit=0
+--guard-schedule-test exit=0
+--guard-policy-test exit=0
+--guard-actions-test exit=0
+--guard-cover-test exit=0
+--guard-danger-test exit=0
+--engineer-drone-test exit=0
+--creature-schedule-test exit=0
+--civilian-schedule-test exit=0
+--campaign-map-test exit=0
+--save-test exit=0
+--stealth-test exit=0
+--exclusion-test exit=0
+--cleanup-split-test exit=0
+--terrain-query-test exit=0
+--gpu-actor-test exit=0
+--vulkan-test exit=0
+--visibility-test exit=0
+--presentation-resize-test exit=0
+--smoke-test exit=0
