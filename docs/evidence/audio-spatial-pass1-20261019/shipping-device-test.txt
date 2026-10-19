@@ -1,0 +1,2 @@
+Windows waveOut stereo PCM playback: PASS
+Device-reported samples played: 132529
