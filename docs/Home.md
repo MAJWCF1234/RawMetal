@@ -5,14 +5,19 @@ aliases: [Documentation Hub, Index]
 
 # RawMetal
 
+Shipped **v0.7.2-preview.12** (2026-10-19): second neural texture pass, **16 reduced
+textures**, root EXE **23.05 MiB** (another **1.24 MiB** below preview.11),
+**8.95 MiB free**. Validation and comparisons:
+[[Performance/preview12-stats-20261019]] and [[Assets/neural-textures-round2-20261019]]. FPS runs varied; no gain claimed.
+
 | | |
 | --- | --- |
-| Performance | [[Assets/neural-textures-expanded-20261018\|Performance/bloat patch / preview.11]] · [[Performance/Exclusion Zone\|Exclusion Zone]] |
+| Performance | [[Performance/preview12-stats-20261019\|Preview.12 patch statistics]] · [[Performance/Exclusion Zone\|Exclusion Zone]] |
 | AI | [[AI/GoldSrc AI\|GoldSrc]] · [[AI/ai-perception\|Perception]] |
 | Design | [[Design/PROJECT_NOTES\|Project notes]] |
 | Systems | [[Systems/Index\|Systems]] |
 | Content | [[Content/Index\|Content]] |
-| Assets | [[Assets/Index\|Assets]] · [[Assets/neural-textures-expanded-20261018\|Neural textures / preview.11]] |
+| Assets | [[Assets/Index\|Assets]] · [[Assets/neural-textures-round2-20261019\|Neural textures / preview.12]] |
 | Archive | [[Archive/Index\|Archive]] |
 
 Shipped **v0.7.2-preview.11** (2026-10-18): seven cached neural texture

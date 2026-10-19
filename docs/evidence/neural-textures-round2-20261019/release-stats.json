@@ -1,0 +1,47 @@
+{
+  "baseline": {
+    "frames": 14400,
+    "mean_ms": 3.3248484583333333,
+    "fps": 300.7655875243337,
+    "p50_ms": 3.2845,
+    "p95_ms": 4.3641,
+    "p99_ms": 5.3019,
+    "worst_frame_ms": 80.2727,
+    "one_percent_low_fps": 89.15803608621978
+  },
+  "candidate": {
+    "frames": 14400,
+    "mean_ms": 3.2303298680555557,
+    "fps": 309.56590838877196,
+    "p50_ms": 3.274,
+    "p95_ms": 4.2392,
+    "p99_ms": 4.7726,
+    "worst_frame_ms": 6.818,
+    "one_percent_low_fps": 196.74418433071932
+  },
+  "storage": {
+    "exe_bytes": 24173568,
+    "exe_mib": 23.0537109375,
+    "saved_vs_preview11_bytes": 1294848,
+    "saved_vs_preview11_percent": 5.084132440745432,
+    "saved_vs_preview10_bytes": 2260480,
+    "saved_vs_preview10_percent": 8.551395533517985,
+    "headroom_bytes": 9380864,
+    "headroom_mib": 8.9462890625,
+    "budget_used_percent": 72.0428466796875,
+    "reduced_textures": 16,
+    "source_pixels": 3874074,
+    "stored_pixels": 969246,
+    "stored_pixel_reduction_percent": 74.9812213189526,
+    "packed_neural_payload_bytes": 1028082,
+    "model_raw_bytes": 2204
+  },
+  "candidate_stage_means_ms": {
+    "total_ms": 3.2303298680555557,
+    "simulation_ms": 0.7344342361111111,
+    "audio_ms": 0.1535935486111111,
+    "scene_ms": 1.7779937083333333,
+    "submit_ms": 0.34257583333333336,
+    "present_ms": 0.13452502083333334
+  }
+}

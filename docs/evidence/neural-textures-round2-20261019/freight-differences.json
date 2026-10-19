@@ -1,0 +1,117 @@
+[
+  {
+    "view": "depot-engine",
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "view": "depot-gantry",
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "view": "freight-equipment-bay",
+    "changed_pixels": 69,
+    "mean_channel_delta": 0.00011863425925925926
+  },
+  {
+    "view": "freight-service-ceiling",
+    "changed_pixels": 2055,
+    "mean_channel_delta": 0.006358506944444444
+  },
+  {
+    "view": "freight-service-corridor",
+    "changed_pixels": 4872,
+    "mean_channel_delta": 0.012171585648148148
+  },
+  {
+    "view": "inspection-chassis",
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "view": "intake-pallets",
+    "changed_pixels": 153,
+    "mean_channel_delta": 0.00026331018518518516
+  },
+  {
+    "view": "manifest-office",
+    "changed_pixels": 1224,
+    "mean_channel_delta": 0.0020674189814814813
+  },
+  {
+    "view": "manifest-records-bays",
+    "changed_pixels": 338,
+    "mean_channel_delta": 0.0005454282407407407
+  },
+  {
+    "view": "manifest-terminal-front",
+    "changed_pixels": 5066,
+    "mean_channel_delta": 0.010358796296296297
+  },
+  {
+    "view": "platform-benches",
+    "changed_pixels": 3,
+    "mean_channel_delta": 4.340277777777778e-06
+  },
+  {
+    "view": "platform-board",
+    "changed_pixels": 3,
+    "mean_channel_delta": 4.340277777777778e-06
+  },
+  {
+    "view": "receiving-inspection-island",
+    "changed_pixels": 2706,
+    "mean_channel_delta": 0.007054398148148148
+  },
+  {
+    "view": "receiving-van",
+    "changed_pixels": 21311,
+    "mean_channel_delta": 0.06907118055555556
+  },
+  {
+    "view": "tunnel-service-bypass",
+    "changed_pixels": 201,
+    "mean_channel_delta": 0.00029658564814814814
+  },
+  {
+    "view": "warehouse-arrival",
+    "changed_pixels": 1,
+    "mean_channel_delta": 1.4467592592592592e-06
+  },
+  {
+    "view": "warehouse-break-corner",
+    "changed_pixels": 201,
+    "mean_channel_delta": 0.00036458333333333335
+  },
+  {
+    "view": "warehouse-cargo",
+    "changed_pixels": 160,
+    "mean_channel_delta": 0.0002922453703703704
+  },
+  {
+    "view": "warehouse-chemical-hold",
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "view": "warehouse-dispatch",
+    "changed_pixels": 1248,
+    "mean_channel_delta": 0.002384259259259259
+  },
+  {
+    "view": "warehouse-forklift-profile",
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "view": "warehouse-vehicle-bay",
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "view": "warehouse-wall-services",
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  }
+]

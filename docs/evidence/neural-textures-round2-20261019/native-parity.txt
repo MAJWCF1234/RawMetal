@@ -1,0 +1,9 @@
+PyTorch parity: max 1 LSB, 9 / 4194304 channels differ; 1024x1024 median 66.3881 ms, p89 68.0886 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 1 / 532992 channels differ; 384x347 median 8.0512 ms, p89 8.3684 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 3 / 147456 channels differ; 192x192 median 2.3701 ms, p89 2.5582 ms; 9 repeat decodes PASS
+PyTorch parity: max 0 LSB, 0 / 147456 channels differ; 192x192 median 2.2417 ms, p89 2.6402 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 2 / 147456 channels differ; 192x192 median 2.3018 ms, p89 2.8505 ms; 9 repeat decodes PASS
+PyTorch parity: max 0 LSB, 0 / 427344 channels differ; 348x307 median 6.5049 ms, p89 7.079 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 1 / 529944 channels differ; 311x426 median 8.4867 ms, p89 9.806 ms; 9 repeat decodes PASS
+PyTorch parity: max 1 LSB, 1 / 611168 channels differ; 538x284 median 9.6366 ms, p89 9.9566 ms; 9 repeat decodes PASS
+PyTorch parity: max 0 LSB, 0 / 147456 channels differ; 192x192 median 2.3159 ms, p89 2.4373 ms; 9 repeat decodes PASS

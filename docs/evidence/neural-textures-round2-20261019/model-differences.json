@@ -1,0 +1,137 @@
+[
+  {
+    "model": 0,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 1,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 2,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 3,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 4,
+    "changed_pixels": 12372,
+    "mean_channel_delta": 0.10449508101851852
+  },
+  {
+    "model": 5,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 6,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 7,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 8,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 9,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 10,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 11,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 12,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 13,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 14,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 15,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 16,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 17,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 18,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 19,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 20,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 21,
+    "changed_pixels": 25736,
+    "mean_channel_delta": 0.14671875
+  },
+  {
+    "model": 22,
+    "changed_pixels": 10484,
+    "mean_channel_delta": 0.05341724537037037
+  },
+  {
+    "model": 23,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 24,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 25,
+    "changed_pixels": 0,
+    "mean_channel_delta": 0.0
+  },
+  {
+    "model": 26,
+    "changed_pixels": 60659,
+    "mean_channel_delta": 0.3399710648148148
+  }
+]
