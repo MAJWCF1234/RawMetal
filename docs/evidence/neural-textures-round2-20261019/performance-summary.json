@@ -1,0 +1,77 @@
+{
+  "runs": [
+    {
+      "Run": "baseline-a",
+      "Frames": 3600,
+      "MeanMs": 3.662333277777777,
+      "FPS": 273.04997228618635,
+      "P99Ms": 9.3324
+    },
+    {
+      "Run": "candidate-a",
+      "Frames": 3600,
+      "MeanMs": 3.16353236111111,
+      "FPS": 316.1023456857497,
+      "P99Ms": 4.6486
+    },
+    {
+      "Run": "candidate-b",
+      "Frames": 3600,
+      "MeanMs": 3.2155645555555616,
+      "FPS": 310.98738113414345,
+      "P99Ms": 4.7623
+    },
+    {
+      "Run": "baseline-b",
+      "Frames": 3600,
+      "MeanMs": 3.3237640277777807,
+      "FPS": 300.86371705171416,
+      "P99Ms": 4.8456
+    },
+    {
+      "Run": "candidate-c",
+      "Frames": 3600,
+      "MeanMs": 3.424273861111108,
+      "FPS": 292.03271717161084,
+      "P99Ms": 4.9841
+    },
+    {
+      "Run": "baseline-c",
+      "Frames": 3600,
+      "MeanMs": 3.2317616388888903,
+      "FPS": 309.4287610715651,
+      "P99Ms": 4.8292
+    },
+    {
+      "Run": "baseline-d",
+      "Frames": 3600,
+      "MeanMs": 3.0815348888888927,
+      "FPS": 324.5136063867735,
+      "P99Ms": 4.4422
+    },
+    {
+      "Run": "candidate-d",
+      "Frames": 3600,
+      "MeanMs": 3.1179486944444457,
+      "FPS": 320.7236866282623,
+      "P99Ms": 4.4956
+    }
+  ],
+  "interpretation": "Baseline and candidate vary across both batches; do not claim an FPS gain. All runs retained.",
+  "baseline": {
+    "frames": 14400,
+    "mean_ms": 3.324848458333335,
+    "aggregate_fps": 300.7655875243335,
+    "median_run_fps": 305.1462390616396,
+    "min_run_fps": 273.04997228618635,
+    "max_run_fps": 324.5136063867735
+  },
+  "candidate": {
+    "frames": 14400,
+    "mean_ms": 3.230329868055556,
+    "aggregate_fps": 309.5659083887719,
+    "median_run_fps": 313.5448634099466,
+    "min_run_fps": 292.03271717161084,
+    "max_run_fps": 320.7236866282623
+  }
+}

@@ -2,15 +2,16 @@
 
 RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
 streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
-The current tester is **v0.7.2-preview.11 / ASHFALL EXCLUSION ZONE — performance
-and bloat reduction patch**.
-Seven reduced surface and prop textures reconstruct at load time into cached
-full-resolution images. The root executable is **24.29 MiB**, **943 KiB smaller
-than the procedural preview.10 build**, leaving **7.71 MiB** of growth room.
-The matched trained-PGO comparison averaged **315 versus 319 FPS** (about 1.1%
-slower). Native decoder checks, Vulkan smoke, resource verification and all 28
-visibility views passed. See the
-[expanded neural texture report](docs/Assets/neural-textures-expanded-20261018.md).
+The current tester is **v0.7.2-preview.12 / ASHFALL EXCLUSION ZONE — second
+neural texture reduction patch**.
+Sixteen reduced textures reconstruct at load time into cached full-resolution
+images. The root executable is **23.05 MiB**, **1.24 MiB smaller than preview.11**
+and **2.16 MiB smaller than procedural preview.10**, leaving **8.95 MiB** free.
+Native decoder checks, Vulkan smoke, resource verification and all 28 visibility
+views passed. Eight FPS runs showed substantial baseline/candidate variation;
+no FPS gain is claimed. See the
+[patch statistics](docs/Performance/preview12-stats-20261019.md) and
+[second-pass comparisons](docs/Assets/neural-textures-round2-20261019.md).
 Retired recipe/OpenKTG experiments are preserved in hash-verified cold storage.
 For published release history, see the [release notes](RELEASE_NOTES.md) and
 [round-ten results](docs/Performance/Competitive%20Round%2010%2020261018.md).

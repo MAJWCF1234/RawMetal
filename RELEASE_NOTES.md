@@ -4,6 +4,24 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.12 - Neural texture reduction patch (2026-10-19)
+
+Nine more textures reduced, **sixteen total**, using the existing shared decoder and weights. Textures reconstruct once at load time and remain cached at their authored dimensions. Scissors is the largest new saving; human textures, hands, weapons, UI, normal maps, animations and AI code are unchanged. Fine grain is slightly softer.
+
+- **23.05 MiB EXE (24,173,568 bytes)**: **1.235 MiB / 5.08% smaller than preview.11**.
+- **2.156 MiB / 8.55% smaller than procedural preview.10**.
+- **8.95 MiB free** under the unchanged 32 MiB ceiling.
+- Exclusion lab: **309.6 aggregate FPS**, **3.23 ms average frame time**, **4.77 ms p99**, **196.7 FPS 1% low**, across 14,400 patch frames on RTX 5060 Ti at 640x360 Vulkan HDR/4x MSAA. Run averages ranged 292-321 FPS. Baseline variability was substantial; these measurements do not establish a speed gain or a stable low-FPS improvement.
+- **750 decoder checks**, **231 resource checks**, full **Vulkan smoke**, **28 visibility views**, twelve Exclusion and 23 freight-detail captures passed/inspected.
+- **Zero reconstruction during gameplay** in the 240-frame cache test or atlas scale changes.
+
+The release asset matches the tested root executable.
+
+SHA-256: `54E771DF0DBE6F3F08584B01B6BC4CC5D9E1A6BE01E341D51245BE9E7DC7509B`
+
+[Full statistics and methodology](docs/Performance/preview12-stats-20261019.md)
+[Screening and visual comparisons](docs/Assets/neural-textures-round2-20261019.md)
+
 ## v0.7.2-preview.11 - Performance and bloat reduction patch (2026-10-18)
 
 Seven reduced surface/prop textures reconstruct once with a small shared neural model and remain cached at their authored dimensions. Odd-sized atlases preserve their UV layout. Retired OpenKTG/recipe experiments are archived; no new animation banks or runtime frameworks are added. Fine grain is slightly softer.

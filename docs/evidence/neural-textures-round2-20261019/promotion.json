@@ -1,0 +1,10 @@
+{
+  "Root": "N:\\rawmetal\\RawMetal.exe",
+  "SHA256": "54E771DF0DBE6F3F08584B01B6BC4CC5D9E1A6BE01E341D51245BE9E7DC7509B",
+  "Bytes": 24173568,
+  "PreviousSHA256": "7C96C14B434CA63F3D71BD2A96EA72C947A47871327BE3A923BF53D470F10D42",
+  "PreviousBytes": 25468416,
+  "SavedBytes": 1294848,
+  "HeadroomBytes": 9380864,
+  "Rollback": "N:\\rawmetal\\.build\\neural-round2\\preview11-baseline.exe"
+}
