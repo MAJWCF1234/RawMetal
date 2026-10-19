@@ -5,6 +5,10 @@ aliases: [Documentation Hub, Index]
 
 # RawMetal
 
+Shipped **v0.7.2-preview.13** (2026-10-19): approved spatial audio first pass,
+geometry-driven wall muffling and point-source stereo correction. Root EXE
+**23.05 MiB**, **8.95 MiB free**. See [[Performance/audio-spatial-pass1-20261019]].
+
 Shipped **v0.7.2-preview.12** (2026-10-19): second neural texture pass, **16 reduced
 textures**, root EXE **23.05 MiB** (another **1.24 MiB** below preview.11),
 **8.95 MiB free**. Validation and comparisons:

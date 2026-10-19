@@ -2,16 +2,16 @@
 
 RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
 streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
-The current tester is **v0.7.2-preview.12 / ASHFALL EXCLUSION ZONE — second
-neural texture reduction patch**.
-Sixteen reduced textures reconstruct at load time into cached full-resolution
-images. The root executable is **23.05 MiB**, **1.24 MiB smaller than preview.11**
-and **2.16 MiB smaller than procedural preview.10**, leaving **8.95 MiB** free.
-Native decoder checks, Vulkan smoke, resource verification and all 28 visibility
-views passed. Eight FPS runs showed substantial baseline/candidate variation;
-no FPS gain is claimed. See the
-[patch statistics](docs/Performance/preview12-stats-20261019.md) and
-[second-pass comparisons](docs/Assets/neural-textures-round2-20261019.md).
+The current tester is **v0.7.2-preview.13 / ASHFALL EXCLUSION ZONE - spatial audio patch**.
+Walls smoothly muffle positional sounds, and positional stereo recordings resolve
+to one emitter while music retains stereo. All 80 NPC voice takes and existing
+cue timing remain intact. The root executable is **23.05 MiB**, leaving **8.95 MiB**
+under the ceiling. All sixteen reduced textures remain cached at full runtime
+resolution after startup reconstruction.
+See the [audio patch validation](docs/Performance/audio-spatial-pass1-20261019.md),
+[previous measured FPS and storage statistics](docs/Performance/preview12-stats-20261019.md),
+and [texture comparisons](docs/Assets/neural-textures-round2-20261019.md).
+No gameplay FPS gain is claimed for this audio patch.
 Retired recipe/OpenKTG experiments are preserved in hash-verified cold storage.
 For published release history, see the [release notes](RELEASE_NOTES.md) and
 [round-ten results](docs/Performance/Competitive%20Round%2010%2020261018.md).
