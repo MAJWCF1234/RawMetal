@@ -4,6 +4,23 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.7.2-preview.13 - Spatial audio patch (2026-10-19)
+
+Approved spatial audio first pass, integrated with all sixteen reduced textures.
+
+- Walls now smoothly muffle treble as well as volume using existing geometry checks.
+- Positional stereo recordings resolve to a single emitter; music and listener-centered cues retain stereo.
+- All 80 NPC takes, voice triggers, cue ordering and lift transitions remain intact.
+- **24,171,008-byte EXE / 23.05 MiB**, **8.95 MiB free** below the unchanged 32 MiB ceiling. Native trained-PGO shipping build, no new dependencies or sound assets.
+- Full Vulkan smoke, audio regression, live Windows device playback and 231 packaged-resource checks passed.
+- Initial candidate mixer stress: 48 spatial loops in 0.25-0.28 ms per 11.61 ms output block. Final PGO shipping validation measured 0.537 ms/block. These short runs vary, exclude game-thread geometry and are not a gameplay FPS comparison.
+
+This first slice adds spectral occlusion and point-source mixing; HRTF, room reflections and audio-thread contention work remain for later passes.
+
+SHA-256: `1092F66712970439633C65925E0418B692FC86C9457A97ADBB79B6D12F65967F`
+
+[Audio validation and remaining work](docs/Performance/audio-spatial-pass1-20261019.md)
+
 ## v0.7.2-preview.12 - Neural texture reduction patch (2026-10-19)
 
 Nine more textures reduced, **sixteen total**, using the existing shared decoder and weights. Textures reconstruct once at load time and remain cached at their authored dimensions. Scissors is the largest new saving; human textures, hands, weapons, UI, normal maps, animations and AI code are unchanged. Fine grain is slightly softer.

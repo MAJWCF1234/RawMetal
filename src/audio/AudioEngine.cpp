@@ -15,8 +15,8 @@ std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
  return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
 }
 bool emitterInChunk(std::int64_t emitter,int level){return emitter>0&&int((std::uint64_t(emitter)>>32)&0xffffu)==level;}
-bool writeVoicePreview(const std::vector<int16_t>& pcm){
- std::ofstream file("npc-voice-preview.wav",std::ios::binary);auto write=[&](auto value){file.write(reinterpret_cast<const char*>(&value),sizeof(value));};
+bool writeVoicePreview(const std::vector<int16_t>& pcm,const char* path="npc-voice-preview.wav"){
+ std::ofstream file(path,std::ios::binary);auto write=[&](auto value){file.write(reinterpret_cast<const char*>(&value),sizeof(value));};
  file.write("RIFF",4);write(uint32_t(pcm.size()*2+36));file.write("WAVEfmt ",8);write(uint32_t(16));write(uint16_t(1));write(uint16_t(2));
  write(uint32_t(44100));write(uint32_t(176400));write(uint16_t(4));write(uint16_t(16));file.write("data",4);write(uint32_t(pcm.size()*2));file.write(reinterpret_cast<const char*>(pcm.data()),pcm.size()*2);return bool(file);
 }
@@ -81,7 +81,7 @@ void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
 }
 void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
- if(!voice.spatial){voice.left=voice.right=1;return;}
+ if(!voice.spatial){voice.left=voice.right=1;voice.filterTarget=1;return;}
  auto delta=voice.position-game.player().pos;float planar=length(delta),listenerZ=game.player().z+game.player().eye;
  float sourceZ=std::isfinite(voice.z)?voice.z:listenerZ;
  float distance=std::sqrt(lengthSq(delta)+(sourceZ-listenerZ)*(sourceZ-listenerZ));
@@ -96,6 +96,11 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  float farTrim=voice.sound==Sound::Machine&&planar>.001f?std::max(.25f,1.7f*distance/planar):.25f;
  if(distance>.5f)for(float offset:{-.18f,0.f,.18f})if(!game.soundRayClear(game.player().pos+side*offset,listenerZ,voice.position+side*offset,sourceZ,.25f,farTrim))blocked+=1;
  float target=1-blocked*(.68f/3.f);voice.occlusion+=(target-voice.occlusion)*(1-std::exp(-dt*7.f));gain*=voice.occlusion;
+ // Walls absorb treble as well as level. Compute the pole on the game
+ // thread, never exponentials in the per-sample spatial filter.
+ float openness=std::clamp((voice.occlusion-.32f)/.68f,0.f,1.f);
+ float cutoff=900.f+17100.f*openness*openness;
+ voice.filterTarget=openness+(1-openness)*(1-std::exp(-kTwoPi*cutoff/Rate));
  voice.left=gain*std::sqrt((1-pan)*.5f);voice.right=gain*std::sqrt((1+pan)*.5f);
 }
 void AudioEngine::update(const Game& game,bool focused){
@@ -162,7 +167,15 @@ void AudioEngine::mix(int16_t* output,size_t frames){
    float blend=v.sound==Sound::FreightMusic?m_freightBlend:v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
    float gain=v.gain*(music?m_musicGain:m_effectsGain)*blend;
    v.smoothLeft+=(v.left*gain-v.smoothLeft)*.0015f;v.smoothRight+=(v.right*gain-v.smoothRight)*.0015f;
-   left+=sample(0)*v.smoothLeft;right+=sample(s.channels-1)*v.smoothRight;v.cursor+=v.pitch;
+   if(v.spatial){
+    // A positional source has one location; baked stereo must not pull it
+    // into two ears independently. Preserve stereo only for listener beds.
+    float mono=s.channels==1?sample(0):(sample(0)+sample(1))*.5f;
+    v.filter+=(v.filterTarget-v.filter)*.0015f;
+    v.filtered+=(mono-v.filtered)*v.filter;
+    left+=v.filtered*v.smoothLeft;right+=v.filtered*v.smoothRight;
+   }else{left+=sample(0)*v.smoothLeft;right+=sample(s.channels-1)*v.smoothRight;}
+   v.cursor+=v.pitch;
    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::FreightMusic||v.sound==Sound::WaterReturn)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
   m_master+=(m_targetMaster-m_master)*.002f;
@@ -229,6 +242,47 @@ bool AudioEngine::test(){
    std::vector<int16_t> rendered(frames*2);voices.mix(rendered.data(),frames);audition.insert(audition.end(),rendered.begin(),rendered.end());}
   if(!writeVoicePreview(audition))return failure("NPC voice audition export");
  }
+ // Synthetic alternating stereo channels prove the real mixer collapses
+ // positional stereo and that obstruction removes treble without muting bass.
+ {
+  AudioEngine probe(false);probe.m_voices.clear();probe.m_musicGain=0;
+  auto& sample=probe.m_samples[size_t(Sound::JunkMetal)];sample.channels=2;
+  sample.pcm.resize(Rate*2);
+  auto render=[&](bool spatial,float pole,float frequency,bool opposing){
+   for(int i=0;i<Rate;++i){auto value=int16_t(5000*std::sin(kTwoPi*frequency*i/Rate));sample.pcm[i*2]=value;sample.pcm[i*2+1]=opposing?-value:value;}
+   probe.m_voices.clear();probe.play({Sound::JunkMetal,{},1,1,spatial});
+   auto& v=probe.m_voices.back();v.filter=v.filterTarget=pole;
+   std::vector<int16_t> output(Rate*2);probe.mix(output.data(),Rate);
+   double energy=0;for(size_t i=Rate;i<output.size();++i)energy+=double(output[i])*output[i];return energy;
+  };
+  if(render(true,1,1000,true)!=0||render(false,1,1000,true)<1e8)return failure("positional stereo collapse or nonspatial stereo preservation");
+  float blockedPole=1-std::exp(-kTwoPi*900.f/Rate);
+  double low=render(true,blockedPole,120,false)/render(true,1,120,false);
+  double high=render(true,blockedPole,8000,false)/render(true,1,8000,false);
+  if(low<.9||high>.03)return failure("wall filter bass preservation or treble attenuation");
+  diagnostic<<"Spatial stereo resolves to one emitter; nonspatial stereo preserved. Wall filter energy ratios bass "<<low<<" treble "<<high<<": PASS\n";
+ }
+ {
+  AudioEngine demo(false);demo.m_voices.clear();demo.m_musicGain=0;
+  std::vector<int16_t> audition;
+  // Four two-second sections: clear left, blocked left, clear right,
+  // blocked right. Same machine recording and level before wall attenuation.
+  for(int section=0;section<4;++section){
+   demo.m_voices.clear();demo.play({Sound::Machine,{},.4f,1,true},0,true);
+   auto& v=demo.m_voices.back();bool blocked=section%2!=0;
+   v.left=section<2?.9f:.1f;v.right=section<2?.1f:.9f;
+   if(blocked){v.left*=.32f;v.right*=.32f;}
+   v.filter=v.filterTarget=blocked?1-std::exp(-kTwoPi*900.f/Rate):1.f;
+   std::vector<int16_t> part(Rate*4);demo.mix(part.data(),Rate*2);
+   audition.insert(audition.end(),part.begin(),part.end());
+  }
+  if(!writeVoicePreview(audition,"spatial-wall-preview.wav"))return failure("spatial wall preview export");
+  demo.m_voices.clear();for(int i=0;i<48;++i){demo.play({Sound::Machine,{},.01f,1,true},0,true);auto& v=demo.m_voices.back();v.filter=v.filterTarget=.15f;}
+  std::array<int16_t,Block*2> block{};for(int i=0;i<16;++i)demo.mix(block.data(),Block);
+  auto begin=std::chrono::steady_clock::now();for(int i=0;i<256;++i)demo.mix(block.data(),Block);
+  double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count()/256;
+  diagnostic<<"48 spatial loop mixer stress: "<<ms<<" ms per 512-frame block (11.61 ms output); wall demo exported.\n";
+ }
  diagnostic<<"All "<<audio.m_speech.size()<<" NPC takes decode with expected duration and signal; mixer replacement and two-speaker cap: PASS\n";
  const auto& worker=audio.m_samples[size_t(Sound::WorkerDying)];
  if(worker.channels!=2||worker.frames()<Rate*9.3||worker.frames()>Rate*9.5||std::none_of(worker.pcm.begin(),worker.pcm.end(),[](int16_t p){return std::abs(int(p))>500;}))return failure("worker compressed WAV missing, silent or truncated");
@@ -265,6 +319,7 @@ bool AudioEngine::test(){
   auto closed=scene(false,false,false,1),opened=scene(false,false,false,2);Voice door=flat;door.position={6.5f,10.5f};door.z=eye+.6f;
   spatial.spatialize(door,closed,1);Voice clearDoor=door;clearDoor.occlusion=1;spatial.spatialize(clearDoor,opened,1);
   diagnostic<<"Door occlusion closed "<<door.occlusion<<" opened "<<clearDoor.occlusion<<'\n';
+  if(door.filterTarget>.14f||clearDoor.filterTarget<.99f)return failure("door spectral occlusion does not follow geometry");
   if(door.occlusion>.33f||clearDoor.occlusion<.99f)return failure("door state or interpolated height occlusion");
   diagnostic<<"Closed/open doors attenuate interpolated-height sound rays while preserving the smooth envelope: PASS\n";
   Voice inaudible=elevated;inaudible.z=eye+30;inaudible.occlusion=.7f;spatial.spatialize(inaudible,stacked,1);

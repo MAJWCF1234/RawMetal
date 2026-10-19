@@ -1,0 +1,10 @@
+{
+  "Bytes": 24171008,
+  "SHA256": "1092F66712970439633C65925E0418B692FC86C9457A97ADBB79B6D12F65967F",
+  "PGO": "USE AGGRESSIVE",
+  "AudioTestExit": 0,
+  "DeviceTestExit": 0,
+  "VulkanSmokeExit": 0,
+  "Resources": 231,
+  "NeuralTextures": 16
+}
