@@ -2,7 +2,8 @@
 
 RawMetal is a compact C++20 Windows game and engine with Vulkan rendering,
 streamed worlds, embedded runtime assets, and a hard **32 MiB executable ceiling**.
-The current tester is **v0.7.2-preview.13 / ASHFALL EXCLUSION ZONE - spatial audio patch**.
+The current tester is **v0.8.0 / NIGHT SHIFT update**: Security Office prologue,
+rebuilt opening maps, a new post-processing renderer and a redesigned UI.
 Walls smoothly muffle positional sounds, and positional stereo recordings resolve
 to one emitter while music retains stereo. All 80 NPC voice takes and existing
 cue timing remain intact. The root executable is **23.05 MiB**, leaving **8.95 MiB**

@@ -2,8 +2,8 @@
 1 ICON "branding/depthworks.ico"
 2 RCDATA "branding/depthworks.png"
 1 VERSIONINFO
- FILEVERSION 0,7,2,7
- PRODUCTVERSION 0,7,2,7
+ FILEVERSION 0,8,0,0
+ PRODUCTVERSION 0,8,0,0
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_APP
 BEGIN
@@ -12,11 +12,11 @@ BEGIN
   BLOCK "040904B0"
   BEGIN
    VALUE "FileDescription", "RawMetal game\0"
-   VALUE "FileVersion", "0.7.2-preview.7\0"
+   VALUE "FileVersion", "0.8.0\0"
    VALUE "InternalName", "RawMetal\0"
    VALUE "OriginalFilename", "RawMetal.exe\0"
    VALUE "ProductName", "RawMetal\0"
-   VALUE "ProductVersion", "0.7.2-preview.7\0"
+   VALUE "ProductVersion", "0.8.0\0"
   END
  END
  BLOCK "VarFileInfo"

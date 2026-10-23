@@ -5,6 +5,10 @@ aliases: [Documentation Hub, Index]
 
 # RawMetal
 
+Shipped **v0.8.0** (2026-10-23): Night Shift update. Security Office prologue,
+rebuilt maps 0-2, post-process renderer (AO, lamp shadows, haze, scatter) and a
+redesigned UI. Root EXE **26.42 MiB**, **5.58 MiB free**. See `RELEASE_NOTES.md`.
+
 Shipped **v0.7.2-preview.13** (2026-10-19): approved spatial audio first pass,
 geometry-driven wall muffling and point-source stereo correction. Root EXE
 **23.05 MiB**, **8.95 MiB free**. See [[Performance/audio-spatial-pass1-20261019]].
