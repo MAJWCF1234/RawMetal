@@ -244,5 +244,9 @@ void main(){
  }
 
  float alpha=surface.z>1.5?color.a:1;
- outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),alpha):vec4(toDisplay(filmic(result*0.95)),alpha);
+ // HDR opaque surfaces store planar camera depth in alpha for the post pass;
+ // blended pipelines keep the destination alpha, so water stays a blend factor.
+ vec3 toPoint=worldPos-view.eyeYaw.xyz;float forward=toPoint.x*view.eyeYaw.w+toPoint.y*view.basis.x;
+ float planarDepth=max(forward*view.basis.y+toPoint.z*view.basis.z,0.0);
+ outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),surface.z>1.5?alpha:planarDepth):vec4(toDisplay(filmic(result*0.95)),alpha);
 }

@@ -1,7 +1,7 @@
 #version 450
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(set=0,binding=1) uniform sampler2D hudImage;
-layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; float vrMode; float alarm; } params;
+layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; float vrMode; float alarm; float postBloom; } params;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 color;
 vec3 highlight(vec2 p){
@@ -27,7 +27,8 @@ void main(){
            +highlight(uv+vec2(0.0,2.0)*glowPixel)+highlight(uv-vec2(0.0,2.0)*glowPixel);
  bloom+=0.5*(highlight(uv+vec2(11.0,7.0)*glowPixel)+highlight(uv-vec2(11.0,7.0)*glowPixel)
             +highlight(uv+vec2(11.0,-7.0)*glowPixel)+highlight(uv-vec2(11.0,-7.0)*glowPixel));
- if(params.hdrScene>0.5)scene+=bloom*0.07;
+ // The post pass already added a wider bloom.
+ if(params.hdrScene>0.5&&params.postBloom<0.5)scene+=bloom*0.07;
  else scene+=min(bloom*0.10,vec3(0.12));
  scene*=params.sceneDim;
  scene*=1.0-0.06*smoothstep(0.45,1.3,radius);

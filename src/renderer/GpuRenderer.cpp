@@ -32,6 +32,9 @@ const uint32_t compositeVertexShader[]=
 const uint32_t compositeFragmentShader[]=
 #include "composite.frag.inc"
 ;
+const uint32_t postFragmentShader[]=
+#include "post.frag.inc"
+;
 struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
 // Keep every position/UV/light at full precision. The vertex shader derives
 // edges, UV differences and outward vectors instead of streaming duplicates.
@@ -323,6 +326,12 @@ struct GpuRenderer::Impl {
  VkPipeline actorOpaque=VK_NULL_HANDLE,actorAdditive=VK_NULL_HANDLE,actorTransparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE,sceneSampler=VK_NULL_HANDLE,pointSampler=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
+ // Post pass (HDR, non-VR): reads scene RGB + planar depth in alpha, writes the
+ // final linear image that both readback and the window composite consume.
+ Image post;VkRenderPass postPass=VK_NULL_HANDLE;VkFramebuffer postFramebuffer=VK_NULL_HANDLE;VkPipeline postPipeline=VK_NULL_HANDLE;VkPipelineLayout postLayout=VK_NULL_HANDLE;
+ VkDescriptorSetLayout postSetLayout=VK_NULL_HANDLE;VkDescriptorPool postDescriptors=VK_NULL_HANDLE;std::array<VkDescriptorSet,FrameCount> postSets{};
+ bool postAvailable=false,postEnabled=true,postDebugOcclusion=false;bool postRan=false;
+ Image& finalImage(){return postRan?post:target;}
  struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;uint32_t sortKey=0,colorLevels=1;};
  std::unordered_map<uint64_t,Material> materials;
  int presentScaleCached=0;
@@ -354,6 +363,7 @@ struct GpuRenderer::Impl {
    for(auto f:swapFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:swapViews)vkDestroyImageView(device,v,nullptr);for(auto&i:vrOutputs){i.view=VK_NULL_HANDLE;destroy(i);}if(swapchain)vkDestroySwapchainKHR(device,swapchain,nullptr);
    for(auto f:mirrorFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:mirrorViews)vkDestroyImageView(device,v,nullptr);if(mirrorPipeline)vkDestroyPipeline(device,mirrorPipeline,nullptr);if(mirrorPass)vkDestroyRenderPass(device,mirrorPass,nullptr);
    for(auto&b:projectionBuffers)destroy(b);for(auto&b:actorBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
+   if(postFramebuffer)vkDestroyFramebuffer(device,postFramebuffer,nullptr);if(postPipeline)vkDestroyPipeline(device,postPipeline,nullptr);if(postLayout)vkDestroyPipelineLayout(device,postLayout,nullptr);if(postSetLayout)vkDestroyDescriptorSetLayout(device,postSetLayout,nullptr);if(postDescriptors)vkDestroyDescriptorPool(device,postDescriptors,nullptr);if(postPass)vkDestroyRenderPass(device,postPass,nullptr);destroy(post);
    destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
    for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(actorVertexBuffers[i]);destroy(overlayBuffers[i]);}
    for(auto&entry:staticCaches)destroy(entry.second.buffer);
@@ -518,7 +528,7 @@ struct GpuRenderer::Impl {
   }
   VkAttachmentDescription color{};color.format=swapFormat;color.samples=VK_SAMPLE_COUNT_1_BIT;color.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;color.storeOp=VK_ATTACHMENT_STORE_OP_STORE;color.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;color.finalLayout=vrMode?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;VkAttachmentReference ref{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};VkSubpassDescription sub{};sub.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;sub.colorAttachmentCount=1;sub.pColorAttachments=&ref;VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};rp.attachmentCount=1;rp.pAttachments=&color;rp.subpassCount=1;rp.pSubpasses=&sub;check(vkCreateRenderPass(device,&rp,nullptr,&compositePass),"Create presentation render pass");
   for(auto view:swapViews){VkFramebufferCreateInfo f{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};f.renderPass=compositePass;f.attachmentCount=1;f.pAttachments=&view;f.width=extent.width;f.height=extent.height;f.layers=1;VkFramebuffer frame;check(vkCreateFramebuffer(device,&f,nullptr,&frame),"Create presentation framebuffer");swapFrames.push_back(frame);}
-  VkDescriptorSetLayoutBinding bindings[2]{};for(uint32_t i=0;i<2;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}VkDescriptorSetLayoutCreateInfo sl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};sl.bindingCount=2;sl.pBindings=bindings;check(vkCreateDescriptorSetLayout(device,&sl,nullptr,&compositeSetLayout),"Create composite descriptor layout");VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT,0,7*sizeof(float)};VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pl.setLayoutCount=1;pl.pSetLayouts=&compositeSetLayout;pl.pushConstantRangeCount=1;pl.pPushConstantRanges=&push;check(vkCreatePipelineLayout(device,&pl,nullptr,&compositeLayout),"Create composite pipeline layout");
+  VkDescriptorSetLayoutBinding bindings[2]{};for(uint32_t i=0;i<2;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}VkDescriptorSetLayoutCreateInfo sl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};sl.bindingCount=2;sl.pBindings=bindings;check(vkCreateDescriptorSetLayout(device,&sl,nullptr,&compositeSetLayout),"Create composite descriptor layout");VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT,0,8*sizeof(float)};VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pl.setLayoutCount=1;pl.pSetLayouts=&compositeSetLayout;pl.pushConstantRangeCount=1;pl.pPushConstantRanges=&push;check(vkCreatePipelineLayout(device,&pl,nullptr,&compositeLayout),"Create composite pipeline layout");
   VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,uint32_t(2*FrameCount)};VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};dp.maxSets=uint32_t(FrameCount);dp.poolSizeCount=1;dp.pPoolSizes=&ps;check(vkCreateDescriptorPool(device,&dp,nullptr,&compositeDescriptors),"Create composite pool");
   std::array<VkDescriptorSetLayout,FrameCount> layouts;layouts.fill(compositeSetLayout);
   VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};da.descriptorPool=compositeDescriptors;da.descriptorSetCount=uint32_t(FrameCount);da.pSetLayouts=layouts.data();check(vkAllocateDescriptorSets(device,&da,compositeSets.data()),"Allocate composite descriptors");
@@ -614,7 +624,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkPipelineColorBlendAttachmentState blend{};blend.colorWriteMask=0xf;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;blend.srcAlphaBlendFactor=blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;blend.colorBlendOp=blend.alphaBlendOp=VK_BLEND_OP_ADD;VkPipelineColorBlendStateCreateInfo blending{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};blending.attachmentCount=1;blending.pAttachments=&blend;
   VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dynamic.dynamicStateCount=2;dynamic.pDynamicStates=states;
   VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};pipeline.stageCount=2;pipeline.pStages=stages;pipeline.pVertexInputState=&input;pipeline.pInputAssemblyState=&assembly;pipeline.pViewportState=&viewport;pipeline.pRasterizationState=&raster;pipeline.pMultisampleState=&samples;pipeline.pDepthStencilState=&depthState;pipeline.pColorBlendState=&blending;pipeline.pDynamicState=&dynamic;pipeline.layout=m->pipelineLayout;pipeline.renderPass=m->renderPass;
-  check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create water blend pipeline");
+  check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;blend.srcAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create water blend pipeline");
   shader.codeSize=sizeof(actorVertexShader);shader.pCode=actorVertexShader;check(vkCreateShaderModule(m->device,&shader,nullptr,&actorVert),"Create instanced actor shader");stages[0].module=actorVert;
   binding={0,sizeof(ActorTriangle),VK_VERTEX_INPUT_RATE_INSTANCE};
   VkVertexInputAttributeDescription actorAttrs[]={
@@ -627,6 +637,32 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorAdditive),"Create additive actor pipeline");
   blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorTransparent),"Create transparent actor pipeline");
  }catch(...){if(vert)vkDestroyShaderModule(m->device,vert,nullptr);if(frag)vkDestroyShaderModule(m->device,frag,nullptr);if(actorVert)vkDestroyShaderModule(m->device,actorVert,nullptr);throw;}vkDestroyShaderModule(m->device,vert,nullptr);vkDestroyShaderModule(m->device,frag,nullptr);vkDestroyShaderModule(m->device,actorVert,nullptr);
+ // Post pass: one colour attachment, fullscreen draw reading the resolved scene.
+ if(m->hdrScene&&!m->vrMode){
+  VkAttachmentDescription a{};a.format=m->sceneFormat;a.samples=VK_SAMPLE_COUNT_1_BIT;a.loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;a.storeOp=VK_ATTACHMENT_STORE_OP_STORE;a.stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;a.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;a.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;a.finalLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  VkAttachmentReference ref{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};VkSubpassDescription sp{};sp.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;sp.colorAttachmentCount=1;sp.pColorAttachments=&ref;
+  VkSubpassDependency pd[2]{};pd[0].srcSubpass=VK_SUBPASS_EXTERNAL;pd[0].dstSubpass=0;pd[0].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;pd[0].dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT;
+  pd[1].srcSubpass=0;pd[1].dstSubpass=VK_SUBPASS_EXTERNAL;pd[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;pd[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;pd[1].dstStageMask=VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;
+  VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};rp.attachmentCount=1;rp.pAttachments=&a;rp.subpassCount=1;rp.pSubpasses=&sp;rp.dependencyCount=2;rp.pDependencies=pd;check(vkCreateRenderPass(m->device,&rp,nullptr,&m->postPass),"Create post render pass");
+  VkDescriptorSetLayoutBinding pb{};pb.binding=0;pb.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;pb.descriptorCount=1;pb.stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;
+  VkDescriptorSetLayoutCreateInfo psl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};psl.bindingCount=1;psl.pBindings=&pb;check(vkCreateDescriptorSetLayout(m->device,&psl,nullptr,&m->postSetLayout),"Create post set layout");
+  VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,uint32_t(Impl::FrameCount)};VkDescriptorPoolCreateInfo pp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};pp.maxSets=uint32_t(Impl::FrameCount);pp.poolSizeCount=1;pp.pPoolSizes=&ps;check(vkCreateDescriptorPool(m->device,&pp,nullptr,&m->postDescriptors),"Create post descriptor pool");
+  std::array<VkDescriptorSetLayout,Impl::FrameCount> postLayouts;postLayouts.fill(m->postSetLayout);VkDescriptorSetAllocateInfo pa{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};pa.descriptorPool=m->postDescriptors;pa.descriptorSetCount=uint32_t(Impl::FrameCount);pa.pSetLayouts=postLayouts.data();check(vkAllocateDescriptorSets(m->device,&pa,m->postSets.data()),"Allocate post descriptor sets");
+  VkPushConstantRange postPush{VK_SHADER_STAGE_FRAGMENT_BIT,0,16*sizeof(float)};VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pl.setLayoutCount=1;pl.pSetLayouts=&m->postSetLayout;pl.pushConstantRangeCount=1;pl.pPushConstantRanges=&postPush;check(vkCreatePipelineLayout(m->device,&pl,nullptr,&m->postLayout),"Create post pipeline layout");
+  VkShaderModule pv=VK_NULL_HANDLE,pf=VK_NULL_HANDLE;
+  try{
+   VkShaderModuleCreateInfo sm{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};sm.codeSize=sizeof(compositeVertexShader);sm.pCode=compositeVertexShader;check(vkCreateShaderModule(m->device,&sm,nullptr,&pv),"Create post vertex shader");sm.codeSize=sizeof(postFragmentShader);sm.pCode=postFragmentShader;check(vkCreateShaderModule(m->device,&sm,nullptr,&pf),"Create post fragment shader");
+   VkPipelineShaderStageCreateInfo st[2]{};for(auto&s:st){s.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;s.pName="main";}st[0].stage=VK_SHADER_STAGE_VERTEX_BIT;st[0].module=pv;st[1].stage=VK_SHADER_STAGE_FRAGMENT_BIT;st[1].module=pf;
+   VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};ia.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+   VkPipelineViewportStateCreateInfo vp{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};vp.viewportCount=vp.scissorCount=1;VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};rs.polygonMode=VK_POLYGON_MODE_FILL;rs.cullMode=VK_CULL_MODE_NONE;rs.lineWidth=1;
+   VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};ms.rasterizationSamples=VK_SAMPLE_COUNT_1_BIT;
+   VkPipelineColorBlendAttachmentState cb{};cb.colorWriteMask=0xf;VkPipelineColorBlendStateCreateInfo cbs{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};cbs.attachmentCount=1;cbs.pAttachments=&cb;
+   VkDynamicState ds[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dyn.dynamicStateCount=2;dyn.pDynamicStates=ds;
+   VkGraphicsPipelineCreateInfo gp{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};gp.stageCount=2;gp.pStages=st;gp.pVertexInputState=&vi;gp.pInputAssemblyState=&ia;gp.pViewportState=&vp;gp.pRasterizationState=&rs;gp.pMultisampleState=&ms;gp.pColorBlendState=&cbs;gp.pDynamicState=&dyn;gp.layout=m->postLayout;gp.renderPass=m->postPass;
+   check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&gp,nullptr,&m->postPipeline),"Create post pipeline");
+  }catch(...){if(pv)vkDestroyShaderModule(m->device,pv,nullptr);if(pf)vkDestroyShaderModule(m->device,pf,nullptr);throw;}
+  vkDestroyShaderModule(m->device,pv,nullptr);vkDestroyShaderModule(m->device,pf,nullptr);m->postAvailable=true;
+ }
  if(m->surface||m->vrMode)m->initPresentation();
  m->vertices.reserve(150000);m->actorVertices.reserve(40000);m->batches.reserve(4096);
 }
@@ -684,14 +720,19 @@ void GpuRenderer::begin(int width,int height){
  if(width==m->width&&height==m->height)return;
  // Render target size changed — must drain GPU fully before resize.
  vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
+ if(m->postFramebuffer){vkDestroyFramebuffer(m->device,m->postFramebuffer,nullptr);m->postFramebuffer=VK_NULL_HANDLE;}m->destroy(m->post);
  if(m->framebuffer){vkDestroyFramebuffer(m->device,m->framebuffer,nullptr);m->framebuffer=VK_NULL_HANDLE;}m->destroy(m->target);m->destroy(m->sceneColor);m->destroy(m->depth);m->destroy(m->readback);
  m->makeImage(m->target,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->sceneColor,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);m->makeImage(m->depth,width,height,1,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,VK_IMAGE_ASPECT_DEPTH_BIT,m->sceneSamples);m->makeBuffer(m->readback,VkDeviceSize(width)*height*(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT?8:m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT?16:4),VK_BUFFER_USAGE_TRANSFER_DST_BIT);
  VkImageView views[]={m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?m->target.view:m->sceneColor.view,m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?m->depth.view:m->target.view,m->depth.view};VkFramebufferCreateInfo frame{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};frame.renderPass=m->renderPass;frame.attachmentCount=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?2u:3u;frame.pAttachments=views;frame.width=width;frame.height=height;frame.layers=1;check(vkCreateFramebuffer(m->device,&frame,nullptr,&m->framebuffer),"Create frame target");m->width=width;m->height=height;
+ if(m->postAvailable){m->makeImage(m->post,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
+  VkFramebufferCreateInfo pfb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};pfb.renderPass=m->postPass;pfb.attachmentCount=1;pfb.pAttachments=&m->post.view;pfb.width=width;pfb.height=height;pfb.layers=1;check(vkCreateFramebuffer(m->device,&pfb,nullptr,&m->postFramebuffer),"Create post target");}
 }
 void GpuRenderer::setView(float x,float y,float z,float yaw,float pitch,float aspect,bool flashlight,float muzzleFlash,float elapsed){
  float cy=std::cos(yaw),sy=std::sin(yaw),cp=std::cos(pitch),sp=std::sin(pitch);
  m->viewState={x,y,z,cy,sy,cp,sp,aspect,flashlight?1.f:0.f,muzzleFlash,elapsed,m->hdrScene?1.f:0.f};
 }
+void GpuRenderer::setPostProcessing(bool enabled,bool occlusionView){m->postEnabled=enabled;m->postDebugOcclusion=occlusionView;}
+bool GpuRenderer::postProcessing()const{return m->postAvailable&&m->postEnabled;}
 void GpuRenderer::setCrispTexels(bool crisp){m->vrProjection[17]=crisp?1.f:0.f;}
 void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);}
 void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
@@ -832,7 +873,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  }
  m->batches.swap(m->sortedBatches);
  m->startCommands();
-  VkClearValue clear[3]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};
+  VkClearValue clear[3]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};
  VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+1;pass.pClearValues=clear;
  auto cmd=m->commands[m->frameIndex];
  vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
@@ -855,6 +896,20 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   if(batch.actor)vkCmdDraw(cmd,3,batch.count,0,batch.start);else vkCmdDraw(cmd,batch.count,1,batch.start,0);
  }
  flushTransparent();vkCmdEndRenderPass(cmd);
+ m->postRan=false;
+ if(m->postAvailable&&m->postEnabled&&m->postFramebuffer){
+  // Scene RGB is linear radiance and alpha is planar camera depth.
+  m->barrier(m->target,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
+  VkDescriptorImageInfo source{m->sceneSampler,m->target.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=m->postSets[m->frameIndex];write.dstBinding=0;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&source;vkUpdateDescriptorSets(m->device,1,&write,0,nullptr);
+  VkRenderPassBeginInfo postBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};postBegin.renderPass=m->postPass;postBegin.framebuffer=m->postFramebuffer;postBegin.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};
+  vkCmdBeginRenderPass(cmd,&postBegin,VK_SUBPASS_CONTENTS_INLINE);vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
+  vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->postPipeline);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->postLayout,0,1,&m->postSets[m->frameIndex],0,nullptr);
+  const auto& v=m->viewState;auto linear=[](float c){return std::pow(std::max(0.f,c),2.2f);};
+  float params[16]={m->postDebugOcclusion?-1.f:1.f,v[7],1.3f,.7f, linear(v[28]),linear(v[29]),linear(v[30]),v[31]*.9f, 1.f/float(m->width),1.f/float(m->height),.09f,1.08f, .0015f,.05f,.006f,900.f};
+  vkCmdPushConstants(cmd,m->postLayout,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(params),params);
+  vkCmdDraw(cmd,6,1,0,0);vkCmdEndRenderPass(cmd);m->postRan=true;
+ }
  if(m->surface||m->vrMode){
   // Windowed path: leave command buffer open — present() will append the
   // composite pass and submit everything together in one async submit.
@@ -862,7 +917,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  }
  // Headless screenshot path: copy to readback buffer then wait (blocking is fine here).
  VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={uint32_t(m->width),uint32_t(m->height),1};
- vkCmdCopyImageToBuffer(cmd,m->target.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,m->readback.handle,1,&copy);
+ vkCmdCopyImageToBuffer(cmd,m->finalImage().handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,m->readback.handle,1,&copy);
  VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;host.srcQueueFamilyIndex=host.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;host.buffer=m->readback.handle;host.size=VK_WHOLE_SIZE;
  vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,nullptr,1,&host,0,nullptr);
  // Blocking submit for headless — we need pixels immediately.
@@ -902,9 +957,9 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
  vkCmdCopyBufferToImage(cmd,ob.handle,m->overlay.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&upload);
  m->barrier(m->overlay,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
  m->overlayInitialized=true;
- m->barrier(m->target,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,0,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
+ m->barrier(m->finalImage(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,0,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
  // Update this frame slot's composite descriptor set.
- VkDescriptorImageInfo images[2]={{m->sceneSampler,m->target.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{m->pointSampler,m->overlay.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+ VkDescriptorImageInfo images[2]={{m->sceneSampler,m->finalImage().view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{m->pointSampler,m->overlay.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
  VkWriteDescriptorSet writes[2]{};for(uint32_t i=0;i<2;++i){writes[i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[i].dstSet=m->compositeSets[m->frameIndex];writes[i].dstBinding=i;writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[i].pImageInfo=&images[i];}
  vkUpdateDescriptorSets(m->device,2,writes,0,nullptr);
  // Acquire swapchain image — use this slot's semaphore.
@@ -921,7 +976,7 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
  vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
  vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->compositePipeline);
  vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->compositeLayout,0,1,&m->compositeSets[m->frameIndex],0,nullptr);
- float params[7]={underwater?1.f:0.f,sceneDim,damageFlash,shotKick,m->hdrScene?1.f:0.f,m->vrMode?1.f:0.f,alarm};
+ float params[8]={underwater?1.f:0.f,sceneDim,damageFlash,shotKick,m->hdrScene?1.f:0.f,m->vrMode?1.f:0.f,alarm,m->postRan?1.f:0.f};
  vkCmdPushConstants(cmd,m->compositeLayout,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(params),params);
  vkCmdDraw(cmd,6,1,0,0);
  vkCmdEndRenderPass(cmd);

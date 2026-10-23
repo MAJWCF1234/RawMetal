@@ -152,7 +152,7 @@ list(APPEND CMAKE_PREFIX_PATH ${RAWMETAL_VULKAN_SDKS})
 find_package(Vulkan REQUIRED COMPONENTS glslc)
 set(RAWMETAL_SHADERS "${CMAKE_BINARY_DIR}/shaders")
 file(MAKE_DIRECTORY "${RAWMETAL_SHADERS}")
-foreach(SHADER scene.vert scene.frag composite.vert composite.frag)
+foreach(SHADER scene.vert scene.frag composite.vert composite.frag post.frag)
   add_custom_command(OUTPUT "${RAWMETAL_SHADERS}/${SHADER}.inc"
     COMMAND Vulkan::glslc --target-env=vulkan1.0 -O -mfmt=c "${CMAKE_CURRENT_SOURCE_DIR}/renderer/shaders/${SHADER}" -o "${RAWMETAL_SHADERS}/${SHADER}.inc"
     DEPENDS "renderer/shaders/${SHADER}" VERBATIM)

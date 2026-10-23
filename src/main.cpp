@@ -664,6 +664,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(std::wcsstr(commandLine,L"--native-capture")?1920:W,std::wcsstr(commandLine,L"--native-capture")?1080:H);
     if(std::wcsstr(commandLine,L"--freight-actor-inspection"))return freightActorInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
+    if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
+    if(std::wcsstr(commandLine,L"--post-ao"))retro::SoftwareRenderer::setPostProcessing(true,true);
     if(std::wcsstr(commandLine,L"--early-maps-inspection"))return earlyMapsInspection(960,540);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);
     if(std::wcsstr(commandLine,L"--waste-locker-inspection"))return campaignInspection(W,H,true);
