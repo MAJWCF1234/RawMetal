@@ -21,6 +21,17 @@ Game Game::prologueInspection(int stage){
  g.m_logTime=std::min(g.m_logTime,1.f);g.equipWeapon(WeaponId::Fists);g.update({},1.f/60);
  return g;
 }
+// UI captures: 0 title, 1 HUD armed, 2 pause menu, 3 death, 4 inventory, 5 prologue objective.
+Game Game::uiInspection(int view){
+ if(view==5)return prologueInspection(0);
+ Game g;
+ if(view==0){g.showTitleScreen();g.update({},1.f/60);return g;}
+ for(int i=0;i<30;++i)g.update({},1.f/60);
+ if(view==2)g.m_paused=true;
+ if(view==3)g.m_player.health=0;
+ if(view==4)g.m_inventoryOpen=true;
+ return g;
+}
 // Plays the Security Office prologue with real input: open the chat, wait out
 // the alarm, run to the service lift, ride the drop and hand off to Map 0.
 bool Game::testPrologue(){

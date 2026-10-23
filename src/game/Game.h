@@ -322,6 +322,7 @@ public:
     static bool testExclusionAuthoring();
     static bool testPrologue();
     static Game prologueInspection(int stage);
+    static Game uiInspection(int view);
     static Game exclusionInspection(int stage=0);
     static bool testStealth();
     bool npcIncapacitated(size_t actor)const;

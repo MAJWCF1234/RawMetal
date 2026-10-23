@@ -186,6 +186,15 @@ private:
     void drawSettings(const Game& game);
     void drawInventory(const Game& game);
     void text(int x,int y,const char* s,std::uint32_t c,int scale=1);
+    // Anti-aliased UI type (faces: 0 condensed semibold, 1 condensed light, 2 display, 3 mono) and alpha-blended fills.
+    int uiText(int x,int y,const char* s,std::uint32_t c,int face,int size,float alpha=1,int tracking=0);
+    int uiTextWidth(const char* s,int face,int size,int tracking=0)const;
+    void label(int x,int y,const char* s,std::uint32_t c,int scale=1);
+    void blend(int x,int y,std::uint32_t c,float alpha);
+    void fill(int x,int y,int w,int h,std::uint32_t c,float alpha);
+    void gradient(int x,int y,int w,int h,std::uint32_t c,float from,float to,bool horizontal);
+    void frame(int x,int y,int w,int h,std::uint32_t c,float alpha);
+    void uiPanel(int x,int y,int w,int h);
     std::uint32_t shade(std::uint32_t c,float s) const;
     int m_width, m_height;
     std::vector<std::uint32_t> m_pixels;

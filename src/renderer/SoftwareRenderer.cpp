@@ -18,6 +18,7 @@
 #include <chrono>
 #include <mutex>
 #include <set>
+#include <map>
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #include "../ThirdParty/stb/stb_image.h"
@@ -527,6 +528,66 @@ void SoftwareRenderer::rect(int x,int y,int w,int h,std::uint32_t c){
 }
 std::uint32_t SoftwareRenderer::shade(std::uint32_t c,float s)const{int r=int(((c>>16)&255)*s),g=int(((c>>8)&255)*s),b=int((c&255)*s);return rgb(std::clamp(r,0,255),std::clamp(g,0,255),std::clamp(b,0,255));}
 void SoftwareRenderer::text(int x,int y,const char* s,std::uint32_t c,int sc){for(;*s;++s,x+=4*sc){auto g=glyphs[size_t(gi(char(std::toupper((unsigned char)*s))))];for(int yy=0;yy<5;++yy)for(int xx=0;xx<3;++xx)if(g[size_t(yy)]&(1<<(2-xx)))rect(x+xx*sc,y+yy*sc,sc,sc,c);}}
+// UI type: installed Windows faces rasterised once per size into grayscale
+// coverage, then alpha-blended. The HUD texture's alpha reaches the
+// composite pass, so translucent panels and soft glyph edges survive.
+namespace {
+struct UiGlyph{int advance=0;std::vector<std::uint8_t> alpha;};
+struct UiFace{int width=0,height=0;std::array<UiGlyph,96> glyphs;};
+const UiFace& uiFace(int face,int size){
+ static std::map<int,UiFace> faces;static std::mutex guard;std::lock_guard lock(guard);
+ if(auto found=faces.find(face*1024+size);found!=faces.end())return found->second;
+ auto& out=faces[face*1024+size];
+ static const wchar_t* names[]={L"Bahnschrift SemiBold SemiConden",L"Bahnschrift Light SemiCondensed",L"Impact",L"Bahnschrift SemiCondensed"};
+ HDC dc=CreateCompatibleDC(nullptr);
+ HFONT font=CreateFontW(-size,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,OUT_TT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,names[std::clamp(face,0,3)]);
+ auto oldFont=SelectObject(dc,font);TEXTMETRICW metrics{};GetTextMetricsW(dc,&metrics);
+ out.height=metrics.tmHeight;out.width=size*2+8;
+ BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=out.width;info.bmiHeader.biHeight=-out.height;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
+ void* bits=nullptr;HBITMAP bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto oldBitmap=SelectObject(dc,bitmap);
+ SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(255,255,255));
+ for(int c=32;c<128;++c){
+  std::memset(bits,0,size_t(out.width)*out.height*4);wchar_t ch=wchar_t(c);
+  SIZE extent{};GetTextExtentPoint32W(dc,&ch,1,&extent);TextOutW(dc,4,0,&ch,1);GdiFlush();
+  auto& glyph=out.glyphs[size_t(c-32)];glyph.advance=extent.cx;glyph.alpha.resize(size_t(out.width)*out.height);
+  auto* pixels=static_cast<const std::uint32_t*>(bits);for(size_t i=0;i<glyph.alpha.size();++i)glyph.alpha[i]=std::uint8_t((pixels[i]>>8)&255);
+ }
+ SelectObject(dc,oldBitmap);SelectObject(dc,oldFont);DeleteObject(bitmap);DeleteObject(font);DeleteDC(dc);
+ return out;
+}
+unsigned uiGlyphIndex(char c){unsigned v=(unsigned char)c;return v<32||v>127?'?'-32:v-32;}
+}
+int SoftwareRenderer::uiTextWidth(const char* s,int face,int size,int tracking)const{auto&f=uiFace(face,size);int w=0;for(;*s;++s)w+=f.glyphs[uiGlyphIndex(*s)].advance+tracking;return w;}
+int SoftwareRenderer::uiText(int x,int y,const char* s,std::uint32_t c,int face,int size,float alpha,int tracking){
+ auto&f=uiFace(face,size);int pen=x;
+ for(;*s;++s){auto&g=f.glyphs[uiGlyphIndex(*s)];
+  for(int yy=0;yy<f.height;++yy)for(int xx=0;xx<f.width;++xx)if(auto cover=g.alpha[size_t(yy)*f.width+xx])blend(pen-4+xx,y+yy,c,alpha*cover/255.f);
+  pen+=g.advance+tracking;}
+ return pen-x;
+}
+// Drop-in for the 5-pixel font on screens that moved to UI type.
+void SoftwareRenderer::label(int x,int y,const char* s,std::uint32_t c,int scale){
+ if(scale>=3)uiText(x,y-7,s,c,0,26);else if(scale==2)uiText(x,y-4,s,c,0,17);else uiText(x,y-3,s,c,0,11,1,1);
+}
+void SoftwareRenderer::blend(int x,int y,std::uint32_t c,float alpha){
+ if(alpha<=0||x<0||y<0||x>=m_width||y>=m_height)return;alpha=std::min(alpha,1.f);
+ auto& d=m_pixels[size_t(y)*m_width+x];float below=float(d>>24)/255.f*(1-alpha),out=alpha+below;
+ auto channel=[&](int shift){return std::uint32_t(std::clamp((float((c>>shift)&255)*alpha+float((d>>shift)&255)*below)/std::max(out,1e-4f),0.f,255.f)+.5f);};
+ d=(std::uint32_t(out*255.f+.5f)<<24)|(channel(16)<<16)|(channel(8)<<8)|channel(0);
+}
+void SoftwareRenderer::fill(int x,int y,int w,int h,std::uint32_t c,float alpha){
+ for(int yy=std::max(0,y);yy<std::min(m_height,y+h);++yy)for(int xx=std::max(0,x);xx<std::min(m_width,x+w);++xx)blend(xx,yy,c,alpha);
+}
+void SoftwareRenderer::gradient(int x,int y,int w,int h,std::uint32_t c,float from,float to,bool horizontal){
+ for(int yy=std::max(0,y);yy<std::min(m_height,y+h);++yy)for(int xx=std::max(0,x);xx<std::min(m_width,x+w);++xx){
+  float t=horizontal?float(xx-x)/std::max(1,w-1):float(yy-y)/std::max(1,h-1);blend(xx,yy,c,from+(to-from)*t);}
+}
+void SoftwareRenderer::frame(int x,int y,int w,int h,std::uint32_t c,float alpha){fill(x,y,w,1,c,alpha);fill(x,y+h-1,w,1,c,alpha);fill(x,y+1,1,h-2,c,alpha);fill(x+w-1,y+1,1,h-2,c,alpha);}
+// Smoked glass with a hairline edge and red corner ticks.
+void SoftwareRenderer::uiPanel(int x,int y,int w,int h){
+ fill(x,y,w,h,rgb(6,5,5),.78f);frame(x,y,w,h,rgb(236,228,214),.10f);
+ const auto red=rgb(214,32,26);fill(x,y,6,1,red,1);fill(x,y,1,6,red,1);fill(x+w-6,y+h-1,6,1,red,1);fill(x+w-1,y+h-6,1,6,red,1);
+}
 
 
 void SoftwareRenderer::wornPanel(int x,int y,int width,int height,bool recess,bool materialPanel){
@@ -562,52 +623,65 @@ void SoftwareRenderer::wornPanel(int x,int y,int width,int height,bool recess,bo
 }
 void SoftwareRenderer::drawHud(const Game& game){
  const auto&p=game.player();
- const auto paper=rgb(222,206,164),muted=rgb(159,139,105),amber=rgb(210,145,54),red=rgb(180,55,36);
+ const auto paper=rgb(236,228,214),muted=rgb(146,138,128),amber=rgb(232,160,60),red=rgb(214,32,26);
  const int sector=int(p.pos.y)/8;
- wornPanel(8,8,176,29);rect(17,12,151,12,rgb(24,18,13));
  const char* mapLabel=game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
- text(19,14,mapLabel,paper,2);
- if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)text(19,32,game.world().liftStatus(),amber);
- char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());text(17,27,b,muted);
+ const auto bone=rgb(236,228,214),black=rgb(0,0,0);
+ gradient(0,0,m_width,46,black,.55f,0.f,false);
+ std::string place(mapLabel);for(auto&c:place)c=char(std::toupper((unsigned char)c));fill(14,13,3,13,red,1);uiText(22,10,place.c_str(),bone,0,15,1,2);
+ char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());if(!game.enemies().empty())uiText(22,28,b,muted,0,10,1,1);
+ if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)uiText(22,41,game.world().liftStatus(),amber,0,10,1,1);
  // Compact map reveals nearby contacts and a fixed extraction marker.
  const int mx=m_width-57,my=8;
- wornPanel(mx-5,my-5,58,58);rect(mx-1,my-1,50,50,rgb(19,18,10));
+ fill(mx-4,my-4,56,56,rgb(6,5,5),.7f);frame(mx-4,my-4,56,56,bone,.14f);fill(mx-4,my-4,5,1,red,1);fill(mx-4,my-4,1,5,red,1);
  static thread_local MinimapCache minimap;const auto&occupancy=minimap.cells(game.world());
- for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(occupancy[size_t(y*24+x)])rect(mx+x*2,my+y*2,2,2,game.world().tile(x,y)=='#'?rgb(85,78,45):rgb(58,52,35));
+ for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(occupancy[size_t(y*24+x)])fill(mx+x*2,my+y*2,2,2,bone,game.world().tile(x,y)=='#'?.32f:.14f);
  for(auto&e:game.enemies())if(e.alive&&lengthSq(e.pos-p.pos)<36)rect(mx+int(e.pos.x*2),my+int(e.pos.y*2),2,2,red);
  auto exit=game.world().exitPoint();rect(mx+int(exit.x*2),my+int(exit.y*2),2,2,game.enemiesRemaining()==0?rgb(225,183,70):muted);
  rect(mx+int(p.pos.x*2)-1,my+int(p.pos.y*2)-1,3,3,amber);
  rect(mx+int((p.pos.x+std::cos(p.angle)*2)*2),my+int((p.pos.y+std::sin(p.angle)*2)*2),1,1,paper);
- wornPanel(0,m_height-39,m_width,39);
- for(int i=0;i<m_width;i+=9)rect(i,m_height-39,4,2,(i/9)%2?rgb(31,24,15):rgb(157,110,42));
- wornPanel(7,m_height-34,114,30,true);wornPanel(130,m_height-34,104,30,true);wornPanel(240,m_height-34,111,30,true);wornPanel(359,m_height-34,m_width-365,30,true);
- text(12,m_height-29,"HEALTH",muted);std::snprintf(b,sizeof(b),"%03d",int(p.health));text(12,m_height-20,b,p.health<30?red:paper,3);
- for(int i=0;i<10;++i){rect(62+i*5,m_height-16,4,11,rgb(10,7,5));if(p.health>i*10){rect(63+i*5,m_height-15,2,8,rgb(158,57,33));put(63+i*5,m_height-15,rgb(215,115,54));}}
- text(139,m_height-29,game.unarmed()?"UNARMED":"12 GA / TUBE-RESERVE",muted);std::snprintf(b,sizeof(b),"%02d/%02d",p.loaded,std::max(0,p.ammo-p.loaded));text(139,m_height-20,game.unarmed()?(game.guarding()?"GUARD":"FISTS"):b,amber,game.unarmed()?2:3);
- text(247,m_height-29,"PURGE",muted);std::snprintf(b,sizeof(b),"%02d / %02d",game.kills(),int(game.enemies().size()));text(247,m_height-19,b,paper,2);
- if(game.hasFlashlight())text(369,m_height-27,game.flashlightOn()?"LIGHT / ON":"LIGHT / OFF",game.flashlightOn()?amber:muted);
- text(m_width-103,m_height-27,"DEPTHWORKS",paper,2);text(m_width-103,m_height-12,"R / RELOAD",muted);
+ // Status: type over a floor shadow, no slab. Vitals left, weapon right.
+ gradient(0,m_height-74,m_width,74,black,0.f,.8f,false);
+ const bool critical=p.health<30;const auto vital=critical?red:bone;
+ std::snprintf(b,sizeof(b),"%d",std::max(0,int(p.health)));int healthWidth=uiText(22,m_height-52,b,vital,0,40);
+ int barX=30+healthWidth;uiText(barX,m_height-41,"HEALTH",muted,0,10,1,2);
+ fill(barX,m_height-25,100,4,bone,.15f);fill(barX,m_height-25,int(std::clamp(p.health,0.f,100.f)),4,critical?red:bone,critical&&(int(game.elapsed()*4)&1)?.5f:1.f);
+ for(int i=1;i<10;++i)fill(barX+i*10,m_height-25,1,4,black,.7f);
+ if(game.unarmed()){const char* hands=game.guarding()?"GUARD":"FISTS";uiText(m_width-24-uiTextWidth(hands,0,30,1),m_height-44,hands,bone,0,30,1,1);uiText(m_width-24-uiTextWidth("UNARMED",0,10,2),m_height-56,"UNARMED",muted,0,10,1,2);}
+ else{std::snprintf(b,sizeof(b),"%02d",p.loaded);int loadedWidth=uiTextWidth(b,0,40);int reserveX=m_width-24-uiTextWidth("/ 00",0,16);
+  uiText(reserveX-6-loadedWidth,m_height-52,b,p.loaded==0?red:bone,0,40);
+  std::snprintf(b,sizeof(b),"/ %02d",std::max(0,p.ammo-p.loaded));uiText(reserveX,m_height-31,b,muted,0,16);
+  uiText(reserveX,m_height-46,"12 GA",muted,0,10,1,2);
+  for(int i=0;i<8;++i)fill(reserveX-6-loadedWidth-12-i*6,m_height-34,3,10,i<p.loaded?amber:bone,i<p.loaded?1.f:.15f);
+  if(p.loaded==0)uiText(m_width/2-uiTextWidth("RELOAD  [R]",0,12,2)/2,m_height/2+24,"RELOAD  [R]",red,0,12,1,2);}
+ std::snprintf(b,sizeof(b),"PURGED  %02d / %02d",game.kills(),int(game.enemies().size()));if(!game.enemies().empty())uiText(m_width/2-uiTextWidth(b,0,10,2)/2,m_height-20,b,muted,0,10,.8f,2);
+ if(game.hasFlashlight()){const char* light=game.flashlightOn()?"LIGHT ON":"LIGHT OFF";uiText(m_width/2-uiTextWidth(light,0,10,2)/2,m_height-34,light,game.flashlightOn()?amber:muted,0,10,.8f,2);}
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
- rect(cx-6,cy,3,1,cross);rect(cx+4,cy,3,1,cross);rect(cx,cy-6,1,3,cross);rect(cx,cy+4,1,3,cross);
+ fill(cx-7,cy,4,1,cross,.85f);fill(cx+4,cy,4,1,cross,.85f);fill(cx,cy-7,1,4,cross,.85f);fill(cx,cy+4,1,4,cross,.85f);blend(cx,cy,cross,.6f);
  if(auto target=game.targetEnemy()){
   int x=m_width/2-65,y=m_height-60;
-  wornPanel(x-4,y-4,138,20,true);text(x,y,target->name(),paper);
-  rect(x,y+8,130,5,rgb(10,7,5));rect(x+1,y+9,int(128*std::max(0.f,target->hp)/target->maxHp),3,target->windup>0?amber:red);
-  if(target->windup>0)text(cx-22,cy-22,"INCOMING",amber);
+  uiText(x,y-6,target->name(),paper,0,11,1,1);
+  fill(x,y+8,130,3,bone,.15f);fill(x,y+8,int(130*std::max(0.f,target->hp)/target->maxHp),3,target->windup>0?amber:red,1);
+  if(target->windup>0)uiText(cx-uiTextWidth("INCOMING",0,11,2)/2,cy-26,"INCOMING",amber,0,11,1,2);
  }
  bool transferReleased=false;
  for(const auto& door:game.world().doors())if(door.transfer&&(door.requireEnemiesClear||door.requireControl||door.requireState)&&!game.doorLocked(door))transferReleased=true;
- if(transferReleased){wornPanel(cx-70,42,140,14,true);text(cx-62,47,"TRANSFER INTERLOCK RELEASED",amber);}
- if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()){int width=std::min(m_width-24,int(goal.size())*6+20);wornPanel(cx-width/2,44,width,17,true);text(cx-width/2+10,49,std::string(goal).c_str(),amber);}
- if(game.dead()||game.won()){wornPanel(cx-100,cy-26,200,51);text(cx-68,cy-15,game.won()?"SECTOR CLEARED":"SIGNAL LOST",game.won()?amber:red,2);text(cx-63,cy+7,"ESC / RESTART GAME",paper);}
+ if(transferReleased){const char* m="TRANSFER INTERLOCK RELEASED";int w=uiTextWidth(m,0,11,2);gradient(cx-w/2-30,86,w/2+30,16,black,0.f,.7f,true);gradient(cx,86,w/2+30,16,black,.7f,0.f,true);uiText(cx-w/2,87,m,amber,0,11,1,2);}
+ if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()){std::string line(goal);int w=std::min(m_width-140,uiTextWidth(line.c_str(),1,13));int left=cx-w/2;
+  gradient(left-40,60,w/2+40,20,black,0.f,.7f,true);gradient(cx,60,w/2+40,20,black,.7f,0.f,true);
+  uiText(cx-uiTextWidth("OBJECTIVE",0,9,3)/2,50,"OBJECTIVE",red,0,9,1,3);uiText(left,62,line.c_str(),bone,1,13);}
+ if(game.dead()||game.won()){fill(0,0,m_width,m_height,black,game.dead()?.55f:.35f);gradient(0,cy-50,m_width,50,black,0.f,.8f,false);gradient(0,cy,m_width,50,black,.8f,0.f,false);
+  const char* headline=game.won()?"SECTOR CLEARED":"YOU DIED";int w=uiTextWidth(headline,2,64,4);uiText(cx-w/2+3,cy-40,headline,black,2,64,.8f,4);uiText(cx-w/2,cy-42,headline,game.won()?amber:red,2,64,1,4);
+  const char* hint="PRESS ESC TO RESTART";uiText(cx-uiTextWidth(hint,0,11,3)/2,cy+30,hint,paper,0,11,.85f,3);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
- if(game.audioMuted())text(10,43,"AUDIO MUTED / M",muted);
- else if(!game.musicEnabled())text(10,43,"MUSIC OFF / N",muted);
+ if(game.audioMuted())uiText(22,54,"AUDIO MUTED  [M]",muted,0,10,1,1);
+ else if(!game.musicEnabled())uiText(22,54,"MUSIC OFF  [N]",muted,0,10,1,1);
  auto promptPanel=[&](int bottom,const char* message,std::uint32_t color){
-  int maxWidth=std::max(24,m_width-24);auto rows=wrapUiText(message,size_t(std::max(1,(maxWidth-20)/4)));
-  size_t longest=0;for(const auto&line:rows)longest=std::max(longest,line.size());
-  int width=std::min(maxWidth,std::max(170,int(longest)*4+20)),height=8+int(rows.size())*8,left=cx-width/2,top=bottom-height;
-  wornPanel(left,top,width,height,true);for(size_t i=0;i<rows.size();++i)text(left+10,top+6+int(i)*8,rows[i].c_str(),color);
+  int maxWidth=std::max(24,m_width-120);auto rows=wrapUiText(message,size_t(std::max(1,(maxWidth-28)/6)));
+  int longest=0;for(const auto&line:rows)longest=std::max(longest,uiTextWidth(line.c_str(),1,13));
+  int width=std::min(maxWidth,longest+28),height=8+int(rows.size())*15,left=cx-width/2,top=bottom-height;
+  fill(left,top,width,height,rgb(6,5,5),.72f);fill(left,top,2,height,color==paper?red:color,1);
+  for(size_t i=0;i<rows.size();++i)uiText(left+14,top+3+int(i)*15,rows[i].c_str(),color,1,13);
  };
  if(game.pickupNoticeTime()>0)promptPanel(m_height-65,game.pickupNotice().c_str(),paper);
  if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
@@ -699,71 +773,88 @@ void SoftwareRenderer::drawVrStatus(const Game&game){
  rect(24,292,266,50,0xff082510u);text(42,307,"INVENTORY",green,3);rect(334,292,282,50,0xff082510u);text(354,307,"MENU / SAVE",green,3);
 }
 void SoftwareRenderer::drawTitle(const Game& game){
- if(!hardwarePresentsWindow())for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x){
-  auto&p=m_pixels[size_t(y*m_width+x)];unsigned hash=unsigned(x*92837111u)^unsigned(y*689287499u);
-  float dim=.17f+float((hash^(hash>>13))&7)*.008f;p=shade(p,dim);
-  if((y%4)==0)p=shade(p,.78f);
- }
- const auto paper=rgb(220,207,170),amber=rgb(203,137,47),rust=rgb(116,52,31),muted=rgb(137,124,96),black=rgb(7,6,5);
- rect(0,0,m_width,8,black);rect(0,m_height-9,m_width,9,black);
- for(int x=-20;x<m_width;x+=32){rect(x,7,20,3,rust);rect(x+20,7,12,3,rgb(42,34,23));}
- rect(46,34,548,1,rgb(92,70,43));rect(46,121,548,2,rgb(71,45,27));
- for(int i=0;i<30;++i){unsigned h=unsigned(i*2654435761u+9137u);int x=38+int(h%560),y=20+int((h>>9)%318),len=3+int((h>>18)%34);rect(x,y,len,1,(i%3)?rgb(37,29,20):rgb(82,55,31));}
- text(58,48,"DEPTHWORKS",rgb(226,207,164),7);
- for(int i=0;i<13;++i){unsigned h=unsigned(i*747796405u+2891336453u);int x=58+int(h%278),y=47+int((h>>11)%39),len=5+int((h>>19)%22);rect(x,y,len,1,(i%2)?black:rgb(74,47,28));}
- text(61,101,game.customMapsOpen()?"CUSTOM MAP ARCHIVE / PLAYER CONTENT":"EXTRACTION COMPLEX / NIGHT SHIFT",muted,2);
- text(61,126,game.customMapsOpen()?"SELECT A DEPLOYMENT":"CONTAINMENT FAILURE",rust,2);
- text(61,144,game.customMapsOpen()?"DROP CAMPAIGN .TXT FILES IN /CUSTOM MAPS":"SURFACE ROUTE / STATUS UNKNOWN",muted);
+ static unsigned tick=0;++tick;const bool blink=(tick/30)%2==0;
+ if(!hardwarePresentsWindow())for(auto&p:m_pixels)p=shade(p,.17f);
+ const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0),amber=rgb(232,160,60);
+ // Smoke the left of the frame so the menu reads over the dimmed scene.
+ gradient(0,0,m_width*3/4,m_height,black,.94f,0.f,true);
+ gradient(0,0,m_width,64,black,.75f,0.f,false);gradient(0,m_height-72,m_width,72,black,0.f,.9f,false);
+ for(int y=0;y<m_height;y+=2)fill(0,y,m_width,1,black,.16f);
+ for(int i=0;i<700;++i){unsigned h=unsigned(i)*2654435761u^tick*40503u;h^=h>>15;h*=2246822519u;h^=h>>13;blend(int(h%unsigned(m_width)),int((h>>10)%unsigned(m_height)),(h>>5)&1?bone:black,.09f);}
+ // Header strip.
+ fill(40,25,5,5,red,1);uiText(52,20,"DEPTHWORKS INDUSTRIAL  //  SITE 9 EXTRACTION COMPLEX",dim,0,11,1,1);
+ const char* clock="SHIFT 03 / 03:14 AM";uiText(m_width-40-uiTextWidth(clock,3,11),20,clock,dim,3,11);
+ fill(40,38,m_width-80,1,bone,.10f);
+ // Wordmark: a red plate misregistered under bone type, torn every few seconds.
+ const char* mark="DEPTHWORKS";const int markX=36,markY=44;
+ uiText(markX+3,markY+2,mark,red,2,74,.85f,2);uiText(markX,markY,mark,bone,2,74,1,2);
+ if(tick>60&&(tick/7)%23==0){unsigned h=tick*747796405u;int band=markY+12+int(h%50),shift=6+int((h>>8)%14);
+  for(int y=band;y<std::min(m_height,band+4+int((h>>4)%6));++y){auto row=m_pixels.begin()+size_t(y)*m_width;std::rotate(row,row+m_width-shift,row+m_width);}}
+ fill(40,134,4,16,red,1);
+ uiText(52,133,game.customMapsOpen()?"CUSTOM MAP ARCHIVE":"CONTAINMENT FAILURE",red,0,15,1,3);
+ uiText(52,153,game.customMapsOpen()?"Drop campaign .txt files in /custom maps":"Something broke loose below the foundry. Nobody is coming.",dim,1,13);
  const char* normalLabels[]={"NEW GAME","CUSTOM MAPS","LOAD GAME","SETTINGS","QUIT"};
  for(int row=0;row<game.titleRows();++row){
   int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();
-  wornPanel(TitleMenuLayout::X,y,TitleMenuLayout::Width,22,true,true);
-  if(selected){rect(TitleMenuLayout::X+1,y+2,3,18,amber);rect(TitleMenuLayout::X+7,y+2,TitleMenuLayout::Width-10,1,rgb(106,72,31));}
   std::string customLabel=game.customMapsOpen()?game.customMenuLabel(row):std::string{};
-  text(TitleMenuLayout::X+16,y+8,game.customMapsOpen()?customLabel.c_str():normalLabels[row],selected?paper:muted,2);
+  const char* label=game.customMapsOpen()?customLabel.c_str():normalLabels[row];
+  if(selected){gradient(TitleMenuLayout::X-14,y,TitleMenuLayout::Width+14,23,red,.55f,0.f,true);fill(TitleMenuLayout::X-14,y,3,23,red,1);}
+  char index[4];std::snprintf(index,sizeof(index),"%02d",row+1);
+  uiText(TitleMenuLayout::X,y+6,index,selected?bone:dim,3,10,selected?1.f:.55f);
+  uiText(TitleMenuLayout::X+24,y,label,selected?bone:dim,0,19,selected?1.f:.8f,1);
+  if(selected)uiText(TitleMenuLayout::X+TitleMenuLayout::Width-16,y+1,">",bone,0,19,.8f);
  }
- wornPanel(386,190,196,106,false,true);
- text(400,204,"SITE TELEMETRY",amber,2);text(400,226,"POWER / DEGRADED",paper);
- text(400,242,"LIFT / EMERGENCY",paper);text(400,258,"CONTAINMENT / FAILED",rust);
- text(400,283,"AUTHORIZED STAFF ONLY",muted);
- text(58,m_height-26,"ARROWS / ENTER / MOUSE",muted);text(m_width-173,m_height-26,"DEPTHWORKS",paper);
+ // Facility status readout.
+ const int sx=m_width-218,sy=196;
+ uiText(sx,sy,"FACILITY STATUS",dim,0,11,1,2);fill(sx,sy+16,178,1,bone,.14f);
+ const char* keys[]={"MAIN POWER","SERVICE LIFT","CONTAINMENT","PERSONNEL"};const char* values[]={"DEGRADED","EMERGENCY","FAILED","UNACCOUNTED"};
+ for(int i=0;i<4;++i){uiText(sx,sy+24+i*17,keys[i],dim,3,11,.85f);uiText(sx+178-uiTextWidth(values[i],3,11),sy+24+i*17,values[i],i<2?amber:red,3,11);}
+ if(blink)fill(sx,sy+101,6,6,red,1);uiText(sx+12,sy+96,"ALARM ACTIVE / ALL LEVELS",red,0,11,blink?1.f:.55f,1);
+ // Footer: key caps and build tag.
+ fill(40,m_height-36,m_width-80,1,bone,.10f);
+ int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
+ cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
+ const char* build="PLAYTEST BUILD";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
  if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.25f);
  constexpr int x=MenuLayout::X,y=MenuLayout::Y;
- const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
- wornPanel(x,y,MenuLayout::Width,MenuLayout::Height,false,true);
+ const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0);
+ fill(0,0,m_width,m_height,black,.45f);
+ fill(x,y,MenuLayout::Width,MenuLayout::Height,rgb(6,5,5),.9f);frame(x,y,MenuLayout::Width,MenuLayout::Height,bone,.10f);fill(x,y,MenuLayout::Width,2,red,1);
  auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;
- const char* title=settingsPage?(game.menuFromTitle()?"DEPTHWORKS / SETTINGS":"DEPTHWORKS / PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
- text(x+15,y+12,title,paper,2);text(x+15,y+29,settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED"),amber);
+ const char* title=settingsPage?(game.menuFromTitle()?"SETTINGS":"PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
+ uiText(x+16,y+9,title,bone,0,20,1,2);
+ const char* subtitle=settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
+ uiText(x+MenuLayout::Width-16-uiTextWidth(subtitle,0,10,1),y+16,subtitle,red,0,10,1,1);
  const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
-  wornPanel(x+12,top,MenuLayout::Width-24,19,true,true);
-  if(selected){rect(x+13,top+2,2,15,amber);rect(x+17,top+2,MenuLayout::Width-35,1,rgb(101,72,32));}
+  if(selected){gradient(x+10,top,MenuLayout::Width-20,19,red,.5f,0.f,true);fill(x+10,top,2,19,red,1);}
+  else fill(x+10,top+18,MenuLayout::Width-20,1,bone,.05f);
   const char* label=settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
-  text(x+23,top+7,label,selected?paper:muted);
+  uiText(x+20,top+2,label,selected?bone:dim,0,13,1,1);
   if(settingsPage&&row>=1&&row<=4){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:settings.sensitivity;
-   float normalized=row==4?(value-.2f)/2.8f:value;
-   rect(MenuLayout::SliderX-3,top+7,MenuLayout::SliderWidth+6,5,rgb(8,7,5));
-   rect(MenuLayout::SliderX,top+8,MenuLayout::SliderWidth,1,rgb(116,97,67));
-   for(int tick=0;tick<=10;++tick)rect(MenuLayout::SliderX+tick*MenuLayout::SliderWidth/10,top+13,1,tick%5==0?3:2,muted);
-   int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);rect(knob-5,top+2,11,16,rgb(13,12,9));rect(knob-4,top+3,9,13,selected?amber:muted);rect(knob-4,top+3,9,2,paper);rect(knob+4,top+5,1,11,rgb(70,51,31));
-   for(int grip=-2;grip<=2;grip+=2)rect(knob+grip,top+7,1,5,rgb(53,47,34));
-   char valueText[16];if(row==4)std::snprintf(valueText,sizeof(valueText),"%.1fX",value);else std::snprintf(valueText,sizeof(valueText),"%d",int(value*100+.5f));text(MenuLayout::SliderX+83,top+7,valueText,paper);
+   float normalized=std::clamp(row==4?(value-.2f)/2.8f:value,0.f,1.f);int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
+   fill(MenuLayout::SliderX,top+9,MenuLayout::SliderWidth,1,bone,.22f);fill(MenuLayout::SliderX,top+8,knob-MenuLayout::SliderX,3,selected?red:bone,selected?1.f:.55f);
+   fill(knob-1,top+4,3,11,bone,1);
+   char valueText[16];if(row==4)std::snprintf(valueText,sizeof(valueText),"%.1fX",value);else std::snprintf(valueText,sizeof(valueText),"%d",int(value*100+.5f));
+   uiText(MenuLayout::SliderX+82,top+3,valueText,bone,3,11);
   }
-  if(settingsPage&&row==5)text(MenuLayout::SliderX,top+7,settings.invertMouse?"ON":"OFF",paper);
+  if(settingsPage&&row==5)uiText(MenuLayout::SliderX,top+3,settings.invertMouse?"ON":"OFF",settings.invertMouse?red:bone,3,11);
  }
- if(!settingsPage){text(x+15,y+153,game.menuMessage().c_str(),amber);if(page==Game::MenuPage::Overwrite)text(x+15,y+177,"THE PREVIOUS SLOT WILL BE REPLACED",muted);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)text(x+15,y+177,"UNSAVED PROGRESS WILL BE LOST",muted);}
- text(x+15,y+MenuLayout::Height-23,"CLICK / ARROWS / ENTER",muted);text(x+15,y+MenuLayout::Height-13,settingsPage?(game.menuFromTitle()?"ESC TO TITLE":"ESC TO RESUME"):"ESC TO GO BACK",amber);
+ if(!settingsPage){uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);}
+ fill(x+10,y+MenuLayout::Height-28,MenuLayout::Width-20,1,bone,.10f);
+ uiText(x+16,y+MenuLayout::Height-22,"CLICK / ARROWS / ENTER",dim,0,10,1,1);
+ const char* back=settingsPage?(game.menuFromTitle()?"ESC  TITLE":"ESC  RESUME"):"ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
 }
 void SoftwareRenderer::drawInventory(const Game& game){
  if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.22f);
- const auto paper=rgb(222,206,164),amber=rgb(210,145,54),muted=rgb(159,139,105);
- int x=48,y=28,w=m_width-96,h=m_height-56;wornPanel(x,y,w,h,false,true);
- text(x+16,y+12,"FIELD INVENTORY",paper,2);text(x+w-112,y+15,"I / CLOSE",muted);
- auto section=[&](int sx,int sy,int sw,int sh,const char* title){wornPanel(sx,sy,sw,sh,true,true);text(sx+8,sy+8,title,amber);};
+ const auto paper=rgb(236,228,214),amber=rgb(214,32,26),muted=rgb(146,138,128);
+ int x=48,y=28,w=m_width-96,h=m_height-56;fill(0,0,m_width,m_height,rgb(0,0,0),.4f);uiPanel(x,y,w,h);fill(x,y,w,2,rgb(214,32,26),1);
+ label(x+16,y+12,"FIELD INVENTORY",paper,2);label(x+w-112,y+15,"I / CLOSE",muted);
+ auto section=[&](int sx,int sy,int sw,int sh,const char* title){uiPanel(sx,sy,sw,sh);label(sx+8,sy+8,title,amber);};
  section(x+14,y+36,260,72,"PRIMARY WEAPON");section(x+14,y+116,260,72,"SECONDARY / MELEE");section(x+14,y+196,260,72,"EQUIPMENT / KEY ITEMS");
  section(x+286,y+36,w-300,h-50,"STORAGE");
  // Orthographic thumbnails use the same textured meshes as the world items.
@@ -783,22 +874,22 @@ void SoftwareRenderer::drawInventory(const Game& game){
   }
  };
  if(game.weaponEquipped())icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
- text(76,123,game.weaponEquipped()?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
- text(76,173,"FISTS / CLICK TO HOLSTER",paper);text(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
- text(76,258,"ARMOR: EMPTY",muted);
- int keyY=273,shown=0;for(const auto&item:game.questItems()){if(shown>=2)break;std::string label=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");text(76,keyY+shown*11,label.c_str(),paper);++shown;}
- if(int(game.questItems().size())>shown){std::string more="+ "+std::to_string(int(game.questItems().size())-shown)+" MORE KEY ITEMS";text(76,keyY+shown*11,more.c_str(),muted);}
- for(int row=0;row<5;++row)for(int col=0;col<6;++col)wornPanel(350+col*34,94+row*29,31,26,true);
+ label(76,123,game.weaponEquipped()?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
+ label(76,173,"FISTS / CLICK TO HOLSTER",paper);label(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
+ label(76,258,"ARMOR: EMPTY",muted);
+ int keyY=273,shown=0;for(const auto&item:game.questItems()){if(shown>=2)break;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
+ if(int(game.questItems().size())>shown){std::string more="+ "+std::to_string(int(game.questItems().size())-shown)+" MORE KEY ITEMS";label(76,keyY+shown*11,more.c_str(),muted);}
+ for(int row=0;row<5;++row)for(int col=0;col<6;++col){fill(350+col*34,94+row*29,31,26,rgb(236,228,214),.05f);frame(350+col*34,94+row*29,31,26,rgb(236,228,214),.10f);}
  int occupied=0;for(int item=0;item<3;++item){if((item==0&&game.weaponEquipped())||(item==1&&game.player().ammo==0)||(item==2&&game.medkits()==0))continue;
   int cell=game.itemCell(item),ix=350+cell%6*34,iy=94+cell/6*29,iw=item==0?133:item==1?31:65;occupied+=item==0?8:item==1?2:4;
-  wornPanel(ix,iy,iw,55,true);if(game.selectedItem()==item){rect(ix,iy,iw,1,amber);rect(ix,iy,1,55,amber);rect(ix+iw-1,iy,1,55,amber);rect(ix,iy+54,iw,1,amber);}
+  fill(ix,iy,iw,55,rgb(30,26,24),.85f);if(game.selectedItem()==item){rect(ix,iy,iw,1,amber);rect(ix,iy,1,55,amber);rect(ix+iw-1,iy,1,55,amber);rect(ix,iy+54,iw,1,amber);}
   icon(item==0?m_weaponMesh:item==1?m_shellsMesh:m_medkitMesh,item==0?m_weaponTexture:item==1?m_shellsTexture:m_medkitTexture,ix+3,iy+3,iw-6,39,item==0);
-  char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?game.player().ammo:game.medkits());text(ix+5,iy+45,count,paper);
+  char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?game.player().ammo:game.medkits());label(ix+5,iy+45,count,paper);
  }
- char status[40];std::snprintf(status,sizeof(status),"%d / 30 CELLS  HP %d",occupied,int(game.player().health));text(350,250,status,muted);
- const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2"};text(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
- wornPanel(350,280,224,28,true);text(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":"AMMO IS USED BY THE SHOTGUN",amber);
- text(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);text(64,316,"I / ESC CLOSE   CLICK PRIMARY TO EQUIP",amber);
+ char status[40];std::snprintf(status,sizeof(status),"%d / 30 CELLS  HP %d",occupied,int(game.player().health));label(350,250,status,muted);
+ const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2"};label(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
+ fill(350,280,224,28,rgb(214,32,26),.18f);label(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":"AMMO IS USED BY THE SHOTGUN",amber);
+ label(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);label(64,316,"I / ESC CLOSE   CLICK PRIMARY TO EQUIP",amber);
 }
 void SoftwareRenderer::drawConsole(const Game& game){
  rect(0,0,m_width,152,rgb(10,14,16));rect(0,150,m_width,2,rgb(202,150,67));
