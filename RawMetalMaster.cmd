@@ -9,14 +9,14 @@ rem RawMetal Master
 rem Central launcher for day-to-day RawMetal development.
 rem
 rem Supports:
-rem   Master.cmd
-rem   Master.cmd play
-rem   Master.cmd build
-rem   Master.cmd test
-rem   Master.cmd sync
-rem   Master.cmd ship
-rem   Master.cmd clean
-rem   Master.cmd status
+rem   RawMetalMaster.cmd
+rem   RawMetalMaster.cmd play
+rem   RawMetalMaster.cmd build
+rem   RawMetalMaster.cmd test
+rem   RawMetalMaster.cmd sync
+rem   RawMetalMaster.cmd ship
+rem   RawMetalMaster.cmd clean
+rem   RawMetalMaster.cmd status
 rem ============================================================
 
 if not "%~1"=="" goto :dispatch
@@ -36,14 +36,14 @@ echo   [2] BUILD
 echo       Build Release RawMetal.exe.
 echo.
 echo   [3] AUTOMATED TESTING
-echo       Build + Stalker + Physics/AI + Save + Vulkan smoke tests.
+echo       Build + core, Exclusion, guard AI, save and Vulkan smoke tests.
 echo       All generated images/logs go into diagnostics\TIMESTAMP.
 echo.
 echo   [4] GITHUB SYNC
 echo       Open the smart FROM / TO / BOTH sync menu.
 echo.
 echo   [5] SHIP RELEASE
-echo       Build, verify size, push source, and publish release.
+echo       Build, verify size, and publish the pushed source as a release.
 echo.
 echo   [6] CLEAN ROOT JUNK
 echo       Move generated RawMetal logs and loose PPM files to diagnostics.
@@ -261,6 +261,13 @@ echo.
 call :run_test "Stalker animation + AI" "--stalker-test"
 call :run_test "Physics + AI" "--physics-ai-test"
 call :run_test "Save format + compatibility" "--save-test"
+call :run_test "Exclusion encounter" "--exclusion-test"
+call :run_test "Exclusion authoring" "--exclusion-authoring-test"
+call :run_test "Stealth + rear actions" "--stealth-test"
+call :run_test "Guard AI" "--guard-ai-test"
+call :run_test "Flashlight" "--flashlight-test"
+call :run_test "Reactor puzzle" "--reactor-test"
+call :run_test "Controls + settings" "--controls-test"
 call :run_test "Full Vulkan smoke suite" "--smoke-test --vulkan"
 
 rem Move any regular runtime logs generated in root during testing.
@@ -268,6 +275,7 @@ for %%F in (
     RawMetal-audio.txt
     RawMetal-renderer.txt
     RawMetal-error.txt
+    RawMetal-custom-maps.txt
 ) do (
     if exist "%ROOT%\%%F" move /Y "%ROOT%\%%F" "%RUN_DIR%\%%F" >nul
 )
@@ -407,6 +415,7 @@ for %%F in (
     RawMetal-audio.txt
     RawMetal-renderer.txt
     RawMetal-error.txt
+    RawMetal-custom-maps.txt
     ai-diagnostic.txt
     ai-test.txt
     model-report.txt
@@ -467,6 +476,8 @@ if exist "%ROOT%\RawMetal.exe" (
         set "EXE_TIME=%%~tA"
     )
     echo RawMetal.exe : !EXE_BYTES! bytes
+    set /a EXE_HEADROOM=33554432-!EXE_BYTES!
+    echo Headroom     : !EXE_HEADROOM! bytes under the 32 MiB ceiling
     echo Built        : !EXE_TIME!
 ) else (
     echo RawMetal.exe : MISSING
