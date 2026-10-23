@@ -4,6 +4,32 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.8.0 - Night Shift update (2026-10-23)
+
+A content and presentation update, not a patch.
+
+- **Security Office prologue** now opens the main campaign: a shift at your desk,
+  a friend messaging you on the workstation, the alarm, the run to the service lift
+  and the drop into the Foundry. The workstation opens full screen, and you start
+  unarmed.
+- **Maps 0-2 rebuilt** (Foundry, Pressure Works, Turbine Gantry) with industrial
+  set pieces, new wall and floor surfaces and a second lamp grid. The freight lift
+  cab is remodelled, and Map 3 now reads as a second failed escape.
+- **New renderer post pass**: ambient occlusion with one-bounce light, denoised
+  screen-space lamp shadows (creatures and props now block lamps), depth haze,
+  volumetric lamp scattering, wide bloom and a filmic grade with a real black
+  point.
+- **Redesigned UI**: the title screen, HUD, pause menu, death screen and
+  inventory now use anti-aliased type and translucent panels instead of the
+  5-pixel font.
+- Missing textures now show a pink and black checker and are logged, instead of
+  stopping the game.
+- Headless frame readback is about 5x faster (104 ms to 21 ms per frame).
+- **27,698,688-byte EXE / 26.42 MiB**, **5.58 MiB free** under the 32 MiB ceiling.
+- Prologue, world isolation, Exclusion and Vulkan smoke tests passed.
+
+SHA-256: `08B3F110CFAC4E4E27FF206C6D39233D7D2B1BBC94652D63E9075FCD0E39954A`
+
 ## v0.7.2-preview.13 - Spatial audio patch (2026-10-19)
 
 Approved spatial audio first pass, integrated with all sixteen reduced textures.
