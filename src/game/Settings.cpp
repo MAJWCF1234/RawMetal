@@ -16,9 +16,12 @@ std::string Game::customMenuLabel(int row)const{
 void Game::startMainCampaign(){
  m_pendingMainCampaign=false;m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Campaign;m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;
 }
+void Game::startNewGame(){startCustomCampaign(loadEmbeddedPrologueCampaign());}
 void Game::selectCustomCampaign(int index){
  if(index<0||index>=int(m_customCampaigns.size()))return;
- auto campaign=m_customCampaigns[size_t(index)];
+ startCustomCampaign(m_customCampaigns[size_t(index)]);
+}
+void Game::startCustomCampaign(std::shared_ptr<const CustomCampaign> campaign){
  m_customCampaign=campaign;m_customCampaignKey=campaign->key;m_worldId=WorldId::Custom;
  m_level=std::clamp(m_customCampaign->startMap,0,int(m_customCampaign->maps.size())-1);
  m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;restart();m_suppressFire=true;
@@ -55,7 +58,7 @@ void Game::updateTitle(const InputState& input){
   if(item>=0&&item<int(m_customCampaigns.size()))selectCustomCampaign(item);
   else {m_customMapsOpen=false;m_customMenuOffset=0;m_titleSelection=1;}
  }else if(activate){
-  if(m_titleSelection==0)startMainCampaign();
+  if(m_titleSelection==0)startNewGame();
   else if(m_titleSelection==1){if(!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);m_customMapsOpen=true;m_customMenuOffset=0;m_titleSelection=0;}
   else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
   else if(m_titleSelection==3){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}

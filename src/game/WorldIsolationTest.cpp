@@ -159,6 +159,7 @@ bool Game::testWorldIsolation(){
  // The browser lists packs from "custom maps"; any selected pack runs as a Custom world.
  if(!check(menu.worldId()==WorldId::Custom&&!menu.titleScreen(),"Title browser loads custom world"))return false;
  menu.showTitleScreen();menu.update(accept,.01f);
- return check(menu.worldId()==WorldId::Campaign&&!menu.titleScreen()&&!menu.world().outdoors(),"New Game returns to campaign");
+ // New Game opens the main campaign at its embedded prologue, never the pack played before.
+ return check(menu.worldId()==WorldId::Custom&&menu.m_customCampaign==loadEmbeddedPrologueCampaign()&&!menu.titleScreen()&&!menu.world().outdoors(),"New Game returns to campaign");
 }
 }

@@ -270,7 +270,7 @@ Additional `SCRIPT_ACTION` kinds:
 - `SCRIPT_ACTION|map|event|SHAKE|amount`: camera shake and flash, amount above
   0 up to 3.
 - `SCRIPT_ACTION|map|event|ENTER_CAMPAIGN`: starts the main campaign at Map 0,
-  exactly like New Game. It applies at the start of the next update. Use it
+  exactly as the prologue hands off. It applies at the start of the next update. Use it
   to end a prologue.
 
 Sound ids 42 `Alarm` (a short klaxon, 1.85 s) and 43 `AlarmDistant` (a 22 s
@@ -288,7 +288,10 @@ with `YOU:` are the player's replies. Walking more than 2.4 m away closes it.
 drawn and no viewmodel until the first punch or weapon swap. Use it for
 off-duty openings.
 
-See `custom maps/RawMetal-Security-Office-Prologue.txt` for all of these in use.
+See `src/assets/campaigns/RawMetal-Security-Office-Prologue.txt` for all of these in use.
+It is the main campaign's opening: New Game starts it (embedded resource 398),
+so it is not in the Custom Maps list. `tools/make_security_office_prologue.py`
+generates it.
 
 ### Legacy MAP_CODE-only CUSTOM payloads
 

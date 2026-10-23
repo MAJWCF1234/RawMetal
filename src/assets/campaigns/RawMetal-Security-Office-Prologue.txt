@@ -4,7 +4,7 @@ META_DEFAULT_TARGET: CUSTOM
 META_CAMPAIGN_NAME: SECURITY OFFICE PROLOGUE
 
 --- CUSTOM_CAMPAIGN_DATA_START ---
-# Prologue test: night shift at the security desk on the upper level. The
+# Main campaign prologue (embedded, resource 398; New Game starts here): night shift at the security desk on the upper level. The
 # friend messages from her Lab 4 terminal, the alarm goes off, you run to
 # the service lift, its cable fails and the cab drops nine metres. Impact
 # hands off to the main campaign's first map through ENTER_CAMPAIGN.
@@ -157,6 +157,7 @@ SCRIPT_ACTION|0|office_arrival|STATE|office_lift_call|1
 SCRIPT_EVENT|0|office_run_now|0|0|24|24|-100|100|office_run|1|0
 SCRIPT_ACTION|0|office_run_now|OBJECTIVE|office_answer|2
 SCRIPT_ACTION|0|office_run_now|OBJECTIVE|office_run|1
+SCRIPT_ACTION|0|office_run_now|CHECKPOINT
 SCRIPT_EVENT|0|office_board|15.3|15.3|18.7|18.7|-1|1|office_run|1|0
 SCRIPT_ACTION|0|office_board|STATE|office_drop|1
 SCRIPT_EVENT|0|office_impact|0|0|24|24|-100|100|office_lift_bottom|1|0
