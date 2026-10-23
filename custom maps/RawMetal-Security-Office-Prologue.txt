@@ -9,7 +9,7 @@ META_CAMPAIGN_NAME: SECURITY OFFICE PROLOGUE
 # the service lift, its cable fails and the cab drops nine metres. Impact
 # hands off to the main campaign's first map through ENTER_CAMPAIGN.
 CAMPAIGN|SECURITY OFFICE PROLOGUE|0
-MAP|0|Depthworks / Security Office|0|0|5.5|4.2|0|0|3|0.24|industrial_night|0|0|0|0|0|-1|1|0|-1.5707963|-42
+MAP|0|Depthworks / Security Office|0|0|4.6|5.75|0|0|3|0.3|industrial_night|0|0|0|0|0|-1|1|0|-1.5707963|-14
 LAYER|0|0|Shaft floor / sub-level|-9|0
 ROW|0|0|0|########################
 ROW|0|0|1|########################
@@ -60,24 +60,56 @@ ROW|0|1|20|........................
 ROW|0|1|21|........................
 ROW|0|1|22|........................
 ROW|0|1|23|........................
-# Fixture bases and terminal heights are relative to the bottom layer (-9).
-# Security office: desk bank, files, the workstation that carries the chat.
-FIXTURE|0|19|4|3|9|1.8|0.65|0.9|0|1
-FIXTURE|0|19|7.4|3|9|1.8|0.65|0.9|0|1
-FIXTURE|0|18|4|4|9|0.417|0.525|0.95|3.1415927|1
-FIXTURE|0|7|2.6|7.6|9|1.4|0.45|1.6|1.5707963|1
-FIXTURE|0|7|9.4|8.6|9|1.4|0.45|1.6|-1.5707963|1
-FIXTURE|0|8|9.9|3|10|0.75|0.15|1|-1.5707963|0
-TERMINAL|0|5.5|2.9|9|0|SECURITY DESK / NIGHT SHIFT|DIRECT LINE: LAB 4 IS MESSAGING YOU.|E: OPEN THE MESSAGE.|office_chat|0||3.1415927
-CLUTTER|0|5|3.3|2.8|0.9|0.4
-CLUTTER|0|3|7.9|2.9|0.9|1.2
-CLUTTER|0|2|8|3.2|0.9|0
-CLUTTER|0|1|2.6|5.4|0|2.2
-CLUTTER|0|4|6.6|8.6|0|1
-SIGN|0|5.5|9.92|2.2|2.2|0.45|3.1415927|SECURITY / LEVEL 1|NIGHT SHIFT / DESK 2|14726704
-LIGHT|0|4|4.5|2.85
-LIGHT|0|7.5|7.5|2.85
+# Fixture bases and terminal heights are relative to the bottom layer (-9),
+# so props on the office floor (z 0) use base 9.0. OFFICE pack models 24-38.
+# Room finish: block walls, drop ceiling and carpet laid inside the shell.
+STRUCT|0|2|2|10|2.06|0|3|0|21
+STRUCT|0|2|9.94|10|10|0|3|0|21
+STRUCT|0|2|2|2.06|10|0|3|0|21
+STRUCT|0|9.94|2|10|5|0|3|0|21
+STRUCT|0|9.94|7|10|10|0|3|0|21
+STRUCT|0|2|2|10|10|2.88|3|0|22
+STRUCT|0|2.06|2.06|9.94|9.94|0|0.012|0|23
+# CCTV bank: four CRT sets on wide filing cabinets along the north wall.
+FIXTURE|0|31|3.3|2.45|9|2.4|0.7|0.706|0|1
+FIXTURE|0|31|5.9|2.45|9|2.4|0.7|0.706|0|1
+FIXTURE|0|30|2.75|2.42|9.706|0.834|0.629|0.913|0|0
+FIXTURE|0|30|3.85|2.42|9.706|0.834|0.629|0.913|0|0
+FIXTURE|0|30|5.35|2.42|9.706|0.834|0.629|0.913|0|0
+FIXTURE|0|30|6.45|2.42|9.706|0.834|0.629|0.913|0|0
+# Security desk facing the bank. The terminal stands on its front edge, so
+# the desk's own CRT is the computer the player uses.
+FIXTURE|0|24|4.6|4.3|9|2.205|1.092|0.891|0|1
+FIXTURE|0|25|7.5|4.1|9|2.205|2.211|0.891|0|1
+FIXTURE|0|27|4.6|4.15|9.891|0.602|0.533|0.567|0|0
+FIXTURE|0|28|4.6|4.6|9.891|0.683|0.225|0.041|0|0
+FIXTURE|0|27|7.9|3.6|9.891|0.602|0.533|0.567|-0.45|0
+FIXTURE|0|29|5.35|4|9|0.262|0.609|0.609|0|0
+FIXTURE|0|33|3.75|4.35|9.891|0.333|0.333|0.089|0.3|0
+FIXTURE|0|34|5.25|4.55|9.891|0.139|0.137|0.123|1.1|0
+FIXTURE|0|38|3.35|4.2|9.891|0.093|0.301|0.424|0.2|0
+FIXTURE|0|26|3.4|5.6|9|0.94|0.862|1.096|2.4|1
+TERMINAL|0|4.6|4.8|9|0|SECURITY DESK 2 / NIGHT SHIFT|DIRECT LINE: LAB 4 IS MESSAGING YOU.|E: OPEN THE MESSAGE.|office_chat|0||3.1415927
+# Files, coffee and water along the side walls.
+FIXTURE|0|32|9.6|2.6|9|0.485|0.525|1.409|-1.5707963|1
+FIXTURE|0|32|9.6|3.2|9|0.485|0.525|1.409|-1.5707963|1
+FIXTURE|0|35|9.65|8.1|9|0.378|0.449|1.396|-1.5707963|1
+FIXTURE|0|36|2.75|9.25|9|1.254|1.283|1.8054|0|1
+FIXTURE|0|37|2.3|6.8|9|1|0.489|2.125|1.5707963|1
+FIXTURE|0|38|2.45|6.55|10.05|0.093|0.301|0.424|1.5707963|0
+FIXTURE|0|38|2.45|6.65|10.05|0.093|0.301|0.424|1.5707963|0
+FIXTURE|0|38|2.45|6.75|10.05|0.093|0.301|0.424|1.5707963|0
+FIXTURE|0|38|2.45|6.85|10.05|0.093|0.301|0.424|1.5707963|0
+SIGN|0|6|9.92|2.2|2.2|0.45|3.1415927|SECURITY / LEVEL 1|NIGHT SHIFT / DESK 2|14726704
+LIGHT|0|4.6|5.2|2.8
+LIGHT|0|7.5|8|2.8
 # Corridor and lobby. Signs and lamps lead to the service lift.
+STRUCT|0|10|5|19|7|0|0.012|0|24
+STRUCT|0|16|7|19|12|0|0.012|0|24
+STRUCT|0|10|5|16|5.06|0|3|0|21
+STRUCT|0|10|6.94|16|7|0|3|0|21
+STRUCT|0|18.94|5|19|12|0|3|0|21
+STRUCT|0|15.94|7|16|12|0|3|0|21
 SIGN|0|14|4.92|2|2|0.42|0|SERVICE LIFT >|LOBBY / SOUTH|6089568
 LIGHT|0|13|6|2.85
 LIGHT|0|17|9.5|2.85
@@ -94,17 +126,17 @@ OBJECTIVE_TEXT|0|office_answer|Answer the message on your workstation
 OBJECTIVE_TEXT|0|office_run|Get to the service lift
 # 1. Chat. Started by the workstation; regions are unreachable on purpose.
 TIMED_SEQUENCE|0|office_chat|office_alarm|-2|-2|-1|-1|-100|100|21000|20500|0|0|27|0.3|1
-SEQUENCE_CUE|0|office_chat|0|27|5.5|2.9|0.35|1.4|LAB 4: you still on shift?
-SEQUENCE_CUE|0|office_chat|3500|27|5.5|2.9|0.35|1.1|YOU: always. quiet night up here.
-SEQUENCE_CUE|0|office_chat|7000|27|5.5|2.9|0.35|1.4|LAB 4: not down here. readings just went off the scale.
-SEQUENCE_CUE|0|office_chat|11000|27|5.5|2.9|0.35|1.4|LAB 4: they're sealing the sub-level doors. nobody says why.
-SEQUENCE_CUE|0|office_chat|14500|27|5.5|2.9|0.35|1.1|YOU: want me to call it in?
-SEQUENCE_CUE|0|office_chat|17500|27|5.5|2.9|0.35|1.4|LAB 4: no. something's wrong. really wrong. hold on
+SEQUENCE_CUE|0|office_chat|0|27|4.6|4.15|0.35|1.4|LAB 4: you still on shift?
+SEQUENCE_CUE|0|office_chat|3500|27|4.6|4.15|0.35|1.1|YOU: always. quiet night up here.
+SEQUENCE_CUE|0|office_chat|7000|27|4.6|4.15|0.35|1.4|LAB 4: not down here. readings just went off the scale.
+SEQUENCE_CUE|0|office_chat|11000|27|4.6|4.15|0.35|1.4|LAB 4: they're sealing the sub-level doors. nobody says why.
+SEQUENCE_CUE|0|office_chat|14500|27|4.6|4.15|0.35|1.1|YOU: want me to call it in?
+SEQUENCE_CUE|0|office_chat|17500|27|4.6|4.15|0.35|1.4|LAB 4: no. something's wrong. really wrong. hold on
 # 2. Alarm: a repeating high beep while the friend tells you to run.
 TIMED_SEQUENCE|0|office_alarm|office_run|-2|-2|-1|-1|-100|100|60000|5200|700|60000|27|0.75|1.7
 SEQUENCE_CUE|0|office_alarm|0|24|12|6|0.6|0.6|FACILITY ALARM / CONTAINMENT LOCKDOWN
-SEQUENCE_CUE|0|office_alarm|2200|27|5.5|2.9|0.4|1.4|LAB 4: they're locking everything. get out of there
-SEQUENCE_CUE|0|office_alarm|4800|27|5.5|2.9|0.45|1.4|LAB 4: RUN. the service lift past the lobby. GO
+SEQUENCE_CUE|0|office_alarm|2200|27|4.6|4.15|0.4|1.4|LAB 4: they're locking everything. get out of there
+SEQUENCE_CUE|0|office_alarm|4800|27|4.6|4.15|0.45|1.4|LAB 4: RUN. the service lift past the lobby. GO
 # 3. Board the cab: doors seal, the cable lets go, the brake fails.
 TIMED_SEQUENCE|0|office_drop|office_lift_release|-2|-2|-1|-1|-100|100|4000|2200|0|0|35|0.5|1
 SEQUENCE_CUE|0|office_drop|0|28|17|17|0.6|0.6|LIFT: DOORS SEALING
