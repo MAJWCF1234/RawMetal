@@ -7,6 +7,15 @@ aliases: [Project notes, PROJECT_NOTES, Project Notes]
 
 Vault: [[Home]] · Performance: [[Performance/Exclusion Zone]] · Design: [[Design]]
 
+## October 23, 2026 — opening prologue and the two lift falls
+
+A Security Office prologue (custom map) tests an opening scene: the friend messages
+from her Lab 4 terminal, the alarm sounds, the guard runs for the service lift, the
+cable fails and the drop hands off to campaign Map 0. The user chose to keep both
+lift falls. Map 3's surface lift is a second escape attempt that fails the same way;
+its terminals reference the service lift's brake. See
+[the prologue design](security-office-prologue-20261023.md).
+
 ## October 10, 2026 — campaign direction and asset availability
 
 The user supplied the [Campaign & System Overview](campaign-system-overview-20261010.md).

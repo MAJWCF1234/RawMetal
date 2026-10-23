@@ -26,14 +26,15 @@ Against [[campaign-system-overview-20261010]] section 1.1:
   immediately in the wake of the disaster" reads as if the guard was away. The
   prologue puts the guard on shift instead, which matches the elevator-failure
   line. Pick one.
-- **Duplicate fall.** The campaign already has a lift failure on Map 3: surface
-  dispatch, jam, cable snap, brake catch, crash into the reactor level. A
-  prologue fall before Map 0 makes two. Options:
-  1. Keep both, and reword Map 3 as a second escape attempt that fails the
-     same way, a deliberate echo.
-  2. The prologue cab's brake catches (the existing Caught phase), so the
-     prologue drop is shorter and the full crash stays on Map 3.
-  3. Drop the Map 3 fall and make the prologue the only one.
+- **Two falls (decided 2026-10-23: keep both).** The prologue's service lift
+  is the first failure. Map 3's surface lift is a second escape attempt that
+  fails the same way: jam, cable snap, brake catch, crash into the reactor
+  level. Its mechanics are unchanged. Its terminals now carry the echo:
+  - `LIFT SYSTEM / OVERRIDE`: "LAST CAB TO THE TOP. BOARD AND DISPATCH."
+  - `CAB CONTROL / DISPATCH`: "WARNING: SAME BRAKE MODEL AS SERVICE LIFT."
+
+  The Map 1 night-shift log, "SURFACE LIFT IS ON EMERGENCY POWER", stays as
+  the setup.
 - **Open:** the friend is unnamed in the docs. The prologue uses her terminal
   handle `LAB 4` as a placeholder. Where her workstation is in the 136-map
   manifest is also undecided. Chapter 2 labs (Maps 45-76) would be a long
