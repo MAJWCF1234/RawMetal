@@ -445,6 +445,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
     if(std::wcsstr(commandLine,L"--exclusion-authoring-test"))return retro::Game::testExclusionAuthoring()?0:21;
     if(std::wcsstr(commandLine,L"--prologue-test"))return retro::Game::testPrologue()?0:21;
+    if(std::wcsstr(commandLine,L"--ui-inspection")){
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/ui-preview");
+     for(int view=0;view<6;++view){auto scene=retro::Game::uiInspection(view);renderer->render(scene);std::ofstream out(".build/ui-preview/view-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--prologue-inspection")){
      constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/prologue-preview");
