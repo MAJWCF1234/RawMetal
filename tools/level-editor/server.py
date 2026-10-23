@@ -396,6 +396,14 @@ FACILITY_MODEL_INDEX = {
     "src/assets/office/coffee-machine.obj": 36,
     "src/assets/office/bookcase.obj": 37,
     "src/assets/office/binder.obj": 38,
+    "src/assets/facility/industrial/converter.obj": 39,
+    "src/assets/facility/industrial/flue.obj": 40,
+    "src/assets/facility/industrial/stock-cage.obj": 41,
+    "src/assets/facility/industrial/pendant-lamp.obj": 42,
+    "src/assets/facility/industrial/ibeam.obj": 43,
+    "src/assets/facility/industrial/pipe-riser.obj": 44,
+    "src/assets/facility/industrial/valve-wheel.obj": 45,
+    "src/assets/facility/industrial/turbine-casing.obj": 46,
 }
 WORLD_PROP_KIND = {
     "src/assets/pressureworks/pump.fbx": 0,

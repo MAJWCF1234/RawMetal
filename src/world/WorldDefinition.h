@@ -10,7 +10,8 @@ enum class WorldId { Campaign, Ashfall, Custom };
 enum class Environment { Interior, Outdoor };
 enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
-inline constexpr int FacilityModelCount=39;
+// 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
+inline constexpr int FacilityModelCount=47;
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant };
 enum class MusicCue { Default, Freight };
 enum class PickupKind { Health, Ammo }; // Values retain the existing save format.
@@ -34,9 +35,10 @@ inline constexpr int AshfallChunkCount=15;
 inline constexpr int WorldChunkCapacity=32;
 static_assert(CampaignChunkCount<=WorldChunkCapacity&&AshfallChunkCount<=WorldChunkCapacity,"World storage must cover every authored chunk");
 inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
-    {{0,0},{3.5f,4.5f},0,Environment::Interior},
-    {{18,24},{3.5f,3.5f},0,Environment::Interior},
-    {{36,48},{3.5f,3.5f},0,Environment::Interior},
+    // Maps 0-2: brighter fill for their darker brick, rust panel and green steel finishes.
+    {{0,0},{3.5f,4.5f},0,Environment::Interior,false,3.4f,.38f},
+    {{18,24},{3.5f,3.5f},0,Environment::Interior,false,3.4f,.36f},
+    {{36,48},{3.5f,3.5f},0,Environment::Interior,false,3.4f,.36f},
     {{54,72},{3.5f,3.5f},0,Environment::Interior,true},
     {{69,96},{6.5f,1.5f},-9,Environment::Interior},
     {{69,120},{12,2},-9,Environment::Interior},

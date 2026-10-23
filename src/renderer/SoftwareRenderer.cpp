@@ -161,6 +161,12 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  // OFFICE pack models bind by their OBJ usemtl names.
  const char* officeMaterials[]={"desk_2","computer","tv","office_chair_black","file_cabinet_large","file_cabinet","desk_phone","mug","watercooler","coffee_machine","bookcase","Binders"};
  for(int i=0;i<12;++i)m_facilityTextures.emplace(officeMaterials[i],loadTexture(374+i));
+ // Mega Pack industrial set pieces bind by their OBJ usemtl names.
+ const char* industrialMaterials[]={"metal_hr_1","metal_hr_2","metal_hr_1_dark_smooth","metal_floor_mx_1","grate_hm_1_1","steel_beams_hr_1","pipe_mp_1","valve_1"};
+ for(int i=0;i<8;++i)m_facilityTextures.emplace(industrialMaterials[i],loadTexture(407+i));
+ for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
+  m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
+ m_areaWalls[1].glossStrength=.2f;m_areaWalls[2].glossStrength=.16f;
  // Lit screens: desk CRTs show a green terminal, CCTV sets a camera feed.
  for(auto [material,resource]:{std::pair{"computer",394},std::pair{"tv",395}}){auto&screen=m_facilityTextures.at(material);auto emission=loadTexture(resource);
   if(emission.width!=screen.width||emission.height!=screen.height)throw std::runtime_error("Office screen emission dimensions mismatch");screen.emission=std::move(emission.pixels);}

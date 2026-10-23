@@ -265,6 +265,26 @@ __declspec(noinline) static int freightActorInspection(int W,int H){
   std::ofstream out("worker-"+std::to_string(age)+(view?"-close.ppm":"-balcony.ppm"),std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
  }return 0;
 }
+// Maps 0-2 (Foundry, Pressure Works, Turbine Gantry): five views each.
+__declspec(noinline) static int earlyMapsInspection(int W,int H){
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/early-maps");
+     struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;};
+     static constexpr std::array<View,15> views{{
+      {"foundry-spawn",0,{3.5f,4.5f},0,0,-4},{"foundry-furnace",0,{7,11.5f},0,0,-6},{"foundry-hall",0,{12.5f,14.5f},0,-retro::kPi*.5f,-4},
+      {"foundry-south",0,{4.5f,19},0,0,-4},{"foundry-east",0,{20.5f,12},0,retro::kPi,-4},
+      {"pressure-entry",1,{3.5f,3.5f},0,retro::kPi*.5f,-6},{"pressure-pumps",1,{6,12.5f},0,0,-6},{"pressure-east",1,{19,13},0,retro::kPi,-4},
+      {"pressure-south",1,{5,20},0,0,-4},{"pressure-north",1,{12,4},0,0,-4},
+      {"gantry-entry",2,{3,4},0,0,-6},{"gantry-west",2,{2.5f,12.5f},0,-.2f,-6},{"gantry-core",2,{12.5f,15.5f},0,-retro::kPi*.5f,-6},
+      {"gantry-east",2,{20,15.5f},0,retro::kPi,-4},{"gantry-catwalk",2,{8.5f,2.5f},3,retro::kPi*.5f,-14}
+     }};
+     for(const auto& view:views){
+      auto scene=retro::Game::mapInspection(view.p,view.yaw,view.pitch,view.level,false,view.z,true);renderer->render(scene);
+      std::ofstream frame(std::string(".build/early-maps/")+view.name+".ppm",std::ios::binary);frame<<"P6\n"<<W<<' '<<H<<"\n255\n";
+      for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};frame.write(rgb,3);}
+     }
+     return 0;
+}
 __declspec(noinline) static int campaignInspection(int W,int H,bool lockersOnly=false,bool cableLockersOnly=false){
      auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
      struct View{const char* name;int level;retro::Vec2 p;float z,yaw,pitch;bool openDoors=false;};
@@ -644,6 +664,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(std::wcsstr(commandLine,L"--native-capture")?1920:W,std::wcsstr(commandLine,L"--native-capture")?1080:H);
     if(std::wcsstr(commandLine,L"--freight-actor-inspection"))return freightActorInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
+    if(std::wcsstr(commandLine,L"--early-maps-inspection"))return earlyMapsInspection(960,540);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);
     if(std::wcsstr(commandLine,L"--waste-locker-inspection"))return campaignInspection(W,H,true);
     if(std::wcsstr(commandLine,L"--megamap-inspection")){

@@ -1517,12 +1517,30 @@ World::World(int level,WorldId id):m_worldId(id) {
  }
  m_fixtures=MapFixtures[m_level];
  m_layers={m_level==0?FoundryGroundLayer:m_level==1?PressureWorksGroundLayer:TurbineGantryGroundLayer};
- for(int y=0;y<Height;++y)for(int x=0;x<Width;){
+ // Area set pieces (facility 39-46, Mega Pack industrial set). Positions keep
+ // every walkable tile, route gap and spawn of the original layouts.
+ if(m_level==0){
+  // Two converter vessels stand on the central plinth (the T block), each
+  // venting through a flue to the roof. A stock cage lines the hall wall.
+  for(float y:{10.78f,12.22f}){m_fixtures.push_back({39,{14.f,y},0,1.9f,1.4f,2.7f,0,false});m_fixtures.push_back({40,{14.f,y},2.7f,.4f,.4f,.7f,0,false});}
+  m_fixtures.push_back({41,{14.f,9.5f},0,2.4f,1.f,1.1f,0,true});
+  for(Vec2 p:{Vec2{1.3f,10.5f},Vec2{1.3f,14.5f},Vec2{22.7f,11.6f},Vec2{22.7f,14.5f}})m_fixtures.push_back({43,p,0,.6f,.5f,3.4f,kPi*.5f,true});
+ }
+ if(m_level==1){
+  // Riser bundles with valve wheels along both pump hall walls.
+  for(float y:{9.2f,12.6f,15.4f}){m_fixtures.push_back({44,{1.06f,y},0,.4f,.1f,4.7f,kPi*.5f,false});m_fixtures.push_back({45,{1.13f,y},1.25f,.32f,.12f,.32f,kPi*.5f,false});}
+  for(float y:{9.6f,13.6f}){m_fixtures.push_back({44,{22.94f,y},0,.4f,.1f,4.7f,-kPi*.5f,false});m_fixtures.push_back({45,{22.87f,y},1.25f,.32f,.12f,.32f,-kPi*.5f,false});}
+ }
+ // The Turbine Gantry's G bays hold turbine casings, placed in its own block.
+ if(m_level!=2)for(int y=0;y<Height;++y)for(int x=0;x<Width;){
   if(tile(x,y)!='G'){++x;continue;}
   int cells=tile(x+1,y)=='G'?2:1;float width=cells*.94f,scale=width/3.4f;
   m_fixtures.push_back({6,{x+cells*.5f,y+.5f},0,width,scale,1.8f*scale,0,true});x+=cells;
  }
  if(m_level==2){
+  // One main turbine under the catwalk and two auxiliary units in the side bays.
+  m_fixtures.push_back({46,{12.f,3.f},0,3.76f,1.9f,2.66f,0,true});
+  for(float x:{6.f,19.f})m_fixtures.push_back({46,{x,11.f},0,1.9f,1.9f,1.6f,0,true});
   m_layers.push_back(TurbineGantryUpperLayer);
   m_internalWallHeight=2.7f;
   m_structures.push_back({2.f,0.f,5.f,.18f,2.5f,6.f,false,3});
@@ -1531,7 +1549,8 @@ World::World(int level,WorldId id):m_worldId(id) {
   m_doors={{2,5,.5f,0,false,false,true},{20,23,21.5f,0,false,true}};
   m_doors.back().requireEnemiesClear=true;m_doors.back().requireControl=true;
   m_terminals={{{18.5f,9.5f},"GANTRY CONTROL / 05:42","TURBINE BRAKES RELEASED.","LOWER TRANSFER INTERLOCK UNSEALED.",3,true}};
-  buildLights();m_lights.push_back({{5,20},5.85f});
+  buildLights();buildLights(4,3);m_lights.push_back({{5,20},5.85f});
+  for(auto&light:m_lights)light.intensity=1.5f;
   return;
  }
  if(m_level==1){
@@ -1550,10 +1569,17 @@ World::World(int level,WorldId id):m_worldId(id) {
  {{16.5f,10.5f},"CONTAINMENT / 04:06","THE VESSELS WERE NOT EMPTY.","CLEAR THE HOSTILES. GET OUT."},
  {{18.5f,19.5f},"DISPATCH / LAST SIGNAL","PRESSURE WORKS STILL HAS POWER.","THE TRANSFER INTERLOCK IS LIVE."}};
  if(m_level==1)m_terminals={{{6.5f,2.5f},"RECEIVING / MANIFEST","THE LAST TRAIN ARRIVED EMPTY.","THE PRESSURE GAUGES KEPT RISING."},{{19.5f,20.5f},"CONTROL / NIGHT SHIFT","SURFACE LIFT IS ON EMERGENCY POWER.","THE PUMPS MUST STAY RUNNING."}};
- buildLights();
+ // Maps 0-2 add an offset second lamp grid: their halls were lit only every 5 x 4 m.
+ buildLights();buildLights(4,3);
+ for(auto&light:m_lights)light.intensity=m_level==0?1.6f:1.5f;
+ if(m_level==0){
+  // Molten metal pooled on the converter plinth (material 25) and a lamp over the pour.
+  m_structures.push_back({13.04f,10.04f,14.96f,12.96f,.14f,.165f,false,25});
+  m_lights.push_back({{12.4f,11.5f},3.25f,WorldLightMount::Ceiling,0,1.6f,8.f});
+ }
 }
-void World::buildLights(){
- for(int y=1;y<Height-1;y+=4)for(int x=2;x<Width-1;x+=5)if(tile(x,y)!='#')
+void World::buildLights(int startX,int startY){
+ for(int y=startY;y<Height-1;y+=4)for(int x=startX;x<Width-1;x+=5)if(tile(x,y)!='#')
   for(const auto&span:spansAt(x,y))if(span.ceiling-span.floor>1.8f)m_lights.push_back({{x+.5f,y+.35f},span.ceiling-.15f});
 }
 std::size_t World::terrainSampleIndex(int sx,int sy,int sz)const{

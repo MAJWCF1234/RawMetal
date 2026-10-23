@@ -299,7 +299,7 @@ private:
     std::vector<ParticleEmitter> m_particleEmitters;
     std::vector<ScriptEvent> m_scriptEvents;
     std::vector<Hazard> m_hazards;
-    void buildLights();
+    void buildLights(int startX=2,int startY=1);
     std::vector<Door> m_doors;
     std::vector<Terminal> m_terminals;
     std::vector<Structure> m_structures;
