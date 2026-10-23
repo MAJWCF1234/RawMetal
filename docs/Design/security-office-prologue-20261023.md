@@ -106,11 +106,14 @@ Two script actions were exposed to custom maps:
 
 ## Known gaps for a production version
 
-- No alarm klaxon sound. The test uses a repeated high-pitched status beep.
-  ROT Horror Audio and Echoes have alarms that could be imported through the
-  existing audio pipeline.
-- No flashing alarm light state. Lights are static records.
-- Raised floors always render as steel walkway, so the office floor is grating
-  rather than carpet. `FloorMaterial` only applies to the base layer.
+- Done since the first pass:
+  - real alarm audio (ROT `warning_signal_smx_1` klaxon over the Echoes
+    `alarm_distant_1` bed);
+  - the red beacon wash on each blast;
+  - a lit green terminal on the desk CRT and CCTV corridor feeds.
+- Raised floors render as walkway unless dressed. The office lays carpet and
+  tile `STRUCT` slabs over the deck.
 - Captions use the small subtitle strip. A dedicated chat window on the CRT
   would read better for longer exchanges.
+- The friend's name and the location of her workstation in the 136-map
+  manifest are still open.

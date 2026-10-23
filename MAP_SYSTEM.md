@@ -244,6 +244,42 @@ META_DEFAULT_TARGET: CUSTOM
 
 does **not** mean built-in campaign level 1. When installed as CUSTOM it becomes map 0 of its own one-map runtime campaign unless the TXT already contains a larger `CUSTOM_CAMPAIGN_DATA` block. The legacy `META_LEVEL_ID` is retained only so the same payload can still describe its old source-code slot.
 
+### Office set, script actions and alarm sounds (2026-10-23)
+
+Office set, from the purchased OFFICE pack. `FIXTURE` models 24-38:
+
+- 24 desk, 25 corner desk, 26 office chair
+- 27 CRT monitor (lit green terminal), 28 keyboard, 29 PC tower
+- 30 CCTV TV (lit camera feed)
+- 31 wide file cabinet, 32 tall file cabinet
+- 33 desk phone, 34 mug, 35 water cooler, 36 coffee machine
+- 37 bookcase, 38 binder
+
+Real sizes are listed in `src/assets/office/OFFICE-SOURCE.md`.
+
+Office surfaces, `STRUCT` materials 21-24: 21 office block wall, 22 drop ceiling,
+23 office carpet, 24 office tile. In custom maps every structure texture
+repeats per metre.
+
+A `TERMINAL` placed within a solid fixture's footprint draws no console. Put
+the interaction point on a desk's front edge and dress the desk with fixture
+27/28 so its CRT is the visible computer.
+
+Additional `SCRIPT_ACTION` kinds:
+
+- `SCRIPT_ACTION|map|event|SHAKE|amount`: camera shake and flash, amount above
+  0 up to 3.
+- `SCRIPT_ACTION|map|event|ENTER_CAMPAIGN`: starts the main campaign at Map 0,
+  exactly like New Game. It applies at the start of the next update. Use it
+  to end a prologue.
+
+Sound ids 42 `Alarm` (a short klaxon, 1.85 s) and 43 `AlarmDistant` (a 22 s
+facility alarm bed). A running `TIMED_SEQUENCE` whose repeating tick sound is
+42 also drives the red alarm beacon wash, which peaks on each blast. Example:
+`TIMED_SEQUENCE|0|alarm|alarm_done|-2|-2|-1|-1|-100|100|60000|5200|1900|60000|42|0.8|1`.
+
+See `custom maps/RawMetal-Security-Office-Prologue.txt` for all of these in use.
+
 ### Legacy MAP_CODE-only CUSTOM payloads
 
 Older or hand-written payloads may contain only:

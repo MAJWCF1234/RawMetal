@@ -161,6 +161,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  // OFFICE pack models bind by their OBJ usemtl names.
  const char* officeMaterials[]={"desk_2","computer","tv","office_chair_black","file_cabinet_large","file_cabinet","desk_phone","mug","watercooler","coffee_machine","bookcase","Binders"};
  for(int i=0;i<12;++i)m_facilityTextures.emplace(officeMaterials[i],loadTexture(374+i));
+ // Lit screens: desk CRTs show a green terminal, CCTV sets a camera feed.
+ for(auto [material,resource]:{std::pair{"computer",394},std::pair{"tv",395}}){auto&screen=m_facilityTextures.at(material);auto emission=loadTexture(resource);
+  if(emission.width!=screen.width||emission.height!=screen.height)throw std::runtime_error("Office screen emission dimensions mismatch");screen.emission=std::move(emission.pixels);}
  m_officeWall=loadTexture(386);attachNormal(m_officeWall,387,true,0);
  m_dropCeiling=loadTexture(388);attachNormal(m_dropCeiling,389,true,0);
  m_securityCarpet=loadTexture(390);attachNormal(m_securityCarpet,391,true,0);
@@ -805,6 +808,11 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    }
   }
  }
+ // CPU twin of the composite alarm wash for captures and the software path.
+ if(float alarm=!directPresentation?game.alarmPulse()*.55f:0.f;alarm>0){
+  const float r=1+.45f*alarm,g=1-.70f*alarm,bl=1-.76f*alarm;const unsigned lift=unsigned(9*alarm);
+  for(auto&c:m_pixels){unsigned cr=std::min(255u,unsigned((c>>16&255u)*r)+lift),cg=unsigned((c>>8&255u)*g),cb=unsigned((c&255u)*bl);c=(c&0xff000000u)|(cr<<16)|(cg<<8)|cb;}
+ }
  if(scaled){int scaledWidth=m_width,scaledHeight=m_height;m_width=fullWidth;m_height=fullHeight;m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
@@ -815,7 +823,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
  m_presentMs=0;
- if(directPresentation){auto presentStart=std::chrono::steady_clock::now();float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;float shotKick=std::max(std::clamp(1.f-game.shotAge()/.10f,0.f,1.f)*(game.weaponKick()>.85f&&!game.unarmed()?1.f:0.f),game.damageFlash()*.65f);m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim,game.damageFlash(),shotKick);m_presentMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-presentStart).count();}
+ if(directPresentation){auto presentStart=std::chrono::steady_clock::now();float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;float shotKick=std::max(std::clamp(1.f-game.shotAge()/.10f,0.f,1.f)*(game.weaponKick()>.85f&&!game.unarmed()?1.f:0.f),game.damageFlash()*.65f);m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim,game.damageFlash(),shotKick,game.alarmPulse());m_presentMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-presentStart).count();}
 }
 }
 

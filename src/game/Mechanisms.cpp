@@ -8,6 +8,15 @@ std::string_view Game::actorCaption()const{
   for(const auto& cue:world.sequenceCues()){int age=state(cue.timerState)-cue.timeMs;if(!cue.caption.empty()&&age>=0&&age<2500)return cue.caption;}
  }return {};
 }
+float Game::alarmPulse()const{
+ if(m_titleScreen)return 0;float pulse=0;
+ for(const auto& sequence:m_world.timedSequences()){
+  if(sequence.tickSound!=Sound::Alarm||sequence.soundIntervalMs<=0)continue;
+  int age=state(sequence.timerState);if(age<=0||age>=sequence.soundUntilMs)continue;
+  float decay=1.f-float(age%sequence.soundIntervalMs)/float(sequence.soundIntervalMs);pulse=std::max(pulse,decay*decay);
+ }
+ return pulse;
+}
 void Game::updateMechanisms(float dt){
  if(dt>0)m_npcNavBudget=4;
  const auto& lift=m_world.cargoLift();

@@ -278,3 +278,7 @@
 391 RCDATA "assets/office/office-carpet-normal.png"
 392 RCDATA "assets/office/office-tile.png"
 393 RCDATA "assets/office/office-tile-normal.png"
+394 RCDATA "assets/office/computer-emission.png"
+395 RCDATA "assets/office/tv-emission.png"
+396 RCDATA "assets/audio/alarm.wav"
+397 RCDATA "assets/audio/alarm-distant.mp3"
