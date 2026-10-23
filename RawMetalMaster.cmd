@@ -276,6 +276,7 @@ for %%F in (
     RawMetal-renderer.txt
     RawMetal-error.txt
     RawMetal-custom-maps.txt
+    RawMetal-missing-textures.txt
 ) do (
     if exist "%ROOT%\%%F" move /Y "%ROOT%\%%F" "%RUN_DIR%\%%F" >nul
 )
@@ -416,6 +417,7 @@ for %%F in (
     RawMetal-renderer.txt
     RawMetal-error.txt
     RawMetal-custom-maps.txt
+    RawMetal-missing-textures.txt
     ai-diagnostic.txt
     ai-test.txt
     model-report.txt

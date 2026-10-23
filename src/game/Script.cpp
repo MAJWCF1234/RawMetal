@@ -74,6 +74,8 @@ void Game::executeScriptAction(const ScriptAction& action){
   case ScriptAction::Type::Shake:m_verticalSpringVelocity-=action.amount;m_damageFlash=std::max(m_damageFlash,std::min(1.f,action.amount*.2f));break;
   case ScriptAction::Type::Checkpoint:saveCheckpoint();break;
   case ScriptAction::Type::CompleteCampaign:m_won=true;break;
+  // Deferred: the script pass is still iterating this world's events.
+  case ScriptAction::Type::EnterMainCampaign:m_pendingMainCampaign=true;break;
  }
 }
 void Game::updateReceivingBreach(){

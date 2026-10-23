@@ -295,6 +295,7 @@ bool Game::testPickups(){
 
 void Game::update(const InputState& input, float dt) {
     m_sounds.clear();
+    if(m_pendingMainCampaign)startMainCampaign();
     if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}
     bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
     if(m_titleScreen){updateTitle(input);return;}

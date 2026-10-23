@@ -137,6 +137,9 @@ private:
  std::array<std::array<Point3,2>,6> m_cleanupPalms{};
  std::array<std::vector<std::array<std::uint8_t,4>>,6> m_cleanupWeights;
     Texture m_glassTexture;
+    // Pink/black checker for any surface whose texture is missing; see
+    // assets/materials/PROP-SURFACES-SOURCE.md for the purchased replacements.
+    Texture m_missingTexture,m_ironTexture,m_darkMetalTexture,m_rubberTexture,m_leatherTexture,m_idFabricTexture,m_medkitCaseTexture,m_medkitLabelTexture;
     Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture;
     Mesh m_barrelMesh{121},m_crateMesh{123};
     std::array<Mesh,FacilityModelCount> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191},Mesh{142},Mesh{258},Mesh{259},Mesh{263},Mesh{265},Mesh{275},Mesh{284},Mesh{285},Mesh{286},Mesh{288},Mesh{290},Mesh{294}};

@@ -119,8 +119,11 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(kind=="STATE"){if(action.value< -100000||action.value>100000)throw std::runtime_error("invalid script state value");action.type=ScriptAction::Type::SetState;}
     else if(kind=="OBJECTIVE"){if(action.value<0||action.value>3)throw std::runtime_error("invalid script objective status");action.type=ScriptAction::Type::SetObjective;}
     else{if(action.value<1||action.value>99)throw std::runtime_error("invalid script item count");action.type=ScriptAction::Type::GiveItem;}
-   }else if(kind=="CHECKPOINT"||kind=="COMPLETE"){
-    if(f.size()!=4)throw std::runtime_error("malformed terminal SCRIPT_ACTION record");action.type=kind=="CHECKPOINT"?ScriptAction::Type::Checkpoint:ScriptAction::Type::CompleteCampaign;
+   }else if(kind=="CHECKPOINT"||kind=="COMPLETE"||kind=="ENTER_CAMPAIGN"){
+    if(f.size()!=4)throw std::runtime_error("malformed terminal SCRIPT_ACTION record");action.type=kind=="CHECKPOINT"?ScriptAction::Type::Checkpoint:kind=="COMPLETE"?ScriptAction::Type::CompleteCampaign:ScriptAction::Type::EnterMainCampaign;
+   }else if(kind=="SHAKE"){
+    if(f.size()!=5)throw std::runtime_error("malformed SHAKE SCRIPT_ACTION record");action.type=ScriptAction::Type::Shake;action.amount=number(f,4,"shake amount");
+    if(action.amount<=0||action.amount>3)throw std::runtime_error("invalid shake amount; use more than 0 up to 3");
    }else throw std::runtime_error("unknown script action type");
    if(event->actions.size()>=16)throw std::runtime_error("too many actions for script event");event->actions.push_back(action);
   }else if(tag=="SIGN"){

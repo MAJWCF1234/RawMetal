@@ -1,0 +1,131 @@
+META_LEVEL_ID: 1
+META_LEVEL_NAME: SECURITY OFFICE PROLOGUE
+META_DEFAULT_TARGET: CUSTOM
+META_CAMPAIGN_NAME: SECURITY OFFICE PROLOGUE
+
+--- CUSTOM_CAMPAIGN_DATA_START ---
+# Prologue test: night shift at the security desk on the upper level. The
+# friend messages from her Lab 4 terminal, the alarm goes off, you run to
+# the service lift, its cable fails and the cab drops nine metres. Impact
+# hands off to the main campaign's first map through ENTER_CAMPAIGN.
+CAMPAIGN|SECURITY OFFICE PROLOGUE|0
+MAP|0|Depthworks / Security Office|0|0|5.5|4.2|0|0|3|0.24|industrial_night|0|0|0|0|0|-1|1|0|-1.5707963|-42
+LAYER|0|0|Shaft floor / sub-level|-9|0
+ROW|0|0|0|########################
+ROW|0|0|1|########################
+ROW|0|0|2|##........##############
+ROW|0|0|3|##........##############
+ROW|0|0|4|##........##############
+ROW|0|0|5|##.................#####
+ROW|0|0|6|##.................#####
+ROW|0|0|7|##........######...#####
+ROW|0|0|8|##........######...#####
+ROW|0|0|9|##........######...#####
+ROW|0|0|10|################...#####
+ROW|0|0|11|################...#####
+ROW|0|0|12|#############........###
+ROW|0|0|13|#############........###
+ROW|0|0|14|#############........###
+ROW|0|0|15|###############....#####
+ROW|0|0|16|###############....#####
+ROW|0|0|17|###############....#####
+ROW|0|0|18|###############....#####
+ROW|0|0|19|########################
+ROW|0|0|20|########################
+ROW|0|0|21|########################
+ROW|0|0|22|########################
+ROW|0|0|23|########################
+LAYER|0|1|Security level|0|0.22
+ROW|0|1|0|........................
+ROW|0|1|1|........................
+ROW|0|1|2|..========..............
+ROW|0|1|3|..========..............
+ROW|0|1|4|..========..............
+ROW|0|1|5|..=================.....
+ROW|0|1|6|..=================.....
+ROW|0|1|7|..========......===.....
+ROW|0|1|8|..========......===.....
+ROW|0|1|9|..========......===.....
+ROW|0|1|10|................===.....
+ROW|0|1|11|................===.....
+ROW|0|1|12|.............========...
+ROW|0|1|13|.............========...
+ROW|0|1|14|.............==....==...
+ROW|0|1|15|........................
+ROW|0|1|16|........................
+ROW|0|1|17|........................
+ROW|0|1|18|........................
+ROW|0|1|19|........................
+ROW|0|1|20|........................
+ROW|0|1|21|........................
+ROW|0|1|22|........................
+ROW|0|1|23|........................
+# Fixture bases and terminal heights are relative to the bottom layer (-9).
+# Security office: desk bank, files, the workstation that carries the chat.
+FIXTURE|0|19|4|3|9|1.8|0.65|0.9|0|1
+FIXTURE|0|19|7.4|3|9|1.8|0.65|0.9|0|1
+FIXTURE|0|18|4|4|9|0.417|0.525|0.95|3.1415927|1
+FIXTURE|0|7|2.6|7.6|9|1.4|0.45|1.6|1.5707963|1
+FIXTURE|0|7|9.4|8.6|9|1.4|0.45|1.6|-1.5707963|1
+FIXTURE|0|8|9.9|3|10|0.75|0.15|1|-1.5707963|0
+TERMINAL|0|5.5|2.9|9|0|SECURITY DESK / NIGHT SHIFT|DIRECT LINE: LAB 4 IS MESSAGING YOU.|E: OPEN THE MESSAGE.|office_chat|0||3.1415927
+CLUTTER|0|5|3.3|2.8|0.9|0.4
+CLUTTER|0|3|7.9|2.9|0.9|1.2
+CLUTTER|0|2|8|3.2|0.9|0
+CLUTTER|0|1|2.6|5.4|0|2.2
+CLUTTER|0|4|6.6|8.6|0|1
+SIGN|0|5.5|9.92|2.2|2.2|0.45|3.1415927|SECURITY / LEVEL 1|NIGHT SHIFT / DESK 2|14726704
+LIGHT|0|4|4.5|2.85
+LIGHT|0|7.5|7.5|2.85
+# Corridor and lobby. Signs and lamps lead to the service lift.
+SIGN|0|14|4.92|2|2|0.42|0|SERVICE LIFT >|LOBBY / SOUTH|6089568
+LIGHT|0|13|6|2.85
+LIGHT|0|17|9.5|2.85
+LIGHT|0|16.5|13|2.85
+SIGN|0|21|13|2|1.8|0.42|-1.5707963|SERVICE LIFT|SUB-LEVEL ACCESS|14726704
+LIGHT|0|17|17|-6.6
+# Flush one-step threshold opens the deck guardrail onto the cab (as Freight).
+STAIR|0|15|13|19|15|-0.12|0|1|1|1
+# Service lift cab: starts at the shaft floor and is called up on arrival,
+# unseen behind the lobby. Speed 7 m/s, so the release is a drop, not a ride.
+CARGO_LIFT|0|15|15|19|19|-9|0|7|office_lift_call|office_lift_release|office_lift_mm|office_lift_down|office_lift_arrived|office_lift_bottom
+# Objectives
+OBJECTIVE_TEXT|0|office_answer|Answer the message on your workstation
+OBJECTIVE_TEXT|0|office_run|Get to the service lift
+# 1. Chat. Started by the workstation; regions are unreachable on purpose.
+TIMED_SEQUENCE|0|office_chat|office_alarm|-2|-2|-1|-1|-100|100|21000|20500|0|0|27|0.3|1
+SEQUENCE_CUE|0|office_chat|0|27|5.5|2.9|0.35|1.4|LAB 4: you still on shift?
+SEQUENCE_CUE|0|office_chat|3500|27|5.5|2.9|0.35|1.1|YOU: always. quiet night up here.
+SEQUENCE_CUE|0|office_chat|7000|27|5.5|2.9|0.35|1.4|LAB 4: not down here. readings just went off the scale.
+SEQUENCE_CUE|0|office_chat|11000|27|5.5|2.9|0.35|1.4|LAB 4: they're sealing the sub-level doors. nobody says why.
+SEQUENCE_CUE|0|office_chat|14500|27|5.5|2.9|0.35|1.1|YOU: want me to call it in?
+SEQUENCE_CUE|0|office_chat|17500|27|5.5|2.9|0.35|1.4|LAB 4: no. something's wrong. really wrong. hold on
+# 2. Alarm: a repeating high beep while the friend tells you to run.
+TIMED_SEQUENCE|0|office_alarm|office_run|-2|-2|-1|-1|-100|100|60000|5200|700|60000|27|0.75|1.7
+SEQUENCE_CUE|0|office_alarm|0|24|12|6|0.6|0.6|FACILITY ALARM / CONTAINMENT LOCKDOWN
+SEQUENCE_CUE|0|office_alarm|2200|27|5.5|2.9|0.4|1.4|LAB 4: they're locking everything. get out of there
+SEQUENCE_CUE|0|office_alarm|4800|27|5.5|2.9|0.45|1.4|LAB 4: RUN. the service lift past the lobby. GO
+# 3. Board the cab: doors seal, the cable lets go, the brake fails.
+TIMED_SEQUENCE|0|office_drop|office_lift_release|-2|-2|-1|-1|-100|100|4000|2200|0|0|35|0.5|1
+SEQUENCE_CUE|0|office_drop|0|28|17|17|0.6|0.6|LIFT: DOORS SEALING
+SEQUENCE_CUE|0|office_drop|1000|36|17|17|0.9|0.8|LIFT: LOAD UNSTABLE
+SEQUENCE_CUE|0|office_drop|2100|38|17|17|1|1.1|CABLE FAILURE
+# 4. Impact, then hand off to the main campaign.
+TIMED_SEQUENCE|0|office_crash|office_prologue_done|-2|-2|-1|-1|-100|100|5000|4200|0|0|27|0.2|1
+SEQUENCE_CUE|0|office_crash|0|34|17|17|1|0.8|
+SEQUENCE_CUE|0|office_crash|1400|27|17|17|0.3|0.5|EMERGENCY POWER / SUB-LEVEL / NO SIGNAL FROM LAB 4
+SCRIPT_EVENT|0|office_arrival|0|0|24|24|-100|100||1|0
+SCRIPT_ACTION|0|office_arrival|OBJECTIVE|office_answer|1
+SCRIPT_ACTION|0|office_arrival|STATE|office_lift_call|1
+SCRIPT_EVENT|0|office_run_now|0|0|24|24|-100|100|office_run|1|0
+SCRIPT_ACTION|0|office_run_now|OBJECTIVE|office_answer|2
+SCRIPT_ACTION|0|office_run_now|OBJECTIVE|office_run|1
+SCRIPT_EVENT|0|office_board|15.3|15.3|18.7|18.7|-1|1|office_run|1|0
+SCRIPT_ACTION|0|office_board|STATE|office_drop|1
+SCRIPT_EVENT|0|office_impact|0|0|24|24|-100|100|office_lift_bottom|1|0
+SCRIPT_ACTION|0|office_impact|SHAKE|1.6
+SCRIPT_ACTION|0|office_impact|STATE|office_crash|1
+SCRIPT_ACTION|0|office_impact|OBJECTIVE|office_run|2
+SCRIPT_EVENT|0|office_handoff|0|0|24|24|-100|100|office_prologue_done|1|0
+SCRIPT_ACTION|0|office_handoff|ENTER_CAMPAIGN
+--- CUSTOM_CAMPAIGN_DATA_END ---
