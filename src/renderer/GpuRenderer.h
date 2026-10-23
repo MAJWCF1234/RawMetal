@@ -59,7 +59,7 @@ public:
  std::uint64_t mirrorFrames()const;
  void setVrEye(int eye,const std::array<float,16>& clip);
  std::pair<int,int> surfaceExtent()const;
- void present(const std::uint32_t* overlay,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick);
+ void present(const std::uint32_t* overlay,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick,float alarm=0);
  const std::string& adapter()const;
  static bool testEmissionMips();
  static bool testDiffuseMips();

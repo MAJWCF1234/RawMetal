@@ -168,6 +168,9 @@ public:
     float compactorHeight(const Compactor& machine)const;
     void showTitleScreen();
     bool titleScreen()const{return m_titleScreen;}
+    // 0..1 beacon level from any running sequence whose repeating sound is the
+    // Alarm klaxon: peaks on each blast and decays until the next.
+    float alarmPulse()const;
     int titleSelection()const{return m_titleSelection;}
     bool customMapsOpen()const{return m_customMapsOpen;}
     int titleRows()const;

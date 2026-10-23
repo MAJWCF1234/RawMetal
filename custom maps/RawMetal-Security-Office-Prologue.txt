@@ -132,9 +132,10 @@ SEQUENCE_CUE|0|office_chat|7000|27|4.6|4.15|0.35|1.4|LAB 4: not down here. readi
 SEQUENCE_CUE|0|office_chat|11000|27|4.6|4.15|0.35|1.4|LAB 4: they're sealing the sub-level doors. nobody says why.
 SEQUENCE_CUE|0|office_chat|14500|27|4.6|4.15|0.35|1.1|YOU: want me to call it in?
 SEQUENCE_CUE|0|office_chat|17500|27|4.6|4.15|0.35|1.4|LAB 4: no. something's wrong. really wrong. hold on
-# 2. Alarm: a repeating high beep while the friend tells you to run.
-TIMED_SEQUENCE|0|office_alarm|office_run|-2|-2|-1|-1|-100|100|60000|5200|700|60000|27|0.75|1.7
-SEQUENCE_CUE|0|office_alarm|0|24|12|6|0.6|0.6|FACILITY ALARM / CONTAINMENT LOCKDOWN
+# 2. Alarm: the klaxon repeats over a facility-wide alarm bed while the friend
+# tells you to run. Sounds 42 Alarm and 43 AlarmDistant.
+TIMED_SEQUENCE|0|office_alarm|office_run|-2|-2|-1|-1|-100|100|60000|5200|1900|60000|42|0.8|1
+SEQUENCE_CUE|0|office_alarm|0|43|12|6|0.75|1|FACILITY ALARM / CONTAINMENT LOCKDOWN
 SEQUENCE_CUE|0|office_alarm|2200|27|4.6|4.15|0.4|1.4|LAB 4: they're locking everything. get out of there
 SEQUENCE_CUE|0|office_alarm|4800|27|4.6|4.15|0.45|1.4|LAB 4: RUN. the service lift past the lobby. GO
 # 3. Board the cab: doors seal, the cable lets go, the brake fails.

@@ -38,9 +38,11 @@ bool Game::testPrologue(){
   check(g.state("office_chat")>0,"E opens the Lab 4 chat");
   frames(60*20);
   check(g.state("office_chat")>0&&!g.state("office_run"),"Chat plays before the alarm without a premature run order");
+  check(g.alarmPulse()==0,"No alarm wash during the quiet chat");
   frames(60*7);
   check(g.state("office_alarm")>0&&g.state("office_run")!=0,"Alarm follows the chat and orders the run");
   check(g.activeObjectiveText()=="Get to the service lift","Run objective replaces the workstation objective");
+  {float peak=0;for(int i=0;i<120;++i){g.update({},1.f/60);peak=std::max(peak,g.alarmPulse());}check(peak>.8f,"Alarm klaxon drives the red beacon wash");}
   auto walk=[&](Vec2 target){for(int i=0;i<900&&length(g.player().pos-target)>.15f;++i){auto d=target-g.player().pos;g.m_player.angle=std::atan2(d.y,d.x);InputState step;step.forward=true;step.sprint=true;g.update(step,1.f/60);}return length(g.player().pos-target)<=.15f;};
   bool ran=walk({8.f,5.5f})&&walk({10.5f,5.5f})&&walk({17.f,5.8f})&&walk({17.f,13.f})&&walk({17.f,16.8f});
   report<<"player="<<g.player().pos.x<<','<<g.player().pos.y<<','<<g.player().z<<'\n';

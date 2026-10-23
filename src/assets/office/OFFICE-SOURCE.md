@@ -37,3 +37,12 @@ materials:
 
 A TERMINAL placed inside a solid fixture's footprint, such as a desk, draws no
 console of its own. The furniture's computer models are its visible hardware.
+
+Derived screen art:
+
+- `computer-emission.png`: an authored green-phosphor terminal glow, lit only
+  on the monitor glass (atlas pixels 15..113 x 17..95).
+- `tv-emission.png`: an authored CCTV corridor feed with scanlines, a timestamp
+  strip and a REC dot, masked to the TV glass.
+- `tv.png`: the purchased `tv.jpg` with only the glass darkened, so the lit
+  feed reads as a powered CRT. All other pixels are unchanged.
