@@ -10,7 +10,18 @@ auto exclusionCampaign(){auto path=std::filesystem::path("custom maps")/"RawMeta
 }
 Game Game::exclusionInspection(int stage){
  const bool endurance=stage==12;if(endurance)stage=2;
- if(stage<0||stage>11)throw std::runtime_error("Unknown Exclusion encounter view");
+ if(stage<0||stage>16||stage==12)throw std::runtime_error("Unknown Exclusion encounter view");
+ if(stage>=13){
+  // Scrap Basin entry and gantry overlook; South Wash arrival and footbridge.
+  struct View {int level;Vec2 position;Vec2 target;};
+  const View views[]={{1,{3.5f,12.5f},{12.f,12.f}},{1,{17.f,4.3f},{12.f,13.f}},{2,{12.5f,3.5f},{12.f,18.f}},{2,{4.6f,10.5f},{12.f,19.f}}};
+  const auto& view=views[stage-13];Game g(exclusionCampaign());
+  if(g.level()!=view.level){g.storeChunk();g.loadLevel(view.level,true);g.updateStreaming(0);}
+  g.m_player.pos=view.position;g.m_player.z=g.groundHeight(view.position,float(World::TerrainMaxZ+1));
+  g.m_player.angle=std::atan2(view.target.y-view.position.y,view.target.x-view.position.x);g.m_player.pitch=-6;g.equipWeapon(WeaponId::Fists);
+  for(int i=0;i<12;++i)g.update({},1.f/60);
+  return g;
+ }
  if(stage>=10){
   Game g;g.loadLevel(14,false);g.updateStreaming(0);g.m_player.pos={1.4f,20};g.m_player.z=-25;
   std::vector<size_t> detail;for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].homeLevel==14&&g.npcActors()[i].track().ai.squad==stateId("receiving_cleanup"))detail.push_back(i);
@@ -165,6 +176,26 @@ bool Game::testExclusion(){
   check(routed&&rear&&sneak.player().health==100,"Actual crouched movement around the west screen reaches a rear knockout after the authored distraction");
  }
  {Game east(exclusionCampaign());check(east.walkExclusionEast(report),"Real east winch hearing, crouched west-flank movement and Q produce a rear knockout at 100 health");}
+ {
+  // Rebuilt side maps: walk each authored route with real movement input.
+  Game route(exclusionCampaign());
+  auto warp=[&](int level,Vec2 position){if(route.level()!=level){route.storeChunk();route.loadLevel(level,true);route.updateStreaming(0);}
+   route.m_player.pos=position;route.m_player.z=route.groundHeight(position,float(World::TerrainMaxZ+1));route.m_player.verticalVelocity=0;route.m_player.grounded=true;route.m_enemies.clear();};
+  auto walk=[&](Vec2 target,bool crouch){for(int i=0;i<600&&length(route.player().pos-target)>.15f;++i){auto d=target-route.player().pos;route.m_player.angle=std::atan2(d.y,d.x);InputState step;step.forward=true;step.crouch=crouch;route.update(step,1.f/60);}return length(route.player().pos-target)<=.15f;};
+  auto aboveGround=[&](){return route.player().z-route.world().floorHeight(route.player().pos.x,route.player().pos.y);};
+  route.m_player.health=100000;
+  for(int level:{1,2}){warp(level,{12,12});warp(level,route.world().definition().playerStart);
+   for(const auto&spawn:route.world().creatureSpawns())check(route.hullFits(spawn.position,route.groundHeight(spawn.position,float(World::TerrainMaxZ+1)),.5f),"Rebuilt side-map creature spawns stand clear of geometry");
+   for(const auto&spawn:route.world().pickupSpawns())check(route.hullFits(spawn.position,route.groundHeight(spawn.position,float(World::TerrainMaxZ+1)),Player::StandingHeight),"Rebuilt side-map pickups are reachable standing");
+  }
+  warp(1,{10.4f,4.1f});bool climbed=walk({16.f,4.1f},false);report<<"basin gantry z above ground="<<aboveGround()<<'\n';
+  check(climbed&&aboveGround()>1.f,"Scrap Basin gantry steps climb onto the overlook deck");
+  warp(1,{12.6f,4.1f});check(walk({19.6f,4.2f},false)&&(route.m_player.angle=-kPi*.5f,route.nearbyTerminal()>=0),"Convoy manifest terminal is usable from the gantry deck");
+  warp(2,{4.6f,5.f});bool onDeck=walk({4.6f,11.f},false)&&aboveGround()>1.f;report<<"wash bridge z above ground="<<aboveGround()<<'\n';
+  check(onDeck&&walk({4.6f,17.2f},false),"South Wash footbridge carries a standing player over the channel");
+  warp(2,{1.5f,11.f});check(walk({7.5f,11.f},true)&&aboveGround()<.5f,"Channel route passes under the footbridge crouched");
+  warp(2,{12.f,15.5f});check(walk({12.f,20.1f},false)&&route.nearbyTerminal()>=0&&route.world().terminals()[size_t(route.nearbyTerminal())].activateState==stateId("exclusion_extract_logged"),"Departure gate opening leads to the usable extraction relay");
+ }
  for(int stage=0;stage<3;++stage){try{auto scene=exclusionInspection(stage);check(!scene.dead(),"Native encounter preview remains alive");}catch(const std::exception&e){report<<e.what()<<'\n';check(false,"Native encounter preview remains alive");}}
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }

@@ -14,6 +14,17 @@ layout(location=6) in vec3 worldPos;
 layout(location=7) in float parallaxScale;
 layout(location=0) out vec4 outColor;
 
+// Pixel-art filtering: snap to the texel centre and blend only across a
+// one-pixel seam, so magnified PSX texels stay square without stair-stepping.
+// Fades back to the original coordinate once a texel spans under a pixel.
+vec2 crispTexelUV(vec2 coordinate,vec2 dx,vec2 dy){
+ vec2 size=vec2(textureSize(colorMap,0));
+ vec2 t=coordinate*size,footprint=max((abs(dx)+abs(dy))*size,vec2(0.00001));
+ vec2 seam=floor(t+0.5);
+ vec2 crisp=seam+clamp((t-seam)/footprint,-0.5,0.5);
+ return mix(crisp,t,smoothstep(0.5,1.0,max(footprint.x,footprint.y)))/size;
+}
+
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
 vec3 toDisplay(vec3 c){return pow(max(c,vec3(0.0)),vec3(1.0/2.2));}
 
@@ -129,6 +140,7 @@ void main(){
    }
  }
 
+ if(stereo.enabled.y>0.5)sampleUV=crispTexelUV(sampleUV,uvDx,uvDy);
  vec4 color=textureGrad(colorMap,sampleUV,uvDx,uvDy);
  if(color.a<(surface.z>0.5?0.01:0.5))discard;
 

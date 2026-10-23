@@ -40,7 +40,11 @@ void Game::executeConsole(std::string command){
  }
  else if(verb=="tex_up"){
   if(arg=="1"||arg=="2"||arg=="4"){SoftwareRenderer::setTexturePresentScale(std::stoi(arg));m_consoleLog.push_back("TEXTURE PRESENT SCALE "+arg+"X (STORE-LOW / RUN-HIGH). ATLASES REBUILD ON NEXT DRAW.");}
-  else m_consoleLog.push_back("USE TEX_UP 1, 2 OR 4. DEFAULT IS 2X BILINEAR PRESENT.");
+  else m_consoleLog.push_back("USE TEX_UP 1, 2 OR 4. DEFAULT IS 1X NATIVE ATLASES.");
+ }
+ else if(verb=="r_texels"){
+  if(arg=="crisp"||arg=="smooth"){SoftwareRenderer::setCrispTexels(arg=="crisp");m_consoleLog.push_back(arg=="crisp"?"TEXELS CRISP: SQUARE PSX TEXELS, ANTIALIASED EDGES.":"TEXELS SMOOTH: PLAIN BILINEAR MAGNIFICATION.");}
+  else m_consoleLog.push_back("USE R_TEXELS CRISP OR SMOOTH. CRISP IS THE DEFAULT.");
  }
  else if(verb=="where"){
   std::ostringstream out;out<<"MAP "<<m_level<<" X "<<m_player.pos.x<<" Y "<<m_player.pos.y<<" Z "<<m_player.z;m_consoleLog.push_back(out.str());

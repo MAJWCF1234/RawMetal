@@ -130,94 +130,234 @@ NAV_HINT|0|12.0|18.8|0|0
 NAV_HINT|0|16.0|19.8|0|0
 NAV_HINT|0|17.4|19.4|0|1
 NAV_HINT|0|23.0|12.5|0|0
-MAP|1|Ashfall / Scrap Basin|24|0|3.5|12.5|0.0|1|2.8|0.27|brutal_wasteland|0|1|1|0|0
-LAYER|1|0|Scrap Basin|0.0|0.0
+# Scrap Basin: optional side yard. A stalled evacuation convoy (Convoy 3)
+# sits in the middle as the landmark seen from the west entry. A salvage
+# gantry on the north edge overlooks it and holds the convoy manifest; a
+# Huntsman nests in the crawl space underneath. The south scrap lanes are
+# the low route, guarded by a Brute with an ammo cache behind it.
+MAP|1|Ashfall / Scrap Basin|24|0|3.5|12.5|0|1|2.8|0.27|brutal_wasteland|0|0|1|0|0|-1|0|0|0
+LAYER|1|0|Scrap Basin|0|0
 ROW|1|0|0|........................
 ROW|1|0|1|........................
-ROW|1|0|2|..GG..............CC....
+ROW|1|0|2|........................
 ROW|1|0|3|........................
 ROW|1|0|4|........................
-ROW|1|0|5|.....####...............
-ROW|1|0|6|.....#..#...............
-ROW|1|0|7|.....#..#...............
-ROW|1|0|8|.....####...............
+ROW|1|0|5|........................
+ROW|1|0|6|........................
+ROW|1|0|7|.......CC...............
+ROW|1|0|8|........................
 ROW|1|0|9|........................
 ROW|1|0|10|........................
-ROW|1|0|11|..CC..............GG....
+ROW|1|0|11|........................
 ROW|1|0|12|........................
 ROW|1|0|13|........................
 ROW|1|0|14|........................
-ROW|1|0|15|............####........
-ROW|1|0|16|............#..#........
-ROW|1|0|17|............#..#........
-ROW|1|0|18|............####........
+ROW|1|0|15|........................
+ROW|1|0|16|.....................C..
+ROW|1|0|17|........................
+ROW|1|0|18|...C....................
 ROW|1|0|19|........................
-ROW|1|0|20|..GG..............CC....
+ROW|1|0|20|........................
 ROW|1|0|21|........................
 ROW|1|0|22|........................
 ROW|1|0|23|........................
-STRUCT|1|8.0|10.5|8.2|14.5|0.0|1.6|0|15
-STRUCT|1|14.5|14.0|18.5|14.2|0.0|1.5|0|12
-# Basin cover keeps the west entry and continuous north/south bypasses open.
-STRUCT|1|4.5|11.1|6.8|11.3|0.0|1.35|0|12
-STRUCT|1|10.1|9.5|10.3|12.8|0.0|1.65|0|15
-STRUCT|1|12.0|5.5|15.8|5.7|0.0|1.35|0|12
-STRUCT|1|19.0|11.6|21.7|11.8|0.0|1.35|0|12
-STRUCT|1|6.6|17.1|9.8|17.3|0.0|1.35|0|12
-STRUCT|1|17.8|18.7|18.0|21.2|0.0|1.65|0|15
-TERMINAL|1|3.8|14.7|0.0|0|SCRAP BASIN / ROUTE LOG|FACILITY RELAY TO THE WEST. SALVAGE PATHS RUN WIDE.|SHORT METAL SCREENS BREAK SIGHT. KEEP BOTH ENDS OPEN.
-PROP|1|0|20.0|8.0|1.4|2.3|0.2|1.15|0.7|0
-PROP|1|1|5.5|18.5|1.05|1.8|1.1|0.28|0.9|0
-CLUTTER|1|2|10.5|12.5|-999|0.5
-CLUTTER|1|3|16.5|7.5|-999|1.4
-CREATURE|1|0|20.5|4.5|0
-CREATURE|1|0|20.5|19.5|0
-NAV_HINT|1|7.5|12.5|0|1
-NAV_HINT|1|16.5|13.5|0|1
+# Entry: a short steel screen gives the first piece of cover without
+# hiding the convoy silhouette.
+STRUCT|1|5|14.6|7.4|14.8|0|1.35|0|12
+STRUCT|1|5|14.6|7.4|14.8|1.25|1.35|0|13
+STRUCT|1|3.7|14.8|3.9|15|0|2.4|0|8
+SIGN|1|3.8|14.78|1.6|2|0.5|3.142|SCRAP BASIN / CONVOY 3|MANIFEST ON THE GANTRY|14726704
+# Convoy 3: van broadside across the lane, spilled cargo behind it,
+# forklift abandoned mid-load. Drag marks lead from the van's rear doors.
+FIXTURE|1|16|11|12|0|2.05|4.9|2.15|1.571|1
+FIXTURE|1|23|16.2|9|0|1.164|3.62|2.2|1.571|1
+FIXTURE|1|21|14.4|14.3|0|1.68|1.68|1.2|0.3|1
+FIXTURE|1|17|7.6|10.4|0|1.1|1|0.99|0.5|1
+FIXTURE|1|15|15.6|11.6|0|1.2|1.15|0.16|0.2|1
+FIXTURE|1|15|17.4|12.2|0|1.2|1.15|0.16|1.1|1
+STRUCT|1|7.6|11.4|8.8|12.8|0|1.1|0|10
+STRUCT|1|13.6|12.5|15.4|13.1|0|0.015|0|16
+STRUCT|1|15.4|12.7|17|13|0|0.015|0|16
+CLUTTER|1|1|13.2|11.4|-999|0.4
+CLUTTER|1|2|14.9|12.2|-999|1.2
+CLUTTER|1|0|9.4|13.4|-999|2
+CLUTTER|1|0|12.6|14.1|-999|0.6
+CLUTTER|1|3|16.8|10.7|-999|1.7
+# Salvage gantry (deck top 1.25 m). Six settled steps climb from the
+# west; the east end is an open drop. 1.1 m of crouch space underneath.
+STRUCT|1|11|2.6|14|5.6|0|0.208|0|8
+STRUCT|1|11.5|2.6|14|5.6|0|0.417|0|8
+STRUCT|1|12|2.6|14|5.6|0|0.625|0|8
+STRUCT|1|12.5|2.6|14|5.6|0|0.833|0|8
+STRUCT|1|13|2.6|14|5.6|0|1.042|0|8
+STRUCT|1|13.5|2.6|14|5.6|0|1.25|0|8
+STRUCT|1|14|2.6|22|5.6|1.1|1.25|0|8
+STRUCT|1|14|5.4|14.2|5.6|0|1.1|0|8
+STRUCT|1|14|2.6|14.2|2.8|0|1.1|0|8
+STRUCT|1|17.9|5.4|18.1|5.6|0|1.1|0|8
+STRUCT|1|17.9|2.6|18.1|2.8|0|1.1|0|8
+STRUCT|1|21.8|5.4|22|5.6|0|1.1|0|8
+STRUCT|1|21.8|2.6|22|2.8|0|1.1|0|8
+STRUCT|1|14|2.6|22|2.7|1.25|2.25|1|8
+STRUCT|1|14|5.5|20.2|5.6|1.25|2.25|1|8
+STRUCT|1|21.9|2.6|22|4.4|1.25|2.25|1|8
+STRUCT|1|10.5|2.6|10.7|2.8|0|2.3|0|8
+LIGHT|1|10.6|2.85|1.9|1|1.571|1.2|5
+STRUCT|1|19|2.5|19.2|2.62|1.25|2.6|0|8
+LIGHT|1|19.1|2.72|2.3|1|1.571|1.3|5
+TERMINAL|1|19.6|3.05|1.25|0|CONVOY 3 / EVAC MANIFEST|14 WITNESSES LOADED. CLEANUP ESCORT HALTED US HERE.|SAID WAIT FOR A SECOND TRUCK. NO TRUCK CAME. - DRIVER
+CLUTTER|1|5|20.6|3.4|-999|0.3
+CLUTTER|1|1|15.2|4.6|-999|1
+CREATURE|1|0|17.6|4.1|0
+PICKUP|1|1|22.9|6.8
+PICKUP|1|0|23|7.8
+# South scrap lanes: mixed high/low stacks split the sightline from the
+# convoy to the south edge while both lanes stay open end to end.
+STRUCT|1|9|16|9.2|20|0|1.85|0|15
+STRUCT|1|9|16|9.2|20|1.75|1.85|0|13
+STRUCT|1|12.5|17.6|15.5|17.8|0|1.35|0|12
+STRUCT|1|12.5|17.6|15.5|17.8|1.25|1.35|0|13
+STRUCT|1|17|15.4|18.6|16.4|0|1.1|0|18
+STRUCT|1|19.6|19.2|20.6|21|0|1.6|0|19
+STRUCT|1|5|19|7.4|19.2|0|1.85|0|15
+STRUCT|1|5|19|7.4|19.2|1.75|1.85|0|13
+CREATURE|1|2|16.5|20.5|0
+CREATURE|1|1|12|16.5|0
+PICKUP|1|1|21.8|20.5
+CLUTTER|1|2|18.2|21.2|-999|0.9
+NAV_HINT|1|7.4|12.6|0|1
+NAV_HINT|1|12.6|9.6|0|1
+NAV_HINT|1|8.2|13.2|0|1
+NAV_HINT|1|9.6|18|0|1
+NAV_HINT|1|14|18.2|0|1
 NAV_HINT|1|3.5|12.5|0|0
-NAV_HINT|1|11.4|14.7|0|0
-MAP|2|Ashfall / South Wash|0|24|12.5|3.5|0.0|1|2.8|0.27|brutal_wasteland|1|0|0|0|0
-LAYER|2|0|South Wash|0.0|0.0
+NAV_HINT|1|10.4|4.1|0|0
+NAV_HINT|1|18.6|18.6|0|0
+# South Wash: the extraction. Arrive at the north apron, cross the dry
+# drainage channel either over the footbridge (exposed, wasps) or along
+# the channel and under it (crouch, Huntsman), then reach the departure
+# gate at the far south. Gate lamps are visible from the channel.
+MAP|2|Ashfall / South Wash|0|24|12.5|3.5|0|1|2.8|0.27|brutal_wasteland|1|0|0|0|0|-1|0|0|1.571
+LAYER|2|0|South Wash|0|0
 ROW|2|0|0|........................
 ROW|2|0|1|........................
-ROW|2|0|2|..GG..............CC....
+ROW|2|0|2|........................
 ROW|2|0|3|........................
 ROW|2|0|4|........................
 ROW|2|0|5|........................
-ROW|2|0|6|.....####...............
-ROW|2|0|7|.....#..#...............
-ROW|2|0|8|.....#..#...............
-ROW|2|0|9|.....####...............
-ROW|2|0|10|........................
-ROW|2|0|11|........................
-ROW|2|0|12|........................
-ROW|2|0|13|..CC..............GG....
+ROW|2|0|6|........................
+ROW|2|0|7|........................
+ROW|2|0|8|........................
+ROW|2|0|9|........................
+ROW|2|0|10|................C..C....
+ROW|2|0|11|.................C......
+ROW|2|0|12|........C...............
+ROW|2|0|13|........................
 ROW|2|0|14|........................
 ROW|2|0|15|........................
 ROW|2|0|16|........................
-ROW|2|0|17|............####........
-ROW|2|0|18|............#..#........
-ROW|2|0|19|............####........
+ROW|2|0|17|........................
+ROW|2|0|18|........................
+ROW|2|0|19|........................
 ROW|2|0|20|........................
 ROW|2|0|21|........................
 ROW|2|0|22|........................
 ROW|2|0|23|........................
-STRUCT|2|10.0|8.0|14.0|8.2|0.0|1.45|0|12
-# Wash cover frames a southbound route without sealing the drainage lanes.
-STRUCT|2|9.7|4.8|9.9|6.7|0.0|1.35|0|12
-STRUCT|2|14.8|5.2|18.0|5.4|0.0|1.35|0|12
-STRUCT|2|10.0|11.0|10.2|13.6|0.0|1.65|0|15
-STRUCT|2|15.0|10.5|18.4|10.7|0.0|1.35|0|12
-STRUCT|2|4.3|15.6|7.8|15.8|0.0|1.35|0|12
-STRUCT|2|18.7|18.0|18.9|20.7|0.0|1.65|0|15
-TERMINAL|2|12.3|4.7|0.0|0|SOUTH WASH / EXTRACTION RELAY|EAST WINCH CLEARANCE REQUIRED. WASH IS YOUR WAY OUT.|E: REGISTER DEPARTURE. YOUR WITNESS CAN FOLLOW.|exclusion_extract_logged|0|exclusion_east_lure_done
-PROP|2|2|18.5|14.5|0.4|3.0|0.5|1.6|0.2|0
-CLUTTER|2|1|6.5|10.5|-999|0.9
-CREATURE|2|2|16.5|16.5|0
-CREATURE|2|1|20.5|21.5|0
-NAV_HINT|2|12.0|7.5|0|1
-NAV_HINT|2|12.5|6.2|0|0
-NAV_HINT|2|11.3|14.8|0|0
+# Gauge hut on the arrival apron: flow log, health, a floppy.
+STRUCT|2|1.5|1.5|5.5|1.66|0|2.4|0|15
+STRUCT|2|1.5|1.5|1.66|4.5|0|2.4|0|15
+STRUCT|2|5.34|1.5|5.5|4.5|0|2.4|0|15
+STRUCT|2|1.5|4.34|2.8|4.5|0|2.4|0|15
+STRUCT|2|4|4.34|5.5|4.5|0|2.4|0|15
+STRUCT|2|1.5|1.5|5.5|4.5|2.4|2.55|0|2
+TERMINAL|2|3.5|1.95|0|0|SOUTH WASH / FLOW LOG|0300: CLEANUP TRUCKS RINSED THE CHANNEL. HIGH FLOW.|DO NOT LOG WHAT WASHED DOWN. GATE RELAY IS SOUTH.
+LIGHT|2|3.5|1.72|2|1|1.571|1|4
+FIXTURE|2|8|2.2|1.75|0.65|0.7|0.2|1|1.571|1
+PICKUP|2|0|2.4|3.6
+CLUTTER|2|5|4.6|2.4|-999|0.4
+# Apron cover: one high screen and two low runs, staggered.
+STRUCT|2|8|5|8.2|8|0|1.85|0|15
+STRUCT|2|8|5|8.2|8|1.75|1.85|0|13
+STRUCT|2|14.5|6.4|17.5|6.6|0|1.35|0|12
+STRUCT|2|14.5|6.4|17.5|6.6|1.25|1.35|0|13
+STRUCT|2|19.5|4.5|19.7|7.5|0|1.35|0|12
+STRUCT|2|19.5|4.5|19.7|7.5|1.25|1.35|0|13
+# Drainage channel y 9-13 with 0.35 m curbs. Gaps at the bridge and a
+# central ford keep north-south flow open.
+STRUCT|2|0|8.8|3.4|9|0|0.35|0|15
+STRUCT|2|6.6|8.8|10.5|9|0|0.35|0|15
+STRUCT|2|13.5|8.8|24|9|0|0.35|0|15
+STRUCT|2|0|13|3.4|13.2|0|0.35|0|15
+STRUCT|2|6.6|13|10.5|13.2|0|0.35|0|15
+STRUCT|2|13.5|13|24|13.2|0|0.35|0|15
+PROP|2|2|22|11|0.4|3|0|1.5|0.2|0
+FIXTURE|2|15|20.5|11.4|0|1.2|1.15|0.16|0.7|1
+CLUTTER|2|0|9.8|10.2|-999|0.3
+CLUTTER|2|2|14.6|12.4|-999|1.9
+CLUTTER|2|0|18.4|9.6|-999|2.6
+# Footbridge (deck top 1.25 m) over the channel at x 3.6-5.6.
+STRUCT|2|3.6|5.6|5.6|8.6|0|0.208|0|8
+STRUCT|2|3.6|6.1|5.6|8.6|0|0.417|0|8
+STRUCT|2|3.6|6.6|5.6|8.6|0|0.625|0|8
+STRUCT|2|3.6|7.1|5.6|8.6|0|0.833|0|8
+STRUCT|2|3.6|7.6|5.6|8.6|0|1.042|0|8
+STRUCT|2|3.6|8.1|5.6|8.6|0|1.25|0|8
+STRUCT|2|3.6|8.6|5.6|13.4|1.1|1.25|0|8
+STRUCT|2|3.6|13.4|5.6|16.4|0|0.208|0|8
+STRUCT|2|3.6|13.4|5.6|15.9|0|0.417|0|8
+STRUCT|2|3.6|13.4|5.6|15.4|0|0.625|0|8
+STRUCT|2|3.6|13.4|5.6|14.9|0|0.833|0|8
+STRUCT|2|3.6|13.4|5.6|14.4|0|1.042|0|8
+STRUCT|2|3.6|13.4|5.6|13.9|0|1.25|0|8
+STRUCT|2|3.6|8.8|3.8|9|0|1.1|0|8
+STRUCT|2|3.6|13|3.8|13.2|0|1.1|0|8
+STRUCT|2|5.4|8.8|5.6|9|0|1.1|0|8
+STRUCT|2|5.4|13|5.6|13.2|0|1.1|0|8
+STRUCT|2|3.6|8.6|3.7|13.4|1.25|2.25|1|8
+STRUCT|2|5.5|8.6|5.6|13.4|1.25|2.25|1|8
+STRUCT|2|6.3|5.4|6.5|5.6|0|2.3|0|8
+LIGHT|2|6.25|5.5|2|1|3.142|1.1|5
+# South band cover before the gate.
+STRUCT|2|9.5|14.5|9.7|17|0|1.85|0|15
+STRUCT|2|9.5|14.5|9.7|17|1.75|1.85|0|13
+STRUCT|2|15|15.6|18|15.8|0|1.35|0|12
+STRUCT|2|15|15.6|18|15.8|1.25|1.35|0|13
+FIXTURE|2|6|20.5|15.5|0|1.8|0.55|0.95|0.25|1
+# Departure gate: full-width wall with a lit 2.4 m opening.
+STRUCT|2|0|18|10.8|18.2|0|2.3|0|15
+STRUCT|2|0|18|10.8|18.2|2.2|2.3|0|13
+STRUCT|2|13.2|18|24|18.2|0|2.3|0|15
+STRUCT|2|13.2|18|24|18.2|2.2|2.3|0|13
+STRUCT|2|10.6|18|10.8|18.2|0|2.8|0|19
+STRUCT|2|13.2|18|13.4|18.2|0|2.8|0|19
+STRUCT|2|10.6|18|13.4|18.2|2.55|2.8|0|18
+SIGN|2|12|17.98|2.1|2.2|0.4|3.142|04 / DEPARTURE GATE|E REGISTER AT THE RELAY|6089568
+LIGHT|2|10.4|17.95|2|1|-1.571|1.4|6
+LIGHT|2|13.6|17.95|2|1|-1.571|1.4|6
+STRUCT|2|10.8|21.6|13.2|21.8|0|2.4|0|7
+LIGHT|2|12.9|21.58|2|1|-1.571|1.2|4
+TERMINAL|2|12|21.2|0|0|SOUTH WASH / DEPARTURE RELAY|EAST WINCH CLEARANCE REQUIRED. WASH IS YOUR WAY OUT.|E: REGISTER DEPARTURE. YOUR WITNESS CAN FOLLOW.|exclusion_extract_logged|0|exclusion_east_lure_done|1.571
+CREATURE|2|1|16|11|0
+CREATURE|2|1|8.5|10.5|0
+CREATURE|2|0|4.6|11|0
+CREATURE|2|2|17|20.5|0
+PICKUP|2|1|4.6|17.2
+PICKUP|2|0|21.5|22.5
+NAV_HINT|2|8.6|6.5|0|1
+NAV_HINT|2|16|7|0|1
+NAV_HINT|2|10.2|15.8|0|1
+NAV_HINT|2|16.5|16.2|0|1
+NAV_HINT|2|12|11|0|0
+NAV_HINT|2|4.6|5|0|0
+NAV_HINT|2|4.6|17|0|0
+NAV_HINT|2|12|17|0|0
+NAV_HINT|2|12|19.5|0|0
+OBJECTIVE_TEXT|2|exclusion_extract_objective|Reach South Wash and register departure at its relay
+SCRIPT_EVENT|2|exclusion_departed|10.8|18.2|13.2|21.6|-100|100|exclusion_extract_logged|1|0
+SCRIPT_ACTION|2|exclusion_departed|OBJECTIVE|exclusion_extract_objective|2
+SCRIPT_ACTION|2|exclusion_departed|STATE|exclusion_complete|1
+SCRIPT_ACTION|2|exclusion_departed|COMPLETE
+SCRIPT_ACTION|2|exclusion_departed|CHECKPOINT
 TIMED_SEQUENCE|0|exclusion_clock|exclusion_clock_done|0|0|24|24|-0.2|3|60000|60000|0|0|0|0|1|1
 # Cleanup Engineer
 ACTOR|0|exclusion_clock|5|1.6|0|0|0
@@ -318,7 +458,6 @@ ACTOR_FACTION|0|6|2|
 OBJECTIVE_TEXT|0|exclusion_cache_objective|Read the arrival cache brief and collect its flashlight
 OBJECTIVE_TEXT|0|exclusion_relay_objective|Test the north scrap rig, then secure the facility relay
 OBJECTIVE_TEXT|0|exclusion_winch_objective|Use the east winch to draw its patrol out of position
-OBJECTIVE_TEXT|2|exclusion_extract_objective|Reach South Wash and register departure at its relay
 SCRIPT_EVENT|0|exclusion_arrival|0|0|24|24|-100|100||1|0
 SCRIPT_ACTION|0|exclusion_arrival|OBJECTIVE|exclusion_cache_objective|1
 SCRIPT_EVENT|0|exclusion_cache_taken|2.7|3.5|5.3|7.3|-100|100|exclusion_brief_read|1|0
@@ -336,11 +475,6 @@ SCRIPT_ACTION|0|exclusion_winch_complete|OBJECTIVE|exclusion_winch_objective|2
 SCRIPT_ACTION|0|exclusion_winch_complete|OBJECTIVE|exclusion_extract_objective|1
 SCRIPT_EVENT|0|exclusion_south_staging_checkpoint|17.0|19.0|20.5|21.0|-100|100|exclusion_east_lure_done|1|0
 SCRIPT_ACTION|0|exclusion_south_staging_checkpoint|CHECKPOINT
-SCRIPT_EVENT|2|exclusion_departed|10.8|2.8|14.0|6.2|-100|100|exclusion_extract_logged|1|0
-SCRIPT_ACTION|2|exclusion_departed|OBJECTIVE|exclusion_extract_objective|2
-SCRIPT_ACTION|2|exclusion_departed|STATE|exclusion_complete|1
-SCRIPT_ACTION|2|exclusion_departed|COMPLETE
-SCRIPT_ACTION|2|exclusion_departed|CHECKPOINT
 # Existing industrial props and hazard caps distinguish cover from machinery.
 STRUCT|0|3.2|8.5|3.4|11.5|1.45|1.55|0|13
 STRUCT|0|18.5|9.0|20.5|9.2|1.3499999999999999|1.45|0|13
@@ -354,37 +488,17 @@ STRUCT|0|17.1|18.7|20.3|18.9|1.75|1.85|0|13
 STRUCT|0|4.4|19.3|8.0|19.5|1.25|1.35|0|13
 STRUCT|0|14.0|21.0|17.0|21.2|1.25|1.35|0|13
 STRUCT|0|22.4|7.3|22.6|10.5|1.25|1.35|0|13
-STRUCT|1|8.0|10.5|8.2|14.5|1.5|1.6|0|13
-STRUCT|1|14.5|14.0|18.5|14.2|1.4|1.5|0|13
-STRUCT|1|4.5|11.1|6.8|11.3|1.25|1.35|0|13
-STRUCT|1|10.1|9.5|10.3|12.8|1.5499999999999998|1.65|0|13
-STRUCT|1|12.0|5.5|15.8|5.7|1.25|1.35|0|13
-STRUCT|1|19.0|11.6|21.7|11.8|1.25|1.35|0|13
-STRUCT|1|6.6|17.1|9.8|17.3|1.25|1.35|0|13
-STRUCT|1|17.8|18.7|18.0|21.2|1.5499999999999998|1.65|0|13
-STRUCT|2|10.0|8.0|14.0|8.2|1.3499999999999999|1.45|0|13
-STRUCT|2|9.7|4.8|9.9|6.7|1.25|1.35|0|13
-STRUCT|2|14.8|5.2|18.0|5.4|1.25|1.35|0|13
-STRUCT|2|10.0|11.0|10.2|13.6|1.5499999999999998|1.65|0|13
-STRUCT|2|15.0|10.5|18.4|10.7|1.25|1.35|0|13
-STRUCT|2|4.3|15.6|7.8|15.8|1.25|1.35|0|13
-STRUCT|2|18.7|18.0|18.9|20.7|1.5499999999999998|1.65|0|13
 SIGN|0|4.1|4.81|1.4|1.25|0.32|0|FIELD CACHE / START|E TAKE LIGHT / F ON|14726704
 SIGN|0|5.68|7.3|1.15|2.2|0.5|-1.5707963|01 / SCRAP RIG|CROUCH SOUTH / REAR Q|14726704
 SIGN|0|12|18.05|2.1|2.2|0.4|0|02 / FIELD RELAY|E LOCAL AUTHORIZATION|6089568
 SIGN|0|18.5|18.92|1.15|2.2|0.5|0|03 / EAST WINCH|CROUCH WEST / Q REAR KO|14726704
-SIGN|2|12.3|4.72|1.5|2.2|0.55|3.1415927|04 / SOUTH WASH|E REGISTER DEPARTURE|6089568
 LIGHT|0|3.15|4.81|1.8|1|1.5707963|1.3|4
 LIGHT|0|5.65|7.8|1.7|1|3.1415927|1.2|4
 LIGHT|0|12|18.06|2.35|1|1.5707963|1.2|5
 LIGHT|0|18.5|18.95|1.7|1|1.5707963|1.25|4
-LIGHT|2|12.3|4.66|2.0|1|-1.5707963|1.3|4
 PROP|0|0|8.8|6.5|0.85|1.2|0|0.6|0.4|0
 PROP|0|1|22.9|12.1|0.9|1.0|1.57|0.22|0.5|0
 FIXTURE|0|21|21.8|15.5|0|0.7|0.7|0.65|0|1
-PROP|1|0|13.5|6.7|0.8|1.3|0.2|0.65|0.4|0
-SIGN|1|3.8|14.72|1.5|2.4|0.6|3.1415927|SCRAP BASIN / OPTIONAL|RELAY WEST / EXIT SOUTH|14726704
-LIGHT|1|3.8|14.7|2.0|1|0|1.2|4
 STRUCT|0|16.2|12.8|19.7|13.0|0|1.85|0|15
 STRUCT|0|16.2|12.8|19.7|13.0|1.75|1.85|0|13
 SEQUENCE_CUE|0|exclusion_east_lure|3200|31|21.0|17.0|0.6|0.8|WINCH RATCHET / WAIT FOR HIS BACK. Q WHEN CLOSE.

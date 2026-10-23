@@ -6,6 +6,18 @@ void Game::ensureChunk(int level){
  auto&chunk=m_chunks[level];if(chunk.resident)return;auto doors=chunk.world.doors();bool control=chunk.world.controlReleased();
  auto saved=chunk.world;chunk.world=makeWorld(level);chunk.world.restoreLift(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();chunk.resident=true;chunk.navReady=false;
 }
+int Game::boundaryPartner(int level,const Door& door)const{
+ // An entry door on the north edge pairs with a transfer door on the
+ // neighbour's south edge and vice versa. Several doors may share an edge, so
+ // match the nearest in world X instead of the first door with that role.
+ auto origin=chunkOffset(m_level),otherOrigin=chunkOffset(level);
+ float probeX=origin.x+(door.left+door.right)*.5f;
+ const auto& doors=m_chunks[level].world.doors();int best=-1;float distance=2.f;
+ for(int candidate=0;candidate<int(doors.size());++candidate){const auto& match=doors[candidate];
+  if(!((door.entry&&match.transfer)||(door.transfer&&match.entry)))continue;
+  float d=std::fabs(otherOrigin.x+(match.left+match.right)*.5f-probeX);if(d<distance){distance=d;best=candidate;}}
+ return best;
+}
 void Game::useDoor(int index){
  auto door=m_world.doors()[index];m_world.toggleDoor(index);bool opening=!door.opening;
  if((m_worldId==WorldId::Custom||m_world.definition().residencyGroup>=0)&&(door.entry||door.transfer)){
@@ -14,11 +26,8 @@ void Game::useDoor(int index){
   auto origin=chunkOffset(m_level);Vec2 probe{origin.x+(door.left+door.right)*.5f,origin.y+(door.entry?-.05f:24.05f)};
   for(int level=0;level<chunkCount();++level)if(level!=m_level){auto otherOrigin=chunkOffset(level);
    if(probe.x<otherOrigin.x||probe.x>=otherOrigin.x+World::Width||probe.y<otherOrigin.y||probe.y>=otherOrigin.y+World::Height)continue;
-   ensureChunk(level);auto& other=m_chunks[level].world;int best=-1;float distance=2.f;
-   for(int candidate=0;candidate<int(other.doors().size());++candidate){const auto& match=other.doors()[candidate];
-    if(!(match.entry||match.transfer))continue;float globalX=otherOrigin.x+(match.left+match.right)*.5f;
-    float d=std::fabs(globalX-probe.x);if(d<distance){distance=d;best=candidate;}}
-   if(best>=0)other.setDoor(best,door.open,opening);break;
+   ensureChunk(level);int best=boundaryPartner(level,door);
+   if(best>=0)m_chunks[level].world.setDoor(best,door.open,opening);break;
   }
  }else{
   if(door.transfer&&m_level+1<chunkCount()){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,opening);}
@@ -45,7 +54,7 @@ void Game::updateStreaming(float dt){
     if(probe.x<other.x||probe.x>=other.x+24||probe.y<other.y||probe.y>=other.y+24)continue;
     needed|=door.opening||door.open>0;
     if(needed){ensureChunk(level);auto& target=m_chunks[level].world;
-     for(int i=0;i<int(target.doors().size());++i){const auto& match=target.doors()[i];if((door.entry&&match.transfer)||(door.transfer&&match.entry)){target.setDoor(i,door.open,door.opening);break;}}
+     int partner=boundaryPartner(level,door);if(partner>=0)target.setDoor(partner,door.open,door.opening);
     }
    }
    if(needed)ensureChunk(level);else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
