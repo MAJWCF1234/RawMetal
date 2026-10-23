@@ -6,9 +6,11 @@ bool Game::testGantry(){
  if(world.layers().size()!=2||world.layers()[0].name!="Turbine Gantry / ground"||world.layers()[1].name!="Turbine Gantry / upper catwalk"||world.layers()[1].elevation!=3)return false;
  for(int level=0;level<3;++level){World map(level);for(const auto&layer:map.layers())for(auto row:layer.rows)if(row.size()!=World::Width)return false;
   for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(map.tile(x,y)=='G'){
-   int owners=0;for(auto&f:map.fixtures())if(f.model==6&&std::fabs(x+.5f-f.position.x)<f.width*.5f&&std::fabs(y+.5f-f.position.y)<f.depth*.5f)++owners;
+   // Generators (6) own G tiles; the Turbine Gantry's bays hold turbine casings (46).
+   int owners=0;for(auto&f:map.fixtures())if((f.model==6||f.model==46)&&std::fabs(x+.5f-f.position.x)<f.width*.5f&&std::fabs(y+.5f-f.position.y)<f.depth*.5f)++owners;
    if(owners!=1){report<<"Missing/overlapping generator at "<<level<<':'<<x<<','<<y;return false;}
   }
+  for(auto&f:map.fixtures())if(f.model==46){float floor=map.floorHeight(f.position.x,f.position.y);if(map.fits(f.position.x,f.position.y,floor,.1f))return false;}
   for(auto&f:map.fixtures())if(f.model==6){
    if(std::fabs(f.width/f.depth-3.4f)>.001f||std::fabs(f.height/f.depth-1.8f)>.001f)return false;
    float floor=map.floorHeight(f.position.x,f.position.y);

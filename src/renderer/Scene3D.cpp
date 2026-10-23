@@ -726,7 +726,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // Authored outdoor grid maps have no terrain mesh. Draw their floor just
     // like collision does, while terrain worlds keep their existing mesh.
     for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
-     quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
+     // Maps 0-2 lay their area floor as 2 m tiles; grating and raised plate stay functional.
+     if(w.campaign()&&w.level()<3&&!w.metalFloor(x,y)&&!(w.level()==1&&h>0))quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},m_areaFloors[size_t(w.level())],.95f,{.25f,.25f},{ax*.5f,ay*.5f});
+     else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):w.campaignChunk(3)?m_concrete:w.campaignChunk(1)?(h>0?m_pressureMetal:m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.campaignChunk(1)?.9f:w.campaignChunk(3)?.95f:w.metalFloor(x,y)?.8f:.95f);
      float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
      if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
      if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
@@ -760,21 +762,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // static-build pass still emit them here; cached GPU frames skip the redraw.
    if(tile=='C'&&(!m_gpuFrame||m_staticGeometryBuild))prop(m_crateMesh,m_crateTexture,X+.5f,Y+.5f,.85f,(x%2)*1.5708f);
    if(tile=='B'&&(!m_gpuFrame||m_staticGeometryBuild))prop(m_barrelMesh,m_barrelTexture,X+.5f,Y+.5f,1.1f,float(x));
-   if(tile=='T'){
-    // Six tall coolant vessels give the foundry a visible central landmark.
-    for(int side=0;side<12;++side){float a=side*kPi/6,b=(side+1)*kPi/6;float ax=X+.5f+std::cos(a)*.47f,ay=Y+.5f+std::sin(a)*.47f,bx=X+.5f+std::cos(b)*.47f,by=Y+.5f+std::sin(b)*.47f;
-     quad({ax,ay,.12f},{bx,by,.12f},{bx,by,2.5f},{ax,ay,2.5f},m_metal,.5f+.2f*std::fabs(std::cos(a)));
-     quad({ax,ay,1.1f},{bx,by,1.1f},{bx,by,1.18f},{ax,ay,1.18f},m_routePaint,.8f);
-     tri({{X+.5f,Y+.5f,2.62f},.5f,.5f},{{ax,ay,2.5f},0,0},{{bx,by,2.5f},1,0},m_metal,.7f);
-    }
-    box({X+.39f,Y+.39f,2.6f},{X+.61f,Y+.61f,Z},m_metal,.8f);
-   }
+   // T tiles are the machine plinth; the map places converter vessels on it.
+   if(tile=='T')box({X,Y,0},{X+1,Y+1,.14f},m_pressureMetal,.9f);
   }else{
    float roof=Z;Z=w.wallHeight(x,y);
    if(Z<roof){quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);if(!w.outdoors())quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
    auto wall=[&](float ax,float ay,float bx,float by,float light){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
-    auto&material=w.campaignChunk(0)?m_wall:m_pressureWall;
+    const auto&material=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
     float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
@@ -788,6 +783,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(w.tile(x,y+1)!='#')wall(X,Y+1,X+1,Y+1,.75f);
   }
  }
+ // Material 25: molten metal, a bright emissive pour under the Foundry's converters.
+ static const Texture molten=[](){constexpr int N=64;Texture t{N,N,std::vector<std::uint32_t>(N*N)};t.emission.resize(N*N);
+  // Smooth, tileable flow bands with darker cooling crust islands.
+  for(int i=0;i<N*N;++i){float u=float(i%N)/N*kPi*2,v=float(i/N)/N*kPi*2;
+   float flow=.5f+.25f*std::sin(u*2+std::sin(v*3)*1.2f)+.25f*std::sin(v*2-std::cos(u*3)*.9f);
+   float crust=std::clamp((flow-.72f)*4.f,0.f,1.f),heat=1.f-crust*.85f;
+   t.pixels[size_t(i)]=0xff000000u|(unsigned(110+145*heat)<<16)|(unsigned(30+70*heat)<<8)|unsigned(10*heat);
+   t.emission[size_t(i)]=0xff000000u|(unsigned(255*heat)<<16)|(unsigned(120*heat*heat)<<8)|unsigned(20*heat*heat);}
+  return t;}();
  for(auto&s:w.structures()){
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
@@ -809,7 +813,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.campaignChunk(3)){
      // A safety cage must not become an opaque wall around every cab window.
