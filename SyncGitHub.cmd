@@ -198,12 +198,13 @@ for /f "delims=" %%U in ('git diff --name-only --diff-filter^=U') do (
 )
 
 echo Checking tracked files for conflict markers...
-for /f "delims=" %%F in ('git ls-files') do (
-    findstr /C:"<<<<<<<" /C:"=======" /C:">>>>>>>" "%%F" >nul 2>&1
-    if not errorlevel 1 (
-        echo [STOP] Conflict marker found in %%F
-        goto :fail
-    )
+rem Real markers start a line with seven < or > and a space plus a label.
+rem A bare "=======" is not checked: it also appears in banners and docs.
+git grep -q -I -E "^(<<<<<<<|>>>>>>>) "
+if not errorlevel 1 (
+    echo [STOP] Conflict markers found in:
+    git --no-pager grep -l -I -E "^(<<<<<<<|>>>>>>>) "
+    goto :fail
 )
 
 git --no-pager diff --check
