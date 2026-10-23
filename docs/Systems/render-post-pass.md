@@ -51,6 +51,25 @@ HDR targets and outside VR, where stereo projection differs.
 The Exclusion yard window benchmark measured 4.6-5.2 ms with post against
 4.7 ms without, which is within run-to-run noise.
 
+## Stage 2 (2026-10-23)
+
+The post pass is now two stages:
+
+- **Occlusion stage** (`occlusion.frag`): ambient occlusion plus one-bounce
+  indirect light gathered from the same samples, so nearby lit surfaces bleed
+  colour. The kernel rotates on a 4x4 Bayer grid.
+- **Compose stage** (`post.frag`):
+  - a depth-aware 4x4 filter, which cancels that pattern exactly, so the
+    occlusion comes out smooth;
+  - bounce light at 0.3;
+  - haze at 0.35;
+  - analytic single scattering from the four nearest ceiling lamps, sent in
+    view space through push constants (128 bytes): lamps glow through the air
+    they light, stopping at visible surfaces.
+
+Strengths were tuned down after A/B renders showed the first pass washing out
+contrast.
+
 ## Next stages
 
 - Denoise the occlusion with a depth-aware blur.
