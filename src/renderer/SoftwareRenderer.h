@@ -43,6 +43,8 @@ public:
     // Store-low / run-high: Vulkan presents bilinear-upsampled atlases (1/2/4).
     static void setTexturePresentScale(int scale);
     static int texturePresentScale();
+    static void setCrispTexels(bool crisp);
+    static bool crispTexels();
     float gripError()const{return m_gripError;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,

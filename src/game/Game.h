@@ -459,6 +459,8 @@ private:
     void ensureChunk(int level);
     void updateStreaming(float dt);
     void useDoor(int index);
+    // Index of the door in chunk `level` across the boundary from this chunk's door, or -1.
+    int boundaryPartner(int level,const Door& door)const;
     void updateClutter(const InputState& input,float dt);
     bool interactClutter(int hand=-1);
     float vrInteractionDistance(Point3 target,float housingRadius)const;

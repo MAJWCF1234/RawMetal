@@ -346,7 +346,7 @@ __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int
         if(doorsOnly){
             scenes.clear();sceneNames.clear();
             for(int level:{0,2,6,7,8,9}){
-                auto world=std::make_unique<retro::World>(level);const auto& door=world->doors().front();
+                auto world=std::make_unique<retro::World>(level);if(world->doors().empty())continue;const auto& door=world->doors().front();
                 retro::Vec2 camera{(door.left+door.right)*.5f,door.y+2.f};
                 scenes.push_back({nullptr,retro::Game::mapInspection(camera,-retro::kPi*.5f,0,level,false,world->floorHeight(camera.x,camera.y)+door.z,true),240,false,false});
                 sceneNames.push_back("Door cycle / map "+std::to_string(level));
@@ -426,7 +426,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--exclusion-inspection")){
      constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/exclusion-preview");std::ofstream report(".build/exclusion-preview/runtime.txt");report<<renderer->hardwareName()<<'\n';
-     for(int stage=0;stage<12;++stage){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
+     for(int stage:{0,1,2,3,4,5,6,7,8,9,10,11,13,14,15,16}){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
      return 0;
     }
     if(std::wcsstr(commandLine,L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
@@ -865,8 +865,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
                 }
             }
         }
-        for(const auto& e:game.enemies())if(!reachable[int(e.pos.y)][int(e.pos.x)])return 3;
-        for(const auto& p:game.pickups())if(!reachable[int(p.pos.y)][int(p.pos.x)])return 4;
+        auto reached=[&](retro::Vec2 p){int x=int(p.x),y=int(p.y);return x>=0&&y>=0&&x<24&&y<24&&reachable[y][x];};
+        for(const auto& e:game.enemies())if(!reached(e.pos))return 3;
+        for(const auto& p:game.pickups())if(!reached(p.pos))return 4;
         if(!reachable[22][21])return 5;
         int walkable=0;for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(!game.world().solid(x+.5f,y+.5f)){if(!reachable[y][x])return 14;++walkable;}
         std::ofstream("map-test.txt")<<"All "<<walkable<<" walkable tiles connected; every enemy, pickup and extraction reachable.\n";
@@ -992,7 +993,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     return 0;
     }catch(const std::exception& error){
         std::ofstream("RawMetal-error.txt")<<error.what();
-        if(!std::wcsstr(commandLine,L"--smoke-test")&&!std::wcsstr(commandLine,L"--performance-window")&&!std::wcsstr(commandLine,L"--vr-smoke-test")&&!std::wcsstr(commandLine,L"--kill-squad-inspection")&&!std::wcsstr(commandLine,L"--cleanup-layer-inspection")&&!std::wcsstr(commandLine,L"--cleanup-split-test"))MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
+        // Automated runs report through the exit code and RawMetal-error.txt; a
+        // modal dialog would hang the test runner.
+        bool automated=false;for(auto marker:{L"-test",L"performance",L"inspection",L"benchmark",L"-profile"})automated|=std::wcsstr(commandLine,marker)!=nullptr;
+        if(!automated)MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }
 }

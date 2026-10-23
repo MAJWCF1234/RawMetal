@@ -155,8 +155,9 @@ bool Game::testWorldIsolation(){
  // Reloading unloaded geometry must use the owning world, not the last menu choice.
  campaign.m_chunks[0].world.unloadGeometry();campaign.m_chunks[0].resident=false;campaign.ensureChunk(0);
  if(!check(campaign.m_chunks[0].world.worldId()==WorldId::Ashfall&&campaign.m_chunks[0].world.hasTerrain()&&campaign.m_chunks[0].world.terrain().size()>200,"Unloaded custom terrain restores from correct world"))return false;
- Game menu;menu.showTitleScreen();menu.m_titleSelection=1;InputState accept{};accept.menuAccept=true;menu.update(accept,.01f);menu.update({},.01f);menu.update(accept,.01f);
- if(!check(menu.worldId()==WorldId::Ashfall&&!menu.titleScreen(),"Title browser loads custom world"))return false;
+ Game menu;menu.loadCustomCampaignDirectory(L"custom maps");menu.showTitleScreen();menu.m_titleSelection=1;InputState accept{};accept.menuAccept=true;menu.update(accept,.01f);menu.update({},.01f);menu.update(accept,.01f);
+ // The browser lists packs from "custom maps"; any selected pack runs as a Custom world.
+ if(!check(menu.worldId()==WorldId::Custom&&!menu.titleScreen(),"Title browser loads custom world"))return false;
  menu.showTitleScreen();menu.update(accept,.01f);
  return check(menu.worldId()==WorldId::Campaign&&!menu.titleScreen()&&!menu.world().outdoors(),"New Game returns to campaign");
 }

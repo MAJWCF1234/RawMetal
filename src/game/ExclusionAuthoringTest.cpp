@@ -48,8 +48,9 @@ bool Game::testExclusionAuthoring(){
   taskDirectory=std::filesystem::temp_directory_path()/("rawmetal-exclusion-authoring-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
   std::filesystem::create_directories(taskDirectory);game.m_saveDirectory=taskDirectory.wstring();
   auto warp=[&](int level,Vec2 position,float angle){
-   if(game.level()!=level){game.storeChunk();game.loadLevel(level,true);game.updateStreaming(0);}
-   game.m_player.pos=position;game.m_player.z=game.groundHeight(position);game.m_player.angle=angle;game.m_logTime=0;game.m_activeLog=-1;game.m_previousUse=false;
+   bool crossed=game.level()!=level;if(crossed){game.storeChunk();game.loadLevel(level,true);game.updateStreaming(0);}
+   // A cross-map warp has no meaningful previous height: sample from above.
+   game.m_player.pos=position;game.m_player.z=crossed?game.groundHeight(position,float(World::TerrainMaxZ+1)):game.groundHeight(position);game.m_player.angle=angle;game.m_logTime=0;game.m_activeLog=-1;game.m_previousUse=false;
   };
   auto operate=[&](int level,Vec2 position,float angle,StateId expected){
    warp(level,position,angle);int nearby=game.nearbyTerminal();bool correct=nearby>=0&&game.world().terminals()[size_t(nearby)].activateState==expected;
@@ -68,7 +69,7 @@ bool Game::testExclusionAuthoring(){
   Game cached(campaign);cached.m_saveDirectory=taskDirectory.wstring();
   check(cached.loadCheckpoint()&&cached.questItemCount(Flashlight)==1&&cached.objective(relay)==ObjectiveStatus::Active,"The authored cache checkpoint restores item ownership and objective progression");
   check(operate(0,{11.f,14.6f},-kPi*.5f,stateId("exclusion_relay_secured"))&&!game.state("exclusion_relay_secured"),"Facility relay stays gated until the north distraction completes");
-  check(operate(2,{12.3f,3.6f},kPi*.5f,stateId("exclusion_extract_logged"))&&!game.state("exclusion_extract_logged")&&!game.m_won,"Early arrival at South Wash cannot bypass east-winch clearance or complete the map");
+  check(operate(2,{12.f,20.1f},kPi*.5f,stateId("exclusion_extract_logged"))&&!game.state("exclusion_extract_logged")&&!game.m_won,"Early arrival at South Wash cannot bypass east-winch clearance or complete the map");
   check(operate(0,{4.3f,6.7f},kPi*.5f,stateId("exclusion_north_lure"))&&game.state("exclusion_north_lure")>0,"Briefed players start the authored north distraction through E");
   advance(310);
   check(game.state("exclusion_north_lure_done")!=0,"Existing mechanism timeline supplies the north completion gate");
@@ -78,7 +79,7 @@ bool Game::testExclusionAuthoring(){
   check(game.state("exclusion_east_lure_done")&&game.objective(winch)==ObjectiveStatus::Complete&&game.objective(extract)==ObjectiveStatus::Active&&!game.m_won&&game.activeObjectiveText()=="Reach South Wash and register departure at its relay","East-winch completion displays the cross-map departure objective without prematurely winning");
   Game staged(campaign);staged.m_saveDirectory=taskDirectory.wstring();
   check(staged.loadCheckpoint()&&staged.objective(extract)==ObjectiveStatus::Active&&staged.hasFlashlight(),"Protected south staging writes a checkpoint with the extraction objective");
-  check(operate(2,{12.3f,3.6f},kPi*.5f,stateId("exclusion_extract_logged"))&&game.state("exclusion_complete")&&game.objective(extract)==ObjectiveStatus::Complete&&game.m_won,"Authorized departure terminal completes the existing ScriptEvent campaign arc");
+  check(operate(2,{12.f,20.1f},kPi*.5f,stateId("exclusion_extract_logged"))&&game.state("exclusion_complete")&&game.objective(extract)==ObjectiveStatus::Complete&&game.m_won,"Authorized departure terminal completes the existing ScriptEvent campaign arc");
   Game completed(campaign);completed.m_saveDirectory=taskDirectory.wstring();
   check(completed.loadCheckpoint()&&completed.m_won&&completed.state("exclusion_complete")&&completed.objective(extract)==ObjectiveStatus::Complete,"Completion precedes checkpoint so reloading the final autosave remains won");
   completed.updateScripts(0);
