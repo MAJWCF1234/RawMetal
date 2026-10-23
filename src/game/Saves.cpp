@@ -51,8 +51,9 @@ template<class A> void Game::archiveSave(A& a,int version){
   if constexpr(A::reading){
    if(m_worldId==WorldId::Custom){
     auto found=std::find_if(m_customCampaigns.begin(),m_customCampaigns.end(),[&](const auto& campaign){return campaign&&campaign->key==m_customCampaignKey;});
-    if(found==m_customCampaigns.end())throw std::runtime_error("Custom campaign required by save is not installed");
-    m_customCampaign=*found;
+    if(found!=m_customCampaigns.end())m_customCampaign=*found;
+    else if(auto builtIn=builtInCampaignForKey(m_customCampaignKey))m_customCampaign=builtIn;
+    else throw std::runtime_error("Custom campaign required by save is not installed");
    }else {m_customCampaign.reset();m_customCampaignKey=0;}
   }
  }else if constexpr(A::reading){m_customCampaign.reset();m_customCampaignKey=0;}

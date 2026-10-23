@@ -21,7 +21,8 @@ cover readability changes and the physical north/east approach checks.
 
 ## Start the Exclusion playtest
 
-Run `RawMetal.exe`, choose desktop play, then **Custom Maps -> ASHFALL EXCLUSION ZONE**.
+Run `RawMetal.exe` and choose **New Game** to start the main campaign at its Security Office prologue.
+For the Exclusion testbed, choose **Custom Maps -> ASHFALL EXCLUSION ZONE**.
 For a direct desktop launch:
 
 ```text

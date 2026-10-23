@@ -300,6 +300,16 @@ std::shared_ptr<const CustomCampaign> loadEmbeddedExclusionZoneCampaign(){
  // Packed resource 346 is the Ashfall Exclusion Zone wasteland custom campaign TXT.
  auto bytes=loadResource(346);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),"RawMetal-Ashfall-Exclusion-Zone.txt");
 }
+std::shared_ptr<const CustomCampaign> loadEmbeddedPrologueCampaign(){
+ // Parsed once: New Game, checkpoints and tests share the same payload.
+ static const auto prologue=[]{auto bytes=loadResource(398);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),"RawMetal-Security-Office-Prologue.txt");}();
+ return prologue;
+}
+std::shared_ptr<const CustomCampaign> builtInCampaignForKey(std::uint64_t key){
+ auto prologue=loadEmbeddedPrologueCampaign();if(prologue->key==key)return prologue;
+ auto exclusion=loadEmbeddedExclusionZoneCampaign();if(exclusion->key==key)return exclusion;
+ return nullptr;
+}
 std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(const std::filesystem::path& directory,std::vector<std::string>* errors){
  std::vector<std::shared_ptr<const CustomCampaign>> result;std::error_code ec;
  if(std::filesystem::exists(directory,ec))for(auto& entry:std::filesystem::directory_iterator(directory,ec)){

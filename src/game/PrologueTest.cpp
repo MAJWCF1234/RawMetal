@@ -2,12 +2,13 @@
 #include "../world/CustomCampaign.h"
 #include <fstream>
 #include <filesystem>
+#include <chrono>
 
 namespace retro {
 // Views: 0 desk at shift start, 1 chat open, 2 corridor during the alarm,
 // 3 lobby facing the waiting cab, 4 inside the cab after impact.
 Game Game::prologueInspection(int stage){
- Game g(loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Security-Office-Prologue.txt"));
+ Game g(loadEmbeddedPrologueCampaign());
  auto frames=[&](int count){for(int i=0;i<count;++i)g.update({},1.f/60);};
  auto place=[&](Vec2 p,float z,Vec2 target,float pitch){g.m_player.pos=p;g.m_player.z=z;g.m_player.angle=std::atan2(target.y-p.y,target.x-p.x);g.m_player.pitch=pitch;};
  frames(120);
@@ -26,8 +27,14 @@ bool Game::testPrologue(){
  std::ofstream report("prologue-test.txt");int checks=0,failed=0;
  auto check=[&](bool ok,const char*text){++checks;failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<text<<'\n';report.flush();};
  try{
-  auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Security-Office-Prologue.txt");
-  Game g(campaign);g.m_player.health=100000;
+  {Game menu;menu.showTitleScreen();menu.m_titleSelection=0;InputState accept{};accept.menuAccept=true;menu.update(accept,.01f);menu.update({},.01f);
+   check(menu.worldId()==WorldId::Custom&&menu.m_customCampaign==loadEmbeddedPrologueCampaign()&&!menu.titleScreen(),"New Game from the title opens the Security Office prologue");}
+  {bool listed=false;for(const auto& pack:retro::loadCustomCampaignDirectory(std::filesystem::path("custom maps")))listed|=pack->sourceFile=="RawMetal-Security-Office-Prologue.txt";
+   check(!listed,"The prologue belongs to the main campaign, not the Custom Maps list");}
+  auto saves=std::filesystem::temp_directory_path()/("rawmetal-prologue-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directories(saves);
+  auto campaign=loadEmbeddedPrologueCampaign();
+  Game g(campaign);g.m_saveDirectory=saves.wstring();
   auto frames=[&](int count,InputState input={}){for(int i=0;i<count;++i)g.update(input,1.f/60);};
   frames(2);
   check(g.activeObjectiveText()=="Answer the message on your workstation","Shift starts on the workstation objective");
@@ -44,6 +51,7 @@ bool Game::testPrologue(){
   frames(60*7);
   check(g.state("office_alarm")>0&&g.state("office_run")!=0,"Alarm follows the chat and orders the run");
   check(g.activeObjectiveText()=="Get to the service lift","Run objective replaces the workstation objective");
+  {Game resumed;resumed.m_saveDirectory=saves.wstring();bool loaded=resumed.loadCheckpoint();check(loaded&&resumed.worldId()==WorldId::Custom&&resumed.state("office_run")&&resumed.activeObjectiveText()=="Get to the service lift","Run checkpoint reloads the embedded prologue in a fresh session");}
   {float peak=0;for(int i=0;i<120;++i){g.update({},1.f/60);peak=std::max(peak,g.alarmPulse());}check(peak>.8f,"Alarm klaxon drives the red beacon wash");}
   auto walk=[&](Vec2 target){for(int i=0;i<900&&length(g.player().pos-target)>.15f;++i){auto d=target-g.player().pos;g.m_player.angle=std::atan2(d.y,d.x);InputState step;step.forward=true;step.sprint=true;g.update(step,1.f/60);}return length(g.player().pos-target)<=.15f;};
   bool ran=walk({8.f,5.5f});check(g.logTime()==0,"Walking away from the desk closes the computer");ran=ran&&walk({10.5f,5.5f})&&walk({17.f,5.8f})&&walk({17.f,13.f})&&walk({17.f,16.8f});
@@ -54,6 +62,7 @@ bool Game::testPrologue(){
   check(g.state("office_crash")>0,"Impact starts the crash beat");
   frames(60*6);
   check(g.worldId()==WorldId::Campaign&&g.level()==0&&!g.titleScreen()&&g.player().health==100,"Prologue hands off to the main campaign's first map");
+  std::error_code error;std::filesystem::remove_all(saves,error);
  }catch(const std::exception&e){report<<"Runtime exception: "<<e.what()<<'\n';check(false,"Prologue runs without an exception");}
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }

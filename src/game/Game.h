@@ -459,6 +459,9 @@ private:
     // New Game: the built-in campaign from its first map. A custom prologue
     // requests this through ENTER_CAMPAIGN; it applies at the next update.
     void startMainCampaign();
+    // Title New Game: the embedded Security Office prologue, then Map 0.
+    void startNewGame();
+    void startCustomCampaign(std::shared_ptr<const CustomCampaign> campaign);
     int customMenuItemCount()const{return int(m_customCampaigns.size())+1;} // uploaded campaigns + Back
     int customMenuLogicalIndex(int row)const{return m_customMenuOffset+row;}
     int m_level=0;

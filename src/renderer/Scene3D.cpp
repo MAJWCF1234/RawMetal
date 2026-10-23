@@ -854,15 +854,43 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  shadowBudget=m_shadowBudgetLimit;
  if(w.cargoLift().upper>w.cargoLift().lower){
   const auto& lift=w.cargoLift();float z=w.cargoLiftHeight();
-  box({lift.x1,lift.y1,z-.18f},{lift.x2,lift.y2,z},m_panelMetal,1.f);
-  quad({lift.x1,lift.y1,z+.005f},{lift.x2,lift.y1,z+.005f},{lift.x2,lift.y2,z+.005f},{lift.x1,lift.y2,z+.005f},m_serviceFloor,1.f,{3,3});
-  // Cage bars and their roof travel with the collision platform.
-  for(float x:{lift.x1,lift.x2-.08f}){
-   box({x,lift.y1,z+2.25f},{x+.08f,lift.y2,z+2.4f},m_panelMetal,.9f);
-   for(float y=lift.y1;y<=lift.y2;y+=.5f)box({x,y,z},{x+.08f,y+.055f,z+2.4f},m_panelMetal,.9f);
+  const float x1=lift.x1,x2=lift.x2,y1=lift.y1,y2=lift.y2,mx=(x1+x2)*.5f,width=x2-x1,depth=y2-y1;
+  const bool released=game.state(lift.downState)!=0,landed=game.state(lift.descendedState)!=0;
+  // Same freight-cab kit as the reactor surface lift: deck, kick panels, cage
+  // windows, header band, roof light, hoist crosshead and guide rails. The
+  // 2.4 m roof matches the platform's collision ceiling.
+  static const Texture roofLight=[](){Texture t{1,1,{0xfff2ead2u}};t.emission={0xffe8dcb4u};return t;}();
+  static const Texture emergencyLight=[](){Texture t{1,1,{0xff3a1210u}};t.emission={0xff4a0e0au};return t;}();
+  box({x1,y1,z-.25f},{x2,y2,z},m_pressureMetal,1.05f);
+  quad({x1+.12f,y1+.12f,z+.004f},{x2-.12f,y1+.12f,z+.004f},{x2-.12f,y2-.12f,z+.004f},{x1+.12f,y2-.12f,z+.004f},m_ironTexture,1.f,{width*.5f,depth*.5f});
+  for(float y:{y1+.02f,y2-.18f})quad({x1+.12f,y,z+.01f},{x2-.12f,y,z+.01f},{x2-.12f,y+.16f,z+.01f},{x1+.12f,y+.16f,z+.01f},m_hazard,1.1f);
+  for(float x:{x1,x2-.12f}){
+   box({x,y1,z},{x+.12f,y2,z+.65f},m_pressureWall,.95f);
+   box({x,y1,z+2.0f},{x+.12f,y2,z+2.4f},m_panelMetal,.9f);
+   for(float y=y1+.45f;y<y2-.3f;y+=.45f)box({x+.03f,y,z+.65f},{x+.09f,y+.04f,z+2.0f},m_metal,.8f);
+   float rail=x<mx?x1+.16f:x2-.22f;box({rail,y1+.2f,z+.82f},{rail+.06f,y2-.2f,z+.89f},m_metal,1.1f);
+   box({x+.015f,y1+.5f,z+.13f},{x+.1f,y1+.95f,z+.47f},m_bulkhead,1.05f);
   }
-  if(!game.state(lift.descendedState))for(float x=lift.x1;x<lift.x2;x+=.5f)box({x,lift.y2-.08f,z},{x+.055f,lift.y2,z+2.4f},m_panelMetal,.9f);
-  box({lift.x1,lift.y1,z+2.4f},{lift.x2,lift.y2,z+2.52f},m_panelMetal,.85f);
+  for(float x:{x1,x2-.16f})for(float y:{y1,y2-.16f})box({x,y,z},{x+.16f,y+.16f,z+2.4f},m_yellowSteel,1.f);
+  // Back wall: a solid panel with dispatch lamps, or a split gate that slides
+  // open at the lower landing when the cab exits through that side.
+  float opening=landed?1.f:0.f;
+  for(int leaf=0;leaf<2;++leaf){float half=width*.5f-.16f,left=leaf?mx+opening*half:x1+.16f-opening*half,right=left+half;
+   box({left,y2-.12f,z},{right,y2,z+1.1f},m_bulkhead,1.f);box({left,y2-.12f,z+1.8f},{right,y2,z+2.4f},m_bulkhead,1.f);
+   for(float post:{left,left+half*.5f,right-.06f})box({post,y2-.12f,z+1.1f},{post+.06f,y2,z+1.8f},m_metal,.8f);}
+  auto&signal=released&&!landed&&int(game.elapsed()*4)%2?m_redPaint:amber;
+  for(float x:{x1+.5f,x2-.6f})box({x,y2-.2f,z+2.1f},{x+.1f,y2-.12f,z+2.3f},signal,1.8f);
+  // Control station on the right wall, facing into the cab.
+  box({x2-.2f,y1+.35f,z+1.0f},{x2-.12f,y1+.75f,z+1.45f},m_panelMetal,1.f);
+  quad({x2-.201f,y1+.42f,z+1.08f},{x2-.201f,y1+.68f,z+1.08f},{x2-.201f,y1+.68f,z+1.38f},{x2-.201f,y1+.42f,z+1.38f},m_facilityTextures.at("keypad_1"),1.3f);
+  box({x1,y1,z+2.4f},{x2,y2,z+2.6f},m_bulkhead,.9f);
+  quad({mx-.6f,y1+.6f,z+2.395f},{mx+.6f,y1+.6f,z+2.395f},{mx+.6f,y2-.6f,z+2.395f},{mx-.6f,y2-.6f,z+2.395f},released?emergencyLight:roofLight,1.f);
+  box({mx-.7f,y1+.3f,z+2.6f},{mx+.7f,y1+.6f,z+2.85f},m_pressureMetal,.8f);box({mx-.7f,y2-.6f,z+2.6f},{mx+.7f,y2-.3f,z+2.85f},m_pressureMetal,.8f);
+  box({mx-.25f,y1+.3f,z+2.85f},{mx+.25f,y2-.3f,z+3.05f},m_pressureMetal,.8f);
+  // Hoist cables run up the shaft until the brake lets go; then they trail.
+  float cableTop=released?z+3.6f:lift.upper+6.f;
+  for(float y:{y1+.45f,y2-.45f})box({mx-.03f,y,z+3.05f},{mx+.03f,y+.06f,cableTop},m_metal,.7f);
+  for(float x:{x1-.09f,x2+.02f})box({x,(y1+y2)*.5f-.06f,lift.lower-.2f},{x+.07f,(y1+y2)*.5f+.06f,lift.upper+3.f},m_metal,.75f);
  }
  auto stripeBand=[&](float left,float right,float centerY,float offset=0.f){
   float halfWidth=(right-left)*m_hazard.height/m_hazard.width*.5f;
