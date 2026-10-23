@@ -26,6 +26,8 @@ struct ChunkDefinition {
     FloorMaterial floorMaterial=FloorMaterial::Industrial;
     MusicCue musicCue=MusicCue::Default;
     float spawnYaw=.08f,spawnPitch=0;
+    // Off-duty openings: no weapon drawn and no viewmodel until the first punch.
+    bool startUnarmed=false;
 };
 inline constexpr int CampaignChunkCount=32;
 inline constexpr int AshfallChunkCount=15;

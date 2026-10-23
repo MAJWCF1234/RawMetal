@@ -43,10 +43,11 @@ void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_hitStopRemaini
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
  updateMechanisms(0);
+ m_handsLowered=m_world.definition().startUnarmed;if(m_handsLowered)equipWeapon(WeaponId::Fists);
 }
 void Game::equipWeapon(WeaponId id){
  if(id==WeaponId::Fists){m_weaponEquipped=false;m_holster=1.f;return;}
- m_equippedWeapon=id;m_weaponEquipped=true;m_holster=m_player.ammo>0?0.f:1.f;
+ m_handsLowered=false;m_equippedWeapon=id;m_weaponEquipped=true;m_holster=m_player.ammo>0?0.f:1.f;
 }
 bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeHitStop,int level){
  if(level<0)level=m_level;
@@ -376,7 +377,7 @@ void Game::update(const InputState& input, float dt) {
         m_holster+=std::clamp(lower-m_holster,-dt*2.6f,dt*2.6f);
         if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f) {
             if(m_player.ammo>0&&m_player.loaded>0&&m_holster<cycle.raiseHolster){shoot();m_shotCooldown=cycle.fireCooldown;}
-            else if(!input.vrTracked&&unarmed()&&!m_guarding){m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
+            else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);

@@ -3,6 +3,24 @@
 #include <cmath>
 #include <fstream>
 namespace retro {
+namespace {
+constexpr float TerminalVoiceRadius=1.5f;
+}
+std::vector<const SequenceCue*> Game::terminalMessages(int terminal)const{
+ std::vector<const SequenceCue*> result;if(terminal<0||terminal>=int(m_world.terminals().size()))return result;
+ const auto& at=m_world.terminals()[size_t(terminal)].position;const auto& sequences=m_world.timedSequences();
+ auto order=[&](StateId timer){for(size_t i=0;i<sequences.size();++i)if(sequences[i].timerState==timer)return int(i);return int(sequences.size());};
+ for(const auto& cue:m_world.sequenceCues())if(!cue.caption.empty()&&length(cue.position-at)<TerminalVoiceRadius&&state(cue.timerState)>cue.timeMs)result.push_back(&cue);
+ std::stable_sort(result.begin(),result.end(),[&](const SequenceCue*a,const SequenceCue*b){int oa=order(a->timerState),ob=order(b->timerState);return oa!=ob?oa<ob:a->timeMs<b->timeMs;});
+ return result;
+}
+bool Game::terminalConversationActive(int terminal)const{
+ if(terminal<0||terminal>=int(m_world.terminals().size()))return false;
+ const auto& at=m_world.terminals()[size_t(terminal)].position;
+ for(const auto& cue:m_world.sequenceCues()){int age=state(cue.timerState);
+  if(!cue.caption.empty()&&length(cue.position-at)<TerminalVoiceRadius&&age>0&&age<=cue.timeMs+3000)return true;}
+ return false;
+}
 std::string_view Game::actorCaption()const{
  for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;const auto& world=level==m_level?m_world:m_chunks[level].world;
   for(const auto& cue:world.sequenceCues()){int age=state(cue.timerState)-cue.timeMs;if(!cue.caption.empty()&&age>=0&&age<2500)return cue.caption;}

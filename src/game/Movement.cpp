@@ -189,6 +189,12 @@ const char* Game::interactionHint()const{
 }
 void Game::updateInteraction(const InputState& input,float dt){
  m_logTime=std::max(0.f,m_logTime-dt);
+ // A computer stays up while its conversation is still arriving, and closes
+ // when the player walks away from the desk.
+ if(m_logTime>0&&m_activeLog>=0&&m_activeLog<int(m_world.terminals().size())){
+  if(length(m_world.terminals()[size_t(m_activeLog)].position-m_player.pos)>2.4f)m_logTime=0;
+  else if(terminalConversationActive(m_activeLog))m_logTime=std::max(m_logTime,1.f);
+ }
  bool usePressed=input.use&&!m_previousUse;
  if(input.vrTracked){
   auto previous=m_previousVrGrip;m_previousVrGrip=input.vrGrip;

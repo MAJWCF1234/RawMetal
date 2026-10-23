@@ -600,13 +600,15 @@ void SoftwareRenderer::drawHud(const Game& game){
   wornPanel(left,top,width,height,true);for(size_t i=0;i<rows.size();++i)text(left+10,top+6+int(i)*8,rows[i].c_str(),color);
  };
  if(game.pickupNoticeTime()>0)promptPanel(m_height-65,game.pickupNotice().c_str(),paper);
- if(auto caption=game.actorCaption();!caption.empty())promptPanel(m_height-112,std::string(caption).c_str(),paper);
+ if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
  else if(auto pickup=game.nearbyPickup()){
   const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   promptPanel(m_height-65,message,amber);
  }
  if(auto hint=game.interactionHint();hint&&game.logTime()<=0)promptPanel(m_height-88,hint,paper);
- if(game.logTime()>0&&game.activeLog()>=0){auto&log=game.world().terminals()[size_t(game.activeLog())];
+ if(game.logTime()>0&&game.activeLog()>=0&&!game.world().terminals()[size_t(game.activeLog())].control&&game.world().terminals()[size_t(game.activeLog())].reactorAction<2){
+  drawComputer(game,game.activeLog());
+ }else if(game.logTime()>0&&game.activeLog()>=0){auto&log=game.world().terminals()[size_t(game.activeLog())];
   const int left=cx-180,top=48,width=360,height=154;
   wornPanel(left,top,width,height,false,true);
   // Inset screen inside the existing metal housing, with a recessed bevel.
@@ -623,6 +625,49 @@ void SoftwareRenderer::drawHud(const Game& game){
   text(left+18,top+117,terminalStatus(game,log),green);
   text(left+18,top+132,"> E TO CLOSE TERMINAL _",bright);
  }
+}
+
+// Personnel computers open full screen: the CRT front from the OFFICE atlas,
+// with a Depthworks OS desktop on its glass. Messages that play at this
+// terminal's position form the conversation in the main window.
+void SoftwareRenderer::drawComputer(const Game& game,int index){
+ const auto& log=game.world().terminals()[size_t(index)];
+ const auto& atlas=m_facilityTextures.at("computer");
+ constexpr int CropW=129,CropH=112,GlassX=14,GlassY=17,GlassW=99,GlassH=79,Scale=3;
+ const int left=(m_width-CropW*Scale)/2,top=std::max(0,(m_height-CropH*Scale)/2);
+ rect(0,0,m_width,m_height,0xb4000000u);
+ for(int y=0;y<CropH*Scale;++y)for(int x=0;x<CropW*Scale;++x){
+  int px=left+x,py=top+y;if(px<0||py<0||px>=m_width||py>=m_height)continue;
+  int sx=std::min(atlas.width-1,x/Scale),sy=std::min(atlas.height-1,y/Scale);
+  m_pixels[size_t(py)*m_width+px]=0xff000000u|(atlas.pixels[size_t(sy)*atlas.width+sx]&0xffffffu);
+ }
+ const int sx=left+GlassX*Scale,sy=top+GlassY*Scale,sw=GlassW*Scale,sh=GlassH*Scale;
+ const auto glass=rgb(5,13,9),bar=rgb(18,64,36),panel=rgb(9,26,16),green=rgb(87,225,123),bright=rgb(150,255,172),dim=rgb(47,136,76);
+ rect(sx,sy,sw,sh,glass);for(int y=sy;y<sy+sh;y+=2)rect(sx,y,sw,1,rgb(3,9,6));
+ auto right=[&](int x,int y,const std::string& value,std::uint32_t color){text(x-int(value.size())*4,y,value.c_str(),color);};
+ rect(sx,sy,sw,11,bar);text(sx+4,sy+3,"DEPTHWORKS SECUREOS 3.1",bright);right(sx+sw-4,sy+3,"LOCAL / NIGHT SHIFT",green);
+ auto messages=game.terminalMessages(index);
+ const int menuW=58;rect(sx,sy+11,menuW,sh-22,panel);
+ const char* items[]={"CCTV","LOGS","MAIL","CHAT"};int selected=messages.empty()?1:3;
+ for(int i=0;i<4;++i){int y=sy+18+i*12;if(i==selected){rect(sx+2,y-2,menuW-4,10,bar);text(sx+6,y,"> ",bright);}text(sx+14,y,items[i],i==selected?bright:dim);}
+ const int wx=sx+menuW+4,wy=sy+15,ww=sw-menuW-8,wh=sh-30;
+ rect(wx,wy,ww,wh,dim);rect(wx+1,wy+1,ww-2,wh-2,glass);rect(wx+1,wy+1,ww-2,9,bar);
+ std::string title=messages.empty()?std::string(log.title):std::string("DIRECT LINE / ")+[&]{std::string who=messages.front()->caption;auto colon=who.find(':');return colon==std::string::npos?std::string("CHAT"):who.substr(0,colon);}();
+ text(wx+4,wy+3,wrapUiText(title,size_t((ww-8)/4),1).front().c_str(),bright);
+ const size_t columns=size_t((ww-10)/4);const int lineH=8,bodyTop=wy+14,bodyRows=(wh-18)/lineH;
+ struct Line{std::string text;std::uint32_t color;int indent;};std::vector<Line> body;
+ if(messages.empty()){
+  for(const char* value:{log.line1,log.line2}){for(auto& line:wrapUiText(value,columns,6))body.push_back({line,green,0});body.push_back({"",green,0});}
+ }else for(const auto* cue:messages){
+  bool own=cue->caption.rfind("YOU:",0)==0;bool first=true;
+  for(auto& line:wrapUiText(cue->caption,columns-(own?3:0),4)){body.push_back({line,first?(own?dim:bright):(own?dim:green),own?12:0});first=false;}
+ }
+ // The HUD font has no underscore: the remote end's typing cursor is a block.
+ bool typing=game.terminalConversationActive(index);if(typing)body.push_back({"",bright,0});
+ int start=std::max(0,int(body.size())-bodyRows),row=0;
+ for(int i=start;i<int(body.size());++i,++row)text(wx+5+body[size_t(i)].indent,bodyTop+row*lineH,body[size_t(i)].text.c_str(),body[size_t(i)].color);
+ if(typing&&int(game.elapsed()*2)%2==0)rect(wx+5,bodyTop+(row-1)*lineH,4,6,bright);
+ rect(sx,sy+sh-11,sw,11,bar);text(sx+4,sy+sh-8,terminalStatus(game,log),green);right(sx+sw-4,sy+sh-8,"E / CLOSE",bright);
 }
 
 void SoftwareRenderer::drawVrStatus(const Game&game){

@@ -278,6 +278,16 @@ facility alarm bed). A running `TIMED_SEQUENCE` whose repeating tick sound is
 42 also drives the red alarm beacon wash, which peaks on each blast. Example:
 `TIMED_SEQUENCE|0|alarm|alarm_done|-2|-2|-1|-1|-100|100|60000|5200|1900|60000|42|0.8|1`.
 
+Personnel computers. A `TERMINAL` that is neither a control nor a valve opens
+full screen as a CRT running Depthworks SecureOS. Captioned `SEQUENCE_CUE`s
+placed within 1.5 m of the terminal appear in its chat window, and the window
+stays open while that conversation still has lines to come. Captions starting
+with `YOU:` are the player's replies. Walking more than 2.4 m away closes it.
+
+`MAP` field 23 (optional), start unarmed: `1` begins the map with no weapon
+drawn and no viewmodel until the first punch or weapon swap. Use it for
+off-duty openings.
+
 See `custom maps/RawMetal-Security-Office-Prologue.txt` for all of these in use.
 
 ### Legacy MAP_CODE-only CUSTOM payloads

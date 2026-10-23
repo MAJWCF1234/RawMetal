@@ -230,6 +230,11 @@ public:
     static bool testCampaignMaps();
     void updateMechanisms(float dt);
     std::string_view actorCaption()const;
+    // Captioned sequence cues emitted at a terminal's position (its computer's
+    // messages) that have already played, in sequence order then time.
+    std::vector<const SequenceCue*> terminalMessages(int terminal)const;
+    // True while a sequence that speaks through this terminal still has lines to come.
+    bool terminalConversationActive(int terminal)const;
     static bool testMechanisms();
 
     float weaponKick() const { return m_weaponKick; }
@@ -239,6 +244,7 @@ public:
     float punchAge()const{return m_punchAge;}
     bool punchLeft()const{return m_punchLeft;}
     bool unarmed()const{return m_holster>=.98f;}
+    bool handsLowered()const{return m_handsLowered;}
     bool guarding()const{return m_guarding;}
     bool takedownActive()const{return m_takedownActor>=0;}
     std::array<Point3,2> takedownGrips()const;
@@ -641,6 +647,7 @@ private:
     int m_kills = 0;
     bool m_won = false;
     bool m_pendingMainCampaign = false;
+    bool m_handsLowered = false;
     float m_hitFlash=0;
     WeaponMotion m_weaponMotion;
     Vec2 m_sway{},m_swayVelocity{};

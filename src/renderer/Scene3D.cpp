@@ -1958,6 +1958,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
 }
 void SoftwareRenderer::drawViewModel(const Game& game){
  perf::Scope viewProfile(perf::ViewModel);
+ if(game.handsLowered()&&!game.holdingClutter()&&game.heldNpc()<0)return; // Off duty: nothing in hand.
  if(m_gpuFrame)m_gpu->clearDepth();
  if(game.holdingClutter()&&!m_inspectRig)return;
  std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());

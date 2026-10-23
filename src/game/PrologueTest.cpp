@@ -36,7 +36,9 @@ bool Game::testPrologue(){
   check(g.state("office_lift_arrived")!=0,"Service lift is waiting at the security level before the alarm");
   InputState use;use.use=true;g.update(use,1.f/60);frames(1);
   check(g.state("office_chat")>0,"E opens the Lab 4 chat");
-  frames(60*20);
+  frames(60*12);
+  {int desk=g.activeLog();check(desk>=0&&g.logTime()>0&&g.terminalMessages(desk).size()>=3&&g.terminalConversationActive(desk),"Workstation stays open past the old 9 s limit while Lab 4 is still messaging");}
+  frames(60*8);
   check(g.state("office_chat")>0&&!g.state("office_run"),"Chat plays before the alarm without a premature run order");
   check(g.alarmPulse()==0,"No alarm wash during the quiet chat");
   frames(60*7);
@@ -44,7 +46,7 @@ bool Game::testPrologue(){
   check(g.activeObjectiveText()=="Get to the service lift","Run objective replaces the workstation objective");
   {float peak=0;for(int i=0;i<120;++i){g.update({},1.f/60);peak=std::max(peak,g.alarmPulse());}check(peak>.8f,"Alarm klaxon drives the red beacon wash");}
   auto walk=[&](Vec2 target){for(int i=0;i<900&&length(g.player().pos-target)>.15f;++i){auto d=target-g.player().pos;g.m_player.angle=std::atan2(d.y,d.x);InputState step;step.forward=true;step.sprint=true;g.update(step,1.f/60);}return length(g.player().pos-target)<=.15f;};
-  bool ran=walk({8.f,5.5f})&&walk({10.5f,5.5f})&&walk({17.f,5.8f})&&walk({17.f,13.f})&&walk({17.f,16.8f});
+  bool ran=walk({8.f,5.5f});check(g.logTime()==0,"Walking away from the desk closes the computer");ran=ran&&walk({10.5f,5.5f})&&walk({17.f,5.8f})&&walk({17.f,13.f})&&walk({17.f,16.8f});
   report<<"player="<<g.player().pos.x<<','<<g.player().pos.y<<','<<g.player().z<<'\n';
   check(ran&&std::fabs(g.player().z)<.1f,"Real movement runs from the desk through the corridor onto the lift");
   frames(60*4);
