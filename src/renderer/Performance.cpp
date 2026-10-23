@@ -65,6 +65,8 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
   ~NativeAtlasScope(){SoftwareRenderer::setTexturePresentScale(previous);}
  } nativeAtlases;
  auto storage=std::make_unique<SoftwareRenderer>(128,72);auto&renderer=*storage;std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;
+ // Material checks measure the scene shader itself, before the post pass grade.
+ renderer.m_gpu->setPostProcessing(false);
  auto check=[&](bool condition,const char* label){report<<label<<": "<<(condition?"PASS":"FAIL")<<'\n';passed&=condition;};
  static_assert(std::is_aggregate_v<Texture>);
  {
@@ -278,7 +280,7 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  auto cachedScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);renderer.render(cachedScene);auto staticFrame=renderer.m_pixels;double cacheBuildMs=renderer.m_sceneMs;auto cacheHits=renderer.m_gpu->staticCacheHits();renderer.render(cachedScene);double cacheReuseMs=renderer.m_sceneMs;report<<"Static map scene pass: build "<<cacheBuildMs<<" ms, cached "<<cacheReuseMs<<" ms\n";check(renderer.m_gpu->staticCacheHits()>cacheHits,"Static chunk VBO is reused on the next frame");check(staticFrame==renderer.m_pixels,"Cached static chunk keeps the same rendered frame at nonzero pitch");InputState turn{};turn.mouseDx=80;turn.mouseDy=12;cachedScene.update(turn,1.f/60.f);renderer.render(cachedScene);auto turnedFrame=renderer.m_pixels;cacheHits=renderer.m_gpu->staticCacheHits();renderer.render(cachedScene);check(renderer.m_gpu->staticCacheHits()>cacheHits,"Static chunk VBO survives a camera turn");check(turnedFrame==renderer.m_pixels&&turnedFrame!=staticFrame,"Cached geometry transforms correctly after a camera turn");
  // Baked shading must not depend on the camera used for first load. View B
  // through A's reused VBO must match a fresh renderer that starts directly at B.
- auto fresh=std::make_unique<SoftwareRenderer>(128,72);if(!fresh->enableHardware())return false;
+ auto fresh=std::make_unique<SoftwareRenderer>(128,72);if(!fresh->enableHardware())return false;fresh->m_gpu->setPostProcessing(false);
  auto bakeScene=Game::mapInspection({6,3},1.85f,-4,16,false,-25,true);renderer.render(bakeScene);
  // Move only the inspection camera, preserving the world and VBO cache key.
  auto&inspectionPlayer=const_cast<Player&>(bakeScene.player());inspectionPlayer.pos={16.5f,15.f};inspectionPlayer.angle=-2.1f;inspectionPlayer.pitch=5;

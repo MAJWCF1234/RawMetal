@@ -45,6 +45,8 @@ public:
     static int texturePresentScale();
     static void setCrispTexels(bool crisp);
     static bool crispTexels();
+    static void setPostProcessing(bool enabled,bool occlusionView=false);
+    static bool postProcessing();
     float gripError()const{return m_gripError;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,

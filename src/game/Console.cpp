@@ -42,6 +42,11 @@ void Game::executeConsole(std::string command){
   if(arg=="1"||arg=="2"||arg=="4"){SoftwareRenderer::setTexturePresentScale(std::stoi(arg));m_consoleLog.push_back("TEXTURE PRESENT SCALE "+arg+"X (STORE-LOW / RUN-HIGH). ATLASES REBUILD ON NEXT DRAW.");}
   else m_consoleLog.push_back("USE TEX_UP 1, 2 OR 4. DEFAULT IS 1X NATIVE ATLASES.");
  }
+ else if(verb=="r_post"){
+  if(arg=="ao"){SoftwareRenderer::setPostProcessing(true,true);m_consoleLog.push_back("POST DEBUG: AMBIENT OCCLUSION ONLY.");}
+  else if(arg=="on"||arg=="off"){SoftwareRenderer::setPostProcessing(arg=="on");m_consoleLog.push_back(arg=="on"?"POST ON: AMBIENT OCCLUSION, DEPTH HAZE, BLOOM, GRADE.":"POST OFF: RAW SCENE LIGHTING.");}
+  else m_consoleLog.push_back("USE R_POST ON OR OFF. ON IS THE DEFAULT.");
+ }
  else if(verb=="r_texels"){
   if(arg=="crisp"||arg=="smooth"){SoftwareRenderer::setCrispTexels(arg=="crisp");m_consoleLog.push_back(arg=="crisp"?"TEXELS CRISP: SQUARE PSX TEXELS, ANTIALIASED EDGES.":"TEXELS SMOOTH: PLAIN BILINEAR MAGNIFICATION.");}
   else m_consoleLog.push_back("USE R_TEXELS CRISP OR SMOOTH. CRISP IS THE DEFAULT.");

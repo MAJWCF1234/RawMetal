@@ -29,6 +29,8 @@ constexpr float FOV = 75.0f * kPi / 180.0f;
 // up close and mip-filtered at range. tex_up 2/4 restores the bilinear preview.
 int g_texturePresentScale = 1;
 bool g_crispTexels = true;
+bool g_postProcessing = true; // GPU post pass: occlusion, haze, bloom, grade
+bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){ return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
 std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t limit=3){
  std::vector<std::string> lines;columns=std::max(size_t(1),columns);
@@ -95,6 +97,8 @@ void SoftwareRenderer::setTexturePresentScale(int scale){
 int SoftwareRenderer::texturePresentScale(){return g_texturePresentScale;}
 void SoftwareRenderer::setCrispTexels(bool crisp){g_crispTexels=crisp;}
 bool SoftwareRenderer::crispTexels(){return g_crispTexels;}
+void SoftwareRenderer::setPostProcessing(bool enabled,bool occlusionView){g_postProcessing=enabled;g_postOcclusionView=occlusionView;}
+bool SoftwareRenderer::postProcessing(){return g_postProcessing;}
 bool SoftwareRenderer::enableHardware(void* window){
  if(m_gpu)return true;
  // Delay-load the system Vulkan loader so unsupported machines can still run.
@@ -842,7 +846,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];fogPowers[slot]=fogPowers[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
    distances[slot]=d2;fogPowers[slot]=lamp.intensity;fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
   }
-  m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);
+  m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};

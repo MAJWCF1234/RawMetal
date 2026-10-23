@@ -15,6 +15,9 @@ public:
  void setFogLights(const std::array<float,16>& lights,const std::array<float,4>& powers={1.f,1.f,1.f,1.f});
  // Crisp keeps source texels square when magnified; smooth is plain bilinear.
  void setCrispTexels(bool crisp);
+ // Ambient occlusion, distance haze, wide bloom and grade (HDR, non-VR only).
+ void setPostProcessing(bool enabled,bool occlusionView=false);
+ bool postProcessing()const;
  void setAtmosphere(const std::array<float,4>& atmosphere);
  bool beginStaticCache(int slot,std::uint64_t key);
  void endStaticCache();
