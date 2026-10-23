@@ -1492,8 +1492,8 @@ World::World(int level,WorldId id):m_worldId(id) {
   buildLayers(ReactorStairs);
   m_doors={{2,5,.5f,0,false,false,true,9},{20,23,21.5f,0,false,true}};
   m_doors.back().requireEnemiesClear=true;m_doors.back().requireControl=true;
-  m_terminals={{{4.5f,2.5f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","BOARD CAB. USE DISPATCH CONTROL.",9},
-               {{13.35f,11.5f},"CAB CONTROL / DISPATCH","ASCENDING TO SURFACE.","WARNING: CABLE TENSION CRITICAL.",9,true},
+  m_terminals={{{4.5f,2.5f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","LAST CAB TO THE TOP. BOARD AND DISPATCH.",9},
+               {{13.35f,11.5f},"CAB CONTROL / DISPATCH","ASCENDING TO SURFACE.","WARNING: SAME BRAKE MODEL AS SERVICE LIFT.",9,true},
                {{8.3f,21.2f},"MAINTENANCE / SHIFT LOG","RETURN TRIPPED AGAIN. NO FEED PRESSURE.","LEFT THE SERVICE DISK WITH THE SPARES.",3},
                {{18.1f,19.1f},"REACTOR ACCESS / DRIVE A:","","",0,false,1},
                {{6.3f,18.2f},"01 / COOLANT FEED","","",0,false,2},
