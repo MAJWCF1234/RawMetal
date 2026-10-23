@@ -4,3 +4,4 @@ src/assets/actors/freight-worker.obj -text
 src/assets/facility/cargo/extraction-fan.obj -text
 src/assets/facility/cargo/forklift.obj -text
 src/assets/facility/cargo/VEHICLE_Forklift.mtl -text
+src/assets/office/*.obj -text
