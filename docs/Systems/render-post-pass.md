@@ -70,10 +70,25 @@ The post pass is now two stages:
 Strengths were tuned down after A/B renders showed the first pass washing out
 contrast.
 
+## Stage 3 (2026-10-23): screen-space lamp shadows
+
+A **shadow stage** (`shadow.frag`) marches 16 jittered steps from each pixel
+toward the four nearest lamps through the depth buffer. Any occluder in front
+of the ray, within 0.9 m of thickness, removes that lamp's estimated share of
+the light. That includes guards, creatures, props and geometry the per-vertex
+bake missed.
+
+- Shadows are applied separately from occlusion, which spares lit pixels.
+- The compose stage denoises them with the same depth-aware 4x4 filter.
+- `grade.x` is now a black point, so haze and bounce do not lift the darkest
+  tones.
+- Actors now cast real shadows from lamps.
+- Yard benchmark: post costs about 0.06 ms.
+- `--performance-test` passes: Foundry 21 ms and Gantry 21 ms per headless
+  frame, after the readback memory fix.
+
 ## Next stages
 
-- Denoise the occlusion with a depth-aware blur.
-- Per-pixel lighting with real-time shadow maps for key lamps.
-- Hemispherical bounce light.
-- Volumetric light that reuses the stored depth.
 - Screen-space reflections on water and wet floors.
+- Per-pixel lamp shading, so lit surfaces can respond to normal-map detail
+  beyond the two strongest lights per face.

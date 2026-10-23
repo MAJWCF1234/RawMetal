@@ -95,7 +95,7 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
    t.emission.resize(15);t.relief.resize(15);t.parallaxScale=.008f;t.glossStrength=.32f;
    for(size_t p=0;p<15;++p){t.emission[p]=0xff000000u|(uint32_t(i*23+p*2)<<16)|(uint32_t(17+i*17+p*3)<<8)|uint32_t(13+i*9+p*4);t.relief[p]=uint8_t(p*17);}
   }
-  GpuRenderer grouped,immediate;
+  GpuRenderer grouped,immediate;grouped.setPostProcessing(false);immediate.setPostProcessing(false); // Raw shader colours
   auto drawAtlases=[&](GpuRenderer&gpu){gpu.begin(128,72);gpu.setView(0,0,0,0,0,128.f/72.f,false,0);
    for(size_t i=0;i<atlases.size();++i){float x=-.36f+float(i%4)*.18f,y=-.18f+float(i/4)*.18f;
     MeshVertex a{{x,y,1},0,0},b{{x+.16f,y,1},8,0},c{{x+.16f,y+.16f,1},8,8},d{{x,y+.16f,1},0,8};std::array<Point3,2> directions{{{0,0,1},{}}};std::array<float,2> weights{.7f,0};
