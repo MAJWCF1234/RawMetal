@@ -16,6 +16,8 @@
 #include <windows.h>
 #include <stdexcept>
 #include <chrono>
+#include <mutex>
+#include <set>
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #include "../ThirdParty/stb/stb_image.h"
@@ -133,6 +135,12 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_handgunTexture=loadTexture(338);deriveSurfaceNormal(m_handgunTexture,.3f);m_handgunTexture.glossStrength=.25f;
  m_droneTexture=loadTexture(335);deriveSurfaceNormal(m_droneTexture,.3f);m_droneTexture.glossStrength=.2f;
  {auto emission=loadTexture(336);if(emission.width!=m_droneTexture.width||emission.height!=m_droneTexture.height)throw std::runtime_error("Drone emission dimensions mismatch");m_droneTexture.emission=std::move(emission.pixels);}
+ {Texture missing{64,64,std::vector<std::uint32_t>(64*64)};for(int y=0;y<64;++y)for(int x=0;x<64;++x)missing.pixels[size_t(y*64+x)]=((x/8+y/8)&1)?0xff000000u:0xffff00ffu;prepareDecal(missing,false);m_missingTexture=std::move(missing);}
+ m_ironTexture=loadTexture(349);attachNormal(m_ironTexture,350,true,0);m_ironTexture.glossStrength=.22f;
+ m_darkMetalTexture=loadTexture(351);attachNormal(m_darkMetalTexture,352,true,0);m_darkMetalTexture.glossStrength=.3f;
+ m_rubberTexture=loadTexture(353);attachNormal(m_rubberTexture,354,true,0);m_rubberTexture.glossStrength=.06f;
+ m_leatherTexture=loadTexture(355);deriveSurfaceNormal(m_leatherTexture,.25f);m_leatherTexture.glossStrength=.12f;
+ m_idFabricTexture=loadTexture(356);m_medkitCaseTexture=loadTexture(357);m_medkitLabelTexture=loadTexture(358);
  m_glassTexture={1,1,{0x203c5a58u}};m_glassTexture.transparent=true;m_glassTexture.glossStrength=.55f;
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
  for(int species=0;species<4;++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=species==int(CreatureKind::Huntsman)||species==int(CreatureKind::Wasp);const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
@@ -365,8 +373,12 @@ const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int 
  // Its handle and housing use the supplied console atlas, while the screen
  // and keypad materials bind separately through their source names above.
  if(mesh==22)return m_facilityTextures.at("electronics_etx_part_1");
+ // Unresolved materials draw as the missing-texture checker instead of
+ // dropping the GPU session; each one is listed once for replacement.
  std::string material=part>=0&&part<int(model.materialNames.size())?model.materialNames[size_t(part)]:"<invalid part>";
- throw std::runtime_error("Missing facility texture for mesh "+std::to_string(mesh)+", part "+std::to_string(part)+", material "+material);
+ static std::mutex reportedLock;static std::set<std::string> reported;
+ {std::lock_guard lock(reportedLock);if(reported.insert(std::to_string(mesh)+"/"+material).second)std::ofstream("RawMetal-missing-textures.txt",std::ios::app)<<"facility mesh "<<mesh<<", part "<<part<<", material "<<material<<'\n';}
+ return m_missingTexture;
 }
 SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
  Texture sign{256,80,std::vector<std::uint32_t>(256*80)};

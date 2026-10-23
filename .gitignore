@@ -10,6 +10,7 @@ RawMetal-error.txt
 RawMetal-audio.txt
 RawMetal-renderer.txt
 RawMetal-custom-maps.txt
+RawMetal-missing-textures.txt
 RawMetal-*.zip
 inventory.zip
 src/world/World.cpp.bak

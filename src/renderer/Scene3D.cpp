@@ -534,7 +534,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    triangle3D(A,B,C,t,light,normalState);triangle3D(A,C,D,t,light,normalState);}
  };
  Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};
- Texture iron{1,1,{0xff343834u}},red{1,1,{0xffb84728u}};
+ const Texture& iron=m_ironTexture;Texture red{1,1,{0xffb84728u}};
  Texture cabWindow{1,1,{0xff30464bu}};cabWindow.glossStrength=.46f;
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
@@ -1710,7 +1710,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=false;objectNormalLighting=nullptr;
   if(engineer&&(!mesh.hasDirectCreatureMotion()||(directSupport&&weapon->padVisible))){
-   static const Texture terminalCase{1,1,{0xff273334u}},terminalRubber{1,1,{0xff151b1au}},terminalStrap{1,1,{0xff493e2du}};
+   const Texture&terminalCase=m_rubberTexture,&terminalRubber=m_leatherTexture,&terminalStrap=m_leatherTexture;
    static const Texture terminalGlass{1,1,{0xff071b1cu}};
    static const Texture terminalSignal=[](){Texture t{1,1,{0xff56d4b7u}};t.emission={0xff23705cu};return t;}();
    static const Texture terminalRepair=[](){Texture t{1,1,{0xffe2b452u}};t.emission={0xff725423u};return t;}();
@@ -1754,8 +1754,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
   }
   if(treating&&m_cleanupInspectionStage==0){
-   static const Texture kitWhite{1,1,{0xffdbddd3u}},kitInside{1,1,{0xff354038u}},kitRed{1,1,{0xffb43432u}};
-   static const Texture kitStand{1,1,{0xff67746eu}},kitFeet{1,1,{0xff252b27u}};
+   const Texture&kitWhite=m_medkitCaseTexture,&kitInside=m_rubberTexture,&kitLabel=m_medkitLabelTexture;
+   const Texture&kitStand=m_darkMetalTexture,&kitFeet=m_rubberTexture;
    Point3 forward{s,c,0},up{0,0,1};float size=track.scale/1.6f;
    auto kit=medicalKit;
    auto casePoint=[&](float x,float y,float z){return kit.point(x,y,z);};
@@ -1773,16 +1773,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
    quad(A,B,C,D,kitWhite,1.f);quad(A,a,b,B,kitWhite,1.f);quad(B,b,e,C,kitWhite,1.f);quad(C,e,d,D,kitWhite,1.f);quad(D,d,a,A,kitWhite,1.f);quad(a,d,e,b,kitInside,1.f);
    // Medical markings on the case remain readable while its lid is open.
-   quad(casePoint(.181f,-.075f,-.09f),casePoint(.181f,.075f,-.09f),casePoint(.181f,.075f,-.06f),casePoint(.181f,-.075f,-.06f),kitRed,1.f);
-   quad(casePoint(.181f,-.018f,-.12f),casePoint(.181f,.018f,-.12f),casePoint(.181f,.018f,-.03f),casePoint(.181f,-.018f,-.03f),kitRed,1.f);
+   quad(casePoint(.181f,-.075f,-.12f),casePoint(.181f,.075f,-.12f),casePoint(.181f,.075f,-.03f),casePoint(.181f,-.075f,-.03f),kitLabel,1.f);
    float open=directTreatment?std::clamp((weapon->treatment-.4f)/.3f,0.f,1.f):std::clamp(std::min(weapon->treatment/.25f,(1-weapon->treatment)/.16f),0.f,1.f),angle=open*(directTreatment?1.8f:1.5f);
    // The far hinge opens toward the patient, clearing the operator's leaning
    // chest and mask while leaving the near rim accessible to both hands.
    auto lid=[&](float x,float y){return casePoint(x,.13f-y*std::cos(angle),-.018f+y*std::sin(angle));};
    auto marking=[&](float x,float y){return lid(x,y)+(up*std::cos(angle)+forward*std::sin(angle))*.0015f;};
    quad(lid(-.18f,0),lid(.18f,0),lid(.18f,.26f),lid(-.18f,.26f),kitWhite,1.f);
-   quad(marking(-.075f,.105f),marking(.075f,.105f),marking(.075f,.155f),marking(-.075f,.155f),kitRed,1.f);
-   quad(marking(-.025f,.055f),marking(.025f,.055f),marking(.025f,.205f),marking(-.025f,.205f),kitRed,1.f);
+   quad(marking(-.075f,.055f),marking(.075f,.055f),marking(.075f,.205f),marking(-.075f,.205f),kitLabel,1.f);
    // Dressing and disinfectant remain visible inside the open case.
    cylinder(casePoint(-.07f,-.02f,-.09f),casePoint(-.07f,-.02f,-.025f),.026f*size,kitWhite);
    quad(casePoint(.015f,-.06f,-.025f),casePoint(.12f,-.06f,-.025f),casePoint(.12f,.07f,-.025f),casePoint(.015f,.07f,-.025f),kitWhite,1.f);
@@ -2048,7 +2046,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
     quad(center+(axis*start+radialA*radiusA)*size,center+(axis*start+radialB*radiusA)*size,center+(axis*end+radialB*radiusB)*size,center+(axis*end+radialA*radiusB)*size,texture);
    }
   };
-  static const Texture rubber{1,1,{0xff202522u}},housing{1,1,{0xff353e37u}},strap{1,1,{0xff33392fu}},identification{1,1,{0xff8c783fu}},reflector{1,1,{0xff707b72u}},lensOff{1,1,{0xff263834u}},lensOn{1,1,{0xffc8dec1u}};
+  const Texture&rubber=m_rubberTexture,&housing=m_darkMetalTexture,&strap=m_leatherTexture,&identification=m_idFabricTexture,&reflector=m_darkMetalTexture;
+  static const Texture lensOff{1,1,{0xff263834u}},lensOn{1,1,{0xffc8dec1u}};
   if(fists){
    for(float z:{-.025f,.025f})tube(forearm,z-.009f,z+.009f,.049f,.049f,strap);
    // A short saddle connects the offset torch to its wrist straps.
@@ -2086,7 +2085,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  }
  // The source arms end in open shoulder rings. Continue those rings into dark
  // sleeves behind the camera, closing the model rather than exposing its interior.
- Texture sleeve{1,1,{0xff302c27u}};
+ const Texture& sleeve=m_leatherTexture;
  for(const auto&ring:m_armsMesh.openRings){
   Point3 center{};for(auto v:ring)center=center+fromRig(v.p);center=center*(1.f/float(ring.size()));
   // Only upper-arm openings are extended; small mesh boundaries are left intact.

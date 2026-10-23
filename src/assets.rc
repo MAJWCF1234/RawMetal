@@ -233,3 +233,13 @@
 347 RCDATA "assets/cleanup-voices.bank"
 
 348 RCDATA "assets/ai/texture-x2.ntm"
+349 RCDATA "assets/materials/iron-plate.png"
+350 RCDATA "assets/materials/iron-plate-normal.png"
+351 RCDATA "assets/materials/dark-metal.png"
+352 RCDATA "assets/materials/dark-metal-normal.png"
+353 RCDATA "assets/materials/rubber.png"
+354 RCDATA "assets/materials/rubber-normal.png"
+355 RCDATA "assets/materials/leather.png"
+356 RCDATA "assets/materials/id-fabric.png"
+357 RCDATA "assets/pickups/medkit-case.png"
+358 RCDATA "assets/pickups/medkit-label.png"

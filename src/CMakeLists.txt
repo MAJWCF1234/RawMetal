@@ -120,6 +120,7 @@ add_executable(RawMetal WIN32
     game/WorldIsolationTest.cpp
     game/ExclusionTest.cpp
     game/ExclusionAuthoringTest.cpp
+    game/PrologueTest.cpp
     game/Stealth.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp

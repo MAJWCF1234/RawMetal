@@ -311,6 +311,8 @@ public:
     bool walkExclusionEast(std::ostream& report);
     static bool testExclusion();
     static bool testExclusionAuthoring();
+    static bool testPrologue();
+    static Game prologueInspection(int stage);
     static Game exclusionInspection(int stage=0);
     static bool testStealth();
     bool npcIncapacitated(size_t actor)const;
@@ -445,6 +447,9 @@ private:
     void loadLevel(int level,bool carry);
     World makeWorld(int level)const;
     void selectCustomCampaign(int index);
+    // New Game: the built-in campaign from its first map. A custom prologue
+    // requests this through ENTER_CAMPAIGN; it applies at the next update.
+    void startMainCampaign();
     int customMenuItemCount()const{return int(m_customCampaigns.size())+1;} // uploaded campaigns + Back
     int customMenuLogicalIndex(int row)const{return m_customMenuOffset+row;}
     int m_level=0;
@@ -632,6 +637,7 @@ private:
     float m_elapsed = 0.0f;
     int m_kills = 0;
     bool m_won = false;
+    bool m_pendingMainCampaign = false;
     float m_hitFlash=0;
     WeaponMotion m_weaponMotion;
     Vec2 m_sway{},m_swayVelocity{};
