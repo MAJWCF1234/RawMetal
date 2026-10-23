@@ -93,6 +93,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=20){int cue=integer(f,19,"music cue");if(cue<0||cue>1)throw std::runtime_error("invalid music cue");map->definition.musicCue=MusicCue(cue);}
    if(f.size()>=21)map->definition.spawnYaw=number(f,20,"spawn yaw");
    if(f.size()>=22)map->definition.spawnPitch=number(f,21,"spawn pitch");
+   if(f.size()>=23)map->definition.startUnarmed=boolean(f,22,"start unarmed");
   }else if(tag=="VISIBLE_GROUP"){
    if(f.size()!=3)throw std::runtime_error("malformed VISIBLE_GROUP record");auto map=mapAt(maps,f);
    int group=integer(f,2,"visible residency group");if(group<0)throw std::runtime_error("visible residency group must be nonnegative");

@@ -172,6 +172,7 @@ private:
     void put(int x,int y,std::uint32_t c);
     void rect(int x,int y,int w,int h,std::uint32_t c);
     void drawVrStatus(const Game& game);
+    void drawComputer(const Game& game,int terminal);
     void drawHud(const Game& game);
     void drawTitle(const Game& game);
     void drawConsole(const Game& game);
