@@ -14,8 +14,8 @@ Game Game::prologueInspection(int stage){
  if(stage>=1){InputState use;use.use=true;g.update(use,1.f/60);frames(stage==1?60*8:60*25);}
  if(stage==2)place({13.f,5.5f},0,{18.f,5.8f},-4);
  if(stage==3)place({17.f,10.5f},0,{17.f,17.f},-8);
- // 5-8: orbit the workstation (south, east, north, west) to check its screen faces the chair.
- if(stage>=5){const Vec2 c{5.5f,2.9f},eye[]={{5.5f,4.1f},{6.4f,3.6f},{5.5f,2.25f},{4.6f,3.6f}};place(eye[stage-5],0,c,-30);}
+ // 5-8: wide from the south-east corner, the doorway, over the shoulder at the desk, west side.
+ if(stage>=5){const Vec2 eye[]={{9.1f,9.1f},{9.6f,6.f},{4.6f,5.6f},{2.7f,5.f}},look[]={{4.2f,3.f},{3.f,4.f},{4.6f,3.f},{6.5f,3.f}};const float pitch[]={-10,-8,-24,-12};place(eye[stage-5],0,look[stage-5],pitch[stage-5]);}
  if(stage==4){place({17.f,16.8f},0,{17.f,13.f},0);g.update({},1.f/60);g.setState(stateId("office_drop"),1);frames(60*4);place({16.f,17.5f},g.player().z,{18.f,15.2f},10);}
  g.m_logTime=std::min(g.m_logTime,1.f);g.equipWeapon(WeaponId::Fists);g.update({},1.f/60);
  return g;

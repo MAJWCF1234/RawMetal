@@ -158,6 +158,13 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_facilityTextures.emplace("wooden_crate_hx_2_1",loadTexture(289));
  m_facilityTextures.emplace("electronics_etx_part_1",loadTexture(291));
  m_facilityTextures.emplace("keypad_1",loadTexture(293));
+ // OFFICE pack models bind by their OBJ usemtl names.
+ const char* officeMaterials[]={"desk_2","computer","tv","office_chair_black","file_cabinet_large","file_cabinet","desk_phone","mug","watercooler","coffee_machine","bookcase","Binders"};
+ for(int i=0;i<12;++i)m_facilityTextures.emplace(officeMaterials[i],loadTexture(374+i));
+ m_officeWall=loadTexture(386);attachNormal(m_officeWall,387,true,0);
+ m_dropCeiling=loadTexture(388);attachNormal(m_dropCeiling,389,true,0);
+ m_securityCarpet=loadTexture(390);attachNormal(m_securityCarpet,391,true,0);
+ m_officeTile=loadTexture(392);attachNormal(m_officeTile,393,true,0);m_officeTile.glossStrength=.18f;
  const char* forkliftMaterials[]={"fl_tire.bmp_fl_tire.png","fl_back.bmp_fl_back.png","fl_front.bmp_fl_front.png","fl_grey.bmp_fl_grey.png","fl_lift.bmp_fl_lift.png","fl_top.bmp_fl_top.png","fl_side.bmp_fl_side.png","fl_gate.bmp_fl_gate.png"};
  for(int i=0;i<8;++i)m_facilityTextures.emplace(forkliftMaterials[i],loadTexture(295+i));
  // A pale painted shipping finish retains the supplied atlas's grain,

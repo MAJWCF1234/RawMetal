@@ -60,6 +60,23 @@ Against [[campaign-system-overview-20261010]] section 1.1:
    SUB-LEVEL / NO SIGNAL FROM LAB 4".
 7. The game hands off to the main campaign's first map, exactly like New Game.
 
+## Set dressing (rebuilt 2026-10-23)
+
+The first pass used generic stand-ins and the user rejected it. The office is
+now dressed from the purchased OFFICE pack and PSX Textures (see
+`src/assets/office/OFFICE-SOURCE.md`):
+
+- A CCTV bank of four CRT sets on wide filing cabinets.
+- A wooden security desk with a CRT, keyboard, phone, mug and binder, a PC
+  tower underneath, and an L-shaped corner desk with a second CRT.
+- An office chair, tall file cabinets, a water cooler, a coffee machine, and a
+  bookcase with binders.
+- Painted block walls, a drop ceiling and green office carpet. The corridor is
+  office tile up to the industrial service lobby.
+
+The workstation terminal sits on the desk's front edge and draws no console of
+its own: the desk CRT is the computer.
+
 ## Systems used
 
 Everything is an existing custom-map record. Chat lines and the alarm are

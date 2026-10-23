@@ -539,7 +539,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
   // Architectural repeats are measured in metres, never stretched over a deck.
-  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,(w.campaign()&&w.level()>=3)?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,((w.campaign()&&w.level()>=3)||w.custom())?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
   if(m_staticGeometryBuild||eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
   if(m_staticGeometryBuild||eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
   if(m_staticGeometryBuild||eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
@@ -809,7 +809,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.campaignChunk(3)){
      // A safety cage must not become an opaque wall around every cab window.
@@ -1326,12 +1326,19 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     box({keyboardX-halfX,keyboardY-halfY,deskTop+.07f},{keyboardX+halfX,keyboardY+halfY,deskTop+.10f},m_panelMetal,1.f);
     facility(11,x,y,deskTop+.065f,.386509f,.53235f,.50505f,terminalYaw);
    }else{
-    box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
-    box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
-    // Honor authored yaw so Exclusion/custom CRTs face their controls; legacy
-    // zero-yaw terminals keep the original -Y facing.
-    float terminalYaw=std::fabs(terminal.yaw)<1e-4f?kPi:terminal.yaw;
-    facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,terminalYaw);
+    // A terminal placed within a solid fixture's footprint (a desk) uses that
+    // furniture's own computer models; only freestanding ones get a console.
+    bool onFurniture=false;
+    for(const auto&f:w.fixtures()){float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw);
+     onFurniture|=f.solid&&std::fabs(dx*c-dy*s)<f.width*.5f&&std::fabs(dx*s+dy*c)<f.depth*.5f;}
+    if(!onFurniture){
+     box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
+     box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
+     // Honor authored yaw so Exclusion/custom CRTs face their controls; legacy
+     // zero-yaw terminals keep the original -Y facing.
+     float terminalYaw=std::fabs(terminal.yaw)<1e-4f?kPi:terminal.yaw;
+     facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,terminalYaw);
+    }
    }
    if(terminal.reactorAction==1){box({x-.2f,y-.295f,h+.28f},{x+.2f,y-.24f,h+.39f},m_metal,1.f);box({x-.15f,y-.30f,h+.33f},{x+.11f,y-.296f,h+.345f},iron,1.f);box({x+.15f,y-.302f,h+.32f},{x+.17f,y-.295f,h+.34f},w.reactorStage()>=World::ReactorStage::DiskLoaded?blue:amber,1.8f);}
   }
