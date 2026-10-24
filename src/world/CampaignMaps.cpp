@@ -359,8 +359,10 @@ std::shared_ptr<const Map> makeFoundry(){
  rectangle(g(),3,10,4,16,'#');
  // A ventilation trunk has dropped across the west passage on its hangers:
  // the way through is a crawl under it.
- wall(m,1,12.f,3,13.6f,1.f,1.62f,2);
+ wall(m,1,12.f,3,13.6f,1.f,1.62f,11);
  for(float y:{12.f,13.52f})wall(m,1,y,3,y+.08f,.92f,1.7f,12);
+ // Hazard banding on both faces marks the duct as something to duck under.
+ for(float y:{11.97f,13.6f})wall(m,1.f,y,3.f,y+.03f,1.1f,1.3f,13);
  for(float x:{1.25f,2.75f})m.pipes.push_back({{x,12.8f},{x,12.8f},1.62f,.02f,6.2f,2});
  // Converter plinth: two vessels, each venting up a flue into the roof.
  rectangle(g(),10,10,14,13,'T');
@@ -413,6 +415,7 @@ std::shared_ptr<const Map> makeFoundry(){
  m.lights.push_back(lamp({8.f,14.8f},hall-.4f,1.3f,7.5f,2100));
  m.lights.push_back(lamp({19.f,8.6f},5.2f,1.1f,5.5f,4300,.25f));
  m.lights.push_back(lamp({1.f,12.5f},2.4f,.9f,4.5f,4300,.35f,WorldLightMount::Wall,0));
+ m.lights.push_back(lamp({1.f,11.f},1.6f,.7f,3.f,1400,-.3f,WorldLightMount::Wall,0));
  // Containment: sick green-white tubes, cells left dark, red at the gate.
  m.lights.push_back(lamp({5.5f,18.f},2.85f,1.f,5.5f,6200,.45f));
  m.lights.push_back(lamp({12.5f,18.f},2.85f,.9f,5.5f,6200,.45f));
@@ -779,6 +782,95 @@ std::shared_ptr<const Map> makeReactorComplex(){
  zone(m,"10 SURFACE LIFT",0,0,24,24,-1.f,1000);
  zone(m,"12 UPPER MANIFOLD",0,0,24,24,-7.f,-1.f);
  zone(m,"11 REACTOR CONTAINMENT",0,0,24,24);
+ return p;
+}
+
+// SERVICE GALLERY. The reactor bulkhead opens on a north landing; a four-metre
+// service spine runs south under the headers and cable tray, straight on into
+// the Coolant Return. Off the spine, each behind an open archway and a
+// swinging door from its cross corridor: the pump workshop where the assembly
+// was moved, the electrical room that must stay dry, the stores and the plant
+// bay. Nothing hunts here: it is the breath between the reactor and the water.
+std::shared_ptr<const Map> makeServiceGallery(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ const float floor=-9,roof=-5.8f,top=roof;
+ m.name=CampaignMapNames[4];m.definition=CampaignChunks[4];m.definition.ceiling=roof;m.definition.ambient=.32f;
+ m.layers.push_back(floorLayer("Reactor Service Gallery",floor,false,true));m.openSouth=true;
+ auto g=[&]()->AuthoredLayerData&{return m.layers[0];};
+ rectangle(g(),5,0,8,1,'.');m.doors.push_back({5,8,.5f,0,false,false,true});
+ auto partition=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,floor,top,3);};
+ auto swing=[&](float left,float right,float y){
+  // A swinging leaf in a 25 cm frame, with the wall closed above the frame.
+  Door d{left,right,y};d.swinging=true;m.doors.push_back(d);wall(m,left,y-.125f,right,y+.125f,floor+2.55f,top,3);};
+ // Rooms: workshop (NW), electrical (NE), stores (SW), plant (SE). Each opens
+ // on the spine through an archway and on its cross corridor through a door.
+ partition(1,4.75f,9.85f,5);partition(14.15f,4.75f,23,5);
+ for(float x:{9.85f,14.f}){partition(x,5,x+.15f,6.5f);partition(x,8.f,x+.15f,11.25f);wall(m,x,6.5f,x+.15f,8.f,floor+2.4f,top,3);
+  partition(x,13,x+.15f,17.f);partition(x,18.5f,x+.15f,23);wall(m,x,17.f,x+.15f,18.5f,floor+2.4f,top,3);}
+ partition(1,11,4.6f,11.25f);partition(6.f,11,10,11.25f);swing(4.6f,6.f,11.125f);
+ partition(14,11,18.f,11.25f);partition(19.4f,11,23,11.25f);swing(18.f,19.4f,11.125f);
+ partition(1,13,3.f,13.25f);partition(4.4f,13,10,13.25f);swing(3.f,4.4f,13.125f);
+ partition(14,13,20.f,13.25f);partition(21.4f,13,23,13.25f);swing(20.f,21.4f,13.125f);
+ partition(1,22.75f,10,23);partition(14,22.75f,23,23);
+
+ // --- Landing --------------------------------------------------------------
+ {AuthoredTerminalData t;t.position={14.5f,1.4f};t.title="SERVICE GALLERY / WORK ORDER";t.line1="PUMP ASSEMBLY MOVED TO WEST WORKSHOP.";t.line2="ELECTRICAL ROOM MUST REMAIN DRY.";t.yaw=.001f;m.terminals.push_back(std::move(t));}
+ for(float x:{17.f,18.f,19.f})m.fixtures.push_back({13,{x,1.27f},0,.9066f,.4956f,2.2f,kPi,true});
+ wallSign(m,10.5f,1.055f,floor+1.9f,"13 / SERVICE GALLERY","REACTOR SERVICE / COOLANT RETURN SOUTH",2.6f,0);
+ // Spine services: headers along the west side, a cable tray along the east.
+ for(float x:{10.4f,10.85f})servicePipe(m,{x,1.2f},{x,24.f},roof-.45f,.11f,x<10.6f?3:4);
+ wall(m,13.55f,1,13.95f,24,roof-.42f,roof-.34f,2);
+ for(float y=2.f;y<24;y+=3.f)wall(m,13.55f,y,13.95f,y+.06f,roof-.34f,roof,2);
+
+ // --- 13A PUMP WORKSHOP -----------------------------------------------------
+ m.fixtures.push_back({12,{4.f,6.f},0,3.06f,.94f,1.751f,0,true});
+ m.props.push_back({0,{3.6f,9.1f},1.25f,2.2f,0,{1.1f,.66f},.15f});
+ m.fixtures.push_back({19,{7.6f,9.3f},0,1.367f,.724f,.78f,0,true});
+ m.fixtures.push_back({7,{1.27f,7.6f},0,1.8f,.5f,1.8f,kPi*.5f,true});
+ wallSign(m,10.055f,9.5f,floor+1.8f,"PUMP WORKSHOP","P-01 ASSEMBLY",1.8f,kPi*.5f);
+
+ // --- 13B ELECTRICAL ----------------------------------------------------------
+ for(float y:{6.f,7.f,8.f,9.f})m.fixtures.push_back({13,{22.75f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});
+ m.fixtures.push_back({41,{17.5f,6.f},0,2.4f,1.f,1.1f,0,true});
+ // A cabinet with a cracked bus bar arcs across the floor in front of it.
+ hazard(m,Hazard::Kind::Electricity,20.6f,8.6f,21.8f,9.4f,floor-1,floor+2,10);
+ wallSign(m,13.945f,9.5f,floor+1.8f,"ELECTRICAL","KEEP DRY / LIVE GEAR",1.8f,-kPi*.5f);
+
+ // --- 13C STORES --------------------------------------------------------------
+ for(float y:{15.f,17.5f,20.f})m.fixtures.push_back({7,{1.27f,y},0,1.8f,.5f,1.8f,kPi*.5f,true});
+ for(float y:{16.f,19.5f})m.fixtures.push_back({7,{5.5f,y},0,1.8f,.5f,1.8f,0,true});
+ cargo(m,8.4f,21.5f,floor);cargo(m,8.4f,14.6f,floor,false);
+ wallSign(m,10.055f,20.5f,floor+1.8f,"STORES","SPARES / CONSUMABLES",1.6f,kPi*.5f);
+
+ // --- 13D PLANT BAY -----------------------------------------------------------
+ m.fixtures.push_back({14,{17.6f,16.f},0,2.404f,2.645f,2.2f,0,true});
+ for(float y:{16.5f,21.3f})m.fixtures.push_back({6,{21.3f,y},0,1.87f,.55f,.99f,0,true});
+ m.props.push_back({1,{17.6f,20.6f},1.12f,2.f,0,{1.f,.31f},.12f});
+ servicePipe(m,{17.6f,16.f},{17.6f,23.f},roof-.5f,.12f,3);
+ wallSign(m,13.945f,20.5f,floor+1.8f,"PLANT BAY","COOLANT RETURN PUMPS",1.6f,-kPi*.5f);
+
+ // --- Light ---------------------------------------------------------------
+ const float lampZ=roof-.15f;
+ for(float x:{6.f,18.f})m.lights.push_back(lamp({x,2.6f},lampZ,.9f,6.f,4300,.2f));
+ m.lights.push_back(lamp({9.f,1.f},floor+2.f,1.1f,4.f,1300,-.3f,WorldLightMount::Wall,kPi*.5f));
+ for(float y:{8.f,15.f,21.f})m.lights.push_back(lamp({12.f,y},lampZ,1.f,7.f,4300,.2f));
+ for(float x:{5.f,19.f})m.lights.push_back(lamp({x,12.1f},lampZ,.6f,4.f,4300,.2f));
+ m.lights.push_back(lamp({5.5f,8.f},lampZ,1.1f,6.f,3200));
+ m.lights.push_back(lamp({18.5f,8.f},lampZ,1.f,6.f,6500,.1f));
+ m.lights.push_back(lamp({5.5f,18.f},lampZ,.8f,6.f,4000));
+ m.lights.push_back(lamp({18.5f,18.f},lampZ,1.f,6.f,2200));
+
+ // --- Supplies ----------------------------------------------------------------
+ using P=PickupKind;
+ m.pickupSpawns={{{8.6f,6.6f},P::Health},{{3.f,21.6f},P::Ammo}};
+ const Vec2 tools[]={{7.2f,10.3f},{7.9f,10.4f},{5.6f,11.8f},{12.6f,3.f}};
+ for(int i=0;i<4;++i)m.clutterSpawns.push_back({i+2,tools[i],floor,i*.9f});
+
+ zone(m,"13A PUMP WORKSHOP",1,5,10,11);
+ zone(m,"13B ELECTRICAL",14,5,23,11);
+ zone(m,"13C STORES",1,13,10,23);
+ zone(m,"13D PLANT BAY",14,13,23,23);
+ zone(m,"13 SERVICE GALLERY",0,0,24,24);
  return p;
 }
 
@@ -1366,7 +1458,7 @@ std::shared_ptr<const Map> make(int level){
 }
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
-  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();
+  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();
   for(int i=10;i<CampaignChunkCount;++i)result[i]=make(i);return result;}();
  return maps.at(size_t(level));
 }

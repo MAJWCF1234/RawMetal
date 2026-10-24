@@ -587,11 +587,12 @@ void SoftwareRenderer::uiPanel(int x,int y,int w,int h){
 // Facility signage: an enamelled graphite steel plate with a bevelled rim,
 // corner rivets and a safety-colour band, lettered in the UI's condensed face
 // (auto-fitted), with light chipping at the edges and grime toward the bottom.
-// "05 PUMP HALL" reads "05 / PUMP HALL" on a plate, with the map as subtitle.
+// "05 PUMP HALL" reads "05 / PUMP HALL" on a plate (likewise a sub-zone such
+// as "13A STORES"), with the map as subtitle.
 const SoftwareRenderer::Texture& SoftwareRenderer::zoneSign(const char* zone,const char* area){
  auto found=m_zoneSigns.find(zone);if(found!=m_zoneSigns.end())return found->second;
- std::string title=zone;
- if(title.size()>3&&std::isdigit(static_cast<unsigned char>(title[0]))&&std::isdigit(static_cast<unsigned char>(title[1]))&&title[2]==' ')title=title.substr(0,2)+" /"+title.substr(2);
+ std::string title=zone;size_t code=title.find(' ');
+ if(code>=2&&code<=3&&code<title.size()-1&&std::isdigit(static_cast<unsigned char>(title[0]))&&std::isdigit(static_cast<unsigned char>(title[1])))title=title.substr(0,code)+" /"+title.substr(code);
  return m_zoneSigns.emplace(zone,makeSign(title.c_str(),area,0xffa7a766u)).first->second;
 }
 SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
@@ -682,7 +683,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  const auto paper=rgb(236,228,214),muted=rgb(146,138,128),amber=rgb(232,160,60),red=rgb(214,32,26);
  const int sector=int(p.pos.y)/8;
  const char* zone=game.world().zoneName(p.pos,p.z);
- const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
+ const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"18 WASTE HANDLING":game.level()==8?"17 UTILITY JUNCTION":game.level()==7?"16 PUMP ANNEX":game.level()==6?"15 CABLE VAULTS":game.level()==5?"14 COOLANT RETURN":game.level()==4?"13 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
  const auto bone=rgb(236,228,214),black=rgb(0,0,0);
  gradient(0,0,m_width,46,black,.55f,0.f,false);
  std::string place(mapLabel);for(auto&c:place)c=char(std::toupper((unsigned char)c));fill(14,13,3,13,red,1);uiText(22,10,place.c_str(),bone,0,15,1,2);
