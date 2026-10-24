@@ -921,7 +921,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   float x=(door.left+door.right)*.5f,y=door.y-.5f,half=(door.right-door.left)*.5f;
   float base=w.floorHeight(x,door.y)+door.z;
   if(door.swinging){
-   float angle=door.open*kPi*.5f,width=door.right-door.left;
+   float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;
    Vec2 axis{std::cos(angle),std::sin(angle)},normal{-axis.y,axis.x};
    Vec2 hinge{door.left,door.y},edge=hinge+axis*width;
    auto point=[&](Vec2 p,float side,float z){return Point3{p.x+normal.x*side,p.y+normal.y*side,base+z};};
@@ -1366,13 +1366,43 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int y=0;y<24;++y)for(int x=0;x<24;++x){float dx=(x-11.5f)/11.5f,dy=(y-11.5f)/11.5f;
    unsigned noise=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x9e3779b9u);float jitter=float(noise%101u)/100.f;
    float distance=std::sqrt(dx*dx+dy*dy)*(1.08f+(jitter-.5f)*.3f);
-   float soot=std::clamp((.76f-distance)*1.5f,0.f,1.f);
-   float chip=std::clamp((.20f-distance)*8.f,0.f,1.f);
-   bool exposed=chip>.28f&&jitter>.16f;
-   unsigned alpha=unsigned(std::clamp(soot*(.72f+jitter*.25f)+(exposed?chip*.18f:0.f),0.f,1.f)*170.f);
-   t.pixels[size_t(y*24+x)]=(alpha<<24)|(exposed?0x008b857bu:0x00070808u);
+   float soot=std::clamp((.76f-distance)*1.5f,0.f,1.f)*std::clamp((distance-.48f)*5.f,0.f,1.f);
+   unsigned alpha=unsigned(std::clamp(soot*(.72f+jitter*.25f),0.f,1.f)*170.f);
+   t.pixels[size_t(y*24+x)]=(alpha<<24)|0x00070808u;
   }
   t.clampEdges=true;t.transparent=true;return t;}();
+ // The hole itself: an opaque, alpha-tested crater with its own relief and
+ // normals. The parallax path displaces the bowl with the view, so the chip
+ // reads as a chunk taken out of the surface rather than a dark sticker.
+ static const Texture crater=[](){const int n=32;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;
+  std::vector<float> height(size_t(n*n));
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x-15.5f)/15.5f,dy=(y-15.5f)/15.5f;
+   unsigned noise=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x4f1bbcdcu);noise=(noise^(noise>>13))*1274126177u;float jitter=float((noise>>24)&255u)/255.f;
+   float r=std::sqrt(dx*dx+dy*dy)*(1.f+(jitter-.5f)*.22f);
+   float bowl=std::clamp(1.f-r/.84f,0.f,1.f),depth=bowl*bowl*(1.f-jitter*.25f);
+   height[size_t(y*n+x)]=1.f-depth;
+   // A lit lip round a dark bowl: the substrate shows at the rim, the chip is deep.
+   bool inside=r<.88f;float lip=std::clamp(1.f-std::fabs(r-.7f)*4.f,0.f,1.f);float shade=.14f+(1.f-depth)*.22f+lip*.3f+jitter*.1f;unsigned v=unsigned(std::clamp(shade,0.f,1.f)*255.f);
+   t.pixels[size_t(y*n+x)]=((inside?0xffu:0u)<<24)|(v<<16)|(unsigned(v*.95f)<<8)|unsigned(v*.88f);
+  }
+  prepareDecal(t,true);
+  t.relief.resize(size_t(n*n));for(size_t i=0;i<height.size();++i)t.relief[i]=std::uint8_t(std::round(height[i]*255.f));
+  auto sample=[&](int x,int y){x=std::clamp(x,0,n-1);y=std::clamp(y,0,n-1);return height[size_t(y*n+x)];};
+  std::vector<Point3> normals;normals.reserve(size_t(n*n));
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){float gx=(sample(x+1,y)-sample(x-1,y))*3.f,gy=(sample(x,y+1)-sample(x,y-1))*3.f;Point3 nn{-gx,gy,1.f};float l=std::sqrt(nn.x*nn.x+nn.y*nn.y+nn.z*nn.z);normals.push_back(nn*(1.f/l));}
+  t.normalLevels.push_back(std::move(normals));
+  int w=n,h=n;while(w>1||h>1){int nw=std::max(1,w/2),nh=std::max(1,h/2);std::vector<Point3> next(size_t(nw*nh));auto&previous=t.normalLevels.back();
+   for(int y=0;y<nh;++y)for(int x=0;x<nw;++x){Point3 sum{};for(int j=0;j<2;++j)for(int i=0;i<2;++i)sum=sum+previous[size_t(std::min(h-1,y*2+j)*w+std::min(w-1,x*2+i))];float l=std::sqrt(sum.x*sum.x+sum.y*sum.y+sum.z*sum.z);next[size_t(y*nw+x)]=l>.00001f?sum*(1.f/l):Point3{0,0,1};}
+   t.normalLevels.push_back(std::move(next));w=nw;h=nh;}
+  t.parallaxScale=.09f;return t;}();
+ // A blast leaves a broad scorch on the floor.
+ static const Texture scorch=[](){const int n=48;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.transparent=true;t.clampEdges=true;
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
+   unsigned hash=(unsigned(x)*2654435761u^unsigned(y)*2246822519u^0x51f15e3bu);hash=(hash^(hash>>15))*3266489917u;float noise=float((hash>>24)&255u)/255.f;
+   float angle=std::atan2(dy,dx),edge=.78f+.12f*std::sin(angle*4.f+.6f)+.08f*std::sin(angle*9.f-1.9f);
+   float a=std::clamp((edge-r)*3.2f,0.f,1.f)*(.55f+.45f*std::clamp(1.f-r*1.1f,0.f,1.f))*(.75f+noise*.25f);
+   t.pixels[size_t(y*n+x)]=(unsigned(a*200.f)<<24)|0x00060505u;
+  }return t;}();
  for(const auto&mark:game.bulletImpacts())if(mark.level==level){
   if(mark.blood){
    int species=std::clamp(mark.tint,0,3);float tint=species<=1?1.f:.9f;const Texture&blood=m_bloodVariants[size_t(species)];
@@ -1380,23 +1410,25 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
    quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},blood,tint);continue;
   }
-  float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.035f;
+  if(mark.tint==-2){float size=.7f,z=mark.z;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},scorch,.9f);continue;}
+  float tangentX=-mark.normal.y,tangentY=mark.normal.x;
   Point3 p{mark.pos.x,mark.pos.y,mark.z};
-  if(std::fabs(mark.normalZ)>.5f){
-   p.z+=mark.normalZ*.012f;
-   if(mark.normalZ>0)quad({p.x-size,p.y-size,p.z},{p.x+size,p.y-size,p.z},{p.x+size,p.y+size,p.z},{p.x-size,p.y+size,p.z},impact,.9f);
-   else quad({p.x-size,p.y+size,p.z},{p.x+size,p.y+size,p.z},{p.x+size,p.y-size,p.z},{p.x-size,p.y-size,p.z},impact,.9f);
-  }else quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},
-       {p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},impact,.9f);
+  Point3 impactNormal{mark.normal.x,mark.normal.y,mark.normalZ};
+  // Each hole turns by its own angle so no two look stamped from one die.
+  unsigned seed=unsigned(std::fabs(mark.pos.x)*331.f)^unsigned(std::fabs(mark.pos.y)*613.f)^unsigned(std::fabs(mark.z)*977.f);float spin=float(seed%360u)*kPi/180.f;
+  Point3 a,b;if(std::fabs(mark.normalZ)>.5f){p.z+=mark.normalZ*.012f;a={1,0,0};b={0,mark.normalZ>0?1.f:-1.f,0};}else{a={tangentX,tangentY,0};b={0,0,1};}
+  auto hole=[&](Point3 c,float size,const Texture&t,float light){float cs=std::cos(spin),sn=std::sin(spin);Point3 u=(a*cs+b*sn)*size,v=(a*-sn+b*cs)*size;quad(c-u-v,c+u-v,c+u+v,c-u+v,t,light);};
+  hole(p,.032f,crater,.9f);
+  hole(p+impactNormal*.003f,.07f,impact,.9f);
   float age=game.elapsed()-mark.time;
-  Point3 impactNormal{mark.normal.x,mark.normal.y,mark.normalZ},sparkTangent=std::fabs(mark.normalZ)>.5f?Point3{1,0,0}:Point3{tangentX,tangentY,0},sparkUp=cross3(impactNormal,sparkTangent);
+  Point3 sparkTangent=std::fabs(mark.normalZ)>.5f?Point3{1,0,0}:Point3{tangentX,tangentY,0},sparkUp=cross3(impactNormal,sparkTangent);
   if(age>=0&&age<.18f)for(int i=0;i<6;++i){float phase=float(i)*1.0472f,flight=age*2.4f;
-   auto a=p+impactNormal*(.03f+age*1.4f)+sparkTangent*(std::cos(phase)*flight)+sparkUp*(std::sin(phase)*flight)-Point3{0,0,age*age*8.f};
-   quad(a,{a.x+.012f,a.y,a.z},{a.x+.012f,a.y,a.z+.025f},{a.x,a.y,a.z+.025f},amber,1.7f);
+   auto s=p+impactNormal*(.03f+age*1.4f)+sparkTangent*(std::cos(phase)*flight)+sparkUp*(std::sin(phase)*flight)-Point3{0,0,age*age*8.f};
+   quad(s,{s.x+.012f,s.y,s.z},{s.x+.012f,s.y,s.z+.025f},{s.x,s.y,s.z+.025f},amber,1.7f);
   }
  }
- // Short-lived barrel fire stays in world space, so walls and props occlude it.
- // Both masks are generated here; no runtime image dependency is needed.
+ // Barrel fire stays in world space, so walls and props occlude it. Every
+ // mask is generated here; no runtime image dependency is needed.
  static const Texture fire=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
   for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
    unsigned hash=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x6d2b79f5u);hash=(hash^(hash>>13))*1274126177u;
@@ -1408,6 +1440,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    unsigned red=unsigned(210.f+45.f*heat),green=unsigned(78.f+147.f*heat),blue=unsigned(8.f+48.f*heat),alpha=unsigned(edge*220.f);
    t.pixels[size_t(y*48+x)]=(alpha<<24)|(red<<16)|(green<<8)|blue;
   }return t;}();
+ // The flash: an additive core that the bloom pass spreads across the hall.
+ static const Texture flash=[](){Texture t{32,32,std::vector<std::uint32_t>(32*32)};t.additive=true;t.clampEdges=true;
+  for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/15.5f,dy=(y-15.5f)/15.5f,r=std::sqrt(dx*dx+dy*dy);
+   float core=std::clamp(1.f-r,0.f,1.f);core=core*core;unsigned v=unsigned(core*255.f);
+   t.pixels[size_t(y*32+x)]=(v<<24)|(255u<<16)|(unsigned(205.f+50.f*core)<<8)|unsigned(90.f+140.f*core);
+  }return t;}();
  static const Texture smoke=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
   for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
    unsigned hash=(unsigned(x)*2654435761u^unsigned(y)*2246822519u^0xa8c3b75eu);hash=(hash^(hash>>15))*3266489917u;
@@ -1415,21 +1453,38 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.pixels[size_t(y*48+x)]=(unsigned(alpha*255.f)<<24)|0x00645b53u;
   }return t;}();
  Point3 effectSide{-std::sin(player.angle),std::cos(player.angle),0};
- auto effectCard=[&](Point3 center,float radius,const Texture&texture,float light){Point3 across=effectSide*radius,up{0,0,radius};quad(center-across-up,center+across-up,center+across+up,center-across+up,texture,light);};
+ // Cards face the camera and keep upright; a spin turns each one so the
+ // same mask never reads as a stamp.
+ auto effectCard=[&](Point3 center,float radius,const Texture&texture,float light,float turn=0.f){Point3 across=effectSide*radius,up{0,0,radius};float cs=std::cos(turn),sn=std::sin(turn);Point3 u=across*cs+up*sn,v=across*-sn+up*cs;quad(center-u-v,center+u-v,center+u+v,center-u+v,texture,light);};
  for(const auto&blast:game.barrelExplosions())if(blast.level==level){
-  float age=game.elapsed()-blast.time;if(age<0.f||age>1.25f)continue;
+  float age=game.elapsed()-blast.time;if(age<0.f||age>2.6f)continue;
   Point3 center{blast.pos.x,blast.pos.y,blast.z};
-  if(age<.55f){float life=std::clamp(1.f-age/.55f,0.f,1.f),growth=.70f+std::min(age/.09f,1.f)*.42f;
-   effectCard(center+Point3{0,0,.12f+age*.45f},.70f*growth*std::sqrt(life),fire,1.55f);
-   for(int i=0;i<4;++i){float phase=float(i)*2.399963f,spread=(.18f+age*.95f)*(i%2?.85f:1.f),size=(.24f+float(i%3)*.045f)*growth*life;
-    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.12f+age*(.75f+float(i%3)*.24f)};
-    effectCard(p,size,fire,1.4f);
+  unsigned seed=unsigned(std::fabs(blast.pos.x)*131.f)^unsigned(std::fabs(blast.pos.y)*719.f);
+  auto rnd=[&](int i){unsigned h=(seed+unsigned(i)*2654435761u);h=(h^(h>>13))*1274126177u;return float((h>>24)&255u)/255.f;};
+  if(age<.14f){float flare=1.f-age/.14f;effectCard(center+Point3{0,0,.25f},1.4f*(.6f+.4f*flare)+age*4.f,flash,2.2f*flare);}
+  if(age<.7f){float life=std::clamp(1.f-age/.7f,0.f,1.f),growth=.70f+std::min(age/.09f,1.f)*.5f;
+   effectCard(center+Point3{0,0,.12f+age*.6f},.8f*growth*std::sqrt(life),fire,1.65f,rnd(0)*6.28f+age*1.2f);
+   for(int i=0;i<7;++i){float phase=rnd(i+1)*6.283f,spread=(.15f+age*(.8f+rnd(i+9)*.8f))*(i%2?.85f:1.f),size=(.22f+rnd(i+20)*.16f)*growth*life;
+    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.1f+age*(.6f+rnd(i+30)*1.1f)};
+    effectCard(p,size,fire,1.45f,rnd(i+40)*6.28f-age*(1.f+rnd(i)));
    }
   }
-  if(age>.12f){float puff=std::clamp((age-.12f)/.2f,0.f,1.f)*std::clamp((1.25f-age)/.35f,0.f,1.f);
-   for(int i=0;i<4;++i){float phase=float(i)*1.5707963f,spread=.18f+age*.55f,radius=(.34f+age*.38f)*puff;
-    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.3f+age*(.65f+float(i)*.07f)};
-    effectCard(p,radius,smoke,1.6f);
+  // Embers: burning fragments thrown out on ballistic arcs.
+  if(age<1.1f)for(int i=0;i<14;++i){float phase=rnd(i+50)*6.283f,speed=2.5f+rnd(i+70)*4.f,lift=3.f+rnd(i+90)*3.5f,t=age;
+   Point3 e{center.x+std::cos(phase)*speed*t,center.y+std::sin(phase)*speed*t,center.z+.2f+lift*t-4.9f*t*t};
+   if(e.z<w.floorHeight(e.x,e.y)+.02f)continue;
+   float glow=std::clamp(1.f-age/1.1f,0.f,1.f);
+   quad(e,{e.x+.03f,e.y,e.z},{e.x+.03f,e.y,e.z+.05f},{e.x,e.y,e.z+.05f},amber,1.2f+glow*.9f);
+  }
+  // A shock ring races over the floor, then smoke climbs and thins.
+  if(age<.32f){float ring=age/.32f,radius=.4f+ring*3.2f,z=w.floorHeight(center.x,center.y)+.03f;
+   for(int i=0;i<16;++i){float a0=i*kPi/8,a1=(i+1)*kPi/8,inner=radius-.25f;
+    quad({center.x+std::cos(a0)*inner,center.y+std::sin(a0)*inner,z},{center.x+std::cos(a1)*inner,center.y+std::sin(a1)*inner,z},{center.x+std::cos(a1)*radius,center.y+std::sin(a1)*radius,z},{center.x+std::cos(a0)*radius,center.y+std::sin(a0)*radius,z},flash,1.3f*(1.f-ring));}
+  }
+  if(age>.1f){float puff=std::clamp((age-.1f)/.25f,0.f,1.f)*std::clamp((2.6f-age)/.9f,0.f,1.f);
+   for(int i=0;i<6;++i){float phase=rnd(i+100)*6.283f,spread=.15f+age*(.35f+rnd(i+110)*.3f),radius=(.4f+age*.5f)*puff;
+    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.3f+age*(.7f+rnd(i+120)*.4f)};
+    effectCard(p,radius,smoke,1.5f,rnd(i+130)*6.28f+age*.4f*(i%2?1.f:-1.f));
    }
   }
  }

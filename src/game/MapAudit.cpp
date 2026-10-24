@@ -1,16 +1,19 @@
 #include "Game.h"
+#include "../world/CampaignMaps.h"
 #include <fstream>
 #include <queue>
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <limits>
+#include <tuple>
 
 namespace retro {
 namespace {
-constexpr int N=96;constexpr float Cell=24.f/N,Step=.45f;
+constexpr int N=96;constexpr float Cell=24.f/N,Step=.45f,Jump=1.35f;
 // Walkable space a player can reach from the map's start: a flood fill on a
 // 0.25 m grid with the game's own support query and player hull test (0.45 m
-// step, standing or crouched, drops of up to 6 m). Stacked floors are separate
+// step, 1.35 m jump, standing or crouched, drops of up to 6 m). Stacked floors are separate
 // states per cell.
 struct Reach {
  std::vector<std::vector<float>> visited=std::vector<std::vector<float>>(N*N);
@@ -31,6 +34,25 @@ bool Game::auditMap(int level){
  for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);
  game.m_world.updateDoors(2,true);
  const World& w=game.world();
+ // Where a move from cell (x,y) at height z to the neighbouring cell lands,
+ // or NaN. A step rises 45 cm; a jump clears a 1.05 m rail or climbs 1.35 m
+ // when the hull fits at the apex; drops of up to 6 m are allowed.
+ auto landing=[&](int x,int y,float z,int nx,int ny,float body){
+  const float nan=std::numeric_limits<float>::quiet_NaN();
+  float cx=(nx+.5f)*Cell,cy=(ny+.5f)*Cell,mx=(x+.5f)*Cell*.5f+cx*.5f,my=(y+.5f)*Cell*.5f+cy*.5f;
+  for(float rise:{Step,Jump}){
+   // Like the player, stand on the highest support under the 40 cm hull.
+   float feet=-1e9f;for(float ox:{-.2f,0.f,.2f})for(float oy:{-.2f,0.f,.2f})feet=std::max(feet,w.supportBelow(cx+ox,cy+oy,z+rise));
+   if(!std::isfinite(feet)||feet<z-6.f||feet>z+rise)continue;
+   if(!game.hullFits({cx,cy},feet+.02f,body))continue;
+   // The move between the two cells must clear the hull: at the higher feet
+   // for a step, at the apex for a jump.
+   float clearAt=rise>Step?std::max(feet,z+Jump-.05f):std::max(feet,z);
+   if(!game.hullFits({mx,my},clearAt+.02f,body))continue;
+   return feet;
+  }
+  return nan;
+ };
  auto flood=[&](float body){
   Reach r;
   auto seen=[&](int x,int y,float z){for(float v:r.visited[size_t(y*N+x)])if(std::fabs(v-z)<.3f)return true;return false;};
@@ -50,14 +72,8 @@ bool Game::auditMap(int level){
    for(int k=0;k<4;++k){
     int nx=n.x+dx[k],ny=n.y+dy[k];if(nx<0||ny<0||nx>=N||ny>=N)continue;
     float cx=(nx+.5f)*Cell,cy=(ny+.5f)*Cell;
-    // Like the player, stand on the highest support under the 40 cm hull.
-    float feet=-1e9f;for(float ox:{-.2f,0.f,.2f})for(float oy:{-.2f,0.f,.2f})feet=std::max(feet,w.supportBelow(cx+ox,cy+oy,n.z+Step));
-    if(!std::isfinite(feet)||feet<n.z-6.f||feet>n.z+Step)continue;
-    if(!game.hullFits({cx,cy},feet+.02f,body))continue;
-    // The step between the two cells must clear the hull at the higher feet.
-    float mx=(n.x+.5f)*Cell*.5f+cx*.5f,my=(n.y+.5f)*Cell*.5f+cy*.5f;
-    if(!game.hullFits({mx,my},std::max(feet,n.z)+.02f,body))continue;
-    if(seen(nx,ny,feet))continue;
+    float feet=landing(n.x,n.y,n.z,nx,ny,body);
+    if(!std::isfinite(feet)||seen(nx,ny,feet))continue;
     r.visited[size_t(ny*N+nx)].push_back(feet);open.push({nx,ny,feet});
    }
   }
@@ -108,12 +124,109 @@ bool Game::auditMap(int level){
   if(std::fabs(w.supportBelow(t.position.x,t.position.y,base+.05f)-base)>.06f)fail("FLOATING "+name);
  }
  check(reachable(w.exitPoint(),-999,1.f),"exit");
+ // Traps: a reachable spot from which the exit can no longer be reached (a
+ // basin jumped into, a pit, a ledge dropped onto). Walk the reach graph
+ // backwards from the exit with the same step rule, then list what is left.
+ {
+  const float body=Player::CrouchedHeight+.02f;
+  std::vector<std::vector<float>> escapes(N*N);
+  auto marked=[&](int x,int y,float z){for(float v:escapes[size_t(y*N+x)])if(std::fabs(v-z)<.3f)return true;return false;};
+  struct Node{int x,y;float z;};std::queue<Node> open;
+  const Vec2 exit=w.exitPoint();
+  // The lift cab is a way out too: it carries the player down to the pit.
+  for(int y=0;y<N;++y)for(int x=0;x<N;++x){Vec2 c{(x+.5f)*Cell,(y+.5f)*Cell};
+   if(length(c-exit)>1.f&&!(w.hasLift()&&w.insideLift(c.x,c.y)))continue;
+   for(float v:visited[size_t(y*N+x)]){escapes[size_t(y*N+x)].push_back(v);open.push({x,y,v});}}
+  while(!open.empty()){
+   auto n=open.front();open.pop();
+   const int dx[4]={1,-1,0,0},dy[4]={0,0,1,-1};
+   for(int k=0;k<4;++k){int px=n.x+dx[k],py=n.y+dy[k];if(px<0||py<0||px>=N||py>=N)continue;
+    for(float pz:visited[size_t(py*N+px)]){
+     if(marked(px,py,pz))continue;
+     // Would a forward move from (px,py,pz) land on n?
+     float feet=landing(px,py,pz,n.x,n.y,body);if(!std::isfinite(feet)||std::fabs(feet-n.z)>=.3f)continue;
+     escapes[size_t(py*N+px)].push_back(pz);open.push({px,py,pz});
+    }
+   }
+  }
+  int trapped=0;std::string first;
+  for(int y=0;y<N;++y)for(int x=0;x<N;++x)for(float v:visited[size_t(y*N+x)])if(!marked(x,y,v)){
+   if(!trapped)first=at({(x+.5f)*Cell,(y+.5f)*Cell})+" z "+std::to_string(v);++trapped;}
+  if(trapped)fail("TRAP "+std::to_string(trapped)+" reachable cells cannot get back to the exit, first at "+first);
+ }
  // Every door must be walkable straight through: a prop in front of a doorway
  // can leave the rooms connected some other way and still block the door.
  for(const auto& d:w.doors()){
   float cx=(d.left+d.right)*.5f;bool clear=true;
   for(float dy=-1.f;dy<=1.f;dy+=.25f)if(d.y+dy>0&&d.y+dy<24)clear&=reachable({cx,d.y+dy},-999,.15f);
   if(!clear)fail("BLOCKED door x "+std::to_string(d.left)+"-"+std::to_string(d.right)+" at y "+std::to_string(d.y));
+ }
+ // Water sits in its basin, never as a slab above the floor around it.
+ for(const auto& b:w.waterVolumes())if(b.surface>w.layers().front().elevation-.02f)fail("WATER ABOVE FLOOR basin at "+at({b.x1,b.y1})+" surface "+std::to_string(b.surface));
+ // Stairs are single flights: two flights that touch read as one broken stair.
+ if(auto map=campaignMap(level))for(size_t i=0;i<map->stairs.size();++i)for(size_t j=i+1;j<map->stairs.size();++j){const auto& a=map->stairs[i];const auto& b=map->stairs[j];
+  if(a.x1<b.x2+.01f&&a.x2>b.x1-.01f&&a.y1<b.y2+.01f&&a.y2>b.y1-.01f&&std::fabs(a.bottom-b.top)>.01f&&std::fabs(a.top-b.bottom)>.01f)fail("STAIRS TOUCH at "+at({a.x1,a.y1})+" and "+at({b.x1,b.y1}));}
+ // Pipes: no run crosses a walkable space at body height, no horizontal run
+ // passes through a deck slab, and every end lands on something: a wall,
+ // slab, floor, roof, fixture or a longer pipe. Flanges and elbows (short
+ // pieces) are dressing, not anchors.
+ {
+  const auto& pipes=w.pipes();
+  // A run is vertical when its ends share an xy; otherwise it may slope.
+  auto vertical=[](const PipeRun& p){return lengthSq(p.end-p.start)<1e-6f;};
+  auto topZ=[](const PipeRun& p){return p.endZ>-999.f?p.endZ:p.z;};
+  auto pipeLength=[&](const PipeRun& p){return vertical(p)?std::fabs(topZ(p)-p.z):length(p.end-p.start);};
+  // Dressing is short and thin; a wide disc (a platform, a drum lid) is an anchor.
+  auto dressing=[&](const PipeRun& p){return pipeLength(p)<.15f&&p.radius<.3f;};
+  auto distanceToPipe=[&](const PipeRun& p,Vec2 xy,float z){
+   if(vertical(p)){float lo=std::min(p.z,topZ(p)),hi=std::max(p.z,topZ(p));float dz=z<lo?lo-z:z>hi?z-hi:0;return std::sqrt(lengthSq(xy-p.start)+dz*dz);}
+   Vec2 d=p.end-p.start;float l2=lengthSq(d);float t=l2>1e-6f?std::clamp(dot(xy-p.start,d)/l2,0.f,1.f):0.f;Vec2 c=p.start+d*t;float cz=p.z+(topZ(p)-p.z)*t;return std::sqrt(lengthSq(xy-c)+(z-cz)*(z-cz));};
+  // Walkways are floors, decks and stairs: standing on top of a pump is not one.
+  auto onWalkway=[&](Vec2 xy,float feet){
+   for(const auto& layer:w.layers())if(std::fabs(feet-layer.elevation)<.25f)return true;
+   if(auto map=campaignMap(level))for(const auto& st:map->stairs)if(xy.x>=st.x1&&xy.x<st.x2&&xy.y>=st.y1&&xy.y<st.y2&&feet>=std::min(st.bottom,st.top)-.1f&&feet<=std::max(st.bottom,st.top)+.1f)return true;
+   return false;};
+  // Equipment carries pipes: an end inside a fixture or prop footprint is held.
+  auto onEquipment=[&](Vec2 xy,float z){
+   for(const auto& f:w.fixtures()){float c=std::cos(f.yaw),sn=std::sin(f.yaw),dx=xy.x-f.position.x,dy=xy.y-f.position.y;
+    if(std::fabs(dx*c-dy*sn)<f.width*.5f+.1f&&std::fabs(dx*sn+dy*c)<f.depth*.5f+.1f){float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(z>=base-.1f&&z<=base+f.height+.3f)return true;}}
+   for(const auto& p:w.props())if(std::fabs(xy.x-p.position.x)<p.halfSize.x+.1f&&std::fabs(xy.y-p.position.y)<p.halfSize.y+.1f){float base=w.floorHeight(p.position.x,p.position.y)+p.base;if(z>=base-.1f&&z<=base+p.height+.3f)return true;}
+   return false;};
+  auto solidNear=[&](Vec2 xy,float z,float reach){
+   for(auto [dx,dy,dz]:{std::tuple{reach,0.f,0.f},{-reach,0.f,0.f},{0.f,reach,0.f},{0.f,-reach,0.f},{0.f,0.f,reach},{0.f,0.f,-reach}}){
+    float px=xy.x+dx,py=xy.y+dy,pz=z+dz;if(px<0||py<0||px>=24||py>=24)return true;
+    if(pz<=w.floorHeight(px,py)+.01f||pz>=w.ceilingHeight(px,py)-.01f||!w.fits(px,py,pz,.02f,false))return true;}
+   return false;};
+  for(size_t i=0;i<pipes.size();++i){const auto& p=pipes[i];
+   const bool isVertical=vertical(p);const float radius=p.radius,z1=topZ(p);
+   if(dressing(p))continue;
+   float lo=std::min(p.z,z1)-radius,hi=std::max(p.z,z1)+radius;
+   std::string name="pipe "+at(p.start)+(isVertical?" z "+std::to_string(p.z)+".."+std::to_string(z1):" to "+at(p.end)+" z "+std::to_string(p.z));
+   // Through a walkway or a deck slab.
+   Vec2 d=isVertical?Vec2{}:p.end-p.start;int samples=std::max(1,int(std::ceil(length(d)/.25f)));bool through=false,slab=false;
+   for(int s=0;s<=samples&&!through;++s){Vec2 q=p.start+d*(float(s)/samples);int cx=int(q.x/Cell),cy=int(q.y/Cell);if(cx<0||cy<0||cx>=N||cy>=N)continue;
+    Vec2 centre{(cx+.5f)*Cell,(cy+.5f)*Cell};if(isVertical&&length(centre-q)>radius+.2f)continue;
+    // Only the head space actually open above that floor counts.
+    for(float feet:visited[size_t(cy*N+cx)]){if(!onWalkway(centre,feet))continue;float head=std::min(feet+Player::StandingHeight+.1f,w.clearanceAbove(centre.x,centre.y,feet+.05f));if(lo<head&&hi>feet+.25f){through=true;break;}}
+    if(!isVertical)for(const auto& layer:w.layers())if(layer.thickness>0&&layer.rows[size_t(std::clamp(int(q.y),0,23))][size_t(std::clamp(int(q.x),0,23))]=='='&&p.z-radius<layer.elevation&&p.z+radius>layer.elevation-layer.thickness)slab=true;
+   }
+   if(through)fail("PIPE THROUGH WALKWAY "+name);
+   if(slab)fail("PIPE THROUGH DECK "+name);
+   // Anchored ends. A wide vertical cylinder is a vessel or drum: its top is free.
+   auto anchored=[&](Vec2 xy,float z){
+    if(solidNear(xy,z,radius+.07f)||onEquipment(xy,z))return true;
+    for(size_t j=0;j<pipes.size();++j){if(j==i)continue;const auto& o=pipes[j];if(dressing(o))continue;if(distanceToPipe(o,xy,z)<=radius+o.radius+.06f)return true;}
+    return false;};
+   if(isVertical){float bottom=std::min(p.z,z1),top=std::max(p.z,z1);
+    // A short drop hung from an anchored top (a shower, a hook shank) may end free.
+    bool drop=top-bottom<1.2f&&radius<.08f&&anchored(p.start,top);
+    if(!drop&&!anchored(p.start,bottom))fail("FLOATING "+name+" (bottom end)");
+    if(radius<.3f&&!anchored(p.start,top))fail("FLOATING "+name+" (top end)");
+   }else{
+    if(!anchored(p.start,p.z))fail("FLOATING "+name+" (start)");
+    if(!anchored(p.end,z1))fail("FLOATING "+name+" (end)");
+   }
+  }
  }
  // Lamps: wall lamps sit on a wall face, ceiling lamps under a roof or slab
  // (the renderer hangs them on rods from it) and never inside geometry.

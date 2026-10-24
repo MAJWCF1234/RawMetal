@@ -20,6 +20,7 @@
 #include <cstring>
 #include <cwchar>
 #include <fstream>
+#include <sstream>
 #include <queue>
 #include <exception>
 #include <filesystem>
@@ -538,6 +539,24 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      renderer->render(scene);std::filesystem::create_directories(".build/shot");
      std::ofstream out(".build/shot/shot.ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+     return 0;
+    }
+    if(auto arg=std::wcsstr(commandLine,L"--map-shots=")){
+     // Many inspection frames: each line "name level x y feet yaw(deg) pitch".
+     // An optional trailing "fire N" fires the gun once and advances N frames.
+     std::ifstream list(std::filesystem::path(arg+12));std::string line;
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/shot");
+     while(std::getline(list,line)){
+      std::istringstream fields(line);std::string name,action;int level=0,frames=0;float x=0,y=0,z=0,yaw=0,pitch=0;
+      if(!(fields>>name>>level>>x>>y>>z>>yaw>>pitch))continue;fields>>action>>frames;
+      auto scene=retro::Game::mapInspection({x,y},yaw*retro::kPi/180.f,pitch,level,true,z,true);
+      if(action=="fire"){retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
+      else scene.stowWeapon();
+      renderer->render(scene);
+      std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
+      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+     }
      return 0;
     }
     if(auto arg=std::wcsstr(commandLine,L"--map-sweep=")){

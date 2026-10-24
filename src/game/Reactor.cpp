@@ -97,11 +97,13 @@ bool Game::testReactor(){
  World core(ReactorCoreChunk),loop(CoolantLoopChunk);
  if(!check(!core.fits(3.5f,1.27f,-6,1)&&core.fits(4.5f,5.4f,-6,1),"Instrument cabinets collide but computer approach stays clear"))return false;
  if(!check(core.rayClear({7.2f,8.5f},-4.8f,{5.5f,8.5f},-8.5f),"The gantry overlooks the core floor"))return false;
- if(!check(!core.fits(12,12,-9,1)&&!core.fits(4.5f,17.5f,-9,1)&&core.fits(12,15.f,-9,1),"Vessel and steam generators are solid; the floor round them is clear"))return false;
+ if(!check(!core.fits(12,12,-9,1)&&!core.fits(12,21,-9,1)&&!core.fits(21,12,-9,1)&&!core.fits(12,18.3f,-9,1)&&core.fits(6,16,-9,1)&&core.fits(5,20,-9,1),"Vessel and steam generators are solid; the floor round them is clear"))return false;
  // Wall lamps are checked against their wall by the map audit; every fixed
  // ceiling lamp hangs 15 cm under a real ceiling, roof, deck or slab.
  for(const World* map:{&world,&core,&loop})for(auto&light:map->lights())if(!(map->hasLift()&&&light==&map->lights().back())&&light.mount==WorldLightMount::Ceiling){bool mounted=false;
-  for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f})mounted|=std::fabs(light.z+.15f-map->clearanceAbove(light.position.x,light.position.y,z))<.005f;if(!check(mounted,"Fixed light has a supporting ceiling"))return false;}
+  for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f})mounted|=std::fabs(light.z+.15f-map->clearanceAbove(light.position.x,light.position.y,z))<.005f;
+  if(!mounted)out<<"Unmounted light in "<<map->level()<<" at "<<light.position.x<<','<<light.position.y<<','<<light.z<<'\n';
+  if(!check(mounted,"Fixed light has a supporting ceiling"))return false;}
  game.restart();return check(game.world().reactorStage()==World::ReactorStage::NoDisk&&!game.world().controlReleased(),"Restart resets puzzle and disk");
 }
 }

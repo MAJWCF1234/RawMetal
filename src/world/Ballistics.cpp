@@ -59,7 +59,7 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal)const{
   else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
  }
  for(const auto&door:m_doors){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
-  if(door.swinging){float angle=door.open*kPi*.5f,width=door.right-door.left;oriented({door.left+std::cos(angle)*width*.5f,door.y+std::sin(angle)*width*.5f},width,.30f,base+.015f,base+2.35f,-angle);}
+  if(door.swinging){float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;oriented({door.left+std::cos(angle)*width*.5f,door.y+std::sin(angle)*width*.5f},width,.30f,base+.015f,base+2.35f,-angle);}
   else box({door.left,door.y-.13f,base+door.open*2.65f+.015f},{door.right,door.y+.13f,base+door.open*2.65f+2.48f});
   if(shapedGround)box({door.left,door.y-.1f,base+2.5f},{door.right,door.y+.1f,ceilingHeight((door.left+door.right)*.5f,door.y)});
  }

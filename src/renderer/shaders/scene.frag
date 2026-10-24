@@ -223,6 +223,9 @@ void main(){
  // Wetness: a damp sheen everywhere plus puddles on level static ground.
  // Wet porous surfaces darken and their roughness collapses toward a mirror.
  float materialRoughness=clamp(1.0-fract(surface.z),0.18,1.0),wetness=0.0;
+ // A liquid: a blended surface with near-mirror gloss reflects like a puddle.
+ bool liquid=surface.z>=2.0&&surface.z<3.0&&fract(surface.z)>=0.85;
+ if(liquid){materialRoughness=0.04;wetness=1.0;}
  if(surface.z<0.5&&surface.w>0.5&&surface.w<1.5&&lampGrid.sunColor.w>0.0){
   vec3 Nw=normalize(cross(dx,dy));if(dot(Nw,view.eyeYaw.xyz-worldPos)<0.0)Nw=-Nw;
   float wet=lampGrid.sunColor.w,damp=wet*0.35;
@@ -456,6 +459,6 @@ void main(){
  // Alpha 1 marks world pixels; the viewmodel writes 0 so MSAA edge pixels
  // (fractional after resolve) skip world-only post effects.
  bool viewModelPixel=surface.w>1.5&&surface.w<2.5;
- outMaterial=vec4(surface.z<0.5&&surface.w<1.5?materialRoughness:1.0,wetness,viewModelPixel?1.0:directShare,viewModelPixel?0.0:1.0);
- outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),surface.z>1.5?alpha:planarDepth):vec4(toDisplay(filmic(result*0.95)),alpha);
+ outMaterial=vec4((surface.z<0.5||liquid)&&surface.w<1.5?materialRoughness:1.0,wetness,viewModelPixel?1.0:directShare,viewModelPixel?0.0:1.0);
+ outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),surface.z>1.5&&!liquid?alpha:planarDepth):vec4(toDisplay(filmic(result*0.95)),alpha);
 }

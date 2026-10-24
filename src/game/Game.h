@@ -73,7 +73,7 @@ struct Enemy {
     Vec2 waypoint{};
     Vec2 home{},lastKnown{};
     enum class State {Idle,Investigate,Chase,Search};State state=State::Idle;
-    enum class StalkMode {Watch,Flank,Rush};StalkMode stalkMode=StalkMode::Watch;
+    enum class StalkMode {Watch,Flank,Rush,Retreat};StalkMode stalkMode=StalkMode::Watch;
     float stalkTimer=0,stalkSide=1;
     int surfaceMode=0; // floor, wall, ceiling
     Vec2 surfaceNormal{};
@@ -244,6 +244,7 @@ public:
     float punchAge()const{return m_punchAge;}
     bool punchLeft()const{return m_punchLeft;}
     bool unarmed()const{return m_holster>=.98f;}
+    void stowWeapon(){m_holster=1;}
     bool handsLowered()const{return m_handsLowered;}
     bool guarding()const{return m_guarding;}
     bool takedownActive()const{return m_takedownActor>=0;}
@@ -632,6 +633,9 @@ private:
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<BarrelExplosion> m_barrelExplosions;
+    // Barrels caught in a blast go up after a short fuse.
+    std::vector<BarrelExplosion> m_pendingBarrels;
+    void detonateBarrel(int level,int tx,int ty);
     int m_heldClutter=-1;
     int m_npcNavBudget=4;
     bool m_aiQueryCaching=true;

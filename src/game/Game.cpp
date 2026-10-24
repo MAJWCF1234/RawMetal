@@ -53,6 +53,8 @@ bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeH
  if(level<0)level=m_level;
  if(!enemy.alive)return false;
  enemy.hp-=amount;enemy.painFlash=1;m_hitFlash=1;
+ // A badly hurt stalker breaks off to hide before it comes back.
+ if(enemy.hp>0&&enemy.kind==Enemy::Kind::Warden&&enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;}
  if(enemy.hp>0)return false;
  enemy.hp=0;enemy.alive=false;enemy.deathTime=0;enemy.windup=0;enemy.strike=0;if(level==m_level)++m_kills;else ++m_chunks[level].kills;
  if(bloodDecal)m_bulletImpacts.push_back({enemy.pos,friendlyWorld(level).floorHeight(enemy.pos.x,enemy.pos.y)+.012f,{0,0},m_elapsed,level,true,int(enemy.kind)});
@@ -223,6 +225,26 @@ Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
 Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly,WorldId id){Game game(id);game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?(game.m_world.hasTerrain()?game.groundHeight(position,float(World::TerrainMaxZ+1)):game.m_world.floorHeight(position.x,position.y)):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
  if(sceneryOnly){game.m_enemies.clear();for(auto&chunk:game.m_chunks)chunk.enemies.clear();}
  if(openDoors){for(auto&chunk:game.m_chunks){for(int i=0;i<int(chunk.world.doors().size());++i)chunk.world.openDoor(i);chunk.world.updateDoors(2);}for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);game.m_world.updateDoors(2);}game.updateStreaming(0);return game;}
+void Game::detonateBarrel(int level,int tx,int ty){
+ auto&world=friendlyWorld(level);if(world.tile(tx,ty)!='B')return;
+ const float floor=world.floorHeight(tx+.5f,ty+.5f);const Vec2 at{tx+.5f,ty+.5f};world.destroyTile(tx,ty);
+ m_barrelExplosions.push_back({at,floor+.55f,m_elapsed,level});if(m_barrelExplosions.size()>16)m_barrelExplosions.erase(m_barrelExplosions.begin());
+ auto shift=chunkOffset(m_level)-chunkOffset(level);Vec2 here=at-shift;
+ float near=std::clamp(1.f-length(here-m_player.pos)/9.f,0.f,1.f);
+ m_verticalSpringVelocity-=.6f+1.2f*near;m_damageFlash=std::max(m_damageFlash,.25f+.55f*near);
+ m_sounds.push_back({Sound::LiftCrash,here,1.f,.8f,true,17,floor+.6f});
+ // A scorch on the floor, burning scrap in the air.
+ m_bulletImpacts.push_back({at,floor+.012f,{0,0},m_elapsed,level,false,-2,1.f});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
+ auto&clutter=level==m_level?m_clutter:m_chunks[level].clutter;
+ for(int i=0;i<5;++i){Clutter c;c.kind=3;c.pos=at;c.z=floor+.5f;c.yaw=float(i)*1.2566f+.3f;c.pitch=(i%2?-.3f:.3f);c.velocity={std::cos(c.yaw)*(3.5f+float(i)*.4f),std::sin(c.yaw)*(3.5f+float(i)*.4f)};c.vz=3.5f+float(i%3);c.spin=(i%2?1.f:-1.f)*5;c.pitchSpeed=(i%2?1.f:-1.f)*4;c.rollSpeed=3;clutter.push_back(c);}
+ auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
+ for(auto&e:enemies)if(e.alive&&length(e.pos-at)<kUnarmedMelee.barrelRadius)applyEnemyDamage(e,kUnarmedMelee.barrelDamage,false,false,level);
+ // Barrels within reach go up in turn.
+ int fuse=0;
+ for(int y=ty-3;y<=ty+3;++y)for(int x=tx-3;x<=tx+3;++x){if((x==tx&&y==ty)||world.tile(x,y)!='B'||length(Vec2{x+.5f,y+.5f}-at)>2.6f)continue;
+  bool queued=false;for(const auto&q:m_pendingBarrels)queued|=q.level==level&&int(std::floor(q.pos.x))==x&&int(std::floor(q.pos.y))==y;if(queued)continue;
+  m_pendingBarrels.push_back({{x+.5f,y+.5f},floor,m_elapsed+.18f+.09f*float(fuse++),level});}
+}
 Game Game::barrelInspection(float age){auto game=mapInspection({12.5f,4.5f},-kPi*.5f,-35,0,false,-999,true);game.shoot();game.m_elapsed=std::max(0.f,age);return game;}
 
 bool Game::lineOfSight(const Vec2& a,const Vec2& b)const{return m_world.rayClear(a,m_world.floorHeight(a.x,a.y)+.75f,b,m_world.floorHeight(b.x,b.y)+.75f);}
@@ -361,6 +383,7 @@ void Game::update(const InputState& input, float dt) {
         crossChunkBoundary();
         updateScripts(dt);
         updateHazards(dt);
+        for(size_t i=0;i<m_pendingBarrels.size();){if(m_elapsed>=m_pendingBarrels[i].time){auto b=m_pendingBarrels[i];m_pendingBarrels.erase(m_pendingBarrels.begin()+long(i));detonateBarrel(b.level,int(std::floor(b.pos.x)),int(std::floor(b.pos.y)));}else ++i;}
         updateInteraction(input,dt);
         updateStreaming(dt);
         // Resident NPCs can operate ordinary doors without the player entering

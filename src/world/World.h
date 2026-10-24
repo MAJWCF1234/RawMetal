@@ -18,6 +18,8 @@ struct Door {
  bool requireEnemiesClear=false,requireControl=false;
  StateId requireState=0;int requireValue=1;
  bool swinging=false;
+ // A swinging leaf opens toward +y (1) or -y (-1) from its hinge at `left`.
+ float swing=1.f;
  int sign=-1;
  float maxOpen=1.f;
 };

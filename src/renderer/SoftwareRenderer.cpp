@@ -327,12 +327,12 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   m_coastSky.pixels[size_t(y*512+x)]=rgb(ir,ig,ib);
  }
  prepareDecal(m_coastSky,false);
- m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.glossStrength=.30f;auto coolantTint=[](uint32_t pixel){return 0xc4000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
+ m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.glossStrength=.92f;auto coolantTint=[](uint32_t pixel){return 0xd6000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
  m_serviceFloor=m_floor;
  auto liftServiceFloor=[](std::uint32_t&pixel){for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*1.45f))<<shift);}};
  for(auto&pixel:m_serviceFloor.pixels)liftServiceFloor(pixel);for(auto&level:m_serviceFloor.mips)for(auto&pixel:level)liftServiceFloor(pixel);
  m_serviceFloor.glossStrength=.42f;
- m_coastWater=loadTexture(250);attachNormal(m_coastWater,251,true,0);m_coastWater.transparent=true;m_coastWater.glossStrength=.48f;
+ m_coastWater=loadTexture(250);attachNormal(m_coastWater,251,true,0);m_coastWater.transparent=true;m_coastWater.glossStrength=.90f;
  auto seaTint=[](std::uint32_t pixel){int gray=int(((pixel>>16)&255)*.30f+((pixel>>8)&255)*.59f+(pixel&255)*.11f);int delta=(gray-100)/3;
   return 0x58000000u|(std::uint32_t(std::clamp(32+delta,0,255))<<16)|(std::uint32_t(std::clamp(92+delta,0,255))<<8)|std::uint32_t(std::clamp(148+delta,0,255));};
 for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWater.mips)for(auto&pixel:mip)pixel=seaTint(pixel);
@@ -355,14 +355,16 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
   for(auto& pixel:result.pixels){
    float grain=float(((pixel>>16)&255)+((pixel>>8)&255)+(pixel&255))/765.f;
    unsigned value=0xff000000u;
+   // Full-contrast grain: the scratches and rust of the source steel show
+   // through the paint instead of being flattened into one tone.
    for(int channel=0;channel<3;++channel){
-    float paint=float((pigment>>(channel*8))&255)*(.72f+grain*.45f);
+    float paint=float((pigment>>(channel*8))&255)*(.42f+grain*1.05f);
     float exposed=float((pixel>>(channel*8))&255);
-    value|=unsigned(std::clamp(paint*.86f+exposed*.14f,0.f,255.f))<<(channel*8);
+    value|=unsigned(std::clamp(paint*.72f+exposed*.28f,0.f,255.f))<<(channel*8);
    }
    pixel=value;
   }
-  prepareDecal(result,true);deriveSurfaceNormal(result,.5f);result.glossStrength=.30f;
+  prepareDecal(result,true);deriveSurfaceNormal(result,1.f);result.glossStrength=.34f;
   return result;
  };
  m_yellowSteel=paintedSteel(0xffb79b39u);m_redSteel=paintedSteel(0xffa34330u);m_paleSteel=paintedSteel(0xffb4bcb1u);

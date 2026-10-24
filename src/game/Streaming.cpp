@@ -184,7 +184,7 @@ bool Game::testStreaming(){
  // once opened, the back wall still stops the player inside the chunk.
  joined.m_player.pos={19.75f,19.2f};joined.m_player.z=-9;joined.m_velocity={};walking.sprint=true;
  for(int i=0;i<120;++i)joined.update(walking,1.f/120);
- if(joined.player().pos.y>20.7f||joined.player().pos.y<20.2f||!joined.hullFits(joined.player().pos,-9,1))return fail(13);
+ if(joined.player().pos.y>20.7f||joined.player().pos.y<20.2f||!joined.hullFits(joined.player().pos,-9,1)){std::ofstream("streaming-debug.txt")<<"Stage 13 at "<<joined.player().pos.x<<','<<joined.player().pos.y<<','<<joined.player().z<<" level "<<joined.level()<<'\n';return false;}
  joined.useDoor(0);joined.m_world.updateDoors(2);joined.m_velocity={};
  for(int i=0;i<120;++i)joined.update(walking,1.f/120);
  if(joined.player().pos.y<21.1f||joined.player().pos.y>22.8f||!joined.hullFits(joined.player().pos,-9,1))return fail(15);
