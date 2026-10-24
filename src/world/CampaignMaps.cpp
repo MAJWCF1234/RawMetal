@@ -299,12 +299,12 @@ void hazard(Map& m,Hazard::Kind kind,float x1,float y1,float x2,float y2,float b
 void shelf(Map& m,Vec2 p,float yaw,float floor=0){m.fixtures.push_back({7,p,floor,1.8f,.5f,1.8f,yaw,true});}
 // Exit to the next map: the stitched gap in the south wall at columns 20-22
 // and the transfer door that opens once the map's hostiles are cleared.
-void transferExit(Map& m){
+void transferExit(Map& m,float floor=0){
  rectangle(m.layers[0],20,23,23,24,'.');
  rectangle(m.layers[0],19,21,20,23,'#');
  Door exit{20,23,21.5f,0,false,true};exit.requireEnemiesClear=true;m.doors.push_back(exit);
  // The boundary opening is a 2.5 m portal, walled above to the roof.
- wall(m,20,23,23,24,2.5f,m.definition.ceiling,3);
+ wall(m,20,23,23,24,floor+2.5f,m.definition.ceiling,3);
 }
 
 // FOUNDRY. The service lift that fell from the Security Office lies wrecked in
@@ -533,7 +533,7 @@ std::shared_ptr<const Map> makePressureWorks(){
 // switchgear bay to the south; the east stair drops back down to it.
 std::shared_ptr<const Map> makeTurbineGantry(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[2];m.definition=CampaignChunks[2];m.definition.ceiling=7.f;m.definition.ambient=.3f;
+ m.name=CampaignMapNames[2];m.definition=CampaignChunks[2];m.definition.ceiling=7.f;m.definition.ambient=.36f;
  m.layers.push_back(floorLayer("Turbine Gantry / ground",0));
  {AuthoredLayerData upper;upper.name="Turbine Gantry / upper catwalk";upper.elevation=3;upper.thickness=.3f;
   for(auto& row:upper.rows)row=std::string(24,'.');m.layers.push_back(std::move(upper));}
@@ -602,9 +602,12 @@ std::shared_ptr<const Map> makeTurbineGantry(){
  wallSign(m,14.5f,18.06f,2.2f,"DANGER","LIVE SWITCHGEAR",2.f,0);
 
  // --- Light ---------------------------------------------------------------
- // Hall: metal-halide high bays; amber lamps along the gantry wall.
- for(Vec2 b:{Vec2{6.f,9.5f},Vec2{12.5f,5.f},Vec2{17.f,12.5f},Vec2{9.f,14.5f}})m.lights.push_back(lamp(b,hall-.4f,1.7f,10.f,4200,.15f));
- for(float x:{10.f,16.f})m.lights.push_back(lamp({x,1.f},deckZ+1.9f,.9f,5.f,2600,.1f,WorldLightMount::Wall,kPi*.5f));
+ // Hall: metal-halide high bays; amber lamps along the gantry walls.
+ for(Vec2 b:{Vec2{5.f,10.f},Vec2{12.5f,5.f},Vec2{17.f,12.5f},Vec2{9.f,15.f},Vec2{12.5f,12.8f},Vec2{20.f,15.5f}})m.lights.push_back(lamp(b,hall-.4f,2.5f,12.f,4200,.15f));
+ for(float x:{4.f,10.f,16.f})m.lights.push_back(lamp({x,1.f},deckZ+1.9f,1.1f,6.f,2600,.1f,WorldLightMount::Wall,kPi*.5f));
+ for(float y:{5.5f,9.5f})m.lights.push_back(lamp({1.f,y},deckZ+1.9f,1.1f,6.f,2600,.1f,WorldLightMount::Wall,0));
+ // An inspection lamp slung under the bridge picks out the main set.
+ m.lights.push_back(lamp({11.f,7.6f},deckZ-.42f,1.4f,6.f,3300));
  // Entry lane under the gantry: low tubes on the deck underside.
  for(float x:{6.f,12.f,18.f})m.lights.push_back(lamp({x,2.f},deckZ-.4f,.8f,4.5f,3600,.2f));
  // Control room: warm desk light and a cold console glow.
@@ -626,6 +629,156 @@ std::shared_ptr<const Map> makeTurbineGantry(){
  zone(m,"08 UPPER GANTRY",0,0,24,24,2.5f,1000);
  zone(m,"07 TURBINE HALL",0,0,24,17.5f);
  zone(m,"09 SWITCHGEAR",0,17.5f,24,24);
+ return p;
+}
+
+// REACTOR COMPLEX. The surface lift's collar: an entry corridor into the lift
+// lobby, with the hoist plant behind it and a casualty by the landing. The cab
+// climbs three storeys of shaft, jams and falls into the containment pit.
+// Below, a two-storey atrium stands round the reactor vessel, with the P-01
+// feed pumps west and the R-03 control room east (the bulkhead out, and the
+// Warden). A west stair climbs to the upper manifold: the maintenance bench
+// with the authorization disk overlooks the vessel, and the P-02 return station
+// stands on the east balcony.
+std::shared_ptr<const Map> makeReactorComplex(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[3];m.definition=CampaignChunks[3];m.definition.ceiling=16.f;m.definition.ambient=.28f;
+ const float lower=-9,upper=-6;
+ m.layers.push_back(floorLayer("Reactor / lower containment",lower));
+ auto layer=[&](const char* name,float z,float thickness){AuthoredLayerData l;l.name=name;l.elevation=z;l.thickness=thickness;
+  for(auto& row:l.rows)row=std::string(24,'.');m.layers.push_back(std::move(l));};
+ layer("Reactor / upper manifold",upper,.3f);layer("Scenery / coolant risers",-3,.25f);layer("Surface lift / collar",0,.3f);
+ layer("Scenery / ventilation plant",3,.25f);layer("Scenery / electrical service",6,.25f);layer("Surface / sealed gates",9,.35f);
+ auto L=[&](size_t i)->AuthoredLayerData&{return m.layers[i];};
+ // The shaft (x 9-15, y 9-15) passes every storey; at each passing storey a
+ // ring of floor encloses it as a bay seen from the moving cab.
+ auto ring=[](AuthoredLayerData& l){for(int x=8;x<16;++x){l.rows[8][x]='=';l.rows[15][x]='=';}for(int y=9;y<15;++y){l.rows[y][8]='=';l.rows[y][15]='=';}};
+ for(size_t i:{2u,4u,5u,6u})ring(L(i));
+ for(float z:{-3.f,3.f,6.f,9.f}){
+  wall(m,7.8f,7.8f,8,16.2f,z,z+2.75f,3);wall(m,16,7.8f,16.2f,16.2f,z,z+2.75f,3);
+  wall(m,8,7.8f,16,8,z,z+2.75f,3);wall(m,8,16,16,16.2f,z,z+2.75f,3);
+  wall(m,7.8f,7.8f,9,16.2f,z+2.65f,z+2.7f,2);wall(m,15,7.8f,16.2f,16.2f,z+2.65f,z+2.7f,2);
+  wall(m,9,7.8f,15,9,z+2.65f,z+2.7f,2);wall(m,9,15,15,16.2f,z+2.65f,z+2.7f,2);
+ }
+ // Roof slabs of the manifold storey (-3.3) and of the collar (2.7).
+ for(float z:{-3.3f,2.7f}){wall(m,1,1,23,9,z,z+.12f,2);wall(m,1,15,23,23,z,z+.12f,2);wall(m,1,9,9,15,z,z+.12f,2);wall(m,15,9,23,15,z,z+.12f,2);}
+
+ // --- 10 SURFACE LIFT (collar, 0 m) ----------------------------------------
+ {auto& c=L(3);
+  rectangle(c,2,0,5,4,'=');rectangle(c,1,4,23,9,'=');rectangle(c,14,1,23,4,'=');ring(c);
+  c.rows[8][11]=c.rows[8][12]='S';}
+ rectangle(L(0),2,0,5,1,'.');m.doors.push_back({2,5,.5f,0,false,false,true,9});
+ wall(m,2,0,5,1,lower,-.3f,3);
+ // The collar's ring round the shaft is the shaft wall, not a corridor.
+ for(float x:{8.f,15.f})wall(m,x,9,x+1,9.12f,0,2.7f,3);
+ // Landing plate into the cab, caged on both sides.
+ wall(m,11,8,13,10,-.3f,0,7);
+ m.structures.push_back({10.95f,8,11,10,0,2.1f,true});m.structures.push_back({13,8,13.05f,10,0,2.1f,true});
+ terminal(m,{13.9f,8.55f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","LAST CAB TO THE TOP. BOARD AND DISPATCH.",9);
+ {AuthoredTerminalData t;t.position={13.35f,11.5f};t.title="CAB CONTROL / DISPATCH";t.line1="ASCENDING TO SURFACE.";t.line2="WARNING: SAME BRAKE MODEL AS SERVICE LIFT.";
+  t.z=9;t.control=true;m.terminals.push_back(std::move(t));}
+ // Lobby: lockers on the north wall, freight waiting for a cab that never came.
+ for(float x:{6.f,7.f,8.f})m.fixtures.push_back({13,{x,4.3f},9,.9066f,.4956f,2.2f,kPi,true});
+ cargo(m,3.f,7.6f,0);cargo(m,19.2f,7.6f,0);cargo(m,20.6f,7.6f,0,false);
+ for(auto b:{std::pair{22,5},{1,5}})m.fixtures.push_back({15,{b.first+.5f,b.second+.5f},9,1.2f,1.15f,.16f,0,true});
+ // Hoist plant: the traction motor and its cable drum, with the drive panels.
+ m.fixtures.push_back({6,{18.f,2.2f},9,2.38f,.7f,1.26f,0,true});
+ m.pipes.push_back({{19.6f,2.2f},{21.6f,2.2f},1.f,.45f,-999,2});
+ for(float x:{19.6f,21.5f})wall(m,x,1.9f,x+.12f,2.5f,0,1.f,12);
+ for(float x:{15.f,16.f})m.fixtures.push_back({13,{x,1.3f},9,.9066f,.4956f,2.2f,kPi,true});
+ wallSign(m,6.5f,8.89f,1.9f,"10 / SURFACE LIFT","LAST CAB / BOARD AND DISPATCH",2.4f,kPi);
+ wallSign(m,22.945f,2.5f,1.9f,"HOIST PLANT","NO ENTRY WHILE CAB MOVES",1.6f,-kPi*.5f);
+
+ // --- 11 REACTOR CONTAINMENT (-9 m) ----------------------------------------
+ // Upper manifold floor over everything but the shaft, the west stair well
+ // and the atrium round the vessel.
+ {auto& u=L(1);rectangle(u,1,1,23,23,'=');rectangle(u,9,9,15,15,'.');rectangle(u,1,9,3,15,'.');rectangle(u,9,16,15,22,'.');}
+ m.stairs.push_back({1,9,3,15,lower,upper,15,true,false});
+ const float roomTop=upper-.3f;
+ // P-01 feed pump room (west) and R-03 control room (east) open on the atrium.
+ wall(m,1,16.85f,9,17,lower,roomTop,3);
+ wall(m,8.85f,17,9,18.6f,lower,roomTop,3);wall(m,8.85f,20.2f,9,23,lower,roomTop,3);wall(m,8.85f,18.6f,9,20.2f,roomTop-.6f,roomTop,3);
+ wall(m,15,16.85f,23,17,lower,roomTop,3);
+ wall(m,15,17,15.15f,18.6f,lower,roomTop,3);wall(m,15,20.2f,15.15f,23,lower,roomTop,3);wall(m,15,18.6f,15.15f,20.2f,roomTop-.6f,roomTop,3);
+ // The vessel rises through the atrium to the manifold roof.
+ m.structures.push_back({10.5f,17.5f,13.5f,20.5f,lower,-3.4f,false,1});
+ // Terminal order is the puzzle's: log, R-03 computer, P-01 feed, P-02 return.
+ terminal(m,{7.8f,21.9f},"MAINTENANCE / SHIFT LOG","RETURN TRIPPED AGAIN. NO FEED PRESSURE.","LEFT THE SERVICE DISK WITH THE SPARES.",3);
+ {AuthoredTerminalData t;t.position={17.4f,21.9f};t.title="REACTOR ACCESS / DRIVE A:";t.reactorAction=1;m.terminals.push_back(std::move(t));}
+ {AuthoredTerminalData t;t.position={3.2f,21.9f};t.title="01 / COOLANT FEED";t.reactorAction=2;m.terminals.push_back(std::move(t));}
+ for(float x:{16.3f,18.45f})m.fixtures.push_back({13,{x,22.6f},0,.9066f,.4956f,2.2f,0,true});
+ m.fixtures.push_back({19,{20.8f,18.3f},0,1.367f,.724f,.78f,0,true});
+ m.fixtures.push_back({18,{20.8f,19.03f},0,.417f,.525f,.95f,kPi,true});
+ // Feed pumps and the coolant main into the vessel jacket.
+ m.props.push_back({0,{4.2f,18.4f},1.25f,2.2f,0,{1.1f,.66f},.15f});
+ m.props.push_back({1,{7.2f,21.6f},1.12f,2.f,0,{1.f,.31f},.12f});
+ servicePipe(m,{5.3f,18.4f},{10.4f,18.4f},-7.7f,.16f,3);
+ servicePipe(m,{13.6f,19.f},{15.f,19.f},-7.2f,.12f,4);
+ m.fixtures.push_back({44,{22.94f,12.f},0,.4f,.1f,2.6f,-kPi*.5f,false});m.fixtures.push_back({45,{22.87f,12.f},1.25f,.32f,.12f,.32f,-kPi*.5f,false});
+ // North store: drums and crates, and a coolant spill along the east wall.
+ for(auto c:{std::pair{4,2},{5,2},{4,3},{18,6},{19,6}})L(0).rows[c.second][c.first]='C';
+ for(auto b:{std::pair{8,2},{14,3},{21,7}})L(0).rows[b.second][b.first]='B';
+ // Leaked coolant pools in the corner, taped off.
+ hazard(m,Hazard::Kind::Toxic,20.2f,1.2f,22.8f,4.f,lower-1,lower+1.2f,6);
+ floorLine(m,20.f,4.f,23.f,4.15f,lower,13);floorLine(m,20.f,1.f,20.15f,4.15f,lower,13);
+ wallSign(m,22.945f,5.2f,lower+1.8f,"DANGER","COOLANT LEAK / DO NOT ENTER",1.6f,-kPi*.5f);
+ transferExit(m,lower);
+ m.doors.back().requireControl=true;
+ wallSign(m,14.945f,21.5f,lower+2.f,"R-03 CONTROL","BULKHEAD / LOCAL CONTROL",1.6f,-kPi*.5f);
+ wallSign(m,9.055f,21.5f,lower+2.f,"P-01 FEED","COOLANT PUMPS",1.6f,kPi*.5f);
+
+ // --- 12 UPPER MANIFOLD (-6 m) ----------------------------------------------
+ wall(m,1,15.85f,5,16,upper,-3.3f,3);wall(m,6.5f,15.85f,9,16,upper,-3.3f,3);wall(m,5,15.85f,6.5f,16,-3.9f,-3.3f,3);
+ // Maintenance bench (the authorization disk lies on it) overlooking the vessel.
+ m.fixtures.push_back({19,{6.f,21.1f},3,1.367f,.724f,.78f,0,true});
+ m.fixtures.push_back({18,{6.f,21.84f},3,.417f,.525f,.95f,0,true});
+ m.fixtures.push_back({7,{3.f,22.5f},3,1.8f,.5f,1.8f,0,true});
+ {AuthoredTerminalData t;t.position={17.5f,21.9f};t.title="02 / COOLANT RETURN";t.z=3;t.reactorAction=3;m.terminals.push_back(std::move(t));}
+ for(float x:{15.6f,16.6f}){m.fixtures.push_back({44,{x,22.94f},3,.4f,.1f,2.6f,0,false});m.fixtures.push_back({45,{x,22.87f},4.2f,.32f,.12f,.32f,0,false});}
+ // North pipe gallery: coolant headers over the shaft head.
+ for(float y:{2.f,3.2f})servicePipe(m,{3.5f,y},{22.5f,y},-4.2f,.2f,y<3?3:4);
+ wallSign(m,3.f,15.795f,-4.6f,"MAINTENANCE","SPARES / SERVICE BENCH",1.8f,kPi);
+ wallSign(m,22.945f,19.f,-4.6f,"P-02 RETURN","COOLANT CIRCULATION",1.6f,-kPi*.5f);
+
+ // --- Light ---------------------------------------------------------------
+ // Collar: lobby tubes, the plant, an amber beacon over the landing.
+ for(float x:{4.f,9.f,17.f})m.lights.push_back(lamp({x,6.5f},2.55f,1.f,6.f,4300,.25f));
+ m.lights.push_back(lamp({3.5f,2.f},2.55f,.8f,4.f,4300,.25f));
+ m.lights.push_back(lamp({18.5f,2.5f},2.55f,.9f,5.f,3000));
+ m.lights.push_back(lamp({12.f,7.f},2.55f,1.1f,4.f,1800,-.1f));
+ // Containment: cold control light, sodium in the pump room, red emergency
+ // lamps and the vessel's blue glow from the atrium roof.
+ m.lights.push_back(lamp({19.f,20.f},roomTop-.15f,1.1f,6.f,6500,.1f));
+ m.lights.push_back(lamp({5.f,20.f},roomTop-.15f,1.f,6.f,2000));
+ m.lights.push_back(lamp({5.f,5.f},roomTop-.15f,.7f,6.f,2800));
+ m.lights.push_back(lamp({18.f,5.f},roomTop-.15f,.6f,6.f,1300,-.3f));
+ m.lights.push_back(lamp({6.f,12.f},roomTop-.15f,.6f,5.f,1300,-.3f));
+ m.lights.push_back(lamp({18.f,12.f},roomTop-.15f,.6f,5.f,1300,-.3f));
+ for(Vec2 a:{Vec2{9.6f,17.f},Vec2{14.4f,21.f}})m.lights.push_back(lamp(a,-3.45f,1.6f,10.f,12000,-.05f));
+ // Manifold: work lamps over the bench, the valve station and the gallery.
+ m.lights.push_back(lamp({5.f,19.f},-3.45f,1.1f,6.f,3500));
+ m.lights.push_back(lamp({19.f,19.5f},-3.45f,1.f,6.f,4500,.1f));
+ for(float x:{6.f,18.f})m.lights.push_back(lamp({x,4.5f},-3.45f,.9f,7.f,2600,.1f));
+ // Each storey the cab passes is lit in its own colour, so the ride reads as
+ // movement: blue coolant risers, the collar, amber plant, red electrical,
+ // white at the sealed surface gates.
+ const std::pair<float,float> storeys[]={{-3.f,9000},{0.f,4300},{3.f,2200},{6.f,1300},{9.f,5200}};
+ for(auto [z,kelvin]:storeys)for(Vec2 bay:{Vec2{8.5f,9.5f},Vec2{15.5f,14.5f}})m.lights.push_back(lamp(bay,z+(z==0?2.55f:2.5f),.9f,5.f,kelvin));
+ // The cab lamp rides with the cab: it must be the map's last light.
+ m.lights.push_back(lamp({12.f,11.8f},2.45f,1.4f,12.f,3600));
+
+ // --- Encounters ------------------------------------------------------------
+ using C=CreatureKind;using P=PickupKind;
+ m.creatureSpawns={{C::Huntsman,{5.5f,5.f}},{C::Wasp,{12.f,16.3f}},{C::Warden,{21.2f,20.5f}},{C::Huntsman,{18.5f,5.5f},upper}};
+ m.pickupSpawns={{{13.f,16.f},P::Health},{{2.5f,20.f},P::Ammo,upper},{{20.5f,11.5f},P::Ammo},{{16.5f,6.5f},P::Health,upper}};
+ for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,{6.6f+i*.45f,4.4f},lower,i*.7f});
+ {ScriptEvent checkpoint;checkpoint.id=stateId("event_reactor_exit_checkpoint");checkpoint.x1=20;checkpoint.y1=21;checkpoint.x2=23;checkpoint.y2=24;
+  checkpoint.bottom=-9.5f;checkpoint.top=-7.5f;checkpoint.requireState=stateId("reactor_bulkhead_released");checkpoint.requireEnemiesClear=true;
+  ScriptAction save;save.type=ScriptAction::Type::Checkpoint;checkpoint.actions.push_back(save);m.scriptEvents.push_back(checkpoint);}
+
+ zone(m,"10 SURFACE LIFT",0,0,24,24,-1.f,1000);
+ zone(m,"12 UPPER MANIFOLD",0,0,24,24,-7.f,-1.f);
+ zone(m,"11 REACTOR CONTAINMENT",0,0,24,24);
  return p;
 }
 
@@ -1213,7 +1366,7 @@ std::shared_ptr<const Map> make(int level){
 }
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
-  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();
+  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();
   for(int i=10;i<CampaignChunkCount;++i)result[i]=make(i);return result;}();
  return maps.at(size_t(level));
 }

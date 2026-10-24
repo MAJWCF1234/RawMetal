@@ -278,7 +278,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  std::uint64_t fixedLightSourceKey=1469598103934665603ull;
  auto hashLightSource=[&](std::uint64_t value){fixedLightSourceKey^=value;fixedLightSourceKey*=1099511628211ull;};
  hashLightSource(w.lights().size());
- for(const auto&light:w.lights())if(!(w.campaignChunk(3)&&&light==&w.lights().back())){
+ for(const auto&light:w.lights())if(!(w.hasLift()&&&light==&w.lights().back())){
   hashLightSource(static_cast<std::uint64_t>(light.mount));
   for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range})hashLightSource(std::bit_cast<std::uint32_t>(value));
  }
@@ -305,7 +305,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto rebuildLightCells=[&]{
  lightCells.assign(512,{});m_chunkLightCounts[w.level()]=w.lights().size();
  for(const auto& light:w.lights()){
-  if(w.campaignChunk(3)&&&light==&w.lights().back())continue;
+  if(w.hasLift()&&&light==&w.lights().back())continue;
   auto emitter=lightFrames[size_t(&light-w.lights().data())].emitter;
   for(int z=0;z<8;++z)for(int y=0;y<8;++y)for(int x=0;x<8;++x){
    auto separation=[](float p,int cell,float origin){float lo=cell==0?-1000.f:origin+cell*4,hi=cell==7?1000.f:origin+(cell+1)*4;return std::max({lo-p,0.f,p-hi});};
@@ -319,7 +319,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // projected bounding box covered by one rectangle: shaft/stair openings stay
  // visible at every camera height, with no arbitrary floor-distance cutoff.
  std::vector<Structure> occluders;
- if(w.campaignChunk(3)&&m_visibilityCulling)for(const auto&layer:w.layers())if(layer.thickness>0){
+ if(w.hasLift()&&m_visibilityCulling)for(const auto&layer:w.layers())if(layer.thickness>0){
   size_t first=occluders.size();
   for(int y=0;y<24;++y)for(int x=0;x<24;){if(layer.rows[y][x]!='='){++x;continue;}int begin=x;while(x<24&&layer.rows[y][x]=='=')++x;
    bool joined=false;for(size_t i=first;i<occluders.size();++i){auto&o=occluders[i];if(o.x1==begin&&o.x2==x&&o.y2==y){o.y2=float(y+1);joined=true;break;}}
@@ -806,25 +806,28 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.material==1){
-   // Faceted containment jacket, with consistent metre-scale panels.
-   for(int side=0;side<12;++side){float a=side*kPi/6,b=(side+1)*kPi/6;float ax=12+1.74f*std::cos(a),ay=20+1.74f*std::sin(a),bx=12+1.74f*std::cos(b),by=20+1.74f*std::sin(b);
+   // Faceted containment jacket, with consistent metre-scale panels, centred
+   // on its structure (radius 1.16 x the half-width: 1.74 m for a 3 m bay).
+   const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,r=(s.x2-s.x1)*.58f,base=s.bottom;
+   for(int side=0;side<12;++side){float a=side*kPi/6,b=(side+1)*kPi/6;float ax=cx+r*std::cos(a),ay=cy+r*std::sin(a),bx=cx+r*std::cos(b),by=cy+r*std::sin(b);
     quad({ax,ay,s.bottom},{bx,by,s.bottom},{bx,by,s.top},{ax,ay,s.top},m_bulkhead,1.f,{.9f,5.6f});
-    for(float z:{-8.6f,-6.5f,-4.f}){float A=12+1.82f*std::cos(a),B=20+1.82f*std::sin(a),C=12+1.82f*std::cos(b),D=20+1.82f*std::sin(b);quad({A,B,z},{C,D,z},{C,D,z+.16f},{A,B,z+.16f},m_pressureMetal,1.1f,{.94f,.16f});}
-    tri({{12,20,s.top},.5f,.5f},{{ax,ay,s.top},0,0},{{bx,by,s.top},1,0},m_metal,1.f);
+    for(float z:{base+.4f,base+2.5f,base+5.f}){float R=r+.08f,A=cx+R*std::cos(a),B=cy+R*std::sin(a),C=cx+R*std::cos(b),D=cy+R*std::sin(b);quad({A,B,z},{C,D,z},{C,D,z+.16f},{A,B,z+.16f},m_pressureMetal,1.1f,{.94f,.16f});}
+    tri({{cx,cy,s.top},.5f,.5f},{{ax,ay,s.top},0,0},{{bx,by,s.top},1,0},m_metal,1.f);
    }
    // Containment vessel spans both reactor maps. Luminous coolant channels
    // and heavy external bands make it readable from below and the balcony.
-   for(float x:{11.55f,12.3f})for(float z:{-8.4f,-7.4f,-5.9f,-4.9f})box({x,18.2f,z},{x+.06f,18.28f,z+.65f},blue,1.2f);
-   quad({12.4f,18.17f,-5.7f},{11.6f,18.17f,-5.7f},{11.6f,18.17f,-4.9f},{12.4f,18.17f,-4.9f},m_chemicalSign,1.1f);
+   const float face=cy-r*1.035f;
+   for(float x:{cx-.45f,cx+.3f})for(float z:{base+.6f,base+1.6f,base+3.1f,base+4.1f})box({x,face,z},{x+.06f,face+.08f,z+.65f},blue,1.2f);
+   quad({cx+.4f,face-.03f,base+3.3f},{cx-.4f,face-.03f,base+3.3f},{cx-.4f,face-.03f,base+4.1f},{cx+.4f,face-.03f,base+4.1f},m_chemicalSign,1.1f);
   }
   else if(s.material==4){
    // Every tread uses the same concrete body and one inset anti-slip plate.
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.campaignChunk(3)&&s.top-s.bottom>1.5f)?m_pressureWall:w.campaignChunk(3)?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
-    if(w.campaignChunk(3)){
+    if(w.hasLift()){
      // A safety cage must not become an opaque wall around every cab window.
      box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.bottom+.16f},m_panelMetal,.8f);
      box({s.x1,s.y1,s.bottom+.92f},{s.x2,s.y2,s.bottom+.96f},m_metal,.9f);
@@ -1004,7 +1007,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(cacheCeilingLamps){
   struct CeilingMount {const WorldLight*light;float mount;};std::vector<CeilingMount> mounts;mounts.reserve(w.lights().size());
   std::uint64_t key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
-  for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.campaignChunk(3)&&&light==&w.lights().back())){
+  for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())){
    float mount=w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;
    mounts.push_back({&light,mount});
    for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount})hash(std::bit_cast<std::uint32_t>(value));
@@ -1017,7 +1020,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  for(const auto&light:w.lights()){
   if(light.mount==WorldLightMount::Wall)continue;
-  movingGeometry=w.campaignChunk(3)&&&light==&w.lights().back();
+  movingGeometry=w.hasLift()&&&light==&w.lights().back();
   if(cacheCeilingLamps&&!movingGeometry)continue;
   ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f);
  }
@@ -1222,8 +1225,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  box({10,14,.66f},{11,15,3.2f},m_metal,.9f);
  quad({9.99f,14.15f,.83f},{9.99f,14.85f,.83f},{9.99f,14.85f,1.05f},{9.99f,14.15f,1.05f},m_serviceSign,1.1f);
  }
- if(w.campaignChunk(3)){
-  // Boarding deck: freight holding on the west, traction plant on the east.
+ if(w.campaign()&&w.hasLift()){
+  // The shaft, cab and the hazmat casualty belong to every lift map; the
+  // freight and plant dressing below is the original layout's own.
   const auto& corpse=game.hazmat();
   if(corpse.initialized&&sphereVisible({corpse.p[0].x,corpse.p[0].y,corpse.p[0].z},2.1f)){
    quad({8.25f,6.7f,.009f},{9.55f,6.7f,.009f},{9.55f,7.9f,.009f},{8.25f,7.9f,.009f},m_blood,1.1f);
@@ -1245,6 +1249,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
    objectLighting=false;
   }
+  if(!w.authored()){
   // The central approach is kept clear; equipment is concentrated at cab windows.
   // This bay ends at the existing x=7 structural partition: keep every crate
   // fully west of it rather than allowing an attractive but impossible overlap.
@@ -1262,6 +1267,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Ventilation trunk runs into the shaft rather than ending in an empty room.
   box({4.f,12.4f,2.15f},{8.85f,12.95f,2.55f},m_pressureMetal,.9f);
   for(float x:{4.2f,6.2f,8.2f})box({x,12.37f,2.12f},{x+.08f,12.98f,2.58f},m_metal,.8f);
+  }
   // Theatre-like shaft bays: readable machinery silhouettes within the window
   // sightline, backed by opaque walls instead of distant explorable rooms.
   for(float z:{-3.f,3.f,6.f,9.f}){
@@ -1293,6 +1299,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    quad({x,y,z},{x,y+.012f,z},{x,y+.06f,z+.10f+life*.15f},{x,y+.048f,z+.10f+life*.15f},i%3?amber:lamp,1.8f);
   }
   movingGeometry=false;
+  if(!w.authored()){
   // Purchased instrument cabinets flank the actual interactive computer.
   for(float x:{17.35f,18.85f})prop(m_consoleMesh,m_consoleTexture,x,19.25f,1.188f,kPi,.626f,-9.f);
   // Elevated coolant headers connect the west pump bay to the containment jacket.
@@ -1300,6 +1307,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({3.8f,21.85f,z},{10.4f,22.03f,z+.18f},m_pressureMetal,.9f);
    box({10.22f,20.4f,z},{10.4f,22.03f,z+.18f},m_pressureMetal,.9f);
    for(float x:{4.f,6.f,8.f,10.f})box({x,21.82f,z-.025f},{x+.08f,22.06f,z+.205f},m_metal,1.f);
+  }
   }
   movingGeometry=true;
   float z=w.liftHeight();bool ready=w.liftPhase()==World::LiftPhase::Ready,crashed=w.liftPhase()==World::LiftPhase::Crashed;
@@ -1349,7 +1357,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   quad({13.8f,14.04f,10.5f},{10.2f,14.04f,10.5f},{10.2f,14.04f,11.3f},{13.8f,14.04f,11.3f},m_surfaceSign,1.1f);
  }
  movingGeometry=false;
- for(auto&terminal:w.terminals()){movingGeometry=w.campaignChunk(3)&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
+ for(auto&terminal:w.terminals()){movingGeometry=w.hasLift()&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
   if(terminal.control){
    box({x-.27f,y-.18f,h},{x+.27f,y+.18f,h+.2f},m_panelMetal,.9f);
    facility(8,x,y,h+.2f,.36f,.54f,.75f,kPi*.5f);
@@ -1408,7 +1416,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  // Extraction floor remains readable even before its gate unlocks.
  movingGeometry=false;
- if(w.campaignChunk(3)&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
+ if(w.hasLift()&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
  if(w.campaign())for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining(level)==0?m_routePaint:m_redPaint,1.f);}
  // Alpha-blend damage into the rendered wall so its grain and lighting remain visible.
  static const Texture impact=[](){Texture t{24,24,std::vector<std::uint32_t>(24*24)};

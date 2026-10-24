@@ -3,44 +3,19 @@
 #include <queue>
 #include <cmath>
 #include <cstdio>
+#include <map>
 
 namespace retro {
 namespace {
 constexpr int N=96;constexpr float Cell=24.f/N,Step=.45f;
 // Walkable space a player can reach from the map's start: a flood fill on a
-// 0.25 m grid with the game's own support and clearance queries (0.45 m step,
-// a standing or crouched hull, drops allowed). Stacked floors are separate
+// 0.25 m grid with the game's own support query and player hull test (0.45 m
+// step, standing or crouched, drops of up to 6 m). Stacked floors are separate
 // states per cell.
 struct Reach {
  std::vector<std::vector<float>> visited=std::vector<std::vector<float>>(N*N);
  int nodes=0;float startZ=0;
 };
-Reach flood(const World& w,float body){
- Reach r;
- auto seen=[&](int x,int y,float z){for(float v:r.visited[size_t(y*N+x)])if(std::fabs(v-z)<.3f)return true;return false;};
- struct Node{int x,y;float z;};std::queue<Node> open;
- const auto start=w.definition().playerStart;
- r.startZ=w.supportBelow(start.x,start.y,w.definition().spawnHeight+1.f);
- int sx=int(start.x/Cell),sy=int(start.y/Cell);
- r.visited[size_t(sy*N+sx)].push_back(r.startZ);open.push({sx,sy,r.startZ});
- while(!open.empty()){
-  auto n=open.front();open.pop();++r.nodes;
-  const int dx[4]={1,-1,0,0},dy[4]={0,0,1,-1};
-  for(int k=0;k<4;++k){
-   int nx=n.x+dx[k],ny=n.y+dy[k];if(nx<0||ny<0||nx>=N||ny>=N)continue;
-   float cx=(nx+.5f)*Cell,cy=(ny+.5f)*Cell;
-   float feet=w.supportBelow(cx,cy,n.z+Step);
-   if(!std::isfinite(feet)||feet<n.z-6.f||feet>n.z+Step)continue;
-   if(!w.fits(cx,cy,feet+.02f,body,false))continue;
-   // The edge between the two cells must be passable at the higher feet.
-   float mx=(n.x+.5f)*Cell*.5f+cx*.5f,my=(n.y+.5f)*Cell*.5f+cy*.5f;
-   if(!w.fits(mx,my,std::max(feet,n.z)+.02f,body,false))continue;
-   if(seen(nx,ny,feet))continue;
-   r.visited[size_t(ny*N+nx)].push_back(feet);open.push({nx,ny,feet});
-  }
- }
- return r;
-}
 std::string at(Vec2 p){char text[48];std::snprintf(text,sizeof text,"%.2f,%.2f",p.x,p.y);return text;}
 }
 
@@ -52,11 +27,47 @@ std::string at(Vec2 p){char text[48];std::snprintf(text,sizeof text,"%.2f,%.2f",
 // view, and map-views-<level>.txt: reachable viewpoints for --map-sweep.
 bool Game::auditMap(int level){
  Game game(WorldId::Campaign);game.loadLevel(level,false);
+ // Doors stand open: the audit asks what is reachable, not what is unlocked.
+ for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);
+ game.m_world.updateDoors(2,true);
  const World& w=game.world();
+ auto flood=[&](float body){
+  Reach r;
+  auto seen=[&](int x,int y,float z){for(float v:r.visited[size_t(y*N+x)])if(std::fabs(v-z)<.3f)return true;return false;};
+  struct Node{int x,y;float z;};std::queue<Node> open;
+  auto seed=[&](Vec2 p,float z){int x=int(p.x/Cell),y=int(p.y/Cell);if(seen(x,y,z))return;r.visited[size_t(y*N+x)].push_back(z);open.push({x,y,z});};
+  const auto start=w.definition().playerStart;
+  r.startZ=w.supportBelow(start.x,start.y,w.definition().spawnHeight+1.f);
+  seed(start,r.startZ);
+  // A lift map continues where the ride ends: the cab crashed in its pit.
+  for(int pass=0;pass<2;++pass){
+  if(pass==1){if(!w.hasLift())break;
+   if(w.liftPhase()==World::LiftPhase::Ready){game.m_world.startLift();game.m_world.updateLift(World::LiftRideComplete);}
+   seed({12,12.5f},w.liftHeight());}
+  while(!open.empty()){
+   auto n=open.front();open.pop();++r.nodes;
+   const int dx[4]={1,-1,0,0},dy[4]={0,0,1,-1};
+   for(int k=0;k<4;++k){
+    int nx=n.x+dx[k],ny=n.y+dy[k];if(nx<0||ny<0||nx>=N||ny>=N)continue;
+    float cx=(nx+.5f)*Cell,cy=(ny+.5f)*Cell;
+    // Like the player, stand on the highest support under the 40 cm hull.
+    float feet=-1e9f;for(float ox:{-.2f,0.f,.2f})for(float oy:{-.2f,0.f,.2f})feet=std::max(feet,w.supportBelow(cx+ox,cy+oy,n.z+Step));
+    if(!std::isfinite(feet)||feet<n.z-6.f||feet>n.z+Step)continue;
+    if(!game.hullFits({cx,cy},feet+.02f,body))continue;
+    // The step between the two cells must clear the hull at the higher feet.
+    float mx=(n.x+.5f)*Cell*.5f+cx*.5f,my=(n.y+.5f)*Cell*.5f+cy*.5f;
+    if(!game.hullFits({mx,my},std::max(feet,n.z)+.02f,body))continue;
+    if(seen(nx,ny,feet))continue;
+    r.visited[size_t(ny*N+nx)].push_back(feet);open.push({nx,ny,feet});
+   }
+  }
+  }
+  return r;
+ };
  std::ofstream report("map-audit-"+std::to_string(level)+".txt");
  // The player may crouch anywhere; creatures need standing room.
- const auto reach=flood(w,Player::CrouchedHeight+.02f);const auto& visited=reach.visited;
- const auto standing=flood(w,Player::StandingHeight+.02f);
+ const auto reach=flood(Player::CrouchedHeight+.02f);const auto& visited=reach.visited;
+ const auto standing=flood(Player::StandingHeight+.02f);
  auto reachableIn=[&](const Reach& area,Vec2 p,float z,float radius){
   int r=int(std::ceil(radius/Cell));int cx=int(p.x/Cell),cy=int(p.y/Cell);
   for(int y=cy-r;y<=cy+r;++y)for(int x=cx-r;x<=cx+r;++x){if(x<0||y<0||x>=N||y>=N)continue;
@@ -66,6 +77,8 @@ bool Game::auditMap(int level){
  auto reachable=[&](Vec2 p,float z,float radius){return reachableIn(reach,p,z,radius);};
  int problems=0;
  auto fail=[&](const std::string& what){++problems;report<<what<<'\n';};
+ {std::map<int,std::pair<int,int>> heights;for(size_t i=0;i<visited.size();++i)for(float v:visited[i]){auto& h=heights[int(std::floor(v*2))];if(!h.first++)h.second=int(i);}
+  report<<"Reached floor heights (m: cells, first at):";for(auto [h,entry]:heights)report<<' '<<h*.5f<<':'<<entry.first<<'@'<<(entry.second%N+.5f)*Cell<<','<<(entry.second/N+.5f)*Cell;report<<'\n';}
  auto check=[&](bool ok,const std::string& what){if(!ok)fail("UNREACHABLE "+what);};
  report<<"Map "<<level<<" ("<<w.definition().playerStart.x<<","<<w.definition().playerStart.y<<" z "<<reach.startZ<<"): "<<reach.nodes<<" reachable cells ("<<standing.nodes<<" standing) of "<<N*N<<"\n";
  const char* kinds[]={"huntsman","wasp","brute","warden","mutant"};
@@ -121,10 +134,10 @@ bool Game::auditMap(int level){
  // Signs face out of a backing surface.
  for(const auto& s:w.signs()){
   Vec2 n{std::sin(s.yaw),std::cos(s.yaw)};float z=s.z+s.height*.5f;
-  // The plate sits 6 cm proud of an 11 cm backing; a wall must continue 17 cm
-  // behind the face, across the plate's whole width.
+  // The plate sits 6 cm proud of an 11 cm backing; a wall (even a 15 cm
+  // partition) must be solid 14 cm behind the face, across the whole plate.
   bool backed=true;Vec2 along{n.y,-n.x};
-  for(float u:{-.45f,0.f,.45f}){Vec2 back=s.position-n*.17f+along*(u*s.width);backed&=!w.fits(back.x,back.y,z,.015f,false);}
+  for(float u:{-.45f,0.f,.45f}){Vec2 back=s.position-n*.14f+along*(u*s.width);backed&=!w.fits(back.x,back.y,z,.015f,false);}
   if(!backed)fail("FLOATING sign '"+s.title+"' at "+at(s.position));
  }
  // Props: a solid prop stands on a floor, slab or another prop, is not sunk
