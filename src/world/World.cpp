@@ -166,7 +166,7 @@ bool insideTerminal(const World& world,const Terminal& terminal,float x,float y)
 }
 float terminalHeight(const World& world,const Terminal& terminal,float x,float y){
  if(!benchTerminal(world,terminal))return .95f;
- float yaw=world.level()==6?-kPi*.5f:terminal.yaw,c=std::cos(yaw),s=std::sin(yaw);
+ float yaw=world.level()==6&&!world.authored()?-kPi*.5f:terminal.yaw,c=std::cos(yaw),s=std::sin(yaw);
  float dx=x-terminal.position.x,dy=y-terminal.position.y;
  // The monitor has its own narrow footprint. Treating its full height as a
  // desk-sized box made objects stand on invisible space beside the screen.

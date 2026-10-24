@@ -36,7 +36,11 @@ vec3 displayCurve(vec3 c){
 float circleOfConfusion(float depth,float focus){
  if(depth<0.0)return 0.0;
  float d=depth>0.02?depth:200.0;
- return clamp(params.lensAperture*0.045*abs(1.0/focus-1.0/d),0.0,0.032);
+ // Gentle: only distant background softens, by at most a few pixels, and
+ // nothing in front of the focus (desks, rails, the room around the player)
+ // ever blurs. A strong lens read as the whole screen being out of focus.
+ float behind=max(1.0/focus-1.0/d,0.0);
+ return clamp(params.lensAperture*0.006*max(behind-0.08,0.0),0.0,0.0035);
 }
 // Lateral chromatic aberration: red and blue land at slightly different
 // magnifications, growing with the square of the distance from the axis.

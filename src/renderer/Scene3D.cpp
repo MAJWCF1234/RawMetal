@@ -1114,14 +1114,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  for(const auto& hazard:w.hazards())if(hazard.kind==Hazard::Kind::Electricity&&game.hazardActive(hazard)){
   // Cable Vault arcs skim the coolant; lifting them above the sump made them
   // look like detached blue strips instead of live electrical discharge.
-  bool sumpArc=w.level()==6&&!w.waterVolumes().empty();
+  bool sumpArc=w.level()==6&&!w.authored()&&!w.waterVolumes().empty();
   float z=sumpArc?w.waterVolumes().front().surface+.012f:hazard.bottom+.45f;
   for(int i=0;i<5;++i){float x=hazard.x1+(hazard.x2-hazard.x1)*(i+.5f)/5.f;
    float arcLength=sumpArc?.16f:.35f,arcHeight=sumpArc?.07f:.28f;
    quad({x-.025f,hazard.y1,z},{x+.025f,hazard.y1,z},{x+.10f,hazard.y1+arcLength,z+arcHeight},{x+.06f,hazard.y1+arcLength,z+arcHeight},blue,1.8f);
   }
  }
- if(w.campaign()&&w.level()==6){
+ if(w.campaign()&&w.level()==6&&!w.authored()){
   // Put a real high-voltage warning over the only control that isolates the
   // live sump, then carry hazard tape along its two exposed concrete curbs.
   quad({21.955f,12.50f,-6.34f},{21.955f,11.30f,-6.34f},
@@ -1164,7 +1164,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  // Paint sits directly on the authored walking floor, so a route cannot
  // appear suspended over the storey below or across a stair opening.
- if(w.campaign()&&w.level()>=7&&w.level()<=9){
+ if(w.campaign()&&w.level()>=7&&w.level()<=9&&!w.authored()){
   auto lane=[&](float x,float y,float endY,float z){
    for(;y<endY;y+=.9f)if(std::fabs(w.supportHeight(x,y)-z)<.03f){
     quad({x-.035f,y,z+.012f},{x+.035f,y,z+.012f},{x+.035f,y+.42f,z+.012f},{x-.035f,y+.42f,z+.012f},m_routePaint,1.f);
@@ -1176,13 +1176,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  for(const auto& terminal:w.terminals())if(terminal.activateState){
   float z=w.floorHeight(terminal.position.x,terminal.position.y)+terminal.z;
-  if(w.level()==6){
+  if(w.level()==6&&!w.authored()){
    auto&statusLamp=game.state(terminal.activateState)?lamp:amber;
    box({21.94f,11.83f,-6.52f},{21.985f,11.97f,-6.43f},statusLamp,1.8f);
   }else{
    // Keep the status lamp on the desk/bezel edge. A fixed -Y offset lands on
    // the CRT phosphor for pedestal terminals that face -Y / authored yaw.
-   float yaw=terminal.yaw;if(w.campaign()&&w.level()>=6&&w.level()<=9){if(w.level()==6)yaw=-kPi*.5f;}
+   float yaw=terminal.yaw;if(w.campaign()&&w.level()>=6&&w.level()<=9&&!w.authored()){if(w.level()==6)yaw=-kPi*.5f;}
    else if(std::fabs(yaw)<1e-4f)yaw=kPi;
    Vec2 front{std::sin(yaw),std::cos(yaw)},side{front.y,-front.x};
    Vec2 p=terminal.position+front*.29f+side*.20f;
@@ -1333,7 +1333,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
      box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
     box({x+.30f,y-.27f,h+.16f},{x+.36f,y+.27f,h+.21f},m_metal,.85f);
-    float terminalYaw=w.level()==6?-kPi*.5f:terminal.yaw;
+    float terminalYaw=w.level()==6&&!w.authored()?-kPi*.5f:terminal.yaw;
     float keyboardX=x+std::sin(terminalYaw)*.22f,keyboardY=y+std::cos(terminalYaw)*.22f;
     float halfX=std::fabs(std::cos(terminalYaw))*.14f+std::fabs(std::sin(terminalYaw))*.105f;
     float halfY=std::fabs(std::sin(terminalYaw))*.14f+std::fabs(std::cos(terminalYaw))*.105f;
