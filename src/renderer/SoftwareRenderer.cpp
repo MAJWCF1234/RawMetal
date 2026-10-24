@@ -36,7 +36,7 @@ bool g_temporalAA = true; // windowed temporal anti-aliasing
 bool g_tiltShift = true; // windowed tilt-shift stylisation
 int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
-std::uint32_t rgb(int r,int g,int b){ return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
+std::uint32_t rgb(int r,int g,int b){return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
 std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t limit=3){
  std::vector<std::string> lines;columns=std::max(size_t(1),columns);
  while(!remaining.empty()&&lines.size()<limit){size_t count=std::min(columns,remaining.size());
@@ -92,7 +92,7 @@ const std::array<std::array<unsigned char,5>, 46> glyphs = {{
 {{0x1,0x1,0x2,0x4,0x4}},{{0x0,0x0,0x7,0x0,0x0}},{{0x0,0x0,0x0,0x0,0x2}},{{0x4,0x2,0x1,0x2,0x4}},
 {{0x1,0x2,0x4,0x2,0x1}},{{0x5,0x1,0x2,0x4,0x5}},{{0x1,0x2,0x2,0x2,0x1}},{{0x4,0x2,0x2,0x2,0x4}}
 }};
-int gi(char c){ if(c>='0'&&c<='9')return c-'0'; if(c>='A'&&c<='Z')return 10+c-'A'; if(c==' ')return 36;const char* extra="/-.><%()";auto found=std::strchr(extra,c);return found?38+int(found-extra):37; }
+int gi(char c){if(c>='0'&&c<='9')return c-'0'; if(c>='A'&&c<='Z')return 10+c-'A'; if(c==' ')return 36;const char* extra="/-.><%()";auto found=std::strchr(extra,c);return found?38+int(found-extra):37; }
 
 SoftwareRenderer::~SoftwareRenderer()=default;
 void SoftwareRenderer::setTexturePresentScale(int scale){
@@ -118,8 +118,8 @@ bool SoftwareRenderer::enableHardware(void* window){
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
-  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,&m_gantrySign,&m_reactorSign,&m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,&m_intakeSign,&m_processingSign,&m_containmentSign,&m_exitSign,&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign,&m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign,&m_serviceSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,&m_diskSign,&m_authSign,&m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
+  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,  &m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,    &m_hazard,&m_chemicalSign,  &m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   // Worker/Witness materials are large too. Deferring their mip construction
   // until the first visible limb caused quarter-second gameplay stalls.
@@ -336,7 +336,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  auto seaTint=[](std::uint32_t pixel){int gray=int(((pixel>>16)&255)*.30f+((pixel>>8)&255)*.59f+(pixel&255)*.11f);int delta=(gray-100)/3;
   return 0x58000000u|(std::uint32_t(std::clamp(32+delta,0,255))<<16)|(std::uint32_t(std::clamp(92+delta,0,255))<<8)|std::uint32_t(std::clamp(148+delta,0,255));};
 for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWater.mips)for(auto&pixel:mip)pixel=seaTint(pixel);
- m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_machineSign=loadTexture(129);m_confinedSign=loadTexture(130);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
+ m_hazard=loadTexture(127);m_chemicalSign=loadTexture(128);m_signRust=loadTexture(131);m_panelMetal=loadTexture(132);
  // Keep the source steel's rust, scratches and tonal variation. Compressing
  // a dark panel into a narrow blue tint made structural beams look untextured.
  m_framePaint=m_pressureMetal;
@@ -366,17 +366,12 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
   return result;
  };
  m_yellowSteel=paintedSteel(0xffb79b39u);m_redSteel=paintedSteel(0xffa34330u);m_paleSteel=paintedSteel(0xffb4bcb1u);
- for(auto*decal:{&m_hazard,&m_chemicalSign,&m_machineSign,&m_confinedSign})prepareDecal(*decal);
+ for(auto*decal:{&m_hazard,&m_chemicalSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
- m_intakeSign=makeSign("01 / INTAKE","FREIGHT ACCESS",0xffca994du);m_processingSign=makeSign("02 / FOUNDRY","KEEP CLEAR",0xffd9984cu);
- m_containmentSign=makeSign("03 / CONTAINMENT","BIOHAZARD",0xffb45c42u);m_exitSign=makeSign("DISPATCH","AUTHORIZED PERSONNEL",0xff83baa7u);
- m_serviceSign=makeSign("SERVICE 04","LOW CLEARANCE",0xffca994du);
  m_transferSign=makeSign("PRESSURE WORKS","TRANSFER / 02",0xffa7a766u);m_pumpSign=makeSign("PUMP HALL","HIGH PRESSURE",0xffa7a766u);
- m_controlSign=makeSign("CONTROL GALLERY","SWITCHGEAR",0xffa7a766u);m_surfaceSign=makeSign("SURFACE LIFT","EXTRACTION",0xffa7a766u);m_gantrySign=makeSign("TURBINE GANTRY","TRANSFER / 03",0xffa7a766u);
- m_reactorSign=makeSign("REACTOR CORE","CONTAINMENT BREACH",0xffbf583eu);
+ m_controlSign=makeSign("CONTROL GALLERY","SWITCHGEAR",0xffa7a766u);m_surfaceSign=makeSign("SURFACE LIFT","EXTRACTION",0xffa7a766u);
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
  m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
- m_diskSign=makeSign("MAINTENANCE","SERVICE BENCH",0xffd7ac64u);m_authSign=makeSign("CONTROL","R-03",0xff53aec4u);
  for(int i=0;i<32;++i)m_routeSigns[i]=makeSign(CampaignMapNames[i],"SERVICE ACCESS",0xffa7a766u);
  m_routeSigns[32]=makeSign("FREIGHT SERVICES","ACCESS SUSPENDED",0xffa7a766u);m_routeSigns[33]=makeSign("PRIMARY UTILITIES","SERVICE ACCESS",0xffa7a766u);
  m_serviceAreaSigns[0]=makeSign("SERVICE STORES","SPARES / MAINTENANCE",0xff53aec4u);
@@ -681,9 +676,8 @@ void SoftwareRenderer::wornPanel(int x,int y,int width,int height,bool recess,bo
 void SoftwareRenderer::drawHud(const Game& game){
  const auto&p=game.player();
  const auto paper=rgb(236,228,214),muted=rgb(146,138,128),amber=rgb(232,160,60),red=rgb(214,32,26);
- const int sector=int(p.pos.y)/8;
  const char* zone=game.world().zoneName(p.pos,p.z);
- const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"18 WASTE HANDLING":game.level()==8?"17 UTILITY JUNCTION":game.level()==7?"16 PUMP ANNEX":game.level()==6?"15 CABLE VAULTS":game.level()==5?"14 COOLANT RETURN":game.level()==4?"13 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
+ const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"18 WASTE HANDLING":game.level()==8?"17 UTILITY JUNCTION":game.level()==7?"16 PUMP ANNEX":game.level()==6?"15 CABLE VAULTS":game.level()==5?"14 COOLANT RETURN":CampaignMapNames[game.level()]; // Maps 0-4 name every spot through zones.
  const auto bone=rgb(236,228,214),black=rgb(0,0,0);
  gradient(0,0,m_width,46,black,.55f,0.f,false);
  std::string place(mapLabel);for(auto&c:place)c=char(std::toupper((unsigned char)c));fill(14,13,3,13,red,1);uiText(22,10,place.c_str(),bone,0,15,1,2);
