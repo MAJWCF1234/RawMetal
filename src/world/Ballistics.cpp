@@ -49,6 +49,11 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal)const{
   for(const auto&f:m_fixtures)if(f.solid){float base=floorHeight(f.position.x,f.position.y)+f.base;
    if(f.model==7){for(float tier:{.17f,.54f,.92f}){float top=base+f.height*tier;oriented(f.position,f.width,f.depth,top-.045f,top,f.yaw);}
     float c=std::cos(f.yaw),s=std::sin(f.yaw);for(float x:{-f.width*.5f+.02f,f.width*.5f-.02f})for(float y:{-f.depth*.5f+.02f,f.depth*.5f-.02f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.04f,.04f,base,base+f.height,f.yaw);
+  }else if(f.model==19||f.model==18){
+    float c=std::cos(f.yaw),s=std::sin(f.yaw),top=f.model==19?base+f.height:base+f.height*.48f;
+    oriented(f.position,f.width,f.depth,top-.05f,top,f.yaw);
+    for(float x:{-f.width*.5f+.05f,f.width*.5f-.05f})for(float y:{-f.depth*.5f+.05f,f.depth*.5f-.05f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.05f,.05f,base,top-.05f,f.yaw);
+    if(f.model==18){Vec2 back{f.position.x+(f.depth*.5f-.03f)*s,f.position.y+(f.depth*.5f-.03f)*c};oriented(back,f.width,.05f,top,base+f.height,f.yaw);}
    }else oriented(f.position,f.width,f.depth,base,base+f.height,f.yaw);
   }
  }

@@ -1366,8 +1366,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int y=0;y<24;++y)for(int x=0;x<24;++x){float dx=(x-11.5f)/11.5f,dy=(y-11.5f)/11.5f;
    unsigned noise=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x9e3779b9u);float jitter=float(noise%101u)/100.f;
    float distance=std::sqrt(dx*dx+dy*dy)*(1.08f+(jitter-.5f)*.3f);
-   float soot=std::clamp((.76f-distance)*1.5f,0.f,1.f)*std::clamp((distance-.48f)*5.f,0.f,1.f);
-   unsigned alpha=unsigned(std::clamp(soot*(.72f+jitter*.25f),0.f,1.f)*170.f);
+   float soot=std::clamp((.9f-distance)*1.4f,0.f,1.f)*std::clamp((distance-.3f)*4.f,0.f,1.f);
+   unsigned alpha=unsigned(std::clamp(soot*(.6f+jitter*.4f),0.f,1.f)*215.f);
    t.pixels[size_t(y*24+x)]=(alpha<<24)|0x00070808u;
   }
   t.clampEdges=true;t.transparent=true;return t;}();
@@ -1379,10 +1379,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x-15.5f)/15.5f,dy=(y-15.5f)/15.5f;
    unsigned noise=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x4f1bbcdcu);noise=(noise^(noise>>13))*1274126177u;float jitter=float((noise>>24)&255u)/255.f;
    float r=std::sqrt(dx*dx+dy*dy)*(1.f+(jitter-.5f)*.22f);
-   float bowl=std::clamp(1.f-r/.84f,0.f,1.f),depth=bowl*bowl*(1.f-jitter*.25f);
+   // A ragged outline: the edge wanders with angle, never a clean circle.
+   float angle=std::atan2(dy,dx),edge=.78f+.1f*std::sin(angle*5.f+jitter)+.06f*std::sin(angle*11.f+1.7f);
+   float bowl=std::clamp(1.f-r/edge,0.f,1.f),depth=std::sqrt(bowl)*(1.f-jitter*.2f);
    height[size_t(y*n+x)]=1.f-depth;
-   // A lit lip round a dark bowl: the substrate shows at the rim, the chip is deep.
-   bool inside=r<.88f;float lip=std::clamp(1.f-std::fabs(r-.7f)*4.f,0.f,1.f);float shade=.14f+(1.f-depth)*.22f+lip*.3f+jitter*.1f;unsigned v=unsigned(std::clamp(shade,0.f,1.f)*255.f);
+   // Dark core where the round went in; round it a band of chipped, freshly
+   // exposed substrate, brighter and broken, fading into the surface.
+   bool inside=r<edge;float core=std::clamp((edge*.42f-r)*12.f,0.f,1.f);
+   float chips=r>edge*.45f?(.42f+.3f*jitter)*(jitter>.18f?1.f:.4f):0.f;
+   float shade=core*.03f+(1.f-core)*chips;unsigned v=unsigned(std::clamp(shade,0.f,1.f)*255.f);
    t.pixels[size_t(y*n+x)]=((inside?0xffu:0u)<<24)|(v<<16)|(unsigned(v*.95f)<<8)|unsigned(v*.88f);
   }
   prepareDecal(t,true);
@@ -1394,7 +1399,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   int w=n,h=n;while(w>1||h>1){int nw=std::max(1,w/2),nh=std::max(1,h/2);std::vector<Point3> next(size_t(nw*nh));auto&previous=t.normalLevels.back();
    for(int y=0;y<nh;++y)for(int x=0;x<nw;++x){Point3 sum{};for(int j=0;j<2;++j)for(int i=0;i<2;++i)sum=sum+previous[size_t(std::min(h-1,y*2+j)*w+std::min(w-1,x*2+i))];float l=std::sqrt(sum.x*sum.x+sum.y*sum.y+sum.z*sum.z);next[size_t(y*nw+x)]=l>.00001f?sum*(1.f/l):Point3{0,0,1};}
    t.normalLevels.push_back(std::move(next));w=nw;h=nh;}
-  t.parallaxScale=.09f;return t;}();
+  t.parallaxScale=.12f;return t;}();
  // A blast leaves a broad scorch on the floor.
  static const Texture scorch=[](){const int n=48;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.transparent=true;t.clampEdges=true;
   for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
@@ -1418,8 +1423,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   unsigned seed=unsigned(std::fabs(mark.pos.x)*331.f)^unsigned(std::fabs(mark.pos.y)*613.f)^unsigned(std::fabs(mark.z)*977.f);float spin=float(seed%360u)*kPi/180.f;
   Point3 a,b;if(std::fabs(mark.normalZ)>.5f){p.z+=mark.normalZ*.012f;a={1,0,0};b={0,mark.normalZ>0?1.f:-1.f,0};}else{a={tangentX,tangentY,0};b={0,0,1};}
   auto hole=[&](Point3 c,float size,const Texture&t,float light){float cs=std::cos(spin),sn=std::sin(spin);Point3 u=(a*cs+b*sn)*size,v=(a*-sn+b*cs)*size;quad(c-u-v,c+u-v,c+u+v,c-u+v,t,light);};
-  hole(p,.032f,crater,.9f);
-  hole(p+impactNormal*.003f,.07f,impact,.9f);
+  hole(p+impactNormal*.003f,.1f,impact,.9f);
+  hole(p+impactNormal*.005f,.042f,crater,.9f);
   float age=game.elapsed()-mark.time;
   Point3 sparkTangent=std::fabs(mark.normalZ)>.5f?Point3{1,0,0}:Point3{tangentX,tangentY,0},sparkUp=cross3(impactNormal,sparkTangent);
   if(age>=0&&age<.18f)for(int i=0;i<6;++i){float phase=float(i)*1.0472f,flight=age*2.4f;
