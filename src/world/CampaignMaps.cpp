@@ -438,7 +438,7 @@ std::shared_ptr<const Map> makePressureWorks(){
  auto g=[&]()->AuthoredLayerData&{return m.layers[0];};
  const float hall=5.5f;
 
- // --- 04 RECEIVING -------------------------------------------------------
+ // --- 04 RAIL DOCK ---------------------------------------------------------
  rectangle(g(),2,0,5,1,'.');m.doors.push_back({2,5,.5f,0,false,false,true});
  rectangle(g(),1,7,3,8,'#');rectangle(g(),6,7,18,8,'#');rectangle(g(),21,7,23,8,'#');
  m.doors.push_back({3,6,7.5f});m.doors.push_back({18,21,7.5f});
@@ -450,7 +450,7 @@ std::shared_ptr<const Map> makePressureWorks(){
  g().rows[5][21]='B';
  forklift(m,15.6f,5.3f,0);
  for(float y:{1.6f,3.6f})shelf(m,{22.65f,y+.6f},-kPi*.5f);
- terminal(m,{6.5f,1.4f},"RECEIVING / MANIFEST","THE LAST TRAIN ARRIVED EMPTY.","THE PRESSURE GAUGES KEPT RISING.");
+ terminal(m,{6.5f,1.4f},"RAIL DOCK / MANIFEST","THE LAST TRAIN ARRIVED EMPTY.","THE PRESSURE GAUGES KEPT RISING.");
  serviceCeiling(m,1,1,23,7,3.6f);
  wallSign(m,4.5f,6.93f,2.4f,"05 / PUMP HALL","HIGH PRESSURE / EAR DEFENDERS",2.2f,kPi);
 
@@ -509,7 +509,7 @@ std::shared_ptr<const Map> makePressureWorks(){
  const Vec2 junk[]={{6.8f,3.2f},{7.1f,3.4f},{9.2f,12.2f},{9.5f,8.6f},{18.7f,19.8f},{19.1f,20.f}};
  for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,junk[i],-999,i*.7f});
 
- zone(m,"04 RECEIVING",0,0,24,7.5f);
+ zone(m,"04 RAIL DOCK",0,0,24,7.5f);
  zone(m,"05 PUMP HALL",0,7.5f,24,17.5f);
  zone(m,"06 CONTROL",0,17.5f,24,24);
  return p;
