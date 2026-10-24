@@ -142,8 +142,11 @@ bool Game::testLift(){
  // Walk to a point in any chunk: the target is world-space, so the walker
  // crosses stitched seams exactly as a player does.
  auto walkTo=[&](int level,Vec2 local){Vec2 goal=game.chunkOffset(level)+local;
+  Vec2 last=game.player().pos;
   for(int i=0;i<2600;++i){auto delta=goal-(game.chunkOffset(game.level())+game.player().pos);if(game.won()||length(delta)<.12f)return true;
-   InputState input{};input.forward=true;input.mouseDx=wrapAngle(std::atan2(delta.y,delta.x)-game.player().angle)/.0022f;game.update(input,1.f/120);}
+   // A player stopped by a closed service door presses E, as the prompt says.
+   InputState input{};input.forward=true;input.use=i%60==59&&length(game.player().pos-last)<.05f;if(i%60==59)last=game.player().pos;
+   input.mouseDx=wrapAngle(std::atan2(delta.y,delta.x)-game.player().angle)/.0022f;game.update(input,1.f/120);}
   report<<"Stopped in "<<game.level()<<" at "<<game.player().pos.x<<','<<game.player().pos.y<<','<<game.player().z<<'\n';return false;};
  auto walk=[&](Vec2 target){return walkTo(3,target);};
  for(Vec2 p: {Vec2{3.5f,6.f},Vec2{8.f,6.f},Vec2{12,6.f},Vec2{12,11.5f}})if(!check(walk(p),"Boarding route"))return false;
@@ -180,6 +183,13 @@ bool Game::testLift(){
  if(!check(walkTo(ReactorCoreChunk,{5.5f,22.5f}),"Bulkhead vestibule reached"))return false;
  if(!check(!game.won(),"Reactor exit remains a campaign transfer, not an implicit ending"))return false;
  if(!check(walkTo(4,{14.5f,1.5f})&&game.level()==4&&std::fabs(game.player().z+9)<.03f,"Bulkhead leads into the Service Gallery"))return false;
+ // Every gallery room through its archway and back to the spine, then on down
+ // the spine and over the open seam into the Coolant Return.
+ for(Vec2 p:{Vec2{12.f,7.25f},Vec2{5.f,7.25f},Vec2{5.3f,10.f},Vec2{5.3f,12.1f},Vec2{3.7f,12.1f},Vec2{3.7f,15.f},Vec2{5.f,17.75f},Vec2{12.f,17.75f},
+             Vec2{18.f,17.75f},Vec2{19.6f,17.75f},Vec2{19.6f,14.4f},Vec2{20.7f,14.4f},Vec2{20.7f,12.1f},Vec2{18.7f,12.1f},Vec2{18.7f,8.f},Vec2{18.f,7.25f},Vec2{12.f,7.25f}})
+  if(!check(walkTo(4,p),"Service Gallery rooms and doors walked"))return false;
+ for(Vec2 p:{Vec2{12.f,4.f},Vec2{12.f,12.f},Vec2{12.f,22.5f}})if(!check(walkTo(4,p),"Service Gallery spine walked end to end"))return false;
+ if(!check(walkTo(5,{12.f,3.f})&&game.level()==5&&std::fabs(game.player().z+9)<.03f,"Service Gallery leads into the Coolant Return"))return false;
  for(int rate:{30,60,120}){auto ride=liftInspection(0);for(int i=0;i<int(rate*World::LiftRideComplete);++i)ride.update({},1.f/rate);
   if(!check(ride.world().liftHeight()==-9&&std::fabs(ride.player().z+9)<.03f,"Frame-rate independent ride"))return false;}
  auto ride=liftInspection(0);InputState push{};push.right=true;push.jump=true;

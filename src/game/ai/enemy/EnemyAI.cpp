@@ -150,7 +150,11 @@ void Game::updateEnemies(float dt){
    Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
    Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
    bool playerLineOfSight=playerToWardenDistance<12.f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.85f);
-   bool observed=playerLineOfSight&&playerToWardenDistance>.001f&&dot(playerForward,playerToWarden*(1.f/playerToWardenDistance))>.72f;
+   // "Observed" is a full 3D gaze test: looking at the floor beneath it, or
+   // over a railing above it, does not count as having it in view.
+   float gazePitch=m_player.pitch/140.f,gazeDz=(e.z+.9f)-(m_player.z+m_player.eye),gazeDistance=std::sqrt(playerToWardenDistance*playerToWardenDistance+gazeDz*gazeDz);
+   float gazeDot=gazeDistance>.001f?(playerForward.x*std::cos(gazePitch)*playerToWarden.x+playerForward.y*std::cos(gazePitch)*playerToWarden.y+std::sin(gazePitch)*gazeDz)/gazeDistance:1.f;
+   bool observed=playerLineOfSight&&gazeDot>.72f;
    bool flat=std::fabs(e.z-m_player.z)<.23f;
    if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,1.85f,roughStep(e.kind));}
    bool freshContact=visible&&!hadAwareness;
@@ -173,7 +177,22 @@ void Game::updateEnemies(float dt){
     e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=std::max(e.stalkTimer,.65f);
    }
 
-   if(visible&&flat){
+   // Hurt badly, it breaks contact: slips to the nearest spot the player
+   // cannot see, waits there, and comes back as a watcher.
+   if(e.stalkMode==Enemy::StalkMode::Retreat){
+    if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=.75f;}
+    else{Vec2 best=goal;float bestScore=1e9f;
+     for(int i=0;i<8;++i){float a=float(i)*kPi*.25f;Vec2 c=e.pos+Vec2{std::cos(a),std::sin(a)}*3.2f;float z=navSupport(m_world,c,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.z+.215f);
+      bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,c,1.85f,roughStep(e.kind)):std::fabs(z-e.z)<.23f;
+      if(!reachable||!navFits(m_world,c,z,1.85f))continue;
+      bool seen=m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c,z+.9f);
+      float score=(seen?10.f:0.f)-lengthSq(c-m_player.pos)*.05f;
+      if(score<bestScore){bestScore=score;best=c;}}
+     goal=best;}
+   }
+   // Height no longer switches the stalk off: it watches from a gantry and
+   // rushes down a stair; only the flank needs level ground.
+   if(visible&&e.stalkMode!=Enemy::StalkMode::Retreat){
     bool emergencyRush=!freshContact&&(m_reloadTimer>0||e.painFlash>.8f||dist<1.8f);
     if(e.stalkMode!=Enemy::StalkMode::Rush&&emergencyRush){
      e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=1.65f;enemySound(e,1,.65f,.9f);
@@ -185,7 +204,7 @@ void Game::updateEnemies(float dt){
     }
 
     // Flanking targets the least visible valid side of the player.
-    if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f){
+    if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f&&flat){
      auto radial=normalized(e.pos-m_player.pos);auto side=Vec2{-radial.y,radial.x};
      Vec2 best=goal;float bestScore=9999.f;bool found=false;
      for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.z+.215f);
@@ -203,12 +222,12 @@ void Game::updateEnemies(float dt){
    // Watching is deliberately unnerving: if the player has it in clear view,
    // it holds position. Looking away gives it permission to creep/flank.
    watching=observed&&e.awareness>0&&e.stalkMode==Enemy::StalkMode::Watch&&dist>2.f&&dist<9.5f;
-   stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f;
+   stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Retreat?2.6f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f;
 
    // Search the last witnessed area; never sample the hidden player's new position.
    if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
     bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
-    if(reachable&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=1.4f;e.stalkSide=-e.stalkSide;
+    if(reachable&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=.6f;e.stalkSide=-e.stalkSide;
    }
   }
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}

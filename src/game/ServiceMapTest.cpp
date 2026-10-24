@@ -63,7 +63,10 @@ bool Game::testServiceMaps(){
   for(const auto& pipe:world.pipes()){
    bool clear=true;
    for(int i=0;i<=32;++i){auto p=pipe.start+(pipe.end-pipe.start)*(i/32.f);
-    clear&=pipe.z-pipe.radius>=-9+2.2f&&pipe.z+pipe.radius<world.ceilingHeight(p.x,p.y);
+    // Low runs are allowed inside equipment collision (pump suctions).
+    bool inEquipment=false;for(const auto& s:world.structures())if((s.material==6||s.material==15)&&p.x>s.x1-.05f&&p.x<s.x2+.05f&&p.y>s.y1-.05f&&p.y<s.y2+.05f)inEquipment=true;
+    for(const auto& f:world.fixtures())if(f.solid&&std::fabs(p.x-f.position.x)<f.width*.5f+.05f&&std::fabs(p.y-f.position.y)<f.depth*.5f+.05f)inEquipment=true;
+    clear&=(inEquipment||pipe.z-pipe.radius>=-9+2.2f)&&pipe.z+pipe.radius<world.ceilingHeight(p.x,p.y);
    }
    if(!check(clear,"Authored headers fit below ceiling and above standing clearance"))return false;
   }
@@ -198,30 +201,22 @@ bool Game::testCampaignExtension(){
   // aisle, upper decks use authored structure instead of procedural post spam,
   // and the suspended freight branch ends in a real vestibule.
   if(level==6){
-   bool panels=true,laneShelves=true,westLockers=true;
+   bool panels=true,westLockers=true;
    for(const auto& f:game.world().fixtures()){
     if(f.model==13&&f.position.x>21)panels&=std::fabs(f.yaw-kPi*.5f)<.01f;
     if(f.model==13&&f.position.x<5)westLockers&=std::fabs(f.yaw+kPi*.5f)<.01f;
-    if(f.model==7&&f.position.x>6.5f&&f.position.x<7.3f&&f.position.y<16)laneShelves&=std::fabs(f.yaw-kPi*.5f)<.01f;
    }
-   result&=check(panels&&laneShelves&&westLockers,"Cable Vault wall equipment faces the service lanes");
-   bool openChamber=true;
-   for(int y=8;y<=14;++y)for(int x:{9,10,15,16})openChamber&=game.world().tile(x,y)!='#';
-   auto routeReaches=[&](Vec2 p){for(const auto& n:reachable)if(length(point(n)-p)<.2f&&std::fabs(n.z+9.f)<.03f)return true;return false;};
-   bool bothTrenchFlanks=game.hullFits({10.25f,10.8f},-9,1.7f)&&game.hullFits({15.75f,10.8f},-9,1.7f)&&
-                        routeReaches({10.25f,10.8f})&&routeReaches({15.75f,10.8f});
+   result&=check(panels&&westLockers,"Cable Vault wall equipment faces the service lanes");
+   auto routeReaches=[&](Vec2 p,float z){for(const auto& n:reachable)if(length(point(n)-p)<.2f&&std::fabs(n.z-z)<.03f)return true;return false;};
    auto terminal=game.world().terminals().front();
-   const auto& liveWater=game.world().waterVolumes().front();
-   bool raisedTrough=liveWater.surface-game.world().floorHeight(13,7)<-.1f&&liveWater.surface-liveWater.bed>.2f;
+   const auto& liveWater=game.world().waterVolumes().front();const auto& arc=game.world().hazards().front();
+   bool recessed=liveWater.surface<-9.1f&&liveWater.surface-liveWater.bed>.2f&&std::fabs(game.world().floorHeight(8,10.2f)-liveWater.bed)<.001f;
+   bool bothTrenchFlanks=routeReaches({3.f,10.2f},-9)&&routeReaches({21.f,10.2f},-9);
+   // The service bridge stands above the arc's reach, and both stairs connect.
+   bool dryBridge=routeReaches({12.f,10.2f},-8.4f)&&-8.4f>arc.top&&arc.bottom<liveWater.surface&&arc.x1<12&&arc.x2>12;
    bool clearHighBay=game.world().ceilingHeight(5,5)-game.world().floorHeight(5,5)>4.3f;
-   bool retainingWalls=false;int retainingSides=0;
-   for(const auto& st:game.world().structures())if(st.top>-8.5f&&st.y1<=8.f&&st.y2>=11.f&&st.y2-st.y1>=3.f&&st.x2-st.x1<.5f)++retainingSides;
-   retainingWalls=retainingSides>=2;
-   bool dryBridge=game.world().fits(12.5f,11.2f,-9,1.7f)&&game.world().fits(13.5f,11.2f,-9,1.7f)&&
-                  routeReaches({12.5f,11.2f})&&routeReaches({13.5f,11.2f});
    bool terminalAtEastAisle=length(terminal.position-Vec2{20.4f,11.9f})<.05f;
-   bool pipeClear=true;for(const auto& pipe:game.world().pipes())pipeClear&=length(pipe.start-terminal.position)>.15f||length(pipe.end-terminal.position)>.15f||pipe.endZ<-999.f;
-   result&=check(openChamber&&bothTrenchFlanks&&dryBridge&&terminalAtEastAisle&&raisedTrough&&retainingWalls&&clearHighBay&&pipeClear,"Cable chamber has a high bay, recessed sump, clear workstations and an east-aisle disconnect");
+   result&=check(bothTrenchFlanks&&dryBridge&&terminalAtEastAisle&&recessed&&clearHighBay,"Cable chamber has a high bay, a recessed live trench, a dry bridge above it and an east-aisle disconnect");
    int feederAssemblies=0;for(const auto& f:game.world().fixtures())if(f.model==12&&f.solid)++feederAssemblies;
    result&=check(feederAssemblies>=2,"Cable bypasses include grounded feeder machinery as combat cover");
   }

@@ -10,7 +10,7 @@ bool Game::testWorldIsolation(){
  auto check=[&](bool ok,const char* label){out<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
  Game campaign;Game custom(WorldId::Ashfall);Game independent;
  // Keep authored encounter composition stable while moving ownership out of Game.
- constexpr int creatureCounts[]={8,9,6,3,0,0,2,4,2,3},pickupCounts[]={4,6,4,4,2,0,1,2,4,2};
+ constexpr int creatureCounts[]={8,9,6,3,0,0,2,4,2,3},pickupCounts[]={4,6,5,4,2,1,1,2,4,2};
  constexpr int clutterCounts[]={6,6,6,6,4,2,2,0,6,19};
  for(int level=0;level<int(std::size(creatureCounts));++level){
   const auto& chunk=campaign.m_chunks[level];

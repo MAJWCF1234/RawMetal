@@ -378,7 +378,7 @@ struct GpuRenderer::Impl {
  struct PendingUpload {Image* image;std::vector<std::vector<uint8_t>> levels;std::vector<VkBufferImageCopy> copies;};
  std::vector<PendingUpload> pendingUploads;size_t pendingUploadBytes=0;Buffer atlasStaging;std::array<std::uint64_t,4> uploadStats{};
  VkDescriptorSetLayout setLayout=VK_NULL_HANDLE;VkDescriptorPool descriptors=VK_NULL_HANDLE;
- VkPipelineLayout pipelineLayout=VK_NULL_HANDLE;VkRenderPass renderPass=VK_NULL_HANDLE;VkPipeline opaque=VK_NULL_HANDLE,additive=VK_NULL_HANDLE,transparent=VK_NULL_HANDLE;
+ VkPipelineLayout pipelineLayout=VK_NULL_HANDLE;VkRenderPass renderPass=VK_NULL_HANDLE;VkPipeline opaque=VK_NULL_HANDLE,additive=VK_NULL_HANDLE,transparent=VK_NULL_HANDLE,liquid=VK_NULL_HANDLE;
  VkPipeline actorOpaque=VK_NULL_HANDLE,actorAdditive=VK_NULL_HANDLE,actorTransparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE,sceneSampler=VK_NULL_HANDLE,pointSampler=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
@@ -404,7 +404,7 @@ struct GpuRenderer::Impl {
  Image& finalImage(){return taaRan?taaImages[size_t(taaWrite)]:postRan?composeStage.image:target;}
  void destroyStageTarget(FullscreenStage& stage){if(stage.framebuffer)vkDestroyFramebuffer(device,stage.framebuffer,nullptr);stage.framebuffer=VK_NULL_HANDLE;destroy(stage.image);}
  void destroyStage(FullscreenStage& stage){destroyStageTarget(stage);if(stage.pipeline)vkDestroyPipeline(device,stage.pipeline,nullptr);if(stage.layout)vkDestroyPipelineLayout(device,stage.layout,nullptr);if(stage.setLayout)vkDestroyDescriptorSetLayout(device,stage.setLayout,nullptr);if(stage.pool)vkDestroyDescriptorPool(device,stage.pool,nullptr);if(stage.pass)vkDestroyRenderPass(device,stage.pass,nullptr);}
- struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false;uint32_t sortKey=0,colorLevels=1;};
+ struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false,liquid=false;uint32_t sortKey=0,colorLevels=1;};
  std::unordered_map<uint64_t,Material> materials;
  int presentScaleCached=0;
  const void* lastPixels=nullptr;uint64_t lastGeneration=0,lastMaterial=0;uint32_t lastSort=0;
@@ -588,7 +588,7 @@ struct GpuRenderer::Impl {
    if(shadowPipeline)vkDestroyPipeline(device,shadowPipeline,nullptr);if(shadowLayout)vkDestroyPipelineLayout(device,shadowLayout,nullptr);if(shadowPass)vkDestroyRenderPass(device,shadowPass,nullptr);if(shadowSampler)vkDestroySampler(device,shadowSampler,nullptr);
    for(auto&slot:retiredBuffers)for(auto&buffer:slot)destroy(buffer);
    for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
-   if(transparent)vkDestroyPipeline(device,transparent,nullptr);if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
+   if(transparent)vkDestroyPipeline(device,transparent,nullptr);if(liquid)vkDestroyPipeline(device,liquid,nullptr);if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
    if(actorTransparent)vkDestroyPipeline(device,actorTransparent,nullptr);if(actorOpaque)vkDestroyPipeline(device,actorOpaque,nullptr);if(actorAdditive)vkDestroyPipeline(device,actorAdditive,nullptr);
    if(compositePipeline)vkDestroyPipeline(device,compositePipeline,nullptr);if(compositePass)vkDestroyRenderPass(device,compositePass,nullptr);if(compositeLayout)vkDestroyPipelineLayout(device,compositeLayout,nullptr);if(compositeSetLayout)vkDestroyDescriptorSetLayout(device,compositeSetLayout,nullptr);if(compositeDescriptors)vkDestroyDescriptorPool(device,compositeDescriptors,nullptr);if(renderPass)vkDestroyRenderPass(device,renderPass,nullptr);if(pipelineLayout)vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
    if(descriptors)vkDestroyDescriptorPool(device,descriptors,nullptr);if(setLayout)vkDestroyDescriptorSetLayout(device,setLayout,nullptr);
@@ -691,7 +691,7 @@ struct GpuRenderer::Impl {
   // Present scale lives in high bits so store-low/run-high retunes invalidate cleanly.
   uint64_t base=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;
   uint64_t key=base^(uint64_t(unsigned(scale))<<56);auto found=materials.find(key);if(found!=materials.end())return key;
-  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;
+  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.glossStrength>=.85f;
   mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
   int presentW=std::max(1,t.width*scale),presentH=std::max(1,t.height*scale);
@@ -922,7 +922,13 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkPipelineColorBlendAttachmentState blends[2]{};auto syncBlend=[&]{blends[0]=blend;blends[1]=VkPipelineColorBlendAttachmentState{};blends[1].colorWriteMask=blend.blendEnable?0u:0xfu;};blending.attachmentCount=2;blending.pAttachments=blends;
   VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dynamic.dynamicStateCount=2;dynamic.pDynamicStates=states;
   VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};pipeline.stageCount=2;pipeline.pStages=stages;pipeline.pVertexInputState=&input;pipeline.pInputAssemblyState=&assembly;pipeline.pViewportState=&viewport;pipeline.pRasterizationState=&raster;pipeline.pMultisampleState=&samples;pipeline.pDepthStencilState=&depthState;pipeline.pColorBlendState=&blending;pipeline.pDynamicState=&dynamic;pipeline.layout=m->pipelineLayout;pipeline.renderPass=m->renderPass;
-  syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;blend.srcAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_FALSE;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create water blend pipeline");
+  syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;blend.srcAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_FALSE;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create transparent blend pipeline");
+  // Liquids blend like glass but write depth and the material target, so the
+  // post pass reflects off the surface the way it does off a wet floor.
+  // Colour blends by a constant; the alpha channel carries the liquid's own
+  // planar depth, as opaque surfaces do, so reflections start at the surface.
+  depthState.depthWriteEnable=VK_TRUE;blend.srcColorBlendFactor=VK_BLEND_FACTOR_CONSTANT_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;blend.srcAlphaBlendFactor=VK_BLEND_FACTOR_ONE;blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;blending.blendConstants[3]=.84f;
+  syncBlend();blends[1].colorWriteMask=0xf;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->liquid),"Create liquid blend pipeline");depthState.depthWriteEnable=VK_FALSE;blending.blendConstants[3]=0.f;
   shader.codeSize=sizeof(actorVertexShader);shader.pCode=actorVertexShader;check(vkCreateShaderModule(m->device,&shader,nullptr,&actorVert),"Create instanced actor shader");stages[0].module=actorVert;
   binding={0,sizeof(ActorTriangle),VK_VERTEX_INPUT_RATE_INSTANCE};
   VkVertexInputAttributeDescription actorAttrs[]={
@@ -1329,13 +1335,13 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  std::memcpy(m->projectionBuffers[m->frameIndex].mapped,m->vrProjection.data(),sizeof(m->vrProjection));vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,1,1,&m->projectionSets[m->frameIndex],0,nullptr);
  vkCmdPushConstants(cmd,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
- struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false;};std::vector<TransparentDraw> transparentDraws;
- auto flushTransparent=[&]{for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}auto pipeline=draw.actor?m->actorTransparent:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);if(draw.actor)vkCmdDraw(cmd,3,draw.count,0,draw.start);else vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
+ struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false,liquid=false;};std::vector<TransparentDraw> transparentDraws;
+ auto flushTransparent=[&]{for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}auto pipeline=draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);if(draw.actor)vkCmdDraw(cmd,3,draw.count,0,draw.start);else vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
  for(auto&batch:m->batches){
   if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
-  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto&mat=m->materials.at(cached.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
+  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto&mat=m->materials.at(cached.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
   auto buffer=batch.actor?ab.handle:vb.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}
-  auto&mat=m->materials.at(batch.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
+  auto&mat=m->materials.at(batch.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor,mat.liquid});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
   if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}
   vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);
   if(batch.actor)vkCmdDraw(cmd,3,batch.count,0,batch.start);else vkCmdDraw(cmd,batch.count,1,batch.start,0);

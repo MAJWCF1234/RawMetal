@@ -12,58 +12,6 @@
 namespace retro {
 namespace {
 std::atomic<uint64_t> nextTerrainRevision{1};
-constexpr MapRows CoolantReturnGround = {
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "########...#############"
-};
-constexpr MapRows CableVaultsGround = {
-    "##...###################",
-    "##...###################",
-    "##...###################",
-    "##...###################",
-    "##...###################",
-    "##....................##",
-    "##....................##",
-    "###...................##",
-    "###...................##",
-    "###...................##",
-    "###...................##",
-    "###...................##",
-    "###...................##",
-    "###...................##",
-    "###...................##",
-    "######................##",
-    "####...................#",
-    "####...................#",
-    "####...................#",
-    "####...................#",
-    "####...................#",
-    "####...................#",
-    "####...................#",
-    "####################...#"
-};
 constexpr MapRows PumpAnnexLower = {
     "##...###################",
     "#......................#",
@@ -678,79 +626,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   // === DYNAMIC_CAMPAIGN_MAPS_START ===
   // Each standalone slot is intentionally an independent if block so the
   // injector can replace one level without rewriting adjacent campaign maps.
-  // === LEVEL_6_START ===
-  if(m_level==6){
-   m_layers={{"Cable Vaults / service passages",-9,0,CableVaultsGround}};
-   m_doors={{2,5,.5f,0,false,false,true},{20,23,23.5f,0,false,true}};
-   m_doors.back().requireState=stateId("vault_disconnect");
-   // Terminate the live run with short concrete cheeks rather than a solid
-   // bulkhead across the player's first sightline. The open center is a dry
-   // service crossing beyond the energized section of trough.
-   wall(11,11,11.48f,11.35f,-9,-7.7f);
-   wall(14.52f,11,15,11.35f,-9,-7.7f);
-   // The surface sits below the surrounding deck and inside the recessed bed;
-   // the renderer insets the water to the sloped shoreline.
-   m_waterVolumes={{11,8.3f,15,10.7f,-9.45f,-9.20f}};
-   wall(10.65f,8.f,10.95f,11.35f,-9.f,-8.35f);
-   wall(15.05f,8.f,15.35f,11.35f,-9.f,-8.35f);
-   Hazard arc{Hazard::Kind::Electricity,11,8.3f,15,10.7f,-9.4f,-7.5f,22};
-   arc.enabledFlag=stateId("vault_disconnect");arc.invertFlag=true;arc.period=4;arc.onTime=1.2f;m_hazards.push_back(arc);
-
-   // Shelves and switchgear neatly aligned to outer walls and piers (aisle kept clear)
-   for(float y:{8.f,10.45f,13.35f})cabinet({21.55f,y},kPi*.5f);
-   for(float y:{8.f,10.f,12.f,14.f})shelf({6.35f,y+.3f},kPi*.5f);
-   for(float x:{11.12f,14.6f}){
-    m_structures.push_back({x,6,x+.25f,21,-7.05f,-6.9f,false,2});
-    for(float y:{6.f,9.f,12.f,15.f,18.f})m_structures.push_back({x,y,x+.25f,y+.08f,-6.9f,roof,false,2});
-   }
-   // Relay island breaks the rear sightline; both ends remain walkable.
-   wall(9.8f,17.6f,10.15f,20.4f,-9,-6.7f);
-   cabinet({10.5f,18.4f},-kPi*.5f);cabinet({10.5f,19.7f},-kPi*.5f);
-   // Wall-backed cabinets along the west solid concrete perimeter wall
-   cabinet({4.45f,18.5f},-kPi*.5f);cabinet({4.45f,20.0f},-kPi*.5f);cabinet({4.45f,21.5f},-kPi*.5f);
-
-   // The live cable trough divides the chamber, but it must not divide the
-   // play space into blind, parallel corridors. Heavy feeders make cover
-   // islands on its flanks and leave readable walk-around lanes.
-   m_fixtures.push_back({12,{8.45f,10.05f},0,2.0f,1.55f,1.75f,.10f,true});
-   m_fixtures.push_back({12,{17.35f,15.85f},0,2.0f,1.55f,1.75f,-.08f,true});
-   // Amber edge lights mark the two safe flanks at the live channel entrance.
-   for(float x:{9.7f,16.3f})for(float y:{7.6f,11.7f})m_lights.push_back({{x,y},-4.92f});
-
-   // Suspended high-voltage cable trays and distribution conduit headers
-   m_pipes.push_back({{11.25f,5.5f},{11.25f,21.5f},-5.35f,.09f});
-   m_pipes.push_back({{14.65f,5.5f},{14.65f,21.5f},-5.35f,.09f});
-   for(float y:{7.5f,12.f,16.5f})m_pipes.push_back({{11.25f,y},{14.65f,y},-5.32f,.07f});
-   m_pipes.push_back({{21.55f,6.f},{21.55f,21.5f},-5.2f,.10f});
-   m_pipes.push_back({{4.45f,6.f},{4.45f,17.5f},-5.25f,.09f});
-   m_pipes.push_back({{20.4f,11.9f},{21.55f,11.9f},-5.2f,.08f});
-
-    // Wall-mounted breaker panels and ventilation grilles (non-solid, mounted flush)
-    m_fixtures.push_back({8,{2.15f,4.f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
-    m_fixtures.push_back({8,{6.15f,16.8f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
-   m_fixtures.push_back({8,{21.85f,16.5f},1.1f,.67f,.20f,.91f,kPi*.5f,false});
-   m_fixtures.push_back({8,{21.85f,11.9f},1.15f,1.15f,.22f,1.25f,kPi*.5f,false});
-    m_fixtures.push_back({3,{6.15f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
-    m_fixtures.push_back({3,{21.85f,9.f},1.65f,1.2f,.15f,.8f,kPi*.5f,false});
-    // Make the electrified trench read as a maintained power channel: a pair
-    // of flush disconnects and cable terminations frame its far bulkhead.
-    for(float x:{12.15f,13.85f})
-     m_fixtures.push_back({8,{x,10.91f},.20f,.72f,.18f,.91f,0,false});
-    m_fixtures.push_back({3,{11.28f,10.88f},.18f,1.05f,.15f,.75f,0,false});
-    m_fixtures.push_back({3,{14.72f,10.88f},.18f,1.05f,.15f,.75f,0,false});
-    m_fixtures.push_back({6,{18.2f,7.f},0,1.87f,.55f,.99f,0,true});
-
-   m_terminals={{{20.4f,11.9f},"FEEDER 7A / REMOTE TRIP","LIVE TRENCH / CROSS AT THE DRY SERVICE BRIDGE.","E / THROW LOCAL DISCONNECT.",0,false,0,stateId("vault_disconnect")}};
-   m_terminals.push_back({{7.5f,6.4f},"CABLE VAULTS / MAINTENANCE","LOCAL DISCONNECT: EAST SWITCHGEAR AISLE.","SPARE LAMP AND SHELLS: SOUTH SERVICE BAY."});
-   shelf({17.7f,19.8f});m_clutterSpawns={{3,{18,19}},{0,{18.5f,19.2f}}};
-   event("vault_maintenance_kit",16.5f,18.5f,19,21,-9.2f,-7,{action(A::GiveItem,stateId("flashlight"),1)});
-   event("vault_relay_trip",2,2,5,4,-9.2f,-7,{action(A::PlaySound,0,0,.6f)});
-   m_scriptEvents.back().actions[0].sound=Sound::Door;
-   m_creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f},-9},{CreatureKind::Huntsman,{19.5f,8.5f},-9}};
-   m_pickupSpawns={{{18,21.5f},PickupKind::Ammo}};
-   for(Vec2 p:{Vec2{3.5f,3},Vec2{9,6.5f},Vec2{13,6.5f},Vec2{19,6.5f},Vec2{7.5f,13},Vec2{13,11.3f},Vec2{19.5f,14},Vec2{12,18},Vec2{21.5f,22},Vec2{18.5f,9.5f},Vec2{4.5f,18.5f}})m_lights.push_back({p,-5.02f});
-  }
-  // === LEVEL_6_END ===
   // === LEVEL_7_START ===
   if(m_level==7){
    m_layers={{"Pump Annex / lower manifold",-12,0,PumpAnnexLower},{"Pump Annex / main floor",-9,.25f,PumpAnnexMain},{"Pump Annex / observation",-4,.25f,PumpAnnexObservation}};
@@ -1096,45 +971,7 @@ World::World(int level,WorldId id):m_worldId(id) {
   if(m_level==8){m_doors[1].sign=CampaignChunkCount;m_doors[2].sign=CampaignChunkCount+1;}
   buildLayers(stairs);return;
  }
- // Coolant Return (map 5): settling basins either side of a dry walkway.
- m_layers={{"Coolant Return",-9,0,CoolantReturnGround}};
- m_openNorthBoundary=true;
- const float roof=3.4f;
- auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
- auto shelf=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({7,{x,y},0,1.8f,.5f,1.8f,yaw,true});};
- auto machine=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({12,{x,y},0,3.060f,.940f,1.751f,yaw,true});};
- auto switchgear=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({13,{x,y},0,.9066f,.4956f,2.2f,yaw,true});};
- auto tank=[&](float x,float y){m_fixtures.push_back({14,{x,y},0,2.404f,2.645f,2.2f,0,true});};
- m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-8.85f},
-                 {13.75f,7.8f,16.75f,10.7f,-9.40f,-8.85f},
-                 {7.25f,12.4f,10.25f,18.f,-9.40f,-8.85f},
-                 {13.75f,12.4f,16.75f,18.f,-9.40f,-8.85f}};
- tank(4.f,4.4f);tank(20.f,4.4f);
- for(float y:{9.f,15.5f}){machine(3.8f,y,kPi*.5f);machine(20.2f,y,kPi*.5f);}
- for(float x:{10.45f,13.45f})for(auto ends:{Vec2{8,10.5f},Vec2{12.6f,17.8f}})
-  m_structures.push_back({x,ends.x,x+.10f,ends.y,0,.9f,true,2});
- for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2})
-  m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
- for(float x:{3.8f,20.2f})m_pipes.push_back({{x,3.2f},{x,15.5f},-6.3f,.14f});
- m_pipes.push_back({{3.8f,3.2f},{20.2f,3.2f},-6.3f,.14f});
- for(float x:{3.8f,20.2f}){
-  m_pipes.push_back({{x,4.4f},{x,4.4f},-6.3f,.14f,-6.85f});
-  for(float y:{9.f,15.5f})m_pipes.push_back({{x,y},{x,y},-6.3f,.09f,-7.3f});
- }
- wall(17.25f,20.65f,19.05f,20.87f);wall(20.45f,20.65f,22.85f,20.87f);
- wall(17.25f,22.85f,22.85f,23.08f);wall(17.25f,20.87f,17.47f,22.85f);
- m_structures.push_back({19.05f,20.65f,20.45f,20.87f,2.55f,roof,false,3});
- Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;m_doors.push_back(storeDoor);
- m_doors.push_back({8,11,23.5f,0,false,true});m_doors.back().sign=6;
- m_fixtures.push_back({7,{21.4f,22.48f},0,1.6f,.48f,1.8f,0,true});
- m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
- m_clutterSpawns.push_back({3,{21.1f,21.8f}});m_clutterSpawns.push_back({2,{18.5f,21.7f}});
- shelf(2,21,kPi*.5f);switchgear(1.5f,18.5f,-kPi*.5f);
- m_terminals={{{12,4.4f},"RETURN HALL / LOCAL CONTROL","DUPLEX CIRCULATION / DUTY AND STANDBY.","DRAIN CHANNELS BEFORE MAINTENANCE.",0,false}};
- for(Vec2 p:{Vec2{12,6},Vec2{12,12},Vec2{12,18},Vec2{5.7f,12},Vec2{18.3f,12}})m_lights.push_back({p,-5.75f});
- for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
- buildLayers({});
- buildLights();
+ throw std::runtime_error("No builder for campaign map "+std::to_string(m_level));
 }
 void World::buildLights(int startX,int startY){
  for(int y=startY;y<Height-1;y+=4)for(int x=startX;x<Width-1;x+=5)if(tile(x,y)!='#')
@@ -1467,7 +1304,7 @@ float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const
 bool World::doorBlocks(float x,float y,float feet,float height)const{
  for(auto&door:m_doors){
   if(door.swinging){
-   float angle=door.open*kPi*.5f,width=door.right-door.left;
+   float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;
    Vec2 hinge{door.left,door.y},axis{std::cos(angle),std::sin(angle)};
    Vec2 delta=Vec2{x,y}-hinge;
    float along=std::clamp(dot(delta,axis),0.f,width);
@@ -1634,7 +1471,8 @@ void World::buildLayers(std::span<const Staircase> stairs){
    m_structures.push_back({float(start),float(y),float(x),float(y+1),underside,z});
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
-   if(!hasLift()&&!custom()&&m_level<6&&(x+y)%5==0&&tile(x,y)!='#')
+   // Legacy decks got thin posts; authored maps carry their own columns.
+   if(!hasLift()&&!custom()&&!m_mapData&&m_level<6&&(x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
    if(!deck(x-1,y)&&!(hasLift()&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
