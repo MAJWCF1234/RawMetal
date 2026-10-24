@@ -463,6 +463,19 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // many mutually exclusive inspection branches otherwise reserve their
     // large renderer objects in one native stack frame before dispatch.
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
+    // Render A/B switches apply to every mode below, inspections included.
+    if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
+    if(std::wcsstr(commandLine,L"--nopixel"))retro::SoftwareRenderer::setPixelLighting(false); // A/B: baked vertex lamps
+    if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
+    if(std::wcsstr(commandLine,L"--notaa"))retro::SoftwareRenderer::setTemporalAA(false); // A/B: MSAA only
+    if(std::wcsstr(commandLine,L"--nodetail"))retro::SoftwareRenderer::setDetailLayer(0); // A/B: no close-up grain
+    if(std::wcsstr(commandLine,L"--detail-field"))retro::SoftwareRenderer::setDetailLayer(2); // debug: raw detail field
+    if(std::wcsstr(commandLine,L"--detail-normal"))retro::SoftwareRenderer::setDetailLayer(3); // debug: detail normal
+    if(std::wcsstr(commandLine,L"--detail-uv"))retro::SoftwareRenderer::setDetailLayer(4); // debug: texel coordinate sawtooth
+    if(std::wcsstr(commandLine,L"--detail-mag"))retro::SoftwareRenderer::setDetailLayer(5); // debug: uv magnitude and surface class
+    if(std::wcsstr(commandLine,L"--detail-nmap"))retro::SoftwareRenderer::setDetailLayer(6); // debug: normal map sample before detail
+    if(std::wcsstr(commandLine,L"--detail-ppt"))retro::SoftwareRenderer::setDetailLayer(7); // debug: pixels per texel and detail cell coordinate
+    if(std::wcsstr(commandLine,L"--detail-sun"))retro::SoftwareRenderer::setDetailLayer(8); // debug: sun visibility, N.L, cascade
     if(std::wcsstr(commandLine,L"--neural-texture-runtime-test"))return neuralTextureRuntimeTest(W,H,std::wcsstr(commandLine,L"--vulkan")!=nullptr);
     if(std::wcsstr(commandLine,L"--stealth-test"))return retro::Game::testStealth()?0:21;
     if(std::wcsstr(commandLine,L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
@@ -483,8 +496,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(std::wcsstr(commandLine,L"--exclusion-inspection")){
      constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     const bool dumpCascades=std::wcsstr(commandLine,L"--sun-cascades")!=nullptr;
      std::filesystem::create_directories(".build/exclusion-preview");std::ofstream report(".build/exclusion-preview/runtime.txt");report<<renderer->hardwareName()<<'\n';
-     for(int stage:{0,1,2,3,4,5,6,7,8,9,10,11,13,14,15,16}){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
+     for(int stage:{0,1,2,3,4,5,6,7,8,9,10,11,13,14,15,16}){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);if(dumpCascades&&stage==13)renderer->saveSunCascades(".build/exclusion-preview/cascade");std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
      return 0;
     }
     if(std::wcsstr(commandLine,L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
@@ -694,17 +708,6 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(std::wcsstr(commandLine,L"--native-capture")?1920:W,std::wcsstr(commandLine,L"--native-capture")?1080:H);
     if(std::wcsstr(commandLine,L"--freight-actor-inspection"))return freightActorInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
-    if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
-    if(std::wcsstr(commandLine,L"--nopixel"))retro::SoftwareRenderer::setPixelLighting(false); // A/B: baked vertex lamps
-    if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
-    if(std::wcsstr(commandLine,L"--notaa"))retro::SoftwareRenderer::setTemporalAA(false); // A/B: MSAA only
-    if(std::wcsstr(commandLine,L"--nodetail"))retro::SoftwareRenderer::setDetailLayer(0); // A/B: no close-up grain
-    if(std::wcsstr(commandLine,L"--detail-field"))retro::SoftwareRenderer::setDetailLayer(2); // debug: raw detail field
-    if(std::wcsstr(commandLine,L"--detail-normal"))retro::SoftwareRenderer::setDetailLayer(3); // debug: detail normal
-    if(std::wcsstr(commandLine,L"--detail-uv"))retro::SoftwareRenderer::setDetailLayer(4); // debug: texel coordinate sawtooth
-    if(std::wcsstr(commandLine,L"--detail-mag"))retro::SoftwareRenderer::setDetailLayer(5); // debug: uv magnitude and surface class
-    if(std::wcsstr(commandLine,L"--detail-nmap"))retro::SoftwareRenderer::setDetailLayer(6); // debug: normal map sample before detail
-    if(std::wcsstr(commandLine,L"--detail-ppt"))retro::SoftwareRenderer::setDetailLayer(7); // debug: pixels per texel and detail cell coordinate
     if(std::wcsstr(commandLine,L"--post-ao"))retro::SoftwareRenderer::setPostProcessing(true,true);
     if(std::wcsstr(commandLine,L"--early-maps-inspection"))return earlyMapsInspection(960,540);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);

@@ -7,6 +7,7 @@
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(set=0,binding=1) uniform sampler2D occlusionImage;
 layout(set=0,binding=2) uniform sampler2D shadowImage;
+layout(std430,set=0,binding=3) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];} lampGrid;
 layout(push_constant) uniform PostParams {
  vec4 camera;   // x AO strength (negative: debug view), y aspect, z focal, w radius (m)
  vec4 haze;     // rgb linear haze colour, w density per metre
@@ -78,6 +79,34 @@ vec3 bloom(){
  return sum/weight;
 }
 
+vec3 worldDirection(vec3 v){
+ vec4 b=lampGrid.basis;float forward=v.z*b.z-v.y*b.w;
+ return normalize(vec3(-v.x*b.y+forward*b.x,v.x*b.x+forward*b.y,v.y*b.z+v.z*b.w));
+}
+float cloudHash(ivec2 c){uvec2 q=uvec2(c+ivec2(65536));uint h=q.x*1664525u+q.y*1013904223u;h^=h>>16;h*=0x7feb352du;h^=h>>15;h*=0x846ca68bu;h^=h>>16;return float(h&0xffffffu)/16777216.0;}
+float cloudNoise(vec2 p){ivec2 i=ivec2(floor(p));vec2 f=fract(p);f=f*f*(3.0-2.0*f);
+ return mix(mix(cloudHash(i),cloudHash(i+ivec2(1,0)),f.x),mix(cloudHash(i+ivec2(0,1)),cloudHash(i+ivec2(1,1)),f.x),f.y);}
+float cloudFbm(vec2 p){float a=0.5,s=0.0;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;++i){s+=a*cloudNoise(p);p=m*p+vec2(3.1,1.7);a*=0.5;}return s;}
+// Overcast wasteland sky: gradient, sun disc and glow, one drifting cloud deck.
+vec3 proceduralSky(vec3 dir){
+ vec3 sunDir=lampGrid.sun.xyz,sunCol=lampGrid.sunColor.rgb;float time=lampGrid.eye.w;
+ float up=clamp(dir.z,-1.0,1.0);
+ vec3 zenith=vec3(0.22,0.29,0.42),horizon=vec3(0.56,0.60,0.66),ground=vec3(0.19,0.18,0.17);
+ vec3 sky=up>0.0?mix(horizon,zenith,pow(up,0.55)):mix(horizon,ground,clamp(-up*4.0,0.0,1.0));
+ float cosSun=dot(dir,sunDir);
+ sky+=sunCol*(0.16*pow(max(cosSun,0.0),6.0)+1.2*smoothstep(0.9985,0.9996,cosSun)+0.04*max(cosSun,0.0));
+ if(dir.z>0.012){
+  vec3 p=lampGrid.eye.xyz+dir*((420.0-lampGrid.eye.z)/dir.z);vec2 q=p.xy*0.0011+vec2(time*0.004,time*0.0016);
+  float cover=cloudFbm(q);float cloud=smoothstep(0.40,0.70,cover);
+  // Thicker toward the sun reads darker; the thin edge toward it reads lit.
+  float toward=cloudFbm(q+sunDir.xy*0.035)-cover;
+  vec3 cloudColor=mix(vec3(0.40,0.42,0.46),vec3(0.96,0.94,0.91),clamp(0.5-toward*4.0,0.0,1.0));
+  cloudColor*=0.75+0.25*max(sunDir.z,0.0);
+  sky=mix(sky,cloudColor,cloud*smoothstep(0.012,0.14,dir.z)*0.95);
+ }
+ return sky;
+}
+
 void main(){
  vec4 source=texture(sceneImage,uv);
  vec3 color=source.rgb;float depth=source.a;
@@ -101,6 +130,7 @@ void main(){
  vec3 rayView=vec3(ndc.x/p.camera.z,-ndc.y/(p.camera.z*p.camera.y),1.0);
  vec3 ray=normalize(rayView);
  float rayLength=surface||viewModel?abs(depth)*length(rayView):40.0;
+ if(!surface&&!viewModel&&lampGrid.sun.w>0.0)color=proceduralSky(worldDirection(rayView));
  if(surface&&p.haze.w>0.0){
   // Aerial perspective: distance lifts toward the atmosphere colour.
   // Continuous from the eye: a 2 m dead zone made the look jump when walking up to walls.

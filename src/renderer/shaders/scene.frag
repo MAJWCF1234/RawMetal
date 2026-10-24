@@ -7,7 +7,9 @@ layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects;
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;} stereo;
 // Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
 // lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot.
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 lamps[512];uint cells[];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 lamps[512];uint cells[];} lampGrid;
+// Three sun cascades (orthographic radial depth), compared in hardware.
+layout(set=1,binding=4) uniform sampler2DArrayShadow sunShadows;
 // Six radial-depth faces per lamp, compared in hardware with bilinear PCF.
 layout(set=1,binding=3) uniform sampler2DArrayShadow lampShadows;
 layout(location=0) in vec2 uv;
@@ -65,6 +67,17 @@ float detailField(vec2 p,float cellPixels){
 }
 // Whiteout blend of a detail normal onto a base tangent-space normal.
 vec3 blendDetail(vec3 base,vec3 detail){return normalize(vec3(base.xy+detail.xy,base.z*detail.z));}
+
+// Sun visibility from cascade c at world point w, 3x3 bilinear PCF.
+float sunShadow(int c,vec3 w,float biasWorld){
+ vec4 o=lampGrid.cascades[c*4],r=lampGrid.cascades[c*4+1],u=lampGrid.cascades[c*4+2],f=lampGrid.cascades[c*4+3];
+ vec3 d=w-o.xyz;vec2 st=vec2(dot(d,r.xyz)*r.w,dot(d,u.xyz)*u.w)*0.5+0.5;
+ if(any(lessThan(st,vec2(0.0)))||any(greaterThan(st,vec2(1.0))))return 1.0;
+ float z=dot(d,f.xyz)*f.w*0.5+0.5-biasWorld*f.w*0.5;
+ vec2 texel=1.0/vec2(textureSize(sunShadows,0).xy);float sum=0.0;
+ for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x)sum+=texture(sunShadows,vec4(st+vec2(x,y)*texel,float(c),z));
+ return sum/9.0;
+}
 
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
 vec3 toDisplay(vec3 c){return pow(max(c,vec3(0.0)),vec3(1.0/2.2));}
@@ -203,6 +216,8 @@ void main(){
  float vertexLight=lighting.y;
  float specularLight=0.0;
  float waterFresnel=0.0;
+ vec3 sunLight=vec3(0.0); // coloured direct sun on static geometry
+ vec3 sunDebug=vec3(0.0);
  vec3 n=vec3(0.0,0.0,1.0);float normalLength=1.0;vec3 baseNormalDebug=vec3(0.0,0.0,1.0);
 
  if(lighting.w>0.5||light0.w+light1.w>0.0){
@@ -298,8 +313,23 @@ void main(){
     }
    }
   }
+  float hemisphere=1.0;
+  if(lampGrid.sun.w>0.0){
+   vec3 L=lampGrid.sun.xyz;float geometric=dot(Ng,L);
+   if(geometric>0.0){
+    int cascade=surface.x<7.0?0:surface.x<22.0?1:2;float texelWorld=lampGrid.cascades[cascade*4].w;
+    float slope=clamp(sqrt(max(1.0-geometric*geometric,0.0))/max(geometric,0.05),0.0,6.0);
+    float visible=sunShadow(cascade,worldPos+Ng*texelWorld*(1.5+slope)+L*texelWorld,texelWorld*(1.0+0.5*slope));
+    float terminator=smoothstep(0.0,0.1,geometric);
+    sunLight=lampGrid.sunColor.rgb*lampGrid.sun.w*visible*(0.04+0.96*max(dot(N,L),0.0))*terminator;
+    sunDebug=vec3(visible,max(dot(N,L),0.0),float(cascade)/3.0+0.2);
+    lampSpecular+=lampGrid.sun.w*visible*dielectricSpecular(N,V,L,roughness)*terminator;
+   }
+   // Sky ambient: the flat outdoor bake becomes a hemisphere term.
+   hemisphere=0.62+0.38*max(N.z,0.0);
+  }
   // Ambient keeps a little of the normal map's relief in unlit areas.
-  float relief=mix(1.0,clamp(dot(N,Ng),0.0,1.0),0.6);
+  float relief=mix(1.0,clamp(dot(N,Ng),0.0,1.0),0.6)*hemisphere;
   // Exposure-matched to the old bake (which clamped at 1.4): a soft shoulder
   // keeps hot spots under lamps without flattening the falloff into the room.
   vertexLight=lighting.y*relief+1.25*(1.0-exp(-lampLight*0.62/1.25));
@@ -317,6 +347,7 @@ void main(){
  // bilinear/trilinear filtering. Decoding the already-filtered sample twice
  // would crush both midtones and minified material detail.
  vec3 result=color.rgb*lighting.x*vertexLight*0.96/(1+surface.x*0.018);
+ result+=color.rgb*lighting.x*sunLight*0.96;
 
  if(surface.z<0.5&&surface.w<1.5){
   float key=clamp((vertexLight-0.24)/0.75,0.0,1.0);
@@ -366,6 +397,7 @@ void main(){
 
  if(lampGrid.flags.y==2&&detailAmount>0.001)result=vec3(detailValue*0.5);
  if(lampGrid.flags.y==3&&detailAmount>0.001)result=detailNormal*0.5+0.5;
+ if(lampGrid.flags.y==8)result=sunDebug;
  if(lampGrid.flags.y==7)result=vec3(clamp(pixelsPerTexel/64.0,0.0,1.0),fract(uv.y*atlasSize.y*2.5),fract(uv.x*atlasSize.x*2.5));
  if(lampGrid.flags.y==6)result=baseNormalDebug*0.5+0.5;
  if(lampGrid.flags.y==5)result=vec3(clamp(abs(uv.x)/64.0,0.0,1.0),clamp(abs(uv.y)/64.0,0.0,1.0),surface.w*0.25);

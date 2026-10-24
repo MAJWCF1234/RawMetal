@@ -41,6 +41,9 @@ struct WorldLight {
   return intensity*3.2f*t*t/(1.f+squaredDistance*.12f);
  }
 };
+// Outdoor worlds carry one directional light. Direction points toward the
+// sun (z up); intensity 0 means no sun. Colour is linear.
+struct SunLight {Point3 direction{};float intensity=0,r=1,g=1,b=1;};
 // Authored overhead services, with absolute elevations. Kept above standing clearance.
 // Materials: 0 service pipe, 1 rusted metal, 2 panel steel, 3 yellow steel,
 // 4 red steel, 5 pale steel, 6 dark finish. An explicit endZ
@@ -205,6 +208,8 @@ public:
     const std::vector<Structure>& structures()const{return m_structures;}
     const std::vector<TerrainTriangle>& terrain()const{return m_terrain;}
     bool hasTerrain()const{return !m_terrain.empty();}
+    // Low overcast sun for the Ashfall exterior; indoor worlds have none.
+    SunLight sun()const{if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;}
     std::vector<Span> spansAt(int x,int y)const;
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;
