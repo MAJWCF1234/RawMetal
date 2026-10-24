@@ -31,7 +31,7 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal)const{
   if((s.material==16||s.material==14||s.material==13)&&s.top-s.bottom<.04f)return;
   if(!s.rail){box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top});return;}
   if(s.top-s.bottom>1.5f){
-   if(campaignChunk(3)){
+   if(hasLift()){
     box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.bottom+.16f});box({s.x1,s.y1,s.bottom+.92f},{s.x2,s.y2,s.bottom+.96f});
     int bars=std::max(1,int(std::max(s.x2-s.x1,s.y2-s.y1)/.4f));for(int i=1;i<=bars;++i){float t=float(i)/(bars+1),x=s.x1+(s.x2-s.x1)*t,y=s.y1+(s.y2-s.y1)*t;box({x-.012f,y-.012f,s.bottom+.16f},{x+.012f,y+.012f,s.top-.07f});}
    }else box({s.x1+.012f,s.y1+.012f,s.bottom+.012f},{s.x2-.012f,s.y2-.012f,s.top-.08f});

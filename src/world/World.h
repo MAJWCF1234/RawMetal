@@ -273,7 +273,7 @@ public:
     enum class ReactorStage { NoDisk, DiskHeld, DiskLoaded, FeedPrimed, ReturnPrimed, Released };
     ReactorStage reactorStage()const{return m_reactorStage;}
     static Vec2 reactorDiskPosition(){return {6.f,21.f};}
-    static constexpr float ReactorDiskZ=-5.39f;
+    static constexpr float ReactorDiskZ=-5.215f; // On the upper workshop bench.
     bool takeReactorDisk();
     void useReactorTerminal(int action);
 

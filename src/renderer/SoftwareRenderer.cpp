@@ -1002,7 +1002,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   {std::vector<std::array<float,7>> lamps;
    for(int level=0;level<game.chunkCount();++level){if(level!=game.level()&&!game.chunkResident(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
-    for(const auto&lamp:chunk.lights()){if((chunk.campaignChunk(3)&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint});}
+    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint});}
    }
    if(lamps.size()>256){Point3 eye{game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye};
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}

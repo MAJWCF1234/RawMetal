@@ -62,18 +62,19 @@ bool Game::testReactor(){
  InputState use{};use.use=true;game.update(use,.01f);
  if(!check(game.world().reactorStage()==World::ReactorStage::DiskHeld&&game.hasQuestItem(ReactorAuthDisk),"E collects a protected reusable quest item"))return false;
  auto operate=[&](int index,Vec2 position,float z,float angle){game.m_logTime=0;game.m_activeLog=-1;game.m_player.pos=position;game.m_player.z=z;game.m_player.angle=angle;game.m_velocity={};game.update({},.01f);if(game.nearbyTerminal()!=index)return false;game.update(use,.01f);return true;};
- if(!check(operate(3,{18.1f,17.9f},-9,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::DiskLoaded&&!game.hasQuestItem(ReactorAuthDisk),"E inserts and consumes the authorization disk"))return false;
- if(!check(operate(5,{17.1f,18.4f},-6,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::DiskLoaded,"Wrong valve order stays locked and can be retried"))return false;
- if(!check(operate(4,{6.3f,17.f},-9,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::FeedPrimed,"Lower feed primes first"))return false;
- if(!check(operate(5,{17.1f,18.4f},-6,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::ReturnPrimed,"Upper return restores circulation"))return false;
+ if(!check(operate(3,{17.4f,20.9f},-9,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::DiskLoaded&&!game.hasQuestItem(ReactorAuthDisk),"E inserts and consumes the authorization disk"))return false;
+ if(!check(operate(5,{17.5f,20.9f},-6,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::DiskLoaded,"Wrong valve order stays locked and can be retried"))return false;
+ if(!check(operate(4,{3.2f,20.9f},-9,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::FeedPrimed,"Lower feed primes first"))return false;
+ if(!check(operate(5,{17.5f,20.9f},-6,kPi*.5f)&&game.world().reactorStage()==World::ReactorStage::ReturnPrimed,"Upper return restores circulation"))return false;
  if(!check(!game.world().controlReleased(),"Final computer confirmation is required"))return false;
- if(!check(operate(3,{18.1f,17.9f},-9,kPi*.5f)&&game.world().controlReleased(),"Computer authorizes next bulkhead"))return false;
+ if(!check(operate(3,{17.4f,20.9f},-9,kPi*.5f)&&game.world().controlReleased(),"Computer authorizes next bulkhead"))return false;
  game.storeChunk();game.m_chunks[3].world.unloadGeometry();game.m_chunks[3].resident=false;game.ensureChunk(3);
  if(!check(game.m_chunks[3].world.reactorStage()==World::ReactorStage::Released,"Puzzle persists across geometry reload"))return false;
- World world(3);if(!check(world.fits(3.6f,21.8f,-9,1)&&!world.fits(3.6f,21.8f,-6,1),"Upper equipment does not block the lower floor"))return false;
- if(!check(!world.fits(17.35f,19.25f,-9,1)&&world.fits(18.1f,17.9f,-9,1),"Instrument cabinets collide but computer approach stays clear"))return false;
- if(!check(world.rayClear({12,16.5f},-5.8f,{12,17.5f},-8.5f),"Upper opening exposes the lower containment hall"))return false;
- for(auto&light:world.lights())if(&light!=&world.lights().back()){bool mounted=false;for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f})mounted|=std::fabs(light.z+.15f-world.clearanceAbove(light.position.x,light.position.y,z))<.005f;if(!check(mounted,"Fixed light has a supporting ceiling"))return false;}
+ World world(3);if(!check(world.fits(2.4f,22.5f,-9,1)&&!world.fits(2.4f,22.5f,-6,1),"Upper equipment does not block the lower floor"))return false;
+ if(!check(!world.fits(16.3f,22.6f,-9,1)&&world.fits(17.4f,20.9f,-9,1),"Instrument cabinets collide but computer approach stays clear"))return false;
+ if(!check(world.rayClear({9.6f,16.5f},-5.8f,{9.6f,18.5f},-8.5f),"Upper opening exposes the lower containment hall"))return false;
+ // Wall lamps are checked against their wall by the map audit.
+ for(auto&light:world.lights())if(&light!=&world.lights().back()&&light.mount==WorldLightMount::Ceiling){bool mounted=false;for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f})mounted|=std::fabs(light.z+.15f-world.clearanceAbove(light.position.x,light.position.y,z))<.005f;if(!check(mounted,"Fixed light has a supporting ceiling"))return false;}
  game.restart();return check(game.world().reactorStage()==World::ReactorStage::NoDisk&&!game.world().controlReleased(),"Restart resets puzzle and disk");
 }
 }

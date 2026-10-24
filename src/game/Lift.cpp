@@ -127,11 +127,12 @@ bool Game::testLift(){
   if(s.rail&&((s.x2-s.x1<.1f&&((s.x1==1&&world.tile(0,y)=='#')||(s.x2==23&&world.tile(23,y)=='#')))||(s.y2-s.y1<.1f&&((s.y1==1&&world.tile(x,0)=='#')||(s.y2==23&&world.tile(x,23)=='#')))))return check(false,"Redundant outer-wall rail");
  }
  if(!check(stairSteps==15,"Reactor stairs use explicit tread material; outer-wall duplicates removed"))return false;
- // Freight props must never intersect the fixed partition at x=7. This catches
- // the exact class of visual overlap that can escape a wide establishing view.
- for(Vec2 cargo:{Vec2{4.45f,7.9f},Vec2{5.75f,9.25f}})for(const auto&s:world.structures()){
+ // Freight pallets in the lift lobby must never intersect fixed structure
+ // (the collar walls, landing cage and plant): the class of visual overlap
+ // that escapes a wide establishing view.
+ for(const auto&f:world.fixtures())if(f.model==15&&f.base>8.f)for(const auto&s:world.structures()){
   if(s.material==6||s.top<=.02f||s.bottom>=.85f)continue;
-  bool overlap=cargo.x+.525f>s.x1&&cargo.x-.525f<s.x2&&cargo.y+.525f>s.y1&&cargo.y-.525f<s.y2;
+  bool overlap=f.position.x+f.width*.5f>s.x1&&f.position.x-f.width*.5f<s.x2&&f.position.y+f.depth*.5f>s.y1&&f.position.y-f.depth*.5f<s.y2;
   if(overlap)return check(false,"Freight crate clears all fixed structure");
  }
  check(true,"Freight crate clears all fixed structure");
@@ -154,11 +155,12 @@ bool Game::testLift(){
  }
  if(!check(std::fabs(top-9)<.01f&&jammed&&falling&&game.world().liftHeight()==-9&&impactSound,"Rise three / fall six / crash sound"))return false;
  if(!check(!game.m_world.startLift()&&!game.world().controlReleased()&&caught,"Brake catches once, crash permanent, puzzle remains locked"))return false;
- for(Vec2 p:{Vec2{11.5f,11.5f},Vec2{11.5f,15.5f},Vec2{18,15.5f},Vec2{18,11.f},Vec2{20,11.f},Vec2{20,18.5f}})if(!check(walk(p),"Reactor stairs route"))return false;
+ // Out of the crashed cab, round the atrium and up the west stair.
+ for(Vec2 p:{Vec2{12,13.3f},Vec2{12,15.8f},Vec2{4,15.8f},Vec2{2,15.8f},Vec2{2,8.3f}})if(!check(walk(p),"Reactor stairs route"))return false;
  if(!check(std::fabs(game.player().z+6)<.03f,"Reactor upper floor reached"))return false;
  game.storeChunk();game.m_chunks[3].world.unloadGeometry();game.m_chunks[3].resident=false;game.ensureChunk(3);
  if(!check(game.m_chunks[3].world.liftPhase()==World::LiftPhase::Crashed&&game.m_chunks[3].world.liftHeight()==-9,"Lift survives geometry unload"))return false;
- for(Vec2 p:{Vec2{20,11.f},Vec2{21.5f,11.f},Vec2{21.5f,20.3f}})if(!check(walk(p),"Return to lower reactor exit"))return false;
+ for(Vec2 p:{Vec2{2,15.8f},Vec2{12,15.8f},Vec2{14.2f,19.4f},Vec2{16.2f,19.4f},Vec2{21.5f,20.3f}})if(!check(walk(p),"Return to lower reactor exit"))return false;
  game.m_world.takeReactorDisk();game.m_world.useReactorTerminal(1);game.m_world.useReactorTerminal(2);game.m_world.useReactorTerminal(3);game.m_world.useReactorTerminal(1);
  game.m_player.angle=kPi*.5f;game.update({},.01f);game.update(use,.01f);
  for(int i=0;i<180;++i)game.update({},1.f/120);

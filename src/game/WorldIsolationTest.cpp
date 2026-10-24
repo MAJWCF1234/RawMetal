@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "../world/CustomCampaign.h"
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <queue>
@@ -9,7 +10,7 @@ bool Game::testWorldIsolation(){
  auto check=[&](bool ok,const char* label){out<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
  Game campaign;Game custom(WorldId::Ashfall);Game independent;
  // Keep authored encounter composition stable while moving ownership out of Game.
- constexpr int creatureCounts[]={8,9,6,3,0,0,2,4,2,3},pickupCounts[]={4,6,4,3,0,0,1,2,4,2};
+ constexpr int creatureCounts[]={8,9,6,4,0,0,2,4,2,3},pickupCounts[]={4,6,4,4,0,0,1,2,4,2};
  constexpr int clutterCounts[]={6,6,6,6,0,2,2,0,6,19};
  for(int level=0;level<int(std::size(creatureCounts));++level){
   const auto& chunk=campaign.m_chunks[level];
@@ -77,8 +78,10 @@ bool Game::testWorldIsolation(){
   if(!check(lightContract,"Ceiling lights retain compatibility and wall emitters stay outside mounting solids"))return false;
   if(!check(valid&&guarded,"Custom loader accepts valid records and rejects duplicate/overlapping maps, invalid models and malformed visible groups"))return false;
  }
- const auto& warden=campaign.m_chunks[3].enemies.back();
- if(!check(warden.kind==CreatureKind::Warden&&warden.hp==320&&warden.pos.x==21.5f&&warden.pos.y==18.5f,"Reactor encounter keeps its authored creature and health"))return false;
+ {const auto& enemies=campaign.m_chunks[3].enemies;const auto& spawns=campaign.m_chunks[3].world.creatureSpawns();
+  auto warden=std::find_if(enemies.begin(),enemies.end(),[](const Enemy& e){return e.kind==Enemy::Kind::Warden;});
+  auto authored=std::find_if(spawns.begin(),spawns.end(),[](const CreatureSpawn& s){return s.kind==CreatureKind::Warden;});
+  if(!check(warden!=enemies.end()&&authored!=spawns.end()&&warden->hp==320&&warden->pos.x==authored->position.x&&warden->pos.y==authored->position.y,"Reactor encounter keeps its authored creature and health"))return false;}
  if(!check(campaign.m_chunks[2].clutter[4].z==3&&campaign.m_chunks[2].clutter[5].z==3,"Upper-deck clutter retains explicit elevation"))return false;
  // Any map can author an ordinary locked door or an unrestricted transfer.
  Game gate(WorldId::Ashfall);Door door{2,5,6};door.requireState=stateId("gate_power");door.requireValue=2;

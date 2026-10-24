@@ -330,8 +330,9 @@ bool Game::testAI(){
   g.m_world=World(0,map);g.m_enemies[0].pos={9.5f,6.5f};g.m_enemies[0].alive=scenario!=2;g.updateMechanisms(.1f);
   float yaw=g.m_world.actorPose(0).yaw;if(scenario==0){if(yaw<=0||yaw>.401f)return false;}else if(yaw!=0)return false;
  }
- // Real reactor stairwell, in both directions, not the shorter foundry steps.
- for(bool descend:{true,false}){auto g=mapInspection({20,descend?10.5f:19.5f},0,0,3,false,descend?-9.f:-6.f,false);g.m_enemies.resize(1);auto&e=g.m_enemies[0];e={};e.kind=Enemy::Kind::Warden;e.pos={20,descend?19.5f:10.5f};e.z=descend?-6.f:-9.f;e.home=e.pos;e.lastKnown=g.m_player.pos;e.lastKnownZ=g.m_player.z;e.awareness=60;e.heading=descend?-kPi*.5f:kPi*.5f;
+ // Real reactor stairwell (west, rising north to the manifold), in both
+ // directions, not the shorter foundry steps.
+ for(bool descend:{true,false}){auto g=mapInspection({2,descend?16.2f:8.f},0,0,3,false,descend?-9.f:-6.f,false);g.m_enemies.resize(1);auto&e=g.m_enemies[0];e={};e.kind=Enemy::Kind::Warden;e.pos={2,descend?8.f:16.2f};e.z=descend?-6.f:-9.f;e.home=e.pos;e.lastKnown=g.m_player.pos;e.lastKnownZ=g.m_player.z;e.awareness=60;e.heading=descend?kPi*.5f:-kPi*.5f;
   g.sound(Sound::Shot);for(int i=0;i<2400&&length(e.pos-g.m_player.pos)>1.2f;++i)g.updateEnemies(1.f/120);
   debug<<"reactor stairs "<<descend<<" position "<<e.pos.x<<' '<<e.pos.y<<" height "<<e.z<<" waypoint "<<e.waypoint.x<<' '<<e.waypoint.y<<'\n';debug.flush();
   if(length(e.pos-g.m_player.pos)>1.3f||std::fabs(e.z-g.m_player.z)>.23f){auto next=e.pos+normalized(e.waypoint-e.pos)*.014f;float ground=g.groundHeight(next,e.z+.215f);debug<<"next "<<next.x<<' '<<next.y<<" ground "<<ground<<" fits "<<g.hullFits(next,ground,1.85f)<<" state "<<int(e.state)<<" distance "<<length(e.pos-g.m_player.pos)<<'\n';return false;}
