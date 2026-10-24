@@ -62,10 +62,15 @@ bool Game::auditMap(int level){
   r.startZ=w.supportBelow(start.x,start.y,w.definition().spawnHeight+1.f);
   seed(start,r.startZ);
   // A lift map continues where the ride ends: the cab crashed in its pit.
+  // A freight cage is boarded at its upper landing and ridden down.
+  const auto& cage=w.cargoLift();const bool freightCage=cage.upper>cage.lower;
+  if(freightCage)game.m_world.setCargoLiftHeight(cage.upper);
   for(int pass=0;pass<2;++pass){
-  if(pass==1){if(!w.hasLift())break;
+  if(pass==1){
+   if(freightCage){game.m_world.setCargoLiftHeight(cage.lower);seed({(cage.x1+cage.x2)*.5f,(cage.y1+cage.y2)*.5f},cage.lower);}
+   else{if(!w.hasLift())break;
    if(w.liftPhase()==World::LiftPhase::Ready){game.m_world.startLift();game.m_world.updateLift(World::LiftRideComplete);}
-   seed({12,12.5f},w.liftHeight());}
+   seed({12,12.5f},w.liftHeight());}}
   while(!open.empty()){
    auto n=open.front();open.pop();++r.nodes;
    const int dx[4]={1,-1,0,0},dy[4]={0,0,1,-1};
@@ -135,7 +140,8 @@ bool Game::auditMap(int level){
   const Vec2 exit=w.exitPoint();
   // The lift cab is a way out too: it carries the player down to the pit.
   for(int y=0;y<N;++y)for(int x=0;x<N;++x){Vec2 c{(x+.5f)*Cell,(y+.5f)*Cell};
-   if(length(c-exit)>1.f&&!(w.hasLift()&&w.insideLift(c.x,c.y)))continue;
+   bool inCage=w.cargoLift().upper>w.cargoLift().lower&&c.x>w.cargoLift().x1-.3f&&c.x<w.cargoLift().x2+.3f&&c.y>w.cargoLift().y1-.3f&&c.y<w.cargoLift().y2+.3f;
+   if(length(c-exit)>1.f&&!(w.hasLift()&&w.insideLift(c.x,c.y))&&!inCage)continue;
    for(float v:visited[size_t(y*N+x)]){escapes[size_t(y*N+x)].push_back(v);open.push({x,y,v});}}
   while(!open.empty()){
    auto n=open.front();open.pop();
@@ -200,6 +206,11 @@ bool Game::auditMap(int level){
   for(size_t i=0;i<pipes.size();++i){const auto& p=pipes[i];
    const bool isVertical=vertical(p);const float radius=p.radius,z1=topZ(p);
    if(dressing(p))continue;
+   // A stair's own stringers run inside its footprint from landing to landing.
+   bool stringer=false;if(auto map=campaignMap(level))for(const auto& st:map->stairs){
+    auto inside=[&](Vec2 q){return q.x>=st.x1-.05f&&q.x<=st.x2+.05f&&q.y>=st.y1-.05f&&q.y<=st.y2+.05f;};
+    if(inside(p.start)&&inside(p.end)&&p.radius<.1f)stringer=true;}
+   if(stringer)continue;
    float lo=std::min(p.z,z1)-radius,hi=std::max(p.z,z1)+radius;
    std::string name="pipe "+at(p.start)+(isVertical?" z "+std::to_string(p.z)+".."+std::to_string(z1):" to "+at(p.end)+" z "+std::to_string(p.z));
    // Through a walkway or a deck slab.
