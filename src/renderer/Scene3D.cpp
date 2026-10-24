@@ -760,8 +760,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float southCeiling=w.ceilingHeight(X+.5f,Y+1.01f),eastCeiling=w.ceilingHeight(X+1.01f,Y+.5f);
    if(Z>southCeiling&&w.tile(x,y+1)!='#')quad({X+1,Y+1,southCeiling},{X,Y+1,southCeiling},{X,Y+1,Z},{X+1,Y+1,Z},m_metal,.7f);
    if(Z>eastCeiling&&w.tile(x+1,y)!='#')quad({X+1,Y,eastCeiling},{X+1,Y+1,eastCeiling},{X+1,Y+1,Z},{X+1,Y,Z},m_metal,.7f);
-   if((w.campaign()&&w.level()<4)&&y%4==0)box({X,Y+.12f,Z-.28f},{X+1,Y+.28f,Z-.03f},m_metal,.7f);
-   if((w.campaign()&&w.level()<4)&&(x==2||x==20)){box({X+.06f,Y,Z-.5f},{X+.17f,Y+1,Z-.39f},m_metal,.8f);box({X+.28f,Y,Z-.5f},{X+.36f,Y+1,Z-.42f},m_metal,.65f);}
+   if((w.campaign()&&w.level()<4&&!w.authored())&&y%4==0)box({X,Y+.12f,Z-.28f},{X+1,Y+.28f,Z-.03f},m_metal,.7f);
+   if((w.campaign()&&w.level()<4&&!w.authored())&&(x==2||x==20)){box({X+.06f,Y,Z-.5f},{X+.17f,Y+1,Z-.39f},m_metal,.8f);box({X+.28f,Y,Z-.5f},{X+.36f,Y+1,Z-.42f},m_metal,.65f);}
    }
    }
    // Painted route edges and worn hazard stripes tie the loops together.
@@ -783,7 +783,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if(w.campaign()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
-    if((w.campaign()&&w.level()<3)&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
+    if((w.campaign()&&w.level()<3&&!w.authored())&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
     (void)light;
    };
    if(w.tile(x-1,y)!='#')wall(X,Y,X,Y+1,.90f);
@@ -937,6 +937,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   float headerTop=std::min(base+3.f,w.ceilingHeight(x,door.y)),headerBottom=std::min(base+2.5f,headerTop-.44f);
   box({x-half,y-.12f,headerBottom},{x+half,y+1.12f,headerTop},m_metal,.8f);
+  // Tall walls: the wall continues over the opening up to the roof, so the
+  // header and its sign are set in the wall instead of hanging under a slot.
+  if(float roof=w.ceilingHeight(x,door.y);roof>headerTop+.05f){
+   const auto&fill=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
+   for(float face:{y,y+1.f})quad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},fill,.9f,{half*.5f,(roof-headerTop)/3.f});
+   box({x-half,y,headerTop},{x+half,y+1.f,headerTop+.02f},m_metal,.8f);
+  }
   float bottom=base+door.open*2.65f;
   box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},m_bulkhead,1.f);
   float stripeHeight=(door.right-door.left)*m_hazard.height/m_hazard.width;
@@ -954,8 +961,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Compact sector label bolted directly to the header.
   auto&front=door.sign>=0&&door.sign<int(m_routeSigns.size())?m_routeSigns[door.sign]:door.transfer?(w.campaignChunk(0)?m_transferSign:w.campaignChunk(1)?m_gantrySign:w.campaignChunk(3)?m_reactorSign:m_surfaceSign):w.campaignChunk(1)?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
   auto&back=door.transfer?front:w.campaignChunk(1)?m_transferSign:(y<10?m_intakeSign:m_processingSign);
-  quad({x+.7f,y-.125f,headerBottom+.02f},{x-.7f,y-.125f,headerBottom+.02f},{x-.7f,y-.125f,headerTop-.04f},{x+.7f,y-.125f,headerTop-.04f},front,.9f);
-  quad({x-.7f,y+1.125f,headerBottom+.02f},{x+.7f,y+1.125f,headerBottom+.02f},{x+.7f,y+1.125f,headerTop-.04f},{x-.7f,y+1.125f,headerTop-.04f},door.sign>=0?front:back,.9f);
+  // A plate of the sign texture's own 3.56:1 proportion, bolted to the header.
+  float plateHalf=std::min(.8f,half-.05f),plateTop=headerBottom+.06f+plateHalf*2.f/3.56f;
+  quad({x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},front,.9f);
+  quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},door.sign>=0?front:back,.9f);
  }
  if(!m_gpuFrame||!staticFixtures)for(const auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.

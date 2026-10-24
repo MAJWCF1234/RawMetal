@@ -120,6 +120,12 @@ struct AuthoredSign {
     std::string title,subtitle;
     std::uint32_t accent=0xffca994du;
 };
+// A named region of a map (HUD location label). The first zone containing
+// the player wins; maps without zones show the map name.
+struct AuthoredZone {
+    std::string name;
+    float x1=0,y1=0,x2=24,y2=24,bottom=-1000,top=1000;
+};
 struct AuthoredNavHint {
     Vec2 position{};
     float z=0;
@@ -155,6 +161,7 @@ struct AuthoredMapData {
     std::vector<ScriptEvent> scriptEvents;
     std::vector<ObjectiveText> objectiveTexts;
     std::vector<AuthoredNavHint> navHints;
+    std::vector<AuthoredZone> zones;
 };
 struct CustomCampaign {
     std::string name;
@@ -180,11 +187,20 @@ public:
     WorldId worldId()const{return m_worldId;}
     bool campaign()const{return m_worldId==WorldId::Campaign;}
     bool custom()const{return m_worldId==WorldId::Custom;}
-    bool campaignChunk(int index)const{return campaign()&&m_level==index;}
+    // A legacy hard-coded campaign chunk. Authored maps (including rebuilt
+    // campaign slots) carry their own content, so legacy special cases skip them.
+    bool campaignChunk(int index)const{return campaign()&&m_level==index&&!m_mapData;}
+    bool authored()const{return m_mapData!=nullptr;}
     const ChunkDefinition& definition()const{return m_mapData?m_mapData->definition:chunkDefinition(m_worldId,m_level);}
     std::span<const int> visibleResidencyGroups()const{return m_mapData?std::span<const int>(m_mapData->visibleResidencyGroups):std::span<const int>{};}
     bool outdoors()const{return definition().environment==Environment::Outdoor;}
     bool hasLift()const{return definition().lift;}
+    // Authored location name at a point (HUD), or nullptr when no zone covers it.
+    const char* zoneName(Vec2 p,float z)const{
+     if(!m_mapData)return nullptr;
+     for(const auto& zone:m_mapData->zones)if(p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.name.c_str();
+     return nullptr;
+    }
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
     bool coast()const{return horrorMode()&&m_level>=12;}
     const char* skyboxId()const{return m_mapData?m_mapData->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
@@ -265,7 +281,8 @@ public:
     bool destroyTile(int x,int y);
     bool solid(float x, float y) const;
     bool isExit(float x, float y) const;
-    bool metalFloor(int x,int y)const{return !outdoors()&&(m_level>=4?(x>=7&&x<=16):y>=8||x>=12);}
+    // Legacy grating rule for the hard-coded chunks; authored maps lay their own floors.
+    bool metalFloor(int x,int y)const{return !outdoors()&&!m_mapData&&(m_level>=4?(x>=7&&x<=16):y>=8||x>=12);}
     std::vector<Vec2> machines()const;
     float floorHeight(float x,float y)const;
     float supportHeight(float x,float y,bool dynamic=true,bool shelfCavities=false)const;

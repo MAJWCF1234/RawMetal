@@ -396,3 +396,15 @@ The editor refuses invalid MAIN IDs below level 6 and surfaces export warnings b
 For MAIN source injection, Player Start markers remain comments and compiled campaign starts still come from `WorldDefinition.h`.
 
 For CUSTOM runtime campaigns, Player Start markers are serialized into the runtime map definitions and are used directly. The custom campaign does not need a `WorldDefinition.h` entry.
+
+## Zones
+
+```
+ZONE|mapIndex|x1|y1|x2|y2|name|bottom|top
+```
+
+A zone names part of a map for the HUD location label (for example
+`ZONE|0|0|0|24|8|01 INTAKE`). The first zone that contains the player wins;
+where no zone applies, the HUD shows the map name. `bottom` and `top` are
+optional heights that separate stacked spaces, such as a gantry above a hall.
+Names are at most 40 characters.
