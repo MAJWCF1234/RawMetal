@@ -1891,6 +1891,362 @@ std::shared_ptr<const Map> makeWasteHandling(){
  return p;
 }
 
+// Every freight chunk ends the same way: steel flights get open treads and
+// stringers, decks are cut back over each flight, and boundary doors name
+// the chunk on their far side.
+void freightFinish(Map& m,int level){
+ for(auto& stair:m.stairs)if(stair.steps>1){
+ stair.openUnderside=true;stair.treadThickness=.12f;stair.sideRails=true;
+ float z1=stair.ascending?stair.bottom:stair.top,z2=stair.ascending?stair.top:stair.bottom;
+ for(bool right:{false,true}){
+ Vec2 a=stair.alongY?Vec2{right?stair.x2-.12f:stair.x1+.12f,stair.y1}:Vec2{stair.x1,right?stair.y2-.12f:stair.y1+.12f};
+ Vec2 b=stair.alongY?Vec2{a.x,stair.y2}:Vec2{stair.x2,a.y};
+ m.pipes.push_back({a,b,z1-.08f,.085f,z2-.08f,2});
+ }
+ }
+ for(const auto& stair:m.stairs)for(auto& layer:m.layers)if(layer.thickness>0&&layer.elevation>=stair.bottom-.02f&&layer.elevation<=stair.top+.02f)
+ rectangle(layer,int(stair.x1),int(stair.y1),int(stair.x2),int(stair.y2),'.');
+ for(auto& d:m.doors)d.sign=d.entry?level-1:level+1;
+}
+// A 1.1 m guard rail along an open edge: the walk-off side of a deck.
+void guardRail(Map& m,float x1,float y1,float x2,float y2,float z){m.structures.push_back({x1,y1,x2,y2,z,z+1.1f,true,2});}
+
+// FREIGHT ACCESS. The goods entrance to the freight district, low and
+// workaday. Waste Handling's dispatch door opens into the personnel wing:
+// lockers, the clock-in station and the tool crib, behind a glazed screen.
+// East of it the freight hall: a trailer dock in the east wall, the dock
+// office, forklift charging and staged loads, and painted lanes running to
+// the freight gate south, which opens onto the Lift Machinery hall.
+std::shared_ptr<const Map> makeFreightAccess(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[10];m.definition=CampaignChunks[10];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.4f;
+ const float floor=-12,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),floor,false,true));m.openSouth=true;
+ auto& g=m.layers[0];
+ rectangle(g,2,0,5,1,'.');m.doors.push_back({2,5,.5f,0,false,false,true});
+ // --- Personnel wing (west) -------------------------------------------------------
+ // A glazed screen with two doorways divides it from the freight hall.
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,floor,floor+.95f,3);wall(m,x1,y1,x2,y2,floor+.95f,floor+2.25f,17);wall(m,x1,y1,x2,y2,floor+2.25f,roof,3);};
+ glazed(6.6f,1,6.8f,4.5f);glazed(6.6f,6.f,6.8f,13.f);glazed(6.6f,14.5f,6.8f,18.f);
+ for(float y:{4.5f,13.f})wall(m,6.6f,y,6.8f,y+1.5f,floor+2.25f,roof,3);
+ wall(m,1,18.f,6.8f,18.2f,floor,roof,3);
+ for(float y:{4.5f,6.f,13.f,14.5f})steelColumn(m,6.7f,y,floor,roof,false);
+ // Clock-in: the time clock, the card rack and the shift board.
+ terminal(m,{4.5f,2.6f},"FREIGHT / CLOCK-IN","EMPLOYEE TRANSIT / USE PERSONNEL ROUTE.","CARGO LIFTS: FOLLOW CLEARANCE MARKINGS.");
+ m.terminals.back().yaw=kPi*.5f;
+ m.fixtures.push_back({8,{6.45f,2.7f},1.1f,.67f,.2f,.91f,-kPi*.5f,false});
+ wallSign(m,1.055f,4.f,floor+1.75f,"PERSONNEL ENTRY","CLOCK IN / HI-VIS / HARD HAT",2.2f,kPi*.5f);
+ // Lockers along the west wall and a changing bench.
+ for(float y:{6.5f,7.5f,8.5f,9.5f,10.5f,11.5f})m.fixtures.push_back({13,{1.27f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
+ bench(m,3.6f,9.f,floor);
+ // Tool crib behind a mesh cage: shelving and the issue hatch.
+ for(float y:{14.6f,16.6f})m.fixtures.push_back({7,{1.27f,y},0,1.6f,.5f,1.8f,kPi*.5f,true});
+ m.structures.push_back({1.f,14.f,2.8f,14.06f,floor,floor+2.2f,true,2});m.structures.push_back({4.2f,14.f,6.6f,14.06f,floor,floor+2.2f,true,2});
+ wall(m,2.8f,14.f,4.2f,14.06f,floor+2.f,floor+2.2f,2);
+ board(m,3.5f,13.88f,floor+2.25f,"TOOL CRIB","SIGN OUT / RETURN BY SHIFT END",2.f);
+ // --- Freight hall ------------------------------------------------------------------
+ // East trailer dock: shutter in its frame, leveller plate, bumpers.
+ wall(m,22.8f,5.6f,23.f,10.4f,floor,roof,7);
+ for(float z=floor+.2f;z<roof-.3f;z+=.3f)wall(m,22.74f,5.8f,22.8f,10.2f,z,z+.05f,2);
+ for(float y:{5.45f,10.4f})wall(m,22.6f,y,23.f,y+.15f,floor,roof,12);
+ wall(m,20.6f,6.f,22.6f,10.f,floor,floor+.03f,8);
+ floorLine(m,20.6f,5.85f,22.6f,6.f,floor+.03f,13);floorLine(m,20.6f,10.f,22.6f,10.15f,floor+.03f,13);
+ for(float y:{6.3f,9.7f})wall(m,22.45f,y-.2f,22.6f,y+.2f,floor+.4f,floor+.9f,8);
+ wallSign(m,22.795f,8.f,roof-.55f,"DOCK 01","TRAILER BAY / SHUTTER LOCKED OUT",1.8f,-kPi*.5f);
+ // Staged loads on the apron, a hand cart and a pallet jack lane.
+ cargo(m,18.5f,6.5f,floor);cargo(m,18.5f,8.f,floor,false);cargo(m,17.f,6.5f,floor);
+ handCart(m,15.5f,9.5f,floor);
+ // Dock office: glazed on two sides, the loading schedule on its desk.
+ glazed(16.5f,13.f,23.f,13.2f);glazed(16.5f,13.2f,16.7f,15.5f);
+ wall(m,16.5f,16.9f,16.7f,18.2f,floor,roof,3);wall(m,16.5f,15.5f,16.7f,16.9f,floor+2.25f,roof,3);
+ wall(m,16.5f,18.f,23.f,18.2f,floor,roof,3);
+ recordsDesk(m,19.5f,15.8f,floor);
+ terminal(m,{21.2f,14.2f},"LOADING SCHEDULE","SHIFT 02 / RECEIVING 01-03 ACTIVE.","RESTRICTED CARGO: MANIFEST AUTHORIZATION.");
+ m.fixtures.push_back({7,{22.6f,16.6f},0,1.4f,.45f,1.8f,-kPi*.5f,true});
+ wallSign(m,19.75f,13.f-.055f,floor+2.45f,"DOCK OFFICE","SHIPPING / RECEIVING",1.8f,kPi);
+ // Forklift charging bay against the north wall.
+ forklift(m,10.f,3.f,floor);
+ wall(m,11.6f,1.f,12.6f,1.3f,floor+.8f,floor+1.8f,12);
+ wallSign(m,12.1f,1.055f,floor+2.f,"CHARGING","FORKLIFT 03 / 48 V",1.4f,0);
+ // Lanes and the freight gate south: a portal frame with hazard posts.
+ for(float x:{8.2f,15.8f})floorLine(m,x,4.f,x+.12f,24.f,floor,14);
+ for(float y=5.f;y<23.f;y+=2.f)floorLine(m,11.9f,y,12.1f,y+1.f,floor,14);
+ for(float x:{7.4f,16.6f}){steelColumn(m,x,21.5f,floor,roof,true);wall(m,x-.2f,21.3f,x+.2f,21.7f,floor,floor+1.2f,13);}
+ wall(m,7.2f,21.35f,16.8f,21.65f,roof-.5f,roof,12);
+ wallSign(m,12.f,21.34f,roof-.48f,"LIFT MACHINERY","FREIGHT GATE / HARD HATS",2.4f,kPi);
+ // The south corners either side of the gate: outbound staging west, the
+ // empties and the spill kit east.
+ for(float x:{2.2f,4.4f})m.fixtures.push_back({7,{x,18.45f},0,1.6f,.5f,1.8f,0,true});
+ cargo(m,5.8f,20.4f,floor);cargo(m,4.3f,21.2f,floor,false,.3f);cargo(m,1.9f,22.6f,floor);
+ floorLine(m,1.2f,19.2f,6.6f,19.32f,floor,13);
+ wallSign(m,3.3f,18.255f,floor+2.3f,"OUTBOUND STAGING","HOLD FOR MANIFEST CHECK",2.2f,0);
+ cargo(m,18.f,20.f,floor,false);cargo(m,19.5f,20.f,floor,false,.15f);cargo(m,21.6f,21.5f,floor);
+ m.fixtures.push_back({7,{21.8f,18.45f},0,1.4f,.45f,1.8f,0,true});
+ wallSign(m,19.f,18.255f,floor+2.3f,"SPILL KIT / EMPTIES","RETURN PALLETS TO DOCK 01",2.f,0);
+ m.lights.push_back(lamp({3.8f,21.f},roof-.15f,.9f,5.f,3800,.1f));m.lights.push_back(lamp({20.f,21.f},roof-.15f,.9f,5.f,3800,.1f));
+// Services: the low roof carries ducts and trays on hangers.
+ servicePipe(m,{1.2f,19.5f},{22.8f,19.5f},roof-.35f,.12f,4);
+ servicePipe(m,{8.6f,1.2f},{8.6f,22.8f},roof-.3f,.08f,3);
+ cableTray(m,{15.2f,1.2f},{15.2f,12.5f},roof-.4f);
+ // --- Light ---------------------------------------------------------------
+ for(Vec2 l:{Vec2{3.5f,5.f},Vec2{3.5f,11.f},Vec2{3.5f,16.f}})m.lights.push_back(lamp(l,roof-.15f,1.f,5.f,4300,.15f));
+ for(Vec2 l:{Vec2{10.f,6.f},Vec2{14.5f,6.f},Vec2{10.f,12.f},Vec2{14.5f,12.f},Vec2{12.f,18.f},Vec2{19.f,8.f}})m.lights.push_back(lamp(l,roof-.15f,1.2f,6.f,4600,.15f));
+ m.lights.push_back(lamp({19.5f,15.8f},roof-.15f,1.f,4.f,3200));
+ m.lights.push_back(lamp({12.f,21.2f},roof-.6f,1.1f,5.f,2200,0));
+ // --- Supplies ----------------------------------------------------------------
+ m.pickupSpawns={{{11.f,5.7f},PickupKind::Ammo},{{3.f,15.5f},PickupKind::Health}};
+ m.clutterSpawns={{3,{2.f,16.f}},{1,{18.f,15.f}},{2,{4.f,11.f}}};
+ zone(m,"FREIGHT ACCESS / PERSONNEL",1,1,6.6f,18);
+ zone(m,"FREIGHT ACCESS / DOCK OFFICE",16.7f,13.2f,23,18);
+ freightFinish(m,10);
+ return p;
+}
+
+// LIFT MACHINERY. The winding house of the main freight lifts. From the
+// north landing a fenced walkway rings a thirteen-metre pit: both main
+// shafts stand dead in it, car A stalled halfway on its ropes, car B fallen
+// to the bottom. The winding engines and their drums sit on the headframe
+// overhead; the motor-generator sets and control cubicles line the east
+// walk. The auxiliary brake console is on the west walk, and the route goes
+// on south to the auxiliary lift.
+std::shared_ptr<const Map> makeLiftMachinery(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[11];m.definition=CampaignChunks[11];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.36f;
+ const float base=-25,walk=-12,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,true));m.openNorth=true;m.openSouth=true;
+ deck(m,walk,1,0,23,4);deck(m,walk,1,4,6,24);deck(m,walk,18,4,23,24);deck(m,walk,6,20,18,24);
+ auto& w=m.layers[1];
+ // Guard rails round the pit.
+ guardRail(m,6.f,3.95f,18.f,4.f,walk);guardRail(m,6.f,20.f,18.f,20.05f,walk);
+ guardRail(m,5.95f,4.f,6.f,20.f,walk);guardRail(m,18.f,4.f,18.05f,20.f,walk);
+ deckSupports(m,w,base,6.f);
+ // --- The shafts ------------------------------------------------------------------
+ // Each shaft: four corner guides from the pit floor to the headframe, a
+ // crosshead at the top, and the winding drum on it.
+ for(Vec2 c:{Vec2{9.f,12.f},Vec2{15.f,12.f}}){
+ for(float dx:{-1.6f,1.6f})for(float dy:{-3.2f,3.2f})steelColumn(m,c.x+dx,c.y+dy,base,roof-1.6f,true);
+ for(float dy:{-3.2f,3.2f})wall(m,c.x-1.8f,c.y+dy-.15f,c.x+1.8f,c.y+dy+.15f,roof-1.6f,roof-1.25f,12);
+ wall(m,c.x-1.8f,c.y-3.35f,c.x-1.5f,c.y+3.35f,roof-1.6f,roof-1.25f,12);wall(m,c.x+1.5f,c.y-3.35f,c.x+1.8f,c.y+3.35f,roof-1.6f,roof-1.25f,12);
+ m.pipes.push_back({{c.x-1.3f,c.y},{c.x+1.3f,c.y},roof-.7f,.55f,roof-.7f,8});
+ for(float x:{c.x-1.25f,c.x+1.25f})m.pipes.push_back({{x,c.y},{x+.08f,c.y},roof-.7f,.62f,roof-.7f,6});
+ m.structures.push_back({c.x-1.4f,c.y-.7f,c.x+1.4f,c.y+.7f,roof-1.6f,roof-.1f,false,6});
+ }
+ // Car A hangs stalled halfway down shaft A on its ropes.
+ const float carA=-18.5f;
+ wall(m,7.6f,9.f,10.4f,15.f,carA,carA+.2f,11);
+ for(float x:{7.6f,10.3f})wall(m,x,9.f,x+.1f,15.f,carA+.2f,carA+2.4f,11);
+ wall(m,7.6f,9.f,10.4f,9.1f,carA+.2f,carA+2.4f,11);wall(m,7.6f,9.f,10.4f,15.f,carA+2.4f,carA+2.55f,12);
+ for(float y:{11.5f,12.5f})m.pipes.push_back({{9.f,y},{9.f,y},carA+2.55f,.03f,roof-1.6f,6});
+ // Car B lies wrecked at the pit bottom, its ropes coiled on top.
+ wall(m,13.5f,9.5f,16.6f,14.5f,base,base+1.4f,11);wall(m,13.4f,9.4f,16.7f,14.6f,base+1.4f,base+1.6f,12);
+ for(float y:{11.f,13.f})m.pipes.push_back({{14.f,y},{16.f,y},base+1.75f,.12f,base+1.75f,6});
+ board(m,12.f,6.5f,base+1.2f,"SHAFTS A / B","OUT OF SERVICE / NO ENTRY TO PIT",2.6f);
+ // Counterweights on their own guides along the pit's north and south walls.
+ for(float x:{9.f,15.f})for(float y:{5.2f,18.8f}){wall(m,x-.5f,y-.3f,x+.5f,y+.3f,base,base+2.f,8);m.pipes.push_back({{x,y},{x,y},base+2.f,.03f,roof-.05f,6});}
+ // --- East walk: the winding plant ---------------------------------------------------
+ for(float y:{6.5f,11.5f}){m.fixtures.push_back({6,{20.5f,y},13,3.4f*.85f,.85f,1.8f*.85f,kPi*.5f,true});}
+ for(float y:{13.f,14.f,17.5f,18.5f})m.fixtures.push_back({13,{22.75f,y},13,.9066f,.4956f,2.2f,kPi*.5f,true});
+ cableTray(m,{22.6f,5.f},{22.6f,19.f},walk+2.7f);
+ wallSign(m,22.945f,9.f,walk+2.3f,"WINDING PLANT","M-G SETS / CONTROL CUBICLES",2.f,-kPi*.5f);
+ // --- West walk: the auxiliary brake ------------------------------------------------
+ terminal(m,{3.5f,17.5f},"AUXILIARY / BRAKE RELEASE","MAIN SHAFTS OUT OF SERVICE.","01: RELEASE AUXILIARY BRAKE.",13,stateId("freight_brake"));
+ m.props.push_back({1,{3.5f,12},1.4f,1.f,0,{.45f,.65f},13});
+ board(m,3.5f,15.f,walk+1.5f,"01 / AUX BRAKE","RELEASE / THEN LOCAL CONTROL NEXT BAY",2.f);
+ board(m,12.f,21.f,walk+1.5f,"AUXILIARY LIFT","LOCAL CONTROL / NEXT BAY SOUTH",3.6f);
+ // Mains out of the side walls along the walks.
+ pipeRoute(m,{{1.05f,1.5f,walk+3.3f},{2.f,1.5f,walk+3.3f},{2.f,22.5f,walk+3.3f},{1.05f,22.5f,walk+3.3f}},.13f,1,roof);
+ pipeRoute(m,{{1.05f,2.f,walk+2.5f},{2.4f,2.f,walk+2.5f},{2.4f,22.f,walk+2.5f},{1.05f,22.f,walk+2.5f}},.13f,3,roof);
+ wallBays(m,base,roof,4.f,false,false,true,true,12.f);
+ // --- Light ---------------------------------------------------------------
+ for(float y:{2.f,6.f,10.f,14.f,18.f,22.f}){m.lights.push_back(lamp({1.02f,y},walk+2.3f,1.2f,6.f,4200,.1f,WorldLightMount::Wall,0));m.lights.push_back(lamp({22.98f,y},walk+2.3f,1.2f,6.f,4200,.1f,WorldLightMount::Wall,kPi));}
+ for(float x:{6.f,12.f,18.f})m.lights.push_back(lamp({x,2.f},walk-.4f,1.f,5.f,3800,.1f));
+ // The pit is lit from below in amber, the headframe from above.
+ for(Vec2 l:{Vec2{12.f,7.f},Vec2{12.f,17.f}})m.lights.push_back(lamp(l,roof-.15f,1.6f,14.f,4600,.15f));
+ for(float y:{8.f,16.f})for(float x:{5.5f,18.5f})m.lights.push_back(lamp({x,y},walk-.45f,1.1f,9.f,2000,0));
+ m.pickupSpawns={{{20.5f,2.5f},PickupKind::Ammo,walk}};
+ zone(m,"LIFT MACHINERY / WINDING PLANT",18,4,23,20,-12.5f,1000);
+ freightFinish(m,11);
+ return p;
+}
+
+// AUXILIARY FREIGHT LIFT. The one working cage. The upper landing runs
+// along the north: three consoles, worked in order (local, call, release),
+// face the shaft across a hazard-edged apron. The cage rides an open steel
+// shaft between guide columns under its hoist; the counterweight runs on
+// its own rails beside it. Seven metres down, the lower landing leads to
+// the receiving hall.
+std::shared_ptr<const Map> makeAuxiliaryLift(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[12];m.definition=CampaignChunks[12];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.38f;
+ const float base=-25,upper=-12,lower=-19,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,false));m.openNorth=true;
+ // Exit to Receiving Overlook from the lower landing.
+ rectangle(m.layers[0],10,23,14,24,'.');m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,lower-base});
+ wall(m,10,23,14,24,lower+2.5f,roof,3);wall(m,10,23,14,24,base,lower-.22f,15);
+ // Upper landing and its threshold onto the cage; the lower landing.
+ deck(m,upper,1,0,23,9);m.stairs.push_back({10,8,14,10,-12.12f,-12,1,true,true});
+ deck(m,lower,8,15,16,24);m.stairs.push_back({10,14,14,16,-19,-19,1,true,true});
+ deckSupports(m,m.layers[1],base,6.f);
+ // The control line: three consoles in order, each under its own sign.
+ terminal(m,{6.5f,6},"AUXILIARY / LOCAL CONTROL","02: SELECT LOCAL AFTER BRAKE RELEASE.","INTERLOCK: BRAKE RELEASE REQUIRED.",13,stateId("freight_local"),stateId("freight_brake"));
+ terminal(m,{12,6},"AUXILIARY / CALL PLATFORM","03: CALL PLATFORM TO BOARDING LEVEL.","INTERLOCK: LOCAL CONTROL REQUIRED.",13,stateId("freight_call"),stateId("freight_local"));
+ terminal(m,{18,6},"AUXILIARY / MANUAL DOOR RELEASE","04: RELEASE THE CAGE DOOR AFTER ARRIVAL.","BOARD THE PLATFORM TO DESCEND.",13,stateId("freight_release"),stateId("freight_platform_arrived"));
+ for(auto [x,title]:{std::pair{6.5f,"02 LOCAL"},{12.f,"03 CALL"},{18.f,"04 RELEASE"}})board(m,x,7.4f,upper+1.6f,title,"",1.6f);
+ floorLine(m,8.5f,8.6f,15.5f,8.75f,upper,13);
+ // The cage, its guides, hoist and counterweight.
+ m.cargoLift={9.5f,10,14.5f,15,-19,-12,1.f,stateId("freight_call"),stateId("freight_release"),stateId("freight_lift_mm"),stateId("freight_lift_down"),stateId("freight_platform_arrived"),stateId("freight_descended")};
+ {Door gate{9.5f,14.5f,10.f,0,false,false,false,13.f};gate.requireState=stateId("freight_release");m.doors.insert(m.doors.begin(),gate);}
+ m.doors.back().requireState=stateId("freight_descended");
+ for(float x:{9.25f,14.7f})wall(m,x,9,x+.12f,16,base,0,2);
+ for(float x:{9.f,15.f})for(float y:{9.6f,15.4f})steelColumn(m,x,y,base,roof-.6f,false);
+ wall(m,8.8f,9.4f,15.2f,15.6f,roof-.9f,roof-.6f,12);
+ m.pipes.push_back({{10.4f,12.5f},{13.6f,12.5f},roof-.2f,.55f,roof-.2f,8});
+ for(float x:{10.3f,13.6f})m.pipes.push_back({{x,12.5f},{x+.1f,12.5f},roof-.2f,.62f,roof-.2f,6});
+ for(float x:{16.f,16.8f})wall(m,x,11.6f,x+.1f,13.4f,base,roof-.9f,8);
+ wall(m,15.9f,11.9f,16.9f,13.1f,-16.f,-14.6f,8);
+ board(m,12.f,8.85f,roof-2.f,"AUXILIARY FREIGHT LIFT","CAGE 2 / 4000 KG / 1 PASSENGER CAR",3.4f);
+ // Beacons either side of the gate.
+ m.lights.push_back(lamp({9.25f,10.8f},-10.f,1.f,4.f,1800,-.1f,WorldLightMount::Wall,kPi));m.lights.push_back(lamp({14.82f,10.8f},-10.f,1.f,4.f,1800,-.1f,WorldLightMount::Wall,0));
+ // Something moves on the far gantry while the player works the controls.
+ machineryClock(m,"lift_distant_motion",12000);
+ actor(m,"lift_distant_motion",ActorVisual::Huntsman,1.5f,{{0,{6,18},-16,0},{2000,{6,18},-16,0},{3600,{17,18},-16,0},{8000,{17,18},-16,kPi},{10400,{6,18},-16,kPi},{12000,{6,18},-16,0}});
+ deck(m,-16,6,17,18,19);cargo(m,17,18,-16);
+ // Upper landing dressing: the hoist motor and the control cubicle.
+ m.fixtures.push_back({6,{20.2f,2.2f},13,2.38f,.7f,1.26f,0,true});
+ for(float x:{2.f,3.f})m.fixtures.push_back({13,{x,1.27f},13,.9066f,.4956f,2.2f,kPi,true});
+ cableTray(m,{1.6f,1.2f},{22.f,1.2f},upper+2.6f);
+ // Lower landing: buffers, a hazard apron and the transfer to receiving.
+ for(float x:{10.f,14.f})wall(m,x-.2f,15.f,x+.2f,15.4f,lower,lower+.5f,8);
+ floorLine(m,9.5f,16.f,14.5f,16.15f,lower,13);
+ wallSign(m,12.f,22.945f,lower+2.8f,"RECEIVING","OVERLOOK / UNLOADING 01",2.f,kPi);
+ wallBays(m,base,roof,4.f,false,true,true,true,12.f);
+ // --- Light ---------------------------------------------------------------
+ for(float y:{2.f,6.f}){m.lights.push_back(lamp({1.02f,y},upper+2.2f,1.f,6.f,4200,.1f,WorldLightMount::Wall,0));m.lights.push_back(lamp({22.98f,y},upper+2.2f,1.f,6.f,4200,.1f,WorldLightMount::Wall,kPi));}
+ m.lights.push_back(lamp({12.f,12.5f},roof-1.15f,1.4f,12.f,4800,.1f));
+ for(float x:{9.f,15.f})m.lights.push_back(lamp({x,22.98f},lower+2.2f,1.1f,6.f,3800,.1f,WorldLightMount::Wall,-kPi*.5f));
+ m.lights.push_back(lamp({12.f,18.f},-16.37f,.9f,5.f,3800,.1f));
+ freightFinish(m,12);
+ return p;
+}
+
+// RECEIVING OVERLOOK. The first sight of the receiving floor. From the
+// lift's lower landing a mezzanine runs along the north wall, with the
+// receiving foreman's glazed booth on it and a balcony that juts out over
+// the floor. Below: numbered unloading bays, two shipping containers, the
+// gantry crane on its runway, trailer docks in the south wall and the
+// receiving office. The floor opens east into the receiving lanes. The
+// worker on the floor is the last of the shift.
+std::shared_ptr<const Map> makeReceivingOverlook(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[13];m.definition=CampaignChunks[13];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.38f;
+ const float base=-25,mezz=-19,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base));m.openEast=true;rectangle(m.layers[0],23,1,24,23,'.');
+ rectangle(m.layers[0],10,0,14,1,'.');m.doors.push_back({10.5f,13.5f,.5f,0,false,false,true,mezz-base});
+ wall(m,10,0,14,1,base,mezz-.22f,15);wall(m,10,0,14,.85f,mezz+2.5f,roof,3);
+ const float sightLine=0;(void)sightLine;
+ // --- The worker encounter (scripted; staged on the open floor) -----------------------
+ m.definition.playerStart={7.6f,9.5f};m.definition.spawnYaw=.69f;m.definition.spawnPitch=-62.f;
+ board(m,12,6.5f,-17.9f,"RECEIVING 01","UNLOADING / KEEP CLEAR",6.4f);
+ m.timedSequences.push_back({stateId("receiving_worker_encounter_ms"),stateId("receiving_worker_encounter_complete"),6.4f,8,8.5f,10,-19.5f,-18.6f,18000,12500,0,0});
+ m.timedSequences.back().sightActor=0;
+ actor(m,"receiving_worker_encounter_ms",ActorVisual::Worker,1.7f,{
+ {0,{16.2f,16},-25,0,1,0},{5200,{16.2f,16},-25,0,0,0},
+ {6000,{16.2f,16},-25,0,0,0,1},
+ {6200,{16.2f,16},-25,0,5,0,1},{6500,{16.2f,16},-25,0,5,1,1},
+ {6501,{16.2f,16},-25,0,2,0,1},{7040,{16.2f,16},-25,0,2,1,1},
+ {7100,{16.2f,16},-25,0,1,0,1},{8200,{16.2f,17.2f},-25,0,1,2,1},
+ {8201,{16.2f,17.2f},-25,0,0,0,1},{9000,{16.2f,17.2f},-25,0,3,0,2},
+ {9450,{16.4f,17.5f},-25,0,3,1,2},{9451,{16.4f,17.5f},-25,0,2,0,2},
+ {9900,{16.4f,17.5f},-25,0,2,1,2},{9901,{16.4f,17.5f},-25,0,3,0,2},
+ {10400,{17,18.1f},-25,0,3,1,2},{10401,{17,18.1f},-25,0,2,0,1},
+ {10850,{17,18.1f},-25,0,2,1,1},{10851,{17,18.1f},-25,0,3,0,2},
+ {11300,{17.3f,18.3f},-25,0,3,1,2},{11301,{17.3f,18.3f},-25,0,4,0},
+ {12500,{17.8f,19},-25,0,4,1},{18000,{17.8f,19},-25,0,4,1}},false,true);
+ auto& worker=m.actorTracks.back();worker.idleUntilMs=3000;worker.approachUntilMs=5200;
+ worker.idleKeys={
+ {0,{14.6f,15},-25,.785f,1,0},{2600,{15.6f,16},-25,.785f,1,4},
+ {2601,{15.6f,16},-25,.785f,0,0},{3300,{15.6f,16},-25,-1.418f,1,0},
+ {5900,{14.3f,16.2f},-25,-1.418f,1,4},{5901,{14.3f,16.2f},-25,-1.418f,0,0},
+ {7000,{14.3f,16.2f},-25,2.897f,1,0},{9600,{14.6f,15},-25,2.897f,1,4},
+ {9601,{14.6f,15},-25,2.897f,0,0},{10000,{14.6f,15},-25,.785f,0,0}};
+ actor(m,"receiving_worker_encounter_ms",ActorVisual::Wasp,1.15f,{
+ {0,{23,13},-23.4f,0},{5600,{23,13},-23.4f,0},{6200,{16,15},-23.7f,0},
+ {6900,{16.2f,15.4f},-23.8f,0},{7040,{14.6f,16.4f},-24.9f,0,4},
+ {9300,{14.6f,16.4f},-24.9f,0,4},{10100,{16.8f,17.5f},-23.7f,0},
+ {10700,{16.8f,17.6f},-23.8f,0},{10900,{15.6f,19},-24.96f,0,4},{18000,{15.6f,19},-24.96f,0,4}});
+ actor(m,"receiving_worker_encounter_ms",ActorVisual::Wasp,1.15f,{
+ {0,{23,23},-23,0},{8800,{23,23},-23,0},{9300,{17.2f,17.5f},-23.7f,0},
+ {9800,{17.3f,17.7f},-23.8f,0},{10500,{17.8f,18.3f},-23.9f,0},
+ {11300,{17.7f,18.6f},-24.2f,0},{13000,{17.8f,19},-24.5f,0},
+ {15500,{22,22},-22.7f,0},{18000,{25,23},-22.7f,0}});
+ cue(m,"receiving_worker_encounter_ms",6100,Sound::WaspAttack,{16,15},"WORKER: GET BACK!",1.2f);
+ cue(m,"receiving_worker_encounter_ms",6200,Sound::WorkerDying,{16.2f,16},"",1.5f,-23.81f);
+ cue(m,"receiving_worker_encounter_ms",6900,Sound::PunchHit,{16.2f,16});
+ cue(m,"receiving_worker_encounter_ms",7040,Sound::Metal1,{14.6f,16.4f},"",1,-24.96f);
+ cue(m,"receiving_worker_encounter_ms",9150,Sound::Hurt,{16.2f,17.5f},"WORKER: NO! GET OFF ME!",0);
+ cue(m,"receiving_worker_encounter_ms",9750,Sound::PunchHit,{17.2f,17.5f});
+ cue(m,"receiving_worker_encounter_ms",10100,Sound::WaspAttack,{16.8f,17.5f});
+ cue(m,"receiving_worker_encounter_ms",10700,Sound::PunchHit,{16.8f,17.6f});
+ cue(m,"receiving_worker_encounter_ms",10900,Sound::WaspDeath,{15.6f,19});
+ cue(m,"receiving_worker_encounter_ms",11400,Sound::Hurt,{17.8f,19},"WORKER: SOMEBODY...",0);
+ // --- Mezzanine, booth and balcony --------------------------------------------------
+ deck(m,mezz,1,0,23,4);deck(m,mezz,1,4,8,10);
+ m.stairs.push_back({3,9,6,18,-25,-19,32,true,false});
+ deckSupports(m,m.layers[1],base,6.f);
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,mezz,mezz+.95f,3);wall(m,x1,y1,x2,y2,mezz+.95f,mezz+2.3f,17);wall(m,x1,y1,x2,y2,mezz+2.3f,mezz+2.6f,3);};
+ // The foreman's booth at the east end of the mezzanine, glazed to the floor.
+ glazed(17.f,3.88f,23.f,4.f);glazed(17.f,1.f,17.12f,2.f);wall(m,17.f,3.2f,17.12f,3.88f,mezz,mezz+2.6f,3);wall(m,17.f,2.f,17.12f,3.2f,mezz+2.2f,mezz+2.6f,3);
+ wall(m,17.f,1.f,23.f,4.f,mezz+2.6f,mezz+2.75f,2);
+ recordsDesk(m,20.f,2.2f,mezz);
+ terminal(m,{21.8f,3.2f},"RECEIVING / FOREMAN","UNLOADING 01 / SHIFT 02 / NO HANDOVER.","OVERLOOK BALCONY: KEEP RADIO ON.",6);
+ for(float x:{18.f,19.f})m.fixtures.push_back({13,{x,1.27f},6,.9066f,.4956f,2.2f,kPi,true});
+ wallSign(m,6.f,1.055f,mezz+1.9f,"RECEIVING OVERLOOK","UNLOADING 01 / LANES EAST",2.6f,0);
+ // --- The floor -----------------------------------------------------------------------
+ // Three numbered unloading bays painted on the floor.
+ for(int i=0;i<3;++i){float x=8.f+i*5.f;
+ for(float xx:{x,x+4.f})floorLine(m,xx,6.f,xx+.12f,13.f,base,14);
+ floorLine(m,x,13.f,x+4.12f,13.12f,base,14);
+ board(m,x+2.f,13.6f,base+.9f,i==0?"BAY 1":i==1?"BAY 2":"BAY 3","",1.f);}
+ // Two containers in the bays, one standing open and half unloaded.
+ container(m,8.5f,6.5f,base,true);container(m,18.5f,6.5f,base,false);
+ cargo(m,14.f,9.f,base);cargo(m,14.f,10.5f,base,false);
+ // Gantry crane: runway beams on the side walls, the bridge and its hoist.
+ for(float x:{1.f,22.6f})wall(m,x,4.f,x+.4f,23.f,-6.f,-5.6f,12);
+ for(float x:{1.f,22.6f})for(float y=6.f;y<23;y+=5.f)wall(m,x,y-.2f,x+.4f,y+.2f,-7.f,-6.f,15);
+ for(float y:{11.f,12.f})wall(m,1.4f,y,22.6f,y+.3f,-5.6f,-5.f,18);
+ wall(m,11.f,10.8f,13.f,12.5f,-6.f,-5.6f,12);
+ for(float y:{11.5f,11.8f})m.pipes.push_back({{12.f,y},{12.f,y},-6.f,.02f,-12.f,6});
+ wall(m,11.8f,11.45f,12.2f,11.85f,-12.4f,-12.f,8);
+ // Receiving office, south-west.
+ office(m,4.5f,20.f,base,"RECEIVING / WORKER NOTE","THEY ARE STILL DOWN HERE. KEEP THE RADIO ON.","WAREHOUSE INTAKE: FOLLOW THE EAST LANES.");
+ terminal(m,{2.5f,21.5f},"WORKER / HANDWRITTEN ROUTE","I HAVE BEEN HERE SINCE SHIFT CHANGE. TWO DAYS.","WEST SERVICE STAIRS / RADIO CALLS: STILL NO ANSWER.");
+ // Trailer docks in the south wall, a forklift between runs.
+ for(float x:{8.5f,12.5f}){
+ wall(m,x,22.8f,x+3.f,23.f,base,base+3.4f,7);
+ for(float z=base+.2f;z<base+3.2f;z+=.3f)wall(m,x+.15f,22.74f,x+2.85f,22.8f,z,z+.05f,2);
+ for(float px:{x-.15f,x+3.f})wall(m,px,22.6f,px+.15f,23.f,base,base+3.6f,12);
+ wall(m,x-.15f,22.55f,x+3.15f,23.f,base+3.3f,base+3.6f,12);
+ wall(m,x+.2f,20.8f,x+2.8f,22.6f,base,base+.03f,8);
+ floorLine(m,x+.2f,20.65f,x+2.8f,20.8f,base+.03f,13);
+ for(float bx:{x+.35f,x+2.45f})wall(m,bx,22.45f,bx+.2f,22.6f,base+.4f,base+.9f,8);
+ wallLamp(m,x+1.5f,22.99f,base+4.f,-kPi*.5f,1.3f,7.f);
+ }
+ wallSign(m,12.f,22.945f,base+4.6f,"DOCKS 03 / 04","RECEIVING / TRAILERS HELD",2.f,kPi);
+ forklift(m,10.f,17.f,base);
+ m.clutterSpawns.push_back({1,{5.5f,15.f},base});m.clutterSpawns.push_back({3,{9.f,20.f},base});
+ m.pickupSpawns.push_back({{6.f,21.8f},PickupKind::Health,base});
+ wallBays(m,base,roof,4.f,false,false,true,false,12.f);
+ // --- Light ---------------------------------------------------------------
+ for(Vec2 l:{Vec2{6.f,8.f},Vec2{12.f,8.f},Vec2{18.f,8.f},Vec2{6.f,16.f},Vec2{12.f,16.f},Vec2{18.f,16.f}})m.lights.push_back(lamp(l,roof-.15f,3.2f,24.f,4800,.15f));
+ for(float x:{4.f,9.f,14.f})m.lights.push_back(lamp({x,1.02f},mezz+2.2f,1.f,6.f,4000,.1f,WorldLightMount::Wall,kPi*.5f));
+ m.lights.push_back(lamp({20.f,2.5f},mezz+2.45f,1.f,4.f,3200));
+ for(float y:{4.5f,8.5f})m.lights.push_back(lamp({3.f,y},mezz-.4f,1.f,5.f,3800,.1f));
+ m.lights.push_back(lamp({16.5f,11.6f},-5.75f,1.8f,14.f,4200,.1f));
+ zone(m,"RECEIVING OVERLOOK / FOREMAN",17.1f,1,23,4,-19.5f,1000);
+ freightFinish(m,13);
+ return p;
+}
+
 std::shared_ptr<const Map> make(int level){
  auto p=std::make_shared<Map>();auto& m=*p;m.name=CampaignMapNames[level];m.definition=CampaignChunks[level];m.definition.musicCue=MusicCue::Freight;
  float base=level==11||level==12?-25.f:level>=13&&level<=19?-25.f:level==22?-25.f:level==27||level==28?-28.f:level==29?-25.f:m.definition.spawnHeight;
@@ -2512,22 +2868,7 @@ std::shared_ptr<const Map> make(int level){
   }
   break;
  }
- // Steel flights have open space beneath their individual treads. Stringers
- // and side rails connect each landing instead of hiding a room-sized wedge.
- for(auto& stair:m.stairs)if(stair.steps>1){
-  stair.openUnderside=true;stair.treadThickness=.12f;stair.sideRails=true;
-  float z1=stair.ascending?stair.bottom:stair.top,z2=stair.ascending?stair.top:stair.bottom;
-  for(bool right:{false,true}){
-   Vec2 a=stair.alongY?Vec2{right?stair.x2-.12f:stair.x1+.12f,stair.y1}:Vec2{stair.x1,right?stair.y2-.12f:stair.y1+.12f};
-   Vec2 b=stair.alongY?Vec2{a.x,stair.y2}:Vec2{stair.x2,a.y};
-   m.pipes.push_back({a,b,z1-.08f,.085f,z2-.08f,2});
-  }
- }
- // Floors at each stair's destination must leave the actual stairwell open.
- // A slab drawn across the flight can otherwise hide and block the descent.
- for(const auto& stair:m.stairs)for(auto& layer:m.layers)if(layer.thickness>0&&layer.elevation>=stair.bottom-.02f&&layer.elevation<=stair.top+.02f)
-  rectangle(layer,int(stair.x1),int(stair.y1),int(stair.x2),int(stair.y2),'.');
- for(auto& d:m.doors)d.sign=d.entry?level-1:level+1;
+ freightFinish(m,level);
  if(level==17)m.creatureSpawns.push_back({CreatureKind::Mutant,{12,10},-25});
  if(level==27)m.creatureSpawns.push_back({CreatureKind::Mutant,{20,19},-25});
  return p;
@@ -2536,7 +2877,7 @@ std::shared_ptr<const Map> make(int level){
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
   result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();result[9]=makeWasteHandling();
-  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i);
+  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i); result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();return result;}();
  return maps.at(size_t(level));
 }
