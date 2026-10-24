@@ -56,7 +56,7 @@ def main():
         image = image.convert('RGB')
         w, h = image.size
         factor = item['factor']
-        if factor not in (2, 4) or min(w, h) < 4 or max(w, h) > 1024:
+        if factor not in (2, 4) or min(w, h) < 4 or max(w, h) > 2048:
             raise ValueError('Unsupported neural texture dimensions/factor')
         lw, lh = (w+factor-1)//factor, (h+factor-1)//factor
         if min(lw, lh) < 2:
