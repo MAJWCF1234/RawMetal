@@ -2601,6 +2601,262 @@ std::shared_ptr<const Map> makeWarehouseC(){
  return p;
 }
 
+// WAREHOUSE / D BLOCK. Restricted freight. The south walk from C block
+// arrives on the north walk six metres up, looking down into the restricted
+// compound: a fenced enclosure round an open containment container, sealed
+// crates, the sample-handling plant and a bay of tall long-hold racking that
+// rises nearly to the roof. Something moves in the top of it. A stair climbs
+// from the north walk to the west mezzanine over the parts racks, and the
+// mezzanine runs on west into the upper racks.
+std::shared_ptr<const Map> makeWarehouseD(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[18];m.definition=CampaignChunks[18];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.3f;
+ const float base=-25,walk=-19,mezz=-13,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,false));m.openNorth=true;m.openWest=true;
+ rectangle(m.layers[0],0,1,1,23,'.');
+ // --- North walk (continues C block's south walk) and the stair to the mezzanine ------------
+ deck(m,walk,1,0,23,4);
+ m.stairs.push_back({6.f,4.f,9.f,13.f,walk,mezz,32,true,true});
+ guardRail(m,1.f,4.f,6.f,4.06f,walk);guardRail(m,9.f,4.f,23.f,4.06f,walk);guardRail(m,1.f,0,1.06f,4.f,walk);
+ terminal(m,{16.f,2.4f},"RESTRICTED / SEALED MANIFEST","CONTAINMENT HARDWARE / SAMPLE HANDLING.","CONTENTS NOT FOR LOCAL INSPECTION.",walk-base);
+ wallSign(m,22.945f,2.f,walk+1.5f,"RACK ACCESS CLOSED","OVERHEAD STOCK DISPLACED / D3",1.8f,-kPi*.5f);
+ // --- West mezzanine over the parts racks, open west to the upper racks ---------------------
+ deck(m,mezz,0,9,10,24);
+ guardRail(m,10.f,9.f,10.06f,24.f,mezz);guardRail(m,0,9.f,6.f,9.06f,mezz);guardRail(m,9.f,9.f,10.f,9.06f,mezz);
+ guardRail(m,5.94f,9.f,6.f,13.f,mezz);guardRail(m,9.f,9.f,9.06f,13.f,mezz);
+ for(float y:{9.6f,13.62f,17.64f})for(float x:{1.3f,6.3f})rack(m,x,y,base,3,y>17.f);
+ rackSign(m,2.68f,9.6f,base+3.4f,"D1","GENERAL FREIGHT / BAYS 01-06");
+ rackSign(m,7.68f,9.6f,base+3.4f,"D2","GENERAL FREIGHT / BAYS 07-12");
+ // --- The restricted compound ------------------------------------------------------------
+ guardRail(m,11.f,8.f,15.f,8.06f,base);guardRail(m,16.4f,8.f,22.8f,8.06f,base);
+ guardRail(m,11.f,8.f,11.06f,12.f,base);guardRail(m,11.f,13.4f,11.06f,22.8f,base);
+ for(float x:{11.f,13.f,15.f,16.4f,18.6f,20.7f,22.7f})wall(m,x,7.97f,x+.1f,8.09f,base,base+3.f,12);
+ for(float y:{10.f,12.f,13.4f,15.6f,17.8f,20.f,22.6f})wall(m,10.97f,y,11.09f,y+.1f,base,base+3.f,12);
+ for(float z:{base+1.8f,base+2.9f}){wall(m,11.f,7.98f,22.8f,8.08f,z,z+.08f,12);wall(m,10.98f,8.f,11.08f,22.8f,z,z+.08f,12);}
+ guardRail(m,11.06f,12.f,12.3f,12.06f,base);
+ board(m,16.f,7.4f,base+2.6f,"D BLOCK / RESTRICTED FREIGHT","AUTHORIZED PERSONNEL / MANIFEST CONTROL",3.6f);
+ container(m,12.4f,10.f,base,true,7);
+ for(float y:{13.5f,14.9f})m.fixtures.push_back({21,{13.9f,y},0,1.1f,1.f,1.f,0,true});
+ for(float y:{18.8f,20.6f})m.fixtures.push_back({14,{17.4f,y},0,1.3f,1.35f,2.f,0,true});
+ m.fixtures.push_back({22,{15.6f,21.6f},0,.78f,.49f,1.3f,kPi,true});
+ for(float y:{19.8f,21.4f})m.fixtures.push_back({21,{13.4f,y},0,1.2f,1.f,1.1f,.1f,true});
+ for(float x=12.6f;x<16.f;x+=.6f)floorLine(m,x,17.6f,x+.3f,17.9f,base,13);
+ for(float y:{9.f,13.02f,17.04f})rack(m,19.9f,y,base,6,y>16.f);
+ rackSign(m,21.28f,9.f,base+3.4f,"D3","RESTRICTED / LONG HOLD");
+ machineryClock(m,"upper_rack_noise",23000);
+ cue(m,"upper_rack_noise",7000,Sound::JunkMetal,{21.f,14.f},"",.9f,-8.f);
+ cue(m,"upper_rack_noise",16000,Sound::SpiderCall,{21.f,14.f},"",.5f,-8.f);
+ // --- Walls, roof and services ---------------------------------------------------------
+ wallBays(m,base,roof,4.f,false,true,false,true);
+ wallSign(m,16.f,22.945f,base+7.f,"D BLOCK","RESTRICTED FREIGHT / NO LOCAL INSPECTION",3.6f,kPi);
+ for(float y:{4.f,10.f,16.f,22.f})wall(m,0,y-.18f,23.f,y+.18f,roof-1.2f,roof,12);
+ servicePipe(m,{1.2f,12.1f},{22.8f,12.1f},-9.f,.4f,5);
+ for(float x:{4.f,12.f,17.5f})for(float y:{6.f,14.f,20.f})m.lights.push_back(lamp({x,y},-10.f,3.f,22.f,4200,.1f));
+ for(float x:{6.f,18.f})m.lights.push_back(lamp({x,2.f},walk-.5f,1.2f,8.f,4000));
+ for(float y:{12.f,20.f})m.lights.push_back(lamp({4.f,y},mezz-.5f,1.3f,9.f,4000));
+ for(float y:{6.f,14.f})wallLamp(m,22.98f,y,base+4.5f,kPi,1.3f,8.f);
+ // --- Creatures and supplies --------------------------------------------------------------
+ m.creatureSpawns={{CreatureKind::Huntsman,{3.f,18.f},mezz},{CreatureKind::Wasp,{14.f,2.4f},walk}};
+ m.pickupSpawns.push_back({{12.f,2.6f},PickupKind::Ammo,walk});
+ zone(m,"D BLOCK / RESTRICTED COMPOUND",11.f,8.f,23.f,23.f,-26.f,-20.f);
+ deckSupports(m,m.layers[1],base,6.f);deckSupports(m,m.layers[2],base,6.f);
+ freightFinish(m,18);
+ return p;
+}
+
+// WAREHOUSE / UPPER RACKS. E block, long-term storage: racking eighteen
+// metres high, the tallest in the warehouse. D block's mezzanine arrives on
+// the east picking deck; a stair climbs from it to the top landing along the
+// south wall, where the manifest offices' window looks back over the hall and
+// the door leads into them. Under the deck a run of upper racking has come
+// down: the breach.
+std::shared_ptr<const Map> makeWarehouseUpper(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[19];m.definition=CampaignChunks[19];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.3f;
+ const float base=-25,deckZ=-13,top=-7,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,false));m.openNorth=true;m.openEast=true;
+ rectangle(m.layers[0],23,1,24,23,'.');
+ // The door into the manifest offices, and their window onto the hall.
+ rectangle(m.layers[0],10,23,14,24,'.');m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,top-base});
+ wall(m,10,23,14,24,top+2.5f,roof,3);wall(m,10,23,14,24,base,top-.22f,15);
+ rectangle(m.layers[0],2,23,10,24,'.');
+ wall(m,2,23.85f,10,24,base,-6.15f,3);wall(m,2,23.85f,10,24,-4.35f,roof,3);
+ for(float x:{2.f,5.9f,9.85f})wall(m,x,23.85f,x+.15f,24,-6.15f,-4.35f,2);
+ // --- East picking deck, the stair and the top landing ------------------------------------
+ deck(m,deckZ,14,9,24,16);
+ m.stairs.push_back({16.f,13.f,19.f,22.f,deckZ,top,32,true,true});
+ guardRail(m,14.f,9.f,14.06f,16.f,deckZ);guardRail(m,14.f,9.f,23.f,9.06f,deckZ);
+ guardRail(m,14.f,15.94f,16.f,16.f,deckZ);guardRail(m,19.f,15.94f,23.f,16.f,deckZ);
+ deck(m,top,2,21,20,24);
+ guardRail(m,2.f,21.f,16.f,21.06f,top);guardRail(m,19.f,21.f,20.f,21.06f,top);
+ guardRail(m,19.94f,21.f,20.f,23.f,top);guardRail(m,2.f,21.f,2.06f,23.f,top);
+ terminal(m,{5.f,22.4f},"UPPER STORAGE / BREACH","RESTRICTED FREIGHT: MANIFEST CONTROL.","OFFICES ABOVE THE INTAKE END.",top-base);
+ wallSign(m,12.f,22.945f,top+2.6f,"MANIFEST OFFICES","FREIGHT RECORDS / ROUTING",2.4f,kPi);
+ m.clutterSpawns.push_back({3,{13.f,22.f},top});
+ // --- E block racking ---------------------------------------------------------------------
+ for(float x:{1.3f,7.2f,9.96f})for(float y:{2.5f,6.52f,10.54f,14.56f})rack(m,x,y,base,6,y>14.f);
+ for(float x:{14.5f,19.f})rack(m,x,2.5f,base,6);
+ rackSign(m,2.68f,2.5f,base+3.4f,"E1","LONG TERM / BAYS 01-08");
+ rackSign(m,8.58f,2.5f,base+3.4f,"E2","LONG TERM / BAYS 09-16");
+ rackSign(m,15.88f,2.5f,base+3.4f,"E3","LONG TERM / OVERSIZE");
+ for(float x:{4.12f,13.f})floorLine(m,x-.05f,2.f,x+.05f,19.f,base,14);
+ // The breach: a run of upper stock down under the deck, a beam with it.
+ cargo(m,15.4f,18.6f,base,true,.5f);cargo(m,17.2f,19.8f,base,false,-.3f);cargo(m,20.6f,18.2f,base,true,1.1f);
+ m.fixtures.push_back({17,{18.4f,17.6f},0,1.f,1.2f,.9f,.7f,true});
+ m.fixtures.push_back({17,{21.4f,20.6f},0,1.f,1.2f,.8f,-.4f,true});
+ wall(m,14.8f,21.f,19.8f,21.14f,base,base+.14f,18);
+ for(float y=17.f;y<22.f;y+=.7f)floorLine(m,14.4f,y,14.7f,y+.35f,base,13);
+ // --- Walls, roof and services ---------------------------------------------------------
+ wallBays(m,base,roof,4.f,false,true,true,false,6.f,12.f);
+ for(float y:{4.f,10.f,16.f,22.f}){wall(m,1.f,y-.18f,24.f,y+.18f,roof-1.2f,roof,12);steelColumn(m,23.85f,y,base,roof-1.2f,false);}
+ servicePipe(m,{1.2f,20.4f},{23.8f,20.4f},-2.f,.4f,5);
+ for(Vec2 l:{Vec2{5.63f,6.f},Vec2{5.63f,13.f},Vec2{13.5f,6.f},Vec2{19.f,12.f},Vec2{8.f,19.5f}})m.lights.push_back(lamp(l,-3.f,3.f,22.f,4200,.1f));
+ for(float y:{5.f,12.f,18.f})m.lights.push_back(lamp({5.63f,y},-8.5f,1.4f,12.f,4000));
+ m.lights.push_back(lamp({13.6f,12.f},-8.5f,1.4f,12.f,4000));
+ for(Vec2 l:{Vec2{21.f,12.f},Vec2{20.f,19.5f}})m.lights.push_back(lamp(l,deckZ-.6f,1.4f,12.f,4000));
+ m.lights.push_back(lamp({6.f,22.f},top+2.5f,1.1f,8.f,3800));
+ for(float x:{15.f,19.5f})wallLamp(m,x,22.98f,top+2.3f,-kPi*.5f,1.1f,7.f);
+ // --- Supplies ----------------------------------------------------------------
+ m.pickupSpawns.push_back({{21.f,12.f},PickupKind::Ammo,deckZ});
+ deckSupports(m,m.layers[1],base,6.f);deckSupports(m,m.layers[2],base,6.f);
+ freightFinish(m,19);
+ return p;
+}
+
+// MANIFEST OFFICES. Freight records, at the top of the warehouse. The
+// window bay looks back over the racks; the reception counter faces the
+// door; two pods of desks fill the floor, with the supervisors' glazed booths
+// either side. Records line the west wall and the kitchenette is in the
+// south-west corner. The routing wing continues south.
+std::shared_ptr<const Map> makeManifestOffices(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[20];m.definition=CampaignChunks[20];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.44f;
+ m.definition.floorMaterial=FloorMaterial::OfficeCarpet;m.visibleResidencyGroups={2};
+ const float f=-7,ceil=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f,false,true));m.openSouth=true;
+ rectangle(m.layers[0],10,0,14,1,'.');m.doors.push_back({10.5f,13.5f,.5f,0,false,false,true,0});
+ // --- The window bay over the warehouse ---------------------------------------------------
+ rectangle(m.layers[0],2,0,10,1,'.');
+ wall(m,2,0,10,.16f,f,-6.15f,3);wall(m,2,0,10,.16f,-4.35f,ceil,3);
+ for(float x:{2.f,5.9f,9.85f})wall(m,x,0,x+.15f,.16f,-6.15f,-4.35f,2);
+ wall(m,2.15f,.045f,9.85f,.065f,-6.15f,-4.35f,17);
+ wall(m,2.25f,1.15f,9.7f,1.65f,-6.2f,-6.12f,20);
+ for(float x:{2.35f,9.45f})wall(m,x,1.2f,x+.12f,1.6f,f,-6.2f,2);
+ m.fixtures.push_back({11,{4.5f,1.4f},.88f,.39f,.38f,.45f,0,false});
+ m.fixtures.push_back({30,{7.6f,1.4f},.88f,.5f,.4f,.42f,0,false});
+ for(float x:{4.5f,7.6f})m.fixtures.push_back({18,{x,2.35f},0,.417f,.525f,.95f,0,true});
+ wallSign(m,6.f,.215f,-4.3f,"WAREHOUSE OVERLOOK","A-B / C / D / E BLOCKS",2.2f,0);
+ // --- Reception ---------------------------------------------------------------------------
+ wall(m,13.9f,2.3f,17.2f,2.75f,f,f+1.05f,21);wall(m,16.75f,2.75f,17.2f,4.2f,f,f+1.05f,21);
+ wall(m,13.85f,2.25f,17.25f,2.8f,f+1.05f,f+1.1f,20);wall(m,16.7f,2.8f,17.25f,4.25f,f+1.05f,f+1.1f,20);
+ m.fixtures.push_back({26,{15.4f,3.6f},0,.55f,.55f,.95f,kPi,true});
+ m.fixtures.push_back({27,{15.4f,2.55f},1.1f,.42f,.4f,.38f,kPi,false});
+ m.fixtures.push_back({33,{14.4f,2.5f},1.1f,.2f,.2f,.1f,0,false});
+ wallSign(m,18.5f,1.055f,f+1.7f,"MANIFEST OFFICES","FREIGHT RECORDS / ALL VISITORS SIGN IN",2.6f,0);
+ // --- Desk pods ---------------------------------------------------------------------------
+ for(float cy:{8.f,13.f}){
+  wall(m,9.6f,cy-.03f,12.4f,cy+.03f,f+.75f,f+1.25f,21);
+  for(float cx:{10.3f,11.7f})for(int side=0;side<2;++side){float y=side?cy+.4f:cy-.4f,yaw=side?kPi:0;
+   m.fixtures.push_back({24,{cx,y},0,1.4f,.7f,.75f,yaw,true});
+   m.fixtures.push_back({26,{cx,side?y+.85f:y-.85f},0,.55f,.55f,.95f,yaw,true});
+   m.fixtures.push_back({27,{cx-.2f,side?y+.12f:y-.12f},.75f,.42f,.4f,.38f,yaw,false});
+   m.fixtures.push_back({28,{cx,side?y-.18f:y+.18f},.75f,.45f,.16f,.03f,yaw,false});
+   if(int(cx)%2)m.fixtures.push_back({38,{cx+.45f,y},.75f,.08f,.3f,.32f,yaw,false});
+  }
+ }
+ // --- Supervisors' booths -----------------------------------------------------------------
+ office(m,5.5f,7,f,"MANIFEST / ORDINARY FREIGHT","BEARINGS / FILTERS / FOOD / MEDICAL SUPPLIES.","SPECIALIZED CONTAINMENT HARDWARE: RESEARCH RECEIVING.",0,true);
+ office(m,18,8,f,"TRAIN 27 / ARRIVAL RECORD","PASSENGERS: 0 / CARGO: NONE / PLATFORM 3.","MANUAL ANNOTATION: THIS IS WRONG.",0,true);
+ for(Vec2 q:{Vec2{5.5f,7},Vec2{18,8}})m.fixtures.push_back({18,{q.x,q.y-.85f},0,.417f,.525f,.95f,kPi,true});
+ // --- Missed calls desk and the records wall -----------------------------------------------
+ terminal(m,{6,16},"MANIFEST / MISSED CALLS","RECEIVING: 02:14 / 02:17 / 02:21 / NO ANSWER.","EMPLOYEE TRANSIT LOG: PLATFORM 3.");
+ m.fixtures.push_back({18,{6,15.15f},0,.417f,.525f,.95f,kPi,true});
+ recordsDesk(m,6,18.2f,f);
+ for(float y:{11.f,12.6f})m.fixtures.push_back({7,{1.5f,y},0,1.5f,.45f,1.8f,-kPi*.5f,true});
+ for(float y:{14.f,14.6f,15.2f})m.fixtures.push_back({32,{1.4f,y},0,.5f,.6f,1.3f,kPi*.5f,true});
+ for(float z:{-5.4f,-4.95f,-4.5f}){
+  wall(m,1.02f,4.7f,1.47f,9.3f,z,z+.045f,2);
+  for(int i=0;i<22;++i){float y=4.8f+i*.2f;wall(m,1.14f,y,1.38f,y+.15f,z+.045f,z+.37f,i%3==0?19:i%3==1?20:18);}
+ }
+ for(float y:{4.73f,9.2f})wall(m,1.02f,y,1.1f,y+.07f,-5.6f,-4.4f,2);
+ // --- East: files and the copier corner ------------------------------------------------------
+ for(float y:{13.f,14.f,15.f})m.fixtures.push_back({31,{22.5f,y},0,.9f,.5f,.75f,-kPi*.5f,true});
+ m.fixtures.push_back({37,{22.6f,17.f},0,.9f,.3f,1.8f,-kPi*.5f,true});
+ m.fixtures.push_back({29,{22.4f,19.f},0,.45f,.6f,1.1f,-kPi*.5f,true});
+ wallSign(m,22.945f,14.f,f+1.5f,"FREIGHT RECORDS","2019-2026 / BY MANIFEST NUMBER",2.f,-kPi*.5f);
+ // --- Kitchenette ---------------------------------------------------------------------------
+ wall(m,1,18.6f,1.65f,22.8f,f,f+.9f,21);wall(m,1,18.55f,1.7f,22.85f,f+.9f,f+.94f,20);
+ m.fixtures.push_back({36,{1.35f,19.4f},.94f,.35f,.35f,.45f,kPi*.5f,false});
+ m.fixtures.push_back({34,{1.35f,20.f},.94f,.09f,.09f,.1f,0,false});
+ m.fixtures.push_back({35,{1.35f,23.3f},0,.35f,.35f,1.1f,0,true});
+ m.fixtures.push_back({19,{3.8f,20.6f},0,1.367f,.724f,.78f,0,true});
+ for(float x:{3.3f,4.3f})for(int s=0;s<2;++s)m.fixtures.push_back({18,{x,s?21.3f:19.9f},0,.417f,.525f,.95f,s?0:kPi,true});
+ wallSign(m,1.055f,16.8f,f+1.4f,"STAFF NOTICES","SHIFT 02 / RADIO CHECK EVERY 30 MIN",1.4f,kPi*.5f);
+ // --- Light ---------------------------------------------------------------------------------
+ for(float x:{4.f,12.f,20.f})for(float y:{4.f,11.f,18.f})m.lights.push_back(lamp({x,y},ceil-.16f,.9f,8.f,4000));
+ m.pickupSpawns.push_back({{6,19.6f},PickupKind::Health,f});
+ zone(m,"MANIFEST OFFICES / RECORDS",1,4,7,16);
+ freightFinish(m,20);
+ return p;
+}
+
+// MANIFEST ROUTING. The routing wing. The manifest archive fills the
+// north-west, the switch room the north-east; the routing desks face the
+// transfer yard board on the south wall, and the routing supervisor's booth
+// holds the control that releases the downstream shutters. The door south
+// leads down to the transfer conveyors once they are released.
+std::shared_ptr<const Map> makeManifestRouting(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[21];m.definition=CampaignChunks[21];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.42f;
+ m.definition.floorMaterial=FloorMaterial::OfficeCarpet;m.visibleResidencyGroups={2};
+ const float f=-7,ceil=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f,true,false));m.openNorth=true;
+ rectangle(m.layers[0],10,23,14,24,'.');m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,0});
+ m.doors.back().requireState=stateId("freight_routing");
+ wall(m,10,23,14,24,f+2.5f,ceil,3);
+ wallSign(m,12.f,22.945f,f+2.55f,"TRANSFER","DOWNSTREAM SHUTTERS / ROUTING REQUIRED",2.2f,kPi);
+ // --- Manifest archive, north-west -----------------------------------------------------------
+ for(float y:{3.5f,6.f,8.5f,11.f})for(float x:{2.5f,4.2f,5.9f})m.fixtures.push_back({7,{x,y},0,1.5f,.45f,1.8f,0,true});
+ for(float y:{3.5f,6.f,8.5f,11.f})m.fixtures.push_back({38,{3.35f,y-.1f},1.2f,.3f,.08f,.32f,0,false});
+ wallSign(m,1.055f,7.2f,f+2.f,"MANIFEST ARCHIVE","SHIPPED / RECEIVED / VOID",2.2f,kPi*.5f);
+ // --- Switch room, north-east ----------------------------------------------------------------
+ wall(m,17.f,1,17.2f,5.f,f,ceil,21);wall(m,17.f,6.2f,17.2f,8.f,f,ceil,21);wall(m,17.f,5.f,17.2f,6.2f,f+2.3f,ceil,21);
+ wall(m,17.2f,7.8f,23.f,8.f,f,ceil,21);
+ for(float y:{2.f,3.f,4.f,5.f,6.f})m.fixtures.push_back({13,{22.75f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});
+ cableTray(m,{18.f,1.6f},{22.4f,1.6f},f+2.6f);
+ m.lights.push_back(lamp({20.f,4.5f},ceil-.16f,.8f,6.f,5200));
+ wallSign(m,16.945f,3.f,f+1.6f,"SWITCH ROOM","FREIGHT CONTROL / AUTHORIZED STAFF",1.6f,-kPi*.5f);
+ // --- Routing desks and the transfer yard board -------------------------------------------
+ wallSign(m,6.f,22.945f,f+1.5f,"TRANSFER YARD / ROUTING","CONVEYORS 22 / SORTING 23 / RAIL YARD 24",5.f,kPi);
+ for(float x:{3.8f,6.f,8.2f}){
+  m.fixtures.push_back({24,{x,19.8f},0,1.4f,.7f,.75f,0,true});
+  m.fixtures.push_back({26,{x,19.f},0,.55f,.55f,.95f,0,true});
+  m.fixtures.push_back({27,{x-.25f,19.9f},.75f,.42f,.4f,.38f,0,false});
+  m.fixtures.push_back({28,{x,19.62f},.75f,.45f,.16f,.03f,0,false});
+ }
+ wall(m,1.f,15.f,1.5f,19.f,f+1.2f,f+1.25f,2);
+ for(float y:{15.5f,16.5f,17.5f,18.5f})m.fixtures.push_back({30,{1.25f,y},1.25f,.5f,.4f,.42f,kPi*.5f,false});
+ wallSign(m,1.055f,13.8f,f+1.6f,"YARD CCTV","CAMERAS 01-04 / NO SIGNAL",1.4f,kPi*.5f);
+ // --- Routing supervisor's booth ------------------------------------------------------------------
+ office(m,18,18,f,"MANIFEST / ROUTING SHUTTERS","TRANSFER YARD: ROUTING AUTHORIZATION.","E / RELEASE THE DOWNSTREAM SHUTTERS.",stateId("freight_routing"),true);
+ m.fixtures.push_back({18,{18,17.15f},0,.417f,.525f,.95f,kPi,true});
+ board(m,12.f,15.6f,f+2.f,"MANIFEST CONTROL","FREIGHT RECORDS / ROUTING",3.f);
+ // --- Desk pod ----------------------------------------------------------------------------
+ wall(m,9.6f,9.97f,12.4f,10.03f,f+.75f,f+1.25f,21);
+ for(float cx:{10.3f,11.7f})for(int side=0;side<2;++side){float y=side?10.4f:9.6f,yaw=side?kPi:0;
+  m.fixtures.push_back({24,{cx,y},0,1.4f,.7f,.75f,yaw,true});
+  m.fixtures.push_back({26,{cx,side?y+.85f:y-.85f},0,.55f,.55f,.95f,yaw,true});
+  m.fixtures.push_back({27,{cx-.2f,side?y+.12f:y-.12f},.75f,.42f,.4f,.38f,yaw,false});
+ }
+ // --- Light ---------------------------------------------------------------------------------
+ for(float x:{4.f,12.f})for(float y:{4.f,11.f,18.f})m.lights.push_back(lamp({x,y},ceil-.16f,.9f,8.f,4000));
+ for(float y:{11.f,15.f})m.lights.push_back(lamp({20.f,y},ceil-.16f,.9f,8.f,4000));
+ m.pickupSpawns.push_back({{14.f,20.f},PickupKind::Ammo,f});
+ zone(m,"MANIFEST ROUTING / SWITCH ROOM",17.2f,1,23,7.8f);
+ freightFinish(m,21);
+ return p;
+}
+
 std::shared_ptr<const Map> make(int level){
  auto p=std::make_shared<Map>();auto& m=*p;m.name=CampaignMapNames[level];m.definition=CampaignChunks[level];m.definition.musicCue=MusicCue::Freight;
  float base=level==11||level==12?-25.f:level>=13&&level<=19?-25.f:level==22?-25.f:level==27||level==28?-28.f:level==29?-25.f:m.definition.spawnHeight;
@@ -3231,7 +3487,7 @@ std::shared_ptr<const Map> make(int level){
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
   result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();result[9]=makeWasteHandling();
-  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i); result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();result[14]=makeReceivingLanes();result[15]=makeWarehouseIntake();result[16]=makeWarehouseAB();result[17]=makeWarehouseC();
+  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i); result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();result[14]=makeReceivingLanes();result[15]=makeWarehouseIntake();result[16]=makeWarehouseAB();result[17]=makeWarehouseC();result[18]=makeWarehouseD();result[19]=makeWarehouseUpper();result[20]=makeManifestOffices();result[21]=makeManifestRouting();
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();return result;}();
  return maps.at(size_t(level));
 }
