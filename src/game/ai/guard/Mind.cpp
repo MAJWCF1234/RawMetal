@@ -247,12 +247,18 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
  if(mode==GuardState::Patrol){auto home=chunkOffset(m_friendlyActors[actor].homeLevel)-globalOrigin;const auto&patrol=config.patrol.at(size_t(point));goal=patrol.position+home;goalZ=patrol.z;
   bool arrived=lengthSq(goal-pose.position)<.25f*.25f&&std::fabs(goalZ-pose.z)<.3f;
   if(arrived){put("guard_return",0);int pause=get("guard_pause");if(!get("guard_arrived")){
-   put("guard_arrived",1);
+   put("guard_arrived",1);put("guard_post_yaw",int(std::lround(std::remainder(pose.yaw,2*kPi)*10000)));
    // Multi-point routes skip the spawn freeze when authored keys sit on patrol[0].
    // Single-point holds keep their authored pause for standing posts.
    if(config.patrol.size()>1&&!get("patrol_booted")){pause=0;put("patrol_booted",1);}else pause=patrol.pauseMs;
   }
-   pause=std::max(0,pause-ms);put("guard_pause",pause);if(pause==0){point=(point+1)%int(config.patrol.size());put("guard_point",point);put("guard_arrived",0);goal=config.patrol[size_t(point)].position+home;goalZ=config.patrol[size_t(point)].z;}
+   pause=std::max(0,pause-ms);put("guard_pause",pause);
+   // A guard waiting at a post on a route looks over it: it turns to the
+   // post's authored bearing and scans slowly either side, rather than
+   // freezing along the line it walked in on.
+   if(pause>0&&config.patrol.size()>1){float base=std::isfinite(patrol.look)?patrol.look:get("guard_post_yaw")*.0001f,t=(patrol.pauseMs-pause)*.001f;
+    float want=base+std::sin(t*1.1f)*.6f*std::min(1.f,t*.8f);pose.yaw+=std::clamp(std::remainder(want-pose.yaw,2*kPi),-2.2f*dt,2.2f*dt);}
+   if(pause==0){point=(point+1)%int(config.patrol.size());put("guard_point",point);put("guard_arrived",0);goal=config.patrol[size_t(point)].position+home;goalZ=config.patrol[size_t(point)].z;}
   }wantsMove=!arrived||!get("guard_arrived");if(wantsMove)guardRoute(level,actor,goal+globalOrigin,goalZ,ms,goal,goalZ);
  }
  if(mode==GuardState::Search||mode==GuardState::Suspicious){put("guard_route_next",0);put("guard_route_wait",0);}

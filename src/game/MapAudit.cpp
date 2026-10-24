@@ -221,6 +221,11 @@ bool Game::auditMap(int level){
     for(float feet:visited[size_t(cy*N+cx)]){if(!onWalkway(centre,feet))continue;float head=std::min(feet+Player::StandingHeight+.1f,w.clearanceAbove(centre.x,centre.y,feet+.05f));if(lo<head&&hi>feet+.25f){through=true;break;}}
     if(!isVertical)for(const auto& layer:w.layers())if(layer.thickness>0&&layer.rows[size_t(std::clamp(int(q.y),0,23))][size_t(std::clamp(int(q.x),0,23))]=='='&&p.z-radius<layer.elevation&&p.z+radius>layer.elevation-layer.thickness)slab=true;
    }
+   // A drum or vessel standing wholly on a solid prop (a pallet, a skid)
+   // occupies ground the player cannot stand on anyway.
+   if(through&&isVertical){float bottom=std::min(p.z,z1);
+    for(const auto& f:w.fixtures()){if(!f.solid)continue;float fb=w.floorHeight(f.position.x,f.position.y)+f.base,c=std::cos(f.yaw),sn=std::sin(f.yaw),dx=p.start.x-f.position.x,dy=p.start.y-f.position.y;
+     if(std::fabs(bottom-(fb+f.height))<.03f&&std::fabs(dx*c-dy*sn)+radius<=f.width*.5f+.02f&&std::fabs(dx*sn+dy*c)+radius<=f.depth*.5f+.02f){through=false;break;}}}
    if(through)fail("PIPE THROUGH WALKWAY "+name);
    if(slab)fail("PIPE THROUGH DECK "+name);
    // Anchored ends. A wide vertical cylinder is a vessel or drum: its top is free.
