@@ -4,6 +4,40 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.10.0 - Rebuilt facility update (2026-10-24)
+
+Every campaign map from the Foundry to the Deep Junction is rebuilt from
+scratch. Each keeps its name, its purpose and its story beats; everything
+else is new.
+
+- **The facility (maps 0-9).** Foundry, Pressure Works, Turbine Gantry with
+  its catwalks, the Reactor Complex stitched across three chunks, Service
+  Gallery, Coolant Return, Cable Vaults, Pump Annex, Utility Junction and
+  Waste Handling.
+- **The freight district (maps 10-31).** Freight Access, the lift machinery
+  and auxiliary lift, the receiving floor and lanes, the high-bay warehouse
+  (A-B, C, D and upper racks), the manifest offices and routing wing, the
+  transfer conveyors, sorting and rail yard, Platform 3, the rolling-stock
+  depot, the maintenance bore and the deep junction.
+- **Purchased-library dressing.** Shipping containers on flat wagons, drums,
+  storage tanks, gas cylinders and road blocks, and a full subway car (Train
+  27) with platform furniture, ticket machines and a vending machine.
+- **Offices built like offices.** Glazed partitions, fabric cubicles with
+  workstations that face their seats, suspended ceilings with troffers,
+  meeting, records, archive and switch rooms.
+- **A continuous rail network** from the platform through the depot and the
+  bore to the junction, with no tracks into walls.
+- **Smarter Cleanup patrols.** Guards walk real beats and scan from their
+  posts instead of pacing.
+- **Rendering.** Auto exposure, the AgX-free display curve, coloured blackbody
+  lamps, wet reflections, combat effects, crater bullet holes and a visible
+  autofocus rack on the cinematic lens.
+- **Neural textures, round 3.** 45 more textures ship as x2 neural textures.
+- **27,915,264-byte EXE / 26.62 MiB**, **5.38 MiB free** under the 32 MiB ceiling.
+- All 27 test suites pass and every rebuilt map passes the placement audit.
+
+---
+
 ## v0.9.0 - Light update (2026-10-24)
 
 A rendering update on top of v0.8.0's Night Shift content.
