@@ -32,6 +32,7 @@ int g_texturePresentScale = 1;
 bool g_crispTexels = true;
 bool g_postProcessing = true; // GPU post pass: occlusion, haze, bloom, grade
 bool g_pixelLighting = true; // GPU per-pixel lamps with cube shadow maps
+bool g_temporalAA = true; // windowed temporal anti-aliasing
 int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){ return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
@@ -104,6 +105,8 @@ void SoftwareRenderer::setPostProcessing(bool enabled,bool occlusionView){g_post
 bool SoftwareRenderer::postProcessing(){return g_postProcessing;}
 void SoftwareRenderer::setPixelLighting(bool enabled){g_pixelLighting=enabled;}
 bool SoftwareRenderer::pixelLighting(){return g_pixelLighting;}
+void SoftwareRenderer::setTemporalAA(bool enabled){g_temporalAA=enabled;}
+bool SoftwareRenderer::temporalAA(){return g_temporalAA;}
 void SoftwareRenderer::setDetailLayer(int mode){g_detailLayer=mode;}
 int SoftwareRenderer::detailLayer(){return g_detailLayer;}
 bool SoftwareRenderer::enableHardware(void* window){
@@ -959,7 +962,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
     std::vector<std::array<float,5>> nearest;for(auto&entry:order)nearest.push_back(lamps[entry.second]);lamps.swap(nearest);}
    m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);
   }
-  m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
+  m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
