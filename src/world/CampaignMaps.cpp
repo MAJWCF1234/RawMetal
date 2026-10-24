@@ -75,11 +75,20 @@ void wallLamp(Map& m,float x,float y,float z,float yaw,float intensity=1.f,float
  m.lights.push_back({{x,y},z,WorldLightMount::Wall,yaw,intensity,range});
 }
 void servicePipe(Map& m,Vec2 a,Vec2 b,float z,float radius,int paint){
+ // An end within 0.7 m of a perimeter wall runs on into the wall face.
+ // Across an open seam the run continues to the chunk edge, into the next hall.
+ auto snap=[&](float& v,bool openLow,bool openHigh){if(v<1.7f&&v>.9f)v=openLow?0.f:1.f;else if(v>22.3f&&v<23.1f)v=openHigh?24.f:23.f;};
+ if(std::fabs(a.x-b.x)<.01f){snap(a.y,m.openNorth,m.openSouth);snap(b.y,m.openNorth,m.openSouth);}
+ else if(std::fabs(a.y-b.y)<.01f){snap(a.x,m.openWest,m.openEast);snap(b.x,m.openWest,m.openEast);}
  m.pipes.push_back({a,b,z,radius,z,paint});
  Vec2 d=b-a;float length=std::sqrt(d.x*d.x+d.y*d.y);if(length<.01f)return;
  Vec2 unit=d*(1.f/length);
  for(float t=.4f;t<length;t+=2.5f){Vec2 c=a+unit*t;
   m.pipes.push_back({c-unit*.045f,c+unit*.045f,z,radius*1.32f,z,2});
+  // The clamp hangs from the nearest surface overhead: a deck or the roof.
+  float top=m.definition.ceiling-.05f;int tx=int(std::floor(c.x)),ty=int(std::floor(c.y));
+  if(tx>=0&&ty>=0&&tx<24&&ty<24)for(const auto& l:m.layers)if(l.thickness>0&&l.rows[size_t(ty)][size_t(tx)]=='='&&l.elevation-l.thickness>z)top=std::min(top,l.elevation-l.thickness-.04f);
+  if(top>z+radius+.05f)m.pipes.push_back({c,c,z+radius*1.32f,.022f,top,6});
  }
 }
 void wallSign(Map& m,float x,float y,float z,const char* title,const char* subtitle,float width=2.f,float yaw=kPi){
@@ -105,6 +114,8 @@ void serviceCeiling(Map& m,float x1,float y1,float x2,float y2,float roof){
  for(float x:{x1+.35f,x2-.45f}){
   servicePipe(m,{x,y1},{x,y2},roof-.37f,.085f,x<x1+1?3:4);
   for(float y=y1+.5f;y<y2;y+=3.f)wall(m,x-.16f,y,x+.16f,y+.065f,roof-.50f,roof,2);
+  // End straps at both ends of the soffit run.
+  for(float y:{y1-.02f,y2-.16f})wall(m,x-.16f,y,x+.16f,y+.18f,roof-.50f,roof,2);
  }
 }
 void warehouseServices(Map& m,float floor,float roof){
@@ -153,7 +164,7 @@ void receivingCleanup(Map& m){
  ScriptAction item;item.type=ScriptAction::Type::GiveItem;item.id=stateId("flashlight");item.value=1;cache.actions.push_back(item);m.scriptEvents.push_back(cache);
  wall(m,6.1f,17.3f,9,17.5f,-25,-23.15f,15);wall(m,6.1f,17.3f,9,17.5f,-23.25f,-23.15f,13);
  m.signs.push_back({{7.5f,17.52f},-23.8f,2.7f,.5f,0,"CLEANUP / HOLD","WEST / Q KO / E GRAB"});
- wallLamp(m,7.5f,17.56f,-23.4f,kPi*.5f,1.3f,5);
+ wallLamp(m,7.5f,17.52f,-23.4f,kPi*.5f,1.3f,5);
  // A real, player-operable pressure door gives the fleeing member a head start.
  wall(m,1,23.4f,10.5f,23.6f,-25,-22,15);wall(m,13.5f,23.4f,23,23.6f,-25,-22,15);
  Door retreat{10.5f,13.5f,23.5f,0};retreat.open=1;retreat.opening=true;m.doors.push_back(retreat);
@@ -195,13 +206,26 @@ void intakeBay(Map& m){
  m.pipes.push_back({{12.14f,17},{12.25f,17},-22.55f,.035f,-22.45f,2});
  m.fixtures.push_back({8,{18.3f,22.7f},1.f,.75f,.15f,1.f,kPi,false});
  m.lights.clear();m.lights.push_back({{12,20},-20.8f});
- wallLamp(m,6.4f,22.74f,-22.7f,-kPi*.5f,1.6f,8.f);
- wallLamp(m,17.6f,22.74f,-22.7f,-kPi*.5f,1.6f,8.f);
+ wallLamp(m,6.2f,22.79f,-22.7f,-kPi*.5f,1.6f,8.f);
+ wallLamp(m,17.8f,22.79f,-22.7f,-kPi*.5f,1.6f,8.f);
  m.definition.ambient=.38f;
 }
 void rail(Map& m,float x,float y1,float y2,float z){
  for(float dx:{-.7f,.7f})wall(m,x+dx-.045f,y1,x+dx+.045f,y2,z,z+.07f,2);
  for(float y=y1;y<y2;y+=.8f)wall(m,x-1.f,y,x+1.f,y+.12f,z-.02f,z+.015f,2);
+}
+// A running line along y at x: it continues through an open seam and ends
+// at a buffer stop (steel frame, timber beam, hazard face) against a wall.
+void trackRun(Map& m,float x,float floor){
+ float y1=m.openNorth?0.f:1.9f,y2=m.openSouth?24.f:22.1f;
+ rail(m,x,y1,y2,floor);
+ auto stop=[&](float y,float dir){
+  for(float dx:{-.7f,.7f}){wall(m,x+dx-.05f,y,x+dx+.05f,y+dir*.9f,floor,floor+.07f,2);wall(m,x+dx-.06f,y+dir*.82f,x+dx+.06f,y+dir*.9f,floor,floor+1.15f,12);}
+  wall(m,x-1.f,std::min(y+dir*.9f,y+dir*.9f-dir*.25f),x+1.f,std::max(y+dir*.9f,y+dir*.9f-dir*.25f),floor+.7f,floor+1.f,10);
+  wall(m,x-1.f,y+dir*.9f-(dir>0?.26f:-.01f),x+1.f,y+dir*.9f-(dir>0?.25f:-.02f),floor+.72f,floor+.98f,13);
+  m.structures.push_back({x-1.f,std::min(y,y+dir*.9f),x+1.f,std::max(y,y+dir*.9f),floor,floor+1.15f,false,6});
+ };
+ if(!m.openNorth)stop(1.f,1.f);if(!m.openSouth)stop(23.f,-1.f);
 }
 void locomotive(Map& m,float x,float y,float floor,bool stripped=false){
  // Rail gauge, underframe and bogies share one centreline. The suspended
@@ -2005,7 +2029,7 @@ std::shared_ptr<const Map> make(int level){
   for(float x:{9.25f,14.7f})wall(m,x,9,x+.12f,16,-25,0,2);
  m.doors.back().requireState=stateId("freight_descended");
  machineryClock(m,"lift_distant_motion",12000);
- actor(m,"lift_distant_motion",ActorVisual::Huntsman,1.5f,{{0,{6,18},-16,0},{2000,{6,18},-16,0},{3600,{17,18},-16,0},{12000,{17,18},-16,0}});
+ actor(m,"lift_distant_motion",ActorVisual::Huntsman,1.5f,{{0,{6,18},-16,0},{2000,{6,18},-16,0},{3600,{17,18},-16,0},{8000,{17,18},-16,kPi},{10400,{6,18},-16,kPi},{12000,{6,18},-16,0}});
  deck(m,-16,6,17,18,19);cargo(m,17,18,-16);
   {Door gate{9.5f,14.5f,10.f,0,false,false,false,13.f};gate.requireState=stateId("freight_release");m.doors.insert(m.doors.begin(),gate);}
   wallLamp(m,1.01f,6,-10.1f,0,1.35f,8.f);wallLamp(m,22.99f,6,-10.1f,kPi,1.35f,8.f);
@@ -2122,7 +2146,7 @@ std::shared_ptr<const Map> make(int level){
   wall(m,13,11.2f,13.10f,14.6f,-24.8f,-24.1f,12);
   wall(m,16.10f,11.2f,16.2f,14.6f,-24.8f,-24.1f,12);
   wall(m,13,11,16.2f,14.8f,-21,-20.85f,2);
-  servicePipe(m,{13.7f,11},{13.7f,14.8f},-21.3f,.10f,3);
+  servicePipe(m,{13.7f,11.1f},{13.7f,14.7f},-21.11f,.10f,3);
   wallLamp(m,13.21f,14.7f,-22.6f,0,1.5f,6.f);
   wallLamp(m,22.99f,8,-22.5f,kPi,1.5f,8.f);
   for(float yy:{4.f,15.f,21.f}){wall(m,22.1f,yy,23,yy+.7f,-25,-1,15);wallLamp(m,22.09f,yy+.35f,-22.6f,kPi,1.3f,7.f);}
@@ -2144,7 +2168,7 @@ std::shared_ptr<const Map> make(int level){
   serviceCeiling(m,18.4f,17.8f,23,21,-21.45f);
   wall(m,22.75f,17.8f,23,21,-25,-21.3f,15);
   wallLamp(m,22.74f,19,-22.7f,kPi,1.4f,7.f);
-  wallSign(m,20.4f,22.74f,-22.8f,"INTAKE / LOCAL CONTROL","CHECK SEALS BEFORE TRANSFER",2.3f);
+  wallSign(m,20.4f,22.945f,-22.8f,"INTAKE / LOCAL CONTROL","CHECK SEALS BEFORE TRANSFER",2.3f);
   break;
  case 16:case 17:case 18:case 19:
   board(m,19.35f,4.8f,-22.8f,level==16?"B / MAINTENANCE SPARES":level==17?"C / CHEMICALS":level==18?"D / RESTRICTED":"E / LONG TERM","STORAGE / KEEP AISLES CLEAR",2.6f);
@@ -2188,7 +2212,7 @@ std::shared_ptr<const Map> make(int level){
    for(float x:{2.f,5.9f,9.85f})wall(m,x,23.85f,x+.15f,24,-6.15f,-4.35f,2);
   }
   if(level==18){machineryClock(m,"upper_rack_noise",23000);cue(m,"upper_rack_noise",7000,Sound::JunkMetal,{19,14},"",.9f,-6.7f);cue(m,"upper_rack_noise",16000,Sound::SpiderCall,{19,14},"",.5f);for(float yy:{12.f,13.f,14.f})wall(m,18,yy,21,yy+.15f,-7,-6.85f,10);board(m,19.5f,16,-4.7f,"RACK ACCESS CLOSED","OVERHEAD STOCK DISPLACED",2.7f);}
-  if(level==17||level==18)m.creatureSpawns={{CreatureKind::Huntsman,{20,11},entry},{CreatureKind::Wasp,{12,18},entry+2}};
+  if(level==17||level==18)m.creatureSpawns={{CreatureKind::Huntsman,{20,11},entry},{CreatureKind::Wasp,{12,18},entry}};
   m.pickupSpawns.push_back({level==19?Vec2{21,12}:Vec2{12,3},PickupKind::Ammo,entry});
   m.lights.clear();for(float z:{-22.5f,-16.5f,-10.5f})for(float y:{6.f,14.f})for(float x:{6.6f,16.4f}){
    m.lights.push_back({{x,y},z});float anchor=x<10?5.3f:17.5f;
@@ -2260,7 +2284,10 @@ std::shared_ptr<const Map> make(int level){
   break;
  case 22:
   machineryClock(m,"transfer_belts",14000);
-  for(float y:{7.f,15.f})actor(m,"transfer_belts",ActorVisual::Cargo,.7f,{{0,{2,y+.35f},-4.7f,0},{4000,{8,y+.35f},-4.7f,0},{6500,{8,y+.35f},-4.7f,0},{12000,{21,y+.35f},-4.7f,0},{14000,{2,y+.35f},-4.7f,0}},true);
+  for(float y:{7.f,15.f})actor(m,"transfer_belts",ActorVisual::Cargo,.7f,{{0,{2,y+.35f},-4.7f,0},{4000,{8,y+.35f},-4.7f,0},{6500,{8,y+.35f},-4.7f,0},{12000,{22.2f,y+.35f},-4.7f,0},{12001,{22.2f,y+.35f},-40.f,0},{13999,{1.8f,y+.35f},-40.f,0},{14000,{1.8f,y+.35f},-4.7f,0}},true);
+  // Feed hoods at both ends of each belt: the freight enters and leaves
+  // through them, out of the player's sight.
+  for(float y:{7.f,15.f})for(float x:{1.f,21.6f}){wall(m,x,y-.1f,x+1.4f,y+.9f,-4.75f,-3.6f,12);wall(m,x,y-.1f,x+1.4f,y+.9f,-3.6f,-3.45f,8);}
   cue(m,"transfer_belts",100,Sound::Machine,{8,7},"",.35f);
   // Three stair flights carry the player down alongside live conveyor spines.
   m.stairs={{3,4,6,13,-13,-7,32,true,false},{8,13,17,16,-19,-13,32,false,false},{17,18,20,23,-25,-19,32,true,false}};
@@ -2310,7 +2337,7 @@ std::shared_ptr<const Map> make(int level){
   for(float x:{2.8f,12.f})wall(m,x,14.8f,x+.2f,15,-25,-17.7f,12);
   for(float x:{2.8f,12.f})wall(m,x,14.8f,x+.2f,16.1f,-18,-17.7f,12);
   board(m,5,18.5f,-22.5f,"MAINTENANCE CRADLE","AUTOMATIC TRANSFER / STAND CLEAR",2.4f);
-  for(float x:{7.f,17.f})rail(m,x,1,23,-25);
+  for(float x:{7.f,17.f})trackRun(m,x,-25);
   container(m,2,6,-25,false);office(m,20,18,-25,"TRANSFER / SIGNAL ROUTING","DEPOT / PLATFORMS / DEEP FREIGHT.","PLATFORM 3: SERVICE ACCESS ONLY.");
   wall(m,8,6,17,6.4f,-9,-8.7f,2);
   // A scale and sheltered signal desk establish the rail transfer function.
@@ -2323,7 +2350,7 @@ std::shared_ptr<const Map> make(int level){
  case 25:case 26:
   board(m,12,8,-22.2f,"PLATFORM 3","TRAIN 27 / ARRIVED 02:13",4.2f);
   if(level==26)board(m,12,22,-22.3f,"DEPOT ACCESS","EMPLOYEE TRANSIT",3.f);
-  rail(m,7,1,23,-25);rail(m,18,1,23,-25);
+  trackRun(m,7,-25);trackRun(m,18,-25);
   for(float y:{10.f,18.f})bench(m,14.5f,y,-25);
   // Trackside fences separate transit from freight, with gaps at entry/exit.
   for(float x:{9.f,16.f})m.structures.push_back({x,4,x+.07f,21,-25,-23.95f,true,2});
@@ -2340,7 +2367,7 @@ std::shared_ptr<const Map> make(int level){
   break;
  case 27:
   board(m,12,6,-22.2f,"ROLLING STOCK","ENGINE 04 / MAINTENANCE",3.f);
-  for(float x:{7.f,17.f})rail(m,x,1,23,-25);
+  for(float x:{7.f,17.f})trackRun(m,x,-25);
   deck(m,-25,1,4,11,10);deck(m,-25,13,4,23,24);
   m.stairs.push_back({3,9,6,18,-28,-25,16,true,false});
   locomotive(m,17,8,-25);
@@ -2350,7 +2377,7 @@ std::shared_ptr<const Map> make(int level){
   terminal(m,{18,18},"DEPOT / MAINTENANCE LOG","ENGINE 04: DRIVER ATTEMPTED EVACUATION.","VEHICLE STOPPED AT THE BARRICADE.",3);
   break;
  case 28:
-  rail(m,7,1,23,-25);rail(m,17,1,23,-25);
+  trackRun(m,7,-25);trackRun(m,17,-25);
   // A suspended chassis straddles the reachable inspection pit.
   locomotive(m,17,5,-25,true);
   m.lights.push_back({{14.5f,7},-23.f});
@@ -2396,26 +2423,27 @@ std::shared_ptr<const Map> make(int level){
    m.fixtures.push_back({7,{2,y},3.f,1.4f,.5f,1.8f,-kPi*.5f,true});
    floorLine(m,1.3f,y-1,3.f,y-.9f,-25,13);
   }
-  board(m,21,13,-22.8f,"ENGINE 04 / TOOL BAY","BOGIE SERVICE / RETURN TOOLS",2.8f);
+  board(m,21,13,-22.8f,"ENGINE 02 / TOOL BAY","STRIPPED FOR BOGIE SERVICE",2.8f);
   m.fixtures.push_back({22,{21,16},3.f,.718f,.453f,1.2f,-kPi*.5f,true});
   m.fixtures.push_back({21,{21,19},3.f,1.68f,1.68f,1.2f,0,true});
   wallLamp(m,22.99f,6,-22.8f,kPi,1.3f,7.f);wallLamp(m,22.99f,16,-22.8f,kPi,1.3f,7.f);
   break;
  case 29:
-  machineryClock(m,"depot_roof_movement",24000);actor(m,"depot_roof_movement",ActorVisual::Huntsman,1.5f,{{0,{19,6},-16,0},{6000,{19,6},-16,0},{8500,{19,14},-16,kPi*.5f},{11000,{19,17},-19,kPi*.5f},{24000,{19,17},-19,kPi*.5f}});
+  machineryClock(m,"depot_roof_movement",24000);actor(m,"depot_roof_movement",ActorVisual::Huntsman,1.5f,{{0,{19,6},-16,0},{6000,{19,6},-16,0},{8500,{19,14},-16,kPi*.5f},{11000,{19,17},-19,kPi*.5f},{17000,{19,17},-19,-kPi*.5f},{19500,{19,14},-16,-kPi*.5f},{22000,{19,6},-16,-kPi*.5f},{24000,{19,6},-16,0}});
   wall(m,18.6f,5.7f,19.4f,14.5f,-16.2f,-16,12);for(float yy:{6.f,14.f})wall(m,19.3f,yy,19.5f,yy+.15f,-25,-16,12);
   cue(m,"depot_roof_movement",7000,Sound::JunkMetal,{19,12},"",.8f);
   deck(m,-19,1,4,7,22);deck(m,-19,17,4,23,22);
   m.stairs.push_back({3,13,6,22,-25,-19,32,true,false});
-  for(float x:{7.f,17.f})rail(m,x,1,23,-25);
-  locomotive(m,17,4,-25);
+  for(float x:{7.f,17.f})trackRun(m,x,-25);
+  // Two freight flats stand on the line with their loads still chained.
+  for(float y:{3.f,12.f}){locomotive(m,17,y,-25,true);cargo(m,17,y+2.f,-23.7f);cargo(m,17,y+5.f,-23.7f,false);}
   m.lights.push_back({{17,7},-20.5f});
   m.creatureSpawns={{CreatureKind::Huntsman,{20,15},-19}};
   terminal(m,{12,22},"DEEP CARGO ROUTE","POWER DISTRIBUTION / RESTRICTED INDUSTRIAL ACCESS.","BEYOND THIS POINT: NO EMPLOYEE TRANSIT.");
   break;
  case 30:case 31:
   board(m,5,11.5f,-22.7f,level==30?"TUNNEL 4A":"DEEP JUNCTION","POWER DISTRIBUTION",2.8f);
-  for(float x:{7.f,17.f})rail(m,x,1,23,-25);
+  for(float x:{7.f,17.f})trackRun(m,x,-25);
   wall(m,11,1,11.2f,10,-25,-19,3);wall(m,11,14,11.2f,23,-25,-19,3);
   for(float y:{3.f,7.f,11.f,15.f,19.f})m.pipes.push_back({{1.2f,y},{22.8f,y},-19.4f,.06f});
   if(level==30){m.waterVolumes.push_back({14,5,20,12,-25.35f,-25.1f});office(m,4,17,-25,"SIGNAL ROOM / TUNNEL 4A","MAIN LINE CLOSED / PARALLEL BORE AVAILABLE.","POWER DISTRIBUTION: DEEP JUNCTION.");
