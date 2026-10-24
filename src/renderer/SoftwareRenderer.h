@@ -60,6 +60,8 @@ public:
     // Temporal anti-aliasing in the window (headless captures stay exact).
     static void setTemporalAA(bool enabled);
     static bool temporalAA();
+    static void setTiltShift(bool enabled);
+    static bool tiltShift();
     float gripError()const{return m_gripError;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,

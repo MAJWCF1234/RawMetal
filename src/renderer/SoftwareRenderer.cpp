@@ -33,6 +33,7 @@ bool g_crispTexels = true;
 bool g_postProcessing = true; // GPU post pass: occlusion, haze, bloom, grade
 bool g_pixelLighting = true; // GPU per-pixel lamps with cube shadow maps
 bool g_temporalAA = true; // windowed temporal anti-aliasing
+bool g_tiltShift = true; // windowed tilt-shift stylisation
 int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){ return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
@@ -106,6 +107,8 @@ bool SoftwareRenderer::postProcessing(){return g_postProcessing;}
 void SoftwareRenderer::setPixelLighting(bool enabled){g_pixelLighting=enabled;}
 bool SoftwareRenderer::pixelLighting(){return g_pixelLighting;}
 void SoftwareRenderer::setTemporalAA(bool enabled){g_temporalAA=enabled;}
+void SoftwareRenderer::setTiltShift(bool enabled){g_tiltShift=enabled;}
+bool SoftwareRenderer::tiltShift(){return g_tiltShift;}
 bool SoftwareRenderer::temporalAA(){return g_temporalAA;}
 void SoftwareRenderer::setDetailLayer(int mode){g_detailLayer=mode;}
 int SoftwareRenderer::detailLayer(){return g_detailLayer;}
@@ -951,15 +954,15 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   // Per-pixel lamps: every resident lamp in world space, in stable order so
   // shadow maps are reused until the set itself changes.
   if(g_pixelLighting!=m_pixelLighting){m_pixelLighting=g_pixelLighting;m_chunkLighting={};m_chunkNormalLighting={};m_gpu->clearStaticCaches();}
-  {std::vector<std::array<float,5>> lamps;
+  {std::vector<std::array<float,7>> lamps;
    for(int level=0;level<game.chunkCount();++level){if(level!=game.level()&&!game.chunkResident(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
-    for(const auto&lamp:chunk.lights()){if((chunk.campaignChunk(3)&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity});}
+    for(const auto&lamp:chunk.lights()){if((chunk.campaignChunk(3)&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint});}
    }
    if(lamps.size()>256){Point3 eye{game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye};
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}
     std::nth_element(order.begin(),order.begin()+256,order.end());order.resize(256);std::sort(order.begin(),order.end(),[](const auto&a,const auto&b){return a.second<b.second;});
-    std::vector<std::array<float,5>> nearest;for(auto&entry:order)nearest.push_back(lamps[entry.second]);lamps.swap(nearest);}
+    std::vector<std::array<float,7>> nearest;for(auto&entry:order)nearest.push_back(lamps[entry.second]);lamps.swap(nearest);}
    m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);
   }
   // Sun cascades: three view-frustum slices, each a texel-snapped square in
@@ -979,7 +982,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
     }
    }
    m_gpu->setSun(sunData);}
-  m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
+  m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setTiltShift(g_tiltShift);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
@@ -1027,7 +1030,9 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
 namespace retro {
 void SoftwareRenderer::saveSunCascades(const char*prefix){if(m_gpu)m_gpu->saveSunCascades(prefix);}
 bool SoftwareRenderer::saveSceneCapture(const char*path){
- if(!m_gpu)return false;std::vector<uint32_t> pixels;int width=0,height=0;m_gpu->captureScene(pixels,width,height);
+ if(!m_gpu)return false;std::vector<uint32_t> pixels;std::vector<float> depth;int width=0,height=0;m_gpu->captureScene(pixels,width,height,&depth);
+ // Planar depth beside the image (raw float32), for offline composite previews.
+ if(!depth.empty()){std::ofstream depthFile(std::string(path)+".depth",std::ios::binary);depthFile.write(reinterpret_cast<const char*>(depth.data()),std::streamsize(depth.size()*sizeof(float)));}
  std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}return true;
 }
 void SoftwareRenderer::saveVrEye(const char*path){std::vector<uint32_t> pixels;m_gpu->captureVrEye(pixels);auto [width,height]=m_gpu->surfaceExtent();std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}}

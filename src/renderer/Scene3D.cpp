@@ -392,7 +392,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
   if(movingGeometry){
-   float brightness=(w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.24f)+.04f*std::max(normal.z,0.f);
+   float brightness=(w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f);
    for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(d2<.001f||weight<=0)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
     if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
@@ -434,7 +434,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     }
     accessibility=1.f-.68f*occlusion*.25f;
    }
-   brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.24f)+.04f*std::max(normal.z,0.f))*accessibility;
+   brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
     auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;

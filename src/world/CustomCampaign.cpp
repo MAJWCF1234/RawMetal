@@ -159,12 +159,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     {number(f,8,"prop half x"),number(f,9,"prop half y")},number(f,10,"prop base")});
    if(map->props.back().kind<0||map->props.back().kind>=4)throw std::runtime_error("invalid prop model");
   }else if(tag=="LIGHT"){
-   if(f.size()<5||f.size()>9)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
+   if(f.size()<5||f.size()>11)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
    WorldLight light{{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")};
    if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>1)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
    if(f.size()>=7&&!f[6].empty())light.yaw=number(f,6,"light yaw");
    if(f.size()>=8&&!f[7].empty())light.intensity=number(f,7,"light intensity");
    if(f.size()>=9&&!f[8].empty())light.range=number(f,8,"light range");
+   if(f.size()>=10&&!f[9].empty()){light.kelvin=number(f,9,"light kelvin");if(light.kelvin<1000||light.kelvin>12000)throw std::runtime_error("light kelvin must be 1000 through 12000");}
+   if(f.size()>=11&&!f[10].empty()){light.tint=number(f,10,"light tint");if(light.tint<-1||light.tint>1)throw std::runtime_error("light tint must be -1 through 1");}
    map->lights.push_back(light);
   }else if(tag=="TERMINAL"){
    if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);AuthoredTerminalData t;

@@ -1,7 +1,10 @@
 #version 450
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(set=0,binding=1) uniform sampler2D hudImage;
-layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; float vrMode; float alarm; float postBloom; } params;
+// Exposure stage output: b holds the eased focus distance.
+layout(set=0,binding=2) uniform sampler2D exposureImage;
+layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; float vrMode; float alarm; float postBloom;
+ float lensAperture; float filmTime; float lensPad; float aspect; } params;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 color;
 vec3 highlight(vec2 p){
@@ -25,6 +28,42 @@ vec3 displayCurve(vec3 c){
  float dl=dot(d,vec3(0.2126,0.7152,0.0722));
  return clamp(dl+Outset*(d-dl),0.0,1.0);
 }
+// Cinematic lens, at first person. A thin lens focused at distance f images
+// a point at depth d as a disc of diameter proportional to |1/f - 1/d|: the
+// circle of confusion. Focus comes eased from the exposure stage (a focus
+// puller racking to the crosshair). The viewmodel (negative depth) is held
+// sharp so the hands stay readable.
+float circleOfConfusion(float depth,float focus){
+ if(depth<0.0)return 0.0;
+ float d=depth>0.02?depth:200.0;
+ return clamp(params.lensAperture*0.045*abs(1.0/focus-1.0/d),0.0,0.032);
+}
+// Lateral chromatic aberration: red and blue land at slightly different
+// magnifications, growing with the square of the distance from the axis.
+vec3 lensSample(vec2 p){
+ vec2 c=p-0.5;float k=params.lensAperture*0.0016*dot(c*vec2(params.aspect,1.0),c*vec2(params.aspect,1.0));
+ return vec3(texture(sceneImage,clamp(0.5+c*(1.0+k),vec2(0.0),vec2(1.0))).r,texture(sceneImage,p).g,texture(sceneImage,clamp(0.5+c*(1.0-k),vec2(0.0),vec2(1.0))).b);
+}
+vec3 depthOfField(vec2 p,vec3 sharp){
+ float focus=max(texture(exposureImage,vec2(0.5)).b,0.5);
+ float depth=texture(sceneImage,p).a;float coc=circleOfConfusion(depth,focus);
+ if(coc<0.0008)return sharp;
+ vec3 sum=sharp;float weight=1.0;
+ for(int i=1;i<32;++i){
+  // Vogel spiral: even disc coverage, the shape of a round aperture.
+  float r=sqrt(float(i)/31.0)*coc,a=float(i)*2.3999632;
+  vec2 q=p+vec2(cos(a)/params.aspect,sin(a))*r;
+  vec4 c=texture(sceneImage,clamp(q,vec2(0.0),vec2(1.0)));
+  // Scatter-as-gather: a sample spreads here only if its own disc reaches.
+  float sampleCoc=c.a<0.0?0.0:circleOfConfusion(c.a,focus);
+  float reach=smoothstep(r*0.6,r,max(sampleCoc,coc*step(depth,c.a)));
+  // Bright points carry more energy into the disc: highlights become bokeh.
+  float w=reach*(1.0+dot(c.rgb,vec3(0.2126,0.7152,0.0722))*1.5);
+  sum+=c.rgb*w;weight+=w;
+ }
+ return sum/weight;
+}
+float filmHash(vec2 v){uvec2 q=uvec2(ivec2(v)+ivec2(65536));uint h=q.x*1664525u+q.y*1013904223u+uint(params.filmTime*24.0)*2654435761u;h^=h>>16;h*=0x7feb352du;h^=h>>15;return float(h&0xffffffu)/16777216.0;}
 vec3 focusedScene(vec2 p){
  // Fixed-distance depth of field created a visible world-space focus shell
  // around the player. Keep the low-resolution scene crisp and let material,
@@ -35,6 +74,7 @@ void main(){
  vec2 centered=(uv-.5)*2.0;float radius=length(centered);float edge=clamp((radius-.48)/.52,0.0,1.0);edge=edge*edge*(3.0-2.0*edge);
  vec2 pixel=1.0/vec2(textureSize(sceneImage,0));vec2 shift=normalize(centered+vec2(1e-5))*pixel*2.0*edge*clamp(params.shotKick,0.0,1.0);
  vec3 scene=focusedScene(uv);
+ if(params.lensAperture>0.0)scene=depthOfField(uv,lensSample(uv));
  if(params.shotKick>0.001){scene.r=texture(sceneImage,uv+shift).r;scene.b=texture(sceneImage,uv-shift).b;}
  // Only bright emitters bleed. Blur their highlights, never the base image or
  // the full-resolution HUD, so low-resolution textures stay visibly crisp.
@@ -44,6 +84,8 @@ void main(){
  bloom+=0.5*(highlight(uv+vec2(11.0,7.0)*glowPixel)+highlight(uv-vec2(11.0,7.0)*glowPixel)
             +highlight(uv+vec2(11.0,-7.0)*glowPixel)+highlight(uv-vec2(11.0,-7.0)*glowPixel));
  // The post pass already added a wider bloom.
+ // Halation: light scattered back through film's red layer around highlights.
+ if(params.lensAperture>0.0)scene+=bloom*vec3(0.06,0.018,0.006);
  if(params.hdrScene>0.5&&params.postBloom<0.5)scene+=bloom*0.07;
  else scene+=min(bloom*0.10,vec3(0.12));
  scene*=params.sceneDim;
@@ -55,5 +97,13 @@ void main(){
  // The HDR scene attachment stores linear radiance. Apply the same exposure
  // as the headless capture path before the display transfer.
  vec3 displayScene=params.hdrScene>0.5?displayCurve(scene):scene;
+ if(params.lensAperture>0.0){
+  // Natural vignetting: illumination falls as cos^4 of the angle off axis.
+  vec2 ndc=uv*2.0-1.0;float t2=dot(vec2(ndc.x/1.3,ndc.y/(1.3*params.aspect)),vec2(ndc.x/1.3,ndc.y/(1.3*params.aspect)));
+  displayScene*=mix(1.0,1.0/((1.0+t2)*(1.0+t2)),0.55);
+  // Film grain: per-frame, strongest in the midtones like silver halide.
+  float l=dot(displayScene,vec3(0.2126,0.7152,0.0722));
+  displayScene=clamp(displayScene+(filmHash(gl_FragCoord.xy)-0.5)*0.05*(4.0*l*(1.0-l)+0.15),0.0,1.0);
+ }
  vec4 h=params.vrMode>0.5?vec4(0.0):texture(hudImage,uv);color=vec4(mix(displayScene,h.rgb,h.a),1.0);
 }
