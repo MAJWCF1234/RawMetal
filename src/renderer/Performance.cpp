@@ -66,6 +66,8 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  } nativeAtlases;
  // Reference checks below compare against the baked vertex lamps; the
  // per-pixel lamp path has its own check at the end.
+ // Material expectations are analytic values through the original display curve.
+ struct ReferenceDisplayScope {ReferenceDisplayScope(){GpuRenderer::setReferenceDisplay(true);}~ReferenceDisplayScope(){GpuRenderer::setReferenceDisplay(false);}} referenceDisplay;
  struct BakedLampScope {
   bool previous=SoftwareRenderer::pixelLighting();
   BakedLampScope(){SoftwareRenderer::setPixelLighting(false);}

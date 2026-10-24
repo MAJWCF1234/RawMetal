@@ -964,7 +964,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   }
   // Sun cascades: three view-frustum slices, each a texel-snapped square in
   // the light's frame so the shadow edge does not crawl as the camera moves.
-  {std::array<float,56> sunData{};const auto sun=world.sun();
+  {std::array<float,56> sunData{};const auto sun=world.sun();sunData[7]=world.wetness();
    if(sun.intensity>0){
     sunData[0]=sun.direction.x;sunData[1]=sun.direction.y;sunData[2]=sun.direction.z;sunData[3]=sun.intensity;sunData[4]=sun.r;sunData[5]=sun.g;sunData[6]=sun.b;
     auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};Point3 forward=sun.direction*-1.f,right=cross(forward,Point3{0,0,1});float rl=std::sqrt(right.x*right.x+right.y*right.y+right.z*right.z);right=right*(1.f/std::max(rl,1e-4f));Point3 up=cross(right,forward);

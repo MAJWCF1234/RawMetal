@@ -208,6 +208,15 @@ public:
     const std::vector<Structure>& structures()const{return m_structures;}
     const std::vector<TerrainTriangle>& terrain()const{return m_terrain;}
     bool hasTerrain()const{return !m_terrain.empty();}
+    // How wet floors are (0 dry .. 1 flooded): damp sheen everywhere, puddles
+    // on level ground. Carpet never puddles; the Foundry runs hot and dry.
+    float wetness()const{
+     if(definition().floorMaterial==FloorMaterial::OfficeCarpet)return 0.f;
+     if(outdoors())return .55f;
+     if(campaign()&&level()==0)return .12f;
+     if(campaign()&&level()==1)return .65f;
+     return .3f;
+    }
     // Low overcast sun for the Ashfall exterior; indoor worlds have none.
     SunLight sun()const{if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;}
     std::vector<Span> spansAt(int x,int y)const;
