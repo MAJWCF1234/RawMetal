@@ -8,6 +8,7 @@
 #include <array>
 #include <charconv>
 #include <cstring>
+#include <limits>
 namespace retro {
 using StateId=std::uint32_t;
 constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
@@ -37,7 +38,10 @@ inline bool factionsHostile(AiFaction a,AiFaction b){
  if(a==AiFaction::Player||a==AiFaction::Facility)return b==AiFaction::Creature||b==AiFaction::Raider;
  return a==AiFaction::Creature||a==AiFaction::Raider;
 }
-struct ActorPatrolPoint {Vec2 position{};float z=0;int pauseMs=1000;};
+// look: the bearing a guard faces while paused at this post (yaw radians).
+// Unset (NaN), it keeps the bearing it arrived on. Either way a guard on a
+// multi-point route scans slowly either side of it while it waits.
+struct ActorPatrolPoint {Vec2 position{};float z=0;int pauseMs=1000;float look=std::numeric_limits<float>::quiet_NaN();};
 struct ActorAiConfig {
  ActorAiMode mode=ActorAiMode::Scripted;StateId enableState=0;float speed=1.4f,followDistance=2.f,dangerRange=6.f;
  float sightRange=11,sightDot=.65f;int recognitionMs=600,searchMs=4000;StateId alertState=0;
