@@ -455,7 +455,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/prologue-preview");
      if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B texel filtering
-     for(int stage=0;stage<9;++stage){auto scene=retro::Game::prologueInspection(stage);renderer->render(scene);std::ofstream out(".build/prologue-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     for(int stage=0;stage<11;++stage){auto scene=retro::Game::prologueInspection(stage);renderer->render(scene);std::ofstream out(".build/prologue-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
     if(std::wcsstr(commandLine,L"--exclusion-inspection")){
