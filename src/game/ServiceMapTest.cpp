@@ -34,7 +34,7 @@ bool Game::testServiceMaps(){
    for(float y:{door.y-.45f,door.y,door.y+.45f})
     if(!check(doorsOpen.fits(x,y,-9,1.7f)&&!doorsOpen.doorBlocks(x,y,-9,1.7f),"Opened door has standing clearance on both sides"))return false;
   }
-  if(!check(world.floorHeight(12,12)==-9&&world.ceilingHeight(12,12)>-6.2f,"Dry service bridge has headroom"))return false;
+  if(level==4&&!check(world.floorHeight(12,12)==-9&&world.ceilingHeight(12,12)>-6.2f,"Dry service spine has headroom"))return false;
   // A quarter-metre walk grid uses the same full hull and step allowance as
   // movement. It catches sealed bays and one-way drops around water ramps.
   std::array<bool,N*N> reached{};std::queue<int> pending;
@@ -71,48 +71,40 @@ bool Game::testServiceMaps(){
    if(!check(clear,"Authored headers fit below ceiling and above standing clearance"))return false;
   }
   if(level==5){
-   if(!check(world.particleEmitters().empty(),"Settling pools do not emit fountain jets"))return false;
-   if(!check(world.waterVolumes().size()==4,"Four authored coolant basins"))return false;
-   for(const auto& basin:world.waterVolumes()){
-    float x=(basin.x1+basin.x2)*.5f,y=(basin.y1+basin.y2)*.5f;
-    if(!check(world.waterSurface(x,y)==basin.surface&&std::fabs(world.floorHeight(x,y)-basin.bed)<.001f,"Render, bed and buoyancy share basin definition"))return false;
-   }
-   if(!check(world.waterSurface(12,9)<-100&&world.floorHeight(12,9)==-9,"Central walkway remains dry"))return false;
+   if(!check(world.particleEmitters().empty(),"Settling channel does not emit fountain jets"))return false;
+   if(!check(world.waterVolumes().size()==1,"One settling channel spans the hall"))return false;
+   const auto& channel=world.waterVolumes().front();
+   if(!check(channel.x1<=1.01f&&channel.x2>=22.99f,"The channel runs wall to wall: the way south is a wade"))return false;
+   float x=(channel.x1+channel.x2)*.5f,y=(channel.y1+channel.y2)*.5f;
+   if(!check(world.waterSurface(x,y)==channel.surface&&std::fabs(world.floorHeight(x,y)-channel.bed)<.001f,"Render, bed and buoyancy share the channel definition"))return false;
+   if(!check(world.waterSurface(12,6)<-100&&world.floorHeight(12,6)==-9&&world.waterSurface(12,18)<-100,"Both landings stay dry"))return false;
    if(!check(world.doors().size()==2&&world.doors()[1].transfer&&world.doors()[0].swinging&&world.doorBlocks(19.7f,20.76f,-9,1.7f),"Rear store has a closed swinging door"))return false;
    World opened=world;opened.openDoor(0);opened.updateDoors(2);
    if(!check(!opened.doorBlocks(19.7f,20.76f,-9,1.7f)&&opened.fits(19.7f,21.3f,-9,1.7f),"Swinging leaf clears a walkable store entrance"))return false;
   }
  }
- Game player;player.loadLevel(5,false);player.m_enemies.clear();player.m_player.pos={9.f,11.4f};player.m_player.z=-9;player.m_player.angle=-kPi*.5f;player.m_player.grounded=true;
- World channelGeometry(5);
- for(const auto& basin:channelGeometry.waterVolumes())for(float direction:{-1.f,1.f}){
-  Game escape;escape.loadLevel(5,false);escape.m_enemies.clear();
-  escape.m_player.pos={(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f};
-  escape.m_player.z=basin.bed;escape.m_player.grounded=true;escape.m_player.angle=direction*kPi*.5f;
-  InputState forward{};forward.forward=true;
-  float end=direction<0?basin.y1-.45f:basin.y2+.45f;
-  for(int frame=0;frame<600&&direction*(escape.player().pos.y-end)<0;++frame)escape.update(forward,1.f/120);
-  if(!check(direction*(escape.player().pos.y-end)>=0&&escape.player().z>-9.08f,"Each channel has walkable ramps at both ends"))return false;
+ {World channelGeometry(5);const auto& channel=channelGeometry.waterVolumes().front();
+  for(float direction:{1.f,-1.f}){
+   Game wade;wade.loadLevel(5,false);wade.m_enemies.clear();
+   wade.m_player.pos={6.f,direction>0?7.4f:15.6f};wade.m_player.z=-9;wade.m_player.grounded=true;wade.m_player.angle=direction*kPi*.5f;
+   InputState forward{};forward.forward=true;float lowest=0;float end=direction>0?channel.y2+.6f:channel.y1-.6f;
+   for(int frame=0;frame<900&&direction*(wade.player().pos.y-end)<0;++frame){wade.update(forward,1.f/120);lowest=std::min(lowest,wade.player().z);}
+   if(!check(lowest<channel.surface&&direction*(wade.player().pos.y-end)>=0&&std::fabs(wade.player().z+9)<.08f,"The channel can be waded and climbed out of in both directions"))return false;
+  }
  }
- InputState walk{};walk.forward=true;float lowest=0;
- for(int i=0;i<110;++i){player.update(walk,1.f/120);lowest=std::min(lowest,player.player().z);}
- if(!check(lowest<-9.12f,"Player enters sloped flooded trench"))return false;
- player.m_player.angle=kPi*.5f;player.m_velocity={};
- for(int i=0;i<125;++i)player.update(walk,1.f/120);
- if(!check(player.player().pos.y>10.9f&&player.player().z>-9.08f,"Player walks back out without one-way drop"))return false;
  Game debris;debris.loadLevel(5,false);debris.m_enemies.clear();debris.m_clutter.clear();
- Clutter bottle;bottle.kind=2;bottle.pos={9,9};bottle.z=-9.10f;debris.m_clutter.push_back(bottle);
- Clutter metal;metal.kind=3;metal.pos={9.5f,9};metal.z=-9.10f;debris.m_clutter.push_back(metal);
+ Clutter bottle;bottle.kind=2;bottle.pos={9,11.5f};bottle.z=-9.10f;debris.m_clutter.push_back(bottle);
+ Clutter metal;metal.kind=3;metal.pos={9.5f,9.f};metal.z=-9.10f;debris.m_clutter.push_back(metal);
  for(int i=0;i<360;++i)debris.updateClutter({},1.f/120);
- float bed=debris.world().floorHeight(9,9);
+ float bed=debris.world().floorHeight(9,11.5f);
  if(!check(debris.m_clutter[0].z>bed+.1f&&!debris.m_clutter[0].sleeping,"Buoyant debris stays at the water surface"))return false;
  auto& heavy=debris.m_clutter[1];auto extent=heavy.extent();float contact=-100;
  for(float dx:{-extent[0],0.f,extent[0]})for(float dy:{-extent[1],0.f,extent[1]})
   contact=std::max(contact,debris.world().floorHeight(heavy.pos.x+dx,heavy.pos.y+dy));
  if(!check(std::fabs(heavy.z-contact)<.035f,"Heavy debris settles against the sloped basin floor"))return false;
  Game restored;
- if(!check(restored.decodeSave(debris.encodeSave())&&restored.level()==5&&restored.world().waterVolumes().size()==4&&restored.clutter().size()==2,
-           "Saving and restoring retains basin geometry and debris state"))return false;
+ if(!check(restored.decodeSave(debris.encodeSave())&&restored.level()==5&&restored.world().waterVolumes().size()==1&&restored.clutter().size()==2,
+           "Saving and restoring retains channel geometry and debris state"))return false;
  return true;
 }
 bool Game::testCampaignExtension(){
@@ -147,9 +139,9 @@ bool Game::testCampaignExtension(){
    }
   }
   struct Target{Vec2 p;float z;};std::vector<Target> targets;
-  if(level==6)targets={{{20,13},-9},{{17.5f,19},-9},{{21.5f,22.5f},-9}};
-  if(level==7)targets={{{12,3},-12},{{10.5f,10.5f},-12},{{16.5f,16.5f},-4},{{20.4f,18.4f},-4},{{20.5f,22.5f},-4}};
-  if(level==8)targets={{{18,13.5f},-9},{{3.8f,4.8f},-9},{{20,6.5f},-4},{{21.5f,22.5f},-9}};
+  if(level==6)targets={{{19.5f,14},-9},{{4.5f,6.5f},-9},{{4,20},-9},{{21.5f,22.5f},-9}};
+  if(level==7)targets={{{12.6f,12.4f},-12},{{3,10},-9},{{16.f,20.5f},-4},{{20.5f,22.5f},-4}};
+  if(level==8)targets={{{12,17.5f},-9},{{20,3},-9},{{3,20},-9},{{21.5f,22.5f},-9},{{8,2},-4}};
   if(level==9)targets={{{10.5f,8.8f},-12},{{20,20},-12},{{7,18},-9}};
   for(auto target:targets){bool found=false;for(auto n:reachable)if(length(point(n)-target.p)<.45f&&std::fabs(n.z-target.z)<.03f){found=true;break;}
    out<<"target "<<target.p.x<<','<<target.p.y<<','<<target.z<<' ';result&=check(found,"Authored destination reachable without jumping");
@@ -201,94 +193,39 @@ bool Game::testCampaignExtension(){
   // aisle, upper decks use authored structure instead of procedural post spam,
   // and the suspended freight branch ends in a real vestibule.
   if(level==6){
-   bool panels=true,westLockers=true;
-   for(const auto& f:game.world().fixtures()){
-    if(f.model==13&&f.position.x>21)panels&=std::fabs(f.yaw-kPi*.5f)<.01f;
-    if(f.model==13&&f.position.x<5)westLockers&=std::fabs(f.yaw+kPi*.5f)<.01f;
-   }
-   result&=check(panels&&westLockers,"Cable Vault wall equipment faces the service lanes");
-   auto routeReaches=[&](Vec2 p,float z){for(const auto& n:reachable)if(length(point(n)-p)<.2f&&std::fabs(n.z-z)<.03f)return true;return false;};
-   auto terminal=game.world().terminals().front();
-   const auto& liveWater=game.world().waterVolumes().front();const auto& arc=game.world().hazards().front();
-   bool recessed=liveWater.surface<-9.1f&&liveWater.surface-liveWater.bed>.2f&&std::fabs(game.world().floorHeight(8,10.2f)-liveWater.bed)<.001f;
-   bool bothTrenchFlanks=routeReaches({3.f,10.2f},-9)&&routeReaches({21.f,10.2f},-9);
-   // The service bridge stands above the arc's reach, and both stairs connect.
-   bool dryBridge=routeReaches({12.f,10.2f},-8.4f)&&-8.4f>arc.top&&arc.bottom<liveWater.surface&&arc.x1<12&&arc.x2>12;
-   bool clearHighBay=game.world().ceilingHeight(5,5)-game.world().floorHeight(5,5)>4.3f;
-   bool terminalAtEastAisle=length(terminal.position-Vec2{20.4f,11.9f})<.05f;
-   result&=check(bothTrenchFlanks&&dryBridge&&terminalAtEastAisle&&recessed&&clearHighBay,"Cable chamber has a high bay, a recessed live trench, a dry bridge above it and an east-aisle disconnect");
+   auto routeReaches=[&](Vec2 p,float z){for(const auto& n:reachable)if(length(point(n)-p)<.3f&&std::fabs(n.z-z)<.05f)return true;return false;};
+   const auto& trench=game.world().waterVolumes().front();const auto& arc=game.world().hazards().front();
+   bool recessed=trench.surface<-9.1f&&trench.surface-trench.bed>.2f;
+   bool arcOverWater=arc.x1<=trench.x1+.01f&&arc.x2>=trench.x2-.01f&&arc.bottom<=trench.bed+.01f;
+   result&=check(recessed&&arcOverWater,"The centre tunnel is a recessed, flooded, live trench");
+   result&=check(routeReaches({4.f,20.f},-9)&&routeReaches({19.5f,14.f},-9),"West tunnel and east feeder room are reachable on dry ground");
+   bool tripInFeederRoom=false;for(const auto& t:game.world().terminals())tripInFeederRoom|=t.activateState==stateId("vault_disconnect")&&t.position.x>16.5f&&t.position.y>12.f;
+   result&=check(tripInFeederRoom,"The feeder trip stands in the east feeder room");
    int feederAssemblies=0;for(const auto& f:game.world().fixtures())if(f.model==12&&f.solid)++feederAssemblies;
-   result&=check(feederAssemblies>=2,"Cable bypasses include grounded feeder machinery as combat cover");
+   result&=check(feederAssemblies>=2,"The feeder room holds grounded feeder machinery as cover");
   }
   if(level==7){
-   bool giantFoundation=false;
-   for(const auto& st:game.world().structures())if(st.bottom<-11.9f&&st.top>-9.05f&&st.x2-st.x1>4&&st.y2-st.y1>4)giantFoundation=true;
-   result&=check(!giantFoundation,"Pump Annex lower manifold is not buried under giant machine blocks");
-   int supportedDecks=0;
-   for(const auto& f:game.world().fixtures())if(f.model==2&&std::fabs(f.height-8.f)<.01f){
-    int x=int(std::floor(f.position.x)),y=int(std::floor(f.position.y));
-    const auto& lower=game.world().layers()[0].rows;
-    const auto& upper=game.world().layers()[2].rows;
-    bool grounded=x>=0&&x<int(lower[y].size())&&lower[y][x]!='#'&&upper[y][x]=='=';
-    bool spansFloors=std::fabs(game.world().floorHeight(f.position.x,f.position.y)+12.f)<.01f&&
-                     std::fabs(game.world().floorHeight(f.position.x,f.position.y)+f.height+4.f)<.01f;
-    if(grounded&&spansFloors&&f.width<.35f&&f.depth<.35f)++supportedDecks;
-   }
-   result&=check(supportedDecks==2,"Pump Annex observation supports are grounded and meet the deck above");
-   bool midairHighBay=false,roofHighBay=false;
-   for(const auto& light:game.world().lights())if(std::fabs(light.position.x-10.f)<.01f&&std::fabs(light.position.y-8.f)<.01f){
-    midairHighBay|=std::fabs(light.z+6.35f)<.01f;
-    roofHighBay|=std::fabs(light.z+1.3f)<.01f;
-   }
-   result&=check(!midairHighBay&&roofHighBay,"Pump Annex high-bay light is mounted at the roof plane");
-   bool noDeckPiercingRiser=true;
-   for(const auto& pipe:game.world().pipes())if(std::fabs(pipe.start.x-12.f)<.01f&&std::fabs(pipe.start.y-19.5f)<.01f&&pipe.endZ> -999.f)noDeckPiercingRiser=false;
-   result&=check(noDeckPiercingRiser,"Pump Annex header avoids piercing the observation deck");
+   int pumps=0;for(const auto& st:game.world().structures())if(st.material==6&&std::fabs(st.bottom+12.f)<.01f&&st.top>-7.f&&st.x2-st.x1<1.6f)++pumps;
+   result&=check(pumps==4,"Four vertical duty pumps stand in the pit, motors above the main floor");
+   bool galleryLit=false;for(const auto& light:game.world().lights())galleryLit|=std::fabs(light.z+4.4f)<.01f;
+   result&=check(galleryLit,"Lamps hang under the observation gallery");
    Game annex;annex.loadLevel(7,false);annex.m_enemies.clear();
    result&=check(annex.doorLocked(annex.world().doors().back()),"Pump Annex transfer stays locked until duty pumps restart");
-   annex.m_player.pos={18.f,16.5f};annex.m_player.z=-4.f;annex.m_player.grounded=true;
-   annex.update({},1.f/60.f);
-   result&=check(annex.state("annex_running")==0&&annex.doorLocked(annex.world().doors().back()),
-                 "Walking onto the observation deck cannot silently skip the pump restart");
-   annex.m_player.pos={10.6f,10.5f};annex.m_player.z=-12.f;annex.m_player.angle=0;
+   annex.m_player.pos={16.f,20.5f};annex.m_player.z=-4.f;annex.m_player.grounded=true;annex.update({},1.f/60.f);
+   result&=check(annex.state("annex_running")==0&&annex.doorLocked(annex.world().doors().back()),"Walking onto the observation gallery cannot skip the pump restart");
+   annex.m_player.pos={12.6f,12.4f};annex.m_player.z=-12.f;annex.m_player.angle=kPi*.5f;
    InputState startPump{};startPump.use=true;annex.updateInteraction(startPump,.01f);
-   result&=check(annex.state("annex_running")==1&&!annex.doorLocked(annex.world().doors().back()),
-                 "Reachable lower pump control releases the Annex transfer through player interaction");
+   result&=check(annex.state("annex_running")==1&&!annex.doorLocked(annex.world().doors().back()),"The pit-floor start releases the Annex transfer through player interaction");
   }
   if(level==8){
-   result&=check(!game.world().fits(18.93f,2.5f,-4,1.7f)&&game.world().fits(20.5f,2.5f,-4,1.7f),
-                 "Utility Junction freight branch has enclosing walls and usable interior");
+   result&=check(!game.world().fits(17.1f,3.f,-9,1.7f)&&game.world().fits(20.f,3.f,-9,1.7f),"Freight branch has enclosing walls and a usable interior");
    bool lightsMounted=true;
-   for(const auto& light:game.world().lights()){
-    if(std::fabs(light.z+4.4f)<.01f){
-     int x=int(std::floor(light.position.x)),y=int(std::floor(light.position.y));
-     lightsMounted&=game.world().layers()[1].rows[y][x]=='=';
-    }else lightsMounted&=std::fabs(light.z+1.05f)<.01f;
-   }
-   result&=check(lightsMounted,"Utility Junction lamps attach to a deck underside or the roof");
-   int supportedBridgePosts=0;
-   for(const auto& s:game.world().structures())if(s.material==2&&std::fabs(s.bottom+9.f)<.01f&&std::fabs(s.top+4.25f)<.01f){
-    float x=(s.x1+s.x2)*.5f,y=(s.y1+s.y2)*.5f;int cellX=int(std::floor(x)),cellY=int(std::floor(y));
-    const auto& ground=game.world().layers()[0].rows;
-    const auto& bridge=game.world().layers()[1].rows;
-    if(std::fabs(x-7.5f)<.01f||std::fabs(x-20.f)<.01f)
-     if(std::fabs(y-7.5f)<.01f&&ground[cellY][cellX]!='#'&&bridge[cellY][cellX]=='='&&s.x2-s.x1<.4f&&s.y2-s.y1<.4f)++supportedBridgePosts;
-   }
-   result&=check(supportedBridgePosts==2,"Utility Junction bridge supports reach the floor below");
-   result&=check(game.world().fits(14.f,8.6f,-9.f,1.7f),"Utility Junction keeps a clear concourse sightline beneath the bridge");
-   bool clearBridge=true;for(const auto& f:game.world().fixtures())if(f.model==13&&f.position.y>8.f&&f.position.y<9.f&&f.position.x>11.f&&f.position.x<16.f)clearBridge=false;
-   result&=check(clearBridge,"Utility Junction bridge walking lane stays clear of cabinets");
-   bool firstDrive=false,secondDrive=false;int drives=0;
-   for(const auto& f:game.world().fixtures())if(f.model==12&&f.solid){
-    bool grounded=std::fabs(game.world().floorHeight(f.position.x,f.position.y)+9.f)<.01f&&f.base==0;
-    firstDrive|=grounded&&length(f.position-Vec2{13.6f,16.42f})<.02f;
-    secondDrive|=grounded&&length(f.position-Vec2{18.3f,18.62f})<.02f;
-    ++drives;
-   }
-   result&=check(drives==2&&firstDrive&&secondDrive,"Utility Junction concourse equipment forms two grounded service bays");
-   bool overheadTrunk=game.world().pipes().size()==4;
-   for(const auto& pipe:game.world().pipes())if(pipe.endZ< -999.f)overheadTrunk&=pipe.z> -1.6f&&pipe.z< -1.1f;
-  result&=check(overheadTrunk,"Utility Junction services stay on a supported overhead perimeter route");
+   for(const auto& light:game.world().lights())if(light.mount==WorldLightMount::Ceiling)lightsMounted&=std::fabs(light.z+.15f-game.world().clearanceAbove(light.position.x,light.position.y,light.z-1.f))<.02f;
+   result&=check(lightsMounted,"Utility Junction lamps hang under a deck, office roof or the hall roof");
+   int columns=0;for(const auto& st:game.world().structures())if(st.material==12&&std::fabs(st.bottom+9.f)<.01f&&std::fabs(st.top+4.25f)<.01f)++columns;
+   result&=check(columns>=4,"The arrival bridge stands on columns down to the concourse");
+   int mains=0;for(const auto& pipe:game.world().pipes())if(pipe.radius>.19f&&pipe.radius<.21f&&std::fabs(pipe.start.x-22.95f)<.01f)++mains;
+   result&=check(mains==3,"Three trunk mains enter the hall from the east wall");
    bool freightControl=false,permitControl=false;
    for(const auto& terminal:game.world().terminals()){
     freightControl|=terminal.activateState==stateId("freight_incident_clearance");
@@ -296,8 +233,8 @@ bool Game::testCampaignExtension(){
    }
    result&=check(freightControl&&permitControl,"Utility Junction has a local operator for each locked service branch");
    for(auto [name,flag,doorIndex,position]:std::array<std::tuple<const char*,StateId,int,Vec2>,2>{{
-       {"freight override",stateId("freight_incident_clearance"),1,{17.2f,8.f}},
-       {"utilities permit",stateId("primary_utilities_permit"),2,{4.f,15.f}}}}){
+       {"freight override",stateId("freight_incident_clearance"),1,{16.2f,7.5f}},
+       {"utilities permit",stateId("primary_utilities_permit"),2,{6.6f,16.4f}}}}){
     Game branch;branch.loadLevel(8,false);branch.updateStreaming(0);branch.m_enemies.clear();
     auto terminal=std::find_if(branch.world().terminals().begin(),branch.world().terminals().end(),[&](const auto& t){return t.activateState==flag;});
     bool station=terminal!=branch.world().terminals().end()&&std::fabs(terminal->position.x-position.x)<.01f&&std::fabs(terminal->position.y-position.y)<.01f;

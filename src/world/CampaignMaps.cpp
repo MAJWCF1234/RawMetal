@@ -337,7 +337,11 @@ void pipeRoute(Map& m,std::initializer_list<P3> points,float radius,int paint,fl
      // Low runs stand on a pipe shoe and post bolted to the floor.
      m.pipes.push_back({c,c,floor,.045f,a.z-radius,6});
      wall(m,c.x-.16f,c.y-.16f,c.x+.16f,c.y+.16f,floor,floor+.025f,8);
-    }else if(roof>NoRoof)m.pipes.push_back({c,c,a.z+radius*1.2f,.022f,roof-.05f,6});
+    }else if(roof>NoRoof){
+     float top=roof-.05f;int tx=int(std::floor(c.x)),ty=int(std::floor(c.y));
+     if(tx>=0&&ty>=0&&tx<24&&ty<24)for(const auto& l:m.layers)if(l.thickness>0&&l.rows[size_t(ty)][size_t(tx)]=='='&&l.elevation-l.thickness>a.z)top=std::min(top,l.elevation-l.thickness-.01f);
+     m.pipes.push_back({c,c,a.z+radius*1.2f,.022f,top,6});
+    }
    }
    lastAxis=axis;
   }
@@ -1368,41 +1372,64 @@ std::shared_ptr<const Map> makeServiceGallery(){
  return p;
 }
 
-// COOLANT RETURN. South of the Service Gallery spine: a low pump hall where
-// the plant's return water settles in four open channels either side of a
-// railed dry walkway. Duty and standby return pumps stand on each side wall
-// and lift the water to the storage tanks at the north end. Nothing hunts
-// here; the water itself is the lesson: wade it, climb its ramps, watch what
-// floats. A rear store with a swinging door, then the transfer to the vaults.
+// COOLANT RETURN. Where the plant's spent coolant settles before it is pumped
+// on. The Service Gallery spine opens onto a landing above one long settling
+// channel that spans the hall wall to wall; two intake culverts pour into it
+// from the north. The footbridge across it has fallen in, so the way south is
+// a wade: knee-deep at the sunken span, deeper either side. Beyond, the duty
+// and standby return pumps lift the water to the vaults. Nothing hunts here:
+// the water is the lesson. Wade it, climb out, watch what floats.
 std::shared_ptr<const Map> makeCoolantReturn(){
  auto p=std::make_shared<Map>();auto& m=*p;
- const float floor=-9,roof=-5.6f;
- m.name=CampaignMapNames[5];m.definition=CampaignChunks[5];m.definition.ceiling=roof;m.definition.ambient=.33f;
+ const float floor=-9,roof=-4.6f;
+ m.name=CampaignMapNames[5];m.definition=CampaignChunks[5];m.definition.ceiling=roof;m.definition.ambient=.3f;
  m.layers.push_back(floorLayer("Coolant Return",floor,true));m.openNorth=true;
  auto& g=m.layers[0];
  // The gallery spine arrives through the open seam; the north wall closes
- // either side of it to match the gallery's own partitions.
+ // either side of it.
  wall(m,1,0,10,.25f,floor,roof,3);wall(m,14,0,23,.25f,floor,roof,3);
- // Settling channels, their coping kerbs and the railed walkway between.
- // Sunk below the floor: the surface sits in the channel, never on the slab.
- m.waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.72f,-9.03f},{13.75f,7.8f,16.75f,10.7f,-9.72f,-9.03f},
-                 {7.25f,12.4f,10.25f,18.f,-9.72f,-9.03f},{13.75f,12.4f,16.75f,18.f,-9.72f,-9.03f}};
- for(const auto& b:m.waterVolumes){
-  for(float x:{b.x1,b.x2})wall(m,x-.04f,b.y1+.18f,x+.04f,b.y2-.18f,floor,floor+.075f,2);
-  floorLine(m,b.x1-.15f,b.y1-.15f,b.x2+.15f,b.y1-.03f,floor,13);floorLine(m,b.x1-.15f,b.y2+.03f,b.x2+.15f,b.y2+.15f,floor,13);
+ // --- The settling channel ----------------------------------------------------
+ const float bed=-9.62f,surface=-9.07f;
+ m.waterVolumes={{1.f,8.6f,23.f,14.4f,bed,surface}};
+ for(float y:{8.35f,14.4f})wall(m,1,y,23,y+.25f,floor,floor+.12f,15);
+ floorLine(m,1,8.2f,23,8.32f,floor,13);floorLine(m,1,14.68f,23,14.8f,floor,13);
+ // Intake culverts from the north wall, on hangers, spilling over a weir lip.
+ for(float x:{5.f,19.f}){
+  pipeRoute(m,{{x,.25f,-6.f},{x,8.9f,-6.f},{x,8.9f,-9.6f}},.42f,5,roof);
+  m.structures.push_back({x-.5f,8.4f,x+.5f,9.4f,bed,-6.f,false,6});
+  wall(m,x-.7f,8.6f,x+.7f,9.2f,bed,floor+.05f,15);
+  floorLine(m,x-.7f,8.6f,x+.7f,8.72f,floor+.05f,13);
  }
- for(float x:{10.45f,13.45f})for(auto ends:{Vec2{8,10.5f},Vec2{12.6f,17.8f}})m.structures.push_back({x,ends.x,x+.10f,ends.y,floor,floor+.9f,true,2});
- for(Vec2 d:{Vec2{12.f,11.5f},Vec2{12.f,19.5f},Vec2{4.f,12.f},Vec2{20.f,12.f}})wall(m,d.x-.35f,d.y-.35f,d.x+.35f,d.y+.35f,floor,floor+.012f,8);
- // Return pumps on both side walls draw from the channel sumps and lift to
- // the header under the roof, which fills the two storage tanks north.
- const float header=-6.3f;
- P3 wA=pumpSkid(m,{3.8f,9.f},floor,0,header),wB=pumpSkid(m,{3.8f,15.5f},floor,0,header);
- P3 eA=pumpSkid(m,{20.2f,9.f},floor,kPi,header),eB=pumpSkid(m,{20.2f,15.5f},floor,kPi,header);
- pipeRoute(m,{wB,{wA.x,wA.y,header},{wA.x,3.2f,header},{eA.x,3.2f,header},{eA.x,eA.y,header},{eB.x,eB.y,header}},.14f,5,roof);
- for(float x:{4.f,20.f}){m.fixtures.push_back({14,{x,4.4f},0,2.404f,2.645f,2.2f,0,true});
-  pipeRoute(m,{{x,3.2f,header},{x,4.4f,header},{x,4.4f,floor+2.25f}},.1f,5,roof);}
- gateValve(m,{wA.x,6.2f,header},{0,1},.14f,floor,1);gateValve(m,{eA.x,6.2f,header},{0,1},.14f,floor,-1);
- for(float x:{3.8f,20.2f})wallSign(m,x,.305f,floor+1.9f,x<12?"RETURN PUMPS":"STANDBY PUMPS",x<12?"P-11A / P-11B":"P-12A / P-12B",1.8f,0);
+ // The condemned footbridge: both abutments stand, the span lies in the water.
+ for(auto [y1,y2]:{std::pair{8.6f,9.7f},{13.3f,14.4f}}){
+  wall(m,11,y1,13,y2,floor,floor+.22f,8);
+  for(float x:{11.f,12.94f})m.structures.push_back({x,y1,x+.06f,y2,floor+.22f,floor+1.2f,true,0});
+ }
+ wall(m,11.1f,9.9f,12.9f,11.6f,bed,-9.52f,8);wall(m,11.2f,11.6f,12.8f,13.1f,bed,-9.4f,8);
+ board(m,10.2f,7.4f,floor+1.1f,"FOOTBRIDGE CONDEMNED","CHANNEL WADEABLE / KEEP TO THE SPAN",2.2f);
+ // --- North landing: what arrives, and where it goes ------------------------
+ m.fixtures.push_back({14,{3.f,4.5f},0,2.404f,2.645f,2.2f,0,true});
+ m.fixtures.push_back({14,{21.f,4.5f},0,2.404f,2.645f,2.2f,0,true});
+ for(float x:{3.f,21.f})pipeRoute(m,{{x,4.5f,floor+2.2f},{x,4.5f,-6.f},{x<12?5.f:19.f,4.5f,-6.f}},.16f,4,roof);
+ terminal(m,{12.f,6.6f},"RETURN HALL / LOCAL CONTROL","DUPLEX CIRCULATION / DUTY AND STANDBY.","FOOTBRIDGE DOWN SINCE THE SURGE. WADE THE CHANNEL.");
+ wallSign(m,5.5f,.305f,floor+2.f,"14 / COOLANT RETURN","SETTLING CHANNEL / RETURN PUMPS SOUTH",2.6f,0);
+ // --- South: the return pumps ---------------------------------------------
+ // Suction trench from the channel to each pump; discharge risers into one
+ // header that leaves through the south wall for the vaults.
+ const float header=-6.4f;
+ std::array<P3,4> risers{};int k=0;
+ for(float x:{3.6f,7.2f,16.8f,20.4f}){
+  wall(m,x-.3f,14.65f,x+.3f,15.9f,floor,floor+.012f,8);
+  risers[size_t(k++)]=pumpSkid(m,{x,17.3f},floor,kPi*.5f,header);
+ }
+ pipeRoute(m,{risers[0],{risers[3].x,risers[3].y,header}},.16f,5,roof);
+ pipeRoute(m,{{14.f,risers[0].y,header},{14.f,22.95f,header}},.16f,5,roof);
+ for(int i=0;i<4;++i)gateValve(m,{risers[size_t(i)].x+(i<2?.9f:-.9f),risers[size_t(i)].y,header},{1,0},.16f,floor,1);
+ wallSign(m,5.4f,22.945f,floor+2.f,"P-11A / P-11B","DUTY RETURN PUMPS",1.8f,kPi);
+ wallSign(m,14.f,22.945f,floor+1.4f,"RETURN MAIN","TO CABLE VAULTS / FEEDER COOLING",1.8f,kPi);
+ // West bay: the shift's lockers and a parts cage.
+ for(float y:{18.5f,21.f,22.f})m.fixtures.push_back({13,{1.27f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
+ m.fixtures.push_back({41,{4.5f,22.f},0,2.4f,1.f,1.1f,0,true});
  // Rear store: a swinging door into a stock room of spares.
  wall(m,17.25f,20.65f,19.05f,20.87f,floor,roof,3);wall(m,20.45f,20.65f,22.85f,20.87f,floor,roof,3);
  wall(m,17.25f,22.85f,22.85f,23.08f,floor,roof,3);wall(m,17.25f,20.87f,17.47f,22.85f,floor,roof,3);
@@ -1410,107 +1437,310 @@ std::shared_ptr<const Map> makeCoolantReturn(){
  {Door store{19.05f,20.45f,20.76f};store.swinging=true;m.doors.push_back(store);}
  m.fixtures.push_back({7,{21.4f,22.48f},0,1.6f,.48f,1.8f,0,true});
  m.fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
- m.clutterSpawns.push_back({3,{21.1f,21.8f}});m.clutterSpawns.push_back({2,{18.5f,21.7f}});
  wallSign(m,21.6f,20.595f,floor+1.9f,"RETURN STORE","SPARES / SEALS / GASKETS",1.6f,kPi);
- // Transfer to the Cable Vaults, and the west service bay.
+ // Transfer to the Cable Vaults.
  rectangle(g,8,23,11,24,'.');m.doors.push_back({8,11,23.5f,0,false,true});
  wall(m,8,23,11,24,floor+2.5f,roof,3);
- m.fixtures.push_back({7,{2.f,21.f},0,1.8f,.5f,1.8f,kPi*.5f,true});
- m.fixtures.push_back({13,{1.5f,18.5f},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
- m.fixtures.push_back({41,{5.f,21.8f},0,2.4f,1.f,1.1f,0,true});
- cableTray(m,{1.2f,17.5f},{1.2f,22.5f},roof-.5f);
- terminal(m,{12,4.4f},"RETURN HALL / LOCAL CONTROL","DUPLEX CIRCULATION / DUTY AND STANDBY.","DRAIN CHANNELS BEFORE MAINTENANCE.");
- wallSign(m,5.f,.305f,floor+2.f,"14 / COOLANT RETURN","SETTLING CHANNELS / KEEP TO THE WALKWAY",2.6f,0);
- wallBays(m,floor,roof,4.f,false,false,true,true,9.f,15.5f);
- for(float y:{5.5f,11.5f,19.f})wall(m,1,y-.1f,23,y+.1f,roof-.3f,roof,12);
+ // What floats: a bottle bobbing in the channel, a gasket box in the store.
+ m.clutterSpawns={{2,{7.5f,11.5f},surface},{0,{21.f,21.6f},floor}};
+ wallBays(m,floor,roof,4.f,false,false,true,true,11.5f);
+ for(float y:{5.5f,16.5f,20.5f})wall(m,1,y-.1f,23,y+.1f,roof-.3f,roof,12);
  // --- Light ---------------------------------------------------------------
- for(Vec2 b:{Vec2{12.f,6.f},Vec2{12.f,12.f},Vec2{12.f,18.f},Vec2{5.7f,12.f},Vec2{18.3f,12.f},Vec2{4.f,7.f},Vec2{20.f,7.f},Vec2{5.f,17.f},Vec2{19.f,17.f}})m.lights.push_back(lamp(b,roof-.15f,1.1f,6.5f,4300,.2f));
+ // Cold tubes along the channel draw the eye across the water; warm lamps
+ // over the pumps; amber over the transfer.
+ for(float x:{3.5f,8.5f,15.5f,20.5f})m.lights.push_back(lamp({x,11.5f},roof-.15f,1.2f,7.f,6500,.2f));
+ for(float x:{6.f,12.f,18.f})m.lights.push_back(lamp({x,3.f},roof-.15f,1.f,6.f,4300,.15f));
+ for(float x:{5.4f,18.6f})m.lights.push_back(lamp({x,18.6f},roof-.15f,1.1f,5.f,3400,.05f));
+ m.lights.push_back(lamp({12.f,19.f},roof-.15f,.9f,5.f,4300,.15f));
  m.lights.push_back(lamp({20.f,22.f},roof-.15f,.9f,4.f,3000));
- // Work lamps over each pump bank: the machines are the room's landmarks.
- for(float x:{3.8f,20.2f})for(float y:{9.f,15.5f})m.lights.push_back(lamp({x+(x<12?1.6f:-1.6f),y},roof-.15f,1.1f,4.5f,3600,.1f));
- m.lights.push_back(lamp({5.f,22.95f},floor+2.f,1.f,4.f,1300,-.3f,WorldLightMount::Wall,-kPi*.5f));
- // --- Supplies ----------------------------------------------------------------
+ m.lights.push_back(lamp({7.5f,22.95f},floor+2.2f,1.2f,4.f,1600,-.2f,WorldLightMount::Wall,-kPi*.5f));
  m.pickupSpawns={{{21.5f,7.f},PickupKind::Health}};
  zone(m,"14A RETURN STORE",17.25f,20.65f,22.85f,23.08f);
  zone(m,"14 COOLANT RETURN",0,0,24,24);
  return p;
 }
 
-// CABLE VAULTS. The plant's feeder trench: a flooded cable channel across the
-// chamber, still live, arcing on a cycle. Cross it on the raised dry service
-// bridge, or wade it between pulses. The feeder's remote trip, in the east
-// switchgear aisle, kills the arc and releases the exit; the south bay keeps
-// the flashlight. Two huntsmen hold the flanks.
+// CABLE VAULTS. The plant's feeder runs underground here in three tunnels off
+// a north hall. The centre tunnel is the straight way south, but its cable
+// trench has flooded and is still live: the arc cycles across the water. The
+// feeder's remote trip is at the end of the east tunnel. The west tunnel goes
+// round, past the maintenance bay that keeps the flashlight, and then into the
+// dark. Trip the feeder and the arc dies; the exit unlocks either way you go.
 std::shared_ptr<const Map> makeCableVaults(){
  auto p=std::make_shared<Map>();auto& m=*p;
  const float floor=-9,roof=-4.65f;
- m.name=CampaignMapNames[6];m.definition=CampaignChunks[6];m.definition.ceiling=roof;m.definition.ambient=.4f;
- m.layers.push_back(floorLayer("Cable Vaults / service passages",floor));
- {AuthoredLayerData l;l.name="Cable Vaults / service bridge";l.elevation=-8.4f;l.thickness=.25f;for(auto& row:l.rows)row=std::string(24,'.');
-  rectangle(l,11,8,13,12,'=');m.layers.push_back(std::move(l));}
- auto& g=m.layers[0];auto& bridge=m.layers[1];
- rectangle(g,3,0,6,1,'.');m.doors.push_back({3,6,.5f,0,false,false,true});
+ m.name=CampaignMapNames[6];m.definition=CampaignChunks[6];m.definition.ceiling=roof;m.definition.ambient=.24f;
+ m.layers.push_back(floorLayer("Cable Vaults / service tunnels",floor));
+ auto& g=m.layers[0];
+ rectangle(g,2,0,5,1,'.');m.doors.push_back({2,5,.5f,0,false,false,true});
+ // Tunnel walls: west | centre | east, between the north and south halls.
+ wall(m,7.5f,4,8.f,19,floor,roof,15);wall(m,16.f,4,16.5f,19,floor,roof,15);
+ // The east tunnel ends in the feeder room; the south hall is reached from
+ // the west and centre tunnels only.
+ wall(m,16.5f,18.8f,23,19,floor,roof,15);
+ // --- The live trench (centre) -------------------------------------------------
+ m.waterVolumes={{8.f,6.f,16.f,17.f,-9.62f,-9.22f}};
+ for(float y:{5.75f,17.f})wall(m,8.f,y,16.f,y+.25f,floor,floor+.1f,15);
+ floorLine(m,8.f,5.55f,16.f,5.7f,floor,13);floorLine(m,8.f,17.3f,16.f,17.45f,floor,13);
+ {Hazard arc;arc.kind=Hazard::Kind::Electricity;arc.x1=8;arc.y1=6;arc.x2=16;arc.y2=17;arc.bottom=-9.62f;arc.top=-8.6f;arc.damagePerSecond=22;
+  arc.enabledFlag=stateId("vault_disconnect");arc.invertFlag=true;arc.period=4;arc.onTime=1.2f;m.hazards.push_back(arc);}
+ // Live cable racks three high down both trench walls, hung from the roof.
+ for(float x:{8.2f,15.8f})for(float z:{-7.3f,-6.6f,-5.9f})cableTray(m,{x,4.5f},{x,18.5f},z);
+ board(m,12.f,4.3f,floor+1.1f,"DANGER","LIVE CABLE TRENCH / 11 KV / ISOLATE AT FEEDER 7A",2.4f);
+ // --- North hall ---------------------------------------------------------------
+ wallSign(m,10.5f,1.055f,floor+1.9f,"15 / CABLE VAULTS","FEEDER TRENCH LIVE UNTIL ISOLATED",2.6f,0);
+ wallSign(m,19.75f,1.055f,floor+1.9f,"FEEDER 7A","REMOTE TRIP / EAST TUNNEL",1.8f,0);
+ wallSign(m,4.5f,1.055f,floor+2.4f,"MAINTENANCE BAY","WEST TUNNEL / LAMPS AND SHELLS",1.8f,0);
+ for(float x:{13.f,14.f})m.fixtures.push_back({13,{x,1.27f},0,.9066f,.4956f,2.2f,kPi,true});
+ cableTray(m,{1.2f,2.f},{1.2f,18.5f},roof-.45f);cableTray(m,{22.8f,2.f},{22.8f,18.f},roof-.45f);
+ // --- West tunnel: the maintenance bay, then the dark ----------------------------
+ for(float y:{5.f,7.f})m.fixtures.push_back({7,{1.27f,y},0,1.8f,.5f,1.8f,kPi*.5f,true});
+ bench(m,5.5f,5.2f,floor);
+ {ScriptEvent kit;kit.id=stateId("vault_maintenance_kit");kit.level=6;kit.x1=2.f;kit.y1=4.5f;kit.x2=7.f;kit.y2=9.f;kit.bottom=-9.2f;kit.top=-7;
+  ScriptAction give;give.type=ScriptAction::Type::GiveItem;give.id=stateId("flashlight");give.value=1;kit.actions.push_back(give);m.scriptEvents.push_back(kit);}
+ // Past the bay the tunnel lights are out: cable drums and a sagging tray.
+ for(Vec2 d:{Vec2{3.f,12.5f},Vec2{5.5f,15.5f}})m.pipes.push_back({{d.x-.45f,d.y},{d.x+.45f,d.y},floor+.6f,.6f,floor+.6f,8});
+ for(Vec2 d:{Vec2{3.f,12.5f},Vec2{5.5f,15.5f}})m.structures.push_back({d.x-.5f,d.y-.62f,d.x+.5f,d.y+.62f,floor,floor+1.2f,false,6});
+ // --- East tunnel: feeder units, transformers and the trip ------------------------
+ m.fixtures.push_back({12,{18.6f,7.f},0,2.0f,1.55f,1.75f,.10f,true});
+ m.fixtures.push_back({12,{21.2f,10.5f},0,2.0f,1.55f,1.75f,-.08f,true});
+ for(Vec2 t:{Vec2{18.f,15.5f},Vec2{21.f,15.5f}}){wall(m,t.x-1.f,t.y-.4f,t.x+1.f,t.y+.4f,floor,floor+.12f,15);m.fixtures.push_back({6,t,.12f,1.87f,.55f,.99f,0,true});
+  pipeRoute(m,{{t.x,t.y,floor+1.1f},{t.x,t.y,roof-.13f}},.06f,6,NoRoof);}
+ for(float y:{12.5f,13.5f})m.fixtures.push_back({13,{22.75f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});
+ terminal(m,{19.5f,13.f},"FEEDER 7A / REMOTE TRIP","LIVE TRENCH / CROSS ONLY WHEN ISOLATED.","E / THROW LOCAL DISCONNECT.",0,stateId("vault_disconnect"));
+ terminal(m,{6.8f,8.6f},"CABLE VAULTS / MAINTENANCE","LOCAL DISCONNECT: FEEDER 7A, EAST TUNNEL.","WEST TUNNEL LIGHTING FAILED. TAKE A LAMP.");
+ wallSign(m,20.f,18.745f,floor+1.9f,"FEEDER 7A","11 KV / REMOTE TRIP",1.6f,kPi);
+ // --- South hall and the exit ------------------------------------------------------
  rectangle(g,20,23,23,24,'.');{Door exit{20,23,23.5f,0,false,true};exit.requireState=stateId("vault_disconnect");m.doors.push_back(exit);}
  wall(m,20,23,23,24,floor+2.5f,roof,3);
- // The trench: recessed, flooded, with concrete retaining cheeks along both
- // sides and the live arc cycling above the water until the feeder is tripped.
- m.waterVolumes={{5.f,9.f,19.f,11.4f,-9.45f,-9.2f}};
- for(float y:{8.7f,11.4f})wall(m,4.7f,y,19.3f,y+.3f,floor,floor+.14f,15);
- for(float x:{4.7f,19.f})wall(m,x,8.7f,x+.3f,11.7f,floor,floor+.14f,15);
- {Hazard arc;arc.kind=Hazard::Kind::Electricity;arc.x1=5;arc.y1=9;arc.x2=19;arc.y2=11.4f;arc.bottom=-9.4f;arc.top=-8.55f;arc.damagePerSecond=22;
-  arc.enabledFlag=stateId("vault_disconnect");arc.invertFlag=true;arc.period=4;arc.onTime=1.2f;m.hazards.push_back(arc);}
- floorLine(m,4.55f,8.55f,19.45f,8.7f,floor,13);floorLine(m,4.55f,11.7f,19.45f,11.85f,floor,13);
- // The dry service bridge: three steps up, grating over the trench, down.
- m.stairs.push_back({11,6,13,8,floor,-8.4f,3,true,true});
- m.stairs.push_back({11,12,13,14,floor,-8.4f,3,true,false});
- deckSupports(m,bridge,-9.45f,2.f);
- // Feeder cables: trays along the trench walls on hangers, risers to the
- // switchgear and the transformers.
- for(float y:{8.2f,12.2f})cableTray(m,{5.f,y},{19.f,y},-7.1f);
- for(float x:{6.f,10.f,14.f,18.f})for(float y:{8.01f,12.01f})m.pipes.push_back({{x,y},{x,y},-7.f,.02f,roof-.05f,6});
- cableTray(m,{22.8f,2.f},{22.8f,22.f},roof-.5f);cableTray(m,{1.2f,2.f},{1.2f,17.f},roof-.5f);
- // East switchgear aisle: the feeder cabinets, the two transformers and the
- // remote trip. West: lockers, shelves and the maintenance log.
- for(float y:{5.f,6.f,7.f,13.5f,14.5f,17.5f,18.5f})m.fixtures.push_back({13,{22.75f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});
- for(Vec2 t:{Vec2{18.2f,5.5f},Vec2{18.2f,15.2f}}){m.fixtures.push_back({6,{t.x,t.y},.12f,1.87f,.55f,.99f,0,true});
-  wall(m,t.x-1.1f,t.y-.5f,t.x+1.1f,t.y+.5f,floor,floor+.12f,15);
-  pipeRoute(m,{{t.x,t.y,floor+1.f},{t.x,t.y,roof-.13f}},.06f,6,NoRoof);}
- for(float y:{17.5f,18.6f,21.5f})m.fixtures.push_back({13,{1.27f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
- for(float y:{4.f,6.f})m.fixtures.push_back({7,{6.9f,y},0,1.8f,.5f,1.8f,kPi*.5f,true});
- for(float y:{13.5f,15.5f})m.fixtures.push_back({7,{1.27f,y},0,1.8f,.5f,1.8f,kPi*.5f,true});
- // The relay island breaks the rear sightline; both ends stay walkable.
- wall(m,9.8f,17.6f,10.15f,20.4f,floor,floor+2.3f,3);
- m.fixtures.push_back({13,{10.5f,18.4f},0,.9066f,.4956f,2.2f,-kPi*.5f,true});m.fixtures.push_back({13,{10.5f,19.7f},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
- // Heavy feeder units flank the trench as cover.
- m.fixtures.push_back({12,{8.45f,14.f},0,2.0f,1.55f,1.75f,.10f,true});
- m.fixtures.push_back({12,{16.f,5.5f},0,2.0f,1.55f,1.75f,-.08f,true});
- // The maintenance bay south-east: shelf, kit and the flashlight.
- m.fixtures.push_back({7,{17.7f,19.8f},0,1.8f,.5f,1.8f,0,true});
- m.clutterSpawns={{3,{18,19}},{0,{18.5f,19.2f}}};
- terminal(m,{20.4f,11.9f},"FEEDER 7A / REMOTE TRIP","LIVE TRENCH / CROSS AT THE DRY SERVICE BRIDGE.","E / THROW LOCAL DISCONNECT.",0,stateId("vault_disconnect"));
- terminal(m,{7.5f,6.4f},"CABLE VAULTS / MAINTENANCE","LOCAL DISCONNECT: EAST SWITCHGEAR AISLE.","SPARE LAMP AND SHELLS: SOUTH SERVICE BAY.");
- {ScriptEvent kit;kit.id=stateId("vault_maintenance_kit");kit.level=6;kit.x1=16.5f;kit.y1=18.5f;kit.x2=19;kit.y2=21;kit.bottom=-9.2f;kit.top=-7;
-  ScriptAction give;give.type=ScriptAction::Type::GiveItem;give.id=stateId("flashlight");give.value=1;kit.actions.push_back(give);m.scriptEvents.push_back(kit);}
- {ScriptEvent trip;trip.id=stateId("vault_relay_trip");trip.level=6;trip.x1=2;trip.y1=2;trip.x2=5;trip.y2=4;trip.bottom=-9.2f;trip.top=-7;
-  ScriptAction play;play.type=ScriptAction::Type::PlaySound;play.amount=.6f;play.sound=Sound::Door;trip.actions.push_back(play);m.scriptEvents.push_back(trip);}
- wallSign(m,10.f,1.055f,floor+1.9f,"15 / CABLE VAULTS","FEEDER TRENCH / LIVE UNTIL ISOLATED",2.6f,0);
- board(m,8.f,8.f,floor+1.1f,"DANGER","LIVE CABLE TRENCH / 11 KV",1.8f);board(m,16.f,12.4f,floor+1.1f,"DANGER","LIVE CABLE TRENCH / 11 KV",1.8f);
- wallSign(m,22.945f,10.f,floor+1.8f,"FEEDER 7A","REMOTE TRIP / EAST AISLE",1.6f,-kPi*.5f);
- wallSign(m,18.f,22.945f,floor+1.9f,"16 / PUMP ANNEX","TRANSFER / ISOLATE FEEDER FIRST",2.f,kPi);
- wallBays(m,floor,roof,4.f,true,true,true,true,4.5f,21.5f);
- for(float y:{4.f,16.f,20.f})wall(m,1,y-.1f,23,y+.1f,roof-.3f,roof,12);
+ wallSign(m,17.f,22.945f,floor+1.9f,"16 / PUMP ANNEX","TRANSFER / ISOLATE FEEDER 7A FIRST",2.2f,kPi);
+ m.fixtures.push_back({41,{10.f,22.2f},0,2.4f,1.f,1.1f,0,true});
+ for(float y:{4.f,19.5f})wall(m,1,y-.1f,23,y+.1f,roof-.3f,roof,12);
  // --- Light ---------------------------------------------------------------
- for(Vec2 b:{Vec2{3.5f,3.f},Vec2{9.f,5.f},Vec2{14.f,5.f},Vec2{19.5f,3.f},Vec2{3.f,13.f},Vec2{7.f,17.f},Vec2{13.f,18.f},Vec2{19.5f,17.5f},Vec2{21.f,21.5f},Vec2{21.f,9.f},Vec2{4.f,19.5f}})m.lights.push_back(lamp(b,roof-.15f,1.f,6.f,4300,.2f));
- // Amber warning lamps mark the trench flanks; blue-white at the bridge.
- for(float x:{4.3f,19.7f})for(float y:{8.4f,12.f})m.lights.push_back(lamp({x,y},roof-.15f,.8f,4.f,2200,0));
- m.lights.push_back(lamp({12.f,10.2f},roof-.15f,1.1f,5.f,7000,.1f));
- for(Vec2 b:{Vec2{8.45f,15.8f},Vec2{16.f,3.8f},Vec2{18.2f,7.f},Vec2{18.2f,16.8f}})m.lights.push_back(lamp(b,roof-.15f,.9f,4.5f,3600,.1f));
- m.lights.push_back(lamp({18.5f,22.95f},floor+2.2f,1.f,4.f,1300,-.3f,WorldLightMount::Wall,-kPi*.5f));
+ for(Vec2 b:{Vec2{4.f,2.5f},Vec2{12.f,2.5f},Vec2{20.f,2.5f},Vec2{4.5f,6.5f}})m.lights.push_back(lamp(b,roof-.15f,1.1f,6.f,4300,.2f));
+ for(Vec2 b:{Vec2{19.5f,6.f},Vec2{19.5f,10.5f},Vec2{19.5f,14.f}})m.lights.push_back(lamp(b,roof-.15f,1.f,5.5f,3600,.1f));
+ // Blue-white work lamps at the trench ends; the tunnel between is lit by the arc.
+ for(float y:{4.6f,18.f})m.lights.push_back(lamp({12.f,y},roof-.15f,1.1f,5.f,7500,.1f));
+ for(float x:{4.f,12.f})m.lights.push_back(lamp({x,21.f},roof-.15f,.9f,5.f,4300,.15f));
+ m.lights.push_back(lamp({19.5f,22.95f},floor+2.2f,1.2f,4.f,1600,-.2f,WorldLightMount::Wall,-kPi*.5f));
  // --- Encounters ------------------------------------------------------------
- m.creatureSpawns={{CreatureKind::Huntsman,{12.5f,20.5f}},{CreatureKind::Huntsman,{19.5f,7.5f}}};
- m.pickupSpawns={{{18,21.5f},PickupKind::Ammo}};
- zone(m,"15A FEEDER AISLE",19.5f,4,23,18);
+ m.creatureSpawns={{CreatureKind::Huntsman,{4.f,17.f}},{CreatureKind::Huntsman,{13.f,21.f}}};
+ m.pickupSpawns={{{20.5f,17.5f},PickupKind::Ammo}};
+ m.clutterSpawns={{3,{3.f,6.f}},{0,{2.6f,8.2f}}};
+ {ScriptEvent trip;trip.id=stateId("vault_relay_trip");trip.level=6;trip.x1=2;trip.y1=1;trip.x2=5;trip.y2=3;trip.bottom=-9.2f;trip.top=-7;
+  ScriptAction play;play.type=ScriptAction::Type::PlaySound;play.amount=.6f;play.sound=Sound::Door;trip.actions.push_back(play);m.scriptEvents.push_back(trip);}
+ zone(m,"15A MAINTENANCE BAY",1,4,7.5f,9);
+ zone(m,"15B FEEDER ROOM",16.5f,12,23,18.8f);
  zone(m,"15 CABLE VAULTS",0,0,24,24);
+ return p;
+}
+
+// PUMP ANNEX. A three-storey pump house. You come in on the main floor round
+// a pit where four vertical duty pumps stand in a row, their motors rising
+// above the floor like landmarks. The pumps are stopped: the local start is
+// at the bottom of the pit. Start them and the house shakes back to life, and
+// the observation gallery's transfer to the Junction unlocks. The gallery
+// runs high along the south over the pit, reached by the east stair.
+std::shared_ptr<const Map> makePumpAnnex(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ const float pit=-12,deck=-9,gallery=-4,roof=-1.f;
+ m.name=CampaignMapNames[7];m.definition=CampaignChunks[7];m.definition.ceiling=roof;m.definition.ambient=.38f;
+ m.layers.push_back(floorLayer("Pump Annex / pump pit",pit));
+ auto layer=[&](const char* name,float z){AuthoredLayerData l;l.name=name;l.elevation=z;l.thickness=.25f;for(auto& row:l.rows)row=std::string(24,'.');m.layers.push_back(std::move(l));};
+ layer("Pump Annex / main floor",deck);layer("Pump Annex / observation",gallery);
+ auto& g=m.layers[0];auto& main=m.layers[1];auto& obs=m.layers[2];
+ rectangle(main,1,1,23,23,'=');rectangle(main,6,6,18,16,'.');
+ rectangle(obs,8,16,23,23,'=');rectangle(obs,20,16,22,17,'=');
+ // Entry on the main floor, exit from the gallery: the walls below are sealed.
+ rectangle(g,2,0,5,1,'.');rectangle(main,2,0,5,1,'=');
+ m.doors.push_back({2,5,.5f,0,false,false,true,3});
+ wall(m,2,0,5,1,pit,deck-.25f,15);wall(m,2,0,5,.85f,deck+2.5f,roof,3);
+ // The pit: concrete walls round it, a stair down its west side.
+ wall(m,5.8f,6,6,16,pit,deck-.25f,15);wall(m,18,6,18.2f,16,pit,deck-.25f,15);
+ wall(m,5.8f,5.8f,18.2f,6,pit,deck-.25f,15);wall(m,5.8f,16,18.2f,16.2f,pit,deck-.25f,15);
+ m.stairs.push_back({6,6,8,12,pit,deck,15,true,false});
+ m.stairs.push_back({20,6,22,16,deck,gallery,26,true,true});
+ // --- The duty pumps ----------------------------------------------------------
+ // Pump bowl and discharge head on the pit floor, the column through the deck
+ // line, the motor on a steel stool; each discharges south into the header.
+ const float headerZ=-11.1f;
+ for(float x:{9.6f,12.f,14.4f,16.8f}){
+  Vec2 c{x,10.f};
+  wall(m,x-.9f,9.1f,x+.9f,10.9f,pit,pit+.15f,15);
+  m.pipes.push_back({c,c,pit+.15f,.62f,pit+1.3f,5});
+  for(float z:{pit+.3f,pit+1.1f})m.pipes.push_back({c,c,z,.7f,z+.1f,6});
+  m.pipes.push_back({c,c,pit+1.3f,.26f,deck+.3f,6});
+  m.pipes.push_back({c,c,deck+.3f,.55f,deck+1.9f,0});
+  for(float z=deck+.5f;z<deck+1.8f;z+=.32f)m.pipes.push_back({c,c,z,.6f,z+.06f,6});
+  m.pipes.push_back({c,c,deck+1.9f,.3f,deck+2.2f,6});
+  for(float s:{-1.f,1.f})steelColumn(m,x+s*.7f,10.f,pit+.15f,deck+.3f,false);
+  wall(m,x-.85f,9.55f,x+.85f,10.45f,deck+.2f,deck+.3f,12);
+  m.structures.push_back({x-.75f,9.25f,x+.75f,11.2f,pit,deck+2.2f,false,6});
+  pipeRoute(m,{{x,10.62f,pit+.7f},{x,10.95f,pit+.7f},{x,10.95f,pit-.3f}},.18f,5,NoRoof);
+  wall(m,x-.3f,11.2f,x+.3f,15.4f,pit-.012f,pit+.006f,8);
+ }
+ wall(m,9.2f,14.95f,17.9f,15.45f,pit-.012f,pit+.006f,8);
+ pipeRoute(m,{{17.6f,15.2f,pit-.3f},{17.6f,15.2f,-5.2f},{17.6f,22.95f,-5.2f}},.24f,5,gallery-.25f);
+ m.structures.push_back({17.2f,14.8f,18.f,16.f,pit,deck-.25f,false,6});
+ wallSign(m,12.f,15.945f,pit+1.9f,"P-21 TO P-24","DUTY PUMPS / LOCAL START BELOW",2.2f,kPi);
+ // The local start, on the pit floor in front of the header.
+ terminal(m,{12.6f,13.2f},"DUTY PUMPS / LOCAL START","RESTORE PRESSURE BEFORE LEAVING THE ANNEX.","E / START DUTY PUMPS. GALLERY STAIR EAST.",0,stateId("annex_running"));
+ for(float x:{9.f,10.f})m.fixtures.push_back({13,{x,15.73f},0,.9066f,.4956f,2.2f,kPi,true});
+ {ScriptEvent restart;restart.id=stateId("annex_pump_restart");restart.x1=1;restart.y1=1;restart.x2=23;restart.y2=23;restart.bottom=-12.1f;restart.top=-2;restart.requireState=stateId("annex_running");
+  ScriptAction shake;shake.type=ScriptAction::Type::Shake;shake.amount=.18f;restart.actions.push_back(shake);
+  ScriptAction motor;motor.type=ScriptAction::Type::PlaySound;motor.amount=.75f;motor.sound=Sound::LiftMotor;restart.actions.push_back(motor);
+  ScriptAction save;save.type=ScriptAction::Type::Checkpoint;restart.actions.push_back(save);m.scriptEvents.push_back(restart);}
+ // --- Main floor ------------------------------------------------------------------
+ // Motor control centre along the west wall, cable trays to the pit edge.
+ for(float y:{8.f,9.f,10.f,11.f})m.fixtures.push_back({13,{1.27f,y},3,.9066f,.4956f,2.2f,-kPi*.5f,true});
+ cableTray(m,{1.6f,7.5f},{1.6f,12.f},deck+2.6f);cableTray(m,{2.f,12.3f},{5.6f,12.3f},deck+2.6f);
+ m.fixtures.push_back({41,{3.5f,19.5f},3,2.4f,1.f,1.1f,0,true});
+ cargo(m,2.5f,15.f,deck);cargo(m,2.5f,16.4f,deck,false);
+ wallSign(m,8.f,1.055f,deck+1.9f,"16 / PUMP ANNEX","DUTY PUMPS STOPPED / START AT PIT FLOOR",2.6f,0);
+ wallSign(m,22.945f,4.5f,deck+1.9f,"GALLERY","STAIR UP / JUNCTION TRANSFER",1.6f,-kPi*.5f);
+ // Pit edge columns carry the gallery; the crane runs the length of the house.
+ deckSupports(m,obs,deck,6.f);
+ for(float y:{5.6f,16.4f})wall(m,1,y-.15f,23,y+.15f,roof-1.3f,roof-1.f,12);
+ for(float y:{5.6f,16.4f})for(float x=3.f;x<23;x+=5.f)wall(m,x-.12f,y-.12f,x+.12f,y+.12f,roof-1.f,roof,12);
+ for(float x:{11.6f,12.1f})wall(m,x,5.45f,x+.3f,16.55f,roof-1.65f,roof-1.3f,18);
+ for(float y:{5.4f,16.2f})wall(m,11.3f,y,12.7f,y+.4f,roof-1.65f,roof-1.2f,12);
+ wall(m,11.6f,10.7f,12.4f,11.5f,roof-1.95f,roof-1.65f,12);
+ m.pipes.push_back({{12.f,11.1f},{12.f,11.1f},roof-1.95f,.02f,gallery-.2f,6});
+ wall(m,11.8f,10.9f,12.2f,11.3f,gallery-.5f,gallery-.2f,8);
+ // --- Observation gallery ------------------------------------------------------------
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gallery,gallery+.9f,3);wall(m,x1,y1,x2,y2,gallery+.9f,gallery+2.4f,17);wall(m,x1,y1,x2,y2,gallery+2.4f,gallery+2.7f,3);};
+ glazed(14.f,19.f,19.f,19.12f);glazed(14.f,19.12f,14.12f,21.2f);
+ wall(m,14,21.2f,14.12f,22.8f,gallery+2.2f,gallery+2.7f,3);
+ wall(m,14,19,19,23,gallery+2.7f,gallery+2.85f,2);
+ terminal(m,{16.5f,21.8f},"PUMP ANNEX / OBSERVATION","DUTY PUMP START: PIT FLOOR CONTROL.","JUNCTION ACCESS: SOUTH GALLERY DOOR.",8);
+ m.fixtures.push_back({19,{17.6f,20.f},8,1.367f,.724f,.78f,kPi,true});
+ // Transfer to the Junction, framed as a personnel door.
+ rectangle(g,19,23,22,24,'.');rectangle(obs,19,23,22,24,'=');
+ {Door exit{19.8f,21.2f,23.5f,0,false,true,false,8};exit.swinging=true;exit.requireState=stateId("annex_running");m.doors.push_back(exit);}
+ wall(m,19,23,22,24,pit,gallery-.25f,15);
+ wall(m,19,23.15f,19.8f,24,gallery,roof,3);wall(m,21.2f,23.15f,22,24,gallery,roof,3);
+ wall(m,19.8f,23.15f,21.2f,24,gallery+2.55f,roof,3);
+ wallSign(m,17.5f,22.945f,gallery+1.9f,"17 / UTILITY JUNCTION","TRANSFER / PUMPS MUST RUN",2.2f,kPi);
+ // --- Light ---------------------------------------------------------------
+ for(Vec2 b:{Vec2{9.f,8.f},Vec2{15.f,8.f},Vec2{9.f,13.5f},Vec2{15.f,13.5f}})m.lights.push_back(lamp(b,roof-.15f,2.2f,11.f,4600,.15f));
+ for(Vec2 b:{Vec2{3.5f,3.5f},Vec2{20.5f,3.5f},Vec2{3.5f,13.f}})m.lights.push_back(lamp(b,roof-.15f,1.f,7.f,4300,.15f));
+ // Bulkhead lamps round the main floor walls, and down inside the pit: every
+ // working level of the house is lit where people stand.
+ for(float x:{6.5f,12.f,17.5f})m.lights.push_back(lamp({x,1.02f},deck+2.4f,1.2f,6.5f,4000,.1f,WorldLightMount::Wall,kPi*.5f));
+ for(float y:{5.f,11.f,17.f})m.lights.push_back(lamp({1.02f,y},deck+2.4f,1.2f,6.5f,4000,.1f,WorldLightMount::Wall,0));
+ for(float y:{9.f,13.5f})m.lights.push_back(lamp({22.98f,y},deck+2.4f,1.2f,6.5f,4000,.1f,WorldLightMount::Wall,kPi));
+ for(float y:{8.5f,13.5f}){m.lights.push_back(lamp({6.02f,y},pit+2.f,1.f,5.f,3600,.05f,WorldLightMount::Wall,0));m.lights.push_back(lamp({17.98f,y},pit+2.f,1.f,5.f,3600,.05f,WorldLightMount::Wall,kPi));}
+ for(float x:{10.f,16.f,21.f})m.lights.push_back(lamp({x,19.5f},gallery-.4f,1.f,5.5f,3800,.1f));
+ m.lights.push_back(lamp({16.5f,21.f},gallery+2.55f,.9f,4.f,3000));
+ for(float x:{10.f,14.f})m.lights.push_back(lamp({x,6.02f},pit+2.f,1.f,5.f,3400,0,WorldLightMount::Wall,kPi*.5f));
+ m.lights.push_back(lamp({12.6f,15.95f},pit+2.3f,1.1f,4.5f,1800,-.1f,WorldLightMount::Wall,-kPi*.5f));
+ m.lights.push_back(lamp({19.4f,23.12f},gallery+2.f,1.f,4.f,1600,-.2f,WorldLightMount::Wall,-kPi*.5f));
+ // --- Encounters ------------------------------------------------------------
+ using C=CreatureKind;using P=PickupKind;
+ m.creatureSpawns={{C::Wasp,{12.f,3.5f},deck},{C::Wasp,{11.f,20.f},gallery},{C::Huntsman,{8.6f,13.6f},pit},{C::Huntsman,{15.5f,13.6f},pit}};
+ m.pickupSpawns={{{3.f,10.f},P::Health,deck},{{21.f,18.5f},P::Ammo,gallery}};
+ zone(m,"16A PUMP PIT",6,6,18,16,-13,-9.1f);
+ zone(m,"16B OBSERVATION",8,16,23,24,-4.5f,1000);
+ zone(m,"16 PUMP ANNEX",0,0,24,24);
+ return p;
+}
+
+// UTILITY JUNCTION. Where the plant's services split. You arrive high on the
+// bridge from the Annex and see the whole hub from its overlook: three trunk
+// mains, colour coded, cross the hall into one distribution header, then part
+// for Waste Handling (yellow, south), Freight Services (red, north-east) and
+// Primary Utilities (white, south-west). Dispatch in the glazed office releases
+// the south route; each side branch has its own local control at its gate.
+std::shared_ptr<const Map> makeUtilityJunction(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ const float floor=-9,bridge=-4,roof=-.8f;
+ m.name=CampaignMapNames[8];m.definition=CampaignChunks[8];m.definition.ceiling=roof;m.definition.ambient=.36f;
+ m.layers.push_back(floorLayer("Utility Junction / concourse",floor));
+ {AuthoredLayerData l;l.name="Utility Junction / arrival bridge";l.elevation=bridge;l.thickness=.25f;for(auto& row:l.rows)row=std::string(24,'.');m.layers.push_back(std::move(l));}
+ auto& g=m.layers[0];auto& b=m.layers[1];
+ rectangle(b,1,1,17,3,'=');rectangle(b,10,3,14,8,'=');rectangle(b,2,0,5,1,'=');
+ m.stairs.push_back({1,4,3,14,floor,bridge,26,true,false});
+ rectangle(b,1,3,3,4,'=');
+ // Arrival: through the Annex door onto the bridge.
+ rectangle(g,2,0,5,1,'.');
+ {Door entry{2.8f,4.2f,.5f,0,false,false,true,5};entry.swinging=true;m.doors.push_back(entry);}
+ wall(m,2,0,5,1,floor,bridge-.25f,15);
+ wall(m,2,0,2.8f,.85f,bridge,roof,3);wall(m,4.2f,0,5,.85f,bridge,roof,3);wall(m,2.8f,0,4.2f,.85f,bridge+2.55f,roof,3);
+ deckSupports(m,b,floor,6.f);
+ for(float x:{10.25f,13.75f})steelColumn(m,x,7.75f,floor,bridge-.25f);
+ {ScriptEvent arrive;arrive.id=stateId("junction_arrival");arrive.x1=2;arrive.y1=1;arrive.x2=6;arrive.y2=4;arrive.bottom=-4.1f;arrive.top=-2;
+  ScriptAction save;save.type=ScriptAction::Type::Checkpoint;arrive.actions.push_back(save);m.scriptEvents.push_back(arrive);}
+ // The overlook's wayfinding board.
+ board(m,12.f,7.3f,bridge+1.f,"17 / UTILITY JUNCTION","WASTE SOUTH / FREIGHT NORTH-EAST / UTILITIES SOUTH-WEST",3.2f);
+ // --- Branch gates ---------------------------------------------------------------
+ // Freight Services, north-east: a vestibule under its own slab.
+ wall(m,17,1,17.2f,5.65f,floor,bridge,3);wall(m,17,5.35f,18.5f,5.65f,floor,bridge,3);wall(m,21.5f,5.35f,23,5.65f,floor,bridge,3);
+ wall(m,18.5f,5.35f,21.5f,5.65f,floor+2.5f,bridge,3);wall(m,17,1,23,5.65f,bridge,bridge+.2f,2);
+ {Door freight{18.5f,21.5f,5.5f};freight.requireState=stateId("freight_incident_clearance");freight.sign=CampaignChunkCount;m.doors.push_back(freight);}
+ // Primary Utilities, south-west.
+ wall(m,1,17.35f,3,17.65f,floor,roof,3);wall(m,5,17.35f,6.2f,17.65f,floor,roof,3);wall(m,6,17.65f,6.2f,23,floor,roof,3);
+ wall(m,3,17.35f,5,17.65f,floor+2.5f,roof,3);
+ {Door utilities{3,5,17.5f};utilities.requireState=stateId("primary_utilities_permit");utilities.sign=CampaignChunkCount+1;m.doors.push_back(utilities);}
+ // --- Dispatch office ------------------------------------------------------------
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,floor,floor+.9f,3);wall(m,x1,y1,x2,y2,floor+.9f,floor+2.4f,17);wall(m,x1,y1,x2,y2,floor+2.4f,floor+2.7f,3);};
+ glazed(9.f,15.f,11.2f,15.12f);glazed(12.8f,15.f,15.f,15.12f);wall(m,11.2f,15.f,12.8f,15.12f,floor+2.2f,floor+2.7f,3);
+ glazed(9.f,15.12f,9.12f,20.f);glazed(14.88f,15.12f,15.f,20.f);
+ wall(m,9.f,19.88f,15.f,20.f,floor,floor+2.7f,3);wall(m,9,15,15,20,floor+2.7f,floor+2.85f,2);
+ terminal(m,{12.f,18.6f},"JUNCTION / WASTE DISPATCH","DISPATCH INTERLOCK / SOUTH BULKHEAD.","E / RELEASE WASTE HANDLING ROUTE.",0,stateId("waste_access"));
+ m.fixtures.push_back({19,{10.4f,18.8f},0,1.367f,.724f,.78f,kPi*.5f,true});
+ for(float x:{13.4f,14.2f})m.fixtures.push_back({13,{x,19.6f},0,.7f,.45f,1.9f,0,true});
+ // --- The junction: three mains into one header, three branches out ----------------
+ const float overhead=-6.4f,drum=-7.6f;
+ m.pipes.push_back({{7.f,8.4f},{7.f,14.6f},drum,.58f,drum,5});
+ for(float y:{8.4f,14.6f})m.pipes.push_back({{7.f,y-.08f},{7.f,y+.08f},drum,.66f,drum,6});
+ for(float y:{9.5f,13.5f}){wall(m,6.6f,y-.3f,7.4f,y+.3f,floor,drum-.5f,15);wall(m,6.5f,y-.34f,7.5f,y+.34f,drum-.5f,drum-.38f,12);}
+ m.structures.push_back({6.35f,8.3f,7.65f,14.7f,floor,drum+.6f,false,6});
+ const struct {float y;int paint;} mains[]={{9.5f,4},{11.5f,3},{13.5f,5}};
+ for(auto main:mains)pipeRoute(m,{{22.95f,main.y,overhead},{7.f,main.y,overhead},{7.f,main.y,drum+.58f}},.2f,main.paint,roof);
+ pipeRoute(m,{{7.f,8.75f,drum+.58f},{7.f,8.75f,overhead},{7.f,8.2f,overhead},{16.f,8.2f,overhead},{16.f,4.5f,overhead},{16.95f,4.5f,overhead}},.16f,4,roof);
+ pipeRoute(m,{{7.f,14.3f,drum+.58f},{7.f,14.3f,overhead},{7.f,21.2f,overhead},{19.f,21.2f,overhead},{19.f,22.95f,overhead}},.16f,3,roof);
+ pipeRoute(m,{{7.f,12.5f,drum+.58f},{7.f,12.5f,-5.6f},{4.5f,12.5f,-5.6f},{4.5f,17.3f,-5.6f}},.14f,5,roof);
+ wallSign(m,22.945f,14.f,floor+1.6f,"TRUNK MAINS","FREIGHT RED / WASTE YELLOW / UTILITIES WHITE",2.4f,-kPi*.5f);
+ // --- Local controls for the branch gates ----------------------------------------
+ terminal(m,{16.2f,7.5f},"FREIGHT SERVICES / INCIDENT OVERRIDE","FREIGHT ROUTE / LOCAL OVERRIDE.","E / CLEAR THE INCIDENT INTERLOCK.",0,stateId("freight_incident_clearance"));
+ terminal(m,{6.6f,16.4f},"PRIMARY UTILITIES / PERMIT DESK","WEST SERVICE GATE / LOCAL PERMIT.","E / RELEASE THE UTILITIES GATE.",0,stateId("primary_utilities_permit"));
+ // Inside the branches: the freight manifest, the utilities substation.
+ terminal(m,{20.f,2.f},"FREIGHT / OUTGOING MANIFEST","RESEARCH CONTAINERS HELD AT THE NEXT TRANSFER.","FREIGHT LINE SUSPENDED BEYOND THIS DOOR.");
+ wall(m,18.f,1.f,22.f,1.2f,floor,floor+2.8f,7);
+ for(float y:{19.5f,21.f})m.fixtures.push_back({13,{1.27f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
+ m.fixtures.push_back({7,{5.6f,21.f},0,1.8f,.5f,1.8f,kPi*.5f,true});
+ // --- Concourse ---------------------------------------------------------------------
+ m.fixtures.push_back({12,{16.5f,11.5f},0,1.8f,1.05f,1.45f,0,true});
+ m.fixtures.push_back({12,{19.5f,16.5f},0,1.8f,1.05f,1.45f,kPi*.5f,true});
+ cargo(m,20.5f,9.f,floor);cargo(m,21.8f,9.f,floor,false);
+ // The south exit to Waste Handling.
+ rectangle(g,20,23,23,24,'.');{Door exit{20,23,23.5f,0,false,true};exit.requireState=stateId("waste_access");m.doors.push_back(exit);}
+ wall(m,20,23,23,24,floor+2.5f,roof,3);
+ wallSign(m,13.f,22.945f,floor+1.9f,"18 / WASTE HANDLING","SOUTH BULKHEAD / RELEASED AT DISPATCH",2.4f,kPi);
+ wallBays(m,floor,roof,4.f,false,true,false,true,21.5f,5.f);
+ // --- Light ---------------------------------------------------------------
+ for(Vec2 l:{Vec2{12.f,11.5f},Vec2{18.f,11.5f},Vec2{4.f,19.f},Vec2{20.f,19.5f},Vec2{18.f,14.f}})m.lights.push_back(lamp(l,roof-.15f,1.8f,10.f,4800,.15f));
+ for(Vec2 l:{Vec2{12.f,10.f},Vec2{20.f,4.f}})m.lights.push_back(lamp(l,roof-.15f,1.f,6.f,4300,.15f));
+ for(Vec2 l:{Vec2{5.f,2.f},Vec2{9.f,2.f},Vec2{15.f,2.f},Vec2{12.f,5.f}})m.lights.push_back(lamp(l,bridge-.4f,1.1f,6.f,3800,.1f));
+ // The arrival bridge itself, lit from the roof so the overlook reads first.
+ for(Vec2 l:{Vec2{3.5f,2.f},Vec2{8.5f,2.f},Vec2{14.f,2.f},Vec2{12.f,6.f}})m.lights.push_back(lamp(l,roof-.15f,1.2f,6.5f,4300,.15f));
+ m.lights.push_back(lamp({1.02f,16.2f},floor+2.4f,1.f,5.5f,4000,.1f,WorldLightMount::Wall,0));
+ m.lights.push_back(lamp({12.f,17.5f},floor+2.55f,1.f,5.f,3600));
+ m.lights.push_back(lamp({20.f,3.5f},bridge-.15f,.9f,4.f,3000));
+ m.lights.push_back(lamp({3.f,20.5f},roof-.15f,.9f,4.5f,4300,.15f));
+ for(float y:{9.f,14.f})m.lights.push_back(lamp({22.98f,y},floor+2.4f,1.1f,6.5f,4000,.1f,WorldLightMount::Wall,kPi));
+ for(float x:{9.f,15.f})m.lights.push_back(lamp({x,22.98f},floor+2.4f,1.f,6.f,4000,.1f,WorldLightMount::Wall,-kPi*.5f));
+ m.lights.push_back(lamp({1.02f,15.5f},floor+2.4f,1.f,6.f,4000,.1f,WorldLightMount::Wall,0));
+ m.lights.push_back(lamp({19.5f,22.95f},floor+2.2f,1.2f,4.f,1600,-.2f,WorldLightMount::Wall,-kPi*.5f));
+ // --- Encounters ------------------------------------------------------------
+ using C=CreatureKind;using P=PickupKind;
+ m.creatureSpawns={{C::Huntsman,{14.f,12.5f}},{C::Wasp,{16.f,17.f}}};
+ m.pickupSpawns={{{17.f,13.5f},P::Health},{{21.f,3.5f},P::Ammo},{{3.1f,21.f},P::Ammo},{{8.f,2.f},P::Ammo,bridge}};
+ m.clutterSpawns={{3,{20.f,10.2f}},{1,{21.3f,10.3f}},{2,{13.4f,18.f}},{3,{4.6f,20.6f}},{0,{2.f,22.f}},{1,{15.f,13.f}}};
+ zone(m,"17A DISPATCH",9,15,15,20);
+ zone(m,"17B FREIGHT SERVICES",17,1,23,6);
+ zone(m,"17C PRIMARY UTILITIES",1,17.5f,6.2f,23);
+ zone(m,"17 UTILITY JUNCTION",0,0,24,24);
  return p;
 }
 
@@ -2098,7 +2328,7 @@ std::shared_ptr<const Map> make(int level){
 }
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
-  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();
+  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();
   for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i);
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();return result;}();
  return maps.at(size_t(level));

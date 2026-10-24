@@ -153,9 +153,9 @@ bool Game::testClutter(){
   if(!g.holdingClutter()||g.m_clutter[transferred].pos.y>=0)return false;
   g.m_player.pos.y=-.1f;g.crossChunkBoundary();if(g.level()!=4||!g.holdingClutter()||g.m_clutter.size()!=1)return false;
  }
- {auto g=mapInspection({9,9},0,0,5,false,-9.18f,true);g.m_clutter.clear();Clutter bottle;bottle.kind=2;bottle.pos={9,9};bottle.z=-9.17f;bottle.velocity={2,0};g.m_clutter.push_back(bottle);
+ {auto g=mapInspection({9,11.5f},0,0,5,false,-9.18f,true);g.m_clutter.clear();Clutter bottle;bottle.kind=2;bottle.pos={9,11.5f};bottle.z=-9.17f;bottle.velocity={2,0};g.m_clutter.push_back(bottle);
   g.updateClutter({},.02f);if(g.m_clutter[0].velocity.x>=2||!std::isfinite(g.m_clutter[0].z))return false;
-  if(g.world().waterSurface(12,9)>-100||g.world().waterSurface(9,9)<-10)return false;
+  if(g.world().waterSurface(12,6)>-100||g.world().waterSurface(9,11.5f)<-10)return false;
  }
  {auto slide=validationScene(Enemy::Kind::Huntsman);slide.m_enemies.clear();slide.m_clutter={{{1.14f,9.5f},{-4,2},1.f}}; // The Foundry's bare west wall.
   slide.updateClutter({},.025f);auto& c=slide.m_clutter[0];

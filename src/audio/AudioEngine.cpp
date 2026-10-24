@@ -379,7 +379,8 @@ bool AudioEngine::test(){
  }if(maxChange>.08f)return failure("machine orbit gain discontinuity");
  auto machines=game.world().machines();for(size_t i=0;i<machines.size();++i)for(size_t j=i+1;j<machines.size();++j)if(length(machines[i]-machines[j])<1.01f)return failure("duplicate machine emitters");
  auto coolant=Game::mapInspection({12,9},0,0,5,false,-9,true);audio.update(coolant);
- auto submerged=Game::mapInspection({8.5f,9.f},0,0,5,false,-9.4f,true);InputState duck{};duck.crouch=true;
+ auto channel=World(5).waterVolumes().front();Vec2 deep{(channel.x1+channel.x2)*.5f,(channel.y1+channel.y2)*.5f};
+ auto submerged=Game::mapInspection(deep,0,0,5,false,channel.bed,true);InputState duck{};duck.crouch=true;
  for(int i=0;i<30;++i)submerged.update(duck,1.f/60.f);
  audio.update(submerged);if(audio.m_submergedTarget<.5f)return failure("underwater fixture camera is above water");
  audio.update(coolant);if(audio.m_submergedTarget>.5f)return failure("dry camera remains submerged");
