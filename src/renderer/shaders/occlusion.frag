@@ -19,7 +19,9 @@ vec3 viewPosition(vec2 at,float depth){
  return vec3(ndc.x*depth/p.camera.z,-ndc.y*depth/(p.camera.z*p.camera.y),depth);
 }
 vec3 viewNormal(vec2 at,vec3 center){
- vec2 t=p.frame.xy;
+ // Depth is stored at half precision (~11 bits): a 3-pixel baseline keeps the
+ // quantisation steps from tilting normals into contour rings and stripes.
+ vec2 t=p.frame.xy*3.0;
  vec3 r=viewPosition(at+vec2(t.x,0),depthAt(at+vec2(t.x,0))),l=viewPosition(at-vec2(t.x,0),depthAt(at-vec2(t.x,0)));
  vec3 d=viewPosition(at+vec2(0,t.y),depthAt(at+vec2(0,t.y))),u=viewPosition(at-vec2(0,t.y),depthAt(at-vec2(0,t.y)));
  vec3 dx=abs(r.z-center.z)<abs(center.z-l.z)?r-center:center-l;
@@ -39,7 +41,7 @@ float bayer4(vec2 pixel){
 const float ViewModelDepth=0.5;
 void main(){
  float depth=depthAt(uv);
- if(depth<ViewModelDepth||depth>=p.grade.w){outColor=vec4(0.0,0.0,0.0,1.0);return;}
+ if(depth<ViewModelDepth||depth>=min(p.grade.w,60.0)){outColor=vec4(0.0,0.0,0.0,1.0);return;}
  vec3 center=viewPosition(uv,depth),normal=viewNormal(uv,center);
  const int Samples=12;
  float radius=p.camera.w,occlusion=0.0;vec3 bounce=vec3(0.0);
@@ -55,7 +57,9 @@ void main(){
   float distance2=dot(toSample,toSample);
   float falloff=clamp(1.0-distance2/(radius*radius*4.0),0.0,1.0);
   float facing=dot(normal,toSample)*inversesqrt(distance2+1e-4);
-  occlusion+=max(facing-0.08,0.0)*falloff;
+  // Ignore samples within the depth quantisation of this surface.
+  if(abs(toSample.z)<depth*0.004+0.01)facing=min(facing,0.0);
+  occlusion+=max(facing-0.2,0.0)*1.25*falloff;
   // Surfaces in front of this one reflect their light onto it.
   bounce+=sampleScene.rgb*max(facing,0.0)*falloff;
  }
