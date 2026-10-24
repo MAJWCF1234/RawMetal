@@ -697,6 +697,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
     if(std::wcsstr(commandLine,L"--nopixel"))retro::SoftwareRenderer::setPixelLighting(false); // A/B: baked vertex lamps
     if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
+    if(std::wcsstr(commandLine,L"--notaa"))retro::SoftwareRenderer::setTemporalAA(false); // A/B: MSAA only
     if(std::wcsstr(commandLine,L"--nodetail"))retro::SoftwareRenderer::setDetailLayer(0); // A/B: no close-up grain
     if(std::wcsstr(commandLine,L"--detail-field"))retro::SoftwareRenderer::setDetailLayer(2); // debug: raw detail field
     if(std::wcsstr(commandLine,L"--detail-normal"))retro::SoftwareRenderer::setDetailLayer(3); // debug: detail normal

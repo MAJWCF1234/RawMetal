@@ -172,6 +172,8 @@ void main(){
  }
 
  if(stereo.enabled.x>0.5)gl_Position=stereo.clip*vec4(worldPos,1.0);
+ // Temporal AA: sub-pixel jitter of the whole frame; the TAA stage removes it.
+ gl_Position.xy+=stereo.enabled.zw*gl_Position.w;
  outUV=uv;
  outLighting=adjustedLighting;
  outLight0=adjustedLight0;

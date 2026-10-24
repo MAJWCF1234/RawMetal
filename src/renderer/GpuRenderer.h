@@ -18,6 +18,8 @@ public:
  // Ambient occlusion, distance haze, wide bloom and grade (HDR, non-VR only).
  void setPostProcessing(bool enabled,bool occlusionView=false);
  bool postProcessing()const;
+ // Temporal anti-aliasing (windowed path only; headless frames stay exact).
+ void setTemporalAA(bool enabled);
  void setAtmosphere(const std::array<float,4>& atmosphere);
  bool beginStaticCache(int slot,std::uint64_t key);
  void endStaticCache();

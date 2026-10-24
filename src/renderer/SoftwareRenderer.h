@@ -56,6 +56,9 @@ public:
     // 0 off, 1 on, 2 debug: raw field, 3 debug: detail normal.
     static void setDetailLayer(int mode);
     static int detailLayer();
+    // Temporal anti-aliasing in the window (headless captures stay exact).
+    static void setTemporalAA(bool enabled);
+    static bool temporalAA();
     float gripError()const{return m_gripError;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,
