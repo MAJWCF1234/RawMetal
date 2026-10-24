@@ -782,7 +782,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
     float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
-    if(w.campaign()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
+    if(w.campaign()&&!w.authored()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
     if((w.campaign()&&w.level()<3&&!w.authored())&&(x+y)%4==0)facility(2,cx-dy*.055f,cy+dx*.055f,0,.15f,.16f,Z,yaw);
     (void)light;
    };
@@ -959,12 +959,25 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({switchX-.025f,face+side*.042f-.005f,h+1.17f},{switchX+.025f,face+side*.042f+.005f,h+1.20f},door.opening?blue:amber,1.55f);
   }
   // Compact sector label bolted directly to the header.
-  auto&front=door.sign>=0&&door.sign<int(m_routeSigns.size())?m_routeSigns[door.sign]:door.transfer?(w.campaignChunk(0)?m_transferSign:w.campaignChunk(1)?m_gantrySign:w.campaignChunk(3)?m_reactorSign:m_surfaceSign):w.campaignChunk(1)?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
-  auto&back=door.transfer?front:w.campaignChunk(1)?m_transferSign:(y<10?m_intakeSign:m_processingSign);
+  // Authored maps: boundary doors name the neighbouring map, interior doors
+  // the HUD zone on the far side of the header (front faces north).
+  const Texture* authoredFront=nullptr;const Texture* authoredBack=nullptr;
+  if(w.authored()&&w.campaign()&&door.sign<0){
+   int neighbour=door.transfer?w.level()+1:door.entry?w.level()-1:-1;
+   if(neighbour>=0&&neighbour<int(m_routeSigns.size()))authoredFront=authoredBack=&m_routeSigns[size_t(neighbour)];
+   else if(!door.transfer&&!door.entry){
+    const char* area=CampaignMapNames[size_t(w.level())];float eye=base+1.2f;
+    const char* south=w.zoneName({x,door.y+1.4f},eye);const char* north=w.zoneName({x,door.y-1.4f},eye);
+    if(south)authoredFront=&zoneSign(south,area);
+    if(north)authoredBack=&zoneSign(north,area);
+   }
+  }
+  auto&front=authoredFront?*authoredFront:door.sign>=0&&door.sign<int(m_routeSigns.size())?m_routeSigns[door.sign]:door.transfer?(w.campaignChunk(0)?m_transferSign:w.campaignChunk(1)?m_gantrySign:w.campaignChunk(3)?m_reactorSign:m_surfaceSign):w.campaignChunk(1)?(y<10?m_pumpSign:m_controlSign):(y<10?m_processingSign:m_containmentSign);
+  auto&back=authoredBack?*authoredBack:authoredFront?front:door.transfer?front:w.campaignChunk(1)?m_transferSign:(y<10?m_intakeSign:m_processingSign);
   // A plate of the sign texture's own 3.56:1 proportion, bolted to the header.
   float plateHalf=std::min(.8f,half-.05f),plateTop=headerBottom+.06f+plateHalf*2.f/3.56f;
   quad({x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},front,.9f);
-  quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},door.sign>=0?front:back,.9f);
+  quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},door.sign>=0&&!authoredBack?front:back,.9f);
  }
  if(!m_gpuFrame||!staticFixtures)for(const auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.
@@ -972,7 +985,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto ceilingLamp=[&](const WorldLight&light,float mount){
   m_emissionScale=light.intensity*(movingGeometry?w.liftLampPower():1.f);
   facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);
-  if(w.campaign()&&w.level()>=7){
+  if(w.campaign()&&(w.level()>=7||w.authored())){
    // The next slab or roof above this lamp is its actual mounting surface.
    // Low bay lamps in tall rooms need visible suspension, rather than floating.
    float top=light.z+.13f;
@@ -992,7 +1005,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   struct CeilingMount {const WorldLight*light;float mount;};std::vector<CeilingMount> mounts;mounts.reserve(w.lights().size());
   std::uint64_t key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
   for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.campaignChunk(3)&&&light==&w.lights().back())){
-   float mount=w.campaign()&&w.level()>=7?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;
+   float mount=w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;
    mounts.push_back({&light,mount});
    for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount})hash(std::bit_cast<std::uint32_t>(value));
   }
@@ -1006,7 +1019,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(light.mount==WorldLightMount::Wall)continue;
   movingGeometry=w.campaignChunk(3)&&&light==&w.lights().back();
   if(cacheCeilingLamps&&!movingGeometry)continue;
-  ceilingLamp(light,w.campaign()&&w.level()>=7?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f);
+  ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f);
  }
  movingGeometry=false;m_emissionScale=1.f;
  if(!staticFixtures)for(const auto&fixture:w.fixtures())facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);

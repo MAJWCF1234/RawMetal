@@ -102,7 +102,8 @@ void Game::updateEnemies(float dt){
   else if(heard){e.lastKnown=heard->source;auto local=heard->source;const auto&sourceWorld=worldAt(local);e.lastKnownZ=sourceWorld.supportBelow(local.x,local.y,heard->z);e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
   if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
-   float ceiling=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
+   // The real surface overhead: a service soffit or deck, not just the map roof.
+   float floor=m_world.floorHeight(e.pos.x,e.pos.y),ceiling=std::min(m_world.clearanceHeight(e.pos.x,e.pos.y),m_world.clearanceAbove(e.pos.x,e.pos.y,std::max(e.z,floor)+.05f));
    if(e.awareness<=0||m_world.outdoors()||ceiling-floor<2.15f||dist<2.2f){e.surfaceMode=0;e.verticalVelocity=0;}
    else if(e.surfaceMode==1){
     e.z=std::min(ceiling-1.05f,e.z+dt*2.1f);e.moving=true;e.gait+=dt*9.f;
@@ -110,7 +111,7 @@ void Game::updateEnemies(float dt){
     continue;
    }else{
     Vec2 toward=normalized(e.lastKnown-e.pos),next=e.pos+toward*(dt*1.6f);
-    float roof=m_world.clearanceHeight(next.x,next.y),nextZ=roof-1.05f;
+    float roof=std::min(m_world.clearanceHeight(next.x,next.y),m_world.clearanceAbove(next.x,next.y,e.z+.05f)),nextZ=roof-1.05f;
     if(roof-m_world.floorHeight(next.x,next.y)>2.15f&&std::fabs(nextZ-e.z)<.4f&&navFits(m_world,next,nextZ,1.05f)){
      e.pos=next;e.z=nextZ;e.heading=std::atan2(toward.y,toward.x);e.moving=true;e.gait+=dt*9.f;
     }else e.surfaceMode=0;
@@ -343,7 +344,7 @@ bool Game::testAI(){
  // Contact-only damage, backstep dodge, and closing door canceling a swing.
  for(int scenario=0;scenario<3;++scenario){auto g=validationScene(Enemy::Kind::Warden);auto& w=g.m_enemies[0];
   w.pos={7.5f,4.5f};w.home=w.pos;g.m_player.pos={6.6f,4.5f};w.heading=kPi;
-  if(scenario==2){w.pos={4.5f,8.95f};w.home=w.pos;g.m_player.pos={4.5f,7.95f};w.heading=-kPi*.5f;g.m_world.setDoor(0,1,true);}
+  if(scenario==2){w.pos={11.f,7.95f};w.home=w.pos;g.m_player.pos={11.f,6.95f};w.heading=-kPi*.5f;g.m_world.setDoor(0,1,true);}
   g.updateEnemies(.01f);if(w.windup<=0)return false;
   if(scenario==1)g.m_player.pos={5.f,5.5f};
   if(scenario==2)g.m_world.setDoor(0,0,false);
@@ -368,7 +369,8 @@ bool Game::testAI(){
   float after=length(s.pos-g.m_player.pos);debug<<"stalker flank then rush distance "<<before<<" -> "<<after<<'\n';
   if(after>=before-.25f)return false;
  }
- auto game=validationScene(Enemy::Kind::Huntsman);auto&e=game.m_enemies[0];e.pos={4.5f,9.5f};e.home=e.pos;e.lastKnown=e.pos;e.heading=-kPi*.5f;game.m_player.pos={4.5f,6.5f};auto original=e.pos;
+ // Across the closed Intake freight gate (door 0): unseen, heard, pursued once open.
+ auto game=validationScene(Enemy::Kind::Huntsman);auto&e=game.m_enemies[0];e.pos={11.f,9.5f};e.home=e.pos;e.lastKnown=e.pos;e.heading=-kPi*.5f;game.m_player.pos={11.f,6.f};auto original=e.pos;
  for(int i=0;i<120;++i)game.update({},1.f/120.f);debug<<"idle "<<int(e.state)<<' '<<length(e.pos-original)<<'\n';if(e.state!=Enemy::State::Idle||length(e.pos-original)>.05f)return false;
  InputState fire{};fire.fire=true;game.update(fire,.02f);debug<<"heard "<<int(e.state)<<'\n';if(e.state!=Enemy::State::Investigate)return false;
  game.m_world.openDoor(0);for(int i=0;i<600;++i)game.update({},1.f/120.f);debug<<"pursuit "<<e.pos.x<<' '<<e.pos.y<<' '<<int(e.state)<<'\n';if(e.pos.y>9.f)return false;
@@ -382,10 +384,13 @@ bool Game::testAI(){
  dodge.m_player.pos=attacker.pos+Vec2{.7f,0};
  for(int i=0;i<70;++i)dodge.update({},1.f/120.f);if(dodge.player().health!=100)return false;
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant}){auto stairs=validationScene(kind);auto&climber=stairs.m_enemies[0];
-  climber.pos={20.5f,15.5f};climber.home=climber.pos;climber.lastKnown=climber.pos;climber.z=stairs.groundHeight(climber.pos);climber.heading=-kPi*.5f;
-  stairs.m_player.pos={20.5f,11.5f};stairs.m_player.z=1.2f;
-  for(int i=0;i<1200&&climber.pos.y>=13.f;++i)stairs.update({},1.f/120.f);
-  debug<<"stairs "<<int(kind)<<' '<<climber.pos.y<<' '<<climber.z<<'\n';if(climber.pos.y>=13||std::fabs(climber.z-1.2f)>.01f)return false;
+  climber.pos={21.f,15.5f};climber.home=climber.pos;climber.lastKnown=climber.pos;climber.z=stairs.groundHeight(climber.pos);climber.heading=-kPi*.5f;
+  stairs.m_player.pos={21.f,11.5f};stairs.m_player.z=stairs.groundHeight(stairs.m_player.pos,5.f);
+  climber.lastKnown=stairs.m_player.pos;climber.lastKnownZ=stairs.m_player.z;climber.awareness=60;
+  // The flight is open-sided: reaching the player means climbing to their tread.
+  auto reached=[&]{return length(climber.pos-stairs.m_player.pos)<1.5f&&climber.z>=1.2f-.01f;};
+  for(int i=0;i<1200&&!reached();++i)stairs.update({},1.f/120.f);
+  debug<<"stairs "<<int(kind)<<' '<<climber.pos.x<<' '<<climber.pos.y<<' '<<climber.z<<" player z "<<stairs.m_player.z<<'\n';if(!reached())return false;
  }
  for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp}){
   auto orbit=validationScene(kind);auto&bug=orbit.m_enemies[0];bug.pos={7.5f,4.5f};bug.home=bug.pos;
@@ -413,15 +418,18 @@ bool Game::testAI(){
  {Game seam(WorldId::Ashfall);seam.m_enemies.clear();Enemy pursuer{};pursuer.kind=Enemy::Kind::Huntsman;pursuer.pos={23.4f,12.f};pursuer.home=pursuer.pos;pursuer.lastKnown={24.1f,12.f};pursuer.awareness=5;pursuer.state=Enemy::State::Chase;pursuer.z=seam.world().floorHeight(pursuer.pos.x,pursuer.pos.y);pursuer.lastKnownZ=pursuer.z;seam.m_enemies.push_back(pursuer);
   seam.m_player.pos={24.1f,12.f};seam.crossChunkBoundary();if(seam.level()!=1||seam.m_enemies.empty()||seam.m_enemies.back().pos.x<.2f||seam.m_enemies.back().pos.x>1.f)return false;
  }
- auto crate=validationScene(Enemy::Kind::Huntsman);auto&crawler=crate.m_enemies[0];crawler.pos={5.7f,3.5f};crawler.home=crawler.pos;crawler.heading=kPi;crate.m_player.pos={3.5f,3.5f};crate.m_player.z=.6f;
+ auto crate=validationScene(Enemy::Kind::Huntsman);auto&crawler=crate.m_enemies[0];crawler.pos={8.5f,5.3f};crawler.home=crawler.pos;crawler.heading=-kPi*.5f;crate.m_player.pos={8.5f,2.5f};crate.m_player.z=.6f;
+ crawler.lastKnown=crate.m_player.pos;crawler.lastKnownZ=crate.m_player.z;crawler.awareness=60;
  for(int i=0;i<240&&crawler.z<.59f;++i)crate.updateEnemies(1.f/120);
  debug<<"crate climb "<<crawler.z<<'\n';if(crawler.z<.59f)return false;
  {auto walls=validationScene(Enemy::Kind::Huntsman);auto&spider=walls.m_enemies[0];
-  spider.pos={1.5f,4.5f};spider.z=walls.m_world.floorHeight(spider.pos.x,spider.pos.y);spider.surfaceMode=1;
-  spider.surfaceNormal={1,0};spider.awareness=8;spider.lastKnown={10,10};walls.m_player.pos={10,10};
+  spider.pos={10.5f,1.5f};spider.z=walls.m_world.floorHeight(spider.pos.x,spider.pos.y);spider.surfaceMode=1;
+  spider.surfaceNormal={0,1};spider.awareness=8;spider.lastKnown={10,10};walls.m_player.pos={10,10};
   for(int i=0;i<180&&spider.surfaceMode!=2;++i)walls.updateEnemies(1.f/120.f);
+  debug<<"wall climb mode "<<spider.surfaceMode<<" at "<<spider.pos.x<<' '<<spider.pos.y<<" z "<<spider.z<<'\n';
   if(spider.surfaceMode!=2||spider.z<=walls.m_world.floorHeight(spider.pos.x,spider.pos.y)+.5f)return false;
   walls.m_player.pos=spider.pos+Vec2{1,0};walls.updateEnemies(1.f/120.f);
+  debug<<"wall drop mode "<<spider.surfaceMode<<'\n';
   if(spider.surfaceMode!=0)return false;
  }
  std::ofstream("ai-test.txt")<<"Closed-door sight blocking, hearing/pursuit, reactor stalker watch/flank/rush behavior, committed melee dodging, all species climbing stairs, bugs tracking a circling target, falling bodies, huntsmen climbing crates, rough Surface Nets hill traversal and outdoor cross-chunk pursuit: PASS\n";return true;

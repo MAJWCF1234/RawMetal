@@ -22,15 +22,6 @@ bool Game::testWorldIsolation(){
  {
   World flat(0,authored);flat.buildLightOcclusion();
   if(!check(flat.m_lightSolids.size()==2&&flat.lightRayClear({2,2},3.2f,{20,20},3.2f)&&!flat.lightRayClear({2,2},3.6f,{20,20},3.6f),"Constant ceiling merges to one optical solid without changing its shadow"))return false;
-  // Isolate the Foundry's authored 3.1/4.2/3.6-metre height bands and its
-  // single low ceiling tile, so fixture shadows cannot mask a merge error.
-  World varied(0);std::array<std::string,24> rows;MapRows openRows{};for(size_t i=0;i<rows.size();++i){rows[i]=std::string(24,'.');openRows[i]=rows[i];}
-  varied.m_layers={{"Ceiling regression",0,0,openRows}};varied.m_structures.clear();varied.m_fixtures.clear();varied.m_props.clear();varied.m_terminals.clear();varied.m_doors.clear();varied.m_lightSolids.clear();varied.m_lightNodes.clear();
-  bool ceiling=varied.lightRayClear({1.5f,4.5f},2.8f,{22.5f,4.5f},2.8f)&&!varied.lightRayClear({1.5f,4.5f},3.2f,{22.5f,4.5f},3.2f)&&varied.lightRayClear({1.5f,4.5f},4.25f,{22.5f,4.5f},4.25f);
-  ceiling&=varied.lightRayClear({1.5f,11.5f},3.25f,{22.5f,11.5f},3.25f)&&!varied.lightRayClear({1.5f,11.5f},4.5f,{22.5f,11.5f},4.5f);
-  ceiling&=!varied.lightRayClear({4.5f,7.5f},3.5f,{4.5f,8.5f},3.5f)&&!varied.lightRayClear({4.5f,8.5f},3.5f,{4.5f,7.5f},3.5f)&&varied.lightRayClear({4.5f,7.5f},4.15f,{4.5f,8.5f},4.15f);
-  ceiling&=!varied.lightRayClear({9.5f,14.5f},1.1f,{11.5f,14.5f},1.1f)&&!varied.lightRayClear({11.5f,14.5f},1.1f,{9.5f,14.5f},1.1f)&&varied.lightRayClear({9.5f,13.5f},1.1f,{11.5f,13.5f},1.1f);
-  if(!check(ceiling,"Merged ceilings preserve height steps, thickness and isolated low tiles in both ray directions"))return false;
  }
  auto rejected=[&](){try{World invalid(0,authored);return false;}catch(const std::runtime_error&){return true;}};
  {

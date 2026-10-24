@@ -1803,12 +1803,7 @@ float World::ceilingHeight(float x,float y)const{
  if(m_level>=6)return definition().ceiling;
  if(m_level>=4)return m_level==4?-6.1f:-5.6f;
  if(hasLift())return 16.f;
- if(m_level==2)return 6.f;
- if(m_level==0&&y>=24&&x>=20&&x<23)return 3.4f;
- if(m_level==1&&y<0&&x>=2&&x<5)return 3.6f;
- if(m_level==1)return y<7?3.4f:y<17?4.8f:3.8f;
- if(int(x)==10&&int(y)==14)return .66f;
- return y<8?3.1f:y<16?4.2f:3.6f;
+ return definition().ceiling;
 }
 void World::buildCollisionCandidates()const{
  m_collisionCells={};m_collisionAll={};for(auto&cells:m_collisionCells)cells.resize(Width*Height);

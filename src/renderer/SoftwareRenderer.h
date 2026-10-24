@@ -135,6 +135,9 @@ private:
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;
     Texture m_feedSign,m_returnSign,m_diskSign,m_authSign;
     std::array<Texture,34> m_routeSigns;
+    // Door header plates of authored maps, one per HUD zone name (lazy).
+    std::unordered_map<std::string,Texture> m_zoneSigns;
+    const Texture& zoneSign(const char* zone,const char* area);
     std::array<Texture,3> m_serviceAreaSigns;
     Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet,m_framePaint;
     Texture m_yellowSteel,m_redSteel,m_paleSteel;

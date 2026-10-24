@@ -17,6 +17,7 @@
 #include "platform/Win32Window.h"
 #include "audio/AudioEngine.h"
 #include <chrono>
+#include <cstring>
 #include <cwchar>
 #include <fstream>
 #include <queue>
@@ -508,6 +509,48 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }
      return 0;
     }
+    if(auto arg=std::wcsstr(commandLine,L"--map-dump=")){
+     // Every collision and render primitive of a map, for inspection.
+     int level=_wtoi(arg+11);auto game=retro::Game::mapInspection({12,12},0,0,level,false,0,true);const auto& w=game.world();
+     std::ofstream out("map-dump-"+std::to_string(level)+".txt");
+     for(const auto& s:w.structures())out<<"S "<<s.x1<<' '<<s.y1<<' '<<s.x2<<' '<<s.y2<<" z "<<s.bottom<<' '<<s.top<<" rail "<<s.rail<<" mat "<<s.material<<'\n';
+     for(const auto& f:w.fixtures())out<<"F "<<f.model<<" at "<<f.position.x<<' '<<f.position.y<<" base "<<f.base<<" size "<<f.width<<' '<<f.depth<<' '<<f.height<<" yaw "<<f.yaw<<" solid "<<f.solid<<'\n';
+     for(const auto& l:w.lights())out<<"L "<<l.position.x<<' '<<l.position.y<<" z "<<l.z<<" mount "<<int(l.mount)<<" yaw "<<l.yaw<<'\n';
+     for(const auto& p:w.pipes())out<<"P "<<p.start.x<<' '<<p.start.y<<" -> "<<p.end.x<<' '<<p.end.y<<" z "<<p.z<<" r "<<p.radius<<" endZ "<<p.endZ<<'\n';
+     for(const auto& d:w.doors())out<<"D "<<d.left<<'-'<<d.right<<" y "<<d.y<<" z "<<d.z<<" transfer "<<d.transfer<<" entry "<<d.entry<<" swing "<<d.swinging<<'\n';
+     for(const auto& t:w.terminals())out<<"T "<<t.position.x<<' '<<t.position.y<<" z "<<t.z<<" '"<<t.title<<"'\n";
+     for(size_t i=0;i<w.layers().size();++i){out<<"LAYER "<<w.layers()[i].name<<" z "<<w.layers()[i].elevation<<'\n';for(auto& r:w.layers()[i].rows)out<<r<<'\n';}
+     return 0;
+    }
+    if(auto arg=std::wcsstr(commandLine,L"--map-shot=")){
+     // One inspection frame: --map-shot=level,x,y,feet,yaw(deg),pitch[,creatures]
+     int level=0,creatures=0;float x=0,y=0,z=0,yaw=0,pitch=0;
+     swscanf_s(arg+11,L"%d,%f,%f,%f,%f,%f,%d",&level,&x,&y,&z,&yaw,&pitch,&creatures);
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     auto scene=retro::Game::mapInspection({x,y},yaw*retro::kPi/180.f,pitch,level,true,z,creatures==0);
+     renderer->render(scene);std::filesystem::create_directories(".build/shot");
+     std::ofstream out(".build/shot/shot.ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
+     for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+     return 0;
+    }
+    if(auto arg=std::wcsstr(commandLine,L"--map-sweep=")){
+     // Every reachable 3 m block of a map (map-views-N.txt from --map-audit),
+     // photographed facing north, east, south and west.
+     int level=_wtoi(arg+12);std::ifstream list("map-views-"+std::to_string(level)+".txt");
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(640,360);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/sweep");float x,y,z;int index=0;
+     while(list>>x>>y>>z){
+      for(int facing=0;facing<4;++facing){
+       auto scene=retro::Game::mapInspection({x,y},facing*retro::kPi*.5f,-4,level,true,z,true);
+       renderer->render(scene);
+       std::ofstream out(".build/sweep/"+std::to_string(level)+"-"+std::to_string(index)+"-"+std::to_string(facing)+".ppm",std::ios::binary);out<<"P6\n"<<640<<' '<<360<<"\n255\n";
+       for(int k=0;k<640*360;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+      }
+      std::ofstream(".build/sweep/"+std::to_string(level)+"-"+std::to_string(index)+".txt")<<x<<' '<<y<<' '<<z;
+      ++index;
+     }
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--prologue-inspection")){
      const int width=std::wcsstr(commandLine,L"--native-capture")?1920:960,height=std::wcsstr(commandLine,L"--native-capture")?1080:540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/prologue-preview");
@@ -895,6 +938,29 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
             report<<position.x<<", "<<position.y<<": "<<ms<<" ms/frame (render only)\n";
         }return 0;
     }
+    if(std::wcsstr(commandLine,L"--each-test")){
+        // The smoke chain's game tests, every one run independently: a failure
+        // early in the chain must not hide the result of everything after it.
+        const std::pair<const char*,bool(*)()> tests[]={
+         {"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
+         {"combat",retro::Game::testCombat},{"weapon-motion",retro::Game::testWeaponMotion},{"audio-events",retro::Game::testAudioEvents},
+         {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
+         {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
+         {"ai",retro::Game::testAI},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
+         {"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
+         {"lift-mix",retro::AudioEngine::testLiftMix},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
+         {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
+         {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps}};
+        std::ofstream report("each-test.txt");int failed=0;
+        const wchar_t* only=std::wcsstr(commandLine,L"--each-test=");
+        for(const auto& [name,run]:tests){
+         if(only){std::wstring wanted(only+12);wanted=wanted.substr(0,wanted.find(L' '));if(std::wstring(name,name+std::strlen(name))!=wanted)continue;}
+         auto start=std::chrono::steady_clock::now();bool ok=false;
+         try{ok=run();}catch(const std::exception& e){report<<name<<" threw "<<e.what()<<'\n';}
+         failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<name<<" "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<"s\n";report.flush();
+        }
+        report<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';return failed?1:0;
+    }
     if(std::wcsstr(commandLine,L"--smoke-test")){
         retro::Game game;
         game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
@@ -965,7 +1031,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         for(const auto& e:game.enemies())if(!reached(e.pos))return 3;
         for(const auto& p:game.pickups())if(!reached(p.pos))return 4;
         if(!reachable[22][21])return 5;
-        int walkable=0;for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(!game.world().solid(x+.5f,y+.5f)){if(!reachable[y][x])return 14;++walkable;}
+        int walkable=0;for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(!game.world().solid(x+.5f,y+.5f)){if(!reachable[y][x]){std::ofstream("map-test.txt")<<"Isolated open tile "<<x<<","<<y;return 14;}++walkable;}
         std::ofstream("map-test.txt")<<"All "<<walkable<<" walkable tiles connected; every enemy, pickup and extraction reachable.\n";
         retro::InputState input{};
         for(int frame=0;frame<120;++frame)game.update(input,1.f/60.f);

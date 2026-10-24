@@ -257,8 +257,9 @@ bool Game::testMovement(){
  {auto size=clean();if(size.player().hullHeight()!=Player::StandingHeight||std::fabs(size.player().eye-Player::StandingEye)>.001f)return false;
   InputState duck{};duck.crouch=true;size.update(duck,.1f);
   if(size.player().hullHeight()!=Player::CrouchedHeight||size.player().eye>=Player::StandingEye)return false;}
- {auto slide=clean();slide.m_player.pos={1.3f,4.5f};slide.m_velocity={-4,2};slide.tryMove({-.6f,.1f});
-  if(slide.player().pos.x<1.199f||slide.player().pos.x>1.21f||std::fabs(slide.player().pos.y-4.6f)>.001f||slide.m_velocity.x!=0||slide.m_velocity.y!=2)return false;
+ // Wall slide along the Foundry's bare west wall.
+ {auto slide=clean();slide.m_player.pos={1.3f,9.5f};slide.m_velocity={-4,2};slide.tryMove({-.6f,.1f});
+  if(slide.player().pos.x<1.199f||slide.player().pos.x>1.21f||std::fabs(slide.player().pos.y-9.6f)>.001f||slide.m_velocity.x!=0||slide.m_velocity.y!=2)return false;
  }
  {auto rails=clean();rails.loadLevel(2,false);const Structure* rail=nullptr;
   for(const auto&s:rails.m_world.structures())if(s.rail&&s.bottom>2.9f){rail=&s;break;}
@@ -273,23 +274,30 @@ bool Game::testMovement(){
  auto run=[&](int rate){auto g=clean();InputState move{};move.forward=true;move.sprint=true;
   for(int i=0;i<rate;++i){move.jump=i==rate/4;move.crouch=i>rate/3&&i<rate*3/4;g.update(move,1.f/rate);}return g;};
  auto a=run(60),b=run(120),c=run(30);debug<<"rate "<<length(a.player().pos-b.player().pos)<<' '<<a.player().z<<' '<<b.player().z<<'\n';if(length(a.player().pos-b.player().pos)>.15f||std::fabs(a.player().z-b.player().z)>.15f||length(c.player().pos-b.player().pos)>.25f)return false;
- game=clean();game.m_player.pos={20.5f,15.75f};game.m_player.angle=-kPi*.5f;game.m_player.z=game.groundHeight(game.m_player.pos);input={};input.forward=true;
- for(int i=0;i<130;++i)game.update(input,1.f/120.f);debug<<"stairs "<<game.player().pos.y<<' '<<game.player().z<<'\n';if(std::fabs(game.player().z-1.2f)>.01f||game.player().pos.y>=13)return false;
- game=clean();game.m_player.pos={9.6f,14.5f};game.m_player.angle=0;input={};input.forward=true;
- for(int i=0;i<60;++i)game.update(input,1.f/120.f);debug<<"standing "<<game.player().pos.x<<'\n';if(game.player().pos.x>9.81f)return false;
- input.crouch=true;for(int i=0;i<100;++i)game.update(input,1.f/120.f);debug<<"duck "<<game.player().pos.x<<'\n';if(game.player().pos.x<10.6f)return false;
- input={};game.update(input,.01f);if(game.player().pos.x<11.2f&&!game.player().crouched)return false;
- game=clean();game.m_player.pos={8.5f,4.4f};game.m_player.angle=-kPi*.5f;game.m_velocity={0,-3.6f};bool clearedCover=false;
- for(int i=0;i<130;++i){input={};input.jump=i==0;input.crouch=i>=18;input.forward=game.player().pos.y>2.55f;game.update(input,1.f/120.f);
-  if(game.player().pos.y<2.f&&game.player().grounded&&std::fabs(game.player().z)<.01f){clearedCover=true;break;}
+ // The mezzanine stair: at least five treads climbed, standing on a tread.
+ game=clean();game.m_player.pos={21.f,15.75f};game.m_player.angle=-kPi*.5f;game.m_player.z=game.groundHeight(game.m_player.pos);input={};input.forward=true;
+ for(int i=0;i<170;++i)game.update(input,1.f/120.f);debug<<"stairs "<<game.player().pos.y<<' '<<game.player().z<<'\n';
+ if(game.player().z<1.f-.01f||std::fabs(game.player().z-game.groundHeight(game.player().pos))>.01f||game.player().pos.y>=13)return false;
+ // The fallen duct across the west passage: stand blocked, crawl under, and
+ // stay down while still beneath it.
+ game=clean();game.m_player.pos={2.f,11.f};game.m_player.angle=kPi*.5f;input={};input.forward=true;
+ for(int i=0;i<60;++i)game.update(input,1.f/120.f);debug<<"standing "<<game.player().pos.y<<'\n';if(game.player().pos.y>11.81f)return false;
+ input.crouch=true;for(int i=0;i<100;++i)game.update(input,1.f/120.f);debug<<"duck "<<game.player().pos.y<<'\n';if(game.player().pos.y<12.6f)return false;
+ input={};game.update(input,.01f);if(game.player().pos.y<13.75f&&!game.player().crouched)return false;
+ // The Intake's 1.1 m dock bumper, cleared with a crouch-jump.
+ game=clean();game.m_player.pos={11.3f,4.6f};game.m_player.angle=-kPi*.5f;game.m_velocity={0,-3.6f};bool clearedCover=false;
+ for(int i=0;i<130;++i){input={};input.jump=i==0;input.crouch=i>=18;input.forward=game.player().pos.y>2.6f;game.update(input,1.f/120.f);
+  if(game.player().pos.y<2.6f&&game.player().grounded&&std::fabs(game.player().z)<.01f){clearedCover=true;break;}
  }debug<<"duck-jump clear 1.1m cover "<<game.player().pos.y<<' '<<game.player().z<<' '<<clearedCover<<'\n';if(!clearedCover)return false;
  std::ofstream("movement-test.txt")<<"1.6 m standing hull, low crouch tunnel, crouched jump, airborne duck clearing 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb and blocked standing: PASS\n";return true;
 }
 bool Game::testProgression(){
- auto game=validationScene(Enemy::Kind::Huntsman,3);game.m_enemies.clear();game.m_player.pos={4.5f,7.9f};game.m_player.angle=kPi*.5f;
- InputState input{};input.forward=true;for(int i=0;i<60;++i)game.update(input,1.f/120.f);if(game.player().pos.y>8.18f)return false;
- input.use=true;game.update(input,.01f);input.use=false;for(int i=0;i<240;++i)game.update(input,1.f/120.f);if(game.player().pos.y<9.5f)return false;
- game=validationScene(Enemy::Kind::Huntsman,3);game.m_player.pos={3.f,5.5f};game.m_player.angle=kPi;input={};input.use=true;game.update(input,.02f);
+ // The Intake's freight gate (y 7.5) holds the player until E opens it.
+ auto game=validationScene(Enemy::Kind::Huntsman,3);game.m_enemies.clear();game.m_player.pos={11.f,6.9f};game.m_player.angle=kPi*.5f;
+ InputState input{};input.forward=true;for(int i=0;i<60;++i)game.update(input,1.f/120.f);if(game.player().pos.y>7.18f)return false;
+ input.use=true;game.update(input,.01f);input.use=false;for(int i=0;i<240;++i)game.update(input,1.f/120.f);if(game.player().pos.y<8.5f)return false;
+ // The shift log on the records desk in the Intake booth.
+ game=validationScene(Enemy::Kind::Huntsman,3);game.m_player.pos={21.3f,3.2f};game.m_player.angle=-kPi*.5f;input={};input.use=true;game.update(input,.02f);
  if(game.activeLog()!=0||game.logTime()<=0)return false;
  input.use=false;game.update(input,.01f);input.use=true;game.update(input,.01f);
  if(game.activeLog()!=-1||game.logTime()!=0)return false;
@@ -307,12 +315,20 @@ bool Game::testProgression(){
   std::queue<int> pending;pending.push(start);parent[start]=start;
   while(!pending.empty()){int cell=pending.front();pending.pop();int x=cell%24,y=cell/24;const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
    for(int d=0;d<4;++d){int nx=x+dx[d],ny=y+dy[d];if(nx<0||ny<0||nx>=24||ny>=24)continue;int next=ny*24+nx;
-    if(parent[next]<0&&planning.navigable(x,y,nx,ny)){parent[next]=cell;pending.push(next);}
+    // A player walks round hazards (the Foundry's pour, steam, live gear).
+    bool hazardous=false;for(const auto& h:planning.hazards())hazardous|=nx+.5f>h.x1&&nx+.5f<h.x2&&ny+.5f>h.y1&&ny+.5f<h.y2;
+    // The walker stays upright: crawlways need a crouch it does not use.
+    auto standable=[&](float px,float py){return planning.fits(px,py,planning.supportBelow(px,py,planning.floorHeight(px,py)+.4f)+.02f,Player::StandingHeight,false);};
+    // Thin partitions sit on cell edges: test the edge as well as the cell.
+    bool upright=standable(nx+.5f,ny+.5f)&&standable(x+.5f+dx[d]*.5f,y+.5f+dy[d]*.5f);
+    if(parent[next]<0&&!hazardous&&upright&&planning.navigable(x,y,nx,ny)){parent[next]=cell;pending.push(next);}
    }
   }
-  if(parent[goal]<0){diagnostic<<"No route in chunk "<<level;return false;}
-  for(auto&e:spawns)if(parent[int(e.pos.y)*24+int(e.pos.x)]<0){diagnostic<<"Unreachable enemy "<<level;return false;}
-  for(auto&p:game.pickups())if(parent[int(p.pos.y)*24+int(p.pos.x)]<0){diagnostic<<"Unreachable pickup "<<level;return false;}
+  if(parent[goal]<0){diagnostic<<"No route in chunk "<<level<<'\n';
+   for(int y=0;y<24;++y){for(int x=0;x<24;++x)diagnostic<<(parent[y*24+x]>=0?'.':planning.tile(x,y)=='#'?'#':'x');diagnostic<<'\n';}
+   return false;}
+  for(auto&e:spawns)if(parent[int(e.pos.y)*24+int(e.pos.x)]<0){diagnostic<<"Unreachable enemy "<<level<<" at "<<e.pos.x<<","<<e.pos.y<<" z "<<e.z;return false;}
+  for(auto&p:game.pickups())if(parent[int(p.pos.y)*24+int(p.pos.x)]<0){diagnostic<<"Unreachable pickup "<<level<<" at "<<p.pos.x<<","<<p.pos.y;return false;}
   std::vector<Vec2> route;for(int cell=goal;cell!=start;cell=parent[cell])route.push_back({cell%24+.5f,cell/24+.5f});std::reverse(route.begin(),route.end());
   route.push_back({21.5f,24.25f});size_t waypoint=0;int ticks=0;
   for(;ticks<14000&&!game.won()&&game.level()==level&&waypoint<route.size();++ticks){auto delta=route[waypoint]-game.player().pos;
@@ -320,7 +336,7 @@ bool Game::testProgression(){
    int door=game.world().nearbyDoor(game.player().pos,normalized(delta));input.use=door>=0&&!game.world().doors()[door].opening;
    input.mouseDx=wrapAngle(std::atan2(delta.y,delta.x)-game.player().angle)/(.0022f*game.settings().sensitivity);game.update(input,1.f/120.f);
   }
-  diagnostic<<"Chunk "<<level<<" ticks "<<ticks<<" waypoint "<<waypoint<<"/"<<route.size()<<" position "<<game.player().pos.x<<", "<<game.player().pos.y<<" active "<<game.level()<<'\n';
+  diagnostic<<"Chunk "<<level<<" ticks "<<ticks<<" waypoint "<<waypoint<<"/"<<route.size()<<" position "<<game.player().pos.x<<", "<<game.player().pos.y<<" active "<<game.level()<<" health "<<game.player().health<<" ammo "<<game.player().ammo<<" enemies "<<game.m_enemies.size()<<'\n';
   if(level==0){if(game.level()!=1||game.player().health!=67||game.player().ammo!=23||game.m_enemies.size()!=9)return false;
    // Walk back across the same seam: old doors, kills and pickups must remain changed.
    game.m_player.angle=-kPi*.5f;input={};input.forward=true;for(int i=0;i<70&&game.level()==1;++i)game.update(input,1.f/120.f);
