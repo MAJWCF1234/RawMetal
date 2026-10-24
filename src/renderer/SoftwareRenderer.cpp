@@ -933,7 +933,9 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    float bottom=std::max(floor,top-4.5f);
    float ahead=dx*std::cos(game.player().angle)+dy*std::sin(game.player().angle);
    float eyeZ=game.player().z+game.player().eye;
-   if(top-bottom<.8f||floor>eyeZ+2.f||top<eyeZ-2.f||ahead<-.5f||d2>=distances[3])continue;
+   // Distance only: a facing test swapped lamps in and out of the four post
+   // slots while turning, popping lamp shadows and glow.
+   if(top-bottom<.8f||floor>eyeZ+2.f||top<eyeZ-2.f||d2>=distances[3])continue;(void)ahead;
    int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];fogPowers[slot]=fogPowers[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
    distances[slot]=d2;fogPowers[slot]=lamp.intensity;fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
   }

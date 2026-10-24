@@ -127,17 +127,15 @@ void main(){
  }
 
  if(parallaxMaterial&&tangentFrameValid){
+   // Single-sample offset mapping with offset limiting. The old 4-layer march
+   // divided by the viewing angle and stacked ghost copies of the texture at
+   // grazing angles, which swam as the camera turned. Fade it out at grazing
+   // angles, where the derivative tangent frame is least stable.
    vec3 toEye=normalize(view.eyeYaw.xyz-worldPos);
-   vec2 direction=vec2(dot(toEye,tangent),dot(toEye,bitangent))/max(abs(dot(toEye,geometricNormal)),0.35);
-   vec2 stepUV=clamp(direction,vec2(-2.0),vec2(2.0))*parallaxScale*parallaxFade/4.0;
-
-   sampleUV=uv+stepUV*2.0;
-
-   for(int layer=0;layer<4;++layer){
-    float height=textureGrad(reliefMap,sampleUV,uvDx,uvDy).r;
-    if(float(layer)/4.0>=height)break;
-    sampleUV-=stepUV;
-   }
+   float grazingFade=smoothstep(0.3,0.65,abs(dot(toEye,geometricNormal)));
+   vec2 direction=vec2(dot(toEye,tangent),dot(toEye,bitangent));
+   float height=textureGrad(reliefMap,uv,uvDx,uvDy).r;
+   sampleUV=uv+direction*(0.5-height)*parallaxScale*parallaxFade*grazingFade;
  }
 
  if(stereo.enabled.y>0.5)sampleUV=crispTexelUV(sampleUV,uvDx,uvDy);

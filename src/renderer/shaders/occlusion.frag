@@ -34,9 +34,12 @@ float bayer4(vec2 pixel){
  return (m[q.y*4+q.x]+0.5)/16.0;
 }
 
+// Planar depth under half a metre is the first-person viewmodel: it neither
+// receives nor casts screen-space occlusion.
+const float ViewModelDepth=0.5;
 void main(){
  float depth=depthAt(uv);
- if(depth<=0.02||depth>=p.grade.w){outColor=vec4(0.0,0.0,0.0,1.0);return;}
+ if(depth<ViewModelDepth||depth>=p.grade.w){outColor=vec4(0.0,0.0,0.0,1.0);return;}
  vec3 center=viewPosition(uv,depth),normal=viewNormal(uv,center);
  const int Samples=12;
  float radius=p.camera.w,occlusion=0.0;vec3 bounce=vec3(0.0);
@@ -47,6 +50,7 @@ void main(){
   float angle=rotation+float(i)*2.3999632;
   vec2 at=clamp(uv+vec2(cos(angle),sin(angle))*screenRadius*sqrt(t),vec2(0.0),vec2(1.0));
   vec4 sampleScene=texture(sceneImage,at);
+  if(sampleScene.a<ViewModelDepth)continue;
   vec3 toSample=viewPosition(at,sampleScene.a)-center;
   float distance2=dot(toSample,toSample);
   float falloff=clamp(1.0-distance2/(radius*radius*4.0),0.0,1.0);
