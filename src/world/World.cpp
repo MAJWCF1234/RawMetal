@@ -12,84 +12,6 @@
 namespace retro {
 namespace {
 std::atomic<uint64_t> nextTerrainRevision{1};
-constexpr MapRows FoundryGround = {
-    "########################",
-    "#...........#..........#",
-    "#..CC...B...#...GG.....#",
-    "#..CC.......#..........#",
-    "#......................#",
-    "#.................BB...#",
-    "#......CC...#...###....#",
-    "#...........#..........#",
-    "###...############...###",
-    "#.........#............#",
-    "#..GG.....#..TT....GG..#",
-    "#............TT........#",
-    "#...#........TT........#",
-    "#...#..................#",
-    "#...#............BB....#",
-    "#.........#............#",
-    "##########....#####...##",
-    "#..BB..........#.......#",
-    "#......#..CC...#...#...#",
-    "#......................#",
-    "#..###.........#.......#",
-    "#......G.......#####...#",
-    "#..............#####.X.#",
-    "####################...#"
-};
-constexpr MapRows PressureWorksGround = {
-    "##...###################",
-    "#.......#..............#",
-    "#.......#..............#",
-    "#...................CC.#",
-    "#......................#",
-    "#..CC...#..............#",
-    "#......................#",
-    "###...############...###",
-    "#......................#",
-    "#.....B...#..#.#.......#",
-    "#..............#.......#",
-    "#..............#.....B.#",
-    "#......................#",
-    "#.CC...................#",
-    "#..............#.......#",
-    "#.........#..#.#.......#",
-    "#......................#",
-    "#####...##########...###",
-    "#..........#...........#",
-    "#......................#",
-    "#........B.............#",
-    "#..........#....####...#",
-    "#..........#....####.X.#",
-    "####################...#"
-};
-constexpr MapRows ReactorServiceGalleryGround = {
-    "#####...################",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#"
-};
 constexpr MapRows CoolantReturnGround = {
     "#......................#",
     "#......................#",
@@ -324,164 +246,6 @@ constexpr MapRows WasteHandlingSortingDeck = {
     "________________________",
     "________________________"
 };
-constexpr MapRows TurbineGantryGround = {
-    "##...###################",
-    "#....#.................#",
-    "#....#....GGGG.........#",
-    "#.........GGGG.........#",
-    "#......................#",
-    "#..CCC.............BB..#",
-    "#..CCC....######...BB..#",
-    "#.........#....#.......#",
-    "######....#....#...#####",
-    "#.........#....#.......#",
-    "#....GG...#....#..GG...#",
-    "#....GG...#....#..GG...#",
-    "#.........#....#.......#",
-    "#.........#....#.......#",
-    "#....######....#####...#",
-    "#......................#",
-    "#..BB..............CC..#",
-    "#..B.....########..CC..#",
-    "#.B......#......#......#",
-    "#........#......#......#",
-    "#...SS...#......#......#",
-    "#...SS..........####...#",
-    "#...............####.X.#",
-    "####################...#"
-};
-constexpr MapRows TurbineGantryUpperCatwalk = {
-    "________________________",
-    "________________________",
-    "______==========________",
-    "______=________=________",
-    "______=________=________",
-    "______=___====_=________",
-    "______=___=__===________",
-    "______=___=_____________",
-    "______=___=_____________",
-    "___====___=______====___",
-    "___=______=______=______",
-    "___=______========______",
-    "___=____________________",
-    "___=____________________",
-    "___======_______________",
-    "________=_______________",
-    "________=_______________",
-    "________======__________",
-    "_____________=__________",
-    "_____________=__________",
-    "____SS========__________",
-    "____SS=_________________",
-    "____===_________________",
-    "________________________"
-};
-
-constexpr MapLayer FoundryGroundLayer{"Foundry / ground",0,0,FoundryGround};
-constexpr MapRows LiftShaftGround = {
-    "##...###################",
-    "#......................#",
-    "#......................#",
-    "#.....CC...............#",
-    "#......................#",
-    "#..BB..................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#....GG................#",
-    "#......................#",
-    "#..............GG......#",
-    "#......................#",
-    "#....................X.#",
-    "####################...#",
-};
-constexpr MapRows emptyDeck(){
- MapRows rows{};for(auto& row:rows)row="________________________";return rows;
-}
-constexpr MapRows reactorDeck(){
- return {
-"________________________",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_========______========_",
-"_========______========_",
-"_========______====__==_",
-"_========______====__==_",
-"_========______====__==_",
-"_========______====__==_",
-"_==================__==_",
-"_=========_____====__==_",
-"_=========_____====__==_",
-"_=========_____========_",
-"_=========_____========_",
-"_=========_____========_",
-"_=========_____========_",
-"_=========_____========_",
-"________________________",
- };
-}
-constexpr MapRows shaftDeck(){
- return {
-"________________________",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_========______========_",
-"_========______========_",
-"_========______========_",
-"_========______========_",
-"_========______========_",
-"_========______========_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"_======================_",
-"________________________",
- };
-}
-constexpr MapRows collarDeck(){
- auto rows=shaftDeck();
- rows[0]="__===___________________";
- rows[8]="_==========SS==========_";
- rows[9]="_========__SS__========_";
- return rows;
-}
-constexpr MapRows shaftScenery(){
- MapRows rows{};for(auto&row:rows)row="________________________";
- rows[8]=rows[15]="________========________";
- for(int y=9;y<15;++y)rows[y]="________=______=________";
- return rows;
-}
-constexpr std::array ReactorStairs{Staircase{19,12,21,18,-9,-6,15,true,true}};
-constexpr MapLayer PressureWorksGroundLayer{"Pressure Works / ground",0,0,PressureWorksGround};
-constexpr MapLayer TurbineGantryGroundLayer{"Turbine Gantry / ground",0,0,TurbineGantryGround};
-constexpr MapLayer TurbineGantryUpperLayer{"Turbine Gantry / upper catwalk",3,.3f,TurbineGantryUpperCatwalk};
-constexpr std::array GantryStairs{Staircase{4,18,6,22,0,3,15,true,true}};
-
 constexpr MapRows ashfallRegion(int region){
  MapRows rows={
   "........................","........................","........................","........................",
@@ -624,14 +388,6 @@ std::uint8_t authoredExclusionMaterial(int worldX,int worldY,int worldZ){
  return worldZ<top-1||top>=3?TerrainRock:TerrainSoil;
 }
 
-const std::array<std::vector<Fixture>,3> MapFixtures{{
- {{7,{1.27f,2.7f},0,2,.5f,1.8f,kPi*.5f,true},{7,{22.7f,18.8f},0,1.6f,.5f,1.8f,kPi*.5f,true},
-  {8,{6.5f,1.10f},.75f,.7f,.20f,1.f,0},{8,{14.5f,9.10f},.7f,.7f,.20f,1.f,0}},
- {{7,{1.27f,3.f},0,2,.5f,1.8f,kPi*.5f,true},{7,{13.f,16.72f},0,1.6f,.5f,1.8f,0,true},
-  {8,{10.5f,1.10f},.8f,.7f,.20f,1.f,0},{8,{1.10f,10.5f},.75f,.7f,.20f,1.f,kPi*.5f}},
- {{7,{1.27f,10.5f},0,1.8f,.5f,1.8f,kPi*.5f,true},{7,{22.7f,4.5f},0,1.8f,.5f,1.8f,kPi*.5f,true},
-  {8,{7.5f,1.10f},.7f,.7f,.20f,1.f,0},{8,{1.10f,19.5f},.8f,.7f,.20f,1.f,kPi*.5f}}
-}};
 bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  float dx=x-fixture.position.x,dy=y-fixture.position.y,c=std::cos(fixture.yaw),s=std::sin(fixture.yaw);
  return std::fabs(dx*c-dy*s)<fixture.width*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*.5f+margin;
@@ -675,30 +431,6 @@ void World::buildPopulation(){
   for(int i=0;i<junk;++i)m_clutterSpawns.push_back({(i+m_level)%6,{3.5f+i*1.4f,20.5f-float((i+m_level)%2)*1.2f},-999,(i+m_level)*.7f});
   return;
  }
- switch(m_level){
- case 0:
-  m_creatureSpawns={{C::Huntsman,{9.5f,4.9f}},{C::Wasp,{15.5f,2.5f}},{C::Brute,{19.5f,7.5f}},{C::Huntsman,{8.5f,11.5f}},
-                   {C::Wasp,{18.5f,12.5f}},{C::Brute,{5.5f,15.5f}},{C::Huntsman,{12.5f,18.5f}},{C::Wasp,{19.5f,20.5f}}};
-  m_pickupSpawns={{{4.5f,7.5f},P::Ammo},{{13.5f,5.5f},P::Health},{{22.5f,10.5f},P::Ammo},{{7.5f,20.5f},P::Health}};
-  break;
- case 1:
-  m_creatureSpawns={{C::Huntsman,{17.5f,4.5f}},{C::Wasp,{6.5f,6.2f}},{C::Brute,{4.5f,14.5f}},{C::Huntsman,{9.5f,12.5f}},
-                   {C::Wasp,{19.5f,12.5f}},{C::Brute,{21.5f,15.5f}},{C::Huntsman,{7.5f,19.5f}},{C::Wasp,{15.5f,20.5f}},{C::Brute,{21.5f,19.5f}}};
-  m_pickupSpawns={{{4.5f,4.5f},P::Ammo},{{16.5f,3.5f},P::Health},{{2.5f,15.5f},P::Ammo},{{21.5f,12.5f},P::Ammo},{{7.5f,20.5f},P::Health},{{17.5f,19.5f},P::Ammo}};
-  break;
- case 2:
-  m_creatureSpawns={{C::Huntsman,{7.5f,4.5f}},{C::Wasp,{16.5f,4.5f}},{C::Brute,{7.5f,12.5f}},
-                   {C::Huntsman,{3.5f,15.5f}},{C::Wasp,{19.5f,15.5f}},{C::Brute,{21.5f,20.5f}}};
-  m_pickupSpawns={{{3.5f,3.5f},P::Ammo},{{7.5f,15.5f},P::Health},{{7.5f,19.5f},P::Ammo},{{21.5f,18.5f},P::Ammo}};
-  break;
- case 3:
-  m_creatureSpawns={{C::Huntsman,{5.5f,13.5f}},{C::Wasp,{17.5f,19.5f}},{C::Warden,{21.5f,18.5f}}};
-  m_pickupSpawns={{{12.5f,15.5f},P::Ammo},{{15.5f,17.5f},P::Health},{{21.5f,19.5f},P::Ammo}};
-  break;
- default:return;
- }
- const Vec2 positions[3][6]={{{2.8f,5.9f},{3.1f,6.1f},{11.3f,4.3f},{11.7f,4.6f},{18.1f,19.9f},{18.8f,20.2f}},{{6.8f,3.2f},{7.1f,3.4f},{9.2f,12.2f},{9.5f,12.6f},{18.7f,19.8f},{19.1f,20.f}},{{7.3f,4.6f},{7.7f,4.8f},{7.2f,18.7f},{7.6f,19.f},{18.6f,9.7f},{19.5f,9.5f}}};
- for(int i=0;i<6;++i)m_clutterSpawns.push_back({i,m_level==3?Vec2{3.5f+i*.45f,19.5f}:positions[m_level][i],m_level==2&&i>=4?3.f:-999.f,i*.7f});
 }
 
 World::World(int level,std::shared_ptr<const AuthoredMapData> map):m_level(level),m_worldId(WorldId::Custom){loadAuthoredMap(std::move(map));}
@@ -1364,220 +1096,45 @@ World::World(int level,WorldId id):m_worldId(id) {
   if(m_level==8){m_doors[1].sign=32;m_doors[2].sign=33;}
   buildLayers(stairs);return;
  }
- if(m_level==4||m_level==5){
-  m_layers={{m_level==4?"Reactor Service Gallery":"Coolant Return",-9,0,m_level==4?ReactorServiceGalleryGround:CoolantReturnGround}};
-  m_openNorthBoundary=m_level==5;
-  m_openSouthBoundary=m_level==4;
-  if(m_level==4)m_doors={{5,8,.5f,0,false,false,true}};
-  const float roof=m_level==4?2.9f:3.4f;
-  auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
-  auto shelf=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({7,{x,y},0,1.8f,.5f,1.8f,yaw,true});};
-  auto machine=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({12,{x,y},0,3.060f,.940f,1.751f,yaw,true});};
-  auto switchgear=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({13,{x,y},0,.9066f,.4956f,2.2f,yaw,true});};
-  auto tank=[&](float x,float y){m_fixtures.push_back({14,{x,y},0,2.404f,2.645f,2.2f,0,true});};
-  if(m_level==4){
-   wall(1,4.5f,4.5f,4.75f);wall(5.9f,4.5f,9,4.75f);
-   wall(8.75f,4.75f,9,8.5f);wall(8.75f,11,9,13.25f);
-   wall(1,13,9,13.25f);
-   Door workshop{4.5f,5.9f,4.625f};workshop.swinging=true;m_doors.push_back(workshop);
-   m_structures.push_back({4.5f,4.5f,5.9f,4.75f,2.55f,roof,false,3});
-   wall(16,4.5f,19,4.75f);wall(21,4.5f,23,4.75f);
-   wall(16,4.75f,16.25f,8);wall(16,10.5f,16.25f,13.25f);
-   wall(16,13,23,13.25f);
-   for(float y:{6.f,7.5f,9.f,10.5f,12.f})switchgear(22.55f,y,kPi*.5f);
-   machine(4.6f,7.3f);machine(4.6f,11.5f);
-   shelf(1.65f,9.3f,kPi*.5f);shelf(7.9f,6.3f,kPi*.5f);
-   wall(1,16,4,16.25f);wall(7,16,9,16.25f);
-   wall(8.75f,16.25f,9,20);wall(8.75f,22,9,24);
-   shelf(1.65f,18,kPi*.5f);shelf(1.65f,21,kPi*.5f);
-   shelf(5.3f,23.2f);shelf(7.7f,18,kPi*.5f);
-   wall(16,16,23,16.25f);wall(16,16.25f,16.25f,19);
-   for(float y:{18.f,21.f})m_fixtures.push_back({6,{21.3f,y},0,1.87f,.55f,.99f,0,true});
-   switchgear(17.5f,17.f);switchgear(18.9f,17.f);
-   m_terminals={{{14.4f,3.4f},"SERVICE GALLERY / WORK ORDER","PUMP ASSEMBLY MOVED TO WEST WORKSHOP.","ELECTRICAL ROOM MUST REMAIN DRY.",0,false}};
-   m_structures.push_back({14.7f,1,15.1f,23,2.45f,2.57f,false,2});
-   m_structures.push_back({15.1f,6.2f,22.7f,6.6f,2.45f,2.57f,false,2});
-   for(float y:{2.f,6.f,10.f,14.f,18.f,22.f})
-    m_structures.push_back({14.87f,y,14.93f,y+.06f,2.57f,roof,false,2});
-   for(Vec2 p:{Vec2{5,9},Vec2{19,9},Vec2{5,20},Vec2{19,20}})m_lights.push_back({p,-6.25f});
-  }else{
-   m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-8.85f},
-                   {13.75f,7.8f,16.75f,10.7f,-9.40f,-8.85f},
-                   {7.25f,12.4f,10.25f,18.f,-9.40f,-8.85f},
-                   {13.75f,12.4f,16.75f,18.f,-9.40f,-8.85f}};
-   tank(4.f,4.4f);tank(20.f,4.4f);
-   for(float y:{9.f,15.5f}){machine(3.8f,y,kPi*.5f);machine(20.2f,y,kPi*.5f);}
-   for(float x:{10.45f,13.45f})for(auto ends:{Vec2{8,10.5f},Vec2{12.6f,17.8f}})
-    m_structures.push_back({x,ends.x,x+.10f,ends.y,0,.9f,true,2});
-   for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2})
-    m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
-   for(float x:{3.8f,20.2f})m_pipes.push_back({{x,3.2f},{x,15.5f},-6.3f,.14f});
-   m_pipes.push_back({{3.8f,3.2f},{20.2f,3.2f},-6.3f,.14f});
-   for(float x:{3.8f,20.2f}){
-    m_pipes.push_back({{x,4.4f},{x,4.4f},-6.3f,.14f,-6.85f});
-    for(float y:{9.f,15.5f})m_pipes.push_back({{x,y},{x,y},-6.3f,.09f,-7.3f});
-   }
-   wall(17.25f,20.65f,19.05f,20.87f);wall(20.45f,20.65f,22.85f,20.87f);
-   wall(17.25f,22.85f,22.85f,23.08f);wall(17.25f,20.87f,17.47f,22.85f);
-   m_structures.push_back({19.05f,20.65f,20.45f,20.87f,2.55f,roof,false,3});
-   Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;m_doors.push_back(storeDoor);
-   m_doors.push_back({8,11,23.5f,0,false,true});m_doors.back().sign=6;
-   m_fixtures.push_back({7,{21.4f,22.48f},0,1.6f,.48f,1.8f,0,true});
-   m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
-   m_clutterSpawns.push_back({3,{21.1f,21.8f}});m_clutterSpawns.push_back({2,{18.5f,21.7f}});
-   shelf(2,21,kPi*.5f);switchgear(1.5f,18.5f,-kPi*.5f);
-   m_terminals={{{12,4.4f},"RETURN HALL / LOCAL CONTROL","DUPLEX CIRCULATION / DUTY AND STANDBY.","DRAIN CHANNELS BEFORE MAINTENANCE.",0,false}};
-   for(Vec2 p:{Vec2{12,6},Vec2{12,12},Vec2{12,18},Vec2{5.7f,12},Vec2{18.3f,12}})m_lights.push_back({p,-5.75f});
-  }
-  for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
-  buildLayers({});
-  buildLights();
-  return;
+ // Coolant Return (map 5): settling basins either side of a dry walkway.
+ m_layers={{"Coolant Return",-9,0,CoolantReturnGround}};
+ m_openNorthBoundary=true;
+ const float roof=3.4f;
+ auto wall=[&](float x1,float y1,float x2,float y2){m_structures.push_back({x1,y1,x2,y2,0,roof,false,3});};
+ auto shelf=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({7,{x,y},0,1.8f,.5f,1.8f,yaw,true});};
+ auto machine=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({12,{x,y},0,3.060f,.940f,1.751f,yaw,true});};
+ auto switchgear=[&](float x,float y,float yaw=0.f){m_fixtures.push_back({13,{x,y},0,.9066f,.4956f,2.2f,yaw,true});};
+ auto tank=[&](float x,float y){m_fixtures.push_back({14,{x,y},0,2.404f,2.645f,2.2f,0,true});};
+ m_waterVolumes={{7.25f,7.8f,10.25f,10.7f,-9.40f,-8.85f},
+                 {13.75f,7.8f,16.75f,10.7f,-9.40f,-8.85f},
+                 {7.25f,12.4f,10.25f,18.f,-9.40f,-8.85f},
+                 {13.75f,12.4f,16.75f,18.f,-9.40f,-8.85f}};
+ tank(4.f,4.4f);tank(20.f,4.4f);
+ for(float y:{9.f,15.5f}){machine(3.8f,y,kPi*.5f);machine(20.2f,y,kPi*.5f);}
+ for(float x:{10.45f,13.45f})for(auto ends:{Vec2{8,10.5f},Vec2{12.6f,17.8f}})
+  m_structures.push_back({x,ends.x,x+.10f,ends.y,0,.9f,true,2});
+ for(const auto& water:m_waterVolumes)for(float x:{water.x1,water.x2})
+  m_structures.push_back({x-.04f,water.y1+.18f,x+.04f,water.y2-.18f,0,.075f,false,2});
+ for(float x:{3.8f,20.2f})m_pipes.push_back({{x,3.2f},{x,15.5f},-6.3f,.14f});
+ m_pipes.push_back({{3.8f,3.2f},{20.2f,3.2f},-6.3f,.14f});
+ for(float x:{3.8f,20.2f}){
+  m_pipes.push_back({{x,4.4f},{x,4.4f},-6.3f,.14f,-6.85f});
+  for(float y:{9.f,15.5f})m_pipes.push_back({{x,y},{x,y},-6.3f,.09f,-7.3f});
  }
- if(hasLift()){
-  ScriptEvent reactorExit;reactorExit.id=stateId("event_reactor_exit_checkpoint");
-  reactorExit.x1=20;reactorExit.y1=21;reactorExit.x2=23;reactorExit.y2=24;reactorExit.bottom=-9.5f;reactorExit.top=-7.5f;
-  reactorExit.requireState=stateId("reactor_bulkhead_released");reactorExit.requireEnemiesClear=true;
-  ScriptAction checkpoint;checkpoint.type=ScriptAction::Type::Checkpoint;reactorExit.actions.push_back(checkpoint);m_scriptEvents.push_back(reactorExit);
-  m_layers={{"Reactor / lower containment",-9,0,LiftShaftGround},
-            {"Reactor / upper manifold",-6,.3f,reactorDeck()},
-            {"Scenery / coolant risers",-3,.25f,shaftScenery()},
-            {"Surface lift / collar",0,.3f,collarDeck()},
-            {"Scenery / ventilation plant",3,.25f,shaftScenery()},
-            {"Scenery / electrical service",6,.25f,shaftScenery()},
-            {"Surface / sealed gates",9,.35f,shaftScenery()}};
-  m_structures.push_back({11,8,13,10,-.3f,0});
-  m_structures.push_back({10.95f,8,11,10,0,2.1f,true});
-  m_structures.push_back({13,8,13.05f,10,0,2.1f,true});
-  m_structures.push_back({2,0,5,1,-9,-.3f});
-  m_structures.push_back({10.5f,18.5f,13.5f,21.5f,-9,-3.4f,false,1});
-  for(float z:{-9.f,-6.f,0.f}){
-   m_structures.push_back({7,2,7.2f,5,z,z+2.65f,false,3});
-   m_structures.push_back({7,7,7.2f,9,z,z+2.65f,false,3});
-   m_structures.push_back({2,16,5,16.2f,z,z+2.65f,false,3});
-   m_structures.push_back({7,16,9,16.2f,z,z+2.65f,false,3});
-  }
-  for(float z:{-3.3f,2.7f}){
-   m_structures.push_back({1,1,23,9,z,z+.12f,false,2});
-   m_structures.push_back({1,15,23,23,z,z+.12f,false,2});
-   m_structures.push_back({1,9,9,15,z,z+.12f,false,2});
-   m_structures.push_back({15,9,23,15,z,z+.12f,false,2});
-  }
-  for(float z:{-3.f,3.f,6.f,9.f}){
-   m_structures.push_back({7.8f,7.8f,8,16.2f,z,z+2.75f,false,3});
-   m_structures.push_back({16,7.8f,16.2f,16.2f,z,z+2.75f,false,3});
-   m_structures.push_back({8,7.8f,16,8,z,z+2.75f,false,3});
-   m_structures.push_back({8,16,16,16.2f,z,z+2.75f,false,3});
-   m_structures.push_back({7.8f,7.8f,9,16.2f,z+2.65f,z+2.7f,false,2});
-   m_structures.push_back({15,7.8f,16.2f,16.2f,z+2.65f,z+2.7f,false,2});
-   m_structures.push_back({9,7.8f,15,9,z+2.65f,z+2.7f,false,2});
-   m_structures.push_back({9,15,15,16.2f,z+2.65f,z+2.7f,false,2});
-  }
-  for(float x:{1.3f,22.3f})for(float y:{16.7f,22.f})
-   m_structures.push_back({x,y,x+.4f,y+.4f,-9,-3.3f,false,3});
-  for(float y:{16.7f,22.f})m_structures.push_back({1.3f,y,22.7f,y+.4f,-3.65f,-3.3f,false,2});
-  for(float x:{17.35f,18.85f})m_structures.push_back({x-.313f,19.04f,x+.313f,19.46f,-9,-7.812f,false,6});
-  for(Vec2 cargo:{Vec2{4.45f,7.9f},Vec2{5.75f,9.25f}})m_structures.push_back({cargo.x-.525f,cargo.y-.525f,cargo.x+.525f,cargo.y+.525f,0,.85f,false,6});
-  m_structures.push_back({6.175f,13.075f,6.825f,13.725f,0,.95f,false,6});
-  m_structures.push_back({15.97f,10.74f,17.9f,11.86f,0,1.71f,false,6});
-  m_structures.push_back({15.5f,14.9f,18.5f,15.05f,0,2.55f,false,2});
-  m_structures.push_back({4,12.4f,8.85f,12.95f,2.15f,2.55f,false,6});
-  m_structures.push_back({5.1f,20.65f,6.9f,21.4f,-5.45f,-5.4f,false,2});
-  for(float x:{5.15f,6.75f})for(float y:{20.7f,21.25f})m_structures.push_back({x,y,x+.08f,y+.08f,-6,-5.45f,false,2});
-  m_structures.push_back({2.8f,17.2f,5.5f,19.1f,-9,-8.85f,false,3});
-  m_structures.push_back({15.2f,20.55f,18.2f,22.f,-9,-8.88f,false,3});
-  for(float z:{-9.f,-6.f}){
-   m_structures.push_back({2.2f,17.1f,2.38f,22.5f,z+2.1f,z+2.28f,false,2});
-   m_structures.push_back({15.1f,22.3f,22.5f,22.48f,z+2.1f,z+2.28f,false,2});
-  }
-  buildLayers(ReactorStairs);
-  m_doors={{2,5,.5f,0,false,false,true,9},{20,23,21.5f,0,false,true}};
-  m_doors.back().requireEnemiesClear=true;m_doors.back().requireControl=true;
-  m_terminals={{{4.5f,2.5f},"LIFT SYSTEM / OVERRIDE","SURFACE GATES CLAMPED SHUT.","LAST CAB TO THE TOP. BOARD AND DISPATCH.",9},
-               {{13.35f,11.5f},"CAB CONTROL / DISPATCH","ASCENDING TO SURFACE.","WARNING: SAME BRAKE MODEL AS SERVICE LIFT.",9,true},
-               {{8.3f,21.2f},"MAINTENANCE / SHIFT LOG","RETURN TRIPPED AGAIN. NO FEED PRESSURE.","LEFT THE SERVICE DISK WITH THE SPARES.",3},
-               {{18.1f,19.1f},"REACTOR ACCESS / DRIVE A:","","",0,false,1},
-               {{6.3f,18.2f},"01 / COOLANT FEED","","",0,false,2},
-               {{17.1f,19.6f},"02 / COOLANT RETURN","","",3,false,3}};
-  m_props={{0,{4.15f,18.15f},1.25f,2.2f,0,{1.1f,.66f},.15f},{1,{16.7f,21.2f},1.12f,2.f,0,{1.f,.31f},.12f},
-           {2,{5.1f,22.15f},.3f,4.2f,kPi*.5f,{2.1f,.15f}}};
-  m_fixtures={{6,{4.2f,20.2f},0,1.87f,.55f,.99f,0,true},
-              {7,{3.6f,21.8f},3,2.052f,.61217f,1.44f,0,true},
-              {7,{16.2f,21.6f},3,2.052f,.61217f,1.44f,0,true}};
-  for(float y:{16.7f,18.4f,20.1f})m_fixtures.push_back({8,{22.9f,y},.5f,.66776f,.1156f,.90576f,kPi*.5f,true});
-  for(float x:{15.9f,17.1f})m_fixtures.push_back({8,{x,22.87f},3.55f,.66776f,.1156f,.90576f,0,true});
-  m_fixtures.push_back({7,{6.2f,11.f},9,2.052f,.61217f,1.44f,kPi*.5f,true});
-  m_fixtures.push_back({6,{16.9f,13.2f},9,2.38f,.70f,1.26f,0,true});
-  for(float x:{16.f,17.f,18.f})m_fixtures.push_back({8,{x,14.83f},9.7f,.66776f,.1156f,.90576f,0,true});
-  for(float z:{-9.f,-6.f,0.f})for(Vec2 p:{Vec2{4,6},Vec2{16,6},Vec2{21,6},Vec2{4,19},Vec2{8,22},Vec2{16,22},Vec2{21,19}}){
-   float ceiling=clearanceAbove(p.x,p.y,z);if(ceiling-z>1.8f)m_lights.push_back({p,ceiling-.15f});
-  }
-  for(float z:{-3.f,3.f,6.f,9.f})for(Vec2 p:{Vec2{8.5f,11.5f},Vec2{15.5f,12.5f}})m_lights.push_back({p,clearanceAbove(p.x,p.y,z)-.15f});
-  m_lights.push_back({{12,11.8f},2.45f});refreshReactorTerminals();
-  return;
- }
- m_fixtures=MapFixtures[m_level];
- m_layers={m_level==0?FoundryGroundLayer:m_level==1?PressureWorksGroundLayer:TurbineGantryGroundLayer};
- // Area set pieces (facility 39-46, Mega Pack industrial set). Positions keep
- // every walkable tile, route gap and spawn of the original layouts.
- if(m_level==0){
-  // Two converter vessels stand on the central plinth (the T block), each
-  // venting through a flue to the roof. A stock cage lines the hall wall.
-  for(float y:{10.78f,12.22f}){m_fixtures.push_back({39,{14.f,y},0,1.9f,1.4f,2.7f,0,false});m_fixtures.push_back({40,{14.f,y},2.7f,.4f,.4f,.7f,0,false});}
-  m_fixtures.push_back({41,{14.f,9.5f},0,2.4f,1.f,1.1f,0,true});
-  for(Vec2 p:{Vec2{1.3f,10.5f},Vec2{1.3f,14.5f},Vec2{22.7f,11.6f},Vec2{22.7f,14.5f}})m_fixtures.push_back({43,p,0,.6f,.5f,3.4f,kPi*.5f,true});
- }
- if(m_level==1){
-  // Riser bundles with valve wheels along both pump hall walls.
-  for(float y:{9.2f,12.6f,15.4f}){m_fixtures.push_back({44,{1.06f,y},0,.4f,.1f,4.7f,kPi*.5f,false});m_fixtures.push_back({45,{1.13f,y},1.25f,.32f,.12f,.32f,kPi*.5f,false});}
-  for(float y:{9.6f,13.6f}){m_fixtures.push_back({44,{22.94f,y},0,.4f,.1f,4.7f,-kPi*.5f,false});m_fixtures.push_back({45,{22.87f,y},1.25f,.32f,.12f,.32f,-kPi*.5f,false});}
- }
- // The Turbine Gantry's G bays hold turbine casings, placed in its own block.
- if(m_level!=2)for(int y=0;y<Height;++y)for(int x=0;x<Width;){
-  if(tile(x,y)!='G'){++x;continue;}
-  int cells=tile(x+1,y)=='G'?2:1;float width=cells*.94f,scale=width/3.4f;
-  m_fixtures.push_back({6,{x+cells*.5f,y+.5f},0,width,scale,1.8f*scale,0,true});x+=cells;
- }
- if(m_level==2){
-  // One main turbine under the catwalk and two auxiliary units in the side bays.
-  m_fixtures.push_back({46,{12.f,3.f},0,3.76f,1.9f,2.66f,0,true});
-  for(float x:{6.f,19.f})m_fixtures.push_back({46,{x,11.f},0,1.9f,1.9f,1.6f,0,true});
-  m_layers.push_back(TurbineGantryUpperLayer);
-  m_internalWallHeight=2.7f;
-  m_structures.push_back({2.f,0.f,5.f,.18f,2.5f,6.f,false,3});
-  m_structures.push_back({20.f,23.82f,23.f,24.f,2.5f,6.f,false,3});
-  buildLayers(GantryStairs);
-  m_doors={{2,5,.5f,0,false,false,true},{20,23,21.5f,0,false,true}};
-  m_doors.back().requireEnemiesClear=true;m_doors.back().requireControl=true;
-  m_terminals={{{18.5f,9.5f},"GANTRY CONTROL / 05:42","TURBINE BRAKES RELEASED.","LOWER TRANSFER INTERLOCK UNSEALED.",3,true}};
-  buildLights();buildLights(4,3);m_lights.push_back({{5,20},5.85f});
-  for(auto&light:m_lights)light.intensity=1.5f;
-  return;
- }
- if(m_level==1){
-  m_props={{0,{11.5f,11.f},1.5f,2.8f,0,{1.4f,.8f}},
-           {0,{11.5f,14.f},1.5f,2.8f,kPi,{1.4f,.8f}},
-           {1,{20.f,10.6f},1.545f,2.7f,kPi*.5f,{.415f,1.35f}},
-           {1,{4.f,10.5f},1.374f,2.4f,0,{1.2f,.369f}},
-           {2,{7.f,12.5f},.1928f,2.8f,0,{.0964f,1.4f}},
-           {3,{13.f,3.5f},.96f,3.f,0,{1.5f,.03f}}};
- }
- for(int y:m_level==0?std::initializer_list<int>{8,16}:std::initializer_list<int>{7,17})for(int x=1;x<Width-1;){if(solid(x+.5f,y+.5f)){++x;continue;}int start=x;while(x<Width-1&&!solid(x+.5f,y+.5f))++x;m_doors.push_back({float(start),float(x),float(y)+.5f});}
- m_doors.push_back({20,23,21.5f,0,false,true});
- m_doors.back().requireEnemiesClear=true;
- if(m_level==1)m_doors.insert(m_doors.begin(),{2,5,.5f,0,false,false,true});
- m_terminals={{{2.2f,5.5f},"SHIFT LOG / 03:17","COOLANT FAILED. THE NIGHT CREW","SEALED FOUNDRY WITH US INSIDE."},
- {{16.5f,10.5f},"CONTAINMENT / 04:06","THE VESSELS WERE NOT EMPTY.","CLEAR THE HOSTILES. GET OUT."},
- {{18.5f,19.5f},"DISPATCH / LAST SIGNAL","PRESSURE WORKS STILL HAS POWER.","THE TRANSFER INTERLOCK IS LIVE."}};
- if(m_level==1)m_terminals={{{6.5f,2.5f},"RECEIVING / MANIFEST","THE LAST TRAIN ARRIVED EMPTY.","THE PRESSURE GAUGES KEPT RISING."},{{19.5f,20.5f},"CONTROL / NIGHT SHIFT","SURFACE LIFT IS ON EMERGENCY POWER.","THE PUMPS MUST STAY RUNNING."}};
- // Maps 0-2 add an offset second lamp grid: their halls were lit only every 5 x 4 m.
- buildLights();buildLights(4,3);
- for(auto&light:m_lights)light.intensity=m_level==0?1.6f:1.5f;
- if(m_level==0){
-  // Molten metal pooled on the converter plinth (material 25) and a lamp over the pour.
-  m_structures.push_back({13.04f,10.04f,14.96f,12.96f,.14f,.165f,false,25});
-  m_lights.push_back({{12.4f,11.5f},3.25f,WorldLightMount::Ceiling,0,1.6f,8.f});
- }
+ wall(17.25f,20.65f,19.05f,20.87f);wall(20.45f,20.65f,22.85f,20.87f);
+ wall(17.25f,22.85f,22.85f,23.08f);wall(17.25f,20.87f,17.47f,22.85f);
+ m_structures.push_back({19.05f,20.65f,20.45f,20.87f,2.55f,roof,false,3});
+ Door storeDoor{19.05f,20.45f,20.76f};storeDoor.swinging=true;m_doors.push_back(storeDoor);
+ m_doors.push_back({8,11,23.5f,0,false,true});m_doors.back().sign=6;
+ m_fixtures.push_back({7,{21.4f,22.48f},0,1.6f,.48f,1.8f,0,true});
+ m_fixtures.push_back({8,{18.15f,22.74f},.78f,.67f,.20f,.91f,0,false});
+ m_clutterSpawns.push_back({3,{21.1f,21.8f}});m_clutterSpawns.push_back({2,{18.5f,21.7f}});
+ shelf(2,21,kPi*.5f);switchgear(1.5f,18.5f,-kPi*.5f);
+ m_terminals={{{12,4.4f},"RETURN HALL / LOCAL CONTROL","DUPLEX CIRCULATION / DUTY AND STANDBY.","DRAIN CHANNELS BEFORE MAINTENANCE.",0,false}};
+ for(Vec2 p:{Vec2{12,6},Vec2{12,12},Vec2{12,18},Vec2{5.7f,12},Vec2{18.3f,12}})m_lights.push_back({p,-5.75f});
+ for(auto&s:m_structures){s.bottom-=9.f;s.top-=9.f;}
+ buildLayers({});
+ buildLights();
 }
 void World::buildLights(int startX,int startY){
  for(int y=startY;y<Height-1;y+=4)for(int x=startX;x<Width-1;x+=5)if(tile(x,y)!='#')
@@ -1780,19 +1337,7 @@ float World::floorHeight(float x,float y)const{
  }
  if(m_mapData)return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
  if(m_level>=6)return m_layers.empty()?definition().spawnHeight:m_layers.front().elevation;
- if(m_level>=4)return -9.f;
- if(hasLift())return -9.f;
- if(m_level==2)return 0;
- if(m_level==1){
-  if(x>=20&&x<23&&y>=21&&y<23)return std::max(0.f,.8f-std::floor((y-21)*2)*.2f);
-  if(x>=17&&x<23&&y>=9&&y<16)return y<13?1.2f:std::min(1.2f,std::floor((16-y)*2)*.2f);
-  if(x>=12&&x<23&&y>=18&&y<23)return std::min(.8f,std::floor((y-18)*2)*.2f);
-  if(x>=6&&x<9&&y>=10&&y<15)return y<11||y>=14?-.2f:-.4f;
-  return 0;
- }
- if(x>=16&&x<23&&y>=9&&y<16){if(x<19&&y>=11&&y<13)return std::floor((x-16)*2)*.2f;if(y<13)return 1.2f;return std::min(1.2f,std::floor((16-y)*2)*.2f);}
- if(x>=1&&x<7&&y>=17&&y<21){if(x>=5&&y<19)return std::floor((7-x)*2)*.2f;if(y<19)return .8f;return std::min(.8f,std::floor((21-y)*2)*.2f);}
- return 0;
+ return -9.f; // Coolant Return
 }
 float World::waterSurface(float x,float y)const{
  for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2)return water.surface;
@@ -1802,9 +1347,7 @@ float World::ceilingHeight(float x,float y)const{
  if(outdoors())return 128.f;
  if(m_mapData)return definition().ceiling;
  if(m_level>=6)return definition().ceiling;
- if(m_level>=4)return m_level==4?-6.1f:-5.6f;
- if(hasLift())return 16.f;
- return definition().ceiling;
+ return -5.6f; // Coolant Return
 }
 void World::buildCollisionCandidates()const{
  m_collisionCells={};m_collisionAll={};for(auto&cells:m_collisionCells)cells.resize(Width*Height);
@@ -1940,7 +1483,6 @@ bool World::doorBlocks(float x,float y,float feet,float height)const{
 }
 float World::clearanceHeight(float x,float y)const{
  float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f)height=std::min(height,floorHeight((door.left+door.right)*.5f,door.y)+door.z+2.5f);
- if(campaignChunk(0)&&x>20.17f&&x<22.83f&&y>22.90f&&y<23.04f)height=std::min(height,2.57f);
  return height;
 }
 void World::buildLightOcclusion()const{

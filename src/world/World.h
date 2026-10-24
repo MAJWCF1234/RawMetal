@@ -282,7 +282,7 @@ public:
     bool solid(float x, float y) const;
     bool isExit(float x, float y) const;
     // Legacy grating rule for the hard-coded chunks; authored maps lay their own floors.
-    bool metalFloor(int x,int y)const{return !outdoors()&&!m_mapData&&(m_level>=4?(x>=7&&x<=16):y>=8||x>=12);}
+    bool metalFloor(int x,int)const{return !outdoors()&&!m_mapData&&x>=7&&x<=16;}
     std::vector<Vec2> machines()const;
     float floorHeight(float x,float y)const;
     float supportHeight(float x,float y,bool dynamic=true,bool shelfCavities=false)const;

@@ -132,8 +132,8 @@ private:
     std::array<Texture,4> m_bloodVariants;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
-    Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_gantrySign,m_reactorSign,m_liftSign,m_liftDispatch;
-    Texture m_feedSign,m_returnSign,m_diskSign,m_authSign;
+    Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_liftSign,m_liftDispatch;
+    Texture m_feedSign,m_returnSign;
     std::array<Texture,34> m_routeSigns;
     // Door header plates of authored maps, one per HUD zone name (lazy).
     std::unordered_map<std::string,Texture> m_zoneSigns;
@@ -177,9 +177,8 @@ private:
     Mesh m_medkitMesh{133},m_shellsMesh{135};
     Texture m_medkitTexture,m_shellsTexture;
     Texture m_barrelTexture,m_crateTexture,m_concrete,m_bulkhead;
-    Texture m_intakeSign,m_processingSign,m_containmentSign,m_exitSign;
-    Texture m_hazard,m_chemicalSign,m_machineSign,m_confinedSign,m_signRust,m_panelMetal,m_routePaint,m_redPaint;
-    Texture m_terminalTexture,m_cautionSign,m_serviceSign;
+    Texture m_hazard,m_chemicalSign,m_signRust,m_panelMetal,m_routePaint,m_redPaint;
+    Texture m_terminalTexture,m_cautionSign;
     Texture m_logo;
     Texture makeSign(const char* title,const char* subtitle,std::uint32_t accent);
     Texture makePaint(std::uint32_t color);
