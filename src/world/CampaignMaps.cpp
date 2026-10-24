@@ -55,8 +55,8 @@ void rack(Map& m,float x,float y,float floor,int tiers=4){
   }
   // Rear diagonal bracing remains inside the rack footprint and clear of
   // the personnel aisle and shelf lamps.
-  m.pipes.push_back({{x+.12f,y+3.9f},{x+2.6f,y+3.9f},z+.35f,.035f,z+2.8f,1});
-  m.pipes.push_back({{x+.12f,y+3.9f},{x+2.6f,y+3.9f},z+2.8f,.035f,z+.35f,1});
+  m.pipes.push_back({{x+.12f,y+3.9f},{x+2.6f,y+3.9f},z+.35f,.035f,z+2.65f,1});
+  m.pipes.push_back({{x+.12f,y+3.9f},{x+2.6f,y+3.9f},z+2.65f,.035f,z+.35f,1});
  }
 }
 void container(Map& m,float x,float y,float floor,bool open=false,int material=11){
@@ -2172,7 +2172,8 @@ std::shared_ptr<const Map> make(int level){
   break;
  case 16:case 17:case 18:case 19:
   board(m,19.35f,4.8f,-22.8f,level==16?"B / MAINTENANCE SPARES":level==17?"C / CHEMICALS":level==18?"D / RESTRICTED":"E / LONG TERM","STORAGE / KEEP AISLES CLEAR",2.6f);
-  for(float x:{2.f,18.f})for(float y:{5.f,13.f})rack(m,x,y,-25,6);
+  // Racks under the upper walks stop a storey short, under the deck.
+  for(float x:{2.f,18.f})for(float y:{5.f,13.f})rack(m,x,y,-25,(level==18&&x<10&&y>8)||(level==19&&x>10&&y>8)?4:6);
   for(int tier=1;tier<=5;++tier){float z=-25+tier*3.f;
    deck(m,z,5,4,6,21);deck(m,z,17,4,18,21);
    // Two staggered crossovers, not a five-storey solid ceiling at the entry.
@@ -2212,7 +2213,8 @@ std::shared_ptr<const Map> make(int level){
    for(float x:{2.f,5.9f,9.85f})wall(m,x,23.85f,x+.15f,24,-6.15f,-4.35f,2);
   }
   if(level==18){machineryClock(m,"upper_rack_noise",23000);cue(m,"upper_rack_noise",7000,Sound::JunkMetal,{19,14},"",.9f,-6.7f);cue(m,"upper_rack_noise",16000,Sound::SpiderCall,{19,14},"",.5f);for(float yy:{12.f,13.f,14.f})wall(m,18,yy,21,yy+.15f,-7,-6.85f,10);board(m,19.5f,16,-4.7f,"RACK ACCESS CLOSED","OVERHEAD STOCK DISPLACED",2.7f);}
-  if(level==17||level==18)m.creatureSpawns={{CreatureKind::Huntsman,{20,11},entry},{CreatureKind::Wasp,{12,18},entry}};
+  if(level==17)m.creatureSpawns={{CreatureKind::Huntsman,{20,11},base},{CreatureKind::Wasp,{12,18},entry}};
+  if(level==18)m.creatureSpawns={{CreatureKind::Huntsman,{7,12},-13},{CreatureKind::Wasp,{12,18},entry}};
   m.pickupSpawns.push_back({level==19?Vec2{21,12}:Vec2{12,3},PickupKind::Ammo,entry});
   m.lights.clear();for(float z:{-22.5f,-16.5f,-10.5f})for(float y:{6.f,14.f})for(float x:{6.6f,16.4f}){
    m.lights.push_back({{x,y},z});float anchor=x<10?5.3f:17.5f;
