@@ -4,6 +4,34 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.9.0 - Light update (2026-10-24)
+
+A rendering update on top of v0.8.0's Night Shift content.
+
+- **Per-pixel lamps with cube shadow maps.** Every lamp lights the static
+  world per pixel with normal-mapped diffuse and GGX specular, and casts real
+  shadows from a six-face shadow map (props, railings and grates all occlude).
+- **Sun and sky for Ashfall.** A directional sun with three cascaded shadow
+  maps, sky-hemisphere ambient, and a procedural overcast sky with a sun disc
+  and drifting cloud deck.
+- **Temporal anti-aliasing.** Stable edges and texture detail in motion, on top
+  of 4x MSAA. `r_taa off` returns to MSAA only.
+- **Close-up quality.** Walking up to a wall no longer collapses it into flat
+  blocks: a detail layer keeps relief and lighting at any distance, parallax and
+  texel snapping fade with magnification, and the ghost copies the occlusion
+  pass painted on near walls are gone.
+- **Volumetric light.** Lamp shafts are shadow-mapped, so light pours through
+  gaps and stops at walls; haze is continuous from the eye.
+- Mailbox presentation (no tearing), per-frame shadow budgeting for streamed
+  chunks, and the renderer survives walking into every Security Office wall at
+  1080p in the new windowed-path harness.
+- **27,827,712-byte EXE / 26.54 MiB**, **5.46 MiB free** under the 32 MiB ceiling.
+- Vulkan, performance, prologue, Exclusion and world isolation tests pass.
+
+Console switches for A/B: `r_pixel`, `r_taa`, `r_post`, `r_texels`.
+
+SHA-256: `E4A465B463B12D3ECEB6E6CC92136FEF8AE1178A53B65C1568957167CC9D2FD2`
+
 ## v0.8.0 - Night Shift update (2026-10-23)
 
 A content and presentation update, not a patch.
