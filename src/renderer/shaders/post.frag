@@ -81,7 +81,9 @@ vec3 bloom(){
 void main(){
  vec4 source=texture(sceneImage,uv);
  vec3 color=source.rgb;float depth=source.a;
- bool surface=depth>0.02&&depth<p.grade.w;
+ // The viewmodel (planar depth under 0.5 m) keeps its own lighting.
+ bool viewModel=depth>0.02&&depth<0.5;
+ bool surface=depth>=0.5&&depth<p.grade.w;
  if(surface&&p.camera.x!=0.0){
   vec4 occlusion=denoisedOcclusion(depth);
   if(p.camera.x<0.0){outColor=vec4(vec3(occlusion.a),depth);return;}
@@ -96,7 +98,7 @@ void main(){
  vec2 ndc=uv*2.0-1.0;
  vec3 rayView=vec3(ndc.x/p.camera.z,-ndc.y/(p.camera.z*p.camera.y),1.0);
  vec3 ray=normalize(rayView);
- float rayLength=surface?depth*length(rayView):40.0;
+ float rayLength=surface||viewModel?depth*length(rayView):40.0;
  if(surface&&p.haze.w>0.0){
   // Aerial perspective: distance lifts toward the atmosphere colour.
   float amount=1.0-exp(-max(depth-2.0,0.0)*p.haze.w);
