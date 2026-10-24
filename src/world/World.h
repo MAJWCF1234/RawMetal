@@ -209,7 +209,12 @@ public:
     bool openSouthBoundary()const{return m_openSouthBoundary;}
     bool openWestBoundary()const{return m_openWestBoundary;}
     bool openEastBoundary()const{return m_openEastBoundary;}
-    Vec2 exitPoint()const{return m_level==5?Vec2{19.5f,22.5f}:m_level==4?Vec2{12.f,22.5f}:Vec2{21.5f,22.5f};}
+    // Where the way on lies: the transfer door, else the open seam onward.
+    Vec2 exitPoint()const{
+     for(const auto& door:m_doors)if(door.transfer)return {(door.left+door.right)*.5f,std::min(door.y+1.f,23.5f)};
+     if(m_openSouthBoundary)return {12.f,23.f};if(m_openEastBoundary)return {23.f,12.f};
+     if(m_openNorthBoundary)return {12.f,1.f};if(m_openWestBoundary)return {1.f,12.f};
+     return {21.5f,22.5f};}
     const std::vector<WorldProp>& props()const{return m_props;}
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}
     const std::vector<AuthoredSign>& signs()const{static const std::vector<AuthoredSign> empty;return m_mapData?m_mapData->signs:empty;}
@@ -276,6 +281,9 @@ public:
     static constexpr float ReactorDiskZ=-5.215f; // On the upper workshop bench.
     bool takeReactorDisk();
     void useReactorTerminal(int action);
+    // A stitched reactor chunk mirrors the lift chunk's puzzle state, so its
+    // terminals read and its interlocks open from one source of truth.
+    void syncReactor(const World& source);
 
     char tile(int x, int y) const;
     bool destroyTile(int x,int y);

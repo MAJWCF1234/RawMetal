@@ -29,6 +29,9 @@ public:
  bool beginStaticCache(int slot,std::uint64_t key);
  void endStaticCache();
  void clearStaticCaches();
+ // Lamp shadow maps still queued: a changed lamp set redraws a bounded
+ // number per frame, so a new view settles over several frames.
+ bool shadowsPending()const;
  // Static lamps (world x, y, z, range, intensity, kelvin, tint) lit per pixel with cube
  // shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
  void setLamps(const std::vector<std::array<float,7>>& lamps,bool enabled,int detail=1);

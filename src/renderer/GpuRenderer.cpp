@@ -1180,6 +1180,11 @@ void GpuRenderer::saveSunCascades(const char* prefix){
   auto* depth=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<size_t(Impl::SunSize)*Impl::SunSize;++i)file.put(char(depth[i]>>8));
  }
 }
+bool GpuRenderer::shadowsPending()const{
+ if(!m->pixelLighting)return false;
+ for(size_t i=0;i<std::min(m->lampDirty.size(),size_t(m->shadowCapacity));++i)if(m->lampDirty[i])return true;
+ return false;
+}
 void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches){if(entry.second.shadowIndices.handle)m->shadowDirtyBounds.push_back(entry.second.bounds);m->retire(entry.second.buffer);m->retire(entry.second.shadowIndices);}m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
 std::uint64_t GpuRenderer::staticCacheHits()const{return m->cacheHits;}
 void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});m->renderingViewmodel=true;}

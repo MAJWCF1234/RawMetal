@@ -349,7 +349,7 @@ bool AudioEngine::test(){
   AudioEngine district(false);std::array<int16_t,Rate*2> block{};
   if(district.m_samples[size_t(Sound::FreightMusic)].frames()<Rate*20)return failure("freight track missing or truncated");
   double cursor=-1;
-  for(int level=10;level<CampaignChunkCount;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
+  for(int level=10;level<FreightDistrictEnd;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
    if(district.m_freightTarget!=1||district.m_mainTarget!=0)return failure("freight music coverage");
    int count=0;for(const auto&v:district.m_voices)if(v.sound==Sound::FreightMusic){++count;if(v.cursor<=cursor)return failure("freight soundtrack restarts at seam");cursor=v.cursor;}
    if(count!=1)return failure("duplicated freight music voice");

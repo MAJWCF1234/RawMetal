@@ -963,7 +963,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // the HUD zone on the far side of the header (front faces north).
   const Texture* authoredFront=nullptr;const Texture* authoredBack=nullptr;
   if(w.authored()&&w.campaign()&&door.sign<0){
-   int neighbour=door.transfer?w.level()+1:door.entry?w.level()-1:-1;
+   int neighbour=-1;
+   if(door.transfer||door.entry)neighbour=campaignChunkAt(w.definition().origin+Vec2{(door.left+door.right)*.5f,door.entry?-.05f:24.05f});
    if(neighbour>=0&&neighbour<int(m_routeSigns.size()))authoredFront=authoredBack=&m_routeSigns[size_t(neighbour)];
    else if(!door.transfer&&!door.entry){
     const char* area=CampaignMapNames[size_t(w.level())];float eye=base+1.2f;
@@ -1323,7 +1324,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    quad({x+.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.59f},{x+.15f,y-.01f,h+.59f},terminal.reactorAction==2?m_feedSign:m_returnSign,1.f);
   }else{
    // Personnel records belong on a computer, visually distinct from switchgear.
-   if(w.campaign()&&w.level()>=6){
+   if(w.campaign()&&w.level()>=6&&terminal.reactorAction==0){
     // A grounded service bench carries the CRT on four legs; the narrow post
     // made the screen look perched in empty space. Its compact top also keeps
     // the screen and keyboard readable from the aisle.

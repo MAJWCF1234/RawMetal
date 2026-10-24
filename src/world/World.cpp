@@ -393,7 +393,7 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  return std::fabs(dx*c-dy*s)<fixture.width*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*.5f+margin;
 }
 constexpr float ShelfTiers[]={.17f,.54f,.92f};
-bool benchTerminal(const World& world,const Terminal& terminal){return world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction<2;}
+bool benchTerminal(const World& world,const Terminal& terminal){return world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;} // Reactor consoles keep their own housing.
 bool insideTerminal(const World& world,const Terminal& terminal,float x,float y){
  if(benchTerminal(world,terminal))return x>terminal.position.x-.48f&&x<terminal.position.x+.42f&&std::fabs(y-terminal.position.y)<.36f;
  return std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<.18f;
@@ -1093,7 +1093,7 @@ World::World(int level,WorldId id):m_worldId(id) {
   // === LEVEL_9_END ===
   // === DYNAMIC_CAMPAIGN_MAPS_END ===
   for(auto& d:m_doors){if(d.entry)d.sign=m_level-1;else if(d.transfer)d.sign=m_level+1;}
-  if(m_level==8){m_doors[1].sign=32;m_doors[2].sign=33;}
+  if(m_level==8){m_doors[1].sign=CampaignChunkCount;m_doors[2].sign=CampaignChunkCount+1;}
   buildLayers(stairs);return;
  }
  // Coolant Return (map 5): settling basins either side of a dry walkway.

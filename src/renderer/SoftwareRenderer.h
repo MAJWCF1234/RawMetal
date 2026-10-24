@@ -134,7 +134,8 @@ private:
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_liftSign,m_liftDispatch;
     Texture m_feedSign,m_returnSign;
-    std::array<Texture,34> m_routeSigns;
+    // One plate per campaign map, then the two utility-route plates.
+    std::array<Texture,CampaignChunkCount+2> m_routeSigns;
     // Door header plates of authored maps, one per HUD zone name (lazy).
     std::unordered_map<std::string,Texture> m_zoneSigns;
     const Texture& zoneSign(const char* zone,const char* area);

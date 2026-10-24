@@ -30,18 +30,26 @@ struct ChunkDefinition {
     // Off-duty openings: no weapon drawn and no viewmodel until the first punch.
     bool startUnarmed=false;
 };
-inline constexpr int CampaignChunkCount=32;
+inline constexpr int CampaignChunkCount=34;
 inline constexpr int AshfallChunkCount=15;
-inline constexpr int WorldChunkCapacity=32;
+inline constexpr int WorldChunkCapacity=34;
+// Maps 10-31 are the generated freight district. Chunks from 32 on are
+// stitched extensions of earlier areas: their index is an authoring ID, and
+// they sit wherever their origin places them in the world.
+inline constexpr int FreightDistrictEnd=32;
+inline constexpr int ReactorCoreChunk=32,CoolantLoopChunk=33;
 static_assert(CampaignChunkCount<=WorldChunkCapacity&&AshfallChunkCount<=WorldChunkCapacity,"World storage must cover every authored chunk");
 inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     // Maps 0-2: brighter fill for their darker brick, rust panel and green steel finishes.
     {{0,0},{3.5f,4.5f},0,Environment::Interior,false,3.4f,.38f},
     {{18,24},{3.5f,3.5f},0,Environment::Interior,false,3.4f,.36f},
     {{36,48},{3.5f,3.5f},0,Environment::Interior,false,3.4f,.36f},
-    {{54,72},{3.5f,3.5f},0,Environment::Interior,true},
-    {{69,96},{6.5f,1.5f},-9,Environment::Interior},
-    {{69,120},{12,2},-9,Environment::Interior},
+    // The Reactor Complex (3, 32, 33) streams by world position: the core and
+    // coolant loop are stitched east of the lift. The Service Gallery and the
+    // Coolant Return share an open seam, so they stay resident together.
+    {{54,72},{3.5f,3.5f},0,Environment::Interior,true,3.4f,.27f,8},
+    {{69,96},{14.5f,1.5f},-9,Environment::Interior,false,3.4f,.27f,9},
+    {{69,120},{12,2},-9,Environment::Interior,false,3.4f,.27f,9},
     {{74,144},{3.5f,2},-9,Environment::Interior,false,-4.65f,.68f},
     {{92,168},{3.5f,2},-9,Environment::Interior,false,-1,.74f},
     {{109,192},{3.5f,2},-4,Environment::Interior,false,-.8f,.62f},
@@ -67,15 +75,24 @@ inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     {{169,600},{12,2},-28,Environment::Interior,false,-5,.31f,6},
     {{169,624},{12,2},-19,Environment::Interior,false,-5,.30f,6},
     {{169,648},{12,2},-25,Environment::Interior,false,-19,.25f,7},
-    {{169,672},{12,2},-25,Environment::Interior,false,-17,.23f,7}
+    {{169,672},{12,2},-25,Environment::Interior,false,-17,.23f,7},
+    {{78,72},{1.5f,12.f},-9,Environment::Interior,false,4.f,.3f,8},
+    {{78,48},{12.f,22.5f},-9,Environment::Interior,false,-2.f,.3f,8}
 }};
 inline constexpr std::array<const char*,CampaignChunkCount> CampaignMapNames{{
  "FOUNDRY","PRESSURE WORKS","TURBINE GANTRY","REACTOR COMPLEX","SERVICE GALLERY","COOLANT RETURN","CABLE VAULTS","PUMP ANNEX","UTILITY JUNCTION","WASTE HANDLING",
  "FREIGHT ACCESS","LIFT MACHINERY","AUXILIARY FREIGHT LIFT","RECEIVING OVERLOOK","RECEIVING LANES","WAREHOUSE INTAKE",
  "WAREHOUSE / A-B","WAREHOUSE / C BLOCK","WAREHOUSE / D BLOCK","WAREHOUSE / UPPER RACKS","MANIFEST OFFICES","MANIFEST ROUTING",
  "TRANSFER / CONVEYORS","TRANSFER / SORTING","TRANSFER / RAIL YARD","EMPTY PLATFORM","PLATFORM / SERVICE END",
- "DEPOT / TRACKSIDE","DEPOT / INSPECTION PITS","DEPOT / GANTRIES","CARGO / MAINTENANCE BORE","CARGO / DEEP JUNCTION"
+ "DEPOT / TRACKSIDE","DEPOT / INSPECTION PITS","DEPOT / GANTRIES","CARGO / MAINTENANCE BORE","CARGO / DEEP JUNCTION",
+ "REACTOR CORE","COOLANT LOOP"
 }};
+// The campaign chunk whose 24 m square contains a world-space point, or -1.
+inline int campaignChunkAt(Vec2 global){
+ for(int i=0;i<CampaignChunkCount;++i){auto o=CampaignChunks[size_t(i)].origin;
+  if(global.x>=o.x&&global.x<o.x+24&&global.y>=o.y&&global.y<o.y+24)return i;}
+ return -1;
+}
 // Preserve the original 4 x 3 chunk IDs for old saves. Three new eastern
 // chunks extend the same stitched world into a 120 x 72 m coastline.
 inline constexpr std::array<ChunkDefinition,AshfallChunkCount> AshfallChunks{{

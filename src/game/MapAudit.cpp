@@ -96,7 +96,8 @@ bool Game::auditMap(int level){
   int r=int(std::ceil(1.5f/Cell));int cx=int(t.position.x/Cell),cy=int(t.position.y/Cell);
   for(int y=cy-r;y<=cy+r;++y)for(int x=cx-r;x<=cx+r;++x){if(x<0||y<0||x>=N||y>=N)continue;
    Vec2 spot{(x+.5f)*Cell,(y+.5f)*Cell};if(length(spot-t.position)>1.5f)continue;
-   for(float v:visited[size_t(y*N+x)])if(std::fabs(v-base)<1.2f&&w.rayClear(spot,v+1.5f,t.position,base+1.1f,false,false))return true;}
+   // Sight line to just above the console (a bench monitor stands 1.32 m).
+   for(float v:visited[size_t(y*N+x)])if(std::fabs(v-base)<1.2f&&w.rayClear(spot,v+1.5f,t.position,base+1.4f,false,false))return true;}
   return false;
  };
  for(const auto& t:w.terminals()){
