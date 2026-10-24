@@ -166,10 +166,11 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   for(int y=0;y<n;++y)for(int x=0;x<n;++x){
    float dust=smooth(float(x),float(y),0x51u,32)*.6f+smooth(float(x),float(y),0x77u,8)*.4f;
    float settle=float(y)/n;dust*=.55f+.6f*settle;
-   float wipe=std::fabs(std::sin((float(x)*.06f+std::sin(float(y)*.045f)*1.6f)));float smear=std::pow(1.f-wipe,6.f)*smooth(float(x),float(y),0x91u,16);
-   float speck=hash(x,y,0x33u)>.985f?.5f:0.f;
-   float a=std::clamp(.1f+dust*.2f+smear*.35f+speck,0.f,.85f);
-   float l=std::clamp(.62f+dust*.25f+smear*.2f+speck*.4f,0.f,1.f);
+   // Soft, even film of grime that gathers toward the bottom edge; faint
+   // broad wipe marks; no bright specks (they read as stars, not dust).
+   float wipe=std::fabs(std::sin((float(x)*.03f+std::sin(float(y)*.02f)*1.2f)));float smear=std::pow(1.f-wipe,10.f)*smooth(float(x),float(y),0x91u,32)*.5f;
+   float a=std::clamp(.14f+dust*.1f+smear*.12f+settle*settle*.1f,0.f,.5f);
+   float l=std::clamp(.55f+dust*.12f+smear*.1f,0.f,1.f);
    unsigned r=unsigned(l*170.f),g=unsigned(l*190.f),b=unsigned(l*196.f);
    t.pixels[size_t(y*n+x)]=(unsigned(a*255.f)<<24)|(r<<16)|(g<<8)|b;}
   t.transparent=true;t.glossStrength=.9f;return t;}();

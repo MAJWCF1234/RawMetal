@@ -60,7 +60,7 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal)const{
  // Traveling controls are absent from the cached static BVH.
  for(const auto&t:m_terminals)if(shapedGround||(hasLift()&&t.control)){
   float base=floorHeight(t.position.x,t.position.y)+t.z;
-  if(campaign()&&level()>=6&&!t.control&&t.reactorAction<2){box({t.position.x-.48f,t.position.y-.36f,base+.74f},{t.position.x+.42f,t.position.y+.36f,base+.815f});oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6?-kPi*.5f:t.yaw);}
+  if(campaign()&&level()>=6&&!t.control&&t.reactorAction<2){box({t.position.x-.48f,t.position.y-.36f,base+.74f},{t.position.x+.42f,t.position.y+.36f,base+.815f});oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6&&!authored()?-kPi*.5f:t.yaw);}
   else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
  }
  for(const auto&door:m_doors){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
