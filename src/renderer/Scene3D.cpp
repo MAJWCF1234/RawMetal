@@ -287,6 +287,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  // A light's pose is immutable during a draw. Reuse its exact emitter and
  // shadow samples instead of evaluating wall-lamp trigonometry per receiver.
+ const auto sun=w.sun();
+ // Dynamic geometry and the vertex-lit fallback take an unshadowed sun term;
+ // static caches get the shadowed per-pixel sun in the scene shader.
+ auto sunTerm=[&](Point3 normal){return sun.intensity>0?sun.intensity*.4f*std::max(0.f,normal.x*sun.direction.x+normal.y*sun.direction.y+normal.z*sun.direction.z):0.f;};
  struct LightFrame {Point3 emitter,target;std::array<Point3,3> shadowSamples;};
  std::vector<LightFrame> lightFrames;lightFrames.reserve(w.lights().size());
  for(const auto&light:w.lights()){
@@ -388,13 +392,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
   if(movingGeometry){
-   float brightness=(w.outdoors()?.48f:w.definition().ambient*.55f)+.04f*std::max(normal.z,0.f);
+   float brightness=(w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.55f)+.04f*std::max(normal.z,0.f);
    for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(d2<.001f||weight<=0)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
     if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
     brightness+=visibility*facing*weight;
    }
-   return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f,4.f);
+   return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+sunTerm(normal)+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f,4.f);
   }
   // Static fixture lighting is cached; the player-mounted flashlight is added
   // afterward because its cone moves every frame with yaw and pitch.
@@ -430,7 +434,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     }
     accessibility=1.f-.68f*occlusion*.25f;
    }
-   brightness=((w.outdoors()?.48f:w.definition().ambient*.55f)+.04f*std::max(normal.z,0.f))*accessibility;
+   brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.55f)+.04f*std::max(normal.z,0.f))*accessibility;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
     auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
@@ -440,6 +444,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     for(auto target:lightFrames[source].shadowSamples){if(shadowBudget<=0)continue;--shadowBudget;visibility+=w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
     brightness+=(visibility/3.f)*(.04f+.96f*facing)*weight;
    }
+   if(!pixelLamps)brightness+=sunTerm(normal);
    brightness=std::clamp(brightness,.075f,1.4f);if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
   }
   return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f,4.f);

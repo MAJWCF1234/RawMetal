@@ -962,6 +962,23 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
     std::vector<std::array<float,5>> nearest;for(auto&entry:order)nearest.push_back(lamps[entry.second]);lamps.swap(nearest);}
    m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);
   }
+  // Sun cascades: three view-frustum slices, each a texel-snapped square in
+  // the light's frame so the shadow edge does not crawl as the camera moves.
+  {std::array<float,56> sunData{};const auto sun=world.sun();
+   if(sun.intensity>0){
+    sunData[0]=sun.direction.x;sunData[1]=sun.direction.y;sunData[2]=sun.direction.z;sunData[3]=sun.intensity;sunData[4]=sun.r;sunData[5]=sun.g;sunData[6]=sun.b;
+    auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};Point3 forward=sun.direction*-1.f,right=cross(forward,Point3{0,0,1});float rl=std::sqrt(right.x*right.x+right.y*right.y+right.z*right.z);right=right*(1.f/std::max(rl,1e-4f));Point3 up=cross(right,forward);
+    const auto&p=game.player();float cy=std::cos(p.angle),sy=std::sin(p.angle),cp=std::cos(p.pitch/140.f),sp=std::sin(p.pitch/140.f);
+    Point3 eye{p.pos.x+origin.x,p.pos.y+origin.y,p.z+p.eye},viewForward{cy*cp,sy*cp,sp};float aspect=float(m_width)/std::max(1,m_height);
+    const float splits[4]={.3f,7.f,22.f,70.f};
+    for(int c=0;c<3;++c){float n=splits[c],f=splits[c+1],cd=(n+f)*.5f;Point3 centre=eye+viewForward*cd;
+     float hx=f/1.3f,hy=f/(1.3f*aspect),r=std::sqrt((f-cd)*(f-cd)+hx*hx+hy*hy),texel=2.f*r/2048.f;
+     auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+     float sr=dot(centre,right),su=dot(centre,up);centre=centre-right*(sr-std::floor(sr/texel)*texel)-up*(su-std::floor(su/texel)*texel);
+     float* k=sunData.data()+8+c*16;k[0]=centre.x;k[1]=centre.y;k[2]=centre.z;k[3]=texel;k[4]=right.x;k[5]=right.y;k[6]=right.z;k[7]=1.f/r;k[8]=up.x;k[9]=up.y;k[10]=up.z;k[11]=1.f/r;k[12]=forward.x;k[13]=forward.y;k[14]=forward.z;k[15]=1.f/90.f;
+    }
+   }
+   m_gpu->setSun(sunData);}
   m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
@@ -1008,6 +1025,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
 
 
 namespace retro {
+void SoftwareRenderer::saveSunCascades(const char*prefix){if(m_gpu)m_gpu->saveSunCascades(prefix);}
 bool SoftwareRenderer::saveSceneCapture(const char*path){
  if(!m_gpu)return false;std::vector<uint32_t> pixels;int width=0,height=0;m_gpu->captureScene(pixels,width,height);
  std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}return true;

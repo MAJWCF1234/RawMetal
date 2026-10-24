@@ -27,6 +27,10 @@ public:
  // Static lamps (world x, y, z, range, intensity) lit per pixel with cube
  // shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
  void setLamps(const std::vector<std::array<float,5>>& lamps,bool enabled,int detail=1);
+ // Sun: direction xyz + intensity, colour rgb + pad, then three cascades of
+ // four vec4 (origin + texel size, right/up/forward with inverse extents).
+ void setSun(const std::array<float,56>& sun);
+ void saveSunCascades(const char* prefix);
  std::uint64_t shadowFacesDrawn()const;
  std::uint64_t staticCacheHits()const;
  void prepare(const SoftwareRenderer::Texture& texture);

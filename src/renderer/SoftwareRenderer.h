@@ -18,6 +18,7 @@ public:
     bool hardwareActive()const{return bool(m_gpu);}
     // Windowed path: the post-processed scene of the last frame as a PPM.
     bool saveSceneCapture(const char* path);
+    void saveSunCascades(const char* prefix);
     bool hardwarePresentsWindow()const;
     std::uint64_t vrMirrorFrames()const;
     std::array<std::uint64_t,4> atlasUploadStatistics()const;
