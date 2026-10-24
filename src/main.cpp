@@ -489,6 +489,25 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int view=0;view<6;++view){auto scene=retro::Game::uiInspection(view);renderer->render(scene);std::ofstream out(".build/ui-preview/view-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
+    if(auto arg=std::wcsstr(commandLine,L"--map-audit=")){return retro::Game::auditMap(_wtoi(arg+12))?0:21;}
+    if(std::wcsstr(commandLine,L"--map-tour")){
+     // Authored viewpoints through a rebuilt map: x, y, eye z (floor), yaw (deg), pitch.
+     struct View{float x,y,z,yaw,pitch;};
+     int level=0;if(auto arg=std::wcsstr(commandLine,L"--map-tour="))level=_wtoi(arg+11);
+     static const std::vector<View> tours[4]={
+      {{3.5f,4.5f,0,0,0},{8,2.2f,0,60,-6},{12,5.5f,0,90,-4},{21.5f,6,0,180,-6},{11,8.6f,0,90,-8},{4.5f,12,0,0,-6},{8,15.5f,0,-60,-4},{21,8.9f,2.6f,180,-18},{20.5f,15.5f,0,-90,0},{2,15,0,90,-4},{2.5f,18,0,0,-4},{8,21.5f,0,-90,-4},{17,18,0,45,-6},{21.5f,19.5f,0,90,-4}},
+      {},{},{}};
+     const auto& views=tours[std::clamp(level,0,3)];
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/tour");
+     for(size_t i=0;i<views.size();++i){const auto&v=views[i];
+      auto scene=retro::Game::mapInspection({v.x,v.y},v.yaw*retro::kPi/180.f,v.pitch,level,true,v.z,true);
+      renderer->render(scene);
+      std::ofstream out(".build/tour/view-"+std::to_string(level)+"-"+std::to_string(i)+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
+      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+     }
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--prologue-inspection")){
      const int width=std::wcsstr(commandLine,L"--native-capture")?1920:960,height=std::wcsstr(commandLine,L"--native-capture")?1080:540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/prologue-preview");

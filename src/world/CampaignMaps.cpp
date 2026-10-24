@@ -288,6 +288,233 @@ void climb(Map& m,float bottom,float top){
  m.stairs.push_back({13,13,16,22,middle,top,24,true,true});
  deck(m,top,8,22,16,24);
 }
+// ---------------------------------------------------------------------------
+// Maps 0-3: the original facility, rebuilt as authored maps.
+// ---------------------------------------------------------------------------
+WorldLight lamp(Vec2 p,float z,float intensity,float range,float kelvin,float tint=0,WorldLightMount mount=WorldLightMount::Ceiling,float yaw=0){
+ WorldLight l{p,z,mount,yaw,intensity,range};l.kelvin=kelvin;l.tint=tint;return l;
+}
+void zone(Map& m,const char* name,float x1,float y1,float x2,float y2,float bottom=-1000,float top=1000){m.zones.push_back({name,x1,y1,x2,y2,bottom,top});}
+void hazard(Map& m,Hazard::Kind kind,float x1,float y1,float x2,float y2,float bottom,float top,float damage){Hazard h;h.kind=kind;h.x1=x1;h.y1=y1;h.x2=x2;h.y2=y2;h.bottom=bottom;h.top=top;h.damagePerSecond=damage;m.hazards.push_back(h);}
+void shelf(Map& m,Vec2 p,float yaw,float floor=0){m.fixtures.push_back({7,p,floor,1.8f,.5f,1.8f,yaw,true});}
+// Exit to the next map: the stitched gap in the south wall at columns 20-22
+// and the transfer door that opens once the map's hostiles are cleared.
+void transferExit(Map& m){
+ rectangle(m.layers[0],20,23,23,24,'.');
+ rectangle(m.layers[0],19,21,20,23,'#');
+ Door exit{20,23,21.5f,0,false,true};exit.requireEnemiesClear=true;m.doors.push_back(exit);
+}
+
+// FOUNDRY. The service lift that fell from the Security Office lies wrecked in
+// the Intake receiving hall. South through the gate is the Foundry: a tall
+// brick hall around two converters whose pour runs in an open molten channel,
+// crossed on steel bridges or flanked by the west service passage; a sodium-lit
+// mezzanine holds the containment console. Containment beyond is a cold
+// corridor of breached holding cells ending in decontamination and the
+// transfer gate to Pressure Works.
+std::shared_ptr<const Map> makeFoundry(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[0];m.definition=CampaignChunks[0];m.definition.ceiling=6.4f;m.definition.ambient=.34f;
+ m.layers.push_back(floorLayer("Foundry / ground",0));
+ // Always index the ground layer: deck() appends layers and would invalidate a reference.
+ auto g=[&]()->AuthoredLayerData&{return m.layers[0];};
+ const float hall=6.4f,low=3.4f;
+
+ // --- 01 INTAKE ----------------------------------------------------------
+ // Lift alcove (the wrecked cab from the Security Office drop).
+ rectangle(g(),5,1,6,3,'#');rectangle(g(),5,6,6,7,'#');
+ // Gate wall to the Foundry: a wide freight gate and a narrow service door.
+ rectangle(g(),1,7,9,8,'#');rectangle(g(),13,7,19,8,'#');rectangle(g(),21,7,23,8,'#');
+ m.doors.push_back({9,13,7.5f});m.doors.push_back({19,21,7.5f});
+ // Receiving floor: crate stacks and drums give cover across the approach.
+ for(auto c:{std::pair{8,2},{8,3},{9,2},{13,4},{14,4},{14,5}})g().rows[c.second][c.first]='C';
+ // Drums stand clear of every doorway and the lift mouth.
+ for(auto b:{std::pair{12,2},{22,5},{7,1}})g().rows[b.second][b.first]='B';
+ forklift(m,17.2f,4.2f,0);
+ // Supervisor's booth: framed walls with a real doorway, desk, chair, shelf.
+ wall(m,18,1,18.15f,3.85f,0,low,3);
+ wall(m,18,3.85f,19.2f,4,0,low,3);wall(m,20.4f,3.85f,23,4,0,low,3);wall(m,19.2f,3.85f,20.4f,4,2.2f,low,3);
+ for(float y:{1.8f,2.9f})wall(m,18,y,18.15f,y+.6f,.95f,2.1f,17); // view glass toward the floor
+ recordsDesk(m,21.3f,2.2f,0);
+ terminal(m,{21.3f,2.25f},"SHIFT LOG / 03:17","COOLANT FAILED. THE NIGHT CREW","SEALED FOUNDRY WITH US INSIDE.");
+ shelf(m,{22.65f,3.05f},kPi*.5f);
+ m.lights.push_back(lamp({20.6f,2.4f},low-.15f,.9f,4.f,3200));
+ shelf(m,{1.27f,2.6f},kPi*.5f);
+ serviceCeiling(m,1,1,23,7,low);
+ // The cab: buckled car walls and the snapped cable drum overhead.
+ wall(m,1.1f,1.1f,4.9f,1.25f,0,2.6f,11);wall(m,1.1f,1.1f,1.25f,6.9f,0,2.6f,11);wall(m,1.1f,6.75f,4.9f,6.9f,0,2.6f,11);
+ wall(m,1.1f,1.1f,4.9f,6.9f,2.6f,2.75f,11);
+ for(float y:{2.2f,4.1f,5.8f})wall(m,1.25f,y,1.35f,y+.08f,.3f,2.5f,2);
+ m.pipes.push_back({{3,1.4f},{3,1.4f},3.2f,.025f,2.75f,2});
+ floorLine(m,5.2f,3.f,9,3.12f,0,13);floorLine(m,5.2f,5.88f,9,6.f,0,13);
+ wallSign(m,11,6.93f,2.35f,"02 / FOUNDRY","HOT METAL / USE THE BRIDGES",2.6f,kPi);
+ wallSign(m,20,6.93f,2.35f,"SERVICE","AUTHORISED STAFF",1.4f,kPi);
+
+ // --- 02 FOUNDRY ---------------------------------------------------------
+ // Brick piers carry the roof; the west wall screens the service passage.
+ for(auto pier:{std::pair{6,10},{6,13},{18,14}})g().rows[pier.second][pier.first]='#';
+ rectangle(g(),3,10,4,16,'#');
+ // Converter plinth: two vessels, each venting up a flue into the roof.
+ rectangle(g(),10,10,14,13,'T');
+ for(float x:{11.f,13.f}){m.fixtures.push_back({39,{x,11.5f},0,1.9f,1.4f,2.7f,0,false});m.fixtures.push_back({40,{x,11.5f},2.7f,.4f,.4f,.7f,0,false});
+  m.pipes.push_back({{x,11.5f},{x,11.5f},3.4f,.2f,hall,2});}
+ m.structures.push_back({10.04f,10.04f,13.96f,12.96f,.14f,.165f,false,25});
+ // The pour: an open molten channel wall to wall, crossed on two steel bridges.
+ const float c1=13.2f,c2=13.85f;
+ wall(m,4,c1,23,c2,0,.012f,25);
+ for(float x:{7.4f,15.4f}){wall(m,x,c1-.25f,x+1.3f,c2+.25f,0,.09f,12);
+  for(float y:{c1-.25f,c2+.17f})wall(m,x,y,x+1.3f,y+.08f,.09f,1.0f,12);}
+ hazard(m,Hazard::Kind::Fire,4,c1,7.4f,c2,-1,.7f,32);
+ hazard(m,Hazard::Kind::Fire,8.7f,c1,15.4f,c2,-1,.7f,32);
+ hazard(m,Hazard::Kind::Fire,16.7f,c1,23,c2,-1,.7f,32);
+ // Mezzanine: a steel deck along the north-east wall with the console.
+ rectangle(g(),15,8,23,10,'.');deck(m,2.6f,15,8,23,10);
+ m.stairs.push_back({20,10,22,14.5f,0,2.6f,13,true,false});
+ m.fixtures.push_back({41,{8,15.3f},0,2.4f,1.f,1.1f,0,true});
+ for(Vec2 b:{Vec2{4.3f,8.6f},Vec2{4.3f,15.4f},Vec2{22.7f,15.4f}})m.fixtures.push_back({43,b,0,.6f,.5f,hall-.2f,kPi*.5f,true});
+ terminal(m,{21.f,8.6f},"CONTAINMENT / 04:06","THE VESSELS WERE NOT EMPTY.","CLEAR THE HOSTILES. GET OUT.",2.6f);
+ // Roof trusses across the hall.
+ for(float y:{8.5f,12.f,15.5f})wall(m,1,y,23,y+.18f,hall-.5f,hall-.3f,2);
+ wallSign(m,8.5f,8.06f,2.4f,"HOT METAL","CROSS ON THE BRIDGES ONLY",2.4f,0);
+
+ // --- 03 CONTAINMENT -----------------------------------------------------
+ // Openings from the Foundry: the west service passage and the east hall.
+ rectangle(g(),1,16,2,17,'#');rectangle(g(),4,16,15,17,'#');rectangle(g(),19,16,23,17,'#');
+ // Holding cells off a two-metre corridor, each breached, a burst vessel inside.
+ rectangle(g(),1,19,2,20,'#');rectangle(g(),3,19,7,20,'#');rectangle(g(),8,19,12,20,'#');rectangle(g(),13,19,16,20,'#');
+ rectangle(g(),5,20,6,23,'#');rectangle(g(),10,20,11,23,'#');rectangle(g(),15,20,16,23,'#');
+ for(float x:{3.4f,8.2f,13.2f}){float h=2.2f,scale=h/2.390135f;m.fixtures.push_back({14,{x,21.6f},0,1.58f*scale,1.62f*scale,h,.3f,true});}
+ for(float x:{2.f,7.f,12.f})floorLine(m,x+.05f,19.9f,x+.95f,20.05f,0,13);
+ // Decontamination: steel-lined room with the exit gate.
+ transferExit(m);
+ equipmentPad(m,16.3f,17.3f,18.9f,19.6f,0);
+ terminal(m,{17.6f,20.6f},"DISPATCH / LAST SIGNAL","PRESSURE WORKS STILL HAS POWER.","THE TRANSFER INTERLOCK IS LIVE.");
+ serviceCeiling(m,1,17,23,23,3.f);
+ wallSign(m,21.5f,20.94f,2.2f,"04 / PRESSURE WORKS","TRANSFER INTERLOCK",2.2f,kPi);
+
+ // --- Light ---------------------------------------------------------------
+ // Intake: cold fluorescent tubes; red emergency lamp in the wrecked cab.
+ m.lights.push_back(lamp({8.5f,3.5f},low-.12f,1.1f,6.5f,4300,.3f));
+ m.lights.push_back(lamp({14.5f,2.5f},low-.12f,1.f,6.f,4300,.3f));
+ m.lights.push_back(lamp({1.25f,4.f},2.f,1.3f,4.f,1300,-.3f,WorldLightMount::Wall,0));
+ // Foundry: sodium high-bays and the molten pour's own orange glow.
+ m.lights.push_back(lamp({12.f,11.5f},3.6f,2.6f,9.f,1700));
+ m.lights.push_back(lamp({7.f,9.f},hall-.4f,1.6f,9.f,2100));
+ m.lights.push_back(lamp({16.f,14.5f},hall-.4f,1.5f,8.f,2100));
+ m.lights.push_back(lamp({8.f,14.8f},hall-.4f,1.3f,7.5f,2100));
+ m.lights.push_back(lamp({19.f,8.6f},5.2f,1.1f,5.5f,4300,.25f));
+ m.lights.push_back(lamp({1.f,12.5f},2.4f,.9f,4.5f,4300,.35f,WorldLightMount::Wall,0));
+ // Containment: sick green-white tubes, cells left dark, red at the gate.
+ m.lights.push_back(lamp({5.5f,18.f},2.85f,1.f,5.5f,6200,.45f));
+ m.lights.push_back(lamp({12.5f,18.f},2.85f,.9f,5.5f,6200,.45f));
+ // Each cell keeps one weak warm caged lamp: dark, but a shape is readable.
+ for(float x:{3.f,8.f,13.f})m.lights.push_back(lamp({x,23.f},2.2f,.55f,3.8f,1900,0,WorldLightMount::Wall,-kPi*.5f));
+ m.lights.push_back(lamp({18.5f,18.5f},2.85f,1.2f,6.f,5200,.15f));
+ m.lights.push_back(lamp({23.f,21.f},2.1f,1.4f,4.5f,1250,-.35f,WorldLightMount::Wall,kPi));
+
+ // --- Encounters ------------------------------------------------------------
+ using C=CreatureKind;using P=PickupKind;
+ m.creatureSpawns={{C::Huntsman,{15.5f,2.5f}},{C::Wasp,{21.f,5.5f}},
+                   {C::Brute,{8.f,11.5f}},{C::Huntsman,{16.5f,15.f}},{C::Wasp,{18.5f,9.f},2.6f},
+                   {C::Huntsman,{8.f,21.5f}},{C::Wasp,{12.5f,18.f}},{C::Brute,{18.f,20.f}}};
+ m.pickupSpawns={{{7.f,5.8f},P::Ammo},{{22.f,8.8f},P::Health,2.6f},{{1.5f,13.f},P::Ammo},{{13.5f,21.5f},P::Health}};
+ const Vec2 junk[]={{6.5f,1.8f},{7.f,1.5f},{2.f,9.2f},{20.f,11.f},{3.8f,20.2f},{17.f,22.f}};
+ for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,junk[i],-999,i*.7f});
+
+ zone(m,"01 INTAKE",0,0,24,7.5f);
+ zone(m,"02 FOUNDRY",0,7.5f,24,16.5f);
+ zone(m,"03 CONTAINMENT",0,16.5f,24,24);
+ return p;
+}
+// PRESSURE WORKS. The transfer from Containment drops into a rail receiving
+// dock of stacked freight; through the pressure wall is the Pump Hall, four
+// high-pressure vessels on a plinth fed by riser bundles, lit by mercury lamps;
+// south lies the Control floor with the night shift's glazed booth and the
+// transfer gate to the Turbine Gantry.
+std::shared_ptr<const Map> makePressureWorks(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[1];m.definition=CampaignChunks[1];m.definition.ceiling=5.5f;m.definition.ambient=.32f;
+ m.layers.push_back(floorLayer("Pressure Works / ground",0));
+ auto g=[&]()->AuthoredLayerData&{return m.layers[0];};
+ const float hall=5.5f;
+
+ // --- 04 RECEIVING -------------------------------------------------------
+ rectangle(g(),2,0,5,1,'.');m.doors.push_back({2,5,.5f,0,false,false,true});
+ rectangle(g(),1,7,3,8,'#');rectangle(g(),6,7,18,8,'#');rectangle(g(),21,7,23,8,'#');
+ m.doors.push_back({3,6,7.5f});m.doors.push_back({18,21,7.5f});
+ // Rail spur along the dock with freight left where the last train stopped.
+ for(float y:{3.15f,3.85f})floorLine(m,6,y,23,y+.1f,0,2);
+ for(float x=6.3f;x<23;x+=.8f)floorLine(m,x,3.f,x+.18f,4.1f,0,11);
+ cargo(m,9.f,2.f,0);cargo(m,10.4f,2.f,0,false);cargo(m,13.5f,5.4f,0);cargo(m,12.2f,5.4f,0);
+ for(auto c:{std::pair{8,5},{8,6},{17,1},{18,1}})g().rows[c.second][c.first]='C';
+ g().rows[5][21]='B';
+ forklift(m,15.6f,5.3f,0);
+ for(float y:{1.6f,3.6f})shelf(m,{22.65f,y+.6f},-kPi*.5f);
+ terminal(m,{6.5f,1.4f},"RECEIVING / MANIFEST","THE LAST TRAIN ARRIVED EMPTY.","THE PRESSURE GAUGES KEPT RISING.");
+ serviceCeiling(m,1,1,23,7,3.6f);
+ wallSign(m,4.5f,6.93f,2.4f,"05 / PUMP HALL","HIGH PRESSURE / EAR DEFENDERS",2.2f,kPi);
+
+ // --- 05 PUMP HALL -------------------------------------------------------
+ for(auto pier:{std::pair{6,10},{6,14},{18,10},{18,14}})g().rows[pier.second][pier.first]='#';
+ // The vessel plinth: four pressure tanks fed from an overhead header.
+ equipmentPad(m,8.6f,9.6f,15.4f,15.4f,0);
+ for(float x:{10.4f,13.6f})for(float y:{11.f,14.f}){float h=3.f,scale=h/2.390135f;
+  m.fixtures.push_back({14,{x,y},.1f,1.58f*scale,1.62f*scale,h,0,true});
+  m.pipes.push_back({{x,y},{x,y},3.1f,.14f,hall,3});}
+ servicePipe(m,{8.6f,12.5f},{15.4f,12.5f},4.6f,.22f,3);
+ servicePipe(m,{1,9.f},{23,9.f},4.8f,.16f,4);servicePipe(m,{1,16.f},{23,16.f},4.8f,.16f,4);
+ // Riser bundles with valve wheels along both walls.
+ for(float y:{9.2f,12.6f,15.4f}){m.fixtures.push_back({44,{1.06f,y},0,.4f,.1f,4.7f,kPi*.5f,false});m.fixtures.push_back({45,{1.13f,y},1.25f,.32f,.12f,.32f,kPi*.5f,false});}
+ for(float y:{9.6f,13.6f}){m.fixtures.push_back({44,{22.94f,y},0,.4f,.1f,4.7f,-kPi*.5f,false});m.fixtures.push_back({45,{22.87f,y},1.25f,.32f,.12f,.32f,-kPi*.5f,false});}
+ // Cover: drums and a crate line on the west flank, a breaker cage east.
+ for(auto c:{std::pair{3,12},{4,12}})g().rows[c.second][c.first]='C';
+ for(auto b:{std::pair{8,9},{20,12},{16,16}})g().rows[b.second][b.first]='B';
+ m.fixtures.push_back({41,{21.f,15.6f},0,2.4f,1.f,1.1f,0,true});
+ hazard(m,Hazard::Kind::Steam,11.6f,15.5f,12.4f,16.4f,-1,2.f,14);
+ for(float y:{8.5f,12.5f,16.2f})wall(m,1,y,23,y+.18f,hall-.4f,hall-.22f,2);
+ wallSign(m,13.5f,16.93f,2.4f,"06 / CONTROL","NIGHT SHIFT ONLY",2.f,kPi);
+
+ // --- 06 CONTROL ---------------------------------------------------------
+ rectangle(g(),1,17,2,18,'#');rectangle(g(),5,17,12,18,'#');rectangle(g(),15,17,23,18,'#');
+ m.doors.push_back({2,5,17.5f});m.doors.push_back({12,15,17.5f});
+ // Operator floor: a bank of desks facing the glazed supervisor's booth.
+ for(float x:{4.f,7.5f,11.f})recordsDesk(m,x,20.6f,0);
+ for(float x:{2.f,3.f,13.f})m.fixtures.push_back({13,{x,22.7f},0,.9f,.5f,1.9f,-kPi*.5f,true});
+ // Booth: steel sill and glass along x 16, open to the south.
+ wall(m,16.f,18.f,16.15f,20.4f,0,1.f,3);wall(m,16.f,18.f,16.15f,20.4f,1.f,2.6f,17);wall(m,16.f,18.f,16.15f,20.4f,2.6f,3.f,3);
+ recordsDesk(m,18.f,19.f,0);
+ terminal(m,{18.f,19.05f},"CONTROL / NIGHT SHIFT","SURFACE LIFT IS ON EMERGENCY POWER.","THE PUMPS MUST STAY RUNNING.");
+ transferExit(m);
+ serviceCeiling(m,1,18,23,23,3.f);
+ wallSign(m,21.5f,20.94f,2.2f,"07 / TURBINE GANTRY","TRANSFER INTERLOCK",2.2f,kPi);
+
+ // --- Light ---------------------------------------------------------------
+ m.lights.push_back(lamp({9.f,3.5f},3.45f,1.f,6.5f,4300,.3f));
+ m.lights.push_back(lamp({16.f,3.5f},3.45f,1.f,6.5f,4300,.3f));
+ m.lights.push_back(lamp({3.5f,3.f},3.45f,.8f,5.f,3400));
+ m.lights.push_back(lamp({12.f,12.5f},hall-.3f,2.f,9.f,5600,.35f));
+ m.lights.push_back(lamp({4.f,10.5f},hall-.3f,1.2f,7.f,2000));
+ m.lights.push_back(lamp({20.f,14.f},hall-.3f,1.2f,7.f,2000));
+ m.lights.push_back(lamp({12.f,16.8f},2.4f,1.3f,3.5f,1300,-.3f,WorldLightMount::Wall,-kPi*.5f));
+ m.lights.push_back(lamp({7.5f,19.5f},2.85f,1.f,6.f,3200));
+ m.lights.push_back(lamp({19.5f,19.5f},2.85f,1.1f,5.f,3800,.1f));
+ m.lights.push_back(lamp({23.f,21.f},2.1f,1.4f,4.5f,1250,-.35f,WorldLightMount::Wall,kPi));
+
+ // --- Encounters ------------------------------------------------------------
+ using C=CreatureKind;using P=PickupKind;
+ m.creatureSpawns={{C::Huntsman,{17.5f,4.5f}},{C::Wasp,{11.f,4.6f}},
+                   {C::Brute,{4.5f,14.5f}},{C::Huntsman,{8.f,12.5f}},{C::Wasp,{19.5f,12.5f}},{C::Brute,{21.f,10.5f}},
+                   {C::Huntsman,{7.5f,19.f}},{C::Wasp,{13.5f,20.5f}},{C::Brute,{21.5f,19.5f}}};
+ m.pickupSpawns={{{4.5f,4.5f},P::Ammo},{{16.5f,2.5f},P::Health},{{2.5f,15.5f},P::Ammo},{{22.f,11.5f},P::Ammo},{{7.5f,22.f},P::Health},{{19.5f,21.f},P::Ammo}};
+ const Vec2 junk[]={{6.8f,3.2f},{7.1f,3.4f},{9.2f,12.2f},{9.5f,8.6f},{18.7f,19.8f},{19.1f,20.f}};
+ for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,junk[i],-999,i*.7f});
+
+ zone(m,"04 RECEIVING",0,0,24,7.5f);
+ zone(m,"05 PUMP HALL",0,7.5f,24,17.5f);
+ zone(m,"06 CONTROL",0,17.5f,24,24);
+ return p;
+}
+
 std::shared_ptr<const Map> make(int level){
  auto p=std::make_shared<Map>();auto& m=*p;m.name=CampaignMapNames[level];m.definition=CampaignChunks[level];m.definition.musicCue=MusicCue::Freight;
  float base=level==11||level==12?-25.f:level>=13&&level<=19?-25.f:level==22?-25.f:level==27||level==28?-28.f:level==29?-25.f:m.definition.spawnHeight;
@@ -871,7 +1098,9 @@ std::shared_ptr<const Map> make(int level){
 }
 }
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
- static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;for(int i=10;i<CampaignChunkCount;++i)result[i]=make(i);return result;}();
+ static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
+  result[0]=makeFoundry();result[1]=makePressureWorks();
+  for(int i=10;i<CampaignChunkCount;++i)result[i]=make(i);return result;}();
  return maps.at(size_t(level));
 }
 }

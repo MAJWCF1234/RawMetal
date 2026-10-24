@@ -500,7 +500,7 @@ void Game::receiveDamage(float amount,Vec2 source,bool blockable){
  bool blocked=blockable&&m_guarding&&unarmed()&&dot(normalized(source-m_player.pos),facing)>melee.guardFrontDot;
  if(blocked){amount*=melee.guardScale;m_verticalSpringVelocity-=.45f;sound(Sound::PunchHit,.35f,.75f);}
  else sound(Sound::Hurt,.7f,.92f);
- m_player.health=std::max(0.f,m_player.health-amount);m_damageFlash=blocked?.25f:1.f;
+ if(!m_god)m_player.health=std::max(0.f,m_player.health-amount);m_damageFlash=blocked?.25f:1.f;
 }
 Game Game::weaponInspection(int mode,float age){auto game=validationScene(Enemy::Kind::Huntsman,3);
  if(mode==1||mode==3){game.m_player.ammo=0;game.m_holster=1;game.m_punchAge=age;game.m_punchLeft=false;game.m_guarding=mode==3;}

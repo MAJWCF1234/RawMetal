@@ -413,22 +413,6 @@ const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int 
  {std::lock_guard lock(reportedLock);if(reported.insert(std::to_string(mesh)+"/"+material).second)std::ofstream("RawMetal-missing-textures.txt",std::ios::app)<<"facility mesh "<<mesh<<", part "<<part<<", material "<<material<<'\n';}
  return m_missingTexture;
 }
-SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
- Texture sign{256,80,std::vector<std::uint32_t>(256*80)};
- for(int y=0;y<80;++y)for(int x=0;x<256;++x){auto rust=sample(m_signRust,x/256.f,y/80.f),metal=sample(m_panelMetal,x/256.f,y/80.f);int edge=std::min({x,y,255-x,79-y});
-  unsigned wear=(rust>>16)&255;float light=.65f+wear/180.f;
-  auto color=edge<4?shade(rust,1.1f):shade(metal,light);
-  if(edge>=5&&edge<8)color=wear>77?rust:shade(accent,.55f+wear/230.f);
-  if(edge<13&&wear>83)color=rust;
-  sign.pixels[y*256+x]=color;
- }
- auto label=[&](int x,int y,const char* value,int scale,std::uint32_t color){for(;*value;++value,x+=4*scale){auto glyph=glyphs[size_t(gi(*value))];for(int yy=0;yy<5;++yy)for(int xx=0;xx<3;++xx)if(glyph[yy]&(1<<(2-xx)))for(int j=0;j<scale;++j)for(int i=0;i<scale;++i){int px=x+xx*scale+i,py=y+yy*scale+j;if(px>=244)continue;auto rust=sample(m_signRust,px/256.f,py/80.f);unsigned wear=(rust>>16)&255;
-   if(wear<106)sign.pixels[py*256+px]=shade(color,.64f+wear/220.f);
-  }}};
- label(18,21,title,3,accent);label(18,51,subtitle,2,0xffbcb393u);
- for(int x:{11,244})for(int y:{11,68})for(int dy=-2;dy<=2;++dy)for(int dx=-2;dx<=2;++dx)sign.pixels[(y+dy)*256+x+dx]=dy==0?0xff171713u:dy<0?0xff929180u:0xff3b3a31u;
- prepareDecal(sign);return sign;
-}
 SoftwareRenderer::Texture SoftwareRenderer::makePaint(std::uint32_t color){
  Texture paint{64,64,std::vector<std::uint32_t>(64*64)};
  for(int y=0;y<64;++y)for(int x=0;x<64;++x){auto rust=sample(m_signRust,x/64.f,y/64.f);unsigned wear=(rust>>16)&255;auto p=shade(color,.58f+wear/200.f);paint.pixels[y*64+x]=(p&0xffffffu)|(wear>97?0u:0xff000000u);}
@@ -600,6 +584,59 @@ void SoftwareRenderer::uiPanel(int x,int y,int w,int h){
  fill(x,y,w,h,rgb(6,5,5),.78f);frame(x,y,w,h,rgb(236,228,214),.10f);
  const auto red=rgb(214,32,26);fill(x,y,6,1,red,1);fill(x,y,1,6,red,1);fill(x+w-6,y+h-1,6,1,red,1);fill(x+w-1,y+h-6,1,6,red,1);
 }
+// Facility signage: an enamelled graphite steel plate with a bevelled rim,
+// corner rivets and a safety-colour band, lettered in the UI's condensed face
+// (auto-fitted), with light chipping at the edges and grime toward the bottom.
+SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
+ constexpr int W=512,H=144;
+ Texture sign{W,H,std::vector<std::uint32_t>(size_t(W)*H)};
+ auto channel=[](std::uint32_t c,int shift){return float((c>>shift)&255);};
+ auto mixColour=[&](std::uint32_t a,std::uint32_t b,float t){t=std::clamp(t,0.f,1.f);
+  return rgb(int(channel(a,16)+(channel(b,16)-channel(a,16))*t),int(channel(a,8)+(channel(b,8)-channel(a,8))*t),int(channel(a,0)+(channel(b,0)-channel(a,0))*t));};
+ auto hash=[](int x,int y,unsigned seed){unsigned h=unsigned(x)*374761393u+unsigned(y)*668265263u+seed*2246822519u;h=(h^(h>>13))*1274126177u;return float((h^(h>>16))&0xffffu)/65535.f;};
+ auto noise=[&](float x,float y,unsigned seed){int ix=int(std::floor(x)),iy=int(std::floor(y));float fx=x-ix,fy=y-iy;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
+  float a=hash(ix,iy,seed),b=hash(ix+1,iy,seed),c=hash(ix,iy+1,seed),d=hash(ix+1,iy+1,seed);return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy;};
+ unsigned seed=0;for(const char* c=title;*c;++c)seed=seed*31u+unsigned(char(*c));
+ const std::uint32_t plate=rgb(36,39,42),plateHi=rgb(52,56,60),rim=rgb(18,19,21),bevel=rgb(88,92,96);
+ const int band=30;
+ for(int y=0;y<H;++y)for(int x=0;x<W;++x){
+  int edge=std::min({x,y,W-1-x,H-1-y});
+  float grain=noise(x*.9f,y*.06f,seed)*.06f+noise(x*.05f,y*.05f,seed+7)*.08f;
+  std::uint32_t c=mixColour(plate,plateHi,(1.f-y/float(H))*.55f+grain);
+  if(x>=6&&x<6+band&&edge>=6)c=mixColour(accent,rgb(0,0,0),.08f+grain);
+  if(x==6+band||x==7+band)c=rim;
+  if(edge<6)c=edge<2?rim:edge<4?mixColour(bevel,plate,y/float(H)):plateHi;
+  // Grime pooling toward the bottom edge, and chips where the enamel wore.
+  float grime=std::clamp((y/float(H)-.6f)*2.2f,0.f,1.f)*noise(x*.08f,y*.2f,seed+3);
+  c=mixColour(c,rgb(20,17,14),grime*.45f);
+  float chip=noise(x*.22f,y*.22f,seed+11);
+  if(edge<14&&chip>.86f-edge*.004f)c=mixColour(rgb(96,70,48),rgb(60,44,32),noise(x*.5f,y*.5f,seed+5));
+  sign.pixels[size_t(y)*W+x]=c;
+ }
+ // Lettering: the condensed UI face, sized to fit, blended over the enamel.
+ auto letter=[&](const char* text,int face,int size,int x,int y,std::uint32_t colour,int tracking){
+  const auto& f=uiFace(face,size);int pen=x;
+  for(const char* c=text;*c;++c){const auto& g=f.glyphs[uiGlyphIndex(*c)];
+   for(int yy=0;yy<f.height;++yy)for(int xx=0;xx<f.width;++xx){int px=pen-4+xx,py=y+yy;if(px<0||py<0||px>=W||py>=H)continue;
+    float a=g.alpha[size_t(yy)*f.width+xx]/255.f;if(a<=0)continue;
+    // Worn paint: lettering thins where the enamel chipped.
+    a*=1.f-std::max(0.f,noise(px*.3f,py*.3f,seed+13)-.8f)*3.f;
+    auto& d=sign.pixels[size_t(py)*W+px];d=mixColour(d,colour,a);}
+   pen+=g.advance+tracking;}
+ };
+ const int textLeft=6+band+22,textWidth=W-textLeft-22;
+ int titleSize=64;while(titleSize>24&&uiTextWidth(title,0,titleSize,2)>textWidth)titleSize-=2;
+ int subtitleSize=26;while(subtitleSize>14&&uiTextWidth(subtitle,0,subtitleSize,2)>textWidth)subtitleSize-=1;
+ const auto& titleFace=uiFace(0,titleSize);
+ int titleY=std::max(8,(H-titleFace.height-uiFace(0,subtitleSize).height)/2-6);
+ letter(title,0,titleSize,textLeft,titleY,rgb(236,232,222),2);
+ letter(subtitle,0,subtitleSize,textLeft+2,titleY+titleFace.height-4,mixColour(accent,rgb(236,232,222),.35f),2);
+ for(int rx:{14+band,W-14})for(int ry:{14,H-15})for(int dy=-4;dy<=4;++dy)for(int dx=-4;dx<=4;++dx){
+  float d=std::sqrt(float(dx*dx+dy*dy));if(d>4.2f)continue;
+  sign.pixels[size_t(ry+dy)*W+rx+dx]=mixColour(rgb(120,124,128),rgb(30,32,35),(dx+dy+6)/12.f*(d/4.2f)*1.4f);
+ }
+ prepareDecal(sign);return sign;
+}
 
 
 void SoftwareRenderer::wornPanel(int x,int y,int width,int height,bool recess,bool materialPanel){
@@ -637,7 +674,8 @@ void SoftwareRenderer::drawHud(const Game& game){
  const auto&p=game.player();
  const auto paper=rgb(236,228,214),muted=rgb(146,138,128),amber=rgb(232,160,60),red=rgb(214,32,26);
  const int sector=int(p.pos.y)/8;
- const char* mapLabel=game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
+ const char* zone=game.world().zoneName(p.pos,p.z);
+ const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"10 WASTE HANDLING":game.level()==8?"09 UTILITY JUNCTION":game.level()==7?"08 PUMP ANNEX":game.level()==6?"07 CABLE VAULTS":game.level()==5?"06 COOLANT RETURN":game.level()==4?"05 SERVICE GALLERY":game.level()==3?(p.z<-4?"10 REACTOR COMPLEX":"09 SURFACE LIFT"):game.level()==2?(p.z>2.5f?"08 UPPER GANTRY":"07 TURBINE HALL"):game.level()==1?(p.pos.y<7?"04 RECEIVING":p.pos.y<17?"05 PUMP HALL":"06 CONTROL"):(sector==0?"01  INTAKE":sector==1?"02  FOUNDRY":"03 CONTAINMENT");
  const auto bone=rgb(236,228,214),black=rgb(0,0,0);
  gradient(0,0,m_width,46,black,.55f,0.f,false);
  std::string place(mapLabel);for(auto&c:place)c=char(std::toupper((unsigned char)c));fill(14,13,3,13,red,1);uiText(22,10,place.c_str(),bone,0,15,1,2);

@@ -168,6 +168,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=10&&!f[9].empty()){light.kelvin=number(f,9,"light kelvin");if(light.kelvin<1000||light.kelvin>12000)throw std::runtime_error("light kelvin must be 1000 through 12000");}
    if(f.size()>=11&&!f[10].empty()){light.tint=number(f,10,"light tint");if(light.tint<-1||light.tint>1)throw std::runtime_error("light tint must be -1 through 1");}
    map->lights.push_back(light);
+  }else if(tag=="ZONE"){
+   // ZONE|map|x1|y1|x2|y2|name[|bottom|top]: a named HUD location.
+   if(f.size()<7||f.size()>9)throw std::runtime_error("malformed ZONE record");auto map=mapAt(maps,f);AuthoredZone zone;
+   zone.x1=number(f,2,"zone x1");zone.y1=number(f,3,"zone y1");zone.x2=number(f,4,"zone x2");zone.y2=number(f,5,"zone y2");zone.name=f[6];
+   if(f.size()>=8&&!f[7].empty())zone.bottom=number(f,7,"zone bottom");
+   if(f.size()>=9&&!f[8].empty())zone.top=number(f,8,"zone top");
+   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||zone.name.empty()||zone.name.size()>40)throw std::runtime_error("invalid ZONE bounds or name");
+   map->zones.push_back(std::move(zone));
   }else if(tag=="TERMINAL"){
    if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);AuthoredTerminalData t;
    t.position={number(f,2,"terminal x"),number(f,3,"terminal y")};t.z=number(f,4,"terminal z");t.control=boolean(f,5,"terminal control");

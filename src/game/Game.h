@@ -321,6 +321,8 @@ public:
     static bool testExclusion();
     static bool testExclusionAuthoring();
     static bool testPrologue();
+    // Reachability and placement audit of a campaign map (map-audit-<level>.txt).
+    static bool auditMap(int level);
     static Game prologueInspection(int stage);
     static Game uiInspection(int view);
     static Game exclusionInspection(int stage=0);
@@ -436,7 +438,7 @@ private:
     void useReactorAction(int action);
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
-    bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false;
+    bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false;
     std::string m_consoleLine;
     std::vector<std::string> m_consoleLog{"DEPTHWORKS DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
     std::vector<std::string> m_consoleHistory;

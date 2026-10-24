@@ -121,6 +121,7 @@ add_executable(RawMetal WIN32
     game/ExclusionTest.cpp
     game/ExclusionAuthoringTest.cpp
     game/PrologueTest.cpp
+    game/MapAudit.cpp
     game/Stealth.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp

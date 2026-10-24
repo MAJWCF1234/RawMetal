@@ -153,7 +153,7 @@ void Game::updateHazards(float dt){
    if(height<c.bed+.3f&&item.z<c.bed+.35f){m_sounds.push_back({Sound::JunkMetal,item.pos,.4f,.7f,true,17,item.z+item.height()*.5f});m_clutter.erase(m_clutter.begin()+i);if(m_heldClutter>i)--m_heldClutter;}
   }
  }
- if(damage<=0)return;m_player.health=std::max(0.f,m_player.health-damage);m_damageFlash=std::max(m_damageFlash,.35f);
+ if(damage<=0||m_god)return;m_player.health=std::max(0.f,m_player.health-damage);m_damageFlash=std::max(m_damageFlash,.35f);
  if(m_hazardSoundTimer<=0){sound(loudest==Hazard::Kind::Crusher||loudest==Hazard::Kind::FallingDebris?Sound::JunkMetal:Sound::Hurt,.55f,loudest==Hazard::Kind::Anomaly?.72f:1.f);m_hazardSoundTimer=.35f;}
 }
 
