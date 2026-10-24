@@ -2319,7 +2319,7 @@ std::shared_ptr<const Map> make(int level){
   cargo(m,3,12,-25);cargo(m,5,12,-25,false);
   m.compactors.push_back({7,7,11,15,-25,-22.4f,8,stateId("sorting_gate_stop")});
   terminal(m,{5,6},"SORTING / CARGO GATE","HYDRAULIC PUSHER: ACTIVE.","E / TOGGLE GATE ISOLATION.",0,stateId("sorting_gate_stop"));m.terminals.back().toggleState=true;
-  container(m,17,7,-25,true);m.creatureSpawns={{CreatureKind::Huntsman,{9,17},-25},{CreatureKind::Wasp,{16,13},-23}};
+  container(m,17,7,-25,true);m.creatureSpawns={{CreatureKind::Huntsman,{9,17},-25},{CreatureKind::Wasp,{16,13},-25}};
   for(float x:{6.75f,11.05f}){
    wall(m,x,6.75f,x+.20f,15.3f,-25,-24.75f,18);
    for(float y:{6.75f,15.1f})wall(m,x,y,x+.20f,y+.20f,-25,-21.7f,12);
@@ -2360,7 +2360,7 @@ std::shared_ptr<const Map> make(int level){
   if(level==25)terminal(m,{12,3},"PLATFORM 3 / DEPARTURES","TRAIN 27 / ARRIVED 02:13.","NO DEPARTURE RECORDED / TRACK CLEAR.");
   if(level==25){m.fixtures.push_back({8,{1.25f,14},1.1f,.55f,.12f,.8f,-kPi*.5f,false});terminal(m,{2,14},"PLATFORM / EMERGENCY PHONE","DISPATCH LINE OPEN / NO OPERATOR RESPONSE.","HOLD THE PLATFORM. DO NOT ENTER THE TRACK.");board(m,20,13,-22.5f,"DEPTHWORKS EMPLOYEE TRANSIT","YOUR SHIFT / YOUR CONNECTION",3.f);}
   else {terminal(m,{12,18},"PLATFORM / SECURITY RECORD","02:12:51 ... 02:19:04 / BLOCK MISSING.","EMPLOYEE TRANSIT: ROLLING STOCK DEPOT.");for(int i=0;i<6;++i)m.clutterSpawns.push_back({i%4,{11.f+float(i%3),19.f+float(i/3)},-25});}
-  m.lights.clear();for(float y:{3.f,12.f,21.f})m.lights.push_back({{12,y},-18.25f});
+  m.lights.clear();for(float y:{2.f,8.f,16.f,22.f})m.lights.push_back({{12,y},-18.15f});
   for(float x:{9.15f,15.75f})floorLine(m,x,2,x+.10f,22,-25);
   for(float y:{5.f,15.f}){
    for(float x:{1.f,22.4f})wall(m,x,y,x+.6f,y+.8f,-25,-18,15);
