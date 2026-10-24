@@ -20,15 +20,18 @@ public:
  bool postProcessing()const;
  // Temporal anti-aliasing (windowed path only; headless frames stay exact).
  void setTemporalAA(bool enabled);
+ // Cinematic lens in the window composite: depth of field with eased
+ // autofocus, natural vignetting, chromatic aberration, film grain, halation.
+ void setTiltShift(bool enabled);
  // Tests: headless readback uses the original analytic display curve.
  static void setReferenceDisplay(bool enabled);
  void setAtmosphere(const std::array<float,4>& atmosphere);
  bool beginStaticCache(int slot,std::uint64_t key);
  void endStaticCache();
  void clearStaticCaches();
- // Static lamps (world x, y, z, range, intensity) lit per pixel with cube
+ // Static lamps (world x, y, z, range, intensity, kelvin, tint) lit per pixel with cube
  // shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
- void setLamps(const std::vector<std::array<float,5>>& lamps,bool enabled,int detail=1);
+ void setLamps(const std::vector<std::array<float,7>>& lamps,bool enabled,int detail=1);
  // Sun: direction xyz + intensity, colour rgb + pad, then three cascades of
  // four vec4 (origin + texel size, right/up/forward with inverse extents).
  void setSun(const std::array<float,56>& sun);
@@ -43,7 +46,7 @@ public:
  void captureVrEye(std::vector<std::uint32_t>& pixels);
  // Windowed path: read back the post-processed scene (before the HUD
  // composite) of the last presented frame, tone mapped like headless frames.
- void captureScene(std::vector<std::uint32_t>& pixels,int& width,int& height);
+ void captureScene(std::vector<std::uint32_t>& pixels,int& width,int& height,std::vector<float>* depth=nullptr);
  void updateDynamic(const SoftwareRenderer::Texture& texture);
  void clearDepth();
  // Vulkan 1.0 vertex-stage work. One six-sided light record per actor,

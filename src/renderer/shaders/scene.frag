@@ -83,6 +83,16 @@ float sunShadow(int c,vec3 w,float biasWorld){
  return sum/9.0;
 }
 
+// Lamp colour from Planck's law: blackbody spectral radiance sampled at red,
+// green and blue wavelengths (610, 550, 465 nm), normalised to unit luminance.
+// tint pushes green (+) or magenta (-) for fluorescent and sodium tubes.
+vec3 lampColour(float kelvin,float tint){
+ const vec3 lambda=vec3(610e-9,550e-9,465e-9);const float c2=1.4388e-2; // hc/k in m*K
+ vec3 radiance=1.0/(pow(lambda,vec3(5.0))*(exp(c2/(lambda*max(kelvin,800.0)))-1.0));
+ radiance*=vec3(1.0,1.0+tint*0.35,1.0-tint*0.1);
+ return radiance/max(dot(radiance,vec3(0.2126,0.7152,0.0722)),1e-30);
+}
+
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
 vec3 toDisplay(vec3 c){return pow(max(c,vec3(0.0)),vec3(1.0/2.2));}
 
@@ -234,6 +244,7 @@ void main(){
  float waterFresnel=0.0;
  vec3 sunLight=vec3(0.0); // coloured direct sun on static geometry
  float directLight=-1.0,ambientLight=0.0; // for the post pass (AO on indirect only)
+ vec3 lampOut=vec3(0.0),lampSpecularOut=vec3(0.0); // coloured lamp light on static geometry
  vec3 sunDebug=vec3(0.0);
  vec3 n=vec3(0.0,0.0,1.0);float normalLength=1.0;vec3 baseNormalDebug=vec3(0.0,0.0,1.0);
 
@@ -289,7 +300,7 @@ void main(){
   float concentration=clamp(normalLength,0.0,1.0);
   float roughness=clamp(materialRoughness,0.03,0.96);
   roughness=sqrt(clamp(roughness*roughness+(1.0-concentration)/max(concentration,0.05),0.0324,1.0));
-  float lampLight=0.0,lampSpecular=0.0;
+  vec3 lampLight=vec3(0.0),lampSpecularRGB=vec3(0.0);float lampSpecular=0.0;
   ivec3 cell=ivec3(floor((worldPos-lampGrid.origin.xyz)/lampGrid.origin.w));
   if(lampGrid.size.w>0&&all(greaterThanEqual(cell,ivec3(0)))&&all(lessThan(cell,lampGrid.size.xyz))){
    int base=((cell.z*lampGrid.size.y+cell.y)*lampGrid.size.x+cell.x)*16;
@@ -313,8 +324,9 @@ void main(){
     }
     if(shadow<=0.0)continue;
     // Soft terminator: normal maps never cut a lit face to black.
-    lampLight+=falloff*shadow*(0.04+0.96*max(dot(N,L),0.0))*smoothstep(0.0,0.12,geometric);
-    lampSpecular+=falloff*shadow*dielectricSpecular(N,V,L,roughness);
+    vec3 tone=lampColour(params.z>0.0?params.z:3400.0,params.w);
+    lampLight+=tone*falloff*shadow*(0.04+0.96*max(dot(N,L),0.0))*smoothstep(0.0,0.12,geometric);
+    lampSpecularRGB+=tone*falloff*shadow*dielectricSpecular(N,V,L,roughness);
    }
   }
   if(view.effects.x>0.5){
@@ -325,8 +337,10 @@ void main(){
     if(along>0.80){
      float cone=clamp((along-0.80)/0.16,0.0,1.0);cone=cone*cone*(3.0-2.0*cone);
      float beam=cone*1.9/(1.0+d2*0.020);
-     lampLight+=beam*(0.30+0.70*max(dot(N,L),0.0));
-     lampSpecular+=beam*dielectricSpecular(N,V,L,roughness);
+     // Torch: a cool white LED.
+     vec3 torch=lampColour(5600.0,0.0);
+     lampLight+=torch*beam*(0.30+0.70*max(dot(N,L),0.0));
+     lampSpecularRGB+=torch*beam*dielectricSpecular(N,V,L,roughness);
     }
    }
   }
@@ -349,11 +363,14 @@ void main(){
   float relief=mix(1.0,clamp(dot(N,Ng),0.0,1.0),0.6)*hemisphere;
   // Exposure-matched to the old bake (which clamped at 1.4): a soft shoulder
   // keeps hot spots under lamps without flattening the falloff into the room.
-  // No shoulder: lamp cores stay hot and exposure plus the tonemap compress
-  // them, as a camera would (the bake used to clamp at 1.4).
-  vertexLight=lighting.y*relief+lampLight*0.62;
-  specularLight=lampSpecular*0.7;
-  directLight=lampLight*0.62+dot(sunLight,vec3(0.333));ambientLight=lighting.y*relief;
+  // Soft shoulder at 2.4: maps authored for the old 1.4-clamped bake overlap
+  // many lamps (Intake sums to ~10x ambient); unbounded, they flattened rooms
+  // and drowned each lamp's shadows in its neighbours' light. Cores stay hot.
+  lampOut=2.4*(1.0-exp(-lampLight*0.62/2.4));
+  vertexLight=lighting.y*relief;
+  specularLight=lampSpecular*0.7;lampSpecularOut=lampSpecularRGB*0.7;
+  float lampLuma=dot(lampOut,vec3(0.2126,0.7152,0.0722));
+  directLight=lampLuma+dot(sunLight,vec3(0.333));ambientLight=lighting.y*relief;
  }
 
  if(surface.z>0.5&&surface.z<1.5){
@@ -366,15 +383,17 @@ void main(){
  // Diffuse atlases use sRGB images: hardware decodes each source texel before
  // bilinear/trilinear filtering. Decoding the already-filtered sample twice
  // would crush both midtones and minified material detail.
- vec3 result=color.rgb*lighting.x*vertexLight*0.96/(1+surface.x*0.018);
+ // Per-pixel scenes: ambient is a cool dim fill, lamps carry their own colour.
+ vec3 ambientTone=lampGrid.flags.x!=0&&directLight>=0.0&&lampGrid.sun.w<=0.0?vec3(0.78,0.88,1.12):vec3(1.0);
+ vec3 result=color.rgb*lighting.x*(vertexLight*ambientTone+lampOut)*0.96/(1+surface.x*0.018);
  result+=color.rgb*lighting.x*sunLight*0.96;
 
- if(surface.z<0.5&&surface.w<1.5){
+ if(surface.z<0.5&&surface.w<1.5&&directLight<0.0){
   float key=clamp((vertexLight-0.24)/0.75,0.0,1.0);
   result*=mix(vec3(0.82,0.88,0.97),vec3(1.04,0.98,0.90),key);
  }
 
- result+=vec3(specularLight*lighting.x);
+ result+=vec3(specularLight*lighting.x)+lampSpecularOut*lighting.x;
 
  if(surface.z>1.5){
   vec3 skySheen=toLinear(vec3(0.55,0.72,0.92));
@@ -418,6 +437,7 @@ void main(){
  if(lampGrid.flags.y==2&&detailAmount>0.001)result=vec3(detailValue*0.5);
  if(lampGrid.flags.y==3&&detailAmount>0.001)result=detailNormal*0.5+0.5;
  if(lampGrid.flags.y==8)result=sunDebug;
+ if(lampGrid.flags.y==9)result=vec3(ambientLight,max(directLight,0.0),directLight<0.0?0.5:0.0)*0.25;
  if(lampGrid.flags.y==7)result=vec3(clamp(pixelsPerTexel/64.0,0.0,1.0),fract(uv.y*atlasSize.y*2.5),fract(uv.x*atlasSize.x*2.5));
  if(lampGrid.flags.y==6)result=baseNormalDebug*0.5+0.5;
  if(lampGrid.flags.y==5)result=vec3(clamp(abs(uv.x)/64.0,0.0,1.0),clamp(abs(uv.y)/64.0,0.0,1.0),surface.w*0.25);

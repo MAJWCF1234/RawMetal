@@ -30,6 +30,9 @@ struct WorldLight {
  // wall lamp, position/z is the backing centre and yaw points into the room.
  WorldLightMount mount=WorldLightMount::Ceiling;
  float yaw=0,intensity=1,range=12;
+ // Colour temperature (K, Planck blackbody) and a green(+)/magenta(-) tint
+ // for discharge tubes. 3400 K, 0 is a neutral warm incandescent.
+ float kelvin=3400,tint=0;
  Point3 emitter()const{
   if(mount==WorldLightMount::Wall)return {position.x+std::cos(yaw)*.16f,position.y+std::sin(yaw)*.16f,z};
   return {position.x,position.y,z};

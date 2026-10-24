@@ -467,6 +467,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
     if(std::wcsstr(commandLine,L"--nopixel"))retro::SoftwareRenderer::setPixelLighting(false); // A/B: baked vertex lamps
     if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
+    if(std::wcsstr(commandLine,L"--notilt"))retro::SoftwareRenderer::setTiltShift(false); // A/B: no tilt-shift
     if(std::wcsstr(commandLine,L"--notaa"))retro::SoftwareRenderer::setTemporalAA(false); // A/B: MSAA only
     if(std::wcsstr(commandLine,L"--nodetail"))retro::SoftwareRenderer::setDetailLayer(0); // A/B: no close-up grain
     if(std::wcsstr(commandLine,L"--detail-field"))retro::SoftwareRenderer::setDetailLayer(2); // debug: raw detail field
@@ -476,6 +477,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--detail-nmap"))retro::SoftwareRenderer::setDetailLayer(6); // debug: normal map sample before detail
     if(std::wcsstr(commandLine,L"--detail-ppt"))retro::SoftwareRenderer::setDetailLayer(7); // debug: pixels per texel and detail cell coordinate
     if(std::wcsstr(commandLine,L"--detail-sun"))retro::SoftwareRenderer::setDetailLayer(8); // debug: sun visibility, N.L, cascade
+    if(std::wcsstr(commandLine,L"--detail-light"))retro::SoftwareRenderer::setDetailLayer(9); // debug: ambient (r), lamp (g), not per-pixel lit (b)
     if(std::wcsstr(commandLine,L"--neural-texture-runtime-test"))return neuralTextureRuntimeTest(W,H,std::wcsstr(commandLine,L"--vulkan")!=nullptr);
     if(std::wcsstr(commandLine,L"--stealth-test"))return retro::Game::testStealth()?0:21;
     if(std::wcsstr(commandLine,L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
