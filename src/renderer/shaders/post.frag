@@ -7,7 +7,9 @@
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(set=0,binding=1) uniform sampler2D occlusionImage;
 layout(set=0,binding=2) uniform sampler2D shadowImage;
-layout(std430,set=0,binding=3) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];} lampGrid;
+layout(set=0,binding=3) uniform sampler2D exposureImage;
+layout(set=0,binding=4) uniform sampler2D materialImage;
+layout(std430,set=0,binding=5) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];} lampGrid;
 layout(push_constant) uniform PostParams {
  vec4 camera;   // x AO strength (negative: debug view), y aspect, z focal, w radius (m)
  vec4 haze;     // rgb linear haze colour, w density per metre
@@ -23,10 +25,13 @@ vec3 viewPosition(vec2 at,float depth){
  vec2 ndc=at*2.0-1.0;
  return vec3(ndc.x*depth/p.camera.z,-ndc.y*depth/(p.camera.z*p.camera.y),depth);
 }
+// Neighbours on the viewmodel (negative depth) or sky stand in as this surface.
+float normalDepth(vec2 at,float fallback){float d=depthAt(at);return d>0.02?d:fallback;}
 vec3 viewNormal(vec2 at,vec3 center){
- vec2 t=p.frame.xy;
- vec3 r=viewPosition(at+vec2(t.x,0),depthAt(at+vec2(t.x,0))),l=viewPosition(at-vec2(t.x,0),depthAt(at-vec2(t.x,0)));
- vec3 d=viewPosition(at+vec2(0,t.y),depthAt(at+vec2(0,t.y))),u=viewPosition(at-vec2(0,t.y),depthAt(at-vec2(0,t.y)));
+  // 2-pixel baseline: half-precision depth steps otherwise tilt reflection normals.
+ vec2 t=p.frame.xy*2.0;
+ vec3 r=viewPosition(at+vec2(t.x,0),normalDepth(at+vec2(t.x,0),center.z)),l=viewPosition(at-vec2(t.x,0),normalDepth(at-vec2(t.x,0),center.z));
+ vec3 d=viewPosition(at+vec2(0,t.y),normalDepth(at+vec2(0,t.y),center.z)),u=viewPosition(at-vec2(0,t.y),normalDepth(at-vec2(0,t.y),center.z));
  vec3 dx=abs(r.z-center.z)<abs(center.z-l.z)?r-center:center-l;
  vec3 dy=abs(d.z-center.z)<abs(center.z-u.z)?d-center:center-u;
  vec3 n=normalize(cross(dy,dx));
@@ -107,29 +112,84 @@ vec3 proceduralSky(vec3 dir){
  return sky;
 }
 
+vec2 projectView(vec3 q){return vec2(q.x*p.camera.z/q.z,-q.y*p.camera.z*p.camera.y/q.z)*0.5+0.5;}
+float postHash(vec2 v){uvec2 q=uvec2(ivec2(v)+ivec2(65536));uint h=q.x*1664525u+q.y*1013904223u+uint(lampGrid.eye.w*60.0)*2654435761u;h^=h>>16;h*=0x7feb352du;h^=h>>15;return float(h&0xffffffu)/16777216.0;}
+
+// Screen-space reflections. Roughness and wetness come from the material
+// target; rough surfaces jitter the ray per pixel and per frame and TAA
+// resolves the blur. Misses outdoors fall back to the sky.
+vec4 screenReflection(vec3 center,vec3 normal,float roughness){
+ vec3 V=normalize(-center);
+ vec2 xi=vec2(postHash(gl_FragCoord.xy),postHash(gl_FragCoord.yx+vec2(17.0,3.0)));
+ vec3 R=reflect(-V,normal);
+ vec3 a=normalize(cross(abs(R.y)<0.9?vec3(0,1,0):vec3(1,0,0),R)),b=cross(R,a);
+ float spread=roughness*roughness*0.9;float ang=xi.x*6.2831853,rad=sqrt(xi.y)*spread;
+ R=normalize(R+(a*cos(ang)+b*sin(ang))*rad);
+ if(dot(R,normal)<0.0)R=reflect(R,normal);
+ const int Steps=24;const float MaxDistance=16.0;
+ float jitter=postHash(gl_FragCoord.xy+vec2(91.0,57.0)),previous=0.0;
+ for(int i=0;i<Steps;++i){
+  float t=MaxDistance*pow((float(i)+jitter)/float(Steps),1.7);
+  vec3 q=center+normal*0.02+R*t;if(q.z<0.05)break;
+  vec2 at=projectView(q);if(any(lessThan(at,vec2(0.0)))||any(greaterThan(at,vec2(1.0))))break;
+  float scene=depthAt(at);
+  if(scene>0.02&&q.z>scene&&q.z-scene<0.25+0.04*q.z){
+   // Refine between the last miss and this hit.
+   float lo=previous,hi=t;
+   for(int k=0;k<5;++k){float mid=(lo+hi)*0.5;vec3 m=center+normal*0.02+R*mid;vec2 mu=projectView(m);float sd=depthAt(mu);if(sd>0.02&&m.z>sd)hi=mid;else lo=mid;}
+   at=projectView(center+normal*0.02+R*hi);
+   vec2 edge=min(at,1.0-at);float fade=smoothstep(0.0,0.08,min(edge.x,edge.y))*(1.0-smoothstep(0.6,1.0,hi/MaxDistance));
+   return vec4(texture(sceneImage,at).rgb,fade);
+  }
+  previous=t;
+ }
+ if(lampGrid.sun.w>0.0){
+  vec4 bs=lampGrid.basis;float forward=R.z*bs.z-R.y*bs.w;
+  vec3 worldR=normalize(vec3(-R.x*bs.y+forward*bs.x,R.x*bs.x+forward*bs.y,R.y*bs.z+R.z*bs.w));
+  if(worldR.z>0.0)return vec4(proceduralSky(worldR),0.8);
+ }
+ return vec4(0.0);
+}
+
 void main(){
  vec4 source=texture(sceneImage,uv);
  vec3 color=source.rgb;float depth=source.a;
  // The viewmodel writes negative depth and keeps its own lighting.
  bool viewModel=depth<0.0;
  bool surface=depth>0.02&&depth<p.grade.w;
- if(surface&&p.camera.x!=0.0){
+ // Pixels that blend the viewmodel with the world after MSAA resolve keep their own lighting.
+ bool worldPixel=texture(materialImage,uv).a>0.99;
+ if(surface&&worldPixel&&p.camera.x!=0.0){
   vec4 occlusion=denoisedOcclusion(depth);
   if(p.camera.x<0.0){outColor=vec4(vec3(occlusion.a),depth);return;}
-  // Occlusion darkens bounce light more than direct light: bright direct
-  // highlights keep more of their value than corners and contacts.
-  float luminance=dot(color,vec3(0.2126,0.7152,0.0722));
-  color*=mix(occlusion.a,1.0,clamp(luminance*1.2-0.35,0.0,0.6));
+  // Occlusion and screen-space lamp shadows act on the light they model:
+  // AO (squared again, about the fourth power of the raw horizon term)
+  // darkens only the indirect share, lamp shadows only the direct share.
+  vec4 material=texture(materialImage,uv);float directShare=clamp(material.b,0.0,1.0);
+  color*=mix(max(occlusion.a*occlusion.a,0.04),1.0,directShare);
   // One bounce: nearby lit surfaces tint and fill this one (colour bleeding).
   // Bounce is low-frequency light; within arm's reach the screen-space
   // estimate degenerates into shifted texture copies, so it fades out.
   color+=occlusion.rgb*0.22*occlusion.a*smoothstep(0.35,1.1,depth);
-  color*=denoisedShadow(depth).x;
+  color*=mix(1.0,denoisedShadow(depth).x,directShare);
+  // Reflections: dielectric Fresnel, faded out for rough materials.
+  float roughness=material.r;
+  if(roughness<0.8){
+   vec3 center=viewPosition(uv,depth),normal=viewNormal(uv,center);
+   float NoV=max(dot(normal,normalize(-center)),0.0);
+   float fresnel=0.04+0.96*pow(1.0-NoV,5.0);
+   float strength=fresnel*(1.0-smoothstep(0.15,0.8,roughness))*(0.55+0.45*material.g);
+   if(strength>0.004){vec4 reflection=screenReflection(center,normal,roughness);color=mix(color,reflection.rgb,strength*reflection.a);}
+  }
  }
+ // Auto exposure scales scene light; haze and shafts below are added in
+ // display terms so a dark room is not filled with brightened fog.
+ float exposure=texture(exposureImage,vec2(0.5)).r;
+ color*=exposure;
  vec2 ndc=uv*2.0-1.0;
  vec3 rayView=vec3(ndc.x/p.camera.z,-ndc.y/(p.camera.z*p.camera.y),1.0);
  vec3 ray=normalize(rayView);
- float rayLength=surface||viewModel?abs(depth)*length(rayView):40.0;
+ float rayLength=surface?depth*length(rayView):viewModel?0.5:40.0;
  if(!surface&&!viewModel&&lampGrid.sun.w>0.0)color=proceduralSky(worldDirection(rayView));
  if(surface&&p.haze.w>0.0){
   // Aerial perspective: distance lifts toward the atmosphere colour.
@@ -141,13 +201,13 @@ void main(){
   // Lamps glow through the air they light; denser air glows more.
   if(texture(shadowImage,uv).b>0.5){
    // Shadow-mapped shafts from every nearby lamp (shadow stage, denoised here).
-   color+=vec3(1.0,0.86,0.66)*denoisedShadow(depth).y*p.haze.w*1.6;
+   color+=vec3(1.0,0.86,0.66)*denoisedShadow(depth).y*p.haze.w*0.8;
   }else{
    float scatter=0.0;for(int i=0;i<4;++i)scatter+=lampScatter(ray,rayLength,p.lights[i]);
    color+=vec3(1.0,0.86,0.66)*scatter*p.haze.w*0.4;
   }
  }
- color+=bloom()*p.frame.z;
+ color+=bloom()*p.frame.z*exposure;
  // Grade in linear light: gentle saturation, cool lifted shadows, warm highs.
  float luminance=dot(color,vec3(0.2126,0.7152,0.0722));
  color=mix(vec3(luminance),color,p.frame.w);

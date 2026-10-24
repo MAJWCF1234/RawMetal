@@ -20,6 +20,8 @@ layout(location=4) in vec4 surface;
 layout(location=6) in vec3 worldPos;
 layout(location=7) in float parallaxScale;
 layout(location=0) out vec4 outColor;
+// Material target for the post pass: roughness, wetness, direct-light share.
+layout(location=1) out vec4 outMaterial;
 
 // Pixel-art filtering: snap to the texel centre and blend only across a
 // one-pixel seam, so magnified PSX texels stay square without stair-stepping.
@@ -65,6 +67,8 @@ float detailField(vec2 p,float cellPixels){
  float w1=smoothstep(1.5,3.0,cellPixels/2.17),w2=smoothstep(1.5,3.0,cellPixels/4.9);
  return (detailNoise(p)*0.6+detailNoise(p*2.17+vec2(7.1,3.3))*0.28*w1+detailNoise(p*4.9+vec2(1.7,9.2))*0.12*w2)/(0.6+0.28*w1+0.12*w2);
 }
+// Puddle field in world metres: two octaves of lattice noise.
+float puddleField(vec2 p){return detailNoise(p*0.45)*0.65+detailNoise(p*1.3+vec2(7.3,2.9))*0.35;}
 // Whiteout blend of a detail normal onto a base tangent-space normal.
 vec3 blendDetail(vec3 base,vec3 detail){return normalize(vec3(base.xy+detail.xy,base.z*detail.z));}
 
@@ -153,6 +157,7 @@ float shaftScattering(vec3 eye,vec3 direction,float rayLength,vec4 lamp,float in
 }
 
 void main(){
+ outMaterial=vec4(1.0,0.0,0.5,1.0);
  vec2 sampleUV=uv;
  vec2 uvDx=dFdx(uv),uvDy=dFdy(uv);
  vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
@@ -205,6 +210,17 @@ void main(){
  if(stereo.enabled.y>0.5)sampleUV=mix(crispTexelUV(sampleUV,uvDx,uvDy),sampleUV,smoothstep(5.0,11.0,pixelsPerTexel));
  vec4 color=textureGrad(colorMap,sampleUV,uvDx,uvDy);
  if(color.a<(surface.z>0.5?0.01:0.5))discard;
+ // Wetness: a damp sheen everywhere plus puddles on level static ground.
+ // Wet porous surfaces darken and their roughness collapses toward a mirror.
+ float materialRoughness=clamp(1.0-fract(surface.z),0.18,1.0),wetness=0.0;
+ if(surface.z<0.5&&surface.w>0.5&&surface.w<1.5&&lampGrid.sunColor.w>0.0){
+  vec3 Nw=normalize(cross(dx,dy));if(dot(Nw,view.eyeYaw.xyz-worldPos)<0.0)Nw=-Nw;
+  float wet=lampGrid.sunColor.w,damp=wet*0.35;
+  if(Nw.z>0.8){float puddle=smoothstep(0.66-wet*0.32,0.74-wet*0.32,puddleField(worldPos.xy))*min(wet*1.6,1.0);wetness=max(damp,puddle);}
+  else wetness=damp*0.4;
+  color.rgb*=mix(1.0,0.6,wetness*0.85);
+  materialRoughness=mix(materialRoughness,0.03,wetness);
+ }
  vec3 detailNormal=vec3(0.0,0.0,1.0);float detailValue=0.5;
  if(detailAmount>0.001){
   vec2 dp=uv*atlasSize*2.5;const float e=0.3;float cellPixels=pixelsPerTexel*0.4;
@@ -217,6 +233,7 @@ void main(){
  float specularLight=0.0;
  float waterFresnel=0.0;
  vec3 sunLight=vec3(0.0); // coloured direct sun on static geometry
+ float directLight=-1.0,ambientLight=0.0; // for the post pass (AO on indirect only)
  vec3 sunDebug=vec3(0.0);
  vec3 n=vec3(0.0,0.0,1.0);float normalLength=1.0;vec3 baseNormalDebug=vec3(0.0,0.0,1.0);
 
@@ -270,7 +287,7 @@ void main(){
    N=normalize(T*n.x+B*n.y+Ng*max(n.z,0.05));
   }
   float concentration=clamp(normalLength,0.0,1.0);
-  float roughness=clamp(1.0-fract(surface.z),0.18,0.96);
+  float roughness=clamp(materialRoughness,0.03,0.96);
   roughness=sqrt(clamp(roughness*roughness+(1.0-concentration)/max(concentration,0.05),0.0324,1.0));
   float lampLight=0.0,lampSpecular=0.0;
   ivec3 cell=ivec3(floor((worldPos-lampGrid.origin.xyz)/lampGrid.origin.w));
@@ -332,8 +349,11 @@ void main(){
   float relief=mix(1.0,clamp(dot(N,Ng),0.0,1.0),0.6)*hemisphere;
   // Exposure-matched to the old bake (which clamped at 1.4): a soft shoulder
   // keeps hot spots under lamps without flattening the falloff into the room.
-  vertexLight=lighting.y*relief+1.25*(1.0-exp(-lampLight*0.62/1.25));
+  // No shoulder: lamp cores stay hot and exposure plus the tonemap compress
+  // them, as a camera would (the bake used to clamp at 1.4).
+  vertexLight=lighting.y*relief+lampLight*0.62;
   specularLight=lampSpecular*0.7;
+  directLight=lampLight*0.62+dot(sunLight,vec3(0.333));ambientLight=lighting.y*relief;
  }
 
  if(surface.z>0.5&&surface.z<1.5){
@@ -407,8 +427,15 @@ void main(){
  // blended pipelines keep the destination alpha, so water stays a blend factor.
  vec3 toPoint=worldPos-view.eyeYaw.xyz;float forward=toPoint.x*view.eyeYaw.w+toPoint.y*view.basis.x;
  float planarDepth=max(forward*view.basis.y+toPoint.z*view.basis.z,0.0);
- // The first-person viewmodel stores negative depth so post stages skip it
- // exactly, at any distance from walls.
- if(surface.w>1.5&&surface.w<2.5)planarDepth=-max(planarDepth,0.01);
+ // The first-person viewmodel stores a large negative depth so post stages
+ // skip it exactly. Large, so an MSAA edge pixel that resolves the hand with
+ // the wall behind it stays negative; a small value averaged to a phantom
+ // surface in mid-air that cast shadow and AO halos around the hands.
+ if(surface.w>1.5&&surface.w<2.5)planarDepth=-1000.0;
+ float directShare=directLight>=0.0?directLight/(directLight+ambientLight+1e-4):0.5;
+ // Alpha 1 marks world pixels; the viewmodel writes 0 so MSAA edge pixels
+ // (fractional after resolve) skip world-only post effects.
+ bool viewModelPixel=surface.w>1.5&&surface.w<2.5;
+ outMaterial=vec4(surface.z<0.5&&surface.w<1.5?materialRoughness:1.0,wetness,viewModelPixel?1.0:directShare,viewModelPixel?0.0:1.0);
  outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),surface.z>1.5?alpha:planarDepth):vec4(toDisplay(filmic(result*0.95)),alpha);
 }

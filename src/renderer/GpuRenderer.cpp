@@ -51,6 +51,39 @@ const uint32_t lampShadowFragmentShader[]=
 const uint32_t taaFragmentShader[]=
 #include "taa.frag.inc"
 ;
+const uint32_t exposureFragmentShader[]=
+#include "exposure.frag.inc"
+;
+// AgX display transform, matching composite.frag (minimal fit by Benjamin
+// Wrensch, MIT licence; see THIRD_PARTY_NOTICES.md). Linear RGB in, BGRA8 out.
+// After the inset matrix the curve is per channel, so it is tabulated by the
+// top 18 bits of the float (sign, exponent, 9 mantissa bits): no log2 or pow
+// per pixel on headless readback.
+static float agxCurve(float v){
+ v=std::clamp((std::log2(std::max(v,1e-10f))+12.47393f)/16.5f,0.f,1.f);float x2=v*v,x4=x2*x2;
+ v=15.5f*x4*x2-40.14f*x4*v+31.96f*x4-6.868f*x2*v+.4298f*x2+.1191f*v-.00232f;
+ return std::pow(std::max(v,0.f),1.3f); // punchy look, as composite.frag
+}
+static const std::vector<float>& agxTable(){
+ static const std::vector<float> table=[]{std::vector<float> t(size_t(1)<<18);for(uint32_t i=0;i<t.size();++i){uint32_t bits=(i<<14)|(1u<<13);float v;std::memcpy(&v,&bits,4);t[i]=(i>>17)||!std::isfinite(v)?agxCurve(1e-10f):agxCurve(v);}return t;}();
+ return table;
+}
+// Test harnesses compare against the original analytic display curve.
+static bool g_referenceDisplay=false;
+static std::uint32_t referencePixel(float r,float g,float b){
+ auto display=[](float value){value=std::max(0.f,value)*1.05f;float mapped=std::clamp((value*(2.51f*value+.03f))/(value*(2.43f*value+.59f)+.14f),0.f,1.f);return uint32_t(std::clamp(int(std::lround(std::pow(mapped,1.f/2.2f)*255.f)),0,255));};
+ return 0xff000000u|(display(r)<<16)|(display(g)<<8)|display(b);
+}
+static std::uint32_t agxPixel(float r,float g,float b){
+ if(g_referenceDisplay)return referencePixel(r,g,b);
+ const auto& table=agxTable();
+ auto curve=[&](float v){uint32_t bits;std::memcpy(&bits,&v,4);return table[bits>>14];};
+ float c[3]={curve(.842479062253094f*r+.0784335999999992f*g+.0792237451477643f*b),curve(.0423282422610123f*r+.878468636469772f*g+.0791661274605434f*b),curve(.0423756549057051f*r+.0784336f*g+.879142973793104f*b)};
+ float luma=.2126f*c[0]+.7152f*c[1]+.0722f*c[2];for(float&v:c)v=luma+1.25f*(v-luma);
+ float o[3]={1.19687900512017f*c[0]-.0980208811401368f*c[1]-.0990297440797205f*c[2],-.0528968517574562f*c[0]+1.15190312990417f*c[1]-.0989611768448433f*c[2],-.0529716355144438f*c[0]-.0980434501171241f*c[1]+1.15107367264116f*c[2]};
+ auto byte=[](float v){return std::uint32_t(std::clamp(int(std::lround(std::clamp(v,0.f,1.f)*255.f)),0,255));};
+ return 0xff000000u|(byte(o[0])<<16)|(byte(o[1])<<8)|byte(o[2]);
+}
 const uint32_t sunShadowVertexShader[]=
 #include "sunshadow.vert.inc"
 ;
@@ -348,6 +381,10 @@ struct GpuRenderer::Impl {
  VkPipeline actorOpaque=VK_NULL_HANDLE,actorAdditive=VK_NULL_HANDLE,actorTransparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE,sceneSampler=VK_NULL_HANDLE,pointSampler=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
+ // Material target (roughness, wetness, direct-light share) for the post pass.
+ Image materialTarget,materialColor;
+ // Auto exposure: 1x1 ping-pong targets written by the exposure stage.
+ std::array<Image,2> exposureImages{};std::array<VkFramebuffer,2> exposureFrames{};std::array<VkImageLayout,2> exposureLayouts{VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_UNDEFINED};int exposureWrite=0;
  // Post pass (HDR, non-VR): reads scene RGB + planar depth in alpha, writes the
  // final linear image that both readback and the window composite consume.
  struct FullscreenStage{bool lampAccess=false;Image image;VkRenderPass pass=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;VkPipeline pipeline=VK_NULL_HANDLE;VkPipelineLayout layout=VK_NULL_HANDLE;
@@ -359,7 +396,7 @@ struct GpuRenderer::Impl {
  // Temporal AA: the stage renders into alternating history images; the one
  // written this frame is the final image. Layouts are tracked because present
  // moves the final image to shader-read for the composite.
- FullscreenStage taaStage;std::array<Image,2> taaImages{};std::array<VkFramebuffer,2> taaFrames{};std::array<VkImageLayout,2> taaLayouts{VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_UNDEFINED};
+ FullscreenStage taaStage,exposureStage;std::array<Image,2> taaImages{};std::array<VkFramebuffer,2> taaFrames{};std::array<VkImageLayout,2> taaLayouts{VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_UNDEFINED};
  int taaWrite=0;bool taaEnabled=true,taaRan=false,taaHistoryValid=false;uint32_t taaFrame=0;std::array<float,8> taaPrevCamera{};std::array<float,2> taaJitter{};
  void destroyTaaTargets(){for(int i=0;i<2;++i){if(taaFrames[size_t(i)])vkDestroyFramebuffer(device,taaFrames[size_t(i)],nullptr);taaFrames[size_t(i)]=VK_NULL_HANDLE;destroy(taaImages[size_t(i)]);taaLayouts[size_t(i)]=VK_IMAGE_LAYOUT_UNDEFINED;}taaHistoryValid=false;}
  Image& finalImage(){return taaRan?taaImages[size_t(taaWrite)]:postRan?composeStage.image:target;}
@@ -539,6 +576,7 @@ struct GpuRenderer::Impl {
    for(auto f:mirrorFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:mirrorViews)vkDestroyImageView(device,v,nullptr);if(mirrorPipeline)vkDestroyPipeline(device,mirrorPipeline,nullptr);if(mirrorPass)vkDestroyRenderPass(device,mirrorPass,nullptr);
    for(auto&b:projectionBuffers)destroy(b);for(auto&b:actorBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
    destroyStage(occlusionStage);destroyStage(shadowStage);destroyStage(composeStage);destroyTaaTargets();destroyStage(taaStage);
+   for(int i=0;i<2;++i){if(exposureFrames[size_t(i)])vkDestroyFramebuffer(device,exposureFrames[size_t(i)],nullptr);destroy(exposureImages[size_t(i)]);}destroyStage(exposureStage);destroy(materialTarget);destroy(materialColor);
    destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
    for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(actorVertexBuffers[i]);destroy(overlayBuffers[i]);}
    for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}
@@ -857,12 +895,15 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   }
  }
  VkDescriptorSetLayout pipelineSets[]={m->setLayout,m->projectionLayout};layout.setLayoutCount=2;layout.pSetLayouts=pipelineSets;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
-  const bool multisampled=m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT;uint32_t depthIndex=multisampled?2u:1u;VkAttachmentDescription attachments[3]{};attachments[0].format=m->sceneFormat;attachments[0].samples=m->sceneSamples;attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[0].storeOp=multisampled?VK_ATTACHMENT_STORE_OP_DONT_CARE:VK_ATTACHMENT_STORE_OP_STORE;attachments[0].stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[0].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachments[0].finalLayout=multisampled?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  const bool multisampled=m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT;uint32_t depthIndex=multisampled?2u:1u;VkAttachmentDescription attachments[5]{};attachments[0].format=m->sceneFormat;attachments[0].samples=m->sceneSamples;attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[0].storeOp=multisampled?VK_ATTACHMENT_STORE_OP_DONT_CARE:VK_ATTACHMENT_STORE_OP_STORE;attachments[0].stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[0].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachments[0].finalLayout=multisampled?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   if(multisampled){attachments[1]=attachments[0];attachments[1].samples=VK_SAMPLE_COUNT_1_BIT;attachments[1].loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[1].storeOp=VK_ATTACHMENT_STORE_OP_STORE;attachments[1].finalLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;}
  attachments[depthIndex]=attachments[0];attachments[depthIndex].format=VK_FORMAT_D32_SFLOAT;attachments[depthIndex].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[depthIndex].storeOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[depthIndex].finalLayout=VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
- VkAttachmentReference color{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},resolve{1,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},depth{depthIndex,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};VkSubpassDescription subpass{};subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;subpass.colorAttachmentCount=1;subpass.pColorAttachments=&color;subpass.pResolveAttachments=multisampled?&resolve:nullptr;subpass.pDepthStencilAttachment=&depth;
+ // Material target: multisampled like the scene, resolved for the post pass.
+ const uint32_t materialIndex=depthIndex+1;attachments[materialIndex]=attachments[0];attachments[materialIndex].format=VK_FORMAT_R8G8B8A8_UNORM;attachments[materialIndex].finalLayout=multisampled?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+ if(multisampled){attachments[materialIndex+1]=attachments[1];attachments[materialIndex+1].format=VK_FORMAT_R8G8B8A8_UNORM;attachments[materialIndex+1].finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
+ VkAttachmentReference colors[2]={{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},{materialIndex,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},resolves[2]={{1,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},{materialIndex+1,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},depth{depthIndex,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};VkSubpassDescription subpass{};subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;subpass.colorAttachmentCount=2;subpass.pColorAttachments=colors;subpass.pResolveAttachments=multisampled?resolves:nullptr;subpass.pDepthStencilAttachment=&depth;
  VkSubpassDependency deps[2]{};deps[0].srcSubpass=VK_SUBPASS_EXTERNAL;deps[0].dstSubpass=0;deps[0].srcStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;deps[0].dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;deps[1].srcSubpass=0;deps[1].dstSubpass=VK_SUBPASS_EXTERNAL;deps[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;deps[1].dstStageMask=VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;deps[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;
- VkRenderPassCreateInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};pass.attachmentCount=depthIndex+1;pass.pAttachments=attachments;pass.subpassCount=1;pass.pSubpasses=&subpass;pass.dependencyCount=2;pass.pDependencies=deps;check(vkCreateRenderPass(m->device,&pass,nullptr,&m->renderPass),"Create render pass");
+ VkRenderPassCreateInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};pass.attachmentCount=multisampled?5u:3u;pass.pAttachments=attachments;pass.subpassCount=1;pass.pSubpasses=&subpass;pass.dependencyCount=2;pass.pDependencies=deps;check(vkCreateRenderPass(m->device,&pass,nullptr,&m->renderPass),"Create render pass");
  VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};sampler.magFilter=sampler.minFilter=VK_FILTER_LINEAR;sampler.anisotropyEnable=enabled.samplerAnisotropy;sampler.maxAnisotropy=enabled.samplerAnisotropy?std::min(8.f,deviceProperties.limits.maxSamplerAnisotropy):1.f;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR;sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_REPEAT;sampler.maxLod=VK_LOD_CLAMP_NONE;check(vkCreateSampler(m->device,&sampler,nullptr,&m->wrap),"Create texture sampler");sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;check(vkCreateSampler(m->device,&sampler,nullptr,&m->clamp),"Create decal sampler");
  sampler.anisotropyEnable=VK_FALSE;sampler.maxAnisotropy=1.f;sampler.maxLod=0.f;check(vkCreateSampler(m->device,&sampler,nullptr,&m->sceneSampler),"Create scene presentation sampler");
  sampler.magFilter=sampler.minFilter=VK_FILTER_NEAREST;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;check(vkCreateSampler(m->device,&sampler,nullptr,&m->pointSampler),"Create HUD and depth sampler");
@@ -874,10 +915,12 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkPipelineVertexInputStateCreateInfo input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};input.vertexBindingDescriptionCount=1;input.pVertexBindingDescriptions=&binding;input.vertexAttributeDescriptionCount=7;input.pVertexAttributeDescriptions=attrs;VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};assembly.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   VkPipelineViewportStateCreateInfo viewport{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};viewport.viewportCount=viewport.scissorCount=1;VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};raster.polygonMode=VK_POLYGON_MODE_FILL;raster.cullMode=VK_CULL_MODE_NONE;raster.frontFace=VK_FRONT_FACE_COUNTER_CLOCKWISE;raster.lineWidth=1;
   VkPipelineMultisampleStateCreateInfo samples{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};samples.rasterizationSamples=m->sceneSamples;VkPipelineDepthStencilStateCreateInfo depthState{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};depthState.depthTestEnable=depthState.depthWriteEnable=VK_TRUE;depthState.depthCompareOp=VK_COMPARE_OP_LESS;
-  VkPipelineColorBlendAttachmentState blend{};blend.colorWriteMask=0xf;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;blend.srcAlphaBlendFactor=blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;blend.colorBlendOp=blend.alphaBlendOp=VK_BLEND_OP_ADD;VkPipelineColorBlendStateCreateInfo blending{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};blending.attachmentCount=1;blending.pAttachments=&blend;
+  VkPipelineColorBlendAttachmentState blend{};blend.colorWriteMask=0xf;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;blend.srcAlphaBlendFactor=blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;blend.colorBlendOp=blend.alphaBlendOp=VK_BLEND_OP_ADD;VkPipelineColorBlendStateCreateInfo blending{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+  // The material target is written only by opaque draws; blended effects leave it.
+  VkPipelineColorBlendAttachmentState blends[2]{};auto syncBlend=[&]{blends[0]=blend;blends[1]=VkPipelineColorBlendAttachmentState{};blends[1].colorWriteMask=blend.blendEnable?0u:0xfu;};blending.attachmentCount=2;blending.pAttachments=blends;
   VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dynamic.dynamicStateCount=2;dynamic.pDynamicStates=states;
   VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};pipeline.stageCount=2;pipeline.pStages=stages;pipeline.pVertexInputState=&input;pipeline.pInputAssemblyState=&assembly;pipeline.pViewportState=&viewport;pipeline.pRasterizationState=&raster;pipeline.pMultisampleState=&samples;pipeline.pDepthStencilState=&depthState;pipeline.pColorBlendState=&blending;pipeline.pDynamicState=&dynamic;pipeline.layout=m->pipelineLayout;pipeline.renderPass=m->renderPass;
-  check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;blend.srcAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create water blend pipeline");
+  syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->opaque),"Create opaque Vulkan pipeline");blend.blendEnable=VK_TRUE;blend.srcAlphaBlendFactor=VK_BLEND_FACTOR_ZERO;blend.dstAlphaBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_FALSE;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->additive),"Create additive Vulkan pipeline");blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->transparent),"Create water blend pipeline");
   shader.codeSize=sizeof(actorVertexShader);shader.pCode=actorVertexShader;check(vkCreateShaderModule(m->device,&shader,nullptr,&actorVert),"Create instanced actor shader");stages[0].module=actorVert;
   binding={0,sizeof(ActorTriangle),VK_VERTEX_INPUT_RATE_INSTANCE};
   VkVertexInputAttributeDescription actorAttrs[]={
@@ -886,9 +929,9 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
    {6,0,VK_FORMAT_R32G32B32A32_SFLOAT,72},{7,0,VK_FORMAT_R32_SFLOAT,88}};
   input.vertexAttributeDescriptionCount=8;input.pVertexAttributeDescriptions=actorAttrs;
   blend.blendEnable=VK_FALSE;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_TRUE;
-  check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorOpaque),"Create opaque actor pipeline");
-  blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorAdditive),"Create additive actor pipeline");
-  blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorTransparent),"Create transparent actor pipeline");
+  syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorOpaque),"Create opaque actor pipeline");
+  blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorAdditive),"Create additive actor pipeline");
+  blend.srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA;blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorTransparent),"Create transparent actor pipeline");
  }catch(...){if(vert)vkDestroyShaderModule(m->device,vert,nullptr);if(frag)vkDestroyShaderModule(m->device,frag,nullptr);if(actorVert)vkDestroyShaderModule(m->device,actorVert,nullptr);throw;}vkDestroyShaderModule(m->device,vert,nullptr);vkDestroyShaderModule(m->device,frag,nullptr);vkDestroyShaderModule(m->device,actorVert,nullptr);
  // Post stages: fullscreen draws reading the resolved scene (and earlier stages).
  if(m->hdrScene&&!m->vrMode){
@@ -899,7 +942,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
    VkSubpassDependency pd[2]{};pd[0].srcSubpass=VK_SUBPASS_EXTERNAL;pd[0].dstSubpass=0;pd[0].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;pd[0].dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT;
    pd[1].srcSubpass=0;pd[1].dstSubpass=VK_SUBPASS_EXTERNAL;pd[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;pd[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;pd[1].dstStageMask=VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;
    VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};rp.attachmentCount=1;rp.pAttachments=&a;rp.subpassCount=1;rp.pSubpasses=&sp;rp.dependencyCount=2;rp.pDependencies=pd;check(vkCreateRenderPass(m->device,&rp,nullptr,&stage.pass),name);
-   VkDescriptorSetLayoutBinding pb[5]{};for(uint32_t i=0;i<samplers;++i){pb[i].binding=i;pb[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;pb[i].descriptorCount=1;pb[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
+   VkDescriptorSetLayoutBinding pb[8]{};for(uint32_t i=0;i<samplers;++i){pb[i].binding=i;pb[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;pb[i].descriptorCount=1;pb[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
    // Lamp access: the lamp grid and the cube shadow atlas follow the images.
    if(lampAccess){pb[samplers]={samplers,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};pb[samplers+1]={samplers+1,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};}
    VkDescriptorSetLayoutCreateInfo psl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};psl.bindingCount=samplers+(lampAccess?2u:0u);psl.pBindings=pb;check(vkCreateDescriptorSetLayout(m->device,&psl,nullptr,&stage.setLayout),name);
@@ -922,7 +965,12 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   };
   buildStage(m->occlusionStage,occlusionFragmentShader,sizeof(occlusionFragmentShader),1,"Create occlusion post stage");
   buildStage(m->shadowStage,shadowFragmentShader,sizeof(shadowFragmentShader),1,"Create shadow post stage",true);
-  buildStage(m->composeStage,postFragmentShader,sizeof(postFragmentShader),3,"Create compose post stage",true);
+  buildStage(m->composeStage,postFragmentShader,sizeof(postFragmentShader),5,"Create compose post stage",true);
+  buildStage(m->exposureStage,exposureFragmentShader,sizeof(exposureFragmentShader),2,"Create auto exposure stage");
+  for(int i=0;i<2;++i){
+   m->makeImage(m->exposureImages[size_t(i)],1,1,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
+   VkFramebufferCreateInfo efb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};efb.renderPass=m->exposureStage.pass;efb.attachmentCount=1;efb.pAttachments=&m->exposureImages[size_t(i)].view;efb.width=efb.height=1;efb.layers=1;check(vkCreateFramebuffer(m->device,&efb,nullptr,&m->exposureFrames[size_t(i)]),"Create auto exposure target");
+  }
   buildStage(m->taaStage,taaFragmentShader,sizeof(taaFragmentShader),3,"Create temporal AA stage");
   m->postAvailable=true;
  }
@@ -962,9 +1010,8 @@ void GpuRenderer::captureScene(std::vector<std::uint32_t>&pixels,int&width,int&h
  m->submitUploadCommands();
  pixels.resize(size_t(width)*height);
  auto half=[](uint16_t bits){float value;if((bits&0x7c00u)==0x7c00u)value=(bits&0x03ffu)?std::numeric_limits<float>::quiet_NaN():std::numeric_limits<float>::infinity();else if((bits&0x7c00u)==0)value=std::ldexp(float(bits&0x03ffu),-24);else value=std::ldexp(1.f+float(bits&0x03ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;};
- auto display=[](float value){value=std::max(0.f,value)*1.05f;float mapped=std::clamp((value*(2.51f*value+.03f))/(value*(2.43f*value+.59f)+.14f),0.f,1.f);return uint32_t(std::clamp(int(std::lround(std::pow(mapped,1.f/2.2f)*255.f)),0,255));};
- if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(display(half(source[i*4]))<<16)|(display(half(source[i*4+1]))<<8)|display(half(source[i*4+2]));}
- else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(display(source[i*4])<<16)|(display(source[i*4+1])<<8)|display(source[i*4+2]);}
+ if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
+ else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(source[i*4],source[i*4+1],source[i*4+2]);}
  else std::memcpy(pixels.data(),m->readback.mapped,pixels.size()*4);
 }
 void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
@@ -1006,9 +1053,12 @@ void GpuRenderer::begin(int width,int height){
  // Render target size changed — must drain GPU fully before resize.
  vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
  m->destroyStageTarget(m->occlusionStage);m->destroyStageTarget(m->shadowStage);m->destroyStageTarget(m->composeStage);m->destroyTaaTargets();
- if(m->framebuffer){vkDestroyFramebuffer(m->device,m->framebuffer,nullptr);m->framebuffer=VK_NULL_HANDLE;}m->destroy(m->target);m->destroy(m->sceneColor);m->destroy(m->depth);m->destroy(m->readback);
+ if(m->framebuffer){vkDestroyFramebuffer(m->device,m->framebuffer,nullptr);m->framebuffer=VK_NULL_HANDLE;}m->destroy(m->target);m->destroy(m->sceneColor);m->destroy(m->depth);m->destroy(m->readback);m->destroy(m->materialTarget);m->destroy(m->materialColor);
+ m->makeImage(m->materialTarget,width,height,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
+ if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->materialColor,width,height,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);
  m->makeImage(m->target,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->sceneColor,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);m->makeImage(m->depth,width,height,1,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,VK_IMAGE_ASPECT_DEPTH_BIT,m->sceneSamples);m->makeBuffer(m->readback,VkDeviceSize(width)*height*(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT?8:m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT?16:4),VK_BUFFER_USAGE_TRANSFER_DST_BIT);
- VkImageView views[]={m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?m->target.view:m->sceneColor.view,m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?m->depth.view:m->target.view,m->depth.view};VkFramebufferCreateInfo frame{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};frame.renderPass=m->renderPass;frame.attachmentCount=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?2u:3u;frame.pAttachments=views;frame.width=width;frame.height=height;frame.layers=1;check(vkCreateFramebuffer(m->device,&frame,nullptr,&m->framebuffer),"Create frame target");m->width=width;m->height=height;
+ const bool msaa=m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT;
+ VkImageView views[5]={msaa?m->sceneColor.view:m->target.view,msaa?m->target.view:m->depth.view,msaa?m->depth.view:m->materialTarget.view,msaa?m->materialColor.view:VK_NULL_HANDLE,msaa?m->materialTarget.view:VK_NULL_HANDLE};VkFramebufferCreateInfo frame{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};frame.renderPass=m->renderPass;frame.attachmentCount=msaa?5u:3u;frame.pAttachments=views;frame.width=width;frame.height=height;frame.layers=1;check(vkCreateFramebuffer(m->device,&frame,nullptr,&m->framebuffer),"Create frame target");m->width=width;m->height=height;
  if(m->postAvailable)for(auto* stage:{&m->occlusionStage,&m->shadowStage,&m->composeStage}){
   m->makeImage(stage->image,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
   VkFramebufferCreateInfo pfb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};pfb.renderPass=stage->pass;pfb.attachmentCount=1;pfb.pAttachments=&stage->image.view;pfb.width=width;pfb.height=height;pfb.layers=1;check(vkCreateFramebuffer(m->device,&pfb,nullptr,&stage->framebuffer),"Create post stage target");
@@ -1025,6 +1075,7 @@ void GpuRenderer::setView(float x,float y,float z,float yaw,float pitch,float as
 void GpuRenderer::setPostProcessing(bool enabled,bool occlusionView){m->postEnabled=enabled;m->postDebugOcclusion=occlusionView;}
 bool GpuRenderer::postProcessing()const{return m->postAvailable&&m->postEnabled;}
 void GpuRenderer::setCrispTexels(bool crisp){m->vrProjection[17]=crisp?1.f:0.f;}
+void GpuRenderer::setReferenceDisplay(bool enabled){g_referenceDisplay=enabled;}
 void GpuRenderer::setTemporalAA(bool enabled){m->taaEnabled=enabled;if(!enabled)m->taaHistoryValid=false;}
 void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);}
 void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
@@ -1257,8 +1308,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  m->batches.swap(m->sortedBatches);
  m->startCommands();
  m->renderLampShadows(m->commands[m->frameIndex]);m->renderSunShadows(m->commands[m->frameIndex]);
-  VkClearValue clear[3]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};
- VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+1;pass.pClearValues=clear;
+  VkClearValue clear[5]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};clear[depthIndex+1].color=VkClearColorValue{{1.f,0.f,.5f,1.f}};
+ VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
  auto cmd=m->commands[m->frameIndex];
  vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
  VkViewport viewport{0,0,float(m->width),float(m->height),0,1};VkRect2D scissor{{0,0},{uint32_t(m->width),uint32_t(m->height)}};
@@ -1290,8 +1341,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   for(int i=0;i<4;++i){float dx=v[12+i*4]-v[0],dy=v[13+i*4]-v[1],dz=v[14+i*4]-.1f-v[2];
    float right=-dx*v[4]+dy*v[3],forward=dx*v[3]+dy*v[4];
    params[16+i*4]=right;params[17+i*4]=dz*v[5]-forward*v[6];params[18+i*4]=forward*v[5]+dz*v[6];params[19+i*4]=m->vrProjection[20+size_t(i)];}
-  auto runStage=[&](Impl::FullscreenStage& stage,std::initializer_list<VkImageView> sources,const float* push=nullptr,VkFramebuffer framebuffer=VK_NULL_HANDLE){
-   VkDescriptorImageInfo images[4]{};VkWriteDescriptorSet writes[5]{};uint32_t count=0;
+  auto runStage=[&](Impl::FullscreenStage& stage,std::initializer_list<VkImageView> sources,const float* push=nullptr,VkFramebuffer framebuffer=VK_NULL_HANDLE,VkExtent2D extent={0,0}){
+   VkDescriptorImageInfo images[8]{};VkWriteDescriptorSet writes[8]{};uint32_t count=0;
    for(auto view:sources){images[count]={m->sceneSampler,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&w=writes[count];w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=stage.sets[m->frameIndex];w.dstBinding=count;w.descriptorCount=1;w.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w.pImageInfo=&images[count];++count;}
    VkDescriptorBufferInfo lampInfo{m->lampBuffers[m->frameIndex].handle,0,Impl::LampBufferBytes};
    if(stage.lampAccess){
@@ -1299,8 +1350,10 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
     images[count]={m->shadowSampler,m->shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&atlas=writes[count+1];atlas.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;atlas.dstSet=stage.sets[m->frameIndex];atlas.dstBinding=count+1;atlas.descriptorCount=1;atlas.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;atlas.pImageInfo=&images[count];count+=2;
    }
    vkUpdateDescriptorSets(m->device,count,writes,0,nullptr);
-   VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};begin.renderPass=stage.pass;begin.framebuffer=framebuffer?framebuffer:stage.framebuffer;begin.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};
-   vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
+   if(!extent.width)extent={uint32_t(m->width),uint32_t(m->height)};
+   VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};begin.renderPass=stage.pass;begin.framebuffer=framebuffer?framebuffer:stage.framebuffer;begin.renderArea.extent=extent;
+   VkViewport stageViewport{0,0,float(extent.width),float(extent.height),0,1};VkRect2D stageScissor{{0,0},extent};
+   vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdSetViewport(cmd,0,1,&stageViewport);vkCmdSetScissor(cmd,0,1,&stageScissor);
    vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,stage.pipeline);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,stage.layout,0,1,&stage.sets[m->frameIndex],0,nullptr);
    vkCmdPushConstants(cmd,stage.layout,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(params),push?push:params);vkCmdDraw(cmd,6,1,0,0);vkCmdEndRenderPass(cmd);
   };
@@ -1308,7 +1361,17 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   m->barrier(m->occlusionStage.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
   runStage(m->shadowStage,{m->target.view});
   m->barrier(m->shadowStage.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
-  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view});
+  {
+   // Meter this frame; the window eases toward the target, headless frames adapt at once.
+   int write=m->exposureWrite^1,read=m->exposureWrite;auto& previousLayout=m->exposureLayouts[size_t(read)];
+   if(previousLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL){m->barrier(m->exposureImages[size_t(read)],previousLayout,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,0,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);previousLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
+   // Partial adaptation (power .45, at most 1.9x): dark rooms brighten a little but stay dark.
+   float exposureParams[32]={m->surface?.045f:1.f,.13f,.65f,1.9f, .45f};
+   runStage(m->exposureStage,{m->target.view,m->exposureImages[size_t(read)].view},exposureParams,m->exposureFrames[size_t(write)],VkExtent2D{1,1});
+   m->barrier(m->exposureImages[size_t(write)],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
+   m->exposureLayouts[size_t(write)]=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;m->exposureWrite=write;
+  }
+  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view,m->exposureImages[size_t(m->exposureWrite)].view,m->materialTarget.view});
   m->postRan=true;
   m->taaRan=false;
   if(taaThisFrame){
@@ -1340,9 +1403,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  m->frameInFlight[m->frameIndex]=false;
  pixels.resize(size_t(m->width*m->height));
  auto half=[](uint16_t bits){float value;if((bits&0x7c00u)==0x7c00u)value=(bits&0x03ffu)?std::numeric_limits<float>::quiet_NaN():std::numeric_limits<float>::infinity();else if((bits&0x7c00u)==0)value=std::ldexp(float(bits&0x03ffu),-24);else value=std::ldexp(1.f+float(bits&0x03ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;};
- auto display=[](float value){value=std::max(0.f,value)*1.05f;float mapped=std::clamp((value*(2.51f*value+.03f))/(value*(2.43f*value+.59f)+.14f),0.f,1.f);return uint32_t(std::clamp(int(std::lround(std::pow(mapped,1.f/2.2f)*255.f)),0,255));};
- if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(display(half(source[i*4]))<<16)|(display(half(source[i*4+1]))<<8)|display(half(source[i*4+2]));}
- else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(display(source[i*4])<<16)|(display(source[i*4+1])<<8)|display(source[i*4+2]);}
+ if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
+ else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(source[i*4],source[i*4+1],source[i*4+2]);}
  else std::memcpy(pixels.data(),m->readback.mapped,pixels.size()*4);
 }
 void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick,float alarm){

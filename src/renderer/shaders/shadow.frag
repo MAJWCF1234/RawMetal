@@ -23,12 +23,14 @@ vec3 viewPosition(vec2 at,float depth){
  vec2 ndc=at*2.0-1.0;
  return vec3(ndc.x*depth/p.camera.z,-ndc.y*depth/(p.camera.z*p.camera.y),depth);
 }
+// Neighbours on the viewmodel (negative depth) or sky stand in as this surface.
+float normalDepth(vec2 at,float fallback){float d=depthAt(at);return d>0.02?d:fallback;}
 vec3 viewNormal(vec2 at,vec3 center){
  // Depth is stored at half precision (~11 bits): a 3-pixel baseline keeps the
  // quantisation steps from tilting normals into contour rings and stripes.
  vec2 t=p.frame.xy*3.0;
- vec3 r=viewPosition(at+vec2(t.x,0),depthAt(at+vec2(t.x,0))),l=viewPosition(at-vec2(t.x,0),depthAt(at-vec2(t.x,0)));
- vec3 d=viewPosition(at+vec2(0,t.y),depthAt(at+vec2(0,t.y))),u=viewPosition(at-vec2(0,t.y),depthAt(at-vec2(0,t.y)));
+ vec3 r=viewPosition(at+vec2(t.x,0),normalDepth(at+vec2(t.x,0),center.z)),l=viewPosition(at-vec2(t.x,0),normalDepth(at-vec2(t.x,0),center.z));
+ vec3 d=viewPosition(at+vec2(0,t.y),normalDepth(at+vec2(0,t.y),center.z)),u=viewPosition(at-vec2(0,t.y),normalDepth(at-vec2(0,t.y),center.z));
  vec3 dx=abs(r.z-center.z)<abs(center.z-l.z)?r-center:center-l;
  vec3 dy=abs(d.z-center.z)<abs(center.z-u.z)?d-center:center-u;
  vec3 n=normalize(cross(dy,dx));
