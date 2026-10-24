@@ -197,6 +197,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  // Mega Pack industrial set pieces bind by their OBJ usemtl names.
  const char* industrialMaterials[]={"metal_hr_1","metal_hr_2","metal_hr_1_dark_smooth","metal_floor_mx_1","grate_hm_1_1","steel_beams_hr_1","pipe_mp_1","valve_1"};
  for(int i=0;i<8;++i)m_facilityTextures.emplace(industrialMaterials[i],loadTexture(407+i));
+ // Freight set pieces (models 47-55) from the same library, also by usemtl.
+ const char* freightMaterials[]={"shipping_containers_mx_1","metal_barrel_mp_1","vending_machine_1","planks_hr_2","Road_Blocks","concrete_hr_1","gas_cylinder_mx_1"};
+ for(int i=0;i<7;++i)m_facilityTextures.emplace(freightMaterials[i],loadTexture(436+i));
  for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
   m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
  m_areaWalls[1].glossStrength=.2f;m_areaWalls[2].glossStrength=.16f;

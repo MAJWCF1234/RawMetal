@@ -2857,6 +2857,264 @@ std::shared_ptr<const Map> makeManifestRouting(){
  return p;
 }
 
+// A suspended belt conveyor along x at y, belt top z: side frames, the belt,
+// return rollers, hanger rods to the roof and feed hoods at both ends.
+void beltConveyor(Map& m,float x1,float x2,float y,float z,float roof){
+ for(float s:{-.4f,.32f})wall(m,x1,y+s,x2,y+s+.08f,z-.3f,z+.06f,12);
+ wall(m,x1,y-.32f,x2,y+.32f,z-.1f,z,8);
+ for(float x=x1+.4f;x<x2;x+=1.2f)wall(m,x,y-.32f,x+.06f,y+.32f,z-.26f,z-.2f,2);
+ for(float x=x1+1.f;x<x2-.5f;x+=3.f)for(float s:{-.36f,.36f})m.pipes.push_back({{x,y+s},{x,y+s},z+.06f,.025f,roof,6});
+ for(float x:{x1,x2-1.2f}){wall(m,x,y-.5f,x+1.2f,y+.5f,z+.05f,z+.7f,12);wall(m,x-.02f,y-.52f,x+1.22f,y+.52f,z+.7f,z+.78f,8);}
+}
+// A ground belt conveyor along y at x on legs, belt top z.
+void floorConveyor(Map& m,float x,float y1,float y2,float floor,float z){
+ for(float s:{-.4f,.32f})wall(m,x+s,y1,x+s+.08f,y2,z-.3f,z+.06f,12);
+ wall(m,x-.32f,y1,x+.32f,y2,z-.1f,z,8);
+ for(float y=y1+.6f;y<y2-.3f;y+=1.8f)for(float s:{-.4f,.32f})wall(m,x+s,y,x+s+.08f,y+.08f,floor,z-.3f,12);
+ m.structures.push_back({x-.4f,y1,x+.4f,y2,floor,z,false,8});
+}
+// A flat wagon on a running line at x from y, its bogies on the rails, with a
+// shipping container chained to the deck.
+void flatWagon(Map& m,float x,float y,float floor,bool loaded=true){
+ wall(m,x-1.25f,y,x+1.25f,y+12.4f,floor+.98f,floor+1.12f,8);
+ for(float s:{-1.3f,1.2f})wall(m,x+s,y,x+s+.1f,y+12.4f,floor+.82f,floor+1.12f,12);
+ for(float yy:{y+2.2f,y+10.2f}){
+  wall(m,x-.65f,yy-.9f,x+.65f,yy+.9f,floor+.55f,floor+.85f,8);
+  for(float axle:{yy-.55f,yy+.55f}){
+   m.pipes.push_back({{x-.85f,axle},{x+.85f,axle},floor+.44f,.075f,floor+.44f,2});
+   for(float dx:{-.78f,.78f})m.pipes.push_back({{x+dx-.07f,axle},{x+dx+.07f,axle},floor+.44f,.42f,floor+.44f,6});
+  }
+ }
+ for(float yy:{y-.35f,y+12.4f})wall(m,x-.15f,yy,x+.15f,yy+.35f,floor+.75f,floor+.95f,8);
+ m.structures.push_back({x-1.3f,y,x+1.3f,y+12.4f,floor,floor+.98f,false,6});
+ if(loaded)m.fixtures.push_back({48,{x,y+6.2f},floor+1.12f-m.layers.front().elevation,2.44f,10.8f,2.5f,0,true});
+}
+
+// TRANSFER / CONVEYORS. The transfer hall between the manifest offices and
+// the sorting floor. Line 1 runs east beside the top landing, line 2 west
+// beside the middle landing and drops down a chute to line 3, which carries
+// freight south along the floor to sorting. The personnel route follows the
+// belts down three flights.
+std::shared_ptr<const Map> makeTransferConveyors(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[22];m.definition=CampaignChunks[22];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.32f;
+ const float base=-25,top=-7,mid=-13,low=-19,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,false,true));m.openSouth=true;
+ rectangle(m.layers[0],10,0,14,1,'.');m.doors.push_back({10.5f,13.5f,.5f,0,false,false,true,top-base});
+ wall(m,10,0,14,1,top+2.5f,roof,3);wall(m,10,0,14,1,base,top-.22f,15);
+ // --- Landings and flights ----------------------------------------------------------------
+ deck(m,top,1,0,23,4);
+ deck(m,mid,1,13,23,16);deck(m,mid,5,16,8,19);
+ deck(m,low,17,16,23,24);
+ m.stairs.push_back({1.5f,4.f,4.5f,13.f,mid,top,32,true,false});
+ m.stairs.push_back({8.f,16.5f,17.f,19.f,low,mid,32,false,false});
+ m.stairs.push_back({8.f,20.5f,17.f,23.f,base,low,32,false,true});
+ guardRail(m,4.5f,4.f,23.f,4.06f,top);
+ guardRail(m,4.5f,12.94f,23.f,13.f,mid);guardRail(m,1.f,15.94f,5.f,16.f,mid);guardRail(m,8.f,15.94f,23.f,16.f,mid);
+ guardRail(m,5.f,16.f,5.06f,19.f,mid);guardRail(m,5.f,18.94f,8.f,19.f,mid);guardRail(m,7.94f,16.f,8.f,16.5f,mid);
+ guardRail(m,17.f,16.f,23.f,16.06f,low);guardRail(m,17.f,16.f,17.06f,16.5f,low);guardRail(m,17.f,19.f,17.06f,20.5f,low);
+ guardRail(m,17.f,23.f,17.06f,24.f,low);guardRail(m,17.f,23.94f,23.f,24.f,low);
+ // --- The three lines -----------------------------------------------------------------------
+ beltConveyor(m,5.f,22.8f,4.8f,top+.65f,roof);
+ beltConveyor(m,5.6f,22.8f,12.2f,mid+.65f,roof);
+ wall(m,4.6f,11.8f,5.6f,12.6f,base,mid+.6f,11);
+ for(float z=base+1.f;z<mid;z+=2.f)wall(m,4.55f,11.75f,5.65f,12.65f,z,z+.1f,12);
+ floorConveyor(m,5.1f,12.6f,24.f,base,base+.85f);
+ machineryClock(m,"transfer_belts",14000);
+ actor(m,"transfer_belts",ActorVisual::Cargo,.7f,{{0,{6.2f,4.8f},top+.65f,kPi*.5f},{9000,{21.6f,4.8f},top+.65f,kPi*.5f},{9001,{21.6f,4.8f},-40.f,0},{13999,{6.2f,4.8f},-40.f,0},{14000,{6.2f,4.8f},top+.65f,kPi*.5f}},true);
+ actor(m,"transfer_belts",ActorVisual::Cargo,.7f,{{0,{21.6f,12.2f},-40.f,0},{3999,{21.6f,12.2f},-40.f,0},{4000,{21.6f,12.2f},mid+.65f,-kPi*.5f},{11000,{6.f,12.2f},mid+.65f,-kPi*.5f},{11001,{6.f,12.2f},-40.f,0},{14000,{21.6f,12.2f},-40.f,0}},true);
+ actor(m,"transfer_belts",ActorVisual::Cargo,.7f,{{0,{5.1f,13.2f},base+.85f,0},{7000,{5.1f,23.6f},base+.85f,0},{7001,{5.1f,23.6f},-40.f,0},{13999,{5.1f,13.2f},-40.f,0},{14000,{5.1f,13.2f},base+.85f,0}},true);
+ cue(m,"transfer_belts",100,Sound::Machine,{12.f,4.8f},"",.35f,top+.6f);
+ cue(m,"transfer_belts",11000,Sound::JunkMetal,{5.1f,12.2f},"",.4f,mid);
+ for(Vec2 d:{Vec2{21.4f,3.6f},Vec2{21.4f,14.4f}})m.fixtures.push_back({6,d,(d.y<5?top:mid)-base,1.2f,.6f,.7f,0,true});
+ wallSign(m,6.f,1.055f,top+1.6f,"TRANSFER / CONVEYORS","LINE 1 EAST / LINE 2 WEST / SORTING BELOW",3.f,0);
+ terminal(m,{21.f,22.f},"TRANSFER / CONVEYOR ROUTE","SORTING FLOOR BELOW / FOLLOW AMBER CLEARANCE.","DEPOT AND PLATFORMS: SOUTH RAIL SPUR.",low-base);
+ // --- The floor: belt plant and stores -------------------------------------------------------
+ m.fixtures.push_back({53,{16.f,8.f},0,4.53f,2.04f,2.74f,0,true});
+ for(Vec2 d:{Vec2{19.4f,10.2f},Vec2{20.3f,10.2f},Vec2{19.85f,11.f},Vec2{12.4f,7.6f}})m.fixtures.push_back({49,d,0,.75f,.75f,1.08f,0,true});
+ for(float y:{17.4f,18.4f,21.4f,22.4f})m.fixtures.push_back({13,{22.75f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});
+ m.fixtures.push_back({6,{7.6f,13.6f},0,1.4f,.8f,.9f,kPi*.5f,true});
+ cargo(m,9.f,6.f,base);cargo(m,10.4f,6.2f,base,false);cargo(m,9.2f,7.5f,base);
+ for(float y:{14.f,17.f,20.f})m.fixtures.push_back({52,{3.8f,y},0,.5f,1.6f,.7f,0,true});
+ wallBays(m,base,roof,4.f,false,false,true,true,12.f);
+ // --- Roof and light -----------------------------------------------------------------------
+ for(float y:{2.f,8.f,14.f,20.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.8f,roof,12);
+ for(float x:{3.5f,17.5f})wallLamp(m,x,1.02f,top+2.3f,kPi*.5f,1.1f,7.f);
+ for(float y:{14.5f})wallLamp(m,22.98f,y,mid+2.3f,kPi,1.2f,8.f);
+ wallLamp(m,1.02f,14.5f,mid+2.3f,0,1.2f,8.f);
+ for(float y:{18.f,22.f})wallLamp(m,22.98f,y,low+2.3f,kPi,1.1f,7.f);
+ for(Vec2 l:{Vec2{8.f,9.f},Vec2{14.f,9.f},Vec2{20.f,7.f}})m.lights.push_back(lamp(l,-16.f,2.2f,14.f,4200,.1f));
+ m.lights.push_back(lamp({20.f,20.f},low-.5f,1.3f,9.f,4000));
+ for(Vec2 l:{Vec2{8.f,2.f},Vec2{16.f,2.f},Vec2{12.f,14.5f}})m.lights.push_back(lamp(l,roof-.95f,2.4f,14.f,4200,.1f));
+ m.pickupSpawns.push_back({{12.f,14.5f},PickupKind::Ammo,mid});
+ m.clutterSpawns.push_back({1,{14.f,12.f},base});
+ deckSupports(m,m.layers[1],base,6.f);deckSupports(m,m.layers[2],base,6.f);deckSupports(m,m.layers[3],base,6.f);
+ freightFinish(m,22);
+ return p;
+}
+
+// TRANSFER / SORTING. Line 3 arrives from the conveyors and feeds the
+// pusher lane, where a hydraulic ram drove each load onto its destination
+// roller lane: depot, platform 3, deep freight. The ram still cycles; its
+// isolation console is at the head of the lane. The sorting crane works over
+// the lanes, and shipping containers wait along the east wall.
+std::shared_ptr<const Map> makeTransferSorting(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[23];m.definition=CampaignChunks[23];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.32f;
+ const float base=-25,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,true));m.openNorth=true;m.openSouth=true;
+ // --- Line 3 into the pusher lane -----------------------------------------------------------
+ floorConveyor(m,5.1f,0,6.2f,base,base+.85f);
+ for(float s:{-.4f,.32f})wall(m,4.7f,6.2f+s+.4f,7.f,6.2f+s+.48f,base+.55f,base+.91f,12);
+ wall(m,4.7f,6.2f,7.f,6.92f,base+.75f,base+.85f,8);m.structures.push_back({4.7f,6.2f,7.f,6.92f,base,base+.85f,false,8});
+ // --- The pusher lane and its ram ---------------------------------------------------------
+ m.compactors.push_back({7,7,11,15,base,-22.4f,8,stateId("sorting_gate_stop")});
+ for(float x:{6.75f,11.05f}){
+  wall(m,x,6.75f,x+.20f,15.3f,base,base+.25f,18);
+  for(float y:{6.75f,15.1f})wall(m,x,y,x+.20f,y+.20f,base,-21.7f,12);
+ }
+ for(float y:{6.75f,15.1f})wall(m,6.75f,y,11.25f,y+.2f,-21.9f,-21.7f,18);
+ wall(m,8.6f,6.75f,9.4f,15.3f,-21.9f,-21.6f,18);
+ m.pipes.push_back({{9.f,11.f},{9.f,11.f},-21.8f,.18f,-20.6f,5});
+ wall(m,8.7f,10.7f,9.3f,11.3f,-20.6f,-20.4f,12);
+ for(float y=7.2f;y<15;y+=.8f)floorLine(m,6.2f,y,6.55f,y+.4f,base,13);
+ terminal(m,{12.4f,5.6f},"SORTING / CARGO GATE","HYDRAULIC PUSHER: ACTIVE.","E / TOGGLE GATE ISOLATION.",0,stateId("sorting_gate_stop"));m.terminals.back().toggleState=true;
+ wallLamp(m,6.74f,6.85f,-22.8f,kPi,1.1f,6.f);wallLamp(m,11.26f,6.85f,-22.8f,0,1.1f,6.f);
+ // --- Destination roller lanes and pallet stations ---------------------------------------------
+ const char* lanes[]={"DEPOT","PLATFORM 3","DEEP FREIGHT"};
+ for(int i=0;i<3;++i){float y=8.f+i*3.f;
+  for(float s:{-.55f,.47f})wall(m,11.3f,y+s,16.f,y+s+.08f,base+.6f,base+.78f,12);
+  for(float x=11.45f;x<16;x+=.3f)wall(m,x,y-.47f,x+.07f,y+.47f,base+.66f,base+.72f,20);
+  for(float x:{11.5f,15.6f})for(float s:{-.55f,.47f})wall(m,x,y+s,x+.08f,y+s+.08f,base,base+.6f,12);
+  m.fixtures.push_back({15,{17.3f,y},0,1.2f,1.15f,.16f,0,true});
+  if(i!=1)m.fixtures.push_back({17,{17.3f,y},.16f,1.1f,1.f,.9f,0,true});
+  board(m,17.3f,y-1.25f,base+2.f,lanes[i],"DESTINATION LANE",1.6f);
+ }
+ // --- The sorting crane ----------------------------------------------------------------------
+ machineryClock(m,"sorting_crane",18000);
+ actor(m,"sorting_crane",ActorVisual::Cargo,1.2f,{{0,{13,8},-19,0},{4000,{13,8},-19,0},{10000,{13,17},-19,.35f},{14000,{13,17},-19,.35f},{18000,{13,8},-19,0}},true);
+ m.actorTracks.back().suspensionTop=-17.5f;
+ wall(m,12.8f,5,13.2f,21,-17.5f,-17.2f,12);
+ for(float y:{5.f,21.f})wall(m,12.8f,y,13.2f,y+.3f,base,-17.2f,12);
+ cue(m,"sorting_crane",5000,Sound::LiftCreak,{13,12},"",.5f);
+ // --- Containers waiting along the east wall ---------------------------------------------------
+ m.fixtures.push_back({48,{21.4f,7.2f},0,2.44f,10.8f,2.5f,0,true});
+ m.fixtures.push_back({48,{21.4f,7.2f},2.5f,2.44f,10.8f,2.5f,0,true});
+ m.fixtures.push_back({48,{21.4f,18.4f},0,2.44f,10.8f,2.5f,0,true});
+ for(Vec2 d:{Vec2{18.6f,16.f},Vec2{18.6f,16.8f},Vec2{19.4f,16.4f}})m.fixtures.push_back({49,d,0,.75f,.75f,1.08f,0,true});
+ // --- Sorting office, south-west -------------------------------------------------------------
+ office(m,3.5f,19.f,base,"SORTING / LANE LOG","DEPOT: 41 / PLATFORM 3: 0 / DEEP FREIGHT: 3.","DEEP FREIGHT LOADS: CREW TO ACCOMPANY.");
+ m.fixtures.push_back({18,{3.5f,18.15f},0,.417f,.525f,.95f,kPi,true});
+ wallSign(m,1.055f,12.f,base+2.6f,"SORTING","DEPOT / PLATFORM 3 / DEEP FREIGHT",3.f,kPi*.5f);
+ wallBays(m,base,roof,4.f,false,false,true,true);
+ // --- Roof and light -----------------------------------------------------------------------
+ for(float y:{2.f,8.f,14.f,20.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.8f,roof,12);
+ servicePipe(m,{1.2f,4.f},{22.8f,4.f},-9.f,.35f,5);
+ for(Vec2 l:{Vec2{6.f,4.f},Vec2{9.f,11.f},Vec2{16.f,11.f},Vec2{18.f,4.f},Vec2{8.f,19.f},Vec2{17.f,20.f}})m.lights.push_back(lamp(l,-10.f,2.8f,20.f,4200,.1f));
+ wallLamp(m,22.98f,13.f,base+3.f,kPi,1.1f,7.f);
+ m.creatureSpawns={{CreatureKind::Huntsman,{9.f,18.5f},base},{CreatureKind::Wasp,{18.6f,13.6f},base}};
+ m.pickupSpawns.push_back({{18.6f,12.6f},PickupKind::Ammo,base});
+ freightFinish(m,23);
+ return p;
+}
+
+// TRANSFER / RAIL YARD. The underground freight yard: two running lines
+// with wagons standing, a container on each; the traverser cradle that
+// moved bogies between them; the weighbridge on line 2 and the signal box
+// beside it. The door south leads to platform 3.
+std::shared_ptr<const Map> makeTransferRailYard(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[24];m.definition=CampaignChunks[24];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.32f;
+ const float base=-25,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,false,false));
+ // Running lines end at buffer stops at both ends of the yard.
+ for(float x:{7.f,17.f})trackRun(m,x,base);
+ m.openNorth=true;rectangle(m.layers[0],1,0,23,1,'.');
+ rectangle(m.layers[0],10,23,14,24,'.');m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,0});
+ wall(m,10,23,14,24,base+2.5f,roof,3);
+ wallSign(m,12.f,22.945f,base+2.6f,"PLATFORM 3","EMPLOYEE TRANSIT / NO FREIGHT",2.4f,kPi);
+ // --- Wagons standing ------------------------------------------------------------------------
+ flatWagon(m,7.f,2.1f,base);
+ flatWagon(m,17.f,3.f,base);
+ // --- The weighbridge on line 2 and the signal box ----------------------------------------------
+ wall(m,15.6f,16.f,18.4f,20.f,base,base+.02f,8);
+ for(float y:{16.f,19.88f})floorLine(m,15.6f,y,18.4f,y+.12f,base+.02f,13);
+ office(m,20.2f,18.f,base,"TRANSFER / SIGNAL ROUTING","DEPOT / PLATFORMS / DEEP FREIGHT.","PLATFORM 3: SERVICE ACCESS ONLY.",0,true);
+ m.fixtures.push_back({18,{20.2f,17.15f},0,.417f,.525f,.95f,kPi,true});
+ for(float x:{4.5f,19.5f}){
+  wall(m,x-.08f,21.4f,x+.08f,21.56f,base,base+3.2f,12);
+  wall(m,x-.2f,21.3f,x+.2f,21.6f,base+3.2f,base+3.9f,8);
+  wallLamp(m,x,21.28f,base+3.65f,-kPi*.5f,.6f,4.f);
+ }
+ // --- The traverser cradle ---------------------------------------------------------------------
+ machineryClock(m,"yard_cradle",20000);
+ actor(m,"yard_cradle",ActorVisual::Cargo,1.f,{{0,{4,16},-24.7f,0},{3000,{4,16},-24.7f,0},{10000,{11,16},-24.7f,0},{13000,{11,16},-24.7f,0},{20000,{4,16},-24.7f,0}},true);
+ m.actorTracks.back().platform=true;m.actorTracks.back().footprint={2.2f,2.2f};m.actorTracks.back().suspensionTop=-17.7f;
+ wall(m,2.8f,15.9f,12.2f,16.1f,-18,-17.7f,12);
+ for(float x:{2.8f,12.f})wall(m,x,15.7f,x+.2f,16.3f,base,-17.7f,12);
+ board(m,5.f,18.6f,base+2.2f,"TRAVERSER CRADLE","AUTOMATIC TRANSFER / STAND CLEAR",2.4f);
+ for(float x=3.2f;x<12;x+=.6f)floorLine(m,x,14.6f,x+.3f,14.75f,base,13);
+ // --- Yard stores along the west wall --------------------------------------------------------
+ m.fixtures.push_back({48,{2.45f,8.6f},0,2.44f,10.8f,2.5f,0,true});
+ m.fixtures.push_back({48,{2.45f,8.6f},2.5f,2.44f,10.8f,2.5f,0,true});
+ for(float y:{19.4f,20.6f})m.fixtures.push_back({52,{2.2f,y},0,1.6f,.5f,.7f,0,true});
+ for(Vec2 d:{Vec2{11.f,20.4f},Vec2{11.8f,20.8f},Vec2{11.f,21.4f}})m.fixtures.push_back({49,d,0,.75f,.75f,1.08f,0,true});
+ for(float x:{14.4f,14.8f,15.2f})m.fixtures.push_back({54,{x,22.6f},0,.33f,.33f,1.58f,0,true});
+ wall(m,14.1f,22.85f,15.5f,22.95f,base+1.f,base+1.08f,12);
+ wallSign(m,1.055f,16.f,base+2.6f,"DEEP FREIGHT","WEIGHING / DEPOT / PLATFORM 3",3.f,kPi*.5f);
+ wallBays(m,base,roof,4.f,false,true,true,true,12.f);
+ // --- Roof and light -----------------------------------------------------------------------
+ for(float y:{2.f,8.f,14.f,20.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.8f,roof,12);
+ for(Vec2 l:{Vec2{7.f,6.f},Vec2{17.f,6.f},Vec2{7.f,13.f},Vec2{17.f,13.f},Vec2{12.f,19.f}})m.lights.push_back(lamp(l,-10.f,2.8f,20.f,4200,.1f));
+ for(float y:{6.f,14.f})wallLamp(m,22.98f,y,base+3.5f,kPi,1.2f,8.f);
+ m.lights.push_back(lamp({8.f,22.f},base+3.f,1.f,6.f,3800));
+ m.pickupSpawns.push_back({{12.f,10.f},PickupKind::Health,base});
+ freightFinish(m,24);
+ return p;
+}
+
+// EMPTY PLATFORM. Platform 3, the employee transit station. An island
+// platform between two lines, reached by steps from the door. Train 27
+// arrived at 02:13; nothing has departed. Benches, a vending machine, the
+// departure board and the emergency phone; the lines run on south.
+std::shared_ptr<const Map> makeEmptyPlatform(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[25];m.definition=CampaignChunks[25];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.36f;
+ const float base=-25,deckZ=-23.9f,ceil=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,false,true));m.openSouth=true;
+ for(float x:{5.f,19.f})trackRun(m,x,base);
+ rectangle(m.layers[0],10,0,14,1,'.');m.doors.push_back({10.5f,13.5f,.5f,0,false,false,true,0});
+ wall(m,10,0,14,1,base+2.5f,ceil,3);
+ guardRail(m,9.f,23.94f,15.f,24.f,deckZ);
+ // --- Island platform: concrete body, steps, coping and tactile edges ---------------------------
+ wall(m,9.f,5.f,15.f,24.f,base,deckZ-.22f,15);
+ deck(m,deckZ,9,5,15,24);
+ m.stairs.push_back({9.f,3.f,15.f,5.f,base,deckZ,6,true,true});
+ for(float x:{9.f,14.55f})wall(m,x,5.f,x+.45f,24.f,deckZ,deckZ+.01f,18);
+ for(float x:{8.85f,15.f})wall(m,x,5.f,x+.15f,24.f,base,deckZ+.01f,20);
+ for(float x:{9.f,14.8f})wall(m,x,3.f,x+.2f,5.f,base,base+1.05f,12);
+ // --- Platform columns, benches, the vending machine ------------------------------------------
+ for(float y:{8.f,14.f,20.f})for(float x:{10.6f,13.4f})wall(m,x-.2f,y-.2f,x+.2f,y+.2f,deckZ,ceil,15);
+ for(float y:{11.f,17.f,22.f})m.fixtures.push_back({51,{12.f,y},deckZ-base,1.86f,.44f,.63f,kPi*.5f,true});
+ m.fixtures.push_back({50,{14.f,6.6f},deckZ-base,.95f,.68f,2.01f,-kPi*.5f,true});
+ m.fixtures.push_back({49,{10.1f,6.4f},deckZ-base,.55f,.55f,.8f,0,true});
+ terminal(m,{12,3},"PLATFORM 3 / DEPARTURES","TRAIN 27 / ARRIVED 02:13.","NO DEPARTURE RECORDED / TRACK CLEAR.");
+ m.fixtures.push_back({8,{13.62f,14.f},deckZ-base+1.1f,.55f,.12f,.8f,kPi*.5f,false});
+ terminal(m,{14.f,15.2f},"PLATFORM / EMERGENCY PHONE","DISPATCH LINE OPEN / NO OPERATOR RESPONSE.","HOLD THE PLATFORM. DO NOT ENTER THE TRACK.",deckZ-base);
+ board(m,12.f,7.6f,-21.f,"PLATFORM 3","TRAIN 27 / ARRIVED 02:13",3.6f);
+ // --- Walls across the lines --------------------------------------------------------------------
+ wallSign(m,1.055f,12.f,-22.2f,"PLATFORM 3","EMPLOYEE TRANSIT / TRAIN 27",4.f,kPi*.5f);
+ wallSign(m,22.945f,12.f,-22.2f,"DEPTHWORKS EMPLOYEE TRANSIT","YOUR SHIFT / YOUR CONNECTION",4.f,-kPi*.5f);
+ wallSign(m,12.f,1.055f,-21.6f,"WAY OUT","FREIGHT YARD / MANIFEST OFFICES",2.4f,0);
+ for(float y:{4.f,20.f}){wallLamp(m,1.02f,y,-21.5f,0,1.1f,8.f);wallLamp(m,22.98f,y,-21.5f,kPi,1.1f,8.f);}
+ // --- Ceiling and light ----------------------------------------------------------------------
+ for(float y:{2.f,8.f,14.f,20.f})wall(m,1.f,y-.15f,23.f,y+.15f,ceil-.5f,ceil,12);
+ for(float y:{5.f,11.f,17.f,23.f})m.lights.push_back(lamp({12.f,y},ceil-.65f,1.6f,10.f,4600,.05f));
+ m.lights.push_back(lamp({12.f,1.6f},ceil-.2f,1.f,6.f,3800));
+ freightFinish(m,25);
+ return p;
+}
+
 std::shared_ptr<const Map> make(int level){
  auto p=std::make_shared<Map>();auto& m=*p;m.name=CampaignMapNames[level];m.definition=CampaignChunks[level];m.definition.musicCue=MusicCue::Freight;
  float base=level==11||level==12?-25.f:level>=13&&level<=19?-25.f:level==22?-25.f:level==27||level==28?-28.f:level==29?-25.f:m.definition.spawnHeight;
@@ -3487,7 +3745,7 @@ std::shared_ptr<const Map> make(int level){
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
   result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();result[9]=makeWasteHandling();
-  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i); result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();result[14]=makeReceivingLanes();result[15]=makeWarehouseIntake();result[16]=makeWarehouseAB();result[17]=makeWarehouseC();result[18]=makeWarehouseD();result[19]=makeWarehouseUpper();result[20]=makeManifestOffices();result[21]=makeManifestRouting();
+  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i); result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();result[14]=makeReceivingLanes();result[15]=makeWarehouseIntake();result[16]=makeWarehouseAB();result[17]=makeWarehouseC();result[18]=makeWarehouseD();result[19]=makeWarehouseUpper();result[20]=makeManifestOffices();result[21]=makeManifestRouting();result[22]=makeTransferConveyors();result[23]=makeTransferSorting();result[24]=makeTransferRailYard();result[25]=makeEmptyPlatform();
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();return result;}();
  return maps.at(size_t(level));
 }

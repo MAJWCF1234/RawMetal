@@ -53,3 +53,5 @@ source-assets/medic-motion/UAL2_Standard.fbx
 
 # Local full-res texture backups kept beside half-res cart embeds
 *.fullres.bak
+# Purchased library models (licence forbids public redistribution).
+src/assets/facility/freight/
