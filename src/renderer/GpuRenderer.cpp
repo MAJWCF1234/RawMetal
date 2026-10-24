@@ -54,18 +54,18 @@ const uint32_t taaFragmentShader[]=
 const uint32_t exposureFragmentShader[]=
 #include "exposure.frag.inc"
 ;
-// AgX display transform, matching composite.frag (minimal fit by Benjamin
-// Wrensch, MIT licence; see THIRD_PARTY_NOTICES.md). Linear RGB in, BGRA8 out.
-// After the inset matrix the curve is per channel, so it is tabulated by the
-// top 18 bits of the float (sign, exponent, 9 mantissa bits): no log2 or pow
-// per pixel on headless readback.
-static float agxCurve(float v){
- v=std::clamp((std::log2(std::max(v,1e-10f))+12.47393f)/16.5f,0.f,1.f);float x2=v*v,x4=x2*x2;
- v=15.5f*x4*x2-40.14f*x4*v+31.96f*x4-6.868f*x2*v+.4298f*x2+.1191f*v-.00232f;
- return std::pow(std::max(v,0.f),1.3f); // punchy look, as composite.frag
+// Display transform, matching displayCurve in composite.frag (derived there
+// from first principles). After the inset the curve is per channel, so it is
+// tabulated by the top 18 bits of the float (sign, exponent, 9 mantissa bits):
+// no log2 or pow per pixel on headless readback.
+static float displayChannel(float v){
+ const float Pivot=std::log(.5f)/std::log(10.f/16.5f),Grey=std::log(.46f)/std::log(.5f);
+ float t=std::clamp((std::log2(std::max(v,1e-10f)/.18f)+10.f)/16.5f,0.f,1.f);
+ t=std::pow(t,Pivot);float a=std::pow(t,1.7f),b=std::pow(1.f-t,1.7f);
+ return std::pow(a/std::max(a+b,1e-20f),Grey);
 }
-static const std::vector<float>& agxTable(){
- static const std::vector<float> table=[]{std::vector<float> t(size_t(1)<<18);for(uint32_t i=0;i<t.size();++i){uint32_t bits=(i<<14)|(1u<<13);float v;std::memcpy(&v,&bits,4);t[i]=(i>>17)||!std::isfinite(v)?agxCurve(1e-10f):agxCurve(v);}return t;}();
+static const std::vector<float>& displayTable(){
+ static const std::vector<float> table=[]{std::vector<float> t(size_t(1)<<18);for(uint32_t i=0;i<t.size();++i){uint32_t bits=(i<<14)|(1u<<13);float v;std::memcpy(&v,&bits,4);t[i]=(i>>17)||!std::isfinite(v)?displayChannel(1e-10f):displayChannel(v);}return t;}();
  return table;
 }
 // Test harnesses compare against the original analytic display curve.
@@ -74,15 +74,16 @@ static std::uint32_t referencePixel(float r,float g,float b){
  auto display=[](float value){value=std::max(0.f,value)*1.05f;float mapped=std::clamp((value*(2.51f*value+.03f))/(value*(2.43f*value+.59f)+.14f),0.f,1.f);return uint32_t(std::clamp(int(std::lround(std::pow(mapped,1.f/2.2f)*255.f)),0,255));};
  return 0xff000000u|(display(r)<<16)|(display(g)<<8)|display(b);
 }
-static std::uint32_t agxPixel(float r,float g,float b){
+static std::uint32_t displayPixel(float r,float g,float b){
  if(g_referenceDisplay)return referencePixel(r,g,b);
- const auto& table=agxTable();
- auto curve=[&](float v){uint32_t bits;std::memcpy(&bits,&v,4);return table[bits>>14];};
- float c[3]={curve(.842479062253094f*r+.0784335999999992f*g+.0792237451477643f*b),curve(.0423282422610123f*r+.878468636469772f*g+.0791661274605434f*b),curve(.0423756549057051f*r+.0784336f*g+.879142973793104f*b)};
- float luma=.2126f*c[0]+.7152f*c[1]+.0722f*c[2];for(float&v:c)v=luma+1.25f*(v-luma);
- float o[3]={1.19687900512017f*c[0]-.0980208811401368f*c[1]-.0990297440797205f*c[2],-.0528968517574562f*c[0]+1.15190312990417f*c[1]-.0989611768448433f*c[2],-.0529716355144438f*c[0]-.0980434501171241f*c[1]+1.15107367264116f*c[2]};
- auto byte=[](float v){return std::uint32_t(std::clamp(int(std::lround(std::clamp(v,0.f,1.f)*255.f)),0,255));};
- return 0xff000000u|(byte(o[0])<<16)|(byte(o[1])<<8)|byte(o[2]);
+ const auto& table=displayTable();
+ auto finite=[](float v){return std::isfinite(v)?std::max(v,0.f):0.f;};r=finite(r);g=finite(g);b=finite(b);
+ float l=.2126f*r+.7152f*g+.0722f*b;
+ auto curve=[&](float v){v=v+(l-v)*.18f;uint32_t bits;std::memcpy(&bits,&v,4);return table[bits>>14];};
+ float c[3]={curve(r),curve(g),curve(b)};
+ float dl=.2126f*c[0]+.7152f*c[1]+.0722f*c[2];
+ auto byte=[&](float v){return std::uint32_t(std::clamp(int(std::lround(std::clamp(dl+1.22f*(v-dl),0.f,1.f)*255.f)),0,255));};
+ return 0xff000000u|(byte(c[0])<<16)|(byte(c[1])<<8)|byte(c[2]);
 }
 const uint32_t sunShadowVertexShader[]=
 #include "sunshadow.vert.inc"
@@ -1010,8 +1011,8 @@ void GpuRenderer::captureScene(std::vector<std::uint32_t>&pixels,int&width,int&h
  m->submitUploadCommands();
  pixels.resize(size_t(width)*height);
  auto half=[](uint16_t bits){float value;if((bits&0x7c00u)==0x7c00u)value=(bits&0x03ffu)?std::numeric_limits<float>::quiet_NaN():std::numeric_limits<float>::infinity();else if((bits&0x7c00u)==0)value=std::ldexp(float(bits&0x03ffu),-24);else value=std::ldexp(1.f+float(bits&0x03ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;};
- if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
- else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(source[i*4],source[i*4+1],source[i*4+2]);}
+ if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=displayPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
+ else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=displayPixel(source[i*4],source[i*4+1],source[i*4+2]);}
  else std::memcpy(pixels.data(),m->readback.mapped,pixels.size()*4);
 }
 void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
@@ -1403,8 +1404,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  m->frameInFlight[m->frameIndex]=false;
  pixels.resize(size_t(m->width*m->height));
  auto half=[](uint16_t bits){float value;if((bits&0x7c00u)==0x7c00u)value=(bits&0x03ffu)?std::numeric_limits<float>::quiet_NaN():std::numeric_limits<float>::infinity();else if((bits&0x7c00u)==0)value=std::ldexp(float(bits&0x03ffu),-24);else value=std::ldexp(1.f+float(bits&0x03ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;};
- if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
- else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=agxPixel(source[i*4],source[i*4+1],source[i*4+2]);}
+ if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=displayPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
+ else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=displayPixel(source[i*4],source[i*4+1],source[i*4+2]);}
  else std::memcpy(pixels.data(),m->readback.mapped,pixels.size()*4);
 }
 void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick,float alarm){
