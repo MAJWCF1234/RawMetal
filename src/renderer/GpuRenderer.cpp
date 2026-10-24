@@ -41,6 +41,12 @@ const uint32_t occlusionFragmentShader[]=
 const uint32_t shadowFragmentShader[]=
 #include "shadow.frag.inc"
 ;
+const uint32_t lampShadowVertexShader[]=
+#include "lampshadow.vert.inc"
+;
+const uint32_t lampShadowFragmentShader[]=
+#include "lampshadow.frag.inc"
+;
 struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4],worldNormal[4];};
 // Keep every position/UV/light at full precision. The vertex shader derives
 // edges, UV differences and outward vectors instead of streaming duplicates.
@@ -351,13 +357,94 @@ struct GpuRenderer::Impl {
   vkDeviceWaitIdle(device);
   for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
   materials.clear();lastPixels=nullptr;lastGeneration=0;lastMaterial=0;lastSort=0;
-  for(auto&entry:staticCaches)destroy(entry.second.buffer);staticCaches.clear();
+  for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}staticCaches.clear();std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));
   // Replayed actor batches carry material keys; stale keys would throw at draw.
   actorEmitCaches.clear();actorEmitHits=0;
   if(descriptors)vkResetDescriptorPool(device,descriptors,0);
  }
  struct Batch {uint64_t material;uint32_t start,count;bool clear=false,cache=false;int cacheSlot=-1;uint32_t sortKey=0;bool actor=false;};
- struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;};
+ // Opaque static triangles grouped by 4 m cell and material for lamp shadow maps.
+ struct ShadowRun {uint64_t material;uint32_t first,count;float lo[3],hi[3];};
+ struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;Buffer shadowIndices;std::vector<ShadowRun> shadowRuns;std::array<float,6> bounds{};};
+ // ── Per-pixel lamps ──────────────────────────────────────────────────────
+ // Static lamps light the static world per pixel. Each lamp owns six faces of
+ // a radial-depth shadow atlas, drawn from the static caches and reused until
+ // geometry near it is rebuilt or the resident lamp set changes.
+ static constexpr int MaxLamps=256,LampsPerCell=16,MaxLampCells=16384;static constexpr uint32_t ShadowSize=256;
+ struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];};
+ static constexpr size_t LampBufferBytes=sizeof(LampHeader)+size_t(MaxLamps)*2*16+size_t(MaxLampCells)*LampsPerCell*4;
+ std::array<Buffer,FrameCount> lampBuffers{};std::array<uint64_t,FrameCount> lampUploaded{};
+ std::vector<uint8_t> lampData;uint64_t lampGeneration=1,lampKey=0;bool pixelLighting=false;
+ // lampDirty: 0 current, 1 stale (geometry nearby rebuilt), 2 never drawn.
+ std::vector<std::array<float,5>> lamps;std::vector<uint8_t> lampDirty;std::vector<std::array<float,6>> shadowDirtyBounds;
+ Image shadowAtlas;std::vector<VkImageView> shadowLayerViews;std::vector<VkFramebuffer> shadowFrames;int shadowCapacity=0;bool shadowLayoutReady=false;
+ VkRenderPass shadowPass=VK_NULL_HANDLE;VkPipeline shadowPipeline=VK_NULL_HANDLE;VkPipelineLayout shadowLayout=VK_NULL_HANDLE;VkSampler shadowSampler=VK_NULL_HANDLE;
+ std::uint64_t shadowFacesDrawn=0;
+ void destroyShadowAtlas(){
+  for(auto frame:shadowFrames)vkDestroyFramebuffer(device,frame,nullptr);shadowFrames.clear();
+  for(auto view:shadowLayerViews)vkDestroyImageView(device,view,nullptr);shadowLayerViews.clear();
+  destroy(shadowAtlas);shadowCapacity=0;
+ }
+ void createShadowAtlas(int capacity){
+  vkDeviceWaitIdle(device);destroyShadowAtlas();
+  uint32_t layers=uint32_t(capacity)*6;
+  VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};info.imageType=VK_IMAGE_TYPE_2D;info.format=VK_FORMAT_D16_UNORM;info.extent={ShadowSize,ShadowSize,1};info.mipLevels=1;info.arrayLayers=layers;info.samples=VK_SAMPLE_COUNT_1_BIT;info.tiling=VK_IMAGE_TILING_OPTIMAL;info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
+  check(vkCreateImage(device,&info,nullptr,&shadowAtlas.handle),"Create lamp shadow atlas");
+  VkMemoryRequirements req;vkGetImageMemoryRequirements(device,shadowAtlas.handle,&req);VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};alloc.allocationSize=req.size;alloc.memoryTypeIndex=memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  check(vkAllocateMemory(device,&alloc,nullptr,&shadowAtlas.memory),"Allocate lamp shadow atlas");check(vkBindImageMemory(device,shadowAtlas.handle,shadowAtlas.memory,0),"Bind lamp shadow atlas");
+  VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};view.image=shadowAtlas.handle;view.viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY;view.format=VK_FORMAT_D16_UNORM;view.subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,layers};
+  check(vkCreateImageView(device,&view,nullptr,&shadowAtlas.view),"Create lamp shadow view");
+  for(uint32_t layer=0;layer<layers;++layer){
+   view.viewType=VK_IMAGE_VIEW_TYPE_2D;view.subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,layer,1};VkImageView face=VK_NULL_HANDLE;check(vkCreateImageView(device,&view,nullptr,&face),"Create lamp shadow face");shadowLayerViews.push_back(face);
+   VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};fb.renderPass=shadowPass;fb.attachmentCount=1;fb.pAttachments=&face;fb.width=fb.height=ShadowSize;fb.layers=1;VkFramebuffer frame=VK_NULL_HANDLE;check(vkCreateFramebuffer(device,&fb,nullptr,&frame),"Create lamp shadow framebuffer");shadowFrames.push_back(frame);
+  }
+  shadowCapacity=capacity;shadowLayoutReady=false;std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));
+  VkDescriptorImageInfo image{shadowSampler,shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  for(auto set:projectionSets){VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=set;write.dstBinding=3;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&image;vkUpdateDescriptorSets(device,1,&write,0,nullptr);}
+ }
+ void renderLampShadows(VkCommandBuffer cmd){
+  if(!pixelLighting||!shadowPipeline||!shadowCapacity)return;
+  if(!shadowLayoutReady){
+   VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=shadowAtlas.handle;b.subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,uint32_t(shadowCapacity)*6};b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+   vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&b);shadowLayoutReady=true;
+  }
+  // A rebuilt cache stales only the lamps whose range reaches it.
+  for(const auto&bounds:shadowDirtyBounds)for(size_t i=0;i<lamps.size();++i){
+   const auto&lamp=lamps[i];float d2=0;for(int k=0;k<3;++k){float c=std::clamp(lamp[size_t(k)],bounds[size_t(k)],bounds[size_t(k)+3])-lamp[size_t(k)];d2+=c*c;}
+   if(d2<lamp[3]*lamp[3]&&!lampDirty[i])lampDirty[i]=1;
+  }
+  shadowDirtyBounds.clear();
+  // New lamps draw at once; stale ones refresh at most 32 per frame.
+  int staleBudget=32;
+  VkViewport viewport{0,0,float(ShadowSize),float(ShadowSize),0,1};VkRect2D scissor{{0,0},{ShadowSize,ShadowSize}};
+  VkClearValue clear{};clear.depthStencil={1,0};
+  size_t count=std::min(lamps.size(),size_t(shadowCapacity));
+  for(size_t i=0;i<count;++i){
+   if(!lampDirty[i]||(lampDirty[i]==1&&staleBudget<=0))continue;if(lampDirty[i]==1)--staleBudget;lampDirty[i]=0;
+   const auto&lamp=lamps[i];float range2=lamp[3]*lamp[3];
+   for(int face=0;face<6;++face){
+    VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};begin.renderPass=shadowPass;begin.framebuffer=shadowFrames[i*6+size_t(face)];begin.renderArea.extent={ShadowSize,ShadowSize};begin.clearValueCount=1;begin.pClearValues=&clear;
+    vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
+    vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowPipeline);
+    static constexpr float faces[6][8]={{1,0,0,0,0,0,1,0},{-1,0,0,0,0,0,1,0},{0,1,0,0,0,0,1,0},{0,-1,0,0,0,0,1,0},{0,0,1,0,0,1,0,0},{0,0,-1,0,0,1,0,0}};
+    float push[12]={lamp[0],lamp[1],lamp[2],lamp[3]};std::memcpy(push+4,faces[face],sizeof(faces[face]));vkCmdPushConstants(cmd,shadowLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(push),push);
+    int axis=face/2;float sign=face%2?-1.f:1.f;
+    for(auto&entry:staticCaches){auto&cache=entry.second;if(!cache.buffer.handle||!cache.shadowIndices.handle)continue;
+     VkDeviceSize offset=0;vkCmdBindVertexBuffers(cmd,0,1,&cache.buffer.handle,&offset);vkCmdBindIndexBuffer(cmd,cache.shadowIndices.handle,0,VK_INDEX_TYPE_UINT32);
+     uint64_t bound=~0ull;
+     for(const auto&run:cache.shadowRuns){
+      float d2=0;for(int k=0;k<3;++k){float c=std::clamp(lamp[size_t(k)],run.lo[k],run.hi[k])-lamp[size_t(k)];d2+=c*c;}
+      if(d2>=range2)continue;
+      // Skip runs wholly behind this face.
+      if((sign>0?run.hi[axis]-lamp[size_t(axis)]:lamp[size_t(axis)]-run.lo[axis])<.02f)continue;
+      if(run.material!=bound){auto found=materials.find(run.material);if(found==materials.end())continue;vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowLayout,0,1,&found->second.set,0,nullptr);bound=run.material;}
+      vkCmdDrawIndexed(cmd,run.count,1,run.first,0,0);
+     }
+    }
+    vkCmdEndRenderPass(cmd);++shadowFacesDrawn;
+   }
+  }
+ }
  std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
  std::vector<Vertex> vertices;std::vector<Batch> batches;
  std::vector<ActorTriangle> actorVertices;
@@ -377,7 +464,9 @@ struct GpuRenderer::Impl {
    destroyStage(occlusionStage);destroyStage(shadowStage);destroyStage(composeStage);
    destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
    for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(actorVertexBuffers[i]);destroy(overlayBuffers[i]);}
-   for(auto&entry:staticCaches)destroy(entry.second.buffer);
+   for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}
+   destroyShadowAtlas();for(auto&b:lampBuffers)destroy(b);
+   if(shadowPipeline)vkDestroyPipeline(device,shadowPipeline,nullptr);if(shadowLayout)vkDestroyPipelineLayout(device,shadowLayout,nullptr);if(shadowPass)vkDestroyRenderPass(device,shadowPass,nullptr);if(shadowSampler)vkDestroySampler(device,shadowSampler,nullptr);
    for(auto&slot:retiredBuffers)for(auto&buffer:slot)destroy(buffer);
    for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
    if(transparent)vkDestroyPipeline(device,transparent,nullptr);if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
@@ -600,11 +689,13 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
  VkDescriptorSetLayoutBinding projectionBindings[]={
   {0,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
-  {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr}};
- VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=2;projectionInfo.pBindings=projectionBindings;
+  {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr},
+  {2,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
+  {3,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr}};
+ VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=4;projectionInfo.pBindings=projectionBindings;
  check(vkCreateDescriptorSetLayout(m->device,&projectionInfo,nullptr,&m->projectionLayout),"Create view and actor layout");
- VkDescriptorPoolSize projectionSizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,2}};
- VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=2;projectionPool.poolSizeCount=2;projectionPool.pPoolSizes=projectionSizes;
+ VkDescriptorPoolSize projectionSizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,4},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,2}};
+ VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=2;projectionPool.poolSizeCount=3;projectionPool.pPoolSizes=projectionSizes;
  check(vkCreateDescriptorPool(m->device,&projectionPool,nullptr,&m->projectionPool),"Create view and actor pool");
  VkDescriptorSetLayout projectionLayouts[]={m->projectionLayout,m->projectionLayout};VkDescriptorSetAllocateInfo projectionAllocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};projectionAllocate.descriptorPool=m->projectionPool;projectionAllocate.descriptorSetCount=2;projectionAllocate.pSetLayouts=projectionLayouts;
  check(vkAllocateDescriptorSets(m->device,&projectionAllocate,m->projectionSets.data()),"Allocate view and actor descriptors");
@@ -614,6 +705,43 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkDescriptorBufferInfo buffers[]={{m->projectionBuffers[i].handle,0,sizeof(m->vrProjection)},{m->actorBuffers[i].handle,0,MaxGpuActors*sizeof(ActorLighting)}};
   VkWriteDescriptorSet writes[2]{};for(int binding=0;binding<2;++binding){auto&write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=m->projectionSets[i];write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=binding?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffers[binding];}
   vkUpdateDescriptorSets(m->device,2,writes,0,nullptr);
+  m->makeBuffer(m->lampBuffers[i],Impl::LampBufferBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(m->lampBuffers[i].mapped,0,Impl::LampBufferBytes);
+  VkDescriptorBufferInfo lampInfo{m->lampBuffers[i].handle,0,Impl::LampBufferBytes};VkWriteDescriptorSet lampWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};lampWrite.dstSet=m->projectionSets[i];lampWrite.dstBinding=2;lampWrite.descriptorCount=1;lampWrite.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;lampWrite.pBufferInfo=&lampInfo;vkUpdateDescriptorSets(m->device,1,&lampWrite,0,nullptr);
+ }
+ {
+  // Lamp shadow atlas: depth-only faces sampled with hardware comparison.
+  VkFormatProperties depthFormat{};vkGetPhysicalDeviceFormatProperties(m->physical,VK_FORMAT_D16_UNORM,&depthFormat);
+  VkFilter shadowFilter=(depthFormat.optimalTilingFeatures&VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+  VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};sampler.magFilter=sampler.minFilter=shadowFilter;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;sampler.compareEnable=VK_TRUE;sampler.compareOp=VK_COMPARE_OP_LESS_OR_EQUAL;sampler.maxLod=0.f;
+  check(vkCreateSampler(m->device,&sampler,nullptr,&m->shadowSampler),"Create lamp shadow sampler");
+  VkAttachmentDescription attachment{};attachment.format=VK_FORMAT_D16_UNORM;attachment.samples=VK_SAMPLE_COUNT_1_BIT;attachment.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachment.storeOp=VK_ATTACHMENT_STORE_OP_STORE;attachment.stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachment.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachment.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachment.finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  VkAttachmentReference reference{0,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};VkSubpassDescription subpass{};subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;subpass.pDepthStencilAttachment=&reference;
+  VkSubpassDependency dependencies[2]{};
+  dependencies[0].srcSubpass=VK_SUBPASS_EXTERNAL;dependencies[0].dstSubpass=0;dependencies[0].srcStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;dependencies[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;dependencies[0].dstStageMask=VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;dependencies[0].dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  dependencies[1].srcSubpass=0;dependencies[1].dstSubpass=VK_SUBPASS_EXTERNAL;dependencies[1].srcStageMask=VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;dependencies[1].srcAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;dependencies[1].dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;dependencies[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+  VkRenderPassCreateInfo passInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};passInfo.attachmentCount=1;passInfo.pAttachments=&attachment;passInfo.subpassCount=1;passInfo.pSubpasses=&subpass;passInfo.dependencyCount=2;passInfo.pDependencies=dependencies;
+  check(vkCreateRenderPass(m->device,&passInfo,nullptr,&m->shadowPass),"Create lamp shadow pass");
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,12*sizeof(float)};VkPipelineLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layoutInfo.setLayoutCount=1;layoutInfo.pSetLayouts=&m->setLayout;layoutInfo.pushConstantRangeCount=1;layoutInfo.pPushConstantRanges=&push;
+  check(vkCreatePipelineLayout(m->device,&layoutInfo,nullptr,&m->shadowLayout),"Create lamp shadow layout");
+  VkShaderModule shadowVert=VK_NULL_HANDLE,shadowFrag=VK_NULL_HANDLE;
+  try{
+   VkShaderModuleCreateInfo module{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};module.codeSize=sizeof(lampShadowVertexShader);module.pCode=lampShadowVertexShader;check(vkCreateShaderModule(m->device,&module,nullptr,&shadowVert),"Create lamp shadow vertex shader");
+   module.codeSize=sizeof(lampShadowFragmentShader);module.pCode=lampShadowFragmentShader;check(vkCreateShaderModule(m->device,&module,nullptr,&shadowFrag),"Create lamp shadow fragment shader");
+   VkPipelineShaderStageCreateInfo stages[2]{};for(auto&stage:stages){stage.sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;stage.pName="main";}stages[0].stage=VK_SHADER_STAGE_VERTEX_BIT;stages[0].module=shadowVert;stages[1].stage=VK_SHADER_STAGE_FRAGMENT_BIT;stages[1].module=shadowFrag;
+   VkVertexInputBindingDescription binding{0,sizeof(Vertex),VK_VERTEX_INPUT_RATE_VERTEX};VkVertexInputAttributeDescription attributes[]={{0,0,VK_FORMAT_R32G32B32A32_SFLOAT,0},{1,0,VK_FORMAT_R32G32_SFLOAT,16}};
+   VkPipelineVertexInputStateCreateInfo input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};input.vertexBindingDescriptionCount=1;input.pVertexBindingDescriptions=&binding;input.vertexAttributeDescriptionCount=2;input.pVertexAttributeDescriptions=attributes;
+   VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};assembly.topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+   VkPipelineViewportStateCreateInfo viewportState{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};viewportState.viewportCount=viewportState.scissorCount=1;
+   VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};raster.polygonMode=VK_POLYGON_MODE_FILL;raster.cullMode=VK_CULL_MODE_NONE;raster.lineWidth=1;
+   VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};multisample.rasterizationSamples=VK_SAMPLE_COUNT_1_BIT;
+   VkPipelineDepthStencilStateCreateInfo depthState{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};depthState.depthTestEnable=depthState.depthWriteEnable=VK_TRUE;depthState.depthCompareOp=VK_COMPARE_OP_LESS;
+   VkPipelineColorBlendStateCreateInfo blending{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+   VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};dynamic.dynamicStateCount=2;dynamic.pDynamicStates=states;
+   VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};pipeline.stageCount=2;pipeline.pStages=stages;pipeline.pVertexInputState=&input;pipeline.pInputAssemblyState=&assembly;pipeline.pViewportState=&viewportState;pipeline.pRasterizationState=&raster;pipeline.pMultisampleState=&multisample;pipeline.pDepthStencilState=&depthState;pipeline.pColorBlendState=&blending;pipeline.pDynamicState=&dynamic;pipeline.layout=m->shadowLayout;pipeline.renderPass=m->shadowPass;
+   check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->shadowPipeline),"Create lamp shadow pipeline");
+  }catch(...){if(shadowVert)vkDestroyShaderModule(m->device,shadowVert,nullptr);if(shadowFrag)vkDestroyShaderModule(m->device,shadowFrag,nullptr);throw;}
+  vkDestroyShaderModule(m->device,shadowVert,nullptr);vkDestroyShaderModule(m->device,shadowFrag,nullptr);
+  m->createShadowAtlas(16);
  }
  VkDescriptorSetLayout pipelineSets[]={m->setLayout,m->projectionLayout};layout.setLayoutCount=2;layout.pSetLayouts=pipelineSets;layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&viewPush;check(vkCreatePipelineLayout(m->device,&layout,nullptr,&m->pipelineLayout),"Create graphics pipeline layout");
   const bool multisampled=m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT;uint32_t depthIndex=multisampled?2u:1u;VkAttachmentDescription attachments[3]{};attachments[0].format=m->sceneFormat;attachments[0].samples=m->sceneSamples;attachments[0].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;attachments[0].storeOp=multisampled?VK_ATTACHMENT_STORE_OP_DONT_CARE:VK_ATTACHMENT_STORE_OP_STORE;attachments[0].stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[0].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;attachments[0].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;attachments[0].finalLayout=multisampled?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -760,7 +888,7 @@ void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy
 bool GpuRenderer::beginStaticCache(int slot,std::uint64_t key){
  auto found=m->staticCaches.find(slot);
  if(found!=m->staticCaches.end()&&found->second.key==key){++m->cacheHits;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return false;}
- auto&cache=m->staticCaches[slot];m->retire(cache.buffer);cache={};cache.key=key;m->captureSlot=slot;m->capturing=true;return true;
+ auto&cache=m->staticCaches[slot];if(cache.shadowIndices.handle)m->shadowDirtyBounds.push_back(cache.bounds);m->retire(cache.buffer);m->retire(cache.shadowIndices);cache={};cache.key=key;m->captureSlot=slot;m->capturing=true;return true;
 }
 void GpuRenderer::endStaticCache(){
  if(!m->capturing||m->captureSlot<0)return;
@@ -769,10 +897,71 @@ void GpuRenderer::endStaticCache(){
  for(auto batch:cache.batches){auto oldStart=batch.start;batch.start=uint32_t(sorted.size());sorted.insert(sorted.end(),cache.vertices.begin()+oldStart,cache.vertices.begin()+oldStart+batch.count);if(!batches.empty()&&batches.back().material==batch.material)batches.back().count+=batch.count;else batches.push_back(batch);}
  cache.vertices.swap(sorted);cache.batches.swap(batches);
  m->capturing=false;m->captureSlot=-1;
- if(!cache.vertices.empty()){size_t bytes=cache.vertices.size()*sizeof(Vertex);m->makeBuffer(cache.buffer,bytes,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);std::memcpy(cache.buffer.mapped,cache.vertices.data(),bytes);}
+ if(!cache.vertices.empty()){size_t bytes=cache.vertices.size()*sizeof(Vertex);m->makeBuffer(cache.buffer,bytes,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);std::memcpy(cache.buffer.mapped,cache.vertices.data(),bytes);
+  // Shadow casters: opaque triangles sorted by 4 m cell, then material, so a
+  // lamp face draws only the runs inside its range.
+  struct Caster {uint64_t cell,material;uint32_t first;};std::vector<Caster> casters;casters.reserve(cache.vertices.size()/3);
+  std::array<float,6> bounds{1e30f,1e30f,1e30f,-1e30f,-1e30f,-1e30f};
+  for(const auto&batch:cache.batches){const auto&mat=m->materials.at(batch.material);bool casts=!mat.transparent&&!mat.additive;
+   for(uint32_t v=batch.start;v+2<batch.start+batch.count;v+=3){const Vertex*t=&cache.vertices[v];float center[3]{};
+    for(int c=0;c<3;++c)for(int k=0;k<3;++k){float value=t[c].position[k];bounds[size_t(k)]=std::min(bounds[size_t(k)],value);bounds[size_t(k)+3]=std::max(bounds[size_t(k)+3],value);center[k]+=value/3.f;}
+    if(!casts)continue;
+    auto cellOf=[](float value){return uint64_t(std::clamp(int(std::floor(value/4.f))+32768,0,65535));};
+    casters.push_back({(cellOf(center[0])<<32)|(cellOf(center[1])<<16)|cellOf(center[2]),batch.material,v});
+   }
+  }
+  std::sort(casters.begin(),casters.end(),[](const Caster&a,const Caster&b){return a.cell!=b.cell?a.cell<b.cell:a.material!=b.material?a.material<b.material:a.first<b.first;});
+  std::vector<uint32_t> indices;indices.reserve(casters.size()*3);uint64_t runCell=~0ull;
+  for(const auto&caster:casters){
+   if(cache.shadowRuns.empty()||runCell!=caster.cell||cache.shadowRuns.back().material!=caster.material){cache.shadowRuns.push_back({caster.material,uint32_t(indices.size()),0,{1e30f,1e30f,1e30f},{-1e30f,-1e30f,-1e30f}});runCell=caster.cell;}
+   auto&run=cache.shadowRuns.back();
+   for(uint32_t c=0;c<3;++c){indices.push_back(caster.first+c);for(int k=0;k<3;++k){float value=cache.vertices[caster.first+c].position[k];run.lo[k]=std::min(run.lo[k],value);run.hi[k]=std::max(run.hi[k],value);}}
+   run.count+=3;
+  }
+  if(!indices.empty()){m->makeBuffer(cache.shadowIndices,indices.size()*4,VK_BUFFER_USAGE_INDEX_BUFFER_BIT);std::memcpy(cache.shadowIndices.mapped,indices.data(),indices.size()*4);}
+  cache.bounds=bounds;m->shadowDirtyBounds.push_back(bounds);
+ }
  Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);
 }
-void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches)m->retire(entry.second.buffer);m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
+void GpuRenderer::setLamps(const std::vector<std::array<float,5>>&input,bool enabled){
+ size_t count=std::min(input.size(),size_t(Impl::MaxLamps));
+ uint64_t key=1469598103934665603ull;auto mix=[&](uint32_t value){key^=value;key*=1099511628211ull;};mix(enabled?1u:0u);mix(uint32_t(count));
+ for(size_t i=0;i<count;++i)for(float value:input[i])mix(std::bit_cast<uint32_t>(value));
+ if(key==m->lampKey)return;
+ m->lampKey=key;m->pixelLighting=enabled;m->lamps.assign(input.begin(),input.begin()+std::ptrdiff_t(count));m->lampDirty.assign(count,uint8_t(2));
+ if(enabled&&int(count)>m->shadowCapacity)m->createShadowAtlas(int((count+15)/16*16));
+ // World-space grid; each cell keeps the 16 lamps that can light it most.
+ Impl::LampHeader header{};header.flags[0]=enabled?1:0;header.size[3]=int(count);
+ std::vector<uint32_t> cells;
+ if(count){
+  float lo[3]={1e30f,1e30f,1e30f},hi[3]={-1e30f,-1e30f,-1e30f};
+  for(size_t i=0;i<count;++i)for(int k=0;k<3;++k){lo[k]=std::min(lo[k],input[i][size_t(k)]-input[i][3]);hi[k]=std::max(hi[k],input[i][size_t(k)]+input[i][3]);}
+  float cell=4.f;int dims[3];
+  for(;;){for(int k=0;k<3;++k)dims[k]=std::max(1,int(std::ceil((hi[k]-lo[k])/cell)));if(int64_t(dims[0])*dims[1]*dims[2]<=Impl::MaxLampCells)break;cell*=1.25f;}
+  for(int k=0;k<3;++k){header.origin[k]=lo[k];header.size[k]=dims[k];}header.origin[3]=cell;
+  std::vector<std::vector<std::pair<float,uint32_t>>> candidates(size_t(dims[0])*dims[1]*dims[2]);
+  for(size_t i=0;i<count;++i){const auto&lamp=input[i];float range=lamp[3];int first[3],last[3];
+   for(int k=0;k<3;++k){first[k]=std::clamp(int(std::floor((lamp[size_t(k)]-range-lo[k])/cell)),0,dims[k]-1);last[k]=std::clamp(int(std::floor((lamp[size_t(k)]+range-lo[k])/cell)),0,dims[k]-1);}
+   for(int z=first[2];z<=last[2];++z)for(int y=first[1];y<=last[1];++y)for(int x=first[0];x<=last[0];++x){
+    int c[3]={x,y,z};float d2=0;for(int k=0;k<3;++k){float a=lo[k]+c[k]*cell,b=a+cell,v=std::clamp(lamp[size_t(k)],a,b)-lamp[size_t(k)];d2+=v*v;}
+    if(d2>=range*range)continue;float t=1.f-d2/(range*range);
+    candidates[size_t((z*dims[1]+y)*dims[0]+x)].push_back({lamp[4]*3.2f*t*t/(1.f+d2*.12f),uint32_t(i+1)});
+   }
+  }
+  cells.assign(candidates.size()*Impl::LampsPerCell,0);
+  for(size_t c=0;c<candidates.size();++c){auto&list=candidates[c];
+   std::sort(list.begin(),list.end(),[](const auto&a,const auto&b){return a.first>b.first;});
+   for(size_t k=0;k<list.size()&&k<size_t(Impl::LampsPerCell);++k)cells[c*Impl::LampsPerCell+k]=list[k].second;
+  }
+ }
+ m->lampData.assign(sizeof(header)+size_t(Impl::MaxLamps)*32+cells.size()*4,0);
+ std::memcpy(m->lampData.data(),&header,sizeof(header));
+ for(size_t i=0;i<count;++i){float record[8]={input[i][0],input[i][1],input[i][2],input[i][3],input[i][4],enabled&&int(i)<m->shadowCapacity?float(i):-1.f,0,0};std::memcpy(m->lampData.data()+sizeof(header)+i*32,record,32);}
+ if(!cells.empty())std::memcpy(m->lampData.data()+sizeof(header)+size_t(Impl::MaxLamps)*32,cells.data(),cells.size()*4);
+ ++m->lampGeneration;
+}
+std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
+void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches){if(entry.second.shadowIndices.handle)m->shadowDirtyBounds.push_back(entry.second.bounds);m->retire(entry.second.buffer);m->retire(entry.second.shadowIndices);}m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
 std::uint64_t GpuRenderer::staticCacheHits()const{return m->cacheHits;}
 void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});m->renderingViewmodel=true;}
 int GpuRenderer::beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye,Point3 center){
@@ -866,6 +1055,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&!m->batches.back().actor&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false,false,-1,sortKey});
 }
 void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
+ if(m->lampUploaded[m->frameIndex]!=m->lampGeneration&&!m->lampData.empty()){std::memcpy(m->lampBuffers[m->frameIndex].mapped,m->lampData.data(),std::min(m->lampData.size(),Impl::LampBufferBytes));m->lampUploaded[m->frameIndex]=m->lampGeneration;}
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
  m->flushUploads();
@@ -894,6 +1084,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  }
  m->batches.swap(m->sortedBatches);
  m->startCommands();
+ m->renderLampShadows(m->commands[m->frameIndex]);
   VkClearValue clear[3]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};
  VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+1;pass.pClearValues=clear;
  auto cmd=m->commands[m->frameIndex];

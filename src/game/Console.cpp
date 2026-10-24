@@ -47,6 +47,10 @@ void Game::executeConsole(std::string command){
   else if(arg=="on"||arg=="off"){SoftwareRenderer::setPostProcessing(arg=="on");m_consoleLog.push_back(arg=="on"?"POST ON: AMBIENT OCCLUSION, DEPTH HAZE, BLOOM, GRADE.":"POST OFF: RAW SCENE LIGHTING.");}
   else m_consoleLog.push_back("USE R_POST ON OR OFF. ON IS THE DEFAULT.");
  }
+ else if(verb=="r_pixel"){
+  if(arg=="on"||arg=="off"){SoftwareRenderer::setPixelLighting(arg=="on");m_consoleLog.push_back(arg=="on"?"PIXEL LIGHTING ON: PER-PIXEL LAMPS WITH SHADOW MAPS.":"PIXEL LIGHTING OFF: BAKED VERTEX LAMPS.");}
+  else m_consoleLog.push_back("USE R_PIXEL ON OR OFF. ON IS THE DEFAULT.");
+ }
  else if(verb=="r_texels"){
   if(arg=="crisp"||arg=="smooth"){SoftwareRenderer::setCrispTexels(arg=="crisp");m_consoleLog.push_back(arg=="crisp"?"TEXELS CRISP: SQUARE PSX TEXELS, ANTIALIASED EDGES.":"TEXELS SMOOTH: PLAIN BILINEAR MAGNIFICATION.");}
   else m_consoleLog.push_back("USE R_TEXELS CRISP OR SMOOTH. CRISP IS THE DEFAULT.");

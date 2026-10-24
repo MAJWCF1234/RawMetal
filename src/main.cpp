@@ -672,6 +672,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--freight-actor-inspection"))return freightActorInspection(W,H);
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
     if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
+    if(std::wcsstr(commandLine,L"--nopixel"))retro::SoftwareRenderer::setPixelLighting(false); // A/B: baked vertex lamps
     if(std::wcsstr(commandLine,L"--post-ao"))retro::SoftwareRenderer::setPostProcessing(true,true);
     if(std::wcsstr(commandLine,L"--early-maps-inspection"))return earlyMapsInspection(960,540);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);

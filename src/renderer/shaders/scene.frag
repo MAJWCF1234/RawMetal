@@ -5,6 +5,11 @@ layout(set=0,binding=2) uniform sampler2D emissionMap;
 layout(set=0,binding=3) uniform sampler2D reliefMap;
 layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects; vec4 fogLights[4]; vec4 atmosphere; } view;
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;} stereo;
+// Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
+// lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot.
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 lamps[512];uint cells[];} lampGrid;
+// Six radial-depth faces per lamp, compared in hardware with bilinear PCF.
+layout(set=1,binding=3) uniform sampler2DArrayShadow lampShadows;
 layout(location=0) in vec2 uv;
 layout(location=1) in vec4 lighting;
 layout(location=2) in vec4 light0;
@@ -23,6 +28,23 @@ vec2 crispTexelUV(vec2 coordinate,vec2 dx,vec2 dy){
  vec2 seam=floor(t+0.5);
  vec2 crisp=seam+clamp((t-seam)/footprint,-0.5,0.5);
  return mix(crisp,t,smoothstep(0.5,1.0,max(footprint.x,footprint.y)))/size;
+}
+
+const vec3 ShadowFace[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
+const vec3 ShadowUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,1,0),vec3(0,1,0));
+// d runs from the lamp to the (normal-offset) receiver. A 3x3 grid of
+// bilinear comparisons gives a smooth 4x4-texel penumbra without noise.
+float lampShadow(int slot,vec3 d,float range){
+ vec3 a=abs(d);
+ int face=a.x>=a.y&&a.x>=a.z?(d.x>0.0?0:1):a.y>=a.z?(d.y>0.0?2:3):(d.z>0.0?4:5);
+ vec3 forward=ShadowFace[face],up=ShadowUp[face],right=cross(forward,up);
+ float w=dot(d,forward);
+ vec2 st=vec2(dot(d,right),dot(d,up))/w*0.5+0.5;
+ vec2 texel=1.0/vec2(textureSize(lampShadows,0).xy);
+ float reference=length(d)/range-0.002,layer=float(slot*6+face),sum=0.0;
+ for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x)
+  sum+=texture(lampShadows,vec4(clamp(st+vec2(x,y)*texel,texel*0.5,1.0-texel*0.5),layer,reference));
+ return sum/9.0;
 }
 
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
@@ -145,11 +167,12 @@ void main(){
  float vertexLight=lighting.y;
  float specularLight=0.0;
  float waterFresnel=0.0;
+ vec3 n=vec3(0.0,0.0,1.0);float normalLength=1.0;
 
  if(lighting.w>0.5||light0.w+light1.w>0.0){
   vec4 filteredNormal=lighting.w>0.5?textureGrad(normalMap,sampleUV,uvDx,uvDy):vec4(0.0,0.0,1.0,1.0);
-  float normalLength=length(filteredNormal.xyz);
-  vec3 n=normalLength>0.000001?filteredNormal.xyz/normalLength:vec3(0.0,0.0,1.0);
+  normalLength=length(filteredNormal.xyz);
+  n=normalLength>0.000001?filteredNormal.xyz/normalLength:vec3(0.0,0.0,1.0);
   float response=0.22+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
   vertexLight*=clamp(response/lighting.z,0.35,1.8);
 
@@ -181,6 +204,62 @@ void main(){
      waterFresnel=0.04+0.96*pow(1.0-NdotV,5.0);
     }
   }
+ }
+
+ // Static world surfaces: the CPU bakes ambient and contact occlusion per vertex;
+ // lamps and the flashlight are lit here per pixel with shadow maps.
+ if(lampGrid.flags.x!=0&&surface.w>0.5&&surface.w<1.5&&surface.z<0.5&&lighting.x<1.5){
+  vec3 V=normalize(view.eyeYaw.xyz-worldPos);
+  vec3 Ng=normalize(cross(dx,dy));if(dot(Ng,V)<0.0)Ng=-Ng;
+  vec3 N=Ng;
+  if(lighting.w>0.5&&tangentFrameValid){
+   vec3 T=normalize(tangent-Ng*dot(Ng,tangent));
+   vec3 B=bitangent-Ng*dot(Ng,bitangent);B=normalize(B-T*dot(T,B));
+   N=normalize(T*n.x+B*n.y+Ng*max(n.z,0.05));
+  }
+  float concentration=clamp(normalLength,0.0,1.0);
+  float roughness=clamp(1.0-fract(surface.z),0.18,0.96);
+  roughness=sqrt(clamp(roughness*roughness+(1.0-concentration)/max(concentration,0.05),0.0324,1.0));
+  float lampLight=0.0,lampSpecular=0.0;
+  ivec3 cell=ivec3(floor((worldPos-lampGrid.origin.xyz)/lampGrid.origin.w));
+  if(lampGrid.size.w>0&&all(greaterThanEqual(cell,ivec3(0)))&&all(lessThan(cell,lampGrid.size.xyz))){
+   int base=((cell.z*lampGrid.size.y+cell.y)*lampGrid.size.x+cell.x)*16;
+   for(int k=0;k<16;++k){
+    uint entry=lampGrid.cells[base+k];if(entry==0u)break;
+    int index=int(entry)-1;vec4 lamp=lampGrid.lamps[index*2],params=lampGrid.lamps[index*2+1];
+    vec3 toLamp=lamp.xyz-worldPos;float d2=dot(toLamp,toLamp),r2=lamp.w*lamp.w;
+    if(d2>=r2||d2<0.0001)continue;
+    // Same falloff as WorldLight::falloff and the CPU bake.
+    float t=1.0-d2/r2,falloff=params.x*3.2*t*t/(1.0+d2*0.12);
+    float distance=sqrt(d2);vec3 L=toLamp/distance;
+    float geometric=dot(Ng,L);if(geometric<=0.0)continue;
+    float shadow=1.0;
+    if(params.y>=0.0&&falloff>0.003)shadow=lampShadow(int(params.y),worldPos+Ng*(0.015+0.012*distance)-lamp.xyz,lamp.w);
+    if(shadow<=0.0)continue;
+    // Soft terminator: normal maps never cut a lit face to black.
+    lampLight+=falloff*shadow*(0.04+0.96*max(dot(N,L),0.0))*smoothstep(0.0,0.12,geometric);
+    lampSpecular+=falloff*shadow*dielectricSpecular(N,V,L,roughness);
+   }
+  }
+  if(view.effects.x>0.5){
+   vec3 forwardWorld=normalize(vec3(view.eyeYaw.w*view.basis.y,view.basis.x*view.basis.y,view.basis.z));
+   vec3 toPoint=worldPos-view.eyeYaw.xyz;float d2=dot(toPoint,toPoint);
+   if(d2>0.04&&d2<196.0){
+    float d=sqrt(d2);vec3 L=-toPoint/d;float along=dot(toPoint,forwardWorld)/d;
+    if(along>0.80){
+     float cone=clamp((along-0.80)/0.16,0.0,1.0);cone=cone*cone*(3.0-2.0*cone);
+     float beam=cone*1.9/(1.0+d2*0.020);
+     lampLight+=beam*(0.30+0.70*max(dot(N,L),0.0));
+     lampSpecular+=beam*dielectricSpecular(N,V,L,roughness);
+    }
+   }
+  }
+  // Ambient keeps a little of the normal map's relief in unlit areas.
+  float relief=mix(1.0,clamp(dot(N,Ng),0.0,1.0),0.6);
+  // Exposure-matched to the old bake (which clamped at 1.4): a soft shoulder
+  // keeps hot spots under lamps without flattening the falloff into the room.
+  vertexLight=lighting.y*relief+1.25*(1.0-exp(-lampLight*0.62/1.25));
+  specularLight=lampSpecular*0.7;
  }
 
  if(surface.z>0.5&&surface.z<1.5){
@@ -246,5 +325,8 @@ void main(){
  // blended pipelines keep the destination alpha, so water stays a blend factor.
  vec3 toPoint=worldPos-view.eyeYaw.xyz;float forward=toPoint.x*view.eyeYaw.w+toPoint.y*view.basis.x;
  float planarDepth=max(forward*view.basis.y+toPoint.z*view.basis.z,0.0);
+ // The first-person viewmodel stores negative depth so post stages skip it
+ // exactly, at any distance from walls.
+ if(surface.w>1.5&&surface.w<2.5)planarDepth=-max(planarDepth,0.01);
  outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),surface.z>1.5?alpha:planarDepth):vec4(toDisplay(filmic(result*0.95)),alpha);
 }
