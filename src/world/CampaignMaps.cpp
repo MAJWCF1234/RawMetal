@@ -339,7 +339,7 @@ void pipeRoute(Map& m,std::initializer_list<P3> points,float radius,int paint,fl
      wall(m,c.x-.16f,c.y-.16f,c.x+.16f,c.y+.16f,floor,floor+.025f,8);
     }else if(roof>NoRoof){
      float top=roof-.05f;int tx=int(std::floor(c.x)),ty=int(std::floor(c.y));
-     if(tx>=0&&ty>=0&&tx<24&&ty<24)for(const auto& l:m.layers)if(l.thickness>0&&l.rows[size_t(ty)][size_t(tx)]=='='&&l.elevation-l.thickness>a.z)top=std::min(top,l.elevation-l.thickness-.01f);
+     if(tx>=0&&ty>=0&&tx<24&&ty<24)for(const auto& l:m.layers)if(l.thickness>0&&l.rows[size_t(ty)][size_t(tx)]=='='&&l.elevation-l.thickness>a.z)top=std::min(top,l.elevation-l.thickness-.04f);
      m.pipes.push_back({c,c,a.z+radius*1.2f,.022f,top,6});
     }
    }
@@ -1600,13 +1600,8 @@ std::shared_ptr<const Map> makePumpAnnex(){
  wallSign(m,22.945f,4.5f,deck+1.9f,"GALLERY","STAIR UP / JUNCTION TRANSFER",1.6f,-kPi*.5f);
  // Pit edge columns carry the gallery; the crane runs the length of the house.
  deckSupports(m,obs,deck,6.f);
- for(float y:{5.6f,16.4f})wall(m,1,y-.15f,23,y+.15f,roof-1.3f,roof-1.f,12);
- for(float y:{5.6f,16.4f})for(float x=3.f;x<23;x+=5.f)wall(m,x-.12f,y-.12f,x+.12f,y+.12f,roof-1.f,roof,12);
- for(float x:{11.6f,12.1f})wall(m,x,5.45f,x+.3f,16.55f,roof-1.65f,roof-1.3f,18);
- for(float y:{5.4f,16.2f})wall(m,11.3f,y,12.7f,y+.4f,roof-1.65f,roof-1.2f,12);
- wall(m,11.6f,10.7f,12.4f,11.5f,roof-1.95f,roof-1.65f,12);
- m.pipes.push_back({{12.f,11.1f},{12.f,11.1f},roof-1.95f,.02f,gallery-.2f,6});
- wall(m,11.8f,10.9f,12.2f,11.3f,gallery-.5f,gallery-.2f,8);
+ for(float x:{4.f,9.f,15.f,20.f}){wall(m,x-.15f,1,x+.15f,23,roof-.55f,roof,12);
+  for(float y:{1.f,22.75f})wall(m,x-.25f,y,x+.25f,y+.25f,gallery+2.9f,roof-.55f,15);}
  // --- Observation gallery ------------------------------------------------------------
  auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gallery,gallery+.9f,3);wall(m,x1,y1,x2,y2,gallery+.9f,gallery+2.4f,17);wall(m,x1,y1,x2,y2,gallery+2.4f,gallery+2.7f,3);};
  glazed(14.f,19.f,19.f,19.12f);glazed(14.f,19.12f,14.12f,21.2f);
@@ -1741,6 +1736,132 @@ std::shared_ptr<const Map> makeUtilityJunction(){
  zone(m,"17B FREIGHT SERVICES",17,1,23,6);
  zone(m,"17C PRIMARY UTILITIES",1,17.5f,6.2f,23);
  zone(m,"17 UTILITY JUNCTION",0,0,24,24);
+ return p;
+}
+
+// WASTE HANDLING. Where the plant's scrap is sorted and crushed before it is
+// shipped. You come in on the sorting gallery: conveyors run along it from
+// the wall chutes to the hopper over the press. Below, a bunker wall divides
+// the processing floor, and the only way south is through the press bay
+// under the cycling platen. Time the stroke, or isolate the press from the
+// glazed control pulpit on the gallery. Beyond the bunker, the sump, the
+// balers and the dispatch room to the freight district.
+std::shared_ptr<const Map> makeWasteHandling(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ const float floor=-12,gallery=-9,roof=-5.3f;
+ m.name=CampaignMapNames[9];m.definition=CampaignChunks[9];m.definition.ceiling=roof;m.definition.ambient=.4f;
+ m.layers.push_back(floorLayer("Waste Handling / processing floor",floor));
+ {AuthoredLayerData l;l.name="Waste Handling / sorting gallery";l.elevation=gallery;l.thickness=.25f;for(auto& row:l.rows)row=std::string(24,'.');
+  rectangle(l,1,1,23,7,'=');rectangle(l,2,0,5,1,'=');m.layers.push_back(std::move(l));}
+ auto& g=m.layers[0];auto& deck=m.layers[1];
+ // Arrival from the Junction onto the gallery; the wall below is sealed.
+ rectangle(g,2,0,5,1,'.');m.doors.push_back({2,5,.5f,0,false,false,true,3});
+ wall(m,2,0,5,1,floor,gallery-.25f,15);wall(m,2,0,5,.85f,gallery+2.5f,roof,3);
+ m.stairs.push_back({1,7,3,13,floor,gallery,16,true,false});
+ deckSupports(m,deck,floor,6.f);
+ // --- Sorting gallery: conveyors to the hopper ------------------------------------
+ // Two wall chutes drop onto a belt that runs east along the gallery to a
+ // hopper over the press. Belts stand on frames; the hopper on its own legs.
+ auto belt=[&](float x1,float x2,float y){wall(m,x1,y-.45f,x2,y+.45f,gallery+.7f,gallery+.82f,8);
+  for(float yy:{y-.5f,y+.42f})wall(m,x1,yy,x2,yy+.08f,gallery+.6f,gallery+.95f,18);
+  for(float x=x1+.3f;x<x2;x+=1.6f)for(float yy:{y-.42f,y+.36f})wall(m,x,yy,x+.06f,yy+.06f,gallery,gallery+.7f,12);
+  for(float x=x1+.2f;x<x2;x+=.5f)wall(m,x,y-.4f,x+.07f,y+.4f,gallery+.62f,gallery+.7f,12);};
+ belt(4.f,14.4f,5.8f);
+ // Two round drop chutes come down through the roof onto the belt.
+ for(float x:{5.f,9.f}){
+  m.pipes.push_back({{x,5.8f},{x,5.8f},gallery+1.15f,.34f,roof-.4f,1});m.pipes.push_back({{x,5.8f},{x,5.8f},roof-1.f,.4f,roof-.92f,6});
+  for(float z:{gallery+1.15f,gallery+2.6f})m.pipes.push_back({{x,5.8f},{x,5.8f},z,.4f,z+.1f,6});
+  board(m,x+1.3f,4.6f,gallery+1.05f,x<7?"CHUTE A":"CHUTE B","GENERAL SCRAP",1.f);}
+ // The hopper: a steel funnel on legs at the gallery edge, its throat over the press.
+ wall(m,14.1f,5.1f,15.9f,7.f,gallery+.4f,gallery+1.3f,12);
+ for(float x:{14.2f,15.7f})for(float y:{5.2f,6.8f})m.pipes.push_back({{x,y},{x,y},gallery+.05f,.04f,gallery+.4f,6});
+ board(m,10.f,4.2f,gallery+1.f,"SORTING / GALLERY","PRESS PULPIT EAST / STAIR DOWN WEST",2.4f);
+ // --- Control pulpit over the press ---------------------------------------------
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gallery,gallery+.95f,3);wall(m,x1,y1,x2,y2,gallery+.95f,gallery+2.3f,17);wall(m,x1,y1,x2,y2,gallery+2.3f,gallery+2.6f,3);};
+ glazed(16.5f,6.88f,21.5f,7.f);glazed(21.38f,3.5f,21.5f,6.88f);
+ wall(m,16.5f,3.5f,17.6f,3.62f,gallery,gallery+2.6f,3);wall(m,19.f,3.5f,21.5f,3.62f,gallery,gallery+2.6f,3);wall(m,17.6f,3.5f,19.f,3.62f,gallery+2.2f,gallery+2.6f,3);
+ wall(m,16.5f,3.62f,16.62f,6.88f,gallery,gallery+2.6f,3);
+ wall(m,16.5f,3.5f,21.5f,7.f,gallery+2.6f,gallery+2.75f,2);
+ terminal(m,{18.5f,6.3f},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / ISOLATE THE PRESS. WAY SOUTH IS THROUGH THE BAY.",3,stateId("compactor_isolated"));
+ m.terminals.back().toggleState=true;
+ for(float x:{20.f,20.9f})m.fixtures.push_back({13,{x,3.9f},3,.9066f,.4956f,2.2f,kPi,true});
+ wallSign(m,18.3f,3.445f,gallery+2.f,"PRESS PULPIT","AUTHORIZED OPERATORS",1.6f,kPi);
+ // --- The press bay -----------------------------------------------------------------
+ m.compactors={{13,8,17,13,floor,-9.8f,9,stateId("compactor_isolated")}};
+ // The press frame's four columns are solid (the renderer draws the frame).
+ for(float x:{13.16f,16.84f})for(float y:{8.12f,12.88f})m.structures.push_back({x-.105f,y-.105f,x+.105f,y+.105f,floor,-9.18f,false,6});
+ wall(m,13,5,17,14,floor,floor+.03f,8);
+ for(float y:{7.85f,13.05f})floorLine(m,13,y,17,y+.1f,floor,13);
+ // Bay walls either side, and the bunker wall dividing the floor: the bay is the way through.
+ wall(m,12.7f,7.6f,13.f,14.3f,floor,-9.6f,15);wall(m,17.f,7.6f,17.3f,14.3f,floor,-9.6f,15);
+ wall(m,1,14.f,12.7f,14.3f,floor,-9.6f,15);wall(m,17.3f,14.f,23,14.3f,floor,-9.6f,15);
+ for(float x:{12.7f,17.f})floorLine(m,x-.15f,7.6f,x+.45f,7.75f,floor,13);
+ wallSign(m,12.f,13.995f,floor+1.8f,"DANGER","PRESS BAY / CYCLING / ISOLATE AT PULPIT",2.2f,kPi);
+ // Hydraulic power unit east of the bay: pump, tank, lines up to the crosshead.
+ m.fixtures.push_back({14,{20.3f,10.5f},0,1.58f,1.62f,1.9f,0,true});
+ P3 hp=pumpSkid(m,{20.3f,8.4f},floor,kPi*.5f,-8.4f);
+ pipeRoute(m,{hp,{17.6f,hp.y,-8.4f},{17.6f,8.12f,-8.4f},{17.6f,8.12f,-9.4f},{16.96f,8.12f,-9.4f}},.09f,4,roof);
+ pipeRoute(m,{{20.3f,10.5f,floor+1.9f},{20.3f,10.5f,-8.1f},{17.8f,10.5f,-8.1f},{17.8f,12.88f,-8.1f},{17.8f,12.88f,-9.4f},{16.96f,12.88f,-9.4f}},.07f,3,roof);
+ wallSign(m,22.945f,10.f,floor+1.9f,"PRESS HYDRAULICS","210 BAR / DO NOT OPEN UNDER PRESSURE",1.8f,-kPi*.5f);
+ // North floor: receiving bins under the chutes, the shredder, scrap.
+ for(float x:{4.5f,8.5f}){
+  wall(m,x-1.3f,9.f,x+1.3f,9.12f,floor,floor+1.1f,11);wall(m,x-1.3f,11.88f,x+1.3f,12.f,floor,floor+1.1f,11);
+  wall(m,x-1.3f,9.12f,x-1.18f,11.88f,floor,floor+1.1f,11);wall(m,x+1.18f,9.12f,x+1.3f,11.88f,floor,floor+1.1f,11);
+  floorLine(m,x-1.3f,8.8f,x+1.3f,8.92f,floor,13);
+ }
+ m.fixtures.push_back({12,{8.5f,10.5f},0,2.0f,1.55f,.8f,.3f,true});
+ m.fixtures.push_back({12,{10.5f,12.6f},0,.940f,3.060f,1.751f,kPi*.5f,true});
+ // --- South floor: sump, balers, dispatch ---------------------------------------
+ // A drainage sump with a curb and rail, and its pump.
+ m.waterVolumes={{2.f,16.f,7.f,21.f,-12.55f,-12.07f}};
+ for(float x:{1.75f,7.f})wall(m,x,15.75f,x+.25f,21.25f,floor,floor+.15f,15);
+ for(float y:{15.75f,21.f})wall(m,1.75f,y,7.25f,y+.25f,floor,floor+.15f,15);
+ for(float y:{15.85f,21.15f})m.pipes.push_back({{1.85f,y},{7.15f,y},floor+1.05f,.025f,floor+1.05f,3});
+ for(float x:{1.85f,4.5f,7.15f})for(float y:{15.85f,21.15f})m.pipes.push_back({{x,y},{x,y},floor+.15f,.03f,floor+1.05f,3});
+ for(float x:{1.85f,7.15f})m.pipes.push_back({{x,15.85f},{x,21.15f},floor+1.05f,.025f,floor+1.05f,3});
+ for(float y:{15.82f,21.12f})m.structures.push_back({1.82f,y,7.18f,y+.06f,floor,floor+1.08f,false,6});
+ for(float x:{1.82f,7.12f})m.structures.push_back({x,15.82f,x+.06f,21.18f,floor,floor+1.08f,false,6});
+ P3 sump=pumpSkid(m,{9.5f,18.5f},floor,0,-8.f);
+ pipeRoute(m,{sump,{9.5f,22.95f,-8.f}},.1f,5,roof);
+ // Balers: two compact bales presses on plinths with finished bales stacked.
+ for(float x:{14.5f,18.5f}){m.fixtures.push_back({12,{x,17.2f},.12f,2.45f,1.30f,1.40f,0,true});wall(m,x-1.4f,16.4f,x+1.4f,18.f,floor,floor+.12f,15);}
+ for(Vec2 b:{Vec2{13.5f,20.f},Vec2{14.7f,20.f},Vec2{13.5f,21.2f}})m.fixtures.push_back({21,b,0,1.f,1.f,.9f,0,true});
+ wallSign(m,20.f,14.355f,floor+1.6f,"BALERS","FINISHED BALES TO DISPATCH",1.8f,0);
+ // Dispatch room and the transfer to Freight Access.
+ wall(m,17.8f,19.8f,19.1f,20,floor,-9.2f,3);wall(m,21.3f,19.8f,23,20,floor,-9.2f,3);
+ wall(m,19.1f,19.8f,21.3f,20,-9.6f,-9.2f,3);wall(m,17.8f,20,18,23,floor,-9.2f,3);
+ wall(m,17.8f,19.8f,23,23,-9.2f,-9.f,2);
+ terminal(m,{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT ACCESS / SOUTH DISPATCH BULKHEAD.");
+ m.fixtures.push_back({7,{22.35f,22.f},0,1.8f,.5f,1.8f,kPi*.5f,true});
+ rectangle(g,20,23,23,24,'.');m.doors.push_back({20,23,23.5f,0,false,true});
+ wall(m,20,23,23,24,floor+2.5f,roof,3);
+ wallSign(m,22.15f,19.745f,floor+1.6f,"DISPATCH","19 / FREIGHT ACCESS",1.4f,kPi);
+ {ScriptEvent dispatch;dispatch.id=stateId("waste_dispatch_checkpoint");dispatch.x1=19;dispatch.y1=20;dispatch.x2=22;dispatch.y2=23;dispatch.bottom=-12.1f;dispatch.top=-10;
+  ScriptAction save;save.type=ScriptAction::Type::Checkpoint;dispatch.actions.push_back(save);m.scriptEvents.push_back(dispatch);}
+ terminal(m,{3.2f,4.f},"SORTING / SHIFT SAFETY","PRESS ISOLATOR: PULPIT ON THIS GALLERY, EAST.","BAY UNDER THE PRESS IS THE ONLY WAY SOUTH.",3);
+ wallBays(m,floor,roof,4.f,false,true,true,true,20.5f,12.f);
+ for(float x:{6.f,12.f,18.f})wall(m,x-.12f,1,x+.12f,23,roof-.45f,roof,12);
+ // --- Light ---------------------------------------------------------------
+ for(Vec2 b:{Vec2{4.f,3.f},Vec2{10.f,3.f},Vec2{14.f,3.f}})m.lights.push_back(lamp(b,roof-.15f,1.f,6.f,4300,.15f));
+ m.lights.push_back(lamp({19.f,5.2f},gallery+2.45f,1.f,4.5f,3200));
+ for(Vec2 b:{Vec2{15.f,10.5f}})m.lights.push_back(lamp(b,roof-.15f,2.f,9.f,5200,.2f));
+ for(Vec2 b:{Vec2{6.5f,10.5f},Vec2{20.f,10.f},Vec2{4.5f,18.5f},Vec2{10.f,18.f},Vec2{16.5f,19.f},Vec2{20.3f,21.5f}})m.lights.push_back(lamp(b,roof-.15f,1.3f,7.f,4000,.1f));
+ for(float x:{4.f,12.f,20.f})m.lights.push_back(lamp({x,7.f},gallery-.4f,1.f,5.f,3800,.1f));
+ for(float x:{11.f,19.f})m.lights.push_back(lamp({x,14.f},floor+2.f,1.2f,4.5f,1800,-.15f,WorldLightMount::Wall,-kPi*.5f));
+ // Work lamps on the bay walls, and along the bunker's south face.
+ for(float y:{9.6f,12.4f}){m.lights.push_back(lamp({13.f,y},floor+2.f,1.3f,4.5f,4200,.1f,WorldLightMount::Wall,0));m.lights.push_back(lamp({17.f,y},floor+2.f,1.3f,4.5f,4200,.1f,WorldLightMount::Wall,kPi));}
+ for(float x:{4.f,9.f,21.f})m.lights.push_back(lamp({x,14.3f},floor+2.2f,1.2f,6.f,4000,.1f,WorldLightMount::Wall,kPi*.5f));
+ m.lights.push_back(lamp({19.f,23.12f},floor+2.1f,1.1f,4.f,1600,-.2f,WorldLightMount::Wall,-kPi*.5f));
+ // --- Encounters ------------------------------------------------------------
+ m.creatureSpawns={{CreatureKind::Huntsman,{19,10},floor},{CreatureKind::Huntsman,{8,21},floor},{CreatureKind::Wasp,{12,4},gallery}};
+ m.pickupSpawns={{{6.f,3.f},PickupKind::Ammo,gallery},{{21.f,18.f},PickupKind::Health,floor}};
+ const Vec2 scrap[]={{3.8f,10.f},{4.6f,10.9f},{5.2f,10.1f},{8.f,9.6f},{9.f,11.3f},{3.9f,11.5f},
+                     {6.5f,4.6f},{7.2f,4.8f},{11.f,4.7f},{12.2f,4.5f},{2.5f,12.6f},{3.4f,13.f},
+                     {9.f,16.f},{10.5f,15.2f},{12.f,16.f},{20.5f,15.3f},{21.4f,15.8f},{15.4f,21.6f},{15.f,7.f}};
+ for(int i=0;i<19;++i)m.clutterSpawns.push_back({i%6,scrap[i],(scrap[i].y<7.f&&scrap[i].x<14.f)?gallery:-999.f,.37f*i});
+ zone(m,"18A SORTING GALLERY",0,0,24,7.1f,-9.5f,1000);
+ zone(m,"18B PRESS BAY",12.7f,7.6f,17.3f,14.3f);
+ zone(m,"18 WASTE HANDLING",0,0,24,24);
  return p;
 }
 
@@ -2328,7 +2449,7 @@ std::shared_ptr<const Map> make(int level){
 }
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
-  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();
+  result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();result[9]=makeWasteHandling();
   for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i);
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();return result;}();
  return maps.at(size_t(level));

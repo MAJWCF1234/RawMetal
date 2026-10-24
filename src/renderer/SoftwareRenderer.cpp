@@ -158,7 +158,22 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_rubberTexture=loadTexture(353);attachNormal(m_rubberTexture,354,true,0);m_rubberTexture.glossStrength=.06f;
  m_leatherTexture=loadTexture(355);deriveSurfaceNormal(m_leatherTexture,.25f);m_leatherTexture.glossStrength=.12f;
  m_idFabricTexture=loadTexture(356);m_medkitCaseTexture=loadTexture(357);m_medkitLabelTexture=loadTexture(358);
- m_glassTexture={1,1,{0x203c5a58u}};m_glassTexture.transparent=true;m_glassTexture.glossStrength=.55f;
+ m_glassTexture=[](){const int n=128;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};
+  auto hash=[](int x,int y,unsigned k){unsigned h=unsigned(x)*73856093u^unsigned(y)*19349663u^k;h=(h^(h>>13))*1274126177u;return float((h>>24)&255u)/255.f;};
+  auto smooth=[&](float x,float y,unsigned k,int cell){int x0=int(std::floor(x/cell)),y0=int(std::floor(y/cell));float fx=x/cell-x0,fy=y/cell-y0;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
+   auto at=[&](int i,int j){return hash((i%(n/cell)+n/cell)%(n/cell),(j%(n/cell)+n/cell)%(n/cell),k);};
+   return at(x0,y0)*(1-fx)*(1-fy)+at(x0+1,y0)*fx*(1-fy)+at(x0,y0+1)*(1-fx)*fy+at(x0+1,y0+1)*fx*fy;};
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){
+   float dust=smooth(float(x),float(y),0x51u,32)*.6f+smooth(float(x),float(y),0x77u,8)*.4f;
+   float settle=float(y)/n;dust*=.55f+.6f*settle;
+   float wipe=std::fabs(std::sin((float(x)*.06f+std::sin(float(y)*.045f)*1.6f)));float smear=std::pow(1.f-wipe,6.f)*smooth(float(x),float(y),0x91u,16);
+   float speck=hash(x,y,0x33u)>.985f?.5f:0.f;
+   float a=std::clamp(.1f+dust*.2f+smear*.35f+speck,0.f,.85f);
+   float l=std::clamp(.62f+dust*.25f+smear*.2f+speck*.4f,0.f,1.f);
+   unsigned r=unsigned(l*170.f),g=unsigned(l*190.f),b=unsigned(l*196.f);
+   t.pixels[size_t(y*n+x)]=(unsigned(a*255.f)<<24)|(r<<16)|(g<<8)|b;}
+  t.transparent=true;t.glossStrength=.9f;return t;}();
+ prepareDecal(m_glassTexture,false);
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
  for(int species=0;species<4;++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=species==int(CreatureKind::Huntsman)||species==int(CreatureKind::Wasp);const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
   for(auto&pixel:variant.pixels){float intensity=float(std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u}))/255.f;auto r=std::uint32_t(tr*intensity),g=std::uint32_t(tg*intensity),b=std::uint32_t(tb*intensity);pixel=(pixel&0xff000000u)|(r<<16)|(g<<8)|b;}prepareDecal(variant);

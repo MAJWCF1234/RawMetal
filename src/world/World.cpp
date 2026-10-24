@@ -12,58 +12,6 @@
 namespace retro {
 namespace {
 std::atomic<uint64_t> nextTerrainRevision{1};
-constexpr MapRows WasteHandlingLower = {
-    "##...###################",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "#......................#",
-    "####################...#"
-};
-constexpr MapRows WasteHandlingSortingDeck = {
-    "__===___________________",
-    "_======================_",
-    "_======================_",
-    "_======================_",
-    "_======================_",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_====___________________",
-    "_==========_____________",
-    "_==========_____________",
-    "_==========_____________",
-    "________________________",
-    "________________________",
-    "________________________",
-    "________________________"
-};
 constexpr MapRows ashfallRegion(int region){
  MapRows rows={
   "........................","........................","........................","........................",
@@ -496,114 +444,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   // === DYNAMIC_CAMPAIGN_MAPS_START ===
   // Each standalone slot is intentionally an independent if block so the
   // injector can replace one level without rewriting adjacent campaign maps.
-  // === LEVEL_9_START ===
-  if(m_level==9){
-   m_layers={{"Waste Handling / processing floor",-12,0,WasteHandlingLower},{"Waste Handling / sorting deck",-9,.25f,WasteHandlingSortingDeck}};
-   m_doors={{2,5,.5f,0,false,false,true,3},{20,23,23.5f,0,false,true}};
-
-   // North entry vestibule: under floor sealed, overhead lintel, doorway fully open
-   wall(2,0,5,1,-12,-9);
-   wall(2,0,5,0.85f,-6.8f,roof);
-
-   stairs={{8,11,11,17,-12,-9,16,true,true}};
-   m_waterVolumes={{14,16,18,21,-12.5f,-12.08f}};
-   // The isolated platen clears a standing operator. The old 1.1 m raised
-   // stroke trapped even crouching players below an opaque oversized gantry.
-   m_compactors={{13,8,17,13,-12,-9.8f,9,stateId("compactor_isolated")}};
-   for(float x:{13.16f,16.84f})for(float y:{8.12f,12.88f})
-    m_structures.push_back({x-.105f,y-.105f,x+.105f,y+.105f,-12,-9.18f,false,2});
-   for(float y:{8.12f,12.62f})m_structures.push_back({13.08f,y,16.92f,y+.26f,-9.46f,-9.26f,false,2});
-   m_structures.push_back({13,5,17,14,-12,-11.97f,false,2});
-
-   // Sorting deck retaining bulkheads: conveyor chute drop and landing perimeter fully enclosed
-   wall(1,4.78f,12.2f,5.06f,-12,-9);
-   wall(12.2f,4.78f,17.8f,5.06f,-12,-9);
-   wall(17.8f,4.78f,23,5.06f,-12,-9);
-   wall(4.78f,5,5.06f,16.9f,-12,-9);
-   wall(1,17,8,17.25f,-12,-9);
-   wall(1,19.72f,10.46f,20.0f,-12,-9);
-   wall(10.18f,17,10.46f,20.0f,-12,-9);
-
-   for(float x:{7.f,19.f})m_pipes.push_back({{x,2},{x,22},-6.1f,.18f});
-
-   // Hydraulic lines to compactor press
-   m_pipes.push_back({{13.f,10.5f},{17.f,10.5f},-5.8f,.14f});
-   m_pipes.push_back({{15.f,10.5f},{15.f,10.5f},-5.8f,.14f,-7.5f});
-   m_pipes.push_back({{19.f,10.5f},{17.f,10.5f},-5.8f,.14f});
-
-   // Slim, evenly spaced roof supports keep the processing floor readable.
-   m_fixtures.push_back({2,{11.5f,5.5f},0.f,.26f,.26f,6.7f,0,true});
-   m_fixtures.push_back({2,{18.5f,5.5f},0.f,.26f,.26f,6.7f,0,true});
-   m_fixtures.push_back({2,{11.5f,15.5f},0.f,.26f,.26f,6.7f,0,true});
-
-   // Press-side guards make the bypass legible without sealing the working belt.
-   wall(17.6f,9,17.85f,12,-12,-10.95f);
-   wall(12.15f,9.4f,12.4f,12,-12,-10.95f);
-   m_lights.push_back({{10.8f,8.8f},-9.55f});
-   m_lights.push_back({{20,16},-9.55f});
-   // Heavy industrial shredder machine along east lower wall (leaves wide open aisle)
-    m_fixtures.push_back({12,{20.5f,8.5f},0.f,.940f,3.060f,1.751f,kPi*.5f,true});
-
-   // Sorting deck control station and lower wall breaker boxes.
-   m_fixtures.push_back({8,{10.8f,7.2f},0.f,.67f,.20f,.91f,0,false});
-    m_fixtures.push_back({8,{21.2f,21.5f},0.f,.67f,.20f,.91f,-kPi*.5f,false});
-    // West-wall lockers face east into the sorting-deck walkway. The mesh's
-    // door face is local -Z, so -pi/2 turns it away from the backing wall.
-    for(float y:{8.f,11.f,14.f})
-     m_fixtures.push_back({13,{1.62f,y},3.f,.9066f,.4956f,2.2f,-kPi*.5f,true});
-
-   m_terminals={{{10.8f,8},"HYDRAULIC PRESS / LOCAL ISOLATOR","AMBER: CYCLING / GREEN: ISOLATED.","E / TOGGLE CONVEYOR AND PRESS.",0,false,0,stateId("compactor_isolated"),true},
-               {{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT ACCESS / SOUTH DISPATCH BULKHEAD.",0,false}};
-   m_terminals.push_back({{3.2f,7},"SORTING / SHIFT SAFETY","PRESS ISOLATOR: NORTHWEST PRESS APPROACH.","EAST AISLE BYPASSES PRESS / DISPATCH SOUTH.",3});
-   // Two receiving bins give the west sorting approach a purpose, while the
-   // recovery lane runs around the press to a separate south dispatch room.
-   for(float y:{8.5f,12.8f}){
-    m_structures.push_back({5.35f,y,7.8f,y+.12f,-12,-10.9f,false,2});
-    m_structures.push_back({5.35f,y+2.f,7.8f,y+2.12f,-12,-10.9f,false,2});
-    m_structures.push_back({5.35f,y+.12f,5.47f,y+2.f,-12,-10.9f,false,2});
-   }
-   // Wall-mounted drop chutes link sorting above to the salvage bins below.
-   // A short steel discharge lip is carried by the housing. Keeping the
-   // descent vertical avoids a staircase of bright plates hovering over scrap.
-   for(float y:{9.55f,13.9f}){
-    m_structures.push_back({5.065f,y-.55f,5.125f,y+.55f,-10.88f,-9.12f,false,2});
-    for(float side:{-.55f,.49f})
-     m_structures.push_back({5.125f,y+side,5.65f,y+side+.06f,-10.88f,-9.12f,false,2});
-    m_structures.push_back({5.59f,y-.49f,5.65f,y+.49f,-10.25f,-9.12f,false,2});
-    m_structures.push_back({5.065f,y-.55f,5.95f,y+.55f,-10.94f,-10.88f,false,2});
-    m_structures.push_back({5.85f,y-.55f,5.95f,y+.55f,-10.99f,-10.94f,false,13});
-   }
-   // A flush warning border and low far-side curb contain the drainage sump.
-   // Its north edge stays open and the press bypass remains on the east.
-   for(float x:{13.85f,18.15f})
-    m_structures.push_back({x-.075f,15.75f,x+.075f,21.2f,-11.993f,-11.985f,false,14});
-   m_structures.push_back({13.775f,15.68f,18.225f,15.83f,-11.993f,-11.985f,false,14});
-   m_structures.push_back({13.92f,21.f,18.08f,21.16f,-12,-11.72f,false,2});
-   // Full-sized discarded drives make the receiving bins read as salvage,
-   // rather than empty architectural blocks with a few tiny floor objects.
-   for(float y:{9.55f,13.9f})m_fixtures.push_back({12,{6.6f,y},0.f,.43f,1.4f,.8f,kPi*.5f,true});
-   wall(17.8f,19.8f,19.1f,20,-12,-9.2f);wall(21.3f,19.8f,23,20,-12,-9.2f);
-   wall(19.1f,19.8f,21.3f,20,-9.6f,-9.2f);
-   wall(17.8f,20,18,23,-12,-9.2f);
-   m_structures.push_back({17.8f,19.8f,23,23,-9.2f,-9.f,false,2});
-   m_lights.push_back({{20.3f,21.5f},-9.36f});
-   shelf({22.35f,22.f},kPi*.5f);
-   const Vec2 scrap[]={{5.7f,5.3f},{6.5f,5.6f},{7.2f,5.4f},{5.9f,9.1f},{6.8f,10.2f},{7.3f,10.f},
-                       {5.9f,13.4f},{6.4f,14.45f},{7.1f,13.3f},{6.0f,16.7f},{6.9f,17.1f},{7.7f,16.4f},
-                       {9.4f,20.5f},{10.2f,20.9f},{11.0f,20.4f},{19.1f,4.2f},{20.0f,4.5f},{20.7f,4.0f}};
-   for(int i=0;i<18;++i)m_clutterSpawns.push_back({i%6,scrap[i],-999.f,.37f*i});
-   m_clutterSpawns.push_back({3,{15,7},-11.9f});
-   shelf({20,3},kPi,3);cabinet({22.4f,16},kPi*.5f);
-   for(Vec2 p:{Vec2{2.6f,6.2f},Vec2{4.3f,12.2f},Vec2{4.3f,16.4f},Vec2{8.4f,18.5f}})
-    post(p.x,p.y,-12,-9.25f,.11f);
-   m_creatureSpawns={{CreatureKind::Huntsman,{19,10},-12},{CreatureKind::Huntsman,{8,21},-12},{CreatureKind::Wasp,{18,15},-9}};
-   m_pickupSpawns={{{6,19},PickupKind::Ammo,-9},{{20,18},PickupKind::Health,-12}};
-   event("waste_dispatch_checkpoint",19,20,22,23,-12.1f,-10,{action(A::Checkpoint)});
-   for(Vec2 p:{Vec2{3,3},Vec2{3,12},Vec2{9,18},Vec2{15,6},Vec2{20,13}})m_lights.push_back({p,-5.55f});
-   for(Vec2 p:{Vec2{6.5f,7},Vec2{9,7},Vec2{7,14},Vec2{15,6.5f},Vec2{12,18},Vec2{19.5f,18.5f}})
-    m_lights.push_back({p,-9.25f});
-  }
-  // === LEVEL_9_END ===
   // === DYNAMIC_CAMPAIGN_MAPS_END ===
   for(auto& d:m_doors){if(d.entry)d.sign=m_level-1;else if(d.transfer)d.sign=m_level+1;}
   buildLayers(stairs);return;
@@ -995,6 +835,11 @@ void World::buildLightOcclusion()const{
  for(const auto&f:m_fixtures)if(f.solid){float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(f.model==7){for(float tier:ShelfTiers){float top=base+f.height*tier;oriented(f.position,f.width,f.depth,top-.045f,top,f.yaw);}
    float c=std::cos(f.yaw),s=std::sin(f.yaw);for(float x:{-f.width*.5f+.02f,f.width*.5f-.02f})for(float y:{-f.depth*.5f+.02f,f.depth*.5f-.02f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.04f,.04f,base,base+f.height,f.yaw);
+  }else if(f.model==19||f.model==18){
+   float c=std::cos(f.yaw),s=std::sin(f.yaw),top=f.model==19?base+f.height:base+f.height*.48f;
+   oriented(f.position,f.width,f.depth,top-.05f,top,f.yaw);
+   for(float x:{-f.width*.5f+.05f,f.width*.5f-.05f})for(float y:{-f.depth*.5f+.05f,f.depth*.5f-.05f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.05f,.05f,base,top-.05f,f.yaw);
+   if(f.model==18){Vec2 back{f.position.x+(f.depth*.5f-.03f)*s,f.position.y+(f.depth*.5f-.03f)*c};oriented(back,f.width,.05f,top,base+f.height,f.yaw);}
   }else oriented(f.position,f.width,f.depth,base,base+f.height,f.yaw);
  }
  for(const auto&p:m_props){float base=floorHeight(p.position.x,p.position.y)+p.base;box(p.position.x-p.halfSize.x,p.position.y-p.halfSize.y,p.position.x+p.halfSize.x,p.position.y+p.halfSize.y,base,base+p.height);}

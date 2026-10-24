@@ -142,7 +142,7 @@ bool Game::testCampaignExtension(){
   if(level==6)targets={{{19.5f,14},-9},{{4.5f,6.5f},-9},{{4,20},-9},{{21.5f,22.5f},-9}};
   if(level==7)targets={{{12.6f,12.4f},-12},{{3,10},-9},{{16.f,20.5f},-4},{{20.5f,22.5f},-4}};
   if(level==8)targets={{{12,17.5f},-9},{{20,3},-9},{{3,20},-9},{{21.5f,22.5f},-9},{{8,2},-4}};
-  if(level==9)targets={{{10.5f,8.8f},-12},{{20,20},-12},{{7,18},-9}};
+  if(level==9)targets={{{15,10.5f},-12},{{21.5f,22.f},-12},{{18.5f,5.5f},-9},{{11.5f,18},-12}};
   for(auto target:targets){bool found=false;for(auto n:reachable)if(length(point(n)-target.p)<.45f&&std::fabs(n.z-target.z)<.03f){found=true;break;}
    out<<"target "<<target.p.x<<','<<target.p.y<<','<<target.z<<' ';result&=check(found,"Authored destination reachable without jumping");
   }
@@ -161,14 +161,14 @@ bool Game::testCampaignExtension(){
     const bool vertical=pipe.endZ> -999.f;
     float high=vertical?std::max(pipe.z,pipe.endZ):pipe.z;
     float low=vertical?std::min(pipe.z,pipe.endZ):pipe.z;
-    servicesClear&=high+pipe.radius<game.world().ceilingHeight(pipe.start.x,pipe.start.y);
+    if(!(high+pipe.radius<game.world().ceilingHeight(pipe.start.x,pipe.start.y))){servicesClear=false;out<<"pipe at roof "<<pipe.start.x<<','<<pipe.start.y<<" top "<<high+pipe.radius<<'\n';}
     float length=retro::length(pipe.end-pipe.start);int samples=std::max(1,int(std::ceil(length/.25f)));
     for(int i=0;i<=samples;++i){auto p=pipe.start+(pipe.end-pipe.start)*(float(i)/samples);
      for(const auto& layer:game.world().layers())if(layer.thickness>0){int x=int(std::floor(p.x)),y=int(std::floor(p.y));
       if(x<0||y<0||y>=int(layer.rows.size())||x>=int(layer.rows[size_t(y)].size())||layer.rows[size_t(y)][size_t(x)]!='=')continue;
       const float slabTop=layer.elevation,slabBottom=layer.elevation-layer.thickness;
-      if(vertical){if(high+pipe.radius>slabBottom&&low-pipe.radius<slabTop)servicesClear=false;}
-      else if(pipe.z-pipe.radius<slabTop+1.7f&&pipe.z+pipe.radius>slabBottom)servicesClear=false;
+      bool hit=vertical?(high+pipe.radius>slabBottom&&low-pipe.radius<slabTop):(pipe.z-pipe.radius<slabTop+1.7f&&pipe.z+pipe.radius>slabBottom);
+      if(hit){servicesClear=false;out<<"pipe through deck "<<pipe.start.x<<','<<pipe.start.y<<" z "<<pipe.z<<".."<<pipe.endZ<<'\n';}
      }
     }
    }
@@ -245,19 +245,12 @@ bool Game::testCampaignExtension(){
    }
   }
   if(level==9){
-   bool eastPanel=false,northShelf=false;
-   for(const auto& f:game.world().fixtures()){
-    if(f.model==13&&f.position.x>22)eastPanel=std::fabs(f.yaw-kPi*.5f)<.01f;
-    if(f.model==7&&f.position.y<4)northShelf=std::fabs(std::fabs(f.yaw)-kPi)<.01f;
-   }
-   result&=check(eastPanel&&northShelf&&game.world().clutterSpawns().size()==19,
-                 "Waste Handling keeps clear routes with correctly faced wall equipment");
-   int roofSupports=0;bool groundedGrid=true;
-   for(const auto& f:game.world().fixtures())if(f.model==2){
-    ++roofSupports;float floor=game.world().floorHeight(f.position.x,f.position.y);
-    groundedGrid&=f.base==0.f&&f.width<=.27f&&f.depth<=.27f&&std::fabs(floor+f.height-game.world().ceilingHeight(f.position.x,f.position.y))<.03f;
-   }
-   result&=check(roofSupports==3&&groundedGrid,"Waste roof columns form a slim, grounded floor-to-ceiling support grid");
+   result&=check(game.world().clutterSpawns().size()==19,"Waste Handling keeps its scrap population");
+   // The bunker wall divides the floor: the press bay is the only way south.
+   bool bunker=!game.world().fits(6.f,14.15f,-12,1.7f)&&!game.world().fits(20.f,14.15f,-12,1.7f)&&game.world().fits(15.f,14.15f,-12,1.7f);
+   result&=check(bunker,"The bunker wall leaves the press bay as the way south");
+   bool pulpit=false;for(const auto& t:game.world().terminals())pulpit|=t.activateState==stateId("compactor_isolated")&&t.z>2.9f;
+   result&=check(pulpit,"The press isolator is in the pulpit on the sorting gallery");
   }
   // Emit reached positions for diagnosing a failed stair or rail join.
   std::ofstream positions("campaign-reach-"+std::to_string(level)+".txt");for(auto n:reachable)positions<<point(n).x<<' '<<point(n).y<<' '<<n.z<<'\n';
