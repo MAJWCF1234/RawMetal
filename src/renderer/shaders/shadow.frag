@@ -12,6 +12,11 @@ layout(push_constant) uniform PostParams {
 } p;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 outColor;
+// Per-pixel lamp grid and cube shadow maps (see scene.frag), for shafts.
+layout(std430,set=0,binding=1) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 lamps[512];uint cells[];} lampGrid;
+layout(set=0,binding=2) uniform sampler2DArrayShadow lampShadows;
+const vec3 ShadowFace[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
+const vec3 ShadowUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,1,0),vec3(0,1,0));
 
 float depthAt(vec2 at){return texture(sceneImage,clamp(at,vec2(0.0),vec2(1.0))).a;}
 vec3 viewPosition(vec2 at,float depth){
@@ -66,9 +71,51 @@ float lampVisibility(vec3 center,vec3 normal,float jitter){
  return visibility;
 }
 
+// View space (right, up, forward) back to world, using the scene camera.
+vec3 worldFromView(vec3 v){
+ vec4 b=lampGrid.basis;float forward=v.z*b.z-v.y*b.w;
+ return lampGrid.eye.xyz+vec3(-v.x*b.y+forward*b.x,v.x*b.x+forward*b.y,v.y*b.z+v.z*b.w);
+}
+float shadowTap(int slot,vec3 d,float range){
+ vec3 a=abs(d);
+ int face=a.x>=a.y&&a.x>=a.z?(d.x>0.0?0:1):a.y>=a.z?(d.y>0.0?2:3):(d.z>0.0?4:5);
+ vec3 forward=ShadowFace[face],up=ShadowUp[face];
+ vec2 st=vec2(dot(d,cross(forward,up)),dot(d,up))/dot(d,forward)*0.5+0.5;
+ return texture(lampShadows,vec4(st,float(slot*6+face),length(d)/range-0.004));
+}
+// Shadow-mapped single scattering: light pours through gaps and stops at walls.
+// Jittered on the Bayer grid; compose denoises it with the lamp shadows.
+float lampShafts(float depth,float jitter){
+ if(lampGrid.flags.x==0||lampGrid.size.w==0)return 0.0;
+ float far=min(depth<0.0?-depth:depth>0.02&&depth<p.grade.w?depth:30.0,24.0);
+ vec3 ray=viewPosition(uv,1.0);
+ vec3 eye=lampGrid.eye.xyz,direction=normalize(worldFromView(ray)-eye);
+ const int Steps=16;float sum=0.0;
+ for(int s=0;s<Steps;++s){
+  float t=far*(float(s)+jitter)/float(Steps);
+  vec3 world=worldFromView(ray*t);
+  ivec3 cell=ivec3(floor((world-lampGrid.origin.xyz)/lampGrid.origin.w));
+  if(any(lessThan(cell,ivec3(0)))||any(greaterThanEqual(cell,lampGrid.size.xyz)))continue;
+  int base=((cell.z*lampGrid.size.y+cell.y)*lampGrid.size.x+cell.x)*16;
+  for(int k=0;k<4;++k){
+   uint entry=lampGrid.cells[base+k];if(entry==0u)break;
+   int index=int(entry)-1;vec4 lamp=lampGrid.lamps[index*2],params=lampGrid.lamps[index*2+1];
+   vec3 toLamp=lamp.xyz-world;float d2=dot(toLamp,toLamp),r2=lamp.w*lamp.w;if(d2>=r2)continue;
+   float fade=1.0-d2/r2,falloff=params.x*fade*fade/(0.35+d2*0.6);
+   float visible=params.y>=0.0?shadowTap(int(params.y),-toLamp,lamp.w):1.0;
+   // Mild forward scattering (Henyey-Greenstein, g=0.3) toward the viewer.
+   float c=dot(direction,toLamp*inversesqrt(max(d2,1e-4)));float phase=0.75/pow(1.09-0.6*c,1.5);
+   sum+=falloff*visible*phase;
+  }
+ }
+ return sum*far/float(Steps)*length(ray);
+}
+
 void main(){
- float depth=depthAt(uv);
- if(depth<0.02||depth>=min(p.grade.w,60.0)){outColor=vec4(1.0);return;} // negative: viewmodel
+ float depth=depthAt(uv);float jitter=bayer4(gl_FragCoord.xy);
+ // g: shadowed shafts, b: 1 when they replace the compose stage's analytic glow.
+ float shafts=lampShafts(depth,jitter),shaftFlag=lampGrid.flags.x!=0?1.0:0.0;
+ if(depth<0.02||depth>=min(p.grade.w,60.0)){outColor=vec4(1.0,shafts,shaftFlag,1.0);return;} // negative: viewmodel
  vec3 center=viewPosition(uv,depth);
- outColor=vec4(lampVisibility(center,viewNormal(uv,center),bayer4(gl_FragCoord.xy)),0.0,0.0,1.0);
+ outColor=vec4(lampVisibility(center,viewNormal(uv,center),jitter),shafts,shaftFlag,1.0);
 }

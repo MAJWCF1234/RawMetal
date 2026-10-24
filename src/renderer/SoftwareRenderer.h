@@ -16,6 +16,8 @@ public:
     ~SoftwareRenderer();
     bool enableHardware(void* window=nullptr);
     bool hardwareActive()const{return bool(m_gpu);}
+    // Windowed path: the post-processed scene of the last frame as a PPM.
+    bool saveSceneCapture(const char* path);
     bool hardwarePresentsWindow()const;
     std::uint64_t vrMirrorFrames()const;
     std::array<std::uint64_t,4> atlasUploadStatistics()const;
@@ -50,6 +52,10 @@ public:
     // Per-pixel lamps with cube shadow maps on the static world (Vulkan only).
     static void setPixelLighting(bool enabled);
     static bool pixelLighting();
+    // Close-up procedural detail layer on per-pixel-lit surfaces.
+    // 0 off, 1 on, 2 debug: raw field, 3 debug: detail normal.
+    static void setDetailLayer(int mode);
+    static int detailLayer();
     float gripError()const{return m_gripError;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,

@@ -7,7 +7,7 @@ layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects;
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;} stereo;
 // Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
 // lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot.
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 lamps[512];uint cells[];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 lamps[512];uint cells[];} lampGrid;
 // Six radial-depth faces per lamp, compared in hardware with bilinear PCF.
 layout(set=1,binding=3) uniform sampler2DArrayShadow lampShadows;
 layout(location=0) in vec2 uv;
@@ -34,18 +34,37 @@ const vec3 ShadowFace[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,
 const vec3 ShadowUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,1,0),vec3(0,1,0));
 // d runs from the lamp to the (normal-offset) receiver. A 3x3 grid of
 // bilinear comparisons gives a smooth 4x4-texel penumbra without noise.
-float lampShadow(int slot,vec3 d,float range){
+float lampShadow(int slot,vec3 d,float range,float bias){
  vec3 a=abs(d);
  int face=a.x>=a.y&&a.x>=a.z?(d.x>0.0?0:1):a.y>=a.z?(d.y>0.0?2:3):(d.z>0.0?4:5);
  vec3 forward=ShadowFace[face],up=ShadowUp[face],right=cross(forward,up);
  float w=dot(d,forward);
  vec2 st=vec2(dot(d,right),dot(d,up))/w*0.5+0.5;
  vec2 texel=1.0/vec2(textureSize(lampShadows,0).xy);
- float reference=length(d)/range-0.002,layer=float(slot*6+face),sum=0.0;
+ float reference=length(d)/range-bias,layer=float(slot*6+face),sum=0.0;
  for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x)
   sum+=texture(lampShadows,vec4(clamp(st+vec2(x,y)*texel,texel*0.5,1.0-texel*0.5),layer,reference));
  return sum/9.0;
 }
+
+// Close-up detail: a procedural grain layer in texture space, about four
+// features per source texel. Like Source's detail textures it fades in once a
+// texel spans several pixels, so magnified PSX art keeps micro-structure for
+// the per-pixel lamps instead of collapsing into flat blocks.
+// Integer lattice hash: a float-fraction hash at coordinates in the thousands
+// evaluated shared corners through different rounding paths (FMA on one side)
+// and tore seams into the noise at every cell edge.
+float detailHash(ivec2 c){uvec2 q=uvec2(c+ivec2(65536));uint h=q.x*1664525u+q.y*1013904223u;h^=h>>16;h*=0x7feb352du;h^=h>>15;h*=0x846ca68bu;h^=h>>16;return float(h&0xffffffu)/16777216.0;}
+float detailNoise(vec2 p){ivec2 i=ivec2(floor(p));vec2 f=fract(p);f=f*f*(3.0-2.0*f);
+ return mix(mix(detailHash(i),detailHash(i+ivec2(1,0)),f.x),mix(detailHash(i+ivec2(0,1)),detailHash(i+ivec2(1,1)),f.x),f.y);}
+// cellPixels: screen pixels per detail cell. Octaves finer than ~2 px fade out
+// so the grain never sparkles in motion.
+float detailField(vec2 p,float cellPixels){
+ float w1=smoothstep(1.5,3.0,cellPixels/2.17),w2=smoothstep(1.5,3.0,cellPixels/4.9);
+ return (detailNoise(p)*0.6+detailNoise(p*2.17+vec2(7.1,3.3))*0.28*w1+detailNoise(p*4.9+vec2(1.7,9.2))*0.12*w2)/(0.6+0.28*w1+0.12*w2);
+}
+// Whiteout blend of a detail normal onto a base tangent-space normal.
+vec3 blendDetail(vec3 base,vec3 detail){return normalize(vec3(base.xy+detail.xy,base.z*detail.z));}
 
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
 vec3 toDisplay(vec3 c){return pow(max(c,vec3(0.0)),vec3(1.0/2.2));}
@@ -126,9 +145,19 @@ void main(){
  vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
 
  float materialDistance=length(worldPos-view.eyeYaw.xyz);
- float parallaxFade=1.0-smoothstep(8.0,18.0,materialDistance);
+ // Magnification: screen pixels per source texel. Past a few pixels the relief
+ // map and texel snapping become flat blocks that jump at texel edges, so they
+ // fade out and the detail layer fades in.
+ vec2 atlasSize=vec2(textureSize(colorMap,0));
+ vec2 texelFootprint=(abs(uvDx)+abs(uvDy))*atlasSize;
+ float pixelsPerTexel=1.0/max(max(texelFootprint.x,texelFootprint.y),0.0001);
+ float closeup=smoothstep(2.5,9.0,pixelsPerTexel);
+ // Detail feeds the per-pixel lamps, so it follows the same switch.
+ bool staticWorld=lampGrid.flags.x!=0&&lampGrid.flags.y!=0&&surface.z<0.5&&surface.w>0.5&&surface.w<1.5;
+ float detailAmount=staticWorld?closeup:0.0;
+ float parallaxFade=(1.0-smoothstep(8.0,18.0,materialDistance))*(1.0-smoothstep(4.0,9.0,pixelsPerTexel));
  bool parallaxMaterial=parallaxScale>0.0&&surface.z<0.5&&parallaxFade>0.001;
- bool litMaterial=lighting.w>0.5||light0.w+light1.w>0.0;
+ bool litMaterial=lighting.w>0.5||light0.w+light1.w>0.0||detailAmount>0.001;
  vec3 tangent=vec3(0.0),bitangent=vec3(0.0),geometricNormal=vec3(0.0);
  bool tangentFrameValid=false;
  if(parallaxMaterial||litMaterial){
@@ -160,19 +189,27 @@ void main(){
    sampleUV=uv+direction*(0.5-height)*parallaxScale*parallaxFade*grazingFade;
  }
 
- if(stereo.enabled.y>0.5)sampleUV=crispTexelUV(sampleUV,uvDx,uvDy);
+ if(stereo.enabled.y>0.5)sampleUV=mix(crispTexelUV(sampleUV,uvDx,uvDy),sampleUV,smoothstep(5.0,11.0,pixelsPerTexel));
  vec4 color=textureGrad(colorMap,sampleUV,uvDx,uvDy);
  if(color.a<(surface.z>0.5?0.01:0.5))discard;
+ vec3 detailNormal=vec3(0.0,0.0,1.0);float detailValue=0.5;
+ if(detailAmount>0.001){
+  vec2 dp=uv*atlasSize*2.5;const float e=0.3;float cellPixels=pixelsPerTexel*0.4;
+  float h=detailField(dp,cellPixels),hx=detailField(dp+vec2(e,0.0),cellPixels),hy=detailField(dp+vec2(0.0,e),cellPixels);
+  detailValue=h;color.rgb*=1.0+(h-0.5)*0.22*detailAmount;
+  detailNormal=normalize(vec3(-(hx-h)/e*0.7*detailAmount,-(hy-h)/e*0.7*detailAmount,1.0));
+ }
 
  float vertexLight=lighting.y;
  float specularLight=0.0;
  float waterFresnel=0.0;
- vec3 n=vec3(0.0,0.0,1.0);float normalLength=1.0;
+ vec3 n=vec3(0.0,0.0,1.0);float normalLength=1.0;vec3 baseNormalDebug=vec3(0.0,0.0,1.0);
 
  if(lighting.w>0.5||light0.w+light1.w>0.0){
   vec4 filteredNormal=lighting.w>0.5?textureGrad(normalMap,sampleUV,uvDx,uvDy):vec4(0.0,0.0,1.0,1.0);
   normalLength=length(filteredNormal.xyz);
-  n=normalLength>0.000001?filteredNormal.xyz/normalLength:vec3(0.0,0.0,1.0);
+  n=normalLength>0.000001?filteredNormal.xyz/normalLength:vec3(0.0,0.0,1.0);baseNormalDebug=n;
+  if(detailAmount>0.001)n=blendDetail(n,detailNormal);
   float response=0.22+light0.w*max(0,dot(n,light0.xyz))+light1.w*max(0,dot(n,light1.xyz));
   vertexLight*=clamp(response/lighting.z,0.35,1.8);
 
@@ -212,7 +249,7 @@ void main(){
   vec3 V=normalize(view.eyeYaw.xyz-worldPos);
   vec3 Ng=normalize(cross(dx,dy));if(dot(Ng,V)<0.0)Ng=-Ng;
   vec3 N=Ng;
-  if(lighting.w>0.5&&tangentFrameValid){
+  if((lighting.w>0.5||detailAmount>0.001)&&tangentFrameValid){
    vec3 T=normalize(tangent-Ng*dot(Ng,tangent));
    vec3 B=bitangent-Ng*dot(Ng,bitangent);B=normalize(B-T*dot(T,B));
    N=normalize(T*n.x+B*n.y+Ng*max(n.z,0.05));
@@ -234,7 +271,14 @@ void main(){
     float distance=sqrt(d2);vec3 L=toLamp/distance;
     float geometric=dot(Ng,L);if(geometric<=0.0)continue;
     float shadow=1.0;
-    if(params.y>=0.0&&falloff>0.003)shadow=lampShadow(int(params.y),worldPos+Ng*(0.015+0.012*distance)-lamp.xyz,lamp.w);
+    if(params.y>=0.0&&falloff>0.003){
+     // Slope-scaled bias in shadow texels: a texel covers about 2d/256 m at
+     // distance d, and a receiver at a grazing angle spans several texels of depth.
+     float texelWorld=distance*2.0/float(textureSize(lampShadows,0).x);
+     float slope=clamp(sqrt(max(1.0-geometric*geometric,0.0))/max(geometric,0.05),0.0,8.0);
+     vec3 receiver=worldPos+Ng*texelWorld*(1.0+slope)+L*texelWorld*0.5;
+     shadow=lampShadow(int(params.y),receiver-lamp.xyz,lamp.w,texelWorld*(1.0+0.5*slope)/lamp.w);
+    }
     if(shadow<=0.0)continue;
     // Soft terminator: normal maps never cut a lit face to black.
     lampLight+=falloff*shadow*(0.04+0.96*max(dot(N,L),0.0))*smoothstep(0.0,0.12,geometric);
@@ -320,6 +364,12 @@ void main(){
   result+=toLinear(vec3(0.98,0.90,0.78))*scatter*1.0;
  }
 
+ if(lampGrid.flags.y==2&&detailAmount>0.001)result=vec3(detailValue*0.5);
+ if(lampGrid.flags.y==3&&detailAmount>0.001)result=detailNormal*0.5+0.5;
+ if(lampGrid.flags.y==7)result=vec3(clamp(pixelsPerTexel/64.0,0.0,1.0),fract(uv.y*atlasSize.y*2.5),fract(uv.x*atlasSize.x*2.5));
+ if(lampGrid.flags.y==6)result=baseNormalDebug*0.5+0.5;
+ if(lampGrid.flags.y==5)result=vec3(clamp(abs(uv.x)/64.0,0.0,1.0),clamp(abs(uv.y)/64.0,0.0,1.0),surface.w*0.25);
+ if(lampGrid.flags.y==4)result=vec3(fract(uv.x*atlasSize.x),fract(uv.y*atlasSize.y*4.0),fract(worldPos.z*256.0));
  float alpha=surface.z>1.5?color.a:1;
  // HDR opaque surfaces store planar camera depth in alpha for the post pass;
  // blended pipelines keep the destination alpha, so water stays a blend factor.

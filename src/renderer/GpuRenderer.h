@@ -24,7 +24,7 @@ public:
  void clearStaticCaches();
  // Static lamps (world x, y, z, range, intensity) lit per pixel with cube
  // shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
- void setLamps(const std::vector<std::array<float,5>>& lamps,bool enabled);
+ void setLamps(const std::vector<std::array<float,5>>& lamps,bool enabled,int detail=1);
  std::uint64_t shadowFacesDrawn()const;
  std::uint64_t staticCacheHits()const;
  void prepare(const SoftwareRenderer::Texture& texture);
@@ -33,6 +33,9 @@ public:
  // Images, transfer submissions, staging allocations, uploaded bytes.
  std::array<std::uint64_t,4> uploadStatistics()const;
  void captureVrEye(std::vector<std::uint32_t>& pixels);
+ // Windowed path: read back the post-processed scene (before the HUD
+ // composite) of the last presented frame, tone mapped like headless frames.
+ void captureScene(std::vector<std::uint32_t>& pixels,int& width,int& height);
  void updateDynamic(const SoftwareRenderer::Texture& texture);
  void clearDepth();
  // Vulkan 1.0 vertex-stage work. One six-sided light record per actor,

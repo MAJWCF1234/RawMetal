@@ -340,7 +340,7 @@ struct GpuRenderer::Impl {
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
  // Post pass (HDR, non-VR): reads scene RGB + planar depth in alpha, writes the
  // final linear image that both readback and the window composite consume.
- struct FullscreenStage{Image image;VkRenderPass pass=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;VkPipeline pipeline=VK_NULL_HANDLE;VkPipelineLayout layout=VK_NULL_HANDLE;
+ struct FullscreenStage{bool lampAccess=false;Image image;VkRenderPass pass=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;VkPipeline pipeline=VK_NULL_HANDLE;VkPipelineLayout layout=VK_NULL_HANDLE;
   VkDescriptorSetLayout setLayout=VK_NULL_HANDLE;VkDescriptorPool pool=VK_NULL_HANDLE;std::array<VkDescriptorSet,FrameCount> sets{};uint32_t samplers=1;};
  // Occlusion stage: AO + one-bounce light. Compose stage: denoise, haze,
  // volumetric lamps, bloom, grade. Both read scene RGB + planar depth (alpha).
@@ -371,7 +371,8 @@ struct GpuRenderer::Impl {
  // a radial-depth shadow atlas, drawn from the static caches and reused until
  // geometry near it is rebuilt or the resident lamp set changes.
  static constexpr int MaxLamps=256,LampsPerCell=16,MaxLampCells=16384;static constexpr uint32_t ShadowSize=256;
- struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];};
+ // eye/basis: the scene camera, rewritten every frame for the post stages.
+ struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];};
  static constexpr size_t LampBufferBytes=sizeof(LampHeader)+size_t(MaxLamps)*2*16+size_t(MaxLampCells)*LampsPerCell*4;
  std::array<Buffer,FrameCount> lampBuffers{};std::array<uint64_t,FrameCount> lampUploaded{};
  std::vector<uint8_t> lampData;uint64_t lampGeneration=1,lampKey=0;bool pixelLighting=false;
@@ -407,6 +408,12 @@ struct GpuRenderer::Impl {
   if(!shadowLayoutReady){
    VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=shadowAtlas.handle;b.subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,uint32_t(shadowCapacity)*6};b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&b);shadowLayoutReady=true;
+   // Faces not drawn yet read as "nothing blocks the lamp": clear the atlas to far.
+   VkImageMemoryBarrier toClear=b;toClear.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;toClear.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;toClear.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;toClear.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+   vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&toClear);
+   VkClearDepthStencilValue farDepth{1.f,0};VkImageSubresourceRange all{VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,uint32_t(shadowCapacity)*6};vkCmdClearDepthStencilImage(cmd,shadowAtlas.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&farDepth,1,&all);
+   VkImageMemoryBarrier toRead=b;toRead.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;toRead.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;toRead.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;toRead.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+   vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&toRead);
   }
   // A rebuilt cache stales only the lamps whose range reaches it.
   for(const auto&bounds:shadowDirtyBounds)for(size_t i=0;i<lamps.size();++i){
@@ -414,13 +421,19 @@ struct GpuRenderer::Impl {
    if(d2<lamp[3]*lamp[3]&&!lampDirty[i])lampDirty[i]=1;
   }
   shadowDirtyBounds.clear();
-  // New lamps draw at once; stale ones refresh at most 32 per frame.
-  int staleBudget=32;
+  // A streamed chunk can bring dozens of lamps at once; six faces each in
+  // one frame spiked the lift fall past 50 ms. Draw the nearest dirty lamps
+  // first, a bounded number per frame; undrawn faces read as unblocked.
+  // A cold start (nothing drawn yet) takes the whole set in one frame, so the
+  // first frame of a map is complete; the budget covers lamps streamed in later.
+  bool coldStart=true;for(size_t i=0;i<std::min(lamps.size(),size_t(shadowCapacity));++i)if(lampDirty[i]!=2){coldStart=false;break;}
+  const int budget=coldStart?int(lamps.size()):10;std::vector<std::pair<float,size_t>> queue;
+  for(size_t i=0;i<std::min(lamps.size(),size_t(shadowCapacity));++i)if(lampDirty[i]){float dx=lamps[i][0]-viewState[0],dy=lamps[i][1]-viewState[1],dz=lamps[i][2]-viewState[2];queue.push_back({dx*dx+dy*dy+dz*dz,i});}
+  if(queue.empty())return;
+  if(int(queue.size())>budget){std::nth_element(queue.begin(),queue.begin()+budget,queue.end());queue.resize(size_t(budget));}
   VkViewport viewport{0,0,float(ShadowSize),float(ShadowSize),0,1};VkRect2D scissor{{0,0},{ShadowSize,ShadowSize}};
   VkClearValue clear{};clear.depthStencil={1,0};
-  size_t count=std::min(lamps.size(),size_t(shadowCapacity));
-  for(size_t i=0;i<count;++i){
-   if(!lampDirty[i]||(lampDirty[i]==1&&staleBudget<=0))continue;if(lampDirty[i]==1)--staleBudget;lampDirty[i]=0;
+  for(const auto&entry:queue){size_t i=entry.second;lampDirty[i]=0;
    const auto&lamp=lamps[i];float range2=lamp[3]*lamp[3];
    for(int face=0;face<6;++face){
     VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};begin.renderPass=shadowPass;begin.framebuffer=shadowFrames[i*6+size_t(face)];begin.renderArea.extent={ShadowSize,ShadowSize};begin.clearValueCount=1;begin.pClearValues=&clear;
@@ -779,16 +792,18 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  }catch(...){if(vert)vkDestroyShaderModule(m->device,vert,nullptr);if(frag)vkDestroyShaderModule(m->device,frag,nullptr);if(actorVert)vkDestroyShaderModule(m->device,actorVert,nullptr);throw;}vkDestroyShaderModule(m->device,vert,nullptr);vkDestroyShaderModule(m->device,frag,nullptr);vkDestroyShaderModule(m->device,actorVert,nullptr);
  // Post stages: fullscreen draws reading the resolved scene (and earlier stages).
  if(m->hdrScene&&!m->vrMode){
-  auto buildStage=[&](Impl::FullscreenStage& stage,const uint32_t* code,size_t codeSize,uint32_t samplers,const char* name){
-   stage.samplers=samplers;
+  auto buildStage=[&](Impl::FullscreenStage& stage,const uint32_t* code,size_t codeSize,uint32_t samplers,const char* name,bool lampAccess=false){
+   stage.samplers=samplers;stage.lampAccess=lampAccess;
    VkAttachmentDescription a{};a.format=m->sceneFormat;a.samples=VK_SAMPLE_COUNT_1_BIT;a.loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;a.storeOp=VK_ATTACHMENT_STORE_OP_STORE;a.stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;a.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;a.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;a.finalLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
    VkAttachmentReference ref{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};VkSubpassDescription sp{};sp.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;sp.colorAttachmentCount=1;sp.pColorAttachments=&ref;
    VkSubpassDependency pd[2]{};pd[0].srcSubpass=VK_SUBPASS_EXTERNAL;pd[0].dstSubpass=0;pd[0].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;pd[0].dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT;
    pd[1].srcSubpass=0;pd[1].dstSubpass=VK_SUBPASS_EXTERNAL;pd[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;pd[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;pd[1].dstStageMask=VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;
    VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};rp.attachmentCount=1;rp.pAttachments=&a;rp.subpassCount=1;rp.pSubpasses=&sp;rp.dependencyCount=2;rp.pDependencies=pd;check(vkCreateRenderPass(m->device,&rp,nullptr,&stage.pass),name);
-   VkDescriptorSetLayoutBinding pb[3]{};for(uint32_t i=0;i<samplers;++i){pb[i].binding=i;pb[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;pb[i].descriptorCount=1;pb[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
-   VkDescriptorSetLayoutCreateInfo psl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};psl.bindingCount=samplers;psl.pBindings=pb;check(vkCreateDescriptorSetLayout(m->device,&psl,nullptr,&stage.setLayout),name);
-   VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,uint32_t(Impl::FrameCount)*samplers};VkDescriptorPoolCreateInfo pp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};pp.maxSets=uint32_t(Impl::FrameCount);pp.poolSizeCount=1;pp.pPoolSizes=&ps;check(vkCreateDescriptorPool(m->device,&pp,nullptr,&stage.pool),name);
+   VkDescriptorSetLayoutBinding pb[5]{};for(uint32_t i=0;i<samplers;++i){pb[i].binding=i;pb[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;pb[i].descriptorCount=1;pb[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
+   // Lamp access: the lamp grid and the cube shadow atlas follow the images.
+   if(lampAccess){pb[samplers]={samplers,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};pb[samplers+1]={samplers+1,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};}
+   VkDescriptorSetLayoutCreateInfo psl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};psl.bindingCount=samplers+(lampAccess?2u:0u);psl.pBindings=pb;check(vkCreateDescriptorSetLayout(m->device,&psl,nullptr,&stage.setLayout),name);
+   VkDescriptorPoolSize ps[2]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,uint32_t(Impl::FrameCount)*(samplers+(lampAccess?1u:0u))},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,uint32_t(Impl::FrameCount)}};VkDescriptorPoolCreateInfo pp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};pp.maxSets=uint32_t(Impl::FrameCount);pp.poolSizeCount=lampAccess?2u:1u;pp.pPoolSizes=ps;check(vkCreateDescriptorPool(m->device,&pp,nullptr,&stage.pool),name);
    std::array<VkDescriptorSetLayout,Impl::FrameCount> setLayouts;setLayouts.fill(stage.setLayout);VkDescriptorSetAllocateInfo pa{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};pa.descriptorPool=stage.pool;pa.descriptorSetCount=uint32_t(Impl::FrameCount);pa.pSetLayouts=setLayouts.data();check(vkAllocateDescriptorSets(m->device,&pa,stage.sets.data()),name);
    VkPushConstantRange postPush{VK_SHADER_STAGE_FRAGMENT_BIT,0,32*sizeof(float)};VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pl.setLayoutCount=1;pl.pSetLayouts=&stage.setLayout;pl.pushConstantRangeCount=1;pl.pPushConstantRanges=&postPush;check(vkCreatePipelineLayout(m->device,&pl,nullptr,&stage.layout),name);
    VkShaderModule pv=VK_NULL_HANDLE,pf=VK_NULL_HANDLE;
@@ -806,7 +821,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
    vkDestroyShaderModule(m->device,pv,nullptr);vkDestroyShaderModule(m->device,pf,nullptr);
   };
   buildStage(m->occlusionStage,occlusionFragmentShader,sizeof(occlusionFragmentShader),1,"Create occlusion post stage");
-  buildStage(m->shadowStage,shadowFragmentShader,sizeof(shadowFragmentShader),1,"Create shadow post stage");
+  buildStage(m->shadowStage,shadowFragmentShader,sizeof(shadowFragmentShader),1,"Create shadow post stage",true);
   buildStage(m->composeStage,postFragmentShader,sizeof(postFragmentShader),3,"Create compose post stage");
   m->postAvailable=true;
  }
@@ -829,6 +844,28 @@ std::pair<int,int> GpuRenderer::surfaceExtent()const{
  return {int(extent.width),int(extent.height)};
 }
 void GpuRenderer::captureVrEye(std::vector<std::uint32_t>&pixels){if(!m->vrMode)throw std::runtime_error("Eye capture requires VR");Buffer capture;try{m->flushUploads();m->makeBuffer(capture,VkDeviceSize(m->swapExtent.width)*m->swapExtent.height*4,VK_BUFFER_USAGE_TRANSFER_DST_BIT);m->startUploadCommands();VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={m->swapExtent.width,m->swapExtent.height,1};vkCmdCopyImageToBuffer(m->uploadCommand,m->vrOutputs[m->vrEye].handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,capture.handle,1,&copy);VkMemoryBarrier host{VK_STRUCTURE_TYPE_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;vkCmdPipelineBarrier(m->uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&host,0,nullptr,0,nullptr);m->submitUploadCommands();pixels.resize(size_t(m->swapExtent.width)*m->swapExtent.height);auto source=static_cast<const uint8_t*>(capture.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(uint32_t(source[i*4])<<16)|(uint32_t(source[i*4+1])<<8)|source[i*4+2];m->destroy(capture);}catch(...){m->destroy(capture);throw;}}
+void GpuRenderer::captureScene(std::vector<std::uint32_t>&pixels,int&width,int&height){
+ if(!m->surface)throw std::runtime_error("Scene capture requires a window");
+ vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
+ width=m->width;height=m->height;auto&image=m->finalImage();
+ size_t bytes=size_t(width)*height*(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT?8:m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT?16:4);
+ if(m->readback.size<bytes){m->destroy(m->readback);m->makeBuffer(m->readback,bytes,VK_BUFFER_USAGE_TRANSFER_DST_BIT);}
+ m->startUploadCommands();
+ // present() left the image in shader-read layout for the composite.
+ m->barrier(image,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,1,m->uploadCommand);
+ VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={uint32_t(width),uint32_t(height),1};
+ vkCmdCopyImageToBuffer(m->uploadCommand,image.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,m->readback.handle,1,&copy);
+ VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;host.srcQueueFamilyIndex=host.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;host.buffer=m->readback.handle;host.size=VK_WHOLE_SIZE;
+ vkCmdPipelineBarrier(m->uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,nullptr,1,&host,0,nullptr);
+ m->barrier(image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_TRANSFER_READ_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,m->uploadCommand);
+ m->submitUploadCommands();
+ pixels.resize(size_t(width)*height);
+ auto half=[](uint16_t bits){float value;if((bits&0x7c00u)==0x7c00u)value=(bits&0x03ffu)?std::numeric_limits<float>::quiet_NaN():std::numeric_limits<float>::infinity();else if((bits&0x7c00u)==0)value=std::ldexp(float(bits&0x03ffu),-24);else value=std::ldexp(1.f+float(bits&0x03ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;};
+ auto display=[](float value){value=std::max(0.f,value)*1.05f;float mapped=std::clamp((value*(2.51f*value+.03f))/(value*(2.43f*value+.59f)+.14f),0.f,1.f);return uint32_t(std::clamp(int(std::lround(std::pow(mapped,1.f/2.2f)*255.f)),0,255));};
+ if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(display(half(source[i*4]))<<16)|(display(half(source[i*4+1]))<<8)|display(half(source[i*4+2]));}
+ else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=0xff000000u|(display(source[i*4])<<16)|(display(source[i*4+1])<<8)|display(source[i*4+2]);}
+ else std::memcpy(pixels.data(),m->readback.mapped,pixels.size()*4);
+}
 void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
  auto key=m->material(texture);m->flushUploads();auto&material=m->materials.at(key);auto&image=material.color;
  int scale=SoftwareRenderer::texturePresentScale();if(scale!=1&&scale!=2&&scale!=4)scale=1;
@@ -923,15 +960,15 @@ void GpuRenderer::endStaticCache(){
  }
  Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);
 }
-void GpuRenderer::setLamps(const std::vector<std::array<float,5>>&input,bool enabled){
+void GpuRenderer::setLamps(const std::vector<std::array<float,5>>&input,bool enabled,int detail){
  size_t count=std::min(input.size(),size_t(Impl::MaxLamps));
- uint64_t key=1469598103934665603ull;auto mix=[&](uint32_t value){key^=value;key*=1099511628211ull;};mix(enabled?1u:0u);mix(uint32_t(count));
+ uint64_t key=1469598103934665603ull;auto mix=[&](uint32_t value){key^=value;key*=1099511628211ull;};mix(enabled?1u:0u);mix(uint32_t(detail));mix(uint32_t(count));
  for(size_t i=0;i<count;++i)for(float value:input[i])mix(std::bit_cast<uint32_t>(value));
  if(key==m->lampKey)return;
  m->lampKey=key;m->pixelLighting=enabled;m->lamps.assign(input.begin(),input.begin()+std::ptrdiff_t(count));m->lampDirty.assign(count,uint8_t(2));
  if(enabled&&int(count)>m->shadowCapacity)m->createShadowAtlas(int((count+15)/16*16));
  // World-space grid; each cell keeps the 16 lamps that can light it most.
- Impl::LampHeader header{};header.flags[0]=enabled?1:0;header.size[3]=int(count);
+ Impl::LampHeader header{};header.flags[0]=enabled?1:0;header.flags[1]=detail;header.size[3]=int(count);
  std::vector<uint32_t> cells;
  if(count){
   float lo[3]={1e30f,1e30f,1e30f},hi[3]={-1e30f,-1e30f,-1e30f};
@@ -1056,6 +1093,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
 }
 void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  if(m->lampUploaded[m->frameIndex]!=m->lampGeneration&&!m->lampData.empty()){std::memcpy(m->lampBuffers[m->frameIndex].mapped,m->lampData.data(),std::min(m->lampData.size(),Impl::LampBufferBytes));m->lampUploaded[m->frameIndex]=m->lampGeneration;}
+ {const auto&v=m->viewState;float camera[8]={v[0],v[1],v[2],0,v[3],v[4],v[5],v[6]};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,eye),camera,sizeof(camera));}
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
  m->flushUploads();
@@ -1119,8 +1157,13 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    float right=-dx*v[4]+dy*v[3],forward=dx*v[3]+dy*v[4];
    params[16+i*4]=right;params[17+i*4]=dz*v[5]-forward*v[6];params[18+i*4]=forward*v[5]+dz*v[6];params[19+i*4]=m->vrProjection[20+size_t(i)];}
   auto runStage=[&](Impl::FullscreenStage& stage,std::initializer_list<VkImageView> sources){
-   VkDescriptorImageInfo images[3]{};VkWriteDescriptorSet writes[3]{};uint32_t count=0;
+   VkDescriptorImageInfo images[4]{};VkWriteDescriptorSet writes[5]{};uint32_t count=0;
    for(auto view:sources){images[count]={m->sceneSampler,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&w=writes[count];w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=stage.sets[m->frameIndex];w.dstBinding=count;w.descriptorCount=1;w.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w.pImageInfo=&images[count];++count;}
+   VkDescriptorBufferInfo lampInfo{m->lampBuffers[m->frameIndex].handle,0,Impl::LampBufferBytes};
+   if(stage.lampAccess){
+    auto&grid=writes[count];grid.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;grid.dstSet=stage.sets[m->frameIndex];grid.dstBinding=count;grid.descriptorCount=1;grid.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;grid.pBufferInfo=&lampInfo;
+    images[count]={m->shadowSampler,m->shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&atlas=writes[count+1];atlas.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;atlas.dstSet=stage.sets[m->frameIndex];atlas.dstBinding=count+1;atlas.descriptorCount=1;atlas.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;atlas.pImageInfo=&images[count];count+=2;
+   }
    vkUpdateDescriptorSets(m->device,count,writes,0,nullptr);
    VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};begin.renderPass=stage.pass;begin.framebuffer=stage.framebuffer;begin.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};
    vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);

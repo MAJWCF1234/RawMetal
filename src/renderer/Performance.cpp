@@ -322,8 +322,10 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
   // Per-pixel lamps: shadow faces are drawn and the lit image departs from the bake.
   auto lit=Game::mapInspection({3.5f,4.5f},0,-6,0,false,0,true);
   renderer.m_gpu->clearStaticCaches();renderer.render(lit);auto baked=renderer.m_pixels;
-  SoftwareRenderer::setPixelLighting(true);auto faces=renderer.m_gpu->shadowFacesDrawn();renderer.render(lit);auto pixel=renderer.m_pixels;auto drawn=renderer.m_gpu->shadowFacesDrawn()-faces;
-  renderer.render(lit);bool stable=pixel==renderer.m_pixels&&renderer.m_gpu->shadowFacesDrawn()-faces==drawn;
+  // Shadow faces are drawn a bounded number of lamps per frame; settle first.
+  SoftwareRenderer::setPixelLighting(true);auto faces=renderer.m_gpu->shadowFacesDrawn();std::uint64_t drawn=0;
+  for(int settle=0;settle<12;++settle){renderer.render(lit);auto total=renderer.m_gpu->shadowFacesDrawn()-faces;if(total==drawn)break;drawn=total;}
+  auto pixel=renderer.m_pixels;renderer.render(lit);bool stable=pixel==renderer.m_pixels&&renderer.m_gpu->shadowFacesDrawn()-faces==drawn;
   size_t changed=0;for(size_t i=0;i<baked.size();++i)changed+=baked[i]!=pixel[i];
   report<<"Per-pixel lamps: "<<drawn<<" shadow faces drawn, "<<changed<<" pixels differ from the bake\n";
   check(drawn>=6&&drawn%6==0&&changed>baked.size()/20,"Per-pixel lamps draw cube shadow faces and relight the static world");
