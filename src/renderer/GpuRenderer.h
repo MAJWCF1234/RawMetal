@@ -22,6 +22,10 @@ public:
  bool beginStaticCache(int slot,std::uint64_t key);
  void endStaticCache();
  void clearStaticCaches();
+ // Static lamps (world x, y, z, range, intensity) lit per pixel with cube
+ // shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
+ void setLamps(const std::vector<std::array<float,5>>& lamps,bool enabled);
+ std::uint64_t shadowFacesDrawn()const;
  std::uint64_t staticCacheHits()const;
  void prepare(const SoftwareRenderer::Texture& texture);
  // prepare/submit collect immutable atlases; finish flushes them before draw.

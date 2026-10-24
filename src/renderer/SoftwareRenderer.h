@@ -47,6 +47,9 @@ public:
     static bool crispTexels();
     static void setPostProcessing(bool enabled,bool occlusionView=false);
     static bool postProcessing();
+    // Per-pixel lamps with cube shadow maps on the static world (Vulkan only).
+    static void setPixelLighting(bool enabled);
+    static bool pixelLighting();
     float gripError()const{return m_gripError;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,
@@ -78,6 +81,8 @@ private:
     void drawTrackedHands(const Game& game);
     bool m_environmentInspection=false;
     bool m_staticGeometryBuild=false;
+    // Static caches bake ambient only; Vulkan adds lamps per pixel.
+    bool m_pixelLighting=false;
     std::uint64_t m_staticGeometryBuilds=0;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0,m_presentMs=0;

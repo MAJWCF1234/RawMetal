@@ -57,7 +57,7 @@ float lampVisibility(vec3 center,vec3 normal,float jitter){
    vec3 q=center+normal*lift+dir*t;float bias=max(0.06,q.z*0.02);if(q.z<0.08)break;
    vec2 at=projectView(q);if(any(lessThan(at,vec2(0.0)))||any(greaterThan(at,vec2(1.0))))break;
    float sceneDepth=depthAt(at);
-   if(sceneDepth<0.5)continue; // the viewmodel casts no lamp shadows
+   if(sceneDepth<0.0)continue; // the viewmodel (negative depth) casts no lamp shadows
    // An occluder sits in front of the ray point, within a plausible thickness.
    if(sceneDepth<q.z-bias&&sceneDepth>q.z-0.9-bias){blocked=1.0;break;}
   }
@@ -68,7 +68,7 @@ float lampVisibility(vec3 center,vec3 normal,float jitter){
 
 void main(){
  float depth=depthAt(uv);
- if(depth<0.5||depth>=min(p.grade.w,60.0)){outColor=vec4(1.0);return;} // 0.5 m: viewmodel
+ if(depth<0.02||depth>=min(p.grade.w,60.0)){outColor=vec4(1.0);return;} // negative: viewmodel
  vec3 center=viewPosition(uv,depth);
  outColor=vec4(lampVisibility(center,viewNormal(uv,center),bayer4(gl_FragCoord.xy)),0.0,0.0,1.0);
 }

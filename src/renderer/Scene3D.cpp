@@ -142,7 +142,8 @@ float yaw=p.angle,pitch=p.pitch/140.f;
 void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const Texture& texture,float light,const NormalLighting* normalLighting){
  // With no fixture power an opaque surface has exactly unit diffuse response
  // and zero specular light. Water still needs its tangent frame for Fresnel.
- bool tangentActive=normalLighting!=nullptr&&(texture.transparent||normalLighting->weights[0]!=0.f||normalLighting->weights[1]!=0.f);bool normalActive=tangentActive&&!texture.normalLevels.empty();std::array<Point3,2> tangentLights{};float flatResponse=.22f;
+ // Per-pixel lamps keep the tangent frame (and normal map) even with no baked light.
+ bool tangentActive=normalLighting!=nullptr&&(texture.transparent||normalLighting->weights[0]!=0.f||normalLighting->weights[1]!=0.f||(m_pixelLighting&&m_staticGeometryBuild));bool normalActive=tangentActive&&!texture.normalLevels.empty();std::array<Point3,2> tangentLights{};float flatResponse=.22f;
  auto dot=[](Point3 p,Point3 q){return p.x*q.x+p.y*q.y+p.z*q.z;};
  auto unitWithSquared=[&](Point3 v,float squared){
   if(squared>1.e-30f&&squared<1.e30f)return v*(1/std::sqrt(squared));
@@ -399,7 +400,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // afterward because its cone moves every frame with yaw and pitch.
   auto positionBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
   auto normalBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*15))+15,0,30));};
-  auto key=positionBits(point.x)|(positionBits(point.y)<<12)|(positionBits(point.z)<<24)|(normalBits(normal.x)<<36)|(normalBits(normal.y)<<41)|(normalBits(normal.z)<<46);
+  // Static caches with per-pixel lamps bake ambient and contact occlusion only.
+  const bool pixelLamps=m_pixelLighting&&m_staticGeometryBuild;
+  auto key=positionBits(point.x)|(positionBits(point.y)<<12)|(positionBits(point.z)<<24)|(normalBits(normal.x)<<36)|(normalBits(normal.y)<<41)|(normalBits(normal.z)<<46)|(pixelLamps?1ull<<52:0ull);
   float brightness=0;auto cached=m_lightingCache.find(key);
   if(cached!=m_lightingCache.end())brightness=cached->second;
   else{
@@ -428,7 +431,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     accessibility=1.f-.68f*occlusion*.25f;
    }
    brightness=((w.outdoors()?.48f:w.definition().ambient*.55f)+.04f*std::max(normal.z,0.f))*accessibility;
-   for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];auto light=lightFrames[source].emitter;
+   if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
     auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
@@ -442,6 +445,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f,4.f);
  };
  auto normalLightingAt=[&](Point3 center){
+  if(m_pixelLighting&&m_staticGeometryBuild)return NormalLighting{};
   auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
   uint64_t key=bits(center.x)|(bits(center.y)<<12)|(bits(center.z)<<24);auto&cache=m_chunkNormalLighting[w.level()];
   auto found=movingGeometry?cache.end():cache.find(key);

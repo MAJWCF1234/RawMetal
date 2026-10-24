@@ -20,6 +20,7 @@ layout(location=6) in vec4 worldNormal;
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;} stereo;
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
 layout(std430,set=1,binding=1) readonly buffer ActorLights {ActorLighting actor[];} actors;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;} lampGrid;
 
 layout(push_constant) uniform ViewState {
  vec4 eyeYaw;
@@ -124,7 +125,8 @@ void main(){
   vec3 eye=view.eyeYaw.xyz;
   vec3 forwardWorld=normalize(vec3(view.eyeYaw.w*view.basis.y,view.basis.x*view.basis.y,view.basis.z));
 
-  if(view.effects.x>0.5){
+  // With per-pixel lamps the fragment shader lights the flashlight cone.
+  if(view.effects.x>0.5&&lampGrid.flags.x==0){
    vec3 toPoint=position.xyz-eye;
    float d2=dot(toPoint,toPoint);
 

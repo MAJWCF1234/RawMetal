@@ -64,6 +64,13 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
   NativeAtlasScope(){SoftwareRenderer::setTexturePresentScale(1);}
   ~NativeAtlasScope(){SoftwareRenderer::setTexturePresentScale(previous);}
  } nativeAtlases;
+ // Reference checks below compare against the baked vertex lamps; the
+ // per-pixel lamp path has its own check at the end.
+ struct BakedLampScope {
+  bool previous=SoftwareRenderer::pixelLighting();
+  BakedLampScope(){SoftwareRenderer::setPixelLighting(false);}
+  ~BakedLampScope(){SoftwareRenderer::setPixelLighting(previous);}
+ } bakedLamps;
  auto storage=std::make_unique<SoftwareRenderer>(128,72);auto&renderer=*storage;std::ofstream report("vulkan-test.txt");if(!renderer.enableHardware()){report<<renderer.hardwareName()<<'\n';return false;}report<<renderer.hardwareName()<<'\n';bool passed=true;
  // Material checks measure the scene shader itself, before the post pass grade.
  renderer.m_gpu->setPostProcessing(false);
@@ -311,6 +318,18 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
   check(renderer.m_staticGeometryBuilds>builds&&dim==renderer.m_pixels&&dim!=bright,"Exact authored lamp power invalidates cached emission and fixture illumination");
  }
  auto reliefScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);float reliefScale=renderer.m_wall.parallaxScale;renderer.m_wall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_wall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(changed>8,"Nearby wall relief changes the Vulkan image");
+ {
+  // Per-pixel lamps: shadow faces are drawn and the lit image departs from the bake.
+  auto lit=Game::mapInspection({3.5f,4.5f},0,-6,0,false,0,true);
+  renderer.m_gpu->clearStaticCaches();renderer.render(lit);auto baked=renderer.m_pixels;
+  SoftwareRenderer::setPixelLighting(true);auto faces=renderer.m_gpu->shadowFacesDrawn();renderer.render(lit);auto pixel=renderer.m_pixels;auto drawn=renderer.m_gpu->shadowFacesDrawn()-faces;
+  renderer.render(lit);bool stable=pixel==renderer.m_pixels&&renderer.m_gpu->shadowFacesDrawn()-faces==drawn;
+  size_t changed=0;for(size_t i=0;i<baked.size();++i)changed+=baked[i]!=pixel[i];
+  report<<"Per-pixel lamps: "<<drawn<<" shadow faces drawn, "<<changed<<" pixels differ from the bake\n";
+  check(drawn>=6&&drawn%6==0&&changed>baked.size()/20,"Per-pixel lamps draw cube shadow faces and relight the static world");
+  check(stable,"Lamp shadow maps are reused on the next frame");
+  SoftwareRenderer::setPixelLighting(false);
+ }
  check(renderer.hardwareActive(),"Hardware remains active without fallback");report<<(passed?"PASS":"FAIL")<<": Vulkan material / depth / clipping checks\n";return passed;
 }
 bool SoftwareRenderer::testGpuActors(){
