@@ -32,6 +32,7 @@ int g_texturePresentScale = 1;
 bool g_crispTexels = true;
 bool g_postProcessing = true; // GPU post pass: occlusion, haze, bloom, grade
 bool g_pixelLighting = true; // GPU per-pixel lamps with cube shadow maps
+int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){ return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
 std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t limit=3){
@@ -103,6 +104,8 @@ void SoftwareRenderer::setPostProcessing(bool enabled,bool occlusionView){g_post
 bool SoftwareRenderer::postProcessing(){return g_postProcessing;}
 void SoftwareRenderer::setPixelLighting(bool enabled){g_pixelLighting=enabled;}
 bool SoftwareRenderer::pixelLighting(){return g_pixelLighting;}
+void SoftwareRenderer::setDetailLayer(int mode){g_detailLayer=mode;}
+int SoftwareRenderer::detailLayer(){return g_detailLayer;}
 bool SoftwareRenderer::enableHardware(void* window){
  if(m_gpu)return true;
  // Delay-load the system Vulkan loader so unsupported machines can still run.
@@ -954,14 +957,16 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}
     std::nth_element(order.begin(),order.begin()+256,order.end());order.resize(256);std::sort(order.begin(),order.end(),[](const auto&a,const auto&b){return a.second<b.second;});
     std::vector<std::array<float,5>> nearest;for(auto&entry:order)nearest.push_back(lamps[entry.second]);lamps.swap(nearest);}
-   m_gpu->setLamps(lamps,m_pixelLighting);
+   m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);
   }
   m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
   m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
-  catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
+  catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';
+   // Mid-session fallbacks are rare and look like a sudden quality drop; keep an appended record for diagnosis.
+   std::ofstream("RawMetal-renderer-events.txt",std::ios::app)<<"Vulkan frame failed, falling back to software: "<<e.what()<<" (map "<<game.level()<<" at "<<game.player().pos.x<<','<<game.player().pos.y<<")\n";m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
  else scene();
  bool underwater=!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f;
  if(!directPresentation&&underwater){
@@ -1000,6 +1005,10 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
 
 
 namespace retro {
+bool SoftwareRenderer::saveSceneCapture(const char*path){
+ if(!m_gpu)return false;std::vector<uint32_t> pixels;int width=0,height=0;m_gpu->captureScene(pixels,width,height);
+ std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}return true;
+}
 void SoftwareRenderer::saveVrEye(const char*path){std::vector<uint32_t> pixels;m_gpu->captureVrEye(pixels);auto [width,height]=m_gpu->surfaceExtent();std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}}
 void SoftwareRenderer::renderVrEye(const Game&game,int eye){
  if(!m_gpu||!m_gpu->vrActive())throw std::runtime_error("VR requires the Vulkan renderer");

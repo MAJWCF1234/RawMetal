@@ -45,7 +45,9 @@ void main(){
  vec3 center=viewPosition(uv,depth),normal=viewNormal(uv,center);
  const int Samples=12;
  float radius=p.camera.w,occlusion=0.0;vec3 bounce=vec3(0.0);
- vec2 screenRadius=min(vec2(radius*p.camera.z*0.5/depth,radius*p.camera.z*p.camera.y*0.5/depth),vec2(0.12));
+ // Clamp the search to 4% of the screen: a 12% radius up close pasted
+ // offset copies of the wall texture through the bounce term.
+ vec2 screenRadius=min(vec2(radius*p.camera.z*0.5/depth,radius*p.camera.z*p.camera.y*0.5/depth),vec2(0.04));
  float rotation=bayer4(gl_FragCoord.xy)*6.2831853;
  for(int i=0;i<Samples;++i){
   float t=(float(i)+0.5)/float(Samples);

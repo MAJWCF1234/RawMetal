@@ -94,6 +94,29 @@ __declspec(noinline) static int gpuActorPerformance(){
  report<<"final_health="<<game.player().health<<"\n";
  return renderer->hardwareActive()?0:36;
 }
+// Windowed-path repro: walk the Security Office corridors into walls and
+// corners for many frames, at a native-sized hidden window, and report any
+// frame where Vulkan drops to the software fallback or the frame time spikes.
+__declspec(noinline) static int approachTest(){
+ retro::Win32Window window(1920,1080,L"Depthworks approach test");if(!window.valid())return 1;ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(1920,1080);if(!renderer->enableHardware(window.handle()))return 36;
+ std::ofstream report("approach-test.txt");report<<renderer->hardwareName()<<'\n';
+ auto game=std::wcsstr(GetCommandLineW(),L"--foundry")?retro::Game::mapInspection({3.5f,4.5f},0,-6,0,false,0,true):retro::Game::prologueInspection(2);bool ok=true;int frame=0;std::filesystem::create_directories(".build/approach");
+ struct Leg{float yaw;int frames;bool forward;};
+ // Face each corridor wall and walk into it, then back off, then a corner.
+ for(auto leg:{Leg{0.f,90,true},Leg{3.14159f,60,true},Leg{1.5708f,120,true},Leg{-1.5708f,120,true},Leg{0.8f,120,true},Leg{2.4f,120,true},Leg{0.f,30,false}}){
+  for(int i=0;i<leg.frames&&window.pump();++i,++frame){
+   retro::InputState input{};input.forward=leg.forward;input.mouseDx=std::sin(frame*.21f)*6.f;input.mouseDy=std::cos(frame*.17f)*2.f;
+   auto&player=const_cast<retro::Player&>(game.player());if(i==0)player.angle=leg.yaw;
+   game.update(input,1.f/60);renderer->render(game);
+   if(!renderer->hardwareActive()){report<<"frame "<<frame<<": "<<renderer->hardwareName()<<" at "<<player.pos.x<<','<<player.pos.y<<" yaw "<<player.angle<<'\n';ok=false;break;}
+   if(frame%15==0)renderer->saveSceneCapture((".build/approach/frame-"+std::to_string(frame)+".ppm").c_str());
+   if(frame%30==0)report<<"frame "<<frame<<" pos "<<player.pos.x<<','<<player.pos.y<<" yaw "<<player.angle<<" frame_ms "<<renderer->frameStages()[0]+renderer->frameStages()[1]<<'\n';
+  }
+  if(!ok)break;
+ }
+ report<<(ok?"PASS":"FAIL")<<": Vulkan survives walking into Security Office walls\n";return ok?0:21;
+}
 __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sustained=false,bool cpuActors=false,bool uncachedAi=false,bool fullRateAi=false,bool deepProfile=false){
  using Clock=std::chrono::steady_clock;auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};
  retro::Win32Window window(retro::DisplayWidth,retro::DisplayHeight,L"Depthworks Ashfall frame profile");if(!window.valid())return 1;ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
@@ -452,7 +475,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      return 0;
     }
     if(std::wcsstr(commandLine,L"--prologue-inspection")){
-     constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     const int width=std::wcsstr(commandLine,L"--native-capture")?1920:960,height=std::wcsstr(commandLine,L"--native-capture")?1080:540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/prologue-preview");
      if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B texel filtering
      for(int stage=0;stage<11;++stage){auto scene=retro::Game::prologueInspection(stage);renderer->render(scene);std::ofstream out(".build/prologue-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
@@ -673,6 +696,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
     if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
     if(std::wcsstr(commandLine,L"--nopixel"))retro::SoftwareRenderer::setPixelLighting(false); // A/B: baked vertex lamps
+    if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
+    if(std::wcsstr(commandLine,L"--nodetail"))retro::SoftwareRenderer::setDetailLayer(0); // A/B: no close-up grain
+    if(std::wcsstr(commandLine,L"--detail-field"))retro::SoftwareRenderer::setDetailLayer(2); // debug: raw detail field
+    if(std::wcsstr(commandLine,L"--detail-normal"))retro::SoftwareRenderer::setDetailLayer(3); // debug: detail normal
+    if(std::wcsstr(commandLine,L"--detail-uv"))retro::SoftwareRenderer::setDetailLayer(4); // debug: texel coordinate sawtooth
+    if(std::wcsstr(commandLine,L"--detail-mag"))retro::SoftwareRenderer::setDetailLayer(5); // debug: uv magnitude and surface class
+    if(std::wcsstr(commandLine,L"--detail-nmap"))retro::SoftwareRenderer::setDetailLayer(6); // debug: normal map sample before detail
+    if(std::wcsstr(commandLine,L"--detail-ppt"))retro::SoftwareRenderer::setDetailLayer(7); // debug: pixels per texel and detail cell coordinate
     if(std::wcsstr(commandLine,L"--post-ao"))retro::SoftwareRenderer::setPostProcessing(true,true);
     if(std::wcsstr(commandLine,L"--early-maps-inspection"))return earlyMapsInspection(960,540);
     if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);
@@ -779,6 +810,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
     if(std::wcsstr(commandLine,L"--lab-profile"))return ashfallPerformance(true,true,false,false,false,true);
     if(std::wcsstr(commandLine,L"--lab-performance"))return ashfallPerformance(true,true,std::wcsstr(commandLine,L"--cpu-actor-preparation")!=nullptr,std::wcsstr(commandLine,L"--uncached-ai-queries")!=nullptr,std::wcsstr(commandLine,L"--full-rate-ai-decisions")!=nullptr);
+    if(std::wcsstr(commandLine,L"--approach-test"))return approachTest();
     if(std::wcsstr(commandLine,L"--ashfall-performance"))return ashfallPerformance(std::wcsstr(commandLine,L"--ashfall-performance-yard")!=nullptr,false,std::wcsstr(commandLine,L"--cpu-actor-preparation")!=nullptr,std::wcsstr(commandLine,L"--uncached-ai-queries")!=nullptr,std::wcsstr(commandLine,L"--full-rate-ai-decisions")!=nullptr);
     if(std::wcsstr(commandLine,L"--performance-window")||std::wcsstr(commandLine,L"--service-performance-window")||std::wcsstr(commandLine,L"--door-performance-window")||std::wcsstr(commandLine,L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
     if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;

@@ -47,15 +47,15 @@ vec4 denoisedOcclusion(float depth){
 }
 
 // Lamp visibility from the shadow stage, filtered like the occlusion.
-float denoisedShadow(float depth){
- float sum=0.0,weight=0.0;
+vec2 denoisedShadow(float depth){
+ vec2 sum=vec2(0.0);float weight=0.0;
  vec2 base=(floor(uv/p.frame.xy-1.5)+0.5)*p.frame.xy;
  for(int y=0;y<4;++y)for(int x=0;x<4;++x){
   vec2 at=base+vec2(x,y)*p.frame.xy;
   float w=exp(-abs(texture(sceneImage,at).a-depth)/(0.04*depth+0.02));
-  sum+=texture(shadowImage,at).r*w;weight+=w;
+  sum+=texture(shadowImage,at).rg*w;weight+=w;
  }
- return weight>0.0?sum/weight:1.0;
+ return weight>0.0?sum/weight:vec2(1.0,0.0);
 }
 
 // Single scattering from a point lamp along the view ray, integrated in
@@ -92,8 +92,10 @@ void main(){
   float luminance=dot(color,vec3(0.2126,0.7152,0.0722));
   color*=mix(occlusion.a,1.0,clamp(luminance*1.2-0.35,0.0,0.6));
   // One bounce: nearby lit surfaces tint and fill this one (colour bleeding).
-  color+=occlusion.rgb*0.22*occlusion.a;
-  color*=denoisedShadow(depth);
+  // Bounce is low-frequency light; within arm's reach the screen-space
+  // estimate degenerates into shifted texture copies, so it fades out.
+  color+=occlusion.rgb*0.22*occlusion.a*smoothstep(0.35,1.1,depth);
+  color*=denoisedShadow(depth).x;
  }
  vec2 ndc=uv*2.0-1.0;
  vec3 rayView=vec3(ndc.x/p.camera.z,-ndc.y/(p.camera.z*p.camera.y),1.0);
@@ -101,13 +103,19 @@ void main(){
  float rayLength=surface||viewModel?abs(depth)*length(rayView):40.0;
  if(surface&&p.haze.w>0.0){
   // Aerial perspective: distance lifts toward the atmosphere colour.
-  float amount=1.0-exp(-max(depth-2.0,0.0)*p.haze.w);
+  // Continuous from the eye: a 2 m dead zone made the look jump when walking up to walls.
+  float amount=1.0-exp(-depth*p.haze.w*0.8);
   color=mix(color,p.haze.rgb,amount*0.25);
  }
  if(p.haze.w>0.0){
   // Lamps glow through the air they light; denser air glows more.
-  float scatter=0.0;for(int i=0;i<4;++i)scatter+=lampScatter(ray,rayLength,p.lights[i]);
-  color+=vec3(1.0,0.86,0.66)*scatter*p.haze.w*0.4;
+  if(texture(shadowImage,uv).b>0.5){
+   // Shadow-mapped shafts from every nearby lamp (shadow stage, denoised here).
+   color+=vec3(1.0,0.86,0.66)*denoisedShadow(depth).y*p.haze.w*1.6;
+  }else{
+   float scatter=0.0;for(int i=0;i<4;++i)scatter+=lampScatter(ray,rayLength,p.lights[i]);
+   color+=vec3(1.0,0.86,0.66)*scatter*p.haze.w*0.4;
+  }
  }
  color+=bloom()*p.frame.z;
  // Grade in linear light: gentle saturation, cool lifted shadows, warm highs.
