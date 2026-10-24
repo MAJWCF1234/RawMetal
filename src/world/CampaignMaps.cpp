@@ -1,6 +1,7 @@
 #include "CampaignMaps.h"
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 namespace retro {
 namespace {
 using Map=AuthoredMapData;
@@ -241,12 +242,13 @@ void locomotive(Map& m,float x,float y,float floor,bool stripped=false){
    }
   }
  }
+ m.structures.push_back({x-1.15f,y-.4f,x+1.15f,y+7.4f,floor,floor+(stripped?1.3f:1.22f),false,6});
  if(!stripped)wall(m,x-1.25f,y,x+1.25f,y+7.f,floor+.96f,floor+1.22f,2);
  for(float yy:{y-.4f,y+7.f})wall(m,x-.28f,yy,x+.28f,yy+.4f,floor+.7f,floor+1.f,8);
  if(stripped){
   for(float dx:{-1.25f,1.03f})wall(m,x+dx,y,x+dx+.22f,y+7.f,floor+.96f,floor+1.3f,12);
   for(float yy:{y+.15f,y+1.5f,y+3.5f,y+5.5f,y+6.65f})wall(m,x-1.25f,yy,x+1.25f,yy+.20f,floor+1.03f,floor+1.27f,12);
-  m.pipes.push_back({{x,y+.7f},{x,y+6.3f},floor+1.13f,.13f,floor+1.13f,1});
+  m.pipes.push_back({{x,y+.25f},{x,y+6.75f},floor+1.13f,.13f,floor+1.13f,1});
   return;
  }
  wall(m,x-1.08f,y+.3f,x+1.08f,y+3.7f,floor+1.22f,floor+2.65f,2);
@@ -2411,8 +2413,10 @@ std::shared_ptr<const Map> make(int level){
   // Continuous masonry cheeks define a service trench, rather than leaving
   // the maintenance vehicle over an entire open lower storey.
   wall(m,14.8f,4,14.96f,14,-28,-25,15);
-  servicePipe(m,{15.08f,4},{15.08f,13.5f},-27.2f,.055f,4);
-  servicePipe(m,{18.77f,4},{18.77f,13.5f},-27.2f,.055f,3);
+  for(auto [px,cheek,paint]:{std::tuple{15.08f,14.96f,4},{18.77f,18.9f,3}}){
+   m.pipes.push_back({{px,4.3f},{px,13.4f},-25.6f,.055f,-25.6f,paint});
+   for(float y=4.3f;y<13.5f;y+=2.275f)wall(m,std::min(px,cheek),y-.03f,std::max(px,cheek)+.01f,y+.03f,-25.67f,-25.53f,8);
+  }
   m.definition.ambient=.40f;
   // Track-height workshop equipment gives the pit a visible maintenance
   // purpose, while its entry, jacks and stairs retain their clearance.
@@ -2447,7 +2451,7 @@ std::shared_ptr<const Map> make(int level){
   board(m,5,11.5f,-22.7f,level==30?"TUNNEL 4A":"DEEP JUNCTION","POWER DISTRIBUTION",2.8f);
   for(float x:{7.f,17.f})trackRun(m,x,-25);
   wall(m,11,1,11.2f,10,-25,-19,3);wall(m,11,14,11.2f,23,-25,-19,3);
-  for(float y:{3.f,7.f,11.f,15.f,19.f})m.pipes.push_back({{1.2f,y},{22.8f,y},-19.4f,.06f});
+  for(float y:{3.f,7.f,11.f,15.f,19.f})servicePipe(m,{1.2f,y},{22.8f,y},-19.4f,.06f,1);
   if(level==30){m.waterVolumes.push_back({14,5,20,12,-25.35f,-25.1f});office(m,4,17,-25,"SIGNAL ROOM / TUNNEL 4A","MAIN LINE CLOSED / PARALLEL BORE AVAILABLE.","POWER DISTRIBUTION: DEEP JUNCTION.");
    // Occlusion and a west-side bypass break the bore's repeated straight run.
    // Roof damage stays over the freight lane, with a real drain/service edge.
@@ -2479,9 +2483,9 @@ std::shared_ptr<const Map> make(int level){
    wall(m,1.2f,y,22.75f,y+.2f,-19.5f,-19.2f,12);
    m.fixtures.push_back({8,{22.7f,y+.6f},1.1f,.6f,.12f,.8f,-kPi*.5f,false});
   }
-  for(float y:{7.f,15.f})m.pipes.push_back({{1.5f,y},{10.7f,y},-22.4f,.07f});
+  for(float y:{7.f,15.f})servicePipe(m,{1.5f,y},{11.f,y},-22.4f,.07f,1);
   // Continuous wall-mounted cable bank, with collars fastened to the wall.
-  for(float z:{-23.0f,-22.75f,-22.5f})m.pipes.push_back({{22.15f,2},{22.15f,22},z,.045f,z,2});
+  for(float z:{-23.0f,-22.75f,-22.5f})servicePipe(m,{22.15f,1.2f},{22.15f,22.8f},z,.045f,2);
   for(float y:{3.f,7.f,11.f,15.f,19.f,22.f}){
    wall(m,22.10f,y,23,y+.07f,-23.18f,-23.10f,2);
    wall(m,22.10f,y,22.20f,y+.07f,-23.18f,-22.35f,2);
@@ -2502,8 +2506,8 @@ std::shared_ptr<const Map> make(int level){
    // leaving the west service bypass free of an arbitrary full-width block.
    for(auto& s:m.structures)if(s.x1==18&&s.y1==13&&s.x2==22.8f){s.x2=20.2f;s.top=-24.1f;}
    wall(m,20.3f,13.5f,22.8f,14.8f,-25,-24.3f,15);
-   m.pipes.push_back({{19,13.2f},{22.4f,14.3f},-24.25f,.14f,-21.3f,3});
-   m.pipes.push_back({{20.2f,13.8f},{21.1f,14.3f},-24.5f,.11f,-22.5f,4});
+   m.pipes.push_back({{19,13.2f},{22.4f,13.5f},-24.25f,.14f,-21.3f,3});
+   m.pipes.push_back({{20.2f,13.8f},{22.4f,13.6f},-24.5f,.11f,-22.5f,4});
    wall(m,22.35f,13,22.8f,14,-23,-19.1f,2);
   }
   break;
