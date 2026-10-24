@@ -187,7 +187,7 @@ bool Game::testCombat(){
  Game g;g.m_enemies.resize(1);g.m_player.pos={3.5f,4.5f};g.m_player.angle=0;g.m_player.pitch=-35;g.m_enemies[0].pos={5.5f,4.5f};
  auto scar=validationScene(Enemy::Kind::Huntsman);scar.m_enemies.clear();scar.m_player.pos={1.5f,1.5f};scar.m_player.angle=kPi;
  scar.shoot();if(scar.bulletImpacts().empty()||scar.bulletImpacts().size()>6)return false;
- auto barrel=barrelInspection(.06f);if(barrel.world().tile(8,2)!='.'||barrel.barrelExplosions().size()!=1||barrel.barrelExplosions()[0].level!=0)return false;
+ auto barrel=barrelInspection(.06f);if(barrel.world().tile(12,2)!='.'||barrel.barrelExplosions().size()!=1||barrel.barrelExplosions()[0].level!=0)return false;
  g.shoot();if(!g.m_enemies[0].alive||g.m_enemies[0].hp>=110)return false;
  g.shoot();g.shoot();if(!g.m_enemies[0].alive)return false;g.shoot();
  if(g.m_enemies[0].alive||g.m_kills!=1||!g.m_enemies[0].visible())return false;
@@ -223,7 +223,7 @@ Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
 Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly,WorldId id){Game game(id);game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?(game.m_world.hasTerrain()?game.groundHeight(position,float(World::TerrainMaxZ+1)):game.m_world.floorHeight(position.x,position.y)):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
  if(sceneryOnly){game.m_enemies.clear();for(auto&chunk:game.m_chunks)chunk.enemies.clear();}
  if(openDoors){for(auto&chunk:game.m_chunks){for(int i=0;i<int(chunk.world.doors().size());++i)chunk.world.openDoor(i);chunk.world.updateDoors(2);}for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);game.m_world.updateDoors(2);}game.updateStreaming(0);return game;}
-Game Game::barrelInspection(float age){auto game=mapInspection({8.5f,4.5f},-kPi*.5f,-35,0,false,-999,true);game.shoot();game.m_elapsed=std::max(0.f,age);return game;}
+Game Game::barrelInspection(float age){auto game=mapInspection({12.5f,4.5f},-kPi*.5f,-35,0,false,-999,true);game.shoot();game.m_elapsed=std::max(0.f,age);return game;}
 
 bool Game::lineOfSight(const Vec2& a,const Vec2& b)const{return m_world.rayClear(a,m_world.floorHeight(a.x,a.y)+.75f,b,m_world.floorHeight(b.x,b.y)+.75f);}
 

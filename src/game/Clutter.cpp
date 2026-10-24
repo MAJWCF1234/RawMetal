@@ -157,9 +157,9 @@ bool Game::testClutter(){
   g.updateClutter({},.02f);if(g.m_clutter[0].velocity.x>=2||!std::isfinite(g.m_clutter[0].z))return false;
   if(g.world().waterSurface(12,9)>-100||g.world().waterSurface(9,9)<-10)return false;
  }
- {auto slide=validationScene(Enemy::Kind::Huntsman);slide.m_enemies.clear();slide.m_clutter={{{1.14f,4.5f},{-4,2},1.f}};
+ {auto slide=validationScene(Enemy::Kind::Huntsman);slide.m_enemies.clear();slide.m_clutter={{{1.14f,9.5f},{-4,2},1.f}}; // The Foundry's bare west wall.
   slide.updateClutter({},.025f);auto& c=slide.m_clutter[0];
-  if(c.velocity.x<=0||c.velocity.y<1.9f||c.pos.y<=4.5f)return false;
+  if(c.velocity.x<=0||c.velocity.y<1.9f||c.pos.y<=9.5f)return false;
  }
  auto g=validationScene(Enemy::Kind::Huntsman);g.m_player.pitch=-85;g.m_enemies[0].pos={5.2f,4.5f};g.m_clutter={{{4.2f,4.5f}}};
  if(!g.interactClutter()||!g.holdingClutter())return false;g.updateClutter({},.01f);InputState fire{};fire.fire=true;g.updateClutter(fire,.01f);
