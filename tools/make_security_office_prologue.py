@@ -92,7 +92,8 @@ fix(CRT, 7.9, 3.6, TOP, 0.602, 0.533, 0.567, -0.45, 0)
 fix(TOWER, 5.35, 4.0, F, 0.262, 0.609, 0.609, 0, 0)
 fix(PHONE, 3.75, 4.35, TOP, 0.333, 0.333, 0.089, 0.3, 0)
 fix(MUG, 5.25, 4.55, TOP, 0.139, 0.137, 0.123, 1.1, 0)
-fix(BINDER, 3.35, 4.2, TOP, 0.093, 0.301, 0.424, 0.2, 0)
+# On the desk top (x 3.5-5.7); at x 3.35 it hung past the left edge.
+fix(BINDER, 5.55, 4.15, TOP, 0.093, 0.301, 0.424, 0.2, 0)
 fix(CHAIR, 3.4, 5.6, F, 0.94, 0.862, 1.096, 2.4, 1)
 rec("TERMINAL", 0, 4.6, 4.8, 9.0, 0, "SECURITY DESK 2 / NIGHT SHIFT",
     "DIRECT LINE: LAB 4 IS MESSAGING YOU.", "E: OPEN THE MESSAGE.", "office_chat", 0, "", PI)

@@ -20,7 +20,7 @@ public:
  bool postProcessing()const;
  // Temporal anti-aliasing (windowed path only; headless frames stay exact).
  void setTemporalAA(bool enabled);
- // Tests: headless readback uses the original analytic display curve, not AgX.
+ // Tests: headless readback uses the original analytic display curve.
  static void setReferenceDisplay(bool enabled);
  void setAtmosphere(const std::array<float,4>& atmosphere);
  bool beginStaticCache(int slot,std::uint64_t key);
