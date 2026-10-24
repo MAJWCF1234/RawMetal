@@ -181,7 +181,7 @@ __declspec(noinline) static int freightInspection(int W,int H){
  auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
  std::filesystem::create_directories("diagnostics/freight-district");
  std::ofstream("diagnostics/freight-district/model-report.txt")<<renderer->modelReport();
- for(int level=10;level<retro::CampaignChunkCount;++level){
+ for(int level=10;level<retro::FreightDistrictEnd;++level){
   const auto& chunk=retro::CampaignChunks[level];
   auto scene=retro::Game::mapInspection(chunk.playerStart,retro::kPi*.5f,-8,level,true,chunk.spawnHeight,true);
   renderer->render(scene);std::ofstream frame("diagnostics/freight-district/map-"+std::to_string(level)+".ppm",std::ios::binary);
@@ -508,6 +508,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      }
      return 0;
+    }
+    if(auto arg=std::wcsstr(commandLine,L"--residency=")){
+     // Which chunks stream in at a map's spawn: the streaming footprint.
+     int level=_wtoi(arg+12);const auto& def=retro::chunkDefinition(retro::WorldId::Campaign,level);
+     auto game=retro::Game::mapInspection(def.playerStart,0,0,level,false,def.spawnHeight,true);std::ofstream out("residency.txt");
+     for(int other=0;other<game.chunkCount();++other)if(other==level||game.chunkResident(other))out<<other<<' ';
+     out<<'\n';return 0;
     }
     if(auto arg=std::wcsstr(commandLine,L"--map-dump=")){
      // Every collision and render primitive of a map, for inspection.

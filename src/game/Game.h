@@ -436,6 +436,8 @@ private:
     template<class Archive> void archiveSave(Archive& archive,int version=2);
     bool nearReactorDisk()const;
     void useReactorAction(int action);
+    World* reactorWorld();
+    void syncReactorComplex();
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
     bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false;

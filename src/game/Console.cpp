@@ -121,7 +121,7 @@ bool Game::testConsole(){
  for(const auto& alias:std::array<std::pair<const char*,int>,8>{{{"freight",10},{"receiving",13},{"warehouse",16},{"manifest",20},{"yard",22},{"platform",25},{"depot",27},{"tunnels",30}}}){
   input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return fail(__LINE__);
  }
- for(const char* invalid:{"32","-1","10junk","999999999999999999999999"}){int current=game.level();input.textInput=std::string("map ")+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return fail(__LINE__);}
+ for(const char* invalid:{"34","-1","10junk","999999999999999999999999"}){int current=game.level();input.textInput=std::string("map ")+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return fail(__LINE__);}
  // Restart canonicalizes the visible encounter at t=1; the console must freeze it.
  input={};input.textInput="map receiving\r";game.update(input,.02f);if(game.state("receiving_worker_encounter_ms")!=1)return fail(__LINE__);
  input={};input.escape=true;game.update(input,.02f);game.update({},.02f);if(game.state("receiving_worker_encounter_ms")<=1||game.player().pitch>-40)return fail(__LINE__);

@@ -132,13 +132,13 @@ int Game::nearbyInteractionDoor()const{
 int Game::nearbyTerminal()const{
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int nearest=-1;float closest=1.8f;
  for(size_t i=0;i<m_world.terminals().size();++i){auto&t=m_world.terminals()[i];auto delta=t.position-m_player.pos;float distance=length(delta),along=dot(delta,forward),base=t.z+m_world.floorHeight(t.position.x,t.position.y);
-  if(m_vrInputActive){bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction<2;
+  if(m_vrInputActive){bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction==0;
    float reach=vrInteractionDistance({t.position.x,t.position.y,base+(bench?1.1f:.75f)},bench?.6f:.4f);
    if(reach<closest){closest=reach;nearest=int(i);}continue;
   }
   if(distance>=closest||along<=0||std::fabs(delta.x*forward.y-delta.y*forward.x)>.4f||std::fabs(m_player.z-base)>=.65f)continue;
   // Stop the sight ray before the computer's own collision housing.
-  bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction<2;
+  bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction==0;
   auto face=t.position-normalized(delta)*std::min(bench?.6f:.4f,distance*.8f);
   if(!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,face,base+(bench?1.1f:.75f)))continue;
   closest=distance;nearest=int(i);

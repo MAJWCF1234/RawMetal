@@ -398,9 +398,19 @@ bool SoftwareRenderer::testVisibility(){
  renderer.m_shadowBudgetLimit=10000000;
  int count=0;
  auto compare=[&](Game scene){
-  renderer.m_visibilityCulling=false;renderer.render(scene);renderer.render(scene);auto reference=renderer.m_pixels;
+  // The reference is a settled frame: lamp shadows streamed in by a changed
+  // lamp set finish over several frames by design.
+  renderer.m_visibilityCulling=false;renderer.render(scene);renderer.render(scene);
+  for(int frame=0;frame<40&&renderer.m_gpu->shadowsPending();++frame)renderer.render(scene);
+  renderer.render(scene);auto reference=renderer.m_pixels;
   renderer.m_visibilityCulling=true;renderer.render(scene);size_t changed=0;
   for(size_t i=0;i<reference.size();++i)changed+=reference[i]!=renderer.m_pixels[i];
+  if(changed){
+   // Keep both frames of a mismatch for inspection.
+   auto dump=[&](const std::vector<std::uint32_t>& pixels,const char* suffix){std::ofstream out("visibility-view-"+std::to_string(count)+suffix,std::ios::binary);out<<"P6\n"<<renderer.m_width<<' '<<renderer.m_height<<"\n255\n";
+    for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
+   dump(reference,"-unculled.ppm");dump(renderer.m_pixels,"-culled.ppm");
+  }
   report<<"View "<<count++<<": "<<changed<<" changed pixels\n";report.flush();passed&=changed==0&&renderer.hardwareActive();
   auto retained=renderer.m_pixels;
   renderer.setPanelCaching(false);

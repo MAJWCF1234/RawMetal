@@ -136,12 +136,16 @@ bool Game::testLift(){
   if(overlap)return check(false,"Freight crate clears all fixed structure");
  }
  check(true,"Freight crate clears all fixed structure");
- if(!check(world.supportBelow(17.5f,20.5f,-6)==-6&&world.supportBelow(17.5f,20.5f,-9)==-9,"Two reactor floors at same XY"))return false;
- if(!check(!world.rayClear({17.5f,20.5f},-8,{17.5f,20.5f},-5),"Vertical sight rays cannot pass through decks"))return false;
+ if(!check(world.supportBelow(18.5f,18.5f,-6)==-6&&world.supportBelow(18.5f,18.5f,-9)==-9,"Two reactor floors at same XY"))return false;
+ if(!check(!world.rayClear({18.5f,18.5f},-8,{18.5f,18.5f},-5),"Vertical sight rays cannot pass through decks"))return false;
  auto game=mapInspection({3.5f,1.5f},kPi*.5f,0,3,false,0,true);game.m_clutter.clear();
- auto walk=[&](Vec2 target){for(int i=0;i<2200;++i){auto delta=target-game.player().pos;if(game.won()||length(delta)<.12f)return true;
+ // Walk to a point in any chunk: the target is world-space, so the walker
+ // crosses stitched seams exactly as a player does.
+ auto walkTo=[&](int level,Vec2 local){Vec2 goal=game.chunkOffset(level)+local;
+  for(int i=0;i<2600;++i){auto delta=goal-(game.chunkOffset(game.level())+game.player().pos);if(game.won()||length(delta)<.12f)return true;
    InputState input{};input.forward=true;input.mouseDx=wrapAngle(std::atan2(delta.y,delta.x)-game.player().angle)/.0022f;game.update(input,1.f/120);}
-   report<<"Stopped at "<<game.player().pos.x<<','<<game.player().pos.y<<','<<game.player().z<<'\n';return false;};
+  report<<"Stopped in "<<game.level()<<" at "<<game.player().pos.x<<','<<game.player().pos.y<<','<<game.player().z<<'\n';return false;};
+ auto walk=[&](Vec2 target){return walkTo(3,target);};
  for(Vec2 p: {Vec2{3.5f,6.f},Vec2{8.f,6.f},Vec2{12,6.f},Vec2{12,11.5f}})if(!check(walk(p),"Boarding route"))return false;
  if(!check(std::fabs(game.player().z)<.01f,"Cab at collar height"))return false;
  game.m_player.angle=0;game.m_velocity={};InputState use{};use.use=true;game.update(use,.01f);
@@ -160,24 +164,33 @@ bool Game::testLift(){
  if(!check(std::fabs(game.player().z+6)<.03f,"Reactor upper floor reached"))return false;
  game.storeChunk();game.m_chunks[3].world.unloadGeometry();game.m_chunks[3].resident=false;game.ensureChunk(3);
  if(!check(game.m_chunks[3].world.liftPhase()==World::LiftPhase::Crashed&&game.m_chunks[3].world.liftHeight()==-9,"Lift survives geometry unload"))return false;
- for(Vec2 p:{Vec2{2,15.8f},Vec2{12,15.8f},Vec2{14.2f,19.4f},Vec2{16.2f,19.4f},Vec2{21.5f,20.3f}})if(!check(walk(p),"Return to lower reactor exit"))return false;
- game.m_world.takeReactorDisk();game.m_world.useReactorTerminal(1);game.m_world.useReactorTerminal(2);game.m_world.useReactorTerminal(3);game.m_world.useReactorTerminal(1);
+ // Back down, east through the seam into the reactor core, round the west
+ // steam generator to the bulkhead tower.
+ for(Vec2 p:{Vec2{2,15.8f},Vec2{12,16.2f},Vec2{19.5f,16.2f},Vec2{19.5f,12.f}})if(!check(walk(p),"Containment to the east passage"))return false;
+ for(Vec2 p:{Vec2{1.5f,12.f},Vec2{1.6f,20.3f},Vec2{5.5f,20.3f}})if(!check(walkTo(ReactorCoreChunk,p),"Through the seam to the core bulkhead"))return false;
+ if(!check(game.level()==ReactorCoreChunk&&std::fabs(game.player().z+9)<.03f,"Reactor core floor reached across the seam"))return false;
  game.m_player.angle=kPi*.5f;game.update({},.01f);game.update(use,.01f);
  for(int i=0;i<180;++i)game.update({},1.f/120);
- if(!check(game.world().doors().back().open>.95f,"Lower reactor interlock opens"))return false;
- if(!check(walk({21.5f,22.5f}),"Lower reactor exit reached"))return false;
+ if(!check(game.world().doors().back().open<.05f,"Bulkhead stays sealed before the reactor puzzle"))return false;
+ // The puzzle lives with the lift chunk; the core mirrors it.
+ {World* reactor=game.reactorWorld();reactor->takeReactorDisk();reactor->useReactorTerminal(1);reactor->useReactorTerminal(2);reactor->useReactorTerminal(3);reactor->useReactorTerminal(1);}
+ game.update({},.01f);game.update({},.01f);game.update(use,.01f);
+ for(int i=0;i<180;++i)game.update({},1.f/120);
+ if(!check(game.world().doors().back().open>.95f,"Core bulkhead opens once the puzzle releases it"))return false;
+ if(!check(walkTo(ReactorCoreChunk,{5.5f,22.5f}),"Bulkhead vestibule reached"))return false;
  if(!check(!game.won(),"Reactor exit remains a campaign transfer, not an implicit ending"))return false;
+ if(!check(walkTo(4,{14.5f,1.5f})&&game.level()==4&&std::fabs(game.player().z+9)<.03f,"Bulkhead leads into the Service Gallery"))return false;
  for(int rate:{30,60,120}){auto ride=liftInspection(0);for(int i=0;i<int(rate*World::LiftRideComplete);++i)ride.update({},1.f/rate);
   if(!check(ride.world().liftHeight()==-9&&std::fabs(ride.player().z+9)<.03f,"Frame-rate independent ride"))return false;}
  auto ride=liftInspection(0);InputState push{};push.right=true;push.jump=true;
  for(int i=0;i<600;++i){ride.update(push,1.f/120);if(!ride.world().insideLift(ride.player().pos.x,ride.player().pos.y)||ride.player().z<ride.world().liftHeight()-.03f)return check(false,"Moving room contains jumping passenger");}
  float pausedHeight=ride.world().liftHeight();InputState pause{};pause.escape=true;ride.update(pause,.02f);for(int i=0;i<60;++i)ride.update({},1.f/60);
  if(!check(ride.world().liftHeight()==pausedHeight,"Pause freezes lift"))return false;
- World doors(3);if(!check(doors.doorBlocks(21.5f,21.5f,-9,1)&&doors.nearbyDoor({21.5f,20.5f},{0,1},-6)==-1,"Door collision and interaction use floor height"))return false;
+ World doors(ReactorCoreChunk);if(!check(doors.doorBlocks(5.5f,21.5f,-9,1)&&doors.nearbyDoor({5.5f,20.5f},{0,1},-6)==-1,"Door collision and interaction use floor height"))return false;
  auto bridge=mapInspection({12,9},kPi*.5f,0,3,false,0,true);InputState hop{};hop.right=true;hop.jump=true;
  for(int i=0;i<240;++i){hop.crouch=i>12;bridge.update(hop,1.f/120);if(bridge.player().z<-.05f)return check(false,"Boarding cage prevents premature shaft fall");}
  check(true,"Boarding cage prevents premature shaft fall");
- doors.openDoor(1);doors.updateDoors(2);if(doors.doorBlocks(21.5f,21.5f,-9,1))return false;
+ doors.openDoor(0);doors.updateDoors(2);if(doors.doorBlocks(5.5f,21.5f,-9,1))return false;
  game.restart();return check(game.world().liftPhase()==World::LiftPhase::Ready,"Restart resets lift");
 }
 }

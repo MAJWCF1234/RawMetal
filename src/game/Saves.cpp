@@ -233,7 +233,7 @@ bool Game::testSaves(){
   if(!check(restored.decodeSave(original.encodeSave())&&std::fabs(restored.player().pitch-pitch)<.001f,"Full vertical camera range survives save/load"))return false;
  }
  for(float time:{0.f,7.f,21.f,34.f,39.5f,42.f,48.f}){
-  auto original=liftInspection(time);original.m_player.health=63;original.m_player.ammo=17;original.m_medkits=2;original.m_weaponEquipped=false;original.m_world.setDoor(1,.35f,true);
+  auto original=liftInspection(time);original.m_player.health=63;original.m_player.ammo=17;original.m_medkits=2;original.m_weaponEquipped=false;original.m_world.setDoor(0,.35f,true);
   // liftInspection() deliberately removes enemies from every chunk, so do not
   // index the stripped enemy vectors here. Enemy death persistence is covered
   // by the authored-content migration regression below.
@@ -308,7 +308,7 @@ bool Game::testSaves(){
   if(!check(restored.decodeSave(data)&&restored.level()==5&&restored.player().health==63&&restored.world().doors().back().transfer&&restored.m_chunks[6].enemies.size()==World(6).creatureSpawns().size()&&restored.m_chunks[9].clutter.size()==World(9).clutterSpawns().size(),"Six-chunk version 10 saves gain the four new chapters and transfer door"))return false;
  }
  // Existing saves are reconciled with newly authored content. Simulate an
- // older build that did not yet contain the Reactor Stalker, the final pickup,
+ // older build that did not yet contain the last reactor creature, the final pickup,
  // one clutter item, or the newest gantry transfer door.
  {Game legacy;legacy.m_chunks[3].enemies[0].alive=false;legacy.m_chunks[3].enemies[0].hp=0;
   legacy.m_chunks[3].enemies.pop_back();legacy.m_chunks[3].pickups[0].active=false;legacy.m_chunks[3].pickups.pop_back();
@@ -318,11 +318,12 @@ bool Game::testSaves(){
   auto data=std::string("RAWMETAL_SAVE 5 ")+std::to_string(checksum(payload))+"\n"+payload;Game restored;
   if(!check(restored.decodeSave(data),"Older content save loads after authored additions"))return false;
   auto&reactor=restored.m_chunks[3];
-  bool hasWarden=std::any_of(reactor.enemies.begin(),reactor.enemies.end(),[](const Enemy&e){return e.kind==Enemy::Kind::Warden&&e.alive;});
+  // The creature the older save predates comes back, alive, in its place.
+  bool hasNewcomer=reactor.enemies.size()==Game{}.m_chunks[3].enemies.size()&&reactor.enemies.back().alive;
   bool oldDeathPreserved=!reactor.enemies.empty()&&!reactor.enemies[0].alive;
   bool collectedPreserved=!reactor.pickups.empty()&&!reactor.pickups[0].active;
   bool movedClutterPreserved=!reactor.clutter.empty()&&lengthSq(reactor.clutter[0].pos-Vec2{9.25f,18.75f})<.0001f;
-  if(!check(hasWarden&&oldDeathPreserved&&collectedPreserved&&movedClutterPreserved&&reactor.pickups.size()==Game{}.m_chunks[3].pickups.size()&&reactor.clutter.size()==Game{}.m_chunks[3].clutter.size(),"New enemies/items spawn while old dynamic state survives"))return false;
+  if(!check(hasNewcomer&&oldDeathPreserved&&collectedPreserved&&movedClutterPreserved&&reactor.pickups.size()==Game{}.m_chunks[3].pickups.size()&&reactor.clutter.size()==Game{}.m_chunks[3].clutter.size(),"New enemies/items spawn while old dynamic state survives"))return false;
   if(!check(restored.m_chunks[2].world.doors().size()==Game{}.m_chunks[2].world.doors().size(),"New doors use current map defaults instead of invalidating old saves"))return false;
  }
  // Version 6 files contained only the original four chunks. New chunks come

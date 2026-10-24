@@ -344,6 +344,7 @@ void Game::update(const InputState& input, float dt) {
 
         updateMechanisms(dt);
         updateLift(dt);
+        syncReactorComplex();
         auto movement=input;if(heldNpc()>=0||takedownActive()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         updateMovement(movement,dt);
         updateStealth(input,dt);

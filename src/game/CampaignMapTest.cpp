@@ -8,7 +8,7 @@ namespace retro {
 bool Game::testCampaignMaps(){
  std::ofstream out("freight-district-test.txt");bool pass=true;
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};
- check(CampaignChunkCount==32,"Eight freight areas allocated across 22 additional stitched chunks");
+ check(FreightDistrictEnd==32&&CampaignChunkCount==34,"Eight freight areas allocated across 22 additional stitched chunks");
  {Game office;office.loadLevel(20,false);office.updateStreaming(0);
   bool vista=true;for(int level=16;level<=19;++level)vista&=office.chunkResident(level);
   check(vista,"Manifest overlook retains all four real warehouse chunks with the door closed");
