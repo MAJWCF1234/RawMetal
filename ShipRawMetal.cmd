@@ -55,14 +55,31 @@ if defined DIRTY (
     goto :fail
 )
 echo [OK] HEAD matches origin/%TARGET_BRANCH%.
+for /f "delims=" %%A in ('git rev-parse HEAD') do set "HEAD_SHA=%%A"
+git fetch origin --tags >nul 2>&1
+set "SHIPPED_TAG="
+for /f "delims=" %%T in ('git tag --points-at HEAD') do set "SHIPPED_TAG=%%T"
+if defined SHIPPED_TAG (
+    echo [STOP] This commit is already released as !SHIPPED_TAG!. Nothing new to ship.
+    goto :fail
+)
 echo.
 
 echo [2/5] Building release EXE...
+rem Skip the build when RawMetal.exe was already built from this exact commit
+rem with no uncommitted changes; Build.cmd records that in built-from.txt.
+set "BUILT_FROM="
+if exist "%ROOT%\.build\built-from.txt" set /p "BUILT_FROM="<"%ROOT%\.build\built-from.txt"
+if exist "RawMetal.exe" if "!BUILT_FROM!"=="!HEAD_SHA! clean" (
+    echo [OK] RawMetal.exe is already built from !HEAD_SHA!; skipping the build.
+    goto :built
+)
 call "%ROOT%\Build.cmd"
 if errorlevel 1 (
     echo [ERROR] Build failed. Nothing will be published.
     goto :fail
 )
+:built
 if not exist "RawMetal.exe" (
     echo [ERROR] Build finished but RawMetal.exe does not exist.
     goto :fail

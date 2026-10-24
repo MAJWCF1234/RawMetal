@@ -1882,6 +1882,14 @@ void freightFinish(Map& m,int level){
  for(const auto& stair:m.stairs)for(auto& layer:m.layers)if(layer.thickness>0&&layer.elevation>=stair.bottom-.02f&&layer.elevation<=stair.top+.02f)
  rectangle(layer,int(stair.x1),int(stair.y1),int(stair.x2),int(stair.y2),'.');
  for(auto& d:m.doors)d.sign=d.entry?level-1:level+1;
+ // A transfer or entry door hangs in a whole-metre wall opening; jambs fill
+ // the opening either side of the leaf so the next map never shows through.
+ for(const auto& d:m.doors){if(!d.transfer&&!d.entry)continue;
+  float y1=std::floor(d.y),base=m.layers.front().elevation+d.z,top=m.definition.ceiling;
+  float l=std::floor(d.left),r=std::ceil(d.right);
+  if(d.left-l>.01f){wall(m,l,y1,d.left,y1+1.f,base,top,15);wall(m,d.left-.12f,y1-.02f,d.left,y1+1.02f,base,base+3.f,12);}
+  if(r-d.right>.01f){wall(m,d.right,y1,r,y1+1.f,base,top,15);wall(m,d.right,y1-.02f,d.right+.12f,y1+1.02f,base,base+3.f,12);}
+ }
 }
 // A 1.1 m guard rail along an open edge: the walk-off side of a deck.
 void guardRail(Map& m,float x1,float y1,float x2,float y2,float z){m.structures.push_back({x1,y1,x2,y2,z,z+1.1f,true,2});}
@@ -2345,7 +2353,7 @@ std::shared_ptr<const Map> makeWarehouseIntake(){
  glazed(5.8f,7.7f,6.f,11.8f);wall(m,5.8f,13.f,6.f,13.3f,base,base+2.7f,3);wall(m,5.8f,11.8f,6.f,13.f,base+2.3f,base+2.7f,3);
  wall(m,1,7.5f,6,13.5f,base+2.7f,base+2.85f,2);
  m.fixtures.push_back({24,{3.f,8.15f},0,1.4f,.7f,.75f,0,true});
- m.fixtures.push_back({26,{3.f,9.05f},0,.55f,.55f,.95f,kPi,true});
+ m.fixtures.push_back({26,{3.f,9.05f},0,.55f,.55f,.95f,0,true});
  m.fixtures.push_back({27,{2.8f,8.f},.75f,.42f,.4f,.38f,0,false});
  m.fixtures.push_back({28,{3.f,8.4f},.75f,.45f,.16f,.03f,0,false});
  m.fixtures.push_back({33,{3.55f,8.2f},.75f,.2f,.2f,.1f,0,false});
@@ -2434,7 +2442,7 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  glazed(17.8f,7.6f,22.7f,7.8f);wall(m,22.7f,1.f,22.9f,7.8f,base,base+2.6f,3);
  wall(m,17.6f,1.f,22.9f,7.8f,base+2.6f,base+2.75f,2);
  m.fixtures.push_back({24,{20.2f,1.62f},0,1.4f,.7f,.75f,0,true});
- m.fixtures.push_back({26,{20.2f,2.55f},0,.55f,.55f,.95f,kPi,true});
+ m.fixtures.push_back({26,{20.2f,2.55f},0,.55f,.55f,.95f,0,true});
  m.fixtures.push_back({27,{20.f,1.5f},.75f,.42f,.4f,.38f,0,false});
  m.fixtures.push_back({28,{20.2f,1.85f},.75f,.45f,.16f,.03f,0,false});
  m.fixtures.push_back({29,{20.75f,1.55f},.75f,.2f,.45f,.42f,0,false});
@@ -2718,7 +2726,8 @@ void officeDoorway(Map& m,float x1,float x2,float y1,float y2,float f,float ceil
 void workstation(Map& m,float x,float y,float f,int facing,int variant){
  float base=f-m.layers.front().elevation,seat=facing>0?0.f:kPi,screen=facing>0?kPi:0.f,s=float(facing);
  m.fixtures.push_back({24,{x,y},base,1.4f,.7f,.75f,seat,true});
- m.fixtures.push_back({26,{x+(variant%2?.15f:-.1f),y-s*.78f},base,.55f,.55f,.95f,seat+(variant%3-1)*.25f,true});
+ // The office chair model faces -y at yaw 0, the opposite of the desk set.
+ m.fixtures.push_back({26,{x+(variant%2?.15f:-.1f),y-s*.78f},base,.55f,.55f,.95f,seat+kPi+(variant%3-1)*.25f,true});
  m.fixtures.push_back({27,{x-.1f,y+s*.12f},base+.75f,.42f,.4f,.38f,screen,false});
  m.fixtures.push_back({28,{x-.1f,y-s*.2f},base+.75f,.45f,.16f,.03f,screen,false});
  m.fixtures.push_back({33,{x+.48f,y+s*.05f},base+.75f,.2f,.2f,.1f,screen,false});
@@ -2762,7 +2771,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  wall(m,2.f,.16f,10.f,.36f,-6.2f,-6.12f,20);
  for(float x:{3.2f,6.f,8.8f}){
   m.fixtures.push_back({24,{x,1.45f},0,1.4f,.7f,.75f,0,true});
-  m.fixtures.push_back({26,{x,2.3f},0,.55f,.55f,.95f,kPi,true});
+  m.fixtures.push_back({26,{x,2.3f},0,.55f,.55f,.95f,0,true});
   m.fixtures.push_back({27,{x-.15f,1.4f},.75f,.42f,.4f,.38f,0,false});
   m.fixtures.push_back({28,{x,1.72f},.75f,.45f,.16f,.03f,0,false});
  }
@@ -2771,7 +2780,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  // --- Reception ---------------------------------------------------------------------------
  m.fixtures.push_back({24,{15.2f,2.8f},0,1.4f,.7f,.75f,0,true});
  m.fixtures.push_back({25,{16.7f,2.6f},0,1.2f,1.2f,.75f,kPi*.5f,true});
- m.fixtures.push_back({26,{15.4f,1.9f},0,.55f,.55f,.95f,0,true});
+ m.fixtures.push_back({26,{15.4f,1.9f},0,.55f,.55f,.95f,kPi,true});
  m.fixtures.push_back({27,{15.f,2.85f},.75f,.42f,.4f,.38f,kPi,false});
  m.fixtures.push_back({28,{15.3f,2.55f},.75f,.45f,.16f,.03f,kPi,false});
  m.fixtures.push_back({33,{16.4f,2.9f},.75f,.2f,.2f,.1f,kPi,false});
@@ -2799,7 +2808,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  officeGlass(m,17.4f,17.6f,18.4f,17.8f,f,ceil);officeDoorway(m,18.4f,19.6f,17.6f,17.8f,f,ceil);officeGlass(m,19.6f,17.6f,23.f,17.8f,f,ceil);
  // North office: the arrival record for Train 27.
  m.fixtures.push_back({25,{21.6f,7.4f},0,1.6f,1.6f,.75f,0,true});
- m.fixtures.push_back({26,{20.9f,8.6f},0,.55f,.55f,.95f,kPi,true});
+ m.fixtures.push_back({26,{20.9f,8.6f},0,.55f,.55f,.95f,0,true});
  m.fixtures.push_back({27,{21.3f,7.2f},.75f,.42f,.4f,.38f,0,false});
  m.fixtures.push_back({31,{22.5f,10.6f},0,.9f,.5f,.75f,-kPi*.5f,true});
  m.fixtures.push_back({30,{22.5f,10.6f},.75f,.5f,.4f,.42f,-kPi*.5f,false});
@@ -2808,7 +2817,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  wallSign(m,21.f,5.745f,f+2.42f,"SUPERVISOR / ARRIVALS","",1.4f,kPi);
  // South office: ordinary freight.
  m.fixtures.push_back({24,{21.4f,15.6f},0,1.4f,.7f,.75f,kPi,true});
- m.fixtures.push_back({26,{21.4f,14.8f},0,.55f,.55f,.95f,0,true});
+ m.fixtures.push_back({26,{21.4f,14.8f},0,.55f,.55f,.95f,kPi,true});
  m.fixtures.push_back({27,{21.2f,15.7f},.75f,.42f,.4f,.38f,kPi,false});
  for(float y:{12.6f,13.4f})m.fixtures.push_back({32,{22.55f,y},0,.5f,.6f,1.3f,-kPi*.5f,true});
  m.fixtures.push_back({37,{18.f,12.25f},0,.9f,.3f,1.8f,0,true});
@@ -2863,8 +2872,8 @@ std::shared_ptr<const Map> makeManifestRouting(){
  officeGlass(m,9.6f,3.4f,10.4f,3.6f,f,ceil);officeDoorway(m,10.4f,11.6f,3.4f,3.6f,f,ceil);officeGlass(m,11.6f,3.4f,15.2f,3.6f,f,ceil);
  officeGlass(m,9.6f,11.4f,15.2f,11.6f,f,ceil);officeGlass(m,9.6f,3.6f,9.8f,11.4f,f,ceil);officeWall(m,15.f,3.6f,15.2f,11.4f,f,ceil);
  m.fixtures.push_back({19,{11.8f,7.5f},0,1.2f,3.2f,.78f,0,true});
- for(float y:{6.4f,7.5f,8.6f}){m.fixtures.push_back({26,{10.75f,y},0,.55f,.55f,.95f,kPi*.5f,true});m.fixtures.push_back({26,{12.85f,y},0,.55f,.55f,.95f,-kPi*.5f,true});}
- m.fixtures.push_back({26,{11.8f,9.65f},0,.55f,.55f,.95f,kPi,true});
+ for(float y:{6.4f,7.5f,8.6f}){m.fixtures.push_back({26,{10.75f,y},0,.55f,.55f,.95f,-kPi*.5f,true});m.fixtures.push_back({26,{12.85f,y},0,.55f,.55f,.95f,kPi*.5f,true});}
+ m.fixtures.push_back({26,{11.8f,9.65f},0,.55f,.55f,.95f,0,true});
  for(Vec2 q:{Vec2{11.6f,6.6f},Vec2{12.f,8.4f}})m.fixtures.push_back({38,q,.78f,.3f,.08f,.32f,.4f,false});
  wallSign(m,14.945f,7.5f,f+1.2f,"SHIFT 02 BRIEFING","DEPOT / PLATFORM 3 / DEEP FREIGHT / NO CHANGES",2.4f,-kPi*.5f);
  m.lights.push_back(lamp({11.8f,7.5f},ceil-.16f,.9f,6.f,4000));
@@ -2874,9 +2883,24 @@ std::shared_ptr<const Map> makeManifestRouting(){
  for(float y:{4.6f,5.6f,6.6f,7.6f,8.6f,9.6f})m.fixtures.push_back({13,{22.75f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});
  cableTray(m,{22.6f,4.f},{22.6f,11.f},ceil-.12f);
  for(float y:{4.6f,6.6f,8.6f})m.pipes.push_back({{22.85f,y+.5f},{22.85f,y+.5f},f+2.2f,.04f,ceil-.1f,1});
- for(float y=4.f;y<11;y+=.5f)wall(m,20.4f,y,21.2f,y+.04f,f,f+.008f,2);
+ // Two back-to-back rows of switchgear down the room, fed from trays at the
+ // ceiling; distribution boards on the west wall; the duty desk and UPS.
+ for(float y=5.f;y<10.2f;y+=.92f){m.fixtures.push_back({13,{19.f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});m.fixtures.push_back({13,{19.52f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});}
+ wall(m,18.7f,4.5f,19.82f,10.2f,f+2.2f,f+2.26f,20);
+ cableTray(m,{19.26f,4.f},{19.26f,11.f},ceil-.12f);
+ for(float y:{5.5f,7.3f,9.2f})m.pipes.push_back({{19.26f,y},{19.26f,y},f+2.26f,.05f,ceil-.12f,1});
+ for(float y:{5.f,6.6f})m.fixtures.push_back({8,{15.27f,y},1.1f,.7f,.15f,1.f,kPi*.5f,false});
+ for(float y:{5.f,6.6f})m.pipes.push_back({{15.3f,y},{15.3f,y},f+2.1f,.04f,ceil-.1f,1});
+ m.fixtures.push_back({24,{15.6f,9.f},0,1.4f,.7f,.75f,kPi*.5f,true});
+ m.fixtures.push_back({26,{16.45f,9.f},0,.55f,.55f,.95f,kPi*.5f,true});
+ m.fixtures.push_back({27,{15.5f,9.2f},.75f,.42f,.4f,.38f,kPi*.5f,false});
+ m.fixtures.push_back({28,{15.8f,8.95f},.75f,.45f,.16f,.03f,kPi*.5f,false});
+ m.fixtures.push_back({6,{16.2f,10.8f},0,1.4f,.7f,1.1f,0,true});
+ for(float x=15.6f;x<22.6f;x+=.6f)wall(m,x,3.8f,x+.02f,11.2f,f,f+.006f,2);
+ for(float y=3.8f;y<11.2f;y+=.6f)wall(m,15.4f,y,22.6f,y+.02f,f,f+.006f,2);
+ wallSign(m,21.f,11.345f,f+1.6f,"DANGER / 415 V","ISOLATE BEFORE OPENING / FREIGHT CONTROL",1.8f,kPi);
  wallSign(m,16.f,3.345f,f+2.25f,"SWITCH ROOM","FREIGHT CONTROL / AUTHORIZED STAFF",1.4f,kPi);
- for(float y:{5.5f,9.5f})m.lights.push_back(lamp({19.5f,y},ceil-.16f,1.2f,7.f,5200));
+ for(float x:{17.f,21.4f})for(float y:{5.2f,9.4f})m.lights.push_back(lamp({x,y},ceil-.16f,1.4f,7.f,5200));
  // --- Routing control room --------------------------------------------------------------------
  // The transfer yard mimic board fills the south wall either side of the door.
  for(float x1:{1.6f,14.f}){float x2=x1+8.4f;
@@ -2899,7 +2923,7 @@ std::shared_ptr<const Map> makeManifestRouting(){
  terminal(m,{20.4f,16.4f},"MANIFEST / ROUTING SHUTTERS","TRANSFER YARD: ROUTING AUTHORIZATION.","E / RELEASE THE DOWNSTREAM SHUTTERS.",0,stateId("freight_routing"));
  m.fixtures.push_back({25,{21.8f,13.9f},0,1.6f,1.6f,.75f,kPi*.5f,true});
  m.fixtures.push_back({27,{22.2f,13.8f},.75f,.42f,.4f,.38f,-kPi*.5f,false});
- m.fixtures.push_back({26,{20.4f,14.f},0,.55f,.55f,.95f,kPi*.5f,true});
+ m.fixtures.push_back({26,{20.4f,14.f},0,.55f,.55f,.95f,-kPi*.5f,true});
  wallSign(m,21.f,18.455f,f+2.42f,"ROUTING SUPERVISOR","",1.4f,0);
  m.lights.push_back(lamp({21.f,15.5f},ceil-.16f,.9f,6.f,4000));
  // --- Ceiling and light ------------------------------------------------------------------------
