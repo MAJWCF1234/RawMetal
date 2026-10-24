@@ -53,6 +53,7 @@ bool Game::testServiceMaps(){
   }
   for(Vec2 target:{Vec2{12,22},Vec2{3.5f,19.5f},Vec2{20.5f,19.5f}}){
    int at=int(target.y*4)*N+int(target.x*4);
+   if(!reached[at])out<<"Level "<<level<<" unreached "<<target.x<<","<<target.y<<'\n';
    if(!check(reached[at],"Service route reaches exit and both maintenance bays"))return false;
   }
   if(level==4){
