@@ -3085,7 +3085,6 @@ std::shared_ptr<const Map> makeEmptyPlatform(){
  for(float x:{5.f,19.f})trackRun(m,x,base);
  rectangle(m.layers[0],10,0,14,1,'.');m.doors.push_back({10.5f,13.5f,.5f,0,false,false,true,0});
  wall(m,10,0,14,1,base+2.5f,ceil,3);
- guardRail(m,9.f,23.94f,15.f,24.f,deckZ);
  // --- Island platform: concrete body, steps, coping and tactile edges ---------------------------
  wall(m,9.f,5.f,15.f,24.f,base,deckZ-.22f,15);
  deck(m,deckZ,9,5,15,24);
@@ -3096,7 +3095,7 @@ std::shared_ptr<const Map> makeEmptyPlatform(){
  // --- Platform columns, benches, the vending machine ------------------------------------------
  for(float y:{8.f,14.f,20.f})for(float x:{10.6f,13.4f})wall(m,x-.2f,y-.2f,x+.2f,y+.2f,deckZ,ceil,15);
  for(float y:{11.f,17.f,22.f})m.fixtures.push_back({51,{12.f,y},deckZ-base,1.86f,.44f,.63f,kPi*.5f,true});
- m.fixtures.push_back({50,{14.f,6.6f},deckZ-base,.95f,.68f,2.01f,-kPi*.5f,true});
+ m.fixtures.push_back({62,{14.1f,6.6f},deckZ-base,1.5f,.68f,2.38f,kPi*.5f,true});
  m.fixtures.push_back({49,{10.1f,6.4f},deckZ-base,.55f,.55f,.8f,0,true});
  terminal(m,{12,3},"PLATFORM 3 / DEPARTURES","TRAIN 27 / ARRIVED 02:13.","NO DEPARTURE RECORDED / TRACK CLEAR.");
  m.fixtures.push_back({8,{13.62f,14.f},deckZ-base+1.1f,.55f,.12f,.8f,kPi*.5f,false});
@@ -3112,6 +3111,210 @@ std::shared_ptr<const Map> makeEmptyPlatform(){
  for(float y:{5.f,11.f,17.f,23.f})m.lights.push_back(lamp({12.f,y},ceil-.65f,1.6f,10.f,4600,.05f));
  m.lights.push_back(lamp({12.f,1.6f},ceil-.2f,1.f,6.f,3800));
  freightFinish(m,25);
+ return p;
+}
+
+// A closed roller shutter over a running line where it passes through the
+// south (or north) wall: steel frame, slats and a hazard-striped sill.
+void trackPortal(Map& m,float x,float y,float floor,float face){
+ wall(m,x-2.f,y,x+2.f,y+.2f,floor,floor+4.4f,7);
+ for(float z=floor+.3f;z<floor+4.3f;z+=.3f)wall(m,x-1.9f,y+face*.06f,x+1.9f,y+.2f-(1-face)*.06f,z,z+.05f,2);
+ for(float px:{x-2.3f,x+2.f})wall(m,px,y-.15f,px+.3f,y+.35f,floor,floor+4.8f,12);
+ wall(m,x-2.3f,y-.15f,x+2.3f,y+.35f,floor+4.4f,floor+4.8f,12);
+}
+
+// PLATFORM / SERVICE END. The south end of platform 3. The island platform
+// ends at a staff stair down to track level, where a boarded crossing spans
+// both lines; the security office watches the end of the platform; both
+// lines run on through shuttered portals into the depot, and the personnel
+// door between them leads there too.
+std::shared_ptr<const Map> makePlatformServiceEnd(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[26];m.definition=CampaignChunks[26];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.34f;
+ const float base=-25,deckZ=-23.9f,ceil=m.definition.ceiling;m.definition.spawnHeight=deckZ;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,false));
+ m.openNorth=true;m.openSouth=true;for(float x:{5.f,19.f})trackRun(m,x,base);m.openSouth=false;
+ for(float x:{5.f,19.f})trackPortal(m,x,22.8f,base,1);
+ wallSign(m,5.f,22.945f,base+4.9f,"DEPOT / LINE 1","ROLLING STOCK / GATE CLOSED",2.4f,kPi);
+ wallSign(m,19.f,22.945f,base+4.9f,"DEPOT / LINE 2","ROLLING STOCK / GATE CLOSED",2.4f,kPi);
+ rectangle(m.layers[0],10,23,14,24,'.');m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,0});
+ wall(m,10,23,14,24,base+2.5f,ceil,3);
+ wallSign(m,12.f,22.945f,base+2.6f,"DEPOT ACCESS","EMPLOYEE TRANSIT / STAFF ONLY",2.4f,kPi);
+ // --- The end of the island platform and its staff stair ----------------------------------
+ wall(m,9.f,0,15.f,13.f,base,deckZ-.22f,15);
+ deck(m,deckZ,9,0,15,13);
+ for(float x:{9.f,14.55f})wall(m,x,0,x+.45f,13.f,deckZ,deckZ+.01f,18);
+ for(float x:{8.85f,15.f})wall(m,x,0,x+.15f,13.f,base,deckZ+.01f,20);
+ m.stairs.push_back({10.5f,13.f,13.5f,15.f,base,deckZ,6,true,false});
+ guardRail(m,9.f,12.94f,10.5f,13.f,deckZ);guardRail(m,13.5f,12.94f,15.f,13.f,deckZ);
+ for(float x:{10.3f,13.5f})wall(m,x,13.f,x+.2f,15.f,base,base+1.05f,12);
+ for(float y:{2.f,8.f})for(float x:{10.6f,13.4f})wall(m,x-.2f,y-.2f,x+.2f,y+.2f,deckZ,ceil,15);
+ m.fixtures.push_back({61,{12.f,5.f},deckZ-base,2.27f,.54f,.95f,kPi*.5f,true});
+ m.fixtures.push_back({59,{12.f,10.6f},deckZ-base,.6f,.6f,.76f,0,true});
+ m.fixtures.push_back({60,{12.f,8.24f},deckZ-base+1.f,1.29f,.08f,1.58f,0,false});
+ wall(m,11.3f,8.2f,12.7f,8.22f,deckZ+.95f,deckZ+2.62f,2);
+ board(m,12.f,11.6f,-21.f,"END OF PLATFORM","NO PUBLIC ACCESS BEYOND THIS POINT",3.f);
+ // --- Track level: crossing, security office ----------------------------------------------------
+ for(float x=2.f;x<22.f;x+=.5f)if(x<9.f||x>15.f)wall(m,x,16.f,x+.4f,17.6f,base+.07f,base+.11f,10);
+ for(float y:{15.9f,17.6f})floorLine(m,1.f,y,9.f,y+.1f,base,13),floorLine(m,15.f,y,23.f,y+.1f,base,13);
+ office(m,10.5f,19.5f,base,"PLATFORM / SECURITY RECORD","02:12:51 ... 02:19:04 / BLOCK MISSING.","EMPLOYEE TRANSIT: ROLLING STOCK DEPOT.",0,true);
+ m.fixtures.push_back({18,{10.5f,18.65f},0,.417f,.525f,.95f,kPi,true});
+ for(int i=0;i<6;++i)m.clutterSpawns.push_back({i%4,{15.6f+float(i%3)*.8f,19.4f+float(i/3)},base});
+ m.fixtures.push_back({58,{16.2f,21.9f},0,.97f,.41f,2.24f,kPi,true});
+ // --- Walls across the lines, ceiling and light -------------------------------------------------
+ wallSign(m,1.055f,8.f,-22.2f,"PLATFORM 3 / SOUTH","SERVICE END / DEPOT",4.f,kPi*.5f);
+ wallSign(m,22.945f,8.f,-22.2f,"MIND THE GAP","STAND BEHIND THE YELLOW LINE",4.f,-kPi*.5f);
+ for(float y:{4.f,14.f}){wallLamp(m,1.02f,y,-21.5f,0,1.1f,8.f);wallLamp(m,22.98f,y,-21.5f,kPi,1.1f,8.f);}
+ for(float y:{2.f,8.f,14.f,20.f})wall(m,1.f,y-.15f,23.f,y+.15f,ceil-.5f,ceil,12);
+ for(float y:{5.f,11.f})m.lights.push_back(lamp({12.f,y},ceil-.65f,1.6f,10.f,4600,.05f));
+ for(Vec2 l:{Vec2{5.f,18.f},Vec2{19.f,18.f},Vec2{12.f,18.f}})m.lights.push_back(lamp(l,ceil-.65f,1.4f,9.f,4200,.05f));
+ freightFinish(m,26);
+ return p;
+}
+
+// DEPOT / TRACKSIDE. The arrival road of the rolling-stock depot. Both lines
+// come in through the shuttered portals on raised track beds; Train 27
+// stands on line 1, its doors shut, where its driver tried to take it out.
+// A loaded flat stands on line 2. Between the beds a sunken service road
+// runs south past the maintenance stores to the inspection pits.
+std::shared_ptr<const Map> makeDepotTrackside(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[27];m.definition=CampaignChunks[27];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.3f;
+ const float base=-28,bed=-25,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,false,true));m.openSouth=true;
+ rectangle(m.layers[0],10,0,14,1,'.');m.doors.push_back({10.5f,13.5f,.5f,0,false,false,true,bed-base});
+ wall(m,10,0,14,1,bed+2.5f,roof,3);wall(m,10,0,14,1,base,bed-.22f,15);
+ // --- Track beds, the north landing and the stair to the service road -------------------------
+ deck(m,bed,1,0,9,24);deck(m,bed,15,0,23,24);deck(m,bed,9,0,15,4);
+ m.openNorth=true;for(float x:{5.f,19.f})trackRun(m,x,bed);m.openNorth=false;
+ for(float x:{5.f,19.f})trackPortal(m,x,1.f,bed,0);
+ m.stairs.push_back({10.5f,4.f,13.5f,9.f,base,bed,16,true,false});
+ guardRail(m,9.f,4.f,10.5f,4.06f,bed);guardRail(m,13.5f,4.f,15.f,4.06f,bed);
+ guardRail(m,8.94f,4.f,9.f,24.f,bed);guardRail(m,15.f,4.f,15.06f,24.f,bed);
+ for(float x:{8.85f,15.f})wall(m,x,4.f,x+.15f,24.f,base,bed,15);
+ // --- Train 27 on line 1 ---------------------------------------------------------------------
+ m.fixtures.push_back({56,{5.f,12.6f},bed-base+.05f,3.83f,22.4f,5.33f,0,true});
+ for(float y:{2.f,6.f,10.f,14.f,18.f,22.f})wallLamp(m,1.02f,y,bed+3.2f,0,1.5f,9.f);
+ for(float y:{6.f,18.f})m.lights.push_back(lamp({7.6f,y},bed+6.5f,2.f,10.f,4600,.05f));
+ // --- A loaded flat on line 2 and the maintenance log ----------------------------------------------
+ flatWagon(m,19.f,6.f,bed);
+ terminal(m,{22.f,20.f},"DEPOT / MAINTENANCE LOG","ENGINE 04: DRIVER ATTEMPTED EVACUATION.","VEHICLE STOPPED AT THE BARRICADE.",bed-base);
+ m.fixtures.push_back({13,{22.75f,22.4f},bed-base,.9066f,.4956f,2.2f,kPi*.5f,true});
+ // --- The service road: stores, carts and the way south -------------------------------------------
+ for(float y:{11.f,12.3f})m.fixtures.push_back({7,{9.3f,y},0,1.2f,.45f,1.8f,kPi*.5f,true});
+ for(Vec2 d:{Vec2{14.4f,10.f},Vec2{14.4f,10.8f},Vec2{13.7f,10.4f}})m.fixtures.push_back({49,d,0,.75f,.75f,1.08f,0,true});
+ for(float x:{13.9f,14.3f})m.fixtures.push_back({54,{x,16.2f},0,.33f,.33f,1.58f,0,true});
+ handCart(m,10.2f,18.f,base);cargo(m,13.8f,21.f,base);
+ for(float y=5.f;y<24;y+=2.f)floorLine(m,11.95f,y,12.05f,y+1.f,base,14);
+ wallSign(m,12.f,1.055f,bed+3.f,"ROLLING STOCK","ENGINE 04 / MAINTENANCE / LINES 1-2",3.6f,0);
+ for(float y:{9.f,17.f}){wallLamp(m,9.02f,y,base+2.4f,0,1.f,6.f);wallLamp(m,14.98f,y,base+2.4f,kPi,1.f,6.f);}
+ // --- Roof and light -----------------------------------------------------------------------
+ wallBays(m,base,roof,4.f,false,false,true,true);
+ for(float y:{4.f,10.f,16.f,22.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.8f,roof,12);
+ servicePipe(m,{1.2f,7.f},{22.8f,7.f},-10.f,.35f,5);
+ for(Vec2 l:{Vec2{5.f,6.f},Vec2{5.f,18.f},Vec2{19.f,6.f},Vec2{19.f,18.f},Vec2{12.f,12.f}})m.lights.push_back(lamp(l,-12.f,2.6f,18.f,4000,.1f));
+ m.creatureSpawns={{CreatureKind::Mutant,{20.5f,19.5f},bed}};
+ m.pickupSpawns.push_back({{12.f,14.f},PickupKind::Ammo,base});
+ freightFinish(m,27);
+ return p;
+}
+
+// DEPOT / INSPECTION PITS. Line 1 ends at the barricade the depot staff
+// threw across it; Train 27 stopped short of it. Line 2 runs over the
+// inspection pit where Engine 02 stands stripped on its jacks, beside the
+// tool bay. The service road ends at a stair to the track beds and a second
+// flight climbs to the gantry walk south.
+std::shared_ptr<const Map> makeDepotInspectionPits(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[28];m.definition=CampaignChunks[28];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.38f;
+ const float base=-28,bed=-25,walk=-19,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,true));m.openNorth=true;m.openSouth=true;
+ deck(m,bed,1,0,9,24);deck(m,bed,15,0,23,24);deck(m,bed,9,10,15,24);
+ for(float x:{5.f,19.f})trackRun(m,x,bed);
+ for(float x:{8.85f,15.f})wall(m,x,0,x+.15f,10.f,base,bed,15);wall(m,9.f,9.85f,15.f,10.f,base,bed,15);
+ // --- Stairs: service road to the beds, then up to the gantry walk ---------------------------------
+ m.stairs.push_back({12.f,5.f,14.5f,10.f,base,bed,16,true,true});
+ m.stairs.push_back({9.f,12.f,12.f,21.f,bed,walk,32,true,true});
+ deck(m,walk,8,21,16,24);
+ guardRail(m,8.94f,0,9.f,10.f,bed);guardRail(m,15.f,0,15.06f,10.f,bed);guardRail(m,9.f,10.f,12.f,10.06f,bed);guardRail(m,14.5f,10.f,15.f,10.06f,bed);
+ guardRail(m,8.f,21.f,9.f,21.06f,walk);guardRail(m,12.f,21.f,16.f,21.06f,walk);guardRail(m,8.f,21.f,8.06f,24.f,walk);guardRail(m,15.94f,21.f,16.f,24.f,walk);
+ // --- The barricade across line 1 ------------------------------------------------------------
+ for(float x:{3.6f,5.f,6.4f})m.fixtures.push_back({52,{x,1.6f},bed-base,1.4f,.55f,.8f,0,true});
+ for(Vec2 c:{Vec2{3.2f,3.f},Vec2{7.f,3.2f}})cargo(m,c.x,c.y,bed);
+ m.fixtures.push_back({17,{5.f,3.f},bed-base,1.f,1.1f,1.f,.4f,true});
+ forklift(m,2.3f,7.f,bed);
+ board(m,5.f,4.6f,bed+2.f,"LINE 1 CLOSED","DEPOT LOCKDOWN / NO MOVEMENTS",2.6f);
+ // --- Line 2 over the inspection pit: Engine 02 on its jacks ------------------------------------
+ for(float x:{18.f,19.6f})wall(m,x,3.f,x+.4f,19.f,base,bed,15);
+ for(float x:{18.f,19.f})for(int y=3;y<19;++y)rectangle(m.layers[1],int(x),y,int(x)+1,y+1,'.');
+ locomotive(m,19.f,6.f,bed,true);
+ for(float x:{17.4f,20.6f})for(float y:{6.6f,12.4f}){wall(m,x-.2f,y-.2f,x+.2f,y+.2f,bed,bed+.1f,8);wall(m,x-.07f,y-.07f,x+.07f,y+.07f,bed+.1f,bed+.72f,18);}
+ for(float y:{5.f,9.f,13.f,17.f})wallLamp(m,18.42f,y,base+1.6f,0,1.f,4.f);
+ board(m,21.6f,2.4f,bed+2.f,"INSPECTION PIT","JACKS ENGAGED / DO NOT LOWER",2.f);
+ // --- The tool bay ---------------------------------------------------------------------------
+ for(float y:{6.f,10.f})m.fixtures.push_back({19,{22.2f,y},bed-base,1.367f,.724f,.78f,kPi*.5f,true});
+ m.fixtures.push_back({22,{22.4f,14.f},bed-base,.718f,.453f,1.2f,-kPi*.5f,true});
+ m.fixtures.push_back({12,{21.8f,17.4f},bed-base,1.8f,1.4f,1.6f,0,true});
+ m.fixtures.push_back({55,{21.5f,21.4f},bed-base,2.2f,2.8f,2.9f,0,true});
+ wallSign(m,22.945f,12.f,bed+2.4f,"ENGINE 02 / TOOL BAY","STRIPPED FOR BOGIE SERVICE",2.4f,-kPi*.5f);
+ for(float y:{5.5f,9.f,12.5f})m.fixtures.push_back({7,{1.6f,y+8.f},bed-base,1.4f,.5f,1.8f,-kPi*.5f,true});
+ // --- Roof and light -----------------------------------------------------------------------
+ wallBays(m,base,roof,4.f,false,false,true,true);
+ for(float y:{4.f,10.f,16.f,22.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.8f,roof,12);
+ for(Vec2 l:{Vec2{5.f,6.f},Vec2{19.f,4.f},Vec2{12.f,6.f},Vec2{5.f,17.f},Vec2{19.f,20.f},Vec2{12.f,17.f}})m.lights.push_back(lamp(l,-12.f,2.6f,18.f,4000,.1f));
+ for(float y:{6.f,18.f})wallLamp(m,22.98f,y,bed+3.f,kPi,1.2f,8.f);
+ m.pickupSpawns.push_back({{12,3},PickupKind::Ammo,base});
+ deckSupports(m,m.layers[2],base,6.f);
+ freightFinish(m,28);
+ return p;
+}
+
+// DEPOT / GANTRIES. The loading end of the depot. Gantry walks run the
+// length of the hall either side, six metres up, under the crane runway
+// where something moves. Freight flats stand on line 2 with their loads
+// still chained. A stair drops from the west walk to the floor and the door
+// south leads to the maintenance bore.
+std::shared_ptr<const Map> makeDepotGantries(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[29];m.definition=CampaignChunks[29];m.definition.musicCue=MusicCue::Freight;m.definition.ambient=.3f;
+ const float base=-25,walk=-19,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),base,true,false));
+ m.openNorth=true;for(float x:{5.f,19.f})trackRun(m,x,base);
+ rectangle(m.layers[0],10,23,14,24,'.');m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,0});
+ wall(m,10,23,14,24,base+2.5f,roof,3);
+ wallSign(m,12.f,22.945f,base+2.6f,"DEEP CARGO","MAINTENANCE BORE / RESTRICTED",2.4f,kPi);
+ terminal(m,{12,21.6f},"DEEP CARGO ROUTE","POWER DISTRIBUTION / RESTRICTED INDUSTRIAL ACCESS.","BEYOND THIS POINT: NO EMPLOYEE TRANSIT.");
+ // --- Gantry walks ---------------------------------------------------------------------------
+ deck(m,walk,1,0,23,4);deck(m,walk,1,4,8,22);deck(m,walk,16,4,23,22);
+ m.stairs.push_back({1.2f,4.f,4.f,13.f,base,walk,32,true,true});
+ guardRail(m,8.f,4.f,16.f,4.06f,walk);guardRail(m,7.94f,4.f,8.f,22.f,walk);guardRail(m,16.f,4.f,16.06f,22.f,walk);
+ guardRail(m,1.f,21.94f,8.f,22.f,walk);guardRail(m,16.f,21.94f,23.f,22.f,walk);guardRail(m,4.f,4.f,4.06f,13.f,walk);guardRail(m,1.f,3.94f,4.f,4.f,walk);
+ wallSign(m,1.055f,6.f,walk+1.6f,"DEPOT / GANTRIES","LOADING END / CRANE RUNWAY OVERHEAD",3.f,kPi*.5f);
+ // --- Crane runway, the bridge and what moves along it --------------------------------------------
+ for(float x:{1.f,22.6f})wall(m,x,4.f,x+.4f,22.f,-12.6f,-12.2f,12);
+ for(float x:{1.f,22.6f})for(float y=5.f;y<22;y+=4.f)wall(m,x,y-.15f,x+.4f,y+.15f,-13.4f,-12.6f,12);
+ wall(m,1.4f,9.6f,22.6f,10.4f,-12.2f,-11.4f,18);
+ wall(m,11.4f,9.4f,12.6f,10.6f,-12.8f,-12.2f,12);
+ m.pipes.push_back({{12.f,10.f},{12.f,10.f},-17.f,.025f,-12.8f,6});wall(m,11.85f,9.85f,12.15f,10.15f,-17.4f,-17.f,8);
+ machineryClock(m,"depot_roof_movement",24000);
+ actor(m,"depot_roof_movement",ActorVisual::Huntsman,1.5f,{{0,{19,6},-16,0},{6000,{19,6},-16,0},{8500,{19,14},-16,kPi*.5f},{11000,{19,17},walk,kPi*.5f},{17000,{19,17},walk,-kPi*.5f},{19500,{19,14},-16,-kPi*.5f},{22000,{19,6},-16,-kPi*.5f},{24000,{19,6},-16,0}});
+ wall(m,18.6f,5.7f,19.4f,14.5f,-16.2f,-16,12);for(float yy:{6.f,14.f})wall(m,19.3f,yy,19.5f,yy+.15f,walk,-16,12);
+ cue(m,"depot_roof_movement",7000,Sound::JunkMetal,{19,12},"",.8f);
+ // --- Freight flats on line 2, the line 1 run-off -----------------------------------------------
+ flatWagon(m,19.f,.4f,base);
+ for(Vec2 c:{Vec2{21.6f,15.f},Vec2{21.6f,16.4f},Vec2{16.4f,15.4f}})cargo(m,c.x,c.y,base);
+ cargo(m,16.4f,17.f,base,false);
+ m.fixtures.push_back({48,{8.6f,16.f},0,2.44f,10.8f,2.5f,0,true});
+ for(Vec2 d:{Vec2{14.4f,6.f},Vec2{14.4f,6.8f},Vec2{13.6f,6.4f}})m.fixtures.push_back({49,d,0,.75f,.75f,1.08f,0,true});
+ // --- Roof and light -----------------------------------------------------------------------
+ wallBays(m,base,roof,4.f,false,true,true,true,12.f);
+ for(float y:{4.f,10.f,16.f,22.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.8f,roof,12);
+ for(Vec2 l:{Vec2{12.f,6.f},Vec2{12.f,16.f},Vec2{5.f,10.f},Vec2{19.f,10.f}})m.lights.push_back(lamp(l,-10.f,2.6f,18.f,4000,.1f));
+ for(float y:{10.f,18.f}){wallLamp(m,1.02f,y,walk+2.4f,0,1.1f,7.f);wallLamp(m,22.98f,y,walk+2.4f,kPi,1.1f,7.f);}
+ for(Vec2 l:{Vec2{4.f,8.f},Vec2{20.f,8.f},Vec2{20.f,18.f}})m.lights.push_back(lamp(l,walk-.5f,1.2f,8.f,4000));
+ m.creatureSpawns={{CreatureKind::Huntsman,{20,15},walk}};
+ deckSupports(m,m.layers[1],base,6.f);
+ freightFinish(m,29);
  return p;
 }
 
@@ -3745,7 +3948,7 @@ std::shared_ptr<const Map> make(int level){
 std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
   result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();result[9]=makeWasteHandling();
-  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i); result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();result[14]=makeReceivingLanes();result[15]=makeWarehouseIntake();result[16]=makeWarehouseAB();result[17]=makeWarehouseC();result[18]=makeWarehouseD();result[19]=makeWarehouseUpper();result[20]=makeManifestOffices();result[21]=makeManifestRouting();result[22]=makeTransferConveyors();result[23]=makeTransferSorting();result[24]=makeTransferRailYard();result[25]=makeEmptyPlatform();
+  for(int i=10;i<FreightDistrictEnd;++i)result[i]=make(i); result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();result[14]=makeReceivingLanes();result[15]=makeWarehouseIntake();result[16]=makeWarehouseAB();result[17]=makeWarehouseC();result[18]=makeWarehouseD();result[19]=makeWarehouseUpper();result[20]=makeManifestOffices();result[21]=makeManifestRouting();result[22]=makeTransferConveyors();result[23]=makeTransferSorting();result[24]=makeTransferRailYard();result[25]=makeEmptyPlatform();result[26]=makePlatformServiceEnd();result[27]=makeDepotTrackside();result[28]=makeDepotInspectionPits();result[29]=makeDepotGantries();
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();return result;}();
  return maps.at(size_t(level));
 }

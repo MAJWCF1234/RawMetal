@@ -21,6 +21,7 @@
 #include <map>
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
 #include "../ThirdParty/stb/stb_image.h"
 
 namespace retro {
@@ -200,6 +201,12 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  // Freight set pieces (models 47-55) from the same library, also by usemtl.
  const char* freightMaterials[]={"shipping_containers_mx_1","metal_barrel_mp_1","vending_machine_1","planks_hr_2","Road_Blocks","concrete_hr_1","gas_cylinder_mx_1"};
  for(int i=0;i<7;++i)m_facilityTextures.emplace(freightMaterials[i],loadTexture(436+i));
+ // Metro pack (models 56-61): the subway car and station furniture. Material
+ // names carry a metro_ prefix so they never collide with other packs.
+ const char* metroMaterials[]={"metro_Door","metro_Floor","metro_Trains","metro_Trains_01","metro_metal","metro_metal_01","metro_metal_02","metro_metal_03","metro_metal_04","metro_seats","metro_automatic_ticket_gate","metro_ticket_machine","metro_trash_can","metro_metro_map","metro_Chair"};
+ for(int i=0;i<15;++i)m_facilityTextures.emplace(metroMaterials[i],loadTexture(449+i));
+ m_facilityTextures.emplace("metro_Glass",m_glassTexture);
+ m_facilityTextures.emplace("metro_Vending_machine",loadTexture(465));
  for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
   m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
  m_areaWalls[1].glossStrength=.2f;m_areaWalls[2].glossStrength=.16f;
