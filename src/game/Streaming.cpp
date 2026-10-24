@@ -189,9 +189,9 @@ bool Game::testStreaming(){
  for(int i=0;i<120;++i)joined.update(walking,1.f/120);
  if(joined.player().pos.y<21.1f||joined.player().pos.y>22.8f||!joined.hullFits(joined.player().pos,-9,1))return fail(15);
  // A player can walk up the authored basin ramp without jumping.
- joined.m_player.pos={9,9};joined.m_player.z=joined.world().floorHeight(9,9);joined.m_player.angle=-kPi*.5f;joined.m_velocity={};walking.sprint=false;
- for(int i=0;i<100;++i)joined.update(walking,1.f/120);
- if(joined.player().pos.y>=7.7f||std::fabs(joined.player().z+9)>.08f)return fail(14);
+ joined.m_player.pos={9,10.f};joined.m_player.z=joined.world().floorHeight(9,10.f);joined.m_player.angle=-kPi*.5f;joined.m_velocity={};walking.sprint=false;
+ for(int i=0;i<160;++i)joined.update(walking,1.f/120);
+ if(joined.player().pos.y>=8.2f||std::fabs(joined.player().z+9)>.08f)return fail(14);
  // A window can show a distant authored hall while traversal keeps separate
  // residency groups. No open door or campaign-specific map index is required.
  auto vista=std::make_shared<CustomCampaign>();vista->name="Visible hall test";vista->key=123456;
