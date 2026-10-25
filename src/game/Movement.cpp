@@ -4,6 +4,15 @@
 #include <fstream>
 #include <queue>
 namespace retro {
+Sound Game::stepSoundAt(const World& world,Vec2 position){
+ const auto origin=world.definition().origin;
+ switch(world.groundKind(position.x+origin.x,position.y+origin.y)){
+  case GroundGravel:return Sound::StepGravel1;
+  case GroundDry:case GroundLitter:case GroundMud:return Sound::StepDirt1;
+  case GroundShortGrass:case GroundLeafyGrass:case GroundClover:case GroundWild:return Sound::StepGrass1;
+  default:return world.metalFloor(int(position.x),int(position.y))?Sound::Metal1:Sound::Concrete1;
+ }
+}
 float Game::groundHeight(Vec2 p)const{
  return groundHeight(p,m_player.z+(m_player.grounded?.215f:0.f));
 }
@@ -94,7 +103,7 @@ void Game::updateMovement(const InputState& input,float dt){
   if(!grounded&&m_player.grounded){sound(Sound::Land,std::clamp(impact*.105f,.2f,.85f),.94f);m_verticalSpringVelocity-=std::min(impact,9.f)*.105f;m_stepDistance=0;}
   if(grounded&&m_player.grounded){m_stepDistance+=length(m_player.pos-old);
    if(m_stepDistance>(m_player.crouched?.85f:input.sprint?1.45f:1.22f)){
-    m_stepDistance=0;unsigned variation=(m_stepVariant++*3)%4;auto base=m_world.metalFloor(int(m_player.pos.x),int(m_player.pos.y))?Sound::Metal1:Sound::Concrete1;
+    m_stepDistance=0;unsigned variation=(m_stepVariant++*3)%4;auto base=stepSoundAt(m_world,m_player.pos);
     // A deliberate crouched step is audible only inside roughly one metre;
     // the former two-metre cue turned an investigating guard before a rear
     // melee approach could enter its 1.25 m physical reach.

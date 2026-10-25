@@ -33,7 +33,7 @@ bool Game::testWorldIsolation(){
   if(!check(openStairs.railBlocksHull(3.1f,10,.2f,1.833f,1.6f)&&!openStairs.railBlocksHull(4,10,.2f,1.833f,1.6f)&&!openStairs.railBlocksHull(3.1f,10,.2f,0,1.6f),"Stair side rails block falls while leaving the route and underside clear"))return false;
  }
  authored->stairs.push_back({3,3,5,11,0,2,12,true,true,true,-.1f});if(!check(rejected(),"Invalid stair tread thickness rejected"))return false;authored->stairs.clear();
- authored->fixtures.push_back({99,{3,3},0,1,1,1,0});if(!check(rejected(),"Invalid fixture model rejected before renderer access"))return false;authored->fixtures.clear();
+ authored->fixtures.push_back({FacilityModelCount,{3,3},0,1,1,1,0});if(!check(rejected(),"Invalid fixture model rejected before renderer access"))return false;authored->fixtures.clear();
  authored->lights.push_back({{3,3},2,WorldLightMount::Wall,0,1,-1});if(!check(rejected(),"Invalid authored light range rejected before renderer binning"))return false;authored->lights.clear();
  authored->props.push_back({99,{3,3},1,1,0,{.5f,.5f}});if(!check(rejected(),"Invalid prop model rejected before renderer access"))return false;authored->props.clear();
  authored->layers[0].rows[0]=".";if(!check(rejected(),"Malformed map row rejected before collision generation"))return false;authored->layers[0].rows[0]=std::string(World::Width,'.');
@@ -69,7 +69,7 @@ bool Game::testWorldIsolation(){
    valid&=friendly->maps[0]->actorTracks[0].ai.mode==ActorAiMode::Escort&&friendly->maps[0]->actorTracks[0].ai.enableState==stateId("npc_enabled");
   }catch(...){}
   auto invalid=[&](const std::string& text){try{load(text);return false;}catch(const std::runtime_error&){return true;}};
-  bool guarded=invalid(base+records(0,0))&&invalid(base+records(1,12))&&invalid(base+"FIXTURE|0|99|3|3|0|1|1|1|0|1\n")&&invalid(base+"PROP|0|99|3|3|1|1|0|0.5|0.5|0\n");
+  bool guarded=invalid(base+records(0,0))&&invalid(base+records(1,12))&&invalid(base+"FIXTURE|0|"+std::to_string(FacilityModelCount)+"|3|3|0|1|1|1|0|1\n")&&invalid(base+"PROP|0|99|3|3|1|1|0|0.5|0.5|0\n");
   guarded&=invalid(base+"VISIBLE_GROUP|0|-1\n")&&invalid(base+"VISIBLE_GROUP|0\n")&&invalid(base+"VISIBLE_GROUP|0|2|extra\n")&&invalid(base+"VISIBLE_GROUP|0|hall\n");
   guarded&=invalid(base+"TERMINAL|0|5|5|0|0|Test|Call|Local||0||nan\n");
   guarded&=invalid(base+"STAIR|0|3|3|5|11|0|2|12|1|1|1|-0.1\n")&&invalid(base+"STAIR|0|3|3|5|11|0|2|12|1|1|2|0.12\n");

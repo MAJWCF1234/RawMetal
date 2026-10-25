@@ -318,7 +318,6 @@ public:
     void setAiQueryCaching(bool enabled){m_aiQueryCaching=enabled;}
     void setAiDecisionScheduling(bool enabled){m_aiDecisionScheduling=enabled;}
     void setNavAuthority(bool enabled){m_navAuthority=enabled;}
-    bool walkExclusionEast(std::ostream& report);
     static bool testExclusion();
     static bool testExclusionAuthoring();
     static bool testPrologue();
@@ -327,6 +326,9 @@ public:
     static Game prologueInspection(int stage);
     static Game uiInspection(int view);
     static Game exclusionInspection(int stage=0);
+    // A standing view anywhere in the Exclusion Zone pack: map, local x/y,
+    // yaw in degrees and view pitch, on the ground (for --zone-shots).
+    static Game zoneInspection(int level,Vec2 position,float yawDegrees,float pitch,float lift=0);
     static bool testStealth();
     bool npcIncapacitated(size_t actor)const;
     bool npcHeld(size_t actor)const;
@@ -497,6 +499,9 @@ private:
     void updateMovement(const InputState& input,float dt);
     void updateLift(float dt);
     void updateInteraction(const InputState& input,float dt);
+    // First footstep of the set for a surface: painted zone ground gives dirt,
+    // grass or gravel; elsewhere metal floors ring and the rest is concrete.
+    static Sound stepSoundAt(const World& world,Vec2 position);
     bool lineOfSight(const Vec2& a, const Vec2& b) const;
     void shoot();
     ShotHit traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc=-1,bool includePlayer=false,const HitscanDef* assist=nullptr,AiTargetRef ignoredEntity={})const;
@@ -514,7 +519,9 @@ private:
     bool creatureTaskAllows(const Enemy& enemy,CreatureTask task)const;
     void clearCreatureSchedule(Enemy& enemy)const;
     void runCreatureSchedule(Enemy& enemy,int ms,bool visible,bool heard,bool canMelee,bool hurt,bool wantsMove);
-    ActorPose friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const;
+    // Perception runs in the map the actor stands in; its track and restraint
+    // state belong to its home map, which differs once an escort crosses a seam.
+    ActorPose friendlyAwareness(const World& world,int level,const ActorTrack& track,int homeLevel,size_t homeActor,const ActorPose& old,ActorPose pose,float dt)const;
     ActorPose updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli=nullptr);
     void guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove);
     void guardBaseIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove);

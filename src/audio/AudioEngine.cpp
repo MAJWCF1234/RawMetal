@@ -10,7 +10,11 @@
 #include <chrono>
 namespace retro {
 namespace {
-enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3 };
+enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5 };
+// Loops that crossfade their tail into their head (no click on wrap).
+bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||sound==Sound::FreightMusic||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum);}
+// Open-zone sounds live in the library resources from 720, in enum order.
+constexpr int ZoneSoundResource=720;
 std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
  return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
 }
@@ -24,7 +28,7 @@ bool writeVoicePreview(const std::vector<int16_t>& pcm,const char* path="npc-voi
 std::vector<int16_t> decodeMusic(const unsigned char* data,size_t bytes);
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
@@ -78,7 +82,7 @@ void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  m_voices.back().radius=std::max(.1f,event.radius);
  m_voices.back().z=event.z;
  m_voices.back().speech=event.speech;m_voices.back().speaker=event.speaker;m_voices.back().speechPriority=event.speechPriority;
- if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
+ if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn||event.sound==Sound::FireCrackle||event.sound==Sound::AnomalyHum||event.sound==Sound::ZoneFrogs))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
 }
 void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  if(!voice.spatial){voice.left=voice.right=1;voice.filterTarget=1;return;}
@@ -117,6 +121,9 @@ void AudioEngine::update(const Game& game,bool focused){
  auto phase=game.world().liftPhase();bool shaft=game.world().hasLift();
  m_freightTarget=game.world().definition().musicCue==MusicCue::Freight?1.f:0.f;
  m_mainTarget=m_freightTarget>0?0.f:!shaft||phase==World::LiftPhase::Ready?1.f:0.f;
+ // The open zone is carried by its ambience; the score sits far back.
+ const bool zone=game.world().zoneSky();
+ if(zone)m_mainTarget=.3f;
  m_reactorTarget=shaft&&phase==World::LiftPhase::Crashed&&game.world().liftPhaseTime()>2?1.f:0.f;
  m_motorTarget=shaft?game.world().liftMotorGain():0.f;
  if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;m_freightBlend=m_freightTarget;}
@@ -145,7 +152,25 @@ void AudioEngine::update(const Game& game,bool focused){
   float machineGain=.30f;if(world.hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
   size_t index=0;for(auto emitter:world.machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
   index=0;for(const auto& basin:world.waterVolumes())
-   loop(ambientEmitter(AmbientKind::Water,level,index++),Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,.18f,basin.surface);
+   loop(ambientEmitter(AmbientKind::Water,level,index++),world.zoneSky()?Sound::ZoneFrogs:Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,world.zoneSky()?.5f:.18f,basin.surface);
+  // Zone hazards are heard before they are seen: camp fires crackle, anomalies hum.
+  if(world.zoneSky()){size_t fires=0,anomalies=0;
+   for(const auto& hazard:world.hazards()){Vec2 centre=Vec2{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f}+shift;
+    if(hazard.kind==Hazard::Kind::Fire)loop(ambientEmitter(AmbientKind::Fire,level,fires++),Sound::FireCrackle,centre,.55f,hazard.bottom+.4f);
+    else if(hazard.kind==Hazard::Kind::Anomaly)loop(ambientEmitter(AmbientKind::Anomaly,level,anomalies++),Sound::AnomalyHum,centre,.4f,hazard.bottom+1.f);}}
+ }
+ // Zone beds follow the ground under the player: wind always, louder on the
+ // high cordon; birds in woods and meadows; crickets in the open; all silent
+ // outside the zone.
+ {float wind=0,birds=0,crickets=0;
+  if(zone){const auto origin=game.world().definition().origin;int kind=game.world().groundKind(game.player().pos.x+origin.x,game.player().pos.y+origin.y);
+   wind=.16f+std::clamp((game.player().z-6.f)*.04f,0.f,.2f);
+   birds=kind==GroundLitter?.34f:kind==GroundMud?.08f:.2f;
+   crickets=kind==GroundLitter||kind==GroundGravel?.05f:.13f;}
+  const std::pair<Sound,float> beds[]={{Sound::ZoneWind,wind},{Sound::ZoneForest,birds},{Sound::ZoneCrickets,crickets}};
+  for(int i=0;i<3;++i){std::int64_t id=-10-i;auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==id;});
+   if(beds[i].second>0&&it==m_voices.end()){play({beds[i].first,{},beds[i].second,1,false},id,true);}
+   else if(it!=m_voices.end()){if(beds[i].second>0)it->gain+=(beds[i].second-it->gain)*std::min(1.f,dt*.8f);else m_voices.erase(it);}}
  }
  for(auto&voice:m_voices)spatialize(voice,game,dt);
 }
@@ -162,7 +187,7 @@ void AudioEngine::mix(int16_t* output,size_t frames){
    if(m_paused&&!music)continue;const auto&s=sampleFor(v);size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
    size_t a=size_t(v.cursor),b=a+1<n?a+1:v.loop?0:a;float frac=float(v.cursor-double(a));
    auto sample=[&](int channel){float value=s.pcm[a*s.channels+channel]*(1-frac)+s.pcm[b*s.channels+channel]*frac;
-    if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::FreightMusic||v.sound==Sound::WaterReturn)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
+    if(v.loop&&seamlessLoop(v.sound)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
     return value/32768.f;};
    float blend=v.sound==Sound::FreightMusic?m_freightBlend:v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
    float gain=v.gain*(music?m_musicGain:m_effectsGain)*blend;
@@ -176,7 +201,7 @@ void AudioEngine::mix(int16_t* output,size_t frames){
     left+=v.filtered*v.smoothLeft;right+=v.filtered*v.smoothRight;
    }else{left+=sample(0)*v.smoothLeft;right+=sample(s.channels-1)*v.smoothRight;}
    v.cursor+=v.pitch;
-   if(v.loop&&(v.sound==Sound::Machine||v.sound==Sound::LiftMotor||v.sound==Sound::ReactorMusic||v.sound==Sound::FreightMusic||v.sound==Sound::WaterReturn)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
+   if(v.loop&&seamlessLoop(v.sound)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
   m_master+=(m_targetMaster-m_master)*.002f;
   m_submerged+=(m_submergedTarget-m_submerged)*.0006f;

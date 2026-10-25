@@ -298,9 +298,8 @@ void Game::updateEnemies(float dt){
  }
  migrateEnemiesAcrossChunks();
 }
-ActorPose Game::friendlyAwareness(const World& world,int level,size_t actor,const ActorPose& old,ActorPose pose,float dt)const{
- const auto&track=world.actorTracks()[actor];
- if(dt<=0||state(actorAiState(level,actor,track.timerState,"restraint"))||!humanActorVisual(track.visual)||pose.clip!=0||pose.lookAtActor>=0||(track.deadState&&state(track.deadState)))return pose;
+ActorPose Game::friendlyAwareness(const World& world,int level,const ActorTrack& track,int homeLevel,size_t homeActor,const ActorPose& old,ActorPose pose,float dt)const{
+ if(dt<=0||state(actorAiState(homeLevel,homeActor,track.timerState,"restraint"))||!humanActorVisual(track.visual)||pose.clip!=0||pose.lookAtActor>=0||(track.deadState&&state(track.deadState)))return pose;
  Vec2 facing{std::sin(old.yaw),std::cos(old.yaw)},target{};float nearest=64.f;bool found=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
   if(distance<nearest&&aiCanSee(world,pose.position,pose.z+track.scale*.85f,facing,position,z,8.f,-.25f,2.f)){nearest=distance;target=position;found=true;}};

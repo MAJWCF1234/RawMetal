@@ -37,6 +37,9 @@ layout(location=3) out vec4 outLight1;
 layout(location=4) out vec4 outSurface;
 layout(location=6) out vec3 outWorldPos;
 layout(location=7) out float outParallax;
+// Painterly Horizon LOD impostors: fractional atlas column and row, packed
+// grid size (columns*16+rows) and the far fade; zero for everything else.
+layout(location=8) out vec4 outImpostor;
 
 vec3 cameraVector(vec3 v){
  precise float forward=v.x*view.eyeYaw.w+v.y*view.basis.x;
@@ -70,6 +73,7 @@ void main(){
  vec4 adjustedSurface=surface;
  vec3 worldPos=position.xyz;
  vec4 adjustedLight0=light0,adjustedLight1=light1;
+ vec2 vertexUV=uv;vec4 impostorFrame=vec4(0.0);bool collapse=false;
 
  if(surface.w>=3.0){
   int index=int(surface.w)-3;
@@ -112,7 +116,31 @@ void main(){
   gl_Position=vec4(p.x*1.3,-p.y*1.3*view.basis.w,p.z-0.06,p.z);
   adjustedSurface=vec4(p.z,lighting.w,surface.z,0.0);
  }else if(surface.w>0.5&&surface.w<1.5){
-  vec3 delta=position.xyz-view.eyeYaw.xyz;
+  vec3 vertexPos=position.xyz;
+  if(worldNormal.w<=-1000.0){
+   // Impostor: one quad per instance, turned to face the eye; the atlas view
+   // follows the eye direction in the model's own frame (yaw undone).
+   float lod=-(worldNormal.w+1000.0);
+   vec3 toEye=view.eyeYaw.xyz-position.xyz;float dist=length(toEye);vec3 d=toEye/max(dist,0.0001);
+   vec3 right=vec3(-d.y,d.x,0.0);float rl=length(right);right=rl>0.0001?right/rl:vec3(1.0,0.0,0.0);
+   vec3 up=cross(right,-d);
+   vertexPos=position.xyz+(right*uv.x+up*uv.y)*light0.x;
+   float c=cos(light0.y),s=sin(light0.y);vec3 m=vec3(c*d.x-s*d.y,s*d.x+c*d.y,d.z);
+   float columns=light0.z,rows=light0.w;
+   float azimuth=fract(atan(m.y,m.x)/6.2831853+1.0)*columns;
+   float elevation=clamp((asin(clamp(m.z,-1.0,1.0))-0.0698)/0.4887,0.0,rows-1.0);
+   impostorFrame=vec4(azimuth,elevation,columns*16.0+rows,light1.x);
+   vertexUV=vec2(uv.x*0.5+0.5,0.5-uv.y*0.5);
+   // The fragment stage reprojects the recorded views along this eye vector
+   // (model frame, light weights zero so no lamp path reads them).
+   adjustedLight0=vec4(m,0.0);adjustedLight1=vec4(light0.x,light0.y,0.0,0.0);adjustedLighting.w=0.0;
+   collapse=dist<lod*0.8||(light1.x>0.0&&dist>light1.x*1.05);
+  }else if(worldNormal.w<0.0){
+   // The real mesh of an impostor model: gone well past its crossfade band.
+   collapse=length(position.xyz-view.eyeYaw.xyz)>-worldNormal.w*1.6;
+  }
+  worldPos=vertexPos;
+  vec3 delta=vertexPos-view.eyeYaw.xyz;
   float right=-delta.x*view.basis.x+delta.y*view.eyeYaw.w;
   float forward=delta.x*view.eyeYaw.w+delta.y*view.basis.x;
   float cameraY=delta.z*view.basis.y-forward*view.basis.z;
@@ -127,7 +155,7 @@ void main(){
 
   // With per-pixel lamps the fragment shader lights the flashlight cone.
   if(view.effects.x>0.5&&lampGrid.flags.x==0){
-   vec3 toPoint=position.xyz-eye;
+   vec3 toPoint=vertexPos-eye;
    float d2=dot(toPoint,toPoint);
 
    if(d2>0.04&&d2<196.0){
@@ -146,7 +174,7 @@ void main(){
 
   if(view.effects.y>0.0){
    vec3 muzzle=eye+forwardWorld*0.42-vec3(0,0,0.10);
-   vec3 toPoint=position.xyz-muzzle;
+   vec3 toPoint=vertexPos-muzzle;
    float d2=dot(toPoint,toPoint);
 
    if(d2<144.0){
@@ -174,7 +202,9 @@ void main(){
  if(stereo.enabled.x>0.5)gl_Position=stereo.clip*vec4(worldPos,1.0);
  // Temporal AA: sub-pixel jitter of the whole frame; the TAA stage removes it.
  gl_Position.xy+=stereo.enabled.zw*gl_Position.w;
- outUV=uv;
+ if(collapse)gl_Position=vec4(0.0,0.0,-2.0,1.0);
+ outImpostor=impostorFrame;
+ outUV=vertexUV;
  outLighting=adjustedLighting;
  outLight0=adjustedLight0;
  outLight1=adjustedLight1;

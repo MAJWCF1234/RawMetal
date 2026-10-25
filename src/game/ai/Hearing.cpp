@@ -6,7 +6,7 @@ std::vector<AiStimulus> Game::aiStimuli()const{
  std::vector<AiStimulus> out;
  for(const auto&event:m_sounds){
   if(event.speech>=0)continue; // Radio dialogue is not a new perception stimulus.
-  bool shot=event.sound==Sound::Shot,step=event.sound>=Sound::Metal1&&event.sound<=Sound::Concrete4;
+  bool shot=event.sound==Sound::Shot,step=footstepSound(event.sound);
   bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty||event.sound==Sound::PunchSwing;
   bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land;
   bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
@@ -76,7 +76,7 @@ bool Game::testHearing(){
  }
  for(int rate:{60,120})for(bool crouch:{false,true}){auto g=scene();g.m_player.pos={3.7f,6.5f};g.m_player.angle=0;g.m_stepDistance=2;
   InputState input{};input.forward=true;input.crouch=crouch;g.updateMovement(input,1.f/rate);
-  auto step=std::find_if(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return e.sound>=Sound::Metal1&&e.sound<=Sound::Concrete4;});
+  auto step=std::find_if(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return footstepSound(e.sound);});
   check(step!=g.m_sounds.end()&&std::isfinite(step->z)&&std::fabs(step->z-g.player().z-.04f)<.001f,"Real standing/crouched movement emits captured foot-contact height at 60/120 Hz");
   if(step==g.m_sounds.end())continue;auto source=step->position;g.m_player.pos={18.5f,18.5f};g.updateEnemies(.01f);
   check(crouch?g.m_enemies[0].awareness==0:(g.m_enemies[0].state==Enemy::State::Investigate&&lengthSq(g.m_enemies[0].lastKnown-source)<.001f),"Walking is heard where emitted while equivalent crouching remains undetected");

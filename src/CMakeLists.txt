@@ -135,6 +135,7 @@ add_executable(RawMetal WIN32
     renderer/NormalMapping.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
+    renderer/Impostors.cpp
     renderer/Performance.cpp
     renderer/GpuRenderer.cpp
     ThirdParty/ufbx/ufbx.c
@@ -185,7 +186,7 @@ if(MSVC)
   # Spend native-code headroom on inlining, retaining precise floating point
   # and the existing baseline ISA. The executable size verifier still applies.
   target_compile_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/Ob3>")
-  target_link_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>")
+  target_link_options(RawMetal PRIVATE "$<$<CONFIG:Release>:/OPT:REF>" "$<$<CONFIG:Release>:/OPT:ICF>" "/MAP:${CMAKE_BINARY_DIR}/../RawMetal.map")
   # Optional native PGO: train the instrumented executable on representative
   # gameplay, then relink the same sources with USE. No ISA or FP changes.
   set(RAWMETAL_PGO_PHASE "OFF" CACHE STRING "Native PGO phase: OFF, GENERATE or USE")

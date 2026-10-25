@@ -36,7 +36,9 @@ bool validLayerPose(const CreatureLayerPose&pose){
  return true;
 }
 }
-Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328),m_nodeFilter(nodeFilter){
+Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328||id>=359),m_nodeFilter(nodeFilter){
+ // From 359 on (office, industrial, freight, Metro and library imports) every
+ // model binds its textures per material, so multi-material models texture correctly.
  m_positionOnlySkinning=id==111;
  auto resource=loadResource(id);
  ufbx_load_opts opts{};opts.evaluate_skinning=true;opts.target_axes=ufbx_axes_right_handed_y_up;opts.target_unit_meters=1;

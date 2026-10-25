@@ -6,6 +6,7 @@
 namespace retro {
 namespace {
 int voiceRole(const ActorTrack& track){
+ if(track.voice>0)return track.voice;
  switch(track.visual){
   case ActorVisual::Cleanup:return 1;
   case ActorVisual::CleanupEngineer:return 2;
@@ -248,14 +249,14 @@ bool Game::testNpcVoices(){
    }
   }
  }
- {auto escort=exclusionInspection(2);escort.setState(stateId("exclusion_relay_secured"),1);size_t witness=0;while(witness<escort.npcActors().size()&&voiceRole(escort.npcActors()[witness].track())!=7)++witness;
-  check(witness<escort.npcActors().size(),"Exclusion witness has the hazmat escort voice");
+ {auto escort=exclusionInspection(0);size_t witness=0;while(witness<escort.npcActors().size()&&(escort.npcActors()[witness].track().ai.mode!=ActorAiMode::Escort||!voiceRole(escort.npcActors()[witness].track())))++witness;
+  check(witness<escort.npcActors().size(),"The zone's camp guide has the escort voice");
   if(witness<escort.npcActors().size()){const auto&npc=escort.npcActors()[witness];escort.m_player.pos=npc.pose.position;escort.m_player.z=npc.pose.z;escort.setState(escort.friendlyKey(witness,"engaged"),0);escort.updateNpcVoices(0);
    auto expect=[&](NpcVoiceCue cue){escort.m_sounds.clear();escort.setState(stateId("npc_voice_busy"),0);escort.setState(escort.friendlyKey(witness,"voice_lock"),0);escort.updateNpcVoices(.016f);
     return std::any_of(escort.sounds().begin(),escort.sounds().end(),[&](const auto&e){return e.speaker==witness+1&&e.speech>=0&&NpcVoiceClips[size_t(e.speech)].cue==cue;});};
    escort.setState(escort.friendlyKey(witness,"engaged"),1);check(expect(NpcVoiceCue::Follow),"Witness acknowledges the actual follow state transition");
    escort.setState(escort.friendlyKey(witness,"hold"),1);check(expect(NpcVoiceCue::Wait),"Witness acknowledges the actual wait state transition");
-   escort.setState(escort.friendlyKey(witness,"fear"),4000);check(expect(NpcVoiceCue::Danger),"Witness danger uses its own frightened masked take");
+   escort.setState(escort.friendlyKey(witness,"fear"),4000);check(expect(NpcVoiceCue::Danger),"The guide warns of danger in his own voice");
   }
  }
  return pass;

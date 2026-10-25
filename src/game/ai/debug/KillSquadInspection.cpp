@@ -9,11 +9,14 @@ namespace retro {
 // does not claim AI encounter progress from manufactured animation states.
 Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
  auto authored=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");
- if(role<0||role>5||sample<0||sample>15||authored->maps[0]->actorTracks.empty())throw std::runtime_error("Invalid cleanup layer inspection");
+ // Any authored guard serves as the template; its visual and role are replaced.
+ const ActorTrack* guard=nullptr;
+ for(const auto&source:authored->maps)for(const auto&candidate:source->actorTracks)if(!guard&&candidate.ai.mode==ActorAiMode::Guard)guard=&candidate;
+ if(role<0||role>5||sample<0||sample>15||!guard)throw std::runtime_error("Invalid cleanup layer inspection");
  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Cleanup animation inspection";campaign->key=883013;
  auto map=std::make_shared<AuthoredMapData>();map->name="Unobstructed pose inspection";map->definition={{0,0},{10.5f,9.5f},0,Environment::Interior,false,8,.7f,42};
  AuthoredLayerData floor;for(auto&row:floor.rows)row=std::string(24,'.');map->layers.push_back(floor);
- auto track=authored->maps[0]->actorTracks.front();track.visual=ActorVisual(int(ActorVisual::Cleanup)+role);track.scale=1.6f;
+ auto track=*guard;track.visual=ActorVisual(int(ActorVisual::Cleanup)+role);track.scale=1.6f;
  track.timerState=stateId("cleanup_inspection_clock");track.keys={{0,{8.5f,8.5f},0,0},{30000,{8.5f,8.5f},0,0}};track.idleKeys.clear();track.ai.patrol={{{8.5f,8.5f},0,1000}};
  TimedSequence clock;clock.timerState=track.timerState;clock.finishState=stateId("cleanup_inspection_done");clock.loop=true;clock.soundIntervalMs=0;map->timedSequences.push_back(clock);
  constexpr GuardSquadRole roles[]={GuardSquadRole::Assault,GuardSquadRole::Engineer,GuardSquadRole::Sharpshooter,GuardSquadRole::Heavy,GuardSquadRole::Medic,GuardSquadRole::Rusher};

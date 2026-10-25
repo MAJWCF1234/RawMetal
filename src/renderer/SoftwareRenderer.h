@@ -19,6 +19,9 @@ public:
     // Windowed path: the post-processed scene of the last frame as a PPM.
     bool saveSceneCapture(const char* path);
     void saveSunCascades(const char* prefix);
+    // Painterly Horizon LOD: write each captured atlas; switch impostors off for A/B views.
+    void saveImpostors(const std::string& prefix)const;
+    static inline bool s_impostors=true;
     bool hardwarePresentsWindow()const;
     std::uint64_t vrMirrorFrames()const;
     std::array<std::uint64_t,4> atlasUploadStatistics()const;
@@ -173,10 +176,18 @@ private:
         Mesh{359},Mesh{360},Mesh{361},Mesh{362},Mesh{363},Mesh{364},Mesh{365},Mesh{366},Mesh{367},Mesh{368},Mesh{369},Mesh{370},Mesh{371},Mesh{372},Mesh{373},
         Mesh{399},Mesh{400},Mesh{401},Mesh{402},Mesh{403},Mesh{404},Mesh{405},Mesh{406},
         Mesh{427},Mesh{428},Mesh{429},Mesh{430},Mesh{431},Mesh{432},Mesh{433},Mesh{434},Mesh{435},
-        Mesh{443},Mesh{444},Mesh{445},Mesh{446},Mesh{447},Mesh{448},Mesh{464}};
+        Mesh{443},Mesh{444},Mesh{445},Mesh{446},Mesh{447},Mesh{448},Mesh{464},
+        Mesh{467},Mesh{469},Mesh{471},Mesh{474},Mesh{477},Mesh{482},Mesh{484},Mesh{486},Mesh{488},Mesh{490},Mesh{496},Mesh{498},Mesh{500},Mesh{502},Mesh{504},Mesh{506},Mesh{508},Mesh{510},Mesh{514},Mesh{516},Mesh{530},Mesh{532},Mesh{534},Mesh{536},Mesh{538},Mesh{540},Mesh{542},Mesh{544},Mesh{546},Mesh{548},Mesh{550},Mesh{552},Mesh{554},Mesh{556},Mesh{558},Mesh{560},Mesh{562},Mesh{564},Mesh{566},Mesh{568},Mesh{570},Mesh{572},Mesh{574},Mesh{576},Mesh{578},Mesh{580},Mesh{582},Mesh{584},Mesh{586},Mesh{588},Mesh{590},Mesh{593},Mesh{596},Mesh{598},Mesh{603},Mesh{605},Mesh{608},Mesh{611},Mesh{614},Mesh{617},Mesh{620},Mesh{622},Mesh{624},Mesh{626},Mesh{628},Mesh{630},Mesh{633},Mesh{635},Mesh{637},
+        Mesh{647},Mesh{649},Mesh{651},Mesh{653},Mesh{655},Mesh{657},Mesh{659},Mesh{661},Mesh{663},Mesh{665},Mesh{667},Mesh{669},Mesh{671},Mesh{673},Mesh{675},Mesh{677},Mesh{679},Mesh{682},Mesh{685},Mesh{687},Mesh{689},Mesh{691}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
+    // Painterly Horizon LOD (Impostors.cpp): a shared multi-view atlas per
+    // repeated cutout model, captured on first use; null for other models.
+    struct Impostor {Texture atlas;Point3 center{};float radius=0;};
+    static constexpr int FirstLibraryModel=63,ImpostorColumns=8,ImpostorRows=3,ImpostorCell=96;
+    const Impostor* impostorFor(int model);
+    std::unordered_map<int,std::unique_ptr<Impostor>> m_impostors;
     Mesh m_medkitMesh{133},m_shellsMesh{135};
     Texture m_medkitTexture,m_shellsTexture;
     Texture m_barrelTexture,m_crateTexture,m_concrete,m_bulkhead;

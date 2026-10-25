@@ -280,12 +280,15 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  check(World::testCollisionCandidates(),"Spatial collision candidates match full scans across ten maps and fixture boundaries");
  for(int mode:{1,2,3}){auto scene=Game::weaponInspection(mode,.16f);renderer.m_animationWorker=std::make_unique<FrameWorker>();renderer.render(scene);auto parallel=renderer.m_pixels;renderer.m_animationWorker.reset();renderer.render(scene);check(parallel==renderer.m_pixels,"Parallel arm pose matches serial reference");check(renderer.gripError()<.025f,"Hardware weapon grip remains attached");}
  World warehouse(16);
- check(warehouse.lightRayClear({12,3},-23,{12,15},-23),"Warehouse open aisle transmits fixture light");
- check(!warehouse.lightRayClear({1.5f,5.08f},-20,{2.5f,5.08f},-20),"Thin rack post casts an exact shadow");
- check(warehouse.lightRayClear({1.5f,5.4f},-20,{2.5f,5.4f},-20),"Open space beside the rack post stays lit");
- check(!warehouse.lightRayClear({5.5f,10},-23,{5.5f,10},-21),"Upper deck blocks light across storeys");
- check(warehouse.lightRayClear({5.5f,10.5f},-21.7f,{6.5f,10.5f},-21.7f),"Guardrail gaps transmit light instead of using the player hull envelope");
- check(!warehouse.fits(5.97f,10.5f,-21.7f,.015f,false,true),"Optical guardrail query remains separate from movement collision");
+ // Warehouse A/B racking (rebuilt freight map): rack A1 stands at x 1.3-4.06,
+ // y 3-7, posts on its corners, shelves every 3 m above the floor.
+ const float floor=warehouse.floorHeight(12,3);
+ check(warehouse.lightRayClear({12,3},floor+.5f,{12,15},floor+.5f),"Warehouse open aisle transmits fixture light");
+ check(!warehouse.lightRayClear({1.02f,3.08f},floor+1.5f,{2.f,3.08f},floor+1.5f),"Thin rack post casts an exact shadow");
+ check(warehouse.lightRayClear({1.02f,12.1f},floor+1.5f,{2.f,12.1f},floor+1.5f),"Open space beside the rack post stays lit");
+ check(!warehouse.lightRayClear({2.6f,5},floor+2.8f,{2.6f,5},floor+3.3f),"A rack shelf blocks light between tiers");
+ check(warehouse.lightRayClear({2.6f,2.5f},floor+1.5f,{2.6f,3.6f},floor+1.5f),"Rack bays between the beams transmit light instead of using the player hull envelope");
+ check(!warehouse.fits(1.38f,3.08f,floor+1.f,.015f,false,true),"Optical rack-post query remains separate from movement collision");
  auto cachedScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);renderer.render(cachedScene);auto staticFrame=renderer.m_pixels;double cacheBuildMs=renderer.m_sceneMs;auto cacheHits=renderer.m_gpu->staticCacheHits();renderer.render(cachedScene);double cacheReuseMs=renderer.m_sceneMs;report<<"Static map scene pass: build "<<cacheBuildMs<<" ms, cached "<<cacheReuseMs<<" ms\n";check(renderer.m_gpu->staticCacheHits()>cacheHits,"Static chunk VBO is reused on the next frame");check(staticFrame==renderer.m_pixels,"Cached static chunk keeps the same rendered frame at nonzero pitch");InputState turn{};turn.mouseDx=80;turn.mouseDy=12;cachedScene.update(turn,1.f/60.f);renderer.render(cachedScene);auto turnedFrame=renderer.m_pixels;cacheHits=renderer.m_gpu->staticCacheHits();renderer.render(cachedScene);check(renderer.m_gpu->staticCacheHits()>cacheHits,"Static chunk VBO survives a camera turn");check(turnedFrame==renderer.m_pixels&&turnedFrame!=staticFrame,"Cached geometry transforms correctly after a camera turn");
  // Baked shading must not depend on the camera used for first load. View B
  // through A's reused VBO must match a fresh renderer that starts directly at B.

@@ -92,8 +92,41 @@ float cloudHash(ivec2 c){uvec2 q=uvec2(c+ivec2(65536));uint h=q.x*1664525u+q.y*1
 float cloudNoise(vec2 p){ivec2 i=ivec2(floor(p));vec2 f=fract(p);f=f*f*(3.0-2.0*f);
  return mix(mix(cloudHash(i),cloudHash(i+ivec2(1,0)),f.x),mix(cloudHash(i+ivec2(0,1)),cloudHash(i+ivec2(1,1)),f.x),f.y);}
 float cloudFbm(vec2 p){float a=0.5,s=0.0;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;++i){s+=a*cloudNoise(p);p=m*p+vec2(3.1,1.7);a*=0.5;}return s;}
+bool zoneSky(){return lampGrid.flags.z==1;}
+// Open-zone sky: hazy blue between broken cumulus, a soft high veil (slight
+// overcast), clouds lit on the sun side with silver edges, and a warm sun that
+// dims when a cloud crosses it. cloudAt is also the shafts' sun visibility.
+float zoneCloud(vec3 dir,out float toward){
+ vec3 sunDir=lampGrid.sun.xyz;float time=lampGrid.eye.w;
+ vec3 p=lampGrid.eye.xyz+dir*((900.0-lampGrid.eye.z)/max(dir.z,0.02));
+ vec2 q=p.xy*0.00085+vec2(time*0.0030,time*0.0011);
+ float cover=cloudFbm(q);
+ toward=cloudFbm(q+sunDir.xy*0.05)-cover;
+ return smoothstep(0.44,0.66,cover)*smoothstep(0.0,0.12,dir.z);
+}
+vec3 zoneSkyColor(vec3 dir){
+ vec3 sunDir=lampGrid.sun.xyz,sunCol=lampGrid.sunColor.rgb;
+ float up=clamp(dir.z,-1.0,1.0);
+ vec3 zenith=vec3(0.20,0.38,0.68),horizon=vec3(0.68,0.73,0.76),ground=vec3(0.40,0.42,0.38);
+ vec3 sky=up>0.0?mix(horizon,zenith,pow(up,0.6)):mix(horizon,ground,clamp(-up*5.0,0.0,1.0));
+ float cosSun=max(dot(dir,sunDir),0.0);
+ // Haze glows round the sun (broad Mie lobe), brightest toward the horizon.
+ sky+=sunCol*(0.10*pow(cosSun,4.0)+0.30*pow(cosSun,32.0))*(1.0-0.4*max(up,0.0));
+ float toward=0.0,cloud=dir.z>0.0?zoneCloud(dir,toward):0.0;
+ float lit=clamp(0.55-toward*5.0,0.0,1.0);
+ vec3 cloudColor=mix(vec3(0.52,0.55,0.60),vec3(1.0,0.97,0.92),lit);
+ // Silver lining: thin cloud edges near the sun glow.
+ cloudColor+=sunCol*pow(cosSun,12.0)*(1.0-cloud)*1.4;
+ sky=mix(sky,cloudColor,cloud*0.96);
+ // Slight overcast: a thin high veil softens the blue and the sun.
+ sky=mix(sky,vec3(0.80,0.81,0.82),0.12*smoothstep(-0.02,0.4,up));
+ float sunCloud=0.0;{float t;sunCloud=zoneCloud(sunDir,t);}
+ sky+=sunCol*(2.6*smoothstep(0.99955,0.99975,dot(dir,sunDir)))*(1.0-0.9*sunCloud);
+ return sky;
+}
 // Overcast wasteland sky: gradient, sun disc and glow, one drifting cloud deck.
 vec3 proceduralSky(vec3 dir){
+ if(zoneSky())return zoneSkyColor(dir);
  vec3 sunDir=lampGrid.sun.xyz,sunCol=lampGrid.sunColor.rgb;float time=lampGrid.eye.w;
  float up=clamp(dir.z,-1.0,1.0);
  vec3 zenith=vec3(0.22,0.29,0.42),horizon=vec3(0.56,0.60,0.66),ground=vec3(0.19,0.18,0.17);
@@ -113,6 +146,37 @@ vec3 proceduralSky(vec3 dir){
 }
 
 vec2 projectView(vec3 q){return vec2(q.x*p.camera.z/q.z,-q.y*p.camera.z*p.camera.y/q.z)*0.5+0.5;}
+// World direction to view space (inverse of worldDirection).
+vec3 viewDirection(vec3 w){
+ vec4 b=lampGrid.basis;vec3 right=vec3(-b.y,b.x,0.0),level=vec3(b.x,b.y,0.0);
+ return vec3(dot(w,right),dot(w,-b.w*level+vec3(0,0,b.z)),dot(w,b.z*level+vec3(0,0,b.w)));
+}
+bool skyAt(vec2 at){float d=depthAt(at);return d>=0.0&&(d<=0.02||d>=p.grade.w);}
+// God rays: march from the pixel toward the sun's screen position and count
+// open sky; trees, ruins and terrain cut the light into shafts.
+float sunShafts(vec2 sunUV){
+ const int Steps=40;vec2 delta=(sunUV-uv)*(0.92/float(Steps));
+ vec2 at=uv+delta*fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
+ float sum=0.0,decay=1.0,weight=0.0;
+ for(int i=0;i<Steps;++i){
+  at+=delta;
+  if(at.x>0.0&&at.y>0.0&&at.x<1.0&&at.y<1.0&&skyAt(at))sum+=decay;
+  weight+=decay;decay*=0.965;
+ }
+ return sum/weight;
+}
+// Low steam: exponential height fog over the valley floor, broken into slowly
+// drifting wisps, integrated in closed form along the view ray.
+float steamAmount(vec3 dir,float rayLength){
+ const float base=4.2,height=1.5,density=0.012;
+ vec3 eye=lampGrid.eye.xyz;float time=lampGrid.eye.w;
+ float L=min(rayLength,140.0),dz=dir.z*L;
+ float column=abs(dz)>0.001?height*(1.0-exp(-dz/height))/dz:1.0;
+ vec2 mid=(eye+dir*min(L,18.0)).xy;
+ float wisp=cloudNoise(mid*0.09+vec2(time*0.05,time*0.02))*0.7+cloudNoise(mid*0.27-vec2(time*0.03,0.0))*0.5;
+ float optical=density*exp(-(eye.z-base)/height)*column*L*(0.45+wisp);
+ return 1.0-exp(-max(optical,0.0));
+}
 float postHash(vec2 v){uvec2 q=uvec2(ivec2(v)+ivec2(65536));uint h=q.x*1664525u+q.y*1013904223u+uint(lampGrid.eye.w*60.0)*2654435761u;h^=h>>16;h*=0x7feb352du;h^=h>>15;return float(h&0xffffffu)/16777216.0;}
 
 // Screen-space reflections. Roughness and wetness come from the material
@@ -196,6 +260,21 @@ void main(){
   // Continuous from the eye: a 2 m dead zone made the look jump when walking up to walls.
   float amount=1.0-exp(-depth*p.haze.w*0.8);
   color=mix(color,p.haze.rgb,amount*0.25);
+ }
+ if(zoneSky()&&!viewModel&&lampGrid.sun.w>0.0){
+  vec3 dir=worldDirection(rayView),sunDir=lampGrid.sun.xyz,sunCol=lampGrid.sunColor.rgb;
+  float cosSun=max(dot(dir,sunDir),0.0);
+  float steam=steamAmount(dir,surface?depth*length(rayView):400.0);
+  vec3 steamColor=vec3(0.70,0.72,0.71)+sunCol*(0.08+0.35*pow(cosSun,6.0));
+  color=mix(color,steamColor,steam*(surface?0.8:0.35));
+  vec3 sunView=viewDirection(sunDir);
+  if(sunView.z>0.05){
+   float t;float sunCloud=zoneCloud(sunDir,t);
+   vec2 sunUV=projectView(sunView);
+   float shafts=sunShafts(sunUV);
+   float lobe=0.25*pow(cosSun,3.0)+0.75*pow(cosSun,14.0);
+   color+=sunCol*shafts*lobe*0.38*(1.0-0.75*sunCloud)*smoothstep(0.05,0.3,sunView.z);
+  }
  }
  if(p.haze.w>0.0){
   // Lamps glow through the air they light; denser air glows more.

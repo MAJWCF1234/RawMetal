@@ -159,7 +159,7 @@ void Game::loadLevel(int level,bool carry) {
     if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
 }
 void Game::sound(Sound sound,float gain,float pitch){
- bool foot=(sound>=Sound::Metal1&&sound<=Sound::Concrete4)||sound==Sound::Land;
+ bool foot=footstepSound(sound)||sound==Sound::Land;
  Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+(foot?.04f:m_player.eye)};
  if(sound==Sound::Shot&&m_vrAimValid)origin=m_vrAimPosition;
  m_sounds.push_back({sound,{origin.x,origin.y},gain,pitch,false,17,origin.z});
@@ -561,7 +561,7 @@ bool Game::testAudioEvents(){
  auto contains=[&](Sound value){return std::any_of(game.m_sounds.begin(),game.m_sounds.end(),[&](auto&e){return e.sound==value;});};
  bool steps=false,jump=false,land=false,pump=false;
  for(int i=0;i<150;++i){InputState input{};input.forward=i<65;input.jump=i==70;input.fire=i==125;game.update(input,1.f/60.f);
-  for(auto&e:game.m_sounds)steps|=e.sound>=Sound::Metal1&&e.sound<=Sound::Concrete4;
+  for(auto&e:game.m_sounds)steps|=footstepSound(e.sound);
   jump|=contains(Sound::Jump);land|=contains(Sound::Land);pump|=contains(Sound::Pump);
  }
  if(!steps||!jump||!land||!pump)return false;
@@ -577,7 +577,7 @@ bool Game::testAudioEvents(){
   if(!contains(Sound(int(Sound::SpiderDeath)+voiceKind*3)))return false;
  }
  game=validationScene(Enemy::Kind::Huntsman,3);game.m_player.pos={1.21f,4.5f};game.m_player.angle=kPi;
- for(int i=0;i<90;++i){InputState input{};input.forward=true;game.update(input,1.f/60.f);for(auto&e:game.m_sounds)if(e.sound>=Sound::Metal1&&e.sound<=Sound::Concrete4)return false;}
+ for(int i=0;i<90;++i){InputState input{};input.forward=true;game.update(input,1.f/60.f);for(auto&e:game.m_sounds)if(footstepSound(e.sound))return false;}
  return true;
 }
 

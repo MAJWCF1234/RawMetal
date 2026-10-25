@@ -139,6 +139,45 @@ std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
 // Exclusion Zone outdoor packs sample world XY (origin+local) so stitched custom
 // chunks share one continuous Surface Nets field. Keep gradients soft — steep
 // authored cliffs explode triangle count and tear at chunk seams.
+// Smooth value noise: a hashed lattice, quintic-blended, summed over octaves.
+float latticeValue(std::uint32_t seed,int x,int y){
+ std::uint32_t h=seed*0x9E3779B1u^std::uint32_t(x)*0x85EBCA77u^std::uint32_t(y)*0xC2B2AE3Du;
+ h^=h>>15;h*=0x2C1B3C6Du;h^=h>>12;h*=0x297A2D39u;h^=h>>15;return float(h&0xffffff)/float(0xffffff)*2.f-1.f;
+}
+float valueNoise(std::uint32_t seed,float x,float y){
+ int ix=int(std::floor(x)),iy=int(std::floor(y));float fx=x-ix,fy=y-iy;
+ auto fade=[](float t){return t*t*t*(t*(t*6-15)+10);};float u=fade(fx),v=fade(fy);
+ float a=latticeValue(seed,ix,iy),b=latticeValue(seed,ix+1,iy),c=latticeValue(seed,ix,iy+1),d=latticeValue(seed,ix+1,iy+1);
+ return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
+}
+// The continuous (unquantized) surface height of an authored terrain shape.
+float authoredTerrainHeight(const TerrainShape& shape,float wx,float wy){
+ float sum=0,amp=1,freq=1/std::max(4.f,shape.scale),norm=0;
+ for(int octave=0;octave<4;++octave){sum+=valueNoise(shape.seed+std::uint32_t(octave)*101u,wx*freq,wy*freq)*amp;norm+=amp;amp*=shape.roughness;freq*=2.03f;}
+ float h=shape.base+shape.amplitude*sum/norm;
+ for(const auto& flat:shape.flats){
+  float dx=std::max({flat.x1-wx,0.f,wx-flat.x2}),dy=std::max({flat.y1-wy,0.f,wy-flat.y2});
+  float d=std::sqrt(dx*dx+dy*dy),t=flat.blend>0?std::clamp(1-d/flat.blend,0.f,1.f):(d<=0?1.f:0.f);
+  t=t*t*(3-2*t);h=h+(flat.height-h)*t;
+ }
+ return h;
+}
+int authoredTerrainTop(const TerrainShape& shape,int wx,int wy){
+ return std::clamp(int(std::lround(authoredTerrainHeight(shape,wx+.5f,wy+.5f))),World::TerrainMinZ+1,World::TerrainMaxZ-2);
+}
+int authoredGroundKind(const TerrainShape& shape,float wx,float wy){
+ // Meadow: two noise fields pick grass, leafy grass, clover, wild and dry
+ // patches a few metres across, PSX-style hard edges between triangles.
+ float a=valueNoise(shape.seed+7001u,wx*.11f,wy*.11f)+valueNoise(shape.seed+7002u,wx*.31f,wy*.31f)*.35f;
+ float b=valueNoise(shape.seed+7003u,wx*.07f,wy*.07f)+valueNoise(shape.seed+7004u,wx*.23f,wy*.23f)*.4f;
+ int kind=a>.45f?GroundDry:a>.22f?GroundWild:b>.38f?GroundClover:b<-.3f?GroundLeafyGrass:GroundShortGrass;
+ for(const auto& paint:shape.ground){
+  float jitter=valueNoise(shape.seed+7005u,wx*.6f,wy*.6f)*paint.edge;
+  float dx=std::max(paint.x1-wx,wx-paint.x2),dy=std::max(paint.y1-wy,wy-paint.y2);
+  if(std::max(dx,dy)<jitter)kind=paint.kind==GroundMeadow?kind:paint.kind;
+ }
+ return kind;
+}
 int exclusionVoxelTop(int worldX,int worldY){
  // Forward facility pad on map 0 stays level so walls and NPCs sit cleanly.
  if(worldX>=5&&worldX<=17&&worldY>=10&&worldY<=19)return 2;
@@ -156,7 +195,7 @@ std::uint8_t authoredExclusionMaterial(int worldX,int worldY,int worldZ){
 
 bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  float dx=x-fixture.position.x,dy=y-fixture.position.y,c=std::cos(fixture.yaw),s=std::sin(fixture.yaw);
- return std::fabs(dx*c-dy*s)<fixture.width*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*.5f+margin;
+ return std::fabs(dx*c-dy*s)<fixture.width*fixture.core*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*fixture.core*.5f+margin;
 }
 constexpr float ShelfTiers[]={.17f,.54f,.92f};
 bool benchTerminal(const World& world,const Terminal& terminal){return world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;} // Reactor consoles keep their own housing.
@@ -213,6 +252,9 @@ void World::settleExclusionFacilityOnTerrain(){
   s.bottom+=low;s.top+=high;
  }
  for(auto&c:m_clutterSpawns)if(c.z>-100)c.z+=ground(c.position.x,c.position.y);
+ // Hazards and emitters are authored relative to the ground at their centre.
+ for(auto&h:m_hazards){float z=ground((h.x1+h.x2)*.5f,(h.y1+h.y2)*.5f);h.bottom+=z;h.top+=z;}
+ for(auto&e:m_particleEmitters)e.z+=ground(e.position.x,e.position.y);
  for(auto&c:m_creatureSpawns)if(c.z>-100)c.z+=ground(c.position.x,c.position.y);
  for(auto&p:m_pickupSpawns)if(p.z>-100)p.z+=ground(p.position.x,p.position.y);
  auto data=std::make_shared<AuthoredMapData>(*m_mapData);
@@ -289,7 +331,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_openWestBoundary=m_mapData->openWest;m_openEastBoundary=m_mapData->openEast;
  m_doors=m_mapData->doors;m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;
  m_creatureSpawns=m_mapData->creatureSpawns;m_pickupSpawns=m_mapData->pickupSpawns;m_clutterSpawns=m_mapData->clutterSpawns;
- m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
+ m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_scriptEvents=m_mapData->scriptEvents;
  m_cargoLift=m_mapData->cargoLift;m_cargoLiftHeight=m_cargoLift.lower;
  m_layers.reserve(m_mapData->layers.size());
@@ -309,7 +351,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  if(hasLift())refreshReactorTerminals();
  // Outdoor wasteland custom packs own a world-space Surface Nets heightfield so
  // the facility and NPCs sit on dirt/rock instead of a flat authored slab.
- if(outdoors()&&m_mapData->skybox=="brutal_wasteland"){
+ if(outdoors()&&(m_mapData->skybox=="brutal_wasteland"||m_mapData->skybox=="zone_overcast")){
   m_exclusionTerrain=true;m_internalWallHeight=2.8f;buildTerrain();settleExclusionFacilityOnTerrain();
  }
 }
@@ -463,6 +505,10 @@ void World::buildTerrainBounds(){
  for(int z=0;z<TerrainSamplesZ;++z)for(int y=0;y<TerrainSamplesY;++y)for(int x=0;x<TerrainSamplesX;++x)
   if(m_terrainDensity[terrainSampleIndex(x,y,z)]>0)m_terrainTops[size_t(y*TerrainSamplesX+x)]=static_cast<std::uint8_t>(z);
 }
+int World::groundKind(float worldX,float worldY)const{
+ if(!m_exclusionTerrain||!m_mapData||!m_mapData->terrain||m_mapData->terrain->ground.empty())return -1;
+ return authoredGroundKind(*m_mapData->terrain,worldX,worldY);
+}
 void World::buildTerrain(){
  m_terrain.clear();
  const size_t samples=size_t(TerrainSamplesX)*TerrainSamplesY*TerrainSamplesZ;
@@ -471,9 +517,19 @@ void World::buildTerrain(){
  for(int sz=0;sz<TerrainSamplesZ;++sz)for(int sy=0;sy<TerrainSamplesY;++sy)for(int sx=0;sx<TerrainSamplesX;++sx){
   int lx=sx-TerrainBorder,ly=sy-TerrainBorder,z=TerrainMinZ-1+sz;
   int wx=int(origin.x)+lx,wy=int(origin.y)+ly;
-  bool solid=m_exclusionTerrain?authoredExclusionVoxel(wx,wy,z):authoredAshfallVoxel(wx,wy,z);
+  bool solid;std::uint8_t material;
+  if(m_exclusionTerrain&&m_mapData&&m_mapData->terrain){
+   // Authored campaign terrain: soil on top, rock beneath and on the high,
+   // steep ground where the surface breaks away from its neighbours.
+   const auto& shape=*m_mapData->terrain;int top=authoredTerrainTop(shape,wx,wy);solid=z<=top;
+   int relief=std::max({std::abs(authoredTerrainTop(shape,wx+1,wy)-top),std::abs(authoredTerrainTop(shape,wx,wy+1)-top)});
+   material=z<top-1||relief>=2||top>=shape.base+shape.amplitude*.7f?TerrainRock:TerrainSoil;
+  }else{
+   solid=m_exclusionTerrain?authoredExclusionVoxel(wx,wy,z):authoredAshfallVoxel(wx,wy,z);
+   material=m_exclusionTerrain?authoredExclusionMaterial(wx,wy,z):authoredAshfallMaterial(wx,wy,z);
+  }
   m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=solid?32:-32;
-  m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=m_exclusionTerrain?authoredExclusionMaterial(wx,wy,z):authoredAshfallMaterial(wx,wy,z);
+  m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=material;
  }
 
  buildTerrainBounds();

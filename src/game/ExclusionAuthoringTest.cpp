@@ -47,44 +47,39 @@ bool Game::testExclusionAuthoring(){
   auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");Game game(campaign);
   taskDirectory=std::filesystem::temp_directory_path()/("rawmetal-exclusion-authoring-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
   std::filesystem::create_directories(taskDirectory);game.m_saveDirectory=taskDirectory.wstring();
-  auto warp=[&](int level,Vec2 position,float angle){
-   bool crossed=game.level()!=level;if(crossed){game.storeChunk();game.loadLevel(level,true);game.updateStreaming(0);}
-   // A cross-map warp has no meaningful previous height: sample from above.
-   game.m_player.pos=position;game.m_player.z=crossed?game.groundHeight(position,float(World::TerrainMaxZ+1)):game.groundHeight(position);game.m_player.angle=angle;game.m_logTime=0;game.m_activeLog=-1;game.m_previousUse=false;
+  // The zone is 5 x 4 maps of 24 m; quest terminals are found by the state
+  // they set, then used from whichever side the player can reach them.
+  auto operate=[&](StateId expected){
+   for(int level=0;level<game.chunkCount();++level)for(const auto& terminal:game.chunkWorld(level).terminals()){
+    if(terminal.activateState!=expected)continue;
+    for(int k=0;k<8;++k){float a=k*kPi/4;Vec2 stand=terminal.position+Vec2{std::cos(a),std::sin(a)}*.85f;
+     if(game.level()!=level){game.storeChunk();game.loadLevel(level,true);game.updateStreaming(0);}
+     game.m_player.pos=stand;game.m_player.z=game.groundHeight(stand,float(World::TerrainMaxZ+1));
+     game.m_player.angle=std::atan2(terminal.position.y-stand.y,terminal.position.x-stand.x);game.m_logTime=0;game.m_activeLog=-1;game.m_previousUse=false;
+     int nearby=game.nearbyTerminal();
+     report<<"  terminal at "<<terminal.position.x<<','<<terminal.position.y<<" map "<<level<<" stand "<<stand.x<<','<<stand.y<<" nearby="<<nearby<<" hull="<<game.hullFits(stand,game.player().z,Player::StandingHeight)<<'\n';
+     if(nearby<0||game.world().terminals()[size_t(nearby)].activateState!=expected||!game.hullFits(stand,game.player().z,Player::StandingHeight))continue;
+     InputState use;use.use=true;game.updateInteraction(use,.01f);game.updateScripts(0);return true;}
+   }
+   return false;
   };
-  auto operate=[&](int level,Vec2 position,float angle,StateId expected){
-   warp(level,position,angle);int nearby=game.nearbyTerminal();bool correct=nearby>=0&&game.world().terminals()[size_t(nearby)].activateState==expected;
-   InputState use;use.use=true;game.updateInteraction(use,.01f);game.updateScripts(0);return correct;
-  };
-  auto advance=[&](int frames){for(int i=0;i<frames;++i){game.m_sounds.clear();game.updateMechanisms(1.f/60);game.updateScripts(0);}};
-  const auto cache=stateId("exclusion_cache_objective"),relay=stateId("exclusion_relay_objective"),winch=stateId("exclusion_winch_objective"),extract=stateId("exclusion_extract_objective");
-  check(game.chunkCount()==3&&std::fabs(game.player().pos.x-4.1f)<.001f&&std::fabs(game.player().angle+kPi*.5f)<.001f,"Authored intro starts facing its usable arrival cache within the original three chunks");
+  const auto elder=stateId("zone_obj_elder"),pda=stateId("zone_obj_pda"),tower=stateId("zone_obj_tower"),out=stateId("zone_obj_out");
+  check(game.chunkCount()==20&&game.level()==15,"The zone starts at the rookie camp in its south-west map");
   game.updateScripts(0);
-  check(game.objective(cache)==ObjectiveStatus::Active&&!game.hasFlashlight()&&game.activeObjectiveText()=="Read the arrival cache brief and collect its flashlight","Arrival displays the named cache objective without silently granting a flashlight");
-  check(operate(0,{4.3f,6.7f},kPi*.5f,stateId("exclusion_north_lure"))&&!game.state("exclusion_north_lure"),"North control respects the physical briefing/cache prerequisite");
-  check(operate(0,{4.1f,6.2f},-kPi*.5f,stateId("exclusion_brief_read"))&&game.hasFlashlight()&&game.questItemCount(Flashlight)==1,"Real E interaction at the entry cache grants one owned flashlight");
-  check(game.objective(cache)==ObjectiveStatus::Complete&&game.objective(relay)==ObjectiveStatus::Active&&std::filesystem::exists(taskDirectory/"checkpoint.rms"),"Cache acquisition advances the objective and writes a real checkpoint");
-  operate(0,{4.1f,6.2f},-kPi*.5f,stateId("exclusion_brief_read"));game.updateScripts(0);
-  check(game.questItemCount(Flashlight)==1,"Repeated briefing interaction cannot duplicate the cache item");
-  Game cached(campaign);cached.m_saveDirectory=taskDirectory.wstring();
-  check(cached.loadCheckpoint()&&cached.questItemCount(Flashlight)==1&&cached.objective(relay)==ObjectiveStatus::Active,"The authored cache checkpoint restores item ownership and objective progression");
-  check(operate(0,{11.f,14.6f},-kPi*.5f,stateId("exclusion_relay_secured"))&&!game.state("exclusion_relay_secured"),"Facility relay stays gated until the north distraction completes");
-  check(operate(2,{12.f,20.1f},kPi*.5f,stateId("exclusion_extract_logged"))&&!game.state("exclusion_extract_logged")&&!game.m_won,"Early arrival at South Wash cannot bypass east-winch clearance or complete the map");
-  check(operate(0,{4.3f,6.7f},kPi*.5f,stateId("exclusion_north_lure"))&&game.state("exclusion_north_lure")>0,"Briefed players start the authored north distraction through E");
-  advance(310);
-  check(game.state("exclusion_north_lure_done")!=0,"Existing mechanism timeline supplies the north completion gate");
-  check(operate(0,{11.f,14.6f},-kPi*.5f,stateId("exclusion_relay_secured"))&&game.state("exclusion_relay_secured")&&game.objective(relay)==ObjectiveStatus::Complete&&game.objective(winch)==ObjectiveStatus::Active,"Securing the actual facility relay advances to the east-winch objective");
-  check(operate(0,{17.3f,20.5f},-kPi*.5f,stateId("exclusion_east_lure"))&&game.state("exclusion_east_lure")>0,"Relay authorization enables the real east-winch terminal");
-  advance(310);
-  check(game.state("exclusion_east_lure_done")&&game.objective(winch)==ObjectiveStatus::Complete&&game.objective(extract)==ObjectiveStatus::Active&&!game.m_won&&game.activeObjectiveText()=="Reach South Wash and register departure at its relay","East-winch completion displays the cross-map departure objective without prematurely winning");
-  Game staged(campaign);staged.m_saveDirectory=taskDirectory.wstring();
-  check(staged.loadCheckpoint()&&staged.objective(extract)==ObjectiveStatus::Active&&staged.hasFlashlight(),"Protected south staging writes a checkpoint with the extraction objective");
-  check(operate(2,{12.f,20.1f},kPi*.5f,stateId("exclusion_extract_logged"))&&game.state("exclusion_complete")&&game.objective(extract)==ObjectiveStatus::Complete&&game.m_won,"Authorized departure terminal completes the existing ScriptEvent campaign arc");
-  Game completed(campaign);completed.m_saveDirectory=taskDirectory.wstring();
-  check(completed.loadCheckpoint()&&completed.m_won&&completed.state("exclusion_complete")&&completed.objective(extract)==ObjectiveStatus::Complete,"Completion precedes checkpoint so reloading the final autosave remains won");
-  completed.updateScripts(0);
-  check(completed.m_won&&completed.questItemCount(Flashlight)==1&&std::count(completed.m_firedEvents.begin(),completed.m_firedEvents.end(),stateId("exclusion_cache_taken"))==1,"Restored once-only events preserve completion and never replay the item award");
- }catch(const std::exception&e){report<<"Runtime exception: "<<e.what()<<'\n';check(false,"Authored objective/item/checkpoint progression runs without an exception");}
+  check(game.objective(elder)==ObjectiveStatus::Active&&game.activeObjectiveText()=="Talk to the camp elder by the fire","Arrival shows the elder objective");
+  check(operate(stateId("zone_pda"))&&!game.state("zone_pda"),"The courier's PDA stays locked until the elder has briefed the player");
+  check(operate(stateId("zone_briefed"))&&game.state("zone_briefed"),"Real E at the elder's terminal records the briefing");
+  game.updateScripts(0);
+  check(game.objective(elder)==ObjectiveStatus::Complete&&game.objective(pda)==ObjectiveStatus::Active,"The briefing advances to the PDA objective");
+  check(operate(stateId("zone_transmit"))&&!game.state("zone_transmit"),"The tower transmitter needs the relay code from the PDA");
+  check(operate(stateId("zone_pda"))&&game.state("zone_pda"),"The PDA at the fuel station gives the relay code");
+  game.updateScripts(0);
+  check(game.objective(pda)==ObjectiveStatus::Complete&&game.objective(tower)==ObjectiveStatus::Active,"The PDA advances to the radio-tower objective");
+  check(operate(stateId("zone_transmit"))&&game.state("zone_transmit"),"The radio tower transmits with the code");
+  game.updateScripts(0);
+  check(game.objective(tower)==ObjectiveStatus::Complete&&game.objective(out)==ObjectiveStatus::Active&&game.state("zone_complete"),"Transmitting completes the chain and leaves the Zone open to roam");
+  for(StateId id:{elder,pda,tower,out})report<<"objective "<<int(game.objective(id))<<'\n';
+ }catch(const std::exception&e){report<<"Runtime exception: "<<e.what()<<'\n';check(false,"The zone quest chain runs without an exception");}
  if(!taskDirectory.empty()){std::error_code error;std::filesystem::remove_all(taskDirectory,error);}
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }

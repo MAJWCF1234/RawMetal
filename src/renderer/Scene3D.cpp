@@ -704,6 +704,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(buildStaticGeometry){ // Outdoor chunks carry an explicit low-poly mesh generated from the same
  // height field used by collision. This replaces the old flat half-metre floor
  // patches while leaving authored ruins, machinery and props on top.
+ // Painterly Horizon LOD, grass into ground: count ground plants per metre so
+ // the terrain under a dense patch carries its colour and shade. Near, the
+ // real plants stand on it; far, where they fade out, the patch still reads.
+ std::vector<std::uint8_t> plantCover;
+ if(w.hasTerrain()&&w.zoneSky()&&s_impostors){plantCover.assign(size_t(World::Width)*World::Height,0);
+  for(const auto&fixture:w.fixtures())if(fixture.height<1.4f&&fixture.model>=FirstLibraryModel&&impostorFor(fixture.model))
+   for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){int cx=int(fixture.position.x)+dx,cy=int(fixture.position.y)+dy;
+    if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height){auto&c=plantCover[size_t(cy*World::Width+cx)];c=std::uint8_t(std::min(255,c+(dx||dy?1:2)));}}}
  if(w.hasTerrain())for(const auto&face:w.terrain()){
   MeshVertex a{{face.a.x,face.a.y,face.a.z},0,0};
   MeshVertex b{{face.b.x,face.b.y,face.b.z},0,0};
@@ -716,7 +724,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Exposed slopes use rock; flatter deposits use the purchased dirt material.
   // Terrain never inherits industrial wall panels or metal floor grating.
   bool rocky=face.material==TerrainRock||az<std::max(ax,ay)*1.35f;
-  const Texture&terrainMaterial=w.coast()?(rocky?m_coastRock:m_coastSand):(rocky?m_terrainRock:m_terrainDirt);
+  float groundShade=1.f;
+  const Texture*terrainMaterial=&(w.coast()?(rocky?m_coastRock:m_coastSand):(rocky?m_terrainRock:m_terrainDirt));
+  // Painted zone ground: the authored cover kind under the triangle's centre.
+  // Steep faces stay rock; the cover changes per triangle, PSX-style.
+  {
+   static const char* const groundNames[GroundKinds]={"ground_shortgrass","ground_leafygrass","ground_clover","ground_wild","ground_dry","ground_litter","ground_gravel","ground_mud"};
+   const auto origin=w.definition().origin;
+   int kind=az>=std::max(ax,ay)*1.35f?w.groundKind((a.p.x+b.p.x+c.p.x)/3+origin.x,(a.p.y+b.p.y+c.p.y)/3+origin.y):-1;
+   int cover=0;
+   if(kind>=0&&kind<=GroundWild&&!plantCover.empty()){int cx=int((a.p.x+b.p.x+c.p.x)/3),cy=int((a.p.y+b.p.y+c.p.y)/3);
+    if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height)cover=plantCover[size_t(cy*World::Width+cx)];
+    if(cover>=4)kind=GroundLeafyGrass;}
+   if(kind>=0){auto found=m_facilityTextures.find(groundNames[kind]);if(found!=m_facilityTextures.end())terrainMaterial=&found->second;}
+   groundShade=1.f-.16f*std::min(1.f,cover/8.f);
+  }
   auto uv=[&](MeshVertex&v){float wx=v.p.x+w.definition().origin.x,wy=v.p.y+w.definition().origin.y,wz=v.p.z;
    constexpr float scale=.28f;
    if(az>=ax&&az>=ay){v.u=wx*scale;v.v=wy*scale;}
@@ -725,7 +747,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   };
   uv(a);uv(b);uv(c);
   // Flat triangle lighting preserves the block-authored faceting.
-  tri(a,b,c,terrainMaterial,w.coast()?1.20f:.96f);
+  tri(a,b,c,*terrainMaterial,(w.coast()?1.20f:.96f)*groundShade);
  }
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.
@@ -841,8 +863,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
  }
  const bool staticFixtures=!w.hasLift()&&w.cargoLift().upper<=w.cargoLift().lower;
- if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures())
-  facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures()){
+  float base=w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base;
+  // Painterly Horizon LOD (experimental, open-zone only): repeated foliage
+  // carries its real mesh and a shared multi-view impostor in the static
+  // cache; the shaders hand one to the other with distance. Ground plants
+  // fold into the painted ground beyond a few crossfades.
+  const Impostor* impostor=m_gpuFrame&&s_impostors&&w.zoneSky()?impostorFor(fixture.model):nullptr;
+  GpuRenderer::LodTag tag;
+  if(impostor){const auto&mesh=m_facilityMeshes[size_t(fixture.model)];float scale=fixture.height/std::max(.001f,mesh.maximum.y-mesh.minimum.y);
+   tag.half=impostor->radius*scale;tag.lod=std::clamp(8.f+7.f*tag.half,12.f,60.f);m_gpu->setLodTag(&tag);}
+  facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+  if(impostor){
+   tag.impostor=true;tag.z=base+fixture.height*.5f;tag.yaw=fixture.yaw;
+   tag.farFade=fixture.height<1.4f?tag.lod*2.6f:0.f;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;
+   float x=fixture.position.x,y=fixture.position.y,z=tag.z;
+   MeshVertex a{{x-1,y,z-1},-1,-1},b{{x+1,y,z-1},1,-1},c{{x+1,y,z+1},1,1},d{{x-1,y,z+1},-1,1};
+   objectLighting=true;tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;
+  }
+  if(m_gpu)m_gpu->setLodTag(nullptr);
+ }
  if(buildStaticGeometry)for(const auto& light:w.lights())if(light.mount==WorldLightMount::Wall)wallLamp(light);
  if(buildStaticGeometry)for(const auto& sign:w.signs()){
   std::string key=sign.title+'\n'+sign.subtitle+'\n'+std::to_string(sign.accent);
@@ -1188,6 +1228,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    Vec2 p=terminal.position+front*.29f+side*.20f;
    float lampZ=z+((w.campaign()&&w.level()>=6)?.832f:.70f);
    box({p.x-.025f,p.y-.025f,lampZ},{p.x+.025f,p.y+.025f,lampZ+.023f},game.state(terminal.activateState)?lamp:amber,1.8f);
+  }
+ }
+ // Anomalies show as a slow vortex of pale motes; fires as flame tongues and
+ // lifting embers. Both sit in their hazard box so players can read and avoid them.
+ for(const auto& hazard:w.hazards())if((hazard.kind==Hazard::Kind::Anomaly||hazard.kind==Hazard::Kind::Fire)&&game.hazardActive(hazard)){
+  static Texture mote=[](){Texture t{16,16,std::vector<uint32_t>(256)};t.clampEdges=true;
+   for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/8,dy=(y-7.5f)/8,d=dx*dx+dy*dy;t.pixels[y*16+x]=d<.55f?0xffd8f4ffu:d<1?0xff7fc8e8u:0;}return t;}();
+  static Texture flame=[](){Texture t{16,32,std::vector<uint32_t>(512)};t.clampEdges=true;
+   for(int y=0;y<32;++y)for(int x=0;x<16;++x){float v=y/31.f,w=(1-v)*.9f+.1f,dx=std::fabs(x-7.5f)/8;
+    t.pixels[y*16+x]=dx<w*.55f?0xfffff0a0u:dx<w?(v<.5f?0xffff8a1cu:0xffd8401au):0;}return t;}();
+  Point3 side{-std::sin(player.angle),std::cos(player.angle),0},c{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f,hazard.bottom};
+  float r=std::min(hazard.x2-hazard.x1,hazard.y2-hazard.y1)*.5f,t=game.elapsed();
+  if(hazard.kind==Hazard::Kind::Anomaly){
+   for(int i=0;i<18;++i){float k=std::fmod(i*.618f,1.f),a=t*(1.1f+k*.9f)+i*2.4f,d=r*(.2f+.75f*k),h=.15f+std::fmod(t*.3f+k,1.f)*1.8f,sz=.05f+.07f*k;
+    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+h},up{0,0,sz};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,mote,2.4f);}
+  }else{
+   for(int i=0;i<9;++i){float age=std::fmod(t*1.3f+i/9.f,1.f),a=i*2.1f+t*.7f,d=r*.35f*(1-age),h=age*.9f,sz=(.32f*(1-age)+.08f)*std::min(1.f,r*1.6f);
+    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+h+sz},up{0,0,sz*1.6f};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,flame,2.6f);}
+   for(int i=0;i<6;++i){float age=std::fmod(t*.6f+i/6.f,1.f),a=i*1.7f;Point3 p{c.x+std::cos(a)*r*.3f+age*.2f,c.y+std::sin(a)*r*.3f,c.z+.4f+age*2.2f},up{0,0,.025f};
+    quad(p-side*.025f-up,p+side*.025f-up,p+side*.025f+up,p-side*.025f+up,flame,2.8f);}
   }
  }
  for(const auto& emitter:w.particleEmitters()){

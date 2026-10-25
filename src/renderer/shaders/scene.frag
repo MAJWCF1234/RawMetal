@@ -17,8 +17,12 @@ layout(location=1) in vec4 lighting;
 layout(location=2) in vec4 light0;
 layout(location=3) in vec4 light1;
 layout(location=4) in vec4 surface;
-layout(location=6) in vec3 worldPos;
+layout(location=6) in vec3 inWorldPos;
+// The shaded point: the interpolated position, moved onto the recorded
+// surface for Painterly Horizon LOD impostors.
+vec3 worldPos;
 layout(location=7) in float parallaxScale;
+layout(location=8) in vec4 impostor;
 layout(location=0) out vec4 outColor;
 // Material target for the post pass: roughness, wetness, direct-light share.
 layout(location=1) out vec4 outMaterial;
@@ -166,8 +170,58 @@ float shaftScattering(vec3 eye,vec3 direction,float rayLength,vec4 lamp,float in
  return (1.0-exp(-opticalDepth))*(0.55+1.30*towardEye*towardEye)*intensity;
 }
 
+// Painterly Horizon LOD: the four recorded views around the eye direction
+// (two azimuth columns, two elevation rows), each reprojected along the
+// current view ray by its recorded depth so overlapping branches shift
+// against each other (parallax) instead of cross-fading flat pictures.
+// light0.xyz is the eye direction in the model frame, light1.x the radius.
+vec3 impostorNormal=vec3(0.0,0.0,1.0);float impostorDepth=0.0;
+vec2 impostorCell(vec2 card,vec2 index,vec2 cell){return (index+clamp(vec2(card.x*0.5+0.5,0.5-card.y*0.5),vec2(0.004),vec2(0.996)))*cell;}
+// Far away (coarse) only the nearest view is read, without the relief step:
+// at that size parallax is invisible and four lookups would cost more than
+// the meshes they replace.
+vec4 impostorColor(vec2 local,vec2 dx,vec2 dy,bool coarse){
+ float packed=impostor.z,rows=mod(packed,16.0),columns=floor(packed/16.0+0.001);
+ vec2 cell=vec2(1.0/columns,1.0/rows),gx=dx*cell,gy=dy*cell;
+ vec3 d=normalize(light0.xyz),right=vec3(-d.y,d.x,0.0);right=length(right)>1e-4?normalize(right):vec3(1.0,0.0,0.0);
+ vec3 up=cross(right,-d),q=right*(local.x*2.0-1.0)+up*(1.0-local.y*2.0);
+ float a0=floor(impostor.x),fa=impostor.x-a0,e0=floor(impostor.y),fe=impostor.y-e0;
+ if(coarse){fa=fa<0.5?0.0:1.0;fe=fe<0.5?0.0:1.0;}
+ vec4 sum=vec4(0.0);vec3 normalSum=vec3(0.0);float depthSum=0.0,weightSum=0.0;
+ for(int k=0;k<4;++k){
+  float w=((k&1)!=0?fa:1.0-fa)*((k>>1)!=0?fe:1.0-fe);if(w<0.001)continue;
+  vec2 index=vec2(mod(a0+float(k&1),columns),min(e0+float(k>>1),rows-1.0));
+  float azimuth=index.x/columns*6.2831853,elevation=0.0698+index.y*0.4887;
+  vec3 di=vec3(cos(elevation)*cos(azimuth),cos(elevation)*sin(azimuth),sin(elevation));
+  vec3 ri=normalize(vec3(-di.y,di.x,0.0)),ui=cross(ri,-di);
+  // One relief step: depth where the ray crosses this view's card, then the
+  // point on the current ray at that depth, seen from this view.
+  float h=coarse?0.0:textureGrad(reliefMap,impostorCell(vec2(dot(q,ri),dot(q,ui)),index,cell),gx,gy).r*2.0-1.0;
+  vec3 p=q+d*h;vec2 at=impostorCell(vec2(dot(p,ri),dot(p,ui)),index,cell);
+  vec4 c=textureGrad(colorMap,at,gx,gy);
+  sum+=c*w;weightSum+=w;
+  if(c.a>0.5){normalSum+=textureGrad(normalMap,at,gx,gy).xyz*w;depthSum+=(textureGrad(reliefMap,at,gx,gy).r*2.0-1.0)*w;}
+ }
+ sum/=max(weightSum,1e-4);
+ if(dot(normalSum,normalSum)>1e-6)impostorNormal=normalize(normalSum);
+ impostorDepth=depthSum/max(weightSum,1e-4);
+ return sum;
+}
+float lodDither(vec2 pixel){return fract(52.9829189*fract(dot(floor(pixel),vec2(0.06711056,0.00583715))));}
+
 void main(){
+ worldPos=inWorldPos;
  outMaterial=vec4(1.0,0.0,0.5,1.0);
+ // Painterly Horizon LOD crossfade: the real mesh and its impostor take
+ // complementary halves of one screen dither across the band, so the swap
+ // neither ghosts nor doubles density.
+ bool impostorQuad=parallaxScale<=-1000.0;
+ float lodDistance=impostorQuad?-(parallaxScale+1000.0):parallaxScale<0.0?-parallaxScale:0.0;
+ if(lodDistance>0.0){
+  float eyeDistance=length(worldPos-view.eyeYaw.xyz),handover=smoothstep(lodDistance*0.85,lodDistance*1.15,eyeDistance),h=lodDither(gl_FragCoord.xy);
+  if(impostorQuad){if(h>=handover||(impostor.w>0.0&&h<smoothstep(impostor.w*0.8,impostor.w,eyeDistance)))discard;}
+  else if(h<handover)discard;
+ }
  vec2 sampleUV=uv;
  vec2 uvDx=dFdx(uv),uvDy=dFdy(uv);
  vec3 dx=dFdx(worldPos),dy=dFdy(worldPos);
@@ -218,7 +272,9 @@ void main(){
  }
 
  if(stereo.enabled.y>0.5)sampleUV=mix(crispTexelUV(sampleUV,uvDx,uvDy),sampleUV,smoothstep(5.0,11.0,pixelsPerTexel));
- vec4 color=textureGrad(colorMap,sampleUV,uvDx,uvDy);
+ vec4 color=impostorQuad?impostorColor(uv,uvDx,uvDy,materialDistance>lodDistance*2.0):textureGrad(colorMap,sampleUV,uvDx,uvDy);
+ // The impostor's visible surface lies in front of or behind its card.
+ if(impostorQuad)worldPos+=normalize(view.eyeYaw.xyz-worldPos)*impostorDepth*light1.x;
  if(color.a<(surface.z>0.5?0.01:0.5))discard;
  // Wetness: a damp sheen everywhere plus puddles on level static ground.
  // Wet porous surfaces darken and their roughness collapses toward a mirror.
@@ -294,6 +350,8 @@ void main(){
  if(lampGrid.flags.x!=0&&surface.w>0.5&&surface.w<1.5&&surface.z<0.5&&lighting.x<1.5){
   vec3 V=normalize(view.eyeYaw.xyz-worldPos);
   vec3 Ng=normalize(cross(dx,dy));if(dot(Ng,V)<0.0)Ng=-Ng;
+  // A canopy is lit like a rounded mass, not like the flat card drawing it.
+  if(impostorQuad){float c=cos(light1.y),s=sin(light1.y);Ng=normalize(vec3(impostorNormal.x*c+impostorNormal.y*s,-impostorNormal.x*s+impostorNormal.y*c,impostorNormal.z));}
   vec3 N=Ng;
   if((lighting.w>0.5||detailAmount>0.001)&&tangentFrameValid){
    vec3 T=normalize(tangent-Ng*dot(Ng,tangent));

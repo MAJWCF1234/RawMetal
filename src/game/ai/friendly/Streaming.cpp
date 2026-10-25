@@ -248,7 +248,7 @@ void Game::updateFriendlyActors(float dt,bool guards){
     float previous=state(friendlyKey(i,"saved"))?state(friendlyKey(i,"phase"))*.0001f:staged.phase;
     float duration=cleanupAnimationDuration(track.visual,0);
     staged.clip=0;staged.phase=std::fmod(previous+dt*(duration>0?1/duration:.45f),1.f);
-    staged=friendlyAwareness(home,npc.homeLevel,npc.homeActor,previousPose,staged,dt);
+    staged=friendlyAwareness(home,npc.homeLevel,track,npc.homeLevel,npc.homeActor,previousPose,staged,dt);
     setState(friendlyKey(i,"x"),int(std::round(staged.position.x*1000)));setState(friendlyKey(i,"y"),int(std::round(staged.position.y*1000)));setState(friendlyKey(i,"z"),int(std::round(staged.z*1000)));
     setState(friendlyKey(i,"phase"),int(std::round(staged.phase*10000)));setState(friendlyKey(i,"yaw"),int(std::round(std::remainder(staged.yaw,2*kPi)*10000)));setState(friendlyKey(i,"walking"),0);setState(friendlyKey(i,"saved"),1);
    }else setState(friendlyKey(i,"saved"),0);

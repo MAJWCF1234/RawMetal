@@ -440,7 +440,7 @@ struct GpuRenderer::Impl {
  // Sun cascades: three 2048x2048 D16 layers redrawn every frame from the
  // static caches (they follow the camera), sampled with hardware comparison.
  static constexpr uint32_t SunSize=2048;static constexpr int SunCascades=3;
- std::array<float,56> sunData{};Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
+ int skyStyle=0;const GpuRenderer::LodTag* lodTag=nullptr;std::array<float,56> sunData{};Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
  void renderSunShadows(VkCommandBuffer cmd){
   if(!sunPipeline||!sunAtlas.handle)return;
   if(!sunLayoutReady){
@@ -1166,6 +1166,8 @@ void GpuRenderer::setLamps(const std::vector<std::array<float,7>>&input,bool ena
 }
 std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
 void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
+void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
+void GpuRenderer::setLodTag(const LodTag* tag){m->lodTag=tag;}
 // Diagnostics: the three cascade depth maps as 8-bit PGMs plus their fit.
 void GpuRenderer::saveSunCascades(const char* prefix){
  if(!m->sunAtlas.handle)return;vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
@@ -1277,9 +1279,21 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  auto&target=m->capturing?m->staticCaches.at(m->captureSlot).vertices:m->vertices;uint32_t start=uint32_t(target.size());
  auto worldPoint=[&](Point3 p){float cy=m->viewState[3],sy=m->viewState[4],cp=m->viewState[5],sp=m->viewState[6];float forward=p.z*cp-p.y*sp;return Point3{m->viewState[0]-p.x*sy+forward*cy,m->viewState[1]+p.x*cy+forward*sy,m->viewState[2]+p.y*cp+p.z*sp};};
  Point3 worldNormal{};if(m->capturing){auto e1=b.p-a.p,e2=c.p-a.p;Point3 n{e1.y*e2.z-e1.z*e2.y,e1.z*e2.x-e1.x*e2.z,e1.x*e2.y-e1.y*e2.x};float nl=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);if(nl>.00001f)n=n*(1.f/nl);worldNormal={-n.x*m->viewState[4]-n.y*m->viewState[6]*m->viewState[3]+n.z*m->viewState[5]*m->viewState[3],n.x*m->viewState[3]-n.y*m->viewState[6]*m->viewState[4]+n.z*m->viewState[5]*m->viewState[4],n.y*m->viewState[5]+n.z*m->viewState[6]};}
+ Point3 impostorCentre{};
+ if(m->capturing&&m->lodTag&&m->lodTag->impostor){const MeshVertex* v[3]={&a,&b,&c};
+  for(int i=0;i<3;++i)for(int j=i+1;j<3;++j)if(std::fabs(v[i]->u+v[j]->u)<.01f&&std::fabs(v[i]->v+v[j]->v)<.01f)impostorCentre=(worldPoint(v[i]->p)+worldPoint(v[j]->p))*.5f;}
  for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{out.position[0]=v.p.x*1.3f;out.position[1]=-v.p.y*1.3f*float(m->width)/m->height;out.position[2]=v.p.z-.06f;out.position[3]=v.p.z;}
   out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=normals?1.f:0.f;
-  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;target.push_back(out);
+  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
+  // Painterly Horizon LOD markers ride in the parallax slot (negative values).
+  if(const auto*tag=m->capturing?m->lodTag:nullptr){
+   if(tag->impostor){out.position[0]=impostorCentre.x;out.position[1]=impostorCentre.y;out.position[2]=impostorCentre.z;out.position[3]=1.f;
+    out.light0[0]=tag->half;out.light0[1]=tag->yaw;out.light0[2]=float(tag->columns);out.light0[3]=float(tag->rows);
+    out.light1[0]=tag->farFade;out.light1[1]=out.light1[2]=out.light1[3]=0.f;out.lighting[3]=0.f;
+    out.worldNormal[0]=0.f;out.worldNormal[1]=0.f;out.worldNormal[2]=1.f;out.worldNormal[3]=-(1000.f+tag->lod);}
+   else if(out.worldNormal[3]<=0.f)out.worldNormal[3]=-tag->lod;
+  }
+  target.push_back(out);
  }
  if(m->capturing){auto&batches=m->staticCaches.at(m->captureSlot).batches;if(!batches.empty()&&!batches.back().clear&&batches.back().material==key)batches.back().count+=3;else batches.push_back({key,start,3,false,false,-1,sortKey});}
  else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&!m->batches.back().actor&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false,false,-1,sortKey});
@@ -1294,7 +1308,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  m->vrProjection[18]=m->taaJitter[0];m->vrProjection[19]=m->taaJitter[1];
  if(m->lampUploaded[m->frameIndex]!=m->lampGeneration&&!m->lampData.empty()){std::memcpy(m->lampBuffers[m->frameIndex].mapped,m->lampData.data(),std::min(m->lampData.size(),Impl::LampBufferBytes));m->lampUploaded[m->frameIndex]=m->lampGeneration;}
  {const auto&v=m->viewState;float camera[8]={v[0],v[1],v[2],v[10],v[3],v[4],v[5],v[6]};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,eye),camera,sizeof(camera));
-  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,sun),m->sunData.data(),sizeof(m->sunData));}
+  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,sun),m->sunData.data(),sizeof(m->sunData));
+  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));}
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
  m->flushUploads();

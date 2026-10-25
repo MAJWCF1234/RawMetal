@@ -456,7 +456,22 @@ __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int
         report<<"Done.\n";
         return (doorsOnly||freightOnly)&&!doorCacheStable?35:0;
 }
+// Crashes leave RawMetal-crash.txt: the exception and its offset in the
+// executable, which the linker map (.build/RawMetal.map) resolves to a function.
+static LONG WINAPI writeCrashReport(EXCEPTION_POINTERS* info){
+    auto base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+    auto address=reinterpret_cast<std::uintptr_t>(info->ExceptionRecord->ExceptionAddress);
+    if(FILE* file=std::fopen("RawMetal-crash.txt","w")){
+        std::fprintf(file,"exception 0x%08lx at RawMetal.exe+0x%llx\n",info->ExceptionRecord->ExceptionCode,static_cast<unsigned long long>(address-base));
+        // Return addresses on the stack near the fault, for a rough call chain.
+        auto* stack=reinterpret_cast<std::uintptr_t*>(info->ContextRecord->Rsp);
+        for(int i=0;i<256;++i){auto value=stack[i];if(value>base&&value<base+0x4000000)std::fprintf(file,"  stack RawMetal.exe+0x%llx\n",static_cast<unsigned long long>(value-base));}
+        std::fclose(file);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
+    SetUnhandledExceptionFilter(writeCrashReport);
     try {
     retro::TerrainSurfaceCache::enabled=std::wcsstr(commandLine,L"--uncached-terrain-surfaces")==nullptr;
     retro::MinimapCache::enabled=std::wcsstr(commandLine,L"--uncached-minimap")==nullptr;
@@ -582,6 +597,30 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      std::filesystem::create_directories(".build/prologue-preview");
      if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B texel filtering
      for(int stage=0;stage<11;++stage){auto scene=retro::Game::prologueInspection(stage);renderer->render(scene);std::ofstream out(".build/prologue-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
+    }
+    if(auto arg=std::wcsstr(commandLine,L"--zone-shots=")){
+     // Exclusion Zone views: each line "name map x y yaw(deg) pitch [lift m]".
+     // --no-impostors renders the same views with every real mesh (A/B for
+     // Painterly Horizon LOD); the atlases are written beside the views.
+     std::ifstream list(std::filesystem::path(arg+13));std::string line;
+     retro::SoftwareRenderer::s_impostors=!std::wcsstr(commandLine,L"--no-impostors");
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/shot");
+     while(std::getline(list,line)){
+      std::istringstream fields(line);std::string name;int level=0;float x=0,y=0,yaw=0,pitch=0,lift=0;
+      if(!(fields>>name>>level>>x>>y>>yaw>>pitch))continue;fields>>lift;
+      auto scene=retro::Game::zoneInspection(level,{x,y},yaw,pitch,lift);renderer->render(scene);
+      std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
+      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+     }
+     // Steady-state frame cost of each view (static caches warm), for A/B runs.
+     {std::ifstream again(std::filesystem::path(arg+13));std::ofstream timing(std::string(".build/shot/timing")+(retro::SoftwareRenderer::s_impostors?"":"-real")+".txt");
+      while(std::getline(again,line)){std::istringstream fields(line);std::string name;int level=0;float x=0,y=0,yaw=0,pitch=0,lift=0;
+       if(!(fields>>name>>level>>x>>y>>yaw>>pitch))continue;fields>>lift;auto scene=retro::Game::zoneInspection(level,{x,y},yaw,pitch,lift);
+       for(int i=0;i<5;++i)renderer->render(scene);auto start=std::chrono::steady_clock::now();for(int i=0;i<40;++i)renderer->render(scene);
+       timing<<name<<' '<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/40<<" ms\n";}}
+     renderer->saveImpostors(".build/shot/impostor");
      return 0;
     }
     if(std::wcsstr(commandLine,L"--exclusion-inspection")){

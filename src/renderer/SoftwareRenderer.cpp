@@ -19,6 +19,7 @@
 #include <mutex>
 #include <set>
 #include <map>
+#include <sstream>
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
@@ -207,6 +208,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(int i=0;i<15;++i)m_facilityTextures.emplace(metroMaterials[i],loadTexture(449+i));
  m_facilityTextures.emplace("metro_Glass",m_glassTexture);
  m_facilityTextures.emplace("metro_Vending_machine",loadTexture(465));
+ // Library imports (tools/library/register.py): "material resource" per line.
+ {auto text=loadResource(466);std::istringstream lines(std::string(text.begin(),text.end()));std::string material;int resource=0;
+  while(lines>>material>>resource)m_facilityTextures.emplace(material,loadTexture(resource));}
  for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
   m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
  m_areaWalls[1].glossStrength=.2f;m_areaWalls[2].glossStrength=.16f;
@@ -1052,6 +1056,8 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    m_gpu->setSun(sunData);}
   m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setTiltShift(g_tiltShift);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
+  if(world.zoneSky())atmosphere={.58f,.66f,.74f,.007f};
+  m_gpu->setSkyStyle(world.zoneSky()?1:0);
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
   m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}

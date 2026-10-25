@@ -60,6 +60,8 @@ struct ActorTrack {
  StateId damageState=0,deadState=0;int health=0;
  std::vector<ActorKey> idleKeys;int idleUntilMs=0,approachUntilMs=0;
  ActorAiConfig ai{};
+ // Voice bank role (NpcVoiceCatalog); 0 picks it from the visual.
+ int voice=0;
 };
 inline AiFaction actorFaction(const ActorTrack& track){
  if(track.ai.faction!=AiFaction::Unspecified)return track.ai.faction;

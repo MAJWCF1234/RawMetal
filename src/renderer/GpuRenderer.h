@@ -38,6 +38,14 @@ public:
  // Sun: direction xyz + intensity, colour rgb + pad, then three cascades of
  // four vec4 (origin + texel size, right/up/forward with inverse extents).
  void setSun(const std::array<float,56>& sun);
+ // 0 the default sky; 1 the open zone (broken overcast, sun shafts, ground steam).
+ void setSkyStyle(int style);
+ // Painterly Horizon LOD: tags the static triangles submitted next. A real
+ // mesh fades out past `lod` metres; an impostor quad (centre, half size,
+ // yaw, atlas grid) fades in there and, for ground plants, out again at `farFade`.
+ // The impostor's centre is the midpoint of its quad's opposite (uv -1/+1) corners.
+ struct LodTag {float lod=0;bool impostor=false;float z=0,half=0,yaw=0,farFade=0;int columns=0,rows=0;};
+ void setLodTag(const LodTag* tag);
  void saveSunCascades(const char* prefix);
  std::uint64_t shadowFacesDrawn()const;
  std::uint64_t staticCacheHits()const;

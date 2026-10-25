@@ -73,7 +73,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  start+=DataStart.size();std::istringstream stream(text.substr(start,end-start));std::string line;
  auto campaign=std::make_shared<CustomCampaign>();campaign->sourceFile=std::move(sourceFile);campaign->key=campaignKey(campaign->sourceFile);
  std::vector<std::shared_ptr<AuthoredMapData>> maps;bool sawCampaign=false;std::array<bool,WorldChunkCapacity> declared{};
- std::vector<std::pair<int,int>> guardTargets;
+ std::vector<std::pair<int,int>> guardTargets;std::shared_ptr<TerrainShape> terrain;
  while(std::getline(stream,line)){
   if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#')continue;
   auto f=fields(line);if(f.empty())continue;const auto& tag=f[0];
@@ -94,6 +94,25 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=21)map->definition.spawnYaw=number(f,20,"spawn yaw");
    if(f.size()>=22)map->definition.spawnPitch=number(f,21,"spawn pitch");
    if(f.size()>=23)map->definition.startUnarmed=boolean(f,22,"start unarmed");
+  }else if(tag=="TERRAIN"){
+   // TERRAIN|seed|base|amplitude|scale|roughness: the campaign's outdoor heightfield.
+   if(f.size()!=6)throw std::runtime_error("malformed TERRAIN record");if(!terrain)terrain=std::make_shared<TerrainShape>();
+   terrain->seed=std::uint32_t(integer(f,1,"terrain seed"));terrain->base=number(f,2,"terrain base");terrain->amplitude=number(f,3,"terrain amplitude");
+   terrain->scale=number(f,4,"terrain scale");terrain->roughness=number(f,5,"terrain roughness");
+   if(terrain->base<World::TerrainMinZ+2||terrain->base>World::TerrainMaxZ-4||terrain->amplitude<0||terrain->amplitude>12||terrain->scale<6||terrain->scale>400||terrain->roughness<0||terrain->roughness>.9f)throw std::runtime_error("terrain parameters out of range");
+  }else if(tag=="TERRAIN_FLAT"){
+   // TERRAIN_FLAT|x1|y1|x2|y2|height|blend in world metres: a level pad or road.
+   if(f.size()!=7)throw std::runtime_error("malformed TERRAIN_FLAT record");if(!terrain)terrain=std::make_shared<TerrainShape>();
+   TerrainFlat flat{number(f,1,"flat x1"),number(f,2,"flat y1"),number(f,3,"flat x2"),number(f,4,"flat y2"),number(f,5,"flat height"),number(f,6,"flat blend")};
+   if(flat.x2<flat.x1||flat.y2<flat.y1||flat.blend<0||flat.blend>60||flat.height<World::TerrainMinZ+2||flat.height>World::TerrainMaxZ-4)throw std::runtime_error("invalid TERRAIN_FLAT");
+   if(terrain->flats.size()>=512)throw std::runtime_error("too many TERRAIN_FLAT records");terrain->flats.push_back(flat);
+  }else if(tag=="GROUND"){
+   // GROUND|x1|y1|x2|y2|kind|edge in world metres: kind 0 short grass, 1 leafy
+   // grass, 2 clover, 3 wild, 4 dry dirt, 5 forest litter, 6 gravel, 7 mud, 8 meadow.
+   if(f.size()!=7)throw std::runtime_error("malformed GROUND record");if(!terrain)terrain=std::make_shared<TerrainShape>();
+   GroundPaint paint{number(f,1,"ground x1"),number(f,2,"ground y1"),number(f,3,"ground x2"),number(f,4,"ground y2"),integer(f,5,"ground kind"),number(f,6,"ground edge")};
+   if(paint.x2<paint.x1||paint.y2<paint.y1||paint.kind<0||paint.kind>GroundMeadow||paint.edge<0||paint.edge>8)throw std::runtime_error("invalid GROUND");
+   if(terrain->ground.size()>=1024)throw std::runtime_error("too many GROUND records");terrain->ground.push_back(paint);
   }else if(tag=="VISIBLE_GROUP"){
    if(f.size()!=3)throw std::runtime_error("malformed VISIBLE_GROUP record");auto map=mapAt(maps,f);
    int group=integer(f,2,"visible residency group");if(group<0)throw std::runtime_error("visible residency group must be nonnegative");
@@ -152,6 +171,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<11)throw std::runtime_error("malformed FIXTURE record");auto map=mapAt(maps,f);map->fixtures.push_back({
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),
     number(f,6,"fixture width"),number(f,7,"fixture depth"),number(f,8,"fixture height"),number(f,9,"fixture yaw"),boolean(f,10,"fixture solid")});
+   if(f.size()>=12){float core=number(f,11,"fixture collision core");if(core<=0||core>1)throw std::runtime_error("fixture collision core must be in (0,1]");map->fixtures.back().core=core;}
    const auto& fixture=map->fixtures.back();if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("invalid fixture model or dimensions");
   }else if(tag=="PROP"){
    if(f.size()<11)throw std::runtime_error("malformed PROP record");auto map=mapAt(maps,f);map->props.push_back({
@@ -217,6 +237,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    int weapon=integer(f,3,"actor weapon");if(weapon<1||weapon>2)throw std::runtime_error("invalid actor weapon; use Shotgun (1) or Handgun (2)");map->actorTracks[size_t(index)].ai.weapon=weapon;
    auto& ai=map->actorTracks[size_t(index)].ai;ai.armed=true;ai.aimMs=integer(f,4,"weapon aim duration");ai.recoveryMs=integer(f,5,"weapon recovery duration");ai.attackRange=number(f,6,"weapon attack range");ai.attackDamage=number(f,7,"weapon attack damage");
    guardTargets.emplace_back(integer(f,1,"map index"),index);
+  }else if(tag=="ACTOR_VOICE"){
+   // ACTOR_VOICE|map|actor|role: a voice bank role (1-10) instead of the visual's default.
+   if(f.size()!=4)throw std::runtime_error("malformed ACTOR_VOICE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),voice=integer(f,3,"voice role");
+   if(index<0||index>=int(map->actorTracks.size())||voice<1||voice>10)throw std::runtime_error("invalid actor voice");map->actorTracks[size_t(index)].voice=voice;
   }else if(tag=="ACTOR_ROLE"){
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_ROLE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),role=integer(f,3,"squad role");if(index<0||index>=int(map->actorTracks.size())||role<0||role>6)throw std::runtime_error("invalid guard role");map->actorTracks[size_t(index)].ai.role=GuardSquadRole(role);guardTargets.emplace_back(integer(f,1,"map index"),index);
   }else if(tag=="ACTOR_TACTICS"){
@@ -248,6 +272,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="HAZARD"){
    if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});
+  }else if(tag=="EMITTER"){
+   // EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count: a smoke/vapour plume.
+   if(f.size()!=12)throw std::runtime_error("malformed EMITTER record");auto map=mapAt(maps,f);
+   ParticleEmitter e{{number(f,2,"emitter x"),number(f,3,"emitter y")},number(f,4,"emitter z"),{number(f,5,"emitter drift x"),number(f,6,"emitter drift y")},number(f,7,"emitter rise"),number(f,8,"emitter rate"),number(f,9,"emitter radius"),number(f,10,"emitter growth"),integer(f,11,"emitter count")};
+   if(e.rate<=0||e.rate>5||e.radius<=0||e.radius>3||e.growth<0||e.growth>5||e.count<1||e.count>32||e.rise<0||e.rise>20)throw std::runtime_error("emitter parameters out of range");
+   if(map->emitters.size()>=64)throw std::runtime_error("too many EMITTER records in one map");map->emitters.push_back(e);
   }else if(tag=="STAIR"){
    if(f.size()<11||f.size()>14)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
@@ -295,6 +325,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   for(size_t j=0;j<i;++j){auto a=maps[i]->definition.origin,b=maps[j]->definition.origin;
    if(a.x<b.x+World::Width&&a.x+World::Width>b.x&&a.y<b.y+World::Height&&a.y+World::Height>b.y)throw std::runtime_error("custom map chunk footprints overlap");
   }
+  maps[i]->terrain=terrain;
   // Reject malformed geometry during discovery, while the caller can report
   // a per-file error, rather than crashing when a player selects the pack.
   World validated(int(i),maps[i]);

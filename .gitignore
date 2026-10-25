@@ -55,3 +55,4 @@ source-assets/medic-motion/UAL2_Standard.fbx
 *.fullres.bak
 # Purchased library models (licence forbids public redistribution).
 src/assets/facility/freight/
+src/assets/library/

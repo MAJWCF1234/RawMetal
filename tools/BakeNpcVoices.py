@@ -2,7 +2,9 @@
 
 Credentials are read only at generation time from ELEVENLABS_API_KEY or an
 explicit private --key-file. They are never written into assets or logs.
-Running without --generate only rebakes existing local masters.
+Running without --generate only rebakes existing local masters. Clips already
+in the shipped bank whose masters are not cached here are carried over as they
+are, so adding lines never regenerates (or changes) the existing voices.
 """
 import argparse
 import hashlib
@@ -21,12 +23,38 @@ import numpy as np
 from scipy.signal import butter, sosfilt, resample_poly
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = 'eleven_multilingual_v2'
-SETTINGS = {'stability': .5, 'similarity_boost': .75, 'style': .25, 'use_speaker_boost': True}
+# Eleven v3 reads the bracketed audio tags in each line ([shouting], [whispers],
+# [grunts]...) as performance direction rather than words. Its stability is
+# one of 0 (creative), .5 (natural) or 1 (robust).
+MODEL = 'eleven_v3'
+SETTINGS = {'stability': .5, 'similarity_boost': .75}
+# (low Hz, high Hz, drive, bits, sample hold) per voice role.
 PROFILES = {1: (280, 2900, 1.35, 12, 2), 2: None,
             3: (260, 2600, 1.2, 13, 2), 4: (150, 2100, 1.6, 11, 3),
             5: (260, 3000, 1.15, 13, 1), 6: (140, 4400, 1.1, 14, 1),
-            7: (180, 3500, 1.15, 13, 1)}
+            7: (180, 3500, 1.15, 13, 1),
+            # Ashfall zone: checkpoint soldiers on throat mics, scrapyard
+            # bandits unfiltered but driven, the camp guide nearly clean.
+            8: (230, 3300, 1.45, 12, 2), 9: (110, 5200, 1.5, 15, 1), 10: (80, 7200, 1.08, 16, 1)}
+
+
+def master_voice(samples, rate=22050):
+    """Mastering shared by every role: rumble high-pass, a gentle compressor
+    so whispers and shouts sit at one level in the mix, and a soft limiter."""
+    samples = sosfilt(butter(2, 75, btype='highpass', fs=rate, output='sos'), samples)
+    # Envelope follower: 5 ms attack, 120 ms release; 3:1 above -20 dBFS.
+    attack, release = np.exp(-1 / (.005 * rate)), np.exp(-1 / (.12 * rate))
+    level = np.abs(samples)
+    envelope = np.empty_like(level)
+    current = 0.0
+    for i, value in enumerate(level):
+        coeff = attack if value > current else release
+        current = coeff * current + (1 - coeff) * value
+        envelope[i] = current
+    threshold = 10 ** (-20 / 20)
+    over = np.maximum(envelope / threshold, 1.0)
+    samples = samples * over ** (1 / 3 - 1)
+    return np.tanh(samples * 1.6) / np.tanh(1.6)
 
 
 def main():
@@ -59,11 +87,28 @@ def main():
     processed = args.masters / 'processed'
     processed.mkdir(exist_ok=True)
 
-    def bake(entry):
+    # The shipped bank, for clips whose masters are not cached locally.
+    shipped, shipped_proof = [], []
+    bank_path = ROOT / 'src/assets/cleanup-voices.bank'
+    provenance_path = catalog_path.parent / 'provenance.json'
+    if bank_path.exists() and provenance_path.exists():
+        data = bank_path.read_bytes()
+        count = struct.unpack_from('<I', data, 4)[0]
+        offset = 8
+        for _ in range(count):
+            size = struct.unpack_from('<I', data, offset)[0]
+            shipped.append(data[offset + 4:offset + 4 + size])
+            offset += 4 + size
+        shipped_proof = json.loads(provenance_path.read_text())['clips']
+
+    def bake(indexed):
+        index, entry = indexed
         identity = {'voice_id': entry['voice_id'], 'text': entry['text'],
                     'model_id': MODEL, 'voice_settings': SETTINGS}
         digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         master = args.masters / (digest + '.mp3')
+        if not master.exists() and index < len(shipped) and shipped_proof[index]['id'] == entry['id']                 and shipped_proof[index].get('generation_identity') == digest:
+            return shipped[index], shipped_proof[index]
         if not master.exists():
             if not args.generate:
                 raise RuntimeError('Missing cached master: ' + entry['id'])
@@ -100,6 +145,7 @@ def main():
                 coarse = resample_poly(samples, 1, hold)
                 samples = np.repeat(coarse, hold)[:len(samples)]
             samples = np.round(samples * (2**(bits-1))) / (2**(bits-1))
+        samples = master_voice(samples)
         rms = np.sqrt(np.mean(samples*samples))
         samples *= min(.15 / max(rms, 1e-6), .88 / max(np.max(np.abs(samples)), 1e-6))
         fade = min(110, len(samples)//2)
@@ -116,7 +162,7 @@ def main():
 
     # Two concurrent calls stay within the account's normal request capacity.
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(bake, catalog['clips']))
+        results = list(pool.map(bake, enumerate(catalog['clips'])))
     bank = b'RVB1' + struct.pack('<I', len(results))
     for data, _ in results:
         bank += struct.pack('<I', len(data)) + data

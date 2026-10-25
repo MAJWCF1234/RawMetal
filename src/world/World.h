@@ -24,7 +24,9 @@ struct Door {
  float maxOpen=1.f;
 };
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
-struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;};
+// core: the fraction of the footprint that collides when solid (a tree blocks
+// at its trunk, not across its canopy); 1 for ordinary furniture and plant.
+struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;float core=1;};
 enum class WorldLightMount { Ceiling, Wall };
 struct WorldLight {
  Vec2 position;float z;
@@ -133,9 +135,28 @@ struct AuthoredNavHint {
     float z=0;
     int hint=0; // 0 Path, 1 Cover — matches ai::NodeHint
 };
+// Campaign-authored outdoor terrain (TERRAIN / TERRAIN_FLAT records). A seeded
+// fractal heightfield in world space, so every stitched chunk samples one
+// continuous surface. Flats level pads, roads and building sites, blending
+// back into the hills over `blend` metres. Heights are 1 m voxel tops.
+struct TerrainFlat {float x1=0,y1=0,x2=0,y2=0,height=2,blend=4;};
+// Ground cover painted over authored terrain: one texture kind per rectangle
+// (world metres), with a noisy border `edge` metres wide.
+enum GroundKind:int {GroundShortGrass,GroundLeafyGrass,GroundClover,GroundWild,GroundDry,GroundLitter,GroundGravel,GroundMud,GroundKinds,GroundMeadow=GroundKinds};
+struct GroundPaint {float x1=0,y1=0,x2=0,y2=0;int kind=GroundMeadow;float edge=1.5f;};
+struct TerrainShape {
+    std::uint32_t seed=1;
+    float base=2,amplitude=3,scale=36,roughness=.45f;
+    std::vector<TerrainFlat> flats;
+    // Any GROUND record turns on painted cover: a noise meadow of grass, clover,
+    // wild and dry ground everywhere, then the rectangles in order.
+    std::vector<GroundPaint> ground;
+};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
+    std::shared_ptr<const TerrainShape> terrain;
+    std::vector<ParticleEmitter> emitters;
     ChunkDefinition definition{};
     // Adjacent views can retain another hall without joining its traversal group.
     std::vector<int> visibleResidencyGroups;
@@ -205,6 +226,11 @@ public:
     }
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
     bool coast()const{return horrorMode()&&m_level>=12;}
+    // The open-zone sky: procedural broken overcast, a warm sun with shafts
+    // and low steam over the ground, on the same authored terrain.
+    bool zoneSky()const{return m_mapData&&m_mapData->skybox=="zone_overcast";}
+    // Painted ground cover at a world position, or -1 for the default terrain look.
+    int groundKind(float worldX,float worldY)const;
     const char* skyboxId()const{return m_mapData?m_mapData->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
     const char* customMapName()const{return m_mapData?m_mapData->name.c_str():"";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
@@ -238,13 +264,15 @@ public:
     // on level ground. Carpet never puddles; the Foundry runs hot and dry.
     float wetness()const{
      if(definition().floorMaterial==FloorMaterial::OfficeCarpet)return 0.f;
+     if(zoneSky())return .38f;
      if(outdoors())return .55f;
      if(campaign()&&level()==0)return .12f;
      if(campaign()&&level()==1)return .65f;
      return .3f;
     }
     // Low overcast sun for the Ashfall exterior; indoor worlds have none.
-    SunLight sun()const{if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;}
+    SunLight sun()const{if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};
+     if(zoneSky()){d={-.62f,.48f,.42f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.6f;s.r=1.f;s.g=.86f;s.b=.66f;return s;}float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;}
     std::vector<Span> spansAt(int x,int y)const;
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;

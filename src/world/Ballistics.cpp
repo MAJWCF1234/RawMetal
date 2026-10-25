@@ -54,7 +54,7 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal)const{
     oriented(f.position,f.width,f.depth,top-.05f,top,f.yaw);
     for(float x:{-f.width*.5f+.05f,f.width*.5f-.05f})for(float y:{-f.depth*.5f+.05f,f.depth*.5f-.05f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.05f,.05f,base,top-.05f,f.yaw);
     if(f.model==18){Vec2 back{f.position.x+(f.depth*.5f-.03f)*s,f.position.y+(f.depth*.5f-.03f)*c};oriented(back,f.width,.05f,top,base+f.height,f.yaw);}
-   }else oriented(f.position,f.width,f.depth,base,base+f.height,f.yaw);
+   }else oriented(f.position,f.width*f.core,f.depth*f.core,base,base+f.height,f.yaw);
   }
  }
  // Traveling controls are absent from the cached static BVH.

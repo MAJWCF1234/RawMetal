@@ -148,19 +148,23 @@ bool Game::testNavGraph(){
    "Typed GuardCtx awareness accessors preserve save-compatible state keys");
  }
  {auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");
-  check(campaign&&!campaign->maps.empty()&&campaign->maps[0]->navHints.size()>=4,"Exclusion Zone authors Path/Cover NAV_HINT markers on the wasteland facility");
-  check(campaign->maps.size()>1&&!campaign->maps[1]->creatureSpawns.empty(),"Exclusion Zone authors a scrap-basin creature for MaintainSchedule observation");
-  bool escort=false;for(const auto&track:campaign->maps[0]->actorTracks)escort|=track.ai.mode==ActorAiMode::Escort;
-  check(escort,"Exclusion Zone authors a Facility escort for civilian schedule observation");
-  Game g(campaign);const auto&graph=g.navGraph(0,1.6f);int authoredCover=0;
-  for(const auto&hint:campaign->maps[0]->navHints)if(hint.hint){
-   for(const auto&n:graph.nodes)if(n.hint==ai::NodeHint::Cover&&length(n.position-hint.position)<.7f){++authoredCover;break;}
-  }
-  check(authoredCover>=2,"Exclusion Zone NAV_HINT Cover markers merge into the live retained graph");
+  // The open zone: the military checkpoint is the guarded map with authored cover.
+  Game g(campaign);
   size_t assault=0;bool foundAssault=false;
   for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].track().ai.role==GuardSquadRole::Assault){assault=i;foundAssault=true;break;}
   check(foundAssault,"Exclusion Zone rebuild exposes the authored Assault");
-  check(foundAssault&&g.npcActors()[assault].track().ai.armed&&g.npcActors()[assault].homeLevel==0,"Exclusion Zone Assault is an armed facility-chunk Guard");
+  int post=foundAssault?g.npcActors()[assault].homeLevel:0;
+  check(campaign&&campaign->maps.size()>size_t(post)&&campaign->maps[size_t(post)]->navHints.size()>=4,"Exclusion Zone authors Path/Cover NAV_HINT markers at the guarded checkpoint");
+  bool creatures=false;for(const auto&map:campaign->maps)creatures|=!map->creatureSpawns.empty();
+  check(creatures,"Exclusion Zone authors creatures for MaintainSchedule observation");
+  bool escort=false;for(const auto&map:campaign->maps)for(const auto&track:map->actorTracks)escort|=track.ai.mode==ActorAiMode::Escort;
+  check(escort,"Exclusion Zone authors an escort for civilian schedule observation");
+  const auto&graph=g.navGraph(post,1.6f);int authoredCover=0;
+  for(const auto&hint:campaign->maps[size_t(post)]->navHints)if(hint.hint){
+   for(const auto&n:graph.nodes)if(n.hint==ai::NodeHint::Cover&&length(n.position-hint.position)<.7f){++authoredCover;break;}
+  }
+  check(authoredCover>=2,"Exclusion Zone NAV_HINT Cover markers merge into the live retained graph");
+  check(foundAssault&&g.npcActors()[assault].track().ai.armed,"Exclusion Zone Assault is an armed checkpoint Guard");
   size_t escortIndex=0;bool foundEscort=false;
   for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].track().ai.mode==ActorAiMode::Escort){escortIndex=i;foundEscort=true;break;}
   check(foundEscort,"Exclusion Zone rebuild exposes the authored escort in the friendly actor list");
