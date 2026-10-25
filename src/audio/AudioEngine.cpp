@@ -26,6 +26,39 @@ bool writeVoicePreview(const std::vector<int16_t>& pcm,const char* path="npc-voi
 }
 }
 std::vector<int16_t> decodeMusic(const unsigned char* data,size_t bytes);
+namespace {
+// What covers each human model's mouth (from its head texture): 0 bare face,
+// 1 face plate, 2 respirator, 3 sealed hood or helmet.
+int maskForVisual(ActorVisual visual){
+ switch(visual){
+  case ActorVisual::Worker:return 3;          // yellow hazmat suit, sealed hood and visor
+  case ActorVisual::Cleanup:return 2;         // Assault: gas mask with hose
+  case ActorVisual::CleanupEngineer:return 0; // goggles only
+  case ActorVisual::CleanupSharpshooter:return 2;
+  case ActorVisual::CleanupHeavy:return 3;    // full helmet and visor
+  case ActorVisual::CleanupMedic:return 2;
+  case ActorVisual::CleanupRusher:return 1;   // hockey face plate
+  default:return 0;
+ }
+}
+}
+AudioEngine::Biquad AudioEngine::biquad(int type,float freq,float q,float gainDb){
+ constexpr float rate=44100;float w=6.2831853f*freq/rate,c=std::cos(w),alpha=std::sin(w)/(2*q),a=std::pow(10.f,gainDb/40);
+ float b0,b1,b2,a0,a1,a2;
+ if(type==0){b0=(1-c)/2;b1=1-c;b2=(1-c)/2;a0=1+alpha;a1=-2*c;a2=1-alpha;}        // low-pass
+ else if(type==1){b0=(1+c)/2;b1=-(1+c);b2=(1+c)/2;a0=1+alpha;a1=-2*c;a2=1-alpha;} // high-pass
+ else {b0=1+alpha*a;b1=-2*c;b2=1-alpha*a;a0=1+alpha/a;a1=-2*c;a2=1-alpha/a;}      // peaking
+ return {b0/a0,b1/a0,b2/a0,a1/a0,a2/a0};
+}
+void AudioEngine::configureMask(MaskFilter& mask,int kind){
+ mask=MaskFilter{};mask.kind=kind;if(kind<=0)return;
+ // low cut, high cut, cavity peaks (Hz, dB), visor echo, level make-up
+ struct Shape {float low,high,peakA,gainA,peakB,gainB,echo,makeup;};
+ const Shape shapes[]={{0,0,0,0,0,0,0,1},{150,5200,1100,3,2600,2,.14f,1.1f},{280,3300,950,7,2300,4.5f,.32f,1.55f},{300,2600,850,8,2100,5,.42f,1.75f}};
+ const auto& s=shapes[kind];
+ mask.stages={biquad(1,s.low,.707f),biquad(0,s.high,.707f),biquad(2,s.peakA,2.2f,s.gainA),biquad(2,s.peakB,3.f,s.gainB)};
+ mask.echoTone=biquad(0,1800,.707f);mask.echoGain=s.echo;mask.makeup=s.makeup;mask.delay=40; // 0.9 ms
+}
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
   auto resource=loadResource(i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
@@ -140,7 +173,7 @@ void AudioEngine::update(const Game& game,bool focused){
   play(event);
  }
  for(auto&voice:m_voices)if(voice.speech>=0&&voice.speaker&&voice.speaker<=game.npcActors().size()){
-  const auto&npc=game.npcActors()[voice.speaker-1];voice.position=npc.pose.position+game.chunkOffset(npc.level)-game.chunkOffset(game.level());voice.z=npc.pose.z+npc.track().scale*.85f;}
+  const auto&npc=game.npcActors()[voice.speaker-1];if(voice.mask.kind<0)configureMask(voice.mask,maskForVisual(npc.track().visual));voice.position=npc.pose.position+game.chunkOffset(npc.level)-game.chunkOffset(game.level());voice.z=npc.pose.z+npc.track().scale*.85f;}
  auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain,float z=std::numeric_limits<float>::quiet_NaN()){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
   if(it==m_voices.end()){play({sound,pos,gain,1,true,17,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;}
  };
@@ -200,6 +233,7 @@ void AudioEngine::mix(int16_t* output,size_t frames){
     // A positional source has one location; baked stereo must not pull it
     // into two ears independently. Preserve stereo only for listener beds.
     float mono=s.channels==1?sample(0):(sample(0)+sample(1))*.5f;
+    if(v.mask.kind>0)mono=v.mask.run(mono);
     v.filter+=(v.filterTarget-v.filter)*.0015f;
     v.filtered+=(mono-v.filtered)*v.filter;
     left+=v.filtered*v.smoothLeft;right+=v.filtered*v.smoothRight;
@@ -254,6 +288,14 @@ bool AudioEngine::test(){
  // The old -2000-map*100 water IDs collided with machine IDs ten maps later.
  auto waterKey=ambientEmitter(AmbientKind::Water,5,0),machineKey=ambientEmitter(AmbientKind::Machine,15,0);
  if(waterKey==machineKey||emitterInChunk(waterKey,15)||!emitterInChunk(waterKey,5))return failure("ambient emitter namespace collision");
+ // Masks: a bare face passes speech unchanged; a respirator and a sealed hood
+ // cut treble and rumble progressively. Measured on two pure tones.
+ {auto energy=[](int kind,float freq){MaskFilter mask;configureMask(mask,kind);double sum=0;
+   for(int i=0;i<44100;++i){float y=mask.kind>0?mask.run(std::sin(6.2831853f*freq*i/44100.f)):std::sin(6.2831853f*freq*i/44100.f);if(i>4410)sum+=y*y;}return sum;};
+  double bare=energy(0,6000),respirator=energy(2,6000),sealed=energy(3,6000),lowRespirator=energy(2,120),lowBare=energy(0,120);
+  diagnostic<<"Mask 6 kHz energy bare/respirator/sealed "<<bare<<'/'<<respirator<<'/'<<sealed<<"; 120 Hz bare/respirator "<<lowBare<<'/'<<lowRespirator<<'\n';
+  if(!(respirator<bare*.25&&sealed<respirator&&lowRespirator<lowBare*.25))return failure("speech masks do not muffle by model");
+  if(maskForVisual(ActorVisual::Worker)!=3||maskForVisual(ActorVisual::CleanupEngineer)!=0||maskForVisual(ActorVisual::Cleanup)!=2)return failure("mask choice does not follow the model");}
  AudioEngine audio(false);auto game=Game::validationScene(Enemy::Kind::Brute);
  if(audio.m_speech.size()!=NpcVoiceClips.size())return failure("NPC voice bank count");
  for(size_t i=0;i<audio.m_speech.size();++i){const auto&clip=audio.m_speech[i];

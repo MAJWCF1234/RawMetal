@@ -4,6 +4,42 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.11.0 - Ashfall Exclusion Zone update (2026-10-24)
+
+The Ashfall Exclusion Zone custom campaign is rebuilt as an open,
+STALKER-style testbed: twenty maps of woods, marsh, ruins and roads to roam.
+It stays a separate custom campaign; the main campaign is unchanged.
+
+- **An open zone.** Rookie camp, fuel station, military checkpoint,
+  scrapyard, radio tower, pine forest, swamp, creek, anomaly field, old
+  mine, industrial zone and village ruins, with a three-step quest from the
+  camp elder to the radio tower.
+- **No walls.** The zone is edged by dense forest and wasteland, and beyond
+  it the land rolls into wooded hills out to the horizon.
+- **Sky and ground.** A broken overcast sky with a low warm sun, god rays
+  through trees and ruins, low steam over the ground and wet patches. PSX
+  grass, clover, dirt, gravel, forest litter and mud painted over the
+  terrain.
+- **Lush plants.** Tall grass, goldenrod, aster, bracken, sumac, bushes,
+  leafy trees, aspens and pines from the purchased nature packs.
+- **Painterly Horizon LOD (experimental).** Distant trees and plants are
+  drawn as shared multi-angle impostors with depth and lighting, handing
+  over smoothly to the real models up close; distant grass folds into the
+  ground colour.
+- **Sound.** Wind, birds, crickets, frogs, a creek, crackling camp fires and
+  humming anomalies; footsteps on dirt, grass and gravel.
+- **Voices.** Every NPC line re-recorded with directed delivery, plus new
+  voices for the checkpoint soldiers, the scrapyard bandits and the camp
+  guide, who will follow you. Speech is now muffled by what each character
+  wears: a sealed hazmat hood, a gas mask, a face plate or nothing, and
+  squad callouts come over the radio.
+- **Performance.** The zone holds the 60 fps frame cap; small ground plants
+  no longer render into the sun shadow maps.
+- **Fixes.** An NPC crossing into another map no longer crashes the game;
+  crashes now leave RawMetal-crash.txt for diagnosis.
+
+---
+
 ## v0.10.0 - Rebuilt facility update (2026-10-24)
 
 Every campaign map from the Foundry to the Deep Junction is rebuilt from

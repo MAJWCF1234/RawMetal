@@ -28,14 +28,20 @@ ROOT = Path(__file__).resolve().parents[1]
 # one of 0 (creative), .5 (natural) or 1 (robust).
 MODEL = 'eleven_v3'
 SETTINGS = {'stability': .5, 'similarity_boost': .75}
-# (low Hz, high Hz, drive, bits, sample hold) per voice role.
-PROFILES = {1: (280, 2900, 1.35, 12, 2), 2: None,
-            3: (260, 2600, 1.2, 13, 2), 4: (150, 2100, 1.6, 11, 3),
-            5: (260, 3000, 1.15, 13, 1), 6: (140, 4400, 1.1, 14, 1),
-            7: (180, 3500, 1.15, 13, 1),
-            # Ashfall zone: checkpoint soldiers on throat mics, scrapyard
-            # bandits unfiltered but driven, the camp guide nearly clean.
-            8: (230, 3300, 1.45, 12, 2), 9: (110, 5200, 1.5, 15, 1), 10: (80, 7200, 1.08, 16, 1)}
+# What a speaker wears over the mouth is applied live by the audio engine from
+# the speaker's model (bare face, face plate, respirator, sealed hood). The bake
+# only adds the radio channel the squad roles and checkpoint soldiers call over.
+RADIO = {1, 3, 4, 6, 8}
+
+
+def radio_channel(samples, rate=22050):
+    """Squad radio: narrow band, driven, light bit-crush and sample hold."""
+    samples = sosfilt(butter(4, [380, 3000], btype='bandpass', fs=rate, output='sos'), samples)
+    peak = max(np.max(np.abs(samples)), 1e-6)
+    samples = np.tanh(samples / peak * 2.0) / np.tanh(2.0)
+    coarse = resample_poly(samples, 1, 2)
+    samples = np.repeat(coarse, 2)[:len(samples)]
+    return np.round(samples * 2048) / 2048
 
 
 def master_voice(samples, rate=22050):
@@ -135,16 +141,8 @@ def main():
         # Preserve delivery and timing; only trim extended encoder lead/tail silence.
         active = np.flatnonzero(np.abs(samples) > .008)
         samples = samples[max(0, active[0]-1102):min(len(samples), active[-1]+2205)]
-        profile = PROFILES[entry['role']]
-        if profile:
-            low, high, drive, bits, hold = profile
-            samples = sosfilt(butter(3, [low, high], btype='bandpass', fs=22050, output='sos'), samples)
-            samples = np.tanh(samples * drive) / np.tanh(drive)
-            if hold > 1:
-                # Filter before decimation; sample hold provides restrained radio grit.
-                coarse = resample_poly(samples, 1, hold)
-                samples = np.repeat(coarse, hold)[:len(samples)]
-            samples = np.round(samples * (2**(bits-1))) / (2**(bits-1))
+        if entry['role'] in RADIO:
+            samples = radio_channel(samples)
         samples = master_voice(samples)
         rms = np.sqrt(np.mean(samples*samples))
         samples *= min(.15 / max(rms, 1e-6), .88 / max(np.max(np.abs(samples)), 1e-6))
@@ -156,7 +154,7 @@ def main():
                         '-c:a', 'adpcm_ima_wav', str(wav)], input=np.asarray(samples, dtype='<f4').tobytes(), check=True)
         result = {'id': entry['id'], 'master_sha256': hashlib.sha256(master.read_bytes()).hexdigest(),
                   'generation_identity': digest, 'seconds': round(len(samples)/22050, 4),
-                  'wav_bytes': wav.stat().st_size, 'masked': profile is not None}
+                  'wav_bytes': wav.stat().st_size, 'radio': entry['role'] in RADIO}
         print('Ready:', entry['id'], result['seconds'], 'seconds', flush=True)
         return wav.read_bytes(), result
 

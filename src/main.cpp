@@ -618,8 +618,16 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      {std::ifstream again(std::filesystem::path(arg+13));std::ofstream timing(std::string(".build/shot/timing")+(retro::SoftwareRenderer::s_impostors?"":"-real")+".txt");
       while(std::getline(again,line)){std::istringstream fields(line);std::string name;int level=0;float x=0,y=0,yaw=0,pitch=0,lift=0;
        if(!(fields>>name>>level>>x>>y>>yaw>>pitch))continue;fields>>lift;auto scene=retro::Game::zoneInspection(level,{x,y},yaw,pitch,lift);
-       for(int i=0;i<5;++i)renderer->render(scene);auto start=std::chrono::steady_clock::now();for(int i=0;i<40;++i)renderer->render(scene);
-       timing<<name<<' '<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/40<<" ms\n";}}
+       for(int i=0;i<5;++i)renderer->render(scene);auto start=std::chrono::steady_clock::now();std::array<double,3> stages{};
+       for(int i=0;i<40;++i){renderer->render(scene);auto s=renderer->frameStages();for(int k=0;k<3;++k)stages[size_t(k)]+=s[size_t(k)]/40;}
+       timing<<name<<' '<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/40<<" ms (scene "<<stages[0]<<", gpu "<<stages[1]<<", present "<<stages[2]<<")\n";
+       // --perf-variants: the same view with the post pass, then per-pixel
+       // lighting (lamps and sun cascades), switched off, to find the cost.
+       if(std::wcsstr(commandLine,L"--perf-variants"))for(int variant=0;variant<2;++variant){
+        if(variant)retro::SoftwareRenderer::setPixelLighting(false);else retro::SoftwareRenderer::setPostProcessing(false);
+        for(int i=0;i<5;++i)renderer->render(scene);double gpu=0;for(int i=0;i<20;++i){renderer->render(scene);gpu+=renderer->frameStages()[1]/20;}
+        timing<<"  without "<<(variant?"pixel lighting":"post")<<": gpu "<<gpu<<'\n';
+        retro::SoftwareRenderer::setPixelLighting(true);retro::SoftwareRenderer::setPostProcessing(true);}}}
      renderer->saveImpostors(".build/shot/impostor");
      return 0;
     }
