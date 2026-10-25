@@ -45,6 +45,9 @@ struct WorldLight {
  // (0..1) adds irregular dropouts: a failing tube or a browned-out circuit.
  StateId enabledState=0;int enabledValue=1;bool invert=false;
  float period=0,onTime=0,phase=0,flicker=0;
+ // Power can change while the map runs (Game::lampPower), so renderers keep
+ // this lamp out of their baked caches and apply its power every frame.
+ bool switchable()const{return enabledState||invert||period>0||flicker>0;}
  Point3 emitter()const{
   if(mount==WorldLightMount::Wall)return {position.x+std::cos(yaw)*.16f,position.y+std::sin(yaw)*.16f,z};
   return {position.x,position.y,z};
@@ -255,6 +258,7 @@ public:
      for(const auto& zone:m_mapData->zones)if(p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.name.c_str();
      return nullptr;
     }
+    const std::vector<DarkZone>& darkZones()const{static const std::vector<DarkZone> empty;return m_mapData?m_mapData->darkZones:empty;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
     bool coast()const{return horrorMode()&&m_level>=12;}
     // The open-zone sky: procedural broken overcast, a warm sun with shafts

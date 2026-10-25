@@ -71,6 +71,8 @@ public:
     // 0 = final attachment (ordinary gameplay).
     void setCleanupInspectionStage(int stage){m_cleanupInspectionStage=stage;}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
+    // Lamp shadow faces drawn so far (Vulkan); 0 on the software path.
+    std::uint64_t shadowFacesDrawn()const;
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
     void inspectRig(const Game& game,float yaw,float pitch);
 private:

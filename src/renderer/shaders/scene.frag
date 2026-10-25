@@ -4,7 +4,7 @@ layout(set=0,binding=1) uniform sampler2D normalMap;
 layout(set=0,binding=2) uniform sampler2D emissionMap;
 layout(set=0,binding=3) uniform sampler2D reliefMap;
 layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects; vec4 fogLights[4]; vec4 atmosphere; } view;
-layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;} stereo;
+layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;vec4 flashes[2];} stereo;
 // Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
 // lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot.
 layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 lamps[512];uint cells[];} lampGrid;
@@ -407,6 +407,17 @@ void main(){
      lampSpecularRGB+=torch*beam*dielectricSpecular(N,V,L,roughness);
     }
    }
+  }
+  // Muzzle flashes (the player's, then NPC guns in darkness), the vertex
+  // formula per pixel: a wall or ceiling quad spanning the room still lights.
+  // Unshadowed, warm, and lifted 1.6x to match the shoulder's low-end slope.
+  for(int flash=0;flash<3;++flash){
+   float strength=flash==0?view.effects.y:stereo.flashes[flash-1].w;if(strength<=0.0)continue;
+   vec3 forwardWorld=normalize(vec3(view.eyeYaw.w*view.basis.y,view.basis.x*view.basis.y,view.basis.z));
+   vec3 muzzle=flash==0?view.eyeYaw.xyz+forwardWorld*0.42-vec3(0,0,0.10):stereo.flashes[flash-1].xyz;
+   vec3 toPoint=worldPos-muzzle;float d2=dot(toPoint,toPoint);if(d2>=144.0)continue;
+   float d=max(sqrt(d2),0.001),edge=1.0-d2/144.0;
+   lampLight+=lampColour(3000.0,0.0)*strength*1.6*1.4*edge*edge*(0.35+0.65*abs(dot(Ng,toPoint))/d)/(1.0+d2*stereo.darkness.y);
   }
   float hemisphere=1.0;
   if(lampGrid.sun.w>0.0){

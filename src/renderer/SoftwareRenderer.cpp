@@ -739,7 +739,7 @@ void SoftwareRenderer::drawHud(const Game& game){
   for(int i=0;i<8;++i)fill(reserveX-6-loadedWidth-12-i*6,m_height-34,3,10,i<p.loaded?amber:bone,i<p.loaded?1.f:.15f);
   if(p.loaded==0)uiText(m_width/2-uiTextWidth("RELOAD  [R]",0,12,2)/2,m_height/2+24,"RELOAD  [R]",red,0,12,1,2);}
  std::snprintf(b,sizeof(b),"PURGED  %02d / %02d",game.kills(),int(game.enemies().size()));if(!game.enemies().empty())uiText(m_width/2-uiTextWidth(b,0,10,2)/2,m_height-20,b,muted,0,10,.8f,2);
- if(game.hasFlashlight()){const char* light=game.flashlightOn()?"LIGHT ON":"LIGHT OFF";uiText(m_width/2-uiTextWidth(light,0,10,2)/2,m_height-34,light,game.flashlightOn()?amber:muted,0,10,.8f,2);}
+ if(game.hasFlashlight()){float jam=game.flashlightJam();const char* light=!game.state(stateId("flashlight_on"))?"LIGHT OFF":jam>=Game::FlashlightJamTime?"NO POWER":jam>0?"LIGHT FAILING":"LIGHT ON";uiText(m_width/2-uiTextWidth(light,0,10,2)/2,m_height-34,light,game.flashlightOn()?amber:muted,0,10,.8f,2);}
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
  fill(cx-7,cy,4,1,cross,.85f);fill(cx+4,cy,4,1,cross,.85f);fill(cx,cy-7,1,4,cross,.85f);fill(cx,cy+4,1,4,cross,.85f);blend(cx,cy,cross,.6f);
  if(auto target=game.targetEnemy()){
@@ -1007,10 +1007,11 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection)drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
- if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleAge=game.shotAge();float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
+ if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
   std::array<float,16> fogLights{};std::array<float,4> fogPowers{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
   const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
    if(lamp.mount==WorldLightMount::Wall||lamp.intensity<=0)continue;
+   // A switched-off lamp keeps its slot at zero power, so shafts never swap.
    float dx=lamp.position.x-game.player().pos.x,dy=lamp.position.y-game.player().pos.y,d2=dx*dx+dy*dy;
    float floor=world.floorHeight(lamp.position.x,lamp.position.y)+.08f;
    float top=std::min(lamp.z,world.clearanceAbove(lamp.position.x,lamp.position.y,floor)-.04f);
@@ -1021,21 +1022,23 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    // slots while turning, popping lamp shadows and glow.
    if(top-bottom<.8f||floor>eyeZ+2.f||top<eyeZ-2.f||d2>=distances[3])continue;(void)ahead;
    int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];fogPowers[slot]=fogPowers[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
-   distances[slot]=d2;fogPowers[slot]=lamp.intensity;fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
+   distances[slot]=d2;fogPowers[slot]=lamp.intensity*game.lampPower(lamp);fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
   }
   // Per-pixel lamps: every resident lamp in world space, in stable order so
   // shadow maps are reused until the set itself changes.
   if(g_pixelLighting!=m_pixelLighting){m_pixelLighting=g_pixelLighting;m_chunkLighting={};m_chunkNormalLighting={};m_gpu->clearStaticCaches();}
-  {std::vector<std::array<float,7>> lamps;
+  // Switchable lamps keep their full intensity in the list (a stable key and
+  // shadow maps) and their power goes in per frame beside it.
+  {std::vector<std::array<float,7>> lamps;std::vector<float> powers;
    for(int level=0;level<game.chunkCount();++level){if(level!=game.level()&&!game.chunkResident(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
-    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint});}
+    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint});powers.push_back(game.lampPower(lamp));}
    }
    if(lamps.size()>256){Point3 eye{game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye};
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}
     std::nth_element(order.begin(),order.begin()+256,order.end());order.resize(256);std::sort(order.begin(),order.end(),[](const auto&a,const auto&b){return a.second<b.second;});
-    std::vector<std::array<float,7>> nearest;for(auto&entry:order)nearest.push_back(lamps[entry.second]);lamps.swap(nearest);}
-   m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);
+    std::vector<std::array<float,7>> nearest;std::vector<float> nearestPowers;for(auto&entry:order){nearest.push_back(lamps[entry.second]);nearestPowers.push_back(powers[entry.second]);}lamps.swap(nearest);powers.swap(nearestPowers);}
+   m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);m_gpu->setLampPowers(powers);
   }
   // Sun cascades: three view-frustum slices, each a texel-snapped square in
   // the light's frame so the shadow edge does not crawl as the camera moves.
@@ -1061,6 +1064,10 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   m_gpu->setSkyStyle(world.zoneSky()?1:0);
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
+  // True darkness: haze goes black (it still swallows distance), the ambient
+  // fill and exposure lift go, and a shot lights the room out to 12 m.
+  const float darkness=game.darkness();for(int c=0;c<3;++c)atmosphere[size_t(c)]*=1.f-darkness;
+  m_gpu->setDarkness(darkness,.045f-.033f*darkness,game.weaponFlashes());
   m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';
    // Mid-session fallbacks are rare and look like a sudden quality drop; keep an appended record for diagnosis.
@@ -1104,6 +1111,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
 
 namespace retro {
 void SoftwareRenderer::saveSunCascades(const char*prefix){if(m_gpu)m_gpu->saveSunCascades(prefix);}
+std::uint64_t SoftwareRenderer::shadowFacesDrawn()const{return m_gpu?m_gpu->shadowFacesDrawn():0;}
 bool SoftwareRenderer::saveSceneCapture(const char*path){
  if(!m_gpu)return false;std::vector<uint32_t> pixels;std::vector<float> depth;int width=0,height=0;m_gpu->captureScene(pixels,width,height,&depth);
  // Planar depth beside the image (raw float32), for offline composite previews.

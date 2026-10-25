@@ -370,8 +370,28 @@ public:
     static constexpr StateId ReactorAuthDisk=stateId("reactor_auth_disk");
     static constexpr StateId Flashlight=stateId("flashlight");
     bool hasFlashlight()const{return hasQuestItem(Flashlight);}
-    bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0;}
+    // The torch lights with the item, its switch (flashlight_on) and power:
+    // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
+    bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0&&!flashlightJammed();}
+    static constexpr float FlashlightJamTime=1.5f;
+    bool flashlightJammed()const;
+    // Seconds inside an active jamming DarkZone, capped at FlashlightJamTime; 0 outside.
+    float flashlightJam()const;
     static bool testFlashlight();
+    // Switchable lamps (WorldLight gating, mirroring Hazard). lampSwitchedOn is
+    // the state gate alone; lampPower adds the timed window and flicker (0..1).
+    bool lampSwitchedOn(const WorldLight& lamp)const;
+    float lampPower(const WorldLight& lamp)const;
+    bool darkZoneActive(const DarkZone& zone)const;
+    // 0 lit .. 1 true darkness: the player's eye inside an active DarkZone of
+    // the current map, eased over about .3 s (and immediate after a load).
+    float darkness()const;
+    // The player's muzzle flash as a light (0 none): about three frames lit; in
+    // darkness it holds .12 s, burns brighter and fades out over .2 s after.
+    float muzzleFlash()const;
+    // NPC gun flashes lighting the room in darkness: two strongest, world x, y, z, strength.
+    std::array<std::array<float,4>,2> weaponFlashes()const;
+    static bool testDarkness();
     bool inventoryOpen()const{return m_inventoryOpen;}
     // Reactor rendering wakes during the first lift shake, one vertical band
     // at a time. Direct reactor entry and restored underground saves bypass it.
@@ -455,6 +475,10 @@ private:
     std::vector<StateId> m_firedEvents;
     std::vector<ScriptEvent> m_scriptEvents;
     float m_hazardSoundTimer=0;
+    // Darkness ramp and torch jam; runtime only, re-settled after any load.
+    float m_darkness=0,m_flashlightJam=0;bool m_darknessSettled=false;
+    float darknessTarget(bool* jamming)const;
+    void updateDarkness(float dt);
     void seedScripts();
     void updateScripts(float dt);
     void updateReceivingBreach();
