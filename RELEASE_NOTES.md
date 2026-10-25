@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.12.1 - Graphics fix for PCs without Resizable BAR (2026-10-25)
+
+- **No more PS1-looking fallback.** On graphics cards or PCs without
+  Resizable BAR, the game ran out of a small (256 MB) region of video memory
+  after a few levels and switched for good to its software renderer, which
+  looks far blockier. It now keeps rendering on the GPU and moves the extra
+  geometry into system memory instead.
+- Everything else is as in v0.12.0.
+
+---
+
 ## v0.12.0 - The Descent, part 1 (playtest) (2026-10-25)
 
 The main campaign continues past Deep Junction. The main-line blast door now
