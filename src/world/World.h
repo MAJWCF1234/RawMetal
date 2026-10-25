@@ -26,7 +26,9 @@ struct Door {
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 // core: the fraction of the footprint that collides when solid (a tree blocks
 // at its trunk, not across its canopy); 1 for ordinary furniture and plant.
-struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;float core=1;};
+// visible=false: a collision-only copy, standing in a neighbouring map for the
+// part of a large fixture that crosses the map border.
+struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;float core=1;bool visible=true;};
 // Bare: a light with no housing (a fire, a lamp head that already has its model).
 enum class WorldLightMount { Ceiling, Wall, Bare };
 struct WorldLight {
@@ -77,6 +79,9 @@ struct CargoLift {
 };
 struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
+// A structure that only collides: the solid core of something drawn in finer
+// pieces (a steel column's flanges and web), never rendered.
+inline constexpr int CollisionProxyMaterial=30;
 // Terrain source points are one-metre solid/air voxels, Minecraft-style.
 // Surface Nets removes the cube faces and emits the engine-native low-poly skin;
 // collision queries the same voxel density field.

@@ -399,6 +399,7 @@ struct GpuRenderer::Impl {
  // moves the final image to shader-read for the composite.
  FullscreenStage taaStage,exposureStage;std::array<Image,2> taaImages{};std::array<VkFramebuffer,2> taaFrames{};std::array<VkImageLayout,2> taaLayouts{VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_UNDEFINED};
  bool tiltShift=true; // composite cinematic lens: DOF, vignette, CA, grain (window only)
+ float lensDepthOfField=1,lensEffects=1; // player settings, 1 = the tuned look
  int taaWrite=0;bool taaEnabled=true,taaRan=false,taaHistoryValid=false;uint32_t taaFrame=0;std::array<float,8> taaPrevCamera{};std::array<float,2> taaJitter{};
  void destroyTaaTargets(){for(int i=0;i<2;++i){if(taaFrames[size_t(i)])vkDestroyFramebuffer(device,taaFrames[size_t(i)],nullptr);taaFrames[size_t(i)]=VK_NULL_HANDLE;destroy(taaImages[size_t(i)]);taaLayouts[size_t(i)]=VK_IMAGE_LAYOUT_UNDEFINED;}taaHistoryValid=false;}
  Image& finalImage(){return taaRan?taaImages[size_t(taaWrite)]:postRan?composeStage.image:target;}
@@ -1087,6 +1088,7 @@ bool GpuRenderer::postProcessing()const{return m->postAvailable&&m->postEnabled;
 void GpuRenderer::setCrispTexels(bool crisp){m->vrProjection[17]=crisp?1.f:0.f;}
 void GpuRenderer::setReferenceDisplay(bool enabled){g_referenceDisplay=enabled;}
 void GpuRenderer::setTiltShift(bool enabled){m->tiltShift=enabled;}
+void GpuRenderer::setLens(float depthOfField,float lensEffects){m->lensDepthOfField=std::clamp(depthOfField,0.f,2.f);m->lensEffects=std::clamp(lensEffects,0.f,2.f);}
 void GpuRenderer::setTemporalAA(bool enabled){m->taaEnabled=enabled;if(!enabled)m->taaHistoryValid=false;}
 void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);}
 void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
@@ -1489,7 +1491,7 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
  vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->compositePipeline);
  vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->compositeLayout,0,1,&m->compositeSets[m->frameIndex],0,nullptr);
  float params[12]={underwater?1.f:0.f,sceneDim,damageFlash,shotKick,m->hdrScene?1.f:0.f,m->vrMode?1.f:0.f,alarm,m->postRan?1.f:0.f,
-  m->tiltShift&&!m->vrMode&&lensReady?1.f:0.f,m->viewState[10],0.f,float(m->width)/float(std::max(1,m->height))};
+  m->tiltShift&&!m->vrMode&&lensReady?m->lensDepthOfField:0.f,m->viewState[10],m->tiltShift&&!m->vrMode&&lensReady?m->lensEffects:0.f,float(m->width)/float(std::max(1,m->height))};
  vkCmdPushConstants(cmd,m->compositeLayout,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(params),params);
  vkCmdDraw(cmd,6,1,0,0);
  vkCmdEndRenderPass(cmd);

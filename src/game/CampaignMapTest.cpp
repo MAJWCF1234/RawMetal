@@ -57,7 +57,7 @@ bool Game::testCampaignMaps(){
 
  }
  int mutants=0;for(int level=10;level<32;++level){Game area;area.loadLevel(level,false);
-  check(area.world().definition().musicCue==MusicCue::Freight,"Freight section has dedicated authored soundtrack");
+  check(area.world().definition().musicCue!=MusicCue::Default,"Freight district maps play their area scores, not the facility track");
   for(const auto&e:area.enemies())if(e.kind==Enemy::Kind::Mutant){++mutants;check(e.maxHp==180&&std::fabs(e.bodyTop()-e.bodyBottom()-1.85f)<.001f,"Mutated human has authored health and standing hull");check(std::fabs(area.groundHeight(e.pos,e.z+.2f)-e.z)<.02f,"Mutated human stands on authored floor");}
  }
  check(mutants==2,"Exactly two mutated humans across the new freight section");

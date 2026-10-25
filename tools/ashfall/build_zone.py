@@ -48,7 +48,7 @@ def value_noise(seed, x, y):
 
 class Terrain:
     def __init__(self, **k):
-        self.__dict__.update(k); self.flats = []; self.ground = []
+        self.__dict__.update(k); self.flats = []; self.paints = []
 
     def raw(self, x, y):
         s, amp, freq, norm = 0.0, 1.0, 1 / max(4.0, self.scale), 0.0
@@ -78,7 +78,7 @@ class Terrain:
     def paint(self, x1, y1, x2, y2, kind, edge=1.5):
         """GROUND cover: 0 short grass, 1 leafy grass, 2 clover, 3 wild, 4 dry dirt,
         5 forest litter, 6 gravel, 7 mud, 8 meadow (the default noise mix)."""
-        self.ground.append((x1, y1, x2, y2, kind, edge))
+        self.paints.append((x1, y1, x2, y2, kind, edge))
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +90,7 @@ class Zone:
                                     sequences=[], hints=[], nav=[])
                      for cy in range(ZONE_H) for cx in range(ZONE_W)}
         self.keep_clear = []  # (x, y, radius): no vegetation
+        self.water = []  # (x1, y1, x2, y2, bed, surface), absolute heights
         self.objective_texts = []
 
     @staticmethod
@@ -432,14 +433,17 @@ def build(z):
     # ================================================================================
     # 9. SWAMP (west).
     px_, py_ = 16, 46
-    pond = t.flat(9.5, 40.5, 22.5, 51.5, round(TERRAIN['base']) - 2, 7)
-    z.water = getattr(z, 'water', []) + [(9.5, 40.5, 22.5, 51.5, pond + .5 - .1, pond + .5 + .55)]
+    # A rim above the water line, then the basin inside it with short banks.
+    # The water reaches a metre past the basin floor, so its edges sit inside
+    # the rising bank instead of standing as bare walls.
+    t.flat(7, 38, 25, 54, round(TERRAIN['base']), 5)
+    pond = t.flat(10.5, 41.5, 21.5, 50.5, round(TERRAIN['base']) - 2, 1.5)
     z.clear(px_, py_, 9)
     for (dx, dy) in [(-9, -6), (9, 5), (-7, 7), (10, -6)]:
         z.model('dead_tree_b', px_ + dx, py_ + dy, yaw=dx * .3, scale=1.2, core=.12)
     for i in range(22):
-        a = i / 22 * 2 * PI; r = 8.5 + (i % 3) * .7
-        z.model('grass_b' if i % 2 else 'wheat', px_ + math.cos(a) * r, py_ + math.sin(a) * r * .75, yaw=i, solid=False, scale=1.2)
+        a = i / 22 * 2 * PI; r = 8.6 + (i % 3) * .6
+        z.model('grass_b' if i % 2 else 'wheat', px_ + math.cos(a) * r, py_ + math.sin(a) * r * .88, yaw=i, solid=False, scale=1.2)
     z.creature(1, px_ - 3, py_); z.creature(1, px_ + 4, py_ + 2); z.creature(1, px_, py_ - 3)
     z.zone_name(4, 36, 30, 56, 'SWAMP')
     creek(z, t, pond)
@@ -514,31 +518,44 @@ def creek(z, t, pond):
         return best
     samples = []
     for (ax, ay), (bx, by) in zip(path, path[1:]):
-        n = max(1, int(math.hypot(bx - ax, by - ay) / 2.2))
+        n = max(1, int(math.hypot(bx - ax, by - ay)))
         samples += [(ax + (bx - ax) * i / n, ay + (by - ay) * i / n) for i in range(n)]
     samples.append(path[-1])
     for (x, y) in samples:
-        t.flat(x - 1.3, y - 1.3, x + 1.3, y + 1.3, pond, 3.5)
+        t.flat(x - .6, y - .6, x + .6, y + .6, pond, 1.2)
         z.clear(x, y, 2.6)
-    # Water rows: each 1 m row of cells within 1.5 m of the line, merged into runs.
-    rows = {}
-    for y in range(int(min(p[1] for p in path)) - 2, int(max(p[1] for p in path)) + 3):
-        run = None
-        for x in range(0, 60):
-            inside = distance(x + .5, y + .5) < 1.5 and not (9.5 <= x + .5 <= 22.5 and 40.5 <= y + .5 <= 51.5)
-            if inside and run is None:
-                run = x
-            if not inside and run is not None:
-                z.water.append((run, y, x, y + 1, bed, surface)); run = None
-        if run is not None:
-            z.water.append((run, y, 60, y + 1, bed, surface))
+    # Water follows the carved bed exactly: flood the 1 m cells whose terrain
+    # top (as the engine voxelises it) sits at the basin floor, starting in the
+    # pond. Every cell around them is at least one voxel higher, so the banks
+    # bury the water's edges.
+    def top(cx, cy):
+        return math.floor(t.height(cx + .5, cy + .5) + .5)
+    wet, frontier = set(), [(16, 46)]
+    while frontier:
+        cx, cy = frontier.pop()
+        if (cx, cy) in wet or not (0 <= cx < 60 and 0 <= cy < 70) or top(cx, cy) > pond:
+            continue
+        wet.add((cx, cy))
+        frontier += [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)]
+    bed, surface = pond + .5 - .1, pond + .5 + .55
+    for cy in sorted({c[1] for c in wet}):
+        row = sorted(c[0] for c in wet if c[1] == cy)
+        start = prev = row[0]
+        for cx in row[1:] + [None]:
+            if cx is not None and cx == prev + 1:
+                prev = cx
+                continue
+            z.water.append((start, cy, prev + 1, cy + 1, bed, surface))
+            if cx is not None:
+                start = prev = cx
+    print('swamp water cells', len(wet))
     # Banks: reeds (tall grass), goldenrod and bracken just outside the water.
     rnd = random.Random(77)
     for (x, y) in samples:
         for _ in range(7):
             a = rnd.uniform(0, 2 * PI); d = rnd.uniform(1.9, 3.4)
             bx, by = x + math.cos(a) * d, y + math.sin(a) * d
-            if distance(bx, by) > 1.8:
+            if distance(bx, by) > 2.0 and top(math.floor(bx), math.floor(by)) > pond:
                 z.model(rnd.choice(['tall_grass_l', 'tall_grass_l', 'tall_grass_m', 'goldenrod', 'bracken', 'dogbane']), bx, by,
                         yaw=rnd.uniform(0, 2 * PI), scale=rnd.uniform(1.0, 1.5), solid=False)
     z.model('rock_mossy', 31.2, 7.2, yaw=.4, scale=1.3)  # the spring's stones
@@ -699,7 +716,7 @@ def write(z, stats=False):
     for f in t.flats:
         lines.append('TERRAIN_FLAT|' + '|'.join(fmt(float(v)) for v in f))
     lines.append('HORIZON|150|5|14|' + ','.join(str(CATALOG[n]['slot']) for n in ('pine_a', 'pine_b', 'leafy_a', 'leafy_b', 'aspen_a', 'aspen_b', 'oak_a', 'oak_b')))
-    for (x1, y1, x2, y2, kind, edge) in t.ground:
+    for (x1, y1, x2, y2, kind, edge) in t.paints:
         lines.append('GROUND|%s|%s|%s|%s|%d|%s' % (fmt(float(x1)), fmt(float(y1)), fmt(float(x2)), fmt(float(y2)), kind, fmt(float(edge))))
     names = {}
     for (x1, y1, x2, y2, name) in [(4, 77, 24, 94, 'Rookie Camp')]:
@@ -722,6 +739,22 @@ def write(z, stats=False):
         for f in m['fixtures']:
             slot, lx, ly, base, w, d, h, yaw, solid, core = f
             lines.append('FIXTURE|%d|%d|%s|%s|%s|%s|%s|%s|%s|%d|%s' % (i, slot, fmt(lx), fmt(ly), fmt(float(base)), fmt(w), fmt(d), fmt(h), fmt(yaw), solid, fmt(float(core))))
+        # Collision belongs to the map that owns a fixture, so a building that
+        # crosses the map border also gets collision-only copies (visible 0)
+        # in every neighbouring map its footprint reaches.
+        for f in m['fixtures']:
+            slot, lx, ly, base, w, d, h, yaw, solid, core = f
+            if not solid:
+                continue
+            c, sn = abs(math.cos(yaw)), abs(math.sin(yaw))
+            hx, hy = (w * c + d * sn) * core / 2, (w * sn + d * c) * core / 2
+            wx, wy = lx + ox, ly + oy
+            for other in order:
+                if other == k:
+                    continue
+                px, py = other[0] * CHUNK, other[1] * CHUNK
+                if wx + hx > px and wx - hx < px + CHUNK and wy + hy > py and wy - hy < py + CHUNK:
+                    lines.append('FIXTURE|%d|%d|%s|%s|%s|%s|%s|%s|%s|1|%s|0' % (index[other], slot, fmt(wx - px), fmt(wy - py), fmt(float(base)), fmt(w), fmt(d), fmt(h), fmt(yaw), fmt(float(core))))
         for s in m['structs']:
             x1, y1, x2, y2, b, tp, rail, mat = s
             lines.append('STRUCT|%d|%s|%s|%s|%s|%s|%s|%d|%d' % (i, fmt(x1), fmt(y1), fmt(x2), fmt(y2), fmt(float(b)), fmt(float(tp)), rail, mat))

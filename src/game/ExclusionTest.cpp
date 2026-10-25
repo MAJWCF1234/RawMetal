@@ -77,13 +77,18 @@ bool Game::testExclusion(){
  check(grid,"Maps form a 5 x 4 grid in zone metres");
  check(sky&&terrain,"Every map uses the open-zone sky over authored terrain");
  check(g.world().sun().intensity>0&&g.world().sun().direction.z>.2f&&g.world().sun().direction.z<.6f,"A low warm sun lights the zone");
- // Seams: neighbouring maps agree on the ground along their shared edge.
+ // Seams: neighbouring maps agree on the ground along their shared edge. A
+ // tear shows as a step across the seam steeper than the ground just inside
+ // either map; a bank that simply slopes across the border is fine.
  float worstSeam=0;
+ auto seam=[&](float across,float insideA,float insideB){worstSeam=std::max(worstSeam,across-std::max(insideA,insideB));};
  for(int level=0;level<g.chunkCount();++level){const auto& a=g.chunkWorld(level);
-  if(level%5<4){const auto& b=g.chunkWorld(level+1);for(float y=.5f;y<24;y+=1)worstSeam=std::max(worstSeam,std::fabs(a.floorHeight(23.9f,y)-b.floorHeight(.1f,y)));}
-  if(level/5<3){const auto& b=g.chunkWorld(level+5);for(float x=.5f;x<24;x+=1)worstSeam=std::max(worstSeam,std::fabs(a.floorHeight(x,23.9f)-b.floorHeight(x,.1f)));}}
- report<<"worst seam step "<<worstSeam<<" m\n";
- check(worstSeam<=1.01f,"Terrain is continuous across every map seam (no step above one voxel)");
+  if(level%5<4){const auto& b=g.chunkWorld(level+1);for(float y=.5f;y<24;y+=1)
+   seam(std::fabs(a.floorHeight(23.9f,y)-b.floorHeight(.1f,y)),std::fabs(a.floorHeight(22.9f,y)-a.floorHeight(23.9f,y)),std::fabs(b.floorHeight(.1f,y)-b.floorHeight(1.1f,y)));}
+  if(level/5<3){const auto& b=g.chunkWorld(level+5);for(float x=.5f;x<24;x+=1)
+   seam(std::fabs(a.floorHeight(x,23.9f)-b.floorHeight(x,.1f)),std::fabs(a.floorHeight(x,22.9f)-a.floorHeight(x,23.9f)),std::fabs(b.floorHeight(x,.1f)-b.floorHeight(x,1.1f)));}}
+ report<<"worst seam step beyond the local slope "<<worstSeam<<" m\n";
+ check(worstSeam<=1.01f,"Terrain is continuous across every map seam (no step beyond the local slope)");
  {Game again(exclusionCampaign());bool same=true;
   for(int level=0;level<g.chunkCount();++level)for(float y=.5f;y<24;y+=3)for(float x=.5f;x<24;x+=3)same&=g.chunkWorld(level).floorHeight(x,y)==again.chunkWorld(level).floorHeight(x,y);
   check(same,"The seeded terrain generator is deterministic");}
@@ -104,6 +109,16 @@ bool Game::testExclusion(){
   for(const auto&spawn:probe.world().creatureSpawns())check(probe.hullFits(spawn.position,probe.groundHeight(spawn.position,float(World::TerrainMaxZ+1)),.5f),"Creature spawns stand clear of geometry");
   for(const auto&spawn:probe.world().pickupSpawns())check(probe.hullFits(spawn.position,probe.groundHeight(spawn.position,float(World::TerrainMaxZ+1)),Player::StandingHeight),"Pickups are reachable standing");}
  report<<"fixtures "<<fixtures<<'\n';
+ // Buildings are solid all through, also where they cross into a neighbouring
+ // map (collision-only copies there): no standing body fits inside one.
+ {int probes=0,open=0;
+  for(int level=0;level<g.chunkCount();++level){Game probe=zoneInspection(level,{12,12},0,0);
+   for(const auto&f:probe.world().fixtures())if(f.solid&&f.visible&&f.core>=1&&f.width*f.depth>20){float c=std::cos(f.yaw),s=std::sin(f.yaw);
+    for(float u:{-.35f,0.f,.35f})for(float v:{-.35f,0.f,.35f}){Vec2 p{f.position.x+u*f.width*c+v*f.depth*s,f.position.y-u*f.width*s+v*f.depth*c};
+     float feet=probe.world().floorHeight(f.position.x,f.position.y)+f.base+.05f;++probes;
+     if(probe.hullFits(p,feet,Player::StandingHeight)){++open;report<<"  open inside model "<<f.model<<" map "<<level<<" at "<<p.x<<','<<p.y<<'\n';}}}}
+  report<<"building probes "<<probes<<" open "<<open<<'\n';
+  check(probes>50&&open==0,"Buildings are solid on both sides of every map border");}
  check(fixtures>=1500,"The zone is dressed with at least 1500 trees, plants, ruins and props");
  // Real movement: walk the camp road east across a map seam on rough ground.
  {Game walk=zoneView({10,81.5f},{40,81.5f});walk.m_player.health=100000;

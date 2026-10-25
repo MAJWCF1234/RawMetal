@@ -57,7 +57,27 @@ bool Game::tryMove(Vec2 delta){
   }
  }return lengthSq(m_player.pos-old)>0;
 }
+// Never leave the player boxed inside geometry. When the body does not fit
+// where it stands and walking has gone nowhere for a while (a gap the hull
+// samples slipped through, a prop that moved onto it), step out to the
+// nearest clear spot rather than softlock. Scenes that place the player in a
+// tight spot on purpose (lift cabs, camera fixtures) never trigger it.
+bool Game::unstickPlayer(){
+ const float height=m_player.hullHeight();
+ if(m_stuckTime<.75f||hullFits(m_player.pos,m_player.z,height))return false;
+ m_stuckTime=0;
+ for(float r=.05f;r<=1.5f;r+=.05f)for(int k=0;k<16;++k){
+  Vec2 probe=m_player.pos+Vec2{std::cos(k*.3926991f),std::sin(k*.3926991f)}*r;
+  for(float feet:{m_player.z,groundHeight(probe)}){
+   if(std::fabs(feet-m_player.z)>.6f||!hullFits(probe,feet,height))continue;
+   m_player.pos=probe;m_player.z=feet;m_velocity={};return true;
+  }
+ }
+ return false;
+}
 void Game::updateMovement(const InputState& input,float dt){
+ unstickPlayer();
+ const Vec2 startPosition=m_player.pos;
  if(input.jump&&!m_previousJump)m_jumpBuffer=.12f;m_previousJump=input.jump;
  if(input.crouch&&!m_player.crouched){
   // Ducking in flight raises the feet while preserving the top of the hull.
@@ -111,6 +131,9 @@ void Game::updateMovement(const InputState& input,float dt){
    }
   }
  }
+ // Stuck: trying to walk, not moving, and the body does not fit where it is.
+ const bool trying=input.forward||input.back||input.left||input.right||(input.vrTracked&&(input.vrMoveForward!=0||input.vrMoveRight!=0));
+ if(trying&&lengthSq(m_player.pos-startPosition)<1e-6f&&!hullFits(m_player.pos,m_player.z,m_player.hullHeight()))m_stuckTime+=dt;else m_stuckTime=0;
 }
 float Game::vrInteractionDistance(Point3 target,float housingRadius)const{
  int hand=m_vrInteractionHand;if(!m_vrHandValid[hand])return 999.f;

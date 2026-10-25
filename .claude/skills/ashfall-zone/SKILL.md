@@ -42,6 +42,9 @@ main campaign.
 - **NPCs:** `z.actor(x, y, visual, yaw, mode, faction, squad, patrol, ...)`. Every patrol point must stay in the actor's own map; the generator asserts it.
 - **Clearings:** `z.clear(x, y, r)` keeps vegetation away.
 - **Vegetation:** `scatter()` plants vegetation in per-biome patches (`TREES`, `PATCHES`). It respects roads, flats and clearings.
+- **Border-crossing fixtures:** collision belongs to the map that owns a fixture. The writer therefore copies every solid fixture as a collision-only FIXTURE (13th field `0`) into each neighbouring map its footprint reaches; keep that when adding big buildings.
+- **Swamp water:** the water is not drawn as rectangles. It floods the 1 m cells whose voxel terrain top sits at the basin floor, so carve with `t.flat` first and the banks bury the water's edges.
+- **Height helpers:** `t.ground(x, y)` is the walking height, and `t.paint(...)` records go to `t.paints`.
 
 ## Audio
 

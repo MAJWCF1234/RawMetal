@@ -46,8 +46,11 @@ private:
  std::atomic<bool> m_stop=false;
  float m_master=1,m_targetMaster=1,m_musicGain=.28f,m_lastTime=-1;
  float m_effectsGain=1;
- float m_mainBlend=1,m_reactorBlend=0,m_motorBlend=0,m_freightBlend=0;
- float m_mainTarget=1,m_reactorTarget=0,m_motorTarget=0,m_freightTarget=0;
+ float m_mainBlend=1,m_reactorBlend=0,m_motorBlend=0;
+ float m_mainTarget=1,m_reactorTarget=0,m_motorTarget=0;
+ // Area score, one entry per MusicCue (0, the original track, is m_main*).
+ static constexpr int AreaScores=9;
+ std::array<float,AreaScores> m_areaBlend{},m_areaTarget{};
  float m_submerged=0,m_submergedTarget=0,m_underwaterLeft=0,m_underwaterRight=0;
  bool m_paused=false;
   int m_lastChunk=-1;

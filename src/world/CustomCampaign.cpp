@@ -90,7 +90,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    map->definition.lift=boolean(f,16,"lift flag");
    if(f.size()>=18)map->definition.residencyGroup=integer(f,17,"residency group");
    if(f.size()>=19){int style=integer(f,18,"floor material");if(style<0||style>1)throw std::runtime_error("invalid floor material");map->definition.floorMaterial=FloorMaterial(style);}
-   if(f.size()>=20){int cue=integer(f,19,"music cue");if(cue<0||cue>1)throw std::runtime_error("invalid music cue");map->definition.musicCue=MusicCue(cue);}
+   if(f.size()>=20){int cue=integer(f,19,"music cue");if(cue<0||cue>=int(MusicCue::Count))throw std::runtime_error("invalid music cue");map->definition.musicCue=MusicCue(cue);}
    if(f.size()>=21)map->definition.spawnYaw=number(f,20,"spawn yaw");
    if(f.size()>=22)map->definition.spawnPitch=number(f,21,"spawn pitch");
    if(f.size()>=23)map->definition.startUnarmed=boolean(f,22,"start unarmed");
@@ -179,6 +179,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),
     number(f,6,"fixture width"),number(f,7,"fixture depth"),number(f,8,"fixture height"),number(f,9,"fixture yaw"),boolean(f,10,"fixture solid")});
    if(f.size()>=12){float core=number(f,11,"fixture collision core");if(core<=0||core>1)throw std::runtime_error("fixture collision core must be in (0,1]");map->fixtures.back().core=core;}
+   // 13th field 0: collision only (a neighbouring map draws the model).
+   if(f.size()>=13)map->fixtures.back().visible=boolean(f,12,"fixture visible");
+   if(f.size()>13)throw std::runtime_error("malformed FIXTURE record");
    const auto& fixture=map->fixtures.back();if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("invalid fixture model or dimensions");
   }else if(tag=="PROP"){
    if(f.size()<11)throw std::runtime_error("malformed PROP record");auto map=mapAt(maps,f);map->props.push_back({

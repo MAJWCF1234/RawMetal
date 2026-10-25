@@ -709,7 +709,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // real plants stand on it; far, where they fade out, the patch still reads.
  std::vector<std::uint8_t> plantCover;
  if(w.hasTerrain()&&w.zoneSky()&&s_impostors){plantCover.assign(size_t(World::Width)*World::Height,0);
-  for(const auto&fixture:w.fixtures())if(fixture.height<1.4f&&fixture.model>=FirstLibraryModel&&impostorFor(fixture.model))
+  for(const auto&fixture:w.fixtures())if(fixture.visible&&fixture.height<1.4f&&fixture.model>=FirstLibraryModel&&impostorFor(fixture.model))
    for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){int cx=int(fixture.position.x)+dx,cy=int(fixture.position.y)+dy;
     if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height){auto&c=plantCover[size_t(cy*World::Width+cx)];c=std::uint8_t(std::min(255,c+(dx||dy?1:2)));}}}
  if(w.hasTerrain())for(const auto&face:w.terrain()){
@@ -871,6 +871,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  for(auto&s:w.structures()){
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
+  if(s.material==CollisionProxyMaterial)continue;
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.material==1){
    // Faceted containment jacket, with consistent metre-scale panels, centred
@@ -911,7 +912,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
  }
  const bool staticFixtures=!w.hasLift()&&w.cargoLift().upper<=w.cargoLift().lower;
- if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures()){
+ if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures())if(fixture.visible){
   float base=w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base;
   // Painterly Horizon LOD (experimental, open-zone only): repeated foliage
   // carries its real mesh and a shared multi-view impostor in the static
@@ -1112,7 +1113,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f);
  }
  movingGeometry=false;m_emissionScale=1.f;
- if(!staticFixtures)for(const auto&fixture:w.fixtures())facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible)facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
  for(auto&c:game.chunkClutter(level)){
   bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},.4f))continue;

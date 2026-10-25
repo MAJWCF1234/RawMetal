@@ -75,14 +75,14 @@ void Game::updateMenu(const InputState& input){
  bool click=pressed(input.fire,m_menuPrevious.fire);
  if(!input.fire)m_dragSlider=-1;
  if(m_dragSlider<0&&inside&&(input.pointerX!=m_pointerX||input.pointerY!=m_pointerY||click))m_menuSelection=(input.pointerY-MenuLayout::RowTop)/MenuLayout::RowHeight;
- if(m_menuPage==MenuPage::Settings&&click&&inside&&m_menuSelection>=1&&m_menuSelection<=4&&input.pointerX>=MenuLayout::SliderX-5&&input.pointerX<=MenuLayout::SliderX+MenuLayout::SliderWidth+5)m_dragSlider=m_menuSelection;
+ if(m_menuPage==MenuPage::Settings&&click&&inside&&((m_menuSelection>=1&&m_menuSelection<=4)||m_menuSelection==6||m_menuSelection==7)&&input.pointerX>=MenuLayout::SliderX-5&&input.pointerX<=MenuLayout::SliderX+MenuLayout::SliderWidth+5)m_dragSlider=m_menuSelection;
  if(m_dragSlider>=0)m_menuSelection=m_dragSlider;
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
  int direction=int(pressed(input.menuRight,m_menuPrevious.menuRight))-int(pressed(input.menuLeft,m_menuPrevious.menuLeft));
  bool activate=pressed(input.menuAccept,m_menuPrevious.menuAccept)||(inside&&click);
  if(m_menuPage!=MenuPage::Settings){
   if(m_menuPage==MenuPage::ConfirmRestart){
-   if(activate){if(m_menuSelection==0){m_menuPage=MenuPage::Settings;m_menuSelection=6;}
+   if(activate){if(m_menuSelection==0){m_menuPage=MenuPage::Settings;m_menuSelection=8;}
     else {restart();m_paused=false;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_suppressFire=true;}}
    m_menuPrevious=input;return;
   }
@@ -104,10 +104,12 @@ void Game::updateMenu(const InputState& input){
   }
   m_menuPrevious=input;return;
  }
- float* value=m_menuSelection==1?&m_settings.master:m_menuSelection==2?&m_settings.music:m_menuSelection==3?&m_settings.effects:m_menuSelection==4?&m_settings.sensitivity:nullptr;
+ // Sliders: volumes 0-1, sensitivity 0.2-3, depth of field and lens effects 0-2 (1 = default look).
+ float* value=m_menuSelection==1?&m_settings.master:m_menuSelection==2?&m_settings.music:m_menuSelection==3?&m_settings.effects:m_menuSelection==4?&m_settings.sensitivity:m_menuSelection==6?&m_settings.depthOfField:m_menuSelection==7?&m_settings.lensEffects:nullptr;
  if(value){
-  float low=m_menuSelection==4?.2f:0,high=m_menuSelection==4?3.f:1.f;
-  if(direction)*value=std::clamp(*value+direction*(m_menuSelection==4?.1f:.05f),low,high);
+  const bool lens=m_menuSelection==6||m_menuSelection==7;
+  float low=m_menuSelection==4?.2f:0,high=m_menuSelection==4?3.f:lens?2.f:1.f;
+  if(direction)*value=std::clamp(*value+direction*(m_menuSelection==4||lens?.1f:.05f),low,high);
   if(m_dragSlider>=0)*value=low+(high-low)*std::clamp(float(input.pointerX-MenuLayout::SliderX)/MenuLayout::SliderWidth,0.f,1.f);
   if(direction||m_dragSlider>=0){
    if(m_menuSelection==1)m_audioMuted=false;if(m_menuSelection==2)m_musicEnabled=true;
@@ -115,20 +117,23 @@ void Game::updateMenu(const InputState& input){
  }
  if(m_menuSelection==5&&(activate||direction))m_settings.invertMouse=!m_settings.invertMouse;
  if(activate&&m_menuSelection==0){if(m_menuFromTitle)showTitleScreen();else {m_paused=false;m_suppressFire=true;}}
- if(activate&&m_menuSelection==6){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
- if(activate&&(m_menuSelection==7||m_menuSelection==8)){m_menuPage=m_menuSelection==7?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
- if(activate&&m_menuSelection==9){if(m_menuFromTitle)m_quitRequested=true;else showTitleScreen();}
+ if(activate&&m_menuSelection==8){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
+ if(activate&&(m_menuSelection==9||m_menuSelection==10)){m_menuPage=m_menuSelection==9?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
+ if(activate&&m_menuSelection==11){if(m_menuFromTitle)m_quitRequested=true;else showTitleScreen();}
  m_menuPrevious=input;
 }
 void Game::loadSettings(const std::wstring& path){
  std::ifstream file{std::filesystem::path(path)};Settings settings;int inverted=0;
  if(!(file>>settings.master>>settings.music>>settings.effects>>settings.sensitivity>>inverted))return;
  if(!std::isfinite(settings.master)||!std::isfinite(settings.music)||!std::isfinite(settings.effects)||!std::isfinite(settings.sensitivity))return;
- settings.master=std::clamp(settings.master,0.f,1.f);settings.music=std::clamp(settings.music,0.f,1.f);settings.effects=std::clamp(settings.effects,0.f,1.f);settings.sensitivity=std::clamp(settings.sensitivity,.2f,3.f);settings.invertMouse=inverted!=0;m_settings=settings;
+ settings.master=std::clamp(settings.master,0.f,1.f);settings.music=std::clamp(settings.music,0.f,1.f);settings.effects=std::clamp(settings.effects,0.f,1.f);settings.sensitivity=std::clamp(settings.sensitivity,.2f,3.f);settings.invertMouse=inverted!=0;
+ // Lens settings came later: older files keep the default look.
+ float dof=1,lens=1;if(file>>dof>>lens&&std::isfinite(dof)&&std::isfinite(lens)){settings.depthOfField=std::clamp(dof,0.f,2.f);settings.lensEffects=std::clamp(lens,0.f,2.f);}
+ m_settings=settings;
 }
 void Game::saveSettings(const std::wstring& path)const{
  std::error_code error;auto filePath=std::filesystem::path(path);std::filesystem::create_directories(filePath.parent_path(),error);if(error)return;
- std::ofstream file(filePath);file<<m_settings.master<<' '<<m_settings.music<<' '<<m_settings.effects<<' '<<m_settings.sensitivity<<' '<<int(m_settings.invertMouse)<<'\n';
+ std::ofstream file(filePath);file<<m_settings.master<<' '<<m_settings.music<<' '<<m_settings.effects<<' '<<m_settings.sensitivity<<' '<<int(m_settings.invertMouse)<<' '<<m_settings.depthOfField<<' '<<m_settings.lensEffects<<'\n';
 }
 bool Game::testSettings(){
  {Game title;title.m_level=3;title.showTitleScreen();InputState accept{};accept.menuAccept=true;title.update(accept,.02f);
@@ -187,13 +192,23 @@ bool Game::testSettings(){
   if(std::fabs(value-(row==4?2.44f:.8f))>.001f||game.menuSelection()!=row)return false;
   click.fire=false;game.update(click,.02f);
  }
+ // Lens sliders run 0-200 %: dragging 60 of 75 px sets 1.6x, and the value
+ // survives a settings save and load.
+ for(int row:{6,7}){game.update({},.02f);click.fire=true;click.pointerX=MenuLayout::SliderX+60;click.pointerY=MenuLayout::RowTop+row*MenuLayout::RowHeight+9;game.update(click,.02f);
+  float value=row==6?game.settings().depthOfField:game.settings().lensEffects;
+  if(std::fabs(value-1.6f)>.001f||game.menuSelection()!=row)return false;
+  click.fire=false;game.update(click,.02f);
+ }
+ {auto path=std::filesystem::temp_directory_path()/"rawmetal-settings-test.txt";game.saveSettings(path.wstring());Game reloaded;reloaded.loadSettings(path.wstring());
+  std::error_code error;std::filesystem::remove(path,error);
+  if(std::fabs(reloaded.settings().depthOfField-1.6f)>.001f||std::fabs(reloaded.settings().lensEffects-1.6f)>.001f)return false;}
  click.fire=true;
- game.update({},.02f);click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+6*MenuLayout::RowHeight+5;game.update(click,.02f);
+ game.update({},.02f);click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+8*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(game.menuPage()!=MenuPage::ConfirmRestart||!game.paused())return false;
  game.update({},.02f);click.pointerY=MenuLayout::RowTop+0*MenuLayout::RowHeight+5;game.update(click,.02f);if(game.menuPage()!=MenuPage::Settings)return false;
- game.update({},.02f);click.pointerY=MenuLayout::RowTop+6*MenuLayout::RowHeight+5;game.update(click,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+1*MenuLayout::RowHeight+5;game.update(click,.02f);
+ game.update({},.02f);click.pointerY=MenuLayout::RowTop+8*MenuLayout::RowHeight+5;game.update(click,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+1*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(game.paused()||game.player().health!=100)return false;
- InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);
+ InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+11*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(!game.titleScreen()||game.quitRequested())return false;
  game.update({},.02f);game.m_titleSelection=4;InputState quit{};quit.menuAccept=true;game.update(quit,.02f);if(!game.quitRequested())return false;
  std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS\n";

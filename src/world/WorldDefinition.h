@@ -13,7 +13,8 @@ enum class FloorMaterial { Industrial, OfficeCarpet };
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
 inline constexpr int FacilityModelCount=154;
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant };
-enum class MusicCue { Default, Freight };
+// The area score a map plays; stitched maps share one so the loop carries on.
+enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Count };
 enum class PickupKind { Health, Ammo }; // Values retain the existing save format.
 struct ChunkDefinition {
     Vec2 origin;

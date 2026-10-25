@@ -9,7 +9,9 @@ enum class Sound {
  WaspDeath, BruteCall, BruteAttack, BruteDeath, Music, Machine, Wings, Empty, Exit, Door, PunchSwing, PunchHit, JunkMetal, JunkGlass, JunkSoft, LiftCrash, LiftMotor, LiftCreak, ReactorMusic, LiftSnap, WaterReturn, FreightMusic, WorkerDying, Alarm, AlarmDistant,
  // Open-zone ambience beds and positional loops, then footsteps on painted ground.
  ZoneWind, ZoneForest, ZoneCrickets, ZoneFrogs, FireCrackle, AnomalyHum,
- StepDirt1, StepDirt2, StepDirt3, StepDirt4, StepGrass1, StepGrass2, StepGrass3, StepGrass4, StepGravel1, StepGravel2, StepGravel3, StepGravel4, Count
+ StepDirt1, StepDirt2, StepDirt3, StepDirt4, StepGrass1, StepGrass2, StepGrass3, StepGrass4, StepGravel1, StepGravel2, StepGravel3, StepGravel4,
+ // Area score: one loop per part of the facility (MusicCue).
+ MusicUndercover, MusicSubliminal, MusicPitchBlack, MusicHeat, MusicDarkness, MusicLastChapter, MusicDeathClose, Count
 };
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}

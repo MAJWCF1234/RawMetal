@@ -367,6 +367,9 @@ void steelColumn(Map& m,float x,float y,float bottom,float top,bool alongX=true)
  if(!alongX){wall(m,x-a,y-b,x-a+.025f,y+b,bottom,top,12);wall(m,x+a-.025f,y-b,x+a,y+b,bottom,top,12);}
  wall(m,x-.22f,y-.22f,x+.22f,y+.22f,bottom,bottom+.03f,8);
  wall(m,x-.2f,y-.2f,x+.2f,y+.2f,top-.03f,top,8);
+ // The thin plates leave channels a body could slip into between hull
+ // samples and be boxed in; an invisible solid core fills the profile.
+ wall(m,x-a,y-b,x+a,y+b,bottom,top,CollisionProxyMaterial);
 }
 // Floor stands under a deck's open edge, every few metres: decks are carried.
 void deckSupports(Map& m,const AuthoredLayerData& deck,float floor,float spacing=6.f){
@@ -1702,6 +1705,7 @@ std::shared_ptr<const Map> makeUtilityJunction(){
  terminal(m,{6.6f,16.4f},"PRIMARY UTILITIES / PERMIT DESK","WEST SERVICE GATE / LOCAL PERMIT.","E / RELEASE THE UTILITIES GATE.",0,stateId("primary_utilities_permit"));
  // Inside the branches: the freight manifest, the utilities substation.
  terminal(m,{20.f,2.f},"FREIGHT / OUTGOING MANIFEST","RESEARCH CONTAINERS HELD AT THE NEXT TRANSFER.","FREIGHT LINE SUSPENDED BEYOND THIS DOOR.");
+ m.terminals.back().yaw=.001f; // its back to the north wall, screen to the room
  wall(m,18.f,1.f,22.f,1.2f,floor,floor+2.8f,7);
  for(float y:{19.5f,21.f})m.fixtures.push_back({13,{1.27f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
  m.fixtures.push_back({7,{5.6f,21.f},0,1.8f,.5f,1.8f,kPi*.5f,true});
@@ -2096,7 +2100,9 @@ std::shared_ptr<const Map> makeAuxiliaryLift(){
  deck(m,-16,6,17,18,19);cargo(m,17,18,-16);
  // Upper landing dressing: the hoist motor and the control cubicle.
  m.fixtures.push_back({6,{20.2f,2.2f},13,2.38f,.7f,1.26f,0,true});
- for(float x:{2.f,3.f})m.fixtures.push_back({13,{x,1.27f},13,.9066f,.4956f,2.2f,kPi,true});
+ // The lockers are wall-mounted cabinets: their backs must meet the west
+ // wall (standing free at the open north edge showed their hollow sides).
+ for(float y:{2.6f,3.6f})m.fixtures.push_back({13,{1.27f,y},13,.9066f,.4956f,2.2f,-kPi*.5f,true});
  cableTray(m,{1.6f,1.2f},{22.f,1.2f},upper+2.6f);
  // Lower landing: buffers, a hazard apron and the transfer to receiving.
  for(float x:{10.f,14.f})wall(m,x-.2f,15.f,x+.2f,15.4f,lower,lower+.5f,8);
@@ -3525,7 +3531,18 @@ std::shared_ptr<const AuthoredMapData> campaignMap(int level){
  static const auto maps=[](){std::array<std::shared_ptr<const Map>,CampaignChunkCount> result;
   result[0]=makeFoundry();result[1]=makePressureWorks();result[2]=makeTurbineGantry();result[3]=makeReactorComplex();result[4]=makeServiceGallery();result[5]=makeCoolantReturn();result[6]=makeCableVaults();result[7]=makePumpAnnex();result[8]=makeUtilityJunction();result[9]=makeWasteHandling();
   result[10]=makeFreightAccess();result[11]=makeLiftMachinery();result[12]=makeAuxiliaryLift();result[13]=makeReceivingOverlook();result[14]=makeReceivingLanes();result[15]=makeWarehouseIntake();result[16]=makeWarehouseAB();result[17]=makeWarehouseC();result[18]=makeWarehouseD();result[19]=makeWarehouseUpper();result[20]=makeManifestOffices();result[21]=makeManifestRouting();result[22]=makeTransferConveyors();result[23]=makeTransferSorting();result[24]=makeTransferRailYard();result[25]=makeEmptyPlatform();result[26]=makePlatformServiceEnd();result[27]=makeDepotTrackside();result[28]=makeDepotInspectionPits();result[29]=makeDepotGantries();result[30]=makeMaintenanceBore();result[31]=makeDeepJunction();
-  result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();return result;}();
+  result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();
+  // Area score: each part of the facility has its own loop; stitched maps
+  // share one so it carries on across the seam.
+  using M=MusicCue;
+  constexpr std::array<MusicCue,CampaignChunkCount> score{{
+   M::Default,M::Default,M::Undercover,M::Subliminal,M::Undercover,M::Undercover,M::PitchBlack,M::PitchBlack,M::PitchBlack,M::PitchBlack,
+   M::Freight,M::Freight,M::Freight,M::Freight,M::Freight,M::Freight,
+   M::Heat,M::Heat,M::Heat,M::Heat,M::Darkness,M::Darkness,M::Darkness,M::Darkness,M::Darkness,
+   M::LastChapter,M::LastChapter,M::LastChapter,M::LastChapter,M::LastChapter,M::DeathClose,M::DeathClose,
+   M::Subliminal,M::Subliminal}};
+  for(size_t i=0;i<result.size();++i){auto scored=std::make_shared<Map>(*result[i]);scored->definition.musicCue=score[i];result[i]=std::move(scored);}
+  return result;}();
  return maps.at(size_t(level));
 }
 }

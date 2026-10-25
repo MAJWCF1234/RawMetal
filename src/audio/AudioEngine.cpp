@@ -12,7 +12,12 @@ namespace retro {
 namespace {
 enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5 };
 // Loops that crossfade their tail into their head (no click on wrap).
-bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||sound==Sound::FreightMusic||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum);}
+// Area score: the loop for each MusicCue after Default (Freight keeps its
+// original track and resource; the rest follow the zone sounds in order).
+static_assert(int(MusicCue::Count)==9,"AudioEngine::AreaScores must match MusicCue");
+Sound areaSound(int cue){return cue==int(MusicCue::Freight)?Sound::FreightMusic:Sound(int(Sound::MusicUndercover)+cue-int(MusicCue::Undercover));}
+int areaCue(Sound sound){if(sound==Sound::FreightMusic)return int(MusicCue::Freight);if(sound>=Sound::MusicUndercover&&sound<=Sound::MusicDeathClose)return int(MusicCue::Undercover)+int(sound)-int(Sound::MusicUndercover);return 0;}
+bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum);}
 // Open-zone sounds live in the library resources from 720, in enum order.
 constexpr int ZoneSoundResource=720;
 std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
@@ -145,25 +150,28 @@ void AudioEngine::update(const Game& game,bool focused){
  float dt=std::clamp(game.elapsed()-m_lastTime,0.f,.1f);
  bool newSession=game.sessionRevision()!=m_lastRevision||int(game.worldId())!=m_lastWorld;
  m_lastWorld=int(game.worldId());
- if(game.elapsed()<m_lastTime||newSession){m_voices.clear();m_lastChunk=-1;play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=m_freightBlend=0;}m_lastRevision=game.sessionRevision();
+ if(game.elapsed()<m_lastTime||newSession){m_voices.clear();m_lastChunk=-1;play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;m_areaBlend.fill(0);}m_lastRevision=game.sessionRevision();
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=game.chunkOffset(m_lastChunk)-game.chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
  m_submergedTarget=game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f?1.f:0.f;
  m_musicGain=game.musicEnabled()?(game.dead()||game.won()?.16f:.28f)*game.settings().music/.75f:0;
  m_effectsGain=game.settings().effects;m_paused=game.paused()||game.consoleOpen();
  auto phase=game.world().liftPhase();bool shaft=game.world().hasLift();
- m_freightTarget=game.world().definition().musicCue==MusicCue::Freight?1.f:0.f;
- m_mainTarget=m_freightTarget>0?0.f:!shaft||phase==World::LiftPhase::Ready?1.f:0.f;
+ // One score plays at a time: the map's area cue, or the original track. A
+ // crashed reactor shaft silences both and its own music takes over.
+ const int cue=int(game.world().definition().musicCue);const bool scored=!shaft||phase==World::LiftPhase::Ready;
+ for(int c=1;c<AreaScores;++c)m_areaTarget[size_t(c)]=c==cue&&scored?1.f:0.f;
+ m_mainTarget=cue!=0||!scored?0.f:1.f;
  // The open zone is carried by its ambience; the score sits far back.
  const bool zone=game.world().zoneSky();
  if(zone)m_mainTarget=.3f;
  m_reactorTarget=shaft&&phase==World::LiftPhase::Crashed&&game.world().liftPhaseTime()>2?1.f:0.f;
  m_motorTarget=shaft?game.world().liftMotorGain():0.f;
- if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;m_freightBlend=m_freightTarget;}
+ if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;m_areaBlend=m_areaTarget;}
  auto sceneLoop=[&](Sound cue,int id){if(std::none_of(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==id;}))play({cue,{},1,1,false},id,true);};
  if(m_motorTarget>0)sceneLoop(Sound::LiftMotor,-2);
  for(auto&voice:m_voices)if(voice.emitter==-2)voice.pitch=m_motorTarget<.3f?.65f:game.world().liftPhaseTime()>24?.82f:1.f;
- if(m_freightTarget>0)sceneLoop(Sound::FreightMusic,-4);
+ for(int c=1;c<AreaScores;++c)if(m_areaTarget[size_t(c)]>0)sceneLoop(areaSound(c),-20-c);
  if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
  std::erase_if(m_voices,[&](const auto&voice){if(voice.speech<0)return false;if(!voice.speaker||voice.speaker>game.npcActors().size())return true;
   size_t actor=voice.speaker-1;const auto&npc=game.npcActors()[actor];return !game.chunkResident(npc.level)||(voice.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(npc.track().deadState)));});
@@ -217,16 +225,16 @@ void AudioEngine::mix(int16_t* output,size_t frames){
   // Per-sample envelopes: main track fades over roughly 2 seconds, motor
   // takes over quickly, and the reactor bed arrives slowly after the impact.
   m_mainBlend+=(m_mainTarget-m_mainBlend)/(.65f*Rate);
-  m_freightBlend+=(m_freightTarget-m_freightBlend)/(.65f*Rate);
+  for(int c=1;c<AreaScores;++c)m_areaBlend[size_t(c)]+=(m_areaTarget[size_t(c)]-m_areaBlend[size_t(c)])/(.65f*Rate);
   m_reactorBlend+=(m_reactorTarget-m_reactorBlend)/(1.2f*Rate);
   m_motorBlend+=(m_motorTarget-m_motorBlend)/(.18f*Rate);
-  for(auto&v:m_voices){bool music=v.sound==Sound::Music||v.sound==Sound::FreightMusic||v.sound==Sound::ReactorMusic;
+  for(auto&v:m_voices){const int area=areaCue(v.sound);bool music=v.sound==Sound::Music||area>0||v.sound==Sound::ReactorMusic;
    if(m_paused&&!music)continue;const auto&s=sampleFor(v);size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
    size_t a=size_t(v.cursor),b=a+1<n?a+1:v.loop?0:a;float frac=float(v.cursor-double(a));
    auto sample=[&](int channel){float value=s.pcm[a*s.channels+channel]*(1-frac)+s.pcm[b*s.channels+channel]*frac;
     if(v.loop&&seamlessLoop(v.sound)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
     return value/32768.f;};
-   float blend=v.sound==Sound::FreightMusic?m_freightBlend:v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
+   float blend=area>0?m_areaBlend[size_t(area)]:v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
    float gain=v.gain*(music?m_musicGain:m_effectsGain)*blend;
    v.smoothLeft+=(v.left*gain-v.smoothLeft)*.0015f;v.smoothRight+=(v.right*gain-v.smoothRight)*.0015f;
    if(v.spatial){
@@ -276,8 +284,10 @@ bool AudioEngine::testLiftMix(){
  InputState muteMusic{};muteMusic.music=true;game.update(muteMusic,1.f/60);audio.update(game);
  if(audio.m_musicGain!=0||audio.m_effectsGain==0)return false;
  report<<"One reactor loop; music toggle preserves effects: PASS\n";
- game.restart();audio.update(game);if(audio.m_mainTarget!=1||audio.m_reactorTarget!=0||audio.m_motorTarget!=0)return false;
- report<<"Restart restores main OST: PASS\n";
+ // Restart restores the map's own score: the original track, or its area cue.
+ game.restart();audio.update(game);{const int cue=int(game.world().definition().musicCue);
+  if((cue==0?audio.m_mainTarget!=1:audio.m_areaTarget[size_t(cue)]!=1)||audio.m_reactorTarget!=0||audio.m_motorTarget!=0)return false;}
+ report<<"Restart restores the map's score: PASS\n";
  std::ofstream file("lift-audio-preview.wav",std::ios::binary);uint32_t bytes=uint32_t(output.size()*2),riff=bytes+36,fmt=16,rate=Rate,byteRate=Rate*4;uint16_t pcm=1,channels=2,align=4,bits=16;
  auto write=[&](auto v){file.write(reinterpret_cast<const char*>(&v),sizeof(v));};
  file.write("RIFF",4);write(riff);file.write("WAVEfmt ",8);write(fmt);write(pcm);write(channels);write(rate);write(byteRate);write(align);write(bits);file.write("data",4);write(bytes);file.write(reinterpret_cast<const char*>(output.data()),bytes);
@@ -415,18 +425,25 @@ bool AudioEngine::test(){
   for(const auto&v:spatial.m_voices)if(v.sound==Sound::Machine&&std::isfinite(v.z))return failure("legacy machine loop gains an invented elevation");
   diagnostic<<"Wasp loops use body-center elevation; static machine loops retain unspecified height: PASS\n";
  }
- // Authored music coverage and seam continuity: map IDs do not route music.
+ // Area score: every campaign map plays its own cue's loop (the original
+ // track for Default), one voice per score, and a loop keeps its place across
+ // the seams within its area instead of restarting.
  {
   AudioEngine district(false);std::array<int16_t,Rate*2> block{};
-  if(district.m_samples[size_t(Sound::FreightMusic)].frames()<Rate*20)return failure("freight track missing or truncated");
-  double cursor=-1;
-  for(int level=10;level<FreightDistrictEnd;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
-   if(district.m_freightTarget!=1||district.m_mainTarget!=0)return failure("freight music coverage");
-   int count=0;for(const auto&v:district.m_voices)if(v.sound==Sound::FreightMusic){++count;if(v.cursor<=cursor)return failure("freight soundtrack restarts at seam");cursor=v.cursor;}
-   if(count!=1)return failure("duplicated freight music voice");
+  for(int c=1;c<AreaScores;++c)if(district.m_samples[size_t(areaSound(c))].frames()<Rate*20)return failure("area score track missing or truncated");
+  std::array<double,AreaScores> cursor;cursor.fill(-1);int scored=0;
+  for(int level=0;level<CampaignChunkCount;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
+   const int cue=int(view.world().definition().musicCue);
+   if(view.world().hasLift()&&view.world().liftPhase()!=World::LiftPhase::Ready)continue;
+   if(cue==0?district.m_mainTarget!=1:(district.m_areaTarget[size_t(cue)]!=1||district.m_mainTarget!=0))return failure("area score coverage");
+   if(cue==0)continue;++scored;
+   int count=0;for(const auto&v:district.m_voices)if(v.sound==areaSound(cue)){++count;if(v.cursor<=cursor[size_t(cue)])return failure("area score restarts at a seam");cursor[size_t(cue)]=v.cursor;}
+   if(count!=1)return failure("duplicated area score voice");
   }
-  district.update(game);if(district.m_freightTarget!=0||district.m_mainTarget!=1)return failure("original soundtrack return");
-  diagnostic<<"Freight music covers all 22 chunks, retains its cursor across seams, and returns to original OST: PASS\n";
+  std::array<bool,AreaScores> used{};for(int level=0;level<CampaignChunkCount;++level)used[size_t(int(game.chunkView(level).world().definition().musicCue))]=true;
+  if(std::count(used.begin(),used.end(),true)<8)return failure("campaign soundtrack lacks variety");
+  district.update(game);if(game.world().definition().musicCue==MusicCue::Default&&district.m_mainTarget!=1)return failure("original soundtrack return");
+  diagnostic<<"Area score: "<<scored<<" scored maps, "<<std::count(used.begin(),used.end(),true)<<" distinct scores, loops carry on across seams: PASS\n";
  }
  std::vector<int16_t> output;output.reserve(Rate*2*12);size_t maxVoices=0;double energy=0;
  for(int frame=0;frame<720;++frame){InputState input{};input.forward=frame<95;input.back=frame>=95&&frame<185;input.jump=frame==125;input.fire=frame==220||frame==280||frame==340||frame==400;game.update(input,1.f/60.f);audio.update(game);

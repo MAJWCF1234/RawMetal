@@ -23,6 +23,8 @@ public:
  // Cinematic lens in the window composite: depth of field with eased
  // autofocus, natural vignetting, chromatic aberration, film grain, halation.
  void setTiltShift(bool enabled);
+ // Player lens settings: depth-of-field and lens-effect strength (1 = default look).
+ void setLens(float depthOfField,float lensEffects);
  // Tests: headless readback uses the original analytic display curve.
  static void setReferenceDisplay(bool enabled);
  void setAtmosphere(const std::array<float,4>& atmosphere);

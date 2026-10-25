@@ -4,7 +4,9 @@ layout(set=0,binding=1) uniform sampler2D hudImage;
 // Exposure stage output: b holds the eased focus distance.
 layout(set=0,binding=2) uniform sampler2D exposureImage;
 layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; float vrMode; float alarm; float postBloom;
- float lensAperture; float filmTime; float lensPad; float aspect; } params;
+ float lensAperture; float filmTime; float lensEffects; float aspect; } params;
+// lensAperture scales depth of field, lensEffects the chromatic aberration,
+// vignetting, grain and warm bloom; both 1 for the tuned look, 0 for off.
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 color;
 vec3 highlight(vec2 p){
@@ -42,12 +44,12 @@ float circleOfConfusion(float depth,float focus){
  // disc is capped well below the old lens that smeared the whole screen.
  float x=1.0/focus-1.0/d;
  float defocus=max(abs(x)-0.04,0.0)*(x>0.0?1.0:0.6);
- return clamp(params.lensAperture*0.03*defocus,0.0,0.012);
+ return clamp(params.lensAperture*0.03*defocus,0.0,0.012*max(params.lensAperture,1.0));
 }
 // Lateral chromatic aberration: red and blue land at slightly different
 // magnifications, growing with the square of the distance from the axis.
 vec3 lensSample(vec2 p){
- vec2 c=p-0.5;float k=params.lensAperture*0.0016*dot(c*vec2(params.aspect,1.0),c*vec2(params.aspect,1.0));
+ vec2 c=p-0.5;float k=params.lensEffects*0.0016*dot(c*vec2(params.aspect,1.0),c*vec2(params.aspect,1.0));
  return vec3(texture(sceneImage,clamp(0.5+c*(1.0+k),vec2(0.0),vec2(1.0))).r,texture(sceneImage,p).g,texture(sceneImage,clamp(0.5+c*(1.0-k),vec2(0.0),vec2(1.0))).b);
 }
 vec3 depthOfField(vec2 p,vec3 sharp){
@@ -80,7 +82,7 @@ void main(){
  vec2 centered=(uv-.5)*2.0;float radius=length(centered);float edge=clamp((radius-.48)/.52,0.0,1.0);edge=edge*edge*(3.0-2.0*edge);
  vec2 pixel=1.0/vec2(textureSize(sceneImage,0));vec2 shift=normalize(centered+vec2(1e-5))*pixel*2.0*edge*clamp(params.shotKick,0.0,1.0);
  vec3 scene=focusedScene(uv);
- if(params.lensAperture>0.0)scene=depthOfField(uv,lensSample(uv));
+ if(params.lensAperture>0.0||params.lensEffects>0.0)scene=depthOfField(uv,lensSample(uv));
  if(params.shotKick>0.001){scene.r=texture(sceneImage,uv+shift).r;scene.b=texture(sceneImage,uv-shift).b;}
  // Only bright emitters bleed. Blur their highlights, never the base image or
  // the full-resolution HUD, so low-resolution textures stay visibly crisp.
@@ -91,7 +93,7 @@ void main(){
             +highlight(uv+vec2(11.0,-7.0)*glowPixel)+highlight(uv-vec2(11.0,-7.0)*glowPixel));
  // The post pass already added a wider bloom.
  // Halation: light scattered back through film's red layer around highlights.
- if(params.lensAperture>0.0)scene+=bloom*vec3(0.06,0.018,0.006);
+ if(params.lensEffects>0.0)scene+=bloom*vec3(0.06,0.018,0.006)*params.lensEffects;
  if(params.hdrScene>0.5&&params.postBloom<0.5)scene+=bloom*0.07;
  else scene+=min(bloom*0.10,vec3(0.12));
  scene*=params.sceneDim;
@@ -103,13 +105,13 @@ void main(){
  // The HDR scene attachment stores linear radiance. Apply the same exposure
  // as the headless capture path before the display transfer.
  vec3 displayScene=params.hdrScene>0.5?displayCurve(scene):scene;
- if(params.lensAperture>0.0){
+ if(params.lensEffects>0.0){
   // Natural vignetting: illumination falls as cos^4 of the angle off axis.
   vec2 ndc=uv*2.0-1.0;float t2=dot(vec2(ndc.x/1.3,ndc.y/(1.3*params.aspect)),vec2(ndc.x/1.3,ndc.y/(1.3*params.aspect)));
-  displayScene*=mix(1.0,1.0/((1.0+t2)*(1.0+t2)),0.55);
+  displayScene*=mix(1.0,1.0/((1.0+t2)*(1.0+t2)),clamp(0.55*params.lensEffects,0.0,0.9));
   // Film grain: per-frame, strongest in the midtones like silver halide.
   float l=dot(displayScene,vec3(0.2126,0.7152,0.0722));
-  displayScene=clamp(displayScene+(filmHash(gl_FragCoord.xy)-0.5)*0.05*(4.0*l*(1.0-l)+0.15),0.0,1.0);
+  displayScene=clamp(displayScene+(filmHash(gl_FragCoord.xy)-0.5)*0.05*params.lensEffects*(4.0*l*(1.0-l)+0.15),0.0,1.0);
  }
  vec4 h=params.vrMode>0.5?vec4(0.0):texture(hudImage,uv);color=vec4(mix(displayScene,h.rgb,h.a),1.0);
 }
