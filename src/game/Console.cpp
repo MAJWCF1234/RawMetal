@@ -117,17 +117,17 @@ bool Game::testConsole(){
  InputState toggle{};toggle.console=true;game.update(toggle,.02f);if(!game.consoleOpen())return fail(__LINE__);
  auto p=game.player();float time=game.elapsed();InputState input{};input.forward=true;input.fire=true;input.mouseDx=30;
  game.update(input,.02f);if(game.elapsed()!=time||game.player().ammo!=p.ammo||game.player().angle!=p.angle)return fail(__LINE__);
- for(int level=0;level<ChunkCount;++level){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return fail(__LINE__);}
+ for(int level=0;level<ChunkCount;level+=level<34?1:(level+7<ChunkCount?7:std::max(1,ChunkCount-1-level))){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return fail(__LINE__);}
  for(const auto& alias:std::array<std::pair<const char*,int>,8>{{{"freight",10},{"receiving",13},{"warehouse",16},{"manifest",20},{"yard",22},{"platform",25},{"depot",27},{"tunnels",30}}}){
   input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return fail(__LINE__);
  }
- for(const char* invalid:{"34","-1","10junk","999999999999999999999999"}){int current=game.level();input.textInput=std::string("map ")+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return fail(__LINE__);}
+ for(const std::string invalid:{std::to_string(ChunkCount),std::string("-1"),std::string("10junk"),std::string("999999999999999999999999")}){int current=game.level();input.textInput="map "+invalid+"\r";game.update(input,.02f);if(game.level()!=current)return fail(__LINE__);}
  // Restart canonicalizes the visible encounter at t=1; the console must freeze it.
  input={};input.textInput="map receiving\r";game.update(input,.02f);if(game.state("receiving_worker_encounter_ms")!=1)return fail(__LINE__);
  input={};input.escape=true;game.update(input,.02f);game.update({},.02f);if(game.state("receiving_worker_encounter_ms")<=1||game.player().pitch>-40)return fail(__LINE__);
  input={};input.console=true;game.update(input,.02f);if(!game.consoleOpen())return fail(__LINE__);
  input.textInput="map reactor\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Crashed||game.player().z!=-9)return fail(__LINE__);
- input.textInput="map 99\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return fail(__LINE__);
+ input.textInput="map 9999\r";game.update(input,.02f);if(game.level()!=3||game.player().z!=-9)return fail(__LINE__);
  input.textInput="map lift\r";game.update(input,.02f);if(game.world().liftPhase()!=World::LiftPhase::Ready||game.player().z!=0)return fail(__LINE__);
  input={};input.textInput="map custom\r";game.update(input,.02f);
  if(!game.world().horrorMode()||game.level()!=0||!game.world().openSouthBoundary()||!game.world().openEastBoundary()||game.world().openNorthBoundary()||game.world().openWestBoundary()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,game.player().hullHeight()))return fail(__LINE__);

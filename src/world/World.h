@@ -40,6 +40,11 @@ struct WorldLight {
  // Colour temperature (K, Planck blackbody) and a green(+)/magenta(-) tint
  // for discharge tubes. 3400 K, 0 is a neutral warm incandescent.
  float kelvin=3400,tint=0;
+ // Switching, mirroring Hazard: lit while (enabledState==0 or its state equals
+ // enabledValue) xor invert, and, with a period, inside the on-window. flicker
+ // (0..1) adds irregular dropouts: a failing tube or a browned-out circuit.
+ StateId enabledState=0;int enabledValue=1;bool invert=false;
+ float period=0,onTime=0,phase=0,flicker=0;
  Point3 emitter()const{
   if(mount==WorldLightMount::Wall)return {position.x+std::cos(yaw)*.16f,position.y+std::sin(yaw)*.16f,z};
   return {position.x,position.y,z};
@@ -59,7 +64,10 @@ struct SunLight {Point3 direction{};float intensity=0,r=1,g=1,b=1;};
 // 4 red steel, 5 pale steel, 6 dark finish. An explicit endZ
 // supplies equipment/bracing geometry without automatic ceiling hangers.
 struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
-struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;};
+// scale and health (0 = the kind's default) make variants and bosses. A
+// non-zero wakeState keeps the creature dormant and deaf until that state is
+// set: patients on their beds, a nest that wakes when the lights fail.
+struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
 // One authored liquid basin controls the bed, physics surface and drawn mesh.
@@ -162,6 +170,17 @@ struct TerrainShape {
     // (drawn only as Painterly Horizon LOD impostors).
     float horizonDepth=0,horizonSpacing=6,horizonRise=0;std::vector<int> horizonModels;
 };
+// Surface sets for a map's layer walls, floor and ceiling (-1 keeps the
+// legacy choice by chunk index). Structure materials 26-29 and 31-35 are the
+// matching box finishes: 26 rock, 27 clinic tile, 28 lab panel, 29 corrugated
+// sheet, 31 brick, 32 mine timber, 33 ancient stone, 34 resonance growth,
+// 35 crystal (self-lit).
+enum Surface:int {SurfaceDefault=-1,SurfaceConcrete,SurfacePressure,SurfaceBrick,SurfaceClinicTile,SurfaceLabPanel,SurfaceRock,SurfaceCorrugated,SurfaceOfficePlaster,SurfaceMineTimber,SurfaceStone,SurfaceCount};
+// Where the lights are truly out: inside an active zone the light floor, haze
+// and exposure lift go to black, the flashlight dies (jamFlashlight) and the
+// muzzle flash is the only light. Active while (state==0 or its state equals
+// value) xor invert.
+struct DarkZone {float x1=0,y1=0,x2=24,y2=24,bottom=-1000,top=1000;StateId state=0;int value=1;bool invert=false;bool jamFlashlight=true;};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
@@ -195,6 +214,8 @@ struct AuthoredMapData {
     std::vector<ObjectiveText> objectiveTexts;
     std::vector<AuthoredNavHint> navHints;
     std::vector<AuthoredZone> zones;
+    std::vector<DarkZone> darkZones;
+    int wallSurface=SurfaceDefault,floorSurface=SurfaceDefault,ceilingSurface=SurfaceDefault;
 };
 struct CustomCampaign {
     std::string name;

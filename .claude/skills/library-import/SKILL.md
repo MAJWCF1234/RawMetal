@@ -46,5 +46,5 @@ Names that are already registered are skipped. Re-importing a registered name in
 
 - Build, then look at the model in game, for example with `--zone-shots` (see the `ashfall-zone` skill).
 - Check its facing: some packs face −y at yaw 0.
-- Check the size budget: `Build.cmd` prints the EXE size against the 40 MiB cap. Keep textures at 256 px or less unless the model is a hero piece.
+- Check the size budget: `Build.cmd` prints the EXE size against the 64 MiB cap. Keep textures at 256 px or less unless the model is a hero piece.
 - Cutout foliage (alpha textures) automatically gets a Painterly Horizon LOD impostor in the zone.

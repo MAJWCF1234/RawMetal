@@ -431,13 +431,17 @@ bool AudioEngine::test(){
  {
   AudioEngine district(false);std::array<int16_t,Rate*2> block{};
   for(int c=1;c<AreaScores;++c)if(district.m_samples[size_t(areaSound(c))].frames()<Rate*20)return failure("area score track missing or truncated");
-  std::array<double,AreaScores> cursor;cursor.fill(-1);int scored=0;
+  // A long campaign mixes past a loop's end: a cursor may wrap, but only once
+  // a whole track has played since that score was last heard.
+  std::array<double,AreaScores> cursor;cursor.fill(-1);std::array<int,AreaScores> heard;heard.fill(0);int scored=0;
   for(int level=0;level<CampaignChunkCount;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
    const int cue=int(view.world().definition().musicCue);
    if(view.world().hasLift()&&view.world().liftPhase()!=World::LiftPhase::Ready)continue;
    if(cue==0?district.m_mainTarget!=1:(district.m_areaTarget[size_t(cue)]!=1||district.m_mainTarget!=0))return failure("area score coverage");
    if(cue==0)continue;++scored;
-   int count=0;for(const auto&v:district.m_voices)if(v.sound==areaSound(cue)){++count;if(v.cursor<=cursor[size_t(cue)])return failure("area score restarts at a seam");cursor[size_t(cue)]=v.cursor;}
+   int count=0;for(const auto&v:district.m_voices)if(v.sound==areaSound(cue)){++count;
+    const bool wrapped=cursor[size_t(cue)]+double(level-heard[size_t(cue)])*Rate>=double(district.m_samples[size_t(areaSound(cue))].frames());
+    if(v.cursor<=cursor[size_t(cue)]&&!wrapped)return failure("area score restarts at a seam");cursor[size_t(cue)]=v.cursor;heard[size_t(cue)]=level;}
    if(count!=1)return failure("duplicated area score voice");
   }
   std::array<bool,AreaScores> used{};for(int level=0;level<CampaignChunkCount;++level)used[size_t(int(game.chunkView(level).world().definition().musicCue))]=true;

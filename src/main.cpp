@@ -1230,7 +1230,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         std::ofstream("RawMetal-error.txt")<<error.what();
         // Automated runs report through the exit code and RawMetal-error.txt; a
         // modal dialog would hang the test runner.
-        bool automated=false;for(auto marker:{L"-test",L"performance",L"inspection",L"benchmark",L"-profile"})automated|=std::wcsstr(commandLine,marker)!=nullptr;
+        bool automated=false;for(auto marker:{L"-test",L"performance",L"inspection",L"benchmark",L"-profile",L"--map-",L"--residency"})automated|=std::wcsstr(commandLine,marker)!=nullptr;
         if(!automated)MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }

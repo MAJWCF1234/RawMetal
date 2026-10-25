@@ -130,6 +130,35 @@ add_executable(RawMetal WIN32
     audio/DecodeMusic.cpp
     world/World.cpp
     world/CampaignMaps.cpp
+    world/CampaignChapters.cpp
+    world/CampaignChapterPower.cpp
+    world/CampaignChapterMachineHall.cpp
+    world/CampaignChapterWater.cpp
+    world/CampaignChapterMaintenance.cpp
+    world/CampaignChapterPerimeterA.cpp
+    world/CampaignChapterPerimeterB.cpp
+    world/CampaignChapterResearchFront.cpp
+    world/CampaignChapterMedicalFront.cpp
+    world/CampaignChapterMedicalWard.cpp
+    world/CampaignChapterAnalysis.cpp
+    world/CampaignChapterEnergyTestLabs.cpp
+    world/CampaignChapterObservationRing.cpp
+    world/CampaignChapterContainmentA.cpp
+    world/CampaignChapterContainmentB.cpp
+    world/CampaignChapterDeepResearch.cpp
+    world/CampaignChapterMinehead.cpp
+    world/CampaignChapterUpperMineA.cpp
+    world/CampaignChapterUpperMineB.cpp
+    world/CampaignChapterLowerMine.cpp
+    world/CampaignChapterDeepBore.cpp
+    world/CampaignChapterWildsA.cpp
+    world/CampaignChapterWildsB.cpp
+    world/CampaignChapterScrap.cpp
+    world/CampaignChapterHavenA.cpp
+    world/CampaignChapterHavenB.cpp
+    world/CampaignChapterFinaleA.cpp
+    world/CampaignChapterFinaleB.cpp
+    world/CampaignChapterFinaleC.cpp
     world/CustomCampaign.cpp
     renderer/SoftwareRenderer.cpp
     renderer/NormalMapping.cpp

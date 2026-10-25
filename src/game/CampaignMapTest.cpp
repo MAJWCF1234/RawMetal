@@ -8,7 +8,8 @@ namespace retro {
 bool Game::testCampaignMaps(){
  std::ofstream out("freight-district-test.txt");bool pass=true;
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};
- check(FreightDistrictEnd==32&&CampaignChunkCount==34,"Eight freight areas allocated across 22 additional stitched chunks");
+ check(FreightDistrictEnd==32&&CampaignChunkCount>=FreightDistrictEnd+2,"Eight freight areas allocated across 22 additional stitched chunks");
+ {bool spawns=true;for(int level=34;level<CampaignChunkCount;++level){World w(level);const auto& d=w.definition();bool fit=w.fits(d.playerStart.x,d.playerStart.y,d.spawnHeight,1.f)&&std::fabs(w.supportBelow(d.playerStart.x,d.playerStart.y,d.spawnHeight+.3f)-d.spawnHeight)<.05f;if(!fit)out<<"  spawn blocked in chunk "<<level<<"\n";spawns&=fit;}check(spawns,"Every descent chunk loads and its spawn fits a standing hull");}
  {Game office;office.loadLevel(20,false);office.updateStreaming(0);
   bool vista=true;for(int level=16;level<=19;++level)vista&=office.chunkResident(level);
   check(vista,"Manifest overlook retains all four real warehouse chunks with the door closed");

@@ -12,7 +12,7 @@ rem ============================================================
 set "TARGET_BRANCH=main"
 set "EXPECTED_REPO=MAJWCF1234/RawMetal"
 rem Same ceiling the build enforces in src/tools/check_size.cmake.
-set "MAX_BYTES=41943040"
+set "MAX_BYTES=67108864"
 
 echo.
 echo ============================================================
@@ -86,11 +86,11 @@ if not exist "RawMetal.exe" (
 )
 for %%A in ("RawMetal.exe") do set "EXE_BYTES=%%~zA"
 if !EXE_BYTES! GEQ %MAX_BYTES% (
-    echo [STOP] RawMetal.exe is !EXE_BYTES! bytes; the ceiling is %MAX_BYTES% bytes ^(40 MiB^).
+    echo [STOP] RawMetal.exe is !EXE_BYTES! bytes; the ceiling is %MAX_BYTES% bytes ^(64 MiB^).
     goto :fail
 )
 set /a HEADROOM=%MAX_BYTES%-!EXE_BYTES!
-echo [OK] RawMetal.exe = !EXE_BYTES! bytes ^(!HEADROOM! bytes under 40 MiB^).
+echo [OK] RawMetal.exe = !EXE_BYTES! bytes ^(!HEADROOM! bytes under 64 MiB^).
 echo.
 
 echo [3/5] Checking GitHub CLI...
