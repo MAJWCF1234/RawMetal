@@ -594,34 +594,263 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  freightFinish(m,-1);
  return p;
 }
-// SECURITY PERIMETER / GATEHOUSE (manifest 37)
+// SECURITY PERIMETER / GATEHOUSE (manifest 37). The yard's east half and the
+// gatehouse that runs it: a block building with a window band on the yard,
+// the gate desk and its CCTV wall, and the detail's bunk room behind it.
+// The Cleanup van is parked where it unloaded. States: perim_gate (gate desk)
+// opens the yard's south door; the guards share the yard's alert.
 std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
- auto p=std::make_shared<Map>(*placeholderChunk(59,{{'W',4.f,20.f,-19.f,false,0}}));
- auto& m=*p;const float f=m.layers.front().elevation;
- // The yard's locked south gate is controlled from this side room, reached
- // through the open east seam before the player approaches that gate.
- wall(m,11.2f,12.65f,12.8f,12.82f,f,f+2.1f,2);
- wallSign(m,12.f,12.638f,f+1.45f,"PERIMETER GATE / RELEASE","SOUTH GATE / CHECKPOINT DELTA",1.45f,kPi);
- terminal(m,{12.f,12.f},"PERIMETER GATE / RELEASE","E / RELEASE THE YARD'S SOUTH GATE.","RETURN WEST TO THE YARD. CHECKPOINT DELTA IS THROUGH THE SOUTH GATE.",0,stateId("perim_gate"));
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[59];m.definition=CampaignChunks[59];m.definition.ambient=.26f;
+ const float f=-19,roof=m.definition.ceiling,top=f+3.3f;
+ const StateId alert=stateId("per_yard_alert");
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ openEdge(m,{'W',4.f,20.f,-19.f,false,0});
+ // --- The yard's east end: fences, the van, the barrier line and a mast -----------------------
+ perFence(m,1.f,3.6f,10.f,3.6f,f);perFence(m,1.f,20.4f,10.f,20.4f,f);
+ perFix(m,model::service_van,4.6f,15.4f,f,2.3f,5.1f,2.2f,.08f,true);
+ m.clutterSpawns.push_back({1,{6.4f,13.2f},f,.6f});m.clutterSpawns.push_back({2,{3.f,12.6f},f});
+ for(float y:{6.f,9.f})perFix(m,model::road_block,7.2f,y,f,1.6f,.5f,.7f,kPi*.5f,true);
+ perSandbags(m,8.6f,10.6f,9.4f,13.4f,f,1.1f);
+ perMast(m,3.f,9.f,f,f+7.f);
+ for(float x=1.5f;x<9.6f;x+=1.f)perFinish(m,x,11.95f,x+.55f,12.05f,f,13);
+ // --- The gatehouse: walls, window band, door and roof ------------------------------------------
+ wall(m,10.f,6.f,10.2f,8.f,f,top,3);wall(m,10.f,9.6f,10.2f,17.f,f,f+1.f,3);
+ perWindow(m,10.f,9.6f,10.2f,17.f,f+1.f,f+2.4f);wall(m,10.f,9.6f,10.2f,17.f,f+2.45f,top,3);
+ perDoorwayY(m,10.f,10.2f,8.f,9.6f,f,top);
+ wall(m,10.f,6.f,23.f,6.2f,f,top,3);wall(m,10.f,16.8f,23.f,17.f,f,top,3);
+ wall(m,10.f,6.f,23.f,17.f,top,top+.25f,15);
+ perFinish(m,10.2f,6.2f,23.f,16.8f,f,24);
+ perSign(m,10.f-.055f,7.f,f+2.6f,"GATEHOUSE","PERIMETER DETAIL / NO ENTRY",1.6f,-kPi*.5f,perBlue);
+ perCamera(m,10.f,16.6f,f+3.f,-1,0);
+ // --- Gate desk and the CCTV wall --------------------------------------------------------------
+ wall(m,10.2f,12.65f,15.6f,12.82f,f,f+2.1f,2);
+ for(float x:{11.f,12.6f,14.2f}){perFix(m,model::file_cabinet_wide,x,13.2f,f,.9f,.6f,.75f,0,true);perFix(m,model::cctv_tv,x,13.2f,f+.75f,.6f,.45f,.5f,kPi,false);}
+ perSign(m,12.f,12.638f,f+1.45f,"PERIMETER GATE / RELEASE","SOUTH GATE / CHECKPOINT DELTA",1.45f,kPi,perAmber);
+ terminal(m,{12.f,12.f},"PERIMETER GATE / RELEASE","E / RELEASE THE YARD'S SOUTH GATE TO CHECKPOINT DELTA.","DELTA IS THROUGH THE SOUTH GATE, BACK ACROSS THE YARD.",0,stateId("perim_gate"));
  m.terminals.back().yaw=kPi;
+ perDesk(m,14.6f,9.f,f,kPi*.5f,1);
+ terminal(m,{11.6f,7.f},"GATEHOUSE / DETAIL LOG","03:10 YARD SECURE. 14 PROCESSED THROUGH DELTA. 0 ESCAPED.","ORDER 7: NO ONE LEAVES THE SUB-LEVELS. ANYONE IN A SHIFT BADGE IS STAFF.");
+ m.terminals.back().yaw=.001f;
+ // --- The bunk room -----------------------------------------------------------------------------
+ wall(m,16.6f,6.2f,16.8f,12.f,f,top,21);wall(m,16.6f,13.6f,16.8f,16.8f,f,top,21);wall(m,16.6f,12.f,16.8f,13.6f,f+2.2f,top,21);
+ for(float y:{7.4f,10.4f})perFix(m,model::med_ward_bed,21.8f,y,f,1.98f,.94f,.84f,0,true);
+ perFix(m,model::med_ward_bed_tossed,21.8f,14.f,f,2.1f,1.5f,.84f,0,true);
+ for(float x:{17.4f,18.3f})perFix(m,model::pwr_locker_bank,x,16.3f,f,.7f,.68f,1.94f,kPi,true);
+ perTable(m,18.6f,9.f,19.8f,11.f,f,.76f);
+ perFix(m,model::ind_crate,19.9f,7.f,f,.8f,.8f,.8f,.2f,true);
+ m.pickupSpawns.push_back({{19.2f,13.2f},PickupKind::Ammo,f});
+ m.pickupSpawns.push_back({{20.f,15.6f},PickupKind::Health,f});
+ // --- Guards: one on the desk, one in the bunk room, one walking the fence --------------------------
+ machineryClock(m,"per_gatehouse_clock",60000);
+ perGuard(m,"per_gatehouse_clock","per_gatehouse",0,ActorVisual::Cleanup,GuardSquadRole::Assault,
+  {{{13.f,10.6f},f,4000,kPi},{{11.f,10.6f},f,3000,-kPi*.5f}},12,.55f,1,1.4f,alert);
+ perGuard(m,"per_gatehouse_clock","per_gatehouse",1,ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,
+  {{{19.f,12.8f},f,5000,-kPi*.5f},{{18.f,8.f},f,3500,kPi}},13,.5f,2,1.3f,alert);
+ perGuard(m,"per_gatehouse_clock","per_gatehouse",2,ActorVisual::CleanupRusher,GuardSquadRole::Rusher,
+  {{{6.f,5.f},f,3000,kPi*.5f},{{6.f,19.f},f,3000,-kPi*.5f},{{2.f,12.f},f,2500,0}},11,.6f,1,1.6f,alert);
+ // --- Light -------------------------------------------------------------------------------------
+ for(Vec2 l:{Vec2{12.5f,9.f},Vec2{14.f,15.f},Vec2{20.f,9.f},Vec2{20.f,14.f}})m.lights.push_back(perTroffer(l,top));
+ m.lights.push_back(lamp({12.4f,13.3f},f+1.4f,.6f,3.f,7000,.2f,WorldLightMount::Bare));
+ m.lights.push_back(lamp({9.98f,7.f},f+2.6f,1.f,5.f,4300,.1f,WorldLightMount::Wall,kPi));
+ for(Vec2 l:{Vec2{16.f,3.f},Vec2{16.f,20.f}})m.lights.push_back(lamp(l,roof-.4f,1.8f,11.f,2000,-.15f));
+ zone(m,"SECURITY PERIMETER / GATEHOUSE",10,6,16.6f,17);
+ zone(m,"SECURITY PERIMETER / BUNK ROOM",16.6f,6,23,17);
+ zone(m,"SECURITY PERIMETER / YARD",0,0,24,24);
+ freightFinish(m,-1);
  return p;
 }
-// CHECKPOINT DELTA (manifest 38)
-std::shared_ptr<const Map> makeCheckpointDelta(){return placeholderChunk(60,{{'N',10.f,14.f,-19.f,true,0},{'W',9.f,13.f,-16.f,false,0},{'S',10.f,14.f,-19.f,true,stateId("delta_override")}});}
-// ADMINISTRATIVE LINK (manifest 39)
+
+// CHECKPOINT DELTA (manifest 38). The hard access point between the plant and
+// the research levels. The inspection lane runs north to south between the
+// scanner portal and the sentry desk; the holding cells along the east wall
+// are where the detail kept the people it caught. A stair climbs to the
+// security office overlooking the lane, and on west into the Administrative
+// Link. The south door to Personnel Transit opens only on the chief's override.
+std::shared_ptr<const Map> makeCheckpointDelta(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[60];m.definition=CampaignChunks[60];m.definition.ambient=.24f;
+ const float f=-19,mz=-16,roof=m.definition.ceiling;
+ const StateId over=stateId("delta_override");
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ openEdge(m,{'N',10.f,14.f,-19.f,true,0});openEdge(m,{'W',9.f,13.f,-16.f,false,0});openEdge(m,{'S',10.f,14.f,-19.f,true,over});
+ // --- The security office mezzanine (west) and its stair -----------------------------------------
+ wall(m,0.f,9.f,1.f,13.f,f,mz-.22f,15);
+ deck(m,mz,0,9,1,13);deck(m,mz,1,5,6,16);
+ if(auto* d=perDeck(m,mz))deckSupports(m,*d,f,4.f);
+ m.stairs.push_back({2.f,16.f,4.f,20.2f,f,mz,15,true,false});
+ wall(m,6.f,5.f,6.12f,16.f,mz,mz+1.f,21);perWindow(m,6.f,5.f,6.12f,16.f,mz+1.f,mz+2.5f);
+ wall(m,6.f,5.f,6.12f,16.f,mz+2.55f,roof,21);
+ for(float y:{7.f,10.f,13.f})perDesk(m,4.4f,y,mz,kPi*.5f,int(y));
+ perSign(m,1.055f,7.f,mz+1.6f,"DELTA / SECURITY OFFICE","ADMINISTRATIVE LINK WEST",2.f,kPi*.5f,perBlue);
+ terminal(m,{2.f,6.f},"DELTA / PROCESSING TALLY","IN: 14 STAFF. OUT: 0. TRANSIT SEALED 02:40 BY ORDER 7.","SOUTH DOOR NEEDS THE CHIEF'S OVERRIDE. CHIEF'S OFFICE: ADMIN LINK.",mz-f);
+ m.terminals.back().yaw=.001f;
+ // --- The inspection lane: scanner portal, turnstiles and the sentry desk --------------------------
+ for(float x:{9.f,15.f}){wall(m,x-.15f,4.5f,x+.15f,6.f,f,f+2.6f,20);}
+ wall(m,8.85f,4.5f,15.15f,6.f,f+2.6f,f+3.6f,20);
+ perWallFix(m,model::lab_id_scanner,9.2f,5.2f,f+1.1f,.3f,.06f,.41f,kPi*.5f);
+ perSign(m,12.f,4.445f,f+2.62f,"CHECKPOINT DELTA","STOP / BADGE / HANDS VISIBLE",2.6f,kPi,perRed);
+ for(float x:{10.4f,12.f,13.6f})perFix(m,model::ticket_gate,x,8.f,f,1.f,.3f,1.f,0,true);
+ perTable(m,9.5f,10.f,11.f,11.2f,f);
+ perFix(m,model::crt_monitor,10.2f,10.6f,f+.86f,.42f,.4f,.38f,kPi,false);
+ perSandbags(m,13.2f,10.f,15.f,10.6f,f,1.f);
+ perFinish(m,9.4f,1.f,14.6f,22.f,f,14);
+ // --- The holding cells: east wall, bars, the sealed door --------------------------------------
+ for(float y:{3.f,9.f,15.f})wall(m,16.f,y-.1f,23.f,y+.1f,f,f+3.f,15);
+ wall(m,16.f,20.9f,23.f,21.1f,f,f+3.f,15);wall(m,16.f,2.9f,23.f,21.1f,f+3.f,f+3.25f,15);
+ // The doorway panels collide only either side of their opening.
+ for(float y:{6.f,12.f,18.f}){perFix(m,model::med_cell_bars,16.05f,y-1.45f,f,2.5f,.04f,2.4f,kPi*.5f,true);perFix(m,model::med_cell_bars_doorway,16.05f,y+1.25f,f,2.5f,.04f,2.4f,kPi*.5f,false);
+  for(float s:{-1.f,1.f})wall(m,16.03f,std::min(y+1.25f+s*.585f,y+1.25f+s*1.25f),16.07f,std::max(y+1.25f+s*.585f,y+1.25f+s*1.25f),f,f+2.4f,CollisionProxyMaterial);}
+ wall(m,15.9f,2.9f,16.f,21.1f,f+2.4f,f+3.35f,15);
+ perBodyBag(m,19.6f,5.f,f,false);perBodyBag(m,20.f,7.2f,f,false);perBodyBag(m,19.4f,11.f,f,false);
+ perBlood(m,18.f,13.f,21.6f,16.4f,f);perWallBlood(m,true,22.98f,13.f,17.f,f+.3f,f+1.6f,-.01f);
+ perFix(m,model::med_ward_bed_tossed,21.2f,18.f,f,2.1f,1.5f,.84f,kPi*.5f,true);
+ perSign(m,15.845f,12.f,f+2.42f,"HOLDING","DETAINED STAFF / DO NOT FEED",1.4f,-kPi*.5f,perRed);
+ // The door in the north-east corner, welded shut with plate.
+ wall(m,22.6f,.95f,23.f,2.95f,f,f+2.4f,7);wall(m,22.55f,1.f,22.6f,2.9f,f+.1f,f+2.3f,11);
+ perSign(m,22.495f,1.95f,f+1.2f,"DO NOT OPEN","WELDED 02:52 / ORDER 7",1.2f,-kPi*.5f,perRed);
+ // --- The south door ---------------------------------------------------------------------------
+ perSign(m,6.f,22.945f,f+1.6f,"PERSONNEL TRANSIT","PLATFORM B / STAFF TRAM",2.4f,kPi,perBlue);
+ perSign(m,18.f,22.945f,f+1.6f,"SOUTH DOOR","CHIEF'S OVERRIDE REQUIRED",2.2f,kPi,perRed);
+ // --- Who is still here -----------------------------------------------------------------------
+ machineryClock(m,"per_delta_clock",60000);
+ perGuard(m,"per_delta_clock","per_delta",0,ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,
+  {{{4.f,15.f},mz,5000,kPi*.5f},{{3.f,8.5f},mz,4000,kPi*.5f}},14,.5f,2,1.2f);
+ m.creatureSpawns.push_back({CreatureKind::Huntsman,{20.f,12.f},f});
+ m.pickupSpawns.push_back({{13.6f,2.4f},PickupKind::Ammo,f});
+ m.pickupSpawns.push_back({{2.4f,14.6f},PickupKind::Health,mz});
+ // --- Light ------------------------------------------------------------------------------------
+ for(Vec2 l:{Vec2{12.f,3.f},Vec2{12.f,11.f},Vec2{12.f,18.f}})m.lights.push_back(lamp(l,roof-.4f,1.8f,10.f,5600,.05f));
+ for(float y:{6.f,12.f,18.f})m.lights.push_back(perSwitch(lamp({20.f,y},f+2.9f,.7f,4.f,4300,.3f),0,false,.4f));
+ for(Vec2 l:{Vec2{3.5f,8.f},Vec2{3.5f,14.f}})m.lights.push_back(perTroffer(l,roof));
+ zone(m,"CHECKPOINT DELTA / SECURITY OFFICE",0,5,6.2f,16,mz-.5f,1000);
+ zone(m,"CHECKPOINT DELTA / HOLDING",16,2.9f,23,21.1f);
+ zone(m,"CHECKPOINT DELTA",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
+
+// ADMINISTRATIVE LINK (manifest 39). The perimeter's offices, hung over the
+// old ore pass: open-plan desks, records, and the security chief's office,
+// all behind a glass gallery that looks down twelve metres into the shaft the
+// plant was built around. The chief refused Order 7 and stayed at his desk.
 std::shared_ptr<const Map> makeAdministrativeLink(){
- auto p=std::make_shared<Map>(*placeholderChunk(61,{{'E',9.f,13.f,-16.f,false,0}}));
- auto& m=*p;const float f=m.layers.front().elevation;
- // Delta's west stair reaches the chief's override before its locked
- // south door. The rest of this office remains under construction.
- wall(m,7.2f,8.65f,8.8f,8.82f,f,f+2.1f,2);
- wallSign(m,8.f,8.638f,f+1.45f,"SECURITY CHIEF / OVERRIDE","CHECKPOINT DELTA / SOUTH DOOR",1.45f,kPi);
- terminal(m,{8.f,8.f},"SECURITY CHIEF / OVERRIDE","E / AUTHORIZE CHECKPOINT DELTA'S SOUTH DOOR.","RETURN EAST TO DELTA AND DESCEND TO THE SOUTH DOOR. PERSONNEL TRANSIT IS BEYOND.",0,stateId("delta_override"));
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[61];m.definition=CampaignChunks[61];m.definition.ambient=.24f;
+ m.definition.playerStart={22.f,11.f};m.definition.spawnHeight=-16;m.definition.spawnYaw=kPi;
+ const float f=-28,o=-16,roof=m.definition.ceiling,ceil=o+3.f;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ m.wallSurface=SurfaceOfficePlaster;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ openEdge(m,{'E',9.f,13.f,-16.f,false,0});
+ // --- The office floor, hung over the shaft --------------------------------------------------
+ wall(m,23.f,9.f,24.f,13.f,f,o-.22f,15);
+ deck(m,o,1,1,24,16);
+ if(auto* d=perDeck(m,o))deckSupports(m,*d,f,4.f);
+ perFinish(m,1.f,1.f,23.f,15.8f,o,23);
+ wall(m,1.f,1.f,23.f,15.8f,ceil,ceil+.2f,22);
+ ceilingGrid(m,1.f,1.f,23.f,15.8f,ceil);
+ // The glass gallery over the shaft.
+ perCurtain(m,1.f,15.8f,23.f,16.f,o,ceil);
+ perHangingSign(m,12.f,15.2f,o+2.f,false,3.2f,"ORE PASS 2","DECOMMISSIONED 1987","ORE PASS 2 / DECOMMISSIONED","THE PLANT WAS BUILT AROUND THIS SHAFT",perAmber,ceil);
+ // --- The shaft below: the old chute, a dead conveyor, sodium lamps far down ------------------------
+ wall(m,4.f,19.f,9.f,23.f,f,f+5.f,11);wall(m,4.5f,19.5f,8.5f,22.5f,f+5.f,f+8.f,11);
+ beltConveyor(m,9.f,22.f,20.f,f+1.2f,roof);
+ for(float x:{11.f,17.f})steelColumn(m,x,21.5f,f,f+1.2f);
+ for(Vec2 l:{Vec2{6.f,17.5f},Vec2{18.f,18.f}})m.lights.push_back(lamp(l,f+3.f,2.f,10.f,1900,-.2f,WorldLightMount::Bare));
+ // --- Open plan -------------------------------------------------------------------------------
+ for(int i=0;i<3;++i){perDesk(m,13.f+i*3.2f,4.f,o,0,i);perDesk(m,13.f+i*3.2f,7.4f,o,kPi,i+1);}
+ for(float x:{14.f,17.f})perFix(m,model::file_cabinet_tall,x,1.45f,o,.5f,.6f,1.4f,0,true);
+ perFix(m,model::water_cooler,22.5f,2.f,o,.4f,.4f,1.2f,-kPi*.5f,true);
+ perFix(m,model::lab_photocopier,22.4f,5.f,o,.83f,.75f,.97f,-kPi*.5f,true);
+ terminal(m,{19.f,13.f},"ADMIN / PERSONNEL NOTICE","02:40 ALL SUB-LEVEL BADGES REVOKED. REPORT TO DELTA FOR PROCESSING.","THIS IS A ROUTINE SECURITY MEASURE. YOUR COOPERATION IS VALUED.",o-f);
+ m.terminals.back().yaw=.001f;
+ // --- Records (centre) --------------------------------------------------------------------------
+ officeWall(m,10.f,1.f,10.15f,9.f,o,ceil);officeWall(m,10.f,10.6f,10.15f,13.f,o,ceil);
+ for(float y:{2.f,3.6f,5.2f})perFix(m,model::bookcase,10.6f,y,o,1.f,.4f,1.9f,kPi*.5f,true);
+ // --- The security chief's office (west) -------------------------------------------------------
+ officeWall(m,1.f,9.2f,6.5f,9.35f,o,ceil);officeGlass(m,6.5f,1.f,6.65f,7.4f,o,ceil);officeWall(m,6.5f,9.f,6.65f,9.35f,o,ceil);
+ perFix(m,model::lab_exec_desk,3.8f,4.f,o,1.85f,.92f,.75f,kPi,true);
+ perFix(m,model::lab_boardroom_chair,3.8f,3.f,o,.84f,.79f,.98f,0,true);
+ perFix(m,model::bookcase,1.5f,6.f,o,1.f,.4f,1.9f,kPi*.5f,true);
+ perFix(m,model::lab_potted_plant,5.8f,1.6f,o,.37f,.43f,.69f,0,false);
+ perBody(m,"per_admin_clock",ActorVisual::Worker,{2.6f,7.4f},o,.4f);
+ perBlood(m,1.9f,6.8f,3.5f,8.2f,o);
+ machineryClock(m,"per_admin_clock",60000);
+ wall(m,7.2f,8.65f,8.8f,8.82f,o,o+2.1f,2);
+ perSign(m,8.f,8.638f,o+1.45f,"SECURITY CHIEF / OVERRIDE","CHECKPOINT DELTA / SOUTH DOOR",1.45f,kPi,perBlue);
+ terminal(m,{8.f,8.f},"SECURITY CHIEF / OVERRIDE","E / AUTHORISE CHECKPOINT DELTA'S SOUTH DOOR.","CHIEF ADEYEMI, 02:33: I WILL NOT SIGN ORDER 7. LET THEM OUT.",o-f,stateId("delta_override"));
  m.terminals.back().yaw=kPi;
+ terminal(m,{4.6f,4.9f},"SECURITY CHIEF / ORDER 7","ORDER 7, 02:31: SEAL SUB-LEVELS. PROCESS ALL STAFF. NO WITNESSES.","REPLY 02:34: REFUSED. 02:51: CLEANUP COMMAND ACKNOWLEDGES.",o-f);
+ m.terminals.back().yaw=.001f;
+ // --- A guard sent back for the override -----------------------------------------------------
+ perGuard(m,"per_admin_clock","per_admin",0,ActorVisual::Cleanup,GuardSquadRole::Assault,
+  {{{16.f,11.f},o,4000,kPi},{{12.f,11.f},o,3000,kPi*.5f},{{20.f,13.5f},o,3000,0}},12,.55f,1,1.4f);
+ m.pickupSpawns.push_back({{21.f,14.6f},PickupKind::Health,o});
+ // --- Light ----------------------------------------------------------------------------------
+ for(Vec2 l:{Vec2{4.f,4.f},Vec2{14.f,3.f},Vec2{19.f,3.f},Vec2{14.f,9.f},Vec2{19.f,9.f},Vec2{8.f,12.f},Vec2{15.f,14.f}})m.lights.push_back(perSwitch(perTroffer(l,ceil),0,false,l.x<6?0.f:.1f));
+ zone(m,"ADMINISTRATIVE LINK / SECURITY CHIEF",1,1,6.6f,9.3f,o-.5f,1000);
+ zone(m,"ADMINISTRATIVE LINK / ORE PASS 2",0,16,24,24);
+ zone(m,"ADMINISTRATIVE LINK",0,0,24,24);
+ freightFinish(m,-1);
  return p;
 }
-// PERSONNEL TRANSIT (manifest 40)
-std::shared_ptr<const Map> makePersonnelTransit(){return placeholderChunk(62,{{'N',10.f,14.f,-19.f,true,0},{'W',14.f,19.f,-19.f,false,0}});}
+
+// PERSONNEL TRANSIT (manifest 40). Platform B of the staff tram. Tram 4 was
+// held here at 02:40 by Order 7 with its doors locked; they were opened at
+// 03:05. Both tunnel mouths are shuttered. The way on is the platform
+// walkway west, past the dead lifts, into Restricted Utilities.
+std::shared_ptr<const Map> makePersonnelTransit(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[62];m.definition=CampaignChunks[62];m.definition.ambient=.24f;
+ const float bed=-20.f,f=-19,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),bed));
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ openEdge(m,{'N',10.f,14.f,-19.f,true,0});openEdge(m,{'W',14.f,19.f,-19.f,false,0});
+ m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=f;
+ // --- Platforms either side of the track bed ------------------------------------------------------
+ deck(m,f,1,1,23,8);deck(m,f,1,13,23,23);deck(m,f,0,14,1,19);
+ wall(m,0.f,14.f,1.f,19.f,bed,f-.22f,15);
+ for(float y:{7.85f,13.f})wall(m,1.f,y,23.f,y+.15f,f-.02f,f+.01f,18);
+ for(float y:{7.4f,13.15f})perFinish(m,1.f,y,23.f,y+.45f,f,13);
+ // The crossing at the east end: steps down to the bed and up again.
+ m.stairs.push_back({19.f,8.f,21.f,9.4f,bed,f,5,true,false});
+ m.stairs.push_back({19.f,11.6f,21.f,13.f,bed,f,5,true,true});
+ // --- The track, the tram and the shuttered tunnel mouths ------------------------------------------
+ perRailX(m,10.5f,1.f,23.f,bed);
+ perFix(m,model::metro_car,10.f,10.5f,bed,2.4f,14.f,3.3f,kPi*.5f,true);
+ for(float x:{1.f,22.6f}){wall(m,x,8.f,x+.4f,13.f,bed,bed+.3f,15);wall(m,x,8.2f,x+.4f,12.8f,bed+.3f,bed+3.6f,7);}
+ perSign(m,1.455f,10.5f,bed+2.4f,"TUNNEL WEST","SHUTTERED 02:40",1.6f,kPi*.5f,perRed);
+ perSign(m,22.545f,10.5f,bed+2.4f,"TUNNEL EAST","SHUTTERED 02:40",1.6f,-kPi*.5f,perRed);
+ // --- North platform: the dead lifts and the departure board --------------------------------------
+ for(float x:{4.f,19.f}){wall(m,x-1.f,1.f,x+1.f,1.3f,f,f+2.4f,7);wall(m,x-1.f,1.f,x+1.f,1.3f,f+2.4f,f+3.5f,15);perSign(m,x,1.355f,f+2.5f,"LIFT","OUT OF SERVICE",1.2f,0,perRed);}
+ perHangingSign(m,12.f,5.f,f+2.6f,false,3.2f,"PLATFORM B / TRAM 4","HELD 02:40 / ORDER 7","PLATFORM B","WAY OUT: WEST WALKWAY",perBlue,roof);
+ for(float x:{7.f,16.f})perFix(m,model::platform_chair,x,6.4f,f,1.8f,.5f,.8f,kPi,true);
+ perFix(m,model::metro_vending,21.6f,3.f,f,1.5f,.68f,2.38f,-kPi*.5f,true);
+ // --- South platform: what happened when the doors opened ----------------------------------------
+ for(float x:{5.f,8.f,13.5f})perBodyBag(m,x,15.4f,f,false);
+ perBody(m,"per_transit_clock",ActorVisual::Worker,{16.6f,14.6f},f,1.6f);
+ perBlood(m,15.4f,13.8f,18.2f,15.6f,f);
+ for(Vec2 b:{Vec2{10.2f,17.f},Vec2{11.f,16.4f},Vec2{20.2f,18.f}})m.clutterSpawns.push_back({0,b,f,b.x});
+ perFix(m,model::ind_crate,21.f,21.4f,f,.8f,.8f,.8f,.3f,true);
+ terminal(m,{8.f,21.f},"TRANSIT / PLATFORM B LOG","TRAM 4 HELD 02:40. 31 ABOARD. DOORS LOCKED BY ORDER 7.","03:05 DOORS OPENED BY CLEANUP. 03:20 PLATFORM CLEAR.",f-bed);
+ perSign(m,1.055f,20.5f,f+1.6f,"WEST WALKWAY","RESTRICTED UTILITIES / RESEARCH RECEIVING",2.6f,kPi*.5f,perBlue);
+ machineryClock(m,"per_transit_clock",60000);
+ // --- Something is still on the tram -------------------------------------------------------------
+ m.creatureSpawns.push_back({CreatureKind::Mutant,{18.f,15.f},f});
+ m.creatureSpawns.push_back({CreatureKind::Huntsman,{6.f,4.f},f});
+ m.pickupSpawns.push_back({{2.f,4.f},PickupKind::Ammo,f});
+ m.pickupSpawns.push_back({{22.f,16.f},PickupKind::Health,f});
+ // --- Light -----------------------------------------------------------------------------------------
+ for(float x:{4.f,10.f,16.f,21.f}){m.lights.push_back(perSwitch(lamp({x,4.f},roof-.3f,1.4f,9.f,4300,.3f),0,false,x==10.f?.5f:.05f));
+  m.lights.push_back(lamp({x,17.f},roof-.3f,1.2f,9.f,4300,.3f));}
+ m.lights.push_back(lamp({12.f,10.5f},roof-.5f,1.f,7.f,3200,0));
+ zone(m,"PERSONNEL TRANSIT / TRAM 4",1,8,23,13);
+ zone(m,"PERSONNEL TRANSIT / PLATFORM B",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
 }
 void buildChapterPerimeterA(CampaignMapTable& maps){
  maps[57]=makeOperationsCorridor();
