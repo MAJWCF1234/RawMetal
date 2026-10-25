@@ -171,7 +171,7 @@ std::shared_ptr<const Map> makePowerDistribution(){
 
  // --- The Cleanup checkpoint at the portal ------------------------------------------------------
  // Road blocks across the approach leave one lane; a field desk, crates and
- // a battery floodlight on a tripod aimed at the portal.
+ // a battery floodlight on a ballasted field case aimed at the portal.
  for(Vec2 r:{Vec2{9.2f,17.4f},Vec2{14.9f,17.4f}})m.fixtures.push_back({model::road_block,r,0,1.6f,.5f,.7f,0,true});
  m.fixtures.push_back({model::road_block,{7.6f,18.2f},0,1.6f,.5f,.7f,.35f,true});
  m.fixtures.push_back({model::wooden_chair,{4.7f,19.7f},0,.417f,.525f,.95f,kPi*.5f+.3f,true});
@@ -179,8 +179,9 @@ std::shared_ptr<const Map> makePowerDistribution(){
  m.fixtures.push_back({model::ind_crate,{2.f,21.7f},.8f,.8f,.8f,.8f,.2f,true});
  terminal(m,{5.5f,19.6f},"CLEANUP / SWEEP 3 / FIELD LOG","02:40 POWER DISTRIBUTION SWEPT. 3 STAFF PROCESSED. 0 OUTSTANDING.","LOAD CONTROL HELD BY TEAM 3. FEEDER 9 STAYS OPEN. NO RESTORATION.");
  m.terminals.back().yaw=kPi*.5f;
- {const Vec2 t{7.9f,16.6f};const float head=base+2.3f;
-  for(float a:{.4f,2.5f,4.6f})m.pipes.push_back({{t.x+std::cos(a)*.55f,t.y+std::sin(a)*.55f},t,base,.022f,head-.2f,6});
+ {const Vec2 t{7.6f,16.6f};const float head=base+2.3f;
+  m.fixtures.push_back({model::ind_crate,t,0,1.3f,1.3f,.6f,0,true});
+  for(float a:{.4f,2.5f,4.6f})m.pipes.push_back({{t.x+std::cos(a)*.55f,t.y+std::sin(a)*.55f},t,base+.6f,.022f,head-.2f,6});
   m.pipes.push_back({t,t,head-.2f,.03f,head-.05f,6});
   wall(m,t.x-.2f,t.y-.13f,t.x+.2f,t.y+.13f,head-.05f,head+.22f,8);
   WorldLight flood=lamp({t.x+.15f,t.y+.32f},head+.08f,2.4f,11.f,6400,0,WorldLightMount::Bare);m.lights.push_back(flood);}
@@ -225,16 +226,34 @@ std::shared_ptr<const Map> makePowerDistribution(){
  freightFinish(m,-1);
  return p;
 }
+// An operational pedestal in an otherwise unfinished district room. The
+// terminal renderer supplies the desk and CRT; its labelled steel backboard
+// is rooted in the room floor, leaving the north approach clear for use.
+void pwrStation(Map& m,Vec2 pos,const char* title,const char* operation,const char* requirement,StateId state,StateId prerequisite=0){
+ const float f=m.layers.front().elevation;
+ wall(m,pos.x-.8f,pos.y+.65f,pos.x+.8f,pos.y+.82f,f,f+2.1f,2);
+ wallSign(m,pos.x,pos.y+.638f,f+1.45f,title,operation,1.45f,kPi);
+ terminal(m,pos,title,operation,requirement,0,state,prerequisite);
+ m.terminals.back().yaw=kPi;
+}
 // DISTRIBUTION / HUB (manifest 19)
 std::shared_ptr<const Map> makeDistributionHub(){return placeholderChunk(35,{{'N',9.f,15.f,-25.f,false,0},{'E',9.f,14.f,-25.f,false,0},{'W',9.f,14.f,-25.f,false,0},{'S',10.f,14.f,-25.f,true,stateId("pwr_feeder9")}});}
 // SUBSTATION A (manifest 20)
-std::shared_ptr<const Map> makeSubstationA(){return placeholderChunk(36,{{'W',9.f,14.f,-25.f,false,0},{'E',16.f,19.f,-28.f,false,0}});}
+std::shared_ptr<const Map> makeSubstationA(){
+ auto p=std::make_shared<Map>(*placeholderChunk(36,{{'W',9.f,14.f,-25.f,false,0},{'E',16.f,19.f,-28.f,false,0}}));
+ pwrStation(*p,{12.f,4.f},"SUBSTATION A / BREAKERS","E / CLOSE THE SUBSTATION BREAKERS.","BLACK START REQUIRED: SYNCHRONIZE EMERGENCY GENERATION VIA THE CABLE TRENCH.",PwrSubA,PwrGen);
+ return p;
+}
 // SWITCH HALL (manifest 21)
 std::shared_ptr<const Map> makeSwitchHall(){return placeholderChunk(37,{{'E',9.f,14.f,-25.f,false,0},{'S',10.f,14.f,-19.f,false,0}});}
 // CABLE TRENCH (manifest 22)
 std::shared_ptr<const Map> makeCableTrench(){return placeholderChunk(38,{{'W',16.f,19.f,-28.f,false,0},{'S',14.f,18.f,-28.f,false,0}});}
 // EMERGENCY GENERATION (manifest 23)
-std::shared_ptr<const Map> makeEmergencyGeneration(){return placeholderChunk(39,{{'N',14.f,18.f,-28.f,false,0},{'W',8.f,12.f,-25.f,false,0}});}
+std::shared_ptr<const Map> makeEmergencyGeneration(){
+ auto p=std::make_shared<Map>(*placeholderChunk(39,{{'N',14.f,18.f,-28.f,false,0},{'W',8.f,12.f,-25.f,false,0}}));
+ pwrStation(*p,{13.f,7.f},"EMERGENCY GENERATION / SYNC","E / CONNECT THE DIESEL SET TO THE EMERGENCY BUS.","THEN RETURN THROUGH THE CABLE TRENCH AND CLOSE SUBSTATION A'S BREAKERS.",PwrGen);
+ return p;
+}
 // LOAD CONTROL (manifest 24): a temporary model showroom while the district is authored.
 std::shared_ptr<const Map> makeLoadControl(){
  auto p=std::make_shared<Map>();auto& m=*p;
@@ -254,6 +273,12 @@ std::shared_ptr<const Map> makeLoadControl(){
    x+=std::max(s.w,.6f)+.8f;}
   y+=6.5f;}
  for(float x:{4.f,10.f,16.f,21.f})for(float yy:{2.f,7.f,13.f,19.f})m.lights.push_back(lamp({x,yy},-15.9f,1.6f,10.f,4200));
+ // Complete the reachable black-start chain without bypassing the hub gate.
+ // The showroom remains unfinished; these three controls are operational.
+ const StateId ready=stateId("pwr_transfer_ready"),bus=stateId("pwr_transfer_bus");
+ pwrStation(m,{5.f,21.f},"LOAD CONTROL / 1 SHED","E / SHED NON-ESSENTIAL LOADS.","REQUIRES SUBSTATION A BREAKERS CLOSED. THEN USE TRANSFER CONTROL 2.",ready,PwrSubA);
+ pwrStation(m,{12.f,21.f},"LOAD CONTROL / 2 TRANSFER","E / TRANSFER TO EMERGENCY GENERATION.","REQUIRES LOAD CONTROL 1. THEN USE FEEDER CONTROL 3.",bus,ready);
+ pwrStation(m,{19.f,21.f},"LOAD CONTROL / 3 FEEDER 9","E / ENERGIZE FEEDER 9 AND RELEASE THE HUB GATE.","REQUIRES LOAD CONTROL 2. RETURN TO DISTRIBUTION HUB AND CONTINUE SOUTH.",PwrFeeder,bus);
  freightFinish(m,-1);
  return p;
 }

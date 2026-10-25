@@ -240,7 +240,9 @@ void mhUnit(MhHall& hall,float x0,float yc,int unit,float northGap,float southGa
  // Gaps (2 m) where the floor stair arrives on the south side and a bridge on the north.
  auto edgeRail=[&](float y1,float y2,float gap){
   if(gap<0){guardRail(m,x0-.5f,y1,x0+19.5f,y2,G);return;}
-  guardRail(m,x0-.5f,y1,gap,y2,G);guardRail(m,gap+2.f,y1,x0+19.5f,y2,G);};
+  // Unit 2's north-east table meets the shutter gallery; keep that lane open.
+  const float eastEnd=unit==2&&y2<yc?44.f:x0+19.5f;
+  guardRail(m,x0-.5f,y1,gap,y2,G);guardRail(m,gap+2.f,y1,eastEnd,y2,G);};
  edgeRail(yc-4.f,yc-3.95f,northGap);edgeRail(yc+3.95f,yc+4.f,southGap);
  guardRail(m,x0-.5f,yc-4.f,x0-.45f,yc+4.f,G);guardRail(m,x0+19.45f,yc-4.f,x0+19.5f,yc+4.f,G);
  // Painted walkway lines on the table.
@@ -367,7 +369,7 @@ void mhHallFloor(MhHall& hall){
 void mhHallLight(MhHall& hall){
  Map& m=hall.h;const float F=mhFloor,G=mhTable,C=mhCatwalk;
  // Red emergency bulkheads: gallery, the stair foot, side walls, catwalk.
- for(float x:{6.f,16.5f,33.f})mhRed(m,{x,1.02f},G+2.4f,kPi*.5f,MhBayD);
+ for(float x:{6.f,16.5f,33.f})mhRed(m,{x,x==6.f?1.42f:1.02f},G+2.4f,kPi*.5f,MhBayD);
  mhRed(m,{1.02f,9.6f},F+2.6f,0,MhBayD);
  for(float y:{22.f,36.f}){mhRed(m,{1.02f,y},F+3.f,0,MhBayD,1.f,8.f);mhRed(m,{46.98f,y+1.f},F+3.f,kPi,MhBayD,1.f,8.f);}
  mhRed(m,{46.98f,28.6f},G+2.3f,kPi,MhBayD,.8f,5.f);

@@ -394,7 +394,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  // Health in the washroom.
  m.pickupSpawns.push_back({{2.6f,4.6f},PickupKind::Health,f});
  m.pickupSpawns.push_back({{19.2f,19.5f},PickupKind::Ammo,f});
- m.clutterSpawns.push_back({1,{21.3f,6.6f},f,.3f});m.clutterSpawns.push_back({1,{20.4f,6.4f},f,1.4f});m.clutterSpawns.push_back({2,{18.4f,5.1f},f+.78f});
+ m.clutterSpawns.push_back({1,{21.3f,6.6f},f,.3f});m.clutterSpawns.push_back({1,{20.4f,6.4f},f,1.4f});m.clutterSpawns.push_back({2,{18.2f,4.4f},f+.80f});
  m.clutterSpawns.push_back({0,{11.5f,15.9f},f});m.clutterSpawns.push_back({2,{3.2f,12.8f},f});
  zone(m,"MAINTENANCE / LOCKER ROOM",1,1,8.8f,8.2f);
  zone(m,"MAINTENANCE / BREAK ROOM",15.2f,1,23,8.2f);
@@ -623,7 +623,21 @@ std::shared_ptr<const Map> makeCentralStores(){
  return p;
 }
 // FABRICATION SHOP (manifest 35)
-std::shared_ptr<const Map> makeFabricationShop(){return placeholderChunk(55,{{'N',10.f,14.f,-19.f,false,0},{'S',10.f,14.f,-19.f,true,stateId("maint_shutter_pin")}});}
+std::shared_ptr<const Map> makeFabricationShop(){
+ auto p=std::make_shared<Map>(*placeholderChunk(55,{{'N',10.f,14.f,-19.f,false,0},{'S',10.f,14.f,-19.f,true,stateId("maint_shutter_pin")}}));
+ auto& m=*p;const float f=m.layers.front().elevation;
+ // Keep the unfinished shop walkable, but make the shutter repair usable:
+ // sign out EN24 stock in Central Stores, machine the pin, then fit it.
+ auto control=[&](Vec2 pos,const char* title,const char* operation,const char* requirement,StateId state,StateId prerequisite){
+  wall(m,pos.x-.8f,pos.y+.65f,pos.x+.8f,pos.y+.82f,f,f+2.1f,2);
+  wallSign(m,pos.x,pos.y+.638f,f+1.45f,title,operation,1.45f,kPi);
+  terminal(m,pos,title,operation,requirement,0,state,prerequisite);m.terminals.back().yaw=kPi;
+ };
+ const StateId pin=stateId("mnt_pin_machined");
+ control({6.f,18.f},"LATHE 2 / SHEAR PIN","E / MACHINE THE 40 MM EN24 SHEAR PIN.","REQUIRES BAR STOCK: SIGN IT OUT AT RACK B IN CENTRAL STORES.",pin,stateId("mnt_bar_stock"));
+ control({12.f,21.f},"OPERATIONS SHUTTER / DRIVE","E / FIT THE MACHINED PIN AND RELEASE THE SHUTTER.","REQUIRES THE FINISHED PIN FROM LATHE 2. OPERATIONS IS THROUGH THE SOUTH DOOR.",stateId("maint_shutter_pin"),pin);
+ return p;
+}
 // MAINTENANCE / AID STATION (manifest 33)
 std::shared_ptr<const Map> makeMaintenanceAidStation(){return placeholderChunk(56,{{'W',9.f,14.f,-19.f,false,0}});}
 }

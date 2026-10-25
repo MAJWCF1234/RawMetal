@@ -467,6 +467,8 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  wall(m,13.75f,7.35f,14.25f,7.85f,f,f+1.05f,18);wall(m,13.7f,7.3f,14.3f,7.9f,f+1.05f,f+1.1f,12);
  for(int i=0;i<7;++i){float x=13.75f-(i+1)*.53f;wall(m,x,7.55f,x+.53f,7.65f,f+.94f,f+1.02f,i%2?20:19);}
  wall(m,14.25f,7.52f,14.7f,7.68f,f+.92f,f+1.04f,8);
+ // The stop plate bolts to an upright on the arm control housing.
+ wall(m,13.7f,7.35f,14.3f,7.5f,f+1.05f,f+1.82f,18);
  perSign(m,14.f,7.295f,f+1.12f,"STOP","BADGE CHECK",.5f,kPi,perRed);
 
  // --- Check 1: the arrivals booth; its intercom is wired to the Lock 2 bell ---------------------
@@ -495,7 +497,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  for(float z=f+.25f;z<f+4.5f;z+=.3f)wall(m,1.18f,6.1f,1.22f,11.6f,z,z+.05f,2);
  for(float y:{6.1f,11.52f})wall(m,1.18f,y,1.26f,y+.08f,f,f+4.6f,8);
  floorLine(m,1.3f,6.1f,2.4f,11.6f,f,13);
- perSign(m,1.275f,8.85f,f+2.4f,"VEHICLE LOCK 2","SEALED 02:51 BY DELTA-2 / NO VEHICLE MOVEMENTS",3.f,kPi*.5f,perRed);
+ perSign(m,1.245f,8.85f,f+2.4f,"VEHICLE LOCK 2","SEALED 02:51 BY DELTA-2 / NO VEHICLE MOVEMENTS",3.f,kPi*.5f,perRed);
  wall(m,1.f,8.8f,1.62f,8.9f,f+5.38f,f+5.48f,8);
  m.pipes.push_back({{1.6f,8.85f},{1.8f,8.85f},f+5.43f,.16f,f+5.43f,4});
  perWallFix(m,model::pwr_disconnect_switch,1.18f,12.75f,f+1.f,.43f,.35f,.85f,kPi*.5f);
@@ -540,7 +542,9 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  perFix(m,model::packing_crate,17.15f,21.75f,f,.6f,.45f,.36f,0,true);
  perFix(m,model::packing_crate,18.f,21.8f,f,.6f,.45f,.36f,.3f,true);
  perFix(m,model::wall_box,17.15f,21.75f,f+.36f,.36f,.12f,.28f,0,false);
- perWorkLight(m,17.6f,19.45f,f,1.65f,0,-1,1.5f,8.f);
+ // The portable light sits on a stores crate, out of the lane and physically supported.
+ perFix(m,model::packing_crate,17.6f,19.6f,f,.8f,.8f,.65f,0,true);
+ perWorkLight(m,17.6f,19.6f,f+.65f,1.f,0,-1,1.5f,8.f);
 
  // --- Sentry 1: a platform over the south-west corner, covering the gate approach ------------
  deck(m,zd,1,17,6,23);
@@ -580,7 +584,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  perGuard(m,"per_yard_clock","per_yard",2,ActorVisual::CleanupHeavy,GuardSquadRole::Heavy,
   {{{17.6f,20.6f},f,9000,kPi},{{17.2f,21.f},f,6000,kPi*.8f}},11.f,.55f,1,1.f,alert);
 
- m.pickupSpawns={{{7.f,4.85f},PickupKind::Health,f},{{2.4f,4.f},PickupKind::Ammo,f},{{2.1f,21.f},PickupKind::Ammo,zd}};
+ m.pickupSpawns={{{7.f,4.85f},PickupKind::Health,f+.12f},{{2.4f,4.f},PickupKind::Ammo,f},{{2.1f,21.f},PickupKind::Ammo,zd}};
  m.clutterSpawns={{2,{5.6f,6.f},f},{0,{9.f,8.4f},f},{2,{6.4f,11.8f},f},{0,{15.4f,17.6f},f},{2,{19.8f,12.f},f}};
  zone(m,"SECURITY PERIMETER / CHECK 1",6.2f,2.4f,9.f,5.4f);
  zone(m,"SECURITY PERIMETER / SENTRY 1",1,17,6,23,zd-.5f,1000);
@@ -591,11 +595,31 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  return p;
 }
 // SECURITY PERIMETER / GATEHOUSE (manifest 37)
-std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){return placeholderChunk(59,{{'W',4.f,20.f,-19.f,false,0}});}
+std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
+ auto p=std::make_shared<Map>(*placeholderChunk(59,{{'W',4.f,20.f,-19.f,false,0}}));
+ auto& m=*p;const float f=m.layers.front().elevation;
+ // The yard's locked south gate is controlled from this side room, reached
+ // through the open east seam before the player approaches that gate.
+ wall(m,11.2f,12.65f,12.8f,12.82f,f,f+2.1f,2);
+ wallSign(m,12.f,12.638f,f+1.45f,"PERIMETER GATE / RELEASE","SOUTH GATE / CHECKPOINT DELTA",1.45f,kPi);
+ terminal(m,{12.f,12.f},"PERIMETER GATE / RELEASE","E / RELEASE THE YARD'S SOUTH GATE.","RETURN WEST TO THE YARD. CHECKPOINT DELTA IS THROUGH THE SOUTH GATE.",0,stateId("perim_gate"));
+ m.terminals.back().yaw=kPi;
+ return p;
+}
 // CHECKPOINT DELTA (manifest 38)
 std::shared_ptr<const Map> makeCheckpointDelta(){return placeholderChunk(60,{{'N',10.f,14.f,-19.f,true,0},{'W',9.f,13.f,-16.f,false,0},{'S',10.f,14.f,-19.f,true,stateId("delta_override")}});}
 // ADMINISTRATIVE LINK (manifest 39)
-std::shared_ptr<const Map> makeAdministrativeLink(){return placeholderChunk(61,{{'E',9.f,13.f,-16.f,false,0}});}
+std::shared_ptr<const Map> makeAdministrativeLink(){
+ auto p=std::make_shared<Map>(*placeholderChunk(61,{{'E',9.f,13.f,-16.f,false,0}}));
+ auto& m=*p;const float f=m.layers.front().elevation;
+ // Delta's west stair reaches the chief's override before its locked
+ // south door. The rest of this office remains under construction.
+ wall(m,7.2f,8.65f,8.8f,8.82f,f,f+2.1f,2);
+ wallSign(m,8.f,8.638f,f+1.45f,"SECURITY CHIEF / OVERRIDE","CHECKPOINT DELTA / SOUTH DOOR",1.45f,kPi);
+ terminal(m,{8.f,8.f},"SECURITY CHIEF / OVERRIDE","E / AUTHORIZE CHECKPOINT DELTA'S SOUTH DOOR.","RETURN EAST TO DELTA AND DESCEND TO THE SOUTH DOOR. PERSONNEL TRANSIT IS BEYOND.",0,stateId("delta_override"));
+ m.terminals.back().yaw=kPi;
+ return p;
+}
 // PERSONNEL TRANSIT (manifest 40)
 std::shared_ptr<const Map> makePersonnelTransit(){return placeholderChunk(62,{{'N',10.f,14.f,-19.f,true,0},{'W',14.f,19.f,-19.f,false,0}});}
 }

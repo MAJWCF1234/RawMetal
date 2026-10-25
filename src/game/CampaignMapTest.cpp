@@ -10,6 +10,50 @@ bool Game::testCampaignMaps(){
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};
  check(FreightDistrictEnd==32&&CampaignChunkCount>=FreightDistrictEnd+2,"Eight freight areas allocated across 22 additional stitched chunks");
  {bool spawns=true;for(int level=34;level<CampaignChunkCount;++level){World w(level);const auto& d=w.definition();bool fit=w.fits(d.playerStart.x,d.playerStart.y,d.spawnHeight,1.f)&&std::fabs(w.supportBelow(d.playerStart.x,d.playerStart.y,d.spawnHeight+.3f)-d.spawnHeight)<.05f;if(!fit)out<<"  spawn blocked in chunk "<<level<<"\n";spawns&=fit;}check(spawns,"Every descent chunk loads and its spawn fits a standing hull");}
+ {Game gallery;gallery.loadLevel(42,false);gallery.m_player.pos={21.f,10.f};gallery.m_player.z=-24.988f;
+  for(int i=0;i<24;++i)gallery.tryMove({0,-.1f});
+  bool crossed=gallery.m_player.pos.y<7.7f&&gallery.m_player.z>-25.1f;
+  for(int i=0;i<24;++i)gallery.tryMove({0,.1f});
+  check(crossed&&gallery.m_player.pos.y>9.9f&&gallery.m_player.z>-25.1f,"Unit 2 shutter gallery can be walked both ways without jumping or dropping off the table");
+ }
+ {bool pickups=true,creatures=true;
+  for(int level:{58,64}){World w(level);
+   for(const auto& s:w.pickupSpawns())pickups&=w.fits(s.position.x,s.position.y,s.z+.03f,.3f,false);
+   for(const auto& s:w.creatureSpawns())creatures&=w.fits(s.position.x,s.position.y,s.z+.03f,1.2f,false);
+  }
+  check(pickups&&creatures,"Perimeter booth and Research Receiving spawns clear their raised floor slabs");
+ }
+ {auto operate=[](Game& g,int level,Vec2 pos,float feet,float yaw=kPi*.5f){
+   g.loadLevel(level,false);g.m_player.pos=pos;g.m_player.z=feet;g.m_player.angle=yaw;g.m_player.pitch=0;
+   InputState use{};use.use=true;g.updateInteraction(use,.01f);
+  };
+  auto gateAvailable=[](Game& g,int level,StateId required){
+   g.loadLevel(level,false);
+   for(const auto& door:g.world().doors())if(door.requireState==required)return !g.doorLocked(door);
+   return false;
+  };
+  Game power;
+  operate(power,36,{12,2.9f},-28);
+  operate(power,40,{19,19.9f},-19);
+  check(!power.state("pwr_sub_a")&&!power.state("pwr_feeder9"),"Power controls refuse out-of-order breaker and feeder operation");
+  operate(power,39,{13,5.9f},-28);operate(power,36,{12,2.9f},-28);
+  check(power.state("pwr_gen_online")&&power.state("pwr_sub_a"),"Physical E controls restore emergency generation and Substation A");
+  Game restored;check(restored.decodeSave(power.encodeSave())&&restored.state("pwr_sub_a"),"Black-start progress survives save/load before load transfer");
+  operate(restored,40,{12,19.9f},-19);
+  check(!restored.state("pwr_transfer_bus"),"Transfer requires loads to be shed first");
+  operate(restored,40,{5,19.9f},-19);operate(restored,40,{12,19.9f},-19);operate(restored,40,{19,19.9f},-19);
+  check(restored.state("pwr_feeder9"),"Physical three-step transfer restores the Machine Hall gate prerequisite");
+  check(gateAvailable(restored,35,stateId("pwr_feeder9")),"Restored feeder actually unlocks the hub's Machine Hall gate");
+  Game maintenance;operate(maintenance,55,{12,19.9f},-19);operate(maintenance,55,{6,16.9f},-19);
+  check(!maintenance.state("maint_shutter_pin")&&!maintenance.state("mnt_pin_machined"),"Fabrication requires signed-out stock and a machined pin");
+  operate(maintenance,54,{4.8f,12.6f},-19,kPi);
+  operate(maintenance,55,{6,16.9f},-19);operate(maintenance,55,{12,19.9f},-19);
+  check(maintenance.state("mnt_bar_stock")&&maintenance.state("maint_shutter_pin"),"Stock issue and physical fabrication controls restore the Operations shutter prerequisite");
+  check(gateAvailable(maintenance,55,stateId("maint_shutter_pin")),"Fitted pin unlocks the actual Operations shutter");
+  operate(maintenance,59,{12,10.9f},-19);operate(maintenance,61,{8,6.9f},-16);
+  check(maintenance.state("perim_gate")&&maintenance.state("delta_override"),"Gatehouse and chief controls restore the two perimeter gate prerequisites");
+  check(gateAvailable(maintenance,58,stateId("perim_gate"))&&gateAvailable(maintenance,60,stateId("delta_override")),"Both restored perimeter controls unlock their actual route gates");
+ }
  {Game office;office.loadLevel(20,false);office.updateStreaming(0);
   bool vista=true;for(int level=16;level<=19;++level)vista&=office.chunkResident(level);
   check(vista,"Manifest overlook retains all four real warehouse chunks with the door closed");

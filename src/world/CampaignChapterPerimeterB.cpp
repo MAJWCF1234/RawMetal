@@ -389,8 +389,9 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  pbHangingSign(m,10.f,4.6f,base+4.2f,false,3.6f,"RESTRICTED UTILITIES","PL-3 / PERSONNEL TRANSIT","RESEARCH RECEIVING","HOLD 2 / CLEAN TRANSFER UPSTAIRS");
  pbSign(m,4.3f,1.055f,base+4.4f,"RESEARCH RECEIVING","DEPTHWORKS ENERGY RESEARCH / HOLD 2",6.f,0,pbAmber);
  // --- Hold 2, west: Train 27's research containers behind the chain-link ----------------
- // The rest of the load stands stacked against the north wall.
- for(auto [x,y,two]:{std::tuple{1.95f,1.75f,true},{3.25f,1.75f,false},{4.55f,1.75f,true},{5.85f,1.75f,false},{1.95f,2.95f,false},{3.25f,2.95f,true},{4.55f,2.95f,false},{5.85f,2.95f,true},{6.95f,2.3f,false}}){
+ // The rest of the load stands stacked against the north wall. Leave the
+ // corner pallet clear of both rows and the vestibule wall.
+ for(auto [x,y,two]:{std::tuple{1.8f,1.75f,true},{3.1f,1.75f,false},{4.4f,1.75f,true},{5.7f,1.75f,false},{1.8f,2.95f,false},{3.1f,2.95f,true},{4.4f,2.95f,false},{5.7f,2.95f,true},{6.95f,2.3f,false}}){
   pbFix(m,model::pallet,x,y,base,1.2f,1.15f,.16f,0,true);
   pbFix(m,model::lab_specimen_crate,x,y,base+.16f,1.08f,1.08f,1.08f,0,true);
   if(two)pbFix(m,model::lab_specimen_crate,x,y,base+1.24f,1.f,1.f,1.f,.15f,true);}
@@ -511,6 +512,8 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  for(float x:{14.15f,17.85f})for(float y:{18.15f,21.85f})steelColumn(m,x,y,base,roof-.6f,false);
  for(float y:{18.15f,21.85f})wall(m,14.f,y-.12f,18.f,y+.12f,roof-.9f,roof-.6f,12);
  m.pipes.push_back({{16.f,18.f},{16.f,22.f},roof-.75f,.22f,roof-.75f,6});
+ // Suspend the CL-2 overhead run from the roof at both ends.
+ for(float y:{18.f,22.f})m.pipes.push_back({{16.f,y},{16.f,y},roof-.75f,.022f,roof,6});
  pbFix(m,model::pallet,15.2f,20.f,base+.22f,1.2f,1.15f,.16f,0,true);
  pbFix(m,model::lab_specimen_crate,15.2f,20.f,base+.38f,1.08f,1.08f,1.08f,0,true);
  // Staff lockers in the lane's end, under the gallery.
@@ -571,8 +574,9 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  for(float x:{3.5f,7.5f,16.5f,20.5f})m.lights.push_back(lamp({x,22.88f},gz+2.5f,1.f,7.f,6500,.05f,WorldLightMount::Wall,-kPi*.5f));
  m.lights.push_back(lamp({12.f,23.4f},gz+2.7f,.9f,5.f,7000,.03f));
  // --- Encounters and rewards ----------------------------------------------------------
- m.creatureSpawns={{CreatureKind::Huntsman,{3.6f,5.3f},base},{CreatureKind::Mutant,{5.6f,19.8f},base,1,0,wake},{CreatureKind::Huntsman,{12.f,20.4f},base}};
- m.pickupSpawns={{{2.2f,6.1f},PickupKind::Ammo,base},{{16.9f,1.6f},PickupKind::Health,base},{{9.2f,21.f},PickupKind::Ammo,gz},{{19.6f,18.4f},PickupKind::Health,base}};
+ // R-114 has an 8 cm steel floor; occupants and supplies stand on it.
+ m.creatureSpawns={{CreatureKind::Huntsman,{3.6f,5.3f},base+.08f},{CreatureKind::Mutant,{5.6f,19.8f},base,1,0,wake},{CreatureKind::Huntsman,{12.f,20.4f},base}};
+ m.pickupSpawns={{{2.2f,6.1f},PickupKind::Ammo,base+.08f},{{16.9f,1.6f},PickupKind::Health,base},{{9.2f,21.f},PickupKind::Ammo,gz},{{19.6f,18.4f},PickupKind::Health,base}};
  m.clutterSpawns={{3,{13.2f,3.7f},base},{4,{16.7f,3.8f},base},{0,{9.4f,15.2f},base},{2,{16.6f,16.2f},base},{1,{20.9f,20.5f},gz}};
  zone(m,"RESEARCH RECEIVING / CLEAN TRANSFER GALLERY",1,17,23,24,gz-.5f,1000);
  zone(m,"RESEARCH RECEIVING / RECEIVING OFFICE",12.4f,1,17.6f,4.2f);
