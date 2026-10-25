@@ -115,15 +115,20 @@ if not errorlevel 1 (
     goto :fail
 )
 for /f "delims=" %%A in ('git rev-parse HEAD') do set "HEAD_SHA=%%A"
+rem Package what players download: the zip (game + this version's notes), a
+rem SHA-256 file, and release text with only this version's section. The
+rem whole changelog must not be the release text: GitHub lists the files
+rem after it, so a long changelog hides the downloads.
+where python >nul 2>&1 || (echo [STOP] Python is needed to package the release.& goto :fail)
+python "%ROOT%\tools\release\package.py" "%TAG%" || (echo [STOP] Packaging failed; add a "## %TAG%" section to RELEASE_NOTES.md.& goto :fail)
+set "PKG=%ROOT%\.build\release\%TAG%"
 echo.
-echo Publishing RawMetal.exe ^(!EXE_BYTES! bytes^) as %TAG% at !HEAD_SHA!
+echo Publishing RawMetal.exe ^(!EXE_BYTES! bytes^), RawMetal-%TAG%.zip and checksums as %TAG% at !HEAD_SHA!
 choice /C YN /N /M "Publish release %TAG% now? [Y/N] "
 if errorlevel 2 goto :fail
 
 echo [5/5] Publishing release...
-set "NOTE_FLAG=--generate-notes"
-if exist "RELEASE_NOTES.md" set "NOTE_FLAG=--notes-file RELEASE_NOTES.md"
-gh release create "%TAG%" "RawMetal.exe" --repo "%EXPECTED_REPO%" --target "!HEAD_SHA!" --title "RawMetal %TAG%" !NOTE_FLAG!
+gh release create "%TAG%" "RawMetal.exe" "!PKG!\RawMetal-%TAG%.zip" "!PKG!\RawMetal-%TAG%.sha256" --repo "%EXPECTED_REPO%" --target "!HEAD_SHA!" --title "RawMetal %TAG%" --notes-file "!PKG!\body.md"
 if errorlevel 1 (
     echo [ERROR] Release creation failed.
     goto :fail
