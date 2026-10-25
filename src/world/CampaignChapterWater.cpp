@@ -60,7 +60,8 @@ void watLiveWater(Map& m,float x1,float y1,float x2,float y2,float surface,float
    h.bottom=surface-.43f;h.top=surface+2.f;h.damagePerSecond=bite;h.enabledFlag=watIsolated;h.invertFlag=true;m.hazards.push_back(h);}
  }
  const float mx1=x1-margin,my1=y1-margin,mx2=x2+margin,my2=y2+margin;
- int nx=std::max(1,int(std::round((mx2-mx1)/3.5f))),ny=std::max(1,int(std::round((my2-my1)/3.5f)));
+ // Sparse cells: each draws 18 motes, so a dense grid over a basin floods the view.
+ int nx=std::max(1,int(std::round((mx2-mx1)/7.f))),ny=std::max(1,int(std::round((my2-my1)/7.f)));
  for(int j=0;j<ny;++j)for(int i=0;i<nx;++i){Hazard h;h.kind=Hazard::Kind::Anomaly;
   h.x1=mx1+(mx2-mx1)*i/nx;h.x2=mx1+(mx2-mx1)*(i+1)/nx;h.y1=my1+(my2-my1)*j/ny;h.y2=my1+(my2-my1)*(j+1)/ny;
   h.bottom=surface;h.top=surface+2.2f;h.damagePerSecond=2.5f;h.enabledFlag=watIsolated;h.invertFlag=true;m.hazards.push_back(h);}
