@@ -155,6 +155,7 @@ void Game::loadLevel(int level,bool carry) {
     m_holster=m_player.ammo==0?1.f:0.f;m_punchAge=10;m_punchLeft=false;m_guarding=false;m_verticalSpring=m_verticalSpringVelocity=0;
     m_sounds.clear();m_stepDistance=0;m_stepVariant=0;
     m_pickupNotice.clear();m_pickupNoticeTime=0;
+    m_darkness=m_flashlightJam=0;m_darknessSettled=false;
     seedClutter();
     if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
 }
@@ -343,7 +344,8 @@ void Game::update(const InputState& input, float dt) {
     if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;m_inventoryClick=input.fire;m_inventoryUse=input.use;return;}
     if(m_inventoryOpen){updateInventory(input);return;}
     if(flashlightPressed){
-     if(hasFlashlight()){bool on=!flashlightOn();setState(stateId("flashlight_on"),on?1:0);m_pickupNotice=on?"FLASHLIGHT / ON":"FLASHLIGHT / OFF";}
+     // The switch, not the beam: a jammed torch still switches off and back on.
+     if(hasFlashlight()){bool on=!state(stateId("flashlight_on"));setState(stateId("flashlight_on"),on?1:0);m_pickupNotice=!on?"FLASHLIGHT / OFF":flashlightJam()>=FlashlightJamTime?"FLASHLIGHT / NO POWER":"FLASHLIGHT / ON";}
      else m_pickupNotice="NO FLASHLIGHT";
      m_pickupNoticeTime=1.25f;
     }
@@ -382,6 +384,7 @@ void Game::update(const InputState& input, float dt) {
         }
         crossChunkBoundary();
         updateScripts(dt);
+        updateDarkness(dt);
         updateHazards(dt);
         for(size_t i=0;i<m_pendingBarrels.size();){if(m_elapsed>=m_pendingBarrels[i].time){auto b=m_pendingBarrels[i];m_pendingBarrels.erase(m_pendingBarrels.begin()+long(i));detonateBarrel(b.level,int(std::floor(b.pos.x)),int(std::floor(b.pos.y)));}else ++i;}
         updateInteraction(input,dt);

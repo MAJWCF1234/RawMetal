@@ -280,7 +280,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  hashLightSource(w.lights().size());
  for(const auto&light:w.lights())if(!(w.hasLift()&&&light==&w.lights().back())){
   hashLightSource(static_cast<std::uint64_t>(light.mount));
-  for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range})hashLightSource(std::bit_cast<std::uint32_t>(value));
+  for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range,light.kelvin,light.tint})hashLightSource(std::bit_cast<std::uint32_t>(value));
  }
  if(m_chunkLightSourceKeys[w.level()]!=fixedLightSourceKey){
   m_chunkLightSourceKeys[w.level()]=fixedLightSourceKey;m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_chunkLightCells[w.level()].clear();m_chunkLightCounts[w.level()]=0;
@@ -298,6 +298,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   Point3 spread=light.mount==WorldLightMount::Wall?Point3{-std::sin(light.yaw)*.45f,std::cos(light.yaw)*.45f,0}:Point3{1,0,0};
   lightFrames.push_back({emitter,target,{{target+spread*-.18f,target+spread*0.f,target+spread*.18f}}});
  }
+ // Switchable lamps (state, timer, flicker) never enter a baked value: each
+ // keeps its unpowered contribution beside the cache and is scaled by its power
+ // per frame. Vulkan uses per-pixel lamps for these maps; the CPU fallback
+ // scales the cached contributions directly. Darkness removes only ambient.
+ const float darkness=game.darkness();
+ std::vector<float> lampPowers(w.lights().size(),1.f);std::vector<std::uint8_t> lampSwitchable(w.lights().size(),0);bool anySwitchable=false;
+ for(size_t i=0;i<w.lights().size()&&i<2000;++i){const auto&light=w.lights()[i];if(!light.switchable()||(w.hasLift()&&i+1==w.lights().size()))continue;lampSwitchable[i]=1;anySwitchable=true;lampPowers[i]=game.lampPower(light);}
+ auto lampPower=[&](size_t source){return lampPowers[source];};
+ auto ambientDarkness=[&]{return m_staticGeometryBuild?0.f:darkness;};
+ constexpr std::uint64_t AmbientTag=1ull<<53;auto lampTag=[](size_t source){return std::uint64_t(source+2)<<53;};
  // Bin lights in 4 m cells; a stacked map must not scan every storey's lamps
  // for each surface sample. The radius test below remains the exact filter.
  auto&lightCells=m_chunkLightCells[w.level()];
@@ -366,9 +376,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto flashPitch=player.pitch/140.f,flashCp=std::cos(flashPitch),flashSp=std::sin(flashPitch);
  Point3 flashForward{std::cos(player.angle)*flashCp,std::sin(player.angle)*flashCp,flashSp};
  bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
- const float muzzleAge=game.shotAge();
- const float muzzleFlash=!game.unarmed()&&muzzleAge>=0.f&&muzzleAge<.05f&&game.weaponKick()>.85f?1.f-muzzleAge/.05f:0.f;
+ const float muzzleFlash=game.muzzleFlash(),muzzleFalloff=.045f-.033f*darkness;
  Point3 muzzlePoint{eye.x+flashForward.x*.42f,eye.y+flashForward.y*.42f,eye.z+flashForward.z*.42f-.10f};
+ // NPC gun flashes light the room in darkness too (world space to this chunk).
+ const auto weaponFlashes=game.weaponFlashes();const auto chunkOrigin=game.chunkOffset(level);
  auto flashlightContribution=[&](Point3 point,Point3 normal){
   if(!flashlightEnabled)return 0.f;Point3 delta=point-eye;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2<.04f||d2>196.f)return 0.f;
   float distance=std::sqrt(d2),along=(delta.x*flashForward.x+delta.y*flashForward.y+delta.z*flashForward.z)/distance;if(along<=.80f)return 0.f;
@@ -385,20 +396,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   return cone*facing*1.9f/(1.f+d2*.020f);
  };
  auto muzzleContribution=[&](Point3 point,Point3 normal){
-  if(muzzleFlash<=0.f)return 0.f;auto delta=point-muzzlePoint;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>=144.f)return 0.f;
-  float distance=std::sqrt(std::max(.001f,d2));float facing=.35f+.65f*std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
-  float edge=1.f-d2/144.f;return muzzleFlash*1.4f*edge*edge*facing/(1.f+d2*.045f);
+  float total=0.f;
+  for(int flash=0;flash<3;++flash){float strength=flash==0?muzzleFlash:weaponFlashes[size_t(flash-1)][3];if(strength<=0.f)continue;
+   const auto&f=weaponFlashes[size_t(std::max(flash-1,0))];auto delta=point-(flash==0?muzzlePoint:Point3{f[0]-chunkOrigin.x,f[1]-chunkOrigin.y,f[2]});
+   float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>=144.f)continue;
+   float distance=std::sqrt(std::max(.001f,d2));float facing=.35f+.65f*std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
+   float edge=1.f-d2/144.f;total+=strength*1.4f*edge*edge*facing/(1.f+d2*muzzleFalloff);
+  }
+  return total;
  };
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
   if(movingGeometry){
-   float brightness=(w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f);
-   for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(d2<.001f||weight<=0)continue;
+   const float dark=ambientDarkness();
+   float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
+   for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
     if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
     brightness+=visibility*facing*weight;
    }
-   return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+sunTerm(normal)+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f,4.f);
+   return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+sunTerm(normal)+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f*(1.f-dark),4.f);
   }
   // Static fixture lighting is cached; the player-mounted flashlight is added
   // afterward because its cone moves every frame with yaw and pitch.
@@ -407,8 +424,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Static caches with per-pixel lamps bake ambient and contact occlusion only.
   const bool pixelLamps=m_pixelLighting&&m_staticGeometryBuild;
   auto key=positionBits(point.x)|(positionBits(point.y)<<12)|(positionBits(point.z)<<24)|(normalBits(normal.x)<<36)|(normalBits(normal.y)<<41)|(normalBits(normal.z)<<46)|(pixelLamps?1ull<<52:0ull);
-  float brightness=0;auto cached=m_lightingCache.find(key);
-  if(cached!=m_lightingCache.end())brightness=cached->second;
+  // Beside the fixed value (ambient, fixed lamps, sun) the cache keeps the
+  // ambient share (AmbientTag) and each switchable lamp's unpowered share.
+  const float dark=ambientDarkness();
+  float brightness=0,ambient=0,switched=0;auto cached=m_lightingCache.find(key);
+  if(cached!=m_lightingCache.end()){brightness=cached->second;
+   if(dark>0){auto share=m_lightingCache.find(key|AmbientTag);if(share!=m_lightingCache.end())ambient=share->second;}
+   if(anySwitchable&&!pixelLamps)for(auto source:lightCells[lightCell(point)])if(lampSwitchable[source]){float power=lampPower(source);if(power<=0)continue;
+    auto share=m_lightingCache.find(key|lampTag(source));if(share!=m_lightingCache.end())switched+=power*share->second;}
+  }
   else{
    // Probe the free hemisphere around the receiver. This darkens recesses and
    // floor/wall junctions from the actual map solids, including terrain, while
@@ -434,7 +458,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     }
     accessibility=1.f-.68f*occlusion*.25f;
    }
-   brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
+   ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
     auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
@@ -442,23 +466,29 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
     float visibility=0;
     for(auto target:lightFrames[source].shadowSamples){if(shadowBudget<=0)continue;--shadowBudget;visibility+=w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
-    brightness+=(visibility/3.f)*(.04f+.96f*facing)*weight;
+    float contribution=(visibility/3.f)*(.04f+.96f*facing)*weight;
+    if(!lampSwitchable[source])brightness+=contribution;
+    else{switched+=lampPower(source)*contribution;if(shadowBudget>0)m_lightingCache.emplace(key|lampTag(source),contribution);}
    }
    if(!pixelLamps)brightness+=sunTerm(normal);
-   brightness=std::clamp(brightness,.075f,1.4f);if(shadowBudget>0)m_lightingCache.emplace(key,brightness);
+   // A per-pixel static bake never darkens on the CPU (the shader scales it).
+   if(shadowBudget>0){m_lightingCache.emplace(key,brightness);if(!pixelLamps)m_lightingCache.emplace(key|AmbientTag,ambient);}
   }
-  return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f,4.f);
+  brightness=std::clamp(brightness-ambient*dark+switched,.075f*(1.f-dark),1.4f);
+  return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f*(1.f-dark),4.f);
  };
  auto normalLightingAt=[&](Point3 center){
   if(m_pixelLighting&&m_staticGeometryBuild)return NormalLighting{};
   auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
   uint64_t key=bits(center.x)|(bits(center.y)<<12)|(bits(center.z)<<24);auto&cache=m_chunkNormalLighting[w.level()];
-  auto found=movingGeometry?cache.end():cache.find(key);
+  // Two strongest lights by current power: a switchable lamp in reach keeps the cell uncached.
+  bool uncached=movingGeometry;if(anySwitchable&&!uncached)for(auto source:lightCells[lightCell(center)])if(lampSwitchable[source]){uncached=true;break;}
+  auto found=uncached?cache.end():cache.find(key);
   if(found==cache.end()){
    NormalLighting lights;
    for(auto source:lightCells[lightCell(center)]){const auto&fixture=w.lights()[source];
     auto delta=lightFrames[source].emitter-center;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
-    float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
+    float weight=fixture.falloff(d2)*lampPower(source);if(weight<=0||d2<.001f)continue;
     // A visibility ray can only reduce this upper bound. If the lamp cannot
     // beat the second retained light, it cannot affect either material slot.
     if(weight<=lights.weights[1])continue;
@@ -469,7 +499,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     int slot=weight>lights.weights[0]?0:1;if(slot==0){lights.weights[1]=lights.weights[0];lights.directions[1]=lights.directions[0];}
     lights.weights[slot]=weight;lights.directions[slot]=delta*(1/std::sqrt(d2));
    }
-   if(movingGeometry||shadowBudget<=0){auto origin=cameraPoint(center,game);for(auto&direction:lights.directions)direction=cameraPoint(center+direction,game)-origin;return lights;}
+   if(uncached||shadowBudget<=0){auto origin=cameraPoint(center,game);for(auto&direction:lights.directions)direction=cameraPoint(center+direction,game)-origin;return lights;}
    found=cache.emplace(key,lights).first;
   }
   auto result=found->second;auto origin=cameraPoint(center,game);
@@ -644,7 +674,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=false;objectNormalLighting=nullptr;
  };
- auto wallLamp=[&](const WorldLight& light){
+ // parts: 1 the backing and guard, 2 the diffuser, 3 both. A switchable lamp
+ // keeps its body in the static chunk and draws its diffuser per frame, lit
+ // by its power (dark glass when off).
+ auto wallLamp=[&](const WorldLight& light,int parts,float power){
   // Backing, recessed diffuser and a real steel guard share the authored wall
   // pose. Wall lamps are part of the static chunk, rather than animated meshes.
   float cosine=std::cos(light.yaw),sine=std::sin(light.yaw);
@@ -652,18 +685,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(!sphereVisible(point(0,.08f,0),.36f))return;
   auto profile=[](float width,float height,float bevel){return std::array<Vec2,8>{{{-width+bevel,-height},{width-bevel,-height},{width,-height+bevel},{width,height-bevel},{width-bevel,height},{-width+bevel,height},{-width,height-bevel},{-width,-height+bevel}}};};
   const auto outer=profile(.17f,.285f,.055f),inner=profile(.128f,.23f,.04f);
-  for(int i=0;i<8;++i){int next=(i+1)%8;auto a=outer[size_t(i)],b=outer[size_t(next)],u=inner[size_t(i)],v=inner[size_t(next)];
+  if(parts&1)for(int i=0;i<8;++i){int next=(i+1)%8;auto a=outer[size_t(i)],b=outer[size_t(next)],u=inner[size_t(i)],v=inner[size_t(next)];
    quad(point(a.x,.012f,a.y),point(b.x,.012f,b.y),point(b.x,.075f,b.y),point(a.x,.075f,a.y),m_panelMetal,.95f);
    quad(point(a.x,.075f,a.y),point(b.x,.075f,b.y),point(v.x,.081f,v.y),point(u.x,.081f,u.y),m_panelMetal,1.f);
    tri({point(0,.012f,0),.5f,.5f},{point(b.x,.012f,b.y),(b.x+.17f)/.34f,(b.y+.285f)/.57f},{point(a.x,.012f,a.y),(a.x+.17f)/.34f,(a.y+.285f)/.57f},m_panelMetal,.8f);
   }
   static const Texture diffuser=[](){Texture t{1,1,{0xfff9d9a1u}};t.emission={0xffffc873u};return t;}();
-  const Texture& lens=light.intensity>0?diffuser:cabWindow;
-  float previousEmission=m_emissionScale;m_emissionScale=light.intensity;
-  for(int i=0;i<8;++i){int next=(i+1)%8;auto a=inner[size_t(i)],b=inner[size_t(next)];
-   tri({point(0,.13f,0),.5f,.5f},{point(a.x,.105f,a.y),(a.x+.128f)/.256f,(a.y+.23f)/.46f},{point(b.x,.105f,b.y),(b.x+.128f)/.256f,(b.y+.23f)/.46f},lens,light.intensity>0?1.6f:.9f);
+  const bool lit=light.intensity>0&&power>.02f;const Texture& lens=lit?diffuser:cabWindow;
+  float previousEmission=m_emissionScale;m_emissionScale=light.intensity*power;
+  // A self-lit diffuser keeps its vertex light: power dims its face with its glow.
+  if(parts&2)for(int i=0;i<8;++i){int next=(i+1)%8;auto a=inner[size_t(i)],b=inner[size_t(next)];
+   MeshVertex centre{point(0,.13f,0),.5f,.5f,power},left{point(a.x,.105f,a.y),(a.x+.128f)/.256f,(a.y+.23f)/.46f,power},right{point(b.x,.105f,b.y),(b.x+.128f)/.256f,(b.y+.23f)/.46f,power};
+   tri(centre,left,right,lens,lit?1.6f:.9f);
   }
   m_emissionScale=previousEmission;
+  if(!(parts&1))return;
   auto guard=[&](float x1,float y1,float z1,float x2,float y2,float z2){
    quad(point(x1,y1,z1),point(x2,y1,z1),point(x2,y1,z2),point(x1,y1,z2),m_panelMetal,.8f);
    quad(point(x2,y2,z1),point(x1,y2,z1),point(x1,y2,z2),point(x2,y2,z2),m_panelMetal,.9f);
@@ -960,7 +996,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   if(m_gpu)m_gpu->setLodTag(nullptr);
  }
- if(buildStaticGeometry)for(const auto& light:w.lights())if(light.mount==WorldLightMount::Wall)wallLamp(light);
+ if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
  if(buildStaticGeometry)for(const auto& sign:w.signs()){
   std::string key=sign.title+'\n'+sign.subtitle+'\n'+std::to_string(sign.accent);
   auto found=m_authoredSigns.find(key);
@@ -978,6 +1014,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
  m_staticGeometryBuild=false;
+ for(size_t i=0;i<w.lights().size();++i)if(lampSwitchable[i]&&w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],2,lampPowers[i]);
  // The one-time static bake has its own large shadow-ray allowance. Dynamic
  // fixtures and objects still need their normal per-frame budget on that
  // first frame, otherwise they visibly brighten when the cache is reused.
@@ -1104,8 +1141,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(!m_gpuFrame||!staticFixtures)for(const auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.
  // The light source sits 4 cm beneath the luminous underside.
- auto ceilingLamp=[&](const WorldLight&light,float mount){
-  m_emissionScale=light.intensity*(movingGeometry?w.liftLampPower():1.f);
+ auto ceilingLamp=[&](const WorldLight&light,float mount,float power){
+  m_emissionScale=light.intensity*power;
   facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);
   if(w.campaign()&&(w.level()>=7||w.authored())){
    // The next slab or roof above this lamp is its actual mounting surface.
@@ -1126,22 +1163,24 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(cacheCeilingLamps){
   struct CeilingMount {const WorldLight*light;float mount;};std::vector<CeilingMount> mounts;mounts.reserve(w.lights().size());
   std::uint64_t key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
-  for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())){
+  for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())&&!lampSwitchable[size_t(&light-w.lights().data())]){
    float mount=w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;
    mounts.push_back({&light,mount});
    for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount})hash(std::bit_cast<std::uint32_t>(value));
   }
   if(!mounts.empty()&&m_gpu->beginStaticCache(2*Game::MaxChunks+w.level(),key)){
    int previousBudget=shadowBudget;m_staticGeometryBuild=true;shadowBudget=400000;
-   for(const auto&entry:mounts)ceilingLamp(*entry.light,entry.mount);
+   for(const auto&entry:mounts)ceilingLamp(*entry.light,entry.mount,1.f);
    m_gpu->endStaticCache();m_staticGeometryBuild=false;shadowBudget=previousBudget;
   }
  }
  for(const auto&light:w.lights()){
   if(light.mount!=WorldLightMount::Ceiling)continue;
   movingGeometry=w.hasLift()&&&light==&w.lights().back();
-  if(cacheCeilingLamps&&!movingGeometry)continue;
-  ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f);
+  // Switchable housings draw per frame: their glow follows the lamp's power.
+  size_t index=size_t(&light-w.lights().data());
+  if(cacheCeilingLamps&&!movingGeometry&&!lampSwitchable[index])continue;
+  ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f,movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
  if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible)facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
@@ -1149,7 +1188,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},.4f))continue;
   if(!w.outdoors()&&length(c.pos-player.pos)<15.f){const WorldLight* source=nullptr;float nearest=25.f;
-   for(const auto&candidate:w.lights()){auto emitter=candidate.emitter();float dx=emitter.x-c.pos.x,dy=emitter.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.intensity>0&&emitter.z>mid+.2f&&d2<candidate.range*candidate.range&&d2<nearest){nearest=d2;source=&candidate;}}
+   for(const auto&candidate:w.lights()){auto emitter=candidate.emitter();float dx=emitter.x-c.pos.x,dy=emitter.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.intensity>0&&lampPower(size_t(&candidate-w.lights().data()))>.05f&&emitter.z>mid+.2f&&d2<candidate.range*candidate.range&&d2<nearest){nearest=d2;source=&candidate;}}
    if(source){static const Texture softShadow=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
      for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/7.5f,dy=(y-7.5f)/7.5f,r=dx*dx+dy*dy;unsigned a=unsigned(std::clamp((1.f-r)*.30f,0.f,1.f)*255.f);t.pixels[size_t(y*16+x)]=a<<24;}return t;}();
     auto emitter=source->emitter();float floor=w.floorHeight(c.pos.x,c.pos.y),factor=std::clamp((emitter.z-floor)/std::max(.25f,emitter.z-mid),1.f,3.f);
@@ -2044,7 +2083,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const WorldLight* keyLight=nullptr;float keyDistance=36.f;
   if(!w.outdoors()&&length(e.pos-player.pos)<15.f)for(const auto&source:w.lights()){
    auto emitter=source.emitter();float dx=emitter.x-e.pos.x,dy=emitter.y-e.pos.y,d2=dx*dx+dy*dy;
-   if(source.intensity>0&&emitter.z>e.bodyTop()+.2f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
+   if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>e.bodyTop()+.2f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
   }
   movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
   bool mutant=e.kind==Enemy::Kind::Mutant;bool wasp=e.kind==Enemy::Kind::Wasp,warden=e.kind==Enemy::Kind::Warden,brute=e.kind==Enemy::Kind::Brute||warden;
@@ -2132,12 +2171,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   static const Texture dust=[](){Texture t{32,32,std::vector<std::uint32_t>(32*32)};t.additive=true;t.clampEdges=true;
    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float u=(x+.5f)/32.f,v=(y+.5f)/32.f,r=std::fabs(u-.5f)*2.f;float feather=std::pow(std::max(0.f,1.f-r),2.f),end=std::min(1.f,std::min(v,1.f-v)*12.f);unsigned a=unsigned(std::clamp(feather*end*.06f,0.f,1.f)*255.f);t.pixels[size_t(y*32+x)]=(a<<24)|0x00d6b884u;}return t;}();
   int beams=0;for(const auto&beamLight:w.lights()){
-   if(beamLight.mount==WorldLightMount::Wall||beamLight.intensity<=0)continue;
+   if(beamLight.mount==WorldLightMount::Wall||beamLight.intensity<=0||lampPower(size_t(&beamLight-w.lights().data()))<=.05f)continue;
    float dx=beamLight.position.x-player.pos.x,dy=beamLight.position.y-player.pos.y;if(dx*dx+dy*dy>144.f)continue;
    float x=beamLight.position.x,y=beamLight.position.y,bottom=w.floorHeight(x,y)+.08f,top=std::min(beamLight.z,w.clearanceAbove(x,y,bottom)-.04f);
    if(top-bottom<1.f||top-bottom>10.f||!sphereVisible({x,y,(bottom+top)*.5f},top-bottom))continue;
    float inv=1.f/std::sqrt(std::max(.0001f,dx*dx+dy*dy)),ux=-dy*inv,uy=dx*inv,wide=.72f,fixtureHalfWidth=.42f;
-   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*fixtureHalfWidth,y+uy*fixtureHalfWidth,top},{x-ux*fixtureHalfWidth,y-uy*fixtureHalfWidth,top},dust,1.6f);
+   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*fixtureHalfWidth,y+uy*fixtureHalfWidth,top},{x-ux*fixtureHalfWidth,y-uy*fixtureHalfWidth,top},dust,1.6f*lampPower(size_t(&beamLight-w.lights().data())));
    if(++beams==6)break;
   }
  }
@@ -2222,10 +2261,13 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  for(int side=0;side<2&&!fists;++side){auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
   auto d=p-(side?leftWrist:rightWrist);m_gripError=std::max(m_gripError,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
  }
- NormalLighting roomLights;float roomAmbient=std::max(.10f,game.world().definition().ambient*.55f);
+ // In true darkness the hands lose the room fill and floor too: only lamps,
+ // the torch lens and the shot (longer and brighter there) show them.
+ const float darkness=game.darkness(),handFloor=1.f-darkness;
+ NormalLighting roomLights;float roomAmbient=std::max(.10f,game.world().definition().ambient*.55f)*handFloor;
  const auto&player=game.player();Point3 receiver{player.pos.x,player.pos.y,player.z+player.eye};
  for(const auto&source:game.world().lights()){
-  auto delta=source.emitter()-receiver;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=source.falloff(d2);if(d2<.001f||weight<=0)continue;
+  auto delta=source.emitter()-receiver;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=source.falloff(d2)*(source.switchable()?game.lampPower(source):1.f);if(d2<.001f||weight<=0)continue;
   // A lamp that cannot enter the existing top two cannot affect the result.
   // Reject it before tracing its shadow; retain source order and exact ties.
   int slot=weight>roomLights.weights[0]?0:1;if(weight<=roomLights.weights[slot])continue;
@@ -2249,8 +2291,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    if(len>.00001f)n=n*(1.f/len);if(n.x*face.v[0].p.x+n.y*face.v[0].p.y+n.z*face.v[0].p.z>0)n=n*-1.f;
    float light=roomAmbient;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::max(0.f,n.x*l.x+n.y*l.y+n.z*l.z);}
-   light+=(game.shotAge()<.08f?.8f*(1-game.shotAge()/.08f):0);
-   for(auto&v:face.v)v.light=std::clamp(light,.10f,2.5f);
+   light+=game.muzzleFlash()*.65f;
+   for(auto&v:face.v)v.light=std::clamp(light,.10f*handFloor,2.5f);
    triangle3D(face.v[0],face.v[1],face.v[2],texture,1.f,&roomLights);
   }
  };
@@ -2273,8 +2315,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto point=[&](Point3 p){p=assembly(fists?p:animated(p));return m_inspectRig?inspectionPoint(p):p;};
   auto tri=[&](Point3 a,Point3 b,Point3 c,const Texture&texture,float emission=0.f){
    a=point(a);b=point(b);c=point(c);auto normal=unit(cross3(b-a,c-a));
-   float light=roomAmbient+.18f;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
-   light=std::clamp(std::max(light,emission),.25f,2.5f);
+   float light=roomAmbient+.18f*handFloor;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
+   light=std::clamp(std::max(light,emission),.25f*handFloor,2.5f);
    triangle3D({a,0,0,light},{b,1,0,light},{c,1,1,light},texture,1.f,&roomLights);
   };
   auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&texture,float emission=0.f){tri(a,b,c,texture,emission);tri(a,c,d,texture,emission);};

@@ -456,6 +456,70 @@ __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int
         report<<"Done.\n";
         return (doorsOnly||freightOnly)&&!doorCacheStable?35:0;
 }
+// Switchable lamps and true darkness, rendered (frames in .build/darkness,
+// numbers in darkness-render-test.txt): a gated lamp off at load, on and off
+// again by its state (power only: no static rebuild or shadow redraw), a dark
+// zone near black, the same view lit by one shot, and the torch jammed then back.
+static bool darknessTestMode(bool software){
+ if(!retro::Game::testDarkness())return false;
+ constexpr int W=640,H=360;std::ofstream report("darkness-render-test.txt");bool ok=true;
+ auto check=[&](bool pass,const char*name){ok&=pass;report<<(pass?"PASS ":"FAIL ")<<name<<'\n';report.flush();};
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);const bool vulkan=!software&&renderer->enableHardware();
+ if(!software&&!vulkan){report<<"Vulkan required for cache/shadow evidence: "<<renderer->hardwareName()<<'\n';return false;}
+ report<<(vulkan?"Vulkan ":"Software renderer ")<<renderer->hardwareName()<<'\n';renderer->setEnvironmentInspection(true);
+ // A 16 m room with crates and barrels, a gated ceiling lamp, a gated failing
+ // wall tube and a dormant Warden ahead; all of it a jamming dark zone.
+ std::string text="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Darkness render fixture|0\nMAP|0|Room|0|0|12|18.5|0|0|3.6|0.3|industrial_night|0|0|0|0|0|0|0|0|-1.5708|0|0\nLAYER|0|0|Floor|0|0\n";
+ for(int row=0;row<24;++row){std::string cells(24,'#');if(row>=3&&row<21)for(int x=4;x<20;++x)cells[size_t(x)]='.';
+  if(row==8){cells[6]=cells[7]='C';cells[17]='B';}if(row==13){cells[5]='C';cells[18]=cells[17]='B';}if(row==6)cells[10]=cells[11]=cells[12]='C';
+  text+="ROW|0|0|"+std::to_string(row)+"|"+cells+"\n";}
+ text+="LIGHT|0|12|10|3.3|0|0|1.5|11|3400|0|test_lamp|1|0||||\nLIGHT|0|4|15|2|1|0|1|7|5600|0.3|test_lamp|1|0||||0.5\nDARK|0|4|3|20|21|-10|10|test_dark|1|0|1\n--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+ std::shared_ptr<const retro::CustomCampaign> parsed;
+ try{parsed=retro::loadCustomCampaignText(text,"darkness-render-fixture.txt");}catch(const std::exception&e){report<<"fixture: "<<e.what()<<'\n';return false;}
+ auto map=std::make_shared<retro::AuthoredMapData>(*parsed->maps[0]);map->creatureSpawns.push_back({retro::CreatureKind::Warden,{15.f,11.5f},-999.f,1.f,0.f,retro::stateId("darkness_fixture_never")});
+ auto campaign=std::make_shared<retro::CustomCampaign>(*parsed);campaign->maps[0]=map;retro::Game game(campaign);
+ std::filesystem::create_directories(".build/darkness");
+ auto frame=[&](const char*name){renderer->render(game);if(vulkan)check(renderer->hardwareActive(),"Rendered evidence stays on Vulkan");const auto*pixels=renderer->pixels();double sum=0,creatureSum=0;unsigned creaturePeak=0;
+  std::ofstream out(std::string(".build/darkness/")+name+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";
+  for(int i=0;i<W*H;++i){auto p=pixels[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);sum+=.2126*double((p>>16)&255)+.7152*double((p>>8)&255)+.0722*double(p&255);}
+  for(int y=160;y<235;++y)for(int x=475;x<520;++x){auto p=pixels[y*W+x];double l=.2126*double((p>>16)&255)+.7152*double((p>>8)&255)+.0722*double(p&255);creatureSum+=l;creaturePeak=std::max(creaturePeak,unsigned(l));}
+  if(std::strcmp(name,"3-dark")==0)check(creatureSum/(45*75)<.1,"The creature has no self-lit floor in darkness");
+  if(std::strcmp(name,"4-dark-muzzle-flash")==0)check(creatureSum/(45*75)>1&&creaturePeak>20,"The shot reveals the creature above the floor (numeric ROI)");
+  double mean=sum/(W*H);report<<"creature ROI mean "<<creatureSum/(45*75)<<", peak "<<creaturePeak<<'\n';report<<name<<": mean luminance "<<mean<<" / 255, darkness "<<game.darkness()<<", torch "<<game.flashlightOn()<<'\n';return mean;};
+ auto step=[&](int frames,retro::InputState first={}){for(int i=0;i<frames;++i){game.update(first,1.f/60.f);first={};}};
+ step(1);double loadOff=frame("0-load-lamp-off");
+ auto builds=renderer->staticGeometryBuilds();auto faces=renderer->shadowFacesDrawn();
+ game.setState(retro::stateId("test_lamp"),1);step(1);double on=frame("1-lamp-on");
+ game.setState(retro::stateId("test_lamp"),0);step(1);double off=frame("2-lamp-off");
+ check(on>off*1.25&&on>off+.5,"The gated lamp lights the room when its state is set and goes out when cleared");
+ check(std::fabs(loadOff-off)<std::max(1.5,off*.15),"A lamp off at load is dark on its very first frame");
+ check(renderer->staticGeometryBuilds()==builds&&renderer->shadowFacesDrawn()==faces,"Switching a lamp changes power only: no static rebuild, no shadow redraw");
+ game.setState(retro::stateId("test_dark"),1);step(30);double dark=frame("3-dark");
+ check(game.darkness()==1&&dark<1.0,"Inside an active dark zone the room renders black");
+ game.setState(retro::stateId("test_lamp"),1);step(1);double darkLamp=frame("3b-dark-lamp-on");
+ check(darkLamp>dark+1,"Lamps still illuminate an active dark zone");
+ game.setState(retro::stateId("test_lamp"),0);step(1);
+ retro::InputState fire{};fire.fire=true;step(1,fire);double flash=frame("4-dark-muzzle-flash");
+ check(flash>6&&flash>dark*8,"One shot lights the room and the creature for an instant");
+ step(30);double after=frame("5-dark-after-flash");check(after<1.0,"The room falls black again after the flash");
+ renderer->setEnvironmentInspection(false);step(60);step(1,fire);frame("6-dark-flash-viewmodel");step(60);frame("6b-dark-viewmodel");renderer->setEnvironmentInspection(true);
+ game.giveQuestItem(retro::Game::Flashlight);game.setState(retro::stateId("flashlight_on"),1);step(120);double jammed=frame("7-flashlight-jammed");
+ check(!game.flashlightOn()&&jammed<1.0,"The jammed torch gives no light inside the zone");
+ game.setState(retro::stateId("test_dark"),0);step(30);
+ game.setState(retro::stateId("flashlight_on"),0);double torchOff=frame("8a-zone-left-torch-off");
+ std::vector<std::uint32_t> torchBaseline(renderer->pixels(),renderer->pixels()+W*H);
+ game.setState(retro::stateId("flashlight_on"),1);double torch=frame("8-flashlight-restored");
+ // The CPU path has no HDR shoulder; compare the illuminated pixels as well
+ // as the mean so the beam must visibly brighten a meaningful part of the room.
+ int torchPixels=0;double torchPeak=0;for(int i=0;i<W*H;++i){auto a=torchBaseline[size_t(i)],b=renderer->pixels()[i];double delta=.2126*(int((b>>16)&255)-int((a>>16)&255))+.7152*(int((b>>8)&255)-int((a>>8)&255))+.0722*(int(b&255)-int(a&255));torchPixels+=delta>5;torchPeak=std::max(torchPeak,delta);}
+ report<<"restored torch: "<<torchPixels<<" pixels brighten by >5/255, peak delta "<<torchPeak<<'\n';
+ check(game.flashlightOn()&&torch>torchOff&&torchPixels>256&&torchPeak>20,"Switching the zone off brings the torch back");
+ game.setState(retro::stateId("test_lamp"),1);step(1);frame("9-lamp-on-torch");
+ report<<"static geometry builds "<<builds<<" -> "<<renderer->staticGeometryBuilds()<<", lamp shadow faces "<<faces<<" -> "<<renderer->shadowFacesDrawn()<<'\n';
+ check(renderer->staticGeometryBuilds()==builds&&renderer->shadowFacesDrawn()==faces,"Darkness, flashes and lamp power never rebuild static caches or shadows");
+ report<<(ok?"ALL PASSED":"FAILED")<<'\n';return ok;
+}
+static bool darknessTest(){return darknessTestMode(false);}
 // Crashes leave RawMetal-crash.txt: the exception and its offset in the
 // executable, which the linker map (.build/RawMetal.map) resolves to a function.
 static LONG WINAPI writeCrashReport(EXCEPTION_POINTERS* info){
@@ -819,6 +883,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
+    if(std::wcsstr(commandLine,L"--darkness-test-software"))return darknessTestMode(true)?0:48;
+    if(std::wcsstr(commandLine,L"--darkness-test"))return darknessTest()?0:48;
     if(std::wcsstr(commandLine,L"--flashlight-test")){
      if(!retro::Game::testFlashlight())return 43;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
@@ -1023,7 +1089,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
          {"lift-mix",retro::AudioEngine::testLiftMix},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
-         {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps}};
+         {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"darkness",darknessTest}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=std::wcsstr(commandLine,L"--each-test=");
         for(const auto& [name,run]:tests){

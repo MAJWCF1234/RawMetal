@@ -1,10 +1,76 @@
 #include "Game.h"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <fstream>
 namespace retro {
 namespace {
 constexpr float TerminalVoiceRadius=1.5f;
+// Integer hash to [0,1): lamp flicker and torch sputter are pure functions of
+// time, so every view, capture and replay of a moment agrees.
+float lightNoise(std::uint32_t h){h^=h>>16;h*=0x7feb352du;h^=h>>15;h*=0x846ca68bu;h^=h>>16;return float(h&0xffffffu)/16777216.f;}
+std::uint32_t timeSlot(double t,double rate){double slot=std::fmod(std::floor(t*rate),4294967296.0);if(slot<0)slot+=4294967296.0;return std::uint32_t(slot);}
+}
+bool Game::lampSwitchedOn(const WorldLight& lamp)const{bool on=!lamp.enabledState||state(lamp.enabledState)==lamp.enabledValue;return lamp.invert?!on:on;}
+float Game::lampPower(const WorldLight& lamp)const{
+ if(!lampSwitchedOn(lamp))return 0.f;
+ if(lamp.period>0){double t=std::fmod(double(m_elapsed)+lamp.phase,double(lamp.period));if(t<0)t+=lamp.period;if(t>=lamp.onTime)return 0.f;}
+ if(lamp.flicker<=0)return 1.f;
+ // A failing tube: mostly on, with stretches of rapid off-blinks between dark,
+ // a buzzing dim and full, brownout holds, and at high flicker whole drop-outs.
+ // The lamp's own position seeds it, so neighbours never fail in step.
+ const float f=lamp.flicker;
+ std::uint32_t seed=std::bit_cast<std::uint32_t>(lamp.position.x)*73856093u^std::bit_cast<std::uint32_t>(lamp.position.y)*19349663u^std::bit_cast<std::uint32_t>(lamp.z)*83492791u;
+ double t=double(m_elapsed)+lamp.phase;
+ std::uint32_t stretch=timeSlot(t,2.5);float chance=lightNoise(seed^stretch*0x9e3779b9u);
+ if(chance<f*.45f){std::uint32_t blink=timeSlot(t,20.0);float b=lightNoise(seed*0x85ebca6bu^blink);
+  return b<.4f?0.f:b<.7f?.18f+.3f*lightNoise(blink^seed^0x27d4eb2fu):1.f;}
+ if(chance<f*.6f)return .4f+.25f*lightNoise(seed^stretch*0x165667b1u);
+ if(chance>1.f-f*f*.12f)return 0.f;
+ return 1.f;
+}
+bool Game::darkZoneActive(const DarkZone& zone)const{bool active=!zone.state||state(zone.state)==zone.value;return zone.invert?!active:active;}
+float Game::darknessTarget(bool* jamming)const{
+ float eye=m_player.z+m_player.eye;bool dark=false,jam=false;
+ for(const auto& zone:m_world.darkZones())
+  if(m_player.pos.x>=zone.x1&&m_player.pos.x<zone.x2&&m_player.pos.y>=zone.y1&&m_player.pos.y<zone.y2&&eye>=zone.bottom&&eye<zone.top&&darkZoneActive(zone)){dark=true;jam|=zone.jamFlashlight;}
+ if(jamming)*jamming=jam;return dark?1.f:0.f;
+}
+// Before the first update after a load (inspection frames, a restored save)
+// the target applies at once: a dark room never opens with a lit frame.
+float Game::darkness()const{return m_darknessSettled?m_darkness:darknessTarget(nullptr);}
+float Game::flashlightJam()const{if(m_darknessSettled)return m_flashlightJam;bool jam=false;darknessTarget(&jam);return jam?FlashlightJamTime:0.f;}
+bool Game::flashlightJammed()const{
+ float jam=flashlightJam();if(jam<=0)return false;if(jam>=FlashlightJamTime)return true;
+ // The beam stutters, dropping out more often until it dies.
+ float progress=jam/FlashlightJamTime;return lightNoise(timeSlot(m_elapsed,18.0)*0x9e3779b9u)<.2f+.7f*progress*progress;
+}
+void Game::updateDarkness(float dt){
+ bool jamming=false;float target=darknessTarget(&jamming);
+ if(!m_darknessSettled){m_darkness=target;m_flashlightJam=jamming?FlashlightJamTime:0.f;m_darknessSettled=true;return;}
+ float jam=m_flashlightJam;m_darkness+=std::clamp(target-m_darkness,-dt/.3f,dt/.3f);
+ m_flashlightJam=jamming?std::min(std::max(m_flashlightJam+dt,1e-3f),FlashlightJamTime):0.f;
+ if(!hasFlashlight()||!state(stateId("flashlight_on")))return;
+ const char* notice=jam<=0&&m_flashlightJam>0?"FLASHLIGHT / FAILING":jam<FlashlightJamTime&&m_flashlightJam>=FlashlightJamTime?"FLASHLIGHT / NO POWER":jam>0&&m_flashlightJam<=0?"FLASHLIGHT / ON":nullptr;
+ if(notice){m_pickupNotice=notice;m_pickupNoticeTime=1.5f;}
+}
+float Game::muzzleFlash()const{
+ // Only a real shot: the kick is set to 1 with it and falls 3/s as it ages
+ // (a finished reload also restarts the shot clock, with a small kick).
+ float age=m_shotAge,dark=darkness(),length=.05f+.07f*dark;
+ if(unarmed()||age<0||m_weaponKick<=0||m_weaponKick+3.f*age<.97f)return 0.f;
+ if(age<length)return (1.f-age/length)*(1.f+1.6f*dark);
+ float tail=(age-length)/.2f;return tail<1?dark*.16f*(1-tail)*(1-tail):0.f;
+}
+std::array<std::array<float,4>,2> Game::weaponFlashes()const{
+ std::array<std::array<float,4>,2> flashes{};const float dark=darkness();if(dark<=0)return flashes;
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto& npc=m_friendlyActors[i];
+  if(!chunkResident(npc.level)||!state(friendlyKey(i,"weapon_flash")))continue;
+  auto weapon=npcWeaponPose(i);if(weapon.flash<=0)continue;auto origin=chunkOffset(npc.level);
+  std::array<float,4> light{weapon.muzzle.x+origin.x,weapon.muzzle.y+origin.y,weapon.muzzle.z,weapon.flash*1.6f*dark};
+  auto& weakest=flashes[0][3]<=flashes[1][3]?flashes[0]:flashes[1];if(light[3]>weakest[3])weakest=light;
+ }
+ return flashes;
 }
 std::vector<const SequenceCue*> Game::terminalMessages(int terminal)const{
  std::vector<const SequenceCue*> result;if(terminal<0||terminal>=int(m_world.terminals().size()))return result;

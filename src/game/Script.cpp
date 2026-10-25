@@ -1,8 +1,10 @@
 #include "Game.h"
 #include "ai/StateLookupHints.h"
+#include "../world/CustomCampaign.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <limits>
 #include <utility>
 #include <chrono>
 
@@ -170,6 +172,82 @@ bool Game::testFlashlight(){
  if(restored.flashlightOn())return false;
  restored.update({},.01f);menu={};menu.inventory=true;restored.update(menu,.01f);restored.update(key,.01f);
  return !restored.flashlightOn();
+}
+
+// Switchable lamps, true darkness and the torch jam, end to end from the
+// custom-campaign records through validation to the per-frame values the
+// renderers read. The rendered evidence is --darkness-test (main.cpp).
+bool Game::testDarkness(){
+ std::ofstream report("darkness-test.txt");int failed=0;
+ auto check=[&](bool ok,const char*name){failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<name<<'\n';report.flush();return ok;};
+ auto record=[](std::initializer_list<std::string> fields){std::string line;for(const auto&field:fields){if(!line.empty())line+='|';line+=field;}return line+"\n";};
+ const std::string start="--- CUSTOM_CAMPAIGN_DATA_START ---\n",end="--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+ std::string base="CAMPAIGN|Darkness fixture|0\nMAP|0|Room|0|0|6.5|12|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
+ for(int row=0;row<24;++row)base+="ROW|0|0|"+std::to_string(row)+"|"+(row==0||row==23?std::string(24,'#'):"#"+std::string(22,'.')+"#")+"\n";
+ // A gated lamp, a timed one, a failing tube and an inverted wall lamp; the
+ // west half is dark while test_dark is set (jamming), the east half always (no jam).
+ const std::string lamps=record({"LIGHT","0","6","8","3.2","0","0","1.4","10","3400","0","test_lamp","1","0","","","",""})+
+  record({"LIGHT","0","18","8","3.2","0","0","1","8","5600","0.3","","","","2","0.5","0.25",""})+
+  record({"LIGHT","0","18","16","3.2","0","0","1","8","5600","0.3","","","","","","","0.6"})+
+  record({"LIGHT","0","1","16","2","1","0","1.2","6","","","test_lamp","1","1"});
+ const std::string zones=record({"DARK","0","1","1","12","23","-10","10","test_dark","1","0","1"})+record({"DARK","0","12","1","23","23","","","","","","0"});
+ auto parse=[&](const std::string&records){return loadCustomCampaignText(start+base+records+end,"darkness-fixture.txt");};
+ auto rejects=[&](const std::string&records){try{parse(records);return false;}catch(const std::exception&){return true;}};
+ std::shared_ptr<const CustomCampaign> campaign;
+ try{campaign=parse(lamps+zones);}catch(const std::exception&e){report<<e.what()<<'\n';}
+ if(!check(campaign!=nullptr,"LIGHT switching fields and DARK records parse"))return false;
+ const auto&map=*campaign->maps[0];
+ check(map.lights.size()==4&&map.lights[0].enabledState==stateId("test_lamp")&&map.lights[0].enabledValue==1&&map.lights[1].period==2&&map.lights[1].onTime==.5f&&map.lights[1].phase==.25f&&map.lights[2].flicker==.6f&&map.lights[3].invert&&map.lights[3].mount==WorldLightMount::Wall&&!map.lights[2].enabledState,"Parsed lamps keep state, value, invert, timed window and flicker");
+ check(map.darkZones.size()==2&&map.darkZones[0].state==stateId("test_dark")&&map.darkZones[0].jamFlashlight&&map.darkZones[0].x2==12&&!map.darkZones[1].state&&!map.darkZones[1].jamFlashlight&&map.darkZones[1].bottom==-1000,"Parsed dark zones keep their box, gate and jam flag");
+ check(rejects(record({"LIGHT","0","6","8","3.2","0","0","1","8","","","","","","","","","1.5"}))&&rejects(record({"LIGHT","0","6","8","3.2","0","0","1","8","","","","","","2","3"}))&&rejects(record({"LIGHT","0","6","8","3.2","0","0","1","8","","","","","","-1","0"}))&&rejects(record({"DARK","0","5","1","4","23"}))&&rejects(record({"DARK","0","1","1","4"}))&&rejects(record({"DARK","0","1","1","4","4","2","1"})),"Parser rejects flicker over 1, on-time past its period, negative periods and empty or inverted dark boxes");
+ auto invalid=[&](auto edit){auto copy=std::make_shared<AuthoredMapData>(map);edit(*copy);try{World world(0,copy);return false;}catch(const std::exception&){return true;}};
+ check(invalid([](AuthoredMapData&m){m.lights[0].flicker=std::numeric_limits<float>::quiet_NaN();})&&invalid([](AuthoredMapData&m){m.lights[0].period=-1;})&&invalid([](AuthoredMapData&m){m.lights[0].phase=std::numeric_limits<float>::infinity();})&&invalid([](AuthoredMapData&m){m.lights[0].onTime=std::numeric_limits<float>::quiet_NaN();})&&invalid([](AuthoredMapData&m){m.lights[0].kelvin=std::numeric_limits<float>::quiet_NaN();})&&invalid([](AuthoredMapData&m){m.lights[0].tint=std::numeric_limits<float>::infinity();})&&invalid([](AuthoredMapData&m){m.lights[1].onTime=3;})&&invalid([](AuthoredMapData&m){m.lights[2].flicker=1.2f;})&&invalid([](AuthoredMapData&m){m.darkZones[0].x2=m.darkZones[0].x1;})&&invalid([](AuthoredMapData&m){m.darkZones[0].top=std::numeric_limits<float>::infinity();})&&invalid([](AuthoredMapData&m){m.darkZones[1].x1=30;m.darkZones[1].x2=40;}),"Map loading rejects nonfinite or out-of-range switching and degenerate or off-map dark zones");
+
+ Game game(campaign);const auto lights=game.m_world.lights();
+ check(lights.size()==4&&lights[0].switchable()&&lights[1].switchable()&&lights[2].switchable()&&lights[3].switchable(),"Every gated, timed, flickering or inverted lamp reports itself switchable");
+ check(game.lampPower(lights[0])==0&&game.lampPower(lights[3])==1,"A gated lamp starts off; its inverted twin starts lit");
+ game.setState(stateId("test_lamp"),1);
+ check(game.lampPower(lights[0])==1&&game.lampPower(lights[3])==0&&game.lampSwitchedOn(lights[0]),"Setting the state swaps them");
+ auto at=[&](float t,const WorldLight&lamp){game.m_elapsed=t;return game.lampPower(lamp);};
+ check(at(0,lights[1])==1&&at(.2f,lights[1])==1&&at(.3f,lights[1])==0&&at(1.7f,lights[1])==0&&at(1.8f,lights[1])==1&&at(5.8f,lights[1])==1,"A timed lamp lights only inside its on-window (phase shifts it)");
+ int off=0,dim=0,on=0,blinks=0,apart=0;float sum=0;bool repeatable=true;std::vector<float> trace;WorldLight twin=lights[2];twin.position.x+=3;
+ for(int i=0;i<6000;++i){float p=at(float(i)/60.f,lights[2]);sum+=p;off+=p==0;on+=p==1;dim+=p>0&&p<1;if(!trace.empty())blinks+=(p==0)!=(trace.back()==0);trace.push_back(p);apart+=game.lampPower(twin)!=p;}
+ for(int i=0;i<6000;i+=7)repeatable&=at(float(i)/60.f,lights[2])==trace[size_t(i)];
+ report<<"flicker .6 over 100 s at 60 Hz: on "<<on<<" dim "<<dim<<" off "<<off<<" mean "<<sum/6000<<" off-transitions "<<blinks<<" frames apart from a moved twin "<<apart<<'\n';
+ check(on>3000&&off>150&&dim>150&&blinks>60&&repeatable,"A failing tube is mostly on, with off-blinks and dim holds, identical on every replay");
+ check(apart>600,"Two failing tubes never blink in step");
+
+ game.m_elapsed=0;game.giveQuestItem(Flashlight);game.setState(stateId("flashlight_on"),1);game.m_player.pos={6.5f,12};game.update({},.01f);
+ check(game.darkness()==0&&game.flashlightOn()&&!game.flashlightJammed(),"An inactive dark zone leaves the room lit and the torch on");
+ game.setState(stateId("test_dark"),1);game.update({},.05f);
+ check(game.flashlightJam()>0&&game.flashlightJam()<FlashlightJamTime&&game.pickupNotice()=="FLASHLIGHT / FAILING","Entering a jamming zone starts the torch sputter with a caption");
+ game.update({},.05f);float early=game.darkness();for(int i=0;i<3;++i)game.update({},.05f);float later=game.darkness();
+ int lit=0,out=0;for(int i=0;i<21;++i){game.update({},.05f);(game.flashlightOn()?lit:out)++;}
+ report<<"darkness after .1 s "<<early<<", .25 s "<<later<<", then "<<game.darkness()<<"; torch lit "<<lit<<" / out "<<out<<" frames while failing\n";
+ check(early>.2f&&early<.5f&&later>.7f&&later<1&&game.darkness()==1,"Entering an active zone ramps to true darkness over about .3 s");
+ check(lit>0&&out>0,"The torch flickers while it fails");
+ for(int i=0;i<6;++i)game.update({},.05f);
+ check(!game.flashlightOn()&&game.flashlightJammed()&&game.pickupNotice()=="FLASHLIGHT / NO POWER","After 1.5 s inside the torch is dead");
+ InputState key{};key.flashlight=true;game.update(key,.05f);game.update({},.05f);game.update(key,.05f);game.update({},.05f);
+ check(game.state("flashlight_on")==1&&!game.flashlightOn()&&game.pickupNotice()=="FLASHLIGHT / NO POWER","Switching a dead torch back on reports no power");
+ {Game restored(campaign);bool decoded=restored.decodeSave(game.encodeSave());
+  check(decoded&&restored.darkness()==1&&restored.flashlightJammed()&&restored.lampPower(restored.m_world.lights()[0])==1,"A restored save is dark at once, its torch dead and its lamps as saved");}
+ InputState fire{};fire.fire=true;game.update(fire,.01f);float flash=game.muzzleFlash();
+ game.update({},.05f);game.update({},.05f);float held=game.muzzleFlash();game.update({},.05f);game.update({},.05f);float tail=game.muzzleFlash();
+ for(int i=0;i<3;++i)game.update({},.05f);float gone=game.muzzleFlash();
+ report<<"dark muzzle flash at .01 s "<<flash<<", .11 s "<<held<<", .21 s "<<tail<<", .36 s "<<gone<<'\n';
+ check(flash>2&&held>0&&tail>0&&tail<.1f&&gone==0,"In darkness a shot flashes brighter and longer, then fades");
+ game.setState(stateId("test_dark"),0);game.update({},.05f);
+ check(game.flashlightOn()&&game.pickupNotice()=="FLASHLIGHT / ON","Switching the zone off restores the torch at once");
+ for(int i=0;i<30;++i)game.update({},.05f);
+ check(game.darkness()==0,"Darkness lifts again");
+ game.update(fire,.01f);float litFlash=game.muzzleFlash();game.update({},.05f);float litAfter=game.muzzleFlash();
+ game.m_shotAge=0;game.m_weaponKick=.1f;float reload=game.muzzleFlash();
+ report<<"lit muzzle flash at .01 s "<<litFlash<<", .06 s "<<litAfter<<'\n';
+ check(litFlash>.7f&&litFlash<=1&&litAfter==0&&reload==0,"In light the flash keeps its three frames; a finished reload never flashes");
+ game.m_player.pos={18,12};game.update({},.05f);for(int i=0;i<8;++i)game.update({},.05f);
+ check(game.darkness()==1&&game.flashlightOn(),"An always-dark zone without jam keeps the torch working");
+ report<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';return failed==0;
 }
 
 bool Game::testSystems(){

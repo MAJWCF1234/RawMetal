@@ -197,7 +197,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     {number(f,8,"prop half x"),number(f,9,"prop half y")},number(f,10,"prop base")});
    if(map->props.back().kind<0||map->props.back().kind>=4)throw std::runtime_error("invalid prop model");
   }else if(tag=="LIGHT"){
-   if(f.size()<5||f.size()>11)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
+   // LIGHT|map|x|y|z[|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker]:
+   // a lamp; the optional tail switches it like a HAZARD (state gate, timed window) and adds flicker 0-1.
+   if(f.size()<5||f.size()>18)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
    WorldLight light{{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")};
    if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>2)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
    if(f.size()>=7&&!f[6].empty())light.yaw=number(f,6,"light yaw");
@@ -205,7 +207,28 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=9&&!f[8].empty())light.range=number(f,8,"light range");
    if(f.size()>=10&&!f[9].empty()){light.kelvin=number(f,9,"light kelvin");if(light.kelvin<1000||light.kelvin>12000)throw std::runtime_error("light kelvin must be 1000 through 12000");}
    if(f.size()>=11&&!f[10].empty()){light.tint=number(f,10,"light tint");if(light.tint<-1||light.tint>1)throw std::runtime_error("light tint must be -1 through 1");}
+   if(f.size()>=12&&!f[11].empty())light.enabledState=scriptName(f,11,"light state");
+   if(f.size()>=13&&!f[12].empty())light.enabledValue=integer(f,12,"light state value");
+   if(f.size()>=14&&!f[13].empty())light.invert=boolean(f,13,"light invert");
+   if(f.size()>=15&&!f[14].empty())light.period=number(f,14,"light period");
+   if(f.size()>=16&&!f[15].empty())light.onTime=number(f,15,"light on time");
+   if(f.size()>=17&&!f[16].empty())light.phase=number(f,16,"light phase");
+   if(f.size()>=18&&!f[17].empty())light.flicker=number(f,17,"light flicker");
+   if(light.period<0||light.onTime<0||light.onTime>light.period||light.flicker<0||light.flicker>1)throw std::runtime_error("light switching needs period >= 0, on time within the period and flicker 0 through 1");
    map->lights.push_back(light);
+  }else if(tag=="DARK"){
+   // DARK|map|x1|y1|x2|y2[|bottom|top|state|value|invert|jam]: true darkness while the
+   // player's eye is inside and the zone is active; jam (default 1) kills the flashlight.
+   if(f.size()<6||f.size()>12)throw std::runtime_error("malformed DARK record");auto map=mapAt(maps,f);DarkZone zone;
+   zone.x1=number(f,2,"dark x1");zone.y1=number(f,3,"dark y1");zone.x2=number(f,4,"dark x2");zone.y2=number(f,5,"dark y2");
+   if(f.size()>=7&&!f[6].empty())zone.bottom=number(f,6,"dark bottom");
+   if(f.size()>=8&&!f[7].empty())zone.top=number(f,7,"dark top");
+   if(f.size()>=9&&!f[8].empty())zone.state=scriptName(f,8,"dark state");
+   if(f.size()>=10&&!f[9].empty())zone.value=integer(f,9,"dark state value");
+   if(f.size()>=11&&!f[10].empty())zone.invert=boolean(f,10,"dark invert");
+   if(f.size()>=12&&!f[11].empty())zone.jamFlashlight=boolean(f,11,"dark flashlight jam");
+   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top)throw std::runtime_error("invalid DARK bounds");
+   if(map->darkZones.size()>=64)throw std::runtime_error("too many DARK records in one map");map->darkZones.push_back(zone);
   }else if(tag=="ZONE"){
    // ZONE|map|x1|y1|x2|y2|name[|bottom|top]: a named HUD location.
    if(f.size()<7||f.size()>9)throw std::runtime_error("malformed ZONE record");auto map=mapAt(maps,f);AuthoredZone zone;

@@ -37,6 +37,12 @@ public:
  // Static lamps (world x, y, z, range, intensity, kelvin, tint) lit per pixel with cube
  // shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
  void setLamps(const std::vector<std::array<float,7>>& lamps,bool enabled,int detail=1);
+ // Per-frame power (0..1) for the lamps last passed to setLamps, in the same
+ // order: switching and flicker without a new key, grid or shadow redraw.
+ void setLampPowers(const std::vector<float>& powers);
+ // True darkness 0..1 (ambient fill and its floor, exposure ceiling, grade lift),
+ // the muzzle flash falloff and two NPC gun flashes (world xyz, strength).
+ void setDarkness(float darkness,float muzzleFalloff,const std::array<std::array<float,4>,2>& flashes);
  // Sun: direction xyz + intensity, colour rgb + pad, then three cascades of
  // four vec4 (origin + texel size, right/up/forward with inverse extents).
  void setSun(const std::array<float,56>& sun);
