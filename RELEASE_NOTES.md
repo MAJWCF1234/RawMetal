@@ -4,6 +4,30 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.12.0 - The Descent, part 1 (playtest) (2026-10-25)
+
+The main campaign continues past Deep Junction. The main-line blast door now
+opens into the deep plant, and the route runs on to the Energy Research
+Entrance. This is a playtest build: some areas are still placeholder rooms.
+
+- **Power Distribution.** Black-start the plant: Substation A, the Cable
+  Trench, Emergency Generation, the Switch Hall and Load Control, then the
+  sealed gate to the Machine Hall. A message waits on the mail relay.
+- **The Machine Hall.** A 48 m turbine hall spread over four stitched maps,
+  then the Ventilation Works and the Air Handling crawlspaces.
+- **Maintenance District.** Break rooms, Central Stores (a stealth patrol),
+  the Fabrication Shop puzzle and an aid station with a survivor.
+- **The Restricted Perimeter.** The Operations Corridor, the Security
+  Perimeter and gatehouse, Checkpoint Delta, the Administrative Link and
+  Personnel Transit, Restricted Utilities, Research Receiving,
+  Decontamination and the Energy Research Entrance.
+- **Placeholders.** Water and Cooling (chunks 47-52) and everything past the
+  great door are walkable placeholder rooms marked UNDER CONSTRUCTION.
+- **Engine.** 178 new purchased models named for the facility, room for
+  179 campaign maps, and a 64 MiB size ceiling.
+
+---
+
 ## v0.11.0 - Ashfall Exclusion Zone update (2026-10-24)
 
 The Ashfall Exclusion Zone custom campaign is rebuilt as an open,
