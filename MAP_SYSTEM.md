@@ -291,6 +291,14 @@ purple-red crust), 35 crystal (cyan and self-lit, like material 25). Material
 30 stays the invisible collision proxy. The textures come from the purchased
 PSX texture packs through `tools/library/surfaces.py`.
 
+`RawMetal.exe --each-test=campaign-maps` checks all surface resources, derived
+normal/mip chains, parser values and crystal emission. It also renders an
+isolated test room with each finish on both CPU and Vulkan. The numerical
+report is `surface-sets-test.txt`; the 40 PPM captures are written under
+`.build/surface-evidence/`. These checks measure frame luminance, variation,
+clipping, distinct finish hashes and reuse of GPU static geometry. They require
+Vulkan and do not change campaign maps or inspect source images.
+
 A `TERMINAL` placed within a solid fixture's footprint draws no console. Put
 the interaction point on a desk's front edge and dress the desk with fixture
 27/28 so its CRT is the visible computer.

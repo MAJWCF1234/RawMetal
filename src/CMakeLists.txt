@@ -161,6 +161,7 @@ add_executable(RawMetal WIN32
     world/CampaignChapterFinaleC.cpp
     world/CustomCampaign.cpp
     renderer/SoftwareRenderer.cpp
+    renderer/SurfaceSetTest.cpp
     renderer/NormalMapping.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp

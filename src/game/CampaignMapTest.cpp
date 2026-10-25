@@ -20,6 +20,9 @@ bool Game::testCampaignMaps(){
   auto rock=parse("SURFACE|0|5|8|5\n"),plain=parse("");
   check(rock&&rock->maps[0]->wallSurface==SurfaceRock&&rock->maps[0]->floorSurface==SurfaceMineTimber&&World(0,rock->maps[0]).ceilingSurface()==SurfaceRock,"SURFACE records set a custom map's wall, floor and ceiling finish");
   check(plain&&World(0,plain->maps[0]).wallSurface()==SurfaceDefault&&!parse("SURFACE|0|10|0|0\n")&&!parse("SURFACE|0|-2|0|0\n")&&!parse("SURFACE|0|1|2\n"),"Absent SURFACE keeps the legacy finish; out-of-range or malformed sets are rejected");
+  bool allSets=true;for(int surface=SurfaceDefault;surface<SurfaceCount;++surface){auto record="SURFACE|0|"+std::to_string(surface)+"|"+std::to_string(surface)+"|"+std::to_string(surface)+"\n";auto pack=parse(record.c_str());
+   allSets&=pack&&World(0,pack->maps[0]).wallSurface()==surface&&World(0,pack->maps[0]).floorSurface()==surface&&World(0,pack->maps[0]).ceilingSurface()==surface;}
+  check(allSets,"Every Surface enum value round-trips through the custom campaign parser");
   bool rejected=false;if(plain){auto bad=std::make_shared<AuthoredMapData>(*plain->maps[0]);bad->ceilingSurface=SurfaceCount;try{World invalid(0,bad);}catch(const std::exception&){rejected=true;}}
   check(rejected,"World::loadAuthoredMap rejects an out-of-range surface");
  }

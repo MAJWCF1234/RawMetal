@@ -689,7 +689,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto hashFloat=[&](float value){hash(std::uint64_t(std::int64_t(std::llround(value*1024.f))));};
   hash(std::uint64_t(game.worldId()));hash(game.sessionRevision());hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
   // Revision: tile crates/barrels + authored props bake into the static VBO.
-  hash(4);
+  hash(5);
+  // Reusing a renderer across maps at the same address must not retain the
+  // previous map's finishes, even when its tiles and lamps are identical.
+  for(int surface:{w.wallSurface(),w.floorSurface(),w.ceilingSurface()})hash(std::uint64_t(surface+1));
+  for(const auto& structure:w.structures())hash(std::uint64_t(structure.material));
   for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)hash(static_cast<unsigned char>(w.tile(x,y)));
   for(const auto&door:w.doors())for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);
   // Authored lamp power may change independently of the map/session. Use exact

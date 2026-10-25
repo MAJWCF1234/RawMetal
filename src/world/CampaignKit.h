@@ -569,11 +569,6 @@ inline std::shared_ptr<const Map> placeholderChunk(int index,std::initializer_li
  for(float x:{6.f,18.f})for(float y:{6.f,18.f})m.lights.push_back(lamp({x,y},roof-.4f,1.2f,10.f,4200));
  zone(m,(m.name+" / UNDER CONSTRUCTION").c_str(),0,0,24,24);
  freightFinish(m,-1);
- // TEMP SURFACE EVIDENCE (worktree only, reverted before commit)
- {static const std::pair<int,int> sets[]={{105,SurfaceConcrete},{100,SurfacePressure},{80,SurfaceBrick},{56,SurfaceClinicTile},{127,SurfaceLabPanel},{126,SurfaceRock},{54,SurfaceCorrugated},{122,SurfaceOfficePlaster},{124,SurfaceMineTimber},{175,SurfaceStone},{178,SurfaceRock}};
-  for(auto [chunk,set]:sets)if(chunk==index)m.wallSurface=m.floorSurface=m.ceilingSurface=set;
-  if(index==178){int i=0;for(int material:{26,27,28,29,31,32,33,34,35,3}){float x=2.5f+float(i%5)*4.f,y=i<5?5.f:12.f;wall(m,x,y,x+1.6f,y+1.6f,base,base+3.f,material);++i;}}
-  if(index==105||index==56||index==127||index==124||index==175)for(int i=0;i<3;++i)wall(m,4.f+i*6.f,8.f,5.2f+i*6.f,9.2f,base,base+(i+1)*.9f,3);}
  return p;
 }
 }

@@ -470,25 +470,6 @@ Vec2 SoftwareRenderer::finishRepeat(const Texture& texture)const{
  for(size_t i=0;i<m_surfaceTextures.size();++i)if(&texture==&m_surfaceTextures[i])return {surfaceFinishes[i].repeat,surfaceFinishes[i].repeat};
  return {};
 }
-bool SoftwareRenderer::testSurfaceSets(std::string* report){
- std::ostringstream out;bool ok=true;
- auto check=[&](bool pass,const std::string& label){out<<(pass?"PASS ":"FAIL ")<<label<<'\n';ok&=pass;};
- // Every pack finish decodes at 256 px with derived normals and mips.
- for(int i=0;i<int(std::size(surfaceFinishes));++i){auto t=loadSurfaceFinish(i);
-  check(t.width==256&&t.height==256&&t.mips.size()==8&&t.normalLevels.size()==9&&(surfaceFinishes[i].glow>0)==!t.emission.empty(),"finish "+std::to_string(FirstSurfaceFinish+i));}
- auto start=std::chrono::steady_clock::now();
- auto storage=std::make_unique<SoftwareRenderer>(64,36);const auto&renderer=*storage;
- out<<"renderer "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<" s\n";
- auto loaded=[](const Texture* t){return t&&t->width>0&&t->height>0&&t->pixels.size()==size_t(t->width)*size_t(t->height)&&t->normalLevels.size()==t->mips.size()+1;};
- for(int s=0;s<SurfaceCount;++s){const auto* set=renderer.surfaceSet(s);
-  check(set&&loaded(set->wall)&&loaded(set->floor)&&loaded(set->ceiling)&&set->wallRepeat.x>0&&set->wallRepeat.y>0&&set->floorRepeat>0&&set->ceilingRepeat>0,"surface "+std::to_string(s));}
- check(!renderer.surfaceSet(SurfaceDefault)&&!renderer.surfaceSet(SurfaceCount),"default and out-of-range surfaces keep the legacy finish");
- for(int material=0;material<=40;++material){const bool finish=(material>=26&&material<=29)||(material>=31&&material<=35);const auto* t=renderer.finishMaterial(material);
-  if(finish)check(loaded(t)&&renderer.finishRepeat(*t).x>0,"structure material "+std::to_string(material));else if(t)check(false,"material "+std::to_string(material)+" is not a finish");}
- check(!renderer.finishMaterial(35)->emission.empty()&&renderer.finishMaterial(34)->emission.empty()&&!renderer.surfaceSet(SurfaceLabPanel)->ceiling->emission.empty(),"crystal and the lab ceiling are self-lit");
- if(report)*report=out.str();
- return ok;
-}
 const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int part)const{
  if(mesh<0||mesh>=int(m_facilityMeshes.size()))throw std::runtime_error("Invalid facility mesh index "+std::to_string(mesh));
  const auto& model=m_facilityMeshes[size_t(mesh)];
