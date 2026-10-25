@@ -31,5 +31,5 @@ void main(){
  // Rack in inverse distance (dioptres), as a lens does: near changes move fast.
  float previousFocus=history.b>0.05?history.b:focusTarget;
  float focus=1.0/mix(1.0/previousFocus,1.0/focusTarget,clamp(p.shape.y,0.0,1.0));
- outColor=vec4(mix(previous,target,clamp(p.settings.x,0.0,1.0)),average,focus,1.0);
+ outColor=vec4(clamp(mix(previous,target,clamp(p.settings.x,0.0,1.0)),p.settings.z,p.settings.w),average,focus,1.0);
 }

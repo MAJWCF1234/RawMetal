@@ -17,12 +17,12 @@ layout(location=4) in vec4 light1;
 layout(location=5) in vec4 surface;
 layout(location=6) in vec4 worldNormal;
 #endif
-// darkness: x ambient scale (0 in true darkness), y muzzle falloff; flashes:
-// NPC gun flashes lighting the room in darkness (world xyz, strength).
-layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;vec4 flashes[2];} stereo;
+// darkness: x ambient scale (0 in true darkness), y muzzle falloff.
+// NPC flashes (world xyz, strength) use the lamp storage buffer.
+layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;} stereo;
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
 layout(std430,set=1,binding=1) readonly buffer ActorLights {ActorLighting actor[];} actors;
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[2];} lampGrid;
 
 layout(push_constant) uniform ViewState {
  vec4 eyeYaw;
@@ -182,9 +182,9 @@ void main(){
   // eases so a shot lights the whole room for an instant. Opaque surfaces
   // with per-pixel lamps are lit in the fragment shader (a vertex misses big quads).
   if(lampGrid.flags.x==0||surface.z>=0.5||lighting.x>=1.5)for(int flash=0;flash<3;++flash){
-   float strength=flash==0?view.effects.y:stereo.flashes[flash-1].w;
+   float strength=flash==0?view.effects.y:lampGrid.flashes[flash-1].w;
    if(strength<=0.0)continue;
-   vec3 muzzle=flash==0?eye+forwardWorld*0.42-vec3(0,0,0.10):stereo.flashes[flash-1].xyz;
+   vec3 muzzle=flash==0?eye+forwardWorld*0.42-vec3(0,0,0.10):lampGrid.flashes[flash-1].xyz;
    vec3 toPoint=vertexPos-muzzle;
    float d2=dot(toPoint,toPoint);
 

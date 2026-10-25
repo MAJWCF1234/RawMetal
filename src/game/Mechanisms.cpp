@@ -9,12 +9,12 @@ constexpr float TerminalVoiceRadius=1.5f;
 // Integer hash to [0,1): lamp flicker and torch sputter are pure functions of
 // time, so every view, capture and replay of a moment agrees.
 float lightNoise(std::uint32_t h){h^=h>>16;h*=0x7feb352du;h^=h>>15;h*=0x846ca68bu;h^=h>>16;return float(h&0xffffffu)/16777216.f;}
-std::uint32_t timeSlot(double t,double rate){return std::uint32_t(std::int64_t(std::floor(t*rate)));}
+std::uint32_t timeSlot(double t,double rate){double slot=std::fmod(std::floor(t*rate),4294967296.0);if(slot<0)slot+=4294967296.0;return std::uint32_t(slot);}
 }
 bool Game::lampSwitchedOn(const WorldLight& lamp)const{bool on=!lamp.enabledState||state(lamp.enabledState)==lamp.enabledValue;return lamp.invert?!on:on;}
 float Game::lampPower(const WorldLight& lamp)const{
  if(!lampSwitchedOn(lamp))return 0.f;
- if(lamp.period>0){float t=std::fmod(m_elapsed+lamp.phase,lamp.period);if(t<0)t+=lamp.period;if(t>=lamp.onTime)return 0.f;}
+ if(lamp.period>0){double t=std::fmod(double(m_elapsed)+lamp.phase,double(lamp.period));if(t<0)t+=lamp.period;if(t>=lamp.onTime)return 0.f;}
  if(lamp.flicker<=0)return 1.f;
  // A failing tube: mostly on, with stretches of rapid off-blinks between dark,
  // a buzzing dim and full, brownout holds, and at high flicker whole drop-outs.

@@ -13,7 +13,7 @@ layout(push_constant) uniform PostParams {
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 outColor;
 // Per-pixel lamp grid and cube shadow maps (see scene.frag), for shafts.
-layout(std430,set=0,binding=1) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 lamps[512];uint cells[];} lampGrid;
+layout(std430,set=0,binding=1) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[2];vec4 lamps[512];uint cells[];} lampGrid;
 layout(set=0,binding=2) uniform sampler2DArrayShadow lampShadows;
 const vec3 ShadowFace[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
 const vec3 ShadowUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,1,0),vec3(0,1,0));

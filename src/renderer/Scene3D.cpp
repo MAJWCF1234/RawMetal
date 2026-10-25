@@ -280,7 +280,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  hashLightSource(w.lights().size());
  for(const auto&light:w.lights())if(!(w.hasLift()&&&light==&w.lights().back())){
   hashLightSource(static_cast<std::uint64_t>(light.mount));
-  for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range})hashLightSource(std::bit_cast<std::uint32_t>(value));
+  for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range,light.kelvin,light.tint})hashLightSource(std::bit_cast<std::uint32_t>(value));
  }
  if(m_chunkLightSourceKeys[w.level()]!=fixedLightSourceKey){
   m_chunkLightSourceKeys[w.level()]=fixedLightSourceKey;m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_chunkLightCells[w.level()].clear();m_chunkLightCounts[w.level()]=0;
@@ -300,14 +300,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  // Switchable lamps (state, timer, flicker) never enter a baked value: each
  // keeps its unpowered contribution beside the cache and is scaled by its power
- // per frame. A static bake without per-pixel lamps takes the state gate only
- // and keys the chunk on it (one rebuild per switch). True darkness removes
- // the ambient fill and its floor the same way.
- const float darkness=game.darkness(),bakedDarkness=darkness>=.5f?1.f:0.f;
+ // per frame. Vulkan uses per-pixel lamps for these maps; the CPU fallback
+ // scales the cached contributions directly. Darkness removes only ambient.
+ const float darkness=game.darkness();
  std::vector<float> lampPowers(w.lights().size(),1.f);std::vector<std::uint8_t> lampSwitchable(w.lights().size(),0);bool anySwitchable=false;
  for(size_t i=0;i<w.lights().size()&&i<2000;++i){const auto&light=w.lights()[i];if(!light.switchable()||(w.hasLift()&&i+1==w.lights().size()))continue;lampSwitchable[i]=1;anySwitchable=true;lampPowers[i]=game.lampPower(light);}
- auto lampPower=[&](size_t source){return !lampSwitchable[source]?1.f:m_staticGeometryBuild?(game.lampSwitchedOn(w.lights()[source])?1.f:0.f):lampPowers[source];};
- auto ambientDarkness=[&]{return m_staticGeometryBuild?(m_pixelLighting?0.f:bakedDarkness):darkness;};
+ auto lampPower=[&](size_t source){return lampPowers[source];};
+ auto ambientDarkness=[&]{return m_staticGeometryBuild?0.f:darkness;};
  constexpr std::uint64_t AmbientTag=1ull<<53;auto lampTag=[](size_t source){return std::uint64_t(source+2)<<53;};
  // Bin lights in 4 m cells; a stacked map must not scan every storey's lamps
  // for each surface sample. The radius test below remains the exact filter.
@@ -730,9 +729,6 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Authored lamp power may change independently of the map/session. Use exact
   // float bits so even a small power change refreshes emission and baked light.
   hash(fixedLightSourceKey);
-  // Without per-pixel lamps the bake holds lamp light: key it on the switch
-  // states and on darkness, so either change rebuilds once, never per flicker.
-  if(!m_pixelLighting&&(anySwitchable||bakedDarkness>0)){hash(bakedDarkness>0?3:2);for(size_t i=0;i<w.lights().size();++i)if(lampSwitchable[i])hash(game.lampSwitchedOn(w.lights()[i])?1:0);}
   buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
   geometryKey=key;
  }
@@ -2149,7 +2145,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float x=beamLight.position.x,y=beamLight.position.y,bottom=w.floorHeight(x,y)+.08f,top=std::min(beamLight.z,w.clearanceAbove(x,y,bottom)-.04f);
    if(top-bottom<1.f||top-bottom>10.f||!sphereVisible({x,y,(bottom+top)*.5f},top-bottom))continue;
    float inv=1.f/std::sqrt(std::max(.0001f,dx*dx+dy*dy)),ux=-dy*inv,uy=dx*inv,wide=.72f,fixtureHalfWidth=.42f;
-   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*fixtureHalfWidth,y+uy*fixtureHalfWidth,top},{x-ux*fixtureHalfWidth,y-uy*fixtureHalfWidth,top},dust,1.6f);
+   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*fixtureHalfWidth,y+uy*fixtureHalfWidth,top},{x-ux*fixtureHalfWidth,y-uy*fixtureHalfWidth,top},dust,1.6f*lampPower(size_t(&beamLight-w.lights().data())));
    if(++beams==6)break;
   }
  }
@@ -2264,7 +2260,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    if(len>.00001f)n=n*(1.f/len);if(n.x*face.v[0].p.x+n.y*face.v[0].p.y+n.z*face.v[0].p.z>0)n=n*-1.f;
    float light=roomAmbient;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::max(0.f,n.x*l.x+n.y*l.y+n.z*l.z);}
-   const float flashWindow=.08f+.06f*darkness;light+=(game.shotAge()<flashWindow?(.8f+.8f*darkness)*(1-game.shotAge()/flashWindow):0);
+   light+=game.muzzleFlash()*.65f;
    for(auto&v:face.v)v.light=std::clamp(light,.10f*handFloor,2.5f);
    triangle3D(face.v[0],face.v[1],face.v[2],texture,1.f,&roomLights);
   }
@@ -2288,7 +2284,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto point=[&](Point3 p){p=assembly(fists?p:animated(p));return m_inspectRig?inspectionPoint(p):p;};
   auto tri=[&](Point3 a,Point3 b,Point3 c,const Texture&texture,float emission=0.f){
    a=point(a);b=point(b);c=point(c);auto normal=unit(cross3(b-a,c-a));
-   float light=roomAmbient+.18f;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
+   float light=roomAmbient+.18f*handFloor;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
    light=std::clamp(std::max(light,emission),.25f*handFloor,2.5f);
    triangle3D({a,0,0,light},{b,1,0,light},{c,1,1,light},texture,1.f,&roomLights);
   };

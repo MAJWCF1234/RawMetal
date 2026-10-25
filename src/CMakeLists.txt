@@ -33,6 +33,9 @@ set_target_properties(RawMetalHazmatImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "
 set_target_properties(RawMetalCreatureBake PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 set_target_properties(RawMetalClutterImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 file(GLOB_RECURSE RAWMETAL_ASSETS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
+# Dangling optional asset-directory links are returned as entries by the glob.
+# They are not resource files and otherwise force a full repack on every build.
+list(FILTER RAWMETAL_ASSETS EXCLUDE REGEX "/assets/(library|facility/freight)$")
 get_filename_component(RAWMETAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/packed")
 # Mirror the manifest into the build tree. configure_file tracks assets.rc by

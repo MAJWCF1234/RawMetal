@@ -1001,7 +1001,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  auto scene=[&]{bool parallel=!m_vrRendering&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
-   clear(rgb(12,16,18));
+   const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level))drawScene(game,false,level);
    if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection)drawViewModel(game);m_poseReady=false;
@@ -1026,7 +1026,16 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   }
   // Per-pixel lamps: every resident lamp in world space, in stable order so
   // shadow maps are reused until the set itself changes.
-  if(g_pixelLighting!=m_pixelLighting){m_pixelLighting=g_pixelLighting;m_chunkLighting={};m_chunkNormalLighting={};m_gpu->clearStaticCaches();}
+  // Animated authored lighting needs the per-frame lamp buffer even when the
+  // diagnostic vertex-bake option is selected. Keep this decision independent
+  // of power/state so switching never invalidates geometry or shadows.
+  bool pixelLighting=g_pixelLighting;
+  for(int level=0;level<game.chunkCount()&&!pixelLighting;++level){
+   if(level!=game.level()&&!game.chunkResident(level))continue;
+   const auto&chunk=game.chunkWorld(level);
+   pixelLighting=!chunk.darkZones().empty()||std::any_of(chunk.lights().begin(),chunk.lights().end(),[](const WorldLight&light){return light.switchable();});
+  }
+  if(pixelLighting!=m_pixelLighting){m_pixelLighting=pixelLighting;m_chunkLighting={};m_chunkNormalLighting={};m_gpu->clearStaticCaches();}
   // Switchable lamps keep their full intensity in the list (a stable key and
   // shadow maps) and their power goes in per frame beside it.
   {std::vector<std::array<float,7>> lamps;std::vector<float> powers;

@@ -351,8 +351,8 @@ struct GpuRenderer::Impl {
  int surfaceClientWidth=0,surfaceClientHeight=0;
  VkExtent2D mirrorExtent{};VkRenderPass mirrorPass=VK_NULL_HANDLE;VkPipeline mirrorPipeline=VK_NULL_HANDLE;std::vector<VkImageView> mirrorViews;std::vector<VkFramebuffer> mirrorFrames;std::uint64_t mirrorPresented=0;
  // Stereo block: clip, enabled, fog powers, then darkness (ambient scale, muzzle
- // falloff) and two NPC gun flashes (world xyz, strength) for scene.vert.
- bool vrMode=false;int vrEye=0;std::array<Image,2> vrOutputs{};std::array<float,36> vrProjection=[]{std::array<float,36> v{};v[24]=1.f;v[25]=.045f;return v;}();VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
+ // falloff). NPC gun flashes live in the per-frame lamp storage buffer.
+ bool vrMode=false;int vrEye=0;std::array<Image,2> vrOutputs{};std::array<float,28> vrProjection=[]{std::array<float,28> v{};v[24]=1.f;v[25]=.045f;return v;}();VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
  VkCommandPool pool=VK_NULL_HANDLE;
  // Two frames in flight: CPU prepares frame N while GPU renders frame N-1.
  // Each slot owns its command buffer, fence, dynamic vertex buffer, overlay
@@ -441,7 +441,7 @@ struct GpuRenderer::Impl {
  // geometry near it is rebuilt or the resident lamp set changes.
  static constexpr int MaxLamps=256,LampsPerCell=16,MaxLampCells=16384;static constexpr uint32_t ShadowSize=256;
  // eye/basis: the scene camera, rewritten every frame for the post stages.
- struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];};
+ struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[8];};
  // Sun cascades: three 2048x2048 D16 layers redrawn every frame from the
  // static caches (they follow the camera), sampled with hardware comparison.
  static constexpr uint32_t SunSize=2048;static constexpr int SunCascades=3;
@@ -482,7 +482,7 @@ struct GpuRenderer::Impl {
  // shadow maps stay, and the upload is the 8 KB record block, not the grid.
  std::vector<float> lampPowers;uint64_t lampPowerGeneration=1;std::array<uint64_t,FrameCount> lampPowerUploaded{};
  // True darkness (0..1): exposure ceiling and grade lift follow it.
- float darkness=0;
+ float darkness=0;std::array<std::array<float,4>,2> weaponFlashes{};
  // lampDirty: 0 current, 1 stale (geometry nearby rebuilt), 2 never drawn.
  std::vector<std::array<float,7>> lamps;std::vector<uint8_t> lampDirty;std::vector<std::array<float,6>> shadowDirtyBounds;
  Image shadowAtlas;std::vector<VkImageView> shadowLayerViews;std::vector<VkFramebuffer> shadowFrames;int shadowCapacity=0;bool shadowLayoutReady=false,shadowAtlasFresh=true;
@@ -1150,8 +1150,16 @@ void GpuRenderer::endStaticCache(){
 void GpuRenderer::setLamps(const std::vector<std::array<float,7>>&input,bool enabled,int detail){
  size_t count=std::min(input.size(),size_t(Impl::MaxLamps));
  uint64_t key=1469598103934665603ull;auto mix=[&](uint32_t value){key^=value;key*=1099511628211ull;};mix(enabled?1u:0u);mix(uint32_t(detail));mix(uint32_t(count));
- for(size_t i=0;i<count;++i)for(float value:input[i])mix(std::bit_cast<uint32_t>(value));
- if(key==m->lampKey)return;
+ // Intensity is a record update, never shadow/grid identity. The lamp set
+ // depends only on its pose, range and colour (plus renderer configuration).
+ for(size_t i=0;i<count;++i)for(size_t k=0;k<7;++k)if(k!=4)mix(std::bit_cast<uint32_t>(input[i][k]));
+ if(key==m->lampKey){
+  bool changed=false;for(size_t i=0;i<count;++i)if(input[i][4]!=m->lamps[i][4]){
+   m->lamps[i][4]=input[i][4];float intensity=input[i][4]*m->lampPowers[i];
+   std::memcpy(m->lampData.data()+sizeof(Impl::LampHeader)+i*32+16,&intensity,4);changed=true;
+  }
+  if(changed)++m->lampPowerGeneration;return;
+ }
  m->lampKey=key;m->pixelLighting=enabled;m->lamps.assign(input.begin(),input.begin()+std::ptrdiff_t(count));m->lampDirty.assign(count,uint8_t(2));m->lampPowers.assign(count,1.f);
  if(enabled&&int(count)>m->shadowCapacity)m->createShadowAtlas(int((count+15)/16*16));
  // World-space grid; each cell keeps the 16 lamps that can light it most.
@@ -1192,7 +1200,7 @@ void GpuRenderer::setLampPowers(const std::vector<float>& powers){
 }
 void GpuRenderer::setDarkness(float darkness,float muzzleFalloff,const std::array<std::array<float,4>,2>& flashes){
  m->darkness=std::clamp(darkness,0.f,1.f);m->vrProjection[24]=1.f-m->darkness;m->vrProjection[25]=muzzleFalloff;
- for(size_t i=0;i<2;++i)for(size_t k=0;k<4;++k)m->vrProjection[28+i*4+k]=flashes[i][k];
+ m->weaponFlashes=flashes;
 }
 std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
 void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
@@ -1340,6 +1348,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  else if(m->lampPowerUploaded[m->frameIndex]!=m->lampPowerGeneration&&m->lampData.size()>=sizeof(Impl::LampHeader)+size_t(Impl::MaxLamps)*32){std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+sizeof(Impl::LampHeader),m->lampData.data()+sizeof(Impl::LampHeader),size_t(Impl::MaxLamps)*32);m->lampPowerUploaded[m->frameIndex]=m->lampPowerGeneration;}
  {const auto&v=m->viewState;float camera[8]={v[0],v[1],v[2],v[10],v[3],v[4],v[5],v[6]};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,eye),camera,sizeof(camera));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,sun),m->sunData.data(),sizeof(m->sunData));
+   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flashes),m->weaponFlashes.data(),sizeof(m->weaponFlashes));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));}
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
