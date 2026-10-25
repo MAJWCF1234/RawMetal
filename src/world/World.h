@@ -283,8 +283,12 @@ public:
     // Where the way on lies: the transfer door, else the open seam onward.
     Vec2 exitPoint()const{
      for(const auto& door:m_doors)if(door.transfer)return {(door.left+door.right)*.5f,std::min(door.y+1.f,23.5f)};
-     if(m_openSouthBoundary)return {12.f,23.f};if(m_openEastBoundary)return {23.f,12.f};
-     if(m_openNorthBoundary)return {12.f,1.f};if(m_openWestBoundary)return {1.f,12.f};
+     // An open seam: the opening nearest the middle of that edge (seams need
+     // not be centred).
+     auto open=[&](bool alongX,int fixed,Vec2 fallback){for(int d=0;d<12;++d)for(int k:{12+d,11-d}){int x=alongX?k:fixed,y=alongX?fixed:k;
+      if(k>=0&&k<24&&tile(x,y)!='#')return alongX?Vec2{k+.5f,fixed==23?23.f:1.f}:Vec2{fixed==23?23.f:1.f,k+.5f};}return fallback;};
+     if(m_openSouthBoundary)return open(true,23,{12.f,23.f});if(m_openEastBoundary)return open(false,23,{23.f,12.f});
+     if(m_openNorthBoundary)return open(true,0,{12.f,1.f});if(m_openWestBoundary)return open(false,0,{1.f,12.f});
      return {21.5f,22.5f};}
     const std::vector<WorldProp>& props()const{return m_props;}
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}

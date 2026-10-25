@@ -53,7 +53,7 @@ bool Game::testCampaignMaps(){
   operate(power,36,{12,2.9f},-28);
   operate(power,40,{19,19.9f},-19);
   check(!power.state("pwr_sub_a")&&!power.state("pwr_feeder9"),"Power controls refuse out-of-order breaker and feeder operation");
-  operate(power,39,{13,5.9f},-28);operate(power,36,{12,2.9f},-28);
+  operate(power,39,{17.9f,6.f},-28,0.f);operate(power,39,{13.f,12.7f},-28);operate(power,39,{13,5.9f},-28);operate(power,36,{12,2.9f},-28);
   check(power.state("pwr_gen_online")&&power.state("pwr_sub_a"),"Physical E controls restore emergency generation and Substation A");
   Game restored;check(restored.decodeSave(power.encodeSave())&&restored.state("pwr_sub_a"),"Black-start progress survives save/load before load transfer");
   operate(restored,40,{12,19.9f},-19);
