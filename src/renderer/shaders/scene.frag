@@ -352,6 +352,9 @@ void main(){
   vec3 Ng=normalize(cross(dx,dy));if(dot(Ng,V)<0.0)Ng=-Ng;
   // A canopy is lit like a rounded mass, not like the flat card drawing it.
   if(impostorQuad){float c=cos(light1.y),s=sin(light1.y);Ng=normalize(vec3(impostorNormal.x*c+impostorNormal.y*s,-impostorNormal.x*s+impostorNormal.y*c,impostorNormal.z));}
+  // Foliage meshes (the real side of an impostor pair): thin two-sided cards
+  // light as a soft rounded mass, mostly up and a little toward the eye.
+  else if(lodDistance>0.0)Ng=normalize(Ng*0.35+vec3(0.0,0.0,0.85)+V*0.3);
   vec3 N=Ng;
   if((lighting.w>0.5||detailAmount>0.001)&&tangentFrameValid){
    vec3 T=normalize(tangent-Ng*dot(Ng,tangent));

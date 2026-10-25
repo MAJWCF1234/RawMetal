@@ -119,7 +119,7 @@ vec3 zoneSkyColor(vec3 dir){
  cloudColor+=sunCol*pow(cosSun,12.0)*(1.0-cloud)*1.4;
  sky=mix(sky,cloudColor,cloud*0.96);
  // Slight overcast: a thin high veil softens the blue and the sun.
- sky=mix(sky,vec3(0.80,0.81,0.82),0.12*smoothstep(-0.02,0.4,up));
+ sky=mix(sky,vec3(0.80,0.81,0.82),0.08*smoothstep(-0.02,0.4,up));
  float sunCloud=0.0;{float t;sunCloud=zoneCloud(sunDir,t);}
  sky+=sunCol*(2.6*smoothstep(0.99955,0.99975,dot(dir,sunDir)))*(1.0-0.9*sunCloud);
  return sky;
@@ -168,7 +168,7 @@ float sunShafts(vec2 sunUV){
 // Low steam: exponential height fog over the valley floor, broken into slowly
 // drifting wisps, integrated in closed form along the view ray.
 float steamAmount(vec3 dir,float rayLength){
- const float base=4.2,height=1.5,density=0.012;
+ const float base=4.2,height=1.4,density=0.006;
  vec3 eye=lampGrid.eye.xyz;float time=lampGrid.eye.w;
  float L=min(rayLength,140.0),dz=dir.z*L;
  float column=abs(dz)>0.001?height*(1.0-exp(-dz/height))/dz:1.0;

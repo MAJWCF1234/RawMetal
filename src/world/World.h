@@ -27,7 +27,8 @@ struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSiz
 // core: the fraction of the footprint that collides when solid (a tree blocks
 // at its trunk, not across its canopy); 1 for ordinary furniture and plant.
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;float core=1;};
-enum class WorldLightMount { Ceiling, Wall };
+// Bare: a light with no housing (a fire, a lamp head that already has its model).
+enum class WorldLightMount { Ceiling, Wall, Bare };
 struct WorldLight {
  Vec2 position;float z;
  // Ceiling records retain the original source and fixture placement. For a
@@ -151,6 +152,10 @@ struct TerrainShape {
     // Any GROUND record turns on painted cover: a noise meadow of grass, clover,
     // wild and dry ground everywhere, then the rectangles in order.
     std::vector<GroundPaint> ground;
+    // HORIZON: unreachable land around the playable maps, rising `rise` metres
+    // over `depth` metres and wooded every `spacing` metres with these models
+    // (drawn only as Painterly Horizon LOD impostors).
+    float horizonDepth=0,horizonSpacing=6,horizonRise=0;std::vector<int> horizonModels;
 };
 struct AuthoredMapData {
     std::string name;
@@ -231,6 +236,10 @@ public:
     bool zoneSky()const{return m_mapData&&m_mapData->skybox=="zone_overcast";}
     // Painted ground cover at a world position, or -1 for the default terrain look.
     int groundKind(float worldX,float worldY)const;
+    // The authored terrain shape, or null; and its continuation past the zone
+    // edge (`outside` metres beyond it), rising toward the horizon hills.
+    const TerrainShape* terrainShape()const{return m_exclusionTerrain&&m_mapData?m_mapData->terrain.get():nullptr;}
+    float outskirtHeight(float worldX,float worldY,float outside)const;
     const char* skyboxId()const{return m_mapData?m_mapData->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
     const char* customMapName()const{return m_mapData?m_mapData->name.c_str():"";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}

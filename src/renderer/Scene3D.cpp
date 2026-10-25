@@ -731,7 +731,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   {
    static const char* const groundNames[GroundKinds]={"ground_shortgrass","ground_leafygrass","ground_clover","ground_wild","ground_dry","ground_litter","ground_gravel","ground_mud"};
    const auto origin=w.definition().origin;
-   int kind=az>=std::max(ax,ay)*1.35f?w.groundKind((a.p.x+b.p.x+c.p.x)/3+origin.x,(a.p.y+b.p.y+c.p.y)/3+origin.y):-1;
+   // Painted ground carries over small banks; only real rock (deep relief or
+   // high bluffs) shows stone, so one-metre steps read as grassy slopes.
+   int kind=(az>=std::max(ax,ay)*1.35f||face.material!=TerrainRock)?w.groundKind((a.p.x+b.p.x+c.p.x)/3+origin.x,(a.p.y+b.p.y+c.p.y)/3+origin.y):-1;
    int cover=0;
    if(kind>=0&&kind<=GroundWild&&!plantCover.empty()){int cx=int((a.p.x+b.p.x+c.p.x)/3),cy=int((a.p.y+b.p.y+c.p.y)/3);
     if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height)cover=plantCover[size_t(cy*World::Width+cx)];
@@ -748,6 +750,52 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   uv(a);uv(b);uv(c);
   // Flat triangle lighting preserves the block-authored faceting.
   tri(a,b,c,*terrainMaterial,(w.coast()?1.20f:.96f)*groundShade);
+ }
+ // Painterly Horizon: unreachable land past the zone edge. Each edge map draws
+ // the strip beyond its open sides (corners belong to corner maps): painted
+ // ground rising into hills, wooded with impostor-only trees. Everything is
+ // derived from world position, so neighbouring strips meet without seams.
+ if(w.hasTerrain()&&w.zoneSky()&&m_gpuFrame&&s_impostors)if(const auto* shape=w.terrainShape();shape&&shape->horizonDepth>0){
+  const auto origin=w.definition().origin;const float cell=6.f,depth=std::ceil(shape->horizonDepth/cell)*cell;
+  float minX=1e9f,minY=1e9f,maxX=-1e9f,maxY=-1e9f;
+  for(int level=0;level<game.chunkCount();++level){auto o=game.chunkOffset(level);minX=std::min(minX,o.x);minY=std::min(minY,o.y);maxX=std::max(maxX,o.x+World::Width);maxY=std::max(maxY,o.y+World::Height);}
+  const float x0=origin.x,y0=origin.y,x1=x0+World::Width,y1=y0+World::Height;
+  const float rx0=x0<=minX?minX-depth:x0,rx1=x1>=maxX?maxX+depth:x1,ry0=y0<=minY?minY-depth:y0,ry1=y1>=maxY?maxY+depth:y1;
+  auto outside=[&](float x,float y){float dx=std::max({minX-x,0.f,x-maxX}),dy=std::max({minY-y,0.f,y-maxY});return std::sqrt(dx*dx+dy*dy);};
+  auto ground=[&](float x,float y){return w.outskirtHeight(x,y,outside(x,y))-.25f;};
+  auto hash=[](int x,int y,unsigned salt){unsigned h=unsigned(x)*73856093u^unsigned(y)*19349663u^salt*83492791u;h^=h>>13;h*=0x5bd1e995u;h^=h>>15;return float(h&0xffffffu)/16777216.f;};
+  const Texture* cover[3]={&m_terrainDirt,&m_terrainDirt,&m_terrainDirt};
+  {const char* names[3]={"ground_leafygrass","ground_wild","ground_litter"};
+   for(int i=0;i<3;++i){auto found=m_facilityTextures.find(names[i]);if(found!=m_facilityTextures.end())cover[i]=&found->second;}}
+  objectLighting=true;
+  for(float gy=ry0;gy<ry1-.01f;gy+=cell)for(float gx=rx0;gx<rx1-.01f;gx+=cell){
+   float cx=std::min(gx+cell,rx1),cy=std::min(gy+cell,ry1);
+   if(gx>=minX&&cx<=maxX&&gy>=minY&&cy<=maxY)continue;
+   auto vertex=[&](float x,float y){return MeshVertex{{x-origin.x,y-origin.y,ground(x,y)},x*.28f,y*.28f};};
+   float distant=outside((gx+cx)*.5f,(gy+cy)*.5f)/depth,n=hash(int(gx),int(gy),11);
+   const Texture& t=*cover[distant>.35f?2:n<.6f?0:1];
+   MeshVertex a=vertex(gx,gy),b=vertex(cx,gy),c=vertex(cx,cy),d=vertex(gx,cy);
+   tri(a,b,c,t,.9f);tri(a,c,d,t,.9f);
+  }
+  objectLighting=false;
+  // Forest: one jittered candidate per spacing cell; dense near the edge,
+  // thinning toward the far hills.
+  const float spacing=shape->horizonSpacing;
+  for(float gy=std::floor(ry0/spacing)*spacing;gy<ry1;gy+=spacing)for(float gx=std::floor(rx0/spacing)*spacing;gx<rx1;gx+=spacing){
+   int ix=int(std::floor(gx/spacing)),iy=int(std::floor(gy/spacing));
+   float x=gx+hash(ix,iy,1)*spacing,y=gy+hash(ix,iy,2)*spacing;
+   if(x<rx0||x>=rx1||y<ry0||y>=ry1)continue;
+   float away=outside(x,y);if(away<1.5f||(x>=minX&&x<=maxX&&y>=minY&&y<=maxY))continue;
+   if(hash(ix,iy,3)>(away<depth*.4f?.95f:.55f))continue;
+   int model=shape->horizonModels.empty()?-1:shape->horizonModels[size_t(hash(ix,iy,4)*shape->horizonModels.size())%shape->horizonModels.size()];
+   const Impostor* impostor=model>=0?impostorFor(model):nullptr;if(!impostor)continue;
+   const auto&mesh=m_facilityMeshes[size_t(model)];float scale=.8f+.5f*hash(ix,iy,5),height=(mesh.maximum.y-mesh.minimum.y)*scale;
+   GpuRenderer::LodTag tag;tag.impostor=true;tag.lod=1;tag.half=impostor->radius*scale;tag.yaw=hash(ix,iy,6)*6.2831853f;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;
+   float lx=x-origin.x,ly=y-origin.y,z=ground(x,y)+.25f+height*.5f;tag.z=z;
+   m_gpu->setLodTag(&tag);objectLighting=true;
+   MeshVertex a{{lx-1,ly,z-1},-1,-1},b{{lx+1,ly,z-1},1,-1},c{{lx+1,ly,z+1},1,1},d{{lx-1,ly,z+1},-1,1};
+   tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;m_gpu->setLodTag(nullptr);
+  }
  }
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.
@@ -1058,7 +1106,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
  }
  for(const auto&light:w.lights()){
-  if(light.mount==WorldLightMount::Wall)continue;
+  if(light.mount!=WorldLightMount::Ceiling)continue;
   movingGeometry=w.hasLift()&&&light==&w.lights().back();
   if(cacheCeilingLamps&&!movingGeometry)continue;
   ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f);
@@ -1235,17 +1283,28 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  for(const auto& hazard:w.hazards())if((hazard.kind==Hazard::Kind::Anomaly||hazard.kind==Hazard::Kind::Fire)&&game.hazardActive(hazard)){
   static Texture mote=[](){Texture t{16,16,std::vector<uint32_t>(256)};t.clampEdges=true;
    for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/8,dy=(y-7.5f)/8,d=dx*dx+dy*dy;t.pixels[y*16+x]=d<.55f?0xffd8f4ffu:d<1?0xff7fc8e8u:0;}return t;}();
-  static Texture flame=[](){Texture t{16,32,std::vector<uint32_t>(512)};t.clampEdges=true;
-   for(int y=0;y<32;++y)for(int x=0;x<16;++x){float v=y/31.f,w=(1-v)*.9f+.1f,dx=std::fabs(x-7.5f)/8;
-    t.pixels[y*16+x]=dx<w*.55f?0xfffff0a0u:dx<w?(v<.5f?0xffff8a1cu:0xffd8401au):0;}return t;}();
+  // A soft additive tongue (base on the last row: quads map their bottom edge
+  // to v=1): white-yellow core, orange body, dark red edge,
+  // fading out at the tip; black is transparent under additive blending.
+  static Texture flame=[](){Texture t{32,64,std::vector<uint32_t>(2048)};t.clampEdges=true;t.additive=true;
+   for(int y=0;y<64;++y)for(int x=0;x<32;++x){float v=1-y/63.f,u=std::fabs(x-15.5f)/16,width=std::pow(1-v,.65f)*.92f+.04f;
+    float body=std::clamp(1-u/width,0.f,1.f);body=body*body*(3-2*body)*std::pow(1-v,.45f);
+    float heat=std::clamp(body*1.35f-.1f,0.f,1.f);
+    float r=body*(.55f+.45f*heat),g=body*(.12f+.75f*heat*heat),b=body*.55f*heat*heat*heat;
+    auto c=[](float value){return std::uint32_t(std::clamp(value,0.f,1.f)*255.f+.5f);};
+    t.pixels[y*32+x]=0xff000000u|(c(r)<<16)|(c(g)<<8)|c(b);}return t;}();
   Point3 side{-std::sin(player.angle),std::cos(player.angle),0},c{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f,hazard.bottom};
   float r=std::min(hazard.x2-hazard.x1,hazard.y2-hazard.y1)*.5f,t=game.elapsed();
   if(hazard.kind==Hazard::Kind::Anomaly){
    for(int i=0;i<18;++i){float k=std::fmod(i*.618f,1.f),a=t*(1.1f+k*.9f)+i*2.4f,d=r*(.2f+.75f*k),h=.15f+std::fmod(t*.3f+k,1.f)*1.8f,sz=.05f+.07f*k;
     Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+h},up{0,0,sz};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,mote,2.4f);}
   }else{
-   for(int i=0;i<9;++i){float age=std::fmod(t*1.3f+i/9.f,1.f),a=i*2.1f+t*.7f,d=r*.35f*(1-age),h=age*.9f,sz=(.32f*(1-age)+.08f)*std::min(1.f,r*1.6f);
-    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+h+sz},up{0,0,sz*1.6f};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,flame,2.6f);}
+   // One tall body flame, then tongues that lick up from the embers and shrink.
+   float scale=std::min(1.f,r*2.f),body=(.34f+.04f*std::sin(t*9.f)+.03f*std::sin(t*23.f))*scale;
+   {Point3 p{c.x,c.y,c.z+.16f},up{0,0,body*2.7f};quad(p-side*body,p+side*body,p+side*body+up,p-side*body+up,flame,2.f);}
+   for(int i=0;i<12;++i){float age=std::fmod(t*1.6f+i/12.f,1.f),a=i*2.1f+t*.7f,d=r*.5f*(1-age),h=age*.45f;
+    float flicker=.85f+.15f*std::sin(t*13.f+i*1.7f),sz=(.24f*(1-age)+.07f)*scale*flicker;
+    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+.16f+h},up{0,0,sz*2.6f};quad(p-side*sz,p+side*sz,p+side*sz+up,p-side*sz+up,flame,2.2f);}
    for(int i=0;i<6;++i){float age=std::fmod(t*.6f+i/6.f,1.f),a=i*1.7f;Point3 p{c.x+std::cos(a)*r*.3f+age*.2f,c.y+std::sin(a)*r*.3f,c.z+.4f+age*2.2f},up{0,0,.025f};
     quad(p-side*.025f-up,p+side*.025f-up,p+side*.025f+up,p-side*.025f+up,flame,2.8f);}
   }
@@ -1254,9 +1313,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=dx*dx+dy*dy;unsigned noise=unsigned(x+y*32+1)*747796405u+2891336453u;noise=((noise>>((noise>>28)+4))^noise)*277803737u;noise=((noise>>22)^noise)&255u;
     t.pixels[y*32+x]=d<1&&noise<190*(1-d)?0xff7f8e91u:0;}return t;}();
+  // The open zone's smoke is soft and blended, fading as each puff rises.
+  static const std::array<Texture,4> smoke=[](){std::array<Texture,4> result;
+   for(int k=0;k<4;++k){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;t.transparent=true;
+    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=std::sqrt(dx*dx+dy*dy),a=std::clamp(1-d,0.f,1.f);
+     t.pixels[y*32+x]=(std::uint32_t(a*a*150.f*(1-k*.24f))<<24)|0x8a8d8eu;}result[size_t(k)]=std::move(t);}return result;}();
+  const bool softSmoke=w.zoneSky();
   Point3 side{-std::sin(player.angle),std::cos(player.angle),0};
   for(int i=0;i<emitter.count;++i){float age=std::fmod(game.elapsed()*emitter.rate+float(i)/emitter.count,1.f),radius=emitter.radius+age*emitter.growth;Point3 p{emitter.position.x+age*emitter.drift.x,emitter.position.y+age*emitter.drift.y,emitter.z+age*emitter.rise},up{0,0,radius};
-   quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,steam,.9f);}
+   quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,softSmoke?smoke[size_t(std::min(3,int(age*4)))]:steam,.9f);}
  }
  if(w.campaign()&&w.hasLift()){
   // The shaft, cab and the hazmat casualty belong to every lift map.

@@ -114,7 +114,8 @@ class Zone:
         self.maps[(cx, cy)]['structs'].append((x1 - ox, y1 - oy, x2 - ox, y2 - oy, bottom, top, rail, material))
 
     def light(self, x, y, z, intensity=1.5, rng=9.0, kelvin=3000, tint=0.0):
-        m, lx, ly = self.local(x, y); m['lights'].append((lx, ly, z, 0, 0, intensity, rng, kelvin, tint))
+        # Mount 2 (bare): outdoor lights belong to fires and lamp heads, never a ceiling fitting.
+        m, lx, ly = self.local(x, y); m['lights'].append((lx, ly, z, 2, 0, intensity, rng, kelvin, tint))
 
     def creature(self, kind, x, y):
         m, lx, ly = self.local(x, y); m['creatures'].append((kind, lx, ly, 0))
@@ -208,16 +209,9 @@ def build(z):
     W, H = ZONE_W * CHUNK, ZONE_H * CHUNK
     # --- The cordon: hills climb to every edge, a concrete fence on the crest. -------
     for (x1, y1, x2, y2) in [(0, 0, W, 2), (0, H - 2, W, H), (0, 0, 2, H), (W - 2, 0, W, H)]:
-        t.flat(x1, y1, x2, y2, 11, 14)
-    # Textured concrete wall panels, 4 m each, along the crest.
-    for i in range(int(W // 4)):
-        x = i * 4 + 2
-        z.model('ind_wall', x, .45, yaw=0, solid=True, sx=.995)
-        z.model('ind_wall', x, H - .45, yaw=PI, solid=True, sx=.995)
-    for i in range(int(H // 4)):
-        y = i * 4 + 2
-        z.model('ind_wall', .45, y, yaw=PI / 2, solid=True, sx=.995)
-        z.model('ind_wall', W - .45, y, yaw=-PI / 2, solid=True, sx=.995)
+        t.flat(x1, y1, x2, y2, 7.5, 12)
+    # No wall: the outer map borders are closed, and an edge belt of forest
+    # (and wasteland on the industrial north-east) reads as impassable.
     # --- Roads -----------------------------------------------------------------------------------
     roads = [(6, 79, 42, 84), (40, 50, 45, 84), (40, 50, 76, 55), (71, 18, 76, 55), (44, 12, 76, 17)]
     # Ground cover under the places, before the roads so the tracks cross them.
@@ -263,6 +257,8 @@ def build(z):
     z.model('cottage', 8.2, 89, yaw=0, scale=.55)
     z.model('bus_wreck', 18, 92.3, yaw=0)
     z.hazard(4, cx0 + 1.5, cy0 - 1, .5, 6, top=1.2)  # the camp fire
+    for yaw in (.3, 1.9, 3.4):  # its log pile
+        z.model('log', cx0 + 1.5, cy0 - 1, yaw=yaw, scale=.32, solid=False)
     z.emitter(cx0 + 1.5, cy0 - 1, .4, (.25, .15), 3.2, .3, .14, .7, 9)
     z.light(cx0 + 1.5, cy0 - 1, .9, 3.2, 12, 1900, .25)
     for a in range(5):
@@ -446,6 +442,7 @@ def build(z):
         z.model('grass_b' if i % 2 else 'wheat', px_ + math.cos(a) * r, py_ + math.sin(a) * r * .75, yaw=i, solid=False, scale=1.2)
     z.creature(1, px_ - 3, py_); z.creature(1, px_ + 4, py_ + 2); z.creature(1, px_, py_ - 3)
     z.zone_name(4, 36, 30, 56, 'SWAMP')
+    creek(z, t, pond)
     # ================================================================================
     # 10. ANOMALY FIELD (centre).
     ax, ay = 58, 30
@@ -499,7 +496,90 @@ def build(z):
     z.objective((10, 85), 'zone_obj_pda', "Find the courier's PDA at the fuel station")
     z.objective((10, 85), 'zone_obj_tower', 'Reach the radio tower on the east ridge and transmit')
     z.objective((10, 85), 'zone_obj_out', 'Transmission sent. Survive the Zone')
+    edge_belt(z)
     scatter(z)
+
+
+def creek(z, t, pond):
+    """A creek from a spring in the pines down to the swamp pond: a gentle
+    channel at pond level, water in 1 m rows, reeds and tall grass on the banks."""
+    path = [(30, 8), (27.5, 14), (24.5, 20), (21.5, 27), (19, 33), (17.2, 39), (16, 43)]
+    bed, surface = pond + .5 - .1, pond + .5 + .55
+    def distance(x, y):
+        best = 1e9
+        for (ax, ay), (bx, by) in zip(path, path[1:]):
+            dx, dy = bx - ax, by - ay
+            u = max(0, min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)))
+            best = min(best, math.hypot(x - ax - u * dx, y - ay - u * dy))
+        return best
+    samples = []
+    for (ax, ay), (bx, by) in zip(path, path[1:]):
+        n = max(1, int(math.hypot(bx - ax, by - ay) / 2.2))
+        samples += [(ax + (bx - ax) * i / n, ay + (by - ay) * i / n) for i in range(n)]
+    samples.append(path[-1])
+    for (x, y) in samples:
+        t.flat(x - 1.3, y - 1.3, x + 1.3, y + 1.3, pond, 3.5)
+        z.clear(x, y, 2.6)
+    # Water rows: each 1 m row of cells within 1.5 m of the line, merged into runs.
+    rows = {}
+    for y in range(int(min(p[1] for p in path)) - 2, int(max(p[1] for p in path)) + 3):
+        run = None
+        for x in range(0, 60):
+            inside = distance(x + .5, y + .5) < 1.5 and not (9.5 <= x + .5 <= 22.5 and 40.5 <= y + .5 <= 51.5)
+            if inside and run is None:
+                run = x
+            if not inside and run is not None:
+                z.water.append((run, y, x, y + 1, bed, surface)); run = None
+        if run is not None:
+            z.water.append((run, y, 60, y + 1, bed, surface))
+    # Banks: reeds (tall grass), goldenrod and bracken just outside the water.
+    rnd = random.Random(77)
+    for (x, y) in samples:
+        for _ in range(7):
+            a = rnd.uniform(0, 2 * PI); d = rnd.uniform(1.9, 3.4)
+            bx, by = x + math.cos(a) * d, y + math.sin(a) * d
+            if distance(bx, by) > 1.8:
+                z.model(rnd.choice(['tall_grass_l', 'tall_grass_l', 'tall_grass_m', 'goldenrod', 'bracken', 'dogbane']), bx, by,
+                        yaw=rnd.uniform(0, 2 * PI), scale=rnd.uniform(1.0, 1.5), solid=False)
+    z.model('rock_mossy', 31.2, 7.2, yaw=.4, scale=1.3)  # the spring's stones
+    z.model('rock_mid', 28.8, 6.6, yaw=2.0, scale=1.1)
+
+
+def edge_belt(z):
+    """Dense trees, deadfall and undergrowth in the outer 6 m of the zone,
+    rubble and dead wood where the industrial zone meets the edge."""
+    rnd = random.Random(404)
+    W, H = ZONE_W * CHUNK, ZONE_H * CHUNK
+
+    def open_ground(x, y, r):
+        if z.on_road(x, y, 1.0) or z.blocked(x, y, r):
+            return False
+        return all(math.hypot(x - cx, y - cy) >= cr + r for (cx, cy, cr) in z.keep_clear if cr > 0)
+    perimeter = []
+    for i in range(int(W / 2.1)):
+        perimeter += [(i * 2.1 + 1, 0, 0, 1), (i * 2.1 + 1, H, 0, -1)]
+    for i in range(int(H / 2.1)):
+        perimeter += [(0, i * 2.1 + 1, 1, 0), (W, i * 2.1 + 1, -1, 0)]
+    for (ex, ey, nx, ny) in perimeter:
+        for band in (.7, 2.4, 4.1, 5.8):
+            x = ex + nx * (band + rnd.uniform(-.5, .5)) + ny * rnd.uniform(-.9, .9)
+            y = ey + ny * (band + rnd.uniform(-.5, .5)) + nx * rnd.uniform(-.9, .9)
+            if not (.4 < x < W - .4 and .4 < y < H - .4) or not open_ground(x, y, .6):
+                continue
+            waste = x > 76 and y < 34
+            k = rnd.random()
+            if waste:
+                name = 'dead_tree_a' if k < .3 else 'dead_tree_b' if k < .55 else 'rock_big' if k < .7 else 'brick_pile' if k < .82 else 'rock_mid' if k < .92 else 'ind_barrel'
+            else:
+                name = 'pine_a' if k < .25 else 'pine_b' if k < .45 else 'leafy_a' if k < .58 else 'leafy_b' if k < .7 else 'aspen_b' if k < .8 else 'oak_b' if k < .88 else 'fallen_pine' if k < .93 else 'rock_mossy'
+            tree = name.startswith(('pine', 'leafy', 'aspen', 'oak', 'dead_tree'))
+            z.model(name, x, y, yaw=rnd.uniform(0, 2 * PI), scale=rnd.uniform(.9, 1.35), core=.12 if tree else 1)
+            # Undergrowth closes the gaps between trunks.
+            for _ in range(2):
+                ux, uy = x + rnd.uniform(-1.2, 1.2), y + rnd.uniform(-1.2, 1.2)
+                if .3 < ux < W - .3 and .3 < uy < H - .3 and not z.on_road(ux, uy, 1.0):
+                    under = ('grass_l', 'tall_grass_m', 'grass_c') if waste else ('bush_a', 'bush_c', 'fern_big', 'bracken', 'tall_grass_l', 'sumac')
+                    z.model(rnd.choice(under), ux, uy, yaw=rnd.uniform(0, 2 * PI), scale=rnd.uniform(.9, 1.4), solid=False)
 
 
 # ---------------------------------------------------------------------------
@@ -567,11 +647,11 @@ def scatter(z):
             z.model(pick(TREES[b]), x, y, yaw=rnd.uniform(0, 2 * PI), scale=rnd.uniform(.75, 1.15), core=.1)
             taken.append((x, y, 1.6)); trees -= 1
         # Plant patches: dense clusters of one mix, scattered tufts between.
-        for _ in range({2: 9, 1: 11, 0: 13}[b]):
+        for _ in range({2: 10, 1: 16, 0: 20}[b]):
             px, py = ox + rnd.uniform(1, 23), oy + rnd.uniform(1, 23)
             mix = pick([(m, w) for m, w in PATCHES[b]])
-            radius = rnd.uniform(1.6, 3.4)
-            for _ in range(int(radius * radius * 2.2)):
+            radius = rnd.uniform(1.8, 3.8)
+            for _ in range(int(radius * radius * 2.6)):
                 ang, d = rnd.uniform(0, 2 * PI), radius * math.sqrt(rnd.random())
                 x, y = px + math.cos(ang) * d, py + math.sin(ang) * d
                 if not free(x, y, .15):
@@ -618,6 +698,7 @@ def write(z, stats=False):
     lines.append('TERRAIN|%d|%s|%s|%s|%s' % (t.seed, fmt(t.base), fmt(t.amplitude), fmt(t.scale), fmt(t.roughness)))
     for f in t.flats:
         lines.append('TERRAIN_FLAT|' + '|'.join(fmt(float(v)) for v in f))
+    lines.append('HORIZON|150|5|14|' + ','.join(str(CATALOG[n]['slot']) for n in ('pine_a', 'pine_b', 'leafy_a', 'leafy_b', 'aspen_a', 'aspen_b', 'oak_a', 'oak_b')))
     for (x1, y1, x2, y2, kind, edge) in t.ground:
         lines.append('GROUND|%s|%s|%s|%s|%d|%s' % (fmt(float(x1)), fmt(float(y1)), fmt(float(x2)), fmt(float(y2)), kind, fmt(float(edge))))
     names = {}
@@ -694,8 +775,11 @@ def write(z, stats=False):
             lines.append('OBJECTIVE_TEXT|%d|%s|%s' % (i, ident, enc(text)))
     # Water (absolute heights), assigned to the map that holds each pond.
     for (x1, y1, x2, y2, bed, surface) in getattr(z, 'water', []):
-        k = Zone.chunk((x1 + x2) / 2, (y1 + y2) / 2); i = index[k]; ox, oy = k[0] * CHUNK, k[1] * CHUNK
-        lines.append('WATER|%d|%s|%s|%s|%s|%s|%s' % (i, fmt(float(max(0, x1 - ox))), fmt(float(max(0, y1 - oy))), fmt(float(min(24, x2 - ox))), fmt(float(min(24, y2 - oy))), fmt(float(bed)), fmt(float(surface))))
+        for k in order:
+            ox, oy = k[0] * CHUNK, k[1] * CHUNK
+            a, b, c, d = max(x1, ox), max(y1, oy), min(x2, ox + CHUNK), min(y2, oy + CHUNK)
+            if a < c and b < d:
+                lines.append('WATER|%d|%s|%s|%s|%s|%s|%s' % (index[k], fmt(float(a - ox)), fmt(float(b - oy)), fmt(float(c - ox)), fmt(float(d - oy)), fmt(float(bed)), fmt(float(surface))))
     lines.append('--- CUSTOM_CAMPAIGN_DATA_END ---')
     text = '\n'.join(lines) + '\n'
     for p in OUTPUTS:

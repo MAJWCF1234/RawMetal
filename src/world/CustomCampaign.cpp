@@ -106,6 +106,13 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    TerrainFlat flat{number(f,1,"flat x1"),number(f,2,"flat y1"),number(f,3,"flat x2"),number(f,4,"flat y2"),number(f,5,"flat height"),number(f,6,"flat blend")};
    if(flat.x2<flat.x1||flat.y2<flat.y1||flat.blend<0||flat.blend>60||flat.height<World::TerrainMinZ+2||flat.height>World::TerrainMaxZ-4)throw std::runtime_error("invalid TERRAIN_FLAT");
    if(terrain->flats.size()>=512)throw std::runtime_error("too many TERRAIN_FLAT records");terrain->flats.push_back(flat);
+  }else if(tag=="HORIZON"){
+   // HORIZON|depth|spacing|rise|model,model,...: wooded land beyond the zone edge.
+   if(f.size()!=5)throw std::runtime_error("malformed HORIZON record");if(!terrain)terrain=std::make_shared<TerrainShape>();
+   terrain->horizonDepth=number(f,1,"horizon depth");terrain->horizonSpacing=number(f,2,"horizon spacing");terrain->horizonRise=number(f,3,"horizon rise");
+   if(terrain->horizonDepth<0||terrain->horizonDepth>400||terrain->horizonSpacing<2||terrain->horizonSpacing>40||terrain->horizonRise<0||terrain->horizonRise>60)throw std::runtime_error("invalid HORIZON");
+   terrain->horizonModels.clear();std::stringstream list(f[4]);std::string item;
+   while(std::getline(list,item,',')){int model=std::stoi(item);if(model<0||model>=FacilityModelCount)throw std::runtime_error("invalid HORIZON model");terrain->horizonModels.push_back(model);}
   }else if(tag=="GROUND"){
    // GROUND|x1|y1|x2|y2|kind|edge in world metres: kind 0 short grass, 1 leafy
    // grass, 2 clover, 3 wild, 4 dry dirt, 5 forest litter, 6 gravel, 7 mud, 8 meadow.
@@ -181,7 +188,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="LIGHT"){
    if(f.size()<5||f.size()>11)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
    WorldLight light{{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")};
-   if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>1)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
+   if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>2)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
    if(f.size()>=7&&!f[6].empty())light.yaw=number(f,6,"light yaw");
    if(f.size()>=8&&!f[7].empty())light.intensity=number(f,7,"light intensity");
    if(f.size()>=9&&!f[8].empty())light.range=number(f,8,"light range");

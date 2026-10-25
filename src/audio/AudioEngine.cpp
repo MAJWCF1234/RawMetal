@@ -151,8 +151,12 @@ void AudioEngine::update(const Game& game,bool focused){
   }
   float machineGain=.30f;if(world.hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
   size_t index=0;for(auto emitter:world.machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
-  index=0;for(const auto& basin:world.waterVolumes())
-   loop(ambientEmitter(AmbientKind::Water,level,index++),world.zoneSky()?Sound::ZoneFrogs:Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,world.zoneSky()?.5f:.18f,basin.surface);
+  // Zone ponds carry frogs; a creek is many thin slices, so only every sixth
+  // one runs a flowing-water loop rather than flooding the mixer.
+  index=0;for(const auto& basin:world.waterVolumes()){size_t slot=index++;
+   bool pond=(basin.x2-basin.x1)*(basin.y2-basin.y1)>=12.f;
+   if(world.zoneSky()&&!pond&&slot%6)continue;
+   loop(ambientEmitter(AmbientKind::Water,level,slot),world.zoneSky()&&pond?Sound::ZoneFrogs:Sound::WaterReturn,Vec2{(basin.x1+basin.x2)*.5f,(basin.y1+basin.y2)*.5f}+shift,world.zoneSky()?(pond?.5f:.22f):.18f,basin.surface);}
   // Zone hazards are heard before they are seen: camp fires crackle, anomalies hum.
   if(world.zoneSky()){size_t fires=0,anomalies=0;
    for(const auto& hazard:world.hazards()){Vec2 centre=Vec2{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f}+shift;

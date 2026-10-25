@@ -73,7 +73,7 @@ bool Game::testWorldIsolation(){
   guarded&=invalid(base+"VISIBLE_GROUP|0|-1\n")&&invalid(base+"VISIBLE_GROUP|0\n")&&invalid(base+"VISIBLE_GROUP|0|2|extra\n")&&invalid(base+"VISIBLE_GROUP|0|hall\n");
   guarded&=invalid(base+"TERMINAL|0|5|5|0|0|Test|Call|Local||0||nan\n");
   guarded&=invalid(base+"STAIR|0|3|3|5|11|0|2|12|1|1|1|-0.1\n")&&invalid(base+"STAIR|0|3|3|5|11|0|2|12|1|1|2|0.12\n");
-  guarded&=invalid(base+"LIGHT|0|1|6|2|2\n")&&invalid(base+"LIGHT|0|1|6|2|1|nan\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|-1|6\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|0\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|25\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|6|extra\n");
+  guarded&=invalid(base+"LIGHT|0|1|6|2|3\n")&&!invalid(base+"LIGHT|0|1|6|2|2\n")&&invalid(base+"LIGHT|0|1|6|2|1|nan\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|-1|6\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|0\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|25\n")&&invalid(base+"LIGHT|0|1|6|2|1|0|1|6|extra\n");
   std::error_code cleanup;std::filesystem::remove(path,cleanup);
   if(!check(lightContract,"Ceiling lights retain compatibility and wall emitters stay outside mounting solids"))return false;
   if(!check(valid&&guarded,"Custom loader accepts valid records and rejects duplicate/overlapping maps, invalid models and malformed visible groups"))return false;

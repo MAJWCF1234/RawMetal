@@ -1056,7 +1056,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    m_gpu->setSun(sunData);}
   m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setTiltShift(g_tiltShift);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
-  if(world.zoneSky())atmosphere={.58f,.66f,.74f,.007f};
+  if(world.zoneSky())atmosphere={.55f,.64f,.74f,.0035f};
   m_gpu->setSkyStyle(world.zoneSky()?1:0);
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};

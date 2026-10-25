@@ -170,7 +170,8 @@ int authoredGroundKind(const TerrainShape& shape,float wx,float wy){
  // patches a few metres across, PSX-style hard edges between triangles.
  float a=valueNoise(shape.seed+7001u,wx*.11f,wy*.11f)+valueNoise(shape.seed+7002u,wx*.31f,wy*.31f)*.35f;
  float b=valueNoise(shape.seed+7003u,wx*.07f,wy*.07f)+valueNoise(shape.seed+7004u,wx*.23f,wy*.23f)*.4f;
- int kind=a>.45f?GroundDry:a>.22f?GroundWild:b>.38f?GroundClover:b<-.3f?GroundLeafyGrass:GroundShortGrass;
+ // Green dominates; wild and dry ground are occasional clearings.
+ int kind=a>.62f?GroundDry:a>.42f?GroundWild:b>.38f?GroundClover:b<-.2f?GroundLeafyGrass:GroundShortGrass;
  for(const auto& paint:shape.ground){
   float jitter=valueNoise(shape.seed+7005u,wx*.6f,wy*.6f)*paint.edge;
   float dx=std::max(paint.x1-wx,wx-paint.x2),dy=std::max(paint.y1-wy,wy-paint.y2);
@@ -321,7 +322,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   for(const auto& row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Authored map rows must match the chunk width");
  }
  for(const auto& fixture:map->fixtures)if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("Invalid authored fixture model or dimensions");
- for(const auto& light:map->lights)if(!std::isfinite(light.position.x)||!std::isfinite(light.position.y)||!std::isfinite(light.z)||!std::isfinite(light.yaw)||!std::isfinite(light.intensity)||!std::isfinite(light.range)||int(light.mount)<0||int(light.mount)>1||light.intensity<0||light.intensity>8||light.range<=0||light.range>24)throw std::runtime_error("Invalid authored light mount or influence");
+ for(const auto& light:map->lights)if(!std::isfinite(light.position.x)||!std::isfinite(light.position.y)||!std::isfinite(light.z)||!std::isfinite(light.yaw)||!std::isfinite(light.intensity)||!std::isfinite(light.range)||int(light.mount)<0||int(light.mount)>int(WorldLightMount::Bare)||light.intensity<0||light.intensity>8||light.range<=0||light.range>24)throw std::runtime_error("Invalid authored light mount or influence");
  for(const auto& sign:map->signs)if(!std::isfinite(sign.width)||!std::isfinite(sign.height)||!std::isfinite(sign.z)||!std::isfinite(sign.yaw)||!std::isfinite(sign.position.x)||!std::isfinite(sign.position.y)||sign.width<=0||sign.height<=0)throw std::runtime_error("Invalid authored sign dimensions");
  for(const auto& prop:map->props)if(prop.kind<0||prop.kind>=4)throw std::runtime_error("Invalid authored prop model");
  for(const auto& stair:map->stairs)if(stair.steps<1||stair.steps>4096||stair.x1>=stair.x2||stair.y1>=stair.y2||stair.bottom>stair.top||!std::isfinite(stair.treadThickness)||stair.treadThickness<.025f||stair.treadThickness>.5f)throw std::runtime_error("Invalid authored staircase");
@@ -505,6 +506,11 @@ void World::buildTerrainBounds(){
  for(int z=0;z<TerrainSamplesZ;++z)for(int y=0;y<TerrainSamplesY;++y)for(int x=0;x<TerrainSamplesX;++x)
   if(m_terrainDensity[terrainSampleIndex(x,y,z)]>0)m_terrainTops[size_t(y*TerrainSamplesX+x)]=static_cast<std::uint8_t>(z);
 }
+float World::outskirtHeight(float worldX,float worldY,float outside)const{
+ const auto* shape=terrainShape();if(!shape)return 0;
+ float t=std::clamp(outside/std::max(1.f,shape->horizonDepth*.6f),0.f,1.f);
+ return authoredTerrainHeight(*shape,worldX,worldY)+shape->horizonRise*t*t*(3-2*t);
+}
 int World::groundKind(float worldX,float worldY)const{
  if(!m_exclusionTerrain||!m_mapData||!m_mapData->terrain||m_mapData->terrain->ground.empty())return -1;
  return authoredGroundKind(*m_mapData->terrain,worldX,worldY);
@@ -523,7 +529,8 @@ void World::buildTerrain(){
    // steep ground where the surface breaks away from its neighbours.
    const auto& shape=*m_mapData->terrain;int top=authoredTerrainTop(shape,wx,wy);solid=z<=top;
    int relief=std::max({std::abs(authoredTerrainTop(shape,wx+1,wy)-top),std::abs(authoredTerrainTop(shape,wx,wy+1)-top)});
-   material=z<top-1||relief>=2||top>=shape.base+shape.amplitude*.7f?TerrainRock:TerrainSoil;
+   // Painted (zone) terrain keeps its cover on high ground; only sharp relief is rock.
+   material=z<top-1||relief>=2||(shape.ground.empty()&&top>=shape.base+shape.amplitude*.7f)?TerrainRock:TerrainSoil;
   }else{
    solid=m_exclusionTerrain?authoredExclusionVoxel(wx,wy,z):authoredAshfallVoxel(wx,wy,z);
    material=m_exclusionTerrain?authoredExclusionMaterial(wx,wy,z):authoredAshfallMaterial(wx,wy,z);
