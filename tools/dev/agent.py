@@ -49,7 +49,12 @@ class BuildLock:
         kernel32.ReleaseMutex(self.h); kernel32.CloseHandle(self.h)
 
 def run_build():
-    subprocess.run('taskkill /F /IM RawMetal.exe', shell=True, capture_output=True)
+    # Only the shared build output is locked by a running game; private copies
+    # (rm-<agent>.exe) and other worktrees' exes are left alone.
+    target = os.path.join(ROOT, 'RawMetal.exe').replace("'", "''")
+    subprocess.run(['powershell', '-NoProfile', '-Command',
+                    "Get-Process RawMetal -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '%s' } | Stop-Process -Force" % target],
+                   capture_output=True)
     p = subprocess.run(['cmd', '/c', os.path.join(ROOT, 'Build.cmd')], cwd=ROOT, capture_output=True)
     out = (p.stdout + p.stderr).decode('mbcs', 'replace')
     return p.returncode, out
@@ -81,14 +86,14 @@ def cmd_build(name, own):
             last = float(open(STAMP).read()) if os.path.exists(STAMP) else 0
             mine = own_mtime(own)
             if own and mine and last > mine and os.path.exists(os.path.join(ROOT, 'RawMetal.exe')):
-                shutil.copy2(os.path.join(ROOT, 'RawMetal.exe'), os.path.join(d, 'RawMetal.exe'))
+                shutil.copy2(os.path.join(ROOT, 'RawMetal.exe'), private_exe(name))
                 print('BUILD OK (shared: a build that started after your last edit)')
                 return 0
             started = time.time()
             code, out = run_build()
             open(os.path.join(d, 'build.log'), 'w', encoding='utf-8').write(out)
             if code == 0:
-                shutil.copy2(os.path.join(ROOT, 'RawMetal.exe'), os.path.join(d, 'RawMetal.exe'))
+                shutil.copy2(os.path.join(ROOT, 'RawMetal.exe'), private_exe(name))
                 open(STAMP, 'w').write(repr(started))
         size = [l for l in out.splitlines() if 'RawMetal executable' in l]
         if code == 0:
@@ -105,9 +110,15 @@ def cmd_build(name, own):
         return 1
     print('BUILD FAILED: still broken by other files after retries'); return 1
 
+def private_exe(name):
+    return os.path.join(agent_dir(name), 'rm-%s.exe' % name)
+
 def exe(name):
-    e = os.path.join(agent_dir(name), 'RawMetal.exe')
-    if not os.path.exists(e): raise SystemExit('no private exe yet: run build first')
+    e = private_exe(name)
+    if not os.path.exists(e):
+        old = os.path.join(agent_dir(name), 'RawMetal.exe')  # copies made before the rename
+        if os.path.exists(old): shutil.copy2(old, e)
+        else: raise SystemExit('no private exe yet: run build first')
     return e
 
 def to_png(src, dst, scale):

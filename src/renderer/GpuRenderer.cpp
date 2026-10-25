@@ -367,6 +367,8 @@ struct GpuRenderer::Impl {
  std::array<Buffer,FrameCount> vertexBuffers{};
  std::array<Buffer,FrameCount> actorVertexBuffers{};
  std::array<std::vector<Buffer>,FrameCount> retiredBuffers{};
+ // The CPU-visible VRAM heap ran out once; later geometry goes to system memory.
+ bool deviceMappedFull=false;
  std::array<Buffer,FrameCount> overlayBuffers{};
  std::array<VkSemaphore,FrameCount> acquiredSems{};
  // Per-frame composite descriptor sets (each frame references the same shared
@@ -614,8 +616,17 @@ struct GpuRenderer::Impl {
  uint32_t memoryType(uint32_t bits,VkMemoryPropertyFlags flags,VkMemoryPropertyFlags preferred=0){VkPhysicalDeviceMemoryProperties props;vkGetPhysicalDeviceMemoryProperties(physical,&props);if(preferred)for(uint32_t i=0;i<props.memoryTypeCount;++i)if((bits&(1u<<i))&&(props.memoryTypes[i].propertyFlags&(flags|preferred))==(flags|preferred))return i;for(uint32_t i=0;i<props.memoryTypeCount;++i)if((bits&(1u<<i))&&(props.memoryTypes[i].propertyFlags&flags)==flags)return i;throw std::runtime_error("No compatible Vulkan memory type");}
  void makeBuffer(Buffer&b,VkDeviceSize size,VkBufferUsageFlags usage){
   VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};info.size=size;info.usage=usage;info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;check(vkCreateBuffer(device,&info,nullptr,&b.handle),"Create buffer");
-  VkMemoryRequirements req;vkGetBufferMemoryRequirements(device,b.handle,&req);VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};alloc.allocationSize=req.size;alloc.memoryTypeIndex=memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,(usage&VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)?VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT:(usage&VK_BUFFER_USAGE_TRANSFER_DST_BIT)?VK_MEMORY_PROPERTY_HOST_CACHED_BIT:0); // CPU-read buffers want cached memory
-  check(vkAllocateMemory(device,&alloc,nullptr,&b.memory),"Allocate mapped buffer");check(vkBindBufferMemory(device,b.handle,b.memory,0),"Bind buffer");check(vkMapMemory(device,b.memory,0,VK_WHOLE_SIZE,0,&b.mapped),"Map buffer");b.size=size;
+  VkMemoryRequirements req;vkGetBufferMemoryRequirements(device,b.handle,&req);VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};alloc.allocationSize=req.size;
+  const VkMemoryPropertyFlags mapped=VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  const bool vertices=usage&VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  alloc.memoryTypeIndex=memoryType(req.memoryTypeBits,mapped,vertices&&!deviceMappedFull?VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT:(usage&VK_BUFFER_USAGE_TRANSFER_DST_BIT)?VK_MEMORY_PROPERTY_HOST_CACHED_BIT:0); // CPU-read buffers want cached memory
+  VkResult result=vkAllocateMemory(device,&alloc,nullptr,&b.memory);
+  // Without Resizable BAR the CPU-visible VRAM heap is only 256 MB, and the
+  // chunk caches outgrow it on large campaigns. Geometry then lives in
+  // system memory the GPU reads over the bus: slower, but still the GPU path,
+  // never the software fallback.
+  if(result==VK_ERROR_OUT_OF_DEVICE_MEMORY&&vertices&&!deviceMappedFull){deviceMappedFull=true;alloc.memoryTypeIndex=memoryType(req.memoryTypeBits,mapped);result=vkAllocateMemory(device,&alloc,nullptr,&b.memory);}
+  check(result,"Allocate mapped buffer");check(vkBindBufferMemory(device,b.handle,b.memory,0),"Bind buffer");check(vkMapMemory(device,b.memory,0,VK_WHOLE_SIZE,0,&b.mapped),"Map buffer");b.size=size;
  }
  void makeImage(Image&i,int w,int h,int levels,VkFormat format,VkImageUsageFlags usage,VkImageAspectFlags aspect,VkSampleCountFlagBits samples=VK_SAMPLE_COUNT_1_BIT){
   VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};info.imageType=VK_IMAGE_TYPE_2D;info.format=format;info.extent={uint32_t(w),uint32_t(h),1};info.mipLevels=levels;info.arrayLayers=1;info.samples=samples;info.tiling=VK_IMAGE_TILING_OPTIMAL;info.usage=usage;info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
