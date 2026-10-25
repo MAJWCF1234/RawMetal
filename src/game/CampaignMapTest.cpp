@@ -1,4 +1,6 @@
 #include "Game.h"
+#include "../renderer/SoftwareRenderer.h"
+#include "../world/CustomCampaign.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -9,6 +11,18 @@ bool Game::testCampaignMaps(){
  std::ofstream out("freight-district-test.txt");bool pass=true;
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};
  check(FreightDistrictEnd==32&&CampaignChunkCount>=FreightDistrictEnd+2,"Eight freight areas allocated across 22 additional stitched chunks");
+ // Surface sets: every Surface value and structure finish 26-35 resolves to
+ // loaded textures, SURFACE records parse, and invalid sets are rejected.
+ {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-35 resolves to loaded textures");out<<report;
+  std::string records="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Surface test|0\nMAP|0|Room|0|0|6.5|6.5|0|0|8|0.3||0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
+  for(int y=0;y<24;++y)records+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";
+  auto parse=[&](const char* surface){try{return loadCustomCampaignText(records+surface+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","surface-test.txt");}catch(const std::exception&){return std::shared_ptr<const CustomCampaign>{};}};
+  auto rock=parse("SURFACE|0|5|8|5\n"),plain=parse("");
+  check(rock&&rock->maps[0]->wallSurface==SurfaceRock&&rock->maps[0]->floorSurface==SurfaceMineTimber&&World(0,rock->maps[0]).ceilingSurface()==SurfaceRock,"SURFACE records set a custom map's wall, floor and ceiling finish");
+  check(plain&&World(0,plain->maps[0]).wallSurface()==SurfaceDefault&&!parse("SURFACE|0|10|0|0\n")&&!parse("SURFACE|0|-2|0|0\n")&&!parse("SURFACE|0|1|2\n"),"Absent SURFACE keeps the legacy finish; out-of-range or malformed sets are rejected");
+  bool rejected=false;if(plain){auto bad=std::make_shared<AuthoredMapData>(*plain->maps[0]);bad->ceilingSurface=SurfaceCount;try{World invalid(0,bad);}catch(const std::exception&){rejected=true;}}
+  check(rejected,"World::loadAuthoredMap rejects an out-of-range surface");
+ }
  {bool spawns=true;for(int level=34;level<CampaignChunkCount;++level){World w(level);const auto& d=w.definition();bool fit=w.fits(d.playerStart.x,d.playerStart.y,d.spawnHeight,1.f)&&std::fabs(w.supportBelow(d.playerStart.x,d.playerStart.y,d.spawnHeight+.3f)-d.spawnHeight)<.05f;if(!fit)out<<"  spawn blocked in chunk "<<level<<"\n";spawns&=fit;}check(spawns,"Every descent chunk loads and its spawn fits a standing hull");}
  {Game office;office.loadLevel(20,false);office.updateStreaming(0);
   bool vista=true;for(int level=16;level<=19;++level)vista&=office.chunkResident(level);

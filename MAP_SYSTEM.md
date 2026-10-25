@@ -261,6 +261,36 @@ Office surfaces, `STRUCT` materials 21-24: 21 office block wall, 22 drop ceiling
 23 office carpet, 24 office tile. In custom maps every structure texture
 repeats per metre.
 
+### Surface sets and finish materials (2026-10-25)
+
+A map can choose the finish of its `#` walls, its floor and its ceiling:
+
+```text
+SURFACE|mapIndex|wall|floor|ceiling
+```
+
+Each value is a surface set: -1 keeps the default finish, 0 cast concrete,
+1 pressure works (the default painted wall), 2 painted industrial brick,
+3 clinic tile, 4 lab panel (luminous ceiling), 5 natural rock, 6 rusted
+corrugated sheet (dirt floor), 7 office plaster, 8 mine timber (gravel floor,
+rock ceiling), 9 ancient stone (flagstone floor). For example,
+`SURFACE|0|5|5|5` makes map 0 a rock cavern and `SURFACE|0|3|3|-1` tiles a
+room but keeps its ceiling. Values outside -1..9 are rejected. Finishes are
+laid in world metres, so they run on unbroken across tiles, floor risers,
+ceiling steps and the wall over tall door headers. `STRUCT` material 3 (the
+wall finish) follows the map's wall surface when one is set. C++ maps set
+`AuthoredMapData::wallSurface`, `floorSurface` and `ceilingSurface`. The editor
+has no control for it yet: put the record in the project's `runtimeRecords`,
+which the exporter carries through unchanged. A pack without it renders exactly
+as before.
+
+`STRUCT` materials 26-35 are the matching box finishes, each repeating at its
+own real scale: 26 rock, 27 clinic tile, 28 lab panel, 29 corrugated sheet,
+31 brick, 32 mine timber, 33 ancient stone, 34 resonance growth (a dark
+purple-red crust), 35 crystal (cyan and self-lit, like material 25). Material
+30 stays the invisible collision proxy. The textures come from the purchased
+PSX texture packs through `tools/library/surfaces.py`.
+
 A `TERMINAL` placed within a solid fixture's footprint draws no console. Put
 the interaction point on a desk's front edge and dress the desk with fixture
 27/28 so its CRT is the visible computer.

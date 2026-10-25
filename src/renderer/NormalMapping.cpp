@@ -57,7 +57,8 @@ bool SoftwareRenderer::testNormalMapping(){
  Texture blendTest{2,2,{}};blendTest.normalLevels={std::vector<Point3>(4,Point3{.6f,0,.8f}),{{0,0,1}}};
  auto blended=sampleNormal(blendTest,.2f,.3f,.5f);
  if(std::fabs(blended.x*blended.x+blended.y*blended.y+blended.z*blended.z-1)>.001f)return false;
- for(auto* texture:{&m_wall,&m_pressureWall,&m_bulkhead,&m_floor,&m_pressureFloor}){
+ std::vector<const Texture*> mapped{&m_wall,&m_pressureWall,&m_bulkhead,&m_floor,&m_pressureFloor};for(const auto&texture:m_surfaceTextures)mapped.push_back(&texture);
+ for(auto* texture:mapped){
   if(texture->normalLevels.size()!=texture->mips.size()+1)return false;
   if((texture->parallaxScale>0&&texture->relief.size()!=texture->pixels.size())||(texture->parallaxScale==0&&!texture->relief.empty()))return false;
   for(auto n:texture->normalLevels[0])if(!std::isfinite(n.x+n.y+n.z)||std::fabs(n.x*n.x+n.y*n.y+n.z*n.z-1)>.001f)return false;

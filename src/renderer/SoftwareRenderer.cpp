@@ -39,6 +39,23 @@ bool g_tiltShift = true; // windowed tilt-shift stylisation
 int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
+// Surface-set and structure finishes, resources 2100-2124 in the order of
+// tools/library/surfaces.py: metres per repeat, derived normal strength,
+// gloss, and the share of albedo that glows above a luma floor.
+struct SurfaceFinish {float repeat,normal,gloss,glow=0,glowFloor=0;};
+constexpr int FirstSurfaceFinish=2100;
+constexpr SurfaceFinish surfaceFinishes[]={
+ {2.4f,.9f,.08f},{2.f,.7f,.12f},{2.4f,.6f,.06f},            // concrete wall, floor, ceiling
+ {1.8f,1.f,.08f},{2.f,.8f,.1f},{3.f,.8f,.06f},              // painted brick
+ {1.f,.6f,.36f},{2.4f,.6f,.26f},{1.8f,.5f,.04f},            // clinic tile
+ {3.f,.7f,.3f},{2.1f,.6f,.3f},{1.8f,.4f,.1f,.45f,.6f},      // lab panel; luminous ceiling panels
+ {3.f,1.3f,.1f},{2.5f,1.1f,.04f},{3.f,1.2f,.06f},           // rock
+ {2.f,1.f,.24f},{2.f,1.f,.04f},{2.f,.9f,.2f},               // corrugated
+ {2.4f,1.f,.06f},{2.f,1.1f,.04f},                           // mine timber walls, gravel (rock ceiling)
+ {3.f,1.1f,.08f},{3.f,1.f,.1f},{2.4f,1.2f,.06f},            // ancient stone
+ {1.5f,1.2f,.3f},{1.2f,1.f,.45f,.7f,.2f}};                  // resonance growth (34), crystal (35)
+constexpr int GrowthFinish=23,CrystalFinish=24;
+static_assert(std::size(surfaceFinishes)==CrystalFinish+1);
 std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t limit=3){
  std::vector<std::string> lines;columns=std::max(size_t(1),columns);
  while(!remaining.empty()&&lines.size()<limit){size_t count=std::min(columns,remaining.size());
@@ -130,6 +147,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   m_gpu->prepare(m_droneTexture);m_gpu->prepare(m_handgunTexture);
   for(const auto&role:m_cleanupTextures)for(const auto&texture:role)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
+  for(const auto&texture:m_surfaceTextures)m_gpu->prepare(texture);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
   m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
  catch(const std::exception&e){m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
@@ -409,7 +427,67 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  m_serviceAreaSigns[0]=makeSign("SERVICE STORES","SPARES / MAINTENANCE",0xff53aec4u);
  m_serviceAreaSigns[1]=makeSign("PRIMARY UTILITIES","PERMIT REQUIRED",0xffd7ac64u);
  m_serviceAreaSigns[2]=makeSign("SALVAGE DISPATCH","WASTE HANDLING",0xff9fceaeu);
+ // Surface sets (World.h Surface) and structure finishes 26-35.
+ static_assert(std::tuple_size_v<decltype(m_surfaceTextures)> ==std::size(surfaceFinishes));
+ for(size_t i=0;i<m_surfaceTextures.size();++i)m_surfaceTextures[i]=loadSurfaceFinish(int(i));
+ auto surface=[&](int set,int wall,int floor,int ceiling){m_surfaceSets[size_t(set)]={&m_surfaceTextures[size_t(wall)],&m_surfaceTextures[size_t(floor)],&m_surfaceTextures[size_t(ceiling)],
+  {surfaceFinishes[wall].repeat,surfaceFinishes[wall].repeat},surfaceFinishes[floor].repeat,surfaceFinishes[ceiling].repeat};};
+ surface(SurfaceConcrete,0,1,2);surface(SurfaceBrick,3,4,5);surface(SurfaceClinicTile,6,7,8);surface(SurfaceLabPanel,9,10,11);
+ surface(SurfaceRock,12,13,14);surface(SurfaceCorrugated,15,16,17);surface(SurfaceMineTimber,18,19,14);surface(SurfaceStone,20,21,22);
+ // Pressure and office plaster are the finishes maps already use, at their repeats.
+ m_surfaceSets[SurfacePressure]={&m_pressureWall,&m_pressureFloor,&m_facilityTextures.at("ceiling_1"),{2,3},.5f,.5f};
+ m_surfaceSets[SurfaceOfficePlaster]={&m_officeWall,&m_securityCarpet,&m_dropCeiling,{1,1},1,1};
  m_logo=loadEmbeddedPng(2);m_logo.clampEdges=true;
+}
+SoftwareRenderer::Texture SoftwareRenderer::loadSurfaceFinish(int index){
+ const auto& finish=surfaceFinishes[size_t(index)];
+ auto texture=loadTexture(FirstSurfaceFinish+index);
+ if(texture.width!=256||texture.height!=256)throw std::runtime_error("Surface finish "+std::to_string(FirstSurfaceFinish+index)+" must be 256 x 256");
+ deriveSurfaceNormal(texture,finish.normal);texture.glossStrength=finish.gloss;
+ // The lab ceiling glows through its diffuser panels, crystal from inside its
+ // facets: emission follows the albedo above a luma floor, like material 25.
+ if(finish.glow>0){texture.emission.resize(texture.pixels.size());
+  for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float r=float((p>>16)&255),g=float((p>>8)&255),b=float(p&255);
+   float k=finish.glow*std::clamp(((r*.3f+g*.59f+b*.11f)/255.f-finish.glowFloor)/(1-finish.glowFloor),0.f,1.f);
+   texture.emission[i]=0xff000000u|(unsigned(r*k)<<16)|(unsigned(g*k)<<8)|unsigned(b*k);}}
+ return texture;
+}
+const SoftwareRenderer::Texture* SoftwareRenderer::finishMaterial(int material)const{
+ switch(material){
+  case 26:return m_surfaceSets[SurfaceRock].wall;
+  case 27:return m_surfaceSets[SurfaceClinicTile].wall;
+  case 28:return m_surfaceSets[SurfaceLabPanel].wall;
+  case 29:return m_surfaceSets[SurfaceCorrugated].wall;
+  case 31:return m_surfaceSets[SurfaceBrick].wall;
+  case 32:return m_surfaceSets[SurfaceMineTimber].wall;
+  case 33:return m_surfaceSets[SurfaceStone].wall;
+  case 34:return &m_surfaceTextures[GrowthFinish];
+  case 35:return &m_surfaceTextures[CrystalFinish];
+ }
+ return nullptr;
+}
+Vec2 SoftwareRenderer::finishRepeat(const Texture& texture)const{
+ for(size_t i=0;i<m_surfaceTextures.size();++i)if(&texture==&m_surfaceTextures[i])return {surfaceFinishes[i].repeat,surfaceFinishes[i].repeat};
+ return {};
+}
+bool SoftwareRenderer::testSurfaceSets(std::string* report){
+ std::ostringstream out;bool ok=true;
+ auto check=[&](bool pass,const std::string& label){out<<(pass?"PASS ":"FAIL ")<<label<<'\n';ok&=pass;};
+ // Every pack finish decodes at 256 px with derived normals and mips.
+ for(int i=0;i<int(std::size(surfaceFinishes));++i){auto t=loadSurfaceFinish(i);
+  check(t.width==256&&t.height==256&&t.mips.size()==8&&t.normalLevels.size()==9&&(surfaceFinishes[i].glow>0)==!t.emission.empty(),"finish "+std::to_string(FirstSurfaceFinish+i));}
+ auto start=std::chrono::steady_clock::now();
+ auto storage=std::make_unique<SoftwareRenderer>(64,36);const auto&renderer=*storage;
+ out<<"renderer "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<" s\n";
+ auto loaded=[](const Texture* t){return t&&t->width>0&&t->height>0&&t->pixels.size()==size_t(t->width)*size_t(t->height)&&t->normalLevels.size()==t->mips.size()+1;};
+ for(int s=0;s<SurfaceCount;++s){const auto* set=renderer.surfaceSet(s);
+  check(set&&loaded(set->wall)&&loaded(set->floor)&&loaded(set->ceiling)&&set->wallRepeat.x>0&&set->wallRepeat.y>0&&set->floorRepeat>0&&set->ceilingRepeat>0,"surface "+std::to_string(s));}
+ check(!renderer.surfaceSet(SurfaceDefault)&&!renderer.surfaceSet(SurfaceCount),"default and out-of-range surfaces keep the legacy finish");
+ for(int material=0;material<=40;++material){const bool finish=(material>=26&&material<=29)||(material>=31&&material<=35);const auto* t=renderer.finishMaterial(material);
+  if(finish)check(loaded(t)&&renderer.finishRepeat(*t).x>0,"structure material "+std::to_string(material));else if(t)check(false,"material "+std::to_string(material)+" is not a finish");}
+ check(!renderer.finishMaterial(35)->emission.empty()&&renderer.finishMaterial(34)->emission.empty()&&!renderer.surfaceSet(SurfaceLabPanel)->ceiling->emission.empty(),"crystal and the lab ceiling are self-lit");
+ if(report)*report=out.str();
+ return ok;
 }
 const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int part)const{
  if(mesh<0||mesh>=int(m_facilityMeshes.size()))throw std::runtime_error("Invalid facility mesh index "+std::to_string(mesh));

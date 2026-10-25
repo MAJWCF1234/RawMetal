@@ -24,6 +24,7 @@ RECORDS = [
     "ACTOR_TACTICS|0|0|1|2",
     "ACTOR_PATROL|0|0|5|5|0|700",
     "ACTOR_PATROL|0|0|5|9|0|500",
+    "SURFACE|0|5|8|5",
 ]
 
 

@@ -174,7 +174,7 @@ struct TerrainShape {
 // legacy choice by chunk index). Structure materials 26-29 and 31-35 are the
 // matching box finishes: 26 rock, 27 clinic tile, 28 lab panel, 29 corrugated
 // sheet, 31 brick, 32 mine timber, 33 ancient stone, 34 resonance growth,
-// 35 crystal (self-lit).
+// 35 crystal (self-lit). Material 3, the wall finish, follows wallSurface.
 enum Surface:int {SurfaceDefault=-1,SurfaceConcrete,SurfacePressure,SurfaceBrick,SurfaceClinicTile,SurfaceLabPanel,SurfaceRock,SurfaceCorrugated,SurfaceOfficePlaster,SurfaceMineTimber,SurfaceStone,SurfaceCount};
 // Where the lights are truly out: inside an active zone the light floor, haze
 // and exposure lift go to black, the flashlight dies (jamFlashlight) and the
@@ -255,6 +255,10 @@ public:
      for(const auto& zone:m_mapData->zones)if(p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.name.c_str();
      return nullptr;
     }
+    // The map's surface sets (Surface values); SurfaceDefault keeps the legacy finish.
+    int wallSurface()const{return m_mapData?m_mapData->wallSurface:SurfaceDefault;}
+    int floorSurface()const{return m_mapData?m_mapData->floorSurface:SurfaceDefault;}
+    int ceilingSurface()const{return m_mapData?m_mapData->ceilingSurface:SurfaceDefault;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
     bool coast()const{return horrorMode()&&m_level>=12;}
     // The open-zone sky: procedural broken overcast, a warm sun with shafts

@@ -548,7 +548,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
   // Architectural repeats are measured in metres, never stretched over a deck.
-  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,((w.campaign()&&w.level()>=3)||w.custom())?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
+  // Pack finishes (surface sets, materials 26-35) repeat at their own scale on every map.
+  const Vec2 finish=finishRepeat(texture);
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,finish.x>0?Vec2{length3(B-A)/finish.x,length3(D-A)/finish.y}:((w.campaign()&&w.level()>=3)||w.custom())?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
   if(m_staticGeometryBuild||eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
   if(m_staticGeometryBuild||eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
   if(m_staticGeometryBuild||eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
@@ -701,6 +703,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Static lighting is baked once per chunk. A frame-sized ray budget leaves
  // later surfaces at ambient only, producing flat walls and missing shadows.
  if(m_staticGeometryBuild)shadowBudget=400000;
+ // Surface sets (World.h): the map's own wall, floor and ceiling finish, or
+ // null for the legacy choice. Finishes are laid in world metres, u along the
+ // face and v down world z (or along y on flats), so they run on unbroken
+ // across tiles, risers, steps and door fills.
+ const SurfaceSet* wallFinish=surfaceSet(w.wallSurface());const SurfaceSet* floorFinish=surfaceSet(w.floorSurface());const SurfaceSet* ceilingFinish=surfaceSet(w.ceilingSurface());
+ auto finishQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 repeat){
+  const bool alongX=std::fabs(b.x-a.x)>=std::fabs(b.y-a.y),flat=std::fabs(d.z-a.z)<.001f;
+  const float u0=alongX?a.x:a.y,u1=alongX?b.x:b.y,v0=flat?(alongX?a.y:a.x):a.z,v1=flat?(alongX?d.y:d.x):d.z,sign=u1<u0?-1.f:1.f;
+  quad(a,b,c,d,t,light,{std::fabs(u1-u0)/repeat.x,(v1-v0)/repeat.y},{sign*u0/repeat.x,-v1/repeat.y});
+ };
  if(buildStaticGeometry){ // Outdoor chunks carry an explicit low-poly mesh generated from the same
  // height field used by collision. This replaces the old flat half-metre floor
  // patches while leaving authored ruins, machinery and props on top.
@@ -806,13 +818,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // like collision does, while terrain worlds keep their existing mesh.
     for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
      // Maps 0-2 lay their area floor as 2 m tiles; grating and raised plate stay functional.
-     if(w.campaign()&&w.level()<3&&!w.metalFloor(x,y)&&!(w.level()==1&&h>0))quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},m_areaFloors[size_t(w.level())],.95f,{.25f,.25f},{ax*.5f,ay*.5f});
+     if(floorFinish)finishQuad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},*floorFinish->floor,.95f,{floorFinish->floorRepeat,floorFinish->floorRepeat});
+     else if(w.campaign()&&w.level()<3&&!w.metalFloor(x,y)&&!(w.level()==1&&h>0))quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},m_areaFloors[size_t(w.level())],.95f,{.25f,.25f},{ax*.5f,ay*.5f});
      else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.metalFloor(x,y)?.8f:.95f);
      float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
-     if(h>north)quad({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h},m_metal,.9f);
-     if(h>south)quad({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h},m_metal,.9f);
-     if(h>west)quad({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h},m_metal,.9f);
-     if(h>east)quad({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h},m_metal,.9f);
+     // Risers between floor heights: steel plate, or the floor's own finish.
+     auto riser=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(floorFinish)finishQuad(a,b,c,d,*floorFinish->floor,.9f,{floorFinish->floorRepeat,floorFinish->floorRepeat});else quad(a,b,c,d,m_metal,.9f);};
+     if(h>north)riser({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h});
+     if(h>south)riser({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h});
+     if(h>west)riser({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h});
+     if(h>east)riser({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h});
     }
 
     if(!w.outdoors()){
@@ -821,15 +836,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     const Texture&ceilingTexture=serviceMap?m_serviceCeiling:m_facilityTextures.at("ceiling_1");
     float ceilingLight=serviceMap?.82f:.6f;
     for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f;
-     quad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},ceilingTexture,ceilingLight);
+     if(ceilingFinish)finishQuad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},*ceilingFinish->ceiling,.6f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});
+     else quad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},ceilingTexture,ceilingLight);
     }
    // Close ceiling height changes instead of exposing the void between sectors.
+   // A surface ceiling carries its finish down the step; legacy maps use plate.
+   auto soffit=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(ceilingFinish)finishQuad(a,b,c,d,*ceilingFinish->ceiling,.7f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});else quad(a,b,c,d,m_metal,.7f);};
    float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
-   if(Z>northCeiling&&w.tile(x,y-1)!='#')quad({X,Y,northCeiling},{X+1,Y,northCeiling},{X+1,Y,Z},{X,Y,Z},m_metal,.7f);
-   if(Z>westCeiling&&w.tile(x-1,y)!='#')quad({X,Y+1,westCeiling},{X,Y,westCeiling},{X,Y,Z},{X,Y+1,Z},m_metal,.7f);
+   if(Z>northCeiling&&w.tile(x,y-1)!='#')soffit({X,Y,northCeiling},{X+1,Y,northCeiling},{X+1,Y,Z},{X,Y,Z});
+   if(Z>westCeiling&&w.tile(x-1,y)!='#')soffit({X,Y+1,westCeiling},{X,Y,westCeiling},{X,Y,Z},{X,Y+1,Z});
    float southCeiling=w.ceilingHeight(X+.5f,Y+1.01f),eastCeiling=w.ceilingHeight(X+1.01f,Y+.5f);
-   if(Z>southCeiling&&w.tile(x,y+1)!='#')quad({X+1,Y+1,southCeiling},{X,Y+1,southCeiling},{X,Y+1,Z},{X+1,Y+1,Z},m_metal,.7f);
-   if(Z>eastCeiling&&w.tile(x+1,y)!='#')quad({X+1,Y,eastCeiling},{X+1,Y+1,eastCeiling},{X+1,Y+1,Z},{X+1,Y,Z},m_metal,.7f);
+   if(Z>southCeiling&&w.tile(x,y+1)!='#')soffit({X+1,Y+1,southCeiling},{X,Y+1,southCeiling},{X,Y+1,Z},{X+1,Y+1,Z});
+   if(Z>eastCeiling&&w.tile(x+1,y)!='#')soffit({X+1,Y,eastCeiling},{X+1,Y+1,eastCeiling},{X+1,Y+1,Z},{X+1,Y,Z});
    }
    }
    // Painted route edges and worn hazard stripes tie the loops together.
@@ -843,13 +861,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(tile=='T')box({X,Y,0},{X+1,Y+1,.14f},m_pressureMetal,.9f);
   }else{
    float roof=Z;Z=w.wallHeight(x,y);
-   if(Z<roof){quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);if(!w.outdoors())quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
+   if(Z<roof){
+    if(wallFinish)finishQuad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},*wallFinish->wall,.8f,wallFinish->wallRepeat);else quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);
+    if(!w.outdoors()){if(ceilingFinish)finishQuad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},*ceilingFinish->ceiling,.43f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});else quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
+   }
    auto wall=[&](float ax,float ay,float bx,float by,float light){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
     const auto&material=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
     float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
-    quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
+    if(wallFinish)finishQuad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},*wallFinish->wall,1.f,wallFinish->wallRepeat);
+    else quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if(w.campaign()&&!w.authored()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
     (void)light;
    };
@@ -893,6 +915,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
+  // Materials 26-29 and 31-35 are the pack finishes; 3, the wall finish, follows the map's wall surface.
+  else if(const Texture* finish=s.material==3&&wallFinish?wallFinish->wall:finishMaterial(s.material);finish&&!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},*finish,1.05f);
   else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.hasLift()){
@@ -1030,7 +1054,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // header and its sign are set in the wall instead of hanging under a slot.
   if(float roof=w.ceilingHeight(x,door.y);roof>headerTop+.05f){
    const auto&fill=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
-   for(float face:{y,y+1.f})quad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},fill,.9f,{half*.5f,(roof-headerTop)/3.f});
+   for(float face:{y,y+1.f}){
+    if(wallFinish)finishQuad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},*wallFinish->wall,.9f,wallFinish->wallRepeat);
+    else quad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},fill,.9f,{half*.5f,(roof-headerTop)/3.f});
+   }
    box({x-half,y,headerTop},{x+half,y+1.f,headerTop+.02f},m_metal,.8f);
   }
   float bottom=base+door.open*2.65f;

@@ -43,6 +43,8 @@ public:
     void setPanelCaching(bool enabled){m_panelCaching=enabled;}
     void setActorEmitCaching(bool enabled){m_actorEmitCaching=enabled;}
     static bool testCablePerformance();
+    // Every Surface value and structure finish resolves to decodable textures.
+    static bool testSurfaceSets(std::string* report=nullptr);
     static bool testHardware();
     static bool testPresentationResize();
     static bool testCreatureAnimation();
@@ -169,6 +171,20 @@ private:
     // Campaign maps 0-2: Foundry brick/cast plate, Pressure Works riveted panel/concrete,
     // Turbine Gantry green steel/concrete.
     std::array<Texture,3> m_areaWalls,m_areaFloors;
+    // Surface sets (World.h Surface): a map's wall, floor and ceiling finish and
+    // its repeat in metres. Pressure and office plaster point at the materials
+    // maps already use; the rest are the pack finishes below.
+    struct SurfaceSet {const Texture* wall=nullptr;const Texture* floor=nullptr;const Texture* ceiling=nullptr;Vec2 wallRepeat{2,3};float floorRepeat=.5f,ceilingRepeat=.5f;};
+    std::array<SurfaceSet,SurfaceCount> m_surfaceSets;
+    // Pack finishes (tools/library/surfaces.py, resources 2100-2124); the last
+    // two are structure materials 34 resonance growth and 35 crystal.
+    std::array<Texture,25> m_surfaceTextures;
+    static Texture loadSurfaceFinish(int index);
+    const SurfaceSet* surfaceSet(int surface)const{return surface>=0&&surface<SurfaceCount?&m_surfaceSets[size_t(surface)]:nullptr;}
+    // Structure materials 26-29 and 31-35, or nullptr for every other material.
+    const Texture* finishMaterial(int material)const;
+    // Metres per repeat of a pack finish; {0,0} for any other texture.
+    Vec2 finishRepeat(const Texture& texture)const;
     Texture m_missingTexture,m_ironTexture,m_darkMetalTexture,m_rubberTexture,m_leatherTexture,m_idFabricTexture,m_medkitCaseTexture,m_medkitLabelTexture;
     Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture;
     Mesh m_barrelMesh{121},m_crateMesh{123};
