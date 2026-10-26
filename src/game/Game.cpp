@@ -54,7 +54,7 @@ bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeH
  if(!enemy.alive)return false;
  enemy.hp-=amount;enemy.painFlash=1;m_hitFlash=1;
  // A badly hurt stalker breaks off to hide before it comes back.
- if(enemy.hp>0&&enemy.kind==Enemy::Kind::Warden&&enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;}
+ if(enemy.hp>0&&creatureTraits(enemy.kind).rushSpeed>0&&enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;}
  if(enemy.hp>0)return false;
  enemy.hp=0;enemy.alive=false;enemy.deathTime=0;enemy.windup=0;enemy.strike=0;if(level==m_level)++m_kills;else ++m_chunks[level].kills;
  if(bloodDecal)m_bulletImpacts.push_back({enemy.pos,friendlyWorld(level).floorHeight(enemy.pos.x,enemy.pos.y)+.012f,{0,0},m_elapsed,level,true,int(enemy.kind)});
@@ -165,7 +165,7 @@ void Game::sound(Sound sound,float gain,float pitch){
  if(sound==Sound::Shot&&m_vrAimValid)origin=m_vrAimPosition;
  m_sounds.push_back({sound,{origin.x,origin.y},gain,pitch,false,17,origin.z});
 }
-void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){int kind=enemy.kind==Enemy::Kind::Warden||enemy.kind==Enemy::Kind::Mutant?2:int(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+kind*3+action),enemy.pos,gain,pitch*(enemy.kind==Enemy::Kind::Warden?.78f:1.f),true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
+void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){const auto& traits=creatureTraits(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+traits.voice*3+action),enemy.pos,gain,pitch*traits.voicePitch,true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
 
 int Game::hostilesRemaining(int level)const{
  const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive;}));
@@ -221,7 +221,7 @@ bool Game::testCombat(){
 }
 Game Game::validationScene(Enemy::Kind kind,float deathTime,float windup){
  Game g;g.m_enemies.resize(1);auto&e=g.m_enemies[0];e.kind=kind;e.pos={6.2f,4.5f};e.heading=kPi;e.moving=true;e.gait=2.f;e.windup=windup;e.hp=e.maxHp=kind==Enemy::Kind::Brute?280.f:kind==Enemy::Kind::Wasp?85.f:110.f;
- e.alive=deathTime<0;e.deathTime=std::max(0.f,deathTime);if(kind==Enemy::Kind::Warden)e.hp=e.maxHp=320;if(kind==Enemy::Kind::Mutant)e.hp=e.maxHp=180;g.m_player.angle=0;return g;
+ e.alive=deathTime<0;e.deathTime=std::max(0.f,deathTime);if(creatureTraits(kind).baked)e.hp=e.maxHp=creatureTraits(kind).health;g.m_player.angle=0;return g;
 }
 Game Game::mapInspection(Vec2 position,float angle,float pitch,int level,bool openDoors,float height,bool sceneryOnly,WorldId id){Game game(id);game.loadLevel(level,false);game.m_player.pos=position;game.m_player.z=height==-999?(game.m_world.hasTerrain()?game.groundHeight(position,float(World::TerrainMaxZ+1)):game.m_world.floorHeight(position.x,position.y)):height;game.m_player.angle=angle;game.m_player.pitch=pitch;
  if(sceneryOnly){game.m_enemies.clear();for(auto&chunk:game.m_chunks)chunk.enemies.clear();}
@@ -265,12 +265,27 @@ void Game::shoot(){
 Game Game::stalkerInspection(int clip,float phase,int view,Enemy::Kind kind){
  auto game=mapInspection({18.6f,18.5f},0,clip==4?-35.f:0.f,3,true,-9,false);
  if(view){game.m_player.pos={21.5f,21.2f};game.m_player.angle=-kPi*.5f;}
- game.m_enemies.resize(1);auto& e=game.m_enemies[0];e={};e.kind=kind;e.pos={21.5f,18.5f};e.z=-9;e.home=e.pos;e.heading=kPi;e.hp=e.maxHp=kind==Enemy::Kind::Mutant?180.f:320.f;
- game.m_elapsed=phase*2.5f-e.home.x*.25f;
+ game.m_enemies.resize(1);auto& e=game.m_enemies[0];e={};e.kind=kind;e.pos={21.5f,18.5f};e.z=-9;e.home=e.pos;e.heading=kPi;e.hp=e.maxHp=kind==Enemy::Kind::Warden||!creatureTraits(kind).baked?320.f:creatureTraits(kind).health;
+ game.posePreviewCreature(clip,phase);
+ return game;
+}
+// Holds the first creature at one point of a clip: 0 idle, 1 move, 2 attack
+// (the kind's own wind-up, then the strike), 3 pain, 4 death.
+void Game::posePreviewCreature(int clip,float phase){
+ auto& e=m_enemies.at(0);e.alive=true;e.moving=false;e.windup=e.strike=e.painFlash=e.deathTime=0;
+ const auto& traits=creatureTraits(e.kind);m_elapsed=(phase-e.home.x*.1f)*traits.idleSeconds;
  if(clip==1){e.moving=true;e.gait=phase*2*kPi;}
- if(clip==2){if(phase<.4f)e.windup=(1-phase/.4f)*.55f;else e.strike=1-(phase-.4f)/.6f;}
+ if(clip==2){if(phase<.4f)e.windup=(1-phase/.4f)*creatureTraits(e.kind).windup;else e.strike=1-(phase-.4f)/.6f;}
  if(clip==3)e.painFlash=1-phase;
- if(clip==4){e.alive=false;e.deathTime=phase*1.15f;}
+ if(clip==4){e.alive=false;e.deathTime=phase*traits.deathSeconds;}
+}
+// A creature alone on the Maintenance District's lit floor, filmed from the
+// front (view 0) or its left side (view 1) far enough back to hold its height.
+Game Game::creaturePreview(Enemy::Kind kind,int view){
+ const Vec2 at{14.f,12.f};const float floor=-19.f,back=creatureTraits(kind).top*1.9f;
+ auto game=mapInspection(view?Vec2{at.x-back,at.y}:Vec2{at.x,at.y-back},view?0.f:kPi*.5f,-5.f,53,true,floor,true);
+ game.m_enemies.resize(1);auto& e=game.m_enemies[0];e={};e.kind=kind;e.pos=at;e.z=floor;e.home=e.pos;e.heading=-kPi*.5f;e.hp=e.maxHp=creatureTraits(kind).health;
+ game.posePreviewCreature(0,0);
  return game;
 }
 Game Game::terminalInspection(int level,int terminal){
@@ -579,9 +594,9 @@ bool Game::testAudioEvents(){
   jump|=contains(Sound::Jump);land|=contains(Sound::Land);pump|=contains(Sound::Pump);
  }
  if(!steps||!jump||!land||!pump)return false;
- for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant}){
+ for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant,Enemy::Kind::Snatcher,Enemy::Kind::Chimera}){
   game=validationScene(kind);game.m_player.pitch=-35;game.m_sounds.clear();game.shoot();
-  int voiceKind=kind==Enemy::Kind::Mutant?2:int(kind);
+  int voiceKind=creatureTraits(kind).voice;
   if(!contains(Sound::Shot)||!contains(Sound(int(Sound::SpiderCall)+voiceKind*3)))return false;
   for(int attempts=0;game.m_enemies[0].alive&&attempts<32;++attempts){
    if(game.m_player.loaded==0)game.m_player.loaded=std::min(6,game.m_player.ammo);

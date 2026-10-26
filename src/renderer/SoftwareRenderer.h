@@ -33,7 +33,7 @@ public:
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
     int height() const { return m_height; }
-    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
+    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_snatcherMesh.description+m_chimeraMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
     void previewModel(int model,float angle);
     bool validate3D();
     static bool testPerformance();
@@ -157,7 +157,7 @@ private:
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;
     Mesh m_weaponMesh{109},m_armsMesh{111},m_enemyMesh{110};
-    Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274};
+    Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131};
     Mesh m_workerMesh{277,"",278};
     std::array<Texture,3> m_workerTextures;
     Mesh m_cleanupMesh{303,"",304};
@@ -192,7 +192,7 @@ private:
     // Metres per repeat of a pack finish; {0,0} for any other texture.
     Vec2 finishRepeat(const Texture& texture)const;
     Texture m_missingTexture,m_ironTexture,m_darkMetalTexture,m_rubberTexture,m_leatherTexture,m_idFabricTexture,m_medkitCaseTexture,m_medkitLabelTexture;
-    Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture;
+    Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture,m_snatcherTexture,m_chimeraTexture;
     Mesh m_barrelMesh{121},m_crateMesh{123};
     std::array<Mesh,FacilityModelCount> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191},Mesh{142},Mesh{258},Mesh{259},Mesh{263},Mesh{265},Mesh{275},Mesh{284},Mesh{285},Mesh{286},Mesh{288},Mesh{290},Mesh{294},
         Mesh{359},Mesh{360},Mesh{361},Mesh{362},Mesh{363},Mesh{364},Mesh{365},Mesh{366},Mesh{367},Mesh{368},Mesh{369},Mesh{370},Mesh{371},Mesh{372},Mesh{373},

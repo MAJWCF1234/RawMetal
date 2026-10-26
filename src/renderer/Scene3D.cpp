@@ -2097,19 +2097,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>e.bodyTop()+.2f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
   }
   movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
+  // Baked kinds are skinned bodies posed from their clips; the rest deform their meshes here.
+  const bool baked=creatureTraits(e.kind).baked,snatcher=e.kind==Enemy::Kind::Snatcher,chimera=e.kind==Enemy::Kind::Chimera;
   bool mutant=e.kind==Enemy::Kind::Mutant;bool wasp=e.kind==Enemy::Kind::Wasp,warden=e.kind==Enemy::Kind::Warden,brute=e.kind==Enemy::Kind::Brute||warden;
-  auto&mesh=mutant?m_mutantMesh:warden?m_wardenMesh:wasp?m_waspMesh:brute?m_bruteMesh:m_enemyMesh;
-  auto&texture=mutant?m_mutantTexture:warden?m_wardenTexture:wasp?m_waspTexture:brute?m_bruteTexture:m_enemyTexture;
-  if(warden||mutant){int clip=0;float phase=std::fmod(game.elapsed()/2.5f+e.home.x*.1f,1.f);
-   if(!e.alive){clip=4;phase=std::min(1.f,e.deathTime/1.15f);}
-   else if(e.windup>0){clip=2;phase=(1-std::clamp(e.windup/.55f,0.f,1.f))*.4f;}
+  auto&mesh=chimera?m_chimeraMesh:snatcher?m_snatcherMesh:mutant?m_mutantMesh:warden?m_wardenMesh:wasp?m_waspMesh:brute?m_bruteMesh:m_enemyMesh;
+  auto&texture=chimera?m_chimeraTexture:snatcher?m_snatcherTexture:mutant?m_mutantTexture:warden?m_wardenTexture:wasp?m_waspTexture:brute?m_bruteTexture:m_enemyTexture;
+  if(baked){const auto& traits=creatureTraits(e.kind);int clip=0;float phase=std::fmod(game.elapsed()/traits.idleSeconds+e.home.x*.1f,1.f);
+   if(!e.alive){clip=4;phase=std::min(1.f,e.deathTime/traits.deathSeconds);}
+   else if(e.windup>0){clip=2;phase=(1-std::clamp(e.windup/creatureTraits(e.kind).windup,0.f,1.f))*.4f;}
    else if(e.strike>0){clip=2;phase=.4f+(1-e.strike)*.6f;}
    else if(e.painFlash>0){clip=3;phase=1-e.painFlash;}
    else if(e.moving){clip=1;phase=std::fmod(e.gait/(2*kPi),1.f);}
    mesh.poseCreature(clip,phase);
   }
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-  float scale=warden||mutant?1.8f/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z});
+  float scale=baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z});
   float angle=e.heading,collapse=e.alive?0.f:std::min(1.f,e.deathTime/.65f);
   float shrink=e.alive?1.f:1.f-std::clamp((e.deathTime-1.25f)/1.15f,0.f,1.f);
   float wind=e.windup>0?std::sin(e.windup*5.f)*.12f:0;
@@ -2118,7 +2120,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(auto&v:face.v){Point3 p=(v.p-center)*scale;
     float localY=p.z;
     float height=p.y+range.y*scale*.5f;
-    if(e.alive&&!warden&&!mutant){
+    if(e.alive&&!baked){
      if(wasp){height+=.60f+.065f*std::sin(game.elapsed()*4.f+e.pos.x);if(face.part==1)height+=std::sin(game.elapsed()*36.f)*std::fabs(p.x)*.9f;}
      else if(brute){float sway=e.moving?std::sin(e.gait)*.07f:0;p.x+=sway*height;height+=std::fabs(sway)*.18f;}
      else if(std::fabs(p.x)>.21f){
@@ -2129,7 +2131,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      }
      height+=wind*(1-std::min(1.f,std::fabs(p.x)));localY+=e.strike*.22f;
      localY-=e.painFlash*.035f;
-    }else if(!e.alive&&!warden&&!mutant&&!mutant){height*=1-.88f*collapse;p.x+=std::sin(collapse*3.14f)*.1f*(p.x<0?-1.f:1.f);}
+    }else if(!e.alive&&!baked){height*=1-.88f*collapse;p.x+=std::sin(collapse*3.14f)*.1f*(p.x<0?-1.f:1.f);}
     p.x*=shrink;localY*=shrink;height*=shrink;
     if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode==1)
      v.p={e.pos.x+e.surfaceNormal.x*(height-.5f)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-.5f)+p.x*std::cos(angle),e.z+localY+.5f};

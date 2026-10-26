@@ -102,11 +102,10 @@ bool Game::auditMap(int level){
   report<<"Reached floor heights (m: cells, first at):";for(auto [h,entry]:heights)report<<' '<<h*.5f<<':'<<entry.first<<'@'<<(entry.second%N+.5f)*Cell<<','<<(entry.second/N+.5f)*Cell;report<<'\n';}
  auto check=[&](bool ok,const std::string& what){if(!ok)fail("UNREACHABLE "+what);};
  report<<"Map "<<level<<" ("<<w.definition().playerStart.x<<","<<w.definition().playerStart.y<<" z "<<reach.startZ<<"): "<<reach.nodes<<" reachable cells ("<<standing.nodes<<" standing) of "<<N*N<<"\n";
- const char* kinds[]={"huntsman","wasp","brute","warden","mutant"};
  auto spawnFeet=[&](Vec2 p,float z){return z>-900?z:w.supportBelow(p.x,p.y,w.floorHeight(p.x,p.y)+.5f);};
- for(const auto& s:w.creatureSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string("creature ")+kinds[int(s.kind)]+" at "+at(s.position);
+ for(const auto& s:w.creatureSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string("creature ")+creatureTraits(s.kind).name+" at "+at(s.position);
   check(reachableIn(standing,s.position,z,.75f),name);
-  if(!w.fits(s.position.x,s.position.y,spawnFeet(s.position,s.z)+.03f,1.2f,false))fail("STUCK "+name);}
+  if(!w.fits(s.position.x,s.position.y,spawnFeet(s.position,s.z)+.03f,creatureTraits(s.kind).hull,false))fail("STUCK "+name);}
  for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":"health")+" at "+at(s.position);
   check(reachable(s.position,z,.6f),name);
   if(!w.fits(s.position.x,s.position.y,spawnFeet(s.position,s.z)+.03f,.3f,false))fail("STUCK "+name);}

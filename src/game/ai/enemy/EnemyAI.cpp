@@ -10,7 +10,7 @@ namespace retro {
 static float navSupport(const World&w,Vec2 p,float feet){float z=w.supportBelow(p.x,p.y,feet);for(float x:{-.20f,.20f})for(float y:{-.20f,.20f})z=std::max(z,w.supportBelow(p.x+x,p.y+y,feet));return z;}
 static bool navFits(const World&w,Vec2 p,float z,float height){if(w.railBlocksHull(p.x,p.y,.20f,z,height))return false;for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
 static float roughStep(Enemy::Kind kind){
- return kind==Enemy::Kind::Huntsman?.62f:kind==Enemy::Kind::Wasp?.46f:kind==Enemy::Kind::Warden?.38f:.34f;
+ return creatureTraits(kind).step;
 }
 // Surface Nets navigation follows the actual terrain support instead of comparing
 // one-metre cell centres. A one-metre voxel rise becomes a traversable slope when
@@ -74,7 +74,12 @@ void Game::updateEnemies(float dt){
   if(dormantEntity(e.z))continue;
   float support=groundHeight(e.pos,e.z+.01f);
   if(e.surfaceMode==0){if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}}
-  if(!e.alive){clearCreatureSchedule(e);continue;}bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(e.kind==Enemy::Kind::Warden?1.f/.45f:4.f));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*5);
+  if(!e.alive){clearCreatureSchedule(e);continue;}
+  // A dormant creature does nothing until its state is set or it is hurt; then
+  // it knows where the player is and calls out.
+  if(e.wakeState){if(!state(e.wakeState)&&e.hp>=e.maxHp){e.moving=false;continue;}
+   e.wakeState=0;e.awareness=std::max(e.awareness,6.f);e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.state=Enemy::State::Investigate;enemySound(e,0,.9f);}
+  bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(1.f/creatureTraits(e.kind).strikeSeconds));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*creatureTraits(e.kind).painDecay);
   Vec2 target=m_player.pos;float targetFeet=m_player.z,targetEye=m_player.eye,targetHull=m_player.hullHeight();int friendly=-1;
   auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   bool visible=aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,11.f,-.25f,2.5f);
@@ -98,7 +103,7 @@ void Game::updateEnemies(float dt){
    float dz=stimulus.z-e.z-.7f;float planar=lengthSq(stimulus.source-e.pos);if(planar+dz*dz>=stimulus.radius*stimulus.radius||planar<1.f)continue;
    float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud,soundRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
    if(strength>strongest){strongest=strength;heard=&stimulus;}}
-  if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,e.kind==Enemy::Kind::Warden?12.f:6.f);e.state=Enemy::State::Chase;}
+  if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,creatureTraits(e.kind).rushSpeed>0?12.f:6.f);e.state=Enemy::State::Chase;}
   else if(heard){e.lastKnown=heard->source;auto local=heard->source;const auto&sourceWorld=worldAt(local);e.lastKnownZ=sourceWorld.supportBelow(local.x,local.y,heard->z);e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
   if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
@@ -120,32 +125,35 @@ void Game::updateEnemies(float dt){
   }
   e.voiceTimer-=dt;e.stepTimer-=dt;
   if(e.awareness>0&&e.voiceTimer<=0){enemySound(e,0,e.kind==Enemy::Kind::Warden?.28f:.65f);e.voiceTimer=(e.kind==Enemy::Kind::Warden?11.f:6.f)+float(int(e.home.x)%4);}
-  bool warden=e.kind==Enemy::Kind::Warden;
-  float range=warden?1.1f:e.kind==Enemy::Kind::Brute?1.25f:1.05f;
+  // Stalkers (the reactor's thing, the Snatcher) hunt by sight: stare, flank, rush, hide.
+  const auto& traits=creatureTraits(e.kind);const bool stalker=traits.rushSpeed>0;
+  float range=traits.reach;
   bool sameLevel=targetFeet<e.bodyTop()&&targetFeet+targetHull>e.bodyBottom();
   bool canMelee=visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0;
   bool heardCue=heard!=nullptr;
-  bool hurt=e.painFlash>(warden?.85f:.65f);
+  bool hurt=e.painFlash>(stalker?.85f:.65f);
   Vec2 goal=e.awareness>0?e.lastKnown:e.home;
-  bool wantsMove=e.state!=Enemy::State::Search&&!(e.windup>0||e.strike>0)&&!canMelee&&length(goal-e.pos)>=.3f&&!(!warden&&visible&&dist<range*.82f);
+  bool wantsMove=e.state!=Enemy::State::Search&&!(e.windup>0||e.strike>0)&&!canMelee&&length(goal-e.pos)>=.3f&&!(!stalker&&visible&&dist<range*.82f);
   int ms=std::max(1,int(std::round(dt*1000)));
   runCreatureSchedule(e,ms,visible,heardCue,canMelee||e.windup>0||e.strike>0,hurt,wantsMove);
   bool scheduleMove=e.scheduleStep==1&&e.scheduleStatus==int(CreatureTaskStatus::Running);
   bool scheduleStrike=creatureTaskAllows(e,CreatureTask::Strike)||e.schedule==int(CreatureSchedule::Attack);
-  if(e.windup>0){if(!warden&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=warden?1.05f:e.kind==Enemy::Kind::Wasp?.8f:e.kind==Enemy::Kind::Huntsman?1.f:1.6f;
-    if(dist<range+.1f&&dot(normalized(to),facing)>(warden?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,target,targetFeet+.5f)){
-     float damage=warden?30.f:e.kind==Enemy::Kind::Mutant?16.f:e.kind==Enemy::Kind::Brute?18.f:9.f;
+  if(e.windup>0){if(!stalker&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=traits.cooldown;
+    if(dist<range+.1f&&dot(normalized(to),facing)>(stalker?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,target,targetFeet+.5f)){
+     float damage=creatureTraits(e.kind).damage;
      if(friendly>=0)damageFriendly(size_t(friendly),damage,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});else receiveDamage(damage,e.pos);
     }
    }continue;
   }
   // Close-range committed swing: the player can backstep or circle behind it.
-  if(warden&&scheduleStrike&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){
-   e.heading=std::atan2(to.y,to.x);e.windup=.55f;enemySound(e,1,.9f);continue;
+  if(stalker&&scheduleStrike&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){
+   e.heading=std::atan2(to.y,to.x);e.windup=traits.windup;enemySound(e,1,.9f);continue;
   }
-  if(e.awareness>0&&(e.kind==Enemy::Kind::Warden||e.kind==Enemy::Kind::Mutant))requestAiDoor(m_world,m_level,e.pos,e.z,goal);
+  if(e.awareness>0&&creatureTraits(e.kind).opensDoors)requestAiDoor(m_world,m_level,e.pos,e.z,goal);
   float stalkSpeed=2.1f;bool watching=false;
-  if(warden&&friendly<0){
+  // Its pace scales every stalking speed and shortens its stare-downs.
+  const float pace=traits.rushSpeed/3.8f;
+  if(stalker&&friendly<0){
    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
    Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
    Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
@@ -168,7 +176,7 @@ void Game::updateEnemies(float dt){
    // First contact is a stare-down. Even if the player's back is turned, the
    // Warden gets a stalking beat before it is allowed to charge.
    if(freshContact){
-    e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=observed?1.6f:.75f;
+    e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=(observed?1.6f:.75f)/pace;
    }
 
    // Catch it trying to circle you and it stops rather than cartoonishly
@@ -222,7 +230,7 @@ void Game::updateEnemies(float dt){
    // Watching is deliberately unnerving: if the player has it in clear view,
    // it holds position. Looking away gives it permission to creep/flank.
    watching=observed&&e.awareness>0&&e.stalkMode==Enemy::StalkMode::Watch&&dist>2.f&&dist<9.5f;
-   stalkSpeed=e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Retreat?2.6f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f;
+   stalkSpeed=pace*(e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Retreat?2.6f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f);
 
    // Search the last witnessed area; never sample the hidden player's new position.
    if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
@@ -233,10 +241,10 @@ void Game::updateEnemies(float dt){
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
   auto look=visible?to:goal-e.pos;
   if(lengthSq(look)>.01f)e.heading+=wrapAngle(std::atan2(look.y,look.x)-e.heading)*std::min(1.f,dt*(e.kind==Enemy::Kind::Brute?3.5f:14.f));
-  if(scheduleStrike&&!warden&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=e.kind==Enemy::Kind::Brute?.8f:e.kind==Enemy::Kind::Mutant?.55f:.32f;enemySound(e,1,.85f);continue;}
-  if(watching||!scheduleMove||length(goal-e.pos)<.3f||(!warden&&visible&&dist<range*.82f)||e.painFlash>(warden?.85f:.65f))continue;
+  if(scheduleStrike&&!stalker&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=creatureTraits(e.kind).windup;enemySound(e,1,.85f);continue;}
+  if(watching||!scheduleMove||length(goal-e.pos)<.3f||(!stalker&&visible&&dist<range*.82f)||e.painFlash>(stalker?.85f:.65f))continue;
   Vec2 destination=goal;
-  float hull=(e.kind==Enemy::Kind::Brute||warden||e.kind==Enemy::Kind::Mutant)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f;
+  float hull=creatureTraits(e.kind).hull;
   float stepHeight=m_world.hasTerrain()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
   bool direct=false;
   if(m_world.hasTerrain()){
@@ -253,7 +261,7 @@ void Game::updateEnemies(float dt){
   // path every frame or continuing to push into the same corner forever.
   if(e.searchTime>.2f)direct=false;
   if(!direct&&e.repathTimer>0)destination=e.waypoint;
-  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,(e.kind==Enemy::Kind::Brute||warden||e.kind==Enemy::Kind::Mutant)?1.85f:e.kind==Enemy::Kind::Wasp?1.6f:1.05f);e.waypoint=destination;e.repathTimer=.35f;}
+  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,creatureTraits(e.kind).hull);e.waypoint=destination;e.repathTimer=.35f;}
   else if(!direct){
    int field[World::Height][World::Width];for(auto&row:field)for(auto&value:row)value=9999;
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
@@ -277,13 +285,13 @@ void Game::updateEnemies(float dt){
   if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
   direction=normalized(direction+separation*2.f);
-  float speed=warden?stalkSpeed:e.kind==Enemy::Kind::Wasp?1.85f:e.kind==Enemy::Kind::Brute?.75f:e.kind==Enemy::Kind::Mutant?1.9f:1.4f;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
+  float speed=stalker?stalkSpeed:traits.speed;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
   auto old=e.pos;
   auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight),height=hull;
    bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);if(ground-e.z<=stepHeight+.01f&&hullFits(next,feet,height)){e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}}
   };
   move(e.pos+Vec2{direction.x*speed*dt,0});move(e.pos+Vec2{0,direction.y*speed*dt});
-  float moved=length(e.pos-old);e.moving=moved>.0001f;e.gait+=moved*7;
+  float moved=length(e.pos-old);e.moving=moved>.0001f;e.gait+=moved*creatureTraits(e.kind).gaitPerMetre;
   e.searchTime=e.moving?0.f:std::min(1.f,e.searchTime+dt);
   if(e.kind==Enemy::Kind::Huntsman&&!m_world.outdoors()&&e.awareness>0&&e.searchTime>.22f){
    float roof=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
@@ -402,7 +410,7 @@ bool Game::testAI(){
  dodge.update({},.01f);if(attacker.windup<=0)return false;
  dodge.m_player.pos=attacker.pos+Vec2{.7f,0};
  for(int i=0;i<70;++i)dodge.update({},1.f/120.f);if(dodge.player().health!=100)return false;
- for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant}){auto stairs=validationScene(kind);auto&climber=stairs.m_enemies[0];
+ for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant,Enemy::Kind::Snatcher}){auto stairs=validationScene(kind);auto&climber=stairs.m_enemies[0];
   climber.pos={21.f,15.5f};climber.home=climber.pos;climber.lastKnown=climber.pos;climber.z=stairs.groundHeight(climber.pos);climber.heading=-kPi*.5f;
   stairs.m_player.pos={21.f,11.5f};stairs.m_player.z=stairs.groundHeight(stairs.m_player.pos,5.f);
   climber.lastKnown=stairs.m_player.pos;climber.lastKnownZ=stairs.m_player.z;climber.awareness=60;

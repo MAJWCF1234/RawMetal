@@ -221,3 +221,18 @@ check in game, since packs differ.
 | scrap_train_car | 329 | 3.83 x 23.39 x 5.33 | Wrecked facility transit or ore-line car embedded in rock (hero piece, 8 textures) | floor or partly buried in rock, solid; has a floor texture and door gaps | long axis Y; the two ends look alike; 3106 triangles |
 | scrap_trash_heap | 330 | 1.85 x 3.20 x 1.18 | Refuse heap with bin bags | floor, not solid (low) | none |
 | scrap_van_husk | 331 | 2.84 x 6.34 x 2.71 | Stripped, rusted van shell on the crushed-machinery plains | floor, solid | front of the van faces -Y; long axis Y; rests on its belly |
+
+## Creatures
+
+Two purchased creatures, kept with the library (gitignored) under
+`src/assets/library/creatures/`, are rebuilt from their packs by tools that are
+in the repository. Their numbers live in `creatureTraits` (WorldDefinition.h).
+
+| Kind | Pack | Runtime files (resources) | Rebuild | Clips |
+| --- | --- | --- | --- | --- |
+| Snatcher | `O:/retro official/psx-snatcher-low-poly-horror.zip` (rigged on the Mixamo skeleton, A-pose) | `snatcher.fbx` 2126, `snatcher.png` 2127 (512 px from the 2048 px sheet), `snatcher-animation.bin` 2128 | `blender -b --python tools/BakeSnatcher.py -- Snatcher.glb snatcher.fbx`, then `RawMetalAuthoredCreatureBake snatcher.fbx snatcher-animation.bin Snatcher_Idle Snatcher_Run Snatcher_Snatch Snatcher_Stagger Snatcher_Death mixamorig:Hips` | its own idle; the Mixamo lunge run, neck bite (frames 6-36), hit stagger (9-47) and death on its back (8-64), retargeted by absolute bone orientation |
+| Chimera | `O:/retro official/chimera.zip` (eleven rigid parts, no skeleton) | `chimera.fbx` 2129, `chimera.png` 2130, `chimera-animation.bin` 2131 | `blender -b --python tools/RigChimera.py -- chimera.glb chimera.fbx`, then `RawMetalAuthoredCreatureBake chimera.fbx chimera-animation.bin Chimera_Idle Chimera_Walk Chimera_Attack Chimera_Pain Chimera_Death` | keyed by RigChimera.py on its own ten-bone rig: breathing with the petals budded, a diagonal gait, rearing with the petals open, a flinch, a collapse onto its side |
+
+Chapter 1 placements: Snatchers in the Fabrication Shop's welding bay, on
+Personnel Transit's platform (a Tram 4 passenger) and in Checkpoint Delta's
+holding cells; the Chimera is R-114's occupant in Research Receiving's cold hold.

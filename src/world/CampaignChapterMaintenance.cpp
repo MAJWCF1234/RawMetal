@@ -682,8 +682,14 @@ std::shared_ptr<const Map> makeFabricationShop(){
  mntFix(m,model::pwr_control_cabinet,{15.6f,22.05f},f,.6f,.35f,1.25f,kPi,true);
  mntControl(m,{15.6f,22.f},"OPERATIONS SHUTTER / DRIVE","E / FIT THE MACHINED PIN AND RELEASE THE SHUTTER.","REQUIRES THE FINISHED PIN FROM LATHE 2. OPERATIONS IS THROUGH THE SOUTH DOOR.",shutter,pin,kPi);
  mntFix(m,model::pwr_breaker_panel_open,{16.4f,22.92f},f+1.3f,.32f,.23f,.46f,kPi,false);
- // --- A transformed worker in the welding bay ------------------------------------------------------
- m.creatureSpawns.push_back({CreatureKind::Mutant,{19.5f,7.f},f});
+ // --- A transformed worker in the welding bay: it runs its prey down ----------------------------------
+ // It stays crouched behind the mesh until the lathe's noise carries to it, or
+ // the player walks into the bay.
+ {const StateId wake=stateId("mnt_weld_wake");
+  m.creatureSpawns.push_back({CreatureKind::Snatcher,{19.5f,7.f},f,1,0,wake});
+  auto& noise=mntOn(m,"mnt_ev_weld_noise",stateId("mnt_lathe_done"));noise.actions={mntAct(ScriptAction::Type::SetState,wake,1)};
+  ScriptEvent e;e.id=stateId("mnt_ev_weld_close");e.x1=15.7f;e.y1=1.f;e.x2=23.f;e.y2=9.5f;e.bottom=f-1;e.top=f+2;
+  e.actions={mntAct(ScriptAction::Type::SetState,wake,1)};m.scriptEvents.push_back(e);}
  m.pickupSpawns.push_back({{22.f,19.f},PickupKind::Ammo,f});
  mntFix(m,model::med_first_aid_box,{14.7f,11.75f},f+1.4f,.37f,.12f,.35f,kPi,false);
  // --- Light: tube rows over the aisle and the machine line, one dying ----------------------------

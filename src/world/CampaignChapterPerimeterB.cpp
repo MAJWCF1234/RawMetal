@@ -353,7 +353,8 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
 // the clean transfer gallery and Decon 1; the lane has been locked since the
 // lockdown at 02:09, so the only way up is the freight stair at the back of
 // the hold, past the containers. The clean-side release opens the lane again
-// as a shortcut. The thing from R-114 waits in the dark of the cold hold.
+// as a shortcut. The thing from R-114, a resonance specimen on four legs with a
+// mouth that flowers open, waits in the dark of the cold hold.
 std::shared_ptr<const Map> makeResearchReceiving(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[64];m.definition=CampaignChunks[64];m.definition.ambient=.28f;
@@ -521,7 +522,9 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  cue(m,"ere_recv_knock_ms",5200,Sound::JunkMetal,{5.5f,8.71f},"",.4f,base+.6f);
  pbSequence(m,"ere_recv_wake_ms","ere_recv_wake_done",6000,5000);
  cue(m,"ere_recv_wake_ms",80,Sound::JunkGlass,{4.6f,21.6f},"",1.f,base+.8f);
- cue(m,"ere_recv_wake_ms",700,Sound::WorkerDying,{5.6f,19.8f},"",1.1f,base+1.5f);
+ // R-114's occupant answers from the dark of the hold: its own call, low, twice.
+ m.sequenceCues.push_back({stateId("ere_recv_wake_ms"),700,Sound::BruteCall,{5.6f,19.8f},1.1f,.6f,"",base+1.5f});
+ m.sequenceCues.push_back({stateId("ere_recv_wake_ms"),2100,Sound::BruteCall,{5.6f,19.8f},1.f,.52f,"",base+1.5f});
  {auto e=pbEvent("ere_recv_wake_trip",1.2f,10.25f,8.45f,13.f,base-.5f,base+1.5f);e.actions={pbSet(wake),pbSet(stateId("ere_recv_wake_ms"))};m.scriptEvents.push_back(e);}
  // --- Light ---------------------------------------------------------------------
  for(Vec2 l:{Vec2{10.5f,6.5f},Vec2{15.f,7.f},Vec2{10.f,14.f}})m.lights.push_back(lamp(l,roof-.5f,2.3f,14.f,4300,.22f));
@@ -544,7 +547,7 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  m.lights.push_back(lamp({12.f,23.4f},gz+2.7f,.9f,5.f,7000,.03f));
  // --- Encounters and rewards ----------------------------------------------------------
  // R-114 has an 8 cm steel floor; occupants and supplies stand on it.
- m.creatureSpawns={{CreatureKind::Huntsman,{3.6f,5.3f},base+.08f},{CreatureKind::Mutant,{5.6f,19.8f},base,1,0,wake},{CreatureKind::Huntsman,{12.f,20.4f},base}};
+ m.creatureSpawns={{CreatureKind::Huntsman,{3.6f,5.3f},base+.08f},{CreatureKind::Chimera,{5.6f,19.8f},base,1,0,wake},{CreatureKind::Huntsman,{12.f,20.4f},base}};
  m.pickupSpawns={{{2.2f,6.1f},PickupKind::Ammo,base+.08f},{{16.9f,1.6f},PickupKind::Health,base},{{9.2f,21.f},PickupKind::Ammo,gz},{{19.6f,18.4f},PickupKind::Health,base}};
  m.clutterSpawns={{3,{13.2f,3.7f},base},{4,{16.7f,3.8f},base},{0,{9.4f,15.2f},base},{2,{16.6f,16.2f},base},{1,{20.9f,20.5f},gz}};
  zone(m,"RESEARCH RECEIVING / CLEAN TRANSFER GALLERY",1,17,23,24,gz-.5f,1000);

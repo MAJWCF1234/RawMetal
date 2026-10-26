@@ -714,7 +714,11 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  machineryClock(m,"per_delta_clock",60000);
  perGuard(m,"per_delta_clock","per_delta",0,ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,
   {{{4.f,15.f},mz,5000,kPi*.5f},{{3.f,8.5f},mz,4000,kPi*.5f}},14,.5f,2,1.2f);
- m.creatureSpawns.push_back({CreatureKind::Huntsman,{20.f,12.f},f});
+ // One of the fourteen the detail processed, still in the holding cells: changed.
+ // It crouches among the body bags until the player walks the lane past the bars.
+ {const StateId wake=stateId("per_delta_cells_wake");
+  m.creatureSpawns.push_back({CreatureKind::Snatcher,{20.f,12.f},f,1,0,wake});
+  auto e=perEvent("per_delta_cells_trip",11.5f,3.f,16.f,21.f,f-.5f,f+1.5f);e.actions={perSet(wake),perSound(Sound::JunkMetal,.7f)};m.scriptEvents.push_back(e);}
  m.pickupSpawns.push_back({{13.6f,2.4f},PickupKind::Ammo,f});
  m.pickupSpawns.push_back({{2.4f,14.6f},PickupKind::Health,mz});
  // --- Light ------------------------------------------------------------------------------------
@@ -832,8 +836,12 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  perFix(m,model::ind_crate,21.f,21.4f,f,.8f,.8f,.8f,.3f,true);
  terminal(m,{8.f,21.f},"TRANSIT / PLATFORM B LOG","TRAM 4 HELD 02:40. 31 ABOARD. DOORS LOCKED BY ORDER 7.","03:05 DOORS OPENED BY CLEANUP. 03:20 PLATFORM CLEAR.",f-bed);
  machineryClock(m,"per_transit_clock",60000);
- // --- Something is still on the tram -------------------------------------------------------------
- m.creatureSpawns.push_back({CreatureKind::Mutant,{18.f,15.f},f});
+ // --- Something is still on the tram: one of Tram 4's thirty-one -----------------------------------
+ // It waits on the track bed behind the car's east end; when the player heads
+ // for the crossing it bangs against the car and climbs out after them.
+ {const StateId wake=stateId("per_transit_wake");
+  m.creatureSpawns.push_back({CreatureKind::Snatcher,{18.6f,10.5f},bed,1,0,wake});
+  auto e=perEvent("per_transit_trip",15.f,1.f,23.f,23.f,f-.5f,f+1.5f);e.actions={perSet(wake),perSound(Sound::JunkMetal,.85f)};m.scriptEvents.push_back(e);}
  m.creatureSpawns.push_back({CreatureKind::Huntsman,{6.f,4.f},f});
  m.pickupSpawns.push_back({{2.f,4.f},PickupKind::Ammo,f});
  m.pickupSpawns.push_back({{22.f,16.f},PickupKind::Health,f});

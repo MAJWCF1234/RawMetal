@@ -82,11 +82,12 @@ struct Enemy {
     int schedule=0,scheduleStep=0,scheduleTask=0,scheduleStatus=0,scheduleMs=0,scheduleCursor=0,scheduleCursorSaved=0,scheduleTransitions=0;
     unsigned scheduleConditions=0;
     bool scriptSpawned=false; // Persistent population owned by a script, not the authored baseline.
+    StateId wakeState=0;      // Dormant, blind and deaf until this state is set or it is hurt.
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
-    float bodyTop()const{return z+(kind==Kind::Wasp?1.55f:kind==Kind::Brute||kind==Kind::Warden||kind==Kind::Mutant?1.85f:1.05f);}
-    const char* name()const{return kind==Kind::Mutant?"MUTATED HUMAN":kind==Kind::Warden?"REACTOR STALKER":kind==Kind::Wasp?"XENOWASP":kind==Kind::Brute?"SCISSOR FIEND":"HUNTSMAN";}
+    float bodyTop()const{return z+creatureTraits(kind).top;}
+    const char* name()const{return creatureTraits(kind).name;}
 };
 
 struct Pickup {
@@ -437,6 +438,8 @@ public:
     bool musicEnabled()const{return m_musicEnabled;}
     static Game validationScene(Enemy::Kind kind,float deathTime=-1,float windup=0);
     static Game stalkerInspection(int clip,float phase,int view=0,Enemy::Kind kind=Enemy::Kind::Warden);
+    static Game creaturePreview(Enemy::Kind kind,int view);
+    void posePreviewCreature(int clip,float phase);
     static Game terminalInspection(int level,int terminal=0);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
     static Game barrelInspection(float age);

@@ -12,7 +12,36 @@ enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
 inline constexpr int FacilityModelCount=332;
-enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant };
+enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera };
+// One record per creature kind: what it is called, how much it takes, the
+// standing height navigation and hits use (hull) against its visible top, its
+// pace, bite, wind-up before a strike and the step it can climb; its call set
+// (0 huntsman, 1 wasp, 2 the big bodies) and pitch; whether it works doors;
+// and whether it is a skinned body posed from baked clips. Then how its clips
+// run against game time: the idle loop's length, gait radians per metre walked
+// (one move-clip cycle every 2*pi of gait), how fast a flinch decays, and how
+// long the death clip takes before the corpse settles. Last, how it fights:
+// melee reach, the rush speed of a stalker (0: it does not stalk; a stalker
+// stares, flanks to the blind side, rushes, and hides when badly hurt), how
+// long a strike lands for and the cooldown after it.
+struct CreatureTraits {const char* name;float health,hull,top,speed,damage,windup,step;int voice;float voicePitch;bool opensDoors,baked;
+ float idleSeconds,gaitPerMetre,painDecay,deathSeconds,reach,rushSpeed,strikeSeconds,cooldown;};
+inline const CreatureTraits& creatureTraits(CreatureKind kind){
+ static constexpr CreatureTraits table[]={
+  {"HUNTSMAN",       110,1.05f,1.05f,1.4f, 9,.32f,.62f,0,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.f},
+  {"XENOWASP",        85,1.6f, 1.55f,1.85f,9,.32f,.46f,1,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,.8f},
+  {"SCISSOR FIEND",  280,1.85f,1.85f,.75f,18,.8f, .34f,2,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.25f,0.f, .25f,1.6f},
+  {"REACTOR STALKER",320,1.85f,1.85f,1.4f,30,.55f,.38f,2,.78f, true, true, 2.5f,7.f, 5.f,1.15f,1.1f, 3.8f,.45f,1.05f},
+  {"MUTATED HUMAN",  180,1.85f,1.85f,1.9f,16,.55f,.34f,2,1.f,  true, true, 2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.6f},
+  // A transformed worker that runs its prey down: it stalks like the reactor's
+  // thing but rushes harder and reaches further with its grab; its run covers
+  // 1.9 m a cycle and it reels for half a second when hit.
+  {"SNATCHER",       140,1.85f,1.85f,2.4f,14,.38f,.34f,2,1.32f,true, true, 3.f, 3.3f,1.8f,1.2f,1.35f,4.6f,.3f, 1.f},
+  // A resonance specimen on four legs: slow, heavy, stooping through doors; a
+  // long reach and a slam that lands hard and takes its time to recover.
+  {"CHIMERA",        420,2.f,  2.4f, 1.6f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.14f,2.2f,1.2f,1.7f, 0.f, .35f,2.f}};
+ return table[int(kind)];
+}
 // The area score a map plays; stitched maps share one so the loop carries on.
 enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Count };
 enum class PickupKind { Health, Ammo }; // Values retain the existing save format.

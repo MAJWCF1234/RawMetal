@@ -959,6 +959,42 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
+    if(auto arg=std::wcsstr(commandLine,L"--creature-inspection=")){
+     // Any kind's five clips at four phases, front and side: creature-K-clip-frame[-side].ppm.
+     const int kind=_wtoi(arg+22);if(kind<0||kind>int(retro::CreatureKind::Chimera))return 1;
+     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
+     for(int view=0;view<2;++view)for(int clip=0;clip<5;++clip)for(int frame=0;frame<4;++frame){
+      auto scene=retro::Game::stalkerInspection(clip,.05f+frame*.3f,view,retro::Enemy::Kind(kind));renderer.render(scene);
+      std::ofstream out("creature-"+std::to_string(kind)+"-"+std::to_string(clip)+"-"+std::to_string(frame)+(view?"-side":"")+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
+      for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return 0;
+    }
+    if(auto arg=std::wcsstr(commandLine,L"--creature-video=")){
+     // Every clip of one kind on a single 30 fps timeline, front and side, at
+     // the timing the game plays it: creature-video/K-front-NNNN.ppm and
+     // K-side-NNNN.ppm, with creature-video/K-timeline.txt naming each frame's clip.
+     const int kind=_wtoi(arg+17);if(kind<0||kind>int(retro::CreatureKind::Chimera))return 1;
+     const auto& traits=retro::creatureTraits(retro::CreatureKind(kind));
+     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
+     renderer.setEnvironmentInspection(true);std::filesystem::create_directories("creature-video");
+     retro::Game views[2]={retro::Game::creaturePreview(retro::Enemy::Kind(kind),0),retro::Game::creaturePreview(retro::Enemy::Kind(kind),1)};
+     struct Segment{const char* name;int clip;float seconds;};
+     const float attack=traits.windup+.25f;
+     const float pain=1.f/traits.painDecay;
+     const Segment timeline[]={{"IDLE",0,traits.idleSeconds*1.5f},{"MOVE",1,2.5f},{"ATTACK",2,attack},{"ATTACK",2,attack},{"PAIN",3,pain},{"PAIN",3,pain},{"DEATH",4,traits.deathSeconds+.8f}};
+     std::ofstream names("creature-video/"+std::to_string(kind)+"-timeline.txt");int frame=0;
+     for(const auto& s:timeline)for(int f=0;f<int(s.seconds*30);++f,++frame){const float t=f/30.f;float phase=0;
+      if(s.clip==0)phase=std::fmod(t/traits.idleSeconds,1.f);
+      else if(s.clip==1)phase=std::fmod(t*traits.speed*traits.gaitPerMetre/(2*retro::kPi),1.f);
+      else if(s.clip==2)phase=t<traits.windup?.4f*t/traits.windup:std::min(1.f,.4f+.6f*(t-traits.windup)/.25f);
+      else if(s.clip==3)phase=std::min(1.f,t/pain);
+      else phase=std::min(1.f,t/traits.deathSeconds);
+      names<<frame<<' '<<s.name<<'\n';
+      for(int v=0;v<2;++v){views[v].posePreviewCreature(s.clip,phase);renderer.render(views[v]);char file[64];std::snprintf(file,sizeof(file),"creature-video/%d-%s-%04d.ppm",kind,v?"side":"front",frame);
+       std::ofstream out(file,std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     }
+     return 0;
+    }
     if(std::wcsstr(commandLine,L"--hearing-test"))return retro::Game::testHearing()?0:21;
     if(std::wcsstr(commandLine,L"--guard-ai-test"))return retro::Game::testGuardAI()?0:21;
     if(std::wcsstr(commandLine,L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
