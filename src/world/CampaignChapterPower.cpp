@@ -625,6 +625,17 @@ std::shared_ptr<const Map> makeLoadControl(){
  wallSign(m,6.f,1.055f,f+1.3f,"CLOCK IN","SHIFT 2: HALE, OKAFOR, BRANDT / OUT: ---",2.f,0);
  // --- The mimic wall and the three transfer stations ---------------------------------------------
  wall(m,1.f,22.3f,23.f,23.f,f,f+2.9f,2);
+ // The single-line diagram the desks face: the 11 kV bus across the top fed
+ // by Substation A's two transformers and the emergency set, seven feeders
+ // dropping to the 415 V boards, each through its breaker; Feeder 9's breaker
+ // striped where Cleanup locked it open. Washed by two lamps on the room's supply.
+ {const float face=22.28f,t=.03f;auto strip=[&](float x1,float z1,float x2,float z2,int mat){wall(m,x1,face-t,x2,face,f+z1,f+z2,mat);};
+  wall(m,1.6f,face-.012f,22.4f,face,f+1.1f,f+2.82f,20);
+  strip(2.5f,2.42f,21.5f,2.5f,18);strip(3.f,1.5f,21.f,1.56f,19);
+  for(float x:{6.f,12.f,18.f})strip(x-.04f,2.5f,x+.04f,2.78f,19);
+  for(float x:{3.5f,6.5f,9.5f,12.5f,15.5f,18.5f,20.8f}){strip(x-.03f,1.56f,x+.03f,2.42f,18);
+   wall(m,x-.08f,face-.045f,x+.08f,face,f+2.02f,f+2.18f,x>18.f&&x<19.f?13:8);}
+  for(Vec2 l:{Vec2{6.5f,face},Vec2{17.5f,face}})pwrWork(m,l,f+2.62f,1.f,5.f,5600,.1f,WorldLightMount::Wall,-kPi*.5f,PwrLcMains);}
  const StateId ready=stateId("pwr_transfer_ready"),bus=stateId("pwr_transfer_bus");
  terminal(m,{5.f,21.f},"LOAD CONTROL / 1 SHED","PLANT DEMAND 36 MW. SET 2 CARRIES 2. NO SUPPLY HERE UNTIL SUBSTATION A CLOSES.","E / SHED ALL BUT LIFE SAFETY AND THE FEEDERS.",0,ready,PwrSubA);
  terminal(m,{12.f,21.f},"LOAD CONTROL / 2 TRANSFER","PLANT STILL ON THE DEAD GRID. SET 2 TRIPS IF IT TAKES UNSHED LOAD.","E / TRANSFER THE PLANT TO EMERGENCY GENERATION.",0,bus,ready);

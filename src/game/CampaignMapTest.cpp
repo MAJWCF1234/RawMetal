@@ -149,7 +149,12 @@ bool Game::testCampaignMaps(){
   operate(power,36,{12,2.9f},-28);
   operate(power,40,{19,19.9f},-19);
   check(!power.state("pwr_sub_a")&&!power.state("pwr_feeder9"),"Power controls refuse out-of-order breaker and feeder operation");
-  operate(power,39,{17.9f,6.f},-28,0.f);operate(power,39,{13.f,12.7f},-28);operate(power,39,{13,5.9f},-28);operate(power,36,{12,2.9f},-28);
+  operate(power,39,{17.9f,6.f},-28,0.f);operate(power,39,{13.f,12.7f},-28);
+  // Set 2 has to catch and run before the emergency bus will close onto it.
+  operate(power,39,{13,5.9f},-28);const bool earlyClose=power.state("pwr_gen_online")!=0;
+  power.loadLevel(39,false);power.m_enemies.clear();power.m_player.pos={13.f,12.7f};power.m_player.z=-28;for(int i=0;i<120;++i)power.update({},1.f/60);
+  check(!earlyClose&&power.state("pwr_set2_ms_done"),"Set 2 catches after cranking, and the bus waits for it");
+  operate(power,39,{13,5.9f},-28);operate(power,36,{12,2.9f},-28);
   check(power.state("pwr_gen_online")&&power.state("pwr_sub_a"),"Physical E controls restore emergency generation and Substation A");
   Game restored;check(restored.decodeSave(power.encodeSave())&&restored.state("pwr_sub_a"),"Black-start progress survives save/load before load transfer");
   operate(restored,40,{12,19.9f},-19);
