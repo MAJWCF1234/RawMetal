@@ -324,9 +324,9 @@ std::shared_ptr<const Map> makeWaterTreatment(){
   e.actions.push_back(watSpawn(C::Huntsman,{18.6f,13.2f},F));e.actions.push_back(watSpawn(C::Huntsman,{12.f,13.6f},F,4));
   e.actions.push_back(watSound(Sound::SpiderCall,.8f));m.scriptEvents.push_back(e);}
  watQuiet(m,"wat_hub_quiet",{"wat_reservoir_hum_ms","wat_basin_hum_ms"});
- zone(m,"28A CONTROL ROOM",14,1,23,6,G-.5f,G+3);
- zone(m,"28B WATER LAB",1,19,7,23);
- zone(m,"28 WATER TREATMENT",0,0,24,24);
+ zone(m,"WATER TREATMENT / CONTROL ROOM",14,1,23,6,G-.5f,G+3);
+ zone(m,"WATER TREATMENT / WATER LAB",1,19,7,23);
+ zone(m,"WATER TREATMENT",0,0,24,24);
  freightFinish(m,-1);
  titleCard(m,"WATER AND COOLING");
  return p;
@@ -458,10 +458,10 @@ std::shared_ptr<const Map> makeDrainageGallery(){
  m.pickupSpawns={{{2.4f,8.3f},P::Ammo,F},{{7.4f,21.6f},P::Health,F}};
  m.clutterSpawns={{0,{9.f,6.f},-999,.4f},{2,{7.5f,4.f},-999,1.1f},{0,{15.5f,6.6f},-999,2.f},{2,{17.3f,16.6f},-999,.3f},{3,{20.f,8.3f},F,0},{1,{12.f,21.f},F,.8f}};
  {auto e=watEvent("wat_drainage_arrival",18,12,24,20,F-.5f,F+2);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
- zone(m,"29A CULVERT 2",5,14,18,18);
- zone(m,"29B OVERFLOW GALLERY",1,1,23,9);
- zone(m,"29C SLUICE JUNCTION",1,19,13,23);
- zone(m,"29 DRAINAGE GALLERY",0,0,24,24);
+ zone(m,"DRAINAGE GALLERY / CULVERT 2",5,14,18,18);
+ zone(m,"DRAINAGE GALLERY / OVERFLOW GALLERY",1,1,23,9);
+ zone(m,"DRAINAGE GALLERY / SLUICE JUNCTION",1,19,13,23);
+ zone(m,"DRAINAGE GALLERY",0,0,24,24);
  freightFinish(m,-1);
  return p;
 }
@@ -627,10 +627,10 @@ std::shared_ptr<const Map> makeSumpWorks(){
  cue(m,"wat_sump_rundown_ms",400,Sound::WaterReturn,{8.f,9.f},"MCC-2 OPEN. THE PUMPS RUN DOWN.",.7f,F);
  cue(m,"wat_sump_rundown_ms",3800,Sound::SpiderCall,{16.75f,22.f},"",.9f,F+.5f);
  cue(m,"wat_sump_rundown_ms",6200,Sound::SpiderCall,{21.f,6.f},"",.8f,F+.5f);
- zone(m,"30A MCC-2 ROOM",1,15,9,23);
- zone(m,"30B SCREENINGS PRESS",14.6f,13,19.4f,18.4f);
- zone(m,"30C MOTOR TERRACE",0,0,24,9,G-.5f,100);
- zone(m,"30 SUMP WORKS",0,0,24,24);
+ zone(m,"SUMP WORKS / MCC-2 ROOM",1,15,9,23);
+ zone(m,"SUMP WORKS / SCREENINGS PRESS",14.6f,13,19.4f,18.4f);
+ zone(m,"SUMP WORKS / MOTOR TERRACE",0,0,24,9,G-.5f,100);
+ zone(m,"SUMP WORKS",0,0,24,24);
  freightFinish(m,-1);
  watDeckRails(m,G);
  return p;
@@ -743,9 +743,9 @@ std::shared_ptr<const Map> makeCoolingTowersBasin(){
  {auto e=watEvent("wat_basin_ambush",10.8f,14.f,13.2f,17.5f,F-1.f,F+1.5f,watIsolated);
   e.actions.push_back(watSpawn(C::Huntsman,{5.6f,20.6f},-999));e.actions.push_back(watSpawn(C::Huntsman,{19.f,13.4f},-999,4));
   e.actions.push_back(watSound(Sound::SpiderCall,.9f));m.scriptEvents.push_back(e);}
- zone(m,"31A RECIRC PUMPS",1,1,23,8.75f,F-1,F+2.5f);
- zone(m,"31B BASIN CROSSING",2,8.75f,22,24,F-2,F+2.5f);
- zone(m,"31 COOLING TOWER 2",0,0,24,24);
+ zone(m,"COOLING TOWER 2 / RECIRC PUMPS",1,1,23,8.75f,F-1,F+2.5f);
+ zone(m,"COOLING TOWER 2 / BASIN CROSSING",2,8.75f,22,24,F-2,F+2.5f);
+ zone(m,"COOLING TOWER 2",0,0,24,24);
  freightFinish(m,-1);
  watDeckRails(m,E);
  return p;
@@ -835,9 +835,9 @@ std::shared_ptr<const Map> makeCoolingTowersShell(){
  m.clutterSpawns={{0,{20.8f,15.f},L1},{2,{6.f,20.5f},L2},{1,{21.f,7.f},L3}};
  {auto e=watEvent("wat_shell_apron",18,0,22,3.5f,F-.5f,F+2,watIsolated);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
  {auto e=watEvent("wat_fill_gallery",20,6,24,10,L3-.5f,L3+2);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
- zone(m,"31D FILL GALLERY EAST",20,6,24,10,L3-.5f,L3+3);
- zone(m,"31C SHELL STAIR",0,0,24,24,-25.f,100);
- zone(m,"31 COOLING TOWER 2",0,0,24,24);
+ zone(m,"COOLING TOWER 2 / FILL GALLERY EAST",20,6,24,10,L3-.5f,L3+3);
+ zone(m,"COOLING TOWER 2 / SHELL STAIR",0,0,24,24,-25.f,100);
+ zone(m,"COOLING TOWER 2",0,0,24,24);
  freightFinish(m,-1);
  for(float z:{L1,L2,L3})watDeckRails(m,z);
  return p;
@@ -1007,9 +1007,9 @@ std::shared_ptr<const Map> makeHeatExchange(){
  m.pickupSpawns={{{13.f,1.7f},P::Ammo,F},{{2.2f,20.2f},P::Health,F},{{19.4f,5.9f},P::Ammo,F}};
  m.clutterSpawns={{0,{4.2f,7.f},F},{2,{10.6f,19.9f},F},{1,{5.6f,21.2f},F},{3,{14.4f,6.4f},F},{0,{3.f,14.6f},F}};
  {auto e=watEvent("wat_hx_arrival",0,5,5,10,F-.5f,F+2);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
- zone(m,"32A HX CONTROL",1,17.9f,6.5f,23);
- zone(m,"32B EXCHANGER ROWS",5,1,23,14.1f);
- zone(m,"32 HEAT EXCHANGE",0,0,24,24);
+ zone(m,"HEAT EXCHANGE / HX CONTROL",1,17.9f,6.5f,23);
+ zone(m,"HEAT EXCHANGE / EXCHANGER ROWS",5,1,23,14.1f);
+ zone(m,"HEAT EXCHANGE",0,0,24,24);
  freightFinish(m,-1);
  return p;
 }

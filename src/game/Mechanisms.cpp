@@ -89,7 +89,7 @@ bool Game::terminalConversationActive(int terminal)const{
 }
 std::string_view Game::actorCaption()const{
  for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;const auto& world=level==m_level?m_world:m_chunks[level].world;
-  for(const auto& cue:world.sequenceCues()){int age=state(cue.timerState)-cue.timeMs;if(!cue.caption.empty()&&age>=0&&age<2500)return cue.caption;}
+  for(const auto& cue:world.sequenceCues()){int clock=state(cue.timerState),age=clock-cue.timeMs;if(!cue.caption.empty()&&clock>0&&age>=0&&age<2500)return cue.caption;} // A timer at 0 has not started.
  }return {};
 }
 float Game::alarmPulse()const{
