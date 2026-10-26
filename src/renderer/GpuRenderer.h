@@ -89,6 +89,7 @@ public:
  // Cross-frame body/gun triangle reuse. Identity is exact float bits from the
  // caller; a hit resubmits retained world-space triangles with a fresh light slot.
  bool replayActorEmit(std::uint64_t slot,std::uint64_t identity,int actor);
+ std::uint32_t actorEmitPosition()const;
  void commitActorEmit(std::uint64_t slot,std::uint64_t identity,std::uint32_t startTriangle);
  void clearActorEmitCache();
  void setActorEmitCaching(bool enabled);

@@ -17,7 +17,8 @@ layout(location=4) in vec4 light1;
 layout(location=5) in vec4 surface;
 layout(location=6) in vec4 worldNormal;
 #endif
-// darkness: x ambient scale (0 in true darkness), y muzzle falloff.
+// darkness: x ambient scale (0 in true darkness), y muzzle falloff,
+// z horizontal projection scale, w near plane (from Projection).
 // NPC flashes (world xyz, strength) use the lamp storage buffer.
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;} stereo;
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
@@ -115,7 +116,7 @@ void main(){
   vec4 originEye=actors.actor[index].originEye;
   precise vec3 p=cameraVector(position.xyz-vec3(originEye.zw,view.eyeYaw.z));
   worldPos=position.xyz+vec3(originEye.xy,0);
-  gl_Position=vec4(p.x*1.3,-p.y*1.3*view.basis.w,p.z-0.06,p.z);
+  gl_Position=vec4(p.x*stereo.darkness.z,-p.y*stereo.darkness.z*view.basis.w,p.z-stereo.darkness.w,p.z);
   adjustedSurface=vec4(p.z,lighting.w,surface.z,0.0);
  }else if(surface.w>0.5&&surface.w<1.5){
   vec3 vertexPos=position.xyz;
@@ -148,7 +149,7 @@ void main(){
   float cameraY=delta.z*view.basis.y-forward*view.basis.z;
   float cameraZ=forward*view.basis.y+delta.z*view.basis.z;
 
-  gl_Position=vec4(right*1.3,-cameraY*1.3*view.basis.w,cameraZ-0.06,cameraZ);
+  gl_Position=vec4(right*stereo.darkness.z,-cameraY*stereo.darkness.z*view.basis.w,cameraZ-stereo.darkness.w,cameraZ);
   adjustedSurface.x=cameraZ;
 
   vec3 n=normalize(worldNormal.xyz);
@@ -199,8 +200,8 @@ void main(){
  }else{
   gl_Position=position;
 
-  float right=position.x/1.3;
-  float cameraY=-position.y/(1.3*view.basis.w);
+  float right=position.x/stereo.darkness.z;
+  float cameraY=-position.y/(stereo.darkness.z*view.basis.w);
   float forward=position.w*view.basis.y-cameraY*view.basis.z;
 
   worldPos=view.eyeYaw.xyz+vec3(

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <set>
 namespace retro {
 namespace {
 VrRuntime* current=nullptr;
@@ -13,6 +14,22 @@ Matrix multiply(const Matrix&a,const Matrix&b){Matrix c{};for(int r=0;r<4;++r)fo
 Point3 rotateTracking(Point3 p,float yaw){float c=std::cos(yaw),s=std::sin(yaw);return {-p.z*c-p.x*s,-p.z*s+p.x*c,p.y};}
 Matrix rigidInverse(const Matrix&a){Matrix b{};b[15]=1;for(int r=0;r<3;++r)for(int c=0;c<3;++c)b[c*4+r]=a[r*4+c];for(int r=0;r<3;++r)for(int k=0;k<3;++k)b[12+r]-=b[k*4+r]*a[12+k];return b;}
 Point3 translation(const vr::HmdMatrix34_t&p){return {p.m[0][3],p.m[1][3],p.m[2][3]};}
+bool transientCompositor(vr::EVRCompositorError error){
+ return error==vr::VRCompositorError_DoNotHaveFocus||error==vr::VRCompositorError_IsNotSceneApplication||error==vr::VRCompositorError_AlreadySubmitted;
+}
+void logCompositor(vr::EVRCompositorError error){
+ static std::set<int> logged;if(logged.insert(int(error)).second){auto message="RawMetal: SteamVR compositor frame suspended ("+std::to_string(error)+").\n";OutputDebugStringA(message.c_str());std::ofstream("vr-compositor-errors.txt",std::ios::app)<<message;}
+}
+bool handFrame(Point3 forward,Point3 across,int side,std::array<Point3,3>& frame){
+ auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+ auto unit=[&](Point3 v){float l=std::sqrt(dot(v,v));return l>1e-6f?v*(1/l):Point3{};};
+ auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+ forward=unit(forward);if(dot(forward,forward)<.5f)return false;
+ // Missing or collinear knuckles need an axis independent of the finger ray.
+ across=unit(across-forward*dot(across,forward));
+ if(dot(across,across)<.5f){Point3 fallback=std::fabs(forward.x)<.8f?Point3{1,0,0}:Point3{0,1,0};across=unit(fallback-forward*dot(fallback,forward));}
+ auto palm=unit(cross(across,forward)*(side==0?-1.f:1.f));across=unit(cross(forward,palm));frame={across,palm,forward};return true;
+}
 float axis(float value){float a=std::fabs(value);return a<.18f?0:std::copysign(std::min(1.f,(a-.18f)/.82f),value);}
 }
 struct VrRuntime::Impl {
@@ -42,8 +59,8 @@ struct VrRuntime::Impl {
   auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
   auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
   const Point3 wrist=joint(1),index=joint(7),middle=joint(12),pinky=joint(22);
-  Point3 forward=unit(middle-wrist),across=unit(index-pinky),palm=unit(cross(across,forward)*(side==0?-1.f:1.f));across=unit(cross(forward,palm));
-  if(forward.x==0&&forward.y==0&&forward.z==0)return false;
+  std::array<Point3,3> frame{};if(!handFrame(middle-wrist,index-pinky,side,frame))return false;
+  auto across=frame[0],palm=frame[1],forward=frame[2];
   h.handOrigin=world(wrist,game);h.handBasis={rotateTracking(across,yaw),rotateTracking(palm,yaw),rotateTracking(forward*-1.f,yaw)};h.handFrame=true;
   // The weapon: its grip through the fist (index side up), the barrel along the
   // knuckles, anchored in the palm. Built in tracking space like the hand, so the
@@ -95,7 +112,10 @@ bool VrRuntime::initialize(std::string& error){
     bool first=true;auto source=[&](const char*hand,const char*control,const char*mode,const char*slot,const char*action){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/"<<hand<<"/input/"<<control<<"\",\"mode\":\""<<mode<<"\",\"inputs\":{\""<<slot<<"\":{\"output\":\"/actions/game/in/"<<action<<"\"}}}";};
     for(int side=0;side<2;++side){const char*hand=side?"right":"left";source(hand,"trigger","button","click",names[side]);source(hand,"grip",vive?"button":index?"force_sensor":"trigger",vive?"click":index?"force":"pull",names[(vive?2:4)+side]);if(side&&!vive){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/right/input/"<<(index?"thumbstick":"joystick")<<"\",\"mode\":\"joystick\",\"inputs\":{\"position\":{\"output\":\"/actions/game/in/turn\"},\"click\":{\"output\":\"/actions/game/in/inventory\"}}}";}
      else source(hand,vive?"trackpad":index?"thumbstick":"joystick",vive?"trackpad":"joystick","position",side?"turn":"move");}
-    if(vive){source("left","application_menu","button","click","menu");source("right","application_menu","button","click","reload");}else{source("right","a","button","click","jump");source("right","b","button","click","reload");source("left",index?"a":"x","button","click","crouch");source("left",index?"b":"y","button","click","menu");}
+    if(vive){source("left","application_menu","button","click","menu");source("right","application_menu","button","click","reload");
+     // Touch supplies locomotion; clicks select discrete cardinal actions.
+     auto dpad=[&](const char*hand,const char*north,const char*south){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/"<<hand<<"/input/trackpad\",\"mode\":\"dpad\",\"parameters\":{\"sub_mode\":\"click\"},\"inputs\":{\"north\":{\"output\":\"/actions/game/in/"<<north<<"\"},\"south\":{\"output\":\"/actions/game/in/"<<south<<"\"}}}";};
+     dpad("left","crouch","inventory");dpad("right","jump","inventory");}else{source("right","a","button","click","jump");source("right","b","button","click","reload");source("left",index?"a":"x","button","click","crouch");source("left",index?"b":"y","button","click","menu");}
     file<<"]}}}";
    }
    auto manifest=(folder/L"actions.json").string();if(m->input->SetActionManifestPath(manifest.c_str())==vr::VRInputError_None){m->input->GetActionSetHandle("/actions/game",&m->set);for(int i=0;i<13;++i)m->input->GetActionHandle((std::string("/actions/game/in/")+names[i]).c_str(),&m->actions[i]);m->input->GetActionHandle("/actions/game/in/left",&m->skeleton[0]);m->input->GetActionHandle("/actions/game/in/right",&m->skeleton[1]);}
@@ -131,8 +151,9 @@ void VrRuntime::suspendTracking(Game&game,InputState&input){
 }
 bool VrRuntime::update(Game&game,InputState&input,float dt){
  vr::VREvent_t event{};while(m->system->PollNextEvent(&event,sizeof(event)))if(event.eventType==vr::VREvent_Quit)return false;
- if(m->compositor->WaitGetPoses(m->poses.data(),uint32_t(m->poses.size()),nullptr,0)!=vr::VRCompositorError_None)throw std::runtime_error("SteamVR tracking/compositor disconnected.");
- if(!m->poses[0].bPoseIsValid){suspendTracking(game,input);return true;}
+ auto result=m->compositor->WaitGetPoses(m->poses.data(),uint32_t(m->poses.size()),nullptr,0);
+ if(result!=vr::VRCompositorError_None){logCompositor(result);m->poses[0].bPoseIsValid=false;suspendTracking(game,input);if(transientCompositor(result)||m->system->IsTrackedDeviceConnected(vr::k_unTrackedDeviceIndex_Hmd))return true;throw std::runtime_error("SteamVR tracking/compositor failed ("+std::to_string(result)+").");}
+ if(!m->compositor->CanRenderScene()||!m->poses[0].bPoseIsValid){m->poses[0].bPoseIsValid=false;suspendTracking(game,input);return true;}
  auto head=translation(m->poses[0].mDeviceToAbsoluteTracking);
  if(!m->calibrated){m->yaw=game.player().angle;m->headStartY=head.y;m->previousHead=head;m->calibrated=true;}
  if(m->trackingInterrupted){m->previousHead=head;m->trackingInterrupted=false;}
@@ -217,8 +238,9 @@ VrEye VrRuntime::eye(int index,const Game&game)const{
  return {p,multiply(clip,rigidInverse(world))};
 }
 void VrRuntime::submit(int eye,VkInstance instance,VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,VkImage image,int width,int height){
+ if(!trackingValid())return;
  vr::VRVulkanTextureData_t data{};data.m_nImage=reinterpret_cast<uint64_t>(image);data.m_pDevice=device;data.m_pPhysicalDevice=physical;data.m_pInstance=instance;data.m_pQueue=queue;data.m_nQueueFamilyIndex=family;data.m_nWidth=width;data.m_nHeight=height;data.m_nFormat=VK_FORMAT_R8G8B8A8_UNORM;data.m_nSampleCount=1;
- vr::Texture_t texture{&data,vr::TextureType_Vulkan,vr::ColorSpace_Gamma};auto result=m->compositor->Submit(vr::EVREye(eye),&texture);if(result!=vr::VRCompositorError_None)throw std::runtime_error("SteamVR Vulkan eye submission failed ("+std::to_string(result)+").");if(eye==1)m->compositor->PostPresentHandoff();
+ vr::Texture_t texture{&data,vr::TextureType_Vulkan,vr::ColorSpace_Gamma};auto result=m->compositor->Submit(vr::EVREye(eye),&texture);if(result!=vr::VRCompositorError_None){logCompositor(result);m->trackingInterrupted=true;m->poses[0].bPoseIsValid=false;if(transientCompositor(result)||m->system->IsTrackedDeviceConnected(vr::k_unTrackedDeviceIndex_Hmd))return;throw std::runtime_error("SteamVR Vulkan eye submission failed ("+std::to_string(result)+").");}if(eye==1)m->compositor->PostPresentHandoff();
 }
 void VrRuntime::submitPanel(VkInstance instance,VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,VkImage image,int width,int height){
  if(!m->titlePanel)return;vr::VRVulkanTextureData_t data{};data.m_nImage=reinterpret_cast<uint64_t>(image);data.m_pDevice=device;data.m_pPhysicalDevice=physical;data.m_pInstance=instance;data.m_pQueue=queue;data.m_nQueueFamilyIndex=family;data.m_nWidth=width;data.m_nHeight=height;data.m_nFormat=VK_FORMAT_B8G8R8A8_UNORM;data.m_nSampleCount=1;vr::Texture_t texture{&data,vr::TextureType_Vulkan,vr::ColorSpace_Gamma};auto result=m->overlay->SetOverlayTexture(m->panel,&texture);if(result!=vr::VROverlayError_None)throw std::runtime_error("SteamVR menu texture failed ("+std::to_string(result)+").");
@@ -237,6 +259,13 @@ bool VrRuntime::foregripSupport(Point3 right,Point3 left,Point3 rightForward,boo
  return along/distance>.8f&&distance*distance-along*along<=.12f*.12f;
 }
 bool VrRuntime::testMath(){
+ if(!transientCompositor(vr::VRCompositorError_DoNotHaveFocus)||!transientCompositor(vr::VRCompositorError_IsNotSceneApplication)||transientCompositor(vr::VRCompositorError_InvalidTexture))return false;
+ for(int side:{0,1})for(Point3 forward:{Point3{0,0,1},Point3{1,0,0}})for(Point3 across:{Point3{},forward}){
+  std::array<Point3,3> frame{};if(!handFrame(forward,across,side,frame))return false;
+  auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+  for(int i=0;i<3;++i){if(std::fabs(dot(frame[i],frame[i])-1)>.0001f)return false;for(int j=0;j<i;++j)if(std::fabs(dot(frame[i],frame[j]))>.0001f)return false;}
+ }
+
  {auto game=std::make_unique<Game>();VrRuntime runtime;InputState input{};
   input.fire=input.use=input.jump=input.reload=true;input.vrGrip={true,true};
   input.vrMoveForward=1;input.vrMoveRight=-1;input.pointerX=input.pointerY=42;

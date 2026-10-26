@@ -1129,7 +1129,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         // The smoke chain's game tests, every one run independently: a failure
         // early in the chain must not hide the result of everything after it.
         const std::pair<const char*,bool(*)()> tests[]={
-         {"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
+         {"projection",retro::SoftwareRenderer::testProjection},{"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
          {"combat",retro::Game::testCombat},{"weapon-motion",retro::Game::testWeaponMotion},{"audio-events",retro::Game::testAudioEvents},
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},

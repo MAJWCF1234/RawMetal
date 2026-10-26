@@ -1,3 +1,5 @@
+#include "Projection.h"
+#include <unordered_set>
 #include "GpuRenderer.h"
 #include "../core/FrameProfile.h"
 
@@ -411,6 +413,11 @@ struct GpuRenderer::Impl {
  void destroyStage(FullscreenStage& stage){destroyStageTarget(stage);if(stage.pipeline)vkDestroyPipeline(device,stage.pipeline,nullptr);if(stage.layout)vkDestroyPipelineLayout(device,stage.layout,nullptr);if(stage.setLayout)vkDestroyDescriptorSetLayout(device,stage.setLayout,nullptr);if(stage.pool)vkDestroyDescriptorPool(device,stage.pool,nullptr);if(stage.pass)vkDestroyRenderPass(device,stage.pass,nullptr);}
  struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false,liquid=false;uint32_t sortKey=0,colorLevels=1;};
  std::unordered_map<uint64_t,Material> materials;
+ std::unordered_set<uint64_t> missingMaterials;
+ Material* findMaterial(uint64_t key){auto found=materials.find(key);if(found!=materials.end())return &found->second;
+  if(missingMaterials.insert(key).second){std::ostringstream message;message<<"RawMetal: skipping missing Vulkan material "<<key<<'\n';OutputDebugStringA(message.str().c_str());std::ofstream("renderer-missing-materials.txt",std::ios::app)<<message.str();}return nullptr;
+ }
+
  int presentScaleCached=0;
  const void* lastPixels=nullptr;uint64_t lastGeneration=0,lastMaterial=0;uint32_t lastSort=0;
  void clearMaterials(){
@@ -1142,7 +1149,7 @@ void GpuRenderer::endStaticCache(){
   // lamp face draws only the runs inside its range.
   struct Caster {uint64_t cell,material;uint32_t first;};std::vector<Caster> casters;casters.reserve(cache.vertices.size()/3);
   std::array<float,6> bounds{1e30f,1e30f,1e30f,-1e30f,-1e30f,-1e30f};
-  for(const auto&batch:cache.batches){const auto&mat=m->materials.at(batch.material);bool casts=!mat.transparent&&!mat.additive;
+  for(const auto&batch:cache.batches){const auto*material=m->findMaterial(batch.material);if(!material)continue;const auto&mat=*material;bool casts=!mat.transparent&&!mat.additive;
    for(uint32_t v=batch.start;v+2<batch.start+batch.count;v+=3){const Vertex*t=&cache.vertices[v];float center[3]{};
     for(int c=0;c<3;++c)for(int k=0;k<3;++k){float value=t[c].position[k];bounds[size_t(k)]=std::min(bounds[size_t(k)],value);bounds[size_t(k)+3]=std::max(bounds[size_t(k)+3],value);center[k]+=value/3.f;}
     if(!casts)continue;
@@ -1278,6 +1285,7 @@ bool GpuRenderer::replayActorEmit(std::uint64_t slot,std::uint64_t identity,int 
  }
  m->actorTriangles+=found->second.triangles.size();++m->actorEmitHits;return true;
 }
+std::uint32_t GpuRenderer::actorEmitPosition()const{return std::uint32_t(m->actorVertices.size());}
 void GpuRenderer::commitActorEmit(std::uint64_t slot,std::uint64_t identity,std::uint32_t startTriangle){
  if(!m->actorEmitCaching||startTriangle>m->actorVertices.size())return;
  if(startTriangle==m->actorVertices.size()){m->actorEmitCaches.erase(slot);return;}
@@ -1335,7 +1343,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  Point3 impostorCentre{};
  if(m->capturing&&m->lodTag&&m->lodTag->impostor){const MeshVertex* v[3]={&a,&b,&c};
   for(int i=0;i<3;++i)for(int j=i+1;j<3;++j)if(std::fabs(v[i]->u+v[j]->u)<.01f&&std::fabs(v[i]->v+v[j]->v)<.01f)impostorCentre=(worldPoint(v[i]->p)+worldPoint(v[j]->p))*.5f;}
- for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{out.position[0]=v.p.x*1.3f;out.position[1]=-v.p.y*1.3f*float(m->width)/m->height;out.position[2]=v.p.z-.06f;out.position[3]=v.p.z;}
+ for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{const Projection projection{float(m->width)/m->height};out.position[0]=v.p.x*Projection::horizontal;out.position[1]=-v.p.y*projection.vertical();out.position[2]=v.p.z-Projection::nearPlane;out.position[3]=v.p.z;}
   out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=normals?1.f:0.f;
   for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
   // Painterly Horizon LOD markers ride in the parallax slot (negative values).
@@ -1403,6 +1411,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
  VkDeviceSize offset=0;VkBuffer currentBuffer=VK_NULL_HANDLE;
  if(bytes){currentBuffer=vb.handle;vkCmdBindVertexBuffers(cmd,0,1,&currentBuffer,&offset);}
+ m->vrProjection[26]=Projection::horizontal;m->vrProjection[27]=Projection::nearPlane;
  std::memcpy(m->projectionBuffers[m->frameIndex].mapped,m->vrProjection.data(),sizeof(m->vrProjection));vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,1,1,&m->projectionSets[m->frameIndex],0,nullptr);
  vkCmdPushConstants(cmd,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
@@ -1410,9 +1419,9 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  auto flushTransparent=[&]{for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}auto pipeline=draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);if(draw.actor)vkCmdDraw(cmd,3,draw.count,0,draw.start);else vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
  for(auto&batch:m->batches){
   if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
-  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto&mat=m->materials.at(cached.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
+  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto*material=m->findMaterial(cached.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
   auto buffer=batch.actor?ab.handle:vb.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}
-  auto&mat=m->materials.at(batch.material);if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor,mat.liquid});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
+  auto*material=m->findMaterial(batch.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor,mat.liquid});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
   if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}
   vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);
   if(batch.actor)vkCmdDraw(cmd,3,batch.count,0,batch.start);else vkCmdDraw(cmd,batch.count,1,batch.start,0);
@@ -1423,7 +1432,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   // Scene RGB is linear radiance and alpha is planar camera depth.
   m->barrier(m->target,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
   const auto& v=m->viewState;auto linear=[](float c){return std::pow(std::max(0.f,c),2.2f);};
-  float params[32]={m->postDebugOcclusion?-1.f:1.f,v[7],1.3f,.7f, linear(v[28]),linear(v[29]),linear(v[30]),v[31]*.9f, 1.f/float(m->width),1.f/float(m->height),.09f,1.08f, .004f,.05f,.004f*(1.f-m->darkness),900.f};
+  float params[32]={m->postDebugOcclusion?-1.f:1.f,v[7],Projection::horizontal,.7f, linear(v[28]),linear(v[29]),linear(v[30]),v[31]*.9f, 1.f/float(m->width),1.f/float(m->height),.09f,1.08f, .004f,.05f,.004f*(1.f-m->darkness),900.f};
   // The four nearest ceiling lamps (world) become view-space scatter sources.
   for(int i=0;i<4;++i){float dx=v[12+i*4]-v[0],dy=v[13+i*4]-v[1],dz=v[14+i*4]-.1f-v[2];
    float right=-dx*v[4]+dy*v[3],forward=dx*v[3]+dy*v[4];
@@ -1470,7 +1479,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    // The history image was presented last frame (shader-read) or is fresh.
    auto& historyLayout=m->taaLayouts[size_t(read)];
    if(historyLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL){m->barrier(m->taaImages[size_t(read)],historyLayout,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,historyLayout==VK_IMAGE_LAYOUT_UNDEFINED?0:VK_ACCESS_TRANSFER_READ_BIT,VK_ACCESS_SHADER_READ_BIT,historyLayout==VK_IMAGE_LAYOUT_UNDEFINED?VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT:VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);historyLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
-   float taa[32]={v[7],1.3f,900.f,m->taaHistoryValid?1.f:0.f, m->taaJitter[0],m->taaJitter[1],0,0, v[0],v[1],v[2],.9f, v[3],v[4],v[5],v[6],
+   float taa[32]={v[7],Projection::horizontal,900.f,m->taaHistoryValid?1.f:0.f, m->taaJitter[0],m->taaJitter[1],0,0, v[0],v[1],v[2],.9f, v[3],v[4],v[5],v[6],
     m->taaPrevCamera[0],m->taaPrevCamera[1],m->taaPrevCamera[2],0, m->taaPrevCamera[3],m->taaPrevCamera[4],m->taaPrevCamera[5],m->taaPrevCamera[6], 1.f/float(m->width),1.f/float(m->height),0,0, 0,0,0,0};
    runStage(m->taaStage,{m->composeStage.image.view,m->taaImages[size_t(read)].view,m->target.view},taa,m->taaFrames[size_t(write)]);
    m->taaLayouts[size_t(write)]=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;m->taaWrite=write;m->taaRan=true;m->taaHistoryValid=true;++m->taaFrame;

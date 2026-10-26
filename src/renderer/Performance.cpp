@@ -1,3 +1,4 @@
+#include "Projection.h"
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
 #include "FrameWorker.h"
@@ -28,6 +29,21 @@ __declspec(noinline) bool SoftwareRenderer::testPresentationResize(){
  ShowWindow(static_cast<HWND>(window.handle()),SW_RESTORE);for(int i=0;i<8;++i){window.pump();renderer.render(scene);}
  bool passed=renderer.hardwareActive();report<<(passed?"PASS":"FAIL")<<": repeated resize, minimize/restore and Vulkan presentation\n";return passed;
 }
+bool SoftwareRenderer::testProjection(){
+ for(float aspect:{16.f/9.f,16.f/10.f,4.f/3.f}){
+  Projection p{aspect};
+  // y/z=.47 is above the widescreen frame but visible at taller aspects.
+  for(float y:{-.47f,.47f}){
+   bool projected=std::fabs(y*p.vertical())<=1.f;
+   if((p.outside(0,y,1)==0)!=projected||projected!=(aspect<16.f/9.f))return false;
+  }
+  for(float sign:{-1.f,1.f})for(float fraction:{.999f,1.001f}){
+   float y=sign*fraction/p.vertical();
+   if((p.outside(0,y,1)==0)!=(fraction<1.f))return false;
+  }
+ }
+ return true;
+}
 bool SoftwareRenderer::testCreatureAnimation(){
  Mesh mesh(242);std::ofstream report("stalker-animation-test.txt");
  for(int clip=0;clip<5;++clip){mesh.poseCreature(clip,0);auto first=mesh.triangles;float movement=0,deformation=0;
@@ -42,13 +58,16 @@ bool SoftwareRenderer::testCreatureAnimation(){
   movement*=1.8f/(mesh.maximum.y-mesh.minimum.y);report<<"clip "<<clip<<" maximum vertex motion "<<movement<<" gameplay metres, non-rigid deformation "<<deformation<<'\n';if(!std::isfinite(movement)||movement<.001f||movement>4||deformation<.001f)return false;
  }
  report<<"PASS: five independently deforming skeletal clips, matching topology\n";
- Mesh mutant(272,"",274);std::ofstream mutantReport("mutant-animation-test.txt");
+ for(auto resource:{std::array<int,2>{272,274},std::array<int,2>{2126,2128},std::array<int,2>{2129,2131}}){
+ Mesh mutant(resource[0],"",resource[1]);std::ofstream mutantReport("creature-animation-"+std::to_string(resource[0])+"-test.txt");
+ if(mutant.creatureClipCount()<5)return false;
  for(int clip=0;clip<5;++clip){mutant.poseCreature(clip,0);auto first=mutant.triangles;float motion=0;
   for(float phase:{.25f,.5f,.75f,1.f}){mutant.poseCreature(clip,phase);for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=mutant.triangles[i].v[v].p,d=p-first[i].v[v].p;
    if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z))return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
   mutantReport<<"clip "<<clip<<" vertex motion "<<motion<<" metres\n";if(motion<.001f||motion>4)return false;
  }
  mutantReport<<"PASS: supplied rig clips and grounded death pose interpolate with matching topology\n";
+ }
  Mesh worker(277,"",278);std::ofstream workerReport("worker-animation-test.txt");
  for(int clip=0;clip<6;++clip){worker.poseCreature(clip,0);auto first=worker.triangles;float motion=0;
   for(float phase:{.25f,.5f,.75f,1.f}){worker.poseCreature(clip,phase);auto hand=worker.poseAnchor(0);if(!std::isfinite(hand.y)||hand.y<-.002f)return false;for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=worker.triangles[i].v[v].p,d=p-first[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.002f)return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
@@ -390,6 +409,20 @@ bool SoftwareRenderer::testGpuActors(){
   bool reused=warm[2]>cold[2]&&changed==0;
   report<<"Idle emit reuse: hits "<<cold[2]<<"->"<<warm[2]<<" changed_pixels="<<changed<<' '<<(reused?"PASS":"FAIL")<<'\n';
   passed&=reused&&renderer.hardwareActive();
+ }
+ // A stale retained material must skip only its draw, including cache replay.
+ {
+  auto&gpu=*renderer.m_gpu;GpuRenderer::ActorMaterial stale{};stale.key=~uint64_t(0);
+  MeshVertex a{{0,0,1},0,0},b{{.1f,0,1},1,0},c{{0,.1f,1},0,1};
+  gpu.setActorEmitCaching(true);gpu.clearActorEmitCache();
+  for(int frame=0;frame<3;++frame){
+   gpu.begin(960,540);gpu.setView(0,0,0,0,0,16.f/9.f,false,0);
+   auto start=gpu.actorEmitPosition();bool replay=gpu.replayActorEmit(0x1234,0x5678,0);
+   if(!replay){gpu.submitActor(a,b,c,0,stale);gpu.commitActorEmit(0x1234,0x5678,start);}
+   if(frame==2)passed&=replay;
+   gpu.finish(renderer.m_pixels);
+  }
+  report<<"Missing material survives live and retained draws: PASS\n";
  }
  report<<(passed?"PASS":"FAIL")<<": GPU actor geometry/material/lighting reference; "<<triangles<<" hardware triangles\n";
  return passed;
