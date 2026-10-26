@@ -221,7 +221,7 @@ void mhUnit(MhHall& hall,float x0,float yc,int unit,float northGap,float southGa
   wall(m,x0+9.55f,yc-2.25f,x0+13.65f,yc+2.25f,G,G+.4f,8);
   for(float x=x0+10.2f;x<x0+13.4f;x+=.8f)wall(m,x,yc-2.25f,x+.1f,yc+2.25f,G+.4f,G+1.4f,8);
   // Scaffold tower over the open HP end: standards, ledgers and a board lift.
-  for(float x:{x0+.2f,x0+4.2f})for(float s:{-1.f,1.f})mhRiser(m,{x,yc+s*2.f},G,G+4.2f,.03f,2);
+  for(float x:{x0+.2f,x0+4.2f})for(float s:{-1.f,1.f}){mhRiser(m,{x,yc+s*2.f},G,G+4.2f,.03f,2);wall(m,x-.08f,yc+s*2.f-.08f,x+.08f,yc+s*2.f+.08f,G,G+4.2f,CollisionProxyMaterial);}
   for(float z:{G+2.1f,G+4.1f})for(float s:{-1.f,1.f})m.pipes.push_back({{x0+.2f,yc+s*2.f},{x0+4.2f,yc+s*2.f},z,.03f,z,2});
   for(float z:{G+2.1f,G+4.1f})for(float x:{x0+.2f,x0+4.2f})m.pipes.push_back({{x,yc-2.f},{x,yc+2.f},z,.03f,z,2});
   wall(m,x0+.2f,yc-2.05f,x0+4.2f,yc+2.05f,G+4.1f,G+4.16f,10);
@@ -254,11 +254,13 @@ void mhUnit(MhHall& hall,float x0,float yc,int unit,float northGap,float southGa
 // A tripod floodlight standing on a floor: three legs, the head box and its lamp.
 void mhFlood(Map& m,Vec2 p,float floor,float yaw,float kelvin=5600){
  const float top=floor+2.f;
- for(int i=0;i<3;++i){float a=i*kPi*2/3+yaw;Vec2 foot=p+Vec2{std::cos(a),std::sin(a)}*.55f;m.pipes.push_back({foot,p,floor,.025f,top,12});}
+ for(int i=0;i<3;++i){float a=i*kPi*2/3+yaw;Vec2 foot=p+Vec2{std::cos(a),std::sin(a)}*.55f;m.pipes.push_back({foot,p,floor+.025f,.025f,top,12});}
+ // Nobody walks through a tripod: its footprint is solid.
+ wall(m,p.x-.6f,p.y-.6f,p.x+.6f,p.y+.6f,floor,top,CollisionProxyMaterial);
  m.pipes.push_back({p,p,top,.03f,top+.25f,12});
  Vec2 d{std::cos(yaw),std::sin(yaw)};
  wall(m,p.x+d.x*.1f-.2f,p.y+d.y*.1f-.2f,p.x+d.x*.1f+.2f,p.y+d.y*.1f+.2f,top+.25f,top+.55f,8);
- m.lights.push_back(lamp(p+d*.32f,top+.4f,2.2f,10.f,kelvin,.05f,WorldLightMount::Bare,yaw));
+ m.lights.push_back(lamp(p+d*.42f,top+.4f,2.2f,10.f,kelvin,.05f,WorldLightMount::Bare,yaw));
 }
 // Timber cribbing: crossed layers of sleepers under a load.
 void mhCrib(Map& m,float x,float y,float floor,float top,float w=1.2f){
@@ -286,7 +288,7 @@ void mhHallFloor(MhHall& hall){
   mhFix(m,model::storage_tank,x,27.3f,F+.1f,6.34f,2.86f,3.84f,0);
   // Shell outlet up to the pipe bridge, a drain to the floor gully.
   pipeRoute(m,{{x+1.6f,27.3f,F+3.94f},{x+1.6f,27.3f,F+5.1f},{x+1.6f,25.05f,F+5.1f}},.2f,5,NoRoof);
-  pipeRoute(m,{{x-2.4f,28.4f,F+.75f},{x-2.4f,29.6f,F+.75f},{x-2.4f,29.6f,F}},.06f,3,NoRoof,F);
+  pipeRoute(m,{{x-2.4f,28.4f,F+.75f},{x-2.4f,28.6f,F+.75f},{x-2.4f,28.6f,F}},.06f,3,NoRoof,F);
  }
  // The pipe bridge they feed: columns, a beam and the header west through the wall.
  for(float x:{4.f,10.f,16.f,21.f})steelColumn(m,x,24.9f,F,F+4.86f);
@@ -296,7 +298,7 @@ void mhHallFloor(MhHall& hall){
  // --- Boiler feed pumps on the centre floor ------------------------------------------------
  for(float y:{26.4f,29.6f}){
   P3 out=pumpSkid(m,{23.6f,y},F,kPi,F+1.35f);
-  pipeRoute(m,{{out.x,out.y,F+1.35f},{out.x+1.6f,out.y,F+1.35f},{out.x+1.6f,out.y,F}},.11f,3,NoRoof,F);
+  pipeRoute(m,{{out.x,out.y,F+1.35f},{out.x+.6f,out.y,F+1.35f},{out.x+.6f,out.y,F}},.11f,3,NoRoof,F);
  }
  // --- Laydown bay: Unit 3's rotor on its stands -------------------------------------------
  {const float y=30.f,z=F+1.75f;
@@ -312,6 +314,7 @@ void mhHallFloor(MhHall& hall){
   m.pipes.push_back({{39.6f,y},{39.9f,y},z,.72f,z,6});
   m.structures.push_back({28.3f,y-1.7f,37.f,y+1.7f,F+.1f,z+1.7f,false,6});
   m.structures.push_back({26.9f,y-.45f,40.3f,y+.45f,z-.45f,z+.45f,false,6});
+  wall(m,26.9f,y-.75f,40.3f,y+.75f,F,z,CollisionProxyMaterial);
  }
  // The casing top halves set down on sleepers: LP hood and the HP shell.
  for(auto [x1,x2,r]:{std::tuple{26.4f,32.8f,2.1f},{35.4f,40.f,1.25f}}){
@@ -328,7 +331,7 @@ void mhHallFloor(MhHall& hall){
  mhFix(m,model::packing_crate,27.8f,26.f,F,1.681f,1.68f,1.2f,0);mhFix(m,model::packing_crate,29.7f,26.1f,F,1.681f,1.68f,1.2f,.06f);
  mhFix(m,model::packing_crate,27.85f,26.f,F+1.2f,1.681f,1.68f,1.2f,-.05f);
  cargo(m,33.f,25.9f,F);cargo(m,34.4f,25.9f,F,false);
- mhFix(m,model::stock_cage,39.6f,25.7f,F,4.49f,2.01f,2.03f,0);
+ mhFix(m,model::stock_cage,39.6f,26.25f,F,4.49f,2.01f,2.03f,0);
  mhFix(m,model::mine_tool_chest,36.5f,26.f,F,.75f,.45f,.97f,0);
  mhFix(m,model::pwr_sheet_steel_stack,41.f,31.6f,F,1.79f,3.4f,.13f,0);
  for(float x:{41.4f,41.8f,42.2f})mhFix(m,model::gas_cylinder,x,40.5f,F,.33f,.33f,1.58f,0);
@@ -346,7 +349,7 @@ void mhHallFloor(MhHall& hall){
  for(float x:{5.2f,6.7f})mhFix(m,model::wooden_table,x,44.f,F,1.402f,.742f,.8f,0);
  for(int i=0;i<6;++i){float x=4.7f+i*.48f;wall(m,x,43.75f,x+.09f,44.3f,F+.8f,F+.83f,20);wall(m,x-.04f,43.7f,x+.13f,43.82f,F+.8f,F+.86f,20);}
  mhFix(m,model::wooden_chair,6.2f,44.9f,F,.417f,.525f,.95f,kPi+.4f);
- m.pipes.push_back({{7.6f,44.3f},{7.6f,44.3f},F,.025f,F+1.9f,12});m.pipes.push_back({{7.6f,44.3f},{7.f,44.f},F+1.9f,.02f,F+1.8f,12});
+ m.pipes.push_back({{7.3f,44.1f},{7.3f,44.1f},F,.025f,F+1.9f,12});m.pipes.push_back({{7.3f,44.1f},{7.f,44.f},F+1.9f,.02f,F+1.8f,12});
  mhFix(m,model::pendant_lamp,7.f,44.f,F+1.45f,.3f,.3f,.35f,0,false);
  m.lights.push_back(lamp({7.f,44.f},F+1.5f,.8f,4.f,3000,0,WorldLightMount::Bare));
  // --- Hard hats and litter of a shift that left in a hurry -----------------------------------
@@ -364,7 +367,7 @@ void mhHallLight(MhHall& hall){
  // Red emergency bulkheads: gallery, the stair foot, side walls, catwalk.
  for(float x:{6.f,16.5f,33.f})mhRed(m,{x,x==6.f?1.42f:1.02f},G+2.4f,kPi*.5f,MhBayD);
  mhRed(m,{1.02f,9.6f},F+2.6f,0,MhBayD);
- for(float y:{22.f,36.f}){mhRed(m,{1.02f,y},F+3.f,0,MhBayD,1.f,8.f);mhRed(m,{46.98f,y+1.f},F+3.f,kPi,MhBayD,1.f,8.f);}
+ for(float y:{22.f,36.f}){mhRed(m,{1.02f,y},F+3.4f,0,MhBayD,1.f,8.f);mhRed(m,{46.98f,y+1.f},F+3.4f,kPi,MhBayD,1.f,8.f);}
  mhRed(m,{46.98f,28.6f},G+2.3f,kPi,MhBayD,.8f,5.f);
  // The hub door light and the gallery work lights by the lighting panel.
  mhLamp(m,{12.f,1.02f},G+2.95f,1.1f,6.f,2800,0,WorldLightMount::Wall,kPi*.5f);
@@ -483,7 +486,7 @@ const MhHall& mhHall(){
   wall(m,30.05f,41.15f,30.95f,41.85f,-25.6f,-24.5f,18);
   for(float x:{30.2f,30.8f})m.pipes.push_back({{x,41.15f},{x,41.85f},-24.85f,.32f,-24.85f,6});
   m.pipes.push_back({{30.5f,41.5f},{30.5f,41.5f},-26.f,.05f,-25.6f,6});
-  m.pipes.push_back({{30.5f,41.5f},{30.85f,41.5f},-26.1f,.05f,-26.f,6});
+  m.pipes.push_back({{30.5f,41.5f},{30.85f,41.5f},-26.1f,.05f,-26.1f,6});
   m.pipes.push_back({{30.85f,41.5f},{30.9f,41.5f},-26.1f,.05f,-25.75f,6});
   // Crane 2 cab, docked at the catwalk landing: floor flush with the -22 deck.
   wall(m,42.4f,40.6f,45.f,43.05f,C-.2f,C,8);
@@ -512,20 +515,21 @@ const MhHall& mhHall(){
   // Torn plate and bent rail at both ends of the gap.
   for(auto [x,dir]:{std::pair{25.f,1.f},std::pair{31.f,-1.f}}){
    for(float y:{1.3f,2.2f,3.1f})wall(m,std::min(x,x+dir*.45f),y,std::max(x,x+dir*.45f),y+.5f,G-.24f,G-.1f,2);
-   m.pipes.push_back({{x-dir*.05f,3.9f},{x+dir*.7f,3.9f},G+1.05f,.03f,G-.6f,3});
-   m.pipes.push_back({{x-dir*.05f,3.9f},{x+dir*.5f,3.6f},G+.5f,.03f,G-.9f,3});
+   wall(m,x-dir*.05f-.03f,3.86f,x-dir*.05f+.03f,3.94f,G,G+1.1f,12);
+   m.pipes.push_back({{x-dir*.05f,3.9f},{x+dir*.4f,3.4f},G+1.05f,.03f,G-.07f,3});
+   m.pipes.push_back({{x-dir*.05f,3.9f},{x+dir*.3f,3.25f},G+.5f,.03f,G-.07f,3});
    mhFix(m,model::barrier,x-dir*2.f,2.5f,G,1.6f,.8f,.88f,kPi*.5f);
   }
   wallSign(m,21.f,1.055f,G+1.3f,"GALLERY CLOSED","SPAN DOWN / USE THE HALL FLOOR",2.2f,0);
   // The fallen span lies on the floor, its west end propped on the rubble.
   wall(m,25.4f,1.4f,30.4f,3.7f,F,F+.2f,2);
   wall(m,25.2f,1.5f,26.5f,3.6f,F+.2f,F+.45f,15);wall(m,25.3f,1.6f,26.3f,3.5f,F+.45f,F+.62f,2);
-  for(float x=25.6f;x<30.4f;x+=.9f)m.pipes.push_back({{x,3.6f},{x+.3f,3.6f},F+.25f,.03f,F+.85f,3});
-  m.pipes.push_back({{25.6f,3.6f},{30.2f,3.6f},F+.95f,.03f,F+.4f,3});
-  m.pipes.push_back({{26.4f,2.2f},{29.8f,4.6f},F+.15f,.14f,F+.25f,6});
+  for(float x=25.6f;x<30.4f;x+=.9f)m.pipes.push_back({{x,3.6f},{x+.3f,3.6f},F+.2f,.03f,F+.2f,3});
+  m.pipes.push_back({{25.6f,3.6f},{30.2f,3.6f},F+.2f,.03f,F+.2f,3});
+  m.pipes.push_back({{26.4f,2.2f},{29.8f,3.5f},F+.1f,.14f,F+.1f,6});
   // The end shield stands where it hit, sunk into the cracked slab.
   m.pipes.push_back({{26.95f,6.6f},{27.55f,6.6f},F+2.f,2.05f,F+2.f,5});
-  m.pipes.push_back({{26.75f,6.6f},{27.75f,6.6f},F+2.f,.62f,F+2.f,6});
+  m.pipes.push_back({{26.95f,6.6f},{27.55f,6.6f},F+2.f,.62f,F+2.f,6});
   for(int i=0;i<12;++i){float a=i*kPi/6;Vec2 c{27.25f,6.6f+std::cos(a)*1.75f};m.pipes.push_back({{26.9f,c.y},{27.6f,c.y},F+2.f+std::sin(a)*1.75f,.06f,F+2.f+std::sin(a)*1.75f,6});}
   m.structures.push_back({26.9f,4.7f,27.6f,8.5f,F,F+3.6f,false,6});
   m.structures.push_back({26.9f,5.2f,27.6f,8.f,F+3.6f,F+4.f,false,6});
@@ -576,7 +580,7 @@ const MhHall& mhHall(){
   for(float x:{26.f,32.f,38.f})steelColumn(m,x,44.25f,F,C-.22f);
   for(float y:{32.25f,33.75f})steelColumn(m,43.25f,y,F,G-.22f);
   for(float y:{38.3f,41.f})steelColumn(m,43.25f,y,F,C-.22f);
-  for(float x=27.5f;x<46.5f;x+=3.f)m.pipes.push_back({{x,46.85f},{x,44.4f},C-1.6f,.05f,C-.25f,6});
+  for(float x=27.5f;x<46.5f;x+=3.f)m.pipes.push_back({{x,46.95f},{x,44.4f},C-1.6f,.05f,C-.25f,6});
   // The vestibule through the south wall: concrete below, lintel over the damper.
   wall(m,38.f,47.f,42.f,48.f,F,C-.22f,15);wall(m,38.f,47.f,42.f,48.f,C+2.65f,R,15);
   for(float x:{37.8f,42.f})wall(m,x,46.7f,x+.2f,47.f,C,C+2.9f,12);

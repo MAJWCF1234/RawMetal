@@ -256,6 +256,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
   pbStand(m,c.x+1.5f,c.y-.45f,c.x+2.3f,c.y+.45f,base,.95f);
   m.fixtures.push_back({model::lab_test_chamber,{c.x+1.9f,c.y},.95f,1.f,.6f,.56f,kPi*.5f,false});
   m.pipes.push_back({{c.x+1.15f,c.y},{c.x+1.55f,c.y},base+1.22f,.09f,base+1.22f,6});
+  wall(m,c.x+1.15f,c.y-.45f,c.x+1.5f,c.y+.45f,base,base+1.4f,CollisionProxyMaterial);
  }
  pipeRoute(m,{{3.4f,22.95f,-16.f},{3.4f,20.95f,-16.f}},.3f,0,roof);
  pipeRoute(m,{{3.4f,16.55f,-16.f},{3.4f,18.65f,-16.f}},.3f,0,roof);

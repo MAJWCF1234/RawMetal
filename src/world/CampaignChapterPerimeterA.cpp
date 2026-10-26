@@ -780,7 +780,7 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  const float bed=-20.f,f=-19,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),bed));
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
- openEdge(m,{'N',10.f,14.f,-19.f,true,0});openEdge(m,{'W',14.f,19.f,-19.f,false,0});
+ openEdge(m,{'N',10.f,14.f,-19.f,true,0});m.doors.back().z=0;openEdge(m,{'W',14.f,19.f,-19.f,false,0}); // the platform already raises the floor at the door
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=f;
  // --- Platforms either side of the track bed ------------------------------------------------------
  deck(m,f,1,1,23,8);deck(m,f,1,13,23,23);deck(m,f,0,14,1,19);
