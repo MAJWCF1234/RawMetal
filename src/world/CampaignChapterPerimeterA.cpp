@@ -684,7 +684,7 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  wall(m,6.f,5.f,6.12f,16.f,mz,mz+1.f,21);perWindow(m,6.f,5.f,6.12f,16.f,mz+1.f,mz+2.5f);
  wall(m,6.f,5.f,6.12f,16.f,mz+2.55f,roof,21);
  for(float y:{7.f,10.f,13.f})perDesk(m,4.4f,y,mz,kPi*.5f,int(y));
- terminal(m,{2.f,6.f},"DELTA / PROCESSING TALLY","IN: 14 STAFF. OUT: 0. TRANSIT SEALED 02:40 BY ORDER 7.","SOUTH DOOR NEEDS THE CHIEF'S OVERRIDE. CHIEF'S OFFICE: ADMIN LINK.",mz-f);
+ terminal(m,{2.f,6.f},"DELTA / PROCESSING TALLY","IN: 14 STAFF. OUT: 0. TRANSIT SEALED 02:40 BY ORDER 7.","SOUTH DOOR ON THE CHIEF'S OVERRIDE ONLY. ADEYEMI NEVER CAME DOWN FROM ADMIN.",mz-f);
  m.terminals.back().yaw=.001f;
  // --- The inspection lane: scanner portal, turnstiles and the sentry desk --------------------------
  for(float x:{9.f,15.f}){wall(m,x-.15f,4.5f,x+.15f,6.f,f,f+2.6f,20);}
@@ -777,7 +777,7 @@ std::shared_ptr<const Map> makeAdministrativeLink(){
  perSign(m,8.f,8.638f,o+1.45f,"SECURITY CHIEF / OVERRIDE","CHECKPOINT DELTA / SOUTH DOOR",1.45f,kPi,perBlue);
  terminal(m,{8.f,8.f},"SECURITY CHIEF / OVERRIDE","E / AUTHORISE CHECKPOINT DELTA'S SOUTH DOOR.","CHIEF ADEYEMI, 02:33: I WILL NOT SIGN ORDER 7. LET THEM OUT.",o-f,stateId("delta_override"));
  m.terminals.back().yaw=kPi;
- terminal(m,{4.6f,4.9f},"SECURITY CHIEF / ORDER 7","ORDER 7, 02:31: SEAL SUB-LEVELS. PROCESS ALL STAFF. NO WITNESSES.","REPLY 02:34: REFUSED. 02:51: CLEANUP COMMAND ACKNOWLEDGES.",o-f);
+ terminal(m,{4.6f,4.9f},"SECURITY CHIEF / ORDER 7","ORDER 7, 02:19: SEAL SUB-LEVELS. PROCESS ALL STAFF. NO WITNESSES.","REPLY 02:34: REFUSED. 02:51: CLEANUP COMMAND ACKNOWLEDGES.",o-f);
  m.terminals.back().yaw=.001f;
  // --- A guard sent back for the override -----------------------------------------------------
  perGuard(m,"per_admin_clock","per_admin",0,ActorVisual::Cleanup,GuardSquadRole::Assault,

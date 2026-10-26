@@ -160,6 +160,27 @@ void watShellUpper(Map& m,int end,float cy,float y1,float y2){
   if(band%3==1){wall(m,2.f+d,y1,2.12f+d,y2,z,z+.22f,12);wall(m,21.88f-d,y1,22.f-d,y2,z,z+.22f,12);}
  }
 }
+// What makes the shell read from its floor, for one chunk's half (straight
+// walls between y1 and y2): rings of red bulkheads climbing the inside, and at
+// the throat the stack's bird screen with cold daylight beyond it. The tower
+// draws air in at the louvres and breathes out up a stack to the surface: from
+// the basin, 48 m down, the only way up there is.
+void watShellLight(Map& m,float y1,float y2){
+ // At band centres, where the narrowing wall's face is exactly watThroatInset(z).
+ for(float z:{-9.f,-3.f,3.f,9.f,15.f}){const float d=watThroatInset(z);
+  for(float y:{y1+4.f,y2-4.f}){
+   m.lights.push_back(watWall({2.02f+d,y},z,0,2.2f,8.f,1000,-.5f));
+   m.lights.push_back(watWall({21.98f-d,y},z,kPi,2.2f,8.f,1000,-.5f));
+  }
+ }
+ // The bird screen across the throat: flat bars on bearers, wall to wall.
+ const float z=14.6f,a=y1-7.f,b=y2+7.f;
+ for(float x=2.5f;x<21.6f;x+=.6f)wall(m,x,std::max(0.f,a),x+.05f,std::min(24.f,b),z,z+.14f,8);
+ for(float y=std::max(0.5f,a);y<std::min(24.f,b);y+=2.4f)wall(m,1.f,y,23.f,y+.12f,z-.18f,z,12);
+ m.lights.push_back(lamp({12.f,(y1+y2)*.5f},m.definition.ceiling-1.4f,8.f,24.f,8000,0,WorldLightMount::Bare));
+ // The daylight spills through the screen onto the throat below it.
+ m.lights.push_back(lamp({12.f,(y1+y2)*.5f},z-2.5f,4.f,20.f,7500,0,WorldLightMount::Bare));
+}
 // Louvred air inlets along a straight base wall (x is the inner face, dir +1
 // for the west wall, -1 for the east): slats, frame posts and a sill.
 void watLouvres(Map& m,float x,int dir,float y1,float y2){
@@ -695,11 +716,13 @@ std::shared_ptr<const Map> makeCoolingTowersBasin(){
  for(float x:{5.f,9.f,15.f,19.f})for(float y:{11.5f,15.5f,19.5f})wall(m,x-.25f,y-.25f,x+.25f,y+.25f,bed,beamB,15);
  for(float y:{9.5f,11.5f,15.5f,19.5f,23.6f})wall(m,2.f,y-.2f,22.f,y+.2f,beamB,beamT,15);
  for(float x:{5.f,9.f,15.f,19.f})wall(m,x-.2f,9.5f,x+.2f,24.f,beamB,beamT,15);
- for(float x=2.1f;x<21.9f;x+=2.f)for(float y=9.6f;y<19.4f;y+=2.f)wall(m,x,y,x+1.9f,y+1.9f,beamT,fillT,29);
- wall(m,2.f,9.5f,22.f,19.5f,-18.2f,-18.f,29);
+ // The packs over the crossing came out with the south cells for access: a
+ // slot open to the shell runs over the walkway, so the way on is lit from above.
+ for(float x=2.1f;x<21.9f;x+=2.f)for(float y=9.6f;y<19.4f;y+=2.f)if(x<10.f||x>13.f)wall(m,x,y,x+1.9f,y+1.9f,beamT,fillT,29);
+ wall(m,2.f,9.5f,10.05f,19.5f,-18.2f,-18.f,29);wall(m,14.05f,9.5f,22.f,19.5f,-18.2f,-18.f,29);
  for(float y=10.6f;y<19.f;y+=2.f){
   m.pipes.push_back({{2.f,y},{22.f,y},-19.4f,.06f,-19.4f,0});
-  for(float x=3.2f;x<21.f;x+=1.5f)m.pipes.push_back({{x,y},{x,y},-19.58f,.035f,-19.4f,5});
+  for(float x=3.2f;x<21.f;x+=1.5f)if(x<10.f||x>14.f)m.pipes.push_back({{x,y},{x,y},-19.58f,.035f,-19.4f,5});
   m.pipes.push_back({{14.f,y},{14.f,y},-19.4f,.06f,-18.6f,0});
  }
  // --- Recirculation pumps P-11 to P-14 on the north apron --------------------------
@@ -730,10 +753,7 @@ std::shared_ptr<const Map> makeCoolingTowersBasin(){
  m.lights.push_back(watWall({2.02f,15.f},-17.f,0,2.2f,16.f,1900,-.25f));
  m.lights.push_back(watWall({21.98f,15.f},-17.f,kPi,2.2f,16.f,1900,-.25f));
  m.lights.push_back(watWall({12.f,1.02f},-17.f,kPi*.5f,1.6f,14.f,1900,-.25f));
- for(float z:{-5.f,7.f,17.f}){const float d=watThroatInset(z);
-  m.lights.push_back(watWall({2.02f+d,16.f},z,0,.8f,5.f,1000,-.5f));
-  m.lights.push_back(watWall({21.98f-d,16.f},z,kPi,.8f,5.f,1000,-.5f));}
- m.lights.push_back(lamp({12.f,14.f},R-.4f,2.f,14.f,1900,-.25f));
+ watShellLight(m,8.f,24.f);
  // --- Encounters and script ---------------------------------------------------------
  m.pickupSpawns={{{3.6f,8.4f},P::Ammo,E},{{7.f,5.f},P::Health,F}};
  m.clutterSpawns.push_back({3,{8.6f,2.6f},F});m.clutterSpawns.push_back({1,{18.6f,7.f},F});m.clutterSpawns.push_back({2,{4.4f,10.6f},E});
@@ -825,10 +845,7 @@ std::shared_ptr<const Map> makeCoolingTowersShell(){
  for(Vec2 b:{Vec2{8.f,8.f},Vec2{15.5f,20.8f}})m.lights.push_back(watSwitched(lamp(b,surf+.1f,1.5f,6.f,12000,-.05f,WorldLightMount::Bare),watIsolated,true,.3f));
  m.lights.push_back(watWall({2.02f,4.f},-17.f,0,2.f,16.f,1900,-.25f));
  m.lights.push_back(watWall({21.98f,13.f},-17.f,kPi,2.f,16.f,1900,-.25f));
- for(float z:{-5.f,7.f,17.f}){const float d=watThroatInset(z);
-  m.lights.push_back(watWall({2.02f+d,8.f},z,0,.8f,5.f,1000,-.5f));
-  m.lights.push_back(watWall({21.98f-d,8.f},z,kPi,.8f,5.f,1000,-.5f));}
- m.lights.push_back(lamp({12.f,10.f},R-.4f,2.f,14.f,1900,-.25f));
+ watShellLight(m,0.f,16.f);
  // --- Encounters and script ---------------------------------------------------------
  m.creatureSpawns={{C::Wasp,{19.6f,18.5f},L1}};
  m.pickupSpawns={{{12.f,8.f},P::Ammo,L3},{{18.6f,2.4f},P::Health,F}};

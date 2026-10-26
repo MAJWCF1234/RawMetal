@@ -16,6 +16,10 @@ using namespace kit;
 
 // --- District states ------------------------------------------------------------------------
 const StateId PwrGen=stateId("pwr_gen_online"),PwrSubA=stateId("pwr_sub_a"),PwrFeeder=stateId("pwr_feeder9");
+// Emergency Generation's work lights strike a second after the bus closes;
+// Load Control's room lamps follow its own supply (0 dead, 1 on generation,
+// 2 the dip while the transfer breaker swings the plant across).
+const StateId PwrStrike=stateId("pwr_strike_ms_done"),PwrLcMains=stateId("pwr_lc_mains");
 
 // --- Light ----------------------------------------------------------------------------------
 // The district runs on dim red emergency lamps until the generators start;
@@ -242,13 +246,31 @@ void pwrLineup(Map& m,float x1,int count,float y,float floor,float front){
 void pwrLamp(Map& m,Vec2 p,float z,float intensity,float range,float kelvin,float tint,StateId state,bool onWithState,WorldLightMount mount=WorldLightMount::Ceiling,float yaw=0,float flicker=0){
  WorldLight l=lamp(p,z,intensity,range,kelvin,tint,mount,yaw);l.enabledState=state;l.invert=!onWithState;l.flicker=flicker;m.lights.push_back(l);
 }
-// A machine-room hum that starts when `state` is set (a looping sequence
-// of the machinery sound, started by an event).
-void pwrRunning(Map& m,const char* timer,StateId state,int level,float gain=.5f){
- TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(std::string(timer)+"_cycled");s.x1=-3;s.y1=-3;s.x2=-2;s.y2=-2;
- s.durationMs=4000;s.finishAtMs=4000;s.soundIntervalMs=1300;s.soundUntilMs=4000;s.tickSound=Sound::Machine;s.gain=gain;s.pitch=.55f;s.loop=true;m.timedSequences.push_back(s);
- ScriptEvent e;e.id=stateId(std::string(timer)+"_start");e.level=level;e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=state;
+// A control answered where the machinery is: once `state` is set, a timer runs
+// for lengthMs (its finish state is "<timer>_done") and the listed sounds play
+// at their places. With tickMs the machine at `at` also runs, its sound every
+// tickMs until untilMs. The sequence's box is the machine's footprint lifted
+// out of reach, so walking past it never starts it.
+struct PwrSound {int ms;Sound sound;Vec2 at;float gain=.6f,pitch=1;};
+void pwrAnswer(Map& m,const char* timer,StateId state,int level,int lengthMs,Vec2 at,std::initializer_list<PwrSound> sounds,
+               int tickMs=0,int untilMs=0,Sound tick=Sound::Machine,float gain=.5f,float pitch=.55f,bool loop=false){
+ TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(std::string(timer)+"_done");
+ s.x1=at.x-.5f;s.y1=at.y-.5f;s.x2=at.x+.5f;s.y2=at.y+.5f;s.bottom=1000;s.top=1001;
+ s.durationMs=lengthMs;s.finishAtMs=lengthMs;s.soundIntervalMs=tickMs;s.soundUntilMs=untilMs;s.tickSound=tick;s.gain=gain;s.pitch=pitch;s.loop=loop;
+ m.timedSequences.push_back(s);
+ for(const auto& c:sounds)m.sequenceCues.push_back({stateId(timer),c.ms,c.sound,c.at,c.gain,c.pitch,""});
+ ScriptEvent e;e.id=stateId(std::string(timer)+"_go");e.level=level;e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=state;
  ScriptAction a;a.type=ScriptAction::Type::SetState;a.id=stateId(timer);a.value=1;e.actions.push_back(a);m.scriptEvents.push_back(e);
+}
+// A machine-room hum where the machine stands, from when `state` is set.
+void pwrRunning(Map& m,const char* timer,StateId state,int level,float gain,Vec2 at){pwrAnswer(m,timer,state,level,4000,at,{},1300,4000,Sound::Machine,gain,.55f,true);}
+// Once `state` is set and the player is in the chunk, sets `target` to value
+// (and shakes the view a little if shake>0).
+void pwrOnState(Map& m,const char* id,int level,StateId state,StateId target,int value,float shake=0){
+ ScriptEvent e;e.id=stateId(id);e.level=level;e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=state;
+ ScriptAction a;a.type=ScriptAction::Type::SetState;a.id=target;a.value=value;e.actions.push_back(a);
+ if(shake>0){ScriptAction k;k.type=ScriptAction::Type::Shake;k.amount=shake;e.actions.push_back(k);}
+ m.scriptEvents.push_back(e);
 }
 ScriptAction pwrSpawn(CreatureKind kind,Vec2 p,float z,float awareness=4){ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=kind;a.position=p;a.z=z;a.amount=awareness;return a;}
 
@@ -378,7 +400,7 @@ std::shared_ptr<const Map> makeSubstationA(){
  // The bus comes alive: something in the trench heard it.
  {ScriptEvent e;e.id=stateId("pwr_evt_suba_live");e.level=36;e.x1=10;e.y1=16;e.x2=24;e.y2=24;e.requireState=PwrGen;
   e.actions.push_back(pwrSpawn(CreatureKind::Huntsman,{20.5f,21.f},base));m.scriptEvents.push_back(e);}
- pwrRunning(m,"pwr_suba_hum",PwrGen,36,.35f);
+ pwrRunning(m,"pwr_suba_hum",PwrGen,36,.35f,{13.f,12.f});
  // --- Light ----------------------------------------------------------------------------------
  // Dead, the substation has only its emergency bulkheads: on the gallery wall,
  // over the breaker desk, by the empty T3 pad and along the basement walk.
@@ -505,9 +527,11 @@ std::shared_ptr<const Map> makeCableTrench(){
 }
 
 // EMERGENCY GENERATION. Three diesel sets in a hall that has not run since
-// the monthly test. Black start in three steps: transfer fuel from the day
-// tanks, prime and crank Set 2 at its local panel, then synchronise to the
-// emergency bus at the control desk. The battery room keeps the controls
+// the monthly test. Black start in three steps, each answered by the plant:
+// the day tanks' valves clank and the transfer pump runs until Tank 2 is
+// full; Set 2's starter turns it over until it coughs and catches; closing it
+// onto the dead emergency bus drops the red lamps and, a second later, the
+// work lights strike bank by bank. The battery room keeps the controls
 // alive. A gallery shutter on the west wall opens onto the Machine Hall once
 // Feeder 9 is live: the way back is short.
 std::shared_ptr<const Map> makeEmergencyGeneration(){
@@ -531,18 +555,30 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
  m.fixtures.push_back({model::storage_tank,{21.f,8.1f},.2f,3.f,1.4f,1.8f,kPi*.5f,true});
  wall(m,19.4f,1.f,23.f,10.4f,base,base+.2f,15);
  floorLine(m,19.3f,1.2f,19.4f,10.4f,base,13);
- terminal(m,{19.f,6.f},"DAY TANKS / FUEL TRANSFER","E / OPEN TRANSFER VALVES AND START THE FUEL PUMP.","STEP 1 OF 3. NEXT: SET 2 LOCAL PANEL, PRIME AND CRANK.",0,fuel);
+ terminal(m,{19.f,6.f},"DAY TANKS / FUEL TRANSFER","DAY TANK 2 AT 3%. BULK FEED VALVES SHUT SINCE THE MONTHLY TEST.","E / OPEN THE BULK VALVES AND RUN THE TRANSFER PUMP.",0,fuel);
  m.terminals.back().yaw=-kPi*.5f;
+ pwrAnswer(m,"pwr_fuel_ms",fuel,39,20000,{20.4f,6.f},
+  {{10,Sound::Metal2,{19.6f,3.6f},.6f,.8f},{380,Sound::Metal2,{19.6f,8.1f},.6f,.75f},{900,Sound::LiftMotor,{20.4f,6.f},.35f,1.3f},
+   {1300,Sound::WaterReturn,{21.f,5.8f},.3f,1.f},{19900,Sound::Metal1,{20.4f,6.f},.4f,.7f}},
+  700,19000,Sound::Machine,.28f,1.2f);
  // --- The three sets -------------------------------------------------------------------------
  for(float x:{7.f,13.f,19.f}){wall(m,x-2.2f,15.2f,x+2.2f,18.6f,base,base+.25f,15);
   m.fixtures.push_back({model::pwr_diesel_genset,{x,16.9f},.25f,3.7f,1.7f,2.f,0,true});
   m.fixtures.push_back({model::flue,{x+1.4f,17.9f},2.25f,.5f,.5f,roof-base-2.6f,0,false});}
- terminal(m,{13.f,13.8f},"SET 2 / LOCAL PANEL","E / PRIME THE FUEL RAIL AND CRANK ON THE BATTERY.","STEP 2 OF 3. NEEDS FUEL TRANSFER. THEN SYNCHRONISE AT THE CONTROL DESK.",0,crank,fuel);
- pwrRunning(m,"pwr_set2_running",crank,39,.7f);
+ terminal(m,{13.f,13.8f},"SET 2 / LOCAL PANEL","FUEL RAIL DRY. BATTERY 24.6 V. NOTHING TO PRIME FROM UNTIL DAY TANK 2 FILLS.","E / PRIME THE RAIL AND CRANK ON THE BATTERY.",0,crank,fuel);
+ // The starter turns it over twice; it coughs, catches and settles to a run.
+ const StateId caught=stateId("pwr_set2_ms_done");
+ pwrAnswer(m,"pwr_set2_ms",crank,39,1600,{13.f,16.9f},
+  {{10,Sound::LiftMotor,{13.f,16.f},.7f,.7f},{620,Sound::Metal3,{13.f,16.6f},.5f,.8f},{860,Sound::LiftMotor,{13.f,16.f},.7f,.78f},{1520,Sound::LiftCrash,{13.f,16.9f},.45f,.6f}});
+ pwrOnState(m,"pwr_evt_set2_caught",39,caught,stateId("pwr_set2_shook"),1,.12f);
+ pwrRunning(m,"pwr_set2_running",caught,39,.7f,{13.f,16.9f});
  // --- The control desk: synchronise to the emergency bus ---------------------------------------------
  for(float x:{10.4f,11.6f,14.4f,15.6f})m.fixtures.push_back({model::pwr_control_cabinet,{x,7.85f},0,.8f,.4f,1.6f,0,true});
- terminal(m,{13.f,7.f},"EMERGENCY GENERATION / CONTROL","E / SYNCHRONISE SET 2 TO THE EMERGENCY BUS.","STEP 3 OF 3. THEN CLOSE SUBSTATION A'S BREAKERS: BACK THROUGH THE TRENCH.",0,PwrGen,crank);
+ terminal(m,{13.f,7.f},"EMERGENCY GENERATION / CONTROL","EMERGENCY BUS DEAD. IT CLOSES ONLY ONTO A SET RUNNING ON SPEED.","E / DEAD-BUS CLOSE SET 2 ONTO THE EMERGENCY BUS.",0,PwrGen,caught);
  m.terminals.back().yaw=kPi;
+ pwrAnswer(m,"pwr_strike_ms",PwrGen,39,950,{13.f,8.f},
+  {{10,Sound::LiftCrash,{13.f,7.6f},.8f,.7f},{760,Sound::Metal3,{7.f,5.6f},.5f,.9f},{880,Sound::Metal3,{16.f,5.6f},.5f,.85f},{940,Sound::Machine,{13.f,12.f},.5f,.45f}});
+ pwrOnState(m,"pwr_evt_lc_mains_39",39,PwrGen,PwrLcMains,1);
  wallSign(m,8.5f,1.055f,base+2.4f,"BLACK START PROCEDURE","1 FUEL / 2 CRANK SET 2 / 3 SYNCHRONISE / 4 SUB A",4.f,0);
  {ScriptEvent e;e.id=stateId("pwr_evt_gen_online");e.level=39;e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=PwrGen;
   ScriptAction s;s.type=ScriptAction::Type::Shake;s.amount=.25f;e.actions.push_back(s);
@@ -561,7 +597,7 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
  for(float y:{4.f,12.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.5f,roof,12);
  cableTray(m,{6.f,1.4f},{18.f,1.4f},base+3.f);
  for(Vec2 l:{Vec2{13.f,6.f},Vec2{5.f,10.f},Vec2{13.f,20.f},Vec2{20.f,15.f}})pwrRed(m,l,roof-.5f,1.f,8.f);
- for(Vec2 l:{Vec2{7.f,5.6f},Vec2{16.f,5.6f},Vec2{7.f,10.4f},Vec2{13.f,11.f},Vec2{7.f,20.5f},Vec2{13.f,20.5f},Vec2{19.f,20.5f},Vec2{20.f,13.f}})pwrWork(m,l,roof-.45f,2.f,11.f,5000,.05f);
+ for(Vec2 l:{Vec2{7.f,5.6f},Vec2{16.f,5.6f},Vec2{7.f,10.4f},Vec2{13.f,11.f},Vec2{7.f,20.5f},Vec2{13.f,20.5f},Vec2{19.f,20.5f},Vec2{20.f,13.f}})pwrWork(m,l,roof-.45f,2.f,11.f,5000,.05f,WorldLightMount::Ceiling,0,PwrStrike);
  zone(m,"EMERGENCY GENERATION / GALLERY",0,4,6,15,deckZ-.5f,1000);
  zone(m,"EMERGENCY GENERATION / BATTERY ROOM",16,10,23,15);
  zone(m,"EMERGENCY GENERATION",0,0,24,24);
@@ -590,9 +626,20 @@ std::shared_ptr<const Map> makeLoadControl(){
  // --- The mimic wall and the three transfer stations ---------------------------------------------
  wall(m,1.f,22.3f,23.f,23.f,f,f+2.9f,2);
  const StateId ready=stateId("pwr_transfer_ready"),bus=stateId("pwr_transfer_bus");
- terminal(m,{5.f,21.f},"LOAD CONTROL / 1 SHED","E / SHED NON-ESSENTIAL LOADS.","NEEDS SUBSTATION A BREAKERS CLOSED. THEN TRANSFER.",0,ready,PwrSubA);
- terminal(m,{12.f,21.f},"LOAD CONTROL / 2 TRANSFER","E / TRANSFER THE PLANT TO EMERGENCY GENERATION.","NEEDS LOAD SHED. THEN FEEDER 9.",0,bus,ready);
- terminal(m,{19.f,21.f},"LOAD CONTROL / 3 FEEDER 9","E / ENERGISE FEEDER 9. RELEASES THE HUB GATE.","NEEDS TRANSFER. THEN BACK TO THE HUB AND SOUTH.",0,PwrFeeder,bus);
+ terminal(m,{5.f,21.f},"LOAD CONTROL / 1 SHED","PLANT DEMAND 36 MW. SET 2 CARRIES 2. NO SUPPLY HERE UNTIL SUBSTATION A CLOSES.","E / SHED ALL BUT LIFE SAFETY AND THE FEEDERS.",0,ready,PwrSubA);
+ terminal(m,{12.f,21.f},"LOAD CONTROL / 2 TRANSFER","PLANT STILL ON THE DEAD GRID. SET 2 TRIPS IF IT TAKES UNSHED LOAD.","E / TRANSFER THE PLANT TO EMERGENCY GENERATION.",0,bus,ready);
+ terminal(m,{19.f,21.f},"LOAD CONTROL / 3 FEEDER 9","FEEDER 9 OPEN BY CLEANUP ORDER. IT FEEDS THE MACHINE HALL AND THE HUB GATE.","E / CLOSE FEEDER 9 ONTO GENERATION.",0,PwrFeeder,bus);
+ // The room answers: breakers trip down the mimic wall as load sheds; the
+ // transfer breaker drops the room dark for a breath and brings it back on
+ // generation; Feeder 9 closes with a slam and the hall's load comes on.
+ pwrAnswer(m,"pwr_lc_shed_ms",ready,40,1400,{12.f,22.6f},
+  {{10,Sound::Metal1,{3.f,22.6f},.5f,1.f},{180,Sound::Metal2,{7.f,22.6f},.5f,.9f},{330,Sound::Metal1,{11.f,22.6f},.5f,1.1f},
+   {520,Sound::Metal2,{15.f,22.6f},.5f,.95f},{700,Sound::Metal1,{19.f,22.6f},.5f,1.05f},{900,Sound::Metal4,{22.f,22.6f},.45f,.9f},{1300,Sound::Machine,{12.f,22.f},.4f,.4f}});
+ pwrOnState(m,"pwr_evt_lc_mains",40,PwrGen,PwrLcMains,1);
+ pwrOnState(m,"pwr_evt_lc_dip",40,bus,PwrLcMains,2);
+ pwrAnswer(m,"pwr_lc_dip_ms",bus,40,750,{12.f,22.6f},{{10,Sound::LiftCrash,{12.f,22.4f},.7f,.7f},{700,Sound::Metal3,{12.f,13.f},.5f,.9f},{740,Sound::Machine,{12.f,22.f},.45f,.5f}});
+ pwrOnState(m,"pwr_evt_lc_dip_back",40,stateId("pwr_lc_dip_ms_done"),PwrLcMains,1,.1f);
+ pwrAnswer(m,"pwr_lc_feeder_ms",PwrFeeder,40,1500,{19.f,22.6f},{{10,Sound::LiftCrash,{19.f,22.4f},.8f,.6f},{450,Sound::Machine,{12.f,22.f},.5f,.5f}});
  // --- Operators' desks, facing the mimic wall -----------------------------------------------------
  for(int i=0;i<4;++i){workstation(m,4.f+i*5.f,11.f,f,1,i);workstation(m,4.f+i*5.f,15.5f,f,1,i+2);}
  // --- Supervisor's office, north-east ----------------------------------------------------------------
@@ -616,7 +663,7 @@ std::shared_ptr<const Map> makeLoadControl(){
  ceilingGrid(m,1.f,4.1f,23.f,22.3f,roof);
  for(Vec2 l:{Vec2{6.f,2.f},Vec2{18.f,2.f}})m.lights.push_back(lamp(l,roof-.1f,1.f,6.f,3800));
  for(Vec2 l:{Vec2{4.f,7.f},Vec2{12.f,7.f},Vec2{4.f,13.f},Vec2{12.f,13.f},Vec2{20.f,13.f},Vec2{4.f,19.f},Vec2{12.f,19.f},Vec2{20.f,19.f}}){
-  pwrRed(m,l,roof-.1f,.6f,5.f);pwrWork(m,l,roof-.1f,1.5f,8.f,4300,.3f,WorldLightMount::Ceiling,0,PwrGen,.05f);}
+  pwrRed(m,l,roof-.1f,.6f,5.f);pwrWork(m,l,roof-.1f,1.5f,8.f,4300,.3f,WorldLightMount::Ceiling,0,PwrLcMains,.05f);}
  zone(m,"LOAD CONTROL / SUPERVISOR",15,4,23,9);
  zone(m,"LOAD CONTROL",0,0,24,24);
  freightFinish(m,-1);

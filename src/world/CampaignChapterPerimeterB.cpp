@@ -156,7 +156,7 @@ void pbSeamHeader(Map& m,char side,float a,float b,float f,float height,int mat=
 // laboratory supply handler AHU-1 under its fan deck, the containment exhaust
 // scrubbers and their trap cartridges, the chilled water plant and, up on the
 // deck, the cascade control room that holds every lab below atmosphere.
-// Security Order 7 stopped the supply at 02:20 with 41 badges still inside.
+// Security Order 7 stopped the supply at 02:20 with 38 badges still inside.
 // The exhaust runs on, the labs sit at -310 Pa and pressure lock PL-3 to
 // Research Receiving cannot open against the load. The player cranks the
 // locked-out outside-air damper open by hand at the west end of the fan deck
@@ -210,7 +210,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  wall(m,1.1f,1.1f,3.1f,3.3f,fd+.9f,fd+1.6f,8);
  m.fixtures.push_back({model::valve_wheel,{2.1f,3.52f},fd-base+.85f,.7f,.12f,.7f,0,false});
  m.pipes.push_back({{2.1f,3.3f},{2.1f,3.47f},fd+1.2f,.04f,fd+1.2f,6});
- terminal(m,{3.6f,3.7f},"DAMPER OA-2 / HAND CRANK","ACTUATOR POWER REMOVED BY SECURITY. WHEEL ENGAGED.","E / CRANK OA-2 OPEN. THEN RESTART SF-2, EAST.",fd-base,damper);
+ terminal(m,{3.6f,3.7f},"DAMPER OA-2 / HAND CRANK","ACTUATOR POWER REMOVED BY SECURITY. WHEEL ENGAGED.","E / CRANK OA-2 OPEN. SF-2 WILL NOT RUN AGAINST A SHUT DAMPER.",fd-base,damper);
  m.terminals.back().control=true;m.terminals.back().yaw=0;
  for(float x:{11.6f,12.9f}){m.fixtures.push_back({model::generator,{x,2.4f},fd-base,1.1f,.7f,.9f,kPi*.5f,true});
   wall(m,x-.22f,2.95f,x+.22f,4.4f,fd,fd+.55f,18);wall(m,x-.35f,4.4f,x+.35f,4.9f,fd,fd+.12f,15);}
@@ -231,7 +231,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  for(float x:{18.4f,21.7f})m.fixtures.push_back({model::lab_control_board,{x,1.24f},fd-base+.05f,1.32f,.19f,.6f,kPi,false});
  terminal(m,{18.8f,3.3f},"CASCADE CONTROL / STATUS","SUPPLY SF-1, SF-2 STOPPED: SECURITY ORDER 7, 02:20.","EXHAUST RUNNING. LABS -310 PA. LOCKS INTERLOCKED.",fd-base);
  terminal(m,{20.7f,3.3f},"SUPPLY FAN SF-2 / RESTART","INTERLOCK: OUTSIDE AIR DAMPER OA-2 MUST BE OPEN.","OA-2 LOCKED OUT: OPEN IT BY HAND, FAN DECK WEST END.",fd-base,supply,damper);
- terminal(m,{22.3f,6.1f},"CASCADE / DUTY LOG","02:20 ORDER 7: STOP LAB SUPPLY. 41 BADGES STILL INSIDE.","02:23 ASKED WHO SIGNED IT. THEY SAID OPEN THE DOOR.",fd-base);m.terminals.back().yaw=-kPi*.5f;
+ terminal(m,{22.3f,6.1f},"CASCADE / DUTY LOG","02:20 ORDER 7: STOP LAB SUPPLY. 38 BADGES STILL INSIDE.","02:23 ASKED WHO SIGNED IT. THEY SAID OPEN THE DOOR.",fd-base);m.terminals.back().yaw=-kPi*.5f;
  for(float x:{18.8f,20.9f})m.fixtures.push_back({model::office_chair,{x,4.15f},fd-base,.55f,.55f,.95f,x<19?.2f:-.5f,true});
  m.fixtures.push_back({model::file_cabinet_wide,{22.7f,8.f},fd-base,.9f,.5f,.75f,-kPi*.5f,true});
  m.fixtures.push_back({model::cctv_tv,{22.7f,8.f},fd-base+.75f,.5f,.4f,.42f,-kPi*.5f,false});
@@ -804,6 +804,14 @@ std::shared_ptr<const Map> makeEnergyResearchGreatDoor(){
  wall(m,9.f,23.f,15.f,24.f,f,top,15);
  floorLine(m,4.f,15.85f,20.f,16.f,top,13);
  for(float x:{3.6f,20.f})wall(m,x,10.4f,x+.4f,16.f,f,top+.9f,33);
+ // Service stairs outside both cheeks, narrow and dim: the flanks. They land at
+ // the ends of the squad's sandbag line, beside its sharpshooters.
+ for(auto [x1,x2,lampX,yaw]:{std::tuple{1.f,3.6f,1.02f,0.f},{20.4f,23.f,22.98f,kPi}}){
+  m.stairs.push_back({x1,9.6f,x2,16.f,f,top,21,true,true});
+  m.lights.push_back(lamp({lampX,12.6f},-11.8f,.8f,5.f,2400,-.1f,WorldLightMount::Wall,yaw));
+ }
+ // Stone planters halfway up the flight: the only cover on the climb.
+ for(float x:{7.2f,15.2f})wall(m,x,12.6f,x+1.6f,13.4f,f,f+(13.4f-10.4f)*.714f+1.f,33);
  // Lamps in the stair's cheek walls and along the podium edge: the climb is lit.
  for(float y:{11.2f,13.2f,15.2f})for(float x:{4.05f,19.95f}){m.lights.push_back(lamp({x,y},f+(y-10.4f)*.71f+.9f,1.4f,6.f,2700,-.05f,WorldLightMount::Wall,x<12?0.f:kPi));}
  for(float x:{6.f,10.f,14.f,18.f}){m.lights.push_back(lamp({x,16.25f},top+.15f,1.2f,5.f,3000,0,WorldLightMount::Bare));pbLampHead(m,x,16.3f,top);}

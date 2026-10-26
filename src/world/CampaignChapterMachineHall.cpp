@@ -146,6 +146,14 @@ ScriptEvent& mhEvent(Map& m,const char* id,float x1,float y1,float x2,float y2,f
  ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=bottom;e.top=top;e.requireState=require;m.scriptEvents.push_back(e);return m.scriptEvents.back();
 }
 ScriptAction mhSet(StateId id,int value=1){ScriptAction a;a.type=ScriptAction::Type::SetState;a.id=id;a.value=value;return a;}
+// The high bays strike row by row from the north gallery's aisle end. A player
+// who comes into the hall another way first (the west stair, Unit 1's bridge,
+// Emergency Generation's shutter into the exciter bay) gets the restrike
+// wherever that is, if it has not started yet.
+void mhRestrikeHere(Map& m,const char* id,float x1,float y1,float x2,float y2,float bottom,float top){
+ auto& e=mhEvent(m,id,x1,y1,x2,y2,bottom,top,stateId("mh_bay_a_ms"));e.requireValue=0;
+ for(const char* timer:{"mh_bay_a_ms","mh_bay_b_ms","mh_bay_c_ms","mh_bay_d_ms"})e.actions.push_back(mhSet(stateId(timer)));
+}
 ScriptAction mhSound(Sound s,float gain){ScriptAction a;a.type=ScriptAction::Type::PlaySound;a.sound=s;a.amount=gain;return a;}
 ScriptAction mhShake(float amount){ScriptAction a;a.type=ScriptAction::Type::Shake;a.amount=amount;return a;}
 ScriptAction mhSave(){ScriptAction a;a.type=ScriptAction::Type::Checkpoint;return a;}
@@ -401,7 +409,7 @@ void mhHallScript(MhHall& hall){
  using CK=CreatureKind;using P=PickupKind;
  // --- Terminals -------------------------------------------------------------------------------
  mhTerminal(m,{7.8f,1.55f},G,0,"MACHINE HALL / LIGHTING L-9","FEEDER 9 LIVE. HIGH BAYS STRIKE ROW A TO D.","GALLERY SPAN DOWN 02:06. CROSS ON THE FLOOR.");
- mhTerminal(m,{14.8f,9.6f},G,0,"UNIT 1 / TURNING GEAR","TRIPPED 23:58 ON GRID LOSS. RUNDOWN NORMAL.","GEAR ENGAGED 00:31. SHAFT STOPPED. SAFE.");
+ mhTerminal(m,{14.8f,9.6f},G,0,"UNIT 1 / TURNING GEAR","TRIPPED 23:58 ON LOAD REJECTION. RUNDOWN NORMAL.","GEAR ENGAGED 00:31. SHAFT STOPPED. SAFE.");
  mhTerminal(m,{38.8f,9.6f},G,0,"UNIT 2 / TURNING GEAR","GEAR DISENGAGED. NO STEAM ON UNIT. SHAFT 3 RPM.","MANUAL ANNOTATION: WHAT IS TURNING IT.");
  mhTerminal(m,{39.4f,2.35f},G,0,"SWITCHBOARD 9 / BOARD 9-14","VENT WORKS CONTROL SUPPLY: OPEN SINCE 23:58.","E / CLOSE 9-14. FIRE DAMPER FD-9 RESETS.",MhVentSupply);
  mhTerminal(m,{36.4f,46.15f},C,kPi,"FIRE DAMPER FD-9","CLOSED: CONTROL SUPPLY LOST AT 23:58.","RESET AT SWITCHBOARD 9 / UNIT CONTROL ROOM.");
@@ -686,20 +694,23 @@ std::shared_ptr<const Map> makeMachineHallNorthGallery(){
  wall(m,.02f,13.f,.06f,17.f,-18.1f,-16.1f,17);
  for(float y:{13.f,14.3f,15.6f,16.88f})wall(m,0.f,y,1.f,y+.12f,-18.1f,-16.1f,12);
  wall(m,.9f,12.85f,1.12f,17.15f,-18.35f,-18.1f,12);wall(m,.9f,12.85f,1.12f,17.15f,-16.1f,-15.85f,12);
- // The high-bay restrike: when the player first reaches the gallery rail the
+ // The high-bay restrike: when the player reaches the gallery's east end, where
+ // the aisle between Units 1 and 2 opens the whole length of the hall, the
  // four lighting contactors close one after another, north to south, and the
- // hall comes up out of the dark row by row (chunk 41 holds the hall's
- // origin, so its local coordinates are hall coordinates).
+ // hall comes up out of the dark row by row, away from them (chunk 41 holds
+ // the hall's origin, so its local coordinates are hall coordinates).
  const char* timers[4]={"mh_bay_a_ms","mh_bay_b_ms","mh_bay_c_ms","mh_bay_d_ms"};
  const StateId rows[4]={MhBayA,MhBayB,MhBayC,MhBayD};
  for(int i=0;i<4;++i){
   TimedSequence s;s.timerState=stateId(timers[i]);s.finishState=rows[i];
-  s.x1=5.f;s.y1=2.6f;s.x2=20.f;s.y2=4.f;s.bottom=-25.5f;s.top=-23.f;
+  s.x1=19.5f;s.y1=2.4f;s.x2=25.f;s.y2=4.f;s.bottom=-25.5f;s.top=-23.f;
   s.durationMs=8000;s.finishAtMs=900+i*1800;s.soundIntervalMs=0;m.timedSequences.push_back(s);
   mhCue(m,timers[i],s.finishAtMs-1,Sound::Machine,{24.f,8.f+i*12.f},mhLampRig,1.f,.55f);
   mhCue(m,timers[i],s.finishAtMs+250,Sound::Metal3,{8.f+i*9.f,8.f+i*12.f},mhLampRig,.5f,.7f);
  }
  mhCue(m,"mh_bay_a_ms",120,Sound::Metal1,{7.8f,1.6f},mhTable+1.f,.8f,.6f,"LIGHTING L-9: CONTACTOR ROW A");
+ mhRestrikeHere(m,"mh_restrike_floor_41",0.f,4.f,24.f,24.f,-29.f,-26.5f);
+ mhRestrikeHere(m,"mh_restrike_bridge_41",16.9f,4.3f,19.1f,9.f,-25.5f,-23.f);
  freightFinish(m,-1);
  titleCard(m,"MACHINE HALL");
  return p;
@@ -708,6 +719,7 @@ std::shared_ptr<const Map> makeMachineHallNorthGallery(){
 std::shared_ptr<const Map> makeMachineHallExciterBay(){
  auto p=std::make_shared<Map>();auto& m=*p;
  mhHallChunk(m,42,1,0);
+ mhRestrikeHere(m,"mh_restrike_42",0.f,0.f,24.f,24.f,-100.f,100.f);
  openEdge(m,{'E',8.f,12.f,mhTable,false,0});
  // K. Voss, the operator who stayed at his desk when the Cleanup Force
  // cleared the hall.
@@ -726,6 +738,7 @@ std::shared_ptr<const Map> makeMachineHallExciterBay(){
 std::shared_ptr<const Map> makeMachineHallTurbineFloor(){
  auto p=std::make_shared<Map>();auto& m=*p;
  mhHallChunk(m,43,0,1);
+ mhRestrikeHere(m,"mh_restrike_43",0.f,0.f,24.f,24.f,-100.f,100.f);
  // The blade inspector, shot at his bench.
  machineryClock(m,"mh_tf_clock",60000);
  mhBody(m,"mh_tf_clock",{7.9f,21.7f},mhFloor,1.3f);
@@ -737,6 +750,7 @@ std::shared_ptr<const Map> makeMachineHallTurbineFloor(){
 std::shared_ptr<const Map> makeMachineHallCraneEnd(){
  auto p=std::make_shared<Map>();auto& m=*p;
  mhHallChunk(m,44,1,1);
+ mhRestrikeHere(m,"mh_restrike_44",0.f,0.f,24.f,24.f,-100.f,100.f);
  openEdge(m,{'S',14.f,18.f,mhCatwalk,false,0});
  // FD-9 resets as the player comes along the catwalk once its supply is back.
  {auto& e=mhEvent(m,"mh_ev_damper",11.f,19.6f,21.f,22.7f,-22.5f,-20.f,MhVentSupply);e.actions={mhOpen(0),mhSound(Sound::Door,.9f),mhSave()};}
