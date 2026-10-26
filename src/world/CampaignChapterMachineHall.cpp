@@ -304,7 +304,7 @@ void mhHallFloor(MhHall& hall){
  {const float y=30.f,z=F+1.75f;
   for(float x:{27.7f,38.7f}){mhCrib(m,x,y,F,F+.6f);wall(m,x-.35f,y-.45f,x+.35f,y+.45f,F+.6f,z-.62f,12);
    wall(m,x-.35f,y-.55f,x+.35f,y-.25f,z-.62f,z-.15f,12);wall(m,x-.35f,y+.25f,x+.35f,y+.55f,z-.62f,z-.15f,12);}
-  m.pipes.push_back({{26.9f,y},{40.3f,y},z,.42f,z,6});
+  m.pipes.push_back({{26.9f,y},{40.05f,y},z,.42f,z,6});
   // HP and IP wheels, then the LP rows growing toward L-0.
   const float wheels[][2]={{28.6f,.8f},{29.1f,.82f},{29.6f,.86f},{30.1f,.9f},{30.6f,.95f},{31.1f,1.f},{32.f,1.2f},{32.7f,1.3f},{33.5f,1.4f},{34.4f,1.5f},{35.4f,1.62f}};
   for(auto& w:wheels){m.pipes.push_back({{w[0],y},{w[0]+.24f,y},z,w[1],z,w[1]>1.3f?5:6});m.pipes.push_back({{w[0]-.02f,y},{w[0]+.26f,y},z,w[1]*.55f,z,6});}
