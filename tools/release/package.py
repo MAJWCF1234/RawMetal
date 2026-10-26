@@ -68,7 +68,9 @@ def main():
             z.write(guide, 'windows-compatibility.md')
     contents = 'the game, these notes and the Windows guide' if guide.is_file() else 'the game and these notes'
     checksums = out / ('%s-%s.sha256' % (name, tag))
-    checksums.write_text('%s  %s\n%s  %s\n' % (sha256(exe), exe.name, sha256(archive), archive.name), encoding='ascii')
+    # LF endings: sha256sum -c on any platform reads them; Windows text mode would write CRLF.
+    with open(checksums, 'w', encoding='ascii', newline='\n') as f:
+        f.write('%s  %s\n%s  %s\n' % (sha256(exe), exe.name, sha256(archive), archive.name))
     base = 'https://github.com/%s/releases/download/%s/' % (REPO, tag)
     body = ('## Download\n\n'
             '- **[%s](%s%s)**: %s\n'
