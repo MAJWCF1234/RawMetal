@@ -715,9 +715,10 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  perGuard(m,"per_delta_clock","per_delta",0,ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,
   {{{4.f,15.f},mz,5000,kPi*.5f},{{3.f,8.5f},mz,4000,kPi*.5f}},14,.5f,2,1.2f);
  // One of the fourteen the detail processed, still in the holding cells: changed.
- // It crouches among the body bags until the player walks the lane past the bars.
+ // It crouches in the dark corner behind the middle cell's bars, out of the
+ // doorway's line and its lamp, until the player walks the lane past the bars.
  {const StateId wake=stateId("per_delta_cells_wake");
-  m.creatureSpawns.push_back({CreatureKind::Snatcher,{20.f,12.f},f,1,0,wake});
+  m.creatureSpawns.push_back({CreatureKind::Snatcher,{21.6f,9.6f},f,1,0,wake});
   auto e=perEvent("per_delta_cells_trip",11.5f,3.f,16.f,21.f,f-.5f,f+1.5f);e.actions={perSet(wake),perSound(Sound::JunkMetal,.7f)};m.scriptEvents.push_back(e);}
  m.pickupSpawns.push_back({{13.6f,2.4f},PickupKind::Ammo,f});
  m.pickupSpawns.push_back({{2.4f,14.6f},PickupKind::Health,mz});
@@ -840,7 +841,7 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  // It waits on the track bed behind the car's east end; when the player heads
  // for the crossing it bangs against the car and climbs out after them.
  {const StateId wake=stateId("per_transit_wake");
-  m.creatureSpawns.push_back({CreatureKind::Snatcher,{18.6f,10.5f},bed,1,0,wake});
+  m.creatureSpawns.push_back({CreatureKind::Snatcher,{17.9f,10.5f},bed,1,0,wake});
   auto e=perEvent("per_transit_trip",15.f,1.f,23.f,23.f,f-.5f,f+1.5f);e.actions={perSet(wake),perSound(Sound::JunkMetal,.85f)};m.scriptEvents.push_back(e);}
  m.creatureSpawns.push_back({CreatureKind::Huntsman,{6.f,4.f},f});
  m.pickupSpawns.push_back({{2.f,4.f},PickupKind::Ammo,f});

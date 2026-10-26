@@ -79,7 +79,8 @@ void Game::updateEnemies(float dt){
   // A dormant creature does nothing until its state is set or it is hurt; then
   // it knows where the player is and calls out.
   if(e.wakeState){if(!state(e.wakeState)&&e.hp>=e.maxHp){e.moving=false;continue;}
-   e.wakeState=0;e.awareness=std::max(e.awareness,6.f);e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.state=Enemy::State::Investigate;enemySound(e,0,.9f);}
+   // A stalker woken by distant noise keeps coming as long as one that saw the player.
+   e.wakeState=0;e.awareness=std::max(e.awareness,creatureTraits(e.kind).rushSpeed>0?12.f:6.f);e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.state=Enemy::State::Investigate;enemySound(e,0,.9f);}
   bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(1.f/creatureTraits(e.kind).strikeSeconds));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*creatureTraits(e.kind).painDecay);
   Vec2 target=m_player.pos;float targetFeet=m_player.z,targetEye=m_player.eye,targetHull=m_player.hullHeight();int friendly=-1;
   auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
