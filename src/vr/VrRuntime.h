@@ -5,7 +5,10 @@
 #include <string>
 #include <vulkan/vulkan.h>
 namespace retro {
-struct VrHand {bool tracked=false,articulated=false;Point3 position{};std::array<Point3,3> basis{};std::array<float,5> curls{};};
+// position/basis: the controller (aim) frame. handOrigin/handBasis: where SteamVR's
+// skeleton puts the hand on that controller, in the hand mesh's frame (x across
+// pinky to index, y palm, z back from the knuckles), when skeletal input is live.
+struct VrHand {bool tracked=false,articulated=false,handFrame=false;Point3 position{};std::array<Point3,3> basis{};Point3 handOrigin{};std::array<Point3,3> handBasis{};std::array<float,5> curls{};};
 struct VrEye {Point3 position{};std::array<float,16> clip{};};
 class VrRuntime {
 public:
@@ -18,6 +21,7 @@ public:
  std::pair<int,int> extent()const;
  bool trackingValid()const;
  bool titlePanel()const;
+ std::string poseReport()const;
  std::pair<int,int> pointer()const;
  std::string instanceExtensions()const;
  std::string deviceExtensions(VkPhysicalDevice device)const;

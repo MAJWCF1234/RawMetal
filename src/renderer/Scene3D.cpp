@@ -2167,7 +2167,10 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   MeshVertex vertices[3];for(int i=0;i<3;++i){vertices[i]=face.v[i];auto p=face.v[i].p;auto world=hand.position+hand.basis[0]*p.x+hand.basis[1]*p.y+hand.basis[2]*p.z;world.x-=origin.x;world.y-=origin.y;vertices[i].p=cameraPoint(world,game);}
   triangle3D(vertices[0],vertices[1],vertices[2],texture,.85f);
  };
- for(int side=0;side<2;++side)if(hands[side].tracked)for(const auto&triangle:m_vrHandMeshes[side])draw(triangle,m_arms,hands[side]);
+ // The hand mesh sits in SteamVR's skeletal hand frame; without skeletal input
+ // it falls back to the controller frame.
+ for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}
+  for(const auto&triangle:m_vrHandMeshes[side])draw(triangle,m_arms,frame);}
  if(hands[0].tracked){
   // Steel casing mounted behind the left hand; the tracked overlay is its recessed screen.
   auto face=[&](Point3 a,Point3 b,Point3 c,Point3 d){a=VrRuntime::wristPoint(a);b=VrRuntime::wristPoint(b);c=VrRuntime::wristPoint(c);d=VrRuntime::wristPoint(d);MeshTriangle t{{{a,0,0},{b,1,0},{c,1,1}}};draw(t,m_panelMetal,hands[0]);t={{{a,0,0},{c,1,1},{d,0,1}}};draw(t,m_panelMetal,hands[0]);};

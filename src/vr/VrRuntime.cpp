@@ -18,6 +18,32 @@ float axis(float value){float a=std::fabs(value);return a<.18f?0:std::copysign(s
 struct VrRuntime::Impl {
  HMODULE dll=nullptr;void(__cdecl* shutdown)()=nullptr;vr::IVRSystem* system=nullptr;vr::IVRCompositor* compositor=nullptr;vr::IVRInput* input=nullptr;
  std::array<vr::VRActionHandle_t,12> actions{};
+ // SteamVR's grip pose: the same hand frame on every controller (the legacy
+ // device pose is pitched differently on Touch, Index and Vive controllers).
+ vr::VRActionHandle_t grip[2]{};std::array<vr::HmdMatrix34_t,2> raw{},gripPose{};std::array<bool,2> gripValid{};
+ bool sampleGrip(int side,vr::HmdMatrix34_t& pose,vr::HmdVector3_t* velocity){
+  if(!input||!grip[side])return false;vr::InputPoseActionData_t data{};
+  if(input->GetPoseActionDataForNextFrame(grip[side],vr::TrackingUniverseStanding,&data,sizeof(data),vr::k_ulInvalidInputValueHandle)!=vr::VRInputError_None||!data.bActive||!data.pose.bPoseIsValid)return false;
+  pose=data.pose.mDeviceToAbsoluteTracking;if(velocity)*velocity=data.pose.vVelocity;return true;
+ }
+ // The hand's frame from SteamVR's skeleton on whatever controller is held:
+ // wrist, index, middle and pinky knuckles, built exactly as Mesh::trackedHand
+ // builds the mesh frame, so the rendered hand sits where the real one is.
+ bool sampleHand(int side,VrHand& h,const Game& game){
+  if(!input||!skeleton[side])return false;
+  vr::InputPoseActionData_t root{};
+  if(input->GetPoseActionDataForNextFrame(skeleton[side],vr::TrackingUniverseStanding,&root,sizeof(root),vr::k_ulInvalidInputValueHandle)!=vr::VRInputError_None||!root.bActive||!root.pose.bPoseIsValid)return false;
+  vr::VRBoneTransform_t bones[31]{};
+  if(input->GetSkeletalBoneData(skeleton[side],vr::VRSkeletalTransformSpace_Model,vr::VRSkeletalMotionRange_WithController,bones,31)!=vr::VRInputError_None)return false;
+  const auto& p=root.pose.mDeviceToAbsoluteTracking;
+  auto joint=[&](int bone){const auto& b=bones[bone].position.v;Point3 t{p.m[0][0]*b[0]+p.m[0][1]*b[1]+p.m[0][2]*b[2]+p.m[0][3],p.m[1][0]*b[0]+p.m[1][1]*b[1]+p.m[1][2]*b[2]+p.m[1][3],p.m[2][0]*b[0]+p.m[2][1]*b[1]+p.m[2][2]*b[2]+p.m[2][3]};return world(t,game);};
+  auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
+  auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+  const Point3 wrist=joint(1),index=joint(7),middle=joint(12),pinky=joint(22);
+  Point3 forward=unit(middle-wrist),across=unit(index-pinky),palm=unit(cross(across,forward)*(side==0?-1.f:1.f));across=unit(cross(forward,palm));
+  if(forward.x==0&&forward.y==0&&forward.z==0)return false;
+  h.handOrigin=wrist;h.handBasis={across,palm,forward*-1.f};h.handFrame=true;return true;
+ }
  vr::VRActionSetHandle_t set=0;vr::VRActionHandle_t skeleton[2]{};vr::IVROverlay* overlay=nullptr;vr::VROverlayHandle_t panel=0;bool titlePanel=false,previousWristClick=false;
  std::array<vr::TrackedDevicePose_t,vr::k_unMaxTrackedDeviceCount> poses{};
  std::array<VrHand,2> hands{};uint32_t width=0,height=0;float yaw=0,headStartY=0;Point3 previousHead{};std::array<bool,2> previousGrip{},shoulderConsumed{};bool calibrated=false,trackingInterrupted=false,menuWasOpen=false;int pointerX=-1,pointerY=-1;
@@ -67,6 +93,12 @@ bool VrRuntime::initialize(std::string& error){
 }
 std::pair<int,int> VrRuntime::extent()const{return {int(m->width),int(m->height)};}
 bool VrRuntime::titlePanel()const{return m->titlePanel;}
+std::string VrRuntime::poseReport()const{
+ std::ostringstream out;out.precision(2);out<<std::fixed;auto basis=[&](const char* name,const vr::HmdMatrix34_t& p){out<<name<<" x("<<p.m[0][0]<<','<<p.m[1][0]<<','<<p.m[2][0]<<") y("<<p.m[0][1]<<','<<p.m[1][1]<<','<<p.m[2][1]<<") z("<<p.m[0][2]<<','<<p.m[1][2]<<','<<p.m[2][2]<<")";};
+ basis("head",m->poses[0].mDeviceToAbsoluteTracking);out<<'\n';
+ for(int side=0;side<2;++side){out<<(side?"right ":"left ");basis("raw",m->raw[side]);out<<"  ";if(m->gripValid[side])basis("grip",m->gripPose[side]);else out<<"grip unavailable";out<<'\n';}
+ return out.str();
+}
 bool VrRuntime::trackingValid()const{return m->poses[0].bPoseIsValid;}
 std::pair<int,int> VrRuntime::pointer()const{return {m->pointerX,m->pointerY};}
 const std::array<VrHand,2>& VrRuntime::hands()const{return m->hands;}
@@ -103,6 +135,10 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
   float trigger=states[side].rAxis[1].x;h.curls.fill((states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))?.85f:.1f);h.curls[1]=std::clamp(trigger,0.f,1.f);
  }
  if(m->input&&m->set){vr::VRActiveActionSet_t set{};set.ulActionSet=m->set;m->input->UpdateActionState(&set,sizeof(set),1);for(int side=0;side<2;++side){vr::InputSkeletalActionData_t data{};vr::VRSkeletalSummaryData_t summary{};if(m->input->GetSkeletalActionData(m->skeleton[side],&data,sizeof(data))==vr::VRInputError_None&&data.bActive&&m->input->GetSkeletalSummaryData(m->skeleton[side],vr::VRSummaryType_FromDevice,&summary)==vr::VRInputError_None){std::copy(summary.flFingerCurl,summary.flFingerCurl+5,m->hands[side].curls.begin());m->hands[side].articulated=true;}}}
+ // Hand frames come from the grip pose wherever SteamVR provides one.
+ for(int side=0;side<2;++side){auto&h=m->hands[side];if(!h.tracked)continue;m->raw[side]=m->poses[devices[side]].mDeviceToAbsoluteTracking;vr::HmdMatrix34_t pose{};m->gripValid[side]=m->sampleGrip(side,pose,nullptr);if(!m->gripValid[side])continue;
+  m->gripPose[side]=pose;h.position=m->world(translation(pose),game);for(int i=0;i<3;++i)h.basis[i]=rotateTracking({pose.m[0][i],pose.m[1][i],pose.m[2][i]},m->yaw);}
+ for(int side=0;side<2;++side)if(m->hands[side].tracked)m->sampleHand(side,m->hands[side],game);
  if(m->input&&m->set){
   auto digital=[&](int action,bool fallback){vr::InputDigitalActionData_t data{};return m->input->GetDigitalActionData(m->actions[action],&data,sizeof(data),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&data.bActive?data.bState:fallback;};
   for(int side=0;side<2;++side){states[side].rAxis[1].x=digital(side,states[side].rAxis[1].x>.65f)?1.f:0.f;vr::InputAnalogActionData_t squeeze{};bool grip=digital(side+2,(states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))!=0);if(m->input->GetAnalogActionData(m->actions[4+side],&squeeze,sizeof(squeeze),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&squeeze.bActive)grip|=squeeze.x>.65f;if(grip)states[side].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_Grip);else states[side].ulButtonPressed&=~vr::ButtonMaskFromId(vr::k_EButton_Grip);vr::InputAnalogActionData_t move{};if(m->input->GetAnalogActionData(m->actions[6+side],&move,sizeof(move),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&move.bActive)sticks[side]={move.x,move.y};}
@@ -150,7 +186,7 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  game.setVrAim(aim,aimDir,m->hands[1].tracked&&focused,support);for(int side=0;side<2;++side){auto hand=m->hands[side].position;hand.x-=origin.x;hand.y-=origin.y;Point3 velocity{};if(devices[side]<m->poses.size()){const auto&v=m->poses[devices[side]].vVelocity;velocity=rotateTracking({v.v[0],v.v[1],v.v[2]},m->yaw);}game.setVrHand(side,hand,m->hands[side].basis[2]*-1,m->hands[side].tracked&&focused,velocity);}return true;
 }
 VrEye VrRuntime::eye(int index,const Game&game)const{
- for(int side=0;side<2;++side)if(m->hands[side].tracked){auto device=m->system->GetTrackedDeviceIndexForControllerRole(side?vr::TrackedControllerRole_RightHand:vr::TrackedControllerRole_LeftHand);if(device>=m->poses.size())continue;const auto&pose=m->poses[device].mDeviceToAbsoluteTracking;m->hands[side].position=m->world(translation(pose),game);for(int i=0;i<3;++i)m->hands[side].basis[i]=rotateTracking({pose.m[0][i],pose.m[1][i],pose.m[2][i]},m->yaw);}
+ for(int side=0;side<2;++side)if(m->hands[side].tracked){auto device=m->system->GetTrackedDeviceIndexForControllerRole(side?vr::TrackedControllerRole_RightHand:vr::TrackedControllerRole_LeftHand);if(device>=m->poses.size())continue;vr::HmdMatrix34_t grip{};const auto&pose=m->sampleGrip(side,grip,nullptr)?grip:m->poses[device].mDeviceToAbsoluteTracking;m->hands[side].position=m->world(translation(pose),game);for(int i=0;i<3;++i)m->hands[side].basis[i]=rotateTracking({pose.m[0][i],pose.m[1][i],pose.m[2][i]},m->yaw);m->sampleHand(side,m->hands[side],game);}
  auto h=m->poses[0].mDeviceToAbsoluteTracking;auto e=m->system->GetEyeToHeadTransform(vr::EVREye(index));vr::HmdMatrix34_t pose{};
  for(int r=0;r<3;++r){for(int col=0;col<3;++col)for(int k=0;k<3;++k)pose.m[r][col]+=h.m[r][k]*e.m[k][col];pose.m[r][3]=h.m[r][3];for(int k=0;k<3;++k)pose.m[r][3]+=h.m[r][k]*e.m[k][3];}
  Matrix world{};world[15]=1;for(int col=0;col<3;++col){auto p=rotateTracking({pose.m[0][col],pose.m[1][col],pose.m[2][col]},m->yaw);world[col*4]=p.x;world[col*4+1]=p.y;world[col*4+2]=p.z;}auto p=m->world(translation(pose),game);world[12]=p.x;world[13]=p.y;world[14]=p.z;
