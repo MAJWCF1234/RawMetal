@@ -156,6 +156,8 @@ void mntBarRack(Map& m,float y1,float y2,float floor,int seed){
    wall(m,1.32f,y-.05f,2.38f,y+.05f,z,z+.09f,18);wall(m,2.31f,y-.05f,2.38f,y+.05f,z+.09f,z+.17f,18);}
  }
  const float last=y1+(columns-1)*1.5f;
+ // Nobody walks in among loaded arms: the rack is solid to the aisle edge.
+ wall(m,1.32f,y1-.1f,2.38f,last+.1f,floor,floor+2.95f,CollisionProxyMaterial);
  for(int k=0;k<4;++k){const float z=floor+.51f+k*.66f;float x=1.42f;
   for(int b=0;b<5;++b){const int v=(seed+k*7+b*3)%9;if(v==4&&k>0)continue;
    const float r=.012f+.008f*(v%5);x+=r;if(x+r>2.28f)break;
@@ -315,7 +317,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  mntFix(m,model::control_console,{7.9f,18.7f},f,.78f,.49f,1.3f,-kPi*.5f,true);
  terminal(m,{7.7f,20.3f},"DISTRICT PA / LOG","03:05 ALL MAINTENANCE STAFF TO CENTRAL STORES FOR HEADCOUNT.","03:40 REPEAT. BRING YOUR BADGE. AUTH: CLEANUP DETAIL 4.");
  m.terminals.back().yaw=-kPi*.5f;
- m.pipes.push_back({{7.75f,18.6f},{7.75f,18.6f},f+1.3f,.012f,f+1.62f,6});wall(m,7.7f,18.55f,7.8f,18.65f,f+1.62f,f+1.7f,8);
+ m.pipes.push_back({{7.75f,18.6f},{7.75f,18.6f},f+1.3f,.012f,f+1.56f,6});wall(m,7.7f,18.55f,7.8f,18.65f,f+1.62f,f+1.7f,8);
  mntFix(m,model::wall_box,{1.03f,22.2f},f+1.3f,.55f,.12f,.75f,kPi*.5f,false);
  mntTube(m,{4.8f,18.f},rt,false,.9f,6.f,4300,.25f);
  mntTube(m,{4.8f,21.f},rt,false,.9f,6.f,4300,.25f);
@@ -349,7 +351,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  servicePipe(m,{1.2f,2.4f},{22.8f,2.4f},-13.4f,.09f,4);
  servicePipe(m,{1.2f,21.6f},{22.8f,21.6f},-13.4f,.09f,3);
  // Drops from the supply duct into each block's roof.
- for(float x:{5.f,19.f}){pipeRoute(m,{{x,1.7f,-13.62f},{x,1.7f,rt+.2f}},.16f,5,NoRoof);pipeRoute(m,{{x,22.3f,-13.62f},{x,22.3f,rt+.2f}},.16f,5,NoRoof);}
+ for(float x:{5.f,19.f}){pipeRoute(m,{{x,1.7f,-13.62f},{x,1.7f,rt+.1f}},.16f,5,NoRoof);pipeRoute(m,{{x,22.3f,-13.62f},{x,22.3f,rt+.1f}},.16f,5,NoRoof);}
  // The direction gantry over the crossing.
  // Floor: walkway lines, the crossing box, drain.
  for(float x:{9.3f,14.6f})floorLine(m,x,1.f,x+.1f,23.f,f,14);
@@ -463,7 +465,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  m.clutterSpawns.push_back({3,{20.1f,10.2f},f,1.2f});m.clutterSpawns.push_back({2,{22.4f,10.1f},f});
  // What B shift's last six chalked for each other before they gave up on the stores.
  for(float x:{21.5f,22.f})wall(m,x-.03f,13.3f,x+.03f,13.36f,f,f+1.2f,10);
- mntChalk(m,21.75f,13.36f,f+1.22f,"THEY'RE STILL IN THERE","STAY LOW. THEY HEAR BOOTS, NOT KNEES.",1.25f,kPi*.5f);
+ mntChalk(m,22.94f,14.6f,f+1.22f,"THEY'RE STILL IN THERE","STAY LOW. THEY HEAR BOOTS, NOT KNEES.",1.25f,-kPi*.5f);
  // --- Assembly point B: the cage where B shift waited to be counted ------------------------------
  mntMesh(m,true,14.6f,21.4f,3.18f,f,true);
  mntMesh(m,false,19.8f,16.1f,2.74f,f,false);mntMesh(m,false,19.8f,18.85f,2.74f,f,true);mntMesh(m,false,19.8f,21.6f,2.74f,f,false);
@@ -471,7 +473,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(float y:{17.f,20.6f})bench(m,21.4f,y,f);
  // Lunch tins, flasks, hats and jackets: they expected to go back to work.
  for(int i=0;i<7;++i){const float x=20.3f+i*.32f,y=(i%2?17.f:20.6f)-.05f;wall(m,x-.11f,y-.07f,x+.11f,y+.07f,f+.51f,f+.62f,i%3==0?19:i%3==1?18:20);}
- for(float x:{20.6f,22.3f})m.pipes.push_back({{x,16.9f},{x,16.9f},f+.51f,.045f,f+.82f,5});
+ for(float x:{20.6f,22.3f})m.pipes.push_back({{x,17.22f},{x,17.22f},f+.51f,.045f,f+.82f,5});
  for(Vec2 h:{Vec2{20.9f,17.05f},Vec2{22.6f,20.7f},Vec2{21.2f,19.3f},Vec2{22.4f,15.6f}})mntFix(m,model::mine_hard_hat,h,h.y>19.f&&h.y<20.f?f:(h.y<16.f?f:f+.51f),.28f,.35f,.15f,h.x*2.1f,false);
  for(float x:{20.4f,21.9f})wall(m,x-.25f,20.78f,x+.25f,20.86f,f+.55f,f+1.f,23);
  floorLine(m,20.1f,15.f,22.8f,15.12f,f,13);floorLine(m,20.1f,22.5f,22.8f,22.62f,f,13);
@@ -496,7 +498,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(float x:{5.2f,7.1f,9.f,10.9f,12.8f,14.7f})mntFix(m,model::metal_shelf,{x,1.36f},mz,1.8f,.5f,1.8f,0,true);
  for(int i=0;i<12;++i){const float x=4.55f+i*.95f+(i%2)*.1f,z=mz+(i%3==0?.31f:i%3==1?.97f:1.66f);
   mntFix(m,model::packing_crate,{x,1.36f},z,.42f,.34f,.26f,(i%4)*.1f,false);}
- for(Vec2 t:{Vec2{9.6f,3.4f},Vec2{10.f,3.5f},Vec2{15.6f,3.2f}})mntFix(m,model::packing_crate,t,mz,.55f,.4f,.32f,t.x,true);
+ for(auto [x,y,yaw]:{std::tuple{9.6f,3.4f,9.6f},{10.15f,3.5f,10.f},{15.6f,3.2f,15.6f}})mntFix(m,model::packing_crate,{x,y},mz,.55f,.4f,.32f,yaw,true);
  terminal(m,{12.f,3.6f},"SMALL PARTS / INDEX","BIN 4411 SEALS. BIN 4412 SEALS. BIN 4413 EMPTY SINCE MAY.","STOCK CHECK OVERDUE / SIGNED OFF ANYWAY / J. OKAFOR",mz-f);
  m.terminals.back().yaw=0;
  m.pickupSpawns.push_back({{4.7f,2.3f},PickupKind::Ammo,mz});
@@ -529,12 +531,13 @@ std::shared_ptr<const Map> makeCentralStores(){
  wall(m,1.75f,2.4f,2.85f,2.72f,f+.8f,f+1.28f,18);
  for(float x:{1.92f,2.68f})m.pipes.push_back({{x,2.36f},{x,2.76f},f+1.04f,.19f,f+1.04f,3});
  wall(m,2.15f,2.2f,2.45f,2.36f,f+.8f,f+.98f,8);wall(m,2.15f,2.76f,2.45f,2.92f,f+.8f,f+.98f,8);
- m.pipes.push_back({{2.3f,2.56f},{3.95f,2.56f},f+.84f,.02f,f+.84f,5});
- for(float x:{3.25f,3.55f,3.85f})m.pipes.push_back({{x,2.3f},{x,2.82f},f+.79f,.035f,f+.79f,6});
+ m.pipes.push_back({{2.3f,2.56f},{3.05f,2.56f},f+.84f,.02f,f+.84f,5});
+ for(float x:{2.35f,2.65f,2.95f})m.pipes.push_back({{x,2.3f},{x,2.82f},f+.835f,.035f,f+.835f,6});
  for(float x:{3.2f,3.9f})wall(m,x-.03f,2.3f,x+.03f,2.82f,f,f+.76f,12);
  wall(m,1.2f,3.6f,1.9f,4.4f,f,f+.55f,11);
  for(int i=0;i<4;++i)m.pipes.push_back({{1.35f+i*.13f,3.75f},{1.4f+i*.13f,4.25f},f+.5f,.02f,f+.5f,i%2?5:6});
- m.pipes.push_back({{2.3f,2.6f},{2.3f,2.6f},f+2.9f,.012f,roof,6});
+ // Re-anchor the roof rod to the existing saw housing below the lamp.
+ m.pipes.push_back({{2.3f,2.6f},{2.3f,2.6f},f+1.28f,.012f,roof,6});
  m.lights.push_back(lamp({2.3f,2.6f},f+2.85f,.8f,5.f,3400,0));
  zone(m,"CENTRAL STORES / RACK B",1,5,5.5f,19.5f);
  // --- The scrap returns chute, south-west: where the headcount ended ----------------------------
@@ -559,7 +562,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  wall(m,7.17f,22.27f,7.23f,22.33f,f,f+2.f,8);
  for(float a:{0.f,2.1f,4.2f})wall(m,7.2f+std::sin(a)*.34f-.02f,22.3f+std::cos(a)*.34f-.02f,7.2f+std::sin(a)*.34f+.02f,22.3f+std::cos(a)*.34f+.02f,f,f+.04f,6);
  wall(m,7.02f,22.12f,7.38f,22.48f,f+2.f,f+2.26f,8);
- m.lights.push_back(lamp({7.1f,22.2f},f+2.05f,1.8f,10.f,5600,0,WorldLightMount::Bare));
+ m.lights.push_back(lamp({6.9f,22.2f},f+2.05f,1.8f,10.f,5600,0,WorldLightMount::Bare));
  zone(m,"CENTRAL STORES / RETURNS CHUTE",1,19.5f,8,23);
  // --- Floor stock along the south wall ----------------------------------------------------------
  mntFix(m,model::forklift,{11.5f,21.95f},f,1.1641f,3.6204f,2.2f,kPi*.5f,true);
@@ -576,7 +579,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  servicePipe(m,{1.2f,18.f},{22.8f,18.f},roof-1.1f,.12f,3);
  cableTray(m,{1.4f,5.6f},{1.4f,22.6f},f+4.6f);
  // The middle high bay over the main aisle is dead: a dark pool between the lit ends.
- for(Vec2 l:{Vec2{15.f,12.f},Vec2{6.f,12.f},Vec2{15.f,19.f},Vec2{21.f,11.5f}})mntPendant(m,l,roof-.6f,roof-1.4f,l.x>20?1.2f:1.5f,10.f,2050,-.1f);
+ for(Vec2 l:{Vec2{15.f,12.f},Vec2{6.f,12.f},Vec2{15.f,19.f},Vec2{21.f,11.5f}})mntPendant(m,l,l.x==6.f||l.x>20.f?roof:roof-.6f,roof-1.4f,l.x>20?1.2f:1.5f,10.f,2050,-.1f);
  m.pipes.push_back({{11.f,12.f},{11.f,12.f},roof-1.08f,.016f,roof-.6f,6});
  mntFix(m,model::pendant_lamp,{11.f,12.f},mntRel(m,roof-1.4f)+f-m.layers.front().elevation,.5f,.5f,.34f,0,false);
  // --- Cleanup Detail 4 ---------------------------------------------------------------------------

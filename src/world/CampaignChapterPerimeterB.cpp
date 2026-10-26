@@ -248,7 +248,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  cableTray(m,{17.6f,1.6f},{22.f,1.6f},base+2.35f);
  // --- Containment exhaust: two scrubbers with trap cartridges and the HEPA bank ----------
  for(Vec2 c:{Vec2{3.4f,15.4f},Vec2{3.4f,19.8f}}){
-  wall(m,c.x-1.45f,c.y-1.45f,c.x+1.45f,c.y+1.45f,base,base+.2f,15);
+  wall(m,c.x-1.45f,c.y-1.45f,c.x+1.55f,c.y+1.45f,base,base+.2f,15);
   vessel(m,c,1.15f,base+.2f,-14.6f,5);
   m.pipes.push_back({c,c,-14.6f,.95f,-14.3f,5});m.pipes.push_back({c,c,-14.3f,.55f,-14.1f,6});
   pipeRoute(m,{{c.x,c.y,-14.1f},{c.x,c.y,roof}},.32f,5,NoRoof);
@@ -273,7 +273,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  // The lab gas manifold, chained upright behind its mesh.
  for(float x=1.45f;x<4.4f;x+=.42f)m.fixtures.push_back({model::gas_cylinder,{x,22.6f},0,.33f,.33f,1.58f,0,true});
  wall(m,1.f,22.38f,4.5f,22.42f,base+1.1f,base+1.15f,12);
- m.pipes.push_back({{1.2f,22.88f},{4.4f,22.88f},base+1.8f,.04f,base+1.8f,3});
+ m.pipes.push_back({{1.2f,22.85f},{4.4f,22.85f},base+1.8f,.04f,base+1.8f,3});
  m.fixtures.push_back({model::mine_mesh_fence,{2.7f,21.5f},0,3.4f,.06f,2.3f,0,true});
  // --- Pressure lock PL-3 to Research Receiving ---------------------------------------------
  wall(m,7.6f,19.4f,7.8f,23.f,base,base+3.4f,3);wall(m,12.2f,19.4f,12.4f,23.f,base,base+3.4f,3);
@@ -385,9 +385,9 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  wall(m,5.8f,6.77f,7.25f,6.83f,base+.06f,base+2.66f,11);
  pbFix(m,model::mine_bent_grate,7.33f,5.26f,base+.08f,2.45f,.086f,2.64f,pbE,false);
  wall(m,7.28f,3.87f,7.38f,4.55f,base,base+2.7f,CollisionProxyMaterial);wall(m,7.28f,5.97f,7.38f,6.65f,base,base+2.7f,CollisionProxyMaterial);
- m.pipes.push_back({{7.32f,4.4f},{7.85f,4.2f},base+1.2f,.025f,base+.09f,6});
+ m.pipes.push_back({{7.32f,4.4f},{7.36f,4.2f},base+1.2f,.025f,base+.09f,6});
  pbFix(m,model::med_mattress_stained,3.1f,4.6f,base+.08f,1.9f,.9f,.12f,0,false);
- for(float y:{4.35f,5.f})m.pipes.push_back({{1.42f,y},{2.25f,y+.05f},base+.45f,.016f,base+.22f,6});
+ for(float y:{4.35f,5.f})m.pipes.push_back({{1.42f,y},{2.25f,y+.05f},base+.20f,.016f,base+.20f,6});
  for(float x=5.3f;x<7.f;x+=.38f)wall(m,x,6.62f,x+.03f,6.65f,base+.9f+std::fmod(x*7.f,.5f),base+1.6f+std::fmod(x*5.f,.4f),8);
  pbBlood(m,5.6f,4.9f,7.2f,5.6f,base+.08f);pbBlood(m,7.3f,5.05f,9.4f,5.4f,base);
  wall(m,1.4f,3.9f,1.43f,6.62f,base+.3f,base+2.5f,20);
@@ -430,8 +430,8 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  pbFix(m,model::file_cabinet_wide,15.6f,1.3f,base,.9f,.5f,.75f,pbS,true);
  pbFix(m,model::cctv_tv,15.6f,1.3f,base+.75f,.5f,.4f,.42f,pbS,false);
  terminal(m,{13.7f,5.f},"PERSONNEL SORT / SHIFT 02","ARRIVALS 31. CLEARED TO DECON 27. HELD FOR SCREENING 4.","HELD STAFF: MEDICAL ESCORT ONLY. DO NOT INFORM THEM.");m.terminals.back().yaw=pbS;
- for(float x:{16.6f,19.6f})for(float y:{4.9f,5.5f}){m.pipes.push_back({{x,y},{x,y},base,.035f,base+.95f,5});m.pipes.push_back({{x,y},{x,y},base,.17f,base+.03f,6});wall(m,x-.06f,y-.06f,x+.06f,y+.06f,base,base+.95f,CollisionProxyMaterial);}
- for(float y:{4.9f,5.5f})wall(m,16.6f,y-.015f,19.6f,y+.015f,base+.83f,base+.89f,19);
+ for(float x:{16.6f,19.6f})for(float y:{4.9f,5.65f}){m.pipes.push_back({{x,y},{x,y},base,.035f,base+.95f,5});m.pipes.push_back({{x,y},{x,y},base,.17f,base+.03f,6});wall(m,x-.06f,y-.06f,x+.06f,y+.06f,base,base+.95f,CollisionProxyMaterial);}
+ for(float y:{4.9f,5.65f})wall(m,16.6f,y-.015f,19.6f,y+.015f,base+.83f,base+.89f,19);
  // The staff lane: glazed on the hall side, its door locked since the lockdown.
  pbGlazed(m,17.9f,6.1f,18.1f,17.f,base,3.f);
  wall(m,17.9f,5.9f,20.f,6.1f,base,base+3.6f,3);wall(m,22.6f,5.9f,23.f,6.1f,base,base+3.6f,3);wall(m,20.f,5.9f,22.6f,6.1f,base+2.65f,base+3.6f,3);
@@ -648,14 +648,14 @@ std::shared_ptr<const Map> makeDecontamination(){
  // Light: steady white until the cycle seals the chamber; then the cycle tubes pulse.
  for(float y:{12.6f,15.9f})m.lights.push_back(pbSwitched(lamp({12.f,y},ceil-.18f,1.f,6.f,6800,.03f),sealed,true));
  for(float y:{13.5f,16.1f}){auto l=pbSwitched(lamp({14.58f,y},f+2.75f,1.3f,6.f,12000,-.4f,WorldLightMount::Wall,kPi),sealed);l.period=.9f;l.onTime=.55f;l.phase=y*.1f;m.lights.push_back(l);}
- m.lights.push_back(pbSwitched(lamp({12.f,11.6f},f+2.8f,.8f,4.f,1000,-.5f,WorldLightMount::Wall,kPi*.5f),sealed));
- m.lights.push_back(pbSwitched(lamp({12.f,17.2f},f+2.8f,.8f,4.f,5000,.5f,WorldLightMount::Wall,kPi*.5f),cycle));
+ m.lights.push_back(pbSwitched(lamp({10.48f,11.6f},f+2.8f,.8f,4.f,1000,-.5f,WorldLightMount::Wall,kPi*.5f),sealed));
+ m.lights.push_back(pbSwitched(lamp({10.48f,17.2f},f+2.8f,.8f,4.f,5000,.5f,WorldLightMount::Wall,kPi*.5f),cycle));
  // --- The decon plant, west -----------------------------------------------------------
  panel(1.f,17.f,9.2f,17.2f,28);
  vessel(m,{2.4f,9.4f},.75f,f,f+2.7f,5);
  m.pipes.push_back({{2.4f,9.4f},{2.4f,9.4f},f+2.7f,.5f,f+2.9f,5});
  pipeRoute(m,{{2.4f,9.4f,f+2.9f},{2.4f,9.4f,f+3.1f},{9.2f,9.4f,f+3.1f}},.07f,4,ceil);
- pipeRoute(m,{{3.15f,10.f,f+2.2f},{9.2f,10.f,f+2.2f}},.06f,0,ceil);
+ pipeRoute(m,{{2.95f,10.f,f+2.2f},{9.2f,10.f,f+2.2f}},.06f,0,ceil);
  for(float y:{8.8f,10.75f}){pbFix(m,model::pwr_air_handler,8.f,y,f,.81f,1.64f,2.62f,0,true);
   wall(m,8.3f,y-.3f,9.2f,y+.3f,f+2.62f,f+3.1f,20);wall(m,7.7f,y-.3f,8.3f,y+.3f,f+2.62f,f+3.1f,20);}
  pbFix(m,model::pwr_control_cabinet,1.25f,12.5f,f,.8f,.4f,1.6f,pbE,true);
@@ -671,8 +671,8 @@ std::shared_ptr<const Map> makeDecontamination(){
  panel(14.8f,17.f,18.f,17.2f,28);panel(20.f,17.f,23.f,17.2f,28);wall(m,18.f,17.f,20.f,17.2f,f+2.65f,ceil,28);frame(18.f,20.f,17.1f);
  for(int i=0;i<8;++i)pbLockers(m,22.5f,8.5f+i*.9f,f,pbW);
  for(float y:{9.4f,11.6f})pbFix(m,model::metal_shelf,15.1f,y,f,1.8f,.5f,1.8f,pbE,true);
- m.pipes.push_back({{17.6f,8.f},{17.6f,14.6f},f+2.05f,.03f,f+2.05f,5});
- for(float y:{8.f,14.6f}){m.pipes.push_back({{17.6f,y},{17.6f,y},f,.03f,f+2.05f,5});wall(m,17.54f,y-.06f,17.66f,y+.06f,f,f+2.05f,CollisionProxyMaterial);}
+ m.pipes.push_back({{17.6f,8.15f},{17.6f,14.6f},f+2.05f,.03f,f+2.05f,5});
+ for(float y:{8.15f,14.6f}){m.pipes.push_back({{17.6f,y},{17.6f,y},f,.03f,f+2.05f,5});wall(m,17.54f,y-.06f,17.66f,y+.06f,f,f+2.05f,CollisionProxyMaterial);}
  for(float y=8.6f;y<14.2f;y+=.6f){wall(m,17.38f,y-.1f,17.82f,y+.1f,f+.75f,f+1.85f,18);wall(m,17.48f,y-.06f,17.72f,y+.06f,f+1.85f,f+2.02f,18);}
  pbFix(m,model::med_supply_cabinet,16.4f,16.55f,f,1.1f,.44f,1.7f,pbN,true);
  bench(m,19.f,15.6f,f);

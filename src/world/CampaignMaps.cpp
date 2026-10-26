@@ -1653,7 +1653,7 @@ std::shared_ptr<const Map> makeAuxiliaryLift(){
  m.fixtures.push_back({6,{20.2f,2.2f},13,2.38f,.7f,1.26f,0,true});
  // The lockers are wall-mounted cabinets: their backs must meet the west
  // wall (standing free at the open north edge showed their hollow sides).
- for(float y:{2.6f,3.6f})m.fixtures.push_back({13,{1.27f,y},13,.9066f,.4956f,2.2f,-kPi*.5f,true});
+ for(float y:{2.6f,3.6f})m.fixtures.push_back({13,{y>3.f?1.48f:1.27f,y},13,.9066f,.4956f,2.2f,-kPi*.5f,true});
  cableTray(m,{1.6f,1.2f},{22.f,1.2f},upper+2.6f);
  // Lower landing: buffers, a hazard apron and the transfer to receiving.
  for(float x:{10.f,14.f})wall(m,x-.2f,15.f,x+.2f,15.4f,lower,lower+.5f,8);
