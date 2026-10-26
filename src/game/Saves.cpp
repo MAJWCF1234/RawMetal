@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "EngineRegressionScene.h"
 #include "../world/CustomCampaign.h"
 #include <windows.h>
 #undef PlaySound
@@ -241,6 +242,38 @@ void Game::refreshSaveSlots(){
  m_checkpointLabel="AUTOSAVE / ";
  if(m_saveDirectory.empty())m_checkpointLabel+="UNAVAILABLE";
  else {auto path=checkpointPath(m_saveDirectory);std::error_code error;if(!std::filesystem::exists(path,error))m_checkpointLabel+=error?"UNAVAILABLE":"EMPTY";else try{Game preview;preview.m_customCampaigns=m_customCampaigns;preview.m_customMapDirectory=m_customMapDirectory;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);m_checkpointLabel+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else m_checkpointLabel+="INVALID";}catch(const std::exception&){m_checkpointLabel+="UNREADABLE";}}
+}
+bool Game::testEngineRegressionSaves(std::ostream& report){
+ bool passed=true;
+ auto check=[&](bool ok,const char* name,const std::string& v){report<<(ok?"PASS ":"FAIL ")<<name<<": "<<v<<'\n';report.flush();passed&=ok;};
+ auto approx=[](float a,float b){return std::fabs(a-b)<.001f;};
+ for(auto kind:{Enemy::Kind::Warden,Enemy::Kind::Snatcher}){
+  auto m=regression::room();m->creatureSpawns.push_back({kind,{9,9},0});Game g(regression::campaign(m));
+  auto&e=g.m_enemies[0];g.applyEnemyDamage(e,e.maxHp*.7f,false,false);bool retreat=e.stalkMode==Enemy::StalkMode::Retreat;
+  g.applyEnemyDamage(e,1000,false,false);Game loaded(g.m_customCampaign);bool ok=loaded.decodeSave(g.encodeSave());
+  int mode=ok&&!loaded.m_enemies.empty()?int(loaded.m_enemies[0].stalkMode):-1;bool dead=ok&&!loaded.m_enemies.empty()&&!loaded.m_enemies[0].alive;
+  check(retreat&&ok&&dead&&mode==int(Enemy::StalkMode::Watch),"1a retreat corpse save",std::string(e.name())+" retreat="+std::to_string(retreat)+" decoded="+std::to_string(ok)+" dead="+std::to_string(dead)+" mode="+std::to_string(mode));
+ }
+ {auto m=regression::room();m->layers[0].rows[9][9]='C';Game g(regression::campaign(m));char before=g.m_world.tile(9,9);g.m_world.destroyTile(9,9);
+  Game loaded(g.m_customCampaign);bool ok=loaded.decodeSave(g.encodeSave());char saved=ok?loaded.m_world.tile(9,9):'?';
+  if(ok){loaded.storeChunk();loaded.m_chunks[0].world.unloadGeometry();loaded.m_chunks[0].resident=false;loaded.ensureChunk(0);}
+  char rebuilt=ok?loaded.m_chunks[0].world.tile(9,9):'?';
+  check(before=='C'&&saved=='.'&&rebuilt=='.',"1b destroyed crate load and rebuild",std::string("before=")+before+" decoded="+std::to_string(ok)+" loaded="+saved+" rebuilt="+rebuilt);
+ }
+ {Game g(regression::campaign(regression::room()));g.m_player.eye=2.2f;g.m_player.pitch=219;Game loaded(g.m_customCampaign);bool ok=loaded.decodeSave(g.encodeSave());
+  check(ok&&approx(loaded.m_player.eye,2.2f)&&approx(loaded.m_player.pitch,219),"1c VR pose save","decoded="+std::to_string(ok)+" eye="+std::to_string(loaded.m_player.eye)+" pitch="+std::to_string(loaded.m_player.pitch));
+ }
+ {Game g(regression::campaign(regression::room()));g.m_player.health=63;g.storeChunk();Writer writer;g.archiveSave(writer,15);auto payload=writer.stream.str();Game loaded(g.m_customCampaign);
+  bool ok=loaded.decodeSave("RAWMETAL_SAVE 15 "+std::to_string(checksum(payload))+"\n"+payload);
+  check(ok&&loaded.m_player.health==63,"1d version 15 archive","decoded="+std::to_string(ok)+" health="+std::to_string(loaded.m_player.health));
+ }
+ {Game g(regression::campaign(regression::room()));CreatureSpawn s{Enemy::Kind::Huntsman,{9,9},0};s.scale=1.5f;g.spawnCreature(s,0,false);
+  auto&e=g.m_enemies.back();e.scriptSpawned=true;e.homeZ=3.25f;e.originLevel=0;e.originHome={7.25f,8.75f};e.surfaceMode=2;e.surfaceNormal={.6f,.8f};
+  Game loaded(g.m_customCampaign);bool ok=loaded.decodeSave(g.encodeSave());Enemy v{};int count=0;if(ok)for(const auto&x:loaded.m_enemies)if(x.scriptSpawned){v=x;++count;}
+  std::ostringstream values;values<<"decoded="<<ok<<" count="<<count<<" homeZ="<<v.homeZ<<" scale="<<v.scale<<" origin="<<v.originLevel<<","<<v.originHome.x<<","<<v.originHome.y<<" surface="<<v.surfaceMode<<","<<v.surfaceNormal.x<<","<<v.surfaceNormal.y;
+  check(ok&&count==1&&approx(v.homeZ,3.25f)&&approx(v.scale,1.5f)&&v.originLevel==0&&approx(v.originHome.x,7.25f)&&approx(v.originHome.y,8.75f)&&v.surfaceMode==2&&approx(v.surfaceNormal.x,.6f)&&approx(v.surfaceNormal.y,.8f),"1e enemy fields save",values.str());
+ }
+ return passed;
 }
 bool Game::testSaves(){
  std::ofstream report("save-test.txt");auto check=[&](bool ok,const char* label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';report.flush();return ok;};

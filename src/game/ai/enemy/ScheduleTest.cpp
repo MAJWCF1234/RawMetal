@@ -45,24 +45,8 @@ bool Game::testCreatureBehaviour(){
   std::ostringstream v;v<<"hp="<<e.hp<<" maxHp="<<e.maxHp<<" awareness="<<e.awareness<<" awake at="<<awake<<"s";
   check(sight&&awake>0&&awake<=.1f,"3 damage wakes",v.str());
  }
- {auto g=scene(Enemy::Kind::Snatcher,6);auto&e=g.m_enemies[0];bool sight=visible(g),watch=true,progress=false;float firstOther=-1;int last=-1;std::ostringstream timeline;
-  const char*names[]={"Watch","Flank","Rush","Retreat"};
-  for(int i=1;i<=600;++i){g.updateEnemies(dt);int mode=int(e.stalkMode);
-   if(mode!=last){timeline<<i*dt<<"s="<<names[mode]<<" ";last=mode;}
-   if(i<=100&&e.stalkMode!=Enemy::StalkMode::Watch)watch=false;
-   if(e.stalkMode!=Enemy::StalkMode::Watch&&firstOther<0)firstOther=i*dt;
-   progress|=length(e.pos-g.m_player.pos)<=creatureTraits(e.kind).reach||e.stalkMode==Enemy::StalkMode::Flank||e.stalkMode==Enemy::StalkMode::Rush;
-  }
-  std::ostringstream v;v<<"player visible="<<sight<<" Watch for first 1s="<<watch<<" first non-Watch="<<firstOther<<"s distance at 6s="<<length(e.pos-g.m_player.pos)<<" timeline="<<timeline.str();
-  check(sight&&watch&&progress,"4 Snatcher stalks under continuous gaze",v.str());
- }
- {auto g=scene(Enemy::Kind::Snatcher,6);auto&e=g.m_enemies[0];
-  // Seed an already active Rush to measure its pace independently of entry rules.
-  e.awareness=12;e.lastKnown=g.m_player.pos;e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=1.65f;
-  auto p=e.pos;bool rush=true;for(int i=0;i<25;++i){g.updateEnemies(dt);rush&=e.stalkMode==Enemy::StalkMode::Rush;}
-  float displacement=length(e.pos-p),speed=displacement/.25f;std::ostringstream v;v<<"Rush throughout="<<rush<<" displacement="<<displacement<<"m / 0.25s speed="<<speed<<"m/s (3.8..5.2)";
-  check(rush&&speed>=3.8f&&speed<=5.2f,"5 Snatcher Rush pace",v.str());
- }
+ // The ambusher checks replace the former stare/chase and seeded Rush tests.
+ passed=testSnatcherAmbush(report)&&passed;
  {auto g=scene(Enemy::Kind::Chimera,1.4f);auto&e=g.m_enemies[0];float begin=-1,first=-1,second=-1,windupSeconds=0,damage=0;int hits=0;bool positive=visible(g);
   for(int i=1;i<=400;++i){float hp=g.m_player.health;g.updateEnemies(dt);float t=i*dt;
    if(begin<0&&e.windup>0)begin=t;

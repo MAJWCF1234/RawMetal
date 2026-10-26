@@ -326,6 +326,9 @@ public:
     static bool testNavGraph();
     static bool testCreatureSchedule();
     static bool testCreatureBehaviour();
+    static bool testEngineRegression();
+    static bool testEngineRegressionSaves(std::ostream& report);
+    static bool testSnatcherAmbush(std::ostream& report);
     static bool testCivilianSchedule();
     static Game squadSupportInspection(int stage=0);
     static Game guardDangerInspection(int stage=0);
