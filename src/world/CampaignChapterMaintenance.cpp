@@ -739,7 +739,7 @@ std::shared_ptr<const Map> makeMaintenanceAidStation(){
  mntFix(m,model::med_crash_cart,{20.3f,6.6f},f,.74f,.48f,1.f,-kPi*.5f,true);
  mntFix(m,model::med_vitals_monitor,{20.3f,6.6f},f+1.f,.38f,.18f,.28f,-kPi*.5f,false);
  mntFix(m,model::med_supply_cabinet,{20.75f,9.4f},f,1.1f,.44f,1.7f,-kPi*.5f,true);
- m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{18.4f,6.3f},f+.45f,kPi,4,1},{30000,{18.4f,6.3f},f+.45f,kPi,4,1}}});
+ m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{18.4f,6.3f},f+.15f,kPi,4,1},{30000,{18.4f,6.3f},f+.15f,kPi,4,1}}});
  {auto& t=mntTimer(m,"mnt_aid_last","mnt_aid_last_done",30000,26000);t.x1=15.2f;t.y1=5.f;t.x2=21.f;t.y2=11.f;t.bottom=f-1;t.top=f+3;}
  cue(m,"mnt_aid_last",400,Sound::WorkerDying,{18.4f,6.3f},"YOU'RE NOT CLEANUP.",.6f,f+.8f);
  cue(m,"mnt_aid_last",5200,Sound::Empty,{18.4f,6.3f},"THEY CAME AT FOUR. KNOCKED THREE TIMES. WE OPENED THE DOOR.",0.f,f+.8f);
