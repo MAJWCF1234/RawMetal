@@ -638,10 +638,10 @@ std::shared_ptr<const Map> makeFabricationShop(){
   m.pipes.push_back({{3.2f,y},{3.42f,y},f+1.28f,.17f,f+1.28f,6});
   if(part>0)m.pipes.push_back({{3.42f,y},{3.42f+part,y},f+1.28f,.05f,f+1.28f,6});
   wall(m,4.8f,y-.42f,5.6f,y+.42f,f+1.f,f+1.22f,12);wall(m,5.05f,y-.12f,5.35f,y+.12f,f+1.22f,f+1.38f,8);
-  wall(m,6.8f,y-.25f,7.4f,y+.25f,f+1.f,f+1.42f,8);m.pipes.push_back({{6.5f,y},{6.8f,y},f+1.28f,.04f,f+1.28f,6});
+  wall(m,6.8f,y-.25f,7.4f,y+.25f,f+1.f,f+1.42f,8);wall(m,6.5f,y-.04f,6.8f,y+.04f,f+1.24f,f+1.32f,12);
   wall(m,2.f,y-.45f,8.f,y-.42f,f+1.f,f+1.08f,12);
  };
- lathe(13.f,.9f);lathe(18.8f,0);
+ lathe(13.f,3.08f);lathe(18.8f,0);
  // Lathe 2's pendant console in front of its bed, and its work lamp, lit
  // while the pin is being turned.
  mntFix(m,model::pwr_control_cabinet,{6.f,18.05f},f,.6f,.35f,1.25f,kPi,true);
@@ -675,7 +675,7 @@ std::shared_ptr<const Map> makeFabricationShop(){
  // Its head box and drive motor over the opening; the local control pedestal
  // stands clear of the door at the east jamb.
  wall(m,9.4f,22.6f,14.6f,23.f,f+3.f,f+3.9f,2);
- wall(m,14.6f,22.4f,15.6f,23.f,f+2.9f,f+3.7f,8);m.pipes.push_back({{15.1f,22.7f},{15.1f,22.7f},f+1.2f,.02f,f+2.9f,6});
+ wall(m,14.6f,22.4f,15.6f,23.f,f+2.9f,f+3.7f,8);
  mntFix(m,model::pwr_control_cabinet,{15.6f,22.05f},f,.6f,.35f,1.25f,kPi,true);
  mntControl(m,{15.6f,22.f},"OPERATIONS SHUTTER / DRIVE","E / FIT THE MACHINED PIN AND RELEASE THE SHUTTER.","REQUIRES THE FINISHED PIN FROM LATHE 2. OPERATIONS IS THROUGH THE SOUTH DOOR.",shutter,pin,kPi);
  mntFix(m,model::pwr_breaker_panel_open,{16.4f,22.92f},f+1.3f,.32f,.23f,.46f,kPi,false);
@@ -739,7 +739,7 @@ std::shared_ptr<const Map> makeMaintenanceAidStation(){
  mntFix(m,model::med_crash_cart,{20.3f,6.6f},f,.74f,.48f,1.f,-kPi*.5f,true);
  mntFix(m,model::med_vitals_monitor,{20.3f,6.6f},f+1.f,.38f,.18f,.28f,-kPi*.5f,false);
  mntFix(m,model::med_supply_cabinet,{20.75f,9.4f},f,1.1f,.44f,1.7f,-kPi*.5f,true);
- m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{18.4f,6.3f},f+.62f,kPi,4,1},{30000,{18.4f,6.3f},f+.62f,kPi,4,1}}});
+ m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{18.4f,6.3f},f+.45f,kPi,4,1},{30000,{18.4f,6.3f},f+.45f,kPi,4,1}}});
  {auto& t=mntTimer(m,"mnt_aid_last","mnt_aid_last_done",30000,26000);t.x1=15.2f;t.y1=5.f;t.x2=21.f;t.y2=11.f;t.bottom=f-1;t.top=f+3;}
  cue(m,"mnt_aid_last",400,Sound::WorkerDying,{18.4f,6.3f},"YOU'RE NOT CLEANUP.",.6f,f+.8f);
  cue(m,"mnt_aid_last",5200,Sound::Empty,{18.4f,6.3f},"THEY CAME AT FOUR. KNOCKED THREE TIMES. WE OPENED THE DOOR.",0.f,f+.8f);
