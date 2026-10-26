@@ -780,10 +780,13 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  const float bed=-20.f,f=-19,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),bed));
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
- openEdge(m,{'N',10.f,14.f,-19.f,true,0});m.doors.back().z=0;openEdge(m,{'W',14.f,19.f,-19.f,false,0}); // the platform already raises the floor at the door
+ openEdge(m,{'N',10.f,14.f,-19.f,true,0});m.doors.back().z=0;openEdge(m,{'W',14.f,19.f,-19.f,false,0});
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=f;
  // --- Platforms either side of the track bed ------------------------------------------------------
  deck(m,f,1,1,23,8);deck(m,f,1,13,23,23);deck(m,f,0,14,1,19);
+ // The north door opens onto the platform: the deck runs under it, so the
+ // door sits on the deck (z 0), not a metre up from the track bed.
+ deck(m,f,10,0,14,1);
  wall(m,0.f,14.f,1.f,19.f,bed,f-.22f,15);
  for(float y:{7.85f,13.f})wall(m,1.f,y,23.f,y+.15f,f-.02f,f+.01f,18);
  for(float y:{7.4f,13.15f})perFinish(m,1.f,y,23.f,y+.45f,f,13);

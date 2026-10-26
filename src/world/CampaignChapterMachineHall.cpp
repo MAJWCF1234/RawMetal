@@ -314,7 +314,7 @@ void mhHallFloor(MhHall& hall){
   m.pipes.push_back({{39.6f,y},{39.9f,y},z,.72f,z,6});
   m.structures.push_back({28.3f,y-1.7f,37.f,y+1.7f,F+.1f,z+1.7f,false,6});
   m.structures.push_back({26.9f,y-.45f,40.3f,y+.45f,z-.45f,z+.45f,false,6});
-  wall(m,26.9f,y-.75f,40.3f,y+.75f,F,z,CollisionProxyMaterial);
+  wall(m,26.9f,y-.75f,40.05f,y+.75f,F,z,CollisionProxyMaterial);
  }
  // The casing top halves set down on sleepers: LP hood and the HP shell.
  for(auto [x1,x2,r]:{std::tuple{26.4f,32.8f,2.1f},{35.4f,40.f,1.25f}}){
@@ -367,7 +367,8 @@ void mhHallLight(MhHall& hall){
  // Red emergency bulkheads: gallery, the stair foot, side walls, catwalk.
  for(float x:{6.f,16.5f,33.f})mhRed(m,{x,x==6.f?1.42f:1.02f},G+2.4f,kPi*.5f,MhBayD);
  mhRed(m,{1.02f,9.6f},F+2.6f,0,MhBayD);
- for(float y:{22.f,36.f}){mhRed(m,{1.02f,y},F+3.4f,0,MhBayD,1.f,8.f);mhRed(m,{46.98f,y+1.f},F+3.4f,kPi,MhBayD,1.f,8.f);}
+ // At y 36 the lamps sit on the face of the crane columns.
+ for(float y:{22.f,36.f}){const float column=y>30?.74f:0.f;mhRed(m,{1.02f+column,y},F+3.f,0,MhBayD,1.f,8.f);mhRed(m,{46.98f-column,y+1.f},F+3.f,kPi,MhBayD,1.f,8.f);}
  mhRed(m,{46.98f,28.6f},G+2.3f,kPi,MhBayD,.8f,5.f);
  // The hub door light and the gallery work lights by the lighting panel.
  mhLamp(m,{12.f,1.02f},G+2.95f,1.1f,6.f,2800,0,WorldLightMount::Wall,kPi*.5f);
@@ -486,8 +487,8 @@ const MhHall& mhHall(){
   wall(m,30.05f,41.15f,30.95f,41.85f,-25.6f,-24.5f,18);
   for(float x:{30.2f,30.8f})m.pipes.push_back({{x,41.15f},{x,41.85f},-24.85f,.32f,-24.85f,6});
   m.pipes.push_back({{30.5f,41.5f},{30.5f,41.5f},-26.f,.05f,-25.6f,6});
-  m.pipes.push_back({{30.5f,41.5f},{30.85f,41.5f},-26.1f,.05f,-26.1f,6});
-  m.pipes.push_back({{30.85f,41.5f},{30.9f,41.5f},-26.1f,.05f,-25.75f,6});
+  m.pipes.push_back({{30.5f,41.5f},{30.6f,41.5f},-26.1f,.05f,-26.1f,6});
+  m.pipes.push_back({{30.6f,41.5f},{30.65f,41.5f},-26.1f,.05f,-25.75f,6});
   // Crane 2 cab, docked at the catwalk landing: floor flush with the -22 deck.
   wall(m,42.4f,40.6f,45.f,43.05f,C-.2f,C,8);
   wall(m,42.4f,40.6f,42.55f,43.05f,C,C+.9f,12);wall(m,42.4f,40.6f,42.55f,43.05f,C+.9f,C+2.f,9);wall(m,42.4f,40.6f,42.55f,43.05f,C+2.f,C+2.3f,12);
