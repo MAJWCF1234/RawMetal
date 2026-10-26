@@ -391,6 +391,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  zone(m,"MAINTENANCE / TOOL CRIB",15.2f,15.8f,23,23);
  zone(m,"MAINTENANCE DISTRICT",0,0,24,24);
  freightFinish(m,-1);
+ titleCard(m,"MAINTENANCE DISTRICT");
  return p;
 }
 // CENTRAL STORES (manifest 34). The district's bulk store, west of the hall.

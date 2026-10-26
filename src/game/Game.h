@@ -3,6 +3,7 @@
 #include "../core/Math.h"
 #include "../world/World.h"
 #include <vector>
+#include <algorithm>
 #include "../audio/Sound.h"
 #include "../audio/NpcVoiceCatalog.h"
 #include "Combat.h"
@@ -347,6 +348,10 @@ public:
     const Pickup* nearbyPickup()const;
     const std::string& pickupNotice()const{return m_pickupNotice;}
     float pickupNoticeTime()const{return m_pickupNoticeTime;}
+    // The major-area title card: its text and opacity (fade in, hold, fade out).
+    static constexpr float AreaTitleTime=7.f;
+    const std::string& areaTitle()const{return m_areaTitle;}
+    float areaTitleAlpha()const{if(m_areaTitle.empty())return 0;float t=m_areaTitleTime;return std::clamp(std::min(t/1.5f,(AreaTitleTime-t)/2.f),0.f,1.f);}
     bool paused()const{return m_paused;}
     bool consoleOpen()const{return m_consoleOpen;}
     const std::string& consoleLine()const{return m_consoleLine;}
@@ -708,6 +713,8 @@ private:
     int nearbyTerminal()const;
     std::string m_pickupNotice;
     float m_pickupNoticeTime=0;
+    std::string m_areaTitle;
+    float m_areaTitleTime=0;
     unsigned m_stepVariant=0;
     bool m_audioMuted=false,m_musicEnabled=true,m_previousMute=false,m_previousMusic=false,m_previousFlashlight=false;
     Settings m_settings;

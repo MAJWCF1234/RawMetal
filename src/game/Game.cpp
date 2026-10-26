@@ -154,7 +154,7 @@ void Game::loadLevel(int level,bool carry) {
     m_weaponMotion={};m_sway={};m_swayVelocity={};m_elbowVelocity=0;m_shotAge=10;
     m_holster=m_player.ammo==0?1.f:0.f;m_punchAge=10;m_punchLeft=false;m_guarding=false;m_verticalSpring=m_verticalSpringVelocity=0;
     m_sounds.clear();m_stepDistance=0;m_stepVariant=0;
-    m_pickupNotice.clear();m_pickupNoticeTime=0;
+    m_pickupNotice.clear();m_pickupNoticeTime=0;m_areaTitle.clear();
     m_darkness=m_flashlightJam=0;m_darknessSettled=false;
     seedClutter();
     if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
@@ -350,6 +350,10 @@ void Game::update(const InputState& input, float dt) {
      m_pickupNoticeTime=1.25f;
     }
     m_pickupNoticeTime=std::max(0.f,m_pickupNoticeTime-std::min(dt,.05f));
+    // Entering a major area for the first time on this save: its title card and sting.
+    if(auto title=m_world.areaTitle(m_player.pos,m_player.z)){StateId seen=stateId(std::string("area_title:")+title);
+     if(!state(seen)){setState(seen,1);m_areaTitle=title;m_areaTitleTime=0;sound(Sound::AreaTitle,.85f);}}
+    if(!m_areaTitle.empty()&&(m_areaTitleTime+=std::min(dt,.05f))>=AreaTitleTime)m_areaTitle.clear();
     if(!input.fire)m_suppressFire=false;
     dt = std::min(dt, 0.05f);
     if(input.mute&&!m_previousMute)m_audioMuted=!m_audioMuted;

@@ -26,6 +26,20 @@ bool Game::testCampaignMaps(){
   bool rejected=false;if(plain){auto bad=std::make_shared<AuthoredMapData>(*plain->maps[0]);bad->ceilingSurface=SurfaceCount;try{World invalid(0,bad);}catch(const std::exception&){rejected=true;}}
   check(rejected,"World::loadAuthoredMap rejects an out-of-range surface");
  }
+ // Area title cards: the first visit to a titled area raises its card with the
+ // sting; the card fades in, holds and clears; staying or returning stays quiet.
+ {Game area;area.loadLevel(53,false);area.m_enemies.clear();area.update({},1.f/60);
+  auto sting=[&]{return std::any_of(area.m_sounds.begin(),area.m_sounds.end(),[](const SoundEvent& e){return e.sound==Sound::AreaTitle;});};
+  check(area.areaTitle()=="MAINTENANCE DISTRICT"&&sting()&&area.world().zoneName(area.player().pos,area.player().z)!=nullptr,"Entering a major area raises its title card and sting; the HUD label is unchanged");
+  float early=area.areaTitleAlpha();for(int i=0;i<150;++i)area.update({},1.f/60);float held=area.areaTitleAlpha();
+  bool again=false;for(int i=0;i<330;++i){area.update({},1.f/60);again|=sting();}
+  check(early<.05f&&held>.95f&&area.areaTitle().empty()&&!again,"The title card fades in, holds, clears and does not repeat");
+  std::string records="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Title test|0\nMAP|0|Room|0|0|6.5|6.5|0|0|8|0.3||0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
+  for(int y=0;y<24;++y)records+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";
+  auto parse=[&](const char* zone){try{return loadCustomCampaignText(records+zone+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","title-test.txt");}catch(const std::exception&){return std::shared_ptr<const CustomCampaign>{};}};
+  auto titled=parse("ZONE|0|0|0|24|24||||OLD WORKINGS\n");
+  check(titled&&titled->maps[0]->zones.size()==1&&titled->maps[0]->zones[0].title=="OLD WORKINGS"&&titled->maps[0]->zones[0].name.empty()&&!parse("ZONE|0|0|0|24|24|||\n"),"ZONE records take an optional area title; a zone with neither name nor title is rejected");
+ }
  {bool spawns=true;for(int level=34;level<CampaignChunkCount;++level){World w(level);const auto& d=w.definition();bool fit=w.fits(d.playerStart.x,d.playerStart.y,d.spawnHeight,1.f)&&std::fabs(w.supportBelow(d.playerStart.x,d.playerStart.y,d.spawnHeight+.3f)-d.spawnHeight)<.05f;if(!fit)out<<"  spawn blocked in chunk "<<level<<"\n";spawns&=fit;}check(spawns,"Every descent chunk loads and its spawn fits a standing hull");}
  {Game gallery;gallery.loadLevel(42,false);gallery.m_player.pos={21.f,10.f};gallery.m_player.z=-24.988f;
   for(int i=0;i<24;++i)gallery.tryMove({0,-.1f});

@@ -11,7 +11,9 @@ enum class Sound {
  ZoneWind, ZoneForest, ZoneCrickets, ZoneFrogs, FireCrackle, AnomalyHum,
  StepDirt1, StepDirt2, StepDirt3, StepDirt4, StepGrass1, StepGrass2, StepGrass3, StepGrass4, StepGravel1, StepGravel2, StepGravel3, StepGravel4,
  // Area score: one loop per part of the facility (MusicCue).
- MusicUndercover, MusicSubliminal, MusicPitchBlack, MusicHeat, MusicDarkness, MusicLastChapter, MusicDeathClose, Count
+ MusicUndercover, MusicSubliminal, MusicPitchBlack, MusicHeat, MusicDarkness, MusicLastChapter, MusicDeathClose,
+ // The sting under an area title card.
+ AreaTitle, Count
 };
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}

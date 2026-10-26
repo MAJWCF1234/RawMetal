@@ -256,7 +256,6 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  wall(m,1.f,7.f,9.6f,7.3f,f,ceil,15);wall(m,14.4f,7.f,23.f,7.3f,f,ceil,15);
  wall(m,9.6f,7.f,14.4f,7.3f,f+2.6f,ceil,15);
  wall(m,9.6f,6.96f,14.4f,7.34f,f+2.52f,f+2.6f,20);
- perSign(m,12.f,6.945f,f+2.66f,"RESTRICTED PERIMETER","BADGE / BAG / BOOT CHECK / CAMERAS IN USE",3.6f,kPi,perBlue);
  for(float x:{9.8f,11.f,12.2f,13.4f})m.fixtures.push_back({model::ticket_gate,{x,7.15f},0,.4f,1.42f,1.09f,0,true});
  // Turnstile 2 forced: its flap torn off and thrown down, blood where he fell.
  wall(m,11.35f,8.25f,11.95f,8.33f,f,f+.04f,20);
@@ -396,6 +395,7 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  zone(m,"STAFF WASHROOM",1,15.2f,9.4f,23);
  zone(m,"OPERATIONS CORRIDOR",0,0,24,24);
  freightFinish(m,-1);
+ titleCard(m,"RESTRICTED PERIMETER");
  return p;
 }
 // =============================================================================================

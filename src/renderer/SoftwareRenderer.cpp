@@ -813,6 +813,12 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()){std::string line(goal);int w=std::min(m_width-140,uiTextWidth(line.c_str(),1,13));int left=cx-w/2;
   gradient(left-40,60,w/2+40,20,black,0.f,.7f,true);gradient(cx,60,w/2+40,20,black,.7f,0.f,true);
   uiText(cx-uiTextWidth("OBJECTIVE",0,9,3)/2,50,"OBJECTIVE",red,0,9,1,3);uiText(left,62,line.c_str(),bone,1,13);}
+ // Major-area title card: thin, wide-set capitals across the top with a soft
+ // glow, fading in and out the first time the player enters the area.
+ if(float a=game.areaTitleAlpha();a>0&&!game.dead()){const char* title=game.areaTitle().c_str();
+  int size=std::max(22,m_height/14),track=size/3,w=uiTextWidth(title,1,size,track),x=cx-w/2,y=m_height/6;
+  for(auto [dx,dy]:{std::pair{-2,0},{2,0},{0,-2},{0,2}})uiText(x+dx,y+dy,title,bone,1,size,a*.08f,track);
+  uiText(x+1,y+2,title,black,1,size,a*.45f,track);uiText(x,y,title,rgb(250,248,242),1,size,a,track);}
  if(game.dead()||game.won()){fill(0,0,m_width,m_height,black,game.dead()?.55f:.35f);gradient(0,cy-50,m_width,50,black,0.f,.8f,false);gradient(0,cy,m_width,50,black,.8f,0.f,false);
   const char* headline=game.won()?"SECTOR CLEARED":"YOU DIED";int w=uiTextWidth(headline,2,64,4);uiText(cx-w/2+3,cy-40,headline,black,2,64,.8f,4);uiText(cx-w/2,cy-42,headline,game.won()?amber:red,2,64,1,4);
   const char* hint="PRESS ESC TO RESTART";uiText(cx-uiTextWidth(hint,0,11,3)/2,cy+30,hint,paper,0,11,.85f,3);}

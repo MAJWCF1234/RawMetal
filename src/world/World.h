@@ -142,10 +142,13 @@ struct AuthoredSign {
     std::uint32_t accent=0xffca994du;
 };
 // A named region of a map (HUD location label). The first zone containing
-// the player wins; maps without zones show the map name.
+// the player wins; maps without zones show the map name. A zone with a title
+// announces a major area: the first time the player enters it the title
+// card fades in across the top. A title-only zone has no name.
 struct AuthoredZone {
     std::string name;
     float x1=0,y1=0,x2=24,y2=24,bottom=-1000,top=1000;
+    std::string title;
 };
 struct AuthoredNavHint {
     Vec2 position{};
@@ -255,7 +258,13 @@ public:
     // Authored location name at a point (HUD), or nullptr when no zone covers it.
     const char* zoneName(Vec2 p,float z)const{
      if(!m_mapData)return nullptr;
-     for(const auto& zone:m_mapData->zones)if(p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.name.c_str();
+     for(const auto& zone:m_mapData->zones)if(!zone.name.empty()&&p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.name.c_str();
+     return nullptr;
+    }
+    // The major-area title at a point, or nullptr.
+    const char* areaTitle(Vec2 p,float z)const{
+     if(!m_mapData)return nullptr;
+     for(const auto& zone:m_mapData->zones)if(!zone.title.empty()&&p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.title.c_str();
      return nullptr;
     }
     // The map's surface sets (Surface values); SurfaceDefault keeps the legacy finish.

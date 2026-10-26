@@ -234,6 +234,8 @@ inline WorldLight lamp(Vec2 p,float z,float intensity,float range,float kelvin,f
  WorldLight l{p,z,mount,yaw,intensity,range};l.kelvin=kelvin;l.tint=tint;return l;
 }
 inline void zone(Map& m,const char* name,float x1,float y1,float x2,float y2,float bottom=-1000,float top=1000){m.zones.push_back({name,x1,y1,x2,y2,bottom,top});}
+// Opens a major area: its title card shows the first time the player walks in.
+inline void titleCard(Map& m,const char* title,float x1=0,float y1=0,float x2=24,float y2=24){AuthoredZone z;z.x1=x1;z.y1=y1;z.x2=x2;z.y2=y2;z.title=title;m.zones.push_back(std::move(z));}
 inline void hazard(Map& m,Hazard::Kind kind,float x1,float y1,float x2,float y2,float bottom,float top,float damage){Hazard h;h.kind=kind;h.x1=x1;h.y1=y1;h.x2=x2;h.y2=y2;h.bottom=bottom;h.top=top;h.damagePerSecond=damage;m.hazards.push_back(h);}
 inline void shelf(Map& m,Vec2 p,float yaw,float floor=0){m.fixtures.push_back({7,p,floor,1.8f,.5f,1.8f,yaw,true});}
 // Exit to the next map: the stitched gap in the south wall at columns 20-22

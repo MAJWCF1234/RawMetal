@@ -724,7 +724,7 @@ std::shared_ptr<const Map> makeDecontamination(){
 }
 // ENERGY RESEARCH / FORECOURT (manifest 44). The first time the plant shows
 // what it was for. Out of the cleanroom into a hall twenty-four metres tall:
-// four concrete piers, the company's name in steel letters, and on a plinth
+// four concrete piers, and on a plinth
 // at the centre THE FIRST SAMPLE, the thing the whole company grew around,
 // lit like a relic. Visitors' benches, the reception desk, the film. The
 // Cleanup Force has turned it into a firing lane toward the great door.
@@ -747,10 +747,6 @@ std::shared_ptr<const Map> makeEnergyResearchForecourt(){
   m.lights.push_back(lamp({c.x,c.y-1.05f},f+.7f,1.6f,8.f,3000,0,WorldLightMount::Bare));pbLampHead(m,c.x,c.y-1.05f,f+.55f);}
  for(float y:{7.f,17.f})wall(m,1.f,y-.3f,23.f,y+.3f,roof-1.2f,roof,15);
  for(float x:{5.f,19.f})wall(m,x-.3f,1.f,x+.3f,24.f,roof-1.2f,roof,15);
- // --- The company's name, high on the north wall ---------------------------------------------
- wall(m,3.f,1.f,21.f,1.3f,f+9.f,f+11.6f,20);
- pbSign(m,12.f,1.355f,f+9.4f,"DEPTHWORKS ENERGY RESEARCH","POWER FROM BELOW",16.f,pbS,pbBlue);
- m.signs.back().height=2.f;
  // --- THE FIRST SAMPLE on its plinth ---------------------------------------------------------
  wall(m,10.4f,10.4f,13.6f,13.6f,f,f+.9f,33);wall(m,10.7f,10.7f,13.3f,13.3f,f+.9f,f+1.05f,20);
  pbFix(m,model::lab_anomaly_relic,12.f,12.f,f+1.05f,1.5f,1.2f,1.2f,kPi*.25f,false);
@@ -784,6 +780,7 @@ std::shared_ptr<const Map> makeEnergyResearchForecourt(){
  zone(m,"ENERGY RESEARCH / THE FIRST SAMPLE",9.f,9.f,15.f,15.f);
  zone(m,"ENERGY RESEARCH / FORECOURT",0,0,24,24);
  freightFinish(m,-1);
+ titleCard(m,"ENERGY RESEARCH");
  return p;
 }
 

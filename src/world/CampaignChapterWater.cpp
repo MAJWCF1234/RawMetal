@@ -328,6 +328,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  zone(m,"28B WATER LAB",1,19,7,23);
  zone(m,"28 WATER TREATMENT",0,0,24,24);
  freightFinish(m,-1);
+ titleCard(m,"WATER AND COOLING");
  return p;
 }
 // ===============================================================================

@@ -230,12 +230,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top)throw std::runtime_error("invalid DARK bounds");
    if(map->darkZones.size()>=64)throw std::runtime_error("too many DARK records in one map");map->darkZones.push_back(zone);
   }else if(tag=="ZONE"){
-   // ZONE|map|x1|y1|x2|y2|name[|bottom|top]: a named HUD location.
-   if(f.size()<7||f.size()>9)throw std::runtime_error("malformed ZONE record");auto map=mapAt(maps,f);AuthoredZone zone;
+   // ZONE|map|x1|y1|x2|y2|name[|bottom|top[|title]]: a named HUD location; a
+   // title makes it a major area announced by a title card (name may be empty).
+   if(f.size()<7||f.size()>10)throw std::runtime_error("malformed ZONE record");auto map=mapAt(maps,f);AuthoredZone zone;
    zone.x1=number(f,2,"zone x1");zone.y1=number(f,3,"zone y1");zone.x2=number(f,4,"zone x2");zone.y2=number(f,5,"zone y2");zone.name=f[6];
    if(f.size()>=8&&!f[7].empty())zone.bottom=number(f,7,"zone bottom");
    if(f.size()>=9&&!f[8].empty())zone.top=number(f,8,"zone top");
-   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||zone.name.empty()||zone.name.size()>40)throw std::runtime_error("invalid ZONE bounds or name");
+   if(f.size()>=10)zone.title=f[9];
+   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||(zone.name.empty()&&zone.title.empty())||zone.name.size()>40||zone.title.size()>40)throw std::runtime_error("invalid ZONE bounds, name or title");
    map->zones.push_back(std::move(zone));
   }else if(tag=="TERMINAL"){
    if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);AuthoredTerminalData t;

@@ -696,6 +696,7 @@ std::shared_ptr<const Map> makeMachineHallNorthGallery(){
  }
  mhCue(m,"mh_bay_a_ms",120,Sound::Metal1,{7.8f,1.6f},mhTable+1.f,.8f,.6f,"LIGHTING L-9: CONTACTOR ROW A");
  freightFinish(m,-1);
+ titleCard(m,"MACHINE HALL");
  return p;
 }
 // MACHINE HALL / EXCITER BAY (manifest 25)

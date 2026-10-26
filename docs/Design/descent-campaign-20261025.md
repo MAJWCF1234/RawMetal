@@ -100,7 +100,9 @@ a fourth, and any title used twice). Sign only what a real plant would: a
 hazard, a locked or welded door and why, a route the player cannot otherwise
 read, or a story beat such as a chalked note. Never a plate naming the room the
 player is standing in, an equipment ID label, a slogan or a key hint. Light,
-colour and layout lead the player, not text.
+colour and layout lead the player, not text. A major area is announced by a
+title card instead of a sign: `titleCard(m,"NAME")` in its entry chunk makes a
+sting play and the name fade in across the top, once per save.
 
 The world layout, chunk table and district briefs are below.
 

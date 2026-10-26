@@ -218,6 +218,7 @@ std::shared_ptr<const Map> makePowerDistribution(){
  zone(m,"POWER DISTRIBUTION / HV RAILHEAD",15.6f,0,24,24);
  zone(m,"POWER DISTRIBUTION",0,0,24,24);
  freightFinish(m,-1);
+ titleCard(m,"POWER DISTRIBUTION");
  return p;
 }
 // A portal through an east or west wall: jambs either side of y1..y2 across

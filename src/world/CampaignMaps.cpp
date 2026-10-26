@@ -202,6 +202,7 @@ std::shared_ptr<const Map> makeFoundry(){
  zone(m,"01 INTAKE",0,0,24,7.5f);
  zone(m,"02 FOUNDRY",0,7.5f,24,16.5f);
  zone(m,"03 CONTAINMENT",0,16.5f,24,24);
+ titleCard(m,"FOUNDRY");
  return p;
 }
 // PRESSURE WORKS. The transfer from Containment drops into a rail receiving
@@ -626,6 +627,7 @@ std::shared_ptr<const Map> makeReactorComplex(){
  zone(m,"10 SURFACE LIFT",0,0,24,24,-1.f,1000);
  zone(m,"11A UPPER MANIFOLD",0,0,24,24,-7.f,-1.f);
  zone(m,"11 CONTAINMENT",0,0,24,24);
+ titleCard(m,"REACTOR COMPLEX");
  return p;
 }
 
@@ -1129,6 +1131,7 @@ std::shared_ptr<const Map> makeCableVaults(){
  zone(m,"15A MAINTENANCE BAY",1,4,7.5f,9);
  zone(m,"15B FEEDER ROOM",16.5f,12,23,18.8f);
  zone(m,"15 CABLE VAULTS",0,0,24,24);
+ titleCard(m,"CABLE VAULTS");
  return p;
 }
 
@@ -1536,6 +1539,7 @@ std::shared_ptr<const Map> makeFreightAccess(){
  zone(m,"FREIGHT ACCESS / PERSONNEL",1,1,6.6f,18);
  zone(m,"FREIGHT ACCESS / DOCK OFFICE",16.7f,13.2f,23,18);
  freightFinish(m,10);
+ titleCard(m,"FREIGHT DISTRICT");
  return p;
 }
 
@@ -2455,6 +2459,7 @@ std::shared_ptr<const Map> makeTransferConveyors(){
  m.clutterSpawns.push_back({1,{14.f,12.f},base});
  deckSupports(m,m.layers[1],base,6.f);deckSupports(m,m.layers[2],base,6.f);deckSupports(m,m.layers[3],base,6.f);
  freightFinish(m,22);
+ titleCard(m,"TRANSFER YARD");
  return p;
 }
 
@@ -2612,6 +2617,7 @@ std::shared_ptr<const Map> makeEmptyPlatform(){
  for(float y:{5.f,11.f,17.f,23.f})m.lights.push_back(lamp({12.f,y},ceil-.65f,1.6f,10.f,4600,.05f));
  m.lights.push_back(lamp({12.f,1.6f},ceil-.2f,1.f,6.f,3800));
  freightFinish(m,25);
+ titleCard(m,"EMPTY PLATFORM");
  return p;
 }
 
@@ -2703,6 +2709,7 @@ std::shared_ptr<const Map> makeDepotTrackside(){
  m.creatureSpawns={{CreatureKind::Mutant,{20.5f,19.5f},bed}};
  m.pickupSpawns.push_back({{12.f,14.f},PickupKind::Ammo,base});
  freightFinish(m,27);
+ titleCard(m,"ROLLING STOCK DEPOT");
  return p;
 }
 
@@ -2853,6 +2860,7 @@ std::shared_ptr<const Map> makeMaintenanceBore(){
  m.lights.push_back(lamp({19.f,12.f},roof-.7f,1.f,8.f,2600,-.2f));
  m.pickupSpawns.push_back({{6.f,12.f},PickupKind::Health,base});
  freightFinish(m,30);
+ titleCard(m,"CARGO TUNNELS");
  return p;
 }
 
