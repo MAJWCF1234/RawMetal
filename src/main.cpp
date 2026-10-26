@@ -1073,6 +1073,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         }
         return 0;
     }
+    if(std::wcsstr(commandLine,L"--chapter-sequence-test"))return retro::Game::testChapterSequences()?0:63;
     if(std::wcsstr(commandLine,L"--chapter-route-test"))return retro::Game::testChapterRoute()?0:62;
     if(std::wcsstr(commandLine,L"--service-map-test"))return retro::Game::testServiceMaps()?0:45;
     if(std::wcsstr(commandLine,L"--mechanisms-test"))return retro::Game::testMechanisms()?0:39;
@@ -1100,7 +1101,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lift-mix",retro::AudioEngine::testLiftMix},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},
-         {"chapter-route",retro::Game::testChapterRoute},{"darkness",darknessTest}};
+         {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=std::wcsstr(commandLine,L"--each-test=");
         for(const auto& [name,run]:tests){

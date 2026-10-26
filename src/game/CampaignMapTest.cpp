@@ -8,6 +8,116 @@
 #include <queue>
 #include <unordered_set>
 namespace retro {
+bool Game::testChapterSequences(){
+ const auto started=std::chrono::steady_clock::now();
+ std::ofstream out("chapter-sequence-test.txt");int passed=0;
+ constexpr float dt=1.f/120;
+ auto place=[](Game& g,int level,Vec2 pos,float z){
+  g.setDeveloperMode(true);g.loadLevel(level,false);
+  g.m_player.pos=pos;g.m_player.z=z;g.m_player.grounded=true;
+  g.m_player.verticalVelocity=0;g.m_player.pitch=0;g.m_player.angle=0;
+ };
+ auto check=[&](bool ok,int number,const char* name)->std::ostream&{
+  passed+=ok;out<<(ok?"PASS":"FAIL")<<" check="<<number<<" "<<name;return out;
+ };
+ auto location=[&](const Game& g){out<<" level="<<g.level()<<" pos="<<g.player().pos.x<<','<<g.player().pos.y<<','<<g.player().z;};
+ // Poll every game frame, including the intervals that must remain quiet.
+ // Separate games keep earlier answers from satisfying later assertions.
+ {
+  Game g;place(g,39,{13,12},-28);g.setState(stateId("pwr_fuel_transfer"));
+  float first=-1;for(int frame=1;frame<=12;++frame){g.update({},dt);if(first<0&&g.state("pwr_fuel_ms")>0)first=frame*dt;}
+  check(first>0&&first<=.1f,1,"fuel answer")<<" start_s="<<first<<" pwr_fuel_ms="<<g.state("pwr_fuel_ms");location(g);out<<'\n';
+ }
+ {
+  Game g;place(g,39,{13,12},-28);g.setState(stateId("pwr_set2_cranked"));
+  float done=-1,running=-1;bool early=false;int at1400=0;
+  for(int frame=1;frame<=216;++frame){g.update({},dt);float t=frame*dt;
+   int value=g.state("pwr_set2_ms_done");if(t<1.4f&&value!=0)early=true;
+   if(frame==168)at1400=value;
+   if(done<0&&value==1)done=t;
+   if(running<0&&g.state("pwr_set2_running")>0)running=t;
+  }
+  check(!early&&done>=1.5f&&done<=1.7f&&running>=done&&running<=done+.1f&&g.state("pwr_set2_ms_done")==1,2,"Set 2 catches then runs")
+   <<" done_s="<<done<<" done_at_1.4s="<<at1400<<" early="<<early<<" running_s="<<running
+   <<" pwr_set2_ms="<<g.state("pwr_set2_ms")<<" pwr_set2_ms_done="<<g.state("pwr_set2_ms_done")<<" pwr_set2_running="<<g.state("pwr_set2_running");location(g);out<<'\n';
+ }
+ {
+  Game g;place(g,39,{13,12},-28);g.setState(stateId("pwr_gen_online"));
+  float mains=-1,strike=-1;bool early=false;int at800=0;
+  for(int frame=1;frame<=132;++frame){g.update({},dt);float t=frame*dt;
+   if(mains<0&&g.state("pwr_lc_mains")==1)mains=t;
+   if(frame<=96&&g.state("pwr_strike_ms_done")!=0)early=true;
+   if(frame==96)at800=g.state("pwr_strike_ms_done");
+   if(strike<0&&g.state("pwr_strike_ms_done")==1)strike=t;
+  }
+  check(mains>0&&mains<=.1f&&!early&&strike>=.85f&&strike<=1.05f&&g.state("pwr_strike_ms_done")==1,3,"generation supply and delayed strike")
+   <<" mains_s="<<mains<<" strike_s="<<strike<<" done_at_0.8s="<<at800<<" early="<<early
+   <<" pwr_lc_mains="<<g.state("pwr_lc_mains")<<" pwr_strike_ms="<<g.state("pwr_strike_ms")<<" pwr_strike_ms_done="<<g.state("pwr_strike_ms_done");location(g);out<<'\n';
+ }
+ {
+  Game g;g.setState(stateId("pwr_gen_online"));place(g,40,{12,18},-19);
+  float entry=-1;for(int frame=1;frame<=12;++frame){g.update({},dt);if(entry<0&&g.state("pwr_lc_mains")==1)entry=frame*dt;}
+  int entered=g.state("pwr_lc_mains");g.setState(stateId("pwr_transfer_bus"));
+  float dip=-1,back=-1;int at100=0;
+  for(int frame=1;frame<=120;++frame){g.update({},dt);float t=frame*dt;
+   if(dip<0&&g.state("pwr_lc_mains")==2)dip=t;
+   if(frame==12)at100=g.state("pwr_lc_mains");
+   if(dip>0&&back<0&&g.state("pwr_lc_mains")==1)back=t;
+  }
+  check(entry>0&&entry<=.1f&&entered==1&&dip>0&&dip<=.1f&&at100==2&&back>=.65f&&back<=.85f&&g.state("pwr_lc_mains")==1,4,"Load Control transfer dip and recovery")
+   <<" entry_s="<<entry<<" entry_mains="<<entered<<" dip_s="<<dip<<" mains_at_0.1s="<<at100<<" back_s="<<back
+   <<" pwr_lc_mains="<<g.state("pwr_lc_mains")<<" pwr_lc_dip_ms="<<g.state("pwr_lc_dip_ms")<<" pwr_lc_dip_ms_done="<<g.state("pwr_lc_dip_ms_done");location(g);out<<'\n';
+ }
+ const char* timers[]={"mh_bay_a_ms","mh_bay_b_ms","mh_bay_c_ms","mh_bay_d_ms"};
+ const char* rows[]={"mh_bay_a","mh_bay_b","mh_bay_c","mh_bay_d"};
+ {
+  Game g;g.setState(stateId("pwr_feeder9"));place(g,42,{12,12},-28);
+  float first=-1,finished[4]={-1,-1,-1,-1};bool ordered=true;int startValue=0;
+  for(int frame=1;frame<=840;++frame){g.update({},dt);
+   if(first<0&&g.state(timers[0])>0){first=frame*dt;startValue=g.state(timers[0]);}
+   for(int i=0;i<4;++i)if(g.state(rows[i])==1){
+    if(finished[i]<0)finished[i]=frame*dt;
+    for(int j=0;j<i;++j)if(g.state(rows[j])!=1)ordered=false;
+   }
+  }
+  bool complete=true;for(int i=0;i<4;++i)complete&=g.state(rows[i])==1&&finished[i]>0&&finished[i]<=7;
+  for(int i=1;i<4;++i)ordered&=finished[i]>finished[i-1];
+  check(first>0&&first<=.1f&&complete&&ordered&&g.level()==42&&std::fabs(g.player().z+28)<.1f,5,"exciter floor restrike in row order")
+   <<" start_s="<<first<<" start_timer="<<startValue<<" ordered="<<ordered;
+  for(int i=0;i<4;++i)out<<' '<<rows[i]<<'='<<g.state(rows[i])<<" at_s="<<finished[i]<<' '<<timers[i]<<'='<<g.state(timers[i]);location(g);out<<'\n';
+
+  // Revisit the original trigger by walking east along the gallery. Observe
+  // every frame so even a momentary reset cannot hide behind the final value.
+  int before[4],minimum[4],previous[4];for(int i=0;i<4;++i)before[i]=minimum[i]=previous[i]=g.state(timers[i]);
+  int beforeD=g.state(rows[3]),minimumD=beforeD;bool stable=true,reached=false;
+  place(g,41,{19,3.2f},-25);InputState walking{};walking.forward=true;
+  auto sample=[&]{
+   minimumD=std::min(minimumD,g.state(rows[3]));stable&=g.state(rows[3])==1;
+   for(int i=0;i<4;++i){int value=g.state(timers[i]);minimum[i]=std::min(minimum[i],value);stable&=value>=previous[i]&&value>100;previous[i]=value;}
+  };
+  sample();
+  for(int frame=0;frame<240;++frame){
+   reached|=g.level()==41&&g.player().pos.x>=19.5f&&g.player().pos.x<=25&&g.player().pos.y>=2.4f&&g.player().pos.y<=4&&std::fabs(g.player().z+25)<.1f;
+   g.update(g.player().pos.x<22?walking:InputState{},dt);sample();
+  }
+  check(complete&&beforeD==1&&stable&&reached,6,"gallery revisit does not restart restrike")<<" reached="<<reached<<" bay_d_before="<<beforeD<<" bay_d_min="<<minimumD<<" bay_d_after="<<g.state(rows[3]);
+  for(int i=0;i<4;++i)out<<' '<<timers[i]<<"_before="<<before[i]<<" min="<<minimum[i]<<" after="<<g.state(timers[i]);location(g);out<<'\n';
+ }
+ {
+  Game g;g.setState(stateId("pwr_feeder9"));place(g,41,{12,3},-25);
+  int maximum[4]={};bool quiet=true;
+  for(int frame=0;frame<120;++frame){g.update({},dt);for(int i=0;i<4;++i){maximum[i]=std::max(maximum[i],g.state(timers[i]));quiet&=g.state(timers[i])==0;}}
+  bool west=g.level()==41&&std::fabs(g.player().z+25)<.1f;Vec2 westPos=g.player().pos;float westZ=g.player().z;
+  // Move the player to the authored east-end box without reloading or
+  // clearing state; the quiet west visit must not consume the trigger.
+  g.m_player.pos={22,3.2f};g.m_player.z=-25;g.m_player.verticalVelocity=0;g.m_player.grounded=true;
+  float first=-1;for(int frame=1;frame<=12;++frame){g.update({},dt);if(first<0&&g.state(timers[0])>0)first=frame*dt;}
+  check(quiet&&west&&first>0&&first<=.1f,7,"west gallery quiet then east end starts restrike")<<" west_pos="<<westPos.x<<','<<westPos.y<<','<<westZ;
+  for(int i=0;i<4;++i)out<<' '<<timers[i]<<"_west_max="<<maximum[i]<<" east="<<g.state(timers[i]);out<<" east_start_s="<<first;location(g);out<<'\n';
+ }
+ out<<"SUMMARY "<<passed<<"/7 PASS "<<7-passed<<" FAIL runtime="<<std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()<<"s\n";
+ out.flush();return passed==7&&out.good();
+}
 bool Game::testChapterRoute(){
  const auto started=std::chrono::steady_clock::now();
  std::ofstream out("chapter-route-test.txt");
@@ -146,6 +256,11 @@ bool Game::testCampaignMaps(){
    return false;
   };
   Game power;
+  auto powerValues=[&](const char* stage,const Game& g){
+   out<<"Black-start observed "<<stage;
+   for(const char* name:{"pwr_fuel_transfer","pwr_set2_cranked","pwr_set2_ms","pwr_set2_ms_done","pwr_gen_online","pwr_sub_a","pwr_transfer_ready","pwr_transfer_bus","pwr_feeder9"})out<<' '<<name<<'='<<g.state(name);
+   out<<'\n';
+  };
   operate(power,36,{12,2.9f},-28);
   operate(power,40,{19,19.9f},-19);
   check(!power.state("pwr_sub_a")&&!power.state("pwr_feeder9"),"Power controls refuse out-of-order breaker and feeder operation");
@@ -156,11 +271,14 @@ bool Game::testCampaignMaps(){
   check(!earlyClose&&power.state("pwr_set2_ms_done"),"Set 2 catches after cranking, and the bus waits for it");
   operate(power,39,{13,5.9f},-28);operate(power,36,{12,2.9f},-28);
   check(power.state("pwr_gen_online")&&power.state("pwr_sub_a"),"Physical E controls restore emergency generation and Substation A");
+  if(!power.state("pwr_gen_online")||!power.state("pwr_sub_a"))powerValues("after physical controls",power);
   Game restored;check(restored.decodeSave(power.encodeSave())&&restored.state("pwr_sub_a"),"Black-start progress survives save/load before load transfer");
+  if(!restored.state("pwr_sub_a"))powerValues("after save/load",restored);
   operate(restored,40,{12,19.9f},-19);
   check(!restored.state("pwr_transfer_bus"),"Transfer requires loads to be shed first");
   operate(restored,40,{5,19.9f},-19);operate(restored,40,{12,19.9f},-19);operate(restored,40,{19,19.9f},-19);
   check(restored.state("pwr_feeder9"),"Physical three-step transfer restores the Machine Hall gate prerequisite");
+  if(!restored.state("pwr_feeder9"))powerValues("after transfer controls",restored);
   check(gateAvailable(restored,35,stateId("pwr_feeder9")),"Restored feeder actually unlocks the hub's Machine Hall gate");
   Game maintenance;operate(maintenance,55,{15.6f,20.9f},-19);operate(maintenance,55,{6,16.9f},-19);
   check(!maintenance.state("maint_shutter_pin")&&!maintenance.state("mnt_pin_machined"),"Fabrication requires signed-out stock and a machined pin");

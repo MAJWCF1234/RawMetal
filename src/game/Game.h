@@ -238,6 +238,7 @@ public:
     static bool testStreaming();
     static bool testCampaignMaps();
     static bool testChapterRoute();
+    static bool testChapterSequences();
     void updateMechanisms(float dt);
     std::string_view actorCaption()const;
     // Captioned sequence cues emitted at a terminal's position (its computer's
