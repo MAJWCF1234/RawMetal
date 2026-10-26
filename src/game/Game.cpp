@@ -177,6 +177,10 @@ void Game::sound(Sound sound,float gain,float pitch){
 void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){const auto& traits=creatureTraits(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+traits.voice*3+action),enemy.pos,gain,pitch*traits.voicePitch,true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
 
 int Game::hostilesRemaining(int level)const{
+ // Developer mode removes the creatures but not the Cleanup Force. Counting
+ // nobody opens the enemy-clear doors and script gates a tester has to pass;
+ // the guards themselves still patrol, hunt and go down to a takedown.
+ if(m_peaceful)return 0;
  const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive;}));
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&!npcIncapacitated(i)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardHostileToPlayer(i))++n;}return n;
 }

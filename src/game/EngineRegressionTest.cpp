@@ -170,6 +170,22 @@ bool Game::testEngineRegression(){
  {Game g(regression::campaign(regression::room()));g.spawnCreature({Enemy::Kind::Huntsman,{9,9},6},0,false);auto&e=g.m_enemies[0];e.surfaceMode=2;g.applyEnemyDamage(e,1000,false,false);for(int i=0;i<125;++i)g.updateEnemies(.016f);
   check(!e.alive&&e.surfaceMode==0&&std::fabs(e.z)<.01f,"10 dead ceiling Huntsman falls","alive="+std::to_string(e.alive)+" surface="+std::to_string(e.surfaceMode)+" z="+std::to_string(e.z));
  }
+ // Developer mode is the testing mode: it must get through the enemy-clear
+ // doors and script gates that ordinary play opens by clearing the room.
+ for(bool developer:{false,true}){auto m=regression::room();
+  auto a=regression::guard({10,6},{10,6},AiFaction::Raider);a.ai.armed=true;m->actorTracks.push_back(a);
+  ScriptEvent cleared;cleared.id=stateId("reg_cleared");cleared.x1=cleared.y1=0;cleared.x2=cleared.y2=24;cleared.requireEnemiesClear=true;
+  ScriptAction act;act.type=ScriptAction::Type::SetState;act.id=stateId("reg_clear_done");act.value=1;cleared.actions.push_back(act);
+  m->scriptEvents.push_back(cleared);
+  Game g(regression::campaign(m));if(developer)g.setDeveloperMode(true);
+  g.spawnCreature({Enemy::Kind::Huntsman,{9,9},0},0,false);
+  for(int i=0;i<60;++i){g.update({},.016f);g.m_sounds.clear();}
+  Door gate{};gate.left=6;gate.right=9;gate.y=12;gate.requireEnemiesClear=true;
+  int hostiles=g.enemiesRemaining();bool fired=g.state(stateId("reg_clear_done"))==1,locked=g.doorLocked(gate);
+  bool guardLives=!g.npcActors().empty()&&g.npcActors()[0].pose.clip!=4;
+  std::ostringstream values;values<<"hostiles="<<hostiles<<" creatures="<<g.enemies().size()<<" gate fired="<<fired<<" door locked="<<locked<<" guard present="<<guardLives;
+  check(guardLives&&(developer?(hostiles==0&&fired&&!locked):(hostiles>0&&!fired&&locked)),developer?"12 developer mode opens enemy-clear gates":"12 enemy-clear gates hold in ordinary play",values.str());
+ }
  passed=testSnatcherAmbush(report)&&passed;return passed&&bool(report);
 }
 }

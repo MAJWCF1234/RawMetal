@@ -4,6 +4,19 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.14.1 - Developer mode gets through the chapter (2026-10-26)
+
+A playtest patch. Developer mode (`--dev`, or DEV in the console) counts
+nothing as a hostile now, so the doors and script gates that ordinary play
+opens by clearing a room let it through. Before this a tester in developer
+mode reached the first enemy-clear door and stopped: the creatures were gone,
+but the Cleanup Force guards still held the gate shut. The guards themselves
+are unchanged, so stealth, takedowns and their AI are still testable there.
+God mode (GOD) still means no damage and nothing else; the console now says
+which of the two opens the gates.
+
+---
+
 ## v0.14.0 - DepthWorks, Chapter 1 playtest (2026-10-26)
 
 A pre-release for playtesters: the first chapter of DepthWorks as players will

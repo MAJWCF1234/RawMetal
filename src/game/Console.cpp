@@ -34,7 +34,7 @@ void Game::executeConsole(std::string command){
  }
  else if(verb=="give"&&arg=="flashlight"&&extra.empty()){giveQuestItem(Flashlight);m_consoleLog.push_back("FLASHLIGHT ADDED. F TO TOGGLE.");}
  else if(verb=="dev"){setDeveloperMode(!developerMode());m_consoleLog.push_back(developerMode()?"DEVELOPER MODE ON: NO DAMAGE, NO CREATURES, EVERY DOOR OPEN.":"DEVELOPER MODE OFF.");}
- else if(verb=="god"){m_god=!m_god;if(m_god)m_player.health=std::max(m_player.health,100.f);m_consoleLog.push_back(m_god?"GOD MODE ON: NO DAMAGE.":"GOD MODE OFF.");}
+ else if(verb=="god"){m_god=!m_god;if(m_god)m_player.health=std::max(m_player.health,100.f);m_consoleLog.push_back(m_god?"GOD MODE ON: NO DAMAGE. DEV ALSO OPENS THE GATES THAT WANT A ROOM CLEARED.":"GOD MODE OFF.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
  else if(verb=="r_scale"){
   if(arg=="50"||arg=="75"||arg=="100"){m_renderScale=arg=="50"?.5f:arg=="75"?.75f:1.f;m_consoleLog.push_back("3D RENDER SCALE "+arg+" PERCENT. HUD STAYS FULL RESOLUTION.");}
