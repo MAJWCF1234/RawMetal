@@ -38,14 +38,17 @@ def main():
         path = os.path.join(folder, 'map-audit-%d.txt' % c['idx'])
         grid = reach_map(path) if os.path.exists(path) else None
         if grid is None: print('%d: no reach map' % c['idx']); bad += 1; continue
-        spots = os.path.join(folder, 'map-views-%d.txt' % c['idx'])
-        views = [tuple(map(float, l.split())) for l in open(spots) if l.strip()] if os.path.exists(spots) else []
+        with open(path, encoding='utf-8') as audit:
+            border = [(int(f[1]), int(f[2]), float(f[3]), f[4]) for line in audit if (f := line.split()) and f[0] == 'BORDER']
+        if not border:
+            print('%d: no height-aware BORDER records; regenerate audit' % c['idx']); bad += 1; continue
         for e in c['edges']:
-            marks = ''.join(grid[r][col] for r, col in tiles(e))
+            cells = set(tiles(e))
+            marks = ''.join(next((m for x, y, z, m in border if (y, x) == (r, col) and abs(z - e['z']) <= .45 and m == '.'), next((m for x, y, z, m in border if (y, x) == (r, col) and abs(z - e['z']) <= .45), 'o')) for r, col in tiles(e))
             ok = '.^c' if (c['idx'], e['side']) in CRAWLS else '.^'
             if not any(m in ok for m in marks):
                 print('%d %s: %s %g-%g z %g, border tiles "%s"' % (c['idx'], c['name'], e['side'], e['a'], e['b'], e['z'], marks)); bad += 1
-            low = sorted({round(z, 2) for x, y, z in views if (int(y), int(x)) in set(tiles(e)) and z < e['z'] - 1})
+            low = sorted({round(z, 2) for x, y, z, _ in border if (y, x) in cells and z < e['z'] - 1})
             if low:
                 print('%d %s: %s %g-%g z %g, pit under the edge at z %s' % (c['idx'], c['name'], e['side'], e['a'], e['b'], e['z'], low)); bad += 1
     print('edges ok' if not bad else '%d edge problems' % bad)
