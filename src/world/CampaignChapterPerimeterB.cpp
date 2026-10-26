@@ -766,10 +766,135 @@ std::shared_ptr<const Map> makeDecontamination(){
  freightFinish(m,-1);
  return p;
 }
-// ENERGY RESEARCH / FORECOURT (manifest 44)
-std::shared_ptr<const Map> makeEnergyResearchForecourt(){return placeholderChunk(66,{{'N',10.f,14.f,-16.f,true,0},{'S',2.f,22.f,-16.f,false,0}});}
-// ENERGY RESEARCH / GREAT DOOR (manifest 44)
-std::shared_ptr<const Map> makeEnergyResearchGreatDoor(){return placeholderChunk(67,{{'N',2.f,22.f,-16.f,false,0},{'S',9.f,15.f,-12.f,true,stateId("ere_great_door")}});}
+// ENERGY RESEARCH / FORECOURT (manifest 44). The first time the plant shows
+// what it was for. Out of the cleanroom into a hall twenty-four metres tall:
+// four concrete piers, the company's name in steel letters, and on a plinth
+// at the centre THE FIRST SAMPLE, the thing the whole company grew around,
+// lit like a relic. Visitors' benches, the reception desk, the film. The
+// Cleanup Force has turned it into a firing lane toward the great door.
+std::shared_ptr<const Map> makeEnergyResearchForecourt(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[66];m.definition=CampaignChunks[66];m.definition.ambient=.3f;
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceStone;m.ceilingSurface=SurfaceConcrete;
+ const float f=-16,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'N',10.f,14.f,-16.f,true,0});openEdge(m,{'S',2.f,22.f,-16.f,false,0});
+ pbSeamHeader(m,'N',10.f,14.f,f,2.65f,15);
+ // --- The entrance from Decontamination: a low portal into the tall hall -------------------------
+ for(float x:{8.6f,14.f})wall(m,x,1.f,x+1.4f,2.2f,f,f+3.6f,15);
+ wall(m,8.6f,1.f,15.4f,2.2f,f+2.65f,f+3.6f,15);
+ pbSign(m,12.f,2.255f,f+2.7f,"ENERGY RESEARCH","VISITORS ESCORTED AT ALL TIMES",2.6f,pbS,pbBlue);
+ // --- Four piers and the hall's ribs ----------------------------------------------------------
+ for(Vec2 c:{Vec2{5.f,7.f},Vec2{19.f,7.f},Vec2{5.f,17.f},Vec2{19.f,17.f}}){
+  wall(m,c.x-.8f,c.y-.8f,c.x+.8f,c.y+.8f,f,roof,15);
+  wall(m,c.x-.95f,c.y-.95f,c.x+.95f,c.y+.95f,f,f+.6f,33);
+  wall(m,c.x-.86f,c.y-.86f,c.x+.86f,c.y+.86f,f+6.f,f+6.25f,20);
+  m.lights.push_back(lamp({c.x,c.y-1.05f},f+.7f,1.6f,8.f,3000,0,WorldLightMount::Bare));pbLampHead(m,c.x,c.y-1.05f,f+.55f);}
+ for(float y:{7.f,17.f})wall(m,1.f,y-.3f,23.f,y+.3f,roof-1.2f,roof,15);
+ for(float x:{5.f,19.f})wall(m,x-.3f,1.f,x+.3f,24.f,roof-1.2f,roof,15);
+ // --- The company's name, high on the north wall ---------------------------------------------
+ wall(m,3.f,1.f,21.f,1.3f,f+9.f,f+11.6f,20);
+ pbSign(m,12.f,1.355f,f+9.4f,"DEPTHWORKS ENERGY RESEARCH","POWER FROM BELOW",16.f,pbS,pbBlue);
+ m.signs.back().height=2.f;
+ // --- THE FIRST SAMPLE on its plinth ---------------------------------------------------------
+ wall(m,10.4f,10.4f,13.6f,13.6f,f,f+.9f,33);wall(m,10.7f,10.7f,13.3f,13.3f,f+.9f,f+1.05f,20);
+ pbFix(m,model::lab_anomaly_relic,12.f,12.f,f+1.05f,1.5f,1.2f,1.2f,kPi*.25f,false);
+ wall(m,10.4f,13.6f,13.6f,13.66f,f+.25f,f+.75f,20);
+ pbSign(m,12.f,13.715f,f+.2f,"THE FIRST SAMPLE","RECOVERED 1979 / LEVEL 11 / THE REASON WE ARE HERE",3.f,pbS,pbAmber);
+ m.signs.back().height=.5f;
+ for(Vec2 l:{Vec2{12.f,10.f},Vec2{12.f,14.f}})m.lights.push_back(lamp(l,f+.35f,1.4f,5.f,6500,.1f,WorldLightMount::Bare));
+ m.lights.push_back(lamp({12.f,12.f},roof-1.5f,6.f,24.f,5600,0));
+ // --- Visitors: benches, the reception desk and the welcome film ------------------------------
+ for(float y:{5.f,9.f})for(float x:{1.6f,22.4f})pbFix(m,model::bench,x,y,f,1.86f,.44f,.63f,x<12?pbE:pbW,true);
+ pbFix(m,model::lab_exec_desk,7.8f,3.6f,f,2.2f,1.1f,.9f,pbS,true);
+ pbFix(m,model::lab_potted_plant,9.f,3.2f,f,.37f,.43f,.69f,0,false);pbFix(m,model::lab_potted_plant,3.f,3.f,f,.37f,.43f,.69f,0,false);
+ terminal(m,{16.2f,3.6f},"VISITOR CENTRE / WELCOME FILM","\"DEEP BENEATH YOUR FEET, A NEW KIND OF POWER WAITS.\" (03:12 RUNTIME)","\"DEPTHWORKS: WE GO DOWN SO THE WORLD CAN GO FORWARD.\"");
+ m.terminals.back().yaw=pbS;
+ terminal(m,{7.8f,4.6f},"RECEPTION / VISITOR LOG","LAST VISITOR: BOARD TOUR, 01:30. 6 GUESTS. SIGNED OUT: 0.","NOTE: TOUR HELD IN RESEARCH ADMINISTRATION BY ORDER 7.");
+ m.terminals.back().yaw=pbS;
+ // --- The firing lane: barriers the Cleanup Force dragged across the hall -------------------------
+ for(float x:{3.f,9.f,15.f,21.f})pbFix(m,model::ind_barrier_wall,x,20.6f,f,2.96f,.4f,2.05f,0,true);
+ for(Vec2 r:{Vec2{8.f,14.6f},Vec2{16.f,14.6f}})pbFix(m,model::road_block,r.x,r.y,f,1.6f,.5f,.7f,.3f,true);
+ pbBody(m,"ere_fore_clock",ActorVisual::Worker,{14.4f,16.8f},f,2.2f);pbBlood(m,13.8f,16.2f,15.2f,17.4f,f);
+ machineryClock(m,"ere_fore_clock",60000);
+ // A forward pair holding the hall; the squad proper waits at the door.
+ pbGuard(m,"ere_fore_clock","ere_fore_0",ActorVisual::Cleanup,GuardSquadRole::Assault,"ere_finale",
+  {{{6.5f,20.f},f,3500,pbN},{{6.5f,14.f},f,3000,pbN}},14,.5f,1,1.5f);
+ pbGuard(m,"ere_fore_clock","ere_fore_1",ActorVisual::CleanupRusher,GuardSquadRole::Rusher,"ere_finale",
+  {{{17.5f,20.f},f,3500,pbN},{{17.5f,13.f},f,3000,pbN}},12,.55f,1,1.7f);
+ m.pickupSpawns.push_back({{2.4f,12.f},PickupKind::Ammo,f});
+ m.pickupSpawns.push_back({{21.6f,12.f},PickupKind::Health,f});
+ // --- Light: high cold lamps, warm uplights on the piers -------------------------------------------
+ for(Vec2 l:{Vec2{12.f,4.f},Vec2{3.f,12.f},Vec2{21.f,12.f},Vec2{12.f,20.f}})m.lights.push_back(lamp(l,roof-1.5f,4.f,20.f,5200,.05f));
+ zone(m,"ENERGY RESEARCH / THE FIRST SAMPLE",9.f,9.f,15.f,15.f);
+ zone(m,"ENERGY RESEARCH / FORECOURT",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
+
+// ENERGY RESEARCH / GREAT DOOR (manifest 44). The chapter's end: a stair as
+// wide as the hall climbs four metres to a podium and the great blast door
+// of the research levels. The Cleanup Force's last squad on this side holds
+// the podium behind sandbags. When they are down, the door console answers.
+std::shared_ptr<const Map> makeEnergyResearchGreatDoor(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[67];m.definition=CampaignChunks[67];m.definition.ambient=.3f;
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceStone;m.ceilingSurface=SurfaceConcrete;
+ const float f=-16,top=-12,roof=m.definition.ceiling;
+ const StateId door=stateId("ere_great_door"),clear=stateId("ere_finale_clear");
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'N',2.f,22.f,-16.f,false,0});openEdge(m,{'S',9.f,15.f,-12.f,true,door});
+ // --- The great stair and the podium ----------------------------------------------------------
+ m.stairs.push_back({4.f,10.4f,20.f,16.f,f,top,20,true,true});
+ wall(m,1.f,16.f,23.f,23.f,f,top,15);
+ floorLine(m,4.f,15.85f,20.f,16.f,top,13);
+ for(float x:{3.6f,20.f})wall(m,x,10.4f,x+.4f,16.f,f,top+.9f,33);
+ // Lamps in the stair's cheek walls and along the podium edge: the climb is lit.
+ for(float y:{11.2f,13.2f,15.2f})for(float x:{4.05f,19.95f}){m.lights.push_back(lamp({x,y},f+(y-10.4f)*.71f+.9f,1.4f,6.f,2700,-.05f,WorldLightMount::Wall,x<12?0.f:kPi));}
+ for(float x:{6.f,10.f,14.f,18.f}){m.lights.push_back(lamp({x,16.25f},top+.15f,1.2f,5.f,3000,0,WorldLightMount::Bare));pbLampHead(m,x,16.3f,top);}
+ // --- Piers carried on from the forecourt ---------------------------------------------------
+ for(Vec2 c:{Vec2{5.f,6.f},Vec2{19.f,6.f}}){wall(m,c.x-.8f,c.y-.8f,c.x+.8f,c.y+.8f,f,roof,15);wall(m,c.x-.95f,c.y-.95f,c.x+.95f,c.y+.95f,f,f+.6f,33);}
+ for(float x:{5.f,19.f})wall(m,x-.3f,0.f,x+.3f,23.f,roof-1.2f,roof,15);
+ // --- The great door's frame and the lettering over it --------------------------------------------
+ for(float x:{7.f,15.f})wall(m,x,21.6f,x+2.f,23.f,top,top+9.f,7);
+ wall(m,7.f,21.6f,17.f,23.f,top+2.65f,top+9.f,7);
+ for(float z=top+3.f;z<top+8.6f;z+=.9f)wall(m,9.f,21.55f,15.f,21.6f,z,z+.1f,13);
+ pbSign(m,12.f,21.545f,top+6.6f,"ENERGY RESEARCH","POWER FROM BELOW / CLEARANCE 5 AND ABOVE",7.f,pbN,pbBlue);
+ m.signs.back().height=1.4f;
+ pbSign(m,12.f,21.545f,top+3.4f,"GREAT DOOR","OPENS ON LOCAL CONTROL ONLY",3.2f,pbN,pbRed);
+ // --- The squad's position on the podium --------------------------------------------------------
+ for(float x:{3.f,15.f}){wall(m,x,17.2f,x+6.f,17.8f,top,top+1.1f,23);wall(m,x+.02f,17.22f,x+5.98f,17.78f,top,top+1.08f,CollisionProxyMaterial);}
+ for(float x:{2.f,21.f}){wall(m,x,18.f,x+1.f,21.f,top,top+1.1f,23);}
+ for(Vec2 c:{Vec2{4.f,20.f},Vec2{20.f,20.f}})pbFix(m,model::ind_crate,c.x,c.y,top,.9f,.9f,.9f,.2f,true);
+ machineryClock(m,"ere_door_clock",60000);
+ pbGuard(m,"ere_door_clock","ere_door_0",ActorVisual::CleanupHeavy,GuardSquadRole::Heavy,"ere_finale",
+  {{{12.f,19.f},top,6000,pbN},{{9.f,19.f},top,4000,pbN}},16,.45f,1,1.2f,0,0,true,0,160);
+ pbGuard(m,"ere_door_clock","ere_door_1",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"ere_finale",
+  {{{4.5f,18.6f},top,5000,pbN},{{6.5f,18.6f},top,4000,pbN}},18,.45f,2,1.2f);
+ pbGuard(m,"ere_door_clock","ere_door_2",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"ere_finale",
+  {{{19.5f,18.6f},top,5000,pbN},{{17.5f,18.6f},top,4000,pbN}},18,.45f,2,1.2f);
+ pbGuard(m,"ere_door_clock","ere_door_3",ActorVisual::CleanupMedic,GuardSquadRole::Medic,"ere_finale",
+  {{{12.f,21.f},top,5000,pbN},{{14.f,20.6f},top,4000,pbN}},14,.5f,2,1.3f);
+ pbGuard(m,"ere_door_clock","ere_door_4",ActorVisual::Cleanup,GuardSquadRole::Assault,"ere_finale",
+  {{{8.f,8.f},f,4000,pbS},{{16.f,8.f},f,4000,pbS}},14,.5f,1,1.5f,0,0,false,2);
+ m.pickupSpawns.push_back({{2.f,4.f},PickupKind::Ammo,f});
+ m.pickupSpawns.push_back({{22.f,4.f},PickupKind::Health,f});
+ m.pickupSpawns.push_back({{6.4f,19.4f},PickupKind::Health,top});
+ // --- The door console: it answers once the squad is down --------------------------------------
+ {auto e=pbEvent("ere_finale_cleared",0,0,24,24,-100,100);e.requireEnemiesClear=true;e.actions={pbSet(clear),pbSave()};m.scriptEvents.push_back(e);}
+ terminal(m,{18.f,20.6f},"GREAT DOOR / LOCAL CONTROL","E / OPEN THE GREAT DOOR TO ENERGY RESEARCH.","LOCKED OUT WHILE THE CLEANUP DETAIL HOLDS THE PODIUM.",top-f,door,clear);
+ m.terminals.back().yaw=pbN;
+ {auto e=pbEvent("ere_great_door_opens",0,0,24,24,-100,100,door);e.actions={pbShake(.3f),pbSound(Sound::LiftCreak,.8f),pbSave()};m.scriptEvents.push_back(e);}
+ // --- Light: the door lit from below, the hall from above ----------------------------------------
+ for(float x:{9.5f,14.5f}){m.lights.push_back(lamp({x,20.6f},top+.4f,2.2f,9.f,2400,-.1f,WorldLightMount::Bare));pbLampHead(m,x,20.6f,top+.25f);}
+ for(Vec2 l:{Vec2{12.f,4.f},Vec2{4.f,12.f},Vec2{20.f,12.f},Vec2{12.f,18.f}})m.lights.push_back(lamp(l,roof-1.5f,4.f,20.f,5200,.05f));
+ m.lights.push_back(pbSwitched(lamp({12.f,21.f},top+2.4f,3.f,10.f,1200,-.4f,WorldLightMount::Bare),door,true));
+ m.lights.push_back(pbSwitched(lamp({12.f,21.f},top+2.4f,3.f,10.f,6500,.3f,WorldLightMount::Bare),door));
+ zone(m,"ENERGY RESEARCH / GREAT DOOR",0,16,24,24,top-.5f,1000);
+ zone(m,"ENERGY RESEARCH / FORECOURT",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
 }
 void buildChapterPerimeterB(CampaignMapTable& maps){
  maps[63]=makeRestrictedUtilities();
