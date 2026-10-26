@@ -314,6 +314,7 @@ public:
     static bool testGuardTable();
     static bool testNavGraph();
     static bool testCreatureSchedule();
+    static bool testCreatureBehaviour();
     static bool testCivilianSchedule();
     static Game squadSupportInspection(int stage=0);
     static Game guardDangerInspection(int stage=0);
