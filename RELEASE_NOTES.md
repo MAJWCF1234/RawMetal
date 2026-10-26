@@ -4,6 +4,48 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.13.0 - Chapter 1 complete, and a VR overhaul (2026-10-26)
+
+Chapter 1 now runs end to end, from the Power Distribution black start to the
+great door of Energy Research, with no placeholder rooms left. VR has been
+rebuilt around proper hands and an Alyx-style interface.
+
+- **Chapter 1 finished.** Water and Cooling (treatment hall, drainage gallery,
+  sump works, cooling tower basin and shell, heat exchange); the Ventilation
+  Works and the Air Handling crawlspaces; the Fabrication Shop shutter puzzle
+  and the Aid Station; the Restricted Perimeter's gatehouse, Checkpoint Delta,
+  Administrative Link and Personnel Transit; and the finale at the Energy
+  Research forecourt and great door.
+- **Area titles instead of signs.** The first time you enter a major area its
+  name fades in across the top, Half-Life 2 style, with a sting. About 300
+  room-name and equipment-label signs are gone, and doors no longer carry
+  area-name plates. What signage remains warns of hazards, explains locked
+  doors or tells part of the story.
+- **Darkness and power.** Lamps switch with the plant's power state, and some
+  areas are truly dark until you restore it.
+- **Fixes.** Personnel Transit's entrance no longer needs a crouch, a
+  subtitle no longer sticks on screen two rooms away, and dozens of floating
+  or buried props are seated.
+- **VR: hands and shotgun.** Hands sit where they really are on Quest, Index
+  or Vive controllers, using SteamVR finger tracking. The shotgun sits in
+  your fist and aims where its barrel points. With your left hand on the
+  pump, slide it back and forward after each shot; one-handed it cycles
+  itself. A reload chambers a round.
+- **VR: Alyx-style interface.** No wrist tablet. Health shows on your left
+  hand, the load and LOADING on the gun, and area titles, subtitles and new
+  objectives float in front of you. Menus, inventory and terminals open on a
+  floating panel you point at with the right controller.
+- **VR: controls and comfort.** Jump right A, reload right B, crouch toggle
+  left X, menu left Y, inventory right stick click. Walking speed follows how
+  far you push the stick, and smooth turning is quicker with fine control
+  near the centre.
+- **VR: frame rate roughly doubled.** The second eye reuses the first eye's
+  scene and shadows, and VR renders with 2x MSAA.
+- **Developer mode.** Start with `--dev` (or type DEV in the console) for no
+  damage, no creatures and every door open.
+
+---
+
 ## v0.12.1 - Graphics fix for PCs without Resizable BAR (2026-10-25)
 
 - **No more PS1-looking fallback.** On graphics cards or PCs without
