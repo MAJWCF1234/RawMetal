@@ -2740,10 +2740,14 @@ std::shared_ptr<const Map> makeDepotInspectionPits(){
  board(m,5.f,4.6f,bed+2.f,"LINE 1 CLOSED","DEPOT LOCKDOWN / NO MOVEMENTS",2.6f);
  // --- Line 2 over the inspection pit: Engine 02 on its jacks ------------------------------------
  for(float x:{18.f,19.6f})wall(m,x,3.f,x+.4f,19.f,base,bed,15);
+ // Closed at both ends, as a pit is (nothing under the beds is a place to be), with
+ // its steps at the south end: down them to work under the engine, up them to get out.
+ wall(m,18.f,2.85f,20.f,3.f,base,bed,15);wall(m,18.f,19.f,20.f,19.15f,base,bed,15);
+ m.stairs.push_back({18.4f,14.5f,19.6f,19.f,base,bed,16,true,true});
  for(float x:{18.f,19.f})for(int y=3;y<19;++y)rectangle(m.layers[1],int(x),y,int(x)+1,y+1,'.');
  locomotive(m,19.f,6.f,bed,true);
  for(float x:{17.4f,20.6f})for(float y:{6.6f,12.4f}){wall(m,x-.2f,y-.2f,x+.2f,y+.2f,bed,bed+.1f,8);wall(m,x-.07f,y-.07f,x+.07f,y+.07f,bed+.1f,bed+.72f,18);}
- for(float y:{5.f,9.f,13.f,17.f})wallLamp(m,18.42f,y,base+1.6f,0,1.f,4.f);
+ for(float y:{5.f,9.f,13.f})wallLamp(m,18.42f,y,base+1.6f,0,1.f,4.f); // the steps take the deck's light
  board(m,21.6f,2.4f,bed+2.f,"INSPECTION PIT","JACKS ENGAGED / DO NOT LOWER",2.f);
  // --- The tool bay ---------------------------------------------------------------------------
  for(float y:{6.f,10.f})m.fixtures.push_back({19,{22.2f,y},bed-base,1.367f,.724f,.78f,kPi*.5f,true});

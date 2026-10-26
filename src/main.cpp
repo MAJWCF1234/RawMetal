@@ -46,15 +46,6 @@ struct CommandArguments {
  bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
 };
 static const CommandArguments& commandArguments(){static const CommandArguments args;return args;}
-// Append diagnostic exceptions even when a test returns early.
-struct ValidationWarningReport {
- std::string path;
- ValidationWarningReport(){const auto& args=commandArguments();bool automated=args.automated();_putenv_s("RAWMETAL_VALIDATION_WARNINGS",automated?"1":"");if(!automated)return;std::ofstream("map-validation-warnings.txt");
-  if(auto arg=args.find(L"--map-audit="))path="map-audit-"+std::to_string(_wtoi(arg+12))+".txt";
-  else for(auto name:{"each-test","smoke-test","chapter-route-test","world-isolation-test","exclusion-test","exclusion-authoring-test","prologue-test","content-integrity-test"}){std::wstring flag=L"--";flag.append(name,name+std::strlen(name));if(args.find(flag)){path=std::string(name)+".txt";break;}}
- }
- ~ValidationWarningReport(){if(path.empty())return;std::ifstream warnings("map-validation-warnings.txt");std::string text((std::istreambuf_iterator<char>(warnings)),{});if(!text.empty())std::ofstream(path,std::ios::app)<<text;}
-};
 static void applyRenderSwitches(bool withoutPost=false,bool withoutPixel=false){
  const auto& args=commandArguments();
  retro::SoftwareRenderer::setPostProcessing(!args.find(L"--nopost")&&(args.find(L"--post-ao")||!withoutPost),args.find(L"--post-ao")!=nullptr);
@@ -621,7 +612,6 @@ static bool loadValidationTest(){
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     SetUnhandledExceptionFilter(writeCrashReport);
     try {
-    ValidationWarningReport validationWarnings;
     retro::TerrainSurfaceCache::enabled=commandArguments().find(L"--uncached-terrain-surfaces")==nullptr;
     retro::MinimapCache::enabled=commandArguments().find(L"--uncached-minimap")==nullptr;
     // Keep renderer storage on the heap throughout this entry point. The

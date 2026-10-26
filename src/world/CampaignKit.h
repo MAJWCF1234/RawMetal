@@ -22,7 +22,7 @@ inline AuthoredLayerData floorLayer(const char* name,float z,bool openNorth=fals
  if(!openSouth)rectangle(layer,0,23,24,24,'#');
  return layer;
 }
-inline void wall(Map& m,float x1,float y1,float x2,float y2,float lo,float hi,int material=2){m.structures.push_back({x1,y1,x2,y2,lo,hi,false,material});}
+inline void wall(Map& m,float x1,float y1,float x2,float y2,float lo,float hi,int material=2){m.structures.push_back({std::min(x1,x2),std::min(y1,y2),std::max(x1,x2),std::max(y1,y2),std::min(lo,hi),std::max(lo,hi),false,material});}
 inline void cargo(Map& m,float x,float y,float floor,bool loaded=true,float yaw=0){
  m.fixtures.push_back({15,{x,y},floor-m.layers.front().elevation,1.2f,1.15f,.16f,yaw,true});
  if(loaded)m.fixtures.push_back({17,{x,y},floor+.16f-m.layers.front().elevation,1.1f,1.f,.99f,yaw,true});

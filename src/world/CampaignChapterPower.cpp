@@ -497,7 +497,7 @@ std::shared_ptr<const Map> makeCableTrench(){
  for(float x=2.f;x<13.5f;x+=2.5f)m.fixtures.push_back({model::pwr_cable_bundle,{x,18.82f},.8f,2.4f,.14f,.22f,0,false});
  // Duckboards on the walk.
  for(float x=1.2f;x<13.8f;x+=.9f)wall(m,x,16.9f,x+.8f,18.1f,base,base+.05f,10);
- for(float y=19.2f;y<23.8f;y+=.9f)wall(m,15.f,y,17.f,y+.8f,base,base+.05f,10);
+ for(float y=19.2f;y+.8f<=24.f;y+=.9f)wall(m,15.f,y,17.f,y+.8f,base,base+.05f,10); // the last cover stops at the seam
  // --- The crawl: the duct bank drops across the walk ------------------------------------------------
  wall(m,8.5f,16.f,11.f,19.f,base+1.05f,roof,8);
  wallSign(m,8.445f,17.5f,base+1.12f,"DUCT BANK 4","LOW HEADROOM / CRAWL",1.2f,-kPi*.5f);

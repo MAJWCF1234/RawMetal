@@ -267,9 +267,9 @@ void Game::updateEnemies(float dt){
      if(spotted){e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=2.f;fading=true;}
      else if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Flank;e.stalkSide=-e.stalkSide;}
     }
-    if(fading)goal=hidingSpot(goal);
+    if(fading){Vec2 spot=hidingSpot(e.pos);if(lengthSq(spot-e.pos)<.01f)watching=true;else goal=spot;} // nowhere to go: it holds
     else if(e.stalkMode==Enemy::StalkMode::Flank&&visible&&dist>2.4f&&sameLevel)goal=flankPoint(2.2f,1.6f,goal);
-    watching=e.stalkMode==Enemy::StalkMode::Watch;
+    watching=watching||e.stalkMode==Enemy::StalkMode::Watch;
     stalkSpeed=fading?2.2f:traits.speed;
    }else stalkSpeed=traits.speed;
   }

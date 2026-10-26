@@ -111,13 +111,13 @@ bool Game::auditMap(int level){
   const float radius=(s.kind==CreatureKind::Wasp||s.kind==CreatureKind::Huntsman)?.2f:.35f;
   name+=" radius="+std::to_string(radius)+" top="+std::to_string(z+traits.top);
   auto intersects=[&](float x,float y,float hx,float hy){float dx=std::max(std::fabs(x)-hx,0.f),dy=std::max(std::fabs(y)-hy,0.f);return dx*dx+dy*dy<radius*radius;};
-  for(size_t j=0;j<w.structures().size();++j){const auto& v=w.structures()[j];if(v.top<=z+.01f||v.bottom>=z+traits.top)continue;
+  for(size_t j=0;j<w.structures().size();++j){const auto& v=w.structures()[j];if(v.top<=z+traits.step||v.bottom>=z+traits.top)continue; // a plate or kerb under its feet is a step, not a wall
    if(intersects(s.position.x-(v.x1+v.x2)*.5f,s.position.y-(v.y1+v.y2)*.5f,(v.x2-v.x1)*.5f,(v.y2-v.y1)*.5f))fail("HULL INTERSECTION "+name+" structure["+std::to_string(j)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
   for(size_t j=0;j<w.fixtures().size();++j){const auto& f=w.fixtures()[j];if(!f.solid||f.core<=0)continue;float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(base+f.height<=z+.01f||base>=z+traits.top)continue;
    float dx=s.position.x-f.position.x,dy=s.position.y-f.position.y,c=std::cos(f.yaw),sn=std::sin(f.yaw);
    if(intersects(dx*c-dy*sn,dx*sn+dy*c,f.width*f.core*.5f,f.depth*f.core*.5f))fail("HULL INTERSECTION "+name+" fixture["+std::to_string(j)+"] base/height "+std::to_string(base)+"/"+std::to_string(f.height)+" position "+at(f.position)+" width/depth/core/yaw "+std::to_string(f.width)+"/"+std::to_string(f.depth)+"/"+std::to_string(f.core)+"/"+std::to_string(f.yaw));}
  }
- for(size_t i=0;i<w.structures().size();++i){const auto& v=w.structures()[i];if(v.x1<0||v.y1<0||v.x2>24||v.y2>24)fail("OUTSIDE CHUNK structure["+std::to_string(i)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
+ for(size_t i=0;i<w.structures().size();++i){const auto& v=w.structures()[i];if(v.x1<-.15f||v.y1<-.15f||v.x2>24.15f||v.y2>24.15f)fail("OUTSIDE CHUNK structure["+std::to_string(i)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
  // Tile decks occupy exactly one cell inside the fixed 24 by 24 layer; their
  // parser/load checks already reject rows of any other width.
  for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":"health")+" at "+at(s.position);
