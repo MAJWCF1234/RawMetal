@@ -32,10 +32,19 @@ add_executable(RawMetalHazmatImport EXCLUDE_FROM_ALL tools/import_hazmat.cpp Thi
 set_target_properties(RawMetalHazmatImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 set_target_properties(RawMetalCreatureBake PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
 set_target_properties(RawMetalClutterImport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
-file(GLOB_RECURSE RAWMETAL_ASSETS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
-# Dangling optional asset-directory links are returned as entries by the glob.
-# They are not resource files and otherwise force a full repack on every build.
-list(FILTER RAWMETAL_ASSETS EXCLUDE REGEX "/assets/(library|facility/freight)$")
+# The packer's inputs and outputs come from the manifest itself: every file
+# assets.rc names (wherever it lives, junctioned library folders included) and
+# the .rmz it becomes. A glob cannot see through the worktrees' junctions, so
+# an edited library asset was never repacked, and a deleted .rmz was never
+# rebuilt; both now rerun the packer.
+set(RAWMETAL_ASSETS)
+set(RAWMETAL_RMZ)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/assets.rc" RAWMETAL_MANIFEST_LINES REGEX "^[0-9]+[ 	]+[A-Za-z]+[ 	]+\"")
+foreach(RAWMETAL_LINE IN LISTS RAWMETAL_MANIFEST_LINES)
+    string(REGEX MATCH "^([0-9]+)[ 	]+[A-Za-z]+[ 	]+\"([^\"]+)\"" RAWMETAL_MATCH "${RAWMETAL_LINE}")
+    list(APPEND RAWMETAL_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_MATCH_2}")
+    list(APPEND RAWMETAL_RMZ "${CMAKE_BINARY_DIR}/packed/${CMAKE_MATCH_1}.rmz")
+endforeach()
 get_filename_component(RAWMETAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/packed")
 # Mirror the manifest into the build tree. configure_file tracks assets.rc by
@@ -44,7 +53,7 @@ file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/packed")
 set(RAWMETAL_ASSET_MANIFEST_DEP "${CMAKE_BINARY_DIR}/packed/assets-manifest.rc")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/assets.rc" "${RAWMETAL_ASSET_MANIFEST_DEP}" COPYONLY)
 set(RAWMETAL_PACKED_RC "${CMAKE_BINARY_DIR}/packed/assets-packed.rc")
-add_custom_command(OUTPUT "${RAWMETAL_PACKED_RC}"
+add_custom_command(OUTPUT "${RAWMETAL_PACKED_RC}" ${RAWMETAL_RMZ}
     COMMAND $<TARGET_FILE:RawMetalAssetPacker> "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/packed" "${CMAKE_BINARY_DIR}/packed/unused-bundle.bin"
     DEPENDS RawMetalAssetPacker "${RAWMETAL_ASSET_MANIFEST_DEP}" ${RAWMETAL_ASSETS}
     COMMENT "Losslessly packing embedded assets" VERBATIM)

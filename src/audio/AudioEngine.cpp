@@ -110,14 +110,21 @@ AudioEngine::~AudioEngine(){
  if(m_wake)CloseHandle(m_wake);
 }
 void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
+ // Authored cues reach here unvalidated: a non-finite or non-positive pitch
+ // would never finish (or read backwards), a wild gain would clip everything.
+ if(!std::isfinite(event.gain)||!std::isfinite(event.pitch)||event.pitch<=0||event.gain<=0)return;
  if(event.speech>=0){if(size_t(event.speech)>=m_speech.size()||!event.speaker)return;
   std::erase_if(m_voices,[&](const auto&voice){return voice.speech>=0&&voice.speaker==event.speaker;});
   if(std::count_if(m_voices.begin(),m_voices.end(),[](const auto&v){return v.speech>=0;})>=2){
    auto victim=m_voices.end();for(auto it=m_voices.begin();it!=m_voices.end();++it)if(it->speech>=0&&(victim==m_voices.end()||it->speechPriority<victim->speechPriority))victim=it;
    if(victim!=m_voices.end()){if(victim->speechPriority>event.speechPriority)return;m_voices.erase(victim);}}
  }
- if(m_voices.size()>=48){auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop;});if(voice!=m_voices.end())m_voices.erase(voice);else return;}
- m_voices.push_back({event.sound,0,event.gain,event.pitch,1,1,event.position,event.spatial,loop,emitter});
+ if(m_voices.size()>=48){
+  // Full: the oldest ordinary one-shot makes room; speech only yields to more important speech.
+  auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop&&v.speech<0;});
+  if(voice==m_voices.end()&&event.speech>=0)voice=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return !v.loop&&v.speechPriority<event.speechPriority;});
+  if(voice==m_voices.end())return;m_voices.erase(voice);}
+ m_voices.push_back({event.sound,0,std::min(event.gain,4.f),std::clamp(event.pitch,.05f,4.f),1,1,event.position,event.spatial,loop,emitter});
  m_voices.back().radius=std::max(.1f,event.radius);
  m_voices.back().z=event.z;
  m_voices.back().speech=event.speech;m_voices.back().speaker=event.speaker;m_voices.back().speechPriority=event.speechPriority;
@@ -187,9 +194,12 @@ void AudioEngine::update(const Game& game,bool focused){
   if(it==m_voices.end()){play({sound,pos,gain,1,true,17,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;}
  };
  std::erase_if(m_voices,[&](auto&v){int level=int((std::uint64_t(v.emitter)>>32)&0xffffu);return v.emitter>0&&!game.chunkResident(level);});
+ // Wing loops are keyed by a wasp's place in its chunk's list; one that crosses a
+ // seam leaves that list, so loops not refreshed this update are dropped below.
+ std::vector<std::int64_t> wings;
  for(int level=0;level<game.chunkCount();++level){if(!game.chunkResident(level))continue;const auto&world=game.chunkWorld(level);const auto&enemies=game.chunkEnemies(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
   for(size_t i=0;i<enemies.size();++i){auto&e=enemies[i];auto id=ambientEmitter(AmbientKind::Wings,level,i);
-   if(e.alive&&e.kind==Enemy::Kind::Wasp)loop(id,Sound::Wings,e.pos+shift,.3f,e.z+.8f);else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
+   if(e.alive&&e.kind==Enemy::Kind::Wasp){loop(id,Sound::Wings,e.pos+shift,.3f,e.z+.8f);wings.push_back(id);}else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
   }
   float machineGain=.30f;if(world.hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
   size_t index=0;for(auto emitter:world.machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
@@ -205,6 +215,7 @@ void AudioEngine::update(const Game& game,bool focused){
     if(hazard.kind==Hazard::Kind::Fire)loop(ambientEmitter(AmbientKind::Fire,level,fires++),Sound::FireCrackle,centre,.55f,hazard.bottom+.4f);
     else if(hazard.kind==Hazard::Kind::Anomaly)loop(ambientEmitter(AmbientKind::Anomaly,level,anomalies++),Sound::AnomalyHum,centre,.4f,hazard.bottom+1.f);}}
  }
+ std::erase_if(m_voices,[&](const auto&v){return v.loop&&v.sound==Sound::Wings&&v.emitter>0&&std::find(wings.begin(),wings.end(),v.emitter)==wings.end();});
  // Zone beds follow the ground under the player: wind always, louder on the
  // high cordon; birds in woods and meadows; crickets in the open; all silent
  // outside the zone.
@@ -250,6 +261,8 @@ void AudioEngine::mix(int16_t* output,size_t frames){
    v.cursor+=v.pitch;
    if(v.loop&&seamlessLoop(v.sound)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
+  // One non-finite sample would poison the underwater filter for good: drop it.
+  if(!std::isfinite(left)||!std::isfinite(right)){left=right=0;m_underwaterLeft=m_underwaterRight=0;}
   m_master+=(m_targetMaster-m_master)*.002f;
   m_submerged+=(m_submergedTarget-m_submerged)*.0006f;
   m_underwaterLeft+=(left-m_underwaterLeft)*.055f;

@@ -15,6 +15,10 @@ enum class Sound {
  // The sting under an area title card.
  AreaTitle, Count
 };
+// AudioEngine maps every sound from ZoneWind on to consecutive library resources
+// and AreaTitle to its own: a sound appended after AreaTitle needs its resource
+// mapped there explicitly, or it would load an unrelated file.
+static_assert(int(Sound::Count)==int(Sound::AreaTitle)+1,"map the new sound's resource in AudioEngine");
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}
 // A finite z captures the emission origin even when the player's own sound is

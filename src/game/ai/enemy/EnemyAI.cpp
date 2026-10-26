@@ -182,7 +182,9 @@ void Game::updateEnemies(float dt){
    // Catch it trying to circle you and it stops rather than cartoonishly
    // continuing the flank in full view.
    if(observed&&e.stalkMode==Enemy::StalkMode::Flank&&dist>2.6f){
-    e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=std::max(e.stalkTimer,.65f);
+    // One that does not freeze under a gaze charges instead.
+    if(traits.freezesWatched){e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=std::max(e.stalkTimer,.65f);}
+    else{e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=1.65f;enemySound(e,1,.65f,.9f);}
    }
 
    // Hurt badly, it breaks contact: slips to the nearest spot the player
@@ -205,7 +207,7 @@ void Game::updateEnemies(float dt){
     if(e.stalkMode!=Enemy::StalkMode::Rush&&emergencyRush){
      e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=1.65f;enemySound(e,1,.65f,.9f);
     }else if(e.stalkMode==Enemy::StalkMode::Watch){
-     if(observed&&dist>2.2f)e.stalkTimer=std::max(e.stalkTimer,.25f);
+     if(traits.freezesWatched&&observed&&dist>2.2f)e.stalkTimer=std::max(e.stalkTimer,.25f);
      else if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Flank;e.stalkTimer=2.25f;e.stalkSide=-e.stalkSide;}
     }else if(e.stalkMode==Enemy::StalkMode::Flank&&e.stalkTimer<=0){
      e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=1.65f;enemySound(e,1,.65f,.9f);
@@ -229,7 +231,7 @@ void Game::updateEnemies(float dt){
 
    // Watching is deliberately unnerving: if the player has it in clear view,
    // it holds position. Looking away gives it permission to creep/flank.
-   watching=observed&&e.awareness>0&&e.stalkMode==Enemy::StalkMode::Watch&&dist>2.f&&dist<9.5f;
+   watching=traits.freezesWatched&&observed&&e.awareness>0&&e.stalkMode==Enemy::StalkMode::Watch&&dist>2.f&&dist<9.5f;
    stalkSpeed=pace*(e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Retreat?2.6f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f);
 
    // Search the last witnessed area; never sample the hidden player's new position.
