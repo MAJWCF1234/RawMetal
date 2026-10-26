@@ -800,11 +800,17 @@ std::shared_ptr<const Map> makeEnergyResearchGreatDoor(){
  // --- The great stair and the podium ----------------------------------------------------------
  m.stairs.push_back({4.f,10.4f,20.f,16.f,f,top,20,true,true});
  wall(m,1.f,16.f,23.f,23.f,f,top,15);
+ // The podium runs on under the door's threshold: the opened edge row is not a pit.
+ wall(m,9.f,23.f,15.f,24.f,f,top,15);
  floorLine(m,4.f,15.85f,20.f,16.f,top,13);
  for(float x:{3.6f,20.f})wall(m,x,10.4f,x+.4f,16.f,f,top+.9f,33);
  // Lamps in the stair's cheek walls and along the podium edge: the climb is lit.
  for(float y:{11.2f,13.2f,15.2f})for(float x:{4.05f,19.95f}){m.lights.push_back(lamp({x,y},f+(y-10.4f)*.71f+.9f,1.4f,6.f,2700,-.05f,WorldLightMount::Wall,x<12?0.f:kPi));}
  for(float x:{6.f,10.f,14.f,18.f}){m.lights.push_back(lamp({x,16.25f},top+.15f,1.2f,5.f,3000,0,WorldLightMount::Bare));pbLampHead(m,x,16.3f,top);}
+ // Uplights recessed in the forecourt floor wash the risers, so the whole
+ // flight reads from the court and not only its cheeks.
+ for(float x:{6.f,9.f,12.f,15.f,18.f}){m.lights.push_back(lamp({x,10.05f},f+.18f,1.6f,7.f,2700,-.05f,WorldLightMount::Bare));
+  wall(m,x-.16f,9.92f,x+.16f,10.18f,f,f+.04f,20);wall(m,x-.11f,9.97f,x+.11f,10.13f,f+.04f,f+.05f,17);}
  // --- Piers carried on from the forecourt ---------------------------------------------------
  for(Vec2 c:{Vec2{5.f,6.f},Vec2{19.f,6.f}}){wall(m,c.x-.8f,c.y-.8f,c.x+.8f,c.y+.8f,f,roof,15);wall(m,c.x-.95f,c.y-.95f,c.x+.95f,c.y+.95f,f,f+.6f,33);}
  for(float x:{5.f,19.f})wall(m,x-.3f,0.f,x+.3f,23.f,roof-1.2f,roof,15);

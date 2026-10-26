@@ -625,14 +625,20 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(auto arg=std::wcsstr(commandLine,L"--map-shots=")){
      // Many inspection frames: each line "name level x y feet yaw(deg) pitch".
      // An optional trailing "fire N" fires the gun once and advances N frames;
-     // "wait N" just advances N frames (title cards, timed sequences).
-     std::ifstream list(std::filesystem::path(arg+12));std::string line;
+     // "wait N" just advances N frames (title cards, timed sequences);
+     // "set a,b,c" switches those states on first (powered plant, solved puzzles).
+     // --clean-shots leaves out the hands and HUD.
+     std::wstring listPath(arg+12);listPath=listPath.substr(0,listPath.find(L' '));std::ifstream list{std::filesystem::path(listPath)};std::string line;
      auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     renderer->setEnvironmentInspection(std::wcsstr(commandLine,L"--clean-shots")!=nullptr);
      std::filesystem::create_directories(".build/shot");
      while(std::getline(list,line)){
       std::istringstream fields(line);std::string name,action;int level=0,frames=0;float x=0,y=0,z=0,yaw=0,pitch=0;
-      if(!(fields>>name>>level>>x>>y>>z>>yaw>>pitch))continue;fields>>action>>frames;
+      if(!(fields>>name>>level>>x>>y>>z>>yaw>>pitch))continue;fields>>action;
       auto scene=retro::Game::mapInspection({x,y},yaw*retro::kPi/180.f,pitch,level,true,z,true);
+      if(action=="set"){std::string states;fields>>states;std::istringstream each(states);std::string state;
+       while(std::getline(each,state,','))scene.setState(retro::stateId(state));action="wait";frames=2;}
+      else fields>>frames;
       if(action=="fire"){retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       else{scene.stowWeapon();if(action=="wait")for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       renderer->render(scene);

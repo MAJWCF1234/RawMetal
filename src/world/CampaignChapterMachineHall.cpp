@@ -759,15 +759,15 @@ std::shared_ptr<const Map> makeVentilationWorks(){
  wall(m,14.f,0.f,18.f,1.f,f+3.f,roof,15);
  wallBays(m,f,roof,4.f,true,false,false,true,16.f);
  // --- The supply main: a walk-through duct from the hall to the west wall ----------------------
- // Panel-steel shell 4.4 m wide and 2.6 m high with stiffener ribs; the
+ // Galvanized shell 4.4 m wide and 2.6 m high with stiffener ribs; the
  // access hatch is in its south face at the east end.
- wall(m,0.f,3.6f,11.f,3.8f,f,dz,2);wall(m,0.f,8.2f,9.f,8.4f,f,dz,2);
- wall(m,0.f,3.6f,11.f,8.4f,dz,dz+.2f,2);
- wall(m,10.8f,3.8f,11.f,8.4f,f,dz,2);
+ wall(m,0.f,3.6f,11.f,3.8f,f,dz,20);wall(m,0.f,8.2f,9.f,8.4f,f,dz,20);
+ wall(m,0.f,3.6f,11.f,8.4f,dz,dz+.2f,20);
+ wall(m,10.8f,3.8f,11.f,8.4f,f,dz,20);
  for(float x=1.5f;x<10.5f;x+=1.5f){wall(m,x,3.5f,x+.08f,8.5f,dz+.2f,dz+.3f,8);
   for(float y:{3.5f,8.4f})wall(m,x,y,x+.08f,y+.1f,f,dz+.2f,8);}
  for(float x=2.f;x<10.f;x+=1.f)wall(m,x,5.6f,x+.5f,6.4f,f,f+.02f,8);
- wall(m,9.f,8.2f,10.8f,8.4f,f+2.f,dz,2);
+ wall(m,9.f,8.2f,10.8f,8.4f,f+2.f,dz,20);
  mhFix(m,model::pwr_vent_grille,9.9f,8.45f,f+2.05f,.82f,.04f,.5f,0,false);
  wallSign(m,7.6f,8.455f,f+1.5f,"DANGER / SUPPLY MAIN","LOCK OUT FAN 2 BEFORE ENTRY",1.6f,0);
  mhLamp(m,{5.f,6.f},dz-.1f,.8f,5.f,3400,0);
@@ -783,17 +783,17 @@ std::shared_ptr<const Map> makeVentilationWorks(){
  }
  // The header under the roof: a branch over the risers, the main west to the
  // supply main, and its drop onto the main's roof. Rods carry it.
- wall(m,18.7f,5.2f,20.1f,19.25f,hd,ht,2);
- wall(m,9.4f,5.2f,20.1f,6.8f,hd,ht,2);
- wall(m,9.4f,5.2f,10.8f,6.8f,dz+.2f,hd,2);
+ wall(m,18.7f,5.2f,20.1f,19.25f,hd,ht,20);
+ wall(m,9.4f,5.2f,20.1f,6.8f,hd,ht,20);
+ wall(m,9.4f,5.2f,10.8f,6.8f,dz+.2f,hd,20);
  for(float x=12.f;x<19.f;x+=3.f)for(float y:{5.3f,6.7f})m.pipes.push_back({{x,y},{x,y},ht,.02f,roof,6});
  for(float y=9.f;y<19.f;y+=3.f)for(float x:{18.8f,20.f})m.pipes.push_back({{x,y},{x,y},ht,.02f,roof,6});
  // --- The scrubber plant along the south wall ----------------------------------------------------
  // Five air-handling units on a pad, their collector over them and its riser.
  equipmentPad(m,1.2f,21.7f,11.8f,23.f,f);
  for(int i=0;i<5;++i)mhFix(m,model::pwr_air_handler,2.f+i*2.2f,22.4f,f+.1f,.93f,1.89f,3.01f,kPi*.5f,true);
- wall(m,1.f,21.6f,11.8f,23.f,f+3.2f,f+4.3f,2);
- wall(m,1.f,21.6f,2.4f,23.f,f+4.3f,roof,2);
+ wall(m,1.f,21.6f,11.8f,23.f,f+3.2f,f+4.3f,20);
+ wall(m,1.f,21.6f,2.4f,23.f,f+4.3f,roof,20);
  // --- The fan control desk ------------------------------------------------------------------------
  mhFix(m,model::pwr_control_cabinet,21.6f,3.f,f,.8f,.4f,1.6f,-kPi*.5f,true);
  mhTerminal(m,{20.f,4.2f},f,kPi*.5f,"VENT WORKS / FAN CONTROL","FAN 1 RUNNING ON BOARD 9-14 SUPPLY. FAN 2 STANDBY.","EXHAUST ON MANUAL SINCE 23:58. AIR HANDLING: WEST, THROUGH THE MAIN.");

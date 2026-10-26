@@ -602,6 +602,28 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  wall(m,10.f,6.f,23.f,17.f,top,top+.25f,15);
  perFinish(m,10.2f,6.2f,23.f,16.8f,f,24);
  perCamera(m,10.f,16.6f,f+3.f,-1,0);
+ // --- Behind the gatehouse: its services on the north face, the detail's smoking spot on the south ----
+ // North: the supply cabinet, conduit along the wall to two condensers on a
+ // pad, a bulkhead over them and a generator parked against the yard wall.
+ perFix(m,model::electrical_cabinet,11.6f,5.73f,f,.9066f,.4956f,2.2f,0,true);
+ m.pipes.push_back({{11.6f,5.96f},{11.6f,5.96f},f+2.2f,.035f,f+2.9f,6});
+ m.pipes.push_back({{11.6f,5.96f},{21.4f,5.96f},f+2.9f,.035f,f+2.9f,6});
+ for(float x:{15.f,19.4f}){
+  m.pipes.push_back({{x,5.96f},{x,5.96f},f+1.1f,.03f,f+2.9f,6});
+  wall(m,x-1.1f,4.55f,x+1.1f,5.95f,f,f+.12f,15);
+  perFix(m,model::compressor,x,5.2f,f+.12f,1.8f,1.05f,.9f,0,true);
+ }
+ m.lights.push_back(lamp({17.2f,5.98f},f+2.6f,.9f,6.f,2400,-.1f,WorldLightMount::Wall,-kPi*.5f));
+ perFix(m,model::mine_portable_generator,20.2f,1.9f,f,.87f,1.04f,.82f,.25f,true);
+ for(float x:{22.2f,22.6f})perFix(m,model::gas_cylinder,x,1.45f,f,.33f,.33f,1.58f,0,true);
+ // South: a bench against the wall, a sand bucket of butts, the bins and a
+ // stack of empties waiting for a run that never came.
+ perFix(m,model::bench,13.6f,17.32f,f,1.86f,.44f,.63f,kPi,true);
+ perFix(m,model::trash_can,15.1f,17.4f,f,.5f,.5f,.62f,0,true);
+ m.lights.push_back(lamp({14.4f,17.02f},f+2.6f,.8f,5.f,2400,-.1f,WorldLightMount::Wall,kPi*.5f));
+ perFix(m,model::dumpster,20.4f,22.2f,f,1.96f,1.27f,1.17f,0,true);
+ for(float z:{0.f,.16f})perFix(m,model::pallet,11.6f,21.9f,f+z,1.2f,1.15f,.16f,z*2.f,true);
+ perFix(m,model::ind_crate,11.6f,21.9f,f+.32f,.8f,.8f,.8f,.3f,true);
  // --- Gate desk and the CCTV wall --------------------------------------------------------------
  wall(m,10.2f,12.65f,15.6f,12.82f,f,f+2.1f,2);
  for(float x:{11.f,12.6f,14.2f}){perFix(m,model::file_cabinet_wide,x,13.2f,f,.9f,.6f,.75f,0,true);perFix(m,model::cctv_tv,x,13.2f,f+.75f,.6f,.45f,.5f,kPi,false);}
@@ -780,12 +802,12 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  const float bed=-20.f,f=-19,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),bed));
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
- openEdge(m,{'N',10.f,14.f,-19.f,true,0});m.doors.back().z=0;openEdge(m,{'W',14.f,19.f,-19.f,false,0});
+ openEdge(m,{'N',10.f,14.f,-19.f,true,0});openEdge(m,{'W',14.f,19.f,-19.f,false,0});
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=f;
  // --- Platforms either side of the track bed ------------------------------------------------------
  deck(m,f,1,1,23,8);deck(m,f,1,13,23,23);deck(m,f,0,14,1,19);
- // The north door opens onto the platform: the deck runs under it, so the
- // door sits on the deck (z 0), not a metre up from the track bed.
+ // The north door opens onto the platform: the deck runs under it. The door's
+ // z counts from the track bed's tile floor, so it stays a metre up, on the deck.
  deck(m,f,10,0,14,1);
  wall(m,0.f,14.f,1.f,19.f,bed,f-.22f,15);
  for(float y:{7.85f,13.f})wall(m,1.f,y,23.f,y+.15f,f-.02f,f+.01f,18);

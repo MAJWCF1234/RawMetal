@@ -6,7 +6,9 @@ Reads map-audit-N.txt (written by RawMetal.exe --map-audit=N) and, for each
 edge in the plan (tools/campaign/plan.py), looks at the border tiles across the
 edge's span in the audit's reach map: at least one must be reachable standing
 ('.' or '^'). A seam the player can only crawl through ('c') or not reach at
-all is reported, since it strands a playthrough.
+all is reported, since it strands a playthrough. So is a border tile the
+player can stand in more than a metre below the edge (map-views-N.txt): the
+row opened under a raised edge with nothing built up to it is a pit.
 """
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -36,11 +38,16 @@ def main():
         path = os.path.join(folder, 'map-audit-%d.txt' % c['idx'])
         grid = reach_map(path) if os.path.exists(path) else None
         if grid is None: print('%d: no reach map' % c['idx']); bad += 1; continue
+        spots = os.path.join(folder, 'map-views-%d.txt' % c['idx'])
+        views = [tuple(map(float, l.split())) for l in open(spots) if l.strip()] if os.path.exists(spots) else []
         for e in c['edges']:
             marks = ''.join(grid[r][col] for r, col in tiles(e))
             ok = '.^c' if (c['idx'], e['side']) in CRAWLS else '.^'
             if not any(m in ok for m in marks):
                 print('%d %s: %s %g-%g z %g, border tiles "%s"' % (c['idx'], c['name'], e['side'], e['a'], e['b'], e['z'], marks)); bad += 1
+            low = sorted({round(z, 2) for x, y, z in views if (int(y), int(x)) in set(tiles(e)) and z < e['z'] - 1})
+            if low:
+                print('%d %s: %s %g-%g z %g, pit under the edge at z %s' % (c['idx'], c['name'], e['side'], e['a'], e['b'], e['z'], low)); bad += 1
     print('edges ok' if not bad else '%d edge problems' % bad)
     sys.exit(1 if bad else 0)
 

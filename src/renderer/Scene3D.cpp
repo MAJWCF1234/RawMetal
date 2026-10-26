@@ -1258,10 +1258,35 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Cable Vault arcs skim the coolant; lifting them above the sump made them
   // look like detached blue strips instead of live electrical discharge.
   bool sumpArc=w.level()==6&&!w.authored()&&!w.waterVolumes().empty();
-  float z=sumpArc?w.waterVolumes().front().surface+.012f:hazard.bottom+.45f;
-  for(int i=0;i<5;++i){float x=hazard.x1+(hazard.x2-hazard.x1)*(i+.5f)/5.f;
-   float arcLength=sumpArc?.16f:.35f,arcHeight=sumpArc?.07f:.28f;
-   quad({x-.025f,hazard.y1,z},{x+.025f,hazard.y1,z},{x+.10f,hazard.y1+arcLength,z+arcHeight},{x+.06f,hazard.y1+arcLength,z+arcHeight},blue,1.8f);
+  if(sumpArc){float z=w.waterVolumes().front().surface+.012f;
+   for(int i=0;i<5;++i){float x=hazard.x1+(hazard.x2-hazard.x1)*(i+.5f)/5.f;
+    quad({x-.025f,hazard.y1,z},{x+.025f,hazard.y1,z},{x+.10f,hazard.y1+.16f,z+.07f},{x+.06f,hazard.y1+.16f,z+.07f},blue,1.8f);}
+   continue;
+  }
+  // Elsewhere current crackles: forked sparks that jump to a new spot several
+  // times a second and are lit only part of the time, lying on the water or
+  // floor they run through. A steady hazard (live water) crackles sparsely, so
+  // a wide basin reads as water that bites, not a bed of blue spikes; a timed
+  // one (a floor that goes live in pulses) is busy while it is on.
+  const float area=(hazard.x2-hazard.x1)*(hazard.y2-hazard.y1);const bool pulsed=hazard.period>0;
+  const int sparks=pulsed?std::clamp(int(area/4.f),2,8):std::clamp(int(area/6.f),1,4);
+  const unsigned seed=unsigned(int(hazard.x1*8.f)*73856093)^unsigned(int(hazard.y1*8.f)*19349663);
+  for(int i=0;i<sparks;++i){
+   unsigned slot=unsigned(game.elapsed()*9.f+float((seed+unsigned(i)*977u)%1000u)*.001f),h=(slot*2654435761u)^(seed+unsigned(i)*40503u);
+   h^=h>>15;h*=2246822519u;h^=h>>13;h*=3266489917u;h^=h>>16;
+   if((h&255u)>=(pulsed?190u:48u))continue;
+   float u=float((h>>8)&255u)/255.f,v=float((h>>16)&255u)/255.f,a=float(h>>24)/255.f*kPi*2;
+   float x=hazard.x1+(hazard.x2-hazard.x1)*(.1f+.8f*u),y=hazard.y1+(hazard.y2-hazard.y1)*(.1f+.8f*v),z=w.supportBelow(x,y,hazard.top);
+   for(const auto& water:w.waterVolumes())if(x>=water.x1&&x<=water.x2&&y>=water.y1&&y<=water.y2&&water.surface>z&&water.surface<hazard.top)z=water.surface;
+   z=std::max(z,hazard.bottom)+.015f;
+   // Four kinked segments, each a flat and an upright strip so the bolt reads
+   // from the catwalk above and from water level.
+   Point3 dir{std::cos(a),std::sin(a),0},across{-dir.y,dir.x,0},p{x,y,z};
+   for(int k=0;k<4;++k){float kink=((h>>(k*3))&1u)?.07f:-.07f;
+    Point3 n=p+dir*.15f+across*kink;n.z=z+(k%2?.05f:.01f);
+    quad(p-across*.012f,n-across*.012f,n+across*.012f,p+across*.012f,blue,2.4f);
+    quad({p.x,p.y,p.z-.012f},{n.x,n.y,n.z-.012f},{n.x,n.y,n.z+.012f},{p.x,p.y,p.z+.012f},blue,2.4f);
+    p=n;}
   }
  }
  if(w.campaign()&&w.level()==6&&!w.authored()){
@@ -1347,8 +1372,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   Point3 side{-std::sin(player.angle),std::cos(player.angle),0},c{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f,hazard.bottom};
   float r=std::min(hazard.x2-hazard.x1,hazard.y2-hazard.y1)*.5f,t=game.elapsed();
   if(hazard.kind==Hazard::Kind::Anomaly){
-   for(int i=0;i<18;++i){float k=std::fmod(i*.618f,1.f),a=t*(1.1f+k*.9f)+i*2.4f,d=r*(.2f+.75f*k),h=.15f+std::fmod(t*.3f+k,1.f)*1.8f,sz=.05f+.07f*k;
-    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+h},up{0,0,sz};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,mote,2.4f);}
+   // Pinpoint glints that crawl over the surface and now and then lift off it,
+   // shrinking as they rise and twinkling out of step: the tingle before the bite.
+   for(int i=0;i<18;++i){float k=std::fmod(i*.618f,1.f),a=t*(.5f+k*.6f)+i*2.4f,d=r*(.2f+.75f*k),rise=std::fmod(t*.22f+k*1.7f,1.f),h=.1f+rise*rise*1.1f,sz=(.022f+.028f*k)*(1.f-.6f*rise);
+    float glint=1.3f+1.1f*std::max(0.f,std::sin(t*(17.f+k*9.f)+i*3.1f));
+    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+h};
+    // Wading through it, the glints at the player's own face would fill the view: they shrink away.
+    const float fade=std::clamp((length(Vec2{p.x,p.y}-player.pos)-.3f)/.9f,0.f,1.f);if(fade<=0)continue;sz*=fade;
+    Point3 up{0,0,sz};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,mote,glint);}
   }else{
    // One tall body flame, then tongues that lick up from the embers and shrink.
    float scale=std::min(1.f,r*2.f),body=(.34f+.04f*std::sin(t*9.f)+.03f*std::sin(t*23.f))*scale;
