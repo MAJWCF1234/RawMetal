@@ -3,10 +3,92 @@
 #include "../world/CustomCampaign.h"
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <fstream>
 #include <queue>
 #include <unordered_set>
 namespace retro {
+bool Game::testChapterRoute(){
+ const auto started=std::chrono::steady_clock::now();
+ std::ofstream out("chapter-route-test.txt");
+ struct Edge{int chunk;char side;float a,b,z;bool isDoor;};
+ static constexpr Edge edges[]={
+#include "ChapterEdges.inc"
+ };
+ int passed=0;
+ auto pressUse=[](Game& g){InputState key{};key.use=true;g.updateInteraction({},.01f);if(g.logTime()>0){g.updateInteraction(key,.01f);g.updateInteraction({},.01f);}g.updateInteraction(key,.01f);g.updateInteraction({},.01f);};
+ for(const auto& edge:edges){
+  Game g;g.setDeveloperMode(true);g.loadLevel(edge.chunk,false);
+  const float middle=(edge.a+edge.b)*.5f;
+  Vec2 boundary{},direction{};
+  switch(edge.side){
+   case 'N':boundary={middle,0};direction={0,-1};break;
+   case 'S':boundary={middle,24};direction={0,1};break;
+   case 'E':boundary={24,middle};direction={1,0};break;
+   case 'W':boundary={0,middle};direction={-1,0};break;
+  }
+  const Vec2 target=g.chunkOffset(edge.chunk)+boundary+direction*2.f;
+  const int neighbour=campaignChunkAt(target);
+  g.m_player.pos=boundary-direction*1.5f;
+  g.m_player.z=g.groundHeight(g.m_player.pos,edge.z+.215f);
+  g.m_player.grounded=true;g.m_player.verticalVelocity=0;
+  g.m_player.pitch=0;g.m_player.angle=std::atan2(direction.y,direction.x);
+  InputState walking{};walking.forward=true;
+  walking.crouch=(edge.chunk==57&&edge.side=='S')||(edge.chunk==58&&edge.side=='N');
+  g.m_player.crouched=walking.crouch;
+  const float startZ=g.player().z;
+  const bool startFits=g.hullFits(g.player().pos,g.player().z,g.player().hullHeight());
+  bool crossed=false;int frames=0,uses=0;
+  // Same world-space steering and 120 Hz update pattern as moveTo below.
+  // Only a real chunk ownership transition counts; approaching the seam does not.
+  for(;neighbour>=0&&neighbour!=edge.chunk&&frames<720;++frames){
+   Vec2 delta=target-(g.player().pos+g.chunkOffset(g.level()));
+   g.m_player.angle=std::atan2(delta.y,delta.x);
+   const auto before=g.player().pos+g.chunkOffset(g.level());
+   g.update(walking,1.f/120);
+   if(g.level()==neighbour){crossed=true;++frames;break;}
+   const auto after=g.player().pos+g.chunkOffset(g.level());
+   if(length(after-before)<.0001f){
+    int door=g.nearbyInteractionDoor();
+    if(door>=0&&!g.world().doors()[door].opening){pressUse(g);++uses;}
+   }
+  }
+  const bool ok=crossed&&startFits;passed+=ok;
+  out<<(ok?"PASS":"FAIL")<<" chunk="<<edge.chunk<<" side="<<edge.side<<" span="<<edge.a<<".."<<edge.b<<" z="<<edge.z
+     <<" kind="<<(edge.isDoor?"door":"seam")<<" neighbour="<<neighbour<<" stopped="<<g.level()<<':'<<g.player().pos.x<<','<<g.player().pos.y<<','<<g.player().z
+     <<" startZ="<<startZ<<" crouch="<<walking.crouch<<" time="<<frames/120.f<<" uses="<<uses;
+  if(!ok){
+   out<<" blocked=";
+   if(neighbour<0)out<<"no neighbouring rectangle;";
+   if(!startFits)out<<"initial hull obstructed;";
+   const Vec2 probe=g.player().pos+direction*.06f;
+   const float feet=g.player().z,height=g.player().hullHeight();
+   bool found=false;
+   for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f}){
+    Vec2 p=probe+Vec2{x,y};const auto& w=g.worldAt(p);
+    if(w.doorBlocks(p.x,p.y,feet,height)){out<<"door map="<<w.level()<<" at="<<p.x<<','<<p.y<<';';found=true;}
+    if(!w.fits(p.x,p.y,feet,height)){
+     const float support=w.supportBelow(p.x,p.y,feet+.215f),ceiling=w.clearanceAbove(p.x,p.y,feet);
+     out<<"solid map="<<w.level()<<" sample="<<p.x<<','<<p.y<<" tile="<<w.tile(int(std::floor(p.x)),int(std::floor(p.y)))
+        <<" support="<<support<<" ceiling="<<ceiling<<';';found=true;
+     if(support>feet+.215f)out<<"floor rise="<<support-feet<<" exceeds walking step;";
+     if(feet+height>ceiling+.005f)out<<"headroom="<<ceiling-feet<<" below hull="<<height<<';';
+     for(size_t i=0;i<w.structures().size();++i){const auto& s=w.structures()[i];
+      if(p.x>s.x1&&p.x<s.x2&&p.y>s.y1&&p.y<s.y2&&feet<s.top&&feet+height>s.bottom)
+       out<<"structure#"<<i<<" bounds="<<s.x1<<','<<s.y1<<','<<s.bottom<<".."<<s.x2<<','<<s.y2<<','<<s.top<<" material="<<s.material<<';';
+     }
+    }
+   }
+   Vec2 local=probe;const auto& w=g.worldAt(local);
+   if(w.railBlocksHull(local.x,local.y,.20f,feet,height)){out<<"rail map="<<w.level()<<';';found=true;}
+   if(!found)out<<"no static contact at forward probe (actor, interaction, or transition);";
+  }
+  out<<'\n';out.flush();
+ }
+ const int total=int(std::size(edges));
+ out<<"SUMMARY "<<passed<<'/'<<total<<" PASS "<<total-passed<<" FAIL runtime="<<std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()<<"s\n";
+ return passed==total&&out.good();
+}
 bool Game::testCampaignMaps(){
  std::ofstream out("freight-district-test.txt");bool pass=true;
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};

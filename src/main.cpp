@@ -1073,6 +1073,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         }
         return 0;
     }
+    if(std::wcsstr(commandLine,L"--chapter-route-test"))return retro::Game::testChapterRoute()?0:62;
     if(std::wcsstr(commandLine,L"--service-map-test"))return retro::Game::testServiceMaps()?0:45;
     if(std::wcsstr(commandLine,L"--mechanisms-test"))return retro::Game::testMechanisms()?0:39;
     if(std::wcsstr(commandLine,L"--campaign-map-test")||std::wcsstr(commandLine,L"--freight-district-test"))return retro::Game::testCampaignMaps()?0:37;
@@ -1098,7 +1099,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
          {"lift-mix",retro::AudioEngine::testLiftMix},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
-         {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"darkness",darknessTest}};
+         {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},
+         {"chapter-route",retro::Game::testChapterRoute},{"darkness",darknessTest}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=std::wcsstr(commandLine,L"--each-test=");
         for(const auto& [name,run]:tests){
