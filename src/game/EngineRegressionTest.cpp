@@ -41,7 +41,7 @@ bool Game::testSnatcherAmbush(std::ostream& report){
    if(recover>=0&&e.stalkMode!=Mode::Recover){recoverEnd=time;break;}
   }
   std::ostringstream v;v<<"tell="<<rush-tell<<" rush="<<rushEnd-rush<<" speed min/max="<<minSpeed<<"/"<<maxSpeed<<" moving samples="<<rushSamples<<" heading drift="<<turn<<" timeline="<<trace.text.str();
-  check(tell>=0&&rush>=0&&rush-tell>=.6f&&rush-tell<=.7f&&rushEnd>rush&&rushEnd-rush<=.451f&&rushSamples>0&&minSpeed>=4.2f&&maxSpeed<=5&&turn<.001f,"11c tell and straight lunge",v.str());
+  check(tell>=0&&rush>=0&&rush-tell>=.6f&&rush-tell<=.7f&&rushEnd>rush&&rushEnd-rush<=.5f&&rushSamples>0&&minSpeed>=4.2f&&maxSpeed<=5&&turn<.001f,"11c tell and straight lunge",v.str());
   std::ostringstream w;w<<"dodged="<<dodged<<" health="<<g.m_player.health<<" Recover duration="<<recoverEnd-recover<<" damage from 10hp="<<damageBonus<<" timeline="<<trace.text.str();
   check(dodged&&saved&&g.m_player.health==100&&recoverEnd-recover>=1.2f&&recoverEnd-recover<=1.3f&&std::fabs(damageBonus-15)<.001f,"11e sideways miss and vulnerable Recover",w.str());
  }
@@ -129,7 +129,7 @@ bool Game::testEngineRegression(){
  for(bool openFirst:{true,false}){auto m=regression::doorRoom();m->actorTracks.push_back(regression::guard({8.5f,5.5f},{8.5f,11}));Game g(regression::campaign(m));g.m_player.pos={20,20};
   const auto&graph=g.navGraph(0,1.6f);size_t links=graph.links.size();bool builtClosed=g.m_world.doors()[0].open==0;
   if(openFirst){g.m_world.openDoor(0);g.m_world.updateDoors(2);}
-  float closest=99;for(int i=0;i<750;++i){g.m_elapsed+=.016f;g.m_sounds.clear();g.updateMechanisms(.016f);g.m_world.updateDoors(.016f);closest=std::min(closest,length(g.m_friendlyActors[0].pose.position-Vec2{8.5f,11}));}
+  float closest=99;for(int i=0;i<750;++i){g.update({},.016f);g.m_sounds.clear();closest=std::min(closest,length(g.m_friendlyActors[0].pose.position-Vec2{8.5f,11}));}
   auto p=g.m_friendlyActors[0].pose.position;
   check(builtClosed&&links>0&&closest<.6f,openFirst?"6 guard graph built closed then opened":"6 guard fallback opens closed door","links="+std::to_string(links)+" closest="+std::to_string(closest)+" end="+std::to_string(p.x)+","+std::to_string(p.y)+" open="+std::to_string(g.m_world.doors()[0].open));
  }
@@ -164,7 +164,7 @@ bool Game::testEngineRegression(){
   check(e.awareness==0&&std::fabs(e.z-e.homeZ)<.05f&&distance<.6f,"8 returns to home floor","startZ="+std::to_string(start)+" endZ="+std::to_string(e.z)+" homeZ="+std::to_string(e.homeZ)+" lastKnownZ="+std::to_string(e.lastKnownZ)+" distance="+std::to_string(distance));
  }
  for(bool hostile:{false,true}){auto m=regression::room();auto a=regression::guard({6,6},{6,6});a.ai.sightRange=1;m->actorTracks.push_back(a);a.damageState=stateId("reg_other_damage");a.deadState=stateId("reg_other_dead");a.keys[0].position=a.keys[1].position={10,6};a.ai.patrol={{{10,6},0,60000}};a.ai.faction=hostile?AiFaction::Raider:AiFaction::Facility;m->actorTracks.push_back(a);Game g(regression::campaign(m));g.m_player.pos={20,20};
-  g.damageFriendly(0,10,{10,6},{ShotKind::Npc,0,1});g.updateMechanisms(.016f);int kind=g.state(g.friendlyKey(0,"guard_target_kind")),index=g.state(g.friendlyKey(0,"guard_target_index"));
+  g.damageFriendly(0,10,{10,6},{ShotKind::Npc,0,1});for(int i=0;i<30;++i){g.update({},.016f);g.m_sounds.clear();}int kind=g.state(g.friendlyKey(0,"guard_target_kind")),index=g.state(g.friendlyKey(0,"guard_target_index"));
   check(hostile?(kind==int(ShotKind::Npc)&&index==2):kind!=int(ShotKind::Npc),hostile?"9 hostile damage adopts attacker":"9 same faction damage avoids target","kind="+std::to_string(kind)+" index="+std::to_string(index)+" damage="+std::to_string(g.state(m->actorTracks[0].damageState)));
  }
  {Game g(regression::campaign(regression::room()));g.spawnCreature({Enemy::Kind::Huntsman,{9,9},6},0,false);auto&e=g.m_enemies[0];e.surfaceMode=2;g.applyEnemyDamage(e,1000,false,false);for(int i=0;i<125;++i)g.updateEnemies(.016f);

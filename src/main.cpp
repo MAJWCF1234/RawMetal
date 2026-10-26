@@ -600,7 +600,7 @@ static bool loadValidationTest(){
  rejected("sequence interval",[](auto& m){retro::TimedSequence t;t.soundIntervalMs=-1;m.timedSequences.push_back(t);});
  rejected("event id",[](auto& m){retro::ScriptEvent e;e.x2=e.y2=24;m.scriptEvents.push_back(e);});
  rejected("event region",[](auto& m){retro::ScriptEvent e;e.id=1;e.requireState=2;m.scriptEvents.push_back(e);});
- try{auto m=base();retro::Door d;d.left=0;d.right=24;m->doors.push_back(d);retro::TimedSequence t;t.timerState=1;t.finishState=2;t.finishAtMs=0;m->timedSequences.push_back(t);retro::SequenceCue c;c.timerState=1;c.timeMs=t.durationMs;m->sequenceCues.push_back(c);retro::World w(7,m);report<<"PASS boundary values\n";}catch(const std::exception& e){ok=false;report<<"FAIL boundary values "<<e.what()<<'\n';}
+ try{auto m=base();retro::Door d;d.left=0;d.right=24;m->doors.push_back(d);retro::TimedSequence t;t.timerState=1;t.finishState=2;t.finishAtMs=1;m->timedSequences.push_back(t);retro::SequenceCue c;c.timerState=1;c.timeMs=t.durationMs;m->sequenceCues.push_back(c);retro::World w(7,m);report<<"PASS boundary values\n";}catch(const std::exception& e){ok=false;report<<"FAIL boundary values "<<e.what()<<'\n';}
  // Exercise the custom parser as well as direct C++ authored records.
  std::string custom="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Validation|0\nMAP|0|Validation|0|0|2|2|0|0|8|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|floor|0|0\n";
  for(int row=0;row<24;++row)custom+="ROW|0|0|"+std::to_string(row)+"|........................\n";

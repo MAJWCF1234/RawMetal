@@ -304,7 +304,9 @@ bool Game::auditMap(int level){
    Vec2 n{std::cos(l.yaw),std::sin(l.yaw)};
    // Solid 5 cm behind the backing plate, open air 15 cm in front of it.
    Vec2 back=l.position-n*.05f,front=l.position+n*.15f;
-   if(w.fits(back.x,back.y,l.z,.015f,false))fail("FLOATING wall "+name+" (no wall behind it)");
+   // A door's header is wall too: a lamp over a doorway hangs on the lintel.
+   bool header=l.z+.015f>w.clearanceHeight(back.x,back.y)+.005f;
+   if(!header&&w.fits(back.x,back.y,l.z,.015f,false))fail("FLOATING wall "+name+" (no wall behind it)");
    if(!w.fits(front.x,front.y,l.z,.015f,false))fail("BURIED wall "+name+" (blocked in front)");
   }else{
    float roof=w.clearanceAbove(l.position.x,l.position.y,l.z);
