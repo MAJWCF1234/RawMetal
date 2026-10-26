@@ -287,8 +287,6 @@ void mhHallFloor(MhHall& hall){
   // Shell outlet up to the pipe bridge, a drain to the floor gully.
   pipeRoute(m,{{x+1.6f,27.3f,F+3.94f},{x+1.6f,27.3f,F+5.1f},{x+1.6f,25.05f,F+5.1f}},.2f,5,NoRoof);
   pipeRoute(m,{{x-2.4f,28.4f,F+.75f},{x-2.4f,29.6f,F+.75f},{x-2.4f,29.6f,F}},.06f,3,NoRoof,F);
-  wallSign(m,x,25.345f,F+3.2f,x<10?"LP HEATER 1A":"LP HEATER 2A","FEEDWATER / 18 BAR",1.6f,kPi);
-  wall(m,x-.8f,25.36f,x+.8f,25.42f,F+3.18f,F+3.2f,12);
  }
  // The pipe bridge they feed: columns, a beam and the header west through the wall.
  for(float x:{4.f,10.f,16.f,21.f})steelColumn(m,x,24.9f,F,F+4.86f);
@@ -300,8 +298,6 @@ void mhHallFloor(MhHall& hall){
   P3 out=pumpSkid(m,{23.6f,y},F,kPi,F+1.35f);
   pipeRoute(m,{{out.x,out.y,F+1.35f},{out.x+1.6f,out.y,F+1.35f},{out.x+1.6f,out.y,F}},.11f,3,NoRoof,F);
  }
- wallSign(m,23.6f,24.9f,F+2.2f,"BFP 1 / BFP 2","FEED PUMPS / UNITS 1-2",1.6f,kPi);
- wall(m,22.8f,24.9f,24.4f,25.f,F+2.18f,F+2.2f,12);
  // --- Laydown bay: Unit 3's rotor on its stands -------------------------------------------
  {const float y=30.f,z=F+1.75f;
   for(float x:{27.7f,38.7f}){mhCrib(m,x,y,F,F+.6f);wall(m,x-.35f,y-.45f,x+.35f,y+.45f,F+.6f,z-.62f,12);
@@ -316,7 +312,6 @@ void mhHallFloor(MhHall& hall){
   m.pipes.push_back({{39.6f,y},{39.9f,y},z,.72f,z,6});
   m.structures.push_back({28.3f,y-1.7f,37.f,y+1.7f,F+.1f,z+1.7f,false,6});
   m.structures.push_back({26.9f,y-.45f,40.3f,y+.45f,z-.45f,z+.45f,false,6});
-  board(m,32.f,27.55f,F+1.f,"UNIT 3 ROTOR","DO NOT LIFT / L-0 INSPECTION HOLD",2.2f);
  }
  // The casing top halves set down on sleepers: LP hood and the HP shell.
  for(auto [x1,x2,r]:{std::tuple{26.4f,32.8f,2.1f},{35.4f,40.f,1.25f}}){
@@ -347,7 +342,6 @@ void mhHallFloor(MhHall& hall){
  mhFix(m,model::file_cabinet_tall,27.f,40.1f,F,.5f,.6f,1.3f,-kPi*.5f);
  mhFix(m,model::wooden_chair,25.9f,41.4f,F,.417f,.525f,.95f,.2f);
  m.lights.push_back(lamp({25.9f,40.2f},F+2.6f,.9f,4.5f,3600,0));
- wallSign(m,25.9f,37.1f,F+2.1f,"OUTAGE OFFICE","UNIT 3 / PERMITS / LOCKOUT",1.6f,kPi);
  // --- South of Unit 3: the blade inspection bench --------------------------------------------
  for(float x:{5.2f,6.7f})mhFix(m,model::wooden_table,x,44.f,F,1.402f,.742f,.8f,0);
  for(int i=0;i<6;++i){float x=4.7f+i*.48f;wall(m,x,43.75f,x+.09f,44.3f,F+.8f,F+.83f,20);wall(m,x-.04f,43.7f,x+.13f,43.82f,F+.8f,F+.86f,20);}
@@ -355,7 +349,6 @@ void mhHallFloor(MhHall& hall){
  m.pipes.push_back({{7.6f,44.3f},{7.6f,44.3f},F,.025f,F+1.9f,12});m.pipes.push_back({{7.6f,44.3f},{7.f,44.f},F+1.9f,.02f,F+1.8f,12});
  mhFix(m,model::pendant_lamp,7.f,44.f,F+1.45f,.3f,.3f,.35f,0,false);
  m.lights.push_back(lamp({7.f,44.f},F+1.5f,.8f,4.f,3000,0,WorldLightMount::Bare));
- board(m,9.6f,45.2f,F+1.2f,"BLADE ROW L-0","INSPECTION / GLOVES / DO NOT POCKET SAMPLES",2.4f);
  // --- Hard hats and litter of a shift that left in a hurry -----------------------------------
  mhHelmet(m,5.f,2.8f,G,.4f);mhHelmet(m,33.2f,27.6f,F,2.1f);mhHelmet(m,13.6f,22.8f,F,-.6f);mhHelmet(m,42.8f,45.6f,C,1.f);
  m.clutterSpawns.push_back({0,{9.f,2.6f},G,.3f});m.clutterSpawns.push_back({2,{37.4f,5.f},G,1.2f});m.clutterSpawns.push_back({4,{42.4f,3.2f},G,0});
@@ -442,11 +435,7 @@ void mhHallScript(MhHall& hall){
  m.pickupSpawns.push_back({{44.4f,42.3f},P::Ammo,C});
  m.pickupSpawns.push_back({{26.4f,45.6f},P::Health,C});
  // --- Signs that guide -------------------------------------------------------------------------
- wallSign(m,17.5f,1.055f,G+2.35f,"MACHINE HALL","UNITS 1-3 / 930 MW / STATION SERVICE FEEDER 9",3.2f,0);
- wallSign(m,1.055f,6.6f,F+2.3f,"HALL FLOOR","UNIT 2 PLATFORM / CONTROL ROOM 9 EAST",2.2f,kPi*.5f);
  board(m,32.6f,21.f,F+1.4f,"UNIT 2 PLATFORM","CONTROL ROOM 9 / NORTH OVER THE TABLE",2.6f);
- wallSign(m,46.945f,26.6f,F+2.4f,"CRANE ACCESS","SOUTH CATWALK -22 / VENTILATION WORKS",2.4f,-kPi*.5f);
- wallSign(m,30.f,46.945f,F+2.2f,"LAYDOWN BAY","UNIT 3 ROTOR / MAX 40 T PER M2",2.4f,kPi);
 }
 
 const MhHall& mhHall(){
@@ -568,7 +557,6 @@ const MhHall& mhHall(){
   mhFix(m,model::desk_phone,39.25f,6.2f,G+.75f,.2f,.2f,.1f,kPi,false);
   mhFix(m,model::mug,37.7f,6.05f,G+.75f,.09f,.09f,.1f,0,false);
   mhFix(m,model::binder,37.4f,6.35f,G+.75f,.3f,.08f,.32f,kPi,false);
-  wallSign(m,43.845f,3.f,G+1.3f,"STATION SERVICE","FEEDER 9 / BOARDS 9-11 / 9-14 VENT WORKS",1.6f,-kPi*.5f);
   // Bridge from Unit 2's table to the control room door.
   guardRail(m,39.95f,7.f,40.f,9.f,G);guardRail(m,42.f,7.f,42.05f,9.f,G);
   // East strip to Emergency Generation's shutter.
@@ -577,7 +565,6 @@ const MhHall& mhHall(){
   wall(m,47.f,8.f,48.f,12.f,F,G-.22f,15);wall(m,47.f,8.f,48.f,12.f,G+3.2f,R,15);
   for(float y:{7.9f,11.95f})wall(m,46.9f,y,47.1f,y+.15f,G,G+3.2f,12);
   wall(m,46.9f,7.9f,47.1f,12.1f,G+3.05f,G+3.2f,12);
-  wallSign(m,46.945f,4.4f,G+1.6f,"EMERGENCY GENERATION","SHUTTER SOUTH-EAST / OPEN ON FEEDER 9",2.f,-kPi*.5f);
   // --- The south catwalk at -22 and the crane access stair --------------------------------
   mhDeck(hall,C,25,44,47,47);mhDeck(hall,C,38,47,42,48);mhDeck(hall,C,42,38,47,44);mhDeck(hall,G,43,32,47,34);
   mhPlate(m,25.f,44.f,47.f,47.f,C);mhPlate(m,38.f,47.f,42.f,48.f,C);mhPlate(m,42.f,38.f,47.f,44.f,C);mhPlate(m,43.f,32.f,47.f,34.f,G);
@@ -594,7 +581,6 @@ const MhHall& mhHall(){
   wall(m,38.f,47.f,42.f,48.f,F,C-.22f,15);wall(m,38.f,47.f,42.f,48.f,C+2.65f,R,15);
   for(float x:{37.8f,42.f})wall(m,x,46.7f,x+.2f,47.f,C,C+2.9f,12);
   wall(m,37.8f,46.7f,42.2f,47.f,C+2.65f,C+2.9f,13);
-  wallSign(m,40.f,46.645f,C+3.f,"VENTILATION WORKS","FIRE DAMPER FD-9 / SUPPLY FAN HALL",2.6f,kPi);
   // --- Units -----------------------------------------------------------------------------
   mhUnit(hall,2.5f,13.f,1,17.f,7.f);mhUnit(hall,26.5f,13.f,2,40.f,29.f);mhUnit(hall,2.5f,37.f,3,-1.f,16.f);
   // Main steam to Units 1 and 3 from the west wall, to Unit 2 overhead from the north.
@@ -617,9 +603,6 @@ const MhHall& mhHall(){
   m.stairs.push_back({29.f,17.f,31.f,21.2f,F,G,15,true,false});
   m.stairs.push_back({16.f,41.f,18.f,45.2f,F,G,15,true,false});
   // Unit numbers on the walls.
-  wallSign(m,1.055f,20.f,F+4.2f,"UNIT 1","310 MW / TRIPPED 23:58",2.6f,kPi*.5f);
-  wallSign(m,1.055f,33.f,F+4.2f,"UNIT 3","OUTAGE / PERMIT 3-118",2.6f,kPi*.5f);
-  wallSign(m,46.945f,22.f,F+4.2f,"UNIT 2","310 MW / TRIPPED 23:58",2.6f,-kPi*.5f);
   mhHallFloor(hall);mhHallLight(hall);mhHallScript(hall);
   return hall;}();
  return built;
@@ -754,10 +737,163 @@ std::shared_ptr<const Map> makeMachineHallCraneEnd(){
  freightFinish(m,-1);
  return p;
 }
-// VENTILATION WORKS (manifest 26)
-std::shared_ptr<const Map> makeVentilationWorks(){return placeholderChunk(45,{{'N',14.f,18.f,-22.f,false,0},{'W',4.f,8.f,-22.f,false,0}});}
-// AIR HANDLING (manifest 27)
-std::shared_ptr<const Map> makeAirHandling(){return placeholderChunk(46,{{'E',4.f,8.f,-22.f,false,0},{'S',4.f,8.f,-22.f,false,0}});}
+// VENTILATION WORKS (manifest 26). Where the plant breathes. Two supply fans
+// in casings the size of a van stand on their plinths; each blows up a round
+// riser into the header that runs under the roof and drops into the supply
+// main, a duct big enough to walk through, which is the way on to Air
+// Handling. The scrubber plant lines the south wall. The player only gets
+// here once board 9-14 is closed in the Machine Hall, so the fans are running.
+std::shared_ptr<const Map> makeVentilationWorks(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[45];m.definition=CampaignChunks[45];m.definition.ambient=.28f;
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ const float f=-22,roof=m.definition.ceiling,dz=f+2.6f,hd=f+7.2f,ht=f+8.6f;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'N',14.f,18.f,-22.f,false,0});openEdge(m,{'W',4.f,8.f,-22.f,false,0});
+ wall(m,14.f,0.f,18.f,1.f,f+3.f,roof,15);
+ wallBays(m,f,roof,4.f,true,false,false,true,16.f);
+ // --- The supply main: a walk-through duct from the hall to the west wall ----------------------
+ // Panel-steel shell 4.4 m wide and 2.6 m high with stiffener ribs; the
+ // access hatch is in its south face at the east end.
+ wall(m,0.f,3.6f,11.f,3.8f,f,dz,2);wall(m,0.f,8.2f,9.f,8.4f,f,dz,2);
+ wall(m,0.f,3.6f,11.f,8.4f,dz,dz+.2f,2);
+ wall(m,10.8f,3.8f,11.f,8.4f,f,dz,2);
+ for(float x=1.5f;x<10.5f;x+=1.5f){wall(m,x,3.5f,x+.08f,8.5f,dz+.2f,dz+.3f,8);
+  for(float y:{3.5f,8.4f})wall(m,x,y,x+.08f,y+.1f,f,dz+.2f,8);}
+ for(float x=2.f;x<10.f;x+=1.f)wall(m,x,5.6f,x+.5f,6.4f,f,f+.02f,8);
+ wall(m,9.f,8.2f,10.8f,8.4f,f+2.f,dz,2);
+ mhFix(m,model::pwr_vent_grille,9.9f,8.45f,f+2.05f,.82f,.04f,.5f,0,false);
+ wallSign(m,7.6f,8.455f,f+1.5f,"DANGER / SUPPLY MAIN","LOCK OUT FAN 2 BEFORE ENTRY",1.6f,0);
+ mhLamp(m,{5.f,6.f},dz-.1f,.8f,5.f,3400,0);
+ // --- Fan 1 and Fan 2 -----------------------------------------------------------------------
+ // Casing on a plinth, a transition piece, and a round riser to the header.
+ for(Vec2 c:{Vec2{16.5f,11.f},Vec2{16.5f,18.5f}}){
+  wall(m,c.x-2.6f,c.y-2.3f,c.x+3.8f,c.y+2.3f,f,f+.4f,15);
+  for(float y:{c.y-2.7f,c.y+2.62f})floorLine(m,c.x-3.f,y,c.x+4.2f,y+.08f,f,13);
+  mhFix(m,model::pwr_turbine_housing,c.x,c.y,f+.4f,4.f,4.f,2.91f,0,true);
+  wall(m,c.x+2.f,c.y-.55f,c.x+2.6f,c.y+.55f,f+.9f,f+2.5f,2);
+  vessel(m,{c.x+2.9f,c.y},.75f,f+.4f,hd,5);
+  mhFix(m,model::pwr_circulation_pump,c.x-1.4f,c.y+2.75f,f,.84f,.5f,.39f,0,true);
+ }
+ // The header under the roof: a branch over the risers, the main west to the
+ // supply main, and its drop onto the main's roof. Rods carry it.
+ wall(m,18.7f,5.2f,20.1f,19.25f,hd,ht,2);
+ wall(m,9.4f,5.2f,20.1f,6.8f,hd,ht,2);
+ wall(m,9.4f,5.2f,10.8f,6.8f,dz+.2f,hd,2);
+ for(float x=12.f;x<19.f;x+=3.f)for(float y:{5.3f,6.7f})m.pipes.push_back({{x,y},{x,y},ht,.02f,roof,6});
+ for(float y=9.f;y<19.f;y+=3.f)for(float x:{18.8f,20.f})m.pipes.push_back({{x,y},{x,y},ht,.02f,roof,6});
+ // --- The scrubber plant along the south wall ----------------------------------------------------
+ // Five air-handling units on a pad, their collector over them and its riser.
+ equipmentPad(m,1.2f,21.7f,11.8f,23.f,f);
+ for(int i=0;i<5;++i)mhFix(m,model::pwr_air_handler,2.f+i*2.2f,22.4f,f+.1f,.93f,1.89f,3.01f,kPi*.5f,true);
+ wall(m,1.f,21.6f,11.8f,23.f,f+3.2f,f+4.3f,2);
+ wall(m,1.f,21.6f,2.4f,23.f,f+4.3f,roof,2);
+ // --- The fan control desk ------------------------------------------------------------------------
+ mhFix(m,model::pwr_control_cabinet,21.6f,3.f,f,.8f,.4f,1.6f,-kPi*.5f,true);
+ mhTerminal(m,{20.f,4.2f},f,kPi*.5f,"VENT WORKS / FAN CONTROL","FAN 1 RUNNING ON BOARD 9-14 SUPPLY. FAN 2 STANDBY.","EXHAUST ON MANUAL SINCE 23:58. AIR HANDLING: WEST, THROUGH THE MAIN.");
+ mhTerminal(m,{2.f,12.f},f,kPi*.5f,"VENT WORKS / DEFECT LOG","DAMPER 6, AIR HANDLING: SOMETHING NESTING. FITTER REFUSED THE JOB.","SUPERVISOR: CLEAR IT. FITTER: NOT FOR THIS MONEY. 23:40.");
+ mhFix(m,model::pwr_fire_cabinet,12.f,1.33f,f+1.1f,.25f,.2f,.56f,0,false);
+ for(Vec2 b:{Vec2{2.2f,9.6f},Vec2{2.95f,9.35f}})mhFix(m,model::ind_barrel,b.x,b.y,f,.53f,.56f,.95f,b.x,true);
+ handCart(m,13.4f,21.6f,f);
+ // --- Wasps in the plant; one woken by the fans ---------------------------------------------------
+ m.creatureSpawns.push_back({CreatureKind::Wasp,{7.f,15.f},f});
+ {CreatureSpawn w{CreatureKind::Wasp,{21.f,21.8f},f};w.wakeState=MhVentSupply;m.creatureSpawns.push_back(w);}
+ m.pickupSpawns.push_back({{2.f,18.f},PickupKind::Ammo,f});
+ // --- Machinery and light ---------------------------------------------------------------------
+ {TimedSequence s;s.timerState=stateId("mh_fans_ms");s.finishState=stateId("mh_fans_cycled");s.x1=13;s.y1=9;s.x2=20;s.y2=20.5f;
+  s.durationMs=3000;s.finishAtMs=3000;s.soundIntervalMs=750;s.soundUntilMs=3000;s.tickSound=Sound::Machine;s.gain=.6f;s.pitch=.45f;s.loop=true;m.timedSequences.push_back(s);
+  auto& e=mhEvent(m,"mh_ev_fans",0,0,24,24,-100,100,MhVentSupply);e.actions={mhSet(stateId("mh_fans_ms"))};}
+ // Work lights hung on rods; floods on the east pilasters; one failing over the scrubbers.
+ for(Vec2 l:{Vec2{14.f,3.f},Vec2{5.f,11.5f},Vec2{5.f,17.f},Vec2{11.5f,14.5f},Vec2{21.5f,10.f},Vec2{21.5f,17.f}})mhLamp(m,l,f+5.5f,2.2f,12.f,4600,.05f);
+ for(float y:{8.f,20.f})mhLamp(m,{22.76f,y},f+4.f,1.6f,10.f,3400,-.1f,WorldLightMount::Wall,kPi);
+ mhLamp(m,{8.f,20.f},f+5.5f,1.4f,8.f,4300,.1f,WorldLightMount::Ceiling,0,0,1,false,.45f);
+ zone(m,"VENTILATION WORKS / SUPPLY MAIN",0,3.6f,11,8.4f);
+ zone(m,"VENTILATION WORKS",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
+
+// AIR HANDLING (manifest 27). The quietest map so far. The supply main
+// breaks up into plenums and low ducts under the slab: two plenum chambers,
+// a filter room, low walkways you stoop through, and true crawlspaces off to
+// the side. Something lives in Damper 6. It is seen once, through a grille,
+// and heard breathing. It comes for the player in the last plenum.
+std::shared_ptr<const Map> makeAirHandling(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[46];m.definition=CampaignChunks[46];m.definition.ambient=.2f;
+ m.wallSurface=SurfacePressure;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfacePressure;
+ const float f=-22,roof=m.definition.ceiling,low=f+1.85f,crawl=f+1.f;
+ const StateId wake=stateId("mh_air_wake");
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ auto& L=m.layers[0];
+ rectangle(L,1,1,23,23,'#');
+ rectangle(L,16,2,23,10,'.');   // plenum 1, east
+ rectangle(L,10,4,16,8,'.');    // low duct west
+ rectangle(L,4,3,10,12,'.');    // filter room
+ rectangle(L,6,12,9,16,'.');    // low duct south
+ rectangle(L,2,16,13,23,'.');   // plenum 2, the last
+ rectangle(L,18,10,21,18,'.');  // crawl south from plenum 1
+ rectangle(L,13,17,21,21,'.');  // the nest chamber
+ rectangle(L,6,1,9,3,'.');      // crawl north from the filter room
+ openEdge(m,{'E',4.f,8.f,-22.f,false,0});openEdge(m,{'S',4.f,8.f,-22.f,false,0});
+ // --- Low ducts on the route: stoop height, panel steel ------------------------------------------
+ wall(m,10.f,4.f,16.f,8.f,low,roof,2);
+ wall(m,6.f,12.f,9.f,16.f,low,roof,2);
+ for(float x=10.6f;x<16.f;x+=1.2f)wall(m,x,4.f,x+.06f,8.f,low-.08f,low,8);
+ for(float y=12.6f;y<16.f;y+=1.2f)wall(m,6.f,y,9.f,y+.06f,low-.08f,low,8);
+ // --- Crawlspaces off the route ------------------------------------------------------------------
+ wall(m,18.f,10.f,21.f,17.f,crawl,roof,2);
+ wall(m,6.f,1.f,9.f,3.f,crawl,roof,2);
+ wall(m,13.f,17.f,14.f,21.f,crawl,roof,2);
+ // --- Plenum 1: the turning vanes, the damper banks ------------------------------------------------
+ for(float y=2.6f;y<9.6f;y+=.9f)wall(m,22.4f,y,22.9f,y+.06f,f+.2f,roof-.2f,8);
+ // Fire dampers in the north wall: framed louvre banks, floor to roof.
+ for(float x:{17.f,19.f}){wall(m,x,2.f,x+.08f,2.3f,f,roof,2);wall(m,x+1.12f,2.f,x+1.2f,2.3f,f,roof,2);
+  for(float z=f+.3f;z<roof-.3f;z+=.18f)wall(m,x+.08f,2.1f,x+1.12f,2.2f,z,z+.04f,8);}
+ mhFix(m,model::pwr_duct_fan_unit,21.6f,9.f,f,.79f,1.49f,1.95f,-kPi*.5f,true);
+ // --- The filter room: filter racks, the grille, the puppet ---------------------------------------
+ // Filter banks: two rows of air-handling units and a one-metre aisle.
+ for(float x:{5.2f,7.f})for(float y=4.6f;y<10.f;y+=1.6f)mhFix(m,model::pwr_air_handler,x,y,f,.75f,1.53f,2.44f,0,true);
+ mhFix(m,model::metal_shelf,9.4f,10.6f,f,1.8f,.5f,1.8f,-kPi*.5f,true);
+ mhTerminal(m,{8.f,4.6f},f,0,"AIR HANDLING / FILTER ROOM","PRE-FILTERS DUE 22:00. NOT DONE.","SCRATCHING IN DAMPER 6 SINCE 23:00. NOBODY GOES IN ALONE.");
+ // The thing in the duct. Standing at the mouth of the low duct the player
+ // looks straight down it into the filter room, and something crosses the
+ // far end, out of the north crawl and down towards plenum 2. Then it is gone.
+ {TimedSequence s;s.timerState=stateId("mh_air_seen");s.finishState=stateId("mh_air_seen_done");s.x1=16.f;s.y1=3.f;s.x2=19.f;s.y2=9.f;s.bottom=f-1;s.top=f+3;
+  s.durationMs=5000;s.finishAtMs=4500;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);}
+ actor(m,"mh_air_seen",ActorVisual::Huntsman,1.f,{{0,{7.6f,1.8f},f,kPi*.5f},{900,{8.9f,4.4f},f,kPi*.5f},{2000,{8.9f,8.6f},f,kPi*.5f},{2900,{7.6f,11.8f},f,kPi*.6f},{3500,{7.6f,14.6f},f,kPi*.5f},{3600,{7.6f,14.6f},f-3.f,kPi*.5f},{5000,{7.6f,14.6f},f-3.f,kPi*.5f}});
+ cue(m,"mh_air_seen",600,Sound::SpiderCall,{8.9f,6.f},"",.45f,f+.5f);
+ // --- Breathing in the walls ----------------------------------------------------------------
+ {TimedSequence s;s.timerState=stateId("mh_air_breath");s.finishState=stateId("mh_air_breath_cycled");s.x1=2.f;s.y1=12.f;s.x2=13.f;s.y2=23.f;s.bottom=f-1;s.top=f+3;
+  s.durationMs=6000;s.finishAtMs=6000;s.soundIntervalMs=3000;s.soundUntilMs=6000;s.tickSound=Sound::Wings;s.gain=.25f;s.pitch=.35f;s.loop=true;m.timedSequences.push_back(s);}
+ // --- The nest chamber (crawl in from plenum 1) ---------------------------------------------------
+ mhFix(m,model::cave_web_corner,20.4f,17.4f,f+1.f,1.36f,.02f,.8f,kPi*.25f,false);
+ mhBody(m,"mh_air_body_clock",{16.f,19.f},f,1.2f);machineryClock(m,"mh_air_body_clock",60000);
+ mhBlood(m,{16.2f,19.2f},f,.5f);
+ mhFix(m,model::mine_hard_hat,17.2f,18.2f,f,.28f,.35f,.15f,.6f,false);
+ m.pickupSpawns.push_back({{19.6f,19.6f},PickupKind::Health,f});
+ m.pickupSpawns.push_back({{7.4f,2.f},PickupKind::Ammo,f});
+ // --- Plenum 2: it comes when the player is halfway across -------------------------------------
+ for(float x:{4.5f,10.5f})steelColumn(m,x,19.5f,f,roof,true);
+ mhFix(m,model::pwr_duct_fan_unit,2.42f,18.5f,f,.79f,1.49f,1.95f,0,true);
+ mhFix(m,model::pwr_air_handler,11.5f,21.9f,f,.75f,1.53f,2.44f,kPi*.5f,true);
+ {CreatureSpawn h{CreatureKind::Huntsman,{12.2f,18.2f},f};h.wakeState=wake;m.creatureSpawns.push_back(h);}
+ {auto& e=mhEvent(m,"mh_air_ambush",2.f,17.f,9.f,23.f,f-1,f+3);e.actions={mhSet(wake),mhSound(Sound::SpiderCall,.7f)};}
+ // --- Light: almost none ------------------------------------------------------------------------
+ mhLamp(m,{19.5f,6.f},roof-.15f,.8f,5.f,2600,-.1f,WorldLightMount::Ceiling,0,0,0,false);
+ m.lights.back().flicker=.5f;
+ mhLamp(m,{8.6f,7.f},roof-.15f,1.1f,6.f,4300,.3f);m.lights.back().flicker=.2f;
+ mhLamp(m,{13.6f,6.f},low-.08f,.5f,3.5f,5000,0,WorldLightMount::Ceiling,0,0,1,false,.35f);
+ mhLamp(m,{7.5f,14.4f},low-.08f,.45f,3.5f,5000,0,WorldLightMount::Ceiling,0,0,1,false,.3f);
+ mhLamp(m,{4.f,17.2f},roof-.15f,.5f,4.f,4300,.1f);
+ mhLamp(m,{7.f,19.5f},roof-.15f,.6f,5.f,1150,-.4f);
+ mhLamp(m,{17.f,19.f},roof-.15f,.4f,3.f,1150,-.4f);
+ zone(m,"AIR HANDLING / FILTER ROOM",4,3,10,12);
+ zone(m,"AIR HANDLING / DAMPER 6",13,17,21,21);
+ zone(m,"AIR HANDLING",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
 }
 void buildChapterMachineHall(CampaignMapTable& maps){
  maps[41]=makeMachineHallNorthGallery();

@@ -270,6 +270,13 @@ bool Game::auditMap(int level){
   for(float u:{-.45f,0.f,.45f}){Vec2 back=s.position-n*.14f+along*(u*s.width);backed&=!w.fits(back.x,back.y,z,.015f,false);}
   if(!backed)fail("FLOATING sign '"+s.title+"' at "+at(s.position));
  }
+ // Signage is sparse. A plant signs its hazards, a locked door and the odd
+ // junction, not every wall: more than three plates in a map, or the same
+ // plate twice, is clutter.
+ const auto& signs=w.signs();
+ if(signs.size()>3)fail("SIGNAGE "+std::to_string(signs.size())+" signs (budget 3)");
+ for(size_t i=0;i<signs.size();++i)for(size_t j=i+1;j<signs.size();++j)
+  if(signs[i].title==signs[j].title)fail("SIGNAGE duplicate '"+signs[i].title+"'");
  // Props: a solid prop stands on a floor, slab or another prop, is not sunk
  // into walls or into structure at eye level (a column may meet a roof truss),
  // and does not interpenetrate another solid prop.

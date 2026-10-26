@@ -229,14 +229,10 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  openEdge(m,{'N',10,14,f,false,0});openEdge(m,{'W',9,14,f,false,0});openEdge(m,{'E',9,14,f,false,0});openEdge(m,{'S',10,14,f,false,0});
  // --- Portals: concrete headers over the four openings, each named ----------------------------
  wall(m,10,0,14,1,-15.f,roof,15);
- wallSign(m,12.f,1.055f,-14.9f,"HEAT EXCHANGE","WATER WORKS / COOLING",3.f,0);
  wall(m,0,9,1,14,-15.f,roof,15);
- wallSign(m,1.055f,11.5f,-14.9f,"CENTRAL STORES","ISSUE COUNTER / ALL PARTS SIGNED FOR",3.6f,kPi*.5f);
  // The aid station's roof is lower than the hall's: the header closes the step.
  wall(m,23,9,24,14,-15.5f,roof,15);
- wallSign(m,22.945f,11.5f,-15.4f,"AID STATION","FIRST AID / B SHIFT MEDIC",3.f,-kPi*.5f);
  wall(m,10,23,14,24,-15.f,roof,15);
- wallSign(m,12.f,22.945f,-14.9f,"FABRICATION SHOP","OPERATIONS CORRIDOR / SHUTTER 3",3.2f,kPi);
  // Steel portal posts stand proud of the wall either side of each opening.
  for(float x:{9.72f,14.f}){wall(m,x,22.72f,x+.28f,23.f,f,-15.f,12);wall(m,x,1.f,x+.28f,1.28f,f,-15.f,12);}
  for(float y:{8.72f,14.f}){wall(m,1.f,y,1.28f,y+.28f,f,-15.f,12);wall(m,22.72f,y,23.f,y+.28f,f,-15.5f,12);}
@@ -263,7 +259,6 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  for(float x:{4.3f,5.95f,7.6f})mntFix(m,model::mine_hard_hat,{x,1.5f},f+2.42f,.28f,.35f,.15f,x*1.3f,false);
  mntFix(m,model::mine_hard_hat,{7.4f,3.4f},f,.28f,.35f,.15f,2.1f,false);
  for(float y:{2.3f,2.9f,3.5f}){wall(m,8.45f,y-.02f,8.6f,y+.02f,f+1.7f,f+1.74f,2);wall(m,8.5f,y-.22f,8.56f,y+.22f,f+1.08f,f+1.68f,18);}
- wallSign(m,4.6f,8.255f,f+2.1f,"LOCKER ROOM","B SHIFT / WASH BEFORE BREAK",2.2f,0);
  mntTube(m,{6.f,3.f},rt,false,.9f,6.f,6200,.45f);
  mntTube(m,{6.f,6.9f},rt,false,.8f,6.f,6200,.45f,.45f);
  mntTube(m,{2.3f,3.9f},rt,true,.6f,4.f,6200,.45f);
@@ -296,7 +291,6 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  for(Vec2 j:{Vec2{22.65f,7.55f},Vec2{22.3f,7.62f},Vec2{22.62f,7.12f}}){wall(m,j.x-.13f,j.y-.13f,j.x+.13f,j.y+.13f,f,f+.42f,20);wall(m,j.x-.04f,j.y-.04f,j.x+.04f,j.y+.04f,f+.42f,f+.5f,19);}
  m.lights.push_back(lamp({19.3f,7.2f},f+.62f,.5f,3.f,2000,-.1f,WorldLightMount::Bare));
  terminal(m,{16.6f,6.6f},"B SHIFT / MESSAGE BOARD","DAY 2. SIX OF US LEFT. WATER FROM THE COOLER. NOBODY GOES TO STORES.","MOVED TO THE AID STATION. KNOCK THREE TIMES. - R. MARSH");
- wallSign(m,19.5f,8.255f,f+2.1f,"BREAK ROOM","B SHIFT / 02:00 - 02:30",2.f,0);
  mntTube(m,{17.9f,4.4f},rt,false,1.f,6.f,3000,0);
  mntTube(m,{20.6f,4.4f},rt,false,.9f,6.f,3000,0);
 
@@ -311,7 +305,6 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  for(float z:{f+.95f,f+2.39f})wall(m,3.6f,15.66f,7.f,15.7f,z,z+.06f,12);
  for(int row=0;row<6;++row)for(int col=0;col<7;++col){if(row*7+col>=41)break;
   float x=3.76f+col*.36f,z=f+2.2f-row*.2f;wall(m,x,15.67f,x+.22f,15.7f,z,z+.14f,(row*7+col)%5==0?19:(row*7+col)%3==0?18:20);}
- wallSign(m,5.3f,15.745f,f+2.55f,"SHIFT BOARD / B SHIFT","IN 41 / OUT 0",2.6f,kPi);
  mntFix(m,model::wall_box,{7.45f,15.72f},f+1.4f,.55f,.15f,.6f,kPi,false);
  terminal(m,{7.5f,15.2f},"TIME CLOCK / B SHIFT","CLOCKED IN 22:00: 41. CLOCKED OUT: 0.","LAST PUNCH 03:52, CARD 2207 MARSH R. / NO EXIT.");
  // Inside: the foreman's desk at the window, files, the PA console.
@@ -324,8 +317,6 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  m.terminals.back().yaw=-kPi*.5f;
  m.pipes.push_back({{7.75f,18.6f},{7.75f,18.6f},f+1.3f,.012f,f+1.62f,6});wall(m,7.7f,18.55f,7.8f,18.65f,f+1.62f,f+1.7f,8);
  mntFix(m,model::wall_box,{1.03f,22.2f},f+1.3f,.55f,.12f,.75f,kPi*.5f,false);
- wallSign(m,1.055f,22.2f,f+2.12f,"KEYS","SIGN OUT / SIGN IN",.8f,kPi*.5f);
- wallSign(m,3.f,15.745f,f+2.6f,"TIME OFFICE","DISTRICT FOREMAN",1.4f,kPi);
  mntTube(m,{4.8f,18.f},rt,false,.9f,6.f,4300,.25f);
  mntTube(m,{4.8f,21.f},rt,false,.9f,6.f,4300,.25f);
 
@@ -339,7 +330,6 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  wall(m,15.2f,15.8f,23,23,rt,rt+.2f,15);
  terminal(m,{14.5f,17.6f},"WORK ORDERS / OPEN","WO 7714: OPERATIONS SHUTTER 3. DRIVE SHEAR PIN SHEARED 02:16.","TURN NEW PIN FROM 40 MM BAR (CENTRAL STORES, RACK B). LATHE 2, FAB SHOP.");
  m.terminals.back().yaw=-kPi*.5f;
- wallSign(m,15.145f,19.2f,f+2.5f,"WORK ORDERS","ISSUE / RETURN / NO TOOL WITHOUT A CHIT",2.2f,-kPi*.5f);
  // Inside: steel shelving, the tool chests, cylinders chained to the wall, a bench and vise.
  for(float y:{17.2f,19.4f})mntFix(m,model::metal_shelf,{22.7f,y},f,1.8f,.5f,1.8f,-kPi*.5f,true);
  for(float x:{17.f,18.f})mntFix(m,model::pwr_tool_chest,{x,22.6f},f,.75f,.45f,.97f,kPi,true);
@@ -361,7 +351,6 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  // Drops from the supply duct into each block's roof.
  for(float x:{5.f,19.f}){pipeRoute(m,{{x,1.7f,-13.62f},{x,1.7f,rt+.2f}},.16f,5,NoRoof);pipeRoute(m,{{x,22.3f,-13.62f},{x,22.3f,rt+.2f}},.16f,5,NoRoof);}
  // The direction gantry over the crossing.
- mntHangingBoard(m,12.f,8.2f,-16.6f,roof,"MAINTENANCE DISTRICT","STORES WEST / AID STATION EAST / FAB SHOP SOUTH",4.6f,kPi);
  // Floor: walkway lines, the crossing box, drain.
  for(float x:{9.3f,14.6f})floorLine(m,x,1.f,x+.1f,23.f,f,14);
  for(float y:{8.7f,15.2f})floorLine(m,1.f,y,23.f,y+.1f,f,14);
@@ -441,7 +430,6 @@ std::shared_ptr<const Map> makeCentralStores(){
  wall(m,20.6f,8.2f,22.4f,8.4f,f+2.2f,ot,3);wall(m,20.55f,8.4f,22.45f,8.6f,f+2.2f,f+2.42f,12);
  for(float x:{20.6f,22.34f})wall(m,x,8.2f,x+.06f,8.4f,f+1.05f,f+2.2f,12);
  wall(m,18.6f,1.f,23.f,8.4f,ot,ot+.2f,15);
- mntSign(m,21.5f,8.455f,f+2.48f,"ISSUE COUNTER","NO CHIT / NO PARTS",1.8f,0);
  // Inside: the storeman's desk at the glass, the ledger, cabinets, keys, the kettle.
  mntDesk(m,19.55f,4.4f,f,-kPi*.5f,1);
  terminal(m,{21.7f,1.75f},"CENTRAL STORES / ISSUE LEDGER","LAST ISSUE 02:09: FILTERS X4 TO WO 7702. NOTHING SINCE.","40 MM EN24: RACK B, BAY 3. ONE LENGTH CUT FOR WO 7714. NOT COLLECTED.");
@@ -451,7 +439,6 @@ std::shared_ptr<const Map> makeCentralStores(){
  mntFix(m,model::coffee_machine,{22.55f,6.65f},f+.75f,.35f,.35f,.45f,-kPi*.5f,false);
  mntFix(m,model::mug,{22.5f,7.2f},f+.75f,.09f,.09f,.1f,0,false);
  mntFix(m,model::wall_box,{22.92f,5.3f},f+1.25f,.55f,.15f,.6f,-kPi*.5f,false);
- mntSign(m,22.945f,5.3f,f+1.98f,"KEYS","FORKLIFT / CAGE / BAR STORE",1.f,-kPi*.5f);
  mntFix(m,model::med_notice_board,{20.f,1.04f},f+1.05f,1.2f,.07f,.9f,0,false);
  mntFix(m,model::med_first_aid_box,{22.95f,2.4f},f+1.35f,.37f,.12f,.35f,-kPi*.5f,false);
  m.pickupSpawns.push_back({{20.6f,7.1f},PickupKind::Health,f});
@@ -475,13 +462,11 @@ std::shared_ptr<const Map> makeCentralStores(){
  m.clutterSpawns.push_back({3,{20.1f,10.2f},f,1.2f});m.clutterSpawns.push_back({2,{22.4f,10.1f},f});
  // What B shift's last six chalked for each other before they gave up on the stores.
  for(float x:{21.5f,22.f})wall(m,x-.03f,13.3f,x+.03f,13.36f,f,f+1.2f,10);
- mntChalk(m,21.75f,13.36f,f+1.22f,"THEY'RE STILL IN THERE","STAY LOW: C. THEY HEAR BOOTS, NOT KNEES.",1.25f,kPi*.5f);
+ mntChalk(m,21.75f,13.36f,f+1.22f,"THEY'RE STILL IN THERE","STAY LOW. THEY HEAR BOOTS, NOT KNEES.",1.25f,kPi*.5f);
  // --- Assembly point B: the cage where B shift waited to be counted ------------------------------
  mntMesh(m,true,14.6f,21.4f,3.18f,f,true);
  mntMesh(m,false,19.8f,16.1f,2.74f,f,false);mntMesh(m,false,19.8f,18.85f,2.74f,f,true);mntMesh(m,false,19.8f,21.6f,2.74f,f,false);
  for(Vec2 c:{Vec2{19.8f,14.6f},Vec2{19.8f,17.47f},Vec2{19.8f,20.23f},Vec2{19.8f,22.97f},Vec2{23.f,14.6f}})wall(m,c.x-.05f,c.y-.05f,c.x+.05f,c.y+.05f,f,f+2.8f,12);
- mntChalk(m,20.35f,14.57f,f+1.25f,"THROW SOMETHING","E: PICK IT UP. FIRE: THROW. THEY GO AND LOOK.",.95f,kPi);
- mntChalk(m,22.45f,14.57f,f+1.25f,"GET BEHIND ONE","Q: DOWN, QUIET. E: GRAB HIM.",.95f,kPi);
  for(float y:{17.f,20.6f})bench(m,21.4f,y,f);
  // Lunch tins, flasks, hats and jackets: they expected to go back to work.
  for(int i=0;i<7;++i){const float x=20.3f+i*.32f,y=(i%2?17.f:20.6f)-.05f;wall(m,x-.11f,y-.07f,x+.11f,y+.07f,f+.51f,f+.62f,i%3==0?19:i%3==1?18:20);}
@@ -497,8 +482,6 @@ std::shared_ptr<const Map> makeCentralStores(){
  // --- The racking: Rack A north of the main aisle, Rack C south ---------------------------------
  mntRackRow(m,5.6f,6.6f,f,4,2,2,1);
  mntRackRow(m,5.6f,13.4f,f,4,2,1,6);
- mntSign(m,16.135f,8.6f,f+2.3f,"RACK A","BEARINGS / SEALS / FILTERS",1.5f,kPi*.5f);
- mntSign(m,16.135f,15.4f,f+2.3f,"RACK C","FASTENERS / GASKETS / ELECTRICAL",1.5f,kPi*.5f);
  for(float y:{10.75f,13.13f})floorLine(m,4.6f,y,18.6f,y+.12f,f,13);
  // Cover in the aisles: a pallet truck, staged loads.
  handCart(m,15.6f,12.9f,f);
@@ -517,7 +500,6 @@ std::shared_ptr<const Map> makeCentralStores(){
  m.terminals.back().yaw=0;
  m.pickupSpawns.push_back({{4.7f,2.3f},PickupKind::Ammo,mz});
  for(float x:{8.f,14.5f})m.lights.push_back(lamp({x,1.02f},mz+2.35f,.75f,6.f,6200,.4f,WorldLightMount::Wall,kPi*.5f));
- mntSign(m,11.f,1.055f,mz+1.95f,"SMALL PARTS","BINS 4000 - 4999 / ONE TOTE AT A TIME",2.4f,0);
  // The parts hoist over the north aisle: lifts totes from the floor to the deck.
  wall(m,11.2f,5.62f,13.f,5.88f,-14.92f,-14.7f,12);
  for(float x:{11.4f,12.8f})m.pipes.push_back({{x,5.75f},{x,5.75f},-14.7f,.02f,roof,6});
@@ -535,7 +517,6 @@ std::shared_ptr<const Map> makeCentralStores(){
  // --- Rack B, the bar store, against the west wall ---------------------------------------------
  mntBarRack(m,9.6f,17.1f,f,3);
  mntSign(m,1.055f,13.35f,f+3.55f,"RACK B","BAR STOCK / 20 - 80 MM / SIGN FOR EVERY CUT",3.2f,kPi*.5f);
- mntSign(m,1.055f,11.85f,f+3.f,"BAY 3","40 MM EN24",.8f,kPi*.5f);
  terminal(m,{3.7f,12.6f},"RACK B / BAR ISSUE","40 MM EN24, BAY 3: ONE LENGTH CUT TO 160 MM, TAGGED WO 7714.","E / SIGN IT OUT AND TAKE IT. LATHE 2 IS IN THE FABRICATION SHOP.",0,stateId("mnt_bar_stock"));
  m.terminals.back().yaw=kPi*.5f;
  mntTimer(m,"mnt_bar_stock","mnt_bar_stock_done",3000,3000);
@@ -552,7 +533,6 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(float x:{3.2f,3.9f})wall(m,x-.03f,2.3f,x+.03f,2.82f,f,f+.76f,12);
  wall(m,1.2f,3.6f,1.9f,4.4f,f,f+.55f,11);
  for(int i=0;i<4;++i)m.pipes.push_back({{1.35f+i*.13f,3.75f},{1.4f+i*.13f,4.25f},f+.5f,.02f,f+.5f,i%2?5:6});
- mntSign(m,1.055f,2.6f,f+1.75f,"BAR SAW","EYES / EARS / NO GLOVES NEAR THE BLADE",1.7f,kPi*.5f);
  m.pipes.push_back({{2.3f,2.6f},{2.3f,2.6f},f+2.9f,.012f,roof,6});
  m.lights.push_back(lamp({2.3f,2.6f},f+2.85f,.8f,5.f,3400,0));
  zone(m,"CENTRAL STORES / RACK B",1,5,5.5f,19.5f);
@@ -564,7 +544,6 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(float z:{f+1.5f,f+2.1f})wall(m,1.09f,19.7f,1.13f,22.1f,z,z+.06f,12);
  wall(m,2.9f,20.3f,2.915f,21.35f,f+.35f,f+1.15f,16);wall(m,2.5f,20.2f,2.9f,21.5f,f+1.16f,f+1.166f,16);
  floorLine(m,2.9f,20.25f,3.9f,21.4f,f,16);
- mntSign(m,1.055f,20.9f,f+2.7f,"SCRAP RETURNS","TO SALVAGE DISPATCH / NO PERSONNEL IN THE CHUTE",2.4f,kPi*.5f,mntRed);
  mntFix(m,model::pwr_breaker_panel,{1.05f,18.9f},f+1.3f,.18f,.1f,.46f,kPi*.5f,false);
  // Drag marks from the cage's side gate down the south aisle to the chute.
  for(float x=18.9f;x>3.4f;x-=1.3f){const float y=20.15f+std::sin(x*.9f)*.14f;floorLine(m,x-.6f,y,x+.2f,y+.07f,f,16);floorLine(m,x-.4f,y+.36f,x+.25f,y+.42f,f,16);}

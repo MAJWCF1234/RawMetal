@@ -236,7 +236,6 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(int i=0;i<5;++i)perFix(m,model::pwr_locker_bank,3.1f+i*.88f,1.45f,f,.87f,.85f,2.42f,-kPi*.5f,true);
  bench(m,4.9f,4.3f,f);
  m.fixtures.push_back({model::trash_can,{7.6f,2.6f},0,.6f,.6f,.76f,0,true});
- perSign(m,1.055f,6.1f,f+1.6f,"CHANGE HERE","COVERALLS IN THE BIN / BOOTS ON THE RACK",1.4f,kPi*.5f,perAmber);
  // A boot rack with the boots still on it, and coveralls on hooks.
  wall(m,1.05f,5.9f,1.5f,6.75f,f,f+.08f,12);wall(m,1.05f,5.9f,1.5f,6.75f,f+.42f,f+.47f,12);
  for(float y=5.98f;y<6.7f;y+=.24f){wall(m,1.12f,y,1.42f,y+.11f,f+.08f,f+.2f,8);wall(m,1.12f,y,1.42f,y+.11f,f+.47f,f+.59f,8);}
@@ -246,11 +245,9 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  m.pipes.push_back({{22.92f,1.6f},{22.92f,5.8f},f+.95f,.03f,f+.95f,5});
  for(float y:{2.2f,3.4f,4.6f}){m.pipes.push_back({{22.92f,y},{22.79f,y},f+.95f,.022f,f+.95f,5});m.pipes.push_back({{22.79f,y},{22.79f,y},f+.84f,.018f,f+.95f,5});
   wall(m,22.15f,y-.22f,22.55f,y+.22f,f+.63f,f+.7f,10);wall(m,22.2f,y-.18f,22.5f,y+.18f,f+.7f,f+.78f,23);}
- perSign(m,22.945f,3.7f,f+1.35f,"BOOT WASH","SCRUB SOLES / RINSE / THEN THE LINE",1.8f,-kPi*.5f,perAmber);
  // The tool drop: shelving on the north wall east of the shutter.
  for(float x:{16.f,18.f})m.fixtures.push_back({model::metal_shelf,{x,1.35f},0,1.8f,.5f,1.8f,0,true});
  for(float x:{15.6f,16.4f,17.7f,18.5f})m.fixtures.push_back({model::packing_crate,{x,1.35f},.92f,.5f,.36f,.3f,0,false});
- perSign(m,17.f,1.055f,f+2.05f,"TOOL DROP","NO TOOLS PAST THE CLEAN LINE",2.f,0,perAmber);
  // Clean line paint across the whole floor.
  floorLine(m,1.f,6.25f,23.f,6.45f,f,13);
  floorLine(m,10.3f,1.5f,10.42f,6.25f,f,14);floorLine(m,13.58f,1.5f,13.7f,6.25f,f,14);
@@ -314,14 +311,12 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(auto seg:{std::tuple{3.f,1.85f,7.f,1.9f},std::tuple{3.f,2.22f,6.2f,2.27f},std::tuple{4.9f,1.72f,4.95f,2.4f},std::tuple{6.2f,1.85f,6.25f,2.27f}})
   {auto [x1,z1,x2,z2]=seg;wall(m,x1,7.46f,x2,7.47f,f+z1,f+z2,14);}
  for(float x:{3.4f,4.4f,5.6f,6.6f})wall(m,x,7.46f,x+.08f,7.48f,f+2.02f,f+2.1f,x<5?19:18);
- perSign(m,5.f,7.415f,f+2.6f,"PERIMETER MIMIC","YARD / GATEHOUSE / DELTA",2.4f,0,perBlue);
  for(float x:{3.6f,5.f,6.4f})perWallFix(m,model::lab_control_board,x,7.455f,f+.9f,1.32f,.19f,.6f,kPi);
  perDesk(m,5.f,9.4f,f,kPi,2);
  terminal(m,{6.6f,13.9f},"PERIMETER OPS / SHIFT LOG","02:51 DELTA-2 HAS THE YARD. OPS STAFF STOOD DOWN.","03:05 GATE RELEASE LOCKED TO THE GATEHOUSE / EAST.");
  m.terminals.back().yaw=kPi;
  perFix(m,model::file_cabinet_tall,1.3f,14.4f,f,.5f,.6f,1.3f,kPi*.5f,true);
  perFix(m,model::water_cooler,8.9f,8.f,f,.35f,.35f,1.1f,0,true);
- perSign(m,1.055f,12.7f,f+1.7f,"YARD FEEDS","CAM 1-8 / RECORDING OFF SINCE 02:51",1.6f,kPi*.5f,perBlue);
  m.lights.push_back(perTroffer({4.f,9.2f},ceil));m.lights.push_back(perTroffer({6.f,12.6f},ceil,.8f));
  perGuard(m,"per_ops_clock","per_ops",0,ActorVisual::Cleanup,GuardSquadRole::Assault,
   {{{3.9f,10.7f},f,9000,-kPi*.5f},{{5.6f,8.4f},f,5000,kPi},{{3.6f,12.3f},f,4000,-kPi*.5f}},11.f,.6f,2,1.3f);
@@ -332,14 +327,12 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(float y:{16.9f,18.f})perWallFix(m,model::med_washroom_mirror,1.04f,y,f+1.2f,1.f,.04f,.67f,kPi*.5f);
  perWallFix(m,model::med_first_aid_box,7.6f,15.27f,f+1.35f,.37f,.12f,.35f,0);
  m.pickupSpawns.push_back({{7.6f,16.f},PickupKind::Health,f});
- perSign(m,9.655f,19.8f,f+1.65f,"STAFF WASHROOM","WASH HANDS / REPORT RASHES TO MEDICAL",1.5f,kPi*.5f,perBlue);
  m.lights.push_back(perTroffer({5.f,18.6f},ceil,.75f,6.f,4300,.32f));m.lights.back().flicker=.45f;
 
  // --- Badging: the corporate face --------------------------------------------------------------
  wall(m,14.6f,7.9f,15.5f,12.2f,f,f+1.02f,21);wall(m,14.55f,7.85f,15.55f,12.25f,f+1.02f,f+1.06f,20);
  perDesk(m,16.4f,10.f,f,-kPi*.5f,0);
  perFix(m,model::lab_photocopier,16.3f,8.f,f,.83f,.75f,.97f,kPi,true);
- perSign(m,22.945f,10.4f,f+1.2f,"DEPTHWORKS","SMILE. YOUR BADGE IS YOUR KEY.",2.6f,-kPi*.5f,perBlue);
  for(float y:{9.9f,10.9f})floorLine(m,21.4f,y,21.75f,y+.2f,f+.02f,14);
  perFix(m,model::wooden_chair,22.1f,10.4f,f,.42f,.52f,.95f,-kPi*.5f,true);
  // The badge camera on its tripod.
@@ -351,7 +344,6 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(float x:{21.3f,22.f})perFix(m,model::file_cabinet_tall,x,7.7f,f,.5f,.6f,1.3f,0,true);
  perWallFix(m,model::lab_notice_board,17.6f,13.93f,f+.95f,1.2f,.07f,.9f,0);
  perWallFix(m,model::lab_wall_clock,20.f,7.4f,f+2.25f,.4f,.03f,.4f,kPi);
- perSign(m,14.345f,9.6f,f+2.3f,"BADGING","PHOTO / ISSUE / REVOKE",1.6f,-kPi*.5f,perBlue);
  m.lights.push_back(perTroffer({17.5f,9.5f},ceil,.9f));m.lights.push_back(perTroffer({20.5f,11.8f},ceil,.85f));
 
  // --- Perimeter security ready room: the rifles are gone -------------------------------------------
@@ -363,7 +355,6 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  // The rifle rack, empty.
  wall(m,15.f,22.6f,18.6f,22.95f,f,f+.1f,12);wall(m,15.f,22.85f,18.6f,22.95f,f+.1f,f+1.7f,12);wall(m,15.f,22.6f,18.6f,22.95f,f+1.1f,f+1.16f,12);
  for(float x=15.3f;x<18.5f;x+=.42f)wall(m,x,22.62f,x+.06f,22.85f,f+.1f,f+.22f,8);
- perSign(m,16.8f,22.945f,f+1.85f,"RIFLE RACK","SIGN OUT WITH THE DUTY SERGEANT",1.8f,kPi,perAmber);
  m.fixtures.push_back({model::wooden_table,{17.6f,18.4f},0,1.367f,.724f,.78f,0,true});
  for(float x:{17.1f,18.1f}){m.fixtures.push_back({model::wooden_chair,{x,17.6f},0,.417f,.525f,.95f,0,true});m.fixtures.push_back({model::wooden_chair,{x,19.2f},0,.417f,.525f,.95f,kPi,true});}
  perFix(m,model::mug,17.3f,18.3f,f+.78f,.09f,.09f,.1f,0,false);
@@ -378,8 +369,6 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
 
  // --- The corridor ------------------------------------------------------------------------------
  perCamera(m,9.6f,8.2f,f+2.85f,1,0);perCamera(m,14.4f,21.6f,f+2.85f,-1,0);
- perSign(m,9.655f,11.f,f+2.42f,"CAMERAS IN USE","YOUR SAFETY IS MONITORED",1.6f,kPi*.5f,perBlue);
- perSign(m,14.345f,18.6f,f+1.55f,"DEPTHWORKS","SAFETY IS A SHARED RESPONSIBILITY",1.8f,-kPi*.5f,perBlue);
  m.fixtures.push_back({model::bench,{9.85f,20.3f},0,1.86f,.44f,.63f,kPi*.5f,true});
  for(Vec2 pt:{Vec2{10.f,7.75f},Vec2{14.f,15.f}})m.fixtures.push_back({model::lab_potted_plant,pt,0,.37f,.43f,.69f,0,false});
  perWallFix(m,model::pwr_fire_cabinet,14.3f,20.6f,f+1.1f,.25f,.2f,.56f,-kPi*.5f);
@@ -393,7 +382,6 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(float z=f+1.1f;z<f+2.7f;z+=.3f)wall(m,10.f,22.5f,14.f,22.55f,z,z+.05f,2);
  wall(m,9.95f,22.5f,14.05f,22.7f,f+.86f,f+.94f,13);
  wall(m,9.6f,22.3f,14.4f,23.f,f+2.75f,ceil,12);
- perSign(m,12.f,22.295f,f+2.8f,"SECURITY PERIMETER","YARD / ESCORTED STAFF ONLY",2.6f,kPi,perRed);
  perWallFix(m,model::lab_status_display,12.f,22.27f,f+2.52f,.69f,.06f,.2f,0);
  floorLine(m,9.6f,21.6f,14.4f,21.8f,f+.02f,13);
  for(Vec2 l:{Vec2{12.f,9.6f},Vec2{12.f,13.6f},Vec2{12.f,17.6f}})m.lights.push_back(perTroffer(l,ceil,1.f,7.f));
@@ -453,10 +441,8 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  wall(m,10.f,1,14.f,1.45f,f+2.75f,f+3.6f,15);
  wall(m,9.95f,.98f,14.05f,1.5f,f+2.7f,f+2.78f,12);
  for(float x:{9.3f,14.62f})for(float z=f+.15f;z<f+1.4f;z+=.4f)wall(m,x,1.45f,x+.08f,1.47f,z,z+.2f,13);
- perSign(m,12.f,1.505f,f+2.85f,"OPERATIONS CORRIDOR","CLEAN LINE / BADGING / PERIMETER OPS",3.2f,0,perBlue);
  m.lights.push_back(lamp({12.f,1.02f},f+4.2f,.9f,6.f,4300,.15f,WorldLightMount::Wall,kPi*.5f));
  perCamera(m,6.f,1.f,f+4.5f,0,1);
- perSign(m,19.f,1.055f,f+3.2f,"SECURITY PERIMETER","CAMERAS IN USE / ESCORTED STAFF ONLY BEYOND THIS POINT",3.2f,0,perBlue);
 
  // --- The staff lane: barriers, paint and the arm ---------------------------------------------
  for(float y:{3.f,4.7f})perFix(m,model::barrier,9.55f,y,f,1.6f,.8f,.88f,kPi*.5f,true);
@@ -467,9 +453,6 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  wall(m,13.75f,7.35f,14.25f,7.85f,f,f+1.05f,18);wall(m,13.7f,7.3f,14.3f,7.9f,f+1.05f,f+1.1f,12);
  for(int i=0;i<7;++i){float x=13.75f-(i+1)*.53f;wall(m,x,7.55f,x+.53f,7.65f,f+.94f,f+1.02f,i%2?20:19);}
  wall(m,14.25f,7.52f,14.7f,7.68f,f+.92f,f+1.04f,8);
- // The stop plate bolts to an upright on the arm control housing.
- wall(m,13.7f,7.35f,14.3f,7.5f,f+1.05f,f+1.82f,18);
- perSign(m,14.f,7.295f,f+1.12f,"STOP","BADGE CHECK",.5f,kPi,perRed);
 
  // --- Check 1: the arrivals booth; its intercom is wired to the Lock 2 bell ---------------------
  {const float x1=6.2f,y1=2.4f,x2=9.f,y2=5.4f,top=f+2.55f;
@@ -488,7 +471,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
   perFix(m,model::binder,7.3f,2.68f,f+1.34f,.3f,.08f,.32f,0,false);
   perWallFix(m,model::med_first_aid_box,6.38f,4.8f,f+1.35f,.37f,.12f,.35f,kPi*.5f);
   m.lights.push_back(lamp({7.6f,3.9f},top-.1f,.7f,3.5f,6200,.4f));
-  perSign(m,7.6f,2.345f,f+1.6f,"CHECK 1","ALL STAFF STOP / BADGE AND BAG",2.2f,kPi,perBlue);}
+  }
 
  // --- Vehicle Lock 2 in the west wall: sealed by Delta-2, its bell still wired ---------------
  for(float y:{5.6f,11.6f})wall(m,1,y,1.55f,y+.5f,f,f+5.2f,18);
@@ -502,7 +485,6 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  m.pipes.push_back({{1.6f,8.85f},{1.8f,8.85f},f+5.43f,.16f,f+5.43f,4});
  perWallFix(m,model::pwr_disconnect_switch,1.18f,12.75f,f+1.f,.43f,.35f,.85f,kPi*.5f);
  m.lights.push_back(perSwitch(lamp({1.57f,8.85f},f+4.9f,1.4f,9.f,1800,-.2f,WorldLightMount::Wall,0),0,false,.15f));
- perSign(m,1.055f,4.6f,f+2.4f,"VEHICLES 5 KM/H","STAFF ON FOOT: LANE ONLY",1.4f,kPi*.5f,perAmber);
  // The security van Delta-2 parked across the lock, and the detail's stores.
  perFix(m,model::service_van,4.3f,8.9f,f,2.05f,4.9f,2.15f,0,true);
  cargo(m,2.4f,2.3f,f);cargo(m,3.75f,2.3f,f,false);
@@ -528,8 +510,6 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  for(float x=10.2f;x<13.8f;x+=.5f)wall(m,x,22.16f,x+.25f,22.2f,f+2.83f,f+3.07f,13);
  for(float x:{7.6f,16.25f})for(float z=f+.2f;z<f+2.2f;z+=.5f)wall(m,x,22.16f,x+.15f,22.2f,z,z+.25f,13);
  perSign(m,12.f,22.145f,f+3.3f,"CHECKPOINT DELTA","ESCORTED STAFF ONLY / RELEASE FROM THE GATEHOUSE",3.8f,kPi,perRed);
- perSign(m,15.2f,22.145f,f+1.45f,"GATE RELEASE","GATEHOUSE / EAST",1.5f,kPi,perAmber);
- perSign(m,8.8f,22.145f,f+1.45f,"WAIT HERE","FOR THE GATE / CAMERAS ACTIVE",1.5f,kPi,perBlue);
  perWallFix(m,model::lab_status_display,12.f,22.17f,f+4.05f,.69f,.06f,.2f,kPi);
  perCamera(m,15.8f,22.2f,f+3.9f,0,-1);
  m.lights.push_back(perSwitch(lamp({9.2f,22.18f},f+2.75f,1.3f,6.f,1100,-.45f,WorldLightMount::Wall,-kPi*.5f),gate,true));
@@ -555,7 +535,6 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  wall(m,5.05f,17.65f,5.15f,17.75f,zd,zd+1.5f,8);
  wall(m,4.92f,17.5f,5.28f,17.86f,zd+1.5f,zd+1.82f,8);wall(m,4.95f,17.47f,5.25f,17.5f,zd+1.53f,zd+1.79f,20);
  m.lights.push_back(lamp({5.1f,17.35f},zd+1.66f,2.f,12.f,6000,.05f,WorldLightMount::Bare));
- perSign(m,1.055f,12.4f,f+2.2f,"SENTRY 1","AUTHORIZED ONLY / KEEP THE STAIR CLEAR",1.6f,kPi*.5f,perAmber);
  for(float x:{1.9f,2.68f})perFix(m,model::packing_crate,x,21.95f,f,.7f,.5f,.42f,0,true);
  perFix(m,model::packing_crate,2.3f,21.95f,f+.42f,.7f,.5f,.42f,.15f,false);
  m.lights.push_back(lamp({3.6f,19.8f},zd-.3f,.6f,4.f,2400,-.1f));
@@ -622,7 +601,6 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  wall(m,10.f,6.f,23.f,6.2f,f,top,3);wall(m,10.f,16.8f,23.f,17.f,f,top,3);
  wall(m,10.f,6.f,23.f,17.f,top,top+.25f,15);
  perFinish(m,10.2f,6.2f,23.f,16.8f,f,24);
- perSign(m,10.f-.055f,7.f,f+2.6f,"GATEHOUSE","PERIMETER DETAIL / NO ENTRY",1.6f,-kPi*.5f,perBlue);
  perCamera(m,10.f,16.6f,f+3.f,-1,0);
  // --- Gate desk and the CCTV wall --------------------------------------------------------------
  wall(m,10.2f,12.65f,15.6f,12.82f,f,f+2.1f,2);
@@ -684,14 +662,12 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  wall(m,6.f,5.f,6.12f,16.f,mz,mz+1.f,21);perWindow(m,6.f,5.f,6.12f,16.f,mz+1.f,mz+2.5f);
  wall(m,6.f,5.f,6.12f,16.f,mz+2.55f,roof,21);
  for(float y:{7.f,10.f,13.f})perDesk(m,4.4f,y,mz,kPi*.5f,int(y));
- perSign(m,1.055f,7.f,mz+1.6f,"DELTA / SECURITY OFFICE","ADMINISTRATIVE LINK WEST",2.f,kPi*.5f,perBlue);
  terminal(m,{2.f,6.f},"DELTA / PROCESSING TALLY","IN: 14 STAFF. OUT: 0. TRANSIT SEALED 02:40 BY ORDER 7.","SOUTH DOOR NEEDS THE CHIEF'S OVERRIDE. CHIEF'S OFFICE: ADMIN LINK.",mz-f);
  m.terminals.back().yaw=.001f;
  // --- The inspection lane: scanner portal, turnstiles and the sentry desk --------------------------
  for(float x:{9.f,15.f}){wall(m,x-.15f,4.5f,x+.15f,6.f,f,f+2.6f,20);}
  wall(m,8.85f,4.5f,15.15f,6.f,f+2.6f,f+3.6f,20);
  perWallFix(m,model::lab_id_scanner,9.2f,5.2f,f+1.1f,.3f,.06f,.41f,kPi*.5f);
- perSign(m,12.f,4.445f,f+2.62f,"CHECKPOINT DELTA","STOP / BADGE / HANDS VISIBLE",2.6f,kPi,perRed);
  for(float x:{10.4f,12.f,13.6f})perFix(m,model::ticket_gate,x,8.f,f,1.f,.3f,1.f,0,true);
  perTable(m,9.5f,10.f,11.f,11.2f,f);
  perFix(m,model::crt_monitor,10.2f,10.6f,f+.86f,.42f,.4f,.38f,kPi,false);
@@ -707,12 +683,10 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  perBodyBag(m,19.6f,5.f,f,false);perBodyBag(m,20.f,7.2f,f,false);perBodyBag(m,19.4f,11.f,f,false);
  perBlood(m,18.f,13.f,21.6f,16.4f,f);perWallBlood(m,true,22.98f,13.f,17.f,f+.3f,f+1.6f,-.01f);
  perFix(m,model::med_ward_bed_tossed,21.2f,18.f,f,2.1f,1.5f,.84f,kPi*.5f,true);
- perSign(m,15.845f,12.f,f+2.42f,"HOLDING","DETAINED STAFF / DO NOT FEED",1.4f,-kPi*.5f,perRed);
  // The door in the north-east corner, welded shut with plate.
  wall(m,22.6f,.95f,23.f,2.95f,f,f+2.4f,7);wall(m,22.55f,1.f,22.6f,2.9f,f+.1f,f+2.3f,11);
  perSign(m,22.495f,1.95f,f+1.2f,"DO NOT OPEN","WELDED 02:52 / ORDER 7",1.2f,-kPi*.5f,perRed);
  // --- The south door ---------------------------------------------------------------------------
- perSign(m,6.f,22.945f,f+1.6f,"PERSONNEL TRANSIT","PLATFORM B / STAFF TRAM",2.4f,kPi,perBlue);
  perSign(m,18.f,22.945f,f+1.6f,"SOUTH DOOR","CHIEF'S OVERRIDE REQUIRED",2.2f,kPi,perRed);
  // --- Who is still here -----------------------------------------------------------------------
  machineryClock(m,"per_delta_clock",60000);
@@ -753,7 +727,6 @@ std::shared_ptr<const Map> makeAdministrativeLink(){
  ceilingGrid(m,1.f,1.f,23.f,15.8f,ceil);
  // The glass gallery over the shaft.
  perCurtain(m,1.f,15.8f,23.f,16.f,o,ceil);
- perHangingSign(m,12.f,15.2f,o+2.f,false,3.2f,"ORE PASS 2","DECOMMISSIONED 1987","ORE PASS 2 / DECOMMISSIONED","THE PLANT WAS BUILT AROUND THIS SHAFT",perAmber,ceil);
  // --- The shaft below: the old chute, a dead conveyor, sodium lamps far down ------------------------
  wall(m,4.f,19.f,9.f,23.f,f,f+5.f,11);wall(m,4.5f,19.5f,8.5f,22.5f,f+5.f,f+8.f,11);
  beltConveyor(m,9.f,22.f,20.f,f+1.2f,roof);
@@ -821,10 +794,8 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  perRailX(m,10.5f,1.f,23.f,bed);
  perFix(m,model::metro_car,10.f,10.5f,bed,2.4f,14.f,3.3f,kPi*.5f,true);
  for(float x:{1.f,22.6f}){wall(m,x,8.f,x+.4f,13.f,bed,bed+.3f,15);wall(m,x,8.2f,x+.4f,12.8f,bed+.3f,bed+3.6f,7);}
- perSign(m,1.455f,10.5f,bed+2.4f,"TUNNEL WEST","SHUTTERED 02:40",1.6f,kPi*.5f,perRed);
- perSign(m,22.545f,10.5f,bed+2.4f,"TUNNEL EAST","SHUTTERED 02:40",1.6f,-kPi*.5f,perRed);
  // --- North platform: the dead lifts and the departure board --------------------------------------
- for(float x:{4.f,19.f}){wall(m,x-1.f,1.f,x+1.f,1.3f,f,f+2.4f,7);wall(m,x-1.f,1.f,x+1.f,1.3f,f+2.4f,f+3.5f,15);perSign(m,x,1.355f,f+2.5f,"LIFT","OUT OF SERVICE",1.2f,0,perRed);}
+ for(float x:{4.f,19.f}){wall(m,x-1.f,1.f,x+1.f,1.3f,f,f+2.4f,7);wall(m,x-1.f,1.f,x+1.f,1.3f,f+2.4f,f+3.5f,15);}
  perHangingSign(m,12.f,5.f,f+2.6f,false,3.2f,"PLATFORM B / TRAM 4","HELD 02:40 / ORDER 7","PLATFORM B","WAY OUT: WEST WALKWAY",perBlue,roof);
  for(float x:{7.f,16.f})perFix(m,model::platform_chair,x,6.4f,f,1.8f,.5f,.8f,kPi,true);
  perFix(m,model::metro_vending,21.6f,3.f,f,1.5f,.68f,2.38f,-kPi*.5f,true);
@@ -835,7 +806,6 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  for(Vec2 b:{Vec2{10.2f,17.f},Vec2{11.f,16.4f},Vec2{20.2f,18.f}})m.clutterSpawns.push_back({0,b,f,b.x});
  perFix(m,model::ind_crate,21.f,21.4f,f,.8f,.8f,.8f,.3f,true);
  terminal(m,{8.f,21.f},"TRANSIT / PLATFORM B LOG","TRAM 4 HELD 02:40. 31 ABOARD. DOORS LOCKED BY ORDER 7.","03:05 DOORS OPENED BY CLEANUP. 03:20 PLATFORM CLEAR.",f-bed);
- perSign(m,1.055f,20.5f,f+1.6f,"WEST WALKWAY","RESTRICTED UTILITIES / RESEARCH RECEIVING",2.6f,kPi*.5f,perBlue);
  machineryClock(m,"per_transit_clock",60000);
  // --- Something is still on the tram -------------------------------------------------------------
  m.creatureSpawns.push_back({CreatureKind::Mutant,{18.f,15.f},f});

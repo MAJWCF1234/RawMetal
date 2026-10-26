@@ -175,7 +175,6 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  wall(m,22.6f,14.f,23.f,19.f,base+3.4f,roof,15);
  for(float y:{13.75f,19.f})wall(m,22.5f,y,23.f,y+.25f,base,roof,15);
  wall(m,22.45f,13.7f,22.6f,19.3f,base+3.25f,base+3.4f,12);
- pbHangingSign(m,20.4f,16.5f,base+3.3f,true,3.4f,"RESTRICTED UTILITIES","LAB LIFE SUPPORT / AUTHORIZED STAFF","PERSONNEL TRANSIT","TRAM PLATFORM / CHECKPOINT DELTA");
  floorLine(m,13.f,16.42f,23.f,16.58f,base);floorLine(m,9.92f,16.42f,13.f,16.58f,base);floorLine(m,9.92f,16.42f,10.08f,18.9f,base);
  // --- Fan deck over the supply handler, the walkway and the control room -----------------
  deck(m,fd,1,1,15,7);deck(m,fd,15,5,17,7);deck(m,fd,17,1,23,9);
@@ -196,11 +195,6 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  wall(m,9.3f,5.2f,10.7f,5.25f,base+.22f,base+.34f,8);
  m.pipes.push_back({{10.f,5.32f},{10.f,5.32f},base+.02f,.04f,base+.28f,0});
  wall(m,9.75f,5.3f,10.25f,5.8f,base,base+.012f,8);
- wallSign(m,2.f,5.255f,base+1.86f,"MIXING","OUTSIDE / RETURN AIR",1.3f,0);
- wallSign(m,5.6f,5.255f,base+1.86f,"PRE-FILTER","G4 / CHANGE AT 250 PA",1.5f,0);
- wallSign(m,7.9f,5.255f,base+1.86f,"HEPA H14","BAG-IN / BAG-OUT",2.f,0);
- wallSign(m,10.f,5.255f,base+1.86f,"COIL","CHW 6 / 12 C",1.2f,0);
- wallSign(m,12.2f,5.255f,base+1.86f,"FANS SF-1 / SF-2","LOCK OUT BEFORE OPENING",2.f,0);
  for(float x:{4.6f,6.6f,9.2f})m.fixtures.push_back({model::lab_pressure_gauge,{x,5.33f},1.95f,.29f,.11f,.41f,kPi,false});
  // Discharge plenum into the riser, and the supply main to the labs along the roof.
  wall(m,14.6f,1.6f,15.f,3.8f,base+.3f,base+2.4f,20);
@@ -210,14 +204,12 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  for(float y=5.f;y<23.f;y+=2.f)wall(m,14.97f,y,16.63f,y+.06f,roof-1.13f,roof-.32f,12);
  for(float y=6.f;y<22.5f;y+=4.f){wall(m,14.85f,y-.04f,16.75f,y+.04f,roof-1.18f,roof-1.1f,12);
   for(float x:{14.9f,16.7f})m.pipes.push_back({{x,y},{x,y},roof-1.15f,.022f,roof,6});}
- wallSign(m,15.8f,4.055f,base+.9f,"RISER R-1","SUPPLY TO LABS / 41 000 M3/H",1.5f,0);
  // --- On the fan deck: the outside-air duct and its damper, motors, the coil header -----
  wall(m,1.2f,1.2f,3.f,3.2f,fd,roof,20);
  for(float z=fd+.4f;z<roof-.3f;z+=1.4f)wall(m,1.14f,1.14f,3.06f,3.26f,z,z+.07f,12);
  wall(m,1.1f,1.1f,3.1f,3.3f,fd+.9f,fd+1.6f,8);
  m.fixtures.push_back({model::valve_wheel,{2.1f,3.52f},fd-base+.85f,.7f,.12f,.7f,0,false});
  m.pipes.push_back({{2.1f,3.3f},{2.1f,3.47f},fd+1.2f,.04f,fd+1.2f,6});
- wallSign(m,2.1f,3.355f,fd+1.62f,"OA-2","OUTSIDE AIR DAMPER",1.6f,0);
  terminal(m,{3.6f,3.7f},"DAMPER OA-2 / HAND CRANK","ACTUATOR POWER REMOVED BY SECURITY. WHEEL ENGAGED.","E / CRANK OA-2 OPEN. THEN RESTART SF-2, EAST.",fd-base,damper);
  m.terminals.back().control=true;m.terminals.back().yaw=0;
  for(float x:{11.6f,12.9f}){m.fixtures.push_back({model::generator,{x,2.4f},fd-base,1.1f,.7f,.9f,kPi*.5f,true});
@@ -227,18 +219,15 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  for(float o:{0.f,.45f}){const float zz=-13.6f+o*.6f,run=14.f+o*.8f;
   pipeRoute(m,{{10.f+o,3.f,fd+1.f},{10.f+o,3.f,zz},{run,3.f,zz},{run,22.45f,zz},{14.85f+o,22.45f,zz},{14.85f+o,22.45f,base+1.49f}},.1f,o<.2f?5:3,roof);}
  for(float x=5.f;x<9.f;x+=1.4f){wall(m,x,4.6f,x+1.f,5.6f,fd,fd+.03f,8);wall(m,x+.4f,4.62f,x+.6f,4.7f,fd+.03f,fd+.06f,12);}
- wallSign(m,8.f,1.055f,fd+2.f,"AHU-1 / LABORATORY SUPPLY AIR","SF-1 DUTY / SF-2 STANDBY / NEGATIVE CASCADE",4.4f,0);
  // --- Cascade control, on the deck east ---------------------------------------------------
  pbGlazed(m,17.f,1.f,17.12f,5.f,fd);pbGlazed(m,17.f,7.f,17.12f,8.88f,fd);wall(m,17.f,5.f,17.12f,7.f,fd+2.2f,fd+2.6f,3);
  pbGlazed(m,17.f,8.88f,18.2f,9.f,fd);pbGlazed(m,19.6f,8.88f,23.f,9.f,fd);wall(m,18.2f,8.88f,19.6f,9.f,fd+2.2f,fd+2.6f,3);
  wall(m,17.f,1.f,23.f,9.f,fd+2.6f,fd+2.75f,2);
  wall(m,17.f,8.95f,23.f,9.05f,fd+2.75f,fd+3.5f,3);
- wallSign(m,20.f,9.105f,fd+2.8f,"CASCADE CONTROL","LAB PRESSURE / SUPPLY / EXHAUST",3.2f,0);
  // The mimic board of the pressure cascade fills the north wall.
  wall(m,17.4f,1.f,22.7f,1.14f,fd+.8f,fd+2.45f,2);
  for(auto [z,mat]:{std::pair{.95f,19},{1.12f,18},{1.29f,20},{1.46f,14}})wall(m,17.7f,1.14f,22.4f,1.152f,fd+z,fd+z+.05f,mat);
  for(float x=18.2f;x<22.4f;x+=1.05f)wall(m,x,1.14f,x+.04f,1.152f,fd+.9f,fd+1.55f,20);
- wallSign(m,20.05f,1.195f,fd+1.72f,"PRESSURE CASCADE","LABS -60 / CORRIDORS -30 / RECEIVING -15 PA",4.8f,0);
  for(float x:{18.4f,21.7f})m.fixtures.push_back({model::lab_control_board,{x,1.24f},fd-base+.05f,1.32f,.19f,.6f,kPi,false});
  terminal(m,{18.8f,3.3f},"CASCADE CONTROL / STATUS","SUPPLY SF-1, SF-2 STOPPED: SECURITY ORDER 7, 02:20.","EXHAUST RUNNING. LABS -310 PA. LOCKS INTERLOCKED.",fd-base);
  terminal(m,{20.7f,3.3f},"SUPPLY FAN SF-2 / RESTART","INTERLOCK: OUTSIDE AIR DAMPER OA-2 MUST BE OPEN.","OA-2 LOCKED OUT: OPEN IT BY HAND, FAN DECK WEST END.",fd-base,supply,damper);
@@ -254,7 +243,6 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  // --- UPS room under the control room -------------------------------------------------------
  wall(m,17.f,1.f,17.2f,8.8f,base,under,15);
  wall(m,17.f,8.8f,20.6f,9.f,base,under,15);wall(m,22.2f,8.8f,23.f,9.f,base,under,15);wall(m,20.6f,8.8f,22.2f,9.f,base+2.15f,under,15);
- m.signs.push_back({{21.4f,9.06f},base+2.16f,1.5f,.38f,0,"UPS-L","LAB LIFE SUPPORT"});
  for(float y:{1.9f,3.2f,4.5f,5.8f})m.fixtures.push_back({model::pwr_tall_switch_cabinet,{22.6f,y},0,.76f,1.23f,2.42f,kPi,true});
  for(float x:{18.f,19.3f})m.fixtures.push_back({model::electrical_cabinet,{x,1.27f},0,.9066f,.4956f,2.2f,kPi,true});
  cableTray(m,{17.6f,1.6f},{22.f,1.6f},base+2.35f);
@@ -271,7 +259,6 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  }
  pipeRoute(m,{{3.4f,22.95f,-16.f},{3.4f,20.95f,-16.f}},.3f,0,roof);
  pipeRoute(m,{{3.4f,16.55f,-16.f},{3.4f,18.65f,-16.f}},.3f,0,roof);
- wallSign(m,1.055f,17.6f,base+2.6f,"CONTAINMENT EXHAUST","EX-1 / EX-2 / RESONANCE TRAP CARTRIDGES",2.6f,kPi*.5f);
  for(float y:{13.9f,15.3f}){
   wall(m,5.7f,y,7.1f,y+1.2f,base+.4f,base+1.95f,20);
   for(float x:{5.72f,7.02f})for(float yy:{y+.05f,y+1.09f})wall(m,x,yy,x+.06f,yy+.06f,base,base+.4f,12);
@@ -279,18 +266,15 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
   wall(m,7.13f,y+.5f,7.17f,y+.7f,base+1.05f,base+1.25f,8);
   pipeRoute(m,{{6.4f,y+.6f,base+1.95f},{6.4f,y+.6f,-15.6f},{4.45f,y+.6f,-15.6f}},.14f,0,roof);
  }
- wallSign(m,6.4f,13.845f,base+1.25f,"EH-1 / EH-2","EXHAUST HEPA / BAG OUT ONLY",1.4f,kPi);
  terminal(m,{6.4f,12.2f},"CONTAINMENT EXHAUST / EX-1","TRAP CARTRIDGES CHANGED 3 TIMES THIS WEEK. SPEC: QUARTERLY.","SPENT UNITS GO BACK TO ENERGY RESEARCH. DO NOT OPEN.");
  m.fixtures.push_back({model::pwr_duct_fan_unit,{1.42f,12.9f},0,.79f,1.49f,1.95f,0,true});
  for(float x:{5.4f,6.7f}){m.fixtures.push_back({model::pallet,{x,22.3f},0,1.2f,1.15f,.16f,0,true});
   m.fixtures.push_back({model::lab_specimen_crate,{x,22.3f},.16f,1.f,1.f,1.f,x>6?.25f:0,true});}
- board(m,6.05f,21.2f,base+1.15f,"SPENT TRAP CARTRIDGES","RETURN TO ENERGY RESEARCH / DO NOT OPEN",2.4f);
  // The lab gas manifold, chained upright behind its mesh.
  for(float x=1.45f;x<4.4f;x+=.42f)m.fixtures.push_back({model::gas_cylinder,{x,22.6f},0,.33f,.33f,1.58f,0,true});
  wall(m,1.f,22.38f,4.5f,22.42f,base+1.1f,base+1.15f,12);
  m.pipes.push_back({{1.2f,22.88f},{4.4f,22.88f},base+1.8f,.04f,base+1.8f,3});
  m.fixtures.push_back({model::mine_mesh_fence,{2.7f,21.5f},0,3.4f,.06f,2.3f,0,true});
- wallSign(m,2.7f,22.945f,base+2.4f,"LAB GASES","N2 / AR / CO2 / CHAINED UPRIGHT",2.4f,kPi);
  // --- Pressure lock PL-3 to Research Receiving ---------------------------------------------
  wall(m,7.6f,19.4f,7.8f,23.f,base,base+3.4f,3);wall(m,12.2f,19.4f,12.4f,23.f,base,base+3.4f,3);
  wall(m,7.6f,19.4f,8.f,19.6f,base,base+3.4f,3);wall(m,12.f,19.4f,12.4f,19.6f,base,base+3.4f,3);
@@ -314,7 +298,6 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  }
  m.structures.push_back({19.3f,19.95f,22.7f,22.45f,base,base+1.35f,false,6});
  m.fixtures.push_back({model::compressor,{21.f,21.2f},1.35f,1.8f,1.05f,.9f,0,true});
- wallSign(m,22.945f,21.2f,base+2.3f,"CH-2","CHILLED WATER / LAB COOLING",1.6f,-kPi*.5f);
  m.fixtures.push_back({model::mine_dewatering_pump,{15.9f,22.45f},0,2.6f,.8f,1.49f,0,true});
  pipeRoute(m,{{17.1f,22.45f,base+1.49f},{17.1f,22.45f,-14.8f},{20.5f,22.45f,-14.8f},{20.5f,21.2f,-14.8f},{20.5f,21.2f,base+2.25f}},.12f,5,roof);
  m.waterVolumes.push_back({14.4f,19.8f,18.8f,21.7f,base-.16f,base-.04f});
@@ -386,8 +369,6 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  for(float x:{7.4f,12.f})wall(m,x,3.2f,x+.6f,3.5f,base,base+4.f,15);
  wall(m,7.4f,3.2f,12.6f,3.5f,base+3.4f,base+4.f,15);
  floorLine(m,8.f,3.2f,12.f,3.35f,base,13);
- pbHangingSign(m,10.f,4.6f,base+4.2f,false,3.6f,"RESTRICTED UTILITIES","PL-3 / PERSONNEL TRANSIT","RESEARCH RECEIVING","HOLD 2 / CLEAN TRANSFER UPSTAIRS");
- pbSign(m,4.3f,1.055f,base+4.4f,"RESEARCH RECEIVING","DEPTHWORKS ENERGY RESEARCH / HOLD 2",6.f,0,pbAmber);
  // --- Hold 2, west: Train 27's research containers behind the chain-link ----------------
  // The rest of the load stands stacked against the north wall. Leave the
  // corner pallet clear of both rows and the vestibule wall.
@@ -425,12 +406,8 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  wall(m,8.f,3.2f,8.5f,3.5f,base,base+2.9f,15);wall(m,8.42f,3.5f,8.48f,3.6f,base,base+2.78f,12);
  wall(m,8.4f,16.36f,8.5f,17.f,base,base+2.78f,12);
  for(float y:{3.6f,6.79f,9.98f,13.17f,16.36f,19.9f})wall(m,8.41f,y-.04f,8.49f,y+.04f,base,base+2.78f,12);
- wall(m,8.47f,6.4f,8.53f,7.8f,base+1.2f,base+2.05f,2);
- pbSign(m,8.585f,7.1f,base+1.27f,"HOLD 2 / ORDER 7","NO CONTAINER LEAVES RECEIVING",1.3f,pbE,pbRed);
- pbHangingSign(m,8.9f,11.575f,base+2.95f,true,2.6f,"FREIGHT STAIR","CLEAN TRANSFER GALLERY / DECON","SORTING FLOOR","PL-3 / UTILITIES NORTH");
  // The freight stair to the gallery, against the west wall.
  m.stairs.push_back({1.3f,12.5f,3.3f,17.f,base,gz,16,true,true});
- pbSign(m,1.055f,11.4f,base+2.1f,"FREIGHT STAIR","CLEAN TRANSFER / DECON 1 UP",1.5f,pbE,pbBlue);
  // R-117: a transfer cage, its door pulled off and bent.
  pbFix(m,model::med_holding_cage,6.25f,14.f,base,3.82f,1.73f,1.71f,kPi,true);
  pbFix(m,model::mine_bent_grate,3.95f,14.f,base,1.6f,.06f,1.72f,pbE,false);
@@ -452,18 +429,15 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  pbFix(m,model::file_cabinet_tall,12.75f,3.75f,base,.5f,.6f,1.3f,pbE,true);
  pbFix(m,model::file_cabinet_wide,15.6f,1.3f,base,.9f,.5f,.75f,pbS,true);
  pbFix(m,model::cctv_tv,15.6f,1.3f,base+.75f,.5f,.4f,.42f,pbS,false);
- pbSign(m,14.9f,1.055f,base+1.75f,"RECEIVING / HOLD 2","SIGN EVERY SEAL / NO CONTAINER LEAVES UNLOGGED",2.2f,0,pbAmber);
  terminal(m,{13.7f,5.f},"PERSONNEL SORT / SHIFT 02","ARRIVALS 31. CLEARED TO DECON 27. HELD FOR SCREENING 4.","HELD STAFF: MEDICAL ESCORT ONLY. DO NOT INFORM THEM.");m.terminals.back().yaw=pbS;
  for(float x:{16.6f,19.6f})for(float y:{4.9f,5.5f}){m.pipes.push_back({{x,y},{x,y},base,.035f,base+.95f,5});m.pipes.push_back({{x,y},{x,y},base,.17f,base+.03f,6});wall(m,x-.06f,y-.06f,x+.06f,y+.06f,base,base+.95f,CollisionProxyMaterial);}
  for(float y:{4.9f,5.5f})wall(m,16.6f,y-.015f,19.6f,y+.015f,base+.83f,base+.89f,19);
- pbSign(m,17.5f,1.055f,base+4.4f,"PERSONNEL SORT","ALL STAFF SCAN / ESCORTS WAIT HERE",4.6f,0,pbBlue);
  // The staff lane: glazed on the hall side, its door locked since the lockdown.
  pbGlazed(m,17.9f,6.1f,18.1f,17.f,base,3.f);
  wall(m,17.9f,5.9f,20.f,6.1f,base,base+3.6f,3);wall(m,22.6f,5.9f,23.f,6.1f,base,base+3.6f,3);wall(m,20.f,5.9f,22.6f,6.1f,base+2.65f,base+3.6f,3);
  for(float x:{19.92f,22.6f})wall(m,x,5.86f,x+.08f,6.14f,base,base+2.7f,20);
  {Door d{20.f,22.6f,6.f,0};d.requireState=staff;m.doors.push_back(d);}
  pbFix(m,model::lab_door_reader,19.45f,5.64f,base,.85f,.52f,2.39f,0,false);
- pbSign(m,21.3f,5.845f,base+2.85f,"STAFF LANE","DECON 1 / CLEARED STAFF ONLY",2.4f,kPi,pbBlue);
  pbSign(m,18.5f,5.845f,base+1.45f,"LOCKDOWN 02:09","RELEASE FROM CLEAN SIDE",.95f,kPi,pbRed);
  m.stairs.push_back({20.8f,12.5f,22.8f,17.f,base,gz,16,true,true});
  for(float y:{7.6f,8.5f,9.4f})pbLockers(m,22.5f,y,base,pbW);
@@ -494,7 +468,6 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  pbOpenCrate(m,13.f,14.6f,base+.16f);
  pbFix(m,model::lab_anomaly_relic,13.f,14.6f,base+.64f,.5f,.4f,.4f,.6f,false);
  wall(m,11.6f,15.4f,12.7f,16.5f,base,base+.05f,10);
- wallSign(m,13.f,13.995f,base+.32f,"SPECIMEN 4471","DEEP BORE / UNPACK IN A LAB ONLY",.95f,kPi);
  pbFix(m,model::mine_depot_forklift,15.9f,12.6f,base,1.2f,3.73f,2.27f,pbE,true);
  // The receiving clerk, dragged from the hold gate.
  pbBody(m,"ere_recv_clock",ActorVisual::Worker,{9.8f,12.9f},base,1.1f);
@@ -503,7 +476,6 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  wall(m,10.f,22.8f,14.f,24.f,base,under,15);
  for(float x:{3.4f,4.2f,5.f})pbFix(m,model::lab_sample_fridge,x,22.36f,base,.7f,.85f,1.f,0,true);
  pbFix(m,model::lab_specimen_cabinet,7.6f,22.42f,base,1.34f,.74f,2.19f,0,true);
- pbSign(m,6.1f,22.945f,base+1.6f,"COLD HOLD","SPECIMENS +4 C / LOG EVERY OPENING",1.4f,kPi,pbBlue);
  pbFix(m,model::med_wheelchair,2.6f,20.2f,base,.55f,1.04f,.91f,.7f,true);
  pbBlood(m,3.6f,19.4f,6.1f,20.f,base);
  // The container lift CL-2 rises through the gallery to the clean side.
@@ -526,7 +498,6 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  wall(m,1.f,17.f,23.f,17.3f,under-.32f,under,12);
  for(float y:{17.7f,22.f})wall(m,14.f,y,18.f,y+.3f,under-.32f,under,12);
  wall(m,8.6f,16.98f,13.4f,17.18f,gz,gz+1.1f,15);wall(m,8.56f,16.94f,13.44f,17.22f,gz+1.1f,gz+1.16f,20);
- m.signs.push_back({{11.f,16.965f},gz+.14f,4.6f,.84f,kPi,"CLEAN TRANSFER GALLERY","DECON 1 / ENERGY RESEARCH",pbBlue});
  guardRail(m,3.3f,17.f,8.6f,17.06f,gz);guardRail(m,13.4f,17.f,20.8f,17.06f,gz);
  guardRail(m,14.f,17.94f,18.f,18.f,gz);guardRail(m,14.f,22.f,18.f,22.06f,gz);guardRail(m,13.94f,18.f,14.f,22.f,gz);guardRail(m,18.f,18.f,18.06f,22.f,gz);
  pbFix(m,model::mine_cage_gate,13.9f,20.f,gz,2.1f,.07f,2.55f,pbE,false);
@@ -536,9 +507,6 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  wall(m,9.55f,22.55f,14.45f,23.f,gz+2.8f,gz+3.3f,20);
  wall(m,10.f,23.f,14.f,24.f,gz+2.8f,roof,28);
  wall(m,9.f,20.5f,14.f,23.f,gz,gz+.015f,27);floorLine(m,9.f,20.4f,14.f,20.52f,gz,20);
- m.signs.push_back({{12.f,22.86f},gz+3.6f,7.f,1.3f,kPi,"ENERGY RESEARCH","DECONTAMINATION / CLEAN SIDE BEYOND",pbBlue});
- pbSign(m,12.f,22.495f,gz+2.85f,"DECON 1","STAGE 1 / DISROBE",2.2f,kPi,pbGreen);
- pbSign(m,16.f,22.825f,gz+1.25f,"CONTAINER LIFT CL-2","CLEAN TRANSFER / 4000 KG",2.f,kPi,pbAmber);
  bench(m,5.5f,21.9f,gz);bench(m,20.4f,21.9f,gz);
  terminal(m,{8.f,21.95f},"DECON 1 / QUEUE","CYCLE ABORTED 02:20: SUPPLY AIR LOST. CHAMBER HELD SEALED.","SUPPLY BACK. ONE OCCUPANT STILL LOGGED INSIDE.",gz-base);
  terminal(m,{22.3f,19.8f},"STAFF LANE / CLEAN-SIDE RELEASE","E / RELEASE THE STAFF LANE DOOR BELOW.","LOCKDOWN 02:09: RELEASE FROM THIS SIDE ONLY.",gz-base,staff);m.terminals.back().yaw=pbW;
@@ -625,14 +593,10 @@ std::shared_ptr<const Map> makeDecontamination(){
  bench(m,4.6f,3.25f,f);bench(m,4.6f,5.35f,f);
  for(float y:{4.4f,5.1f,5.8f})pbFix(m,model::drum,1.45f,y,f,.6f,.6f,.86f,y*2.f,true);
  pbFix(m,model::stock_cage,2.05f,6.85f,f,1.6f,.9f,1.1f,0,true);
- pbSign(m,1.055f,5.1f,f+1.35f,"SOILED GARMENTS","BAG / TAG / BIN BEFORE THE SHOWER",1.6f,pbE,pbAmber);
  for(float x:{6.2f,7.2f,8.2f,9.2f})pbFix(m,model::med_scrub_sink,x,7.13f,f,.49f,.54f,1.13f,pbN,true);
  for(float x:{6.7f,8.7f})pbFix(m,model::med_washroom_mirror,x,7.38f,f+1.15f,1.5f,.04f,1.f,pbN,false);
  floorLine(m,9.6f,6.85f,14.4f,6.97f,f,19);
  pbSign(m,5.f,1.055f,f+2.62f,"DECONTAMINATION / 5 STAGES","DISROBE - SHOWER - AIR - MONITOR - GOWN",4.f,0,pbBlue);
- pbSign(m,12.f,1.055f,f+2.84f,"RESEARCH RECEIVING","CLEAN TRANSFER GALLERY / HOLD 2",3.2f,0,pbAmber);
- pbSign(m,12.f,7.345f,f+2.72f,"STAGE 2 / SHOWER","CLOTHES BINNED / NOTHING CARRIED THROUGH",2.8f,kPi,pbGreen);
- pbSign(m,4.f,7.345f,f+2.72f,"DECON PLANT","WATER / AIR / DOSING",1.8f,kPi,pbAmber);
  ceilingGrid(m,1.f,1.f,15.f,7.4f,ceil);
  for(Vec2 l:{Vec2{4.f,3.f},Vec2{8.f,5.4f},Vec2{12.f,2.8f},Vec2{12.f,5.8f}})m.lights.push_back(lamp(l,ceil-.16f,.95f,6.5f,6200,.04f));
  // The operator's booth: glazed onto stage 1, entered from the clean side.
@@ -654,7 +618,6 @@ std::shared_ptr<const Map> makeDecontamination(){
   for(float y=8.f;y<11.2f;y+=.55f)m.pipes.push_back({{x,y},{x+(x<12?.1f:-.1f),y},f+2.15f,.022f,f+2.07f,5});}
  for(float y:{8.4f,9.5f,10.6f}){m.pipes.push_back({{12.f,y},{12.f,y},ceil-.3f,.02f,ceil,5});m.pipes.push_back({{12.f,y},{12.f,y},ceil-.34f,.12f,ceil-.3f,5});}
  for(float y:{8.6f,10.4f})pbFix(m,model::med_floor_drain,12.f,y,f,.5f,.5f,.01f,0,false);
- pbSign(m,9.455f,9.5f,f+1.6f,"STAGE 2 / SHOWER","3 MINUTES / HAIR, HANDS, NAILS",1.6f,pbE,pbGreen);
  for(float y:{8.4f,10.6f})m.lights.push_back(lamp({11.2f,y},ceil-.18f,.9f,5.f,6500,.04f));
  // --- The chamber: air shower and exposure monitor -------------------------------------
  wall(m,9.2f,11.6f,9.4f,12.6f,f,ceil,27);wall(m,9.2f,16.2f,9.4f,17.f,f,ceil,27);
@@ -677,7 +640,6 @@ std::shared_ptr<const Map> makeDecontamination(){
  pbFix(m,model::lab_status_display,12.f,14.58f,f+2.34f,.69f,.06f,.2f,kPi,false);
  for(float x:{11.6f,12.15f})floorLine(m,x,14.3f,x+.25f,14.5f,f,20);
  terminal(m,{9.95f,13.4f},"DECON 1 / CYCLE CONTROL","LAST CYCLE 0412 ABORTED 02:20. SUPPLY RESTORED.","E / START CYCLE 0413. STAND IN THE MONITOR FRAME.",0,start);m.terminals.back().yaw=pbE;
- pbSign(m,14.545f,13.5f,f+2.65f,"STAGE 3 / AIR  STAGE 4 / MONITOR","ARMS RAISED / TURN SLOWLY / HOLD STILL",2.2f,pbW,pbGreen);
  // The technician sealed in at 02:20: he got as far as the clean door.
  pbBody(m,"ere_decon_clock",ActorVisual::Worker,{11.3f,16.3f},f,.4f);
  pbBlood(m,10.6f,15.7f,12.4f,16.85f,f);pbBlood(m,12.3f,16.2f,13.f,16.6f,f);
@@ -685,7 +647,7 @@ std::shared_ptr<const Map> makeDecontamination(){
  wall(m,13.7f,16.97f,14.f,16.99f,f+1.35f,f+1.6f,16);
  // Light: steady white until the cycle seals the chamber; then the cycle tubes pulse.
  for(float y:{12.6f,15.9f})m.lights.push_back(pbSwitched(lamp({12.f,y},ceil-.18f,1.f,6.f,6800,.03f),sealed,true));
- for(float y:{13.5f,16.1f}){auto l=pbSwitched(lamp({14.45f,y},f+2.75f,1.3f,6.f,12000,-.4f,WorldLightMount::Wall,kPi),sealed);l.period=.9f;l.onTime=.55f;l.phase=y*.1f;m.lights.push_back(l);}
+ for(float y:{13.5f,16.1f}){auto l=pbSwitched(lamp({14.58f,y},f+2.75f,1.3f,6.f,12000,-.4f,WorldLightMount::Wall,kPi),sealed);l.period=.9f;l.onTime=.55f;l.phase=y*.1f;m.lights.push_back(l);}
  m.lights.push_back(pbSwitched(lamp({12.f,11.6f},f+2.8f,.8f,4.f,1000,-.5f,WorldLightMount::Wall,kPi*.5f),sealed));
  m.lights.push_back(pbSwitched(lamp({12.f,17.2f},f+2.8f,.8f,4.f,5000,.5f,WorldLightMount::Wall,kPi*.5f),cycle));
  // --- The decon plant, west -----------------------------------------------------------
@@ -699,11 +661,9 @@ std::shared_ptr<const Map> makeDecontamination(){
  pbFix(m,model::pwr_control_cabinet,1.25f,12.5f,f,.8f,.4f,1.6f,pbE,true);
  wall(m,4.2f,15.2f,6.2f,16.8f,f,f+2.2f,20);wall(m,4.15f,15.15f,6.25f,16.85f,f+2.2f,f+2.3f,12);
  wall(m,4.9f,15.6f,5.5f,16.4f,f+2.3f,ceil,20);
- wallSign(m,5.2f,15.145f,f+1.2f,"HEPA / DECON 1 EXHAUST","BAG-IN / BAG-OUT / ANNUAL TEST",1.6f,kPi);
  for(auto [x,y]:{std::pair{1.6f,15.7f},{2.3f,15.95f},{1.6f,16.5f}})pbFix(m,model::ind_barrel,x,y,f,.53f,.56f,.95f,x+y,true);
  pbStand(m,3.f,14.6f,3.9f,15.3f,f,.6f);
  pbFix(m,model::pwr_circulation_pump,3.45f,14.95f,f+.6f,.84f,.5f,.39f,0,false);
- pbSign(m,6.5f,7.655f,f+2.f,"DECON PLANT","SHOWER WATER / AIR SHOWER FANS / DOSING",2.6f,0,pbAmber);
  m.lights.push_back(lamp({5.f,10.f},ceil-.2f,1.f,7.f,4000,.1f));
  m.lights.push_back(lamp({5.6f,13.6f},ceil-.2f,.9f,6.f,4000,.1f));
  {auto l=lamp({1.02f,14.f},f+2.4f,.5f,4.f,1300,-.3f,WorldLightMount::Wall,0);l.flicker=.2f;m.lights.push_back(l);}
@@ -716,7 +676,6 @@ std::shared_ptr<const Map> makeDecontamination(){
  for(float y=8.6f;y<14.2f;y+=.6f){wall(m,17.38f,y-.1f,17.82f,y+.1f,f+.75f,f+1.85f,18);wall(m,17.48f,y-.06f,17.72f,y+.06f,f+1.85f,f+2.02f,18);}
  pbFix(m,model::med_supply_cabinet,16.4f,16.55f,f,1.1f,.44f,1.7f,pbN,true);
  bench(m,19.f,15.6f,f);
- pbSign(m,22.945f,12.f,f+2.5f,"CLEAN SUITS","GOWN BEFORE THE COURT / NO EXCEPTIONS",2.f,pbW,pbGreen);
  for(float y:{10.f,14.5f})m.lights.push_back(lamp({19.f,y},ceil-.16f,.9f,6.f,6000,.04f));
  // --- Stage 5: gowning, and the way out to the court -----------------------------------
  wall(m,10.f,23.f,14.f,23.3f,f+2.65f,ceil,28);
@@ -730,9 +689,6 @@ std::shared_ptr<const Map> makeDecontamination(){
  pbFix(m,model::water_cooler,22.5f,18.1f,f,.35f,.35f,1.1f,pbW,true);
  pbFix(m,model::lab_potted_plant,22.4f,22.4f,f,.5f,.58f,.93f,0,false);
  bench(m,20.5f,22.3f,f);
- pbSign(m,12.f,22.945f,f+2.72f,"ENERGY RESEARCH","FORECOURT / THE GREAT DOOR",3.f,kPi,pbBlue);
- pbSign(m,12.f,17.255f,f+2.72f,"STAGE 5 / GOWN","CLEAN SUIT / OVERSHOES / GLOVES",2.6f,0,pbGreen);
- pbSign(m,1.055f,18.4f,f+1.6f,"STEP OVER","DIRTY FEET NEVER TOUCH THIS SIDE",1.4f,pbE,pbGreen);
  for(Vec2 l:{Vec2{5.f,20.2f},Vec2{12.f,19.6f},Vec2{12.f,22.2f},Vec2{18.6f,20.4f}})m.lights.push_back(lamp(l,ceil-.16f,.95f,6.5f,6200,.04f));
  // The door watcher: idle at his mark until the cycle releases the clean door.
  pbGuard(m,"ere_decon_clock","ere_decon_guard",ActorVisual::Cleanup,GuardSquadRole::Default,nullptr,
@@ -783,7 +739,6 @@ std::shared_ptr<const Map> makeEnergyResearchForecourt(){
  // --- The entrance from Decontamination: a low portal into the tall hall -------------------------
  for(float x:{8.6f,14.f})wall(m,x,1.f,x+1.4f,2.2f,f,f+3.6f,15);
  wall(m,8.6f,1.f,15.4f,2.2f,f+2.65f,f+3.6f,15);
- pbSign(m,12.f,2.255f,f+2.7f,"ENERGY RESEARCH","VISITORS ESCORTED AT ALL TIMES",2.6f,pbS,pbBlue);
  // --- Four piers and the hall's ribs ----------------------------------------------------------
  for(Vec2 c:{Vec2{5.f,7.f},Vec2{19.f,7.f},Vec2{5.f,17.f},Vec2{19.f,17.f}}){
   wall(m,c.x-.8f,c.y-.8f,c.x+.8f,c.y+.8f,f,roof,15);
@@ -859,8 +814,6 @@ std::shared_ptr<const Map> makeEnergyResearchGreatDoor(){
  for(float x:{7.f,15.f})wall(m,x,21.6f,x+2.f,23.f,top,top+9.f,7);
  wall(m,7.f,21.6f,17.f,23.f,top+2.65f,top+9.f,7);
  for(float z=top+3.f;z<top+8.6f;z+=.9f)wall(m,9.f,21.55f,15.f,21.6f,z,z+.1f,13);
- pbSign(m,12.f,21.545f,top+6.6f,"ENERGY RESEARCH","POWER FROM BELOW / CLEARANCE 5 AND ABOVE",7.f,pbN,pbBlue);
- m.signs.back().height=1.4f;
  pbSign(m,12.f,21.545f,top+3.4f,"GREAT DOOR","OPENS ON LOCAL CONTROL ONLY",3.2f,pbN,pbRed);
  // --- The squad's position on the podium --------------------------------------------------------
  for(float x:{3.f,15.f}){wall(m,x,17.2f,x+6.f,17.8f,top,top+1.1f,23);wall(m,x+.02f,17.22f,x+5.98f,17.78f,top,top+1.08f,CollisionProxyMaterial);}

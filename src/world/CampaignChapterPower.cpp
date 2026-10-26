@@ -101,7 +101,6 @@ std::shared_ptr<const Map> makePowerDistribution(){
  // --- The siding: the main line runs on from Deep Junction to a buffer ---------------------------
  rail(m,19.f,0.f,19.5f,base);
  pwrBuffer(m,19.f,19.5f,base);
- wallSign(m,19.f,22.945f,base+2.1f,"SIDING 1 / HV RAILHEAD","END OF MAIN LINE / MAX 40 T",2.6f,kPi);
  flatWagon(m,19.f,6.4f,base,false);
  const float wagonDeck=base+1.12f;
  // Spare T3 for Substation A, chained down, and two crates of spares.
@@ -129,7 +128,6 @@ std::shared_ptr<const Map> makePowerDistribution(){
  m.pipes.push_back({{19.f,12.62f},{19.f,12.62f},-20.95f,.045f,-20.6f,6});
  for(float sx:{-1.f,1.f})for(float sy:{-1.f,1.f})
   m.pipes.push_back({{19.f,12.62f},{19.f+sx*.95f,12.62f+sy*1.7f},-20.92f,.02f,-21.27f,6});
- wallSign(m,22.945f,6.5f,base+2.f,"CRANE 2 / 40 T","PENDANT ISOLATED / NO LIFT ON EMERGENCY POWER",2.2f,-kPi*.5f);
  // The siding terminal by the door: what was on the wagon, and why.
  terminal(m,{14.9f,2.25f},"HV RAILHEAD / SIDING 1","T3 SPARE / 11 KV 40 MVA / ARRIVED 01:12. CONSIGNEE: SUBSTATION A.","T3 TRIPPED 00:58 ON EARTH FAULT. UNLOADING STOPPED 02:13.");
  m.terminals.back().yaw=-kPi*.5f;
@@ -153,9 +151,6 @@ std::shared_ptr<const Map> makePowerDistribution(){
  m.fixtures.push_back({model::med_first_aid_box,{4.1f,6.78f},1.35f,.37f,.12f,.35f,kPi,false});
  terminal(m,{6.6f,1.75f},"PERMIT TO WORK / POWER DISTRIBUTION","OPEN 01:40: SUBSTATION A (OYELARAN, VASK). LOAD CONTROL (HALE).","SIGNED OUT: NONE. ALL PERMITS VOIDED 02:31 BY CLEANUP COMMAND.");
  m.terminals.back().yaw=.001f;
- wallSign(m,6.6f,1.055f,base+1.55f,"PERMIT TO WORK","SIGN IN / SIGN OUT / NO EXCEPTIONS",1.6f,0);
- wallSign(m,3.f,1.055f,base+1.95f,"ARC FLASH PPE","CAT 4 SUIT / VISOR / GLOVES / MAT",1.4f,0);
- wallSign(m,4.2f,6.995f,base+2.15f,"PPE / PERMITS","SIGN IN BEFORE THE PORTAL",1.6f,0);
  m.pickupSpawns.push_back({{3.6f,5.6f},PickupKind::Health,base});
 
  // --- Cable store, west ----------------------------------------------------------------------------
@@ -166,7 +161,6 @@ std::shared_ptr<const Map> makePowerDistribution(){
  cargo(m,5.4f,12.6f,base);cargo(m,5.3f,14.2f,base,false);
  for(float y:{8.4f,15.4f})floorLine(m,1.2f,y,7.f,y+.1f,base,13);
  floorLine(m,6.9f,8.4f,7.f,15.5f,base,13);
- wallSign(m,1.055f,11.8f,base+2.4f,"CABLE STORE","11 KV XLPE / 415 V SWA / RETURN OFFCUTS",2.4f,kPi*.5f);
  m.fixtures.push_back({model::metal_shelf,{1.27f,16.8f},0,1.8f,.5f,1.8f,kPi*.5f,true});
  cableTray(m,{1.2f,7.4f},{1.2f,22.6f},base+3.4f);
 
@@ -198,7 +192,6 @@ std::shared_ptr<const Map> makePowerDistribution(){
  wall(m,9.f,23.f,15.f,24.f,base+3.4f,roof,15);
  wallSign(m,12.f,22.145f,base+3.95f,"DANGER / HIGH VOLTAGE","AUTHORISED PERSONS ONLY / ARC FLASH PPE BEYOND",4.f,kPi);
  pwrMat(m,9.2f,20.6f,14.8f,23.f,base);
- wallSign(m,6.f,22.945f,base+1.4f,"POWER DISTRIBUTION","HUB SOUTH / SUBSTATION A EAST / SWITCH HALL WEST",3.2f,kPi);
 
  // --- Services ------------------------------------------------------------------------------------
  cableTray(m,{8.6f,1.2f},{15.4f,1.2f},base+3.4f);
@@ -277,17 +270,14 @@ std::shared_ptr<const Map> makeDistributionHub(){
  pwrPortalY(m,1.f,1.6f,9.f,14.f,base,3.4f,roof);
  wall(m,23.f,9.f,24.f,14.f,base+3.4f,roof,15);wall(m,0.f,9.f,1.f,14.f,base+3.4f,roof,15);
  pwrPortalX(m,10.f,14.f,22.2f,23.f,base,2.65f,roof);
- wallSign(m,12.f,22.145f,base+2.95f,"FEEDER 9 / MACHINE HALL","GATE INTERLOCK: NO SUPPLY ON FEEDER 9",3.6f,kPi);
  pwrLamp(m,{9.7f,22.2f},base+2.25f,1.3f,6.f,1150,-.4f,PwrFeeder,false,WorldLightMount::Wall,-kPi*.5f);
  pwrLamp(m,{14.3f,22.2f},base+2.25f,1.3f,6.f,4300,.4f,PwrFeeder,true,WorldLightMount::Wall,-kPi*.5f);
- wallSign(m,22.945f,17.5f,base+1.9f,"SUBSTATION A","BREAKER CONTROL / CABLE TRENCH BELOW",2.6f,-kPi*.5f);
- wallSign(m,1.055f,17.5f,base+1.9f,"SWITCH HALL","LOAD CONTROL / UP THE CATWALKS",2.6f,kPi*.5f);
  // --- Route paint: the walkway lanes to each portal -------------------------------------------
  for(float x:{9.6f,14.3f})floorLine(m,x,1.2f,x+.1f,22.f,base,14);
  for(float y:{8.6f,14.3f}){floorLine(m,1.7f,y,9.6f,y+.1f,base,14);floorLine(m,14.4f,y,22.3f,y+.1f,base,14);}
  // --- The mimic board and its desk, west of the entry -------------------------------------------
  wall(m,1.f,1.f,8.6f,1.4f,base,base+3.f,2);
- wallSign(m,4.8f,1.455f,base+1.25f,"DISTRIBUTION MIMIC / 11 KV","SUB A: DEAD    SWITCH HALL: DEAD    FEEDER 9: NO SUPPLY",7.f,0);
+ wallSign(m,4.8f,1.455f,base+1.25f,"11 KV DISTRIBUTION","SUB A: DEAD    SWITCH HALL: DEAD    FEEDER 9: NO SUPPLY",7.f,0);
  for(float x:{2.6f,4.8f,7.f})m.fixtures.push_back({model::control_console,{x,2.4f},0,1.6f,.8f,1.1f,kPi,true});
  m.fixtures.push_back({model::office_chair,{4.8f,3.5f},0,.55f,.55f,.95f,kPi+.4f,true});
  terminal(m,{6.9f,3.6f},"DISTRIBUTION / SHIFT HANDOVER","00:58 T3 EARTH FAULT. SUB A ON T1/T2. 02:13 GRID LOST. ALL FEEDERS TRIPPED.","BLACK START: GENERATION FIRST, THEN SUB A BREAKERS, THEN LOAD CONTROL.");
@@ -302,7 +292,6 @@ std::shared_ptr<const Map> makeDistributionHub(){
  pwrBusDuct(m,{12.f,1.2f},{12.f,21.8f},roof-1.7f,roof);
  pwrBusDuct(m,{1.8f,11.5f},{22.2f,11.5f},roof-2.4f,roof);
  wall(m,11.3f,10.8f,12.7f,12.2f,roof-2.6f,roof-1.4f,2);
- wallSign(m,12.f,10.745f,roof-2.45f,"BUS JUNCTION 9","11 KV / DO NOT OPEN LIVE",1.3f,kPi);
  cableTray(m,{1.4f,15.2f},{1.4f,22.6f},base+3.4f);cableTray(m,{22.6f,15.2f},{22.6f,22.6f},base+3.4f);
  // --- The mail relay, south-west -----------------------------------------------------------------
  m.fixtures.push_back({model::pwr_tall_switch_cabinet,{1.55f,21.6f},0,.95f,1.f,2.2f,kPi*.5f,true});
@@ -357,7 +346,6 @@ std::shared_ptr<const Map> makeSubstationA(){
  deckSupports(m,m.layers.back(),base,4.f);
  m.stairs.push_back({6.f,19.f,10.2f,21.f,base,deckZ,15,false,false});
  guardRail(m,5.92f,1.2f,6.f,19.f,deckZ);guardRail(m,5.92f,21.f,6.f,22.8f,deckZ);
- wallSign(m,1.055f,6.f,deckZ+1.6f,"SUBSTATION A / 11 KV","T1 / T2 IN SERVICE  /  T3 OUT  /  BREAKERS BELOW",3.f,kPi*.5f);
  terminal(m,{3.4f,4.2f},"SUBSTATION A / PERMIT LOG","OYELARAN, VASK: ISOLATING T3 AFTER EARTH FAULT 00:58. SAFE TO WORK.","02:36. TWO IN CLEANUP GREY. THEY HAD OUR NAMES. THEY ASKED FOR BOTH OF US.",deckZ-base);
  m.terminals.back().yaw=.001f;
  // The technicians, where they were stopped at the top of the stair.
@@ -377,15 +365,10 @@ std::shared_ptr<const Map> makeSubstationA(){
  m.fixtures.push_back({model::transformer,{16.f,12.f},0,4.4f,2.4f,2.6f,0,true});
  wall(m,19.8f,9.4f,22.6f,14.6f,base,base+.15f,15);
  wall(m,20.2f,10.6f,22.2f,13.4f,base+.15f,base+.16f,8);
- board(m,21.2f,15.f,base+1.4f,"T3 / OUT OF SERVICE","EARTH FAULT 00:58 / SPARE ON SIDING 1",2.2f);
  for(float x:{8.4f,11.6f,14.4f,17.6f})m.fixtures.push_back({model::med_cell_bars,{x,15.55f},0,2.5f,.04f,2.4f,0,true});
- wall(m,9.1f,15.5f,10.9f,15.62f,base+2.4f,base+3.4f,2);wall(m,15.1f,15.5f,16.9f,15.62f,base+2.4f,base+3.4f,2);
- wallSign(m,10.f,15.675f,base+2.45f,"T1 / 40 MVA","DANGER / LIVE WHEN BUS IS ENERGISED",1.8f,0);
- wallSign(m,16.f,15.675f,base+2.45f,"T2 / 40 MVA","DANGER / LIVE WHEN BUS IS ENERGISED",1.8f,0);
  for(float x:{7.4f,13.4f}){Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=x;h.x2=x+5.2f;h.y1=8.7f;h.y2=15.3f;h.bottom=base;h.top=base+2.6f;h.damagePerSecond=40;h.enabledFlag=PwrGen;h.period=3.2f;h.onTime=1.1f;h.phase=x*.37f;m.hazards.push_back(h);}
  // --- The basement walk to the Cable Trench ----------------------------------------------------
  pwrMat(m,10.4f,19.f,23.f,21.f,base);
- wallSign(m,22.945f,21.6f,base+1.5f,"CABLE TRENCH","TO EMERGENCY GENERATION",2.2f,-kPi*.5f);
  pwrPortalY(m,22.4f,23.f,16.f,19.f,base,2.6f,roof);
  wall(m,23.f,16.f,24.f,19.f,base+2.6f,roof,15);
  cableTray(m,{11.f,22.6f},{22.6f,22.6f},base+2.8f);cableTray(m,{22.6f,1.4f},{22.6f,15.4f},base+3.2f);
@@ -431,10 +414,7 @@ std::shared_ptr<const Map> makeSwitchHall(){
  // --- The pit: two 415 V boards facing each other, live on a cycle after the black start ------------
  pwrLineup(m,4.f,5,4.4f,base,1.f);pwrLineup(m,6.5f,5,21.2f,base,-1.f);
  for(float y:{6.f,19.f}){Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=4.f;h.x2=13.f+(y>10?2.5f:0.f);h.y1=y-1.2f;h.y2=y+1.2f;h.bottom=base;h.top=base+2.4f;h.damagePerSecond=45;h.enabledFlag=PwrGen;h.period=2.6f;h.onTime=.8f;h.phase=y*.2f;m.hazards.push_back(h);}
- wallSign(m,1.055f,13.f,base+2.f,"SWITCH HALL / 415 V","BOARDS 1 AND 2 / LIVE WORK FORBIDDEN",2.8f,kPi*.5f);
  // --- Signage, risers and the cable shaft -----------------------------------------------------
- wallSign(m,22.945f,16.f,-25.f+1.6f,"SWITCH HALL","LOAD CONTROL: UP TWO LEVELS / SOUTH BRIDGE",3.f,-kPi*.5f);
- wallSign(m,7.f,23.f-.055f,-19.f+1.7f,"LOAD CONTROL","CONTROL ROOM / AUTHORISED OPERATORS",2.4f,kPi);
  for(float x:{6.f,8.f})m.pipes.push_back({{x,1.3f},{x,1.3f},base,.11f,roof,6});
  cableTray(m,{22.6f,1.4f},{22.6f,8.6f},-21.f);cableTray(m,{1.4f,1.4f},{1.4f,8.f},-20.f);
  for(float z:{-24.f,-21.f})servicePipe(m,{22.75f,15.f},{22.75f,22.8f},z,.07f,3);
@@ -531,8 +511,6 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
  {Door d{1.f,3.f,14.75f,0,false,false,false,deckZ-base};d.requireState=PwrFeeder;m.doors.push_back(d);}
  wall(m,3.f,14.6f,5.f,14.9f,deckZ,deckZ+2.65f,3);
  wall(m,1.f,14.6f,5.f,14.9f,deckZ+2.65f,deckZ+3.3f,3);
- wallSign(m,2.f,14.545f,deckZ+2.7f,"MACHINE HALL GALLERY","INTERLOCK: FEEDER 9",1.6f,kPi);
- wallSign(m,1.055f,5.6f,deckZ+1.5f,"EMERGENCY GENERATION","SETS 1-3 / BATTERY ROOM",2.4f,kPi*.5f);
  // --- The day tanks and the fuel transfer panel, north-east --------------------------------------
  m.fixtures.push_back({model::storage_tank,{21.f,3.6f},.2f,3.f,1.4f,1.8f,kPi*.5f,true});
  m.fixtures.push_back({model::storage_tank,{21.f,8.1f},.2f,3.f,1.4f,1.8f,kPi*.5f,true});
@@ -544,9 +522,6 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
  for(float x:{7.f,13.f,19.f}){wall(m,x-2.2f,15.2f,x+2.2f,18.6f,base,base+.25f,15);
   m.fixtures.push_back({model::pwr_diesel_genset,{x,16.9f},.25f,3.7f,1.7f,2.f,0,true});
   m.fixtures.push_back({model::flue,{x+1.4f,17.9f},2.25f,.5f,.5f,roof-base-2.6f,0,false});}
- wallSign(m,7.f,22.945f,base+2.2f,"SET 1","OUT FOR SERVICE",1.4f,kPi);
- wallSign(m,13.f,22.945f,base+2.2f,"SET 2","DUTY / BLACK START",1.4f,kPi);
- wallSign(m,19.f,22.945f,base+2.2f,"SET 3","STANDBY",1.4f,kPi);
  terminal(m,{13.f,13.8f},"SET 2 / LOCAL PANEL","E / PRIME THE FUEL RAIL AND CRANK ON THE BATTERY.","STEP 2 OF 3. NEEDS FUEL TRANSFER. THEN SYNCHRONISE AT THE CONTROL DESK.",0,crank,fuel);
  pwrRunning(m,"pwr_set2_running",crank,39,.7f);
  // --- The control desk: synchronise to the emergency bus ---------------------------------------------
@@ -560,7 +535,6 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
  // --- The battery room, south-east -------------------------------------------------------------------
  wall(m,16.f,9.8f,23.f,10.f,base,base+2.8f,3);
  for(float y:{11.6f,13.f})m.fixtures.push_back({model::pwr_tall_switch_cabinet,{21.9f,y},0,.95f,1.f,2.2f,-kPi*.5f,true});
- wallSign(m,19.f,10.055f,base+1.7f,"BATTERY ROOM","110 V DC / NO NAKED FLAMES",1.8f,0);
  // --- The stores corner, south-west, and what waits there --------------------------------------
  for(Vec2 d:{Vec2{2.2f,21.4f},Vec2{3.f,22.2f},Vec2{4.1f,21.6f}})m.fixtures.push_back({model::drum,d,0,.6f,.6f,.9f,0,true});
  m.fixtures.push_back({model::metal_shelf,{6.3f,22.6f},0,1.8f,.5f,1.8f,kPi,true});
@@ -595,15 +569,11 @@ std::shared_ptr<const Map> makeLoadControl(){
  for(float x:{8.6f,14.f})wall(m,x,3.8f,x+1.4f,4.1f,f,roof,21);
  wall(m,1.f,3.8f,8.6f,4.1f,f,roof,21);wall(m,15.4f,3.8f,23.f,4.1f,f,roof,21);
  wall(m,10.f,3.8f,14.f,4.1f,f+2.6f,roof,21);
- wallSign(m,12.f,3.745f,f+2.62f,"LOAD CONTROL","OPERATORS ONLY",1.6f,kPi);
  m.fixtures.push_back({model::water_cooler,{2.f,1.7f},0,.4f,.4f,1.2f,0,true});
  m.fixtures.push_back({model::file_cabinet_tall,{21.8f,1.6f},0,.5f,.6f,1.4f,kPi,true});
  wallSign(m,6.f,1.055f,f+1.3f,"CLOCK IN","SHIFT 2: HALE, OKAFOR, BRANDT / OUT: ---",2.f,0);
  // --- The mimic wall and the three transfer stations ---------------------------------------------
  wall(m,1.f,22.3f,23.f,23.f,f,f+2.9f,2);
- wallSign(m,6.f,22.245f,f+1.25f,"LOAD SHEDDING","NON-ESSENTIAL: HVAC 2 / LIGHTING 4 / STORES",3.6f,kPi);
- wallSign(m,12.f,22.245f,f+1.25f,"SUPPLY TRANSFER","GRID: LOST  /  EMERGENCY BUS: SEE GENERATION",3.6f,kPi);
- wallSign(m,18.5f,22.245f,f+1.25f,"FEEDER 9","MACHINE HALL / WEST GALLERY / RELAY 9",3.6f,kPi);
  const StateId ready=stateId("pwr_transfer_ready"),bus=stateId("pwr_transfer_bus");
  terminal(m,{5.f,21.f},"LOAD CONTROL / 1 SHED","E / SHED NON-ESSENTIAL LOADS.","NEEDS SUBSTATION A BREAKERS CLOSED. THEN TRANSFER.",0,ready,PwrSubA);
  terminal(m,{12.f,21.f},"LOAD CONTROL / 2 TRANSFER","E / TRANSFER THE PLANT TO EMERGENCY GENERATION.","NEEDS LOAD SHED. THEN FEEDER 9.",0,bus,ready);
