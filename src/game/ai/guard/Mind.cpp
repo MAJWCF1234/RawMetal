@@ -158,6 +158,11 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  int damage=track.damageState?state(track.damageState):0;int freshDamage=std::clamp(damage-get("guard_damage"),0,std::max(0,track.health));put("guard_hurt_amount",freshDamage);put("guard_under_fire",std::max(0,get("guard_under_fire")-ms));
  if(damage>get("guard_damage")){
   put("guard_under_fire",1500);auto attacker=guardAttacker(actor);
+  // Fire from a squadmate or an ally of its own faction (a stray grenade, a
+  // crossfire) is investigated, not answered; anyone else who hurts it is.
+  if(attacker.valid()&&attacker.kind==ShotKind::Npc&&size_t(attacker.index)<m_friendlyActors.size()){const auto&other=m_friendlyActors[size_t(attacker.index)].track();auto faction=actorFaction(track);
+   bool squadmate=track.ai.squad&&other.ai.squad==track.ai.squad,ally=attacker.faction==faction&&faction!=AiFaction::Neutral&&faction!=AiFaction::Unspecified;
+   if(squadmate||ally)attacker={};}
   if(attacker.valid()){target=attacker;rememberGuardTarget(actor,attacker);remember(attacker.position+globalOrigin,attacker.feet);confirmed=true;recognition=config.recognitionMs;visible=guardCanSee(actor,pose,attacker);mode=visible?GuardState::Alert:GuardState::Investigate;}
   else if(get("hit_source")){Vec2 hit{get("hit_x")*.001f,get("hit_y")*.001f};remember(hit+globalOrigin,friendlyWorld(level).supportBelow(hit.x,hit.y,pose.z+track.scale));mode=GuardState::Investigate;}
  }

@@ -407,9 +407,6 @@ inline void freightFinish(Map& m,int level){
  }
  for(const auto& stair:m.stairs)for(auto& layer:m.layers)if(layer.thickness>0&&layer.elevation>=stair.bottom-.02f&&layer.elevation<=stair.top+.02f)
  rectangle(layer,int(stair.x1),int(stair.y1),int(stair.x2),int(stair.y2),'.');
- // Sequential maps name their neighbours by index; level -1 (chunks 34 on) keeps
- // sign -1 so the route sign is looked up from the world position instead.
- if(level>=0)for(auto& d:m.doors)d.sign=d.entry?level-1:level+1;
  // A transfer or entry door hangs in a whole-metre wall opening; jambs fill
  // the opening either side of the leaf so the next map never shows through.
  for(const auto& d:m.doors){if(!d.transfer&&!d.entry)continue;

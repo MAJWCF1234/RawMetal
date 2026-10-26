@@ -52,13 +52,14 @@ void Game::seedScripts(){
  }
 }
 void Game::spawnScriptEnemy(const ScriptAction& action){
- spawnCreature({action.enemyKind,action.position,action.z},action.amount,true);m_enemies.back().scriptSpawned=true;
+ auto before=m_enemies.size();spawnCreature({action.enemyKind,action.position,action.z},action.amount,true);
+ if(m_enemies.size()>before)m_enemies.back().scriptSpawned=true; // Peaceful and developer runs spawn nothing.
 }
 void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announce){
  if(m_peaceful)return;
  Enemy e{};e.kind=spawn.kind;e.pos=spawn.position;e.home=e.pos;e.lastKnown=e.pos;
  e.hp=e.maxHp=spawn.health>0?spawn.health:creatureTraits(e.kind).health;e.wakeState=spawn.wakeState;
- e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.z;e.heading=kPi;
+ e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.homeZ=e.z;e.heading=kPi;e.scale=spawn.scale>0?spawn.scale:1;
  e.awareness=std::max(0.f,awareness);e.state=e.awareness>0?Enemy::State::Investigate:Enemy::State::Idle;
  e.voiceTimer=announce?.25f:.8f+float(m_enemies.size())*.9f;m_enemies.push_back(e);
  if(announce){if(e.kind==Enemy::Kind::Brute)sound(Sound::Land,.8f,.7f);else enemySound(m_enemies.back(),0,.55f,.9f);}
@@ -149,7 +150,7 @@ void Game::updateHazards(float dt){
   if(inside(m_player.pos)&&m_player.z<height&&m_player.z+m_player.hullHeight()>height){damage+=100*dt;loudest=Hazard::Kind::Crusher;}
   for(auto& e:m_enemies)if(e.alive&&inside(e.pos)){
    if(running&&e.z<c.bed+.25f)e.pos.y+=dt*.55f;
-   if(e.bodyTop()>height&&e.bodyBottom()<height){e.hp-=300*dt;e.painFlash=1;if(e.hp<=0){e.alive=false;e.deathTime=0;e.windup=0;++m_kills;enemySound(e,2);}}
+   if(e.bodyTop()>height&&e.bodyBottom()<height){e.hp-=300*dt;e.painFlash=1;if(e.hp<=0){e.alive=false;e.deathTime=0;e.windup=0;e.surfaceMode=0;e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=0;++m_kills;enemySound(e,2);}}
   }
   for(int i=int(m_clutter.size())-1;i>=0;--i){auto& item=m_clutter[i];if(!inside(item.pos)||i==m_heldClutter)continue;
    if(running&&item.z<c.bed+.3f){item.sleeping=false;item.velocity.y+=dt*2.f;}

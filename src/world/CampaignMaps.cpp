@@ -2918,9 +2918,6 @@ std::shared_ptr<const Map> makeDeepJunction(){
  m.lights.push_back(lamp({12.f,20.f},roof-.7f,1.f,6.f,5200,.1f));
  m.creatureSpawns={{CreatureKind::Huntsman,{16.5f,19.f},base}};
  freightFinish(m,31);
- // Chunk 32 is the reactor core, not the next map: name the blast door's
- // neighbour from the world position.
- for(auto& d:m.doors)if(d.transfer)d.sign=-1;
  return p;
 }
 

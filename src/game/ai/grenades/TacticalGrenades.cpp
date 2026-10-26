@@ -94,6 +94,9 @@ void Game::tryGuardGrenade(size_t actor,float dt){
  put("grenade_used",get("grenade_used")+1);put("grenade_windup",0);put("grenade_cooldown",6000);put("weapon_aim",0);put("weapon_recovery",std::max(450,get("weapon_recovery")));
  if(c.squad)for(size_t i=0;i<m_friendlyActors.size();++i)if(m_friendlyActors[i].track().ai.squad==c.squad&&actorFaction(m_friendlyActors[i].track())==actorFaction(t))setState(friendlyKey(i,"grenade_cooldown"),6000);
 }
+void Game::remapGrenadeEnemyRefs(int level,const std::vector<AiTargetRef>& moved){
+ for(int slot=0;slot<GrenadeSlots;++slot)followEnemyRef([&](std::string_view f){return grenadeKey(slot,f);},"",level,moved);
+}
 void Game::validateTacticalGrenades()const{
  for(int slot=0;slot<GrenadeSlots;++slot){auto get=[&](std::string_view f){return state(grenadeKey(slot,f));};if(get("active")<0||get("active")>1)throw std::runtime_error("Invalid saved grenade active flag");if(!get("active"))continue;
   if(get("fuse_us")<=0||get("fuse_us")>6000000||get("fraction")<0||get("fraction")>=StepUs||get("faction")<0||get("faction")>5||get("squad")<0||get("squad")>0x7fffff||get("level")<=0||get("level")>chunkCount()||get("index")<=0||get("index")>65536)throw std::runtime_error("Invalid saved grenade clock or owner");

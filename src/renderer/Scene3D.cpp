@@ -1117,7 +1117,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   // Doors carry no area-name plates: title cards announce areas. Only an
   // explicit notice (a door that says why it is shut) is bolted to the header.
-  if(door.sign>=CampaignChunkCount&&door.sign<int(m_routeSigns.size())){const auto& notice=m_routeSigns[size_t(door.sign)];
+  if(door.sign>=CampaignChunkCount&&door.sign<CampaignChunkCount+int(m_noticeSigns.size())){const auto& notice=m_noticeSigns[size_t(door.sign-CampaignChunkCount)];
    float plateHalf=std::min(.8f,half-.05f),plateTop=headerBottom+.06f+plateHalf*2.f/3.56f;
    quad({x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},notice,.9f);
    quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},notice,.9f);}
@@ -2111,7 +2111,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    mesh.poseCreature(clip,phase);
   }
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-  float scale=baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z});
+  float scale=e.scale*(baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z}));
   float angle=e.heading,collapse=e.alive?0.f:std::min(1.f,e.deathTime/.65f);
   float shrink=e.alive?1.f:1.f-std::clamp((e.deathTime-1.25f)/1.15f,0.f,1.f);
   float wind=e.windup>0?std::sin(e.windup*5.f)*.12f:0;

@@ -159,6 +159,9 @@ void Game::updateEngineerDrones(float dt){
   int x=int(std::round((here.x+origin.x)*1000)),y=int(std::round((here.y+origin.y)*1000));put("x",x);put("y",y);put("x_fraction",int(std::round((here.x+origin.x-x*.001f)*1000000)));put("y_fraction",int(std::round((here.y+origin.y-y*.001f)*1000000)));put("z",int(std::round(p.z*1000)));put("walking",travelled>.0001f);put("phase",int(std::round(std::fmod(get("phase")*.0001f+(travelled>.0001f?travelled*1.5f:dt*.3f),1.f)*10000)));put("way_x",int(std::round((waypoint.x+origin.x)*1000)));put("way_y",int(std::round((waypoint.y+origin.y)*1000)));if(destination==level)put("repath",repath);
  }
 }
+void Game::remapDroneEnemyRefs(int level,const std::vector<AiTargetRef>& moved){
+ for(int slot=0;slot<EngineerDroneSlots;++slot)followEnemyRef([&](std::string_view f){return droneKey(slot,f);},"target_",level,moved);
+}
 void Game::validateEngineerDrones()const{
  std::vector<int> owners(m_friendlyActors.size());
  for(int slot=0;slot<EngineerDroneSlots;++slot){auto get=[&](const char*f){return state(droneKey(slot,f));};if(get("active")<0||get("active")>1)throw std::runtime_error("Invalid saved drone activation");if(!get("active"))continue;int owner=get("owner")-1,level=get("level")-1;

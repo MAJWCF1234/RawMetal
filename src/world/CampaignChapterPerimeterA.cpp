@@ -104,10 +104,10 @@ ScriptAction perSound(Sound s,float gain){ScriptAction a;a.type=ScriptAction::Ty
 ScriptAction perSave(){ScriptAction a;a.type=ScriptAction::Type::Checkpoint;return a;}
 // A sequence started only by setting its timer (its trigger box is off the map),
 // optionally ticking a sound; an Alarm tick pulses the red screen wash with it.
-void perSequence(Map& m,const char* timer,const char* finish,int durationMs,int finishAtMs,Sound tick=Sound::Metal1,int intervalMs=0,int untilMs=0,float gain=.5f){
+TimedSequence& perSequence(Map& m,const char* timer,const char* finish,int durationMs,int finishAtMs,Sound tick=Sound::Metal1,int intervalMs=0,int untilMs=0,float gain=.5f){
  TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(finish);s.x1=-2;s.y1=-2;s.x2=-1;s.y2=-1;
  s.durationMs=durationMs;s.finishAtMs=finishAtMs;s.soundIntervalMs=intervalMs;s.soundUntilMs=untilMs;s.tickSound=tick;s.gain=gain;s.pitch=1;
- m.timedSequences.push_back(s);
+ m.timedSequences.push_back(s);return m.timedSequences.back();
 }
 // The deck layer at height z (after every deck() call: deck() may reallocate the layers).
 const AuthoredLayerData* perDeck(const Map& m,float z){for(const auto& l:m.layers)if(l.thickness>0&&std::fabs(l.elevation-z)<.01f)return &l;return nullptr;}
@@ -548,7 +548,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  for(Vec2 l:{Vec2{5.f,7.f},Vec2{18.f,17.f}})m.lights.push_back(lamp(l,ceil-.95f,.8f,10.f,4000,.1f));
  for(float x:{8.5f,20.f})m.lights.push_back(perSwitch(lamp({x,1.02f},f+6.2f,2.6f,16.f,6500,.04f,WorldLightMount::Wall,kPi*.5f),alert));
  m.lights.push_back(perSwitch(lamp({12.f,22.18f},f+5.6f,2.6f,16.f,6500,.04f,WorldLightMount::Wall,-kPi*.5f),alert));
- perSequence(m,"per_yard_klaxon","per_yard_klaxon_done",14000,13000,Sound::Alarm,1500,9500,.7f);
+ {auto& k=perSequence(m,"per_yard_klaxon","per_yard_klaxon_done",14000,13000,Sound::Alarm,1500,9500,.7f);k.soundAt={14.f,1.4f};k.soundZ=f+6.f;} // the horn on the north wall, between the floods
  {auto e=perEvent("per_yard_alarm",0,0,24,24,-100,100,alert);e.actions={perSet(stateId("per_yard_klaxon"))};m.scriptEvents.push_back(e);}
 
  // --- The intercom lure: Lock 2's bell rings in the west -----------------------------------------

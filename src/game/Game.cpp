@@ -52,11 +52,14 @@ void Game::equipWeapon(WeaponId id){
 bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeHitStop,int level){
  if(level<0)level=m_level;
  if(!enemy.alive)return false;
+ // A Snatcher sprawled after its lunge is open: hits land harder.
+ if(enemy.kind==Enemy::Kind::Snatcher&&enemy.stalkMode==Enemy::StalkMode::Recover)amount*=1.5f;
  enemy.hp-=amount;enemy.painFlash=1;m_hitFlash=1;
  // A badly hurt stalker breaks off to hide before it comes back.
  if(enemy.hp>0&&creatureTraits(enemy.kind).rushSpeed>0&&enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;}
  if(enemy.hp>0)return false;
- enemy.hp=0;enemy.alive=false;enemy.deathTime=0;enemy.windup=0;enemy.strike=0;if(level==m_level)++m_kills;else ++m_chunks[level].kills;
+ // The dead fall from walls and ceilings and stop stalking (a Retreat must not outlive it).
+ enemy.hp=0;enemy.alive=false;enemy.deathTime=0;enemy.windup=0;enemy.strike=0;enemy.surfaceMode=0;enemy.stalkMode=Enemy::StalkMode::Watch;enemy.stalkTimer=0;if(level==m_level)++m_kills;else ++m_chunks[level].kills;
  if(bloodDecal)m_bulletImpacts.push_back({enemy.pos,friendlyWorld(level).floorHeight(enemy.pos.x,enemy.pos.y)+.012f,{0,0},m_elapsed,level,true,int(enemy.kind)});
  if(closeHitStop)m_hitStopRemaining=.03f;
  if(level==m_level&&enemiesRemaining()==0)sound(Sound::Exit,.75f);
@@ -95,17 +98,20 @@ void Game::crossChunkBoundary(){
  // Outdoor pursuers standing at the seam hand off with the player. Without
  // this, changing the active chunk froze an alerted creature one metre behind
  // an invisible ownership boundary even though the terrain itself was seamless.
- std::vector<Enemy> followers;
+ std::vector<Enemy> followers;std::vector<AiTargetRef> moved;
  if(m_worldId==WorldId::Ashfall){
-  for(auto it=m_enemies.begin();it!=m_enemies.end();){
-   auto local=it->pos+shift;
+  moved.assign(m_enemies.size(),{});std::vector<Enemy> staying;
+  for(size_t i=0;i<m_enemies.size();++i){auto enemy=m_enemies[i];
+   auto local=enemy.pos+shift;
    float outsideX=local.x<0?-local.x:local.x>=World::Width?local.x-World::Width:0;
    float outsideY=local.y<0?-local.y:local.y>=World::Height?local.y-World::Height:0;
-   if(it->alive&&it->awareness>0&&std::max(outsideX,outsideY)<1.6f){
-    auto enemy=*it;enemy.pos={std::clamp(local.x,.24f,23.76f),std::clamp(local.y,.24f,23.76f)};
-    enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;followers.push_back(enemy);it=m_enemies.erase(it);
-   }else ++it;
+   if(enemy.alive&&enemy.awareness>0&&std::max(outsideX,outsideY)<1.6f){
+    if(enemy.originLevel<0&&!enemy.scriptSpawned){enemy.originLevel=previous;enemy.originHome=enemy.home;}
+    enemy.pos={std::clamp(local.x,.24f,23.76f),std::clamp(local.y,.24f,23.76f)};
+    enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;moved[i]={ShotKind::Enemy,next,-1-int(followers.size())};followers.push_back(enemy);
+   }else{moved[i]={ShotKind::Enemy,previous,int(staying.size())};staying.push_back(enemy);}
   }
+  if(!followers.empty())m_enemies=std::move(staying);else moved.clear();
  }
  // Loose objects can cross any stitched edge. Transfer ownership only when the
  // object's world-space position belongs to the same destination as the player.
@@ -117,7 +123,10 @@ void Game::crossChunkBoundary(){
  ensureChunk(next);storeChunk();auto&chunk=m_chunks[next];m_world=chunk.world;m_levelNav=std::move(chunk.nav);m_levelNavReady=chunk.navReady;chunk.nav={};chunk.navReady=false;m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=next;m_player.pos+=shift;m_vrAimPosition.x+=shift.x;m_vrAimPosition.y+=shift.y;for(auto&hand:m_vrHandPosition){hand.x+=shift.x;hand.y+=shift.y;}for(auto&hand:m_vrPreviousFist){hand.x+=shift.x;hand.y+=shift.y;}
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
- for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;m_enemies.push_back(enemy);}
+ int firstFollower=int(m_enemies.size());
+ for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.homeZ=enemy.z;m_enemies.push_back(enemy);}
+ for(auto&ref:moved)if(ref.index<0)ref.index=firstFollower-1-ref.index;
+ if(!moved.empty())remapEnemyRefs(previous,moved);
  for(auto&event:m_sounds)if(event.spatial||std::isfinite(event.z))event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
  if((m_worldId==WorldId::Campaign&&next>previous)||m_worldId==WorldId::Custom)saveCheckpoint();

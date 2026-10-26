@@ -650,7 +650,7 @@ std::shared_ptr<const Map> makeFabricationShop(){
  mntFix(m,model::pwr_control_cabinet,{6.f,18.05f},f,.6f,.35f,1.25f,kPi,true);
  mntControl(m,{6.f,18.f},"LATHE 2 / SHEAR PIN","E / MACHINE THE 40 MM EN24 SHEAR PIN.","REQUIRES BAR STOCK: SIGN IT OUT AT RACK B IN CENTRAL STORES.",pin,stateId("mnt_bar_stock"),kPi);
  m.lights.push_back(lamp({4.4f,18.8f},f+2.1f,.9f,4.f,3600,.1f,WorldLightMount::Bare));
- {auto& t=mntTimer(m,"mnt_lathe_ms","mnt_lathe_done",4200,4200);t.soundIntervalMs=350;t.soundUntilMs=4000;t.tickSound=Sound::Machine;t.gain=.8f;t.pitch=1.4f;
+ {auto& t=mntTimer(m,"mnt_lathe_ms","mnt_lathe_done",4200,4200);t.soundIntervalMs=350;t.soundUntilMs=4000;t.tickSound=Sound::Machine;t.gain=.8f;t.pitch=1.4f;t.soundAt={3.f,18.8f};t.soundZ=f+1.3f; // lathe 2's headstock
   ScriptEvent e;e.id=stateId("mnt_ev_lathe");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=pin;e.actions={mntAct(ScriptAction::Type::SetState,stateId("mnt_lathe_ms"),1)};m.scriptEvents.push_back(e);}
  // Marsh, at the lathe he could not use; the empty bar chuck, a flask.
  mntBody(m,"mnt_marsh_clock",ActorVisual::Worker,{3.9f,17.2f},f,2.6f);machineryClock(m,"mnt_marsh_clock",60000);

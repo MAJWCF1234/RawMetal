@@ -17,6 +17,9 @@ const ai::NodeGraph& Game::navGraph(int level,float height){
     authored.push_back({hint.position,hint.z,hint.hint?ai::NodeHint::Cover:ai::NodeHint::Path});
    }
   }
+  // Link through every door as if open: a door shut when the graph is built
+  // may open later, and each query certifies its route against live doors.
+  std::vector<char> everyDoor(world.doors().size(),1);World::DoorPlan open(world,everyDoor);
   graph=ai::buildNodeGraph(world,height,[&](Vec2 from,float fromFeet,Vec2 to,float hull,float* endFeet){
    return aiWalkSegment(world,from,fromFeet,to,hull,endFeet);
   },authored);

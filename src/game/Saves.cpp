@@ -40,7 +40,7 @@ std::string readFile(const std::filesystem::path& path){
  std::ifstream in(path,std::ios::binary);std::string data(size,'\0');if(!in.read(data.data(),std::streamsize(size)))throw std::runtime_error("unreadable save");return data;
 }
 }
-template<class A> void Game::archiveSave(A& a,int version){
+template<class A> int Game::archiveSave(A& a,int version){
  if(version>=9){
   a(m_worldId);
   bool known=m_worldId==WorldId::Campaign||m_worldId==WorldId::Ashfall||(version>=12&&m_worldId==WorldId::Custom);
@@ -83,29 +83,34 @@ template<class A> void Game::archiveSave(A& a,int version){
  if(version>=11){a(archivedChunks);int available=version>=12?chunkCount():worldChunkCount(m_worldId);if(archivedChunks<1||archivedChunks>available||archivedChunks>MaxChunks)throw std::runtime_error("Invalid chunk count");}
  for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=makeWorld(index);auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
+  if(version>=16)list(w.m_destroyedTiles,[&](std::pair<int,int>&t){a(t.first,t.second);if(t.first<0||t.second<0||t.first>=World::Width||t.second>=World::Height)throw std::runtime_error("invalid destroyed tile");});
+  if constexpr(A::reading)if(!w.m_destroyedTiles.empty()){w.m_lightSolids.clear();w.m_lightNodes.clear();}
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
   if constexpr(A::reading){
    for(int door=0;door<doors;++door){float open=0;bool opening=false;a(open,opening);if(open<0||open>1)throw std::runtime_error("invalid door");
     if(door<int(w.m_doors.size())){w.m_doors[door].open=open;w.m_doors[door].opening=opening;}}
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
-  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(version>=15)a(e.wakeState);if(int(e.kind)>(version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>3||int(e.stalkMode)>2||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
+  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(version>=15)a(e.wakeState);
+   if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid enemy");}
+   if(int(e.kind)>(version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>6)throw std::runtime_error("invalid clutter");});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
  }
+ return archivedChunks;
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,15);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 15 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,16);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>15))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>16))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
-  Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);int archived=next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   // Earlier builds represented a broken crate as four unrelated prop models
   // (kinds 0-3) spawned together. Convert that recognizable saved quartet to
   // the current textured splinter kind so existing saves receive the repair.
@@ -132,18 +137,29 @@ bool Game::decodeSave(const std::string& data){
   auto samePosition=[](Vec2 a,Vec2 b){return lengthSq(a-b)<.0004f;};
   for(int level=0;level<next.chunkCount();++level){
    auto&saved=next.m_chunks[level];const auto&fresh=authored.m_chunks[level];
-   if(version<10&&next.m_worldId==WorldId::Ashfall&&level>=6){saved=fresh;continue;}
+   // Chunks the save never carried (older saves, or maps a custom pack gained
+   // since) are today's authored chunks, not the default Game's.
+   if(level>=archived){saved=fresh;continue;}
 
    auto oldEnemies=std::move(saved.enemies);std::vector<bool> enemyUsed(oldEnemies.size(),false);saved.enemies.clear();saved.enemies.reserve(fresh.enemies.size());
+   // An authored creature that followed the player to another chunk is matched
+   // there: its spawn here stays empty instead of coming back at full health.
+   auto followedElsewhere=[&](const Enemy&spawn){for(int other=0;other<next.chunkCount();++other){const auto&list=other==level?oldEnemies:next.m_chunks[other].enemies;
+    for(const auto&enemy:list)if(enemy.originLevel==level&&enemy.kind==spawn.kind&&samePosition(enemy.originHome,spawn.home))return true;}return false;};
    for(const auto&spawn:fresh.enemies){
-    int match=-1;for(int i=0;i<int(oldEnemies.size());++i)if(!enemyUsed[i]&&!oldEnemies[i].scriptSpawned&&oldEnemies[i].kind==spawn.kind&&samePosition(oldEnemies[i].home,spawn.home)){match=i;break;}
-    if(match>=0){enemyUsed[match]=true;auto state=oldEnemies[match];state.maxHp=spawn.maxHp;if(state.alive)state.hp=std::min(state.hp,state.maxHp);saved.enemies.push_back(state);}
-    else saved.enemies.push_back(spawn);
+    int match=-1;for(int i=0;i<int(oldEnemies.size());++i)if(!enemyUsed[i]&&!oldEnemies[i].scriptSpawned&&oldEnemies[i].originLevel<0&&oldEnemies[i].kind==spawn.kind&&samePosition(oldEnemies[i].home,spawn.home)){match=i;break;}
+    if(match>=0){enemyUsed[match]=true;auto state=oldEnemies[match];state.maxHp=spawn.maxHp;state.scale=spawn.scale;if(state.alive)state.hp=std::min(state.hp,state.maxHp);
+     if(state.homeZ<=-999)state.homeZ=spawn.homeZ;
+     // Saves before dormancy kept no wake state: an untouched creature sleeps again.
+     if(version<15&&state.alive&&state.hp>=state.maxHp&&state.awareness<=0)state.wakeState=spawn.wakeState;
+     saved.enemies.push_back(state);}
+    else if(!followedElsewhere(spawn))saved.enemies.push_back(spawn);
    }
 
    // Dynamic waves retain both living and dead members instead of vanishing
-   // when content updates reconcile the authored population.
-   for(const auto&enemy:oldEnemies)if(enemy.scriptSpawned)saved.enemies.push_back(enemy);
+   // when content updates reconcile the authored population; so do creatures
+   // that crossed into this chunk from another.
+   for(const auto&enemy:oldEnemies)if(enemy.scriptSpawned||enemy.originLevel>=0)saved.enemies.push_back(enemy);
 
    auto oldPickups=std::move(saved.pickups);std::vector<bool> pickupUsed(oldPickups.size(),false);saved.pickups.clear();saved.pickups.reserve(fresh.pickups.size());
    for(const auto&spawn:fresh.pickups){
@@ -167,7 +183,7 @@ bool Game::decodeSave(const std::string& data){
    if(level==next.m_level)next.m_heldClutter=heldNew;
   }
   auto&p=next.m_player;
-  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>weaponDef(WeaponId::Shotgun).cycle.tubeCapacity||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>Player::StandingEye+.2f||std::fabs(p.pitch)>210.01f||next.m_medkits<0)return false;
+  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>weaponDef(WeaponId::Shotgun).cycle.tubeCapacity||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return false;
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);

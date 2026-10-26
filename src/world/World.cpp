@@ -491,7 +491,6 @@ World::World(int level,WorldId id):m_worldId(id) {
   // Each standalone slot is intentionally an independent if block so the
   // injector can replace one level without rewriting adjacent campaign maps.
   // === DYNAMIC_CAMPAIGN_MAPS_END ===
-  for(auto& d:m_doors){if(d.entry)d.sign=m_level-1;else if(d.transfer)d.sign=m_level+1;}
   buildLayers(stairs);return;
  }
  throw std::runtime_error("No builder for campaign map "+std::to_string(m_level));
@@ -845,9 +844,10 @@ float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const
  }
 }
 bool World::doorBlocks(float x,float y,float feet,float height)const{
- for(auto&door:m_doors){
+ for(size_t index=0;index<m_doors.size();++index){const auto&door=m_doors[index];
+  float open=m_doorPlan.open&&index<m_doorPlan.open->size()&&(*m_doorPlan.open)[index]?door.maxOpen:door.open;
   if(door.swinging){
-   float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;
+   float angle=open*kPi*.5f*door.swing,width=door.right-door.left;
    Vec2 hinge{door.left,door.y},axis{std::cos(angle),std::sin(angle)};
    Vec2 delta=Vec2{x,y}-hinge;
    float along=std::clamp(dot(delta,axis),0.f,width);
@@ -856,13 +856,14 @@ bool World::doorBlocks(float x,float y,float feet,float height)const{
     if(feet+height>base+.015f&&feet<base+2.35f)return true;
    }
   }else if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
-   if(feet+height>base+door.open*2.65f+.015f&&feet<base+door.open*2.65f+2.48f)return true;
+   if(feet+height>base+open*2.65f+.015f&&feet<base+open*2.65f+2.48f)return true;
   }
  }
  return false;
 }
-float World::clearanceHeight(float x,float y)const{
- float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f)height=std::min(height,floorHeight((door.left+door.right)*.5f,door.y)+door.z+2.5f);
+float World::clearanceHeight(float x,float y,float feet)const{
+ float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f){
+  float header=floorHeight((door.left+door.right)*.5f,door.y)+door.z+2.5f;if(feet<header-.05f)height=std::min(height,header);}
  return height;
 }
 void World::buildLightOcclusion()const{
@@ -1097,7 +1098,7 @@ float World::supportBelowUncached(float x,float y,float feet)const{
  return result;
 }
 float World::clearanceAbove(float x,float y,float feet)const{
- float ceiling=hasTerrain()?std::min(clearanceHeight(x,y),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y);
+ float ceiling=hasTerrain()?std::min(clearanceHeight(x,y,feet),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y,feet);
  for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(f.model==7)for(float tier:ShelfTiers){float underside=base+f.height*tier-.045f;if(underside>feet+.025f)ceiling=std::min(ceiling,underside);}
@@ -1141,7 +1142,7 @@ bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bo
    float base=floorHeight(x,y),top=terrainTile=='#'?wallHeight(int(std::floor(x)),int(std::floor(y))):base+(terrainTile=='C'?.60f:terrainTile=='B'?1.1f:2.62f);
    if(feet<top-.025f&&feet+height>base+.005f)return false;
   }
- }else if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y)+.005f)return false;
+ }else if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y,feet)+.005f)return false;
  for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixture(f,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(shelfCavities&&f.model==7){

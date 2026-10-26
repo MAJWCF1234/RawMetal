@@ -80,16 +80,26 @@ std::vector<const SequenceCue*> Game::terminalMessages(int terminal)const{
  std::stable_sort(result.begin(),result.end(),[&](const SequenceCue*a,const SequenceCue*b){int oa=order(a->timerState),ob=order(b->timerState);return oa!=ob?oa<ob:a->timeMs<b->timeMs;});
  return result;
 }
+// A timer's clock in ms. A finished one-shot rests at durationMs in its saved
+// state; for captions and conversations its clock keeps counting from the end
+// (after a load, a finished one counts as long over).
+int Game::sequenceClock(const World& world,StateId timer)const{
+ int clock=state(timer);
+ for(const auto& s:world.timedSequences())if(s.timerState==timer){
+  if(!s.loop&&clock>=s.durationMs){auto found=m_sequenceEnded.find(timer);clock=found==m_sequenceEnded.end()?1<<29:s.durationMs+int((m_elapsed-found->second)*1000);}
+  break;}
+ return clock;
+}
 bool Game::terminalConversationActive(int terminal)const{
  if(terminal<0||terminal>=int(m_world.terminals().size()))return false;
  const auto& at=m_world.terminals()[size_t(terminal)].position;
- for(const auto& cue:m_world.sequenceCues()){int age=state(cue.timerState);
+ for(const auto& cue:m_world.sequenceCues()){int age=sequenceClock(m_world,cue.timerState);
   if(!cue.caption.empty()&&length(cue.position-at)<TerminalVoiceRadius&&age>0&&age<=cue.timeMs+3000)return true;}
  return false;
 }
 std::string_view Game::actorCaption()const{
  for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;const auto& world=level==m_level?m_world:m_chunks[level].world;
-  for(const auto& cue:world.sequenceCues()){int clock=state(cue.timerState),age=clock-cue.timeMs;if(!cue.caption.empty()&&clock>0&&age>=0&&age<2500)return cue.caption;} // A timer at 0 has not started.
+  for(const auto& cue:world.sequenceCues()){int clock=sequenceClock(world,cue.timerState),age=clock-cue.timeMs;if(!cue.caption.empty()&&clock>0&&age>=0&&age<2500)return cue.caption;} // A timer at 0 has not started.
  }return {};
 }
 float Game::alarmPulse()const{
@@ -132,15 +142,25 @@ void Game::updateMechanisms(float dt){
   }
   if(age==0&&seen&&level==m_level&&m_player.pos.x>=sequence.x1&&m_player.pos.x<=sequence.x2&&m_player.pos.y>=sequence.y1&&m_player.pos.y<=sequence.y2&&m_player.z>=sequence.bottom&&m_player.z<=sequence.top)age=1;
   if(age<=0)continue;
+  // A finished one-shot rests at its end: nothing more fires (a cue at the
+  // very end would otherwise replay every frame).
+  if(!sequence.loop&&age>=sequence.durationMs)continue;
   int advanced=age+int(std::round(dt*1000));bool wrapped=sequence.loop&&advanced>sequence.durationMs;
   int next=sequence.loop?1+(advanced-1)%sequence.durationMs:std::min(sequence.durationMs,advanced);setState(sequence.timerState,next);
   if(sequence.soundIntervalMs>0&&age/sequence.soundIntervalMs!=next/sequence.soundIntervalMs&&next<sequence.soundUntilMs){
    Vec2 position{(sequence.x1+sequence.x2)*.5f,(sequence.y1+sequence.y2)*.5f};float z=world.floorHeight(position.x,position.y)+.04f;
    for(size_t i=0;i<world.actorTracks().size();++i)if(world.actorTracks()[i].timerState==sequence.timerState){auto pose=world.actorPose(i);position=pose.position;z=pose.z+.04f;break;}
+   if(sequence.soundAt.x>=0){position=sequence.soundAt;z=std::isfinite(sequence.soundZ)?sequence.soundZ:world.floorHeight(position.x,position.y)+.04f;}
    m_sounds.push_back({sequence.tickSound,position+chunkOffset(level)-chunkOffset(m_level),sequence.gain,sequence.pitch,true,17,z});
   }
-  if((age<sequence.finishAtMs&&advanced>=sequence.finishAtMs)||wrapped)setState(sequence.finishState,1);
-  for(const auto& cue:world.sequenceCues())if(cue.timerState==sequence.timerState&&((age<=cue.timeMs&&advanced>cue.timeMs)||(wrapped&&next>cue.timeMs))){
+  // The clock starts at 1 (0 means not started), so a cue or finish at 0 or 1
+  // is due on the first frame; a one-shot's last frame fires a cue at its end.
+  bool ended=!sequence.loop&&next>=sequence.durationMs;
+  int finishAt=std::max(sequence.finishAtMs,2);
+  if((age<finishAt&&advanced>=finishAt)||wrapped)setState(sequence.finishState,1);
+  if(!sequence.loop&&age<sequence.durationMs&&next>=sequence.durationMs)m_sequenceEnded[sequence.timerState]=m_elapsed;
+  for(const auto& cue:world.sequenceCues()){if(cue.timerState!=sequence.timerState)continue;int at=std::max(cue.timeMs,1);
+   if(!((age<=at&&(advanced>at||(ended&&at==sequence.durationMs)))||(wrapped&&next>at)))continue;
    auto position=chunkOffset(level)+cue.position-chunkOffset(m_level);
    m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35,cue.z});
   }

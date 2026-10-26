@@ -64,7 +64,7 @@ private:
 };
 inline thread_local WalkQueryCache WalkQueryCache::s_cache{};
 inline thread_local WalkQueryCache*WalkQueryCache::s_active=nullptr;
-inline WalkQueryCache* WalkQueryCache::active(const World&world){return s_active&&s_active->m_world==&world?s_active:nullptr;}
+inline WalkQueryCache* WalkQueryCache::active(const World&world){return s_active&&s_active->m_world==&world&&!world.doorPlanActive()?s_active:nullptr;}
 inline WalkQueryCache::Scope::Scope(const World&world,const std::shared_ptr<const AuthoredMapData>&definition,bool enabled){
  m_previous=s_active;
  if(!enabled){s_active=nullptr;return;}

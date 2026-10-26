@@ -147,8 +147,8 @@ private:
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_liftSign,m_liftDispatch;
     Texture m_feedSign,m_returnSign;
-    // One plate per campaign map, then the two utility-route plates.
-    std::array<Texture,CampaignChunkCount+2> m_routeSigns;
+    // The two door notices (freight suspended, utilities permit): Door.sign-CampaignChunkCount.
+    std::array<Texture,2> m_noticeSigns;
     // Door header plates of authored maps, one per HUD zone name (lazy).
     std::array<Texture,3> m_serviceAreaSigns;
     Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet,m_framePaint;

@@ -6,6 +6,7 @@
 #include <queue>
 #include <cmath>
 #include <fstream>
+#include <optional>
 namespace retro {
 static float navSupport(const World&w,Vec2 p,float feet){float z=w.supportBelow(p.x,p.y,feet);for(float x:{-.20f,.20f})for(float y:{-.20f,.20f})z=std::max(z,w.supportBelow(p.x+x,p.y+y,feet));return z;}
 static bool navFits(const World&w,Vec2 p,float z,float height){if(w.railBlocksHull(p.x,p.y,.20f,z,height))return false;for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
@@ -127,18 +128,22 @@ void Game::updateEnemies(float dt){
   if(e.awareness>0&&e.voiceTimer<=0){enemySound(e,0,e.kind==Enemy::Kind::Warden?.28f:.65f);e.voiceTimer=(e.kind==Enemy::Kind::Warden?11.f:6.f)+float(int(e.home.x)%4);}
   // Stalkers (the reactor's thing, the Snatcher) hunt by sight: stare, flank, rush, hide.
   const auto& traits=creatureTraits(e.kind);const bool stalker=traits.rushSpeed>0;
-  float range=traits.reach;
+  float range=e.reach();
   bool sameLevel=targetFeet<e.bodyTop()&&targetFeet+targetHull>e.bodyBottom();
-  bool canMelee=visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0;
+  // The Snatcher crouches to lunge from further out than its claws reach.
+  bool canMelee=visible&&sameLevel&&dist<(e.kind==Enemy::Kind::Snatcher?2.8f*e.scale:range)&&e.attackCooldown<=0&&e.strike<=0;
   bool heardCue=heard!=nullptr;
   bool hurt=e.painFlash>(stalker?.85f:.65f);
   Vec2 goal=e.awareness>0?e.lastKnown:e.home;
+  // Going home means its own floor, not the one it last saw the player on.
+  float goalZ=e.awareness>0||e.homeZ<=-999?e.lastKnownZ:e.homeZ;
   bool wantsMove=e.state!=Enemy::State::Search&&!(e.windup>0||e.strike>0)&&!canMelee&&length(goal-e.pos)>=.3f&&!(!stalker&&visible&&dist<range*.82f);
   int ms=std::max(1,int(std::round(dt*1000)));
   runCreatureSchedule(e,ms,visible,heardCue,canMelee||e.windup>0||e.strike>0,hurt,wantsMove);
   bool scheduleMove=e.scheduleStep==1&&e.scheduleStatus==int(CreatureTaskStatus::Running);
   bool scheduleStrike=creatureTaskAllows(e,CreatureTask::Strike)||e.schedule==int(CreatureSchedule::Attack);
-  if(e.windup>0){if(!stalker&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=traits.cooldown;
+  const bool snatcher=e.kind==Enemy::Kind::Snatcher;
+  if(e.windup>0&&!snatcher){if(!stalker&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=traits.cooldown;
     if(dist<range+.1f&&dot(normalized(to),facing)>(stalker?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,target,targetFeet+.5f)){
      float damage=creatureTraits(e.kind).damage;
      if(friendly>=0)damageFriendly(size_t(friendly),damage,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});else receiveDamage(damage,e.pos);
@@ -146,25 +151,132 @@ void Game::updateEnemies(float dt){
    }continue;
   }
   // Close-range committed swing: the player can backstep or circle behind it.
-  if(stalker&&scheduleStrike&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){
+  if(stalker&&!snatcher&&scheduleStrike&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){
    e.heading=std::atan2(to.y,to.x);e.windup=traits.windup;enemySound(e,1,.9f);continue;
   }
   if(e.awareness>0&&creatureTraits(e.kind).opensDoors)requestAiDoor(m_world,m_level,e.pos,e.z,goal);
-  float stalkSpeed=2.1f;bool watching=false;
   // Its pace scales every stalking speed and shortens its stare-downs.
   const float pace=traits.rushSpeed/3.8f;
+  float stalkSpeed=2.1f*pace;bool watching=false;
+  // What a stalker knows about the player's eyes. "Observed" is a full 3D gaze
+  // test: looking at the floor beneath it, or over a railing above it, does
+  // not count as having it in view.
+  Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
+  Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
+  bool observed=false;
   if(stalker&&friendly<0){
-   e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
-   Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
-   Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
    bool playerLineOfSight=playerToWardenDistance<12.f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.85f);
-   // "Observed" is a full 3D gaze test: looking at the floor beneath it, or
-   // over a railing above it, does not count as having it in view.
    float gazePitch=m_player.pitch/140.f,gazeDz=(e.z+.9f)-(m_player.z+m_player.eye),gazeDistance=std::sqrt(playerToWardenDistance*playerToWardenDistance+gazeDz*gazeDz);
    float gazeDot=gazeDistance>.001f?(playerForward.x*std::cos(gazePitch)*playerToWarden.x+playerForward.y*std::cos(gazePitch)*playerToWarden.y+std::sin(gazePitch)*gazeDz)/gazeDistance:1.f;
-   bool observed=playerLineOfSight&&gazeDot>.72f;
+   observed=playerLineOfSight&&gazeDot>.72f;
+  }
+  auto standable=[&](Vec2 c,float& z){z=navSupport(m_world,c,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.z+.215f);
+   bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,c,e.hull(),roughStep(e.kind)):std::fabs(z-e.z)<.23f;
+   return reachable&&navFits(m_world,c,z,e.hull());};
+  // The nearest spot round about that the player cannot see.
+  auto hidingSpot=[&](Vec2 fallback){Vec2 best=fallback;float bestScore=1e9f;
+   for(int i=0;i<8;++i){float a=float(i)*kPi*.25f;Vec2 c=e.pos+Vec2{std::cos(a),std::sin(a)}*3.2f;float z=0;if(!standable(c,z))continue;
+    bool seen=m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c,z+.9f);
+    float score=(seen?10.f:0.f)-lengthSq(c-m_player.pos)*.05f;
+    if(score<bestScore){bestScore=score;best=c;}}
+   return best;};
+  // A point beside the player on the side it is least likely to be looking at.
+  auto flankPoint=[&](float out,float across,Vec2 fallback){
+   auto radial=normalized(e.pos-m_player.pos);auto side=Vec2{-radial.y,radial.x};
+   Vec2 best=fallback;float bestScore=9999.f;
+   for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*out+side*(sign*across);float z=0;if(!standable(candidate,z))continue;
+    auto fromPlayer=candidate-m_player.pos;float candidateDistance=length(fromPlayer);
+    float gaze=candidateDistance>.001f?dot(playerForward,fromPlayer*(1.f/candidateDistance)):1.f;
+    float score=gaze+lengthSq(candidate-e.pos)*.02f;
+    if(score<bestScore){bestScore=score;best=candidate;}
+   }
+   return best;};
+  if(snatcher){
+   // An ambusher, not a runner. It limps up out of sight, slips away from a
+   // player who watches it, and hunts with one readable move: a hissing crouch,
+   // a straight lunge it cannot steer, a grab that hauls its prey a step, then
+   // a fade back into cover. A miss, or a hit during the tell, sprawls it.
+   constexpr float Tell=.65f,Lunge=.45f,Hold=.55f,Sprawl=1.25f,Fade=2.5f,Strike=2.8f;
+   Vec2 aim{std::cos(e.heading),std::sin(e.heading)};
+   bool struck=e.painFlash>.85f;
+   auto sprawl=[&](float seconds){e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(friendly<0)m_grabbed=0;};
+   if(e.stalkMode==Enemy::StalkMode::Recover){
+    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);e.windup=0;e.strike=0;
+    e.painFlash=.84f*e.stalkTimer/Sprawl; // plays its stagger through
+    if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=Fade;}
+    continue;
+   }
+   if(e.windup>0){ // the tell
+    if(struck){sprawl(1.f);continue;}
+    // It tracks its prey through the crouch, then commits to a line.
+    if(e.windup>.25f)e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*10.f);
+    e.windup=std::max(0.f,e.windup-dt);
+    if(e.windup==0){e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=Lunge;e.strike=1;}
+    continue;
+   }
+   if(e.stalkMode==Enemy::StalkMode::Rush){ // the lunge
+    float travel=std::min(dt,e.stalkTimer);e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
+    e.strike=1.f-.25f*(1.f-e.stalkTimer/Lunge);
+    int samples=std::max(1,int(std::ceil(traits.rushSpeed*travel/.08f)));bool blocked=false,caught=false;
+    for(int i=0;i<samples&&!blocked&&!caught;++i){
+     Vec2 next=e.pos+aim*(traits.rushSpeed*travel/samples);float feet=e.z;
+     if(length(target-next)<.7f)break; // it does not run through its prey
+     // Swept with the same walk authority as everyone else: no phasing through
+     // closed doors, railings, low ceilings, cliffs or stair corners.
+     if(aiWalkSegment(m_world,e.pos,e.z,next,e.hull(),&feet)&&std::fabs(feet-e.z)<=traits.step+.025f){
+      float moved=length(next-e.pos);e.pos=next;e.z=feet;e.moving=moved>.0001f;e.gait+=moved*traits.gaitPerMetre;
+     }else blocked=true;
+     Vec2 reachTo=target-e.pos;float reachDistance=length(reachTo);
+     bool overlap=targetFeet<e.bodyTop()&&targetFeet+targetHull>e.bodyBottom();
+     caught=overlap&&reachDistance<range&&dot(normalized(reachTo),aim)>.72f&&m_world.rayClear(e.pos,e.z+.6f,target,targetFeet+.5f);
+    }
+    if(caught){
+     e.stalkMode=Enemy::StalkMode::Grab;e.stalkTimer=Hold;e.attackCooldown=traits.cooldown;enemySound(e,1,.95f,.82f);
+     if(friendly>=0)damageFriendly(size_t(friendly),traits.damage,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});
+     else{receiveDamage(traits.damage,e.pos);m_grabbed=Hold;}
+    }else if(blocked||e.stalkTimer<=0)sprawl(Sprawl);
+    continue;
+   }
+   if(e.stalkMode==Enemy::StalkMode::Grab){
+    if(struck){sprawl(1.f);continue;} // shoot or punch it off
+    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);e.strike=.75f*e.stalkTimer/Hold;
+    // It backs off with its prey in its hands. The haul stops at a wall and
+    // never drags the player off a ledge or up a step.
+    Vec2 back=e.pos-aim*(1.6f*dt);float feet=e.z;
+    if(aiWalkSegment(m_world,e.pos,e.z,back,e.hull(),&feet)&&std::fabs(feet-e.z)<=traits.step+.025f){e.pos=back;e.z=feet;}
+    if(friendly<0){m_grabbed=std::max(m_grabbed,e.stalkTimer);
+     Vec2 haul=e.pos+aim*.95f-m_player.pos;float pull=std::min(length(haul),2.5f*dt);
+     if(pull>.001f){Vec2 step=normalized(haul)*pull;if(std::fabs(groundHeight(m_player.pos+step,m_player.z+.215f)-m_player.z)<=.215f)tryMove(step);}}
+    if(e.stalkTimer<=0){e.strike=0;e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=Fade;}
+    continue;
+   }
+   e.stalkTimer=std::max(0.f,e.stalkTimer-dt);e.strike=0;
+   // Close enough to snatch: hiss and crouch. Fading, it only turns on a
+   // player who follows it right into its corner.
+   bool fading=e.stalkMode==Enemy::StalkMode::Retreat;
+   if(scheduleStrike&&visible&&sameLevel&&dist<(fading?1.8f:Strike)*e.scale&&e.attackCooldown<=0){
+    e.heading=std::atan2(to.y,to.x);e.windup=traits.windup;e.stalkMode=Enemy::StalkMode::Watch;enemySound(e,1,.9f,1.2f);continue;
+   }
+   if(friendly<0&&e.awareness>0){
+    // Seen from a distance, it does not come on: it slips out of sight and
+    // comes again from somewhere the player is not looking.
+    bool spotted=observed&&dist>4.f;
+    if(fading&&e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=1.4f;fading=false;}
+    if(!fading&&spotted&&e.stalkMode!=Enemy::StalkMode::Watch){e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=2.f;fading=true;}
+    if(e.stalkMode==Enemy::StalkMode::Watch){
+     if(spotted){e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=2.f;fading=true;}
+     else if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Flank;e.stalkSide=-e.stalkSide;}
+    }
+    if(fading)goal=hidingSpot(goal);
+    else if(e.stalkMode==Enemy::StalkMode::Flank&&visible&&dist>2.4f&&sameLevel)goal=flankPoint(2.2f,1.6f,goal);
+    watching=e.stalkMode==Enemy::StalkMode::Watch;
+    stalkSpeed=fading?2.2f:traits.speed;
+   }else stalkSpeed=traits.speed;
+  }
+  if(stalker&&!snatcher&&friendly<0){
+   e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
    bool flat=std::fabs(e.z-m_player.z)<.23f;
-   if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,1.85f,roughStep(e.kind));}
+   if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,e.hull(),roughStep(e.kind));}
    bool freshContact=visible&&!hadAwareness;
 
    // A rush is a short burst, never the Warden's permanent navigation speed.
@@ -191,14 +303,7 @@ void Game::updateEnemies(float dt){
    // cannot see, waits there, and comes back as a watcher.
    if(e.stalkMode==Enemy::StalkMode::Retreat){
     if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=.75f;}
-    else{Vec2 best=goal;float bestScore=1e9f;
-     for(int i=0;i<8;++i){float a=float(i)*kPi*.25f;Vec2 c=e.pos+Vec2{std::cos(a),std::sin(a)}*3.2f;float z=navSupport(m_world,c,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.z+.215f);
-      bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,c,1.85f,roughStep(e.kind)):std::fabs(z-e.z)<.23f;
-      if(!reachable||!navFits(m_world,c,z,1.85f))continue;
-      bool seen=m_world.rayClear(m_player.pos,m_player.z+m_player.eye,c,z+.9f);
-      float score=(seen?10.f:0.f)-lengthSq(c-m_player.pos)*.05f;
-      if(score<bestScore){bestScore=score;best=c;}}
-     goal=best;}
+    else goal=hidingSpot(goal);
    }
    // Height no longer switches the stalk off: it watches from a gantry and
    // rushes down a stair; only the flank needs level ground.
@@ -214,19 +319,7 @@ void Game::updateEnemies(float dt){
     }
 
     // Flanking targets the least visible valid side of the player.
-    if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f&&flat){
-     auto radial=normalized(e.pos-m_player.pos);auto side=Vec2{-radial.y,radial.x};
-     Vec2 best=goal;float bestScore=9999.f;bool found=false;
-     for(float sign:{e.stalkSide,-e.stalkSide}){auto candidate=m_player.pos+radial*2.9f+side*(sign*2.3f);float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.z+.215f);
-      bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.z)<.23f;
-      if(!reachable||!navFits(m_world,candidate,z,1.85f))continue;
-      auto fromPlayer=candidate-m_player.pos;float candidateDistance=length(fromPlayer);
-      float gaze=candidateDistance>.001f?dot(playerForward,fromPlayer*(1.f/candidateDistance)):1.f;
-      float score=gaze+lengthSq(candidate-e.pos)*.02f;
-      if(score<bestScore){bestScore=score;best=candidate;found=true;}
-     }
-     if(found)goal=best;
-    }
+    if(e.stalkMode==Enemy::StalkMode::Flank&&dist>2.4f&&flat)goal=flankPoint(2.9f,2.3f,goal);
    }
 
    // Watching is deliberately unnerving: if the player has it in clear view,
@@ -236,8 +329,8 @@ void Game::updateEnemies(float dt){
 
    // Search the last witnessed area; never sample the hidden player's new position.
    if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
-    bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,1.85f,roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
-    if(reachable&&navFits(m_world,candidate,z,1.85f)){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=.6f;e.stalkSide=-e.stalkSide;
+    bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,e.hull(),roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
+    if(reachable&&navFits(m_world,candidate,z,e.hull())){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=.6f;e.stalkSide=-e.stalkSide;
    }
   }
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
@@ -246,7 +339,7 @@ void Game::updateEnemies(float dt){
   if(scheduleStrike&&!stalker&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=creatureTraits(e.kind).windup;enemySound(e,1,.85f);continue;}
   if(watching||!scheduleMove||length(goal-e.pos)<.3f||(!stalker&&visible&&dist<range*.82f)||e.painFlash>(stalker?.85f:.65f))continue;
   Vec2 destination=goal;
-  float hull=creatureTraits(e.kind).hull;
+  float hull=e.hull();
   float stepHeight=m_world.hasTerrain()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
   bool direct=false;
   if(m_world.hasTerrain()){
@@ -256,14 +349,21 @@ void Game::updateEnemies(float dt){
    auto delta=goal-e.pos;float distance=length(delta);Vec2 probe=distance>1.6f?e.pos+delta*(1.6f/distance):goal;
    direct=roughSegment(m_world,e.pos,e.z,probe,hull,stepHeight);
   }else{
-   direct=std::fabs((visible?targetFeet:m_world.supportBelow(goal.x,goal.y,e.lastKnownZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
+   direct=std::fabs((visible?targetFeet:m_world.supportBelow(goal.x,goal.y,goalZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
   }
   if(e.kind==Enemy::Kind::Huntsman&&visible&&m_world.tile(int(goal.x),int(goal.y))=='C')direct=m_world.rayClear(e.pos,e.z+.7f,goal,targetFeet+.3f);
   // Repeated contact switches to routed movement instead of rebuilding a
   // path every frame or continuing to push into the same corner forever.
   if(e.searchTime>.2f)direct=false;
-  if(!direct&&e.repathTimer>0)destination=e.waypoint;
-  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,e.lastKnownZ,creatureTraits(e.kind).hull);e.waypoint=destination;e.repathTimer=.35f;}
+  // A creature that opens doors plans through the ones it may operate; it
+  // still collides with them until requestAiDoor has swung them open.
+  std::vector<char> operable;std::optional<World::DoorPlan> doorPlan;
+  if(!direct&&traits.opensDoors&&e.awareness>0){bool any=false;operable.assign(m_world.doors().size(),0);
+   for(size_t i=0;i<m_world.doors().size();++i){const auto&d=m_world.doors()[i];if(d.open<d.maxOpen&&!aiDoorLocked(m_world,m_level,d)){operable[i]=1;any=true;}}
+   if(any)doorPlan.emplace(m_world,operable);}
+  // A fast mover reaches a one-metre waypoint before the repath clock runs out.
+  if(!direct&&e.repathTimer>0&&lengthSq(e.waypoint-e.pos)>.04f)destination=e.waypoint;
+  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull);e.waypoint=destination;e.repathTimer=.35f;}
   else if(!direct){
    int field[World::Height][World::Width];for(auto&row:field)for(auto&value:row)value=9999;
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
@@ -283,6 +383,7 @@ void Game::updateEnemies(float dt){
    for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx>=minCell&&nx<=maxCell&&ny>=minCell&&ny<=maxCell&&field[ny][nx]<best&&edgeWalkable(x,y,nx,ny)){best=field[ny][nx];destination={nx+.5f,ny+.5f};}}
    e.waypoint=destination;e.repathTimer=.25f;
   }
+  doorPlan.reset();
   Vec2 direction=normalized(destination-e.pos);
   if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
@@ -331,10 +432,27 @@ void Game::migrateEnemiesAcrossChunks(){
   }
   if(target==m_level){++it;continue;}
   ensureChunk(target);auto origin=chunkOffset(target);auto enemy=*it;Vec2 shift=sourceOrigin-origin;
+  if(enemy.originLevel<0&&!enemy.scriptSpawned){enemy.originLevel=m_level;enemy.originHome=enemy.home;}
   enemy.pos+=shift;enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;
-  enemy.z=m_chunks[target].world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.z;
-  m_chunks[target].enemies.push_back(enemy);it=m_enemies.erase(it);
+  enemy.z=m_chunks[target].world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.homeZ=enemy.z;
+  m_chunks[target].enemies.push_back(enemy);int leaving=int(it-m_enemies.begin());it=m_enemies.erase(it);
+  // Guards, drones and grenades hold enemies by list index: follow this one to
+  // its new list and close the gap it left behind.
+  std::vector<AiTargetRef> moved(m_enemies.size()+1);for(int i=0;i<int(moved.size());++i)moved[size_t(i)]={ShotKind::Enemy,m_level,i<leaving?i:i-1};
+  moved[size_t(leaving)]={ShotKind::Enemy,target,int(m_chunks[target].enemies.size())-1};remapEnemyRefs(m_level,moved);
  }
+}
+void Game::followEnemyRef(const std::function<StateId(std::string_view)>& key,std::string_view prefix,int level,const std::vector<AiTargetRef>& moved){
+ auto field=[&](const char* name){return key(std::string(prefix)+name);};
+ if(state(field("kind"))!=int(ShotKind::Enemy)||state(field("level"))!=level+1)return;
+ int index=state(field("index"))-1;if(index<0||size_t(index)>=moved.size())return;
+ const auto& to=moved[size_t(index)];setState(field("level"),to.level+1);setState(field("index"),to.index+1);
+}
+void Game::remapEnemyRefs(int level,const std::vector<AiTargetRef>& moved){
+ for(size_t actor=0;actor<m_friendlyActors.size();++actor)
+  for(std::string_view prefix:{"guard_target_","weapon_target_","hit_","task_enemy_","tactic_","grenade_target_"})
+   followEnemyRef([&](std::string_view f){return friendlyKey(actor,f);},prefix,level,moved);
+ remapDroneEnemyRefs(level,moved);remapGrenadeEnemyRefs(level,moved);
 }
 bool Game::testAI(){
  if(!testGuardAI())return false;

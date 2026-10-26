@@ -422,8 +422,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  m_controlSign=makeSign("CONTROL GALLERY","SWITCHGEAR",0xffa7a766u);m_surfaceSign=makeSign("SURFACE LIFT","EXTRACTION",0xffa7a766u);
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
  m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
- for(int i=0;i<CampaignChunkCount;++i)m_routeSigns[i]=makeSign(CampaignMapNames[i],"SERVICE ACCESS",0xffa7a766u);
- m_routeSigns[CampaignChunkCount]=makeSign("FREIGHT SERVICES","ACCESS SUSPENDED",0xffa7a766u);m_routeSigns[CampaignChunkCount+1]=makeSign("PRIMARY UTILITIES","SERVICE ACCESS",0xffa7a766u);
+ m_noticeSigns[0]=makeSign("FREIGHT SERVICES","ACCESS SUSPENDED",0xffa7a766u);m_noticeSigns[1]=makeSign("PRIMARY UTILITIES","SERVICE ACCESS",0xffa7a766u);
  m_serviceAreaSigns[0]=makeSign("SERVICE STORES","SPARES / MAINTENANCE",0xff53aec4u);
  m_serviceAreaSigns[1]=makeSign("PRIMARY UTILITIES","PERMIT REQUIRED",0xffd7ac64u);
  m_serviceAreaSigns[2]=makeSign("SALVAGE DISPATCH","WASTE HANDLING",0xff9fceaeu);

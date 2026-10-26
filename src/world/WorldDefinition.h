@@ -36,10 +36,10 @@ inline const CreatureTraits& creatureTraits(CreatureKind kind){
   {"SCISSOR FIEND",  280,1.85f,1.85f,.75f,18,.8f, .34f,2,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.25f,0.f, .25f,1.6f,false},
   {"REACTOR STALKER",320,1.85f,1.85f,1.4f,30,.55f,.38f,2,.78f, true, true, 2.5f,7.f, 5.f,1.15f,1.1f, 3.8f,.45f,1.05f,true},
   {"MUTATED HUMAN",  180,1.85f,1.85f,1.9f,16,.55f,.34f,2,1.f,  true, true, 2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.6f,false},
-  // A transformed worker that runs its prey down: it stalks like the reactor's
-  // thing but rushes harder and reaches further with its grab; its run covers
-  // 1.9 m a cycle and it reels for half a second when hit.
-  {"SNATCHER",       140,1.85f,1.85f,2.4f,14,.38f,.34f,2,1.32f,true, true, 3.f, 3.3f,1.8f,1.2f,1.35f,4.6f,.3f, 1.f,false},
+  // A transformed worker that ambushes rather than chases: it limps at 1.1 m/s
+  // (its injured walk covers 1.9 m a cycle), crouches for .65 s before a 4.6 m/s
+  // lunge, and needs 2.2 s before it can snatch again.
+  {"SNATCHER",       140,1.85f,1.85f,1.1f,14,.65f,.34f,2,1.32f,true, true, 3.f, 3.3f,1.8f,1.2f,1.35f,4.6f,.3f, 2.2f,false},
   // A resonance specimen on four legs: slow, heavy, stooping through doors; a
   // long reach and a slam that lands hard and takes its time to recover.
   {"CHIMERA",        420,2.f,  2.4f, 1.6f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.14f,2.2f,1.2f,1.7f, 0.f, .35f,2.f,false}};

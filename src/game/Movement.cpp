@@ -97,7 +97,9 @@ void Game::updateMovement(const InputState& input,float dt){
   bool grounded=m_player.grounded;auto old=m_player.pos;
   m_jumpBuffer=std::max(0.f,m_jumpBuffer-step);m_coyote=grounded?.075f:std::max(0.f,m_coyote-step);
   if(m_jumpBuffer>0&&m_coyote>0){m_player.verticalVelocity=5.4f;m_player.grounded=false;m_jumpBuffer=0;m_coyote=0;m_verticalSpringVelocity-=.45f;sound(Sound::Jump,.38f,.97f+(m_stepVariant%3)*.025f);}
-  float speed=length(m_velocity),wishSpeed=heldNpc()>=0?1.4f:m_player.crouched?1.65f:input.sprint?5.4f:3.6f;
+  float speed=length(m_velocity),wishSpeed=heldNpc()>=0?1.4f:m_player.crouched?1.65f:input.sprint&&m_grabbed<=0?5.4f:3.6f;
+  // In a Snatcher's hands the player can only struggle.
+  if(m_grabbed>0){wishSpeed*=.35f;m_grabbed=std::max(0.f,m_grabbed-step);}
   if(m_player.grounded&&speed>0){float remaining=std::max(0.f,speed-std::max(1.5f,speed)*6.f*step);m_velocity=m_velocity*(remaining/speed);}
   if(lengthSq(wish)>0){
    float acceleration=m_player.grounded?12.f:3.f;

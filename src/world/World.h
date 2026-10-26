@@ -20,6 +20,8 @@ struct Door {
  bool swinging=false;
  // A swinging leaf opens toward +y (1) or -y (-1) from its hinge at `left`.
  float swing=1.f;
+ // A notice plate on the header: CampaignChunkCount+n is notice n (a door that
+ // says why it is shut); -1, none. Doors carry no area names.
  int sign=-1;
  float maxOpen=1.f;
 };
@@ -358,6 +360,8 @@ public:
     bool startLift();
     void updateLift(float dt);
     void restoreLift(const World& saved);
+    // A rebuilt chunk takes back what play changed: lift, reactor and broken crates.
+    void restoreDynamic(const World& saved){restoreLift(saved);if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
     const char* liftStatus()const;
     float liftLampPower()const;
     float liftMotorGain()const;
@@ -381,7 +385,9 @@ public:
     float floorHeight(float x,float y)const;
     float supportHeight(float x,float y,bool dynamic=true,bool shelfCavities=false)const;
     float ceilingHeight(float x,float y)const;
-    float clearanceHeight(float x,float y)const;
+    // Headroom over the tile floor. A door's header caps it only for someone
+    // below that header (a deck or catwalk over the door line passes above it).
+    float clearanceHeight(float x,float y,float feet=-1e9f)const;
     bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true,bool shelfCavities=false)const;
     // Static optical visibility: exact solid intersections, separate from player hull clearance.
     bool lightRayClear(Vec2 a,float az,Vec2 b,float bz)const;
@@ -390,6 +396,15 @@ public:
     float shotFraction(Point3 from,Point3 to,Point3&normal)const;
     static bool testCollisionCandidates();
     bool doorBlocks(float x,float y,float feet,float height)const;
+    // While a plan is alive, the doors it marks count as standing at maxOpen to
+    // doorBlocks, so route planning for an actor that operates doors passes them.
+    struct DoorPlan {
+     const World& world;const std::vector<char>* previous;
+     DoorPlan(const World& w,const std::vector<char>& open):world(w),previous(w.m_doorPlan.open){w.m_doorPlan.open=&open;}
+     ~DoorPlan(){world.m_doorPlan.open=previous;}
+     DoorPlan(const DoorPlan&)=delete;DoorPlan& operator=(const DoorPlan&)=delete;
+    };
+    bool doorPlanActive()const{return m_doorPlan.open!=nullptr;}
     bool navigable(int x,int y,int nx,int ny,float height=1.f)const;
     void updateDoors(float dt,bool includeTransfers=true);
     bool openDoor(int index);
@@ -407,6 +422,9 @@ private:
     friend class Game; // Save codec persists dynamic state, never geometry or pointers.
     std::vector<MapLayer> m_layers;
     std::vector<std::pair<int,int>> m_destroyedTiles;
+    // Never copied: a plan belongs to the World it was made on.
+    struct DoorPlanSlot {const std::vector<char>* open=nullptr;DoorPlanSlot()=default;DoorPlanSlot(const DoorPlanSlot&){}DoorPlanSlot& operator=(const DoorPlanSlot&){return *this;}};
+    mutable DoorPlanSlot m_doorPlan;
     float m_internalWallHeight=0;
     int m_level=0;
     WorldId m_worldId=WorldId::Campaign;

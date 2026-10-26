@@ -149,7 +149,10 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    for(size_t i=0;i<world.doors().size();++i)if(!aiDoorLocked(world,level,world.doors()[i])&&world.doors()[i].open<world.doors()[i].maxOpen){if(!planning)planning=world;planning->setDoor(int(i),world.doors()[i].maxOpen,true);}
    // Prefer the retained hint graph for guards; fall back to the span flood
    // when the graph has no useful hop from the current feet.
-   if(config.mode==ActorAiMode::Guard){waypoint=guardGraphWaypoint(level,pose.position,pose.z,goal,goalZ,height);if(lengthSq(waypoint-pose.position)<.04f)waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);}
+   // The graph answers the goal itself when it has no route (a door shut in
+   // the way, say): then the span flood plans through the doors it may open.
+   if(config.mode==ActorAiMode::Guard){waypoint=guardGraphWaypoint(level,pose.position,pose.z,goal,goalZ,height);
+    if(lengthSq(waypoint-pose.position)<.04f||(lengthSq(waypoint-goal)<1e-6f&&!friendlyWalkSegment(level,pose.position,pose.z,goal,height)))waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);}
    else waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);
    timer=.3f+float((actor*17+size_t(level)*5)%11)*.02f;}
   }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+#include <functional>
 #include "../core/Math.h"
 #include "../world/World.h"
 #include <vector>
@@ -74,7 +76,8 @@ struct Enemy {
     Vec2 waypoint{};
     Vec2 home{},lastKnown{};
     enum class State {Idle,Investigate,Chase,Search};State state=State::Idle;
-    enum class StalkMode {Watch,Flank,Rush,Retreat};StalkMode stalkMode=StalkMode::Watch;
+    // Grab and Recover are the Snatcher's: holding its prey, sprawled after a lunge.
+    enum class StalkMode {Watch,Flank,Rush,Retreat,Grab,Recover};StalkMode stalkMode=StalkMode::Watch;
     float stalkTimer=0,stalkSide=1;
     int surfaceMode=0; // floor, wall, ceiling
     Vec2 surfaceNormal{};
@@ -83,10 +86,17 @@ struct Enemy {
     unsigned scheduleConditions=0;
     bool scriptSpawned=false; // Persistent population owned by a script, not the authored baseline.
     StateId wakeState=0;      // Dormant, blind and deaf until this state is set or it is hurt.
+    float homeZ=-999;         // The floor it walks back to; -999 (an older save) uses its last known floor.
+    float scale=1;            // Authored size: its body, hull and reach grow with it.
+    // An authored creature that followed the player across a seam keeps the chunk
+    // and home it was placed at, so a load matches it there instead of respawning it.
+    int originLevel=-1;Vec2 originHome{};
     static constexpr float CorpseLifetime=2.4f;
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
-    float bodyTop()const{return z+creatureTraits(kind).top;}
+    float bodyTop()const{return z+creatureTraits(kind).top*scale;}
+    float hull()const{return creatureTraits(kind).hull*scale;}
+    float reach()const{return creatureTraits(kind).reach*scale;}
     const char* name()const{return creatureTraits(kind).name;}
 };
 
@@ -247,6 +257,7 @@ public:
     std::vector<const SequenceCue*> terminalMessages(int terminal)const;
     // True while a sequence that speaks through this terminal still has lines to come.
     bool terminalConversationActive(int terminal)const;
+    int sequenceClock(const World& world,StateId timer)const;
     static bool testMechanisms();
 
     float weaponKick() const { return m_weaponKick; }
@@ -475,7 +486,8 @@ private:
     void refreshSaveSlots();
     std::string encodeSave()const;
     bool decodeSave(const std::string& data);
-    template<class Archive> void archiveSave(Archive& archive,int version=2);
+    // Returns how many chunks the archive carried; later ones are authored fresh.
+    template<class Archive> int archiveSave(Archive& archive,int version=2);
     bool nearReactorDisk()const;
     void useReactorAction(int action);
     World* reactorWorld();
@@ -631,6 +643,12 @@ private:
     void guardAvoidGrenade(size_t actor,const ActorPose& pose,Vec2& goal,float& goalZ,bool& wantsMove);
     void updateEngineerDrones(float dt);
     void validateEngineerDrones()const;
+    // AI state holds enemies as (kind, level+1, index+1). When a chunk's list
+    // changes, moved[i] says where its entry i is now; references follow it.
+    void remapEnemyRefs(int level,const std::vector<AiTargetRef>& moved);
+    void followEnemyRef(const std::function<StateId(std::string_view)>& key,std::string_view prefix,int level,const std::vector<AiTargetRef>& moved);
+    void remapDroneEnemyRefs(int level,const std::vector<AiTargetRef>& moved);
+    void remapGrenadeEnemyRefs(int level,const std::vector<AiTargetRef>& moved);
     bool deployEngineerDrone(size_t owner);
     void damageEngineerDrone(int slot,float amount,AiTargetRef attacker={});
     ShotHit traceEngineerDrone(Point3 from,Point3 to,size_t owner)const;
@@ -707,6 +725,8 @@ private:
     float m_damageFlash = 0.0f;
     float m_hitStopRemaining=0.f;
     float m_elapsed = 0.0f;
+    float m_grabbed=0; // Seconds a Snatcher still has hold of the player: slowed, no sprint.
+    std::unordered_map<StateId,float> m_sequenceEnded; // Game time each one-shot reached its end; not saved.
     int m_kills = 0;
     bool m_won = false;
     bool m_pendingMainCampaign = false;

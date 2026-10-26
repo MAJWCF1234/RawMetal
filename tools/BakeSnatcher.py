@@ -22,7 +22,9 @@ glb, out = Path(sys.argv[sys.argv.index('--') + 1]), Path(sys.argv[sys.argv.inde
 IDLE_WINDOW = (1, 73)
 CLIPS = {
     'Snatcher_Idle': None,
-    'Snatcher_Run': (root / 'source-assets' / 'transformed_lunge_run.fbx', 1, 25),
+    # It limps rather than runs: the injured walk (in place, 1.9 m a cycle at
+    # 1.17 m/s planted-foot speed) is its creep and, played faster, its fade.
+    'Snatcher_Creep': (root / 'source-assets' / 'survivor_injured_walk.fbx', 1, 49),
     'Snatcher_Snatch': (root / 'source-assets' / 'transformed_neck_bite.fbx', 6, 36),
     'Snatcher_Stagger': (root / 'source-assets' / 'transformed_hit_stagger.fbx', 11, 34),
     'Snatcher_Death': (root / 'source-assets' / 'transformed_death_back.fbx', 20, 62),

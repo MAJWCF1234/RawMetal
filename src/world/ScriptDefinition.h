@@ -23,6 +23,9 @@ struct TimedSequence {
  Sound tickSound=Sound::Metal1;float gain=.5f,pitch=.65f;
  bool loop=false;
  int sightActor=-1;float sightDistance=30;
+ // Where the tick plays. Unset (x<0) plays it at the trigger box's centre or on
+ // the actor riding this timer; a sequence started only by script needs it.
+ Vec2 soundAt{-1,-1};float soundZ=std::numeric_limits<float>::quiet_NaN();
 };
 struct QuestItemStack {StateId id=0;int count=0;};
 // Shared, saved actor and machinery timelines. Keys use absolute map elevation.
