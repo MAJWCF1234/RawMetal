@@ -102,14 +102,28 @@ bool Game::auditMap(int level){
   report<<"Reached floor heights (m: cells, first at):";for(auto [h,entry]:heights)report<<' '<<h*.5f<<':'<<entry.first<<'@'<<(entry.second%N+.5f)*Cell<<','<<(entry.second/N+.5f)*Cell;report<<'\n';}
  auto check=[&](bool ok,const std::string& what){if(!ok)fail("UNREACHABLE "+what);};
  report<<"Map "<<level<<" ("<<w.definition().playerStart.x<<","<<w.definition().playerStart.y<<" z "<<reach.startZ<<"): "<<reach.nodes<<" reachable cells ("<<standing.nodes<<" standing) of "<<N*N<<"\n";
- auto spawnFeet=[&](Vec2 p,float z){return z>-900?z:w.supportBelow(p.x,p.y,w.floorHeight(p.x,p.y)+.5f);};
- for(const auto& s:w.creatureSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string("creature ")+creatureTraits(s.kind).name+" at "+at(s.position);
+ auto spawnFeet=[&](Vec2 p,float z){return z==-999?w.floorHeight(p.x,p.y):z;};
+ // Use spawnCreature's exact sentinel and floor rule, then test the whole hull.
+ for(size_t i=0;i<w.creatureSpawns().size();++i){const auto& s=w.creatureSpawns()[i];const auto& traits=creatureTraits(s.kind);float z=spawnFeet(s.position,s.z);
+  std::string name="creature["+std::to_string(i)+"] "+traits.name+" at "+at(s.position)+" z "+std::to_string(z);
   check(reachableIn(standing,s.position,z,.75f),name);
-  if(!w.fits(s.position.x,s.position.y,spawnFeet(s.position,s.z)+.03f,creatureTraits(s.kind).hull,false))fail("STUCK "+name);}
+  if(!w.fits(s.position.x,s.position.y,z+.03f,traits.hull,false))fail("STUCK "+name);
+  const float radius=(s.kind==CreatureKind::Wasp||s.kind==CreatureKind::Huntsman)?.2f:.35f;
+  name+=" radius="+std::to_string(radius)+" top="+std::to_string(z+traits.top);
+  auto intersects=[&](float x,float y,float hx,float hy){float dx=std::max(std::fabs(x)-hx,0.f),dy=std::max(std::fabs(y)-hy,0.f);return dx*dx+dy*dy<radius*radius;};
+  for(size_t j=0;j<w.structures().size();++j){const auto& v=w.structures()[j];if(v.top<=z+.01f||v.bottom>=z+traits.top)continue;
+   if(intersects(s.position.x-(v.x1+v.x2)*.5f,s.position.y-(v.y1+v.y2)*.5f,(v.x2-v.x1)*.5f,(v.y2-v.y1)*.5f))fail("HULL INTERSECTION "+name+" structure["+std::to_string(j)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
+  for(size_t j=0;j<w.fixtures().size();++j){const auto& f=w.fixtures()[j];if(!f.solid||f.core<=0)continue;float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(base+f.height<=z+.01f||base>=z+traits.top)continue;
+   float dx=s.position.x-f.position.x,dy=s.position.y-f.position.y,c=std::cos(f.yaw),sn=std::sin(f.yaw);
+   if(intersects(dx*c-dy*sn,dx*sn+dy*c,f.width*f.core*.5f,f.depth*f.core*.5f))fail("HULL INTERSECTION "+name+" fixture["+std::to_string(j)+"] base/height "+std::to_string(base)+"/"+std::to_string(f.height)+" position "+at(f.position)+" width/depth/core/yaw "+std::to_string(f.width)+"/"+std::to_string(f.depth)+"/"+std::to_string(f.core)+"/"+std::to_string(f.yaw));}
+ }
+ for(size_t i=0;i<w.structures().size();++i){const auto& v=w.structures()[i];if(v.x1<0||v.y1<0||v.x2>24||v.y2>24)fail("OUTSIDE CHUNK structure["+std::to_string(i)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
+ // Tile decks occupy exactly one cell inside the fixed 24 by 24 layer; their
+ // parser/load checks already reject rows of any other width.
  for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":"health")+" at "+at(s.position);
   check(reachable(s.position,z,.6f),name);
-  if(!w.fits(s.position.x,s.position.y,spawnFeet(s.position,s.z)+.03f,.3f,false))fail("STUCK "+name);}
- for(const auto& c:w.clutterSpawns())if(!w.fits(c.position.x,c.position.y,spawnFeet(c.position,c.z)+.03f,.2f,false))fail("STUCK clutter at "+at(c.position));
+  if(!w.fits(s.position.x,s.position.y,(s.z>-900?s.z:w.supportBelow(s.position.x,s.position.y,w.floorHeight(s.position.x,s.position.y)+.5f))+.03f,.3f,false))fail("STUCK "+name);}
+ for(const auto& c:w.clutterSpawns())if(!w.fits(c.position.x,c.position.y,(c.z>-900?c.z:w.supportBelow(c.position.x,c.position.y,w.floorHeight(c.position.x,c.position.y)+.5f))+.03f,.2f,false))fail("STUCK clutter at "+at(c.position));
  // A terminal is usable only from a reachable spot within 1.5 m that sees it.
  auto usable=[&](const Terminal& t){
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;
@@ -127,7 +141,37 @@ bool Game::auditMap(int level){
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;
   if(std::fabs(w.supportBelow(t.position.x,t.position.y,base+.05f)-base)>.06f)fail("FLOATING "+name);
  }
- check(reachable(w.exitPoint(),-999,1.f),"exit");
+ // A transfer door has one authored base. Open seams may carry more than
+ // one floor (e.g. the reactor's containment corridor and upper manifold).
+ // Match walkable surfaces across the seam; do not mistake a scenery roof
+ // for the only exit, or a pit below the adjoining floor for a valid exit.
+ auto surfaces=[](const World& world,Vec2 p){
+  std::vector<float> result;auto add=[&](float z){if(!world.fits(p.x,p.y,z+.03f,Player::CrouchedHeight,false))return;for(float existing:result)if(std::fabs(existing-z)<.03f)return;result.push_back(z);};
+  add(world.floorHeight(p.x,p.y));
+  for(const auto& v:world.structures())if(!v.rail&&p.x>=v.x1&&p.x<v.x2&&p.y>=v.y1&&p.y<v.y2)add(v.top);
+  return result;
+ };
+ auto exitHeights=surfaces(w,w.exitPoint());bool transferExit=false;
+ for(const auto& d:w.doors())if(d.transfer){exitHeights={w.floorHeight((d.left+d.right)*.5f,d.y)+d.z};transferExit=true;break;}
+ if(!transferExit){Vec2 outside=w.exitPoint(),inside=outside;bool seam=true;
+  // Compare at the border itself: comparing points a metre apart can mistake
+  // a continuous sloped basin/terrain bank for a discontinuous step.
+  if(w.openSouthBoundary()){inside.y=23.99f;outside.y=24.01f;}else if(w.openEastBoundary()){inside.x=23.99f;outside.x=24.01f;}else if(w.openNorthBoundary()){inside.y=.01f;outside.y=-.01f;}else if(w.openWestBoundary()){inside.x=.01f;outside.x=-.01f;}else seam=false;
+  if(seam){exitHeights=surfaces(w,inside);Vec2 absolute=outside+w.definition().origin;
+   for(int other=0;other<worldChunkCount(WorldId::Campaign);++other){if(other==level)continue;auto data=campaignMap(other);const auto& definition=data?data->definition:chunkDefinition(WorldId::Campaign,other);auto local=absolute-definition.origin;
+    if(local.x<0||local.x>=24||local.y<0||local.y>=24)continue;
+    World neighbor(other);auto adjoining=surfaces(neighbor,local);std::vector<float> matched;
+    for(float z:exitHeights)if(std::any_of(adjoining.begin(),adjoining.end(),[&](float next){return std::fabs(next-z)<=Step;}))matched.push_back(z);
+    if(matched.empty()){std::string values="EXIT STEP to map "+std::to_string(other)+" at "+at(inside)+" current surfaces";for(float z:exitHeights)values+=' '+std::to_string(z);values+=" adjoining surfaces";for(float z:adjoining)values+=' '+std::to_string(z);fail(values);}
+    exitHeights=std::move(matched);break;
+   }
+  }
+ }
+ auto exitHeight=[&](float feet){return std::any_of(exitHeights.begin(),exitHeights.end(),[&](float z){return std::fabs(feet-z)<=Step;});};
+ bool exitReached=false;Vec2 exit=w.exitPoint();int exitX=int(exit.x/Cell),exitY=int(exit.y/Cell),exitRadius=int(std::ceil(1.f/Cell));
+ for(int y=exitY-exitRadius;y<=exitY+exitRadius;++y)for(int x=exitX-exitRadius;x<=exitX+exitRadius;++x)if(x>=0&&y>=0&&x<N&&y<N)for(float feet:visited[size_t(y*N+x)])exitReached|=exitHeight(feet);
+ std::string exitValues="exit at "+at(exit)+" surfaces";for(float z:exitHeights)exitValues+=' '+std::to_string(z);
+ check(exitReached,exitValues);
  // Traps: a reachable spot from which the exit can no longer be reached (a
  // basin jumped into, a pit, a ledge dropped onto). Walk the reach graph
  // backwards from the exit with the same step rule, then list what is left.
@@ -141,7 +185,7 @@ bool Game::auditMap(int level){
   for(int y=0;y<N;++y)for(int x=0;x<N;++x){Vec2 c{(x+.5f)*Cell,(y+.5f)*Cell};
    bool inCage=w.cargoLift().upper>w.cargoLift().lower&&c.x>w.cargoLift().x1-.3f&&c.x<w.cargoLift().x2+.3f&&c.y>w.cargoLift().y1-.3f&&c.y<w.cargoLift().y2+.3f;
    if(length(c-exit)>1.f&&!(w.hasLift()&&w.insideLift(c.x,c.y))&&!inCage)continue;
-   for(float v:visited[size_t(y*N+x)]){escapes[size_t(y*N+x)].push_back(v);open.push({x,y,v});}}
+   for(float v:visited[size_t(y*N+x)]){if(!inCage&&!w.hasLift()&&!exitHeight(v))continue;escapes[size_t(y*N+x)].push_back(v);open.push({x,y,v});}}
   while(!open.empty()){
    auto n=open.front();open.pop();
    const int dx[4]={1,-1,0,0},dy[4]={0,0,1,-1};
@@ -161,10 +205,18 @@ bool Game::auditMap(int level){
  }
  // Every door must be walkable straight through: a prop in front of a doorway
  // can leave the rooms connected some other way and still block the door.
- for(const auto& d:w.doors()){
-  float cx=(d.left+d.right)*.5f;bool clear=true;
-  for(float dy=-1.f;dy<=1.f;dy+=.25f)if(d.y+dy>0&&d.y+dy<24)clear&=reachable({cx,d.y+dy},-999,.15f);
-  if(!clear)fail("BLOCKED door x "+std::to_string(d.left)+"-"+std::to_string(d.right)+" at y "+std::to_string(d.y));
+ for(size_t i=0;i<w.doors().size();++i){const auto& d=w.doors()[i];float cx=(d.left+d.right)*.5f,base=w.floorHeight(cx,d.y)+d.z;bool clear=true;
+  // Like the flood fill, assess a lift landing with the cage at that landing.
+  // A called platform is a support; a temporarily lowered cage is not a pit.
+  float previousCage=w.cargoLiftHeight();const auto& cage=w.cargoLift();
+  if(cage.upper>cage.lower){if(std::fabs(base-cage.upper)<=Step)game.m_world.setCargoLiftHeight(cage.upper);else if(std::fabs(base-cage.lower)<=Step)game.m_world.setCargoLiftHeight(cage.lower);}
+  for(float dy=-1.f;dy<=1.f;dy+=.25f)if(d.y+dy>0&&d.y+dy<24)clear&=reachable({cx,d.y+dy},base,.15f);
+  if(!clear)fail("BLOCKED door["+std::to_string(i)+"] x "+std::to_string(d.left)+"-"+std::to_string(d.right)+" at y "+std::to_string(d.y)+" base "+std::to_string(base));
+  for(float side:{-1.f,1.f}){float y=d.y+side*.35f;if(y<0||y>=24)continue;
+   float surface=w.supportBelow(cx,y,base+.45f);
+   if(!std::isfinite(surface)||std::fabs(surface-base)>.45f||!w.fits(cx,y,surface+.02f,Player::CrouchedHeight,false))fail("DOOR STEP door["+std::to_string(i)+"] at "+at({cx,d.y})+" left="+std::to_string(d.left)+" right="+std::to_string(d.right)+" relativeZ="+std::to_string(d.z)+" side="+std::to_string(side)+" base="+std::to_string(base)+" surface="+std::to_string(surface));
+  }
+  game.m_world.setCargoLiftHeight(previousCage);
  }
  // Water sits in its basin, never as a slab above the floor around it.
  for(const auto& b:w.waterVolumes())if(b.surface>w.layers().front().elevation-.02f)fail("WATER ABOVE FLOOR basin at "+at({b.x1,b.y1})+" surface "+std::to_string(b.surface));
@@ -315,6 +367,12 @@ bool Game::auditMap(int level){
    row+=raised?'^':upright?'.':any?'c':'o';
   }
   report<<row<<'\n';
+ }
+ // One record for every reachable border tile and floor, with standing status.
+ for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(x==0||x==23||y==0||y==23){
+  std::map<int,bool> floors;
+  for(int sy=0;sy<4;++sy)for(int sx=0;sx<4;++sx){size_t cell=size_t((y*4+sy)*N+x*4+sx);for(float v:visited[cell])floors.try_emplace(int(std::lround(v*1000)),false);for(float v:standing.visited[cell])floors[int(std::lround(v*1000))]=true;}
+  for(auto [height,upright]:floors)report<<"BORDER "<<x<<' '<<y<<' '<<height/1000.f<<' '<<(upright?'.':'c')<<'\n';
  }
  // Viewpoints for the visual sweep: one per reachable 3 m block and floor.
  std::ofstream views("map-views-"+std::to_string(level)+".txt");

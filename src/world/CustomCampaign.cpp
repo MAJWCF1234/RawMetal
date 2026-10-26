@@ -100,6 +100,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    terrain->seed=std::uint32_t(integer(f,1,"terrain seed"));terrain->base=number(f,2,"terrain base");terrain->amplitude=number(f,3,"terrain amplitude");
    terrain->scale=number(f,4,"terrain scale");terrain->roughness=number(f,5,"terrain roughness");
    if(terrain->base<World::TerrainMinZ+2||terrain->base>World::TerrainMaxZ-4||terrain->amplitude<0||terrain->amplitude>12||terrain->scale<6||terrain->scale>400||terrain->roughness<0||terrain->roughness>.9f)throw std::runtime_error("terrain parameters out of range");
+   if(terrain->base-terrain->amplitude<World::TerrainMinZ+1||terrain->base+terrain->amplitude>World::TerrainMaxZ-2)throw std::runtime_error("TERRAIN[0] base="+std::to_string(terrain->base)+" amplitude="+std::to_string(terrain->amplitude)+" height range leaves [-11,18] (campaign-wide, all maps)");
   }else if(tag=="TERRAIN_FLAT"){
    // TERRAIN_FLAT|x1|y1|x2|y2|height|blend in world metres: a level pad or road.
    if(f.size()!=7)throw std::runtime_error("malformed TERRAIN_FLAT record");if(!terrain)terrain=std::make_shared<TerrainShape>();
@@ -141,7 +142,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()!=12)throw std::runtime_error("malformed SCRIPT_EVENT record");auto map=mapAt(maps,f);ScriptEvent event;event.id=scriptName(f,2,"script event name");event.level=integer(f,1,"map index");
    for(const auto&other:maps)if(other)for(const auto&previous:other->scriptEvents)if(previous.id==event.id)throw std::runtime_error("duplicate script event name");
    event.x1=number(f,3,"event x1");event.y1=number(f,4,"event y1");event.x2=number(f,5,"event x2");event.y2=number(f,6,"event y2");event.bottom=number(f,7,"event bottom");event.top=number(f,8,"event top");
-   if(event.x1<0||event.y1<0||event.x2>World::Width||event.y2>World::Height||event.x1>=event.x2||event.y1>=event.y2||event.bottom>=event.top)throw std::runtime_error("invalid script event region");
+   if(event.x1<0||event.y1<0||event.x2>World::Width||event.y2>World::Height||event.x1>=event.x2||event.y1>=event.y2||event.bottom>=event.top)throw std::runtime_error("map "+f[1]+" scriptEvent["+std::to_string(map->scriptEvents.size())+"] id="+std::to_string(event.id)+" bounds="+std::to_string(event.x1)+","+std::to_string(event.y1)+","+std::to_string(event.x2)+","+std::to_string(event.y2)+" bottom="+std::to_string(event.bottom)+" top="+std::to_string(event.top)+" invalid region");
    if(!f[9].empty())event.requireState=scriptName(f,9,"event gate state");event.requireValue=integer(f,10,"event gate value");
    if(event.requireValue< -100000||event.requireValue>100000||(!event.requireState&&event.requireValue!=1))throw std::runtime_error("invalid script event gate");event.requireEnemiesClear=boolean(f,11,"event enemy-clear gate");event.once=true;
    if(map->scriptEvents.size()>=128)throw std::runtime_error("too many script events");map->scriptEvents.push_back(std::move(event));
@@ -186,7 +187,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<11)throw std::runtime_error("malformed FIXTURE record");auto map=mapAt(maps,f);map->fixtures.push_back({
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),
     number(f,6,"fixture width"),number(f,7,"fixture depth"),number(f,8,"fixture height"),number(f,9,"fixture yaw"),boolean(f,10,"fixture solid")});
-   if(f.size()>=12){float core=number(f,11,"fixture collision core");if(core<=0||core>1)throw std::runtime_error("fixture collision core must be in (0,1]");map->fixtures.back().core=core;}
+   if(f.size()>=12){float core=number(f,11,"fixture collision core");if(core<0||core>1)throw std::runtime_error("map "+f[1]+" fixture["+std::to_string(map->fixtures.size()-1)+"] core="+std::to_string(core)+" must be in [0,1]");map->fixtures.back().core=core;}
    // 13th field 0: collision only (a neighbouring map draws the model).
    if(f.size()>=13)map->fixtures.back().visible=boolean(f,12,"fixture visible");
    if(f.size()>13)throw std::runtime_error("malformed FIXTURE record");

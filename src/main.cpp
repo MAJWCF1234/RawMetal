@@ -13,6 +13,12 @@
 #include "vr/VrRuntime.h"
 #include <windows.h>
 #include <commctrl.h>
+#include <shellapi.h>
+#include <iostream>
+#include <cstdlib>
+#include <map>
+#include "world/CampaignMaps.h"
+#pragma comment(lib,"shell32.lib")
 #include "renderer/SoftwareRenderer.h"
 #include "platform/Win32Window.h"
 #include "audio/AudioEngine.h"
@@ -29,6 +35,31 @@
 #include <numeric>
 #include <vector>
 
+// Own argv strings for the lifetime of every dispatch, including exception handling.
+struct CommandArguments {
+ std::vector<std::wstring> values;
+ explicit CommandArguments(const wchar_t* line=GetCommandLineW()){int count=0;auto argv=CommandLineToArgvW(line,&count);if(!argv)throw std::runtime_error("Cannot parse command line");for(int i=1;i<count;++i)values.emplace_back(argv[i]);LocalFree(argv);}
+ const wchar_t* find(std::wstring_view flag)const{
+  for(const auto& value:values)if(value==flag||(flag.back()==L'='?value.starts_with(flag):(value.starts_with(flag)&&value.size()>flag.size()&&value[flag.size()]==L'=')))return value.c_str();
+  return nullptr;
+ }
+ bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
+};
+static const CommandArguments& commandArguments(){static const CommandArguments args;return args;}
+// Append diagnostic exceptions even when a test returns early.
+struct ValidationWarningReport {
+ std::string path;
+ ValidationWarningReport(){const auto& args=commandArguments();bool automated=args.automated();_putenv_s("RAWMETAL_VALIDATION_WARNINGS",automated?"1":"");if(!automated)return;std::ofstream("map-validation-warnings.txt");
+  if(auto arg=args.find(L"--map-audit="))path="map-audit-"+std::to_string(_wtoi(arg+12))+".txt";
+  else for(auto name:{"each-test","smoke-test","chapter-route-test","world-isolation-test","exclusion-test","exclusion-authoring-test","prologue-test","content-integrity-test"}){std::wstring flag=L"--";flag.append(name,name+std::strlen(name));if(args.find(flag)){path=std::string(name)+".txt";break;}}
+ }
+ ~ValidationWarningReport(){if(path.empty())return;std::ifstream warnings("map-validation-warnings.txt");std::string text((std::istreambuf_iterator<char>(warnings)),{});if(!text.empty())std::ofstream(path,std::ios::app)<<text;}
+};
+static void applyRenderSwitches(bool withoutPost=false,bool withoutPixel=false){
+ const auto& args=commandArguments();
+ retro::SoftwareRenderer::setPostProcessing(!args.find(L"--nopost")&&(args.find(L"--post-ao")||!withoutPost),args.find(L"--post-ao")!=nullptr);
+ retro::SoftwareRenderer::setPixelLighting(!withoutPixel&&!args.find(L"--nopixel"));
+}
 __declspec(noinline) static int neuralTextureRuntimeTest(int W,int H,bool vulkan){
  std::ofstream report("neural-texture-runtime-test.txt");
  auto before=retro::neuralTextureReconstructionCount();auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);
@@ -105,7 +136,7 @@ __declspec(noinline) static int approachTest(){
  retro::Win32Window window(1920,1080,L"Depthworks approach test");if(!window.valid())return 1;ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
  auto renderer=std::make_unique<retro::SoftwareRenderer>(1920,1080);if(!renderer->enableHardware(window.handle()))return 36;
  std::ofstream report("approach-test.txt");report<<renderer->hardwareName()<<'\n';
- auto game=std::wcsstr(GetCommandLineW(),L"--foundry")?retro::Game::mapInspection({3.5f,4.5f},0,-6,0,false,0,true):retro::Game::prologueInspection(2);bool ok=true;int frame=0;std::filesystem::create_directories(".build/approach");
+ auto game=commandArguments().find(L"--foundry")?retro::Game::mapInspection({3.5f,4.5f},0,-6,0,false,0,true):retro::Game::prologueInspection(2);bool ok=true;int frame=0;std::filesystem::create_directories(".build/approach");
  struct Leg{float yaw;int frames;bool forward;};
  // Face each corridor wall and walk into it, then back off, then a corner.
  for(auto leg:{Leg{0.f,90,true},Leg{3.14159f,60,true},Leg{1.5708f,120,true},Leg{-1.5708f,120,true},Leg{0.8f,120,true},Leg{2.4f,120,true},Leg{0.f,30,false}}){
@@ -126,8 +157,8 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
  retro::Win32Window window(retro::DisplayWidth,retro::DisplayHeight,L"Depthworks Ashfall frame profile");if(!window.valid())return 1;ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
  auto renderer=std::make_unique<retro::SoftwareRenderer>(retro::DisplayWidth,retro::DisplayHeight);if(!renderer->enableHardware(window.handle()))return 36;
  renderer->setGpuActorPreparation(!cpuActors);
- renderer->setPanelCaching(std::wcsstr(GetCommandLineW(),L"--uncached-panels")==nullptr);
- renderer->setActorEmitCaching(std::wcsstr(GetCommandLineW(),L"--uncached-actor-emit")==nullptr);
+ renderer->setPanelCaching(commandArguments().find(L"--uncached-panels")==nullptr);
+ renderer->setActorEmitCaching(commandArguments().find(L"--uncached-actor-emit")==nullptr);
  const int measured=sustained?3600:240;
  retro::AudioEngine audio(sustained);std::ofstream report("ashfall-performance.txt"),csv("ashfall-performance.csv");
  report<<renderer->hardwareName()<<" / native window / "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<" / 30 simulated warmup + "<<measured<<" measured frames\nCPU wall timings, including native window presentation; not GPU timestamps.\n";
@@ -138,8 +169,8 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
   if((yardOnly||sustained)&&test.kind!=2)continue;auto start=Clock::now();auto game=test.kind>=0?retro::Game::exclusionInspection(sustained?12:test.kind):test.kind==-1?retro::Game(retro::WorldId::Ashfall):test.kind==-2?retro::Game::mapInspection({1.4f,20},0,0,14,false,-25,false):retro::Game::mapInspection({18,17},retro::kPi*.5f,0,3,false,-9,false);
   game.setAiQueryCaching(!uncachedAi);
   game.setAiDecisionScheduling(!fullRateAi);
-  game.setNavAuthority(std::wcsstr(GetCommandLineW(),L"--lattice-walk-probes")==nullptr);
-  report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<" ai_query_cache="<<!uncachedAi<<" nav_authority="<<(std::wcsstr(GetCommandLineW(),L"--lattice-walk-probes")==nullptr)<<'\n';std::array<std::vector<double>,6> samples;
+  game.setNavAuthority(commandArguments().find(L"--lattice-walk-probes")==nullptr);
+  report<<test.name<<" construction_ms="<<ms(start,Clock::now())<<" ai_query_cache="<<!uncachedAi<<" nav_authority="<<(commandArguments().find(L"--lattice-walk-probes")==nullptr)<<'\n';std::array<std::vector<double>,6> samples;
   for(int frame=-30;frame<measured&&window.pump();++frame){retro::InputState input{};input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;
    if(frame==0){retro::CollisionQueryBatch::resetStatistics();retro::ai::DecisionClock::resetStatistics();retro::ai::WalkQueryCache::resetStatistics();retro::TerrainSurfaceCache::resetStatistics();retro::ai::StateLookupHints::resetStatistics();retro::MinimapCache::resetStatistics();retro::perf::cpuGrowthFrames=retro::perf::gpuBufferGrowths=0;}
    retro::perf::enabled=!sustained||deepProfile;retro::perf::costs.fill(0);retro::perf::actorCosts.fill(0);retro::perf::actorTriangleCounter=0;auto a=Clock::now();game.update(input,1.f/60);auto b=Clock::now();audio.update(game,!sustained);auto c=Clock::now();renderer->render(game);auto d=Clock::now();auto stages=renderer->frameStages();
@@ -349,9 +380,9 @@ __declspec(noinline) static int campaignInspection(int W,int H,bool lockersOnly=
      }return 0;
     }
 __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int W,int H){
-        const bool doorsOnly=std::wcsstr(commandLine,L"--door-performance-window")!=nullptr;
-        const bool freightOnly=std::wcsstr(commandLine,L"--freight-performance-window")!=nullptr;
-        const bool servicesOnly=doorsOnly||freightOnly||std::wcsstr(commandLine,L"--service-performance-window")!=nullptr;
+        const bool doorsOnly=commandArguments().find(L"--door-performance-window")!=nullptr;
+        const bool freightOnly=commandArguments().find(L"--freight-performance-window")!=nullptr;
+        const bool servicesOnly=doorsOnly||freightOnly||commandArguments().find(L"--service-performance-window")!=nullptr;
         retro::Win32Window benchWindow(W,H,L"RawMetal Vulkan Performance");if(!benchWindow.valid())return 1;
         auto assetStart=std::chrono::steady_clock::now();
         auto benchRendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& benchRenderer=*benchRendererStorage;
@@ -536,47 +567,102 @@ static LONG WINAPI writeCrashReport(EXCEPTION_POINTERS* info){
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
+static bool commandArgumentsTest(){
+ std::ofstream report("command-arguments-test.txt");bool ok=true;
+ CommandArguments args(L"RawMetal.exe --nopost \"--map-shots=folder with spaces/views.txt\" --zone-shots=\"another path/list.txt\" --each-test=movement --nopixel");
+ auto check=[&](bool value,const char* label){ok&=value;report<<(value?"PASS ":"FAIL ")<<label<<'\n';};
+ check(args.find(L"--map-shots=")&&std::wstring(args.find(L"--map-shots=")+12)==L"folder with spaces/views.txt","quoted map list value");
+ check(args.find(L"--zone-shots=")&&std::wstring(args.find(L"--zone-shots=")+13)==L"another path/list.txt","quoted zone list value");
+ check(args.find(L"--each-test=")&&std::wstring(args.find(L"--each-test=")+12)==L"movement","value consumes one argument");
+ check(args.find(L"--nopost")&&args.find(L"--nopixel"),"switches anywhere");
+ check(!args.find(L"--map-shot=")&&!args.find(L"--pixel"),"exact flag boundaries");
+ for(auto flag:{L"--zone-shots=a",L"--creature-video=1",L"--vr-hand-dump",L"--map-shots=a",L"--map-shot=0",L"--map-audit=0"}){CommandArguments automation((std::wstring(L"RawMetal.exe ")+flag).c_str());check(automation.automated(),"automation suppresses dialog");}
+ check(!CommandArguments(L"RawMetal.exe --vulkan --vr").automated(),"interactive startup retains error dialog");
+ return ok;
+}
+static bool contentIntegrityTest(){
+ std::ofstream report("content-integrity-test.txt");int problems=0;
+ for(auto name:{"receiving_cleanup","receiving_breach"})report<<"HASH "<<name<<' '<<retro::stateId(name)<<'\n';
+ auto inspect=[&](const std::string& world,int count,auto load){
+  std::map<retro::StateId,std::string> events;
+  for(int level=0;level<count;++level){try{auto w=load(level);std::map<retro::StateId,size_t> timers;
+   for(size_t i=0;i<w.scriptEvents().size();++i){auto id=w.scriptEvents()[i].id;std::string record="map "+std::to_string(level)+" scriptEvent["+std::to_string(i)+"]";auto [it,unique]=events.emplace(id,record);if(!unique){++problems;report<<world<<" duplicate event id="<<id<<" "<<it->second<<" and "<<record<<'\n';}}
+   for(size_t i=0;i<w.timedSequences().size();++i){auto id=w.timedSequences()[i].timerState;auto [it,unique]=timers.emplace(id,i);if(!unique){++problems;report<<world<<" map "<<level<<" duplicate timerState="<<id<<" timedSequence["<<it->second<<"] and ["<<i<<"]\n";}}
+  }catch(const std::exception& e){++problems;report<<world<<" map "<<level<<" load error: "<<e.what()<<'\n';}}
+ };
+ for(auto id:{retro::WorldId::Campaign,retro::WorldId::Ashfall})inspect(id==retro::WorldId::Campaign?"Campaign":"Ashfall",retro::worldChunkCount(id),[&](int level){return retro::World(level,id);});
+ for(auto load:{retro::loadEmbeddedPrologueCampaign,retro::loadEmbeddedExclusionZoneCampaign})try{auto campaign=load();inspect(campaign->name,int(campaign->maps.size()),[&](int level){return retro::World(level,campaign->maps[size_t(level)]);});}catch(const std::exception& e){++problems;report<<"Built-in campaign load error: "<<e.what()<<'\n';}
+ report<<(problems?"FAIL ":"PASS ")<<problems<<" integrity problems\n";return problems==0;
+}
+static bool loadValidationTest(){
+ std::ofstream report("load-validation-test.txt");bool ok=true;
+ auto base=[](){auto m=std::make_shared<retro::AuthoredMapData>();m->name="Validation fixture";retro::AuthoredLayerData layer{};layer.name="floor";for(auto& row:layer.rows)row=std::string(24,'.');m->layers.push_back(layer);return m;};
+ auto rejected=[&](const char* name,auto mutate){auto map=base();mutate(*map);try{retro::World w(7,map);report<<"FAIL accepted "<<name<<'\n';ok=false;}catch(const std::exception& e){std::string message=e.what();bool named=message.find("map 7")!=std::string::npos&&message.find("[0]")!=std::string::npos;ok&=named;report<<(named?"PASS ":"FAIL unindexed ")<<name<<": "<<message;}};
+ rejected("door bounds",[](auto& m){retro::Door d;d.left=5;d.right=4;m.doors.push_back(d);});
+ rejected("door maxOpen",[](auto& m){retro::Door d;d.left=1;d.right=2;d.maxOpen=0;m.doors.push_back(d);});
+ rejected("structure",[](auto& m){m.structures.push_back({1,1,1,2,3,2});});
+ rejected("compactor",[](auto& m){retro::Compactor c{};c.period=0;m.compactors.push_back(c);});
+ rejected("fixture core",[](auto& m){retro::Fixture f{};f.core=1.1f;m.fixtures.push_back(f);});
+ rejected("sequence duration",[](auto& m){retro::TimedSequence t;t.durationMs=0;m.timedSequences.push_back(t);});
+ rejected("sequence cue",[](auto& m){retro::TimedSequence t;t.timerState=1;t.finishState=2;m.timedSequences.push_back(t);retro::SequenceCue c;c.timerState=1;c.timeMs=t.durationMs+1;m.sequenceCues.push_back(c);});
+ rejected("sequence finish",[](auto& m){retro::TimedSequence t;t.finishAtMs=t.durationMs+1;m.timedSequences.push_back(t);});
+ rejected("sequence interval",[](auto& m){retro::TimedSequence t;t.soundIntervalMs=-1;m.timedSequences.push_back(t);});
+ rejected("event id",[](auto& m){retro::ScriptEvent e;e.x2=e.y2=24;m.scriptEvents.push_back(e);});
+ rejected("event region",[](auto& m){retro::ScriptEvent e;e.id=1;e.requireState=2;m.scriptEvents.push_back(e);});
+ try{auto m=base();retro::Door d;d.left=0;d.right=24;m->doors.push_back(d);retro::TimedSequence t;t.timerState=1;t.finishState=2;t.finishAtMs=0;m->timedSequences.push_back(t);retro::SequenceCue c;c.timerState=1;c.timeMs=t.durationMs;m->sequenceCues.push_back(c);retro::World w(7,m);report<<"PASS boundary values\n";}catch(const std::exception& e){ok=false;report<<"FAIL boundary values "<<e.what()<<'\n';}
+ // Exercise the custom parser as well as direct C++ authored records.
+ std::string custom="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Validation|0\nMAP|0|Validation|0|0|2|2|0|0|8|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|floor|0|0\n";
+ for(int row=0;row<24;++row)custom+="ROW|0|0|"+std::to_string(row)+"|........................\n";
+ for(auto record:{"TERRAIN|1|-10|2|34|0.45","TERRAIN|1|16|3|34|0.45","DOOR|0|3|2|4|0|0|0|0|0|-1","STRUCT|0|1|1|1|2|0|2|0|0","COMPACTOR|0|1|1|2|2|0|2|0"}){
+  try{retro::loadCustomCampaignText(custom+record+"\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","validation.txt");ok=false;report<<"FAIL parser accepted "<<record<<'\n';}catch(const std::exception& e){report<<"PASS parser rejected "<<record<<": "<<e.what()<<'\n';}
+ }
+ report<<(ok?"PASS":"FAIL")<<'\n';return ok;
+}
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     SetUnhandledExceptionFilter(writeCrashReport);
     try {
-    retro::TerrainSurfaceCache::enabled=std::wcsstr(commandLine,L"--uncached-terrain-surfaces")==nullptr;
-    retro::MinimapCache::enabled=std::wcsstr(commandLine,L"--uncached-minimap")==nullptr;
-    if(std::wcsstr(commandLine,L"--minimap-cache-test"))return retro::MinimapCache::test()?0:35;
+    ValidationWarningReport validationWarnings;
+    retro::TerrainSurfaceCache::enabled=commandArguments().find(L"--uncached-terrain-surfaces")==nullptr;
+    retro::MinimapCache::enabled=commandArguments().find(L"--uncached-minimap")==nullptr;
     // Keep renderer storage on the heap throughout this entry point. The
     // many mutually exclusive inspection branches otherwise reserve their
     // large renderer objects in one native stack frame before dispatch.
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
     // Render A/B switches apply to every mode below, inspections included.
-    if(std::wcsstr(commandLine,L"--nopost"))retro::SoftwareRenderer::setPostProcessing(false); // A/B renders
-    if(std::wcsstr(commandLine,L"--nopixel"))retro::SoftwareRenderer::setPixelLighting(false); // A/B: baked vertex lamps
-    if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
-    if(std::wcsstr(commandLine,L"--notilt"))retro::SoftwareRenderer::setTiltShift(false); // A/B: no tilt-shift
-    if(std::wcsstr(commandLine,L"--notaa"))retro::SoftwareRenderer::setTemporalAA(false); // A/B: MSAA only
-    if(std::wcsstr(commandLine,L"--nodetail"))retro::SoftwareRenderer::setDetailLayer(0); // A/B: no close-up grain
-    if(std::wcsstr(commandLine,L"--detail-field"))retro::SoftwareRenderer::setDetailLayer(2); // debug: raw detail field
-    if(std::wcsstr(commandLine,L"--detail-normal"))retro::SoftwareRenderer::setDetailLayer(3); // debug: detail normal
-    if(std::wcsstr(commandLine,L"--detail-uv"))retro::SoftwareRenderer::setDetailLayer(4); // debug: texel coordinate sawtooth
-    if(std::wcsstr(commandLine,L"--detail-mag"))retro::SoftwareRenderer::setDetailLayer(5); // debug: uv magnitude and surface class
-    if(std::wcsstr(commandLine,L"--detail-nmap"))retro::SoftwareRenderer::setDetailLayer(6); // debug: normal map sample before detail
-    if(std::wcsstr(commandLine,L"--detail-ppt"))retro::SoftwareRenderer::setDetailLayer(7); // debug: pixels per texel and detail cell coordinate
-    if(std::wcsstr(commandLine,L"--detail-sun"))retro::SoftwareRenderer::setDetailLayer(8); // debug: sun visibility, N.L, cascade
-    if(std::wcsstr(commandLine,L"--detail-light"))retro::SoftwareRenderer::setDetailLayer(9); // debug: ambient (r), lamp (g), not per-pixel lit (b)
-    if(std::wcsstr(commandLine,L"--neural-texture-runtime-test"))return neuralTextureRuntimeTest(W,H,std::wcsstr(commandLine,L"--vulkan")!=nullptr);
-    if(std::wcsstr(commandLine,L"--stealth-test"))return retro::Game::testStealth()?0:21;
-    if(std::wcsstr(commandLine,L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
-    if(std::wcsstr(commandLine,L"--exclusion-authoring-test"))return retro::Game::testExclusionAuthoring()?0:21;
-    if(std::wcsstr(commandLine,L"--prologue-test"))return retro::Game::testPrologue()?0:21;
-    if(std::wcsstr(commandLine,L"--ui-inspection")){
+    applyRenderSwitches();
+    if(commandArguments().find(L"--no-impostors"))retro::SoftwareRenderer::s_impostors=false;
+    if(commandArguments().find(L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
+    if(commandArguments().find(L"--notilt"))retro::SoftwareRenderer::setTiltShift(false); // A/B: no tilt-shift
+    if(commandArguments().find(L"--notaa"))retro::SoftwareRenderer::setTemporalAA(false); // A/B: MSAA only
+    if(commandArguments().find(L"--nodetail"))retro::SoftwareRenderer::setDetailLayer(0); // A/B: no close-up grain
+    if(commandArguments().find(L"--detail-field"))retro::SoftwareRenderer::setDetailLayer(2); // debug: raw detail field
+    if(commandArguments().find(L"--detail-normal"))retro::SoftwareRenderer::setDetailLayer(3); // debug: detail normal
+    if(commandArguments().find(L"--detail-uv"))retro::SoftwareRenderer::setDetailLayer(4); // debug: texel coordinate sawtooth
+    if(commandArguments().find(L"--detail-mag"))retro::SoftwareRenderer::setDetailLayer(5); // debug: uv magnitude and surface class
+    if(commandArguments().find(L"--detail-nmap"))retro::SoftwareRenderer::setDetailLayer(6); // debug: normal map sample before detail
+    if(commandArguments().find(L"--detail-ppt"))retro::SoftwareRenderer::setDetailLayer(7); // debug: pixels per texel and detail cell coordinate
+    if(commandArguments().find(L"--detail-sun"))retro::SoftwareRenderer::setDetailLayer(8); // debug: sun visibility, N.L, cascade
+    if(commandArguments().find(L"--detail-light"))retro::SoftwareRenderer::setDetailLayer(9); // debug: ambient (r), lamp (g), not per-pixel lit (b)
+    if(commandArguments().find(L"--minimap-cache-test"))return retro::MinimapCache::test()?0:35;
+    if(commandArguments().find(L"--neural-texture-runtime-test"))return neuralTextureRuntimeTest(W,H,commandArguments().find(L"--vulkan")!=nullptr);
+    if(commandArguments().find(L"--stealth-test"))return retro::Game::testStealth()?0:21;
+    if(commandArguments().find(L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
+    if(commandArguments().find(L"--exclusion-authoring-test"))return retro::Game::testExclusionAuthoring()?0:21;
+    if(commandArguments().find(L"--prologue-test"))return retro::Game::testPrologue()?0:21;
+    if(commandArguments().find(L"--ui-inspection")){
      auto renderer=std::make_unique<retro::SoftwareRenderer>(W,H);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/ui-preview");
      for(int view=0;view<6;++view){auto scene=retro::Game::uiInspection(view);renderer->render(scene);std::ofstream out(".build/ui-preview/view-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--map-audit=")){return retro::Game::auditMap(_wtoi(arg+12))?0:21;}
-    if(std::wcsstr(commandLine,L"--map-tour")){
+    if(auto arg=commandArguments().find(L"--map-audit=")){
+     int level=_wtoi(arg+12);try{return retro::Game::auditMap(level)?0:21;}
+     catch(const std::exception& e){std::ofstream("map-audit-"+std::to_string(level)+".txt")<<"ERROR loading map "<<level<<": "<<e.what()<<'\n';throw;}
+    }
+    if(commandArguments().find(L"--map-tour")){
      // Authored viewpoints through a rebuilt map: x, y, eye z (floor), yaw (deg), pitch.
      struct View{float x,y,z,yaw,pitch;};
-     int level=0;if(auto arg=std::wcsstr(commandLine,L"--map-tour="))level=_wtoi(arg+11);
+     int level=0;if(auto arg=commandArguments().find(L"--map-tour="))level=_wtoi(arg+11);
      static const std::vector<View> tours[4]={
       {{3.5f,4.5f,0,0,0},{8,2.2f,0,60,-6},{12,5.5f,0,90,-4},{21.5f,6,0,180,-6},{11,8.6f,0,90,-8},{4.5f,12,0,0,-6},{8,15.5f,0,-60,-4},{21,8.9f,2.6f,180,-18},{20.5f,15.5f,0,-90,0},{2,15,0,90,-4},{2.5f,18,0,0,-4},{8,21.5f,0,-90,-4},{17,18,0,45,-6},{21.5f,19.5f,0,90,-4}},
       {},{},{}};
@@ -591,14 +677,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }
      return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--residency=")){
+    if(auto arg=commandArguments().find(L"--residency=")){
      // Which chunks stream in at a map's spawn: the streaming footprint.
      int level=_wtoi(arg+12);const auto& def=retro::chunkDefinition(retro::WorldId::Campaign,level);
      auto game=retro::Game::mapInspection(def.playerStart,0,0,level,false,def.spawnHeight,true);std::ofstream out("residency.txt");
      for(int other=0;other<game.chunkCount();++other)if(other==level||game.chunkResident(other))out<<other<<' ';
      out<<'\n';return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--map-dump=")){
+    if(auto arg=commandArguments().find(L"--map-dump=")){
      // Every collision and render primitive of a map, for inspection.
      int level=_wtoi(arg+11);auto game=retro::Game::mapInspection({12,12},0,0,level,false,0,true);const auto& w=game.world();
      std::ofstream out("map-dump-"+std::to_string(level)+".txt");
@@ -611,7 +697,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(size_t i=0;i<w.layers().size();++i){out<<"LAYER "<<w.layers()[i].name<<" z "<<w.layers()[i].elevation<<'\n';for(auto& r:w.layers()[i].rows)out<<r<<'\n';}
      return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--map-shot=")){
+    if(auto arg=commandArguments().find(L"--map-shot=")){
      // One inspection frame: --map-shot=level,x,y,feet,yaw(deg),pitch[,creatures]
      int level=0,creatures=0;float x=0,y=0,z=0,yaw=0,pitch=0;
      swscanf_s(arg+11,L"%d,%f,%f,%f,%f,%f,%d",&level,&x,&y,&z,&yaw,&pitch,&creatures);
@@ -622,16 +708,19 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--map-shots=")){
+    if(auto arg=commandArguments().find(L"--map-shots=")){
      // Many inspection frames: each line "name level x y feet yaw(deg) pitch".
      // An optional trailing "fire N" fires the gun once and advances N frames;
      // "wait N" just advances N frames (title cards, timed sequences);
      // "set a,b,c" switches those states on first (powered plant, solved puzzles).
      // --clean-shots leaves out the hands and HUD.
-     std::wstring listPath(arg+12);listPath=listPath.substr(0,listPath.find(L' '));std::ifstream list{std::filesystem::path(listPath)};std::string line;
+     std::wstring listPath(arg+12);std::ifstream list{std::filesystem::path(listPath)};std::string line;
+     if(!list){std::ofstream("map-shots.txt")<<"ERROR: cannot open list file: "<<std::filesystem::path(listPath).string()<<'\n';return 21;}
+     std::ofstream("map-shots.txt")<<"List: "<<std::filesystem::path(listPath).string()<<'\n';
      auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
-     renderer->setEnvironmentInspection(std::wcsstr(commandLine,L"--clean-shots")!=nullptr);
+     renderer->setEnvironmentInspection(commandArguments().find(L"--clean-shots")!=nullptr);
      std::filesystem::create_directories(".build/shot");
+     size_t captures=0;
      while(std::getline(list,line)){
       std::istringstream fields(line);std::string name,action;int level=0,frames=0;float x=0,y=0,z=0,yaw=0,pitch=0;
       if(!(fields>>name>>level>>x>>y>>z>>yaw>>pitch))continue;fields>>action;
@@ -641,16 +730,18 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       else fields>>frames;
       if(action=="fire"){retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       else{scene.stowWeapon();if(action=="wait")for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
-      renderer->render(scene);
+      renderer->render(scene);++captures;
       std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
       for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      }
+     std::ofstream("map-shots.txt",std::ios::app)<<"Rendered "<<captures<<" views; post="<<retro::SoftwareRenderer::postProcessing()<<" pixel="<<retro::SoftwareRenderer::pixelLighting()<<'\n';
      return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--map-sweep=")){
+    if(auto arg=commandArguments().find(L"--map-sweep=")){
      // Every reachable 3 m block of a map (map-views-N.txt from --map-audit),
      // photographed facing north, east, south and west.
      int level=_wtoi(arg+12);std::ifstream list("map-views-"+std::to_string(level)+".txt");
+     if(!list){std::ofstream("map-sweep.txt")<<"ERROR: cannot open list file map-views-"<<level<<".txt\n";return 21;}
      auto renderer=std::make_unique<retro::SoftwareRenderer>(640,360);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/sweep");float x,y,z;int index=0;
      while(list>>x>>y>>z){
@@ -665,19 +756,19 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--prologue-inspection")){
-     const int width=std::wcsstr(commandLine,L"--native-capture")?1920:960,height=std::wcsstr(commandLine,L"--native-capture")?1080:540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+    if(commandArguments().find(L"--prologue-inspection")){
+     const int width=commandArguments().find(L"--native-capture")?1920:960,height=commandArguments().find(L"--native-capture")?1080:540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/prologue-preview");
-     if(std::wcsstr(commandLine,L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B texel filtering
      for(int stage=0;stage<11;++stage){auto scene=retro::Game::prologueInspection(stage);renderer->render(scene);std::ofstream out(".build/prologue-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--zone-shots=")){
+    if(auto arg=commandArguments().find(L"--zone-shots=")){
      // Exclusion Zone views: each line "name map x y yaw(deg) pitch [lift m]".
      // --no-impostors renders the same views with every real mesh (A/B for
      // Painterly Horizon LOD); the atlases are written beside the views.
-     std::ifstream list(std::filesystem::path(arg+13));std::string line;
-     retro::SoftwareRenderer::s_impostors=!std::wcsstr(commandLine,L"--no-impostors");
+     std::ifstream list{std::filesystem::path(arg+13)};std::string line;
+     if(!list){std::ofstream("zone-shots.txt")<<"ERROR: cannot open list file: "<<std::filesystem::path(arg+13).string()<<'\n';return 21;}
+     std::ofstream("zone-shots.txt")<<"List: "<<std::filesystem::path(arg+13).string()<<'\n';
      auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories(".build/shot");
      while(std::getline(list,line)){
@@ -688,7 +779,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      }
      // Steady-state frame cost of each view (static caches warm), for A/B runs.
-     {std::ifstream again(std::filesystem::path(arg+13));std::ofstream timing(std::string(".build/shot/timing")+(retro::SoftwareRenderer::s_impostors?"":"-real")+".txt");
+     {std::ifstream again{std::filesystem::path(arg+13)};if(!again){std::ofstream("zone-shots.txt",std::ios::app)<<"ERROR: cannot reopen list file for timings\n";return 21;}std::ofstream timing(std::string(".build/shot/timing")+(retro::SoftwareRenderer::s_impostors?"":"-real")+".txt");
       while(std::getline(again,line)){std::istringstream fields(line);std::string name;int level=0;float x=0,y=0,yaw=0,pitch=0,lift=0;
        if(!(fields>>name>>level>>x>>y>>yaw>>pitch))continue;fields>>lift;auto scene=retro::Game::zoneInspection(level,{x,y},yaw,pitch,lift);
        for(int i=0;i<5;++i)renderer->render(scene);auto start=std::chrono::steady_clock::now();std::array<double,3> stages{};
@@ -696,64 +787,64 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
        timing<<name<<' '<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/40<<" ms (scene "<<stages[0]<<", gpu "<<stages[1]<<", present "<<stages[2]<<")\n";
        // --perf-variants: the same view with the post pass, then per-pixel
        // lighting (lamps and sun cascades), switched off, to find the cost.
-       if(std::wcsstr(commandLine,L"--perf-variants"))for(int variant=0;variant<2;++variant){
-        if(variant)retro::SoftwareRenderer::setPixelLighting(false);else retro::SoftwareRenderer::setPostProcessing(false);
+       if(commandArguments().find(L"--perf-variants"))for(int variant=0;variant<2;++variant){
+        applyRenderSwitches(variant==0,variant==1);
         for(int i=0;i<5;++i)renderer->render(scene);double gpu=0;for(int i=0;i<20;++i){renderer->render(scene);gpu+=renderer->frameStages()[1]/20;}
-        timing<<"  without "<<(variant?"pixel lighting":"post")<<": gpu "<<gpu<<'\n';
-        retro::SoftwareRenderer::setPixelLighting(true);retro::SoftwareRenderer::setPostProcessing(true);}}}
+        timing<<"  without "<<(variant?"pixel lighting":"post")<<" (post="<<retro::SoftwareRenderer::postProcessing()<<", pixel="<<retro::SoftwareRenderer::pixelLighting()<<"): gpu "<<gpu<<'\n';
+        applyRenderSwitches();}}}
      renderer->saveImpostors(".build/shot/impostor");
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--exclusion-inspection")){
+    if(commandArguments().find(L"--exclusion-inspection")){
      constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
-     const bool dumpCascades=std::wcsstr(commandLine,L"--sun-cascades")!=nullptr;
+     const bool dumpCascades=commandArguments().find(L"--sun-cascades")!=nullptr;
      std::filesystem::create_directories(".build/exclusion-preview");std::ofstream report(".build/exclusion-preview/runtime.txt");report<<renderer->hardwareName()<<'\n';
      for(int stage:{0,1,2,3,4,5,6,7,8,9,10,11,13,14,15,16}){auto scene=retro::Game::exclusionInspection(stage);renderer->render(scene);if(dumpCascades&&stage==13)renderer->saveSunCascades(".build/exclusion-preview/cascade");std::ofstream out(".build/exclusion-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}report<<"view "<<stage<<" health="<<scene.player().health<<" npcs="<<scene.npcActors().size()<<" gripError="<<renderer->gripError()<<'\n';}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
-    if(std::wcsstr(commandLine,L"--terrain-query-test"))return retro::World::testCollisionCandidates()?0:21;
-    if(std::wcsstr(commandLine,L"--ai-query-test"))return retro::Game::testAiQueryBatch()?0:21;
-    if(std::wcsstr(commandLine,L"--ai-decision-test"))return retro::Game::testAiDecisionClock()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-tactics-test"))return retro::Game::testGuardTactics()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-policy-test"))return retro::Game::testGuardPolicy()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-defense-test"))return retro::Game::testGuardDefense()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-pursuit-test"))return retro::Game::testGuardPursuit()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-actions-test"))return retro::Game::testGuardActions()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-roles-test"))return retro::Game::testGuardRoles()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-table-test"))return retro::Game::testGuardTable()?0:21;
-    if(std::wcsstr(commandLine,L"--nav-graph-test"))return retro::Game::testNavGraph()?0:21;
-    if(std::wcsstr(commandLine,L"--creature-behaviour-test"))return retro::Game::testCreatureBehaviour()?0:21;
-    if(std::wcsstr(commandLine,L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
-    if(std::wcsstr(commandLine,L"--civilian-schedule-test"))return retro::Game::testCivilianSchedule()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-patient-test"))return retro::Game::testGuardPatient()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-cover-test"))return retro::Game::testGuardCover()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-schedule-test"))return retro::Game::testGuardSchedule()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-danger-test"))return retro::Game::testGuardDanger()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-danger-inspection")){
+    if(commandArguments().find(L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
+    if(commandArguments().find(L"--terrain-query-test"))return retro::World::testCollisionCandidates()?0:21;
+    if(commandArguments().find(L"--ai-query-test"))return retro::Game::testAiQueryBatch()?0:21;
+    if(commandArguments().find(L"--ai-decision-test"))return retro::Game::testAiDecisionClock()?0:21;
+    if(commandArguments().find(L"--guard-tactics-test"))return retro::Game::testGuardTactics()?0:21;
+    if(commandArguments().find(L"--guard-policy-test"))return retro::Game::testGuardPolicy()?0:21;
+    if(commandArguments().find(L"--guard-defense-test"))return retro::Game::testGuardDefense()?0:21;
+    if(commandArguments().find(L"--guard-pursuit-test"))return retro::Game::testGuardPursuit()?0:21;
+    if(commandArguments().find(L"--guard-actions-test"))return retro::Game::testGuardActions()?0:21;
+    if(commandArguments().find(L"--guard-roles-test"))return retro::Game::testGuardRoles()?0:21;
+    if(commandArguments().find(L"--guard-table-test"))return retro::Game::testGuardTable()?0:21;
+    if(commandArguments().find(L"--nav-graph-test"))return retro::Game::testNavGraph()?0:21;
+    if(commandArguments().find(L"--creature-behaviour-test"))return retro::Game::testCreatureBehaviour()?0:21;
+    if(commandArguments().find(L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
+    if(commandArguments().find(L"--civilian-schedule-test"))return retro::Game::testCivilianSchedule()?0:21;
+    if(commandArguments().find(L"--guard-patient-test"))return retro::Game::testGuardPatient()?0:21;
+    if(commandArguments().find(L"--guard-cover-test"))return retro::Game::testGuardCover()?0:21;
+    if(commandArguments().find(L"--guard-schedule-test"))return retro::Game::testGuardSchedule()?0:21;
+    if(commandArguments().find(L"--guard-danger-test"))return retro::Game::testGuardDanger()?0:21;
+    if(commandArguments().find(L"--guard-danger-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/guard-danger-20261011");const char*names[]={"danger-ready","danger-escape","danger-clear"};
      for(int stage=0;stage<3;++stage){auto scene=retro::Game::guardDangerInspection(stage);renderer->render(scene);std::ofstream out(std::string("diagnostics/guard-danger-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--engineer-drone-test"))return retro::Game::testEngineerDrones()?0:21;
-    if(std::wcsstr(commandLine,L"--squad-support-inspection")){
+    if(commandArguments().find(L"--engineer-drone-test"))return retro::Game::testEngineerDrones()?0:21;
+    if(commandArguments().find(L"--squad-support-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/squad-support-20261012");const char*names[]={"patient-withdraw","medic-kit","patient-resume"};
      for(int stage=0;stage<3;++stage){auto scene=retro::Game::squadSupportInspection(stage);renderer->render(scene);std::ofstream out(std::string("diagnostics/squad-support-20261012/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--engineer-support-inspection")){
+    if(commandArguments().find(L"--engineer-support-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/engineer-support-20261012");const char*names[]={"terminal-deploy","five-drone-fleet","terminal-maintenance","pistol-support","pad-equip","pad-stow"};
      for(int stage=0;stage<6;++stage){auto scene=retro::Game::engineerSupportInspection(stage);renderer->render(scene);std::ofstream out(std::string("diagnostics/engineer-support-20261012/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--tactical-grenade-test"))return retro::Game::testTacticalGrenades()?0:21;
-    if(std::wcsstr(commandLine,L"--kill-squad-inspection")){
+    if(commandArguments().find(L"--tactical-grenade-test"))return retro::Game::testTacticalGrenades()?0:21;
+    if(commandArguments().find(L"--kill-squad-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/kill-squad-20261011");std::ofstream report("diagnostics/kill-squad-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"cleanup-ready","cleanup-grenade","cleanup-fire","cleanup-pursuit","cleanup-engineer-throw","cleanup-assault-close","cleanup-sharpshooter-close","cleanup-heavy-close","cleanup-medic-close","cleanup-rusher-close","cleanup-drone","cleanup-medkit-opening","cleanup-medkit-treatment","cleanup-medkit-healed"};
-     int firstStage=0,lastStage=13;if(auto flag=std::wcsstr(commandLine,L"--kill-squad-stage=")){wchar_t*end=nullptr;long selected=std::wcstol(flag+19,&end,10);if(end==flag+19||selected<0||selected>13)return 21;firstStage=lastStage=int(selected);}
+     int firstStage=0,lastStage=13;if(auto flag=commandArguments().find(L"--kill-squad-stage=")){wchar_t*end=nullptr;long selected=std::wcstol(flag+19,&end,10);if(end==flag+19||selected<0||selected>13)return 21;firstStage=lastStage=int(selected);}
      for(int stage=firstStage;stage<=lastStage;++stage){auto scene=retro::Game::killSquadInspection(stage);report<<names[stage]<<": PASS health="<<scene.player().health<<" grenades="<<scene.tacticalGrenades().size()<<" drones="<<scene.engineerDrones().size();
       for(size_t actor=0;actor<scene.npcActors().size();++actor){const auto&npc=scene.npcActors()[actor];if(npc.homeLevel!=1||npc.track().ai.mode!=retro::ActorAiMode::Guard)continue;
        if(npc.track().ai.role==retro::GuardSquadRole::Medic)report<<" treatment="<<scene.npcWeaponPose(actor).treatment;
@@ -762,14 +853,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       report<<'\n';report.flush();renderer->render(scene);std::ofstream out(std::string("diagnostics/kill-squad-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--cleanup-layer-inspection")){
+    if(commandArguments().find(L"--cleanup-layer-inspection")){
      constexpr int width=960,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
-     int inspectionStage=0;if(auto flag=std::wcsstr(commandLine,L"--cleanup-layer-stage="))inspectionStage=int(std::wcstol(flag+22,nullptr,10));if(inspectionStage<0||inspectionStage>3)return 21;renderer->setCleanupInspectionStage(inspectionStage);
+     int inspectionStage=0;if(auto flag=commandArguments().find(L"--cleanup-layer-stage="))inspectionStage=int(std::wcstol(flag+22,nullptr,10));if(inspectionStage<0||inspectionStage>3)return 21;renderer->setCleanupInspectionStage(inspectionStage);
      std::string inspectionDirectory="diagnostics/animation-repair-20261013/native";if(inspectionStage)inspectionDirectory+="-stage-"+std::to_string(inspectionStage);std::filesystem::create_directories(inspectionDirectory);
      const char*roles[]={"assault","engineer","sharpshooter","heavy","medic","rusher"};const char*poses[]={"idle","walk","walk-wrap","aim-up","aim-down","aim-left","aim-right","crouch","fire","reload","support","death","crouch-aim-up","crouch-aim-down","low-ready","crouch-walk"};
-     auto filter=[&](const wchar_t*prefix,int maximum){auto flag=std::wcsstr(commandLine,prefix);if(!flag)return -1;auto value=flag+std::wcslen(prefix);wchar_t*end=nullptr;long selected=std::wcstol(value,&end,10);return end==value||selected<0||selected>maximum?-2:int(selected);};
+     auto filter=[&](const wchar_t*prefix,int maximum){auto flag=commandArguments().find(prefix);if(!flag)return -1;auto value=flag+std::wcslen(prefix);wchar_t*end=nullptr;long selected=std::wcstol(value,&end,10);return end==value||selected<0||selected>maximum?-2:int(selected);};
      int roleFilter=filter(L"--cleanup-layer-role=",5),sampleFilter=filter(L"--cleanup-layer-sample=",15);if(roleFilter<-1||sampleFilter<-1)return 21;
-     float phase=-1;if(auto flag=std::wcsstr(commandLine,L"--cleanup-layer-phase=")){wchar_t*end=nullptr;phase=float(std::wcstod(flag+22,&end));if(end==flag+22||!std::isfinite(phase)||phase<0||phase>1)return 21;inspectionDirectory+="-phase-"+std::to_string(phase);std::filesystem::create_directories(inspectionDirectory);}
+     float phase=-1;if(auto flag=commandArguments().find(L"--cleanup-layer-phase=")){wchar_t*end=nullptr;phase=float(std::wcstod(flag+22,&end));if(end==flag+22||!std::isfinite(phase)||phase<0||phase>1)return 21;inspectionDirectory+="-phase-"+std::to_string(phase);std::filesystem::create_directories(inspectionDirectory);}
      std::string reportName=inspectionDirectory+"/attachments";if(roleFilter>=0)reportName+="-role-"+std::to_string(roleFilter);if(sampleFilter>=0)reportName+="-sample-"+std::to_string(sampleFilter);
      std::ofstream report(reportName+".csv");report<<"role,pose,view,wristReachError,fingerEdgeError,barrelError,wholeMeshEdgeStretch\n";bool passed=true;
      for(int role=0;role<6;++role)for(int sample=0;sample<16;++sample)for(int view=0;view<2;++view){if(roleFilter>=0&&role!=roleFilter||sampleFilter>=0&&sample!=sampleFilter)continue;auto scene=retro::Game::cleanupLayerInspection(role,sample,view,phase);renderer->render(scene);
@@ -778,14 +869,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return passed?0:47;
     }
-    if(std::wcsstr(commandLine,L"--guard-policy-inspection")){
+    if(commandArguments().find(L"--guard-policy-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/guard-policy-20261011");std::ofstream report("diagnostics/guard-policy-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"squad-activated","squad-alert","squad-fire","squad-reload-cover"};
      for(int stage=0;stage<4;++stage){auto scene=retro::Game::guardPolicyInspection(stage);report<<names[stage]<<": PASS health="<<scene.player().health<<" target-damage="<<scene.state("ash_target_damage");for(size_t i=0;i<scene.npcActors().size();++i){const auto&npc=scene.npcActors()[i];auto weapon=scene.npcWeaponPose(i);report<<" npc"<<i<<"="<<int(scene.guardState(i))<<'/'<<npc.pose.position.x<<','<<npc.pose.position.y<<" flash="<<weapon.flash;}report<<'\n';
       renderer->render(scene);std::ofstream out(std::string("diagnostics/guard-policy-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
-    if(std::wcsstr(commandLine,L"--guard-tactics-inspection")){
+    if(commandArguments().find(L"--guard-tactics-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      renderer->setEnvironmentInspection(true);
      std::filesystem::create_directories("diagnostics/guard-tactics-20261011");std::ofstream report("diagnostics/guard-tactics-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"guard-covered","guard-reposition","guard-clear-fire"};
@@ -793,14 +884,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       renderer->render(scene);std::ofstream out(std::string("diagnostics/guard-tactics-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
-    if(std::wcsstr(commandLine,L"--guard-combat-inspection")){
+    if(commandArguments().find(L"--guard-combat-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories("diagnostics/guard-combat-20261011");std::ofstream report("diagnostics/guard-combat-20261011/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';const char*names[]={"guard-unarmed-control","guard-low-ready","guard-aim","guard-fire","guard-fire-side"};
      for(int stage=-1;stage<4;++stage){auto scene=retro::Game::guardCombatInspection(stage);auto weapon=scene.npcWeaponPose(0);bool passed=stage<0?!weapon.armed:weapon.armed&&(stage<2||weapon.flash>0&&scene.player().health==82);report<<names[stage+1]<<": "<<(passed?"PASS":"FAIL")<<" health="<<scene.player().health<<" raise="<<weapon.raise<<" flash="<<weapon.flash<<" muzzle="<<weapon.muzzle.x<<','<<weapon.muzzle.y<<','<<weapon.muzzle.z<<'\n';if(!passed)return 21;
       renderer->render(scene);std::ofstream out(std::string("diagnostics/guard-combat-20261011/")+names[stage+1]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
-    if(std::wcsstr(commandLine,L"--guard-inspection")){
+    if(commandArguments().find(L"--guard-inspection")){
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
      std::filesystem::create_directories("diagnostics/guard-pass-20261010");std::ofstream report("diagnostics/guard-pass-20261010/playground-runtime.txt");report<<renderer->hardwareName()<<'\n';
      const char*names[]={"guard-patrol","guard-alert","guard-investigate"};
@@ -810,17 +901,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }report<<"Actual custom pack: complete patrol with hidden player, recognition, distraction: PASS\n";return 0;
     }
-    if(std::wcsstr(commandLine,L"--renderer-window-inspection")){
+    if(commandArguments().find(L"--renderer-window-inspection")){
      retro::Win32Window window(W,H,L"RawMetal / Renderer Inspection");if(!window.valid())return 1;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware(window.handle()))return 36;
-     auto scene=std::wcsstr(commandLine,L"--fixture")?retro::Game::mapInspection({4.5f,6.5f},retro::kPi*.5f,-14,0,false,0,true):retro::Game::mapInspection({6.8f,12},.25f,12,18,false,-13,true);
+     auto scene=commandArguments().find(L"--fixture")?retro::Game::mapInspection({4.5f,6.5f},retro::kPi*.5f,-14,0,false,0,true):retro::Game::mapInspection({6.8f,12},.25f,12,18,false,-13,true);
      std::filesystem::remove("window-inspection.ready");
      for(int frame=0;frame<720&&window.pump();++frame){renderer.render(scene);if(frame==30)std::ofstream("window-inspection.ready")<<reinterpret_cast<std::uintptr_t>(window.handle());Sleep(16);}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--barrel-inspection")){
+    if(commandArguments().find(L"--barrel-inspection")){
      constexpr int inspectW=1280,inspectH=720;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(inspectW,inspectH);auto& renderer=*rendererStorage;
-     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
      for(const auto&phase:std::array<std::pair<float,const char*>,3>{{{.06f,"barrel-fireball"},{.25f,"barrel-flames"},{.70f,"barrel-smoke"}}}){
       auto scene=retro::Game::barrelInspection(phase.first);renderer.render(scene);
       std::ofstream out(std::string(phase.second)+".ppm",std::ios::binary);out<<"P6\n"<<inspectW<<' '<<inspectH<<"\n255\n";
@@ -828,9 +919,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--shading-inspection")){
+    if(commandArguments().find(L"--shading-inspection")){
      constexpr int inspectW=1920,inspectH=1080;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(inspectW,inspectH);auto& renderer=*rendererStorage;
-     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
      struct View{retro::Vec2 position;float yaw,pitch;int level;float z;const char*name;};
      const View views[]={
       {{3.5f,5.35f},0,0,0,-999.f,"corridor-light"},
@@ -844,9 +935,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<inspectW*inspectH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--coast-inspection")){
+    if(commandArguments().find(L"--coast-inspection")){
      constexpr int testW=1280,testH=720;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(testW,testH);auto& renderer=*rendererStorage;
-     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
      struct View{int level;retro::Vec2 local;float yaw,pitch;const char*name;};
      const View views[]={
       {13,{8.f,12.f},0,-10.f,"coast-from-shelf"},
@@ -859,9 +950,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<testW*testH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--terrain-seam-inspection")){
+    if(commandArguments().find(L"--terrain-seam-inspection")){
      constexpr int testW=1920,testH=1080;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(testW,testH);auto& renderer=*rendererStorage;
-     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
      struct View{int level;retro::Vec2 local;float yaw;const char*name;};
      const View views[]={
       {0,{23.5f,12.f},0,"east-into-east-chunk"},{1,{.5f,12.f},retro::kPi,"west-into-west-chunk"},
@@ -873,10 +964,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<testW*testH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--world-isolation-test")||std::wcsstr(commandLine,L"--ashfall-inspection")){
-     if(std::wcsstr(commandLine,L"--world-isolation-test"))return retro::Game::testWorldIsolation()?0:44;
+    if(commandArguments().find(L"--world-isolation-test")||commandArguments().find(L"--ashfall-inspection")){
+     if(commandArguments().find(L"--world-isolation-test"))return retro::Game::testWorldIsolation()?0:44;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
-     if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+     if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
      for(int level=0;level<retro::worldChunkCount(retro::WorldId::Ashfall);++level){
       auto spawn=retro::chunkDefinition(retro::WorldId::Ashfall,level).playerStart;
       auto scene=retro::Game::mapInspection(spawn,.6f,0,level,false,-999,true,retro::WorldId::Ashfall);renderer.render(scene);
@@ -885,20 +976,20 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--water-wall-inspection")){
-     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
+    if(commandArguments().find(L"--water-wall-inspection")){
+     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!commandArguments().find(L"--software")&&!renderer.enableHardware())return 36;
      for(int view=0;view<10;++view){auto scene=view<8?retro::Game::mapInspection({8,6},view*retro::kPi*.25f,0,3,false,0,true):retro::Game::mapInspection({9,7.8f},retro::kPi*.5f,-55,5,false,-9,true);
       if(view==9)scene.update({},.05f);renderer.render(scene);
       std::ofstream out("water-wall-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<' '<<H<<"\n255\n";
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
-    if(std::wcsstr(commandLine,L"--darkness-test-software"))return darknessTestMode(true)?0:48;
-    if(std::wcsstr(commandLine,L"--darkness-test"))return darknessTest()?0:48;
-    if(std::wcsstr(commandLine,L"--flashlight-test")){
+    if(commandArguments().find(L"--darkness-test-software"))return darknessTestMode(true)?0:48;
+    if(commandArguments().find(L"--darkness-test"))return darknessTest()?0:48;
+    if(commandArguments().find(L"--flashlight-test")){
      if(!retro::Game::testFlashlight())return 43;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
-     if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
+     if(!commandArguments().find(L"--software")&&!renderer.enableHardware())return 36;
      auto scene=retro::Game::mapInspection({6.5f,1.5f},1.4f,0,4,false,-9,true);
      std::vector<std::uint32_t> before;std::ofstream report("flashlight-test.txt");
      for(int on=0;on<2;++on){if(on){scene.giveQuestItem(retro::Game::Flashlight);retro::InputState key{};key.flashlight=true;scene.update(key,.01f);}
@@ -912,21 +1003,20 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      int brighter=0;for(int y=60;y<H-60;++y)for(int x=80;x<W-80;++x){int i=y*W+x;auto a=before[i],b=renderer.pixels()[i];if(int(b&255)+int((b>>8)&255)+int((b>>16)&255)>int(a&255)+int((a>>8)&255)+int((a>>16)&255)+12)++brighter;}
      report<<"Brighter scene pixels: "<<brighter<<'\n';return brighter>100?0:43;
     }
-    if(std::wcsstr(commandLine,L"--campaign-extension-test"))return retro::Game::testCampaignExtension()?0:46;
-    if(std::wcsstr(commandLine,L"--cable-layout-inspection"))return cableLayoutInspection(W,H);
-    if(std::wcsstr(commandLine,L"--cable-performance-test"))return retro::SoftwareRenderer::testCablePerformance()?0:35;
-    if(std::wcsstr(commandLine,L"--cable-window-performance-test"))return cableWindowPerformance();
-    if(std::wcsstr(commandLine,L"--freight-inspection"))return freightInspection(W,H);
-    if(std::wcsstr(commandLine,L"--freight-detail-inspection"))return freightDetailInspection(std::wcsstr(commandLine,L"--native-capture")?1920:W,std::wcsstr(commandLine,L"--native-capture")?1080:H);
-    if(std::wcsstr(commandLine,L"--freight-art-inspection"))return freightArtInspection(std::wcsstr(commandLine,L"--native-capture")?1920:W,std::wcsstr(commandLine,L"--native-capture")?1080:H);
-    if(std::wcsstr(commandLine,L"--freight-actor-inspection"))return freightActorInspection(W,H);
-    if(std::wcsstr(commandLine,L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
-    if(std::wcsstr(commandLine,L"--post-ao"))retro::SoftwareRenderer::setPostProcessing(true,true);
-    if(std::wcsstr(commandLine,L"--early-maps-inspection"))return earlyMapsInspection(960,540);
-    if(std::wcsstr(commandLine,L"--campaign-inspection"))return campaignInspection(W,H);
-    if(std::wcsstr(commandLine,L"--waste-locker-inspection"))return campaignInspection(W,H,true);
-    if(std::wcsstr(commandLine,L"--megamap-inspection")){
-     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software")&&!renderer.enableHardware())return 36;
+    if(commandArguments().find(L"--campaign-extension-test"))return retro::Game::testCampaignExtension()?0:46;
+    if(commandArguments().find(L"--cable-layout-inspection"))return cableLayoutInspection(W,H);
+    if(commandArguments().find(L"--cable-performance-test"))return retro::SoftwareRenderer::testCablePerformance()?0:35;
+    if(commandArguments().find(L"--cable-window-performance-test"))return cableWindowPerformance();
+    if(commandArguments().find(L"--freight-inspection"))return freightInspection(W,H);
+    if(commandArguments().find(L"--freight-detail-inspection"))return freightDetailInspection(commandArguments().find(L"--native-capture")?1920:W,commandArguments().find(L"--native-capture")?1080:H);
+    if(commandArguments().find(L"--freight-art-inspection"))return freightArtInspection(commandArguments().find(L"--native-capture")?1920:W,commandArguments().find(L"--native-capture")?1080:H);
+    if(commandArguments().find(L"--freight-actor-inspection"))return freightActorInspection(W,H);
+    if(commandArguments().find(L"--cable-locker-inspection"))return campaignInspection(W,H,false,true);
+    if(commandArguments().find(L"--early-maps-inspection"))return earlyMapsInspection(960,540);
+    if(commandArguments().find(L"--campaign-inspection"))return campaignInspection(W,H);
+    if(commandArguments().find(L"--waste-locker-inspection"))return campaignInspection(W,H,true);
+    if(commandArguments().find(L"--megamap-inspection")){
+     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!commandArguments().find(L"--software")&&!renderer.enableHardware())return 36;
      std::ofstream report("megamap-inspection.txt");bool ok=true;
      for(int level:{4,5}){retro::World w(level);for(auto&s:w.structures()){bool valid=s.bottom>=-9.01f&&s.top<=-4.79f;ok&=valid;report<<"map "<<level<<" structure "<<s.x1<<','<<s.y1<<" z "<<s.bottom<<".."<<s.top<<" in room "<<valid<<'\n';}
       bool blocks=level==4?!w.fits(8.9f,6,-9,1):!w.fits(17.35f,22,-9,1);ok&=blocks;report<<"collision present "<<blocks<<'\n';}
@@ -947,12 +1037,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }
      return ok&&retro::Game::testStreaming()?0:42;
     }
-    if(std::wcsstr(commandLine,L"--hazmat-test")){
+    if(commandArguments().find(L"--hazmat-test")){
      bool passed=retro::Game::testHazmat();auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;renderer.enableHardware();
      for(int view=0;view<3;++view){auto scene=retro::Game::hazmatInspection(view);renderer.render(scene);std::ofstream out("hazmat-"+std::to_string(view)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return passed?0:41;
     }
-    if(std::wcsstr(commandLine,L"--stalker-test")){
+    if(commandArguments().find(L"--stalker-test")){
      if(!retro::SoftwareRenderer::testCreatureAnimation()||!retro::Game::testAI())return 40;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
      for(int view=0;view<2;++view)for(int clip=0;clip<5;++clip)for(int frame=0;frame<5;++frame){auto scene=retro::Game::stalkerInspection(clip,.01f+frame*.245f,view);renderer.render(scene);
@@ -960,7 +1050,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--creature-inspection=")){
+    if(auto arg=commandArguments().find(L"--creature-inspection=")){
      // Any kind's five clips at four phases, front and side: creature-K-clip-frame[-side].ppm.
      const int kind=_wtoi(arg+22);if(kind<0||kind>int(retro::CreatureKind::Chimera))return 1;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
@@ -970,7 +1060,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
-    if(auto arg=std::wcsstr(commandLine,L"--creature-video=")){
+    if(auto arg=commandArguments().find(L"--creature-video=")){
      // Every clip of one kind on a single 30 fps timeline, front and side, at
      // the timing the game plays it: creature-video/K-front-NNNN.ppm and
      // K-side-NNNN.ppm, with creature-video/K-timeline.txt naming each frame's clip.
@@ -996,18 +1086,18 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }
      return 0;
     }
-    if(std::wcsstr(commandLine,L"--hearing-test"))return retro::Game::testHearing()?0:21;
-    if(std::wcsstr(commandLine,L"--guard-ai-test"))return retro::Game::testGuardAI()?0:21;
-    if(std::wcsstr(commandLine,L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
-    if(std::wcsstr(commandLine,L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
-    if(std::wcsstr(commandLine,L"--freight-repair-inspection")){
+    if(commandArguments().find(L"--hearing-test"))return retro::Game::testHearing()?0:21;
+    if(commandArguments().find(L"--guard-ai-test"))return retro::Game::testGuardAI()?0:21;
+    if(commandArguments().find(L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
+    if(commandArguments().find(L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
+    if(commandArguments().find(L"--freight-repair-inspection")){
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
      const char* names[]={"repair-van","repair-machinery","repair-cage","repair-intake-header","repair-terminal-warehouse","repair-terminal-legacy","repair-van-left","repair-van-right"};
      for(int view=0;view<8;++view){auto scene=view==0?retro::Game::mapInspection({15,3},.8f,-3,14,true,-25,true):view==1?retro::Game::mapInspection({12,3},retro::kPi*.5f,-8,11,true,-12,true):view==2?retro::Game::mapInspection({12,7},retro::kPi*.5f,-15,12,true,-12,true):view==3?retro::Game::mapInspection({12,21},retro::kPi*.5f,55,15,true,-25,true):view==6?retro::Game::mapInspection({15.5f,8},0,-12,14,true,-25,true):view==7?retro::Game::mapInspection({22.5f,8},retro::kPi,-12,14,true,-25,true):retro::Game::terminalInspection(view==4?16:0);
       renderer.render(scene);std::ofstream out(std::string(names[view])+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
-    if(std::wcsstr(commandLine,L"--mutant-inspection")){
+    if(commandArguments().find(L"--mutant-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 49;
         const char* names[]={"mutant-baseline","mutant-walk","mutant-lunge","mutant-death","mutant-warehouse","mutant-depot","mutant-death-baseline"};
         for(int view=0;view<7;++view){auto scene=view==0?retro::Game::mapInspection({3.5f,4.5f},0,0,0,false,0,true):view==3?retro::Game::stalkerInspection(4,.87f,0,retro::Enemy::Kind::Mutant):view==4?retro::Game::mapInspection({12,14.5f},-retro::kPi*.5f,-3,17,true,-25,false):view==5?retro::Game::mapInspection({17.3f,19},0,0,27,true,-25,false):view==6?retro::Game::mapInspection({18.6f,18.5f},0,-35,3,true,-9,true):retro::Game::validationScene(retro::Enemy::Kind::Mutant,-1.f,view==2?.22f:0.f);
@@ -1015,7 +1105,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
         }return 0;
     }
-    if(std::wcsstr(commandLine,L"--warden-inspection")){
+    if(commandArguments().find(L"--warden-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;renderer.enableHardware();
         for(int view=0;view<2;++view){
          auto scene=view==0?retro::Game::validationScene(retro::Enemy::Kind::Warden,-1,.9f):retro::Game::mapInspection({19.2f,18.5f},0,0,3,true,-9,false);renderer.render(scene);
@@ -1023,17 +1113,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
         }return 0;
     }
-    if(std::wcsstr(commandLine,L"--lift-test"))return retro::Game::testLift()?0:32;
-    if(std::wcsstr(commandLine,L"--reactor-test"))return retro::Game::testReactor()?0:37;
-    if(std::wcsstr(commandLine,L"--save-test"))return retro::Game::testSaves()?0:38;
-    if(std::wcsstr(commandLine,L"--npc-voice-test"))return retro::Game::testNpcVoices()?0:13;
-    if(std::wcsstr(commandLine,L"--shaft-inspection")){
-        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();int index=0;
+    if(commandArguments().find(L"--lift-test"))return retro::Game::testLift()?0:32;
+    if(commandArguments().find(L"--reactor-test"))return retro::Game::testReactor()?0:37;
+    if(commandArguments().find(L"--save-test"))return retro::Game::testSaves()?0:38;
+    if(commandArguments().find(L"--npc-voice-test"))return retro::Game::testNpcVoices()?0:13;
+    if(commandArguments().find(L"--shaft-inspection")){
+        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!commandArguments().find(L"--software"))renderer.enableHardware();int index=0;
         for(float seconds:{0.f,9.f,17.f,25.f,29.f,35.f,38.7f,39.6f,42.f,48.f}){auto scene=retro::Game::liftInspection(seconds,8);renderer.render(scene);std::ofstream out("shaft-"+std::to_string(index++)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
         return 0;
     }
-    if(std::wcsstr(commandLine,L"--plant-inspection")){
-        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
+    if(commandArguments().find(L"--plant-inspection")){
+        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!commandArguments().find(L"--software"))renderer.enableHardware();
         auto save=[&](const char* name,const retro::Game& scene){renderer.render(scene);std::ofstream out(name,std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
         save("plant-feed.ppm",retro::Game::mapInspection({6.3f,16.95f},retro::kPi*.5f,5,3,false,-9,true));
         save("plant-return.ppm",retro::Game::liftInspection(48,7));
@@ -1043,8 +1133,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         save("plant-winch.ppm",retro::Game::mapInspection({15.3f,9.4f},.7f,0,3,false,0,true));
         save("plant-cab.ppm",retro::Game::liftInspection(0,8));return 0;
     }
-    if(std::wcsstr(commandLine,L"--repair-inspection")){
-        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();
+    if(commandArguments().find(L"--repair-inspection")){
+        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!commandArguments().find(L"--software"))renderer.enableHardware();
         auto save=[&](const char* name,const retro::Game& scene){renderer.render(scene);std::ofstream out(name,std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
         save("repair-wall.ppm",retro::Game::mapInspection({17,20},0,0,3,false,-9,true));
         save("repair-stairs.ppm",retro::Game::mapInspection({21.8f,11.5f},2.04f,15,3,false,-9,true));
@@ -1054,31 +1144,31 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         auto click=[&](int row){menu.update({},.01f);retro::InputState i{};i.fire=true;i.pointerX=retro::MenuLayout::X+30;i.pointerY=retro::MenuLayout::RowTop+row*retro::MenuLayout::RowHeight+7;menu.update(i,.01f);};
         click(7);save("repair-save.ppm",menu);click(3);click(8);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
     }
-    if(std::wcsstr(commandLine,L"--console-test"))return retro::Game::testConsole()?0:34;
-    if(std::wcsstr(commandLine,L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
-    if(std::wcsstr(commandLine,L"--presentation-resize-test"))return retro::SoftwareRenderer::testPresentationResize()?0:36;
-    if(std::wcsstr(commandLine,L"--gpu-actor-test"))return retro::SoftwareRenderer::testGpuActors()?0:35;
-    if(std::wcsstr(commandLine,L"--gpu-actor-performance"))return gpuActorPerformance();
-    if(std::wcsstr(commandLine,L"--visibility-test"))return retro::SoftwareRenderer::testVisibility()?0:35;
-    if(std::wcsstr(commandLine,L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
-    if(std::wcsstr(commandLine,L"--lab-profile"))return ashfallPerformance(true,true,false,false,false,true);
-    if(std::wcsstr(commandLine,L"--lab-performance"))return ashfallPerformance(true,true,std::wcsstr(commandLine,L"--cpu-actor-preparation")!=nullptr,std::wcsstr(commandLine,L"--uncached-ai-queries")!=nullptr,std::wcsstr(commandLine,L"--full-rate-ai-decisions")!=nullptr);
-    if(std::wcsstr(commandLine,L"--approach-test"))return approachTest();
-    if(std::wcsstr(commandLine,L"--ashfall-performance"))return ashfallPerformance(std::wcsstr(commandLine,L"--ashfall-performance-yard")!=nullptr,false,std::wcsstr(commandLine,L"--cpu-actor-preparation")!=nullptr,std::wcsstr(commandLine,L"--uncached-ai-queries")!=nullptr,std::wcsstr(commandLine,L"--full-rate-ai-decisions")!=nullptr);
-    if(std::wcsstr(commandLine,L"--performance-window")||std::wcsstr(commandLine,L"--service-performance-window")||std::wcsstr(commandLine,L"--door-performance-window")||std::wcsstr(commandLine,L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
-    if(std::wcsstr(commandLine,L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
-    if(std::wcsstr(commandLine,L"--cleanup-split-test"))return retro::Mesh::testCleanupTankAim()?0:47;
-    if(std::wcsstr(commandLine,L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
-    if(std::wcsstr(commandLine,L"--lift-inspection")){
-        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware();int index=0;
+    if(commandArguments().find(L"--console-test"))return retro::Game::testConsole()?0:34;
+    if(commandArguments().find(L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
+    if(commandArguments().find(L"--presentation-resize-test"))return retro::SoftwareRenderer::testPresentationResize()?0:36;
+    if(commandArguments().find(L"--gpu-actor-test"))return retro::SoftwareRenderer::testGpuActors()?0:35;
+    if(commandArguments().find(L"--gpu-actor-performance"))return gpuActorPerformance();
+    if(commandArguments().find(L"--visibility-test"))return retro::SoftwareRenderer::testVisibility()?0:35;
+    if(commandArguments().find(L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
+    if(commandArguments().find(L"--lab-profile"))return ashfallPerformance(true,true,false,false,false,true);
+    if(commandArguments().find(L"--lab-performance"))return ashfallPerformance(true,true,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
+    if(commandArguments().find(L"--approach-test"))return approachTest();
+    if(commandArguments().find(L"--ashfall-performance")||commandArguments().find(L"--ashfall-performance-yard"))return ashfallPerformance(commandArguments().find(L"--ashfall-performance-yard")!=nullptr,false,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
+    if(commandArguments().find(L"--performance-window")||commandArguments().find(L"--service-performance-window")||commandArguments().find(L"--door-performance-window")||commandArguments().find(L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
+    if(commandArguments().find(L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
+    if(commandArguments().find(L"--cleanup-split-test"))return retro::Mesh::testCleanupTankAim()?0:47;
+    if(commandArguments().find(L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
+    if(commandArguments().find(L"--lift-inspection")){
+        auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!commandArguments().find(L"--software"))renderer.enableHardware();int index=0;
         for(float seconds:{0.f,7.f,21.f,34.f,48.f,48.f,48.f,48.f,48.f,48.f,48.f}){auto scene=retro::Game::liftInspection(seconds,index>=7?index-3:index>=5?index-4:index==1?3:0);renderer.render(scene);
             std::ofstream out("lift-"+std::to_string(index++)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
             for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
         return 0;
     }
-    if(std::wcsstr(commandLine,L"--audio-test"))return retro::AudioEngine::test()?0:13;
-    if(std::wcsstr(commandLine,L"--audio-device-test"))return retro::AudioEngine::testDevice()?0:15;
-    if(std::wcsstr(commandLine,L"--environment-inspection")){
+    if(commandArguments().find(L"--audio-test"))return retro::AudioEngine::test()?0:13;
+    if(commandArguments().find(L"--audio-device-test"))return retro::AudioEngine::testDevice()?0:15;
+    if(commandArguments().find(L"--environment-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
         auto save=[&](const std::string&name){std::ofstream out(name+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
         const retro::Vec2 centers[]={{16.f,2.5f},{4.f,10.5f},{11.5f,11.f},{11.f,2.5f}};
@@ -1094,9 +1184,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
             auto scene=retro::Game::mapInspection(position,-retro::kPi*.5f,std::atan2(light.z-feet-.78f,1.4f)*140,level,false,feet,true);renderer.render(scene);save("ceiling-light-"+std::to_string(level)+"-"+std::to_string(count));if(++count==2)break;}}
         return 0;
     }
-    if(std::wcsstr(commandLine,L"--service-inspection")){
+    if(commandArguments().find(L"--service-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
-        if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+        if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
         struct View{int level;retro::Vec2 position;float angle;bool openDoors=false;};
         const View views[]={
             {4,{6.5f,2.5f},1.0f},{4,{12.f,7.f},1.57f},{4,{12.f,16.f},0.f},
@@ -1110,13 +1200,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         }
         return 0;
     }
-    if(std::wcsstr(commandLine,L"--chapter-sequence-test"))return retro::Game::testChapterSequences()?0:63;
-    if(std::wcsstr(commandLine,L"--chapter-route-test"))return retro::Game::testChapterRoute()?0:62;
-    if(std::wcsstr(commandLine,L"--service-map-test"))return retro::Game::testServiceMaps()?0:45;
-    if(std::wcsstr(commandLine,L"--mechanisms-test"))return retro::Game::testMechanisms()?0:39;
-    if(std::wcsstr(commandLine,L"--campaign-map-test")||std::wcsstr(commandLine,L"--freight-district-test"))return retro::Game::testCampaignMaps()?0:37;
-    if(std::wcsstr(commandLine,L"--streaming-test"))return retro::Game::testStreaming()?0:26;
-    if(std::wcsstr(commandLine,L"--render-benchmark")){
+    if(commandArguments().find(L"--chapter-sequence-test"))return retro::Game::testChapterSequences()?0:63;
+    if(commandArguments().find(L"--chapter-route-test"))return retro::Game::testChapterRoute()?0:62;
+    if(commandArguments().find(L"--service-map-test"))return retro::Game::testServiceMaps()?0:45;
+    if(commandArguments().find(L"--mechanisms-test"))return retro::Game::testMechanisms()?0:39;
+    if(commandArguments().find(L"--campaign-map-test")||commandArguments().find(L"--freight-district-test"))return retro::Game::testCampaignMaps()?0:37;
+    if(commandArguments().find(L"--streaming-test"))return retro::Game::testStreaming()?0:26;
+    if(commandArguments().find(L"--render-benchmark")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;std::ofstream report("render-benchmark.txt");
         const retro::Vec2 positions[]={{3.5f,4.5f},{7.5f,12.5f},{20.5f,11.5f}};
         for(auto position:positions){auto scene=retro::Game::mapInspection(position,0);renderer.render(scene);auto start=std::chrono::steady_clock::now();
@@ -1125,11 +1215,15 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
             report<<position.x<<", "<<position.y<<": "<<ms<<" ms/frame (render only)\n";
         }return 0;
     }
-    if(std::wcsstr(commandLine,L"--each-test")){
+    if(commandArguments().find(L"--command-arguments-test"))return commandArgumentsTest()?0:21;
+    if(commandArguments().find(L"--content-integrity-test"))return contentIntegrityTest()?0:21;
+    if(commandArguments().find(L"--load-validation-test"))return loadValidationTest()?0:21;
+    if(commandArguments().find(L"--each-test")){
         // The smoke chain's game tests, every one run independently: a failure
         // early in the chain must not hide the result of everything after it.
         const std::pair<const char*,bool(*)()> tests[]={
-         {"projection",retro::SoftwareRenderer::testProjection},{"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
+         {"projection",retro::SoftwareRenderer::testProjection},{"command-arguments",commandArgumentsTest},{"content-integrity",contentIntegrityTest},{"load-validation",loadValidationTest},
+         {"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
          {"combat",retro::Game::testCombat},{"weapon-motion",retro::Game::testWeaponMotion},{"audio-events",retro::Game::testAudioEvents},
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
@@ -1140,20 +1234,20 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},
          {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest}};
         std::ofstream report("each-test.txt");int failed=0;
-        const wchar_t* only=std::wcsstr(commandLine,L"--each-test=");
+        const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){
-         if(only){std::wstring wanted(only+12);wanted=wanted.substr(0,wanted.find(L' '));if(std::wstring(name,name+std::strlen(name))!=wanted)continue;}
+         if(only){std::wstring wanted(only+12);if(std::wstring(name,name+std::strlen(name))!=wanted)continue;}
          auto start=std::chrono::steady_clock::now();bool ok=false;
          try{ok=run();}catch(const std::exception& e){report<<name<<" threw "<<e.what()<<'\n';}
          failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<name<<" "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<"s\n";report.flush();
         }
-        report<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';return failed?1:0;
+        report<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';std::cout<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';return failed?1:0;
     }
-    if(std::wcsstr(commandLine,L"--smoke-test")){
+    if(commandArguments().find(L"--smoke-test")){
         retro::Game game;
         game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
-        if(std::wcsstr(commandLine,L"--vulkan")&&!renderer.enableHardware())return 36;
+        if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
         std::ofstream("model-report.txt")<<renderer.modelReport();
         if(!renderer.validate3D())return 7;
         if(!retro::Game::testHazmat())return 41;
@@ -1302,40 +1396,40 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         renderer.render(game);saveFrame("jump-look-frame.ppm");
         return out && game.player().health>0 ? 0 : 2;
     }
-    if(std::wcsstr(commandLine,L"--vr-inspection-test"))return vrSmokeTest(W,H,true);
-    if(std::wcsstr(commandLine,L"--vr-smoke-test"))return vrSmokeTest(W,H);
-    if(std::wcsstr(commandLine,L"--vr-hand-dump")){
+    if(commandArguments().find(L"--vr-inspection-test"))return vrSmokeTest(W,H,true);
+    if(commandArguments().find(L"--vr-smoke-test"))return vrSmokeTest(W,H);
+    if(commandArguments().find(L"--vr-hand-dump")){
      // The tracked-hand mesh open and closed, as OBJ files for offline inspection.
      retro::Mesh arms(111);int file=0;
      for(bool left:{false,true})for(float curl:{0.f,1.f}){std::ofstream obj(std::string("vr-hand-")+(left?"left":"right")+(curl>0?"-closed":"-open")+".obj");int n=0;
       for(const auto&t:arms.trackedHand(left,{curl,curl,curl,curl,curl})){for(const auto&v:t.v)obj<<"v "<<v.p.x<<' '<<v.p.y<<' '<<v.p.z<<'\n';obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}++file;}
      {retro::Mesh weapon(109);std::ofstream obj("vr-weapon.obj");int n=0;for(const auto&t:weapon.triangles){for(const auto&v:t.v)obj<<"v "<<v.p.x<<' '<<v.p.y<<' '<<v.p.z<<'\n';obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}}
      return file==4?0:1;}
-    if(std::wcsstr(commandLine,L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
-    bool vrMode=std::wcsstr(commandLine,L"--vr")!=nullptr;
+    if(commandArguments().find(L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
+    bool vrMode=commandArguments().find(L"--vr")!=nullptr;
     if(!*commandLine){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
     std::unique_ptr<retro::VrRuntime> vrRuntime;
     if(vrMode){vrRuntime=std::make_unique<retro::VrRuntime>();std::string error;if(!vrRuntime->initialize(error))throw std::runtime_error(error);}
     retro::Win32Window window(W,H,L"Depthworks");
     if(!window.valid()) return 1;
-    retro::Game game;if(std::wcsstr(commandLine,L"--dev"))game.setDeveloperMode(true);
+    retro::Game game;if(commandArguments().find(L"--dev"))game.setDeveloperMode(true);
     game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
-    bool exclusionZone=std::wcsstr(commandLine,L"--exclusion-zone")!=nullptr||std::wcsstr(commandLine,L"--guard-lab")!=nullptr;
-    bool directStart=std::wcsstr(commandLine,L"--surface-lift")!=nullptr||exclusionZone;
+    bool exclusionZone=commandArguments().find(L"--exclusion-zone")!=nullptr||commandArguments().find(L"--guard-lab")!=nullptr;
+    bool directStart=commandArguments().find(L"--surface-lift")!=nullptr||exclusionZone;
     if(exclusionZone){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";game=retro::Game(std::filesystem::exists(path)?retro::loadCustomCampaignFile(path):retro::loadEmbeddedExclusionZoneCampaign());}
-    else if(std::wcsstr(commandLine,L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
+    else if(commandArguments().find(L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     if(!settingsPath.empty())game.loadSettings(settingsPath);
     if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\\RawMetal\\saves");
     if(!directStart)game.showTitleScreen();
     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
     retro::AudioEngine audio;
-    renderer.setGpuActorPreparation(std::wcsstr(commandLine,L"--cpu-actor-preparation")==nullptr);
-    game.setAiQueryCaching(std::wcsstr(commandLine,L"--uncached-ai-queries")==nullptr);
-    game.setAiDecisionScheduling(std::wcsstr(commandLine,L"--full-rate-ai-decisions")==nullptr);
-    game.setNavAuthority(std::wcsstr(commandLine,L"--lattice-walk-probes")==nullptr);
-    if(vrMode){if(!renderer.enableHardware(window.handle()))throw std::runtime_error("SteamVR requires Vulkan hardware rendering: "+renderer.hardwareName());}else if(!std::wcsstr(commandLine,L"--software"))renderer.enableHardware(window.handle());
+    renderer.setGpuActorPreparation(commandArguments().find(L"--cpu-actor-preparation")==nullptr);
+    game.setAiQueryCaching(commandArguments().find(L"--uncached-ai-queries")==nullptr);
+    game.setAiDecisionScheduling(commandArguments().find(L"--full-rate-ai-decisions")==nullptr);
+    game.setNavAuthority(commandArguments().find(L"--lattice-walk-probes")==nullptr);
+    if(vrMode){if(!renderer.enableHardware(window.handle()))throw std::runtime_error("SteamVR requires Vulkan hardware rendering: "+renderer.hardwareName());}else if(!commandArguments().find(L"--software"))renderer.enableHardware(window.handle());
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
@@ -1352,12 +1446,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         std::ofstream("RawMetal-error.txt")<<error.what();
         // Automated runs report through the exit code and RawMetal-error.txt; a
         // modal dialog would hang the test runner.
-        bool automated=false;for(auto marker:{L"-test",L"performance",L"inspection",L"benchmark",L"-profile",L"--map-",L"--residency"})automated|=std::wcsstr(commandLine,marker)!=nullptr;
+        bool automated=commandArguments().automated();
+        if(automated)std::cerr<<error.what()<<'\n';
         if(!automated)MessageBoxA(nullptr,error.what(),"Depthworks could not start",MB_OK|MB_ICONERROR);
         return 8;
     }
 }
 #else
 #include <iostream>
+#include <cstdlib>
 int main(){std::cout<<"This demo targets Win32. Build it on Windows with MSVC or MinGW.\n";return 0;}
 #endif
