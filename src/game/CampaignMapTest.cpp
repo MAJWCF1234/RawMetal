@@ -75,10 +75,10 @@ bool Game::testCampaignMaps(){
   operate(restored,40,{5,19.9f},-19);operate(restored,40,{12,19.9f},-19);operate(restored,40,{19,19.9f},-19);
   check(restored.state("pwr_feeder9"),"Physical three-step transfer restores the Machine Hall gate prerequisite");
   check(gateAvailable(restored,35,stateId("pwr_feeder9")),"Restored feeder actually unlocks the hub's Machine Hall gate");
-  Game maintenance;operate(maintenance,55,{12,19.9f},-19);operate(maintenance,55,{6,16.9f},-19);
+  Game maintenance;operate(maintenance,55,{15.6f,20.9f},-19);operate(maintenance,55,{6,16.9f},-19);
   check(!maintenance.state("maint_shutter_pin")&&!maintenance.state("mnt_pin_machined"),"Fabrication requires signed-out stock and a machined pin");
   operate(maintenance,54,{4.8f,12.6f},-19,kPi);
-  operate(maintenance,55,{6,16.9f},-19);operate(maintenance,55,{12,19.9f},-19);
+  operate(maintenance,55,{6,16.9f},-19);operate(maintenance,55,{15.6f,20.9f},-19);
   check(maintenance.state("mnt_bar_stock")&&maintenance.state("maint_shutter_pin"),"Stock issue and physical fabrication controls restore the Operations shutter prerequisite");
   check(gateAvailable(maintenance,55,stateId("maint_shutter_pin")),"Fitted pin unlocks the actual Operations shutter");
   operate(maintenance,59,{12,10.9f},-19);operate(maintenance,61,{8,6.9f},-16);

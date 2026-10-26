@@ -602,24 +602,172 @@ std::shared_ptr<const Map> makeCentralStores(){
  freightFinish(m,-1);
  return p;
 }
-// FABRICATION SHOP (manifest 35)
+// FABRICATION SHOP (manifest 35). Where the district made its own parts: the
+// machine line under the west wall, a welding bay behind mesh to the east,
+// plate stock and tool chests, and at the south end the roller shutter to
+// Operations, down since its drive pin sheared at 02:16. R. Marsh got as far
+// as Lathe 2 without the bar; the player brings it from Central Stores.
 std::shared_ptr<const Map> makeFabricationShop(){
- auto p=std::make_shared<Map>(*placeholderChunk(55,{{'N',10.f,14.f,-19.f,false,0},{'S',10.f,14.f,-19.f,true,stateId("maint_shutter_pin")}}));
- auto& m=*p;const float f=m.layers.front().elevation;
- // Keep the unfinished shop walkable, but make the shutter repair usable:
- // sign out EN24 stock in Central Stores, machine the pin, then fit it.
- auto control=[&](Vec2 pos,const char* title,const char* operation,const char* requirement,StateId state,StateId prerequisite){
-  wall(m,pos.x-.8f,pos.y+.65f,pos.x+.8f,pos.y+.82f,f,f+2.1f,2);
-  wallSign(m,pos.x,pos.y+.638f,f+1.45f,title,operation,1.45f,kPi);
-  terminal(m,pos,title,operation,requirement,0,state,prerequisite);m.terminals.back().yaw=kPi;
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[55];m.definition=CampaignChunks[55];m.definition.ambient=.26f;
+ m.wallSurface=SurfaceBrick;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceCorrugated;
+ const float f=-19,roof=m.definition.ceiling;
+ const StateId pin=stateId("mnt_pin_machined"),shutter=stateId("maint_shutter_pin");
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'N',10,14,f,false,0});openEdge(m,{'S',10,14,f,true,shutter});
+ wallBays(m,f,roof,4.f,false,false,true,true);
+ // Roof steel: three trusses on the bay columns either side of the aisle.
+ for(float y:{6.f,12.f,18.f}){wall(m,1,y-.12f,23,y+.12f,roof-.55f,roof,12);for(float x:{9.3f,14.7f})steelColumn(m,x,y,f,roof-.55f,false);}
+ for(float x:{9.85f,14.03f})floorLine(m,x,1.f,x+.12f,22.6f,f,13);
+ // --- The machine line, west ----------------------------------------------------------------
+ // CNC cell: a steel enclosure with a glazed front, its machine inside.
+ wall(m,1.22f,1.f,1.37f,5.2f,f,f+2.5f,2);wall(m,6.65f,1.f,6.8f,5.2f,f,f+2.5f,2);
+ mntGlazed(m,1.37f,5.05f,6.65f,5.2f,f,f+2.5f,2);
+ wall(m,1.22f,1.f,6.8f,5.2f,f+2.5f,f+2.6f,2);
+ mntFix(m,model::test_machine,{4.f,2.9f},f,2.2f,2.8f,2.9f*.85f,kPi*.5f,true);
+ // The mill: base, column, head and table, and its lamp.
+ wall(m,2.6f,8.f,4.2f,9.2f,f,f+.9f,8);wall(m,2.9f,8.7f,3.9f,9.2f,f+.9f,f+2.3f,8);wall(m,2.8f,8.1f,4.f,9.2f,f+2.3f,f+2.75f,8);
+ wall(m,2.5f,8.1f,4.3f,8.6f,f+1.05f,f+1.15f,12);
+ m.pipes.push_back({{3.4f,8.35f},{3.4f,8.35f},f+1.6f,.05f,f+2.3f,6});
+ // Lathes: a cabinet stand, the bed ways, headstock and chuck, carriage and
+ // tailstock, along x with the operator on the north side.
+ auto lathe=[&](float y,float part){
+  wall(m,2.f,y-.4f,8.f,y+.4f,f,f+.78f,8);
+  wall(m,2.1f,y-.3f,7.9f,y+.3f,f+.78f,f+1.f,12);
+  wall(m,2.f,y-.45f,3.2f,y+.45f,f+1.f,f+1.6f,8);
+  m.pipes.push_back({{3.2f,y},{3.42f,y},f+1.28f,.17f,f+1.28f,6});
+  if(part>0)m.pipes.push_back({{3.42f,y},{3.42f+part,y},f+1.28f,.05f,f+1.28f,6});
+  wall(m,4.8f,y-.42f,5.6f,y+.42f,f+1.f,f+1.22f,12);wall(m,5.05f,y-.12f,5.35f,y+.12f,f+1.22f,f+1.38f,8);
+  wall(m,6.8f,y-.25f,7.4f,y+.25f,f+1.f,f+1.42f,8);m.pipes.push_back({{6.5f,y},{6.8f,y},f+1.28f,.04f,f+1.28f,6});
+  wall(m,2.f,y-.45f,8.f,y-.42f,f+1.f,f+1.08f,12);
  };
- const StateId pin=stateId("mnt_pin_machined");
- control({6.f,18.f},"LATHE 2 / SHEAR PIN","E / MACHINE THE 40 MM EN24 SHEAR PIN.","REQUIRES BAR STOCK: SIGN IT OUT AT RACK B IN CENTRAL STORES.",pin,stateId("mnt_bar_stock"));
- control({12.f,21.f},"OPERATIONS SHUTTER / DRIVE","E / FIT THE MACHINED PIN AND RELEASE THE SHUTTER.","REQUIRES THE FINISHED PIN FROM LATHE 2. OPERATIONS IS THROUGH THE SOUTH DOOR.",stateId("maint_shutter_pin"),pin);
+ lathe(13.f,.9f);lathe(18.8f,0);
+ // Lathe 2's pendant console in front of its bed, and its work lamp, lit
+ // while the pin is being turned.
+ mntFix(m,model::pwr_control_cabinet,{6.f,18.05f},f,.6f,.35f,1.25f,kPi,true);
+ mntControl(m,{6.f,18.f},"LATHE 2 / SHEAR PIN","E / MACHINE THE 40 MM EN24 SHEAR PIN.","REQUIRES BAR STOCK: SIGN IT OUT AT RACK B IN CENTRAL STORES.",pin,stateId("mnt_bar_stock"),kPi);
+ m.lights.push_back(lamp({4.4f,18.8f},f+2.1f,.9f,4.f,3600,.1f,WorldLightMount::Bare));
+ {auto& t=mntTimer(m,"mnt_lathe_ms","mnt_lathe_done",4200,4200);t.soundIntervalMs=350;t.soundUntilMs=4000;t.tickSound=Sound::Machine;t.gain=.8f;t.pitch=1.4f;
+  ScriptEvent e;e.id=stateId("mnt_ev_lathe");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=pin;e.actions={mntAct(ScriptAction::Type::SetState,stateId("mnt_lathe_ms"),1)};m.scriptEvents.push_back(e);}
+ // Marsh, at the lathe he could not use; the empty bar chuck, a flask.
+ mntBody(m,"mnt_marsh_clock",ActorVisual::Worker,{3.9f,17.2f},f,2.6f);machineryClock(m,"mnt_marsh_clock",60000);
+ for(auto [x,y,r]:{std::tuple{3.7f,17.f,.55f},{4.4f,17.5f,.3f}})wall(m,x-r,y-r*.6f,x+r,y+r*.6f,f,f+.004f,16);
+ mntFix(m,model::mine_hard_hat,{6.9f,16.6f},f,.28f,.35f,.15f,.9f,false);
+ // Workbenches between the machines, vices and a grinder on them.
+ auto bench=[&](float y1,float y2){wall(m,1.25f,y1,2.1f,y2,f+.86f,f+.92f,12);
+  for(float y:{y1+.05f,y2-.1f})wall(m,1.3f,y,2.05f,y+.05f,f,f+.86f,12);
+  wall(m,1.3f,y1,2.05f,y2,f+.18f,f+.2f,12);
+  wall(m,1.6f,(y1+y2)*.5f-.12f,1.9f,(y1+y2)*.5f+.12f,f+.92f,f+1.08f,8);};
+ bench(10.f,11.8f);bench(15.f,16.6f);bench(20.6f,22.8f);
+ // --- The welding bay, east, behind mesh -------------------------------------------------------
+ mntMesh(m,false,15.6f,4.3f,3.19f*1.f,f,true);mntMesh(m,false,15.6f,7.45f,3.1f,f,false);
+ mntMesh(m,true,9.05f,17.45f,3.7f,f,false);mntMesh(m,true,9.05f,21.15f,3.7f,f,false);
+ wall(m,18.f,4.f,21.f,5.4f,f+.88f,f+.94f,12);for(Vec2 l:{Vec2{18.1f,4.1f},Vec2{20.85f,4.1f},Vec2{18.1f,5.25f},Vec2{20.85f,5.25f}})wall(m,l.x,l.y,l.x+.06f,l.y+.06f,f,f+.88f,12);
+ for(float x:{22.3f,22.65f})mntFix(m,model::gas_cylinder,{x,2.f},f,.33f,.33f,1.58f,0,true);
+ mntFix(m,model::gas_cylinder,{22.45f,2.5f},f,.33f,.33f,1.58f,0,true);
+ mntFix(m,model::drum,{17.f,8.2f},f,.6f,.6f,.88f,.4f,true);
+ // --- Plate stock and the tool chests --------------------------------------------------------------
+ mntFix(m,model::pwr_sheet_steel_stack,{19.6f,12.4f},f,1.79f,3.4f,.13f,0,true);
+ mntFix(m,model::pwr_sheet_steel_stack,{19.6f,12.4f},f+.13f,1.79f,3.4f,.13f,.04f,true);
+ for(float y:{15.6f,16.5f})mntFix(m,model::mine_tool_chest,{22.45f,y},f,.75f,.45f,.97f,-kPi*.5f,true);
+ mntFix(m,model::stock_cage,{19.6f,21.7f},f,4.49f,2.01f,2.03f,0,true);
+ // --- The shutter to Operations ---------------------------------------------------------------
+ // Its head box and drive motor over the opening; the local control pedestal
+ // stands clear of the door at the east jamb.
+ wall(m,9.4f,22.6f,14.6f,23.f,f+3.f,f+3.9f,2);
+ wall(m,14.6f,22.4f,15.6f,23.f,f+2.9f,f+3.7f,8);m.pipes.push_back({{15.1f,22.7f},{15.1f,22.7f},f+1.2f,.02f,f+2.9f,6});
+ mntFix(m,model::pwr_control_cabinet,{15.6f,22.05f},f,.6f,.35f,1.25f,kPi,true);
+ mntControl(m,{15.6f,22.f},"OPERATIONS SHUTTER / DRIVE","E / FIT THE MACHINED PIN AND RELEASE THE SHUTTER.","REQUIRES THE FINISHED PIN FROM LATHE 2. OPERATIONS IS THROUGH THE SOUTH DOOR.",shutter,pin,kPi);
+ mntFix(m,model::pwr_breaker_panel_open,{16.4f,22.92f},f+1.3f,.32f,.23f,.46f,kPi,false);
+ // --- A transformed worker in the welding bay ------------------------------------------------------
+ m.creatureSpawns.push_back({CreatureKind::Mutant,{19.5f,7.f},f});
+ m.pickupSpawns.push_back({{22.f,19.f},PickupKind::Ammo,f});
+ mntFix(m,model::med_first_aid_box,{14.7f,11.75f},f+1.4f,.37f,.12f,.35f,kPi,false);
+ // --- Light: tube rows over the aisle and the machine line, one dying ----------------------------
+ for(float y:{3.f,9.f,15.f,21.f})mntHungTube(m,{12.f,y},roof,f+3.6f,true,1.1f,8.f,4800,.05f,y==15.f?.35f:0.f);
+ for(float y:{3.f,9.f,15.f,21.f})mntHungTube(m,{5.f,y},roof,f+3.6f,true,.9f,7.f,4600,.05f);
+ for(float y:{4.5f,13.5f,20.f})mntHungTube(m,{19.5f,y},roof,f+3.6f,true,.8f,7.f,4400,.05f,y==4.5f?.5f:0.f);
+ zone(m,"FABRICATION SHOP / LATHES",1,9.5f,9.3f,23);
+ zone(m,"FABRICATION SHOP / WELDING BAY",15.6f,1,23,9.05f);
+ zone(m,"FABRICATION SHOP",0,0,24,24);
+ freightFinish(m,-1);
  return p;
 }
-// MAINTENANCE / AID STATION (manifest 33)
-std::shared_ptr<const Map> makeMaintenanceAidStation(){return placeholderChunk(56,{{'W',9.f,14.f,-19.f,false,0}});}
+// MAINTENANCE / AID STATION (manifest 33). The B shift's first-aid post,
+// where the six who were left after the headcount held out: a barricade of
+// lockers at the door, cots and bedrolls in the triage room, the medicine
+// store behind it. Cleanup found them. One is still breathing in treatment.
+std::shared_ptr<const Map> makeMaintenanceAidStation(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[56];m.definition=CampaignChunks[56];m.definition.ambient=.22f;
+ m.wallSurface=SurfaceClinicTile;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceOfficePlaster;
+ const float f=-19,roof=m.definition.ceiling;
+ const StateId rise=stateId("mnt_aid_rise");
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ auto& L=m.layers[0];
+ rectangle(L,1,1,23,23,'#');
+ rectangle(L,1,9,6,14,'.');      // the passage from the district
+ rectangle(L,6,5,15,19,'.');     // triage
+ rectangle(L,15,5,21,11,'.');    // treatment
+ rectangle(L,15,12,21,19,'.');   // medicine store
+ openEdge(m,{'W',9,14,f,false,0});
+ // --- The barricade: lockers dragged across the doorway, one pulled aside -------------------
+ mntDoorwayY(m,10.2f,12.8f,5.85f,6.15f,f,roof);
+ wall(m,5.85f,9.f,6.15f,10.2f,f,roof,3);wall(m,5.85f,12.8f,6.15f,14.f,f,roof,3);
+ mntFix(m,model::pwr_locker_bank,{6.7f,10.6f},f,.87f,.85f,2.42f,kPi*.5f,true);
+ mntFix(m,model::pwr_locker_bank,{7.4f,12.5f},f,.87f,.85f,2.42f,kPi*.85f,true);
+ mntFix(m,model::wooden_table,{8.2f,9.8f},f,1.367f,.724f,.78f,.5f,true);
+ // --- Triage: cots, bedrolls, the nurse's desk, the forms on the board ------------------------
+ for(float y:{6.2f,8.6f})mntFix(m,model::med_ward_bed,{13.6f,y},f,1.98f,.94f,.84f,kPi,true);
+ mntFix(m,model::med_ward_bed_tossed,{13.5f,16.9f},f,2.1f,1.52f,.84f,kPi,true);
+ for(auto [x,y,yaw]:{std::tuple{7.6f,15.5f,0.f},{8.8f,15.8f,.15f},{10.f,15.4f,-.1f}})mntFix(m,model::scrap_bedroll,{x,y},f,.92f,1.96f,.18f,yaw,false);
+ mntFix(m,model::med_nurse_desk,{8.f,5.6f},f,1.18f,.56f,.81f,kPi,true);
+ mntFix(m,model::med_notice_board,{10.5f,5.07f},f+1.f,1.2f,.07f,.9f,0,false);
+ mntFix(m,model::med_scrub_sink,{6.33f,7.6f},f,.49f,.54f,1.13f,kPi*.5f,true);
+ mntFix(m,model::med_crash_cart,{11.6f,12.f},f,.74f,.48f,1.f,.3f,true);
+ mntFix(m,model::med_wheelchair,{7.f,17.9f},f,.55f,1.03f,.9f,2.f,true);
+ mntFix(m,model::med_wall_clock,{12.f,5.03f},f+2.f,.24f,.02f,.23f,0,false);
+ terminal(m,{9.3f,5.7f},"AID STATION / EXPOSURE REGISTER","B SHIFT: 41 SCREENED THIS MONTH. TIER 2: 6. TIER 3: 1 (TRANSFERRED).","TIER 3 GOES TO MEDICAL SCREENING ON LEVEL 9. NOBODY HAS COME BACK TO WORK FROM THERE.");
+ // The ones Cleanup reached: four where they lay, and the blood.
+ for(auto [x,y,yaw]:{std::tuple{9.f,11.2f,1.f},{10.6f,9.4f,2.4f},{12.4f,14.f,-.6f},{8.4f,13.6f,3.6f}}){
+  std::string clock="mnt_aid_body_"+std::to_string(int(x*10));mntBody(m,clock.c_str(),ActorVisual::Worker,{x,y},f,yaw);machineryClock(m,clock.c_str(),60000);
+  wall(m,x-.45f,y-.3f,x+.45f,y+.3f,f,f+.004f,16);}
+ // --- Treatment: the last of them --------------------------------------------------------------
+ mntDoorwayY(m,7.f,8.6f,14.85f,15.15f,f,roof);
+ wall(m,14.85f,5.f,15.15f,7.f,f,roof,3);wall(m,14.85f,8.6f,15.15f,11.f,f,roof,3);
+ mntFix(m,model::med_ward_bed,{18.6f,6.3f},f,1.98f,.94f,.84f,kPi,true);
+ mntFix(m,model::med_crash_cart,{20.3f,6.6f},f,.74f,.48f,1.f,-kPi*.5f,true);
+ mntFix(m,model::med_vitals_monitor,{20.3f,6.6f},f+1.f,.38f,.18f,.28f,-kPi*.5f,false);
+ mntFix(m,model::med_supply_cabinet,{20.75f,9.4f},f,1.1f,.44f,1.7f,-kPi*.5f,true);
+ m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{18.4f,6.3f},f+.62f,kPi,4,1},{30000,{18.4f,6.3f},f+.62f,kPi,4,1}}});
+ {auto& t=mntTimer(m,"mnt_aid_last","mnt_aid_last_done",30000,26000);t.x1=15.2f;t.y1=5.f;t.x2=21.f;t.y2=11.f;t.bottom=f-1;t.top=f+3;}
+ cue(m,"mnt_aid_last",400,Sound::WorkerDying,{18.4f,6.3f},"YOU'RE NOT CLEANUP.",.6f,f+.8f);
+ cue(m,"mnt_aid_last",5200,Sound::Empty,{18.4f,6.3f},"THEY CAME AT FOUR. KNOCKED THREE TIMES. WE OPENED THE DOOR.",0.f,f+.8f);
+ cue(m,"mnt_aid_last",11000,Sound::Empty,{18.4f,6.3f},"MARSH WENT FOR THE SHUTTER. THE PIN. HE NEVER GOT THE BAR.",0.f,f+.8f);
+ cue(m,"mnt_aid_last",17500,Sound::Empty,{18.4f,6.3f},"OPERATIONS IS THE WAY OUT. DON'T LET THEM COUNT YOU.",0.f,f+.8f);
+ // --- The medicine store, and the one that was not dead ----------------------------------------
+ mntDoorwayY(m,14.6f,16.2f,14.85f,15.15f,f,roof);
+ wall(m,14.85f,12.f,15.15f,14.6f,f,roof,3);wall(m,14.85f,16.2f,15.15f,19.f,f,roof,3);
+ for(float x:{16.4f,17.6f,18.8f})mntFix(m,model::med_supply_cabinet,{x,18.75f},f,1.1f,.44f,1.7f,kPi,true);
+ mntFix(m,model::metal_shelf,{20.7f,15.f},f,1.8f,.5f,1.8f,-kPi*.5f,true);
+ m.pickupSpawns.push_back({{17.f,14.5f},PickupKind::Health,f});
+ m.pickupSpawns.push_back({{19.f,16.8f},PickupKind::Health,f});
+ m.pickupSpawns.push_back({{16.f,16.6f},PickupKind::Ammo,f});
+ {CreatureSpawn c{CreatureKind::Mutant,{13.4f,18.35f},f};c.wakeState=rise;m.creatureSpawns.push_back(c);}
+ {ScriptEvent e;e.id=stateId("mnt_ev_aid_rise");e.x1=15.4f;e.y1=12.2f;e.x2=21.f;e.y2=19.f;e.bottom=f-1;e.top=f+3;
+  e.actions={mntAct(ScriptAction::Type::SetState,rise,1)};m.scriptEvents.push_back(e);}
+ // --- Light: what the generator still feeds --------------------------------------------------------
+ mntTube(m,{10.5f,8.f},roof,false,.9f,7.f,5200,.1f);
+ mntTube(m,{10.5f,14.5f},roof,false,.7f,6.f,5200,.1f,.4f);
+ mntTube(m,{18.f,8.f},roof,false,.8f,5.f,4800,.05f);
+ mntTube(m,{18.f,15.5f},roof,false,.5f,5.f,4800,.05f,.25f);
+ mntTube(m,{3.f,11.5f},roof,true,.5f,4.f,4600,0);
+ zone(m,"AID STATION / TREATMENT",15,5,21,11);
+ zone(m,"AID STATION / MEDICINE STORE",15,12,21,19);
+ zone(m,"AID STATION",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
 }
 void buildChapterMaintenance(CampaignMapTable& maps){
  maps[53]=makeMaintenanceDistrict();
