@@ -4,6 +4,60 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.14.0 - DepthWorks, Chapter 1 playtest (2026-10-26)
+
+A pre-release for playtesters: the first chapter of DepthWorks as players will
+get it, in one file. There is no changelog here. This is what the chapter is.
+
+**The plant.** You are a night-shift guard at the Depthworks plant, built over
+something the company found deep underground and sells as power. Tonight the
+service lift drops you into the sub-levels your badge does not open. The
+lights are off, Order 7 has sealed the doors, the Cleanup Force is sweeping the
+plant to remove witnesses, and the last message from your friend at Lab 4 was
+cut off mid-line. The workers the lockdown did not reach are no longer workers.
+
+**Chapter 1: the power plant and the perimeter.** You bring the plant back from
+a black start one district at a time, and each district opens the next.
+
+- Power Distribution: the switch hall, the cable trench, the emergency
+  generators, and Load Control, where the mail relay wakes with one queued
+  message.
+- The Machine Hall: the galleries around the turbine floor, the exciter bay,
+  the crane end, and the restrike that lights them.
+- Ventilation Works and the Air Handling crawlspaces.
+- Water and Cooling: the treatment hall, the drainage gallery, the sump works,
+  the cooling tower basin and shell, and heat exchange.
+- Maintenance: Central Stores, the Fabrication Shop, where the shutter to
+  Operations needs a pin you machine yourself, and the Aid Station.
+- The Restricted Perimeter: the Operations corridor, the Security Perimeter's
+  yard and gatehouse, Checkpoint Delta's holding cells, the Administrative
+  Link over the old ore pass, Personnel Transit's held tram, Restricted
+  Utilities, Research Receiving, Decontamination, and the forecourt of Energy
+  Research, where the chapter ends at the great door.
+
+**What is in the dark.** Huntsmen and xenowasps in the ducts and galleries;
+the transformed, who keep their habits; the Snatcher, which waits for you and
+does not chase; and the Chimera, which does not wait. The Cleanup Force holds
+the checkpoints: creep past, take them down from behind, or fight.
+
+**Controls.** WASD move, Shift sprint, Space jump, C or Ctrl crouch, mouse
+fire, right mouse guard, R reload, E use, F flashlight, Q subdue from behind,
+I inventory, Esc menu. Checkpoints are automatic; manual saves are in the
+menu. Saves and settings live in %LOCALAPPDATA%\RawMetal.
+
+**VR (experimental).** SteamVR with Quest, Index or Vive controllers: real
+hands, the shotgun in your fist, an Alyx-style interface. Known rough edges:
+the support hand can snap on the pump, the pump slide is not drawn, the reload
+has no animation yet, and Quest frame rate is below 72.
+
+**For playtesters.** We want to know where you got lost, where you got stuck,
+where you got bored, where a death felt unfair, and what your GPU and frame
+rate were. Developer mode (start with `--dev`, or type DEV in the console)
+gives no damage, no creatures and every door open, for getting back to a
+place quickly.
+
+---
+
 ## v0.13.0 - Chapter 1 complete, and a VR overhaul (2026-10-26)
 
 Chapter 1 now runs end to end, from the Power Distribution black start to the
