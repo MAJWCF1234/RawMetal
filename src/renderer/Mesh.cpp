@@ -68,7 +68,8 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
   if(m_creatureFrames.size()<20||(!compact&&std::memcmp(m_creatureFrames.data(),"RMA2",4)))throw std::runtime_error("Invalid creature animation");
   std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&headerSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
   std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);
-  if(vertices!=triangles.size()*3||clips<1||clips>32||m_creatureVertices==0||m_creatureVertices>65535)throw std::runtime_error("Creature animation topology mismatch");
+  const uint32_t requiredClips=(id==242||id==272||id==2126||id==2129)?5u:1u;
+  if(vertices!=triangles.size()*3||clips<requiredClips||clips>32||m_creatureVertices==0||m_creatureVertices>65535)throw std::runtime_error("Creature animation topology mismatch");
   m_creatureFrameOffset=20+size_t(vertices)*2+(compact?size_t(clips)*4:0);
   if(m_creatureFrames.size()<m_creatureFrameOffset)throw std::runtime_error("Missing creature sample table");
   m_creatureSampleCounts.resize(clips);m_creatureSampleOffsets.resize(clips);

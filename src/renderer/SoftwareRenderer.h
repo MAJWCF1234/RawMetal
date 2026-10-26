@@ -48,6 +48,7 @@ public:
     static bool testHardware();
     static bool testPresentationResize();
     static bool testCreatureAnimation();
+    static bool testProjection();
     // Store-low / run-high: Vulkan presents bilinear-upsampled atlases (1/2/4).
     static void setTexturePresentScale(int scale);
     static int texturePresentScale();
@@ -142,7 +143,7 @@ private:
     std::array<RagPoint,Ragdoll::Count> m_hazmatPoseJoints{};
     bool m_hazmatPoseValid=false;
     Texture m_blood;
-    std::array<Texture,4> m_bloodVariants;
+    std::array<Texture,size_t(CreatureKind::Chimera)+1> m_bloodVariants;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_liftSign,m_liftDispatch;
@@ -277,6 +278,16 @@ private:
     float m_inspectYaw=0,m_inspectPitch=0;
     Point3 inspectionPoint(Point3 p)const;
     void wornPanel(int x,int y,int width,int height,bool recess=false,bool materialPanel=false);
+    struct CreatureVisual {Mesh SoftwareRenderer::*mesh;Texture SoftwareRenderer::*texture;bool xenoblood;float bloodLight;};
+    static constexpr std::array creatureVisuals{
+     CreatureVisual{&SoftwareRenderer::m_enemyMesh,&SoftwareRenderer::m_enemyTexture,true,1.f},
+     CreatureVisual{&SoftwareRenderer::m_waspMesh,&SoftwareRenderer::m_waspTexture,true,1.f},
+     CreatureVisual{&SoftwareRenderer::m_bruteMesh,&SoftwareRenderer::m_bruteTexture,false,.9f},
+     CreatureVisual{&SoftwareRenderer::m_wardenMesh,&SoftwareRenderer::m_wardenTexture,false,.9f},
+     CreatureVisual{&SoftwareRenderer::m_mutantMesh,&SoftwareRenderer::m_mutantTexture,false,.9f},
+     CreatureVisual{&SoftwareRenderer::m_snatcherMesh,&SoftwareRenderer::m_snatcherTexture,false,.9f},
+     CreatureVisual{&SoftwareRenderer::m_chimeraMesh,&SoftwareRenderer::m_chimeraTexture,false,.9f}};
+    static_assert(creatureVisuals.size()==size_t(CreatureKind::Chimera)+1);
 };
 }
 

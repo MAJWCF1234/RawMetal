@@ -196,7 +196,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   t.transparent=true;t.glossStrength=.9f;return t;}();
  prepareDecal(m_glassTexture,false);
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
- for(int species=0;species<4;++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=species==int(CreatureKind::Huntsman)||species==int(CreatureKind::Wasp);const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
+ for(int species=0;species<int(creatureVisuals.size());++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=creatureVisuals[size_t(species)].xenoblood;const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
   for(auto&pixel:variant.pixels){float intensity=float(std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u}))/255.f;auto r=std::uint32_t(tr*intensity),g=std::uint32_t(tg*intensity),b=std::uint32_t(tb*intensity);pixel=(pixel&0xff000000u)|(r<<16)|(g<<8)|b;}prepareDecal(variant);
  }
  m_facilityTextures.emplace("pc_1",loadTexture(192));m_facilityTextures.emplace("keyboard_1",loadTexture(193));
@@ -248,7 +248,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    float variation=(float(gray)-92.f)*.82f;
    auto channel=[&](int base){return unsigned(std::clamp(int(base+variation),0,255));};
    if(gray>30)pixel=(pixel&0xff000000u)|(channel(184)<<16)|(channel(191)<<8)|channel(176);
-  }}
+  }prepareDecal(packing,false);}
  {auto&console=m_facilityTextures.at("electronics_etx_part_1");auto emission=loadTexture(292);
   if(console.width!=emission.width||console.height!=emission.height)throw std::runtime_error("Console emission dimensions mismatch");
   console.emission=std::move(emission.pixels);

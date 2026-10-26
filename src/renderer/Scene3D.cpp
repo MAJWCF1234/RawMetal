@@ -1,3 +1,4 @@
+#include "Projection.h"
 #include "RenderProfile.h"
 #include "../core/FrameProfile.h"
 #include "SoftwareRenderer.h"
@@ -99,6 +100,7 @@ bool SoftwareRenderer::validate3D(){
   if((m_pixels[size_t((m_height/2)*m_width+m_width/2)]&0xffffffu)!=0xffffffu)return false;
  }
  // Standalone decals clamp at their edges, and distant detail averages instead of aliasing.
+ if(m_facilityTextures.at("wooden_crate_hx_2_1").mips.empty())return false;
  if(m_hazard.mips.empty()||sample(m_hazard,1,1)!=m_hazard.pixels.back()||sample(m_hazard,-1,-1)!=m_hazard.pixels.front())return false;
  Texture checker{8,8,std::vector<std::uint32_t>(64)};for(int y=0;y<8;++y)for(int x=0;x<8;++x)checker.pixels[y*8+x]=(x+y)%2?0xffffffffu:0xff000000u;
  prepareDecal(checker);auto distant=sample(checker,.13f,.67f,3);if((distant&255)<126||(distant&255)>128)return false;
@@ -190,9 +192,10 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
  }
  if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale);return;}
  // Clip in camera space before perspective division; preserve UVs at intersections.
+ const Projection projection{float(m_width)/m_height};
  MeshVertex input[8]={a,b,c},output[8];int count=3;
  for(int plane=0;plane<5;++plane){
-  auto distance=[&](MeshVertex v){switch(plane){case 0:return v.p.z-.06f;case 1:return v.p.z+v.p.x*1.3f;case 2:return v.p.z-v.p.x*1.3f;case 3:return v.p.z+v.p.y*2.2f;default:return v.p.z-v.p.y*2.2f;}};
+  auto distance=[&](MeshVertex v){switch(plane){case 0:return v.p.z-Projection::nearPlane;case 1:return v.p.z+v.p.x*Projection::horizontal;case 2:return v.p.z-v.p.x*Projection::horizontal;case 3:return v.p.z+v.p.y*projection.vertical();default:return v.p.z-v.p.y*projection.vertical();}};
   int next=0;
   for(int i=0;i<count;++i){auto v=input[i],w=input[(i+1)%count];float d=distance(v),e=distance(w);
    if(d>=0)output[next++]=v;
@@ -200,7 +203,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
   }
   count=next;if(count<3)return;std::copy(output,output+count,input);
  }
- struct P{float x,y,iz,u,v,light;};float focal=m_width*.65f;
+ struct P{float x,y,iz,u,v,light;};float focal=projection.focal(float(m_width));
  auto project=[&](MeshVertex v){float iz=1.f/v.p.z;return P{m_width*.5f+v.p.x*focal*iz,m_height*.5f-v.p.y*focal*iz,iz,v.u*iz,v.v*iz,v.light*iz};};
  for(int t=1;t<count-1;++t){P A=project(input[0]),B=project(input[t]),C=project(input[t+1]);
   float area=(B.x-A.x)*(C.y-A.y)-(B.y-A.y)*(C.x-A.x);if(std::fabs(area)<.001f)continue;
@@ -370,9 +373,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  float farPlane=w.outdoors()?70.f:160.f;
  // VR headsets outrun the desktop frustum; keep sphere/edge culling but widen
  // the planes so peripheral geometry does not pop at the HMD borders.
- float hx=m_vrRendering?.72f:1.3f,hy=m_vrRendering?1.15f:2.2f,hr=m_vrRendering?1.95f:1.65f,vr=m_vrRendering?2.65f:2.42f;
- auto outside=[&](Point3 p){if(m_staticGeometryBuild)return 0u;unsigned mask=0;if(p.z<.06f)mask|=1;if(p.z+p.x*hx<0)mask|=2;if(p.z-p.x*hx<0)mask|=4;if(p.z+p.y*hy<0)mask|=8;if(p.z-p.y*hy<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
- auto sphereVisible=[&](Point3 point,float radius){if(m_staticGeometryBuild)return true;if(!m_visibilityCulling)return true;auto p=cameraPoint(point,game);return p.z+radius>.06f&&p.z-radius<farPlane&&p.z+p.x*hx+radius*hr>0&&p.z-p.x*hx+radius*hr>0&&p.z+p.y*hy+radius*vr>0&&p.z-p.y*hy+radius*vr>0;};
+ const Projection projection{float(m_width)/m_height};
+ float hx=m_vrRendering?.72f:Projection::horizontal,hy=m_vrRendering?1.15f:projection.vertical(),hr=m_vrRendering?1.95f:std::sqrt(1+hx*hx),vr=m_vrRendering?2.65f:std::sqrt(1+hy*hy);
+ auto outside=[&](Point3 p){if(m_staticGeometryBuild)return 0u;if(!m_vrRendering)return projection.outside(p.x,p.y,p.z)|(p.z>farPlane?32u:0u);unsigned mask=0;if(p.z<Projection::nearPlane)mask|=1;if(p.z+p.x*hx<0)mask|=2;if(p.z-p.x*hx<0)mask|=4;if(p.z+p.y*hy<0)mask|=8;if(p.z-p.y*hy<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
+ auto sphereVisible=[&](Point3 point,float radius){if(m_staticGeometryBuild)return true;if(!m_visibilityCulling)return true;auto p=cameraPoint(point,game);return p.z+radius>Projection::nearPlane&&p.z-radius<farPlane&&p.z+p.x*hx+radius*hr>0&&p.z-p.x*hx+radius*hr>0&&p.z+p.y*hy+radius*vr>0&&p.z-p.y*hy+radius*vr>0;};
  auto flashPitch=player.pitch/140.f,flashCp=std::cos(flashPitch),flashSp=std::sin(flashPitch);
  Point3 flashForward{std::cos(player.angle)*flashCp,std::sin(player.angle)*flashCp,flashSp};
  bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
@@ -1617,7 +1621,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }return t;}();
  for(const auto&mark:game.bulletImpacts())if(mark.level==level){
   if(mark.blood){
-   int species=std::clamp(mark.tint,0,3);float tint=species<=1?1.f:.9f;const Texture&blood=m_bloodVariants[size_t(species)];
+   int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);float tint=creatureVisuals[size_t(species)].bloodLight;const Texture&blood=m_bloodVariants[size_t(species)];
    if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}
    float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
    quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},blood,tint);continue;
@@ -1917,7 +1921,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    mixFloat(emitIdentity,weapon->grip.x);mixFloat(emitIdentity,weapon->grip.y);mixFloat(emitIdentity,weapon->grip.z);mixFloat(emitIdentity,weapon->muzzle.x);mixFloat(emitIdentity,weapon->muzzle.y);mixFloat(emitIdentity,weapon->muzzle.z);
    mixFloat(emitIdentity,weapon->direction.x);mixFloat(emitIdentity,weapon->direction.y);mixFloat(emitIdentity,weapon->direction.z);mixFloat(emitIdentity,weapon->raise);mixFloat(emitIdentity,weapon->flash);
    mixFloat(emitIdentity,weapon->recoil);mixFloat(emitIdentity,weapon->actionProgress);mixFloat(emitIdentity,weapon->reload);mixFloat(emitIdentity,weapon->grenadeThrow);}
-  const std::uint32_t emitStart=gpuActor>=0?std::uint32_t(m_gpu->actorStatistics()[1]):0;
+  const std::uint32_t emitStart=gpuActor>=0?m_gpu->actorEmitPosition():0;
   const bool replayedEmit=m_actorEmitCaching&&gpuActor>=0&&m_gpu->replayActorEmit(emitSlot,emitIdentity,gpuActor);
   if(!replayedEmit){
   // Material ownership is immutable during this draw. Resolve each name
@@ -1982,7 +1986,6 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(streamBody){flushRun();m_gpu->endActorStream(stream,emitted);}
   }
   if(armed){
-   if(weapon->grenadeThrow>0)drawTacticalGrenade(arms[0].targetHand+Point3{0,0,.025f},2.4f);
    auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
    const auto&gunMesh=weapon->handgun?m_handgunMesh:m_weaponMesh;
    const auto&gunTexture=weapon->handgun?m_handgunTexture:m_weaponTexture;
@@ -1996,6 +1999,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   if(m_actorEmitCaching&&gpuActor>=0)m_gpu->commitActorEmit(emitSlot,emitIdentity,emitStart);
   }
+  if(armed&&weapon->grenadeThrow>0)drawTacticalGrenade(arms[0].targetHand+Point3{0,0,.025f},2.4f);
   objectLighting=false;objectNormalLighting=nullptr;
   if(engineer&&(!mesh.hasDirectCreatureMotion()||(directSupport&&weapon->padVisible))){
    const Texture&terminalCase=m_rubberTexture,&terminalRubber=m_leatherTexture,&terminalStrap=m_leatherTexture;
@@ -2076,7 +2080,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(armed&&!engineering&&weapon->flash>0){float size=(.075f+.09f*weapon->flash)*track.scale/1.6f;Point3 across=effectSide*size,up{0,0,size};quad(gunMuzzle-across-up,gunMuzzle+across-up,gunMuzzle+across+up,gunMuzzle-across+up,m_muzzleFlash,2.4f*weapon->flash);}
   if(human&&track.tool&&!armed&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
  };
- for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i),nullptr,-1,0xB000000000000000ull|i);
+ for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i),nullptr,-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|i);
  for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i),0xA000000000000000ull|i);}}
  for(const auto&drone:engineerDrones)if(drone.level==level){
   if(!sphereVisible(drone.position+Point3{0,0,EngineerDroneHeight*.5f},1.2f))continue;
@@ -2098,10 +2102,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
   // Baked kinds are skinned bodies posed from their clips; the rest deform their meshes here.
-  const bool baked=creatureTraits(e.kind).baked,snatcher=e.kind==Enemy::Kind::Snatcher,chimera=e.kind==Enemy::Kind::Chimera;
-  bool mutant=e.kind==Enemy::Kind::Mutant;bool wasp=e.kind==Enemy::Kind::Wasp,warden=e.kind==Enemy::Kind::Warden,brute=e.kind==Enemy::Kind::Brute||warden;
-  auto&mesh=chimera?m_chimeraMesh:snatcher?m_snatcherMesh:mutant?m_mutantMesh:warden?m_wardenMesh:wasp?m_waspMesh:brute?m_bruteMesh:m_enemyMesh;
-  auto&texture=chimera?m_chimeraTexture:snatcher?m_snatcherTexture:mutant?m_mutantTexture:warden?m_wardenTexture:wasp?m_waspTexture:brute?m_bruteTexture:m_enemyTexture;
+  const bool baked=creatureTraits(e.kind).baked;
+  bool wasp=e.kind==Enemy::Kind::Wasp,brute=e.kind==Enemy::Kind::Brute||e.kind==Enemy::Kind::Warden;
+  const auto&visual=creatureVisuals[size_t(e.kind)];
+  auto&mesh=this->*visual.mesh;
+  auto&texture=this->*visual.texture;
   if(baked){const auto& traits=creatureTraits(e.kind);int clip=0;float phase=std::fmod(game.elapsed()/traits.idleSeconds+e.home.x*.1f,1.f);
    if(!e.alive){clip=4;phase=std::min(1.f,e.deathTime/traits.deathSeconds);}
    else if(e.windup>0){clip=2;phase=(1-std::clamp(e.windup/creatureTraits(e.kind).windup,0.f,1.f))*.4f;}
@@ -2115,7 +2120,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   float angle=e.heading,collapse=e.alive?0.f:std::min(1.f,e.deathTime/.65f);
   float shrink=e.alive?1.f:1.f-std::clamp((e.deathTime-1.25f)/1.15f,0.f,1.f);
   float wind=e.windup>0?std::sin(e.windup*5.f)*.12f:0;
-  auto enemyLights=exteriorLight(receiver,std::max(.2f,range.x*scale),std::max(.2f,range.z*scale),std::max(.2f,range.y*scale),angle,true);
+  // Mesh X is actor right; exteriorLight X points at yaw=(pi/2-heading).
+  auto enemyLights=exteriorLight(receiver,std::max(.2f,range.x*scale),std::max(.2f,range.z*scale),std::max(.2f,range.y*scale),kPi*.5f-angle,true);
   for(auto face:mesh.triangles){
    for(auto&v:face.v){Point3 p=(v.p-center)*scale;
     float localY=p.z;
