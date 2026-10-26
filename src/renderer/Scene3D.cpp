@@ -1115,28 +1115,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    else quad({switchX-.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+1.24f},{switchX-.14f,face+.04f,h+1.24f},m_terminalTexture,.85f);
    box({switchX-.025f,face+side*.042f-.005f,h+1.17f},{switchX+.025f,face+side*.042f+.005f,h+1.20f},door.opening?blue:amber,1.55f);
   }
-  // Compact sector label bolted directly to the header.
-  // Authored maps: boundary doors name the neighbouring map, interior doors
-  // the HUD zone on the far side of the header (front faces north).
-  const Texture* authoredFront=nullptr;const Texture* authoredBack=nullptr;
-  if(w.authored()&&w.campaign()&&door.sign<0){
-   int neighbour=-1;
-   if(door.transfer||door.entry)neighbour=campaignChunkAt(w.definition().origin+Vec2{(door.left+door.right)*.5f,door.entry?-.05f:24.05f});
-   if(neighbour>=0&&neighbour<int(m_routeSigns.size()))authoredFront=authoredBack=&m_routeSigns[size_t(neighbour)];
-   else if(!door.transfer&&!door.entry){
-    const char* area=CampaignMapNames[size_t(w.level())];float eye=base+1.2f;
-    const char* south=w.zoneName({x,door.y+1.4f},eye);const char* north=w.zoneName({x,door.y-1.4f},eye);
-    if(south)authoredFront=&zoneSign(south,area);
-    if(north)authoredBack=&zoneSign(north,area);
-   }
-  }
-  const auto&own=m_routeSigns[size_t(std::clamp(w.level(),0,int(m_routeSigns.size())-1))];
-  auto&front=authoredFront?*authoredFront:door.sign>=0&&door.sign<int(m_routeSigns.size())?m_routeSigns[door.sign]:own;
-  auto&back=authoredBack?*authoredBack:authoredFront?front:door.sign>=0?front:own;
-  // A plate of the sign texture's own 3.56:1 proportion, bolted to the header.
-  float plateHalf=std::min(.8f,half-.05f),plateTop=headerBottom+.06f+plateHalf*2.f/3.56f;
-  quad({x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},front,.9f);
-  quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},door.sign>=0&&!authoredBack?front:back,.9f);
+  // Doors carry no area-name plates: title cards announce areas. Only an
+  // explicit notice (a door that says why it is shut) is bolted to the header.
+  if(door.sign>=CampaignChunkCount&&door.sign<int(m_routeSigns.size())){const auto& notice=m_routeSigns[size_t(door.sign)];
+   float plateHalf=std::min(.8f,half-.05f),plateTop=headerBottom+.06f+plateHalf*2.f/3.56f;
+   quad({x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},notice,.9f);
+   quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},notice,.9f);}
  }
  if(!m_gpuFrame||!staticFixtures)for(const auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.
@@ -1300,13 +1284,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   quad({12.695f,9.7f,-10.65f},{12.695f,11.2f,-10.65f},{12.695f,11.2f,-9.7f},{12.695f,9.7f,-9.7f},m_pumpSign,1.f);
  }
  if(w.campaignChunk(8)){
-  // Flush-mounted route plates distinguish stores and primary utilities.
-  box({2.8f,1.005f,-8.9f},{4.8f,1.055f,-6.5f},m_panelMetal,.9f);
-  quad({2.95f,1.06f,-7.5f},{4.65f,1.06f,-7.5f},{4.65f,1.06f,-6.85f},{2.95f,1.06f,-6.85f},m_serviceAreaSigns[0],1.f);
+  // The primary utilities door says why it is shut.
   box({1.01f,18.4f,-8.95f},{1.055f,22.4f,-6.1f},m_panelMetal,.85f);
   quad({1.06f,21.4f,-6.8f},{1.06f,19.4f,-6.8f},{1.06f,19.4f,-6.25f},{1.06f,21.4f,-6.25f},m_serviceAreaSigns[1],1.f);
-  // The distribution spine is a landmark visible from the descending stair.
-  quad({12.795f,11.2f,-7.35f},{12.795f,14.3f,-7.35f},{12.795f,14.3f,-6.8f},{12.795f,11.2f,-6.8f},m_routeSigns[9],1.05f);
   quad({13.125f,14.3f,-7.35f},{13.125f,11.2f,-7.35f},{13.125f,11.2f,-6.8f},{13.125f,14.3f,-6.8f},m_cautionSign,1.f);
  }
  if(w.campaignChunk(9)){
