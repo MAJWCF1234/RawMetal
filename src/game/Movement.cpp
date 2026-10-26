@@ -180,6 +180,7 @@ int Game::nearbyTerminal()const{
  }return nearest;
 }
 bool Game::doorLocked(const Door& door)const{
+ if(m_unlockAll)return false;
  return (door.requireEnemiesClear&&enemiesRemaining()>0)||
         (door.requireControl&&!m_world.controlReleased())||
         (door.requireState&&state(door.requireState)!=door.requireValue);

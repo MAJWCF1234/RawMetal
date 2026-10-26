@@ -1272,7 +1272,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(vrMode){vrRuntime=std::make_unique<retro::VrRuntime>();std::string error;if(!vrRuntime->initialize(error))throw std::runtime_error(error);}
     retro::Win32Window window(W,H,L"Depthworks");
     if(!window.valid()) return 1;
-    retro::Game game;
+    retro::Game game;if(std::wcsstr(commandLine,L"--dev"))game.setDeveloperMode(true);
     game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
     bool exclusionZone=std::wcsstr(commandLine,L"--exclusion-zone")!=nullptr||std::wcsstr(commandLine,L"--guard-lab")!=nullptr;

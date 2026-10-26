@@ -282,6 +282,7 @@ void Game::reloadWeapon(){
  const auto&cycle=equippedWeaponDef().cycle;
  if(dead()||m_won||holdingClutter()||!m_weaponEquipped||m_reloadTimer>0||m_player.loaded>=cycle.tubeCapacity||m_player.ammo<=m_player.loaded)return;
  m_reloadTimer=cycle.reloadTime;m_shotCooldown=std::max(m_shotCooldown,m_reloadTimer);m_weaponKick=cycle.reloadKick;
+ m_vrChamberEmpty=m_vrPumpBack=false; // a reload chambers a round
 }
 
 void Game::updatePickups() {
@@ -323,6 +324,7 @@ void Game::update(const InputState& input, float dt) {
     if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}
     bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
     if(m_titleScreen){updateTitle(input);return;}
+    if(m_peaceful){m_enemies.clear();for(auto&chunk:m_chunks)chunk.enemies.clear();}
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
     if(consolePressed){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
     if(m_consoleOpen){updateConsole(input);return;}
@@ -406,8 +408,13 @@ void Game::update(const InputState& input, float dt) {
         float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&!takedownActive()&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
         float lower=(!m_weaponEquipped||m_player.ammo<=0)&&m_shotAge>cycle.autoHolsterAfter?1.f:0.f;
         m_holster+=std::clamp(lower-m_holster,-dt*2.6f,dt*2.6f);
-        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f) {
-            if(m_player.ammo>0&&m_player.loaded>0&&m_holster<cycle.raiseHolster){shoot();m_shotCooldown=cycle.fireCooldown;}
+        // VR pump: the support hand's distance along the barrel from the grip.
+        if(input.vrTracked){Point3 d=m_vrHandPosition[0]-m_vrAimPosition;m_vrPumpAlong=d.x*m_vrAimDirection.x+d.y*m_vrAimDirection.y+d.z*m_vrAimDirection.z;
+         if(m_vrChamberEmpty&&!m_vrSupportGrip)m_vrChamberEmpty=m_vrPumpBack=false; // let go: it cycles itself
+         if(m_vrChamberEmpty){if(m_vrPumpAlong<m_vrPumpRest-.07f)m_vrPumpBack=true;
+          else if(m_vrPumpBack&&m_vrPumpAlong>m_vrPumpRest-.025f){m_vrChamberEmpty=m_vrPumpBack=false;sound(Sound::Pump,.9f);}}}
+        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && !(input.vrTracked&&m_vrChamberEmpty)) {
+            if(m_player.ammo>0&&m_player.loaded>0&&m_holster<cycle.raiseHolster){shoot();m_shotCooldown=cycle.fireCooldown;if(input.vrTracked&&m_vrSupportGrip){m_vrChamberEmpty=true;m_vrPumpBack=false;m_vrPumpRest=m_vrPumpAlong;}}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
         // Guard perception consumes this frame's movement, throws and shots.

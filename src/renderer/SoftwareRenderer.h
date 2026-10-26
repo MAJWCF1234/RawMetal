@@ -98,6 +98,7 @@ private:
     bool m_vrRendering=false;
     bool m_vrReuseScene=false; // second eye: replay the first eye's geometry
     std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
+    std::vector<MeshTriangle> m_vrSupportGripMesh; // the left hand closed round the fore-end
     void drawTrackedHands(const Game& game);
     bool m_environmentInspection=false;
     bool m_staticGeometryBuild=false;

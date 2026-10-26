@@ -55,6 +55,7 @@ void Game::spawnScriptEnemy(const ScriptAction& action){
  spawnCreature({action.enemyKind,action.position,action.z},action.amount,true);m_enemies.back().scriptSpawned=true;
 }
 void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announce){
+ if(m_peaceful)return;
  Enemy e{};e.kind=spawn.kind;e.pos=spawn.position;e.home=e.pos;e.lastKnown=e.pos;
  e.hp=e.maxHp=e.kind==Enemy::Kind::Wasp?85.f:e.kind==Enemy::Kind::Brute?280.f:e.kind==Enemy::Kind::Warden?320.f:e.kind==Enemy::Kind::Mutant?180.f:110.f;
  e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.z;e.heading=kPi;

@@ -935,7 +935,9 @@ void SoftwareRenderer::prepareVrDisplays(const Game& game){
  if(health!=m_vrHealthShown){m_vrHealthShown=health;stamp(m_vrHealthTexture,128,24,[&]{const int lit=(health+9)/10;for(int i=0;i<10;++i)rect(4+i*12,5,10,14,i<lit?(health<30?warn:glass):dim);});}
  // The load in the gun, and the reserve beside it.
  const int load=game.player().loaded,reserve=std::max(0,game.player().ammo-load);
- if(load*1000+reserve!=m_vrAmmoShown){m_vrAmmoShown=load*1000+reserve;stamp(m_vrAmmoTexture,128,64,[&]{char text[16];std::snprintf(text,sizeof text,"%d",load);uiText(10,4,text,load?glass:warn,0,44);std::snprintf(text,sizeof text,"%d",reserve);uiText(74,30,text,rgb(90,140,160),0,20);});}
+ const int ammoKey=load*1000+reserve+(game.reloading()?500:0);
+ if(ammoKey!=m_vrAmmoShown){m_vrAmmoShown=ammoKey;stamp(m_vrAmmoTexture,128,64,[&]{char text[16];std::snprintf(text,sizeof text,"%d",load);uiText(10,4,text,load?glass:warn,0,44);
+  if(game.reloading())uiText(62,8,"LOADING",rgb(255,190,90),0,14,1,1);std::snprintf(text,sizeof text,"%d",reserve);uiText(74,30,text,rgb(90,140,160),0,20);});}
  // Area titles fade in and out as on the desktop.
  const float titleAlpha=game.areaTitleAlpha();
  if(std::fabs(titleAlpha-m_vrTitleShown)>.01f){m_vrTitleShown=titleAlpha;stamp(m_vrTitleTexture,512,64,[&]{if(titleAlpha<=0)return;const char* title=game.areaTitle().c_str();const int size=34,track=10,width=uiTextWidth(title,1,size,track);uiText(256-width/2,10,title,rgb(250,248,242),1,size,titleAlpha,track);});}

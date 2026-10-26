@@ -2182,7 +2182,6 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  // hand or the gun never hides it.
  auto clear=[](Point3 c,float lift,float pull){c.y+=lift;float l=std::sqrt(c.x*c.x+c.y*c.y+c.z*c.z);return l>pull?c*((l-pull)/l):c;};
  if(hands[0].tracked){const auto&h=hands[0];card(clear(at(h.handFrame?h.handOrigin+h.handBasis[2]*-.05f:h.position),.05f,.07f),.10f,.019f,m_vrHealthTexture);}
- if(hands[1].tracked&&game.weaponEquipped()&&!game.unarmed()){const auto&h=hands[1];card(clear(at(h.handFrame?h.gunOrigin:h.position),.08f,.09f),.08f,.04f,m_vrAmmoTexture);}
  card({0,.24f,1.8f},1.2f,.15f,m_vrTitleTexture);card({0,-.42f,1.5f},.9f,.127f,m_vrCaptionTexture);
 
  if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
@@ -2200,6 +2199,11 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   // its older offsets.
   const float gripLift=hands[1].handFrame?0.f:.055f,gripBack=hands[1].handFrame?.13f:.25f;
   for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack};}draw(face,m_weaponTexture,gun);}
+  // The load, on a plate on the left of the receiver (facing the player's eye
+  // when the gun is held right-handed); drawn both ways round.
+  if(!m_vrAmmoTexture.pixels.empty()){const float x=-.036f,y0=.022f,y1=.052f,z0=-.08f,z1=-.02f;
+   MeshTriangle plate{{{{x,y0,z0},0,1},{{x,y0,z1},1,1},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y1,z0},0,0}}};draw(plate,m_vrAmmoTexture,gun);
+   plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y0,z1},1,1}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z0},0,0},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);}
  }
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){

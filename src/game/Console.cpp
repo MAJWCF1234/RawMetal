@@ -33,6 +33,7 @@ void Game::executeConsole(std::string command){
   m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=13;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL COAST / WALK EAST TO THE WATER.");
  }
  else if(verb=="give"&&arg=="flashlight"&&extra.empty()){giveQuestItem(Flashlight);m_consoleLog.push_back("FLASHLIGHT ADDED. F TO TOGGLE.");}
+ else if(verb=="dev"){setDeveloperMode(!developerMode());m_consoleLog.push_back(developerMode()?"DEVELOPER MODE ON: NO DAMAGE, NO CREATURES, EVERY DOOR OPEN.":"DEVELOPER MODE OFF.");}
  else if(verb=="god"){m_god=!m_god;if(m_god)m_player.health=std::max(m_player.health,100.f);m_consoleLog.push_back(m_god?"GOD MODE ON: NO DAMAGE.":"GOD MODE OFF.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
  else if(verb=="r_scale"){

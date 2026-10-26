@@ -17,7 +17,7 @@ float axis(float value){float a=std::fabs(value);return a<.18f?0:std::copysign(s
 }
 struct VrRuntime::Impl {
  HMODULE dll=nullptr;void(__cdecl* shutdown)()=nullptr;vr::IVRSystem* system=nullptr;vr::IVRCompositor* compositor=nullptr;vr::IVRInput* input=nullptr;
- std::array<vr::VRActionHandle_t,13> actions{};bool crouchToggled=false,previousCrouch=false;
+ std::array<vr::VRActionHandle_t,13> actions{};bool crouchToggled=false,previousCrouch=false;int framesSeen=0;
  // SteamVR's grip pose: the same hand frame on every controller (the legacy
  // device pose is pitched differently on Touch, Index and Vive controllers).
  vr::VRActionHandle_t grip[2]{};std::array<vr::HmdMatrix34_t,2> raw{},gripPose{};std::array<bool,2> gripValid{};
@@ -49,7 +49,9 @@ struct VrRuntime::Impl {
   // knuckles, anchored in the palm. Built in tracking space like the hand, so the
   // aim and the model agree with the hand the player sees.
   const Point3 back=forward*-1.f,right=unit(cross(across,back)),up=unit(cross(back,right));
-  const Point3 grip=wrist+forward*.075f-palm*.03f;
+  // The mesh frame's +y is the palm side (the closed fist spans y -0.03 to
+  // +0.06): the grip goes through the fist, 7.5 cm along and 3 cm into the palm.
+  const Point3 grip=wrist+forward*.075f+palm*.03f;
   h.gunOrigin=world(grip,game);h.gunBasis={rotateTracking(right,yaw),rotateTracking(up,yaw),rotateTracking(back,yaw)};
   return true;
  }
@@ -154,6 +156,10 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  if(m->input&&m->set){
   auto digital=[&](int action,bool fallback){vr::InputDigitalActionData_t data{};return m->input->GetDigitalActionData(m->actions[action],&data,sizeof(data),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&data.bActive?data.bState:fallback;};
   for(int side=0;side<2;++side){states[side].rAxis[1].x=digital(side,states[side].rAxis[1].x>.65f)?1.f:0.f;vr::InputAnalogActionData_t squeeze{};bool grip=digital(side+2,(states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))!=0);if(m->input->GetAnalogActionData(m->actions[4+side],&squeeze,sizeof(squeeze),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&squeeze.bActive)grip|=squeeze.x>.65f;if(grip)states[side].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_Grip);else states[side].ulButtonPressed&=~vr::ButtonMaskFromId(vr::k_EButton_Grip);vr::InputAnalogActionData_t move{};if(m->input->GetAnalogActionData(m->actions[6+side],&move,sizeof(move),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&move.bActive)sticks[side]={move.x,move.y};}
+  // Once SteamVR has loaded the bindings, record what drives each button action.
+  if(++m->framesSeen==180){wchar_t local[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);std::ofstream log(std::filesystem::path(local)/L"RawMetal/vr/bindings-active.txt");
+   const char* labels[]={"jump","reload","menu","inventory","crouch"};const int ids[]={8,9,10,11,12};
+   for(int k=0;k<5;++k){vr::VRInputValueHandle_t origins[vr::k_unMaxActionOriginCount]{};log<<labels[k]<<":";if(m->input->GetActionOrigins(m->set,m->actions[size_t(ids[k])],origins,vr::k_unMaxActionOriginCount)==vr::VRInputError_None)for(auto origin:origins){if(!origin)break;char name[128]{};m->input->GetOriginLocalizedName(origin,name,sizeof name,vr::VRInputString_All);log<<" ["<<name<<"]";}log<<'\n';}}
   jumpButton=digital(8,jumpButton);reloadButton=digital(9,reloadButton);crouchButton=digital(12,crouchButton);menuButton=digital(10,menuButton);input.inventory|=digital(11,false);
  }
  // SteamVR action state can outlive its tracked device. Discard it before

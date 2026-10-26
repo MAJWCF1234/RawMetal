@@ -186,6 +186,13 @@ public:
     void setVrAim(Point3 position,Point3 direction,bool valid,bool support=false){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;m_vrSupportGrip=support&&valid;}
     void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandValid[side]=valid;}
     bool vrSupportGrip()const{return m_vrSupportGrip;}
+    // Developer mode (--dev, console DEV): no damage, no creatures, every door open.
+    void setDeveloperMode(bool on){m_god=m_peaceful=m_unlockAll=on;if(on){m_player.health=std::max(m_player.health,100.f);m_enemies.clear();}}
+    bool developerMode()const{return m_unlockAll;}
+    bool reloading()const{return m_reloadTimer>0;}
+    // VR pump: fired with the support hand on the fore-end, the shotgun waits for
+    // a stroke (back 7 cm, forward again). How far back the pump is, for drawing.
+    float vrPumpOffset()const{return m_vrChamberEmpty&&m_vrSupportGrip?std::clamp(m_vrPumpRest-m_vrPumpAlong,0.f,.1f):0.f;}
     void restart();
     int level()const{return m_level;}
     // Campaign content count; runtime custom packs use their authored map count.
@@ -469,7 +476,7 @@ private:
     void syncReactorComplex();
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
-    bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false;
+    bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false,m_peaceful=false,m_unlockAll=false;
     std::string m_consoleLine;
     std::vector<std::string> m_consoleLog{"DEPTHWORKS DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
     std::vector<std::string> m_consoleHistory;
@@ -679,7 +686,7 @@ private:
     bool m_aiQueryCaching=true;
     bool m_aiDecisionScheduling=true;
     bool m_navAuthority=true;
-    bool m_vrAimValid=false,m_vrSupportGrip=false;
+    bool m_vrAimValid=false,m_vrSupportGrip=false,m_vrChamberEmpty=false,m_vrPumpBack=false;float m_vrPumpRest=0,m_vrPumpAlong=0;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;
     std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{};
