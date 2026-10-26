@@ -69,6 +69,7 @@ add_executable(RawMetal WIN32
     game/Inventory.cpp
     game/Movement.cpp
     game/GantryTest.cpp
+    game/EngineRegressionTest.cpp
     game/Lift.cpp
     game/Reactor.cpp
     game/Console.cpp

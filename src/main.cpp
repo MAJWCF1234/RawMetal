@@ -805,6 +805,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--guard-table-test"))return retro::Game::testGuardTable()?0:21;
     if(commandArguments().find(L"--nav-graph-test"))return retro::Game::testNavGraph()?0:21;
     if(commandArguments().find(L"--creature-behaviour-test"))return retro::Game::testCreatureBehaviour()?0:21;
+    if(commandArguments().find(L"--engine-regression-test"))return retro::Game::testEngineRegression()?0:21;
     if(commandArguments().find(L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
     if(commandArguments().find(L"--civilian-schedule-test"))return retro::Game::testCivilianSchedule()?0:21;
     if(commandArguments().find(L"--guard-patient-test"))return retro::Game::testGuardPatient()?0:21;
@@ -1218,7 +1219,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
          {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
-         {"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
+         {"engine-regression",retro::Game::testEngineRegression},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
          {"lift-mix",retro::AudioEngine::testLiftMix},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},
