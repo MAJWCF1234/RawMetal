@@ -96,6 +96,7 @@ private:
     std::array<PanelRaster,16> m_panelRasters;
     size_t m_nextPanelRaster=0;
     bool m_vrRendering=false;
+    bool m_vrReuseScene=false; // second eye: replay the first eye's geometry
     std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
     void drawTrackedHands(const Game& game);
     bool m_environmentInspection=false;
@@ -125,6 +126,10 @@ private:
     static Point3 sampleNormal(const Texture& texture,float u,float v,float lod);
     bool testNormalMapping();
     Texture m_vrWristTexture;
+    // Alyx-style VR displays: health on the back of the left hand, the load on
+    // the gun, and area titles and subtitles floating ahead (additive glass).
+    Texture m_vrHealthTexture,m_vrAmmoTexture,m_vrTitleTexture,m_vrCaptionTexture;
+    int m_vrHealthShown=-1,m_vrAmmoShown=-1;float m_vrTitleShown=-1;std::string m_vrCaptionShown,m_vrObjective;float m_vrObjectiveTime=0;
     Texture m_muzzleFlash;
     Texture m_water,m_coastWater;
     Texture m_terrainDirt,m_terrainRock,m_coastSand,m_coastRock;
@@ -228,6 +233,8 @@ private:
     void put(int x,int y,std::uint32_t c);
     void rect(int x,int y,int w,int h,std::uint32_t c);
     void drawVrStatus(const Game& game);
+    void drawTerminal(const Game& game);
+    void prepareVrDisplays(const Game& game);
     void drawComputer(const Game& game,int terminal);
     void drawHud(const Game& game);
     void drawTitle(const Game& game);

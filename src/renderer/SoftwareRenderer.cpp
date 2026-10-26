@@ -831,6 +831,12 @@ void SoftwareRenderer::drawHud(const Game& game){
   promptPanel(m_height-65,message,amber);
  }
  if(auto hint=game.interactionHint();hint&&game.logTime()<=0)promptPanel(m_height-88,hint,paper);
+ drawTerminal(game);
+}
+// A terminal open on screen: the personnel computer full screen, or the
+// local-control panel. The desktop HUD and the VR panel both draw it.
+void SoftwareRenderer::drawTerminal(const Game& game){
+ const int cx=m_width/2;
  if(game.logTime()>0&&game.activeLog()>=0&&!game.world().terminals()[size_t(game.activeLog())].control&&game.world().terminals()[size_t(game.activeLog())].reactorAction<2){
   drawComputer(game,game.activeLog());
  }else if(game.logTime()>0&&game.activeLog()>=0){auto&log=game.world().terminals()[size_t(game.activeLog())];
@@ -912,6 +918,33 @@ void SoftwareRenderer::drawVrStatus(const Game&game){
  // Map and contacts remain available on the device, never across the headset view.
  for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(game.world().solid(x+.5f,y+.5f))rect(530+x*3,180+y*3,3,3,0xff0b3417u);const auto&p=game.player();rect(530+int(p.pos.x*3),180+int(p.pos.y*3),3,3,green);for(const auto&e:game.enemies())if(e.alive&&lengthSq(e.pos-p.pos)<36)rect(530+int(e.pos.x*3),180+int(e.pos.y*3),3,3,green);auto exit=game.world().exitPoint();rect(530+int(exit.x*3),180+int(exit.y*3),4,4,green);
  rect(24,292,266,50,0xff082510u);text(42,307,"INVENTORY",green,3);rect(334,292,282,50,0xff082510u);text(354,307,"MENU / SAVE",green,3);
+}
+// Alyx-style VR presentation: no HUD across the view. Small textures, drawn on
+// the renderer's own canvas and copied out, for the displays that ride on the
+// hands and float ahead; all additive, so black is clear glass and text glows.
+void SoftwareRenderer::prepareVrDisplays(const Game& game){
+ auto stamp=[&](Texture& texture,int width,int height,const auto& draw){
+  std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);draw();
+  if(texture.pixels.size()!=size_t(width*height)){texture={width,height,std::vector<std::uint32_t>(size_t(width*height))};texture.clampEdges=true;texture.additive=true;}
+  for(int y=0;y<height;++y)std::copy_n(m_pixels.begin()+size_t(y)*size_t(m_width),width,texture.pixels.begin()+size_t(y)*size_t(width));
+  m_gpu->updateDynamic(texture);
+ };
+ const auto glass=rgb(150,225,255),dim=rgb(24,44,54),warn=rgb(255,96,60);
+ // Health: ten cells on the back of the left hand, red below 30.
+ const int health=int(std::clamp(game.player().health,0.f,100.f));
+ if(health!=m_vrHealthShown){m_vrHealthShown=health;stamp(m_vrHealthTexture,128,24,[&]{const int lit=(health+9)/10;for(int i=0;i<10;++i)rect(4+i*12,5,10,14,i<lit?(health<30?warn:glass):dim);});}
+ // The load in the gun, and the reserve beside it.
+ const int load=game.player().loaded,reserve=std::max(0,game.player().ammo-load);
+ if(load*1000+reserve!=m_vrAmmoShown){m_vrAmmoShown=load*1000+reserve;stamp(m_vrAmmoTexture,128,64,[&]{char text[16];std::snprintf(text,sizeof text,"%d",load);uiText(10,4,text,load?glass:warn,0,44);std::snprintf(text,sizeof text,"%d",reserve);uiText(74,30,text,rgb(90,140,160),0,20);});}
+ // Area titles fade in and out as on the desktop.
+ const float titleAlpha=game.areaTitleAlpha();
+ if(std::fabs(titleAlpha-m_vrTitleShown)>.01f){m_vrTitleShown=titleAlpha;stamp(m_vrTitleTexture,512,64,[&]{if(titleAlpha<=0)return;const char* title=game.areaTitle().c_str();const int size=34,track=10,width=uiTextWidth(title,1,size,track);uiText(256-width/2,10,title,rgb(250,248,242),1,size,titleAlpha,track);});}
+ // Subtitles, or a new objective for six seconds.
+ std::string objective(game.activeObjectiveText());
+ if(objective!=m_vrObjective){m_vrObjective=objective;m_vrObjectiveTime=objective.empty()?0.f:6.f;}
+ m_vrObjectiveTime=std::max(0.f,m_vrObjectiveTime-1.f/90.f);
+ std::string caption(game.actorCaption());if(caption.empty()&&m_vrObjectiveTime>0)caption="OBJECTIVE: "+m_vrObjective;
+ if(caption!=m_vrCaptionShown){m_vrCaptionShown=caption;stamp(m_vrCaptionTexture,512,72,[&]{int y=4;for(const auto& row:wrapUiText(caption,size_t(64),3)){const int width=uiTextWidth(row.c_str(),1,18);uiText(256-width/2,y,row.c_str(),rgb(235,235,230),1,18);y+=22;}});}
 }
 void SoftwareRenderer::drawTitle(const Game& game){
  static unsigned tick=0;++tick;const bool blink=(tick/30)%2==0;
@@ -1064,7 +1097,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection)drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
- if(m_gpu){try{m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
+ if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
   std::array<float,16> fogLights{};std::array<float,4> fogPowers{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
   const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
    if(lamp.mount==WorldLightMount::Wall||lamp.intensity<=0)continue;
@@ -1134,7 +1167,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   // fill and exposure lift go, and a shot lights the room out to 12 m.
   const float darkness=game.darkness();for(int c=0;c<3;++c)atmosphere[size_t(c)]*=1.f-darkness;
   m_gpu->setDarkness(darkness,.045f-.033f*darkness,game.weaponFlashes());
-  m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
+  m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();if(!m_vrReuseScene)scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';
    // Mid-session fallbacks are rare and look like a sudden quality drop; keep an appended record for diagnosis.
    std::ofstream("RawMetal-renderer-events.txt",std::ios::app)<<"Vulkan frame failed, falling back to software: "<<e.what()<<" (map "<<game.level()<<" at "<<game.player().pos.x<<','<<game.player().pos.y<<")\n";m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
@@ -1158,9 +1191,8 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
- if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering)drawVrStatus(game);else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}}
- if(m_vrRendering){for(auto&pixel:m_pixels){unsigned intensity=std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u});pixel=0xff000000u|((intensity/4)<<16)|(intensity<<8)|(intensity/3);}}
- if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xff7aff9au);rect(x-1,y-3,3,7,0xff7aff9au);}}
+ if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}}
+ if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xfff4f4f0u);rect(x-1,y-3,3,7,0xfff4f4f0u);}}
  auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
  m_presentMs=0;
@@ -1189,8 +1221,8 @@ void SoftwareRenderer::renderVrEye(const Game&game,int eye){
  if(!m_gpu||!m_gpu->vrActive())throw std::runtime_error("VR requires the Vulkan renderer");
  m_vrRendering=true;
  try{m_gpu->setVrEye(eye,VrRuntime::active()->eye(eye,game).clip);if(eye==0){
-  if(!game.titleScreen()){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawVrStatus(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);for(auto&pixel:m_pixels){unsigned intensity=std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u});pixel=0xff000000u|((intensity/4)<<16)|(intensity<<8)|(intensity/3);}auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-1,9,3,0xff80ffa0u);rect(x-1,y-4,3,9,0xff80ffa0u);}if(m_vrWristTexture.pixels.empty()){m_vrWristTexture={m_width,m_height,std::vector<uint32_t>(size_t(m_width*m_height))};m_vrWristTexture.clampEdges=true;}std::copy_n(m_pixels.begin(),m_vrWristTexture.pixels.size(),m_vrWristTexture.pixels.begin());m_gpu->updateDynamic(m_vrWristTexture);}
-  const auto&hands=VrRuntime::active()->hands();for(int side=0;side<2;++side)m_vrHandMeshes[side]=hands[side].tracked?m_armsMesh.trackedHand(side==0,hands[side].curls):std::vector<MeshTriangle>{};}render(game);}
- catch(...){m_vrRendering=false;throw;}
+  if(!game.titleScreen())prepareVrDisplays(game);
+  const auto&hands=VrRuntime::active()->hands();for(int side=0;side<2;++side)m_vrHandMeshes[side]=hands[side].tracked?m_armsMesh.trackedHand(side==0,hands[side].curls):std::vector<MeshTriangle>{};}m_vrReuseScene=eye==1;render(game);m_vrReuseScene=false;}
+ catch(...){m_vrRendering=false;m_vrReuseScene=false;throw;}
  m_vrRendering=false;
 }}

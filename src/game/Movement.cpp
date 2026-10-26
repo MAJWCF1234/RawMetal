@@ -102,9 +102,12 @@ void Game::updateMovement(const InputState& input,float dt){
   if(lengthSq(wish)>0){
    float acceleration=m_player.grounded?12.f:3.f;
    // Air control accelerates only the requested component, retaining launch momentum.
-   float target=m_player.grounded?wishSpeed:std::min(wishSpeed,1.25f);
-   float add=target-dot(m_velocity,wish);
-   if(add>0)m_velocity+=wish*std::min(add,acceleration*wishSpeed*step);
+   // A part-pushed stick walks slower: speed follows the deflection (keys are
+   // always full). Acceleration runs along the wish direction.
+   const float amount=std::min(1.f,length(wish));const Vec2 direction=wish*(1.f/length(wish));
+   float target=(m_player.grounded?wishSpeed:std::min(wishSpeed,1.25f))*amount;
+   float add=target-dot(m_velocity,direction);
+   if(add>0)m_velocity+=direction*std::min(add,acceleration*wishSpeed*step);
   }
   tryMove(m_velocity*step);
   float ground=groundHeight(m_player.pos);

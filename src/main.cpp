@@ -1263,6 +1263,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      retro::Mesh arms(111);int file=0;
      for(bool left:{false,true})for(float curl:{0.f,1.f}){std::ofstream obj(std::string("vr-hand-")+(left?"left":"right")+(curl>0?"-closed":"-open")+".obj");int n=0;
       for(const auto&t:arms.trackedHand(left,{curl,curl,curl,curl,curl})){for(const auto&v:t.v)obj<<"v "<<v.p.x<<' '<<v.p.y<<' '<<v.p.z<<'\n';obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}++file;}
+     {retro::Mesh weapon(109);std::ofstream obj("vr-weapon.obj");int n=0;for(const auto&t:weapon.triangles){for(const auto&v:t.v)obj<<"v "<<v.p.x<<' '<<v.p.y<<' '<<v.p.z<<'\n';obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}}
      return file==4?0:1;}
     if(std::wcsstr(commandLine,L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
     bool vrMode=std::wcsstr(commandLine,L"--vr")!=nullptr;

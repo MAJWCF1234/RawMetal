@@ -11,6 +11,7 @@ public:
  explicit GpuRenderer(void* window=nullptr);
  ~GpuRenderer();
  void begin(int width,int height);
+ void beginReuse();
  void setView(float eyeX,float eyeY,float eyeZ,float yaw,float pitch,float aspect,bool flashlight,float muzzleFlash,float elapsed=0.f);
  void setFogLights(const std::array<float,16>& lights,const std::array<float,4>& powers={1.f,1.f,1.f,1.f});
  // Crisp keeps source texels square when magnified; smooth is plain bilinear.

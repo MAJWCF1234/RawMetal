@@ -8,7 +8,9 @@ namespace retro {
 // position/basis: the controller (aim) frame. handOrigin/handBasis: where SteamVR's
 // skeleton puts the hand on that controller, in the hand mesh's frame (x across
 // pinky to index, y palm, z back from the knuckles), when skeletal input is live.
-struct VrHand {bool tracked=false,articulated=false,handFrame=false;Point3 position{};std::array<Point3,3> basis{};Point3 handOrigin{};std::array<Point3,3> handBasis{};std::array<float,5> curls{};};
+// gunOrigin/gunBasis: the weapon held in that hand, grip in the palm and the
+// barrel along the knuckles ({side, up, back}, as the controller frame).
+struct VrHand {bool tracked=false,articulated=false,handFrame=false;Point3 position{};std::array<Point3,3> basis{};Point3 handOrigin{};std::array<Point3,3> handBasis{};Point3 gunOrigin{};std::array<Point3,3> gunBasis{};std::array<float,5> curls{};};
 struct VrEye {Point3 position{};std::array<float,16> clip{};};
 class VrRuntime {
 public:

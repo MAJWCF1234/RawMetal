@@ -2171,25 +2171,35 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  // it falls back to the controller frame.
  for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}
   for(const auto&triangle:m_vrHandMeshes[side])draw(triangle,m_arms,frame);}
- if(hands[0].tracked){
-  // Steel casing mounted behind the left hand; the tracked overlay is its recessed screen.
-  auto face=[&](Point3 a,Point3 b,Point3 c,Point3 d){a=VrRuntime::wristPoint(a);b=VrRuntime::wristPoint(b);c=VrRuntime::wristPoint(c);d=VrRuntime::wristPoint(d);MeshTriangle t{{{a,0,0},{b,1,0},{c,1,1}}};draw(t,m_panelMetal,hands[0]);t={{{a,0,0},{c,1,1},{d,0,1}}};draw(t,m_panelMetal,hands[0]);};
-  auto casing=[&](Point3 a,Point3 b){face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,b.y,a.z},{a.x,b.y,a.z});face({b.x,a.y,b.z},{a.x,a.y,b.z},{a.x,b.y,b.z},{b.x,b.y,b.z});face({a.x,a.y,b.z},{a.x,a.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z});face({b.x,a.y,a.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{b.x,b.y,a.z});face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{a.x,b.y,b.z});face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,a.y,a.z},{a.x,a.y,a.z});};
-  if(!m_vrWristTexture.pixels.empty()){MeshTriangle screen{{{{-.11f,.037f,.068125f},0,0},{{.11f,.037f,.068125f},1,0},{{.11f,.037f,.191875f},1,1}}};for(auto&v:screen.v)v.p=VrRuntime::wristPoint(v.p);draw(screen,m_vrWristTexture,hands[0]);screen={{{{-.11f,.037f,.068125f},0,0},{{.11f,.037f,.191875f},1,1},{{-.11f,.037f,.191875f},0,1}}};for(auto&v:screen.v)v.p=VrRuntime::wristPoint(v.p);draw(screen,m_vrWristTexture,hands[0]);}
-  casing({-.126f,-.035f,.045f},{.126f,.027f,.215f});casing({-.126f,.027f,.045f},{-.111f,.043f,.215f});casing({.111f,.027f,.045f},{.126f,.043f,.215f});casing({-.111f,.027f,.045f},{.111f,.043f,.065f});casing({-.111f,.027f,.195f},{.111f,.043f,.215f});
- }
+ // Alyx-style displays (SoftwareRenderer::prepareVrDisplays): camera-facing
+ // glass cards on the back of the left hand and on the gun, and title and
+ // subtitle cards held ahead of the head. Both windings, so no culling.
+ auto card=[&](Point3 c,float width,float height,const Texture&texture){if(texture.pixels.empty())return;
+  MeshVertex a{{c.x-width*.5f,c.y-height*.5f,c.z},0,1},b{{c.x+width*.5f,c.y-height*.5f,c.z},1,1},d{{c.x+width*.5f,c.y+height*.5f,c.z},1,0},e{{c.x-width*.5f,c.y+height*.5f,c.z},0,0};
+  triangle3D(a,b,d,texture,1.f);triangle3D(a,d,e,texture,1.f);triangle3D(a,d,b,texture,1.f);triangle3D(a,e,d,texture,1.f);};
+ auto at=[&](Point3 world){world.x-=origin.x;world.y-=origin.y;return cameraPoint(world,game);};
+ // Each card sits just above its hand and is pulled toward the eye, so the
+ // hand or the gun never hides it.
+ auto clear=[](Point3 c,float lift,float pull){c.y+=lift;float l=std::sqrt(c.x*c.x+c.y*c.y+c.z*c.z);return l>pull?c*((l-pull)/l):c;};
+ if(hands[0].tracked){const auto&h=hands[0];card(clear(at(h.handFrame?h.handOrigin+h.handBasis[2]*-.05f:h.position),.05f,.07f),.10f,.019f,m_vrHealthTexture);}
+ if(hands[1].tracked&&game.weaponEquipped()&&!game.unarmed()){const auto&h=hands[1];card(clear(at(h.handFrame?h.gunOrigin:h.position),.08f,.09f),.08f,.04f,m_vrAmmoTexture);}
+ card({0,.24f,1.8f},1.2f,.15f,m_vrTitleTexture);card({0,-.42f,1.5f},.9f,.127f,m_vrCaptionTexture);
 
  if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
-  VrHand gun=hands[1];
+  VrHand gun=hands[1];if(gun.handFrame){gun.position=gun.gunOrigin;gun.basis=gun.gunBasis;}
   if(game.vrSupportGrip()&&hands[0].tracked){
-   auto delta=hands[0].position-hands[1].position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
-   if(length>.0001f){Point3 back={-delta.x/length,-delta.y/length,-delta.z/length},upHint=hands[1].basis[1];
-    Point3 side={upHint.y*back.z-upHint.z*back.y,upHint.z*back.x-upHint.x*back.z,upHint.x*back.y-upHint.y*back.x};float sideLength=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);
-    if(sideLength>.0001f){side=side*(1.f/sideLength);Point3 up={back.y*side.z-back.z*side.y,back.z*side.x-back.x*side.z,back.x*side.y-back.y*side.x};gun.basis={side,up,back};}
+   auto delta=(hands[0].handFrame?hands[0].gunOrigin:hands[0].position)-gun.position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
+   if(length>.0001f){Point3 back={-delta.x/length,-delta.y/length,-delta.z/length},upHint=gun.basis[1];
+    Point3 side={back.y*upHint.z-back.z*upHint.y,back.z*upHint.x-back.x*upHint.z,back.x*upHint.y-back.y*upHint.x};float sideLength=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);
+    if(sideLength>.0001f){side=side*(1.f/sideLength);Point3 up={side.y*back.z-side.z*back.y,side.z*back.x-side.x*back.z,side.x*back.y-side.y*back.x};gun.basis={side,up,back};}
    }
   }
   auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=.85f/std::max({range.x,range.y,range.z});
-  for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-.055f,p.z-.25f};}draw(face,m_weaponTexture,gun);}
+  // In the grip frame the pistol grip sits in the palm (13 cm behind the model's
+  // centre) with the bore about 6 cm above the fist; the controller frame keeps
+  // its older offsets.
+  const float gripLift=hands[1].handFrame?0.f:.055f,gripBack=hands[1].handFrame?.13f:.25f;
+  for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack};}draw(face,m_weaponTexture,gun);}
  }
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){

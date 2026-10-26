@@ -573,6 +573,8 @@ struct GpuRenderer::Impl {
  }
  std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
  std::vector<Vertex> vertices;std::vector<Batch> batches;
+ // VR: the first eye's batches before sorting, replayed for the second eye.
+ std::vector<Batch> vrBatches;
  std::vector<ActorTriangle> actorVertices;
  std::array<Buffer,FrameCount> actorBuffers{};
  std::vector<ActorLighting> actorLights;
@@ -807,7 +809,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   if((properties.optimalTilingFeatures&required)==required){m->sceneFormat=format;m->hdrScene=true;break;}
  }
   VkPhysicalDeviceProperties properties{};vkGetPhysicalDeviceProperties(m->physical,&properties);VkFormatProperties colorProperties{},depthProperties{};vkGetPhysicalDeviceFormatProperties(m->physical,m->sceneFormat,&colorProperties);vkGetPhysicalDeviceFormatProperties(m->physical,VK_FORMAT_D32_SFLOAT,&depthProperties);VkSampleCountFlags sampleCounts=properties.limits.framebufferColorSampleCounts&properties.limits.framebufferDepthSampleCounts;colorProperties.optimalTilingFeatures&=VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;depthProperties.optimalTilingFeatures&=VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;if(colorProperties.optimalTilingFeatures&&depthProperties.optimalTilingFeatures){VkImageFormatProperties cp{},dp{};if(vkGetPhysicalDeviceImageFormatProperties(m->physical,m->sceneFormat,VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,0,&cp)==VK_SUCCESS&&vkGetPhysicalDeviceImageFormatProperties(m->physical,VK_FORMAT_D32_SFLOAT,VK_IMAGE_TYPE_2D,VK_IMAGE_TILING_OPTIMAL,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,0,&dp)==VK_SUCCESS)sampleCounts&=cp.sampleCounts&dp.sampleCounts;else sampleCounts=VK_SAMPLE_COUNT_1_BIT;}else sampleCounts=VK_SAMPLE_COUNT_1_BIT;
-  for(auto candidate:{VK_SAMPLE_COUNT_4_BIT,VK_SAMPLE_COUNT_2_BIT})if(sampleCounts&candidate){m->sceneSamples=candidate;break;}
+  for(auto candidate:{VK_SAMPLE_COUNT_4_BIT,VK_SAMPLE_COUNT_2_BIT})if(sampleCounts&candidate&&!(m->vrMode&&candidate==VK_SAMPLE_COUNT_4_BIT)){m->sceneSamples=candidate;break;} // VR renders two large eyes: 2x
   m->name+=m->hdrScene?" / linear HDR":" / LDR";
   if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->name+=" / "+std::to_string(int(m->sceneSamples))+"x MSAA";
   VkPhysicalDeviceFeatures supported{};vkGetPhysicalDeviceFeatures(m->physical,&supported);VkPhysicalDeviceFeatures enabled{};enabled.samplerAnisotropy=supported.samplerAnisotropy;
@@ -1064,6 +1066,19 @@ void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
 void GpuRenderer::prepare(const SoftwareRenderer::Texture&texture){m->material(texture);}
 void GpuRenderer::flushUploads(){m->flushUploads();}
 std::array<std::uint64_t,4> GpuRenderer::uploadStatistics()const{return m->uploadStats;}
+// The second VR eye draws the first eye's geometry again: every triangle is
+// built from the head-centre camera, so only the eye projection differs.
+void GpuRenderer::beginReuse(){
+ m->frameIndex=(m->frameIndex+1)%Impl::FrameCount;
+ if(m->frameInFlight[m->frameIndex]){
+  auto waitStart=std::chrono::steady_clock::now();
+  check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for frame fence");
+  perf::costs[perf::FenceWait]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-waitStart).count();
+  m->frameInFlight[m->frameIndex]=false;
+ }
+ for(auto&buffer:m->retiredBuffers[m->frameIndex])m->destroy(buffer);m->retiredBuffers[m->frameIndex].clear();
+ m->batches=m->vrBatches;m->capturing=false;m->captureSlot=-1;
+}
 void GpuRenderer::begin(int width,int height){
  // Advance to the next frame slot.
  m->frameIndex=(m->frameIndex+1)%Impl::FrameCount;
@@ -1364,6 +1379,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  if(actorBytes>ab.size){auto allocationStart=std::chrono::steady_clock::now();m->destroy(ab);m->makeBuffer(ab,std::max(actorBytes*2,size_t(1048576)),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);++perf::gpuBufferGrowths;perf::costs[perf::GpuAllocation]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-allocationStart).count();}
  if(m->frameVertexCapacity!=m->vertices.capacity()||m->frameActorCapacity!=m->actorVertices.capacity())++perf::cpuGrowthFrames;
  auto* actorDest=static_cast<ActorTriangle*>(ab.mapped);uint32_t actorOffset=0;
+ if(m->vrMode&&m->vrEye==0)m->vrBatches=m->batches;
  m->sortedBatches.clear();
  for(size_t begin=0;begin<m->batches.size();){
   if(m->batches[begin].clear||m->batches[begin].cache){m->sortedBatches.push_back(m->batches[begin++]);continue;}
@@ -1378,7 +1394,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  }
  m->batches.swap(m->sortedBatches);
  m->startCommands();
- m->renderLampShadows(m->commands[m->frameIndex]);m->renderSunShadows(m->commands[m->frameIndex]);
+ if(!(m->vrMode&&m->vrEye==1)){m->renderLampShadows(m->commands[m->frameIndex]);m->renderSunShadows(m->commands[m->frameIndex]);} // the second eye reuses the first eye's shadow maps
   VkClearValue clear[5]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};clear[depthIndex+1].color=VkClearColorValue{{1.f,0.f,.5f,1.f}};
  VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
  auto cmd=m->commands[m->frameIndex];
@@ -1546,7 +1562,7 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
    }else if(result==VK_ERROR_OUT_OF_DATE_KHR)m->initMirror();else if(result!=VK_NOT_READY&&result!=VK_TIMEOUT)check(result,"Acquire spectator image");
   }
  }
- if(m->vrMode){m->barrier(m->overlay,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->barrier(m->vrOutputs[m->vrEye],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->submitCommandsAsync(mirrorAcquired?m->acquiredSems[m->frameIndex]:VK_NULL_HANDLE,mirrorAcquired?m->readySemaphores[mirrorIndex]:VK_NULL_HANDLE);check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for VR eye");m->frameInFlight[m->frameIndex]=false;if(m->vrEye==1)VrRuntime::active()->submitPanel(m->instance,m->physical,m->device,m->queue,m->family,m->overlay.handle,overlayWidth,overlayHeight);VrRuntime::active()->submit(m->vrEye,m->instance,m->physical,m->device,m->queue,m->family,m->vrOutputs[m->vrEye].handle,m->swapExtent.width,m->swapExtent.height);if(mirrorAcquired){VkPresentInfoKHR spectator{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};spectator.waitSemaphoreCount=1;spectator.pWaitSemaphores=&m->readySemaphores[mirrorIndex];spectator.swapchainCount=1;spectator.pSwapchains=&m->swapchain;spectator.pImageIndices=&mirrorIndex;auto result=vkQueuePresentKHR(m->queue,&spectator);if(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)++m->mirrorPresented;else if(result!=VK_ERROR_OUT_OF_DATE_KHR)check(result,"Present spectator");if(result==VK_SUBOPTIMAL_KHR||result==VK_ERROR_OUT_OF_DATE_KHR)m->initMirror();}return;}
+ if(m->vrMode){m->barrier(m->overlay,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->barrier(m->vrOutputs[m->vrEye],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->submitCommandsAsync(mirrorAcquired?m->acquiredSems[m->frameIndex]:VK_NULL_HANDLE,mirrorAcquired?m->readySemaphores[mirrorIndex]:VK_NULL_HANDLE);/* No CPU wait: SteamVR's Vulkan submit only needs the eye's commands queued ahead of it on this queue; begin() waits on the slot's fence before reusing it. */if(m->vrEye==1)VrRuntime::active()->submitPanel(m->instance,m->physical,m->device,m->queue,m->family,m->overlay.handle,overlayWidth,overlayHeight);VrRuntime::active()->submit(m->vrEye,m->instance,m->physical,m->device,m->queue,m->family,m->vrOutputs[m->vrEye].handle,m->swapExtent.width,m->swapExtent.height);if(mirrorAcquired){VkPresentInfoKHR spectator{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};spectator.waitSemaphoreCount=1;spectator.pWaitSemaphores=&m->readySemaphores[mirrorIndex];spectator.swapchainCount=1;spectator.pSwapchains=&m->swapchain;spectator.pImageIndices=&mirrorIndex;auto result=vkQueuePresentKHR(m->queue,&spectator);if(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)++m->mirrorPresented;else if(result!=VK_ERROR_OUT_OF_DATE_KHR)check(result,"Present spectator");if(result==VK_SUBOPTIMAL_KHR||result==VK_ERROR_OUT_OF_DATE_KHR)m->initMirror();}return;}
  // Submit: wait on image-acquired semaphore, signal ready semaphore, NO CPU wait.
  m->submitCommandsAsync(m->acquiredSems[m->frameIndex],m->readySemaphores[imageIndex]);
  // Present immediately.
