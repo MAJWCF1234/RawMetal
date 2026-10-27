@@ -189,8 +189,8 @@ bool Game::lockerHands(std::array<Point3,2>* grips)const{
 // (a man who has you braces for them, and the doors only open).
 int Game::lockerBurstTarget()const{
  const int index=hiddenLocker();if(index<0||lockerViewLocked())return -1;const auto&f=m_world.fixtures()[size_t(index)];
- const Vec2 o=out(f),side{-o.y,o.x},mouth=front(f,0);const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base,reach=f.depth*.5f+.2f;
- int best=-1;float nearest=1.3f;
+ const Vec2 o=out(f),side{-o.y,o.x},mouth=front(f,0);const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base,reach=std::min(f.depth*.5f+.2f,.45f);
+ int best=-1;float nearest=.72f; // within the leaves' sweep, not a step beyond it
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
   if(npc.level!=m_level||track.ai.mode!=ActorAiMode::Guard||npcIncapacitated(actor)||npcHeld(actor)||npcStowed(actor)||(track.deadState&&state(track.deadState))||guardState(actor)==GuardState::Alert)continue;
   const float ahead=dot(npc.pose.position-mouth,o),across=dot(npc.pose.position-mouth,side);
@@ -203,7 +203,7 @@ bool Game::stageLockerBurst(){
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&npc=m_friendlyActors[actor];if(npc.level!=m_level||npc.track().ai.mode!=ActorAiMode::Guard)continue;
   const float d=lengthSq(npc.pose.position-f.position);if(d<best){best=d;chosen=int(actor);}}
  if(chosen<0)return false;auto&npc=m_friendlyActors[size_t(chosen)];const Vec2 toward=out(f)*-1.f;
- npc.pose.position=front(f,.8f);npc.pose.z=m_player.z;npc.pose.yaw=std::atan2(toward.x,toward.y);
+ npc.pose.position=front(f,.6f);npc.pose.z=m_player.z;npc.pose.yaw=std::atan2(toward.x,toward.y);
  setState(friendlyKey(size_t(chosen),"guard_mode"),int(GuardState::Investigate));return lockerBurstTarget()==chosen;
 }
 bool Game::stageLockerCatch(){

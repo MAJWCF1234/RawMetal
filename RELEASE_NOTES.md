@@ -34,14 +34,14 @@ you can get into any of them. Your hands take the doors, you back in and pull
 them to, and the room goes muffled and small behind a band of holes punched in
 the steel at eye height. Anyone coming shows through it. Knock on the door and
 somebody comes to see; knock twice and he opens it. Drag a man you have put to
-sleep to an empty locker and he goes in instead of you, until someone opens it.
+sleep to an empty locker and he goes in instead of you.
 
 A guard who watched you climb in says so, walks over, takes the handle and
-drags you out into the light, and gives you a moment with his gun in your face
-before he uses it. A man who heard the doors, or whose search for you ends
+drags you out into the light, and racks his gun in your face and gives you a
+moment before he uses it. A man who heard the doors, or whose search for you ends
 beside a locker, stops, turns to it and looks inside; on Caution some of them
-check on a hunch. Whoever is standing at the doors when you come out gets them
-in the face.
+check on a hunch. Whoever is checking the doors when you burst out, and is not
+ready for you, takes them in the face.
 
 Smaller: E on a terminal you are facing beats a body lying at its foot, and
 the prompt says when E will drag a body, drop it or stow it. Alert calls are

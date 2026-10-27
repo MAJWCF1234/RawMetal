@@ -258,7 +258,7 @@ bool Game::stowBody(){
  auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};const auto&body=m_friendlyActors[actor].pose;
  put("guard_stowed",index+1);put("guard_stowed_level",m_level+1);put("guard_stow_ms",0);put("guard_stow_fraction",0);
  put("guard_stow_x",int(std::round(std::clamp(body.position.x,0.f,24.f)*1000)));put("guard_stow_y",int(std::round(std::clamp(body.position.y,0.f,24.f)*1000)));put("guard_stow_z",int(std::round(body.z*1000)));
- dropBody();lockerDoorsMove(m_level,index,LockerMotion::Stow);
+ dropBody();m_pickupNotice.clear();m_pickupNoticeTime=0;lockerDoorsMove(m_level,index,LockerMotion::Stow);
  const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
  SoundEvent clank{Sound::Door,doorsFront(f,0),.3f,1.3f,true,6,floor+1.2f};clank.aiRadius=1.2f;m_sounds.push_back(clank);
  return true;
@@ -300,7 +300,9 @@ void Game::tumbleFromLocker(int level,int fixture,size_t finder){
  auto put=[&](const char*field,int value){setState(friendlyKey(finder,field),value);};const Vec2 global=npc.pose.position+chunkOffset(npc.level);
  AiTarget blame{ShotKind::Player,m_level,0};blame.position=m_player.pos+chunkOffset(m_level)-chunkOffset(m_friendlyActors[finder].level);blame.feet=m_player.z;blame.height=m_player.hullHeight();blame.eye=m_player.eye;blame.faction=AiFaction::Player;
  rememberGuardTarget(finder,blame);put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(npc.pose.z*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);
- put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[finder].track().ai.recognitionMs);put("guard_mode",int(GuardState::Investigate));
+ // He blames the player but has not seen them: he searches from the body and
+ // radios it in, so the squad goes to Caution as for any found body.
+ put("guard_confirmed",0);put("guard_mode",int(GuardState::Investigate));if(!state(friendlyKey(finder,"guard_call")))startGuardCall(finder,CallBody);
  if(npcVoice(finder,NpcVoiceCue::AllyDown))put("voice_mode",int(GuardState::Investigate));
 }
 void Game::inspectLockerGuard(bool stow,bool staged){
@@ -407,7 +409,7 @@ bool Game::testLockerGuards(){
   auto put=[&](const char*f,int v){loaded.setState(loaded.friendlyKey(1,f),v);};put("guard_locker",1);put("guard_check",1);put("guard_check_said",1);put("guard_check_ms",3000);put("guard_x",3035);put("guard_y",6500);put("guard_z",0);put("guard_memory",1);put("guard_mode",int(GuardState::Investigate));
   bool out2=false;for(int i=0;i<60*15&&!out2;++i){loaded.update({},frame);out2=!loaded.state(loaded.friendlyKey(0,"guard_stowed"));}
   for(int i=0;i<30;++i)loaded.update({},frame);dump(loaded,1,"tumble");
-  check(out2&&!loaded.npcStowed(0)&&loaded.npcActors()[0].pose.clip==4&&std::fabs(loaded.npcActors()[0].pose.position.x-(out-LockerStowSeat))<.05f&&std::cos(loaded.npcActors()[0].pose.yaw-kPi*.5f)>.99f&&loaded.state(loaded.friendlyKey(1,"guard_confirmed"))&&loaded.state(loaded.friendlyKey(1,"guard_target_kind"))==int(ShotKind::Player),"Opening it, a guard has the body tumble out at his feet and treats it as a found colleague");
+  check(out2&&!loaded.npcStowed(0)&&loaded.npcActors()[0].pose.clip==4&&std::fabs(loaded.npcActors()[0].pose.position.x-(out-LockerStowSeat))<.05f&&std::cos(loaded.npcActors()[0].pose.yaw-kPi*.5f)>.99f&&!loaded.state(loaded.friendlyKey(1,"guard_confirmed"))&&loaded.state(loaded.friendlyKey(1,"guard_target_kind"))==int(ShotKind::Player),"Opening it, a guard has the body tumble out at his feet and treats it as a found colleague");
   bool corrupt=false;{Game bad(g.m_customCampaign);g.setState(g.friendlyKey(0,"guard_stow_ms"),LockerStowMs+1);corrupt=!bad.decodeSave(g.encodeSave());}
   check(corrupt,"A corrupt stow clock is refused on load");
  }

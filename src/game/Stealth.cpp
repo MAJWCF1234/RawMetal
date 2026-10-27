@@ -263,6 +263,7 @@ bool Game::leaveLocker(){
   const Vec2 hit=npc.pose.position;{const Vec2 shoved=hit+away*.3f;float landed=npc.pose.z;if(friendlyWalkSegment(m_level,hit,npc.pose.z,shoved,.45f,&landed)){npc.pose.position=shoved;npc.pose.z=landed;}}
   npc.pose.yaw=std::atan2(-away.x,-away.y);npc.pose.clip=4;npc.pose.phase=into;npc.pose.lookAtActor=-1;saveRestrainedPose(actor);updateGuardFlags();
   SoundEvent bang{Sound::LockerBang,hit,.95f,1.04f,true,14,feet+1.2f};bang.aiRadius=8;m_sounds.push_back(bang);
+  m_sounds.push_back({Sound::PunchHit,hit,.85f,.9f,true,14,feet+1.1f});npcVoice(actor,NpcVoiceCue::Hurt); // steel into a man, and the man
   m_sounds.push_back({Sound::Land,npc.pose.position+away*.4f,.6f,.85f,true,10,feet+.05f});
   m_pickupNotice="GUARD UNCONSCIOUS";m_pickupNoticeTime=1.6f;
  }else m_sounds.push_back({Sound::LockerCreak,lockerFront(f,.1f),.28f,1.1f,true,6,feet+1.6f});
@@ -313,6 +314,7 @@ bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
  rememberGuardTarget(actor,resolveGuardTarget(actor,{ShotKind::Player,m_level,0}));const Vec2 global=exit+chunkOffset(m_level);auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[actor].track().ai.recognitionMs);
  put("guard_hold_ms",1200);put("weapon_aim",0); // the gun comes up in the player's face; he holds fire a moment
+ m_sounds.push_back({Sound::Pump,pose.position-shift,.75f,1.f,true,12,pose.z+1.2f}); // and racks it, so the moment is heard
  // The doors bang back on their stops: anyone near hears it. The sting is the player's alone.
  m_sounds.push_back({Sound::LockerBang,lockerFront(f,0),.8f,1.f,true,12,feet+1.2f});m_sounds.push_back({Sound::LockerSting,{},.75f,1.f,false});m_alarmSting=std::max(m_alarmSting,.6f); // the locker's own sting is this detection's; no second one on his '!'
  m_lockerRearm|=m_weaponEquipped;equipWeapon(WeaponId::Fists);animateLockerDoor(m_level,index,LockerMotion::Caught);startLockerView(LockerMotion::Caught,before,index);
@@ -587,7 +589,7 @@ bool Game::testLockers(){
  // thrown back off the doors; the bang carries to anyone near. A man alert on
  // the player braces: the doors only open.
  for(bool alert:{false,true}){auto g=scene({{{4.3f,6.5f},0,5000}},kPi*.5f);hide(g);for(int i=0;i<70;++i)g.update({},1.f/60);
-  auto&npc=g.m_friendlyActors[0];const Vec2 o=lockerOut(g.m_world.fixtures()[0]),standing=lockerFront(g.m_world.fixtures()[0],.8f);
+  auto&npc=g.m_friendlyActors[0];const Vec2 o=lockerOut(g.m_world.fixtures()[0]),standing=lockerFront(g.m_world.fixtures()[0],.6f);
   npc.pose.position=standing;npc.pose.z=0;npc.pose.yaw=std::atan2(-o.x,-o.y);g.setState(g.friendlyKey(0,"guard_mode"),int(alert?GuardState::Alert:GuardState::Investigate));
   const bool aimed=g.lockerBurstTarget()==(alert?-1:0);const std::string hint=g.interactionHint()?g.interactionHint():"";
   g.update(use,1.f/60);bool bang=false,heard=false;for(const auto&s:g.sounds())bang|=s.sound==Sound::LockerBang&&length(s.position-standing)<.3f&&s.aiRadius>=8;
@@ -596,7 +598,7 @@ bool Game::testLockers(){
   for(int i=0;i<180;++i)g.update({},1.f/60);const auto box=g.friendlyShotBounds(0);const Vec2 middle{(box.first.x+box.second.x)*.5f,(box.first.y+box.second.y)*.5f};
   const bool fell=dot(middle-lockerFront(g.m_world.fixtures()[0],0),o)>startAhead+.2f;
   if(!alert)check(aimed&&hint=="E / BURST OUT   LMB / KNOCK"&&steppedOut&&bang&&heard&&g.npcIncapacitated(0)&&g.state(g.friendlyKey(0,"restraint"))==1&&g.npcActors()[0].pose.clip==4&&fell&&!g.state("locker_dead")&&g.hullFits(g.player().pos,g.player().z,Player::StandingHeight),
-   "Bursting out into a man checking the doors 0.8 m off knocks him out, thrown back off them, and the bang reaches anyone within 8 m");
+   "Bursting out into a man checking the doors 0.6 m off knocks him out, thrown back off them, and the bang reaches anyone within 8 m");
   else check(aimed&&hint=="E / STEP OUT   LMB / KNOCK"&&steppedOut&&!bang&&!g.npcIncapacitated(0),"A man alert on the player is not knocked down: the doors just open");
   report<<"  burst"<<(alert?" (alert)":"")<<": aimed "<<aimed<<" '"<<hint<<"' out "<<steppedOut<<" bang "<<bang<<" heard "<<heard<<" down "<<g.npcIncapacitated(0)<<" clip "<<g.npcActors()[0].pose.clip<<" phase "<<g.npcActors()[0].pose.phase<<", body "<<dot(middle-lockerFront(g.m_world.fixtures()[0],0),o)<<" m out from "<<startAhead<<'\n';
  }
