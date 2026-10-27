@@ -162,7 +162,7 @@ void Game::updateMechanisms(float dt){
   for(const auto& cue:world.sequenceCues()){if(cue.timerState!=sequence.timerState)continue;int at=std::max(cue.timeMs,1);
    if(!((age<=at&&(advanced>at||(ended&&at==sequence.durationMs)))||(wrapped&&next>at)))continue;
    auto position=chunkOffset(level)+cue.position-chunkOffset(m_level);
-   m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35,cue.z});
+   m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35,cue.z});m_sounds.back().aiRadius=cue.aiRadius;
   }
  }
  for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);

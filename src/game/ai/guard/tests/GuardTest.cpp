@@ -31,7 +31,10 @@ bool Game::testGuardAI(){
    tick(investigating,rate*15,rate);check(investigating.guardState(0)==GuardState::Patrol,"Bounded investigation and search return to patrol");
   }
  }
- {auto g=scene();g.m_player.pos={8.5f,6.5f};tick(g,10);g.m_player.pos={18.5f,18.5f};tick(g,1);check(g.guardState(0)==GuardState::Patrol&&g.state(g.friendlyKey(0,"guard_recognition"))==0,"Brief glimpse does not become a delayed alert after the player hides");}
+ {auto g=scene();g.m_player.pos={8.5f,6.5f};tick(g,10);g.m_player.pos={18.5f,18.5f};tick(g,1);check(g.guardState(0)==GuardState::Patrol&&!g.state(g.friendlyKey(0,"guard_confirmed"))&&g.state(g.friendlyKey(0,"guard_recognition"))*2<600,"Brief glimpse does not become a delayed alert after the player hides");
+  tick(g,60);check(g.state(g.friendlyKey(0,"guard_recognition"))==0,"The doubt from a glimpse fades");}
+ {auto g=scene();g.m_player.pos={8.5f,6.5f};tick(g,25);g.m_player.pos={18.5f,18.5f};tick(g,1);check(g.guardState(0)==GuardState::Investigate&&!g.state(g.friendlyKey(0,"guard_confirmed")),"A half-seen player is walked over to and checked, unconfirmed");}
+ {auto g=scene();g.m_player.pos={14.5f,6.5f};g.m_player.crouched=true;tick(g,60);check(g.guardState(0)!=GuardState::Alert&&g.playerExposure()<.5f,"A still, crouched shape eight metres off in shadow is not made out in a second");}
  {auto g=scene();g.m_player.pos={3.5f,6.5f};tick(g,45);check(g.guardState(0)==GuardState::Patrol,"Player behind guard's sight cone remains unrecognized");}
  {auto g=scene(true);g.m_player.pos={8.5f,6.5f};tick(g,45);check(g.guardState(0)==GuardState::Patrol,"Wall blocks recognition inside the sight cone");}
  for(bool crouch:{false,true}){auto g=scene();g.m_player.pos={3.7f,6.5f};g.m_player.angle=0;g.m_stepDistance=2;InputState input{};input.forward=true;input.crouch=crouch;g.update(input,1.f/60);

@@ -245,6 +245,7 @@ private:
     void drawComputer(const Game& game,int terminal);
     void drawHud(const Game& game);
     void drawTitle(const Game& game);
+    void drawLoading(const Game& game);
     void drawConsole(const Game& game);
     float m_frameMs=0;
     void drawSettings(const Game& game);

@@ -203,9 +203,9 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  return std::fabs(dx*c-dy*s)<fixture.width*fixture.core*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*fixture.core*.5f+margin;
 }
 constexpr float ShelfTiers[]={.17f,.54f,.92f};
-bool benchTerminal(const World& world,const Terminal& terminal){return terminal.paper()?!terminal.taped:world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;} // Reactor consoles keep their own housing.
+bool benchTerminal(const World& world,const Terminal& terminal){return terminal.paper()?terminal.paperOnBench():world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;} // Reactor consoles keep their own housing.
 bool insideTerminal(const World& world,const Terminal& terminal,float x,float y){
- if(terminal.paper()&&terminal.taped)return false;
+ if(terminal.paper()&&!terminal.paperOnBench())return false; // the wall or the desk does the colliding
  if(benchTerminal(world,terminal))return x>terminal.position.x-.48f&&x<terminal.position.x+.42f&&std::fabs(y-terminal.position.y)<.36f;
  return std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<.18f;
 }
@@ -281,7 +281,7 @@ void World::settleExclusionFacilityOnTerrain(){
  m_mapData=std::move(data);
  // Rebuild terminal views from the settled map so title strings stay owned.
  m_terminals.clear();m_terminals.reserve(m_mapData->terminals.size());
- for(const auto&source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped});
+ for(const auto&source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
  m_actorPoses.clear();for(const auto&track:m_mapData->actorTracks)m_actorPoses.push_back(track.idleKeys.empty()?sampleActor(track,0):sampleActorKeys(track.idleKeys,0,true));
  m_structureCells.assign(size_t(Width*Height),{});
  if(m_structures.size()>65535)throw std::runtime_error("Exclusion facility exceeds the collision structure capacity");
@@ -360,6 +360,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_creatureSpawns=m_mapData->creatureSpawns;m_pickupSpawns=m_mapData->pickupSpawns;m_clutterSpawns=m_mapData->clutterSpawns;
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_scriptEvents=m_mapData->scriptEvents;
+ m_pushCrates=m_mapData->pushCrates;m_cratePlates=m_mapData->cratePlates;
+ for(auto& crate:m_pushCrates){crate.home=crate.position;crate.z=m_mapData->layers.empty()?crate.z:m_mapData->layers.front().elevation+crate.z;}
  m_cargoLift=m_mapData->cargoLift;m_cargoLiftHeight=m_cargoLift.lower;
  m_layers.reserve(m_mapData->layers.size());
  // Boundary doors are bounded apertures. The tall hall above their frames is
@@ -373,7 +375,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   m_layers.push_back({source.name,source.elevation,source.thickness,rows});
  }
  m_terminals.reserve(m_mapData->terminals.size());
- for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped});
+ for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
  buildLayers(m_mapData->stairs);
  if(hasLift())refreshReactorTerminals();
  // Outdoor wasteland custom packs own a world-space Surface Nets heightfield so
@@ -764,7 +766,10 @@ void World::buildCollisionCandidates()const{
   // Lift-control consoles can travel without changing the terminal count.
   // Include them in every cell; the original exact tests still decide hits.
   if(t.control){add(2,i,0,0,Width,Height);continue;}
-  if(t.paper()&&t.taped)continue;
+  // Paper on a wall or a desk collides through what holds it, so it joins no
+  // cell; it is still counted, or the size check below would rebuild this
+  // grid on every query of a map with a taped note (v0.14.2's freezes).
+  if(t.paper()&&!t.paperOnBench()){m_collisionAll[2].push_back(i);continue;}
   bool desk=benchTerminal(*this,t);add(2,i,t.position.x-(desk?.48f:.27f),t.position.y-(desk?.36f:.18f),t.position.x+(desk?.42f:.27f),t.position.y+(desk?.36f:.18f));
  }
 }
@@ -775,7 +780,11 @@ std::span<const size_t> World::collisionCandidates(int kind,float x,float y)cons
  return m_collisionCells[kind][iy*Width+ix];
 }
 __declspec(noinline) bool World::testCollisionCandidates(){
- for(int level:{0,1,3,5,6,7,8,9,16,20}){World world(level);std::vector<Vec2> samples;
+ // A map with taped paper builds its grid once and keeps it.
+ for(int level:{14,15,58}){World world(level);bool taped=false;for(const auto&t:world.terminals())taped|=t.paper()&&!t.paperOnBench();
+  world.fits(12,12,world.floorHeight(12,12),1.f);const auto* cells=world.m_collisionCells[2].data();world.fits(6,6,world.floorHeight(6,6),1.f);
+  if(!taped||world.m_collisionAll[2].size()!=world.terminals().size()||world.m_collisionCells[2].data()!=cells)return false;}
+ for(int level:{0,1,3,5,6,7,8,9,14,16,20}){World world(level);std::vector<Vec2> samples;
   for(int y=-1;y<=Height;++y)for(int x=-1;x<=Width;++x)samples.push_back({x+.137f,y+.713f});
   for(const auto&f:world.fixtures())for(float u:{-.51f,-.49f,0.f,.49f,.51f})for(float v:{-.51f,-.49f,0.f,.49f,.51f}){float c=std::cos(f.yaw),s=std::sin(f.yaw);samples.push_back({f.position.x+u*f.width*c+v*f.depth*s,f.position.y-u*f.width*s+v*f.depth*c});}
   for(auto p:samples)for(float offset:{-.04f,.02f,.5f,1.5f,3.f})for(bool cavities:{false,true}){
@@ -934,7 +943,7 @@ void World::buildLightOcclusion()const{
   }else oriented(f.position,f.width,f.depth,base,base+f.height,f.yaw);
  }
  for(const auto&p:m_props){float base=floorHeight(p.position.x,p.position.y)+p.base;box(p.position.x-p.halfSize.x,p.position.y-p.halfSize.y,p.position.x+p.halfSize.x,p.position.y+p.halfSize.y,base,base+p.height);}
- for(const auto&t:m_terminals){if((hasLift()&&t.control)||(t.paper()&&t.taped))continue;float base=floorHeight(t.position.x,t.position.y)+t.z;
+ for(const auto&t:m_terminals){if((hasLift()&&t.control)||(t.paper()&&!t.paperOnBench()))continue;float base=floorHeight(t.position.x,t.position.y)+t.z;
   if(benchTerminal(*this,t)&&t.paper())box(t.position.x-.48f,t.position.y-.36f,t.position.x+.42f,t.position.y+.36f,base+.74f,base+.815f);
   else if(benchTerminal(*this,t)){box(t.position.x-.48f,t.position.y-.36f,t.position.x+.42f,t.position.y+.36f,base+.74f,base+.815f);oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6?-kPi*.5f:t.yaw);}
   else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
@@ -1118,6 +1127,7 @@ float World::supportBelowUncached(float x,float y,float feet)const{
  }}
  if(insideLift(x,y)&&m_liftHeight<=feet+.025f)result=std::max(result,m_liftHeight);
  if(insideCargoLift(x,y)&&m_cargoLiftHeight<=feet+.025f)result=std::max(result,m_cargoLiftHeight);
+ for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z+c.size<=feet+.025f)result=std::max(result,c.z+c.size);
  for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<=t.footprint.x*.5f&&std::fabs(y-p.position.y)<=t.footprint.y*.5f&&p.z<=feet+.025f)result=std::max(result,p.z);}
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
@@ -1132,6 +1142,7 @@ float World::clearanceAbove(float x,float y,float feet)const{
  for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
+ for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
  for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
@@ -1144,7 +1155,13 @@ bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelf
  if(batch)batch->store(CollisionQueryBatch::Fits,x,y,feet,height,flags,result?1.f:0.f);
  return result;
 }
+bool World::crateBlocks(float x,float y,float feet,float height,int except)const{
+ for(size_t i=0;i<m_pushCrates.size();++i){if(int(i)==except)continue;const auto& c=m_pushCrates[i];const float half=c.size*.5f;
+  if(std::fabs(x-c.position.x)<half&&std::fabs(y-c.position.y)<half&&feet<c.z+c.size-.025f&&feet+height>c.z+.025f)return true;}
+ return false;
+}
 bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
+ if(dynamic&&crateBlocks(x,y,feet,height))return false;
  if(dynamic)for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<t.footprint.x*.5f&&std::fabs(y-p.position.y)<t.footprint.y*.5f&&feet<p.z-.025f&&feet+height>p.z-t.thickness)return false;}
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight-.025f&&feet+height>m_cargoLiftHeight-.18f)return false;
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.52f&&feet+height>m_cargoLiftHeight+2.4f)return false;

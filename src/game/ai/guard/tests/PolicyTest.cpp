@@ -55,6 +55,7 @@ bool Game::testGuardPolicy(){
   check(g.state("policy_guard_damage")>0&&g.guardTarget(0).kind==ShotKind::Enemy&&g.guardTarget(0).index==0&&g.player().health==100,"Guard retaliates against the actual creature that struck it from behind");
  }
  {auto g=scene([](auto&map){auto&guard=map.actorTracks[0];guard.ai.squad=stateId("policy_squad");auto other=guard;other.ai.armed=false;other.ai.patrol={{{6.5f,8.5f},0,1000}};for(auto&key:other.keys){key.position={6.5f,8.5f};key.yaw=kPi;}other.damageState=stateId("policy_teammate_damage");other.deadState=stateId("policy_teammate_dead");map.actorTracks.push_back(other);map.structures.push_back({7,7.5f,11.5f,7.7f,0,4});});tick(g,50);
+  check(g.guardState(0)==GuardState::Alert&&g.guardState(1)==GuardState::Patrol,"A sighting is not shared until the spotter has been on the radio");tick(g,100);
   check(g.guardState(0)==GuardState::Alert&&g.guardState(1)==GuardState::Investigate&&g.guardTarget(1).kind==ShotKind::Player,"A nearby squadmate's fresh sighting supplies last-known threat knowledge");
   check(g.state(g.friendlyKey(1,"guard_seen"))==0&&g.state(g.friendlyKey(1,"weapon_rounds"))==0,"Squad reports do not fabricate personal visibility or arm an unarmed teammate");
  }

@@ -13,10 +13,12 @@ std::string Game::customMenuLabel(int row)const{
  if(item>=0&&item<int(m_customCampaigns.size()))return m_customCampaigns[size_t(item)]->name;
  return "BACK TO TITLE";
 }
-void Game::startMainCampaign(){
- m_pendingMainCampaign=false;m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Campaign;m_titleScreen=false;m_menuFromTitle=false;m_level=0;restart();m_suppressFire=true;
+void Game::startMainCampaign(int level){
+ m_pendingMainCampaign=false;m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Campaign;m_titleScreen=false;m_menuFromTitle=false;m_customMapsOpen=false;m_level=level;restart();m_suppressFire=true;
 }
-void Game::startNewGame(){startCustomCampaign(loadEmbeddedPrologueCampaign());}
+// New Game: the night shift in the Security Office, on the campaign grid north
+// of the Foundry; the crashed lift's shaft passage walks into Map 0.
+void Game::startNewGame(){startMainCampaign(PrologueChunk);}
 void Game::selectCustomCampaign(int index){
  if(index<0||index>=int(m_customCampaigns.size()))return;
  startCustomCampaign(m_customCampaigns[size_t(index)]);
@@ -137,7 +139,7 @@ void Game::saveSettings(const std::wstring& path)const{
 }
 bool Game::testSettings(){
  {Game title;title.m_level=3;title.showTitleScreen();InputState accept{};accept.menuAccept=true;title.update(accept,.02f);
- if(title.titleScreen()||title.paused()||title.level()!=0)return false;
+ if(title.titleScreen()||title.paused()||title.level()!=PrologueChunk||title.worldId()!=WorldId::Campaign)return false;
  }
  // Custom Maps lists installed campaigns and Back. An empty catalog must
  // return to the title, while an installed pack launches its own world.

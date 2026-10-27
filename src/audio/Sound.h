@@ -23,5 +23,5 @@ static_assert(int(Sound::Count)==int(Sound::AreaTitle)+1,"map the new sound's re
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}
 // A finite z captures the emission origin even when the player's own sound is
 // mixed at the listener. NaN retains legacy events without authored elevation.
-struct SoundEvent { Sound sound; Vec2 position{}; float gain=1, pitch=1; bool spatial=false; float radius=17; float z=std::numeric_limits<float>::quiet_NaN(); int speech=-1; size_t speaker=0; int speechPriority=0; };
+struct SoundEvent { Sound sound; Vec2 position{}; float gain=1, pitch=1; bool spatial=false; float radius=17; float z=std::numeric_limits<float>::quiet_NaN(); int speech=-1; size_t speaker=0; int speechPriority=0; float aiRadius=0; };
 }

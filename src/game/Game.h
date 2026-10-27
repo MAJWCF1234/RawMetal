@@ -1,6 +1,9 @@
 #pragma once
 
 #include <unordered_map>
+#include <atomic>
+#include <filesystem>
+#include <memory>
 #include <functional>
 #include "../core/Math.h"
 #include "../world/World.h"
@@ -26,6 +29,10 @@
 #include "Ragdoll.h"
 
 namespace retro {
+// Bumped once per chunk built while a save loads on a worker thread, so the
+// loading bar can move; null (no counting) everywhere else.
+inline thread_local std::atomic<int>* loadProgressCounter=nullptr;
+struct LoadJob;
 constexpr int DisplayWidth=640,DisplayHeight=360;
 // Zero denotes an older animation bank whose legacy simulation clocks remain valid.
 float cleanupAnimationDuration(ActorVisual visual,int clip);
@@ -81,6 +88,12 @@ struct Enemy {
     float stalkTimer=0,stalkSide=1;
     int surfaceMode=0; // floor, wall, ceiling
     Vec2 surfaceNormal{};
+    // The Snatcher's fade: the cover it chose when it was seen, and how many times
+    // the player has made it give ground since its last snatch. Not archived.
+    Vec2 hideAt{};bool hideSet=false;int fades=0;
+    // No route to its goal: it ambles a cell at a time instead of re-planning
+    // every frame. Not archived.
+    bool lostPath=false;
     // Ephemeral MaintainSchedule mind. Rebuilt from state after load; not archived.
     int schedule=0,scheduleStep=0,scheduleTask=0,scheduleStatus=0,scheduleMs=0,scheduleCursor=0,scheduleCursorSaved=0,scheduleTransitions=0;
     unsigned scheduleConditions=0;
@@ -302,6 +315,12 @@ public:
     bool loadSlot(int slot);
     bool saveCheckpoint();
     bool loadCheckpoint();
+    // With asynchronous loads (the shipped game turns them on) a load builds the
+    // saved game on a worker while the window stays responsive and a loading
+    // bar shows; update() commits it when it is ready. Tests load in place.
+    void setAsyncLoads(bool enabled){m_asyncLoads=enabled;}
+    bool loading()const{return m_loadJob!=nullptr;}
+    float loadProgress()const;
     unsigned sessionRevision()const{return m_sessionRevision;}
     static bool testPickups();
     static bool testMovement();
@@ -348,6 +367,7 @@ public:
     static bool testExclusion();
     static bool testExclusionAuthoring();
     static bool testPrologue();
+    static bool testCrates();
     // Reachability and placement audit of a campaign map (map-audit-<level>.txt).
     static bool auditMap(int level);
     static Game prologueInspection(int stage);
@@ -402,6 +422,21 @@ public:
     bool hasFlashlight()const{return hasQuestItem(Flashlight);}
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
+    float playerExposure()const{return m_playerExposure;}
+    // How long a guard who has the player must be on the radio before his squad knows.
+    static constexpr int RadioCallMs=1500;
+    void updateExposure(float dt);
+    // E against a bare wall: two knocks a guard on the other side will come to.
+    void knockOnWall();float m_lastKnock=-10;
+    // A knocked-out guard the player is dragging by the collar (not saved: the
+    // body's own pose is, every step). -1 when the hands are free.
+    int m_draggedNpc=-1;
+    int nearbyBody()const;
+    void dropBody();
+    bool draggingBody()const{return m_draggedNpc>=0;}
+    // A guard's read on the player for the HUD: 0 unaware, up to 1 while
+    // suspicion builds, 2 once he has you.
+    float guardAwareness(size_t actor)const;
     bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0&&!flashlightJammed();}
     static constexpr float FlashlightJamTime=1.5f;
     bool flashlightJammed()const;
@@ -487,8 +522,17 @@ private:
     int m_pendingSlot=-1;
     unsigned m_sessionRevision=0;
     void refreshSaveSlots();
+    std::string savedLabel(const std::filesystem::path& path,const char* invalid)const;
     std::string encodeSave()const;
     bool decodeSave(const std::string& data);
+    // Builds the game a save describes into `next` without touching this one
+    // (it only reads this session's settings); decodeSave commits it.
+    bool prepareLoad(const std::string& data,Game& next)const;
+    void adoptSession(Game& next)const;
+    bool beginLoad(std::string data,int slot);
+    void finishLoad();
+    bool loadReady()const;
+    std::shared_ptr<LoadJob> m_loadJob;bool m_asyncLoads=false;
     // Returns how many chunks the archive carried; later ones are authored fresh.
     template<class Archive> int archiveSave(Archive& archive,int version=2);
     bool nearReactorDisk()const;
@@ -510,6 +554,9 @@ private:
     float m_hazardSoundTimer=0;
     // Darkness ramp and torch jam; runtime only, re-settled after any load.
     float m_darkness=0,m_flashlightJam=0;bool m_darknessSettled=false;
+    // How lit the player is (0 black to 1 floodlit): lamps in reach with a
+    // clear line, the map's ambient, true darkness and the flashlight.
+    float m_playerExposure=1,m_exposureTimer=0;
     float darknessTarget(bool* jamming)const;
     void updateDarkness(float dt);
     void seedScripts();
@@ -524,7 +571,7 @@ private:
     void selectCustomCampaign(int index);
     // New Game: the built-in campaign from its first map. A custom prologue
     // requests this through ENTER_CAMPAIGN; it applies at the next update.
-    void startMainCampaign();
+    void startMainCampaign(int level=0);
     // Title New Game: the embedded Security Office prologue, then Map 0.
     void startNewGame();
     void startCustomCampaign(std::shared_ptr<const CustomCampaign> campaign);
@@ -697,6 +744,11 @@ private:
     World m_world;
     Ragdoll m_hazmat;
     float m_hazmatPushCooldown=0;
+    // How long the player has leaned on a heavy crate (it goes at ShoveSeconds).
+    float m_crateShove=0;
+    void updatePushCrates(const InputState& input,float dt);
+    bool crateFree(const World& w,size_t index,Vec2 at)const;
+    void restoreCrates(World& w,int level)const;
     Player m_player;
     std::vector<Enemy> m_enemies;
     std::vector<FriendlyActor> m_friendlyActors;

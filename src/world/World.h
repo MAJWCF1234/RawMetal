@@ -91,8 +91,10 @@ struct Hazard {
 enum class Readable { Screen, Letter, Note, Sticky };
 struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;StateId activateState=0;bool toggleState=false;float yaw=kPi;StateId requireState=0;
  // Paper lies on its bench, or is taped to the wall it faces.
- Readable readable=Readable::Screen;bool taped=false;
- bool paper()const{return readable!=Readable::Screen;}};
+ Readable readable=Readable::Screen;bool taped=false;float surface=-1;
+ bool paper()const{return readable!=Readable::Screen;}
+ // Paper that brings its own bench (not taped up, not lying on a desk).
+ bool paperOnBench()const{return paper()&&!taped&&surface<0;}};
 struct CargoLift {
  float x1=0,y1=0,x2=0,y2=0,lower=0,upper=0,speed=1.f;
  StateId callState=0,releaseState=0,positionState=0,downState=0,arrivedState=0,descendedState=0;
@@ -147,6 +149,9 @@ struct AuthoredTerminalData {
     // Paper only: taped to the wall it faces at an absolute height, instead of
     // lying on its bench.
     bool taped=false;
+    // Paper only: lying on furniture already there (a desk) whose top is this
+    // far above the floor; -1 gives the sheet a bench of its own.
+    float surface=-1;
 };
 struct AuthoredSign {
     Vec2 position{};
@@ -200,6 +205,12 @@ enum Surface:int {SurfaceDefault=-1,SurfaceConcrete,SurfacePressure,SurfaceBrick
 // muzzle flash is the only light. Active while (state==0 or its state equals
 // value) xor invert.
 struct DarkZone {float x1=0,y1=0,x2=24,y2=24,bottom=-1000,top=1000;StateId state=0;int value=1;bool invert=false;bool jamFlashlight=true;};
+// A heavy crate the player can shove: it slides along the axis it was pushed
+// until something stops it, and comes to rest on a floor cell's centre. z is
+// the floor it stands on; it is a solid box of side `size` you can climb onto.
+struct PushCrate {Vec2 position{};float z=0,size=1.f;Vec2 home{},slide{},target{};};
+// A floor plate a crate can be slid onto: its state is 1 while a crate rests there.
+struct CratePlate {Vec2 position{};StateId state=0;};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
@@ -233,6 +244,10 @@ struct AuthoredMapData {
     std::vector<ObjectiveText> objectiveTexts;
     std::vector<AuthoredNavHint> navHints;
     std::vector<AuthoredZone> zones;
+    std::vector<PushCrate> pushCrates;
+    std::vector<CratePlate> cratePlates;
+    // Set by a lever or terminal: every crate on the map goes back home.
+    StateId crateReset=0;
     std::vector<DarkZone> darkZones;
     int wallSurface=SurfaceDefault,floorSurface=SurfaceDefault,ceilingSurface=SurfaceDefault;
 };
@@ -347,6 +362,11 @@ public:
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;
     bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
+    // A heavy crate's box overlaps this column (skipping crate `except`).
+    bool crateBlocks(float x,float y,float feet,float height,int except=-1)const;
+    const std::vector<PushCrate>& pushCrates()const{return m_pushCrates;}
+    const std::vector<CratePlate>& cratePlates()const{return m_cratePlates;}
+    StateId crateReset()const{return m_mapData?m_mapData->crateReset:0;}
     const CargoLift& cargoLift()const{return m_cargoLift;}
     const std::vector<TimedSequence>& timedSequences()const{static const std::vector<TimedSequence> empty;return m_mapData?m_mapData->timedSequences:empty;}
     const std::vector<ActorTrack>& actorTracks()const{static const std::vector<ActorTrack> empty;return m_mapData?m_mapData->actorTracks:empty;}
@@ -373,7 +393,7 @@ public:
     void updateLift(float dt);
     void restoreLift(const World& saved);
     // A rebuilt chunk takes back what play changed: lift, reactor and broken crates.
-    void restoreDynamic(const World& saved){restoreLift(saved);if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
+    void restoreDynamic(const World& saved){restoreLift(saved);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
     const char* liftStatus()const;
     float liftLampPower()const;
     float liftMotorGain()const;
@@ -459,6 +479,7 @@ private:
     std::vector<Hazard> m_hazards;
     void buildLights(int startX=2,int startY=1);
     std::vector<Door> m_doors;
+    std::vector<PushCrate> m_pushCrates;std::vector<CratePlate> m_cratePlates;
     std::vector<Terminal> m_terminals;
     std::vector<Structure> m_structures;
     std::vector<TerrainTriangle> m_terrain;

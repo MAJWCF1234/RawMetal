@@ -79,7 +79,7 @@ void perGuard(Map& m,const char* clock,const char* squad,int index,ActorVisual v
  const Vec2 start=beat.front().position;const float z=beat.front().z,look=std::isnan(beat.front().look)?0.f:beat.front().look;
  t.keys={{0,start,z,look},{60000,start,z,look,0,1}};
  auto& ai=t.ai;ai.mode=ActorAiMode::Guard;ai.role=role;ai.faction=AiFaction::Raider;ai.squad=stateId(squad);ai.armed=true;
- ai.weapon=weapon;ai.sightRange=sight;ai.sightDot=dot;ai.searchMs=7000;ai.speed=speed;ai.alertState=alert;ai.patrol=std::move(beat);
+ ai.weapon=weapon;ai.sightRange=sight;ai.sightDot=dot;ai.searchMs=7000;ai.recognitionMs=1500;ai.speed=speed;ai.alertState=alert;ai.patrol=std::move(beat);
  m.actorTracks.push_back(std::move(t));
 }
 // A troffer (recessed fluorescent) in a suspended ceiling.
@@ -485,7 +485,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  wall(m,1.f,8.8f,1.62f,8.9f,f+5.38f,f+5.48f,8);
  m.pipes.push_back({{1.6f,8.85f},{1.8f,8.85f},f+5.43f,.16f,f+5.43f,4});
  perWallFix(m,model::pwr_disconnect_switch,1.18f,12.75f,f+1.f,.43f,.35f,.85f,kPi*.5f);
- m.lights.push_back(perSwitch(lamp({1.57f,8.85f},f+4.9f,1.4f,9.f,1800,-.2f,WorldLightMount::Wall,0),0,false,.15f));
+ m.lights.push_back(perSwitch(lamp({1.57f,8.85f},f+4.9f,1.4f,9.f,1800,-.2f,WorldLightMount::Wall,0),stateId("per_yard_bell"),false,.15f));
  // The security van Delta-2 parked across the lock, and the detail's stores.
  perFix(m,model::service_van,4.3f,8.9f,f,2.05f,4.9f,2.15f,0,true);
  cargo(m,2.4f,2.3f,f);cargo(m,3.75f,2.3f,f,false);
@@ -532,13 +532,12 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  m.stairs.push_back({1.3f,12.8f,2.7f,17.f,f,zd,15,true,true});
  guardRail(m,2.7f,16.97f,6.f,17.03f,zd);guardRail(m,5.97f,17.f,6.03f,22.95f,zd);
  if(auto* l=perDeck(m,zd))deckSupports(m,*l,f,3);
- perSandbags(m,2.9f,17.1f,5.9f,17.45f,zd,.7f);perSandbags(m,5.5f,17.45f,5.9f,22.9f,zd,.7f);
+ perSandbags(m,2.9f,17.1f,5.9f,17.45f,zd,.7f);perSandbags(m,5.5f,17.45f,5.9f,22.9f,zd,1.05f);
  wall(m,5.05f,17.65f,5.15f,17.75f,zd,zd+1.5f,8);
  wall(m,4.92f,17.5f,5.28f,17.86f,zd+1.5f,zd+1.82f,8);wall(m,4.95f,17.47f,5.25f,17.5f,zd+1.53f,zd+1.79f,20);
  m.lights.push_back(lamp({5.1f,17.35f},zd+1.66f,2.f,12.f,6000,.05f,WorldLightMount::Bare));
  for(float x:{1.9f,2.68f})perFix(m,model::packing_crate,x,21.95f,f,.7f,.5f,.42f,0,true);
  perFix(m,model::packing_crate,2.3f,21.95f,f+.42f,.7f,.5f,.42f,.15f,false);
- m.lights.push_back(lamp({3.6f,19.8f},zd-.3f,.6f,4.f,2400,-.1f));
 
  // --- Stock for the gun position, and the forklift that brought it ------------------------------
  forklift(m,21.5f,3.2f,f);
@@ -546,7 +545,8 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  perSandbags(m,18.3f,2.1f,19.3f,3.1f,f+.16f,.6f);
 
  // --- Light: high bays, and the alarm floods that come on when the detail is alerted ---------
- for(Vec2 l:{Vec2{5.f,7.f},Vec2{18.f,17.f}})m.lights.push_back(lamp(l,ceil-.95f,.8f,10.f,4000,.1f));
+ // The high bays light the lane, not the van's lee by the west wall.
+ for(Vec2 l:{Vec2{11.f,7.f},Vec2{18.f,17.f}})m.lights.push_back(lamp(l,ceil-.95f,.8f,10.f,4000,.1f));
  for(float x:{8.5f,20.f})m.lights.push_back(perSwitch(lamp({x,1.02f},f+6.2f,2.6f,16.f,6500,.04f,WorldLightMount::Wall,kPi*.5f),alert));
  m.lights.push_back(perSwitch(lamp({12.f,22.18f},f+5.6f,2.6f,16.f,6500,.04f,WorldLightMount::Wall,-kPi*.5f),alert));
  {auto& k=perSequence(m,"per_yard_klaxon","per_yard_klaxon_done",14000,13000,Sound::Alarm,1500,9500,.7f);k.soundAt={14.f,1.4f};k.soundZ=f+6.f;} // the horn on the north wall, between the floods
@@ -554,15 +554,20 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
 
  // --- The intercom lure: Lock 2's bell rings in the west -----------------------------------------
  perSequence(m,"per_yard_bell","per_yard_bell_done",9000,8000);
- for(int i=0;i<4;++i)cue(m,"per_yard_bell",300+i*900,i%2?Sound::JunkMetal:Sound::Door,{2.f,8.85f},i?"":"LOCK 2 BELL: RINGING, WEST WALL.",1.f,f+4.8f);
+ for(int i=0;i<4;++i){cue(m,"per_yard_bell",300+i*900,i%2?Sound::JunkMetal:Sound::Door,{2.2f,8.85f},i?"":"LOCK 2 BELL: RINGING, WEST WALL.",1.f,f+1.8f);m.sequenceCues.back().aiRadius=11.5f;}
 
  // --- Delta-2 in the yard --------------------------------------------------------------------
  perGuard(m,"per_yard_clock","per_yard",0,ActorVisual::Cleanup,GuardSquadRole::Assault,
-  {{{12.6f,10.2f},f,4500,0},{{18.6f,12.6f},f,3500,kPi*.5f},{{8.2f,10.4f},f,4000,-kPi*.5f},{{15.f,8.4f},f,3000,kPi}},12.f,.6f,1,1.2f,alert);
+  {{{12.6f,10.2f},f,4500,0},{{18.6f,12.6f},f,3500,kPi*.5f},{{8.2f,10.4f},f,4000,-kPi*.5f},{{15.f,8.4f},f,3000,kPi*.5f}},12.f,.6f,1,1.2f,alert);
  perGuard(m,"per_yard_clock","per_yard",1,ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,
-  {{{3.4f,19.2f},zd,7000,kPi*.75f},{{4.6f,21.f},zd,5000,kPi*.55f}},16.f,.72f,1,1.f,alert);
+  {{{3.4f,19.2f},zd,8000,kPi*.7f},{{4.6f,21.f},zd,4000,kPi*.5f}},16.f,.72f,1,1.f,alert);
  perGuard(m,"per_yard_clock","per_yard",2,ActorVisual::CleanupHeavy,GuardSquadRole::Heavy,
-  {{{17.6f,20.6f},f,9000,kPi},{{17.2f,21.f},f,6000,kPi*.8f}},11.f,.55f,1,1.f,alert);
+  {{{17.6f,20.6f},f,9000,kPi},{{18.2f,20.2f},f,6000,kPi*.5f}},11.f,.55f,1,1.f,alert);
+ // A cover island on the way to the gatehouse: crates staged on a pallet,
+ // between the heavy's nest and the middle of the east seam.
+ perFix(m,model::pallet,20.4f,16.3f,f,1.2f,1.15f,.16f,.1f,true);
+ perFix(m,model::ind_crate,20.4f,16.3f,f+.16f,.81f,.81f,.81f,.15f,true);
+ perFix(m,model::ind_crate,20.45f,16.25f,f+.97f,.81f,.81f,.81f,-.2f,true);
 
  m.pickupSpawns={{{7.f,4.85f},PickupKind::Health,f+.12f},{{2.4f,4.f},PickupKind::Ammo,f},{{2.1f,21.f},PickupKind::Ammo,zd}};
  m.clutterSpawns={{2,{5.6f,6.f},f},{0,{9.f,8.4f},f},{2,{6.4f,11.8f},f},{0,{15.4f,17.6f},f},{2,{19.8f,12.f},f}};
@@ -599,7 +604,9 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  wall(m,10.f,6.f,10.2f,8.f,f,top,3);wall(m,10.f,9.6f,10.2f,17.f,f,f+1.f,3);
  perWindow(m,10.f,9.6f,10.2f,17.f,f+1.f,f+2.4f);wall(m,10.f,9.6f,10.2f,17.f,f+2.45f,top,3);
  perDoorwayY(m,10.f,10.2f,8.f,9.6f,f,top);
- wall(m,10.f,6.f,23.f,6.2f,f,top,3);wall(m,10.f,16.8f,23.f,17.f,f,top,3);
+ wall(m,10.f,6.f,23.f,6.2f,f,top,3);
+ wall(m,10.f,16.8f,15.2f,17.f,f,top,3);wall(m,16.2f,16.8f,23.f,17.f,f,top,3);wall(m,15.2f,16.8f,16.2f,17.f,f+2.2f,top,3);
+ {Door smoking{15.2f,16.2f,16.9f,0};smoking.swinging=true;smoking.swing=1;m.doors.push_back(smoking);}
  wall(m,10.f,6.f,23.f,17.f,top,top+.25f,15);
  perFinish(m,10.2f,6.2f,23.f,16.8f,f,24);
  perCamera(m,10.f,16.6f,f+3.f,-1,0);
@@ -619,9 +626,10 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  for(float x:{22.2f,22.6f})perFix(m,model::gas_cylinder,x,1.45f,f,.33f,.33f,1.58f,0,true);
  // South: a bench against the wall, a sand bucket of butts, the bins and a
  // stack of empties waiting for a run that never came.
- perFix(m,model::bench,13.6f,17.32f,f,1.86f,.44f,.63f,kPi,true);
- perFix(m,model::trash_can,15.1f,17.4f,f,.5f,.5f,.62f,0,true);
- m.lights.push_back(lamp({14.4f,17.02f},f+2.6f,.8f,5.f,2400,-.1f,WorldLightMount::Wall,kPi*.5f));
+ perFix(m,model::bench,13.4f,17.32f,f,1.86f,.44f,.63f,kPi,true);
+ perFix(m,model::trash_can,17.f,17.4f,f,.5f,.5f,.62f,0,true);
+ // The lamp over the smoking door is dead: it flickers, mostly off.
+ m.lights.push_back(perSwitch(lamp({14.4f,17.02f},f+2.6f,.5f,4.f,2400,-.1f,WorldLightMount::Wall,kPi*.5f),0,false,.85f));
  perFix(m,model::dumpster,20.4f,22.2f,f,1.96f,1.27f,1.17f,0,true);
  for(float z:{0.f,.16f})perFix(m,model::pallet,11.6f,21.9f,f+z,1.2f,1.15f,.16f,z*2.f,true);
  perFix(m,model::ind_crate,11.6f,21.9f,f+.32f,.8f,.8f,.8f,.3f,true);
@@ -646,9 +654,9 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  // --- Guards: one on the desk, one in the bunk room, one walking the fence --------------------------
  machineryClock(m,"per_gatehouse_clock",60000);
  perGuard(m,"per_gatehouse_clock","per_gatehouse",0,ActorVisual::Cleanup,GuardSquadRole::Assault,
-  {{{13.f,10.6f},f,4000,kPi},{{11.f,10.6f},f,3000,-kPi*.5f}},12,.55f,1,1.4f,alert);
+  {{{13.f,10.6f},f,4000,kPi},{{11.f,10.6f},f,6000,0}},12,.55f,1,1.4f,alert);
  perGuard(m,"per_gatehouse_clock","per_gatehouse",1,ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,
-  {{{19.f,12.8f},f,5000,-kPi*.5f},{{18.f,8.f},f,3500,kPi}},13,.5f,2,1.3f,alert);
+  {{{19.f,12.8f},f,5000,kPi*.5f},{{18.f,8.f},f,3500,kPi}},13,.5f,2,1.3f,alert);
  perGuard(m,"per_gatehouse_clock","per_gatehouse",2,ActorVisual::CleanupRusher,GuardSquadRole::Rusher,
   {{{6.f,5.f},f,3000,kPi*.5f},{{6.f,19.f},f,3000,-kPi*.5f},{{2.f,12.f},f,2500,0}},11,.6f,1,1.6f,alert);
  // --- Light -------------------------------------------------------------------------------------

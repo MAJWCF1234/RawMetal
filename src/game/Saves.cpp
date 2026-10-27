@@ -1,3 +1,5 @@
+#include <optional>
+#include <thread>
 #include "Game.h"
 #include "EngineRegressionScene.h"
 #include "../world/CustomCampaign.h"
@@ -82,7 +84,7 @@ template<class A> int Game::archiveSave(A& a,int version){
  }
  int archivedChunks=version>=12?chunkCount():version>=11?worldChunkCount(m_worldId):version>=10?(m_worldId==WorldId::Campaign?6:12):version>=7?6:4;
  if(version>=11){a(archivedChunks);int available=version>=12?chunkCount():worldChunkCount(m_worldId);if(archivedChunks<1||archivedChunks>available||archivedChunks>MaxChunks)throw std::runtime_error("Invalid chunk count");}
- for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading)c.world=makeWorld(index);auto&w=c.world;
+ for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading){c.world=makeWorld(index);if(loadProgressCounter)++*loadProgressCounter;}auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   if(version>=16)list(w.m_destroyedTiles,[&](std::pair<int,int>&t){a(t.first,t.second);if(t.first<0||t.second<0||t.first>=World::Width||t.second>=World::Height)throw std::runtime_error("invalid destroyed tile");});
   if constexpr(A::reading)if(!w.m_destroyedTiles.empty()){w.m_lightSolids.clear();w.m_lightNodes.clear();}
@@ -106,12 +108,21 @@ std::string Game::encodeSave()const{
  return "RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
+ Game next;if(!prepareLoad(data,next))return false;
+ *this=std::move(next);return true;
+}
+bool Game::prepareLoad(const std::string& data,Game& next)const{
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
   if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>16))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
-  Game next;next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);int archived=next.archiveSave(reader,version);if(version==1){next.m_player.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);
+  // A save made inside the prologue when it was its own custom world: its map
+  // has since moved onto the campaign grid, so the night shift starts over.
+  auto oldPrologue=[&]{return next.m_worldId==WorldId::Custom&&next.m_customCampaignKey==loadEmbeddedPrologueCampaign()->key;};
+  int archived=0;try{archived=next.archiveSave(reader,version);}catch(const std::exception&){if(!oldPrologue())throw;}
+  if(oldPrologue()){next=Game();next.startNewGame();adoptSession(next);return true;}if(version==1){next.m_player.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   // Earlier builds represented a broken crate as four unrelated prop models
   // (kinds 0-3) spawned together. Convert that recognizable saved quartet to
   // the current textured splinter kind so existing saves receive the repair.
@@ -126,6 +137,7 @@ bool Game::decodeSave(const std::string& data){
    }
   };
   for(auto&chunk:next.m_chunks)migrateCrateDebris(chunk.clutter);
+  for(int level=0;level<next.chunkCount();++level)next.restoreCrates(next.m_chunks[level].world,level);
   if(next.chunkCount()>3&&next.m_chunks[3].world.hasLift()){
    auto reactorStage=next.m_chunks[3].world.reactorStage();if(reactorStage==World::ReactorStage::DiskHeld&&!next.hasQuestItem(ReactorAuthDisk))next.giveQuestItem(ReactorAuthDisk);if(next.m_chunks[3].world.controlReleased())next.setState(stateId("reactor_bulkhead_released"),1);
   }
@@ -189,8 +201,7 @@ bool Game::decodeSave(const std::string& data){
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
-  next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
-  next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousSubdue=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
+  adoptSession(next);
   next.updateStreaming(0);
   next.rebuildFriendlyActors();
   int heldCount=0;
@@ -217,31 +228,72 @@ bool Game::decodeSave(const std::string& data){
    if(best==std::numeric_limits<float>::max())return false;
    p.pos=safe;p.z=safeZ;p.verticalVelocity=0;p.grounded=true;next.m_velocity={};
   }
-  next.m_aiQueryCaching=m_aiQueryCaching;
-  next.m_aiDecisionScheduling=m_aiDecisionScheduling;
-  *this=std::move(next);return true;
+  return true;
  }catch(const std::exception&){return false;}
 }
+// What a loaded game keeps of the session that loads it: settings, the save
+// folder and engine switches, and a fresh render revision.
+void Game::adoptSession(Game& next)const{
+ next.m_settings=m_settings;next.m_audioMuted=m_audioMuted;next.m_musicEnabled=m_musicEnabled;next.m_showFps=m_showFps;next.m_renderScale=m_renderScale;next.m_saveDirectory=m_saveDirectory;
+ next.m_sessionRevision=m_sessionRevision+1;next.m_suppressFire=true;next.m_previousUse=true;next.m_previousSubdue=true;next.m_previousJump=true;next.m_previousEscape=true;next.m_menuPage=MenuPage::Settings;
+ next.m_aiQueryCaching=m_aiQueryCaching;next.m_aiDecisionScheduling=m_aiDecisionScheduling;next.m_asyncLoads=m_asyncLoads;
+ next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;
+}
+// A save being built on a worker. The worker only writes `result`, `ok` and the
+// counters; the main thread reads them after `done`, then joins.
+struct LoadJob {
+ std::thread worker;std::atomic<bool> done{false};std::atomic<int> progress{0};int expected=1,slot=-1;bool ok=false;std::optional<Game> result;
+ ~LoadJob(){if(worker.joinable())worker.join();}
+};
+bool Game::loadReady()const{return m_loadJob&&m_loadJob->done.load();}
+float Game::loadProgress()const{if(!m_loadJob)return 1.f;return std::clamp(float(m_loadJob->progress.load())/float(m_loadJob->expected),0.f,.99f);}
+bool Game::beginLoad(std::string data,int slot){
+ if(m_loadJob)return false;
+ auto job=std::make_shared<LoadJob>();job->slot=slot;job->expected=std::max(1,chunkCount()*3);
+ // The source session stays still while the worker reads its settings: update()
+ // does nothing else until the job is done.
+ job->worker=std::thread([job,this,data=std::move(data)]{loadProgressCounter=&job->progress;
+  try{job->result.emplace();job->ok=prepareLoad(data,*job->result);}catch(...){job->ok=false;}
+  loadProgressCounter=nullptr;job->done.store(true);});
+ m_loadJob=std::move(job);m_menuMessage.clear();return true;
+}
+void Game::finishLoad(){
+ auto job=std::move(m_loadJob);m_loadJob.reset();if(job->worker.joinable())job->worker.join();
+ if(job->ok){*this=std::move(*job->result);return;}
+ if(job->slot>=0){m_menuMessage="LOAD FAILED / EMPTY OR INVALID SAVE";m_menuPage=MenuPage::Load;m_menuSelection=job->slot;}
+ else m_menuMessage="AUTOSAVE EMPTY OR INVALID";
+}
+static std::string saveLabel(int level,float elapsed,float health){return "MAP "+std::to_string(level)+" / "+std::to_string(int(elapsed/60))+" MIN / HP "+std::to_string(int(health));}
+static std::filesystem::path labelPath(const std::filesystem::path& save){auto path=save;path+=".label";return path;}
 bool Game::saveSlot(int slot){
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
- try {writeAtomic(slotPath(m_saveDirectory,slot),encodeSave());refreshSaveSlots();m_menuMessage="GAME SAVED";return true;}catch(const std::exception&){m_menuMessage="SAVE FAILED / CHECK DISK AND FOLDER";return false;}
+ try {writeAtomic(slotPath(m_saveDirectory,slot),encodeSave());try{writeAtomic(labelPath(slotPath(m_saveDirectory,slot)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();m_menuMessage="GAME SAVED";return true;}catch(const std::exception&){m_menuMessage="SAVE FAILED / CHECK DISK AND FOLDER";return false;}
 }
-bool Game::saveCheckpoint(){if(m_saveDirectory.empty())return false;try{writeAtomic(checkpointPath(m_saveDirectory),encodeSave());refreshSaveSlots();return true;}catch(const std::exception&){return false;}}
-bool Game::loadCheckpoint(){if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}try{if(decodeSave(readFile(checkpointPath(m_saveDirectory))))return true;}catch(const std::exception&){}m_menuMessage="AUTOSAVE EMPTY OR INVALID";return false;}
+bool Game::saveCheckpoint(){if(m_saveDirectory.empty())return false;try{writeAtomic(checkpointPath(m_saveDirectory),encodeSave());try{writeAtomic(labelPath(checkpointPath(m_saveDirectory)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();return true;}catch(const std::exception&){return false;}}
+bool Game::loadCheckpoint(){if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}try{auto data=readFile(checkpointPath(m_saveDirectory));if(m_asyncLoads)return beginLoad(std::move(data),-1);if(decodeSave(data))return true;}catch(const std::exception&){}m_menuMessage="AUTOSAVE EMPTY OR INVALID";return false;}
 bool Game::loadSlot(int slot){
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
- try{if(decodeSave(readFile(slotPath(m_saveDirectory,slot))))return true;}catch(const std::exception&){}
+ try{auto data=readFile(slotPath(m_saveDirectory,slot));if(m_asyncLoads)return beginLoad(std::move(data),slot);if(decodeSave(data))return true;}catch(const std::exception&){}
  m_menuMessage="LOAD FAILED / EMPTY OR INVALID SAVE";return false;
+}
+// What a save's menu row says: its sidecar label when it is newer than the
+// save; otherwise (a save from before sidecars) one full decode, after which the
+// sidecar is written so it never happens again.
+std::string Game::savedLabel(const std::filesystem::path& path,const char* invalid)const{
+ std::error_code error;auto label=labelPath(path);
+ if(std::filesystem::exists(label,error)&&std::filesystem::last_write_time(label,error)>=std::filesystem::last_write_time(path,error)&&!error)
+  try{auto text=readFile(label);if(!text.empty()&&text.size()<64)return text;}catch(const std::exception&){}
+ try{Game preview;if(prepareLoad(readFile(path),preview)){auto text=saveLabel(preview.level(),preview.elapsed(),preview.player().health);try{writeAtomic(label,text);}catch(const std::exception&){}return text;}return invalid;}catch(const std::exception&){return "UNREADABLE";}
 }
 void Game::refreshSaveSlots(){
  for(int slot=0;slot<3;++slot){auto&label=m_slotLabels[slot];label="SLOT "+std::to_string(slot+1)+" / ";
   if(m_saveDirectory.empty()){label+="UNAVAILABLE";continue;}
   auto path=slotPath(m_saveDirectory,slot);std::error_code error;if(!std::filesystem::exists(path,error)){label+=error?"UNAVAILABLE":"EMPTY";continue;}
-  try{Game preview;preview.m_customCampaigns=m_customCampaigns;preview.m_customMapDirectory=m_customMapDirectory;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);label+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else label+="INVALID SAVE";}catch(const std::exception&){label+="UNREADABLE";}
+  label+=savedLabel(path,"INVALID SAVE");
  }
  m_checkpointLabel="AUTOSAVE / ";
  if(m_saveDirectory.empty())m_checkpointLabel+="UNAVAILABLE";
- else {auto path=checkpointPath(m_saveDirectory);std::error_code error;if(!std::filesystem::exists(path,error))m_checkpointLabel+=error?"UNAVAILABLE":"EMPTY";else try{Game preview;preview.m_customCampaigns=m_customCampaigns;preview.m_customMapDirectory=m_customMapDirectory;if(preview.decodeSave(readFile(path))){int minutes=int(preview.elapsed()/60);m_checkpointLabel+="MAP "+std::to_string(preview.level())+" / "+std::to_string(minutes)+" MIN / HP "+std::to_string(int(preview.player().health));}else m_checkpointLabel+="INVALID";}catch(const std::exception&){m_checkpointLabel+="UNREADABLE";}}
+ else {auto path=checkpointPath(m_saveDirectory);std::error_code error;if(!std::filesystem::exists(path,error))m_checkpointLabel+=error?"UNAVAILABLE":"EMPTY";else m_checkpointLabel+=savedLabel(path,"INVALID");}
 }
 bool Game::testEngineRegressionSaves(std::ostream& report){
  bool passed=true;

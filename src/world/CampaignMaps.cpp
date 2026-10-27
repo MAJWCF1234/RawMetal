@@ -1,6 +1,7 @@
 #include "CampaignMaps.h"
 #include "CampaignKit.h"
 #include "CampaignChapters.h"
+#include "CustomCampaign.h"
 #include <algorithm>
 #include <cmath>
 #include <tuple>
@@ -86,13 +87,17 @@ void intakeBay(Map& m){
 std::shared_ptr<const Map> makeFoundry(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[0];m.definition=CampaignChunks[0];m.definition.ceiling=6.4f;m.definition.ambient=.34f;
- m.layers.push_back(floorLayer("Foundry / ground",0));
+ m.layers.push_back(floorLayer("Foundry / ground",0,true));m.openNorth=true;
  // Always index the ground layer: deck() appends layers and would invalidate a reference.
  auto g=[&]()->AuthoredLayerData&{return m.layers[0];};
  const float hall=6.4f,low=3.4f;
 
  // --- 01 INTAKE ----------------------------------------------------------
- // Lift alcove (the wrecked cab from the Security Office drop).
+ // The north wall is open at x 2-5 only: the service passage from the bottom
+ // of the Security Office lift shaft (chunk 179) comes in there, so the player
+ // walks out of the crashed cab and into the Foundry without a cut.
+ rectangle(g(),0,0,2,1,'#');rectangle(g(),5,0,24,1,'#');
+ // Lift alcove at the foot of the passage.
  rectangle(g(),5,1,6,3,'#');rectangle(g(),5,6,6,7,'#');
  // Gate wall to the Foundry: a wide freight gate and a narrow service door.
  rectangle(g(),1,7,9,8,'#');rectangle(g(),13,7,19,8,'#');rectangle(g(),21,7,23,8,'#');
@@ -109,15 +114,14 @@ std::shared_ptr<const Map> makeFoundry(){
  wall(m,18,3.85f,19.2f,4,0,low,3);wall(m,20.4f,3.85f,23,4,0,low,3);wall(m,19.2f,3.85f,20.4f,4,2.2f,low,3);
  for(float y:{1.8f,2.9f})wall(m,18,y,18.15f,y+.6f,.95f,2.1f,17); // view glass toward the floor
  recordsDesk(m,21.3f,2.f,0);
- terminal(m,{21.3f,2.05f},"SHIFT LOG / 03:17","COOLANT FAILED. THE NIGHT CREW","SEALED FOUNDRY WITH US INSIDE.");
+ terminal(m,{21.3f,2.05f},"SHIFT LOG / 03:17","COOLANT FAILED. THE NIGHT CREW","SEALED FOUNDRY WITH US INSIDE.");m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.815f;
  shelf(m,{19.4f,1.3f},0);
  m.lights.push_back(lamp({20.6f,2.4f},low-.15f,.9f,4.f,3200));
- serviceCeiling(m,1,1,23,7,low);
- // The cab: buckled car walls and the snapped cable drum overhead.
- wall(m,1.1f,1.1f,4.9f,1.25f,0,2.6f,11);wall(m,1.1f,1.1f,1.25f,6.9f,0,2.6f,11);wall(m,1.1f,6.75f,4.9f,6.9f,0,2.6f,11);
- wall(m,1.1f,1.1f,4.9f,6.9f,2.6f,2.75f,11);
- for(float y:{2.2f,4.1f,5.8f})wall(m,1.25f,y,1.35f,y+.08f,.3f,2.5f,2);
- m.pipes.push_back({{3,1.4f},{3,1.4f},3.2f,.025f,2.75f,2});
+ serviceCeiling(m,1,0,23,7,low);
+ // The alcove: the snapped hoist line lies where it fell along the floor, the
+ // cab's dropped counterweight guide stands against the west wall.
+ for(float y:{2.2f,4.1f,5.8f})wall(m,1.f,y,1.12f,y+.08f,.3f,2.5f,2);
+ m.pipes.push_back({{1.3f,1.4f},{3.9f,2.3f},.03f,.025f,.03f,2});m.pipes.push_back({{3.9f,2.3f},{4.4f,3.6f},.03f,.025f,.03f,2});
  floorLine(m,5.2f,3.f,9,3.12f,0,13);floorLine(m,5.2f,5.88f,9,6.f,0,13);
 
  // --- 02 FOUNDRY ---------------------------------------------------------
@@ -150,7 +154,7 @@ std::shared_ptr<const Map> makeFoundry(){
  m.stairs.push_back({20,10,22,14.5f,0,2.6f,13,true,false});
  m.fixtures.push_back({41,{8,15.3f},0,2.4f,1.f,1.1f,0,true});
  for(Vec2 b:{Vec2{4.3f,8.6f},Vec2{4.3f,15.4f},Vec2{22.7f,15.4f}})m.fixtures.push_back({43,b,0,.6f,.5f,hall-.2f,kPi*.5f,true});
- terminal(m,{21.f,8.6f},"CONTAINMENT / 04:06","THE VESSELS WERE NOT EMPTY.","CLEAR THE HOSTILES. GET OUT.",2.6f);
+ terminal(m,{21.f,8.6f},"CONTAINMENT / 04:06","THE VESSELS WERE NOT EMPTY.","CLEAR THE HOSTILES. GET OUT.",2.6f);m.terminals.back().readable=Readable::Note;
  // Roof trusses across the hall.
  for(float y:{8.5f,12.f,15.5f})wall(m,1,y,23,y+.18f,hall-.5f,hall-.3f,2);
  wallSign(m,6.f,8.06f,2.4f,"HOT METAL","CROSS ON THE BRIDGES ONLY",2.4f,0);
@@ -173,7 +177,7 @@ std::shared_ptr<const Map> makeFoundry(){
  // Intake: cold fluorescent tubes; red emergency lamp in the wrecked cab.
  m.lights.push_back(lamp({8.5f,3.5f},low-.12f,1.1f,6.5f,4300,.3f));
  m.lights.push_back(lamp({14.5f,2.5f},low-.12f,1.f,6.f,4300,.3f));
- m.lights.push_back(lamp({1.25f,4.f},2.f,1.3f,4.f,1300,-.3f,WorldLightMount::Wall,0));
+ m.lights.push_back(lamp({1.02f,4.f},2.f,1.3f,4.f,1300,-.3f,WorldLightMount::Wall,0));
  // Foundry: sodium high-bays and the molten pour's own orange glow.
  m.lights.push_back(lamp({12.f,11.5f},3.6f,2.6f,9.f,1700));
  m.lights.push_back(lamp({7.f,9.f},hall-.4f,1.6f,9.f,2100));
@@ -229,7 +233,7 @@ std::shared_ptr<const Map> makePressureWorks(){
  g().rows[5][21]='B';
  forklift(m,15.6f,4.9f,0);
  for(float y:{1.6f,3.6f})shelf(m,{22.65f,y+.6f},-kPi*.5f);
- terminal(m,{6.5f,1.4f},"RAIL DOCK / MANIFEST","THE LAST TRAIN ARRIVED EMPTY.","THE PRESSURE GAUGES KEPT RISING.");
+ terminal(m,{6.5f,1.4f},"RAIL DOCK / MANIFEST","THE LAST TRAIN ARRIVED EMPTY.","THE PRESSURE GAUGES KEPT RISING.");m.terminals.back().readable=Readable::Letter;
  serviceCeiling(m,1,1,23,7,3.6f);
 
  // --- 05 PUMP HALL -------------------------------------------------------
@@ -2937,6 +2941,9 @@ std::shared_ptr<const AuthoredMapData> campaignMap(int level){
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();
   // Chunks 34 on: the descent chapters, one file per district.
   buildCampaignChapters(result);
+  // The Security Office prologue is written in the custom map format; on the
+  // grid it takes the campaign's own definition for its chunk.
+  {auto office=std::make_shared<Map>(*loadEmbeddedPrologueCampaign()->maps.front());office->definition=CampaignChunks[PrologueChunk];office->name=CampaignMapNames[PrologueChunk];result[PrologueChunk]=std::move(office);}
   // Area score: each part of the facility has its own loop; stitched maps
   // share one so it carries on across the seam.
   using M=MusicCue;

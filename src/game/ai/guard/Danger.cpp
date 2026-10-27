@@ -53,8 +53,8 @@ bool Game::guardDangerIntent(size_t actor,ActorPose&pose,float dt,Vec2&goal,floa
  if(currentRisk<=.00001f){hasGoal=false;wantsMove=false;}
  else if(wait==0&&m_npcNavBudget>0){
   --m_npcNavBudget;wait=350;float best=currentRisk;Vec2 selected=pose.position;float selectedFeet=pose.z;bool found=false;
-  std::optional<World> planning;const auto&world=friendlyWorld(npc.level);
-  for(size_t door=0;door<world.doors().size();++door)if(!aiDoorLocked(world,npc.level,world.doors()[door])&&world.doors()[door].open<world.doors()[door].maxOpen){if(!planning)planning=world;planning->setDoor(int(door),world.doors()[door].maxOpen,true);}
+  const auto&world=friendlyWorld(npc.level);std::vector<char> operable(world.doors().size(),0);bool planning=false;
+  for(size_t door=0;door<world.doors().size();++door)if(!aiDoorLocked(world,npc.level,world.doors()[door])&&world.doors()[door].open<world.doors()[door].maxOpen){operable[door]=1;planning=true;}
   Vec2 hazard{get("guard_danger_x")*.001f-origin.x,get("guard_danger_y")*.001f-origin.y};auto away=normalized(pose.position-hazard);if(lengthSq(away)<.001f)away={std::sin(pose.yaw),std::cos(pose.yaw)};
   // One bounded local search, with angular alternatives and two distances.
   // Ordinary movement still owns doors, floor support and collision. A trapped
@@ -64,7 +64,7 @@ bool Game::guardDangerIntent(size_t actor,ActorPose&pose,float dt,Vec2&goal,floa
    candidate.x=std::clamp(candidate.x,.35f,23.65f);candidate.y=std::clamp(candidate.y,.35f,23.65f);
    if(lengthSq(candidate-pose.position)<.15f*.15f||guardPositionReserved(actor,candidate,pose.z))continue;
    float feet=pose.z;bool clear=friendlyWalkSegment(npc.level,pose.position,pose.z,candidate,track.scale,&feet);
-   if(!clear&&planning)clear=aiWalkSegment(*planning,pose.position,pose.z,candidate,track.scale,&feet);
+   if(!clear&&planning){World::DoorPlan plan(world,operable);clear=aiWalkSegment(world,pose.position,pose.z,candidate,track.scale,&feet);}
    if(!clear||!safeRiskPath(candidate,feet,currentRisk))continue;
    float risk=riskAt(candidate,feet);if(risk+.00001f<best){best=risk;selected=candidate;selectedFeet=feet;found=true;}
   }

@@ -9,6 +9,8 @@ AiTarget Game::guardSquadReport(size_t actor)const{
  const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;if(!c.squad)return {};auto faction=actorFaction(npc.track());AiTarget report;float best=1e9f;auto origin=chunkOffset(npc.level);
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&source=m_friendlyActors[i];const auto&t=source.track();
   if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||t.ai.squad!=c.squad||actorFaction(t)!=faction||!chunkResident(source.level)||!autonomousActor(t)||source.pose.clip==4||(t.deadState&&state(t.deadState))||guardState(i)!=GuardState::Alert||!state(friendlyKey(i,"guard_seen")))continue;
+  // A sighting reaches the squad over the radio, which takes a moment.
+  if(state(friendlyKey(i,"guard_radio"))<RadioCallMs)continue;
   auto delta=source.pose.position+chunkOffset(source.level)-origin-npc.pose.position;float height=source.pose.z-npc.pose.z,range=lengthSq(delta)+height*height;if(range>18*18||range>=best)continue;auto target=guardTarget(i);if(!guardCanSee(i,source.pose,target))continue;
   if(!factionsHostile(faction,target.faction))continue;target.position+=chunkOffset(source.level)-origin;report=target;best=range;
  }return report;

@@ -200,7 +200,7 @@ void Game::updateEnemies(float dt){
    constexpr float Tell=.65f,Lunge=.45f,Hold=.55f,Sprawl=1.25f,Fade=2.5f,Strike=2.8f;
    Vec2 aim{std::cos(e.heading),std::sin(e.heading)};
    bool struck=e.painFlash>.85f;
-   auto sprawl=[&](float seconds){e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(friendly<0)m_grabbed=0;};
+   auto sprawl=[&](float seconds){e.fades=0;e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(friendly<0)m_grabbed=0;};
    if(e.stalkMode==Enemy::StalkMode::Recover){
     e.stalkTimer=std::max(0.f,e.stalkTimer-dt);e.windup=0;e.strike=0;
     e.painFlash=.84f*e.stalkTimer/Sprawl; // plays its stagger through
@@ -260,15 +260,21 @@ void Game::updateEnemies(float dt){
    }
    if(friendly<0&&e.awareness>0){
     // Seen from a distance, it does not come on: it slips out of sight and
-    // comes again from somewhere the player is not looking.
-    bool spotted=observed&&dist>4.f;
-    if(fading&&e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=1.4f;fading=false;}
-    if(!fading&&spotted&&e.stalkMode!=Enemy::StalkMode::Watch){e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=2.f;fading=true;}
+    // comes again from somewhere the player is not looking. Twice; a player
+    // who keeps staring it down the third time gets it coming anyway. It picks
+    // its cover once, when it is seen, and stays hidden a while before it moves.
+    const bool spotted=observed&&dist>4.5f&&e.fades<2;
+    auto fade=[&]{e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=2.f;fading=true;++e.fades;e.hideAt=hidingSpot(e.pos);e.hideSet=true;};
+    if(fading&&e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=2.6f;fading=false;e.hideSet=false;}
+    if(!fading&&spotted&&e.stalkMode!=Enemy::StalkMode::Watch)fade();
     if(e.stalkMode==Enemy::StalkMode::Watch){
-     if(spotted){e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=2.f;fading=true;}
+     if(spotted&&e.stalkTimer<1.8f)fade();
      else if(e.stalkTimer<=0){e.stalkMode=Enemy::StalkMode::Flank;e.stalkSide=-e.stalkSide;}
     }
-    if(fading){Vec2 spot=hidingSpot(e.pos);if(lengthSq(spot-e.pos)<.01f)watching=true;else goal=spot;} // nowhere to go: it holds
+    if(fading&&!e.hideSet){e.hideAt=hidingSpot(e.pos);e.hideSet=true;} // a load or a hurt flight
+    // Nowhere to hide: it does not stand frozen in the open, it comes on.
+    if(fading&&lengthSq(e.hideAt-e.pos)<.01f){e.stalkMode=Enemy::StalkMode::Flank;fading=false;e.hideSet=false;e.fades=2;}
+    if(fading)goal=e.hideAt;
     else if(e.stalkMode==Enemy::StalkMode::Flank&&visible&&dist>2.4f&&sameLevel)goal=flankPoint(2.2f,1.6f,goal);
     watching=watching||e.stalkMode==Enemy::StalkMode::Watch;
     stalkSpeed=fading?2.2f:traits.speed;
@@ -359,12 +365,20 @@ void Game::updateEnemies(float dt){
   // A creature that opens doors plans through the ones it may operate; it
   // still collides with them until requestAiDoor has swung them open.
   std::vector<char> operable;std::optional<World::DoorPlan> doorPlan;
-  if(!direct&&traits.opensDoors&&e.awareness>0){bool any=false;operable.assign(m_world.doors().size(),0);
+  const bool keepWaypoint=!direct&&e.repathTimer>0&&(e.lostPath||lengthSq(e.waypoint-e.pos)>.04f);
+  if(direct)e.lostPath=false;
+  if(!direct&&!keepWaypoint&&traits.opensDoors&&e.awareness>0){bool any=false;operable.assign(m_world.doors().size(),0);
    for(size_t i=0;i<m_world.doors().size();++i){const auto&d=m_world.doors()[i];if(d.open<d.maxOpen&&!aiDoorLocked(m_world,m_level,d)){operable[i]=1;any=true;}}
    if(any)doorPlan.emplace(m_world,operable);}
   // A fast mover reaches a one-metre waypoint before the repath clock runs out.
-  if(!direct&&e.repathTimer>0&&lengthSq(e.waypoint-e.pos)>.04f)destination=e.waypoint;
-  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull);e.waypoint=destination;e.repathTimer=.35f;}
+  if(keepWaypoint)destination=e.waypoint;
+  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull);e.waypoint=destination;e.repathTimer=.35f;e.lostPath=false;
+   // No route through the decks: amble a step the way it faces (or turn) and
+   // ask again later; rebuilding the deck graph every frame stalls the game.
+   if(lengthSq(destination-e.pos)<.0001f){e.lostPath=true;e.repathTimer=1.6f;
+    for(int turn=0;turn<4;++turn){float a=e.heading+float(turn)*kPi*.5f*((int(e.gait*3)&1)?1.f:-1.f);Vec2 step=e.pos+Vec2{std::cos(a),std::sin(a)}*.9f;
+     if(aiWalkSegment(m_world,e.pos,e.z,step,hull)){destination=step;break;}}
+    e.waypoint=destination;}}
   else if(!direct){
    int field[World::Height][World::Width];for(auto&row:field)for(auto&value:row)value=9999;
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
@@ -382,7 +396,15 @@ void Game::updateEnemies(float dt){
    while(!queue.empty()){auto[x,y]=queue.front();queue.pop();for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<minCell||nx>maxCell||ny<minCell||ny>maxCell||field[ny][nx]!=9999||!edgeWalkable(nx,ny,x,y))continue;field[ny][nx]=field[y][x]+1;queue.push({nx,ny});}}
    int x=std::clamp(int(e.pos.x),minCell,maxCell),y=std::clamp(int(e.pos.y),minCell,maxCell),best=field[y][x];destination=e.pos;
    for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx>=minCell&&nx<=maxCell&&ny>=minCell&&ny<=maxCell&&field[ny][nx]<best&&edgeWalkable(x,y,nx,ny)){best=field[ny][nx];destination={nx+.5f,ny+.5f};}}
-   e.waypoint=destination;e.repathTimer=.25f;
+   e.waypoint=destination;e.repathTimer=.25f;e.lostPath=false;
+   // Nothing it can walk leads to the goal (the player on a ledge, behind a
+   // locked door): it wanders a cell at a time, mostly the way it faces, and
+   // asks again in a while instead of flooding the map every frame.
+   if(field[y][x]==9999){int pick=-1;float bestTurn=9.f;
+    for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<minCell||nx>maxCell||ny<minCell||ny>maxCell||!edgeWalkable(x,y,nx,ny))continue;
+     float turn=std::fabs(wrapAngle(std::atan2(float(dy[i]),float(dx[i]))-e.heading))+float((x*7+y*13+i*5+int(e.gait*3))%5)*.35f;
+     if(turn<bestTurn){bestTurn=turn;pick=i;}}
+    destination=pick<0?e.pos:Vec2{x+dx[pick]+.5f,y+dy[pick]+.5f};e.waypoint=destination;e.repathTimer=1.6f;e.lostPath=true;}
   }
   doorPlan.reset();
   Vec2 direction=normalized(destination-e.pos);

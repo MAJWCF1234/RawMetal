@@ -4,13 +4,13 @@ META_DEFAULT_TARGET: CUSTOM
 META_CAMPAIGN_NAME: SECURITY OFFICE PROLOGUE
 
 --- CUSTOM_CAMPAIGN_DATA_START ---
-# Main campaign prologue (embedded, resource 398; New Game starts here): night shift at the security desk on the upper level. The
+# Main campaign chunk 179 (embedded, resource 398; New Game starts here): night shift at the security desk on the upper level. The
 # friend messages from her Lab 4 terminal, the alarm goes off, you run to
 # the service lift, its cable fails and the cab drops nine metres. Impact
-# hands off to the main campaign's first map through ENTER_CAMPAIGN.
+# opens the cab's south door: the shaft passage leads into the Foundry.
 CAMPAIGN|SECURITY OFFICE PROLOGUE|0
-MAP|0|Depthworks / Security Office|0|0|4.6|5.75|0|0|3|0.3|industrial_night|0|0|0|0|0|-1|1|0|-1.5707963|-14|1
-LAYER|0|0|Shaft floor / sub-level|-9|0
+MAP|0|Depthworks / Security Office|0|-24|4.6|5.75|9|0|12|0.3|industrial_night|0|1|0|0|0|96|1|0|-1.5707963|-14|1
+LAYER|0|0|Shaft floor / sub-level|0|0
 ROW|0|0|0|########################
 ROW|0|0|1|########################
 ROW|0|0|2|##........##############
@@ -30,12 +30,12 @@ ROW|0|0|15|###############....#####
 ROW|0|0|16|###############....#####
 ROW|0|0|17|###############....#####
 ROW|0|0|18|###############....#####
-ROW|0|0|19|########################
-ROW|0|0|20|########################
-ROW|0|0|21|########################
-ROW|0|0|22|########################
-ROW|0|0|23|########################
-LAYER|0|1|Security level|0|0.22
+ROW|0|0|19|###############....#####
+ROW|0|0|20|##.................#####
+ROW|0|0|21|##.................#####
+ROW|0|0|22|##...###################
+ROW|0|0|23|##...###################
+LAYER|0|1|Security level|9|0.22
 ROW|0|1|0|........................
 ROW|0|1|1|........................
 ROW|0|1|2|..========..............
@@ -60,16 +60,18 @@ ROW|0|1|20|........................
 ROW|0|1|21|........................
 ROW|0|1|22|........................
 ROW|0|1|23|........................
-# Fixture bases and terminal heights are relative to the bottom layer (-9),
-# so props on the office floor (z 0) use base 9.0. OFFICE pack models 24-38.
+# The map stands on the campaign grid as chunk 179, north of the Foundry,
+# with the shaft floor level with the Foundry floor: the shaft is z 0 and the
+# office floor z 9. Fixture bases and terminal heights are relative to the
+# bottom layer, so props on the office floor use base 9.0. OFFICE pack models 24-38.
 # Room finish: block walls, drop ceiling and carpet laid inside the shell.
-STRUCT|0|2|2|10|2.06|0|3|0|21
-STRUCT|0|2|9.94|10|10|0|3|0|21
-STRUCT|0|2|2|2.06|10|0|3|0|21
-STRUCT|0|9.94|2|10|5|0|3|0|21
-STRUCT|0|9.94|7|10|10|0|3|0|21
-STRUCT|0|2|2|10|10|2.88|3|0|22
-STRUCT|0|2.06|2.06|9.94|9.94|0|0.012|0|23
+STRUCT|0|2|2|10|2.06|9|12|0|21
+STRUCT|0|2|9.94|10|10|9|12|0|21
+STRUCT|0|2|2|2.06|10|9|12|0|21
+STRUCT|0|9.94|2|10|5|9|12|0|21
+STRUCT|0|9.94|7|10|10|9|12|0|21
+STRUCT|0|2|2|10|10|11.88|12|0|22
+STRUCT|0|2.06|2.06|9.94|9.94|9|9.012|0|23
 # CCTV bank: four CRT sets on wide filing cabinets along the north wall.
 FIXTURE|0|31|3.3|2.45|9|2.4|0.7|0.706|0|1
 FIXTURE|0|31|5.9|2.45|9|2.4|0.7|0.706|0|1
@@ -104,30 +106,40 @@ FIXTURE|0|38|2.3|6.89|10.015|0.093|0.301|0.424|1.5707963|0
 FIXTURE|0|38|2.3|6.95|9.521|0.093|0.301|0.424|1.5707963|0
 FIXTURE|0|38|2.3|7.06|9.521|0.093|0.301|0.424|1.5707963|0
 FIXTURE|0|38|2.3|7.17|9.521|0.093|0.301|0.424|1.5707963|0
-SIGN|0|6|9.92|2.2|2.2|0.45|3.1415927|SECURITY / LEVEL 1|NIGHT SHIFT / DESK 2|14726704
-LIGHT|0|4.6|5.2|2.8
-LIGHT|0|7.5|8|2.8
+SIGN|0|6|9.92|11.2|2.2|0.45|3.1415927|SECURITY / LEVEL 1|NIGHT SHIFT / DESK 2|14726704
+LIGHT|0|4.6|5.2|11.8
+LIGHT|0|7.5|8|11.8
 # Corridor and lobby. Signs and lamps lead to the service lift.
-STRUCT|0|10|5|19|7|0|0.012|0|24
-STRUCT|0|16|7|19|12|0|0.012|0|24
-STRUCT|0|10|5|16|5.06|0|3|0|21
-STRUCT|0|10|6.94|16|7|0|3|0|21
-STRUCT|0|18.94|5|19|12|0|3|0|21
-STRUCT|0|15.94|7|16|12|0|3|0|21
-SIGN|0|14|4.92|2|2|0.42|0|SERVICE LIFT >|LOBBY / SOUTH|6089568
-LIGHT|0|13|6|2.85
-LIGHT|0|17|9.5|2.85
-LIGHT|0|16.5|13|2.85
-SIGN|0|21|13|2|1.8|0.42|-1.5707963|SERVICE LIFT|SUB-LEVEL ACCESS|14726704
-LIGHT|0|17|17|-6.6
+STRUCT|0|10|5|19|7|9|9.012|0|24
+STRUCT|0|16|7|19|12|9|9.012|0|24
+STRUCT|0|10|5|16|5.06|9|12|0|21
+STRUCT|0|10|6.94|16|7|9|12|0|21
+STRUCT|0|18.94|5|19|12|9|12|0|21
+STRUCT|0|15.94|7|16|12|9|12|0|21
+SIGN|0|14|4.92|11|2|0.42|0|SERVICE LIFT >|LOBBY / SOUTH|6089568
+LIGHT|0|13|6|11.85
+LIGHT|0|17|9.5|11.85
+LIGHT|0|16.5|13|11.85
+SIGN|0|21|13|11|1.8|0.42|-1.5707963|SERVICE LIFT|SUB-LEVEL ACCESS|14726704
+LIGHT|0|17|17|2.4
 # Flush one-step threshold opens the deck guardrail onto the cab (as Freight).
-STAIR|0|15|13|19|15|-0.12|0|1|1|1
+STAIR|0|15|13|19|15|8.88|9|1|1|1
 # Service lift cab: starts at the shaft floor and is called up on arrival,
 # unseen behind the lobby. Speed 7 m/s, so the release is a drop, not a ride.
-CARGO_LIFT|0|15|15|19|19|-9|0|7|office_lift_call|office_lift_release|office_lift_mm|office_lift_down|office_lift_arrived|office_lift_bottom
+CARGO_LIFT|0|15|15|19|19|0|9|7|office_lift_call|office_lift_release|office_lift_mm|office_lift_down|office_lift_arrived|office_lift_bottom
+# Shaft floor: the cab door (locked until the crash is over), a landing and
+# the service passage to the Foundry. The passage roof meets the Foundry
+# intake ceiling at 3.4; a lintel closes the shaft above the door.
+DOOR|0|15|19|19.5|0|0|0|0|0|-1|office_prologue_done|1
+STRUCT|0|15|19|19|20|2.65|12|0|21
+STRUCT|0|2|19|19|24|3.4|3.6|0|21
+LIGHT|0|16.5|20.5|3.15|||0.75|6|2300
+LIGHT|0|8|20.5|3.15|||0.6|6|2300|||||||0.2
+LIGHT|0|3.5|22.6|3.15|||0.7|6|2300
 # Objectives
 OBJECTIVE_TEXT|0|office_answer|Answer the message on your workstation
 OBJECTIVE_TEXT|0|office_run|Get to the service lift
+OBJECTIVE_TEXT|0|office_out|Get out of the shaft
 # 1. Chat. Started by the workstation; regions are unreachable on purpose.
 TIMED_SEQUENCE|0|office_chat|office_alarm|-2|-2|-1|-1|-100|100|21000|20500|0|0|27|0.3|1
 SEQUENCE_CUE|0|office_chat|0|27|4.6|4.15|0.35|1.4|LAB 4: you still on shift?
@@ -147,7 +159,8 @@ TIMED_SEQUENCE|0|office_drop|office_lift_release|-2|-2|-1|-1|-100|100|4000|2200|
 SEQUENCE_CUE|0|office_drop|0|28|17|17|0.6|0.6|LIFT: DOORS SEALING
 SEQUENCE_CUE|0|office_drop|1000|36|17|17|0.9|0.8|LIFT: LOAD UNSTABLE
 SEQUENCE_CUE|0|office_drop|2100|38|17|17|1|1.1|CABLE FAILURE
-# 4. Impact, then hand off to the main campaign.
+# 4. Impact; when the dust settles the cab door gives, and the way out
+# is the service passage into the Foundry.
 TIMED_SEQUENCE|0|office_crash|office_prologue_done|-2|-2|-1|-1|-100|100|5000|4200|0|0|27|0.2|1
 SEQUENCE_CUE|0|office_crash|0|34|17|17|1|0.8|
 SEQUENCE_CUE|0|office_crash|1400|27|17|17|0.3|0.5|EMERGENCY POWER / SUB-LEVEL / NO SIGNAL FROM LAB 4
@@ -158,12 +171,14 @@ SCRIPT_EVENT|0|office_run_now|0|0|24|24|-100|100|office_run|1|0
 SCRIPT_ACTION|0|office_run_now|OBJECTIVE|office_answer|2
 SCRIPT_ACTION|0|office_run_now|OBJECTIVE|office_run|1
 SCRIPT_ACTION|0|office_run_now|CHECKPOINT
-SCRIPT_EVENT|0|office_board|15.3|15.3|18.7|18.7|-1|1|office_run|1|0
+SCRIPT_EVENT|0|office_board|15.3|15.3|18.7|18.7|8|10|office_run|1|0
 SCRIPT_ACTION|0|office_board|STATE|office_drop|1
 SCRIPT_EVENT|0|office_impact|0|0|24|24|-100|100|office_lift_bottom|1|0
 SCRIPT_ACTION|0|office_impact|SHAKE|1.6
 SCRIPT_ACTION|0|office_impact|STATE|office_crash|1
 SCRIPT_ACTION|0|office_impact|OBJECTIVE|office_run|2
 SCRIPT_EVENT|0|office_handoff|0|0|24|24|-100|100|office_prologue_done|1|0
-SCRIPT_ACTION|0|office_handoff|ENTER_CAMPAIGN
+SCRIPT_ACTION|0|office_handoff|OBJECTIVE|office_out|1
+SCRIPT_EVENT|0|office_out_done|2|22|5|24|-1|3|office_prologue_done|1|0
+SCRIPT_ACTION|0|office_out_done|OBJECTIVE|office_out|2
 --- CUSTOM_CAMPAIGN_DATA_END ---

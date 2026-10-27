@@ -4,6 +4,44 @@
 #include <filesystem>
 
 namespace retro {
+void Game::updateExposure(float dt){
+ if((m_exposureTimer-=dt)>0)return;m_exposureTimer=.1f;
+ const Vec2 at=m_player.pos;const float chest=m_player.z+m_player.hullHeight()*.6f;
+ float lit=m_world.definition().ambient*.8f;
+ for(const auto& lamp:m_world.lights()){float power=lampPower(lamp);if(power<=0)continue;
+  float dz=lamp.z-chest,distance=std::sqrt(lengthSq(lamp.position-at)+dz*dz),range=std::max(1.f,lamp.range);if(distance>=range)continue;
+  float falloff=1-distance/range,share=power*lamp.intensity*falloff*falloff;if(share<.02f)continue;
+  if(m_world.lightRayClear(lamp.position,lamp.z-.05f,at,chest))lit+=share;
+ }
+ lit*=1-m_darkness;if(flashlightOn())lit=std::max(lit,1.f);
+ m_playerExposure=std::clamp(lit,0.f,1.f);
+}
+void Game::knockOnWall(){
+ if(m_elapsed-m_lastKnock<.6f||!m_player.grounded)return;
+ Vec2 ahead{std::cos(m_player.angle),std::sin(m_player.angle)};const float hand=m_player.z+m_player.hullHeight()*.7f;
+ for(float reach=.35f;reach<=.85f;reach+=.1f){Vec2 p=m_player.pos+ahead*reach;
+  if(m_world.fits(p.x,p.y,hand-.05f,.1f,false))continue;
+  m_lastKnock=m_elapsed;m_sounds.push_back({Sound::Land,p,.7f,1.35f,true,12,hand});
+  return;
+ }
+}
+// An unconscious guard lying within reach, to drag out of sight.
+int Game::nearbyBody()const{
+ int chosen=-1;float nearest=1.4f;
+ for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto& npc=m_friendlyActors[actor];
+  if(npc.level!=m_level||state(friendlyKey(actor,"restraint"))!=1||npc.pose.clip!=4||(npc.track().deadState&&state(npc.track().deadState))||!humanActorVisual(npc.track().visual))continue;
+  float distance=length(npc.pose.position-m_player.pos);if(distance<nearest&&std::fabs(npc.pose.z-m_player.z)<.5f){nearest=distance;chosen=int(actor);}
+ }return chosen;
+}
+void Game::dropBody(){if(m_draggedNpc<0)return;if(size_t(m_draggedNpc)<m_friendlyActors.size())saveRestrainedPose(size_t(m_draggedNpc));m_draggedNpc=-1;m_pickupNotice="BODY LEFT";m_pickupNoticeTime=1.2f;}
+float Game::guardAwareness(size_t actor)const{
+ if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return 0;const auto& npc=m_friendlyActors[actor];
+ if(npc.track().ai.mode!=ActorAiMode::Guard||npc.pose.clip==4||(npc.track().deadState&&state(npc.track().deadState)))return 0;
+ auto mode=guardState(actor);if(mode==GuardState::Alert)return 2;
+ if(mode==GuardState::Suspicious)return std::clamp(state(friendlyKey(actor,"guard_recognition"))/float(std::max(1,npc.track().ai.recognitionMs)),.05f,1.f);
+ if(mode==GuardState::Investigate||mode==GuardState::Search)return .5f;
+ return 0;
+}
 bool Game::npcIncapacitated(size_t actor)const{return actor<m_friendlyActors.size()&&state(friendlyKey(actor,"restraint"))!=0;}
 bool Game::npcHeld(size_t actor)const{return actor<m_friendlyActors.size()&&state(friendlyKey(actor,"restraint"))==2;}
 int Game::heldNpc()const{for(size_t i=0;i<m_friendlyActors.size();++i)if(npcHeld(i))return int(i);return -1;}
@@ -50,7 +88,9 @@ void Game::restrainNpc(size_t actor,bool held){
   m_player.pitch*=.2f;m_takedownActor=int(actor);m_takedownAge=0;
   npc.pose.clip=0;npc.pose.phase=0;saveRestrainedPose(actor);
   m_punchAge=10;m_shotCooldown=.55f;m_suppressFire=true;
-  float neck=npc.pose.z+npc.track().scale*.85f;m_sounds.push_back({Sound::PunchHit,npc.pose.position,.85f,.72f,true,14,neck});
+  // A choke is a scuffle, not a punch: heard by a man a room's width away
+  // (about 6.7 m in the open, 2.3 m through a wall), not across the yard.
+  float neck=npc.pose.z+npc.track().scale*.85f;m_sounds.push_back({Sound::PunchHit,npc.pose.position,.45f,.72f,true,14,neck});
   m_pickupNotice="GUARD UNCONSCIOUS";m_pickupNoticeTime=2;
  }
  updateGuardFlags();
@@ -88,6 +128,17 @@ void Game::releaseNpc(bool unconscious){
 void Game::updateStealth(const InputState&input,float){
  bool subdue=input.subdue&&!m_previousSubdue;m_previousSubdue=input.subdue;
  if(input.vrTracked){if(heldNpc()>=0)releaseNpc(true);return;}
+ if(m_draggedNpc>=0){
+  if(size_t(m_draggedNpc)>=m_friendlyActors.size()){m_draggedNpc=-1;}
+  else{auto& body=m_friendlyActors[size_t(m_draggedNpc)];
+   if(dead()||body.level!=m_level||state(friendlyKey(size_t(m_draggedNpc),"restraint"))!=1||(body.track().deadState&&state(body.track().deadState))||input.jump||!m_player.grounded||(input.fire&&!m_previousFire)||subdue){dropBody();}
+   else{Vec2 back{-std::cos(m_player.angle),-std::sin(m_player.angle)},target=m_player.pos+back*.85f;float feet=groundHeight(target);auto old=body.pose.position;
+    bool clear=target.x>=.25f&&target.y>=.25f&&target.x<23.75f&&target.y<23.75f&&std::fabs(feet-m_player.z)<.28f&&friendlyWalkSegment(m_level,old,body.pose.z,target,.45f);
+    if(clear){body.pose.position=target;body.pose.z=feet;body.pose.yaw=wrapAngle(kPi*.5f-m_player.angle);}
+    body.pose.clip=4;body.pose.phase=1;saveRestrainedPose(size_t(m_draggedNpc));
+    if(length(body.pose.position-m_player.pos)>1.6f)dropBody();
+   }}
+ }
  int index=heldNpc();
  if(index>=0){
   auto&npc=m_friendlyActors[size_t(index)];
@@ -166,7 +217,7 @@ bool Game::testStealth(){
   for(auto&key:listener.keys){key.position={14.5f,6.5f};key.yaw=kPi*.5f;}listener.ai.patrol={{{14.5f,6.5f},0,5000}};map->actorTracks.push_back(listener);campaign->maps[0]=map;
   Game g(campaign);g.m_player.pos={9.4f,6.5f};g.m_player.angle=kPi;InputState q;q.subdue=true;g.update(q,1.f/60);
   auto choke=std::find_if(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return e.sound==Sound::PunchHit&&e.spatial;});
-  check(choke!=g.m_sounds.end()&&choke->gain>=.8f,"A rear knockout emits a loud spatial struggle at the victim");
+  check(choke!=g.m_sounds.end()&&choke->gain>=.4f&&choke->gain<=.5f,"A rear knockout emits a spatial struggle at the victim, heard across a room but not a yard");
   check(g.guardState(1)==GuardState::Investigate,"A nearby guard investigates the choke instead of remaining on patrol");
  }
  {auto g=scene();g.m_player.pos={3.5f,6.5f};check(g.nearbyTakedown()<0,"Rear actions respect physical reach");}

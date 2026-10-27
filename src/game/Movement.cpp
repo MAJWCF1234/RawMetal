@@ -97,7 +97,7 @@ void Game::updateMovement(const InputState& input,float dt){
   bool grounded=m_player.grounded;auto old=m_player.pos;
   m_jumpBuffer=std::max(0.f,m_jumpBuffer-step);m_coyote=grounded?.075f:std::max(0.f,m_coyote-step);
   if(m_jumpBuffer>0&&m_coyote>0){m_player.verticalVelocity=5.4f;m_player.grounded=false;m_jumpBuffer=0;m_coyote=0;m_verticalSpringVelocity-=.45f;sound(Sound::Jump,.38f,.97f+(m_stepVariant%3)*.025f);}
-  float speed=length(m_velocity),wishSpeed=heldNpc()>=0?1.4f:m_player.crouched?1.65f:input.sprint&&m_grabbed<=0?5.4f:3.6f;
+  float speed=length(m_velocity),wishSpeed=draggingBody()?1.1f:heldNpc()>=0?1.4f:m_player.crouched?1.65f:input.sprint&&m_grabbed<=0?5.4f:3.6f;
   // In a Snatcher's hands the player can only struggle.
   if(m_grabbed>0){wishSpeed*=.35f;m_grabbed=std::max(0.f,m_grabbed-step);}
   if(m_player.grounded&&speed>0){float remaining=std::max(0.f,speed-std::max(1.5f,speed)*6.f*step);m_velocity=m_velocity*(remaining/speed);}
@@ -171,8 +171,8 @@ int Game::nearbyTerminal()const{
  for(size_t i=0;i<m_world.terminals().size();++i){auto&t=m_world.terminals()[i];auto delta=t.position-m_player.pos;float distance=length(delta),along=dot(delta,forward),base=t.z+m_world.floorHeight(t.position.x,t.position.y);
   // Paper is read where it lies: off its bench top, or off the wall it is
   // taped to at about eye height, from whatever floor is under the reader.
-  const bool bench=t.paper()?!t.taped:m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction==0;
-  const float aim=t.paper()?(t.taped?0.f:1.1f):(bench?1.1f:.75f),inset=t.paper()&&t.taped?.12f:bench?.6f:.4f;
+  const bool bench=t.paper()?t.paperOnBench():m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction==0;
+  const float aim=t.paper()?(t.taped?0.f:t.surface>=0?t.surface+.3f:1.1f):(bench?1.1f:.75f),inset=t.paper()&&t.taped?.12f:bench?.6f:.4f;
   const float stand=t.paper()&&t.taped?base-1.5f:base,tolerance=t.paper()&&t.taped?1.f:.65f;
   if(m_vrInputActive){
    float reach=vrInteractionDistance({t.position.x,t.position.y,base+aim},t.paper()?.35f:inset);
@@ -251,7 +251,10 @@ void Game::updateInteraction(const InputState& input,float dt){
  }
  if(usePressed&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
  if(usePressed&&heldNpc()>=0){releaseNpc(false);m_previousUse=true;m_world.updateDoors(dt);return;}
+ if(usePressed&&draggingBody()){dropBody();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&!input.vrTracked&&nearbyTakedown()>=0){restrainNpc(size_t(nearbyTakedown()),true);m_previousUse=true;m_world.updateDoors(dt);return;}
+ // E on a knocked-out guard: take him by the collar and drag him.
+ if(usePressed&&!input.vrTracked&&!holdingClutter()&&nearbyInteractionDoor()<0&&nearbyBody()>=0){m_draggedNpc=nearbyBody();equipWeapon(WeaponId::Fists);m_pickupNotice="DRAGGING THE BODY";m_pickupNoticeTime=1.5f;m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
  if(usePressed){int door=nearbyInteractionDoor();
@@ -261,7 +264,7 @@ void Game::updateInteraction(const InputState& input,float dt){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
   }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
-  if(!holdingClutter()&&door<0&&m_logTime==0&&!interactClutter())commandFriendly();
+  if(!holdingClutter()&&door<0&&m_logTime==0&&!interactClutter()&&!commandFriendly())knockOnWall();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);
 }

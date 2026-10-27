@@ -40,9 +40,11 @@ inline const CreatureTraits& creatureTraits(CreatureKind kind){
   // (its injured walk covers 1.9 m a cycle), crouches for .65 s before a 4.6 m/s
   // lunge, and needs 2.2 s before it can snatch again.
   {"SNATCHER",       140,1.85f,1.85f,1.1f,14,.65f,.34f,2,1.32f,true, true, 3.f, 3.3f,1.8f,1.2f,1.35f,4.6f,.3f, 2.2f,false},
-  // A resonance specimen on four legs: slow, heavy, stooping through doors; a
-  // long reach and a slam that lands hard and takes its time to recover.
-  {"CHIMERA",        420,2.f,  2.4f, 1.6f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.14f,2.2f,1.2f,1.7f, 0.f, .35f,2.f,false}};
+  // A resonance specimen on four legs, and a hunter: it stares a player down,
+  // circles to the side they are not watching and comes at 4.6 m/s on all
+  // fours; caught circling, it charges rather than freezing. A long reach and a
+  // slam that lands hard; it takes a lot of killing.
+  {"CHIMERA",        560,2.f,  2.4f, 1.6f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.2f,1.7f, 4.6f,.35f,2.f,false}};
  return table[int(kind)];
 }
 // The area score a map plays; stitched maps share one so the loop carries on.
@@ -63,9 +65,9 @@ struct ChunkDefinition {
     // Off-duty openings: no weapon drawn and no viewmodel until the first punch.
     bool startUnarmed=false;
 };
-inline constexpr int CampaignChunkCount=179;
+inline constexpr int CampaignChunkCount=180;
 inline constexpr int AshfallChunkCount=15;
-inline constexpr int WorldChunkCapacity=179;
+inline constexpr int WorldChunkCapacity=180;
 // Chunks 34 on are the descent chapters (power plant to the Dark Below),
 // generated from tools/campaign/plan.py; their builders live in the
 // CampaignChapter*.cpp files.
@@ -74,10 +76,13 @@ inline constexpr int WorldChunkCapacity=179;
 // they sit wherever their origin places them in the world.
 inline constexpr int FreightDistrictEnd=32;
 inline constexpr int ReactorCoreChunk=32,CoolantLoopChunk=33;
+// The Security Office prologue, where New Game starts: the last chunk, stood
+// on the grid north of the Foundry with its lift shaft opening into it.
+inline constexpr int PrologueChunk=179;
 static_assert(CampaignChunkCount<=WorldChunkCapacity&&AshfallChunkCount<=WorldChunkCapacity,"World storage must cover every authored chunk");
 inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     // Maps 0-2: brighter fill for their darker brick, rust panel and green steel finishes.
-    {{0,0},{3.5f,4.5f},0,Environment::Interior,false,3.4f,.38f},
+    {{0,0},{3.5f,4.5f},0,Environment::Interior,false,3.4f,.38f,96},
     {{18,24},{3.5f,3.5f},0,Environment::Interior,false,3.4f,.36f},
     {{36,48},{3.5f,3.5f},0,Environment::Interior,false,3.4f,.36f},
     // The Reactor Complex (3, 32, 33) streams by world position: the core and
@@ -261,6 +266,8 @@ inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     {{169,2376},{12.f,2.2f},-24.f,Environment::Interior,false,12.f,0.26f,94,FloorMaterial::Industrial,MusicCue::DeathClose,1.571f},
     {{169,2400},{12.f,2.2f},-24.f,Environment::Interior,false,24.f,0.26f,95,FloorMaterial::Industrial,MusicCue::LastChapter,1.571f},
     // PLAN:CHUNKS END
+    // 179: the Security Office (authored as a custom-format map, resource 398).
+    {{0,-24},{4.6f,5.75f},9,Environment::Interior,false,12.f,.3f,96,FloorMaterial::OfficeCarpet,MusicCue::Default,-1.5707963f,-14.f,true},
 }};
 inline constexpr std::array<const char*,CampaignChunkCount> CampaignMapNames{{
  "FOUNDRY","PRESSURE WORKS","TURBINE GANTRY","REACTOR COMPLEX","SERVICE GALLERY","COOLANT RETURN","CABLE VAULTS","PUMP ANNEX","UTILITY JUNCTION","WASTE HANDLING",
@@ -296,6 +303,7 @@ inline constexpr std::array<const char*,CampaignChunkCount> CampaignMapNames{{
  "BOSS ARENA II / FLOOR","LOWER DEPTHS","OLD CITY / CAUSEWAY","OLD CITY / TEMPLE","THE DEEP GATE","DEEP GATE / APPROACH",
  "THE DARK HEART",
     // PLAN:NAMES END
+ "SECURITY OFFICE",
 }};
 // The campaign chunk whose 24 m square contains a world-space point, or -1.
 inline int campaignChunkAt(Vec2 global){

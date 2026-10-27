@@ -448,8 +448,10 @@ std::shared_ptr<const Map> makeDrainageGallery(){
  // Two penstock headstocks on their plinths: the gallery sluices to the sump.
  for(float x:{3.f,6.f}){
   wall(m,x-.45f,20.6f,x+.45f,21.5f,F,F+.25f,15);
-  m.pipes.push_back({{x,21.05f},{x,21.05f},F+.25f,.12f,F+1.1f,6});
-  m.fixtures.push_back({model::valve_wheel,{x,21.05f},1.12f,.55f,.12f,.55f,0,false});
+  m.pipes.push_back({{x,21.05f},{x,21.05f},F+.25f,.12f,F+1.f,6});
+  // The stem ends in a gear head; the handwheel turns it from the gallery side.
+  wall(m,x-.17f,20.9f,x+.17f,21.2f,F+1.f,F+1.32f,8);
+  m.fixtures.push_back({model::valve_wheel,{x,20.84f},F-m.layers.front().elevation+.89f,.55f,.12f,.55f,0,false});
   m.structures.push_back({x-.2f,20.85f,x+.2f,21.25f,F,F+1.15f,false,6});
  }
  terminal(m,{12.35f,19.9f},"SLUICE JUNCTION / SUMP ACCESS","MCC-2 FEEDER ISOLATOR: SUMP WORKS PIT FLOOR, SOUTH-WEST ROOM.","OPEN IT AND EVERY LOAD DROPS: P-4, P-7, TOWER 2 RECIRC, THE SUMP.");m.terminals.back().readable=Readable::Letter;

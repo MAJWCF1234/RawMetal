@@ -4,6 +4,89 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.14.3 - The shaft door (2026-10-27)
+
+A playtest patch, from the second night's reports.
+
+The fall is not a cut any more. The Security Office stands on the plant's own
+grid now, nine metres over the Foundry, and when the cab hits the bottom of the
+shaft the game does not stop and start again. The dust settles, the cab's south
+door gives, and a service passage under the office runs out into the Foundry's
+lift alcove. You walk it. Nothing loads.
+
+Loading a save no longer hangs the window. The plant is rebuilt on a second
+thread behind a dark screen and a bar that fills as it goes, and Windows stops
+asking whether the game has died. That question was the crash: a load took long
+enough that a click told Windows the game was frozen, and Windows closed it. The
+save menu reads a small label written beside each save instead of rebuilding
+every saved game to print one line of it.
+
+The freezes at the end of the freight lift, in Receiving Lanes and in the
+warehouses were ours, and came in with the paper. A note taped to a wall was
+left out of the plant's collision index without being counted, so on any map
+with one the index was thrown away and rebuilt on every question asked of it:
+a minute and a half to light the receiving hall, six to reach the warehouse
+blocks, and every guard paying for it every step. It is counted now. Nobody was
+taken out of Receiving Lanes; all six of the detail together cost less than a
+millisecond.
+
+Anything that cannot reach you has stopped working out the whole plant again
+every frame to be sure. It wanders, a cell at a time, and asks again later.
+Guards planning a route through doors stopped copying the entire world to do it.
+
+The black walls in Emergency Generation were the next hall not being loaded
+until you stood within six metres of it. An open seam is a window, and what is
+through it is kept now, there and at every other open seam in the plant. Two
+low red lamps light the gallery's west wall before the sets are running.
+
+The Cleanup Force can be crept past. A guard who glimpses you does not know
+what he saw: a yellow "?" over his head fills while he works it out, and a red
+"!" means he has you. Within five metres nothing has changed. Beyond that,
+distance, a crouch, keeping still, the edge of his vision and shadow all buy
+time, and the five pips under your health are how lit you are. A glimpse he
+half made out, he walks over to check, still unsure and still open to a choke
+from behind. When he does have you he gets on the radio, and his squad hears
+about it a second and a half later, unless you drop him first. A body can be
+taken by the collar and dragged out of sight (E on a knocked-out guard, E again
+to let go), and a man has to see one fall to call it in. A choke is heard
+across a room now, not across the yard. E against a bare wall knocks on it,
+and a thrown can no longer gives away the hand that threw it.
+
+The Security Yard was built to be crept through and could not be. The detail
+takes longer to make out a shape at the end of the yard. The lane man turns his
+back on the portal for a moment; Sentry 1 holds longer on the lane and there
+are higher sandbags on his east side, so a crouched player along the south wall
+is under his line; the heavy turns to watch the gatehouse with the gate behind
+him; the lee of the van by the west wall is dark; there is a stack of crates
+between the nest and the gatehouse to break his view; and the Lock 2 bell is
+heard across the west half of the yard now, its lamp coming on while it rings. In the gatehouse the desk man watches his monitors with his
+back to the door, the bunk-room sharpshooter watches the beds, and there is a
+second way in, the smoking door on the south side, under a lamp that is out.
+
+The Snatcher had black holes in it: the gaps between its texture islands were
+black and bled through. They are filled. It also had a fit. Watched from across
+a room it slipped away, came back, was watched, slipped away, forever, and it
+looked for cover forty times a second while it did. It picks its cover once
+now, waits there, and the second time you stare it down it stops caring and
+comes anyway. With nowhere to hide it does not stand frozen in the open.
+
+The Chimera hunts. It stares, circles to the side you are not watching and
+comes at four and a half metres a second, and it takes a third as much again
+to kill. It moves like something with four legs: its gait is taken from a
+wolf's (Quaternius, CC0), under a torso that hunches and claws ahead of it.
+
+Central Stores has a sling test bay. The test load is a tonne of timber on
+skids: lean on it and it goes, and it does not stop until something stops it.
+Get it onto the scale and the cage opens. The winch pendant drags it home if
+you wedge it.
+
+Smaller: the door switches beside the bulkheads sit on the wall instead of in
+the air. The Foundry's shift log and containment note are paper. The drainage
+gallery's handwheels are on their stems. The man in the aid station lies on his
+bed.
+
+---
+
 ## v0.14.2 - Paper you can pick up (2026-10-26)
 
 A playtest patch, from what the testers walked into.

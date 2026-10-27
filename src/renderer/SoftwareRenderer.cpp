@@ -782,6 +782,9 @@ void SoftwareRenderer::drawHud(const Game& game){
  std::snprintf(b,sizeof(b),"%d",std::max(0,int(p.health)));int healthWidth=uiText(22,m_height-52,b,vital,0,40);
  int barX=30+healthWidth;uiText(barX,m_height-41,"HEALTH",muted,0,10,1,2);
  fill(barX,m_height-25,100,4,bone,.15f);fill(barX,m_height-25,int(std::clamp(p.health,0.f,100.f)),4,critical?red:bone,critical&&(int(game.elapsed()*4)&1)?.5f:1.f);
+ // How lit you are: five pips under the health bar. Guards make out a lit
+ // shape from across the room and a dark one only close up.
+ {const int lit=int(std::lround(game.playerExposure()*5.f));for(int pip=0;pip<5;++pip)fill(barX+pip*21,m_height-16,18,3,amber,pip<lit?.85f:.15f);}
  for(int i=1;i<10;++i)fill(barX+i*10,m_height-25,1,4,black,.7f);
  if(game.unarmed()){const char* hands=game.guarding()?"GUARD":"FISTS";uiText(m_width-24-uiTextWidth(hands,0,30,1),m_height-44,hands,bone,0,30,1,1);uiText(m_width-24-uiTextWidth("UNARMED",0,10,2),m_height-56,"UNARMED",muted,0,10,1,2);}
  else{std::snprintf(b,sizeof(b),"%02d",p.loaded);int loadedWidth=uiTextWidth(b,0,40);int reserveX=m_width-24-uiTextWidth("/ 00",0,16);
@@ -1006,6 +1009,18 @@ void SoftwareRenderer::prepareVrDisplays(const Game& game){
  m_vrObjectiveTime=std::max(0.f,m_vrObjectiveTime-1.f/90.f);
  std::string caption(game.actorCaption());if(caption.empty()&&m_vrObjectiveTime>0)caption="OBJECTIVE: "+m_vrObjective;
  if(caption!=m_vrCaptionShown){m_vrCaptionShown=caption;stamp(m_vrCaptionTexture,512,72,[&]{int y=4;for(const auto& row:wrapUiText(caption,size_t(64),3)){const int width=uiTextWidth(row.c_str(),1,18);uiText(256-width/2,y,row.c_str(),rgb(235,235,230),1,18);y+=22;}});}
+}
+// A save is being rebuilt on a worker: the frame goes dark under a bar that
+// fills as its chunks are built, instead of the window hanging.
+void SoftwareRenderer::drawLoading(const Game& game){
+ const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0);
+ if(!hardwarePresentsWindow())for(auto&p:m_pixels)p=shade(p,.1f);
+ fill(0,0,m_width,m_height,black,.82f);
+ const int w=std::min(420,m_width-80),x=(m_width-w)/2,y=m_height/2+10;
+ const char* label="LOADING";uiText((m_width-uiTextWidth(label,0,14))/2,y-34,label,bone,0,14);
+ fill(x,y,w,6,bone,.12f);fill(x,y,std::max(2,int(float(w)*game.loadProgress())),6,red,1);
+ const int percent=int(game.loadProgress()*100.f+.5f);char text[16];std::snprintf(text,sizeof text,"%d%%",percent);
+ uiText((m_width-uiTextWidth(text,3,11))/2,y+18,text,dim,3,11);
 }
 void SoftwareRenderer::drawTitle(const Game& game){
  static unsigned tick=0;++tick;const bool blink=(tick/30)%2==0;
@@ -1252,12 +1267,12 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
- if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}}
+ if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}if(game.loading())drawLoading(game);}
  if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xfff4f4f0u);rect(x-1,y-3,3,7,0xfff4f4f0u);}}
  auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}
  m_presentMs=0;
- if(directPresentation){auto presentStart=std::chrono::steady_clock::now();float sceneDim=game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;float shotKick=std::max(std::clamp(1.f-game.shotAge()/.10f,0.f,1.f)*(game.weaponKick()>.85f&&!game.unarmed()?1.f:0.f),game.damageFlash()*.65f);m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim,game.damageFlash(),shotKick,game.alarmPulse());m_presentMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-presentStart).count();}
+ if(directPresentation){auto presentStart=std::chrono::steady_clock::now();float sceneDim=game.loading()?.08f:game.titleScreen()?.17f:game.paused()?.25f:game.inventoryOpen()?.22f:1.f;float shotKick=std::max(std::clamp(1.f-game.shotAge()/.10f,0.f,1.f)*(game.weaponKick()>.85f&&!game.unarmed()?1.f:0.f),game.damageFlash()*.65f);m_gpu->present(m_pixels.data(),m_width,m_height,underwater,sceneDim,game.damageFlash(),shotKick,game.alarmPulse());m_presentMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-presentStart).count();}
 }
 }
 

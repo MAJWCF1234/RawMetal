@@ -572,6 +572,31 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(Vec2 d:{Vec2{16.25f,22.4f},Vec2{17.f,22.4f},Vec2{16.6f,21.7f}})mntFix(m,model::drum,d,f,.6f,.6f,.88f,d.x,true);
  for(float x:{17.9f,18.3f,18.7f})mntFix(m,model::gas_cylinder,{x,22.72f},f,.3f,.3f,1.45f,0,true);
  wall(m,17.7f,22.86f,18.9f,22.92f,f+1.05f,f+1.11f,8);
+ // --- The sling test bay: a proof-load cage that releases at rated load ------------------------
+ // The test load is a 1 t timber crate that slides on its skids until it hits
+ // something. Shoved south it stops against the bay's first bollard; shoved
+ // west from there it runs down the aisle against the second, onto the floor
+ // scale, which unlocks the cage (lifting gear and B shift's spare kit). Shoved
+ // west first it wedges on the staged load, and the winch drags it home.
+ m.pushCrates.push_back({{16.5f,18.5f},0});
+ m.cratePlates.push_back({{9.5f,19.5f},stateId("mnt_test_load")});
+ m.crateReset=stateId("mnt_test_reset");
+ for(Vec2 stop:{Vec2{8.5f,19.5f},Vec2{16.5f,20.5f}})mntFix(m,model::pwr_safety_bollard,stop,f,.2f,.2f,1.1f,0,true);
+ wall(m,9.04f,19.04f,9.96f,19.96f,f+.002f,f+.006f,8);
+ for(auto [x1,y1,x2,y2]:{std::tuple{9.f,19.f,10.f,19.06f},{9.f,19.94f,10.f,20.f},{9.f,19.f,9.06f,20.f},{9.94f,19.f,10.f,20.f}})floorLine(m,x1,y1,x2,y2,f,13);
+ // The cage: mesh on a kerb, its gate on the aisle.
+ mntMesh(m,true,17.f,4.8f,3.2f,f,false);
+ mntMesh(m,false,6.4f,18.2f,2.4f,f,false);mntMesh(m,false,3.2f,18.2f,2.4f,f,false);
+ mntMesh(m,true,19.4f,4.8f,3.2f,f,true);
+ {Door gate{4.24f,5.36f,19.4f,0};gate.swinging=true;gate.swing=-1;gate.requireState=stateId("mnt_test_load");m.doors.push_back(gate);}
+ taped(m,{6.43f,19.f},f+1.45f,kPi*.5f,Readable::Note,"SLING TEST BAY","CAGE RELEASES AT RATED LOAD. TEST LOAD ON THE SCALE, NOT YOUR FOOT.","WINCH IT BACK TO THE BAY WHEN YOU'RE DONE. - J.O.");
+ terminal(m,{17.6f,17.35f},"TEST BAY / WINCH PENDANT","DRAGS THE TEST LOAD BACK TO ITS BAY.","E / WINCH IT HOME.",0,stateId("mnt_test_reset"));
+ m.terminals.back().yaw=kPi;
+ mntFix(m,model::packing_crate,{3.8f,17.5f},f,.6f,.45f,.42f,.1f,true);
+ mntFix(m,model::cable_reel,{5.7f,17.6f},f,.45f,.9f,.9f,kPi*.5f,true);
+ m.pickupSpawns.push_back({{4.4f,18.4f},PickupKind::Health,f});
+ m.pickupSpawns.push_back({{5.4f,18.6f},PickupKind::Ammo,f});
+ m.lights.push_back(lamp({4.8f,18.2f},f+2.9f,.8f,5.f,4200,0));
  // --- The store's shell: girders, ducts, the high bays ----------------------------------------
  for(float x:{3.f,7.f,11.f,15.f,19.f}){wall(m,x-.13f,1.f,x+.13f,23.f,roof-.6f,roof-.54f,12);wall(m,x-.13f,1.f,x+.13f,23.f,roof-.06f,roof,12);wall(m,x-.02f,1.f,x+.02f,23.f,roof-.54f,roof-.06f,12);}
  wallBays(m,f,roof,4.f,false,true,true,false,12.f,20.f);
@@ -750,7 +775,8 @@ std::shared_ptr<const Map> makeMaintenanceAidStation(){
  mntFix(m,model::med_crash_cart,{20.3f,6.6f},f,.74f,.48f,1.f,-kPi*.5f,true);
  mntFix(m,model::med_vitals_monitor,{20.3f,6.6f},f+1.f,.38f,.18f,.28f,-kPi*.5f,false);
  mntFix(m,model::med_supply_cabinet,{20.75f,9.4f},f,1.1f,.44f,1.7f,-kPi*.5f,true);
- m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{18.4f,6.3f},f+.15f,kPi,4,1},{30000,{18.4f,6.3f},f+.15f,kPi,4,1}}});
+ // He lies on the mattress the length of the bed, head at the headboard.
+ m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{17.85f,6.3f},f+.58f,-kPi*.5f,4,1},{30000,{17.85f,6.3f},f+.58f,-kPi*.5f,4,1}}});
  {auto& t=mntTimer(m,"mnt_aid_last","mnt_aid_last_done",30000,26000);t.x1=15.2f;t.y1=5.f;t.x2=21.f;t.y2=11.f;t.bottom=f-1;t.top=f+3;}
  cue(m,"mnt_aid_last",400,Sound::WorkerDying,{18.4f,6.3f},"YOU'RE NOT CLEANUP.",.6f,f+.8f);
  cue(m,"mnt_aid_last",5200,Sound::Empty,{18.4f,6.3f},"THEY CAME AT FOUR. KNOCKED THREE TIMES. WE OPENED THE DOOR.",0.f,f+.8f);

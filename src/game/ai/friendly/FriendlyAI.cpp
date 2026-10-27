@@ -29,6 +29,9 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
   for(size_t other=0;other<m_friendlyActors.size();++other){const auto&buddy=m_friendlyActors[other];
    if(other==actor||buddy.track().ai.squad!=track.ai.squad||!npcHasVoice(other)||state(buddy.track().deadState)||npcIncapacitated(other))continue;
    auto delta=buddy.pose.position+chunkOffset(buddy.level)-pose.position-chunkOffset(npc.level);float dist=lengthSq(delta);if(dist>best)continue;
+   // Only a man who saw him go down can call it.
+   auto from=buddy.pose.position+chunkOffset(buddy.level)-chunkOffset(m_level),to=pose.position+chunkOffset(npc.level)-chunkOffset(m_level);
+   if(!soundRayClear(from,buddy.pose.z+buddy.track().scale*.85f,to,pose.z+track.scale*.5f))continue;
    best=dist;reporter=other;
   }
   if(reporter!=SIZE_MAX){
@@ -145,15 +148,17 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    else{--m_npcNavBudget;
    // Plan through doors this actor may operate; actual movement still collides
    // until a nearby request has physically opened the door.
-   std::optional<World> planning;
-   for(size_t i=0;i<world.doors().size();++i)if(!aiDoorLocked(world,level,world.doors()[i])&&world.doors()[i].open<world.doors()[i].maxOpen){if(!planning)planning=world;planning->setDoor(int(i),world.doors()[i].maxOpen,true);}
+   // (An overlay on the live world: copying the whole world per search stalled
+   // crowded rooms.)
+   std::vector<char> operable(world.doors().size(),0);bool anyOperable=false;
+   for(size_t i=0;i<world.doors().size();++i)if(!aiDoorLocked(world,level,world.doors()[i])&&world.doors()[i].open<world.doors()[i].maxOpen){operable[i]=1;anyOperable=true;}
    // Prefer the retained hint graph for guards; fall back to the span flood
    // when the graph has no useful hop from the current feet.
    // The graph answers the goal itself when it has no route (a door shut in
    // the way, say): then the span flood plans through the doors it may open.
    if(config.mode==ActorAiMode::Guard){waypoint=guardGraphWaypoint(level,pose.position,pose.z,goal,goalZ,height);
-    if(lengthSq(waypoint-pose.position)<.04f||(lengthSq(waypoint-goal)<1e-6f&&!friendlyWalkSegment(level,pose.position,pose.z,goal,height)))waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);}
-   else waypoint=aiWalkWaypoint(planning?*planning:world,pose.position,pose.z,goal,goalZ,height);
+    if(lengthSq(waypoint-pose.position)<.04f||(lengthSq(waypoint-goal)<1e-6f&&!friendlyWalkSegment(level,pose.position,pose.z,goal,height))){std::optional<World::DoorPlan> plan;if(anyOperable)plan.emplace(world,operable);waypoint=aiWalkWaypoint(world,pose.position,pose.z,goal,goalZ,height);}}
+   else{std::optional<World::DoorPlan> plan;if(anyOperable)plan.emplace(world,operable);waypoint=aiWalkWaypoint(world,pose.position,pose.z,goal,goalZ,height);}
    timer=.3f+float((actor*17+size_t(level)*5)%11)*.02f;}
   }
   // A saved pose can exist before its first route search. When the shared

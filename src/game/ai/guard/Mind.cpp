@@ -15,6 +15,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_step")<0||get("guard_step")>=1000||get("guard_bearing")< -31416||get("guard_bearing")>31416)throw std::runtime_error("Invalid saved guard motion");
  if(get("guard_cover")<0||get("guard_cover")>1||get("guard_cover_wait")<0||get("guard_cover_wait")>1000||get("guard_cover_x")<0||get("guard_cover_x")>24000||get("guard_cover_y")<0||get("guard_cover_y")>24000||get("guard_cover_z")< -100000||get("guard_cover_z")>100000)throw std::runtime_error("Invalid saved guard repositioning");
  if(get("guard_cover")&&(get("guard_cover_x")<350||get("guard_cover_x")>23650||get("guard_cover_y")<350||get("guard_cover_y")>23650))throw std::runtime_error("Invalid saved guard cover goal");
+ if(get("guard_radio")<0||get("guard_radio")>2000)throw std::runtime_error("Invalid saved guard radio call");
  if(get("guard_confirmed")<0||get("guard_confirmed")>1||get("guard_seen")<0||get("guard_seen")>1||get("guard_under_fire")<0||get("guard_under_fire")>1500)throw std::runtime_error("Invalid saved guard threat memory");
  if(get("guard_heard")<0||get("guard_heard")>15||get("guard_hurt_amount")<0||get("guard_hurt_amount")>m_friendlyActors[actor].track().health||get("guard_enemy_dead")<0||get("guard_enemy_dead")>1)throw std::runtime_error("Invalid saved guard sensory conditions");
  if(get("guard_patrol_wait")<0||get("guard_patrol_wait")>5000||get("guard_patrol_progress")<0||get("guard_patrol_progress")>=100||get("guard_patrol_point_seen")<0||get("guard_patrol_point_seen")>int(config.patrol.size())||get("guard_patrol_fraction")<0||get("guard_patrol_fraction")>=1000||get("guard_patrol_movement_fraction")<0||get("guard_patrol_movement_fraction")>=1000)throw std::runtime_error("Invalid saved guard patrol recovery");
@@ -141,11 +142,32 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   // A just-found body already blamed the player — keep that confirm.
   if(!sameRef(previous,target)&&!casualty){confirmed=false;recognition=0;}
   rememberGuardTarget(actor,target);remember(target.position+globalOrigin,target.feet);
-  recognition=confirmed||casualty?config.recognitionMs:std::min(config.recognitionMs,recognition+ms);confirmed=recognition>=config.recognitionMs||casualty;mode=confirmed?GuardState::Alert:GuardState::Suspicious;
+  // How fast he makes the player out. Within 5 m nothing saves them; beyond
+  // it distance, a crouch, keeping still, the edge of his vision and shadow
+  // all buy time (at the end of his sight, three times as long before the rest).
+  float rate=1.f;
+  if(target.kind==ShotKind::Player&&!confirmed&&!casualty){
+   auto toward=target.position-pose.position;float dz=target.feet+target.eye-eye,distance=std::sqrt(lengthSq(toward)+dz*dz);
+   if(distance>5.f){rate=1.f-.7f*std::clamp((distance-5.f)/std::max(1.f,config.sightRange-5.f),0.f,1.f);
+    if(m_player.crouched)rate*=.6f;
+    float speed=length(m_velocity);if(speed<.3f)rate*=.7f;else if(speed>4.2f)rate*=1.4f;
+    if(dot(normalized(toward),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})<(config.sightDot+1.f)*.5f)rate*=.5f;
+    rate*=.35f+.65f*std::min(1.f,m_playerExposure*1.6f);
+   }
+  }
+  int gain=ms>0?std::max(1,int(std::lround(ms*rate))):0;
+  recognition=confirmed||casualty?config.recognitionMs:std::min(config.recognitionMs,recognition+gain);confirmed=recognition>=config.recognitionMs||casualty;mode=confirmed?GuardState::Alert:GuardState::Suspicious;
  }
  else{
-  recognition=confirmed?config.recognitionMs:0;
-  if(mode==GuardState::Suspicious&&!confirmed){mode=GuardState::Patrol;put("guard_memory",0);rememberGuardTarget(actor,{});}
+  const int glimpsed=recognition;
+  recognition=confirmed?config.recognitionMs:std::max(0,recognition-ms/2);
+  // Half made out: he walks over to where he saw it, still unsure (and still
+  // open to a takedown). Less than that and he shrugs, but the doubt fades
+  // slowly, so a second look soon after finishes the job faster.
+  if(mode==GuardState::Suspicious&&!confirmed){
+   if(glimpsed*2>=config.recognitionMs){mode=GuardState::Investigate;put("guard_travel",0);}
+   else{mode=GuardState::Patrol;put("guard_memory",0);rememberGuardTarget(actor,{});}
+  }
   else if(mode==GuardState::Alert){mode=GuardState::Investigate;put("guard_travel",0);}
   bool supporting=schedule==GuardSchedule::Medic||schedule==GuardSchedule::Engineer||schedule==GuardSchedule::Patient;
   if(heard&&!supporting&&!enemyDead){auto local=heard->source;const auto&world=worldAt(local);remember(heard->source+chunkOffset(m_level),world.supportBelow(local.x,local.y,heard->z));mode=GuardState::Investigate;}
@@ -176,7 +198,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  int oldSeen=get("guard_seen");put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
  // Senses update independently of task ownership. Only the shared executor
  // below may select movement or advance role work for this actor/frame.
- put("guard_mode",int(mode));
+ put("guard_mode",int(mode));put("guard_radio",mode==GuardState::Alert?std::min(2000,get("guard_radio")+ms):0);
  int planFlags=(get("guard_under_fire")>0)|((get("weapon_reload")>0||get("weapon_reloading"))<<1)|((get("weapon_saved")&&!get("weapon_rounds"))<<2);
  bool changedThreat=target.valid()&&(previous.kind!=target.kind||previous.level!=target.level||previous.index!=target.index);
  bool planWake=freshHit||noiseWake||nearThreat||enemyDead||changedThreat||int(mode)!=get("plan_mode")||visible!=bool(oldSeen)||planFlags!=get("plan_flags")||get("stuck")>0;

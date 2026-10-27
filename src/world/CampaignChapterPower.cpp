@@ -597,6 +597,9 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
  for(float y:{4.f,12.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.5f,roof,12);
  cableTray(m,{6.f,1.4f},{18.f,1.4f},base+3.f);
  for(Vec2 l:{Vec2{13.f,6.f},Vec2{5.f,10.f},Vec2{13.f,20.f},Vec2{20.f,15.f}})pwrRed(m,l,roof-.5f,1.f,8.f);
+ // The gallery deck shades the ceiling reds off the west walls: two low reds
+ // under it, so the walls read before the sets are running.
+ for(Vec2 l:{Vec2{1.6f,6.f},Vec2{3.2f,12.6f}})pwrRed(m,l,deckZ-.4f,.7f,5.f);
  for(Vec2 l:{Vec2{7.f,5.6f},Vec2{16.f,5.6f},Vec2{7.f,10.4f},Vec2{13.f,11.f},Vec2{7.f,20.5f},Vec2{13.f,20.5f},Vec2{19.f,20.5f},Vec2{20.f,13.f}})pwrWork(m,l,roof-.45f,2.f,11.f,5000,.05f,WorldLightMount::Ceiling,0,PwrStrike);
  zone(m,"EMERGENCY GENERATION / GALLERY",0,4,6,15,deckZ-.5f,1000);
  zone(m,"EMERGENCY GENERATION / BATTERY ROOM",16,10,23,15);

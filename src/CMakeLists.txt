@@ -136,6 +136,7 @@ add_executable(RawMetal WIN32
     game/PrologueTest.cpp
     game/MapAudit.cpp
     game/Stealth.cpp
+    game/Crates.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
     game/Ragdoll.cpp

@@ -26,6 +26,9 @@ void Game::setState(StateId id,int value){
 ObjectiveStatus Game::objective(StateId id)const{int index=findValue(m_objectives,id);return index<0?ObjectiveStatus::Hidden:static_cast<ObjectiveStatus>(m_objectives[size_t(index)].value);}
 std::string_view Game::activeObjectiveText()const{
  if(m_customCampaign)for(const auto&map:m_customCampaign->maps)for(const auto&label:map->objectiveTexts)if(objective(label.id)==ObjectiveStatus::Active)return label.text;
+ // A campaign chunk written in the custom map format (the Security Office)
+ // names its own objectives.
+ if(!m_customCampaign&&m_world.m_mapData)for(const auto&label:m_world.m_mapData->objectiveTexts)if(objective(label.id)==ObjectiveStatus::Active)return label.text;
  return {};
 }
 void Game::setObjective(StateId id,ObjectiveStatus status){if(!id)return;int value=int(status),index=findValue(m_objectives,id);if(index<0){if(status!=ObjectiveStatus::Hidden)m_objectives.push_back({id,value});}else if(status==ObjectiveStatus::Hidden)m_objectives.erase(m_objectives.begin()+index);else m_objectives[size_t(index)].value=value;}
@@ -79,7 +82,8 @@ void Game::executeScriptAction(const ScriptAction& action){
   case ScriptAction::Type::Checkpoint:saveCheckpoint();break;
   case ScriptAction::Type::CompleteCampaign:m_won=true;break;
   // Deferred: the script pass is still iterating this world's events.
-  case ScriptAction::Type::EnterMainCampaign:m_pendingMainCampaign=true;break;
+  // (Only a custom world hands off: the prologue is a campaign chunk now.)
+  case ScriptAction::Type::EnterMainCampaign:if(m_worldId==WorldId::Custom)m_pendingMainCampaign=true;break;
  }
 }
 void Game::updateReceivingBreach(){

@@ -1,3 +1,4 @@
+#include "../world/ModelIds.h"
 #include "Projection.h"
 #include "RenderProfile.h"
 #include "../core/FrameProfile.h"
@@ -1023,6 +1024,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // fixtures and objects still need their normal per-frame budget on that
  // first frame, otherwise they visibly brighten when the cache is reused.
  shadowBudget=m_shadowBudgetLimit;
+ // Heavy crates move, so they are drawn every frame, never baked.
+ for(const auto& crate:w.pushCrates())facility(model::wooden_crate,crate.position.x,crate.position.y,crate.z,crate.size,crate.size,crate.size,0);
  if(w.cargoLift().upper>w.cargoLift().lower){
   const auto& lift=w.cargoLift();float z=w.cargoLiftHeight();
   const float x1=lift.x1,x2=lift.x2,y1=lift.y1,y2=lift.y2,mx=(x1+x2)*.5f,width=x2-x1,depth=y2-y1;
@@ -1112,8 +1115,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   quad({door.left,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f+stripeHeight},{door.left,door.y+.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
   for(float jamb:{door.left,door.right})box({jamb-.055f,y-.08f,base},{jamb+.055f,y+1.08f,base+2.75f},m_panelMetal,.85f);
   // Switch housings attach to the fixed wall on both sides, never to the moving leaf.
-  for(float side:{-1.f,1.f}){float face=door.y+side*.535f,switchX=door.left-.25f;
+  for(float side:{-1.f,1.f}){const float switchX=door.left-.25f;
    float h=base;
+   // Mount on the real face of the wall beside the opening, however thick it
+   // is; where there is no wall there is no switch, rather than one in the air.
+   float face=door.y;bool wallThere=false;
+   for(float d=.02f;d<.66f;d+=.02f)if(w.fits(switchX,door.y+side*d,h+1.05f,.02f,false)){face=door.y+side*(d-.005f);wallThere=d>.03f;break;}
+   if(!wallThere)continue;
    box({switchX-.17f,face-.035f,h+.86f},{switchX+.17f,face+.035f,h+1.27f},m_panelMetal,.9f);
    if(side<0)quad({switchX+.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+1.24f},{switchX+.14f,face-.04f,h+1.24f},m_terminalTexture,.85f);
    else quad({switchX-.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+1.24f},{switchX-.14f,face+.04f,h+1.24f},m_terminalTexture,.85f);
@@ -1523,10 +1531,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     quad({l.x,l.y,h-hh},{r.x,r.y,h-hh},{r.x,r.y,h+hh},{l.x,l.y,h+hh},sheet,1.f);
    }else{
     const float deskTop=h+.75f;
-    box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
-    for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
-     box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
-    const float a=terminal.yaw+.22f,z=deskTop+.068f;const Vec2 u{std::cos(a)*hw,std::sin(a)*hw},v{-std::sin(a)*hh,std::cos(a)*hh};
+    if(terminal.surface<0){
+     box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
+     for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
+      box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
+    }
+    const float a=terminal.yaw+.22f,z=terminal.surface<0?deskTop+.068f:h+terminal.surface+.004f;const Vec2 u{std::cos(a)*hw,std::sin(a)*hw},v{-std::sin(a)*hh,std::cos(a)*hh};
     quad({x-u.x-v.x,y-u.y-v.y,z},{x+u.x-v.x,y+u.y-v.y,z},{x+u.x+v.x,y+u.y+v.y,z},{x-u.x+v.x,y-u.y+v.y,z},sheet,1.f);
    }
    continue;
@@ -2101,6 +2111,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  };
  for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i),nullptr,-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|i);
  for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i),0xA000000000000000ull|i);}}
+ // What each guard makes of the player, over his head: a "?" that brightens
+ // as he works out what he is looking at (dim while he checks a spot), a red
+ // "!" once he has them.
+ for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level!=level)continue;
+  float awareness=game.guardAwareness(i);if(awareness<=0)continue;
+  // 7x11 glyphs, scaled into 16x24 cards; black is clear.
+  static const auto glyph=[](const char* rows[11],std::uint32_t colour){Texture t{16,24,std::vector<uint32_t>(16*24)};t.clampEdges=true;
+   for(int y=0;y<24;++y)for(int x=0;x<16;++x){int gx=(x-1)*7/14,gy=(y-1)*11/22;if(x<1||x>14||y<1||y>22)continue;if(rows[gy][gx]=='#')t.pixels[y*16+x]=colour;}
+   t.emission=t.pixels;return t;};
+  static const char* question[11]={".#####.","##...##","##...##","....##.","...##..","...##..","...##..",".......","...##..","...##..","......."};
+  static const char* bang[11]={"..###..","..###..","..###..","..###..","..###..","..###..","..###..",".......","..###..","..###..","......."};
+  static const Texture suspicious=glyph(question,0xffffd040u),alerted=glyph(bang,0xffff3020u);
+  const bool alert=awareness>=2;const float bob=std::sin(game.elapsed()*6.f+float(i))*.03f;
+  Point3 head{npc.pose.position.x,npc.pose.position.y,npc.pose.z+npc.track().scale*1.12f+.32f+bob};
+  const Point3 across=effectSide*(alert?.13f:.12f),up{0,0,alert?.2f:.18f};const float glow=alert?2.4f:.6f+1.6f*std::min(1.f,awareness);
+  quad(head-across-up,head+across-up,head+across+up,head-across+up,alert?alerted:suspicious,glow);
+ }
  for(const auto&drone:engineerDrones)if(drone.level==level){
   if(!sphereVisible(drone.position+Point3{0,0,EngineerDroneHeight*.5f},1.2f))continue;
   m_engineerDrone.poseCreature(drone.walking?1:0,drone.phase);

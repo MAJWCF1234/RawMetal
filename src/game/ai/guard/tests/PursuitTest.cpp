@@ -59,7 +59,9 @@ bool Game::testGuardPursuit(){
   check(decoded&&restored&&restored->npcActors().size()==1&&restored->npcActors()[0].homeLevel==0&&restored->npcActors()[0].level==g.npcActors()[0].level&&length(global(*restored)-global(g))<.04f&&restored->guardState(0)==g.guardState(0),"Save during a seam pursuit preserves authored identity, physical ownership and continuation");
   tick(g,rate*13,rate);if(restored)tick(*restored,rate*13,rate);const auto&npc=g.npcActors()[0];
   check(npc.level==0&&length(npc.pose.position-npc.track().ai.patrol[0].position)<.3f&&g.guardState(0)==GuardState::Patrol&&!g.state(g.friendlyKey(0,"guard_memory"))&&!g.guardTarget(0).valid(),"Expired search forgets the threat and physically returns to its authored patrol home");
-  check(!g.chunkResident(0)&&!g.chunkResident(away),"Home geometry is released again after the returned guard resumes patrol");
+  // The player stays across the open seam from home in the side-by-side
+  // layouts: what is through an open seam stays loaded so it is not a black wall.
+  {bool throughSeam=layout!=2&&g.level()==1;check((throughSeam?g.chunkResident(0):!g.chunkResident(0))&&!g.chunkResident(away),"Home geometry is released again after the returned guard resumes patrol, unless it is in view through an open seam");}
  }
  auto gate=[&](Game&g,float open,bool opening){g.ensureChunk(0);g.friendlyWorld(0).setDoor(0,open,opening);g.friendlyWorld(1).setDoor(0,open,opening);};
  for(int rate:{60,120})for(bool locked:{false,true}){

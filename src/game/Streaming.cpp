@@ -4,7 +4,7 @@
 namespace retro {
 void Game::ensureChunk(int level){
  auto&chunk=m_chunks[level];if(chunk.resident)return;auto doors=chunk.world.doors();bool control=chunk.world.controlReleased();
- auto saved=chunk.world;chunk.world=makeWorld(level);chunk.world.restoreDynamic(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();chunk.resident=true;chunk.navReady=false;
+ auto saved=chunk.world;chunk.world=makeWorld(level);chunk.world.restoreDynamic(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();restoreCrates(chunk.world,level);chunk.resident=true;chunk.navReady=false;
 }
 int Game::boundaryPartner(int level,const Door& door)const{
  // An entry door on the north edge pairs with a transfer door on the
@@ -49,6 +49,13 @@ void Game::updateStreaming(float dt){
    if(group>=0)needed|=std::find(visibleGroups.begin(),visibleGroups.end(),group)!=visibleGroups.end();
    float dx=std::max({other.x-global.x,0.f,global.x-other.x-24}),dy=std::max({other.y-global.y,0.f,global.y-other.y-24});
    if(dx*dx+dy*dy<36)needed=true;
+   // An open seam is a window: whatever stands across it must be there however
+   // far back from the edge the player is, or the opening shows as a black wall.
+   auto delta=other-origin;
+   if(std::fabs(delta.y)<.01f&&std::fabs(delta.x-24)<.01f&&m_world.openEastBoundary())needed=true;
+   if(std::fabs(delta.y)<.01f&&std::fabs(delta.x+24)<.01f&&m_world.openWestBoundary())needed=true;
+   if(std::fabs(delta.x)<.01f&&std::fabs(delta.y-24)<.01f&&m_world.openSouthBoundary())needed=true;
+   if(std::fabs(delta.x)<.01f&&std::fabs(delta.y+24)<.01f&&m_world.openNorthBoundary())needed=true;
    for(const auto& door:m_world.doors())if(door.entry||door.transfer){
     Vec2 probe{origin.x+(door.left+door.right)*.5f,origin.y+(door.entry?-.05f:24.05f)};
     if(probe.x<other.x||probe.x>=other.x+24||probe.y<other.y||probe.y>=other.y+24)continue;
@@ -155,6 +162,11 @@ bool Game::testStreaming(){
  joined.m_player.angle=kPi*.5f;joined.m_velocity={};
  for(int i=0;i<110;++i)joined.update(walking,1.f/120);
  if(joined.level()!=5||!joined.chunkResident(4)||std::fabs(joined.player().z+9)>.001f)return fail(12);
+
+ // Emergency Generation opens onto the cable trench (38, north) and the Machine
+ // Hall deck (42, west): from the middle of its hall both stand loaded.
+ {Game seam;seam.m_level=39;seam.restart();seam.m_player.pos={12,12};seam.updateStreaming(0);
+  if(seam.level()!=39||!seam.chunkResident(38)||!seam.chunkResident(42))return fail(30);}
 
  // Ashfall uses the same resident-chunk renderer/collision path in two axes.
  Game ash(WorldId::Ashfall);

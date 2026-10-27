@@ -7,7 +7,8 @@ std::vector<AiStimulus> Game::aiStimuli()const{
  for(const auto&event:m_sounds){
   if(event.speech>=0)continue; // Radio dialogue is not a new perception stimulus.
   bool shot=event.sound==Sound::Shot,step=footstepSound(event.sound);
-  bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty||event.sound==Sound::PunchSwing;
+  // A swing or a throw is a whoosh, not a report: what it hits is the noise.
+  bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty;
   bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land;
   bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
   bool mechanism=event.sound==Sound::Door||event.sound==Sound::Machine||event.sound==Sound::LiftMotor||event.sound==Sound::LiftCreak;
@@ -19,7 +20,7 @@ std::vector<AiStimulus> Game::aiStimuli()const{
   float z=std::isfinite(event.z)?event.z:event.spatial?world.floorHeight(local.x,local.y)+.7f:m_player.z+m_player.eye;
   // Choke/takedown PunchHits carry farther than tossed junk — still under gunshot range.
   float impactCap=event.sound==Sound::PunchHit?10.f:6.f;
-  float radius=std::min(event.radius,danger?20.f:weapon?14.f:step?4.5f:mechanism?8.f:impactCap)*std::sqrt(std::clamp(event.gain,0.f,1.f));
+  float radius=event.aiRadius>0?event.aiRadius:std::min(event.radius,danger?20.f:weapon?14.f:step?4.5f:mechanism?8.f:impactCap)*std::sqrt(std::clamp(event.gain,0.f,1.f));
   int owner=-1;
   // NPC firearm sounds also appear in the general mixer. Attribute their
   // captured source so the duplicate cannot bypass own/friendly-shot filters.

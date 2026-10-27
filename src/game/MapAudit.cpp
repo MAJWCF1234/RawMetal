@@ -129,7 +129,7 @@ bool Game::auditMap(int level){
  auto usable=[&](const Terminal& t){
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;
   // Paper is read off its bench top, or off the wall at about eye height.
-  const float stand=t.paper()&&t.taped?base-1.5f:base,aim=t.paper()?(t.taped?0.f:1.1f):1.4f;
+  const float stand=t.paper()&&t.taped?base-1.5f:base,aim=t.paper()?(t.taped?0.f:t.surface>=0?t.surface+.3f:1.1f):1.4f;
   const Vec2 target=t.paper()&&t.taped?t.position+Vec2{std::sin(t.yaw),std::cos(t.yaw)}*.05f:t.position;
   int r=int(std::ceil(1.5f/Cell));int cx=int(t.position.x/Cell),cy=int(t.position.y/Cell);
   for(int y=cy-r;y<=cy+r;++y)for(int x=cx-r;x<=cx+r;++x){if(x<0||y<0||x>=N||y>=N)continue;

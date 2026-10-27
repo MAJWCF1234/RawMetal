@@ -29,6 +29,9 @@ bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)c
  // Crouched targets present a smaller silhouette; shrink recognition range so
  // sneaking closer is required before the cone can lock on.
  float range=c.sightRange;if(live.kind==ShotKind::Player&&m_player.crouched)range*=.55f;else if(live.height<Player::StandingHeight*.75f)range*=.55f;
+ // In shadow the player is a shape he has to be close to make out; once he
+ // has confirmed them he keeps tracking whatever the light.
+ if(live.kind==ShotKind::Player&&!state(friendlyKey(actor,"guard_confirmed")))range*=.55f+.45f*std::min(1.f,m_playerExposure*2.f);
  auto shift=chunkOffset(npc.level)-chunkOffset(m_level);return lengthSq(delta)+z*z<range*range&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>c.sightDot&&soundRayClear(pose.position+shift,pose.z+eye,live.position+shift,live.feet+live.eye);
 }
 AiTarget Game::guardThreat(size_t actor,const ActorPose&pose)const{

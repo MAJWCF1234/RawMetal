@@ -9,8 +9,11 @@ and elbows (each leg split out of the lower body below its barrel and again at
 the knee; each arm at the elbow), weights every part rigidly to its bone, and
 keys five clips at 30 fps for RawMetalAuthoredCreatureBake:
 
-  Chimera_Idle    2.5 s loop: breathing, a slow look round, the petals budded
-  Chimera_Walk    1.25 s loop: a trot, hooves lifting, body bob, tail and arms swinging
+  Chimera_Idle    2.5 s loop: laboured breathing, the head jerking round in
+                  twitches, a forehoof pawing, the petals fluttering
+  Chimera_Walk    1.25 s loop: a wolf's gait (the CC0 Quaternius wolf's walk,
+                  tools/data/wolf_walk.json from ExtractWolfGait.py) under a
+                  hunched torso that claws forward, head low and thrusting
   Chimera_Attack  1.2 s: it dips, rears onto its hind legs with the petals
                   flaring open, and slams down arms first
   Chimera_Pain    0.7 s: a jolt back, the petals snapping shut, an overshoot
@@ -21,7 +24,8 @@ Blender axes: Z up, the creature faces -Y. For a bone hanging down (legs,
 arms) a negative X rotation swings it forward; for the torso, positive leans
 it forward; for the body, negative lifts the nose.
 """
-import bpy, sys, math
+import bpy, sys, math, json
+from pathlib import Path
 from mathutils import Vector
 
 glb, out = sys.argv[sys.argv.index('--') + 1], sys.argv[sys.argv.index('--') + 2]
@@ -117,33 +121,59 @@ def ramp(t, t0, t1):
 BUD = .55
 S = math.sin; TAU = 2 * math.pi
 
+def snap(t, at, hold):
+    """A twitch: 0 until `at`, snaps to 1 in a frame or two, holds, eases back."""
+    return ramp(t, at, at + .03) * (1 - ramp(t, at + hold, at + hold + .12))
+
 def idle(t):
     a = TAU * t
-    return {'Root': {'loc': (0, 0, .012 * S(a))}, 'Torso': {'rot': (.04 + .03 * S(a), 0, .02 * S(a * .5 + 1))},
-            'Head': {'rot': (-.04 * S(a), 0, .28 * S(a * .5))}, 'Petals': {'scale': BUD + .05 * S(a)},
-            'UpperArmL': {'rot': (.05 * S(a + .5), 0, .04)}, 'UpperArmR': {'rot': (.05 * S(a + .9), 0, -.04)},
-            'ForearmL': {'rot': (-.08, 0, 0)}, 'ForearmR': {'rot': (-.08, 0, 0)},
-            'Tail': {'rot': (.05 * S(a), 0, .18 * S(a + 1.2))}}
-sampled('Chimera_Idle', 75, idle, step=3)
+    breath = S(2 * a) * .5 + .5  # two heaving breaths a loop
+    # The head does not look round smoothly: it jerks to a bearing, holds, jerks on.
+    look = .45 * snap(t, .12, .22) - .55 * snap(t, .52, .2) + .2 * snap(t, .83, .06)
+    cock = .3 * snap(t, .15, .18) - .25 * snap(t, .55, .16)
+    paw = max(0, S(TAU * ramp(t, .62, .9))) if .62 < t < .9 else 0
+    return {'Root': {'loc': (0, 0, .02 * breath)},
+            'Body': {'rot': (.03 * breath, 0, .02 * S(a))},
+            'Torso': {'rot': (.32 + .07 * breath, 0, .05 * S(a + 1))},
+            'Head': {'rot': (.18 - .1 * breath + .12 * snap(t, .4, .05), cock, look)},
+            'Petals': {'scale': BUD + .08 * breath + .25 * snap(t, .4, .05) + .03 * S(13 * a)},
+            'UpperArmL': {'rot': (-.35 + .06 * breath, 0, .12)}, 'UpperArmR': {'rot': (-.3 + .06 * S(2 * a + .7), 0, -.12)},
+            'ForearmL': {'rot': (-.55 - .25 * snap(t, .3, .1), 0, 0)}, 'ForearmR': {'rot': (-.5 - .2 * snap(t, .7, .08), 0, 0)},
+            'ThighFR': {'rot': (-.55 * paw, 0, 0)}, 'ShinFR': {'rot': (.9 * paw, 0, 0)},
+            'Tail': {'rot': (.15, 0, .5 * S(a) * .5 + .25 * S(3 * a))}}
+sampled('Chimera_Idle', 75, idle, step=1)
+
+WOLF = json.load(open(Path(__file__).resolve().parent / 'data' / 'wolf_walk.json'))['frames']
+def wolf(t, key):
+    """The wolf's swing for `key` at loop phase t, interpolated between frames."""
+    f = (t % 1) * len(WOLF); i = int(f) % len(WOLF); w = f - int(f)
+    return mix(WOLF[i][key], WOLF[(i + 1) % len(WOLF)][key], w)
 
 def walk(t):
     pose = {}
-    for leg, off in (('FL', 0), ('BR', 0), ('FR', .5), ('BL', .5)):
-        a = TAU * (t + off)
-        pose['Thigh' + leg] = {'rot': (-.5 * S(a), 0, 0)}
-        # The hoof lifts while the leg swings forward: the knee folds it back.
-        pose['Shin' + leg] = {'rot': (.95 * max(0, math.cos(a)), 0, 0)}
+    # Legs from the wolf: a negative X swings a hanging bone's tip forward, and
+    # the hind legs are scaled down to the horse-length legs they now drive.
+    for leg, scale in (('FL', 1.0), ('FR', 1.0), ('BL', .8), ('BR', .8)):
+        pose['Thigh' + leg] = {'rot': (-scale * wolf(t, 'Thigh' + leg), 0, 0)}
+        pose['Shin' + leg] = {'rot': (-scale * wolf(t, 'Shin' + leg), 0, 0)}
     a = TAU * t
-    pose['Root'] = {'loc': (0, 0, .045 * math.cos(2 * a))}
-    pose['Body'] = {'rot': (.03 * S(2 * a), 0, .04 * S(a))}
-    pose['Torso'] = {'rot': (.12 + .04 * S(2 * a + .6), 0, -.06 * S(a))}
-    pose['UpperArmL'] = {'rot': (.45 * S(a), 0, .05)}; pose['ForearmL'] = {'rot': (-.35 - .2 * max(0, S(a)), 0, 0)}
-    pose['UpperArmR'] = {'rot': (-.45 * S(a), 0, -.05)}; pose['ForearmR'] = {'rot': (-.35 - .2 * max(0, -S(a)), 0, 0)}
-    pose['Head'] = {'rot': (-.05 * S(2 * a + .8), 0, .04 * S(a))}
-    pose['Petals'] = {'scale': BUD + .04 * S(2 * a)}
-    pose['Tail'] = {'rot': (.1, 0, .32 * S(a + .8))}
+    # Weight drops onto each forefoot: a hard double bob and a pitching back.
+    fall = abs(S(2 * a + .4)) ** .6
+    pose['Root'] = {'loc': (0, 0, .07 * fall - .05)}
+    pose['Body'] = {'rot': (.06 * S(2 * a + 1.1), 0, .06 * S(a))}
+    # The human torso rides hunched over the forelegs, swaying, clawing ahead
+    # of itself in a fast reach and a slow drag.
+    pose['Torso'] = {'rot': (.5 + .08 * S(2 * a + .6), .08 * S(a + .3), -.1 * S(a))}
+    reachL = ramp(t % 1, 0, .2) * (1 - ramp(t % 1, .2, .75))
+    reachR = ramp((t + .5) % 1, 0, .2) * (1 - ramp((t + .5) % 1, .2, .75))
+    pose['UpperArmL'] = {'rot': (-.55 - .75 * reachL, 0, .1)}; pose['ForearmL'] = {'rot': (-.7 + .45 * reachL, 0, 0)}
+    pose['UpperArmR'] = {'rot': (-.55 - .75 * reachR, 0, -.1)}; pose['ForearmR'] = {'rot': (-.7 + .45 * reachR, 0, 0)}
+    # Head low and thrust out, snapping side to side once a stride.
+    pose['Head'] = {'rot': (.35 + .1 * S(2 * a + 2.2), .12 * S(a), .2 * (snap(t, .3, .08) - snap(t, .78, .06)))}
+    pose['Petals'] = {'scale': BUD + .18 * fall + .06 * S(11 * a)}
+    pose['Tail'] = {'rot': (.1 + .1 * S(2 * a), 0, .45 * S(a + .8))}
     return pose
-sampled('Chimera_Walk', 38, walk)
+sampled('Chimera_Walk', 38, walk, step=1)
 
 def blend(a, b, w):
     """Pose a toward pose b by w, bone by bone (missing bones are at rest)."""
