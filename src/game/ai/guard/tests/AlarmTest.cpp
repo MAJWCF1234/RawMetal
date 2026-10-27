@@ -47,12 +47,15 @@ bool Game::testAlarm(){
   check(latch==AlarmAlert&&g.guardAlarm()==AlarmEvasion&&std::fabs(held-AlertLatchMs/1000.f)<.1f,"ALERT holds "+std::to_string(held)+" s past the player leaving his sight, then reads EVASION");
   int clock=g.guardEvasion(),lowest=clock,steps=0;bool down=true,flood=true,hunted=true;
   while(steps<60*30&&g.guardAlarm()==AlarmEvasion){tick(g,1);++steps;int now=g.guardEvasion();down&=now<=lowest||now==0;lowest=std::min(lowest,now?now:lowest);const bool still=g.guardAlarm()==AlarmEvasion;flood&=!still||g.state("alarm_flag")==1;hunted&=!still||g.guardCard(0).kind==GuardCardKind::Hunting;stingsAfter+=heard(g,Sound::DetectSting);}
-  check(clock>0&&clock<=g.npcActors()[0].track().ai.searchMs+8000&&down&&std::abs(steps*1000/60-clock)<1200,"EVASION counts down from "+std::to_string(clock)+" ms and runs out in "+std::to_string(steps*1000/60)+" ms");
+  // A confirmed hunt is searched at least HuntSearchMs, so EVASION is never a blink (and never a
+  // HUD-only number); the ALERT latch is the first two seconds of that same hunt.
+  check(clock>=HuntSearchMs-AlertLatchMs&&clock<=std::max(g.npcActors()[0].track().ai.searchMs,HuntSearchMs)+8000&&down&&std::abs(steps*1000/60-clock)<1200,"EVASION counts down from "+std::to_string(clock)+" ms and runs out in "+std::to_string(steps*1000/60)+" ms");
   check(flood&&hunted,"Through the hunt the alarm flag stays up and he wears the red '?'");
   check(g.guardAlarm()>0&&g.guardAlarm()==g.guardCaution(0)&&g.guardCaution(0)>CautionMs-200&&!g.state("alarm_flag")&&g.guardState(0)==GuardState::Patrol,"When the hunt gives up the HUD reads CAUTION and the alarm flag drops");
   check(stingsAfter==0,"No second sting through the hunt");
   // A new detection is a new sting.
-  g.m_player.pos=near;int again=0;for(int f=0;f<120;++f){tick(g,1);again+=heard(g,Sound::DetectSting);}
+  // (In front of him, wherever his long search left him facing: he searched where he last had the player.)
+  {const auto&p=g.npcActors()[0].pose;g.m_player.pos=p.position+Vec2{std::sin(p.yaw),std::cos(p.yaw)}*2.5f;}int again=0;for(int f=0;f<120;++f){tick(g,1);again+=heard(g,Sound::DetectSting);}
   check(again==1&&g.guardAlarm()==AlarmAlert,"Seen again after the hunt, the sting sounds once more");
  }
  // Line-of-sight flicker: in and out of cover, one sting, one call, no strobing HUD.

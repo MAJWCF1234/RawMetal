@@ -26,7 +26,8 @@ bool Game::testGuardPolicy(){
   g.m_player.pos={10.5f,6.5f};tick(g,1,rate);check(g.guardState(0)==GuardState::Alert,"Known hostile is reacquired immediately after a short peek");
   check(tick(g,rate/3,rate)==0&&g.player().health==100,"Reacquisition still requires a fresh weapon raise and aim delay");
   if(decoded){restored.m_player.pos={10.5f,6.5f};tick(restored,1+rate/3,rate);check(restored.guardState(0)==g.guardState(0)&&restored.player().health==g.player().health,"Interrupted and restored peeks retain the same reaction and health");}
-  g.m_player.pos={18.5f,18.5f};tick(g,rate*16,rate);
+  // A confirmed hunt is searched at least HuntSearchMs: wait that out, and the walk to it.
+  g.m_player.pos={18.5f,18.5f};tick(g,rate*(HuntSearchMs/1000+8),rate);
   check(g.guardState(0)==GuardState::Patrol&&!g.guardTarget(0).valid()&&!g.state(g.friendlyKey(0,"guard_confirmed")),"An expired investigation/search forgets the entity and returns to patrol");
   g.m_player.pos=standing(g,0);tick(g,1,rate);check(g.guardState(0)==GuardState::Suspicious&&g.player().health==100,"A genuinely forgotten hostile must be recognised again");
  }

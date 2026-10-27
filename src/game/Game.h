@@ -563,6 +563,24 @@ public:
     enum class GuardCardKind{None,Making,Checking,Hunting,Alert};
     struct GuardCard{GuardCardKind kind=GuardCardKind::None;float fill=0;int bangMs=0;float call=0;};
     GuardCard guardCard(size_t actor)const;
+    // Lockers and bodies (ai/guard/Lockers.cpp). A man bound for a locker's
+    // doors (a witness, a suspect check) wears the full '?' of a hunt: the doors
+    // are about to open. The burst (leaveLocker): guard_burst (fixture+1) holds
+    // the man at the doors until a leaf's edge reaches him; guard_burst_ms runs
+    // from the hit, the push back easing out under him, until he lands.
+    GuardCard guardLockerCard(size_t actor)const;
+    bool lockerBurstPending(size_t actor)const;
+    void updateLockerBurst(float dt);
+    // The fall clip's phase at which his shoulders stand `lift` (0 down, 1
+    // standing) of their full height, so a rise or a slump moves at an even pace.
+    static float fallPhaseAtLift(ActorVisual visual,float lift);
+    // The collar of a body (midway between his shoulders, where a hand takes
+    // him), for the hands that stow him.
+    Point3 npcCollar(size_t actor)const;
+    // A confirmed hunt for the player is searched at least HuntSearchMs, so
+    // EVASION's clock is the time the hunters really give it.
+    static constexpr int HuntSearchMs=20000;
+    int guardSearchMs(size_t actor)const;
     // A radio call is a committed action: guard_call is what he is reporting
     // (1 the player seen, 2 a body), guard_radio how long he has been on it.
     // Only a choke, a knockout, death or a fresh hit cuts it short. A sighting

@@ -57,7 +57,8 @@ bool Game::testGuardPursuit(){
   check(sawDestination&&(layout!=2||sawMiddle),"Guard physically traverses the nonsequential stitched route and reaches its last-known area");
   check(body,"Migrated guard body blocks its destination floor and leaves the floor above clear");
   check(decoded&&restored&&restored->npcActors().size()==1&&restored->npcActors()[0].homeLevel==0&&restored->npcActors()[0].level==g.npcActors()[0].level&&length(global(*restored)-global(g))<.04f&&restored->guardState(0)==g.guardState(0),"Save during a seam pursuit preserves authored identity, physical ownership and continuation");
-  tick(g,rate*13,rate);if(restored)tick(*restored,rate*13,rate);const auto&npc=g.npcActors()[0];
+  // A confirmed hunt is searched at least HuntSearchMs before the walk home.
+  tick(g,rate*(HuntSearchMs/1000+13),rate);if(restored)tick(*restored,rate*(HuntSearchMs/1000+13),rate);const auto&npc=g.npcActors()[0];
   check(npc.level==0&&length(npc.pose.position-npc.track().ai.patrol[0].position)<.3f&&g.guardState(0)==GuardState::Patrol&&!g.state(g.friendlyKey(0,"guard_memory"))&&!g.guardTarget(0).valid(),"Expired search forgets the threat and physically returns to its authored patrol home");
   // The player stays across the open seam from home in the side-by-side
   // layouts: what is through an open seam stays loaded so it is not a black wall.
@@ -67,7 +68,8 @@ bool Game::testGuardPursuit(){
  for(int rate:{60,120})for(bool locked:{false,true}){
   auto g=scene(1,true,locked);check(observe(g,1,rate),"Paired transfer gate permits a real visual sighting while open and authorised");
   int knownX=g.state(g.friendlyKey(0,"guard_x")),knownY=g.state(g.friendlyKey(0,"guard_y"));if(locked)g.setState(stateId("pursuit_gate_permission"),0);else gate(g,0,false);
-  bool held=true,unchanged=true;for(int frame=0;frame<rate*14;++frame){tick(g,1,rate);held&=g.npcActors()[0].level==0&&global(g).y<24;
+  // A confirmed hunt is searched at least HuntSearchMs: wait that out, and the walk.
+  bool held=true,unchanged=true;for(int frame=0;frame<rate*(HuntSearchMs/1000+14);++frame){tick(g,1,rate);held&=g.npcActors()[0].level==0&&global(g).y<24;
    if(g.state(g.friendlyKey(0,"guard_memory")))unchanged&=knownX==g.state(g.friendlyKey(0,"guard_x"))&&knownY==g.state(g.friendlyKey(0,"guard_y"));}
   check(held&&unchanged&&(locked||!g.friendlyWorld(1).doors()[0].opening),"Closed or newly locked paired gate holds pursuit without wall crossing or forcing transfer leaves");
   check(g.guardState(0)==GuardState::Patrol&&!g.state(g.friendlyKey(0,"guard_memory")),"An inaccessible stitched pursuit abandons its old knowledge after the bounded investigation/search");

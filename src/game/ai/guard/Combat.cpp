@@ -45,6 +45,27 @@ CleanupBodyFrame cleanupBodyFrame(int role,int clip,float phase){
 float cleanupAnimationDuration(ActorVisual visual,int clip){
  int role=int(visual)-int(ActorVisual::Cleanup);if(role<0||role>=6)return 0;const auto&table=cleanupBodyFrames()[size_t(role)];return clip>=0&&size_t(clip)<table.durations.size()?table.durations[size_t(clip)]:0;
 }
+// The fall clip read by the height of its shoulders: the first phase at which
+// they have come down to `lift` of the way from the floor pose to standing.
+// Other visuals (no baked frames) take the phase as the lift.
+float Game::fallPhaseAtLift(ActorVisual visual,float lift){
+ lift=std::clamp(lift,0.f,1.f);const int role=int(visual)-int(ActorVisual::Cleanup);if(role<0||role>=6)return 1-lift;
+ const auto&table=cleanupBodyFrames()[size_t(role)];const unsigned count=table.counts[4],offset=table.offsets[4];
+ auto height=[&](unsigned frame){const auto&p=table.poses[offset+frame];return (p.rightShoulder.y+p.leftShoulder.y)*.5f;};
+ float low=height(0),high=height(0);for(unsigned frame=1;frame<count;++frame)low=std::min(low,height(frame));
+ const float want=low+(high-low)*lift;
+ for(unsigned frame=1;frame<count;++frame){const float a=height(frame-1),b=height(frame);
+  if(b<=want){const float k=a>b?std::clamp((a-want)/(a-b),0.f,1.f):1.f;return (float(frame-1)+k)/float(count-1);}}
+ return 1;
+}
+// Where a hand takes a man by the collar: midway between his shoulders, at
+// their top and a little behind them, in his present pose.
+Point3 Game::npcCollar(size_t actor)const{
+ const auto&npc=m_friendlyActors.at(actor);const int role=int(npc.track().visual)-int(ActorVisual::Cleanup);const float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=npc.track().scale/1.6f;
+ Point3 p{0,npc.track().scale*.85f,-.06f};
+ if(role>=0&&role<6){const auto frame=cleanupBodyFrame(role,std::clamp(npc.pose.clip,0,int(cleanupBodyFrames()[size_t(role)].clips)-1),npc.pose.phase);p=(frame.rightShoulder+frame.leftShoulder)*.5f;p.y+=.05f;p.z-=.06f;}
+ return {npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};
+}
 std::pair<Point3,Point3> Game::friendlyShotBounds(size_t actor)const{
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();Point3 center{npc.pose.position.x,npc.pose.position.y,npc.pose.z};
  int role=int(track.visual)-int(ActorVisual::Cleanup);
@@ -117,7 +138,12 @@ NpcWeaponPose Game::npcWeaponPose(size_t actor)const{
  if(npcIncapacitated(actor)||track.ai.mode!=ActorAiMode::Guard||!track.ai.armed||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))return weapon;
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};float raise=get("weapon_raise")*.001f;
  bool engineering=track.ai.role==GuardSquadRole::Engineer&&(get("drone_windup")||get("drone_busy"));if(engineering)raise=0;
- if(get("weapon_target")){auto shift=chunkOffset(npc.level);Point3 target{get("weapon_x")*.001f-shift.x,get("weapon_y")*.001f-shift.y,get("weapon_z")*.001f},cover;if(guardSuppressionPoint(actor,cover))target=cover;weapon=npcWeaponPoseAt(actor,npc.pose,target,raise);}
+ // Hauled out at gunpoint (the hold): the muzzle comes up at the player's face,
+ // so the gun he is held at is in their view, not under it.
+ if(get("guard_hold_ms")>0&&get("guard_target_kind")==int(ShotKind::Player)){const Vec2 at=m_player.pos+chunkOffset(m_level)-chunkOffset(npc.level);
+  weapon=npcWeaponPoseAt(actor,npc.pose,{at.x,at.y,m_player.z+m_player.eye-.06f},raise);
+  if(weapon.handgun){const float lift=.16f*raise*track.scale/1.6f;weapon.grip.z+=lift;weapon.muzzle.z+=lift;}}
+ else if(get("weapon_target")){auto shift=chunkOffset(npc.level);Point3 target{get("weapon_x")*.001f-shift.x,get("weapon_y")*.001f-shift.y,get("weapon_z")*.001f},cover;if(guardSuppressionPoint(actor,cover))target=cover;weapon=npcWeaponPoseAt(actor,npc.pose,target,raise);}
  else{
   // A raised saved pose without an aim target retains its low-ready direction.
   weapon=npcWeaponPoseAt(actor,npc.pose,{},0);float lift=.216f*raise*track.scale/1.6f;weapon.grip.z+=lift;weapon.muzzle.z+=lift;weapon.raise=raise;
@@ -153,6 +179,8 @@ ShotHit Game::guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& 
 void Game::updateGuardCombat(float dt){
  perf::Scope frameProfile(perf::Combat);
  if(dt<=0)return;updateGuardSquadSlots(dt);
+ // A man a locker burst into, from the leaves reaching him to the floor (Lockers.cpp).
+ updateLockerBurst(dt);
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();const auto&config=track.ai;if(config.mode!=ActorAiMode::Guard||!config.armed||!chunkResident(npc.level))continue;
   const auto&gun=weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun);
   auto get=[&](const char*field){return state(friendlyKey(i,field));};auto put=[&](const char*field,int value){setState(friendlyKey(i,field),value);};
@@ -218,10 +246,12 @@ void Game::updateGuardCombat(float dt){
   Point3 coverPoint;bool suppress=!visible&&guardSuppressionPoint(i,coverPoint);
   if(get("grenade_windup")>0||get("grenade_used")!=grenadesUsed){put("weapon_aim",0);put("weapon_raise",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
   bool fireAllowed=guardTaskAllows(i,GuardTask::Fire);
-  int raised=(fireAllowed||bashAllowed)&&(visible||suppress)&&(!reload||close)&&npc.pose.clip!=1?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-ms*3,ms*3));
   // Hauled out of a locker, the player gets the muzzle in their face and a
-  // moment to answer it (run, hit him, or be shot) before he fires or swings.
-  if(int hold=get("guard_hold_ms");hold>0){put("guard_hold_ms",std::max(0,hold-ms));put("weapon_aim",0);put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
+  // moment to answer it (run, hit him, or be shot) before he fires or swings:
+  // the gun comes up at twice the pace and stays up through the hold.
+  const int hold=get("guard_hold_ms"),pace=hold>0?ms*6:ms*3;
+  int raised=hold>0||((fireAllowed||bashAllowed)&&(visible||suppress)&&(!reload||close)&&npc.pose.clip!=1)?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-pace,pace));
+  if(hold>0){put("guard_hold_ms",std::max(0,hold-ms));put("weapon_aim",0);put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
   // At contact range a finite, interruptible weapon bash takes precedence.
   // It is usable with an empty tube, and never spends ammunition or shares a
   // frame with a firearm attack. The live target/cover test runs every tick.

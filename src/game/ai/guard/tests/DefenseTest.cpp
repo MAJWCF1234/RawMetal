@@ -17,7 +17,8 @@ bool Game::testGuardDefense(){
   auto g=scene();g.damageFriendly(0,50,g.player().pos,{ShotKind::Player,0,0});tick(g,rate,rate);
   check(g.guardState(0)==GuardState::Investigate&&g.state(g.friendlyKey(0,"guard_under_fire"))>0&&g.guardCovered(0,g.npcActors()[0].pose,g.guardTarget(0)),"Recent injury preserves a completed retreat and a protected unseen position");
   g.m_player.pos={18.5f,18.5f};Game restored(g.m_customCampaign);bool decoded=restored.decodeSave(g.encodeSave());check(decoded,"An injured guard holding cover can be saved during its transient damage pause");
-  tick(g,rate*20,rate);if(decoded)tick(restored,rate*20,rate);
+  // A confirmed hunt is searched at least HuntSearchMs: wait that out past the defense pause.
+  tick(g,rate*(HuntSearchMs/1000+12),rate);if(decoded)tick(restored,rate*(HuntSearchMs/1000+12),rate);
   check(g.guardState(0)==GuardState::Patrol&&!g.guardTarget(0).valid()&&!g.state(g.friendlyKey(0,"guard_confirmed"))&&g.state("defense_guard_damage")==50,"Permanent low health cannot retain a hidden hostile forever after transient defense expires");
   if(decoded)check(restored.guardState(0)==g.guardState(0)&&!restored.guardTarget(0).valid()&&length(restored.npcActors()[0].pose.position-g.npcActors()[0].pose.position)<.02f&&restored.player().health==g.player().health,"Saved and uninterrupted low-health defense both search, forget and resume patrol");
  }

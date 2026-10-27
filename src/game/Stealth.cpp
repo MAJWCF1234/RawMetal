@@ -255,19 +255,14 @@ bool Game::leaveLocker(){
  const int burst=lockerBurstTarget();
  const Player before=view();forgetLocker();m_player.pos=exit;m_player.z=feet;m_velocity={};m_stepDistance=0;m_lockerRearm|=m_weaponEquipped;equipWeapon(WeaponId::Fists);
  SoundEvent latch{Sound::LockerLatch,lockerFront(f,0),.45f,.92f,true,6,feet+1.2f};latch.aiRadius=1.2f;m_sounds.push_back(latch);
- if(burst>=0){const size_t actor=size_t(burst);auto&npc=m_friendlyActors[actor];const Vec2 away=lockerOut(f);clearGuardSchedule(actor);
+ if(burst>=0){const size_t actor=size_t(burst);const auto&npc=m_friendlyActors[actor];clearGuardSchedule(actor);
   for(const char*field:{"weapon_aim","weapon_recovery","weapon_bash","weapon_bash_pose","grenade_windup","support_ms","drone_windup","drone_busy","engineer_pad_stage","engineer_pad_ms","guard_seen","guard_slot","guard_locker"})setState(friendlyKey(actor,field),0);
-  // The blow lands at once: the fall picks up past the clip's opening stagger.
-  const float fall=cleanupAnimationDuration(npc.track().visual,4),into=fall>0?.3f:0.f;
-  setState(friendlyKey(actor,"restraint"),1);setState(friendlyKey(actor,"restraint_ms"),int(std::round(fall*1000*into)));setState(friendlyKey(actor,"restraint_fraction"),0);
-  // Thrown back off the doors: shoved a step back where the floor takes him,
-  // facing them, he goes over backwards (the fall clip drops a man on his back).
-  const Vec2 hit=npc.pose.position;{const Vec2 shoved=hit+away*.3f;float landed=npc.pose.z;if(friendlyWalkSegment(m_level,hit,npc.pose.z,shoved,.45f,&landed)){npc.pose.position=shoved;npc.pose.z=landed;}}
-  npc.pose.yaw=std::atan2(-away.x,-away.y);npc.pose.clip=4;npc.pose.phase=into;npc.pose.lookAtActor=-1;saveRestrainedPose(actor);updateGuardFlags();
-  SoundEvent bang{Sound::LockerBang,hit,.95f,1.04f,true,14,feet+1.2f};bang.aiRadius=8;m_sounds.push_back(bang);
-  m_sounds.push_back({Sound::PunchHit,hit,.85f,.9f,true,14,feet+1.1f});npcVoice(actor,NpcVoiceCue::Hurt); // steel into a man, and the man
-  m_sounds.push_back({Sound::Land,npc.pose.position+away*.4f,.6f,.85f,true,10,feet+.05f});
-  m_pickupNotice="GUARD UNCONSCIOUS";m_pickupNoticeTime=1.6f;
+  // The leaves go out with a bang anyone near hears. He is caught where he
+  // stands, until a leaf's edge reaches him: the blow, his cry, the shove back
+  // off the doors and the fall all start on that frame, and he is counted out
+  // when he lands (updateLockerBurst, ai/guard/Lockers.cpp).
+  SoundEvent bang{Sound::LockerBang,npc.pose.position,.95f,1.04f,true,14,feet+1.2f};bang.aiRadius=8;m_sounds.push_back(bang);
+  setState(friendlyKey(actor,"guard_burst"),index+1);setState(friendlyKey(actor,"guard_burst_ms"),0);
  }else m_sounds.push_back({Sound::LockerCreak,lockerFront(f,.1f),.28f,1.1f,true,6,feet+1.6f});
  animateLockerDoor(m_level,index,burst>=0?LockerMotion::Caught:LockerMotion::Exit);startLockerView(LockerMotion::Exit,before,index);m_lockerView.burst=burst>=0;return true;
 }

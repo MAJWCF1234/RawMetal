@@ -81,9 +81,16 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  int choices[4],count=0;for(size_t i=0;i<NpcVoiceClips.size();++i)if(NpcVoiceClips[i].role==role&&NpcVoiceClips[i].cue==cue&&count<4)choices[count++]=int(i);
  if(!count)return false;
  int variant=std::max(0,get("voice_variant"));int clip=choices[variant%count];put("voice_variant",(variant+1)%10000);
- // At a locker only the takes that match what he does: a plain "saw that", a
- // single door checked, and "out" (never a hold-up or a sweep he never makes).
- if(cue==NpcVoiceCue::Witness||cue==NpcVoiceCue::Found)clip=choices[0];else if(cue==NpcVoiceCue::CheckLockers&&count>1)clip=choices[1];
+ // At a locker only the takes that match what he does: a plain "saw that";
+ // for the check, the one door he heard ("what's in here") or a bank he means
+ // to go through ("check the lockers", "which one are you in?"); and on the
+ // doors, the man who walked up knowing says "out", the one checking on a
+ // doubt is startled ("whoa-- got you"). Takes by role (1-9; 0 and 7 speak none of these).
+ static constexpr int startled[10]={0,1,0,1,0,0,1,0,0,0},oneDoor[10]={1,1,1,1,1,1,0,1,1,1};
+ const int check=get("guard_check"),pick=role>=0&&role<10?role:0;
+ if(cue==NpcVoiceCue::Witness)clip=choices[0];
+ else if(cue==NpcVoiceCue::Found&&count>1)clip=choices[check?startled[pick]:1-startled[pick]];
+ else if(cue==NpcVoiceCue::CheckLockers&&count>1)clip=choices[check==2?1-oneDoor[pick]:oneDoor[pick]];
  int duration=int(std::ceil(NpcVoiceClips[size_t(clip)].seconds*1000))+180;
  put("voice_lock",duration);put("voice_priority",priority);if(cue==NpcVoiceCue::Hurt)put("voice_hurt_wait",1800);
  setState(stateId("npc_voice_busy"),duration+350);

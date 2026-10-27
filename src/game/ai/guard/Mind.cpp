@@ -23,7 +23,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_route_target")<0||get("guard_route_target")>chunkCount()||get("guard_route_next")<0||get("guard_route_next")>chunkCount()||get("guard_route_wait")<0||get("guard_route_wait")>1000||get("guard_portal_z")< -100000||get("guard_portal_z")>100000)throw std::runtime_error("Invalid saved guard pursuit route");
  if(get("guard_route_next")){float x=get("guard_portal_x")*.001f,y=get("guard_portal_y")*.001f;bool inside=false;for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);inside|=x>=origin.x-.36f&&x<=origin.x+24.36f&&y>=origin.y-.36f&&y<=origin.y+24.36f;}if(!inside)throw std::runtime_error("Invalid saved guard pursuit portal");}
  if(get("weapon_aim")<0||get("weapon_aim")>config.aimMs||get("weapon_recovery")<0||get("weapon_recovery")>std::max(config.recoveryMs,900)||get("weapon_reload")<0||get("weapon_reload")>1800||get("weapon_rounds")<0||get("weapon_rounds")>weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun).cycle.tubeCapacity||get("weapon_raise")<0||get("weapon_raise")>1000||get("weapon_flash")<0||get("weapon_flash")>80||get("weapon_recoil")<0||get("weapon_recoil")>220)throw std::runtime_error("Invalid saved guard weapon state");
- if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>config.searchMs||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
+ if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>std::max(config.searchMs,HuntSearchMs)||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
  // Bounded loosely, not by CautionMs: rebuildFriendlyActors cuts a longer one to this build's clock.
  if(int caution=state(guardCautionKey(actor));caution<0||caution>600000)throw std::runtime_error("Invalid saved guard caution");
  if(get("guard_locker")<0||get("guard_locker")>65536)throw std::runtime_error("Invalid saved guard locker memory");
@@ -63,7 +63,8 @@ void Game::startGuardCall(size_t actor,int kind){
  m_sounds.push_back({Sound::RadioSquelch,npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.85f,1,true,14,npc.pose.z+t.scale*.9f});
 }
 void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove){
- if(npcIncapacitated(actor)){wantsMove=false;return;}
+ // Caught at a locker's doors as they burst open: nothing he does is quicker than the leaves.
+ if(npcIncapacitated(actor)||lockerBurstPending(actor)){wantsMove=false;return;}
  lockerWitnessSense(level,actor,pose);
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
  auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;
@@ -262,6 +263,12 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  put("plan_due",planDue);put("plan_mode",int(mode));put("plan_flags",planFlags);
  runGuardSchedule(level,actor,track,pose,dt,ms,goal,goalZ,wantsMove);
 }
+// The search he gives a place: his own, or on a confirmed hunt for the player
+// at least HuntSearchMs, so the hunt EVASION counts down is the one he makes.
+int Game::guardSearchMs(size_t actor)const{
+ const auto&config=m_friendlyActors.at(actor).track().ai;auto get=[&](const char*field){return state(friendlyKey(actor,field));};
+ return get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player)?std::max(config.searchMs,HuntSearchMs):config.searchMs;
+}
 void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,int ms,Vec2&goal,float&goalZ,bool&wantsMove){
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};
  auto mode=GuardState(get("guard_mode"));int point=get("guard_point");auto globalOrigin=chunkOffset(level);auto target=guardTarget(actor);bool visible=get("guard_seen")!=0;float dt=ms*.001f;int damage=track.damageState?state(track.damageState):0;
@@ -326,7 +333,7 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
    // Arrived where he means to search: lockers at hand may be looked into first (Lockers.cpp).
    const bool arrived=!wantsMove&&!finishingRetreat&&!suppressing;
    if(arrived&&travel<8000&&lockerAtSearch(level,actor)){goal=pose.position;goalZ=pose.z;}
-   else if(arrived||travel>=8000){mode=GuardState::Search;put("guard_search",config.searchMs);put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
+   else if(arrived||travel>=8000){mode=GuardState::Search;put("guard_search",guardSearchMs(actor));put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
  }
  if(mode==GuardState::Search){int remaining=std::max(0,get("guard_search")-ms);put("guard_search",remaining);
   // Confirmed foes get a wide sweep. Sound-only searches stay focused on the
@@ -336,7 +343,7 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
   // He turns to the sweep rather than being set on it (3 rad/s clears its
   // fastest swing), so Caution starting or ending mid-search widens or narrows
   // the arc without snapping his head, and his eyes, round in one frame.
-  float want=get("guard_bearing")*.0001f+std::sin((config.searchMs-remaining)*.001f*2.4f)*sweep;
+  float want=get("guard_bearing")*.0001f+std::sin((guardSearchMs(actor)-remaining)*.001f*2.4f)*sweep;
   pose.yaw+=std::clamp(std::remainder(want-pose.yaw,2*kPi),-3.f*dt,3.f*dt);wantsMove=false;
   // Giving up on the player he had puts his squad on Caution.
   if(remaining==0&&get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player))startGuardCaution(actor);

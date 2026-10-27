@@ -2165,9 +2165,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // What each guard makes of the player, over his head: a "?" that fills from
  // its foot, yellow turning orange, as he works out what he is looking at (dim
  // while he checks a spot), a red "!" that pops once he has them, a red "?"
- // while he hunts the player he had, and a pulsing handset while he radios.
+ // while he hunts the player he had or is on his way to open a locker's doors,
+ // and a pulsing handset while he radios.
  for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level!=level)continue;
-  const auto card=game.guardCard(i);if(card.kind==Game::GuardCardKind::None)continue;
+  const auto card=game.guardLockerCard(i);if(card.kind==Game::GuardCardKind::None)continue;
   // 7x11 glyphs, scaled into 16x24 cards; black is clear. Rows below `from` take `low`.
   static const auto glyph=[](const char* rows[11],std::uint32_t colour,int from=24,std::uint32_t low=0){Texture t{16,24,std::vector<uint32_t>(16*24)};t.clampEdges=true;
    for(int y=0;y<24;++y)for(int x=0;x<16;++x){int gx=(x-1)*7/14,gy=(y-1)*11/22;if(x<1||x>14||y<1||y>22)continue;if(rows[gy][gx]=='#')t.pixels[y*16+x]=y>=from?low:colour;}

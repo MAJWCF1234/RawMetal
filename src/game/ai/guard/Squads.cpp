@@ -146,7 +146,7 @@ int Game::guardHuntLeft(size_t i)const{
  if(mode==GuardState::Search)return std::max(1,get("guard_search"));
  const auto&npc=m_friendlyActors[i];const auto&ai=npc.track().ai;
  float walk=length(Vec2{get("guard_x")*.001f,get("guard_y")*.001f}-npc.pose.position-chunkOffset(npc.level))/std::max(.5f,ai.speed);
- return std::max(1,ai.searchMs+std::clamp(int(walk*1000),0,std::max(0,8000-get("guard_travel"))));
+ return std::max(1,guardSearchMs(i)+std::clamp(int(walk*1000),0,std::max(0,8000-get("guard_travel"))));
 }
 int Game::guardEvasion()const{int live=0;for(size_t i=0;i<m_friendlyActors.size();++i)live=std::max(live,guardHuntLeft(i));return !live?0:m_evasionMs?std::min(m_evasionMs,live):live;}
 int Game::guardAlarm()const{

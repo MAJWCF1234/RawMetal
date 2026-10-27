@@ -29,7 +29,8 @@ bool Game::testGuardAI(){
    auto remembered=Vec2{suspicious.state(suspicious.friendlyKey(0,"guard_x"))*.001f,suspicious.state(suspicious.friendlyKey(0,"guard_y"))*.001f};suspicious.m_player.pos={18.5f,18.5f};tick(suspicious,1,rate);
    check(suspicious.guardState(0)==GuardState::Investigate&&lengthSq(Vec2{suspicious.state(suspicious.friendlyKey(0,"guard_x"))*.001f,suspicious.state(suspicious.friendlyKey(0,"guard_y"))*.001f}-remembered)<.001f,"Lost sight investigates the last observed position without tracking hidden movement");
    Game investigating(g.m_customCampaign);check(investigating.decodeSave(suspicious.encodeSave())&&investigating.guardState(0)==GuardState::Investigate,"Save restores an active investigation");
-   tick(investigating,rate*15,rate);check(investigating.guardState(0)==GuardState::Patrol,"Bounded investigation and search return to patrol");
+   // A confirmed hunt is searched at least HuntSearchMs, then the walk back.
+   tick(investigating,rate*(HuntSearchMs/1000+11),rate);check(investigating.guardState(0)==GuardState::Patrol,"Bounded investigation and search return to patrol");
   }
  }
  {auto g=scene();g.m_player.pos={8.5f,6.5f};tick(g,10);g.m_player.pos={18.5f,18.5f};tick(g,1);check(g.guardState(0)==GuardState::Patrol&&!g.state(g.friendlyKey(0,"guard_confirmed"))&&g.state(g.friendlyKey(0,"guard_recognition"))*2<600,"Brief glimpse does not become a delayed alert after the player hides");
