@@ -300,13 +300,19 @@ bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
  const int saw=state(friendlyKey(actor,"guard_locker"))-1;setState(friendlyKey(actor,"guard_locker"),0);
  const int index=hiddenLocker();if(index<0||index!=saw||level<0||level>=chunkCount())return false;const auto&f=m_world.fixtures()[size_t(index)];
  const Vec2 shift=chunkOffset(m_level)-chunkOffset(level);Vec2 exit;float feet;
- if(lengthSq(pose.position-lockerFront(f,LockerEye)-shift)>1.9f*1.9f||std::fabs(pose.z-m_player.z)>.6f||!lockerExit(f,exit,feet,true))return false;
+ if(lengthSq(pose.position-lockerFront(f,LockerEye)-shift)>1.9f*1.9f||std::fabs(pose.z-m_player.z)>.6f)return false;
+ // He hauls the player out past himself: a step back as he pulls, so they land
+ // between him and the doors, face to face, not squeezed out behind him.
+ {const Vec2 o=lockerOut(f),at=pose.position-shift;const float ahead=dot(at-lockerFront(f,0),o);
+  if(ahead<1.f){const Vec2 to=at+o*(1.f-ahead);if(m_world.fits(to.x,to.y,pose.z,1.6f)&&!m_world.doorBlocks(to.x,to.y,pose.z,1.6f)&&m_world.rayClear(at,pose.z+1.f,to,pose.z+1.f,true)){pose.position=to+shift;m_friendlyActors[actor].pose.position=pose.position;}}}
+ if(!lockerExit(f,exit,feet,true))return false;
  const Player before=view();forgetLocker();m_player.pos=exit;m_player.z=feet;m_velocity={};
  const Vec2 toward=pose.position-exit-shift;m_player.angle=std::atan2(toward.y,toward.x);pose.yaw=std::atan2(-toward.x,-toward.y);
  // Eye to eye with him: the view lands looking at his face, not his chest.
  const float face=pose.z+m_friendlyActors[actor].track().scale*.92f-(feet+Player::StandingEye);m_player.pitch=std::clamp(std::atan2(face,std::max(.4f,length(toward)))*140.f,-50.f,50.f);
  rememberGuardTarget(actor,resolveGuardTarget(actor,{ShotKind::Player,m_level,0}));const Vec2 global=exit+chunkOffset(m_level);auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[actor].track().ai.recognitionMs);
+ put("guard_hold_ms",1200);put("weapon_aim",0); // the gun comes up in the player's face; he holds fire a moment
  // The doors bang back on their stops: anyone near hears it. The sting is the player's alone.
  m_sounds.push_back({Sound::LockerBang,lockerFront(f,0),.8f,1.f,true,12,feet+1.2f});m_sounds.push_back({Sound::LockerSting,{},.75f,1.f,false});m_alarmSting=std::max(m_alarmSting,.6f); // the locker's own sting is this detection's; no second one on his '!'
  m_lockerRearm|=m_weaponEquipped;equipWeapon(WeaponId::Fists);animateLockerDoor(m_level,index,LockerMotion::Caught);startLockerView(LockerMotion::Caught,before,index);

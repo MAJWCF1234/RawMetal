@@ -261,7 +261,7 @@ bool Game::stowBody(){
  dropBody();lockerDoorsMove(m_level,index,LockerMotion::Stow);
  const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
  SoundEvent clank{Sound::Door,doorsFront(f,0),.3f,1.3f,true,6,floor+1.2f};clank.aiRadius=1.2f;m_sounds.push_back(clank);
- m_pickupNotice="BODY STOWED";m_pickupNoticeTime=1.2f;return true;
+ return true;
 }
 // The stow, over the Stow swing of the leaves (open by 0.25 s, held to 1.05 s,
 // shut at 1.4 s): dragged round whichever side of the player he lay on to the
@@ -273,7 +273,8 @@ void Game::updateStowedBody(size_t actor,ActorPose& pose,float dt){
  const int index=get("guard_stowed")-1,level=get("guard_stowed_level")-1;if(index<0)return;
  if(level<0||level>=chunkCount()||!chunkResident(level)||size_t(index)>=friendlyWorld(level).fixtures().size()){for(const char*f:{"guard_stowed","guard_stowed_level","guard_stow_ms"})put(f,0);return;}
  const auto&f=friendlyWorld(level).fixtures()[size_t(index)];const auto&npc=m_friendlyActors[actor];const Vec2 shift=chunkOffset(level)-chunkOffset(npc.level);
- int ms=get("guard_stow_ms");if(dt>0&&ms<LockerStowMs)ms=std::min(LockerStowMs,ms+npcMilliseconds(actor,dt,"guard_stow_fraction"));put("guard_stow_ms",ms);
+ int ms=get("guard_stow_ms");const int was=ms;if(dt>0&&ms<LockerStowMs)ms=std::min(LockerStowMs,ms+npcMilliseconds(actor,dt,"guard_stow_fraction"));put("guard_stow_ms",ms);
+ if(was<LockerStowMs&&ms>=LockerStowMs){m_pickupNotice="BODY STOWED";m_pickupNoticeTime=1.2f;} // said once the leaves are shut on him
  const Vec2 out=doorsOut(f),side{-out.y,out.x},start{get("guard_stow_x")*.001f,get("guard_stow_y")*.001f},mouth=doorsFront(f,LockerStowMouth)+shift,inside=doorsFront(f,-LockerStowSeat)+shift;
  const float floor=friendlyWorld(level).floorHeight(f.position.x,f.position.y)+f.base,startZ=get("guard_stow_z")*.001f;
  const float t=float(ms)/LockerStowMs;Vec2 at;float feet,phase=1;

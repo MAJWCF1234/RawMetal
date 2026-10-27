@@ -790,7 +790,7 @@ void SoftwareRenderer::drawHud(const Game& game){
   const auto&f=game.world().fixtures()[size_t(game.lockerViewFixture())];const auto&v=m_view;
   const float c=std::cos(f.yaw),s=std::sin(f.yaw),sz=f.depth/.9f;const Vec2 out{c,-s},side{s,c};
   const Vec2 plane=f.position+out*(f.width*.5f-.01f);const float floor=game.world().floorHeight(f.position.x,f.position.y)+f.base;
-  const float band=floor+Player::StandingEye,halfWidth=.4f*sz,colPitch=.0115f,rowPitch=.01f,radius=.0036f;
+  const float band=floor+Player::StandingEye,halfWidth=.4f*sz,colPitch=.0115f,rowPitch=.01f,radius=.0046f; // over half the band is hole: the room reads through it
   const float cy=std::cos(v.angle),sy=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=Projection{float(m_width)/m_height}.focal(float(m_width));
   const Point3 eye{v.pos.x,v.pos.y,v.z+v.eye},forward{cy*cp,sy*cp,sp},right{-sy,cy,0},up{-cy*sp,-sy*sp,cp};
   const float eyeAhead=(plane.x-eye.x)*out.x+(plane.y-eye.y)*out.y;
@@ -803,7 +803,7 @@ void SoftwareRenderer::drawHud(const Game& game){
    const float t=eyeAhead/toward;const float hx=eye.x+d.x*t-plane.x,hy=eye.y+d.y*t-plane.y,u=hx*side.x+hy*side.y,h=eye.z+d.z*t-band;
    if(std::fabs(u)>halfWidth)return Dim;
    if(std::fabs(u+.002f*sz)<.0004f&&std::fabs(h)<.9f)return Seam;
-   const int row=int(std::floor(h/rowPitch+.5f));if(row<-3||row>3)return std::fabs(h)<.075f?Lit:Steel; // light from the holes reaches a little way
+   const int row=int(std::floor(h/rowPitch+.5f));if(row<-4||row>4)return std::fabs(h)<.09f?Lit:Steel; // light from the holes reaches a little way
    if(std::fabs(u)>halfWidth-.03f||std::fabs(u+.002f*sz)<.008f)return Lit;
    const float shift=(row&1)?colPitch*.5f:0.f,cu=std::floor((u-shift)/colPitch+.5f)*colPitch+shift,ch=row*rowPitch;
    if(std::fabs(cu)>halfWidth-.03f||std::fabs(cu+.002f*sz)<.008f)return Lit; // a margin at the edges and where the leaves meet
@@ -812,9 +812,20 @@ void SoftwareRenderer::drawHud(const Game& game){
    if(r2<(radius+.0007f)*(radius+.0007f)&&dh<-radius*.35f)return Lip;return Lit;
   };
   for(int y=0;y<m_height;++y){int x=0;while(x<m_width){const Kind k=classify(x,y);int end=x+1;while(end<m_width&&classify(end,y)==k)++end;
-    if(k==Hole)fill(x,y,end-x,1,black,.38f*cover); // the room through the steel: dimmer than in the open
+    if(k==Hole)fill(x,y,end-x,1,black,.22f*cover); // the room through the steel: a little dimmer than in the open
     else fill(x,y,end-x,1,k==Lip?lip:k==Seam?seam:k==Dim?dim:k==Lit?lit:steel,cover*(k==Seam?.75f:1.f));
     x=end;}}
+  // What the men outside make of the player still reads through the steel: a
+  // man at the doors is the one thing a hider must be able to see.
+  if(cover>=.5f)for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level!=game.level())continue;
+   const auto card=game.guardCard(i);if(card.kind==Game::GuardCardKind::None)continue;
+   const Vec2 at=npc.pose.position;if((at.x-plane.x)*out.x+(at.y-plane.y)*out.y<.1f||lengthSq(at-plane)>36.f)continue;
+   const Point3 head{at.x,at.y,npc.pose.z+npc.track().scale*1.12f+.1f},d{head.x-eye.x,head.y-eye.y,head.z-eye.z};
+   const float depth=d.x*forward.x+d.y*forward.y+d.z*forward.z;if(depth<.05f)continue;
+   const int sx=std::clamp(int(m_width*.5f+(d.x*right.x+d.y*right.y+d.z*right.z)/depth*focal),12,m_width-12),sy=std::clamp(int(m_height*.5f-(d.x*up.x+d.y*up.y+d.z*up.z)/depth*focal),16,m_height-40);
+   const bool bang=card.kind==Game::GuardCardKind::Alert;const char* mark=bang?"!":"?";
+   const auto tone=bang||card.kind==Game::GuardCardKind::Hunting?rgb(255,58,36):rgb(255,std::uint32_t(208-104*std::clamp(card.fill,0.f,1.f)),64);
+   uiText(sx-uiTextWidth(mark,0,26,0)/2,sy,mark,tone,0,26,cover);}
  }
  // Shut in (and on the way in once the leaves meet) the HUD is down to what
  // hiding needs: the hint, the radar and the alarm line. Vitals, the gun, the

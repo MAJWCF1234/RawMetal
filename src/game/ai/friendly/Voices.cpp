@@ -81,6 +81,9 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  int choices[4],count=0;for(size_t i=0;i<NpcVoiceClips.size();++i)if(NpcVoiceClips[i].role==role&&NpcVoiceClips[i].cue==cue&&count<4)choices[count++]=int(i);
  if(!count)return false;
  int variant=std::max(0,get("voice_variant"));int clip=choices[variant%count];put("voice_variant",(variant+1)%10000);
+ // At a locker only the takes that match what he does: a plain "saw that", a
+ // single door checked, and "out" (never a hold-up or a sweep he never makes).
+ if(cue==NpcVoiceCue::Witness||cue==NpcVoiceCue::Found)clip=choices[0];else if(cue==NpcVoiceCue::CheckLockers&&count>1)clip=choices[1];
  int duration=int(std::ceil(NpcVoiceClips[size_t(clip)].seconds*1000))+180;
  put("voice_lock",duration);put("voice_priority",priority);if(cue==NpcVoiceCue::Hurt)put("voice_hurt_wait",1800);
  setState(stateId("npc_voice_busy"),duration+350);

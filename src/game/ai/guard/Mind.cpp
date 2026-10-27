@@ -9,6 +9,7 @@ int Game::npcMilliseconds(size_t actor,float dt,std::string_view field){auto key
 void Game::validateGuardState(size_t actor)const{
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};const auto&config=m_friendlyActors[actor].track().ai;
  for(const char*f:{"sense_ready","plan_ready","tactic_ready","room_ready","sense_due","plan_due"})if(get(f)<0||get(f)>1)throw std::runtime_error("Invalid saved AI decision flag");
+ if(get("guard_hold_ms")<0||get("guard_hold_ms")>1200)throw std::runtime_error("Invalid saved guard hold");
  for(const char*f:{"sense_wait","plan_wait","sense_age","plan_age","tactic_age"})if(get(f)<0||get(f)>1000)throw std::runtime_error("Invalid saved AI decision clock");
  if(get("evac_level")<0||get("evac_level")>chunkCount()||get("evac_x")<0||get("evac_x")>24000||get("evac_y")<0||get("evac_y")>24000||(get("evac_z")< -100000||get("evac_z")>100000)||get("evacuated")<0||get("evacuated")>1||get("killed_by_player")<0||get("killed_by_player")>1)throw std::runtime_error("Invalid saved NPC evacuation");
  if(get("guard_fraction")<0||get("guard_fraction")>=1000||get("weapon_fraction")<0||get("weapon_fraction")>=1000)throw std::runtime_error("Invalid saved guard clock fraction");

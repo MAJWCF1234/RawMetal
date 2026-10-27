@@ -87,6 +87,7 @@ float Game::lockerShutView()const{
  const float t=m_lockerView.age;
  // The perforated inner face takes over the view as the leaves meet in front of the eye.
  if(m_lockerView.motion==LockerMotion::Enter)return ease((t-.7f)/.2f);
+ if(m_lockerView.motion==LockerMotion::Caught)return 0; // the real leaves are what rips away
  return 1-ease(t/.07f);
 }
 Player Game::view()const{
@@ -116,7 +117,8 @@ Player Game::view()const{
   default:{
    // Hauled out: a hard yank by the collar, wrenched round onto the guard's
    // face, the grip shaking the view; it settles exactly on the commit.
-   const float k=easeOut(t/.22f),r=easeOut(t/.3f),shake=(1-t/m_lockerView.length)*(1-t/m_lockerView.length);
+   // The eye stays put for the first frames while the leaves swing clear of it.
+   const float k=easeOut(std::max(0.f,t-.08f)/.22f),r=easeOut(std::max(0.f,t-.08f)/.3f),shake=(1-t/m_lockerView.length)*(1-t/m_lockerView.length);
    const Vec2 o=out(f),side{-o.y,o.x};
    v.pos=a.pos+(to.pos-a.pos)*k+side*(.03f*std::sin(t*57)*shake)+o*(.02f*std::sin(t*43+1)*shake);
    v.angle=wrapAngle(turn(a.angle,to.angle,r)+.04f*std::sin(t*49+2)*shake);v.pitch=mix(a.pitch,to.pitch,r);

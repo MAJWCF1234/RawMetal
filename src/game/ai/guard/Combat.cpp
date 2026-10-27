@@ -219,6 +219,9 @@ void Game::updateGuardCombat(float dt){
   if(get("grenade_windup")>0||get("grenade_used")!=grenadesUsed){put("weapon_aim",0);put("weapon_raise",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
   bool fireAllowed=guardTaskAllows(i,GuardTask::Fire);
   int raised=(fireAllowed||bashAllowed)&&(visible||suppress)&&(!reload||close)&&npc.pose.clip!=1?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-ms*3,ms*3));
+  // Hauled out of a locker, the player gets the muzzle in their face and a
+  // moment to answer it (run, hit him, or be shot) before he fires or swings.
+  if(int hold=get("guard_hold_ms");hold>0){put("guard_hold_ms",std::max(0,hold-ms));put("weapon_aim",0);put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
   // At contact range a finite, interruptible weapon bash takes precedence.
   // It is usable with an empty tube, and never spends ammunition or shares a
   // frame with a firearm attack. The live target/cover test runs every tick.
