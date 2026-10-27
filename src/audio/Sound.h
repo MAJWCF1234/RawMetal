@@ -16,12 +16,14 @@ enum class Sound {
  AreaTitle,
  // Hiding lockers: the latch, a hinge creak, the leaves shutting, a guard
  // ripping them open (and its sting), and a knock from inside.
- LockerLatch, LockerCreak, LockerShut, LockerBang, LockerSting, LockerKnock, Count
+ LockerLatch, LockerCreak, LockerShut, LockerBang, LockerSting, LockerKnock,
+ // Being seen: the player's sting on a guard's '!', the tick as his '?' goes up, and a guard's radio keying.
+ DetectSting, SuspicionTick, RadioSquelch, Count
 };
 // AudioEngine maps every sound from ZoneWind on to consecutive library resources
-// and AreaTitle and the locker sounds to their own: a sound appended after them
+// and AreaTitle, the locker sounds and the detection sounds to their own: a sound appended after them
 // needs its resource mapped there explicitly, or it would load an unrelated file.
-static_assert(int(Sound::Count)==int(Sound::LockerKnock)+1,"map the new sound's resource in AudioEngine");
+static_assert(int(Sound::Count)==int(Sound::RadioSquelch)+1,"map the new sound's resource in AudioEngine");
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}
 // A finite z captures the emission origin even when the player's own sound is

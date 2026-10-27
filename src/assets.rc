@@ -1078,3 +1078,6 @@
 2143 RCDATA "assets/audio/locker-bang.wav"
 2144 RCDATA "assets/audio/locker-sting.wav"
 2145 RCDATA "assets/audio/locker-knock.wav"
+2180 RCDATA "assets/audio/detect-sting.wav"
+2181 RCDATA "assets/audio/suspicion-tick.wav"
+2182 RCDATA "assets/audio/radio-squelch.wav"

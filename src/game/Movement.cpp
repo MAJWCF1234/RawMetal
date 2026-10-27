@@ -209,6 +209,8 @@ const char* Game::interactionHint()const{
   if(t.paper())return m_vrInputActive?"GRIP / READ":"E / READ";
   if(t.activateState){
    if(t.requireState&&!state(t.requireState))return m_vrInputActive?"GRIP / READ WHY LOCKED":"E / READ WHY LOCKED";
+   // Perimeter Ops' CCTV patch says what it does.
+   if(t.activateState==stateId("cctv_radar")&&!state(t.activateState))return m_vrInputActive?"GRIP / PATCH CAMERAS TO HANDSET":"E / PATCH CAMERAS TO HANDSET";
    return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):(m_vrInputActive?"GRIP / READ COMPLETED CONTROL":"E / READ COMPLETED CONTROL")):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");
   }
   if(t.reactorAction){auto stage=m_world.reactorStage();

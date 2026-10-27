@@ -27,8 +27,12 @@ bool Game::testCaution(){
  const std::vector<Post> yard={{{6.5f,6.5f},kPi*.5f,"caution_squad",{}},{{2.5f,20.5f},-kPi*.5f,"caution_squad",{}},{{20.5f,2.5f},kPi*.5f,"caution_other",{}}};
  const Vec2 hide{18.5f,18.5f};
  {auto g=scene(yard);g.m_player.pos={8.5f,6.5f};confirm(g);
-  check(g.guardState(0)==GuardState::Alert&&g.state("caution_alert")==1&&g.guardAlarm()==-1&&!g.guardCaution(0),"A confirmed sighting is an Alert: the alarm flag is up, the HUD reads ALERT, no Caution yet");
-  g.m_player.pos=hide;int frames=searchOut(g);int caution=g.guardCaution(0);
+  // The alarm flag now waits for his radio call, which he finishes with the
+  // player already gone from sight (AlarmTest covers the call itself).
+  bool sighting=g.guardState(0)==GuardState::Alert&&!g.state("caution_alert")&&g.guardAlarm()==-1&&!g.guardCaution(0);
+  g.m_player.pos=hide;tick(g,RadioCallMs*60/1000+3);
+  check(sighting&&g.state("caution_alert")==1&&g.guardAlarm()==-1&&!g.guardCaution(0),"A confirmed sighting is an Alert: the HUD reads ALERT, no Caution yet, and the alarm flag goes up when his call lands");
+  int frames=searchOut(g)+RadioCallMs*60/1000+3;int caution=g.guardCaution(0);
   check(caution>=CautionMs-40&&caution<=CautionMs&&frames>60*4&&g.guardState(0)==GuardState::Patrol&&!g.state(g.friendlyKey(0,"guard_confirmed")),"Hiding until his search gives up puts him on about 45 s of Caution as he goes back to patrol ("+std::to_string(caution)+" ms after "+std::to_string(frames)+" frames)");
   check(g.guardCaution(1)==caution&&!g.guardCaution(2)&&g.guardState(1)==GuardState::Patrol,"Caution is the squad's: his squadmate shares the clock, another squad does not");
   check(g.guardAlarm()==caution&&!g.state("caution_alert"),"The HUD reads CAUTION and the alarm flag is down");
@@ -58,8 +62,10 @@ bool Game::testCaution(){
  {auto plain=scene(yard);plain.m_player.pos={8.5f,6.5f};int near=confirm(plain);
   auto wary=scene(yard);wary.startGuardCaution(0);wary.m_player.pos={8.5f,6.5f};int nearWary=confirm(wary);
   check(nearWary<near*.8f,"On Caution he makes the player out sooner close up too ("+std::to_string(nearWary)+" frames against "+std::to_string(near)+")");
-  check(wary.guardState(0)==GuardState::Alert&&!wary.guardCaution(0)&&!wary.guardCaution(1)&&wary.state("caution_alert")==1&&wary.guardAlarm()==-1,"An Alert ends the squad's Caution and still throws the alarm flag");
-  wary.m_player.pos=hide;searchOut(wary);check(wary.guardCaution(0)>=CautionMs-40&&wary.guardCaution(1)==wary.guardCaution(0),"When that search gives up too, Caution starts again");
+  bool alert=wary.guardState(0)==GuardState::Alert&&!wary.guardCaution(0)&&!wary.guardCaution(1)&&wary.guardAlarm()==-1;
+  wary.m_player.pos=hide;tick(wary,RadioCallMs*60/1000+3); // the flag waits for his call to land
+  check(alert&&wary.state("caution_alert")==1,"An Alert ends the squad's Caution and still throws the alarm flag");
+  searchOut(wary);check(wary.guardCaution(0)>=CautionMs-40&&wary.guardCaution(1)==wary.guardCaution(0),"When that search gives up too, Caution starts again");
  }
  {auto g=scene(yard);g.startGuardCaution(0);g.startGuardCaution(2);g.m_player.pos={1.2f,20.5f};int frames=0;
   while(frames<600&&g.guardState(1)!=GuardState::Alert){tick(g,1);++frames;}int other=g.guardCaution(2),expected=CautionMs-int(std::lround(frames*1000/60.));

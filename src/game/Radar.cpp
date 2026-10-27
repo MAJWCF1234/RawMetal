@@ -117,7 +117,7 @@ bool Game::testRadar(){
    control.m_player.pos=patch->position+front*.8f;control.m_player.z=control.world().floorHeight(patch->position.x,patch->position.y)+patch->z;control.m_player.angle=std::atan2(-front.y,-front.x);
    auto hint=[&]{auto text=control.interactionHint();return std::string(text?text:"");};
    report<<"ops man down "<<down<<", body "<<control.nearbyBody()<<", terminal "<<control.nearbyTerminal()<<", hint "<<hint()<<'\n';
-   bool crowded=down&&control.nearbyBody()==int(man)&&control.nearbyTerminal()>=0&&hint()=="E / OPERATE LOCAL CONTROL";
+   bool crowded=down&&control.nearbyBody()==int(man)&&control.nearbyTerminal()>=0&&hint()=="E / PATCH CAMERAS TO HANDSET";
    InputState use{};use.use=true;control.updateInteraction(use,.01f);
    check(crowded&&control.state(CctvRadar)==1&&!control.draggingBody(),"Using the Perimeter Ops terminal makes the patch, with the Ops man choked at his post beside it");
    // Close the screen, turn to the body: now E drags him, and says so.

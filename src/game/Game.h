@@ -526,8 +526,27 @@ public:
     // player just hid in, or is knocked out and dragged to the one they face.
     void inspectLockerGuard(bool stow);
     // A guard's read on the player for the HUD: 0 unaware, up to 1 while
-    // suspicion builds, 2 once he has you.
+    // suspicion builds (recognition over recognitionMs), 2 once he has you,
+    // 3 while he hunts the player he had confirmed, .5 checking a noise.
     float guardAwareness(size_t actor)const;
+    // His card over his head: which glyph, how far the '?' has filled, how
+    // long the '!' has been up (it pops for its first ~100 ms), and how far
+    // through a radio call he is (0 when not calling).
+    enum class GuardCardKind{None,Making,Checking,Hunting,Alert};
+    struct GuardCard{GuardCardKind kind=GuardCardKind::None;float fill=0;int bangMs=0;float call=0;};
+    GuardCard guardCard(size_t actor)const;
+    // A radio call is a committed action: guard_call is what he is reporting
+    // (1 the player seen, 2 a body), guard_radio how long he has been on it.
+    // Only a choke, a knockout, death or a fresh hit cuts it short. A sighting
+    // that lands raises the alarm flag; a body that lands puts his squad on Caution.
+    static constexpr int CallSighting=1,CallBody=2;
+    void startGuardCall(size_t actor,int kind);
+    bool guardCalling(size_t actor)const;
+    // EVASION: a squad still hunting the player it had confirmed. The longest
+    // search left (ms), smoothed so the clock only runs down within one hunt; 0 when none.
+    int guardEvasion()const;int guardEvasionPeak()const{return std::max(m_evasionPeakMs,guardEvasion());}
+    // The HUD keeps ALERT up this long after the last man loses sight of the player.
+    static constexpr int AlertLatchMs=2000;
     // Caution: when a guard who had the player gives up his search, his squad
     // (or he alone, with no squad) stays wary this long: quicker to make the
     // player out, a little longer sighted, shorter at their posts. An Alert ends it.
@@ -538,10 +557,14 @@ public:
     bool guardWary(size_t actor)const;
     void startGuardCaution(size_t actor);
     // The HUD's alarm line: -1 while a guard in any resident chunk is in Alert
-    // with the player as his target, else the longest Caution (ms) of a squad
-    // hostile to the player with a man in this chunk, else 0.
+    // with the player as his target (and for AlertLatchMs after he loses them
+    // while the hunt goes on), -2 during EVASION (guardEvasion has the clock),
+    // else the longest Caution (ms) of a squad hostile to the player with a
+    // man in this chunk, else 0.
+    static constexpr int AlarmAlert=-1,AlarmEvasion=-2;
     int guardAlarm()const;
     static bool testCaution();
+    static bool testAlarm();
     bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0&&!flashlightJammed();}
     static constexpr float FlashlightJamTime=1.5f;
     bool flashlightJammed()const;
@@ -779,6 +802,10 @@ private:
     void updateGuardSquadSlots(float dt);
     StateId guardCautionKey(size_t actor)const;
     void updateGuardCaution(float dt);int m_cautionMicros=0;
+    // The HUD's ALERT latch and EVASION clock (not saved: both rebuild from the guards).
+    // m_alarmSting spaces the detection sting and the '?' tick when several men turn at once.
+    int m_alertLatchMs=0,m_evasionMs=0,m_evasionPeakMs=0;float m_alarmSting=0,m_alarmTick=0;
+    int guardHuntLeft(size_t actor)const;bool guardAlarmActor(size_t actor)const;
     bool guardFireSlot(size_t actor)const;
     int guardFlankSide(size_t actor)const;
     bool guardPositionReserved(size_t actor,Vec2 position,float feet)const;

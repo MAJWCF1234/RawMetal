@@ -15,7 +15,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_step")<0||get("guard_step")>=1000||get("guard_bearing")< -31416||get("guard_bearing")>31416)throw std::runtime_error("Invalid saved guard motion");
  if(get("guard_cover")<0||get("guard_cover")>1||get("guard_cover_wait")<0||get("guard_cover_wait")>1000||get("guard_cover_x")<0||get("guard_cover_x")>24000||get("guard_cover_y")<0||get("guard_cover_y")>24000||get("guard_cover_z")< -100000||get("guard_cover_z")>100000)throw std::runtime_error("Invalid saved guard repositioning");
  if(get("guard_cover")&&(get("guard_cover_x")<350||get("guard_cover_x")>23650||get("guard_cover_y")<350||get("guard_cover_y")>23650))throw std::runtime_error("Invalid saved guard cover goal");
- if(get("guard_radio")<0||get("guard_radio")>2000)throw std::runtime_error("Invalid saved guard radio call");
+ if(get("guard_radio")<0||get("guard_radio")>2000||get("guard_call")<0||get("guard_call")>CallBody||get("guard_sting")<0||get("guard_sting")>1||get("guard_bang_ms")<0||get("guard_bang_ms")>1000)throw std::runtime_error("Invalid saved guard radio call");
  if(get("guard_confirmed")<0||get("guard_confirmed")>1||get("guard_seen")<0||get("guard_seen")>1||get("guard_under_fire")<0||get("guard_under_fire")>1500)throw std::runtime_error("Invalid saved guard threat memory");
  if(get("guard_heard")<0||get("guard_heard")>15||get("guard_hurt_amount")<0||get("guard_hurt_amount")>m_friendlyActors[actor].track().health||get("guard_enemy_dead")<0||get("guard_enemy_dead")>1)throw std::runtime_error("Invalid saved guard sensory conditions");
  if(get("guard_patrol_wait")<0||get("guard_patrol_wait")>5000||get("guard_patrol_progress")<0||get("guard_patrol_progress")>=100||get("guard_patrol_point_seen")<0||get("guard_patrol_point_seen")>int(config.patrol.size())||get("guard_patrol_fraction")<0||get("guard_patrol_fraction")>=1000||get("guard_patrol_movement_fraction")<0||get("guard_patrol_movement_fraction")>=1000)throw std::runtime_error("Invalid saved guard patrol recovery");
@@ -33,10 +33,33 @@ void Game::validateGuardState(size_t actor)const{
 }
 void Game::updateGuardFlags(){
  std::vector<StateValue> flags;
- for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(track.ai.mode!=ActorAiMode::Guard||!track.ai.alertState)continue;
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(track.ai.mode!=ActorAiMode::Guard)continue;
+  bool down=npcIncapacitated(i)||npc.pose.clip==4||(track.deadState&&state(track.deadState));
+  // Choked, knocked down or killed, he is off the radio: an unfinished call dies with him.
+  if(down&&guardCalling(i)){setState(friendlyKey(i,"guard_call"),0);setState(friendlyKey(i,"guard_radio"),0);}
+  if(!track.ai.alertState)continue;
   auto it=std::lower_bound(flags.begin(),flags.end(),track.ai.alertState,[](const auto&v,StateId id){return v.id<id;});if(it==flags.end()||it->id!=track.ai.alertState)it=flags.insert(it,{track.ai.alertState,0});
-  if(!npcIncapacitated(i)&&(!track.ai.enableState||state(track.ai.enableState))&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardState(i)==GuardState::Alert)it->value=1;
- }for(const auto&flag:flags)setState(flag.id,flag.value);
+  if(down||(track.ai.enableState&&!state(track.ai.enableState)))continue;
+  // Up through the whole fight and the hunt after it, not just while a man has eyes on.
+  auto mode=guardState(i);auto get=[&](const char*f){return state(friendlyKey(i,f));};
+  if(mode==GuardState::Alert||((mode==GuardState::Investigate||mode==GuardState::Search)&&get("guard_confirmed")&&get("guard_call")!=CallBody))it->value|=1;
+  if(get("guard_call")==CallSighting&&get("guard_radio")>=RadioCallMs)it->value|=2;
+ }
+ // The floods and the klaxon wait for a sighting to land over the radio (a man
+ // choked mid-call raises nothing), then hold while anyone still fights or hunts.
+ for(const auto&flag:flags)setState(flag.id,(flag.value&1)&&((flag.value&2)||state(flag.id))?1:0);
+}
+bool Game::guardCalling(size_t actor)const{return actor<m_friendlyActors.size()&&state(friendlyKey(actor,"guard_call"))&&state(friendlyKey(actor,"guard_radio"))<RadioCallMs;}
+void Game::startGuardCall(size_t actor,int kind){
+ if(actor>=m_friendlyActors.size()||npcIncapacitated(actor)||(kind!=CallSighting&&kind!=CallBody))return;
+ const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard||npc.pose.clip==4||(t.deadState&&state(t.deadState)))return;
+ // Already on the air: a sighting takes over a body report without starting over; nothing else interrupts.
+ // A man whose sighting has landed is past reporting bodies: his squad is already hunting.
+ if(guardCalling(actor)){if(kind==CallSighting)setState(friendlyKey(actor,"guard_call"),kind);return;}
+ if(kind==CallBody&&state(friendlyKey(actor,"guard_call"))==CallSighting)return;
+ setState(friendlyKey(actor,"guard_call"),kind);setState(friendlyKey(actor,"guard_radio"),0);
+ // The handset keys at his shoulder, loud enough for the player to hear who is calling.
+ m_sounds.push_back({Sound::RadioSquelch,npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.85f,1,true,14,npc.pose.z+t.scale*.9f});
 }
 void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove){
  if(npcIncapacitated(actor)){wantsMove=false;return;}
@@ -206,10 +229,31 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);put("guard_route_next",0);put("guard_route_wait",0);
   confirmed=false;recognition=0;mode=GuardState::Search;
  }
+ const int oldMode=get("guard_mode"),oldRecognition=get("guard_recognition");
  int oldSeen=get("guard_seen");put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
  // Senses update independently of task ownership. Only the shared executor
  // below may select movement or advance role work for this actor/frame.
- put("guard_mode",int(mode));put("guard_radio",mode==GuardState::Alert?std::min(2000,get("guard_radio")+ms):0);
+ put("guard_mode",int(mode));
+ // The radio call is committed: once he keys the handset he finishes it whatever
+ // his eyes do. A fresh hit cuts it (he starts over if he still has them); a
+ // choke, a knockout or death stop him outright.
+ if(freshHit&&get("guard_call")&&get("guard_radio")<RadioCallMs){put("guard_call",0);put("guard_radio",0);}
+ if(mode==GuardState::Alert&&confirmed&&get("guard_call")!=CallSighting)startGuardCall(actor,CallSighting);
+ else if(casualty&&!get("guard_call"))startGuardCall(actor,CallBody);
+ else if(!confirmed&&(mode==GuardState::Patrol||mode==GuardState::Suspicious)&&!guardCalling(actor)){put("guard_call",0);put("guard_radio",0);}
+ if(guardCalling(actor)){int radio=std::min(RadioCallMs,get("guard_radio")+ms);put("guard_radio",radio);
+  // It lands: a second squelch. A body puts his squad on Caution (a sighting's alarm is updateGuardFlags').
+  if(radio>=RadioCallMs){m_sounds.push_back({Sound::RadioSquelch,pose.position+shift,.6f,1.15f,true,14,pose.z+track.scale*.9f});if(get("guard_call")==CallBody)startGuardCaution(actor);}}
+ // What the player hears of being seen: a soft rising tick as a '?' first goes
+ // up over a man making them out, the sting on his '!' (once per detection,
+ // however often cover breaks his line); several men at once sound once.
+ if(!confirmed)put("guard_sting",0);
+ if(visible&&target.kind==ShotKind::Player&&guardHostileToPlayer(actor)){
+  if(mode==GuardState::Alert&&confirmed&&!get("guard_sting")){put("guard_sting",1);if(m_alarmSting<=0){sound(Sound::DetectSting,.9f);m_alarmSting=.4f;}}
+  else if(mode==GuardState::Suspicious&&oldMode!=int(GuardState::Suspicious)&&!oldRecognition&&m_alarmTick<=0){sound(Sound::SuspicionTick,.5f);m_alarmTick=.8f;}
+ }
+ // How long his '!' has been up, for the card's pop.
+ put("guard_bang_ms",mode==GuardState::Alert?std::min(1000,get("guard_bang_ms")+ms):0);
  int planFlags=(get("guard_under_fire")>0)|((get("weapon_reload")>0||get("weapon_reloading"))<<1)|((get("weapon_saved")&&!get("weapon_rounds"))<<2);
  bool changedThreat=target.valid()&&(previous.kind!=target.kind||previous.level!=target.level||previous.index!=target.index);
  bool planWake=freshHit||noiseWake||nearThreat||enemyDead||changedThreat||int(mode)!=get("plan_mode")||visible!=bool(oldSeen)||planFlags!=get("plan_flags")||get("stuck")>0;

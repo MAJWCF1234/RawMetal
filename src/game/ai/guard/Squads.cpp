@@ -11,8 +11,9 @@ AiTarget Game::guardSquadReport(size_t actor)const{
  const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;if(!c.squad)return {};auto faction=actorFaction(npc.track());AiTarget report;float best=1e9f;auto origin=chunkOffset(npc.level);
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&source=m_friendlyActors[i];const auto&t=source.track();
   if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||t.ai.squad!=c.squad||actorFaction(t)!=faction||!chunkResident(source.level)||!autonomousActor(t)||source.pose.clip==4||(t.deadState&&state(t.deadState))||guardState(i)!=GuardState::Alert||!state(friendlyKey(i,"guard_seen")))continue;
-  // A sighting reaches the squad over the radio, which takes a moment.
-  if(state(friendlyKey(i,"guard_radio"))<RadioCallMs)continue;
+  // A sighting reaches the squad over the radio, which takes a moment; once
+  // his call has landed he stays on the net for the rest of the hunt.
+  if(state(friendlyKey(i,"guard_call"))!=CallSighting||state(friendlyKey(i,"guard_radio"))<RadioCallMs)continue;
   auto delta=source.pose.position+chunkOffset(source.level)-origin-npc.pose.position;float height=source.pose.z-npc.pose.z,range=lengthSq(delta)+height*height;if(range>18*18||range>=best)continue;auto target=guardTarget(i);if(!guardCanSee(i,source.pose,target))continue;
   if(!factionsHostile(faction,target.faction))continue;target.position+=chunkOffset(source.level)-origin;report=target;best=range;
  }return report;
@@ -112,6 +113,16 @@ bool Game::guardWary(size_t actor)const{return guardCaution(actor)||(actor<m_fri
 void Game::startGuardCaution(size_t actor){if(actor<m_friendlyActors.size()&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)setState(guardCautionKey(actor),CautionMs);}
 void Game::updateGuardCaution(float dt){
  m_cautionMicros+=int(std::lround(double(dt)*1000000));int ms=m_cautionMicros/1000;m_cautionMicros%=1000;
+ // The HUD: ALERT holds AlertLatchMs past the last man losing sight (no strobing
+ // round a pillar), then EVASION counts down the longest search left. Within one
+ // hunt the clock only runs down; a fresh ALERT starts the next one from the top.
+ bool sighted=false;int hunt=0;
+ for(size_t i=0;i<m_friendlyActors.size();++i){sighted=sighted||(guardAlarmActor(i)&&guardState(i)==GuardState::Alert&&guardTarget(i).kind==ShotKind::Player);int left=guardHuntLeft(i);hunt=std::max(hunt,left);
+  // A man the player evaded keeps his squad's CAUTION on the HUD, even over a seam, until its clock runs out.
+  if(m_friendlyActors[i].track().ai.mode==ActorAiMode::Guard){auto evaded=friendlyKey(i,"guard_evaded");if(left)setState(evaded,1);else if(state(evaded)&&!state(guardCautionKey(i)))setState(evaded,0);}}
+ m_alertLatchMs=sighted?AlertLatchMs:std::max(0,m_alertLatchMs-ms);
+ if(sighted||!hunt){m_evasionMs=0;m_evasionPeakMs=0;}else{m_evasionMs=m_evasionMs?std::min(m_evasionMs,hunt):hunt;m_evasionPeakMs=std::max(m_evasionPeakMs,m_evasionMs);}
+ m_alarmSting=std::max(0.f,m_alarmSting-dt);m_alarmTick=std::max(0.f,m_alarmTick-dt);
  std::vector<std::pair<StateId,bool>> clocks;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard)continue;auto key=guardCautionKey(i);if(!state(key))continue;
   bool alert=!npcIncapacitated(i)&&(!t.ai.enableState||state(t.ai.enableState))&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&guardState(i)==GuardState::Alert&&guardTarget(i).kind==ShotKind::Player;
@@ -121,14 +132,35 @@ void Game::updateGuardCaution(float dt){
  // faction lets it run on); the next search that gives up on the player starts it again.
  for(const auto&[key,alert]:clocks)setState(key,alert?0:std::max(0,state(key)-ms));
 }
+bool Game::guardAlarmActor(size_t i)const{
+ const auto&npc=m_friendlyActors[i];const auto&t=npc.track();
+ return t.ai.mode==ActorAiMode::Guard&&chunkResident(npc.level)&&!npcIncapacitated(i)&&npc.pose.clip!=4&&!(t.deadState&&state(t.deadState))&&!(t.ai.enableState&&!state(t.ai.enableState));
+}
+// A man of a squad hostile to the player, hunting the player he had confirmed
+// (by his own eyes or a squadmate's call; blaming a body is not a sighting):
+// the search he has left, plus, still on his way, the walk to the last-known spot.
+int Game::guardHuntLeft(size_t i)const{
+ if(i>=m_friendlyActors.size()||!guardAlarmActor(i)||!factionsHostile(actorFaction(m_friendlyActors[i].track()),AiFaction::Player))return 0;
+ auto get=[&](const char*f){return state(friendlyKey(i,f));};auto mode=guardState(i);
+ if((mode!=GuardState::Investigate&&mode!=GuardState::Search)||!get("guard_confirmed")||get("guard_target_kind")!=int(ShotKind::Player)||get("guard_call")==CallBody)return 0;
+ if(mode==GuardState::Search)return std::max(1,get("guard_search"));
+ const auto&npc=m_friendlyActors[i];const auto&ai=npc.track().ai;
+ float walk=length(Vec2{get("guard_x")*.001f,get("guard_y")*.001f}-npc.pose.position-chunkOffset(npc.level))/std::max(.5f,ai.speed);
+ return std::max(1,ai.searchMs+std::clamp(int(walk*1000),0,std::max(0,8000-get("guard_travel"))));
+}
+int Game::guardEvasion()const{int live=0;for(size_t i=0;i<m_friendlyActors.size();++i)live=std::max(live,guardHuntLeft(i));return !live?0:m_evasionMs?std::min(m_evasionMs,live):live;}
 int Game::guardAlarm()const{
- int caution=0;
+ int caution=0;bool hunt=false;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();
-  if(t.ai.mode!=ActorAiMode::Guard||!chunkResident(npc.level)||npcIncapacitated(i)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||(t.ai.enableState&&!state(t.ai.enableState)))continue;
+  if(!guardAlarmActor(i))continue;
   // ALERT is a man in Alert with the player as his target, here or over a seam; a fight with a wasp is not.
-  if(guardState(i)==GuardState::Alert&&guardTarget(i).kind==ShotKind::Player)return -1;
-  // CAUTION is a squad hostile to the player with a man in this chunk.
-  if(npc.level==m_level&&factionsHostile(actorFaction(t),AiFaction::Player))caution=std::max(caution,state(guardCautionKey(i)));
- }return caution;
+  if(guardState(i)==GuardState::Alert&&guardTarget(i).kind==ShotKind::Player)return AlarmAlert;
+  hunt=hunt||guardHuntLeft(i)>0;
+  // CAUTION is a squad hostile to the player with a man in this chunk, or one who was just hunting them.
+  if((npc.level==m_level||state(friendlyKey(i,"guard_evaded")))&&factionsHostile(actorFaction(t),AiFaction::Player))caution=std::max(caution,state(guardCautionKey(i)));
+ }
+ // Out of sight but still hunted: ALERT a moment longer, then EVASION.
+ if(hunt)return m_alertLatchMs>0?AlarmAlert:AlarmEvasion;
+ return caution;
 }
 }

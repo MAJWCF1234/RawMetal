@@ -37,13 +37,23 @@ int Game::nearbyBody()const{
  }return chosen;
 }
 void Game::dropBody(){if(m_draggedNpc<0)return;if(size_t(m_draggedNpc)<m_friendlyActors.size())saveRestrainedPose(size_t(m_draggedNpc));m_draggedNpc=-1;m_pickupNotice="BODY LEFT";m_pickupNoticeTime=1.2f;}
+Game::GuardCard Game::guardCard(size_t actor)const{
+ GuardCard card;if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return card;const auto& npc=m_friendlyActors[actor];
+ if(npc.track().ai.mode!=ActorAiMode::Guard||npc.pose.clip==4||(npc.track().deadState&&state(npc.track().deadState)))return card;
+ auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto mode=guardState(actor);
+ if(guardCalling(actor))card.call=std::clamp(get("guard_radio")/float(RadioCallMs),0.f,1.f);
+ // The '?' fills from the foot as he makes the player out.
+ card.fill=std::clamp(get("guard_recognition")/float(std::max(1,npc.track().ai.recognitionMs)),0.f,1.f);
+ if(mode==GuardState::Alert){card.kind=GuardCardKind::Alert;card.bangMs=get("guard_bang_ms");}
+ else if(mode==GuardState::Suspicious){card.kind=GuardCardKind::Making;card.fill=std::max(card.fill,.05f);}
+ // Searching for the player he had: a full red '?'. A noise, or a glimpse he never made out: a dim one.
+ else if(mode==GuardState::Investigate||mode==GuardState::Search)card.kind=get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player)?GuardCardKind::Hunting:GuardCardKind::Checking;
+ else if(card.call>0)card.kind=GuardCardKind::Checking;
+ return card;
+}
 float Game::guardAwareness(size_t actor)const{
- if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return 0;const auto& npc=m_friendlyActors[actor];
- if(npc.track().ai.mode!=ActorAiMode::Guard||npc.pose.clip==4||(npc.track().deadState&&state(npc.track().deadState)))return 0;
- auto mode=guardState(actor);if(mode==GuardState::Alert)return 2;
- if(mode==GuardState::Suspicious)return std::clamp(state(friendlyKey(actor,"guard_recognition"))/float(std::max(1,npc.track().ai.recognitionMs)),.05f,1.f);
- if(mode==GuardState::Investigate||mode==GuardState::Search)return .5f;
- return 0;
+ auto card=guardCard(actor);
+ switch(card.kind){case GuardCardKind::Alert:return 2;case GuardCardKind::Hunting:return 3;case GuardCardKind::Making:return card.fill;case GuardCardKind::Checking:return .5f;default:return 0;}
 }
 bool Game::npcIncapacitated(size_t actor)const{return actor<m_friendlyActors.size()&&state(friendlyKey(actor,"restraint"))!=0;}
 bool Game::npcHeld(size_t actor)const{return actor<m_friendlyActors.size()&&state(friendlyKey(actor,"restraint"))==2;}

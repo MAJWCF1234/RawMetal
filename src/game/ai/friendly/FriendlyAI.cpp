@@ -24,17 +24,20 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
  }
  bool voiced=damage>=track.health?std::any_of(m_sounds.begin(),m_sounds.end(),[&](const auto&e){return e.speech>=0&&e.speaker==actor+1;}):npcVoice(actor,NpcVoiceCue::Hurt);
  if(!voiced&&!npcHasVoice(actor))m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
- if(damage>=track.health&&track.ai.squad&&state(stateId("npc_voice_cd_allydown"))<=0){
-  size_t reporter=SIZE_MAX;float best=15.f*15.f;
-  for(size_t other=0;other<m_friendlyActors.size();++other){const auto&buddy=m_friendlyActors[other];
-   if(other==actor||buddy.track().ai.squad!=track.ai.squad||!npcHasVoice(other)||state(buddy.track().deadState)||npcIncapacitated(other))continue;
-   auto delta=buddy.pose.position+chunkOffset(buddy.level)-pose.position-chunkOffset(npc.level);float dist=lengthSq(delta);if(dist>best)continue;
-   // Only a man who saw him go down can call it.
-   auto from=buddy.pose.position+chunkOffset(buddy.level)-chunkOffset(m_level),to=pose.position+chunkOffset(npc.level)-chunkOffset(m_level);
-   if(!soundRayClear(from,buddy.pose.z+buddy.track().scale*.85f,to,pose.z+track.scale*.5f))continue;
-   best=dist;reporter=other;
-  }
-  if(reporter!=SIZE_MAX){
+ if(damage>=track.health&&track.ai.squad){
+  // The nearest squadmate who saw him go down (a voiced one, for the spoken line).
+  auto witness=[&](bool voiced){size_t reporter=SIZE_MAX;float best=15.f*15.f;
+   for(size_t other=0;other<m_friendlyActors.size();++other){const auto&buddy=m_friendlyActors[other];
+    if(other==actor||buddy.track().ai.squad!=track.ai.squad||(voiced&&!npcHasVoice(other))||(!voiced&&buddy.track().ai.mode!=ActorAiMode::Guard)||state(buddy.track().deadState)||npcIncapacitated(other))continue;
+    auto delta=buddy.pose.position+chunkOffset(buddy.level)-pose.position-chunkOffset(npc.level);float dist=lengthSq(delta);if(dist>best)continue;
+    // Only a man who saw him go down can call it.
+    auto from=buddy.pose.position+chunkOffset(buddy.level)-chunkOffset(m_level),to=pose.position+chunkOffset(npc.level)-chunkOffset(m_level);
+    if(!soundRayClear(from,buddy.pose.z+buddy.track().scale*.85f,to,pose.z+track.scale*.5f))continue;
+    best=dist;reporter=other;
+   }return reporter;};
+  // He radios it in: the same committed call as a sighting, cut short if he is dropped before it lands.
+  if(auto caller=witness(false);caller!=SIZE_MAX)startGuardCall(caller,CallBody);
+  if(size_t reporter=state(stateId("npc_voice_cd_allydown"))<=0?witness(true):SIZE_MAX;reporter!=SIZE_MAX){
    setState(friendlyKey(reporter,"voice_pending"),int(NpcVoiceCue::AllyDown)+1);setState(friendlyKey(reporter,"voice_pending_ms"),4500);setState(friendlyKey(reporter,"voice_reply_wait"),0);
    // Reserve the channel immediately so a multi-kill frame cannot queue several reports.
    setState(stateId("npc_voice_cd_allydown"),9000);

@@ -874,15 +874,19 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()){std::string line(goal);int w=std::min(m_width-140,uiTextWidth(line.c_str(),1,13));int left=cx-w/2;
   gradient(left-40,60,w/2+40,20,black,0.f,.7f,true);gradient(cx,60,w/2+40,20,black,.7f,0.f,true);
   uiText(cx-uiTextWidth("OBJECTIVE",0,9,3)/2,50,"OBJECTIVE",red,0,9,1,3);uiText(left,62,line.c_str(),bone,1,13);}
- // Under the objective: ALERT while a guard here has you, then his squad's
- // CAUTION clock running down while they keep looking.
+ // Under the objective: ALERT while a guard here has you, EVASION and its
+ // clock while his squad still hunts you out of sight, then their CAUTION
+ // clock running down while they keep looking.
  if(int alarm=game.guardAlarm();alarm&&!game.dead()&&!game.won()){
-  if(alarm<0)std::snprintf(b,sizeof(b),"ALERT");else{int s=(alarm+999)/1000;std::snprintf(b,sizeof(b),"CAUTION  %d:%02d",s/60,s%60);}
+  const bool evasion=alarm==Game::AlarmEvasion;const int left=evasion?game.guardEvasion():alarm;
+  if(alarm==Game::AlarmAlert)std::snprintf(b,sizeof(b),"ALERT");else{int s=(left+999)/1000;std::snprintf(b,sizeof(b),evasion?"EVASION  %d:%02d":"CAUTION  %d:%02d",s/60,s%60);}
   int w=uiTextWidth(b,0,13,3),y=transferReleased?108:88;if(game.areaTitleAlpha()>0)y=std::max(y,m_height/6+std::max(22,m_height/14)+12);
   gradient(cx-w/2-30,y-3,w/2+30,20,black,0.f,.7f,true);gradient(cx,y-3,w/2+30,20,black,.7f,0.f,true);
-  // A full red bar while they have you; the amber one drains with the clock.
-  const auto tone=alarm<0?rgb(244,62,46):amber;uiText(cx-w/2,y,b,tone,0,13,alarm<0&&(int(game.elapsed()*3)&1)?.75f:1.f,3);
-  fill(cx-w/2,y+16,w,2,tone,alarm<0?.85f:.18f);if(alarm>0)fill(cx-w/2,y+16,w*alarm/Game::CautionMs,2,amber,.85f);
+  // A full red bar while they have you; the red-orange one drains with the
+  // hunt's clock, the amber one with Caution's.
+  const auto tone=alarm==Game::AlarmAlert?rgb(244,62,46):evasion?rgb(255,112,36):amber;uiText(cx-w/2,y,b,tone,0,13,alarm==Game::AlarmAlert&&(int(game.elapsed()*3)&1)?.75f:1.f,3);
+  fill(cx-w/2,y+16,w,2,tone,alarm==Game::AlarmAlert?.85f:.18f);
+  if(evasion)fill(cx-w/2,y+16,int(int64_t(w)*left/std::max(1,game.guardEvasionPeak())),2,tone,.85f);else if(alarm>0)fill(cx-w/2,y+16,w*alarm/Game::CautionMs,2,amber,.85f);
  }
  // Major-area title card: thin, wide-set capitals across the top with a soft
  // glow, fading in and out the first time the player enters the area.
@@ -1083,10 +1087,10 @@ void SoftwareRenderer::prepareVrDisplays(const Game& game){
  if(objective!=m_vrObjective){m_vrObjective=objective;m_vrObjectiveTime=objective.empty()?0.f:6.f;}
  m_vrObjectiveTime=std::max(0.f,m_vrObjectiveTime-1.f/90.f);
  std::string caption(game.actorCaption());if(caption.empty()&&m_vrObjectiveTime>0)caption="OBJECTIVE: "+m_vrObjective;
- // With nothing else to say, the strip carries the guards' alarm: ALERT, or the Caution clock.
+ // With nothing else to say, the strip carries the guards' alarm: ALERT, the Evasion clock, or the Caution clock.
  const int alarm=caption.empty()&&!game.dead()&&!game.won()?game.guardAlarm():0;
- if(alarm<0)caption="ALERT";else if(alarm>0){const int s=(alarm+999)/1000;char clock[24];std::snprintf(clock,sizeof clock,"CAUTION  %d:%02d",s/60,s%60);caption=clock;}
- if(caption!=m_vrCaptionShown){m_vrCaptionShown=caption;const auto tone=alarm<0?rgb(244,62,46):alarm>0?rgb(232,160,60):rgb(235,235,230);stamp(m_vrCaptionTexture,512,72,[&]{int y=4;for(const auto& row:wrapUiText(caption,size_t(64),3)){const int width=uiTextWidth(row.c_str(),1,18);uiText(256-width/2,y,row.c_str(),tone,1,18);y+=22;}});}
+ if(alarm==Game::AlarmAlert)caption="ALERT";else if(alarm){const bool evasion=alarm==Game::AlarmEvasion;const int s=((evasion?game.guardEvasion():alarm)+999)/1000;char clock[24];std::snprintf(clock,sizeof clock,evasion?"EVASION  %d:%02d":"CAUTION  %d:%02d",s/60,s%60);caption=clock;}
+ if(caption!=m_vrCaptionShown){m_vrCaptionShown=caption;const auto tone=alarm==Game::AlarmAlert?rgb(244,62,46):alarm==Game::AlarmEvasion?rgb(255,112,36):alarm>0?rgb(232,160,60):rgb(235,235,230);stamp(m_vrCaptionTexture,512,72,[&]{int y=4;for(const auto& row:wrapUiText(caption,size_t(64),3)){const int width=uiTextWidth(row.c_str(),1,18);uiText(256-width/2,y,row.c_str(),tone,1,18);y+=22;}});}
 }
 // A save is being rebuilt on a worker: the frame goes dark under a bar that
 // fills as its chunks are built, instead of the window hanging.

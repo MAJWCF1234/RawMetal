@@ -2162,22 +2162,43 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  };
  for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i),nullptr,-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|i);
  for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())&&!game.npcStowed(i)){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i),0xA000000000000000ull|i);}}
- // What each guard makes of the player, over his head: a "?" that brightens
- // as he works out what he is looking at (dim while he checks a spot), a red
- // "!" once he has them.
+ // What each guard makes of the player, over his head: a "?" that fills from
+ // its foot, yellow turning orange, as he works out what he is looking at (dim
+ // while he checks a spot), a red "!" that pops once he has them, a red "?"
+ // while he hunts the player he had, and a pulsing handset while he radios.
  for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level!=level)continue;
-  float awareness=game.guardAwareness(i);if(awareness<=0)continue;
-  // 7x11 glyphs, scaled into 16x24 cards; black is clear.
-  static const auto glyph=[](const char* rows[11],std::uint32_t colour){Texture t{16,24,std::vector<uint32_t>(16*24)};t.clampEdges=true;
-   for(int y=0;y<24;++y)for(int x=0;x<16;++x){int gx=(x-1)*7/14,gy=(y-1)*11/22;if(x<1||x>14||y<1||y>22)continue;if(rows[gy][gx]=='#')t.pixels[y*16+x]=colour;}
+  const auto card=game.guardCard(i);if(card.kind==Game::GuardCardKind::None)continue;
+  // 7x11 glyphs, scaled into 16x24 cards; black is clear. Rows below `from` take `low`.
+  static const auto glyph=[](const char* rows[11],std::uint32_t colour,int from=24,std::uint32_t low=0){Texture t{16,24,std::vector<uint32_t>(16*24)};t.clampEdges=true;
+   for(int y=0;y<24;++y)for(int x=0;x<16;++x){int gx=(x-1)*7/14,gy=(y-1)*11/22;if(x<1||x>14||y<1||y>22)continue;if(rows[gy][gx]=='#')t.pixels[y*16+x]=y>=from?low:colour;}
    t.emission=t.pixels;return t;};
   static const char* question[11]={".#####.","##...##","##...##","....##.","...##..","...##..","...##..",".......","...##..","...##..","......."};
   static const char* bang[11]={"..###..","..###..","..###..","..###..","..###..","..###..","..###..",".......","..###..","..###..","......."};
-  static const Texture suspicious=glyph(question,0xffffd040u),alerted=glyph(bang,0xffff3020u);
-  const bool alert=awareness>=2;const float bob=std::sin(game.elapsed()*6.f+float(i))*.03f;
+  static const char* handset[11]={"...#...",".#.#.#.","#..#..#","...#...","..###..","..#.#..","..###..","..#.#..","..###..","..###..","......."};
+  // One '?' per filled row (0..22): the empty top dim amber, the filled foot yellow, orange near full.
+  static const auto filling=[]{std::array<Texture,23> cards;for(int rows=0;rows<23;++rows){float f=rows/22.f,o=std::clamp((f-.55f)/.45f,0.f,1.f);
+   std::uint32_t g=std::uint32_t(208-104*o),b=std::uint32_t(64-40*o);cards[size_t(rows)]=glyph(question,0xff4a3a14u,23-rows,0xff000000u|(255u<<16)|(g<<8)|b);}return cards;}();
+  static const Texture alerted=glyph(bang,0xffff3020u),hunting=glyph(question,0xffff4a26u),radio=glyph(handset,0xff78e6ffu);
+  static const Texture bar=[]{Texture t{4,4,std::vector<uint32_t>(16,0xff78e6ffu)};t.clampEdges=true;t.emission=t.pixels;return t;}();
+  const bool alert=card.kind==Game::GuardCardKind::Alert;const float bob=std::sin(game.elapsed()*6.f+float(i))*.03f;
   Point3 head{npc.pose.position.x,npc.pose.position.y,npc.pose.z+npc.track().scale*1.12f+.32f+bob};
-  const Point3 across=effectSide*(alert?.13f:.12f),up{0,0,alert?.2f:.18f};const float glow=alert?2.4f:.6f+1.6f*std::min(1.f,awareness);
-  quad(head-across-up,head+across-up,head+across+up,head-across+up,alert?alerted:suspicious,glow);
+  // Past 9 m the card grows with distance so it still reads at 15 m and beyond;
+  // the '!' starts half as large again and settles over its first ~100 ms.
+  Point3 eyeAt{player.pos.x,player.pos.y,player.z+player.eye},toCard=head-eyeAt;
+  float reach=std::max(1.f,std::sqrt(toCard.x*toCard.x+toCard.y*toCard.y+toCard.z*toCard.z)/9.f),pop=alert?std::clamp(1.f-card.bangMs/100.f,0.f,1.f):0.f,scale=reach*(1+.55f*pop*pop);
+  const Point3 across=effectSide*((alert?.13f:.12f)*scale),up{0,0,(alert?.2f:.18f)*scale};
+  const Texture* face=&alerted;float glow=2.4f+2.f*pop;
+  if(card.kind==Game::GuardCardKind::Hunting){face=&hunting;glow=2.f;}
+  else if(card.kind==Game::GuardCardKind::Making){face=&filling[size_t(std::lround(card.fill*22))];glow=1.2f+1.4f*card.fill;}
+  else if(card.kind==Game::GuardCardKind::Checking){face=&filling[size_t(std::lround(card.fill*22))];glow=.8f;}
+  quad(head-across-up,head+across-up,head+across+up,head-across+up,*face,glow);
+  if(card.call>0){
+   // On the radio: a handset beside the card, pulsing, over a bar that fills as the call goes out.
+   const Point3 side=effectSide*(.12f*reach),tall{0,0,.18f*reach},at=head+effectSide*(.30f*reach);const float pulse=1.3f+.9f*std::sin(game.elapsed()*16.f);
+   quad(at-side-tall,at+side-tall,at+side+tall,at-side+tall,radio,pulse);
+   const Point3 foot=at-tall-Point3{0,0,.05f*reach},left=foot-side,thin{0,0,.025f*reach};const Point3 right=left+side*(2.f*card.call);
+   quad(left-thin,right-thin,right+thin,left+thin,bar,1.6f);
+  }
  }
  for(const auto&drone:engineerDrones)if(drone.level==level){
   if(!sphereVisible(drone.position+Point3{0,0,EngineerDroneHeight*.5f},1.2f))continue;
