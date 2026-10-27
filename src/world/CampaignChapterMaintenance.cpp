@@ -764,9 +764,10 @@ std::shared_ptr<const Map> makeMaintenanceAidStation(){
  mntFix(m,model::med_wheelchair,{7.f,17.9f},f,.55f,1.03f,.9f,2.f,true);
  mntFix(m,model::med_wall_clock,{12.f,5.03f},f+2.f,.24f,.02f,.23f,0,false);
  terminal(m,{9.3f,5.7f},"AID STATION / EXPOSURE REGISTER","B SHIFT: 41 SCREENED THIS MONTH. TIER 2: 6. TIER 3: 1 (TRANSFERRED).","TIER 3 GOES TO MEDICAL SCREENING ON LEVEL 9. NOBODY HAS COME BACK TO WORK FROM THERE.");m.terminals.back().readable=Readable::Note;
- // The ones Cleanup reached: four where they lay, and the blood.
+ // The ones Cleanup reached: four where they lay, and the blood. The station's
+ // doctor went down between the cots and her desk.
  for(auto [x,y,yaw]:{std::tuple{9.f,11.2f,1.f},{10.6f,9.4f,2.4f},{12.4f,14.f,-.6f},{8.4f,13.6f,3.6f}}){
-  std::string clock="mnt_aid_body_"+std::to_string(int(x*10));mntBody(m,clock.c_str(),ActorVisual::Worker,{x,y},f,yaw);machineryClock(m,clock.c_str(),60000);
+  std::string clock="mnt_aid_body_"+std::to_string(int(x*10));mntBody(m,clock.c_str(),x==10.6f?ActorVisual::FemaleDoctor:ActorVisual::Worker,{x,y},f,yaw);machineryClock(m,clock.c_str(),60000);
   wall(m,x-.45f,y-.3f,x+.45f,y+.3f,f,f+.004f,16);}
  // --- Treatment: the last of them --------------------------------------------------------------
  mntDoorwayY(m,7.f,8.6f,14.85f,15.15f,f,roof);

@@ -4,6 +4,19 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.14.4 - Lab coats (2026-10-27)
+
+The plant had one set of clothes. Everyone below the security office wore the
+heavy radiation suit, the aid station's doctor included. The research staff
+have their own now: two men and a woman in lab coats over what they came to
+work in, a doctor with her stethoscope still on, and a technician in the light
+hazmat suit and respirator, from the same character packs as everyone else and
+moving the way everyone else does. The technician sealed in Decon 1 wears his
+suit, the body in the Energy Research firing lane wears a coat, and the aid
+station's doctor went down between the cots and her desk.
+
+---
+
 ## v0.14.3 - The shaft door (2026-10-27)
 
 A playtest patch, from the second night's reports.
