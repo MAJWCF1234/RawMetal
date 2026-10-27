@@ -480,10 +480,22 @@ public:
     int lockerViewFixture()const;
     // LMB shut in a locker: a rattle of the leaves and a knock guards come to.
     void knockInLocker();
+    // The hands while a locker path or a stow plays (world grips, right then
+    // left, as takedownGrips): pulling the leaves open and shut on the way in,
+    // palms shoving them on the way out, shoving a body in. False, no hands.
+    bool lockerHands(std::array<Point3,2>* grips=nullptr)const;
+    // Stepping out into a guard in the leaves' swing who is not on to the
+    // player: the doors are flung into him and he goes down (the actor, or -1).
+    int lockerBurstTarget()const;
+    // --map-shots "burst": the nearest guard stands at the doors checking them, the player bursts out.
+    bool stageLockerBurst();
+    // The gun put away for the way in, raised again once the way out ends.
+    bool m_lockerRearm=false;void lockerRearm();
     // Transient, never saved: a save mid-motion loads at the committed end.
-    struct LockerDoor {int level=-1,fixture=-1;LockerMotion motion=LockerMotion::Knock;float age=0,length=0;std::array<float,2> from{},angle{},limit{};bool shut=true;};
+    // lead: how long the leaves wait for the hands to reach them (Enter).
+    struct LockerDoor {int level=-1,fixture=-1;LockerMotion motion=LockerMotion::Knock;float age=0,length=0,lead=0;std::array<float,2> from{},angle{},limit{};bool shut=true;};
     std::vector<LockerDoor> m_lockerDoors;
-    struct LockerView {bool active=false;LockerMotion motion=LockerMotion::Enter;float age=0,length=0;Player from;int fixture=-1;float facePitch=0;};
+    struct LockerView {bool active=false;LockerMotion motion=LockerMotion::Enter;float age=0,length=0;Player from;int fixture=-1;float facePitch=0;bool burst=false;};
     LockerView m_lockerView;
     void startLockerView(LockerMotion motion,const Player& from,int fixture,float facePitch=0);
     void updateLockerDoors(float dt);

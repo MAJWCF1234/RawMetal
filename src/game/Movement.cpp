@@ -194,7 +194,8 @@ bool Game::doorLocked(const Door& door)const{
 const char* Game::interactionHint()const{
  if(m_logTime>0){const bool paper=m_activeLog>=0&&size_t(m_activeLog)<m_world.terminals().size()&&m_world.terminals()[size_t(m_activeLog)].paper();
   return paper?(m_vrInputActive?"WRIST / PUT IT DOWN":"E / PUT IT DOWN"):(m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL");}
- if(hiddenLocker()>=0)return lockerViewLocked()?nullptr:"E / STEP OUT   LMB / KNOCK";
+ // Someone in the leaves' swing who is not on to the player: the doors go into him.
+ if(hiddenLocker()>=0)return lockerViewLocked()?nullptr:lockerBurstTarget()>=0?"E / BURST OUT   LMB / KNOCK":"E / STEP OUT   LMB / KNOCK";
  if(lockerViewLocked())return nullptr; // nothing to do mid-step: no hint for the frame that cannot take it
  if(heldNpc()>=0)return "E / RELEASE    Q / KNOCK OUT    FIRE / KILL";
  if(draggingBody())return stowLockerAhead()>=0?"E / STOW THE BODY":"E / DROP THE BODY";

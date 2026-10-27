@@ -816,10 +816,15 @@ void SoftwareRenderer::drawHud(const Game& game){
     else fill(x,y,end-x,1,k==Lip?lip:k==Seam?seam:k==Dim?dim:k==Lit?lit:steel,cover*(k==Seam?.75f:1.f));
     x=end;}}
  }
- gradient(0,0,m_width,46,black,.55f,0.f,false);
+ // Shut in (and on the way in once the leaves meet) the HUD is down to what
+ // hiding needs: the hint, the radar and the alarm line. Vitals, the gun, the
+ // objective, notices and title cards wait until the player steps out.
+ const bool shut=game.lockerShutView()>=.5f&&game.lockerViewFixture()>=0;
+ char b[80];
+ if(!shut){gradient(0,0,m_width,46,black,.55f,0.f,false);
  std::string place(mapLabel);for(auto&c:place)c=char(std::toupper((unsigned char)c));fill(14,13,3,13,red,1);uiText(22,10,place.c_str(),bone,0,15,1,2);
- char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());if(!game.enemies().empty())uiText(22,28,b,muted,0,10,1,1);
- if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)uiText(22,41,game.world().liftStatus(),amber,0,10,1,1);
+ std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());if(!game.enemies().empty())uiText(22,28,b,muted,0,10,1,1);
+ if(game.world().hasLift()&&game.world().liftPhase()!=World::LiftPhase::Crashed)uiText(22,41,game.world().liftStatus(),amber,0,10,1,1);}
  // Compact map reveals nearby contacts and a fixed extraction marker.
  const int mx=m_width-57,my=8;
  fill(mx-4,my-4,56,56,rgb(6,5,5),.7f);frame(mx-4,my-4,56,56,bone,.14f);fill(mx-4,my-4,5,1,red,1);fill(mx-4,my-4,1,5,red,1);
@@ -842,7 +847,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  rect(mx+int(p.pos.x*2)-1,my+int(p.pos.y*2)-1,3,3,amber);
  rect(mx+int((p.pos.x+std::cos(p.angle)*2)*2),my+int((p.pos.y+std::sin(p.angle)*2)*2),1,1,paper);
  // Status: type over a floor shadow, no slab. Vitals left, weapon right.
- gradient(0,m_height-74,m_width,74,black,0.f,.8f,false);
+ if(!shut){gradient(0,m_height-74,m_width,74,black,0.f,.8f,false);
  const bool critical=p.health<30;const auto vital=critical?red:bone;
  std::snprintf(b,sizeof(b),"%d",std::max(0,int(p.health)));int healthWidth=uiText(22,m_height-52,b,vital,0,40);
  int barX=30+healthWidth;uiText(barX,m_height-41,"HEALTH",muted,0,10,1,2);
@@ -859,10 +864,10 @@ void SoftwareRenderer::drawHud(const Game& game){
   for(int i=0;i<8;++i)fill(reserveX-6-loadedWidth-12-i*6,m_height-34,3,10,i<p.loaded?amber:bone,i<p.loaded?1.f:.15f);
   if(p.loaded==0)uiText(m_width/2-uiTextWidth("RELOAD  [R]",0,12,2)/2,m_height/2+24,"RELOAD  [R]",red,0,12,1,2);}
  std::snprintf(b,sizeof(b),"PURGED  %02d / %02d",game.kills(),int(game.enemies().size()));if(!game.enemies().empty())uiText(m_width/2-uiTextWidth(b,0,10,2)/2,m_height-20,b,muted,0,10,.8f,2);
- if(game.hasFlashlight()){float jam=game.flashlightJam();const char* light=!game.state(stateId("flashlight_on"))?"LIGHT OFF":jam>=Game::FlashlightJamTime?"NO POWER":jam>0?"LIGHT FAILING":"LIGHT ON";uiText(m_width/2-uiTextWidth(light,0,10,2)/2,m_height-34,light,game.flashlightOn()?amber:muted,0,10,.8f,2);}
+ if(game.hasFlashlight()){float jam=game.flashlightJam();const char* light=!game.state(stateId("flashlight_on"))?"LIGHT OFF":jam>=Game::FlashlightJamTime?"NO POWER":jam>0?"LIGHT FAILING":"LIGHT ON";uiText(m_width/2-uiTextWidth(light,0,10,2)/2,m_height-34,light,game.flashlightOn()?amber:muted,0,10,.8f,2);}}
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
  if(!locker){fill(cx-7,cy,4,1,cross,.85f);fill(cx+4,cy,4,1,cross,.85f);fill(cx,cy-7,1,4,cross,.85f);fill(cx,cy+4,1,4,cross,.85f);blend(cx,cy,cross,.6f);}
- if(auto target=game.targetEnemy()){
+ if(auto target=shut?nullptr:game.targetEnemy()){
   int x=m_width/2-65,y=m_height-60;
   uiText(x,y-6,target->name(),paper,0,11,1,1);
   fill(x,y+8,130,3,bone,.15f);fill(x,y+8,int(130*std::max(0.f,target->hp)/target->maxHp),3,target->windup>0?amber:red,1);
@@ -870,8 +875,9 @@ void SoftwareRenderer::drawHud(const Game& game){
  }
  bool transferReleased=false;
  for(const auto& door:game.world().doors())if(door.transfer&&(door.requireEnemiesClear||door.requireControl||door.requireState)&&!game.doorLocked(door))transferReleased=true;
+ if(shut)transferReleased=false;
  if(transferReleased){const char* m="TRANSFER INTERLOCK RELEASED";int w=uiTextWidth(m,0,11,2);gradient(cx-w/2-30,86,w/2+30,16,black,0.f,.7f,true);gradient(cx,86,w/2+30,16,black,.7f,0.f,true);uiText(cx-w/2,87,m,amber,0,11,1,2);}
- if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()){std::string line(goal);int w=std::min(m_width-140,uiTextWidth(line.c_str(),1,13));int left=cx-w/2;
+ if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()&&!shut){std::string line(goal);int w=std::min(m_width-140,uiTextWidth(line.c_str(),1,13));int left=cx-w/2;
   gradient(left-40,60,w/2+40,20,black,0.f,.7f,true);gradient(cx,60,w/2+40,20,black,.7f,0.f,true);
   uiText(cx-uiTextWidth("OBJECTIVE",0,9,3)/2,50,"OBJECTIVE",red,0,9,1,3);uiText(left,62,line.c_str(),bone,1,13);}
  // Under the objective: ALERT while a guard here has you, EVASION and its
@@ -880,7 +886,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(int alarm=game.guardAlarm();alarm&&!game.dead()&&!game.won()){
   const bool evasion=alarm==Game::AlarmEvasion;const int left=evasion?game.guardEvasion():alarm;
   if(alarm==Game::AlarmAlert)std::snprintf(b,sizeof(b),"ALERT");else{int s=(left+999)/1000;std::snprintf(b,sizeof(b),evasion?"EVASION  %d:%02d":"CAUTION  %d:%02d",s/60,s%60);}
-  int w=uiTextWidth(b,0,13,3),y=transferReleased?108:88;if(game.areaTitleAlpha()>0)y=std::max(y,m_height/6+std::max(22,m_height/14)+12);
+  int w=uiTextWidth(b,0,13,3),y=transferReleased?108:88;if(game.areaTitleAlpha()>0&&!locker)y=std::max(y,m_height/6+std::max(22,m_height/14)+12);
   gradient(cx-w/2-30,y-3,w/2+30,20,black,0.f,.7f,true);gradient(cx,y-3,w/2+30,20,black,.7f,0.f,true);
   // A full red bar while they have you; the red-orange one drains with the
   // hunt's clock, the amber one with Caution's.
@@ -890,7 +896,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  }
  // Major-area title card: thin, wide-set capitals across the top with a soft
  // glow, fading in and out the first time the player enters the area.
- if(float a=game.areaTitleAlpha();a>0&&!game.dead()){const char* title=game.areaTitle().c_str();
+ if(float a=game.areaTitleAlpha();a>0&&!game.dead()&&!locker){const char* title=game.areaTitle().c_str();
   int size=std::max(22,m_height/14),track=size/3,w=uiTextWidth(title,1,size,track),x=cx-w/2,y=m_height/6;
   for(auto [dx,dy]:{std::pair{-2,0},{2,0},{0,-2},{0,2}})uiText(x+dx,y+dy,title,bone,1,size,a*.08f,track);
   uiText(x+1,y+2,title,black,1,size,a*.45f,track);uiText(x,y,title,rgb(250,248,242),1,size,a,track);}
@@ -898,7 +904,8 @@ void SoftwareRenderer::drawHud(const Game& game){
   const char* headline=game.won()?"SECTOR CLEARED":"YOU DIED";int w=uiTextWidth(headline,2,64,4);uiText(cx-w/2+3,cy-40,headline,black,2,64,.8f,4);uiText(cx-w/2,cy-42,headline,game.won()?amber:red,2,64,1,4);
   const char* hint="PRESS ESC TO RESTART";uiText(cx-uiTextWidth(hint,0,11,3)/2,cy+30,hint,paper,0,11,.85f,3);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
- if(game.audioMuted())uiText(22,54,"AUDIO MUTED  [M]",muted,0,10,1,1);
+ if(shut){}
+ else if(game.audioMuted())uiText(22,54,"AUDIO MUTED  [M]",muted,0,10,1,1);
  else if(!game.musicEnabled())uiText(22,54,"MUSIC OFF  [N]",muted,0,10,1,1);
  auto promptPanel=[&](int bottom,const char* message,std::uint32_t color){
   int maxWidth=std::max(24,m_width-120);auto rows=wrapUiText(message,size_t(std::max(1,(maxWidth-28)/6)));
@@ -907,9 +914,9 @@ void SoftwareRenderer::drawHud(const Game& game){
   fill(left,top,width,height,rgb(6,5,5),.72f);fill(left,top,2,height,color==paper?red:color,1);
   for(size_t i=0;i<rows.size();++i)uiText(left+14,top+3+int(i)*15,rows[i].c_str(),color,1,13);
  };
- if(game.pickupNoticeTime()>0)promptPanel(m_height-65,game.pickupNotice().c_str(),paper);
+ if(game.pickupNoticeTime()>0&&!shut)promptPanel(m_height-65,game.pickupNotice().c_str(),paper);
  if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
- else if(auto pickup=game.nearbyPickup()){
+ else if(auto pickup=shut?nullptr:game.nearbyPickup()){
   const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   promptPanel(m_height-65,message,amber);
  }
@@ -1252,7 +1259,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level))drawScene(game,false,level);
-   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&game.hiddenLocker()<0&&!game.lockerViewLocked())drawViewModel(game);m_poseReady=false;
+   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye,m_view.angle,m_view.pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());

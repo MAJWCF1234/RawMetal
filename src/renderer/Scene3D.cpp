@@ -2364,9 +2364,9 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  }
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){
- const auto&motion=game.weaponMotion();
- if(game.heldNpc()>=0||game.takedownActive()){
-  auto center=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;auto grips=game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
+ const auto&motion=game.weaponMotion();std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
+ if(game.heldNpc()>=0||game.takedownActive()||locker){
+  auto center=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
   auto toRig=[&](Point3 world){auto p=(cameraPoint(world,game)-Point3{0,-.22f,.30f})*(1.f/kViewModelScale);p.x=-p.x;return p+center;};
   m_armsMesh.poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
  }
@@ -2382,7 +2382,9 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
 }
 void SoftwareRenderer::drawViewModel(const Game& game){
  perf::Scope viewProfile(perf::ViewModel);
- if(game.handsLowered()&&!game.holdingClutter()&&game.heldNpc()<0)return; // Off duty: nothing in hand.
+ // The hands on a locker's leaves (Game::lockerHands) draw however the gun is.
+ std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
+ if(game.handsLowered()&&!game.holdingClutter()&&game.heldNpc()<0&&!locker)return; // Off duty: nothing in hand.
  if(m_gpuFrame)m_gpu->clearDepth();
  if(game.holdingClutter()&&!m_inspectRig)return;
  std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
@@ -2403,15 +2405,15 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  const Point3 triggerSocket{.02f,.70f,1.10f},supportSocket{.02f,1.10f,-1.15f};
   auto rightWrist=animated(gunLocal(triggerSocket)+Point3{.045f,-.105f,-.07f});
   auto leftWrist=animated(gunLocal(supportSocket)+Point3{-.085f,-.055f,-.03f});
- bool fists=game.unarmed();
+ bool fists=game.unarmed()||locker;
  Point3 armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f,armOffset=fists?Point3{0,-.22f,.30f}:Point3{.15f,-.285f,.52f};
  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*kViewModelScale;p.x=-p.x;return p+armOffset;};
  if(!m_poseReady)prepareViewModel(game);
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
-  if(heldActor>=0)return p;
+  if(heldActor>=0||locker)return p;
   return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-game.holster()*.85f),p.z};};
  m_gripError=0;
- if(heldActor>=0||game.takedownActive()){auto grips=game.takedownActive()?game.takedownGrips():game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
+ if(heldActor>=0||game.takedownActive()||locker){auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
  for(int side=0;side<2&&!fists;++side){auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
   auto d=p-(side?leftWrist:rightWrist);m_gripError=std::max(m_gripError,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
  }

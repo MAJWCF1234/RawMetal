@@ -734,7 +734,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
        // Locker sequences, each from shut in (E, then 70 frames for the way in):
        // "out N" E again, N frames; "peek D" the head turned D degrees;
        // "yank N" the nearest guard is put at the doors and hauls them out, N frames; "knock N" LMB, N frames.
-       if(action=="out"||action=="peek"||action=="yank"||action=="knock"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);for(int i=0;i<70;++i)scene.update({},1.f/60.f);
+       // "burst N": the nearest guard stands at the doors checking them and the player bursts out into him, N frames.
+       if(action=="out"||action=="peek"||action=="yank"||action=="knock"||action=="burst"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);for(int i=0;i<70;++i)scene.update({},1.f/60.f);
+        if(action=="burst"){scene.stageLockerBurst();scene.update(use,1.f/60.f);}
         if(action=="out")scene.update(use,1.f/60.f);
         if(action=="peek"){retro::InputState look{};look.mouseDx=decltype(look.mouseDx)(frames*retro::kPi/180.f/.0022f);scene.update(look,1.f/60.f);frames=2;}
         if(action=="yank")scene.stageLockerCatch();

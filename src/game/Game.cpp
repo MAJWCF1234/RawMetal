@@ -382,9 +382,11 @@ void Game::update(const InputState& input, float dt) {
     }
     m_pickupNoticeTime=std::max(0.f,m_pickupNoticeTime-std::min(dt,.05f));
     // Entering a major area for the first time on this save: its title card and sting.
-    if(auto title=m_world.areaTitle(m_player.pos,m_player.z)){StateId seen=stateId(std::string("area_title:")+title);
+    // Shut in a locker, or on the way in, the card waits for the player to step out.
+    const bool lockedIn=hiddenLocker()>=0||(lockerViewLocked()&&m_lockerView.motion==LockerMotion::Enter);
+    if(auto title=lockedIn?nullptr:m_world.areaTitle(m_player.pos,m_player.z)){StateId seen=stateId(std::string("area_title:")+title);
      if(!state(seen)){setState(seen,1);m_areaTitle=title;m_areaTitleTime=0;sound(Sound::AreaTitle,.85f);}}
-    if(!m_areaTitle.empty()&&(m_areaTitleTime+=std::min(dt,.05f))>=AreaTitleTime)m_areaTitle.clear();
+    if(!m_areaTitle.empty()&&!lockedIn&&(m_areaTitleTime+=std::min(dt,.05f))>=AreaTitleTime)m_areaTitle.clear();
     if(!input.fire)m_suppressFire=false;
     dt = std::min(dt, 0.05f);
     if(input.mute&&!m_previousMute)m_audioMuted=!m_audioMuted;
