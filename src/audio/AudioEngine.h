@@ -2,6 +2,7 @@
 #include "Sound.h"
 #include <windows.h>
 #include <mmsystem.h>
+#include <algorithm>
 #include <array>
 #include <vector>
 #include <mutex>
@@ -21,6 +22,7 @@ public:
  static bool test();
  static bool testDevice();
  static bool testLiftMix();
+ static bool testAlertMusic();
 private:
  struct Sample {std::vector<int16_t> pcm; int channels=1; size_t frames()const{return pcm.size()/channels;}};
  // NPC speech is coloured live by what the speaker wears over the mouth,
@@ -51,6 +53,19 @@ private:
  // Area score, one entry per MusicCue (0, the original track, is m_main*).
  static constexpr int AreaScores=9;
  std::array<float,AreaScores> m_areaBlend{},m_areaTarget{};
+ // Alert / Evasion music: while a guard has the player (ALERT) or still hunts
+ // him (EVASION) the area score gives way to the alert loop (Sound::MusicAlert).
+ // The crossfade's place (m_alertIn) moves linearly, AlertRise s in and
+ // AlertFall s back to the area score on Caution or when the squad stands down;
+ // the two levels follow it on an equal-power curve. EVASION eases the loop
+ // EvasionLevel down over EvasionEase s. A detection sting ducks every score
+ // StingDuck for StingHold s, released over StingRelease s.
+ static constexpr float AlertRise=.4f,AlertFall=3.f,EvasionLevel=.8f,EvasionEase=1.f,StingDuck=.5f,StingHold=.5f,StingRelease=.35f;
+ static constexpr std::int64_t AlertEmitter=-30;
+ float m_alertIn=0,m_alertTarget=0,m_alertLevel=1,m_alertLevelTarget=1;int m_stingFrames=0;
+ void alertScore(int alarm);
+ void duckForSting(){m_stingFrames=int((StingHold+StingRelease)*Rate);}
+ float stingDuck()const{if(m_stingFrames<=0)return 1;const float left=m_stingFrames/float(Rate);return 1-StingDuck*std::min(1.f,left/StingRelease);}
  float m_submerged=0,m_submergedTarget=0,m_underwaterLeft=0,m_underwaterRight=0;
  bool m_paused=false;
   int m_lastChunk=-1;

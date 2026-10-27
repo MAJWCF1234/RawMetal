@@ -17,7 +17,14 @@ enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, An
 static_assert(int(MusicCue::Count)==9,"AudioEngine::AreaScores must match MusicCue");
 Sound areaSound(int cue){return cue==int(MusicCue::Freight)?Sound::FreightMusic:Sound(int(Sound::MusicUndercover)+cue-int(MusicCue::Undercover));}
 int areaCue(Sound sound){if(sound==Sound::FreightMusic)return int(MusicCue::Freight);if(sound>=Sound::MusicUndercover&&sound<=Sound::MusicDeathClose)return int(MusicCue::Undercover)+int(sound)-int(Sound::MusicUndercover);return 0;}
-bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum);}
+// The alert loop is the library's boss track, which no map plays as its area
+// score (every packed score is heard somewhere in Chapter 1): it opens on a
+// hit, ~0.2 s at -12 to -16 dBFS, then holds a dense, bright beat at about -21,
+// brighter than any area score. Trimmed to sit a little above the -20 to -22 of
+// the scores under the lockers (Darkness, Freight, the original).
+constexpr int AlertMusicResource=2183;
+constexpr float AlertTrim=1.2f;
+bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::MusicAlert||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum);}
 // Open-zone sounds live in the library resources from 720, in enum order.
 constexpr int ZoneSoundResource=720;
 constexpr int AreaTitleResource=2125;
@@ -74,7 +81,7 @@ void AudioEngine::configureMask(MaskFilter& mask,int kind){
 }
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
@@ -163,12 +170,23 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  voice.filterTarget=openness+(1-openness)*(1-std::exp(-kTwoPi*cutoff/Rate));
  voice.left=gain*std::sqrt((1-pan)*.5f);voice.right=gain*std::sqrt((1+pan)*.5f);
 }
+// The HUD's alarm drives the score: ALERT and EVASION want the alert loop,
+// Caution and peace want none. A fresh alert starts the loop on its opening
+// hit; one called back within the fall picks it up where it is.
+void AudioEngine::alertScore(int alarm){
+ const bool hunted=alarm==Game::AlarmAlert||alarm==Game::AlarmEvasion;m_alertTarget=hunted?1.f:0.f;
+ // Out of the hunt the loop fades at the level it had, never swelling first.
+ if(hunted){m_alertLevelTarget=alarm==Game::AlarmEvasion?EvasionLevel:1.f;if(m_alertIn<=0)m_alertLevel=m_alertLevelTarget;}
+ auto it=std::find_if(m_voices.begin(),m_voices.end(),[](const auto&v){return v.emitter==AlertEmitter;});
+ if(hunted&&it==m_voices.end())play({Sound::MusicAlert,{},AlertTrim,1,false},AlertEmitter,true);
+ else if(!hunted&&it!=m_voices.end()&&m_alertIn<=0)m_voices.erase(it);
+}
 void AudioEngine::update(const Game& game,bool focused){
  std::lock_guard lock(m_mutex);
  float dt=std::clamp(game.elapsed()-m_lastTime,0.f,.1f);
  bool newSession=game.sessionRevision()!=m_lastRevision||int(game.worldId())!=m_lastWorld;
  m_lastWorld=int(game.worldId());
- if(game.elapsed()<m_lastTime||newSession){m_voices.clear();m_lastChunk=-1;play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;m_areaBlend.fill(0);}m_lastRevision=game.sessionRevision();
+ if(game.elapsed()<m_lastTime||newSession){m_voices.clear();m_lastChunk=-1;play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;m_areaBlend.fill(0);m_alertIn=0;m_stingFrames=0;}m_lastRevision=game.sessionRevision();
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=game.chunkOffset(m_lastChunk)-game.chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
  m_submergedTarget=game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f?1.f:0.f;
@@ -185,7 +203,9 @@ void AudioEngine::update(const Game& game,bool focused){
  if(zone)m_mainTarget=.3f;
  m_reactorTarget=shaft&&phase==World::LiftPhase::Crashed&&game.world().liftPhaseTime()>2?1.f:0.f;
  m_motorTarget=shaft?game.world().liftMotorGain():0.f;
- if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;m_areaBlend=m_areaTarget;}
+ // Being hunted takes the score over (alertScore), but not past a death or the end.
+ alertScore(game.dead()||game.won()?0:game.guardAlarm());
+ if(newSession){m_mainBlend=m_mainTarget;m_reactorBlend=m_reactorTarget;m_motorBlend=m_motorTarget;m_areaBlend=m_areaTarget;m_alertIn=m_alertTarget;m_alertLevel=m_alertLevelTarget;}
  auto sceneLoop=[&](Sound cue,int id){if(std::none_of(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==id;}))play({cue,{},1,1,false},id,true);};
  if(m_motorTarget>0)sceneLoop(Sound::LiftMotor,-2);
  for(auto&voice:m_voices)if(voice.emitter==-2)voice.pitch=m_motorTarget<.3f?.65f:game.world().liftPhaseTime()>24?.82f:1.f;
@@ -194,6 +214,8 @@ void AudioEngine::update(const Game& game,bool focused){
  std::erase_if(m_voices,[&](const auto&voice){if(voice.speech<0)return false;if(!voice.speaker||voice.speaker>game.npcActors().size())return true;
   size_t actor=voice.speaker-1;const auto&npc=game.npcActors()[actor];return !game.chunkResident(npc.level)||(voice.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(npc.track().deadState)));});
  for(const auto&event:game.sounds()){
+  // The sting on a guard's '!' (or on the doors of your locker coming open) cuts the score.
+  if(event.sound==Sound::DetectSting||event.sound==Sound::LockerSting)duckForSting();
   if(event.speech>=0){if(!event.speaker||event.speaker>game.npcActors().size())continue;size_t actor=event.speaker-1;
    if(event.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(game.npcActors()[actor].track().deadState)))continue;}
   play(event);
@@ -250,14 +272,19 @@ void AudioEngine::mix(int16_t* output,size_t frames){
   for(int c=1;c<AreaScores;++c)m_areaBlend[size_t(c)]+=(m_areaTarget[size_t(c)]-m_areaBlend[size_t(c)])/(.65f*Rate);
   m_reactorBlend+=(m_reactorTarget-m_reactorBlend)/(1.2f*Rate);
   m_motorBlend+=(m_motorTarget-m_motorBlend)/(.18f*Rate);
-  for(auto&v:m_voices){const int area=areaCue(v.sound);bool music=v.sound==Sound::Music||area>0||v.sound==Sound::ReactorMusic;
+  // Alert music: a linear place, quick in and slow out, levels on equal-power curves.
+  {auto toward=[](float& value,float to,float step){value=to>value?std::min(to,value+step):std::max(to,value-step);};
+   toward(m_alertIn,m_alertTarget,1/((m_alertTarget>m_alertIn?AlertRise:AlertFall)*Rate));
+   toward(m_alertLevel,m_alertLevelTarget,(1-EvasionLevel)/(EvasionEase*Rate));}
+  const float alertGain=std::sin(m_alertIn*kPi*.5f)*m_alertLevel,scoreGain=std::cos(m_alertIn*kPi*.5f),duck=stingDuck();if(m_stingFrames>0)--m_stingFrames;
+  for(auto&v:m_voices){const int area=areaCue(v.sound);const bool alert=v.sound==Sound::MusicAlert,music=alert||v.sound==Sound::Music||area>0||v.sound==Sound::ReactorMusic;
    if(m_paused&&!music)continue;const auto&s=sampleFor(v);size_t n=s.frames();if(v.cursor>=n){if(v.loop)v.cursor=std::fmod(v.cursor,double(n));else continue;}
    size_t a=size_t(v.cursor),b=a+1<n?a+1:v.loop?0:a;float frac=float(v.cursor-double(a));
    auto sample=[&](int channel){float value=s.pcm[a*s.channels+channel]*(1-frac)+s.pcm[b*s.channels+channel]*frac;
     if(v.loop&&seamlessLoop(v.sound)){size_t fade=std::min(size_t(2205),n/4);if(a>=n-fade){float blend=float(v.cursor-double(n-fade))/float(fade);size_t head=a-(n-fade);float incoming=s.pcm[head*s.channels+channel]*(1-frac)+s.pcm[(head+1)*s.channels+channel]*frac;value=value*(1-blend)+incoming*blend;}}
     return value/32768.f;};
-   float blend=area>0?m_areaBlend[size_t(area)]:v.sound==Sound::Music?m_mainBlend:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
-   float gain=v.gain*(music?m_musicGain:m_effectsGain)*blend;
+   float blend=alert?alertGain:area>0?m_areaBlend[size_t(area)]*scoreGain:v.sound==Sound::Music?m_mainBlend*scoreGain:v.sound==Sound::ReactorMusic?m_reactorBlend:v.sound==Sound::LiftMotor?m_motorBlend:1.f;
+   float gain=v.gain*(music?m_musicGain*duck:m_effectsGain)*blend;
    v.smoothLeft+=(v.left*gain-v.smoothLeft)*.0015f;v.smoothRight+=(v.right*gain-v.smoothRight)*.0015f;
    if(v.spatial){
     // A positional source has one location; baked stereo must not pull it
@@ -514,6 +541,85 @@ bool AudioEngine::test(){
  file.write("RIFF",4);write(riff);file.write("WAVEfmt ",8);write(fmtSize);write(pcm);write(channels);write(rate);write(byteRate);write(align);write(bits);file.write("data",4);write(bytes);file.write(reinterpret_cast<const char*>(output.data()),bytes);
  std::ofstream("audio-test.txt")<<"Loaded "<<audio.m_samples.size()<<" embedded samples.\n12 second gameplay mix; peak voices: "<<maxVoices<<"\nStereo direction, distance attenuation, overlap, mute and PCM output: PASS\n";
  return bool(file);
+}
+// Alert / Evasion music: a loop no map plays as its score, the fade curve
+// through ALERT -> EVASION -> CAUTION -> none, a re-alert inside the fall, the
+// sting's duck, a real guard's '!' taking the score over, and peace leaving it
+// alone. Writes alert-music-preview.wav to listen to.
+bool AudioEngine::testAlertMusic(){
+ std::ofstream report("alert-music-test.txt");int checks=0,failed=0;
+ auto check=[&](bool ok,const std::string&text){++checks;failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<text<<'\n';report.flush();};
+ auto ms=[](int blocks){return std::to_string(blocks*10)+" ms";};
+ const int dark=int(MusicCue::Darkness);
+ AudioEngine audio(false);
+ // Told apart by their decoded audio, not their names: the same file packed twice would be caught.
+ {const auto&loop=audio.m_samples[size_t(Sound::MusicAlert)].pcm;auto same=[&](Sound s){return audio.m_samples[size_t(s)].pcm==loop;};
+  auto game=Game::validationScene(Enemy::Kind::Brute);std::string heard;std::array<bool,AreaScores> chapter{};
+  for(int level=0;level<CampaignChunkCount;++level){const int cue=int(game.chunkView(level).world().definition().musicCue);
+   if(same(cue?areaSound(cue):Sound::Music))heard+=" "+std::to_string(level);if(level<=67||level==PrologueChunk)chapter[size_t(cue)]=true;}
+  check(loop.size()>size_t(Rate*2*30)&&heard.empty()&&!same(Sound::ReactorMusic),"The alert loop ("+std::to_string(loop.size()/2/Rate)+" s) is no map's area score"+(heard.empty()?std::string():", but maps"+heard+" play it"));
+  check(std::count(chapter.begin(),chapter.end(),true)==AreaScores,"Chapter 1 already plays every packed score, so the alert loop is one of its own");}
+ // The bunk room by the lockers (map 59, Darkness): its score set up by a real update, then the alarm driven by hand.
+ auto room=Game::mapInspection({17.4f,15.25f},kPi*.5f,0,59);audio.update(room);
+ std::array<int16_t,882> block{};
+ // Voices are looked up afresh each time: playing one can move the others.
+ auto voice=[&](std::int64_t id)->Voice*{for(auto&v:audio.m_voices)if(v.emitter==id)return &v;return nullptr;};
+ auto cursor=[&](std::int64_t id){auto v=voice(id);return v?v->cursor:-1.;};
+ auto score=[&]{return std::cos(audio.m_alertIn*kPi*.5f);};
+ auto loud=[&]{return std::sin(audio.m_alertIn*kPi*.5f)*audio.m_alertLevel;};
+ // 10 ms blocks, the alarm re-read before each as update does every frame; returns the blocks until done().
+ auto run=[&](int alarm,int most,auto done,const char* curve=nullptr){int n=0;audio.alertScore(alarm);
+  while(n<most&&!done()){audio.mix(block.data(),441);audio.alertScore(alarm);++n;
+   if(curve&&n%5==0)report<<"  "<<curve<<' '<<n*10<<" ms: alert "<<loud()<<" score "<<score()<<'\n';}
+  return n;};
+ check(voice(-20-dark)&&audio.m_areaBlend[size_t(dark)]==1&&!voice(AlertEmitter),"Map 59 plays Darkness and no alert loop while nobody has the player");
+ run(0,100,[]{return false;});audio.alertScore(Game::CautionMs);
+ check(!voice(AlertEmitter)&&audio.m_alertTarget==0&&score()==1,"Caution with no hunt behind it, and peace, leave the area score alone");
+ const double areaCursor=cursor(-20-dark);int calls=0;float at100=0;
+ int in=run(Game::AlarmAlert,200,[&]{if(calls++==10)at100=loud();return audio.m_alertIn>=1;},"ALERT");
+ check(in>=39&&in<=41&&voice(AlertEmitter)&&voice(AlertEmitter)->sound==Sound::MusicAlert&&voice(AlertEmitter)->gain==AlertTrim&&cursor(AlertEmitter)<Rate*.5&&score()<.001f&&loud()>.999f&&at100>.35f,
+  "ALERT: the loop in from its opening hit and Darkness out in "+ms(in)+", equal power, the loop at "+std::to_string(at100).substr(0,4)+" after 100 ms");
+ check(cursor(-20-dark)>areaCursor,"Darkness keeps its place under the alert loop");
+ double alertCursor=cursor(AlertEmitter);
+ int ease=run(Game::AlarmEvasion,300,[&]{return audio.m_alertLevel<=EvasionLevel;});
+ check(ease>=99&&ease<=101&&audio.m_alertIn==1&&cursor(AlertEmitter)>alertCursor&&std::fabs(loud()-EvasionLevel)<.001f,"EVASION keeps the loop going, eased to "+std::to_string(EvasionLevel).substr(0,4)+" over "+ms(ease));
+ run(Game::AlarmEvasion,200,[]{return false;});
+ float last=loud();bool falling=true;
+ int fall=run(Game::CautionMs,600,[&]{falling&=loud()<=last;last=loud();return audio.m_alertIn<=0;},"CAUTION");audio.alertScore(Game::CautionMs);
+ check(fall>=299&&fall<=301&&falling&&!voice(AlertEmitter)&&score()==1,"CAUTION hands back to Darkness over "+ms(fall)+", the loop only ever falling, and lets it go");
+ run(0,100,[]{return false;});
+ check(!voice(AlertEmitter)&&score()==1,"Peace after Caution: the area score alone");
+ // Seen again inside the fall: the same loop climbs back from where it is.
+ run(Game::AlarmAlert,100,[&]{return audio.m_alertIn>=1;});run(Game::CautionMs,150,[]{return false;});
+ alertCursor=cursor(AlertEmitter);const float half=audio.m_alertIn;
+ int back=run(Game::AlarmAlert,100,[&]{return audio.m_alertIn>=1;});
+ check(std::fabs(half-.5f)<.01f&&back>=19&&back<=21&&cursor(AlertEmitter)>alertCursor,"Seen again half way out, the loop climbs back in "+ms(back)+" without restarting");
+ run(0,400,[&]{return audio.m_alertIn<=0;});audio.alertScore(0);
+ // The sting: every score ducked 6 dB through its body, back by its tail.
+ {audio.duckForSting();const float at=audio.stingDuck();int n=0;float held=0;while(audio.m_stingFrames>0&&n<200){if(n<int(StingHold*100))held=std::max(held,audio.stingDuck());audio.mix(block.data(),441);++n;}
+  check(at==1-StingDuck&&held==1-StingDuck&&audio.stingDuck()==1&&n>=84&&n<=86,"A detection sting ducks the music "+std::to_string(StingDuck).substr(0,4)+" for "+ms(int(StingHold*100))+", back in "+ms(n));}
+ // A real guard's '!': the sting ducks the score, ALERT brings the loop in; peace in a scene without guards.
+ {auto map=std::make_shared<AuthoredMapData>();map->name="Alert music room";map->definition={{0,0},{8.5f,6.5f},0,Environment::Interior,false,8,.3f,42};map->definition.musicCue=MusicCue::Darkness;
+  AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
+  TimedSequence timer;timer.timerState=stateId("alert_music_clock");timer.finishState=stateId("alert_music_done");timer.soundIntervalMs=0;map->timedSequences.push_back(timer);
+  ActorTrack t;t.timerState=timer.timerState;t.keys={{0,{6.5f,6.5f},0,kPi*.5f},{30000,{6.5f,6.5f},0,kPi*.5f}};t.scale=1.6f;t.health=70;
+  t.damageState=stateId("alert_music_damage");t.deadState=stateId("alert_music_dead");t.ai.mode=ActorAiMode::Guard;t.ai.alertState=stateId("alert_music_flag");t.ai.patrol={{{6.5f,6.5f},0,1000}};map->actorTracks.push_back(t);
+  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Alert music validation";campaign->key=731913;campaign->maps.push_back(map);Game g(campaign);
+  AudioEngine live(false);bool ducked=false;int frames=0;
+  while(frames<600&&g.guardAlarm()!=Game::AlarmAlert){g.update({},1.f/60);live.update(g);++frames;
+   for(const auto&e:g.sounds())ducked|=e.sound==Sound::DetectSting&&live.m_stingFrames>0;std::array<int16_t,1470> step{};live.mix(step.data(),735);}
+  const bool loop=live.m_alertTarget==1&&std::any_of(live.m_voices.begin(),live.m_voices.end(),[](const auto&v){return v.emitter==AlertEmitter&&v.sound==Sound::MusicAlert;});
+  for(int f=0;f<30;++f){g.update({},1.f/60);live.update(g);std::array<int16_t,1470> step{};live.mix(step.data(),735);}
+  check(frames<600&&ducked&&loop&&live.m_alertIn>=1&&std::cos(live.m_alertIn*kPi*.5f)<.001f,"A guard's '!' after "+std::to_string(frames)+" frames: the sting ducks the score and the alert loop takes it over");
+  auto quiet=Game::validationScene(Enemy::Kind::Brute);AudioEngine calm(false);bool none=true;
+  for(int f=0;f<120;++f){quiet.update({},1.f/60);calm.update(quiet);none&=calm.m_alertTarget==0&&calm.m_alertIn==0&&std::none_of(calm.m_voices.begin(),calm.m_voices.end(),[](const auto&v){return v.sound==Sound::MusicAlert;});}
+  check(none,"No hostile guards: nothing changes");}
+ // Something to listen to: Darkness, the sting and ALERT, EVASION, CAUTION.
+ {AudioEngine demo(false);demo.update(room);std::vector<int16_t> wav;std::array<int16_t,882> part{};
+  auto section=[&](int alarm,int blocks){for(int i=0;i<blocks;++i){demo.alertScore(alarm);demo.mix(part.data(),441);wav.insert(wav.end(),part.begin(),part.end());}};
+  section(0,300);demo.play({Sound::DetectSting,{},.9f,1,false});demo.duckForSting();section(Game::AlarmAlert,600);section(Game::AlarmEvasion,600);section(Game::CautionMs,500);
+  check(writeVoicePreview(wav,"alert-music-preview.wav"),"alert-music-preview.wav: 3 s Darkness, sting and ALERT 6 s, EVASION 6 s, CAUTION 5 s");}
+ report<<(failed?"FAILED ":"ALL PASSED ")<<checks-failed<<'/'<<checks<<'\n';return !failed;
 }
 bool AudioEngine::testDevice(){
  AudioEngine audio;std::ofstream report("audio-device-test.txt");

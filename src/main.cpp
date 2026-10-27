@@ -1292,7 +1292,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"caution",retro::Game::testCaution},
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
-         {"alarm",retro::Game::testAlarm}};
+         {"alarm",retro::Game::testAlarm},
+         {"alert-music",retro::AudioEngine::testAlertMusic}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){
