@@ -277,7 +277,7 @@ bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
  rememberGuardTarget(actor,resolveGuardTarget(actor,{ShotKind::Player,m_level,0}));const Vec2 global=exit+chunkOffset(m_level);auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[actor].track().ai.recognitionMs);
  // The doors bang back on their stops: anyone near hears it. The sting is the player's alone.
- m_sounds.push_back({Sound::LockerBang,lockerFront(f,0),.8f,1.f,true,12,feet+1.2f});m_sounds.push_back({Sound::LockerSting,{},.75f,1.f,false});
+ m_sounds.push_back({Sound::LockerBang,lockerFront(f,0),.8f,1.f,true,12,feet+1.2f});m_sounds.push_back({Sound::LockerSting,{},.75f,1.f,false});m_alarmSting=std::max(m_alarmSting,.6f); // the locker's own sting is this detection's; no second one on his '!'
  animateLockerDoor(m_level,index,LockerMotion::Caught);startLockerView(LockerMotion::Caught,before,index);
  m_pickupNotice="FOUND";m_pickupNoticeTime=1.5f;return true;
 }
