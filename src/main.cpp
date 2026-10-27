@@ -705,6 +705,35 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      return 0;
     }
+    if(commandArguments().find(L"--locker-view-test")){
+     // The shut and the first frame out, rendered from inside the lockers of
+     // maps 57 (west wall) and 59 (bunk room): frame by frame through the way
+     // in, the picture across the frame the leaves meet (the view counts as
+     // shut in) and across E may change by under 0.5 (mean absolute difference
+     // per channel, 0-255): the leaves are the same pixels either side. The
+     // frames around both are kept in .build/shot/locker-view-*.ppm.
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/shot");std::ofstream report("locker-view-test.txt");bool ok=true;
+     struct Spot{int level;float x,y,yaw;};
+     for(const Spot spot:{Spot{57,2.55f,3.47f,180},Spot{59,17.4f,15.25f,90}}){
+      auto scene=retro::Game::mapInspection({spot.x,spot.y},spot.yaw*retro::kPi/180.f,0,spot.level,true,-999,true);scene.stowWeapon();
+      std::vector<std::uint32_t> previous;auto frame=[&](const std::string& name,bool keep){renderer->render(scene);const auto*px=renderer->pixels();std::vector<std::uint32_t> now(px,px+960*540);double sum=0;
+       if(!previous.empty())for(size_t k=0;k<now.size();++k)for(int shift:{0,8,16})sum+=std::abs(int(now[k]>>shift&255)-int(previous[k]>>shift&255));
+       if(keep){std::ofstream out(".build/shot/locker-view-"+std::to_string(spot.level)+"-"+name+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";for(auto p:now){char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+       previous=std::move(now);return float(sum/(960.*540.*3.));};
+      retro::InputState use{};use.use=true;frame("start",false);scene.update(use,1.f/60.f);frame("e",false);
+      float across=-1,after=-1,still=0;int shutAt=-1;
+      for(int i=1;i<=90;++i){const bool was=scene.lockerShutView()>=1;scene.update({},1.f/60.f);const bool now=scene.lockerShutView()>=1;
+       char name[16];std::snprintf(name,sizeof(name),"j%03d",i);const float diff=frame(name,i>=50&&(shutAt<0||i<=shutAt+2)); // the frames round the shut
+       if(!was&&now&&shutAt<0){shutAt=i;across=diff;}else if(shutAt>0&&i==shutAt+1)after=diff;else if(shutAt>0&&i>shutAt+1)still=std::max(still,diff);}
+      // Out: E, and the frame it is drawn on.
+      scene.update(use,1.f/60.f);const float out=frame("o000",true);float rise=0;for(int i=1;i<=8;++i){scene.update({},1.f/60.f);char name[16];std::snprintf(name,sizeof(name),"o%03d",i);rise=std::max(rise,frame(name,true));}
+      const bool pass=shutAt>0&&across>=0&&across<.5f&&out<.5f;ok&=pass;
+      report<<(pass?"PASS":"FAIL")<<" map "<<spot.level<<": the leaves meet on frame "<<shutAt<<" ("<<shutAt/60.f<<" s), the picture changes by "<<across<<" across it ("<<after<<" the frame after, at most "<<still<<" while shut); "
+            <<"E changes it by "<<out<<", then at most "<<rise<<" a frame as the hands come up\n";
+     }
+     return ok?0:21;
+    }
     if(auto arg=commandArguments().find(L"--map-shots=")){
      // Many inspection frames: each line "name level x y feet yaw(deg) pitch".
      // An optional trailing "fire N" fires the gun once and advances N frames;
@@ -756,9 +785,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         retro::InputState step{};step.sprint=true;step.back=way=="back";step.left=way=="left";step.right=way=="right";for(int i=0;i<run;++i)scene.update(step,1.f/60.f);action="wait";}
        if(action=="wait")for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       // A trailing "watch x y feet yaw pitch" draws the result from that fixed
-      // observer instead of the player's eyes (a guard at the doors, a stow).
-      std::string watch;float wx=0,wy=0,wz=0,wyaw=0,wpitch=0;
-      if(fields>>watch&&watch=="watch"&&fields>>wx>>wy>>wz>>wyaw>>wpitch)scene.inspectLockerWatch({wx,wy},wz,wyaw*retro::kPi/180.f,wpitch);
+      // observer instead of the player's eyes (a guard at the doors, a stow),
+      // without the player's fists and HUD, which are not the observer's.
+      std::string watch;float wx=0,wy=0,wz=0,wyaw=0,wpitch=0;const bool watching=fields>>watch&&watch=="watch"&&fields>>wx>>wy>>wz>>wyaw>>wpitch;
+      if(watching)scene.inspectLockerWatch({wx,wy},wz,wyaw*retro::kPi/180.f,wpitch);
+      renderer->setEnvironmentInspection(watching||commandArguments().find(L"--clean-shots")!=nullptr);
       renderer->render(scene);++captures;
       std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
       for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}

@@ -232,7 +232,10 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
   for(float z=f+.15f;z<f+1.4f;z+=.3f)wall(m,x-.01f,1.45f,x+.41f,1.47f,z,z+.15f,13);}
  wall(m,9.6f,1.f,14.4f,1.45f,f+2.65f,f+3.f,12);
  // Lockers on the west and north walls, benches between them.
- for(int i=0;i<4;++i)perFix(m,model::psx_locker,1.335f,2.0f+i*.87f,f,.64f,.85f,2.42f,0,true); // backs where the old banks' were: 0.115 m toward the wall
+ // The west row stands clear of the corner (its first locker 1.2 m down the
+ // wall), so the view out of its vents is the room, not the doors of the
+ // north row's corner locker a stride away.
+ for(int i=0;i<4;++i)perFix(m,model::psx_locker,1.335f,2.6f+i*.87f,f,.64f,.85f,2.42f,0,true); // backs where the old banks' were: 0.115 m toward the wall
  for(int i=0;i<5;++i)perFix(m,model::psx_locker,3.1f+i*.88f,1.335f,f,.64f,.85f,2.42f,-kPi*.5f,true);
  bench(m,4.9f,4.3f,f);
  m.fixtures.push_back({model::trash_can,{7.6f,2.6f},0,.6f,.6f,.76f,0,true});

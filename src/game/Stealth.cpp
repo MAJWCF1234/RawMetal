@@ -28,11 +28,15 @@ void Game::knockOnWall(){
   return;
  }
 }
-// An unconscious guard lying within reach, to drag out of sight.
+// An unconscious guard lying within reach, to drag out of sight: one the
+// player faces (his collar or his hips within 50 degrees of where they look,
+// or under their feet), so E and its hint only ever offer a body in view.
 int Game::nearbyBody()const{
- int chosen=-1;float nearest=1.4f;
+ int chosen=-1;float nearest=1.4f;const Vec2 facing{std::cos(m_player.angle),std::sin(m_player.angle)};
+ auto faced=[&](Vec2 at){const Vec2 to=at-m_player.pos;return lengthSq(to)<.4f*.4f||dot(normalized(to),facing)>std::cos(50*kPi/180);};
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto& npc=m_friendlyActors[actor];
   if(npc.level!=m_level||state(friendlyKey(actor,"restraint"))!=1||npc.pose.clip!=4||state(friendlyKey(actor,"guard_stowed"))||(npc.track().deadState&&state(npc.track().deadState))||!humanActorVisual(npc.track().visual))continue;
+  if(const Point3 collar=npcCollar(actor);!faced({collar.x,collar.y})&&!faced(npc.pose.position))continue;
   float distance=length(npc.pose.position-m_player.pos);if(distance<nearest&&std::fabs(npc.pose.z-m_player.z)<.5f){nearest=distance;chosen=int(actor);}
  }return chosen;
 }
@@ -520,7 +524,7 @@ bool Game::testLockers(){
  }
  // The campaign's own lockers: the Operations Corridor's west wall, and the
  // Gatehouse bunk room's pair, which now open into the room.
- for(auto [level,at,angle]:{std::tuple{57,Vec2{2.55f,2.87f},kPi},std::tuple{59,Vec2{17.4f,15.25f},kPi*.5f}}){
+ for(auto [level,at,angle]:{std::tuple{57,Vec2{2.55f,3.47f},kPi},std::tuple{59,Vec2{17.4f,15.25f},kPi*.5f}}){
   auto g=mapInspection(at,angle,0,level,false,-999,true);bool ahead=g.lockerAhead()>=0;bool hidden=hide(g);Game loaded=g;bool restored=loaded.decodeSave(g.encodeSave())&&loaded.hiddenLocker()==g.hiddenLocker()&&length(loaded.player().pos-g.player().pos)<.001f;
   loaded.update({},1.f/60);loaded.update(use,1.f/60);
   check(ahead&&hidden&&restored&&loaded.hiddenLocker()<0&&loaded.hullFits(loaded.player().pos,loaded.player().z,Player::StandingHeight),level==57?"Map 57's west-wall lockers hide the player through a save and let them out again":"Map 59's bunk-room lockers hide the player through a save and let them out again");
@@ -546,7 +550,7 @@ bool Game::testLockers(){
   check(started&&length(before.pos-Vec2{3.2f,6.5f})<1e-4f&&frames>=50&&frames<=56&&length(end.pos-inside)<1e-4f&&std::fabs(wrapAngle(end.angle-at.angle))<1e-5f&&jump<.08f&&turnStep<.2f,"Hiding plays a 0.9 s way in that ends on the eye behind the shut leaves, without a pop");
   report<<"  way in "<<frames<<" frames, largest step "<<jump<<" m, largest turn "<<turnStep<<" rad\n";
   check(still,"Nothing the player presses moves, turns or lets them out while the way in plays");
-  check(g.lockerShutView()==1&&g.lockerDoorOpen(0,0,0)==0&&g.lockerDoorOpen(0,0,1)==0,"Once in, the leaves are shut and the view is their perforated inner face");
+  check(g.lockerShutView()==1&&g.lockerDoorOpen(0,0,0)==0&&g.lockerDoorOpen(0,0,1)==0,"Once in, the leaves are shut and the view is their perforated inner faces");
   // A save mid-way loads at the committed end: shut in, no path, eye behind the leaves.
   auto mid=scene({{{10.5f,6.5f},0,600},{{4.2f,6.5f},0,4000}},kPi*.5f);hide(mid);for(int i=0;i<20;++i)mid.update({},1.f/60);Game loaded(mid.m_customCampaign);
   check(mid.lockerViewLocked()&&loaded.decodeSave(mid.encodeSave())&&loaded.hiddenLocker()==0&&!loaded.lockerViewLocked()&&length(loaded.view().pos-inside)<1e-4f&&loaded.lockerShutView()==1,"A save made halfway in loads with the player shut in, the motion over");
@@ -573,7 +577,7 @@ bool Game::testLockers(){
     const Vec2 hinge=f.position+o*(f.width*.5f)+side*((leaf?.4412f:.432f)*sz*hand),toward=side*(-hand*std::cos(a))+o*std::sin(a),q{p.x,p.y};
     const float along=std::clamp(dot(q-hinge,toward),0.f,(leaf?.443f:.43f)*sz);best=std::min(best,length(q-(hinge+toward*along)));}return p.z>.3f&&p.z<2.2f?best:9.f;};
   // (Pulling them to, the hands let go for the last twenty degrees: the
-  // leaves meet on their own swing with no hand in front of the inner face.)
+  // leaves meet on their own swing with no hand in front of the vents.)
   int moving=0,gripped=0;bool holstered=true,always=true;float worst=0;std::array<float,2> last{0,0};
   auto watch=[&]{std::array<Point3,2> grips;const bool hands=g.lockerHands(&grips);const std::array<float,2> now{g.lockerDoorOpen(0,0,0),g.lockerDoorOpen(0,0,1)};
    const bool lettingGo=g.m_lockerView.motion==LockerMotion::Enter&&g.m_lockerView.age>.82f;
@@ -617,9 +621,9 @@ bool Game::testLockers(){
   check(held&&waited>=118&&waited<=126&&g.areaTitle()=="TEST AREA"&&caught.hiddenLocker()<0&&caught.areaTitle().empty(),"An area title card waits hidden while the player is in a locker and for 1.5 s after the way out, then fades in; hauled out, it is dropped");
   report<<"  title: back "<<waited<<" frames after E, after a haul '"<<caught.areaTitle()<<"'\n";
  }
- // The shut: the perforated inner face stands in for the leaves only once
- // they have met (and keeps them through a knock's rattle), never with a hand
- // in front of it; the HUD drains over the fifth of a second they take to
+ // The shut: the view counts as shut in (the guards' cards through the vents)
+ // only once the leaves have met (and through a knock's rattle), never with a
+ // hand in front of them; the HUD drains over the fifth of a second they take to
  // meet and comes back over the first fifth of the way out; the head gives a
  // little with a knock.
  {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);bool clean=true;int fading=0,faced=0,returning=0;float firstFace=-1;
@@ -629,8 +633,34 @@ bool Game::testLockers(){
   InputState knock;knock.fire=true;g.update(knock,1.f/60);float nudge=0;bool kept=true;
   for(int i=0;i<20;++i){g.update({},1.f/60);look();kept&=g.lockerShutView()>=1;nudge=std::max(nudge,std::fabs(g.view().pitch-g.player().pitch));}
   faced=0;g.update(use,1.f/60);look();for(int i=0;i<40;++i){g.update({},1.f/60);look();}
-  check(clean&&inFade>=9&&firstFace>=.9f-1e-3f&&kept&&nudge>.05f&&nudge<.5f&&faced==0&&returning>=9,"The inner face stands in only for shut leaves with no hand before it, the HUD fades out and back in, and a knock keeps the face and nudges the head");
+  check(clean&&inFade>=9&&firstFace>=.9f-1e-3f&&kept&&nudge>.05f&&nudge<.5f&&faced==0&&returning>=9,"The view is shut in only once the leaves have met with no hand before them, the HUD fades out and back in, and a knock keeps it shut and nudges the head");
   report<<"  shut: clean "<<clean<<", fade in "<<inFade<<" frames, face from "<<firstFace<<" s, knock kept "<<kept<<" nudge "<<nudge<<", face frames out "<<faced<<", fade back "<<returning<<" frames\n";
+ }
+ // Where a point falls in the camera's frame (Projection: 1.3 across, 16:9):
+ // x and y in units of the half-width and half-height, depth in metres.
+ auto inFrame=[](const Game& g,Point3 p){const Player v=g.view();const float a=v.angle,t=v.pitch/140.f,ca=std::cos(a),sa=std::sin(a),ct=std::cos(t),st=std::sin(t);
+  const Point3 d{p.x-v.pos.x,p.y-v.pos.y,p.z-(v.z+v.eye)};const float depth=d.x*ca*ct+d.y*sa*ct+d.z*st;
+  return std::tuple{depth,depth>.06f?(-d.x*sa+d.y*ca)/depth*1.3f:9.f,depth>.06f?(-d.x*ca*st-d.y*sa*st+d.z*ct)/depth*1.3f*16/9:-9.f};};
+ // Out: the palms come up from below the view onto the leaves over four to
+ // six frames, and the leaves wait for them.
+ {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);hide(g);for(int i=0;i<70;++i)g.update({},1.f/60);g.update(use,1.f/60);
+  std::array<Point3,2> grips;const bool hands=g.lockerHands(&grips);bool below=hands;for(const auto&p:grips){const auto [depth,x,y]=inFrame(g,p);below&=y<-1;}
+  int waited=0;for(;waited<30&&g.lockerDoorOpen(0,0,0)==0&&g.lockerDoorOpen(0,0,1)==0;++waited)g.update({},1.f/60);
+  check(below&&waited>=4&&waited<=7,"Stepping out, the hands come up from below the view, and the leaves start to swing only as the palms reach them (four to six frames)");
+  report<<"  way out: hands below the view on the frame of E "<<below<<", leaves first move "<<waited<<" frames after E\n";
+ }
+ // The stow from the player's eyes: the view drops 25-35 degrees over about
+ // 150 ms, rides the collar up so it is in frame for most of the lift, and
+ // comes level again as the leaves shut.
+ {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.setState(g.friendlyKey(0,"restraint"),1);g.m_friendlyActors[0].pose.clip=4;g.m_friendlyActors[0].pose.position={4.05f,6.5f};g.m_draggedNpc=0;
+  const float level=g.player().pitch;g.update(use,1.f/60);constexpr float Unit=140*kPi/180;
+  std::vector<float> collar;std::vector<bool> seen;float dropped=0;for(int i=0;i<100;++i){g.update({},1.f/60);const Point3 c=g.npcCollar(0);const auto [depth,x,y]=inFrame(g,c);
+   collar.push_back(c.z);seen.push_back(depth>.06f&&std::fabs(x)<1&&std::fabs(y)<1);if(i==8)dropped=(level-g.view().pitch)/Unit;}
+  const float low=*std::min_element(collar.begin(),collar.end()),high=collar.back();int from=-1,to=-1,inside=0;
+  for(size_t i=0;i<collar.size();++i){if(from<0&&collar[i]>low+(high-low)*.05f)from=int(i);if(to<0&&collar[i]>=low+(high-low)*.95f)to=int(i);}
+  for(int i=std::max(0,from);i<=to;++i)inside+=seen[size_t(i)];const float share=to>from&&from>=0?float(inside)/float(to-from+1):0.f;
+  check(dropped>=25&&dropped<=35&&share>=.7f&&std::fabs(g.view().pitch-level)<1e-3f&&g.npcStowed(0),"Stowing, the view drops 25-35 degrees in 150 ms, keeps the collar in frame for at least 70% of the lift, and comes level as the leaves shut");
+  report<<"  stow view: dropped "<<dropped<<" degrees by 150 ms, collar in frame "<<inside<<"/"<<(to-from+1)<<" lift frames ("<<share*100<<"%), level after "<<(g.view().pitch-level)<<'\n';
  }
  // The gun comes back up after the way out only if it was up going in.
  for(int armed:{0,1,2}){auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.m_player.ammo=std::max(g.m_player.ammo,8);

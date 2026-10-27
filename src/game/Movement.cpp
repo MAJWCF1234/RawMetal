@@ -234,7 +234,7 @@ const char* Game::interactionHint()const{
   if(m_vrInputActive)return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";
   return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
  if(lockerAhead()>=0)return "E / HIDE";
- if(!m_vrInputActive&&nearbyBody()>=0)return "E / DRAG BODY";
+ if(!m_vrInputActive&&nearbyBody()>=0)return "E / DRAG BODY"; // E's own test: a body in reach that the player faces, never one out of view
  if(nearbyClutter()>=0)return m_vrInputActive?"GRIP / LIFT":"E / LIFT";
  if(nearbyFriendly()>=0)return m_vrInputActive?"GRIP / FOLLOW OR WAIT":"E / FOLLOW OR WAIT";
  return nullptr;

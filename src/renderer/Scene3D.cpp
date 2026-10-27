@@ -1056,10 +1056,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Locker leaves swing on the hinges at the outer edges of the open front
  // (the source FBX: left leaf 0.43 wide hung 0.432 left of centre, right 0.443
  // hung 0.441 right, both 0.075 off the floor in the front plane), so they are
- // drawn every frame and lit as moving geometry. From inside a shut locker the
- // perforated inner face (drawHud) stands in for its own leaves.
- {const int shutIn=level==game.level()&&game.lockerShutView()>=1?game.lockerViewFixture():-1;movingGeometry=true;
-  for(size_t i=0;i<w.fixtures().size();++i){const auto&f=w.fixtures()[i];if(f.model!=model::psx_locker||!f.visible||int(i)==shutIn)continue;
+ // drawn every frame and lit as moving geometry, shut in or not: from inside a
+ // shut locker its own leaves, vent holes and all, are what the player sees,
+ // the same pixels as the frame before they met (no stand-in face to swap to).
+ {movingGeometry=true;
+  for(size_t i=0;i<w.fixtures().size();++i){const auto&f=w.fixtures()[i];if(f.model!=model::psx_locker||!f.visible)continue;
    const float sx=f.width/.64f,sz=f.depth/.9f,sy=f.height/2.2969f,c=std::cos(f.yaw),s=std::sin(f.yaw),base=w.floorHeight(f.position.x,f.position.y)+f.base+.075f*sy;
    const Vec2 out{c,-s},side{s,c};
    for(int leaf=0;leaf<2;++leaf){const float hand=leaf?-1.f:1.f,half=(leaf?.2216f:.215f)*sz,angle=game.lockerDoorOpen(level,int(i),leaf)*kPi*(110.f/180.f);

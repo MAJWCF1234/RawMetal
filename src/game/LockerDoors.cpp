@@ -12,9 +12,13 @@ namespace retro {
 namespace {
 constexpr float Degree=kPi/180.f;
 constexpr float FullSwing=110*Degree,WideOpen=95*Degree; // lockerDoorOpen()==1, and the ordinary swing
+// Stepping out, the palms come up from below the view and reach the leaves in
+// PalmsReach (six frames, in sight for the last four; four bursting out, a
+// shove); the leaves start their swing on that frame.
+constexpr float PalmsReach=6/60.f,BurstReach=4/60.f;
 constexpr float LockerInset=.2f; // the eye behind the leaves' plane, shut in: far enough back that the vent band, not one hole, fills the view
-// The vent band punched through both leaves (the door textures' alpha, and
-// drawHud's inner face): three staggered rows across each leaf, their middle
+// The vent band punched through both leaves (the door textures' alpha, seen
+// from inside as from out): three staggered rows across each leaf, their middle
 // row 57.8% of the way up it. Shut in, the eye sits level with it, so the
 // Gatehouse's short pair (1.94 m) has the player stooped to theirs.
 constexpr float VentRise=.578237f;
@@ -89,15 +93,17 @@ void Game::updateLockerDoors(float dt){
 void Game::startLockerView(LockerMotion motion,const Player& from,int fixture,float facePitch){
  if(m_vrInputActive)return; // the headset is the camera: no path ever moves it
  m_lockerView={true,motion,0,motion==LockerMotion::Enter?.9f:motion==LockerMotion::Exit?.5f:.45f,from,fixture,facePitch};
+ // Out (stepped or burst), the leaves wait for the palms to come up onto them.
+ if(motion==LockerMotion::Exit)for(auto&d:m_lockerDoors)if(d.level==m_level&&d.fixture==fixture&&d.age<=0)d.lead=d.motion==LockerMotion::Caught?BurstReach:PalmsReach;
 }
 void Game::clearLockerMotion(bool doors){const bool out=m_lockerView.active&&m_lockerView.motion!=LockerMotion::Enter;m_lockerView.active=false;if(doors)m_lockerDoors.clear();if(out)lockerRearm();}
 bool Game::lockerViewLocked()const{return m_lockerView.active&&!dead();}
 int Game::lockerViewFixture()const{return m_lockerView.active?m_lockerView.fixture:hiddenLocker();}
-// 1: the perforated inner face (drawHud) stands in for the shut leaves; the
-// way there and back it is how far the HUD has drained, over the last fifth
-// of a second in and the first fifth out. The inner face only ever replaces
-// leaves that have met (a knock's rattle is the most they move under it), and
-// the real leaves are punched with the same holes, so there is nothing to pop.
+// 1: shut in, the leaves met (a knock's rattle is the most they move): the HUD
+// is down to what hiding needs and the guards' cards read through the vents
+// (drawHud); the way there and back it is how far the HUD has drained, over
+// the last fifth of a second in and the first fifth out. The leaves themselves
+// are drawn the same either way (Scene3D), so there is nothing to pop.
 float Game::lockerShutView()const{
  if(m_vrInputActive)return 0;const float t=m_lockerView.age;
  // (While a way in or out plays, the hands may be on the real leaves: they are what is drawn.)
@@ -114,6 +120,19 @@ Player Game::view()const{
  // A knock from inside: the head gives a little with the rattle of the leaves.
  if(!m_lockerView.active&&hidden>=0)for(const auto&d:m_lockerDoors)if(d.level==m_level&&d.fixture==hidden&&d.motion==LockerMotion::Knock&&d.age<d.length){
   const float u=d.age/d.length,shake=(1-u)*(1-u);to.pitch+=.3f*std::sin(u*kPi*5)*shake;to.angle=wrapAngle(to.angle+.0016f*std::sin(u*kPi*7+1)*shake);}
+ // A stow the player stands over (the stance lockerHands takes for it): the
+ // eyes drop 30 degrees over the first 150 ms onto the body coming round to
+ // the mouth, then ride his collar as the hands lift him in (the view's middle
+ // a little over it, so the hands on it and the slump above them are in
+ // frame), and come level again as the leaves swing to on him.
+ if(!m_lockerView.active&&hidden<0)for(const auto&d:m_lockerDoors){if(d.level!=m_level||d.motion!=LockerMotion::Stow||d.age>=d.length||size_t(d.fixture)>=fixtures.size())continue;
+  const auto&f=fixtures[size_t(d.fixture)];const Vec2 o=out(f),mouth=front(f,0),forward{std::cos(m_player.angle),std::sin(m_player.angle)};const float ahead=dot(m_player.pos-mouth,o);
+  if(ahead<0||ahead>1.4f||std::fabs(dot(m_player.pos-mouth,Vec2{-o.y,o.x}))>.8f||dot(forward,o)>-.3f)continue;
+  constexpr float Unit=140*Degree;float target=-30*Unit;
+  for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(state(friendlyKey(actor,"guard_stowed"))==d.fixture+1&&state(friendlyKey(actor,"guard_stowed_level"))==m_level+1){
+   const Point3 c=npcCollar(actor);const float run=std::max(.15f,dot(Vec2{c.x,c.y}-m_player.pos,forward)),ride=std::clamp(std::atan2(c.z-(m_player.z+m_player.eye),run)*140.f+8*Unit,-62*Unit,-8*Unit);
+   target+=(ride-target)*ease((d.age-.45f)/.15f);}
+  const float w=ease(d.age/.15f)*(1-ease((d.age-1.05f)/.3f));to.pitch+=(target-to.pitch)*w;break;}
  if(!m_lockerView.active||m_lockerView.fixture<0||size_t(m_lockerView.fixture)>=fixtures.size())return to;
  const auto&f=fixtures[size_t(m_lockerView.fixture)];const auto&a=m_lockerView.from;const float t=m_lockerView.age;v=to;
  auto mix=[](float x,float y,float k){return x+(y-x)*k;};
@@ -129,11 +148,12 @@ Player Game::view()const{
    v.angle=turn(a.angle,to.angle,ease((t-.14f)/.45f));v.pitch=mix(a.pitch,to.pitch,ease(t/.5f));
    v.z=mix(a.z,to.z,ease(t/.3f));v.eye=mix(a.eye,to.eye,ease(t/.3f));break;}
   case LockerMotion::Exit:{
-   // The leaves fly open first; the body follows them out. Burst into a man
-   // at the doors, the blow comes back up the arms: a short hard jolt.
-   const float k=ease((t-.06f)/.44f);v.pos=a.pos+(to.pos-a.pos)*k;v.z=mix(a.z,to.z,k);
+   // The palms come up onto the leaves, the leaves fly open, the body follows
+   // them out. Burst into a man at the doors, the blow comes back up the
+   // arms: a short hard jolt.
+   const float reach=m_lockerView.burst?BurstReach:PalmsReach,k=ease((t-reach-.06f)/(.44f-reach));v.pos=a.pos+(to.pos-a.pos)*k;v.z=mix(a.z,to.z,k);
    v.angle=turn(a.angle,to.angle,k);v.pitch=mix(a.pitch,to.pitch,k);v.eye=mix(a.eye,to.eye,k);
-   if(m_lockerView.burst&&t>.07f&&t<.32f){const float u=(t-.07f)/.25f,shake=(1-u)*(1-u);v.angle=wrapAngle(v.angle+.035f*std::sin(u*31)*shake);v.pitch+=5.f*std::sin(u*23+1.3f)*shake;v.eye-=.025f*std::sin(u*kPi)*shake;}
+   if(m_lockerView.burst&&t>.07f+reach&&t<.32f+reach){const float u=(t-.07f-reach)/.25f,shake=(1-u)*(1-u);v.angle=wrapAngle(v.angle+.035f*std::sin(u*31)*shake);v.pitch+=5.f*std::sin(u*23+1.3f)*shake;v.eye-=.025f*std::sin(u*kPi)*shake;}
    break;}
   default:{
    // Hauled out: a hard yank by the collar, wrenched round onto the guard's
@@ -170,8 +190,9 @@ Point3 blend(Point3 a,Point3 b,float k){return a+(b-a)*std::clamp(k,0.f,1.f);}
 // The hands rest below the view between holds, so they never pop in or out:
 // in, they come up and take the leaves' edges as the leaves open, drop for the
 // about-turn, then take the inner faces and pull them shut; out, both palms
-// shove the leaves open and drop as the body follows; stowing, they shove the
-// body in by the chest and push the leaves to on him.
+// come up onto the leaves (the leaves wait for them), shove them open and drop
+// as the body follows; stowing, they shove the body in by the chest and push
+// the leaves to on him.
 bool Game::lockerHands(std::array<Point3,2>* grips)const{
  if(m_vrInputActive||dead())return false;const auto&fixtures=m_world.fixtures();
  const Player v=view();const Vec2 forward{std::cos(v.angle),std::sin(v.angle)},right{-forward.y,forward.x};const float eye=v.z+v.eye;
@@ -189,7 +210,9 @@ bool Game::lockerHands(std::array<Point3,2>* grips)const{
     const float take=ease(t/lead)*(1-ease((t-lead-.25f)/.12f)),pull=ease((t-.55f)/.1f)*(1-ease((t-.82f)/.07f));
     const int outside=hand?0:1,inside=hand?1:0;
     at[size_t(hand)]=blend(blend(at[size_t(hand)],leafGrip(f,floor,outside,d->angle[size_t(outside)],.9f,1.12f*tall,-.03f),take),leafGrip(f,floor,inside,d->angle[size_t(inside)],.85f,1.2f*tall,.04f),pull);
-   }else{const int leaf=hand?1:0;at[size_t(hand)]=blend(leafGrip(f,floor,leaf,d->angle[size_t(leaf)],.75f,1.3f*tall,.05f),at[size_t(hand)],ease((t-.16f)/.14f));}
+   }else{ // out: straight up onto the leaves over the lead from a hand's length under the frame (fast, settling on them), the shove, then down to rest
+    const int leaf=hand?1:0;const float lead=d->lead;const Point3 grip=leafGrip(f,floor,leaf,d->angle[size_t(leaf)],.75f,1.3f*tall,.05f);
+    at[size_t(hand)]=blend(blend(grip-Point3{0,0,.22f},grip,lead>0?easeOut(t/lead):1.f),at[size_t(hand)],ease((t-lead-.16f)/.14f));}
   }
   if(grips)*grips=at;return true;
  }

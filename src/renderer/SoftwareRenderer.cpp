@@ -780,60 +780,16 @@ void SoftwareRenderer::drawHud(const Game& game){
  const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"18 WASTE HANDLING":game.level()==8?"17 UTILITY JUNCTION":game.level()==7?"16 PUMP ANNEX":game.level()==6?"15 CABLE VAULTS":game.level()==5?"14 COOLANT RETURN":CampaignMapNames[game.level()]; // Maps 0-4 name every spot through zones.
  const auto bone=rgb(236,228,214),black=rgb(0,0,0);
  // Shut in a locker the leaves are all there is to see, but for the band of
- // vent holes punched through them. Every pixel's ray is followed to the
- // inner face of whichever leaf it meets, at that leaf's own swing (a knock
- // rattles them under the eye), and shows the room only through a hole: the
- // same three staggered rows the door textures are punched with, laid out in
- // those textures' texels (1024 across; the inner face runs u 0.1445 at the
- // hinge to 0.0201 at the free edge, v 0.3203 at the foot to 0.9958 at the
- // head; the outer face sees the same holes 1.2 cm along), so the holes
- // outside, on the real leaves as they swing to, and in here are one set. The
- // light that leaks in catches the lower lip of each hole; where the leaves
- // meet is a hairline of light. It stands in for the real leaves only once
- // they have met (Game::lockerShutView).
+ // vent holes punched through them: Scene3D draws the real leaves from inside
+ // as it does while they swing (the door textures' alpha cuts the holes), so
+ // the frame they meet and every frame after are the same pixels. All that is
+ // added here, once they have met, is what the men outside make of the player.
  const bool locker=game.hiddenLocker()>=0;
  if(game.lockerShutView()>=1&&game.lockerViewFixture()>=0){
   const int index=game.lockerViewFixture();const auto&f=game.world().fixtures()[size_t(index)];const auto&v=m_view;
-  const float c=std::cos(f.yaw),s=std::sin(f.yaw),sx=f.width/.64f,sz=f.depth/.9f,sy=f.height/2.2969f;const Vec2 out{c,-s},side{s,c};
-  const float floor=game.world().floorHeight(f.position.x,f.position.y)+f.base,foot=floor+.075f*sy,tall=2.2f*sy,skin=.01f*sx;
-  struct Leaf {Vec2 hinge,toward,inner;float width;};std::array<Leaf,2> leaves;
-  for(int leaf=0;leaf<2;++leaf){const float hand=leaf?-1.f:1.f,a=game.lockerDoorOpen(game.level(),index,leaf)*kPi*(110.f/180.f);
-   leaves[size_t(leaf)]={f.position+out*(.32f*sx)+side*((leaf?.4412f:.432f)*sz*hand),side*(-hand*std::cos(a))+out*std::sin(a),out*-std::cos(a)-side*(hand*std::sin(a)),(leaf?.4432f:.43f)*sz};}
-  constexpr float Axis=84,Row=296,ColPitch=8,RowPitch=7,Radius=2.9f; // the vent band in door-texture texels (1024 square)
-  const auto&paint=facilityTexture(model::psx_locker_door_l,0);float X=0,Y=0; // the leaves' own steel, as the room light leaves it once they meet
+  const float c=std::cos(f.yaw),s=std::sin(f.yaw);const Vec2 out{c,-s};
   const float cy=std::cos(v.angle),sy2=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=Projection{float(m_width)/m_height}.focal(float(m_width));
   const Point3 eye{v.pos.x,v.pos.y,v.z+v.eye},forward{cy*cp,sy2*cp,sp},right{-sy2,cy,0},up{-cy*sp,-sy2*sp,cp};
-  const auto dim=rgb(9,10,11),seam=rgb(64,62,55);
-  enum Kind {Steel,Lit,Dim,Hole,Lip,Seam};
-  auto classify=[&](int x,int y)->Kind{
-   const float px=(x+.5f-m_width*.5f)/focal,py=(m_height*.5f-y-.5f)/focal;
-   const Point3 d{forward.x+right.x*px+up.x*py,forward.y+right.y*px+up.y*py,forward.z+right.z*px+up.z*py};
-   float best=1e9f,along=0,height=0;const Leaf* hit=nullptr;
-   for(const auto&leaf:leaves){const float facing=d.x*leaf.inner.x+d.y*leaf.inner.y;if(facing>-1e-4f)continue;
-    const Vec2 face=leaf.hinge+leaf.inner*skin;const float t=((face.x-eye.x)*leaf.inner.x+(face.y-eye.y)*leaf.inner.y)/facing;if(t<=0||t>=best)continue;
-    const Vec2 at{eye.x+d.x*t,eye.y+d.y*t};const float a=dot(at-leaf.hinge,leaf.toward),h=eye.z+d.z*t-foot;if(a<0||a>leaf.width||h<0||h>tall)continue;
-    best=t;along=a;height=h;hit=&leaf;}
-   if(!hit){ // between the rattling leaves the room shows; past them is the locker's own frame
-    const float toward=d.x*out.x+d.y*out.y;if(toward<=.02f)return Dim;const Vec2 plane=f.position+out*(.32f*sx);
-    const float t=((plane.x-eye.x)*out.x+(plane.y-eye.y)*out.y)/toward,u=(eye.x+d.x*t-f.position.x)*side.x+(eye.y+d.y*t-f.position.y)*side.y,h=eye.z+d.z*t-foot;
-    return std::fabs(u-.002f*sz)<.03f&&h>0&&h<tall?Hole:Dim;}
-   if(hit->width-along<.0004f)return Seam;
-   X=(.144531f-along/hit->width*.12445f)*1024;Y=(1-(.320312f+height/tall*.675534f))*1024;const float dy=Y-Row;
-   const int row=int(std::floor(dy/RowPitch+.5f));
-   if(row<-1||row>1)return std::fabs(dy)<RowPitch+Radius+3&&std::fabs(X-Axis)<63?Lit:Steel; // light from the holes reaches a little way
-   const float shift=row?ColPitch*.5f:0.f,cu=std::floor((X-Axis-shift)/ColPitch+.5f)*ColPitch+shift;
-   if(std::fabs(cu)>(row?52.f:56.f))return std::fabs(X-Axis)<63?Lit:Steel;
-   const float du=X-Axis-cu,dh=dy-row*RowPitch,r2=du*du+dh*dh;
-   if(r2<Radius*Radius)return Hole;
-   if(r2<(Radius+.7f)*(Radius+.7f)&&dh>Radius*.35f)return Lip;return Lit;
-  };
-  // The steel is the door texture itself, shaded as the real leaves are drawn
-  // the frame before they meet, a little brighter round the holes and on
-  // their lower lips; through the holes the room shows as it is.
-  for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x){const Kind k=classify(x,y);if(k==Hole)continue;if(k==Dim||k==Seam){fill(x,y,1,1,k==Dim?dim:seam,k==Seam?.75f:1.f);continue;}
-    std::uint32_t texel=rgb(117,132,136);if(paint.width>0&&paint.height>0){const int tx=std::clamp(int(X*paint.width/1024.f),0,paint.width-1),ty=std::clamp(int(Y*paint.height/1024.f),0,paint.height-1);texel=paint.pixels[size_t(ty)*paint.width+tx];}
-    const float light=k==Lip?.42f:k==Lit?1.12f:1.f;
-    put(x,y,rgb(std::min(255,int((texel>>16&255)*.2f*light)),std::min(255,int((texel>>8&255)*.23f*light)),std::min(255,int((texel&255)*.245f*light))));}
   const Vec2 plane=f.position+out*(f.width*.5f-.01f);const float cover=1;
  // What the men outside make of the player still reads through the steel: a
   // man at the doors is the one thing a hider must be able to see.
@@ -946,7 +902,23 @@ void SoftwareRenderer::drawHud(const Game& game){
   fill(left,top,width,height,rgb(6,5,5),.72f);fill(left,top,2,height,color==paper?red:color,1);
   for(size_t i=0;i<rows.size();++i)uiText(left+14,top+3+int(i)*15,rows[i].c_str(),color,1,13);
  };
- if(game.pickupNoticeTime()>0&&!shut)promptPanel(m_height-65,game.pickupNotice().c_str(),paper);
+ // A notice never sits on a locker's vent band (BODY STOWED, said facing the
+ // doors just shut on him): the band of the nearest locker ahead is projected
+ // and the panel goes above it, or below it if there is no room above.
+ auto offVents=[&](int bottom,int height){
+  const auto&v=m_view;const float ca=std::cos(v.angle),sa=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=Projection{float(m_width)/m_height}.focal(float(m_width));
+  const Point3 eye{v.pos.x,v.pos.y,v.z+v.eye},forward{ca*cp,sa*cp,sp},right{-sa,ca,0},up{-ca*sp,-sa*sp,cp};
+  for(const auto&f:game.world().fixtures()){if(f.model!=model::psx_locker||!f.visible||lengthSq(f.position-v.pos)>9.f)continue;
+   const Vec2 out{std::cos(f.yaw),-std::sin(f.yaw)},side{-out.y,out.x},plane=f.position+out*(f.width*.5f);const float sz=f.depth/.9f,sy=f.height/2.2969f,floor=game.world().floorHeight(f.position.x,f.position.y)+f.base;
+   float top=1e9f,low=-1e9f,left=1e9f,rightmost=-1e9f;bool ahead=true;
+   for(float across:{-.45f*sz,.45f*sz})for(float h:{1.31f,1.385f}){const Vec2 p=plane+side*across;const Point3 d{p.x-eye.x,p.y-eye.y,floor+h*sy-eye.z};
+    const float depth=d.x*forward.x+d.y*forward.y+d.z*forward.z;if(depth<.1f){ahead=false;break;}
+    const float x=m_width*.5f+(d.x*right.x+d.y*right.y+d.z*right.z)/depth*focal,y=m_height*.5f-(d.x*up.x+d.y*up.y+d.z*up.z)/depth*focal;
+    top=std::min(top,y);low=std::max(low,y);left=std::min(left,x);rightmost=std::max(rightmost,x);}
+   if(!ahead||rightmost<m_width*.3f||left>m_width*.7f||low<bottom-height-6||top>bottom+6)continue;
+   bottom=top-8-height>60?int(top)-8:std::min(m_height-8,int(low)+10+height);}
+  return bottom;};
+ if(game.pickupNoticeTime()>0&&!shut)promptPanel(offVents(m_height-65,23),game.pickupNotice().c_str(),paper);
  if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
  else if(auto pickup=shut?nullptr:game.nearbyPickup()){
   const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
