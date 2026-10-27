@@ -446,6 +446,18 @@ public:
     int nearbyBody()const;
     void dropBody();
     bool draggingBody()const{return m_draggedNpc>=0;}
+    // Hiding in a steel locker (Stealth.cpp). The fixture the player is shut
+    // in (-1 when out; state "player_locker", so it saves), the one in front of
+    // them they could climb into, and getting in and out. A guard who saw them
+    // climb in keeps guard_locker and pulls them out at its doors.
+    int hiddenLocker()const;
+    int lockerAhead()const;
+    bool enterLocker();
+    bool leaveLocker();
+    bool lockerExit(const Fixture& locker,Vec2& at,float& feet)const;
+    bool updateLocker(const InputState& input);
+    bool pullFromLocker(int level,size_t actor,ActorPose& pose);
+    static bool testLockers();
     // A guard's read on the player for the HUD: 0 unaware, up to 1 while
     // suspicion builds, 2 once he has you.
     float guardAwareness(size_t actor)const;

@@ -26,6 +26,8 @@ void Game::rememberGuardTarget(size_t actor,const AiTarget&target){
 }
 bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)const{
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor)||!target.valid())return false;auto live=resolveGuardTarget(actor,{target.kind,target.level,target.index});if(!live.valid())return false;const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;float eye=friendlyHullHeight(actor,npc.track())*.85f;auto delta=live.position-pose.position;float z=live.feet+live.eye-pose.z-eye;
+ // Steel doors: nobody outside a locker sees the player shut in it.
+ if(live.kind==ShotKind::Player&&hiddenLocker()>=0)return false;
  // Crouched targets present a smaller silhouette; shrink recognition range so
  // sneaking closer is required before the cone can lock on.
  float range=c.sightRange;if(live.kind==ShotKind::Player&&m_player.crouched)range*=.55f;else if(live.height<Player::StandingHeight*.75f)range*=.55f;

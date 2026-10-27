@@ -194,6 +194,7 @@ bool Game::doorLocked(const Door& door)const{
 const char* Game::interactionHint()const{
  if(m_logTime>0){const bool paper=m_activeLog>=0&&size_t(m_activeLog)<m_world.terminals().size()&&m_world.terminals()[size_t(m_activeLog)].paper();
   return paper?(m_vrInputActive?"WRIST / PUT IT DOWN":"E / PUT IT DOWN"):(m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL");}
+ if(hiddenLocker()>=0)return "E / STEP OUT";
  if(heldNpc()>=0)return "E / RELEASE    Q / KNOCK OUT    FIRE / KILL";
  if(draggingBody())return "E / DROP THE BODY";
  if(holdingClutter())return m_vrInputActive?"RELEASE GRIP / DROP":"E / DROP     FIRE / PUNT";
@@ -229,6 +230,7 @@ const char* Game::interactionHint()const{
   if(m_vrInputActive)return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";
   return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
  if(!m_vrInputActive&&nearbyBody()>=0)return "E / DRAG BODY";
+ if(lockerAhead()>=0)return "E / HIDE";
  if(nearbyClutter()>=0)return m_vrInputActive?"GRIP / LIFT":"E / LIFT";
  if(nearbyFriendly()>=0)return m_vrInputActive?"GRIP / FOLLOW OR WAIT":"E / FOLLOW OR WAIT";
  return nullptr;
@@ -252,6 +254,7 @@ void Game::updateInteraction(const InputState& input,float dt){
   for(int hand=0;hand<2;++hand)if(input.use&&input.vrGrip[hand]&&!previous[hand]){m_vrInteractionHand=hand;usePressed=true;break;}
  }
  if(usePressed&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
+ if(usePressed&&hiddenLocker()>=0){leaveLocker();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&heldNpc()>=0){releaseNpc(false);m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&draggingBody()){dropBody();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&!input.vrTracked&&nearbyTakedown()>=0){restrainNpc(size_t(nearbyTakedown()),true);m_previousUse=true;m_world.updateDoors(dt);return;}
@@ -268,7 +271,7 @@ void Game::updateInteraction(const InputState& input,float dt){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
   }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
-  if(!holdingClutter()&&door<0&&m_logTime==0&&!interactClutter()&&!commandFriendly())knockOnWall();
+  if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!interactClutter()&&!commandFriendly())knockOnWall();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);
 }

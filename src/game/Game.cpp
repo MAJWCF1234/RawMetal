@@ -405,8 +405,8 @@ void Game::update(const InputState& input, float dt) {
         updateLift(dt);
         syncReactorComplex();
         auto movement=input;if(heldNpc()>=0||takedownActive()||draggingBody()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
-        updateMovement(movement,dt);
-        updatePushCrates(movement,dt);
+        // Shut in a locker the body stays where it is; only the head turns.
+        if(hiddenLocker()<0){updateMovement(movement,dt);updatePushCrates(movement,dt);}
         updateExposure(dt);
         updateStealth(input,dt);
         if(m_world.hasLift()){

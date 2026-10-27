@@ -771,6 +771,12 @@ void SoftwareRenderer::drawHud(const Game& game){
  const char* zone=game.world().zoneName(p.pos,p.z);
  const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"18 WASTE HANDLING":game.level()==8?"17 UTILITY JUNCTION":game.level()==7?"16 PUMP ANNEX":game.level()==6?"15 CABLE VAULTS":game.level()==5?"14 COOLANT RETURN":CampaignMapNames[game.level()]; // Maps 0-4 name every spot through zones.
  const auto bone=rgb(236,228,214),black=rgb(0,0,0);
+ // Shut in a locker the door is all there is to see, but for its vent slats.
+ const bool locker=game.hiddenLocker()>=0;
+ if(locker){const auto steel=rgb(16,17,18),lip=rgb(74,76,77);const int left=m_width*3/16,right=m_width-left,top=m_height*7/25,bottom=m_height*31/50,slats=7;
+  fill(0,0,m_width,top,steel,.97f);fill(0,bottom,m_width,m_height-bottom,steel,.97f);fill(0,top,left,bottom-top,steel,.97f);fill(right,top,m_width-right,bottom-top,steel,.97f);
+  for(int i=0;i<slats;++i){int y=top+(bottom-top)*i/slats,h=(bottom-top)*11/(slats*20);fill(left,y,right-left,h,steel,1);fill(left,y+h-2,right-left,2,lip,.75f);fill(left,y+h,right-left,3,black,.4f);}
+  frame(left-1,top-1,right-left+2,bottom-top+2,lip,.55f);}
  gradient(0,0,m_width,46,black,.55f,0.f,false);
  std::string place(mapLabel);for(auto&c:place)c=char(std::toupper((unsigned char)c));fill(14,13,3,13,red,1);uiText(22,10,place.c_str(),bone,0,15,1,2);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());if(!game.enemies().empty())uiText(22,28,b,muted,0,10,1,1);
@@ -816,7 +822,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  std::snprintf(b,sizeof(b),"PURGED  %02d / %02d",game.kills(),int(game.enemies().size()));if(!game.enemies().empty())uiText(m_width/2-uiTextWidth(b,0,10,2)/2,m_height-20,b,muted,0,10,.8f,2);
  if(game.hasFlashlight()){float jam=game.flashlightJam();const char* light=!game.state(stateId("flashlight_on"))?"LIGHT OFF":jam>=Game::FlashlightJamTime?"NO POWER":jam>0?"LIGHT FAILING":"LIGHT ON";uiText(m_width/2-uiTextWidth(light,0,10,2)/2,m_height-34,light,game.flashlightOn()?amber:muted,0,10,.8f,2);}
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
- fill(cx-7,cy,4,1,cross,.85f);fill(cx+4,cy,4,1,cross,.85f);fill(cx,cy-7,1,4,cross,.85f);fill(cx,cy+4,1,4,cross,.85f);blend(cx,cy,cross,.6f);
+ if(!locker){fill(cx-7,cy,4,1,cross,.85f);fill(cx+4,cy,4,1,cross,.85f);fill(cx,cy-7,1,4,cross,.85f);fill(cx,cy+4,1,4,cross,.85f);blend(cx,cy,cross,.6f);}
  if(auto target=game.targetEnemy()){
   int x=m_width/2-65,y=m_height-60;
   uiText(x,y-6,target->name(),paper,0,11,1,1);
@@ -1203,7 +1209,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level))drawScene(game,false,level);
-   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection)drawViewModel(game);m_poseReady=false;
+   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&game.hiddenLocker()<0)drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());

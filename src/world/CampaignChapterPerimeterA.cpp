@@ -650,7 +650,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  wall(m,16.6f,6.2f,16.8f,12.f,f,top,21);wall(m,16.6f,13.6f,16.8f,16.8f,f,top,21);wall(m,16.6f,12.f,16.8f,13.6f,f+2.2f,top,21);
  for(float y:{7.4f,10.4f})perFix(m,model::med_ward_bed,21.8f,y,f,1.98f,.94f,.84f,0,true);
  perFix(m,model::med_ward_bed_tossed,21.8f,14.f,f,2.1f,1.5f,.84f,0,true);
- for(float x:{17.4f,18.3f})perFix(m,model::pwr_locker_bank,x,16.3f,f,.7f,.68f,1.94f,kPi,true);
+ for(float x:{17.4f,18.3f})perFix(m,model::pwr_locker_bank,x,16.3f,f,.7f,.68f,1.94f,kPi*.5f,true); // doors (local +x) open north into the room
  perTable(m,18.6f,9.f,19.8f,11.f,f,.76f);
  perFix(m,model::ind_crate,19.9f,7.f,f,.8f,.8f,.8f,.2f,true);
  m.pickupSpawns.push_back({{19.2f,13.2f},PickupKind::Ammo,f});
