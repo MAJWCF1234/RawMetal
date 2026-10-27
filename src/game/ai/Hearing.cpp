@@ -1,3 +1,4 @@
+#include "../../core/FrameProfile.h"
 #include "../Game.h"
 #include "../../world/CustomCampaign.h"
 #include <fstream>
@@ -32,6 +33,7 @@ std::vector<AiStimulus> Game::aiStimuli()const{
  }return out;
 }
 bool Game::soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim,float farTrim)const{
+ perf::count(perf::SoundRay);
  auto delta=to-from;float dz=toZ-fromZ,distance=std::sqrt(lengthSq(delta)+dz*dz);if(distance<.001f)return true;
  float begin=std::max(0.f,nearTrim)/distance,finish=1-std::max(0.f,farTrim)/distance;
  while(begin<finish){

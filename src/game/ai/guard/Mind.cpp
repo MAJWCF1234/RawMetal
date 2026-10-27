@@ -1,3 +1,4 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "../Perception.h"
 #include "ScheduleTables.h"
@@ -71,9 +72,10 @@ void Game::startGuardCall(size_t actor,int kind){
  m_sounds.push_back({Sound::RadioSquelch,npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.85f,1,true,14,npc.pose.z+t.scale*.9f});
 }
 void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove){
+ perf::Scope mindProfile(perf::GuardMind);perf::count(perf::GuardIntents);
  // Caught at a locker's doors as they burst open: nothing he does is quicker than the leaves.
  if(npcIncapacitated(actor)||lockerBurstPending(actor)){wantsMove=false;return;}
- lockerWitnessSense(level,actor,pose);
+ {perf::Scope profile(perf::LockerWitness);lockerWitnessSense(level,actor,pose);}
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
  auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;
  auto shift=chunkOffset(level)-chunkOffset(m_level),globalOrigin=chunkOffset(level);auto observer=pose.position+shift;
@@ -273,7 +275,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  bool planWake=freshHit||noiseWake||nearThreat||enemyDead||changedThreat||int(mode)!=get("plan_mode")||visible!=bool(oldSeen)||planFlags!=get("plan_flags")||get("stuck")>0;
  bool planDue=!m_aiDecisionScheduling||clock("plan_wait","plan_age","plan_ready",100,planWake,1);
  put("plan_due",planDue);put("plan_mode",int(mode));put("plan_flags",planFlags);
- runGuardSchedule(level,actor,track,pose,dt,ms,goal,goalZ,wantsMove);
+ {perf::Scope scheduleProfile(perf::GuardSchedule);runGuardSchedule(level,actor,track,pose,dt,ms,goal,goalZ,wantsMove);}
  // Holding a hauled-out player at gunpoint (Combat.cpp): he stands where he
  // stepped back to (Lockers.cpp), turning with them, for the whole hold.
  if(get("guard_hold_ms")>0&&get("guard_target_kind")==int(ShotKind::Player)){const Vec2 toward=playerLocal-pose.position;

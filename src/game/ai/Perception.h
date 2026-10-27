@@ -1,8 +1,10 @@
 #pragma once
+#include "../../core/FrameProfile.h"
 #include "../../world/World.h"
 namespace retro {
 // Shared visibility and hearing for enemies and friendly actor reactions.
 inline bool aiCanSee(const World& world,Vec2 observer,float eye,Vec2 forward,Vec2 target,float targetZ,float range,float facingDot,float closeRange=0){
+ perf::count(perf::AiCanSee);
  auto delta=target-observer;float distanceSq=lengthSq(delta),height=targetZ-eye;
  if(distanceSq+height*height>=range*range)return false;
  if(distanceSq>closeRange*closeRange&&dot(normalized(delta),forward)<=facingDot)return false;

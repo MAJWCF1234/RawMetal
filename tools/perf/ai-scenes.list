@@ -1,0 +1,47 @@
+# --perf-profile scenes for "where does a frame go when the AI is awake".
+# name level x y feet yaw(deg) pitch frames [options]  (see main.cpp perfProfile)
+# --- The campaign's own populations, asleep and then hunting the player -------
+foundry-asleep          0 start start - 0 0 600
+foundry-wake            0 start start - 0 0 600 wake
+pressure-works-wake     1 start start - 0 0 600 wake
+turbine-gantry-wake     2 start start - 0 0 600 wake
+reactor-complex-wake    3 start start - 0 0 600 wake
+sump-works-wake        49 start start - 0 0 600 wake
+heat-exchange-wake     52 start start - 0 0 600 wake
+transit-snatcher-wake  62 start start - 0 0 600 wake
+receiving-chimera-wake 64 start start - 0 0 600 wake
+# --- Cleanup squads: the Security Yard and gatehouse, Central Stores, the Great Door
+yard-asleep            58 12 6 -19 90 0 600
+yard-wake              58 12 6 -19 90 0 600 wake
+gatehouse-wake         59 8 12 -19 0 0 600 wake
+central-stores-wake    54 start start - 0 0 600 wake
+great-door-wake        67 start start - 0 0 600 wake
+# --- What scales with creature count: huntsmen hunting the player -----------------
+# Foundry has two decks (creatures route through the deck graph, stackedWaypoint);
+# Pressure Works is one floor (the 24x24 cell flood); Upper Racks has 539 fixtures on three decks.
+foundry-huntsman-1      0 start start - 0 0 600 clear spawn huntsman 1 wake
+foundry-huntsman-3      0 start start - 0 0 600 clear spawn huntsman 3 wake
+foundry-huntsman-6      0 start start - 0 0 600 clear spawn huntsman 6 wake
+foundry-huntsman-12     0 start start - 0 0 600 clear spawn huntsman 12 wake
+pressure-huntsman-1     1 start start - 0 0 600 clear spawn huntsman 1 wake
+pressure-huntsman-3     1 start start - 0 0 600 clear spawn huntsman 3 wake
+pressure-huntsman-6     1 start start - 0 0 600 clear spawn huntsman 6 wake
+pressure-huntsman-12    1 start start - 0 0 600 clear spawn huntsman 12 wake
+racks-huntsman-1       19 start start - 0 0 600 clear spawn huntsman 1 wake
+racks-huntsman-3       19 start start - 0 0 600 clear spawn huntsman 3 wake
+racks-huntsman-6       19 start start - 0 0 600 clear spawn huntsman 6 wake
+racks-huntsman-12      19 start start - 0 0 600 clear spawn huntsman 12 wake
+# The Foundry and Pressure Works starts sit behind shut doors a huntsman cannot work
+# (stacked_no_route / flood_no_route count the failed plans); "open" swings every door.
+foundry-huntsman-6-open 0 start start - 0 0 600 clear spawn huntsman 6 wake open
+pressure-huntsman-6-open 1 start start - 0 0 600 clear spawn huntsman 6 wake open
+foundry-wake-open       0 start start - 0 0 600 wake open
+# Door-openers (mutated humans) plan through doors: the door overlay and requestAiDoor.
+pressure-mutant-1       1 start start - 0 0 600 clear spawn mutant 1 wake
+pressure-mutant-6       1 start start - 0 0 600 clear spawn mutant 6 wake
+pressure-mutant-12      1 start start - 0 0 600 clear spawn mutant 12 wake
+# --- The player where they cannot get to him ---------------------------------------
+# On the Foundry's tank tops (2.62 m, no climb): the deck graph has no route.
+foundry-tank-top        0 11.5 11.5 2.62 180 -20 600 clear spawn huntsman 6 far 4 wake
+# On a barrel in Pressure Works (1.1 m): the flood reaches the cell beside it, never him.
+pressure-barrel-top     1 21.5 5.5 1.1 180 -20 600 clear spawn huntsman 6 far 4 wake

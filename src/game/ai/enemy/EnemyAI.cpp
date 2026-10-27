@@ -9,7 +9,7 @@
 #include <optional>
 namespace retro {
 static float navSupport(const World&w,Vec2 p,float feet){float z=w.supportBelow(p.x,p.y,feet);for(float x:{-.20f,.20f})for(float y:{-.20f,.20f})z=std::max(z,w.supportBelow(p.x+x,p.y+y,feet));return z;}
-static bool navFits(const World&w,Vec2 p,float z,float height){if(w.railBlocksHull(p.x,p.y,.20f,z,height))return false;for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
+static bool navFits(const World&w,Vec2 p,float z,float height){perf::count(perf::NavFits);if(w.railBlocksHull(p.x,p.y,.20f,z,height))return false;for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
 static float roughStep(Enemy::Kind kind){
  return creatureTraits(kind).step;
 }
@@ -18,6 +18,7 @@ static float roughStep(Enemy::Kind kind){
 // its short movement samples stay within the creature's step capability, while a
 // real cliff still fails the same test.
 static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr,bool sweep=false){
+ perf::count(perf::RoughSegment);
  auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height);}
  float pitch=aiWalkSamplePitch(w.hasTerrain());int samples=std::max(1,int(std::ceil(distance/pitch)));float z=fromZ;
  for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f);
@@ -27,23 +28,25 @@ static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float heigh
  if(endZ)*endZ=z;return true;
 }
 static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false){
+ perf::Scope stackedProfile(perf::StackedWaypoint);perf::count(perf::StackedCalls);
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
  for(int y=1;y<23;++y)for(int x=1;x<23;++x)for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
   Vec2 p{x+.5f,y+.5f};float floor=navSupport(w,p,span.floor+.215f);if(!navFits(w,p,floor,height))continue;
   cells[y*24+x].push_back(int(nodes.size()));nodes.push_back({p,floor});}
+ perf::count(perf::StackedNodes,nodes.size());
  int origin=-1,target=-1;float a=1e9f,b=1e9f;
  for(int i=0;i<int(nodes.size());++i){auto&n=nodes[i];float da=lengthSq(n.p-start)+std::fabs(n.z-startZ)*8,db=lengthSq(n.p-goal)+std::fabs(n.z-goalZ)*8;if(da<a){a=da;origin=i;}if(db<b){b=db;target=i;}}
- if(origin<0||target<0)return start;std::queue<int> queue;queue.push(origin);nodes[origin].parent=origin;
+ if(origin<0||target<0){perf::count(perf::StackedNoRoute);return start;}std::queue<int> queue;queue.push(origin);nodes[origin].parent=origin;
  while(!queue.empty()&&nodes[target].parent<0){int current=queue.front();queue.pop();auto n=nodes[current];int x=int(n.p.x),y=int(n.p.y);
   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
-   for(int next:cells[ny*24+nx]){if(nodes[next].parent>=0)continue;float feet=n.z;bool clear=true;
+   for(int next:cells[ny*24+nx]){if(nodes[next].parent>=0)continue;perf::count(perf::StackedEdges);float feet=n.z;bool clear=true;
     for(int sample=1;sample<=4;++sample){Vec2 p=n.p+d*(sample/4.f);float ground=navSupport(w,p,feet+.215f);
      if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height)){clear=false;break;}feet=ground;}
     if(clear&&std::fabs(feet-nodes[next].z)<.03f){nodes[next].parent=current;queue.push(next);}
    }
   }
  }
- if(nodes[target].parent<0)return start;int next=target;while(nodes[next].parent!=origin&&next!=origin)next=nodes[next].parent;
+ if(nodes[target].parent<0){perf::count(perf::StackedNoRoute);return start;}int next=target;while(nodes[next].parent!=origin&&next!=origin)next=nodes[next].parent;
  // The actor can enter a navigation cell near an obstacle corner. Its next
  // cell-to-cell edge is safe from the cell centre, but the diagonal from the
  // actor's actual feet may clip that corner. Reach the origin centre first.
@@ -72,16 +75,19 @@ void Game::updateEnemies(float dt){
  auto stimuli=aiStimuli();
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
  for(auto&e:m_enemies){
+  perf::CreatureScope creatureProfile(int(e.kind));
   if(dormantEntity(e.z))continue;
   float support=groundHeight(e.pos,e.z+.01f);
   if(e.surfaceMode==0){if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}}
   if(!e.alive){clearCreatureSchedule(e);continue;}
+  perf::count(perf::CreatureUpdates);
   // A dormant creature does nothing until its state is set or it is hurt; then
   // it knows where the player is and calls out.
   if(e.wakeState){if(!state(e.wakeState)&&e.hp>=e.maxHp){e.moving=false;continue;}
    // A stalker woken by distant noise keeps coming as long as one that saw the player.
    e.wakeState=0;e.awareness=std::max(e.awareness,creatureTraits(e.kind).rushSpeed>0?12.f:6.f);e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.state=Enemy::State::Investigate;enemySound(e,0,.9f);}
   bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(1.f/creatureTraits(e.kind).strikeSeconds));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*creatureTraits(e.kind).painDecay);
+  perf::Scope senseProfile(perf::EnemySense);
   Vec2 target=m_player.pos;float targetFeet=m_player.z,targetEye=m_player.eye,targetHull=m_player.hullHeight();int friendly=-1;
   auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   // Shut in a locker the player is out of sight of anything that hunts by eye.
@@ -109,6 +115,7 @@ void Game::updateEnemies(float dt){
   if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,creatureTraits(e.kind).rushSpeed>0?12.f:6.f);e.state=Enemy::State::Chase;}
   else if(heard){e.lastKnown=heard->source;auto local=heard->source;const auto&sourceWorld=worldAt(local);e.lastKnownZ=sourceWorld.supportBelow(local.x,local.y,heard->z);e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
+  senseProfile.stop();if(e.awareness>0)perf::count(perf::CreaturesHunting);
   if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
    // The real surface overhead: a service soffit or deck, not just the map roof.
    float floor=m_world.floorHeight(e.pos.x,e.pos.y),ceiling=std::min(m_world.clearanceHeight(e.pos.x,e.pos.y),m_world.clearanceAbove(e.pos.x,e.pos.y,std::max(e.z,floor)+.05f));
@@ -163,6 +170,7 @@ void Game::updateEnemies(float dt){
   // What a stalker knows about the player's eyes. "Observed" is a full 3D gaze
   // test: looking at the floor beneath it, or over a railing above it, does
   // not count as having it in view.
+  perf::Scope stalkProfile(perf::EnemyStalk);
   Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
   Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
   bool observed=false;
@@ -341,6 +349,7 @@ void Game::updateEnemies(float dt){
     if(reachable&&navFits(m_world,candidate,z,e.hull())){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=.6f;e.stalkSide=-e.stalkSide;
    }
   }
+  stalkProfile.stop();
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
   auto look=visible?to:goal-e.pos;
   if(lengthSq(look)>.01f)e.heading+=wrapAngle(std::atan2(look.y,look.x)-e.heading)*std::min(1.f,dt*(e.kind==Enemy::Kind::Brute?3.5f:14.f));
@@ -368,12 +377,12 @@ void Game::updateEnemies(float dt){
   std::vector<char> operable;std::optional<World::DoorPlan> doorPlan;
   const bool keepWaypoint=!direct&&e.repathTimer>0&&(e.lostPath||lengthSq(e.waypoint-e.pos)>.04f);
   if(direct)e.lostPath=false;
-  if(!direct&&!keepWaypoint&&traits.opensDoors&&e.awareness>0){bool any=false;operable.assign(m_world.doors().size(),0);
+  if(!direct&&!keepWaypoint&&traits.opensDoors&&e.awareness>0){perf::Scope doorProfile(perf::EnemyDoorPlan);perf::count(perf::DoorPlans);bool any=false;operable.assign(m_world.doors().size(),0);
    for(size_t i=0;i<m_world.doors().size();++i){const auto&d=m_world.doors()[i];if(d.open<d.maxOpen&&!aiDoorLocked(m_world,m_level,d)){operable[i]=1;any=true;}}
    if(any)doorPlan.emplace(m_world,operable);}
   // A fast mover reaches a one-metre waypoint before the repath clock runs out.
   if(keepWaypoint)destination=e.waypoint;
-  else if(!direct&&m_world.layers().size()>1){destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull);e.waypoint=destination;e.repathTimer=.35f;e.lostPath=false;
+  else if(!direct&&m_world.layers().size()>1){perf::Scope stackedProfile(perf::EnemyStacked);destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull);e.waypoint=destination;e.repathTimer=.35f;e.lostPath=false;
    // No route through the decks: amble a step the way it faces (or turn) and
    // ask again later; rebuilding the deck graph every frame stalls the game.
    if(lengthSq(destination-e.pos)<.0001f){e.lostPath=true;e.repathTimer=1.6f;
@@ -381,6 +390,7 @@ void Game::updateEnemies(float dt){
      if(aiWalkSegment(m_world,e.pos,e.z,step,hull)){destination=step;break;}}
     e.waypoint=destination;}}
   else if(!direct){
+   perf::Scope repathProfile(perf::EnemyRepath);perf::count(perf::FloodFills);
    int field[World::Height][World::Width];for(auto&row:field)for(auto&value:row)value=9999;
    int gx=int(goal.x),gy=int(goal.y);if(m_world.solid(gx+.5f,gy+.5f)){
     int originX=gx,originY=gy;float best=999;for(int yy=originY-1;yy<=originY+1;++yy)for(int xx=originX-1;xx<=originX+1;++xx)if(!m_world.solid(xx+.5f,yy+.5f)){float d=lengthSq(Vec2{xx+.5f,yy+.5f}-goal);if(d<best){best=d;gx=xx;gy=yy;}}
@@ -388,6 +398,7 @@ void Game::updateEnemies(float dt){
    int minCell=m_world.hasTerrain()?0:1,maxCell=m_world.hasTerrain()?23:22;
    gx=std::clamp(gx,minCell,maxCell);gy=std::clamp(gy,minCell,maxCell);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
    auto edgeWalkable=[&](int x,int y,int nx,int ny){
+    perf::count(perf::FloodEdges);
     if(!m_world.hasTerrain())return m_world.navigable(x,y,nx,ny,hull);
     Vec2 a{x+.5f,y+.5f},b{nx+.5f,ny+.5f};float az=navSupport(m_world,a,float(World::TerrainMaxZ+1));
     return roughSegment(m_world,a,az,b,hull,stepHeight);
@@ -401,13 +412,14 @@ void Game::updateEnemies(float dt){
    // Nothing it can walk leads to the goal (the player on a ledge, behind a
    // locked door): it wanders a cell at a time, mostly the way it faces, and
    // asks again in a while instead of flooding the map every frame.
-   if(field[y][x]==9999){int pick=-1;float bestTurn=9.f;
+   if(field[y][x]==9999){perf::count(perf::FloodNoRoute);int pick=-1;float bestTurn=9.f;
     for(int i=0;i<4;++i){int nx=x+dx[i],ny=y+dy[i];if(nx<minCell||nx>maxCell||ny<minCell||ny>maxCell||!edgeWalkable(x,y,nx,ny))continue;
      float turn=std::fabs(wrapAngle(std::atan2(float(dy[i]),float(dx[i]))-e.heading))+float((x*7+y*13+i*5+int(e.gait*3))%5)*.35f;
      if(turn<bestTurn){bestTurn=turn;pick=i;}}
     destination=pick<0?e.pos:Vec2{x+dx[pick]+.5f,y+dy[pick]+.5f};e.waypoint=destination;e.repathTimer=1.6f;e.lostPath=true;}
   }
   doorPlan.reset();
+  perf::Scope moveProfile(perf::EnemyMove);
   Vec2 direction=normalized(destination-e.pos);
   if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
@@ -434,6 +446,7 @@ void Game::updateEnemies(float dt){
  migrateEnemiesAcrossChunks();
 }
 ActorPose Game::friendlyAwareness(const World& world,int level,const ActorTrack& track,int homeLevel,size_t homeActor,const ActorPose& old,ActorPose pose,float dt)const{
+ perf::Scope awarenessProfile(perf::Awareness);
  if(dt<=0||state(actorAiState(homeLevel,homeActor,track.timerState,"restraint"))||!humanActorVisual(track.visual)||pose.clip!=0||pose.lookAtActor>=0||(track.deadState&&state(track.deadState)))return pose;
  Vec2 facing{std::sin(old.yaw),std::cos(old.yaw)},target{};float nearest=64.f;bool found=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);

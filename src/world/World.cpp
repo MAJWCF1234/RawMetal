@@ -877,6 +877,7 @@ float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const
  }
 }
 bool World::doorBlocks(float x,float y,float feet,float height)const{
+ perf::count(perf::DoorBlocks);
  for(size_t index=0;index<m_doors.size();++index){const auto&door=m_doors[index];
   float open=m_doorPlan.open&&index<m_doorPlan.open->size()&&(*m_doorPlan.open)[index]?door.maxOpen:door.open;
   if(door.swinging){
@@ -960,6 +961,7 @@ void World::buildLightOcclusion()const{
  if(!m_lightSolids.empty())build(build,0,int(m_lightSolids.size()));
 }
 bool World::lightRayClear(Vec2 a,float az,Vec2 b,float bz)const{
+ perf::count(perf::LightRay);
  // Terrain and shaped water beds retain the volumetric reference trace.
  if(outdoors()||!m_waterVolumes.empty())return rayClear(a,az,b,bz,false,false,true);
  if(m_lightNodes.empty())buildLightOcclusion();
@@ -978,11 +980,13 @@ bool World::lightRayClear(Vec2 a,float az,Vec2 b,float bz)const{
 }
 bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic,bool shelfCavities)const{
  auto delta=b-a;float dz=bz-az;int steps=std::max(1,int(std::ceil(std::sqrt(lengthSq(delta)+dz*dz)/.12f)));
+ perf::count(perf::RayClear);perf::count(perf::RayClearSteps,uint64_t(steps-1));
  for(int i=1;i<steps;++i){float t=float(i)/steps;auto p=a+delta*t;float z=az+(bz-az)*t;
   if(!fits(p.x,p.y,z,.015f,dynamic,shelfCavities)|| (doors&&doorBlocks(p.x,p.y,z,.015f)))return false;
  }return true;
 }
 bool World::navigable(int x,int y,int nx,int ny,float height)const{
+ perf::count(perf::Navigable);
  if(solid(nx+.5f,ny+.5f))return false;
  float floor=floorHeight(nx+.5f,ny+.5f);
  return std::fabs(floor-floorHeight(x+.5f,y+.5f))<=.45f&&clearanceHeight(nx+.5f,ny+.5f)-floor>=height&&!doorBlocks(nx+.5f,ny+.5f,floor,height);
@@ -1005,6 +1009,7 @@ char World::tile(int x, int y) const {
 }
 
 bool World::solid(float x, float y) const {
+    perf::count(perf::Solid);
     for(const auto&fixture:m_fixtures)if(fixture.solid&&insideFixture(fixture,x,y,.2f))return true;
     for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x+.2f&&std::fabs(y-p.position.y)<p.halfSize.y+.2f)return true;
     for(auto&terminal:m_terminals)if(terminal.z==0&&int(x)==int(terminal.position.x)&&int(y)==int(terminal.position.y))return true;
@@ -1104,7 +1109,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
 }
 float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+(m_internalWallHeight>0?m_internalWallHeight:definition().ceiling):m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet)const{
- perf::Scope queryProfile(perf::Support);
+ perf::LeafScope queryProfile(perf::Support);perf::count(perf::SupportCalls);
  auto*batch=CollisionQueryBatch::active(this);float value;
  if(batch&&batch->find(CollisionQueryBatch::SupportBelow,x,y,feet,0,0,value))return value;
  value=supportBelowUncached(x,y,feet);
@@ -1148,7 +1153,7 @@ float World::clearanceAbove(float x,float y,float feet)const{
  return ceiling;
 }
 bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
- perf::Scope queryProfile(perf::Fits);
+ perf::LeafScope queryProfile(perf::Fits);perf::count(perf::FitsCalls);
  auto*batch=CollisionQueryBatch::active(this);float value;uint32_t flags=uint32_t(dynamic)|(uint32_t(shelfCavities)<<1);
  if(batch&&batch->find(CollisionQueryBatch::Fits,x,y,feet,height,flags,value))return value!=0;
  bool result=fitsUncached(x,y,feet,height,dynamic,shelfCavities);
@@ -1161,6 +1166,7 @@ bool World::crateBlocks(float x,float y,float feet,float height,int except)const
  return false;
 }
 bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
+ perf::count(perf::FitsComputed);
  if(dynamic&&crateBlocks(x,y,feet,height))return false;
  if(dynamic)for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<t.footprint.x*.5f&&std::fabs(y-p.position.y)<t.footprint.y*.5f&&feet<p.z-.025f&&feet+height>p.z-t.thickness)return false;}
  if(dynamic&&insideCargoLift(x,y)&&feet<m_cargoLiftHeight-.025f&&feet+height>m_cargoLiftHeight-.18f)return false;
@@ -1227,6 +1233,7 @@ bool World::railBlocksHull(float x,float y,float radius,float feet,float height)
  return false;
 }
 std::vector<Span> World::spansAt(int x,int y)const{
+ perf::count(perf::SpansAt);
  float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);std::vector<std::pair<float,float>> solids={{-100.f,supportHeight(px,py)}};
  for(auto&f:m_fixtures)if(f.solid&&f.base>.025f&&insideFixture(f,px,py)){float base=floorHeight(px,py)+f.base;solids.push_back({base,base+f.height});}
  for(auto&p:m_props)if(p.base>.025f&&std::fabs(px-p.position.x)<p.halfSize.x&&std::fabs(py-p.position.y)<p.halfSize.y){float base=floorHeight(px,py)+p.base;solids.push_back({base,base+p.height});}

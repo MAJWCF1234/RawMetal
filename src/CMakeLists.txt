@@ -131,6 +131,7 @@ add_executable(RawMetal WIN32
     game/ai/debug/KillSquadInspection.cpp
     game/ai/debug/SquadSupportInspection.cpp
     game/Hitscan.cpp
+    game/PerfProfile.cpp
     game/Radar.cpp
     world/Ballistics.cpp
     game/CampaignMapTest.cpp

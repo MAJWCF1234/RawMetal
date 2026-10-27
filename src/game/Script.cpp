@@ -1,3 +1,4 @@
+#include "../core/FrameProfile.h"
 #include "Game.h"
 #include "ai/StateLookupHints.h"
 #include "../world/CustomCampaign.h"
@@ -20,8 +21,8 @@ bool containsEvent(const std::vector<StateId>& values,StateId id){
 
 int Game::state(StateId id)const{auto index=ai::StateLookupHints::lowerBound(m_states,id,m_aiQueryCaching);return index<m_states.size()&&m_states[index].id==id?m_states[index].value:0;}
 void Game::setState(StateId id,int value){
- if(!id)return;auto it=m_states.begin()+ai::StateLookupHints::lowerBound(m_states,id,m_aiQueryCaching);
- if(it==m_states.end()||it->id!=id){if(value)m_states.insert(it,{id,value});}else if(value)it->value=value;else m_states.erase(it);
+ if(!id)return;auto it=m_states.begin()+ai::StateLookupHints::lowerBound(m_states,id,m_aiQueryCaching);perf::count(perf::StateWrites);
+ if(it==m_states.end()||it->id!=id){if(value){m_states.insert(it,{id,value});perf::count(perf::StateInserts);}}else if(value)it->value=value;else{m_states.erase(it);perf::count(perf::StateErases);}
 }
 ObjectiveStatus Game::objective(StateId id)const{int index=findValue(m_objectives,id);return index<0?ObjectiveStatus::Hidden:static_cast<ObjectiveStatus>(m_objectives[size_t(index)].value);}
 std::string_view Game::activeObjectiveText()const{

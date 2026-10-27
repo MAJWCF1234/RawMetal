@@ -1,3 +1,4 @@
+#include "../core/FrameProfile.h"
 #include "Game.h"
 #include "../core/Ray.h"
 namespace retro {
@@ -5,6 +6,7 @@ namespace {
 float magnitude(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
 }
 ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc,bool includePlayer,const HitscanDef* assist,AiTargetRef ignoredEntity)const{
+ perf::count(perf::TraceShot);
  ShotHit result;result.distance=result.damageDistance=range;result.level=m_level;
  float size=magnitude(direction);if(!std::isfinite(size)||size<.0001f||!std::isfinite(range)||range<=0||range>100||!std::isfinite(origin.x)||!std::isfinite(origin.y)||!std::isfinite(origin.z))return result;
  direction=direction*(1/size);auto activeOrigin=chunkOffset(m_level);

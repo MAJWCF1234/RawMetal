@@ -1,6 +1,8 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 namespace retro {
 AiTarget Game::resolveGuardTarget(size_t actor,AiTargetRef ref)const{
+ perf::count(perf::GuardTargets);
  AiTarget target;if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return target;auto origin=chunkOffset(m_friendlyActors[actor].level);
  target.kind=ref.kind;target.level=ref.level;target.index=ref.index;
  if(ref.kind==ShotKind::Player){if(dead())return {};target.level=m_level;target.index=0;target.position=m_player.pos;target.feet=m_player.z;target.height=m_player.hullHeight();target.eye=m_player.eye;target.faction=AiFaction::Player;}
@@ -25,6 +27,7 @@ void Game::rememberGuardTarget(size_t actor,const AiTarget&target){
  setState(friendlyKey(actor,"guard_target_kind"),target.valid()?int(target.kind):0);setState(friendlyKey(actor,"guard_target_level"),target.valid()?target.level+1:0);setState(friendlyKey(actor,"guard_target_index"),target.valid()?target.index+1:0);
 }
 bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)const{
+ perf::count(perf::GuardSight);
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor)||!target.valid())return false;auto live=resolveGuardTarget(actor,{target.kind,target.level,target.index});if(!live.valid())return false;const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;float eye=friendlyHullHeight(actor,npc.track())*.85f;auto delta=live.position-pose.position;float z=live.feet+live.eye-pose.z-eye;
  // Steel doors: nobody outside a locker sees the player shut in it.
  if(live.kind==ShotKind::Player&&hiddenLocker()>=0)return false;
@@ -41,6 +44,7 @@ bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)c
  auto shift=chunkOffset(npc.level)-chunkOffset(m_level);return lengthSq(delta)+z*z<range*range&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>c.sightDot&&soundRayClear(pose.position+shift,pose.z+eye,live.position+shift,live.feet+live.eye);
 }
 AiTarget Game::guardThreat(size_t actor,const ActorPose&pose)const{
+ perf::Scope threatProfile(perf::GuardThreat);perf::count(perf::GuardThreats);
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return {};
  AiTarget best;float score=1e9f;const auto&npc=m_friendlyActors[actor];auto faction=actorFaction(npc.track());auto previous=guardTarget(actor);
  auto consider=[&](AiTargetRef ref){auto t=resolveGuardTarget(actor,ref);if(!t.valid())return;

@@ -1,0 +1,8 @@
+# A short set for A/B runs (--perf-software, --perf-leaf, --perf-bare): one scene per cost path.
+foundry-wake            0 start start - 0 0 600 wake
+turbine-gantry-wake     2 start start - 0 0 600 wake
+yard-wake              58 12 6 -19 90 0 600 wake
+foundry-huntsman-12     0 start start - 0 0 600 clear spawn huntsman 12 wake
+pressure-huntsman-12    1 start start - 0 0 600 clear spawn huntsman 12 wake
+racks-huntsman-12      19 start start - 0 0 600 clear spawn huntsman 12 wake
+pressure-mutant-12      1 start start - 0 0 600 clear spawn mutant 12 wake

@@ -182,6 +182,158 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
  }
  return 0;
 }
+// --perf-profile=FILE: where a frame goes when the AI is awake. One scene per
+// line, "name level x y feet yaw(deg) pitch frames [options]" (x y "start start"
+// for the map's player start; feet "-" for the floor), run with the real campaign: N frames of
+// Game::update(input,1/60), the muted mixer and a real render (presented to
+// a hidden window, as the game does), each timed with QueryPerformanceCounter
+// (steady_clock), plus every perf:: section and query
+// counter for that frame. Options, in any order after frames:
+//   clear              remove the chunk's own creatures first
+//   spawn KIND N       add N creatures (huntsman wasp brute warden mutant snatcher
+//                      chimera, or 0-6) on the floor under the player (within a
+//                      storey of his feet), `far` metres off
+//   far D              their minimum distance from the player (default 6)
+//   wake               every creature hunts the player for the whole run (as a
+//                      heard shot wakes it, refreshed each frame) and every guard
+//                      hostile to him in a resident chunk is told where he is
+//                      (at the start and every two seconds)
+//   creatures          as wake, creatures only
+//   caution            the guard squads of this chunk on Caution first
+//   set a,b,c          switch these states on first
+//   warm N             unmeasured frames first (default 30)
+//   still              no mouse sweep (default: the Ashfall profile's sweep)
+//   open               every door in every chunk swung open first (--map-shots' open views)
+// God mode keeps the player standing, so the AI never stops on a death.
+// Switches: --perf-software (the CPU rasteriser; default Vulkan),
+// --perf-norender, --perf-bare (no section timers: the update/render totals
+// alone, to measure what the timers cost), --perf-leaf (time fits, support
+// and structure sweeps too; costly at their call rates), --perf-out=PREFIX
+// (default perf-profile: PREFIX.txt summary, PREFIX.csv one row per frame),
+// --perf-offscreen (no window: Vulkan reads each frame back instead of presenting).
+// --perf-profile-census writes perf-census.txt: every campaign map's
+// creatures, guards and the collision lists its queries walk.
+__declspec(noinline) static int perfProfile(const wchar_t* listArgument){
+ using Clock=std::chrono::steady_clock;auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};
+ const auto& args=commandArguments();
+ std::filesystem::path listPath(listArgument);std::ifstream list{listPath};
+ std::string prefix="perf-profile";if(auto out=args.find(L"--perf-out="))prefix=std::filesystem::path(out+11).string();
+ // The summary must not overwrite the scene list it is reading.
+ std::error_code same;if(std::filesystem::equivalent(listPath,prefix+".txt",same)||std::filesystem::equivalent(listPath,prefix+".csv",same))return 21;
+ std::ofstream report(prefix+".txt"),csv(prefix+".csv");
+ if(!list){report<<"ERROR: cannot open scene list "<<listPath.string()<<'\n';return 21;}
+ const bool bare=args.find(L"--perf-bare")!=nullptr,render=args.find(L"--perf-norender")==nullptr,software=args.find(L"--perf-software")!=nullptr;
+ retro::perf::leafTimers=args.find(L"--perf-leaf")!=nullptr;
+ // The game's own present path: a (hidden) window of the game's size that
+ // Vulkan presents to, or that the software frame is blitted into.
+ // --perf-offscreen renders without a window (Vulkan reads the frame back).
+ const bool offscreen=args.find(L"--perf-offscreen")!=nullptr;
+ std::unique_ptr<retro::Win32Window> window;std::unique_ptr<retro::SoftwareRenderer> renderer;
+ if(render){
+  if(!offscreen){window=std::make_unique<retro::Win32Window>(retro::DisplayWidth,retro::DisplayHeight,L"Depthworks perf profile");if(!window->valid())return 1;ShowWindow(static_cast<HWND>(window->handle()),SW_HIDE);}
+  renderer=std::make_unique<retro::SoftwareRenderer>(retro::DisplayWidth,retro::DisplayHeight);
+  if(!software&&!renderer->enableHardware(window?window->handle():nullptr))report<<"Vulkan unavailable ("<<renderer->hardwareName()<<"); software rasteriser\n";}
+ retro::AudioEngine audio(false);
+ report<<"Scene list: "<<listPath.string()<<"\nRenderer: "<<(!render?"none":renderer->hardwareActive()?renderer->hardwareName():std::string("software rasteriser"))<<" at "<<retro::DisplayWidth<<'x'<<retro::DisplayHeight<<(!render?"":offscreen?", offscreen (frame read back)":", hidden window present")
+       <<"\nSection timers: "<<(bare?"off (--perf-bare)":retro::perf::leafTimers?"on, leaf queries timed too":"on (fits/support/structure counted, not timed)")<<"\nDt 1/60 per update; times are CPU wall ms per frame (QueryPerformanceCounter).\n"
+       <<"Nesting: friendly holds civilians, guard_mind, guard_threat, locker_witness, guard_schedule, walk, stacked_waypoint (guards); mechanisms holds civilians; enemies holds enemy_* and stacked_waypoint (creatures);\n"
+       <<"         guard_mind holds guard_threat, locker_witness, guard_schedule; guard_schedule holds intent, route, graph_*, walk, room, post; enemy_stacked holds stacked_waypoint;\n         streaming holds chunk_needed; door_requests sits in enemies (aware door-openers) and friendly (moving guards).\n\n";
+ report.flush();
+ const char* kindNames[]={"huntsman","wasp","brute","warden","mutant","snatcher","chimera"};
+ auto kindOf=[&](const std::string& word)->int{for(int i=0;i<7;++i)if(word==kindNames[i])return i;if(word.size()==1&&word[0]>='0'&&word[0]<='6')return word[0]-'0';return -1;};
+ // Per-frame columns: frame totals, every section, every counter, each creature kind's ms and runs.
+ std::vector<std::string> columns={"frame_ms","update_ms","audio_ms","render_ms","render_scene_ms","render_submit_ms","render_present_ms"};
+ const size_t sectionBase=columns.size();for(auto name:retro::perf::names)columns.push_back(name);
+ const size_t counterBase=columns.size();for(auto name:retro::perf::counterNames)columns.push_back(name);
+ columns.push_back("state_lookups");columns.push_back("walk_cache_queries");columns.push_back("walk_cache_hits");
+ const size_t kindBase=columns.size();for(auto name:kindNames){columns.push_back(std::string(name)+"_ms");columns.push_back(std::string(name)+"_runs");}
+ // The same queries made while rendering (light rays, actor lighting, the HUD's state reads).
+ const size_t renderBase=columns.size();for(auto name:retro::perf::counterNames)columns.push_back(std::string("render_")+name);columns.push_back("render_state_lookups");
+ // Sections the renderer owns; the rest belong to Game::update.
+ auto renderSection=[](size_t cost){using namespace retro::perf;for(Cost c:{Scene,Actor,Prop,Skin,Sky,ViewModel,PoseWait,RenderSetup,FenceWait,Overlay,GpuAllocation})if(cost==size_t(c))return true;return false;};
+ csv<<"scene,frame";for(const auto&c:columns)csv<<','<<c;csv<<'\n';
+ std::string line;int scenes=0;
+ while(std::getline(list,line)){
+  if(line.empty()||line[0]=='#')continue;
+  std::istringstream fields(line);std::string name,xText,yText,feetText;int level=0,frames=0;float yaw=0,pitch=0;
+  if(!(fields>>name>>level>>xText>>yText>>feetText>>yaw>>pitch>>frames)){report<<"SKIP malformed line: "<<line<<"\n\n";continue;}
+  // "start start -" stands at the map's own player start.
+  const float x=xText=="start"?std::nanf(""):std::stof(xText),y=yText=="start"?std::nanf(""):std::stof(yText),feet=feetText=="-"?-999.f:std::stof(feetText);
+  bool clear=false,wake=false,guards=false,caution=false,still=false,open=false;int warm=30;float distance=6;std::vector<std::pair<int,int>> spawns;std::vector<std::string> states;std::string word;
+  while(fields>>word){
+   if(word=="clear")clear=true;else if(word=="wake"){wake=true;guards=true;}else if(word=="creatures")wake=true;else if(word=="caution")caution=true;else if(word=="still")still=true;else if(word=="open")open=true;
+   else if(word=="warm")fields>>warm;else if(word=="far")fields>>distance;
+   else if(word=="spawn"){std::string kind;int count=0;fields>>kind>>count;int k=kindOf(kind);if(k<0){report<<"SKIP unknown creature kind "<<kind<<'\n';continue;}spawns.push_back({k,count});}
+   else if(word=="set"){std::string names;fields>>names;std::istringstream each(names);std::string state;while(std::getline(each,state,','))states.push_back(state);}
+   else report<<"note: ignored option "<<word<<'\n';
+  }
+  auto built=Clock::now();auto scene=retro::Game::perfScene(level,{x,y},feet,yaw,pitch,open);double buildMs=ms(built,Clock::now());
+  for(const auto&state:states)scene.setState(retro::stateId(state));
+  if(caution)for(size_t i=0;i<scene.npcActors().size();++i)if(scene.npcActors()[i].level==scene.level())scene.startGuardCaution(i);
+  if(clear)scene.perfClearCreatures();
+  std::string placed;for(auto [kind,count]:spawns){int n=scene.perfSpawn(retro::CreatureKind(kind),count,distance);placed+=" "+std::string(kindNames[kind])+" "+std::to_string(n)+"/"+std::to_string(count);}
+  report<<"== "<<name<<": level "<<level<<" at ("<<scene.player().pos.x<<", "<<scene.player().pos.y<<") feet "<<scene.player().z<<", yaw "<<yaw<<", pitch "<<pitch<<"; "<<frames<<" measured frames after "<<warm<<" warm-up"
+        <<(wake?guards?"; wake: creatures and guards":"; wake: creatures":"; no wake")<<(placed.empty()?"":"; spawned"+placed)<<"\n   scene build "<<buildMs<<" ms\n   at start: "<<scene.perfPopulation()<<'\n';
+  std::vector<std::vector<double>> samples(columns.size());double firstFrame=0;
+  for(int frame=-warm;frame<frames;++frame){
+   retro::InputState input{};if(!still){input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;}
+   if(wake)scene.perfWake(guards&&((frame+warm)%120==0));
+   scene.perfHold();
+   retro::perf::resetFrame();retro::perf::enabled=!bare;
+   retro::ai::StateLookupHints::resetStatistics();retro::ai::WalkQueryCache::resetStatistics();
+   if(window)window->pump();
+   auto a=Clock::now();scene.update(input,1.f/60);auto b=Clock::now();
+   const auto updateCounts=retro::perf::counts;const auto updateLookups=retro::ai::StateLookupHints::statistics.queries;
+   audio.update(scene,false);auto c=Clock::now();
+   if(render){renderer->render(scene);if(window&&!renderer->hardwarePresentsWindow())window->present(renderer->pixels(),renderer->width(),renderer->height());}auto d=Clock::now();
+   retro::perf::enabled=false;
+   if(frame==-warm)firstFrame=ms(a,d);
+   if(frame<0)continue;
+   std::vector<double> row(columns.size());auto stages=render?renderer->frameStages():std::array<double,3>{};
+   row[0]=ms(a,d);row[1]=ms(a,b);row[2]=ms(b,c);row[3]=ms(c,d);row[4]=stages[0];row[5]=stages[1];row[6]=stages[2];
+   for(size_t i=0;i<retro::perf::Count;++i)row[sectionBase+i]=retro::perf::costs[i];
+   for(size_t i=0;i<retro::perf::CounterCount;++i){row[counterBase+i]=double(updateCounts[i]);row[renderBase+i]=double(retro::perf::counts[i]-updateCounts[i]);}
+   row[counterBase+retro::perf::CounterCount]=double(updateLookups);row[renderBase+retro::perf::CounterCount]=double(retro::ai::StateLookupHints::statistics.queries-updateLookups);
+   row[counterBase+retro::perf::CounterCount+1]=double(retro::ai::WalkQueryCache::statistics.queries);row[counterBase+retro::perf::CounterCount+2]=double(retro::ai::WalkQueryCache::statistics.hits);
+   for(size_t k=0;k<7;++k){row[kindBase+2*k]=retro::perf::creatureCosts[k];row[kindBase+2*k+1]=retro::perf::creatureRuns[k];}
+   csv<<name<<','<<frame;for(auto value:row)csv<<','<<value;csv<<'\n';
+   for(size_t i=0;i<row.size();++i)samples[i].push_back(row[i]);
+  }
+  report<<"   at end:   "<<scene.perfPopulation()<<"\n   first frame "<<firstFrame<<" ms; player health held "<<scene.player().health<<'\n';
+  if(frames<=0){report<<'\n';continue;}
+  struct Stat{double mean,p50,p95,p99,max;};
+  auto stat=[](std::vector<double> v){std::sort(v.begin(),v.end());double sum=std::accumulate(v.begin(),v.end(),0.);auto at=[&](double q){return v[std::min(v.size()-1,size_t(q*double(v.size())))];};return Stat{sum/double(v.size()),at(.5),at(.95),at(.99),v.back()};};
+  char buffer[256];
+  auto print=[&](const char* label,const Stat& s,const char* unit="ms"){std::snprintf(buffer,sizeof buffer,"   %-24s %9.3f %9.3f %9.3f %9.3f %9.3f %s\n",label,s.mean,s.p50,s.p95,s.p99,s.max,unit);report<<buffer;};
+  report<<"                            mean       p50       p95       p99       max\n";
+  for(size_t i=0;i<sectionBase;++i)print(columns[i].c_str(),stat(samples[i]));
+  // Spikes: frames whose update alone misses a 60 Hz frame.
+  int over=0,overHalf=0;for(double v:samples[1]){over+=v>16.667;overHalf+=v>8.333;}
+  report<<"   update over 16.7 ms: "<<over<<" frames; over 8.3 ms: "<<overHalf<<" frames of "<<frames<<'\n';
+  if(!bare){
+   report<<"   sections (ms per frame), by mean:\n";std::vector<std::pair<double,size_t>> order;
+   for(size_t i=0;i<retro::perf::Count;++i){auto s=stat(samples[sectionBase+i]);if(s.max>0)order.push_back({s.mean,i});}
+   std::sort(order.rbegin(),order.rend());for(auto [mean,i]:order)print((std::string(retro::perf::names[i])+(renderSection(i)?" (render)":"")).c_str(),stat(samples[sectionBase+i]));
+   report<<"   creature kinds (whole updateEnemies body per creature):\n";
+   for(size_t k=0;k<7;++k){auto runs=stat(samples[kindBase+2*k+1]);if(runs.max<=0)continue;auto cost=stat(samples[kindBase+2*k]);
+    std::snprintf(buffer,sizeof buffer,"   %-24s %9.3f %9.3f %9.3f %9.3f %9.3f ms; %.2f updates/frame, %.4f ms per update\n",kindNames[k],cost.mean,cost.p50,cost.p95,cost.p99,cost.max,runs.mean,runs.mean>0?cost.mean/runs.mean:0.);report<<buffer;}
+  }
+  report<<"   calls per frame in Game::update (mean / p95 / max; counted even with --perf-bare):\n";
+  for(size_t i=counterBase;i<kindBase;++i){auto s=stat(samples[i]);if(s.max<=0)continue;std::snprintf(buffer,sizeof buffer,"   %-24s %12.1f %12.0f %12.0f\n",columns[i].c_str(),s.mean,s.p95,s.max);report<<buffer;}
+  report<<"   calls per frame while rendering:\n";
+  for(size_t i=renderBase;i<columns.size();++i){auto s=stat(samples[i]);if(s.max<=0)continue;std::snprintf(buffer,sizeof buffer,"   %-24s %12.1f %12.0f %12.0f\n",columns[i].c_str(),s.mean,s.p95,s.max);report<<buffer;}
+  // The worst frames and what filled them.
+  std::vector<std::pair<double,size_t>> worst;for(size_t f=0;f<samples[1].size();++f)worst.push_back({samples[1][f],f});std::sort(worst.rbegin(),worst.rend());
+  report<<"   worst updates:\n";
+  for(size_t w=0;w<std::min<size_t>(5,worst.size());++w){size_t f=worst[w].second;std::snprintf(buffer,sizeof buffer,"   frame %4zu update %8.3f ms:",f,worst[w].first);report<<buffer;
+   if(!bare){std::vector<std::pair<double,size_t>> top;for(size_t i=0;i<retro::perf::Count;++i)if(!renderSection(i))top.push_back({samples[sectionBase+i][f],i});std::sort(top.rbegin(),top.rend());
+    for(size_t t=0;t<6&&t<top.size()&&top[t].first>0;++t){std::snprintf(buffer,sizeof buffer," %s %.2f",retro::perf::names[top[t].second],top[t].first);report<<buffer;}}
+   for(auto counter:{retro::perf::FloodFills,retro::perf::FloodNoRoute,retro::perf::StackedCalls,retro::perf::StackedNoRoute,retro::perf::Navigable,retro::perf::FitsCalls,retro::perf::RayClearSteps}){std::snprintf(buffer,sizeof buffer," | %s %.0f",retro::perf::counterNames[counter],samples[counterBase+counter][f]);report<<buffer;}
+   report<<'\n';}
+  report<<'\n';report.flush();csv.flush();++scenes;
+ }
+ report<<scenes<<" scenes profiled\n";return scenes>0?0:21;
+}
 static int cableWindowPerformance(){
  retro::Win32Window window(retro::DisplayWidth,retro::DisplayHeight,L"RawMetal Map 6 Frame Test");
  if(!window.valid())return 1;
@@ -641,6 +793,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--detail-sun"))retro::SoftwareRenderer::setDetailLayer(8); // debug: sun visibility, N.L, cascade
     if(commandArguments().find(L"--detail-light"))retro::SoftwareRenderer::setDetailLayer(9); // debug: ambient (r), lamp (g), not per-pixel lit (b)
     if(commandArguments().find(L"--minimap-cache-test"))return retro::MinimapCache::test()?0:35;
+    if(auto arg=commandArguments().find(L"--perf-profile="))return perfProfile(arg+15);
+    if(commandArguments().find(L"--perf-profile-census")){std::ofstream out("perf-census.txt");retro::Game::perfCensus(out);return out?0:21;}
     if(commandArguments().find(L"--neural-texture-runtime-test"))return neuralTextureRuntimeTest(W,H,commandArguments().find(L"--vulkan")!=nullptr);
     if(commandArguments().find(L"--stealth-test")){bool stealth=retro::Game::testStealth(),caution=retro::Game::testCaution();return stealth&&caution?0:21;}
     if(commandArguments().find(L"--exclusion-test"))return retro::Game::testExclusion()?0:21;

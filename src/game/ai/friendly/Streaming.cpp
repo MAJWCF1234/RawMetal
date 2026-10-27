@@ -55,6 +55,7 @@ void Game::rebuildFriendlyActors(){
  }
 }
 bool Game::friendlyChunkNeeded(int level)const{
+ perf::Scope neededProfile(perf::ChunkNeeded);
  if(engineerDroneChunkNeeded(level))return true;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
   if(npcIncapacitated(i)||!autonomousActor(track)||npc.pose.clip==4)continue;
@@ -87,6 +88,7 @@ bool Game::friendlyBoundaryOpen(int from,int to,Vec2 global)const{
  return false;
 }
 bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){
+ perf::count(perf::FriendlyWalks);
  // Exact memo for in-chunk sweeps while a WalkQueryCache::Scope is live.
  // Same answers as the uncached body; seam-crossing probes stay live.
  if(auto*cache=ai::WalkQueryCache::active(friendlyWorld(level))){
@@ -96,7 +98,7 @@ bool Game::friendlyWalkSegment(int level,Vec2 start,float feet,Vec2 goal,float h
  return friendlyWalkSegmentUncached(level,start,feet,goal,height,endFeet);
 }
 bool Game::friendlyWalkSegmentUncached(int level,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){
- perf::Scope walkProfile(perf::Walk);
+ perf::Scope walkProfile(perf::Walk);perf::count(perf::FriendlyWalksComputed);
  // TraceHull-style: the actor already occupies `start`. Re-proving that
  // footprint every probe doubled short locomotion cost for free. Same support,
  // structure, door and destination fits as before — only the path ahead.
@@ -174,6 +176,7 @@ bool Game::friendlyBodyFits(int level,Vec2 position,float feet,float height){
  return true;
 }
 bool Game::friendlyRayClear(Point3 from,Point3 to)const{
+ perf::count(perf::FriendlyRay);
  auto delta=to-from;int samples=std::max(1,int(std::ceil(std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z)/.04f)));int previous=friendlyChunkAt({from.x,from.y},m_level);if(previous<0)return false;
  for(int i=0;i<=samples;++i){auto point=from+delta*(float(i)/samples);int level=friendlyChunkAt({point.x,point.y},previous);if(level<0||!chunkResident(level)||!friendlyBoundaryOpen(previous,level,{point.x,point.y}))return false;
   auto local=Vec2{point.x,point.y}-chunkOffset(level);const auto&world=level==m_level?m_world:m_chunks[level].world;
@@ -226,7 +229,7 @@ bool Game::guardRoute(int level,size_t actor,Vec2 globalGoal,float feet,int ms,V
  if(cached){goal=portalGlobal-origin;goalFeet=get("guard_portal_z")*.001f;}return cached;
 }
 void Game::updateFriendlyActors(float dt,bool guards){
- perf::Scope frameProfile(perf::Friendly);
+ perf::Scope frameProfile(perf::Friendly),civilianProfile(perf::Civilians);if(guards)civilianProfile.stop();
  auto stimuli=guards?aiStimuli():std::vector<AiStimulus>{};
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);shot.categories=ai::SoundWeapon;stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);

@@ -667,6 +667,17 @@ public:
     static Game terminalInspection(int level,int terminal=0);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
     static Game barrelInspection(float age);
+    // --perf-profile (PerfProfile.cpp): a campaign view with god mode on (a run
+    // never ends on a dead player), creatures added on the floor under him, every
+    // hunter woken onto the player (perfWake each frame holds them on him), and
+    // a one-line census of what is resident and awake. perfCensus lists every map.
+    static Game perfScene(int level,Vec2 position,float feet,float yawDegrees,float pitch,bool openDoors=false);
+    void perfClearCreatures();
+    int perfSpawn(CreatureKind kind,int count,float minimumDistance);
+    void perfWake(bool guards);
+    void perfHold();
+    std::string perfPopulation()const;
+    static void perfCensus(std::ostream& out);
 
 private:
     int nearbyTakedown()const;

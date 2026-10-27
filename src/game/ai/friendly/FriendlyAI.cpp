@@ -1,3 +1,4 @@
+#include "../../../core/FrameProfile.h"
 #include "../../Game.h"
 #include "../Navigation.h"
 #include "../Perception.h"
@@ -45,10 +46,12 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
  }
 }
 bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
+ perf::count(perf::DoorLockChecks);
  int living=hostilesRemaining(level);
  return door.transfer||door.entry||(door.requireEnemiesClear&&living)||(door.requireControl&&!world.controlReleased())||(door.requireState&&state(door.requireState)!=door.requireValue);
 }
 void Game::requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal){
+ perf::Scope doorProfile(perf::DoorRequests);
  for(size_t i=0;i<world.doors().size();++i){const auto&door=world.doors()[i];
   if(aiDoorLocked(world,level,door)||door.opening||std::fabs(position.y-door.y)>1.8f||position.x<door.left+.2f||position.x>door.right-.2f||(position.y-door.y)*(goal.y-door.y)>=0)continue;
   float z=world.floorHeight((door.left+door.right)*.5f,door.y)+door.z;if(std::fabs(feet-z)>.3f)continue;
@@ -57,6 +60,7 @@ void Game::requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 go
  }
 }
 ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const ActorTrack& track,const ActorPose& old,ActorPose pose,float dt,const std::vector<AiStimulus>* stimuli){
+ perf::count(perf::FriendlyUpdates);
  const auto&config=track.ai;
  auto key=[&](std::string_view field){return friendlyKey(actor,field);};
  auto get=[&](std::string_view field){return state(key(field));};auto put=[&](std::string_view field,int value){setState(key(field),value);};

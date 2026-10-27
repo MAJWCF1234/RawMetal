@@ -177,6 +177,7 @@ void Game::sound(Sound sound,float gain,float pitch){
 void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){const auto& traits=creatureTraits(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+traits.voice*3+action),enemy.pos,gain,pitch*traits.voicePitch,true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
 
 int Game::hostilesRemaining(int level)const{
+ perf::count(perf::HostileCensus);
  // Developer mode removes the creatures but not the Cleanup Force. Counting
  // nobody opens the enemy-clear doors and script gates a tester has to pass;
  // the guards themselves still patrol, hunt and go down to a takedown.
@@ -406,22 +407,22 @@ void Game::update(const InputState& input, float dt) {
         m_elapsed += dt;
         // A locker's choreography holds the controls until the camera lands
         // on the committed pose, so the path always ends where the player is.
-        updateLockerDoors(dt);const bool choreographed=lockerViewLocked();
+        {perf::Scope profile(perf::LockerDoors);updateLockerDoors(dt);}const bool choreographed=lockerViewLocked();
         if(!choreographed){
         m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
         m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -210.0f, 210.0f);
         }else{m_velocity={};m_suppressFire=true;}
 
-        updateMechanisms(dt);
+        {perf::Scope profile(perf::Mechanisms);updateMechanisms(dt);
         updateLift(dt);
-        syncReactorComplex();
+        syncReactorComplex();}
         auto movement=input;if(heldNpc()>=0||takedownActive()||draggingBody()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         // Shut in a locker the body stays where it is; only the head turns.
         // Crates already sliding and the reset lever carry on without it.
-        if(hiddenLocker()<0&&!choreographed){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);
-        updateExposure(dt);
-        updateStealth(input,dt);
-        if(m_world.hasLift()){
+        {perf::Scope profile(perf::Movement);if(hiddenLocker()<0&&!choreographed){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);}
+        {perf::Scope profile(perf::Stealth);updateExposure(dt);
+        updateStealth(input,dt);}
+        if(m_world.hasLift()){perf::Scope profile(perf::Movement);
             m_hazmatPushCooldown=std::max(0.f,m_hazmatPushCooldown-dt);
             if(m_hazmat.initialized&&length(m_velocity)>.5f&&m_hazmatPushCooldown<=0){
                 int nearest=-1;float nearestDistance=.4f*.4f;
@@ -431,17 +432,18 @@ void Game::update(const InputState& input, float dt) {
             }
             m_hazmat.update(m_world,dt);
         }
-        crossChunkBoundary();
-        updateScripts(dt);
-        updateDarkness(dt);
-        updateHazards(dt);
-        for(size_t i=0;i<m_pendingBarrels.size();){if(m_elapsed>=m_pendingBarrels[i].time){auto b=m_pendingBarrels[i];m_pendingBarrels.erase(m_pendingBarrels.begin()+long(i));detonateBarrel(b.level,int(std::floor(b.pos.x)),int(std::floor(b.pos.y)));}else ++i;}
-        updateInteraction(input,dt);
-        updateStreaming(dt);
+        {perf::Scope profile(perf::Streaming);crossChunkBoundary();}
+        {perf::Scope profile(perf::Scripts);updateScripts(dt);
+        updateDarkness(dt);}
+        {perf::Scope profile(perf::Hazards);updateHazards(dt);
+        for(size_t i=0;i<m_pendingBarrels.size();){if(m_elapsed>=m_pendingBarrels[i].time){auto b=m_pendingBarrels[i];m_pendingBarrels.erase(m_pendingBarrels.begin()+long(i));detonateBarrel(b.level,int(std::floor(b.pos.x)),int(std::floor(b.pos.y)));}else ++i;}}
+        {perf::Scope profile(perf::Interaction);updateInteraction(input,dt);}
+        perf::Scope streamingProfile(perf::Streaming);updateStreaming(dt);
         // Resident NPCs can operate ordinary doors without the player entering
         // their chunk. Transfer leaves are mirrored by the streamer instead.
         for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))m_chunks[level].world.updateDoors(dt,false);
-        bool carryingAtStart=heldNpc()>=0||(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1));updateClutter(input,dt);
+        streamingProfile.stop();
+        bool carryingAtStart=heldNpc()>=0||(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1));{perf::Scope profile(perf::Clutter);updateClutter(input,dt);}
 
         const auto&cycle=equippedWeaponDef().cycle;const auto&melee=kUnarmedMelee;
         float oldReload=m_reloadTimer;m_reloadTimer=std::max(0.f,m_reloadTimer-dt);
@@ -462,14 +464,14 @@ void Game::update(const InputState& input, float dt) {
         }
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);
-        updateTakedown(dt);
+        {perf::Scope profile(perf::Takedown);updateTakedown(dt);}
         updateEngineerDrones(dt);
         updateGuardCombat(dt);
-        for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);
-        updateTacticalGrenades(dt);
+        {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
+        {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}
         updateEnemies(dt);
-        updateNpcVoices(dt);
-        updatePickups();
+        {perf::Scope profile(perf::Voices);updateNpcVoices(dt);}
+        {perf::Scope profile(perf::Pickups);updatePickups();}
 
         // Campaign completion is explicit through scripted content. Reaching the
         // numerically last compiled chunk is never an implicit ending.
