@@ -1512,6 +1512,25 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  movingGeometry=false;
  for(auto&terminal:w.terminals()){movingGeometry=w.hasLift()&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
+  if(terminal.paper()){
+   // Paper is a sheet, not a screen: put down on its bench a little askew, or
+   // taped flat to the wall it faces.
+   const auto& sheet=m_paperProps[static_cast<size_t>(terminal.readable)-1];
+   const bool letter=terminal.readable==Readable::Letter,sticky=terminal.readable==Readable::Sticky;
+   const float hw=sticky?.038f:letter?.105f:.075f,hh=sticky?.038f:letter?.1485f:.105f;
+   if(terminal.taped){
+    const Vec2 side{std::cos(terminal.yaw),-std::sin(terminal.yaw)},l=terminal.position-side*hw,r=terminal.position+side*hw;
+    quad({l.x,l.y,h-hh},{r.x,r.y,h-hh},{r.x,r.y,h+hh},{l.x,l.y,h+hh},sheet,1.f);
+   }else{
+    const float deskTop=h+.75f;
+    box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
+    for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
+     box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
+    const float a=terminal.yaw+.22f,z=deskTop+.068f;const Vec2 u{std::cos(a)*hw,std::sin(a)*hw},v{-std::sin(a)*hh,std::cos(a)*hh};
+    quad({x-u.x-v.x,y-u.y-v.y,z},{x+u.x-v.x,y+u.y-v.y,z},{x+u.x+v.x,y+u.y+v.y,z},{x-u.x+v.x,y-u.y+v.y,z},sheet,1.f);
+   }
+   continue;
+  }
   if(terminal.control){
    box({x-.27f,y-.18f,h},{x+.27f,y+.18f,h+.2f},m_panelMetal,.9f);
    facility(8,x,y,h+.2f,.36f,.54f,.75f,kPi*.5f);

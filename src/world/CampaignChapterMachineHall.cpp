@@ -529,7 +529,7 @@ const MhHall& mhHall(){
    m.pipes.push_back({{x-dir*.05f,3.9f},{x+dir*.3f,3.25f},G+.5f,.03f,G-.07f,3});
    mhFix(m,model::barrier,x-dir*2.f,2.5f,G,1.6f,.8f,.88f,kPi*.5f);
   }
-  wallSign(m,21.f,1.055f,G+1.3f,"GALLERY CLOSED","SPAN DOWN / USE THE HALL FLOOR",2.2f,0);
+  taped(m,{21.f,1.f},G+1.5f,0,Readable::Note,"GALLERY CLOSED","SPAN'S DOWN.","GO ROUND BY THE HALL FLOOR. - SHIFT 2");
   // The fallen span lies on the floor, its west end propped on the rubble.
   wall(m,25.4f,1.4f,30.4f,3.7f,F,F+.2f,2);
   wall(m,25.2f,1.5f,26.5f,3.6f,F+.2f,F+.45f,15);wall(m,25.3f,1.6f,26.3f,3.5f,F+.45f,F+.62f,2);

@@ -150,6 +150,7 @@ private:
     Texture m_feedSign,m_returnSign;
     // The two door notices (freight suspended, utilities permit): Door.sign-CampaignChunkCount.
     std::array<Texture,2> m_noticeSigns;
+    std::array<Texture,3> m_paperProps; // Readable::Letter, Note, Sticky
     // Door header plates of authored maps, one per HUD zone name (lazy).
     std::array<Texture,3> m_serviceAreaSigns;
     Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet,m_framePaint;
@@ -219,6 +220,10 @@ private:
     Texture m_terminalTexture,m_cautionSign;
     Texture m_logo;
     Texture makeSign(const char* title,const char* subtitle,std::uint32_t accent);
+    // The sheet as seen lying in the world (letter, note, sticky), and the
+    // same paper read in the hand.
+    Texture makePaperProp(Readable kind);
+    void drawPaper(const Game& game,int index);
     Texture makePaint(std::uint32_t color);
     static Texture loadEmbeddedPng(int id);
     static void prepareDecal(Texture& texture,bool clampEdges=true);

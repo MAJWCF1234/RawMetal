@@ -240,7 +240,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  terminal(m,{18.5f,2.55f},"TREATMENT / BASIN STATUS","TOWER 2 BASIN LIVE. RECIRC P-11 TO P-14 TRIPPED 01:52.","DO NOT CROSS. ISOLATE MCC-2 AT SUMP WORKS, WEST AND DOWN.",G-F);
  m.terminals.back().yaw=.001f;
  workstation(m,16.f,2.7f,G,-1,1);
- terminal(m,{22.3f,4.4f},"TREATMENT / SHIFT LOG","02:51 PRYOR TO TOWER 2 TO RESET THE RECIRC PUMPS.","03:20 NO RADIO FROM PRYOR. NOT SENDING ANYONE ELSE.",G-F);
+ terminal(m,{22.3f,4.4f},"TREATMENT / SHIFT LOG","02:51 PRYOR TO TOWER 2 TO RESET THE RECIRC PUMPS.","03:20 NO RADIO FROM PRYOR. NOT SENDING ANYONE ELSE.",G-F);m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=-kPi*.5f;
  for(float y:{1.8f,2.75f})m.fixtures.push_back({model::electrical_cabinet,{22.75f,y},G-F,.9066f,.4956f,2.2f,kPi*.5f,true});
  m.fixtures.push_back({model::lab_pa_horn,{14.6f,1.36f},G-F+2.05f,.49f,.56f,.43f,kPi,false});
@@ -423,7 +423,7 @@ std::shared_ptr<const Map> makeDrainageGallery(){
   floorLine(m,x1,7.6f,x2,7.72f,F,13);
  }
  for(float x:{6.f,12.f})wall(m,x-.25f,7.6f,x+.25f,9.f,bbed-.05f,F-.25f,15);
- wallSign(m,9.f,8.945f,F+1.4f,"OVERFLOW / LEDGE FAILED","WADE THE CHANNEL. NO PUMP ON THIS LINE.",3.f,kPi);
+ taped(m,{9.f,9.f},F+1.55f,kPi,Readable::Note,"LEDGE'S GONE","NO PUMP ON THIS LINE. YOU'LL HAVE TO WADE.","- PRYOR");
  // The gallery's ribs stand in the water; three overflow outfalls come down
  // the north wall from the treatment hall.
  for(float x=2.5f;x<22.6f;x+=4.f){
@@ -437,7 +437,7 @@ std::shared_ptr<const Map> makeDrainageGallery(){
   m.pipes.push_back({{x,1.45f},{x,1.45f},R-.6f,.42f,R-.5f,6});
   m.structures.push_back({x-.4f,1.f,x+.4f,1.85f,bbed,R,false,6});
  }
- terminal(m,{22.45f,8.1f},"OVERFLOW / LEVEL","OVERFLOW GALLERY 0.45 M AND STEADY. NO PUMP ON THIS LINE.","IT IS JUST WATER. LISTEN FOR THE HUM. CULVERT 2 HUMS.",0);
+ terminal(m,{22.45f,8.1f},"OVERFLOW / LEVEL","OVERFLOW GALLERY 0.45 M AND STEADY. NO PUMP ON THIS LINE.","IT IS JUST WATER. LISTEN FOR THE HUM. CULVERT 2 HUMS.",0);m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=-kPi*.5f;
  cableTray(m,{2.f,1.3f},{22.6f,1.3f},R-1.f);
  // --- West passage ------------------------------------------------------------------
@@ -452,7 +452,7 @@ std::shared_ptr<const Map> makeDrainageGallery(){
   m.fixtures.push_back({model::valve_wheel,{x,21.05f},1.12f,.55f,.12f,.55f,0,false});
   m.structures.push_back({x-.2f,20.85f,x+.2f,21.25f,F,F+1.15f,false,6});
  }
- terminal(m,{12.35f,19.9f},"SLUICE JUNCTION / SUMP ACCESS","MCC-2 FEEDER ISOLATOR: SUMP WORKS PIT FLOOR, SOUTH-WEST ROOM.","OPEN IT AND EVERY LOAD DROPS: P-4, P-7, TOWER 2 RECIRC, THE SUMP.");
+ terminal(m,{12.35f,19.9f},"SLUICE JUNCTION / SUMP ACCESS","MCC-2 FEEDER ISOLATOR: SUMP WORKS PIT FLOOR, SOUTH-WEST ROOM.","OPEN IT AND EVERY LOAD DROPS: P-4, P-7, TOWER 2 RECIRC, THE SUMP.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=-kPi*.5f;
  servicePipe(m,{1.2f,19.6f},{12.8f,19.6f},F+3.6f,.16f,0);
  cableTray(m,{12.6f,19.2f},{12.6f,22.8f},F+3.f);
@@ -511,7 +511,7 @@ std::shared_ptr<const Map> makeSumpWorks(){
  wall(m,8,0,12,1,-20.f,R,15);
  floorLine(m,1.f,4.82f,23.f,4.97f,G,13);
  m.stairs.push_back({21.f,5.f,22.8f,9.2f,F,G,15,true,false});
- board(m,18.2f,4.55f,G+1.f,"MCC-2 / FEEDER ISOLATOR","PIT FLOOR SOUTH-WEST / STAIR EAST / UNDER THE PRESS",2.8f);
+ board(m,18.2f,4.55f,G+1.f,"MCC-2 / FEEDER ISOLATOR","PIT FLOOR / EAST STAIR",2.8f);
  // The terrace desk: the duty pump log faces the pit.
  terminal(m,{6.f,3.2f},"SUMP WORKS / DUTY PUMP LOG","P-2 STARTED 02:40. NO START COMMAND. P-2 STOPPED 02:41. NO STOP COMMAND.","P-2 STARTED 02:52. NOBODY IS LOGGED IN DOWN HERE.",G-F);
  m.terminals.back().yaw=.001f;
@@ -581,7 +581,7 @@ std::shared_ptr<const Map> makeSumpWorks(){
  m.pipes.push_back({{17.f,15.5f},{17.f,15.5f},-24.9f,.45f,R,1});
  m.pipes.push_back({{17.f,15.5f},{17.f,15.5f},-24.95f,.55f,-24.75f,6});
  wall(m,14.6f,13.f,19.4f,13.4f,F+3.3f,-24.f,15);
- wallSign(m,21.1f,12.945f,F+1.9f,"SCREENINGS PRESS","CYCLES ON MCC-2 / PASS ON THE UPSTROKE",2.8f,kPi);
+ wallSign(m,21.1f,12.945f,F+1.9f,"SCREENINGS PRESS","CYCLES ON MCC-2 / KEEP CLEAR OF THE RAM",2.8f,kPi);
  // The press hydraulics in the east pocket.
  m.fixtures.push_back({model::tank_system,{21.6f,14.7f},0,1.58f*.8f,1.62f*.8f,2.3f*.8f,0,true});
  P3 hp=pumpSkid(m,{21.4f,17.f},F,kPi*.5f,-24.6f);
@@ -810,7 +810,7 @@ std::shared_ptr<const Map> makeCoolingTowersShell(){
  for(Vec2 c:{Vec2{2.1f,1.6f},Vec2{4.1f,1.6f},Vec2{2.1f,3.6f}})wall(m,c.x,c.y,c.x+1.9f,c.y+1.9f,beamT,-19.8f,29);
  // New packs staged on the apron, and the replacement log.
  for(Vec2 c:{Vec2{18.95f,.95f}}){for(float d:{-.45f,.3f})wall(m,c.x-.55f,c.y+d,c.x+.55f,c.y+d+.15f,F,F+.14f,10);for(float z:{0.f,1.f})wall(m,c.x-.5f,c.y-.45f,c.x+.5f,c.y+.45f,F+.14f+z*.62f,F+.74f+z*.62f,29);}
- terminal(m,{21.25f,1.2f},"TOWER 2 / FILL REPLACEMENT","CELLS 5 TO 8 STRIPPED 10/02. NEW PACKS STAGED ON THE APRON.","SHELL CREW: THE SHELL HUMS WHEN THE PUMPS ARE OFF. LOGGED. NOT EXPLAINED.");
+ terminal(m,{21.25f,1.2f},"TOWER 2 / FILL REPLACEMENT","CELLS 5 TO 8 STRIPPED 10/02. NEW PACKS STAGED ON THE APRON.","SHELL CREW: THE SHELL HUMS WHEN THE PUMPS ARE OFF. LOGGED. NOT EXPLAINED.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=-kPi*.5f;
  // --- The shell stair --------------------------------------------------------------------
  // East wall up from the apron, round the south end, back up the west wall
@@ -833,7 +833,7 @@ std::shared_ptr<const Map> makeCoolingTowersShell(){
  // --- The fill gallery door --------------------------------------------------------------
  for(float y:{5.8f,10.f})wall(m,21.8f,y,22.f,y+.2f,L3,L3+3.f,12);
  wall(m,21.8f,5.8f,22.f,10.2f,L3+2.8f,L3+3.f,12);
- terminal(m,{22.5f,11.45f},"TOWER 2 / FILL GALLERY BOOK","HEAT EXCHANGE THROUGH THE EAST DOOR. SIGN THE BOOK.","03:10 TWO FROM SECURITY CAME UP THE STAIR. DID NOT SIGN. ASKED WHO WAS ON SHIFT.",L3-F);
+ terminal(m,{22.5f,11.45f},"TOWER 2 / FILL GALLERY BOOK","HEAT EXCHANGE THROUGH THE EAST DOOR. SIGN THE BOOK.","03:10 TWO FROM SECURITY CAME UP THE STAIR. DID NOT SIGN. ASKED WHO WAS ON SHIFT.",L3-F);m.terminals.back().readable=Readable::Note;
  // --- Light ------------------------------------------------------------------------------
  m.lights.push_back(watWall({21.98f,1.8f},F+2.4f,kPi,1.2f,6.f,4300,.2f));
  for(float y:{12.f,16.f})m.lights.push_back(watWall({21.98f,y},L1+2.2f,kPi,1.f,6.f,3000));
@@ -923,8 +923,8 @@ std::shared_ptr<const Map> makeHeatExchange(){
  wall(m,.8f,5.8f,1.f,10.2f,F+2.8f,F+3.f,12);
  wall(m,5.f,6.95f,5.2f,10.2f,F,R,15);wall(m,1.f,10.f,5.2f,10.2f,F,R,15);
  floorLine(m,1.f,7.9f,5.f,8.1f,F,14);
- wallSign(m,5.f-.055f,8.6f,F+1.35f,"GASKETS LIFTING","E-301 / E-304 / E-305 / STAND CLEAR WHEN IT HISSES",2.4f,-kPi*.5f);
- terminal(m,{2.4f,5.75f},"HEAT EXCHANGE / ROUNDS","LOOP 02:10 88 C. 02:40 91 C. 03:05 96 C. REACTOR SCRAMMED 01:47.","NOTHING IS HEATING THIS LOOP. IT IS STILL CLIMBING.");
+ wallSign(m,5.f-.055f,8.6f,F+1.35f,"GASKETS LIFTING","E-301 / E-304 / E-305 / STEAM RELEASE",2.4f,-kPi*.5f);
+ terminal(m,{2.4f,5.75f},"HEAT EXCHANGE / ROUNDS","LOOP 02:10 88 C. 02:40 91 C. 03:05 96 C. REACTOR SCRAMMED 01:47.","NOTHING IS HEATING THIS LOOP. IT IS STILL CLIMBING.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
  m.fixtures.push_back({model::pwr_locker_bank,{1.45f,9.45f},0,.87f,.85f,2.42f,-kPi*.5f,true});
  m.fixtures.push_back({model::pwr_fire_cabinet,{4.88f,6.5f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
@@ -994,7 +994,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  // The operator: told to wait, and he waited.
  watBody(m,"wat_hx_operator",{12.9f,19.6f},F,kPi*.8f);
  floorLine(m,12.5f,19.1f,13.6f,19.9f,F,16);
- terminal(m,{8.f,16.9f},"HX / SHIFT HANDOVER","03:14 TWO FROM SECURITY TOOK THE ROUNDS SHEET. ASKED WHO ELSE READ THE LOOP.","03:16 TOLD TO WAIT HERE FOR THE NEXT SHIFT.");
+ terminal(m,{8.f,16.9f},"HX / SHIFT HANDOVER","03:14 TWO FROM SECURITY TOOK THE ROUNDS SHEET. ASKED WHO ELSE READ THE LOOP.","03:16 TOLD TO WAIT HERE FOR THE NEXT SHIFT.");m.terminals.back().readable=Readable::Note;
  // The way on: a framed opening south to the Maintenance District.
  wall(m,10.f,23.f,14.f,24.f,F+3.2f,R,15);
  for(float x:{9.6f,14.f})wall(m,x,22.6f,x+.4f,23.f,F,F+3.2f,12);

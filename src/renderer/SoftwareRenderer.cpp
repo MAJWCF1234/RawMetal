@@ -145,6 +145,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   for(const auto&texture:m_workerTextures)m_gpu->prepare(texture);
   if(!m_logo.pixels.empty())m_gpu->prepare(m_logo);
   m_gpu->prepare(m_droneTexture);m_gpu->prepare(m_handgunTexture);
+  for(const auto&texture:m_paperProps)m_gpu->prepare(texture);
   for(const auto&role:m_cleanupTextures)for(const auto&texture:role)m_gpu->prepare(texture);
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(const auto&texture:m_surfaceTextures)m_gpu->prepare(texture);
@@ -422,6 +423,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  m_controlSign=makeSign("CONTROL GALLERY","SWITCHGEAR",0xffa7a766u);m_surfaceSign=makeSign("SURFACE LIFT","EXTRACTION",0xffa7a766u);
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
  m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
+ for(int kind=0;kind<3;++kind)m_paperProps[size_t(kind)]=makePaperProp(Readable(kind+1));
  m_noticeSigns[0]=makeSign("FREIGHT SERVICES","ACCESS SUSPENDED",0xffa7a766u);m_noticeSigns[1]=makeSign("PRIMARY UTILITIES","SERVICE ACCESS",0xffa7a766u);
  m_serviceAreaSigns[0]=makeSign("SERVICE STORES","SPARES / MAINTENANCE",0xff53aec4u);
  m_serviceAreaSigns[1]=makeSign("PRIMARY UTILITIES","PERMIT REQUIRED",0xffd7ac64u);
@@ -834,8 +836,66 @@ void SoftwareRenderer::drawHud(const Game& game){
 }
 // A terminal open on screen: the personnel computer full screen, or the
 // local-control panel. The desktop HUD and the VR panel both draw it.
+// Lying in the world a sheet is too small to read: stock, and lines of writing
+// that end ragged the way real lines do.
+SoftwareRenderer::Texture SoftwareRenderer::makePaperProp(Readable kind){
+ const bool sticky=kind==Readable::Sticky,letter=kind==Readable::Letter;
+ const int W=sticky?32:64,H=sticky?32:88;
+ Texture sheet{W,H,std::vector<std::uint32_t>(size_t(W)*H)};
+ const std::uint32_t stock=sticky?rgb(233,208,92):letter?rgb(232,228,214):rgb(226,222,204);
+ const std::uint32_t ink=sticky?rgb(30,30,30):letter?rgb(70,70,74):rgb(52,66,120);
+ for(int y=0;y<H;++y)for(int x=0;x<W;++x){
+  std::uint32_t c=stock;
+  if(!letter&&!sticky&&y>8&&(y-10)%6==0)c=rgb(170,186,210);
+  const int pitch=sticky?7:6,first=sticky?6:8,line=(y-first)/pitch,lineTop=first+line*pitch;
+  const bool writing=y>=first&&y-lineTop<2&&line<(sticky?3:12);
+  const unsigned h=unsigned(line+1)*2654435761u;const int end=W-6-int((h>>8)%unsigned(W/3));
+  if(writing&&x>=5&&x<end&&(x*7+line*3)%11!=0)c=ink;
+  sheet.pixels[size_t(y)*W+x]=c;
+ }
+ prepareDecal(sheet);return sheet;
+}
+// Paper is read in the hand, not on a screen: the sheet fills the middle of the
+// view with the room dimmed behind it. A printout is typed, a note or log book
+// is in pen on ruled paper, a sticky note is in marker.
+void SoftwareRenderer::drawPaper(const Game& game,int index){
+ const auto& paper=game.world().terminals()[size_t(index)];
+ const bool letter=paper.readable==Readable::Letter,sticky=paper.readable==Readable::Sticky;
+ fill(0,0,m_width,m_height,rgb(0,0,0),.62f);
+ const int sheetH=std::max(160,std::min(m_height-80,sticky?300:470)),sheetW=sticky?sheetH:int(sheetH*(letter?.71f:.74f));
+ const int left=(m_width-sheetW)/2,top=std::max(12,(m_height-sheetH)/2-14);
+ const std::uint32_t stock=sticky?rgb(233,208,92):letter?rgb(232,228,214):rgb(226,222,204);
+ fill(left+6,top+8,sheetW,sheetH,rgb(0,0,0),.45f);
+ fill(left,top,sheetW,sheetH,stock,1.f);
+ // A printout was folded to fit a pocket; every sheet darkens toward its edges.
+ if(letter)fill(left,top+sheetH/3,sheetW,1,rgb(180,176,160),.8f);
+ for(int ring=0;ring<6;++ring)frame(left+ring,top+ring,sheetW-ring*2,sheetH-ring*2,rgb(120,110,90),.05f*(6-ring));
+ const int face=letter?3:sticky?0:1,size=letter?15:sticky?24:19,lineH=letter?20:sticky?30:26;
+ const int margin=sticky?22:letter?32:54,width=sheetW-margin-(sticky?22:28);
+ const std::uint32_t ink=letter?rgb(38,38,42):sticky?rgb(24,24,24):rgb(30,44,104);
+ int row=top+(sticky?24:letter?36:38);
+ if(!letter&&!sticky){ // ruled notepad: a red margin and blue rules under each line
+  fill(left+margin-12,top,2,sheetH,rgb(200,120,120),.8f);
+  for(int y=row+size+4;y<top+sheetH-8;y+=lineH)fill(left+6,y,sheetW-12,1,rgb(150,170,200),.7f);
+ }
+ auto wrap=[&](const std::string& text,int textSize){
+  std::vector<std::string> rows;std::string line,word;
+  auto place=[&]{if(word.empty())return;const std::string next=line.empty()?word:line+' '+word;
+   if(!line.empty()&&uiTextWidth(next.c_str(),face,textSize)>width){rows.push_back(line);line=word;}else line=next;word.clear();};
+  for(char c:text){if(c==' ')place();else word+=c;}
+  place();if(!line.empty())rows.push_back(line);return rows;
+ };
+ // Pen does not keep a straight margin; type and marker do.
+ auto write=[&](const std::string& text,int textSize){for(const auto& line:wrap(text,textSize)){if(row>top+sheetH-lineH)return;
+   const int drift=letter||sticky?0:(row*7)%5-2;uiText(left+margin+drift,row,line.c_str(),ink,face,textSize);row+=lineH;}};
+ write(paper.title,size+4);row+=lineH/2;
+ write(paper.line1,size);row+=lineH/3;
+ write(paper.line2,size);
+ uiText(left,top+sheetH+12,m_vrRendering?"GRIP / PUT IT DOWN":"E / PUT IT DOWN",rgb(214,208,190),0,16);
+}
 void SoftwareRenderer::drawTerminal(const Game& game){
  const int cx=m_width/2;
+ if(game.logTime()>0&&game.activeLog()>=0&&game.world().terminals()[size_t(game.activeLog())].paper()){drawPaper(game,game.activeLog());return;}
  if(game.logTime()>0&&game.activeLog()>=0&&!game.world().terminals()[size_t(game.activeLog())].control&&game.world().terminals()[size_t(game.activeLog())].reactorAction<2){
   drawComputer(game,game.activeLog());
  }else if(game.logTime()>0&&game.activeLog()>=0){auto&log=game.world().terminals()[size_t(game.activeLog())];
@@ -903,9 +963,9 @@ void SoftwareRenderer::drawComputer(const Game& game,int index){
 void SoftwareRenderer::drawVrStatus(const Game&game){
  rect(0,0,m_width,m_height,0xff000000u);constexpr auto green=0xff69ff8au;char data[100];
  if(game.logTime()>0&&game.activeLog()>=0){const auto&log=game.world().terminals()[game.activeLog()];
-  text(24,20,log.reactorAction||log.activateState||log.control?"TERMINAL / LOCAL CONTROL":"TERMINAL / SHIFT LOG",green,3);
+  text(24,20,log.paper()?(log.readable==Readable::Letter?"PAPER / PRINTED":log.readable==Readable::Sticky?"PAPER / STICKY NOTE":"PAPER / HANDWRITTEN"):log.reactorAction||log.activateState||log.control?"TERMINAL / LOCAL CONTROL":"TERMINAL / SHIFT LOG",green,3);
   text(24,60,log.title,green,2);int row=95;auto lines=[&](const char*value){for(const auto&line:wrapUiText(value,70,4)){if(row>=250)break;text(24,row,line.c_str(),green,2);row+=22;}};
-  lines(log.line1);row+=12;lines(log.line2);text(24,270,terminalStatus(game,log),green);text(24,307,"CLOSE TERMINAL",green,3);return;
+  lines(log.line1);row+=12;lines(log.line2);if(!log.paper())text(24,270,terminalStatus(game,log),green);text(24,307,log.paper()?"PUT IT DOWN":"CLOSE TERMINAL",green,3);return;
  }
  text(24,20,"DEPTHWORKS / FIELD TERMINAL",green,3);rect(24,46,592,2,green);
  std::snprintf(data,sizeof(data),"HEALTH %03d",int(game.player().health));text(24,67,data,green,5);

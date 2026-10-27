@@ -4,6 +4,37 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.14.2 - Paper you can pick up (2026-10-26)
+
+A playtest patch, from what the testers walked into.
+
+Paper is paper now. A log book, a ledger, a manifest or a note left on a bench
+used to open the same green screen as the plant's computers. It lies on the
+bench as a sheet, and reading it puts the sheet in your hands: typed for a
+printout, in pen on ruled paper for a log or a note, in marker for a sticky
+note. The computers keep what a system writes: status, alarms, the PA, the
+badge run, the mail relay, a message thread.
+
+What happened tonight is no longer bolted to the walls on enamel plates. The
+roof fall in the deep cargo line, the depot lockdown, a jammed shutter, the
+condemned footbridge, the welded door at Checkpoint Delta, a sealed vehicle
+lock: each is a sheet taped up by whoever closed it, on the wall or on a
+crew's barrier, and you read it by walking up to it. The plates keep to what
+will still be true next year.
+
+No sign tells you which key to press any more, and no place is called by its
+number in our own manifest: what the game announced as "10 SURFACE LIFT" and
+"12A R-03 CONTROL" are the Surface Lift and R-03 Control.
+
+Clutter was laid out in a straight row in the reactor complex and on the depot
+platform. It is dropped, kicked and left where people stood.
+
+The map audit refuses each of those from here on: tonight's news on a
+permanent plate, a sign that names a key, a place titled by its manifest
+number, and four pieces of clutter in one straight row.
+
+---
+
 ## v0.14.1 - Developer mode gets through the chapter (2026-10-26)
 
 A playtest patch. Developer mode (`--dev`, or DEV in the console) counts

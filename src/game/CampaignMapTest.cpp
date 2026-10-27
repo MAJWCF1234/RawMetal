@@ -370,9 +370,11 @@ bool Game::testCampaignMaps(){
    auto a=queue.front();queue.pop();Vec2 p{(a.x+.5f)*.125f,(a.y+.5f)*.125f};
    low=std::min(low,a.z);high=std::max(high,a.z);
    for(size_t t=0;t<controlsReached.size();++t){const auto& terminal=game.world().terminals()[t];
-    float z=game.world().floorHeight(terminal.position.x,terminal.position.y)+terminal.z;
+    // A taped sheet is read standing about 1.5 m under it, as the game reads it.
+    const bool taped=terminal.paper()&&terminal.taped;
+    float z=game.world().floorHeight(terminal.position.x,terminal.position.y)+terminal.z-(taped?1.5f:0.f);
     nearest[t]=std::min(nearest[t],length(p-terminal.position)+std::fabs(a.z-z));
-    if(length(p-terminal.position)<1.6f&&std::fabs(a.z-z)<.3f)controlsReached[t]=true;
+    if(length(p-terminal.position)<1.6f&&std::fabs(a.z-z)<(taped?1.f:.3f))controlsReached[t]=true;
    }
    for(auto delta:{Vec2{-1,0},Vec2{1,0},Vec2{0,-1},Vec2{0,1}}){
     Node b{a.x+int(delta.x),a.y+int(delta.y),a.z};if(b.x<2||b.x>=190||b.y<2||b.y>=190)continue;

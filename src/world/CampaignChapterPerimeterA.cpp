@@ -312,7 +312,7 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(float x:{3.4f,4.4f,5.6f,6.6f})wall(m,x,7.46f,x+.08f,7.48f,f+2.02f,f+2.1f,x<5?19:18);
  for(float x:{3.6f,5.f,6.4f})perWallFix(m,model::lab_control_board,x,7.455f,f+.9f,1.32f,.19f,.6f,kPi);
  perDesk(m,5.f,9.4f,f,kPi,2);
- terminal(m,{6.6f,13.9f},"PERIMETER OPS / SHIFT LOG","02:51 DELTA-2 HAS THE YARD. OPS STAFF STOOD DOWN.","03:05 GATE RELEASE LOCKED TO THE GATEHOUSE / EAST.");
+ terminal(m,{6.6f,13.9f},"PERIMETER OPS / SHIFT LOG","02:51 DELTA-2 HAS THE YARD. OPS STAFF STOOD DOWN.","03:05 GATE RELEASE LOCKED TO THE GATEHOUSE / EAST.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=kPi;
  perFix(m,model::file_cabinet_tall,1.3f,14.4f,f,.5f,.6f,1.3f,kPi*.5f,true);
  perFix(m,model::water_cooler,8.9f,8.f,f,.35f,.35f,1.1f,0,true);
@@ -358,7 +358,7 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(float x:{17.1f,18.1f}){m.fixtures.push_back({model::wooden_chair,{x,17.6f},0,.417f,.525f,.95f,0,true});m.fixtures.push_back({model::wooden_chair,{x,19.2f},0,.417f,.525f,.95f,kPi,true});}
  perFix(m,model::mug,17.3f,18.3f,f+.78f,.09f,.09f,.1f,0,false);
  perFix(m,model::binder,17.9f,18.5f,f+.78f,.3f,.08f,.32f,.4f,false);
- terminal(m,{16.2f,15.f},"PERIMETER / DUTY BOARD","ORDER 7 IN EFFECT: NO STAFF PAST DELTA. NO EXCEPTIONS.","WRITTEN UNDER IT IN PEN: WHO SIGNED THIS?");
+ terminal(m,{16.2f,15.f},"PERIMETER / DUTY BOARD","ORDER 7 IN EFFECT: NO STAFF PAST DELTA. NO EXCEPTIONS.","WRITTEN UNDER IT IN PEN: WHO SIGNED THIS?");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=0;
  perWallFix(m,model::lab_notice_board,18.4f,14.27f,f+.95f,1.2f,.07f,.9f,kPi);
  perFix(m,model::coffee_machine,15.f,21.4f,f+.8f,.35f,.35f,.45f,kPi*.5f,false);
@@ -480,7 +480,8 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  for(float z=f+.25f;z<f+4.5f;z+=.3f)wall(m,1.18f,6.1f,1.22f,11.6f,z,z+.05f,2);
  for(float y:{6.1f,11.52f})wall(m,1.18f,y,1.26f,y+.08f,f,f+4.6f,8);
  floorLine(m,1.3f,6.1f,2.4f,11.6f,f,13);
- perSign(m,1.245f,8.85f,f+2.4f,"VEHICLE LOCK 2","SEALED 02:51 BY DELTA-2 / NO VEHICLE MOVEMENTS",3.f,kPi*.5f,perRed);
+ perSign(m,1.245f,8.85f,f+2.4f,"VEHICLE LOCK 2","VEHICLES ONLY / NO PEDESTRIANS",3.f,kPi*.5f,perRed);
+ taped(m,{1.19f,7.6f},f+1.45f,kPi*.5f,Readable::Letter,"LOCK 2 SEALED","02:51 BY DELTA-2. NO VEHICLE MOVEMENTS.","ORDER 7");
  wall(m,1.f,8.8f,1.62f,8.9f,f+5.38f,f+5.48f,8);
  m.pipes.push_back({{1.6f,8.85f},{1.8f,8.85f},f+5.43f,.16f,f+5.43f,4});
  perWallFix(m,model::pwr_disconnect_switch,1.18f,12.75f,f+1.f,.43f,.35f,.85f,kPi*.5f);
@@ -631,7 +632,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  terminal(m,{12.f,12.f},"PERIMETER GATE / RELEASE","E / RELEASE THE YARD'S SOUTH GATE TO CHECKPOINT DELTA.","DELTA IS THROUGH THE SOUTH GATE, BACK ACROSS THE YARD.",0,stateId("perim_gate"));
  m.terminals.back().yaw=kPi;
  perDesk(m,14.6f,9.f,f,kPi*.5f,1);
- terminal(m,{11.6f,7.f},"GATEHOUSE / DETAIL LOG","03:10 YARD SECURE. 14 PROCESSED THROUGH DELTA. 0 ESCAPED.","ORDER 7: NO ONE LEAVES THE SUB-LEVELS. ANYONE IN A SHIFT BADGE IS STAFF.");
+ terminal(m,{11.6f,7.f},"GATEHOUSE / DETAIL LOG","03:10 YARD SECURE. 14 PROCESSED THROUGH DELTA. 0 ESCAPED.","ORDER 7: NO ONE LEAVES THE SUB-LEVELS. ANYONE IN A SHIFT BADGE IS STAFF.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
  // --- The bunk room -----------------------------------------------------------------------------
  wall(m,16.6f,6.2f,16.8f,12.f,f,top,21);wall(m,16.6f,13.6f,16.8f,16.8f,f,top,21);wall(m,16.6f,12.f,16.8f,13.6f,f+2.2f,top,21);
@@ -684,7 +685,7 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  wall(m,6.f,5.f,6.12f,16.f,mz,mz+1.f,21);perWindow(m,6.f,5.f,6.12f,16.f,mz+1.f,mz+2.5f);
  wall(m,6.f,5.f,6.12f,16.f,mz+2.55f,roof,21);
  for(float y:{7.f,10.f,13.f})perDesk(m,4.4f,y,mz,kPi*.5f,int(y));
- terminal(m,{2.f,6.f},"DELTA / PROCESSING TALLY","IN: 14 STAFF. OUT: 0. TRANSIT SEALED 02:40 BY ORDER 7.","SOUTH DOOR ON THE CHIEF'S OVERRIDE ONLY. ADEYEMI NEVER CAME DOWN FROM ADMIN.",mz-f);
+ terminal(m,{2.f,6.f},"DELTA / PROCESSING TALLY","IN: 14 STAFF. OUT: 0. TRANSIT SEALED 02:40 BY ORDER 7.","SOUTH DOOR ON THE CHIEF'S OVERRIDE ONLY. ADEYEMI NEVER CAME DOWN FROM ADMIN.",mz-f);m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
  // --- The inspection lane: scanner portal, turnstiles and the sentry desk --------------------------
  for(float x:{9.f,15.f}){wall(m,x-.15f,4.5f,x+.15f,6.f,f,f+2.6f,20);}
@@ -707,7 +708,7 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  perFix(m,model::med_ward_bed_tossed,21.2f,18.f,f,2.1f,1.5f,.84f,kPi*.5f,true);
  // The door in the north-east corner, welded shut with plate.
  wall(m,22.6f,.95f,23.f,2.95f,f,f+2.4f,7);wall(m,22.55f,1.f,22.6f,2.9f,f+.1f,f+2.3f,11);
- perSign(m,22.495f,1.95f,f+1.2f,"DO NOT OPEN","WELDED 02:52 / ORDER 7",1.2f,-kPi*.5f,perRed);
+ taped(m,{22.55f,1.95f},f+1.45f,-kPi*.5f,Readable::Note,"DO NOT OPEN","WELDED 02:52. ORDER 7.","WHATEVER YOU HEAR BEHIND IT.");
  // --- The south door ---------------------------------------------------------------------------
  perSign(m,18.f,22.945f,f+1.6f,"SOUTH DOOR","CHIEF'S OVERRIDE REQUIRED",2.2f,kPi,perRed);
  // --- Who is still here -----------------------------------------------------------------------
@@ -764,7 +765,7 @@ std::shared_ptr<const Map> makeAdministrativeLink(){
  for(float x:{14.f,17.f})perFix(m,model::file_cabinet_tall,x,1.45f,o,.5f,.6f,1.4f,0,true);
  perFix(m,model::water_cooler,22.5f,2.f,o,.4f,.4f,1.2f,-kPi*.5f,true);
  perFix(m,model::lab_photocopier,22.4f,5.f,o,.83f,.75f,.97f,-kPi*.5f,true);
- terminal(m,{19.f,13.f},"ADMIN / PERSONNEL NOTICE","02:40 ALL SUB-LEVEL BADGES REVOKED. REPORT TO DELTA FOR PROCESSING.","THIS IS A ROUTINE SECURITY MEASURE. YOUR COOPERATION IS VALUED.",o-f);
+ terminal(m,{19.f,13.f},"ADMIN / PERSONNEL NOTICE","02:40 ALL SUB-LEVEL BADGES REVOKED. REPORT TO DELTA FOR PROCESSING.","THIS IS A ROUTINE SECURITY MEASURE. YOUR COOPERATION IS VALUED.",o-f);m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=.001f;
  // --- Records (centre) --------------------------------------------------------------------------
  officeWall(m,10.f,1.f,10.15f,9.f,o,ceil);officeWall(m,10.f,10.6f,10.15f,13.f,o,ceil);
@@ -826,7 +827,7 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  for(float x:{1.f,22.6f}){wall(m,x,8.f,x+.4f,13.f,bed,bed+.3f,15);wall(m,x,8.2f,x+.4f,12.8f,bed+.3f,bed+3.6f,7);}
  // --- North platform: the dead lifts and the departure board --------------------------------------
  for(float x:{4.f,19.f}){wall(m,x-1.f,1.f,x+1.f,1.3f,f,f+2.4f,7);wall(m,x-1.f,1.f,x+1.f,1.3f,f+2.4f,f+3.5f,15);}
- perHangingSign(m,12.f,5.f,f+2.6f,false,3.2f,"PLATFORM B / TRAM 4","HELD 02:40 / ORDER 7","PLATFORM B","WAY OUT: WEST WALKWAY",perBlue,roof);
+ perHangingSign(m,12.f,5.f,f+2.6f,false,3.2f,"PLATFORM B / TRAM 4","SERVICES FROM THIS PLATFORM","PLATFORM B","WAY OUT: WEST WALKWAY",perBlue,roof);
  for(float x:{7.f,16.f})perFix(m,model::platform_chair,x,6.4f,f,1.8f,.5f,.8f,kPi,true);
  perFix(m,model::metro_vending,21.6f,3.f,f,1.5f,.68f,2.38f,-kPi*.5f,true);
  // --- South platform: what happened when the doors opened ----------------------------------------
@@ -835,7 +836,7 @@ std::shared_ptr<const Map> makePersonnelTransit(){
  perBlood(m,15.4f,13.8f,18.2f,15.6f,f);
  for(Vec2 b:{Vec2{10.2f,17.f},Vec2{11.f,16.4f},Vec2{20.2f,18.f}})m.clutterSpawns.push_back({0,b,f,b.x});
  perFix(m,model::ind_crate,21.f,21.4f,f,.8f,.8f,.8f,.3f,true);
- terminal(m,{8.f,21.f},"TRANSIT / PLATFORM B LOG","TRAM 4 HELD 02:40. 31 ABOARD. DOORS LOCKED BY ORDER 7.","03:05 DOORS OPENED BY CLEANUP. 03:20 PLATFORM CLEAR.",f-bed);
+ terminal(m,{8.f,21.f},"TRANSIT / PLATFORM B LOG","TRAM 4 HELD 02:40. 31 ABOARD. DOORS LOCKED BY ORDER 7.","03:05 DOORS OPENED BY CLEANUP. 03:20 PLATFORM CLEAR.",f-bed);m.terminals.back().readable=Readable::Note;
  machineryClock(m,"per_transit_clock",60000);
  // --- Something is still on the tram: one of Tram 4's thirty-one -----------------------------------
  // It waits on the track bed behind the car's east end; when the player heads

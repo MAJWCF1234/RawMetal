@@ -1081,6 +1081,19 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--guard-ai-test"))return retro::Game::testGuardAI()?0:21;
     if(commandArguments().find(L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
     if(commandArguments().find(L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
+    // --terminal-inspection=LEVEL,TITLE: the first terminal or paper on that map
+    // whose title contains TITLE, rendered open as the player reads it.
+    if(auto arg=commandArguments().find(L"--terminal-inspection=")){
+     const std::wstring value(arg+22);const auto comma=value.find(L',');if(comma==std::wstring::npos)return 2;
+     const int level=_wtoi(value.substr(0,comma).c_str());std::string title;for(auto c:value.substr(comma+1))title+=char(c);
+     auto probe=retro::Game::mapInspection({12,12},0,0,level,false,-999,false);int index=-1;
+     for(size_t i=0;i<probe.world().terminals().size()&&index<0;++i)if(std::string(probe.world().terminals()[i].title).find(title)!=std::string::npos)index=int(i);
+     if(index<0)return 2;
+     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
+     auto scene=retro::Game::terminalInspection(level,index);renderer.render(scene);
+     std::filesystem::create_directories(".build/shot");std::ofstream out(".build/shot/terminal-"+std::to_string(level)+"-"+std::to_string(index)+".ppm",std::ios::binary);
+     out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}return 0;
+    }
     if(commandArguments().find(L"--freight-repair-inspection")){
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
      const char* names[]={"repair-van","repair-machinery","repair-cage","repair-intake-header","repair-terminal-warehouse","repair-terminal-legacy","repair-van-left","repair-van-right"};

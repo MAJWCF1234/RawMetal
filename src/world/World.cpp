@@ -203,13 +203,15 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  return std::fabs(dx*c-dy*s)<fixture.width*fixture.core*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*fixture.core*.5f+margin;
 }
 constexpr float ShelfTiers[]={.17f,.54f,.92f};
-bool benchTerminal(const World& world,const Terminal& terminal){return world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;} // Reactor consoles keep their own housing.
+bool benchTerminal(const World& world,const Terminal& terminal){return terminal.paper()?!terminal.taped:world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;} // Reactor consoles keep their own housing.
 bool insideTerminal(const World& world,const Terminal& terminal,float x,float y){
+ if(terminal.paper()&&terminal.taped)return false;
  if(benchTerminal(world,terminal))return x>terminal.position.x-.48f&&x<terminal.position.x+.42f&&std::fabs(y-terminal.position.y)<.36f;
  return std::fabs(x-terminal.position.x)<.27f&&std::fabs(y-terminal.position.y)<.18f;
 }
 float terminalHeight(const World& world,const Terminal& terminal,float x,float y){
  if(!benchTerminal(world,terminal))return .95f;
+ if(terminal.paper())return .815f; // the bench top: no monitor, no keyboard
  float yaw=world.level()==6&&!world.authored()?-kPi*.5f:terminal.yaw,c=std::cos(yaw),s=std::sin(yaw);
  float dx=x-terminal.position.x,dy=y-terminal.position.y;
  // The monitor has its own narrow footprint. Treating its full height as a
@@ -279,7 +281,7 @@ void World::settleExclusionFacilityOnTerrain(){
  m_mapData=std::move(data);
  // Rebuild terminal views from the settled map so title strings stay owned.
  m_terminals.clear();m_terminals.reserve(m_mapData->terminals.size());
- for(const auto&source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState});
+ for(const auto&source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped});
  m_actorPoses.clear();for(const auto&track:m_mapData->actorTracks)m_actorPoses.push_back(track.idleKeys.empty()?sampleActor(track,0):sampleActorKeys(track.idleKeys,0,true));
  m_structureCells.assign(size_t(Width*Height),{});
  if(m_structures.size()>65535)throw std::runtime_error("Exclusion facility exceeds the collision structure capacity");
@@ -371,7 +373,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   m_layers.push_back({source.name,source.elevation,source.thickness,rows});
  }
  m_terminals.reserve(m_mapData->terminals.size());
- for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState});
+ for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped});
  buildLayers(m_mapData->stairs);
  if(hasLift())refreshReactorTerminals();
  // Outdoor wasteland custom packs own a world-space Surface Nets heightfield so
@@ -762,6 +764,7 @@ void World::buildCollisionCandidates()const{
   // Lift-control consoles can travel without changing the terminal count.
   // Include them in every cell; the original exact tests still decide hits.
   if(t.control){add(2,i,0,0,Width,Height);continue;}
+  if(t.paper()&&t.taped)continue;
   bool desk=benchTerminal(*this,t);add(2,i,t.position.x-(desk?.48f:.27f),t.position.y-(desk?.36f:.18f),t.position.x+(desk?.42f:.27f),t.position.y+(desk?.36f:.18f));
  }
 }
@@ -931,8 +934,9 @@ void World::buildLightOcclusion()const{
   }else oriented(f.position,f.width,f.depth,base,base+f.height,f.yaw);
  }
  for(const auto&p:m_props){float base=floorHeight(p.position.x,p.position.y)+p.base;box(p.position.x-p.halfSize.x,p.position.y-p.halfSize.y,p.position.x+p.halfSize.x,p.position.y+p.halfSize.y,base,base+p.height);}
- for(const auto&t:m_terminals){if(hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;
-  if(benchTerminal(*this,t)){box(t.position.x-.48f,t.position.y-.36f,t.position.x+.42f,t.position.y+.36f,base+.74f,base+.815f);oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6?-kPi*.5f:t.yaw);}
+ for(const auto&t:m_terminals){if((hasLift()&&t.control)||(t.paper()&&t.taped))continue;float base=floorHeight(t.position.x,t.position.y)+t.z;
+  if(benchTerminal(*this,t)&&t.paper())box(t.position.x-.48f,t.position.y-.36f,t.position.x+.42f,t.position.y+.36f,base+.74f,base+.815f);
+  else if(benchTerminal(*this,t)){box(t.position.x-.48f,t.position.y-.36f,t.position.x+.42f,t.position.y+.36f,base+.74f,base+.815f);oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6?-kPi*.5f:t.yaw);}
   else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
  }
  for(const auto&d:m_doors){float base=floorHeight((d.left+d.right)*.5f,d.y)+d.z;box(d.left,d.y-.10f,d.right,d.y+.10f,base+2.5f,ceilingHeight((d.left+d.right)*.5f,d.y));}

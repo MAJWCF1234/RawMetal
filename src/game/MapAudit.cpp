@@ -1,3 +1,4 @@
+#include <cctype>
 #include "Game.h"
 #include "../world/CampaignMaps.h"
 #include <fstream>
@@ -127,11 +128,14 @@ bool Game::auditMap(int level){
  // A terminal is usable only from a reachable spot within 1.5 m that sees it.
  auto usable=[&](const Terminal& t){
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;
+  // Paper is read off its bench top, or off the wall at about eye height.
+  const float stand=t.paper()&&t.taped?base-1.5f:base,aim=t.paper()?(t.taped?0.f:1.1f):1.4f;
+  const Vec2 target=t.paper()&&t.taped?t.position+Vec2{std::sin(t.yaw),std::cos(t.yaw)}*.05f:t.position;
   int r=int(std::ceil(1.5f/Cell));int cx=int(t.position.x/Cell),cy=int(t.position.y/Cell);
   for(int y=cy-r;y<=cy+r;++y)for(int x=cx-r;x<=cx+r;++x){if(x<0||y<0||x>=N||y>=N)continue;
    Vec2 spot{(x+.5f)*Cell,(y+.5f)*Cell};if(length(spot-t.position)>1.5f)continue;
    // Sight line to just above the console (a bench monitor stands 1.32 m).
-   for(float v:visited[size_t(y*N+x)])if(std::fabs(v-base)<1.2f&&w.rayClear(spot,v+1.5f,t.position,base+1.4f,false,false))return true;}
+   for(float v:visited[size_t(y*N+x)])if(std::fabs(v-stand)<1.2f&&w.rayClear(spot,v+1.5f,target,base+aim,false,false))return true;}
   return false;
  };
  for(const auto& t:w.terminals()){
@@ -139,7 +143,10 @@ bool Game::auditMap(int level){
   std::string name=std::string("terminal '")+t.title+"' at "+at(t.position);
   check(usable(t),name);
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;
-  if(std::fabs(w.supportBelow(t.position.x,t.position.y,base+.05f)-base)>.06f)fail("FLOATING "+name);
+  // A taped sheet hangs on a wall: solid five centimetres behind it.
+  if(t.paper()&&t.taped){const Vec2 behind=t.position-Vec2{std::sin(t.yaw),std::cos(t.yaw)}*.05f;
+   if(w.fits(behind.x,behind.y,base,.015f,false))fail("FLOATING "+name+" (no wall behind the tape)");}
+  else if(std::fabs(w.supportBelow(t.position.x,t.position.y,base+.05f)-base)>.06f)fail("FLOATING "+name);
  }
  // A transfer door has one authored base. Open seams may carry more than
  // one floor (e.g. the reactor's containment corridor and upper manifold).
@@ -330,6 +337,48 @@ bool Game::auditMap(int level){
  if(signs.size()>3)fail("SIGNAGE "+std::to_string(signs.size())+" signs (budget 3)");
  for(size_t i=0;i<signs.size();++i)for(size_t j=i+1;j<signs.size();++j)
   if(signs[i].title==signs[j].title)fail("SIGNAGE duplicate '"+signs[i].title+"'");
+ // A plate is bolted up for something that will still be true next year. What
+ // happened tonight is taped up, chalked or left on a desk by whoever saw it,
+ // and nothing in the world names a key: the player is not reading a manual.
+ auto word=[](const std::string& text,const char* term){
+  const std::string needle(term);
+  for(size_t at=text.find(needle);at!=std::string::npos;at=text.find(needle,at+1)){
+   const bool before=at==0||text[at-1]==' '||text[at-1]=='/';
+   const size_t end=at+needle.size();
+   const bool after=end>=text.size()||text[end]==' '||text[end]=='/';
+   if(before&&after)return true;
+  }
+  return false;
+ };
+ for(const auto& s:signs){
+  const std::string text=s.title+" / "+s.subtitle;
+  for(const char* key:{"Q","E","F","WASD","LMB","RMB"})
+   if(word(text,key)){fail("SIGNAGE '"+s.title+"' names a key the player presses");break;}
+  bool tonight=false;
+  for(size_t i=0;i+4<=text.size();++i)
+   if(std::isdigit(static_cast<unsigned char>(text[i]))&&std::isdigit(static_cast<unsigned char>(text[i+1]))&&text[i+2]==':'&&std::isdigit(static_cast<unsigned char>(text[i+3])))tonight=true;
+  for(const char* term:{"CLOSED","BLOCKED","JAMMED","FAILED","CONDEMNED","LOCKDOWN","DISPLACED","WELDED"})tonight=tonight||word(text,term);
+  if(tonight)fail("SIGNAGE '"+s.title+"' bolts tonight's news to a permanent plate");
+ }
+ // A place is called what the plant calls it, never its number in the manifest.
+ for(const auto& z:w.zones())for(const std::string& name:{z.name,z.title})
+  if(name.size()>2&&std::isdigit(static_cast<unsigned char>(name[0]))&&(std::isdigit(static_cast<unsigned char>(name[1]))||name[1]==' '))
+   fail("AREA TITLE '"+name+"' carries a manifest number");
+ // Clutter is dropped, kicked and left where people stood. Pieces scattered
+ // across a hall can fall on one line by chance; what reads as a row is four
+ // of them within arm's reach of each other along it.
+ {const auto& junk=w.clutterSpawns();bool lined=false;
+  for(size_t i=0;i<junk.size()&&!lined;++i)for(size_t j=i+1;j<junk.size()&&!lined;++j){
+   const Vec2 a=junk[i].position,b=junk[j].position,d=b-a;const float span=length(d);
+   if(span<.2f)continue;
+   const Vec2 n{-d.y/span,d.x/span},along{d.x/span,d.y/span};
+   std::vector<float> seats;
+   for(const auto& c:junk)if(std::fabs(dot(c.position-a,n))<.1f)seats.push_back(dot(c.position-a,along));
+   std::sort(seats.begin(),seats.end());
+   int run=1,longest=1;
+   for(size_t k=1;k<seats.size();++k){run=seats[k]-seats[k-1]<=1.5f?run+1:1;longest=std::max(longest,run);}
+   if(longest>=4){fail("CLUTTER "+std::to_string(longest)+" pieces in one straight row through "+at(a));lined=true;}
+  }}
  // Props: a solid prop stands on a floor, slab or another prop, is not sunk
  // into walls or into structure at eye level (a column may meet a roof truss),
  // and does not interpenetrate another solid prop.

@@ -231,7 +231,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  for(float x:{18.4f,21.7f})m.fixtures.push_back({model::lab_control_board,{x,1.24f},fd-base+.05f,1.32f,.19f,.6f,kPi,false});
  terminal(m,{18.8f,3.3f},"CASCADE CONTROL / STATUS","SUPPLY SF-1, SF-2 STOPPED: SECURITY ORDER 7, 02:20.","EXHAUST RUNNING. LABS -310 PA. LOCKS INTERLOCKED.",fd-base);
  terminal(m,{20.7f,3.3f},"SUPPLY FAN SF-2 / RESTART","INTERLOCK: OUTSIDE AIR DAMPER OA-2 MUST BE OPEN.","OA-2 LOCKED OUT: OPEN IT BY HAND, FAN DECK WEST END.",fd-base,supply,damper);
- terminal(m,{22.3f,6.1f},"CASCADE / DUTY LOG","02:20 ORDER 7: STOP LAB SUPPLY. 38 BADGES STILL INSIDE.","02:23 ASKED WHO SIGNED IT. THEY SAID OPEN THE DOOR.",fd-base);m.terminals.back().yaw=-kPi*.5f;
+ terminal(m,{22.3f,6.1f},"CASCADE / DUTY LOG","02:20 ORDER 7: STOP LAB SUPPLY. 38 BADGES STILL INSIDE.","02:23 ASKED WHO SIGNED IT. THEY SAID OPEN THE DOOR.",fd-base);m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=-kPi*.5f;
  for(float x:{18.8f,20.9f})m.fixtures.push_back({model::office_chair,{x,4.15f},fd-base,.55f,.55f,.95f,x<19?.2f:-.5f,true});
  m.fixtures.push_back({model::file_cabinet_wide,{22.7f,8.f},fd-base,.9f,.5f,.75f,-kPi*.5f,true});
  m.fixtures.push_back({model::cctv_tv,{22.7f,8.f},fd-base+.75f,.5f,.4f,.42f,-kPi*.5f,false});
@@ -267,7 +267,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
   wall(m,7.13f,y+.5f,7.17f,y+.7f,base+1.05f,base+1.25f,8);
   pipeRoute(m,{{6.4f,y+.6f,base+1.95f},{6.4f,y+.6f,-15.6f},{4.45f,y+.6f,-15.6f}},.14f,0,roof);
  }
- terminal(m,{6.4f,12.2f},"CONTAINMENT EXHAUST / EX-1","TRAP CARTRIDGES CHANGED 3 TIMES THIS WEEK. SPEC: QUARTERLY.","SPENT UNITS GO BACK TO ENERGY RESEARCH. DO NOT OPEN.");
+ terminal(m,{6.4f,12.2f},"CONTAINMENT EXHAUST / EX-1","TRAP CARTRIDGES CHANGED 3 TIMES THIS WEEK. SPEC: QUARTERLY.","SPENT UNITS GO BACK TO ENERGY RESEARCH. DO NOT OPEN.");m.terminals.back().readable=Readable::Letter;
  m.fixtures.push_back({model::pwr_duct_fan_unit,{1.42f,12.9f},0,.79f,1.49f,1.95f,0,true});
  for(float x:{5.4f,6.7f}){m.fixtures.push_back({model::pallet,{x,22.3f},0,1.2f,1.15f,.16f,0,true});
   m.fixtures.push_back({model::lab_specimen_crate,{x,22.3f},.16f,1.f,1.f,1.f,x>6?.25f:0,true});}
@@ -426,12 +426,12 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  ceilingGrid(m,12.4f,1.f,17.6f,4.2f,oc);
  workstation(m,14.5f,3.25f,base,1,2);
  pbFix(m,model::lab_desk_lamp,15.05f,3.4f,base+.75f,.18f,.4f,.52f,kPi,false);
- terminal(m,{13.3f,1.6f},"RESEARCH RECEIVING / HOLD LOG","01:50 R-114 KNOCKING. LOGGED AS LOAD SETTLING.","02:31 R-114 OPEN. LATCHES BENT OUTWARD. NOT LOGGED.");m.terminals.back().yaw=pbS;
- terminal(m,{17.05f,2.5f},"TRAIN 27 / RECEIVED HERE","01:40 OFF-BOOK UNLOAD: 6 RESEARCH CONTAINERS.","FREIGHT TO RECORD CARGO: NONE. HOLD PER ORDER 7.");m.terminals.back().yaw=pbW;
+ terminal(m,{13.3f,1.6f},"RESEARCH RECEIVING / HOLD LOG","01:50 R-114 KNOCKING. LOGGED AS LOAD SETTLING.","02:31 R-114 OPEN. LATCHES BENT OUTWARD. NOT LOGGED.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=pbS;
+ terminal(m,{17.05f,2.5f},"TRAIN 27 / RECEIVED HERE","01:40 OFF-BOOK UNLOAD: 6 RESEARCH CONTAINERS.","FREIGHT TO RECORD CARGO: NONE. HOLD PER ORDER 7.");m.terminals.back().readable=Readable::Letter;m.terminals.back().yaw=pbW;
  pbFix(m,model::file_cabinet_tall,12.75f,3.75f,base,.5f,.6f,1.3f,pbE,true);
  pbFix(m,model::file_cabinet_wide,15.6f,1.3f,base,.9f,.5f,.75f,pbS,true);
  pbFix(m,model::cctv_tv,15.6f,1.3f,base+.75f,.5f,.4f,.42f,pbS,false);
- terminal(m,{13.7f,5.f},"PERSONNEL SORT / SHIFT 02","ARRIVALS 31. CLEARED TO DECON 27. HELD FOR SCREENING 4.","HELD STAFF: MEDICAL ESCORT ONLY. DO NOT INFORM THEM.");m.terminals.back().yaw=pbS;
+ terminal(m,{13.7f,5.f},"PERSONNEL SORT / SHIFT 02","ARRIVALS 31. CLEARED TO DECON 27. HELD FOR SCREENING 4.","HELD STAFF: MEDICAL ESCORT ONLY. DO NOT INFORM THEM.");m.terminals.back().readable=Readable::Letter;m.terminals.back().yaw=pbS;
  for(float x:{16.6f,19.6f})for(float y:{4.9f,5.65f}){m.pipes.push_back({{x,y},{x,y},base,.035f,base+.95f,5});m.pipes.push_back({{x,y},{x,y},base,.17f,base+.03f,6});wall(m,x-.06f,y-.06f,x+.06f,y+.06f,base,base+.95f,CollisionProxyMaterial);}
  for(float y:{4.9f,5.65f})wall(m,16.6f,y-.015f,19.6f,y+.015f,base+.83f,base+.89f,19);
  // The staff lane: glazed on the hall side, its door locked since the lockdown.
@@ -440,7 +440,7 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  for(float x:{19.92f,22.6f})wall(m,x,5.86f,x+.08f,6.14f,base,base+2.7f,20);
  {Door d{20.f,22.6f,6.f,0};d.requireState=staff;m.doors.push_back(d);}
  pbFix(m,model::lab_door_reader,19.45f,5.64f,base,.85f,.52f,2.39f,0,false);
- pbSign(m,18.5f,5.845f,base+1.45f,"LOCKDOWN 02:09","RELEASE FROM CLEAN SIDE",.95f,kPi,pbRed);
+ taped(m,{18.5f,5.9f},base+1.5f,kPi,Readable::Letter,"LOCKDOWN 02:09","RELEASE FROM THE CLEAN SIDE ONLY.","CLEANUP 2");
  m.stairs.push_back({20.8f,12.5f,22.8f,17.f,base,gz,16,true,true});
  for(float y:{7.6f,8.5f,9.4f})pbLockers(m,22.5f,y,base,pbW);
  bench(m,19.8f,10.8f,base);
@@ -612,7 +612,7 @@ std::shared_ptr<const Map> makeDecontamination(){
  pbFix(m,model::file_cabinet_tall,22.6f,6.6f,f,.5f,.6f,1.3f,pbW,true);
  pbFix(m,model::water_cooler,19.f,1.35f,f,.35f,.35f,1.1f,pbS,true);
  pbFix(m,model::lab_wall_clock,18.f,1.03f,f+2.3f,.4f,.03f,.4f,kPi,false);
- terminal(m,{14.45f,4.f},"DECON 1 / OPERATOR LOG","02:20 SUPPLY LOST. CHAMBER SEALED. RELEASE ASKED 02:21, 02:24, 02:31.","03:12 CLEAN DOOR OPENED BY CLEANUP OVERRIDE. 03:13 CLOSED.");m.terminals.back().yaw=pbW;
+ terminal(m,{14.45f,4.f},"DECON 1 / OPERATOR LOG","02:20 SUPPLY LOST. CHAMBER SEALED. RELEASE ASKED 02:21, 02:24, 02:31.","03:12 CLEAN DOOR OPENED BY CLEANUP OVERRIDE. 03:13 CLOSED.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=pbW;
  m.lights.push_back(lamp({19.f,4.2f},ceil-.16f,.9f,6.f,5200,.03f));
  // --- Stage 2: the shower ------------------------------------------------------------
  for(float x:{9.2f,14.6f})wall(m,x,7.6f,x+.2f,11.4f,f,ceil,27);
@@ -689,7 +689,7 @@ std::shared_ptr<const Map> makeDecontamination(){
  for(float x:{3.f,6.f})floorLine(m,x,19.4f,x+1.2f,19.52f,f,13);
  for(int i=0;i<8;++i)pbLockers(m,1.5f+i*.9f,22.55f,f,pbN);
  pbFix(m,model::med_washroom_mirror,1.03f,20.4f,f+1.1f,1.5f,.04f,1.f,pbE,false);
- terminal(m,{16.5f,18.2f},"DECON 1 / CLEAN-SIDE LOG","OUT 01:58: 6 STAFF TO THE COURT. IN SINCE 02:09: NONE.","03:05 CLEANUP 2 SIGNED IN: HOLD DECON 1. NOBODY GOES UP.");m.terminals.back().yaw=pbS;
+ terminal(m,{16.5f,18.2f},"DECON 1 / CLEAN-SIDE LOG","OUT 01:58: 6 STAFF TO THE COURT. IN SINCE 02:09: NONE.","03:05 CLEANUP 2 SIGNED IN: HOLD DECON 1. NOBODY GOES UP.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=pbS;
  pbFix(m,model::water_cooler,22.5f,18.1f,f,.35f,.35f,1.1f,pbW,true);
  pbFix(m,model::lab_potted_plant,22.4f,22.4f,f,.5f,.58f,.93f,0,false);
  bench(m,20.5f,22.3f,f);
@@ -765,7 +765,7 @@ std::shared_ptr<const Map> makeEnergyResearchForecourt(){
  pbFix(m,model::lab_potted_plant,9.f,3.2f,f,.37f,.43f,.69f,0,false);pbFix(m,model::lab_potted_plant,3.f,3.f,f,.37f,.43f,.69f,0,false);
  terminal(m,{16.2f,3.6f},"VISITOR CENTRE / WELCOME FILM","\"DEEP BENEATH YOUR FEET, A NEW KIND OF POWER WAITS.\" (03:12 RUNTIME)","\"DEPTHWORKS: WE GO DOWN SO THE WORLD CAN GO FORWARD.\"");
  m.terminals.back().yaw=pbS;
- terminal(m,{7.8f,4.6f},"RECEPTION / VISITOR LOG","LAST VISITOR: BOARD TOUR, 01:30. 6 GUESTS. SIGNED OUT: 0.","NOTE: TOUR HELD IN RESEARCH ADMINISTRATION BY ORDER 7.");
+ terminal(m,{7.8f,4.6f},"RECEPTION / VISITOR LOG","LAST VISITOR: BOARD TOUR, 01:30. 6 GUESTS. SIGNED OUT: 0.","NOTE: TOUR HELD IN RESEARCH ADMINISTRATION BY ORDER 7.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=pbS;
  // --- The firing lane: barriers the Cleanup Force dragged across the hall -------------------------
  for(float x:{3.f,9.f,15.f,21.f})pbFix(m,model::ind_barrier_wall,x,20.6f,f,2.96f,.4f,2.05f,0,true);

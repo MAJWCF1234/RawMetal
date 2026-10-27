@@ -33,6 +33,20 @@ inline void board(Map& m,float x,float y,float z,const char* title,const char* s
  for(float dx:{-width*.44f,width*.44f})wall(m,x+dx-.04f,y+.04f,x+dx+.04f,y+.12f,m.layers.front().elevation,z,2);
  m.signs.push_back({{x,y-.012f},z,width,.9f,kPi,title,subtitle});
 }
+// A sheet taped to a wall: what somebody put up tonight. (face) is a point on
+// the wall's face, yaw the way the sheet faces, z its centre's absolute height.
+inline void taped(Map& m,Vec2 face,float z,float yaw,Readable kind,const char* title,const char* a,const char* b){
+ AuthoredTerminalData t;t.position=face+Vec2{std::sin(yaw),std::cos(yaw)}*.01f;t.z=z-m.layers.front().elevation;t.yaw=yaw;
+ t.title=title;t.line1=a;t.line2=b;t.readable=kind;t.taped=true;m.terminals.push_back(std::move(t));
+}
+// A crew's portable barrier across a way closed tonight: feet, posts, a hazard
+// rail and a plywood board to tape the notice to. Its board faces -y at y.
+inline void crewBarrier(Map& m,float x,float y,float floor,float width=1.4f){
+ const float h=width*.5f;
+ for(float dx:{-h,h}){wall(m,x+dx-.03f,y-.18f,x+dx+.03f,y+.24f,floor,floor+.04f,2);wall(m,x+dx-.025f,y,x+dx+.025f,y+.06f,floor,floor+1.1f,2);}
+ wall(m,x-h,y,x+h,y+.06f,floor+1.04f,floor+1.1f,13);
+ wall(m,x-h+.06f,y,x+h-.06f,y+.06f,floor+.5f,floor+1.f,10);
+}
 inline void terminal(Map& m,Vec2 p,const char* title,const char* a,const char* b,float z=0,StateId state=0,StateId prerequisite=0){
  AuthoredTerminalData t;t.position=p;t.title=title;t.line1=a;t.line2=b;t.z=z;t.activateState=state;t.requireState=prerequisite;m.terminals.push_back(std::move(t));
 }

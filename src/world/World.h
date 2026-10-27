@@ -85,7 +85,14 @@ struct Hazard {
  std::uint32_t enabledFlag=0;int enabledValue=1;bool invertFlag=false;
  float period=0,onTime=0,phase=0;
 };
-struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;StateId activateState=0;bool toggleState=false;float yaw=kPi;StateId requireState=0;};
+// What a readable thing is read on. A screen is one of the plant's computers;
+// the rest is paper, read in the hand: a typed letter or printout, a note or
+// log book in pen, a sticky note in marker.
+enum class Readable { Screen, Letter, Note, Sticky };
+struct Terminal {Vec2 position;const char* title;const char* line1;const char* line2;float z=0;bool control=false;int reactorAction=0;StateId activateState=0;bool toggleState=false;float yaw=kPi;StateId requireState=0;
+ // Paper lies on its bench, or is taped to the wall it faces.
+ Readable readable=Readable::Screen;bool taped=false;
+ bool paper()const{return readable!=Readable::Screen;}};
 struct CargoLift {
  float x1=0,y1=0,x2=0,y2=0,lower=0,upper=0,speed=1.f;
  StateId callState=0,releaseState=0,positionState=0,downState=0,arrivedState=0,descendedState=0;
@@ -136,6 +143,10 @@ struct AuthoredTerminalData {
     bool toggleState=false;
     StateId requireState=0;
     float yaw=kPi;
+    Readable readable=Readable::Screen;
+    // Paper only: taped to the wall it faces at an absolute height, instead of
+    // lying on its bench.
+    bool taped=false;
 };
 struct AuthoredSign {
     Vec2 position{};
@@ -304,6 +315,7 @@ public:
     const std::vector<WorldProp>& props()const{return m_props;}
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}
     const std::vector<AuthoredSign>& signs()const{static const std::vector<AuthoredSign> empty;return m_mapData?m_mapData->signs:empty;}
+    const std::vector<AuthoredZone>& zones()const{static const std::vector<AuthoredZone> empty;return m_mapData?m_mapData->zones:empty;}
     const std::vector<PipeRun>& pipes()const{return m_pipes;}
     bool wallSpaceFree(Vec2 center,Vec2 along,float width,float bottom,float top)const;
     const std::vector<WorldLight>& lights()const{return m_lights;}

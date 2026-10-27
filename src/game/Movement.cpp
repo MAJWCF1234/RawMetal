@@ -169,15 +169,19 @@ int Game::nearbyInteractionDoor()const{
 int Game::nearbyTerminal()const{
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int nearest=-1;float closest=1.8f;
  for(size_t i=0;i<m_world.terminals().size();++i){auto&t=m_world.terminals()[i];auto delta=t.position-m_player.pos;float distance=length(delta),along=dot(delta,forward),base=t.z+m_world.floorHeight(t.position.x,t.position.y);
-  if(m_vrInputActive){bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction==0;
-   float reach=vrInteractionDistance({t.position.x,t.position.y,base+(bench?1.1f:.75f)},bench?.6f:.4f);
+  // Paper is read where it lies: off its bench top, or off the wall it is
+  // taped to at about eye height, from whatever floor is under the reader.
+  const bool bench=t.paper()?!t.taped:m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction==0;
+  const float aim=t.paper()?(t.taped?0.f:1.1f):(bench?1.1f:.75f),inset=t.paper()&&t.taped?.12f:bench?.6f:.4f;
+  const float stand=t.paper()&&t.taped?base-1.5f:base,tolerance=t.paper()&&t.taped?1.f:.65f;
+  if(m_vrInputActive){
+   float reach=vrInteractionDistance({t.position.x,t.position.y,base+aim},t.paper()?.35f:inset);
    if(reach<closest){closest=reach;nearest=int(i);}continue;
   }
-  if(distance>=closest||along<=0||std::fabs(delta.x*forward.y-delta.y*forward.x)>.4f||std::fabs(m_player.z-base)>=.65f)continue;
+  if(distance>=closest||along<=0||std::fabs(delta.x*forward.y-delta.y*forward.x)>.4f||std::fabs(m_player.z-stand)>=tolerance)continue;
   // Stop the sight ray before the computer's own collision housing.
-  bool bench=m_world.campaign()&&m_world.level()>=6&&!t.control&&t.reactorAction==0;
-  auto face=t.position-normalized(delta)*std::min(bench?.6f:.4f,distance*.8f);
-  if(!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,face,base+(bench?1.1f:.75f)))continue;
+  auto face=t.position-normalized(delta)*std::min(inset,distance*.8f);
+  if(!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,face,base+aim))continue;
   closest=distance;nearest=int(i);
  }return nearest;
 }
@@ -188,7 +192,8 @@ bool Game::doorLocked(const Door& door)const{
         (door.requireState&&state(door.requireState)!=door.requireValue);
 }
 const char* Game::interactionHint()const{
- if(m_logTime>0)return m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL";
+ if(m_logTime>0){const bool paper=m_activeLog>=0&&size_t(m_activeLog)<m_world.terminals().size()&&m_world.terminals()[size_t(m_activeLog)].paper();
+  return paper?(m_vrInputActive?"WRIST / PUT IT DOWN":"E / PUT IT DOWN"):(m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL");}
  if(heldNpc()>=0)return "E / RELEASE    Q / KNOCK OUT    FIRE / KILL";
  if(holdingClutter())return m_vrInputActive?"RELEASE GRIP / DROP":"E / DROP     FIRE / PUNT";
  if(!m_vrInputActive&&nearbyTakedown()>=0)return "Q / REAR KNOCKOUT    E / GRAB    FISTS / KILL";
@@ -198,6 +203,7 @@ const char* Game::interactionHint()const{
   if(m_vrInputActive)return d.swinging?(d.opening?"GRIP / CLOSE SERVICE DOOR":"GRIP / OPEN SERVICE DOOR"):d.opening?"GRIP / CLOSE BULKHEAD":d.transfer?"GRIP / TRANSFER BULKHEAD":"GRIP / OPEN BULKHEAD";
   return d.swinging?(d.opening?"E / CLOSE SERVICE DOOR":"E / OPEN SERVICE DOOR"):d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
  if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];
+  if(t.paper())return m_vrInputActive?"GRIP / READ":"E / READ";
   if(t.activateState){
    if(t.requireState&&!state(t.requireState))return m_vrInputActive?"GRIP / READ WHY LOCKED":"E / READ WHY LOCKED";
    return state(t.activateState)?(t.toggleState?(m_vrInputActive?"GRIP / RESUME MACHINERY":"E / RESUME MACHINERY"):(m_vrInputActive?"GRIP / READ COMPLETED CONTROL":"E / READ COMPLETED CONTROL")):(m_vrInputActive?"GRIP / OPERATE LOCAL CONTROL":"E / OPERATE LOCAL CONTROL");

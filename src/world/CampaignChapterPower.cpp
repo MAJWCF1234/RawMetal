@@ -133,7 +133,7 @@ std::shared_ptr<const Map> makePowerDistribution(){
  for(float sx:{-1.f,1.f})for(float sy:{-1.f,1.f})
   m.pipes.push_back({{19.f,12.62f},{19.f+sx*.95f,12.62f+sy*1.7f},-20.92f,.02f,-21.27f,6});
  // The siding terminal by the door: what was on the wagon, and why.
- terminal(m,{14.9f,2.25f},"HV RAILHEAD / SIDING 1","T3 SPARE / 11 KV 40 MVA / ARRIVED 01:12. CONSIGNEE: SUBSTATION A.","T3 TRIPPED 00:58 ON EARTH FAULT. UNLOADING STOPPED 02:13.");
+ terminal(m,{14.9f,2.25f},"HV RAILHEAD / SIDING 1","T3 SPARE / 11 KV 40 MVA / ARRIVED 01:12. CONSIGNEE: SUBSTATION A.","T3 TRIPPED 00:58 ON EARTH FAULT. UNLOADING STOPPED 02:13.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=-kPi*.5f;
 
  // --- PPE and permit room, north-west ------------------------------------------------------------
@@ -153,7 +153,7 @@ std::shared_ptr<const Map> makePowerDistribution(){
  for(float x:{4.2f,4.65f,5.1f})m.fixtures.push_back({model::mine_hard_hat,{x,1.27f},1.8f,.28f,.35f,.15f,0,false});
  m.fixtures.push_back({model::pwr_fire_cabinet,{3.f,6.75f},1.1f,.25f,.2f,.56f,kPi,false});
  m.fixtures.push_back({model::med_first_aid_box,{4.1f,6.78f},1.35f,.37f,.12f,.35f,kPi,false});
- terminal(m,{6.6f,1.75f},"PERMIT TO WORK / POWER DISTRIBUTION","OPEN 01:40: SUBSTATION A (OYELARAN, VASK). LOAD CONTROL (HALE).","SIGNED OUT: NONE. ALL PERMITS VOIDED 02:31 BY CLEANUP COMMAND.");
+ terminal(m,{6.6f,1.75f},"PERMIT TO WORK / POWER DISTRIBUTION","OPEN 01:40: SUBSTATION A (OYELARAN, VASK). LOAD CONTROL (HALE).","SIGNED OUT: NONE. ALL PERMITS VOIDED 02:31 BY CLEANUP COMMAND.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=.001f;
  m.pickupSpawns.push_back({{3.6f,5.6f},PickupKind::Health,base});
 
@@ -176,7 +176,7 @@ std::shared_ptr<const Map> makePowerDistribution(){
  m.fixtures.push_back({model::wooden_chair,{4.7f,19.7f},0,.417f,.525f,.95f,kPi*.5f+.3f,true});
  for(Vec2 c:{Vec2{2.f,21.7f},Vec2{2.f,20.8f},Vec2{2.9f,21.7f}})m.fixtures.push_back({model::ind_crate,c,0,.8f,.8f,.8f,0,true});
  m.fixtures.push_back({model::ind_crate,{2.f,21.7f},.8f,.8f,.8f,.8f,.2f,true});
- terminal(m,{5.5f,19.6f},"CLEANUP / SWEEP 3 / FIELD LOG","02:40 POWER DISTRIBUTION SWEPT. 3 STAFF PROCESSED. 0 OUTSTANDING.","LOAD CONTROL HELD BY TEAM 3. FEEDER 9 STAYS OPEN. NO RESTORATION.");
+ terminal(m,{5.5f,19.6f},"CLEANUP / SWEEP 3 / FIELD LOG","02:40 POWER DISTRIBUTION SWEPT. 3 STAFF PROCESSED. 0 OUTSTANDING.","LOAD CONTROL HELD BY TEAM 3. FEEDER 9 STAYS OPEN. NO RESTORATION.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=kPi*.5f;
  {const Vec2 t{7.6f,16.6f};const float head=base+2.3f;
   m.fixtures.push_back({model::ind_crate,t,0,1.3f,1.3f,.6f,0,true});
@@ -303,7 +303,7 @@ std::shared_ptr<const Map> makeDistributionHub(){
  wallSign(m,4.8f,1.455f,base+1.25f,"11 KV DISTRIBUTION","SUB A: DEAD    SWITCH HALL: DEAD    FEEDER 9: NO SUPPLY",7.f,0);
  for(float x:{2.6f,4.8f,7.f})m.fixtures.push_back({model::control_console,{x,2.4f},0,1.6f,.8f,1.1f,kPi,true});
  m.fixtures.push_back({model::office_chair,{4.8f,3.5f},0,.55f,.55f,.95f,kPi+.4f,true});
- terminal(m,{6.9f,3.6f},"DISTRIBUTION / SHIFT HANDOVER","00:58 T3 EARTH FAULT. SUB A ON T1/T2. 02:13 GRID LOST. ALL FEEDERS TRIPPED.","BLACK START: GENERATION FIRST, THEN SUB A BREAKERS, THEN LOAD CONTROL.");
+ terminal(m,{6.9f,3.6f},"DISTRIBUTION / SHIFT HANDOVER","00:58 T3 EARTH FAULT. SUB A ON T1/T2. 02:13 GRID LOST. ALL FEEDERS TRIPPED.","BLACK START: GENERATION FIRST, THEN SUB A BREAKERS, THEN LOAD CONTROL.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
  // --- Switchgear lineup, east of the entry; tall relay panels on the side walls ------------------
  pwrLineup(m,15.6f,4,1.47f,base,1.f);
@@ -369,7 +369,7 @@ std::shared_ptr<const Map> makeSubstationA(){
  deckSupports(m,m.layers.back(),base,4.f);
  m.stairs.push_back({6.f,19.f,10.2f,21.f,base,deckZ,15,false,false});
  guardRail(m,5.92f,1.2f,6.f,19.f,deckZ);guardRail(m,5.92f,21.f,6.f,22.8f,deckZ);
- terminal(m,{3.4f,4.2f},"SUBSTATION A / PERMIT LOG","OYELARAN, VASK: ISOLATING T3 AFTER EARTH FAULT 00:58. SAFE TO WORK.","02:36. TWO IN CLEANUP GREY. THEY HAD OUR NAMES. THEY ASKED FOR BOTH OF US.",deckZ-base);
+ terminal(m,{3.4f,4.2f},"SUBSTATION A / PERMIT LOG","OYELARAN, VASK: ISOLATING T3 AFTER EARTH FAULT 00:58. SAFE TO WORK.","02:36. TWO IN CLEANUP GREY. THEY HAD OUR NAMES. THEY ASKED FOR BOTH OF US.",deckZ-base);m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
  // The technicians, where they were stopped at the top of the stair.
  machineryClock(m,"pwr_suba_bodies",60000);
@@ -500,11 +500,11 @@ std::shared_ptr<const Map> makeCableTrench(){
  for(float y=19.2f;y+.8f<=24.f;y+=.9f)wall(m,15.f,y,17.f,y+.8f,base,base+.05f,10); // the last cover stops at the seam
  // --- The crawl: the duct bank drops across the walk ------------------------------------------------
  wall(m,8.5f,16.f,11.f,19.f,base+1.05f,roof,8);
- wallSign(m,8.445f,17.5f,base+1.12f,"DUCT BANK 4","LOW HEADROOM / CRAWL",1.2f,-kPi*.5f);
+ wallSign(m,8.445f,17.5f,base+1.12f,"DUCT BANK 4","LOW HEADROOM",1.2f,-kPi*.5f);
  // --- The pull pit: winch, drum, the jointer who never came back up -----------------------------
  m.fixtures.push_back({model::cable_reel,{3.6f,3.6f},0,.85f,1.7f,1.7f,kPi*.5f,true});
  m.fixtures.push_back({model::mine_portable_generator,{7.6f,3.f},0,.87f,1.04f,.82f,.3f,true});
- terminal(m,{8.6f,5.f},"CABLE TRENCH / PULL PIT 4","FEEDER 9 CABLES RE-ROUTED 01:30. MEGGER BEFORE ENERGISING.","EMERGENCY GENERATION: SOUTH LEG. KEEP OFF THE WET DRAIN, IT HUMS.");
+ terminal(m,{8.6f,5.f},"CABLE TRENCH / PULL PIT 4","FEEDER 9 CABLES RE-ROUTED 01:30. MEGGER BEFORE ENERGISING.","EMERGENCY GENERATION: SOUTH LEG. KEEP OFF THE WET DRAIN, IT HUMS.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=-kPi*.5f;
  machineryClock(m,"pwr_trench_body",60000);
  pwrBody(m,"pwr_trench_body",{5.f,3.3f},base,.4f);

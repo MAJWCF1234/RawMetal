@@ -39,7 +39,7 @@ void receivingCleanup(Map& m){
  ScriptEvent cache;cache.id=stateId("receiving_cache_award");cache.level=14;cache.x1=0;cache.y1=0;cache.x2=24;cache.y2=24;cache.requireState=stateId("receiving_cache_read");
  ScriptAction item;item.type=ScriptAction::Type::GiveItem;item.id=stateId("flashlight");item.value=1;cache.actions.push_back(item);m.scriptEvents.push_back(cache);
  wall(m,6.1f,17.3f,9,17.5f,-25,-23.15f,15);wall(m,6.1f,17.3f,9,17.5f,-23.25f,-23.15f,13);
- m.signs.push_back({{7.5f,17.52f},-23.8f,2.7f,.5f,0,"CLEANUP / HOLD","WEST / Q KO / E GRAB"});
+ taped(m,{7.5f,17.5f},-23.45f,0,Readable::Letter,"CLEANUP / HOLD POINT","DETAINEES WEST OF THIS LINE. NO UNESCORTED ENTRY.","DELTA-2 / BY ORDER 7");
  wallLamp(m,7.5f,17.52f,-23.4f,kPi*.5f,1.3f,5);
  // A real, player-operable pressure door gives the fleeing member a head start.
  wall(m,1,23.4f,10.5f,23.6f,-25,-22,15);wall(m,13.5f,23.4f,23,23.6f,-25,-22,15);
@@ -199,9 +199,9 @@ std::shared_ptr<const Map> makeFoundry(){
  const Vec2 junk[]={{6.5f,1.8f},{6.6f,4.2f},{2.f,9.2f},{16.5f,11.5f},{3.8f,20.2f},{17.f,22.f}};
  for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,junk[i],-999,i*.7f});
 
- zone(m,"01 INTAKE",0,0,24,7.5f);
- zone(m,"02 FOUNDRY",0,7.5f,24,16.5f);
- zone(m,"03 CONTAINMENT",0,16.5f,24,24);
+ zone(m,"INTAKE",0,0,24,7.5f);
+ zone(m,"FOUNDRY",0,7.5f,24,16.5f);
+ zone(m,"CONTAINMENT",0,16.5f,24,24);
  titleCard(m,"FOUNDRY");
  return p;
 }
@@ -287,9 +287,9 @@ std::shared_ptr<const Map> makePressureWorks(){
  const Vec2 junk[]={{6.8f,3.2f},{7.1f,3.4f},{9.2f,12.2f},{9.5f,8.6f},{18.7f,19.8f},{19.1f,20.f}};
  for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,junk[i],-999,i*.7f});
 
- zone(m,"04 RAIL DOCK",0,0,24,7.5f);
- zone(m,"05 PUMP HALL",0,7.5f,24,17.5f);
- zone(m,"06 CONTROL",0,17.5f,24,24);
+ zone(m,"RAIL DOCK",0,0,24,7.5f);
+ zone(m,"PUMP HALL",0,7.5f,24,17.5f);
+ zone(m,"CONTROL",0,17.5f,24,24);
  return p;
 }
 
@@ -440,10 +440,10 @@ std::shared_ptr<const Map> makeTurbineGantry(){
  const Vec2 junk[]={{7.4f,3.6f},{7.6f,4.6f},{12.5f,19.2f},{13.f,19.6f},{18.4f,5.f},{18.9f,5.4f}};
  for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,junk[i],i>=4?deckZ:-999.f,i*.7f});
 
- zone(m,"08A CRANE GALLERY",0,0,24,24,5.5f,1000);
- zone(m,"08 UPPER GANTRY",0,0,24,24,2.5f,1000);
- zone(m,"07 TURBINE HALL",0,0,24,17.5f);
- zone(m,"09 SWITCHGEAR",0,17.5f,24,24);
+ zone(m,"CRANE GALLERY",0,0,24,24,5.5f,1000);
+ zone(m,"UPPER GANTRY",0,0,24,24,2.5f,1000);
+ zone(m,"TURBINE HALL",0,0,24,17.5f);
+ zone(m,"SWITCHGEAR",0,17.5f,24,24);
  return p;
 }
 
@@ -622,11 +622,13 @@ std::shared_ptr<const Map> makeReactorComplex(){
  using C=CreatureKind;using P=PickupKind;
  m.creatureSpawns={{C::Huntsman,{5.5f,5.f}},{C::Wasp,{16.f,19.f}},{C::Huntsman,{18.5f,5.5f},upper}};
  m.pickupSpawns={{{13.f,16.f},P::Health},{{2.5f,20.f},P::Ammo,upper},{{20.5f,11.5f},P::Ammo},{{16.5f,6.5f},P::Health,upper}};
- for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,{6.6f+i*.45f,4.4f},lower,i*.7f});
+ {const Vec2 spill[]={{7.3f,3.4f},{8.6f,3.9f},{6.9f,5.7f},{9.2f,5.1f},{7.7f,6.3f},{8.1f,4.5f}};
+  const float spin[]={.4f,2.3f,1.1f,5.2f,3.6f,.9f};
+  for(int i=0;i<6;++i)m.clutterSpawns.push_back({i,spill[i],lower,spin[i]});}
 
- zone(m,"10 SURFACE LIFT",0,0,24,24,-1.f,1000);
- zone(m,"11A UPPER MANIFOLD",0,0,24,24,-7.f,-1.f);
- zone(m,"11 CONTAINMENT",0,0,24,24);
+ zone(m,"SURFACE LIFT",0,0,24,24,-1.f,1000);
+ zone(m,"UPPER MANIFOLD",0,0,24,24,-7.f,-1.f);
+ zone(m,"CONTAINMENT",0,0,24,24);
  titleCard(m,"REACTOR COMPLEX");
  return p;
 }
@@ -781,8 +783,8 @@ std::shared_ptr<const Map> makeReactorCore(){
  const Vec2 litter[]={{14.5f,18.8f},{15.f,19.3f},{15.6f,18.6f}};
  for(int i=0;i<3;++i)m.clutterSpawns.push_back({i+1,litter[i],lower,i*.9f});
 
- zone(m,"12A R-03 CONTROL",1,1,9,7,-7.f,-1.f);
- zone(m,"12 REACTOR CORE",0,0,24,24);
+ zone(m,"R-03 CONTROL",1,1,9,7,-7.f,-1.f);
+ zone(m,"REACTOR CORE",0,0,24,24);
  return p;
 }
 
@@ -869,7 +871,7 @@ std::shared_ptr<const Map> makeCoolantLoop(){
  for(float x:{3.f,8.f,13.5f,18.5f})wall(m,x-.13f,1,x+.13f,23,roof-.45f,roof,12);
  // P-02 return valve on the gantry edge, its wheel to the walkway.
  {AuthoredTerminalData t;t.position={11.f,3.6f};t.title="02 / COOLANT RETURN";t.z=3;t.reactorAction=3;m.terminals.push_back(std::move(t));}
- terminal(m,{8.8f,22.3f},"COOLANT LOOP / LOCAL LOG","RETURN VALVE IS ON THE NORTH GANTRY.","FEED MUST BE PRIMED BEFORE THE RETURN.");
+ terminal(m,{8.8f,22.3f},"COOLANT LOOP / LOCAL LOG","RETURN VALVE IS ON THE NORTH GANTRY.","FEED MUST BE PRIMED BEFORE THE RETURN.");m.terminals.back().readable=Readable::Note;
  // --- Light ---------------------------------------------------------------
  for(Vec2 b:{Vec2{6.f,10.f},Vec2{15.f,10.f},Vec2{11.5f,18.5f}})m.lights.push_back(lamp(b,roof-.15f,1.8f,10.f,5600,.2f));
  for(Vec2 b:{Vec2{5.f,18.5f},Vec2{16.5f,18.5f}})m.lights.push_back(lamp(b,roof-.15f,1.f,6.f,7000,.15f));
@@ -884,7 +886,7 @@ std::shared_ptr<const Map> makeCoolantLoop(){
  using C=CreatureKind;using P=PickupKind;
  m.creatureSpawns={{C::Huntsman,{6.f,10.f}},{C::Wasp,{14.f,10.f}},{C::Huntsman,{15.f,2.5f},catwalk}};
  m.pickupSpawns={{{21.f,8.f},P::Ammo,catwalk},{{11.5f,19.5f},P::Health}};
- zone(m,"12B COOLANT LOOP",0,0,24,24);
+ zone(m,"COOLANT LOOP",0,0,24,24);
  return p;
 }
 
@@ -971,11 +973,11 @@ std::shared_ptr<const Map> makeServiceGallery(){
  const Vec2 tools[]={{7.2f,10.3f},{7.9f,10.4f},{5.6f,11.8f},{12.6f,3.f}};
  for(int i=0;i<4;++i)m.clutterSpawns.push_back({i+2,tools[i],floor,i*.9f});
 
- zone(m,"13A PUMP WORKSHOP",1,5,10,11);
- zone(m,"13B ELECTRICAL",14,5,23,11);
- zone(m,"13C STORES",1,13,10,23);
- zone(m,"13D PLANT BAY",14,13,23,23);
- zone(m,"13 SERVICE GALLERY",0,0,24,24);
+ zone(m,"PUMP WORKSHOP",1,5,10,11);
+ zone(m,"ELECTRICAL",14,5,23,11);
+ zone(m,"STORES",1,13,10,23);
+ zone(m,"PLANT BAY",14,13,23,23);
+ zone(m,"SERVICE GALLERY",0,0,24,24);
  return p;
 }
 
@@ -1013,7 +1015,7 @@ std::shared_ptr<const Map> makeCoolantReturn(){
   for(float x:{11.f,12.94f})m.structures.push_back({x,y1,x+.06f,y2,floor+.22f,floor+1.2f,true,0});
  }
  wall(m,11.1f,9.9f,12.9f,11.6f,bed,-9.52f,8);wall(m,11.2f,11.6f,12.8f,13.1f,bed,-9.4f,8);
- board(m,10.2f,7.4f,floor+1.1f,"FOOTBRIDGE CONDEMNED","CHANNEL WADEABLE / KEEP TO THE SPAN",2.2f);
+ crewBarrier(m,10.2f,7.4f,floor);taped(m,{10.2f,7.4f},floor+.78f,kPi,Readable::Note,"FOOTBRIDGE","CONDEMNED. DON'T STAND ON IT.","CHANNEL'S ONLY KNEE DEEP, WADE IT. - PUMP CREW");
  // --- North landing: what arrives, and where it goes ------------------------
  m.fixtures.push_back({14,{3.f,4.5f},0,2.404f,2.645f,2.2f,0,true});
  m.fixtures.push_back({14,{21.f,4.5f},0,2.404f,2.645f,2.2f,0,true});
@@ -1058,8 +1060,8 @@ std::shared_ptr<const Map> makeCoolantReturn(){
  m.lights.push_back(lamp({20.f,22.f},roof-.15f,.9f,4.f,3000));
  m.lights.push_back(lamp({7.5f,22.95f},floor+2.2f,1.2f,4.f,1600,-.2f,WorldLightMount::Wall,-kPi*.5f));
  m.pickupSpawns={{{21.5f,7.f},PickupKind::Health}};
- zone(m,"14A RETURN STORE",17.25f,20.65f,22.85f,23.08f);
- zone(m,"14 COOLANT RETURN",0,0,24,24);
+ zone(m,"RETURN STORE",17.25f,20.65f,22.85f,23.08f);
+ zone(m,"COOLANT RETURN",0,0,24,24);
  return p;
 }
 
@@ -1108,7 +1110,7 @@ std::shared_ptr<const Map> makeCableVaults(){
   pipeRoute(m,{{t.x,t.y,floor+1.1f},{t.x,t.y,roof-.13f}},.06f,6,NoRoof);}
  for(float y:{12.5f,13.5f})m.fixtures.push_back({13,{22.75f,y},0,.9066f,.4956f,2.2f,kPi*.5f,true});
  terminal(m,{19.5f,13.f},"FEEDER 7A / REMOTE TRIP","LIVE TRENCH / CROSS ONLY WHEN ISOLATED.","E / THROW LOCAL DISCONNECT.",0,stateId("vault_disconnect"));
- terminal(m,{6.8f,8.6f},"CABLE VAULTS / MAINTENANCE","LOCAL DISCONNECT: FEEDER 7A, EAST TUNNEL.","WEST TUNNEL LIGHTING FAILED. TAKE A LAMP.");
+ terminal(m,{6.8f,8.6f},"CABLE VAULTS / MAINTENANCE","LOCAL DISCONNECT: FEEDER 7A, EAST TUNNEL.","WEST TUNNEL LIGHTING FAILED. TAKE A LAMP.");m.terminals.back().readable=Readable::Note;
  wallSign(m,20.f,18.745f,floor+1.9f,"FEEDER 7A","11 KV / REMOTE TRIP",1.6f,kPi);
  // --- South hall and the exit ------------------------------------------------------
  rectangle(g,20,23,23,24,'.');{Door exit{20,23,23.5f,0,false,true};exit.requireState=stateId("vault_disconnect");m.doors.push_back(exit);}
@@ -1128,9 +1130,9 @@ std::shared_ptr<const Map> makeCableVaults(){
  m.clutterSpawns={{3,{3.f,6.f}},{0,{2.6f,8.2f}}};
  {ScriptEvent trip;trip.id=stateId("vault_relay_trip");trip.level=6;trip.x1=2;trip.y1=1;trip.x2=5;trip.y2=3;trip.bottom=-9.2f;trip.top=-7;
   ScriptAction play;play.type=ScriptAction::Type::PlaySound;play.amount=.6f;play.sound=Sound::Door;trip.actions.push_back(play);m.scriptEvents.push_back(trip);}
- zone(m,"15A MAINTENANCE BAY",1,4,7.5f,9);
- zone(m,"15B FEEDER ROOM",16.5f,12,23,18.8f);
- zone(m,"15 CABLE VAULTS",0,0,24,24);
+ zone(m,"MAINTENANCE BAY",1,4,7.5f,9);
+ zone(m,"FEEDER ROOM",16.5f,12,23,18.8f);
+ zone(m,"CABLE VAULTS",0,0,24,24);
  titleCard(m,"CABLE VAULTS");
  return p;
 }
@@ -1205,7 +1207,7 @@ std::shared_ptr<const Map> makePumpAnnex(){
  glazed(14.f,19.f,19.f,19.12f);glazed(14.f,19.12f,14.12f,21.2f);
  wall(m,14,21.2f,14.12f,22.8f,gallery+2.2f,gallery+2.7f,3);
  wall(m,14,19,19,23,gallery+2.7f,gallery+2.85f,2);
- terminal(m,{16.5f,21.8f},"PUMP ANNEX / OBSERVATION","DUTY PUMP START: PIT FLOOR CONTROL.","JUNCTION ACCESS: SOUTH GALLERY DOOR.",8);
+ terminal(m,{16.5f,21.8f},"PUMP ANNEX / OBSERVATION","DUTY PUMP START: PIT FLOOR CONTROL.","JUNCTION ACCESS: SOUTH GALLERY DOOR.",8);m.terminals.back().readable=Readable::Letter;
  m.fixtures.push_back({19,{17.6f,20.f},8,1.367f,.724f,.78f,kPi,true});
  // Transfer to the Junction, framed as a personnel door.
  rectangle(g,19,23,22,24,'.');rectangle(obs,19,23,22,24,'=');
@@ -1231,9 +1233,9 @@ std::shared_ptr<const Map> makePumpAnnex(){
  using C=CreatureKind;using P=PickupKind;
  m.creatureSpawns={{C::Wasp,{12.f,3.5f},deck},{C::Wasp,{11.f,20.f},gallery},{C::Huntsman,{8.6f,13.6f},pit},{C::Huntsman,{15.5f,13.6f},pit}};
  m.pickupSpawns={{{3.f,10.f},P::Health,deck},{{21.f,18.5f},P::Ammo,gallery}};
- zone(m,"16A PUMP PIT",6,6,18,16,-13,-9.1f);
- zone(m,"16B OBSERVATION",8,16,23,24,-4.5f,1000);
- zone(m,"16 PUMP ANNEX",0,0,24,24);
+ zone(m,"PUMP PIT",6,6,18,16,-13,-9.1f);
+ zone(m,"OBSERVATION",8,16,23,24,-4.5f,1000);
+ zone(m,"PUMP ANNEX",0,0,24,24);
  return p;
 }
 
@@ -1297,7 +1299,7 @@ std::shared_ptr<const Map> makeUtilityJunction(){
  terminal(m,{16.2f,7.5f},"FREIGHT SERVICES / INCIDENT OVERRIDE","FREIGHT ROUTE / LOCAL OVERRIDE.","E / CLEAR THE INCIDENT INTERLOCK.",0,stateId("freight_incident_clearance"));
  terminal(m,{6.6f,16.4f},"PRIMARY UTILITIES / PERMIT DESK","WEST SERVICE GATE / LOCAL PERMIT.","E / RELEASE THE UTILITIES GATE.",0,stateId("primary_utilities_permit"));
  // Inside the branches: the freight manifest, the utilities substation.
- terminal(m,{20.f,2.f},"FREIGHT / OUTGOING MANIFEST","RESEARCH CONTAINERS HELD AT THE NEXT TRANSFER.","FREIGHT LINE SUSPENDED BEYOND THIS DOOR.");
+ terminal(m,{20.f,2.f},"FREIGHT / OUTGOING MANIFEST","RESEARCH CONTAINERS HELD AT THE NEXT TRANSFER.","FREIGHT LINE SUSPENDED BEYOND THIS DOOR.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=.001f; // its back to the north wall, screen to the room
  wall(m,18.f,1.f,22.f,1.2f,floor,floor+2.8f,7);
  for(float y:{19.5f,21.f})m.fixtures.push_back({13,{1.27f,y},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
@@ -1329,10 +1331,10 @@ std::shared_ptr<const Map> makeUtilityJunction(){
  m.creatureSpawns={{C::Huntsman,{14.f,12.5f}},{C::Wasp,{16.f,17.f}}};
  m.pickupSpawns={{{17.f,13.5f},P::Health},{{21.f,3.5f},P::Ammo},{{3.1f,21.f},P::Ammo},{{8.f,2.f},P::Ammo,bridge}};
  m.clutterSpawns={{3,{20.f,10.2f}},{1,{21.3f,10.3f}},{2,{13.4f,18.f}},{3,{4.6f,20.6f}},{0,{2.f,22.f}},{1,{15.f,13.f}}};
- zone(m,"17A DISPATCH",9,15,15,20);
- zone(m,"17B FREIGHT SERVICES",17,1,23,6);
- zone(m,"17C PRIMARY UTILITIES",1,17.5f,6.2f,23);
- zone(m,"17 UTILITY JUNCTION",0,0,24,24);
+ zone(m,"DISPATCH",9,15,15,20);
+ zone(m,"FREIGHT SERVICES",17,1,23,6);
+ zone(m,"PRIMARY UTILITIES",1,17.5f,6.2f,23);
+ zone(m,"UTILITY JUNCTION",0,0,24,24);
  return p;
 }
 
@@ -1424,13 +1426,13 @@ std::shared_ptr<const Map> makeWasteHandling(){
  wall(m,17.8f,19.8f,19.1f,20,floor,-9.2f,3);wall(m,21.3f,19.8f,23,20,floor,-9.2f,3);
  wall(m,19.1f,19.8f,21.3f,20,-9.6f,-9.2f,3);wall(m,17.8f,20,18,23,floor,-9.2f,3);
  wall(m,17.8f,19.8f,23,23,-9.2f,-9.f,2);
- terminal(m,{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT ACCESS / SOUTH DISPATCH BULKHEAD.");
+ terminal(m,{20,21.5f},"SALVAGE DISPATCH / FREIGHT SERVICES","OUTGOING MANIFEST: RESEARCH CONTAINERS.","FREIGHT ACCESS / SOUTH DISPATCH BULKHEAD.");m.terminals.back().readable=Readable::Letter;
  m.fixtures.push_back({7,{22.35f,22.f},0,1.8f,.5f,1.8f,kPi*.5f,true});
  rectangle(g,20,23,23,24,'.');m.doors.push_back({20,23,23.5f,0,false,true});
  wall(m,20,23,23,24,floor+2.5f,roof,3);
  {ScriptEvent dispatch;dispatch.id=stateId("waste_dispatch_checkpoint");dispatch.x1=19;dispatch.y1=20;dispatch.x2=22;dispatch.y2=23;dispatch.bottom=-12.1f;dispatch.top=-10;
   ScriptAction save;save.type=ScriptAction::Type::Checkpoint;dispatch.actions.push_back(save);m.scriptEvents.push_back(dispatch);}
- terminal(m,{3.2f,4.f},"SORTING / SHIFT SAFETY","PRESS ISOLATOR: PULPIT ON THIS GALLERY, EAST.","BAY UNDER THE PRESS IS THE ONLY WAY SOUTH.",3);
+ terminal(m,{3.2f,4.f},"SORTING / SHIFT SAFETY","PRESS ISOLATOR: PULPIT ON THIS GALLERY, EAST.","BAY UNDER THE PRESS IS THE ONLY WAY SOUTH.",3);m.terminals.back().readable=Readable::Letter;
  wallBays(m,floor,roof,4.f,false,true,true,true,20.5f,12.f);
  for(float x:{6.f,12.f,18.f})wall(m,x-.12f,1,x+.12f,23,roof-.45f,roof,12);
  // --- Light ---------------------------------------------------------------
@@ -1451,9 +1453,9 @@ std::shared_ptr<const Map> makeWasteHandling(){
                      {6.5f,4.6f},{7.2f,4.8f},{11.f,4.7f},{12.2f,4.5f},{2.5f,12.6f},{3.4f,13.f},
                      {9.f,16.f},{10.5f,15.2f},{12.f,16.f},{20.5f,15.3f},{21.4f,15.8f},{15.4f,21.6f},{15.f,7.f}};
  for(int i=0;i<19;++i)m.clutterSpawns.push_back({i%6,scrap[i],(scrap[i].y<7.f&&scrap[i].x<14.f)?gallery:-999.f,.37f*i});
- zone(m,"18A SORTING GALLERY",0,0,24,7.1f,-9.5f,1000);
- zone(m,"18B PRESS BAY",12.7f,7.6f,17.3f,14.3f);
- zone(m,"18 WASTE HANDLING",0,0,24,24);
+ zone(m,"SORTING GALLERY",0,0,24,7.1f,-9.5f,1000);
+ zone(m,"PRESS BAY",12.7f,7.6f,17.3f,14.3f);
+ zone(m,"WASTE HANDLING",0,0,24,24);
  return p;
 }
 
@@ -1478,7 +1480,7 @@ std::shared_ptr<const Map> makeFreightAccess(){
  wall(m,1,18.f,6.8f,18.2f,floor,roof,3);
  for(float y:{4.5f,6.f,13.f,14.5f})steelColumn(m,6.7f,y,floor,roof,false);
  // Clock-in: the time clock, the card rack and the shift board.
- terminal(m,{4.5f,2.6f},"FREIGHT / CLOCK-IN","EMPLOYEE TRANSIT / USE PERSONNEL ROUTE.","CARGO LIFTS: FOLLOW CLEARANCE MARKINGS.");
+ terminal(m,{4.5f,2.6f},"FREIGHT / CLOCK-IN","EMPLOYEE TRANSIT / USE PERSONNEL ROUTE.","CARGO LIFTS: FOLLOW CLEARANCE MARKINGS.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=kPi*.5f;
  m.fixtures.push_back({8,{6.45f,2.7f},1.1f,.67f,.2f,.91f,-kPi*.5f,false});
  // Lockers along the west wall and a changing bench.
@@ -1505,7 +1507,7 @@ std::shared_ptr<const Map> makeFreightAccess(){
  wall(m,16.5f,16.9f,16.7f,18.2f,floor,roof,3);wall(m,16.5f,15.5f,16.7f,16.9f,floor+2.25f,roof,3);
  wall(m,16.5f,18.f,23.f,18.2f,floor,roof,3);
  recordsDesk(m,19.5f,15.8f,floor);
- terminal(m,{21.2f,14.2f},"LOADING SCHEDULE","SHIFT 02 / RECEIVING 01-03 ACTIVE.","RESTRICTED CARGO: MANIFEST AUTHORIZATION.");
+ terminal(m,{21.2f,14.2f},"LOADING SCHEDULE","SHIFT 02 / RECEIVING 01-03 ACTIVE.","RESTRICTED CARGO: MANIFEST AUTHORIZATION.");m.terminals.back().readable=Readable::Letter;
  m.fixtures.push_back({7,{22.6f,16.6f},0,1.4f,.45f,1.8f,-kPi*.5f,true});
  // Forklift charging bay against the north wall.
  forklift(m,10.f,3.f,floor);
@@ -1736,7 +1738,7 @@ std::shared_ptr<const Map> makeReceivingOverlook(){
  glazed(17.f,3.88f,23.f,4.f);glazed(17.f,1.f,17.12f,2.f);wall(m,17.f,3.2f,17.12f,3.88f,mezz,mezz+2.6f,3);wall(m,17.f,2.f,17.12f,3.2f,mezz+2.2f,mezz+2.6f,3);
  wall(m,17.f,1.f,23.f,4.f,mezz+2.6f,mezz+2.75f,2);
  recordsDesk(m,20.f,2.2f,mezz);
- terminal(m,{21.8f,3.2f},"RECEIVING / FOREMAN","UNLOADING 01 / SHIFT 02 / NO HANDOVER.","OVERLOOK BALCONY: KEEP RADIO ON.",6);
+ terminal(m,{21.8f,3.2f},"RECEIVING / FOREMAN","UNLOADING 01 / SHIFT 02 / NO HANDOVER.","OVERLOOK BALCONY: KEEP RADIO ON.",6);m.terminals.back().readable=Readable::Note;
  for(float x:{18.f,19.f})m.fixtures.push_back({13,{x,1.27f},6,.9066f,.4956f,2.2f,kPi,true});
  // --- The floor -----------------------------------------------------------------------
  // Three numbered unloading bays painted on the floor.
@@ -1756,7 +1758,7 @@ std::shared_ptr<const Map> makeReceivingOverlook(){
  wall(m,11.8f,11.45f,12.2f,11.85f,-12.4f,-12.f,8);
  // Receiving office, south-west.
  office(m,4.5f,20.f,base,"RECEIVING / WORKER NOTE","THEY ARE STILL DOWN HERE. KEEP THE RADIO ON.","WAREHOUSE INTAKE: FOLLOW THE EAST LANES.");
- terminal(m,{2.5f,21.5f},"WORKER / HANDWRITTEN ROUTE","I HAVE BEEN HERE SINCE SHIFT CHANGE. TWO DAYS.","WEST SERVICE STAIRS / RADIO CALLS: STILL NO ANSWER.");
+ terminal(m,{2.5f,21.5f},"WORKER / HANDWRITTEN ROUTE","I HAVE BEEN HERE SINCE SHIFT CHANGE. TWO DAYS.","WEST SERVICE STAIRS / RADIO CALLS: STILL NO ANSWER.");m.terminals.back().readable=Readable::Note;
  // Trailer docks in the south wall, a forklift between runs.
  for(float x:{8.5f,12.5f}){
  wall(m,x,22.8f,x+3.f,23.f,base,base+3.4f,7);
@@ -1896,7 +1898,7 @@ std::shared_ptr<const Map> makeWarehouseIntake(){
  m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,0});m.doors.back().maxOpen=.4f;
  wall(m,10,23,14,24,base+2.5f,roof,3);
  intakeBay(m);m.definition.ambient=.37f;
- wallSign(m,8.2f,22.805f,base+2.25f,"SHUTTER JAMMED","40% TRAVEL / DUCK UNDER",1.8f,kPi);
+ taped(m,{8.2f,22.86f},base+2.35f,kPi,Readable::Sticky,"SHUTTER","JAMMED AT 40%. DON'T FORCE IT.","- J.");
  for(float x=10.6f;x<13.4f;x+=.5f)floorLine(m,x,22.1f,x+.25f,22.6f,base,13);
  // --- Intake office, west: glazed onto the floor ------------------------------------------
  auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,base,base+.95f,3);wall(m,x1,y1,x2,y2,base+.95f,base+2.3f,17);wall(m,x1,y1,x2,y2,base+2.3f,base+2.7f,3);};
@@ -1913,7 +1915,7 @@ std::shared_ptr<const Map> makeWarehouseIntake(){
  m.fixtures.push_back({31,{3.4f,12.95f},0,.9f,.5f,.75f,kPi,true});
  m.fixtures.push_back({35,{5.4f,12.9f},0,.35f,.35f,1.1f,0,true});
  m.lights.push_back(lamp({3.5f,10.5f},base+2.5f,1.f,5.f,3400));
- terminal(m,{5.f,19.f},"WAREHOUSE / TRACK DAMAGE","INTAKE SHUTTER CANNOT FULLY RETRACT.","CROUCH THROUGH THE CLEARANCE OPENING.");
+ terminal(m,{5.f,19.f},"WAREHOUSE / TRACK DAMAGE","INTAKE SHUTTER CANNOT FULLY RETRACT.","CROUCH THROUGH THE CLEARANCE OPENING.");m.terminals.back().readable=Readable::Note;
  // --- Scale plate inside the pressure door, and its readout --------------------------------
  wall(m,11.2f,4.2f,12.8f,5.8f,base,base+.04f,8);
  for(float y:{4.2f,5.68f})floorLine(m,11.2f,y,12.8f,y+.12f,base+.04f,13);
@@ -1995,7 +1997,7 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  for(float y:{3.2f,4.f})m.fixtures.push_back({32,{22.35f,y},0,.5f,.6f,1.3f,-kPi*.5f,true});
  m.fixtures.push_back({37,{22.5f,5.6f},0,.9f,.3f,1.8f,-kPi*.5f,true});
  m.fixtures.push_back({35,{18.15f,7.25f},0,.35f,.35f,1.1f,0,true});
- terminal(m,{18.6f,3.6f},"WAREHOUSE / OPERATIONS","DO NOT SEND ANYTHING TO RECEIVING.","THEY ARE NOT ANSWERING.");
+ terminal(m,{18.6f,3.6f},"WAREHOUSE / OPERATIONS","DO NOT SEND ANYTHING TO RECEIVING.","THEY ARE NOT ANSWERING.");m.terminals.back().readable=Readable::Note;
  m.lights.push_back(lamp({20.2f,4.4f},base+2.45f,1.f,5.f,3200));
  // --- Dispatch and packing, south of the office -------------------------------------------
  for(float x:{18.6f,21.6f})m.fixtures.push_back({19,{x,11.f},0,1.367f,.724f,.78f,0,true});
@@ -2003,14 +2005,14 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  m.fixtures.push_back({21,{21.9f,10.9f},.78f,.6f,.45f,.3f,-.15f,false});
  cargo(m,18.4f,14.6f,base);cargo(m,19.8f,14.6f,base);cargo(m,21.2f,14.6f,base,false);
  forklift(m,20.2f,19.3f,base);cargo(m,20.2f,16.9f,base);
- terminal(m,{22.4f,19.3f},"FORKLIFT / SHIFT REPORT","DRIVE MOTOR LEFT RUNNING. BATTERY EMPTY.","OPERATOR DID NOT CLOCK OUT.");
+ terminal(m,{22.4f,19.3f},"FORKLIFT / SHIFT REPORT","DRIVE MOTOR LEFT RUNNING. BATTERY EMPTY.","OPERATOR DID NOT CLOCK OUT.");m.terminals.back().readable=Readable::Letter;
  // --- Break corner, south-west ----------------------------------------------------------------
  bench(m,3.2f,23.3f,base);
  m.fixtures.push_back({19,{5.9f,22.5f},0,1.367f,.724f,.78f,0,true});
  for(float x:{5.4f,6.4f})m.fixtures.push_back({18,{x,23.25f},0,.417f,.525f,.95f,kPi,true});
  m.fixtures.push_back({36,{6.3f,22.45f},.78f,.3f,.3f,.4f,0,false});
  m.fixtures.push_back({34,{5.6f,22.5f},.78f,.09f,.09f,.1f,0,false});
- terminal(m,{1.8f,22.2f},"WAREHOUSE / BREAK CORNER","RADIO CHECK 02:14 / NO REPLY FROM RECEIVING.","DO NOT USE THE FREIGHT AISLES FOR EVACUATION.");
+ terminal(m,{1.8f,22.2f},"WAREHOUSE / BREAK CORNER","RADIO CHECK 02:14 / NO REPLY FROM RECEIVING.","DO NOT USE THE FREIGHT AISLES FOR EVACUATION.");m.terminals.back().readable=Readable::Note;
  wallLamp(m,1.02f,21.9f,base+2.7f,0,1.1f,6.f);
  // --- Walls, roof and services ---------------------------------------------------------
  wallBays(m,base,roof,4.f,true,false,false,false,12.f,20.f);
@@ -2125,8 +2127,8 @@ std::shared_ptr<const Map> makeWarehouseD(){
  deck(m,walk,1,0,23,4);
  m.stairs.push_back({6.f,4.f,9.f,13.f,walk,mezz,32,true,true});
  guardRail(m,1.f,4.f,6.f,4.06f,walk);guardRail(m,9.f,4.f,23.f,4.06f,walk);guardRail(m,1.f,0,1.06f,4.f,walk);
- terminal(m,{16.f,2.4f},"RESTRICTED / SEALED MANIFEST","CONTAINMENT HARDWARE / SAMPLE HANDLING.","CONTENTS NOT FOR LOCAL INSPECTION.",walk-base);
- wallSign(m,22.945f,2.f,walk+1.5f,"RACK ACCESS CLOSED","OVERHEAD STOCK DISPLACED / D3",1.8f,-kPi*.5f);
+ terminal(m,{16.f,2.4f},"RESTRICTED / SEALED MANIFEST","CONTAINMENT HARDWARE / SAMPLE HANDLING.","CONTENTS NOT FOR LOCAL INSPECTION.",walk-base);m.terminals.back().readable=Readable::Letter;
+ taped(m,{23.f,2.f},walk+1.55f,-kPi*.5f,Readable::Letter,"RACK ACCESS CLOSED","OVERHEAD STOCK DISPLACED IN D3. DO NOT CLIMB THE RACKING.","STORES SUPERVISOR");
  // --- West mezzanine over the parts racks, open west to the upper racks ---------------------
  deck(m,mezz,0,9,10,24);
  guardRail(m,10.f,9.f,10.06f,24.f,mezz);guardRail(m,0,9.f,6.f,9.06f,mezz);guardRail(m,9.f,9.f,10.f,9.06f,mezz);
@@ -2193,7 +2195,7 @@ std::shared_ptr<const Map> makeWarehouseUpper(){
  deck(m,top,2,21,20,24);
  guardRail(m,2.f,21.f,16.f,21.06f,top);guardRail(m,19.f,21.f,20.f,21.06f,top);
  guardRail(m,19.94f,21.f,20.f,23.f,top);guardRail(m,2.f,21.f,2.06f,23.f,top);
- terminal(m,{5.f,22.4f},"UPPER STORAGE / BREACH","RESTRICTED FREIGHT: MANIFEST CONTROL.","OFFICES ABOVE THE INTAKE END.",top-base);
+ terminal(m,{5.f,22.4f},"UPPER STORAGE / BREACH","RESTRICTED FREIGHT: MANIFEST CONTROL.","OFFICES ABOVE THE INTAKE END.",top-base);m.terminals.back().readable=Readable::Letter;
  m.clutterSpawns.push_back({3,{13.f,22.f},top});
  // --- E block racking ---------------------------------------------------------------------
  for(float x:{1.3f,7.2f,9.96f})for(float y:{2.5f,6.52f,10.54f,14.56f})rack(m,x,y,base,6,y>14.f);
@@ -2272,7 +2274,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  // --- The bullpen -----------------------------------------------------------------------------
  cubicleBank(m,8.8f,4,9.2f,f,0);
  cubicleBank(m,8.8f,4,13.8f,f,2);
- terminal(m,{6,16},"MANIFEST / MISSED CALLS","RECEIVING: 02:14 / 02:17 / 02:21 / NO ANSWER.","EMPLOYEE TRANSIT LOG: PLATFORM 3.");
+ terminal(m,{6,16},"MANIFEST / MISSED CALLS","RECEIVING: 02:14 / 02:17 / 02:21 / NO ANSWER.","EMPLOYEE TRANSIT LOG: PLATFORM 3.");m.terminals.back().readable=Readable::Note;
  // --- Supervisors' offices, east ----------------------------------------------------------------
  officeGlass(m,17.2f,5.8f,17.4f,17.8f,f,ceil);
  officeGlass(m,17.4f,5.8f,18.4f,6.f,f,ceil);officeDoorway(m,18.4f,19.6f,5.8f,6.f,f,ceil);officeGlass(m,19.6f,5.8f,23.f,6.f,f,ceil);
@@ -2285,14 +2287,14 @@ std::shared_ptr<const Map> makeManifestOffices(){
  m.fixtures.push_back({31,{22.5f,10.6f},0,.9f,.5f,.75f,-kPi*.5f,true});
  m.fixtures.push_back({30,{22.5f,10.6f},.75f,.5f,.4f,.42f,-kPi*.5f,false});
  m.fixtures.push_back({37,{18.f,11.45f},0,.9f,.3f,1.8f,kPi,true});
- terminal(m,{19.4f,8.6f},"TRAIN 27 / ARRIVAL RECORD","PASSENGERS: 0 / CARGO: NONE / PLATFORM 3.","MANUAL ANNOTATION: THIS IS WRONG.");
+ terminal(m,{19.4f,8.6f},"TRAIN 27 / ARRIVAL RECORD","PASSENGERS: 0 / CARGO: NONE / PLATFORM 3.","MANUAL ANNOTATION: THIS IS WRONG.");m.terminals.back().readable=Readable::Letter;
  // South office: ordinary freight.
  m.fixtures.push_back({24,{21.4f,15.6f},0,1.4f,.7f,.75f,kPi,true});
  m.fixtures.push_back({26,{21.4f,14.8f},0,.55f,.55f,.95f,kPi,true});
  m.fixtures.push_back({27,{21.2f,15.7f},.75f,.42f,.4f,.38f,kPi,false});
  for(float y:{12.6f,13.4f})m.fixtures.push_back({32,{22.55f,y},0,.5f,.6f,1.3f,-kPi*.5f,true});
  m.fixtures.push_back({37,{18.f,12.25f},0,.9f,.3f,1.8f,0,true});
- terminal(m,{19.4f,14.6f},"MANIFEST / ORDINARY FREIGHT","BEARINGS / FILTERS / FOOD / MEDICAL SUPPLIES.","SPECIALIZED CONTAINMENT HARDWARE: RESEARCH RECEIVING.");
+ terminal(m,{19.4f,14.6f},"MANIFEST / ORDINARY FREIGHT","BEARINGS / FILTERS / FOOD / MEDICAL SUPPLIES.","SPECIALIZED CONTAINMENT HARDWARE: RESEARCH RECEIVING.");m.terminals.back().readable=Readable::Letter;
  for(Vec2 l:{Vec2{20.2f,8.8f},Vec2{20.2f,14.8f}})m.lights.push_back(lamp(l,ceil-.16f,.9f,6.f,3800));
  // --- Kitchen, south-west ---------------------------------------------------------------------
  officeWall(m,1.f,16.6f,6.8f,16.8f,f,ceil);
@@ -2437,7 +2439,7 @@ std::shared_ptr<const Map> makeTransferConveyors(){
  cue(m,"transfer_belts",100,Sound::Machine,{12.f,4.8f},"",.35f,top+.6f);
  cue(m,"transfer_belts",11000,Sound::JunkMetal,{5.1f,12.2f},"",.4f,mid);
  for(Vec2 d:{Vec2{21.4f,3.6f},Vec2{21.4f,14.4f}})m.fixtures.push_back({6,d,(d.y<5?top:mid)-base,1.2f,.6f,.7f,0,true});
- terminal(m,{21.f,22.f},"TRANSFER / CONVEYOR ROUTE","SORTING FLOOR BELOW / FOLLOW AMBER CLEARANCE.","DEPOT AND PLATFORMS: SOUTH RAIL SPUR.",low-base);
+ terminal(m,{21.f,22.f},"TRANSFER / CONVEYOR ROUTE","SORTING FLOOR BELOW / FOLLOW AMBER CLEARANCE.","DEPOT AND PLATFORMS: SOUTH RAIL SPUR.",low-base);m.terminals.back().readable=Readable::Letter;
  // --- The floor: belt plant and stores -------------------------------------------------------
  m.fixtures.push_back({53,{16.f,8.f},0,4.53f,2.04f,2.74f,0,true});
  for(Vec2 d:{Vec2{19.4f,10.2f},Vec2{20.3f,10.2f},Vec2{19.85f,11.f},Vec2{12.4f,7.6f}})m.fixtures.push_back({49,d,0,.75f,.75f,1.08f,0,true});
@@ -2608,7 +2610,7 @@ std::shared_ptr<const Map> makeEmptyPlatform(){
  terminal(m,{12,3},"PLATFORM 3 / DEPARTURES","TRAIN 27 / ARRIVED 02:13.","NO DEPARTURE RECORDED / TRACK CLEAR.");
  m.fixtures.push_back({8,{13.62f,14.f},deckZ-base+1.1f,.55f,.12f,.8f,kPi*.5f,false});
  terminal(m,{14.f,15.2f},"PLATFORM / EMERGENCY PHONE","DISPATCH LINE OPEN / NO OPERATOR RESPONSE.","HOLD THE PLATFORM. DO NOT ENTER THE TRACK.",deckZ-base);
- board(m,12.f,7.6f,-21.f,"PLATFORM 3","TRAIN 27 / ARRIVED 02:13",3.6f);
+ 
  // --- Walls across the lines --------------------------------------------------------------------
  wallSign(m,12.f,1.055f,-20.f,"WAY OUT","FREIGHT YARD / MANIFEST OFFICES",2.4f,0);
  for(float y:{4.f,20.f}){wallLamp(m,1.02f,y,-21.5f,0,1.1f,8.f);wallLamp(m,22.98f,y,-21.5f,kPi,1.1f,8.f);}
@@ -2654,7 +2656,9 @@ std::shared_ptr<const Map> makePlatformServiceEnd(){
  for(float y:{15.9f,17.6f})floorLine(m,1.f,y,9.f,y+.1f,base,13),floorLine(m,15.f,y,23.f,y+.1f,base,13);
  office(m,10.5f,19.5f,base,"PLATFORM / SECURITY RECORD","02:12:51 ... 02:19:04 / BLOCK MISSING.","EMPLOYEE TRANSIT: ROLLING STOCK DEPOT.",0,true);
  m.fixtures.push_back({18,{10.5f,18.65f},0,.417f,.525f,.95f,kPi,true});
- for(int i=0;i<6;++i)m.clutterSpawns.push_back({i%4,{15.6f+float(i%3)*.8f,19.4f+float(i/3)},base});
+ {const Vec2 spill[]={{15.3f,19.2f},{16.9f,20.6f},{17.6f,19.3f},{15.8f,21.f},{18.1f,20.2f},{16.3f,19.7f}};
+  const float spin[]={1.2f,.3f,4.4f,2.1f,5.6f,3.f};
+  for(int i=0;i<6;++i)m.clutterSpawns.push_back({i%4,spill[i],base,spin[i]});}
  m.fixtures.push_back({58,{16.2f,21.9f},0,.97f,.41f,2.24f,kPi,true});
  // --- Walls across the lines, ceiling and light -------------------------------------------------
  wallSign(m,22.945f,8.f,-22.2f,"MIND THE GAP","STAND BEHIND THE YELLOW LINE",4.f,-kPi*.5f);
@@ -2692,7 +2696,7 @@ std::shared_ptr<const Map> makeDepotTrackside(){
  for(float y:{6.f,18.f})m.lights.push_back(lamp({7.6f,y},bed+6.5f,2.f,10.f,4600,.05f));
  // --- A loaded flat on line 2 and the maintenance log ----------------------------------------------
  flatWagon(m,19.f,6.f,bed);
- terminal(m,{22.f,20.f},"DEPOT / MAINTENANCE LOG","ENGINE 04: DRIVER ATTEMPTED EVACUATION.","VEHICLE STOPPED AT THE BARRICADE.",bed-base);
+ terminal(m,{22.f,20.f},"DEPOT / MAINTENANCE LOG","ENGINE 04: DRIVER ATTEMPTED EVACUATION.","VEHICLE STOPPED AT THE BARRICADE.",bed-base);m.terminals.back().readable=Readable::Note;
  m.fixtures.push_back({13,{22.75f,22.4f},bed-base,.9066f,.4956f,2.2f,kPi*.5f,true});
  // --- The service road: stores, carts and the way south -------------------------------------------
  for(float y:{11.f,12.3f})m.fixtures.push_back({7,{9.3f,y},0,1.2f,.45f,1.8f,kPi*.5f,true});
@@ -2737,7 +2741,7 @@ std::shared_ptr<const Map> makeDepotInspectionPits(){
  for(Vec2 c:{Vec2{3.2f,3.f},Vec2{7.f,3.2f}})cargo(m,c.x,c.y,bed);
  m.fixtures.push_back({17,{5.f,3.f},bed-base,1.f,1.1f,1.f,.4f,true});
  forklift(m,2.3f,7.f,bed);
- board(m,5.f,4.6f,bed+2.f,"LINE 1 CLOSED","DEPOT LOCKDOWN / NO MOVEMENTS",2.6f);
+ crewBarrier(m,5.f,4.6f,bed);taped(m,{5.f,4.6f},bed+.78f,kPi,Readable::Letter,"LINE 1 CLOSED","DEPOT LOCKDOWN 02:31. NO VEHICLE MOVEMENTS.","DEPOT CONTROL");
  // --- Line 2 over the inspection pit: Engine 02 on its jacks ------------------------------------
  for(float x:{18.f,19.6f})wall(m,x,3.f,x+.4f,19.f,base,bed,15);
  // Closed at both ends, as a pit is (nothing under the beds is a place to be), with
@@ -2748,7 +2752,7 @@ std::shared_ptr<const Map> makeDepotInspectionPits(){
  locomotive(m,19.f,6.f,bed,true);
  for(float x:{17.4f,20.6f})for(float y:{6.6f,12.4f}){wall(m,x-.2f,y-.2f,x+.2f,y+.2f,bed,bed+.1f,8);wall(m,x-.07f,y-.07f,x+.07f,y+.07f,bed+.1f,bed+.72f,18);}
  for(float y:{5.f,9.f,13.f})wallLamp(m,18.42f,y,base+1.6f,0,1.f,4.f); // the steps take the deck's light
- board(m,21.6f,2.4f,bed+2.f,"INSPECTION PIT","JACKS ENGAGED / DO NOT LOWER",2.f);
+ crewBarrier(m,21.6f,2.4f,bed);taped(m,{21.6f,2.4f},bed+.78f,kPi,Readable::Sticky,"DO NOT LOWER","ENGINE 02 ON JACKS.","TAG: R. OKAFOR");
  // --- The tool bay ---------------------------------------------------------------------------
  for(float y:{6.f,10.f})m.fixtures.push_back({19,{22.2f,y},bed-base,1.367f,.724f,.78f,kPi*.5f,true});
  m.fixtures.push_back({22,{22.4f,14.f},bed-base,.718f,.453f,1.2f,-kPi*.5f,true});
@@ -2781,7 +2785,7 @@ std::shared_ptr<const Map> makeDepotGantries(){
  rectangle(m.layers[0],10,23,14,24,'.');m.doors.push_back({10.5f,13.5f,23.5f,0,false,true,false,0});
  wall(m,10,23,14,24,base+2.5f,roof,3);
  wallSign(m,12.f,22.945f,base+4.2f,"DEEP CARGO","MAINTENANCE BORE / RESTRICTED",2.4f,kPi);
- terminal(m,{12,21.6f},"DEEP CARGO ROUTE","POWER DISTRIBUTION / RESTRICTED INDUSTRIAL ACCESS.","BEYOND THIS POINT: NO EMPLOYEE TRANSIT.");
+ terminal(m,{12,21.6f},"DEEP CARGO ROUTE","POWER DISTRIBUTION / RESTRICTED INDUSTRIAL ACCESS.","BEYOND THIS POINT: NO EMPLOYEE TRANSIT.");m.terminals.back().readable=Readable::Letter;
  // --- Gantry walks ---------------------------------------------------------------------------
  deck(m,walk,1,0,23,4);deck(m,walk,1,4,8,22);deck(m,walk,16,4,23,22);
  m.stairs.push_back({1.2f,4.f,4.f,13.f,base,walk,32,true,true});
@@ -2847,7 +2851,7 @@ std::shared_ptr<const Map> makeMaintenanceBore(){
  wall(m,13.2f,16.55f,22.8f,16.8f,base+.9f,base+1.15f,12);
  for(Vec2 b:{Vec2{12.4f,14.6f},Vec2{18.2f,19.f},Vec2{21.f,13.8f}})wall(m,b.x-.35f,b.y-.3f,b.x+.35f,b.y+.3f,base,base+.4f,15);
  wall(m,13.f,14.6f,23.f,19.f,roof-.08f,roof,8);
- board(m,15.f,12.6f,base+2.f,"LINE BLOCKED","ROOF FAILURE / USE CROSS PASSAGE",2.6f);
+ crewBarrier(m,15.f,12.6f,base);taped(m,{15.f,12.6f},base+.78f,kPi,Readable::Letter,"LINE BLOCKED","ROOF FALL BETWEEN SIGNALS 4A-2 AND 4A-3.","USE CROSS PASSAGE 4A-3. - PERMANENT WAY");
  for(Vec2 r:{Vec2{12.8f,13.6f},Vec2{16.f,13.6f}})m.fixtures.push_back({52,r,0,1.6f,.5f,.7f,0,true});
  // --- West bore: signal room, cable runs, stores ----------------------------------------------------
  office(m,11.f,19.f,base,"SIGNAL ROOM / TUNNEL 4A","MAIN LINE CLOSED / PARALLEL BORE AVAILABLE.","POWER DISTRIBUTION: DEEP JUNCTION.",0,true);

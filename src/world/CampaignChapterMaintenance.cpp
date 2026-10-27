@@ -292,7 +292,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  mntFix(m,model::scrap_lantern,{19.3f,7.2f},f,.26f,.31f,.77f,0,false);
  for(Vec2 j:{Vec2{22.65f,7.55f},Vec2{22.3f,7.62f},Vec2{22.62f,7.12f}}){wall(m,j.x-.13f,j.y-.13f,j.x+.13f,j.y+.13f,f,f+.42f,20);wall(m,j.x-.04f,j.y-.04f,j.x+.04f,j.y+.04f,f+.42f,f+.5f,19);}
  m.lights.push_back(lamp({19.3f,7.2f},f+.62f,.5f,3.f,2000,-.1f,WorldLightMount::Bare));
- terminal(m,{16.6f,6.6f},"B SHIFT / MESSAGE BOARD","DAY 2. SIX OF US LEFT. WATER FROM THE COOLER. NOBODY GOES TO STORES.","MOVED TO THE AID STATION. KNOCK THREE TIMES. - R. MARSH");
+ terminal(m,{16.6f,6.6f},"B SHIFT / MESSAGE BOARD","DAY 2. SIX OF US LEFT. WATER FROM THE COOLER. NOBODY GOES TO STORES.","MOVED TO THE AID STATION. KNOCK THREE TIMES. - R. MARSH");m.terminals.back().readable=Readable::Note;
  mntTube(m,{17.9f,4.4f},rt,false,1.f,6.f,3000,0);
  mntTube(m,{20.6f,4.4f},rt,false,.9f,6.f,3000,0);
 
@@ -330,7 +330,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  wall(m,15.2f,18.4f,15.4f,20.f,f,f+1.f,3);wall(m,14.9f,18.3f,15.6f,20.1f,f+1.f,f+1.06f,20);
  wall(m,15.2f,18.4f,15.4f,20.f,f+2.15f,rt,3);wall(m,15.0f,18.35f,15.2f,20.05f,f+2.15f,f+2.45f,12);
  wall(m,15.2f,15.8f,23,23,rt,rt+.2f,15);
- terminal(m,{14.5f,17.6f},"WORK ORDERS / OPEN","WO 7714: OPERATIONS SHUTTER 3. DRIVE SHEAR PIN SHEARED 02:16.","TURN NEW PIN FROM 40 MM BAR (CENTRAL STORES, RACK B). LATHE 2, FAB SHOP.");
+ terminal(m,{14.5f,17.6f},"WORK ORDERS / OPEN","WO 7714: OPERATIONS SHUTTER 3. DRIVE SHEAR PIN SHEARED 02:16.","TURN NEW PIN FROM 40 MM BAR (CENTRAL STORES, RACK B). LATHE 2, FAB SHOP.");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=-kPi*.5f;
  // Inside: steel shelving, the tool chests, cylinders chained to the wall, a bench and vise.
  for(float y:{17.2f,19.4f})mntFix(m,model::metal_shelf,{22.7f,y},f,1.8f,.5f,1.8f,-kPi*.5f,true);
@@ -435,7 +435,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  wall(m,18.6f,1.f,23.f,8.4f,ot,ot+.2f,15);
  // Inside: the storeman's desk at the glass, the ledger, cabinets, keys, the kettle.
  mntDesk(m,19.55f,4.4f,f,-kPi*.5f,1);
- terminal(m,{21.7f,1.75f},"CENTRAL STORES / ISSUE LEDGER","LAST ISSUE 02:09: FILTERS X4 TO WO 7702. NOTHING SINCE.","40 MM EN24: RACK B, BAY 3. ONE LENGTH CUT FOR WO 7714. NOT COLLECTED.");
+ terminal(m,{21.7f,1.75f},"CENTRAL STORES / ISSUE LEDGER","LAST ISSUE 02:09: FILTERS X4 TO WO 7702. NOTHING SINCE.","40 MM EN24: RACK B, BAY 3. ONE LENGTH CUT FOR WO 7714. NOT COLLECTED.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=0;
  for(float y:{3.3f,3.9f})mntFix(m,model::file_cabinet_tall,{22.65f,y},f,.5f,.6f,1.3f,-kPi*.5f,true);
  mntFix(m,model::file_cabinet_wide,{22.5f,6.9f},f,.9f,.5f,.75f,-kPi*.5f,true);
@@ -499,7 +499,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(int i=0;i<12;++i){const float x=4.55f+i*.95f+(i%2)*.1f,z=mz+(i%3==0?.31f:i%3==1?.97f:1.66f);
   mntFix(m,model::packing_crate,{x,1.36f},z,.42f,.34f,.26f,(i%4)*.1f,false);}
  for(auto [x,y,yaw]:{std::tuple{9.6f,3.4f,9.6f},{10.15f,3.5f,10.f},{15.6f,3.2f,15.6f}})mntFix(m,model::packing_crate,{x,y},mz,.55f,.4f,.32f,yaw,true);
- terminal(m,{12.f,3.6f},"SMALL PARTS / INDEX","BIN 4411 SEALS. BIN 4412 SEALS. BIN 4413 EMPTY SINCE MAY.","STOCK CHECK OVERDUE / SIGNED OFF ANYWAY / J. OKAFOR",mz-f);
+ terminal(m,{12.f,3.6f},"SMALL PARTS / INDEX","BIN 4411 SEALS. BIN 4412 SEALS. BIN 4413 EMPTY SINCE MAY.","STOCK CHECK OVERDUE / SIGNED OFF ANYWAY / J. OKAFOR",mz-f);m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=0;
  m.pickupSpawns.push_back({{4.7f,2.3f},PickupKind::Ammo,mz});
  for(float x:{8.f,14.5f})m.lights.push_back(lamp({x,1.02f},mz+2.35f,.75f,6.f,6200,.4f,WorldLightMount::Wall,kPi*.5f));
@@ -557,7 +557,7 @@ std::shared_ptr<const Map> makeCentralStores(){
   for(int k=0;k<6;++k){const float bx=x-.15f+(k%3)*.105f,by=21.8f+(k/3)*.17f;wall(m,bx,by,bx+.07f,by+.11f,f+.82f,f+.828f,(i+k)%3==0?19:(i+k)%3==1?18:20);}}
  mntFix(m,model::packing_crate,{6.55f,22.45f},f,.6f,.45f,.42f,.25f,true);
  for(Vec2 h:{Vec2{4.7f,21.8f},Vec2{6.0f,22.f}})mntFix(m,model::mine_hard_hat,h,f+.78f,.28f,.35f,.15f,h.x,false);
- terminal(m,{3.85f,22.35f},"CLEANUP DETAIL 4 / HEADCOUNT","B SHIFT PRESENT 03:10 - 03:58: 35 OF 41. PROCESSED: 35.","OUTSTANDING: 6. SWEEP THE DISTRICT. ORDER 7 STANDS.");
+ terminal(m,{3.85f,22.35f},"CLEANUP DETAIL 4 / HEADCOUNT","B SHIFT PRESENT 03:10 - 03:58: 35 OF 41. PROCESSED: 35.","OUTSTANDING: 6. SWEEP THE DISTRICT. ORDER 7 STANDS.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=kPi;
  wall(m,7.17f,22.27f,7.23f,22.33f,f,f+2.f,8);
  for(float a:{0.f,2.1f,4.2f})wall(m,7.2f+std::sin(a)*.34f-.02f,22.3f+std::cos(a)*.34f-.02f,7.2f+std::sin(a)*.34f+.02f,22.3f+std::cos(a)*.34f+.02f,f,f+.04f,6);
@@ -738,7 +738,7 @@ std::shared_ptr<const Map> makeMaintenanceAidStation(){
  mntFix(m,model::med_crash_cart,{11.6f,12.f},f,.74f,.48f,1.f,.3f,true);
  mntFix(m,model::med_wheelchair,{7.f,17.9f},f,.55f,1.03f,.9f,2.f,true);
  mntFix(m,model::med_wall_clock,{12.f,5.03f},f+2.f,.24f,.02f,.23f,0,false);
- terminal(m,{9.3f,5.7f},"AID STATION / EXPOSURE REGISTER","B SHIFT: 41 SCREENED THIS MONTH. TIER 2: 6. TIER 3: 1 (TRANSFERRED).","TIER 3 GOES TO MEDICAL SCREENING ON LEVEL 9. NOBODY HAS COME BACK TO WORK FROM THERE.");
+ terminal(m,{9.3f,5.7f},"AID STATION / EXPOSURE REGISTER","B SHIFT: 41 SCREENED THIS MONTH. TIER 2: 6. TIER 3: 1 (TRANSFERRED).","TIER 3 GOES TO MEDICAL SCREENING ON LEVEL 9. NOBODY HAS COME BACK TO WORK FROM THERE.");m.terminals.back().readable=Readable::Note;
  // The ones Cleanup reached: four where they lay, and the blood.
  for(auto [x,y,yaw]:{std::tuple{9.f,11.2f,1.f},{10.6f,9.4f,2.4f},{12.4f,14.f,-.6f},{8.4f,13.6f,3.6f}}){
   std::string clock="mnt_aid_body_"+std::to_string(int(x*10));mntBody(m,clock.c_str(),ActorVisual::Worker,{x,y},f,yaw);machineryClock(m,clock.c_str(),60000);
