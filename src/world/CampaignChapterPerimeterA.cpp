@@ -232,8 +232,8 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
   for(float z=f+.15f;z<f+1.4f;z+=.3f)wall(m,x-.01f,1.45f,x+.41f,1.47f,z,z+.15f,13);}
  wall(m,9.6f,1.f,14.4f,1.45f,f+2.65f,f+3.f,12);
  // Lockers on the west and north walls, benches between them.
- for(int i=0;i<4;++i)perFix(m,model::pwr_locker_bank,1.45f,2.0f+i*.87f,f,.87f,.85f,2.42f,0,true);
- for(int i=0;i<5;++i)perFix(m,model::pwr_locker_bank,3.1f+i*.88f,1.45f,f,.87f,.85f,2.42f,-kPi*.5f,true);
+ for(int i=0;i<4;++i)perFix(m,model::psx_locker,1.335f,2.0f+i*.87f,f,.64f,.85f,2.42f,0,true); // backs where the old banks' were: 0.115 m toward the wall
+ for(int i=0;i<5;++i)perFix(m,model::psx_locker,3.1f+i*.88f,1.335f,f,.64f,.85f,2.42f,-kPi*.5f,true);
  bench(m,4.9f,4.3f,f);
  m.fixtures.push_back({model::trash_can,{7.6f,2.6f},0,.6f,.6f,.76f,0,true});
  // A boot rack with the boots still on it, and coveralls on hooks.
@@ -350,7 +350,7 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  m.lights.push_back(perTroffer({17.5f,9.5f},ceil,.9f));m.lights.push_back(perTroffer({20.5f,11.8f},ceil,.85f));
 
  // --- Perimeter security ready room: the rifles are gone -------------------------------------------
- for(int i=0;i<6;++i)perFix(m,model::pwr_locker_bank,22.56f,15.3f+i*.88f,f,.87f,.85f,2.42f,kPi,true);
+ for(int i=0;i<6;++i)perFix(m,model::psx_locker,22.675f,15.3f+i*.88f,f,.64f,.85f,2.42f,kPi,true);
  perWallBlood(m,true,22.1f,19.1f,19.6f,f+.6f,f+1.6f,.02f);
  perBody(m,"per_ops_clock",ActorVisual::Cleanup,{21.3f,19.4f},f,-kPi*.4f);
  perBlood(m,20.4f,18.9f,21.9f,20.1f,f);
@@ -650,7 +650,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  wall(m,16.6f,6.2f,16.8f,12.f,f,top,21);wall(m,16.6f,13.6f,16.8f,16.8f,f,top,21);wall(m,16.6f,12.f,16.8f,13.6f,f+2.2f,top,21);
  for(float y:{7.4f,10.4f})perFix(m,model::med_ward_bed,21.8f,y,f,1.98f,.94f,.84f,0,true);
  perFix(m,model::med_ward_bed_tossed,21.8f,14.f,f,2.1f,1.5f,.84f,0,true);
- for(float x:{17.4f,18.3f})perFix(m,model::pwr_locker_bank,x,16.3f,f,.7f,.68f,1.94f,kPi*.5f,true); // doors (local +x) open north into the room
+ for(float x:{17.4f,18.3f})perFix(m,model::psx_locker,x,16.3925f,f,.515f,.68f,1.94f,kPi*.5f,true); // doors (local +x) open north into the room; backs where the old pair's were
  perTable(m,18.6f,9.f,19.8f,11.f,f,.76f);
  perFix(m,model::ind_crate,19.9f,7.f,f,.8f,.8f,.8f,.2f,true);
  m.pickupSpawns.push_back({{19.2f,13.2f},PickupKind::Ammo,f});

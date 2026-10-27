@@ -90,7 +90,7 @@ void Game::crossChunkBoundary(){
  for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){next=level;break;}
  }
- if(next==m_level)return;int previous=m_level;dropBody();
+ if(next==m_level)return;int previous=m_level;dropBody();clearLockerMotion(false); // the path's poses belong to the old chunk
  // Release a captive while their local coordinates still belong to this
  // chunk, before the seam checkpoint serializes the new player ownership.
  if(heldNpc()>=0)releaseNpc(true);
@@ -133,7 +133,7 @@ void Game::crossChunkBoundary(){
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;int ammo=m_player.ammo,loaded=m_player.loaded;
-    m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_levelNav={};m_levelNavReady=false;m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
+    clearLockerMotion(true);m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_levelNav={};m_levelNavReady=false;m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_world.definition().playerStart;
     m_player.angle = m_world.definition().spawnYaw;
@@ -398,8 +398,13 @@ void Game::update(const InputState& input, float dt) {
 
     if (!dead() && !m_won) {
         m_elapsed += dt;
+        // A locker's choreography holds the controls until the camera lands
+        // on the committed pose, so the path always ends where the player is.
+        updateLockerDoors(dt);const bool choreographed=lockerViewLocked();
+        if(!choreographed){
         m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
         m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -210.0f, 210.0f);
+        }else{m_velocity={};m_suppressFire=true;}
 
         updateMechanisms(dt);
         updateLift(dt);
@@ -407,7 +412,7 @@ void Game::update(const InputState& input, float dt) {
         auto movement=input;if(heldNpc()>=0||takedownActive()||draggingBody()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         // Shut in a locker the body stays where it is; only the head turns.
         // Crates already sliding and the reset lever carry on without it.
-        if(hiddenLocker()<0){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);
+        if(hiddenLocker()<0&&!choreographed){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);
         updateExposure(dt);
         updateStealth(input,dt);
         if(m_world.hasLift()){

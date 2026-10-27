@@ -461,6 +461,35 @@ public:
     bool updateLocker(const InputState& input);
     bool pullFromLocker(int level,size_t actor,ActorPose& pose);
     static bool testLockers();
+    // Locker doors (LockerDoors.cpp): each locker's two leaves swing on their
+    // hinges. Gameplay commits stay instant; the doors and the player's view
+    // play the motion over the following fraction of a second.
+    enum class LockerMotion {Enter,Exit,Caught,Stow,Knock};
+    void animateLockerDoor(int level,int fixture,LockerMotion motion);
+    // How far a leaf stands open: 0 shut, 1 at its full swing (leaf 0 left, 1 right, seen from outside).
+    float lockerDoorOpen(int level,int fixture,int leaf)const;
+    // The camera: the player's pose, or while a locker's choreography plays the
+    // path from where they stood to where the instant commit put them. Shut in,
+    // the eye sits behind the leaves while the record keeps the body at the doors.
+    Player view()const;
+    // True while a path holds the controls (enter, step out, the first half second of being pulled out).
+    bool lockerViewLocked()const;
+    // How much of the view the shut leaves cover from inside: 0 open, 1 shut in.
+    float lockerShutView()const;
+    // The locker whose leaves the camera looks out through, or -1.
+    int lockerViewFixture()const;
+    // LMB shut in a locker: a rattle of the leaves and a knock guards come to.
+    void knockInLocker();
+    // Transient, never saved: a save mid-motion loads at the committed end.
+    struct LockerDoor {int level=-1,fixture=-1;LockerMotion motion=LockerMotion::Knock;float age=0,length=0;std::array<float,2> from{},angle{},limit{};bool shut=true;};
+    std::vector<LockerDoor> m_lockerDoors;
+    struct LockerView {bool active=false;LockerMotion motion=LockerMotion::Enter;float age=0,length=0;Player from;int fixture=-1;float facePitch=0;};
+    LockerView m_lockerView;
+    void startLockerView(LockerMotion motion,const Player& from,int fixture,float facePitch=0);
+    void updateLockerDoors(float dt);
+    void clearLockerMotion(bool doors);
+    // --map-shots "caught": the nearest guard here steps to the doors and hauls the player out.
+    bool stageLockerCatch();
     // A guard's read on the player for the HUD: 0 unaware, up to 1 while
     // suspicion builds, 2 once he has you.
     float guardAwareness(size_t actor)const;

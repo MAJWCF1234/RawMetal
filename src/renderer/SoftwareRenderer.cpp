@@ -1,5 +1,6 @@
 #include "../core/FrameProfile.h"
 #include "SoftwareRenderer.h"
+#include "Projection.h"
 #include "GpuRenderer.h"
 #include "../vr/VrRuntime.h"
 #include "FrameWorker.h"
@@ -562,7 +563,7 @@ void SoftwareRenderer::drawSky(const Game& game){
  // a 4x3 horizontal cube cross, or an equirectangular panorama. The sky is
  // camera-centred and goes through the normal triangle path, so software and
  // Vulkan render the same environment without a second texture implementation.
- constexpr float radius=80.f;const auto& player=game.player();Point3 eye{player.pos.x,player.pos.y,player.z+player.eye};
+ constexpr float radius=80.f;const auto& player=m_view;Point3 eye{player.pos.x,player.pos.y,player.z+player.eye};
  auto point=[&](Point3 direction,float u,float v){
   auto camera=cameraPoint(eye+direction*radius,game);
   return MeshVertex{camera,u,v,1.f+std::max(0.f,camera.z)*.018f};
@@ -777,12 +778,44 @@ void SoftwareRenderer::drawHud(const Game& game){
  const char* zone=game.world().zoneName(p.pos,p.z);
  const char* mapLabel=zone?zone:game.world().custom()?game.world().customMapName():!game.world().campaign()?"ASHFALL / SURFACE":game.level()>=10?CampaignMapNames[game.level()]:game.level()==9?"18 WASTE HANDLING":game.level()==8?"17 UTILITY JUNCTION":game.level()==7?"16 PUMP ANNEX":game.level()==6?"15 CABLE VAULTS":game.level()==5?"14 COOLANT RETURN":CampaignMapNames[game.level()]; // Maps 0-4 name every spot through zones.
  const auto bone=rgb(236,228,214),black=rgb(0,0,0);
- // Shut in a locker the door is all there is to see, but for its vent slats.
+ // Shut in a locker the leaves are all there is to see, but for the band of
+ // vent holes punched through them. Every pixel's ray meets the leaves' inner
+ // face 13 cm from the eye; it shows the room only through a hole (staggered
+ // rows across both leaves, at eye height), so the holes stay put on the steel
+ // as the head turns and grow as it leans to them. The light that leaks in
+ // catches the lower lip of each hole; the seam where the leaves meet is a
+ // hairline of light. It fades in as the leaves shut and out as they open.
  const bool locker=game.hiddenLocker()>=0;
- if(locker){const auto steel=rgb(16,17,18),lip=rgb(74,76,77);const int left=m_width*3/16,right=m_width-left,top=m_height*7/25,bottom=m_height*31/50,slats=7;
-  fill(0,0,m_width,top,steel,.97f);fill(0,bottom,m_width,m_height-bottom,steel,.97f);fill(0,top,left,bottom-top,steel,.97f);fill(right,top,m_width-right,bottom-top,steel,.97f);
-  for(int i=0;i<slats;++i){int y=top+(bottom-top)*i/slats,h=(bottom-top)*11/(slats*20);fill(left,y,right-left,h,steel,1);fill(left,y+h-2,right-left,2,lip,.75f);fill(left,y+h,right-left,3,black,.4f);}
-  frame(left-1,top-1,right-left+2,bottom-top+2,lip,.55f);}
+ if(const float cover=game.lockerShutView();cover>0&&game.lockerViewFixture()>=0){
+  const auto&f=game.world().fixtures()[size_t(game.lockerViewFixture())];const auto&v=m_view;
+  const float c=std::cos(f.yaw),s=std::sin(f.yaw),sz=f.depth/.9f;const Vec2 out{c,-s},side{s,c};
+  const Vec2 plane=f.position+out*(f.width*.5f-.01f);const float floor=game.world().floorHeight(f.position.x,f.position.y)+f.base;
+  const float band=floor+Player::StandingEye,halfWidth=.4f*sz,colPitch=.0115f,rowPitch=.01f,radius=.0036f;
+  const float cy=std::cos(v.angle),sy=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=Projection{float(m_width)/m_height}.focal(float(m_width));
+  const Point3 eye{v.pos.x,v.pos.y,v.z+v.eye},forward{cy*cp,sy*cp,sp},right{-sy,cy,0},up{-cy*sp,-sy*sp,cp};
+  const float eyeAhead=(plane.x-eye.x)*out.x+(plane.y-eye.y)*out.y;
+  const auto steel=rgb(15,17,18),lit=rgb(25,28,29),dim=rgb(9,10,11),lip=rgb(52,56,54),seam=rgb(64,62,55);
+  enum Kind {Steel,Lit,Dim,Hole,Lip,Seam};
+  auto classify=[&](int x,int y)->Kind{
+   const float px=(x+.5f-m_width*.5f)/focal,py=(m_height*.5f-y-.5f)/focal;
+   const Point3 d{forward.x+right.x*px+up.x*py,forward.y+right.y*px+up.y*py,forward.z+right.z*px+up.z*py};
+   const float toward=d.x*out.x+d.y*out.y;if(toward<=.02f)return Steel;
+   const float t=eyeAhead/toward;const float hx=eye.x+d.x*t-plane.x,hy=eye.y+d.y*t-plane.y,u=hx*side.x+hy*side.y,h=eye.z+d.z*t-band;
+   if(std::fabs(u)>halfWidth)return Dim;
+   if(std::fabs(u+.002f*sz)<.0004f&&std::fabs(h)<.9f)return Seam;
+   const int row=int(std::floor(h/rowPitch+.5f));if(row<-3||row>3)return std::fabs(h)<.075f?Lit:Steel; // light from the holes reaches a little way
+   if(std::fabs(u)>halfWidth-.03f||std::fabs(u+.002f*sz)<.008f)return Lit;
+   const float shift=(row&1)?colPitch*.5f:0.f,cu=std::floor((u-shift)/colPitch+.5f)*colPitch+shift,ch=row*rowPitch;
+   if(std::fabs(cu)>halfWidth-.03f||std::fabs(cu+.002f*sz)<.008f)return Lit; // a margin at the edges and where the leaves meet
+   const float du=u-cu,dh=h-ch,r2=du*du+dh*dh;
+   if(r2<radius*radius)return Hole;
+   if(r2<(radius+.0007f)*(radius+.0007f)&&dh<-radius*.35f)return Lip;return Lit;
+  };
+  for(int y=0;y<m_height;++y){int x=0;while(x<m_width){const Kind k=classify(x,y);int end=x+1;while(end<m_width&&classify(end,y)==k)++end;
+    if(k==Hole)fill(x,y,end-x,1,black,.38f*cover); // the room through the steel: dimmer than in the open
+    else fill(x,y,end-x,1,k==Lip?lip:k==Seam?seam:k==Dim?dim:k==Lit?lit:steel,cover*(k==Seam?.75f:1.f));
+    x=end;}}
+ }
  gradient(0,0,m_width,46,black,.55f,0.f,false);
  std::string place(mapLabel);for(auto&c:place)c=char(std::toupper((unsigned char)c));fill(14,13,3,13,red,1);uiText(22,10,place.c_str(),bone,0,15,1,2);
  char b[80];std::snprintf(b,sizeof(b),"%d CONTACTS REMAIN",game.enemiesRemaining());if(!game.enemies().empty())uiText(22,28,b,muted,0,10,1,1);
@@ -1193,7 +1226,7 @@ void SoftwareRenderer::drawConsole(const Game& game){
  int y=28;for(size_t i=first;i<log.size();++i,y+=11)text(12,y,log[i].substr(0,150).c_str(),rgb(188,204,196));
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
-void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();auto afterSubmission=start;
+void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  m_cleanupEdgeStretch=1;
  bool directPresentation=hardwarePresentsWindow();
@@ -1215,20 +1248,20 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level))drawScene(game,false,level);
-   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&game.hiddenLocker()<0)drawViewModel(game);m_poseReady=false;
+   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&game.hiddenLocker()<0&&!game.lockerViewLocked())drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
- if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye,game.player().angle,game.player().pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
+ if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye,m_view.angle,m_view.pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
   std::array<float,16> fogLights{};std::array<float,4> fogPowers{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
   const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
    if(lamp.mount==WorldLightMount::Wall||lamp.intensity<=0)continue;
    // A switched-off lamp keeps its slot at zero power, so shafts never swap.
-   float dx=lamp.position.x-game.player().pos.x,dy=lamp.position.y-game.player().pos.y,d2=dx*dx+dy*dy;
+   float dx=lamp.position.x-m_view.pos.x,dy=lamp.position.y-m_view.pos.y,d2=dx*dx+dy*dy;
    float floor=world.floorHeight(lamp.position.x,lamp.position.y)+.08f;
    float top=std::min(lamp.z,world.clearanceAbove(lamp.position.x,lamp.position.y,floor)-.04f);
    float bottom=std::max(floor,top-4.5f);
-   float ahead=dx*std::cos(game.player().angle)+dy*std::sin(game.player().angle);
-   float eyeZ=game.player().z+game.player().eye;
+   float ahead=dx*std::cos(m_view.angle)+dy*std::sin(m_view.angle);
+   float eyeZ=m_view.z+m_view.eye;
    // Distance only: a facing test swapped lamps in and out of the four post
    // slots while turning, popping lamp shadows and glow.
    if(top-bottom<.8f||floor>eyeZ+2.f||top<eyeZ-2.f||d2>=distances[3])continue;(void)ahead;
@@ -1254,7 +1287,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
     for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint});powers.push_back(game.lampPower(lamp));}
    }
-   if(lamps.size()>256){Point3 eye{game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye};
+   if(lamps.size()>256){Point3 eye{m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye};
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}
     std::nth_element(order.begin(),order.begin()+256,order.end());order.resize(256);std::sort(order.begin(),order.end(),[](const auto&a,const auto&b){return a.second<b.second;});
     std::vector<std::array<float,7>> nearest;std::vector<float> nearestPowers;for(auto&entry:order){nearest.push_back(lamps[entry.second]);nearestPowers.push_back(powers[entry.second]);}lamps.swap(nearest);powers.swap(nearestPowers);}
@@ -1266,7 +1299,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    if(sun.intensity>0){
     sunData[0]=sun.direction.x;sunData[1]=sun.direction.y;sunData[2]=sun.direction.z;sunData[3]=sun.intensity;sunData[4]=sun.r;sunData[5]=sun.g;sunData[6]=sun.b;
     auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};Point3 forward=sun.direction*-1.f,right=cross(forward,Point3{0,0,1});float rl=std::sqrt(right.x*right.x+right.y*right.y+right.z*right.z);right=right*(1.f/std::max(rl,1e-4f));Point3 up=cross(right,forward);
-    const auto&p=game.player();float cy=std::cos(p.angle),sy=std::sin(p.angle),cp=std::cos(p.pitch/140.f),sp=std::sin(p.pitch/140.f);
+    const auto&p=m_view;float cy=std::cos(p.angle),sy=std::sin(p.angle),cp=std::cos(p.pitch/140.f),sp=std::sin(p.pitch/140.f);
     Point3 eye{p.pos.x+origin.x,p.pos.y+origin.y,p.z+p.eye},viewForward{cy*cp,sy*cp,sp};float aspect=float(m_width)/std::max(1,m_height);
     const float splits[4]={.3f,7.f,22.f,70.f};
     for(int c=0;c<3;++c){float n=splits[c],f=splits[c+1],cd=(n+f)*.5f;Point3 centre=eye+viewForward*cd;
@@ -1283,7 +1316,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   if(world.zoneSky())atmosphere={.55f,.64f,.74f,.0035f};
   m_gpu->setSkyStyle(world.zoneSky()?1:0);
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
-  if(world.waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
+  if(world.waterSurface(m_view.pos.x,m_view.pos.y)>m_view.z+m_view.eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
   // True darkness: haze goes black (it still swallows distance), the ambient
   // fill and exposure lift go, and a shot lights the room out to 12 m.
   const float darkness=game.darkness();for(int c=0;c<3;++c)atmosphere[size_t(c)]*=1.f-darkness;
@@ -1293,7 +1326,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    // Mid-session fallbacks are rare and look like a sudden quality drop; keep an appended record for diagnosis.
    std::ofstream("RawMetal-renderer-events.txt",std::ios::app)<<"Vulkan frame failed, falling back to software: "<<e.what()<<" (map "<<game.level()<<" at "<<game.player().pos.x<<','<<game.player().pos.y<<")\n";m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}
  else scene();
- bool underwater=!game.titleScreen()&&game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f;
+ bool underwater=!game.titleScreen()&&game.world().waterSurface(m_view.pos.x,m_view.pos.y)>m_view.z+m_view.eye+.03f;
  if(!directPresentation&&underwater){
   const auto source=m_pixels;
   for(int y=0;y<m_height;++y){int wobble=int(std::sin(game.elapsed()*7.f+y*.055f)*2.f);

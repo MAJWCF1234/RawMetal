@@ -194,7 +194,8 @@ bool Game::doorLocked(const Door& door)const{
 const char* Game::interactionHint()const{
  if(m_logTime>0){const bool paper=m_activeLog>=0&&size_t(m_activeLog)<m_world.terminals().size()&&m_world.terminals()[size_t(m_activeLog)].paper();
   return paper?(m_vrInputActive?"WRIST / PUT IT DOWN":"E / PUT IT DOWN"):(m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL");}
- if(hiddenLocker()>=0)return "E / STEP OUT";
+ if(hiddenLocker()>=0)return lockerViewLocked()?nullptr:"E / STEP OUT   LMB / KNOCK";
+ if(lockerViewLocked())return nullptr; // nothing to do mid-step: no hint for the frame that cannot take it
  if(heldNpc()>=0)return "E / RELEASE    Q / KNOCK OUT    FIRE / KILL";
  if(draggingBody())return "E / DROP THE BODY";
  if(holdingClutter())return m_vrInputActive?"RELEASE GRIP / DROP":"E / DROP     FIRE / PUNT";
@@ -254,6 +255,8 @@ void Game::updateInteraction(const InputState& input,float dt){
   for(int hand=0;hand<2;++hand)if(input.use&&input.vrGrip[hand]&&!previous[hand]){m_vrInteractionHand=hand;usePressed=true;break;}
  }
  if(usePressed&&m_logTime>0){m_logTime=0;m_activeLog=-1;m_previousUse=true;return;}
+ // Mid-choreography E waits for the camera to land; it is not queued.
+ if(usePressed&&lockerViewLocked()){m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&hiddenLocker()>=0){leaveLocker();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&heldNpc()>=0){releaseNpc(false);m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&draggingBody()){dropBody();m_previousUse=true;m_world.updateDoors(dt);return;}

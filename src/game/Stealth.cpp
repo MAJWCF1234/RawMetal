@@ -162,10 +162,10 @@ void Game::updateStealth(const InputState&input,float){
  }else if(subdue){int target=nearbyTakedown();if(target>=0)restrainNpc(size_t(target),false);else{m_pickupNotice="GET CLOSE BEHIND AN UNAWARE GUARD";m_pickupNoticeTime=1.5f;}}
 }
 // --- Lockers -----------------------------------------------------------------
-// Any solid steel locker bank whose doors (the model's local +x) open onto
-// floor a body can stand on is somewhere to hide. Shut in, the player looks
-// out through the vent slats: no steps, no light on them, and nobody outside
-// sees in. A guard who watched them climb in knows which locker and comes to
+// Any solid double-door steel locker whose leaves (the model's local +x) open
+// onto floor a body can stand on is somewhere to hide. Shut in, the player
+// looks out through the perforations in its leaves: no steps, no light on them,
+// and nobody outside sees in. A guard who watched them climb in knows which locker and comes to
 // open it; nobody else ever looks inside one.
 namespace {
 constexpr StateId PlayerLocker=stateId("player_locker"); // the fixture shut in, +1
@@ -176,7 +176,7 @@ constexpr float LockerEye=.06f,LockerStep=.32f,LockerStand=1.1f;
 constexpr float LockerYaw=.55f,LockerPitch=45.f;
 Vec2 lockerOut(const Fixture& f){return {std::cos(f.yaw),-std::sin(f.yaw)};}
 Vec2 lockerFront(const Fixture& f,float ahead){return f.position+lockerOut(f)*(f.width*.5f+ahead);}
-bool lockerModel(const Fixture& f){return f.model==model::pwr_locker_bank&&f.solid&&f.visible;}
+bool lockerModel(const Fixture& f){return f.model==model::psx_locker&&f.solid&&f.visible;}
 }
 int Game::hiddenLocker()const{
  const int index=state(PlayerLocker)-1;if(index<0||dead()||size_t(index)>=m_world.fixtures().size())return -1;const auto&f=m_world.fixtures()[size_t(index)];
@@ -214,7 +214,7 @@ int Game::lockerAhead()const{
  }return best;
 }
 bool Game::enterLocker(){
- const int index=lockerAhead();if(index<0)return false;const auto&f=m_world.fixtures()[size_t(index)];
+ const int index=lockerAhead();if(index<0)return false;const auto&f=m_world.fixtures()[size_t(index)];const Player before=m_player;
  const Vec2 out=lockerOut(f),stand=lockerFront(f,LockerStand)+chunkOffset(m_level);const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
  // Whoever has eyes on the player right now sees which locker.
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();
@@ -227,27 +227,33 @@ bool Game::enterLocker(){
  setState(PlayerLocker,index+1);
  m_player.pos=lockerFront(f,LockerEye);m_player.z=floor;m_player.crouched=false;m_player.eye=Player::StandingEye;m_player.grounded=true;m_player.verticalVelocity=0;
  m_player.angle=std::atan2(out.y,out.x);m_player.pitch=0;m_velocity={};m_stepDistance=0;m_jumpBuffer=0;m_suppressFire=true;m_playerExposure=0;
- // The doors pull to with a soft clank only someone at arm's length would notice.
- SoundEvent clank{Sound::Door,lockerFront(f,0),.3f,1.35f,true,6,floor+1.2f};clank.aiRadius=1.2f;m_sounds.push_back(clank);
+ // The latch lifts with a click only someone at arm's length would notice;
+ // the leaves swing wide, the player turns in, and they are pulled to.
+ SoundEvent latch{Sound::LockerLatch,lockerFront(f,0),.45f,1.f,true,6,floor+1.2f};latch.aiRadius=1.2f;m_sounds.push_back(latch);
+ animateLockerDoor(m_level,index,LockerMotion::Enter);startLockerView(LockerMotion::Enter,before,index);
  m_pickupNotice="HIDING";m_pickupNoticeTime=1.2f;return true;
 }
 bool Game::leaveLocker(){
  const int index=hiddenLocker();if(index<0)return false;const auto&f=m_world.fixtures()[size_t(index)];Vec2 exit;float feet;
  if(!lockerExit(f,exit,feet,true)){m_pickupNotice="NO ROOM TO STEP OUT";m_pickupNoticeTime=1.2f;return false;}
- forgetLocker();m_player.pos=exit;m_player.z=feet;m_velocity={};m_stepDistance=0;
- SoundEvent clank{Sound::Door,lockerFront(f,0),.3f,1.2f,true,6,feet+1.2f};clank.aiRadius=1.2f;m_sounds.push_back(clank);return true;
+ const Player before=view();forgetLocker();m_player.pos=exit;m_player.z=feet;m_velocity={};m_stepDistance=0;
+ SoundEvent latch{Sound::LockerLatch,lockerFront(f,0),.45f,.92f,true,6,feet+1.2f};latch.aiRadius=1.2f;m_sounds.push_back(latch);
+ m_sounds.push_back({Sound::LockerCreak,lockerFront(f,.1f),.28f,1.1f,true,6,feet+1.6f});
+ animateLockerDoor(m_level,index,LockerMotion::Exit);startLockerView(LockerMotion::Exit,before,index);return true;
 }
 // Out, however it happened: the next time in is a new secret, so a guard who
 // saw this one cannot open the locker on the strength of it.
 void Game::forgetLocker(){setState(PlayerLocker,0);for(size_t actor=0;actor<m_friendlyActors.size();++actor)setState(friendlyKey(actor,"guard_locker"),0);}
 // Shut in, the body stays put and the hands stay still; the head turns only
-// as far as the slats let it see out. True while the player is inside.
+// as far as the vent holes let it see out; LMB knocks on the leaves. True
+// while the player is inside.
 bool Game::updateLocker(const InputState& input){
  if(!state(PlayerLocker))return false;const int index=hiddenLocker();
  // A record that matches no locker the player is in (a jump to another map,
  // an older build's save) just lets them go where they stand.
  if(index<0){forgetLocker();return false;}
  if(input.vrTracked){if(!leaveLocker())forgetLocker();return false;}
+ if(input.fire&&!m_previousFire)knockInLocker();
  const Vec2 out=lockerOut(m_world.fixtures()[size_t(index)]);const float facing=std::atan2(out.y,out.x);
  m_player.angle=wrapAngle(facing+std::clamp(wrapAngle(m_player.angle-facing),-LockerYaw,LockerYaw));m_player.pitch=std::clamp(m_player.pitch,-LockerPitch,LockerPitch);
  m_velocity={};m_suppressFire=true;m_playerExposure=0;return true;
@@ -260,12 +266,15 @@ bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
  const int index=hiddenLocker();if(index<0||index!=saw||level<0||level>=chunkCount())return false;const auto&f=m_world.fixtures()[size_t(index)];
  const Vec2 shift=chunkOffset(m_level)-chunkOffset(level);Vec2 exit;float feet;
  if(lengthSq(pose.position-lockerFront(f,LockerEye)-shift)>1.9f*1.9f||std::fabs(pose.z-m_player.z)>.6f||!lockerExit(f,exit,feet,true))return false;
- forgetLocker();m_player.pos=exit;m_player.z=feet;m_player.pitch=0;m_velocity={};
+ const Player before=view();forgetLocker();m_player.pos=exit;m_player.z=feet;m_velocity={};
  const Vec2 toward=pose.position-exit-shift;m_player.angle=std::atan2(toward.y,toward.x);pose.yaw=std::atan2(-toward.x,-toward.y);
+ // Eye to eye with him: the view lands looking at his face, not his chest.
+ const float face=pose.z+m_friendlyActors[actor].track().scale*.92f-(feet+Player::StandingEye);m_player.pitch=std::clamp(std::atan2(face,std::max(.4f,length(toward)))*140.f,-50.f,50.f);
  rememberGuardTarget(actor,resolveGuardTarget(actor,{ShotKind::Player,m_level,0}));const Vec2 global=exit+chunkOffset(m_level);auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[actor].track().ai.recognitionMs);
- // The doors bang back: anyone near hears it.
- m_sounds.push_back({Sound::Door,lockerFront(f,0),.8f,1.1f,true,12,feet+1.2f});
+ // The doors bang back on their stops: anyone near hears it. The sting is the player's alone.
+ m_sounds.push_back({Sound::LockerBang,lockerFront(f,0),.8f,1.f,true,12,feet+1.2f});m_sounds.push_back({Sound::LockerSting,{},.75f,1.f,false});
+ animateLockerDoor(m_level,index,LockerMotion::Caught);startLockerView(LockerMotion::Caught,before,index);
  m_pickupNotice="FOUND";m_pickupNoticeTime=1.5f;return true;
 }
 bool Game::testStealth(){
@@ -357,7 +366,7 @@ bool Game::testLockers(){
   auto campaign=std::make_shared<CustomCampaign>();campaign->name="Locker validation";campaign->key=883016;
   auto map=std::make_shared<AuthoredMapData>();map->name="Locker test room";map->definition={{0,0},{3.2f,6.5f},0,Environment::Interior,false,8,.3f,43};
   AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
-  map->fixtures.push_back({model::pwr_locker_bank,{2.f,6.5f},0,.87f,.85f,2.42f,0,true});
+  map->fixtures.push_back({model::psx_locker,{2.115f,6.5f},0,.64f,.85f,2.42f,0,true});
   for(const auto&wall:walls)map->structures.push_back(wall);
   TimedSequence timer;timer.timerState=stateId("locker_clock");timer.finishState=stateId("locker_done");timer.soundIntervalMs=0;timer.loop=true;map->timedSequences.push_back(timer);
   ActorTrack track;track.timerState=timer.timerState;track.visual=ActorVisual::Cleanup;track.keys={{0,beat[0].position,0,yaw},{30000,beat[0].position,0,yaw}};track.scale=1.6f;track.health=90;track.damageState=stateId("locker_damage");track.deadState=stateId("locker_dead");track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.patrol=beat;if(engineer){track.ai.role=GuardSquadRole::Engineer;track.ai.squad=stateId("locker_team");}
@@ -442,7 +451,7 @@ bool Game::testLockers(){
  // witness forgets it once the player is out.
  {auto g=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);bool seen=hide(g)&&g.state(g.friendlyKey(0,"guard_locker"))==1;g.setState(g.friendlyKey(0,"guard_mode"),int(GuardState::Search));g.update({},1.f/60);
   bool dropped=!g.state(g.friendlyKey(0,"guard_locker"))&&g.hiddenLocker()==0;
-  auto again=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);seen&=hide(again)&&again.state(again.friendlyKey(0,"guard_locker"))==1;again.update(use,1.f/60);
+  auto again=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);seen&=hide(again)&&again.state(again.friendlyKey(0,"guard_locker"))==1;for(int i=0;i<60&&again.lockerViewLocked();++i)again.update({},1.f/60);again.update(use,1.f/60);
   check(seen&&dropped&&again.hiddenLocker()<0&&!again.state(again.friendlyKey(0,"guard_locker")),"A witness who goes to searching, or whose player steps out, forgets the locker");
  }
  // An Engineer's drone with the player in its sights fires on them in the
@@ -462,10 +471,67 @@ bool Game::testLockers(){
  }
  // The campaign's own lockers: the Operations Corridor's west wall, and the
  // Gatehouse bunk room's pair, which now open into the room.
- for(auto [level,at,angle]:{std::tuple{57,Vec2{2.55f,2.87f},kPi},std::tuple{59,Vec2{17.4f,15.05f},kPi*.5f}}){
+ for(auto [level,at,angle]:{std::tuple{57,Vec2{2.55f,2.87f},kPi},std::tuple{59,Vec2{17.4f,15.25f},kPi*.5f}}){
   auto g=mapInspection(at,angle,0,level,false,-999,true);bool ahead=g.lockerAhead()>=0;bool hidden=hide(g);Game loaded=g;bool restored=loaded.decodeSave(g.encodeSave())&&loaded.hiddenLocker()==g.hiddenLocker()&&length(loaded.player().pos-g.player().pos)<.001f;
   loaded.update({},1.f/60);loaded.update(use,1.f/60);
   check(ahead&&hidden&&restored&&loaded.hiddenLocker()<0&&loaded.hullFits(loaded.player().pos,loaded.player().z,Player::StandingHeight),level==57?"Map 57's west-wall lockers hide the player through a save and let them out again":"Map 59's bunk-room lockers hide the player through a save and let them out again");
+ }
+ // The leaves: every motion swings them out and lets them settle shut, each
+ // within its time, and none passes the stops.
+ {auto g=scene({{{20.5f,20.5f},0,5000}},0);bool settled=true;std::string detail;
+  for(auto [motion,peak,within]:{std::tuple{LockerMotion::Enter,.864f,.95f},std::tuple{LockerMotion::Exit,.864f,1.05f},std::tuple{LockerMotion::Caught,1.f,2.45f},std::tuple{LockerMotion::Stow,.864f,1.45f},std::tuple{LockerMotion::Knock,.027f,.3f}}){
+   g.animateLockerDoor(0,0,motion);float most=0;int frames=0;for(;frames<240&&!g.m_lockerDoors.empty();++frames){g.updateLockerDoors(1.f/60);most=std::max({most,g.lockerDoorOpen(0,0,0),g.lockerDoorOpen(0,0,1)});}
+   const bool ok=std::fabs(most-peak)<.03f&&g.m_lockerDoors.empty()&&g.lockerDoorOpen(0,0,0)==0&&frames<=int(within*60)+2;settled&=ok;
+   detail+=" "+std::to_string(int(motion))+":"+std::to_string(most).substr(0,5)+"/"+std::to_string(frames);}
+  check(settled,"Each locker motion swings both leaves to its stop and settles them shut in its time");report<<"  peaks/frames"<<detail<<'\n';
+ }
+ // In: the camera walks the path from where the player stood to the eye behind
+ // the shut leaves, with no pop, while the body is already committed inside.
+ {auto g=scene({{{10.5f,6.5f},0,600},{{4.2f,6.5f},0,4000}},kPi*.5f);const Player before=g.view();bool started=hide(g)&&g.lockerViewLocked();const Player at=g.player();
+  float jump=0,turnStep=0;Player last=g.view();bool still=true;InputState push;push.forward=true;push.mouseDx=300;push.mouseDy=200;push.jump=true;push.crouch=true;push.use=true;push.fire=true;int frames=0;
+  // Everything held down until the last frames: the release frame itself takes input as usual.
+  auto held=[&]{return g.m_lockerView.age<g.m_lockerView.length-.04f?push:InputState{};};
+  for(;frames<120&&g.lockerViewLocked();++frames){g.update(held(),1.f/60);const Player v=g.view();jump=std::max(jump,length(v.pos-last.pos));turnStep=std::max(turnStep,std::fabs(wrapAngle(v.angle-last.angle)));last=v;
+   still&=length(g.player().pos-at.pos)<1e-5f&&g.player().angle==at.angle&&g.player().pitch==at.pitch&&g.hiddenLocker()==0;}
+  const Player end=g.view();const Vec2 inside=lockerFront(g.m_world.fixtures()[0],-.14f);
+  check(started&&length(before.pos-Vec2{3.2f,6.5f})<1e-4f&&frames>=50&&frames<=56&&length(end.pos-inside)<1e-4f&&std::fabs(wrapAngle(end.angle-at.angle))<1e-5f&&jump<.08f&&turnStep<.2f,"Hiding plays a 0.9 s way in that ends on the eye behind the shut leaves, without a pop");
+  report<<"  way in "<<frames<<" frames, largest step "<<jump<<" m, largest turn "<<turnStep<<" rad\n";
+  check(still,"Nothing the player presses moves, turns or lets them out while the way in plays");
+  check(g.lockerShutView()==1&&g.lockerDoorOpen(0,0,0)==0&&g.lockerDoorOpen(0,0,1)==0,"Once in, the leaves are shut and the view is their perforated inner face");
+  // A save mid-way loads at the committed end: shut in, no path, eye behind the leaves.
+  auto mid=scene({{{10.5f,6.5f},0,600},{{4.2f,6.5f},0,4000}},kPi*.5f);hide(mid);for(int i=0;i<20;++i)mid.update({},1.f/60);Game loaded(mid.m_customCampaign);
+  check(mid.lockerViewLocked()&&loaded.decodeSave(mid.encodeSave())&&loaded.hiddenLocker()==0&&!loaded.lockerViewLocked()&&length(loaded.view().pos-inside)<1e-4f&&loaded.lockerShutView()==1,"A save made halfway in loads with the player shut in, the motion over");
+  // Knocking from inside: the leaves rattle and a guard hears it at the doors.
+  InputState knock;knock.fire=true;g.update({},1.f/60);g.update(knock,1.f/60);bool rattled=!g.m_lockerDoors.empty()&&g.m_lockerDoors[0].motion==LockerMotion::Knock;
+  bool heard=false;for(const auto&s:g.aiStimuli())heard|=s.radius>4.5f&&length(s.source-lockerFront(g.m_world.fixtures()[0],.15f))<.01f;
+  g.update({},1.f/60);g.update(knock,1.f/60);int knocks=0;for(const auto&s:g.sounds())knocks+=s.sound==Sound::LockerKnock;
+  const std::string hint=g.interactionHint()?g.interactionHint():"";
+  check(rattled&&heard&&knocks==0&&g.hiddenLocker()==0&&hint=="E / STEP OUT   LMB / KNOCK","LMB shut in knocks on the leaves: they rattle, a guard can hear it at the doors, and it keeps knockOnWall's cooldown");
+  // Out: the leaves fly open and the camera steps out onto the committed spot.
+  for(int i=0;i<60;++i)g.update({},1.f/60);const Player inView=g.view();g.update(use,1.f/60);const Player out=g.player();bool exitStarted=g.lockerViewLocked()&&g.hiddenLocker()<0&&length(g.view().pos-inView.pos)<.02f;
+  jump=0;last=g.view();frames=0;bool stayed=true;for(;frames<60&&g.lockerViewLocked();++frames){g.update(held(),1.f/60);jump=std::max(jump,length(g.view().pos-last.pos));last=g.view();stayed&=length(g.player().pos-out.pos)<1e-5f;}
+  check(exitStarted&&frames>=28&&frames<=32&&length(g.view().pos-g.player().pos)<1e-5f&&jump<.08f&&stayed&&std::max(g.lockerDoorOpen(0,0,0),g.lockerDoorOpen(0,0,1))>.5f,"Stepping out flings the leaves open and walks the camera out to the player in half a second, input held");
+  report<<"  way out "<<frames<<" frames, largest step "<<jump<<" m\n";
+  for(int i=0;i<60;++i)g.update({},1.f/60);check(g.m_lockerDoors.empty(),"Behind the player the leaves swing shut on their own");
+ }
+ // Caught: the yank lands on the committed pose, facing the guard, inside half a second.
+ {auto g=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);hide(g);int frames=0;for(;frames<60*15&&g.hiddenLocker()>=0;++frames)g.update({},1.f/60);
+  const bool started=g.hiddenLocker()<0&&g.lockerViewLocked()&&g.m_lockerView.motion==LockerMotion::Caught;int held=0;for(;held<60&&g.lockerViewLocked();++held)g.update({},1.f/60);
+  const bool open=g.lockerDoorOpen(0,0,0)>.8f&&g.lockerDoorOpen(0,0,1)>.8f;
+  check(started&&held<=30&&length(g.view().pos-g.player().pos)<1e-5f&&std::fabs(wrapAngle(g.view().angle-g.player().angle))<1e-5f&&open,"Pulled out, the leaves are ripped back and the camera lands facing the guard, the controls back inside half a second");
+ }
+ // Every locker the campaign places is the double-door locker, and from in
+ // front of its doors the player can get into each one.
+ {std::string missing,levels;int lockers=0,banks=0;Game probe;
+  for(int level=0;level<probe.chunkCount();++level){const World w=probe.makeWorld(level);int here=0;for(const auto&f:w.fixtures()){banks+=f.model==model::pwr_locker_bank;here+=f.model==model::psx_locker;}if(!here)continue;
+   levels+=" "+std::to_string(level);auto g=mapInspection({12,12},0,0,level,false,-999,true);const auto&fixtures=g.m_world.fixtures();bool hid=false;
+   for(size_t i=0;i<fixtures.size();++i){const auto&f=fixtures[i];if(f.model!=model::psx_locker)continue;++lockers;
+    const Vec2 o=lockerOut(f),spot=lockerFront(f,.45f);g.m_player.pos=spot;g.m_player.z=g.m_world.floorHeight(f.position.x,f.position.y)+f.base;g.m_player.angle=std::atan2(-o.y,-o.x);g.m_player.grounded=true;
+    if(g.lockerAhead()!=int(i)){missing+=" "+std::to_string(level)+"#"+std::to_string(i)+"@"+std::to_string(f.position.x).substr(0,5)+","+std::to_string(f.position.y).substr(0,5);continue;}
+    if(!hid){Game h=g;hid=h.enterLocker()&&h.hiddenLocker()==int(i);if(!hid)missing+=" "+std::to_string(level)+"#"+std::to_string(i)+"(enter)";}}
+  }
+  check(lockers>0&&banks==0&&missing.empty(),"Every campaign locker is the double-door locker and each one can be got into from in front of its doors");
+  report<<"  maps"<<levels<<": lockers "<<lockers<<", old banks "<<banks<<", unreachable"<<(missing.empty()?" none":missing)<<'\n';
  }
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }

@@ -928,7 +928,9 @@ std::shared_ptr<const Map> makeHeatExchange(){
  wallSign(m,5.f-.055f,8.6f,F+1.35f,"GASKETS LIFTING","E-301 / E-304 / E-305 / STEAM RELEASE",2.4f,-kPi*.5f);
  terminal(m,{2.4f,5.75f},"HEAT EXCHANGE / ROUNDS","LOOP 02:10 88 C. 02:40 91 C. 03:05 96 C. REACTOR SCRAMMED 01:47.","NOTHING IS HEATING THIS LOOP. IT IS STILL CLIMBING.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
- m.fixtures.push_back({model::pwr_locker_bank,{1.45f,9.45f},0,.87f,.85f,2.42f,-kPi*.5f,true});
+ // The bank that stood here had its doors a hand's breadth off the south wall;
+ // the locker turns round, back to that wall, to open into the vestibule.
+ m.fixtures.push_back({model::psx_locker,{1.45f,9.665f},0,.64f,.85f,2.42f,kPi*.5f,true});
  m.fixtures.push_back({model::pwr_fire_cabinet,{4.88f,6.5f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
  m.fixtures.push_back({model::lab_wall_clock,{3.9f,5.05f},2.05f,.4f,.03f,.4f,kPi,false});
  // --- Exchanger rows ----------------------------------------------------------------------

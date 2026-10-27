@@ -68,9 +68,11 @@ void pbFix(Map& m,int model,float x,float y,float z,float w,float d,float h,floa
  m.fixtures.push_back({model,{x,y},z-m.layers.front().elevation,w,d,h,yaw,solid});
 }
 constexpr float pbS=0,pbN=kPi,pbE=kPi*.5f,pbW=-kPi*.5f;
-// A steel locker bank (doors on the model's +x) turned to face `front`.
+// A double-door steel locker (doors on the model's +x) turned to face `front`,
+// its back where the deeper bank it replaced had its own.
 void pbLockers(Map& m,float x,float y,float z,float front,float scale=1){
- pbFix(m,model::pwr_locker_bank,x,y,z,.87f*scale,.85f*scale,2.42f*scale,front-kPi*.5f,true);
+ const float yaw=front-kPi*.5f,back=.115f*scale;
+ pbFix(m,model::psx_locker,x-std::cos(yaw)*back,y+std::sin(yaw)*back,z,.64f*scale,.85f*scale,2.42f*scale,yaw,true);
 }
 // The thin-walled freight layer for a deck at z (deck() may reallocate layers).
 AuthoredLayerData& pbDeckLayer(Map& m,float z){for(auto& l:m.layers)if(l.thickness>0&&std::fabs(l.elevation-z)<.01f)return l;return m.layers.back();}

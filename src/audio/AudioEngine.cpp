@@ -21,6 +21,8 @@ bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftM
 // Open-zone sounds live in the library resources from 720, in enum order.
 constexpr int ZoneSoundResource=720;
 constexpr int AreaTitleResource=2125;
+// The locker sounds, LockerLatch to LockerKnock in enum order.
+constexpr int LockerSoundResource=2140;
 std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
  return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
 }
@@ -70,7 +72,7 @@ void AudioEngine::configureMask(MaskFilter& mask,int kind){
 }
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
@@ -152,6 +154,9 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  // Walls absorb treble as well as level. Compute the pole on the game
  // thread, never exponentials in the per-sample spatial filter.
  float openness=std::clamp((voice.occlusion-.32f)/.68f,0.f,1.f);
+ // Shut in a locker the room comes through the steel quieter and dull; its
+ // own latch and knock, at arm's length, stay as they are (music never passes here).
+ if(distance>.9f&&game.hiddenLocker()>=0){gain*=.55f;openness=std::min(openness,.28f);}
  float cutoff=900.f+17100.f*openness*openness;
  voice.filterTarget=openness+(1-openness)*(1-std::exp(-kTwoPi*cutoff/Rate));
  voice.left=gain*std::sqrt((1-pan)*.5f);voice.right=gain*std::sqrt((1+pan)*.5f);

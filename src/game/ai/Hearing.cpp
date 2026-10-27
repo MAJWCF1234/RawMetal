@@ -9,12 +9,14 @@ std::vector<AiStimulus> Game::aiStimuli()const{
   bool shot=event.sound==Sound::Shot,step=footstepSound(event.sound);
   // A swing or a throw is a whoosh, not a report: what it hits is the noise.
   bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty;
-  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land;
+  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock;
   bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
-  bool mechanism=event.sound==Sound::Door||event.sound==Sound::Machine||event.sound==Sound::LiftMotor||event.sound==Sound::LiftCreak;
+  // A locker's latch, shut and bang carry like any door; its sting is score.
+  bool locker=event.sound==Sound::LockerLatch||event.sound==Sound::LockerShut||event.sound==Sound::LockerBang;
+  bool mechanism=event.sound==Sound::Door||locker||event.sound==Sound::Machine||event.sound==Sound::LiftMotor||event.sound==Sound::LiftCreak;
   // Continuous ambience has no discrete emitting position. Spatial machinery
   // and authored/mechanism events still provide genuine world stimuli.
-  if(mechanism&&event.sound!=Sound::Door&&!event.spatial)continue;
+  if(mechanism&&event.sound!=Sound::Door&&!locker&&!event.spatial)continue;
   if((!weapon&&!step&&!impact&&!danger&&!mechanism)||!std::isfinite(event.gain)||event.gain<=0||!std::isfinite(event.radius)||event.radius<=0||!std::isfinite(event.position.x)||!std::isfinite(event.position.y)||std::isinf(event.z))continue;
   auto source=event.spatial||std::isfinite(event.z)?event.position:m_player.pos;auto local=source;const auto&world=worldAt(local);
   float z=std::isfinite(event.z)?event.z:event.spatial?world.floorHeight(local.x,local.y)+.7f:m_player.z+m_player.eye;

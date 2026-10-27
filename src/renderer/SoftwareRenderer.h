@@ -97,6 +97,8 @@ private:
     std::array<PanelRaster,16> m_panelRasters;
     size_t m_nextPanelRaster=0;
     bool m_vrRendering=false;
+    // This frame's camera (Game::view): the player, or a locker's path in or out.
+    Player m_view;
     bool m_vrReuseScene=false; // second eye: replay the first eye's geometry
     std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
     std::vector<MeshTriangle> m_vrSupportGripMesh; // the left hand closed round the fore-end

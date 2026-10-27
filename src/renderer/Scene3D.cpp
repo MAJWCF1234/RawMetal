@@ -160,7 +160,7 @@ void SoftwareRenderer::previewModel(int model,float angle){
  for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;float x=p.x*std::cos(angle)+p.z*std::sin(angle),z=-p.x*std::sin(angle)+p.z*std::cos(angle);v.p={x,p.y*.94f-z*.34f,3.f+z*.94f+p.y*.34f};}triangle3D(face.v[0],face.v[1],face.v[2],model>=15?facilityTexture(model-15,face.part):texture,1.15f);}
 }
 static Point3 cross3(Point3 a,Point3 b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
-Point3 SoftwareRenderer::cameraPoint(Point3 v,const Game& game)const{return cameraPoint(v,game.player());}
+Point3 SoftwareRenderer::cameraPoint(Point3 v,const Game&)const{return cameraPoint(v,m_view);}
 Point3 SoftwareRenderer::cameraPoint(Point3 v,const Player&p)const{
 float yaw=p.angle,pitch=p.pitch/140.f;
  static thread_local float previousYaw=999,previousPitch=999,cy=1,sy=0,cp=1,sp=0;
@@ -286,7 +286,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(clearDepth)std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
  if(level<0)level=game.level();const auto&w=game.chunkWorld(level);
  const float dormantFloor=game.dormantBelow(level);
- auto player=game.player();player.pos+=game.chunkOffset(game.level())-game.chunkOffset(level);
+ auto player=m_view;player.pos+=game.chunkOffset(game.level())-game.chunkOffset(level);
  // One immutable camera basis per chunk draw, rather than thread-local angle
  // comparisons and player lookups at every triangle corner and light probe.
  const float cameraCy=std::cos(player.angle),cameraSy=std::sin(player.angle);
@@ -1053,6 +1053,19 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  shadowBudget=m_shadowBudgetLimit;
  // Heavy crates move, so they are drawn every frame, never baked.
  for(const auto& crate:w.pushCrates())facility(model::wooden_crate,crate.position.x,crate.position.y,crate.z,crate.size,crate.size,crate.size,0);
+ // Locker leaves swing on the hinges at the outer edges of the open front
+ // (the source FBX: left leaf 0.43 wide hung 0.432 left of centre, right 0.443
+ // hung 0.441 right, both 0.075 off the floor in the front plane), so they are
+ // drawn every frame and lit as moving geometry. From inside a shut locker the
+ // perforated inner face (drawHud) stands in for its own leaves.
+ {const int shutIn=level==game.level()&&game.lockerShutView()>=1?game.lockerViewFixture():-1;movingGeometry=true;
+  for(size_t i=0;i<w.fixtures().size();++i){const auto&f=w.fixtures()[i];if(f.model!=model::psx_locker||!f.visible||int(i)==shutIn)continue;
+   const float sx=f.width/.64f,sz=f.depth/.9f,sy=f.height/2.2969f,c=std::cos(f.yaw),s=std::sin(f.yaw),base=w.floorHeight(f.position.x,f.position.y)+f.base+.075f*sy;
+   const Vec2 out{c,-s},side{s,c};
+   for(int leaf=0;leaf<2;++leaf){const float hand=leaf?-1.f:1.f,half=(leaf?.2216f:.215f)*sz,angle=game.lockerDoorOpen(level,int(i),leaf)*kPi*(110.f/180.f);
+    const Vec2 hinge=f.position+out*(.32f*sx)+side*((leaf?.4412f:.432f)*sz*hand),toward=side*(-hand*std::cos(angle))+out*std::sin(angle),centre=hinge+toward*half;
+    facility(leaf?model::psx_locker_door_r:model::psx_locker_door_l,centre.x,centre.y,base,.02f*sx,half*2,2.2f*sy,f.yaw-hand*angle);}
+  }movingGeometry=false;}
  if(w.cargoLift().upper>w.cargoLift().lower){
   const auto& lift=w.cargoLift();float z=w.cargoLiftHeight();
   const float x1=lift.x1,x2=lift.x2,y1=lift.y1,y2=lift.y2,mx=(x1+x2)*.5f,width=x2-x1,depth=y2-y1;
@@ -2382,7 +2395,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  // the torch lens and the shot (longer and brighter there) show them.
  const float darkness=game.darkness(),handFloor=1.f-darkness;
  NormalLighting roomLights;float roomAmbient=std::max(.10f,game.world().definition().ambient*.55f)*handFloor;
- const auto&player=game.player();Point3 receiver{player.pos.x,player.pos.y,player.z+player.eye};
+ const auto&player=m_view;Point3 receiver{player.pos.x,player.pos.y,player.z+player.eye};
  for(const auto&source:game.world().lights()){
   auto delta=source.emitter()-receiver;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=source.falloff(d2)*(source.switchable()?game.lampPower(source):1.f);if(d2<.001f||weight<=0)continue;
   // A lamp that cannot enter the existing top two cannot affect the result.

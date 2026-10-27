@@ -731,6 +731,15 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       else{scene.stowWeapon();
        // "hide N": E at the locker in front, then N frames looking out of it.
        if(action=="hide"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);action="wait";}
+       // Locker sequences, each from shut in (E, then 70 frames for the way in):
+       // "out N" E again, N frames; "peek D" the head turned D degrees;
+       // "caught N" the nearest guard hauls them out, N frames; "knock N" LMB, N frames.
+       if(action=="out"||action=="peek"||action=="caught"||action=="knock"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);for(int i=0;i<70;++i)scene.update({},1.f/60.f);
+        if(action=="out")scene.update(use,1.f/60.f);
+        if(action=="peek"){retro::InputState look{};look.mouseDx=decltype(look.mouseDx)(frames*retro::kPi/180.f/.0022f);scene.update(look,1.f/60.f);frames=2;}
+        if(action=="caught")scene.stageLockerCatch();
+        if(action=="knock"){retro::InputState knock{};knock.fire=true;scene.update(knock,1.f/60.f);}
+        action="wait";}
        if(action=="wait")for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       renderer->render(scene);++captures;
       std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";

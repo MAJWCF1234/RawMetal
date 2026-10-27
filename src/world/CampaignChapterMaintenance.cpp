@@ -62,9 +62,12 @@ void mntTable(Map& m,float x,float y,float f,int seed){
   if((seed+i)%4!=3)mntFix(m,model::wooden_chair,{x+dx[i]-jitter*.4f,y+.74f},f,.417f,.525f,.95f,kPi-jitter,true);}
 }
 // A run of steel lockers against a wall; `face` is the direction the doors open to.
+// The double-door locker is 0.23 m shallower than the bank it replaced, so its
+// centre comes back toward the wall by half that: the back stays where it was.
+Vec2 lockerBack(Vec2 at,float face,float shallower=.115f){return at-Vec2{std::cos(face),-std::sin(face)}*shallower;}
 void mntLockers(Map& m,float x,float y,int count,Vec2 step,float f,float face){
  // The locker model's doors are on its local +x side.
- for(int i=0;i<count;++i)mntFix(m,model::pwr_locker_bank,{x+step.x*i,y+step.y*i},f,.87f,.85f,2.42f,face,true);
+ for(int i=0;i<count;++i)mntFix(m,model::psx_locker,lockerBack({x+step.x*i,y+step.y*i},face),f,.64f,.85f,2.42f,face,true);
 }
 // A direction board: a steel plate hung on two drop rods from the roof, or,
 // with roof below the board, standing on two legs from the floor.
@@ -711,7 +714,7 @@ std::shared_ptr<const Map> makeFabricationShop(){
  // The welders' lockers stand across the bay with their backs to the south;
  // it crouches behind them, out of sight from the aisle and the entrance,
  // until the lathe's noise carries to it or the player walks into the bay.
- for(int i=0;i<4;++i)mntFix(m,model::pwr_locker_bank,{18.2f+.9f*i,6.7f},f,.87f,.85f,2.42f,kPi*.5f,true);
+ for(int i=0;i<4;++i)mntFix(m,model::psx_locker,lockerBack({18.2f+.9f*i,6.7f},kPi*.5f),f,.64f,.85f,2.42f,kPi*.5f,true);
  {const StateId wake=stateId("mnt_weld_wake");
   m.creatureSpawns.push_back({CreatureKind::Snatcher,{19.5f,7.9f},f,1,0,wake});
   auto& noise=mntOn(m,"mnt_ev_weld_noise",stateId("mnt_lathe_done"));noise.actions={mntAct(ScriptAction::Type::SetState,wake,1)};
@@ -750,8 +753,8 @@ std::shared_ptr<const Map> makeMaintenanceAidStation(){
  // --- The barricade: lockers dragged across the doorway, one pulled aside -------------------
  mntDoorwayY(m,10.2f,12.8f,5.85f,6.15f,f,roof);
  wall(m,5.85f,9.f,6.15f,10.2f,f,roof,3);wall(m,5.85f,12.8f,6.15f,14.f,f,roof,3);
- mntFix(m,model::pwr_locker_bank,{6.7f,10.6f},f,.87f,.85f,2.42f,kPi*.5f,true);
- mntFix(m,model::pwr_locker_bank,{7.4f,12.5f},f,.87f,.85f,2.42f,kPi*.85f,true);
+ mntFix(m,model::psx_locker,lockerBack({6.7f,10.6f},kPi*.5f),f,.64f,.85f,2.42f,kPi*.5f,true);
+ mntFix(m,model::psx_locker,lockerBack({7.4f,12.5f},kPi*.85f),f,.64f,.85f,2.42f,kPi*.85f,true);
  mntFix(m,model::wooden_table,{8.2f,9.8f},f,1.367f,.724f,.78f,.5f,true);
  // --- Triage: cots, bedrolls, the nurse's desk, the forms on the board ------------------------
  for(float y:{6.2f,8.6f})mntFix(m,model::med_ward_bed,{13.6f,y},f,1.98f,.94f,.84f,kPi,true);

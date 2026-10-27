@@ -147,7 +147,7 @@ std::shared_ptr<const Map> makePowerDistribution(){
  wall(m,8.06f,3.9f,8.19f,4.f,base+1.f,base+2.3f,20);
  for(float z:{base+1.f,base+2.26f})wall(m,8.03f,1.6f,8.22f,6.3f,z,z+.04f,20);
  wall(m,1.f,1.f,8.2f,7.f,room,room+.15f,2);
- for(float y:{1.5f,2.37f,3.24f,4.11f})m.fixtures.push_back({model::pwr_locker_bank,{1.46f,y},0,.87f,.85f,2.42f,0,true});
+ for(float y:{1.5f,2.37f,3.24f,4.11f})m.fixtures.push_back({model::psx_locker,{1.345f,y},0,.64f,.85f,2.42f,0,true}); // backs on the wall, doors east
  m.fixtures.push_back({model::bench,{2.95f,2.8f},0,1.86f,.44f,.63f,kPi*.5f,true});
  m.fixtures.push_back({model::metal_shelf,{4.7f,1.27f},0,1.8f,.5f,1.8f,0,true});
  for(float x:{4.2f,4.65f,5.1f})m.fixtures.push_back({model::mine_hard_hat,{x,1.27f},1.8f,.28f,.35f,.15f,0,false});
