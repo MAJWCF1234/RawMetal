@@ -64,7 +64,9 @@ also accepts other actor modes; only nonempty squads require Guard mode.
 
 Guards must use a human visual and cannot be moving platforms. Visual 0 is Worker,
 4 Cleanup Assault, 5 Cleanup Engineer, 6 Cleanup Sharpshooter, 7 Cleanup Heavy,
-8 Cleanup Medic and 9 Cleanup Rusher. Author 1–64
+8 Cleanup Medic and 9 Cleanup Rusher. The research staff are 10 Scientist,
+11 Senior Scientist, 12 Female Scientist, 13 Female Doctor and 14 Lab Tech (light
+hazmat suit and respirator); they play the Worker's clips. Author 1–64
 patrol points, visited in the listed order. Points use coordinates within the
 guard's home chunk (0.25–23.75 m on each horizontal axis) and absolute elevation
 (-100–100 m). Each point pauses for 0–60000 ms. Patrol routes remain in the home

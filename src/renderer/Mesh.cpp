@@ -36,7 +36,7 @@ bool validLayerPose(const CreatureLayerPose&pose){
  return true;
 }
 }
-Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328||id>=359),m_nodeFilter(nodeFilter){
+Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328||id>=359),m_nodeFilter(nodeFilter){
  // From 359 on (office, industrial, freight, Metro and library imports) every
  // model binds its textures per material, so multi-material models texture correctly.
  m_positionOnlySkinning=id==111;
@@ -105,7 +105,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource):m_materialParts(
     for(float duration:m_creatureDurations)if(!std::isfinite(duration)||duration<=0||duration>120)throw std::runtime_error("Invalid creature clip duration");
    }
   }
-  if(id==277){m_anchorFrames=loadResource(282);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Actor attachment topology mismatch");}
+  if(id==277||anchorResource){m_anchorFrames=loadResource(anchorResource?anchorResource:282);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Actor attachment topology mismatch");}
     if(id==323){m_anchorFrames=loadResource(339);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Medic treatment attachment topology mismatch");}
   m_creatureIndices.resize(vertices);std::memcpy(m_creatureIndices.data(),m_creatureFrames.data()+20,size_t(vertices)*2);
   for(auto index:m_creatureIndices)if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");

@@ -355,6 +355,9 @@ public:
     static Game guardPolicyInspection(int stage=0);
     static Game killSquadInspection(int stage=0);
     static Game cleanupLayerInspection(int role,int sample,int view=0,float phase=-1);
+    // One civilian body (civilianActorBody order) alone on a floor: clip and
+    // phase on a still actor, or armed with the shotgun raised (clip<0).
+    static Game civilianInspection(int body,int clip,float phase,int view);
     static Game guardTacticsInspection(int stage=0);
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);

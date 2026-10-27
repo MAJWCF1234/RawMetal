@@ -68,12 +68,21 @@ bool SoftwareRenderer::testCreatureAnimation(){
  }
  mutantReport<<"PASS: supplied rig clips and grounded death pose interpolate with matching topology\n";
  }
- Mesh worker(277,"",278);std::ofstream workerReport("worker-animation-test.txt");
- for(int clip=0;clip<6;++clip){worker.poseCreature(clip,0);auto first=worker.triangles;float motion=0;
-  for(float phase:{.25f,.5f,.75f,1.f}){worker.poseCreature(clip,phase);auto hand=worker.poseAnchor(0);if(!std::isfinite(hand.y)||hand.y<-.002f)return false;for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=worker.triangles[i].v[v].p,d=p-first[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.002f)return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
-  workerReport<<"clip "<<clip<<" skeletal vertex motion "<<motion<<'\n';if(motion<.001f||motion>4)return false;
+ // The Worker and the five research staff (each with its own anchors) share
+ // one six-clip skeletal bake. Staff motion limits scale with rest height.
+ std::ofstream workerReport("worker-animation-test.txt");
+ constexpr std::array<std::array<int,3>,6> civilians{{{277,278,0},{693,694,695},{697,698,699},{701,702,703},{705,706,707},{709,710,711}}};
+ for(const auto&ids:civilians){Mesh worker(ids[0],"",ids[1],ids[2]);const float height=worker.maximum.y-worker.minimum.y,unit=ids[0]==277?1.f:height/1.632f;
+  if(worker.creatureClipCount()!=6)return false;
+  for(int clip=0;clip<6;++clip){worker.poseCreature(clip,0);auto first=worker.triangles;float motion=0;
+   if(clip==0){float low=1e9f,high=-1e9f;for(const auto&t:first)for(const auto&v:t.v){low=std::min(low,v.p.y);high=std::max(high,v.p.y);}
+    // Idle stands on its feet at the rest height: no floating, no sinking.
+    workerReport<<"model "<<ids[0]<<" idle floor "<<low<<" height "<<high-low<<" of rest "<<height<<'\n';if(low<-.002f||low>.02f*unit||high-low<height*.85f||high-low>height*1.1f)return false;}
+   for(float phase:{.25f,.5f,.75f,1.f}){worker.poseCreature(clip,phase);auto hand=worker.poseAnchor(0);if(!std::isfinite(hand.y)||hand.y<-.002f)return false;for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=worker.triangles[i].v[v].p,d=p-first[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.002f)return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
+   workerReport<<"model "<<ids[0]<<" clip "<<clip<<" skeletal vertex motion "<<motion<<'\n';if(motion<.001f*unit||motion>4*unit)return false;
+  }
  }
- workerReport<<"PASS: six skeletal clips, grounded poses and interpolated hand attachments\n";return true;
+ workerReport<<"PASS: six skeletal clips, grounded poses and interpolated hand attachments on the Worker and five staff models\n";return true;
 }
 __declspec(noinline) bool SoftwareRenderer::testHardware(){
  // Analytic texel/radiance expectations describe native source atlases.
@@ -109,7 +118,7 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  check(GpuRenderer::testNormalMips(),"Normal mips preserve vector moments, coherence weights, odd edges and finite cancellation");
  {
   std::vector<const Texture*> gameAtlases{&renderer.m_vrWristTexture,&renderer.m_water,&renderer.m_glassTexture,&renderer.m_ashfallSky,&renderer.m_coastSky,&renderer.m_coastWater,&renderer.m_muzzleFlash,&renderer.m_pumpTexture,&renderer.m_compressorTexture,&renderer.m_pipeTexture,&renderer.m_gateTexture,&renderer.m_pressureWall,&renderer.m_pressureFloor,&renderer.m_pressureMetal,&renderer.m_transferSign,&renderer.m_pumpSign,&renderer.m_controlSign,&renderer.m_surfaceSign,  &renderer.m_liftSign,&renderer.m_liftDispatch,&renderer.m_wall,&renderer.m_floor,&renderer.m_metal,&renderer.m_serviceFloor,&renderer.m_serviceCeiling,&renderer.m_officeCarpet,&renderer.m_arms,&renderer.m_weaponTexture,&renderer.m_enemyTexture,&renderer.m_waspTexture,&renderer.m_bruteTexture,&renderer.m_wingTexture,&renderer.m_medkitTexture,&renderer.m_shellsTexture,&renderer.m_barrelTexture,&renderer.m_crateTexture,&renderer.m_concrete,&renderer.m_bulkhead,    &renderer.m_hazard,&renderer.m_chemicalSign,  &renderer.m_signRust,&renderer.m_panelMetal,&renderer.m_routePaint,&renderer.m_redPaint,&renderer.m_terminalTexture,&renderer.m_cautionSign,&renderer.m_blood,&renderer.m_wardenTexture,&renderer.m_mutantTexture,&renderer.m_consoleTexture,&renderer.m_feedSign,&renderer.m_returnSign,  &renderer.m_terrainDirt,&renderer.m_terrainRock,&renderer.m_coastSand,&renderer.m_coastRock,&renderer.m_framePaint,&renderer.m_yellowSteel,&renderer.m_redSteel,&renderer.m_paleSteel};
-  for(const auto&texture:renderer.m_bloodVariants)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_hazmatTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_clutterTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_workerTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_noticeSigns)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_serviceAreaSigns)gameAtlases.push_back(&texture);for(const auto&entry:renderer.m_facilityTextures)gameAtlases.push_back(&entry.second);for(const auto&texture:renderer.m_surfaceTextures)gameAtlases.push_back(&texture);
+  for(const auto&texture:renderer.m_bloodVariants)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_hazmatTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_clutterTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_workerTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_staffTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_noticeSigns)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_serviceAreaSigns)gameAtlases.push_back(&texture);for(const auto&entry:renderer.m_facilityTextures)gameAtlases.push_back(&entry.second);for(const auto&texture:renderer.m_surfaceTextures)gameAtlases.push_back(&texture);
   std::array<uint64_t,4> statistics{};std::array<double,2> milliseconds{};bool exact=GpuRenderer::testGameDiffuseEncoding(gameAtlases,statistics,milliseconds);
   report<<"Game atlas sRGB encoding: "<<statistics[0]<<" atlases, "<<statistics[1]<<" mip channels; fast / slow "<<milliseconds[0]<<" / "<<milliseconds[1]<<" ms; byte hashes "<<statistics[2]<<" / "<<statistics[3]<<'\n';
   check(exact&&statistics[0]>80&&statistics[1]>1000000&&statistics[2]==statistics[3],"Fast sRGB encoding is byte-identical to the slow reference across every loaded non-additive game atlas");

@@ -143,6 +143,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   // Worker/Witness materials are large too. Deferring their mip construction
   // until the first visible limb caused quarter-second gameplay stalls.
   for(const auto&texture:m_workerTextures)m_gpu->prepare(texture);
+  for(const auto&texture:m_staffTextures)m_gpu->prepare(texture);
   if(!m_logo.pixels.empty())m_gpu->prepare(m_logo);
   m_gpu->prepare(m_droneTexture);m_gpu->prepare(m_handgunTexture);
   for(const auto&texture:m_paperProps)m_gpu->prepare(texture);
@@ -166,6 +167,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);m_mutantTexture=loadTexture(273);m_snatcherTexture=loadTexture(2127);m_chimeraTexture=loadTexture(2130);
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
+ for(int i=0;i<6;++i){auto&texture=m_staffTextures[size_t(i)];texture=loadTexture(i<4?696+i*4:712+(i-4));deriveSurfaceNormal(texture,.35f);texture.glossStrength=i==5?.2f:.05f;}
  for(int role=0;role<6;++role){for(int i=0;i<2;++i){auto&texture=m_cleanupTextures[role][i];texture=loadTexture(305+role*5+i);deriveSurfaceNormal(texture,.25f);texture.glossStrength=.12f;}
    auto joints=loadResource(340+role);uint32_t corners=0;if(joints.size()<104||std::memcmp(joints.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup attachment calibration");std::memcpy(&corners,joints.data()+100,4);
    const Mesh*meshes[]={&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher};const auto&mesh=*meshes[role];if(corners!=mesh.triangles.size()*3||joints.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup attachment topology mismatch");
@@ -512,6 +514,12 @@ void SoftwareRenderer::prepareDecal(Texture&texture,bool clampEdges){
    next[y*nextWidth+x]=(channels[0]/4)|((channels[1]/4)<<8)|((channels[2]/4)<<16)|((channels[3]/4)<<24);
   }texture.mips.push_back(next);pixels=std::move(next);width=nextWidth;height=nextHeight;
  }
+}
+// Material: 0 body, 1 gloves, 2 boots, 3 respirator (Scene3D's civilian parts).
+const SoftwareRenderer::Texture& SoftwareRenderer::civilianTexture(int body,int material)const{
+ if(body<=0)return m_workerTextures[size_t(std::clamp(material,0,2))];
+ if(body<5)return m_staffTextures[size_t(body-1)];
+ return material==1||material==2?m_workerTextures[size_t(material)]:m_staffTextures[material==3?5:4];
 }
 SoftwareRenderer::Texture SoftwareRenderer::loadTexture(int id){
  auto resource=loadResource(id);

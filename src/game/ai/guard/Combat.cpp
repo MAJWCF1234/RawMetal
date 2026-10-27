@@ -79,10 +79,10 @@ NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 ta
  float scale=track.scale/1.6f;Point3 forward{std::sin(pose.yaw),std::cos(pose.yaw),0},right{forward.y,-forward.x,0};
  // The cleanup shotgun sits close enough for the retained short forearms to
  // support its receiver. Rendering and shot clearance share this same grip.
- float gripForward=track.visual==ActorVisual::Worker?.40f:weapon.handgun?.31f:.23f;
+ float gripForward=civilianActorVisual(track.visual)?.40f:weapon.handgun?.31f:.23f;
  float bodyHeight=pose.clip==5?npcCrouchedHeight(track):friendlyHullHeight(actor,track),crouchDrop=std::max(0.f,track.scale-bodyHeight);
  weapon.crouched=bodyHeight<track.scale-.01f;
- const bool cleanup=int(track.visual)>=4&&int(track.visual)<=9;
+ const bool cleanup=cleanupActorVisual(track.visual);
  CleanupBodyFrame upperBody{},lowerBody{};bool layerAim=pose.clip<=1||pose.clip==5;
  if(cleanup){int upperClip=pose.clip,lowerClip=pose.clip;float upperPhase=pose.phase;
   if(layerAim){upperClip=weapon.crouched?5:0;lowerClip=weapon.crouched?5:pose.clip;

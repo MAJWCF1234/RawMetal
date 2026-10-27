@@ -16,7 +16,9 @@ struct CreatureLayerPose {
 static_assert(sizeof(CreatureLayerPose)==120);
 class Mesh {
 public:
- explicit Mesh(int resource,const char* nodeFilter="",int animationResource=0);
+ // anchorResource: a baked civilian's .anchors sidecar (RightHand and
+ // RightForeArm per sample). The Worker (277) finds its own 282.
+ explicit Mesh(int resource,const char* nodeFilter="",int animationResource=0,int anchorResource=0);
  ~Mesh();
  Mesh(const Mesh&)=delete;
  Mesh& operator=(const Mesh&)=delete;

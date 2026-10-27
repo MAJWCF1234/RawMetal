@@ -37,6 +37,25 @@ Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
  g.m_player.angle=std::atan2(pose.position.y-g.m_player.pos.y,pose.position.x-g.m_player.pos.x);g.m_player.pitch=-30;
  g.m_weaponEquipped=false;g.m_holster=1;g.m_damageFlash=0;return g;
 }
+Game Game::civilianInspection(int body,int clip,float phase,int view){
+ constexpr ActorVisual bodies[]={ActorVisual::Worker,ActorVisual::Scientist,ActorVisual::SeniorScientist,ActorVisual::FemaleScientist,ActorVisual::FemaleDoctor,ActorVisual::LabTech};
+ if(body<0||body>5||clip<-1||clip>5||view<0||view>1)throw std::runtime_error("Invalid civilian inspection");
+ auto campaign=std::make_shared<CustomCampaign>();campaign->name="Civilian model inspection";campaign->key=883014;
+ auto map=std::make_shared<AuthoredMapData>();map->name="Unobstructed civilian inspection";map->definition={{0,0},{10.5f,9.5f},0,Environment::Interior,false,8,.7f,42};
+ AuthoredLayerData floor;for(auto&row:floor.rows)row=std::string(24,'.');map->layers.push_back(floor);
+ ActorTrack track;track.visual=bodies[body];track.scale=1.7f;track.health=100;track.timerState=stateId("civilian_inspection_clock");
+ track.damageState=stateId("civilian_inspection_damage");track.deadState=stateId("civilian_inspection_dead");track.keys={{0,{8.5f,8.5f},0,0},{30000,{8.5f,8.5f},0,0}};
+ if(clip<0){track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.weapon=1;track.ai.patrol={{{8.5f,8.5f},0,1000}};}else track.ai.mode=ActorAiMode::Civilian;
+ TimedSequence clock;clock.timerState=track.timerState;clock.finishState=stateId("civilian_inspection_done");clock.loop=true;clock.soundIntervalMs=0;map->timedSequences.push_back(clock);
+ map->actorTracks={track};campaign->maps.push_back(map);Game g(campaign);auto&pose=g.m_friendlyActors.at(0).pose;
+ pose.yaw=0;pose.clip=std::max(clip,0);pose.phase=std::clamp(phase,0.f,1.f);pose.lookAtActor=-1;
+ if(clip<0){auto put=[&](const char*key,int value){g.setState(g.friendlyKey(0,key),value);};auto target=Point3{pose.position.x,pose.position.y+5.f,pose.z+1.24f};
+  put("weapon_raise",1000);put("weapon_target",1);put("weapon_x",int(std::lround(target.x*1000)));put("weapon_y",int(std::lround(target.y*1000)));put("weapon_z",int(std::lround(target.z*1000)));}
+ Vec2 forward{std::sin(pose.yaw),std::cos(pose.yaw)},right{forward.y,-forward.x};
+ g.m_player.pos=pose.position+(view?right*2.6f+forward*.35f:forward*2.7f+right*.6f);g.m_player.z=pose.z;
+ g.m_player.angle=std::atan2(pose.position.y-g.m_player.pos.y,pose.position.x-g.m_player.pos.x);g.m_player.pitch=-30;
+ g.m_weaponEquipped=false;g.m_holster=1;g.m_damageFlash=0;return g;
+}
 Game Game::killSquadInspection(int stage){
  auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");Game g(campaign);
  if(stage<0||stage>13||g.chunkCount()<3)throw std::runtime_error("Kill squad inspection requires the Exclusion Zone wasteland export");

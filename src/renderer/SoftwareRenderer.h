@@ -162,6 +162,15 @@ private:
     Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131};
     Mesh m_workerMesh{277,"",278};
     std::array<Texture,3> m_workerTextures;
+    // Research staff (ActorVisual::Scientist..LabTech), each baked with the
+    // Worker's six clips and its own hand anchors. A lab coat is one material;
+    // the light suit wears the Worker's gloves and boots (the pack ships the
+    // same two textures for both suits) with its own body and respirator.
+    std::array<Mesh,5> m_staffMeshes{Mesh{693,"",694,695},Mesh{697,"",698,699},Mesh{701,"",702,703},Mesh{705,"",706,707},Mesh{709,"",710,711}};
+    std::array<Texture,6> m_staffTextures; // four lab coats, light suit body, respirator
+    // civilianActorBody: 0 the Worker, 1-5 the staff.
+    Mesh& civilianMesh(int body){return body>0?m_staffMeshes[size_t(body-1)]:m_workerMesh;}
+    const Texture& civilianTexture(int body,int material)const;
     Mesh m_cleanupMesh{303,"",304};
     Mesh m_cleanupEngineer{308,"",309},m_cleanupSharpshooter{313,"",314};
     Mesh m_cleanupHeavy{318,"",319},m_cleanupMedic{323,"",324},m_cleanupRusher{328,"",329};

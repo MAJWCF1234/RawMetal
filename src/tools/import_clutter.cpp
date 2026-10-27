@@ -13,7 +13,9 @@ int main(int argc,char**argv){
  std::ofstream out;if(argc>=4){out.open(argv[3]);if(!out)return 3;out<<"# RawMetal imported world-space triangles and UVs\n"<<std::setprecision(9);}unsigned vertex=1;
  if(argc==2){
   for(auto stack:scene->anim_stacks)std::cout<<"ANIMATION "<<stack->name.data<<" "<<stack->time_begin<<".."<<stack->time_end<<'\n';
-  for(auto node:scene->nodes)if(node->bone)std::cout<<"BONE "<<node->name.data<<'\n';
+  // World positions in the same loaded pose --skin-rest exports, so a rig's
+  // joints can be read against the exported rest mesh.
+  for(auto node:scene->nodes)if(node->bone)std::cout<<"BONE "<<node->name.data<<" at "<<node->node_to_world.m03<<','<<node->node_to_world.m13<<','<<node->node_to_world.m23<<'\n';
  }
  for(auto node:scene->nodes)if(auto mesh=node->mesh){
   std::cout<<node->name.data<<" | "<<mesh->num_triangles<<" triangles";

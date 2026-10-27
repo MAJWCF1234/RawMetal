@@ -44,6 +44,9 @@ int maskForVisual(ActorVisual visual){
   case ActorVisual::CleanupHeavy:return 3;    // full helmet and visor
   case ActorVisual::CleanupMedic:return 2;
   case ActorVisual::CleanupRusher:return 1;   // hockey face plate
+  case ActorVisual::LabTech:return 2;         // light hazmat suit, full-face respirator
+  case ActorVisual::Scientist:case ActorVisual::SeniorScientist:
+  case ActorVisual::FemaleScientist:case ActorVisual::FemaleDoctor:return 0; // lab coats, bare face
   default:return 0;
  }
 }
@@ -319,7 +322,7 @@ bool AudioEngine::test(){
   double bare=energy(0,6000),respirator=energy(2,6000),sealed=energy(3,6000),lowRespirator=energy(2,120),lowBare=energy(0,120);
   diagnostic<<"Mask 6 kHz energy bare/respirator/sealed "<<bare<<'/'<<respirator<<'/'<<sealed<<"; 120 Hz bare/respirator "<<lowBare<<'/'<<lowRespirator<<'\n';
   if(!(respirator<bare*.25&&sealed<respirator&&lowRespirator<lowBare*.25))return failure("speech masks do not muffle by model");
-  if(maskForVisual(ActorVisual::Worker)!=3||maskForVisual(ActorVisual::CleanupEngineer)!=0||maskForVisual(ActorVisual::Cleanup)!=2)return failure("mask choice does not follow the model");}
+  if(maskForVisual(ActorVisual::Worker)!=3||maskForVisual(ActorVisual::CleanupEngineer)!=0||maskForVisual(ActorVisual::Cleanup)!=2||maskForVisual(ActorVisual::LabTech)!=2||maskForVisual(ActorVisual::FemaleDoctor)!=0)return failure("mask choice does not follow the model");}
  AudioEngine audio(false);auto game=Game::validationScene(Enemy::Kind::Brute);
  if(audio.m_speech.size()!=NpcVoiceClips.size())return failure("NPC voice bank count");
  for(size_t i=0;i<audio.m_speech.size();++i){const auto&clip=audio.m_speech[i];

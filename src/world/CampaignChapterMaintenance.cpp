@@ -95,7 +95,7 @@ void mntChalk(Map& m,float x,float y,float z,const char* title,const char* subti
 }
 // A worker or a Cleanup man where he fell: a scripted track holding the down pose.
 void mntBody(Map& m,const char* clock,ActorVisual visual,Vec2 p,float z,float yaw){
- m.actorTracks.push_back({stateId(clock),visual,visual==ActorVisual::Worker?1.7f:1.6f,false,false,{{0,p,z,yaw,4,1},{1000,p,z,yaw,4,1}}});
+ m.actorTracks.push_back({stateId(clock),visual,civilianActorVisual(visual)?1.7f:1.6f,false,false,{{0,p,z,yaw,4,1},{1000,p,z,yaw,4,1}}});
 }
 // An armed Cleanup man walking an authored beat: he pauses at each post facing
 // its bearing and scans either side of it.

@@ -607,6 +607,13 @@ static bool loadValidationTest(){
  for(auto record:{"TERRAIN|1|-10|2|34|0.45","TERRAIN|1|16|3|34|0.45","DOOR|0|3|2|4|0|0|0|0|0|-1","STRUCT|0|1|1|1|2|0|2|0|0","COMPACTOR|0|1|1|2|2|0|2|0"}){
   try{retro::loadCustomCampaignText(custom+record+"\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","validation.txt");ok=false;report<<"FAIL parser accepted "<<record<<'\n';}catch(const std::exception& e){report<<"PASS parser rejected "<<record<<": "<<e.what()<<'\n';}
  }
+ // Actor visuals are appended: the last one parses, the value past it does not.
+ for(int visual:{int(retro::LastActorVisual),int(retro::LastActorVisual)+1}){
+  std::string record="ACTOR|0|staff_clock|"+std::to_string(visual)+"|1.7|0|0|0";bool last=visual==int(retro::LastActorVisual);
+  const std::string body="TIMED_SEQUENCE|0|staff_clock|staff_clock_done|0|0|24|24|-100|100|60000|60000|0|0|0|0|1|1\n"+record+"\nACTOR_KEY|0|0|0|5|4.5|0|0|4|1\nACTOR_KEY|0|0|60000|5|4.5|0|0|4|1";
+  try{auto parsed=retro::loadCustomCampaignText(custom+body+"\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","validation.txt");bool staff=last&&parsed->maps.at(0)->actorTracks.at(0).visual==retro::ActorVisual::LabTech;ok&=staff;report<<(staff?"PASS":"FAIL")<<" parser accepted "<<record<<'\n';}
+  catch(const std::exception& e){ok&=!last;report<<(last?"FAIL":"PASS")<<" parser rejected "<<record<<": "<<e.what()<<'\n';}
+ }
  report<<(ok?"PASS":"FAIL")<<'\n';return ok;
 }
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
@@ -843,6 +850,18 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
        report<<" npc"<<actor<<"="<<npc.level<<'/'<<npc.pose.position.x<<','<<npc.pose.position.y<<" role="<<int(npc.track().ai.role)<<" clip="<<npc.pose.clip<<" phase="<<npc.pose.phase;}
       report<<'\n';report.flush();renderer->render(scene);std::ofstream out(std::string("diagnostics/kill-squad-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
+    }
+    if(commandArguments().find(L"--civilian-inspection")){
+     // The Worker and the research staff, front and side, through drawActor:
+     // each baked clip at a mid phase, death at its end, and armed.
+     constexpr int width=960,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+     const std::string directory="diagnostics/civilian-models";std::filesystem::create_directories(directory);
+     const char*bodies[]={"worker","scientist","senior-scientist","female-scientist","female-doctor","lab-tech"};
+     struct Pose{const char*name;int clip;float phase;};constexpr Pose poses[]={{"idle",0,.3f},{"walk",1,.25f},{"punch",2,.5f},{"hit",3,.5f},{"death",4,1.f},{"crouch",5,.3f},{"armed",-1,.3f}};
+     for(int body=0;body<6;++body)for(const auto&pose:poses)for(int view=0;view<2;++view){auto scene=retro::Game::civilianInspection(body,pose.clip,pose.phase,view);renderer->render(scene);
+      std::ofstream out(directory+"/"+bodies[body]+"-"+pose.name+(view?"-side":"-front")+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";
+      for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return 0;
     }
     if(commandArguments().find(L"--cleanup-layer-inspection")){
      constexpr int width=960,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);

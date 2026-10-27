@@ -14,7 +14,10 @@ int voiceRole(const ActorTrack& track){
   case ActorVisual::CleanupHeavy:return 4;
   case ActorVisual::CleanupMedic:return 5;
   case ActorVisual::CleanupRusher:return 6;
-  case ActorVisual::Worker:return track.ai.mode==ActorAiMode::Escort?7:0;
+  case ActorVisual::Worker:case ActorVisual::Scientist:case ActorVisual::SeniorScientist:case ActorVisual::LabTech:
+   return track.ai.mode==ActorAiMode::Escort?7:0;
+  // The escort bank is a man's voice: a woman stays silent unless authored one.
+  case ActorVisual::FemaleScientist:case ActorVisual::FemaleDoctor:return 0;
   default:return 0;
  }
 }

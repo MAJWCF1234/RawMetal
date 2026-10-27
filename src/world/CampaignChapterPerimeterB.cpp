@@ -645,7 +645,7 @@ std::shared_ptr<const Map> makeDecontamination(){
  for(float x:{11.6f,12.15f})floorLine(m,x,14.3f,x+.25f,14.5f,f,20);
  terminal(m,{9.95f,13.4f},"DECON 1 / CYCLE CONTROL","LAST CYCLE 0412 ABORTED 02:20. SUPPLY RESTORED.","E / START CYCLE 0413. STAND IN THE MONITOR FRAME.",0,start);m.terminals.back().yaw=pbE;
  // The technician sealed in at 02:20: he got as far as the clean door.
- pbBody(m,"ere_decon_clock",ActorVisual::Worker,{11.3f,16.3f},f,.4f);
+ pbBody(m,"ere_decon_clock",ActorVisual::LabTech,{11.3f,16.3f},f,.4f);
  pbBlood(m,10.6f,15.7f,12.4f,16.85f,f);pbBlood(m,12.3f,16.2f,13.f,16.6f,f);
  for(auto [x,z]:{std::pair{9.75f,1.25f},{9.9f,1.55f},{10.15f,1.3f},{9.65f,.95f}})wall(m,x,16.97f,x+.08f,16.99f,f+z,f+z+.09f,16);
  wall(m,13.7f,16.97f,14.f,16.99f,f+1.35f,f+1.6f,16);
@@ -770,7 +770,8 @@ std::shared_ptr<const Map> makeEnergyResearchForecourt(){
  // --- The firing lane: barriers the Cleanup Force dragged across the hall -------------------------
  for(float x:{3.f,9.f,15.f,21.f})pbFix(m,model::ind_barrier_wall,x,20.6f,f,2.96f,.4f,2.05f,0,true);
  for(Vec2 r:{Vec2{8.f,14.6f},Vec2{16.f,14.6f}})pbFix(m,model::road_block,r.x,r.y,f,1.6f,.5f,.7f,.3f,true);
- pbBody(m,"ere_fore_clock",ActorVisual::Worker,{14.4f,16.8f},f,2.2f);pbBlood(m,13.8f,16.2f,15.2f,17.4f,f);
+ // A researcher from the clean side, caught in the lane.
+ pbBody(m,"ere_fore_clock",ActorVisual::Scientist,{14.4f,16.8f},f,2.2f);pbBlood(m,13.8f,16.2f,15.2f,17.4f,f);
  machineryClock(m,"ere_fore_clock",60000);
  // A forward pair holding the hall; the squad proper waits at the door.
  pbGuard(m,"ere_fore_clock","ere_fore_0",ActorVisual::Cleanup,GuardSquadRole::Assault,"ere_finale",

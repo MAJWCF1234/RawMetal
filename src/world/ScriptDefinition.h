@@ -29,8 +29,17 @@ struct TimedSequence {
 };
 struct QuestItemStack {StateId id=0;int count=0;};
 // Shared, saved actor and machinery timelines. Keys use absolute map elevation.
-enum class ActorVisual { Worker, Wasp, Huntsman, Cargo, Cleanup, CleanupEngineer, CleanupSharpshooter, CleanupHeavy, CleanupMedic, CleanupRusher };
-constexpr bool humanActorVisual(ActorVisual visual){return visual==ActorVisual::Worker||(int(visual)>=4&&int(visual)<=9);}
+// Values are saved in custom campaign ACTOR records: append, never reorder.
+// Staff (Scientist..LabTech) are civilians like the Worker: each model plays
+// the Worker's six baked clips with its own hand anchors.
+enum class ActorVisual { Worker, Wasp, Huntsman, Cargo, Cleanup, CleanupEngineer, CleanupSharpshooter, CleanupHeavy, CleanupMedic, CleanupRusher,
+ Scientist, SeniorScientist, FemaleScientist, FemaleDoctor, LabTech };
+constexpr ActorVisual LastActorVisual=ActorVisual::LabTech;
+constexpr bool cleanupActorVisual(ActorVisual visual){return int(visual)>=int(ActorVisual::Cleanup)&&int(visual)<=int(ActorVisual::CleanupRusher);}
+// 0 for the Worker, 1-5 for the staff models, -1 for anything else.
+constexpr int civilianActorBody(ActorVisual visual){return visual==ActorVisual::Worker?0:int(visual)>=int(ActorVisual::Scientist)&&int(visual)<=int(ActorVisual::LabTech)?int(visual)-int(ActorVisual::Scientist)+1:-1;}
+constexpr bool civilianActorVisual(ActorVisual visual){return civilianActorBody(visual)>=0;}
+constexpr bool humanActorVisual(ActorVisual visual){return civilianActorVisual(visual)||cleanupActorVisual(visual);}
 struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 enum class ActorAiMode { Scripted, Civilian, Escort, Guard=3 };
 enum class AiFaction { Unspecified, Player, Facility, Creature, Raider, Neutral };

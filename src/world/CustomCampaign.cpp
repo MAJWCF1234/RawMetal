@@ -259,7 +259,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    map->timedSequences.push_back({stateId(decode(f[2])),stateId(decode(f[3])),number(f,4,"sequence x1"),number(f,5,"sequence y1"),number(f,6,"sequence x2"),number(f,7,"sequence y2"),number(f,8,"sequence bottom"),number(f,9,"sequence top"),integer(f,10,"sequence duration"),integer(f,11,"sequence finish time"),integer(f,12,"sequence sound interval"),integer(f,13,"sequence sound cutoff"),Sound(tick),number(f,15,"sequence gain"),number(f,16,"sequence pitch")});
    if(f.size()>17)map->timedSequences.back().loop=boolean(f,17,"sequence loop");
   }else if(tag=="ACTOR"){
-   if(f.size()!=8)throw std::runtime_error("malformed ACTOR record");auto map=mapAt(maps,f);int kind=integer(f,3,"actor visual");if(kind<0||kind>9||f[2].empty())throw std::runtime_error("invalid actor visual or timer");
+   if(f.size()!=8)throw std::runtime_error("malformed ACTOR record");auto map=mapAt(maps,f);int kind=integer(f,3,"actor visual");if(kind<0||kind>int(LastActorVisual)||f[2].empty())throw std::runtime_error("invalid actor visual or timer");
    if(integer(f,7,"actor index")!=int(map->actorTracks.size()))throw std::runtime_error("actor indices must be sequential");
    map->actorTracks.push_back({stateId(decode(f[2])),ActorVisual(kind),number(f,4,"actor scale"),boolean(f,5,"actor loop"),boolean(f,6,"actor tool"),{}});
   }else if(tag=="ACTOR_AI"){

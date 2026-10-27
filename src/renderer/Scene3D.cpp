@@ -18,6 +18,33 @@ namespace retro {
 // made a standard rifle render almost two metres long on screen.
 namespace {
 constexpr float kViewModelScale=1.15f;
+// How a gun-holding civilian's baked body takes the arm attachment, in its
+// rest-OBJ space (civilianActorBody order: Worker, then the five staff).
+// Joints are the FBX RightArm/LeftArm, ForeArm and Hand in the pose that
+// RawMetalClutterImport --skin-rest exports (its listing prints them); palms
+// point from Hand toward Middle1 (Index1 where the rig has no Middle1).
+// `unit` is the rest height over the Worker's 1.632, scaling the mask's
+// distances; the torso axis splits the sides and the band bounds arm
+// vertices: from .26 units below the wrists (bare fingers hang to about .24;
+// the light suit's gloves follow by material) to .17 above the shoulders.
+// Bare hands have no glove material: `fingers` extends the arm chain from the
+// wrist along the palm (fingertips at Hand + palm * fingers) so the whole hand
+// joins the grip. The Worker keeps its original hand-tuned values.
+struct CivilianRig {std::array<Point3,2> shoulders,elbows,hands,palms;float torsoX,torsoZ,sideSplit,bandLow,bandHigh,pullStart,unit,fingers;};
+constexpr std::array<CivilianRig,6> kCivilianRigs{{
+ {{{{-.299655f,1.128231f,.062529f},{.175621f,1.137175f,.208664f}}},{{{-.320979f,1.004710f,-.043664f},{.235904f,.985455f,.190558f}}},{{{-.455896f,.685732f,-.040689f},{.244775f,.711805f,.402681f}}},
+  {{{-.017374f,-.105655f,.031950f},{.020742f,-.075568f,.078422f}}},-.085f,.10f,-.1f,.55f,1.30f,.66f,1.f,0},
+ {{{{-0.547253f,3.60615f,-0.0740935f},{0.312347f,3.60615f,-0.0846731f}}},{{{-0.713854f,2.99819f,-0.00719324f},{0.478948f,2.99819f,-0.00706265f}}},{{{-0.817165f,2.39903f,0.22525f},{0.58226f,2.39903f,0.22548f}}},
+  {{{-0.0629246f,-0.272458f,0.127924f},{0.0649639f,-0.273789f,0.124002f}}},-0.117453f,-0.0555683f,-0.117453f,1.67221f,4.08138f,2.59672f,2.79547f,2.2f},
+ {{{{-0.49371f,3.55719f,-0.0917704f},{0.299881f,3.55719f,-0.0909463f}}},{{{-0.734385f,2.93329f,-0.11308f},{0.540556f,2.93329f,-0.118474f}}},{{{-0.835041f,2.29881f,-0.0457228f},{0.641212f,2.29881f,-0.0424704f}}},
+  {{{-0.0161463f,-0.290415f,0.0870152f},{0.024676f,-0.292103f,0.0789926f}}},-0.0969143f,-0.063972f,-0.0969143f,1.58121f,4.02639f,2.5045f,2.76f,2.2f},
+ {{{{-0.41536f,3.685f,-0.0267333f},{0.327459f,3.685f,-0.0300128f}}},{{{-0.687445f,3.17155f,-0.0157767f},{0.599544f,3.17155f,-0.0117012f}}},{{{-0.944825f,2.62909f,0.00320618f},{0.856924f,2.62909f,0.0011927f}}},
+  {{{-0.19006f,-0.239095f,0.0249561f},{0.197376f,-0.233138f,0.0245304f}}},-0.0439507f,-0.0198611f,-0.0439507f,1.90475f,4.15861f,2.71382f,2.78592f,2.2f},
+ {{{{-0.455447f,3.66273f,-0.0464635f},{0.343809f,3.66273f,-0.0446663f}}},{{{-0.846065f,3.11828f,-0.0595233f},{0.734426f,3.11828f,-0.0570286f}}},{{{-1.19234f,2.65597f,-0.0651441f},{1.0807f,2.65597f,-0.0655766f}}},
+  {{{-0.159059f,-0.26061f,0.0216822f},{0.154528f,-0.264f,0.0106013f}}},-0.0558194f,-0.0318954f,-0.0558194f,1.93250f,4.13577f,2.59176f,2.78258f,2.2f},
+ {{{{-0.170945f,1.14816f,0.00725444f},{0.149303f,1.15564f,0.102785f}}},{{{-0.189157f,1.04289f,-0.0831918f},{0.200698f,1.02632f,0.0873293f}}},{{{-0.315382f,0.744461f,-0.0802804f},{0.209169f,0.770415f,0.285742f}}},
+  {{{-0.0260366f,-0.0960641f,0.0277716f},{0.0252621f,-0.0618565f,0.0788231f}}},-0.000731455f,0.0199785f,-0.000731455f,0.612948f,1.31533f,0.83484f,0.939381f,0},
+}};
 // A field terminal is authored geometry in the actor's metre-sized frame.
 // Its working surface tilts toward both the operator and a standing observer.
 struct FieldTerminalFrame {
@@ -1750,8 +1777,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(track.suspensionTop>pose.z){float top=pose.z+(track.platform?0.f:track.scale);if(top<track.suspensionTop)cylinder({pose.position.x,pose.position.y,top},{pose.position.x,pose.position.y,track.suspensionTop},.035f,m_pressureMetal);}
   if(track.platform){float x=pose.position.x,y=pose.position.y,halfWidth=track.footprint.x*.5f,d=track.footprint.y*.5f;box({x-halfWidth,y-d,pose.z-track.thickness},{x+halfWidth,y+d,pose.z},m_pressureMetal,1.f);quad({x-halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d+.12f,pose.z+.004f},{x-halfWidth,y-d+.12f,pose.z+.004f},m_hazard,1.f);return;}
   if(track.visual==ActorVisual::Cargo){prop(m_crateMesh,m_crateTexture,pose.position.x,pose.position.y,track.scale,pose.yaw,track.scale,pose.z);return;}
-  bool human=humanActorVisual(track.visual),cleanup=int(track.visual)>=4&&int(track.visual)<=9,wasp=track.visual==ActorVisual::Wasp;
-  int cleanupRole=cleanup?int(track.visual)-4:0;Mesh*cleanupMeshes[]={&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher};auto& mesh=cleanup?*cleanupMeshes[cleanupRole]:human?m_workerMesh:wasp?m_waspMesh:m_enemyMesh;
+  bool human=humanActorVisual(track.visual),cleanup=cleanupActorVisual(track.visual),wasp=track.visual==ActorVisual::Wasp;
+  // Civilians share the Worker path; civilianBody picks the Worker or a staff model.
+  const int civilianBody=std::max(0,civilianActorBody(track.visual));const auto&rig=kCivilianRigs[size_t(civilianBody)];
+  int cleanupRole=cleanup?int(track.visual)-4:0;Mesh*cleanupMeshes[]={&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher};auto& mesh=cleanup?*cleanupMeshes[cleanupRole]:human?civilianMesh(civilianBody):wasp?m_waspMesh:m_enemyMesh;
   bool treating=human&&weapon&&weapon->treatment>0&&pose.clip!=4;
   bool directTreatment=treating&&cleanup&&mesh.hasDirectCreatureMotion();
   bool engineer=human&&weapon&&weapon->armed&&track.ai.role==GuardSquadRole::Engineer&&pose.clip!=4;
@@ -1828,25 +1857,30 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    auto recoil=gunForward*(-.022f*weapon->recoil*bodyScale);
    gunGrip=weapon->grip+recoil;gunMuzzle=weapon->muzzle+recoil;
    if(cleanup){auto barrel=gunGrip+gunForward*((weapon->handgun?.172f:.500522f)*bodyScale)+gunUp*((weapon->handgun?.035f:.058961f)*bodyScale)+gunRight*((weapon->handgun?0.f:-.007496f)*bodyScale);m_cleanupBarrelError=std::max(m_cleanupBarrelError,std::sqrt(dot(barrel-gunMuzzle,barrel-gunMuzzle)));}
-   // Worker joints come from its FBX; cleanup calibration comes from each
-   // retained Blender mesh. All imports face +Z, matching the shared NPC yaw.
-   std::array<Point3,2> shoulders=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][0],m_cleanupArms[cleanupRole][1][0]}:std::array<Point3,2>{Point3{-.299655f,1.128231f,.062529f},Point3{.175621f,1.137175f,.208664f}};
-   std::array<Point3,2> elbows=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][1],m_cleanupArms[cleanupRole][1][1]}:std::array<Point3,2>{Point3{-.320979f,1.004710f,-.043664f},Point3{.235904f,.985455f,.190558f}};
-   std::array<Point3,2> hands=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][2],m_cleanupArms[cleanupRole][1][2]}:std::array<Point3,2>{Point3{-.455896f,.685732f,-.040689f},Point3{.244775f,.711805f,.402681f}};
+   // Civilian joints come from each FBX (kCivilianRigs); cleanup calibration
+   // comes from each retained Blender mesh. All imports face +Z, matching the
+   // shared NPC yaw.
+   std::array<Point3,2> shoulders=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][0],m_cleanupArms[cleanupRole][1][0]}:rig.shoulders;
+   std::array<Point3,2> elbows=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][1],m_cleanupArms[cleanupRole][1][1]}:rig.elbows;
+   std::array<Point3,2> hands=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][2],m_cleanupArms[cleanupRole][1][2]}:rig.hands;
    if(posedArms)for(int side=0;side<2;++side){const auto&j=mesh.creatureLayerPose().arms[side];shoulders[side]=j[0];elbows[side]=j[1];hands[side]=j[2];}
-   static std::array<std::vector<std::array<ArmedVertex,3>>,7> bindings;static std::once_flag bindOnce[7];static std::array<uint32_t,7> groupCounts{};
-   auto&bind=bindings[cleanup?cleanupRole+1:0];std::call_once(bindOnce[cleanup?cleanupRole+1:0],[&](){bind=[&](){
+   // One binding per body: 0 the Worker, 1-6 the cleanup roles, 7-11 the staff.
+   const size_t bindingSlot=cleanup?size_t(cleanupRole+1):civilianBody?size_t(6+civilianBody):0;
+   static std::array<std::vector<std::array<ArmedVertex,3>>,12> bindings;static std::once_flag bindOnce[12];static std::array<uint32_t,12> groupCounts{};
+   auto&bind=bindings[bindingSlot];std::call_once(bindOnce[bindingSlot],[&](){bind=[&](){
     const auto&rest=mesh.bindTriangles();std::vector<std::array<ArmedVertex,3>> result(rest.size());
     auto segmentDistance=[&](Point3 p,Point3 a,Point3 b){auto line=b-a;auto delta=p-a;float t=std::clamp(dot(delta,line)/dot(line,line),0.f,1.f);auto d=delta-line*t;return std::sqrt(dot(d,d));};
+    const float u=rig.unit;
     for(size_t face=0;face<rest.size();++face){const auto&t=rest[face];bool glove=t.part>=0&&t.part<int(mesh.materialNames.size())&&mesh.materialNames[t.part].find("mano")!=std::string::npos;
-     for(int vertex=0;vertex<3;++vertex){auto p=t.v[vertex].p;auto&v=result[face][vertex];v.position=p;v.side=p.x<(cleanup?0.f:-.1f)?0:1;
+     for(int vertex=0;vertex<3;++vertex){auto p=t.v[vertex].p;auto&v=result[face][vertex];v.position=p;v.side=p.x<(cleanup?0.f:rig.sideSplit)?0:1;
       if(cleanup){const auto&weight=m_cleanupWeights[cleanupRole][face*3+vertex];v.influence=weight[0]/255.f;v.lower=weight[1]/255.f;v.palm=weight[2]/255.f;v.side=weight[3];continue;}
       if(glove){v.influence=1;v.palm=1;continue;}
-      if(p.y<.55f||p.y>1.30f)continue;
+      if(p.y<rig.bandLow||p.y>rig.bandHigh)continue;
       auto S=shoulders[v.side],E=elbows[v.side],H=hands[v.side];float armDistance=std::min(segmentDistance(p,S,E),segmentDistance(p,E,H));
-      float torsoDistance=std::hypot(p.x+(cleanup?0.f:.085f),p.z-(cleanup?0.f:.10f));
-      v.influence=std::clamp((torsoDistance-armDistance-.04f)/.10f,0.f,1.f)*std::clamp((S.y+.13f-p.y)/.16f,0.f,1.f)*std::clamp((.18f-armDistance)/.06f,0.f,1.f);
-      v.lower=std::clamp((E.y+.09f-p.y)/.18f,0.f,1.f);v.palm=std::clamp((H.y+.06f-p.y)/.12f,0.f,1.f);
+      if(rig.fingers>0)armDistance=std::min(armDistance,segmentDistance(p,H,H+rig.palms[size_t(v.side)]*rig.fingers));
+      float torsoDistance=std::hypot(p.x-rig.torsoX,p.z-rig.torsoZ);
+      v.influence=std::clamp((torsoDistance-armDistance-.04f*u)/(.10f*u),0.f,1.f)*std::clamp((S.y+.13f*u-p.y)/(.16f*u),0.f,1.f)*std::clamp((.18f*u-armDistance)/(.06f*u),0.f,1.f);
+      v.lower=std::clamp((E.y+.09f*u-p.y)/(.18f*u),0.f,1.f);v.palm=std::clamp((H.y+.06f*u-p.y)/(.12f*u),0.f,1.f);
      }
     }
     // A corner can share its final position only when both the animated
@@ -1856,8 +1890,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      std::array<uint32_t,8> key{indices.empty()?uint32_t(corner):uint32_t(indices[corner]),uint32_t(v.side),std::bit_cast<uint32_t>(v.influence),std::bit_cast<uint32_t>(v.lower),std::bit_cast<uint32_t>(v.palm),std::bit_cast<uint32_t>(v.position.x),std::bit_cast<uint32_t>(v.position.y),std::bit_cast<uint32_t>(v.position.z)};
      auto entry=groups.emplace(key,uint32_t(groups.size()));v.group=entry.first->second;
     }
-    groupCounts[cleanup?cleanupRole+1:0]=uint32_t(groups.size());return result;
-   }();});armedVertices=&bind;attachmentGroups=groupCounts[cleanup?cleanupRole+1:0];
+    groupCounts[bindingSlot]=uint32_t(groups.size());return result;
+   }();});armedVertices=&bind;attachmentGroups=groupCounts[bindingSlot];
    auto rotation=[&](Point3 from,Point3 to){
     from=unit(from);to=unit(to);float cosine=std::clamp(dot(from,to),-1.f,1.f);auto axis=cross3(from,to);float sine=std::sqrt(dot(axis,axis));
     if(sine<.00001f){if(cosine>0)return std::array<Point3,3>{Point3{1,0,0},Point3{0,1,0},Point3{0,0,1}};axis=unit(cross3(from,std::fabs(from.z)<.9f?Point3{0,0,1}:Point3{0,1,0}));}
@@ -1901,7 +1935,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float along=(l1*l1-l2*l2+distance*distance)/(2*distance),height=std::sqrt(std::max(0.f,l1*l1-along*along));
     auto bend=gunRight*(side?.35f:-.35f)-gunUp*.30f-gunForward*.10f;bend=unit(bend-axis*dot(bend,axis));arm.targetElbow=arm.targetShoulder+axis*along+bend*height;
     arm.upper=rotation(upper,arm.targetElbow-arm.targetShoulder);arm.lower=rotation(lower,arm.targetHand-arm.targetElbow);
-    Point3 sourcePalm=posedArms?mesh.creatureLayerPose().arms[side][3]:cleanup?m_cleanupPalms[cleanupRole][side]:side?Point3{.020742f,-.075568f,.078422f}:Point3{-.017374f,-.105655f,.031950f};
+    Point3 sourcePalm=posedArms?mesh.creatureLayerPose().arms[side][3]:cleanup?m_cleanupPalms[cleanupRole][side]:rig.palms[size_t(side)];
     auto sourceDirection=transform(hands[side]+sourcePalm)-arm.hand;
     auto palmDirection=side?gunRight*-.060f+gunUp*.025f:gunUp*.075f+gunForward*.025f;
     if(supportRelease>0)palmDirection=palmDirection+(Point3{0,0,-.08f}-palmDirection)*supportRelease;
@@ -1918,8 +1952,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const bool nearFarLimit=cameraPoint({pose.position.x,pose.position.y,pose.z+radius*.5f},game).z+radius*4.f>=farPlane;
   const Point3 actorCenter{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
   const int gpuActor=m_gpuFrame&&m_gpuActorPreparation&&!nearFarLimit?m_gpu->beginActor(actorLights.normals,actorLights.brightness,actorLights.gloss,game.chunkOffset(level),player.pos,actorCenter):-1;
-  std::array<GpuRenderer::ActorMaterial,3> gpuMaterials{};
-  std::array<bool,3> gpuMaterialReady{};
+  std::array<GpuRenderer::ActorMaterial,4> gpuMaterials{};
+  std::array<bool,4> gpuMaterialReady{};
   auto actorTriangle=[&](const MeshTriangle&face,const Texture&texture,GpuRenderer::ActorMaterial&material,bool&ready){
    perf::ActorTriangleScope submissionProfile(gpuActor>=0);
    if(gpuActor>=0){
@@ -1958,7 +1992,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   std::vector<int> actorMaterials(mesh.materialNames.size());
   for(size_t part=0;part<mesh.materialNames.size();++part){const auto&name=mesh.materialNames[part];
    if(cleanup)actorMaterials[part]=name.find("head")!=std::string::npos?1:0;
-   else if(human)actorMaterials[part]=name.find("pies")!=std::string::npos?2:name.find("mano")!=std::string::npos?1:0;
+   // Civilian parts: 0 body, 1 gloves (mano), 2 boots (pies), 3 respirator (mask).
+   else if(human)actorMaterials[part]=name.find("pies")!=std::string::npos?2:name.find("mano")!=std::string::npos?1:name.find("mask")!=std::string::npos?3:0;
   }
   // Scratch is reset for every actor/pose; no position survives into another
   // pose. UVs, material ownership and per-face lighting remain per corner.
@@ -1982,7 +2017,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      // Worker hunched idle used to bury the visor in the gun, so the jacket is
      // pulled toward bind. Cleanup UAL / Worker walk already clear the weapon —
      // keep most of the posed body so idle and legs read as motion.
-     float bindPull=std::clamp((bind.position.y-.66f)/.28f,0.f,1.f);
+     float bindPull=std::clamp((bind.position.y-rig.pullStart)/(.28f*rig.unit),0.f,1.f);
      if(posedArms)bindPull=0;
      else if(cleanup)bindPull*=.18f;
      else if(pose.clip==1||pose.clip==5)bindPull*=.4f;
@@ -2004,12 +2039,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
    if(streamBody){
     if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
-     if(!gpuMaterialReady[material]){const auto&texture=cleanup?m_cleanupTextures[cleanupRole][material]:human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture;
+     if(!gpuMaterialReady[material]){const auto&texture=cleanup?m_cleanupTextures[cleanupRole][material]:human?civilianTexture(civilianBody,material):wasp?m_waspTexture:m_enemyTexture;
       gpuMaterials[material]=m_gpu->prepareActorMaterial(texture,m_emissionScale);gpuMaterialReady[material]=true;}
      if(runMaterial!=material){flushRun();runMaterial=material;}
      GpuRenderer::writeActorTriangle(stream.triangles[emitted++],face,gpuActor,gpuMaterials[material]);
     }
-   }else actorTriangle(face,cleanup?m_cleanupTextures[cleanupRole][material]:human?m_workerTextures[material]:wasp?m_waspTexture:m_enemyTexture,gpuMaterials[material],gpuMaterialReady[material]);
+   }else actorTriangle(face,cleanup?m_cleanupTextures[cleanupRole][material]:human?civilianTexture(civilianBody,material):wasp?m_waspTexture:m_enemyTexture,gpuMaterials[material],gpuMaterialReady[material]);
    ++actorFace;
   }
   if(streamBody){flushRun();m_gpu->endActorStream(stream,emitted);}
