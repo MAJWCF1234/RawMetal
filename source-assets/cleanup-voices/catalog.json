@@ -13,7 +13,11 @@
   "Treat",
   "Follow",
   "Wait",
-  "Danger"
+  "Danger",
+  "Witness",
+  "CheckLockers",
+  "Found",
+  "GiveUp"
  ],
  "clips": [
   {
@@ -785,6 +789,454 @@
    "cue": "Hurt",
    "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[strained, stubborn] Still breathing. Keep going."
+  },
+  {
+   "id": "assault-witness-0",
+   "role": 1,
+   "cue": "Witness",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[low, menacing] Saw that."
+  },
+  {
+   "id": "assault-witness-1",
+   "role": 1,
+   "cue": "Witness",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[whispers, cold] I saw you. Stay put."
+  },
+  {
+   "id": "assault-checklockers-0",
+   "role": 1,
+   "cue": "CheckLockers",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[low, firm] Check the lockers."
+  },
+  {
+   "id": "assault-checklockers-1",
+   "role": 1,
+   "cue": "CheckLockers",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[quiet, focused] Let's see what's in here."
+  },
+  {
+   "id": "assault-found-0",
+   "role": 1,
+   "cue": "Found",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[shouting] Got you! Out!"
+  },
+  {
+   "id": "assault-found-1",
+   "role": 1,
+   "cue": "Found",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[startled, angry shout] Out! Now!"
+  },
+  {
+   "id": "assault-giveup-0",
+   "role": 1,
+   "cue": "GiveUp",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[sighs, irritated] Nothing. Back to it."
+  },
+  {
+   "id": "assault-giveup-1",
+   "role": 1,
+   "cue": "GiveUp",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[tired, annoyed] Lost him. Stay sharp."
+  },
+  {
+   "id": "sharpshooter-witness-0",
+   "role": 3,
+   "cue": "Witness",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[whispers] I saw that."
+  },
+  {
+   "id": "sharpshooter-witness-1",
+   "role": 3,
+   "cue": "Witness",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[cold, quiet] Saw you go in. Don't move."
+  },
+  {
+   "id": "sharpshooter-checklockers-0",
+   "role": 3,
+   "cue": "CheckLockers",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[calm, low] Lockers. Clearing them one by one."
+  },
+  {
+   "id": "sharpshooter-checklockers-1",
+   "role": 3,
+   "cue": "CheckLockers",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[quiet, focused] Let's see what's behind this door."
+  },
+  {
+   "id": "sharpshooter-found-0",
+   "role": 3,
+   "cue": "Found",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[sharp, cold] There you are. Out."
+  },
+  {
+   "id": "sharpshooter-found-1",
+   "role": 3,
+   "cue": "Found",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[sharp shout] Got you! Hands where I can see them!"
+  },
+  {
+   "id": "sharpshooter-giveup-0",
+   "role": 3,
+   "cue": "GiveUp",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[flat, tired] Nothing. Just the vents."
+  },
+  {
+   "id": "sharpshooter-giveup-1",
+   "role": 3,
+   "cue": "GiveUp",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[irritated, quiet] Lost him. Watching the lanes."
+  },
+  {
+   "id": "rusher-witness-0",
+   "role": 6,
+   "cue": "Witness",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[eager whisper] Oh, I saw that."
+  },
+  {
+   "id": "rusher-witness-1",
+   "role": 6,
+   "cue": "Witness",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[quiet, grinning] Saw you. Nowhere to run now."
+  },
+  {
+   "id": "rusher-checklockers-0",
+   "role": 6,
+   "cue": "CheckLockers",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[impatient] Lockers! Rip them open!"
+  },
+  {
+   "id": "rusher-checklockers-1",
+   "role": 6,
+   "cue": "CheckLockers",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[eager, low] Come on... which one are you in?"
+  },
+  {
+   "id": "rusher-found-0",
+   "role": 6,
+   "cue": "Found",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[yelling, aggressive] Got you! Out!"
+  },
+  {
+   "id": "rusher-found-1",
+   "role": 6,
+   "cue": "Found",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[shouting] Gotcha! Move, move!"
+  },
+  {
+   "id": "rusher-giveup-0",
+   "role": 6,
+   "cue": "GiveUp",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[frustrated groan] Nothing! Waste of time."
+  },
+  {
+   "id": "rusher-giveup-1",
+   "role": 6,
+   "cue": "GiveUp",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[irritated, out of breath] Lost him. He's still out there."
+  },
+  {
+   "id": "heavy-witness-0",
+   "role": 4,
+   "cue": "Witness",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[low growl] I saw that."
+  },
+  {
+   "id": "heavy-witness-1",
+   "role": 4,
+   "cue": "Witness",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[deep, slow, menacing] Saw you climb in."
+  },
+  {
+   "id": "heavy-checklockers-0",
+   "role": 4,
+   "cue": "CheckLockers",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[gruff] Lockers. Open them up."
+  },
+  {
+   "id": "heavy-checklockers-1",
+   "role": 4,
+   "cue": "CheckLockers",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[deep, slow] Let's see what's hiding in here."
+  },
+  {
+   "id": "heavy-found-0",
+   "role": 4,
+   "cue": "Found",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[booming] Found you! Get out!"
+  },
+  {
+   "id": "heavy-found-1",
+   "role": 4,
+   "cue": "Found",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[shouting, angry] Out! NOW!"
+  },
+  {
+   "id": "heavy-giveup-0",
+   "role": 4,
+   "cue": "GiveUp",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[tired sigh] Just the pipes. Back to the door."
+  },
+  {
+   "id": "heavy-giveup-1",
+   "role": 4,
+   "cue": "GiveUp",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[gruff, irritated] He slipped us. Eyes open."
+  },
+  {
+   "id": "engineer-witness-0",
+   "role": 2,
+   "cue": "Witness",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[quietly, amused] Oh... I saw that."
+  },
+  {
+   "id": "engineer-witness-1",
+   "role": 2,
+   "cue": "Witness",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[muttering] Saw that. Bad place to hide."
+  },
+  {
+   "id": "engineer-checklockers-0",
+   "role": 2,
+   "cue": "CheckLockers",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[muttering] Better check these lockers."
+  },
+  {
+   "id": "engineer-checklockers-1",
+   "role": 2,
+   "cue": "CheckLockers",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[curious, quiet] What have we got in here..."
+  },
+  {
+   "id": "engineer-found-0",
+   "role": 2,
+   "cue": "Found",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[startled shout] Whoa-- got you!"
+  },
+  {
+   "id": "engineer-found-1",
+   "role": 2,
+   "cue": "Found",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[startled, angry] Out! Now!"
+  },
+  {
+   "id": "engineer-giveup-0",
+   "role": 2,
+   "cue": "GiveUp",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[sighs] Pipes knocking again. Back to work."
+  },
+  {
+   "id": "engineer-giveup-1",
+   "role": 2,
+   "cue": "GiveUp",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[irritated mutter] Lost him. Keep watch."
+  },
+  {
+   "id": "medic-witness-0",
+   "role": 5,
+   "cue": "Witness",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[quiet, cold] I saw that."
+  },
+  {
+   "id": "medic-witness-1",
+   "role": 5,
+   "cue": "Witness",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[soft, ominous] I saw you. Come out slowly."
+  },
+  {
+   "id": "medic-checklockers-0",
+   "role": 5,
+   "cue": "CheckLockers",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[cautious] Checking the lockers."
+  },
+  {
+   "id": "medic-checklockers-1",
+   "role": 5,
+   "cue": "CheckLockers",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[nervous, quiet] Easy... let's see what's in here."
+  },
+  {
+   "id": "medic-found-0",
+   "role": 5,
+   "cue": "Found",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[sharp, startled] There you are! Out!"
+  },
+  {
+   "id": "medic-found-1",
+   "role": 5,
+   "cue": "Found",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[shouting] Out! Hands up!"
+  },
+  {
+   "id": "medic-giveup-0",
+   "role": 5,
+   "cue": "GiveUp",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[tired sigh] Nothing. Just nerves."
+  },
+  {
+   "id": "medic-giveup-1",
+   "role": 5,
+   "cue": "GiveUp",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[uneasy] Lost him. Stay together."
+  },
+  {
+   "id": "zone-military-witness-0",
+   "role": 8,
+   "cue": "Witness",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[low, firm] Saw that."
+  },
+  {
+   "id": "zone-military-witness-1",
+   "role": 8,
+   "cue": "Witness",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[quiet, menacing] I saw you. Stay where you are."
+  },
+  {
+   "id": "zone-military-checklockers-0",
+   "role": 8,
+   "cue": "CheckLockers",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[firm] Search the lockers. All of them."
+  },
+  {
+   "id": "zone-military-checklockers-1",
+   "role": 8,
+   "cue": "CheckLockers",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[low, tense] Let's see what's in here."
+  },
+  {
+   "id": "zone-military-found-0",
+   "role": 8,
+   "cue": "Found",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[commanding shout] Got you! Step out!"
+  },
+  {
+   "id": "zone-military-found-1",
+   "role": 8,
+   "cue": "Found",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[shouting] Out! On the ground!"
+  },
+  {
+   "id": "zone-military-giveup-0",
+   "role": 8,
+   "cue": "GiveUp",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[bored, flat] Nothing. Back to the checkpoint."
+  },
+  {
+   "id": "zone-military-giveup-1",
+   "role": 8,
+   "cue": "GiveUp",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[irritated] Lost him. Eyes on the road."
+  },
+  {
+   "id": "zone-bandit-witness-0",
+   "role": 9,
+   "cue": "Witness",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[chuckles, quiet] Oh, I saw that."
+  },
+  {
+   "id": "zone-bandit-witness-1",
+   "role": 9,
+   "cue": "Witness",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[low, amused] Saw that, rookie. Stay put."
+  },
+  {
+   "id": "zone-bandit-checklockers-0",
+   "role": 9,
+   "cue": "CheckLockers",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[gruff] Check the lockers, boys."
+  },
+  {
+   "id": "zone-bandit-checklockers-1",
+   "role": 9,
+   "cue": "CheckLockers",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[suspicious muttering] What have we got in here, eh?"
+  },
+  {
+   "id": "zone-bandit-found-0",
+   "role": 9,
+   "cue": "Found",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[shouting, gleeful] Got you, rookie! Out!"
+  },
+  {
+   "id": "zone-bandit-found-1",
+   "role": 9,
+   "cue": "Found",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[aggressive yell] Out! Now!"
+  },
+  {
+   "id": "zone-bandit-giveup-0",
+   "role": 9,
+   "cue": "GiveUp",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[sighs, lazy] Nothing. Just rats."
+  },
+  {
+   "id": "zone-bandit-giveup-1",
+   "role": 9,
+   "cue": "GiveUp",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[irritated grumble] Slippery little rat... keep your eyes open."
   }
  ]
 }

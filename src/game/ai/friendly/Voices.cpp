@@ -1,4 +1,5 @@
 #include "../../Game.h"
+#include "../../../world/CustomCampaign.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -22,21 +23,29 @@ int voiceRole(const ActorTrack& track){
  }
 }
 int voicePriority(NpcVoiceCue cue){
- if(cue==NpcVoiceCue::Down)return 3;
- if(cue==NpcVoiceCue::Hurt||cue==NpcVoiceCue::AllyDown)return 2;
+ // The door ripped open is the one line nothing may swallow, not even his own
+ // "let's see what's in here" still in his mouth as the leaves swing.
+ if(cue==NpcVoiceCue::Down||cue==NpcVoiceCue::Found)return 3;
+ // Locker events are called once, as they happen: another guard's chatter on
+ // the channel must not drop them, or the player hides on a lie of silence.
+ if(cue==NpcVoiceCue::Hurt||cue==NpcVoiceCue::AllyDown||cue==NpcVoiceCue::Witness||cue==NpcVoiceCue::CheckLockers)return 2;
  if(cue==NpcVoiceCue::Patrol)return 0;
  return 1;
 }
 bool sharedTactical(NpcVoiceCue cue){return cue==NpcVoiceCue::Alert||cue==NpcVoiceCue::Investigate||cue==NpcVoiceCue::Retreat;}
 bool channelHold(NpcVoiceCue cue){
  return sharedTactical(cue)||cue==NpcVoiceCue::AllyDown||cue==NpcVoiceCue::Treat||cue==NpcVoiceCue::Repair||
-  cue==NpcVoiceCue::Support||cue==NpcVoiceCue::Deploy||cue==NpcVoiceCue::Follow||cue==NpcVoiceCue::Wait||cue==NpcVoiceCue::Danger;
+  cue==NpcVoiceCue::Support||cue==NpcVoiceCue::Deploy||cue==NpcVoiceCue::Follow||cue==NpcVoiceCue::Wait||cue==NpcVoiceCue::Danger||cue==NpcVoiceCue::GiveUp;
 }
 StateId cueCooldownId(NpcVoiceCue cue){
  if(cue==NpcVoiceCue::Alert)return stateId("npc_voice_cd_alert");
  if(cue==NpcVoiceCue::Investigate)return stateId("npc_voice_cd_investigate");
  if(cue==NpcVoiceCue::Retreat)return stateId("npc_voice_cd_retreat");
  if(cue==NpcVoiceCue::AllyDown)return stateId("npc_voice_cd_allydown");
+ if(cue==NpcVoiceCue::Witness)return stateId("npc_voice_cd_witness");
+ if(cue==NpcVoiceCue::CheckLockers)return stateId("npc_voice_cd_lockers");
+ if(cue==NpcVoiceCue::Found)return stateId("npc_voice_cd_found");
+ if(cue==NpcVoiceCue::GiveUp)return stateId("npc_voice_cd_giveup");
  return 0;
 }
 int cueCooldownMs(NpcVoiceCue cue){
@@ -44,6 +53,13 @@ int cueCooldownMs(NpcVoiceCue cue){
  if(cue==NpcVoiceCue::Investigate)return 8000;
  if(cue==NpcVoiceCue::Retreat)return 12000;
  if(cue==NpcVoiceCue::AllyDown)return 9000;
+ // Two guards watching one climb-in say it once; a squad opening a row of
+ // lockers orders it once; one player is pulled out once.
+ if(cue==NpcVoiceCue::Witness)return 4000;
+ if(cue==NpcVoiceCue::CheckLockers)return 8000;
+ if(cue==NpcVoiceCue::Found)return 3000;
+ // Searches of one squad end a few seconds apart: one of them calls it off.
+ if(cue==NpcVoiceCue::GiveUp)return 15000;
  return 0;
 }
 }
@@ -73,7 +89,8 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
 }
 void Game::updateNpcVoices(float dt){
  int ms=std::max(0,int(std::round(dt*1000)));setState(stateId("npc_voice_busy"),std::max(0,state("npc_voice_busy")-ms));
- for(StateId id:{stateId("npc_voice_cd_alert"),stateId("npc_voice_cd_investigate"),stateId("npc_voice_cd_retreat"),stateId("npc_voice_cd_allydown"),stateId("npc_voice_reply_ms")})
+ for(StateId id:{stateId("npc_voice_cd_alert"),stateId("npc_voice_cd_investigate"),stateId("npc_voice_cd_retreat"),stateId("npc_voice_cd_allydown"),stateId("npc_voice_reply_ms"),
+  stateId("npc_voice_cd_witness"),stateId("npc_voice_cd_lockers"),stateId("npc_voice_cd_found"),stateId("npc_voice_cd_giveup")})
   setState(id,std::max(0,state(id)-ms));
  auto sameRadio=[&](size_t a,size_t b){
   const auto&left=m_friendlyActors[a].track(),&right=m_friendlyActors[b].track();
@@ -125,6 +142,10 @@ void Game::updateNpcVoices(float dt){
   }
   if(track.ai.mode==ActorAiMode::Guard){
    int mode=int(guardState(actor));int previous=get("voice_mode");
+   // What this hunt was after, kept past the frame the mind forgets it: 1 a
+   // glimpse of the player he never made out, 2 the player confirmed (seen,
+   // reported by the squad or blamed for a body) - that search ends on Caution.
+   if(mode!=int(GuardState::Patrol)&&get("guard_target_kind")==int(ShotKind::Player))put("voice_hunt",std::max(get("voice_hunt"),get("guard_confirmed")?2:1));
    if(mode!=previous){
     if(mode==int(GuardState::Alert))claimShared(NpcVoiceCue::Alert);
     else if(mode==int(GuardState::Investigate))claimShared(NpcVoiceCue::Investigate);
@@ -133,8 +154,16 @@ void Game::updateNpcVoices(float dt){
      // they already announced the check.
      if(previous==int(GuardState::Alert)||previous==int(GuardState::Suspicious))claimShared(NpcVoiceCue::Investigate);
     }
+    else if(mode==int(GuardState::Patrol)&&previous==int(GuardState::Search)&&get("voice_hunt")){
+     // Calling off a search for the player: one voice per radio net, from a
+     // guard the player can hear (a distant claim would gag a near squadmate).
+     bool taken=state(stateId("npc_voice_cd_giveup"))>0||lengthSq(npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level)-m_player.pos)+std::pow(npc.pose.z-m_player.z,2)>22*22;
+     for(size_t other=0;other<m_friendlyActors.size()&&!taken;++other)taken=other!=actor&&sameRadio(actor,other)&&pendingCue(other)==int(NpcVoiceCue::GiveUp);
+     if(!taken){pending(NpcVoiceCue::GiveUp,5000);if(pendingCue(actor)==int(NpcVoiceCue::GiveUp))put("voice_giveup",get("voice_hunt"));}
+    }
     put("voice_mode",mode);
    }
+   if(mode==int(GuardState::Patrol))put("voice_hunt",0);
    bool retreat=get("evac_level")!=0;if(retreat&&!get("voice_retreat"))claimShared(NpcVoiceCue::Retreat);put("voice_retreat",retreat);
    bool treating=get("support_ms")>0&&get("support_target")>0;
    if(treating&&!get("voice_treating"))pending(NpcVoiceCue::Treat);put("voice_treating",treating);
@@ -146,6 +175,8 @@ void Game::updateNpcVoices(float dt){
    int request=get("voice_pending")-1;
    if((request==int(NpcVoiceCue::Treat)&&!treating)||(request==int(NpcVoiceCue::Repair)&&!repairing)||(request==int(NpcVoiceCue::Support)&&!pad))put("voice_pending",0);
    if(request==int(NpcVoiceCue::Deploy)){bool live=false;for(const auto&drone:engineerDrones())if(drone.owner==int(actor)&&drone.slot==get("voice_drone")-1){live=true;break;}if(!live)put("voice_pending",0);}
+   // Back on the hunt before he got the words out: "lost him" would be a lie.
+   if(request==int(NpcVoiceCue::GiveUp)&&mode!=int(GuardState::Patrol))put("voice_pending",0);
    if(!retreat&&mode==int(GuardState::Patrol)&&!get("walking")&&!get("voice_patrol")&&!get("voice_pending")){
     if(npcVoice(actor,NpcVoiceCue::Patrol))put("voice_patrol",22000+int(actor*2903%12000));
    }
@@ -162,7 +193,12 @@ void Game::updateNpcVoices(float dt){
    if(channelHold(cue)&&state("npc_voice_busy")&&!get("voice_reply_wait")&&get("voice_pending_ms")<1800)put("voice_pending_ms",1800);
    if(!get("voice_pending_ms")){put("voice_pending",0);put("voice_reply_wait",0);}
    else if(get("voice_reply_wait")>0){}
-   else if(request<=int(NpcVoiceCue::Danger)&&npcVoice(actor,cue)){put("voice_pending",0);put("voice_reply_wait",0);}
+   else if(request<=int(NpcVoiceCue::GiveUp)){
+    // Calling it off he says what he knew: take 0 shrugs off a doubt, take 1
+    // admits a confirmed intruder got away (his squad is on Caution).
+    if(cue==NpcVoiceCue::GiveUp)put("voice_variant",std::max(0,get("voice_giveup")-1));
+    if(npcVoice(actor,cue)){put("voice_pending",0);put("voice_reply_wait",0);if(cue==NpcVoiceCue::GiveUp)put("voice_patrol",std::max(get("voice_patrol"),15000));}
+   }
   }
  }
 }
@@ -262,6 +298,66 @@ bool Game::testNpcVoices(){
    escort.setState(escort.friendlyKey(witness,"fear"),4000);check(expect(NpcVoiceCue::Danger),"The guide warns of danger in his own voice");
   }
  }
+ // Lockers. Every hostile voice has two takes of each locker cue, short enough
+ // to land on the moment (GiveUp's two takes are chosen by what he knew).
+ {bool covered=true;for(int role:{1,2,3,4,5,6,8,9})for(auto cue:{NpcVoiceCue::Witness,NpcVoiceCue::CheckLockers,NpcVoiceCue::Found,NpcVoiceCue::GiveUp}){int count=0;
+   for(const auto&clip:NpcVoiceClips)if(clip.role==role&&clip.cue==cue){++count;covered&=clip.seconds>.5f&&clip.seconds<(cue==NpcVoiceCue::Found?2.8f:cue==NpcVoiceCue::GiveUp?4.8f:3.8f);}
+   if(count!=2){covered=false;out<<"  role "<<role<<" cue "<<int(cue)<<" has "<<count<<" takes\n";}}
+  check(covered,"Every guard voice has two takes of Witness, CheckLockers, Found and GiveUp of a sane length");}
+ Game lockers;lockers.loadLevel(14,false);lockers.updateStreaming(0);lockers.m_player.pos={13,19};lockers.m_player.z=-25;
+ std::vector<size_t> guards;for(size_t i=0;i<lockers.npcActors().size();++i)if(lockers.npcActors()[i].homeLevel==14&&voiceRole(lockers.npcActors()[i].track())&&lockers.npcActors()[i].track().ai.mode==ActorAiMode::Guard)guards.push_back(i);
+ check(guards.size()>=3,"Receiving has a guard squad for the locker voice tests");
+ if(guards.size()>=3){
+  auto spoken=[&](NpcVoiceCue cue){int n=0;for(const auto&e:lockers.sounds())n+=e.speech>=0&&NpcVoiceClips[size_t(e.speech)].cue==cue;return n;};
+  auto quiet=[&](){lockers.m_sounds.clear();lockers.setState(stateId("npc_voice_busy"),0);for(auto g:guards){lockers.setState(lockers.friendlyKey(g,"voice_lock"),0);lockers.setState(lockers.friendlyKey(g,"voice_pending"),0);lockers.setState(lockers.friendlyKey(g,"voice_patrol"),60000);}
+   for(const char*cd:{"npc_voice_cd_alert","npc_voice_cd_investigate","npc_voice_cd_witness","npc_voice_cd_lockers","npc_voice_cd_found","npc_voice_cd_giveup","npc_voice_reply_ms"})lockers.setState(stateId(cd),0);};
+  size_t a=guards[0],b=guards[1];quiet();
+  check(lockers.npcVoice(a,NpcVoiceCue::Witness)&&!lockers.npcVoice(b,NpcVoiceCue::Witness)&&spoken(NpcVoiceCue::Witness)==1,"Two guards who watch one climb-in say it once");
+  check(!lockers.npcVoice(a,NpcVoiceCue::Patrol),"Chatter cannot talk over the witness line");
+  quiet();lockers.npcVoice(b,NpcVoiceCue::Investigate);
+  check(lockers.npcVoice(a,NpcVoiceCue::CheckLockers),"A squadmate's bark on the channel does not swallow the order to check the lockers");
+  check(lockers.npcVoice(a,NpcVoiceCue::Found)&&spoken(NpcVoiceCue::Found)==1&&spoken(NpcVoiceCue::CheckLockers)==0,"Ripping the door open cuts his own unfinished mutter, never overlaps it");
+  check(!lockers.npcVoice(b,NpcVoiceCue::Found)&&!lockers.npcVoice(b,NpcVoiceCue::CheckLockers),"The pull and the order are said once per event, not echoed by the squad");
+  // A search for the player ends: one voice calls it off, in the take that fits what he knew.
+  auto hunt=[&](int kind,int confirmed,int busy=0){quiet();for(auto g:guards){lockers.setState(lockers.friendlyKey(g,"voice_initialized"),1);lockers.setState(lockers.friendlyKey(g,"voice_mode"),int(GuardState::Search));
+    lockers.setState(lockers.friendlyKey(g,"guard_mode"),int(GuardState::Search));lockers.setState(lockers.friendlyKey(g,"guard_target_kind"),kind);lockers.setState(lockers.friendlyKey(g,"guard_confirmed"),confirmed);lockers.setState(lockers.friendlyKey(g,"voice_hunt"),0);}
+   lockers.updateNpcVoices(.016f);lockers.setState(stateId("npc_voice_busy"),busy);for(auto g:guards){lockers.setState(lockers.friendlyKey(g,"guard_mode"),int(GuardState::Patrol));lockers.setState(lockers.friendlyKey(g,"guard_target_kind"),0);lockers.setState(lockers.friendlyKey(g,"guard_confirmed"),0);}
+   lockers.updateNpcVoices(.016f);int claims=0;for(auto g:guards)claims+=lockers.state(lockers.friendlyKey(g,"voice_pending"))-1==int(NpcVoiceCue::GiveUp);return claims+spoken(NpcVoiceCue::GiveUp);};
+  auto flush=[&](){for(int i=0;i<120;++i)lockers.updateNpcVoices(.05f);int take=-1;
+   for(const auto&e:lockers.sounds())if(e.speech>=0&&NpcVoiceClips[size_t(e.speech)].cue==NpcVoiceCue::GiveUp){int role=NpcVoiceClips[size_t(e.speech)].role;take=0;for(int i=0;i<e.speech;++i)take+=NpcVoiceClips[size_t(i)].role==role&&NpcVoiceClips[size_t(i)].cue==NpcVoiceCue::GiveUp;}
+   return take;};
+  check(hunt(int(ShotKind::Player),1)==1,"A squad ending its search for the player elects one GiveUp, not a roll call");
+  int take=flush();check(take==1&&spoken(NpcVoiceCue::GiveUp)==1,"After a confirmed intruder he says he lost him (the squad is on Caution), once");
+  for(auto g:guards){lockers.setState(lockers.friendlyKey(g,"guard_mode"),int(GuardState::Search));lockers.setState(lockers.friendlyKey(g,"guard_target_kind"),int(ShotKind::Player));}
+  lockers.updateNpcVoices(.016f);for(auto g:guards)lockers.setState(lockers.friendlyKey(g,"guard_mode"),int(GuardState::Patrol));lockers.m_sounds.clear();lockers.updateNpcVoices(.016f);
+  int late=0;for(auto g:guards)late+=lockers.state(lockers.friendlyKey(g,"voice_pending"))-1==int(NpcVoiceCue::GiveUp);
+  check(late==0,"A squadmate whose search ends seconds later stays quiet");
+  check(hunt(int(ShotKind::Player),0)==1&&flush()==0,"A glimpse he never made out is shrugged off with the doubtful take");
+  check(hunt(int(ShotKind::Enemy),1)==0&&flush()<0,"A search for a creature does not end on a line about the player");
+  // A fresh glimpse (Suspicious claims no bark of its own) before the words are out.
+  check(hunt(int(ShotKind::Player),1,5000)==1&&spoken(NpcVoiceCue::GiveUp)==0,"With the channel busy the GiveUp claim waits its turn");for(auto g:guards)lockers.setState(lockers.friendlyKey(g,"guard_mode"),int(GuardState::Suspicious));
+  lockers.updateNpcVoices(.016f);lockers.setState(stateId("npc_voice_busy"),0);lockers.updateNpcVoices(.016f);
+  int stale=0;for(auto g:guards)stale+=lockers.state(lockers.friendlyKey(g,"voice_pending"))-1==int(NpcVoiceCue::GiveUp);
+  check(stale==0&&spoken(NpcVoiceCue::GiveUp)==0,"Back on the hunt before he spoke, he does not say he lost him");
+  lockers.setState(stateId("npc_voice_cd_giveup"),7000);lockers.setState(lockers.friendlyKey(a,"voice_hunt"),2);
+  Game restored;check(restored.decodeSave(lockers.encodeSave())&&restored.state(stateId("npc_voice_cd_giveup"))==7000&&restored.state(restored.friendlyKey(a,"voice_hunt"))==2,"A search's quarry and the GiveUp cooldown survive save/load");
+ }
+ // End to end through the real guard mind (the Caution room): he makes the
+ // player out, loses him behind the wall, searches and gives up. One of the
+ // pair says so, once, as he turns back to patrol, in the "lost him" take.
+ {auto map=std::make_shared<AuthoredMapData>();map->name="Voice room";map->definition={{0,0},{18.5f,18.5f},0,Environment::Interior,false,8,.3f,42};
+  AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);map->structures.push_back({12,14,24,14.2f,0,8});
+  TimedSequence timer;timer.timerState=stateId("voice_room_clock");timer.finishState=stateId("voice_room_done");timer.soundIntervalMs=0;map->timedSequences.push_back(timer);
+  for(int i=0;i<2;++i){Vec2 at=i?Vec2{2.5f,20.5f}:Vec2{6.5f,6.5f};float yaw=i?-kPi*.5f:kPi*.5f;ActorTrack t;t.timerState=timer.timerState;t.keys={{0,at,0,yaw},{30000,at,0,yaw}};t.scale=1.6f;t.health=70;t.voice=1;
+   t.damageState=stateId("voice_room_damage_"+std::to_string(i));t.deadState=stateId("voice_room_dead_"+std::to_string(i));t.ai.mode=ActorAiMode::Guard;t.ai.alertState=stateId("voice_room_alert");t.ai.sightRange=11;
+   t.ai.squad=stateId("voice_room_squad");t.ai.patrol={{at,0,1000}};map->actorTracks.push_back(t);}
+  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Voice validation";campaign->key=731906;campaign->maps.push_back(map);Game g(campaign);
+  g.m_player.pos={8.5f,6.5f};int seen=0;while(seen<600&&!g.state(g.friendlyKey(0,"guard_confirmed"))){g.update({},1.f/60);++seen;}
+  g.m_player.pos={18.5f,18.5f};int giveUps=0,take=-1,spokenAt=-1,gaveUpAt=-1;
+  for(int i=0;i<60*40;++i){g.m_sounds.clear();g.update({},1.f/60);if(gaveUpAt<0&&g.guardCaution(0))gaveUpAt=i;
+   for(const auto&e:g.sounds())if(e.speech>=0&&NpcVoiceClips[size_t(e.speech)].cue==NpcVoiceCue::GiveUp){++giveUps;if(spokenAt<0)spokenAt=i;take=0;for(int c=0;c<e.speech;++c)take+=NpcVoiceClips[size_t(c)].role==1&&NpcVoiceClips[size_t(c)].cue==NpcVoiceCue::GiveUp;}}
+  out<<"  confirmed after "<<seen<<" frames, search given up at "<<gaveUpAt<<", GiveUp spoken at "<<spokenAt<<" ("<<giveUps<<" times, take "<<take<<")"<<'\n';
+  check(seen<600&&gaveUpAt>0&&giveUps==1&&take==1&&spokenAt>=gaveUpAt&&spokenAt-gaveUpAt<45,"Through the real guard mind a lost player is called off once, as the search ends, in the take that admits it");}
  return pass;
 }
 }
