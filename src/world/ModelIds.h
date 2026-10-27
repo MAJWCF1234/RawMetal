@@ -336,4 +336,7 @@ inline constexpr int scrap_stovepipe=328; // 0.50 x 0.40 x 1.41
 inline constexpr int scrap_train_car=329; // 3.83 x 23.39 x 5.33
 inline constexpr int scrap_trash_heap=330; // 1.85 x 3.20 x 1.18
 inline constexpr int scrap_van_husk=331; // 2.84 x 6.34 x 2.71
+inline constexpr int psx_locker=332; // 0.64 x 0.90 x 2.30
+inline constexpr int psx_locker_door_l=333; // 0.02 x 0.43 x 2.20
+inline constexpr int psx_locker_door_r=334; // 0.02 x 0.44 x 2.20
 }
