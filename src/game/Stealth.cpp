@@ -203,7 +203,7 @@ bool Game::lockerExit(const Fixture& f,Vec2& at,float& feet,bool squeeze)const{
 }
 int Game::lockerAhead()const{
  // A Snatcher's grip is struggled out of, not slipped into a locker.
- if(m_vrInputActive||dead()||draggingBody()||heldNpc()>=0||holdingClutter()||takedownActive()||m_grabbed>0||!m_player.grounded||hiddenLocker()>=0||nearbyBody()>=0)return -1;
+ if(m_vrInputActive||dead()||draggingBody()||heldNpc()>=0||holdingClutter()||takedownActive()||m_grabbed>0||!m_player.grounded||hiddenLocker()>=0)return -1;
  const Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int best=-1;float nearest=1.05f;const auto&fixtures=m_world.fixtures();
  for(size_t i=0;i<fixtures.size();++i){const auto&f=fixtures[i];if(!lockerModel(f))continue;
   const Vec2 out=lockerOut(f),side{-out.y,out.x},delta=m_player.pos-f.position;const float ahead=dot(delta,out)-f.width*.5f;
@@ -408,6 +408,12 @@ bool Game::testLockers(){
   bool refused=g.lockerAhead()<0;g.update(use,1.f/60);g.update({},1.f/60);
   check(refused&&g.hiddenLocker()<0&&!g.draggingBody(),"E while dragging a body puts the body down instead of climbing in");
  }
+ // A man dropped by the lockers does not stand between the player and hiding:
+ // facing the doors E hides, facing him it takes him by the collar.
+ for(bool doors:{true,false}){auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.setState(g.friendlyKey(0,"restraint"),1);g.m_friendlyActors[0].pose.clip=4;g.m_friendlyActors[0].pose.position={4.05f,6.5f};
+  if(!doors)g.m_player.angle=0;const std::string hint=g.interactionHint()?g.interactionHint():"";const bool hid=hide(g);
+  if(doors)check(hint=="E / HIDE"&&hid&&!g.draggingBody(),"A body lying behind the player does not stop them hiding in the locker they face");
+  else check(hint=="E / DRAG BODY"&&!hid&&g.draggingBody(),"Facing the body instead, E takes him by the collar");}
  {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.m_grabbed=.4f;bool held=g.lockerAhead()<0&&!hide(g);g.m_grabbed=0;
   check(held&&g.lockerAhead()==0,"In a Snatcher's grip there is no slipping into a locker; free of it there is");
  }

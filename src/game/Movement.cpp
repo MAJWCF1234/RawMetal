@@ -229,8 +229,8 @@ const char* Game::interactionHint()const{
   }
   if(m_vrInputActive)return t.control?(m_world.hasLift()?"GRIP / LIFT DISPATCH":"GRIP / GANTRY CONTROL"):"GRIP / READ SHIFT LOG";
   return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
- if(!m_vrInputActive&&nearbyBody()>=0)return "E / DRAG BODY";
  if(lockerAhead()>=0)return "E / HIDE";
+ if(!m_vrInputActive&&nearbyBody()>=0)return "E / DRAG BODY";
  if(nearbyClutter()>=0)return m_vrInputActive?"GRIP / LIFT":"E / LIFT";
  if(nearbyFriendly()>=0)return m_vrInputActive?"GRIP / FOLLOW OR WAIT":"E / FOLLOW OR WAIT";
  return nullptr;
@@ -258,10 +258,11 @@ void Game::updateInteraction(const InputState& input,float dt){
  if(usePressed&&heldNpc()>=0){releaseNpc(false);m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&draggingBody()){dropBody();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&!input.vrTracked&&nearbyTakedown()>=0){restrainNpc(size_t(nearbyTakedown()),true);m_previousUse=true;m_world.updateDoors(dt);return;}
- // E on a knocked-out guard: take him by the collar and drag him. A door or a
- // terminal the player is squared up to comes first, as the hint says: a man
- // dropped at his post must not stand between the player and the desk.
- if(usePressed&&!input.vrTracked&&!holdingClutter()&&nearbyInteractionDoor()<0&&nearbyTerminal()<0&&nearbyBody()>=0){m_draggedNpc=nearbyBody();equipWeapon(WeaponId::Fists);m_pickupNotice="DRAGGING THE BODY";m_pickupNoticeTime=1.5f;m_previousUse=true;m_world.updateDoors(dt);return;}
+ // E on a knocked-out guard: take him by the collar and drag him. A door, a
+ // terminal or a locker the player is squared up to comes first, as the hint
+ // says: a man dropped at his post must not stand between the player and the
+ // desk, nor one dropped by the lockers between the player and hiding.
+ if(usePressed&&!input.vrTracked&&!holdingClutter()&&nearbyInteractionDoor()<0&&nearbyTerminal()<0&&lockerAhead()<0&&nearbyBody()>=0){m_draggedNpc=nearbyBody();equipWeapon(WeaponId::Fists);m_pickupNotice="DRAGGING THE BODY";m_pickupNoticeTime=1.5f;m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&holdingClutter()){interactClutter();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
  if(usePressed){int door=nearbyInteractionDoor();

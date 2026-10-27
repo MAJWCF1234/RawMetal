@@ -34,8 +34,10 @@ bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)c
  // In shadow the player is a shape he has to be close to make out; once he
  // has confirmed them he keeps tracking whatever the light.
  if(live.kind==ShotKind::Player&&!state(friendlyKey(actor,"guard_confirmed")))range*=.55f+.45f*std::min(1.f,m_playerExposure*2.f);
- // A squad on Caution sees 15% further (looked up only where that decides it).
- if(float reach=lengthSq(delta)+z*z;reach>=range*range&&reach<range*range*1.3225f&&guardCaution(actor))range*=1.15f;
+ // A squad on Caution sees 15% further (looked up only where that decides it),
+ // and so does a man in Alert: the Alert that ends Caution must not shorten
+ // the sight that made it, or he loses the player the frame he finds them.
+ if(float reach=lengthSq(delta)+z*z;reach>=range*range&&reach<range*range*1.3225f&&guardWary(actor))range*=1.15f;
  auto shift=chunkOffset(npc.level)-chunkOffset(m_level);return lengthSq(delta)+z*z<range*range&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>c.sightDot&&soundRayClear(pose.position+shift,pose.z+eye,live.position+shift,live.feet+live.eye);
 }
 AiTarget Game::guardThreat(size_t actor,const ActorPose&pose)const{

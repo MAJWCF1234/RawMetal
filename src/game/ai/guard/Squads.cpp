@@ -108,15 +108,17 @@ bool Game::guardPositionReserved(size_t actor,Vec2 position,float feet)const{
 // squad spread over several chunks counts down together wherever the player is.
 StateId Game::guardCautionKey(size_t actor)const{const auto&t=m_friendlyActors.at(actor).track();return t.ai.squad?squadCautionKey(actorFaction(t),t.ai.squad):friendlyKey(actor,"guard_caution");}
 int Game::guardCaution(size_t actor)const{return actor<m_friendlyActors.size()&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard?state(guardCautionKey(actor)):0;}
+bool Game::guardWary(size_t actor)const{return guardCaution(actor)||(actor<m_friendlyActors.size()&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard&&guardState(actor)==GuardState::Alert);}
 void Game::startGuardCaution(size_t actor){if(actor<m_friendlyActors.size()&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)setState(guardCautionKey(actor),CautionMs);}
 void Game::updateGuardCaution(float dt){
  m_cautionMicros+=int(std::lround(double(dt)*1000000));int ms=m_cautionMicros/1000;m_cautionMicros%=1000;
  std::vector<std::pair<StateId,bool>> clocks;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(t.ai.mode!=ActorAiMode::Guard)continue;auto key=guardCautionKey(i);if(!state(key))continue;
-  bool alert=!npcIncapacitated(i)&&(!t.ai.enableState||state(t.ai.enableState))&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&guardState(i)==GuardState::Alert;
+  bool alert=!npcIncapacitated(i)&&(!t.ai.enableState||state(t.ai.enableState))&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&guardState(i)==GuardState::Alert&&guardTarget(i).kind==ShotKind::Player;
   auto clock=std::find_if(clocks.begin(),clocks.end(),[&](const auto&c){return c.first==key;});if(clock==clocks.end())clocks.push_back({key,alert});else clock->second=clock->second||alert;
  }
- // Any man of the squad in Alert ends it; the next search that gives up on the player starts it again.
+ // Any man of the squad in Alert against the player ends it (a fight with a creature or another
+ // faction lets it run on); the next search that gives up on the player starts it again.
  for(const auto&[key,alert]:clocks)setState(key,alert?0:std::max(0,state(key)-ms));
 }
 int Game::guardAlarm()const{

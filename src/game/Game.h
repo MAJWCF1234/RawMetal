@@ -469,6 +469,9 @@ public:
     // player out, a little longer sighted, shorter at their posts. An Alert ends it.
     static constexpr int CautionMs=45000;
     int guardCaution(size_t actor)const;
+    // Caution's longer sight, which a man in Alert keeps: guardCanSee, body
+    // spotting and the CCTV radar's wedges all read it.
+    bool guardWary(size_t actor)const;
     void startGuardCaution(size_t actor);
     // The HUD's alarm line: -1 while a guard in any resident chunk is in Alert
     // with the player as his target, else the longest Caution (ms) of a squad

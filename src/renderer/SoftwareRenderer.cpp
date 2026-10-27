@@ -667,7 +667,13 @@ void SoftwareRenderer::blend(int x,int y,std::uint32_t c,float alpha){
  d=(std::uint32_t(out*255.f+.5f)<<24)|(channel(16)<<16)|(channel(8)<<8)|channel(0);
 }
 void SoftwareRenderer::fill(int x,int y,int w,int h,std::uint32_t c,float alpha){
- for(int yy=std::max(0,y);yy<std::min(m_height,y+h);++yy)for(int xx=std::max(0,x);xx<std::min(m_width,x+w);++xx)blend(xx,yy,c,alpha);
+ if(alpha<=0)return;alpha=std::min(alpha,1.f);
+ const int x0=std::max(0,x),x1=std::min(m_width,x+w),y0=std::max(0,y),y1=std::min(m_height,y+h);if(x0>=x1)return;
+ // What blend() writes for c at full alpha over anything, or at any alpha over the
+ // cleared (transparent black) HUD canvas, without its per-pixel float maths.
+ const std::uint32_t over=(std::uint32_t(alpha*255.f+.5f)<<24)|(c&0xffffffu);const bool opaque=alpha>=1.f,exact=alpha>=1e-4f;
+ for(int yy=y0;yy<y1;++yy){auto*row=m_pixels.data()+size_t(yy)*m_width;
+  for(int xx=x0;xx<x1;++xx){auto&d=row[xx];if(opaque||(d==0&&exact))d=over;else blend(xx,yy,c,alpha);}}
 }
 void SoftwareRenderer::gradient(int x,int y,int w,int h,std::uint32_t c,float from,float to,bool horizontal){
  for(int yy=std::max(0,y);yy<std::min(m_height,y+h);++yy)for(int xx=std::max(0,x);xx<std::min(m_width,x+w);++xx){

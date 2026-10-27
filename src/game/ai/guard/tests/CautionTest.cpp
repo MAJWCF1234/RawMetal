@@ -40,6 +40,13 @@ bool Game::testCaution(){
   int left=0;while(left<60*20&&g.guardCaution(0)){tick(g,1);++left;}float total=(CautionMs-caution)*.001f+30+left/60.f;
   check(!g.guardCaution(0)&&!g.guardCaution(1)&&std::fabs(total-45)<.1f&&g.guardAlarm()==0,"Caution runs out after 45 s and the HUD line goes ("+std::to_string(total)+" s)");
  }
+ // Only an Alert against the player ends it: a squadmate who turns on someone
+ // else leaves the squad wary, and the player still reads CAUTION.
+ {auto g=scene(yard);g.m_player.pos=hide;g.startGuardCaution(0);auto put=[&](const char*f,int v){g.setState(g.friendlyKey(1,f),v);};
+  put("guard_mode",int(GuardState::Alert));put("guard_confirmed",1);put("guard_target_kind",int(ShotKind::Npc));put("guard_target_level",1);put("guard_target_index",3);
+  g.updateGuardCaution(1.f/60);const int kept=g.guardCaution(0);
+  put("guard_target_kind",int(ShotKind::Player));put("guard_target_index",1);g.updateGuardCaution(1.f/60);
+  check(kept>CautionMs-40&&kept<CautionMs&&g.guardCaution(1)==0&&g.guardCaution(0)==0,"A squadmate in Alert at another man leaves Caution running ("+std::to_string(kept)+" ms); in Alert at the player he ends it");}
  // Only losing the player he had starts it: a search after a glimpse he never
  // made out, or after a fight that was not with the player, gives up quietly.
  for(int sure:{0,1}){auto g=scene(yard);g.m_player.pos=hide;const auto&config=g.npcActors()[0].track().ai;int kind=int(sure?ShotKind::Npc:ShotKind::Player);

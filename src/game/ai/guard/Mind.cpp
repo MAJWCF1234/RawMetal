@@ -68,7 +68,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  bool senseDue=!m_aiDecisionScheduling||clock("sense_wait","sense_age","sense_ready",mode==GuardState::Patrol?100:50,freshHit||noiseWake||nearThreat||(!previous.valid()&&get("guard_target_kind")),0);
  put("sense_due",senseDue);
  // A squad on Caution sees 15% further, bodies included (asked only when he looks).
- const float sight=config.sightRange*(senseDue&&guardCaution(actor)?1.15f:1.f);
+ const float sight=config.sightRange*(senseDue&&guardWary(actor)?1.15f:1.f);
  // Selecting among all possible threats is scheduled. Tracking the current
  // reference and its live LOS remain immediate, including losing it to cover.
  auto target=senseDue?guardThreat(actor,pose):(previous.valid()&&guardCanSee(actor,pose,previous)?resolveGuardTarget(actor,{previous.kind,previous.level,previous.index}):AiTarget{});bool visible=target.valid();

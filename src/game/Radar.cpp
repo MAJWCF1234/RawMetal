@@ -12,7 +12,8 @@ std::vector<RadarContact> Game::radarContacts()const{
  std::vector<RadarContact> contacts;if(!state(CctvRadar))return contacts;
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();
   if(npc.level!=m_level||t.ai.mode!=ActorAiMode::Guard||!autonomousActor(t)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!guardHostileToPlayer(actor))continue;
-  contacts.push_back({npc.pose.position,npc.pose.yaw,t.ai.sightRange,std::acos(std::clamp(t.ai.sightDot,-1.f,1.f)),guardState(actor),actor});
+  // The wedge reaches as far as he sees: further on Caution or in Alert.
+  contacts.push_back({npc.pose.position,npc.pose.yaw,t.ai.sightRange*(guardWary(actor)?1.15f:1.f),std::acos(std::clamp(t.ai.sightDot,-1.f,1.f)),guardState(actor),actor});
  }return contacts;
 }
 bool Game::testRadar(){
@@ -35,6 +36,10 @@ bool Game::testRadar(){
  g.setState(CctvRadar,1);auto contacts=g.radarContacts();bool placed=contacts.size()==3;
  for(const auto&c:contacts){const auto&pose=g.npcActors()[c.actor].pose;placed&=length(c.position-pose.position)<.01f&&std::fabs(c.yaw-pose.yaw)<.001f&&std::fabs(c.range-12)<.001f&&std::fabs(c.cone-std::acos(.6f))<.001f&&c.state==GuardState::Patrol;}
  check(placed,"After the patch every guard shows where he stands and looks, with his sight range and cone, on patrol");
+ // A man on Caution sees 15% further, and his wedge says so; the others keep theirs.
+ {g.startGuardCaution(1);const auto wary=g.radarContacts();bool longer=wary.size()==3;
+  for(const auto&c:wary)longer&=std::fabs(c.range-(c.actor==1?12*1.15f:12.f))<.001f;
+  g.setState(g.guardCautionKey(1),0);check(longer&&g.radarContacts()[1].range==12,"A guard on Caution draws a wedge as long as he can now see");}
  // Step into the corner man's view for a moment, seven metres off: he
  // squints. Hold it until he half makes the player out, then get behind him;
  // he walks over to the spot and sweeps it. Nobody else can see either spot.
