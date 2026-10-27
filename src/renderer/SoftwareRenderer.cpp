@@ -784,6 +784,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  // Once the CCTV patch is made, the Cleanup detail in this chunk: a dot by
  // what each man makes of you (the yellow of the "?" over his head, so it
  // does not read as your own marker), a faint wedge as far and wide as he sees.
+ // The headset draws no minimap yet, so in VR the patch shows nothing.
  for(const auto&c:game.radarContacts()){const auto tone=c.state==GuardState::Alert?red:c.state==GuardState::Patrol?paper:rgb(255,208,64);
   const int dx=mx+int(c.position.x*2),dy=my+int(c.position.y*2);const float ox=float(dx)+1,oy=float(dy)+1,reach=c.range*2;
   auto line=[&](float x0,float y0,float x1,float y1){int steps=std::max(1,int(std::ceil(std::max(std::fabs(x1-x0),std::fabs(y1-y0)))));
