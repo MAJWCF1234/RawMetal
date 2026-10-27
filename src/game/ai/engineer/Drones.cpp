@@ -107,6 +107,8 @@ void Game::updateEngineerDrones(float dt){
   if(!chunkResident(level)){if(m_npcNavBudget<=0)continue;--m_npcNavBudget;ensureChunk(level);}auto origin=chunkOffset(level),active=chunkOffset(m_level),shift=origin-active;
   Point3 p{get("x")*.001f-origin.x+get("x_fraction")*.000001f,get("y")*.001f-origin.y+get("y_fraction")*.000001f,get("z")*.001f};Vec2 here{p.x,p.y},ownerLocal=npc.pose.position+chunkOffset(npc.level)-origin;
   auto target=guardTarget(size_t(owner));bool confirmed=state(friendlyKey(size_t(owner),"guard_confirmed"))&&state(friendlyKey(size_t(owner),"guard_memory"));auto live=confirmed?resolveGuardTarget(size_t(owner),{target.kind,target.level,target.index}):AiTarget{};
+  // A player shut in a locker is behind steel: the drone has nothing to aim at.
+  if(live.kind==ShotKind::Player&&hiddenLocker()>=0)live={};
   Point3 eye{p.x+shift.x,p.y+shift.y,p.z+EngineerDroneHeight*.85f},aim{};ShotHit hit;bool seen=false;
   if(live.valid()){auto ownerShift=chunkOffset(npc.level)-active;aim={live.position.x+ownerShift.x,live.position.y+ownerShift.y,live.feet+live.height*.6f};auto direction=aim-eye;float range=norm3(direction);
    if(range>.01f&&range<12){hit=traceShot(eye,direction,range+.05f,-1,true,nullptr,{ShotKind::Drone,level,slot});seen=sameTarget(hit,live);}

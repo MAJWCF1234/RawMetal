@@ -406,7 +406,8 @@ void Game::update(const InputState& input, float dt) {
         syncReactorComplex();
         auto movement=input;if(heldNpc()>=0||takedownActive()||draggingBody()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         // Shut in a locker the body stays where it is; only the head turns.
-        if(hiddenLocker()<0){updateMovement(movement,dt);updatePushCrates(movement,dt);}
+        // Crates already sliding and the reset lever carry on without it.
+        if(hiddenLocker()<0){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);
         updateExposure(dt);
         updateStealth(input,dt);
         if(m_world.hasLift()){

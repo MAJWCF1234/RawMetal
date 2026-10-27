@@ -308,5 +308,8 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
  if(mode==GuardState::Search||mode==GuardState::Suspicious){put("guard_route_next",0);put("guard_route_wait",0);}
  if(mode!=GuardState::Alert&&!defensiveIntent){put("guard_cover",0);put("guard_cover_wait",0);}
  put("guard_mode",int(mode));
+ // Searching or back on his beat he has given the locker up; only the walk
+ // straight to its doors ends with him opening it.
+ if((mode==GuardState::Search||mode==GuardState::Patrol)&&get("guard_locker"))put("guard_locker",0);
 }
 }

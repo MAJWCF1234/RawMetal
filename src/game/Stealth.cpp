@@ -184,15 +184,26 @@ int Game::hiddenLocker()const{
 }
 // A standing spot in front of the doors, reached from them without passing
 // through anything: straight out first, then a little to either side.
-bool Game::lockerExit(const Fixture& f,Vec2& at,float& feet)const{
- const Vec2 out=lockerOut(f),side{-out.y,out.x};const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
- for(float ahead:{LockerStep,.45f,.6f})for(float across:{0.f,.42f,-.42f}){const Vec2 p=lockerFront(f,ahead)+side*across;const float z=groundHeight(p,floor+.1f);
-  // The ray runs to the far side of the body: hull samples alone can straddle a thin partition.
-  if(std::fabs(z-floor)<.25f&&hullFits(p,z,Player::StandingHeight)&&m_world.rayClear(lockerFront(f,.03f),floor+1.f,p+out*.21f,z+1.f,true)){at=p;feet=z;return true;}}
+// Squeezing, when someone stands in all of those, it takes the nearest clear
+// spot out to a metre and a half in front, so nobody is ever boxed in.
+bool Game::lockerExit(const Fixture& f,Vec2& at,float& feet,bool squeeze)const{
+ const Vec2 out=lockerOut(f),side{-out.y,out.x},mouth=lockerFront(f,0);const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
+ // Hull samples 20 cm apart can straddle a thin partition, and walking never
+ // gets there but a step out could: so the ray from the doors runs to the far
+ // side of the body, and the body is felt out every few centimetres from its
+ // middle to each sample.
+ auto whole=[&](Vec2 p,float z){for(float x:{-1.f,0.f,1.f})for(float y:{-1.f,0.f,1.f})for(float t:{.2f,.4f,.6f,.8f}){if(x==0&&y==0)continue;Vec2 q=p+Vec2{x,y}*(.2f*t);const auto&w=worldAt(q);
+  if(!w.fits(q.x,q.y,z,Player::StandingHeight)||w.doorBlocks(q.x,q.y,z,Player::StandingHeight))return false;}return true;};
+ auto clear=[&](Vec2 p){const float z=groundHeight(p,floor+.1f);
+  if(std::fabs(z-floor)<.25f&&hullFits(p,z,Player::StandingHeight)&&m_world.rayClear(lockerFront(f,.03f),floor+1.f,p+out*.21f,z+1.f,true)&&whole(p,z)){at=p;feet=z;return true;}return false;};
+ for(float ahead:{LockerStep,.45f,.6f})for(float across:{0.f,.42f,-.42f})if(clear(lockerFront(f,ahead)+side*across))return true;
+ if(squeeze)for(int ring=3;ring<=15;++ring)for(int k=0;k<13;++k){const float turn=float((k+1)/2)*(k%2?1.f:-1.f)*kPi/12;const Vec2 p=mouth+(out*std::cos(turn)+side*std::sin(turn))*(ring*.1f);
+  if(dot(p-mouth,out)>=.21f&&clear(p))return true;}
  return false;
 }
 int Game::lockerAhead()const{
- if(m_vrInputActive||dead()||draggingBody()||heldNpc()>=0||holdingClutter()||takedownActive()||!m_player.grounded||hiddenLocker()>=0||nearbyBody()>=0)return -1;
+ // A Snatcher's grip is struggled out of, not slipped into a locker.
+ if(m_vrInputActive||dead()||draggingBody()||heldNpc()>=0||holdingClutter()||takedownActive()||m_grabbed>0||!m_player.grounded||hiddenLocker()>=0||nearbyBody()>=0)return -1;
  const Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};int best=-1;float nearest=1.05f;const auto&fixtures=m_world.fixtures();
  for(size_t i=0;i<fixtures.size();++i){const auto&f=fixtures[i];if(!lockerModel(f))continue;
   const Vec2 out=lockerOut(f),side{-out.y,out.x},delta=m_player.pos-f.position;const float ahead=dot(delta,out)-f.width*.5f;
@@ -222,18 +233,21 @@ bool Game::enterLocker(){
 }
 bool Game::leaveLocker(){
  const int index=hiddenLocker();if(index<0)return false;const auto&f=m_world.fixtures()[size_t(index)];Vec2 exit;float feet;
- if(!lockerExit(f,exit,feet)){m_pickupNotice="NO ROOM TO STEP OUT";m_pickupNoticeTime=1.2f;return false;}
- setState(PlayerLocker,0);m_player.pos=exit;m_player.z=feet;m_velocity={};m_stepDistance=0;
+ if(!lockerExit(f,exit,feet,true)){m_pickupNotice="NO ROOM TO STEP OUT";m_pickupNoticeTime=1.2f;return false;}
+ forgetLocker();m_player.pos=exit;m_player.z=feet;m_velocity={};m_stepDistance=0;
  SoundEvent clank{Sound::Door,lockerFront(f,0),.3f,1.2f,true,6,feet+1.2f};clank.aiRadius=1.2f;m_sounds.push_back(clank);return true;
 }
+// Out, however it happened: the next time in is a new secret, so a guard who
+// saw this one cannot open the locker on the strength of it.
+void Game::forgetLocker(){setState(PlayerLocker,0);for(size_t actor=0;actor<m_friendlyActors.size();++actor)setState(friendlyKey(actor,"guard_locker"),0);}
 // Shut in, the body stays put and the hands stay still; the head turns only
 // as far as the slats let it see out. True while the player is inside.
 bool Game::updateLocker(const InputState& input){
  if(!state(PlayerLocker))return false;const int index=hiddenLocker();
  // A record that matches no locker the player is in (a jump to another map,
  // an older build's save) just lets them go where they stand.
- if(index<0){setState(PlayerLocker,0);return false;}
- if(input.vrTracked){if(!leaveLocker())setState(PlayerLocker,0);return false;}
+ if(index<0){forgetLocker();return false;}
+ if(input.vrTracked){if(!leaveLocker())forgetLocker();return false;}
  const Vec2 out=lockerOut(m_world.fixtures()[size_t(index)]);const float facing=std::atan2(out.y,out.x);
  m_player.angle=wrapAngle(facing+std::clamp(wrapAngle(m_player.angle-facing),-LockerYaw,LockerYaw));m_player.pitch=std::clamp(m_player.pitch,-LockerPitch,LockerPitch);
  m_velocity={};m_suppressFire=true;m_playerExposure=0;return true;
@@ -245,8 +259,8 @@ bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
  const int saw=state(friendlyKey(actor,"guard_locker"))-1;setState(friendlyKey(actor,"guard_locker"),0);
  const int index=hiddenLocker();if(index<0||index!=saw||level<0||level>=chunkCount())return false;const auto&f=m_world.fixtures()[size_t(index)];
  const Vec2 shift=chunkOffset(m_level)-chunkOffset(level);Vec2 exit;float feet;
- if(lengthSq(pose.position-lockerFront(f,LockerEye)-shift)>1.9f*1.9f||std::fabs(pose.z-m_player.z)>.6f||!lockerExit(f,exit,feet))return false;
- setState(PlayerLocker,0);m_player.pos=exit;m_player.z=feet;m_player.pitch=0;m_velocity={};
+ if(lengthSq(pose.position-lockerFront(f,LockerEye)-shift)>1.9f*1.9f||std::fabs(pose.z-m_player.z)>.6f||!lockerExit(f,exit,feet,true))return false;
+ forgetLocker();m_player.pos=exit;m_player.z=feet;m_player.pitch=0;m_velocity={};
  const Vec2 toward=pose.position-exit-shift;m_player.angle=std::atan2(toward.y,toward.x);pose.yaw=std::atan2(-toward.x,-toward.y);
  rememberGuardTarget(actor,resolveGuardTarget(actor,{ShotKind::Player,m_level,0}));const Vec2 global=exit+chunkOffset(m_level);auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[actor].track().ai.recognitionMs);
@@ -339,14 +353,14 @@ bool Game::testLockers(){
  auto check=[&](bool ok,const char*text){++checks;failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<text<<'\n';report.flush();};
  // A bare dim room: one locker at the west end with its doors facing east,
  // the player a step in front of them, and one guard on a beat down the room.
- auto scene=[](std::vector<ActorPatrolPoint> beat,float yaw,float wall=0){
+ auto scene=[](std::vector<ActorPatrolPoint> beat,float yaw,std::vector<Structure> walls={},bool engineer=false){
   auto campaign=std::make_shared<CustomCampaign>();campaign->name="Locker validation";campaign->key=883016;
   auto map=std::make_shared<AuthoredMapData>();map->name="Locker test room";map->definition={{0,0},{3.2f,6.5f},0,Environment::Interior,false,8,.3f,43};
   AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
   map->fixtures.push_back({model::pwr_locker_bank,{2.f,6.5f},0,.87f,.85f,2.42f,0,true});
-  if(wall>0)map->structures.push_back({wall,5.f,wall+.1f,8.f,0,2.6f});
+  for(const auto&wall:walls)map->structures.push_back(wall);
   TimedSequence timer;timer.timerState=stateId("locker_clock");timer.finishState=stateId("locker_done");timer.soundIntervalMs=0;timer.loop=true;map->timedSequences.push_back(timer);
-  ActorTrack track;track.timerState=timer.timerState;track.visual=ActorVisual::Cleanup;track.keys={{0,beat[0].position,0,yaw},{30000,beat[0].position,0,yaw}};track.scale=1.6f;track.health=90;track.damageState=stateId("locker_damage");track.deadState=stateId("locker_dead");track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.patrol=beat;
+  ActorTrack track;track.timerState=timer.timerState;track.visual=ActorVisual::Cleanup;track.keys={{0,beat[0].position,0,yaw},{30000,beat[0].position,0,yaw}};track.scale=1.6f;track.health=90;track.damageState=stateId("locker_damage");track.deadState=stateId("locker_dead");track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.patrol=beat;if(engineer){track.ai.role=GuardSquadRole::Engineer;track.ai.squad=stateId("locker_team");}
   map->actorTracks.push_back(track);campaign->maps.push_back(map);Game g(campaign);g.m_player.pos={3.2f,6.5f};g.m_player.z=0;g.m_player.angle=kPi;g.m_player.pitch=0;return g;
  };
  InputState use;use.use=true;const float out=2.435f;
@@ -364,9 +378,11 @@ bool Game::testLockers(){
   check(closest<2.f&&calm&&g.hiddenLocker()==0,"A guard who walks his beat right up to the doors stays on patrol and never opens them");
   check(length(g.player().pos-at)<.001f&&!g.player().crouched&&g.player().ammo==ammo&&g.player().loaded==chambered&&steps==0,"Inside, walking, crouching, jumping and firing do nothing and make no steps");
   check(g.playerExposure()==0,"The light meter reads nothing inside a shut locker");
-  InputState look;look.mouseDx=2000;look.mouseDy=-2000;g.update(look,1.f/60);bool clamped=std::fabs(wrapAngle(g.player().angle))<=LockerYaw+.001f&&std::fabs(g.player().pitch)<=LockerPitch+.001f;
-  look.mouseDx=-4000;look.mouseDy=4000;g.update(look,1.f/60);clamped&=std::fabs(wrapAngle(g.player().angle))<=LockerYaw+.001f&&std::fabs(g.player().pitch)<=LockerPitch+.001f&&std::fabs(wrapAngle(g.player().angle))>LockerYaw-.01f;
-  check(clamped,"The view stays in a cone looking out of the doors");
+  // Under a radian a frame, too little to wrap: each way ends hard on its own
+  // edge of the cone (the doors face +x, so the facing is angle 0).
+  auto turn=[&](float dx,float dy){InputState look;look.mouseDx=dx;look.mouseDy=dy;for(int i=0;i<4;++i)g.update(look,1.f/60);return std::pair{wrapAngle(g.player().angle),g.player().pitch};};
+  auto [right,down]=turn(400,400);auto [left,up]=turn(-400,-400);
+  check(std::fabs(right-LockerYaw)<.001f&&std::fabs(left+LockerYaw)<.001f&&std::fabs(down+LockerPitch)<.001f&&std::fabs(up-LockerPitch)<.001f,"The view stays in a cone looking out of the doors, to its edge either way");
   Game loaded(g.m_customCampaign);check(loaded.decodeSave(g.encodeSave())&&loaded.hiddenLocker()==0&&length(loaded.player().pos-at)<.001f,"A save made in a locker loads with the player still shut in it");
   loaded.update({},1.f/60);loaded.update(use,1.f/60);
   check(loaded.hiddenLocker()<0&&loaded.player().pos.x>out+.2f&&std::fabs(loaded.player().pos.y-6.5f)<.5f&&loaded.hullFits(loaded.player().pos,loaded.player().z,Player::StandingHeight),"E again steps out in front of the doors where a standing body fits");
@@ -392,9 +408,44 @@ bool Game::testLockers(){
   bool refused=g.lockerAhead()<0;g.update(use,1.f/60);g.update({},1.f/60);
   check(refused&&g.hiddenLocker()<0&&!g.draggingBody(),"E while dragging a body puts the body down instead of climbing in");
  }
- {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f,2.85f);bool refused=g.lockerAhead()<0;
+ {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.m_grabbed=.4f;bool held=g.lockerAhead()<0&&!hide(g);g.m_grabbed=0;
+  check(held&&g.lockerAhead()==0,"In a Snatcher's grip there is no slipping into a locker; free of it there is");
+ }
+ // The wall stands a hand's breadth off the doors. The player is right at
+ // them with a clear look in, so only the missing way out turns them away.
+ const Structure flush{2.75f,5.f,2.85f,8.f,0,2.6f};
+ {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f,{flush});g.m_player.pos={out+.11f,6.5f};const auto&locker=g.m_world.fixtures()[0];Vec2 spot;float feet;
+  bool refused=g.m_world.rayClear(g.player().pos,1.f,{out+.03f,6.5f},1.f,true)&&!g.lockerExit(locker,spot,feet)&&!g.lockerExit(locker,spot,feet,true)&&g.lockerAhead()<0;
   g.m_player.pos={out+LockerEye,6.5f};g.setState(PlayerLocker,1);bool shut=g.hiddenLocker()==0;g.update(use,1.f/60);
   check(refused&&shut&&g.hiddenLocker()==0&&g.pickupNotice()=="NO ROOM TO STEP OUT","A locker whose doors open against a wall is no hiding place, and nobody steps out into the wall");
+ }
+ // A guard planted at the doors of a narrow nook takes every plain way out;
+ // stepping out squeezes past him rather than leaving the player boxed in.
+ {auto g=scene({{{out+.45f,6.5f},0,60000}},-kPi*.5f,{{out+.005f,5.95f,4.5f,6.05f,0,2.6f},{out+.005f,6.95f,4.5f,7.05f,0,2.6f}});
+  g.m_player.pos={out+LockerEye,6.5f};g.setState(PlayerLocker,1);Vec2 spot;float feet;bool boxed=g.hiddenLocker()==0&&!g.lockerExit(g.m_world.fixtures()[0],spot,feet);g.update(use,1.f/60);
+  check(boxed&&g.hiddenLocker()<0&&g.player().pos.x>out+.2f&&std::fabs(g.player().pos.y-6.5f)<.3f&&g.hullFits(g.player().pos,g.player().z,Player::StandingHeight),"With a guard planted at the doors of a narrow nook the player still squeezes out");
+  report<<"  boxed "<<boxed<<", out at "<<g.player().pos.x<<','<<g.player().pos.y<<", guard at "<<g.npcActors()[0].pose.position.x<<','<<g.npcActors()[0].pose.position.y<<'\n';
+ }
+ // A save made in a locker whose doors an update has since walled off loads
+ // with the player let go, and they work free of the steel.
+ {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);hide(g);auto blocked=scene({{{10.5f,6.5f},0,5000}},kPi*.5f,{flush});
+  bool freed=blocked.decodeSave(g.encodeSave())&&blocked.hiddenLocker()<0&&!blocked.state(PlayerLocker);InputState walk;walk.left=true;for(int i=0;i<90;++i)blocked.update(walk,1.f/60);
+  check(freed&&blocked.hullFits(blocked.player().pos,blocked.player().z,Player::StandingHeight),"A save in a locker an update has walled off loads with the player out of it and free to move");
+ }
+ // A witness sent searching some other way gives the locker up, and every
+ // witness forgets it once the player is out.
+ {auto g=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);bool seen=hide(g)&&g.state(g.friendlyKey(0,"guard_locker"))==1;g.setState(g.friendlyKey(0,"guard_mode"),int(GuardState::Search));g.update({},1.f/60);
+  bool dropped=!g.state(g.friendlyKey(0,"guard_locker"))&&g.hiddenLocker()==0;
+  auto again=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);seen&=hide(again)&&again.state(again.friendlyKey(0,"guard_locker"))==1;again.update(use,1.f/60);
+  check(seen&&dropped&&again.hiddenLocker()<0&&!again.state(again.friendlyKey(0,"guard_locker")),"A witness who goes to searching, or whose player steps out, forgets the locker");
+ }
+ // An Engineer's drone with the player in its sights fires on them in the
+ // open and loses them at the doors: no aim, no rounds into the steel.
+ for(bool inside:{false,true}){auto g=scene({{{6.5f,6.5f},0,60000}},kPi*.5f,{},true);if(inside)hide(g);
+  bool deployed=g.deployEngineerDrone(0);g.rememberGuardTarget(0,g.resolveGuardTarget(0,{ShotKind::Player,0,0}));for(const char*f:{"guard_confirmed","guard_seen","guard_memory"})g.setState(g.friendlyKey(0,f),1);g.setState(g.friendlyKey(0,"guard_mode"),int(GuardState::Alert));
+  const float health=g.player().health;for(int i=0;i<240;++i){g.m_npcNavBudget=4;g.updateEngineerDrones(1.f/60);}
+  if(inside)check(deployed&&g.hiddenLocker()==0&&g.player().health==health,"An Engineer's drone cannot see or shoot the player shut in a locker");
+  else check(deployed&&g.player().health<health,"The same drone fires on the player standing in the open");
  }
  // Nothing that hunts by sight finds the player, but a blast still does.
  {auto g=scene({{{20.5f,20.5f},0,5000}},0);Enemy e;e.pos={6.5f,6.5f};e.home=e.pos;e.homeZ=0;e.heading=kPi;g.m_enemies={e};auto watched=g;

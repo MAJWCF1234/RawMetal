@@ -219,7 +219,10 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   }
   // Old megamap builds had non-colliding partitions. Only relocate a saved
   // player if the current authored geometry now overlaps their complete hull.
-  // A player saved shut in a locker stays in it, half inside its steel.
+  // A player saved shut in a locker stays in it, half inside its steel,
+  // unless an update has since blocked every way out: then they go free and
+  // are set somewhere clear like anyone else.
+  if(const int locker=next.hiddenLocker();locker>=0){Vec2 exit;float feet;if(!next.lockerExit(next.m_world.fixtures()[size_t(locker)],exit,feet,true))next.forgetLocker();}
   if(next.m_world.campaign()&&next.m_level>=4&&next.hiddenLocker()<0&&!next.hullFits(p.pos,p.z,p.hullHeight())){
    Vec2 safe{};float safeZ=0,best=std::numeric_limits<float>::max();
    for(float y=1.25f;y<23.75f;y+=.25f)for(float x=1.25f;x<23;x+=.25f){

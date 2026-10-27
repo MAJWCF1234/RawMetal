@@ -449,12 +449,15 @@ public:
     // Hiding in a steel locker (Stealth.cpp). The fixture the player is shut
     // in (-1 when out; state "player_locker", so it saves), the one in front of
     // them they could climb into, and getting in and out. A guard who saw them
-    // climb in keeps guard_locker and pulls them out at its doors.
+    // climb in keeps guard_locker and pulls them out at its doors. However the
+    // player comes out, forgetLocker drops the record and every guard's memory
+    // of it. lockerExit squeezes further afield when the plain spots are taken.
     int hiddenLocker()const;
     int lockerAhead()const;
     bool enterLocker();
     bool leaveLocker();
-    bool lockerExit(const Fixture& locker,Vec2& at,float& feet)const;
+    void forgetLocker();
+    bool lockerExit(const Fixture& locker,Vec2& at,float& feet,bool squeeze=false)const;
     bool updateLocker(const InputState& input);
     bool pullFromLocker(int level,size_t actor,ActorPose& pose);
     static bool testLockers();
