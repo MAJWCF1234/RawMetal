@@ -4,6 +4,51 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.14.5 - Saw that (2026-10-27)
+
+The rest of the Cleanup Force's training: what they do after they lose you,
+and where they look.
+
+When a guard who had you loses sight of you, the hunt is not over and the
+screen says so: EVASION, in red, with the time his search has left. His squad
+keeps the floods on while they look. When the search gives up it becomes
+CAUTION: for forty-five seconds they make you out sooner, see a little further,
+sweep wide at any noise and do not linger at their posts. ALERT means one of
+them has you, and a man in Alert keeps the eyes he found you with.
+
+Being seen has a sound now, and so does being half seen. The "?" over a man's
+head fills as he works out what he is looking at, and the "!" lands with a
+sting. A guard who has you reaches for his radio; you hear him key it, a
+handset glows over his head, and you have a second and a half to stop him.
+Looking away does not stop him talking. The floods wait for the call. A man who
+finds a body calls that in too, unless you get to him first.
+
+Perimeter Ops has a patch desk at the end of its camera bank. Put the plant's
+cameras through to your handset and the map in the corner shows the men in
+whatever room you are in: where each one stands, which way he looks and how
+far he can see. Pale, he is walking his beat. Yellow, he is not sure. Red, he
+is sure. The headset has no map yet, so for now the patch is for the screen.
+
+The steel lockers are the rusty double-door kind now, every one of them, and
+you can get into any of them. Your hands take the doors, you back in and pull
+them to, and the room goes muffled and small behind a band of holes punched in
+the steel at eye height. Anyone coming shows through it. Knock on the door and
+somebody comes to see; knock twice and he opens it. Drag a man you have put to
+sleep to an empty locker and he goes in instead of you, until someone opens it.
+
+A guard who watched you climb in says so, walks over, takes the handle and
+drags you out into the light, and gives you a moment with his gun in your face
+before he uses it. A man who heard the doors, or whose search for you ends
+beside a locker, stops, turns to it and looks inside; on Caution some of them
+check on a hunch. Whoever is standing at the doors when you come out gets them
+in the face.
+
+Smaller: E on a terminal you are facing beats a body lying at its foot, and
+the prompt says when E will drag a body, drop it or stow it. Alert calls are
+made per squad, so a second squad that sees you says so.
+
+---
+
 ## v0.14.4 - Lab coats (2026-10-27)
 
 The plant had one set of clothes. Everyone below the security office wore the
