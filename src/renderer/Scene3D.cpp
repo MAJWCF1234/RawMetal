@@ -1922,8 +1922,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     if(!side&&weapon->grenadeThrow>0){float wind=std::sin(weapon->grenadeThrow*kPi);arm.targetHand=gunGrip+(gunRight*.12f-gunForward*(.12f*wind)+gunUp*(.08f+.12f*wind))*bodyScale;}
     if(engineering)arm.targetHand=fieldTerminalHand(terminal,side,terminalTouch);
     if(treating)arm.targetHand=side?medicalKit.point(.055f,.005f,.045f+.035f*std::sin(weapon->treatment*4*kPi)):medicalKit.point(-.235f,0,.035f);
+    // A locker's handle: the support hand leaves the gun for the doors.
+    if(side&&weapon->haul>0)arm.targetHand=arm.targetHand+(weapon->handle-arm.targetHand)*weapon->haul;
     auto upper=arm.elbow-arm.shoulder,lower=arm.hand-arm.elbow;float l1=std::sqrt(dot(upper,upper)),l2=std::sqrt(dot(lower,lower));
-    if(posedArms&&side&&!weapon->handgun&&weapon->reload<=0&&!engineering&&!treating){
+    if(posedArms&&side&&!weapon->handgun&&weapon->reload<=0&&!engineering&&!treating&&weapon->haul<=0){
      // The receiver/linkage and pump form a continuous support surface from
      // 0-.363 m ahead of the grip. Extreme aim can move a short arm back
      // from the bulky pump onto the receiver without stretching its cuff.
@@ -1932,7 +1934,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      arm.targetHand=base+gunForward*std::clamp(furthest,0.f,.363f*bodyScale);
     }
     float supportRelease=0;
-    if(posedArms&&side&&weapon->handgun&&weapon->reload<=0&&!engineering&&!treating){auto delta=arm.targetHand-arm.shoulder;float limit=l1+l2-.005f;
+    if(posedArms&&side&&weapon->handgun&&weapon->reload<=0&&!engineering&&!treating&&weapon->haul<=0){auto delta=arm.targetHand-arm.shoulder;float limit=l1+l2-.005f;
      supportRelease=std::clamp((std::sqrt(dot(delta,delta))-(limit-.06f))/.06f,0.f,1.f);supportRelease*=supportRelease*(3-2*supportRelease);
      if(supportRelease>0){auto rest=transform(mesh.creatureLayerPose().pelvis+Point3{.22f,.15f,.10f});arm.targetHand=arm.targetHand+(rest-arm.targetHand)*supportRelease;}
     }
@@ -1996,7 +1998,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    mixBits(emitIdentity,std::uint32_t(weapon->action));mixFloat(emitIdentity,weapon->supportPhase);mixFloat(emitIdentity,weapon->treatment);mixFloat(emitIdentity,weapon->engineering);
    mixFloat(emitIdentity,weapon->grip.x);mixFloat(emitIdentity,weapon->grip.y);mixFloat(emitIdentity,weapon->grip.z);mixFloat(emitIdentity,weapon->muzzle.x);mixFloat(emitIdentity,weapon->muzzle.y);mixFloat(emitIdentity,weapon->muzzle.z);
    mixFloat(emitIdentity,weapon->direction.x);mixFloat(emitIdentity,weapon->direction.y);mixFloat(emitIdentity,weapon->direction.z);mixFloat(emitIdentity,weapon->raise);mixFloat(emitIdentity,weapon->flash);
-   mixFloat(emitIdentity,weapon->recoil);mixFloat(emitIdentity,weapon->actionProgress);mixFloat(emitIdentity,weapon->reload);mixFloat(emitIdentity,weapon->grenadeThrow);}
+   mixFloat(emitIdentity,weapon->recoil);mixFloat(emitIdentity,weapon->actionProgress);mixFloat(emitIdentity,weapon->reload);mixFloat(emitIdentity,weapon->grenadeThrow);
+   mixFloat(emitIdentity,weapon->haul);mixFloat(emitIdentity,weapon->handle.x);mixFloat(emitIdentity,weapon->handle.y);mixFloat(emitIdentity,weapon->handle.z);}
   const std::uint32_t emitStart=gpuActor>=0?m_gpu->actorEmitPosition():0;
   const bool replayedEmit=m_actorEmitCaching&&gpuActor>=0&&m_gpu->replayActorEmit(emitSlot,emitIdentity,gpuActor);
   if(!replayedEmit){
@@ -2158,7 +2161,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(human&&track.tool&&!armed&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
  };
  for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i),nullptr,-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|i);
- for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i),0xA000000000000000ull|i);}}
+ for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())&&!game.npcStowed(i)){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i),0xA000000000000000ull|i);}}
  // What each guard makes of the player, over his head: a "?" that brightens
  // as he works out what he is looking at (dim while he checks a spot), a red
  // "!" once he has them.

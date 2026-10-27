@@ -133,6 +133,8 @@ NpcWeaponPose Game::npcWeaponPose(size_t actor)const{
  weapon.action=GuardAction(get("weapon_action"));weapon.actionProgress=guardActionDuration(weapon.action)?float(get("weapon_action_ms"))/guardActionDuration(weapon.action):0;
  weapon.reload=get("weapon_reloading")?1.f-get("weapon_reload")/1800.f:0;
  int grenade=get("grenade_windup");weapon.grenadeThrow=grenade>0?grenade/450.f+.0001f:0;
+ // At a locker's doors his support hand goes to the handle (Lockers.cpp).
+ if(get("guard_haul"))weapon.handle=guardLockerHandle(actor,weapon.haul);
  // Both hands follow this cosmetic assembly offset in the shared renderer.
  // Recovery prevents firing from the transient bash pose.
  float bash=get("weapon_bash_pose")/220.f,windup=get("weapon_bash")/300.f;

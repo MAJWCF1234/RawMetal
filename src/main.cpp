@@ -733,13 +733,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
        if(action=="hide"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);action="wait";}
        // Locker sequences, each from shut in (E, then 70 frames for the way in):
        // "out N" E again, N frames; "peek D" the head turned D degrees;
-       // "caught N" the nearest guard hauls them out, N frames; "knock N" LMB, N frames.
-       if(action=="out"||action=="peek"||action=="caught"||action=="knock"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);for(int i=0;i<70;++i)scene.update({},1.f/60.f);
+       // "yank N" the nearest guard is put at the doors and hauls them out, N frames; "knock N" LMB, N frames.
+       if(action=="out"||action=="peek"||action=="yank"||action=="knock"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);for(int i=0;i<70;++i)scene.update({},1.f/60.f);
         if(action=="out")scene.update(use,1.f/60.f);
         if(action=="peek"){retro::InputState look{};look.mouseDx=decltype(look.mouseDx)(frames*retro::kPi/180.f/.0022f);scene.update(look,1.f/60.f);frames=2;}
-        if(action=="caught")scene.stageLockerCatch();
+        if(action=="yank")scene.stageLockerCatch();
         if(action=="knock"){retro::InputState knock{};knock.fire=true;scene.update(knock,1.f/60.f);}
         action="wait";}
+       // "caught N": hide, then the nearest guard comes for that locker as a witness (walk, reach, haul).
+       // "stow N": the nearest guard knocked out and dragged behind the player, then E stows him.
+       if(action=="caught"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);scene.inspectLockerGuard(false);action="wait";}
+       if(action=="stow"){scene.inspectLockerGuard(true);retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);action="wait";}
        if(action=="wait")for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       renderer->render(scene);++captures;
       std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
@@ -1272,7 +1276,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"crates",retro::Game::testCrates},
          {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest},
          {"caution",retro::Game::testCaution},
-         {"lockers",retro::Game::testLockers}};
+         {"lockers",retro::Game::testLockers},
+         {"locker-guards",retro::Game::testLockerGuards}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){

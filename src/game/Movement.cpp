@@ -197,7 +197,7 @@ const char* Game::interactionHint()const{
  if(hiddenLocker()>=0)return lockerViewLocked()?nullptr:"E / STEP OUT   LMB / KNOCK";
  if(lockerViewLocked())return nullptr; // nothing to do mid-step: no hint for the frame that cannot take it
  if(heldNpc()>=0)return "E / RELEASE    Q / KNOCK OUT    FIRE / KILL";
- if(draggingBody())return "E / DROP THE BODY";
+ if(draggingBody())return stowLockerAhead()>=0?"E / STOW THE BODY":"E / DROP THE BODY";
  if(holdingClutter())return m_vrInputActive?"RELEASE GRIP / DROP":"E / DROP     FIRE / PUNT";
  if(!m_vrInputActive&&nearbyTakedown()>=0)return "Q / REAR KNOCKOUT    E / GRAB    FISTS / KILL";
  if(nearReactorDisk())return m_vrInputActive?"GRIP / TAKE AUTH FLOPPY":"E / TAKE AUTH FLOPPY";
@@ -259,7 +259,7 @@ void Game::updateInteraction(const InputState& input,float dt){
  if(usePressed&&lockerViewLocked()){m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&hiddenLocker()>=0){leaveLocker();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&heldNpc()>=0){releaseNpc(false);m_previousUse=true;m_world.updateDoors(dt);return;}
- if(usePressed&&draggingBody()){dropBody();m_previousUse=true;m_world.updateDoors(dt);return;}
+ if(usePressed&&draggingBody()){if(!stowBody())dropBody();m_previousUse=true;m_world.updateDoors(dt);return;}
  if(usePressed&&!input.vrTracked&&nearbyTakedown()>=0){restrainNpc(size_t(nearbyTakedown()),true);m_previousUse=true;m_world.updateDoors(dt);return;}
  // E on a knocked-out guard: take him by the collar and drag him. A door, a
  // terminal or a locker the player is squared up to comes first, as the hint

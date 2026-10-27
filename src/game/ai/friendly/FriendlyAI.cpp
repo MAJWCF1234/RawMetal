@@ -71,13 +71,15 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   if(get("schedule")||get("task")||get("support_target")||get("drone_windup")||get("drone_busy")||get("guard_slot")){
    if(config.mode==ActorAiMode::Guard)clearGuardSchedule(actor);else clearCivilianSchedule(actor);
   }
-  for(const char*field:{"running","walking","weapon_aim","weapon_raise","weapon_flash","weapon_recoil","weapon_reload","weapon_reloading","weapon_reload_events","weapon_action","weapon_action_ms","weapon_action_events","weapon_bash","weapon_bash_pose","grenade_windup","guard_mode","guard_seen","guard_confirmed","guard_memory","guard_suppress_ms"})put(field,0);
+  for(const char*field:{"running","walking","weapon_aim","weapon_raise","weapon_flash","weapon_recoil","weapon_reload","weapon_reloading","weapon_reload_events","weapon_action","weapon_action_ms","weapon_action_events","weapon_bash","weapon_bash_pose","grenade_windup","guard_mode","guard_seen","guard_confirmed","guard_memory","guard_suppress_ms","guard_locker","guard_check","guard_check_ms","guard_check_said","guard_doors_ms","guard_haul"})if(get(field))put(field,0);
   if(get("guard_target_kind"))rememberGuardTarget(actor,{});
   pose=old;pose.lookAtActor=-1;
   if(npcHeld(actor)){pose.clip=0;pose.phase=0;}
   else{
    float sourceDuration=cleanupAnimationDuration(track.visual,4);int duration=sourceDuration>0?std::max(1,int(std::round(sourceDuration*1000))):1000;
    int age=std::clamp(get("restraint_ms"),0,duration);if(dt>0)age=std::min(duration,age+npcMilliseconds(actor,dt,"restraint_fraction"));put("restraint_ms",age);pose.clip=4;pose.phase=float(age)/duration;
+   // Stowed in a locker: the slide in, then shut out of sight.
+   if(get("guard_stowed"))updateStowedBody(actor,pose,dt);
   }
   return pose;
  }

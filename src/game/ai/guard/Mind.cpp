@@ -26,6 +26,7 @@ void Game::validateGuardState(size_t actor)const{
  // Bounded loosely, not by CautionMs: rebuildFriendlyActors cuts a longer one to this build's clock.
  if(int caution=state(guardCautionKey(actor));caution<0||caution>600000)throw std::runtime_error("Invalid saved guard caution");
  if(get("guard_locker")<0||get("guard_locker")>65536)throw std::runtime_error("Invalid saved guard locker memory");
+ validateGuardLocker(actor);
  validateGuardPolicyState(actor);
  validateGuardDanger(actor);
  validateGuardSchedule(actor);
@@ -39,6 +40,7 @@ void Game::updateGuardFlags(){
 }
 void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose& pose,float dt,const std::vector<AiStimulus>& stimuli,Vec2& goal,float& goalZ,bool& wantsMove){
  if(npcIncapacitated(actor)){wantsMove=false;return;}
+ lockerWitnessSense(level,actor,pose);
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
  auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;
  auto shift=chunkOffset(level)-chunkOffset(m_level),globalOrigin=chunkOffset(level);auto observer=pose.position+shift;
@@ -84,7 +86,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
    if(index<0||size_t(index)>=m_friendlyActors.size()||size_t(index)==actor)return false;
    const auto&other=m_friendlyActors[size_t(index)];const auto&t=other.track();
    // Knocked-out and dead squadmates both count as bodies once they are down.
-   if(!(npcIncapacitated(size_t(index))||(t.deadState&&state(t.deadState))||other.pose.clip==4))return false;
+   if(!(npcIncapacitated(size_t(index))||(t.deadState&&state(t.deadState))||other.pose.clip==4)||npcStowed(size_t(index)))return false;
    targetLevel=other.level;position=other.pose.position;feet=other.pose.z;corpseEye=t.scale*.25f;
   }
   else if(kind==ShotKind::Enemy){
@@ -129,7 +131,8 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
    if(i==actor)continue;const auto&buddy=m_friendlyActors[i];const auto&bt=buddy.track();
    if(bt.ai.mode!=ActorAiMode::Guard||actorFaction(bt)!=actorFaction(track)||!chunkResident(buddy.level))continue;
    if(config.squad&&bt.ai.squad&&bt.ai.squad!=config.squad)continue;
-   bool down=npcIncapacitated(i)||buddy.pose.clip==4||(bt.deadState&&state(bt.deadState));if(!down)continue;
+   // A man shut in a locker is out of sight until someone opens it.
+   bool down=npcIncapacitated(i)||buddy.pose.clip==4||(bt.deadState&&state(bt.deadState));if(!down||npcStowed(i))continue;
    auto bodyLocal=buddy.pose.position+chunkOffset(buddy.level)-globalOrigin;auto delta=bodyLocal-pose.position;
    float bodyEye=buddy.pose.z+bt.scale*.25f,dz=bodyEye-eye;
    if(lengthSq(delta)+dz*dz>=sight*sight||dot(normalized(delta),facing)<=config.sightDot)continue;
@@ -177,7 +180,8 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   }
   else if(mode==GuardState::Alert){mode=GuardState::Investigate;put("guard_travel",0);}
   bool supporting=schedule==GuardSchedule::Medic||schedule==GuardSchedule::Engineer||schedule==GuardSchedule::Patient;
-  if(heard&&!supporting&&!enemyDead){auto local=heard->source;const auto&world=worldAt(local);remember(heard->source+chunkOffset(m_level),world.supportBelow(local.x,local.y,heard->z));mode=GuardState::Investigate;}
+  // A second noise from the locker he came to look at makes it suspect (Lockers.cpp).
+  if(heard&&!supporting&&!enemyDead){if(!lockerSuspectNoise(level,actor,pose,*heard)){auto local=heard->source;const auto&world=worldAt(local);remember(heard->source+chunkOffset(m_level),world.supportBelow(local.x,local.y,heard->z));}mode=GuardState::Investigate;}
   auto report=guardSquadReport(actor);auto remembered=Vec2{get("guard_x")*.001f-globalOrigin.x,get("guard_y")*.001f-globalOrigin.y};
   if(report.valid()&&(mode==GuardState::Patrol||mode==GuardState::Suspicious||!sameRef(previous,report)||lengthSq(report.position-remembered)>.25f*.25f||std::fabs(report.feet-get("guard_z")*.001f)>.3f)){
    // A teammate's sighting supplies last-known knowledge, never our own sight.
@@ -242,7 +246,7 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
    else if(visible&&!wantsMove){Point3 aim{target.position.x,target.position.y,target.feet+target.height*.6f};guardReposition(level,actor,track,pose,aim,ms,goal,goalZ,wantsMove);}
    else{put("guard_cover",0);put("guard_cover_wait",0);}
   }
-  else if(mode==GuardState::Investigate&&config.armed&&wantsMove&&distance>3.5f&&m_npcNavBudget>0){
+  else if(mode==GuardState::Investigate&&config.armed&&wantsMove&&distance>3.5f&&m_npcNavBudget>0&&!get("guard_locker")){
    // Soft approach: take a Cover node that still closes on the memory instead
    // of sprinting the open span of a room. Live shot matching is Alert work.
    --m_npcNavBudget;const auto&graph=navGraph(level,track.scale);std::vector<std::pair<float,size_t>> posts;posts.reserve(graph.nodes.size());
@@ -269,9 +273,11 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
   // an unfinished retreat complete, but bound it by the normal investigation
   // deadline so low health cannot preserve an unseen target indefinitely.
   bool pauseInvestigation=defensiveIntent&&transientDefense;
-  // He watched the player climb into a locker: at its doors he opens it.
-  if(mode==GuardState::Investigate&&!pauseInvestigation&&get("guard_locker")&&((!wantsMove&&!finishingRetreat&&!suppressing)||get("guard_travel")+ms>=8000)&&pullFromLocker(level,actor,pose)){mode=GuardState::Alert;goal=pose.position;goalZ=pose.z;wantsMove=false;}
-  if(mode==GuardState::Investigate&&!pauseInvestigation){int travel=std::min(8000,get("guard_travel")+ms);put("guard_travel",travel);
+  // A locker to open (he watched the player climb in, or suspects it): he
+  // walks straight to its doors, reaches and hauls (Lockers.cpp).
+  const int locker=mode==GuardState::Investigate&&!pauseInvestigation?guardAtLocker(level,actor,track,pose,ms,goal,goalZ,wantsMove,!finishingRetreat&&!suppressing):0;
+  if(locker==2){mode=GuardState::Alert;goal=pose.position;goalZ=pose.z;wantsMove=false;}
+  if(mode==GuardState::Investigate&&!pauseInvestigation&&locker==0){int travel=std::min(8000,get("guard_travel")+ms);put("guard_travel",travel);
    if((!wantsMove&&!finishingRetreat&&!suppressing)||travel>=8000){mode=GuardState::Search;put("guard_search",config.searchMs);put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
  }
  if(mode==GuardState::Search){int remaining=std::max(0,get("guard_search")-ms);put("guard_search",remaining);
@@ -310,6 +316,10 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
  put("guard_mode",int(mode));
  // Searching or back on his beat he has given the locker up; only the walk
  // straight to its doors ends with him opening it.
- if((mode==GuardState::Search||mode==GuardState::Patrol)&&get("guard_locker"))put("guard_locker",0);
+ if((mode==GuardState::Search||mode==GuardState::Patrol)&&(get("guard_locker")||get("guard_check")))clearGuardLocker(actor);
+ // Anything else he turns to (a fight, a hit) lets go of the handle; back
+ // on his beat he may check a locker again.
+ if(mode!=GuardState::Investigate&&get("guard_haul"))put("guard_haul",0);
+ if(mode==GuardState::Patrol&&get("guard_checked"))put("guard_checked",0);
 }
 }

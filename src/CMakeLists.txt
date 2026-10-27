@@ -91,6 +91,7 @@ add_executable(RawMetal WIN32
     game/ai/friendly/Mind.cpp
     game/ai/guard/GuardCtx.cpp
     game/ai/guard/Mind.cpp
+    game/ai/guard/Lockers.cpp
     game/ai/guard/Combat.cpp
     game/ai/guard/Tactics.cpp
     game/ai/guard/Targets.cpp

@@ -122,7 +122,7 @@ struct Pickup {
 };
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
 struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;unsigned categories=ai::SoundWorld;};
-struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false,crouched=false,supportAnimation=false,padVisible=false,pistolVisible=false;int supportClip=6;float supportPhase=0,treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0;};
+struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false,crouched=false,supportAnimation=false,padVisible=false,pistolVisible=false;int supportClip=6;float supportPhase=0,treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0,haul=0;Point3 handle{};};
 enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone};
 struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
 struct AiTargetRef {ShotKind kind=ShotKind::None;int level=0,index=-1;};
@@ -490,6 +490,41 @@ public:
     void clearLockerMotion(bool doors);
     // --map-shots "caught": the nearest guard here steps to the doors and hauls the player out.
     bool stageLockerCatch();
+    // Guards and lockers (ai/guard/Lockers.cpp). A guard is a witness only if
+    // he watched the player go in for a quarter second of the entry's first
+    // 0.65 s and already half had them; anyone else who glimpsed it checks the
+    // floor in front. The watch is transient (m_lockerWatch: per guard, when the
+    // current unbroken look began, and his verdict), and so is when each guard
+    // last had the player confirmed (for the hot-dive rule); what they decide
+    // saves: guard_locker (fixture+1), guard_check (a suspect check, not a
+    // sighting), guard_check_ms/guard_check_said/guard_doors_ms (the bark lead
+    // and the pause at the doors), guard_haul (the reach for the handle, ms)
+    // and guard_checked (one check per search).
+    static constexpr int LockerHaulMs=350,LockerCheckLeadMs=1500,LockerCheckPauseMs=1000,LockerStowMs=1200;
+    struct LockerWatch {int locker=-1;float started=-10;Point3 body{};float height=0,eye=0,exposure=0;bool crouched=false;std::vector<float> since;std::vector<std::uint8_t> verdict;std::vector<float> hadPlayer;};
+    LockerWatch m_lockerWatch;
+    void watchLockerEntry(int locker);
+    void lockerWitnessSense(int level,size_t actor,const ActorPose& pose);
+    bool lockerSuspectNoise(int level,size_t actor,const ActorPose& pose,const AiStimulus& noise);
+    int guardAtLocker(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove,bool free);
+    void clearGuardLocker(size_t actor);
+    void validateGuardLocker(size_t actor)const;
+    Point3 guardLockerHandle(size_t actor,float& reach)const;
+    // Bodies stowed in lockers: guard_stowed (fixture+1), guard_stowed_level
+    // (+1) and guard_stow_ms (the slide in; at LockerStowMs he is shut in and
+    // out of sight). One body to a locker, and nobody hides in that one.
+    int lockerBody(int level,int fixture)const;
+    bool npcStowed(size_t actor)const;
+    int stowLockerAhead()const;
+    bool stowBody();
+    void updateStowedBody(size_t actor,ActorPose& pose,float dt);
+    void tumbleFromLocker(int level,int fixture,size_t finder);
+    // Every door motion a guard or a stow asks for goes through here, counted for the tests.
+    void lockerDoorsMove(int level,int fixture,LockerMotion motion);int m_lockerDoorCalls=0;LockerMotion m_lockerDoorLast=LockerMotion::Enter;
+    static bool testLockerGuards();
+    // --map-shots "caught"/"stow": the nearest guard comes for the locker the
+    // player just hid in, or is knocked out and dragged to the one they face.
+    void inspectLockerGuard(bool stow);
     // A guard's read on the player for the HUD: 0 unaware, up to 1 while
     // suspicion builds, 2 once he has you.
     float guardAwareness(size_t actor)const;
