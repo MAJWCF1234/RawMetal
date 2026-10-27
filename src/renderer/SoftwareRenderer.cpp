@@ -1026,7 +1026,10 @@ void SoftwareRenderer::prepareVrDisplays(const Game& game){
  if(objective!=m_vrObjective){m_vrObjective=objective;m_vrObjectiveTime=objective.empty()?0.f:6.f;}
  m_vrObjectiveTime=std::max(0.f,m_vrObjectiveTime-1.f/90.f);
  std::string caption(game.actorCaption());if(caption.empty()&&m_vrObjectiveTime>0)caption="OBJECTIVE: "+m_vrObjective;
- if(caption!=m_vrCaptionShown){m_vrCaptionShown=caption;stamp(m_vrCaptionTexture,512,72,[&]{int y=4;for(const auto& row:wrapUiText(caption,size_t(64),3)){const int width=uiTextWidth(row.c_str(),1,18);uiText(256-width/2,y,row.c_str(),rgb(235,235,230),1,18);y+=22;}});}
+ // With nothing else to say, the strip carries the guards' alarm: ALERT, or the Caution clock.
+ const int alarm=caption.empty()&&!game.dead()&&!game.won()?game.guardAlarm():0;
+ if(alarm<0)caption="ALERT";else if(alarm>0){const int s=(alarm+999)/1000;char clock[24];std::snprintf(clock,sizeof clock,"CAUTION  %d:%02d",s/60,s%60);caption=clock;}
+ if(caption!=m_vrCaptionShown){m_vrCaptionShown=caption;const auto tone=alarm<0?rgb(244,62,46):alarm>0?rgb(232,160,60):rgb(235,235,230);stamp(m_vrCaptionTexture,512,72,[&]{int y=4;for(const auto& row:wrapUiText(caption,size_t(64),3)){const int width=uiTextWidth(row.c_str(),1,18);uiText(256-width/2,y,row.c_str(),tone,1,18);y+=22;}});}
 }
 // A save is being rebuilt on a worker: the frame goes dark under a bar that
 // fills as its chunks are built, instead of the window hanging.

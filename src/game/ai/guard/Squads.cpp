@@ -3,6 +3,8 @@
 namespace retro {
 namespace {
 StateId squadKey(AiFaction faction,StateId squad,std::string_view field="cursor"){std::string value="npc/squad/"+std::to_string(int(faction))+"/"+std::to_string(squad)+"/"+std::string(field);StateId hash=2166136261u;for(unsigned char c:value)hash=(hash^c)*16777619u;return hash|0x80000000u;}
+// Caution's key is asked for every frame for every guard: remember it per squad.
+StateId squadCautionKey(AiFaction faction,StateId squad){struct Slot{AiFaction faction=AiFaction::Unspecified;StateId squad=0,key=0;};static thread_local std::array<Slot,64> slots{};auto&slot=slots[(squad^uint32_t(faction)*0x9e3779b9u)&63u];if(!slot.key||slot.squad!=squad||slot.faction!=faction)slot={faction,squad,squadKey(faction,squad,"caution")};return slot.key;}
 }
 AiTarget Game::guardSquadReport(size_t actor)const{
  if(npcIncapacitated(actor))return {};
@@ -104,7 +106,7 @@ bool Game::guardPositionReserved(size_t actor,Vec2 position,float feet)const{
 }
 // Caution keeps one clock per squad (a man with no squad keeps his own), so a
 // squad spread over several chunks counts down together wherever the player is.
-StateId Game::guardCautionKey(size_t actor)const{const auto&t=m_friendlyActors.at(actor).track();return t.ai.squad?squadKey(actorFaction(t),t.ai.squad,"caution"):friendlyKey(actor,"guard_caution");}
+StateId Game::guardCautionKey(size_t actor)const{const auto&t=m_friendlyActors.at(actor).track();return t.ai.squad?squadCautionKey(actorFaction(t),t.ai.squad):friendlyKey(actor,"guard_caution");}
 int Game::guardCaution(size_t actor)const{return actor<m_friendlyActors.size()&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard?state(guardCautionKey(actor)):0;}
 void Game::startGuardCaution(size_t actor){if(actor<m_friendlyActors.size()&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)setState(guardCautionKey(actor),CautionMs);}
 void Game::updateGuardCaution(float dt){
@@ -120,8 +122,11 @@ void Game::updateGuardCaution(float dt){
 int Game::guardAlarm()const{
  int caution=0;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();
-  if(t.ai.mode!=ActorAiMode::Guard||npc.level!=m_level||npcIncapacitated(i)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||(t.ai.enableState&&!state(t.ai.enableState)))continue;
-  if(guardState(i)==GuardState::Alert&&guardHostileToPlayer(i))return -1;caution=std::max(caution,state(guardCautionKey(i)));
+  if(t.ai.mode!=ActorAiMode::Guard||!chunkResident(npc.level)||npcIncapacitated(i)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||(t.ai.enableState&&!state(t.ai.enableState)))continue;
+  // ALERT is a man in Alert with the player as his target, here or over a seam; a fight with a wasp is not.
+  if(guardState(i)==GuardState::Alert&&guardTarget(i).kind==ShotKind::Player)return -1;
+  // CAUTION is a squad hostile to the player with a man in this chunk.
+  if(npc.level==m_level&&factionsHostile(actorFaction(t),AiFaction::Player))caution=std::max(caution,state(guardCautionKey(i)));
  }return caution;
 }
 }

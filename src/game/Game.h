@@ -446,8 +446,9 @@ public:
     static constexpr int CautionMs=45000;
     int guardCaution(size_t actor)const;
     void startGuardCaution(size_t actor);
-    // The HUD's alarm line: -1 while a guard in this chunk is in Alert against
-    // the player, else the longest Caution (ms) of a squad with a man here, else 0.
+    // The HUD's alarm line: -1 while a guard in any resident chunk is in Alert
+    // with the player as his target, else the longest Caution (ms) of a squad
+    // hostile to the player with a man in this chunk, else 0.
     int guardAlarm()const;
     static bool testCaution();
     bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0&&!flashlightJammed();}

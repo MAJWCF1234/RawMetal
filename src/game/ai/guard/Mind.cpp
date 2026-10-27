@@ -23,7 +23,8 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_route_next")){float x=get("guard_portal_x")*.001f,y=get("guard_portal_y")*.001f;bool inside=false;for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);inside|=x>=origin.x-.36f&&x<=origin.x+24.36f&&y>=origin.y-.36f&&y<=origin.y+24.36f;}if(!inside)throw std::runtime_error("Invalid saved guard pursuit portal");}
  if(get("weapon_aim")<0||get("weapon_aim")>config.aimMs||get("weapon_recovery")<0||get("weapon_recovery")>std::max(config.recoveryMs,900)||get("weapon_reload")<0||get("weapon_reload")>1800||get("weapon_rounds")<0||get("weapon_rounds")>weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun).cycle.tubeCapacity||get("weapon_raise")<0||get("weapon_raise")>1000||get("weapon_flash")<0||get("weapon_flash")>80||get("weapon_recoil")<0||get("weapon_recoil")>220)throw std::runtime_error("Invalid saved guard weapon state");
  if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>config.searchMs||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
- if(int caution=state(guardCautionKey(actor));caution<0||caution>CautionMs)throw std::runtime_error("Invalid saved guard caution");
+ // Bounded loosely, not by CautionMs: rebuildFriendlyActors cuts a longer one to this build's clock.
+ if(int caution=state(guardCautionKey(actor));caution<0||caution>600000)throw std::runtime_error("Invalid saved guard caution");
  validateGuardPolicyState(actor);
  validateGuardDanger(actor);
  validateGuardSchedule(actor);
@@ -65,6 +66,8 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  };
  bool senseDue=!m_aiDecisionScheduling||clock("sense_wait","sense_age","sense_ready",mode==GuardState::Patrol?100:50,freshHit||noiseWake||nearThreat||(!previous.valid()&&get("guard_target_kind")),0);
  put("sense_due",senseDue);
+ // A squad on Caution sees 15% further, bodies included (asked only when he looks).
+ const float sight=config.sightRange*(senseDue&&guardCaution(actor)?1.15f:1.f);
  // Selecting among all possible threats is scheduled. Tracking the current
  // reference and its live LOS remain immediate, including losing it to cover.
  auto target=senseDue?guardThreat(actor,pose):(previous.valid()&&guardCanSee(actor,pose,previous)?resolveGuardTarget(actor,{previous.kind,previous.level,previous.index}):AiTarget{});bool visible=target.valid();
@@ -99,7 +102,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   }else return false;
   if(targetLevel<0||targetLevel>=chunkCount()||!chunkResident(targetLevel))return false;
   position+=chunkOffset(targetLevel)-globalOrigin;auto delta=position-pose.position;float dz=feet+corpseEye-eye;
-  return lengthSq(delta)+dz*dz<config.sightRange*config.sightRange&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>config.sightDot&&soundRayClear(observer,eye,position+shift,feet+corpseEye);
+  return lengthSq(delta)+dz*dz<sight*sight&&dot(normalized(delta),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})>config.sightDot&&soundRayClear(observer,eye,position+shift,feet+corpseEye);
  };
  bool enemyDead=senseDue&&corpseSeen();int deadKind=get("guard_target_kind"),deadLevel=get("guard_target_level"),deadIndex=get("guard_target_index");put("guard_enemy_dead",enemyDead);
  auto schedule=GuardSchedule(get("schedule"));if(schedule==GuardSchedule::None)schedule=GuardSchedule::Patrol;
@@ -128,7 +131,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
    bool down=npcIncapacitated(i)||buddy.pose.clip==4||(bt.deadState&&state(bt.deadState));if(!down)continue;
    auto bodyLocal=buddy.pose.position+chunkOffset(buddy.level)-globalOrigin;auto delta=bodyLocal-pose.position;
    float bodyEye=buddy.pose.z+bt.scale*.25f,dz=bodyEye-eye;
-   if(lengthSq(delta)+dz*dz>=config.sightRange*config.sightRange||dot(normalized(delta),facing)<=config.sightDot)continue;
+   if(lengthSq(delta)+dz*dz>=sight*sight||dot(normalized(delta),facing)<=config.sightDot)continue;
    auto worldBody=buddy.pose.position+chunkOffset(buddy.level)-chunkOffset(m_level);
    if(!soundRayClear(observer,eye,worldBody,bodyEye))continue;
    remember(buddy.pose.position+chunkOffset(buddy.level),buddy.pose.z);
@@ -273,7 +276,11 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
   // noise bearing so a rear approach after a distraction remains possible,
   // unless his squad is on Caution and already knows someone is about.
   float sweep=get("guard_confirmed")||guardCaution(actor)?1.2f:.45f;
-  pose.yaw=get("guard_bearing")*.0001f+std::sin((config.searchMs-remaining)*.001f*2.4f)*sweep;wantsMove=false;
+  // He turns to the sweep rather than being set on it (3 rad/s clears its
+  // fastest swing), so Caution starting or ending mid-search widens or narrows
+  // the arc without snapping his head, and his eyes, round in one frame.
+  float want=get("guard_bearing")*.0001f+std::sin((config.searchMs-remaining)*.001f*2.4f)*sweep;
+  pose.yaw+=std::clamp(std::remainder(want-pose.yaw,2*kPi),-3.f*dt,3.f*dt);wantsMove=false;
   // Giving up on the player he had puts his squad on Caution.
   if(remaining==0&&get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player))startGuardCaution(actor);
   if(remaining==0){mode=GuardState::Patrol;put("guard_arrived",0);put("guard_pause",0);put("repath",0);put("guard_memory",0);put("guard_confirmed",0);put("guard_recognition",0);put("guard_return",level!=m_friendlyActors[actor].homeLevel);rememberGuardTarget(actor,{});}}

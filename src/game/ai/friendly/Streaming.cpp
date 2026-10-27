@@ -27,6 +27,8 @@ void Game::rebuildFriendlyActors(){
    int restraintFraction=state(friendlyKey(index,"restraint_fraction"));
    if(restraint<0||restraint>2||restraintMs<0||restraintMs>120000||restraintFraction<0||restraintFraction>=1000||(restraint&&!state(friendlyKey(index,"saved"))))throw std::runtime_error("Invalid saved NPC restraint");
    if(track.ai.mode==ActorAiMode::Guard)validateGuardState(index);
+   // A Caution saved under a longer clock than this build's is cut to it, not refused.
+   if(track.ai.mode==ActorAiMode::Guard)if(auto key=guardCautionKey(index);state(key)>CautionMs)setState(key,CautionMs);
    if(saved)m_friendlyActors[index].level=saved-1;
    if(m_friendlyActors[index].level==m_level)setState(friendlyKey(index,"engaged"),1);
    if(state(friendlyKey(index,"saved"))){auto&pose=m_friendlyActors[index].pose;pose.position={state(friendlyKey(index,"x"))*.001f,state(friendlyKey(index,"y"))*.001f};pose.z=state(friendlyKey(index,"z"))*.001f;pose.yaw=state(friendlyKey(index,"yaw"))*.0001f;pose.phase=state(friendlyKey(index,"phase"))*.0001f;
