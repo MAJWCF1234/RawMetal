@@ -440,6 +440,16 @@ public:
     // A guard's read on the player for the HUD: 0 unaware, up to 1 while
     // suspicion builds, 2 once he has you.
     float guardAwareness(size_t actor)const;
+    // Caution: when a guard who had the player gives up his search, his squad
+    // (or he alone, with no squad) stays wary this long: quicker to make the
+    // player out, a little longer sighted, shorter at their posts. An Alert ends it.
+    static constexpr int CautionMs=45000;
+    int guardCaution(size_t actor)const;
+    void startGuardCaution(size_t actor);
+    // The HUD's alarm line: -1 while a guard in this chunk is in Alert against
+    // the player, else the longest Caution (ms) of a squad with a man here, else 0.
+    int guardAlarm()const;
+    static bool testCaution();
     bool flashlightOn()const{return hasFlashlight()&&state(stateId("flashlight_on"))!=0&&!flashlightJammed();}
     static constexpr float FlashlightJamTime=1.5f;
     bool flashlightJammed()const;
@@ -675,6 +685,8 @@ private:
     void damageGuardTarget(size_t actor,float amount);
     bool guardCovered(size_t actor,const ActorPose& pose,const AiTarget& target)const;
     void updateGuardSquadSlots(float dt);
+    StateId guardCautionKey(size_t actor)const;
+    void updateGuardCaution(float dt);int m_cautionMicros=0;
     bool guardFireSlot(size_t actor)const;
     int guardFlankSide(size_t actor)const;
     bool guardPositionReserved(size_t actor,Vec2 position,float feet)const;

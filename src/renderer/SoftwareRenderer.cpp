@@ -817,6 +817,16 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(auto goal=game.activeObjectiveText();!goal.empty()&&!game.dead()&&!game.won()){std::string line(goal);int w=std::min(m_width-140,uiTextWidth(line.c_str(),1,13));int left=cx-w/2;
   gradient(left-40,60,w/2+40,20,black,0.f,.7f,true);gradient(cx,60,w/2+40,20,black,.7f,0.f,true);
   uiText(cx-uiTextWidth("OBJECTIVE",0,9,3)/2,50,"OBJECTIVE",red,0,9,1,3);uiText(left,62,line.c_str(),bone,1,13);}
+ // Under the objective: ALERT while a guard here has you, then his squad's
+ // CAUTION clock running down while they keep looking.
+ if(int alarm=game.guardAlarm();alarm&&!game.dead()&&!game.won()){
+  if(alarm<0)std::snprintf(b,sizeof(b),"ALERT");else{int s=(alarm+999)/1000;std::snprintf(b,sizeof(b),"CAUTION  %d:%02d",s/60,s%60);}
+  int w=uiTextWidth(b,0,13,3),y=transferReleased?108:88;if(game.areaTitleAlpha()>0)y=std::max(y,m_height/6+std::max(22,m_height/14)+12);
+  gradient(cx-w/2-30,y-3,w/2+30,20,black,0.f,.7f,true);gradient(cx,y-3,w/2+30,20,black,.7f,0.f,true);
+  // A full red bar while they have you; the amber one drains with the clock.
+  const auto tone=alarm<0?rgb(244,62,46):amber;uiText(cx-w/2,y,b,tone,0,13,alarm<0&&(int(game.elapsed()*3)&1)?.75f:1.f,3);
+  fill(cx-w/2,y+16,w,2,tone,alarm<0?.85f:.18f);if(alarm>0)fill(cx-w/2,y+16,w*alarm/Game::CautionMs,2,amber,.85f);
+ }
  // Major-area title card: thin, wide-set capitals across the top with a soft
  // glow, fading in and out the first time the player enters the area.
  if(float a=game.areaTitleAlpha();a>0&&!game.dead()){const char* title=game.areaTitle().c_str();

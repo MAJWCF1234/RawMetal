@@ -642,7 +642,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--detail-light"))retro::SoftwareRenderer::setDetailLayer(9); // debug: ambient (r), lamp (g), not per-pixel lit (b)
     if(commandArguments().find(L"--minimap-cache-test"))return retro::MinimapCache::test()?0:35;
     if(commandArguments().find(L"--neural-texture-runtime-test"))return neuralTextureRuntimeTest(W,H,commandArguments().find(L"--vulkan")!=nullptr);
-    if(commandArguments().find(L"--stealth-test"))return retro::Game::testStealth()?0:21;
+    if(commandArguments().find(L"--stealth-test")){bool stealth=retro::Game::testStealth(),caution=retro::Game::testCaution();return stealth&&caution?0:21;}
     if(commandArguments().find(L"--exclusion-test"))return retro::Game::testExclusion()?0:21;
     if(commandArguments().find(L"--exclusion-authoring-test"))return retro::Game::testExclusionAuthoring()?0:21;
     if(commandArguments().find(L"--prologue-test"))return retro::Game::testPrologue()?0:21;
@@ -710,6 +710,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // An optional trailing "fire N" fires the gun once and advances N frames;
      // "wait N" just advances N frames (title cards, timed sequences);
      // "set a,b,c" switches those states on first (powered plant, solved puzzles).
+     // "caution N" puts the guard squads of that chunk on Caution, then waits N frames.
      // --clean-shots leaves out the hands and HUD.
      std::wstring listPath(arg+12);std::ifstream list{std::filesystem::path(listPath)};std::string line;
      if(!list){std::ofstream("map-shots.txt")<<"ERROR: cannot open list file: "<<std::filesystem::path(listPath).string()<<'\n';return 21;}
@@ -725,6 +726,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       if(action=="set"){std::string states;fields>>states;std::istringstream each(states);std::string state;
        while(std::getline(each,state,','))scene.setState(retro::stateId(state));action="wait";frames=2;}
       else fields>>frames;
+      if(action=="caution"){for(size_t i=0;i<scene.npcActors().size();++i)if(scene.npcActors()[i].level==scene.level())scene.startGuardCaution(i);action="wait";}
       if(action=="fire"){retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       else{scene.stowWeapon();if(action=="wait")for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       renderer->render(scene);++captures;
@@ -1255,7 +1257,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lift-mix",retro::AudioEngine::testLiftMix},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"crates",retro::Game::testCrates},
-         {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest}};
+         {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest},
+         {"caution",retro::Game::testCaution}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){

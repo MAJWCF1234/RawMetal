@@ -116,6 +116,7 @@ add_executable(RawMetal WIN32
     game/ai/guard/tests/TableTest.cpp
     game/ai/guard/tests/NavGraphTest.cpp
     game/ai/guard/tests/DecisionTest.cpp
+    game/ai/guard/tests/CautionTest.cpp
     game/ai/engineer/Drones.cpp
     game/ai/engineer/Support.cpp
     game/ai/engineer/DronesTest.cpp

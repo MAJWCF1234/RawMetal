@@ -23,6 +23,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_route_next")){float x=get("guard_portal_x")*.001f,y=get("guard_portal_y")*.001f;bool inside=false;for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);inside|=x>=origin.x-.36f&&x<=origin.x+24.36f&&y>=origin.y-.36f&&y<=origin.y+24.36f;}if(!inside)throw std::runtime_error("Invalid saved guard pursuit portal");}
  if(get("weapon_aim")<0||get("weapon_aim")>config.aimMs||get("weapon_recovery")<0||get("weapon_recovery")>std::max(config.recoveryMs,900)||get("weapon_reload")<0||get("weapon_reload")>1800||get("weapon_rounds")<0||get("weapon_rounds")>weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun).cycle.tubeCapacity||get("weapon_raise")<0||get("weapon_raise")>1000||get("weapon_flash")<0||get("weapon_flash")>80||get("weapon_recoil")<0||get("weapon_recoil")>220)throw std::runtime_error("Invalid saved guard weapon state");
  if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>config.searchMs||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
+ if(int caution=state(guardCautionKey(actor));caution<0||caution>CautionMs)throw std::runtime_error("Invalid saved guard caution");
  validateGuardPolicyState(actor);
  validateGuardDanger(actor);
  validateGuardSchedule(actor);
@@ -154,6 +155,8 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
     if(dot(normalized(toward),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})<(config.sightDot+1.f)*.5f)rate*=.5f;
     rate*=.35f+.65f*std::min(1.f,m_playerExposure*1.6f);
    }
+   // A squad on Caution knows someone is about: near or far, it makes them out sooner.
+   if(guardCaution(actor))rate*=1.6f;
   }
   int gain=ms>0?std::max(1,int(std::lround(ms*rate))):0;
   recognition=confirmed||casualty?config.recognitionMs:std::min(config.recognitionMs,recognition+gain);confirmed=recognition>=config.recognitionMs||casualty;mode=confirmed?GuardState::Alert:GuardState::Suspicious;
@@ -267,9 +270,12 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
  }
  if(mode==GuardState::Search){int remaining=std::max(0,get("guard_search")-ms);put("guard_search",remaining);
   // Confirmed foes get a wide sweep. Sound-only searches stay focused on the
-  // noise bearing so a rear approach after a distraction remains possible.
-  float sweep=get("guard_confirmed")?1.2f:.45f;
+  // noise bearing so a rear approach after a distraction remains possible,
+  // unless his squad is on Caution and already knows someone is about.
+  float sweep=get("guard_confirmed")||guardCaution(actor)?1.2f:.45f;
   pose.yaw=get("guard_bearing")*.0001f+std::sin((config.searchMs-remaining)*.001f*2.4f)*sweep;wantsMove=false;
+  // Giving up on the player he had puts his squad on Caution.
+  if(remaining==0&&get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player))startGuardCaution(actor);
   if(remaining==0){mode=GuardState::Patrol;put("guard_arrived",0);put("guard_pause",0);put("repath",0);put("guard_memory",0);put("guard_confirmed",0);put("guard_recognition",0);put("guard_return",level!=m_friendlyActors[actor].homeLevel);rememberGuardTarget(actor,{});}}
  if(mode==GuardState::Patrol){auto home=chunkOffset(m_friendlyActors[actor].homeLevel)-globalOrigin;const auto&patrol=config.patrol.at(size_t(point));goal=patrol.position+home;goalZ=patrol.z;
   bool arrived=lengthSq(goal-pose.position)<.25f*.25f&&std::fabs(goalZ-pose.z)<.3f;
@@ -279,7 +285,8 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
    // Single-point holds keep their authored pause for standing posts.
    if(config.patrol.size()>1&&!get("patrol_booted")){pause=0;put("patrol_booted",1);}else pause=patrol.pauseMs;
   }
-   pause=std::max(0,pause-ms);put("guard_pause",pause);
+   // On Caution a post gets 60% of its pause, and a brisker look round.
+   pause=std::max(0,pause-(guardCaution(actor)?int(std::lround(ms/.6f)):ms));put("guard_pause",pause);
    // A guard waiting at a post on a route looks over it: it turns to the
    // post's authored bearing and scans slowly either side, rather than
    // freezing along the line it walked in on.
