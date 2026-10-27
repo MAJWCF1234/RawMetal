@@ -744,13 +744,21 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         action="wait";}
        // "caught N": hide, then the nearest guard comes for that locker as a witness (walk, reach, haul).
        // "stow N": the nearest guard knocked out and dragged behind the player, then E stows him.
-       if(action=="caught"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);scene.inspectLockerGuard(false);action="wait";}
-       if(action=="stow"){scene.inspectLockerGuard(true);retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);action="wait";}
+       // "reach N": as caught, but he starts a few steps off the doors (the walk up, stop, reach and haul in 2-3 s).
+       // "tumble N": stow, 100 frames, then the nearest guard, a few steps off, checks that locker and the body falls out.
+       if(action=="caught"||action=="reach"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);scene.inspectLockerGuard(false,action=="reach");action="wait";}
+       if(action=="stow"||action=="tumble"){scene.inspectLockerGuard(true);retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);
+        if(action=="tumble"){for(int i=0;i<100;++i)scene.update({},1.f/60.f);scene.inspectLockerGuard(false,true);}
+        action="wait";}
        // "flee N [back|left|right] [K]": wait (up to 10 s) for a guard to have the player, run
        // that way K frames (default back, 50), then N frames: the ALERT latch, EVASION, Caution.
        if(action=="flee"){std::string way="back";int run=50;fields>>way>>run;for(int i=0;i<600&&scene.guardAlarm()!=retro::Game::AlarmAlert;++i)scene.update({},1.f/60.f);
         retro::InputState step{};step.sprint=true;step.back=way=="back";step.left=way=="left";step.right=way=="right";for(int i=0;i<run;++i)scene.update(step,1.f/60.f);action="wait";}
        if(action=="wait")for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
+      // A trailing "watch x y feet yaw pitch" draws the result from that fixed
+      // observer instead of the player's eyes (a guard at the doors, a stow).
+      std::string watch;float wx=0,wy=0,wz=0,wyaw=0,wpitch=0;
+      if(fields>>watch&&watch=="watch"&&fields>>wx>>wy>>wz>>wyaw>>wpitch)scene.inspectLockerWatch({wx,wy},wz,wyaw*retro::kPi/180.f,wpitch);
       renderer->render(scene);++captures;
       std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
       for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}

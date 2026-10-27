@@ -18,6 +18,25 @@ constexpr float HaulStand=.6f;
 // by a man who already half had the player, makes a witness.
 constexpr float WatchWindow=.65f,WitnessLook=.25f,GlimpseLook=.1f;
 enum : std::uint8_t {Qualified=1,Glimpsed=2,Witness=4};
+// The doors heard: walked in, the latch carries an arm's length; run at (any
+// faster than the 3.6 m/s walk within 0.3 s of the latch) it carries 5 m.
+constexpr float DashSpeed=4.2f,DashWindow=.3f,DoorsHeard=1.2f,DashHeard=5.f;
+// A search that ends this close to a locker's doors may take in the locker:
+// always on a confirmed hunt for the player, on a hunch (one in three, the
+// same for the same man, locker and search point) while his squad is on Caution.
+constexpr float SearchReach=1.5f;constexpr int HunchPerMille=350;
+// A suspect check starts with a stop: he turns square to the doors (up to
+// FaceMs) before he walks to them, so the intent is read before he moves.
+constexpr int FaceMs=700;
+std::uint32_t scramble(std::uint32_t h){h^=h>>16;h*=0x7feb352dU;h^=h>>15;h*=0x846ca68bU;h^=h>>16;return h;}
+// A stowed body: dragged on his back to LockerStowMouth in front of the doors,
+// then stood up into the locker facing its back wall, his feet LockerStowSeat
+// behind the doors (the middle, so no boot shows under the shut leaves), the
+// knockout's fall run back to LockerStowSlump. Opened, he is turned to the
+// doors and the rest of that fall carries him out over their foot.
+constexpr float LockerStowMouth=.25f,LockerStowSeat=.32f,LockerStowSlump=.12f;
+// The handle, where the leaves meet, and how square he stands to the doors before reaching.
+constexpr float LockerHandleZ=1.05f,LockerHandleOut=.03f,LockerHaulSquare=.12f;
 }
 void Game::validateGuardLocker(size_t actor)const{
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};
@@ -31,6 +50,7 @@ void Game::clearGuardLocker(size_t actor){for(const char*field:{"guard_locker","
 // what a guard sees, where it stood and as lit as it was.
 void Game::watchLockerEntry(int locker){
  auto&w=m_lockerWatch;const auto&f=m_world.fixtures()[size_t(locker)];const size_t count=m_friendlyActors.size();
+ w.dash=length(m_velocity)>DashSpeed||m_elapsed-w.dashAt<=DashWindow+1e-4f;
  w.locker=locker;w.started=m_elapsed;const Vec2 at=doorsFront(f,.2f);w.body={at.x,at.y,m_world.floorHeight(f.position.x,f.position.y)+f.base};
  w.height=Player::StandingHeight;w.eye=Player::StandingEye;w.exposure=m_playerExposure;w.crouched=m_player.crouched;
  w.since.assign(count,-1);w.verdict.assign(count,0);if(w.hadPlayer.size()<count)w.hadPlayer.resize(count,-100);
@@ -46,6 +66,8 @@ void Game::watchLockerEntry(int locker){
 void Game::lockerWitnessSense(int level,size_t actor,const ActorPose& pose){
  auto&w=m_lockerWatch;auto get=[&](const char*field){return state(friendlyKey(actor,field));};
  if(w.hadPlayer.size()<m_friendlyActors.size())w.hadPlayer.resize(m_friendlyActors.size(),-100);
+ // The pace the player last ran at, for the latch's reach (lockerEntryHeard).
+ if(length(m_velocity)>DashSpeed&&hiddenLocker()<0)w.dashAt=m_elapsed;
  if(get("guard_seen")&&get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player))w.hadPlayer[actor]=m_elapsed;
  if(w.locker<0)return;
  // Out again (or pulled) and the record is moot; on the entry frame itself he is not in yet.
@@ -106,18 +128,55 @@ void Game::lockerWitnessSense(int level,size_t actor,const ActorPose& pose){
 // look at it and stands within 2.5 m: now he suspects it. True when the noise
 // is his locker's business (his memory stays on its doors).
 bool Game::lockerSuspectNoise(int level,size_t actor,const ActorPose& pose,const AiStimulus& noise){
+ auto get=[&](const char*field){return state(friendlyKey(actor,field));};
+ // The doors themselves, worked by the player (in, out, a body stowed): he
+ // heard which locker, and checks it, once a search, whatever he was doing.
+ if(const int doors=lockerDoorNoise(noise);doors>=0){
+  if(get("guard_locker"))return get("guard_locker")==doors+1;
+  if(get("guard_checked")||!guardHostileToPlayer(actor))return false;
+  suspectLocker(actor,doors);return true;}
  const int index=hiddenLocker();if(index<0)return false;const auto&f=m_world.fixtures()[size_t(index)];
- auto get=[&](const char*field){return state(friendlyKey(actor,field));};auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  const Vec2 mouth=doorsFront(f,0);if(length(noise.source-mouth)>1.f)return false;
  if(get("guard_locker"))return get("guard_locker")==index+1;
  const auto mode=guardState(actor);if(mode!=GuardState::Investigate&&mode!=GuardState::Search)return false;
  const Vec2 global=mouth+chunkOffset(m_level),remembered{get("guard_x")*.001f,get("guard_y")*.001f};
  if(!get("guard_memory")&&mode!=GuardState::Search)return false;
  if(length(remembered-global)>1.5f||length(pose.position+chunkOffset(level)-global)>2.5f)return false;
- const Vec2 stand=doorsFront(f,HaulStand)+chunkOffset(m_level);clearGuardLocker(actor);put("guard_locker",index+1);put("guard_check",1);put("guard_checked",1);
- put("guard_x",int(std::round(stand.x*1000)));put("guard_y",int(std::round(stand.y*1000)));put("guard_z",int(std::round((m_world.floorHeight(f.position.x,f.position.y)+f.base)*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);
- return true;
+ suspectLocker(actor,index);return true;
 }
+// A latch or a shut this frame from a locker's mouth: the fixture, or -1. Doors
+// a guard ripped open are his own noise, not the player's.
+int Game::lockerDoorNoise(const AiStimulus& noise)const{
+ bool doors=false;for(const auto&e:m_sounds)doors|=(e.sound==Sound::LockerLatch||e.sound==Sound::LockerShut)&&lengthSq(e.position-noise.source)<1e-4f&&std::fabs(e.z-noise.z)<.05f;
+ if(!doors)return -1;const auto&fixtures=m_world.fixtures();
+ for(size_t i=0;i<fixtures.size();++i){const auto&f=fixtures[i];if(!hidingLocker(f)||lengthSq(doorsFront(f,0)-noise.source)>.1f*.1f)continue;
+  for(const auto&d:m_lockerDoors)if(d.level==m_level&&d.fixture==int(i)&&d.motion==LockerMotion::Caught)return -1;
+  return int(i);}
+ return -1;
+}
+float Game::lockerEntryHeard()const{return m_lockerWatch.dash?DashHeard:DoorsHeard;}
+// He has a locker to look into, out loud: square on to its doors, an arm's
+// length out, with this search's one check spent on it.
+void Game::suspectLocker(size_t actor,int index){
+ const auto&f=m_world.fixtures()[size_t(index)];auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};const Vec2 stand=doorsFront(f,HaulStand)+chunkOffset(m_level);
+ clearGuardLocker(actor);put("guard_locker",index+1);put("guard_check",1);put("guard_checked",1);
+ put("guard_x",int(std::round(stand.x*1000)));put("guard_y",int(std::round(stand.y*1000)));put("guard_z",int(std::round((m_world.floorHeight(f.position.x,f.position.y)+f.base)*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);
+}
+// Investigate's end, where he means to search (guardBaseIntent): a locker whose
+// doors open within SearchReach of that point is looked into first - always on
+// a confirmed hunt for the player, on a hunch while his squad is on Caution;
+// never from his beat, never twice a search. True when he takes one.
+bool Game::lockerAtSearch(int level,size_t actor){
+ auto get=[&](const char*field){return state(friendlyKey(actor,field));};
+ if(get("guard_checked")||get("guard_locker")||!get("guard_memory")||!guardHostileToPlayer(actor)||guardState(actor)==GuardState::Patrol)return false;
+ const bool hunt=get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player);if(!hunt&&!guardCaution(actor))return false;
+ const Vec2 point{get("guard_x")*.001f,get("guard_y")*.001f};const float feet=get("guard_z")*.001f;int chosen=-1;float best=SearchReach;const auto&fixtures=m_world.fixtures();
+ for(size_t i=0;i<fixtures.size();++i){const auto&f=fixtures[i];if(!hidingLocker(f)||std::fabs(m_world.floorHeight(f.position.x,f.position.y)+f.base-feet)>1.f)continue;
+  const float d=length(doorsFront(f,0)+chunkOffset(m_level)-point);if(d<best){best=d;chosen=int(i);}}
+ if(chosen<0||(!hunt&&!lockerHunch(actor,chosen,get("guard_x"),get("guard_y"))))return false;
+ suspectLocker(actor,chosen);(void)level;return true;
+}
+bool Game::lockerHunch(size_t actor,int locker,int x,int y){return scramble(scramble(std::uint32_t(actor)*0x9e3779b9u+std::uint32_t(locker))^std::uint32_t(x)*0x85ebca6bu^std::uint32_t(y)*0xc2b2ae35u)%1000<HunchPerMille;}
 // --- At the doors ----------------------------------------------------------------
 // guardBaseIntent's Investigate step for a man with a locker to open: 0 when
 // he has none (or gives it up), 1 while he walks to it, waits or reaches,
@@ -137,7 +196,10 @@ int Game::guardAtLocker(int level,size_t actor,const ActorTrack& track,ActorPose
  const bool suspect=get("guard_check")!=0;int check=get("guard_check_ms");
  if(suspect){check=std::min(60000,check+ms);put("guard_check_ms",check);
   // Out loud, before he acts: a suspect check is never a surprise.
-  if(!get("guard_check_said")&&(npcVoice(actor,NpcVoiceCue::CheckLockers)||(check>=700&&npcVoice(actor,NpcVoiceCue::Investigate))||!npcHasVoice(actor)||check>=2500)){put("guard_check_said",check+1);put("voice_mode",int(GuardState::Investigate));}}
+  if(!get("guard_check_said")&&(npcVoice(actor,NpcVoiceCue::CheckLockers)||(check>=700&&npcVoice(actor,NpcVoiceCue::Investigate))||!npcHasVoice(actor)||check>=2500)){put("guard_check_said",check+1);put("voice_mode",int(GuardState::Investigate));}
+  // The stop and the look: he turns square to the doors before his first step.
+  const Vec2 toward=mouth-pose.position;const float turn=std::remainder(std::atan2(toward.x,toward.y)-pose.yaw,2*kPi);
+  if(check<=FaceMs&&!get("guard_doors_ms")&&std::fabs(turn)>.2f&&lengthSq(toward)>.04f){pose.yaw+=std::clamp(turn,-4.f*ms*.001f,4.f*ms*.001f);goal=pose.position;goalZ=pose.z;wantsMove=false;return 1;}}
  const float distance=length(pose.position-stand);
  if(distance>.03f||std::fabs(pose.z-floor)>.3f){
   int travel=std::min(8000,get("guard_travel")+ms);put("guard_travel",travel);put("guard_doors_ms",0);put("guard_haul",0);
@@ -148,7 +210,8 @@ int Game::guardAtLocker(int level,size_t actor,const ActorTrack& track,ActorPose
  wantsMove=false;goal=pose.position;goalZ=pose.z;const float want=std::atan2(-out.x,-out.y),turn=std::remainder(want-pose.yaw,2*kPi);
  pose.yaw+=std::clamp(turn,-4.f*ms*.001f,4.f*ms*.001f);
  int doors=std::min(60000,get("guard_doors_ms")+ms);put("guard_doors_ms",doors);
- if(std::fabs(turn)>.3f)return 1;
+ // Square on to the doors before the hand goes out.
+ if(std::fabs(turn)>LockerHaulSquare)return 1;
  if(suspect&&(doors<LockerCheckPauseMs||!get("guard_check_said")||check<get("guard_check_said")-1+LockerCheckLeadMs))return 1;
  int haul=std::min(LockerHaulMs,get("guard_haul")+ms);put("guard_haul",haul);if(haul<LockerHaulMs)return 1;
  lockerDoorsMove(m_level,index,LockerMotion::Caught);
@@ -166,10 +229,10 @@ Point3 Game::guardLockerHandle(size_t actor,float& reach)const{
  reach=0;const int index=state(friendlyKey(actor,"guard_locker"))-1;const int haul=state(friendlyKey(actor,"guard_haul"));
  if(index<0||size_t(index)>=m_world.fixtures().size()||actor>=m_friendlyActors.size())return {};
  const auto&npc=m_friendlyActors[actor];const auto&f=m_world.fixtures()[size_t(index)];const Vec2 shift=chunkOffset(m_level)-chunkOffset(npc.level);
- const Vec2 at=doorsFront(f,.03f)+shift;const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
+ const Vec2 at=doorsFront(f,LockerHandleOut)+shift;const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
  // Up over the first 60%, then held on the handle as the doors give.
  float t=std::clamp(haul/(LockerHaulMs*.6f),0.f,1.f);reach=haul>0?t*t*(3-2*t):0;
- return {at.x,at.y,floor+1.05f};
+ return {at.x,at.y,floor+LockerHandleZ};
 }
 // --- Bodies in lockers ---------------------------------------------------------------
 int Game::lockerBody(int level,int fixture)const{
@@ -200,22 +263,24 @@ bool Game::stowBody(){
  SoundEvent clank{Sound::Door,doorsFront(f,0),.3f,1.3f,true,6,floor+1.2f};clank.aiRadius=1.2f;m_sounds.push_back(clank);
  m_pickupNotice="BODY STOWED";m_pickupNoticeTime=1.2f;return true;
 }
-// The slide in: round whichever side of the player the body lay on, to the
-// mouth by 60% of the motion, then inside as the leaves shut on him.
+// The stow, over the Stow swing of the leaves (open by 0.25 s, held to 1.05 s,
+// shut at 1.4 s): dragged round whichever side of the player he lay on to the
+// open doors, stood up into the locker between the leaves, his length along
+// its depth so nothing passes through its sides, and held there as they shut.
+// He is drawn until they have shut, so he never vanishes in an open locker.
 void Game::updateStowedBody(size_t actor,ActorPose& pose,float dt){
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  const int index=get("guard_stowed")-1,level=get("guard_stowed_level")-1;if(index<0)return;
  if(level<0||level>=chunkCount()||!chunkResident(level)||size_t(index)>=friendlyWorld(level).fixtures().size()){for(const char*f:{"guard_stowed","guard_stowed_level","guard_stow_ms"})put(f,0);return;}
  const auto&f=friendlyWorld(level).fixtures()[size_t(index)];const auto&npc=m_friendlyActors[actor];const Vec2 shift=chunkOffset(level)-chunkOffset(npc.level);
  int ms=get("guard_stow_ms");if(dt>0&&ms<LockerStowMs)ms=std::min(LockerStowMs,ms+npcMilliseconds(actor,dt,"guard_stow_fraction"));put("guard_stow_ms",ms);
- const Vec2 out=doorsOut(f),side{-out.y,out.x},start{get("guard_stow_x")*.001f,get("guard_stow_y")*.001f},mouth=doorsFront(f,.15f)+shift,inside=f.position+shift;
+ const Vec2 out=doorsOut(f),side{-out.y,out.x},start{get("guard_stow_x")*.001f,get("guard_stow_y")*.001f},mouth=doorsFront(f,LockerStowMouth)+shift,inside=doorsFront(f,-LockerStowSeat)+shift;
  const float floor=friendlyWorld(level).floorHeight(f.position.x,f.position.y)+f.base,startZ=get("guard_stow_z")*.001f;
- const float t=float(ms)/LockerStowMs;Vec2 at;float feet;
- if(t<.6f){const float u=t/.6f,s=u*u*(3-2*u);const Vec2 bend=(start+mouth)*.5f+side*(dot(start-mouth,side)>=0?.55f:-.55f);
-  at=start*((1-s)*(1-s))+bend*(2*s*(1-s))+mouth*(s*s);feet=startZ+(floor-startZ)*s;}
- else{const float u=(t-.6f)/.4f,s=u*u*(3-2*u);at=mouth+(inside-mouth)*s;feet=floor+.11f*s;}
- const Vec2 heading=t<.6f?normalized(mouth-at+out*-.01f):out*-1.f;
- pose.position=at;pose.z=feet;if(lengthSq(heading)>.0001f)pose.yaw=std::atan2(heading.x,heading.y);pose.clip=4;pose.phase=1;pose.lookAtActor=-1;
+ const float t=float(ms)/LockerStowMs;Vec2 at;float feet,phase=1;
+ if(t<.42f){const float u=t/.42f,s=u*u*(3-2*u);const Vec2 bend=(start+mouth)*.5f+side*(dot(start-mouth,side)>=0?.45f:-.45f);
+  at=start*((1-s)*(1-s))+bend*(2*s*(1-s))+mouth*(s*s);feet=startZ+(floor-startZ)*s;const Vec2 heading=normalized(mouth-at+out*-.01f);if(lengthSq(heading)>.0001f)pose.yaw=std::atan2(heading.x,heading.y);}
+ else{const float u=std::min(1.f,(t-.42f)/.33f),s=u*u*(3-2*u);at=mouth+(inside-mouth)*s;feet=floor;phase=1-(1-LockerStowSlump)*s;pose.yaw=std::atan2(-out.x,-out.y);}
+ pose.position=at;pose.z=feet;pose.clip=4;pose.phase=phase;pose.lookAtActor=-1;
  m_friendlyActors[actor].pose=pose;saveRestrainedPose(actor);
 }
 // The doors open on a stowed body: he tumbles out across their foot, and the
@@ -223,9 +288,12 @@ void Game::updateStowedBody(size_t actor,ActorPose& pose,float dt){
 void Game::tumbleFromLocker(int level,int fixture,size_t finder){
  const int body=lockerBody(level,fixture)-1;if(body<0)return;const size_t actor=size_t(body);const auto&f=friendlyWorld(level).fixtures()[size_t(fixture)];
  for(const char*field:{"guard_stowed","guard_stowed_level","guard_stow_ms","guard_stow_fraction","guard_stow_x","guard_stow_y","guard_stow_z"})setState(friendlyKey(actor,field),0);
- auto&npc=m_friendlyActors[actor];const Vec2 out=doorsOut(f),side{-out.y,out.x};const Vec2 shift=chunkOffset(level)-chunkOffset(npc.level);
- npc.pose.position=doorsFront(f,.32f)+shift;npc.pose.z=friendlyWorld(level).floorHeight(f.position.x,f.position.y)+f.base;npc.pose.yaw=std::atan2(side.x,side.y);npc.pose.clip=4;npc.pose.phase=0;
- setState(friendlyKey(actor,"restraint_ms"),0);setState(friendlyKey(actor,"restraint_fraction"),0);saveRestrainedPose(actor);
+ // Where he slumped, turned out to the doors while they are still shut: the
+ // rest of his fall carries him out over their foot as they fly open.
+ auto&npc=m_friendlyActors[actor];const Vec2 out=doorsOut(f);const Vec2 shift=chunkOffset(level)-chunkOffset(npc.level);
+ const float fall=cleanupAnimationDuration(npc.track().visual,4);const int duration=fall>0?std::max(1,int(std::round(fall*1000))):1000;
+ npc.pose.position=doorsFront(f,-LockerStowSeat)+shift;npc.pose.z=friendlyWorld(level).floorHeight(f.position.x,f.position.y)+f.base;npc.pose.yaw=std::atan2(out.x,out.y);npc.pose.clip=4;npc.pose.phase=LockerStowSlump;
+ setState(friendlyKey(actor,"restraint_ms"),int(std::round(LockerStowSlump*duration)));setState(friendlyKey(actor,"restraint_fraction"),0);saveRestrainedPose(actor);
  m_sounds.push_back({Sound::Land,doorsFront(f,.3f)+chunkOffset(level)-chunkOffset(m_level),.6f,.85f,true,12,npc.pose.z+.1f});
  if(finder>=m_friendlyActors.size()||npcIncapacitated(finder))return;
  auto put=[&](const char*field,int value){setState(friendlyKey(finder,field),value);};const Vec2 global=npc.pose.position+chunkOffset(npc.level);
@@ -234,7 +302,7 @@ void Game::tumbleFromLocker(int level,int fixture,size_t finder){
  put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[finder].track().ai.recognitionMs);put("guard_mode",int(GuardState::Investigate));
  if(npcVoice(finder,NpcVoiceCue::AllyDown))put("voice_mode",int(GuardState::Investigate));
 }
-void Game::inspectLockerGuard(bool stow){
+void Game::inspectLockerGuard(bool stow,bool staged){
  size_t chosen=SIZE_MAX;float best=1e9f;
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();
   if(npc.level!=m_level||t.ai.mode!=ActorAiMode::Guard||!autonomousActor(t)||npcIncapacitated(actor)||npc.pose.clip==4||(t.deadState&&state(t.deadState)))continue;
@@ -242,9 +310,22 @@ void Game::inspectLockerGuard(bool stow){
  if(chosen==SIZE_MAX)return;auto put=[&](const char*field,int value){setState(friendlyKey(chosen,field),value);};
  if(stow){auto&npc=m_friendlyActors[chosen];clearGuardSchedule(chosen);put("restraint",1);npc.pose.clip=4;npc.pose.phase=1;
   npc.pose.position=m_player.pos-Vec2{std::cos(m_player.angle),std::sin(m_player.angle)}*.85f;npc.pose.z=m_player.z;npc.pose.yaw=wrapAngle(kPi*.5f-m_player.angle);saveRestrainedPose(chosen);m_draggedNpc=int(chosen);equipWeapon(WeaponId::Fists);return;}
- const int index=hiddenLocker();if(index<0)return;const auto&f=m_world.fixtures()[size_t(index)];const Vec2 stand=doorsFront(f,HaulStand)+chunkOffset(m_level);
+ int index=hiddenLocker();
+ // "tumble": no one hiding, the locker a body was stowed in is checked instead.
+ if(index<0&&staged)for(size_t i=0;i<m_world.fixtures().size()&&index<0;++i)if(lockerBody(m_level,int(i)))index=int(i);
+ if(index<0)return;const auto&f=m_world.fixtures()[size_t(index)];const Vec2 stand=doorsFront(f,HaulStand)+chunkOffset(m_level);
+ // "reach"/"tumble": he starts a few steps off the doors, so the walk up, the
+ // stop, the reach and the haul all fall inside a short sequence.
+ if(staged){auto&npc=m_friendlyActors[chosen];const Vec2 out=doorsOut(f),side{-out.y,out.x},at=doorsFront(f,HaulStand+1.1f)+side*.7f-chunkOffset(npc.level)+chunkOffset(m_level),to=doorsFront(f,0)-at;
+  npc.pose.position=at;npc.pose.z=m_world.floorHeight(f.position.x,f.position.y)+f.base;npc.pose.yaw=std::atan2(to.x,to.y);
+  put("x",int(std::round(at.x*1000)));put("y",int(std::round(at.y*1000)));put("z",int(std::round(npc.pose.z*1000)));put("yaw",int(std::round(std::remainder(npc.pose.yaw,2*kPi)*10000)));
+  // Nobody hiding: the player stands off in the corner, out of his sight.
+  if(hiddenLocker()<0){suspectLocker(chosen,index);put("guard_mode",int(GuardState::Investigate));m_player.pos={.3f,.3f};return;}}
  clearGuardLocker(chosen);rememberGuardTarget(chosen,resolveGuardTarget(chosen,{ShotKind::Player,m_level,0}));
  put("guard_x",int(std::round(stand.x*1000)));put("guard_y",int(std::round(stand.y*1000)));put("guard_z",int(std::round((m_world.floorHeight(f.position.x,f.position.y)+f.base)*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);put("guard_locker",index+1);put("guard_mode",int(GuardState::Investigate));
+}
+void Game::inspectLockerWatch(Vec2 at,float feet,float yaw,float pitch){
+ m_lockerView.active=false;m_player.pos=at;m_player.z=feet==-999?m_world.floorHeight(at.x,at.y):feet;m_player.angle=yaw;m_player.pitch=pitch;m_player.crouched=false;m_player.eye=Player::StandingEye;
 }
 // --- Tests ---------------------------------------------------------------------------
 bool Game::testLockerGuards(){
@@ -257,7 +338,7 @@ bool Game::testLockerGuards(){
   auto campaign=std::make_shared<CustomCampaign>();campaign->name="Locker guard validation";campaign->key=883017;
   auto map=std::make_shared<AuthoredMapData>();map->name="Locker guard room";map->definition={{0,0},{3.2f,6.5f},0,Environment::Interior,false,8,.3f,44};
   AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
-  map->fixtures.push_back({model::psx_locker,{2.115f,6.5f},0,.64f,.85f,2.42f,0,true});
+  map->fixtures.push_back({model::psx_locker,{2.f,6.5f},0,.87f,.85f,2.42f,0,true});
   for(const auto&wall:walls)map->structures.push_back(wall);
   TimedSequence timer;timer.timerState=stateId("lg_clock");timer.finishState=stateId("lg_done");timer.soundIntervalMs=0;timer.loop=true;map->timedSequences.push_back(timer);
   int n=0;for(const auto&post:guards){ActorTrack track;track.timerState=timer.timerState;track.visual=ActorVisual::Cleanup;track.keys={{0,post.at,0,post.yaw},{30000,post.at,0,post.yaw}};track.scale=1.6f;track.health=90;
@@ -311,8 +392,8 @@ bool Game::testLockerGuards(){
  {auto g=scene({{{10.5f,6.5f},kPi*.5f},{{9.5f,9.5f},kPi*.5f}});g.setState(g.friendlyKey(0,"restraint"),1);g.m_friendlyActors[0].pose.clip=4;g.m_friendlyActors[0].pose.position={4.05f,6.5f};g.saveRestrainedPose(0);g.m_draggedNpc=0;
   const std::string hint=g.interactionHint()?g.interactionHint():"";const int calls=g.m_lockerDoorCalls;g.update(use,frame);
   check(hint=="E / STOW THE BODY"&&!g.draggingBody()&&get(g,0,"guard_stowed")==1&&g.m_lockerDoorCalls==calls+1&&g.m_lockerDoorLast==LockerMotion::Stow,"Facing a free locker with a body, E / STOW THE BODY puts him in and opens the doors for it");
-  float jump=0;auto at=g.npcActors()[0].pose.position;bool shown=true;for(int i=0;i<80;++i){g.update({},frame);jump=std::max(jump,length(g.npcActors()[0].pose.position-at));at=g.npcActors()[0].pose.position;if(i<60)shown&=!g.npcStowed(0);}
-  check(jump<.12f&&shown&&g.npcStowed(0)&&length(at-Vec2{2.f,6.5f})<.05f,"He slides in over 1.2 s without a jump (largest step "+std::to_string(jump)+" m), then is shut in out of sight");
+  float jump=0;auto at=g.npcActors()[0].pose.position;bool shown=true;for(int i=0;i<100;++i){g.update({},frame);jump=std::max(jump,length(g.npcActors()[0].pose.position-at));at=g.npcActors()[0].pose.position;if(i<80)shown&=!g.npcStowed(0);}
+  check(jump<.12f&&shown&&g.npcStowed(0)&&length(at-Vec2{out-LockerStowSeat,6.5f})<.05f,"He is dragged and heaved in over 1.4 s, drawn until the leaves shut, without a jump (largest step "+std::to_string(jump)+" m), then is shut in out of sight");
   g.m_player.pos={3.2f,6.5f};g.m_player.angle=kPi;const std::string after=g.interactionHint()?g.interactionHint():"";
   check(g.nearbyBody()<0&&g.lockerAhead()<0&&after!="E / HIDE"&&!hide(g),"A stowed body is no body to drag, and his locker hides nobody else");
   // The second man turns to look straight at the locker, the player well behind him.
@@ -325,7 +406,7 @@ bool Game::testLockerGuards(){
   auto put=[&](const char*f,int v){loaded.setState(loaded.friendlyKey(1,f),v);};put("guard_locker",1);put("guard_check",1);put("guard_check_said",1);put("guard_check_ms",3000);put("guard_x",3035);put("guard_y",6500);put("guard_z",0);put("guard_memory",1);put("guard_mode",int(GuardState::Investigate));
   bool out2=false;for(int i=0;i<60*15&&!out2;++i){loaded.update({},frame);out2=!loaded.state(loaded.friendlyKey(0,"guard_stowed"));}
   for(int i=0;i<30;++i)loaded.update({},frame);dump(loaded,1,"tumble");
-  check(out2&&!loaded.npcStowed(0)&&loaded.npcActors()[0].pose.clip==4&&loaded.npcActors()[0].pose.position.x>out&&loaded.state(loaded.friendlyKey(1,"guard_confirmed"))&&loaded.state(loaded.friendlyKey(1,"guard_target_kind"))==int(ShotKind::Player),"Opening it, a guard has the body tumble out at his feet and treats it as a found colleague");
+  check(out2&&!loaded.npcStowed(0)&&loaded.npcActors()[0].pose.clip==4&&std::fabs(loaded.npcActors()[0].pose.position.x-(out-LockerStowSeat))<.05f&&std::cos(loaded.npcActors()[0].pose.yaw-kPi*.5f)>.99f&&loaded.state(loaded.friendlyKey(1,"guard_confirmed"))&&loaded.state(loaded.friendlyKey(1,"guard_target_kind"))==int(ShotKind::Player),"Opening it, a guard has the body tumble out at his feet and treats it as a found colleague");
   bool corrupt=false;{Game bad(g.m_customCampaign);g.setState(g.friendlyKey(0,"guard_stow_ms"),LockerStowMs+1);corrupt=!bad.decodeSave(g.encodeSave());}
   check(corrupt,"A corrupt stow clock is refused on load");
  }
@@ -368,6 +449,50 @@ bool Game::testLockerGuards(){
   bool opened=false;for(int i=0;i<60*15;++i){g.update({},frame);opened|=g.hiddenLocker()<0||get(g,0,"guard_check");}
   check(!opened,"A squad on Caution never checks a locker it has no reason to");
  }
+ // 6. Fair search rules. A check, however it starts, is read before it lands:
+ // he stops and turns square to the doors, says so, walks up, waits a second, hauls.
+ struct Watched {bool assigned=false,opened=false,squared=true;int doors=0,lead=0;};
+ auto follow=[&](Game& g,int seconds){Watched w;Vec2 from{};float moved=0;
+  for(int i=0;i<60*seconds&&!w.opened;++i){g.update({},frame);const auto&p=g.npcActors()[0].pose;
+   if(!w.assigned&&get(g,0,"guard_check")&&get(g,0,"guard_locker")==1){w.assigned=true;from=p.position;}
+   if(w.assigned&&moved<.05f){moved=length(p.position-from);const Vec2 to=Vec2{out,6.5f}-p.position;if(moved>=.05f)w.squared=std::fabs(std::remainder(std::atan2(to.x,to.y)-p.yaw,2*kPi))<.35f;}
+   if(get(g,0,"guard_haul")>0&&!w.doors){w.doors=get(g,0,"guard_doors_ms");w.lead=get(g,0,"guard_check_ms")-(get(g,0,"guard_check_said")-1);}
+   w.opened=g.hiddenLocker()<0;}
+  return w;};
+ auto fair=[&](const Watched& w){return w.assigned&&w.opened&&w.squared&&w.doors>=LockerCheckPauseMs&&w.lead>=LockerCheckLeadMs;};
+ auto describe=[&](const Watched& w){return " (assigned "+std::to_string(w.assigned)+", squared "+std::to_string(w.squared)+", paused "+std::to_string(w.doors)+" ms, spoke "+std::to_string(w.lead)+" ms before)";};
+ // a. The doors heard: an arm's length walked in, five metres run in.
+ {auto g=scene({{{3.f,7.4f},0}});const bool hidden=hide(g);const Watched w=follow(g,15);dump(g,0,"heard-near");
+  check(hidden&&fair(w),"A guard at arm's length (back turned) who hears the latch turns to the locker, says it, waits at the doors and checks it"+describe(w));}
+ for(int way=0;way<3;++way){auto g=scene({{{5.6f,7.6f},0}});
+  if(way==2){g.m_player.pos={3.9f,6.5f};g.m_velocity={-5.4f,0};for(int i=0;i<10;++i)g.update({},frame);}else g.m_velocity={way?-5.4f:-3.6f,0};
+  const bool hidden=hide(g);const Watched w=follow(g,20);dump(g,0,way==0?"walk-3m":way==1?"run-3m":"ran-3m");
+  if(way==0)check(hidden&&!w.assigned&&!w.opened&&!get(g,0,"guard_check"),"A walking entry 3.3 m behind a guard is not heard");
+  else check(hidden&&fair(w),std::string(way==1?"Running":"Having run, a sixth of a second before,")+" into a locker 3.3 m behind a guard is heard: he comes to check it"+describe(w));}
+ {auto g=scene({{{8.5f,6.5f},kPi*.5f}});hide(g);for(int i=0;i<70;++i)g.update({},frame);auto&p=g.m_friendlyActors[0].pose;p.position={3.f,7.4f};p.yaw=0;
+  for(auto [f,v]:{std::pair{"x",3000},std::pair{"y",7400},std::pair{"yaw",0}})g.setState(g.friendlyKey(0,f),v);
+  g.update(use,frame);const bool assigned=g.hiddenLocker()<0&&get(g,0,"guard_locker")==1&&get(g,0,"guard_check")==1;dump(g,0,"exit");
+  check(assigned,"Stepping out at a guard's back, he hears the doors and turns to that locker");}
+ // b. A confirmed search that ends within 1.5 m of the doors takes in the locker; 2.5 m off it does not.
+ // (Set a second after the climb in, so the entry's own watch has closed.)
+ auto hunt=[&](Game& g,Vec2 point,bool confirmed){g.rememberGuardTarget(0,g.resolveGuardTarget(0,{ShotKind::Player,0,0}));if(!confirmed)g.rememberGuardTarget(0,{});const int need=g.npcActors()[0].track().ai.recognitionMs;
+  for(auto [f,v]:{std::pair{"guard_confirmed",int(confirmed)},std::pair{"guard_recognition",confirmed?need:0},std::pair{"guard_mode",int(GuardState::Investigate)},std::pair{"guard_x",int(std::round(point.x*1000))},std::pair{"guard_y",int(std::round(point.y*1000))},std::pair{"guard_z",0},std::pair{"guard_memory",1},std::pair{"guard_travel",0}})g.setState(g.friendlyKey(0,f),v);};
+ for(float off:{1.44f,2.5f}){auto g=scene({{{8.5f,6.5f},kPi*.5f}});hide(g);for(int i=0;i<60;++i)g.update({},frame);hunt(g,{out+off*.83f,6.5f+off*.55f},true);const Watched w=follow(g,20);dump(g,0,"search");
+  if(off<2)check(fair(w),"A confirmed search for the player that ends 1.4 m from the doors checks the locker first"+describe(w));
+  else check(!w.assigned&&!w.opened,"A confirmed search that ends 2.5 m off the doors leaves the locker alone");}
+ // c. On Caution an unconfirmed searcher near the doors checks on a hunch: the
+ // same man, locker and search point always decide alike, about one in three.
+ {Vec2 hit{},miss{};bool foundHit=false,foundMiss=false;int hits=0,tries=0;
+  for(int x=0;x<12;++x)for(int y=0;y<12;++y){const int gx=int(std::round((out+.6f+x*.06f)*1000)),gy=int(std::round((6.f+y*.09f)*1000));const bool h=lockerHunch(0,0,gx,gy);hits+=h;++tries;
+   if(h&&!foundHit){hit={gx*.001f,gy*.001f};foundHit=true;}if(!h&&!foundMiss){miss={gx*.001f,gy*.001f};foundMiss=true;}}
+  report<<"  hunch "<<hits<<'/'<<tries<<" hit "<<hit.x<<','<<hit.y<<" miss "<<miss.x<<','<<miss.y<<'\n';
+  check(foundHit&&foundMiss&&hits*100>=tries*25&&hits*100<=tries*45,"A hunch comes up about one time in three ("+std::to_string(hits)+"/"+std::to_string(tries)+")");
+  for(int way=0;way<3;++way){auto g=scene({{{8.5f,6.5f},kPi*.5f}});hide(g);for(int i=0;i<60;++i)g.update({},frame);if(way<2)g.startGuardCaution(0);hunt(g,way==1?miss:hit,false);const Watched w=follow(g,20);dump(g,0,"hunch");
+   if(way==0)check(fair(w),"On Caution, an unconfirmed search that ends by the doors checks the locker when the hunch says so"+describe(w));
+   else check(!w.assigned&&!w.opened,way==1?"On Caution, the same search with no hunch leaves it shut":"Off Caution an unconfirmed search never checks a locker");}}
+ // d. A man on his beat never checks one, Caution or not, even posted 1.3 m from its doors.
+ {auto g=scene({{{out+1.3f,6.5f},kPi*.5f}});g.startGuardCaution(0);hide(g);Watched w=follow(g,15);
+  check(!w.assigned&&!w.opened&&g.guardState(0)==GuardState::Patrol,"A guard on his beat by the doors, on Caution, never checks the locker");}
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }
 }

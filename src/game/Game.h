@@ -512,10 +512,21 @@ public:
     // sighting), guard_check_ms/guard_check_said/guard_doors_ms (the bark lead
     // and the pause at the doors), guard_haul (the reach for the handle, ms)
     // and guard_checked (one check per search).
-    static constexpr int LockerHaulMs=350,LockerCheckLeadMs=1500,LockerCheckPauseMs=1000,LockerStowMs=1200;
-    struct LockerWatch {int locker=-1;float started=-10;Point3 body{};float height=0,eye=0,exposure=0;bool crouched=false;std::vector<float> since;std::vector<std::uint8_t> verdict;std::vector<float> hadPlayer;};
+    static constexpr int LockerHaulMs=350,LockerCheckLeadMs=1500,LockerCheckPauseMs=1000,LockerStowMs=1400;
+    struct LockerWatch {int locker=-1;float started=-10;Point3 body{};float height=0,eye=0,exposure=0;bool crouched=false;std::vector<float> since;std::vector<std::uint8_t> verdict;std::vector<float> hadPlayer;float dashAt=-10;bool dash=false;};
     LockerWatch m_lockerWatch;
     void watchLockerEntry(int locker);
+    // The entry latch's hearing radius: an arm's length (1.2 m) walked in,
+    // five metres when the player ran at the doors (dash: faster than a walk
+    // within 0.3 s of the latch). A guard who hears a locker's doors worked
+    // checks that locker (lockerSuspectNoise); so does one whose confirmed
+    // search ends within 1.5 m of a locker's doors, and, on a hunch, one whose
+    // unconfirmed search does while his squad is on Caution (lockerAtSearch).
+    float lockerEntryHeard()const;
+    int lockerDoorNoise(const AiStimulus& noise)const;
+    bool lockerAtSearch(int level,size_t actor);
+    static bool lockerHunch(size_t actor,int locker,int x,int y);
+    void suspectLocker(size_t actor,int locker);
     void lockerWitnessSense(int level,size_t actor,const ActorPose& pose);
     bool lockerSuspectNoise(int level,size_t actor,const ActorPose& pose,const AiStimulus& noise);
     int guardAtLocker(int level,size_t actor,const ActorTrack& track,ActorPose& pose,int ms,Vec2& goal,float& goalZ,bool& wantsMove,bool free);
@@ -536,7 +547,12 @@ public:
     static bool testLockerGuards();
     // --map-shots "caught"/"stow": the nearest guard comes for the locker the
     // player just hid in, or is knocked out and dragged to the one they face.
-    void inspectLockerGuard(bool stow);
+    // staged: he starts a few steps off the doors ("reach"), and with nobody
+    // hiding he checks the locker a body was stowed in ("tumble").
+    void inspectLockerGuard(bool stow,bool staged=false);
+    // --map-shots "watch": the eye moved to a fixed observer for the frame drawn
+    // (feet -999 the floor there), the scene simulated no further.
+    void inspectLockerWatch(Vec2 at,float feet,float yaw,float pitch);
     // A guard's read on the player for the HUD: 0 unaware, up to 1 while
     // suspicion builds (recognition over recognitionMs), 2 once he has you,
     // 3 while he hunts the player he had confirmed, .5 checking a noise.

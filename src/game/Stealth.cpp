@@ -233,7 +233,7 @@ bool Game::enterLocker(){
  m_player.angle=std::atan2(out.y,out.x);m_player.pitch=0;m_velocity={};m_stepDistance=0;m_jumpBuffer=0;m_suppressFire=true;m_playerExposure=0;
  // The latch lifts with a click only someone at arm's length would notice;
  // the leaves swing wide, the player turns in, and they are pulled to.
- SoundEvent latch{Sound::LockerLatch,lockerFront(f,0),.45f,1.f,true,6,floor+1.2f};latch.aiRadius=1.2f;m_sounds.push_back(latch);
+ SoundEvent latch{Sound::LockerLatch,lockerFront(f,0),.45f,1.f,true,6,floor+1.2f};latch.aiRadius=lockerEntryHeard();m_sounds.push_back(latch);
  // Both hands go to the leaves, so the gun goes away (as for a takedown) and
  // comes back up once the way out ends. The leaves wait for the hands: from a
  // long step back the body has to close in before they can take the edges.

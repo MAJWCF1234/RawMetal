@@ -48,8 +48,9 @@ StateId cueCooldownId(NpcVoiceCue cue){
  if(cue==NpcVoiceCue::GiveUp)return stateId("npc_voice_cd_giveup");
  return 0;
 }
+constexpr int AlertFloorMs=1500;
 int cueCooldownMs(NpcVoiceCue cue){
- if(cue==NpcVoiceCue::Alert)return 10000;
+ if(cue==NpcVoiceCue::Alert)return 10000; // per squad; the shared channel holds AlertFloorMs
  if(cue==NpcVoiceCue::Investigate)return 8000;
  if(cue==NpcVoiceCue::Retreat)return 12000;
  if(cue==NpcVoiceCue::AllyDown)return 9000;
@@ -76,13 +77,17 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  // AllyDown reserves its cooldown at claim time so multi-kills cannot queue
  // several reports; the elected speaker must still be allowed to flush.
  if(StateId cooldown=cueCooldownId(cue);cooldown&&state(cooldown)>0&&cue!=NpcVoiceCue::Hurt&&cue!=NpcVoiceCue::Down&&cue!=NpcVoiceCue::AllyDown)return false;
+ if(cue==NpcVoiceCue::Alert&&get("voice_cd_alert")>0)return false;
  int choices[4],count=0;for(size_t i=0;i<NpcVoiceClips.size();++i)if(NpcVoiceClips[i].role==role&&NpcVoiceClips[i].cue==cue&&count<4)choices[count++]=int(i);
  if(!count)return false;
  int variant=std::max(0,get("voice_variant"));int clip=choices[variant%count];put("voice_variant",(variant+1)%10000);
  int duration=int(std::ceil(NpcVoiceClips[size_t(clip)].seconds*1000))+180;
  put("voice_lock",duration);put("voice_priority",priority);if(cue==NpcVoiceCue::Hurt)put("voice_hurt_wait",1800);
  setState(stateId("npc_voice_busy"),duration+350);
- if(StateId cooldown=cueCooldownId(cue))setState(cooldown,cueCooldownMs(cue));
+ // Contact is called once per squad (a man without one is his own) every ten
+ // seconds; the shared floor only keeps two squads from calling over each other.
+ if(StateId cooldown=cueCooldownId(cue))setState(cooldown,cue==NpcVoiceCue::Alert?AlertFloorMs:cueCooldownMs(cue));
+ if(cue==NpcVoiceCue::Alert)for(size_t other=0;other<m_friendlyActors.size();++other)if(other==actor||(track.ai.squad&&m_friendlyActors[other].track().ai.squad==track.ai.squad))setState(friendlyKey(other,"voice_cd_alert"),cueCooldownMs(cue));
  // A single speaker cannot overlap its previous take, even within one frame.
  std::erase_if(m_sounds,[&](const auto&event){return event.speech>=0&&event.speaker==actor+1;});
  m_sounds.push_back({Sound::WorkerDying,position,.95f,1,true,22,npc.pose.z+track.scale*.85f,clip,actor+1,priority});return true;
@@ -92,6 +97,7 @@ void Game::updateNpcVoices(float dt){
  for(StateId id:{stateId("npc_voice_cd_alert"),stateId("npc_voice_cd_investigate"),stateId("npc_voice_cd_retreat"),stateId("npc_voice_cd_allydown"),stateId("npc_voice_reply_ms"),
   stateId("npc_voice_cd_witness"),stateId("npc_voice_cd_lockers"),stateId("npc_voice_cd_found"),stateId("npc_voice_cd_giveup")})
   setState(id,std::max(0,state(id)-ms));
+ for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(int cd=state(friendlyKey(actor,"voice_cd_alert")))setState(friendlyKey(actor,"voice_cd_alert"),std::max(0,cd-ms));
  auto sameRadio=[&](size_t a,size_t b){
   const auto&left=m_friendlyActors[a].track(),&right=m_friendlyActors[b].track();
   if(left.ai.squad&&left.ai.squad==right.ai.squad)return true;
@@ -108,7 +114,9 @@ void Game::updateNpcVoices(float dt){
   // squad contact sounds like chatter, not a roll call down the actor list.
   auto claimShared=[&](NpcVoiceCue cue){
    if(StateId cooldown=cueCooldownId(cue);cooldown&&state(cooldown)>0)return;
-   if(cue==NpcVoiceCue::Investigate&&state(stateId("npc_voice_cd_alert"))>0){
+   if(cue==NpcVoiceCue::Alert&&get("voice_cd_alert")>0)return;
+   // His own squad called contact in the last ten seconds: he answers it.
+   if(cue==NpcVoiceCue::Investigate&&get("voice_cd_alert")>0){
     // At most one delayed "copy" after someone already called contact.
     if(state(stateId("npc_voice_reply_ms"))>0)return;
     for(size_t other=0;other<m_friendlyActors.size();++other)if(other!=actor&&sameRadio(actor,other)&&pendingCue(other)==int(NpcVoiceCue::Investigate))return;
@@ -208,7 +216,7 @@ bool Game::testNpcVoices(){
  Game game;game.loadLevel(14,false);game.updateStreaming(0);game.m_player.pos={13,19};game.m_player.z=-25;
  std::vector<size_t> detail;for(size_t i=0;i<game.npcActors().size();++i)if(game.npcActors()[i].homeLevel==14&&voiceRole(game.npcActors()[i].track()))detail.push_back(i);
  check(detail.size()==6,"Receiving uses six distinct skinned voice roles");
- for(auto actor:detail){game.m_sounds.clear();game.setState(stateId("npc_voice_busy"),0);game.setState(game.friendlyKey(actor,"voice_lock"),0);game.setState(stateId("npc_voice_cd_alert"),0);
+ for(auto actor:detail){game.m_sounds.clear();game.setState(stateId("npc_voice_busy"),0);game.setState(game.friendlyKey(actor,"voice_lock"),0);game.setState(stateId("npc_voice_cd_alert"),0);for(size_t i=0;i<game.npcActors().size();++i)game.setState(game.friendlyKey(i,"voice_cd_alert"),0);
   bool spoke=game.npcVoice(actor,NpcVoiceCue::Alert);int role=voiceRole(game.npcActors()[actor].track());
   check(spoke&&!game.sounds().empty()&&NpcVoiceClips[size_t(game.sounds().back().speech)].role==role,"Alert selects the actor's actual skinned voice");
   check(!game.npcVoice(actor,NpcVoiceCue::Patrol),"Patrol cannot interrupt an active tactical call");
@@ -358,6 +366,20 @@ bool Game::testNpcVoices(){
    for(const auto&e:g.sounds())if(e.speech>=0&&NpcVoiceClips[size_t(e.speech)].cue==NpcVoiceCue::GiveUp){++giveUps;if(spokenAt<0)spokenAt=i;take=0;for(int c=0;c<e.speech;++c)take+=NpcVoiceClips[size_t(c)].role==1&&NpcVoiceClips[size_t(c)].cue==NpcVoiceCue::GiveUp;}}
   out<<"  confirmed after "<<seen<<" frames, search given up at "<<gaveUpAt<<", GiveUp spoken at "<<spokenAt<<" ("<<giveUps<<" times, take "<<take<<")"<<'\n';
   check(seen<600&&gaveUpAt>0&&giveUps==1&&take==1&&spokenAt>=gaveUpAt&&spokenAt-gaveUpAt<45,"Through the real guard mind a lost player is called off once, as the search ends, in the take that admits it");}
+ // Contact per squad: a second squad's "!" is heard 1.5 s after the first; the
+ // first squad's own second call waits out its ten seconds.
+ {auto map=std::make_shared<AuthoredMapData>();map->name="Two squads";map->definition={{0,0},{12.5f,12.5f},0,Environment::Interior,false,8,.3f,42};
+  AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
+  TimedSequence timer;timer.timerState=stateId("squads_clock");timer.finishState=stateId("squads_done");timer.soundIntervalMs=0;map->timedSequences.push_back(timer);
+  for(int i=0;i<4;++i){Vec2 at{6.5f+i*2.f,8.5f};ActorTrack t;t.timerState=timer.timerState;t.keys={{0,at,0,0},{30000,at,0,0}};t.scale=1.6f;t.health=70;t.voice=1+i%2;
+   t.damageState=stateId("squads_damage_"+std::to_string(i));t.deadState=stateId("squads_dead_"+std::to_string(i));t.ai.mode=ActorAiMode::Guard;t.ai.patrol={{at,0,1000}};
+   if(i<3)t.ai.squad=stateId(i<2?"squads_a":"squads_b");map->actorTracks.push_back(t);}
+  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Squad voice validation";campaign->key=731907;campaign->maps.push_back(map);Game g(campaign);g.m_player.pos={12.5f,12.5f};
+  auto call=[&](size_t a){g.setState(stateId("npc_voice_busy"),0);g.setState(g.friendlyKey(a,"voice_lock"),0);return g.npcVoice(a,NpcVoiceCue::Alert);};
+  auto wait=[&](float seconds){for(int i=0;i<int(seconds*20);++i){g.m_sounds.clear();g.updateNpcVoices(.05f);}};
+  const bool first=call(0),floor=!call(2);wait(1.6f);const bool other=call(2);wait(1.6f);const bool own=!call(1),lone=call(3);wait(7.f);const bool later=call(1);
+  out<<"  squads: first "<<first<<" floor "<<floor<<" other "<<other<<" own "<<own<<" lone "<<lone<<" later "<<later<<'\n';
+  check(first&&floor&&other&&own&&lone&&later,"Contact is called per squad: another squad's (or a lone guard's) is heard 1.5 s later, the same squad's waits ten seconds");}
  return pass;
 }
 }

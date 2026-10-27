@@ -322,7 +322,10 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
   const int locker=mode==GuardState::Investigate&&!pauseInvestigation?guardAtLocker(level,actor,track,pose,ms,goal,goalZ,wantsMove,!finishingRetreat&&!suppressing):0;
   if(locker==2){mode=GuardState::Alert;goal=pose.position;goalZ=pose.z;wantsMove=false;}
   if(mode==GuardState::Investigate&&!pauseInvestigation&&locker==0){int travel=std::min(8000,get("guard_travel")+ms);put("guard_travel",travel);
-   if((!wantsMove&&!finishingRetreat&&!suppressing)||travel>=8000){mode=GuardState::Search;put("guard_search",config.searchMs);put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
+   // Arrived where he means to search: lockers at hand may be looked into first (Lockers.cpp).
+   const bool arrived=!wantsMove&&!finishingRetreat&&!suppressing;
+   if(arrived&&travel<8000&&lockerAtSearch(level,actor)){goal=pose.position;goalZ=pose.z;}
+   else if(arrived||travel>=8000){mode=GuardState::Search;put("guard_search",config.searchMs);put("guard_bearing",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",0);wantsMove=false;}}
  }
  if(mode==GuardState::Search){int remaining=std::max(0,get("guard_search")-ms);put("guard_search",remaining);
   // Confirmed foes get a wide sweep. Sound-only searches stay focused on the
