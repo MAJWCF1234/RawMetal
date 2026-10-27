@@ -781,6 +781,17 @@ void SoftwareRenderer::drawHud(const Game& game){
  static thread_local MinimapCache minimap;const auto&occupancy=minimap.cells(game.world());
  for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(occupancy[size_t(y*24+x)])fill(mx+x*2,my+y*2,2,2,bone,game.world().tile(x,y)=='#'?.32f:.14f);
  for(auto&e:game.enemies())if(e.alive&&lengthSq(e.pos-p.pos)<36)rect(mx+int(e.pos.x*2),my+int(e.pos.y*2),2,2,red);
+ // Once the CCTV patch is made, the Cleanup detail in this chunk: a dot by
+ // what each man makes of you (the yellow of the "?" over his head, so it
+ // does not read as your own marker), a faint wedge as far and wide as he sees.
+ for(const auto&c:game.radarContacts()){const auto tone=c.state==GuardState::Alert?red:c.state==GuardState::Patrol?paper:rgb(255,208,64);
+  const int dx=mx+int(c.position.x*2),dy=my+int(c.position.y*2);const float ox=float(dx)+1,oy=float(dy)+1,reach=c.range*2;
+  auto line=[&](float x0,float y0,float x1,float y1){int steps=std::max(1,int(std::ceil(std::max(std::fabs(x1-x0),std::fabs(y1-y0)))));
+   for(int i=1;i<=steps;++i){int x=int(std::floor(x0+(x1-x0)*i/steps)),y=int(std::floor(y0+(y1-y0)*i/steps));if(x>=mx-3&&y>=my-3&&x<=mx+50&&y<=my+50)blend(x,y,tone,.35f);}};
+  auto arc=[&](float from,float a){line(ox+std::sin(from)*reach,oy+std::cos(from)*reach,ox+std::sin(a)*reach,oy+std::cos(a)*reach);};
+  line(ox,oy,ox+std::sin(c.yaw-c.cone)*reach,oy+std::cos(c.yaw-c.cone)*reach);line(ox,oy,ox+std::sin(c.yaw+c.cone)*reach,oy+std::cos(c.yaw+c.cone)*reach);
+  for(int i=0;i<6;++i)arc(c.yaw-c.cone+c.cone*float(i)/3,c.yaw-c.cone+c.cone*float(i+1)/3);
+  rect(dx,dy,2,2,tone);}
  auto exit=game.world().exitPoint();rect(mx+int(exit.x*2),my+int(exit.y*2),2,2,game.enemiesRemaining()==0?rgb(225,183,70):muted);
  rect(mx+int(p.pos.x*2)-1,my+int(p.pos.y*2)-1,3,3,amber);
  rect(mx+int((p.pos.x+std::cos(p.angle)*2)*2),my+int((p.pos.y+std::sin(p.angle)*2)*2),1,1,paper);

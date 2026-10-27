@@ -314,6 +314,10 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  perDesk(m,5.f,9.4f,f,kPi,2);
  terminal(m,{6.6f,13.9f},"PERIMETER OPS / SHIFT LOG","02:51 DELTA-2 HAS THE YARD. OPS STAFF STOOD DOWN.","03:05 GATE RELEASE LOCKED TO THE GATEHOUSE / EAST.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=kPi;
+ // The camera patch, on a bench at the end of the CCTV bank: once made, the
+ // handset minimap shows the Cleanup detail for the rest of the descent.
+ terminal(m,{1.75f,12.5f},"PERIMETER OPS / CCTV PATCH","PATCHES THE YARD AND GATEHOUSE CAMERAS THROUGH TO YOUR HANDSET.","IT WILL SHOW THE DETAIL: WHERE THEY STAND, WHICH WAY THEY LOOK.",0,stateId("cctv_radar"));
+ m.terminals.back().yaw=kPi*.5f;
  perFix(m,model::file_cabinet_tall,1.3f,14.4f,f,.5f,.6f,1.3f,kPi*.5f,true);
  perFix(m,model::water_cooler,8.9f,8.f,f,.35f,.35f,1.1f,0,true);
  m.lights.push_back(perTroffer({4.f,9.2f},ceil));m.lights.push_back(perTroffer({6.f,12.6f},ceil,.8f));

@@ -138,6 +138,10 @@ struct FriendlyActor {
  std::shared_ptr<const AuthoredMapData> definition;
  const ActorTrack& track()const{return definition->actorTracks.at(homeActor);}
 };
+// A Cleanup man on the patched-through yard cameras: where he stands in the
+// current chunk, which way he looks, how far he sees and how wide (cone is the
+// half-angle in radians), and what he makes of the player.
+struct RadarContact {Vec2 position{};float yaw=0,range=0,cone=0;GuardState state=GuardState::Patrol;size_t actor=0;};
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct Clutter {
@@ -242,6 +246,11 @@ public:
     const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
     const std::vector<FriendlyActor>& npcActors()const{return m_friendlyActors;}
     NpcWeaponPose npcWeaponPose(size_t actor)const;
+    // Set by the CCTV patch in Perimeter Ops; from then on the minimap shows
+    // the hostile guards in the current chunk (empty before it).
+    static constexpr StateId CctvRadar=stateId("cctv_radar");
+    std::vector<RadarContact> radarContacts()const;
+    static bool testRadar();
     std::vector<TacticalGrenadePose> tacticalGrenades(bool dangerOnly=false)const;
     std::vector<EngineerDronePose> engineerDrones()const;
     AiTarget engineerDroneTarget(int slot,int observerLevel)const;

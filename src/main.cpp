@@ -1251,6 +1251,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
          {"combat",retro::Game::testCombat},{"weapon-motion",retro::Game::testWeaponMotion},{"audio-events",retro::Game::testAudioEvents},
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
+         {"radar",retro::Game::testRadar},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
          {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
          {"engine-regression",retro::Game::testEngineRegression},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
