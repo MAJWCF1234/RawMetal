@@ -524,7 +524,7 @@ bool Game::testLockers(){
   for(int i=0;i<60;++i)g.update({},1.f/60);check(g.m_lockerDoors.empty(),"Behind the player the leaves swing shut on their own");
  }
  // Caught: the yank lands on the committed pose, facing the guard, inside half a second.
- {auto g=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);hide(g);int frames=0;for(;frames<60*15&&g.hiddenLocker()>=0;++frames)g.update({},1.f/60);
+ {auto g=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);halfSeen(g);hide(g);int frames=0;for(;frames<60*15&&g.hiddenLocker()>=0;++frames)g.update({},1.f/60);
   const bool started=g.hiddenLocker()<0&&g.lockerViewLocked()&&g.m_lockerView.motion==LockerMotion::Caught;int held=0;for(;held<60&&g.lockerViewLocked();++held)g.update({},1.f/60);
   const bool open=g.lockerDoorOpen(0,0,0)>.8f&&g.lockerDoorOpen(0,0,1)>.8f;
   check(started&&held<=30&&length(g.view().pos-g.player().pos)<1e-5f&&std::fabs(wrapAngle(g.view().angle-g.player().angle))<1e-5f&&open,"Pulled out, the leaves are ripped back and the camera lands facing the guard, the controls back inside half a second");

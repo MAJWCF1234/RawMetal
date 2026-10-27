@@ -10,7 +10,7 @@ namespace {
 // The same reading of a locker as Stealth.cpp's: the doors are the model's local +x.
 Vec2 doorsOut(const Fixture& f){return {std::cos(f.yaw),-std::sin(f.yaw)};}
 Vec2 doorsFront(const Fixture& f,float ahead){return f.position+doorsOut(f)*(f.width*.5f+ahead);}
-bool hidingLocker(const Fixture& f){return (f.model==model::pwr_locker_bank||f.model==model::psx_locker)&&f.solid&&f.visible;}
+bool hidingLocker(const Fixture& f){return f.model==model::psx_locker&&f.solid&&f.visible;}
 // Where a guard stands to open the doors: square on, an arm's length out, so
 // the plain way out beside him stays clear for the player he hauls.
 constexpr float HaulStand=.6f;
@@ -257,7 +257,7 @@ bool Game::testLockerGuards(){
   auto campaign=std::make_shared<CustomCampaign>();campaign->name="Locker guard validation";campaign->key=883017;
   auto map=std::make_shared<AuthoredMapData>();map->name="Locker guard room";map->definition={{0,0},{3.2f,6.5f},0,Environment::Interior,false,8,.3f,44};
   AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
-  map->fixtures.push_back({model::pwr_locker_bank,{2.f,6.5f},0,.87f,.85f,2.42f,0,true});
+  map->fixtures.push_back({model::psx_locker,{2.115f,6.5f},0,.64f,.85f,2.42f,0,true});
   for(const auto&wall:walls)map->structures.push_back(wall);
   TimedSequence timer;timer.timerState=stateId("lg_clock");timer.finishState=stateId("lg_done");timer.soundIntervalMs=0;timer.loop=true;map->timedSequences.push_back(timer);
   int n=0;for(const auto&post:guards){ActorTrack track;track.timerState=timer.timerState;track.visual=ActorVisual::Cleanup;track.keys={{0,post.at,0,post.yaw},{30000,post.at,0,post.yaw}};track.scale=1.6f;track.health=90;
