@@ -237,10 +237,12 @@ bool Game::enterLocker(){
  // Both hands go to the leaves, so the gun goes away (as for a takedown) and
  // comes back up once the way out ends. The leaves wait for the hands: from a
  // long step back the body has to close in before they can take the edges.
- // (Put away mid-cycle, the last shot is over: nothing raises it again before the way out.)
- m_lockerRearm|=m_weaponEquipped;equipWeapon(WeaponId::Fists);m_handsLowered=false;m_shotAge=std::max(m_shotAge,equippedWeaponDef().cycle.autoHolsterAfter+.01f);
- const float back=dot(before.pos-lockerFront(f,0),out);float lead=.1f;
- auto closing=[&](float t){const float k=std::clamp(t/.4f,0.f,1.f);return back+(.26f-back)*k*k*(3-2*k);};
+ // (Put away mid-cycle, the last shot is over: nothing raises it again before
+ // the way out. A gun already lowered stays down: only one that was up comes back up.)
+ m_lockerRearm|=m_weaponEquipped&&m_holster<.5f;equipWeapon(WeaponId::Fists);m_handsLowered=false;m_shotAge=std::max(m_shotAge,equippedWeaponDef().cycle.autoHolsterAfter+.01f);
+ // The body closes to where it turns about (LockerDoors.cpp's turnAt: 0.26-0.45 m out).
+ const float back=dot(before.pos-lockerFront(f,0),out),turn=std::clamp(back,.26f,.45f);float lead=.1f;
+ auto closing=[&](float t){const float k=std::clamp(t/.4f,0.f,1.f);return back+(turn-back)*k*k*(3-2*k);};
  while(lead<.18f&&closing(lead)>.6f)lead+=.01f;
  animateLockerDoor(m_level,index,LockerMotion::Enter);for(auto&d:m_lockerDoors)if(d.level==m_level&&d.fixture==index)d.lead=lead;
  startLockerView(LockerMotion::Enter,before,index);return true;
@@ -308,9 +310,13 @@ bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
   if(ahead<1.f){const Vec2 to=at+o*(1.f-ahead);if(m_world.fits(to.x,to.y,pose.z,1.6f)&&!m_world.doorBlocks(to.x,to.y,pose.z,1.6f)&&m_world.rayClear(at,pose.z+1.f,to,pose.z+1.f,true)){pose.position=to+shift;m_friendlyActors[actor].pose.position=pose.position;}}}
  if(!lockerExit(f,exit,feet,true))return false;
  const Player before=view();forgetLocker();m_player.pos=exit;m_player.z=feet;m_velocity={};
- const Vec2 toward=pose.position-exit-shift;m_player.angle=std::atan2(toward.y,toward.x);pose.yaw=std::atan2(-toward.x,-toward.y);
- // Eye to eye with him: the view lands looking at his face, not his chest.
- const float face=pose.z+m_friendlyActors[actor].track().scale*.92f-(feet+Player::StandingEye);m_player.pitch=std::clamp(std::atan2(face,std::max(.4f,length(toward)))*140.f,-50.f,50.f);
+ const Vec2 toward=pose.position-exit-shift;pose.yaw=std::atan2(-toward.x,-toward.y);
+ // The view lands on him: his gasmask high in the middle of the frame and,
+ // under it, the muzzle he holds on the player. He shoulders the gun, so his
+ // head sits a hand's breadth to his right of his feet; the eye is put a few
+ // degrees under his chin so the weapon is in frame too.
+ const float scale=m_friendlyActors[actor].track().scale;const Vec2 his=normalized(toward),aim=toward+Vec2{his.y,-his.x}*(.075f*scale);m_player.angle=std::atan2(aim.y,aim.x);
+ const float face=pose.z+scale*.8f-(feet+Player::StandingEye);m_player.pitch=std::clamp(std::atan2(face,std::max(.4f,length(aim)))*140.f,-50.f,50.f);
  rememberGuardTarget(actor,resolveGuardTarget(actor,{ShotKind::Player,m_level,0}));const Vec2 global=exit+chunkOffset(m_level);auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(feet*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[actor].track().ai.recognitionMs);
  put("guard_hold_ms",1200);put("weapon_aim",0); // the gun comes up in the player's face; he holds fire a moment
@@ -541,7 +547,7 @@ bool Game::testLockers(){
   auto held=[&]{return g.m_lockerView.age<g.m_lockerView.length-.04f?push:InputState{};};
   for(;frames<120&&g.lockerViewLocked();++frames){g.update(held(),1.f/60);const Player v=g.view();jump=std::max(jump,length(v.pos-last.pos));turnStep=std::max(turnStep,std::fabs(wrapAngle(v.angle-last.angle)));last=v;
    still&=length(g.player().pos-at.pos)<1e-5f&&g.player().angle==at.angle&&g.player().pitch==at.pitch&&g.hiddenLocker()==0;}
-  const Player end=g.view();const Vec2 inside=lockerFront(g.m_world.fixtures()[0],-.14f);
+  const Player end=g.view();const Vec2 inside=lockerFront(g.m_world.fixtures()[0],-.2f);
   check(started&&length(before.pos-Vec2{3.2f,6.5f})<1e-4f&&frames>=50&&frames<=56&&length(end.pos-inside)<1e-4f&&std::fabs(wrapAngle(end.angle-at.angle))<1e-5f&&jump<.08f&&turnStep<.2f,"Hiding plays a 0.9 s way in that ends on the eye behind the shut leaves, without a pop");
   report<<"  way in "<<frames<<" frames, largest step "<<jump<<" m, largest turn "<<turnStep<<" rad\n";
   check(still,"Nothing the player presses moves, turns or lets them out while the way in plays");
@@ -571,15 +577,18 @@ bool Game::testLockers(){
   auto onLeaf=[&](Point3 p){float best=9;for(int leaf=0;leaf<2;++leaf){const float hand=leaf?-1.f:1.f,a=g.lockerDoorOpen(0,0,leaf)*kPi*(110.f/180.f);
     const Vec2 hinge=f.position+o*(f.width*.5f)+side*((leaf?.4412f:.432f)*sz*hand),toward=side*(-hand*std::cos(a))+o*std::sin(a),q{p.x,p.y};
     const float along=std::clamp(dot(q-hinge,toward),0.f,(leaf?.443f:.43f)*sz);best=std::min(best,length(q-(hinge+toward*along)));}return p.z>.3f&&p.z<2.2f?best:9.f;};
+  // (Pulling them to, the hands let go for the last twenty degrees: the
+  // leaves meet on their own swing with no hand in front of the inner face.)
   int moving=0,gripped=0;bool holstered=true,always=true;float worst=0;std::array<float,2> last{0,0};
   auto watch=[&]{std::array<Point3,2> grips;const bool hands=g.lockerHands(&grips);const std::array<float,2> now{g.lockerDoorOpen(0,0,0),g.lockerDoorOpen(0,0,1)};
-   if(g.lockerViewLocked()||g.hiddenLocker()>=0)holstered&=g.unarmed()&&!g.m_weaponEquipped;if(std::fabs(now[0]-last[0])+std::fabs(now[1]-last[1])>1e-4f&&g.lockerViewLocked()){++moving;always&=hands;
+   const bool lettingGo=g.m_lockerView.motion==LockerMotion::Enter&&g.m_lockerView.age>.82f;
+   if(g.lockerViewLocked()||g.hiddenLocker()>=0)holstered&=g.unarmed()&&!g.m_weaponEquipped;if(std::fabs(now[0]-last[0])+std::fabs(now[1]-last[1])>1e-4f&&g.lockerViewLocked()&&!lettingGo){++moving;always&=hands;
     if(hands){const float d=std::max(onLeaf(grips[0]),onLeaf(grips[1]));worst=std::max(worst,d);gripped+=d<.06f;}}last=now;};
   bool in=hide(g);watch();for(int i=0;i<70&&g.lockerViewLocked();++i){g.update({},1.f/60);watch();}
   const int inMoving=moving,inGripped=gripped;for(int i=0;i<30;++i)g.update({},1.f/60);bool shutAway=g.unarmed()&&!g.lockerHands();
   g.update(use,1.f/60);last={0,0};watch();for(int i=0;i<40&&g.lockerViewLocked();++i){g.update({},1.f/60);watch();}
   const float atEnd=g.holster();for(int i=0;i<40;++i)g.update({},1.f/60);
-  check(in&&inMoving>20&&inGripped==inMoving&&moving>inMoving+5&&gripped==moving&&always,"Every frame the leaves swing on the way in and out, both hands are on them (pulling open, pulling shut, shoving open)");
+  check(in&&inMoving>20&&inGripped==inMoving&&moving>inMoving+5&&gripped==moving&&always,"Every frame the leaves swing on the way in and out, both hands are on them (pulling open, pulling shut to the last twenty degrees, shoving open)");
   report<<"  hands: "<<gripped<<"/"<<moving<<" moving frames gripped, worst "<<worst<<" m off a leaf\n";
   report<<"  gun: away "<<holstered<<shutAway<<", back "<<g.m_weaponEquipped<<", holster at the end of the way out "<<atEnd<<", then "<<g.holster()<<'\n';
   check(holstered&&shutAway&&g.m_weaponEquipped&&atEnd>.9f&&g.holster()<.02f,"The gun is away for the way in and out and comes back up from below the view once the way out ends");
@@ -602,10 +611,38 @@ bool Game::testLockers(){
   else check(aimed&&hint=="E / STEP OUT   LMB / KNOCK"&&steppedOut&&!bang&&!g.npcIncapacitated(0),"A man alert on the player is not knocked down: the doors just open");
   report<<"  burst"<<(alert?" (alert)":"")<<": aimed "<<aimed<<" '"<<hint<<"' out "<<steppedOut<<" bang "<<bang<<" heard "<<heard<<" down "<<g.npcIncapacitated(0)<<" clip "<<g.npcActors()[0].pose.clip<<" phase "<<g.npcActors()[0].pose.phase<<", body "<<dot(middle-lockerFront(g.m_world.fixtures()[0],0),o)<<" m out from "<<startAhead<<'\n';
  }
- // Shut in, an area title card waits for the player to step out.
+ // Shut in, an area title card waits, hidden, until the player has had a
+ // second and a half of their own control back, then fades in from the
+ // start; hauled out, it is dropped. (It used to wait frozen and play the
+ // moment the doors opened, over the haul or the burst.)
  {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);hide(g);for(int i=0;i<70;++i)g.update({},1.f/60);g.m_areaTitle="TEST AREA";g.m_areaTitleTime=.4f;
-  for(int i=0;i<120;++i)g.update({},1.f/60);const bool held=g.m_areaTitleTime==.4f&&g.areaTitle()=="TEST AREA";g.update(use,1.f/60);for(int i=0;i<40;++i)g.update({},1.f/60);
-  check(held&&g.m_areaTitleTime>.9f,"An area title card waits while the player is shut in a locker and plays once they step out");
+  for(int i=0;i<120;++i)g.update({},1.f/60);const bool held=g.m_areaTitleTime==0&&g.areaTitleAlpha()==0&&g.areaTitle()=="TEST AREA";g.update(use,1.f/60);
+  int waited=0;for(;waited<300&&g.areaTitleAlpha()==0;++waited)g.update({},1.f/60);
+  auto caught=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);halfSeen(caught);hide(caught);caught.m_areaTitle="TEST AREA";for(int i=0;i<60*15&&caught.hiddenLocker()>=0;++i)caught.update({},1.f/60);caught.update({},1.f/60);
+  check(held&&waited>=118&&waited<=126&&g.areaTitle()=="TEST AREA"&&caught.hiddenLocker()<0&&caught.areaTitle().empty(),"An area title card waits hidden while the player is in a locker and for 1.5 s after the way out, then fades in; hauled out, it is dropped");
+  report<<"  title: back "<<waited<<" frames after E, after a haul '"<<caught.areaTitle()<<"'\n";
+ }
+ // The shut: the perforated inner face stands in for the leaves only once
+ // they have met (and keeps them through a knock's rattle), never with a hand
+ // in front of it; the HUD drains over the fifth of a second they take to
+ // meet and comes back over the first fifth of the way out; the head gives a
+ // little with a knock.
+ {auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);bool clean=true;int fading=0,faced=0,returning=0;float firstFace=-1;
+  auto look=[&]{const float shut=g.lockerShutView(),open=std::max(g.lockerDoorOpen(0,0,0),g.lockerDoorOpen(0,0,1));
+   if(shut>=1){++faced;clean&=open<=4.f/110.f&&!g.lockerHands();if(firstFace<0)firstFace=g.m_lockerView.age;}else if(shut>0)(g.hiddenLocker()>=0?fading:returning)++;};
+  hide(g);look();for(int i=0;i<70;++i){g.update({},1.f/60);look();}const int inFade=fading;
+  InputState knock;knock.fire=true;g.update(knock,1.f/60);float nudge=0;bool kept=true;
+  for(int i=0;i<20;++i){g.update({},1.f/60);look();kept&=g.lockerShutView()>=1;nudge=std::max(nudge,std::fabs(g.view().pitch-g.player().pitch));}
+  faced=0;g.update(use,1.f/60);look();for(int i=0;i<40;++i){g.update({},1.f/60);look();}
+  check(clean&&inFade>=9&&firstFace>=.9f-1e-3f&&kept&&nudge>.05f&&nudge<.5f&&faced==0&&returning>=9,"The inner face stands in only for shut leaves with no hand before it, the HUD fades out and back in, and a knock keeps the face and nudges the head");
+  report<<"  shut: clean "<<clean<<", fade in "<<inFade<<" frames, face from "<<firstFace<<" s, knock kept "<<kept<<" nudge "<<nudge<<", face frames out "<<faced<<", fade back "<<returning<<" frames\n";
+ }
+ // The gun comes back up after the way out only if it was up going in.
+ for(int armed:{0,1,2}){auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.m_player.ammo=std::max(g.m_player.ammo,8);
+  if(armed){g.m_weaponEquipped=true;g.m_holster=armed==1?0.f:1.f;}else g.equipWeapon(WeaponId::Fists);
+  hide(g);for(int i=0;i<70;++i)g.update({},1.f/60);g.update(use,1.f/60);for(int i=0;i<60;++i)g.update({},1.f/60);
+  if(armed==1)check(g.m_weaponEquipped&&!g.unarmed(),"A gun that was up going in comes back up after the way out");
+  else check(!g.m_weaponEquipped&&g.unarmed(),armed?"A gun that was already lowered going in stays away after the way out":"Empty hands going in stay empty after the way out");
  }
  // Caught: the yank lands on the committed pose, facing the guard, inside half a second.
  {auto g=scene({{{8.5f,6.5f},0,5000}},-kPi*.5f);halfSeen(g);hide(g);int frames=0;for(;frames<60*15&&g.hiddenLocker()>=0;++frames)g.update({},1.f/60);

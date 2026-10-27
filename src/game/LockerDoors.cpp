@@ -12,7 +12,17 @@ namespace retro {
 namespace {
 constexpr float Degree=kPi/180.f;
 constexpr float FullSwing=110*Degree,WideOpen=95*Degree; // lockerDoorOpen()==1, and the ordinary swing
-constexpr float LockerInset=.14f; // the eye behind the leaves' plane, shut in
+constexpr float LockerInset=.2f; // the eye behind the leaves' plane, shut in: far enough back that the vent band, not one hole, fills the view
+// The vent band punched through both leaves (the door textures' alpha, and
+// drawHud's inner face): three staggered rows across each leaf, their middle
+// row 57.8% of the way up it. Shut in, the eye sits level with it, so the
+// Gatehouse's short pair (1.94 m) has the player stooped to theirs.
+constexpr float VentRise=.578237f;
+float ventEye(const Fixture& f,float floor){const float sy=f.height/2.2969f;return floor+(.075f+VentRise*2.2f)*sy;}
+// Where the body turns about on the way in: where it stood, if that is close,
+// otherwise 0.45 m out, so the leaves and the room frame the turn rather than
+// the locker's back wall.
+float turnAt(float ahead){return std::clamp(ahead,.26f,.45f);}
 Vec2 out(const Fixture& f){return {std::cos(f.yaw),-std::sin(f.yaw)};}
 Vec2 front(const Fixture& f,float ahead){return f.position+out(f)*(f.width*.5f+ahead);}
 float ease(float t){t=std::clamp(t,0.f,1.f);return t*t*(3-2*t);}
@@ -58,8 +68,10 @@ float Game::lockerDoorOpen(int level,int fixture,int leaf)const{
 void Game::updateLockerDoors(float dt){
  const bool handsOn=lockerHands();
  if(dead())m_lockerView.active=false;
- // The way out over, the gun comes back up with its ordinary raise.
- if(m_lockerView.active&&(m_lockerView.age+=dt)>=m_lockerView.length){m_lockerView.active=false;if(m_lockerView.motion!=LockerMotion::Enter)lockerRearm();}
+ // The way out over, the gun comes back up with its ordinary raise. The age
+ // runs on past the end: a held area title waits on it (Game.cpp).
+ const bool viewing=m_lockerView.active;m_lockerView.age=std::min(m_lockerView.age+dt,60.f);
+ if(viewing&&m_lockerView.age>=m_lockerView.length){m_lockerView.active=false;if(m_lockerView.motion!=LockerMotion::Enter)lockerRearm();}
  for(auto&d:m_lockerDoors){const float before=d.age;d.age+=dt;const float t=std::min(d.age,d.length);
   for(int leaf=0;leaf<2;++leaf)d.angle[size_t(leaf)]=std::clamp(angleAt(d.motion,t,d.from[size_t(leaf)],d.lead),0.f,d.limit[size_t(leaf)]);
   // A stow's hands let go as the leaves meet: nothing pops back into them.
@@ -81,31 +93,40 @@ void Game::startLockerView(LockerMotion motion,const Player& from,int fixture,fl
 void Game::clearLockerMotion(bool doors){const bool out=m_lockerView.active&&m_lockerView.motion!=LockerMotion::Enter;m_lockerView.active=false;if(doors)m_lockerDoors.clear();if(out)lockerRearm();}
 bool Game::lockerViewLocked()const{return m_lockerView.active&&!dead();}
 int Game::lockerViewFixture()const{return m_lockerView.active?m_lockerView.fixture:hiddenLocker();}
+// 1: the perforated inner face (drawHud) stands in for the shut leaves; the
+// way there and back it is how far the HUD has drained, over the last fifth
+// of a second in and the first fifth out. The inner face only ever replaces
+// leaves that have met (a knock's rattle is the most they move under it), and
+// the real leaves are punched with the same holes, so there is nothing to pop.
 float Game::lockerShutView()const{
- if(m_vrInputActive)return 0;
- if(!m_lockerView.active)return hiddenLocker()>=0?1.f:0.f;
- const float t=m_lockerView.age;
- // The perforated inner face takes over the view as the leaves meet in front of the eye.
- if(m_lockerView.motion==LockerMotion::Enter)return ease((t-.7f)/.2f);
- if(m_lockerView.motion==LockerMotion::Caught)return 0; // the real leaves are what rips away
- return 1-ease(t/.07f);
+ if(m_vrInputActive)return 0;const float t=m_lockerView.age;
+ // (While a way in or out plays, the hands may be on the real leaves: they are what is drawn.)
+ float shut=!m_lockerView.active?(hiddenLocker()>=0?1.f:0.f):m_lockerView.motion==LockerMotion::Caught?0.f:std::min(.999f,m_lockerView.motion==LockerMotion::Enter?ease((t-.7f)/.2f):1-ease(t/.2f));
+ const int index=lockerViewFixture();
+ if(shut>=1&&index>=0&&std::max(lockerDoorOpen(m_level,index,0),lockerDoorOpen(m_level,index,1))>4*Degree/FullSwing)shut=.999f;
+ return shut;
 }
 Player Game::view()const{
  Player v=m_player;if(dead()||m_vrInputActive)return v;
  const auto&fixtures=m_world.fixtures();const int hidden=hiddenLocker();
- auto inside=[&](int index,Player p){p.pos=front(fixtures[size_t(index)],-LockerInset);return p;};
- const Player to=hidden>=0?inside(hidden,v):v; // the committed end of any path
+ auto inside=[&](int index,Player p){const auto&f=fixtures[size_t(index)];p.pos=front(f,-LockerInset);p.eye=ventEye(f,m_world.floorHeight(f.position.x,f.position.y)+f.base)-p.z;return p;};
+ Player to=hidden>=0?inside(hidden,v):v; // the committed end of any path
+ // A knock from inside: the head gives a little with the rattle of the leaves.
+ if(!m_lockerView.active&&hidden>=0)for(const auto&d:m_lockerDoors)if(d.level==m_level&&d.fixture==hidden&&d.motion==LockerMotion::Knock&&d.age<d.length){
+  const float u=d.age/d.length,shake=(1-u)*(1-u);to.pitch+=.3f*std::sin(u*kPi*5)*shake;to.angle=wrapAngle(to.angle+.0016f*std::sin(u*kPi*7+1)*shake);}
  if(!m_lockerView.active||m_lockerView.fixture<0||size_t(m_lockerView.fixture)>=fixtures.size())return to;
  const auto&f=fixtures[size_t(m_lockerView.fixture)];const auto&a=m_lockerView.from;const float t=m_lockerView.age;v=to;
  auto mix=[](float x,float y,float k){return x+(y-x)*k;};
  auto turn=[](float from,float target,float k){return wrapAngle(from+wrapAngle(target-from)*k);};
  switch(m_lockerView.motion){
   case LockerMotion::Enter:{
-   // A step to the open doors, the about-turn on the spot, then backing in as
-   // the leaves come to; the two moves overlap so the body never stops dead.
-   const Vec2 mouth=front(f,.26f),toMouth=a.pos+(mouth-a.pos)*ease(t/.4f);
+   // A step to the open doors, the about-turn short of their mouth, then
+   // backing in as the leaves come to; the moves overlap so the body never
+   // stops dead, and the turn is half done before the locker's inside could
+   // fill the view.
+   const Vec2 mouth=front(f,turnAt(dot(a.pos-front(f,0),out(f)))),toMouth=a.pos+(mouth-a.pos)*ease(t/.4f);
    v.pos=toMouth+(to.pos-toMouth)*ease((t-.35f)/.45f);
-   v.angle=turn(a.angle,to.angle,ease((t-.2f)/.45f));v.pitch=mix(a.pitch,to.pitch,ease(t/.5f));
+   v.angle=turn(a.angle,to.angle,ease((t-.14f)/.45f));v.pitch=mix(a.pitch,to.pitch,ease(t/.5f));
    v.z=mix(a.z,to.z,ease(t/.3f));v.eye=mix(a.eye,to.eye,ease(t/.3f));break;}
   case LockerMotion::Exit:{
    // The leaves fly open first; the body follows them out. Burst into a man
@@ -159,14 +180,16 @@ bool Game::lockerHands(std::array<Point3,2>* grips)const{
  std::array<Point3,2> at{rest(0),rest(1)};
  if(m_lockerView.active&&(m_lockerView.motion==LockerMotion::Enter||m_lockerView.motion==LockerMotion::Exit)&&m_lockerView.fixture>=0&&size_t(m_lockerView.fixture)<fixtures.size()){
   const auto&f=fixtures[size_t(m_lockerView.fixture)];const LockerDoor*d=door(m_lockerView.fixture);if(!d)return false;
-  const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base,t=m_lockerView.age;
+  const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base,t=m_lockerView.age,tall=f.height/2.42f; // grips scale with the locker, as the eye in it does
   for(int hand=0;hand<2;++hand){
    // Facing in, the right hand is on the leaf hung on the right (leaf 1); facing out, on leaf 0.
    if(m_lockerView.motion==LockerMotion::Enter){const float lead=std::max(d->lead,.05f);
-    const float take=ease(t/lead)*(1-ease((t-lead-.25f)/.12f)),pull=ease((t-.55f)/.1f);
+    // They let go for the last twenty degrees and drop away: the leaves meet
+    // on their own swing, with no hand left in front of the perforated face.
+    const float take=ease(t/lead)*(1-ease((t-lead-.25f)/.12f)),pull=ease((t-.55f)/.1f)*(1-ease((t-.82f)/.07f));
     const int outside=hand?0:1,inside=hand?1:0;
-    at[size_t(hand)]=blend(blend(at[size_t(hand)],leafGrip(f,floor,outside,d->angle[size_t(outside)],.9f,1.12f,-.03f),take),leafGrip(f,floor,inside,d->angle[size_t(inside)],.85f,1.2f,.04f),pull);
-   }else{const int leaf=hand?1:0;at[size_t(hand)]=blend(leafGrip(f,floor,leaf,d->angle[size_t(leaf)],.75f,1.3f,.05f),at[size_t(hand)],ease((t-.16f)/.14f));}
+    at[size_t(hand)]=blend(blend(at[size_t(hand)],leafGrip(f,floor,outside,d->angle[size_t(outside)],.9f,1.12f*tall,-.03f),take),leafGrip(f,floor,inside,d->angle[size_t(inside)],.85f,1.2f*tall,.04f),pull);
+   }else{const int leaf=hand?1:0;at[size_t(hand)]=blend(leafGrip(f,floor,leaf,d->angle[size_t(leaf)],.75f,1.3f*tall,.05f),at[size_t(hand)],ease((t-.16f)/.14f));}
   }
   if(grips)*grips=at;return true;
  }
@@ -176,10 +199,16 @@ bool Game::lockerHands(std::array<Point3,2>* grips)const{
   if(ahead<0||ahead>1.4f||std::fabs(dot(m_player.pos-mouth,Vec2{-o.y,o.x}))>.8f||dot(forward,o)>-.3f)continue;
   int body=-1;for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(state(friendlyKey(actor,"guard_stowed"))==d.fixture+1&&state(friendlyKey(actor,"guard_stowed_level"))==m_level+1)body=int(actor);
   const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base,t=d.age;
-  const float shove=ease((t-.4f)/.15f)*(1-ease((t-.95f)/.1f)),shut=ease((t-.98f)/.08f)*(1-ease((t-d.length+.04f)/.04f));
+  // By the collar from the moment he reaches the mouth: the grips ride his
+  // collar as it comes up off the floor (his fall clip run back: phase 1
+  // lying, 0 standing), so the hands lift him in rather than meet him there.
+  // The push to starts low on the leaves, the forearms coming up from below.
+  const float shove=ease((t-.5f)/.1f)*(1-ease((t-1.f)/.08f)),shut=ease((t-.98f)/.08f)*(1-ease((t-d.length+.04f)/.04f));
   for(int hand=0;hand<2;++hand){Point3 chest=at[size_t(hand)];
-   if(body>=0){const auto&pose=m_friendlyActors[size_t(body)].pose;const Vec2 p=pose.position+right*(hand?-.16f:.16f);chest={p.x,p.y,pose.z+.42f};}
-   const int leaf=hand?0:1;at[size_t(hand)]=blend(blend(at[size_t(hand)],chest,shove),leafGrip(f,floor,leaf,d.angle[size_t(leaf)],.8f,1.15f,-.04f),shut);}
+   if(body>=0){const auto&npc=m_friendlyActors[size_t(body)];const auto&pose=npc.pose;const float rise=std::clamp(pose.phase,0.f,1.f);
+    const Vec2 facing{std::sin(pose.yaw),std::cos(pose.yaw)},p=pose.position+facing*(.1f-.25f*rise)+right*(hand?-.13f:.13f);chest={p.x,p.y,pose.z+npc.track().scale*(.84f-.6f*rise)};}
+   const int leaf=hand?0:1;const float up=.9f+.22f*ease((t-1.06f)/.26f); // low on the leaves: the forearms come up into the foot of the view, not in from its sides
+   at[size_t(hand)]=blend(blend(at[size_t(hand)],chest,shove),leafGrip(f,floor,leaf,d.angle[size_t(leaf)],.88f,up,-.04f),shut);}
   if(grips)*grips=at;return true;
  }
  return false;
