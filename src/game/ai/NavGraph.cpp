@@ -3,29 +3,55 @@
 #include "Navigation.h"
 #include "WalkQueryCache.h"
 #include <algorithm>
+#include <limits>
 namespace retro {
-const ai::NodeGraph& Game::navGraph(int level,float height){
- ensureChunk(level);
+bool Game::advanceNavGraph(int level,float height,size_t pairBudget){
+ const auto&world=friendlyWorld(level);
  auto&ready=level==m_level?m_levelNavReady:m_chunks[size_t(level)].navReady;
  auto&graph=level==m_level?m_levelNav:m_chunks[size_t(level)].nav;
- if(!ready){
-  const auto&world=friendlyWorld(level);
-  std::vector<ai::AuthoredHint> authored;
-  if(m_worldId==WorldId::Custom&&m_customCampaign&&level>=0&&size_t(level)<m_customCampaign->maps.size()&&m_customCampaign->maps[size_t(level)]){
-   for(const auto&hint:m_customCampaign->maps[size_t(level)]->navHints){
-    if(hint.hint<0||hint.hint>1)continue;
+ std::vector<uint32_t> snapshot;ai::collisionSnapshot(world,snapshot);
+ bool matches=graph.snapshot==snapshot&&graph.height==height;
+ std::vector<ai::AuthoredHint> authored;
+ auto hints=[&](){
+  if(m_worldId==WorldId::Custom&&m_customCampaign&&level>=0&&size_t(level)<m_customCampaign->maps.size()&&m_customCampaign->maps[size_t(level)])
+   for(const auto&hint:m_customCampaign->maps[size_t(level)]->navHints)if(hint.hint>=0&&hint.hint<=1)
     authored.push_back({hint.position,hint.z,hint.hint?ai::NodeHint::Cover:ai::NodeHint::Path});
-   }
+ };
+ auto walk=[&](Vec2 a,float z,Vec2 b,float h,float*out){return aiWalkSegment(world,a,z,b,h,out);};
+ if(matches&&ready&&graph.complete){
+  perf::count(perf::NavGraphReused);
+  if(ai::streamingVerify()){
+   hints();std::vector<char> everyDoor(world.doors().size(),1);World::DoorPlan open(world,everyDoor);
+   auto reference=ai::buildNodeGraph(world,height,walk,authored);
+   // This package uses the shared streaming mismatch counter for graph identity too.
+   if(!ai::sameNodeGraph(graph,reference))perf::count(perf::StreamingMismatches);
   }
-  // Link through every door as if open: a door shut when the graph is built
-  // may open later, and each query certifies its route against live doors.
-  std::vector<char> everyDoor(world.doors().size(),1);World::DoorPlan open(world,everyDoor);
-  graph=ai::buildNodeGraph(world,height,[&](Vec2 from,float fromFeet,Vec2 to,float hull,float* endFeet){
-   return aiWalkSegment(world,from,fromFeet,to,hull,endFeet);
-  },authored);
-  ready=true;
+  return true;
  }
- return graph;
+ // An overlay belongs to one slice; it never survives this call.
+ std::vector<char> everyDoor(world.doors().size(),1);World::DoorPlan open(world,everyDoor);
+ if(!matches||!graph.building){hints();ai::beginNodeGraph(graph,world,height,authored);ready=false;}
+ ready=ai::advanceNodeGraph(graph,walk,pairBudget);
+ if(ready&&ai::streamingVerify()){
+  if(authored.empty())hints();auto reference=ai::buildNodeGraph(world,height,walk,authored);
+  if(!ai::sameNodeGraph(graph,reference))perf::count(perf::StreamingMismatches);
+ }
+ return ready;
+}
+const ai::NodeGraph& Game::navGraph(int level,float height){
+ ensureChunk(level);advanceNavGraph(level,height,std::numeric_limits<size_t>::max());
+ return level==m_level?m_levelNav:m_chunks[size_t(level)].nav;
+}
+void Game::prebuildNavGraph(){
+ // Fixed work, independent of wall-clock timing and actor decisions.
+ constexpr size_t pairBudget=512;
+ for(int level=0;level<chunkCount();++level){
+  if(level!=m_level&&!m_chunks[size_t(level)].resident)continue;
+  if(level==m_level?m_levelNavReady:m_chunks[size_t(level)].navReady)continue;
+  for(const auto&npc:m_friendlyActors)if(npc.level==level&&npc.track().ai.mode==ActorAiMode::Guard&&autonomousActor(npc.track())){
+   perf::count(perf::NavGraphSlices);advanceNavGraph(level,npc.track().scale,pairBudget);return;
+  }
+ }
 }
 bool Game::findGuardGraphCover(int level,size_t actor,const ActorPose&pose,Point3 threat,Vec2&goal,float&goalZ){
  if(actor>=m_friendlyActors.size())return false;

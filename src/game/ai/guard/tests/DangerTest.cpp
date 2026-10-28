@@ -224,6 +224,15 @@ bool Game::testGuardDanger(){
   check(serviced==511,"All nine threatened guards receive a bounded escape search without starvation");
   check(pairs&&distinct,"Nine members of a named squad reserve separate active escape destinations rather than converging on the same close point");
  }
+ {Game g;bool equal=true;
+  // Exercise every level, including valid route destinations and inactive sentinels.
+  for(const char* field:{"engaged","follow","hold","guard_danger_ms","guard_return","schedule","guard_memory","guard_mode","guard_route_next","route_next"})for(int value:{0,1,2,59,180}){
+   for(size_t actor=0;actor<g.m_friendlyActors.size();++actor)g.setState(g.friendlyKey(actor,field),value);
+   std::vector<char> needed;g.friendlyChunksNeeded(needed);
+   for(int level=0;level<g.chunkCount();++level)equal&=bool(needed[size_t(level)])==g.friendlyChunkNeeded(level);
+  }
+  check(equal,"One-pass residency equals the per-level reference across danger, return and route states");
+ }
  report<<"checks="<<checks<<" result="<<(passed?"PASS":"FAIL")<<'\n';return passed;
 }
 }

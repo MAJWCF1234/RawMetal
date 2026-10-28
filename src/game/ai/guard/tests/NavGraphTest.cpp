@@ -4,6 +4,7 @@
 #include "../../friendly/Mind.h"
 #include "../../../../world/CustomCampaign.h"
 #include <fstream>
+#include "../../../../core/FrameProfile.h"
 namespace retro {
 bool Game::testNavGraph(){
  std::ofstream report("nav-graph-test.txt");bool passed=true;int checks=0;
@@ -37,6 +38,27 @@ bool Game::testNavGraph(){
   if(wall)map->structures.push_back({8,4,8.25f,9,0,1.4f});
   campaign->maps.push_back(map);return Game(campaign);
  };
+ // Slice boundaries must not alter pair order, feet, hints or link order.
+ for(size_t budget:{size_t(1),size_t(17),size_t(256)}){
+  auto g=scene(true);auto reference=g.navGraph(0,1.6f);
+  g.m_levelNav={};g.m_levelNavReady=false;int slices=0;
+  while(!g.advanceNavGraph(0,1.6f,budget))++slices;
+  check(slices>0&&ai::sameNodeGraph(reference,g.m_levelNav),"Resumable pair budgets produce the exact synchronous graph");
+  check(!g.world().doorPlanActive(),"Each graph slice releases its door overlay");
+ }
+ {auto seed=scene(true);auto campaign=std::make_shared<CustomCampaign>(*seed.m_customCampaign);
+  auto first=std::make_shared<AuthoredMapData>(*campaign->maps[0]);first->definition.residencyGroup=0;
+  auto second=std::make_shared<AuthoredMapData>(*first);second->definition.origin={24,0};second->definition.residencyGroup=1;second->actorTracks.clear();
+  campaign->maps={first,second};Game g(campaign);auto reference=g.navGraph(0,1.6f);
+  // Cross the seam, move beyond the residency safety bubble, then return.
+  g.m_player.pos={24.1f,12};g.crossChunkBoundary();g.m_player.pos={12,12};g.updateStreaming(0);
+  check(g.level()==1&&!g.chunkResident(0),"Leaving a guard chunk releases its geometry residency");
+  g.m_player.pos={-.1f,12};g.crossChunkBoundary();auto before=perf::counts[perf::NavGraphReused];auto built=perf::counts[perf::NavGraphBuilt];
+  const auto&retained=g.navGraph(0,1.6f);
+  check(g.level()==0&&ai::sameNodeGraph(reference,retained)&&perf::counts[perf::NavGraphReused]>before&&perf::counts[perf::NavGraphBuilt]==built,
+   "Reentering an unchanged guard chunk reuses its identical retained graph without rebuilding");
+  g.navGraph(0,.8f);check(g.m_levelNav.height==.8f,"A different caller hull synchronously rebuilds the graph");
+ }
  {auto open=scene(false),blocked=scene(true);float end=0;
   ai::WalkQueryCache::Scope outer(open.m_world,open.m_world.m_mapData);
   bool clear=open.friendlyWalkSegment(0,{6.5f,6.5f},0,{10.5f,6.5f},1.6f,&end);

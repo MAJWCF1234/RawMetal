@@ -1,5 +1,8 @@
 #include "../../core/FrameProfile.h"
 #include "Nodes.h"
+#include "WalkQueryCache.h"
+#include <cstdlib>
+#include <limits>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -22,9 +25,10 @@ int addNode(NodeGraph& graph,Vec2 p,float feet,NodeHint hint){
  return int(graph.nodes.size())-1;
 }
 }
-NodeGraph buildNodeGraph(const World& world,float height,const WalkProbe& walk,std::span<const AuthoredHint> authored){
+bool streamingVerify(){static const bool enabled=[](){const char* value=std::getenv("RAWMETAL_STREAMING_VERIFY");return value&&std::string_view(value)=="1";}();return enabled;}
+void beginNodeGraph(NodeGraph& graph,const World& world,float height,std::span<const AuthoredHint> authored){
  perf::Scope frameProfile(perf::GraphBuild);
- NodeGraph graph;
+ graph={};graph.height=height;graph.building=true;collisionSnapshot(world,graph.snapshot);
  for(const auto&hint:authored){
   float feet=hint.feet;Vec2 p=hint.position;
   if(!nearFloor(world,p,feet,height)&&!world.fits(p.x,p.y,hint.feet,height))continue;
@@ -49,20 +53,26 @@ NodeGraph buildNodeGraph(const World& world,float height,const WalkProbe& walk,s
   Vec2 p{x+.5f,y+.5f};float feet=0;if(!nearFloor(world,p,feet,height))continue;
   addNode(graph,p,feet,NodeHint::Path);
  }
- if(graph.nodes.empty())return graph;
- std::vector<std::vector<NavLink>> buckets(graph.nodes.size());
- for(int i=0;i<int(graph.nodes.size());++i){
-  const auto&a=graph.nodes[size_t(i)];
-  for(int j=i+1;j<int(graph.nodes.size());++j){
+ graph.buckets.resize(graph.nodes.size());
+}
+bool advanceNodeGraph(NodeGraph& graph,const WalkProbe& walk,size_t pairBudget){
+ perf::Scope frameProfile(perf::GraphBuild);
+ auto& buckets=graph.buckets;float height=graph.height;
+ while(graph.pairI<graph.nodes.size()){
+  size_t i=graph.pairI;const auto&a=graph.nodes[i];
+  while(graph.pairJ<graph.nodes.size()){
+   if(!pairBudget)return false;
+   --pairBudget;size_t j=graph.pairJ++;
    const auto&b=graph.nodes[size_t(j)];
    float distance=length(a.position-b.position);
    if(distance<.35f||distance>3.1f||std::fabs(a.feet-b.feet)>.45f)continue;
    float ab=a.feet,ba=b.feet;
    if(!walk(a.position,a.feet,b.position,height,&ab)||std::fabs(ab-b.feet)>.35f)continue;
    if(!walk(b.position,b.feet,a.position,height,&ba)||std::fabs(ba-a.feet)>.35f)continue;
-   buckets[size_t(i)].push_back({j,distance});
-   buckets[size_t(j)].push_back({i,distance});
+   buckets[size_t(i)].push_back({int(j),distance});
+   buckets[size_t(j)].push_back({int(i),distance});
   }
+  ++graph.pairI;graph.pairJ=graph.pairI+1;
  }
  for(int i=0;i<int(graph.nodes.size());++i){
   auto&n=graph.nodes[size_t(i)];
@@ -70,7 +80,21 @@ NodeGraph buildNodeGraph(const World& world,float height,const WalkProbe& walk,s
   n.linkCount=int(buckets[size_t(i)].size());
   for(const auto&link:buckets[size_t(i)])graph.links.push_back(link);
  }
- return graph;
+ graph.buckets.clear();graph.building=false;graph.complete=true;
+ perf::count(perf::NavGraphBuilt);return true;
+}
+NodeGraph buildNodeGraph(const World& world,float height,const WalkProbe& walk,std::span<const AuthoredHint> authored){
+ NodeGraph graph;beginNodeGraph(graph,world,height,authored);
+ advanceNodeGraph(graph,walk,std::numeric_limits<size_t>::max());return graph;
+}
+bool sameNodeGraph(const NodeGraph&a,const NodeGraph&b){
+ if(a.nodes.size()!=b.nodes.size()||a.links.size()!=b.links.size())return false;
+ auto bits=[](float x){return std::bit_cast<uint32_t>(x);};
+ for(size_t i=0;i<a.nodes.size();++i){const auto&x=a.nodes[i];const auto&y=b.nodes[i];
+  if(bits(x.position.x)!=bits(y.position.x)||bits(x.position.y)!=bits(y.position.y)||bits(x.feet)!=bits(y.feet)||x.hint!=y.hint||x.firstLink!=y.firstLink||x.linkCount!=y.linkCount)return false;
+ }
+ for(size_t i=0;i<a.links.size();++i)if(a.links[i].dest!=b.links[i].dest||bits(a.links[i].cost)!=bits(b.links[i].cost))return false;
+ return true;
 }
 bool findCoverNode(const NodeGraph& graph,Vec2 from,float fromFeet,Vec2 threat,float height,
  const WalkProbe& walk,const CoverProbe& covered,const ReservedProbe& reserved,Vec2& goal,float& goalFeet,float maxRange,float minDist){

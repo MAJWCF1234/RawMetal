@@ -1,10 +1,12 @@
 #include "Game.h"
+#include "ai/WalkQueryCache.h"
+#include "../core/FrameProfile.h"
 #include <algorithm>
 #include <fstream>
 namespace retro {
 void Game::ensureChunk(int level){
  auto&chunk=m_chunks[level];if(chunk.resident)return;auto doors=chunk.world.doors();bool control=chunk.world.controlReleased();
- auto saved=chunk.world;chunk.world=makeWorld(level);chunk.world.restoreDynamic(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();restoreCrates(chunk.world,level);chunk.resident=true;chunk.navReady=false;
+ auto saved=chunk.world;chunk.world=makeWorld(level);chunk.world.restoreDynamic(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();restoreCrates(chunk.world,level);chunk.resident=true;
 }
 int Game::boundaryPartner(int level,const Door& door)const{
  // An entry door on the north edge pairs with a transfer door on the
@@ -36,6 +38,9 @@ void Game::useDoor(int index){
  sound(Sound::Door,.65f);
 }
 void Game::updateStreaming(float dt){
+ std::vector<char> friendlyNeeded;friendlyChunksNeeded(friendlyNeeded);
+ if(ai::streamingVerify())for(int level=0;level<chunkCount();++level)
+  if(bool(friendlyNeeded[size_t(level)])!=friendlyChunkNeeded(level))perf::count(perf::StreamingMismatches);
  if(m_world.definition().residencyGroup>=0){
   for(int index=0;index<int(m_world.doors().size());++index){const auto& door=m_world.doors()[index];
    if(!door.opening&&door.open>0&&m_player.pos.x>door.left-.25f&&m_player.pos.x<door.right+.25f&&std::fabs(m_player.pos.y-door.y)<.55f)m_world.openDoor(index);
@@ -45,7 +50,7 @@ void Game::updateStreaming(float dt){
   auto visibleGroups=m_world.visibleResidencyGroups();
   for(int level=0;level<chunkCount();++level)if(level!=m_level){auto other=chunkOffset(level);
    int group=m_chunks[level].world.definition().residencyGroup;
-   bool needed=group==m_world.definition().residencyGroup||friendlyChunkNeeded(level);
+   bool needed=group==m_world.definition().residencyGroup||friendlyNeeded[size_t(level)];
    if(group>=0)needed|=std::find(visibleGroups.begin(),visibleGroups.end(),group)!=visibleGroups.end();
    float dx=std::max({other.x-global.x,0.f,global.x-other.x-24}),dy=std::max({other.y-global.y,0.f,global.y-other.y-24});
    if(dx*dx+dy*dy<36)needed=true;
@@ -66,14 +71,14 @@ void Game::updateStreaming(float dt){
    }
    if(needed)ensureChunk(level);else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
   }
-  (void)dt;return;
+  prebuildNavGraph();(void)dt;return;
  }
  if(m_worldId==WorldId::Custom){
   // Runtime campaign packs are capped at 32 tiny 24 m chunks. Keep their
   // authored geometry resident so arbitrary 2D layouts and non-sequential
   // chunk numbering never depend on the built-in campaign's +/-1 streamer.
   for(int level=0;level<chunkCount();++level)if(level!=m_level)ensureChunk(level);
-  (void)dt;return;
+  prebuildNavGraph();(void)dt;return;
  }
  if(m_worldId==WorldId::Ashfall){
   // Directional outdoor streaming. Keep a short safety bubble around the player
@@ -91,17 +96,17 @@ void Game::updateStreaming(float dt){
    float along=dot(to,forward),lateral=std::fabs(to.x*forward.y-to.y*forward.x);
    float cone=17.f+std::max(0.f,along)*.42f;
    bool inFront=along>-5.f&&along<70.f&&lateral<cone;
-   bool keepResident=inFront||seamBuffer||friendlyChunkNeeded(level);
+   bool keepResident=inFront||seamBuffer||friendlyNeeded[size_t(level)];
    if(m_chunks[level].resident){
     // Hysteresis prevents rapid load/unload thrashing when the player looks
     // sideways across a cone edge.
     float keepCone=cone+8.f;
-    keepResident=friendlyChunkNeeded(level)||seamBuffer||(along>-14.f&&along<78.f&&lateral<keepCone);
+    keepResident=friendlyNeeded[size_t(level)]||seamBuffer||(along>-14.f&&along<78.f&&lateral<keepCone);
    }
    if(keepResident)ensureChunk(level);
    else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
   }
-  (void)dt;return;
+  prebuildNavGraph();(void)dt;return;
  }
  // Doors form a short transfer vestibule. Keep both geometries until the
  // opaque leaves fully close, then release static geometry, retaining state.
@@ -110,7 +115,7 @@ void Game::updateStreaming(float dt){
   if(door.transfer&&m_level+1<chunkCount()){auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,door.opening);}
   if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
  }
- for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=friendlyChunkNeeded(level);
+ for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=friendlyNeeded[size_t(level)];
   auto approaching=[&](const Door& door){
    float dx=std::max({door.left-m_player.pos.x,0.f,m_player.pos.x-door.right});
    float dy=std::fabs(m_player.pos.y-door.y);
@@ -128,7 +133,7 @@ void Game::updateStreaming(float dt){
   if(needed)ensureChunk(level);
   else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
  }
- (void)dt;
+ prebuildNavGraph();(void)dt;
 }
 bool Game::testStreaming(){
  auto fail=[](int stage){std::ofstream("streaming-debug.txt")<<"Failed at stage "<<stage<<'\n';return false;};

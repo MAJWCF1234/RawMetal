@@ -24,6 +24,12 @@ struct NavLink {
 struct NodeGraph {
  std::vector<NavNode> nodes;
  std::vector<NavLink> links;
+ // Exact collision key and unfinished pair buckets move with chunk ownership.
+ std::vector<uint32_t> snapshot;
+ float height=0;
+ bool building=false,complete=false;
+ size_t pairI=0,pairJ=1;
+ std::vector<std::vector<NavLink>> buckets;
  bool empty()const{return nodes.empty();}
 };
 using WalkProbe=std::function<bool(Vec2 from,float fromFeet,Vec2 to,float height,float* endFeet)>;
@@ -34,6 +40,12 @@ struct AuthoredHint {Vec2 position{};float feet=0;NodeHint hint=NodeHint::Path;}
 // connectivity. Height is the actor hull used for fit and stroll tests.
 // Authored hints are merged first so designer cover/path markers survive.
 NodeGraph buildNodeGraph(const World& world,float height,const WalkProbe& walk,std::span<const AuthoredHint> authored={});
+// Seed nodes once, then consume pairs in the original i/j order. Only a
+// completed graph may be queried. The caller owns a per-slice DoorPlan.
+void beginNodeGraph(NodeGraph&,const World&,float,std::span<const AuthoredHint> authored={});
+bool advanceNodeGraph(NodeGraph&,const WalkProbe&,size_t pairBudget);
+bool sameNodeGraph(const NodeGraph&,const NodeGraph&);
+bool streamingVerify();
 // Prefer Cover hints that block the threat probe, stay walkable from the actor
 // and do not move closer to the remembered threat than the current pose.
 // minDist rejects node cover closer than that range (FIND_FAR_NODE_COVER).

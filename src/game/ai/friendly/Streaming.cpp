@@ -70,6 +70,24 @@ bool Game::friendlyChunkNeeded(int level)const{
   if(follow&&next>=0&&(npc.level==level||next==level))return true;
  }return false;
 }
+void Game::friendlyChunksNeeded(std::vector<char>& needed)const{
+ perf::Scope neededProfile(perf::ChunkNeeded);
+ needed.assign(size_t(chunkCount()),0);
+ for(int level=0;level<chunkCount();++level)needed[size_t(level)]=engineerDroneChunkNeeded(level);
+ auto mark=[&](int level){if(level>=0&&level<chunkCount())needed[size_t(level)]=1;};
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();
+  if(npcIncapacitated(i)||!autonomousActor(track)||npc.pose.clip==4)continue;
+  if(track.ai.mode==ActorAiMode::Guard){
+   auto schedule=GuardSchedule(state(friendlyKey(i,"schedule")));bool scheduled=schedule!=GuardSchedule::None&&schedule!=GuardSchedule::Patrol;
+   bool active=scheduled||state(friendlyKey(i,"guard_danger_ms"))>0||(guardState(i)!=GuardState::Patrol&&state(friendlyKey(i,"guard_memory")))||npc.level!=npc.homeLevel||state(friendlyKey(i,"guard_return"));
+   int next=state(friendlyKey(i,"guard_route_next"))-1;if(active){mark(npc.level);mark(next);}continue;
+  }
+  if(!state(friendlyKey(i,"engaged")))continue;
+  bool follow=track.ai.mode==ActorAiMode::Escort?!state(friendlyKey(i,"hold")):state(friendlyKey(i,"follow"))!=0;
+  int next=state(friendlyKey(i,"route_next"))-1;
+  if(follow&&next>=0){mark(npc.level);mark(next);}
+ }
+}
 int Game::friendlyChunkAt(Vec2 global,int preferred)const{
  auto inside=[&](int level){auto origin=chunkOffset(level);return global.x>=origin.x&&global.x<origin.x+24&&global.y>=origin.y&&global.y<origin.y+24;};
  if(inside(preferred))return preferred;if(inside(m_level))return m_level;

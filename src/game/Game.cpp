@@ -66,7 +66,7 @@ bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeH
  return true;
 }
 void Game::storeChunk(){
- auto nav=std::move(m_chunks[m_level].nav);bool ready=m_chunks[m_level].navReady;
+ auto nav=std::move(m_levelNav);bool ready=m_levelNavReady;
  m_chunks[m_level]={m_world,std::move(nav),ready,m_enemies,m_pickups,m_kills,true,m_clutter};
 }
 Game Game::chunkView(int level)const{

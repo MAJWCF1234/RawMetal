@@ -259,6 +259,7 @@ public:
     bool scriptedHandoffActive(size_t actor)const;
     bool scriptedHandoffActive(int level,size_t homeActor)const;
     bool friendlyChunkNeeded(int level)const;
+    void friendlyChunksNeeded(std::vector<char>& needed)const;
     const std::vector<Pickup>& pickups() const { return m_pickups; }
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
@@ -837,6 +838,8 @@ private:
     ShotHit guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& weapon)const;
     void guardReposition(int level,size_t actor,const ActorTrack& track,const ActorPose& pose,Point3 target,int ms,Vec2& goal,float& goalZ,bool& wantsMove);
     const ai::NodeGraph& navGraph(int level,float height);
+    bool advanceNavGraph(int level,float height,size_t pairBudget);
+    void prebuildNavGraph();
     bool findGuardGraphCover(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ);
     bool findGuardLateralCover(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ,float sideSign=0.f);
     bool findGuardCoverFromEnemy(int level,size_t actor,const ActorPose& pose,Point3 threat,Vec2& goal,float& goalZ,float sideSign=0.f);
