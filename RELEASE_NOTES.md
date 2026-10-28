@@ -4,6 +4,37 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v0.14.6 - The lag (2026-10-27)
+
+The plant stopped stuttering when something hunted you. A creature that had
+lost its way used to work out every deck of the room again, from scratch, each
+time it wondered where you had gone, and every creature that heard the same
+noise wondered on the same frame. Six of them on the Foundry's gantries could
+cost a frame three times over; standing on a tank where they could not reach
+you cost it every second and a half. They remember the room now, and share
+it. The guards' fallback routes, the plant's question of which halls to keep
+loaded, and their route maps on arrival were doing the same and have stopped.
+
+The guards in the Security Yard who had you and never fired were stuck
+walking in place against cover, and a man walking does not shoot. Now a man who is
+moving and has a clean line takes it. A flank he cannot reach in two seconds
+he gives up. A hunt that has lost you lasts at least twenty seconds, and the
+EVASION clock says so honestly. A man who hears something stops for a beat
+before he turns.
+
+Lockers: the doors are perforated steel all the way through, and from inside
+you are looking through the real doors, not a picture of them. Your hands come
+up to the doors before they move, and take a stowed man by the collar and lift
+him in where you can see it. Whoever opens that locker gets him falling out at
+his feet. Burst out and only a man the doors actually reach goes down, and he
+goes down in front of you. Pulled out, you get the pistol in your face for a
+moment before he uses it.
+
+Being seen has music now: the score gives way to a hard loop the moment a '!'
+goes up, holds through EVASION, and lets go when they give up.
+
+---
+
 ## v0.14.5 - Saw that (2026-10-27)
 
 The rest of the Cleanup Force's training: what they do after they lose you,
