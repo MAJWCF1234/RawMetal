@@ -4,6 +4,71 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.0.0 - DepthWorks, Chapter 1 (2026-10-28)
+
+The first chapter of DepthWorks, finished. There is no changelog here. This is
+what the chapter is.
+
+**The plant.** You are a night-shift guard at the Depthworks plant, built over
+something the company found deep underground and sells as power. Tonight the
+service lift drops you into the sub-levels your badge does not open. The
+lights are off, Order 7 has sealed the doors, the Cleanup Force is sweeping the
+plant to remove witnesses, and the last message from your friend at Lab 4 was
+cut off mid-line. The workers the lockdown did not reach are no longer workers.
+
+**Chapter 1: the power plant and the perimeter.** You bring the plant back from
+a black start one district at a time, and each district opens the next.
+
+- Power Distribution: the switch hall, the cable trench, the emergency
+  generators, and Load Control, where the mail relay wakes with one queued
+  message.
+- The Machine Hall: the galleries around the turbine floor, the exciter bay,
+  the crane end, and the restrike that lights them.
+- Ventilation Works and the Air Handling crawlspaces.
+- Water and Cooling: the treatment hall, the drainage gallery, the sump works,
+  the cooling tower basin and shell, and heat exchange.
+- Maintenance: Central Stores, the Fabrication Shop, where the shutter to
+  Operations needs a pin you machine yourself, and the Aid Station.
+- The Restricted Perimeter: the Operations corridor, the Security Perimeter's
+  yard and gatehouse, Checkpoint Delta's holding cells, the Administrative
+  Link over the old ore pass, Personnel Transit's held tram, Restricted
+  Utilities, Research Receiving, Decontamination, and the forecourt of Energy
+  Research, where the chapter ends at the great door.
+
+**What is in the dark.** Huntsmen and xenowasps in the ducts and galleries;
+the transformed, who keep their habits; the Snatcher, which waits for you and
+does not chase; and the Chimera, which does not wait.
+
+**The Cleanup Force.** They hold the checkpoints, and they are not stupid. A
+man who glimpses you does not know what he saw: the "?" over his head fills as
+he works it out, and the "!" means he has you. He reaches for his radio, and
+you have a second and a half to stop the call. Lose him and his squad hunts
+you (EVASION), then stays wary for a long time after (CAUTION). Keep to the
+dark, keep low, keep still; knock on a wall, throw a can; take a man from
+behind and drag him out of sight, or stuff him in a locker. Hide in one
+yourself and watch the room through the holes in the door, and pray nobody
+saw you climb in. Patch the perimeter cameras through to your handset and you
+can see where every man is looking. Or fight.
+
+**Controls.** WASD move, Shift sprint, Space jump, C or Ctrl crouch, mouse
+fire, right mouse guard, R reload, E use (doors, terminals, lockers, bodies),
+F flashlight, Q subdue from behind, I inventory, Esc menu. Inside a locker, E
+steps out and the left mouse button knocks. Checkpoints are automatic; manual
+saves are in the menu. Saves and settings live in %LOCALAPPDATA%\RawMetal.
+
+**Needs.** Windows 10 or 11 (x64), a GPU with a Vulkan 1.0 driver, and the
+Microsoft Visual C++ x64 Redistributable. Unzip anywhere and run
+DepthWorks.exe; nothing is installed.
+
+**VR (experimental).** SteamVR with Quest, Index or Vive controllers: real
+hands, the shotgun in your fist, an Alyx-style interface. Lockers and the
+camera patch are desktop-only for now, the reload has no animation yet, and
+Quest frame rate is below 72.
+
+Chapter 2 continues below the great door.
+
+---
+
 ## v0.14.6 - The lag (2026-10-27)
 
 The plant stopped stuttering when something hunted you. A creature that had
