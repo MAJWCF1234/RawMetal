@@ -2,7 +2,9 @@
 #include "../../Game.h"
 #include "../Perception.h"
 #include "../Navigation.h"
+#include "../RouteCache.h"
 #include "ScheduleTables.h"
+#include <bit>
 #include <queue>
 #include <cmath>
 #include <fstream>
@@ -27,7 +29,9 @@ static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float heigh
  }
  if(endZ)*endZ=z;return true;
 }
-static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false){
+// The deck planner as it probes with nothing kept: the reference the route
+// cache must match, and the planner wherever nothing may be kept.
+static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false){
  perf::Scope stackedProfile(perf::StackedWaypoint);perf::count(perf::StackedCalls);
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
  for(int y=1;y<23;++y)for(int x=1;x<23;++x)for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
@@ -53,13 +57,71 @@ static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,floa
  if(human&&!aiWalkSegment(w,start,startZ,nodes[next].p,height)&&aiWalkSegment(w,start,startZ,nodes[origin].p,height))return nodes[origin].p;
  return nodes[next].p;
 }
+static bool sameBits(Vec2 a,Vec2 b){return std::bit_cast<uint32_t>(a.x)==std::bit_cast<uint32_t>(b.x)&&std::bit_cast<uint32_t>(a.y)==std::bit_cast<uint32_t>(b.y);}
+// A verify-mode shadow probe leaves the frame's query and decision counters as
+// the kept answer left them (only its time shows).
+template<class Probe> static auto uncounted(const Probe&probe){auto counts=perf::counts;auto result=probe();perf::counts=counts;return result;}
+// The same planner over the deck graph kept for this collision state and hull:
+// a fresh deck takes its nodes and cell lists exactly as liveStackedWaypoint
+// builds them, and an edge first asked is probed exactly as it probes one (the
+// walk from a node toward a neighbour cell does not depend on which node there
+// it reaches). Origin and target choice, search order, early stop and the
+// corner rule are unchanged, so the waypoint is the live planner's to the bit.
+static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fresh,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human){
+ auto&nodes=deck.nodes;auto&cells=deck.cells;
+ if(fresh){
+  for(int y=1;y<23;++y)for(int x=1;x<23;++x){cells[y*24+x].begin=int(nodes.size());for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
+   Vec2 p{x+.5f,y+.5f};float floor=navSupport(w,p,span.floor+.215f);if(!navFits(w,p,floor,height))continue;
+   nodes.push_back({p,floor});}cells[y*24+x].end=int(nodes.size());}
+  deck.edges.assign(nodes.size()*4,{});
+ }
+ perf::count(perf::StackedNodes,nodes.size());
+ int origin=-1,target=-1;float a=1e9f,b=1e9f;
+ for(int i=0;i<int(nodes.size());++i){auto&n=nodes[i];float da=lengthSq(n.p-start)+std::fabs(n.z-startZ)*8,db=lengthSq(n.p-goal)+std::fabs(n.z-goalZ)*8;if(da<a){a=da;origin=i;}if(db<b){b=db;target=i;}}
+ if(origin<0||target<0){perf::count(perf::StackedNoRoute);return start;}
+ thread_local std::vector<int> parent;parent.assign(nodes.size(),-1);std::queue<int> queue;queue.push(origin);parent[size_t(origin)]=origin;
+ while(!queue.empty()&&parent[size_t(target)]<0){int current=queue.front();queue.pop();auto n=nodes[current];int x=int(n.p.x),y=int(n.p.y),direction=-1;
+  for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){++direction;int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
+   for(int next=cells[ny*24+nx].begin;next<cells[ny*24+nx].end;++next){if(parent[size_t(next)]>=0)continue;perf::count(perf::StackedEdges);
+    auto&edge=deck.edges[size_t(current*4+direction)];
+    if(edge.state==ai::RouteCache::Unknown){float feet=n.z;bool clear=true;
+     for(int sample=1;sample<=4;++sample){Vec2 p=n.p+d*(sample/4.f);float ground=navSupport(w,p,feet+.215f);
+      if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height)){clear=false;break;}feet=ground;}
+     edge={feet,clear?ai::RouteCache::Clear:ai::RouteCache::Blocked};}
+    if(edge.state==ai::RouteCache::Clear&&std::fabs(edge.feet-nodes[next].z)<.03f){parent[size_t(next)]=current;queue.push(next);}
+   }
+  }
+ }
+ if(parent[size_t(target)]<0){perf::count(perf::StackedNoRoute);return start;}int next=target;while(parent[size_t(next)]!=origin&&next!=origin)next=parent[size_t(next)];
+ if(human&&!aiWalkSegment(w,start,startZ,nodes[next].p,height)&&aiWalkSegment(w,start,startZ,nodes[origin].p,height))return nodes[origin].p;
+ return nodes[next].p;
+}
+static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false){
+ Vec2 result;
+ {perf::Scope stackedProfile(perf::StackedWaypoint);bool fresh=false;auto*deck=ai::RouteCache::deck(w,height,fresh);
+  if(!deck){stackedProfile.stop();return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human);}
+  perf::count(perf::StackedCalls);result=keptStackedWaypoint(w,*deck,fresh,start,startZ,goal,goalZ,height,human);}
+ if(ai::RouteCache::verify()&&!sameBits(result,uncounted([&]{return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human);})))perf::count(perf::RouteCacheMismatches);
+ return result;
+}
+// One terrain cell-grid edge: the walk from cell a's centre, standing on its
+// support, to neighbour b's centre. With a kept grid each edge is probed once
+// per collision state; verify mode re-probes every kept answer.
+static bool cellEdge(const World&w,ai::RouteCache::Grid*grid,int a,int b,float height,float stepHeight,bool sweep){
+ auto probe=[&]{Vec2 p{a%24+.5f,a/24+.5f},q{b%24+.5f,b/24+.5f};return roughSegment(w,p,navSupport(w,p,float(World::TerrainMaxZ+1)),q,height,stepHeight,nullptr,sweep);};
+ if(!grid)return probe();
+ auto&edge=grid->edges[size_t(a*4+(b==a+1?0:b==a-1?1:b==a+24?2:3))];
+ if(edge.state==ai::RouteCache::Unknown)edge.state=probe()?ai::RouteCache::Clear:ai::RouteCache::Blocked;
+ else if(ai::RouteCache::verify()&&uncounted(probe)!=(edge.state==ai::RouteCache::Clear))perf::count(perf::RouteCacheMismatches);
+ return edge.state==ai::RouteCache::Clear;
+}
 bool aiWalkSegment(const World&w,Vec2 start,float feet,Vec2 goal,float height,float*endFeet){return roughSegment(w,start,feet,goal,height,w.hasTerrain()?.34f:.24f,endFeet,true);}
-Vec2 aiWalkWaypoint(const World&w,Vec2 start,float feet,Vec2 goal,float goalFeet,float height){
- if(aiWalkSegment(w,start,feet,goal,height))return goal;
- if(!w.hasTerrain())return stackedWaypoint(w,start,feet,goal,goalFeet,height,true);
+// The terrain fallback: flood from the goal cell over the whole grid, then
+// take the start's best neighbour. Its edges are aiWalkSegment's walk.
+static Vec2 terrainWaypoint(const World&w,ai::RouteCache::Grid*grid,Vec2 start,Vec2 goal,float height){
  std::array<int,24*24> field;field.fill(9999);std::queue<int> queue;
  int gx=std::clamp(int(goal.x),0,23),gy=std::clamp(int(goal.y),0,23);field[gy*24+gx]=0;queue.push(gy*24+gx);
- auto edge=[&](int a,int b){Vec2 p{a%24+.5f,a/24+.5f},q{b%24+.5f,b/24+.5f};return aiWalkSegment(w,p,navSupport(w,p,float(World::TerrainMaxZ+1)),q,height);};
+ auto edge=[&](int a,int b){return cellEdge(w,grid,a,b,height,.34f,true);};
  while(!queue.empty()){int cell=queue.front();queue.pop();int x=cell%24,y=cell/24;
   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<0||ny<0||nx>23||ny>23)continue;int next=ny*24+nx;
    if(field[next]==9999&&edge(next,cell)){field[next]=field[cell]+1;queue.push(next);}}
@@ -69,9 +131,21 @@ Vec2 aiWalkWaypoint(const World&w,Vec2 start,float feet,Vec2 goal,float goalFeet
   if(field[next]<best&&edge(y*24+x,next)){best=field[next];result={nx+.5f,ny+.5f};}}
  return result;
 }
+Vec2 aiWalkWaypoint(const World&w,Vec2 start,float feet,Vec2 goal,float goalFeet,float height){
+ if(aiWalkSegment(w,start,feet,goal,height))return goal;
+ if(!w.hasTerrain())return stackedWaypoint(w,start,feet,goal,goalFeet,height,true);
+ bool fresh=false;auto*grid=ai::RouteCache::grid(w,height,.34f,true,fresh);Vec2 result=terrainWaypoint(w,grid,start,goal,height);
+ if(grid&&ai::RouteCache::verify()&&!sameBits(result,uncounted([&]{return terrainWaypoint(w,nullptr,start,goal,height);})))perf::count(perf::RouteCacheMismatches);
+ return result;
+}
+Vec2 aiDeckWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human){return stackedWaypoint(w,start,startZ,goal,goalZ,height,human);}
+bool aiCellEdge(const World&w,int from,int to,float height,float stepHeight,bool sweep){
+ bool fresh=false;return cellEdge(w,ai::RouteCache::grid(w,height,stepHeight,sweep,fresh),from,to,height,stepHeight,sweep);
+}
 void Game::updateEnemies(float dt){
  perf::Scope frameProfile(perf::Enemies);
  if(dead()||m_won)return;
+ ai::RouteCache::Owner routeOwner(m_world,m_world.m_mapData);
  auto stimuli=aiStimuli();
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
  for(auto&e:m_enemies){
@@ -397,11 +471,12 @@ void Game::updateEnemies(float dt){
    }
    int minCell=m_world.hasTerrain()?0:1,maxCell=m_world.hasTerrain()?23:22;
    gx=std::clamp(gx,minCell,maxCell);gy=std::clamp(gy,minCell,maxCell);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
+   // Terrain edges are kept per collision state, hull and step (the route cache).
+   bool freshGrid=false;auto*grid=m_world.hasTerrain()?ai::RouteCache::grid(m_world,hull,stepHeight,false,freshGrid):nullptr;
    auto edgeWalkable=[&](int x,int y,int nx,int ny){
     perf::count(perf::FloodEdges);
     if(!m_world.hasTerrain())return m_world.navigable(x,y,nx,ny,hull);
-    Vec2 a{x+.5f,y+.5f},b{nx+.5f,ny+.5f};float az=navSupport(m_world,a,float(World::TerrainMaxZ+1));
-    return roughSegment(m_world,a,az,b,hull,stepHeight);
+    return cellEdge(m_world,grid,y*24+x,ny*24+nx,hull,stepHeight,false);
    };
    // Flooding outward from the goal must test travel TOWARD the goal. A
    // traversable descent is not necessarily a climbable reverse edge.

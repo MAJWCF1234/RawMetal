@@ -2,6 +2,7 @@
 #include "../../Game.h"
 #include "Drones.h"
 #include "../Navigation.h"
+#include "../RouteCache.h"
 namespace retro {
 namespace {
 StateId droneKey(int slot,std::string_view field){auto text="drone/slot/"+std::to_string(slot)+"/"+std::string(field);StateId key=2166136261u;for(unsigned char c:text)key=(key^c)*16777619u;return key|0x80000000u;}
@@ -146,7 +147,7 @@ void Game::updateEngineerDrones(float dt){
   }else put("route_next",0);put("route_wait",routeWait);
   Vec2 before=here,waypoint{get("way_x")*.001f-origin.x,get("way_y")*.001f-origin.y};int repath=std::max(0,get("repath")-ms);
   if(moving){auto delta=goal-here;auto probe=here+normalized(delta)*std::min(1.f,length(delta));if(friendlyWalkSegment(level,here,p.z,probe,EngineerDroneHeight))waypoint=goal;
-   else if(!repath&&m_npcNavBudget>0){--m_npcNavBudget;waypoint=aiWalkWaypoint(friendlyWorld(level),here,p.z,goal,goalFeet,EngineerDroneHeight);repath=350+slot*30;}
+   else if(!repath&&m_npcNavBudget>0){--m_npcNavBudget;auto&routeWorld=friendlyWorld(level);ai::RouteCache::Owner routeOwner(routeWorld,routeWorld.m_mapData);waypoint=aiWalkWaypoint(routeWorld,here,p.z,goal,goalFeet,EngineerDroneHeight);repath=350+slot*30;}
    auto deltaWay=waypoint-here;float distance=length(deltaWay);auto direction=normalized(deltaWay);auto end=here+direction*std::min(distance,1.6f*dt);float feet=-10000;bool clear=true;
    for(float x:{-.4f,0.f,.4f})for(float y:{-.4f,0.f,.4f}){float supported=p.z;clear&=friendlyWalkSegment(level,here+Vec2{x,y},p.z,end+Vec2{x,y},EngineerDroneHeight,&supported);feet=std::max(feet,supported);}
    auto activeEnd=end+origin-active;auto bodyOverlap=[&](Vec2 point,float bottom,float top,float radius){float combined=EngineerDroneRadius+radius;if(feet<top&&feet+EngineerDroneHeight>bottom&&lengthSq(activeEnd-point)<combined*combined)clear=false;};

@@ -445,6 +445,8 @@ public:
      DoorPlan(const DoorPlan&)=delete;DoorPlan& operator=(const DoorPlan&)=delete;
     };
     bool doorPlanActive()const{return m_doorPlan.open!=nullptr;}
+    // The live plan's door marks, or null: memos keyed on doorBlocks key on them.
+    const std::vector<char>* doorPlanDoors()const{return m_doorPlan.open;}
     bool navigable(int x,int y,int nx,int ny,float height=1.f)const;
     void updateDoors(float dt,bool includeTransfers=true);
     bool openDoor(int index);

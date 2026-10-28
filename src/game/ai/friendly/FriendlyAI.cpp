@@ -4,6 +4,7 @@
 #include "../Perception.h"
 #include "../StateLookupHints.h"
 #include "../WalkQueryCache.h"
+#include "../RouteCache.h"
 #include "../../../world/CollisionQueryBatch.h"
 #include <optional>
 #include <fstream>
@@ -119,6 +120,7 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  // state. The cache expires on return, before another actor or physics step.
  CollisionQueryBatch queries(&world,m_aiQueryCaching);
  ai::WalkQueryCache::Scope walkMemo(world,world.m_mapData,m_aiQueryCaching);
+ ai::RouteCache::Owner routeOwner(world,world.m_mapData);
  put("running",1);float standing=track.scale;bool crouched=get("crouched")!=0;float height=crouched?npcCrouchedHeight(track):standing;
  bool grounded=get("grounded")!=0||!get("locomotion");float vv=get("vv")*.001f;int ms=std::max(1,int(std::round(dt*1000)));
  Vec2 goal=pose.position;float goalZ=pose.z;bool wantsMove=false;float speedScale=1;

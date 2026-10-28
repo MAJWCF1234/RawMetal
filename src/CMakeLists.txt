@@ -79,6 +79,7 @@ add_executable(RawMetal WIN32
     game/ai/Hearing.cpp
     game/ai/Nodes.cpp
     game/ai/NavGraph.cpp
+    game/ai/RouteCache.cpp
     game/ai/enemy/EnemyAI.cpp
     game/ai/enemy/Schedule.cpp
     game/ai/enemy/ScheduleTest.cpp

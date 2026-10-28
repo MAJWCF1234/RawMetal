@@ -1,10 +1,17 @@
 #include "../../Game.h"
 #include "ScheduleTables.h"
 #include "../Perception.h"
+#include "../Navigation.h"
+#include "../RouteCache.h"
+#include "../../../core/FrameProfile.h"
 #include <fstream>
 #include <sstream>
 #include <chrono>
 #include <cmath>
+#include <bit>
+#include <cstring>
+#include <random>
+#include <tuple>
 namespace retro {
 bool Game::testCreatureBehaviour(){
  const auto started=std::chrono::steady_clock::now();
@@ -69,6 +76,70 @@ bool Game::testCreatureBehaviour(){
   if(found){auto p=loaded.m_enemies[0].pos;loaded.setState(wake,1);for(int i=0;i<200;++i)loaded.updateEnemies(dt);after=length(loaded.m_enemies[0].pos-p);}
   std::ostringstream v;v<<"decode="<<decoded<<" Snatcher found="<<found<<" saved wakeState="<<gate<<" max displacement/turn/awareness over 3s="<<movement<<'/'<<turn<<'/'<<awareness<<" displacement after state +2s="<<after;
   check(sleeping&&after>.05f,"7 save/load dormancy and state wake",v.str());
+ }
+ // The route cache keeps each deck graph and terrain cell grid per exact
+ // collision state; what it hands a planner must be the live probe to the bit.
+ // Every multi-deck campaign chunk and every fourth one-floor chunk (a guard's
+ // fallback walks the same graph there), seeded start/goal pairs on real spans,
+ // one hull per state (a creature's or a standing or crouched man's) so later
+ // pairs walk edges the earlier ones kept, each pair asked twice; doors as
+ // built, half open, open, and shut under an operable door plan; lift, cargo
+ // lift and platform moved; a crate shoved; all put back.
+ {std::mt19937 random(0x7c4b08u);const auto counted=perf::counts;int compared=0,differ=0,chunks=0,states=0;std::string first;bool unowned=false,unownedAsked=false;
+  std::vector<float> hulls{1.78f,1.78f*.85f};for(int k=0;k<7;++k)hulls.push_back(creatureTraits(CreatureKind(k)).hull);
+  auto pick=[&](float low,float high){return std::uniform_real_distribution<float>(low,high)(random);};
+  auto bits=[](Vec2 a,Vec2 b){return std::bit_cast<uint32_t>(a.x)==std::bit_cast<uint32_t>(b.x)&&std::bit_cast<uint32_t>(a.y)==std::bit_cast<uint32_t>(b.y);};
+  auto compare=[&](const World&w,int level,const char*state,int pairs){++states;const float height=hulls[random()%hulls.size()];
+   for(int i=0;i<pairs;++i){bool human=random()%2==0;
+    auto spot=[&](Vec2&p,float&z){p={pick(1.f,23.f),pick(1.f,23.f)};auto spans=w.spansAt(int(p.x),int(p.y));z=spans.empty()?0.f:spans[random()%spans.size()].floor;};
+    Vec2 start,goal;float startZ,goalZ;spot(start,startZ);spot(goal,goalZ);
+    ai::RouteCache::enabled=false;Vec2 live=aiDeckWaypoint(w,start,startZ,goal,goalZ,height,human);ai::RouteCache::enabled=true;
+    for(int ask=0;ask<2;++ask){Vec2 kept=aiDeckWaypoint(w,start,startZ,goal,goalZ,height,human);++compared;
+     if(!bits(live,kept)){++differ;if(first.empty()){std::ostringstream at;at<<" first: level "<<level<<' '<<state<<" hull "<<height<<" human "<<human<<" ("<<start.x<<','<<start.y<<','<<startZ<<")->("<<goal.x<<','<<goal.y<<','<<goalZ<<") live "<<live.x<<','<<live.y<<" kept "<<kept.x<<','<<kept.y;first=at.str();}}}
+   }};
+  for(int level=0;level<worldChunkCount(WorldId::Campaign);++level){World w(level,WorldId::Campaign);if(w.hasTerrain()||(w.layers().size()<2&&level%4))continue;++chunks;
+   // An authored World no Owner names keeps nothing.
+   if(w.authored()&&!unownedAsked){bool fresh=false;unownedAsked=true;unowned=!ai::RouteCache::deck(w,1.78f,fresh);}
+   ai::RouteCache::Owner owner(w,w.m_mapData);const int pairs=w.layers().size()>1?3:2;const auto built=w.doors();
+   compare(w,level,"as built",pairs);
+   for(size_t d=0;d<built.size();++d)w.setDoor(int(d),built[d].maxOpen*.5f,false);if(!built.empty())compare(w,level,"doors half open",pairs);
+   for(size_t d=0;d<built.size();++d)w.setDoor(int(d),built[d].maxOpen,false);if(!built.empty())compare(w,level,"doors open",pairs);
+   for(size_t d=0;d<built.size();++d)w.setDoor(int(d),0,false);
+   if(!built.empty()){std::vector<char> operable(built.size(),0);for(size_t d=0;d<built.size();d+=2)operable[d]=1;World::DoorPlan plan(w,operable);compare(w,level,"doors shut, a door plan through half",pairs);}
+   if(w.hasLift()){const float lift=w.m_liftHeight;w.m_liftHeight=lift+2.5f;compare(w,level,"lift raised",pairs);w.m_liftHeight=lift;}
+   if(w.cargoLift().x2>w.cargoLift().x1){const float cargo=w.cargoLiftHeight();w.setCargoLiftHeight(w.cargoLift().upper);compare(w,level,"cargo lift up",pairs);w.setCargoLiftHeight(w.cargoLift().lower);compare(w,level,"cargo lift down",pairs);w.setCargoLiftHeight(cargo);}
+   for(size_t i=0;i<w.actorTracks().size();++i)if(w.actorTracks()[i].platform){const auto pose=w.actorPose(i);auto moved=pose;moved.position.x+=.6f;moved.z+=.4f;w.setActorPose(i,moved);compare(w,level,"platform moved",pairs);w.setActorPose(i,pose);break;}
+   if(!w.m_pushCrates.empty()){const auto crate=w.m_pushCrates[0];w.m_pushCrates[0].position.x+=.7f;compare(w,level,"crate shoved",pairs);w.m_pushCrates[0]=crate;}
+   w.restoreDoors(built);compare(w,level,"put back",pairs);
+  }
+  // Ashfall terrain: every cell edge for a creature's step (no sweep) and the
+  // walk a guard's fallback takes (swept), each asked twice, then whole
+  // terrain floods from seeded points.
+  int edges=0,edgeDiffer=0,floods=0,floodDiffer=0;
+  for(int level:{0,7}){World w(level,WorldId::Ashfall);if(!w.hasTerrain())continue;ai::RouteCache::Owner owner(w,w.m_mapData);
+   for(auto [height,step,sweep]:{std::tuple{creatureTraits(CreatureKind::Brute).hull,creatureTraits(CreatureKind::Brute).step,false},std::tuple{1.78f,.34f,true}})
+    for(int ask=0;ask<2;++ask)for(int cell=0;cell<24*24;++cell)for(int to:{cell+1,cell-1,cell+24,cell-24}){
+     if(to<0||to>=24*24||((to==cell+1||to==cell-1)&&to/24!=cell/24))continue;
+     ai::RouteCache::enabled=false;bool live=aiCellEdge(w,cell,to,height,step,sweep);ai::RouteCache::enabled=true;
+     ++edges;edgeDiffer+=aiCellEdge(w,cell,to,height,step,sweep)!=live;}
+   for(int i=0;i<4;++i){Vec2 start{pick(1.f,23.f),pick(1.f,23.f)},goal{pick(1.f,23.f),pick(1.f,23.f)};float feet=w.supportBelow(start.x,start.y,float(World::TerrainMaxZ+1)),goalFeet=w.supportBelow(goal.x,goal.y,float(World::TerrainMaxZ+1));
+    ai::RouteCache::enabled=false;Vec2 live=aiWalkWaypoint(w,start,feet,goal,goalFeet,1.78f);ai::RouteCache::enabled=true;
+    for(int ask=0;ask<2;++ask){++floods;floodDiffer+=!bits(live,aiWalkWaypoint(w,start,feet,goal,goalFeet,1.78f));}}
+  }
+  // Whole creature runs, kept against live, frame by frame: six Huntsmen held
+  // on the player across the Foundry's decks, and a Brute over Ashfall ground.
+  auto trace=[&](bool keep,bool terrain){ai::RouteCache::enabled=keep;std::vector<float> out;
+   if(terrain){Game g(WorldId::Ashfall);g.m_enemies.clear();g.m_sounds.clear();g.m_player.pos={20.5f,12.5f};g.m_player.z=g.world().supportBelow(20.5f,12.5f,float(World::TerrainMaxZ+1));
+    Enemy brute{};brute.kind=Enemy::Kind::Brute;brute.pos={6.5f,12.5f};brute.z=g.world().supportBelow(6.5f,12.5f,float(World::TerrainMaxZ+1));brute.home=brute.pos;brute.lastKnown=g.m_player.pos;brute.lastKnownZ=g.m_player.z;brute.awareness=40.f;brute.state=Enemy::State::Investigate;g.m_enemies.push_back(brute);
+    for(int f=0;f<600;++f){g.updateEnemies(1.f/120.f);for(const auto&e:g.m_enemies)out.insert(out.end(),{e.pos.x,e.pos.y,e.z,e.waypoint.x,e.waypoint.y});}}
+   else{auto g=perfScene(0,{NAN,NAN},-999,0,0);g.perfClearCreatures();g.perfSpawn(CreatureKind::Huntsman,6,4.f);
+    for(int f=0;f<240;++f){g.perfWake(false);g.updateEnemies(1.f/60.f);for(const auto&e:g.m_enemies)out.insert(out.end(),{e.pos.x,e.pos.y,e.z,e.waypoint.x,e.waypoint.y,e.repathTimer});}}
+   ai::RouteCache::enabled=true;return out;};
+  bool runsSame=true;for(bool terrain:{false,true}){auto live=trace(false,terrain),kept=trace(true,terrain);runsSame&=live.size()==kept.size()&&!live.empty()&&std::memcmp(live.data(),kept.data(),live.size()*sizeof(float))==0;}
+  const auto hits=perf::counts[perf::RouteCacheHits]-counted[perf::RouteCacheHits],misses=perf::counts[perf::RouteCacheMisses]-counted[perf::RouteCacheMisses];
+  std::ostringstream v;v<<"chunks="<<chunks<<" states="<<states<<" deck waypoints="<<compared<<" differ="<<differ<<" terrain edges="<<edges<<" differ="<<edgeDiffer<<" floods="<<floods<<" differ="<<floodDiffer
+   <<" whole runs identical="<<runsSame<<" cache hits="<<hits<<" misses="<<misses<<" unowned kept nothing="<<unowned<<first;
+  check(chunks>40&&compared>500&&differ==0&&edges>=8000&&edgeDiffer==0&&floods>0&&floodDiffer==0&&runsSame&&hits>0&&misses>0&&unowned,"8 route cache answers are the live planner's to the bit",v.str());
  }
  report<<"runtime_seconds="<<std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()<<'\n';
  return passed&&bool(report);

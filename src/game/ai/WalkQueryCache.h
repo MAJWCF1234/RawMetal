@@ -20,7 +20,8 @@ inline void collisionSnapshot(const World&world,std::vector<uint32_t>&out){
  word(uint32_t(world.layers().size()));word(uint32_t(world.structures().size()));word(uint32_t(world.fixtures().size()));word(uint32_t(world.props().size()));word(world.hasTerrain());
  // Tile destruction opens paths; comparing actual tiles also handles restore.
  for(int y=0;y<24;++y)for(int x=0;x<24;x+=4){uint32_t tiles=0;for(int i=0;i<4;++i)tiles|=uint32_t(uint8_t(world.tile(x+i,y)))<<(i*8);word(tiles);}
- word(uint32_t(world.doors().size()));for(const auto&door:world.doors()){for(float value:{door.left,door.right,door.y,door.z,door.open})scalar(value);word(door.swinging);}
+ // maxOpen is where a door plan stands a door it may operate; swing turns a leaf.
+ word(uint32_t(world.doors().size()));for(const auto&door:world.doors()){for(float value:{door.left,door.right,door.y,door.z,door.open,door.maxOpen,door.swing})scalar(value);word(door.swinging);}
  scalar(world.cargoLiftHeight());scalar(world.liftHeight());word(uint32_t(world.liftPhase()));word(world.liftPhaseTime()>=3.65f);
  word(uint32_t(world.terminals().size()));for(const auto&terminal:world.terminals())scalar(terminal.z);
  // Ordinary NPCs do not participate in World::fits/supportBelow. Moving
