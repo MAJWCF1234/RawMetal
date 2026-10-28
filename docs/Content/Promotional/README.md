@@ -14,6 +14,8 @@ captured with the states a player has on first arriving in each area.
 | 06-security-yard.png | 1920x1080 | Security Perimeter yard: a soldier and his torch |
 | 07-tram-4.png | 1920x1080 | Personnel Transit: Tram 4 held at Platform B |
 | 08-great-door.png | 1920x1080 | Energy Research forecourt: the great door |
+| 09-locker-watch.png | 1920x1080 | Hiding in a locker: a Cleanup man makes you out through the holes (v0.14.6) |
+| 10-hauled-out.png | 1920x1080 | Pulled out of the locker at gunpoint (v0.14.6) |
 | cover-630x500.png | 630x500 | itch.io cover (the yard soldier, title in the plant's green) |
 | banner-1920x540.png | 1920x540 | page or store header (the rotor) |
 | background-1920x1080.png | 1920x1080 | itch.io page background (the forecourt by torchlight, darkened) |
