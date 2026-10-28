@@ -367,6 +367,8 @@ public:
     SunLight sun()const{if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};
      if(zoneSky()){d={-.62f,.48f,.42f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.6f;s.r=1.f;s.g=.86f;s.b=.66f;return s;}float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;}
     std::vector<Span> spansAt(int x,int y)const;
+    // Reuse result storage for repeated cell queries.
+    void spansAt(int x,int y,std::vector<Span>& result)const;
     float supportBelow(float x,float y,float feet)const;
     float clearanceAbove(float x,float y,float feet)const;
     bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
@@ -453,7 +455,7 @@ public:
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
     void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
-    void unloadGeometry(){m_collisionCells={};m_collisionAll={};std::vector<LightSolid>{}.swap(m_lightSolids);std::vector<LightNode>{}.swap(m_lightNodes);std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainTops);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Compactor>{}.swap(m_compactors);std::vector<Terminal>{}.swap(m_terminals);}
+    void unloadGeometry(){m_fixtureRotation.clear();m_collisionCells={};m_collisionAll={};std::vector<LightSolid>{}.swap(m_lightSolids);std::vector<LightNode>{}.swap(m_lightNodes);std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainTops);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Compactor>{}.swap(m_compactors);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
@@ -522,9 +524,20 @@ private:
     mutable std::vector<LightSolid> m_lightSolids;
     mutable std::vector<LightNode> m_lightNodes;
     void buildLightOcclusion()const;
-    mutable std::array<std::vector<std::vector<size_t>>,3> m_collisionCells;
-    mutable std::array<std::vector<size_t>,3> m_collisionAll;
+    mutable std::array<std::vector<std::vector<size_t>>,4> m_collisionCells;
+    mutable std::array<std::vector<size_t>,4> m_collisionAll;
     bool m_collisionCandidatesEnabled=true;
+    mutable std::vector<Vec2> m_fixtureRotation;
+    bool insideFixtureCandidate(size_t index,float x,float y,float margin=0)const;
+    std::span<const size_t> wallCandidates(Vec2 center,Vec2 along,float width,std::vector<size_t>& scratch)const;
+    bool solidReference(float x, float y) const;
+    bool solidIndexed(float x, float y) const;
+    bool wallSpaceFreeReference(Vec2 center,Vec2 along,float width,float bottom,float top)const;
+    bool wallSpaceFreeIndexed(Vec2 center,Vec2 along,float width,float bottom,float top)const;
+    float clearanceAboveReference(float x,float y,float feet)const;
+    float clearanceAboveIndexed(float x,float y,float feet)const;
+    std::vector<Span> spansAtReference(int x,int y)const;
+    void spansAtIndexed(int x,int y,std::vector<Span>& result)const;
     void buildCollisionCandidates()const;
     std::span<const size_t> collisionCandidates(int kind,float x,float y)const;
     std::vector<std::vector<uint16_t>> m_structureCells;

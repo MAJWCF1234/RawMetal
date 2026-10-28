@@ -12,6 +12,8 @@
 #include <fstream>
 #include <cstdlib>
 #include <set>
+#include <bit>
+#include <cstdio>
 
 namespace retro {
 namespace {
@@ -288,6 +290,7 @@ void World::settleExclusionFacilityOnTerrain(){
  for(size_t index=0;index<m_structures.size();++index){const auto&s=m_structures[index];
   for(int y=int(std::floor(s.y1-.001f));y<=int(std::floor(s.y2+.001f));++y)for(int x=int(std::floor(s.x1-.001f));x<=int(std::floor(s.x2+.001f));++x)
    if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[size_t(y*Width+x)].push_back(static_cast<uint16_t>(index));}
+ m_fixtureRotation.clear();
  m_collisionCells={};m_collisionAll={};
 }
 void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
@@ -757,23 +760,35 @@ float World::ceilingHeight(float x,float y)const{
  return -5.6f; // Coolant Return
 }
 void World::buildCollisionCandidates()const{
+ m_fixtureRotation.clear();
  m_collisionCells={};m_collisionAll={};for(auto&cells:m_collisionCells)cells.resize(Width*Height);
  auto add=[&](int kind,size_t index,float x1,float y1,float x2,float y2){
   m_collisionAll[kind].push_back(index);
   for(int y=std::max(0,int(std::floor(y1-.001f)));y<=std::min(Height-1,int(std::floor(y2+.001f)));++y)
    for(int x=std::max(0,int(std::floor(x1-.001f)));x<=std::min(Width-1,int(std::floor(x2+.001f)));++x)m_collisionCells[kind][y*Width+x].push_back(index);
  };
- for(size_t i=0;i<m_fixtures.size();++i){const auto&f=m_fixtures[i];float c=std::fabs(std::cos(f.yaw)),s=std::fabs(std::sin(f.yaw));float hx=(f.width*c+f.depth*s)*.5f,hy=(f.width*s+f.depth*c)*.5f;add(0,i,f.position.x-hx,f.position.y-hy,f.position.x+hx,f.position.y+hy);}
- for(size_t i=0;i<m_props.size();++i){const auto&p=m_props[i];add(1,i,p.position.x-p.halfSize.x,p.position.y-p.halfSize.y,p.position.x+p.halfSize.x,p.position.y+p.halfSize.y);}
+ for(size_t i=0;i<m_fixtures.size();++i){
+  const auto& f=m_fixtures[i];float cosine=std::cos(f.yaw),sine=std::sin(f.yaw);
+  m_fixtureRotation.push_back({cosine,sine});float c=std::fabs(cosine),s=std::fabs(sine);
+  float hx=(f.width*c+f.depth*s)*.5f,hy=(f.width*s+f.depth*c)*.5f;
+  // solid expands each local fixture axis by .2, including rotated corners.
+  hx=std::max(hx,(f.width*f.core*.5f+.2f)*c+(f.depth*f.core*.5f+.2f)*s);
+  hy=std::max(hy,(f.width*f.core*.5f+.2f)*s+(f.depth*f.core*.5f+.2f)*c);
+  add(0,i,f.position.x-hx,f.position.y-hy,f.position.x+hx,f.position.y+hy);
+  // wallSpaceFree tests only the query's axes. Preserve its conservative
+  // projected-rectangle hits, which can extend beyond the rotated footprint.
+  float radius=(f.width+f.depth)*.5f;
+  add(3,i,f.position.x-radius,f.position.y-radius,f.position.x+radius,f.position.y+radius);
+ }
+ for(size_t i=0;i<m_props.size();++i){const auto&p=m_props[i];add(1,i,p.position.x-p.halfSize.x-.2f,p.position.y-p.halfSize.y-.2f,p.position.x+p.halfSize.x+.2f,p.position.y+p.halfSize.y+.2f);}
  for(size_t i=0;i<m_terminals.size();++i){const auto&t=m_terminals[i];
   // Lift-control consoles can travel without changing the terminal count.
   // Include them in every cell; the original exact tests still decide hits.
   if(t.control){add(2,i,0,0,Width,Height);continue;}
-  // Paper on a wall or a desk collides through what holds it, so it joins no
-  // cell; it is still counted, or the size check below would rebuild this
-  // grid on every query of a map with a taped note (v0.14.2's freezes).
-  if(t.paper()&&!t.paperOnBench()){m_collisionAll[2].push_back(i);continue;}
-  bool desk=benchTerminal(*this,t);add(2,i,t.position.x-(desk?.48f:.27f),t.position.y-(desk?.36f:.18f),t.position.x+(desk?.42f:.27f),t.position.y+(desk?.36f:.18f));
+  // solid uses the terminal integer cell even for paper on a wall.
+  bool desk=benchTerminal(*this,t);
+  float cx=float(int(t.position.x)),cy=float(int(t.position.y));
+  add(2,i,std::min(t.position.x-(desk?.48f:.27f),cx<=0?cx-1:cx),std::min(t.position.y-(desk?.36f:.18f),cy<=0?cy-1:cy),std::max(t.position.x+(desk?.42f:.27f),cx>=0?cx+1:cx),std::max(t.position.y+(desk?.36f:.18f),cy>=0?cy+1:cy));
  }
 }
 std::span<const size_t> World::collisionCandidates(int kind,float x,float y)const{
@@ -781,6 +796,34 @@ std::span<const size_t> World::collisionCandidates(int kind,float x,float y)cons
  int ix=int(std::floor(x)),iy=int(std::floor(y));
  if(!m_collisionCandidatesEnabled||ix<0||iy<0||ix>=Width||iy>=Height)return m_collisionAll[kind];
  return m_collisionCells[kind][iy*Width+ix];
+}
+bool World::insideFixtureCandidate(size_t index,float x,float y,float margin)const{
+ const auto& f=m_fixtures[index];if(!m_collisionCandidatesEnabled)return insideFixture(f,x,y,margin);const auto& rotation=m_fixtureRotation[index];
+ float dx=x-f.position.x,dy=y-f.position.y,c=rotation.x,s=rotation.y;
+ return std::fabs(dx*c-dy*s)<f.width*f.core*.5f+margin&&std::fabs(dx*s+dy*c)<f.depth*f.core*.5f+margin;
+}
+std::span<const size_t> World::wallCandidates(Vec2 center,Vec2 along,float width,std::vector<size_t>& scratch)const{
+ auto all=collisionCandidates(3,-1,-1);
+ // The exact test uses the supplied basis without normalizing it.
+ float norm=dot(along,along);if(!(norm>0))return all;
+ Vec2 normal{-along.y,along.x};float tangent=width*.5f+.02f;
+ float hx=(std::fabs(along.x)*tangent+std::fabs(normal.x)*.06f)/norm;
+ float hy=(std::fabs(along.y)*tangent+std::fabs(normal.y)*.06f)/norm;
+ float x1=center.x-hx,y1=center.y-hy,x2=center.x+hx,y2=center.y+hy;
+ if(!m_collisionCandidatesEnabled||x1<0||y1<0||x2>=Width||y2>=Height)return all;
+ scratch.clear();for(int y=int(std::floor(y1));y<=int(std::floor(y2));++y)for(int x=int(std::floor(x1));x<=int(std::floor(x2));++x){const auto& cell=m_collisionCells[3][y*Width+x];scratch.insert(scratch.end(),cell.begin(),cell.end());}
+ std::sort(scratch.begin(),scratch.end());scratch.erase(std::unique(scratch.begin(),scratch.end()),scratch.end());return scratch;
+}
+namespace {
+bool collisionVerify(){static const bool enabled=[] {const char* value=std::getenv("RAWMETAL_COLLISION_VERIFY");return value&&std::string_view(value)=="1";}();return enabled;}
+struct CollisionVerification {
+ std::array<uint64_t,4> queries{},mismatches{};
+ ~CollisionVerification(){const char* names[]={"solid","wall_space_free","clearance_above","spans_at"};for(size_t i=0;i<queries.size();++i)if(queries[i])std::fprintf(stderr,"collision_verify %s queries=%llu mismatches=%llu\n",names[i],static_cast<unsigned long long>(queries[i]),static_cast<unsigned long long>(mismatches[i]));}
+};
+thread_local CollisionVerification collisionVerification;
+void verifyCollision(size_t kind,bool equal){++collisionVerification.queries[kind];if(!equal)++collisionVerification.mismatches[kind];}
+bool sameFloat(float a,float b){return std::bit_cast<uint32_t>(a)==std::bit_cast<uint32_t>(b);}
+bool sameSpans(const std::vector<Span>& a,const std::vector<Span>& b){if(a.size()!=b.size())return false;for(size_t i=0;i<a.size();++i)if(!sameFloat(a[i].floor,b[i].floor)||!sameFloat(a[i].ceiling,b[i].ceiling)||a[i].flags!=b[i].flags)return false;return true;}
 }
 __declspec(noinline) bool World::testCollisionCandidates(){
  // A map with taped paper builds its grid once and keeps it.
@@ -804,6 +847,47 @@ __declspec(noinline) bool World::testCollisionCandidates(){
    Vec2 from{s.x1+offset,(s.y1+s.y2)*.5f},to{s.x2+offset,from.y};float feet=s.bottom+.03f;
    if(world.structureSegmentClear(from,feet,to,1.6f)!=world.structureSegmentClear(from,feet,to,1.6f,false))return false;
   }
+ }
+ // Isolated leaf comparison uses the preserved returning signature on both
+ // paths. A checksum keeps both timed loops observable under optimisation.
+ {
+  World racks(19);racks.buildCollisionCandidates();uint64_t checksum=0;
+  for(bool indexed:{false,true})for(bool spans:{false,true}){
+   auto start=std::chrono::steady_clock::now();
+   constexpr int samples=200000;
+   for(int i=0;i<samples;++i){int x=(i*17)%Width,y=(i/Width*13)%Height;
+    if(spans){auto result=indexed?racks.spansAt(x,y):racks.spansAtReference(x,y);checksum+=result.size();}
+    else checksum+=indexed?racks.solidIndexed(x+.5f,y+.5f):racks.solidReference(x+.5f,y+.5f);
+   }
+   double ns=std::chrono::duration<double,std::nano>(std::chrono::steady_clock::now()-start).count()/samples;
+   std::fprintf(stderr,"racks_leaf %s %s ns_per_query=%.3f checksum=%llu\n",spans?"spans_at":"solid",indexed?"indexed":"reference",ns,static_cast<unsigned long long>(checksum));
+  }
+ }
+ // Every compiled campaign chunk and every Ashfall chunk, at exact eighth-metre
+ // positions and seeded jitter. The compiled campaign count is authoritative.
+ uint64_t checked=0;
+ for(WorldId id:{WorldId::Campaign,WorldId::Ashfall})for(int level=0;level<worldChunkCount(id);++level){
+  World world(level,id);uint32_t seed=uint32_t(level+1);auto unit=[&]{seed=seed*1664525u+1013904223u;return float(seed>>8)/16777216.f;};
+  world.buildCollisionCandidates();std::vector<Span> optimizedSpans;
+  for(float doorState:{0.f,.5f,1.f}){
+   for(size_t i=0;i<world.m_doors.size();++i)world.setDoor(int(i),doorState,false);
+   for(int iy=0;iy<=Height*8;++iy)for(int ix=0;ix<=Width*8;++ix)for(int jitter=0;jitter<2;++jitter){
+    float x=ix*.125f+(jitter?(unit()-.5f)*.125f:0),y=iy*.125f+(jitter?(unit()-.5f)*.125f:0);
+    if(world.solidIndexed(x,y)!=world.solidReference(x,y)){std::fprintf(stderr,"solid mismatch %d %d %g %g\n",int(id),level,x,y);return false;}
+    // spansAt accepts integer cells; exercise every cell including the border,
+    // once per door state, rather than repeating the same integer query 128 times.
+    if(!jitter&&ix%8==0&&iy%8==0){world.spansAtIndexed(ix/8,iy/8,optimizedSpans);if(!sameSpans(optimizedSpans,world.spansAtReference(ix/8,iy/8)))return false;}
+    float floor=world.floorHeight(x,y);
+    for(float offset:{-.04f,.02f,1.5f,3.f}){
+     float feet=floor+offset;
+     if(!sameFloat(world.clearanceAboveIndexed(x,y,feet),world.clearanceAboveReference(x,y,feet)))return false;
+     float angle=unit()*2*kPi;Vec2 along{std::cos(angle),std::sin(angle)};
+     if(world.wallSpaceFreeIndexed({x,y},along,1.2f,feet,feet+1.8f)!=world.wallSpaceFreeReference({x,y},along,1.2f,feet,feet+1.8f)){std::fprintf(stderr,"wall mismatch %d %d %g %g\n",int(id),level,x,y);return false;}
+     ++checked;
+    }
+   }
+  }
+  std::fprintf(stderr,"collision differential world=%d chunk=%d checks=%llu mismatches=0\n",int(id),level,static_cast<unsigned long long>(checked));
  }
  // Compare terrain acceleration against the original fixed-step queries,
  // including synthetic stacked floors/overhangs and fractional starts.
@@ -868,7 +952,7 @@ __declspec(noinline) bool World::testCollisionCandidates(){
  return true;
 }
 float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const{
- for(auto index:collisionCandidates(0,x,y)){const auto&fixture=m_fixtures[index];if(fixture.solid&&fixture.base<.025f&&insideFixture(fixture,x,y)){
+ for(auto index:collisionCandidates(0,x,y)){const auto&fixture=m_fixtures[index];if(fixture.solid&&fixture.base<.025f&&insideFixtureCandidate(index,x,y)){
   if(shelfCavities&&fixture.model==7)continue;
   return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
  }}
@@ -1012,17 +1096,24 @@ char World::tile(int x, int y) const {
 }
 
 bool World::solid(float x, float y) const {
+ auto result=solidIndexed(x,y);if(collisionVerify())verifyCollision(0,result==solidReference(x,y));return result;
+}
+bool World::solidIndexed(float x, float y) const {
     perf::count(perf::Solid);
-    for(const auto&fixture:m_fixtures)if(fixture.solid&&insideFixture(fixture,x,y,.2f))return true;
-    for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x+.2f&&std::fabs(y-p.position.y)<p.halfSize.y+.2f)return true;
-    for(auto&terminal:m_terminals)if(terminal.z==0&&int(x)==int(terminal.position.x)&&int(y)==int(terminal.position.y))return true;
+    for(auto index:collisionCandidates(0,x,y)){const auto&fixture=m_fixtures[index];if(fixture.solid&&insideFixtureCandidate(index,x,y,.2f))return true;}
+    for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(std::fabs(x-p.position.x)<p.halfSize.x+.2f&&std::fabs(y-p.position.y)<p.halfSize.y+.2f)return true;}
+    for(auto index:collisionCandidates(2,x,y)){const auto&terminal=m_terminals[index];if(terminal.z==0&&int(x)==int(terminal.position.x)&&int(y)==int(terminal.position.y))return true;}
     const char t = tile(static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)));
     return t=='#'||t=='C'||t=='B'||t=='T';
 }
 bool World::wallSpaceFree(Vec2 center,Vec2 along,float width,float bottom,float top)const{
+ auto result=wallSpaceFreeIndexed(center,along,width,bottom,top);if(collisionVerify())verifyCollision(1,result==wallSpaceFreeReference(center,along,width,bottom,top));return result;
+}
+bool World::wallSpaceFreeIndexed(Vec2 center,Vec2 along,float width,float bottom,float top)const{
  Vec2 normal{-along.y,along.x};
- for(auto&f:m_fixtures){float base=floorHeight(f.position.x,f.position.y)+f.base;if(base>=top||base+f.height<=bottom)continue;
-  Vec2 a{std::cos(f.yaw),-std::sin(f.yaw)},b{-a.y,a.x},delta=f.position-center;
+ thread_local std::vector<size_t> scratch;
+ for(auto index:wallCandidates(center,along,width,scratch)){const auto&f=m_fixtures[index];float base=floorHeight(f.position.x,f.position.y)+f.base;if(base>=top||base+f.height<=bottom)continue;
+  Vec2 a{m_fixtureRotation[index].x,-m_fixtureRotation[index].y},b{-a.y,a.x},delta=f.position-center;
   float tangentExtent=std::fabs(dot(along,a))*f.width*.5f+std::fabs(dot(along,b))*f.depth*.5f;
   float normalExtent=std::fabs(dot(normal,a))*f.width*.5f+std::fabs(dot(normal,b))*f.depth*.5f;
   if(std::fabs(dot(delta,along))<tangentExtent+width*.5f+.02f&&std::fabs(dot(delta,normal))<normalExtent+.06f)return false;
@@ -1121,7 +1212,7 @@ float World::supportBelow(float x,float y,float feet)const{
 }
 float World::supportBelowUncached(float x,float y,float feet)const{
  float fixtureTop=-100;
- for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixture(f,x,y)){
+ for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(f.model==7)for(float tier:ShelfTiers){float top=base+f.height*tier;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
   else if(base+f.height<=feet+.025f)fixtureTop=std::max(fixtureTop,base+f.height);
@@ -1141,18 +1232,21 @@ float World::supportBelowUncached(float x,float y,float feet)const{
  return result;
 }
 float World::clearanceAbove(float x,float y,float feet)const{
+ auto result=clearanceAboveIndexed(x,y,feet);if(collisionVerify())verifyCollision(2,sameFloat(result,clearanceAboveReference(x,y,feet)));return result;
+}
+float World::clearanceAboveIndexed(float x,float y,float feet)const{
  float ceiling=hasTerrain()?std::min(clearanceHeight(x,y,feet),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y,feet);
- for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
+ for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(f.model==7)for(float tier:ShelfTiers){float underside=base+f.height*tier-.045f;if(underside>feet+.025f)ceiling=std::min(ceiling,underside);}
   else if(base>feet+.025f)ceiling=std::min(ceiling,base);
- }
- for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
+ }}
+ for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}}
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
- for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
+ for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
 bool World::fits(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const{
@@ -1194,7 +1288,7 @@ bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bo
    if(feet<top-.025f&&feet+height>base+.005f)return false;
   }
  }else if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y,feet)+.005f)return false;
- for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixture(f,x,y)){
+ for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(shelfCavities&&f.model==7){
    for(float tier:ShelfTiers){float top=base+f.height*tier;if(feet<top-.005f&&feet+height>top-.045f)return false;}
@@ -1236,7 +1330,55 @@ bool World::railBlocksHull(float x,float y,float radius,float feet,float height)
  return false;
 }
 std::vector<Span> World::spansAt(int x,int y)const{
+ std::vector<Span> result;spansAt(x,y,result);return result;
+}
+void World::spansAt(int x,int y,std::vector<Span>& result)const{
+ spansAtIndexed(x,y,result);if(collisionVerify())verifyCollision(3,sameSpans(result,spansAtReference(x,y)));
+}
+void World::spansAtIndexed(int x,int y,std::vector<Span>& result)const{
  perf::count(perf::SpansAt);
+ float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);thread_local std::vector<std::pair<float,float>> solids;solids.clear();solids.push_back({-100.f,supportHeight(px,py)});
+ for(auto index:collisionCandidates(0,px,py)){const auto&f=m_fixtures[index];if(f.solid&&f.base>.025f&&insideFixtureCandidate(index,px,py)){float base=floorHeight(px,py)+f.base;solids.push_back({base,base+f.height});}}
+ for(auto index:collisionCandidates(1,px,py)){const auto&p=m_props[index];if(p.base>.025f&&std::fabs(px-p.position.x)<p.halfSize.x&&std::fabs(py-p.position.y)<p.halfSize.y){float base=floorHeight(px,py)+p.base;solids.push_back({base,base+p.height});}}
+ for(auto index:structureIndices(px,py)){auto&s=m_structures[index];if(px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});}
+ std::sort(solids.begin(),solids.end());result.clear();float bottom=-100.f;
+ for(auto solid:solids){if(solid.first>bottom)result.push_back({bottom,solid.first,0});bottom=std::max(bottom,solid.second);}
+ if(bottom<roof)result.push_back({bottom,roof,0});return;
+}
+bool World::solidReference(float x, float y) const {
+
+    for(const auto&fixture:m_fixtures)if(fixture.solid&&insideFixture(fixture,x,y,.2f))return true;
+    for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x+.2f&&std::fabs(y-p.position.y)<p.halfSize.y+.2f)return true;
+    for(auto&terminal:m_terminals)if(terminal.z==0&&int(x)==int(terminal.position.x)&&int(y)==int(terminal.position.y))return true;
+    const char t = tile(static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)));
+    return t=='#'||t=='C'||t=='B'||t=='T';
+}
+bool World::wallSpaceFreeReference(Vec2 center,Vec2 along,float width,float bottom,float top)const{
+ Vec2 normal{-along.y,along.x};
+ for(auto&f:m_fixtures){float base=floorHeight(f.position.x,f.position.y)+f.base;if(base>=top||base+f.height<=bottom)continue;
+  Vec2 a{std::cos(f.yaw),-std::sin(f.yaw)},b{-a.y,a.x},delta=f.position-center;
+  float tangentExtent=std::fabs(dot(along,a))*f.width*.5f+std::fabs(dot(along,b))*f.depth*.5f;
+  float normalExtent=std::fabs(dot(normal,a))*f.width*.5f+std::fabs(dot(normal,b))*f.depth*.5f;
+  if(std::fabs(dot(delta,along))<tangentExtent+width*.5f+.02f&&std::fabs(dot(delta,normal))<normalExtent+.06f)return false;
+ }return true;
+}
+float World::clearanceAboveReference(float x,float y,float feet)const{
+ float ceiling=hasTerrain()?std::min(clearanceHeight(x,y,feet),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y,feet);
+ for(auto&f:m_fixtures)if(f.solid&&insideFixture(f,x,y)){
+  float base=floorHeight(f.position.x,f.position.y)+f.base;
+  if(f.model==7)for(float tier:ShelfTiers){float underside=base+f.height*tier-.045f;if(underside>feet+.025f)ceiling=std::min(ceiling,underside);}
+  else if(base>feet+.025f)ceiling=std::min(ceiling,base);
+ }
+ for(auto&p:m_props)if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(base>feet+.025f)ceiling=std::min(ceiling,base);}
+ if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
+ if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
+ for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
+ for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
+ return ceiling;
+}
+std::vector<Span> World::spansAtReference(int x,int y)const{
+
  float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);std::vector<std::pair<float,float>> solids={{-100.f,supportHeight(px,py)}};
  for(auto&f:m_fixtures)if(f.solid&&f.base>.025f&&insideFixture(f,px,py)){float base=floorHeight(px,py)+f.base;solids.push_back({base,base+f.height});}
  for(auto&p:m_props)if(p.base>.025f&&std::fabs(px-p.position.x)<p.halfSize.x&&std::fabs(py-p.position.y)<p.halfSize.y){float base=floorHeight(px,py)+p.base;solids.push_back({base,base+p.height});}
