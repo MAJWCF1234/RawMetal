@@ -1135,6 +1135,8 @@ void World::buildLayers(std::span<const Staircase> stairs){
   const float z=layer.elevation, underside=z-layer.thickness;
   const bool collarWall=hasLift()&&z==0;
   const float railHeight=collarWall?2.7f:.55f;
+  // Wall backing above a deck edge takes the chunk's wall finish, not the grating's.
+  const int wallBacker=campaign()&&authored()?3:0;
   auto deck=[&](int x,int y){return x>=0&&y>=0&&x<Width&&y<Height&&layer.rows[y][x]=='=';};
   auto stairConnection=[&](float x,float y){
    if(hasLift()&&z==0&&x>=11&&x<=13&&y>=7.9f&&y<=10)return true;
@@ -1158,19 +1160,19 @@ void World::buildLayers(std::span<const Staircase> stairs){
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
    if(!deck(x-1,y)&&!(hasLift()&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
     m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
+    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
    }
    if(!deck(x+1,y)&&!(hasLift()&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
     m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
+    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
    }
    if(!deck(x,y-1)&&!(hasLift()&&tile(x,y-1)=='#')&&!stairConnection(x+.5f,y-.001f)){
     m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
+    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
    }
    if(!deck(x,y+1)&&!(hasLift()&&tile(x,y+1)=='#')&&!stairConnection(x+.5f,y+1.001f)){
     m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false});
+    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
    }
   }
  }
