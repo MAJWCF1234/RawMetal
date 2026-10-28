@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.0.2 - The lights on, again (2026-10-28)
+
+A second walk through the plant, this time with a record of what each fix
+looks like before and after.
+
+The feeder isolator in the sump works, the breaker panel, the ammeter and the
+fire cabinets in the water chapters were hung on their walls facing into the
+brick; you saw their backs. They face the room. The specimen crate on the
+Research Receiving lift, the transfer cage and the mesh fences were black in
+a lit room and show their metal and rust. The big painted steel of the supply
+main, the exchanger shells and the crane girders was one flat colour and has
+grain and wear. The brown grating that showed on walls above the decks is
+the wall finish of its own hall. The menu says what build it is.
+
+---
+
 ## v1.0.1 - Things that were not where they should be (2026-10-28)
 
 A walk through the plant with the lights on, looking for what is wrong.
