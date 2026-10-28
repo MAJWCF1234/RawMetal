@@ -390,9 +390,9 @@ std::shared_ptr<const Map> makeDrainageGallery(){
  m.pipes.push_back({p4,p4,abed+.95f,.3f,abed+1.15f,6});
  m.structures.push_back({p4.x-.5f,p4.y-.5f,p4.x+.5f,p4.y+.5f,abed,abed+1.15f,false,6});
  pipeRoute(m,{{p4.x,p4.y,abed+1.15f},{p4.x,p4.y,-22.55f},{p4.x,17.4f,-22.55f},{18.4f,17.4f,-22.55f},{18.4f,17.4f,-21.2f},{21.2f,17.4f,-21.2f},{21.2f,17.4f,R}},.14f,5,aroof);
- m.fixtures.push_back({model::pwr_disconnect_switch,{10.4f,14.18f},1.25f,.43f,.35f,.85f,kPi,false});
+ m.fixtures.push_back({model::pwr_disconnect_switch,{10.4f,14.18f},1.25f,.43f,.35f,.85f,0,false});
  pipeRoute(m,{{10.4f,14.12f,F+1.25f},{10.4f,14.12f,-22.25f},{11.5f,14.12f,-22.25f},{11.5f,16.44f,-22.25f}},.03f,6,NoRoof);
- m.fixtures.push_back({model::pwr_breaker_panel,{12.6f,14.06f},1.3f,.18f*1.6f,.1f*1.6f,.46f*1.6f,kPi,false});
+ m.fixtures.push_back({model::pwr_breaker_panel,{12.6f,14.06f},1.3f,.18f*1.6f,.1f*1.6f,.46f*1.6f,0,false});
  watLiveWater(m,5.f,14.f,18.f,18.f,asurf,70.f,.6f);
  watHum(m,"wat_culvert_hum_ms",4.f,12.f,23.f,20.f,F-1.5f,F+3.f,.6f);
  watHumPrime(m,"wat_culvert_hum_prime","wat_culvert_hum_ms",17.f,12.f,24.f,20.f,F-1.f,F+3.f);
@@ -404,7 +404,7 @@ std::shared_ptr<const Map> makeDrainageGallery(){
  // --- The landing (east, from Water Treatment) ------------------------------------
  terminal(m,{22.2f,19.3f},"DRAINAGE / P-4 LOCAL","P-4 TRIPPED 01:52. MOTOR STILL FED FROM MCC-2.","CULVERT 2 IS LIVE. WALK THE OVERFLOW. MCC-2 IS AT THE SUMP WORKS.");
  m.fixtures.push_back({model::pwr_control_cabinet,{18.45f,12.25f},0,.8f,.4f,1.6f,kPi,true});
- m.fixtures.push_back({model::pwr_ammeter_box,{18.06f,13.3f},1.3f,.23f,.1f,.37f,-kPi*.5f,false});
+ m.fixtures.push_back({model::pwr_ammeter_box,{18.06f,13.3f},1.3f,.23f,.1f,.37f,kPi*.5f,false});
  cableTray(m,{18.2f,19.7f},{22.8f,19.7f},F+2.7f);
  floorLine(m,18.2f,15.9f,23.f,16.1f,F,14);
  // Drain grating and a hose reel at the culvert mouth.
@@ -459,7 +459,7 @@ std::shared_ptr<const Map> makeDrainageGallery(){
  servicePipe(m,{1.2f,19.6f},{12.8f,19.6f},F+3.6f,.16f,0);
  cableTray(m,{12.6f,19.2f},{12.6f,22.8f},F+3.f);
  m.fixtures.push_back({model::electrical_cabinet,{12.55f,21.6f},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
- m.fixtures.push_back({model::pwr_fire_cabinet,{1.12f,21.f},1.1f,.25f,.2f,.56f,-kPi*.5f,false});
+ m.fixtures.push_back({model::pwr_fire_cabinet,{1.12f,21.f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
  for(float x:{9.f,11.f})floorLine(m,x,20.6f,x+.2f,23.f,F,14);
  // --- Light ---------------------------------------------------------------------
  m.lights.push_back(lamp({20.5f,16.f},R-.25f,1.4f,8.f,6200,.4f));
@@ -601,14 +601,14 @@ std::shared_ptr<const Map> makeSumpWorks(){
   m.fixtures.push_back({model::pwr_switchgear_cabinet,{x,22.63f},0,1.35f,.74f,2.43f,0,true});
   }
  // The feeder isolator: the big switch on the west wall, its control desk.
- m.fixtures.push_back({model::pwr_disconnect_switch,{1.3f,18.2f},.75f,.43f*1.7f,.35f*1.7f,.85f*1.7f,-kPi*.5f,false});
+ m.fixtures.push_back({model::pwr_disconnect_switch,{1.3f,18.2f},.75f,.43f*1.7f,.35f*1.7f,.85f*1.7f,kPi*.5f,false});
  terminal(m,{2.75f,18.2f},"MCC-2 / FEEDER ISOLATOR","FEEDER CLOSED. P-4, P-7, TOWER 2 RECIRC AND THE SUMP ENERGIZED.","E / OPEN THE FEEDER. EVERYTHING ON MCC-2 GOES DEAD.",0,watIsolated);
  m.terminals.back().yaw=kPi*.5f;
  terminal(m,{6.2f,16.f},"MCC-2 / FAULT LOG","01:52 EARTH FAULT ON P-4, P-7 AND TOWER 2 RECIRC. FEEDER DID NOT OPEN.","NOBODY CAME DOWN TO OPEN IT. THE WATER HAS BEEN LIVE SINCE.");
  m.terminals.back().yaw=.001f;
  m.fixtures.push_back({model::office_chair,{7.6f,16.6f},0,.55f,.55f,.95f,.6f,true});
  for(float y:{20.2f,21.f})m.fixtures.push_back({model::pwr_control_cabinet,{1.25f,y},0,.8f,.4f,1.6f,-kPi*.5f,true});
- m.fixtures.push_back({model::pwr_fire_cabinet,{8.72f,22.f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
+ m.fixtures.push_back({model::pwr_fire_cabinet,{8.72f,22.f},1.1f,.25f,.2f,.56f,-kPi*.5f,false});
  cableTray(m,{1.5f,15.6f},{8.4f,15.6f},F+3.f);
  // --- The pockets and the south bay ---------------------------------------------------
  m.fixtures.push_back({model::dumpster,{11.2f,16.6f},0,1.96f,1.27f,1.17f,kPi*.5f,true});
@@ -742,7 +742,7 @@ std::shared_ptr<const Map> makeCoolingTowersBasin(){
  // Biocide dosing in the north-east of the apron.
  {float s=.7f;m.fixtures.push_back({model::tank_system,{19.7f,6.f},0,1.58f*s,1.62f*s,2.3f*s,0,true});}
  for(Vec2 d:{Vec2{20.4f,7.6f},Vec2{19.6f,7.7f}})m.fixtures.push_back({model::drum,d,0,.6f,.6f,.86f,0,true});
- m.fixtures.push_back({model::pwr_fire_cabinet,{9.4f,1.12f},1.1f,.25f,.2f,.56f,kPi,false});
+ m.fixtures.push_back({model::pwr_fire_cabinet,{9.4f,1.12f},1.1f,.25f,.2f,.56f,0,false});
  m.fixtures.push_back({model::cable_reel,{7.4f,3.6f},0,.5f,1.f,1.f,0,true});
  // --- Light ------------------------------------------------------------------------
  m.lights.push_back(watWall({2.02f,12.5f},-22.6f,0,1.1f,6.f,3000));
@@ -932,7 +932,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  // the locker turns round, back to that wall, to open into the vestibule.
  m.fixtures.push_back({model::psx_locker,{1.45f,9.665f},0,.64f,.85f,2.42f,kPi*.5f,true});
  m.fixtures.push_back({model::pwr_fire_cabinet,{4.88f,7.17f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
- m.fixtures.push_back({model::lab_wall_clock,{3.9f,5.05f},2.05f,.4f,.03f,.4f,kPi,false});
+ m.fixtures.push_back({model::lab_wall_clock,{3.9f,5.05f},2.05f,.4f,.03f,.4f,0,false});
  // --- Exchanger rows ----------------------------------------------------------------------
  const float axis=F+1.75f,r=1.2f,hotA=-14.f,coldA=-13.3f;
  struct WatRow{float cy,x1a,x2a,x1b,x2b;const char* a;const char* b;int side;float west;};
@@ -994,7 +994,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  m.terminals.back().yaw=.001f;
  for(float x:{1.6f,2.55f})m.fixtures.push_back({model::electrical_cabinet,{x,22.73f},0,.9066f,.4956f,2.2f,0,true});
  m.fixtures.push_back({model::lab_control_board,{5.2f,22.9f},1.f,1.32f,.19f,.6f,kPi,false});
- m.fixtures.push_back({model::pwr_fire_cabinet,{1.12f,20.5f},1.1f,.25f,.2f,.56f,-kPi*.5f,false});
+ m.fixtures.push_back({model::pwr_fire_cabinet,{1.12f,20.5f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
  // The operator: told to wait, and he waited.
  watBody(m,"wat_hx_operator",{12.9f,19.6f},F,kPi*.8f);
  floorLine(m,12.5f,19.1f,13.6f,19.9f,F,16);
