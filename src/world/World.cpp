@@ -352,7 +352,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(const auto& prop:map->props)if(prop.kind<0||prop.kind>=4)throw std::runtime_error("Invalid authored prop model");
  for(int surface:{map->wallSurface,map->floorSurface,map->ceilingSurface})if(surface<SurfaceDefault||surface>=SurfaceCount)throw std::runtime_error("Invalid authored surface set");
  for(const auto& stair:map->stairs)if(stair.steps<1||stair.steps>4096||stair.x1>=stair.x2||stair.y1>=stair.y2||stair.bottom>stair.top||!std::isfinite(stair.treadThickness)||stair.treadThickness<.025f||stair.treadThickness>.5f)throw std::runtime_error("Invalid authored staircase");
- m_mapData=std::move(map);
+ m_definitionSource=map.get();m_mapData=std::move(map);
  m_actorPoses.clear();for(const auto& track:m_mapData->actorTracks)m_actorPoses.push_back(track.idleKeys.empty()?sampleActor(track,0):sampleActorKeys(track.idleKeys,0,true));
  m_openNorthBoundary=m_mapData->openNorth;m_openSouthBoundary=m_mapData->openSouth;
  m_openWestBoundary=m_mapData->openWest;m_openEastBoundary=m_mapData->openEast;

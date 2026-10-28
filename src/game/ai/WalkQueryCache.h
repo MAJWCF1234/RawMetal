@@ -3,8 +3,33 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdint>
 #include <memory>
+#include <vector>
 namespace retro::ai {
+// The exact mutable collision state World::fits / supportBelow / doorBlocks read,
+// behind the identity of the immutable definition it sits on: two equal
+// snapshots answer every collision query alike. The walk memo below keys on it,
+// and so does any route or node-graph memo; a new mutable input to those
+// queries belongs here, never in one memo's private key.
+inline void collisionSnapshot(const World&world,std::vector<uint32_t>&out){
+ out.clear();auto word=[&](uint32_t value){out.push_back(value);};auto scalar=[&](float value){word(std::bit_cast<uint32_t>(value));};
+ // Which definition: the authored map it was loaded from, its world and slot.
+ const auto identity=world.definitionIdentity();const auto address=uint64_t(reinterpret_cast<uintptr_t>(identity.map));
+ word(uint32_t(address));word(uint32_t(address>>32));word(uint32_t(identity.world));word(uint32_t(identity.level));
+ word(uint32_t(world.layers().size()));word(uint32_t(world.structures().size()));word(uint32_t(world.fixtures().size()));word(uint32_t(world.props().size()));word(world.hasTerrain());
+ // Tile destruction opens paths; comparing actual tiles also handles restore.
+ for(int y=0;y<24;++y)for(int x=0;x<24;x+=4){uint32_t tiles=0;for(int i=0;i<4;++i)tiles|=uint32_t(uint8_t(world.tile(x+i,y)))<<(i*8);word(tiles);}
+ word(uint32_t(world.doors().size()));for(const auto&door:world.doors()){for(float value:{door.left,door.right,door.y,door.z,door.open})scalar(value);word(door.swinging);}
+ scalar(world.cargoLiftHeight());scalar(world.liftHeight());word(uint32_t(world.liftPhase()));word(world.liftPhaseTime()>=3.65f);
+ word(uint32_t(world.terminals().size()));for(const auto&terminal:world.terminals())scalar(terminal.z);
+ // Ordinary NPCs do not participate in World::fits/supportBelow. Moving
+ // platform tracks do, and every exact platform position must invalidate.
+ word(uint32_t(world.actorTracks().size()));for(size_t i=0;i<world.actorTracks().size();++i)if(world.actorTracks()[i].platform){const auto&pose=world.actorPose(i);scalar(pose.position.x);scalar(pose.position.y);scalar(pose.z);}
+ // Push crates block fits (crateBlocks) and carry supportBelow / clearanceAbove
+ // wherever each one has been shoved or dropped to.
+ word(uint32_t(world.pushCrates().size()));for(const auto&crate:world.pushCrates()){scalar(crate.position.x);scalar(crate.position.y);scalar(crate.z);scalar(crate.size);}
+}
 // Exact retained route probes, scoped to one immutable authored definition and
 // an exact snapshot of its mutable collision state. This never caches movement
 // execution or a seam-crossing probe. It also survives no definition lifetime.
@@ -26,16 +51,7 @@ public:
  };
  void begin(const World&world,const std::shared_ptr<const AuthoredMapData>&definition,bool enabled=true){
   m_enabled=enabled&&bool(definition);if(!m_enabled)return;
-  m_scratch.clear();auto word=[&](uint32_t value){m_scratch.push_back(value);};auto scalar=[&](float value){word(std::bit_cast<uint32_t>(value));};
-  word(uint32_t(world.layers().size()));word(uint32_t(world.structures().size()));word(uint32_t(world.fixtures().size()));word(uint32_t(world.props().size()));word(world.hasTerrain());
-  // Tile destruction opens paths; comparing actual tiles also handles restore.
-  for(int y=0;y<24;++y)for(int x=0;x<24;x+=4){uint32_t tiles=0;for(int i=0;i<4;++i)tiles|=uint32_t(uint8_t(world.tile(x+i,y)))<<(i*8);word(tiles);}
-  word(uint32_t(world.doors().size()));for(const auto&door:world.doors()){for(float value:{door.left,door.right,door.y,door.z,door.open})scalar(value);word(door.swinging);}
-  scalar(world.cargoLiftHeight());scalar(world.liftHeight());word(uint32_t(world.liftPhase()));word(world.liftPhaseTime()>=3.65f);
-  word(uint32_t(world.terminals().size()));for(const auto&terminal:world.terminals())scalar(terminal.z);
-  // Ordinary NPCs do not participate in World::fits/supportBelow. Moving
-  // platform tracks do, and every exact platform position must invalidate.
-  word(uint32_t(world.actorTracks().size()));for(size_t i=0;i<world.actorTracks().size();++i)if(world.actorTracks()[i].platform){const auto&pose=world.actorPose(i);scalar(pose.position.x);scalar(pose.position.y);scalar(pose.z);}
+  collisionSnapshot(world,m_scratch);
   bool ownerChanged=m_world!=&world||m_definition.expired()||m_definition.owner_before(definition)||definition.owner_before(m_definition);
   if(ownerChanged||m_snapshot!=m_scratch){for(auto&entry:m_entries)entry.state=0;m_snapshot.swap(m_scratch);m_definition=definition;m_world=&world;++statistics.invalidations;}
  }

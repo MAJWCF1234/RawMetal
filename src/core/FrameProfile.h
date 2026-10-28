@@ -56,11 +56,19 @@ struct LeafScope:Scope {explicit LeafScope(Cost value):Scope(value,true){}};
 enum Counter {Navigable,RoughSegment,NavFits,FitsCalls,FitsComputed,RayClear,RayClearSteps,SupportCalls,DoorBlocks,Solid,SpansAt,
  StackedCalls,StackedNodes,StackedEdges,StackedNoRoute,FloodFills,FloodEdges,FloodNoRoute,DoorPlans,AiCanSee,SoundRay,LightRay,
  GuardIntents,GuardThreats,GuardTargets,GuardSight,FriendlyUpdates,FriendlyWalks,FriendlyWalksComputed,FriendlyRay,TraceShot,HostileCensus,DoorLockChecks,StateWrites,StateInserts,StateErases,
- CreatureUpdates,CreaturesHunting,CounterCount};
+ CreatureUpdates,CreaturesHunting,
+ // Retained AI data, keyed on ai::collisionSnapshot: route-graph lookups that
+ // found or built their entry, guard node graphs built whole, kept across
+ // residency or advanced a slice ahead of need. The mismatch counters are the
+ // verify modes' own: a retained answer that differs from the live one, or a
+ // per-frame chunk-residency answer that differs from asking chunk by chunk.
+ // Each must read zero.
+ RouteCacheHits,RouteCacheMisses,RouteCacheMismatches,NavGraphBuilt,NavGraphReused,NavGraphSlices,StreamingMismatches,CounterCount};
 inline constexpr const char* counterNames[]={"navigable","rough_segment","nav_fits","fits_calls","fits_computed","ray_clear","ray_clear_steps","support_below","door_blocks","solid","spans_at",
  "stacked_calls","stacked_nodes","stacked_edges","stacked_no_route","flood_fills","flood_edges","flood_no_route","door_plans","ai_can_see","sound_ray","light_ray",
  "guard_intents","guard_threats","guard_targets","guard_sight","friendly_updates","friendly_walks","friendly_walks_computed","friendly_ray","trace_shot","hostiles_remaining","door_lock_checks","state_writes","state_inserts","state_erases",
- "creature_updates","creatures_hunting"};
+ "creature_updates","creatures_hunting",
+ "route_cache_hits","route_cache_misses","route_cache_mismatches","navgraph_built","navgraph_reused","navgraph_slices","streaming_mismatches"};
 static_assert(std::size(counterNames)==CounterCount,"every counter has a name");
 inline thread_local std::array<uint64_t,CounterCount> counts{};
 inline void count(Counter counter,uint64_t amount=1){counts[counter]+=amount;}

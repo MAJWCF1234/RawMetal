@@ -279,6 +279,14 @@ public:
     // campaign slots) carry their own content, so legacy special cases skip them.
     bool campaignChunk(int index)const{return campaign()&&m_level==index&&!m_mapData;}
     bool authored()const{return m_mapData!=nullptr;}
+    // Which definition this World's geometry was built from, for memos keyed on
+    // its collision (ai::collisionSnapshot): the authored map it was loaded from
+    // (the same across a chunk re-made on streaming, even where terrain settles
+    // a private copy of it), or none for a built-in chunk, with world and slot.
+    // An address names its map only while that map lives; a memo kept longer
+    // than the World that keyed it must hold or check its owner too.
+    struct DefinitionIdentity {const AuthoredMapData* map=nullptr;WorldId world=WorldId::Campaign;int level=0;bool operator==(const DefinitionIdentity&)const=default;};
+    DefinitionIdentity definitionIdentity()const{return {m_definitionSource,m_worldId,m_level};}
     const ChunkDefinition& definition()const{return m_mapData?m_mapData->definition:chunkDefinition(m_worldId,m_level);}
     std::span<const int> visibleResidencyGroups()const{return m_mapData?std::span<const int>(m_mapData->visibleResidencyGroups):std::span<const int>{};}
     bool outdoors()const{return definition().environment==Environment::Outdoor;}
@@ -461,6 +469,7 @@ private:
     int m_level=0;
     WorldId m_worldId=WorldId::Campaign;
     std::shared_ptr<const AuthoredMapData> m_mapData;
+    const AuthoredMapData* m_definitionSource=nullptr;
     std::vector<ActorPose> m_actorPoses;
     void loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map);
     bool m_openNorthBoundary=false,m_openSouthBoundary=false,m_openWestBoundary=false,m_openEastBoundary=false;
