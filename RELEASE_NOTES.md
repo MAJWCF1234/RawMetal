@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.0.3 - The night desk (2026-10-28)
+
+Since the office became part of the plant, a second computer had been sitting
+on your security desk with its back to you, hiding the screen you work at.
+It is gone; the desk's own terminal faces your chair again. When the lift
+cable goes, the cab light dies instead of turning into a red sheet across the
+ceiling, and one small emergency lamp by the door is all that stays lit.
+
+---
+
 ## v1.0.2 - The lights on, again (2026-10-28)
 
 A second walk through the plant, this time with a record of what each fix

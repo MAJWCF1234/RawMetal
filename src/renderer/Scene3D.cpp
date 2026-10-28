@@ -1076,6 +1076,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // 2.4 m roof matches the platform's collision ceiling.
   static const Texture roofLight=[](){Texture t{1,1,{0xfff2ead2u}};t.emission={0xffe8dcb4u};return t;}();
   static const Texture emergencyLight=[](){Texture t{1,1,{0xff3a1210u}};t.emission={0xff4a0e0au};return t;}();
+  // The dead diffuser once the brake lets go: grey plastic, no glow.
+  static const Texture roofLightOff=[](){Texture t{1,1,{0xff4a4844u}};return t;}();
   box({x1,y1,z-.25f},{x2,y2,z},m_pressureMetal,1.05f);
   quad({x1+.12f,y1+.12f,z+.004f},{x2-.12f,y1+.12f,z+.004f},{x2-.12f,y2-.12f,z+.004f},{x1+.12f,y2-.12f,z+.004f},m_ironTexture,1.f,{width*.5f,depth*.5f});
   for(float y:{y1+.02f,y2-.18f})quad({x1+.12f,y,z+.01f},{x2-.12f,y,z+.01f},{x2-.12f,y+.16f,z+.01f},{x1+.12f,y+.16f,z+.01f},m_hazard,1.1f);
@@ -1099,7 +1101,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   box({x2-.2f,y1+.35f,z+1.0f},{x2-.12f,y1+.75f,z+1.45f},m_panelMetal,1.f);
   quad({x2-.201f,y1+.42f,z+1.08f},{x2-.201f,y1+.68f,z+1.08f},{x2-.201f,y1+.68f,z+1.38f},{x2-.201f,y1+.42f,z+1.38f},m_facilityTextures.at("keypad_1"),1.3f);
   box({x1,y1,z+2.4f},{x2,y2,z+2.6f},m_bulkhead,.9f);
-  quad({mx-.6f,y1+.6f,z+2.395f},{mx+.6f,y1+.6f,z+2.395f},{mx+.6f,y2-.6f,z+2.395f},{mx-.6f,y2-.6f,z+2.395f},released?emergencyLight:roofLight,1.f);
+  quad({mx-.6f,y1+.6f,z+2.395f},{mx+.6f,y1+.6f,z+2.395f},{mx+.6f,y2-.6f,z+2.395f},{mx-.6f,y2-.6f,z+2.395f},released?roofLightOff:roofLight,1.f);
+  // After the cable goes, a small emergency lamp by the door is all that is lit,
+  // not the whole ceiling panel painted red.
+  if(released)box({mx-.12f,y1+.32f,z+2.32f},{mx+.12f,y1+.44f,z+2.4f},emergencyLight,1.8f);
   box({mx-.7f,y1+.3f,z+2.6f},{mx+.7f,y1+.6f,z+2.85f},m_pressureMetal,.8f);box({mx-.7f,y2-.6f,z+2.6f},{mx+.7f,y2-.3f,z+2.85f},m_pressureMetal,.8f);
   box({mx-.25f,y1+.3f,z+2.85f},{mx+.25f,y2-.3f,z+3.05f},m_pressureMetal,.8f);
   // Hoist cables run up the shaft until the brake lets go; then they trail.
@@ -1604,8 +1609,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({x-.16f,y-.005f,h+.46f},{x+.16f,y+.02f,h+.60f},m_panelMetal,.9f);
    quad({x+.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.59f},{x+.15f,y-.01f,h+.59f},terminal.reactorAction==2?m_feedSign:m_returnSign,1.f);
   }else{
-   // Personnel records belong on a computer, visually distinct from switchgear.
-   if(w.campaign()&&w.level()>=6&&terminal.reactorAction==0){
+   // A terminal placed within a solid fixture's footprint (a desk) uses that
+   // furniture's own computer models; only freestanding ones get a console.
+   // A campaign records bench is skipped only on a desk, which carries its own CRT.
+   bool onFurniture=false,onDesk=false;
+   for(const auto&f:w.fixtures()){float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw);
+    bool inside=f.solid&&std::fabs(dx*c-dy*s)<f.width*.5f&&std::fabs(dx*s+dy*c)<f.depth*.5f;
+    onFurniture|=inside;onDesk|=inside&&(f.model==model::desk||f.model==model::desk_corner||f.model==model::lab_exec_desk);}
+   if(onDesk){
+   }else if(w.campaign()&&w.level()>=6&&terminal.reactorAction==0){
+    // Personnel records belong on a computer, visually distinct from switchgear.
     // A grounded service bench carries the CRT on four legs; the narrow post
     // made the screen look perched in empty space. Its compact top also keeps
     // the screen and keyboard readable from the aisle.
@@ -1620,20 +1633,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float halfY=std::fabs(std::sin(terminalYaw))*.14f+std::fabs(std::cos(terminalYaw))*.105f;
     box({keyboardX-halfX,keyboardY-halfY,deskTop+.07f},{keyboardX+halfX,keyboardY+halfY,deskTop+.10f},m_panelMetal,1.f);
     facility(11,x,y,deskTop+.065f,.386509f,.53235f,.50505f,terminalYaw);
-   }else{
-    // A terminal placed within a solid fixture's footprint (a desk) uses that
-    // furniture's own computer models; only freestanding ones get a console.
-    bool onFurniture=false;
-    for(const auto&f:w.fixtures()){float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw);
-     onFurniture|=f.solid&&std::fabs(dx*c-dy*s)<f.width*.5f&&std::fabs(dx*s+dy*c)<f.depth*.5f;}
-    if(!onFurniture){
-     box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
-     box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
-     // Honor authored yaw so Exclusion/custom CRTs face their controls; legacy
-     // zero-yaw terminals keep the original -Y facing.
-     float terminalYaw=std::fabs(terminal.yaw)<1e-4f?kPi:terminal.yaw;
-     facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,terminalYaw);
-    }
+   }else if(!onFurniture){
+    box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
+    box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
+    // Honor authored yaw so Exclusion/custom CRTs face their controls; legacy
+    // zero-yaw terminals keep the original -Y facing.
+    float terminalYaw=std::fabs(terminal.yaw)<1e-4f?kPi:terminal.yaw;
+    facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,terminalYaw);
    }
    if(terminal.reactorAction==1){box({x-.2f,y-.295f,h+.28f},{x+.2f,y-.24f,h+.39f},m_metal,1.f);box({x-.15f,y-.30f,h+.33f},{x+.11f,y-.296f,h+.345f},iron,1.f);box({x+.15f,y-.302f,h+.32f},{x+.17f,y-.295f,h+.34f},w.reactorStage()>=World::ReactorStage::DiskLoaded?blue:amber,1.8f);}
   }
