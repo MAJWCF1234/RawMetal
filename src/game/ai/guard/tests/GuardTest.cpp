@@ -40,7 +40,9 @@ bool Game::testGuardAI(){
  {auto g=scene();g.m_player.pos={3.5f,6.5f};tick(g,45);check(g.guardState(0)==GuardState::Patrol,"Player behind guard's sight cone remains unrecognized");}
  {auto g=scene(true);g.m_player.pos={8.5f,6.5f};tick(g,45);check(g.guardState(0)==GuardState::Patrol,"Wall blocks recognition inside the sight cone");}
  for(bool crouch:{false,true}){auto g=scene();g.m_player.pos={3.7f,6.5f};g.m_player.angle=0;g.m_stepDistance=2;InputState input{};input.forward=true;input.crouch=crouch;g.update(input,1.f/60);
-  check(crouch?g.guardState(0)==GuardState::Patrol:g.guardState(0)==GuardState::Investigate,"Real Game update hears walking and preserves quiet crouching in the same frame");
+  // Heard in the same frame (he stops dead), turned to a beat later (Mind.cpp's HearBeatMs).
+  const bool stopped=g.state(g.friendlyKey(0,"guard_ear_ms"))>0;tick(g,16);
+  check(crouch?g.guardState(0)==GuardState::Patrol&&!stopped:g.guardState(0)==GuardState::Investigate&&stopped,"Real Game update hears walking and preserves quiet crouching in the same frame");
  }
  {auto g=scene();g.m_player.pos={3.7f,6.5f};g.m_player.angle=kPi;g.m_suppressFire=false;InputState input{};input.fire=true;g.update(input,1.f/60);
   check(g.guardState(0)==GuardState::Investigate&&std::fabs(g.state(g.friendlyKey(0,"guard_x"))*.001f-g.player().pos.x)<.001f,"Real Game update hears a gunshot emitted after mechanisms");
@@ -48,7 +50,8 @@ bool Game::testGuardAI(){
  {auto original=scene();auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);map->structures.push_back({1,7.4f,5.5f,7.6f,0,3});campaign->maps[0]=map;Game g(campaign);
   g.m_player.pos={3.5f,8.5f};g.m_player.angle=0;g.m_player.pitch=-38;Clutter object;object.kind=3;object.pos=g.player().pos;g.m_clutter={object};g.m_heldClutter=0;g.m_suppressFire=false;
   InputState input{};input.fire=true;input.crouch=true;g.update(input,1.f/60);input.fire=false;bool heard=false;
-  for(int i=0;i<120&&!heard;++i){g.update(input,1.f/60);for(const auto&sound:g.sounds())if(sound.sound==Sound::JunkMetal&&g.guardState(0)==GuardState::Investigate)heard=true;}
+  // Investigating within a beat (Mind.cpp's HearBeatMs) of the junk landing.
+  int landed=-1;for(int i=0;i<120&&!heard;++i){g.update(input,1.f/60);for(const auto&sound:g.sounds())if(sound.sound==Sound::JunkMetal&&landed<0)landed=i;heard=landed>=0&&i-landed<=20&&g.guardState(0)==GuardState::Investigate;}
   check(heard&&lengthSq(Vec2{g.state(g.friendlyKey(0,"guard_x"))*.001f,g.state(g.friendlyKey(0,"guard_y"))*.001f}-g.player().pos)>1,"Crouched throw in real Game update distracts guard beyond cover without revealing player");
  }
  {auto g=scene();g.m_player.pos={7.5f,6.5f};g.m_player.angle=kPi;check(!g.commandFriendly(),"PC Follow/Wait cannot command a guard");g.setVrHand(0,{6.8f,6.5f,1.2f},{-1,0,0},true);g.m_vrInteractionHand=0;check(!g.commandFriendly(),"VR Follow/Wait cannot command a guard");}

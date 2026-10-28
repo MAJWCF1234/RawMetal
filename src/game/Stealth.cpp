@@ -267,6 +267,12 @@ bool Game::leaveLocker(){
   // when he lands (updateLockerBurst, ai/guard/Lockers.cpp).
   SoundEvent bang{Sound::LockerBang,npc.pose.position,.95f,1.04f,true,14,feet+1.2f};bang.aiRadius=8;m_sounds.push_back(bang);
   setState(friendlyKey(actor,"guard_burst"),index+1);setState(friendlyKey(actor,"guard_burst_ms"),0);
+  // The eyes go with the blow: the way out ends square to the doors, looking
+  // down their normal to where he goes over (his collar lands Fall out from
+  // where he stood, shoved back off the doors and down on his back), so the
+  // fall is watched to the floor, his landing a little under the middle of the frame.
+  {constexpr float Fall=1.35f,Collar=.3f,Under=.12f;const Vec2 o=lockerOut(f);const float ahead=std::max(.6f,dot(npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level)-exit,o)+Fall);
+   m_player.angle=std::atan2(o.y,o.x);m_player.pitch=std::clamp((std::atan2(Collar-Player::StandingEye,ahead)+Under)*140.f,-90.f,0.f);}
  }else m_sounds.push_back({Sound::LockerCreak,lockerFront(f,.1f),.28f,1.1f,true,6,feet+1.6f});
  animateLockerDoor(m_level,index,burst>=0?LockerMotion::Caught:LockerMotion::Exit);startLockerView(LockerMotion::Exit,before,index);m_lockerView.burst=burst>=0;return true;
 }
@@ -386,7 +392,8 @@ bool Game::testStealth(){
   Game g(campaign);g.m_player.pos={9.4f,6.5f};g.m_player.angle=kPi;InputState q;q.subdue=true;g.update(q,1.f/60);
   auto choke=std::find_if(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return e.sound==Sound::PunchHit&&e.spatial;});
   check(choke!=g.m_sounds.end()&&choke->gain>=.4f&&choke->gain<=.5f,"A rear knockout emits a spatial struggle at the victim, heard across a room but not a yard");
-  check(g.guardState(1)==GuardState::Investigate,"A nearby guard investigates the choke instead of remaining on patrol");
+  // (He stops dead on hearing it and turns to it a beat later: ai/guard/Mind.cpp's HearBeatMs.)
+  for(int i=0;i<16;++i)g.update({},1.f/60);check(g.guardState(1)==GuardState::Investigate,"A nearby guard investigates the choke instead of remaining on patrol");
  }
  {auto g=scene();g.m_player.pos={3.5f,6.5f};check(g.nearbyTakedown()<0,"Rear actions respect physical reach");}
  {auto original=scene();auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);map->structures.push_back({4.95f,6,5.05f,7,0,2});campaign->maps[0]=map;Game g(campaign);check(g.nearbyTakedown()<0,"A narrow wall blocks a rear action even within arm's reach");}

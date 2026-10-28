@@ -59,6 +59,9 @@ void Game::planGuardReposition(int level,size_t actor,const ActorTrack& track,co
  }
  if(mode==2){put("guard_cover",0);put("guard_cover_wait",0);}put("guard_cover_mode",0);
  if(guardMeleeReady(actor,pose,selected)){put("guard_cover",0);put("guard_cover_wait",0);wantsMove=false;return;}
+ // A flank has FlankBudgetMs to reach its point and is given up at once when no
+ // way to it is left; on the way he still fires whenever his line is clear (Combat.cpp).
+ constexpr int FlankBudgetMs=2000;
  bool flank=role!=0&&!get("guard_flank_done");
  if(flank){
   // A selected target change invalidates the previous encounter's destination
@@ -75,13 +78,12 @@ void Game::planGuardReposition(int level,size_t actor,const ActorTrack& track,co
     bool direct=remaining>0&&!reserved&&friendlyWalkSegment(level,pose.position,pose.z,cached,track.scale,&endFeet)&&std::fabs(endFeet-feet)<.3f;
     if(direct){put("guard_cover_mode",1);goal=cached;goalZ=feet;wantsMove=true;return;}
     // Door/body can block the straight span — hop the retained graph instead
-    // of abandoning the flank until the wait actually expires.
+    // while the flank still has time.
     if(remaining>0&&!reserved){
      auto hop=guardGraphWaypoint(level,pose.position,pose.z,cached,feet,track.scale);
      if(lengthSq(hop-pose.position)>.04f){put("guard_cover_mode",1);goal=hop;goalZ=pose.z;wantsMove=true;return;}
-     wantsMove=false;return;
     }
-    // Wait elapsed with no path: release the flank so fire leases can resume.
+    // Out of time, or no way to the point left: release the flank.
     put("guard_flank_done",1);put("guard_flank_wait",0);put("guard_cover",0);put("guard_cover_mode",0);put("guard_cover_wait",600+int(actor%7)*30);flank=false;
    }
   }
@@ -100,7 +102,7 @@ void Game::planGuardReposition(int level,size_t actor,const ActorTrack& track,co
        destination=candidate;destinationZ=feet;found=true;break;
       }
      }
-     if(found){put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(destination.x*1000)));put("guard_cover_y",int(std::round(destination.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));put("guard_flank_wait",5000);put("guard_cover_wait",600+int(actor%7)*30);goal=destination;goalZ=destinationZ;wantsMove=true;return;}
+     if(found){put("guard_cover",1);put("guard_cover_mode",1);put("guard_cover_x",int(std::round(destination.x*1000)));put("guard_cover_y",int(std::round(destination.y*1000)));put("guard_cover_z",int(std::round(destinationZ*1000)));put("guard_flank_wait",FlankBudgetMs);put("guard_cover_wait",600+int(actor%7)*30);goal=destination;goalZ=destinationZ;wantsMove=true;return;}
     }
     // Blocked room or a starved search frame must not mute fire forever while
     // pendingFlank keeps wantsMove false. Same backoff either way.

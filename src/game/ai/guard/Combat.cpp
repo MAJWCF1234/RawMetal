@@ -2,6 +2,7 @@
 #include "../../Game.h"
 #include "../../../core/PackedResource.h"
 #include "../../../core/ActorBodyAim.h"
+#include "Schedule.h"
 namespace retro {
 namespace {
 Point3 unit(Point3 p){float length=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);return length>.0001f?p*(1/length):Point3{};}
@@ -138,11 +139,13 @@ NpcWeaponPose Game::npcWeaponPose(size_t actor)const{
  if(npcIncapacitated(actor)||track.ai.mode!=ActorAiMode::Guard||!track.ai.armed||!autonomousActor(track)||npc.pose.clip==4||(track.deadState&&state(track.deadState)))return weapon;
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};float raise=get("weapon_raise")*.001f;
  bool engineering=track.ai.role==GuardSquadRole::Engineer&&(get("drone_windup")||get("drone_busy"));if(engineering)raise=0;
- // Hauled out at gunpoint (the hold): the muzzle comes up at the player's face,
- // so the gun he is held at is in their view, not under it.
+ // Hauled out at gunpoint (the hold): the pistol comes up into the player's
+ // view, lifted a hand's breadth over the carry, and is aimed from where it is
+ // lifted to: its line, pitch and yaw, runs from the muzzle to the player's
+ // eye (aimed at the eye less the lift, then lifted, the line is the same).
  if(get("guard_hold_ms")>0&&get("guard_target_kind")==int(ShotKind::Player)){const Vec2 at=m_player.pos+chunkOffset(m_level)-chunkOffset(npc.level);
-  weapon=npcWeaponPoseAt(actor,npc.pose,{at.x,at.y,m_player.z+m_player.eye-.06f},raise);
-  if(weapon.handgun){const float lift=.16f*raise*track.scale/1.6f;weapon.grip.z+=lift;weapon.muzzle.z+=lift;}}
+  const float lift=guardHandgun(track.ai)?.16f*raise*track.scale/1.6f:0.f;
+  weapon=npcWeaponPoseAt(actor,npc.pose,{at.x,at.y,m_player.z+m_player.eye-lift},raise);weapon.grip.z+=lift;weapon.muzzle.z+=lift;}
  else if(get("weapon_target")){auto shift=chunkOffset(npc.level);Point3 target{get("weapon_x")*.001f-shift.x,get("weapon_y")*.001f-shift.y,get("weapon_z")*.001f},cover;if(guardSuppressionPoint(actor,cover))target=cover;weapon=npcWeaponPoseAt(actor,npc.pose,target,raise);}
  else{
   // A raised saved pose without an aim target retains its low-ready direction.
@@ -245,12 +248,17 @@ void Game::updateGuardCombat(float dt){
   if(workBlocked){put("weapon_aim",0);put("weapon_raise",0);put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300)cancelAction();continue;}
   Point3 coverPoint;bool suppress=!visible&&guardSuppressionPoint(i,coverPoint);
   if(get("grenade_windup")>0||get("grenade_used")!=grenadesUsed){put("weapon_aim",0);put("weapon_raise",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
-  bool fireAllowed=guardTaskAllows(i,GuardTask::Fire);
+  // A move in a fight (an advance, a flank, a sidestep: the Combat schedule's
+  // Move) is no ceasefire: with the target in his sight he has the gun up and
+  // fires on the way whenever the shot line is clear (ready, below). Before,
+  // a man walking in place against a yard fence on ALERT never raised it.
+  const bool repositioning=visible&&get("schedule")==int(GuardSchedule::Combat)&&get("task")==int(GuardTask::Move)&&get("task_status")==int(GuardTaskStatus::Running);
+  bool fireAllowed=guardTaskAllows(i,GuardTask::Fire)||repositioning;
   // Hauled out of a locker, the player gets the muzzle in their face and a
   // moment to answer it (run, hit him, or be shot) before he fires or swings:
   // the gun comes up at twice the pace and stays up through the hold.
   const int hold=get("guard_hold_ms"),pace=hold>0?ms*6:ms*3;
-  int raised=hold>0||((fireAllowed||bashAllowed)&&(visible||suppress)&&(!reload||close)&&npc.pose.clip!=1)?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-pace,pace));
+  int raised=hold>0||((fireAllowed||bashAllowed)&&(visible||suppress)&&(!reload||close)&&(npc.pose.clip!=1||repositioning))?1000:0;int current=get("weapon_raise");put("weapon_raise",current+std::clamp(raised-current,-pace,pace));
   if(hold>0){put("guard_hold_ms",std::max(0,hold-ms));put("weapon_aim",0);put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;}continue;}
   // At contact range a finite, interruptible weapon bash takes precedence.
   // It is usable with an empty tube, and never spends ammunition or shares a
@@ -266,12 +274,12 @@ void Game::updateGuardCombat(float dt){
    damageGuardTarget(i,12.f);m_sounds.push_back({Sound::PunchHit,{origin.x,origin.y},.7f,.85f,true,17,origin.z});auto global=chunkOffset(m_level);m_guardShots.push_back({{origin.x+global.x,origin.y+global.y},origin.z,4.f,.7f,true,int(i)});continue;
   }
   put("weapon_bash",0);if(action==GuardAction::Bash&&elapsed<300){cancelAction();action=GuardAction::None;if(get("weapon_reloading"))phase(GuardAction::Reload,1800-reload,unsigned(get("weapon_reload_events")));}
-  bool pendingFlank=guardFlankSide(i)!=0&&!get("guard_flank_done");
-  if(!fireAllowed||(!visible&&!suppress)||reload||recovery||npc.pose.clip==1||get("weapon_raise")<1000||!guardFireSlot(i)||pendingFlank){put("weapon_aim",0);continue;}
+  // A flank still to reach holds no fire either: whenever he has a clear line he takes it.
+  if(!fireAllowed||(!visible&&!suppress)||reload||recovery||(npc.pose.clip==1&&!repositioning)||get("weapon_raise")<1000||!guardFireSlot(i)){put("weapon_aim",0);continue;}
   auto weapon=suppress?npcWeaponPoseAt(i,npc.pose,coverPoint,1):npcWeaponPose(i);auto origin=weapon.muzzle+Point3{shift.x,shift.y,0};auto hit=guardShot(i,npc.pose,weapon);
   // Seeing the head is insufficient: the barrel and its full shot line must
   // clear cover and intervening bodies. Cancel an interrupted aim completely.
-  bool ready=(visible||suppress)&&!reload&&!recovery&&npc.pose.clip!=1&&weapon.raise>=.999f&&(suppress?hit.kind==ShotKind::Solid&&hit.distance>.15f:guardShotMatches(i,hit));
+  bool ready=(visible||suppress)&&!reload&&!recovery&&(npc.pose.clip!=1||repositioning)&&weapon.raise>=.999f&&(suppress?hit.kind==ShotKind::Solid&&hit.distance>.15f:guardShotMatches(i,hit));
   int aim=ready?std::min(config.aimMs,get("weapon_aim")+ms):0;put("weapon_aim",aim);
   if(aim<config.aimMs)continue;
   unsigned fireEvents=0;auto events=consumeGuardAction(GuardAction::Fire,0,fireEvents);phase(GuardAction::Fire,0,fireEvents);

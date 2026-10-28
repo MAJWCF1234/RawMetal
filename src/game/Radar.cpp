@@ -54,6 +54,7 @@ bool Game::testRadar(){
  // Back to the first man, from behind, and choke him: the second hears it.
  {const auto pose=g.npcActors()[0].pose;Vec2 facing{std::sin(pose.yaw),std::cos(pose.yaw)};g.m_player.pos=pose.position-facing*.95f;g.m_player.angle=std::atan2(facing.y,facing.x);}
  InputState q;q.subdue=true;g.update(q,1.f/60);
+ for(int i=0;i<16;++i)g.update({},1.f/60); // he stops dead on it and turns a beat later (ai/guard/Mind.cpp's HearBeatMs)
  contacts=g.radarContacts();auto east=find(contacts,1);check(g.npcIncapacitated(0)&&g.guardState(1)==GuardState::Investigate&&east&&east->state==GuardState::Investigate,"A guard who hears the choke shows as investigating");
  for(int i=0;i<60;++i)g.update({},1.f/60);
  contacts=g.radarContacts();check(g.npcIncapacitated(0)&&!find(contacts,0)&&contacts.size()==2,"A knocked-out guard drops off the handset");

@@ -42,9 +42,14 @@ constexpr float LockerStowMouth=.25f,LockerStowSeat=.32f,LockerStowRise=.4f,Lock
 // starts his fall where it already moves (BurstLift) and throws him BurstPush
 // back off the doors, easing out over BurstPushMs; he lands at LandLift.
 constexpr float BurstBody=.36f,BurstGun=.07f,BurstLift=.93f,BurstPush=.3f,LandLift=.1f;constexpr int BurstPushMs=180,BurstFastMs=360;
-// Hauled out, the player is held at gunpoint at arm's length: the hauler takes
-// HoldStep back off them as the hold begins (the muzzle at their face, not in it).
+// Hauled out, the player is held at gunpoint at arm's length: as the hold
+// begins the hauler takes HoldStep straight back off the doors, along their
+// normal, or as near it as the room lets him (holdStep).
 constexpr float HoldStep=.5f;
+// Opened on a body, the leaves stay back on their stops (inside the Caught
+// swing's hold, LockerDoors.cpp: out by 0.15 s, held to 1.15 s) for as long as
+// a man lies across their arc; dragged clear, they drift to.
+constexpr float LeavesHeld=1.f,LeafClear=.22f; // his boots and a hand's breadth past the free edge's sweep
 // A leaf at a swing (the geometry LockerDoors.cpp hangs them by): hinged on
 // an outer edge of the open front, its free edge meeting the other's in the middle.
 std::pair<Vec2,Vec2> leafAt(const Fixture& f,int leaf,float angle){const float sx=f.width/.64f,sz=f.depth/.9f,hand=leaf?-1.f:1.f;const Vec2 o=doorsOut(f),side{-o.y,o.x};
@@ -229,13 +234,16 @@ int Game::guardAtLocker(int level,size_t actor,const ActorTrack& track,ActorPose
  int doors=std::min(60000,get("guard_doors_ms")+ms);put("guard_doors_ms",doors);
  // Square on to the doors before the hand goes out.
  if(std::fabs(turn)>LockerHaulSquare)return 1;
- if(suspect&&(doors<LockerCheckPauseMs||!get("guard_check_said")||check<get("guard_check_said")-1+LockerCheckLeadMs))return 1;
+ // The lead (said LockerCheckLeadMs before the doors move) is for whoever hides
+ // in there to hear; with nobody in it the pause at the doors is all he takes.
+ const bool hider=hiddenLocker()==index;
+ if(suspect&&(doors<LockerCheckPauseMs||(hider&&(!get("guard_check_said")||check<get("guard_check_said")-1+LockerCheckLeadMs))))return 1;
  int haul=std::min(LockerHaulMs,get("guard_haul")+ms);put("guard_haul",haul);if(haul<LockerHaulMs)return 1;
  lockerDoorsMove(m_level,index,LockerMotion::Caught);
  if(hiddenLocker()==index){
   if(npcVoice(actor,NpcVoiceCue::Found))put("voice_mode",int(GuardState::Alert));
+  // (The step back for the hold is updateLockerBurst's, from the hold's first frame.)
   put("guard_haul",0);const bool pulled=pullFromLocker(level,actor,pose);clearGuardLocker(actor);
-  if(pulled){const Vec2 player=m_player.pos+chunkOffset(m_level)-chunkOffset(level),back=pose.position+normalized(pose.position-player)*HoldStep;put("guard_recoil",1);put("guard_recoil_x",int(std::round(std::clamp(back.x,0.f,24.f)*1000)));put("guard_recoil_y",int(std::round(std::clamp(back.y,0.f,24.f)*1000)));}
   return pulled?2:0;
  }
  clearGuardLocker(actor);
@@ -325,10 +333,12 @@ void Game::tumbleFromLocker(int level,int fixture,size_t finder){
  {const Vec2 away=doorsFront(f,.95f)-side*(lean*.75f)+chunkOffset(level)-chunkOffset(m_friendlyActors[finder].level);put("guard_recoil",1);put("guard_recoil_x",int(std::round(away.x*1000)));put("guard_recoil_y",int(std::round(away.y*1000)));}
  AiTarget blame{ShotKind::Player,m_level,0};blame.position=m_player.pos+chunkOffset(m_level)-chunkOffset(m_friendlyActors[finder].level);blame.feet=m_player.z;blame.height=m_player.hullHeight();blame.eye=m_player.eye;blame.faction=AiFaction::Player;
  rememberGuardTarget(finder,blame);put("guard_x",int(std::round(global.x*1000)));put("guard_y",int(std::round(global.y*1000)));put("guard_z",int(std::round(npc.pose.z*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);
- // He blames the player but has not seen them: he searches from the body and
- // radios it in, so the squad goes to Caution as for any found body.
- // This search has had its check: he does not go back to the doors over him.
- put("guard_confirmed",0);put("guard_checked",1);put("guard_mode",int(GuardState::Investigate));if(!state(friendlyKey(finder,"guard_call")))startGuardCall(finder,CallBody);
+ // He blames the player, as for any found body (Mind.cpp's casualty rules):
+ // sure someone did this, he wears the hunt's red '?', searches from the body
+ // and radios it in, so the squad goes to Caution when it lands (a body's call
+ // is no hunt EVASION counts). This search has had its check: he does not go
+ // back to the doors over him.
+ put("guard_confirmed",1);put("guard_recognition",m_friendlyActors[finder].track().ai.recognitionMs);put("guard_checked",1);put("guard_mode",int(GuardState::Investigate));if(!state(friendlyKey(finder,"guard_call")))startGuardCall(finder,CallBody);
  if(npcVoice(finder,NpcVoiceCue::AllyDown))put("voice_mode",int(GuardState::Investigate));
 }
 // --- The burst, the tumble and the start back ----------------------------------------
@@ -342,18 +352,42 @@ bool Game::lockerBurstPending(size_t actor)const{
 // has no leaves in motion: the blow lands at once.
 void Game::updateLockerBurst(float dt){
  const int ms=std::max(1,int(std::lround(dt*1000)));
+ // The hold's step back: HoldStep straight off the doors along their normal;
+ // where a wall or cabinet stops that, the step turns along it toward
+ // whichever side is clear, shorter only when nothing else is; always farther
+ // from the player, never past them. Where he can go farthest from them wins,
+ // straight back by a hand's breadth.
+ auto lockerHoldStep=[&](size_t actor,const Fixture& f,Vec2& to){const auto&npc=m_friendlyActors[actor];const auto&pose=npc.pose;
+  const Vec2 o=doorsOut(f),side{-o.y,o.x},player=m_player.pos+chunkOffset(m_level)-chunkOffset(npc.level);float best=length(pose.position-player)+.1f;bool found=false;
+  for(float step:{HoldStep,.35f,.2f})for(float turn:{0.f,.5f,-.5f,1.f,-1.f,1.4f,-1.4f}){const Vec2 at=pose.position+(o*std::cos(turn)+side*std::sin(turn))*step;float feet=pose.z;
+   if(!friendlyWalkSegment(npc.level,pose.position,pose.z,at,npc.track().scale,&feet)||std::fabs(feet-pose.z)>.3f)continue;
+   const float score=length(at-player)-.05f*std::fabs(turn);if(score>best){best=score;to=at;found=true;}}
+  return found;};
+ // Leaves opened on a body stay back on their stops while he lies across their arc.
+ for(auto&d:m_lockerDoors){if(d.motion!=LockerMotion::Caught||d.age<=LeavesHeld||d.age>=d.length||!chunkResident(d.level)||size_t(d.fixture)>=friendlyWorld(d.level).fixtures().size())continue;
+  const auto&f=friendlyWorld(d.level).fixtures()[size_t(d.fixture)];bool across=false;
+  for(size_t actor=0;actor<m_friendlyActors.size()&&!across;++actor){const auto&n=m_friendlyActors[actor];if(!chunkResident(n.level)||n.pose.clip!=4||npcStowed(actor)||npcHeld(actor))continue;
+   const Vec2 shift=chunkOffset(n.level)-chunkOffset(d.level);const Point3 c=npcCollar(actor);const Vec2 feet=n.pose.position+shift,collar=Vec2{c.x,c.y}+shift;
+   for(int leaf=0;leaf<2;++leaf){const auto [hinge,edge]=leafAt(f,leaf,0);across|=segmentDistance(hinge,feet,collar)<length(edge-hinge)+LeafClear;}}
+  if(across)d.age=LeavesHeld;}
  for(size_t actor=0;actor<m_friendlyActors.size();++actor){auto get=[&](const char*field){return state(friendlyKey(actor,field));};auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
+  auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
+  // The hold's first frame (pullFromLocker, from a witness's haul or any
+  // other): he has the gun up from the haul, and takes his step back.
+  if(get("guard_hold_ms")>=1200&&!get("guard_recoil")&&get("guard_target_kind")==int(ShotKind::Player)&&!npcIncapacitated(actor)){put("weapon_raise",1000);
+   if(const int index=lockerViewFixture();index>=0&&size_t(index)<m_world.fixtures().size()){Vec2 to;if(lockerHoldStep(actor,m_world.fixtures()[size_t(index)],to)){put("guard_recoil",1);put("guard_recoil_x",int(std::round(to.x*1000)));put("guard_recoil_y",int(std::round(to.y*1000)));}}}
   if(!get("guard_burst")&&!get("guard_tumble")&&!get("guard_recoil"))continue;
-  auto&npc=m_friendlyActors[actor];const auto&track=npc.track();const bool dead=track.deadState&&state(track.deadState);
+  const bool dead=track.deadState&&state(track.deadState);
   if(dead||npcHeld(actor)){for(const char*field:{"guard_burst","guard_burst_ms","guard_tumble","guard_recoil","guard_recoil_x","guard_recoil_y"})put(field,0);continue;}
   const float fall=cleanupAnimationDuration(track.visual,4);
   // He starts back: eased over 450 ms to the spot beside the doors, facing the
-  // body, the walk played backwards under him.
+  // body (or, holding the player, turning with them), the walk played backwards under him.
   if(int recoil=get("guard_recoil")){
    const Vec2 to{get("guard_recoil_x")*.001f,get("guard_recoil_y")*.001f};const int was=recoil-1,now=std::min(450,was+ms);
    auto ease=[](float u){u=std::clamp(u,0.f,1.f);return 1-(1-u)*(1-u)*(1-u);};const float a=ease(was/450.f),b=ease(now/450.f),k=a<1?(b-a)/(1-a):1;
    auto&pose=npc.pose;const Vec2 step=(to-pose.position)*k;float feet=pose.z;
    if(npcIncapacitated(actor)||npc.pose.clip==4){put("guard_recoil",0);continue;}
+   if(get("guard_hold_ms")>0){const Vec2 toward=m_player.pos+chunkOffset(m_level)-chunkOffset(npc.level)-pose.position;if(lengthSq(toward)>.001f)pose.yaw+=std::clamp(std::remainder(std::atan2(toward.x,toward.y)-pose.yaw,2*kPi),-6*dt,6*dt);}
    if(friendlyWalkSegment(npc.level,pose.position,pose.z,pose.position+step,track.scale,&feet)){pose.position+=step;pose.z=feet;}
    pose.clip=1;pose.phase=std::fmod(pose.phase+1.f-std::min(.9f,length(step)*1.1f),1.f);
    put("x",int(std::round(pose.position.x*1000)));put("y",int(std::round(pose.position.y*1000)));put("z",int(std::round(pose.z*1000)));put("yaw",int(std::round(std::remainder(pose.yaw,2*kPi)*10000)));put("phase",int(std::round(pose.phase*10000)));put("walking",1);
@@ -528,18 +562,22 @@ bool Game::testLockerGuards(){
   Game loaded(g.m_customCampaign);bool restored=loaded.decodeSave(g.encodeSave());loaded.update({},frame);
   check(restored&&loaded.npcStowed(0)&&loaded.lockerBody(0,0)==1&&loaded.lockerAhead()<0,"A stowed body stays stowed through a save");
   // Opened: he tumbles out, and the man who opened it has found a body.
-  auto put=[&](const char*f,int v){loaded.setState(loaded.friendlyKey(1,f),v);};put("guard_locker",1);put("guard_check",1);put("guard_checked",1);put("guard_check_said",1);put("guard_check_ms",3000);put("guard_x",3035);put("guard_y",6500);put("guard_z",0);put("guard_memory",1);put("guard_mode",int(GuardState::Investigate));
-  bool out2=false;for(int i=0;i<60*15&&!out2;++i){loaded.update({},frame);out2=!loaded.state(loaded.friendlyKey(0,"guard_stowed"));}
-  const bool blamed=!loaded.state(loaded.friendlyKey(1,"guard_confirmed"))&&loaded.state(loaded.friendlyKey(1,"guard_target_kind"))==int(ShotKind::Player);
-  // He falls out backwards as the leaves fly open, his boots clear of their arc before they swing back,
+  auto put=[&](const char*f,int v){loaded.setState(loaded.friendlyKey(1,f),v);};put("guard_locker",1);put("guard_check",1);put("guard_checked",1);put("guard_check_said",0);put("guard_check_ms",0);put("guard_x",3035);put("guard_y",6500);put("guard_z",0);put("guard_memory",1);put("guard_mode",int(GuardState::Investigate));
+  // Nobody hides in it, so nobody needs to hear him first: a second at the doors and he opens them.
+  bool out2=false;int waited=-1;for(int i=0;i<60*15&&!out2;++i){loaded.update({},frame);if(waited<0&&loaded.state(loaded.friendlyKey(1,"guard_haul"))>0)waited=loaded.state(loaded.friendlyKey(1,"guard_doors_ms"));out2=!loaded.state(loaded.friendlyKey(0,"guard_stowed"));}
+  // As for any found body he is sure someone did this: the hunt's red '?', not the dim one.
+  const bool blamed=loaded.state(loaded.friendlyKey(1,"guard_confirmed"))&&loaded.state(loaded.friendlyKey(1,"guard_target_kind"))==int(ShotKind::Player)&&loaded.guardCard(1).kind==GuardCardKind::Hunting;
+  // He falls out backwards as the leaves fly open, and they stay back on their stops while he lies across their arc;
   // and the man who opened them starts back out of his way.
   float peak=0,feetAtClose=-1,nearest=9,step=0;Vec2 last=loaded.npcActors()[0].pose.position;
   for(int i=0;i<150;++i){loaded.update({},frame);const float leaf=loaded.lockerDoorOpen(0,0,0);if(leaf<peak-.01f&&feetAtClose<0)feetAtClose=loaded.npcActors()[0].pose.position.x-out;peak=std::max(peak,leaf);
    const auto&body=loaded.npcActors()[0].pose;const Point3 c=loaded.npcCollar(0);step=std::max(step,length(body.position-last));last=body.position;
    nearest=std::min(nearest,segmentDistance(loaded.npcActors()[1].pose.position,body.position,{c.x,c.y}));}
   dump(loaded,1,"tumble");const auto&body=loaded.npcActors()[0].pose;const Point3 c=loaded.npcCollar(0);
-  report<<"  tumble: boots "<<body.position.x-out<<" m out ("<<feetAtClose<<" as the leaves turned back), collar "<<c.x-out<<" m out, "<<c.z<<" m up, opener at least "<<nearest<<" m off him, largest step "<<step<<"\n";
-  check(out2&&!loaded.npcStowed(0)&&body.clip==4&&body.position.x-out>LockerTumbleFeet-.05f&&feetAtClose>.3f&&c.x-out>.8f&&c.z<.5f&&step<.06f&&nearest>.3f&&blamed,"Opening it, a guard has the body tumble out onto the floor in front of the doors, clear of the leaves, and treats it as a found colleague");
+  report<<"  tumble: boots "<<body.position.x-out<<" m out ("<<feetAtClose<<" as the leaves turned back), collar "<<c.x-out<<" m out, "<<c.z<<" m up, opener at least "<<nearest<<" m off him, largest step "<<step<<"; leaves at "<<loaded.lockerDoorOpen(0,0,0)<<" of a peak "<<peak<<", he waited "<<waited<<" ms at the doors, blamed "<<blamed<<" (card "<<int(loaded.guardCard(1).kind)<<")\n";
+  check(out2&&!loaded.npcStowed(0)&&body.clip==4&&body.position.x-out>LockerTumbleFeet-.05f&&feetAtClose<0&&peak>.5f&&c.x-out>.8f&&c.z<.5f&&step<.06f&&nearest>.3f&&blamed&&waited>=LockerCheckPauseMs&&waited<LockerCheckPauseMs+100,"Opening it after a second at the doors ("+std::to_string(waited)+" ms), a guard has the body tumble out onto the floor in front of them, the leaves held open over him, and treats it as a found colleague (the red '?' of a hunt)");
+  // Dragged clear of their arc, the leaves drift to.
+  {auto&b=loaded.m_friendlyActors[0].pose;b.position={out+2.2f,6.5f};loaded.saveRestrainedPose(0);for(int i=0;i<200;++i)loaded.update({},frame);check(loaded.lockerDoorOpen(0,0,0)<.01f,"Once the body is out of their arc, the held leaves swing to");}
   bool corrupt=false;{Game bad(g.m_customCampaign);g.setState(g.friendlyKey(0,"guard_stow_ms"),LockerStowMs+1);corrupt=!bad.decodeSave(g.encodeSave());}
   check(corrupt,"A corrupt stow clock is refused on load");
  }
@@ -633,13 +671,20 @@ bool Game::testLockerGuards(){
  for(float off:{.6f,.45f}){auto g=scene({{{8.5f,6.5f},kPi*.5f}});hide(g);for(int i=0;i<70;++i)g.update({},frame);auto&p=g.m_friendlyActors[0].pose;p.position={out+off,6.5f};p.yaw=-kPi*.5f;
   for(auto [f,v]:{std::pair{"x",int(std::round((out+off)*1000))},std::pair{"y",6500},std::pair{"yaw",int(std::round(-kPi*.5f*10000))},std::pair{"guard_mode",int(GuardState::Investigate)}})g.setState(g.friendlyKey(0,f),v);
   const bool aimed=g.lockerBurstTarget()==0;g.update(use,frame);const bool standing=!g.npcIncapacitated(0)&&g.npcActors()[0].pose.clip!=4;bool bang=false;for(const auto&e:g.sounds())bang|=e.sound==Sound::LockerBang;
-  int hit=-1,landed=-1,noticed=-1;float leafAtHit=0,collarAtHit=0,collar3=0,biggest=0;Vec2 before=g.npcActors()[0].pose.position,start=before;bool punched=false;
+  int hit=-1,landed=-1,noticed=-1,framed=0,falling=0;float leafAtHit=0,collarAtHit=0,collar3=0,biggest=0;Vec2 before=g.npcActors()[0].pose.position,start=before;bool punched=false,landSeen=false;
+  // Where his collar falls in the player's view (the renderer's projection at 960 x 540).
+  auto inView=[&](Point3 p,float* across=nullptr){const Player v=g.view();const float cy=std::cos(v.angle),sy=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=960*.65f;const Point3 r{p.x-v.pos.x,p.y-v.pos.y,p.z-(v.z+v.eye)};
+   const float depth=r.x*cy*cp+r.y*sy*cp+r.z*sp,x=(-r.x*sy+r.y*cy)/std::max(.01f,depth)*focal,y=(-r.x*cy*sp-r.y*sy*sp+r.z*cp)/std::max(.01f,depth)*focal;if(across)*across=x;return depth>.06f&&std::fabs(x)<480&&std::fabs(y)<270;};
+  float drift=0;
   for(int i=1;i<150;++i){g.update({},frame);const auto&n=g.npcActors()[0].pose;const Point3 c=g.npcCollar(0);
    if(hit<0&&g.npcIncapacitated(0)){hit=i;leafAtHit=std::max(g.lockerDoorOpen(0,0,0),g.lockerDoorOpen(0,0,1))*110;collarAtHit=c.z;for(const auto&e:g.sounds())punched|=e.sound==Sound::PunchHit;}
    if(hit>0&&i==hit+3)collar3=c.z;if(hit>0)biggest=std::max(biggest,length(n.position-before));before=n.position;
-   if(noticed<0&&g.pickupNotice()=="GUARD UNCONSCIOUS"){noticed=i;landed=c.z<.5f?i:-1;}}
-  const float pushed=g.npcActors()[0].pose.position.x-start.x;
-  report<<"  burst at "<<off<<" m: hit on frame "<<hit<<" with the leaves "<<leafAtHit<<" deg out, collar "<<collarAtHit<<" -> "<<collar3<<" three frames on, shoved "<<pushed<<" m (largest step "<<biggest<<"), counted out on frame "<<noticed<<"\n";
+   if(hit>0&&noticed<0){++falling;float x=0;framed+=inView(c,&x);drift=std::max(drift,std::fabs(x));}
+   if(noticed<0&&g.pickupNotice()=="GUARD UNCONSCIOUS"){noticed=i;landed=c.z<.5f?i:-1;landSeen=inView(c);}}
+  const float pushed=g.npcActors()[0].pose.position.x-start.x;const Point3 rest=g.npcCollar(0);
+  report<<"  burst at "<<off<<" m: hit on frame "<<hit<<" with the leaves "<<leafAtHit<<" deg out, collar "<<collarAtHit<<" -> "<<collar3<<" three frames on, shoved "<<pushed<<" m (largest step "<<biggest<<"), counted out on frame "<<noticed<<"; collar at rest "<<rest.x-start.x<<" m out, "<<rest.y-start.y<<" m across, "<<rest.z<<" m up\n";
+  report<<"  his collar in the player's view on "<<framed<<" of "<<falling<<" frames of the fall (at most "<<drift<<" px off the middle across), landing seen "<<landSeen<<"\n";
+  check(landSeen&&framed*10>=falling*7,"Bursting out at "+std::to_string(off).substr(0,4)+" m, the view goes down with him: his collar is in frame on "+std::to_string(framed)+" of "+std::to_string(falling)+" frames of the fall, and when he lands");
   check(aimed&&standing&&bang&&hit>=(off>.5f?2:1)&&hit<=6&&leafAtHit>25&&punched,"Bursting out at a man "+std::to_string(off).substr(0,4)+" m off the doors: he stands until a leaf reaches him (frame "+std::to_string(hit)+", the leaves "+std::to_string(int(leafAtHit))+" degrees out), and the blow lands with it");
   check(hit>0&&collar3<collarAtHit-.015f&&pushed>.2f&&pushed<.36f&&biggest<.07f,"He is falling within three frames of the hit and is shoved back off the doors over a few frames, not in one ("+std::to_string(biggest)+" m largest step)");
   check(noticed>hit+10&&landed==noticed,"GUARD UNCONSCIOUS comes up when he lands (frame "+std::to_string(noticed)+"), not under a standing man");
@@ -648,6 +693,28 @@ bool Game::testLockerGuards(){
  {auto g=scene({{{8.5f,6.5f},kPi*.5f}});hide(g);for(int i=0;i<60;++i)g.update({},frame);hunt(g,{6.5f,6.5f},true);g.update({},frame);const int clock=g.guardHuntLeft(0);int searched=0;
   for(int i=0;i<60*10&&!searched;++i){g.update({},frame);if(g.guardState(0)==GuardState::Search)searched=get(g,0,"guard_search");}
   check(clock>=HuntSearchMs&&searched>=HuntSearchMs-50,"A confirmed hunt gives the search at least 20 s: EVASION reads "+std::to_string(clock)+" ms and the search runs "+std::to_string(searched)+" ms");}
+ // 9. The hold in the campaign's own lockers (map 57's west wall, map 59's bunk
+ // room), hauled out as the review saw it: for every frame of guard_hold_ms the
+ // muzzle points within 10 degrees of the player's eye, and he has stepped back
+ // off them (along the doors' normal, or along the wall where that is blocked).
+ for(auto [level,at,angle]:{std::tuple{57,Vec2{2.55f,2.87f},kPi},std::tuple{59,Vec2{17.4f,15.25f},kPi*.5f}}){
+  auto g=mapInspection(at,angle,0,level,false,-999,true);g.stowWeapon();g.update(use,frame);for(int i=0;i<70;++i)g.update({},frame);
+  const int index=g.hiddenLocker();const bool staged=index>=0&&g.stageLockerCatch();int guard=-1;
+  for(size_t a=0;a<g.npcActors().size();++a)if(get(g,a,"guard_hold_ms")>0)guard=int(a);
+  const Vec2 start=guard>=0?g.npcActors()[size_t(guard)].pose.position:Vec2{};const float apart=guard>=0?length(start-g.player().pos):0;
+  int frames=0,offAim=0;float worst=0,gasX=0,gasY=0,steepest=-90;
+  for(int i=0;i<90&&guard>=0;++i){g.update({},frame);if(get(g,size_t(guard),"guard_hold_ms")<=0)break;++frames;
+   const auto&npc=g.npcActors()[size_t(guard)];const auto w=g.npcWeaponPose(size_t(guard));const Point3 eye{g.player().pos.x,g.player().pos.y,g.player().z+g.player().eye},to=eye-w.muzzle;
+   const float d=std::sqrt(to.x*to.x+to.y*to.y+to.z*to.z),aim=std::acos(std::clamp(d>0?(to.x*w.direction.x+to.y*w.direction.y+to.z*w.direction.z)/d:-1.f,-1.f,1.f))*180/kPi;
+   worst=std::max(worst,aim);offAim+=aim>10;steepest=std::max(steepest,std::asin(std::clamp(w.direction.z,-1.f,1.f))*180/kPi);
+   // His gasmask in the player's view (the view package frames it; reported here).
+   const Player v=g.view();const float cy=std::cos(v.angle),sy=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=960*.65f;
+   const Point3 r{npc.pose.position.x-v.pos.x,npc.pose.position.y-v.pos.y,npc.pose.z+npc.track().scale*.93f-(v.z+v.eye)};const float depth=r.x*cy*cp+r.y*sy*cp+r.z*sp;
+   if(depth>.05f){gasX=std::max(gasX,std::fabs((-r.x*sy+r.y*cy)/depth*focal));gasY=std::max(gasY,std::fabs((-r.x*cy*sp-r.y*sy*sp+r.z*cp)/depth*focal));}}
+  const float held=guard>=0?length(g.npcActors()[size_t(guard)].pose.position-g.player().pos):0;
+  report<<"  hold in map "<<level<<": guard "<<guard<<", "<<frames<<" frames, muzzle off the eye by up to "<<worst<<" deg ("<<offAim<<" frames over 10), the barrel at most "<<steepest<<" deg up; he stood "<<apart<<" m off the player and holds from "<<held<<" m; gasmask up to "<<gasX<<","<<gasY<<" px off the middle of the view\n";
+  check(staged&&guard>=0&&frames>=60&&offAim==0&&held>apart+.15f,"Map "+std::to_string(level)+": hauled out, the muzzle is on the player's eye for the whole hold (at worst "+std::to_string(worst).substr(0,4)+" degrees off) and he steps back to "+std::to_string(held).substr(0,4)+" m");
+ }
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }
 }

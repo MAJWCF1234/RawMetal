@@ -5,6 +5,14 @@
 #include <fstream>
 #include "../../../world/CustomCampaign.h"
 namespace retro {
+namespace {
+// A noise heard by a man at peace is a beat before it is anything: he stops,
+// and only then turns to it with his '?' up (a knock, a footfall, a bottle).
+constexpr int HearBeatMs=250;
+// A confirmed hunt for the player is searched HuntSearchMs past the ALERT
+// latch: EVASION, which the HUD starts as the latch ends, really has its 20 s.
+constexpr int HuntFloorMs=Game::HuntSearchMs+Game::AlertLatchMs;
+}
 int Game::npcMilliseconds(size_t actor,float dt,std::string_view field){auto key=friendlyKey(actor,field);int micros=state(key)+int(std::round(double(dt)*1000000));setState(key,micros%1000);return micros/1000;}
 void Game::validateGuardState(size_t actor)const{
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};const auto&config=m_friendlyActors[actor].track().ai;
@@ -23,7 +31,7 @@ void Game::validateGuardState(size_t actor)const{
  if(get("guard_route_target")<0||get("guard_route_target")>chunkCount()||get("guard_route_next")<0||get("guard_route_next")>chunkCount()||get("guard_route_wait")<0||get("guard_route_wait")>1000||get("guard_portal_z")< -100000||get("guard_portal_z")>100000)throw std::runtime_error("Invalid saved guard pursuit route");
  if(get("guard_route_next")){float x=get("guard_portal_x")*.001f,y=get("guard_portal_y")*.001f;bool inside=false;for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);inside|=x>=origin.x-.36f&&x<=origin.x+24.36f&&y>=origin.y-.36f&&y<=origin.y+24.36f;}if(!inside)throw std::runtime_error("Invalid saved guard pursuit portal");}
  if(get("weapon_aim")<0||get("weapon_aim")>config.aimMs||get("weapon_recovery")<0||get("weapon_recovery")>std::max(config.recoveryMs,900)||get("weapon_reload")<0||get("weapon_reload")>1800||get("weapon_rounds")<0||get("weapon_rounds")>weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun).cycle.tubeCapacity||get("weapon_raise")<0||get("weapon_raise")>1000||get("weapon_flash")<0||get("weapon_flash")>80||get("weapon_recoil")<0||get("weapon_recoil")>220)throw std::runtime_error("Invalid saved guard weapon state");
- if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>std::max(config.searchMs,HuntSearchMs)||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
+ if(get("guard_mode")<0||get("guard_mode")>4||get("guard_point")<0||get("guard_point")>=int(config.patrol.size())||get("guard_pause")<0||get("guard_pause")>60000||get("guard_recognition")<0||get("guard_recognition")>config.recognitionMs||get("guard_search")<0||get("guard_search")>std::max(config.searchMs,HuntFloorMs)||get("guard_ear_ms")<0||get("guard_ear_ms")>HearBeatMs||get("guard_travel")<0||get("guard_travel")>8000||get("guard_z")< -100000||get("guard_z")>100000)throw std::runtime_error("Invalid saved guard awareness");
  // Bounded loosely, not by CautionMs: rebuildFriendlyActors cuts a longer one to this build's clock.
  if(int caution=state(guardCautionKey(actor));caution<0||caution>600000)throw std::runtime_error("Invalid saved guard caution");
  if(get("guard_locker")<0||get("guard_locker")>65536)throw std::runtime_error("Invalid saved guard locker memory");
@@ -206,7 +214,11 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   else if(mode==GuardState::Alert){mode=GuardState::Investigate;put("guard_travel",0);}
   bool supporting=schedule==GuardSchedule::Medic||schedule==GuardSchedule::Engineer||schedule==GuardSchedule::Patient;
   // A second noise from the locker he came to look at makes it suspect (Lockers.cpp).
-  if(heard&&!supporting&&!enemyDead){if(!lockerSuspectNoise(level,actor,pose,*heard)){auto local=heard->source;const auto&world=worldAt(local);remember(heard->source+chunkOffset(m_level),world.supportBelow(local.x,local.y,heard->z));}mode=GuardState::Investigate;}
+  // At peace he hears it, stops, and only after HearBeatMs turns to it with
+  // his '?' up; a shot or a blast, or a man already looking for something, turns at once.
+  if(heard&&!supporting&&!enemyDead){if(!lockerSuspectNoise(level,actor,pose,*heard)){auto local=heard->source;const auto&world=worldAt(local);remember(heard->source+chunkOffset(m_level),world.supportBelow(local.x,local.y,heard->z));}
+   if(mode!=GuardState::Patrol||heard->loud)mode=GuardState::Investigate;else if(!get("guard_ear_ms"))put("guard_ear_ms",HearBeatMs+ms);}
+  if(mode==GuardState::Patrol&&get("guard_ear_ms")){const int left=std::max(0,get("guard_ear_ms")-ms);put("guard_ear_ms",left);if(!left){mode=GuardState::Investigate;put("guard_travel",0);}}
   auto report=guardSquadReport(actor);auto remembered=Vec2{get("guard_x")*.001f-globalOrigin.x,get("guard_y")*.001f-globalOrigin.y};
   if(report.valid()&&(mode==GuardState::Patrol||mode==GuardState::Suspicious||!sameRef(previous,report)||lengthSq(report.position-remembered)>.25f*.25f||std::fabs(report.feet-get("guard_z")*.001f)>.3f)){
    // A teammate's sighting supplies last-known knowledge, never our own sight.
@@ -235,7 +247,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  int oldSeen=get("guard_seen");put("guard_damage",damage);put("hit_source",0);put("guard_recognition",recognition);put("guard_confirmed",confirmed);put("guard_seen",visible);
  // Senses update independently of task ownership. Only the shared executor
  // below may select movement or advance role work for this actor/frame.
- put("guard_mode",int(mode));
+ put("guard_mode",int(mode));if(mode!=GuardState::Patrol&&get("guard_ear_ms"))put("guard_ear_ms",0);
  // The radio call is committed: once he keys the handset he finishes it whatever
  // his eyes do. A fresh hit cuts it (he starts over if he still has them); a
  // choke, a knockout or death stop him outright.
@@ -262,12 +274,17 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  bool planDue=!m_aiDecisionScheduling||clock("plan_wait","plan_age","plan_ready",100,planWake,1);
  put("plan_due",planDue);put("plan_mode",int(mode));put("plan_flags",planFlags);
  runGuardSchedule(level,actor,track,pose,dt,ms,goal,goalZ,wantsMove);
+ // Holding a hauled-out player at gunpoint (Combat.cpp): he stands where he
+ // stepped back to (Lockers.cpp), turning with them, for the whole hold.
+ if(get("guard_hold_ms")>0&&get("guard_target_kind")==int(ShotKind::Player)){const Vec2 toward=playerLocal-pose.position;
+  if(lengthSq(toward)>.001f)pose.yaw+=std::clamp(std::remainder(std::atan2(toward.x,toward.y)-pose.yaw,2*kPi),-6*dt,6*dt);
+  goal=pose.position;goalZ=pose.z;wantsMove=false;}
 }
 // The search he gives a place: his own, or on a confirmed hunt for the player
-// at least HuntSearchMs, so the hunt EVASION counts down is the one he makes.
+// at least HuntFloorMs, so the hunt EVASION counts down is the one he makes.
 int Game::guardSearchMs(size_t actor)const{
  const auto&config=m_friendlyActors.at(actor).track().ai;auto get=[&](const char*field){return state(friendlyKey(actor,field));};
- return get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player)?std::max(config.searchMs,HuntSearchMs):config.searchMs;
+ return get("guard_confirmed")&&get("guard_target_kind")==int(ShotKind::Player)?std::max(config.searchMs,HuntFloorMs):config.searchMs;
 }
 void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPose&pose,int ms,Vec2&goal,float&goalZ,bool&wantsMove){
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*f){return ctx.get(f);};auto put=[&](const char*f,int v){ctx.put(f,v);};
@@ -364,14 +381,16 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
    if(pause>0&&config.patrol.size()>1){float base=std::isfinite(patrol.look)?patrol.look:get("guard_post_yaw")*.0001f,t=(patrol.pauseMs-pause)*.001f;
     float want=base+std::sin(t*1.1f)*.6f*std::min(1.f,t*.8f);pose.yaw+=std::clamp(std::remainder(want-pose.yaw,2*kPi),-2.2f*dt,2.2f*dt);}
    if(pause==0){point=(point+1)%int(config.patrol.size());put("guard_point",point);put("guard_arrived",0);goal=config.patrol[size_t(point)].position+home;goalZ=config.patrol[size_t(point)].z;}
-  }wantsMove=!arrived||!get("guard_arrived");if(wantsMove)guardRoute(level,actor,goal+globalOrigin,goalZ,ms,goal,goalZ);
+  }wantsMove=(!arrived||!get("guard_arrived"))&&!get("guard_ear_ms"); // stopped dead by a noise, for its beat
+  if(wantsMove)guardRoute(level,actor,goal+globalOrigin,goalZ,ms,goal,goalZ);
  }
  if(mode==GuardState::Search||mode==GuardState::Suspicious){put("guard_route_next",0);put("guard_route_wait",0);}
  if(mode!=GuardState::Alert&&!defensiveIntent){put("guard_cover",0);put("guard_cover_wait",0);}
  put("guard_mode",int(mode));
  // Searching or back on his beat he has given the locker up; only the walk
  // straight to its doors ends with him opening it.
- if((mode==GuardState::Search||mode==GuardState::Patrol)&&(get("guard_locker")||get("guard_check")))clearGuardLocker(actor);
+ // (A man stopped by a noise for its beat keeps the locker it was.)
+ if((mode==GuardState::Search||(mode==GuardState::Patrol&&!get("guard_ear_ms")))&&(get("guard_locker")||get("guard_check")))clearGuardLocker(actor);
  // Anything else he turns to (a fight, a hit) lets go of the handle; back
  // on his beat he may check a locker again.
  if(mode!=GuardState::Investigate&&get("guard_haul"))put("guard_haul",0);

@@ -18,12 +18,38 @@ static_assert(int(MusicCue::Count)==9,"AudioEngine::AreaScores must match MusicC
 Sound areaSound(int cue){return cue==int(MusicCue::Freight)?Sound::FreightMusic:Sound(int(Sound::MusicUndercover)+cue-int(MusicCue::Undercover));}
 int areaCue(Sound sound){if(sound==Sound::FreightMusic)return int(MusicCue::Freight);if(sound>=Sound::MusicUndercover&&sound<=Sound::MusicDeathClose)return int(MusicCue::Undercover)+int(sound)-int(Sound::MusicUndercover);return 0;}
 // The alert loop is the library's boss track, which no map plays as its area
-// score (every packed score is heard somewhere in Chapter 1): it opens on a
-// hit, ~0.2 s at -12 to -16 dBFS, then holds a dense, bright beat at about -21,
+// score (every packed score is heard somewhere in Chapter 1): hits of -12 to
+// -16 dBFS on the half bar over a dense, bright beat at about -21,
 // brighter than any area score. Trimmed to sit a little above the -20 to -22 of
 // the scores under the lockers (Darkness, Freight, the original).
 constexpr int AlertMusicResource=2183;
 constexpr float AlertTrim=1.2f;
+// It runs in four-bar phrases at 93 BPM (a bar 2.58 s), the first downbeat at
+// 6.45 s after the hit and a pickup, and every phrase ends on a rest: ~0.16 s
+// at -42 dB against -22 just before its downbeat, so a fresh ALERT dropped out
+// 6 s in, and every 10 s after. The loop is three whole phrases, from just
+// before the first downbeat to the fourth (the wrap's 50 ms crossfade is two
+// stretches of the same place in the bar), each rest filled from the same
+// 0.3 s of the bar before it, on the beat. The downbeats are found in the
+// decoded audio (the quiet block, then the hit out of it), not assumed, so a
+// decoder's start padding cannot put a splice across a hit.
+constexpr float AlertPhrase=10.3227f,AlertFirstDownbeat=6.455f,AlertRestFill=.3f;
+void shapeAlertLoop(std::vector<int16_t>& pcm){
+ constexpr size_t Rate=44100,Block=220,Fade=2205,Edge=220;const size_t frames=pcm.size()/2;
+ auto energy=[&](size_t at){double sum=1;for(size_t f=at;f<at+Block&&f<frames;++f){const double m=(pcm[f*2]+pcm[f*2+1])*.5;sum+=m*m/Block;}return sum;};
+ std::array<size_t,4> downbeat{};
+ for(size_t k=0;k<4;++k){const double nominal=AlertFirstDownbeat+AlertPhrase*k;const size_t lo=size_t((nominal-.3)*Rate),hi=size_t((nominal+.05)*Rate),end=size_t((nominal+.2)*Rate);if(end+Block>=frames)return;
+  size_t quiet=lo;double low=energy(lo);for(size_t at=lo;at<hi;at+=Block)if(const double e=energy(at);e<low){low=e;quiet=at;}
+  // A rest is some 20 dB under the bar before it; the hit out of it is 15 dB over the rest.
+  double before=0;int blocks=0;for(size_t at=size_t((nominal-1.2)*Rate);at<lo;at+=Block,++blocks)before+=energy(at);
+  if(!blocks||low*50>before/blocks)return;
+  for(size_t at=quiet+Block;at<end&&!downbeat[k];at+=Block)if(energy(at)>low*30)downbeat[k]=at;
+  if(!downbeat[k])return;}
+ const size_t bar=(downbeat[1]-downbeat[0]+2)/4,fill=size_t(AlertRestFill*Rate),lead=Rate/100;
+ for(const size_t at:downbeat){const size_t from=at-fill,to=at-lead;
+  for(size_t f=from;f<to;++f){const float w=std::min({1.f,float(f-from)/Edge,float(to-f)/Edge});for(size_t c=0;c<2;++c)pcm[f*2+c]=int16_t(std::lround(pcm[f*2+c]*(1-w)+pcm[(f-bar)*2+c]*w));}}
+ pcm=std::vector<int16_t>(pcm.begin()+std::ptrdiff_t((downbeat[0]-Fade)*2),pcm.begin()+std::ptrdiff_t(downbeat[3]*2));
+}
 bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::MusicAlert||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum);}
 // Open-zone sounds live in the library resources from 720, in enum order.
 constexpr int ZoneSoundResource=720;
@@ -85,7 +111,7 @@ AudioEngine::AudioEngine(bool device){
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
-   m_samples[i].pcm=decodeMusic(data,size);m_samples[i].channels=2;continue;
+   m_samples[i].pcm=decodeMusic(data,size);m_samples[i].channels=2;if(i==size_t(Sound::MusicAlert))shapeAlertLoop(m_samples[i].pcm);continue;
   }
   const unsigned char* pcm=nullptr;size_t bytes=0;bool format=false,compressed=false;
   for(size_t offset=12;offset+8<=size;){size_t count=u32(data+offset+4);auto chunk=data+offset+8;
@@ -171,8 +197,8 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  voice.left=gain*std::sqrt((1-pan)*.5f);voice.right=gain*std::sqrt((1+pan)*.5f);
 }
 // The HUD's alarm drives the score: ALERT and EVASION want the alert loop,
-// Caution and peace want none. A fresh alert starts the loop on its opening
-// hit; one called back within the fall picks it up where it is.
+// Caution and peace want none. A fresh alert starts the loop on a phrase's
+// downbeat; one called back within the fall picks it up where it is.
 void AudioEngine::alertScore(int alarm){
  const bool hunted=alarm==Game::AlarmAlert||alarm==Game::AlarmEvasion;m_alertTarget=hunted?1.f:0.f;
  // Out of the hunt the loop fades at the level it had, never swelling first.
@@ -559,6 +585,13 @@ bool AudioEngine::testAlertMusic(){
    if(same(cue?areaSound(cue):Sound::Music))heard+=" "+std::to_string(level);if(level<=67||level==PrologueChunk)chapter[size_t(cue)]=true;}
   check(loop.size()>size_t(Rate*2*30)&&heard.empty()&&!same(Sound::ReactorMusic),"The alert loop ("+std::to_string(loop.size()/2/Rate)+" s) is no map's area score"+(heard.empty()?std::string():", but maps"+heard+" play it"));
   check(std::count(chapter.begin(),chapter.end(),true)==AreaScores,"Chapter 1 already plays every packed score, so the alert loop is one of its own");}
+ // Played twice round, through the wrap's crossfade as mix plays it: three whole
+ // phrases a lap, and no rest left in them (the quietest 50 ms near the rest of it).
+ {const auto&s=audio.m_samples[size_t(Sound::MusicAlert)];const size_t n=s.frames(),fade=std::min(size_t(2205),n/4),length=2*n-fade,window=Rate/20;
+  auto mono=[&](size_t c){float v=(s.pcm[c*2]+s.pcm[c*2+1])*.5f;if(c>=n-fade){const float b=float(c-(n-fade))/fade;const size_t h=c-(n-fade);v=v*(1-b)+(s.pcm[h*2]+s.pcm[h*2+1])*.5f*b;}return v;};
+  std::vector<float> level;for(size_t at=0;at+window<=length;at+=window/2){double sum=0;for(size_t p=at;p<at+window;++p){const double v=mono(p<n?p:p-n+fade);sum+=v*v;}level.push_back(float(10*std::log10(sum/window+1)));}
+  auto sorted=level;std::sort(sorted.begin(),sorted.end());const float middle=sorted[sorted.size()/2],dip=middle-sorted.front(),lap=float(n-fade)/Rate;
+  check(dip<12&&std::fabs(lap-3*AlertPhrase)<.05f,"The alert loop laps every "+std::to_string(lap).substr(0,5)+" s (three phrases) and its rests are filled: its quietest 50 ms is "+std::to_string(dip).substr(0,4)+" dB under its middle level (the bare track's is 18)");}
  // The bunk room by the lockers (map 59, Darkness): its score set up by a real update, then the alarm driven by hand.
  auto room=Game::mapInspection({17.4f,15.25f},kPi*.5f,0,59);audio.update(room);
  std::array<int16_t,882> block{};
@@ -578,7 +611,7 @@ bool AudioEngine::testAlertMusic(){
  const double areaCursor=cursor(-20-dark);int calls=0;float at100=0;
  int in=run(Game::AlarmAlert,200,[&]{if(calls++==10)at100=loud();return audio.m_alertIn>=1;},"ALERT");
  check(in>=39&&in<=41&&voice(AlertEmitter)&&voice(AlertEmitter)->sound==Sound::MusicAlert&&voice(AlertEmitter)->gain==AlertTrim&&cursor(AlertEmitter)<Rate*.5&&score()<.001f&&loud()>.999f&&at100>.35f,
-  "ALERT: the loop in from its opening hit and Darkness out in "+ms(in)+", equal power, the loop at "+std::to_string(at100).substr(0,4)+" after 100 ms");
+  "ALERT: the loop in from a phrase's downbeat and Darkness out in "+ms(in)+", equal power, the loop at "+std::to_string(at100).substr(0,4)+" after 100 ms");
  check(cursor(-20-dark)>areaCursor,"Darkness keeps its place under the alert loop");
  double alertCursor=cursor(AlertEmitter);
  int ease=run(Game::AlarmEvasion,300,[&]{return audio.m_alertLevel<=EvasionLevel;});

@@ -1,5 +1,6 @@
 #include "../../Game.h"
 #include "../engineer/Drones.h"
+#include "Schedule.h"
 namespace retro {
 namespace {
 StateId squadKey(AiFaction faction,StateId squad,std::string_view field="cursor"){std::string value="npc/squad/"+std::to_string(int(faction))+"/"+std::to_string(squad)+"/"+std::string(field);StateId hash=2166136261u;for(unsigned char c:value)hash=(hash^c)*16777619u;return hash|0x80000000u;}
@@ -18,7 +19,8 @@ AiTarget Game::guardSquadReport(size_t actor)const{
   if(!factionsHostile(faction,target.faction))continue;target.position+=chunkOffset(source.level)-origin;report=target;best=range;
  }return report;
 }
-bool Game::guardFireSlot(size_t actor)const{return guardTaskAllows(actor,GuardTask::Fire)&&!state(friendlyKey(actor,"guard_danger_ms"))&&!state(friendlyKey(actor,"engineer_pad_stage"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
+// A man moving in a fight (the Combat schedule's Move) may hold a slot too: he fires on the way.
+bool Game::guardFireSlot(size_t actor)const{return (guardTaskAllows(actor,GuardTask::Fire)||(state(friendlyKey(actor,"schedule"))==int(GuardSchedule::Combat)&&state(friendlyKey(actor,"task"))==int(GuardTask::Move)&&state(friendlyKey(actor,"task_status"))==int(GuardTaskStatus::Running)))&&!state(friendlyKey(actor,"guard_danger_ms"))&&!state(friendlyKey(actor,"engineer_pad_stage"))&&(!m_friendlyActors[actor].track().ai.squad||state(friendlyKey(actor,"guard_slot"))!=0);}
 int Game::guardCoveringPeer(size_t actor)const{
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return 0;const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto target=guardTarget(actor);
  bool anchor=t.ai.role==GuardSquadRole::Heavy||t.ai.role==GuardSquadRole::Sharpshooter||(t.ai.role==GuardSquadRole::Default&&guardSuppressionEnabled(t.ai)&&!guardFlankSide(actor));
@@ -71,8 +73,10 @@ void Game::updateGuardSquadSlots(float dt){
   int lease=std::max(0,state(friendlyKey(i,"guard_slot_ms"))-npcMilliseconds(i,dt,"squad_fraction"));auto target=guardTarget(i);
   Point3 cover;bool suppression=guardSuppressionPoint(i,cover);
   bool ordinary=guardState(i)==GuardState::Alert&&guardCanSee(i,npc.pose,target)&&guardShotMatches(i,guardShot(i,npc.pose,npcWeaponPoseAt(i,npc.pose,{target.position.x,target.position.y,target.feet+target.height*.6f},1)));
-  bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&npc.pose.clip!=1&&(!state(friendlyKey(i,"weapon_saved"))||state(friendlyKey(i,"weapon_rounds"))>0)&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_reloading"))&&!state(friendlyKey(i,"weapon_recovery"))&&!state(friendlyKey(i,"grenade_windup"))&&!guardMeleeReady(i,npc.pose,target)&&(ordinary||suppression);
-  eligible=eligible&&guardTaskAllows(i,GuardTask::Fire)&&!state(friendlyKey(i,"guard_danger_ms"))&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"engineer_pad_stage"))&&!state(friendlyKey(i,"support_target"))&&(!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
+  // Moving in the fight with a clear line (ordinary) he competes for a slot like a man standing; a flank to reach is no exclusion.
+  const bool moving=ordinary&&state(friendlyKey(i,"schedule"))==int(GuardSchedule::Combat)&&state(friendlyKey(i,"task"))==int(GuardTask::Move)&&state(friendlyKey(i,"task_status"))==int(GuardTaskStatus::Running);
+  bool eligible=t.ai.armed&&chunkResident(npc.level)&&autonomousActor(t)&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState))&&(npc.pose.clip!=1||moving)&&(!state(friendlyKey(i,"weapon_saved"))||state(friendlyKey(i,"weapon_rounds"))>0)&&!state(friendlyKey(i,"weapon_reload"))&&!state(friendlyKey(i,"weapon_reloading"))&&!state(friendlyKey(i,"weapon_recovery"))&&!state(friendlyKey(i,"grenade_windup"))&&!guardMeleeReady(i,npc.pose,target)&&(ordinary||suppression);
+  eligible=eligible&&(guardTaskAllows(i,GuardTask::Fire)||moving)&&!state(friendlyKey(i,"guard_danger_ms"))&&!state(friendlyKey(i,"drone_busy"))&&!state(friendlyKey(i,"engineer_pad_stage"))&&!state(friendlyKey(i,"support_target"));if(!eligible||!lease){lease=0;setState(friendlyKey(i,"guard_slot"),0);}setState(friendlyKey(i,"guard_slot_ms"),lease);if(!eligible)continue;
   auto key=squadKey(actorFaction(t),t.ai.squad);auto group=std::find_if(groups.begin(),groups.end(),[&](const Group&g){return g.key==key;});if(group==groups.end()){groups.push_back({key,{}});group=std::prev(groups.end());}group->actors.push_back(i);
  }
  for(const auto&group:groups){int occupied=0;for(auto i:group.actors)occupied+=state(friendlyKey(i,"guard_slot"))!=0;

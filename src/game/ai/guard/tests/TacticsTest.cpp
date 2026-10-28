@@ -25,13 +25,14 @@ bool Game::testGuardTactics(){
  {auto g=scene();auto pose=g.npcActors()[0].pose;auto weapon=g.npcWeaponPoseAt(0,pose,{10.5f,6.5f,.96f},1);
   check(g.soundRayClear(pose.position,1.36f,g.player().pos,Player::StandingEye)&&g.traceShot(weapon.muzzle,weapon.direction,9,0,true).kind==ShotKind::Solid,"Low-cover fixture has a visible head and a blocked raised muzzle line");
  }
- for(int rate:{60,120}){auto g=scene();const Vec2 start=g.npcActors()[0].pose.position;float greatestMove=0;int shots=0,frame=0;bool safe=true,earlyShot=false,lowReady=true;
-  for(;frame<rate*10&&g.player().health==100;++frame){int fired=tick(g,1,rate);shots+=fired;greatestMove=std::max(greatestMove,length(g.npcActors()[0].pose.position-start));if(g.npcActors()[0].pose.clip==1)lowReady&=g.npcWeaponPose(0).raise<.01f;if(fired){safe&=safeShot(g,0);earlyShot|=float(frame+1)/rate<1.2f;}}
+ for(int rate:{60,120}){auto g=scene();const Vec2 start=g.npcActors()[0].pose.position;float greatestMove=0;int shots=0,frame=0;bool safe=true,earlyShot=false,upOnTheMove=false;
+  for(;frame<rate*10&&g.player().health==100;++frame){int fired=tick(g,1,rate);shots+=fired;greatestMove=std::max(greatestMove,length(g.npcActors()[0].pose.position-start));if(g.npcActors()[0].pose.clip==1)upOnTheMove|=g.npcWeaponPose(0).raise>.99f;if(fired){safe&=safeShot(g,0);earlyShot|=float(frame+1)/rate<1.2f;}}
   report<<"cover first-fire rate="<<rate<<" seconds="<<float(frame)/rate<<" displacement="<<greatestMove<<" pose="<<g.npcActors()[0].pose.position.x<<','<<g.npcActors()[0].pose.position.y<<'\n';
   check(greatestMove>.2f,"Armed guard physically moves around low cover at 60/120 Hz");
   check(shots==1&&g.player().health==82&&g.state(g.friendlyKey(0,"weapon_rounds"))==5&&frame<=rate*10,"Guard finds a firing position and damages the player within ten seconds at 60/120 Hz");
   check(safe&&!earlyShot,"Repositioned shot clears the body, barrel and intervening cover after its readable aim delay");
-  check(lowReady,"Guard keeps the weapon low while repositioning and raises it after stopping at 60/120 Hz");
+  // A move in a fight is no ceasefire (Combat.cpp): in sight of the player the gun stays up on him on the way, and the shot waits for a clear line.
+  check(upOnTheMove&&safe,"Guard keeps the weapon up on the player while repositioning in sight of him, firing only from a clear line, at 60/120 Hz");
  }
  {auto g=scene();int frames=0;while(frames<300&&length(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})<.2f&&g.player().health==100){tick(g,1);++frames;}
   check(length(g.npcActors()[0].pose.position-Vec2{6.5f,6.5f})>=.2f&&g.player().health==100&&g.npcActors()[0].pose.clip==1,"Save fixture interrupts actual cover movement before the first shot");
