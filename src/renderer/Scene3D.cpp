@@ -989,7 +989,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   // Materials 26-29 and 31-35 are the pack finishes; 3, the wall finish, follows the map's wall surface.
   else if(const Texture* finish=s.material==3&&wallFinish?wallFinish->wall:finishMaterial(s.material);finish&&!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},*finish,1.05f);
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelMetal:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelSteel:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor,1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.hasLift()){
      // A safety cage must not become an opaque wall around every cab window.
@@ -1263,7 +1263,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(cachePipes&&buildPipes){m_staticGeometryBuild=true;shadowBudget=400000;}
  if(buildPipes)for(const auto& pipe:w.pipes()){
   float endZ=pipe.endZ>-999?pipe.endZ:pipe.z;
-  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==6?iron:pipe.material==5?m_paleSteel:pipe.material==4?m_redSteel:pipe.material==3?m_yellowSteel:pipe.material==2?m_panelMetal:pipe.material==1?m_metal:m_pipeTexture);
+  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==6?iron:pipe.material==5?m_paleSteel:pipe.material==4?m_redSteel:pipe.material==3?m_yellowSteel:pipe.material==2?m_panelSteel:pipe.material==1?m_metal:m_pipeTexture);
   if(pipe.endZ>-999)continue; // Vertical drops terminate inside solid equipment.
   float distance=length(pipe.end-pipe.start);int supports=std::max(1,int(std::ceil(distance/3.f)));
   for(int i=0;i<=supports;++i){

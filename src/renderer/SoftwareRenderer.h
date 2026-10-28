@@ -156,7 +156,7 @@ private:
     // Door header plates of authored maps, one per HUD zone name (lazy).
     std::array<Texture,3> m_serviceAreaSigns;
     Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet,m_framePaint;
-    Texture m_yellowSteel,m_redSteel,m_paleSteel;
+    Texture m_yellowSteel,m_redSteel,m_paleSteel,m_panelSteel;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;

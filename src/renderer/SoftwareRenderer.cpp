@@ -140,7 +140,7 @@ bool SoftwareRenderer::enableHardware(void* window){
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
   for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,  &m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,    &m_hazard,&m_chemicalSign,  &m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_snatcherTexture,&m_chimeraTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_snatcherTexture,&m_chimeraTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel,&m_panelSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   // Worker/Witness materials are large too. Deferring their mip construction
   // until the first visible limb caused quarter-second gameplay stalls.
@@ -292,6 +292,13 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   // albedo before linear lighting; increasing room ambient hid every shadow.
   if(name=="wooden_crate_8"||name=="wood_1"){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*2.2f))<<shift);}prepareDecal(texture,false);}
 
+  // The research-receiving specimen crate and holding cage ship with metal
+  // atlases averaging 25-64/255; lit like any other albedo they fall to a flat
+  // black silhouette in a lit room. Same calibration as the wood above.
+  // The wire-mesh fences and cell bars (mean 13-27/255) get the same lift.
+  float steelLift=name=="lab_specimen_crate_metal_crate_3"||name=="med_holding_cage_metal_hr_2"||name=="med_holding_cage_metal_floor_mx_1"?2.6f:name=="mine_mesh_fence_fence"||name=="mine_mesh_doorway_fence"?3.5f:name.starts_with("med_cell_bars")||name=="lab_cell_gate_metal_4"?2.6f:0.f;
+  if(steelLift>0.f){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*steelLift))<<shift);}prepareDecal(texture,false);}
+
   bool wall=name.starts_with("wall_")&&name!="wall_box_2";
   texture.glossStrength=wood?.06f:wall?.10f:name=="pc_1"?.20f:.32f;
   deriveSurfaceNormal(texture,name=="fl_tire.bmp_fl_tire.png"?.18f:wood?.65f:wall?.8f:.45f);
@@ -403,24 +410,29 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  deriveSurfaceNormal(m_framePaint,.65f);m_framePaint.glossStrength=.18f;
  // Opaque worn industrial paint. Broad housings need real material coverage;
  // the transparent floor-marking decals are unsuitable for their surfaces.
+ // The panel-metal source is almost uniform (std dev 2.5/255), so paint over
+ // it came out one flat tone. Take the grain from the rusted pressure-works
+ // plate instead, as a deviation from its mean so overall brightness is kept.
  auto paintedSteel=[&](unsigned pigment){
-  Texture result=m_panelMetal;
+  Texture result=m_pressureMetal;
   for(auto& pixel:result.pixels){
    float grain=float(((pixel>>16)&255)+((pixel>>8)&255)+(pixel&255))/765.f;
    unsigned value=0xff000000u;
-   // Full-contrast grain: the scratches and rust of the source steel show
-   // through the paint instead of being flattened into one tone.
    for(int channel=0;channel<3;++channel){
-    float paint=float((pigment>>(channel*8))&255)*(.42f+grain*1.05f);
-    float exposed=float((pixel>>(channel*8))&255);
-    value|=unsigned(std::clamp(paint*.72f+exposed*.28f,0.f,255.f))<<(channel*8);
+    float paint=float((pigment>>(channel*8))&255)*std::clamp(.46f+(grain-.52f)*2.2f,.2f,.95f);
+    float exposed=float((pixel>>(channel*8))&255)*.5f;
+    value|=unsigned(std::clamp(paint*.9f+exposed*.1f,0.f,255.f))<<(channel*8);
    }
    pixel=value;
   }
+  result.mips.clear();result.normalLevels.clear();result.relief.clear();
   prepareDecal(result,true);deriveSurfaceNormal(result,1.f);result.glossStrength=.34f;
   return result;
  };
  m_yellowSteel=paintedSteel(0xffb79b39u);m_redSteel=paintedSteel(0xffa34330u);m_paleSteel=paintedSteel(0xffb4bcb1u);
+ // Structure material 2 (ducts, enclosures, housings) was the bare near-black
+ // panel metal; give it the same worn grey-green paint.
+ m_panelSteel=paintedSteel(0xff6d7a70u);
  for(auto*decal:{&m_hazard,&m_chemicalSign})prepareDecal(*decal);
  m_routePaint=makePaint(0xffb99348u);m_redPaint=makePaint(0xff954732u);
  m_transferSign=makeSign("PRESSURE WORKS","TRANSFER / 02",0xffa7a766u);m_pumpSign=makeSign("PUMP HALL","HIGH PRESSURE",0xffa7a766u);
