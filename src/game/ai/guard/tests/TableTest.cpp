@@ -100,8 +100,11 @@ bool Game::testGuardTable(){
   check(result.outcome==ai::ScheduleOutcome::InvalidState&&actor.starts.empty()&&actor.runs.empty(),"An invalid table cursor fails before an action adapter is called");}
 
  for(int rate:{60,120})for(auto noise:sounds){auto g=scene([](auto&map){map.actorTracks[0].ai.armed=false;});tick(g,2,rate);Vec2 source{9,6.5f};soundTick(g,noise.sound,source,rate);
+  const bool heard=(g.state(g.friendlyKey(0,"guard_heard"))&int(noise.category))&&(conditions(g)&GuardHeardSound);
+  // World and impact sounds turn him after Mind.cpp's 250 ms hearing beat; weapons turn him immediately.
+  if(noise.category!=ai::SoundWeapon)tick(g,rate/4+2,rate);
   auto goal=Vec2{g.state(g.friendlyKey(0,"task_goal_x"))*.001f,g.state(g.friendlyKey(0,"task_goal_y"))*.001f};
-  check((g.state(g.friendlyKey(0,"guard_heard"))&int(noise.category))&&(conditions(g)&GuardHeardSound)&&schedule(g)==GuardSchedule::Investigate&&
+  check(heard&&schedule(g)==GuardSchedule::Investigate&&
    task(g)==GuardTask::Move&&g.state(g.friendlyKey(0,"task_cursor_saved"))&&g.state(g.friendlyKey(0,"task_cursor"))==1&&length(goal-source)<.05f,
    "An actual audible world, weapon or impact event interrupts Patrol and executes the table's Move task toward the captured source at both frame rates");
  }
