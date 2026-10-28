@@ -712,6 +712,9 @@ template<class Density> float terrainCeiling(float feet,float limit,const Densit
  while(low+.125f<=end){
   int steps=std::max(1,int((std::floor(low)+1-low)*8));
   steps=std::min(steps,int((end-low)*8));
+  // Rounding can pass the loop test with under one sample left to `end`
+  // (a 1.78 m hull from some feet): that is the end, not a step of zero.
+  if(steps<1)break;
   float high=low+steps*.125f,highD=density(high);
   if(lowD<=0&&highD>0){
    for(float probe=low+.125f;probe<high;probe+=.125f){if(density(probe)>0){high=probe;break;}low=probe;}
