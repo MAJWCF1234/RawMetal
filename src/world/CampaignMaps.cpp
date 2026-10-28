@@ -110,7 +110,8 @@ std::shared_ptr<const Map> makeFoundry(){
  // A 1.1 m concrete dock bumper: low enough to vault with a crouch-jump.
  wall(m,10.5f,3.f,12.f,3.35f,0,1.06f,15);wall(m,10.5f,3.f,12.f,3.35f,1.06f,1.1f,13);
  // Supervisor's booth: framed walls with a real doorway, desk, chair, shelf.
- wall(m,18,1,18.15f,3.85f,0,low,3);
+ // West wall framed around the two view-glass openings (sill .95, head 2.1) so the panes are not coplanar with solid plaster.
+ wall(m,18,1,18.15f,3.85f,0,.95f,3);wall(m,18,1,18.15f,3.85f,2.1f,low,3);wall(m,18,1,18.15f,1.8f,.95f,2.1f,3);wall(m,18,2.4f,18.15f,2.9f,.95f,2.1f,3);wall(m,18,3.5f,18.15f,3.85f,.95f,2.1f,3);
  wall(m,18,3.85f,19.2f,4,0,low,3);wall(m,20.4f,3.85f,23,4,0,low,3);wall(m,19.2f,3.85f,20.4f,4,2.2f,low,3);
  for(float y:{1.8f,2.9f})wall(m,18,y,18.15f,y+.6f,.95f,2.1f,17); // view glass toward the floor
  recordsDesk(m,21.3f,2.f,0);
@@ -1492,7 +1493,7 @@ std::shared_ptr<const Map> makeFreightAccess(){
  bench(m,3.6f,9.f,floor);
  // Tool crib behind a mesh cage: shelving and the issue hatch.
  for(float y:{14.6f,16.6f})m.fixtures.push_back({7,{1.27f,y},0,1.6f,.5f,1.8f,kPi*.5f,true});
- m.structures.push_back({1.f,14.f,2.8f,14.06f,floor,floor+2.2f,true,2});m.structures.push_back({4.2f,14.f,6.6f,14.06f,floor,floor+2.2f,true,2});
+ m.structures.push_back({1.f,14.f,2.8f,14.06f,floor,floor+2.2f,true,2});m.structures.push_back({4.2f,14.f,5.9f,14.06f,floor,floor+2.2f,true,2});
  wall(m,2.8f,14.f,4.2f,14.06f,floor+2.f,floor+2.2f,2);
  // --- Freight hall ------------------------------------------------------------------
  // East trailer dock: shutter in its frame, leveller plate, bumpers.

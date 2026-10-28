@@ -4,6 +4,23 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.0.1 - Things that were not where they should be (2026-10-28)
+
+A walk through the plant with the lights on, looking for what is wrong.
+
+The Foundry's supervisor had two windows onto the floor, built into a solid
+wall; they are open now. The firing-lane barriers the Cleanup Force dragged
+across the Energy Research forecourt were drawn as a bar on a post and you
+could see through them; they are walls again. The fire cabinet in the heat
+exchange vestibule hung in the doorway with nothing behind it and is on the
+wall. In Medical and the ready room the wooden tables and chairs went black as
+you walked up to them; they have their wood back. The crashed lift in the
+Security Office no longer opens onto a second, empty office underneath. The
+tool crib's mesh no longer stands half across a doorway, and a steel jamb in
+Decontamination stopped shimmering.
+
+---
+
 ## v1.0.0 - DepthWorks, Chapter 1 (2026-10-28)
 
 The first chapter of DepthWorks, finished. There is no changelog here. This is

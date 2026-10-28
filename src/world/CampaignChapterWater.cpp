@@ -931,7 +931,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  // The bank that stood here had its doors a hand's breadth off the south wall;
  // the locker turns round, back to that wall, to open into the vestibule.
  m.fixtures.push_back({model::psx_locker,{1.45f,9.665f},0,.64f,.85f,2.42f,kPi*.5f,true});
- m.fixtures.push_back({model::pwr_fire_cabinet,{4.88f,6.5f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
+ m.fixtures.push_back({model::pwr_fire_cabinet,{4.88f,7.17f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
  m.fixtures.push_back({model::lab_wall_clock,{3.9f,5.05f},2.05f,.4f,.03f,.4f,kPi,false});
  // --- Exchanger rows ----------------------------------------------------------------------
  const float axis=F+1.75f,r=1.2f,hotA=-14.f,coldA=-13.3f;

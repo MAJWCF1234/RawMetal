@@ -290,7 +290,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   bool wood=name=="wood_1"||name=="wooden_crate_8"||name=="wooden_crate_hx_2_1";
   // This supplied crate atlas averages only 31/255 red. Calibrate its wood
   // albedo before linear lighting; increasing room ambient hid every shadow.
-  if(name=="wooden_crate_8"){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*2.2f))<<shift);}prepareDecal(texture,false);}
+  if(name=="wooden_crate_8"||name=="wood_1"){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*2.2f))<<shift);}prepareDecal(texture,false);}
 
   bool wall=name.starts_with("wall_")&&name!="wall_box_2";
   texture.glossStrength=wood?.06f:wall?.10f:name=="pc_1"?.20f:.32f;

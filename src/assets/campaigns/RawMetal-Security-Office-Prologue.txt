@@ -133,6 +133,8 @@ CARGO_LIFT|0|15|15|19|19|0|9|7|office_lift_call|office_lift_release|office_lift_
 DOOR|0|15|19|19.5|0|0|0|0|0|-1|office_prologue_done|1
 STRUCT|0|15|19|19|20|2.65|12|0|21
 STRUCT|0|2|19|19|24|3.4|3.6|0|21
+# A wall across the shaft's north face, floor to the boarding threshold, closes the empty sub-level behind it.
+STRUCT|0|14.9|14.85|19.1|15|0|8.88|0|21
 LIGHT|0|16.5|20.5|3.15|||0.75|6|2300
 LIGHT|0|8|20.5|3.15|||0.6|6|2300|||||||0.2
 LIGHT|0|3.5|22.6|3.15|||0.7|6|2300

@@ -674,7 +674,7 @@ std::shared_ptr<const Map> makeDecontamination(){
  m.lights.push_back(lamp({5.6f,13.6f},ceil-.2f,.9f,6.f,4000,.1f));
  {auto l=lamp({1.02f,14.f},f+2.4f,.5f,4.f,1300,-.3f,WorldLightMount::Wall,0);l.flicker=.2f;m.lights.push_back(l);}
  // --- Clean suits, east (clean side) ---------------------------------------------------
- panel(14.8f,17.f,18.f,17.2f,28);panel(20.f,17.f,23.f,17.2f,28);wall(m,18.f,17.f,20.f,17.2f,f+2.65f,ceil,28);frame(18.f,20.f,17.1f);
+ panel(14.8f,17.f,17.92f,17.2f,28);panel(20.f,17.f,23.f,17.2f,28);wall(m,18.f,17.f,20.f,17.2f,f+2.65f,ceil,28);frame(18.f,20.f,17.1f);
  for(int i=0;i<8;++i)pbLockers(m,22.5f,8.5f+i*.9f,f,pbW);
  for(float y:{9.4f,11.6f})pbFix(m,model::metal_shelf,15.1f,y,f,1.8f,.5f,1.8f,pbE,true);
  m.pipes.push_back({{17.6f,8.15f},{17.6f,14.6f},f+2.05f,.03f,f+2.05f,5});
@@ -770,7 +770,7 @@ std::shared_ptr<const Map> makeEnergyResearchForecourt(){
  terminal(m,{7.8f,4.6f},"RECEPTION / VISITOR LOG","LAST VISITOR: BOARD TOUR, 01:30. 6 GUESTS. SIGNED OUT: 0.","NOTE: TOUR HELD IN RESEARCH ADMINISTRATION BY ORDER 7.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=pbS;
  // --- The firing lane: barriers the Cleanup Force dragged across the hall -------------------------
- for(float x:{3.f,9.f,15.f,21.f})pbFix(m,model::ind_barrier_wall,x,20.6f,f,2.96f,.4f,2.05f,0,true);
+ for(float x:{3.f,9.f,15.f,21.f})pbFix(m,model::scrap_barrier_wall,x,20.6f,f,2.96f,.4f,2.05f,0,true);
  for(Vec2 r:{Vec2{8.f,14.6f},Vec2{16.f,14.6f}})pbFix(m,model::road_block,r.x,r.y,f,1.6f,.5f,.7f,.3f,true);
  // A researcher from the clean side, caught in the lane.
  pbBody(m,"ere_fore_clock",ActorVisual::Scientist,{14.4f,16.8f},f,2.2f);pbBlood(m,13.8f,16.2f,15.2f,17.4f,f);
