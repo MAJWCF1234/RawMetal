@@ -12,6 +12,9 @@ public:
  static RECT viewport(int clientWidth,int clientHeight);
  bool valid()const{return m_hwnd!=nullptr;} bool pump(); InputState input(bool menuOpen=false); void setMenu(bool open); void present(const std::uint32_t* pixels,int w,int h); void setCaption(const std::wstring& s);
  HWND handle()const{return m_hwnd;}
+ // The loading screen painted with GDI before the renderer exists: the name,
+ // a status line and a bar (progress 0-1), so the window never sits blank or frozen.
+ void showLoading(float progress,const wchar_t* status);
 private:
  std::string m_textInput; int m_scrollDelta=0;
  static LRESULT CALLBACK wndProc(HWND,UINT,WPARAM,LPARAM); HWND m_hwnd=nullptr; BITMAPINFO m_bmi{}; bool m_quit=false; bool m_mouseCaptured=false,m_menuOpen=false,m_cursorVisible=false; POINT m_center{};

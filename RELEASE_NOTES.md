@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.0.4 - No longer frozen at the door (2026-10-29)
+
+For the first five seconds after you started DepthWorks there was nothing,
+and for the next seven a full-screen window Windows called not responding,
+while the plant loaded behind it. It looked like a crash. The loading now
+happens behind a screen that says so: the name, what is loading and a bar
+that fills, from the first fraction of a second. The window answers Windows
+the whole time.
+
+The PC or VR question that opened the game is only asked when SteamVR can
+see a headset. Everyone else goes straight in.
+
+---
+
 ## v1.0.3 - The night desk (2026-10-28)
 
 Since the office became part of the plant, a second computer had been sitting

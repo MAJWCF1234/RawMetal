@@ -23,6 +23,8 @@
 #include "platform/Win32Window.h"
 #include "audio/AudioEngine.h"
 #include <chrono>
+#include <atomic>
+#include <thread>
 #include <cstring>
 #include <cwchar>
 #include <fstream>
@@ -1665,31 +1667,61 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      return file==4?0:1;}
     if(commandArguments().find(L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
     bool vrMode=commandArguments().find(L"--vr")!=nullptr;
-    if(!*commandLine){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
+    // Double-clicked with a headset SteamVR can see: ask PC or VR. Without one there is nothing to ask.
+    if(!*commandLine&&retro::VrRuntime::headsetPresent()){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
     std::unique_ptr<retro::VrRuntime> vrRuntime;
     if(vrMode){vrRuntime=std::make_unique<retro::VrRuntime>();std::string error;if(!vrRuntime->initialize(error))throw std::runtime_error(error);}
     retro::Win32Window window(W,H,L"Depthworks");
     if(!window.valid()) return 1;
-    retro::Game game;if(commandArguments().find(L"--dev"))game.setDeveloperMode(true);
-    game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
+    // The world, the renderer's assets and the GPU take seconds to come up. They
+    // load on a worker while this thread paints the loading screen and answers
+    // Windows, so the window is never a frozen, "not responding" sheet.
+    window.showLoading(0,L"LOADING");
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
-    bool exclusionZone=commandArguments().find(L"--exclusion-zone")!=nullptr||commandArguments().find(L"--guard-lab")!=nullptr;
-    bool directStart=commandArguments().find(L"--surface-lift")!=nullptr||exclusionZone;
-    if(exclusionZone){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";game=retro::Game(std::filesystem::exists(path)?retro::loadCustomCampaignFile(path):retro::loadEmbeddedExclusionZoneCampaign());}
-    else if(commandArguments().find(L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
-    std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
-    if(!settingsPath.empty())game.loadSettings(settingsPath);
-    if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\\RawMetal\\saves");
-    // Loads build the saved game on a worker so the window keeps answering Windows.
-    game.setAsyncLoads(true);
-    if(!directStart)game.showTitleScreen();
-    auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
+    std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\RawMetal\settings.ini":L"";
+    std::unique_ptr<retro::Game> gameStorage;std::unique_ptr<retro::SoftwareRenderer> rendererStorage;
+    std::atomic<int> loadStage{0};std::atomic<bool> loadDone{false};std::exception_ptr loadFailure;
+    std::thread loader([&]{
+     try{
+      auto g=std::make_unique<retro::Game>();auto&game=*g;if(commandArguments().find(L"--dev"))game.setDeveloperMode(true);
+      game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
+      bool exclusionZone=commandArguments().find(L"--exclusion-zone")!=nullptr||commandArguments().find(L"--guard-lab")!=nullptr;
+      bool directStart=commandArguments().find(L"--surface-lift")!=nullptr||exclusionZone;
+      if(exclusionZone){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";game=retro::Game(std::filesystem::exists(path)?retro::loadCustomCampaignFile(path):retro::loadEmbeddedExclusionZoneCampaign());}
+      else if(commandArguments().find(L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
+      if(!settingsPath.empty())game.loadSettings(settingsPath);
+      if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\RawMetal\saves");
+      // Loads build the saved game on a worker so the window keeps answering Windows.
+      game.setAsyncLoads(true);
+      if(!directStart)game.showTitleScreen();
+      loadStage=1;
+      auto r=std::make_unique<retro::SoftwareRenderer>(W,H);auto&renderer=*r;
+      renderer.setGpuActorPreparation(commandArguments().find(L"--cpu-actor-preparation")==nullptr);
+      game.setAiQueryCaching(commandArguments().find(L"--uncached-ai-queries")==nullptr);
+      game.setAiDecisionScheduling(commandArguments().find(L"--full-rate-ai-decisions")==nullptr);
+      game.setNavAuthority(commandArguments().find(L"--lattice-walk-probes")==nullptr);
+      loadStage=2;
+      if(vrMode){if(!renderer.enableHardware(window.handle()))throw std::runtime_error("SteamVR requires Vulkan hardware rendering: "+renderer.hardwareName());}else if(!commandArguments().find(L"--software"))renderer.enableHardware(window.handle());
+      gameStorage=std::move(g);rendererStorage=std::move(r);
+     }catch(...){loadFailure=std::current_exception();}
+     loadDone=true;
+    });
+    {// Progress eases toward each stage's end on its usual duration (world 1.3 s, assets 6 s, GPU 3.6 s).
+     const float from[]={0,.12f,.62f},to[]={.12f,.62f,.97f},expected[]={1.3f,6.f,3.6f};const wchar_t* status[]={L"LOADING THE WORLD",L"LOADING TEXTURES AND MODELS",L"STARTING THE RENDERER"};
+     auto stageStart=std::chrono::steady_clock::now();int shown=0;bool closed=false;
+     while(!loadDone){
+      if(!closed&&!window.pump())closed=true;
+      int stage=loadStage;if(stage!=shown){shown=stage;stageStart=std::chrono::steady_clock::now();}
+      float t=std::chrono::duration<float>(std::chrono::steady_clock::now()-stageStart).count();
+      if(!closed)window.showLoading(from[shown]+(to[shown]-from[shown])*(1-std::exp(-1.6f*t/expected[shown])),status[shown]);
+      Sleep(16);
+     }
+     loader.join();if(loadFailure)std::rethrow_exception(loadFailure);
+     if(closed)return 0;
+    }
+    window.showLoading(1,L"STARTING THE RENDERER");
+    auto& game=*gameStorage;auto& renderer=*rendererStorage;
     retro::AudioEngine audio;
-    renderer.setGpuActorPreparation(commandArguments().find(L"--cpu-actor-preparation")==nullptr);
-    game.setAiQueryCaching(commandArguments().find(L"--uncached-ai-queries")==nullptr);
-    game.setAiDecisionScheduling(commandArguments().find(L"--full-rate-ai-decisions")==nullptr);
-    game.setNavAuthority(commandArguments().find(L"--lattice-walk-probes")==nullptr);
-    if(vrMode){if(!renderer.enableHardware(window.handle()))throw std::runtime_error("SteamVR requires Vulkan hardware rendering: "+renderer.hardwareName());}else if(!commandArguments().find(L"--software"))renderer.enableHardware(window.handle());
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){

@@ -81,6 +81,12 @@ struct VrRuntime::Impl {
 VrRuntime::VrRuntime():m(std::make_unique<Impl>()){}
 VrRuntime::~VrRuntime(){if(current==this)current=nullptr;}
 VrRuntime* VrRuntime::active(){return current;}
+bool VrRuntime::headsetPresent(){
+ wchar_t steam[32768]{};DWORD bytes=sizeof(steam);if(RegGetValueW(HKEY_CURRENT_USER,L"Software\Valve\Steam",L"SteamPath",RRF_RT_REG_SZ,nullptr,steam,&bytes)!=ERROR_SUCCESS)return false;
+ auto path=std::filesystem::path(steam)/L"steamapps/common/SteamVR/bin/win64/openvr_api.dll";if(!std::filesystem::exists(path))return false;
+ HMODULE dll=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);if(!dll)return false;
+ auto present=reinterpret_cast<bool(__cdecl*)()>(GetProcAddress(dll,"VR_IsHmdPresent"));bool found=present&&present();FreeLibrary(dll);return found;
+}
 void VrRuntime::shutdownGraphics(){if(m->overlay&&m->panel){m->overlay->DestroyOverlay(m->panel);m->panel=0;}if(m->shutdown&&m->system)m->shutdown();m->system=nullptr;m->compositor=nullptr;m->input=nullptr;m->overlay=nullptr;if(current==this)current=nullptr;}
 bool VrRuntime::initialize(std::string& error){
  try{

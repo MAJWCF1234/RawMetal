@@ -15,7 +15,20 @@ LRESULT CALLBACK Win32Window::wndProc(HWND h,UINT m,WPARAM w,LPARAM l){
  if(m==WM_MOUSEWHEEL&&self){self->m_scrollDelta+=GET_WHEEL_DELTA_WPARAM(w);return 0;}
  if(m==WM_CLOSE){DestroyWindow(h);return 0;}if(m==WM_DESTROY){PostQuitMessage(0);return 0;}return DefWindowProcW(h,m,w,l);
 }
-Win32Window::Win32Window(int w,int h,const wchar_t* title){HINSTANCE in=GetModuleHandleW(nullptr);WNDCLASSEXW wc{sizeof(wc)};wc.lpfnWndProc=wndProc;wc.hInstance=in;wc.hIcon=LoadIconW(in,MAKEINTRESOURCEW(1));wc.hIconSm=LoadIconW(in,MAKEINTRESOURCEW(1));wc.lpszClassName=L"RetroQuakeCppWindow";wc.hCursor=LoadCursor(nullptr,IDC_CROSS);RegisterClassExW(&wc);POINT origin{0,0};HMONITOR monitor=MonitorFromPoint(origin,MONITOR_DEFAULTTOPRIMARY);MONITORINFO info{sizeof(info)};GetMonitorInfoW(monitor,&info);RECT bounds=info.rcMonitor;m_hwnd=CreateWindowExW(0,wc.lpszClassName,title,WS_POPUP|WS_VISIBLE,bounds.left,bounds.top,bounds.right-bounds.left,bounds.bottom-bounds.top,nullptr,nullptr,in,this);m_bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);m_bmi.bmiHeader.biWidth=w;m_bmi.bmiHeader.biHeight=-h;m_bmi.bmiHeader.biPlanes=1;m_bmi.bmiHeader.biBitCount=32;m_bmi.bmiHeader.biCompression=BI_RGB;ShowCursor(FALSE);}
+Win32Window::Win32Window(int w,int h,const wchar_t* title){HINSTANCE in=GetModuleHandleW(nullptr);WNDCLASSEXW wc{sizeof(wc)};wc.lpfnWndProc=wndProc;wc.hInstance=in;wc.hIcon=LoadIconW(in,MAKEINTRESOURCEW(1));wc.hIconSm=LoadIconW(in,MAKEINTRESOURCEW(1));wc.lpszClassName=L"RetroQuakeCppWindow";wc.hCursor=LoadCursor(nullptr,IDC_CROSS);wc.hbrBackground=static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));RegisterClassExW(&wc);POINT origin{0,0};HMONITOR monitor=MonitorFromPoint(origin,MONITOR_DEFAULTTOPRIMARY);MONITORINFO info{sizeof(info)};GetMonitorInfoW(monitor,&info);RECT bounds=info.rcMonitor;m_hwnd=CreateWindowExW(0,wc.lpszClassName,title,WS_POPUP|WS_VISIBLE,bounds.left,bounds.top,bounds.right-bounds.left,bounds.bottom-bounds.top,nullptr,nullptr,in,this);m_bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);m_bmi.bmiHeader.biWidth=w;m_bmi.bmiHeader.biHeight=-h;m_bmi.bmiHeader.biPlanes=1;m_bmi.bmiHeader.biBitCount=32;m_bmi.bmiHeader.biCompression=BI_RGB;ShowCursor(FALSE);}
+void Win32Window::showLoading(float progress,const wchar_t* status){
+ RECT rc{};GetClientRect(m_hwnd,&rc);const int w=rc.right,h=rc.bottom;if(w<=0||h<=0)return;
+ HDC dc=GetDC(m_hwnd);HDC mem=CreateCompatibleDC(dc);HBITMAP bitmap=CreateCompatibleBitmap(dc,w,h);HGDIOBJ old=SelectObject(mem,bitmap);
+ HBRUSH ground=CreateSolidBrush(RGB(5,7,6));FillRect(mem,&rc,ground);DeleteObject(ground);SetBkMode(mem,TRANSPARENT);
+ auto font=[&](int height,int weight,int spacing){HFONT f=CreateFontW(-height,0,0,0,weight,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Bahnschrift");SelectObject(mem,f);SetTextCharacterExtra(mem,spacing);return f;};
+ auto centred=[&](const wchar_t* text,int y,COLORREF colour){SetTextColor(mem,colour);SIZE size{};GetTextExtentPoint32W(mem,text,lstrlenW(text),&size);TextOutW(mem,(w-size.cx)/2+(size.cx>0?GetTextCharacterExtra(mem)/2:0),y,text,lstrlenW(text));};
+ const int title=std::max(28,h/13);HFONT big=font(title,FW_BOLD,title/3);centred(L"DEPTHWORKS",h*40/100-title/2,RGB(59,178,103));
+ HFONT statusFont=font(std::max(12,h/48),FW_NORMAL,std::max(1,h/540));DeleteObject(big);centred(status,h*40/100+title*3/4,RGB(146,138,128));
+ const int barW=w*28/100,barH=std::max(2,h/360),barX=(w-barW)/2,barY=h*58/100;
+ RECT track{barX,barY,barX+barW,barY+barH},done{barX,barY,barX+int(barW*std::clamp(progress,0.f,1.f)),barY+barH};
+ HBRUSH dim=CreateSolidBrush(RGB(28,34,31)),lit=CreateSolidBrush(RGB(59,178,103));FillRect(mem,&track,dim);FillRect(mem,&done,lit);DeleteObject(dim);DeleteObject(lit);
+ BitBlt(dc,0,0,w,h,mem,0,0,SRCCOPY);SelectObject(mem,old);DeleteObject(statusFont);DeleteObject(bitmap);DeleteDC(mem);ReleaseDC(m_hwnd,dc);
+}
 Win32Window::~Win32Window(){if(!m_cursorVisible)ShowCursor(TRUE);if(m_hwnd)DestroyWindow(m_hwnd);} 
 bool Win32Window::pump(){MSG msg{};while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){if(msg.message==WM_QUIT)m_quit=true;TranslateMessage(&msg);DispatchMessageW(&msg);}return !m_quit;}
 void Win32Window::setMenu(bool open){

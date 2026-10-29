@@ -31,6 +31,8 @@ public:
  void submit(int eye,VkInstance instance,VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,VkImage image,int width,int height);
  void submitPanel(VkInstance instance,VkPhysicalDevice physical,VkDevice device,VkQueue queue,uint32_t family,VkImage image,int width,int height);
  static VrRuntime* active();
+ // A headset SteamVR can see, asked without starting SteamVR: the PC/VR choice is only offered then.
+ static bool headsetPresent();
  static bool testMath();
  static constexpr float WristScale=.55f,WristCenter=.07f;
  static Point3 wristPoint(Point3 p){return {p.x*WristScale,p.y*WristScale,(p.z-.13f)*WristScale+WristCenter};}
