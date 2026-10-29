@@ -1463,6 +1463,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int i=0;i<emitter.count;++i){float age=std::fmod(game.elapsed()*emitter.rate+float(i)/emitter.count,1.f),radius=emitter.radius+age*emitter.growth;Point3 p{emitter.position.x+age*emitter.drift.x,emitter.position.y+age*emitter.drift.y,emitter.z+age*emitter.rise},up{0,0,radius};
    quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,softSmoke?smoke[size_t(std::min(3,int(age*4)))]:steam,.9f);}
  }
+ // Falling ash (Game::ashFall): flakes in a box that moves with the camera,
+ // each on its own slow tumble down the wind; a storm fills the air with them.
+ if(const float ash=game.ashFall();ash>0&&level==game.level()){
+  static const Texture flake=[](){Texture t{8,8,std::vector<uint32_t>(64)};t.clampEdges=true;t.transparent=true;
+   for(int y=0;y<8;++y)for(int x=0;x<8;++x){float dx=(x-3.5f)/4,dy=(y-3.5f)/4,a=std::clamp(1-std::sqrt(dx*dx+dy*dy),0.f,1.f);t.pixels[y*8+x]=(std::uint32_t(a*210.f)<<24)|0xc9c4bdu;}return t;}();
+  constexpr float Box=14.f;const float t=game.elapsed(),storm=game.stormIntensity();
+  const Point3 eye{player.pos.x,player.pos.y,player.z+player.eye},side{-std::sin(player.angle),std::cos(player.angle),0};
+  const int count=int(ash*ash*1600.f);
+  for(int i=0;i<count;++i){unsigned h=unsigned(i)*2654435761u;auto rnd=[&](int k){h^=h>>15;h*=2246822519u;h^=h>>13;h+=unsigned(k)*3266489917u;return float(h&65535u)/65535.f;};
+   const float fall=.35f+rnd(1)*.4f+storm*1.2f,windX=.5f+storm*3.5f,windY=.2f+storm*1.2f;
+   auto wrap=[&](float v,float c){return c-Box*.5f+std::fmod(std::fmod(v-(c-Box*.5f),Box)+Box,Box);};
+   Point3 p{wrap(rnd(2)*Box+t*windX+std::sin(t*.9f+i)*.3f,eye.x),wrap(rnd(3)*Box+t*windY,eye.y),wrap(rnd(4)*Box-t*fall,eye.z)};
+   const float size=.025f+rnd(5)*.035f;const Point3 up{0,0,size};
+   quad(p-side*size-up,p+side*size-up,p+side*size+up,p-side*size+up,flake,1.1f);}
+ }
  if(w.campaign()&&w.hasLift()){
   // The shaft, cab and the hazmat casualty belong to every lift map.
   const auto& corpse=game.hazmat();
@@ -2239,8 +2254,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    else if(e.strike>0){clip=2;phase=.4f+(1-e.strike)*.6f;}
    else if(e.painFlash>0){clip=3;phase=1-e.painFlash;}
    else if(e.moving){clip=1;phase=std::fmod(e.gait/(2*kPi),1.f);}
+   // The transformed's own clips: a leap into the bite and the hold (2), a
+   // missed leap's stumble (the stagger, 3), and the overhead blow (5) as
+   // its wind-up and strike, the fists coming down where the wind-up ends.
+   if(e.kind==Enemy::Kind::Transformed&&e.alive){
+    if(e.stalkMode==Enemy::StalkMode::Rush){clip=2;phase=.15f*(1-std::clamp(e.stalkTimer/TransformedLeap,0.f,1.f));}
+    else if(e.stalkMode==Enemy::StalkMode::Grab){clip=2;phase=.15f+.85f*(1-std::clamp(e.stalkTimer/TransformedHold,0.f,1.f));}
+    else if(e.stalkMode==Enemy::StalkMode::Recover){clip=3;phase=.2f+.8f*(1-std::clamp(e.stalkTimer/TransformedStumble,0.f,1.f));}
+    else if(e.windup>0){clip=5;phase=(1-std::clamp(e.windup/traits.windup,0.f,1.f))*.55f;}
+    else if(e.strike>0){clip=5;phase=.55f+(1-e.strike)*.45f;}
+   }
    mesh.poseCreature(clip,phase);
   }
+  // The transformed wears the Worker's body, gloves (mano) and boots (pies).
+  std::array<const Texture*,8> parts{};parts.fill(&texture);
+  if(e.kind==Enemy::Kind::Transformed)for(size_t part=0;part<mesh.materialNames.size()&&part<parts.size();++part){const auto&name=mesh.materialNames[part];
+   parts[part]=name.find("pies")!=std::string::npos?&m_transformedBoots:name.find("mano")!=std::string::npos?&m_transformedGloves:&m_transformedTexture;}
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   float scale=e.scale*(baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z}));
   float angle=e.heading,collapse=e.alive?0.f:std::min(1.f,e.deathTime/.65f);
@@ -2276,7 +2305,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+e.painFlash*.22f;
    // Thin wasp wings transmit light from the far side of the membrane.
    if(wasp&&face.part==1&&keyLight&&len>.00001f){auto toLamp=keyLight->emitter()-receiver;float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
-   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:texture,e.alive?light:.65f);
+   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[size_t(std::clamp(face.part,0,int(parts.size())-1))],e.alive?light:.65f);
    if(e.alive&&keyLight){
     static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
     MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();

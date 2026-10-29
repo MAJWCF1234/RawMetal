@@ -452,7 +452,7 @@ struct GpuRenderer::Impl {
  // Sun cascades: three 2048x2048 D16 layers redrawn every frame from the
  // static caches (they follow the camera), sampled with hardware comparison.
  static constexpr uint32_t SunSize=2048;static constexpr int SunCascades=3;
- int skyStyle=0;const GpuRenderer::LodTag* lodTag=nullptr;std::array<float,56> sunData{};Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
+ int skyStyle=0,storm=0;const GpuRenderer::LodTag* lodTag=nullptr;std::array<float,56> sunData{};Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
  void renderSunShadows(VkCommandBuffer cmd){
   if(!sunPipeline||!sunAtlas.handle)return;
   if(!sunLayoutReady){
@@ -1227,6 +1227,7 @@ void GpuRenderer::setDarkness(float darkness,float muzzleFalloff,const std::arra
 std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
 void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
 void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
+void GpuRenderer::setStorm(float storm){m->storm=int(std::clamp(storm,0.f,1.f)*1000.f);}
 void GpuRenderer::setLodTag(const LodTag* tag){m->lodTag=tag;}
 // Diagnostics: the three cascade depth maps as 8-bit PGMs plus their fit.
 void GpuRenderer::saveSunCascades(const char* prefix){
@@ -1372,7 +1373,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  {const auto&v=m->viewState;float camera[8]={v[0],v[1],v[2],v[10],v[3],v[4],v[5],v[6]};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,eye),camera,sizeof(camera));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,sun),m->sunData.data(),sizeof(m->sunData));
    std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flashes),m->weaponFlashes.data(),sizeof(m->weaponFlashes));
-  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));}
+  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));
+  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+3*sizeof(int32_t),&m->storm,sizeof(int32_t));}
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
  m->flushUploads();

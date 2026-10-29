@@ -377,6 +377,8 @@ public:
     static bool testFriendlyAI();
     static bool testStance();
     static bool testDialogue();
+    static bool testStorm();
+    static bool testZonePeople();
     // The stance room with its corporal mid-conversation (the --dialogue-shot frame).
     static Game dialogueInspection();
     static bool testAiQueryBatch();
@@ -643,6 +645,14 @@ public:
     // A conversation with choices is open (DialogueNode): the world runs on,
     // the player stands and picks a reply with 1-4, the arrows or the mouse.
     bool talking()const{return m_talk.actor>=0;}
+    // The campaign's ash storm (StormCycle): its phase (0 calm, 1 warning, 2 storm),
+    // how far it has closed in (0-1), the ash falling (0-1) and whether the player is under a roof.
+    const StormCycle* stormCycle()const;
+    int stormPhase()const;
+    float stormIntensity()const;
+    float ashFall()const;
+    bool sheltered()const;
+    void updateStorm(float dt);
     // The conversation panel's layout in HUD pixels (DisplayWidth x DisplayHeight), shared with the mouse.
     static constexpr int DialoguePanelY=244,DialogueFirstReplyY=294,DialogueReplyRowHeight=14;
     struct DialogueView {std::string speaker,line;std::vector<std::string> replies;int selected=0;float age=0;};
@@ -1001,6 +1011,7 @@ private:
     float m_shotCooldown = 0.0f;
     Vec2 m_velocity{};float m_stuckTime=0;
     float m_damageFlash = 0.0f;
+    float m_stormHurtTimer=0;
     float m_hitStopRemaining=0.f;
     float m_elapsed = 0.0f;
     float m_grabbed=0; // Seconds a Snatcher still has hold of the player: slowed, no sprint.

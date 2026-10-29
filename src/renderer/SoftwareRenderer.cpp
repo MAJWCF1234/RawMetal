@@ -145,6 +145,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   // Worker/Witness materials are large too. Deferring their mip construction
   // until the first visible limb caused quarter-second gameplay stalls.
   for(const auto&texture:m_workerTextures)m_gpu->prepare(texture);
+  for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})m_gpu->prepare(*texture);
   for(const auto&texture:m_staffTextures)m_gpu->prepare(texture);
   if(!m_logo.pixels.empty())m_gpu->prepare(m_logo);
   m_gpu->prepare(m_droneTexture);m_gpu->prepare(m_handgunTexture);
@@ -169,6 +170,13 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);m_mutantTexture=loadTexture(273);m_snatcherTexture=loadTexture(2127);m_chimeraTexture=loadTexture(2130);
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
+ // The transformed wear the same suit, drained of colour and darkened with
+ // ash: half the saturation, two thirds the light, an olive cast.
+ {auto scorch=[](std::uint32_t&pixel){float r=float((pixel>>16)&255),g=float((pixel>>8)&255),b=float(pixel&255),grey=r*.3f+g*.59f+b*.11f;
+   auto channel=[&](float c,float cast){return std::uint32_t(std::clamp((grey+(c-grey)*.5f)*.66f*cast,0.f,255.f));};
+   pixel=(pixel&0xff000000u)|(channel(r,1.02f)<<16)|(channel(g,1.f)<<8)|channel(b,.82f);};
+  Texture* scorched[]={&m_transformedTexture,&m_transformedGloves,&m_transformedBoots};
+  for(int i=0;i<3;++i){auto&texture=*scorched[i];texture=loadTexture(279+i);for(auto&pixel:texture.pixels)scorch(pixel);for(auto&level:texture.mips)for(auto&pixel:level)scorch(pixel);deriveSurfaceNormal(texture,.35f);texture.glossStrength=.05f;}}
  for(int i=0;i<6;++i){auto&texture=m_staffTextures[size_t(i)];texture=loadTexture(i<4?696+i*4:712+(i-4));deriveSurfaceNormal(texture,.35f);texture.glossStrength=i==5?.2f:.05f;}
  for(int role=0;role<6;++role){for(int i=0;i<2;++i){auto&texture=m_cleanupTextures[role][i];texture=loadTexture(305+role*5+i);deriveSurfaceNormal(texture,.25f);texture.glossStrength=.12f;}
    auto joints=loadResource(340+role);uint32_t corners=0;if(joints.size()<104||std::memcmp(joints.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup attachment calibration");std::memcpy(&corners,joints.data()+100,4);
@@ -1345,7 +1353,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   // the light's frame so the shadow edge does not crawl as the camera moves.
   {std::array<float,56> sunData{};const auto sun=world.sun();sunData[7]=world.wetness();
    if(sun.intensity>0){
-    sunData[0]=sun.direction.x;sunData[1]=sun.direction.y;sunData[2]=sun.direction.z;sunData[3]=sun.intensity;sunData[4]=sun.r;sunData[5]=sun.g;sunData[6]=sun.b;
+    sunData[0]=sun.direction.x;sunData[1]=sun.direction.y;sunData[2]=sun.direction.z;sunData[3]=sun.intensity*(1.f-.9f*game.stormIntensity());sunData[4]=sun.r;sunData[5]=sun.g;sunData[6]=sun.b;
     auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};Point3 forward=sun.direction*-1.f,right=cross(forward,Point3{0,0,1});float rl=std::sqrt(right.x*right.x+right.y*right.y+right.z*right.z);right=right*(1.f/std::max(rl,1e-4f));Point3 up=cross(right,forward);
     const auto&p=m_view;float cy=std::cos(p.angle),sy=std::sin(p.angle),cp=std::cos(p.pitch/140.f),sp=std::sin(p.pitch/140.f);
     Point3 eye{p.pos.x+origin.x,p.pos.y+origin.y,p.z+p.eye},viewForward{cy*cp,sy*cp,sp};float aspect=float(m_width)/std::max(1,m_height);
@@ -1362,13 +1370,16 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setTiltShift(g_tiltShift);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
   if(world.zoneSky())atmosphere={.55f,.64f,.74f,.0035f};
-  m_gpu->setSkyStyle(world.zoneSky()?1:0);
+  m_gpu->setSkyStyle(world.zoneSky()?1:0);m_gpu->setStorm(game.stormIntensity());
   if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(m_view.pos.x,m_view.pos.y)>m_view.z+m_view.eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
   // True darkness: haze goes black (it still swallows distance), the ambient
   // fill and exposure lift go, and a shot lights the room out to 12 m.
+  // An ash storm closes the haze in to a brown wall and takes the light down with it.
+  if(const float storm=game.stormIntensity();storm>0){const std::array<float,4> ash{.26f,.21f,.17f,.075f};for(size_t c=0;c<4;++c)atmosphere[c]+=(ash[c]-atmosphere[c])*storm;}
   const float darkness=game.darkness();for(int c=0;c<3;++c)atmosphere[size_t(c)]*=1.f-darkness;
-  m_gpu->setDarkness(darkness,.045f-.033f*darkness,game.weaponFlashes());
+  const float gloom=std::min(1.f,darkness+game.stormIntensity()*.5f);
+  m_gpu->setDarkness(gloom,.045f-.033f*gloom,game.weaponFlashes());
   m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();if(!m_vrReuseScene)scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';
    // Mid-session fallbacks are rare and look like a sudden quality drop; keep an appended record for diagnosis.

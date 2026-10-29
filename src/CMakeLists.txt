@@ -87,6 +87,8 @@ add_executable(RawMetal WIN32
     game/ai/friendly/Voices.cpp
     game/ai/friendly/Dialogue.cpp
     game/ai/friendly/DialogueTest.cpp
+    game/Storm.cpp
+    game/ZonePeopleTest.cpp
     game/ai/friendly/Streaming.cpp
     game/ai/friendly/CivilianEscort.cpp
     game/ai/friendly/Schedule.cpp

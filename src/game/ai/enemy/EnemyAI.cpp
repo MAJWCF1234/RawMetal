@@ -214,7 +214,7 @@ void Game::updateEnemies(float dt){
   float range=e.reach();
   bool sameLevel=targetFeet<e.bodyTop()&&targetFeet+targetHull>e.bodyBottom();
   // The Snatcher crouches to lunge from further out than its claws reach.
-  bool canMelee=visible&&sameLevel&&dist<(e.kind==Enemy::Kind::Snatcher?2.8f*e.scale:range)&&e.attackCooldown<=0&&e.strike<=0;
+  bool canMelee=visible&&sameLevel&&dist<(e.kind==Enemy::Kind::Snatcher?2.8f*e.scale:e.kind==Enemy::Kind::Transformed?3.2f*e.scale:range)&&e.attackCooldown<=0&&e.strike<=0;
   bool heardCue=heard!=nullptr;
   bool hurt=e.painFlash>(stalker?.85f:.65f);
   Vec2 goal=e.awareness>0?e.lastKnown:e.home;
@@ -226,6 +226,54 @@ void Game::updateEnemies(float dt){
   bool scheduleMove=e.scheduleStep==1&&e.scheduleStatus==int(CreatureTaskStatus::Running);
   bool scheduleStrike=creatureTaskAllows(e,CreatureTask::Strike)||e.schedule==int(CreatureSchedule::Attack);
   const bool snatcher=e.kind==Enemy::Kind::Snatcher;
+  if(e.kind==Enemy::Kind::Transformed){
+   // Two moves, both readable. Out of arm's reach it leaps (Rush), and one
+   // that lands pins its prey (Grab) and bites until the hold ends or a hit
+   // knocks it off; a miss stumbles it (Recover). In arm's reach it raises
+   // both fists for the overhead blow: the generic wind-up below, which a hit
+   // during the raise breaks.
+   constexpr float Leap=TransformedLeap,LeapSpeed=6.f,Hold=TransformedHold,Stumble=TransformedStumble,Bite=9.f;
+   Vec2 aim{std::cos(e.heading),std::sin(e.heading)};
+   const bool struck=e.painFlash>.85f;
+   auto release=[&](float seconds){e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(friendly<0)m_grabbed=0;};
+   if(e.stalkMode==Enemy::StalkMode::Recover){
+    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);if(e.stalkTimer<=0)e.stalkMode=Enemy::StalkMode::Watch;
+    continue;
+   }
+   if(e.stalkMode==Enemy::StalkMode::Rush){
+    float travel=std::min(dt,e.stalkTimer);e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
+    int samples=std::max(1,int(std::ceil(LeapSpeed*travel/.08f)));bool blocked=false,caught=false;
+    for(int i=0;i<samples&&!blocked&&!caught;++i){
+     Vec2 next=e.pos+aim*(LeapSpeed*travel/samples);float feet=e.z;
+     if(length(target-next)<.65f)break;
+     if(aiWalkSegment(m_world,e.pos,e.z,next,e.hull(),&feet)&&std::fabs(feet-e.z)<=traits.step+.025f){float moved=length(next-e.pos);e.pos=next;e.z=feet;e.moving=moved>.0001f;}
+     else blocked=true;
+     Vec2 reachTo=target-e.pos;
+     caught=sameLevel&&length(reachTo)<range&&dot(normalized(reachTo),aim)>.7f&&m_world.rayClear(e.pos,e.z+.6f,target,targetFeet+.5f);
+    }
+    if(caught){e.stalkMode=Enemy::StalkMode::Grab;e.stalkTimer=Hold;e.attackCooldown=traits.cooldown;enemySound(e,1,.95f,1.05f);}
+    else if(blocked||e.stalkTimer<=0)release(Stumble);
+    continue;
+   }
+   if(e.stalkMode==Enemy::StalkMode::Grab){
+    if(struck){release(Stumble);continue;} // shoot or punch it off
+    float before=e.stalkTimer;e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
+    // A bite as the hold opens and two more while it lasts, on whoever is
+    // still in its hands.
+    bool bite=false;for(float at:{Hold-.05f,Hold*.55f,Hold*.15f})bite=bite||(before>at&&e.stalkTimer<=at);
+    const bool holding=sameLevel&&dist<range+.35f;
+    if(bite&&holding){if(friendly>=0)damageFriendly(size_t(friendly),Bite,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});else receiveDamage(Bite,e.pos);}
+    if(friendly<0&&holding)m_grabbed=std::max(m_grabbed,std::min(e.stalkTimer,.25f));
+    if(lengthSq(to)>.01f)e.heading=std::atan2(to.y,to.x);
+    if(e.stalkTimer<=0||!holding){e.stalkMode=Enemy::StalkMode::Watch;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown*.6f);}
+    continue;
+   }
+   if(e.windup>0&&struck){e.windup=0;e.attackCooldown=std::max(e.attackCooldown,.8f);continue;}
+   // Out of arm's reach and facing its prey: leap.
+   if(e.windup<=0&&e.strike<=0&&scheduleStrike&&visible&&sameLevel&&dist>=range&&dist<3.2f*e.scale&&e.attackCooldown<=0&&dot(normalized(to),aim)>.8f){
+    e.heading=std::atan2(to.y,to.x);e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=Leap;enemySound(e,1,.9f,1.15f);continue;
+   }
+  }
   if(e.windup>0&&!snatcher){if(!stalker&&e.kind!=Enemy::Kind::Brute&&e.windup>.09f){e.heading+=wrapAngle(std::atan2(to.y,to.x)-e.heading)*std::min(1.f,dt*16.f);facing={std::cos(e.heading),std::sin(e.heading)};}e.windup-=dt;if(e.windup<=0){e.strike=1;e.attackCooldown=traits.cooldown;
     if(dist<range+.1f&&dot(normalized(to),facing)>(stalker?.5f:.25f)&&sameLevel&&m_world.rayClear(e.pos,e.z+.6f,target,targetFeet+.5f)){
      float damage=creatureTraits(e.kind).damage;
@@ -642,7 +690,7 @@ bool Game::testAI(){
  dodge.update({},.01f);if(attacker.windup<=0)return false;
  dodge.m_player.pos=attacker.pos+Vec2{.7f,0};
  for(int i=0;i<70;++i)dodge.update({},1.f/120.f);if(dodge.player().health!=100)return false;
- for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant,Enemy::Kind::Snatcher}){auto stairs=validationScene(kind);auto&climber=stairs.m_enemies[0];
+ for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant,Enemy::Kind::Snatcher,Enemy::Kind::Transformed}){auto stairs=validationScene(kind);auto&climber=stairs.m_enemies[0];
   climber.pos={21.f,15.5f};climber.home=climber.pos;climber.lastKnown=climber.pos;climber.z=stairs.groundHeight(climber.pos);climber.heading=-kPi*.5f;
   stairs.m_player.pos={21.f,11.5f};stairs.m_player.z=stairs.groundHeight(stairs.m_player.pos,5.f);
   climber.lastKnown=stairs.m_player.pos;climber.lastKnownZ=stairs.m_player.z;climber.awareness=60;

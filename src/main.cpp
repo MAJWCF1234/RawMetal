@@ -998,7 +998,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      while(std::getline(list,line)){
       std::istringstream fields(line);std::string name;int level=0;float x=0,y=0,yaw=0,pitch=0,lift=0;
       if(!(fields>>name>>level>>x>>y>>yaw>>pitch))continue;fields>>lift;
-      auto scene=retro::Game::zoneInspection(level,{x,y},yaw,pitch,lift);renderer->render(scene);
+      // An optional "storm S": the view S seconds into the campaign's ash storm.
+      std::string action;float stormAt=-1;if(fields>>action&&action=="storm")fields>>stormAt;
+      auto scene=retro::Game::zoneInspection(level,{x,y},yaw,pitch,lift);
+      if(const auto*cycle=scene.stormCycle();cycle&&stormAt>=0){scene.setState(retro::stateId("storm_clock"),cycle->calmMs+cycle->warningMs+int(stormAt*1000));scene.setState(retro::stateId("storm_phase"),2);}
+      renderer->render(scene);
       std::ofstream out(".build/shot/"+name+".ppm",std::ios::binary);out<<"P6\n"<<960<<' '<<540<<"\n255\n";
       for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      }
@@ -1288,10 +1292,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }return 0;
     }
     if(auto arg=commandArguments().find(L"--creature-inspection=")){
-     // Any kind's five clips at four phases, front and side: creature-K-clip-frame[-side].ppm.
-     const int kind=_wtoi(arg+22);if(kind<0||kind>int(retro::CreatureKind::Chimera))return 1;
+     // Any kind's clips (five; the transformed's six) at four phases, front and side: creature-K-clip-frame[-side].ppm.
+     const int kind=_wtoi(arg+22);if(kind<0||kind>int(retro::CreatureKind::Transformed))return 1;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
-     for(int view=0;view<2;++view)for(int clip=0;clip<5;++clip)for(int frame=0;frame<4;++frame){
+     const int clips=kind==int(retro::CreatureKind::Transformed)?6:5;
+     for(int view=0;view<2;++view)for(int clip=0;clip<clips;++clip)for(int frame=0;frame<4;++frame){
       auto scene=retro::Game::stalkerInspection(clip,.05f+frame*.3f,view,retro::Enemy::Kind(kind));renderer.render(scene);
       std::ofstream out("creature-"+std::to_string(kind)+"-"+std::to_string(clip)+"-"+std::to_string(frame)+(view?"-side":"")+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
@@ -1301,7 +1306,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // Every clip of one kind on a single 30 fps timeline, front and side, at
      // the timing the game plays it: creature-video/K-front-NNNN.ppm and
      // K-side-NNNN.ppm, with creature-video/K-timeline.txt naming each frame's clip.
-     const int kind=_wtoi(arg+17);if(kind<0||kind>int(retro::CreatureKind::Chimera))return 1;
+     const int kind=_wtoi(arg+17);if(kind<0||kind>int(retro::CreatureKind::Transformed))return 1;
      const auto& traits=retro::creatureTraits(retro::CreatureKind(kind));
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
      renderer.setEnvironmentInspection(true);std::filesystem::create_directories("creature-video");
@@ -1309,12 +1314,20 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      struct Segment{const char* name;int clip;float seconds;};
      const float attack=traits.windup+.25f;
      const float pain=1.f/traits.painDecay;
-     const Segment timeline[]={{"IDLE",0,traits.idleSeconds*1.5f},{"MOVE",1,2.5f},{"ATTACK",2,attack},{"ATTACK",2,attack},{"PAIN",3,pain},{"PAIN",3,pain},{"DEATH",4,traits.deathSeconds+.8f}};
+     // The transformed's attack is its leap and two-second pin; its overhead
+     // blow is a sixth clip, its wind-up then the strike.
+     const bool transformed=kind==int(retro::CreatureKind::Transformed);
+     const float bite=retro::TransformedLeap+retro::TransformedHold,overhead=traits.windup+traits.strikeSeconds;
+     std::vector<Segment> timeline{{"IDLE",0,traits.idleSeconds*1.5f},{"MOVE",1,2.5f},{"ATTACK",2,transformed?bite:attack},{"ATTACK",2,transformed?bite:attack},{"PAIN",3,pain},{"PAIN",3,pain}};
+     if(transformed)timeline.insert(timeline.end(),{{"OVERHEAD",5,overhead},{"OVERHEAD",5,overhead}});
+     timeline.push_back({"DEATH",4,traits.deathSeconds+.8f});
      std::ofstream names("creature-video/"+std::to_string(kind)+"-timeline.txt");int frame=0;
      for(const auto& s:timeline)for(int f=0;f<int(s.seconds*30);++f,++frame){const float t=f/30.f;float phase=0;
       if(s.clip==0)phase=std::fmod(t/traits.idleSeconds,1.f);
       else if(s.clip==1)phase=std::fmod(t*traits.speed*traits.gaitPerMetre/(2*retro::kPi),1.f);
+      else if(s.clip==2&&transformed)phase=t<retro::TransformedLeap?.15f*t/retro::TransformedLeap:std::min(1.f,.15f+.85f*(t-retro::TransformedLeap)/retro::TransformedHold);
       else if(s.clip==2)phase=t<traits.windup?.4f*t/traits.windup:std::min(1.f,.4f+.6f*(t-traits.windup)/.25f);
+      else if(s.clip==5)phase=t<traits.windup?.55f*t/traits.windup:std::min(1.f,.55f+.45f*(t-traits.windup)/traits.strikeSeconds);
       else if(s.clip==3)phase=std::min(1.f,t/pain);
       else phase=std::min(1.f,t/traits.deathSeconds);
       names<<frame<<' '<<s.name<<'\n';
@@ -1328,6 +1341,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
     if(commandArguments().find(L"--stance-test"))return retro::Game::testStance()?0:21;
     if(commandArguments().find(L"--dialogue-test"))return retro::Game::testDialogue()?0:21;
+    if(commandArguments().find(L"--storm-test"))return retro::Game::testStorm()?0:21;
+    if(commandArguments().find(L"--zone-people-test"))return retro::Game::testZonePeople()?0:21;
     if(commandArguments().find(L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
     // --terminal-inspection=LEVEL,TITLE: the first terminal or paper on that map
     // whose title contains TITLE, rendered open as the player reads it.
@@ -1492,7 +1507,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},
          {"stance",retro::Game::testStance},
-         {"dialogue",retro::Game::testDialogue}};
+         {"dialogue",retro::Game::testDialogue},
+         {"storm",retro::Game::testStorm},
+         {"zone-people",retro::Game::testZonePeople}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){

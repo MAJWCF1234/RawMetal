@@ -4,6 +4,7 @@
 #include "../Navigation.h"
 #include "../RouteCache.h"
 #include "../../../core/FrameProfile.h"
+#include "../../../world/CustomCampaign.h"
 #include <fstream>
 #include <sstream>
 #include <chrono>
@@ -76,6 +77,58 @@ bool Game::testCreatureBehaviour(){
   if(found){auto p=loaded.m_enemies[0].pos;loaded.setState(wake,1);for(int i=0;i<200;++i)loaded.updateEnemies(dt);after=length(loaded.m_enemies[0].pos-p);}
   std::ostringstream v;v<<"decode="<<decoded<<" Snatcher found="<<found<<" saved wakeState="<<gate<<" max displacement/turn/awareness over 3s="<<movement<<'/'<<turn<<'/'<<awareness<<" displacement after state +2s="<<after;
   check(sleeping&&after>.05f,"7 save/load dormancy and state wake",v.str());
+ }
+ // The transformed: a run as fast as a walking player, a leap that pins and
+ // bites, an overhead blow from arm's reach that a hit during the raise
+ // breaks, a stagger that plays through a stream of fire, and every faction's
+ // squads as prey.
+ {const auto&t=creatureTraits(Enemy::Kind::Transformed);std::ostringstream v;
+  v<<t.name<<" health="<<t.health<<" speed="<<t.speed<<" reach="<<t.reach<<" windup="<<t.windup<<" damage="<<t.damage<<" baked="<<t.baked<<" rushSpeed="<<t.rushSpeed<<" kind index="<<int(Enemy::Kind::Transformed);
+  check(int(Enemy::Kind::Transformed)==7&&near(t.health,150)&&near(t.speed,3.6f)&&near(t.reach,1.5f)&&near(t.windup,1.05f)&&near(t.damage,26)&&t.baked&&t.opensDoors&&t.rushSpeed==0,"9 transformed traits",v.str());}
+ {auto g=scene(Enemy::Kind::Transformed,9.f);auto&e=g.m_enemies[0];e.awareness=10;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Chase;
+  float run=-1,start=-1;Vec2 from{};for(int i=1;i<=300;++i){g.updateEnemies(dt);if(start<0&&e.moving&&i>20){start=i*dt;from=e.pos;}if(start>=0&&run<0&&i*dt>=start+.5f)run=length(e.pos-from)/(i*dt-start);}
+  std::ostringstream v;v<<"run speed over .5 s="<<run<<" m/s";check(run>3.3f&&run<3.75f,"9 transformed runs at a walking player's pace",v.str());}
+ {auto g=scene(Enemy::Kind::Transformed,2.6f);auto&e=g.m_enemies[0];float leap=-1,pin=-1,held=0;int bites=0;float lost=0;
+  for(int i=1;i<=300;++i){float hp=g.m_player.health;g.updateEnemies(dt);float t=i*dt;if(g.m_player.health<hp){++bites;lost+=hp-g.m_player.health;}
+   if(leap<0&&e.stalkMode==Enemy::StalkMode::Rush)leap=t;if(pin<0&&e.stalkMode==Enemy::StalkMode::Grab)pin=t;if(e.stalkMode==Enemy::StalkMode::Grab)held=std::max(held,g.m_grabbed);}
+  std::ostringstream v;v<<"leap at="<<leap<<"s pinned at="<<pin<<"s bites="<<bites<<" damage="<<lost<<" grip held="<<held<<" final mode="<<int(e.stalkMode);
+  check(leap>=0&&pin>leap&&pin-leap<=TransformedLeap+.02f&&bites==3&&near(lost,27)&&held>0,"9 transformed leaps, pins and bites three times",v.str());}
+ {auto g=scene(Enemy::Kind::Transformed,2.6f);auto&e=g.m_enemies[0];int i=0;for(;i<200&&e.stalkMode!=Enemy::StalkMode::Grab;++i)g.updateEnemies(dt);
+  for(int k=0;k<30;++k)g.updateEnemies(dt);float hp=e.hp;bool pinned=e.stalkMode==Enemy::StalkMode::Grab;g.applyEnemyDamage(e,10,false,false);g.updateEnemies(dt);
+  bool knocked=e.stalkMode==Enemy::StalkMode::Recover;float before=e.hp;g.applyEnemyDamage(e,10,false,false);float open=before-e.hp;float player=g.m_player.health;
+  for(int k=0;k<60;++k){g.updateEnemies(dt);g.m_grabbed=std::max(0.f,g.m_grabbed-dt);}
+  std::ostringstream v;v<<"pinned="<<pinned<<" knocked off="<<knocked<<" first hit="<<hp-before<<" hit while stumbling="<<open<<" player health held="<<(g.m_player.health==player)<<" grip after .6 s="<<g.m_grabbed;
+  check(pinned&&knocked&&near(open,15)&&g.m_player.health==player&&g.m_grabbed<=0,"9 transformed knocked off its prey stumbles, open to harder hits",v.str());}
+ {auto g=scene(Enemy::Kind::Transformed,1.2f);auto&e=g.m_enemies[0];float begin=-1,hit=-1,damage=0;
+  for(int i=1;i<=250&&hit<0;++i){float hp=g.m_player.health;g.updateEnemies(dt);float t=i*dt;if(begin<0&&e.windup>0)begin=t;if(g.m_player.health<hp){hit=t;damage=hp-g.m_player.health;}}
+  std::ostringstream v;v<<"wind-up from="<<begin<<"s blow at="<<hit<<"s ("<<hit-begin<<" s) damage="<<damage<<" no leap="<<(e.stalkMode==Enemy::StalkMode::Watch);
+  check(begin>=0&&hit-begin>=1.f&&hit-begin<=1.1f&&near(damage,26),"9 transformed overhead blow lands as the wind-up ends",v.str());}
+ {auto g=scene(Enemy::Kind::Transformed,1.2f);auto&e=g.m_enemies[0];for(int i=0;i<300&&e.windup<.5f;++i)g.updateEnemies(dt);
+  bool raising=e.windup>0;g.applyEnemyDamage(e,10,false,false);g.updateEnemies(dt);bool broken=e.windup<=0;float player=g.m_player.health;
+  for(int i=0;i<60;++i)g.updateEnemies(dt);
+  std::ostringstream v;v<<"raising="<<raising<<" broken="<<broken<<" player health over .6 s="<<player<<" -> "<<g.m_player.health;
+  check(raising&&broken&&g.m_player.health==player,"9 transformed hit during its raise staggers instead of striking",v.str());}
+ {auto g=scene(Enemy::Kind::Transformed,6.f);auto&e=g.m_enemies[0];g.applyEnemyDamage(e,1,false,false);g.updateEnemies(.2f);float mid=e.painFlash;g.applyEnemyDamage(e,1,false,false);float again=e.painFlash;
+  for(int i=0;i<60;++i)g.updateEnemies(dt);g.applyEnemyDamage(e,1,false,false);
+  std::ostringstream v;v<<"pain after .2 s="<<mid<<" after a second hit="<<again<<" after .8 s and a third="<<e.painFlash;
+  check(mid>.5f&&near(again,mid)&&near(e.painFlash,1),"9 transformed stagger plays through, then a fresh hit staggers again",v.str());}
+ // A squad of each stance stands 3 m from a transformed the player is far from:
+ // hostile (Raider), truce (Wary) and ally (Facility), and a Neutral bystander.
+ for(int stance:{int(SquadStance::Hostile),int(SquadStance::Truce),int(SquadStance::Ally),-1}){
+  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Transformed prey";campaign->key=771207;
+  auto map=std::make_shared<AuthoredMapData>();map->name="Prey room";map->definition={{0,0},{21.5f,21.5f},0,Environment::Interior,false,8,.3f,42};
+  AuthoredLayerData layer;for(auto&row:layer.rows)row=std::string(24,'.');map->layers.push_back(layer);
+  TimedSequence timer;timer.timerState=stateId("tp_clock");timer.finishState=stateId("tp_done");timer.durationMs=60000;timer.finishAtMs=60000;timer.soundIntervalMs=0;timer.loop=true;map->timedSequences.push_back(timer);
+  ActorTrack guard;guard.timerState=timer.timerState;guard.keys={{0,{6.5f,6.5f},0,kPi*.5f},{60000,{6.5f,6.5f},0,kPi*.5f}};guard.scale=1.6f;guard.health=400;
+  guard.damageState=stateId("tp_damage");guard.deadState=stateId("tp_dead");guard.ai.mode=ActorAiMode::Guard;guard.ai.faction=stance<0?AiFaction::Neutral:AiFaction::Raider;
+  guard.ai.squad=stateId("tp");guard.ai.stance=stateId("tp_stance");guard.ai.patrol={{{6.5f,6.5f},0,1000}};map->actorTracks.push_back(guard);campaign->maps.push_back(map);
+  Game g(campaign);if(stance>=0)g.setState(stateId("tp_stance"),stance);g.m_enemies.clear();g.m_player.pos={21.5f,21.5f};g.m_player.angle=kPi;
+  g.spawnCreature({Enemy::Kind::Transformed,{6.5f,9.5f},0},0,false);g.m_enemies[0].heading=-kPi*.5f;
+  const auto faction=g.npcFaction(g.m_friendlyActors[0].track());int first=-1;
+  for(int i=0;i<600&&first<0;++i){g.update({},1.f/60);if(g.state(stateId("tp_damage"))>0)first=i;}
+  std::ostringstream v;v<<"stance="<<stance<<" faction="<<int(faction)<<" first damage frame="<<first<<" damage="<<g.state(stateId("tp_damage"))<<" player health="<<g.m_player.health;
+  const bool prey=stance>=0;
+  check((prey?first>=0:first<0)&&g.m_player.health==100&&factionsHostile(AiFaction::Creature,faction)==prey,prey?"9 transformed attacks a squad of any stance":"9 transformed leaves a Neutral bystander alone",v.str());
  }
  // The route cache keeps each deck graph and terrain cell grid per exact
  // collision state; what it hands a planner must be the live probe to the bit.

@@ -87,11 +87,12 @@ class Zone:
         self.t = Terrain(**TERRAIN)
         self.maps = {(cx, cy): dict(fixtures=[], structs=[], lights=[], creatures=[], pickups=[], clutter=[], terminals=[],
                                     signs=[], hazards=[], emitters=[], water=[], zones=[], actors=[], events=[], objectives=[],
-                                    sequences=[], hints=[], nav=[])
+                                    sequences=[], hints=[], nav=[], shelters=[])
                      for cy in range(ZONE_H) for cx in range(ZONE_W)}
         self.keep_clear = []  # (x, y, radius): no vegetation
         self.water = []  # (x1, y1, x2, y2, bed, surface), absolute heights
         self.objective_texts = []
+        self.dialogues = {}  # map key -> [(node, speaker, line, voice, replies)]
 
     @staticmethod
     def chunk(x, y):
@@ -118,8 +119,9 @@ class Zone:
         # Mount 2 (bare): outdoor lights belong to fires and lamp heads, never a ceiling fitting.
         m, lx, ly = self.local(x, y); m['lights'].append((lx, ly, z, 2, 0, intensity, rng, kelvin, tint))
 
-    def creature(self, kind, x, y):
-        m, lx, ly = self.local(x, y); m['creatures'].append((kind, lx, ly, 0))
+    def creature(self, kind, x, y, scale=None, health=None, wake=''):
+        """wake: a state the creature sleeps until (blind and deaf; a hit wakes it too)."""
+        m, lx, ly = self.local(x, y); m['creatures'].append((kind, lx, ly, 0, scale, health, wake))
 
     def pickup(self, kind, x, y):
         m, lx, ly = self.local(x, y); m['pickups'].append((kind, lx, ly))
@@ -181,7 +183,7 @@ class Zone:
                     return px, py
         raise SystemExit('no clear ground for %s at %s' % (what, (x, y)))
 
-    def actor(self, x, y, visual, yaw, mode=0, faction=5, squad='', patrol=(), weapon=None, role=None, health=None, name='', voice=0):
+    def actor(self, x, y, visual, yaw, mode=0, faction=5, squad='', patrol=(), weapon=None, role=None, health=None, name='', voice=0, stance='', talk=''):
         x, y = self.clear_spot(x, y, name or 'actor')
         patrol = [self.clear_spot(px, py, 'patrol') + (pause,) for (px, py, pause) in patrol]
         if patrol:
@@ -193,12 +195,35 @@ class Zone:
             assert self.chunk(px, py) == self.chunk(x, y), ('patrol leaves its map', name or (x, y), (px, py))
         m['actors'].append(dict(x=lx, y=ly, visual=visual, yaw=yaw, mode=mode, faction=faction, squad=squad,
                                 patrol=[(px - (x - lx), py - (y - ly), pause) for (px, py, pause) in patrol],
-                                weapon=weapon, role=role, health=health, name=name, voice=voice))
+                                weapon=weapon, role=role, health=health, name=name, voice=voice, stance=stance, talk=talk))
+        return self.chunk(x, y)
 
     def event(self, x1, y1, x2, y2, name, actions, require='', value=1):
         m, lx, ly = self.local((x1 + x2) / 2, (y1 + y2) / 2)
         ox, oy = (x1 + x2) / 2 - lx, (y1 + y2) / 2 - ly
         m['events'].append((name, max(0, x1 - ox), max(0, y1 - oy), min(24, x2 - ox), min(24, y2 - oy), require, value, actions))
+
+    def shelter(self, x1, y1, x2, y2, top=3.2):
+        """SHELTER: the ash storm cannot reach under this roof (world metres)."""
+        for (cx, cy), m in self.maps.items():  # split across every map the roof reaches
+            ox, oy = cx * CHUNK, cy * CHUNK
+            a, b, c, d = max(x1, ox), max(y1, oy), min(x2, ox + CHUNK), min(y2, oy + CHUNK)
+            if a < c and b < d:
+                m['shelters'].append((a - ox, b - oy, c - ox, d - oy, -1.0, top))
+
+    def leanto(self, x, y, yaw):
+        """A scrap lean-to to wait out a storm under: open-fronted, so not solid."""
+        self.clear(x, y, 2.6)
+        self.model('scrap_leanto', x, y, yaw=yaw, solid=False)
+        c, s = abs(math.cos(yaw)), abs(math.sin(yaw))
+        hx, hy = (3.57 * c + 2.12 * s) / 2 - .25, (3.57 * s + 2.12 * c) / 2 - .25
+        self.shelter(x - hx, y - hy, x + hx, y + hy, 2.9)
+
+    def dialogue(self, speaker_map, node, speaker, line, replies, voice=''):
+        """One line of a conversation, in the map of the actor who says it (an
+        actor's talk node and every node it leads to share that map). replies:
+        (text, next, require, require_value, hide, {state: value}, stance)."""
+        self.dialogues.setdefault(speaker_map, []).append((node, speaker, line, voice, replies))
 
     def objective(self, map_xy, ident, text):
         m, _, _ = self.local(*map_xy); m['objectives'].append((ident, text))
@@ -271,8 +296,11 @@ def build(z):
     z.model('ind_sandbags', 15, 79.5, sz=.45)
     z.model('ind_crate', 21.8, 89.3); z.model('ind_crate', 21.8, 90.2, yaw=.3); z.model('ind_barrel', 20.6, 89.6)
     z.model('dumpster', 5.6, 80.6, yaw=0)
-    z.terminal(19.5, 84.8, 'CAMP / ELDER', 'WELCOME TO THE ZONE, ROOKIE. THE COURIER NEVER CAME BACK.',
-               'FIND HIS PDA AT THE OLD FUEL STATION NORTH OF THE BUS.', 'zone_briefed')
+    for (bx_, by_, yaw) in [(11.8, 82.6, .3), (16.6, 83.2, 2.6), (16.8, 87.6, 3.8)]:
+        z.model('scrap_bedroll', bx_, by_, yaw=yaw, solid=False)
+    z.model('scrap_lantern', 9.6, 82.3, solid=False, base=1.9)
+    z.light(9.6, 82.3, 1.8, 1.4, 6, 2100, .2)
+    z.model('scrap_still', 6.4, 86.5, yaw=PI / 2)
     z.sign(10.5, 79.2, 1.9, 2.6, .55, 0, 'ROOKIE CAMP', 'NO SHOOTING INSIDE THE FENCE')
     for (px, py, yaw) in [(11.5, 83.5, 0.3), (15.5, 83.8, 2.5), (16, 88.6, 3.6), (13.4, 87.6, 5.2)]:
         z.actor(px, py, 0, yaw)  # stalkers at the fire
@@ -355,6 +383,26 @@ def build(z):
                 weapon=(1, 700, 1100, 14, 6), role=[6, 4, 1][i], health=90, voice=9)
     for (hx, hy) in [(89, 57.6), (91.6, 61.6), (87, 65.8), (95.2, 66.4), (81.5, 66.6)]:
         z.nav_hint(hx, hy)
+    # The bandits live here: shacks of patched sheet, a brazier, a still and a dish on a pole.
+    z.model('scrap_shack', 95.2, 57.5, yaw=PI / 2)
+    z.model('scrap_shack', 80.6, 70.2, yaw=0)
+    for (wx, wy, yaw) in [(84, 52.6, 0), (87.2, 52.6, 0), (90.4, 52.6, 0), (96.4, 66, PI / 2)]:
+        z.model('scrap_patched_wall', wx, wy, yaw=yaw)
+    z.model('scrap_barrier_wall', 79.6, 61.8, yaw=PI / 2)
+    z.model('scrap_van_husk', 84.5, 54.6, yaw=.25)
+    z.model('scrap_sat_dish', 96.4, 53.8, yaw=-2.4)
+    z.model('scrap_still', 89.2, 68.6, yaw=1.2)
+    z.model('scrap_trash_heap', 92.6, 72, yaw=.4, solid=False)
+    z.model('scrap_notice_board', 79.6, 55.4, yaw=-PI / 2)
+    z.model('scrap_brazier', 87.6, 63.6)
+    z.hazard(4, 87.6, 63.6, .3, 5, top=1.1)
+    z.emitter(87.6, 63.6, .9, (.25, .1), 2.8, .3, .1, .55, 7)
+    z.light(87.6, 63.6, 1.2, 2.8, 10, 1900, .25)
+    z.model('scrap_couch', 86.2, 65.4, yaw=PI * .85)
+    z.model('scrap_chair', 89.2, 62.2, yaw=-1.2)
+    for (lx_, ly_) in [(95.2, 59.4), (82.4, 70.2)]:
+        z.model('scrap_lantern', lx_, ly_, solid=False, base=2.1)
+        z.light(lx_, ly_, 2.0, 1.6, 7, 2100, .2)
     z.creature(2, 95, 71)
     z.pickup(1, 89, 61.5); z.pickup(1, 81, 63); z.pickup(0, 93, 70)
     z.zone_name(78, 52, 97, 73, 'SCRAPYARD')
@@ -403,12 +451,23 @@ def build(z):
     t.flat(46, 2, 66, 12, None, 5)
     z.clear(56, 7, 6)
     z.model('mine_headframe', 52, 6.5)
-    z.model('mine_entrance', 59, 5.5, yaw=PI / 2)
+    z.model('mine_entrance', 59, 5.5, yaw=PI / 2, base=-1.1)  # sunk: a low rock face, not a block on the yard
     z.model('mine_lift', 52, 9.8)
     z.model('ind_crate', 55, 9.5); z.model('ind_crate', 55.8, 9.7, yaw=.4); z.model('ind_barrel', 63.5, 9)
+    # The portal is bedded into an outcrop of the pack's rock, not left standing
+    # as a slab: boulders along its back and flanks, rails and a cart out of the mouth.
+    for (rx_, ry_, yaw, sc, m) in [(56.6, 2.0, .3, 1.2, 'cave_rock_block'), (60.4, 1.9, 2.9, 1.25, 'cave_rock_block'), (53.8, 3.6, 1.4, .9, 'cave_rock_block'),
+                                   (64.0, 2.8, .8, .85, 'cave_rock_block')]:
+        z.model(m, rx_, ry_, yaw=yaw, scale=sc)
+    z.model('mine_rail_straight', 67.3, 5.5, yaw=PI / 2, solid=False)
+    z.model('mine_ore_cart', 65.4, 5.5, yaw=PI / 2)
+    z.model('mine_muck_pile', 49.2, 3.6, yaw=.6, solid=False); z.model('mine_muck_pile', 66.8, 8.2, yaw=2.2, solid=False)
+    for (lx_, ly_, base) in [(52.9, 6.5, 3.2), (63.4, 3.7, 3.4)]:
+        z.model('mine_cage_lamp', lx_, ly_, solid=False, base=base)
+        z.light(lx_, ly_, base + .1, 2.2, 9, 2400, .15)
     z.light(56, 9, 3.2, 3.5, 12, 2600, .15)
     z.model('pole_light', 49, 9.5, core=.3)
-    z.creature(4, 61.5, 9.5); z.creature(0, 50, 11)
+    # The yard is the Cleanup squad's now; what took the miners waits in the lift shaft (the transformed, below).
     z.terminal(56, 10.5, 'MINE / LIFT LOG', 'SHAFT 2 FLOODED. LIFT LOCKED AT SURFACE.', 'NINE MINERS UNACCOUNTED FOR.')
     z.pickup(0, 54, 10.5)
     z.zone_name(46, 2, 66, 12, 'OLD MINE')
@@ -490,7 +549,8 @@ def build(z):
     for (cxx, cyy, yaw, m) in [(37, 86.5, .3, 'car_b'), (42.5, 66, 1.4, 'car_c'), (73.5, 33, 1.7, 'car_a'), (66, 14.5, .1, 'car_b')]:
         z.model(m, cxx, cyy, yaw=yaw, scale=.75)
     z.model('billboard', 46.5, 74, yaw=PI / 2)
-    z.model('bus_shelter', 38, 86.5, yaw=PI)
+    z.model('bus_shelter', 38, 86.5, yaw=PI, solid=False)
+    z.shelter(36.3, 86.0, 39.7, 87.0, 3.0)
     # --- Quest chain --------------------------------------------------------------------
     z.event(4, 77, 24, 94, 'zone_arrival', [('OBJECTIVE', 'zone_obj_elder', 1)])
     z.event(4, 77, 24, 94, 'zone_briefed_step', [('OBJECTIVE', 'zone_obj_elder', 2), ('OBJECTIVE', 'zone_obj_pda', 1)], 'zone_briefed')
@@ -500,8 +560,118 @@ def build(z):
     z.objective((10, 85), 'zone_obj_pda', "Find the courier's PDA at the fuel station")
     z.objective((10, 85), 'zone_obj_tower', 'Reach the radio tower on the east ridge and transmit')
     z.objective((10, 85), 'zone_obj_out', 'Transmission sent. Survive the Zone')
+    people(z)
+    # --- The transformed (creature 7): people the zone changed. They sleep where
+    # they fell and the storm wakes them; a few already walk.
+    for (x, y) in [(97.5, 89.5), (100.5, 86.5), (90.5, 87.5), (106, 84.5)]:  # under the burned village
+        z.creature(7, x, y, wake='zone_storm_wake')
+    for (x, y) in [(109, 12.5), (113, 9.5)]:  # out of the reservoir
+        z.creature(7, x, y, wake='zone_storm_wake')
+    z.creature(7, 60.5, 3.2, wake='zone_storm_wake')  # the lift shaft at the mine
+    for (x, y) in [(31, 60.5), (71, 38)]:  # already walking
+        z.creature(7, x, y)
+    # The first storm wakes them, and they stay awake.
+    for cy in range(ZONE_H):
+        for cx in range(ZONE_W):
+            z.event(cx * CHUNK, cy * CHUNK, cx * CHUNK + CHUNK, cy * CHUNK + CHUNK, 'zone_storm_wakes_%d_%d' % (cx, cy),
+                    [('STATE', 'zone_storm_wake', 1)], 'storm_phase', 2)
+    # --- Ash storms: a roof at every place, the fuel station's canopy the biggest. ---------
+    z.shelter(24, 65.8, 36, 74.2, 4.0)
+    for (x, y, yaw) in [(10.5, 84.5, PI / 2), (56, 59.6, 0), (90.5, 70.5, PI), (62.5, 8.6, -PI / 2), (104.2, 37, 0),
+                        (94, 24.5, PI / 2), (95.5, 85, 0), (28.6, 13.4, .2), (25, 51.5, PI)]:
+        z.leanto(x, y, yaw)
     edge_belt(z)
     scatter(z)
+
+
+def R(text, nxt='', req='', reqv=1, hide='', sets=None, stance=None):
+    """A reply: its text, the next node ('' ends), a state it needs, one that hides it, what it sets, a stance."""
+    return (text, nxt, req, reqv, hide, sets or {}, stance)
+
+
+def people(z):
+    """The zone's factions. Stances are states every member of a squad shares:
+    0 declared, 1 hostile, 2 truce, 3 allied. Arrival at the camp sets them."""
+    # --- Rookie camp: the elder (talks), two sentries allied with the player. -------
+    elder = z.actor(19.5, 84.8, 0, 4.4, mode=1, faction=2, name='elder', talk='elder_hello')
+    z.dialogue(elder, 'elder_hello', 'CAMP ELDER',
+               'Another one through the wire. Sit, warm your hands. You came for work or for answers?', [
+                   R('Work.', 'elder_work', hide='zone_briefed'),
+                   R('What happened out here?', 'elder_story'),
+                   R('Who are the men holed up at the mine?', 'elder_mine', req='zone_briefed'),
+                   R('The courier is dead. I have his PDA.', 'elder_pda', req='zone_pda', hide='zone_elder_pda'),
+                   R('Later.')], voice='elder_hello')
+    z.dialogue(elder, 'elder_work', 'CAMP ELDER',
+               'A courier went north to the old fuel station three days ago with our relay code. He never came back. Bring me his PDA.', [
+                   R("I'll find him.", sets={'zone_briefed': 1}),
+                   R("What's in it for me?", 'elder_pay')], voice='elder_work')
+    z.dialogue(elder, 'elder_pay', 'CAMP ELDER',
+               "Shells, a bed by the fire, and nobody here shoots you in the back. Out here that's a fortune.", [
+                   R('Deal.', sets={'zone_briefed': 1}),
+                   R('Find someone else.')], voice='elder_pay')
+    z.dialogue(elder, 'elder_story', 'CAMP ELDER',
+               'The plant burned and the sky kept the ash. Then the storms started. When the siren goes, get under a roof and stay there.', [
+                   R('Back.', 'elder_hello')], voice='elder_story')
+    z.dialogue(elder, 'elder_mine', 'CAMP ELDER',
+               "Cleanup men. Sent in to tidy us away, then forgotten. They're starving at the old mine. They'll talk if you keep your gun down.", [
+                   R('Back.', 'elder_hello')], voice='elder_mine')
+    z.dialogue(elder, 'elder_pda', 'CAMP ELDER',
+               'Then he got further than most. The code still opens the transmitter on the east ridge. Tell the world we are still here.', [
+                   R("I'll get it done.", sets={'zone_elder_pda': 1})], voice='elder_pda')
+    for i, p in enumerate([[(15, 80.5, 6000), (9, 80.5, 6000)], [(20.5, 82.5, 5000), (20.5, 87.5, 5000)]]):
+        z.actor(p[0][0], p[0][1], 4, 0, mode=3, faction=2, squad='zone_camp', patrol=p, weapon=(1, 650, 1000, 16, 7),
+                role=1, health=110, voice=1, stance='zone_camp_stance', name='sentry %d' % i)
+    # --- The old mine: what is left of a Cleanup squad, on a truce. -----------------
+    cpl = z.actor(57.5, 11.2, 4, PI, mode=3, faction=4, squad='zone_cleanup', patrol=[(57.5, 11.2, 60000)],
+                  weapon=(1, 650, 1000, 16, 7), role=1, health=110, voice=1, stance='zone_cleanup_stance', talk='cpl_hello', name='corporal')
+    for i, p in enumerate([[(51, 11.5, 7000), (49.5, 6, 7000)], [(63, 10, 5000), (63, 4.5, 5000)], [(55.5, 4, 60000)]]):
+        z.actor(p[0][0], p[0][1], [5, 9, 8][i], 0, mode=3, faction=4, squad='zone_cleanup', patrol=p,
+                weapon=(2, 650, 1000, 14, 6), role=[2, 6, 5][i], health=100, voice=[2, 6, 5][i], stance='zone_cleanup_stance', name='cleanup %d' % i)
+    z.dialogue(cpl, 'cpl_hello', 'CLEANUP CORPORAL',
+               "That's close enough. Gun low, hands where I can see them. What do you want?", [
+                   R('Just passing through.', 'cpl_pass'),
+                   R('Your own people sent you in here to die.', 'cpl_bitter'),
+                   R('I can get you out. The tower on the ridge can still transmit.', 'cpl_deal', req='zone_pda', hide='zone_cleanup_escort'),
+                   R("Nothing. I'm leaving.")], voice='cpl_hello')
+    z.dialogue(cpl, 'cpl_pass', 'CLEANUP CORPORAL',
+               'Then pass. Stay off the headframe. Something lives in the lift shaft, and it eats the lamps first.', [
+                   R('Thanks.', sets={'zone_mine_warned': 1})], voice='cpl_pass')
+    z.dialogue(cpl, 'cpl_bitter', 'CLEANUP CORPORAL',
+               'I know what they sent us in for. Eleven of us came. Four are left. Say it again and you make it five.', [
+                   R('Easy. I meant no harm.'),
+                   R("Then let's see you try.", stance=1)], voice='cpl_bitter')
+    z.dialogue(cpl, 'cpl_deal', 'CLEANUP CORPORAL',
+               'Out? If that tower can reach anyone at all, we walk you there ourselves. Lead the way.', [
+                   R('Then walk with me.', sets={'zone_cleanup_escort': 1}, stance=3),
+                   R('Think it over.')], voice='cpl_deal')
+    # --- The scrapyard: bandits who charge a toll. ----------------------------------------
+    boss = z.actor(78.5, 57.5, 9, -PI / 2, mode=3, faction=4, squad='zone_bandits', patrol=[(78.5, 57.5, 60000)],
+                   weapon=(1, 700, 1100, 14, 6), role=6, health=100, voice=9, stance='zone_bandit_stance', talk='toll_hello', name='toll boss')
+    z.dialogue(boss, 'toll_hello', 'SCRAPYARD BOSS',
+               "Whoa, whoa. The yard's ours. You want through, you pay the toll.", [
+                   R("What's the toll?", 'toll_price'),
+                   R("I'm not paying you anything.", 'toll_refuse'),
+                   R("The soldiers' supply crate. It's yours.", 'toll_crate', req='zone_checkpoint_crate', hide='zone_toll_paid'),
+                   R('Forget it.')], voice='toll_hello')
+    z.dialogue(boss, 'toll_price', 'SCRAPYARD BOSS',
+               'Something worth more than your boots. The soldiers keep a supply crate by their hut. Bring me that and we are friends.', [
+                   R("I'll think about it.", sets={'zone_toll_asked': 1})], voice='toll_price')
+    z.dialogue(boss, 'toll_refuse', 'SCRAPYARD BOSS',
+               'Then turn around, or the boys turn you into scrap.', [
+                   R("Fine. I'm going."),
+                   R('Try it.', stance=1)], voice='toll_refuse')
+    z.dialogue(boss, 'toll_crate', 'SCRAPYARD BOSS',
+               "Now that's manners. Go on through. Nobody in this yard touches you.", [
+                   R('Pleasure doing business.', sets={'zone_toll_paid': 1, 'zone_toll_unpaid': 0}, stance=3)], voice='toll_crate')
+    # The checkpoint's crate: what the toll is paid with.
+    z.model('ind_crate', 66.6, 57.6, yaw=.2)
+    z.terminal(66.4, 56.6, 'SUPPLY CRATE', 'RATIONS, SHELLS AND A RADIO BATTERY. STAMPED: DO NOT ISSUE.',
+               'YOU SHOULDER THE CRATE.', 'zone_checkpoint_crate', '', PI)
+    # Walking into the yard unpaid ends the truce.
+    z.event(82, 56, 96, 72, 'zone_toll_jumped', [('STATE', 'zone_bandit_stance', 1)], 'zone_toll_unpaid')
+    # Stances on arrival: the camp allied, the mine and the yard on a truce, the toll unpaid.
+    z.event(4, 77, 24, 94, 'zone_stances', [('STATE', 'zone_camp_stance', 3), ('STATE', 'zone_cleanup_stance', 2),
+                                            ('STATE', 'zone_bandit_stance', 2), ('STATE', 'zone_toll_unpaid', 1)])
 
 
 def creek(z, t, pond):
@@ -713,6 +883,8 @@ def write(z, stats=False):
     start = index[Zone.chunk(13, 86)]
     lines.append('CAMPAIGN|ASHFALL EXCLUSION ZONE|%d' % start)
     lines.append('TERRAIN|%d|%s|%s|%s|%s' % (t.seed, fmt(t.base), fmt(t.amplitude), fmt(t.scale), fmt(t.roughness)))
+    # Ash storms: four calm minutes, a half-minute siren, a minute of storm; light ash between.
+    lines.append('STORM|240000|30000|60000|4|0.22')
     for f in t.flats:
         lines.append('TERRAIN_FLAT|' + '|'.join(fmt(float(v)) for v in f))
     lines.append('HORIZON|150|5|14|' + ','.join(str(CATALOG[n]['slot']) for n in ('pine_a', 'pine_b', 'leafy_a', 'leafy_b', 'aspen_a', 'aspen_b', 'oak_a', 'oak_b')))
@@ -760,8 +932,9 @@ def write(z, stats=False):
             lines.append('STRUCT|%d|%s|%s|%s|%s|%s|%s|%d|%d' % (i, fmt(x1), fmt(y1), fmt(x2), fmt(y2), fmt(float(b)), fmt(float(tp)), rail, mat))
         for (lx, ly, zz, mount, yaw, inten, rng, kel, tint) in m['lights']:
             lines.append('LIGHT|%d|%s|%s|%s|%d|%s|%s|%s|%d|%s' % (i, fmt(lx), fmt(ly), fmt(float(zz)), mount, fmt(float(yaw)), fmt(float(inten)), fmt(float(rng)), kel, fmt(float(tint))))
-        for (kind, lx, ly, zz) in m['creatures']:
-            lines.append('CREATURE|%d|%d|%s|%s|0' % (i, kind, fmt(lx), fmt(ly)))
+        for (kind, lx, ly, zz, scale, health, wake) in m['creatures']:
+            extra = '' if scale is None and health is None and not wake else '|%s|%s|%s' % ('' if scale is None else fmt(float(scale)), '' if health is None else health, wake)
+            lines.append('CREATURE|%d|%d|%s|%s|0%s' % (i, kind, fmt(lx), fmt(ly), extra))
         for (kind, lx, ly) in m['pickups']:
             lines.append('PICKUP|%d|%d|%s|%s' % (i, kind, fmt(lx), fmt(ly)))
         for (kind, lx, ly, zz, yaw) in m['clutter']:
@@ -798,12 +971,23 @@ def write(z, stats=False):
                     lines.append('ACTOR_HEALTH|%d|%d|%d|%s_dmg_%d_%d|%s_dead_%d_%d' % (i, a_i, a['health'], a['squad'], i, a_i, a['squad'], i, a_i))
                 if a['voice']:
                     lines.append('ACTOR_VOICE|%d|%d|%d' % (i, a_i, a['voice']))
+                if a['stance']:
+                    lines.append('ACTOR_STANCE|%d|%d|%s' % (i, a_i, a['stance']))
+                if a['talk']:
+                    lines.append('ACTOR_TALK|%d|%d|%s' % (i, a_i, a['talk']))
                 lines.append('ACTOR_KEY|%d|%d|0|%s|%s|0|%s|0|0' % (i, a_i, fmt(a['x']), fmt(a['y']), fmt(float(a['yaw']))))
                 lines.append('ACTOR_KEY|%d|%d|60000|%s|%s|0|%s|0|1' % (i, a_i, fmt(a['x']), fmt(a['y']), fmt(float(a['yaw']))))
         for (name, x1, y1, x2, y2, req, val, actions) in m['events']:
             lines.append('SCRIPT_EVENT|%d|%s|%s|%s|%s|%s|-100|100|%s|%d|0' % (i, name, fmt(float(x1)), fmt(float(y1)), fmt(float(x2)), fmt(float(y2)), req, val))
             for (kind, ident, value) in actions:
                 lines.append('SCRIPT_ACTION|%d|%s|%s|%s|%d' % (i, name, kind, ident, value))
+        for (node, speaker, line, voice, replies) in z.dialogues.get(k, []):
+            lines.append('DIALOGUE|%d|%s|%s|%s|%s' % (i, node, enc(speaker), enc(line), voice))
+            for (text, nxt, req, reqv, hide, sets, stance) in replies:
+                lines.append('DIALOGUE_REPLY|%d|%s|%s|%s|%s|%d|%s|%s|%s' % (i, node, enc(text), nxt, req, reqv, hide,
+                             ';'.join('%s=%d' % kv for kv in sets.items()), '' if stance is None else stance))
+        for (x1, y1, x2, y2, b, tp) in m['shelters']:
+            lines.append('SHELTER|%d|%s|%s|%s|%s|%s|%s' % (i, fmt(float(x1)), fmt(float(y1)), fmt(float(x2)), fmt(float(y2)), fmt(b), fmt(float(tp))))
         for (ident, text) in m['objectives']:
             lines.append('OBJECTIVE_TEXT|%d|%s|%s' % (i, ident, enc(text)))
     # Water (absolute heights), assigned to the map that holds each pond.

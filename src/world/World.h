@@ -211,6 +211,13 @@ struct DarkZone {float x1=0,y1=0,x2=24,y2=24,bottom=-1000,top=1000;StateId state
 struct PushCrate {Vec2 position{};float z=0,size=1.f;Vec2 home{},slide{},target{};};
 // A floor plate a crate can be slid onto: its state is 1 while a crate rests there.
 struct CratePlate {Vec2 position{};StateId state=0;};
+// An ash storm cycle for a whole campaign (STORM record): calm, a warning, the
+// storm itself, then calm again. Out in the open during the storm the player
+// takes `damage` a second; `ambientAsh` (0-1) is the ash that falls when calm.
+struct StormCycle {int calmMs=0,warningMs=0,stormMs=0;float damage=0,ambientAsh=0;bool active()const{return calmMs>0&&stormMs>0;}};
+// A roof the storm cannot reach (SHELTER record), in map metres; on terrain its
+// bottom and top are heights above the ground at its centre.
+struct Shelter {float x1=0,y1=0,x2=0,y2=0,bottom=-1000,top=1000;};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
@@ -251,6 +258,7 @@ struct AuthoredMapData {
     // Set by a lever or terminal: every crate on the map goes back home.
     StateId crateReset=0;
     std::vector<DarkZone> darkZones;
+    std::vector<Shelter> shelters;
     int wallSurface=SurfaceDefault,floorSurface=SurfaceDefault,ceilingSurface=SurfaceDefault;
 };
 struct CustomCampaign {
@@ -258,6 +266,7 @@ struct CustomCampaign {
     std::string sourceFile;
     std::uint64_t key=0;
     int startMap=0;
+    StormCycle storm;
     std::vector<std::shared_ptr<const AuthoredMapData>> maps;
 };
 
@@ -349,6 +358,7 @@ public:
     const std::vector<ClutterSpawn>& clutterSpawns()const{return m_clutterSpawns;}
     const std::vector<WaterVolume>& waterVolumes()const{return m_waterVolumes;}
     const std::vector<ParticleEmitter>& particleEmitters()const{return m_particleEmitters;}
+    const std::vector<Shelter>& shelters()const{static const std::vector<Shelter> none;return m_mapData?m_mapData->shelters:none;}
     const std::vector<ScriptEvent>& scriptEvents()const{return m_scriptEvents;}
     const std::vector<Hazard>& hazards()const{return m_hazards;}
     const std::vector<Compactor>& compactors()const{return m_compactors;}

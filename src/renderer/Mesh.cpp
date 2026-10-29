@@ -68,7 +68,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
   if(m_creatureFrames.size()<20||(!compact&&std::memcmp(m_creatureFrames.data(),"RMA2",4)))throw std::runtime_error("Invalid creature animation");
   std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&headerSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
   std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);
-  const uint32_t requiredClips=(id==242||id==272||id==2126||id==2129)?5u:1u;
+  const uint32_t requiredClips=(id==242||id==272||id==2126||id==2129)?5u:animationResource==2185?6u:1u;
   if(vertices!=triangles.size()*3||clips<requiredClips||clips>32||m_creatureVertices==0||m_creatureVertices>65535)throw std::runtime_error("Creature animation topology mismatch");
   m_creatureFrameOffset=20+size_t(vertices)*2+(compact?size_t(clips)*4:0);
   if(m_creatureFrames.size()<m_creatureFrameOffset)throw std::runtime_error("Missing creature sample table");
@@ -105,7 +105,8 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
     for(float duration:m_creatureDurations)if(!std::isfinite(duration)||duration<=0||duration>120)throw std::runtime_error("Invalid creature clip duration");
    }
   }
-  if(id==277||anchorResource){m_anchorFrames=loadResource(anchorResource?anchorResource:282);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Actor attachment topology mismatch");}
+  // The transformed (2185) wears the Worker's body without its hand anchors.
+  if((id==277&&animationResource!=2185)||anchorResource){m_anchorFrames=loadResource(anchorResource?anchorResource:282);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Actor attachment topology mismatch");}
     if(id==323){m_anchorFrames=loadResource(339);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Medic treatment attachment topology mismatch");}
   m_creatureIndices.resize(vertices);std::memcpy(m_creatureIndices.data(),m_creatureFrames.data()+20,size_t(vertices)*2);
   for(auto index:m_creatureIndices)if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");

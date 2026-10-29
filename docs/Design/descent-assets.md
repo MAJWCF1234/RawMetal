@@ -224,14 +224,15 @@ check in game, since packs differ.
 
 ## Creatures
 
-Two purchased creatures, kept with the library (gitignored) under
-`src/assets/library/creatures/`, are rebuilt from their packs by tools that are
-in the repository. Their numbers live in `creatureTraits` (WorldDefinition.h).
+Two purchased creatures, and the transformed's clips, kept with the library
+(gitignored) under `src/assets/library/creatures/`, are rebuilt from their packs
+by tools that are in the repository. Their numbers live in `creatureTraits` (WorldDefinition.h).
 
 | Kind | Pack | Runtime files (resources) | Rebuild | Clips |
 | --- | --- | --- | --- | --- |
 | Snatcher | `O:/retro official/psx-snatcher-low-poly-horror.zip` (rigged on the Mixamo skeleton, A-pose) | `snatcher.fbx` 2126, `snatcher.png` 2127 (512 px from the 2048 px sheet), `snatcher-animation.bin` 2128 | `blender -b --python tools/BakeSnatcher.py -- Snatcher.glb snatcher.fbx`, then `RawMetalAuthoredCreatureBake snatcher.fbx snatcher-animation.bin Snatcher_Idle Snatcher_Creep Snatcher_Snatch Snatcher_Stagger Snatcher_Death mixamorig:Hips` | its own idle; the Mixamo injured walk (its limping creep), neck bite (frames 6-36), hit stagger (9-47) and death on its back (8-64), retargeted by absolute bone orientation |
 | Chimera | `O:/retro official/chimera.zip` (eleven rigid parts, no skeleton) | `chimera.fbx` 2129, `chimera.png` 2130, `chimera-animation.bin` 2131 | `blender -b --python tools/RigChimera.py -- chimera.glb chimera.fbx`, then `RawMetalAuthoredCreatureBake chimera.fbx chimera-animation.bin Chimera_Idle Chimera_Walk Chimera_Attack Chimera_Pain Chimera_Death` | keyed by RigChimera.py on its own ten-bone rig: a twitching idle (head jerks, a pawing forehoof), a walk whose leg swing comes from the CC0 Quaternius wolf (`tools/data/wolf_walk.json`, extracted by `tools/ExtractWolfGait.py`; licence in `tools/data/wolf_walk.LICENSE.txt`) under a hunched, clawing torso, rearing with the petals open, a flinch, a collapse onto its side. The texture's island gutters are padded so no black bleeds through at seams or distant mips (same for the Snatcher) |
+| Transformed (kind 7) | the Freight Worker's body, `O:/retro official/Characters/Radiation Workers – Retro PSX Character Pack/heavy radiation suit.fbx` (tracked as `src/assets/actors/source/freight-worker.fbx`, Mixamo-named rig); Mixamo takes in `source-assets/` | the Worker's `freight-worker.obj` 277 and textures 279-281 (scorched at load: half saturation, two thirds light, an olive cast), `transformed-animation.bin` 2185 | `RawMetalCreatureBake --takes src/assets/actors/source/freight-worker.fbx transformed-animation.bin source-assets/worker_agony_head.fbx:1:112 source-assets/transformed_lunge_run.fbx:1:25 source-assets/transformed_neck_bite.fbx:16:104:drift source-assets/transformed_hit_stagger.fbx:1:50 source-assets/transformed_death_back.fbx:1:75 source-assets/transformed_overhead_strike.fbx:4:70:drift` | six RMA3 clips at every 30 fps frame: idle (clutching its head), lunge run (in place, one cycle per 3 m), leap and neck bite (the leap is its first .15, the hold the rest, with the take's forward lunge), hit stagger, death onto its back, overhead blow (the fists fall at .55). Retargeted by the engine's own bone-delta retarget with arms matched by direction, as the Worker's own clips are |
 
 Chapter 1 placements: Snatchers in the Fabrication Shop's welding bay, on
 Personnel Transit's platform (a Tram 4 passenger) and in Checkpoint Delta's

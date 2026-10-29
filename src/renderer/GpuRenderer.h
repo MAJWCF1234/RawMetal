@@ -49,6 +49,8 @@ public:
  void setSun(const std::array<float,56>& sun);
  // 0 the default sky; 1 the open zone (broken overcast, sun shafts, ground steam).
  void setSkyStyle(int style);
+ // An ash storm's strength (0-1): the open-zone sky closes over brown (lampGrid.flags.w).
+ void setStorm(float storm);
  // Painterly Horizon LOD: tags the static triangles submitted next. A real
  // mesh fades out past `lod` metres; an impostor quad (centre, half size,
  // yaw, atlas grid) fades in there and, for ground plants, out again at `farFade`.

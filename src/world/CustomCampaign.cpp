@@ -285,6 +285,16 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    // ACTOR_VOICE|map|actor|role: a voice bank role (1-10) instead of the visual's default.
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_VOICE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),voice=integer(f,3,"voice role");
    if(index<0||index>=int(map->actorTracks.size())||voice<1||voice>10)throw std::runtime_error("invalid actor voice");map->actorTracks[size_t(index)].voice=voice;
+  }else if(tag=="STORM"){
+   // STORM|calm ms|warning ms|storm ms|damage per second|ambient ash (0-1): one cycle for the campaign.
+   if(f.size()!=6)throw std::runtime_error("malformed STORM record");
+   campaign->storm={integer(f,1,"storm calm"),integer(f,2,"storm warning"),integer(f,3,"storm duration"),number(f,4,"storm damage"),number(f,5,"ambient ash")};
+   const auto&s=campaign->storm;if(s.calmMs<1000||s.warningMs<0||s.stormMs<1000||s.damage<0||s.damage>100||s.ambientAsh<0||s.ambientAsh>1)throw std::runtime_error("invalid STORM timing or strength");
+  }else if(tag=="SHELTER"){
+   // SHELTER|map|x1|y1|x2|y2|bottom|top: under this roof the storm does no harm.
+   if(f.size()!=8)throw std::runtime_error("malformed SHELTER record");auto map=mapAt(maps,f);
+   Shelter s{number(f,2,"shelter x1"),number(f,3,"shelter y1"),number(f,4,"shelter x2"),number(f,5,"shelter y2"),number(f,6,"shelter bottom"),number(f,7,"shelter top")};
+   if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)throw std::runtime_error("empty SHELTER box");map->shelters.push_back(s);
   }else if(tag=="ACTOR_STANCE"){
    // ACTOR_STANCE|map|actor|state: the state holding this squad's stance (0 declared, 1 hostile, 2 truce, 3 ally).
    if(f.size()!=4||f[3].empty())throw std::runtime_error("malformed ACTOR_STANCE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
@@ -351,8 +361,15 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
     integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending"),f.size()>11&&!f[11].empty()?boolean(f,11,"stair open underside"):false,f.size()>12&&!f[12].empty()?number(f,12,"stair tread thickness"):.12f,f.size()>13&&!f[13].empty()?boolean(f,13,"stair side rails"):false});
   }else if(tag=="CREATURE"){
-   if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>int(CreatureKind::Chimera))throw std::runtime_error("invalid creature kind");
-   map->creatureSpawns.push_back({CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")});
+   if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>int(CreatureKind::Transformed))throw std::runtime_error("invalid creature kind");
+   CreatureSpawn spawn{CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")};
+   // Optional: size (.5-2), health (0 the kind's own) and a wake state that
+   // keeps it dormant, blind and deaf until set or until it is hurt.
+   if(f.size()>6&&!f[6].empty())spawn.scale=number(f,6,"creature scale");
+   if(f.size()>7&&!f[7].empty())spawn.health=number(f,7,"creature health");
+   if(f.size()>8&&!f[8].empty())spawn.wakeState=stateId(decode(f[8]));
+   if(f.size()>9||spawn.scale<.5f||spawn.scale>2||spawn.health<0||spawn.health>5000)throw std::runtime_error("creature parameters out of range");
+   map->creatureSpawns.push_back(spawn);
   }else if(tag=="PICKUP"){
    if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::Ammo))throw std::runtime_error("invalid pickup kind");
    map->pickupSpawns.push_back({{number(f,3,"pickup x"),number(f,4,"pickup y")},PickupKind(kind)});

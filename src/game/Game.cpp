@@ -52,9 +52,13 @@ void Game::equipWeapon(WeaponId id){
 bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeHitStop,int level){
  if(level<0)level=m_level;
  if(!enemy.alive)return false;
- // A Snatcher sprawled after its lunge is open: hits land harder.
- if(enemy.kind==Enemy::Kind::Snatcher&&enemy.stalkMode==Enemy::StalkMode::Recover)amount*=1.5f;
- enemy.hp-=amount;enemy.painFlash=1;m_hitFlash=1;
+ // A Snatcher sprawled after its lunge, or a transformed stumbling from a
+ // missed leap, is open: hits land harder.
+ if((enemy.kind==Enemy::Kind::Snatcher||enemy.kind==Enemy::Kind::Transformed)&&enemy.stalkMode==Enemy::StalkMode::Recover)amount*=1.5f;
+ // The transformed's stagger plays through: a hit in its first half does not
+ // start it again, so a stream of fire cannot hold it still.
+ const bool staggering=enemy.kind==Enemy::Kind::Transformed&&enemy.painFlash>.5f;
+ enemy.hp-=amount;if(!staggering)enemy.painFlash=1;m_hitFlash=1;
  // A badly hurt stalker breaks off to hide before it comes back.
  if(enemy.hp>0&&creatureTraits(enemy.kind).rushSpeed>0&&enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;}
  if(enemy.hp>0)return false;
@@ -284,12 +288,16 @@ Game Game::stalkerInspection(int clip,float phase,int view,Enemy::Kind kind){
  return game;
 }
 // Holds the first creature at one point of a clip: 0 idle, 1 move, 2 attack
-// (the kind's own wind-up, then the strike), 3 pain, 4 death.
+// (the kind's own wind-up, then the strike), 3 pain, 4 death. The transformed's
+// attack is its leap and bite (the first .15 in the air), and its clip 5 the
+// overhead blow (wind-up to .55, then the strike).
 void Game::posePreviewCreature(int clip,float phase){
- auto& e=m_enemies.at(0);e.alive=true;e.moving=false;e.windup=e.strike=e.painFlash=e.deathTime=0;
+ auto& e=m_enemies.at(0);e.alive=true;e.moving=false;e.windup=e.strike=e.painFlash=e.deathTime=0;e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=0;
  const auto& traits=creatureTraits(e.kind);m_elapsed=(phase-e.home.x*.1f)*traits.idleSeconds;
  if(clip==1){e.moving=true;e.gait=phase*2*kPi;}
- if(clip==2){if(phase<.4f)e.windup=(1-phase/.4f)*creatureTraits(e.kind).windup;else e.strike=1-(phase-.4f)/.6f;}
+ if(clip==2&&e.kind==Enemy::Kind::Transformed){if(phase<.15f){e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=(1-phase/.15f)*TransformedLeap;}else{e.stalkMode=Enemy::StalkMode::Grab;e.stalkTimer=(1-(phase-.15f)/.85f)*TransformedHold;}}
+ else if(clip==2){if(phase<.4f)e.windup=(1-phase/.4f)*creatureTraits(e.kind).windup;else e.strike=1-(phase-.4f)/.6f;}
+ if(clip==5){if(phase<.55f)e.windup=(1-phase/.55f)*traits.windup;else e.strike=std::max(.001f,1-(phase-.55f)/.45f);}
  if(clip==3)e.painFlash=1-phase;
  if(clip==4){e.alive=false;e.deathTime=phase*traits.deathSeconds;}
 }
@@ -442,7 +450,7 @@ void Game::update(const InputState& input, float dt) {
         {perf::Scope profile(perf::Streaming);crossChunkBoundary();}
         {perf::Scope profile(perf::Scripts);updateScripts(dt);
         updateDarkness(dt);}
-        {perf::Scope profile(perf::Hazards);updateHazards(dt);
+        {perf::Scope profile(perf::Hazards);updateHazards(dt);updateStorm(dt);
         for(size_t i=0;i<m_pendingBarrels.size();){if(m_elapsed>=m_pendingBarrels[i].time){auto b=m_pendingBarrels[i];m_pendingBarrels.erase(m_pendingBarrels.begin()+long(i));detonateBarrel(b.level,int(std::floor(b.pos.x)),int(std::floor(b.pos.y)));}else ++i;}}
         {perf::Scope profile(perf::Interaction);updateInteraction(input,dt);}
         perf::Scope streamingProfile(perf::Streaming);updateStreaming(dt);
@@ -631,7 +639,7 @@ bool Game::testAudioEvents(){
   jump|=contains(Sound::Jump);land|=contains(Sound::Land);pump|=contains(Sound::Pump);
  }
  if(!steps||!jump||!land||!pump)return false;
- for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant,Enemy::Kind::Snatcher,Enemy::Kind::Chimera}){
+ for(auto kind:{Enemy::Kind::Huntsman,Enemy::Kind::Wasp,Enemy::Kind::Brute,Enemy::Kind::Mutant,Enemy::Kind::Snatcher,Enemy::Kind::Chimera,Enemy::Kind::Transformed}){
   game=validationScene(kind);game.m_player.pitch=-35;game.m_sounds.clear();game.shoot();
   int voiceKind=creatureTraits(kind).voice;
   if(!contains(Sound::Shot)||!contains(Sound(int(Sound::SpiderCall)+voiceKind*3)))return false;

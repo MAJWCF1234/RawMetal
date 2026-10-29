@@ -630,6 +630,7 @@
 2129 RCDATA "assets/library/creatures/chimera.fbx"
 2130 RCDATA "assets/library/creatures/chimera.png"
 2131 RCDATA "assets/library/creatures/chimera-animation.bin"
+2185 RCDATA "assets/library/creatures/transformed-animation.bin"
 745 RCDATA "assets/library/cave_boulder_a.obj"
 746 RCDATA "assets/library/cave_boulder_a_m_rp_rocks_0_2k.jpg"
 747 RCDATA "assets/library/cave_boulder_round.obj"

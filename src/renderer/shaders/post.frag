@@ -122,7 +122,10 @@ vec3 zoneSkyColor(vec3 dir){
  sky=mix(sky,vec3(0.80,0.81,0.82),0.08*smoothstep(-0.02,0.4,up));
  float sunCloud=0.0;{float t;sunCloud=zoneCloud(sunDir,t);}
  sky+=sunCol*(2.6*smoothstep(0.99955,0.99975,dot(dir,sunDir)))*(1.0-0.9*sunCloud);
- return sky;
+ // An ash storm (flags.w, 0-1000) closes the sky over: a low brown ceiling, the sun a smudge.
+ float storm=float(lampGrid.flags.w)*0.001;
+ vec3 ash=mix(vec3(0.30,0.24,0.19),vec3(0.17,0.14,0.12),clamp(up*1.5,0.0,1.0))+sunCol*0.08*pow(cosSun,8.0);
+ return mix(sky,ash,storm*0.94);
 }
 // Overcast wasteland sky: gradient, sun disc and glow, one drifting cloud deck.
 vec3 proceduralSky(vec3 dir){

@@ -269,6 +269,8 @@ void World::settleExclusionFacilityOnTerrain(){
  auto data=std::make_shared<AuthoredMapData>(*m_mapData);
  data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
  for(auto&sign:data->signs)sign.z+=ground(sign.position.x,sign.position.y);
+ // Like hazards, a shelter's height band is measured from the ground at its centre.
+ for(auto&s:data->shelters){float z=ground((s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f);s.bottom+=z;s.top+=z;}
  for(auto&hint:data->navHints)hint.z+=ground(hint.position.x,hint.position.y);
  for(auto&light:m_lights)light.z+=ground(light.position.x,light.position.y);
  for(auto&sequence:data->timedSequences)if(sequence.x1>=0&&sequence.y1>=0&&sequence.x2<=Width&&sequence.y2<=Height){
@@ -345,7 +347,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // Every conversation an actor opens and every reply's next line is in this map.
  auto node=[&](StateId id){return std::any_of(map->dialogue.begin(),map->dialogue.end(),[&](const DialogueNode&n){return n.id==id;});};
  for(const auto& track:map->actorTracks)if(track.talk&&!node(track.talk))throw std::runtime_error("Actor opens a dialogue node this map does not have");
- for(const auto& n:map->dialogue){if(n.line.empty()||n.replies.size()>4)throw std::runtime_error("Dialogue node needs a line and at most four replies");
+ for(const auto& n:map->dialogue){// Up to six replies may be written; states gate them, and at most four show at once.
+  if(n.line.empty()||n.replies.size()>6)throw std::runtime_error("Dialogue node needs a line and at most six replies");
   for(const auto& reply:n.replies)if(reply.text.empty()||(reply.next&&!node(reply.next)))throw std::runtime_error("Dialogue reply has no text or leads to a missing node");}
  for(const auto& cue:map->sequenceCues)if(!timerExists(cue.timerState)||cue.timeMs<0||int(cue.sound)<0||int(cue.sound)>=int(Sound::Count)||cue.gain<0||cue.pitch<=0||!std::isfinite(cue.gain)||!std::isfinite(cue.pitch)||std::isinf(cue.z))throw std::runtime_error("Invalid actor sequence cue");
  for(const auto& layer:map->layers){

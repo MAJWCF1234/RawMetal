@@ -1242,6 +1242,334 @@
    "cue": "GiveUp",
    "voice_id": "2OcnG4mH3jIMtWz3vKus",
    "text": "[irritated grumble] Slippery little rat... keep your eyes open."
+  },
+  {
+   "id": "zone-r1-greet-s3-m0-0",
+   "role": 1,
+   "cue": "Greet",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[warm, tired] Good to see you back in one piece.",
+   "stance": 3,
+   "mood": 0
+  },
+  {
+   "id": "zone-r1-greet-s2-m0-0",
+   "role": 1,
+   "cue": "Greet",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[wary, low] Easy now. Keep it slow.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r1-warn-s2-m0-0",
+   "role": 1,
+   "cue": "Warn",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[sharp, tense] Lower that. Now.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r1-warn-s3-m0-0",
+   "role": 1,
+   "cue": "Warn",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[angry] Hey! Watch where you are shooting!",
+   "stance": 3,
+   "mood": 0
+  },
+  {
+   "id": "zone-r1-betrayed-s0-m0-0",
+   "role": 1,
+   "cue": "Betrayed",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[shouting] That is it! Put him down!",
+   "stance": 0,
+   "mood": 0
+  },
+  {
+   "id": "zone-r1-plead-s1-m3-0",
+   "role": 1,
+   "cue": "Plead",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[desperate, breathless] Enough! We are done, we are done!",
+   "stance": 1,
+   "mood": 3
+  },
+  {
+   "id": "zone-r2-greet-s2-m0-0",
+   "role": 2,
+   "cue": "Greet",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[muttering] Another one. Keep your hands where I can see them.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r2-warn-s2-m0-0",
+   "role": 2,
+   "cue": "Warn",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[nervous] Do not point that at me.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r2-betrayed-s0-m0-0",
+   "role": 2,
+   "cue": "Betrayed",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[yelling] He turned on us! Fire!",
+   "stance": 0,
+   "mood": 0
+  },
+  {
+   "id": "zone-r2-plead-s1-m3-0",
+   "role": 2,
+   "cue": "Plead",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[panicked] Stop! Please, I have got nothing left!",
+   "stance": 1,
+   "mood": 3
+  },
+  {
+   "id": "zone-r5-greet-s2-m0-0",
+   "role": 5,
+   "cue": "Greet",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[calm, quiet] You are not one of them. Good.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r5-warn-s2-m0-0",
+   "role": 5,
+   "cue": "Warn",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[calm, firm] Put the weapon down, friend.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r5-betrayed-s0-m0-0",
+   "role": 5,
+   "cue": "Betrayed",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[sharp] So that is how it is. Take him.",
+   "stance": 0,
+   "mood": 0
+  },
+  {
+   "id": "zone-r5-plead-s1-m3-0",
+   "role": 5,
+   "cue": "Plead",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[shaking] Let me see to my men. Please.",
+   "stance": 1,
+   "mood": 3
+  },
+  {
+   "id": "zone-r6-greet-s2-m0-0",
+   "role": 6,
+   "cue": "Greet",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[restless] Who is that? Oh. You again.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r6-warn-s2-m0-0",
+   "role": 6,
+   "cue": "Warn",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[restless, sharp] Gun down! Gun down!",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r6-betrayed-s0-m0-0",
+   "role": 6,
+   "cue": "Betrayed",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[shouting] Liar! Light him up!",
+   "stance": 0,
+   "mood": 0
+  },
+  {
+   "id": "zone-r6-plead-s1-m3-0",
+   "role": 6,
+   "cue": "Plead",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[sobbing, frantic] I do not want to die out here!",
+   "stance": 1,
+   "mood": 3
+  },
+  {
+   "id": "zone-r9-greet-s2-m0-0",
+   "role": 9,
+   "cue": "Greet",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[smirking] The toll is still waiting, my friend.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r9-greet-s3-m0-0",
+   "role": 9,
+   "cue": "Greet",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[friendly, laughing] Hey! Our supplier!",
+   "stance": 3,
+   "mood": 0
+  },
+  {
+   "id": "zone-r9-warn-s2-m0-0",
+   "role": 9,
+   "cue": "Warn",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[threatening, low] Point that somewhere else.",
+   "stance": 2,
+   "mood": 0
+  },
+  {
+   "id": "zone-r9-betrayed-s0-m0-0",
+   "role": 9,
+   "cue": "Betrayed",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[yelling] Cheat! Get him, boys!",
+   "stance": 0,
+   "mood": 0
+  },
+  {
+   "id": "zone-r9-plead-s1-m3-0",
+   "role": 9,
+   "cue": "Plead",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[panicked] Take everything! Just take it, it is yours!",
+   "stance": 1,
+   "mood": 3
+  },
+  {
+   "id": "zone-r8-plead-s1-m3-0",
+   "role": 8,
+   "cue": "Plead",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[panicked, shouting] Fall back! We cannot hold this!",
+   "stance": 1,
+   "mood": 3
+  },
+  {
+   "id": "dlg-elder_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[slow, gravelly] Another one through the wire. [sighs] Sit, warm your hands. You came for work, or for answers?",
+   "line": "elder_hello"
+  },
+  {
+   "id": "dlg-elder_work",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[low, serious] A courier went north to the old fuel station three days ago, with our relay code. He never came back. Bring me his PDA.",
+   "line": "elder_work"
+  },
+  {
+   "id": "dlg-elder_pay",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[dry chuckle] Shells. A bed by the fire. And nobody here shoots you in the back. [pause] Out here, that is a fortune.",
+   "line": "elder_pay"
+  },
+  {
+   "id": "dlg-elder_story",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[quiet, grave] The plant burned, and the sky kept the ash. Then the storms started. When the siren goes, get under a roof. And stay there.",
+   "line": "elder_story"
+  },
+  {
+   "id": "dlg-elder_mine",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[bitter] Cleanup men. Sent in to tidy us away, then forgotten. They're starving at the old mine. They'll talk, if you keep your gun down.",
+   "line": "elder_mine"
+  },
+  {
+   "id": "dlg-elder_pda",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[moved, quiet] Then he got further than most. The code still opens the transmitter on the east ridge. [firm] Tell the world we are still here.",
+   "line": "elder_pda"
+  },
+  {
+   "id": "dlg-cpl_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[tense, clipped] That's close enough. Gun low. Hands where I can see them. [beat] What do you want?",
+   "line": "cpl_hello"
+  },
+  {
+   "id": "dlg-cpl_pass",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[low] Then pass. Stay off the headframe. [uneasy] Something lives in the lift shaft. It eats the lamps first.",
+   "line": "cpl_pass"
+  },
+  {
+   "id": "dlg-cpl_bitter",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[tired, cold] I know what they sent us in for. Eleven of us came. Four are left. [threatening, quiet] Say it again, and you make it five.",
+   "line": "cpl_bitter"
+  },
+  {
+   "id": "dlg-cpl_deal",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[disbelieving laugh] Out? [pause, hopeful] If that tower can reach anyone at all, we walk you there ourselves. Lead the way.",
+   "line": "cpl_deal"
+  },
+  {
+   "id": "dlg-toll_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[cocky] Whoa, whoa. The yard's ours. You want through? You pay the toll.",
+   "line": "toll_hello"
+  },
+  {
+   "id": "dlg-toll_price",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[sly] Something worth more than your boots. The soldiers keep a supply crate by their hut. Bring me that, and we are friends.",
+   "line": "toll_price"
+  },
+  {
+   "id": "dlg-toll_refuse",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[menacing, amused] Then turn around. Or the boys turn you into scrap.",
+   "line": "toll_refuse"
+  },
+  {
+   "id": "dlg-toll_crate",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[delighted whistle] Now that's manners. Go on through. Nobody in this yard touches you.",
+   "line": "toll_crate"
   }
  ]
 }

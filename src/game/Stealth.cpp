@@ -44,6 +44,8 @@ void Game::dropBody(){if(m_draggedNpc<0)return;if(size_t(m_draggedNpc)<m_friendl
 Game::GuardCard Game::guardCard(size_t actor)const{
  GuardCard card;if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return card;const auto& npc=m_friendlyActors[actor];
  if(npc.track().ai.mode!=ActorAiMode::Guard||npc.pose.clip==4||(npc.track().deadState&&state(npc.track().deadState)))return card;
+ // The card is what he makes of the player: a squad on a truce or allied has nothing to make.
+ if(!factionsHostile(npcFaction(npc.track()),AiFaction::Player))return card;
  auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto mode=guardState(actor);
  if(guardCalling(actor))card.call=std::clamp(get("guard_radio")/float(RadioCallMs),0.f,1.f);
  // The '?' fills from the foot as he makes the player out.

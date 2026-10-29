@@ -33,7 +33,7 @@ public:
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
     int height() const { return m_height; }
-    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_snatcherMesh.description+m_chimeraMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
+    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_snatcherMesh.description+m_chimeraMesh.description+m_transformedMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
     void previewModel(int model,float angle);
     bool validate3D();
     static bool testPerformance();
@@ -145,7 +145,7 @@ private:
     std::array<RagPoint,Ragdoll::Count> m_hazmatPoseJoints{};
     bool m_hazmatPoseValid=false;
     Texture m_blood;
-    std::array<Texture,size_t(CreatureKind::Chimera)+1> m_bloodVariants;
+    std::array<Texture,size_t(CreatureKind::Transformed)+1> m_bloodVariants;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_liftSign,m_liftDispatch;
@@ -162,6 +162,8 @@ private:
     Texture m_weaponTexture,m_enemyTexture;
     Mesh m_weaponMesh{109},m_armsMesh{111},m_enemyMesh{110};
     Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131};
+    // The transformed: the Worker's body (277) on its own six baked clips.
+    Mesh m_transformedMesh{277,"",2185};
     Mesh m_workerMesh{277,"",278};
     std::array<Texture,3> m_workerTextures;
     // Research staff (ActorVisual::Scientist..LabTech), each baked with the
@@ -206,6 +208,8 @@ private:
     Vec2 finishRepeat(const Texture& texture)const;
     Texture m_missingTexture,m_ironTexture,m_darkMetalTexture,m_rubberTexture,m_leatherTexture,m_idFabricTexture,m_medkitCaseTexture,m_medkitLabelTexture;
     Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture,m_snatcherTexture,m_chimeraTexture;
+    // The Worker's body, gloves and boots, scorched and drained by the zone.
+    Texture m_transformedTexture,m_transformedGloves,m_transformedBoots;
     Mesh m_barrelMesh{121},m_crateMesh{123};
     std::array<Mesh,FacilityModelCount> m_facilityMeshes{Mesh{163},Mesh{164},Mesh{165},Mesh{166},Mesh{167},Mesh{168,"doorway_wide_1"},Mesh{169},Mesh{170},Mesh{171},Mesh{168,"door_wide_1_bottom"},Mesh{168,"door_wide_1_top"},Mesh{191},Mesh{142},Mesh{258},Mesh{259},Mesh{263},Mesh{265},Mesh{275},Mesh{284},Mesh{285},Mesh{286},Mesh{288},Mesh{290},Mesh{294},
         Mesh{359},Mesh{360},Mesh{361},Mesh{362},Mesh{363},Mesh{364},Mesh{365},Mesh{366},Mesh{367},Mesh{368},Mesh{369},Mesh{370},Mesh{371},Mesh{372},Mesh{373},
@@ -305,8 +309,9 @@ private:
      CreatureVisual{&SoftwareRenderer::m_wardenMesh,&SoftwareRenderer::m_wardenTexture,false,.9f},
      CreatureVisual{&SoftwareRenderer::m_mutantMesh,&SoftwareRenderer::m_mutantTexture,false,.9f},
      CreatureVisual{&SoftwareRenderer::m_snatcherMesh,&SoftwareRenderer::m_snatcherTexture,false,.9f},
-     CreatureVisual{&SoftwareRenderer::m_chimeraMesh,&SoftwareRenderer::m_chimeraTexture,false,.9f}};
-    static_assert(creatureVisuals.size()==size_t(CreatureKind::Chimera)+1);
+     CreatureVisual{&SoftwareRenderer::m_chimeraMesh,&SoftwareRenderer::m_chimeraTexture,false,.9f},
+     CreatureVisual{&SoftwareRenderer::m_transformedMesh,&SoftwareRenderer::m_transformedTexture,false,.9f}};
+    static_assert(creatureVisuals.size()==size_t(CreatureKind::Transformed)+1);
 };
 }
 

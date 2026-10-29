@@ -38,6 +38,11 @@ Music routes through authored metadata in native and custom campaigns and keeps 
 playback cursor across chunk seams. CREATURE kind 4 is the mutated human, with
 180 health and a 1.85 m standing hull. Save version 13 preserves this new kind;
 versions 1–12 remain readable and receive newly authored encounters automatically.
+CREATURE kinds run 0 huntsman, 1 wasp, 2 brute, 3 warden, 4 mutated human,
+5 Snatcher, 6 Chimera and 7 the transformed (`CREATURE|map|kind|x|y|z`). Three
+optional fields follow: scale (.5-2, empty 1), health (empty or 0 the kind's
+own) and a wake state name that keeps the creature dormant, blind and deaf
+until the state is set or it is hurt.
 
 Human guards use the shared actor AI rather than a campaign-specific NPC system.
 The existing `ACTOR_AI` record accepts mode 3 for Guard; modes 0 (Scripted),

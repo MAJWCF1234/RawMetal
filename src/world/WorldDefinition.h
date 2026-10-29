@@ -12,7 +12,7 @@ enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
 inline constexpr int FacilityModelCount=335;
-enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera };
+enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed };
 // One record per creature kind: what it is called, how much it takes, the
 // standing height navigation and hits use (hull) against its visible top, its
 // pace, bite, wind-up before a strike and the step it can climb; its call set
@@ -44,9 +44,19 @@ inline const CreatureTraits& creatureTraits(CreatureKind kind){
   // circles to the side they are not watching and comes at 4.6 m/s on all
   // fours; caught circling, it charges rather than freezing. A long reach and a
   // slam that lands hard; it takes a lot of killing.
-  {"CHIMERA",        560,2.f,  2.4f, 1.6f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.2f,1.7f, 4.6f,.35f,2.f,false}};
+  {"CHIMERA",        560,2.f,  2.4f, 1.6f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.2f,1.7f, 4.6f,.35f,2.f,false},
+  // A worker the zone's energy changed, still in its suit and still at its
+  // habits: it clutches its head in its idle, then comes at a run as fast as a
+  // walking player (its lunge run covers 3 m a cycle at 3.6 m/s). It leaps on and
+  // pins its prey to bite (14 a bite) or, slower and readable, raises both
+  // fists for an overhead blow (the wind-up below, 26 when it lands). Every
+  // faction's squads are prey too. A hard hit staggers it; it dies on its back.
+  {"TRANSFORMED",    150,1.85f,1.85f,3.6f,26,1.05f,.34f,2,1.12f,true, true, 3.7f,2.1f, 1.1f,2.5f,1.5f, 0.f,.7f, 1.6f,false}};
  return table[int(kind)];
 }
+// The transformed's leap (seconds in the air), its pin and the stumble after a
+// miss or being knocked off; the AI and the renderer's clip timing share them.
+inline constexpr float TransformedLeap=.4f,TransformedHold=2.f,TransformedStumble=.9f;
 // The area score a map plays; stitched maps share one so the loop carries on.
 enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Count };
 enum class PickupKind { Health, Ammo }; // Values retain the existing save format.

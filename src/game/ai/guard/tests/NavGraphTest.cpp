@@ -173,7 +173,8 @@ bool Game::testNavGraph(){
   // The open zone: the military checkpoint is the guarded map with authored cover.
   Game g(campaign);
   size_t assault=0;bool foundAssault=false;
-  for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].track().ai.role==GuardSquadRole::Assault){assault=i;foundAssault=true;break;}
+  // The checkpoint's Assault: other squads in the zone have one too.
+  for(size_t i=0;i<g.npcActors().size();++i)if(g.npcActors()[i].track().ai.role==GuardSquadRole::Assault&&g.npcActors()[i].track().ai.squad==stateId("zone_military")){assault=i;foundAssault=true;break;}
   check(foundAssault,"Exclusion Zone rebuild exposes the authored Assault");
   int post=foundAssault?g.npcActors()[assault].homeLevel:0;
   check(campaign&&campaign->maps.size()>size_t(post)&&campaign->maps[size_t(post)]->navHints.size()>=4,"Exclusion Zone authors Path/Cover NAV_HINT markers at the guarded checkpoint");

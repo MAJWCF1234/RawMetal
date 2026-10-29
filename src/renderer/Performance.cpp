@@ -68,6 +68,25 @@ bool SoftwareRenderer::testCreatureAnimation(){
  }
  mutantReport<<"PASS: supplied rig clips and grounded death pose interpolate with matching topology\n";
  }
+ // The transformed: the Worker's body on six Mixamo clips. Every frame stands
+ // on the floor (it is grounded per frame), the idle near the Worker's height,
+ // the death lying low, and the overhead blow lifting the fists from its crouch.
+ {Mesh transformed(277,"",2185);std::ofstream transformedReport("creature-animation-transformed-test.txt");
+  if(transformed.creatureClipCount()!=6)return false;
+  const float rest=transformed.maximum.y-transformed.minimum.y;
+  for(int clip=0;clip<6;++clip){transformed.poseCreature(clip,0);auto first=transformed.triangles;float motion=0,low=1e9f,high=-1e9f,peak=-1e9f,start=0;
+   for(float phase:{0.f,.25f,.5f,.75f,1.f}){transformed.poseCreature(clip,phase);float top=-1e9f;
+    for(size_t i=0;i<first.size();++i)for(int v=0;v<3;++v){auto p=transformed.triangles[i].v[v].p,d=p-first[i].v[v].p;
+     if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z))return false;motion=std::max(motion,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));low=std::min(low,p.y);top=std::max(top,p.y);}
+    high=std::max(high,top);if(phase==0.f)start=top;if(phase==1.f)peak=top;}
+   transformedReport<<"clip "<<clip<<" vertex motion "<<motion<<" floor "<<low<<" highest "<<high<<" start height "<<start<<" end height "<<peak<<" of rest "<<rest<<'\n';
+   if(motion<.01f||motion>4||low<-.002f||low>.02f)return false;
+   if(clip==0&&(high<rest*.85f||high>rest*1.1f))return false;
+   if(clip==4&&peak>rest*.45f)return false;
+   if(clip==5&&high<start+.08f)return false;
+  }
+  transformedReport<<"PASS: six grounded clips on the Worker's body; it ends its death lying down and the overhead blow raises its fists\n";
+ }
  // The Worker and the five research staff (each with its own anchors) share
  // one six-clip skeletal bake. Staff motion limits scale with rest height.
  std::ofstream workerReport("worker-animation-test.txt");

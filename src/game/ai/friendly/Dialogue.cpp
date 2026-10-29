@@ -118,7 +118,7 @@ std::vector<int> Game::dialogueReplies()const{
  for(size_t i=0;i<node->replies.size();++i){const auto&reply=node->replies[i];
   if(reply.require&&state(reply.require)<reply.requireValue)continue;
   if(reply.hide&&state(reply.hide))continue;
-  shown.push_back(int(i));}
+  if(shown.size()<4)shown.push_back(int(i));}
  return shown;
 }
 std::optional<Game::DialogueView> Game::dialogueView()const{
