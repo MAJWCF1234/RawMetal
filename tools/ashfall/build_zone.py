@@ -424,6 +424,13 @@ def build(z):
     z.terminal(rx - 2.6, ry + .5, 'RADIO TOWER / TRANSMITTER', 'ENTER RELAY CODE 4471. TRANSMITTING ON ALL BANDS.',
                'MESSAGE SENT: THE ZONE IS GROWING. GET EVERYONE OUT.', 'zone_transmit', 'zone_pda', PI / 2)
     z.creature(3, rx + 6, ry - 5)  # the Warden guards the ridge
+    for (fx, fy, yaw) in [(106.2, 34.6, PI / 2), (111.8, 34.6, PI / 2), (114.6, 37.4, 0), (114.6, 43, 0), (108.6, 45.4, PI / 2)]:
+        z.model('ind_fence', fx, fy, yaw=yaw)
+    z.model('scrap_aerial', 111.6, 37.2, yaw=.4)
+    z.model('scrap_server_cabinet', rx - 2.6, ry + 1.7, yaw=PI / 2)
+    z.model('cable_reel', 110.6, 43.4, yaw=1.1)
+    z.model('ind_crate', 107.2, 44, yaw=.3); z.model('ind_barrel', 112.6, 41.6)
+    z.light(rx - 5, ry + 2, 3.6, 2.4, 9, 2600, .1)
     z.pickup(0, rx - 4, ry + 4.5)
     z.zone_name(103, 34, 115, 46, 'RADIO TOWER')
     # ================================================================================
@@ -504,6 +511,11 @@ def build(z):
         a = i / 22 * 2 * PI; r = 8.6 + (i % 3) * .6
         z.model('grass_b' if i % 2 else 'wheat', px_ + math.cos(a) * r, py_ + math.sin(a) * r * .88, yaw=i, solid=False, scale=1.2)
     z.creature(1, px_ - 3, py_); z.creature(1, px_ + 4, py_ + 2); z.creature(1, px_, py_ - 3)
+    z.clear(25.2, 45.6, 4)
+    z.model('scrap_shack', 25.2, 45.6, yaw=-PI / 2)
+    z.model('scrap_drum', 23.2, 43.6); z.model('scrap_stovepipe', 23.4, 47.8, solid=False)
+    z.model('scrap_lantern', 23.3, 45.6, solid=False, base=2.0)
+    z.light(23.3, 45.6, 1.9, 1.3, 6, 2100, .2)
     z.zone_name(4, 36, 30, 56, 'SWAMP')
     creek(z, t, pond)
     # ================================================================================
@@ -530,9 +542,18 @@ def build(z):
         z.clear(hx, hy, 7); z.model('cottage', hx, hy, yaw=yaw, scale=.7)
     bx, by = 99, 88
     z.clear(bx, by, 6)
-    for (x1, y1, x2, y2, h) in [(bx - 4, by - 3, bx + 4, by - 2.7, 2.2), (bx - 4, by - 3, bx - 3.7, by + 3, 1.4), (bx + 3.7, by - 3, bx + 4, by + 1, 2.6), (bx - 1, by + 2.7, bx + 4, by + 3, .9)]:
-        z.struct(x1, y1, x2, y2, 0, h, 0, 15)
+    # The walls the fire left, broken to different heights (the pack's wall panels).
+    for (wx, wy, yaw, h) in [(bx - 2, by - 2.85, 0, .74), (bx + 2, by - 2.85, 0, .52), (bx - 3.8, by - 1, PI / 2, .47),
+                             (bx - 3.8, by + 2, PI / 2, .22), (bx + 3.8, by - 1, PI / 2, .86), (bx + 1.6, by + 2.8, 0, .3)]:
+        z.model('ind_wall', wx, wy, yaw=yaw, sz=h)
     z.model('brick_pile', bx, by); z.model('brick_pile', bx + 2, by + 1.5, yaw=1); z.model('dead_tree_b', bx + 6, by - 3)
+    # What the fire left: charred planks, a burn barrel someone still uses, a bedroll under the last wall.
+    z.model('scrap_plank_pile', bx - 2.4, by - 1.6, yaw=.7, solid=False)
+    z.model('scrap_burn_barrel', bx + 2.8, by - 1.9)
+    z.model('scrap_mattress', bx + 2.6, by + .2, yaw=1.6, solid=False)
+    z.model('ind_barrel', bx - 3.1, by + 2.1, yaw=.4)
+    for i in range(5):
+        z.junk(i % 6, bx - 1 + i * .8, by + 1.2 - (i % 2) * .7, i * .9)
     z.hazard(4, bx - 1.5, by + .5, .4, 5, top=1); z.emitter(bx - 1.5, by + .5, .3, (.2, .1), 3, .28, .12, .6, 8)
     z.light(bx - 1.5, by + .5, .9, 2.4, 9, 1900, .25)
     for i in range(8):
@@ -549,6 +570,15 @@ def build(z):
     for (cxx, cyy, yaw, m) in [(37, 86.5, .3, 'car_b'), (42.5, 66, 1.4, 'car_c'), (73.5, 33, 1.7, 'car_a'), (66, 14.5, .1, 'car_b')]:
         z.model(m, cxx, cyy, yaw=yaw, scale=.75)
     z.model('billboard', 46.5, 74, yaw=PI / 2)
+    z.clear(79.4, 38, 13)
+    for ry_ in (28.2, 36.4, 44.6):
+        z.model('mine_rail_straight', 79.4, ry_, yaw=0, solid=False, sx=1.2)
+    z.model('scrap_train_car', 79.4, 37.6, yaw=0.02)
+    z.model('scrap_van_husk', 43.6, 52.6, yaw=1.3)
+    for (bx_, by_) in [(45.2, 56.2), (45.9, 56.6), (70, 48.6)]:
+        z.model('scrap_drum', bx_, by_, yaw=bx_)
+    for i in range(4):
+        z.model('tire', 69.2 + i * .6, 47.5 + (i % 2) * .5, yaw=i, solid=False)
     z.model('bus_shelter', 38, 86.5, yaw=PI, solid=False)
     z.shelter(36.3, 86.0, 39.7, 87.0, 3.0)
     # --- Quest chain --------------------------------------------------------------------
