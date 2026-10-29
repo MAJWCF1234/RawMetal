@@ -861,6 +861,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      return 0;
     }
+    if(commandArguments().find(L"--card-shot")){
+     // The overhead markers on an alerted squad, near and far: .build/shot/card-near.ppm, card-far.ppm.
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;std::filesystem::create_directories(".build/shot");
+     for(auto [name,distance]:{std::pair{"near",4.f},std::pair{"far",12.f}}){auto scene=retro::Game::cardInspection(distance);renderer->render(scene);
+      std::ofstream out(std::string(".build/shot/card-")+name+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";
+      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}}
+     return 0;
+    }
     if(commandArguments().find(L"--dialogue-shot")){
      // The conversation panel over a lit room: .build/shot/dialogue.ppm.
      auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;

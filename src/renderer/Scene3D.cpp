@@ -2204,23 +2204,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   static const Texture alerted=glyph(bang,0xffff3020u),hunting=glyph(question,0xffff4a26u),radio=glyph(handset,0xff78e6ffu);
   static const Texture bar=[]{Texture t{4,4,std::vector<uint32_t>(16,0xff78e6ffu)};t.clampEdges=true;t.emission=t.pixels;return t;}();
   const bool alert=card.kind==Game::GuardCardKind::Alert;const float bob=std::sin(game.elapsed()*6.f+float(i))*.03f;
-  Point3 head{npc.pose.position.x,npc.pose.position.y,npc.pose.z+npc.track().scale*1.12f+.32f+bob};
+  Point3 head{npc.pose.position.x,npc.pose.position.y,npc.pose.z+npc.track().scale*1.08f+.18f+bob};
   // Past 9 m the card grows with distance so it still reads at 15 m and beyond;
   // the '!' starts half as large again and settles over its first ~100 ms.
   Point3 eyeAt{player.pos.x,player.pos.y,player.z+player.eye},toCard=head-eyeAt;
-  float reach=std::max(1.f,std::sqrt(toCard.x*toCard.x+toCard.y*toCard.y+toCard.z*toCard.z)/9.f),pop=alert?std::clamp(1.f-card.bangMs/100.f,0.f,1.f):0.f,scale=reach*(1+.55f*pop*pop);
-  const Point3 across=effectSide*((alert?.13f:.12f)*scale),up{0,0,(alert?.2f:.18f)*scale};
-  const Texture* face=&alerted;float glow=2.4f+2.f*pop;
+  float reach=std::clamp(std::sqrt(toCard.x*toCard.x+toCard.y*toCard.y+toCard.z*toCard.z)/14.f,1.f,2.f),pop=alert?std::clamp(1.f-card.bangMs/100.f,0.f,1.f):0.f,scale=reach*(1+.55f*pop*pop);
+  const Point3 across=effectSide*((alert?.07f:.065f)*scale),up{0,0,(alert?.11f:.10f)*scale};
+  const Texture* face=&alerted;float glow=1.25f+.8f*pop;
   if(card.kind==Game::GuardCardKind::Hunting){face=&hunting;glow=2.f;}
-  else if(card.kind==Game::GuardCardKind::Making){face=&filling[size_t(std::lround(card.fill*22))];glow=1.2f+1.4f*card.fill;}
+  else if(card.kind==Game::GuardCardKind::Making){face=&filling[size_t(std::lround(card.fill*22))];glow=.9f+.6f*card.fill;}
   else if(card.kind==Game::GuardCardKind::Checking){face=&filling[size_t(std::lround(card.fill*22))];glow=.8f;}
   quad(head-across-up,head+across-up,head+across+up,head-across+up,*face,glow);
   if(card.call>0){
    // On the radio: a handset beside the card, pulsing, over a bar that fills as the call goes out.
-   const Point3 side=effectSide*(.12f*reach),tall{0,0,.18f*reach},at=head+effectSide*(.30f*reach);const float pulse=1.3f+.9f*std::sin(game.elapsed()*16.f);
+   const Point3 side=effectSide*(.065f*reach),tall{0,0,.10f*reach},at=head+effectSide*(.17f*reach);const float pulse=.9f+.35f*std::sin(game.elapsed()*16.f);
    quad(at-side-tall,at+side-tall,at+side+tall,at-side+tall,radio,pulse);
-   const Point3 foot=at-tall-Point3{0,0,.05f*reach},left=foot-side,thin{0,0,.025f*reach};const Point3 right=left+side*(2.f*card.call);
-   quad(left-thin,right-thin,right+thin,left+thin,bar,1.6f);
+   const Point3 foot=at-tall-Point3{0,0,.03f*reach},left=foot-side,thin{0,0,.015f*reach};const Point3 right=left+side*(2.f*card.call);
+   quad(left-thin,right-thin,right+thin,left+thin,bar,1.f);
   }
  }
  for(const auto&drone:engineerDrones)if(drone.level==level){

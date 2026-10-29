@@ -60,6 +60,9 @@ bool Game::testZonePeople(){
   int roofs=0;for(int level=0;level<g.chunkCount();++level)roofs+=int(g.chunkWorld(level).shelters().size());
   check(roofs>=12,"Shelters stand across the zone ("+std::to_string(roofs)+")");
   check(g.sheltered(),"Under the fuel station canopy is out of the storm");}
+ // 6. A player with nothing but the exe finds the zone under Custom Maps.
+ {Game title;title.loadCustomCampaignDirectory(L"no-such-custom-maps-folder");
+  check(title.m_customCampaigns.size()==1&&title.m_customCampaigns[0]->name=="ASHFALL EXCLUSION ZONE","Custom Maps lists the zone shipped inside the exe");}
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }
 }

@@ -35,6 +35,10 @@ Game Game::dialogueInspection(){
  auto g=stanceRoomBare(int(SquadStance::Truce));g.m_player.pos={6.5f,4.9f};g.m_player.angle=kPi*.5f;g.setState(stateId("sq_pass"),1);
  InputState use{};use.use=true;g.update({},1.f/60);g.update(use,1.f/60);for(int i=0;i<90;++i)g.update({},1.f/60);g.m_talk.selected=1;return g;
 }
+Game Game::cardInspection(float distance){
+ auto g=stanceRoomBare(int(SquadStance::Hostile));g.m_god=true;g.m_player.pos={7.5f,6.5f-distance};g.m_player.angle=kPi*.5f;
+ for(int i=0;i<150&&g.guardState(0)!=GuardState::Alert;++i)g.update({},1.f/60);g.m_player.pos={7.5f,6.5f-distance};g.m_player.angle=kPi*.5f;g.m_player.pitch=8;g.update({},1.f/60);return g;
+}
 bool Game::testStance(){
  // The player stands 3.5 m south of the first guard, facing him.
  auto stanceRoom=[](int stance,bool patrol=false){auto g=stanceRoomBare(stance,patrol);g.m_player.pos={6.5f,3.f};g.m_player.angle=kPi*.5f;return g;};

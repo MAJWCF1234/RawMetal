@@ -381,6 +381,8 @@ public:
     static bool testZonePeople();
     // The stance room with its corporal mid-conversation (the --dialogue-shot frame).
     static Game dialogueInspection();
+    // The stance room's squad hostile and on Alert, seen from `distance` metres (--card-shot).
+    static Game cardInspection(float distance);
     static bool testAiQueryBatch();
     static bool testAiDecisionClock();
     void setAiQueryCaching(bool enabled){m_aiQueryCaching=enabled;}

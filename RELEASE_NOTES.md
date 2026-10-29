@@ -4,6 +4,35 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.0 - The Ashfall Exclusion Zone (2026-10-29)
+
+Chapter 1 is as you left it. This update is for the Exclusion Zone, the open
+ground past the wire where the engine is tried before it goes underground.
+Start it from the custom campaigns.
+
+The people out there talk now, and what you say to them stays said. The elder
+at the rookie camp has work for you and an opinion about storms. What is left
+of a Cleanup squad holds the old mine on a truce: keep your gun low and walk
+through, or tell them what their own people sent them in for and find out what
+four tired men can still do. Bring them a way out and they will walk you to it.
+The scrapyard charges a toll. Pay it in the soldiers' rations and the yard is
+yours; walk in without paying and it is not. A squad on a truce warns you once
+if you hold a gun on it. The second time it does not warn.
+
+Every few minutes the siren goes. The haze turns brown, the sky comes down, the
+ash pours, and the open ground burns. Get under a roof. The first storm wakes
+the transformed, the people the zone kept, sleeping under the burned village,
+by the reservoir and down the mine shaft. They run as fast as you walk. They do
+not care whose side anyone is on.
+
+The scrapyard is a shanty yard, a train rots on a siding by the east road, the
+radio tower stands behind a fence, and someone has been fishing in the swamp.
+
+The ? and ! over a guard's head are about half the size, and no longer swell
+into red banners across a yard.
+
+---
+
 ## v1.0.4 - No longer frozen at the door (2026-10-29)
 
 For the first five seconds after you started DepthWorks there was nothing,
