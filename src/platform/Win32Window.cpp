@@ -1,6 +1,7 @@
 #include "Win32Window.h"
 #ifdef _WIN32
 #include <windowsx.h>
+#include "../core/PackedResource.h"
 namespace retro {
 RECT Win32Window::viewport(int clientWidth,int clientHeight){
  float scale=std::min(float(clientWidth)/DisplayWidth,float(clientHeight)/DisplayHeight);
@@ -22,9 +23,16 @@ void Win32Window::showLoading(float progress,const wchar_t* status){
  HBRUSH ground=CreateSolidBrush(RGB(5,7,6));FillRect(mem,&rc,ground);DeleteObject(ground);SetBkMode(mem,TRANSPARENT);
  auto font=[&](int height,int weight,int spacing){HFONT f=CreateFontW(-height,0,0,0,weight,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Bahnschrift");SelectObject(mem,f);SetTextCharacterExtra(mem,spacing);return f;};
  auto centred=[&](const wchar_t* text,int y,COLORREF colour){SetTextColor(mem,colour);SIZE size{};GetTextExtentPoint32W(mem,text,lstrlenW(text),&size);TextOutW(mem,(w-size.cx)/2+(size.cx>0?GetTextCharacterExtra(mem)/2:0),y,text,lstrlenW(text));};
- const int title=std::max(28,h/13);HFONT big=font(title,FW_BOLD,title/3);centred(L"DEPTHWORKS",h*40/100-title/2,RGB(59,178,103));
- HFONT statusFont=font(std::max(12,h/48),FW_NORMAL,std::max(1,h/540));DeleteObject(big);centred(status,h*40/100+title*3/4,RGB(146,138,128));
- const int barW=w*28/100,barH=std::max(2,h/360),barX=(w-barW)/2,barY=h*58/100;
+ // The promotional logo (resource 2184: width, height, then BGRA rows on the loading black).
+ static const std::vector<unsigned char> logo=[]{try{return loadResource(2184);}catch(...){return std::vector<unsigned char>{};}}();
+ int below=h*44/100;
+ if(logo.size()>8){const int lw=int(logo[0]|logo[1]<<8|logo[2]<<16|logo[3]<<24),lh=int(logo[4]|logo[5]<<8|logo[6]<<16|logo[7]<<24);
+  if(lw>0&&lh>0&&logo.size()>=8+size_t(lw)*lh*4){BITMAPINFO info{};info.bmiHeader={sizeof(BITMAPINFOHEADER),lw,-lh,1,32,BI_RGB};
+   const int dw=w*52/100,dh=dw*lh/lw,dx=(w-dw)/2,dy=h*40/100-dh/2;SetStretchBltMode(mem,HALFTONE);SetBrushOrgEx(mem,0,0,nullptr);
+   StretchDIBits(mem,dx,dy,dw,dh,0,0,lw,lh,logo.data()+8,&info,DIB_RGB_COLORS,SRCCOPY);below=dy+dh+h/60;}}
+ else{HFONT big=font(std::max(28,h/13),FW_BOLD,h/40);centred(L"DEPTHWORKS",h*34/100,RGB(59,178,103));DeleteObject(big);}
+ HFONT statusFont=font(std::max(12,h/50),FW_NORMAL,std::max(2,h/300));centred(status,below,RGB(146,138,128));
+ const int barW=w*30/100,barH=std::max(2,h/360),barX=(w-barW)/2,barY=below+h*7/100;
  RECT track{barX,barY,barX+barW,barY+barH},done{barX,barY,barX+int(barW*std::clamp(progress,0.f,1.f)),barY+barH};
  HBRUSH dim=CreateSolidBrush(RGB(28,34,31)),lit=CreateSolidBrush(RGB(59,178,103));FillRect(mem,&track,dim);FillRect(mem,&done,lit);DeleteObject(dim);DeleteObject(lit);
  BitBlt(dc,0,0,w,h,mem,0,0,SRCCOPY);SelectObject(mem,old);DeleteObject(statusFont);DeleteObject(bitmap);DeleteDC(mem);ReleaseDC(m_hwnd,dc);
