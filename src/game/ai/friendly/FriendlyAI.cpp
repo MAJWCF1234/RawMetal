@@ -13,6 +13,8 @@ namespace retro {
 void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef attacker){
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();auto pose=npc.pose;
  if(!track.health||state(track.deadState)||!std::isfinite(amount)||amount<=0)return;
+ // A shot from the player ends a truce, and an ally's patience after one warning.
+ stanceStruck(actor,attacker);
  int previous=std::clamp(state(track.damageState),0,track.health);int damage=previous+std::min(track.health-previous,int(std::ceil(std::min(amount,float(track.health)))));setState(track.damageState,damage);
  setState(friendlyKey(actor,"hit_x"),int(std::round(source.x*1000)));setState(friendlyKey(actor,"hit_y"),int(std::round(source.y*1000)));setState(friendlyKey(actor,"hit_source"),1);
  setState(friendlyKey(actor,"hit_kind"),int(attacker.kind));setState(friendlyKey(actor,"hit_level"),attacker.kind==ShotKind::None?0:attacker.level+1);setState(friendlyKey(actor,"hit_index"),attacker.kind==ShotKind::None?0:attacker.index+1);

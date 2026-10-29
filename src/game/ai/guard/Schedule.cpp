@@ -180,7 +180,7 @@ void Game::validateGuardSchedule(size_t actor)const{
  if(schedule==GuardSchedule::Patient){
   const ActorTrack*provider=nullptr;int remaining=subject;
   if(subject>0&&size_t(subject)<=npcCount&&size_t(subject)!=actor+1)for(int level=0;level<chunkCount()&&!provider;++level)for(const auto&candidate:(level==m_level?m_world:m_chunks[level].world).actorTracks())if(candidate.ai.mode!=ActorAiMode::Scripted&&--remaining==0){provider=&candidate;break;}
-  if(!provider||provider->ai.role!=GuardSquadRole::Medic||provider->ai.squad!=track.ai.squad||actorFaction(*provider)!=actorFaction(track))throw std::runtime_error("Invalid saved Patient provider");
+  if(!provider||provider->ai.role!=GuardSquadRole::Medic||provider->ai.squad!=track.ai.squad||npcFaction(*provider)!=npcFaction(track))throw std::runtime_error("Invalid saved Patient provider");
  }
  if(schedule==GuardSchedule::Engineer&&track.ai.role!=GuardSquadRole::Engineer)throw std::runtime_error("Invalid saved engineering ownership");
  if(task==GuardTask::Treat&&schedule!=GuardSchedule::Medic)throw std::runtime_error("Treatment has no Medic owner");

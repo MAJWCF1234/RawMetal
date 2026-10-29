@@ -859,6 +859,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
      return 0;
     }
+    if(commandArguments().find(L"--dialogue-shot")){
+     // The conversation panel over a lit room: .build/shot/dialogue.ppm.
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     auto scene=retro::Game::dialogueInspection();renderer->render(scene);std::filesystem::create_directories(".build/shot");
+     std::ofstream out(".build/shot/dialogue.ppm",std::ios::binary);out<<"P6\n960 540\n255\n";
+     for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+     return scene.talking()?0:21;
+    }
     if(commandArguments().find(L"--locker-view-test")){
      // The shut and the first frame out, rendered from inside the lockers of
      // maps 57 (west wall) and 59 (bunk room): frame by frame through the way
@@ -1316,6 +1324,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--hearing-test"))return retro::Game::testHearing()?0:21;
     if(commandArguments().find(L"--guard-ai-test"))return retro::Game::testGuardAI()?0:21;
     if(commandArguments().find(L"--friendly-ai-test"))return retro::Game::testFriendlyAI()?0:21;
+    if(commandArguments().find(L"--stance-test"))return retro::Game::testStance()?0:21;
+    if(commandArguments().find(L"--dialogue-test"))return retro::Game::testDialogue()?0:21;
     if(commandArguments().find(L"--physics-ai-test"))return !retro::Game::testMovement()?19:!retro::Game::testAI()?21:!retro::Game::testClutter()?22:0;
     // --terminal-inspection=LEVEL,TITLE: the first terminal or paper on that map
     // whose title contains TITLE, rendered open as the player reads it.
@@ -1478,7 +1488,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"alarm",retro::Game::testAlarm},
-         {"alert-music",retro::AudioEngine::testAlertMusic}};
+         {"alert-music",retro::AudioEngine::testAlertMusic},
+         {"stance",retro::Game::testStance},
+         {"dialogue",retro::Game::testDialogue}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){
@@ -1682,7 +1694,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.consoleOpen());
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());

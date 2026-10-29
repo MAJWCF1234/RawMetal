@@ -11,9 +11,9 @@ void Game::civilianEscortIntent(World& world,int level,size_t actor,const ActorT
  int fear=std::max(0,std::clamp(mind.fear(),0,4000)-ms);Vec2 threat=mind.threat();float nearest=config.dangerRange*config.dangerRange;bool danger=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
   if(distance<nearest&&aiCanSee(world,pose.position,pose.z+height*.85f,{std::sin(pose.yaw),std::cos(pose.yaw)},position,z,config.dangerRange,-.25f,2.5f)){nearest=distance;threat=position;danger=true;}};
- if(factionsHostile(actorFaction(track),AiFaction::Creature))for(const auto&enemy:enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
+ if(factionsHostile(npcFaction(track),AiFaction::Creature))for(const auto&enemy:enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
  for(size_t i=0;i<world.actorTracks().size();++i){const auto&other=world.actorTracks()[i];if(other.visual!=ActorVisual::Wasp&&other.visual!=ActorVisual::Huntsman)continue;
-  const auto&target=world.actorPose(i);if(factionsHostile(actorFaction(track),actorFaction(other))&&target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
+  const auto&target=world.actorPose(i);if(factionsHostile(npcFaction(track),npcFaction(other))&&target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
  int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:m_player.pos;}put("damage",damage);put("hit_source",0);
  if(danger){fear=4000;mind.setThreat(threat);}mind.setFear(fear);
  bool follow=config.mode==ActorAiMode::Escort?!mind.holding():mind.following();
@@ -66,9 +66,9 @@ void Game::scriptedHandoffIntent(World& world,int level,size_t actor,const Actor
  int fear=std::max(0,std::clamp(mind.fear(),0,4000)-ms);Vec2 threat=mind.threat();float nearest=track.ai.dangerRange*track.ai.dangerRange;bool danger=false;
  auto consider=[&](Vec2 position,float z){float distance=lengthSq(position-pose.position);
   if(distance<nearest&&aiCanSee(world,pose.position,pose.z+height*.85f,{std::sin(pose.yaw),std::cos(pose.yaw)},position,z,track.ai.dangerRange,-.25f,2.5f)){nearest=distance;threat=position;danger=true;}};
- if(factionsHostile(actorFaction(track),AiFaction::Creature))for(const auto&enemy:enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
+ if(factionsHostile(npcFaction(track),AiFaction::Creature))for(const auto&enemy:enemies)if(enemy.alive)consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
  for(size_t i=0;i<world.actorTracks().size();++i){const auto&other=world.actorTracks()[i];if(other.visual!=ActorVisual::Wasp&&other.visual!=ActorVisual::Huntsman)continue;
-  const auto&target=world.actorPose(i);if(factionsHostile(actorFaction(track),actorFaction(other))&&target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
+  const auto&target=world.actorPose(i);if(factionsHostile(npcFaction(track),npcFaction(other))&&target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
  int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:m_player.pos;}put("damage",damage);put("hit_source",0);
  if(danger){fear=4000;mind.setThreat(threat);}mind.setFear(fear);
  if(fear<=0&&mind.schedule()!=CivilianSchedule::Flee&&mind.schedule()!=CivilianSchedule::Recovery){clearCivilianSchedule(actor);return;}

@@ -53,7 +53,7 @@ void Game::perfWake(bool guards){
  AiTarget target;target.kind=ShotKind::Player;target.level=m_level;target.index=0;target.position=m_player.pos;target.feet=m_player.z;target.height=m_player.hullHeight();target.eye=m_player.eye;target.faction=AiFaction::Player;
  Vec2 global=m_player.pos+chunkOffset(m_level);
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();
-  if(t.ai.mode!=ActorAiMode::Guard||!chunkResident(npc.level)||!autonomousActor(t)||npcIncapacitated(i)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!factionsHostile(actorFaction(t),AiFaction::Player))continue;
+  if(t.ai.mode!=ActorAiMode::Guard||!chunkResident(npc.level)||!autonomousActor(t)||npcIncapacitated(i)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!factionsHostile(npcFaction(t),AiFaction::Player))continue;
   rememberGuardTarget(i,target);
   if(guardState(i)!=GuardState::Alert)setState(friendlyKey(i,"guard_mode"),int(GuardState::Investigate));
   setState(friendlyKey(i,"guard_confirmed"),1);setState(friendlyKey(i,"guard_memory"),1);
@@ -69,7 +69,7 @@ std::string Game::perfPopulation()const{
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(!chunkResident(npc.level))continue;
   if(t.ai.mode!=ActorAiMode::Guard){++civilians;continue;}
   ++guards;if(!autonomousActor(t)||npcIncapacitated(i)||npc.pose.clip==4)continue;++autonomous;
-  if(factionsHostile(actorFaction(t),AiFaction::Player))++hostile;if(guardState(i)==GuardState::Alert)++alert;}
+  if(factionsHostile(npcFaction(t),AiFaction::Player))++hostile;if(guardState(i)==GuardState::Alert)++alert;}
  out<<"creatures="<<alive<<" hunting="<<hunting;for(const auto&[name,k]:kinds)out<<" ["<<name<<' '<<k.first<<'/'<<k.second<<']';
  out<<" resident_chunks="<<resident<<" npcs_total="<<m_friendlyActors.size()<<" resident_guards="<<guards<<" autonomous="<<autonomous<<" hostile="<<hostile<<" alert="<<alert<<" resident_civilians="<<civilians
     <<" layers="<<m_world.layers().size()<<" terrain="<<m_world.hasTerrain()<<" doors="<<m_world.doors().size()<<" fixtures="<<m_world.fixtures().size()<<" props="<<m_world.props().size()<<" structures="<<m_world.structures().size()<<" states="<<m_states.size();

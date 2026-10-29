@@ -1,8 +1,8 @@
 #pragma once
 #include <array>
 namespace retro {
-enum class NpcVoiceCue {Patrol,Investigate,Alert,Hurt,Down,Retreat,AllyDown,Support,Deploy,Repair,Treat,Follow,Wait,Danger,Witness,CheckLockers,Found,GiveUp};
-struct NpcVoiceClip {int role; NpcVoiceCue cue; float seconds;};
+enum class NpcVoiceCue {Patrol,Investigate,Alert,Hurt,Down,Retreat,AllyDown,Support,Deploy,Repair,Treat,Follow,Wait,Danger,Witness,CheckLockers,Found,GiveUp,Warn,Betrayed,Greet,Plead,Talk};
+struct NpcVoiceClip {int role; NpcVoiceCue cue; float seconds; int stance=0; int mood=0; const char* line="";};
 inline constexpr std::array<NpcVoiceClip,174> NpcVoiceClips={{
  {1,NpcVoiceCue::Patrol,2.8530f},
  {1,NpcVoiceCue::Patrol,3.2122f},

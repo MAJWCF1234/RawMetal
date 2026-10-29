@@ -42,11 +42,17 @@ constexpr bool civilianActorVisual(ActorVisual visual){return civilianActorBody(
 constexpr bool humanActorVisual(ActorVisual visual){return civilianActorVisual(visual)||cleanupActorVisual(visual);}
 struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 enum class ActorAiMode { Scripted, Civilian, Escort, Guard=3 };
-enum class AiFaction { Unspecified, Player, Facility, Creature, Raider, Neutral };
+// Wary: a squad holding a truce. It fights only what fights everyone (the
+// creatures); nobody else is its enemy until the truce breaks.
+enum class AiFaction { Unspecified, Player, Facility, Creature, Raider, Neutral, Wary };
+// A squad's stance toward the player, read from its stance state (ActorAiConfig::stance).
+// Declared keeps the authored faction; the others override it while they hold.
+enum class SquadStance { Declared, Hostile, Truce, Ally };
 enum class GuardSquadRole { Default, Assault, Engineer, Sharpshooter, Heavy, Medic, Rusher };
 inline AiFaction actorFaction(const struct ActorTrack& track);
 inline bool factionsHostile(AiFaction a,AiFaction b){
  if(a==b||a==AiFaction::Neutral||b==AiFaction::Neutral)return false;
+ if(a==AiFaction::Wary||b==AiFaction::Wary)return a==AiFaction::Creature||b==AiFaction::Creature;
  if(a==AiFaction::Player||a==AiFaction::Facility)return b==AiFaction::Creature||b==AiFaction::Raider;
  return a==AiFaction::Creature||a==AiFaction::Raider;
 }
@@ -60,6 +66,8 @@ struct ActorAiConfig {
  std::vector<ActorPatrolPoint> patrol;
  bool armed=false;int aimMs=650,recoveryMs=1000;float attackRange=9,attackDamage=18;
  AiFaction faction=AiFaction::Unspecified;StateId squad=0;
+ // A state holding this actor's SquadStance (shared by the squad); 0: the faction is fixed.
+ StateId stance=0;
  bool suppress=false;int grenades=0;
  GuardSquadRole role=GuardSquadRole::Default;
  int weapon=1;
@@ -74,7 +82,18 @@ struct ActorTrack {
  ActorAiConfig ai{};
  // Voice bank role (NpcVoiceCatalog); 0 picks it from the visual.
  int voice=0;
+ // The dialogue node E opens on this actor (Map::dialogue); 0: nothing to say.
+ StateId talk=0;
 };
+// Dialogue: a line from the speaker and the player's replies. A reply shows
+// while `require` holds at least requireValue and `hide` is unset; picking it
+// sets its states, may change the speaker's squad stance and goes to `next`
+// (0 ends the conversation). `voice` names a voiced take (NpcVoiceClip::line).
+struct DialogueReply {
+ std::string text;StateId next=0,require=0,hide=0;int requireValue=1;
+ std::vector<std::pair<StateId,int>> sets;int stance=-1;
+};
+struct DialogueNode {StateId id=0;std::string speaker,line,voice;std::vector<DialogueReply> replies;};
 inline AiFaction actorFaction(const ActorTrack& track){
  if(track.ai.faction!=AiFaction::Unspecified)return track.ai.faction;
  if(track.ai.mode==ActorAiMode::Guard)return AiFaction::Raider;

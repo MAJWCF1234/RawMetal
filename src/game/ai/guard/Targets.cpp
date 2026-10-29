@@ -6,9 +6,9 @@ AiTarget Game::resolveGuardTarget(size_t actor,AiTargetRef ref)const{
  AiTarget target;if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return target;auto origin=chunkOffset(m_friendlyActors[actor].level);
  target.kind=ref.kind;target.level=ref.level;target.index=ref.index;
  if(ref.kind==ShotKind::Player){if(dead())return {};target.level=m_level;target.index=0;target.position=m_player.pos;target.feet=m_player.z;target.height=m_player.hullHeight();target.eye=m_player.eye;target.faction=AiFaction::Player;}
- else if(ref.kind==ShotKind::Npc){if(ref.index<0||size_t(ref.index)>=m_friendlyActors.size()||size_t(ref.index)==actor||npcIncapacitated(size_t(ref.index)))return {};const auto&npc=m_friendlyActors[size_t(ref.index)];const auto&t=npc.track();if(!autonomousActor(t)||npc.pose.clip==4||!t.health||(t.deadState&&state(t.deadState)))return {};float body=friendlyHullHeight(size_t(ref.index),t);target.level=npc.level;target.position=npc.pose.position;target.feet=npc.pose.z;target.height=body;target.eye=body*.85f;target.faction=actorFaction(t);}
+ else if(ref.kind==ShotKind::Npc){if(ref.index<0||size_t(ref.index)>=m_friendlyActors.size()||size_t(ref.index)==actor||npcIncapacitated(size_t(ref.index)))return {};const auto&npc=m_friendlyActors[size_t(ref.index)];const auto&t=npc.track();if(!autonomousActor(t)||npc.pose.clip==4||!t.health||(t.deadState&&state(t.deadState)))return {};float body=friendlyHullHeight(size_t(ref.index),t);target.level=npc.level;target.position=npc.pose.position;target.feet=npc.pose.z;target.height=body;target.eye=body*.85f;target.faction=npcFaction(t);}
  else if(ref.kind==ShotKind::Enemy){if(ref.level<0||ref.level>=chunkCount()||!chunkResident(ref.level))return {};const auto&enemies=ref.level==m_level?m_enemies:m_chunks[ref.level].enemies;if(ref.index<0||size_t(ref.index)>=enemies.size()||!enemies[size_t(ref.index)].alive)return {};const auto&e=enemies[size_t(ref.index)];target.position=e.pos;target.feet=e.bodyBottom();target.height=e.bodyTop()-e.bodyBottom();target.eye=target.height*.65f;target.faction=AiFaction::Creature;}
- else if(ref.kind==ShotKind::Actor){if(ref.level<0||ref.level>=chunkCount()||!chunkResident(ref.level))return {};const auto&w=ref.level==m_level?m_world:m_chunks[ref.level].world;if(ref.index<0||size_t(ref.index)>=w.actorTracks().size())return {};const auto&t=w.actorTracks()[size_t(ref.index)];const auto&p=w.actorPose(size_t(ref.index));if(t.ai.mode!=ActorAiMode::Scripted||state(actorAiState(ref.level,size_t(ref.index),t.timerState,"restraint"))||t.platform||!t.health||p.clip==4||(t.deadState&&state(t.deadState))||(t.ai.enableState&&!state(t.ai.enableState)))return {};target.position=p.position;target.feet=p.z;target.height=t.scale;target.eye=t.scale*.85f;target.faction=actorFaction(t);}
+ else if(ref.kind==ShotKind::Actor){if(ref.level<0||ref.level>=chunkCount()||!chunkResident(ref.level))return {};const auto&w=ref.level==m_level?m_world:m_chunks[ref.level].world;if(ref.index<0||size_t(ref.index)>=w.actorTracks().size())return {};const auto&t=w.actorTracks()[size_t(ref.index)];const auto&p=w.actorPose(size_t(ref.index));if(t.ai.mode!=ActorAiMode::Scripted||state(actorAiState(ref.level,size_t(ref.index),t.timerState,"restraint"))||t.platform||!t.health||p.clip==4||(t.deadState&&state(t.deadState))||(t.ai.enableState&&!state(t.ai.enableState)))return {};target.position=p.position;target.feet=p.z;target.height=t.scale;target.eye=t.scale*.85f;target.faction=npcFaction(t);}
  else if(ref.kind==ShotKind::Drone)return engineerDroneTarget(ref.index,m_friendlyActors[actor].level);
  else return {};
  if(!chunkResident(target.level))return {};target.position+=chunkOffset(target.level)-origin;return target;
@@ -16,7 +16,7 @@ AiTarget Game::resolveGuardTarget(size_t actor,AiTargetRef ref)const{
 AiTarget Game::guardTarget(size_t actor)const{
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return {};
  auto get=[&](const char*f){return state(friendlyKey(actor,f));};AiTargetRef ref{ShotKind(get("guard_target_kind")),get("guard_target_level")-1,get("guard_target_index")-1};
- if(ref.kind==ShotKind::None&&guardState(actor)==GuardState::Alert&&factionsHostile(actorFaction(m_friendlyActors[actor].track()),AiFaction::Player))ref={ShotKind::Player,m_level,0};
+ if(ref.kind==ShotKind::None&&guardState(actor)==GuardState::Alert&&factionsHostile(npcFaction(m_friendlyActors[actor].track()),AiFaction::Player))ref={ShotKind::Player,m_level,0};
  auto target=resolveGuardTarget(actor,ref);if(target.valid()&&get("guard_memory")&&!get("guard_seen")){auto origin=chunkOffset(m_friendlyActors[actor].level);target.position={get("guard_x")*.001f-origin.x,get("guard_y")*.001f-origin.y};target.feet=get("guard_z")*.001f;}return target;
 }
 AiTarget Game::guardAttacker(size_t actor)const{
@@ -46,7 +46,7 @@ bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)c
 AiTarget Game::guardThreat(size_t actor,const ActorPose&pose)const{
  perf::Scope threatProfile(perf::GuardThreat);perf::count(perf::GuardThreats);
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return {};
- AiTarget best;float score=1e9f;const auto&npc=m_friendlyActors[actor];auto faction=actorFaction(npc.track());auto previous=guardTarget(actor);
+ AiTarget best;float score=1e9f;const auto&npc=m_friendlyActors[actor];auto faction=npcFaction(npc.track());auto previous=guardTarget(actor);
  auto consider=[&](AiTargetRef ref){auto t=resolveGuardTarget(actor,ref);if(!t.valid())return;
   bool personal=t.kind==previous.kind&&t.index==previous.index&&(t.kind==ShotKind::Npc||t.level==previous.level)&&state(friendlyKey(actor,"guard_confirmed"));
   if(!factionsHostile(faction,t.faction)&&!personal)return;if(!guardCanSee(actor,pose,t))return;
@@ -83,7 +83,7 @@ bool Game::guardCovered(size_t actor,const ActorPose&pose,const AiTarget&t)const
 }
 bool Game::guardHostileToPlayer(size_t actor)const{
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return false;
- auto target=guardTarget(actor);return factionsHostile(actorFaction(m_friendlyActors[actor].track()),AiFaction::Player)||(target.kind==ShotKind::Player&&state(friendlyKey(actor,"guard_confirmed")));
+ auto target=guardTarget(actor);return factionsHostile(npcFaction(m_friendlyActors[actor].track()),AiFaction::Player)||(target.kind==ShotKind::Player&&state(friendlyKey(actor,"guard_confirmed")));
 }
 void Game::validateGuardPolicyState(size_t actor)const{
  validateGuardActions(actor);

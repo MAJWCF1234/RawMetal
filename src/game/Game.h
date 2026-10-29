@@ -25,6 +25,7 @@
 #include <string_view>
 #include <iosfwd>
 #include <utility>
+#include <optional>
 #include <cstdint>
 #include "Ragdoll.h"
 
@@ -59,6 +60,8 @@ struct InputState {
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
     bool inventory=false;
+    // 1-4 while a number key is held: a reply in a conversation.
+    int choice=0;
     int pointerX=-1,pointerY=-1;
     float mouseDx = 0.0f;
     float mouseDy = 0.0f;
@@ -372,6 +375,10 @@ public:
     static Game guardCombatInspection(int stage=0);
     static Game guardInspection(int stage=0);
     static bool testFriendlyAI();
+    static bool testStance();
+    static bool testDialogue();
+    // The stance room with its corporal mid-conversation (the --dialogue-shot frame).
+    static Game dialogueInspection();
     static bool testAiQueryBatch();
     static bool testAiDecisionClock();
     void setAiQueryCaching(bool enabled){m_aiQueryCaching=enabled;}
@@ -633,6 +640,16 @@ public:
     std::array<std::array<float,4>,2> weaponFlashes()const;
     static bool testDarkness();
     bool inventoryOpen()const{return m_inventoryOpen;}
+    // A conversation with choices is open (DialogueNode): the world runs on,
+    // the player stands and picks a reply with 1-4, the arrows or the mouse.
+    bool talking()const{return m_talk.actor>=0;}
+    // The conversation panel's layout in HUD pixels (DisplayWidth x DisplayHeight), shared with the mouse.
+    static constexpr int DialoguePanelY=244,DialogueFirstReplyY=294,DialogueReplyRowHeight=14;
+    struct DialogueView {std::string speaker,line;std::vector<std::string> replies;int selected=0;float age=0;};
+    std::optional<DialogueView> dialogueView()const;
+    // The faction this actor fights as now: its declared one, or what its squad's stance makes it.
+    AiFaction npcFaction(const ActorTrack& track)const;
+    SquadStance npcStance(const ActorTrack& track)const;
     // Reactor rendering wakes during the first lift shake, one vertical band
     // at a time. Direct reactor entry and restored underground saves bypass it.
     float dormantBelow()const{return dormantBelow(m_level);}
@@ -928,6 +945,18 @@ private:
     bool friendlyPortal(int from,int target,Vec2 position,float feet,float height,Vec2& goal,float& goalFeet,float targetFeet=std::numeric_limits<float>::quiet_NaN());
     int nearbyFriendly()const;
     bool commandFriendly();
+    // How a squad is holding up: 1 steady, 2 shaken (a man down or the speaker badly hurt), 3 broken (half the squad down).
+    int squadMood(size_t actor)const;
+    void stanceStruck(size_t actor,AiTargetRef attacker);
+    void setSquadStance(size_t actor,SquadStance stance);
+    void updateStances(float dt);
+    int nearbyTalker()const;
+    bool openDialogue();
+    void updateDialogue(const InputState& input,float dt);
+    void closeDialogue();
+    std::vector<int> dialogueReplies()const;
+    const DialogueNode* dialogueNode()const;
+    struct TalkState {int actor=-1;StateId node=0;int selected=0;float age=0;bool primed=false;InputState previous{};} m_talk;
     void requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal);
     bool aiDoorLocked(const World& world,int level,const Door& door)const;
     int hostilesRemaining(int level)const;

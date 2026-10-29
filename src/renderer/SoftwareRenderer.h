@@ -262,6 +262,7 @@ private:
     float m_frameMs=0;
     void drawSettings(const Game& game);
     void drawInventory(const Game& game);
+    void drawDialogue(const Game& game);
     void text(int x,int y,const char* s,std::uint32_t c,int scale=1);
     // Anti-aliased UI type (faces: 0 condensed semibold, 1 condensed light, 2 display, 3 mono) and alpha-blended fills.
     int uiText(int x,int y,const char* s,std::uint32_t c,int face,int size,float alpha=1,int tracking=0);

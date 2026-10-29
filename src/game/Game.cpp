@@ -361,6 +361,7 @@ void Game::update(const InputState& input, float dt) {
     bool escapePressed=input.escape&&!m_previousEscape;m_previousEscape=input.escape;
     bool inventoryPressed=input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
     if(m_inventoryOpen&&escapePressed){m_inventoryOpen=false;m_suppressFire=true;return;}
+    if(talking()&&escapePressed){closeDialogue();return;}
     if(escapePressed){
      if(m_paused&&m_menuFromTitle){
       if(m_menuPage==MenuPage::ConfirmLoad){m_menuPage=MenuPage::Load;m_menuSelection=m_pendingSlot;m_menuMessage.clear();}
@@ -375,6 +376,8 @@ void Game::update(const InputState& input, float dt) {
     if(m_paused){updateMenu(input);return;}
     if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;m_inventoryClick=input.fire;m_inventoryUse=input.use;return;}
     if(m_inventoryOpen){updateInventory(input);return;}
+    // A conversation keeps the world running; only the player stands and listens.
+    if(talking())updateDialogue(input,dt);
     if(flashlightPressed){
      // The switch, not the beam: a jammed torch still switches off and back on.
      if(hasFlashlight()){bool on=!state(stateId("flashlight_on"));setState(stateId("flashlight_on"),on?1:0);m_pickupNotice=!on?"FLASHLIGHT / OFF":flashlightJam()>=FlashlightJamTime?"FLASHLIGHT / NO POWER":"FLASHLIGHT / ON";}
@@ -408,10 +411,14 @@ void Game::update(const InputState& input, float dt) {
         // A locker's choreography holds the controls until the camera lands
         // on the committed pose, so the path always ends where the player is.
         {perf::Scope profile(perf::LockerDoors);updateLockerDoors(dt);}const bool choreographed=lockerViewLocked();
-        if(!choreographed){
+        if(!choreographed&&!talking()){
         m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
         m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -210.0f, 210.0f);
         }else{m_velocity={};m_suppressFire=true;}
+        // Talking, the view settles on the speaker's face.
+        if(talking()){const auto&npc=m_friendlyActors[size_t(m_talk.actor)];auto at=npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level)-m_player.pos;
+         float want=std::atan2(at.y,at.x),pitch=std::atan2(npc.pose.z+npc.track().scale*.9f-m_player.z-m_player.eye,std::max(.3f,length(at)))*140.f;float k=std::min(1.f,dt*6.f);
+         m_player.angle=wrapAngle(m_player.angle+std::remainder(want-m_player.angle,2*kPi)*k);m_player.pitch+=(std::clamp(pitch,-60.f,60.f)-m_player.pitch)*k;}
 
         {perf::Scope profile(perf::Mechanisms);updateMechanisms(dt);
         updateLift(dt);
@@ -419,7 +426,7 @@ void Game::update(const InputState& input, float dt) {
         auto movement=input;if(heldNpc()>=0||takedownActive()||draggingBody()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         // Shut in a locker the body stays where it is; only the head turns.
         // Crates already sliding and the reset lever carry on without it.
-        {perf::Scope profile(perf::Movement);if(hiddenLocker()<0&&!choreographed){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);}
+        {perf::Scope profile(perf::Movement);if(hiddenLocker()<0&&!choreographed&&!talking()){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);}
         {perf::Scope profile(perf::Stealth);updateExposure(dt);
         updateStealth(input,dt);}
         if(m_world.hasLift()){perf::Scope profile(perf::Movement);
@@ -470,7 +477,7 @@ void Game::update(const InputState& input, float dt) {
         {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
         {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}
         updateEnemies(dt);
-        {perf::Scope profile(perf::Voices);updateNpcVoices(dt);}
+        {perf::Scope profile(perf::Voices);updateStances(dt);updateNpcVoices(dt);}
         {perf::Scope profile(perf::Pickups);updatePickups();}
 
         // Campaign completion is explicit through scripted content. Reaching the

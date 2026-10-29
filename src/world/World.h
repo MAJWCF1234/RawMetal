@@ -240,6 +240,8 @@ struct AuthoredMapData {
     std::vector<TimedSequence> timedSequences;
     std::vector<ActorTrack> actorTracks;
     std::vector<SequenceCue> sequenceCues;
+    // Conversations the actors here open with E (ActorTrack::talk).
+    std::vector<DialogueNode> dialogue;
     std::vector<ScriptEvent> scriptEvents;
     std::vector<ObjectiveText> objectiveTexts;
     std::vector<AuthoredNavHint> navHints;

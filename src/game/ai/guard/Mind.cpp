@@ -82,19 +82,19 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  float eye=pose.z+friendlyHullHeight(actor,track)*.85f;auto previous=guardTarget(actor);
  bool freshHit=(track.damageState&&state(track.damageState)>get("guard_damage"))||get("hit_source");
  Vec2 playerLocal=m_player.pos+chunkOffset(m_level)-globalOrigin;
- bool nearThreat=(factionsHostile(actorFaction(track),AiFaction::Player)&&lengthSq(playerLocal-pose.position)<3.f*3.f&&std::fabs(m_player.z-pose.z)<track.scale)||(previous.valid()&&lengthSq(previous.position-pose.position)<3.f*3.f);
+ bool nearThreat=(factionsHostile(npcFaction(track),AiFaction::Player)&&lengthSq(playerLocal-pose.position)<3.f*3.f&&std::fabs(m_player.z-pose.z)<track.scale)||(previous.valid()&&lengthSq(previous.position-pose.position)<3.f*3.f);
  if(!nearThreat)for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();
-  if(i==actor||!t.health||npcIncapacitated(i)||(t.deadState&&state(t.deadState))||!factionsHostile(actorFaction(track),actorFaction(t)))continue;
+  if(i==actor||!t.health||npcIncapacitated(i)||(t.deadState&&state(t.deadState))||!factionsHostile(npcFaction(track),npcFaction(t)))continue;
   if(lengthSq(other.pose.position+chunkOffset(other.level)-globalOrigin-pose.position)<9.f&&std::fabs(other.pose.z-pose.z)<track.scale){nearThreat=true;break;}
  }
- if(!nearThreat&&factionsHostile(actorFaction(track),AiFaction::Creature))for(int other=0;other<chunkCount()&&!nearThreat;++other)if(chunkResident(other)){
+ if(!nearThreat&&factionsHostile(npcFaction(track),AiFaction::Creature))for(int other=0;other<chunkCount()&&!nearThreat;++other)if(chunkResident(other)){
   const auto&enemies=other==m_level?m_enemies:m_chunks[other].enemies;auto offset=chunkOffset(other)-globalOrigin;
   for(const auto&enemy:enemies)if(enemy.alive&&lengthSq(enemy.pos+offset-pose.position)<9.f&&std::fabs(enemy.bodyBottom()-pose.z)<track.scale){nearThreat=true;break;}
  }
  bool noiseWake=false;
  for(const auto&noise:stimuli){
   if(noise.npc==int(actor)||!(noise.radius>0)||!(noise.gain>0))continue;
-  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&actorFaction(m_friendlyActors[size_t(noise.npc)].track())==actorFaction(track))continue;
+  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&npcFaction(m_friendlyActors[size_t(noise.npc)].track())==npcFaction(track))continue;
   float dz=noise.z-eye;if(lengthSq(noise.source-observer)+dz*dz<noise.radius*noise.radius){noiseWake=true;break;}
  }
  auto clock=[&](const char*wait,const char*age,const char*ready,int period,bool wake,int lane){
@@ -149,7 +149,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  for(const auto&noise:stimuli){
   if(!std::isfinite(noise.radius)||noise.radius<=0||!std::isfinite(noise.gain)||noise.gain<=0||!std::isfinite(noise.source.x)||!std::isfinite(noise.source.y)||!std::isfinite(noise.z))continue;
   float height=noise.z-eye;if(lengthSq(noise.source-observer)+height*height>=noise.radius*noise.radius||noise.npc==int(actor))continue;
-  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&actorFaction(m_friendlyActors[size_t(noise.npc)].track())==actorFaction(track))continue;
+  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&npcFaction(m_friendlyActors[size_t(noise.npc)].track())==npcFaction(track))continue;
   float strength=aiSoundStrength(observer,eye,noise.source,noise.z,noise.radius,noise.gain,noise.loud,soundRayClear(observer,eye,noise.source,noise.z));
   if(strength<=0)continue;audible|=noise.categories&15u;
   if((noise.categories&soundMask)&&strength>strongest){strongest=strength;heard=&noise;}
@@ -164,7 +164,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   Vec2 facing{std::sin(pose.yaw),std::cos(pose.yaw)};
   for(size_t i=0;i<m_friendlyActors.size();++i){
    if(i==actor)continue;const auto&buddy=m_friendlyActors[i];const auto&bt=buddy.track();
-   if(bt.ai.mode!=ActorAiMode::Guard||actorFaction(bt)!=actorFaction(track)||!chunkResident(buddy.level))continue;
+   if(bt.ai.mode!=ActorAiMode::Guard||npcFaction(bt)!=npcFaction(track)||!chunkResident(buddy.level))continue;
    if(config.squad&&bt.ai.squad&&bt.ai.squad!=config.squad)continue;
    // A man shut in a locker is out of sight until someone opens it.
    bool down=npcIncapacitated(i)||buddy.pose.clip==4||(bt.deadState&&state(bt.deadState));if(!down||npcStowed(i))continue;
@@ -232,7 +232,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   put("guard_under_fire",1500);auto attacker=guardAttacker(actor);
   // Fire from a squadmate or an ally of its own faction (a stray grenade, a
   // crossfire) is investigated, not answered; anyone else who hurts it is.
-  if(attacker.valid()&&attacker.kind==ShotKind::Npc&&size_t(attacker.index)<m_friendlyActors.size()){const auto&other=m_friendlyActors[size_t(attacker.index)].track();auto faction=actorFaction(track);
+  if(attacker.valid()&&attacker.kind==ShotKind::Npc&&size_t(attacker.index)<m_friendlyActors.size()){const auto&other=m_friendlyActors[size_t(attacker.index)].track();auto faction=npcFaction(track);
    bool squadmate=track.ai.squad&&other.ai.squad==track.ai.squad,ally=attacker.faction==faction&&faction!=AiFaction::Neutral&&faction!=AiFaction::Unspecified;
    if(squadmate||ally)attacker={};}
   if(attacker.valid()){target=attacker;rememberGuardTarget(actor,attacker);remember(attacker.position+globalOrigin,attacker.feet);confirmed=true;recognition=config.recognitionMs;visible=guardCanSee(actor,pose,attacker);mode=visible?GuardState::Alert:GuardState::Investigate;}
@@ -384,6 +384,8 @@ void Game::guardBaseIntent(int level,size_t actor,const ActorTrack&track,ActorPo
     float want=base+std::sin(t*1.1f)*.6f*std::min(1.f,t*.8f);pose.yaw+=std::clamp(std::remainder(want-pose.yaw,2*kPi),-2.2f*dt,2.2f*dt);}
    if(pause==0){point=(point+1)%int(config.patrol.size());put("guard_point",point);put("guard_arrived",0);goal=config.patrol[size_t(point)].position+home;goalZ=config.patrol[size_t(point)].z;}
   }wantsMove=(!arrived||!get("guard_arrived"))&&!get("guard_ear_ms"); // stopped dead by a noise, for its beat
+  // Spoken to: he stops where he is and turns to the player until it is over.
+  if(get("talking")){auto at=m_player.pos+chunkOffset(m_level)-globalOrigin-pose.position;pose.yaw+=std::clamp(std::remainder(std::atan2(at.x,at.y)-pose.yaw,2*kPi),-4.f*dt,4.f*dt);wantsMove=false;}
   if(wantsMove)guardRoute(level,actor,goal+globalOrigin,goalZ,ms,goal,goalZ);
  }
  if(mode==GuardState::Search||mode==GuardState::Suspicious){put("guard_route_next",0);put("guard_route_wait",0);}

@@ -17,7 +17,12 @@
   "Witness",
   "CheckLockers",
   "Found",
-  "GiveUp"
+  "GiveUp",
+  "Warn",
+  "Betrayed",
+  "Greet",
+  "Plead",
+  "Talk"
  ],
  "clips": [
   {

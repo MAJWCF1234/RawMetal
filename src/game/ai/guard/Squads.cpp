@@ -9,9 +9,9 @@ StateId squadCautionKey(AiFaction faction,StateId squad){struct Slot{AiFaction f
 }
 AiTarget Game::guardSquadReport(size_t actor)const{
  if(npcIncapacitated(actor))return {};
- const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;if(!c.squad)return {};auto faction=actorFaction(npc.track());AiTarget report;float best=1e9f;auto origin=chunkOffset(npc.level);
+ const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;if(!c.squad)return {};auto faction=npcFaction(npc.track());AiTarget report;float best=1e9f;auto origin=chunkOffset(npc.level);
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&source=m_friendlyActors[i];const auto&t=source.track();
-  if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||t.ai.squad!=c.squad||actorFaction(t)!=faction||!chunkResident(source.level)||!autonomousActor(t)||source.pose.clip==4||(t.deadState&&state(t.deadState))||guardState(i)!=GuardState::Alert||!state(friendlyKey(i,"guard_seen")))continue;
+  if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||t.ai.squad!=c.squad||npcFaction(t)!=faction||!chunkResident(source.level)||!autonomousActor(t)||source.pose.clip==4||(t.deadState&&state(t.deadState))||guardState(i)!=GuardState::Alert||!state(friendlyKey(i,"guard_seen")))continue;
   // A sighting reaches the squad over the radio, which takes a moment; once
   // his call has landed he stays on the net for the rest of the hunt.
   if(state(friendlyKey(i,"guard_call"))!=CallSighting||state(friendlyKey(i,"guard_radio"))<RadioCallMs)continue;
@@ -24,9 +24,9 @@ bool Game::guardFireSlot(size_t actor)const{return (guardTaskAllows(actor,GuardT
 int Game::guardCoveringPeer(size_t actor)const{
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return 0;const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto target=guardTarget(actor);
  bool anchor=t.ai.role==GuardSquadRole::Heavy||t.ai.role==GuardSquadRole::Sharpshooter||(t.ai.role==GuardSquadRole::Default&&guardSuppressionEnabled(t.ai)&&!guardFlankSide(actor));
- if(!anchor||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!state(friendlyKey(actor,"guard_confirmed"))||!state(friendlyKey(actor,"guard_memory")))return 0;
- auto faction=actorFaction(t);auto origin=chunkOffset(npc.level);int chosen=0;float nearest=18.f*18.f;
- auto livingPeer=[&](size_t peer){const auto&other=m_friendlyActors[peer];const auto&c=other.track();return !npcIncapacitated(peer)&&c.ai.mode==ActorAiMode::Guard&&c.ai.squad==t.ai.squad&&actorFaction(c)==faction&&chunkResident(other.level)&&autonomousActor(c)&&other.pose.clip!=4&&(!c.deadState||!state(c.deadState));};
+ if(!anchor||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(npcFaction(t),target.faction)||!state(friendlyKey(actor,"guard_confirmed"))||!state(friendlyKey(actor,"guard_memory")))return 0;
+ auto faction=npcFaction(t);auto origin=chunkOffset(npc.level);int chosen=0;float nearest=18.f*18.f;
+ auto livingPeer=[&](size_t peer){const auto&other=m_friendlyActors[peer];const auto&c=other.track();return !npcIncapacitated(peer)&&c.ai.mode==ActorAiMode::Guard&&c.ai.squad==t.ai.squad&&npcFaction(c)==faction&&chunkResident(other.level)&&autonomousActor(c)&&other.pose.clip!=4&&(!c.deadState||!state(c.deadState));};
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor||!livingPeer(i))continue;const auto&other=m_friendlyActors[i];const auto&c=other.track();auto get=[&](const char*f){return state(friendlyKey(i,f));};
   auto delta=other.pose.position+chunkOffset(other.level)-origin-npc.pose.position;float height=other.pose.z-npc.pose.z,distance=lengthSq(delta)+height*height;if(distance>nearest||get("guard_danger_ms"))continue;
   auto selected=guardTarget(i);if(selected.valid()&&(selected.kind!=target.kind||selected.index!=target.index||(selected.kind!=ShotKind::Npc&&selected.level!=target.level)))continue;
@@ -46,10 +46,10 @@ int Game::guardCoveringPeer(size_t actor)const{
 bool Game::guardSuppressionPoint(size_t actor,Point3& point)const{
  if(npcIncapacitated(actor))return false;
  const auto&npc=m_friendlyActors[actor];const auto&t=npc.track();auto get=[&](const char*f){return state(friendlyKey(actor,f));};auto target=guardTarget(actor);
- if(!guardSuppressionEnabled(t.ai)||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(actorFaction(t),target.faction)||!get("guard_confirmed")||!get("guard_memory")||!get("weapon_target")||get("guard_seen")||get("guard_suppress_ms")<=0||guardFlankSide(actor)!=0||guardCanSee(actor,npc.pose,target))return false;
- bool flank=guardCoveringPeer(actor)!=0;auto faction=actorFaction(t);
+ if(!guardSuppressionEnabled(t.ai)||!t.ai.squad||!t.ai.armed||!autonomousActor(t)||!chunkResident(npc.level)||npc.pose.clip==4||(t.deadState&&state(t.deadState))||!target.valid()||!factionsHostile(npcFaction(t),target.faction)||!get("guard_confirmed")||!get("guard_memory")||!get("weapon_target")||get("guard_seen")||get("guard_suppress_ms")<=0||guardFlankSide(actor)!=0||guardCanSee(actor,npc.pose,target))return false;
+ bool flank=guardCoveringPeer(actor)!=0;auto faction=npcFaction(t);
  for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];const auto&c=other.track();
-  if(npcIncapacitated(i)||c.ai.mode!=ActorAiMode::Guard||!c.ai.armed||c.ai.squad!=t.ai.squad||actorFaction(c)!=faction||!chunkResident(other.level)||!autonomousActor(c)||other.pose.clip==4||(c.deadState&&state(c.deadState))||!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")))continue;
+  if(npcIncapacitated(i)||c.ai.mode!=ActorAiMode::Guard||!c.ai.armed||c.ai.squad!=t.ai.squad||npcFaction(c)!=faction||!chunkResident(other.level)||!autonomousActor(c)||other.pose.clip==4||(c.deadState&&state(c.deadState))||!guardFlankSide(i)||state(friendlyKey(i,"guard_flank_done")))continue;
   auto selected=guardTarget(i);if(selected.kind==target.kind&&selected.index==target.index&&selected.level==target.level){flank=true;break;}
  }
  if(!flank)return false;
@@ -95,14 +95,14 @@ int Game::guardFlankSide(size_t actor)const{
  const auto&npc=m_friendlyActors[actor];if(!npc.track().ai.squad)return 0;auto target=guardTarget(actor);if(!target.valid())return 0;
  if(npc.track().ai.role!=GuardSquadRole::Default){if(!guardRoleProfile(npc.track().ai.role).flanks)return 0;return npc.track().ai.role==GuardSquadRole::Rusher?1:-1;}
  int rank=0,count=0;
- for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||!t.ai.armed||t.ai.squad!=npc.track().ai.squad||actorFaction(t)!=actorFaction(npc.track())||!autonomousActor(t)||other.pose.clip==4||(t.deadState&&state(t.deadState))||!chunkResident(other.level))continue;
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();if(npcIncapacitated(i)||t.ai.mode!=ActorAiMode::Guard||!t.ai.armed||t.ai.squad!=npc.track().ai.squad||npcFaction(t)!=npcFaction(npc.track())||!autonomousActor(t)||other.pose.clip==4||(t.deadState&&state(t.deadState))||!chunkResident(other.level))continue;
   auto selected=guardTarget(i);if(selected.kind!=target.kind||selected.index!=target.index||selected.level!=target.level)continue;auto delta=other.pose.position+chunkOffset(other.level)-chunkOffset(npc.level)-npc.pose.position;if(lengthSq(delta)>18*18)continue;if(i<actor)++rank;++count;
  }return count>1?(rank%3==1?-1:rank%3==2?1:0):0;
 }
 bool Game::guardPositionReserved(size_t actor,Vec2 position,float feet)const{
  if(npcIncapacitated(actor))return false;
  const auto&npc=m_friendlyActors[actor];if(!npc.track().ai.squad)return false;auto origin=chunkOffset(npc.level);
- for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];if(npcIncapacitated(i)||!chunkResident(other.level)||!autonomousActor(other.track())||other.pose.clip==4||(other.track().deadState&&state(other.track().deadState))||other.track().ai.squad!=npc.track().ai.squad||actorFaction(other.track())!=actorFaction(npc.track()))continue;
+ for(size_t i=0;i<m_friendlyActors.size();++i){if(i==actor)continue;const auto&other=m_friendlyActors[i];if(npcIncapacitated(i)||!chunkResident(other.level)||!autonomousActor(other.track())||other.pose.clip==4||(other.track().deadState&&state(other.track().deadState))||other.track().ai.squad!=npc.track().ai.squad||npcFaction(other.track())!=npcFaction(npc.track()))continue;
   auto current=other.pose.position+chunkOffset(other.level)-origin;if(std::fabs(feet-other.pose.z)<npc.track().scale&&lengthSq(current-position)<.7f*.7f)return true;
   if(state(friendlyKey(i,"guard_danger_ms"))&&state(friendlyKey(i,"guard_danger_goal"))){Vec2 escape{state(friendlyKey(i,"guard_danger_goal_x"))*.001f-origin.x,state(friendlyKey(i,"guard_danger_goal_y"))*.001f-origin.y};if(std::fabs(feet-state(friendlyKey(i,"guard_danger_goal_z"))*.001f)<npc.track().scale&&lengthSq(escape-position)<.7f*.7f)return true;}
   if(!state(friendlyKey(i,"guard_cover")))continue;
@@ -144,7 +144,7 @@ bool Game::guardAlarmActor(size_t i)const{
 // (by his own eyes or a squadmate's call; blaming a body is not a sighting):
 // the search he has left, plus, still on his way, the walk to the last-known spot.
 int Game::guardHuntLeft(size_t i)const{
- if(i>=m_friendlyActors.size()||!guardAlarmActor(i)||!factionsHostile(actorFaction(m_friendlyActors[i].track()),AiFaction::Player))return 0;
+ if(i>=m_friendlyActors.size()||!guardAlarmActor(i)||!factionsHostile(npcFaction(m_friendlyActors[i].track()),AiFaction::Player))return 0;
  auto get=[&](const char*f){return state(friendlyKey(i,f));};auto mode=guardState(i);
  if((mode!=GuardState::Investigate&&mode!=GuardState::Search)||!get("guard_confirmed")||get("guard_target_kind")!=int(ShotKind::Player)||get("guard_call")==CallBody)return 0;
  if(mode==GuardState::Search)return std::max(1,get("guard_search"));
@@ -161,7 +161,7 @@ int Game::guardAlarm()const{
   if(guardState(i)==GuardState::Alert&&guardTarget(i).kind==ShotKind::Player)return AlarmAlert;
   hunt=hunt||guardHuntLeft(i)>0;
   // CAUTION is a squad hostile to the player with a man in this chunk, or one who was just hunting them.
-  if((npc.level==m_level||state(friendlyKey(i,"guard_evaded")))&&factionsHostile(actorFaction(t),AiFaction::Player))caution=std::max(caution,state(guardCautionKey(i)));
+  if((npc.level==m_level||state(friendlyKey(i,"guard_evaded")))&&factionsHostile(npcFaction(t),AiFaction::Player))caution=std::max(caution,state(guardCautionKey(i)));
  }
  // Out of sight but still hunted: ALERT a moment longer, then EVASION.
  if(hunt)return m_alertLatchMs>0?AlarmAlert:AlarmEvasion;

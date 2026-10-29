@@ -1206,6 +1206,25 @@ void SoftwareRenderer::drawSettings(const Game& game){
  uiText(x+16,y+MenuLayout::Height-22,"CLICK / ARROWS / ENTER",dim,0,10,1,1);
  const char* back=settingsPage?(game.menuFromTitle()?"ESC  TITLE":"ESC  RESUME"):"ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
 }
+// A conversation: the speaker's line over the bottom of the view, the
+// replies numbered under it (Game::DialogueFirstReplyY is where the mouse
+// finds them). The world stays visible above; the panel is the only frame.
+void SoftwareRenderer::drawDialogue(const Game& game){
+ auto view=game.dialogueView();if(!view)return;
+ const auto paper=rgb(236,228,214),amber=rgb(214,32,26),muted=rgb(146,138,128),bright=rgb(255,206,120);
+ // Laid out in DisplayWidth x DisplayHeight units and scaled to this HUD, so the mouse rows match.
+ const float sx=m_width/float(DisplayWidth),sy=m_height/float(DisplayHeight);auto X=[&](int v){return int(v*sx);};auto Y=[&](int v){return int(v*sy);};
+ const int x=X(40),y=Y(Game::DialoguePanelY),w=m_width-2*X(40),h=m_height-y-Y(4);
+ fill(x,y,w,h,rgb(6,8,7),.72f);uiPanel(x,y,w,h);fill(x,y,w,2,amber,1);
+ label(x+X(10),y+Y(9),view->speaker.c_str(),amber);
+ // The line types itself out, quickly: about 90 characters a second.
+ std::string said=view->line.substr(0,std::min(view->line.size(),size_t(view->age*90.f)+1));
+ int row=y+Y(22);for(const auto&line:wrapUiText(said,size_t((w-X(20))/6),2)){label(x+X(10),row,line.c_str(),paper);row+=Y(12);}
+ for(size_t i=0;i<view->replies.size();++i){int ry=Y(Game::DialogueFirstReplyY+int(i)*Game::DialogueReplyRowHeight);bool on=int(i)==view->selected;
+  if(on)fill(x+X(4),ry-Y(3),w-X(8),Y(Game::DialogueReplyRowHeight)-1,rgb(40,22,18),.85f);
+  std::string text=std::to_string(i+1)+". "+wrapUiText(view->replies[i],size_t((w-X(30))/6),1).front();
+  label(x+X(14),ry+Y(2),text.c_str(),on?bright:muted);}
+}
 void SoftwareRenderer::drawInventory(const Game& game){
  if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.22f);
  const auto paper=rgb(236,228,214),amber=rgb(214,32,26),muted=rgb(146,138,128);
@@ -1374,7 +1393,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
- if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);}if(game.loading())drawLoading(game);}
+ if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
  if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xfff4f4f0u);rect(x-1,y-3,3,7,0xfff4f4f0u);}}
  auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}

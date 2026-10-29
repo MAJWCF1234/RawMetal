@@ -342,6 +342,11 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   }
   if(track.health<0||track.health>100000||(track.health&&(!track.damageState||!track.deadState)))throw std::runtime_error("Invalid actor health states");
  }
+ // Every conversation an actor opens and every reply's next line is in this map.
+ auto node=[&](StateId id){return std::any_of(map->dialogue.begin(),map->dialogue.end(),[&](const DialogueNode&n){return n.id==id;});};
+ for(const auto& track:map->actorTracks)if(track.talk&&!node(track.talk))throw std::runtime_error("Actor opens a dialogue node this map does not have");
+ for(const auto& n:map->dialogue){if(n.line.empty()||n.replies.size()>4)throw std::runtime_error("Dialogue node needs a line and at most four replies");
+  for(const auto& reply:n.replies)if(reply.text.empty()||(reply.next&&!node(reply.next)))throw std::runtime_error("Dialogue reply has no text or leads to a missing node");}
  for(const auto& cue:map->sequenceCues)if(!timerExists(cue.timerState)||cue.timeMs<0||int(cue.sound)<0||int(cue.sound)>=int(Sound::Count)||cue.gain<0||cue.pitch<=0||!std::isfinite(cue.gain)||!std::isfinite(cue.pitch)||std::isinf(cue.z))throw std::runtime_error("Invalid actor sequence cue");
  for(const auto& layer:map->layers){
   if(!std::isfinite(layer.elevation)||!std::isfinite(layer.thickness)||layer.thickness<0)throw std::runtime_error("Invalid authored layer elevation or thickness");

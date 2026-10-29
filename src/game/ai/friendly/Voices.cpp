@@ -28,7 +28,8 @@ int voicePriority(NpcVoiceCue cue){
  if(cue==NpcVoiceCue::Down||cue==NpcVoiceCue::Found)return 3;
  // Locker events are called once, as they happen: another guard's chatter on
  // the channel must not drop them, or the player hides on a lie of silence.
- if(cue==NpcVoiceCue::Hurt||cue==NpcVoiceCue::AllyDown||cue==NpcVoiceCue::Witness||cue==NpcVoiceCue::CheckLockers)return 2;
+ // A truce warned or broken is the turn of the scene: nothing may talk over it.
+ if(cue==NpcVoiceCue::Hurt||cue==NpcVoiceCue::AllyDown||cue==NpcVoiceCue::Witness||cue==NpcVoiceCue::CheckLockers||cue==NpcVoiceCue::Warn||cue==NpcVoiceCue::Betrayed)return 2;
  if(cue==NpcVoiceCue::Patrol)return 0;
  return 1;
 }
@@ -78,7 +79,12 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  // several reports; the elected speaker must still be allowed to flush.
  if(StateId cooldown=cueCooldownId(cue);cooldown&&state(cooldown)>0&&cue!=NpcVoiceCue::Hurt&&cue!=NpcVoiceCue::Down&&cue!=NpcVoiceCue::AllyDown)return false;
  if(cue==NpcVoiceCue::Alert&&get("voice_cd_alert")>0)return false;
- int choices[4],count=0;for(size_t i=0;i<NpcVoiceClips.size();++i)if(NpcVoiceClips[i].role==role&&NpcVoiceClips[i].cue==cue&&count<4)choices[count++]=int(i);
+ // Takes recorded for a stance (1 hostile, 2 truce, 3 ally) or a mood (1 steady, 2 shaken,
+ // 3 broken) are only said in it; the closest match wins over the untagged ones.
+ const auto stance=npcStance(track);const int voiceStance=stance==SquadStance::Truce?2:stance==SquadStance::Ally?3:factionsHostile(npcFaction(track),AiFaction::Player)?1:0,mood=squadMood(actor);
+ int choices[4],count=0,best=-1;for(size_t i=0;i<NpcVoiceClips.size();++i){const auto&clip=NpcVoiceClips[i];
+  if(clip.role!=role||clip.cue!=cue||*clip.line||(clip.stance&&clip.stance!=voiceStance)||(clip.mood&&clip.mood!=mood))continue;
+  int score=(clip.stance?2:0)+(clip.mood?1:0);if(score<best)continue;if(score>best){best=score;count=0;}if(count<4)choices[count++]=int(i);}
  if(!count)return false;
  int variant=std::max(0,get("voice_variant"));int clip=choices[variant%count];put("voice_variant",(variant+1)%10000);
  // At a locker only the takes that match what he does: a plain "saw that";
@@ -158,6 +164,13 @@ void Game::updateNpcVoices(float dt){
    // Seed current mode quietly. Spawning already-alerted squads must not roll-call.
    if(track.ai.mode==ActorAiMode::Escort&&get("engaged"))pending(get("hold")?NpcVoiceCue::Wait:NpcVoiceCue::Follow);
   }
+  // A squad on a truce or allied with the player greets him as he walks up,
+  // at most once a minute; a hostile squad half gone pleads or bargains in a fight.
+  for(const char*field:{"voice_greet_cd","voice_plead_cd"})put(field,std::max(0,get(field)-ms));
+  {const auto stance=npcStance(track);const float near=lengthSq(npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level)-m_player.pos);
+   if((stance==SquadStance::Truce||stance==SquadStance::Ally)&&near<4.f*4.f&&!get("voice_greet_cd")&&!talking()&&!get("voice_pending"))put("voice_greet_cd",npcVoice(actor,NpcVoiceCue::Greet)?60000:5000);
+   if(track.ai.mode==ActorAiMode::Guard&&track.ai.squad&&near<14.f*14.f&&!get("voice_plead_cd")&&guardState(actor)==GuardState::Alert&&factionsHostile(npcFaction(track),AiFaction::Player)&&squadMood(actor)==3)
+    put("voice_plead_cd",npcVoice(actor,NpcVoiceCue::Plead)?15000:5000);}
   if(track.ai.mode==ActorAiMode::Guard){
    int mode=int(guardState(actor));int previous=get("voice_mode");
    // What this hunt was after, kept past the frame the mind forgets it: 1 a

@@ -285,6 +285,30 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    // ACTOR_VOICE|map|actor|role: a voice bank role (1-10) instead of the visual's default.
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_VOICE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),voice=integer(f,3,"voice role");
    if(index<0||index>=int(map->actorTracks.size())||voice<1||voice>10)throw std::runtime_error("invalid actor voice");map->actorTracks[size_t(index)].voice=voice;
+  }else if(tag=="ACTOR_STANCE"){
+   // ACTOR_STANCE|map|actor|state: the state holding this squad's stance (0 declared, 1 hostile, 2 truce, 3 ally).
+   if(f.size()!=4||f[3].empty())throw std::runtime_error("malformed ACTOR_STANCE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
+   if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("stance has no actor");map->actorTracks[size_t(index)].ai.stance=stateId(decode(f[3]));
+  }else if(tag=="ACTOR_TALK"){
+   // ACTOR_TALK|map|actor|node: the dialogue node E opens on this actor.
+   if(f.size()!=4||f[3].empty())throw std::runtime_error("malformed ACTOR_TALK record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
+   if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("dialogue has no actor");map->actorTracks[size_t(index)].talk=stateId(decode(f[3]));
+  }else if(tag=="DIALOGUE"){
+   // DIALOGUE|map|node|speaker|line|voice
+   if(f.size()!=6||f[2].empty())throw std::runtime_error("malformed DIALOGUE record");auto map=mapAt(maps,f);
+   map->dialogue.push_back({stateId(decode(f[2])),decode(f[3]),decode(f[4]),decode(f[5]),{}});
+  }else if(tag=="DIALOGUE_REPLY"){
+   // DIALOGUE_REPLY|map|node|text|next|require|requireValue|hide|sets|stance
+   // sets: state=value pairs joined by ';'. next and stance may be empty (end; no change).
+   if(f.size()!=10||f[2].empty()||f[3].empty())throw std::runtime_error("malformed DIALOGUE_REPLY record");auto map=mapAt(maps,f);StateId node=stateId(decode(f[2]));
+   auto owner=std::find_if(map->dialogue.begin(),map->dialogue.end(),[&](const DialogueNode&n){return n.id==node;});
+   if(owner==map->dialogue.end())throw std::runtime_error("dialogue reply before its node");
+   DialogueReply reply;reply.text=decode(f[3]);reply.next=f[4].empty()?0:stateId(decode(f[4]));reply.require=f[5].empty()?0:stateId(decode(f[5]));
+   reply.requireValue=integer(f,6,"reply require value");reply.hide=f[7].empty()?0:stateId(decode(f[7]));
+   std::string sets=decode(f[8]);for(size_t at=0;at<sets.size();){size_t end=sets.find(';',at);if(end==std::string::npos)end=sets.size();auto pair=sets.substr(at,end-at);at=end+1;if(pair.empty())continue;
+    auto eq=pair.find('=');if(eq==std::string::npos||eq==0)throw std::runtime_error("dialogue reply sets need state=value");reply.sets.push_back({stateId(pair.substr(0,eq)),std::stoi(pair.substr(eq+1))});}
+   reply.stance=f[9].empty()?-1:integer(f,9,"reply stance");if(reply.stance<-1||reply.stance>3)throw std::runtime_error("invalid reply stance");
+   owner->replies.push_back(std::move(reply));
   }else if(tag=="ACTOR_ROLE"){
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_ROLE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),role=integer(f,3,"squad role");if(index<0||index>=int(map->actorTracks.size())||role<0||role>6)throw std::runtime_error("invalid guard role");map->actorTracks[size_t(index)].ai.role=GuardSquadRole(role);guardTargets.emplace_back(integer(f,1,"map index"),index);
   }else if(tag=="ACTOR_TACTICS"){

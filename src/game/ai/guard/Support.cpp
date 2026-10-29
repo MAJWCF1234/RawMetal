@@ -9,7 +9,7 @@ void Game::guardSupportIntent(int level,size_t actor,const ActorTrack&track,Acto
  put("support_cooldown",std::max(0,get("support_cooldown")-ms));
  auto origin=chunkOffset(level);int target=-1;float priority=-1;
  if(get("support_used")<guardRoleProfile(track.ai.role).treatments&&!get("support_cooldown"))for(size_t i=0;i<m_friendlyActors.size();++i){
-  const auto&patient=m_friendlyActors[i];const auto&t=patient.track();if(i==actor||npcIncapacitated(i)||!t.health||!chunkResident(patient.level)||!autonomousActor(t)||patient.pose.clip==4||state(t.deadState)||t.ai.squad!=track.ai.squad||actorFaction(t)!=actorFaction(track))continue;
+  const auto&patient=m_friendlyActors[i];const auto&t=patient.track();if(i==actor||npcIncapacitated(i)||!t.health||!chunkResident(patient.level)||!autonomousActor(t)||patient.pose.clip==4||state(t.deadState)||t.ai.squad!=track.ai.squad||npcFaction(t)!=npcFaction(track))continue;
   int damage=state(t.damageState);auto position=patient.pose.position+chunkOffset(patient.level)-origin;float distance=length(position-pose.position);if(damage<t.health*.50f||distance>12||std::fabs(patient.pose.z-pose.z)>.3f)continue;
   if(state(friendlyKey(i,"guard_danger_ms"))||state(friendlyKey(i,"schedule"))==int(GuardSchedule::Recovery))continue;
   if(t.ai.mode==ActorAiMode::Guard&&(state(friendlyKey(i,"guard_under_fire"))||state(friendlyKey(i,"hit_source"))||guardGrenadeExposed(i)||(get("schedule")!=int(GuardSchedule::None)&&damage>state(friendlyKey(i,"guard_damage")))))continue;

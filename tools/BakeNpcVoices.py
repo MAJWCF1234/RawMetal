@@ -169,10 +169,11 @@ def main():
     cues = catalog['cues']
     header = ['#pragma once', '#include <array>', 'namespace retro {',
               'enum class NpcVoiceCue {' + ','.join(cues) + '};',
-              'struct NpcVoiceClip {int role; NpcVoiceCue cue; float seconds;};',
+              'struct NpcVoiceClip {int role; NpcVoiceCue cue; float seconds; int stance=0; int mood=0; const char* line="";};',
               f'inline constexpr std::array<NpcVoiceClip,{len(results)}> NpcVoiceClips={{{{']
     for entry, (_, proof) in zip(catalog['clips'], results):
-        header.append(f' {{{entry["role"]},NpcVoiceCue::{entry["cue"]},{proof["seconds"]:.4f}f}},')
+        # stance (1 hostile, 2 truce, 3 ally), mood (1 steady, 2 shaken, 3 broken) and a dialogue line key are optional.
+        header.append(f' {{{entry["role"]},NpcVoiceCue::{entry["cue"]},{proof["seconds"]:.4f}f,{entry.get("stance",0)},{entry.get("mood",0)},"{entry.get("line","")}"}},')
     header += ['}};', '}']
     (ROOT / 'src/audio/NpcVoiceCatalog.h').write_text('\n'.join(header)+'\n')
     provenance = {'provider': 'ElevenLabs', 'model': MODEL, 'settings': SETTINGS,

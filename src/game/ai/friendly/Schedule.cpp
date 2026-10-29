@@ -11,7 +11,7 @@ void Game::runCivilianSchedule(size_t actor,int ms,unsigned conditions,bool want
  CivilianScheduleChoice choice;
  if(conditions&CivilianInFear){choice.schedule=CivilianSchedule::Flee;choice.work=CivilianTask::Escape;}
  else if(conditions&CivilianShouldFollow){choice.schedule=CivilianSchedule::Follow;choice.work=CivilianTask::Hold;}
- else if(get("hold")&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Escort){choice.schedule=CivilianSchedule::Hold;choice.work=CivilianTask::Hold;}
+ else if((get("hold")&&m_friendlyActors[actor].track().ai.mode==ActorAiMode::Escort)||get("talking")){choice.schedule=CivilianSchedule::Hold;choice.work=CivilianTask::Hold;}
  else{choice.schedule=CivilianSchedule::Idle;choice.work=CivilianTask::Hold;}
  auto desired=choice.schedule;auto work=choice.work;put("task_conditions",int(conditions));
  unsigned events=(conditions&~oldConditions)|(conditions&(CivilianInFear|CivilianHurt|CivilianShouldFollow));

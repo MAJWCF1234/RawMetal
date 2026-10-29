@@ -113,7 +113,7 @@ Game Game::killSquadInspection(int stage){
   bool reached=false,emitted=false;size_t shooter=g.npcActors().size();AiTarget hitTarget;float healthBefore=-1,healthAfter=-1;int spent=0;
   for(int frame=0;frame<600&&!g.dead();++frame){std::array<ShotBefore,6> before{};float elapsedBefore=g.elapsed();
    for(size_t role=0;role<members.size();++role){size_t actor=members[role];auto&shot=before[role];const auto&npc=g.npcActors()[actor];shot.target=g.guardTarget(actor);shot.health=targetHealth(shot.target);shot.rounds=g.state(g.friendlyKey(actor,"weapon_rounds"));
-    if(shot.target.valid()&&factionsHostile(actorFaction(npc.track()),shot.target.faction)&&g.state(g.friendlyKey(actor,"guard_seen"))&&g.state(g.friendlyKey(actor,"guard_confirmed"))){
+    if(shot.target.valid()&&factionsHostile(g.npcFaction(npc.track()),shot.target.faction)&&g.state(g.friendlyKey(actor,"guard_seen"))&&g.state(g.friendlyKey(actor,"guard_confirmed"))){
      Point3 aim{shot.target.position.x,shot.target.position.y,shot.target.feet+shot.target.height*.6f};shot.clear=g.guardShotMatches(actor,g.guardShot(actor,npc.pose,g.npcWeaponPoseAt(actor,npc.pose,aim,1)));}
    }
    g.update({},1.f/60);

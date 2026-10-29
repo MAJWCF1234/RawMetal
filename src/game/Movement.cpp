@@ -240,6 +240,8 @@ const char* Game::interactionHint()const{
  return nullptr;
 }
 void Game::updateInteraction(const InputState& input,float dt){
+ // E belongs to the conversation while one is open (updateDialogue).
+ if(talking()){m_previousUse=input.use;m_world.updateDoors(dt);return;}
  m_logTime=std::max(0.f,m_logTime-dt);
  // A computer stays up while its conversation is still arriving, and closes
  // when the player walks away from the desk.
@@ -278,7 +280,7 @@ void Game::updateInteraction(const InputState& input,float dt){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
   }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
-  if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!interactClutter()&&!commandFriendly())knockOnWall();
+  if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!interactClutter()&&!openDialogue()&&!commandFriendly())knockOnWall();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);
 }
