@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.2 - Furnished (2026-10-30)
+
+Chapter 1 is as you left it.
+
+Behind the great door, someone has been putting the rooms back the way they
+were on the night: the chairs where people sat, the paper where it fell, the
+pictures the company hung where its visitors waited. The door is still shut.
+You will see them when it opens.
+
+---
+
 ## v1.1.1 - Their own proportions (2026-10-30)
 
 Things in the plant were the right shape from one side only. The crate under
