@@ -4,6 +4,24 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.1 - Their own proportions (2026-10-30)
+
+Things in the plant were the right shape from one side only. The crate under
+the power house tanks was squashed flat, the switch cabinets there and in the
+machine hall were swollen, the mesh fences in the maintenance yard and on the
+perimeter were stretched, and the ladder in the water works was one flight
+pulled to twice its height, with its rungs a stride apart. Every prop in
+Chapter 1 now stands at the shape it was made in, from every side you can walk
+around, and the plant's own inspection will not let one stretch again.
+
+At the far end of the metro platform, the map board's steel backing sat in the
+same place as the map. Walk behind it and the map showed through the steel like
+a ghost. The backing now stands clear of the board.
+
+The great door at the bottom of the chapter is still shut. It will open.
+
+---
+
 ## v1.1.0 - The Ashfall Exclusion Zone (2026-10-29)
 
 Chapter 1 is as you left it. This update is for the Exclusion Zone, the open
