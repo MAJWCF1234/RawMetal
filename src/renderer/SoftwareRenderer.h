@@ -124,7 +124,9 @@ private:
     // GPU atlases are immutable after prepare/first submit; updateDynamic is
     // the explicit exception for dynamic colour pixels. Copies own a fresh
     // generation, while moves transfer it with the uploaded pixel allocation.
-    struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; TextureGeneration generation; };
+    struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; TextureGeneration generation;
+        // A dado band: drawn once over its first `band` metres above the floor, `above` over the rest of the face.
+        float band=0; const Texture* above=nullptr; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};Point3 surfaceNormal{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true,float reliefScale=.012f);
     static void deriveSurfaceNormal(Texture& texture,float strength);
@@ -201,12 +203,13 @@ private:
     // maps already use; the rest are the pack finishes below.
     struct SurfaceSet {const Texture* wall=nullptr;const Texture* floor=nullptr;const Texture* ceiling=nullptr;Vec2 wallRepeat{2,3};float floorRepeat=.5f,ceilingRepeat=.5f;};
     std::array<SurfaceSet,SurfaceCount> m_surfaceSets;
-    // Pack finishes (tools/library/surfaces.py, resources 2100-2124); the last
-    // two are structure materials 34 resonance growth and 35 crystal.
-    std::array<Texture,25> m_surfaceTextures;
+    // Pack finishes (tools/library/surfaces.py, resources 2100-2124 and 2150-2154):
+    // structure materials 34 resonance growth and 35 crystal, then the clinic
+    // paint, its three dado bands (materials 36-38) and ward curtain fabric (39).
+    std::array<Texture,30> m_surfaceTextures;
     static Texture loadSurfaceFinish(int index);
     const SurfaceSet* surfaceSet(int surface)const{return surface>=0&&surface<SurfaceCount?&m_surfaceSets[size_t(surface)]:nullptr;}
-    // Structure materials 26-29 and 31-35, or nullptr for every other material.
+    // Structure materials 26-29 and 31-39, or nullptr for every other material.
     const Texture* finishMaterial(int material)const;
     // Metres per repeat of a pack finish; {0,0} for any other texture.
     Vec2 finishRepeat(const Texture& texture)const;

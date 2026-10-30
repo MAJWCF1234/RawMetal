@@ -607,18 +607,33 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};
  const Texture& iron=m_ironTexture;Texture red{1,1,{0xffb84728u}};
  Texture cabWindow{1,1,{0xff30464bu}};cabWindow.glossStrength=.46f;
- auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
+ auto boxFaces=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
   // Architectural repeats are measured in metres, never stretched over a deck.
   // Pack finishes (surface sets, materials 26-35) repeat at their own scale on every map.
   const Vec2 finish=finishRepeat(texture);
-  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};quad(A,B,C,D,texture,intensity,finish.x>0?Vec2{length3(B-A)/finish.x,length3(D-A)/finish.y}:((w.campaign()&&w.level()>=3)||w.custom())?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};
+   // The band maps once from the floor (texture bottom) to the band's height.
+   if(texture.band>0){const float h=(b.z-a.z)/texture.band;if(std::fabs(D.z-A.z)>.001f){quad(A,B,C,D,texture,intensity,{length3(B-A)/finish.x,h},{0,1-h});return;}
+    quad(A,B,C,D,texture.above?*texture.above:texture,intensity,{length3(B-A)/2.f,length3(D-A)/2.f});return;}
+   quad(A,B,C,D,texture,intensity,finish.x>0?Vec2{length3(B-A)/finish.x,length3(D-A)/finish.y}:((w.campaign()&&w.level()>=3)||w.custom())?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
   if(m_staticGeometryBuild||eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
   if(m_staticGeometryBuild||eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
   if(m_staticGeometryBuild||eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
   if(m_staticGeometryBuild||eye.x>=b.x)face({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},light);
   if(m_staticGeometryBuild||eye.z>=b.z)face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},light*1.1f);
   if(m_staticGeometryBuild||eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.88f);
+ };
+ // A dado band stands on the floor: a box whose foot meets the floor beside it
+ // takes the band once up to its height and the paint above; a box raised off
+ // the floor (a header, a shelf) is all paint.
+ auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
+  if(texture.band<=0||!texture.above){boxFaces(a,b,texture,light);return;}
+  const Vec2 c{(a.x+b.x)*.5f,(a.y+b.y)*.5f};bool grounded=false;
+  for(Vec2 p:{Vec2{a.x-.3f,c.y},Vec2{b.x+.3f,c.y},Vec2{c.x,a.y-.3f},Vec2{c.x,b.y+.3f}})grounded|=std::fabs(w.floorHeight(p.x,p.y)-a.z)<.06f;
+  if(!grounded){boxFaces(a,b,*texture.above,light);return;}
+  if(b.z>a.z+texture.band){boxFaces({a.x,a.y,a.z+texture.band},b,*texture.above,light);b.z=a.z+texture.band;}
+  boxFaces(a,b,texture,light);
  };
  // Low-sided, capped pipes retain a cylindrical silhouette without dense meshes.
  static const auto cylinderRing=[](){std::array<Vec2,11> ring{};for(int i=0;i<10;++i){float angle=i*kTwoPi/10;ring[i]={std::cos(angle),std::sin(angle)};}ring[10]=ring[0];return ring;}();
@@ -934,7 +949,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }else{
    float roof=Z;Z=w.wallHeight(x,y);
    if(Z<roof){
-    if(wallFinish)finishQuad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},*wallFinish->wall,.8f,wallFinish->wallRepeat);else quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);
+    if(wallFinish)finishQuad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},wallFinish->wall->above?*wallFinish->wall->above:*wallFinish->wall,.8f,wallFinish->wall->above?finishRepeat(*wallFinish->wall->above):wallFinish->wallRepeat);else quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);
     if(!w.outdoors()){if(ceilingFinish)finishQuad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},*ceilingFinish->ceiling,.43f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});else quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
    }
    auto wall=[&](float ax,float ay,float bx,float by,float light){
@@ -942,7 +957,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     const auto&material=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
     float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
-    if(wallFinish)finishQuad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},*wallFinish->wall,1.f,wallFinish->wallRepeat);
+    if(wallFinish&&wallFinish->wall->band>0&&wallFinish->wall->above){
+     // A painted wall: the dado band once from the floor, the paint above it.
+     const auto& band=*wallFinish->wall;const float top=std::min(Z,wallBase+band.band),h=(top-wallBase)/band.band;
+     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,top},{ax,ay,top},band,1.f,{std::hypot(bx-ax,by-ay)/wallFinish->wallRepeat.x,h},{(dx!=0?ax:ay)*(dx<0||dy<0?-1.f:1.f)/wallFinish->wallRepeat.x,1-h});
+     if(Z>top)finishQuad({ax,ay,top},{bx,by,top},{bx,by,Z},{ax,ay,Z},*band.above,1.f,finishRepeat(*band.above));
+    }else if(wallFinish)finishQuad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},*wallFinish->wall,1.f,wallFinish->wallRepeat);
     else quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if(w.campaign()&&!w.authored()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
     (void)light;
@@ -1149,7 +1169,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(float roof=w.ceilingHeight(x,door.y);roof>headerTop+.05f){
    const auto&fill=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
    for(float face:{y,y+1.f}){
-    if(wallFinish)finishQuad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},*wallFinish->wall,.9f,wallFinish->wallRepeat);
+    if(wallFinish)finishQuad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},wallFinish->wall->above?*wallFinish->wall->above:*wallFinish->wall,.9f,wallFinish->wall->above?finishRepeat(*wallFinish->wall->above):wallFinish->wallRepeat);
     else quad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},fill,.9f,{half*.5f,(roof-headerTop)/3.f});
    }
    box({x-half,y,headerTop},{x+half,y+1.f,headerTop+.02f},m_metal,.8f);

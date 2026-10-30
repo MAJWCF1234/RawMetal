@@ -202,8 +202,10 @@ struct TerrainShape {
 // legacy choice by chunk index). Structure materials 26-29 and 31-35 are the
 // matching box finishes: 26 rock, 27 clinic tile, 28 lab panel, 29 corrugated
 // sheet, 31 brick, 32 mine timber, 33 ancient stone, 34 resonance growth,
-// 35 crystal (self-lit). Material 3, the wall finish, follows wallSurface.
-enum Surface:int {SurfaceDefault=-1,SurfaceConcrete,SurfacePressure,SurfaceBrick,SurfaceClinicTile,SurfaceLabPanel,SurfaceRock,SurfaceCorrugated,SurfaceOfficePlaster,SurfaceMineTimber,SurfaceStone,SurfaceCount};
+// 35 crystal (self-lit), 36-38 painted clinic walls with a teal, green or
+// maroon dado band at the floor, 39 ward curtain fabric. Material 3, the wall
+// finish, follows wallSurface.
+enum Surface:int {SurfaceDefault=-1,SurfaceConcrete,SurfacePressure,SurfaceBrick,SurfaceClinicTile,SurfaceLabPanel,SurfaceRock,SurfaceCorrugated,SurfaceOfficePlaster,SurfaceMineTimber,SurfaceStone,SurfacePaintedTeal,SurfacePaintedGreen,SurfacePaintedMaroon,SurfaceCount};
 // Where the lights are truly out: inside an active zone the light floor, haze
 // and exposure lift go to black, the flashlight dies (jamFlashlight) and the
 // muzzle flash is the only light. Active while (state==0 or its state equals

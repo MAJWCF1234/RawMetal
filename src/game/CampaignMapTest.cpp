@@ -234,13 +234,13 @@ bool Game::testCampaignMaps(){
   check(down&&g.state(stateId("md_triage_rise"))>0&&g.world().actorPose(1).clip==5,"Triage: the patient sits up behind the player who turns to the nurse");}
  // Surface sets: every Surface value and structure finish 26-35 resolves to
  // loaded textures, SURFACE records parse, and invalid sets are rejected.
- {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-35 resolves to loaded textures");out<<report;
+ {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-39 resolves to loaded textures");out<<report;
   std::string records="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Surface test|0\nMAP|0|Room|0|0|6.5|6.5|0|0|8|0.3||0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
   for(int y=0;y<24;++y)records+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";
   auto parse=[&](const char* surface){try{return loadCustomCampaignText(records+surface+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","surface-test.txt");}catch(const std::exception&){return std::shared_ptr<const CustomCampaign>{};}};
   auto rock=parse("SURFACE|0|5|8|5\n"),plain=parse("");
   check(rock&&rock->maps[0]->wallSurface==SurfaceRock&&rock->maps[0]->floorSurface==SurfaceMineTimber&&World(0,rock->maps[0]).ceilingSurface()==SurfaceRock,"SURFACE records set a custom map's wall, floor and ceiling finish");
-  check(plain&&World(0,plain->maps[0]).wallSurface()==SurfaceDefault&&!parse("SURFACE|0|10|0|0\n")&&!parse("SURFACE|0|-2|0|0\n")&&!parse("SURFACE|0|1|2\n"),"Absent SURFACE keeps the legacy finish; out-of-range or malformed sets are rejected");
+  check(plain&&World(0,plain->maps[0]).wallSurface()==SurfaceDefault&&!parse(("SURFACE|0|"+std::to_string(int(SurfaceCount))+"|0|0\n").c_str())&&!parse("SURFACE|0|-2|0|0\n")&&!parse("SURFACE|0|1|2\n"),"Absent SURFACE keeps the legacy finish; out-of-range or malformed sets are rejected");
   bool allSets=true;for(int surface=SurfaceDefault;surface<SurfaceCount;++surface){auto record="SURFACE|0|"+std::to_string(surface)+"|"+std::to_string(surface)+"|"+std::to_string(surface)+"\n";auto pack=parse(record.c_str());
    allSets&=pack&&World(0,pack->maps[0]).wallSurface()==surface&&World(0,pack->maps[0]).floorSurface()==surface&&World(0,pack->maps[0]).ceilingSurface()==surface;}
   check(allSets,"Every Surface enum value round-trips through the custom campaign parser");

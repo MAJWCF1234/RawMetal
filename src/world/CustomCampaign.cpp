@@ -128,10 +128,11 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="SURFACE"){
    // SURFACE|map|wall|floor|ceiling: World.h surface sets, -1 keeps the default;
    // 0 concrete, 1 pressure, 2 brick, 3 clinic tile, 4 lab panel, 5 rock,
-   // 6 corrugated, 7 office plaster, 8 mine timber, 9 ancient stone.
+   // 6 corrugated, 7 office plaster, 8 mine timber, 9 ancient stone, 10-12 clinic
+   // paint over a teal, green or maroon dado band.
    if(f.size()!=5)throw std::runtime_error("malformed SURFACE record");auto map=mapAt(maps,f);
    int wall=integer(f,2,"wall surface"),floor=integer(f,3,"floor surface"),ceiling=integer(f,4,"ceiling surface");
-   for(int surface:{wall,floor,ceiling})if(surface<SurfaceDefault||surface>=SurfaceCount)throw std::runtime_error("invalid surface; use -1 through 9");
+   for(int surface:{wall,floor,ceiling})if(surface<SurfaceDefault||surface>=SurfaceCount)throw std::runtime_error("invalid surface; use -1 through 12");
    map->wallSurface=wall;map->floorSurface=floor;map->ceilingSurface=ceiling;
   }else if(tag=="OBJECTIVE_TEXT"){
    if(f.size()!=4)throw std::runtime_error("malformed OBJECTIVE_TEXT record");auto map=mapAt(maps,f);auto id=scriptName(f,2,"objective name");auto label=decode(f[3]);

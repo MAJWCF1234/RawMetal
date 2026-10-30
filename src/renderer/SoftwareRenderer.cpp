@@ -41,11 +41,12 @@ bool g_tiltShift = true; // windowed tilt-shift stylisation
 int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
-// Surface-set and structure finishes, resources 2100-2124 in the order of
-// tools/library/surfaces.py: metres per repeat, derived normal strength,
-// gloss, and the share of albedo that glows above a luma floor.
-struct SurfaceFinish {float repeat,normal,gloss,glow=0,glowFloor=0;};
-constexpr int FirstSurfaceFinish=2100;
+// Surface-set and structure finishes, resources 2100-2124 then 2150 on, in the
+// order of tools/library/surfaces.py: metres per repeat, derived normal
+// strength, gloss, the share of albedo that glows above a luma floor, and for a
+// dado band its height in metres (drawn once from the floor, paint above).
+struct SurfaceFinish {float repeat,normal,gloss,glow=0,glowFloor=0,band=0;};
+constexpr int FirstSurfaceFinish=2100,SecondSurfaceFinish=2150,FirstBlockFinishes=25;
 constexpr SurfaceFinish surfaceFinishes[]={
  {2.4f,.9f,.08f},{2.f,.7f,.12f},{2.4f,.6f,.06f},            // concrete wall, floor, ceiling
  {1.8f,1.f,.08f},{2.f,.8f,.1f},{3.f,.8f,.06f},              // painted brick
@@ -55,9 +56,12 @@ constexpr SurfaceFinish surfaceFinishes[]={
  {2.f,1.f,.24f},{2.f,1.f,.04f},{2.f,.9f,.2f},               // corrugated
  {2.4f,1.f,.06f},{2.f,1.1f,.04f},                           // mine timber walls, gravel (rock ceiling)
  {3.f,1.1f,.08f},{3.f,1.f,.1f},{2.4f,1.2f,.06f},            // ancient stone
- {1.5f,1.2f,.3f},{1.2f,1.f,.45f,.7f,.2f}};                  // resonance growth (34), crystal (35)
-constexpr int GrowthFinish=23,CrystalFinish=24;
-static_assert(std::size(surfaceFinishes)==CrystalFinish+1);
+ {1.5f,1.2f,.3f},{1.2f,1.f,.45f,.7f,.2f},                   // resonance growth (34), crystal (35)
+ {2.f,.5f,.08f},                                            // clinic paint, above the bands
+ {2.3f,.5f,.12f,0,0,1.1f},{2.3f,.5f,.12f,0,0,1.1f},{2.3f,.5f,.12f,0,0,1.1f}, // teal, green, maroon dado bands (36-38)
+ {1.2f,.8f,.04f}};                                          // ward curtain fabric (39)
+constexpr int GrowthFinish=23,CrystalFinish=24,PaintFinish=25,TealBandFinish=26,CurtainFinish=29;
+static_assert(std::size(surfaceFinishes)==CurtainFinish+1);
 std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t limit=3){
  std::vector<std::string> lines;columns=std::max(size_t(1),columns);
  while(!remaining.empty()&&lines.size()<limit){size_t count=std::min(columns,remaining.size());
@@ -463,10 +467,14 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  // Surface sets (World.h Surface) and structure finishes 26-35.
  static_assert(std::tuple_size_v<decltype(m_surfaceTextures)> ==std::size(surfaceFinishes));
  for(size_t i=0;i<m_surfaceTextures.size();++i)m_surfaceTextures[i]=loadSurfaceFinish(int(i));
+ // Dado bands: drawn once from the floor to their height, the clinic paint above.
+ for(size_t i=0;i<m_surfaceTextures.size();++i)if(surfaceFinishes[i].band>0){m_surfaceTextures[i].band=surfaceFinishes[i].band;m_surfaceTextures[i].above=&m_surfaceTextures[PaintFinish];}
  auto surface=[&](int set,int wall,int floor,int ceiling){m_surfaceSets[size_t(set)]={&m_surfaceTextures[size_t(wall)],&m_surfaceTextures[size_t(floor)],&m_surfaceTextures[size_t(ceiling)],
   {surfaceFinishes[wall].repeat,surfaceFinishes[wall].repeat},surfaceFinishes[floor].repeat,surfaceFinishes[ceiling].repeat};};
  surface(SurfaceConcrete,0,1,2);surface(SurfaceBrick,3,4,5);surface(SurfaceClinicTile,6,7,8);surface(SurfaceLabPanel,9,10,11);
  surface(SurfaceRock,12,13,14);surface(SurfaceCorrugated,15,16,17);surface(SurfaceMineTimber,18,19,14);surface(SurfaceStone,20,21,22);
+ // Painted clinic walls on the clinic's tile floor and drop ceiling.
+ surface(SurfacePaintedTeal,TealBandFinish,7,8);surface(SurfacePaintedGreen,TealBandFinish+1,7,8);surface(SurfacePaintedMaroon,TealBandFinish+2,7,8);
  // Pressure and office plaster are the finishes maps already use, at their repeats.
  m_surfaceSets[SurfacePressure]={&m_pressureWall,&m_pressureFloor,&m_facilityTextures.at("ceiling_1"),{2,3},.5f,.5f};
  m_surfaceSets[SurfaceOfficePlaster]={&m_officeWall,&m_securityCarpet,&m_dropCeiling,{1,1},1,1};
@@ -474,8 +482,9 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
 }
 SoftwareRenderer::Texture SoftwareRenderer::loadSurfaceFinish(int index){
  const auto& finish=surfaceFinishes[size_t(index)];
- auto texture=loadTexture(FirstSurfaceFinish+index);
- if(texture.width!=256||texture.height!=256)throw std::runtime_error("Surface finish "+std::to_string(FirstSurfaceFinish+index)+" must be 256 x 256");
+ const int resource=index<FirstBlockFinishes?FirstSurfaceFinish+index:SecondSurfaceFinish+index-FirstBlockFinishes;
+ auto texture=loadTexture(resource);
+ if(texture.width!=256||texture.height!=256)throw std::runtime_error("Surface finish "+std::to_string(resource)+" must be 256 x 256");
  deriveSurfaceNormal(texture,finish.normal);texture.glossStrength=finish.gloss;
  // The lab ceiling glows through its diffuser panels, crystal from inside its
  // facets: emission follows the albedo above a luma floor, like material 25.
@@ -496,6 +505,8 @@ const SoftwareRenderer::Texture* SoftwareRenderer::finishMaterial(int material)c
   case 33:return m_surfaceSets[SurfaceStone].wall;
   case 34:return &m_surfaceTextures[GrowthFinish];
   case 35:return &m_surfaceTextures[CrystalFinish];
+  case 36:case 37:case 38:return &m_surfaceTextures[size_t(TealBandFinish+material-36)];
+  case 39:return &m_surfaceTextures[CurtainFinish];
  }
  return nullptr;
 }

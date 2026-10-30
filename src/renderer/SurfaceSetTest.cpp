@@ -15,11 +15,12 @@ bool SoftwareRenderer::testSurfaceSets(std::string* report){
  auto storage=std::make_unique<SoftwareRenderer>(320,180);auto& renderer=*storage;
  auto loaded=[](const Texture* t){return t&&t->width>0&&t->height>0&&t->pixels.size()==size_t(t->width)*size_t(t->height)&&(t->normalLevels.empty()||t->normalLevels.size()==t->mips.size()+1);};
  for(size_t i=0;i<renderer.m_surfaceTextures.size();++i){const auto& t=renderer.m_surfaceTextures[i];
-  check(loaded(&t)&&t.width==256&&t.height==256&&t.mips.size()==8&&t.normalLevels.size()==9,"finish "+std::to_string(2100+i));}
+  check(loaded(&t)&&t.width==256&&t.height==256&&t.mips.size()==8&&t.normalLevels.size()==9,"finish "+std::to_string(i<25?2100+i:2150+i-25));}
  for(int s=0;s<SurfaceCount;++s){const auto* set=renderer.surfaceSet(s);
   check(set&&loaded(set->wall)&&loaded(set->floor)&&loaded(set->ceiling)&&set->wallRepeat.x>0&&set->wallRepeat.y>0&&set->floorRepeat>0&&set->ceilingRepeat>0,"surface "+std::to_string(s));}
  check(!renderer.surfaceSet(SurfaceDefault)&&!renderer.surfaceSet(SurfaceCount),"default and invalid surfaces retain legacy selection");
- const int materials[]={26,27,28,29,31,32,33,34,35};
+ const int materials[]={26,27,28,29,31,32,33,34,35,36,37,38,39};
+ check(renderer.finishMaterial(36)->band>0&&renderer.finishMaterial(36)->above&&renderer.finishMaterial(36)->above->band==0,"dado bands carry their height and the paint above");
  for(int material:materials){const auto* t=renderer.finishMaterial(material);check(loaded(t)&&renderer.finishRepeat(*t).x>0,"structure material "+std::to_string(material));}
  check(!renderer.finishMaterial(30)&&!renderer.finishMaterial(25),"collision proxy and molten metal retain their behavior");
  auto glowing=[](const Texture& t){return t.emission.size()==t.pixels.size()&&std::any_of(t.emission.begin(),t.emission.end(),[](auto p){return (p&0xffffffu)!=0;});};

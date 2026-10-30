@@ -3,7 +3,7 @@
   python tools/library/surfaces.py [--sheet out.png]
 
 Writes src/assets/library/textures/surface_*.png (gitignored, shared through
-the library junction), registered in src/assets.rc as resources 2100-2124 and
+the library junction), registered in src/assets.rc as resources 2100-2124 and 2150-2154, and
 loaded by SoftwareRenderer (World.h Surface sets, structure materials 26-35).
 Every texture starts from a tileable pack texture under
 O:/retro official/Textures; the grades below only shift colour and level, so
@@ -97,6 +97,22 @@ def luminous():
     return np.clip(lit * panel + frame * (1 - panel), 0, 1)
 
 
+
+def dado(name):
+    # Rows 134-255 of the pack's 256 px wall: the painted band and skirting.
+    image = Image.open(PSX + '/' + name + '.png').convert('RGB').crop((0, 134, 256, 256)).resize((SIZE, SIZE), Image.BICUBIC)
+    c = np.asarray(image, dtype=np.float32) / 255.0
+    return np.clip(c * 1.35, 0, 1)
+
+
+
+def curtain():
+    c = grade(load(PACKS + '/Fabric_050.jpg'), saturation=0, tint=(.86, 1.0, .94), mean=176, contrast=.7)
+    x = np.arange(SIZE, dtype=np.float32)
+    pleat = .82 + .18 * np.sin(x / SIZE * 2 * np.pi * 4) ** 2
+    return np.clip(c * pleat[None, :, None], 0, 1)
+
+
 TEXTURES = [
     # name, builder
     ('surface_concrete_wall', lambda: grade(load(PSX + '/concrete_wall_3.png'), saturation=.6, mean=112)),
@@ -124,8 +140,23 @@ TEXTURES = [
     ('surface_stone_ceiling', lambda: grade(load(PSX + '/stone_wall_pt_1.png'), saturation=.6, mean=94)),
     ('surface_growth', growth),
     ('surface_crystal', crystal),
+    # Painted clinic walls: the plain upper paint, and the dado bands (colour
+    # and skirting) cut from the bottom of the pack's two-tone walls. A band is
+    # drawn once from the floor up (World.h painted surfaces, materials 36-38).
+    ('surface_paint_upper', lambda: grade(load(PSX + '/painted_concrete_wall_pt_5_plain.png'), saturation=.2, tint=(1.0, .99, .96), mean=168)),
+    ('surface_paint_band_teal', lambda: dado('painted_concrete_wall_pt_5_2')),
+    ('surface_paint_band_green', lambda: dado('painted_concrete_wall_pt_5_3')),
+    ('surface_paint_band_maroon', lambda: dado('painted_concrete_wall_pt_5_1')),
+    # Ward privacy curtains: the woven fabric, pale hospital green, pleated.
+    ('surface_curtain', curtain),
 ]
 FIRST_RESOURCE = 2100
+# Finishes past the first 25 continue in the free block at 2150.
+SECOND_RESOURCE, FIRST_BLOCK = 2150, 25
+
+
+def resource(index):
+    return FIRST_RESOURCE + index if index < FIRST_BLOCK else SECOND_RESOURCE + index - FIRST_BLOCK
 
 
 def main(args):
@@ -137,7 +168,7 @@ def main(args):
         path = os.path.join(OUT, name + '.png')
         image.save(path, optimize=True)
         built.append((name, image))
-        print('%d RCDATA "assets/library/textures/%s.png"  mean %.0f' % (FIRST_RESOURCE + index, name, luma(c).mean() * 255))
+        print('%d RCDATA "assets/library/textures/%s.png"  mean %.0f' % (resource(index), name, luma(c).mean() * 255))
     if len(args) == 2 and args[0] == '--sheet':
         # Each texture tiled 2x2 so seams show.
         cell = 160
