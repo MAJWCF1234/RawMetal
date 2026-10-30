@@ -33,13 +33,20 @@ struct QuestItemStack {StateId id=0;int count=0;};
 // Staff (Scientist..LabTech) are civilians like the Worker: each model plays
 // the Worker's six baked clips with its own hand anchors.
 enum class ActorVisual { Worker, Wasp, Huntsman, Cargo, Cleanup, CleanupEngineer, CleanupSharpshooter, CleanupHeavy, CleanupMedic, CleanupRusher,
- Scientist, SeniorScientist, FemaleScientist, FemaleDoctor, LabTech };
-constexpr ActorVisual LastActorVisual=ActorVisual::LabTech;
-constexpr bool cleanupActorVisual(ActorVisual visual){return int(visual)>=int(ActorVisual::Cleanup)&&int(visual)<=int(ActorVisual::CleanupRusher);}
+ Scientist, SeniorScientist, FemaleScientist, FemaleDoctor, LabTech, Investigator };
+constexpr ActorVisual LastActorVisual=ActorVisual::Investigator;
+// The Cleanup bodies baked from direct Mixamo motion: 0-5 the squad roles in
+// enum order, 6 the company Investigator (long coat, standing clips only);
+// -1 for anything else.
+constexpr int cleanupActorBody(ActorVisual visual){return visual==ActorVisual::Investigator?6:int(visual)>=int(ActorVisual::Cleanup)&&int(visual)<=int(ActorVisual::CleanupRusher)?int(visual)-int(ActorVisual::Cleanup):-1;}
+constexpr bool cleanupActorVisual(ActorVisual visual){return cleanupActorBody(visual)>=0;}
 // 0 for the Worker, 1-5 for the staff models, -1 for anything else.
 constexpr int civilianActorBody(ActorVisual visual){return visual==ActorVisual::Worker?0:int(visual)>=int(ActorVisual::Scientist)&&int(visual)<=int(ActorVisual::LabTech)?int(visual)-int(ActorVisual::Scientist)+1:-1;}
 constexpr bool civilianActorVisual(ActorVisual visual){return civilianActorBody(visual)>=0;}
 constexpr bool humanActorVisual(ActorVisual visual){return civilianActorVisual(visual)||cleanupActorVisual(visual);}
+// The highest clip an authored pose key may name. The Investigator adds four
+// scripted takes to the shared six: 6 radio, 7 reading, 8 pointing, 9 directing.
+constexpr int lastActorClip(ActorVisual visual){return visual==ActorVisual::Investigator?9:humanActorVisual(visual)?5:4;}
 struct ActorKey {int timeMs=0;Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 enum class ActorAiMode { Scripted, Civilian, Escort, Guard=3 };
 // Wary: a squad holding a truce. It fights only what fights everyone (the
@@ -106,6 +113,9 @@ struct SequenceCue {
  // How far the AI hears it (0: as its sound class allows); a bell or a horn
  // meant to pull a guard over carries further than a door would.
  float aiRadius=0;
+ // A voiced take (NpcVoiceClip::line) said from the cue's position as it fires:
+ // radio orders, announcements. The caption stays the words on screen.
+ std::string voice;
 };
 struct ActorPose {Vec2 position{};float z=0,yaw=0;int clip=0;float phase=0;int lookAtActor=-1;};
 inline StateId actorTrackState(StateId timer,size_t index,std::string_view field){return stateId("actor_track/"+std::to_string(timer)+"/"+std::to_string(index)+"/"+std::string(field));}

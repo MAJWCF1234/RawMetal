@@ -409,12 +409,12 @@ bool SoftwareRenderer::testGpuActors(){
   passed&=same&&renderer.hardwareActive();++view;
  };
  renderer.setActorEmitCaching(false);
- for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,0));
- for(int sample:{8,10,11,12,13})for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,sample));
- for(int sample:{12,13})for(int role=0;role<6;++role)compare(Game::cleanupLayerInspection(role,sample,1));
+ for(int role=0;role<kCleanupBodies;++role)compare(Game::cleanupLayerInspection(role,0));
+ for(int sample:{8,10,11,12,13})for(int role=0;role<kCleanupBodies;++role)compare(Game::cleanupLayerInspection(role,sample));
+ for(int sample:{12,13})for(int role=0;role<kCleanupBodies;++role)compare(Game::cleanupLayerInspection(role,sample,1));
  for(int stage:{0,1,2,7,8,9,10,11})compare(Game::exclusionInspection(stage));
  passed&=triangles>1000;
- for(int role=0;role<6;++role)for(int sample:{0,7,11}){
+ for(int role=0;role<kCleanupBodies;++role)for(int sample:{0,7,11}){
   renderer.setActorEmitCaching(true);renderer.m_gpu->clearActorEmitCache();
   for(float phase:{.11f,.41f,.79f}){
    auto scene=Game::cleanupLayerInspection(role,sample,0,phase);

@@ -765,8 +765,15 @@ static bool loadValidationTest(){
  for(int visual:{int(retro::LastActorVisual),int(retro::LastActorVisual)+1}){
   std::string record="ACTOR|0|staff_clock|"+std::to_string(visual)+"|1.7|0|0|0";bool last=visual==int(retro::LastActorVisual);
   const std::string body="TIMED_SEQUENCE|0|staff_clock|staff_clock_done|0|0|24|24|-100|100|60000|60000|0|0|0|0|1|1\n"+record+"\nACTOR_KEY|0|0|0|5|4.5|0|0|4|1\nACTOR_KEY|0|0|60000|5|4.5|0|0|4|1";
-  try{auto parsed=retro::loadCustomCampaignText(custom+body+"\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","validation.txt");bool staff=last&&parsed->maps.at(0)->actorTracks.at(0).visual==retro::ActorVisual::LabTech;ok&=staff;report<<(staff?"PASS":"FAIL")<<" parser accepted "<<record<<'\n';}
+  try{auto parsed=retro::loadCustomCampaignText(custom+body+"\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","validation.txt");bool staff=last&&parsed->maps.at(0)->actorTracks.at(0).visual==retro::ActorVisual::Investigator;ok&=staff;report<<(staff?"PASS":"FAIL")<<" parser accepted "<<record<<'\n';}
   catch(const std::exception& e){ok&=!last;report<<(last?"FAIL":"PASS")<<" parser rejected "<<record<<": "<<e.what()<<'\n';}
+ }
+ // The Investigator's scripted takes run to clip 9; the staff stop at 5.
+ for(auto [visual,clip,accepted]:{std::tuple{retro::ActorVisual::Investigator,9,true},std::tuple{retro::ActorVisual::Investigator,10,false},std::tuple{retro::ActorVisual::LabTech,6,false}}){
+  std::string key="|0|"+std::to_string(clip)+"|0.5",record="ACTOR|0|staff_clock|"+std::to_string(int(visual))+"|1.8|0|0|0";
+  const std::string body="TIMED_SEQUENCE|0|staff_clock|staff_clock_done|0|0|24|24|-100|100|60000|60000|0|0|0|0|1|1\n"+record+"\nACTOR_KEY|0|0|0|5|4.5|0"+key+"\nACTOR_KEY|0|0|60000|5|4.5|0"+key;
+  bool parsed=true;try{retro::loadCustomCampaignText(custom+body+"\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","validation.txt");}catch(const std::exception&){parsed=false;}
+  ok&=parsed==accepted;report<<(parsed==accepted?"PASS":"FAIL")<<" actor visual "<<int(visual)<<" clip "<<clip<<(parsed?" accepted":" rejected")<<'\n';
  }
  report<<(ok?"PASS":"FAIL")<<'\n';return ok;
 }
@@ -1090,6 +1097,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       report<<'\n';report.flush();renderer->render(scene);std::ofstream out(std::string("diagnostics/kill-squad-20261011/")+names[stage]+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
+    if(commandArguments().find(L"--investigator-inspection")){
+     // The Investigator through drawActor, front and side: every clip at five
+     // phases (unarmed, as a scripted actor plays them) and the armed guard.
+     constexpr int width=960,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
+     const std::string directory="diagnostics/investigator";std::filesystem::create_directories(directory);
+     const char*clips[]={"idle","walk","fire","hit","death","pistol-ready","radio","reading","pointing","directing"};
+     for(int clip=-1;clip<=retro::lastActorClip(retro::ActorVisual::Investigator);++clip)for(int step=0;step<5;++step)for(int view=0;view<2;++view){auto scene=retro::Game::civilianInspection(6,clip,step*.25f,view);renderer->render(scene);
+      std::ofstream out(directory+"/"+(clip<0?"armed":clips[clip])+"-"+std::to_string(step*25)+(view?"-side":"-front")+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";
+      for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return 0;
+    }
     if(commandArguments().find(L"--civilian-inspection")){
      // The Worker and the research staff, front and side, through drawActor:
      // each baked clip at a mid phase, death at its end, and armed.
@@ -1106,13 +1124,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      constexpr int width=960,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;renderer->setEnvironmentInspection(true);
      int inspectionStage=0;if(auto flag=commandArguments().find(L"--cleanup-layer-stage="))inspectionStage=int(std::wcstol(flag+22,nullptr,10));if(inspectionStage<0||inspectionStage>3)return 21;renderer->setCleanupInspectionStage(inspectionStage);
      std::string inspectionDirectory="diagnostics/animation-repair-20261013/native";if(inspectionStage)inspectionDirectory+="-stage-"+std::to_string(inspectionStage);std::filesystem::create_directories(inspectionDirectory);
-     const char*roles[]={"assault","engineer","sharpshooter","heavy","medic","rusher"};const char*poses[]={"idle","walk","walk-wrap","aim-up","aim-down","aim-left","aim-right","crouch","fire","reload","support","death","crouch-aim-up","crouch-aim-down","low-ready","crouch-walk"};
+     const char*roles[]={"assault","engineer","sharpshooter","heavy","medic","rusher","investigator"};const char*poses[]={"idle","walk","walk-wrap","aim-up","aim-down","aim-left","aim-right","crouch","fire","reload","support","death","crouch-aim-up","crouch-aim-down","low-ready","crouch-walk"};
      auto filter=[&](const wchar_t*prefix,int maximum){auto flag=commandArguments().find(prefix);if(!flag)return -1;auto value=flag+std::wcslen(prefix);wchar_t*end=nullptr;long selected=std::wcstol(value,&end,10);return end==value||selected<0||selected>maximum?-2:int(selected);};
-     int roleFilter=filter(L"--cleanup-layer-role=",5),sampleFilter=filter(L"--cleanup-layer-sample=",15);if(roleFilter<-1||sampleFilter<-1)return 21;
+     int roleFilter=filter(L"--cleanup-layer-role=",retro::kCleanupBodies-1),sampleFilter=filter(L"--cleanup-layer-sample=",15);if(roleFilter<-1||sampleFilter<-1)return 21;
      float phase=-1;if(auto flag=commandArguments().find(L"--cleanup-layer-phase=")){wchar_t*end=nullptr;phase=float(std::wcstod(flag+22,&end));if(end==flag+22||!std::isfinite(phase)||phase<0||phase>1)return 21;inspectionDirectory+="-phase-"+std::to_string(phase);std::filesystem::create_directories(inspectionDirectory);}
      std::string reportName=inspectionDirectory+"/attachments";if(roleFilter>=0)reportName+="-role-"+std::to_string(roleFilter);if(sampleFilter>=0)reportName+="-sample-"+std::to_string(sampleFilter);
      std::ofstream report(reportName+".csv");report<<"role,pose,view,wristReachError,fingerEdgeError,barrelError,wholeMeshEdgeStretch\n";bool passed=true;
-     for(int role=0;role<6;++role)for(int sample=0;sample<16;++sample)for(int view=0;view<2;++view){if(roleFilter>=0&&role!=roleFilter||sampleFilter>=0&&sample!=sampleFilter)continue;auto scene=retro::Game::cleanupLayerInspection(role,sample,view,phase);renderer->render(scene);
+     for(int role=0;role<retro::kCleanupBodies;++role)for(int sample=0;sample<16;++sample)for(int view=0;view<2;++view){if(roleFilter>=0&&role!=roleFilter||sampleFilter>=0&&sample!=sampleFilter)continue;auto scene=retro::Game::cleanupLayerInspection(role,sample,view,phase);renderer->render(scene);
       auto errors=renderer->cleanupAttachmentErrors();report<<roles[role]<<','<<poses[sample]<<','<<view<<','<<errors[0]<<','<<errors[1]<<','<<errors[2]<<','<<errors[3]<<'\n';report.flush();passed&=errors[0]<.02f&&errors[1]<.00002f&&errors[2]<.002f&&errors[3]<8.f;
       auto name=inspectionDirectory+"/"+roles[role]+"-"+poses[sample]+(view?"-side":"-front")+".ppm";std::ofstream out(name,std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";
       for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}

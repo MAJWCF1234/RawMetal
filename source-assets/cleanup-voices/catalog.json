@@ -1570,6 +1570,134 @@
    "voice_id": "2OcnG4mH3jIMtWz3vKus",
    "text": "[delighted whistle] Now that's manners. Go on through. Nobody in this yard touches you.",
    "line": "toll_crate"
+  },
+  {
+   "id": "dlg-inv_intake_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, measured] Intake detail. Report.",
+   "line": "inv_intake_1"
+  },
+  {
+   "id": "dlg-rf_intake_lead_1",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[tired, uneasy] Intake holding, sir. We heard the great door go.",
+   "line": "rf_intake_lead_1"
+  },
+  {
+   "id": "dlg-inv_intake_2",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[cold, unhurried] Then someone opened it. Sweep the booths. Anyone without a band is exposed.",
+   "line": "inv_intake_2"
+  },
+  {
+   "id": "dlg-rf_intake_lead_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[reluctant, quiet] Copy. Booths. Move.",
+   "line": "rf_intake_lead_2"
+  },
+  {
+   "id": "dlg-inv_intake_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[quiet, precise] And Intake. If it is one of ours, it is still exposed.",
+   "line": "inv_intake_3"
+  },
+  {
+   "id": "dlg-proc_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[weak, wary, short of breath] Don't. I'm not going to shoot you. [winces] I can't lift it.",
+   "line": "proc_hello"
+  },
+  {
+   "id": "dlg-proc_who",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[bitter, quiet] The Investigator. Company man. Came down the service lift at three forty, and every radio's been his since. [pause] He doesn't count us. He counts what we've seen.",
+   "line": "proc_who"
+  },
+  {
+   "id": "dlg-proc_squad",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[haunted, low] Booth sweep at Medical. He said treat them as exposed. [pause] They were nurses. I stopped following orders about then. [dry, pained] So did my leg.",
+   "line": "proc_squad"
+  },
+  {
+   "id": "dlg-proc_admin",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[tired] West. The clearance desk's in there. He was in Records an hour ago, reading cards. [uneasy] Looking for somebody.",
+   "line": "proc_admin"
+  },
+  {
+   "id": "dlg-inv_admin_1",
+   "role": 12,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[quiet, unhurried, reading] Every card from Energy Diagnostics. Bag them.",
+   "line": "inv_admin_1"
+  },
+  {
+   "id": "dlg-rf_admin_door_1",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[flat, tired] Sir.",
+   "line": "rf_admin_door_1"
+  },
+  {
+   "id": "dlg-inv_admin_2",
+   "role": 12,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, matter-of-fact] The rest of this floor can burn with the building.",
+   "line": "inv_admin_2"
+  },
+  {
+   "id": "dlg-inv_admin_3",
+   "role": 12,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[softly, almost to himself] Not this one. [pause] This one comes with me.",
+   "line": "inv_admin_3"
+  },
+  {
+   "id": "dlg-inv_screen_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[even, unhurried] Medical detail. The screening floor is closed. Anyone walking it is exposed.",
+   "line": "inv_screen_1"
+  },
+  {
+   "id": "dlg-md_screen_a_1",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[hollow, tired] Sir, we did the booths. [pause] There's nobody left to walk it.",
+   "line": "md_screen_a_1"
+  },
+  {
+   "id": "dlg-inv_screen_2",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[dry, without warmth] Then you will not be busy.",
+   "line": "inv_screen_2"
   }
  ]
 }

@@ -12,15 +12,18 @@ Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
  // Any authored guard serves as the template; its visual and role are replaced.
  const ActorTrack* guard=nullptr;
  for(const auto&source:authored->maps)for(const auto&candidate:source->actorTracks)if(!guard&&candidate.ai.mode==ActorAiMode::Guard)guard=&candidate;
- if(role<0||role>5||sample<0||sample>15||!guard)throw std::runtime_error("Invalid cleanup layer inspection");
+ if(role<0||role>6||sample<0||sample>15||!guard)throw std::runtime_error("Invalid cleanup layer inspection");
  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Cleanup animation inspection";campaign->key=883013;
  auto map=std::make_shared<AuthoredMapData>();map->name="Unobstructed pose inspection";map->definition={{0,0},{10.5f,9.5f},0,Environment::Interior,false,8,.7f,42};
  AuthoredLayerData floor;for(auto&row:floor.rows)row=std::string(24,'.');map->layers.push_back(floor);
- auto track=*guard;track.visual=ActorVisual(int(ActorVisual::Cleanup)+role);track.scale=1.6f;
+ // Role 6 is the Investigator: a Default-role guard with a handgun, 1.8 m tall.
+ auto track=*guard;track.visual=role==6?ActorVisual::Investigator:ActorVisual(int(ActorVisual::Cleanup)+role);track.scale=role==6?1.8f:1.6f;
  track.timerState=stateId("cleanup_inspection_clock");track.keys={{0,{8.5f,8.5f},0,0},{30000,{8.5f,8.5f},0,0}};track.idleKeys.clear();track.ai.patrol={{{8.5f,8.5f},0,1000}};
+ // The template may be a guard with a conversation or a stance; the inspection room carries neither.
+ track.talk=0;track.ai.stance=0;
  TimedSequence clock;clock.timerState=track.timerState;clock.finishState=stateId("cleanup_inspection_done");clock.loop=true;clock.soundIntervalMs=0;map->timedSequences.push_back(clock);
- constexpr GuardSquadRole roles[]={GuardSquadRole::Assault,GuardSquadRole::Engineer,GuardSquadRole::Sharpshooter,GuardSquadRole::Heavy,GuardSquadRole::Medic,GuardSquadRole::Rusher};
- track.ai.role=roles[role];track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.enableState=0;track.ai.weapon=1;
+ constexpr GuardSquadRole roles[]={GuardSquadRole::Assault,GuardSquadRole::Engineer,GuardSquadRole::Sharpshooter,GuardSquadRole::Heavy,GuardSquadRole::Medic,GuardSquadRole::Rusher,GuardSquadRole::Default};
+ track.ai.role=roles[role];track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.enableState=0;track.ai.weapon=role==6?2:1;
  map->actorTracks={track};campaign->maps.push_back(map);Game g(campaign);auto&npc=g.m_friendlyActors.at(0);auto&pose=npc.pose;
  pose.yaw=0;pose.phase=phase<0?(sample==2?.99f:.5f):std::clamp(phase,0.f,1.f);pose.clip=sample==0?0:(sample==7||sample==12||sample==13)?5:sample==11?4:1;
  auto put=[&](const char*key,int value){g.setState(g.friendlyKey(0,key),value);};
@@ -38,14 +41,16 @@ Game Game::cleanupLayerInspection(int role,int sample,int view,float phase){
  g.m_weaponEquipped=false;g.m_holster=1;g.m_damageFlash=0;return g;
 }
 Game Game::civilianInspection(int body,int clip,float phase,int view){
- constexpr ActorVisual bodies[]={ActorVisual::Worker,ActorVisual::Scientist,ActorVisual::SeniorScientist,ActorVisual::FemaleScientist,ActorVisual::FemaleDoctor,ActorVisual::LabTech};
- if(body<0||body>5||clip<-1||clip>5||view<0||view>1)throw std::runtime_error("Invalid civilian inspection");
+ // Body 6, the Investigator, also shows the scripted takes (clips 6-9).
+ constexpr ActorVisual bodies[]={ActorVisual::Worker,ActorVisual::Scientist,ActorVisual::SeniorScientist,ActorVisual::FemaleScientist,ActorVisual::FemaleDoctor,ActorVisual::LabTech,ActorVisual::Investigator};
+ if(body<0||body>6||clip<-1||clip>lastActorClip(bodies[body])||view<0||view>1)throw std::runtime_error("Invalid civilian inspection");
  auto campaign=std::make_shared<CustomCampaign>();campaign->name="Civilian model inspection";campaign->key=883014;
  auto map=std::make_shared<AuthoredMapData>();map->name="Unobstructed civilian inspection";map->definition={{0,0},{10.5f,9.5f},0,Environment::Interior,false,8,.7f,42};
  AuthoredLayerData floor;for(auto&row:floor.rows)row=std::string(24,'.');map->layers.push_back(floor);
- ActorTrack track;track.visual=bodies[body];track.scale=1.7f;track.health=100;track.timerState=stateId("civilian_inspection_clock");
+ ActorTrack track;track.visual=bodies[body];track.scale=body==6?1.8f:1.7f;track.health=100;track.timerState=stateId("civilian_inspection_clock");
  track.damageState=stateId("civilian_inspection_damage");track.deadState=stateId("civilian_inspection_dead");track.keys={{0,{8.5f,8.5f},0,0},{30000,{8.5f,8.5f},0,0}};
- if(clip<0){track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.weapon=1;track.ai.patrol={{{8.5f,8.5f},0,1000}};}else track.ai.mode=ActorAiMode::Civilian;
+ track.talk=0;track.ai.stance=0;
+ if(clip<0){track.ai.mode=ActorAiMode::Guard;track.ai.armed=true;track.ai.weapon=body==6?2:1;track.ai.patrol={{{8.5f,8.5f},0,1000}};}else track.ai.mode=ActorAiMode::Civilian;
  TimedSequence clock;clock.timerState=track.timerState;clock.finishState=stateId("civilian_inspection_done");clock.loop=true;clock.soundIntervalMs=0;map->timedSequences.push_back(clock);
  map->actorTracks={track};campaign->maps.push_back(map);Game g(campaign);auto&pose=g.m_friendlyActors.at(0).pose;
  pose.yaw=0;pose.clip=std::max(clip,0);pose.phase=std::clamp(phase,0.f,1.f);pose.lookAtActor=-1;

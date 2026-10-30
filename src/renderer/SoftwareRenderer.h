@@ -6,6 +6,7 @@
 #include <memory>
 #include <atomic>
 #include "Mesh.h"
+#include "../core/CleanupBodies.h"
 
 namespace retro {
 class GpuRenderer;
@@ -151,7 +152,7 @@ private:
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_liftSign,m_liftDispatch;
     Texture m_feedSign,m_returnSign;
     // The two door notices (freight suspended, utilities permit): Door.sign-CampaignChunkCount.
-    std::array<Texture,2> m_noticeSigns;
+    std::array<Texture,3> m_noticeSigns;
     std::array<Texture,3> m_paperProps; // Readable::Letter, Note, Sticky
     // Door header plates of authored maps, one per HUD zone name (lazy).
     std::array<Texture,3> m_serviceAreaSigns;
@@ -178,13 +179,16 @@ private:
     Mesh m_cleanupMesh{303,"",304};
     Mesh m_cleanupEngineer{308,"",309},m_cleanupSharpshooter{313,"",314};
     Mesh m_cleanupHeavy{318,"",319},m_cleanupMedic{323,"",324},m_cleanupRusher{328,"",329};
+    Mesh m_cleanupInvestigator{cleanupBodyResources(6).mesh,"",cleanupBodyResources(6).animation};
+    // Indexed by cleanupActorBody.
+    std::array<Mesh*,kCleanupBodies> cleanupMeshes(){return {&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher,&m_cleanupInvestigator};}
     Mesh m_engineerDrone{333,"",334};
     Texture m_droneTexture,m_handgunTexture;
     Mesh m_handgunMesh{337};
-    std::array<std::array<Texture,2>,6> m_cleanupTextures;
-    std::array<std::array<std::array<Point3,3>,2>,6> m_cleanupArms{};
- std::array<std::array<Point3,2>,6> m_cleanupPalms{};
- std::array<std::vector<std::array<std::uint8_t,4>>,6> m_cleanupWeights;
+    std::array<std::array<Texture,2>,kCleanupBodies> m_cleanupTextures;
+    std::array<std::array<std::array<Point3,3>,2>,kCleanupBodies> m_cleanupArms{};
+ std::array<std::array<Point3,2>,kCleanupBodies> m_cleanupPalms{};
+ std::array<std::vector<std::array<std::uint8_t,4>>,kCleanupBodies> m_cleanupWeights;
     Texture m_glassTexture;
     // Pink/black checker for any surface whose texture is missing; see
     // assets/materials/PROP-SURFACES-SOURCE.md for the purchased replacements.

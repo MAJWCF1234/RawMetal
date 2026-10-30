@@ -18,8 +18,17 @@ void Game::executeConsole(std::string command){
   for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
-  m_consoleLog.push_back("RELOAD / WHERE / GOD / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");
+  m_consoleLog.push_back("RELOAD / WHERE / GOD / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
  }else if(verb=="clear")m_consoleLog.clear();
+ else if(verb=="unlock"){
+  // Unlock what the player is looking at for good, by setting the state it
+  // waits for: a door's lock, or a terminal's prerequisite. For playtesting.
+  if(int door=nearbyInteractionDoor();door>=0){auto&d=m_world.doors()[size_t(door)];
+   if(d.requireState){setState(d.requireState,d.requireValue);m_consoleLog.push_back("DOOR UNLOCKED.");}else m_consoleLog.push_back("THAT DOOR HAS NO LOCK TO OPEN.");}
+  else if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[size_t(terminal)];
+   if(t.requireState){setState(t.requireState,1);m_consoleLog.push_back("TERMINAL UNLOCKED.");}else m_consoleLog.push_back("THAT TERMINAL IS NOT LOCKED.");}
+  else m_consoleLog.push_back("LOOK AT A DOOR OR A TERMINAL, THEN TYPE UNLOCK.");
+ }
  else if(verb=="map"&&(arg=="custom"||arg=="wasteland"||arg=="horror")){
   m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=0;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL WASTELAND / 15 STITCHED SURFACE CHUNKS.");
  }

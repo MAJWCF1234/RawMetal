@@ -82,6 +82,7 @@ int maskForVisual(ActorVisual visual){
   case ActorVisual::CleanupMedic:return 2;
   case ActorVisual::CleanupRusher:return 1;   // hockey face plate
   case ActorVisual::LabTech:return 2;         // light hazmat suit, full-face respirator
+  case ActorVisual::Investigator:return 2;    // gas mask under the hat brim
   case ActorVisual::Scientist:case ActorVisual::SeniorScientist:
   case ActorVisual::FemaleScientist:case ActorVisual::FemaleDoctor:return 0; // lab coats, bare face
   default:return 0;

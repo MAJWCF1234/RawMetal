@@ -284,7 +284,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="ACTOR_VOICE"){
    // ACTOR_VOICE|map|actor|role: a voice bank role (1-10) instead of the visual's default.
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_VOICE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),voice=integer(f,3,"voice role");
-   if(index<0||index>=int(map->actorTracks.size())||voice<1||voice>10)throw std::runtime_error("invalid actor voice");map->actorTracks[size_t(index)].voice=voice;
+   if(index<0||index>=int(map->actorTracks.size())||voice<1||voice>12)throw std::runtime_error("invalid actor voice");map->actorTracks[size_t(index)].voice=voice;
   }else if(tag=="STORM"){
    // STORM|calm ms|warning ms|storm ms|damage per second|ambient ash (0-1): one cycle for the campaign.
    if(f.size()!=6)throw std::runtime_error("malformed STORM record");
@@ -345,8 +345,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    ActorKey key{integer(f,3,"actor time"),{number(f,4,"actor x"),number(f,5,"actor y")},number(f,6,"actor z"),number(f,7,"actor yaw"),integer(f,8,"actor clip"),number(f,9,"actor phase")};if(f.size()>10)key.lookAtActor=integer(f,10,"look target");
    auto& actor=map->actorTracks[size_t(index)];(tag=="ACTOR_KEY"?actor.keys:actor.idleKeys).push_back(key);
   }else if(tag=="SEQUENCE_CUE"){
-   if(f.size()!=10&&f.size()!=11)throw std::runtime_error("malformed SEQUENCE_CUE record");auto map=mapAt(maps,f);int sound=integer(f,4,"cue sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid cue sound");
-   map->sequenceCues.push_back({stateId(decode(f[2])),integer(f,3,"cue time"),Sound(sound),{number(f,5,"cue x"),number(f,6,"cue y")},number(f,7,"cue gain"),number(f,8,"cue pitch"),decode(f[9]),f.size()==11?number(f,10,"cue height"):std::numeric_limits<float>::quiet_NaN()});
+   if(f.size()<10||f.size()>12)throw std::runtime_error("malformed SEQUENCE_CUE record");auto map=mapAt(maps,f);int sound=integer(f,4,"cue sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid cue sound");
+   map->sequenceCues.push_back({stateId(decode(f[2])),integer(f,3,"cue time"),Sound(sound),{number(f,5,"cue x"),number(f,6,"cue y")},number(f,7,"cue gain"),number(f,8,"cue pitch"),decode(f[9]),f.size()>=11&&!f[10].empty()?number(f,10,"cue height"):std::numeric_limits<float>::quiet_NaN()});
+   if(f.size()==12)map->sequenceCues.back().voice=decode(f[11]); // a voiced take (NpcVoiceClip::line)
   }else if(tag=="HAZARD"){
    if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});

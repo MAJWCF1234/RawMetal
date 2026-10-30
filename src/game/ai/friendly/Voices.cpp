@@ -15,6 +15,8 @@ int voiceRole(const ActorTrack& track){
   case ActorVisual::CleanupHeavy:return 4;
   case ActorVisual::CleanupMedic:return 5;
   case ActorVisual::CleanupRusher:return 6;
+  // The Investigator in person (11 is the same voice over the radio).
+  case ActorVisual::Investigator:return 12;
   case ActorVisual::Worker:case ActorVisual::Scientist:case ActorVisual::SeniorScientist:case ActorVisual::LabTech:
    return track.ai.mode==ActorAiMode::Escort?7:0;
   // The escort bank is a man's voice: a woman stays silent unless authored one.

@@ -31,7 +31,8 @@ SETTINGS = {'stability': .5, 'similarity_boost': .75}
 # What a speaker wears over the mouth is applied live by the audio engine from
 # the speaker's model (bare face, face plate, respirator, sealed hood). The bake
 # only adds the radio channel the squad roles and checkpoint soldiers call over.
-RADIO = {1, 3, 4, 6, 8}
+# 11 is the Investigator heard over a squad's radio; 12 is the Investigator in person.
+RADIO = {1, 3, 4, 6, 8, 11}
 
 
 def radio_channel(samples, rate=22050):

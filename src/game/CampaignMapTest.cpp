@@ -203,6 +203,27 @@ bool Game::testCampaignMaps(){
  std::ofstream out("freight-district-test.txt");bool pass=true;
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};
  check(FreightDistrictEnd==32&&CampaignChunkCount>=FreightDistrictEnd+2,"Eight freight areas allocated across 22 additional stitched chunks");
+ // Chapter 2 is sealed behind the great door until it ships; UNLOCK while
+ // looking at the seal opens it for a playtester.
+ {Game g;g.m_level=68;g.restart();const auto&doors=g.world().doors();
+  bool sealed=!doors.empty()&&doors[0].requireState==stateId("chapter2_open")&&g.doorLocked(doors[0]);check(sealed,"Research Intake's inner door is sealed in an ordinary playthrough");
+  if(sealed){g.m_player.pos={12.f,1.6f};g.m_player.z=g.world().floorHeight(12.f,1.6f);g.m_player.angle=-kPi*.5f;
+   g.executeConsole("unlock");check(!g.doorLocked(g.world().doors()[0])&&g.state(stateId("chapter2_open"))==1,"UNLOCK while facing the seal opens Chapter 2");}}
+ // Chapter 2's first beats, played on their clocks.
+ {Game g;g.m_level=68;g.restart();g.m_player.pos={12.f,2.2f};g.m_player.z=g.world().floorHeight(12.f,2.2f);g.m_god=true;
+  for(int i=0;i<60*15;++i)g.update({},1.f/60);
+  check(g.state(stateId("rf_intake_sweep"))==1,"Research Intake: the Investigator's radio order sends the sweep (13 s after the vestibule)");}
+ {Game g;g.m_level=69;g.restart();g.m_player.pos={12.f,2.f};g.m_player.z=g.world().floorHeight(12.f,2.f);
+  for(int i=0;i<30;++i)g.update({},1.f/60);
+  int talker=-1;for(size_t i=0;i<g.m_friendlyActors.size();++i)if(g.m_friendlyActors[i].track().talk==stateId("proc_hello"))talker=int(i);
+  check(talker>=0&&g.npcStance(g.m_friendlyActors[size_t(talker)].track())==SquadStance::Truce,"Personnel Processing: the wounded private is on a truce and has something to say");}
+ {Game g;g.m_level=70;g.restart();g.m_player.pos={21.f,11.5f};g.m_player.z=g.world().floorHeight(21.f,11.5f);g.m_god=true;
+  bool cast=false;for(const auto&t:g.world().actorTracks())cast|=t.visual==ActorVisual::Investigator;
+  check(cast,"Research Administration: the Investigator is in the records office");
+  check(g.doorLocked(g.world().doors()[1]),"Records stays shut while he is in it");
+  for(int i=0;i<60*28;++i)g.update({},1.f/60);
+  check(g.state(stateId("rf_admin_gone"))==1&&!g.doorLocked(g.world().doors()[1]),"He leaves by the far door, and records opens after");
+  check(g.world().doors()[2].open<.05f,"The far door shuts behind him");}
  // Surface sets: every Surface value and structure finish 26-35 resolves to
  // loaded textures, SURFACE records parse, and invalid sets are rejected.
  {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-35 resolves to loaded textures");out<<report;

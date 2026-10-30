@@ -2,17 +2,18 @@
 #include "../../Game.h"
 #include "../../../core/PackedResource.h"
 #include "../../../core/ActorBodyAim.h"
+#include "../../../core/CleanupBodies.h"
 #include "Schedule.h"
 namespace retro {
 namespace {
 Point3 unit(Point3 p){float length=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);return length>.0001f?p*(1/length):Point3{};}
 struct CleanupBodyFrame {Point3 pelvis{},spine{},rightShoulder{},leftShoulder{};};
 struct CleanupBodyFrames {unsigned clips=0;std::vector<unsigned> counts,offsets;std::vector<CleanupBodyFrame> poses;std::vector<float> durations;std::vector<std::pair<Point3,Point3>> fallBounds;};
-const std::array<CleanupBodyFrames,6>& cleanupBodyFrames(){
+const std::array<CleanupBodyFrames,kCleanupBodies>& cleanupBodyFrames(){
  // Share the baked body frame with physical weapon placement. A fixed root
  // offset cannot seat a stock on a leaning or deeply kneeling shoulder.
- static const auto frames=[](){std::array<CleanupBodyFrames,6> result;
-  for(int role=0;role<6;++role){auto data=loadResource(304+role*5);uint32_t header[4]{};
+ static const auto frames=[](){std::array<CleanupBodyFrames,kCleanupBodies> result;
+  for(int role=0;role<kCleanupBodies;++role){auto data=loadResource(cleanupBodyResources(role).animation);uint32_t header[4]{};
    bool compact=data.size()>=20&&!std::memcmp(data.data(),"RMA3",4);
    if(data.size()<20||(!compact&&std::memcmp(data.data(),"RMA2",4)))throw std::runtime_error("Missing cleanup stance animation");std::memcpy(header,data.data()+4,16);
    auto [corners,samples,clips,vertices]=std::array<uint32_t,4>{header[0],header[1],header[2],header[3]};size_t frameStart=20+size_t(corners)*2+(compact?size_t(clips)*4:0);
@@ -44,13 +45,13 @@ CleanupBodyFrame cleanupBodyFrame(int role,int clip,float phase){
 }
 }
 float cleanupAnimationDuration(ActorVisual visual,int clip){
- int role=int(visual)-int(ActorVisual::Cleanup);if(role<0||role>=6)return 0;const auto&table=cleanupBodyFrames()[size_t(role)];return clip>=0&&size_t(clip)<table.durations.size()?table.durations[size_t(clip)]:0;
+ int role=cleanupActorBody(visual);if(role<0)return 0;const auto&table=cleanupBodyFrames()[size_t(role)];return clip>=0&&size_t(clip)<table.durations.size()?table.durations[size_t(clip)]:0;
 }
 // The fall clip read by the height of its shoulders: the first phase at which
 // they have come down to `lift` of the way from the floor pose to standing.
 // Other visuals (no baked frames) take the phase as the lift.
 float Game::fallPhaseAtLift(ActorVisual visual,float lift){
- lift=std::clamp(lift,0.f,1.f);const int role=int(visual)-int(ActorVisual::Cleanup);if(role<0||role>=6)return 1-lift;
+ lift=std::clamp(lift,0.f,1.f);const int role=cleanupActorBody(visual);if(role<0)return 1-lift;
  const auto&table=cleanupBodyFrames()[size_t(role)];const unsigned count=table.counts[4],offset=table.offsets[4];
  auto height=[&](unsigned frame){const auto&p=table.poses[offset+frame];return (p.rightShoulder.y+p.leftShoulder.y)*.5f;};
  float low=height(0),high=height(0);for(unsigned frame=1;frame<count;++frame)low=std::min(low,height(frame));
@@ -62,15 +63,15 @@ float Game::fallPhaseAtLift(ActorVisual visual,float lift){
 // Where a hand takes a man by the collar: midway between his shoulders, at
 // their top and a little behind them, in his present pose.
 Point3 Game::npcCollar(size_t actor)const{
- const auto&npc=m_friendlyActors.at(actor);const int role=int(npc.track().visual)-int(ActorVisual::Cleanup);const float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=npc.track().scale/1.6f;
+ const auto&npc=m_friendlyActors.at(actor);const int role=cleanupActorBody(npc.track().visual);const float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=npc.track().scale/1.6f;
  Point3 p{0,npc.track().scale*.85f,-.06f};
- if(role>=0&&role<6){const auto frame=cleanupBodyFrame(role,std::clamp(npc.pose.clip,0,int(cleanupBodyFrames()[size_t(role)].clips)-1),npc.pose.phase);p=(frame.rightShoulder+frame.leftShoulder)*.5f;p.y+=.05f;p.z-=.06f;}
+ if(role>=0){const auto frame=cleanupBodyFrame(role,std::clamp(npc.pose.clip,0,int(cleanupBodyFrames()[size_t(role)].clips)-1),npc.pose.phase);p=(frame.rightShoulder+frame.leftShoulder)*.5f;p.y+=.05f;p.z-=.06f;}
  return {npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};
 }
 std::pair<Point3,Point3> Game::friendlyShotBounds(size_t actor)const{
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();Point3 center{npc.pose.position.x,npc.pose.position.y,npc.pose.z};
- int role=int(track.visual)-int(ActorVisual::Cleanup);
- if(!npcIncapacitated(actor)||npcHeld(actor)||role<0||role>=6)return {center-Point3{.2f,.2f,0},center+Point3{.2f,.2f,friendlyHullHeight(actor,track)}};
+ int role=cleanupActorBody(track.visual);
+ if(!npcIncapacitated(actor)||npcHeld(actor)||role<0)return {center-Point3{.2f,.2f,0},center+Point3{.2f,.2f,friendlyHullHeight(actor,track)}};
  const auto&bounds=cleanupBodyFrames()[size_t(role)].fallBounds;float frame=std::clamp(npc.pose.phase,0.f,1.f)*(bounds.size()-1);size_t a=size_t(frame),b=std::min(a+1,bounds.size()-1);
  auto [lo,hi]=bounds[a];const auto&next=bounds[b];lo={std::min(lo.x,next.first.x),std::min(lo.y,next.first.y),std::min(lo.z,next.first.z)};hi={std::max(hi.x,next.second.x),std::max(hi.y,next.second.y),std::max(hi.z,next.second.z)};
  float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=track.scale/1.6f;Point3 low{1000,1000,1000},high{-1000,-1000,-1000};
@@ -78,18 +79,18 @@ std::pair<Point3,Point3> Game::friendlyShotBounds(size_t actor)const{
  return {low-Point3{.02f,.02f,.02f},high+Point3{.02f,.02f,.02f}};
 }
 std::array<Point3,2> Game::heldNpcGrips()const{
- int actor=heldNpc();if(actor<0)return {};const auto&npc=m_friendlyActors[size_t(actor)];int role=int(npc.track().visual)-int(ActorVisual::Cleanup);
- Point3 right{-.18f,1.24f,0},left{.18f,1.24f,0};if(role>=0&&role<6){auto frame=cleanupBodyFrame(role,0,0);right=frame.rightShoulder;left=frame.leftShoulder;}
+ int actor=heldNpc();if(actor<0)return {};const auto&npc=m_friendlyActors[size_t(actor)];int role=cleanupActorBody(npc.track().visual);
+ Point3 right{-.18f,1.24f,0},left{.18f,1.24f,0};if(role>=0){auto frame=cleanupBodyFrame(role,0,0);right=frame.rightShoulder;left=frame.leftShoulder;}
  float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=npc.track().scale/1.6f;
  auto grip=[&](Point3 p){p.y+=.05f;p.z-=.07f;return Point3{npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};};
  return {grip(right),grip(left)};
 }
 std::array<Point3,2> Game::takedownGrips()const{
  if(m_takedownActor<0||size_t(m_takedownActor)>=m_friendlyActors.size())return {};
- const auto&npc=m_friendlyActors[size_t(m_takedownActor)];int role=int(npc.track().visual)-int(ActorVisual::Cleanup);
+ const auto&npc=m_friendlyActors[size_t(m_takedownActor)];int role=cleanupActorBody(npc.track().visual);
  // Wrap the neck/upper shoulders from behind — not a jab aimed at the ankles.
  Point3 right{-.12f,1.48f,-.04f},left{.12f,1.48f,-.04f};
- if(role>=0&&role<6){auto frame=cleanupBodyFrame(role,0,0);right=frame.rightShoulder;left=frame.leftShoulder;right.y=left.y=std::max(right.y,left.y)+.22f;right.z=left.z=-.05f;right.x=-.11f;left.x=.11f;}
+ if(role>=0){auto frame=cleanupBodyFrame(role,0,0);right=frame.rightShoulder;left=frame.leftShoulder;right.y=left.y=std::max(right.y,left.y)+.22f;right.z=left.z=-.05f;right.x=-.11f;left.x=.11f;}
  float c=std::cos(npc.pose.yaw),s=std::sin(npc.pose.yaw),scale=npc.track().scale/1.6f;
  auto grip=[&](Point3 p){return Point3{npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};};
  return {grip(right),grip(left)};
@@ -109,8 +110,8 @@ NpcWeaponPose Game::npcWeaponPoseAt(size_t actor,const ActorPose& pose,Point3 ta
  if(cleanup){int upperClip=pose.clip,lowerClip=pose.clip;float upperPhase=pose.phase;
   if(layerAim){upperClip=weapon.crouched?5:0;lowerClip=weapon.crouched?5:pose.clip;
    if(!weapon.crouched&&(!weapon.handgun||cleanupAnimationDuration(track.visual,2)>0)&&state(friendlyKey(actor,"weapon_action"))==int(GuardAction::Fire)){upperClip=2;upperPhase=float(state(friendlyKey(actor,"weapon_action_ms")))/guardActionDuration(GuardAction::Fire);}}
-  upperBody=cleanupBodyFrame(int(track.visual)-4,upperClip,upperPhase);lowerBody=cleanupBodyFrame(int(track.visual)-4,lowerClip,pose.phase);
-  if(weapon.crouched){auto standing=cleanupBodyFrame(int(track.visual)-4,0,pose.phase);crouchDrop=std::max(0.f,((standing.rightShoulder.y+standing.leftShoulder.y)-(upperBody.rightShoulder.y+upperBody.leftShoulder.y))*.5f)*scale;}
+  upperBody=cleanupBodyFrame(cleanupActorBody(track.visual),upperClip,upperPhase);lowerBody=cleanupBodyFrame(cleanupActorBody(track.visual),lowerClip,pose.phase);
+  if(weapon.crouched){auto standing=cleanupBodyFrame(cleanupActorBody(track.visual),0,pose.phase);crouchDrop=std::max(0.f,((standing.rightShoulder.y+standing.leftShoulder.y)-(upperBody.rightShoulder.y+upperBody.leftShoulder.y))*.5f)*scale;}
  }
  weapon.grip=Point3{pose.position.x,pose.position.y,pose.z}+right*(-.12f*scale)+forward*(gripForward*scale)+Point3{0,0,(1.024f+.216f*weapon.raise)*scale-crouchDrop};
  const auto carryGrip=weapon.grip;

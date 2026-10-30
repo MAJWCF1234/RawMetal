@@ -163,6 +163,8 @@ void Game::updateMechanisms(float dt){
    if(!((age<=at&&(advanced>at||(ended&&at==sequence.durationMs)))||(wrapped&&next>at)))continue;
    auto position=chunkOffset(level)+cue.position-chunkOffset(m_level);
    m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35,cue.z});m_sounds.back().aiRadius=cue.aiRadius;
+   if(!cue.voice.empty())for(size_t clip=0;clip<NpcVoiceClips.size();++clip)if(cue.voice==NpcVoiceClips[clip].line){
+    m_sounds.push_back({Sound::WorkerDying,position,cue.gain,1,true,35,cue.z,int(clip),0,2});break;}
   }
  }
  for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);

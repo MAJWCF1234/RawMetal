@@ -75,6 +75,74 @@ breadcrumb, paid off in steps, never in one cut-scene:
   (kept out of ordinary squads until now) leads the last assault at the Deep
   Gate.
 
+#### The Investigator (decided 2026-10-29)
+
+Chapter 1 shows what the Cleanup Force does; Chapter 2 shows who tells it to.
+Depthworks Internal Investigations sent one officer down after the surge to
+"contain the incident": the **Investigator**, a long-coated company
+investigator (the supplied Investigator model) who runs the whole cleanup
+operation from below. They never wear the Force's suit and never raise their
+voice. Every squad answers to them.
+
+- **How they direct.** Orders go out over the squads' radios, and the player
+  hears them through any guard's handset in earshot, filtered and captioned
+  INVESTIGATOR. An order is not flavour: it changes what the squad does. It
+  moves a squad to another sector, puts a sector on Caution, orders a sweep, or
+  revokes a truce ("Detail six is compromised. Treat them as exposed."), which
+  turns that squad's stance and sometimes turns its neighbours on it.
+- **What they want.** The incident buried, and the exposure records with it.
+  They are looking for LAB 4 too, for the company's reasons, not the
+  player's. Her personnel card is gone from Research Administration because the
+  Investigator took it first.
+- **How the player meets them.**
+  1. *Research Intake (68):* first heard, not seen. A squad's radio gives the
+     Investigator's orders while the player hides from them, and the squad
+     answers "copy" like men who do not believe it.
+  2. *Research Administration (70):* first seen, through the records office
+     glass. The Investigator stands among filing cabinets reading personnel
+     cards, directing a squad by hand, and leaves by the far door with LAB 4's
+     card. No fight; the glass holds and the door locks behind them.
+  3. *Containment (94-103):* the orders turn on the Force itself. Squads that
+     struck a truce with the player are revoked over the radio, and some men
+     argue back on the channel before they obey or desert.
+- **With the stances.** Losing squads resent the orders, and dialogue lets the
+  player use it. Allies the player wins are the ones the Investigator writes off.
+- **After Chapter 2.** The Investigator commands the last team at the drill in
+  Chapter 3 and sends the Limitator in Chapter 4. They are never a boss in
+  Chapter 2; they appear, direct and leave.
+- **Marketing.** The Investigator is a Chapter 2 reveal: keep them out of
+  trailers and store copy.
+
+#### Chapter 2: three stances, one Force (decided 2026-10-29)
+
+Every squad in Chapter 2 holds one of three stances, and which one depends on
+the squad, not the chapter:
+
+1. **Hostile, breaking.** Their orders still say no witnesses. Fewer men,
+   frightened, short of ammunition; the stealth game of Chapter 1 against
+   people who are barely holding.
+2. **Conditional truce.** A squad cut off in its sector holds fire while the
+   player keeps a weapon down and stays out of its lines. Threaten them, be
+   seen with a specimen or bring the transformed onto them, and the truce
+   breaks.
+3. **Allies for a stretch.** One squad works with the player for part of the
+   chapter. By Chapter 4 the Force is the enemy again when it raids the scrap
+   city, and the player may meet those men on the other side.
+
+Stance is state, not a fixed label: it moves with what the player does, what
+the squad has lost and what it has heard over the radio.
+
+**Voices change with stance.** Each stance has its own barks for the same
+beats (sighting, warning, losing someone, calling it off), and lines shift as
+the squad breaks: orders at first, then fear, then pleading or bargaining.
+
+**Dialogue with choices, STALKER/Fallout style.** Truce and allied squads
+can be spoken to: a line from them, two to four replies from the player, and
+the replies set states (truce kept or broken, information, a door opened, a
+man let go). It grows out of the existing terminal conversation and NPC voice
+systems, not a separate one. Voiced like every other line (ElevenLabs v3,
+STT-checked).
+
 ### The transformed
 
 - In the plant and labs they are the danger: patients, specimens and workers

@@ -178,9 +178,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   Texture* scorched[]={&m_transformedTexture,&m_transformedGloves,&m_transformedBoots};
   for(int i=0;i<3;++i){auto&texture=*scorched[i];texture=loadTexture(279+i);for(auto&pixel:texture.pixels)scorch(pixel);for(auto&level:texture.mips)for(auto&pixel:level)scorch(pixel);deriveSurfaceNormal(texture,.35f);texture.glossStrength=.05f;}}
  for(int i=0;i<6;++i){auto&texture=m_staffTextures[size_t(i)];texture=loadTexture(i<4?696+i*4:712+(i-4));deriveSurfaceNormal(texture,.35f);texture.glossStrength=i==5?.2f:.05f;}
- for(int role=0;role<6;++role){for(int i=0;i<2;++i){auto&texture=m_cleanupTextures[role][i];texture=loadTexture(305+role*5+i);deriveSurfaceNormal(texture,.25f);texture.glossStrength=.12f;}
-   auto joints=loadResource(340+role);uint32_t corners=0;if(joints.size()<104||std::memcmp(joints.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup attachment calibration");std::memcpy(&corners,joints.data()+100,4);
-   const Mesh*meshes[]={&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher};const auto&mesh=*meshes[role];if(corners!=mesh.triangles.size()*3||joints.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup attachment topology mismatch");
+ for(int role=0;role<kCleanupBodies;++role){const auto resources=cleanupBodyResources(role);for(int i=0;i<2;++i){auto&texture=m_cleanupTextures[role][i];texture=loadTexture(resources.textures[size_t(i)]);deriveSurfaceNormal(texture,.25f);texture.glossStrength=.12f;}
+   auto joints=loadResource(resources.skin);uint32_t corners=0;if(joints.size()<104||std::memcmp(joints.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup attachment calibration");std::memcpy(&corners,joints.data()+100,4);
+   const auto&mesh=*cleanupMeshes()[size_t(role)];if(corners!=mesh.triangles.size()*3||joints.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup attachment topology mismatch");
    std::memcpy(m_cleanupArms[role].data(),joints.data()+4,72);std::memcpy(m_cleanupPalms[role].data(),joints.data()+76,24);m_cleanupWeights[role].resize(corners);std::memcpy(m_cleanupWeights[role].data(),joints.data()+104,size_t(corners)*4);for(const auto&weight:m_cleanupWeights[role])if(weight[3]>1)throw std::runtime_error("Invalid cleanup arm side");}
  m_handgunTexture=loadTexture(338);deriveSurfaceNormal(m_handgunTexture,.3f);m_handgunTexture.glossStrength=.25f;
  m_droneTexture=loadTexture(335);deriveSurfaceNormal(m_droneTexture,.3f);m_droneTexture.glossStrength=.2f;
@@ -448,7 +448,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  m_liftSign=makeSign("FREIGHT / 03","MAX LOAD 4000 KG",0xffd7ac64u);m_liftDispatch=makeSign("SURFACE / UP","DISPATCH CONTROL",0xff9fceaeu);
  m_feedSign=makeSign("FEED","P-01",0xffd7ac64u);m_returnSign=makeSign("RETURN","P-02",0xff53aec4u);
  for(int kind=0;kind<3;++kind)m_paperProps[size_t(kind)]=makePaperProp(Readable(kind+1));
- m_noticeSigns[0]=makeSign("FREIGHT SERVICES","ACCESS SUSPENDED",0xffa7a766u);m_noticeSigns[1]=makeSign("PRIMARY UTILITIES","SERVICE ACCESS",0xffa7a766u);
+ m_noticeSigns[0]=makeSign("FREIGHT SERVICES","ACCESS SUSPENDED",0xffa7a766u);m_noticeSigns[1]=makeSign("PRIMARY UTILITIES","SERVICE ACCESS",0xffa7a766u);m_noticeSigns[2]=makeSign("ENERGY RESEARCH","SEALED",0xffc8392du);
  m_serviceAreaSigns[0]=makeSign("SERVICE STORES","SPARES / MAINTENANCE",0xff53aec4u);
  m_serviceAreaSigns[1]=makeSign("PRIMARY UTILITIES","PERMIT REQUIRED",0xffd7ac64u);
  m_serviceAreaSigns[2]=makeSign("SALVAGE DISPATCH","WASTE HANDLING",0xff9fceaeu);

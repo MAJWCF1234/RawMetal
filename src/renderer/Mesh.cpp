@@ -2,6 +2,7 @@
 #include "Mesh.h"
 #include "../core/PackedResource.h"
 #include "../core/ActorBodyAim.h"
+#include "../core/CleanupBodies.h"
 #include <windows.h>
 #include <stdexcept>
 #include <algorithm>
@@ -110,8 +111,9 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
     if(id==323){m_anchorFrames=loadResource(339);if(m_anchorFrames.size()!=size_t(totalSamples)*24)throw std::runtime_error("Medic treatment attachment topology mismatch");}
   m_creatureIndices.resize(vertices);std::memcpy(m_creatureIndices.data(),m_creatureFrames.data()+20,size_t(vertices)*2);
   for(auto index:m_creatureIndices)if(index>=m_creatureVertices)throw std::runtime_error("Invalid creature vertex index");
-  if(id==303||id==308||id==313||id==318||id==323||id==328){
-   auto calibration=loadResource(340+(id-303)/5);uint32_t corners=0;
+  int cleanupBody=-1;for(int body=0;body<kCleanupBodies;++body)if(id==cleanupBodyResources(body).mesh&&animationResource==cleanupBodyResources(body).animation)cleanupBody=body;
+  if(cleanupBody>=0){
+   auto calibration=loadResource(cleanupBodyResources(cleanupBody).skin);uint32_t corners=0;
    if(calibration.size()<104||std::memcmp(calibration.data(),"RMC2",4))throw std::runtime_error("Invalid cleanup layer calibration");
    std::memcpy(&corners,calibration.data()+100,4);
    if(corners!=vertices||calibration.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup layer calibration topology mismatch");
@@ -257,10 +259,10 @@ bool Mesh::testCleanupTankAim(){
  auto check=[&](bool condition,const char*name,int role){++checks;report<<(condition?"PASS: ":"FAIL: ")<<role<<' '<<name<<'\n';passed&=condition;};
  const float phases[]={0.f,.125f,.25f,.5f,.75f,.875f,1.f};
  const Point3 angles[]={{0,0,0},{.7f,.55f,0},{-.7f,-.45f,0},{.55f,-.35f,0},{-.5f,.45f,0}};
- const char*roles[]={"Assault","Engineer","Sharpshooter","Heavy","Medic","Rusher"};
+ const char*roles[]={"Assault","Engineer","Sharpshooter","Heavy","Medic","Rusher","Investigator"};
  struct Edge {uint16_t a,b;float bind;};
- for(int role=0;role<6;++role){
-  Mesh mesh(303+role*5,"",304+role*5);report<<"ROLE "<<roles[role]<<'\n';
+ for(int role=0;role<kCleanupBodies;++role){
+  const auto resources=cleanupBodyResources(role);Mesh mesh(resources.mesh,"",resources.animation);report<<"ROLE "<<roles[role]<<'\n';
   bool decodedExact=true;std::vector<Point3> decoded;
   for(unsigned clip=0;clip<mesh.m_creatureClips;++clip)for(float phase:{-.1f,0.f,.013f,.125f,.333f,.5f,.999f,1.f,1.1f}){
    mesh.sampleCreatureClip(int(clip),phase,decoded);
@@ -275,7 +277,7 @@ bool Mesh::testCleanupTankAim(){
    for(unsigned clip=0;clip<mesh.creatureClipCount();++clip){float seconds=mesh.creatureClipDuration(int(clip));timed&=std::isfinite(seconds)&&seconds>0&&float(mesh.m_creatureSampleCounts[clip]-1)/seconds>=23.9f;}
    check(timed,"direct character clips retain at least 24 source samples per second",role);
   }else check(mesh.creatureClipDuration(0)==0,"legacy banks retain their existing playback clock",role);
-  const auto&bind=mesh.bindTriangles();auto calibration=loadResource(307+role*5);
+  const auto&bind=mesh.bindTriangles();auto calibration=loadResource(resources.skin);
   std::vector<Edge>handEdges,fingerEdges,headEdges,waistEdges;int hands[2]{};
   for(auto side:mesh.m_creatureHandSide)if(side)++hands[side-1];
   bool handOwned=hands[0]>20&&hands[1]>20;
@@ -335,7 +337,10 @@ bool Mesh::testCleanupTankAim(){
   check(waistStretch<3.f,"waist edges remain bounded across gait and aim",role);
   check(jointLengthError<.00001f,"composed arm metadata preserves limb lengths",role);
   check(finite&&grounded,"all combined poses and joints remain finite and grounded",role);
-  check(crouchTop<=1.363f,"aimed crouch stays inside the 1.36 metre NPC hull",role);
+  // The Investigator's coat folds badly in a kneel: slot 5 is a standing
+  // pistol ready, so a crouched Investigator stays at full height.
+  if(role==6)check(crouchTop>1.45f&&crouchTop<=1.65f,"the Investigator's crouch slot stands at full height",role);
+  else check(crouchTop<=1.363f,"aimed crouch stays inside the 1.36 metre NPC hull",role);
   float identicalError=0,loopError=0,rootDrift=0,clampError=0;
   for(int clip:{0,1,5}){
    auto start=mesh.sampleCreatureLayerPose(clip,0),end=mesh.sampleCreatureLayerPose(clip,1);auto rootDelta=end.pelvis-start.pelvis;

@@ -87,7 +87,7 @@ MedicalCaseFrame medicalCaseFrame(Point3 actorBase,float yaw,float size){
 }
 bool SoftwareRenderer::validate3D(){
  if(!testNormalMapping())return false;
- {for(Mesh*cleanupMesh:{&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher}){const auto&rest=cleanupMesh->bindTriangles();
+ {for(Mesh*cleanupMesh:cleanupMeshes()){const auto&rest=cleanupMesh->bindTriangles();
   bool head=false,body=false;for(const auto&face:rest){if(face.part<0||size_t(face.part)>=cleanupMesh->materialNames.size())return false;const auto&name=cleanupMesh->materialNames[size_t(face.part)];head|=name.find("head")!=std::string::npos;body|=name.find("body")!=std::string::npos;}
   if(!head||!body)return false;
   // Natural idle is a posed clip. The repaired OBJ is the immutable bind mesh.
@@ -1815,7 +1815,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   bool human=humanActorVisual(track.visual),cleanup=cleanupActorVisual(track.visual),wasp=track.visual==ActorVisual::Wasp;
   // Civilians share the Worker path; civilianBody picks the Worker or a staff model.
   const int civilianBody=std::max(0,civilianActorBody(track.visual));const auto&rig=kCivilianRigs[size_t(civilianBody)];
-  int cleanupRole=cleanup?int(track.visual)-4:0;Mesh*cleanupMeshes[]={&m_cleanupMesh,&m_cleanupEngineer,&m_cleanupSharpshooter,&m_cleanupHeavy,&m_cleanupMedic,&m_cleanupRusher};auto& mesh=cleanup?*cleanupMeshes[cleanupRole]:human?civilianMesh(civilianBody):wasp?m_waspMesh:m_enemyMesh;
+  int cleanupRole=cleanup?cleanupActorBody(track.visual):0;auto& mesh=cleanup?*cleanupMeshes()[size_t(cleanupRole)]:human?civilianMesh(civilianBody):wasp?m_waspMesh:m_enemyMesh;
   bool treating=human&&weapon&&weapon->treatment>0&&pose.clip!=4;
   bool directTreatment=treating&&cleanup&&mesh.hasDirectCreatureMotion();
   bool engineer=human&&weapon&&weapon->armed&&track.ai.role==GuardSquadRole::Engineer&&pose.clip!=4;
@@ -1899,9 +1899,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    std::array<Point3,2> elbows=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][1],m_cleanupArms[cleanupRole][1][1]}:rig.elbows;
    std::array<Point3,2> hands=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][2],m_cleanupArms[cleanupRole][1][2]}:rig.hands;
    if(posedArms)for(int side=0;side<2;++side){const auto&j=mesh.creatureLayerPose().arms[side];shoulders[side]=j[0];elbows[side]=j[1];hands[side]=j[2];}
-   // One binding per body: 0 the Worker, 1-6 the cleanup roles, 7-11 the staff.
-   const size_t bindingSlot=cleanup?size_t(cleanupRole+1):civilianBody?size_t(6+civilianBody):0;
-   static std::array<std::vector<std::array<ArmedVertex,3>>,12> bindings;static std::once_flag bindOnce[12];static std::array<uint32_t,12> groupCounts{};
+   // One binding per body: 0 the Worker, 1-7 the cleanup bodies, 8-12 the staff.
+   const size_t bindingSlot=cleanup?size_t(cleanupRole+1):civilianBody?size_t(kCleanupBodies+civilianBody):0;
+   constexpr size_t bodies=1+kCleanupBodies+5;
+   static std::array<std::vector<std::array<ArmedVertex,3>>,bodies> bindings;static std::once_flag bindOnce[bodies];static std::array<uint32_t,bodies> groupCounts{};
    auto&bind=bindings[bindingSlot];std::call_once(bindOnce[bindingSlot],[&](){bind=[&](){
     const auto&rest=mesh.bindTriangles();std::vector<std::array<ArmedVertex,3>> result(rest.size());
     auto segmentDistance=[&](Point3 p,Point3 a,Point3 b){auto line=b-a;auto delta=p-a;float t=std::clamp(dot(delta,line)/dot(line,line),0.f,1.f);auto d=delta-line*t;return std::sqrt(dot(d,d));};

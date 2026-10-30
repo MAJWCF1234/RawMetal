@@ -3,7 +3,7 @@
 namespace retro {
 enum class NpcVoiceCue {Patrol,Investigate,Alert,Hurt,Down,Retreat,AllyDown,Support,Deploy,Repair,Treat,Follow,Wait,Danger,Witness,CheckLockers,Found,GiveUp,Warn,Betrayed,Greet,Plead,Talk};
 struct NpcVoiceClip {int role; NpcVoiceCue cue; float seconds; int stance=0; int mood=0; const char* line="";};
-inline constexpr std::array<NpcVoiceClip,212> NpcVoiceClips={{
+inline constexpr std::array<NpcVoiceClip,228> NpcVoiceClips={{
  {1,NpcVoiceCue::Patrol,2.8530f,0,0,""},
  {1,NpcVoiceCue::Patrol,3.2122f,0,0,""},
  {1,NpcVoiceCue::Investigate,1.6479f,0,0,""},
@@ -216,5 +216,21 @@ inline constexpr std::array<NpcVoiceClip,212> NpcVoiceClips={{
  {10,NpcVoiceCue::Talk,9.2000f,0,0,"toll_price"},
  {10,NpcVoiceCue::Talk,4.1722f,0,0,"toll_refuse"},
  {10,NpcVoiceCue::Talk,5.4093f,0,0,"toll_crate"},
+ {11,NpcVoiceCue::Talk,2.1550f,0,0,"inv_intake_1"},
+ {1,NpcVoiceCue::Talk,3.1032f,0,0,"rf_intake_lead_1"},
+ {11,NpcVoiceCue::Talk,6.4743f,0,0,"inv_intake_2"},
+ {1,NpcVoiceCue::Talk,3.4496f,0,0,"rf_intake_lead_2"},
+ {11,NpcVoiceCue::Talk,4.1805f,0,0,"inv_intake_3"},
+ {10,NpcVoiceCue::Talk,3.8056f,0,0,"proc_hello"},
+ {10,NpcVoiceCue::Talk,9.6419f,0,0,"proc_who"},
+ {10,NpcVoiceCue::Talk,9.4875f,0,0,"proc_squad"},
+ {10,NpcVoiceCue::Talk,7.0305f,0,0,"proc_admin"},
+ {12,NpcVoiceCue::Talk,5.9658f,0,0,"inv_admin_1"},
+ {10,NpcVoiceCue::Talk,1.2427f,0,0,"rf_admin_door_1"},
+ {12,NpcVoiceCue::Talk,2.9229f,0,0,"inv_admin_2"},
+ {12,NpcVoiceCue::Talk,3.7610f,0,0,"inv_admin_3"},
+ {11,NpcVoiceCue::Talk,7.5829f,0,0,"inv_screen_1"},
+ {1,NpcVoiceCue::Talk,4.7610f,0,0,"md_screen_a_1"},
+ {11,NpcVoiceCue::Talk,1.1985f,0,0,"inv_screen_2"},
 }};
 }

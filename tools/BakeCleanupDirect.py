@@ -1,4 +1,4 @@
-"""Bake only the six current squad roles' required direct Mixamo motions.
+"""Bake the six squad roles' and the Investigator's required direct Mixamo motions.
 
 Run in Blender --python-exit-code 1 --python this-file. Raw FBXs remain local.
 Publishes matching mesh, evaluated skin vertices, semantic arm bindings and
@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / 'src/assets/actors/cleanup'
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--roles', nargs='+', default=['assault', 'engineer', 'sharpshooter', 'heavy', 'medic', 'rusher'])
+# Worktrees carry only the tracked manifests; the raw FBXs live in the main checkout.
+parser.add_argument('--source-root', type=Path, default=ROOT)
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else [])
 
 
@@ -43,7 +45,36 @@ def assign(rig, action):
         rig.animation_data.action_slot = action.slots[0]
 
 
+def investigator(library):
+    # The Investigator wears a long coat that folds sharply in crouch and
+    # prone, so every take is a standing one. IDs 0-5 keep the squad's core
+    # slots; slot 5 (the squad's crouch) is a standing two-hand pistol ready.
+    pickup = library / 'special/picking-up-object-picking-up-an-object-with-one-hand.fbx'
+    shooting = library / 'special/shooting-pistol-shooting-a-pistol-from-behind-cover.fbx'
+    specs = [
+        dict(path=library / 'locomotion-pack/idle.fbx', loop=True),
+        dict(path=library / 'male-locomotion-pack/walking.fbx', loop=True),
+        dict(path=shooting, loop=False, center_seconds=.25),
+        dict(path=library / 'male-injured-pack/injured hurting idle.fbx', loop=False, seconds=(0, .5)),
+        dict(path=library / 'special/dying-backwards-shot-to-the-chest-falling-backwards.fbx', loop=False),
+        dict(path=library / 'pistol-handgun-locomotion-pack/pistol idle.fbx', loop=True),
+        # 6 radio: the hand held up at the mask, as to a handset.
+        dict(path=pickup, loop=True, pingpong=True, seconds=(1.7, 2.2)),
+        # 7 reading: head bowed over what the right hand holds at the chest.
+        dict(path=library / 'special/picking-up-picking-up-an-object.fbx', loop=True, pingpong=True, seconds=(5.0, 6.1)),
+        # 8 pointing: the arm raised straight ahead; hold phase 1 to keep it there.
+        dict(path=pickup, loop=False, seconds=(0, .55)),
+        # 9 directing: a flick of the hand and a sweep of the arm, rest to rest.
+        dict(path=library / 'gestures-pack-basic/dismissing gesture.fbx', loop=False),
+    ]
+    for spec in specs:
+        assert spec['path'].is_file(), spec['path']
+    return specs
+
+
 def selected(role, library):
+    if role == 'investigator':
+        return investigator(library)
     pistol = role in ('engineer', 'medic')
     def file(name):
         p = library / name
@@ -79,14 +110,14 @@ def selected(role, library):
 
 
 def bake(role):
-    library = ROOT / 'source-assets/mixamo-motion' / (role + '-direct')
+    library = args.source_root / 'source-assets/mixamo-motion' / (role + '-direct')
     manifest = json.loads((library / 'manifest.json').read_text())
     file_hashes = {f['file']: f['sha256'] for g in manifest['packs'] for f in g['files']}
     specs = selected(role, library)
     # Match each pack's own character bind pose. All poses are transferred as
     # evaluated bone matrices, rather than local rotation F-curves.
     pack = 'pistol-handgun-locomotion-pack' if role in ('medic', 'engineer') else 'pro-rifle-pack'
-    base = library / pack / (manifest['character'] + '.fbx')
+    base = library / pack / ('Investigator.fbx' if role == 'investigator' else manifest['character'] + '.fbx')
     if not base.exists():
         bases = list(library.glob('*/' + manifest['character'] + '.fbx'))
         assert len(bases) == 1, bases
@@ -117,7 +148,8 @@ def bake(role):
     if backup.exists():
         authored = backup
     authored_uv, material_uv, material = [], {}, 'cleanup_body'
-    for line in authored.read_text().splitlines():
+    # A new body has no earlier OBJ: its head material comes from the weights.
+    for line in (authored.read_text().splitlines() if authored.exists() else []):
         if line.startswith('vt '):
             authored_uv.append(tuple(round(float(v), 5) for v in line.split()[1:3]))
         elif line.startswith('usemtl '):
@@ -215,7 +247,7 @@ def bake(role):
             first, last = center - half, center + half
         duration = (last - first) / fps
         # Per-role density is decided after importing all selected timelines.
-        evidence.append(dict(clip=clip, file=path.relative_to(ROOT).as_posix(), sha256=sha(path), source_fps=fps,
+        evidence.append(dict(clip=clip, file=path.relative_to(args.source_root).as_posix(), sha256=sha(path), source_fps=fps,
                              source_first_frame=first, source_last_frame=last, duration_seconds=duration, loop=spec['loop']))
         samples = max(2, math.ceil(duration * 24 - 1e-6) + 1)
         # First inspect clocks, then evaluate every published sample at the
@@ -281,6 +313,14 @@ def bake(role):
             finger_temporal = max(finger_temporal, max(((a - b).length * hand_scale for a, b in zip(current_fingers, first_fingers)), default=0))
             frames.append(posed)
             layers.append(layer)
+        if spec.get('pingpong'):
+            # A held pose cut from a longer take does not return to its start:
+            # play it out and back, so the loop seam is the same sample.
+            frames += frames[-2::-1]
+            layers += layers[-2::-1]
+            samples = len(frames)
+            spec.update(samples=samples, duration=spec['duration'] * 2)
+            evidence[clip].update(duration_seconds=spec['duration'], pingpong=True)
         closure = 0.
         if spec['loop']:
             closure = max((a - b).length for a, b in zip(frames[0], frames[-1]))
@@ -299,6 +339,7 @@ def bake(role):
         all_layers += layers
         quantization = max((p - Vector(tuple(round(v * 1000) / 1000 for v in p))).length for f in frames for p in f)
         hand_motion = max((f[i] - frames[0][i]).length for f in frames for ids in finger_vertices for i in ids)
+        assert samples <= 512, (role, clip, samples)
         evidence[clip].update(samples=samples, max_quantization_error_m=quantization, max_hand_motion_m=hand_motion,
                               max_finger_motion_m=finger_motion, max_finger_temporal_motion_m=finger_temporal,
                               max_pose_transfer_error=max_error, max_loop_closure_m=closure)
@@ -324,9 +365,9 @@ def bake(role):
                role + '-arms.bin': calibration, role + '-skin.bin': calibration}
     if role == 'medic':
         outputs['medic-treatment-anchors.bin'] = b''.join(struct.pack('<6f', *(list(layer[4]) + list(layer[8]))) for layer in all_layers)
-    result = dict(role=role, vertices=len(points), corners=len(corner_indices), samples=max_samples,
+    result = dict(role=role, vertices=len(points), corners=len(corner_indices), samples=max(s['samples'] for s in specs),
                   total_samples=total_samples, clips=evidence,
-                  base_file=base.relative_to(ROOT).as_posix(), base_sha256=sha(base),
+                  base_file=base.relative_to(args.source_root).as_posix(), base_sha256=sha(base),
                   output_sha256={name: hashlib.sha256(content).hexdigest() for name, content in outputs.items()})
     return result, outputs
 
