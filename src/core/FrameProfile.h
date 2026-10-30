@@ -26,13 +26,19 @@ enum Cost {Friendly,Intent,Route,GraphBuild,GraphPath,Walk,Combat,Drones,Enemies
  DoorRequests,
  // friendlyChunkNeeded: updateStreaming asks it of every other chunk each frame (inside streaming).
  ChunkNeeded,
+ // GPU time per pass, from timestamp queries, read back two frames late when
+ // the frame slot's fence is waited on: lamp/sun shadow maps, the scene pass,
+ // each post stage (occlusion, screen shadows and shafts, exposure, compose,
+ // TAA) and the window composite.
+ GpuShadows,GpuScene,GpuOcclusion,GpuShafts,GpuExposure,GpuCompose,GpuTaa,GpuComposite,
  Count};
 inline constexpr const char* names[]={"friendly","intent","route","graph_build","graph_path","walk","combat","drones","enemies","chunk_copy","draw_scene","actor","prop","skin","support","fits","structure","room","post","sky","viewmodel","pose_wait","render_setup","fence_wait","overlay","gpu_allocation",
  "mechanisms","movement","stealth","scripts","streaming","interaction","clutter","hazards","takedown","guard_tasks","grenades","voices","pickups","locker_doors",
  "enemy_sense","enemy_stalk","enemy_door_plan","enemy_stacked","enemy_repath","enemy_move",
  "stacked_waypoint",
  "guard_mind","guard_threat","locker_witness","guard_schedule","awareness",
- "civilians","door_requests","chunk_needed"};
+ "civilians","door_requests","chunk_needed",
+ "gpu_shadows","gpu_scene","gpu_occlusion","gpu_shafts","gpu_exposure","gpu_compose","gpu_taa","gpu_composite"};
 static_assert(std::size(names)==Count,"every cost has a name");
 inline thread_local uint64_t cpuGrowthFrames=0,gpuBufferGrowths=0;
 inline thread_local bool enabled=false;

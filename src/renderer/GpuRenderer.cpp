@@ -364,6 +364,18 @@ struct GpuRenderer::Impl {
  int frameIndex=0;
  size_t frameVertexCapacity=0,frameActorCapacity=0;
  std::array<VkCommandBuffer,FrameCount> commands{};
+ // Pass timestamps for the frame profiler: Stamps per frame slot (start, after
+ // shadows, after the scene, after each post stage, after the composite).
+ // Written only while the profiler runs (perf::enabled); play pays nothing.
+ // A stage that does not run this frame leaves its pair equal (zero cost).
+ static constexpr uint32_t Stamps=9;VkQueryPool timestamps=VK_NULL_HANDLE;double timestampPeriod=0;std::array<bool,FrameCount> stamped{};
+ void stamp(VkCommandBuffer cmd,uint32_t index){if(!timestamps||!perf::enabled)return;vkCmdWriteTimestamp(cmd,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,timestamps,uint32_t(frameIndex)*Stamps+index);if(index==Stamps-1)stamped[size_t(frameIndex)]=true;}
+ void readStamps(int slot){
+  if(!stamped[size_t(slot)])return;stamped[size_t(slot)]=false;if(!perf::enabled)return;
+  std::array<uint64_t,Stamps> t{};if(vkGetQueryPoolResults(device,timestamps,uint32_t(slot)*Stamps,Stamps,sizeof(t),t.data(),sizeof(uint64_t),VK_QUERY_RESULT_64_BIT)!=VK_SUCCESS)return;
+  const perf::Cost passes[Stamps-1]={perf::GpuShadows,perf::GpuScene,perf::GpuOcclusion,perf::GpuShafts,perf::GpuExposure,perf::GpuCompose,perf::GpuTaa,perf::GpuComposite};
+  for(uint32_t i=0;i+1<Stamps;++i)if(t[i+1]>=t[i])perf::costs[passes[i]]+=double(t[i+1]-t[i])*timestampPeriod*1e-6;
+ }
  std::array<VkFence,FrameCount> fences{};
  std::array<bool,FrameCount> frameInFlight{};
  std::array<Buffer,FrameCount> vertexBuffers{};
@@ -592,7 +604,7 @@ struct GpuRenderer::Impl {
  std::vector<Vertex> sortedVertices;std::vector<Batch> sortedBatches;
  int width=0,height=0;VkFormat sceneFormat=VK_FORMAT_B8G8R8A8_UNORM;VkSampleCountFlagBits sceneSamples=VK_SAMPLE_COUNT_1_BIT;bool hdrScene=false;std::string name;
  ~Impl(){
-  if(device){vkDeviceWaitIdle(device);if(vrMode&&VrRuntime::active())VrRuntime::active()->shutdownGraphics();if(framebuffer)vkDestroyFramebuffer(device,framebuffer,nullptr);
+  if(device){vkDeviceWaitIdle(device);if(timestamps)vkDestroyQueryPool(device,timestamps,nullptr);if(vrMode&&VrRuntime::active())VrRuntime::active()->shutdownGraphics();if(framebuffer)vkDestroyFramebuffer(device,framebuffer,nullptr);
    for(auto f:swapFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:swapViews)vkDestroyImageView(device,v,nullptr);for(auto&i:vrOutputs){i.view=VK_NULL_HANDLE;destroy(i);}if(swapchain)vkDestroySwapchainKHR(device,swapchain,nullptr);
    for(auto f:mirrorFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:mirrorViews)vkDestroyImageView(device,v,nullptr);if(mirrorPipeline)vkDestroyPipeline(device,mirrorPipeline,nullptr);if(mirrorPass)vkDestroyRenderPass(device,mirrorPass,nullptr);
    for(auto&b:projectionBuffers)destroy(b);for(auto&b:actorBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
@@ -650,6 +662,8 @@ struct GpuRenderer::Impl {
   VkCommandBufferBeginInfo info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   info.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   check(vkBeginCommandBuffer(cmd,&info),"Begin commands");
+  if(timestamps&&perf::enabled)vkCmdResetQueryPool(cmd,timestamps,uint32_t(frameIndex)*Stamps,Stamps);
+  stamped[size_t(frameIndex)]=false;
  }
  // Submit current frame async — no wait. GPU runs in parallel with next frame's CPU work.
  void submitCommandsAsync(VkSemaphore waitSem=VK_NULL_HANDLE,VkSemaphore signalSem=VK_NULL_HANDLE){
@@ -827,6 +841,8 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  VkCommandBufferAllocateInfo cmdAlloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};cmdAlloc.commandPool=m->pool;cmdAlloc.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;
  cmdAlloc.commandBufferCount=uint32_t(Impl::FrameCount);check(vkAllocateCommandBuffers(m->device,&cmdAlloc,m->commands.data()),"Allocate frame command buffers");
  cmdAlloc.commandBufferCount=1;check(vkAllocateCommandBuffers(m->device,&cmdAlloc,&m->uploadCommand),"Allocate upload command buffer");
+ if(deviceProperties.limits.timestampComputeAndGraphics){VkQueryPoolCreateInfo query{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};query.queryType=VK_QUERY_TYPE_TIMESTAMP;query.queryCount=uint32_t(Impl::FrameCount)*Impl::Stamps;
+  if(vkCreateQueryPool(m->device,&query,nullptr,&m->timestamps)==VK_SUCCESS)m->timestampPeriod=deviceProperties.limits.timestampPeriod;}
  VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
  for(int i=0;i<Impl::FrameCount;++i)check(vkCreateFence(m->device,&fenceInfo,nullptr,&m->fences[i]),"Create frame fence");
  check(vkCreateFence(m->device,&fenceInfo,nullptr,&m->uploadFence),"Create upload fence");
@@ -1081,7 +1097,7 @@ void GpuRenderer::beginReuse(){
   auto waitStart=std::chrono::steady_clock::now();
   check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for frame fence");
   perf::costs[perf::FenceWait]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-waitStart).count();
-  m->frameInFlight[m->frameIndex]=false;
+  m->frameInFlight[m->frameIndex]=false;m->readStamps(m->frameIndex);
  }
  for(auto&buffer:m->retiredBuffers[m->frameIndex])m->destroy(buffer);m->retiredBuffers[m->frameIndex].clear();
  m->batches=m->vrBatches;m->capturing=false;m->captureSlot=-1;
@@ -1095,7 +1111,7 @@ void GpuRenderer::begin(int width,int height){
   auto waitStart=std::chrono::steady_clock::now();
   check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for frame fence");
   perf::costs[perf::FenceWait]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-waitStart).count();
-  m->frameInFlight[m->frameIndex]=false;
+  m->frameInFlight[m->frameIndex]=false;m->readStamps(m->frameIndex);
  }
  for(auto&buffer:m->retiredBuffers[m->frameIndex])m->destroy(buffer);m->retiredBuffers[m->frameIndex].clear();
  m->vertices.clear();m->actorVertices.clear();m->batches.clear();m->actorLights.clear();m->actorTriangles=0;m->capturing=false;m->captureSlot=-1;m->renderingViewmodel=false;
@@ -1403,8 +1419,9 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   }begin=end;
  }
  m->batches.swap(m->sortedBatches);
- m->startCommands();
- if(!(m->vrMode&&m->vrEye==1)){m->renderLampShadows(m->commands[m->frameIndex]);m->renderSunShadows(m->commands[m->frameIndex]);} // the second eye reuses the first eye's shadow maps
+ m->startCommands();m->stamp(m->commands[m->frameIndex],0);
+ if(!(m->vrMode&&m->vrEye==1)){m->renderLampShadows(m->commands[m->frameIndex]);m->renderSunShadows(m->commands[m->frameIndex]);}
+ m->stamp(m->commands[m->frameIndex],1); // the second eye reuses the first eye's shadow maps
   VkClearValue clear[5]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};clear[depthIndex+1].color=VkClearColorValue{{1.f,0.f,.5f,1.f}};
  VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
  auto cmd=m->commands[m->frameIndex];
@@ -1428,7 +1445,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);
   if(batch.actor)vkCmdDraw(cmd,3,batch.count,0,batch.start);else vkCmdDraw(cmd,batch.count,1,batch.start,0);
  }
- flushTransparent();vkCmdEndRenderPass(cmd);
+ flushTransparent();vkCmdEndRenderPass(cmd);m->stamp(cmd,2);
  m->postRan=false;
  if(m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer){
   // Scene RGB is linear radiance and alpha is planar camera depth.
@@ -1455,9 +1472,9 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,stage.pipeline);vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,stage.layout,0,1,&stage.sets[m->frameIndex],0,nullptr);
    vkCmdPushConstants(cmd,stage.layout,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(params),push?push:params);vkCmdDraw(cmd,6,1,0,0);vkCmdEndRenderPass(cmd);
   };
-  runStage(m->occlusionStage,{m->target.view});
+  runStage(m->occlusionStage,{m->target.view});m->stamp(cmd,3);
   m->barrier(m->occlusionStage.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
-  runStage(m->shadowStage,{m->target.view});
+  runStage(m->shadowStage,{m->target.view});m->stamp(cmd,4);
   m->barrier(m->shadowStage.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
   {
    // Meter this frame; the window eases toward the target, headless frames adapt at once.
@@ -1472,7 +1489,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    m->barrier(m->exposureImages[size_t(write)],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
    m->exposureLayouts[size_t(write)]=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;m->exposureWrite=write;
   }
-  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view,m->exposureImages[size_t(m->exposureWrite)].view,m->materialTarget.view});
+  m->stamp(cmd,5);
+  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view,m->exposureImages[size_t(m->exposureWrite)].view,m->materialTarget.view});m->stamp(cmd,6);
   m->postRan=true;
   m->taaRan=false;
   if(taaThisFrame){
@@ -1488,6 +1506,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    for(int i=0;i<7;++i)m->taaPrevCamera[size_t(i)]=v[size_t(i)];
   }
  }
+ if(!m->postRan)for(uint32_t i=3;i<=6;++i)m->stamp(cmd,i);
+ m->stamp(cmd,7);
  if(m->surface||m->vrMode){
   // Windowed path: leave command buffer open — present() will append the
   // composite pass and submit everything together in one async submit.
@@ -1499,9 +1519,9 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;host.srcQueueFamilyIndex=host.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;host.buffer=m->readback.handle;host.size=VK_WHOLE_SIZE;
  vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,nullptr,1,&host,0,nullptr);
  // Blocking submit for headless — we need pixels immediately.
- m->submitCommandsAsync();
+ m->stamp(cmd,8);m->submitCommandsAsync();
  check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for headless frame");
- m->frameInFlight[m->frameIndex]=false;
+ m->frameInFlight[m->frameIndex]=false;m->readStamps(m->frameIndex);
  pixels.resize(size_t(m->width*m->height));
  auto half=[](uint16_t bits){float value;if((bits&0x7c00u)==0x7c00u)value=(bits&0x03ffu)?std::numeric_limits<float>::quiet_NaN():std::numeric_limits<float>::infinity();else if((bits&0x7c00u)==0)value=std::ldexp(float(bits&0x03ffu),-24);else value=std::ldexp(1.f+float(bits&0x03ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;};
  if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=displayPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
@@ -1575,7 +1595,7 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
  }
  if(m->vrMode){m->barrier(m->overlay,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->barrier(m->vrOutputs[m->vrEye],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->submitCommandsAsync(mirrorAcquired?m->acquiredSems[m->frameIndex]:VK_NULL_HANDLE,mirrorAcquired?m->readySemaphores[mirrorIndex]:VK_NULL_HANDLE);/* No CPU wait: SteamVR's Vulkan submit only needs the eye's commands queued ahead of it on this queue; begin() waits on the slot's fence before reusing it. */if(m->vrEye==1)VrRuntime::active()->submitPanel(m->instance,m->physical,m->device,m->queue,m->family,m->overlay.handle,overlayWidth,overlayHeight);VrRuntime::active()->submit(m->vrEye,m->instance,m->physical,m->device,m->queue,m->family,m->vrOutputs[m->vrEye].handle,m->swapExtent.width,m->swapExtent.height);if(mirrorAcquired){VkPresentInfoKHR spectator{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};spectator.waitSemaphoreCount=1;spectator.pWaitSemaphores=&m->readySemaphores[mirrorIndex];spectator.swapchainCount=1;spectator.pSwapchains=&m->swapchain;spectator.pImageIndices=&mirrorIndex;auto result=vkQueuePresentKHR(m->queue,&spectator);if(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)++m->mirrorPresented;else if(result!=VK_ERROR_OUT_OF_DATE_KHR)check(result,"Present spectator");if(result==VK_SUBOPTIMAL_KHR||result==VK_ERROR_OUT_OF_DATE_KHR)m->initMirror();}return;}
  // Submit: wait on image-acquired semaphore, signal ready semaphore, NO CPU wait.
- m->submitCommandsAsync(m->acquiredSems[m->frameIndex],m->readySemaphores[imageIndex]);
+ m->stamp(cmd,8);m->submitCommandsAsync(m->acquiredSems[m->frameIndex],m->readySemaphores[imageIndex]);
  // Present immediately.
  VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};present.waitSemaphoreCount=1;present.pWaitSemaphores=&m->readySemaphores[imageIndex];present.swapchainCount=1;present.pSwapchains=&m->swapchain;present.pImageIndices=&imageIndex;
  VkResult result=vkQueuePresentKHR(m->queue,&present);

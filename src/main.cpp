@@ -252,7 +252,7 @@ __declspec(noinline) static int perfProfile(const wchar_t* listArgument){
  // The same queries made while rendering (light rays, actor lighting, the HUD's state reads).
  const size_t renderBase=columns.size();for(auto name:retro::perf::counterNames)columns.push_back(std::string("render_")+name);columns.push_back("render_state_lookups");
  // Sections the renderer owns; the rest belong to Game::update.
- auto renderSection=[](size_t cost){using namespace retro::perf;for(Cost c:{Scene,Actor,Prop,Skin,Sky,ViewModel,PoseWait,RenderSetup,FenceWait,Overlay,GpuAllocation})if(cost==size_t(c))return true;return false;};
+ auto renderSection=[](size_t cost){using namespace retro::perf;for(Cost c:{Scene,Actor,Prop,Skin,Sky,ViewModel,PoseWait,RenderSetup,FenceWait,Overlay,GpuAllocation,GpuShadows,GpuScene,GpuOcclusion,GpuShafts,GpuExposure,GpuCompose,GpuTaa,GpuComposite})if(cost==size_t(c))return true;return false;};
  csv<<"scene,frame";for(const auto&c:columns)csv<<','<<c;csv<<'\n';
  std::string line;int scenes=0;
  while(std::getline(list,line)){
