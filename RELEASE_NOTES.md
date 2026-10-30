@@ -12,8 +12,8 @@ any different.
 Every voice keeps the bandwidth of a Half-Life 2 voice at half the
 bytes. Footsteps, doors, the lift and the creatures' calls are packed tighter,
 and the engine trims each one back to its exact first and last sample, so a shot
-lands when you fire and a hum loops without a gap. Bodies move on a grid finer
-than a millimetre. Most of the plant's surfaces are stored the way photographs
+lands when you fire and a hum loops without a gap. Bodies move within a
+millimetre of where they were made to. Most of the plant's surfaces are stored the way photographs
 are, but each one was held to a bar where the difference cannot be found by eye,
 and anything with writing on it, a face in a frame or a painted sign was left
 exactly as it was.
