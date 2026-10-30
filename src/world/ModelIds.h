@@ -341,6 +341,21 @@ inline constexpr int psx_locker_door_l=333; // 0.02 x 0.43 x 2.20
 inline constexpr int psx_locker_door_r=334; // 0.02 x 0.44 x 2.20
 inline constexpr int clinic_ceiling_lamp_1=335; // 1.05 x 1.04 x 0.16
 inline constexpr int clinic_ceiling_lamp_2=336; // 0.44 x 1.04 x 0.17
+inline constexpr int med_extinguisher=337; // 0.24 x 0.16 x 0.66
+inline constexpr int office_paper_sheet=338; // 0.44 x 0.32 x 0.00
+inline constexpr int office_paper_stack=339; // 0.33 x 0.44 x 0.03
+inline constexpr int office_file_binder=340; // 0.09 x 0.30 x 0.42
+inline constexpr int office_bookcase=341; // 2.02 x 0.50 x 2.50
+inline constexpr int office_couch_green=342; // 2.24 x 1.36 x 1.19
+inline constexpr int office_armchair_green=343; // 1.40 x 1.36 x 1.19
+inline constexpr int office_file_cabinet_open=344; // 1.45 x 0.70 x 1.05
+inline constexpr int office_pc_tower=345; // 0.26 x 0.61 x 0.61
+inline constexpr int prop_cardboard_box=346; // 0.73 x 0.72 x 0.37
+inline constexpr int prop_cardboard_box_open=347; // 0.73 x 0.72 x 0.73
+inline constexpr int item_id_card=348; // 0.13 x 0.09 x 0.00
+inline constexpr int item_dosimeter=349; // 0.31 x 0.15 x 0.07
+inline constexpr int item_walkie=350; // 0.11 x 0.38 x 0.05
+inline constexpr int item_bandage=351; // 0.07 x 0.15 x 0.06
 inline constexpr float size[][3]={
  {0.000f,0.000f,0.000f},
  {0.000f,0.000f,0.000f},
@@ -679,5 +694,20 @@ inline constexpr float size[][3]={
  {0.020f,0.443f,2.200f},
  {1.050f,1.040f,0.160f},
  {0.440f,1.040f,0.170f},
+ {0.240f,0.160f,0.659f},
+ {0.436f,0.319f,0.004f},
+ {0.329f,0.443f,0.030f},
+ {0.093f,0.301f,0.424f},
+ {2.025f,0.500f,2.500f},
+ {2.242f,1.364f,1.192f},
+ {1.399f,1.364f,1.192f},
+ {1.451f,0.699f,1.054f},
+ {0.262f,0.609f,0.609f},
+ {0.727f,0.720f,0.367f},
+ {0.730f,0.725f,0.726f},
+ {0.132f,0.085f,0.002f},
+ {0.310f,0.146f,0.066f},
+ {0.114f,0.376f,0.046f},
+ {0.075f,0.148f,0.061f},
 };
 }

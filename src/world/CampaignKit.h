@@ -257,6 +257,19 @@ inline void recessedFittings(Map& m,bool troffer=false){
   else{l.fitting=model::clinic_ceiling_lamp_2;l.fittingWidth=.44f;l.fittingDepth=1.04f;l.fittingHeight=.17f;}
  }
 }
+// Paper left where it fell, over a box at absolute height z (a floor or a desk
+// top): loose sheets laid flat and every fifth a stack, scattered by `seed`.
+inline void paperDrift(Map& m,float x1,float y1,float x2,float y2,float z,int count,unsigned seed){
+ const float base=z-m.layers.front().elevation;unsigned h=seed*2654435761u+1;
+ auto next=[&h]{h^=h<<13;h^=h>>17;h^=h<<5;return (h&0xffffu)/65535.f;};
+ for(int i=0;i<count;++i){const float x=x1+(x2-x1)*next(),y=y1+(y2-y1)*next(),yaw=next()*kPi*2;
+  if(i%5==4)m.fixtures.push_back({model::office_paper_stack,{x,y},base,.33f,.44f,.03f,yaw,false});
+  else m.fixtures.push_back({model::office_paper_sheet,{x,y},base+.001f*(i%4),.4f,.293f,.004f,yaw,false});}
+}
+// A fire extinguisher hung on its bracket, its back to the wall face at (x, y), facing `face`.
+inline void extinguisher(Map& m,float x,float y,float z,float face){
+ m.fixtures.push_back({model::med_extinguisher,{x+std::sin(face)*.09f,y+std::cos(face)*.09f},z-m.layers.front().elevation+.45f,.24f,.16f,.66f,face,false});
+}
 inline void zone(Map& m,const char* name,float x1,float y1,float x2,float y2,float bottom=-1000,float top=1000){m.zones.push_back({name,x1,y1,x2,y2,bottom,top});}
 // Opens a major area: its title card shows the first time the player walks in.
 inline void titleCard(Map& m,const char* title,float x1=0,float y1=0,float x2=24,float y2=24){AuthoredZone z;z.x1=x1;z.y1=y1;z.x2=x2;z.y2=y2;z.title=title;m.zones.push_back(std::move(z));}

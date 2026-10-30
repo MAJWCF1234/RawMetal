@@ -195,8 +195,36 @@ std::shared_ptr<const Map> makeResearchIntake(){
  cue(m,"rf_intake_radio",7600,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then someone opened it. Sweep the booths. Anyone without a band is exposed.",.6f,f+1.5f,"inv_intake_2");
  cue(m,"rf_intake_radio",12200,Sound::Empty,radio,"RADIO: ...Copy. Booths. Move.",.6f,f+1.5f,"rf_intake_lead_2");
  cue(m,"rf_intake_radio",15600,Sound::Empty,radio,"INVESTIGATOR (RADIO): And Intake. If it is one of ours, it is still exposed.",.6f,f+1.5f,"inv_intake_3");
+ // --- What the night left -------------------------------------------------------------------------
+ // The counter: dosimeters handed in at the surge and never read, the detail's
+ // spare radio, the intake sheets. Under it, the clerk's machine still on.
+ const float top=f+.891f;
+ for(auto [x,y,yaw]:{std::tuple{18.f,7.75f,.3f},{18.3f,8.05f,-.2f},{18.62f,7.8f,1.4f},{19.1f,7.7f,.1f}})rfFix(m,model::item_dosimeter,x,y,top,.31f,.146f,.066f,yaw,false);
+ rfFix(m,model::item_walkie,17.55f,7.95f,top,.114f,.376f,.046f,.5f,false);
+ rfFix(m,model::office_paper_stack,18.95f,8.25f,top,.33f,.44f,.03f,rfE+.1f,false);
+ rfFix(m,model::office_pc_tower,19.85f,7.35f,f,.262f,.609f,.609f,rfW,true);
+ // The booth: two boxes of confiscated badges, one taped, one still open.
+ rfFix(m,model::prop_cardboard_box,2.55f,7.45f,f,.727f,.72f,.367f,.2f,true);
+ rfFix(m,model::prop_cardboard_box,2.57f,7.4f,f+.367f,.727f,.72f,.367f,-.1f,true);
+ rfFix(m,model::prop_cardboard_box_open,3.55f,4.45f,f,.73f,.725f,.726f,0,true);
+ for(auto [x,y,yaw]:{std::tuple{3.1f,4.95f,.4f},{4.2f,5.05f,2.f},{5.45f,4.95f,1.f}})rfFix(m,model::item_id_card,x,y,x>5.f?f+.75f:f,.132f,.085f,.002f,yaw,false);
+ paperDrift(m,1.6f,4.f,6.4f,7.6f,f,6,68);
+ // The lounge: the couch under the plants, an armchair by the coffee.
+ rfFix(m,model::office_couch_green,19.7f,19.28f,f,2.242f,1.364f,1.192f,rfN,true);
+ rfFix(m,model::office_armchair_green,22.25f,14.45f,f,1.399f,1.364f,1.192f,rfW,true);
+ rfFix(m,model::mug,22.5f,13.42f,f+.9f,.09f,.09f,.1f,0,false);
+ // The hall: bands dropped on the way to the booths, the sheets that went with them.
+ paperDrift(m,8.6f,7.4f,15.6f,12.6f,f,11,681);
+ paperDrift(m,17.2f,4.4f,22.6f,11.4f,f,5,682);
+ for(auto [x,y,yaw]:{std::tuple{9.7f,8.1f,.6f},{13.4f,7.6f,2.4f},{8.4f,11.2f,1.2f},{5.2f,11.f,.3f},{4.1f,13.8f,2.6f}})rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ extinguisher(m,15.98f,2.6f,f,rfW);extinguisher(m,10.f,22.4f,f,rfE);
+ // The hall's south wall: the notices, the plants, the copier reception shared.
+ rfFix(m,model::lab_notice_board,8.6f,19.96f,f+1.3f,1.2f,.07f,.9f,rfN,false);
+ rfFix(m,model::lab_potted_plant,15.6f,19.5f,f,.5f,.58f,.93f,0,false);
+ rfFix(m,model::lab_photocopier,20.8f,4.05f,f,.826f,.752f,.967f,rfS,true);
+ rfFix(m,model::trash_can,22.6f,10.3f,f,.5f,.5f,.62f,0,true);
  // --- Rewards and names ---------------------------------------------------------------------------
- m.pickupSpawns={{{2.2f,6.6f},PickupKind::Ammo,f},{{3.9f,10.f},PickupKind::Health,f},{{21.9f,14.f},PickupKind::Ammo,f}};
+ m.pickupSpawns={{{2.2f,6.6f},PickupKind::Ammo,f},{{3.9f,10.f},PickupKind::Health,f},{{21.6f,16.2f},PickupKind::Ammo,f}};
  m.clutterSpawns={{0,{19.3f,8.9f},f+.891f},{1,{17.9f,15.8f},f},{2,{9.f,19.2f},f}};
  zone(m,"RESEARCH INTAKE / INTERLOCK",8.f,1.f,16.f,3.4f);
  zone(m,"RESEARCH INTAKE / SECURITY BOOTH",1.f,3.6f,7.f,8.f);
@@ -298,6 +326,33 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  // Walking in from Intake sets the truce.
  {ScriptEvent e;e.id=stateId("rf_proc_truce");e.x1=9.8f;e.y1=0;e.x2=14.2f;e.y2=4.f;e.bottom=-100;e.top=100;
   ScriptAction a;a.type=ScriptAction::Type::SetState;a.id=stance;a.value=int(SquadStance::Truce);e.actions={a};m.scriptEvents.push_back(e);}
+ // --- What the night left -------------------------------------------------------------------------
+ // The lockers were being emptied into boxes when the sweep went to Medical.
+ rfFix(m,model::prop_cardboard_box_open,1.65f,17.95f,f,.73f,.725f,.726f,.15f,true);
+ rfFix(m,model::prop_cardboard_box,6.1f,7.6f,f,.727f,.72f,.367f,-.25f,true);
+ paperDrift(m,1.4f,5.2f,6.4f,8.2f,f,5,69);paperDrift(m,1.4f,14.8f,6.4f,18.8f,f,5,691);
+ // The private: what he wrapped his leg with, where he bled, the radio he stopped answering.
+ wall(m,5.f,15.75f,6.35f,16.85f,f+.004f,f+.010f,16);
+ for(auto [x,y,yaw]:{std::tuple{4.85f,15.9f,.7f},{6.4f,16.95f,2.1f},{4.6f,16.4f,-.4f}})rfFix(m,model::item_bandage,x,y,f,.075f,.148f,.061f,yaw,false);
+ rfFix(m,model::item_walkie,4.75f,16.85f,f,.114f,.376f,.046f,1.2f,false);
+ // Suit stations: stock boxes by the cabinet, dosimeters laid out on the bench for a shift that never came.
+ rfFix(m,model::prop_cardboard_box,17.75f,4.45f,f,.727f,.72f,.367f,0,true);
+ rfFix(m,model::prop_cardboard_box,17.77f,4.47f,f+.367f,.727f,.72f,.367f,.15f,true);
+ for(float x:{18.9f,19.35f,19.8f,20.25f,20.7f})rfFix(m,model::item_dosimeter,x,7.12f,f+.51f,.31f,.146f,.066f,rfE+(x>20.f?.3f:0),false);
+ // Screening intake: bands read and left on the desk, the readings under them.
+ rfFix(m,model::office_paper_stack,19.65f,16.6f,f+1.01f,.33f,.44f,.03f,rfN+.2f,false);
+ for(auto [x,y,yaw]:{std::tuple{20.15f,16.45f,.2f},{20.4f,16.75f,1.7f},{20.05f,16.8f,2.9f}})rfFix(m,model::item_id_card,x,y,f+1.01f,.132f,.085f,.002f,yaw,false);
+ rfFix(m,model::office_pc_tower,19.15f,17.3f,f,.262f,.609f,.609f,rfS,true);
+ paperDrift(m,17.6f,17.6f,22.4f,21.4f,f,6,692);
+ // The hall and the gates.
+ paperDrift(m,8.f,12.2f,16.f,18.6f,f,9,693);
+ for(auto [x,y,yaw]:{std::tuple{11.8f,18.7f,.5f},{8.7f,18.85f,2.2f},{15.1f,13.f,1.f}})rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ extinguisher(m,17.f,6.f,f,rfW);extinguisher(m,7.f,18.f,f,rfE);
+ // The hub: the PA that called the tiers, the notices nobody reads, the bins by the columns.
+ rfFix(m,model::lab_pa_horn,7.28f,7.6f,f+2.6f,.495f,.564f,.433f,rfE,false);
+ rfFix(m,model::lab_notice_board,7.04f,16.2f,f+1.3f,1.2f,.07f,.9f,rfE,false);
+ for(Vec2 b:{Vec2{10.05f,7.f},Vec2{13.95f,16.f}})rfFix(m,model::trash_can,b.x,b.y,f,.5f,.5f,.62f,0,true);
+ rfLockers(m,20.3f,4.5f,f,rfS);
  // --- Rewards and names ------------------------------------------------------------------------
  m.pickupSpawns={{{2.f,15.6f},PickupKind::Health,f},{{22.2f,10.f},PickupKind::Ammo,f},{{18.6f,6.4f},PickupKind::Health,f}};
  m.clutterSpawns={{1,{20.6f,16.4f},f+1.f},{0,{3.f,7.2f},f}};
@@ -414,6 +469,32 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  cue(m,"rf_admin_scene",15400,Sound::Empty,Vec2{6.3f,16.3f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
  cue(m,"rf_admin_scene",21100,Sound::Door,{3.75f,21.1f},"",.8f,f+1.2f);
  cue(m,"rf_admin_exit",4100,Sound::Door,{3.75f,21.1f},"",.7f,f+1.2f);
+ // --- What the night left -------------------------------------------------------------------------
+ // The boardroom: the binders of quarters past, the minutes still on the table.
+ rfFix(m,model::office_bookcase,1.27f,4.1f,f,2.025f,.5f,2.5f,rfE,true);
+ rfFix(m,model::office_bookcase,9.8f,1.27f,f,2.025f,.5f,2.5f,rfS,true);
+ for(int i=0;i<7;++i)rfFix(m,model::office_file_binder,1.2f,3.35f+i*.12f,f+1.27f,.093f,.301f,.424f,rfE,false);
+ for(int i=0;i<5;++i)rfFix(m,model::office_file_binder,9.2f+i*.12f,1.2f,f+.64f,.093f,.301f,.424f,rfS,false);
+ for(auto [x,y,yaw]:{std::tuple{5.4f,3.25f,.1f},{7.f,3.f,-.2f},{6.9f,5.05f,3.f},{5.3f,5.3f,3.3f}})rfFix(m,model::office_paper_stack,x,y,f+.89f,.33f,.44f,.03f,yaw,false);
+ // Records: the cabinets he had pulled, the cards he did not want, the boxes for the rest.
+ rfFix(m,model::office_file_cabinet_open,7.6f,12.56f,f,1.451f,.699f,1.054f,rfS,true);
+ rfFix(m,model::prop_cardboard_box_open,9.5f,14.1f,f,.73f,.725f,.726f,.2f,true);
+ rfFix(m,model::prop_cardboard_box,9.5f,19.6f,f,.727f,.72f,.367f,0,true);
+ rfFix(m,model::prop_cardboard_box,9.52f,19.62f,f+.367f,.727f,.72f,.367f,-.2f,true);
+ paperDrift(m,4.4f,12.8f,10.6f,20.4f,f,14,70);
+ for(auto [x,y,yaw]:{std::tuple{4.6f,14.9f,.3f},{5.4f,16.1f,1.9f},{4.2f,18.6f,.8f},{6.f,19.5f,2.6f},{8.3f,15.2f,1.1f},{9.2f,17.f,.2f},{6.8f,13.4f,2.f},{8.9f,14.6f,.6f}})
+  rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ for(auto [x,y,yaw]:{std::tuple{6.45f,17.25f,.4f},{7.35f,16.75f,2.2f},{6.75f,16.7f,1.f}})rfFix(m,model::item_id_card,x,y,f+.891f,.132f,.085f,.002f,yaw,false);
+ // The lobby: the waiting group nobody waited in, and the first boxes carried out.
+ rfFix(m,model::office_couch_green,16.6f,22.3f,f,2.242f,1.364f,1.192f,rfN,true);
+ rfFix(m,model::office_armchair_green,14.4f,21.2f,f,1.399f,1.364f,1.192f,rfE,true);
+ rfFix(m,model::prop_cardboard_box,13.f,17.6f,f,.727f,.72f,.367f,.1f,true);
+ rfFix(m,model::prop_cardboard_box_open,13.f,18.45f,f,.73f,.725f,.726f,-.1f,true);
+ paperDrift(m,13.f,12.6f,22.f,20.4f,f,6,701);
+ extinguisher(m,23.f,7.8f,f,rfW);
+ rfFix(m,model::trash_can,22.5f,20.4f,f,.5f,.5f,.62f,0,true);
+ rfFix(m,model::lab_pa_horn,22.72f,6.f,f+3.5f,.495f,.564f,.433f,rfW,false);
+ rfFix(m,model::lab_photocopier,10.6f,20.6f,f,.826f,.752f,.967f,rfN,true);
  // --- Rewards and names ---------------------------------------------------------------------------
  m.pickupSpawns={{{22.f,22.f},PickupKind::Ammo,f},{{2.f,2.f},PickupKind::Health,f},{{13.f,2.6f},PickupKind::Ammo,dz}};
  m.clutterSpawns={{0,{7.f,17.4f},f+.891f},{2,{21.f,22.f},f}};

@@ -123,6 +123,48 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  cue(m,"md_screen_radio",900,Sound::Empty,radio,"INVESTIGATOR (RADIO): Medical detail. The screening floor is closed. Anyone walking it is exposed.",.6f,f+1.5f,"inv_screen_1");
  cue(m,"md_screen_radio",6200,Sound::Empty,radio,"RADIO: Sir, we did the booths. There's nobody left to walk it.",.6f,f+1.5f,"md_screen_a_1");
  cue(m,"md_screen_radio",11000,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then you will not be busy.",.6f,f+1.5f,"inv_screen_2");
+ // --- What the night left -------------------------------------------------------------------------
+ // The waiting room: the slips people were holding when they were called, the bands they dropped.
+ paperDrift(m,1.6f,1.6f,10.2f,8.2f,f,7,71);
+ for(auto [x,y,yaw]:{std::tuple{4.1f,5.4f,.4f},{7.6f,2.2f,2.f},{8.8f,6.9f,1.1f}})mdFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ extinguisher(m,10.6f,4.f,f,mdW);
+ // The booths: each counter's dosimeter reader and pills, a band near each of the dead.
+ for(float x0:{11.f,14.8f,18.8f}){const float cx=x0+1.9f;
+  mdFix(m,model::item_dosimeter,cx-.1f,1.4f,f+.9f,.31f,.146f,.066f,mdS+.2f,false);
+  mdFix(m,model::med_pill_bottle,cx+.35f,1.35f,f+.9f,.07f,.03f,.13f,0,false);}
+ for(auto [x,y,yaw]:{std::tuple{13.7f,7.4f,.6f},{19.8f,7.5f,2.3f},{16.9f,6.8f,1.4f}})mdFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ mdFix(m,model::item_bandage,16.5f,5.4f,f,.075f,.148f,.061f,.8f,false);
+ paperDrift(m,11.4f,2.f,22.6f,8.2f,f,6,711);
+ // The corridor, walked over in boots.
+ paperDrift(m,3.f,9.2f,22.6f,14.f,f,9,712);
+ extinguisher(m,15.5f,14.4f,f,mdN);
+ // The triage side: a bed made up for observation, the kit on the wall.
+ mdFix(m,model::med_ward_bed,1.5f,19.9f,f,1.98f,.94f,.84f,kPi*.5f,true);
+ mdFix(m,model::med_first_aid_box,1.06f,16.8f,f+1.3f,.367f,.12f,.349f,mdE,false);
+ paperDrift(m,1.6f,15.f,9.6f,22.6f,f,6,713);
+ // The nurses' side: the list they were reading from, the cabinet they emptied.
+ mdFix(m,model::office_paper_stack,18.f,17.4f,f+1.01f,.33f,.44f,.03f,mdN+.15f,false);
+ for(auto [x,y,yaw]:{std::tuple{18.6f,17.3f,.3f},{18.85f,17.55f,1.9f}})mdFix(m,model::item_id_card,x,y,f+1.01f,.132f,.085f,.002f,yaw,false);
+ mdFix(m,model::office_file_cabinet_open,21.5f,22.65f,f,1.451f,.699f,1.054f,mdN,true);
+ mdFix(m,model::prop_cardboard_box_open,14.8f,22.4f,f,.73f,.725f,.726f,.3f,true);
+ paperDrift(m,14.6f,15.f,22.6f,22.2f,f,7,714);
+ // Second row of observation beds on the south wall, a curtain between them, the sink at the door.
+ for(float x:{7.f,8.95f})mdFix(m,model::med_ward_bed,x,22.f,f,1.98f,.94f,.84f,kPi*.5f,true);
+ mdFix(m,model::med_vitals_monitor,7.f,22.9f,f+1.2f,.38f,.181f,.28f,mdN,false);
+ wall(m,7.95f,20.9f,8.01f,23.f,f+.2f,f+2.1f,39);m.pipes.push_back({{7.98f,20.9f},{7.98f,23.f},f+2.15f,.02f,f+2.15f,6});
+ mdFix(m,model::med_scrub_sink,8.6f,14.87f,f,.488f,.536f,1.127f,mdS,true);
+ mdFix(m,model::med_notice_board,1.04f,22.f,f+1.3f,1.2f,.07f,.9f,mdE,false);
+ // The nurses' room: the drug fridge, the scrub sink, stock on the shelf, the chair pushed back.
+ mdFix(m,model::med_scrub_sink,14.27f,16.4f,f,.488f,.536f,1.127f,mdE,true);
+ mdFix(m,model::lab_sample_fridge,14.45f,17.6f,f,.7f,.85f,1.f,mdE,true);
+ for(auto [x,y,yaw]:{std::tuple{14.3f,17.45f,.4f},{14.55f,17.75f,1.6f}})mdFix(m,model::med_pill_bottle,x,y,f+1.f,.07f,.03f,.13f,yaw,false);
+ shelf(m,{20.6f,14.88f},mdS,0);
+ mdFix(m,model::prop_cardboard_box,20.2f,14.9f,f+1.8f,.727f,.72f,.367f,0,false);
+ mdFix(m,model::office_chair,18.1f,18.3f,f,.55f,.55f,.95f,mdN+.5f,true);
+ mdFix(m,model::med_wheelchair,22.5f,20.9f,f,.482f,.9f,.787f,.15f,true);
+ // The corridor: the cart they were pushing, the horn his voice came out of.
+ mdFix(m,model::med_crash_cart,20.5f,14.1f,f,.74f,.48f,1.f,0,true);
+ mdFix(m,model::lab_pa_horn,9.f,9.1f,f+2.6f,.495f,.564f,.433f,mdS,false);
  // --- Rewards and names -------------------------------------------------------------------------
  m.pickupSpawns={{{9.f,3.f},PickupKind::Health,f},{{22.f,13.6f},PickupKind::Ammo,f},{{3.f,15.6f},PickupKind::Health,f}};
  m.clutterSpawns={{2,{5.4f,6.6f},f},{1,{18.2f,17.4f},f+1.f}};
@@ -188,6 +230,33 @@ std::shared_ptr<const Map> makeMedicalTriage(){
   s.durationMs=60000;s.finishAtMs=3000;s.soundIntervalMs=0;s.soundUntilMs=0;s.sightActor=0;s.sightDistance=7.f;m.timedSequences.push_back(s);}
  cue(m,"md_triage_rise",600,Sound::WorkerDying,patient,"",.45f,f+.6f);
  cue(m,"md_triage_rise",2600,Sound::Metal1,{20.6f,11.f},"",.35f,f+.5f);
+ // --- What the night left -------------------------------------------------------------------------
+ // The band desk: the box the bands came from, the bands that spilled, the readers on the desk.
+ mdFix(m,model::prop_cardboard_box_open,11.5f,1.75f,f,.73f,.725f,.726f,-.15f,true);
+ for(auto [x,y,yaw]:{std::tuple{11.f,2.5f,.4f},{12.1f,2.7f,1.6f},{11.7f,3.1f,2.8f},{10.6f,3.4f,.9f},{12.6f,2.f,2.2f},{9.9f,5.3f,1.3f}})
+  mdFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ for(auto [x,y,yaw]:{std::tuple{8.3f,5.55f,.2f},{8.15f,5.8f,1.5f}})mdFix(m,model::item_dosimeter,x,y,f+1.01f,.31f,.146f,.066f,yaw,false);
+ mdFix(m,model::office_paper_stack,8.35f,6.65f,f+1.01f,.33f,.44f,.03f,mdE,false);
+ paperDrift(m,6.f,2.f,15.f,8.2f,f,8,72);paperDrift(m,1.4f,9.f,5.f,14.f,f,3,721);
+ extinguisher(m,5.2f,7.6f,f,mdE);
+ // A bed parked against the wall for the next one, the kit above it.
+ mdFix(m,model::med_ward_bed,5.75f,16.6f,f,1.98f,.94f,.84f,kPi*.5f,true);
+ mdFix(m,model::med_first_aid_box,5.26f,18.4f,f+1.3f,.367f,.12f,.349f,mdE,false);
+ // The bays: dressings torn open where the bands were cut off.
+ for(auto [x,y,yaw]:{std::tuple{17.f,3.5f,.4f},{16.8f,16.4f,1.9f},{17.2f,20.9f,2.7f},{16.4f,8.3f,1.2f}})mdFix(m,model::item_bandage,x,y,f,.075f,.148f,.061f,yaw,false);
+ paperDrift(m,6.f,9.f,15.f,22.4f,f,8,722);
+ for(auto [x,y,yaw]:{std::tuple{8.4f,13.2f,.5f},{12.6f,17.f,2.f},{14.4f,21.2f,1.f}})mdFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ // The ward floor: beds shoved out of the bays in a hurry, a mattress dragged off one.
+ mdFix(m,model::med_ward_bed,9.f,14.4f,f,1.98f,.94f,.84f,kPi*.5f+.25f,true);
+ mdFix(m,model::med_ward_bed_tossed,12.5f,15.6f,f,2.1f,1.52f,.84f,kPi*.5f-.35f,true);
+ mdFix(m,model::med_mattress_stained,11.2f,11.6f,f,1.9f,.9f,.118f,.7f,false);
+ mdFix(m,model::med_supply_cabinet,8.f,22.75f,f,1.1f,.444f,1.7f,mdN,true);
+ mdFix(m,model::med_scrub_sink,5.47f,21.9f,f,.488f,.536f,1.127f,mdE,true);
+ mdFix(m,model::med_notice_board,5.24f,20.4f,f+1.3f,1.2f,.07f,.9f,mdE,false);
+ // The band desk: more bands boxed on the shelf; the PA that read the colours out.
+ shelf(m,{13.6f,1.27f},mdS,0);
+ for(float x:{13.1f,14.f})mdFix(m,model::prop_cardboard_box,x,1.3f,f+1.8f,.727f,.72f,.367f,x*.3f,false);
+ mdFix(m,model::lab_pa_horn,5.5f,4.f,f+2.6f,.495f,.564f,.433f,mdE,false);
  // --- Light: the desk lit, the bays dimming, one tube going out over bay 3 ----------------------
  for(Vec2 l:{Vec2{8.f,4.f},Vec2{3.f,11.5f}})m.lights.push_back(lamp(l,roof-.16f,.85f,6.f,5200,.05f));
  {auto l=lamp({18.6f,11.3f},roof-.16f,.8f,4.f,5600,.04f);l.flicker=.6f;m.lights.push_back(l);}
@@ -263,6 +332,32 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  for(float y:{15.4f,17.f,18.6f,20.2f})for(float x:{17.f,19.4f})mdFix(m,model::file_cabinet_tall,x,y,f,.5f,.6f,1.3f,mdS,true);
  mdFix(m,model::file_cabinet_tall,22.5f,21.6f,f,.5f,.6f,1.3f,mdW,true);
  m.lights.push_back(lamp({20.f,18.f},roof-.16f,.55f,5.f,4600,.08f));
+ // --- What the night left -------------------------------------------------------------------------
+ // The reading room: films on the floor, the boxes the board sent for them.
+ paperDrift(m,15.6f,1.8f,22.6f,8.4f,f,10,73);
+ for(auto [x,y,yaw]:{std::tuple{16.6f,3.1f,.1f},{20.25f,3.25f,-.15f}})mdFix(m,model::office_paper_stack,x,y,f+.75f,.33f,.44f,.03f,yaw,false);
+ mdFix(m,model::prop_cardboard_box,16.f,7.9f,f,.727f,.72f,.367f,0,true);
+ mdFix(m,model::prop_cardboard_box,16.02f,7.88f,f+.367f,.727f,.72f,.367f,.2f,true);
+ mdFix(m,model::prop_cardboard_box_open,22.2f,7.9f,f,.73f,.725f,.726f,-.2f,true);
+ // The film archive: the drawer cabinet pulled open, the envelopes thrown down.
+ mdFix(m,model::office_file_cabinet_open,21.75f,22.65f,f,1.451f,.699f,1.054f,mdN,true);
+ mdFix(m,model::prop_cardboard_box_open,15.9f,22.3f,f,.73f,.725f,.726f,.4f,true);
+ paperDrift(m,15.6f,14.6f,22.6f,22.6f,f,10,731);
+ // The scanning bay and the spine.
+ for(auto [x,y,yaw]:{std::tuple{6.1f,18.9f,.5f},{7.7f,19.6f,2.f}})mdFix(m,model::item_bandage,x,y,f,.075f,.148f,.061f,yaw,false);
+ mdFix(m,model::item_id_card,5.5f,18.3f,f,.132f,.085f,.002f,1.2f,false);
+ paperDrift(m,9.4f,2.f,14.6f,22.6f,f,6,732);
+ extinguisher(m,15.f,20.f,f,mdW);extinguisher(m,2.f,6.f,f,mdN);
+ // The archive's walls: shelving of boxed films, the boxes the board has not had yet.
+ for(float y:{16.5f,18.6f}){shelf(m,{15.47f,y},mdE,0);mdFix(m,model::prop_cardboard_box,15.5f,y,f+1.8f,.727f,.72f,.367f,y,false);}
+ for(float y:{15.6f,17.6f}){shelf(m,{22.73f,y},mdW,0);mdFix(m,model::prop_cardboard_box,22.7f,y+.3f,f+1.8f,.727f,.72f,.367f,-y,false);}
+ for(auto [x,y]:{std::pair{18.2f,21.8f},{18.25f,21.82f}})mdFix(m,model::prop_cardboard_box,x,y,x>18.22f?f+.367f:f,.727f,.72f,.367f,x,true);
+ // The scanning bay: the cabinet for the contrast, the fridge for the samples.
+ mdFix(m,model::med_supply_cabinet,1.23f,14.f,f,1.1f,.444f,1.7f,mdE,true);
+ mdFix(m,model::lab_sample_fridge,1.43f,12.55f,f,.7f,.85f,1.f,mdE,true);
+ // The spine: gurneys parked against the wall for the morning.
+ for(float y:{5.f,18.4f})mdFix(m,model::med_ward_bed,14.5f,y,f,1.98f,.94f,.84f,kPi*.5f,true);
+ mdFix(m,model::med_wheelchair,9.5f,21.4f,f,.482f,.9f,.787f,.3f,true);
  // --- Rewards and names -------------------------------------------------------------------------
  m.pickupSpawns={{{2.f,3.f},PickupKind::Health,f},{{22.f,4.f},PickupKind::Ammo,f},{{22.f,16.f},PickupKind::Ammo,f}};
  m.clutterSpawns={{0,{18.f,3.4f},f+.75f},{2,{12.6f,20.f},f}};

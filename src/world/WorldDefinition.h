@@ -11,7 +11,7 @@ enum class Environment { Interior, Outdoor };
 enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
-inline constexpr int FacilityModelCount=337;
+inline constexpr int FacilityModelCount=352;
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed };
 // One record per creature kind: what it is called, how much it takes, the
 // standing height navigation and hits use (hull) against its visible top, its
