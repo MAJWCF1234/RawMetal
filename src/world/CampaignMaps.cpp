@@ -2654,7 +2654,7 @@ std::shared_ptr<const Map> makePlatformServiceEnd(){
  m.fixtures.push_back({61,{12.f,5.f},deckZ-base,2.27f,.54f,.95f,kPi*.5f,true});
  m.fixtures.push_back({59,{12.f,10.6f},deckZ-base,.6f,.6f,.76f,0,true});
  m.fixtures.push_back({60,{12.f,8.24f},deckZ-base+1.f,1.29f,.08f,1.58f,0,false});
- wall(m,11.3f,8.2f,12.7f,8.22f,deckZ+.95f,deckZ+2.62f,2);
+ wall(m,11.3f,8.16f,12.7f,8.19f,deckZ+.95f,deckZ+2.62f,2);   // the board's backing, clear of its rear face
  board(m,12.f,11.6f,-21.f,"END OF PLATFORM","NO PUBLIC ACCESS BEYOND THIS POINT",3.f);
  // --- Track level: crossing, security office ----------------------------------------------------
  for(float x=2.f;x<22.f;x+=.5f)if(x<9.f||x>15.f)wall(m,x,16.f,x+.4f,17.6f,base+.07f,base+.11f,10);
