@@ -33,6 +33,22 @@ SETTINGS = {'stability': .5, 'similarity_boost': .75}
 # only adds the radio channel the squad roles and checkpoint soldiers call over.
 # 11 is the Investigator heard over a squad's radio; 12 is the Investigator in person.
 RADIO = {1, 3, 4, 6, 8, 11}
+# Clips ship as MP3, 22050 Hz mono, LAME VBR q6 (about 40 kbps): Half-Life 2's
+# speech bandwidth (~10 kHz) at under half the size of the IMA ADPCM they
+# replaced. The engine decodes them with miniaudio like the music.
+CLIP_CODEC = ['-c:a', 'libmp3lame', '-q:a', '6']
+
+
+def encode_clip(ffmpeg, wav_or_none, samples=None):
+    """MP3 clip bytes from processed float samples, or from a shipped WAV clip."""
+    if samples is not None:
+        source = ['-f', 'f32le', '-ar', '22050', '-ac', '1', '-i', '-']
+        data = np.asarray(samples, dtype='<f4').tobytes()
+    else:
+        source = ['-i', '-']
+        data = wav_or_none
+    return subprocess.run([ffmpeg, '-v', 'error', *source, '-ar', '22050', '-ac', '1', *CLIP_CODEC, '-f', 'mp3', '-'],
+                          input=data, capture_output=True, check=True).stdout
 
 
 def radio_channel(samples, rate=22050):
@@ -89,7 +105,7 @@ def main():
         raise SystemExit('Set ELEVENLABS_API_KEY or provide --key-file privately')
     ffmpeg = shutil.which('ffmpeg')
     if not ffmpeg:
-        raise SystemExit('ffmpeg is required for existing supported IMA ADPCM WAV output')
+        raise SystemExit('ffmpeg (with libmp3lame) is required to encode the voice clips')
     args.masters.mkdir(parents=True, exist_ok=True)
     processed = args.masters / 'processed'
     processed.mkdir(exist_ok=True)
@@ -115,7 +131,13 @@ def main():
         digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         master = args.masters / (digest + '.mp3')
         if not master.exists() and index < len(shipped) and shipped_proof[index]['id'] == entry['id']                 and shipped_proof[index].get('generation_identity') == digest:
-            return shipped[index], shipped_proof[index]
+            # Carried over without its master: an older ADPCM clip is re-encoded once.
+            data, proof = shipped[index], dict(shipped_proof[index])
+            if data[:4] == b'RIFF':
+                data = encode_clip(ffmpeg, data)
+            proof.pop('wav_bytes', None)
+            proof['clip_bytes'] = len(data)
+            return data, proof
         if not master.exists():
             if not args.generate:
                 raise RuntimeError('Missing cached master: ' + entry['id'])
@@ -150,14 +172,13 @@ def main():
         fade = min(110, len(samples)//2)
         samples[:fade] *= np.linspace(0, 1, fade)
         samples[-fade:] *= np.linspace(1, 0, fade)
-        wav = processed / (entry['id'] + '.wav')
-        subprocess.run([ffmpeg, '-v', 'error', '-y', '-f', 'f32le', '-ar', '22050', '-ac', '1', '-i', '-',
-                        '-c:a', 'adpcm_ima_wav', str(wav)], input=np.asarray(samples, dtype='<f4').tobytes(), check=True)
+        clip = processed / (entry['id'] + '.mp3')
+        clip.write_bytes(encode_clip(ffmpeg, None, samples))
         result = {'id': entry['id'], 'master_sha256': hashlib.sha256(master.read_bytes()).hexdigest(),
                   'generation_identity': digest, 'seconds': round(len(samples)/22050, 4),
-                  'wav_bytes': wav.stat().st_size, 'radio': entry['role'] in RADIO}
+                  'clip_bytes': clip.stat().st_size, 'radio': entry['role'] in RADIO}
         print('Ready:', entry['id'], result['seconds'], 'seconds', flush=True)
-        return wav.read_bytes(), result
+        return clip.read_bytes(), result
 
     # Two concurrent calls stay within the account's normal request capacity.
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -178,6 +199,7 @@ def main():
     header += ['}};', '}']
     (ROOT / 'src/audio/NpcVoiceCatalog.h').write_text('\n'.join(header)+'\n')
     provenance = {'provider': 'ElevenLabs', 'model': MODEL, 'settings': SETTINGS,
+                  'codec': 'MP3 22050 Hz mono, LAME VBR q6',
                   'bank_bytes': len(bank), 'bank_sha256': hashlib.sha256(bank).hexdigest(),
                   'clips': [proof for _, proof in results]}
     (catalog_path.parent / 'provenance.json').write_text(json.dumps(provenance, indent=2)+'\n')
