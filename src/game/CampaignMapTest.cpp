@@ -224,6 +224,14 @@ bool Game::testCampaignMaps(){
   for(int i=0;i<60*28;++i)g.update({},1.f/60);
   check(g.state(stateId("rf_admin_gone"))==1&&!g.doorLocked(g.world().doors()[1]),"He leaves by the far door, and records opens after");
   check(g.world().doors()[2].open<.05f,"The far door shuts behind him");}
+ // Triage: the patient stays down while he is watched, and sits up once the player turns to the nurse.
+ {Game g;g.m_level=72;g.restart();g.m_player.pos={13.f,11.f};g.m_player.z=g.world().floorHeight(13.f,11.f);g.m_player.angle=0;
+  for(int i=0;i<180;++i)g.update({},1.f/60);
+  const bool down=g.state(stateId("md_triage_rise"))==0&&g.world().actorPose(1).phase>.95f;
+  g.m_player.pos={10.5f,6.f};g.m_player.z=g.world().floorHeight(10.5f,6.f);g.m_player.angle=kPi;
+  for(int i=0;i<240;++i)g.update({},1.f/60);
+  out<<"triage: down="<<down<<" rise="<<g.state(stateId("md_triage_rise"))<<" phase="<<g.world().actorPose(1).phase<<" actors="<<g.world().actorTracks().size()<<'\n';
+  check(down&&g.state(stateId("md_triage_rise"))>0&&g.world().actorPose(1).clip==5,"Triage: the patient sits up behind the player who turns to the nurse");}
  // Surface sets: every Surface value and structure finish 26-35 resolves to
  // loaded textures, SURFACE records parse, and invalid sets are rejected.
  {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-35 resolves to loaded textures");out<<report;

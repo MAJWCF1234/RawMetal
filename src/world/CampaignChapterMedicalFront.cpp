@@ -1,5 +1,5 @@
 // DEPTHWORKS MEDICAL (chapter 2, manifest 48 (subchapter)): chunks 71, 72, 73, 74.
-// Medical Screening is authored; Triage, Imaging and Pharmacy are still the
+// Medical Screening and Triage are authored; Imaging and Pharmacy are still the
 // plan's placeholders. See docs/Design/descent-campaign-20261025.md for the brief.
 #include "CampaignChapters.h"
 #include "CampaignKit.h"
@@ -128,8 +128,73 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  freightFinish(m,-1);
  return p;
 }
-// MEDICAL / TRIAGE (manifest 48)
-std::shared_ptr<const Map> makeMedicalTriage(){return placeholderChunk(72,{{'W',9.f,14.f,-12.f,false,0}});}
+// MEDICAL / TRIAGE (manifest 48). Five curtained bays, the band desk where
+// every shift was given a colour, and the mess of a ward cleared in a hurry:
+// beds tossed, a crash cart abandoned, bags of blood on the floor. A nurse
+// sits slumped at the band desk. In the third bay a patient lies where he fell
+// off his gurney. Turn your back on him to look at her, and he sits up.
+std::shared_ptr<const Map> makeMedicalTriage(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[72];m.definition=CampaignChunks[72];m.definition.ambient=.24f;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ const float f=-12,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'W',9.f,14.f,f,false,0});
+ machineryClock(m,"md_triage_clock",60000);
+ // --- The way in and the band desk ------------------------------------------------------------
+ wall(m,1.f,8.6f,5.f,8.8f,f,roof,28);wall(m,1.f,14.4f,5.f,14.6f,f,roof,28);
+ wall(m,5.f,1.f,5.2f,8.8f,f,roof,28);wall(m,5.f,14.4f,5.2f,23.f,f,roof,28);
+ ceilingGrid(m,5.2f,1.f,23.f,23.f,roof);
+ mdFix(m,model::med_nurse_desk,8.2f,6.f,f,1.7f,.8f,1.f,mdE,true);
+ mdFix(m,model::med_vitals_monitor,8.1f,6.3f,f+1.f,.4f,.3f,.35f,mdE,false);
+ mdFix(m,model::office_chair,7.2f,6.f,f,.55f,.55f,.95f,mdE,true);
+ for(float y:{2.f,3.2f})mdFix(m,model::med_records_cabinet,5.6f,y,f,.9f,.5f,1.3f,mdE,true);
+ mdFix(m,model::med_supply_cabinet,10.f,1.45f,f,1.1f,.44f,1.7f,mdS,true);
+ mdFix(m,model::med_wall_clock,8.f,1.04f,f+2.3f,.4f,.03f,.4f,mdS,false);
+ terminal(m,{9.2f,5.2f},"BAND DESK / ISSUE LOG","GREEN: TIER 1, BACK TO SHIFT. AMBER: TIER 2, SCREENING DUE. RED: TIER 3, WARD C.",
+  "02:12 NO MORE AMBER BANDS. ISSUE RED.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=mdE;
+ // The nurse at the desk (actor 0): looking at her is turning your back on the bays.
+ actor(m,"md_triage_clock",ActorVisual::FemaleDoctor,1.7f,{{0,{7.3f,6.f},f,mdE,4,1},{1000,{7.3f,6.f},f,mdE,4,1}});
+ mdBlood(m,6.7f,5.4f,8.f,6.8f,f);
+ // --- The curtained bays, east ------------------------------------------------------------------
+ for(float y:{4.6f,9.1f,13.6f,18.1f})wall(m,15.6f,y-.03f,23.f,y+.03f,f+.2f,f+2.1f,27);
+ for(float y:{4.6f,9.1f,13.6f,18.1f})m.pipes.push_back({{15.6f,y},{23.f,y},f+2.15f,.02f,f+2.15f,6});
+ const float bays[5]={2.6f,6.85f,11.35f,15.85f,20.4f};
+ for(int i=0;i<5;++i){const float y=bays[i];
+  if(i==1||i==3)mdFix(m,model::med_ward_bed_tossed,20.4f,y+.3f,f,1.f,2.1f,.9f,mdE+.4f*(i-2),true);
+  else if(i!=2)mdFix(m,model::med_ward_bed,20.4f,y,f,1.f,2.1f,.9f,mdE,true);
+  mdFix(m,model::med_vitals_monitor,22.6f,y-.7f,f+1.2f,.4f,.3f,.35f,mdW,false);
+  m.lights.push_back(lamp({19.f,y},roof-.16f,.7f,4.5f,5000,.05f));}
+ // Bay 3: the gurney he fell from, its frame twisted.
+ mdFix(m,model::med_bed_frame_wrecked,20.6f,11.f,f,1.f,2.f,.8f,mdE+.3f,true);
+ for(auto [x,y]:{std::pair{18.4f,12.2f},{17.6f,7.8f},{13.f,16.6f}})mdFix(m,model::med_blood_bag,x,y,f,.2f,.3f,.05f,x,false);
+ mdFix(m,model::med_crash_cart,13.6f,10.f,f,.6f,.5f,1.f,.6f,true);
+ mdFix(m,model::med_wheelchair,11.f,18.6f,f,.65f,1.f,.95f,2.4f,true);
+ mdFix(m,model::med_ward_bed_tossed,9.6f,21.4f,f,1.f,2.1f,.9f,.5f,true);
+ mdFix(m,model::med_crutches,6.f,20.f,f,.4f,.2f,1.3f,.3f,false);
+ // The patient (actor 1): on the floor beside the gurney, until his timer runs.
+ // Turning to the nurse at the desk starts it; he comes up off the floor (the
+ // fall played backwards, stopping on his knees) and stays there, facing you.
+ const Vec2 patient{18.6f,11.3f};
+ actor(m,"md_triage_rise",ActorVisual::Worker,1.7f,{{0,patient,f,mdW,4,1},{500,patient,f,mdW,4,1},{2300,patient,f,mdW,4,.5f},{2500,patient,f,mdW,5,0},{60000,patient,f,mdW,5,40.f}});
+ // Sight is checked on top of the box: anywhere in the room, looking at her.
+ {TimedSequence s;s.timerState=stateId("md_triage_rise");s.finishState=stateId("md_triage_risen");s.x1=0;s.y1=0;s.x2=24;s.y2=24;
+  s.durationMs=60000;s.finishAtMs=3000;s.soundIntervalMs=0;s.soundUntilMs=0;s.sightActor=0;s.sightDistance=7.f;m.timedSequences.push_back(s);}
+ cue(m,"md_triage_rise",600,Sound::WorkerDying,patient,"",.45f,f+.6f);
+ cue(m,"md_triage_rise",2600,Sound::Metal1,{20.6f,11.f},"",.35f,f+.5f);
+ // --- Light: the desk lit, the bays dimming, one tube going out over bay 3 ----------------------
+ for(Vec2 l:{Vec2{8.f,4.f},Vec2{3.f,11.5f}})m.lights.push_back(lamp(l,roof-.16f,.85f,6.f,5200,.05f));
+ {auto l=lamp({18.6f,11.3f},roof-.16f,.8f,4.f,5600,.04f);l.flicker=.6f;m.lights.push_back(l);}
+ m.lights.push_back(lamp({10.f,15.f},roof-.16f,.6f,6.f,4200,.08f));
+ // --- Rewards and names -------------------------------------------------------------------------
+ m.pickupSpawns={{{9.8f,3.f},PickupKind::Health,f},{{22.2f,21.6f},PickupKind::Health,f},{{12.f,22.f},PickupKind::Ammo,f}};
+ m.clutterSpawns={{2,{14.4f,12.6f},f},{1,{9.f,6.2f},f+1.f},{0,{12.f,6.f},f}};
+ zone(m,"MEDICAL / TRIAGE / BAND DESK",5.2f,1.f,15.6f,8.6f);
+ zone(m,"MEDICAL / TRIAGE / BAYS",15.6f,1.f,23.f,23.f);
+ zone(m,"MEDICAL / TRIAGE",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
 // MEDICAL / IMAGING (manifest 48)
 std::shared_ptr<const Map> makeMedicalImaging(){return placeholderChunk(73,{{'N',10.f,14.f,-12.f,true,0},{'E',9.f,14.f,-12.f,false,0},{'S',10.f,14.f,-12.f,false,0}});}
 // MEDICAL / PHARMACY (manifest 48)

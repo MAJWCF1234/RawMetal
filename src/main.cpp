@@ -932,7 +932,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       if(!(fields>>name>>level>>x>>y>>z>>yaw>>pitch))continue;fields>>action;
       auto scene=retro::Game::mapInspection({x,y},yaw*retro::kPi/180.f,pitch,level,true,z,true);
       if(action=="set"){std::string states;fields>>states;std::istringstream each(states);std::string state;
-       while(std::getline(each,state,','))scene.setState(retro::stateId(state));action="wait";frames=2;}
+       while(std::getline(each,state,',')){auto eq=state.find('=');scene.setState(retro::stateId(state.substr(0,eq)),eq==std::string::npos?1:std::stoi(state.substr(eq+1)));}action="wait";frames=2;} // set a,b=5000: states on, or to a value (a timer's clock)
       else fields>>frames;
       if(action=="caution"){for(size_t i=0;i<scene.npcActors().size();++i)if(scene.npcActors()[i].level==scene.level())scene.startGuardCaution(i);action="wait";}
       if(action=="fire"){retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
