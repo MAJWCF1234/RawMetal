@@ -1,6 +1,6 @@
 // DEPTHWORKS MEDICAL (chapter 2, manifest 48 (subchapter)): chunks 71, 72, 73, 74.
-// Medical Screening and Triage are authored; Imaging and Pharmacy are still the
-// plan's placeholders. See docs/Design/descent-campaign-20261025.md for the brief.
+// Screening, Triage and Imaging are authored; Pharmacy is still the plan's
+// placeholder. See docs/Design/descent-campaign-20261025.md for the brief.
 #include "CampaignChapters.h"
 #include "CampaignKit.h"
 #include <cmath>
@@ -41,6 +41,12 @@ void mdGuard(Map& m,const char* clock,const std::string& key,ActorVisual visual,
  auto& ai=t.ai;ai.mode=ActorAiMode::Guard;ai.role=role;ai.faction=AiFaction::Raider;ai.squad=squad?stateId(squad):0;ai.armed=true;
  ai.weapon=weapon;ai.sightRange=sight;ai.sightDot=.6f;ai.searchMs=7000;ai.speed=speed;ai.patrol=std::move(beat);
  m.actorTracks.push_back(std::move(t));
+}
+// A reading desk facing north: desk, chair, monitor.
+void mdDeskLocal(Map& m,float x,float y,float f){
+ mdFix(m,model::desk,x,y,f,1.4f,.7f,.75f,mdN,true);
+ mdFix(m,model::office_chair,x,y+.8f,f,.55f,.55f,.95f,mdN,true);
+ mdFix(m,model::crt_monitor,x,y-.12f,f+.75f,.42f,.4f,.38f,mdS,false);
 }
 void mdSequence(Map& m,const char* timer,const char* finish,int durationMs,int finishAtMs,float x1,float y1,float x2,float y2){
  TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(finish);s.x1=x1;s.y1=y1;s.x2=x2;s.y2=y2;
@@ -195,8 +201,74 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  freightFinish(m,-1);
  return p;
 }
-// MEDICAL / IMAGING (manifest 48)
-std::shared_ptr<const Map> makeMedicalImaging(){return placeholderChunk(73,{{'N',10.f,14.f,-12.f,true,0},{'E',9.f,14.f,-12.f,false,0},{'S',10.f,14.f,-12.f,false,0}});}
+// MEDICAL / IMAGING (manifest 48). The first room past the seal: two X-ray
+// suites behind lead glass, the scanning bay, the reading room and its film
+// archive. The films on the lightboxes are wrong: skulls grown through with
+// something crystalline, and the readings say it is the same on everyone in
+// tier 3. One of the scanned is still in the scanning bay, and awake.
+std::shared_ptr<const Map> makeMedicalImaging(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[73];m.definition=CampaignChunks[73];m.definition.ambient=.20f;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ const float f=-12,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'N',10.f,14.f,f,true,0});   // door 0: Screening's sealed door, this side
+ openEdge(m,{'E',9.f,14.f,f,false,0});
+ openEdge(m,{'S',10.f,14.f,f,false,0});
+ machineryClock(m,"md_imaging_clock",60000);
+ // --- The spine corridor ------------------------------------------------------------------------
+ // West wall: open doorways into the two X-ray suites and the scanning bay, a window onto suite 2.
+ wall(m,8.8f,1.f,9.f,4.6f,f,roof,28);wall(m,8.8f,5.8f,9.f,7.2f,f,roof,28);wall(m,8.8f,8.4f,9.f,9.f,f,roof,28);mdGlass(m,8.8f,9.f,9.f,10.6f,f,roof);
+ wall(m,8.8f,10.6f,9.f,13.6f,f,roof,28);wall(m,8.8f,15.f,9.f,23.8f,f,roof,28);
+ for(float y:{4.6f,7.2f,13.6f})wall(m,8.75f,y,9.05f,y+1.2f,f+2.65f,roof,28);
+ wall(m,15.f,1.f,15.2f,9.f,f,roof,28);wall(m,15.f,14.f,15.2f,23.8f,f,roof,28);
+ ceilingGrid(m,9.f,1.f,15.f,23.f,roof);
+ for(float y:{4.f,11.5f,19.f})m.lights.push_back(lamp({12.f,y},roof-.16f,.7f,5.5f,5400,.05f));
+ {auto l=lamp({12.f,15.f},roof-.16f,.7f,5.f,5400,.05f);l.flicker=.5f;m.lights.push_back(l);}
+ // --- X-ray suites, north-west: the tables behind a lead-glass control booth -----------------------
+ wall(m,1.f,6.f,8.8f,6.2f,f,roof,27);
+ for(float y0:{1.f,6.2f}){const float cy=y0+2.4f;
+  mdFix(m,model::med_autopsy_table,5.2f,cy,f,.9f,2.f,.9f,mdE,true);
+  wall(m,4.6f,cy-.3f,5.8f,cy+.3f,f+2.3f,f+2.5f,20);m.pipes.push_back({{5.2f,cy},{5.2f,cy},f+2.5f,.05f,roof,6});
+  mdFix(m,model::med_xray_viewer_skull,1.04f,cy-.6f,f+1.4f,.6f,.05f,.5f,mdE,false);
+  mdFix(m,model::med_xray_viewer_chest,1.04f,cy+.6f,f+1.4f,.6f,.05f,.5f,mdE,false);
+  m.lights.push_back(lamp({1.3f,cy},f+1.6f,.6f,3.f,7500,-.3f,WorldLightMount::Bare));}
+ mdGlass(m,7.f,1.f,7.2f,4.2f,f,roof,27);   // the booth's lead glass, open at its south end
+ mdFix(m,model::lab_control_board,8.4f,3.4f,f+.9f,1.32f,.19f,.6f,mdW,false);
+ terminal(m,{8.3f,2.2f},"RADIOLOGY / READINGS","03:00 FRONTAL BONE: CRYSTALLINE GROWTH THROUGH THE SUTURES. SAME AS LAST WEEK'S. SAME AS EVERY TIER 3.",
+  "DO NOT REPORT AS ABNORMAL. REPORT AS EXPOSURE, TIER 3. THE BOARD HAS ASKED FOR THE FILMS.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=mdW;
+ // --- The scanning bay, south-west ----------------------------------------------------------------
+ wall(m,1.f,11.8f,8.8f,12.f,f,roof,27);
+ mdFix(m,model::lab_test_chamber,4.4f,16.6f,f,2.6f,2.6f,2.5f,mdE,true);
+ mdFix(m,model::lab_control_board,7.9f,13.f,f+.9f,1.32f,.19f,.6f,mdW,false);
+ mdFix(m,model::lab_scope_monitor,8.2f,14.4f,f+.9f,.5f,.4f,.45f,mdW,false);
+ mdFix(m,model::med_wheelchair,7.2f,20.6f,f,.65f,1.f,.95f,2.8f,true);
+ mdBlood(m,5.8f,18.6f,7.4f,20.f,f);
+ {auto l=lamp({4.4f,16.6f},roof-.2f,.8f,5.f,9000,-.4f);l.flicker=.4f;m.lights.push_back(l);}
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{3.f,20.6f},f});
+ // --- The reading room, north-east: lightboxes along the wall --------------------------------------
+ wall(m,15.2f,8.8f,17.f,9.f,f,roof,28);wall(m,21.f,8.8f,23.f,9.f,f,roof,28);
+ for(float x:{16.4f,17.6f,18.8f,20.f,21.2f})mdFix(m,model::med_xray_viewer_skull,x,1.04f,f+1.4f,.6f,.05f,.5f,mdS,false);
+ for(float x:{17.f,20.6f})mdDeskLocal(m,x,3.2f,f);
+ mdBody(m,"md_imaging_clock",ActorVisual::SeniorScientist,{18.8f,5.6f},f,1.9f);
+ m.lights.push_back(lamp({18.8f,1.4f},f+1.5f,.8f,4.5f,7500,-.3f,WorldLightMount::Bare));
+ m.lights.push_back(lamp({19.f,5.6f},roof-.16f,.6f,5.f,4800,.06f));
+ // --- The film archive, south-east ----------------------------------------------------------------
+ wall(m,15.2f,14.f,21.f,14.2f,f,roof,28);wall(m,22.6f,14.f,23.f,14.2f,f,roof,28);mdFrame(m,21.f,22.6f,14.1f,f,roof);
+ for(float y:{15.4f,17.f,18.6f,20.2f})for(float x:{17.f,19.4f})mdFix(m,model::med_records_cabinet,x,y,f,.9f,.5f,1.3f,mdS,true);
+ mdFix(m,model::file_cabinet_tall,22.5f,21.6f,f,.5f,.6f,1.3f,mdW,true);
+ m.lights.push_back(lamp({20.f,18.f},roof-.16f,.55f,5.f,4600,.08f));
+ // --- Rewards and names -------------------------------------------------------------------------
+ m.pickupSpawns={{{2.f,3.f},PickupKind::Health,f},{{22.f,4.f},PickupKind::Ammo,f},{{22.f,16.f},PickupKind::Ammo,f}};
+ m.clutterSpawns={{0,{18.f,3.4f},f+.75f},{2,{12.6f,20.f},f}};
+ zone(m,"MEDICAL / IMAGING / X-RAY",1.f,1.f,8.8f,11.8f);
+ zone(m,"MEDICAL / IMAGING / SCANNING BAY",1.f,12.f,8.8f,23.f);
+ zone(m,"MEDICAL / IMAGING / READING ROOM",15.2f,1.f,23.f,8.8f);
+ zone(m,"MEDICAL / IMAGING / FILM ARCHIVE",15.2f,14.2f,23.f,23.f);
+ zone(m,"MEDICAL / IMAGING",0,0,24,24);
+ freightFinish(m,-1);
+ return p;
+}
 // MEDICAL / PHARMACY (manifest 48)
 std::shared_ptr<const Map> makeMedicalPharmacy(){return placeholderChunk(74,{{'W',9.f,14.f,-12.f,false,0}});}
 }
