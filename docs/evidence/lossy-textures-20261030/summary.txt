@@ -1,0 +1,13 @@
+Lossy release textures (2026-10-30)
+Screened the 343 lossless colour textures packed at 3 KB or more. Excluded by
+name: normal and emission maps, signs, warnings, labels, paintings, posters,
+the muzzle flash (30). Each was encoded as WebP at q90, then q95, q97 and q100
+until it met the bar: PSNR >= 38 dB over visible pixels, block luminance SSIM
+>= 0.95, alpha exact, packet at least 25% and 2 KB smaller than the lossless
+packing. 193 pass, saving 9,507,558 packed bytes; 120 stay lossless.
+All 193 were inspected side by side at 2x on their most detailed window,
+lowest PSNR first, and the character atlases at face crops; no difference was
+visible. The packer stores them as transform 15; the embedded check confirms
+every one decodes to the screened pixels.
+RawMetal.exe 54,970,880 -> 46,838,784 bytes. 92 campaign views and the
+Exclusion Zone survey differ from the previous build by at most 0.58/255 mean.

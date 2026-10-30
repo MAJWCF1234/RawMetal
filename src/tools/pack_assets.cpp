@@ -73,7 +73,7 @@ int main(int argc,char** argv){try{
   auto module=LoadLibraryExW(fs::absolute(argv[3]).c_str(),nullptr,LOAD_LIBRARY_AS_DATAFILE|LOAD_LIBRARY_AS_IMAGE_RESOURCE);if(!module)throw std::runtime_error("Cannot inspect executable resources");
   struct Close{HMODULE module;~Close(){FreeLibrary(module);}} close{module};
   std::ifstream manifest(fs::path(argv[2])/"assets.rc");if(!manifest)throw std::runtime_error("Missing asset manifest");
-  std::regex pattern(R"rc((\d+)\s+\w+\s+"([^"]+)")rc");std::string line;int count=0,generated=0,gridded=0;
+  std::regex pattern(R"rc((\d+)\s+\w+\s+"([^"]+)")rc");std::string line;int count=0,generated=0,gridded=0,lossy=0;
   while(std::getline(manifest,line)){std::smatch match;if(!std::regex_search(line,match,pattern))continue;
    auto path=fs::path(argv[2])/match[2].str();std::ifstream file(path,std::ios::binary);if(!file)throw std::runtime_error("Missing source asset: "+path.string());Bytes original((std::istreambuf_iterator<char>(file)),{});
    int resourceId=std::stoi(match[1].str());Bytes decoded;
@@ -81,10 +81,11 @@ int main(int argc,char** argv){try{
    catch(const std::exception& error){throw std::runtime_error("Embedded resource "+std::to_string(resourceId)+" ("+path.string()+"): "+error.what());}
    if(path.extension()==".png"){original=rawTexture(original);if(decoded.size()<12||std::memcmp(decoded.data(),"RMT1",4))decoded=rawTexture(decoded);}
    if(path.extension()==".ntx"){original=neuralPixels(argv[2],original);++generated;}
+   if(path.extension()==".webp"){original=retro::decodeLossyTexture(original);++lossy;}
    retro::AnimationPredictionLayout grid;if(path.extension()==".bin"&&retro::animationPredictionLayout(original,grid)){original=retro::animationQuantize(original);++gridded;}
    if(decoded!=original)throw std::runtime_error("Packaged resource mismatch: "+path.string());++count;
   }
-  if(!count)throw std::runtime_error("Empty asset manifest");std::cout<<count<<" packaged resources match source: PNG pixels/dimensions, byte-identical audio/models/animation; "<<generated<<" neural reconstructions match native decoded output; "<<gridded<<" animations match their 3 mm release grid\n";return 0;
+  if(!count)throw std::runtime_error("Empty asset manifest");std::cout<<count<<" packaged resources match source: PNG pixels/dimensions, byte-identical audio/models/animation; "<<generated<<" neural reconstructions match native decoded output; "<<gridded<<" animations match their 3 mm release grid; "<<lossy<<" lossy textures match their screened WebP\n";return 0;
  }
  if(argc!=4)throw std::runtime_error("Usage: pack_assets source-dir output-dir bundle-path");fs::path source=argv[1],out=argv[2];fs::create_directories(out);
  struct Entry{uint32_t id;Bytes bytes;};std::vector<Entry> entries;
@@ -97,6 +98,7 @@ int main(int argc,char** argv){try{
   if(gridded)original=retro::animationQuantize(original);
   Bytes chosen=original,packed=compress(original);uint32_t encoding=0;
   if(path.extension()==".ntx"){neuralPixels(source,original);encoding=13;}
+  if(path.extension()==".webp"){retro::decodeLossyTexture(original);encoding=15;}
   auto candidate=[&](const Bytes& data,uint32_t method){auto compressed=compress(data);if(compressed.size()<packed.size()){chosen=data;packed=std::move(compressed);encoding=method;}};
   if(path.extension()==".fbx"||path.extension()==".bin"||path.extension()==".obj"||path.extension()==".glb"){
    for(bool predict:{false,true}){
