@@ -4,6 +4,25 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.3 - Travelling light (2026-10-30)
+
+DepthWorks.exe has gone from 63 MB to 47 MB, and nothing in it looks or sounds
+any different.
+
+Every voice keeps the bandwidth of a Half-Life 2 voice at half the
+bytes. Footsteps, doors, the lift and the creatures' calls are packed tighter,
+and the engine trims each one back to its exact first and last sample, so a shot
+lands when you fire and a hum loops without a gap. Bodies move on a grid finer
+than a millimetre. Most of the plant's surfaces are stored the way photographs
+are, but each one was held to a bar where the difference cannot be found by eye,
+and anything with writing on it, a face in a frame or a painted sign was left
+exactly as it was.
+
+The picture also costs the graphics card less: one of the last steps of every
+frame was filtering the same pixels twice, and now does it once.
+
+---
+
 ## v1.1.2 - Furnished (2026-10-30)
 
 Chapter 1 is as you left it.
