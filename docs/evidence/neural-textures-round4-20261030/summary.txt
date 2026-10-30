@@ -1,0 +1,11 @@
+Neural texture round 4 (2026-10-30)
+Screened the 290 opaque colour textures imported from the purchased packs since
+round 3 (59 with alpha and 9 under 16 px were left alone) at x2.
+Round-3 bar: PSNR >= 32 and SSIM >= 0.84, packet at least 20% smaller than the
+lossless packed PNG; the byte floor drops from 8 KB to 4 KB because these
+textures are mostly 128-256 px. 67 passed.
+Side-by-side sheets were inspected at native resolution. Twelve were rejected
+where the softening shows: clock numerals, first-aid and box labels, breaker
+latch, switch label, plank and cabinet wood grain, TV frame, couch fabric and
+the three paintings. 55 ship as x2 neural textures, saving 1,536,222 packed
+bytes. Their .ntx files sit beside the gitignored library sources.

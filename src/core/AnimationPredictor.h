@@ -61,4 +61,25 @@ inline std::vector<unsigned char> animationPredict(const std::vector<unsigned ch
  }
  return output;
 }
+// Release packing snaps baked millimetre positions to a 3 mm grid: every vertex
+// stays within 1 mm of its bake, under a pixel on a full-screen body. Grid
+// prediction stores grid steps, so LZMS sees values a third the size.
+constexpr int AnimationGrid=3;
+template<class F> inline void animationPayload(std::vector<unsigned char>&data,const AnimationPredictionLayout&layout,F&&f){
+ for(size_t i=0;i<layout.payload;i+=2){int16_t v;std::memcpy(&v,data.data()+layout.prefix+i,2);v=f(v);std::memcpy(data.data()+layout.prefix+i,&v,2);}
+}
+inline std::vector<unsigned char> animationQuantize(const std::vector<unsigned char>&input){
+ AnimationPredictionLayout layout;auto output=input;
+ if(!animationPredictionLayout(input,layout))throw std::runtime_error("Invalid quantized animation layout");
+ animationPayload(output,layout,[](int16_t v){int q=v>=0?(v+1)/AnimationGrid:-((1-v)/AnimationGrid);if(q*AnimationGrid<-32768)++q;if(q*AnimationGrid>32767)--q;return int16_t(q*AnimationGrid);});
+ return output;
+}
+inline std::vector<unsigned char> animationGridPredict(const std::vector<unsigned char>&input,bool decode){
+ AnimationPredictionLayout layout;
+ if(!animationPredictionLayout(input,layout))throw std::runtime_error("Invalid grid animation layout");
+ if(decode){auto output=animationPredict(input,true);animationPayload(output,layout,[](int16_t v){return int16_t(v*AnimationGrid);});return output;}
+ auto steps=input;
+ animationPayload(steps,layout,[](int16_t v){if(v%AnimationGrid)throw std::runtime_error("Animation is not on the release grid");return int16_t(v/AnimationGrid);});
+ return animationPredict(steps,false);
+}
 }

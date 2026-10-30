@@ -35,7 +35,7 @@ inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,i
  }
  if(!bytes||size<12||std::memcmp(bytes,"RMZ1",4))throw std::runtime_error("Invalid packed resource");
  uint32_t count=0,transform=0;std::memcpy(&count,bytes+4,4);std::memcpy(&transform,bytes+8,4);
- if(!count||count>128*1024*1024||transform>13||transform==11||transform==12)throw std::runtime_error("Invalid resource size or encoding");
+ if(!count||count>128*1024*1024||transform>14||transform==11||transform==12)throw std::runtime_error("Invalid resource size or encoding");
  std::vector<unsigned char> decoded(count);DECOMPRESSOR_HANDLE decoder=nullptr;
  if(!CreateDecompressor(COMPRESS_ALGORITHM_LZMS,nullptr,&decoder))throw std::runtime_error("Cannot create resource decoder");
  SIZE_T actual=0;bool ok=Decompress(decoder,bytes+12,size-12,decoded.data(),count,&actual)!=FALSE;CloseDecompressor(decoder);
@@ -47,6 +47,7 @@ inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,i
  if(transform>=5&&transform<=7)decoded=audioPredict(decoded,transform!=6,transform!=5,true);
  if(transform==8||transform==9)decoded=binaryPredict(decoded,transform==9,true);
  if(transform==10)decoded=animationPredict(decoded,true);
+ if(transform==14)decoded=animationGridPredict(decoded,true);
  if(transform==13){
   if(neuralDepth)throw std::runtime_error("Neural texture model recursion");
   uint32_t modelId=neuralTextureModelResource(decoded);

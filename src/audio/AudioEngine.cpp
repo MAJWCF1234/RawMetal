@@ -111,6 +111,14 @@ AudioEngine::AudioEngine(bool device){
   auto resource=loadResource(i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
+  auto&sample=m_samples[i];
+  if(size>=12&&!std::memcmp(data,"RMS1",4)){
+   // Effects ship as MP3 behind their exact PCM length and the decoder's
+   // lead-in, so onsets and loop points land on the original samples.
+   uint32_t frames=u32(data+4),lead=u32(data+8);auto decoded=decodeMusic(data+12,size-12);
+   if(frames<2||decoded.size()/2<size_t(lead)+frames)throw std::runtime_error("Truncated effect resource");
+   sample.pcm.assign(decoded.begin()+ptrdiff_t(lead)*2,decoded.begin()+ptrdiff_t(lead+frames)*2);sample.channels=2;
+  }else{
   if(size<12||std::memcmp(data,"RIFF",4)||std::memcmp(data+8,"WAVE",4)){
    m_samples[i].pcm=decodeMusic(data,size);m_samples[i].channels=2;if(i==size_t(Sound::MusicAlert))shapeAlertLoop(m_samples[i].pcm);continue;
   }
@@ -123,7 +131,8 @@ AudioEngine::AudioEngine(bool device){
   }
   if(compressed){m_samples[i].pcm=decodeMusic(data,size);m_samples[i].channels=2;continue;}
   if(!format||!pcm||bytes<4||bytes%(2*m_samples[i].channels))throw std::runtime_error("Audio must be PCM16 at 44100 Hz");
-  auto&sample=m_samples[i];sample.pcm.resize(bytes/2);std::memcpy(sample.pcm.data(),pcm,bytes);
+  sample.pcm.resize(bytes/2);std::memcpy(sample.pcm.data(),pcm,bytes);
+  }
   // A short boundary taper suppresses clicks when ambience wraps.
   if(i==size_t(Sound::Music)||i==size_t(Sound::Machine)||i==size_t(Sound::Wings)||i==size_t(Sound::WaterReturn)){
    size_t fade=std::min(size_t(220),sample.frames()/2);
