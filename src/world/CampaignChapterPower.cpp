@@ -179,8 +179,8 @@ std::shared_ptr<const Map> makePowerDistribution(){
  terminal(m,{5.5f,19.6f},"CLEANUP / SWEEP 3 / FIELD LOG","02:40 POWER DISTRIBUTION SWEPT. 3 STAFF PROCESSED. 0 OUTSTANDING.","LOAD CONTROL HELD BY TEAM 3. FEEDER 9 STAYS OPEN. NO RESTORATION.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=kPi*.5f;
  {const Vec2 t{7.6f,16.6f};const float head=base+2.3f;
-  m.fixtures.push_back({model::ind_crate,t,0,1.3f,1.3f,.6f,0,true});
-  for(float a:{.4f,2.5f,4.6f})m.pipes.push_back({{t.x+std::cos(a)*.55f,t.y+std::sin(a)*.55f},t,base+.6f,.022f,head-.2f,6});
+  m.fixtures.push_back({model::ind_crate,t,0,.95f,.95f,.95f,0,true});
+  for(float a:{.4f,2.5f,4.6f})m.pipes.push_back({{t.x+std::cos(a)*.38f,t.y+std::sin(a)*.38f},t,base+.95f,.022f,head-.2f,6});
   m.pipes.push_back({t,t,head-.2f,.03f,head-.05f,6});
   wall(m,t.x-.2f,t.y-.13f,t.x+.2f,t.y+.13f,head-.05f,head+.22f,8);
   WorldLight flood=lamp({t.x+.15f,t.y+.32f},head+.08f,2.4f,11.f,6400,0,WorldLightMount::Bare);m.lights.push_back(flood);}
@@ -307,7 +307,7 @@ std::shared_ptr<const Map> makeDistributionHub(){
  m.terminals.back().yaw=.001f;
  // --- Switchgear lineup, east of the entry; tall relay panels on the side walls ------------------
  pwrLineup(m,15.6f,4,1.47f,base,1.f);
- for(float y:{3.5f,5.f,6.5f})m.fixtures.push_back({model::pwr_tall_switch_cabinet,{22.3f,y},0,.95f,1.f,2.2f,-kPi*.5f,true});
+ for(float y:{3.5f,5.f,6.5f})m.fixtures.push_back({model::pwr_tall_switch_cabinet,{22.3f,y},0,.69f,1.12f,2.2f,-kPi*.5f,true});
  for(float y:{16.f,17.5f})m.fixtures.push_back({model::pwr_control_cabinet,{1.42f,y+3.f},0,.8f,.4f,1.6f,kPi*.5f,true});
  // --- Columns, the overhead bus and its junction ----------------------------------------------------
  for(Vec2 c:{Vec2{6.f,6.f},Vec2{18.f,6.f},Vec2{6.f,18.f},Vec2{18.f,18.f}}){wall(m,c.x-.35f,c.y-.35f,c.x+.35f,c.y+.35f,base,roof,15);
@@ -317,7 +317,7 @@ std::shared_ptr<const Map> makeDistributionHub(){
  wall(m,11.3f,10.8f,12.7f,12.2f,roof-2.6f,roof-1.4f,2);
  cableTray(m,{1.4f,15.2f},{1.4f,22.6f},base+3.4f);cableTray(m,{22.6f,15.2f},{22.6f,22.6f},base+3.4f);
  // --- The mail relay, south-west -----------------------------------------------------------------
- m.fixtures.push_back({model::pwr_tall_switch_cabinet,{1.55f,21.6f},0,.95f,1.f,2.2f,kPi*.5f,true});
+ m.fixtures.push_back({model::pwr_tall_switch_cabinet,{1.55f,21.6f},0,.69f,1.12f,2.2f,kPi*.5f,true});
  m.fixtures.push_back({model::lab_status_display,{1.08f,19.6f},1.9f,.69f,.06f,.2f,kPi*.5f,false});
  terminal(m,{4.4f,21.f},"MAIL RELAY / NODE 9","CARRIER LOST ON FEEDER 9. 1 MESSAGE QUEUED.","DELIVERY RESUMES WHEN THE FEEDER IS LIVE.");
  {const StateId relay=stateId("pwr_relay_ms");
@@ -585,7 +585,7 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
   ScriptAction c;c.type=ScriptAction::Type::Checkpoint;e.actions.push_back(c);m.scriptEvents.push_back(e);}
  // --- The battery room, south-east -------------------------------------------------------------------
  wall(m,16.f,9.8f,23.f,10.f,base,base+2.8f,3);
- for(float y:{11.6f,13.f})m.fixtures.push_back({model::pwr_tall_switch_cabinet,{21.9f,y},0,.95f,1.f,2.2f,-kPi*.5f,true});
+ for(float y:{11.6f,13.f})m.fixtures.push_back({model::pwr_tall_switch_cabinet,{21.9f,y},0,.69f,1.12f,2.2f,-kPi*.5f,true});
  // --- The stores corner, south-west, and what waits there --------------------------------------
  for(Vec2 d:{Vec2{2.2f,21.4f},Vec2{3.f,22.2f},Vec2{4.1f,21.6f}})m.fixtures.push_back({model::drum,d,0,.6f,.6f,.9f,0,true});
  m.fixtures.push_back({model::metal_shelf,{6.3f,22.6f},0,1.8f,.5f,1.8f,kPi,true});

@@ -121,13 +121,13 @@ std::shared_ptr<const Map> makeResearchIntake(){
  rfGlass(m,8.f,3.4f,10.5f,3.6f,f,roof);rfGlass(m,13.5f,3.4f,16.2f,3.6f,f,roof);rfFrame(m,10.5f,13.5f,3.5f,true,f,roof,3);
  m.doors.push_back({10.5f,13.5f,3.5f,0});          // 1: the inner interlock leaf
  floorLine(m,8.2f,1.2f,15.8f,1.32f,f,13);
- rfFix(m,model::lab_door_reader,10.2f,3.38f,f+1.2f,.12f,.04f,.18f,rfN,false);
+ rfFix(m,model::lab_id_scanner,10.2f,3.38f,f+1.2f,.15f,.03f,.205f,rfN,false);
  m.lights.push_back(lamp({12.f,2.2f},roof-.16f,.9f,5.5f,6400,.03f));
  rfSign(m,12.f,3.62f,f+2.75f,"DEPTHWORKS ENERGY RESEARCH","INTAKE / ALL STAFF PRESENT BADGE AND BAND",4.4f,0,rfBlue);
  // --- The turnstile line ---------------------------------------------------------------------
  for(float x:{8.6f,10.f,11.4f,12.8f,14.2f,15.6f}){
   wall(m,x-.12f,5.7f,x+.12f,6.7f,f,f+1.f,20);wall(m,x-.14f,5.68f,x+.14f,6.72f,f+1.f,f+1.04f,12);
-  rfFix(m,model::lab_id_scanner,x,5.9f,f+1.04f,.2f,.1f,.3f,rfN,false);}
+  rfFix(m,model::lab_id_scanner,x,5.9f,f+1.04f,.21f,.042f,.29f,rfN,false);}
  for(float x:{9.3f,10.7f,12.1f,13.5f,14.9f})floorLine(m,x-.45f,7.f,x+.45f,7.12f,f,13);
  wall(m,7.f,5.7f,8.48f,6.7f,f,f+1.f,20);wall(m,15.72f,5.7f,16.4f,6.7f,f,f+1.f,20);
  // --- Intake security booth, west --------------------------------------------------------------
@@ -168,7 +168,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  for(float x:{17.8f,20.2f})bench(m,x,15.f,f);
  rfFix(m,model::coffee_machine,22.6f,13.f,f+.9f,.4f,.45f,.5f,rfW,false);
  rfFix(m,model::file_cabinet_wide,22.55f,13.f,f,.9f,.5f,.9f,rfW,true);
- rfFix(m,model::lab_notice_board,22.92f,16.6f,f+1.3f,1.4f,.06f,.9f,rfW,false);
+ rfFix(m,model::lab_notice_board,22.92f,16.6f,f+1.3f,1.2f,.07f,.9f,rfW,false);
  rfFix(m,model::lab_potted_plant,17.f,19.4f,f,.5f,.58f,.93f,0,false);rfFix(m,model::lab_potted_plant,22.4f,19.4f,f,.5f,.58f,.93f,0,false);
  terminal(m,{22.7f,18.f},"INTAKE / VISITOR NOTICES","SCREENING CALLS BY TIER. TIER 2 AND ABOVE REPORT TO MEDICAL SCREENING, EAST OF PROCESSING.",
   "LOST BANDS ARE A SAFETY BREACH. A BREACH IS REPORTED, NOT FORGIVEN.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfW;
@@ -258,9 +258,9 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  // --- The biometric gates and the clearance door, south -----------------------------------------
  wall(m,7.f,21.8f,10.f,22.f,f,roof,3);wall(m,14.f,21.8f,17.f,22.f,f,roof,3);
  for(float x:{8.f,9.4f,14.6f,16.f}){wall(m,x-.12f,19.2f,x+.12f,20.2f,f,f+1.f,20);wall(m,x-.14f,19.18f,x+.14f,20.22f,f+1.f,f+1.04f,12);
-  rfFix(m,model::lab_id_scanner,x,19.4f,f+1.04f,.2f,.1f,.3f,rfN,false);}
+  rfFix(m,model::lab_id_scanner,x,19.4f,f+1.04f,.21f,.042f,.29f,rfN,false);}
  wall(m,10.f,22.f,10.2f,23.8f,f,roof,3);wall(m,13.8f,22.f,14.f,23.8f,f,roof,3);
- rfFix(m,model::lab_door_reader,9.8f,21.78f,f+1.2f,.12f,.04f,.18f,rfN,false);
+ rfFix(m,model::lab_id_scanner,9.8f,21.78f,f+1.2f,.15f,.03f,.205f,rfN,false);
  rfFix(m,model::lab_status_display,12.f,21.76f,f+2.72f,.69f,.06f,.2f,rfN,false);
  m.lights.push_back(rfSwitched(lamp({12.f,22.6f},roof-.18f,.8f,4.f,1000,-.5f),clearance,true));
  m.lights.push_back(rfSwitched(lamp({12.f,22.6f},roof-.18f,.8f,4.f,5200,.3f),clearance));
@@ -272,10 +272,10 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  m.lights.push_back(lamp({20.f,6.2f},roof-.16f,.85f,5.5f,5600,.05f));
  // --- Screening intake, south-east: where a tier was read -----------------------------------------
  wall(m,17.2f,14.2f,23.f,14.4f,f,f+1.1f,3);
- rfFix(m,model::med_nurse_desk,20.2f,16.6f,f,1.7f,.8f,1.f,rfN,true);
- rfFix(m,model::med_vitals_monitor,21.f,16.5f,f+1.f,.4f,.3f,.35f,rfN,false);
+ rfFix(m,model::med_nurse_desk,20.2f,16.6f,f,1.48f,.7f,1.01f,rfN,true);
+ rfFix(m,model::med_vitals_monitor,21.f,16.5f,f+1.01f,.42f,.2f,.31f,rfN,false);
  rfFix(m,model::file_cabinet_tall,22.5f,19.8f,f,.5f,.6f,1.3f,rfW,true);
- rfFix(m,model::med_wall_clock,20.f,21.8f,f+2.3f,.4f,.03f,.4f,rfN,false);
+ rfFix(m,model::med_wall_clock,20.f,21.8f,f+2.3f,.41f,.034f,.39f,rfN,false);
  terminal(m,{18.f,17.f},"SCREENING INTAKE / TIER BOARD","BANDS READ AT THE GATES. TIER 1: CLEAR. TIER 2: SCREENING DUE. TIER 3: OBSERVATION.",
   "02:30 ALL TIER 2 STAFF HELD FOR SCREENING. 03:52 TIER LIST COPIED TO INTERNAL INVESTIGATIONS.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfE;
  m.lights.push_back(lamp({20.f,17.5f},roof-.16f,.85f,5.5f,5000,.05f));
@@ -330,7 +330,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  // No rod where the stair arrives on the deck.
  std::erase_if(m.pipes,[](const PipeRun& r){return r.start.x>19.6f&&r.start.x<22.4f&&r.start.y>4.f&&r.start.y<5.6f;});
  for(float x:{14.5f,17.5f})bench(m,x,2.f,dz);
- rfFix(m,model::lab_scope_monitor,22.f,1.4f,dz+.75f,.5f,.4f,.45f,rfN,false);
+ rfFix(m,model::lab_scope_monitor,22.f,1.4f,dz+.75f,.47f,.34f,.45f,rfN,false);
  rfFix(m,model::lab_potted_plant,12.6f,1.6f,dz,.5f,.58f,.93f,0,false);
  for(Vec2 l:{Vec2{15.f,3.f},Vec2{20.f,3.f}})m.lights.push_back(lamp(l,roof-.2f,.85f,6.f,5200,.05f));
  // --- The lobby ------------------------------------------------------------------------------------
@@ -353,8 +353,8 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  m.doors.push_back({8.f,9.5f,10.1f,0});              // 0: boardroom
  rfFix(m,model::lab_exec_desk,6.2f,5.2f,f,2.21f,1.1f,.89f,0,true);
  rfFix(m,model::lab_exec_desk,6.2f,3.f,f,2.21f,1.1f,.89f,0,true);
- for(float x:{4.9f,6.2f,7.5f})for(float y:{1.9f,6.3f})rfFix(m,model::lab_boardroom_chair,x,y,f,.6f,.6f,1.f,y<4?rfS:rfN,true);
- rfFix(m,model::lab_boardroom_chair,3.6f,4.1f,f,.6f,.6f,1.f,rfE,true);
+ for(float x:{4.9f,6.2f,7.5f})for(float y:{1.9f,6.3f})rfFix(m,model::lab_boardroom_chair,x,y,f,.79f,.74f,.93f,y<4?rfS:rfN,true);
+ rfFix(m,model::lab_boardroom_chair,3.6f,4.1f,f,.79f,.74f,.93f,rfE,true);
  rfFix(m,model::cctv_tv,11.73f,4.1f,f+1.4f,1.f,.5f,.8f,rfW,false);
  rfFix(m,model::lab_wall_clock,6.2f,1.04f,f+2.6f,.4f,.03f,.4f,rfS,false);
  rfFix(m,model::lab_potted_plant,1.6f,9.f,f,.5f,.58f,.93f,0,false);

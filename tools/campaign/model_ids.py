@@ -35,6 +35,14 @@ def main():
         ident = re.sub(r'\W', '_', name)
         size = ' // %.2f x %.2f x %.2f' % (e['width'], e['depth'], e['height']) if e else ''
         out.append('inline constexpr int %s=%d;%s' % (ident, slot, size))
+    # Each slot's own size (0 for the engine's models), so the map audit can
+    # flag a fixture stretched out of proportion.
+    sizes = {slot: e for slot, _, e in rows}
+    out.append('inline constexpr float size[][3]={')
+    for slot in range(max(sizes) + 1):
+        e = sizes.get(slot)
+        out.append(' {%.3ff,%.3ff,%.3ff},' % ((e['width'], e['depth'], e['height']) if e else (0, 0, 0)))
+    out.append('};')
     out.append('}')
     open(os.path.join(ROOT, 'src', 'world', 'ModelIds.h'), 'w', newline='\n').write('\n'.join(out) + '\n')
     print('ModelIds.h: %d models' % len(rows))

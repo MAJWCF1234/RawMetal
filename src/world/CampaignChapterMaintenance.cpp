@@ -171,7 +171,8 @@ void mntBarRack(Map& m,float y1,float y2,float floor,int seed){
 // or along y at x=`at`. A doorway panel collides only either side of its gap.
 void mntMesh(Map& m,bool alongX,float at,float c,float len,float floor,bool doorway){
  const Vec2 p=alongX?Vec2{c,at}:Vec2{at,c};
- mntFix(m,doorway?model::mine_mesh_doorway:model::mine_mesh_fence,p,floor,len,.06f,2.78f,alongX?0.f:kPi*.5f,!doorway);
+ // A short or long panel trades a little height to keep its mesh square.
+ mntFix(m,doorway?model::mine_mesh_doorway:model::mine_mesh_fence,p,floor,len,.06f,2.78f*std::clamp(len/3.19f,.85f,1.15f),alongX?0.f:kPi*.5f,!doorway);
  if(!doorway)return;
  const float gap=.56f*len/3.19f;
  for(float s:{-1.f,1.f}){const float a=c+s*gap,b=c+s*len*.5f,lo=std::min(a,b),hi=std::max(a,b);
@@ -453,7 +454,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  zone(m,"CENTRAL STORES / STOREMAN",18.6f,1,23,8.4f);
  // --- The passage in and the goods line ------------------------------------------------------
  floorLine(m,18.66f,8.4f,18.8f,14.6f,f,13);
- for(float y:{8.8f,14.2f})mntFix(m,model::pwr_safety_bollard,{18.73f,y},f,.2f,.2f,1.1f,0,true);
+ for(float y:{8.8f,14.2f})mntFix(m,model::pwr_safety_bollard,{18.73f,y},f,.15f,.15f,1.1f,0,true);
  // Goods-in staging stacked two high: it hides the doorway from the main aisle.
  cargo(m,19.7f,11.7f,f,true,.1f);
  mntFix(m,model::wooden_crate,{19.72f,11.66f},f+1.15f,.95f,.9f,.85f,.35f,true);
@@ -584,7 +585,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  m.pushCrates.push_back({{16.5f,18.5f},0});
  m.cratePlates.push_back({{9.5f,19.5f},stateId("mnt_test_load")});
  m.crateReset=stateId("mnt_test_reset");
- for(Vec2 stop:{Vec2{8.5f,19.5f},Vec2{16.5f,20.5f}})mntFix(m,model::pwr_safety_bollard,stop,f,.2f,.2f,1.1f,0,true);
+ for(Vec2 stop:{Vec2{8.5f,19.5f},Vec2{16.5f,20.5f}})mntFix(m,model::pwr_safety_bollard,stop,f,.15f,.15f,1.1f,0,true);
  wall(m,9.04f,19.04f,9.96f,19.96f,f+.002f,f+.006f,8);
  for(auto [x1,y1,x2,y2]:{std::tuple{9.f,19.f,10.f,19.06f},{9.f,19.94f,10.f,20.f},{9.f,19.f,9.06f,20.f},{9.94f,19.f,10.f,20.f}})floorLine(m,x1,y1,x2,y2,f,13);
  // The cage: mesh on a kerb, its gate on the aisle.

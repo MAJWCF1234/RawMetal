@@ -82,8 +82,8 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // --- The waiting room, north-west ----------------------------------------------------------
  for(float y:{3.f,4.6f,6.2f})for(float x:{2.6f,5.6f})bench(m,x,y,f);
  mdFix(m,model::water_cooler,9.6f,1.5f,f,.35f,.35f,1.1f,mdS,true);
- mdFix(m,model::med_notice_board,1.04f,4.6f,f+1.3f,1.2f,.06f,.9f,mdE,false);
- mdFix(m,model::med_wall_clock,6.f,1.04f,f+2.3f,.4f,.03f,.4f,mdS,false);
+ mdFix(m,model::med_notice_board,1.04f,4.6f,f+1.3f,1.2f,.07f,.9f,mdE,false);
+ mdFix(m,model::med_wall_clock,6.f,1.03f,f+2.3f,.41f,.034f,.39f,mdS,false);
  mdFix(m,model::lab_potted_plant,9.5f,7.8f,f,.5f,.58f,.93f,0,false);
  wall(m,10.6f,1.f,10.8f,8.6f,f,roof,3);
  terminal(m,{1.4f,7.2f},"ROUTINE MONITORING / A NOTE FOR STAFF","YOUR BAND KEEPS YOU SAFE. A SCREENING CALL IS ROUTINE, NOT A CONCERN.",
@@ -92,8 +92,8 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // --- The screening booths, north-east ------------------------------------------------------
  for(float x:{14.6f,18.6f})wall(m,x,1.f,x+.2f,8.6f,f,roof,27);
  for(float x0:{11.f,14.8f,18.8f}){const float cx=x0+1.9f;
-  mdFix(m,model::med_vitals_monitor,cx+.8f,1.4f,f+.9f,.4f,.3f,.35f,mdS,false);
-  mdFix(m,model::lab_field_meter,cx-.8f,1.38f,f+.9f,.3f,.2f,.25f,mdS,false);
+  mdFix(m,model::med_vitals_monitor,cx+.8f,1.4f,f+.9f,.42f,.2f,.31f,mdS,false);
+  mdFix(m,model::lab_field_meter,cx-.8f,1.38f,f+.9f,.25f,.33f,.15f,mdS+kPi*.5f,false);
   wall(m,cx-1.3f,1.1f,cx+1.3f,1.7f,f,f+.9f,20);
   mdFix(m,model::office_chair,cx,4.2f,f,.55f,.55f,.95f,mdN,true);
   m.lights.push_back(lamp({cx,4.f},roof-.16f,.85f,5.f,6400,.03f));}
@@ -104,12 +104,12 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // --- The triage board and the nurses' desk, south ---------------------------------------
  terminal(m,{4.6f,14.25f},"TRIAGE BOARD / TONIGHT","TIER 2 HELD FOR SCREENING: 31. TIER 3 MOVED TO OBSERVATION: 9.",
   "LAB 4 / ENERGY DIAGNOSTICS / HELD FOR OBSERVATION / WARD C.");m.terminals.back().yaw=mdN;
- mdFix(m,model::med_nurse_desk,18.4f,17.4f,f,1.7f,.8f,1.f,mdN,true);
+ mdFix(m,model::med_nurse_desk,18.4f,17.4f,f,1.48f,.7f,1.01f,mdN,true);
  mdFix(m,model::file_cabinet_tall,22.5f,16.f,f,.5f,.6f,1.3f,mdW,true);
  mdFix(m,model::med_supply_cabinet,22.5f,19.f,f,1.1f,.44f,1.7f,mdW,true);
- mdFix(m,model::med_crash_cart,16.f,20.6f,f,.6f,.5f,1.f,.4f,true);
- mdFix(m,model::med_wheelchair,3.f,17.6f,f,.65f,1.f,.95f,1.2f,true);
- mdFix(m,model::med_ward_bed_tossed,5.f,20.8f,f,1.f,2.1f,.9f,mdE+.3f,true);
+ mdFix(m,model::med_crash_cart,16.f,20.6f,f,.74f,.48f,1.f,.4f,true);
+ mdFix(m,model::med_wheelchair,3.f,17.6f,f,.53f,.99f,.87f,1.2f,true);
+ mdFix(m,model::med_ward_bed_tossed,5.f,20.8f,f,2.1f,1.52f,.84f,mdE+.3f+kPi*.5f,true);
  wall(m,10.f,14.6f,10.2f,23.8f,f,roof,3);wall(m,13.8f,14.6f,14.f,23.8f,f,roof,3);
  for(Vec2 l:{Vec2{5.f,18.6f},Vec2{12.f,18.f},Vec2{18.6f,19.6f}})m.lights.push_back(lamp(l,roof-.16f,.85f,6.f,4800,.06f));
  m.lights.push_back(lamp({12.f,22.4f},roof-.18f,.8f,4.f,1000,-.5f));
@@ -151,12 +151,12 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  wall(m,1.f,8.6f,5.f,8.8f,f,roof,3);wall(m,1.f,14.4f,5.f,14.6f,f,roof,3);
  wall(m,5.f,1.f,5.2f,8.8f,f,roof,3);wall(m,5.f,14.4f,5.2f,23.f,f,roof,3);
  ceilingGrid(m,5.2f,1.f,23.f,23.f,roof);
- mdFix(m,model::med_nurse_desk,8.2f,6.f,f,1.7f,.8f,1.f,mdE,true);
- mdFix(m,model::med_vitals_monitor,8.1f,6.3f,f+1.f,.4f,.3f,.35f,mdE,false);
+ mdFix(m,model::med_nurse_desk,8.2f,6.f,f,1.48f,.7f,1.01f,mdE,true);
+ mdFix(m,model::med_vitals_monitor,8.1f,6.3f,f+1.01f,.42f,.2f,.31f,mdE,false);
  mdFix(m,model::office_chair,7.2f,6.f,f,.55f,.55f,.95f,mdE,true);
  for(float y:{2.f,3.2f})mdFix(m,model::file_cabinet_tall,5.6f,y,f,.5f,.6f,1.3f,mdE,true);
  mdFix(m,model::med_supply_cabinet,10.f,1.45f,f,1.1f,.44f,1.7f,mdS,true);
- mdFix(m,model::med_wall_clock,8.f,1.04f,f+2.3f,.4f,.03f,.4f,mdS,false);
+ mdFix(m,model::med_wall_clock,8.f,1.03f,f+2.3f,.41f,.034f,.39f,mdS,false);
  terminal(m,{9.2f,5.2f},"BAND DESK / ISSUE LOG","GREEN: TIER 1, BACK TO SHIFT. AMBER: TIER 2, SCREENING DUE. RED: TIER 3, WARD C.",
   "02:12 NO MORE AMBER BANDS. ISSUE RED.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=mdE;
  // The nurse at the desk (actor 0): looking at her is turning your back on the bays.
@@ -167,17 +167,17 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  for(float y:{4.6f,9.1f,13.6f,18.1f})m.pipes.push_back({{15.6f,y},{23.f,y},f+2.15f,.02f,f+2.15f,6});
  const float bays[5]={2.6f,6.85f,11.35f,15.85f,20.4f};
  for(int i=0;i<5;++i){const float y=bays[i];
-  if(i==1||i==3)mdFix(m,model::med_ward_bed_tossed,20.4f,y+.3f,f,1.f,2.1f,.9f,mdE+.4f*(i-2),true);
-  else if(i!=2)mdFix(m,model::med_ward_bed,20.4f,y,f,1.f,2.1f,.9f,mdE,true);
-  mdFix(m,model::med_vitals_monitor,22.83f,y-.7f,f+1.2f,.4f,.3f,.35f,mdW,false);
+  if(i==1||i==3)mdFix(m,model::med_ward_bed_tossed,20.4f,y+.3f,f,2.1f,1.52f,.84f,mdE+.4f*(i-2)+kPi*.5f,true);
+  else if(i!=2)mdFix(m,model::med_ward_bed,20.4f,y,f,1.98f,.94f,.84f,mdE+kPi*.5f,true);
+  mdFix(m,model::med_vitals_monitor,22.88f,y-.7f,f+1.2f,.42f,.2f,.31f,mdW,false);
   m.lights.push_back(lamp({19.f,y},roof-.16f,.7f,4.5f,5000,.05f));}
  // Bay 3: the gurney he fell from, its frame twisted.
- mdFix(m,model::med_bed_frame_wrecked,20.6f,11.f,f,1.f,2.f,.8f,mdE+.3f,true);
- for(auto [x,y]:{std::pair{18.4f,12.2f},{17.6f,7.8f},{13.f,16.6f}})mdFix(m,model::med_blood_bag,x,y,f,.2f,.3f,.05f,x,false);
- mdFix(m,model::med_crash_cart,13.6f,10.f,f,.6f,.5f,1.f,.6f,true);
- mdFix(m,model::med_wheelchair,11.f,18.6f,f,.65f,1.f,.95f,2.4f,true);
- mdFix(m,model::med_ward_bed_tossed,9.6f,21.4f,f,1.f,2.1f,.9f,.5f,true);
- mdFix(m,model::med_crutches,6.f,20.f,f,.4f,.2f,1.3f,.3f,false);
+ mdFix(m,model::med_bed_frame_wrecked,20.6f,11.f,f,1.98f,.94f,.84f,mdE+.3f+kPi*.5f,true);
+ for(auto [x,y]:{std::pair{18.4f,12.2f},{17.6f,7.8f},{13.f,16.6f}})mdBlood(m,x-.3f,y-.25f,x+.3f,y+.25f,f);
+ mdFix(m,model::med_crash_cart,13.6f,10.f,f,.74f,.48f,1.f,.6f,true);
+ mdFix(m,model::med_wheelchair,11.f,18.6f,f,.53f,.99f,.87f,2.4f,true);
+ mdFix(m,model::med_ward_bed_tossed,9.6f,21.4f,f,2.1f,1.52f,.84f,.5f+kPi*.5f,true);
+ mdFix(m,model::med_crutches,6.f,20.f,f,.17f,.06f,1.2f,.3f,false);
  // The patient (actor 1): on the floor beside the gurney, until his timer runs.
  // Turning to the nurse at the desk starts it; he comes up off the floor (the
  // fall played backwards, stopping on his knees) and stays there, facing you.
@@ -229,10 +229,10 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  // --- X-ray suites, north-west: the tables behind a lead-glass control booth -----------------------
  wall(m,1.f,6.f,8.8f,6.2f,f,roof,27);
  for(float y0:{1.f,6.2f}){const float cy=y0+2.4f;
-  mdFix(m,model::med_autopsy_table,5.2f,cy,f,.9f,2.f,.9f,mdE,true);
+  mdFix(m,model::med_autopsy_table,5.2f,cy,f,1.98f,.81f,.95f,mdE+kPi*.5f,true);
   wall(m,4.6f,cy-.3f,5.8f,cy+.3f,f+2.3f,f+2.5f,20);m.pipes.push_back({{5.2f,cy},{5.2f,cy},f+2.5f,.05f,roof,6});
-  mdFix(m,model::med_xray_viewer_skull,1.04f,cy-.6f,f+1.4f,.6f,.05f,.5f,mdE,false);
-  mdFix(m,model::med_xray_viewer_chest,1.04f,cy+.6f,f+1.4f,.6f,.05f,.5f,mdE,false);
+  mdFix(m,model::med_xray_viewer_skull,1.06f,cy-.6f,f+1.4f,.41f,.1f,.5f,mdE,false);
+  mdFix(m,model::med_xray_viewer_chest,1.06f,cy+.6f,f+1.4f,.41f,.1f,.5f,mdE,false);
   m.lights.push_back(lamp({1.3f,cy},f+1.6f,.6f,3.f,7500,-.3f,WorldLightMount::Bare));
   m.lights.push_back(lamp({3.4f,cy},roof-.16f,.6f,4.5f,5600,.04f));}
  mdGlass(m,7.f,1.f,7.2f,4.2f,f,roof,27);   // the booth's lead glass, open at its south end
@@ -244,8 +244,8 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  mdFix(m,model::lab_test_chamber,4.4f,16.6f,f,2.5f,1.5f,1.4f,mdE,true);
  mdFix(m,model::lab_control_board,8.7f,13.f,f+.9f,1.32f,.19f,.6f,mdW,false);   // on the bay wall
  mdFix(m,model::desk,8.3f,17.4f,f,1.4f,.7f,.75f,mdW,true);
- mdFix(m,model::lab_scope_monitor,8.35f,17.4f,f+.75f,.5f,.4f,.45f,mdW,false);
- mdFix(m,model::med_wheelchair,7.2f,20.6f,f,.65f,1.f,.95f,2.8f,true);
+ mdFix(m,model::lab_scope_monitor,8.35f,17.4f,f+.75f,.47f,.34f,.45f,mdW,false);
+ mdFix(m,model::med_wheelchair,7.2f,20.6f,f,.53f,.99f,.87f,2.8f,true);
  mdBlood(m,5.8f,18.6f,7.4f,20.f,f);
  {auto l=lamp({4.4f,16.6f},roof-.2f,.9f,5.f,9000,-.4f);l.flicker=.4f;m.lights.push_back(l);}
  m.lights.push_back(lamp({4.4f,20.8f},roof-.16f,.6f,5.f,5200,.05f));
@@ -253,7 +253,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{3.f,20.6f},f});
  // --- The reading room, north-east: lightboxes along the wall --------------------------------------
  wall(m,15.2f,8.8f,17.f,9.f,f,roof,3);wall(m,21.f,8.8f,23.f,9.f,f,roof,3);
- for(float x:{16.4f,17.6f,18.8f,20.f,21.2f})mdFix(m,model::med_xray_viewer_skull,x,1.04f,f+1.4f,.6f,.05f,.5f,mdS,false);
+ for(float x:{16.4f,17.6f,18.8f,20.f,21.2f})mdFix(m,model::med_xray_viewer_skull,x,1.06f,f+1.4f,.41f,.1f,.5f,mdS,false);
  for(float x:{17.f,20.6f})mdDeskLocal(m,x,3.2f,f);
  mdBody(m,"md_imaging_clock",ActorVisual::SeniorScientist,{18.8f,5.6f},f,1.9f);
  m.lights.push_back(lamp({18.8f,1.4f},f+1.5f,.8f,4.5f,7500,-.3f,WorldLightMount::Bare));

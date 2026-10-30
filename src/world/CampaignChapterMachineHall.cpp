@@ -563,7 +563,7 @@ const MhHall& mhHall(){
   ceilingGrid(m,36.15f,1.f,43.85f,6.85f,G+2.7f);
   // Switchboard 9: the station service lineup along the north wall.
   for(float x:{37.15f,38.65f,40.15f})mhFix(m,model::pwr_switchgear_cabinet,x+.75f,1.41f,G,1.5f,.82f,2.7f,0);
-  mhFix(m,model::pwr_tall_switch_cabinet,43.3f,2.2f,G,.95f,1.54f,2.3f,kPi);
+  mhFix(m,model::pwr_tall_switch_cabinet,43.3f,2.2f,G,.72f,1.17f,2.3f,kPi);
   // The operator's desk under the windows faces the hall; the shift log is on it.
   mhTerminal(m,{38.4f,6.15f},G,kPi,"UNIT CONTROL / SHIFT LOG","02:40 CLEANUP FORCE ORDERS THE HALL CLEARED.","OPERATORS TO MUSTER C. K. VOSS STAYS AT DESK.");
   mhFix(m,model::office_chair,38.6f,5.25f,G,.55f,.55f,.95f,.3f);
@@ -782,7 +782,7 @@ std::shared_ptr<const Map> makeVentilationWorks(){
   for(float y:{3.5f,8.4f})wall(m,x,y,x+.08f,y+.1f,f,dz+.2f,8);}
  for(float x=2.f;x<10.f;x+=1.f)wall(m,x,5.6f,x+.5f,6.4f,f,f+.02f,8);
  wall(m,9.f,8.2f,10.8f,8.4f,f+2.f,dz,20);
- mhFix(m,model::pwr_vent_grille,9.9f,8.45f,f+2.05f,.82f,.04f,.5f,0,false);
+ mhFix(m,model::pwr_vent_grille,9.9f,8.45f,f+2.05f,.51f,.04f,.5f,0,false);
  wallSign(m,7.6f,8.455f,f+1.5f,"DANGER / SUPPLY MAIN","LOCK OUT FAN 2 BEFORE ENTRY",1.6f,0);
  mhLamp(m,{5.f,6.f},dz-.1f,.8f,5.f,3400,0);
  // --- Fan 1 and Fan 2 -----------------------------------------------------------------------

@@ -277,7 +277,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  for(float x=1.45f;x<4.4f;x+=.42f)m.fixtures.push_back({model::gas_cylinder,{x,22.6f},0,.33f,.33f,1.58f,0,true});
  wall(m,1.f,22.38f,4.5f,22.42f,base+1.1f,base+1.15f,12);
  m.pipes.push_back({{1.2f,22.85f},{4.4f,22.85f},base+1.8f,.04f,base+1.8f,3});
- m.fixtures.push_back({model::mine_mesh_fence,{2.7f,21.5f},0,3.4f,.06f,2.3f,0,true});
+ m.fixtures.push_back({model::mine_mesh_fence,{2.7f,21.5f},0,3.4f,.06f,2.62f,0,true});
  // --- Pressure lock PL-3 to Research Receiving ---------------------------------------------
  wall(m,7.6f,19.4f,7.8f,23.f,base,base+3.4f,3);wall(m,12.2f,19.4f,12.4f,23.f,base,base+3.4f,3);
  wall(m,7.6f,19.4f,8.f,19.6f,base,base+3.4f,3);wall(m,12.f,19.4f,12.4f,19.6f,base,base+3.4f,3);

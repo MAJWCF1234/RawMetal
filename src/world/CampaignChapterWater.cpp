@@ -266,7 +266,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
   pipeRoute(m,{{c.x+1.3f,c.y+1.55f,F+.6f},{c.x+1.9f,c.y+2.15f,F+.6f}},.12f,0,NoRoof);
   watRiser(m,{c.x+1.9f,c.y+2.15f},F,F+.6f,.12f,0);
   m.structures.push_back({c.x+1.1f,c.y+1.35f,c.x+2.05f,c.y+2.3f,F,F+.75f,false,6});
-  m.fixtures.push_back({model::pwr_wall_ladder,{c.x-2.06f,c.y},0,.08f,.84f,5.f,0,false});
+  for(float z:{0.f,2.5f})m.fixtures.push_back({model::pwr_wall_ladder,{c.x-2.06f,c.y},z,.08f,.78f,2.5f,0,false});   // two flights: rungs at their own spacing
  }
  m.pipes.push_back({{9.5f,10.6f},{15.5f,10.6f},-19.3f,.09f,-19.3f,6});
  // --- Reservoir 2 -----------------------------------------------------------------

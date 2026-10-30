@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <cctype>
 #include "Game.h"
 #include "../world/CampaignMaps.h"
+#include "../world/ModelIds.h"
 #include <fstream>
 #include <queue>
 #include <cmath>
@@ -387,6 +389,21 @@ bool Game::auditMap(int level){
   for(float u:{-.5f,0.f,.5f})for(float v:{-.5f,0.f,.5f}){float x=u*(f.width-inset*2),y=v*(f.depth-inset*2);p[size_t(k++)]={f.position.x+x*c+y*s,f.position.y-x*s+y*c};}
   return p;};
  const auto& fixtures=w.fixtures();
+ // A pack model is drawn stretched to the box it is given: one scaled further
+ // along one axis than another looks right from one side only.
+ for(const auto& f:fixtures){
+  if(f.model<0||f.model>=int(std::size(model::size))||model::size[f.model][0]<=0)continue;
+  // Panels thinner than 10 cm (mesh, mirrors, webs) may take any thickness, and
+  // a run (cable, pipe) four times longer than it is thick may take any length.
+  const float* own=model::size[f.model];const float given[]={f.width,f.depth,f.height};
+  float low=1e9f,high=0,second=0;int longest=int(std::max_element(own,own+3)-own);
+  for(int a=0;a<3;++a)if(a!=longest&&own[a]>=.1f)second=std::max(second,own[a]);
+  const bool run=second>0&&own[longest]>=second*4;
+  for(int a=0;a<3;++a){if(own[a]<.1f||(run&&a==longest))continue;float r=given[a]/own[a];low=std::min(low,r);high=std::max(high,r);}
+  const float spread=high>0?high/low:1.f;
+  if(spread>1.2f){char text[96];std::snprintf(text,sizeof text," (%.2f x %.2f x %.2f, own %.2f x %.2f x %.2f)",f.width,f.depth,f.height,own[0],own[1],own[2]);
+   fail("DISTORTED prop model "+std::to_string(f.model)+" at "+at(f.position)+text);}
+ }
  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!f.solid)continue;
   float base=w.floorHeight(f.position.x,f.position.y)+f.base,top=base+f.height;
   std::string name="prop model "+std::to_string(f.model)+" at "+at(f.position);
