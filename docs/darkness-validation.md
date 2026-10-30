@@ -24,7 +24,7 @@ Only the current chunk's zones determine darkness. Lamps remain independent.
 Custom campaign records (optional trailing fields may be empty):
 
 ```text
-LIGHT|mapIndex|x|y|z|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker
+LIGHT|mapIndex|x|y|z|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker|fitting|width|depth|height
 DARK|mapIndex|x1|y1|x2|y2|bottom|top|state|value|invert|jam
 ```
 

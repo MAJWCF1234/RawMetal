@@ -52,6 +52,10 @@ bool Game::testWorldIsolation(){
    auto ceilingPoint=ceiling.emitter(),ceilingTarget=ceiling.shadowTarget(),wallPoint=wall.emitter(),wallTarget=wall.shadowTarget();
    lightContract=ceiling.mount==WorldLightMount::Ceiling&&ceiling.intensity==1&&ceiling.range==12&&ceilingPoint.x==5&&ceilingPoint.y==5&&ceilingPoint.z==3&&std::fabs(ceilingTarget.z-2.96f)<.0001f;
    lightContract&=wall.mount==WorldLightMount::Wall&&std::fabs(wallPoint.x-1)<.0001f&&std::fabs(wallPoint.y-6.16f)<.0001f&&wallTarget.z==2&&wall.range==6&&wall.intensity==1.2f;
+   auto fitted=load(base+"LIGHT|0|5|5|3|0|1.5707963|1|8|5600|0|||||||0.1|336|0.44|1.04|0.17\n");const auto& fit=fitted->maps[0]->lights[0];
+   lightContract&=ceiling.fitting==-1&&fit.fitting==336&&fit.fittingWidth==.44f&&fit.fittingDepth==1.04f&&fit.fittingHeight==.17f&&fit.flicker==.1f;
+   auto rejects=[&](const std::string& text){try{load(text);return false;}catch(const std::runtime_error&){return true;}};
+   lightContract&=rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|336\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|99999|1|1|1\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|336|0|1|1\n");
    lightContract&=std::fabs(ceiling.falloff(25)-3.2f*std::pow(1.f-25.f/144.f,2.f)/(1.f+25.f*.12f))<.000001f&&wall.falloff(36)==0&&wall.falloff(35)>0;
    auto mounted=load(base+"STRUCT|0|0|1|1|20|0|3.4|0|2\nLIGHT|0|1|6|2|1|0|1.2|6\n");World mountedWall(0,mounted->maps[0]);auto target=mountedWall.lights()[0].shadowTarget();
    lightContract&=mountedWall.lightRayClear({3,6},1.5f,{target.x,target.y},target.z)&&!mountedWall.lightRayClear({3,6},1.5f,{.98f,6},2);

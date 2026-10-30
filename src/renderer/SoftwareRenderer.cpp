@@ -241,7 +241,15 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_facilityTextures.emplace("metro_Vending_machine",loadTexture(465));
  // Library imports (tools/library/register.py): "material resource" per line.
  {auto text=loadResource(466);std::istringstream lines(std::string(text.begin(),text.end()));std::string material;int resource=0;
-  while(lines>>material>>resource)m_facilityTextures.emplace(material,loadTexture(resource));}
+  while(lines>>material>>resource){auto texture=loadTexture(resource);
+   // A pack's lit ceiling-lamp panel ("..ceiling_lamp_N_on"): its tubes are
+   // printed amber, so they go to a neutral white the lamp's own colour
+   // temperature tints, and glow from the bright texels like the lab diffuser.
+   if(material.find("ceiling_lamp_")!=std::string::npos&&material.ends_with("_on")){texture.emission.resize(texture.pixels.size());
+    for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
+     float k=std::clamp((y-.35f)/.5f,0.f,1.f);unsigned v=unsigned(std::min(255.f,y*255.f*(1+k*.35f)));
+     texture.pixels[i]=(p&0xff000000u)|(v<<16)|(v<<8)|std::min(255u,v+6);unsigned e=unsigned(v*k);texture.emission[i]=0xff000000u|(e<<16)|(e<<8)|e;}}
+   m_facilityTextures.emplace(material,std::move(texture));}}
  for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
   m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
  m_areaWalls[1].glossStrength=.2f;m_areaWalls[2].glossStrength=.16f;

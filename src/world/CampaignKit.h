@@ -247,6 +247,16 @@ inline void recordsDesk(Map& m,float x,float y,float floor){
 inline WorldLight lamp(Vec2 p,float z,float intensity,float range,float kelvin,float tint=0,WorldLightMount mount=WorldLightMount::Ceiling,float yaw=0){
  WorldLight l{p,z,mount,yaw,intensity,range};l.kelvin=kelvin;l.tint=tint;return l;
 }
+// Fits every ceiling lamp in the map that still has the original square
+// facility housing with one of the pack's recessed fittings, set flush into
+// the ceiling above it: the two-tube fluorescent for clinics and labs, or the
+// square troffer panel for offices. Call it after the map's lights are placed.
+inline void recessedFittings(Map& m,bool troffer=false){
+ for(auto& l:m.lights)if(l.mount==WorldLightMount::Ceiling&&l.fitting<0){
+  if(troffer){l.fitting=model::clinic_ceiling_lamp_1;l.fittingWidth=1.05f;l.fittingDepth=1.04f;l.fittingHeight=.16f;}
+  else{l.fitting=model::clinic_ceiling_lamp_2;l.fittingWidth=.44f;l.fittingDepth=1.04f;l.fittingHeight=.17f;}
+ }
+}
 inline void zone(Map& m,const char* name,float x1,float y1,float x2,float y2,float bottom=-1000,float top=1000){m.zones.push_back({name,x1,y1,x2,y2,bottom,top});}
 // Opens a major area: its title card shows the first time the player walks in.
 inline void titleCard(Map& m,const char* title,float x1=0,float y1=0,float x2=24,float y2=24){AuthoredZone z;z.x1=x1;z.y1=y1;z.x2=x2;z.y2=y2;z.title=title;m.zones.push_back(std::move(z));}

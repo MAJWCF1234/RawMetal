@@ -339,4 +339,6 @@ inline constexpr int scrap_van_husk=331; // 2.84 x 6.34 x 2.71
 inline constexpr int psx_locker=332; // 0.64 x 0.90 x 2.30
 inline constexpr int psx_locker_door_l=333; // 0.02 x 0.43 x 2.20
 inline constexpr int psx_locker_door_r=334; // 0.02 x 0.44 x 2.20
+inline constexpr int clinic_ceiling_lamp_1=335; // 1.05 x 1.04 x 0.16
+inline constexpr int clinic_ceiling_lamp_2=336; // 0.44 x 1.04 x 0.17
 }

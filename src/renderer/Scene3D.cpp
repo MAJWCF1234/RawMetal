@@ -1185,6 +1185,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // The light source sits 4 cm beneath the luminous underside.
  auto ceilingLamp=[&](const WorldLight&light,float mount,float power){
   m_emissionScale=light.intensity*power;
+  if(light.fitting>=0){facility(light.fitting,light.position.x,light.position.y,mount-light.fittingHeight,light.fittingWidth,light.fittingDepth,light.fittingHeight,light.yaw);return;}
   facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);
   if(w.campaign()&&(w.level()>=7||w.authored())){
    // The next slab or roof above this lamp is its actual mounting surface.
@@ -1208,7 +1209,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())&&!lampSwitchable[size_t(&light-w.lights().data())]){
    float mount=w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;
    mounts.push_back({&light,mount});
-   for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount})hash(std::bit_cast<std::uint32_t>(value));
+   for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount,float(light.fitting),light.yaw})hash(std::bit_cast<std::uint32_t>(value));
   }
   if(!mounts.empty()&&m_gpu->beginStaticCache(2*Game::MaxChunks+w.level(),key)){
    int previousBudget=shadowBudget;m_staticGeometryBuild=true;shadowBudget=400000;

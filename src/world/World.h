@@ -47,6 +47,10 @@ struct WorldLight {
  // (0..1) adds irregular dropouts: a failing tube or a browned-out circuit.
  StateId enabledState=0;int enabledValue=1;bool invert=false;
  float period=0,onTime=0,phase=0,flicker=0;
+ // A ceiling lamp's housing: -1 is the original square facility lamp; any
+ // other fixture model is drawn flush under its mounting surface at this
+ // size, turned by yaw (a clinic's recessed fluorescent, say).
+ int fitting=-1;float fittingWidth=0,fittingDepth=0,fittingHeight=0;
  // Power can change while the map runs (Game::lampPower), so renderers keep
  // this lamp out of their baked caches and apply its power every frame.
  bool switchable()const{return enabledState||invert||period>0||flicker>0;}

@@ -198,9 +198,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     {number(f,8,"prop half x"),number(f,9,"prop half y")},number(f,10,"prop base")});
    if(map->props.back().kind<0||map->props.back().kind>=4)throw std::runtime_error("invalid prop model");
   }else if(tag=="LIGHT"){
-   // LIGHT|map|x|y|z[|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker]:
+   // LIGHT|map|x|y|z[|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker|fitting|width|depth|height]:
    // a lamp; the optional tail switches it like a HAZARD (state gate, timed window) and adds flicker 0-1.
-   if(f.size()<5||f.size()>18)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
+   // A ceiling lamp's fitting is a fixture model drawn flush under its ceiling at width x depth x height.
+   if(f.size()<5||f.size()>22)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
    WorldLight light{{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")};
    if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>2)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
    if(f.size()>=7&&!f[6].empty())light.yaw=number(f,6,"light yaw");
@@ -215,6 +216,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=16&&!f[15].empty())light.onTime=number(f,15,"light on time");
    if(f.size()>=17&&!f[16].empty())light.phase=number(f,16,"light phase");
    if(f.size()>=18&&!f[17].empty())light.flicker=number(f,17,"light flicker");
+   if(f.size()>=19&&!f[18].empty()){
+    if(f.size()<22)throw std::runtime_error("a light fitting needs its width, depth and height");
+    light.fitting=integer(f,18,"light fitting");if(light.fitting<0||light.fitting>=FacilityModelCount)throw std::runtime_error("invalid light fitting model");
+    light.fittingWidth=number(f,19,"fitting width");light.fittingDepth=number(f,20,"fitting depth");light.fittingHeight=number(f,21,"fitting height");
+    if(light.fittingWidth<=0||light.fittingDepth<=0||light.fittingHeight<=0)throw std::runtime_error("light fitting size must be positive");
+   }
    if(light.period<0||light.onTime<0||light.onTime>light.period||light.flicker<0||light.flicker>1)throw std::runtime_error("light switching needs period >= 0, on time within the period and flicker 0 through 1");
    map->lights.push_back(light);
   }else if(tag=="DARK"){

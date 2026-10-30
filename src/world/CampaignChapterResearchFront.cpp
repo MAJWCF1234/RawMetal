@@ -105,7 +105,7 @@ void rfBooth(Map& m,float x2,float y1,float y2,float f,float roof,float doorA,fl
 std::shared_ptr<const Map> makeResearchIntake(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[68];m.definition=CampaignChunks[68];m.definition.ambient=.40f;
- m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  const StateId sweep=stateId("rf_intake_sweep");
  m.layers.push_back(floorLayer(m.name.c_str(),f));
@@ -205,7 +205,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  zone(m,"RESEARCH INTAKE / LOUNGE",16.6f,12.2f,23.f,20.f);
  zone(m,"RESEARCH INTAKE",0,0,24,24);
  titleCard(m,"RESEARCH FRONT",7.4f,3.8f,16.4f,20.f);
- freightFinish(m,-1);
+ recessedFittings(m,true);freightFinish(m,-1);
  return p;
 }
 // A reply in a conversation (DialogueReply).
@@ -225,7 +225,7 @@ void rfLine(Map& m,const char* node,const char* speaker,const char* line,std::ve
 std::shared_ptr<const Map> makePersonnelProcessing(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[69];m.definition=CampaignChunks[69];m.definition.ambient=.36f;
- m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  const StateId clearance=stateId("proc_clearance"),stance=stateId("rf_proc_stance");
  m.layers.push_back(floorLayer(m.name.c_str(),f));
@@ -305,7 +305,7 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  zone(m,"PERSONNEL PROCESSING / SUIT STATIONS",17.2f,3.8f,23.f,8.6f);
  zone(m,"PERSONNEL PROCESSING / SCREENING INTAKE",17.2f,14.4f,23.f,22.f);
  zone(m,"PERSONNEL PROCESSING",0,0,24,24);
- freightFinish(m,-1);
+ recessedFittings(m,true);freightFinish(m,-1);
  return p;
 }
 // RESEARCH ADMINISTRATION (manifest 47). Where the company kept score: a lobby
@@ -317,7 +317,7 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
 std::shared_ptr<const Map> makeResearchAdministration(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[70];m.definition=CampaignChunks[70];m.definition.ambient=.34f;
- m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling,dz=-9;
  const StateId gone=stateId("rf_admin_gone"),clearance=stateId("proc_clearance");
  m.layers.push_back(floorLayer(m.name.c_str(),f));
@@ -421,7 +421,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  zone(m,"RESEARCH ADMINISTRATION / RECORDS",1.f,12.2f,12.f,21.f);
  zone(m,"RESEARCH ADMINISTRATION / OBSERVATION GALLERY",12.f,1.f,23.f,5.f,dz-.5f,1000);
  zone(m,"RESEARCH ADMINISTRATION",0,0,24,24);
- freightFinish(m,-1);
+ recessedFittings(m,true);freightFinish(m,-1);
  return p;
 }
 }

@@ -61,7 +61,7 @@ void mdSequence(Map& m,const char* timer,const char* finish,int durationMs,int f
 std::shared_ptr<const Map> makeMedicalScreening(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[71];m.definition=CampaignChunks[71];m.definition.ambient=.30f;
- m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),f));
  openEdge(m,{'W',9.f,14.f,f,false,0});
@@ -131,7 +131,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  zone(m,"MEDICAL SCREENING / TRIAGE DESK",1.f,14.6f,23.f,23.f);
  zone(m,"MEDICAL SCREENING",0,0,24,24);
  titleCard(m,"DEPTHWORKS MEDICAL",1.f,8.8f,23.f,14.4f);
- freightFinish(m,-1);
+ recessedFittings(m);freightFinish(m,-1);
  return p;
 }
 // MEDICAL / TRIAGE (manifest 48). Five curtained bays, the band desk where
@@ -142,7 +142,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
 std::shared_ptr<const Map> makeMedicalTriage(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[72];m.definition=CampaignChunks[72];m.definition.ambient=.24f;
- m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),f));
  openEdge(m,{'W',9.f,14.f,f,false,0});
@@ -198,7 +198,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  zone(m,"MEDICAL / TRIAGE / BAND DESK",5.2f,1.f,15.6f,8.6f);
  zone(m,"MEDICAL / TRIAGE / BAYS",15.6f,1.f,23.f,23.f);
  zone(m,"MEDICAL / TRIAGE",0,0,24,24);
- freightFinish(m,-1);
+ recessedFittings(m);freightFinish(m,-1);
  return p;
 }
 // MEDICAL / IMAGING (manifest 48). The first room past the seal: two X-ray
@@ -209,7 +209,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
 std::shared_ptr<const Map> makeMedicalImaging(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[73];m.definition=CampaignChunks[73];m.definition.ambient=.20f;
- m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),f));
  openEdge(m,{'N',10.f,14.f,f,true,0});   // door 0: Screening's sealed door, this side
@@ -266,7 +266,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  zone(m,"MEDICAL / IMAGING / READING ROOM",15.2f,1.f,23.f,8.8f);
  zone(m,"MEDICAL / IMAGING / FILM ARCHIVE",15.2f,14.2f,23.f,23.f);
  zone(m,"MEDICAL / IMAGING",0,0,24,24);
- freightFinish(m,-1);
+ recessedFittings(m);freightFinish(m,-1);
  return p;
 }
 // MEDICAL / PHARMACY (manifest 48)
