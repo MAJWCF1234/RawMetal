@@ -356,6 +356,10 @@ inline constexpr int item_id_card=348; // 0.13 x 0.09 x 0.00
 inline constexpr int item_dosimeter=349; // 0.31 x 0.15 x 0.07
 inline constexpr int item_walkie=350; // 0.11 x 0.38 x 0.05
 inline constexpr int item_bandage=351; // 0.07 x 0.15 x 0.06
+inline constexpr int art_painting_4=352; // 1.09 x 0.04 x 0.90
+inline constexpr int art_painting_5=353; // 1.16 x 0.08 x 0.98
+inline constexpr int art_painting_6=354; // 0.69 x 0.03 x 0.80
+inline constexpr int office_display_cabinet=355; // 0.97 x 0.54 x 2.10
 inline constexpr float size[][3]={
  {0.000f,0.000f,0.000f},
  {0.000f,0.000f,0.000f},
@@ -709,5 +713,9 @@ inline constexpr float size[][3]={
  {0.310f,0.146f,0.066f},
  {0.114f,0.376f,0.046f},
  {0.075f,0.148f,0.061f},
+ {1.089f,0.038f,0.900f},
+ {1.156f,0.080f,0.983f},
+ {0.689f,0.030f,0.800f},
+ {0.968f,0.540f,2.100f},
 };
 }

@@ -165,6 +165,9 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // The corridor: the cart they were pushing, the horn his voice came out of.
  mdFix(m,model::med_crash_cart,20.5f,14.1f,f,.74f,.48f,1.f,0,true);
  mdFix(m,model::lab_pa_horn,9.f,9.1f,f+2.6f,.495f,.564f,.433f,mdS,false);
+ // Where the overflow sat: a bench against the corridor wall, the notices over the cart.
+ bench(m,3.f,13.95f,f);
+ mdFix(m,model::med_notice_board,21.5f,14.36f,f+1.3f,1.2f,.07f,.9f,mdN,false);
  // --- Rewards and names -------------------------------------------------------------------------
  m.pickupSpawns={{{9.f,3.f},PickupKind::Health,f},{{22.f,13.6f},PickupKind::Ammo,f},{{3.f,15.6f},PickupKind::Health,f}};
  m.clutterSpawns={{2,{5.4f,6.6f},f},{1,{18.2f,17.4f},f+1.f}};
@@ -257,6 +260,8 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  shelf(m,{13.6f,1.27f},mdS,0);
  for(float x:{13.1f,14.f})mdFix(m,model::prop_cardboard_box,x,1.3f,f+1.8f,.727f,.72f,.367f,x*.3f,false);
  mdFix(m,model::lab_pa_horn,5.5f,4.f,f+2.6f,.495f,.564f,.433f,mdE,false);
+ // Where they waited to be given a colour.
+ for(float y:{3.2f,4.6f})bench(m,12.6f,y,f);
  // --- Light: the desk lit, the bays dimming, one tube going out over bay 3 ----------------------
  for(Vec2 l:{Vec2{8.f,4.f},Vec2{3.f,11.5f}})m.lights.push_back(lamp(l,roof-.16f,.85f,6.f,5200,.05f));
  {auto l=lamp({18.6f,11.3f},roof-.16f,.8f,4.f,5600,.04f);l.flicker=.6f;m.lights.push_back(l);}

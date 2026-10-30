@@ -223,6 +223,18 @@ std::shared_ptr<const Map> makeResearchIntake(){
  rfFix(m,model::lab_potted_plant,15.6f,19.5f,f,.5f,.58f,.93f,0,false);
  rfFix(m,model::lab_photocopier,20.8f,4.05f,f,.826f,.752f,.967f,rfS,true);
  rfFix(m,model::trash_can,22.6f,10.3f,f,.5f,.5f,.62f,0,true);
+ // Behind the showers: lost property, caged, and the shelf the bags went on.
+ rfFix(m,model::stock_cage,2.4f,19.4f,f,2.4f,1.f,1.1f,0,true);
+ for(auto [x,y]:{std::pair{1.8f,19.4f},{2.9f,19.35f}})rfFix(m,model::prop_cardboard_box,x,y,f+1.1f,.727f,.72f,.367f,x,false);
+ shelf(m,{1.27f,17.4f},rfE,0);
+ rfFix(m,model::prop_cardboard_box_open,1.3f,17.f,f+1.8f,.73f,.725f,.726f,.2f,false);
+ bench(m,4.6f,16.6f,f);
+ m.lights.push_back(lamp({3.8f,18.f},roof-.16f,.8f,5.5f,5000,.05f));
+ // The detail's staging pile in the hall corner: a crate of kit, the boxes for what they take.
+ rfFix(m,model::lab_specimen_crate,15.6f,17.f,f,1.12f,1.12f,1.12f,.15f,true);
+ rfFix(m,model::prop_cardboard_box,14.6f,19.3f,f,.727f,.72f,.367f,0,true);
+ rfFix(m,model::prop_cardboard_box,14.62f,19.28f,f+.367f,.727f,.72f,.367f,.25f,true);
+ rfFix(m,model::item_walkie,15.5f,16.9f,f+1.12f,.114f,.376f,.046f,.9f,false);
  // --- Rewards and names ---------------------------------------------------------------------------
  m.pickupSpawns={{{2.2f,6.6f},PickupKind::Ammo,f},{{3.9f,10.f},PickupKind::Health,f},{{21.6f,16.2f},PickupKind::Ammo,f}};
  m.clutterSpawns={{0,{19.3f,8.9f},f+.891f},{1,{17.9f,15.8f},f},{2,{9.f,19.2f},f}};
@@ -353,6 +365,14 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  rfFix(m,model::lab_notice_board,7.04f,16.2f,f+1.3f,1.2f,.07f,.9f,rfE,false);
  for(Vec2 b:{Vec2{10.05f,7.f},Vec2{13.95f,16.f}})rfFix(m,model::trash_can,b.x,b.y,f,.5f,.5f,.62f,0,true);
  rfLockers(m,20.3f,4.5f,f,rfS);
+ // The queue for the gates: belt rails funnelling each pair of turnstiles, the lanes taped on the floor.
+ for(float x:{8.f,9.4f,14.6f,16.f}){
+  for(float y:{16.6f,17.8f,19.f}){wall(m,x-.03f,y-.03f,x+.03f,y+.03f,f,f+.95f,20);wall(m,x-.05f,y-.05f,x+.05f,y+.05f,f+.95f,f+.99f,12);}
+  wall(m,x-.012f,16.6f,x+.012f,19.f,f+.86f,f+.92f,12);}
+ for(float x:{8.7f,15.3f})floorLine(m,x-.06f,14.6f,x+.06f,19.1f,f,13);
+ // The way west, past the lockers: the laundry nobody collected.
+ rfFix(m,model::prop_cardboard_box_open,5.8f,9.45f,f,.73f,.725f,.726f,-.3f,true);
+ rfFix(m,model::prop_cardboard_box,5.75f,13.5f,f,.727f,.72f,.367f,.1f,true);
  // --- Rewards and names ------------------------------------------------------------------------
  m.pickupSpawns={{{2.f,15.6f},PickupKind::Health,f},{{22.2f,10.f},PickupKind::Ammo,f},{{18.6f,6.4f},PickupKind::Health,f}};
  m.clutterSpawns={{1,{20.6f,16.4f},f+1.f},{0,{3.f,7.2f},f}};
@@ -495,6 +515,18 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  rfFix(m,model::trash_can,22.5f,20.4f,f,.5f,.5f,.62f,0,true);
  rfFix(m,model::lab_pa_horn,22.72f,6.f,f+3.5f,.495f,.564f,.433f,rfW,false);
  rfFix(m,model::lab_photocopier,10.6f,20.6f,f,.826f,.752f,.967f,rfN,true);
+ // The lobby's walls: what the company hung where visitors waited.
+ rfFix(m,model::art_painting_5,12.24f,7.4f,f+1.45f,1.156f,.08f,.983f,rfE,false);
+ rfFix(m,model::art_painting_6,12.24f,3.f,f+1.3f,.689f,.03f,.8f,rfE,false);
+ rfFix(m,model::art_painting_4,20.f,22.97f,f+1.55f,1.089f,.038f,.9f,rfN,false);
+ // And the case it was proud of: the first core out of the deep seam, under glass.
+ rfFix(m,model::office_display_cabinet,22.72f,17.2f,f,.968f,.54f,2.1f,rfW,true);
+ rfFix(m,model::lab_anomaly_relic,22.75f,17.05f,f+1.02f,.25f,.2f,.2f,.6f,false);
+ m.lights.push_back(lamp({21.9f,17.2f},f+2.3f,.7f,2.6f,6800,-.15f,WorldLightMount::Bare));   // the case lit for visitors
+ // The boardroom: flowers nobody chose, over the minutes.
+ rfFix(m,model::art_painting_6,4.6f,9.97f,f+1.3f,.689f,.03f,.8f,rfN,false);
+ // Picture lights: a warm wash on each canvas.
+ for(auto [x,y]:{std::pair{12.6f,7.4f},{12.6f,3.f},{20.f,22.5f},{4.6f,9.5f}})m.lights.push_back(lamp({x,y},f+2.5f,.55f,2.2f,3000,.12f,WorldLightMount::Bare));
  // --- Rewards and names ---------------------------------------------------------------------------
  m.pickupSpawns={{{22.f,22.f},PickupKind::Ammo,f},{{2.f,2.f},PickupKind::Health,f},{{13.f,2.6f},PickupKind::Ammo,dz}};
  m.clutterSpawns={{0,{7.f,17.4f},f+.891f},{2,{21.f,22.f},f}};
