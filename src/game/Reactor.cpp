@@ -101,7 +101,8 @@ bool Game::testReactor(){
  // Wall lamps are checked against their wall by the map audit; every fixed
  // ceiling lamp hangs 15 cm under a real ceiling, roof, deck or slab.
  for(const World* map:{&world,&core,&loop})for(auto&light:map->lights())if(!(map->hasLift()&&&light==&map->lights().back())&&light.mount==WorldLightMount::Ceiling){bool mounted=false;
-  for(float z:{-9.f,-6.f,-3.f,0.f,3.f,6.f,9.f})mounted|=std::fabs(light.z+.15f-map->clearanceAbove(light.position.x,light.position.y,z))<.005f;
+  // Query from the emitter: a glazing transom below it must not hide its ceiling.
+  mounted=std::fabs(light.z+.15f-map->clearanceAbove(light.position.x,light.position.y,light.z))<.005f;
   if(!mounted)out<<"Unmounted light in "<<map->level()<<" at "<<light.position.x<<','<<light.position.y<<','<<light.z<<'\n';
   if(!check(mounted,"Fixed light has a supporting ceiling"))return false;}
  game.restart();return check(game.world().reactorStage()==World::ReactorStage::NoDisk&&!game.world().controlReleased(),"Restart resets puzzle and disk");
