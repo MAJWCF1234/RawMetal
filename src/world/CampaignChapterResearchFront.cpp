@@ -403,7 +403,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  wall(m,22.85f,7.6f,23.f,12.f,f+.55f,f+2.95f,8);
  // The film stopped on its title slide: the screen itself is the theatre's one sign.
  {AuthoredSign s{{22.84f,9.8f},f+.75f,4.1f,2.f,rfW,"YOUR WORK POWERS THE WORLD","DEPTHWORKS ENERGY RESEARCH / WELCOME, NEW STAFF"};s.accent=rfBlue;m.signs.push_back(s);}
- for(float x:{20.2f,21.4f})for(float y:{8.25f,10.55f})rfFix(m,model::platform_chair,x,y,f,2.27f,.54f,.95f,rfE+(x>21&&y>9?.12f:0),true);
+ for(float x:{20.2f,21.4f})for(float y:{8.25f,10.55f})rfFix(m,model::platform_chair,x,y,f,2.27f,.54f,.95f,rfW+(x>21&&y>9?.12f:0),true);
  // The film, running for nobody since 01:58: its console at the back.
  terminal(m,{19.3f,7.4f},"WELCOME TO ENERGY RESEARCH","YOUR WORK POWERS THE WORLD. EVERY SHIFT BELOW BRINGS LIGHT ABOVE.",
   "BANDS STAY ON. SCREENING IS FOR YOUR SAFETY. ASK YOUR SUPERVISOR ABOUT EXPOSURE TIERS.",0,stateId("rf_intake_film_loud"));m.terminals.back().yaw=rfW;
