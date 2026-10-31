@@ -177,8 +177,10 @@ ShotHit Game::guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& 
  // Both candidate evaluation and actual firing use the same physical barrel
  // clearance, with this NPC's own hull ignored and all points in active space.
  auto shoulder=Point3{pose.position.x+shift.x,pose.position.y+shift.y,grip.z};auto blocked=segment(shoulder,grip);if(blocked.kind!=ShotKind::None)return blocked;
- blocked=segment(grip,muzzle);if(blocked.kind!=ShotKind::None)return blocked;
- return traceShot(muzzle,weapon.direction,npc.track().ai.attackRange,int(actor),true);
+ auto shoulderPass=blocked.passed;blocked=segment(grip,muzzle);if(blocked.kind!=ShotKind::None)return blocked;
+ auto hit=traceShot(muzzle,weapon.direction,npc.track().ai.attackRange,int(actor),true);auto rayPass=hit.passed;hit.passed={};int count=0;
+ auto append=[&](const ShotPassage&p){if(!p.kind||count==2)return;for(int i=0;i<count;++i)if(hit.passed[i].kind==p.kind&&hit.passed[i].level==p.level&&hit.passed[i].index==p.index)return;auto passage=p;auto d=p.point-muzzle;passage.distance=std::max(0.f,d.x*weapon.direction.x+d.y*weapon.direction.y+d.z*weapon.direction.z);hit.passed[count++]=passage;};
+ for(const auto&p:shoulderPass)append(p);for(const auto&p:blocked.passed)append(p);for(const auto&p:rayPass)append(p);return hit;
 }
 void Game::updateGuardCombat(float dt){
  perf::Scope frameProfile(perf::Combat);

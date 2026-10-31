@@ -108,7 +108,7 @@ private:
     bool m_staticGeometryBuild=false;
     // Static caches bake ambient only; Vulkan adds lamps per pixel.
     bool m_pixelLighting=false;
-    std::uint64_t m_staticGeometryBuilds=0;
+    std::uint64_t m_staticGeometryBuilds=0,m_propGeometryBuilds=0,m_breakableGeometryBuilds=0;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0,m_presentMs=0;
     bool m_poseReady=false;

@@ -1,11 +1,28 @@
 #pragma once
 #include "../core/Math.h"
+#include "../audio/Sound.h"
 #include <array>
 #include <cstddef>
 #include <stdexcept>
 
 namespace retro {
 // A chunk index is local to a world. Never use it as a global content identity.
+enum class PropMaterial:int {Paper,Cardboard,Plastic,Wood,Metal,Glass,Ceramic,Electronic,Cloth,Organic,Count};
+struct PropMaterialTraits {const char* name;float restitution,friction,breakSpeed;int shards;bool floats;Sound impact;float impactPitch,impactGain;Sound breakSound;float breakPitch,blockMass;};
+inline const PropMaterialTraits& propMaterialTraits(PropMaterial m){
+ static constexpr PropMaterialTraits table[]={
+ {"PAPER",.02f,10,0,0,true,Sound::JunkSoft,1.15f,.5f,Sound::JunkSoft,1,0},
+ {"CARDBOARD",.04f,8,0,0,true,Sound::JunkSoft,.9f,.65f,Sound::JunkSoft,1,0},
+ {"PLASTIC",.15f,6,0,0,true,Sound::JunkSoft,1.25f,.7f,Sound::JunkSoft,1,4},
+ {"WOOD",.1f,7,0,6,true,Sound::JunkSoft,.8f,.8f,Sound::JunkSoft,1,4},
+ {"METAL",.2f,5,0,0,false,Sound::JunkMetal,1,1,Sound::JunkMetal,1,4},
+ {"GLASS",.2f,6,4.5f,10,true,Sound::JunkGlass,1,1,Sound::BottleBreak,1,0},
+ {"CERAMIC",.15f,6,5.5f,8,false,Sound::JunkGlass,.8f,1,Sound::BottleBreak,.8f,4},
+ {"ELECTRONIC",.12f,5,0,0,false,Sound::JunkMetal,.85f,1,Sound::JunkMetal,1,4},
+ {"CLOTH",0,12,0,0,true,Sound::JunkSoft,.7f,.4f,Sound::JunkSoft,1,0},
+ {"ORGANIC",.05f,10,6,0,false,Sound::JunkSoft,.6f,.7f,Sound::PunchHit,.7f,0}};
+ return table[int(m)];
+}
 enum class WorldId { Campaign, Ashfall, Custom };
 enum class Environment { Interior, Outdoor };
 enum class FloorMaterial { Industrial, OfficeCarpet };

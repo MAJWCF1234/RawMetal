@@ -87,6 +87,11 @@ template<class A> int Game::archiveSave(A& a,int version){
  for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading){c.world=makeWorld(index);if(loadProgressCounter)++*loadProgressCounter;}auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   if(version>=16)list(w.m_destroyedTiles,[&](std::pair<int,int>&t){a(t.first,t.second);if(t.first<0||t.second<0||t.first>=World::Width||t.second>=World::Height)throw std::runtime_error("invalid destroyed tile");});
+  if(version>=17){list(w.m_brokenBreakables,[&](std::uint16_t&i){a(i);if(i>=w.breakables().size())throw std::runtime_error("invalid broken pane");});
+   std::vector<std::pair<int,float>> damaged;if constexpr(!A::reading)for(int i=0;i<int(w.m_breakableDamage.size());++i)if(w.m_breakableDamage[i]>0&&w.breakableIntact(i))damaged.push_back({i,w.m_breakableDamage[i]});
+   list(damaged,[&](std::pair<int,float>&v){a(v.first,v.second);if(v.first<0||v.first>=int(w.breakables().size())||v.second<0)throw std::runtime_error("invalid pane damage");});
+   if constexpr(A::reading){for(auto [i,damage]:damaged)w.m_breakableDamage[i]=damage;auto broken=w.m_brokenBreakables;for(auto i:broken)w.removeBreakable(i);}
+  }
   if constexpr(A::reading)if(!w.m_destroyedTiles.empty()){w.m_lightSolids.clear();w.m_lightNodes.clear();}
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
   if constexpr(A::reading){
@@ -97,15 +102,15 @@ template<class A> int Game::archiveSave(A& a,int version){
    if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid enemy");}
    if(int(e.kind)>(version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
-  list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>6)throw std::runtime_error("invalid clutter");});
+  list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>(version>=17?7:6))throw std::runtime_error("invalid clutter");if(version>=17){a(v.model,v.damage,v.authored,v.broken,v.homeZ);vec(v.home);for(auto&d:v.dims)a(d);if((v.kind==7)!=(v.model>=0)||v.model>=FacilityModelCount||v.damage<0||(v.kind==7&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return d<=0||d>1.6f;})))throw std::runtime_error("invalid prop");}});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
  }
  return archivedChunks;
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,16);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,17);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 17 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  Game next;if(!prepareLoad(data,next))return false;
@@ -115,7 +120,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>16))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>17))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);
   // A save made inside the prologue when it was its own custom world: its map
@@ -148,6 +153,12 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   // the older serialized vector lengths.
   next.seedScripts();Game authored=next.m_worldId==WorldId::Custom?Game(next.m_customCampaign):Game(next.m_worldId);
   auto samePosition=[](Vec2 a,Vec2 b){return lengthSq(a-b)<.0004f;};
+  // Homes are in world XY, independent of which chunk currently owns a prop.
+  // Snapshot the saved identities before reconciliation mutates any list.
+  std::vector<Clutter> savedProps;for(int l=0;l<next.chunkCount();++l)for(const auto&c:next.m_chunks[l].clutter)if(c.model>=0&&c.authored)savedProps.push_back(c);
+  auto sameProp=[&](const Clutter&a,const Clutter&b){return a.model==b.model&&samePosition(a.home,b.home)&&std::fabs(a.homeZ-b.homeZ)<.05f;};
+  auto freshProp=[&](const Clutter&c)->const Clutter*{for(int l=0;l<authored.chunkCount();++l)for(const auto&spawn:authored.m_chunks[l].clutter)if(spawn.model>=0&&spawn.authored&&sameProp(spawn,c))return &spawn;return nullptr;};
+  auto hadSavedProp=[&](const Clutter&c){return std::any_of(savedProps.begin(),savedProps.end(),[&](const Clutter&v){return sameProp(c,v);});};
   for(int level=0;level<next.chunkCount();++level){
    auto&saved=next.m_chunks[level];const auto&fresh=authored.m_chunks[level];
    // Chunks the save never carried (older saves, or maps a custom pack gained
@@ -185,7 +196,15 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
    }
 
    // Current saves own their dynamic clutter population, including imported objects.
-   if(version>=8)continue;
+   if(version>=8){
+    int held=level==next.m_level?next.m_heldClutter:-1,newHeld=-1;std::vector<Clutter> reconciled;
+    for(int i=0;i<int(saved.clutter.size());++i){auto c=saved.clutter[i];bool keep=c.model<0||!c.authored||i==held;
+     if(c.model>=0&&c.authored)if(const auto*spawn=freshProp(c)){c.breakState=spawn->breakState;keep=true;}
+     if(keep){if(i==held)newHeld=int(reconciled.size());reconciled.push_back(c);}
+    }
+    for(const auto&spawn:fresh.clutter)if(spawn.model>=0&&!hadSavedProp(spawn))reconciled.push_back(spawn);
+    saved.clutter=std::move(reconciled);if(level==next.m_level)next.m_heldClutter=newHeld;continue;
+   }
    int heldOld=level==next.m_level?next.m_heldClutter:-1,heldNew=-1;
    auto oldClutter=std::move(saved.clutter);std::vector<bool> clutterUsed(oldClutter.size(),false);saved.clutter.clear();saved.clutter.reserve(std::max(fresh.clutter.size(),oldClutter.size()));
    for(const auto&spawn:fresh.clutter){
@@ -200,7 +219,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
-  if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
+  if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size())||(next.m_heldClutter>=0&&next.m_clutter[next.m_heldClutter].broken))return false;
   adoptSession(next);
   next.updateStreaming(0);
   next.rebuildFriendlyActors();
@@ -211,7 +230,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   }
   next.validateTacticalGrenades();
   next.validateEngineerDrones();
-  next.updateMechanisms(0);
+  next.updateMechanisms(0);next.updateBreakables();
   // Ashfall saves from the flat-ground prototype keep their chunk-local X/Y,
   // but grounded feet now belong on the generated terrain surface.
   if(next.m_world.outdoors()&&p.grounded){
@@ -481,5 +500,12 @@ bool Game::testSaves(){
   if(!check(ok&&scripted==2&&dead==1&&injured,"Version 14 retains living, injured and dead script-spawned creatures without resurrecting them"))return false;
  }
  return check(!game.saveSlot(-1)&&!game.loadSlot(3),"Invalid manual slots are rejected");
+}
+}
+
+namespace retro {
+bool Game::testPropSaves(){
+ auto map=regression::room();map->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});auto campaign=regression::campaign(map);Game g(campaign);g.storeChunk();g.m_chunks[0].clutter.clear();g.m_heldClutter=-1;Writer writer;g.archiveSave(writer,16);auto payload=writer.stream.str();Game loaded(campaign);if(!loaded.decodeSave("RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload)||loaded.m_clutter.size()!=1||loaded.m_clutter[0].model!=27)return false;
+ loaded.m_heldClutter=0;auto bytes=loaded.encodeSave();Game held(campaign);return held.decodeSave(bytes)&&held.m_heldClutter==0&&held.encodeSave()==bytes;
 }
 }

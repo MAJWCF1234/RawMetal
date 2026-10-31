@@ -78,7 +78,10 @@ struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
 // set: patients on their beds, a nest that wakes when the lights fail.
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
-struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
+struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;};
+struct ShotTrace {int blocking=-1;std::array<int,2> passed{-1,-1};std::array<float,2> passedAt{1,1};std::array<Point3,2> passedNormal{};};
+inline constexpr int ClutterModelKind=7;
+struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;};
 // One authored liquid basin controls the bed, physics surface and drawn mesh.
 struct WaterVolume {float x1,y1,x2,y2,bed,surface;};
 // Content specifies emitters; rendering does not decide their positions from chunk IDs.
@@ -242,6 +245,7 @@ struct AuthoredMapData {
     std::vector<CreatureSpawn> creatureSpawns;
     std::vector<PickupSpawn> pickupSpawns;
     std::vector<ClutterSpawn> clutterSpawns;
+    std::vector<Breakable> breakables;
     std::vector<WaterVolume> waterVolumes;
     std::vector<Hazard> hazards;
     std::vector<Compactor> compactors;
@@ -368,6 +372,14 @@ public:
     const std::vector<ScriptEvent>& scriptEvents()const{return m_scriptEvents;}
     const std::vector<Hazard>& hazards()const{return m_hazards;}
     const std::vector<Compactor>& compactors()const{return m_compactors;}
+    const std::vector<Breakable>& breakables()const{static const std::vector<Breakable> none;return m_mapData?m_mapData->breakables:none;}
+    int breakableStructure(int i)const{return m_breakableFirst+i;}
+    bool isBreakableStructure(int i)const{return i>=m_breakableFirst&&i<m_breakableFirst+int(breakables().size());}
+    bool breakableIntact(int i)const;
+    float breakableDamage(int i)const{return m_breakableDamage.at(i);}
+    int breakableAt(float x,float y,float z,float margin=.03f)const;
+    bool damageBreakable(int i,float amount);
+    const std::vector<std::uint16_t>& brokenBreakables()const{return m_brokenBreakables;}
     const std::vector<Structure>& structures()const{return m_structures;}
     const std::vector<TerrainTriangle>& terrain()const{return m_terrain;}
     bool hasTerrain()const{return !m_terrain.empty();}
@@ -421,7 +433,7 @@ public:
     void updateLift(float dt);
     void restoreLift(const World& saved);
     // A rebuilt chunk takes back what play changed: lift, reactor and broken crates.
-    void restoreDynamic(const World& saved){restoreLift(saved);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
+    void restoreDynamic(const World& saved){restoreLift(saved);m_breakableDamage=saved.m_breakableDamage;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
     const char* liftStatus()const;
     float liftLampPower()const;
     float liftMotorGain()const;
@@ -453,7 +465,7 @@ public:
     bool lightRayClear(Vec2 a,float az,Vec2 b,float bz)const;
     // Nearest physical shot obstruction on a finite 3D segment. Actor hulls
     // are resolved by Game; this includes static and moving world geometry.
-    float shotFraction(Point3 from,Point3 to,Point3&normal)const;
+    float shotFraction(Point3 from,Point3 to,Point3&normal,ShotTrace* trace=nullptr)const;
     static bool testCollisionCandidates();
     bool doorBlocks(float x,float y,float feet,float height)const;
     // While a plan is alive, the doors it marks count as standing at maxOpen to
@@ -484,6 +496,8 @@ private:
     friend class Game; // Save codec persists dynamic state, never geometry or pointers.
     std::vector<MapLayer> m_layers;
     std::vector<std::pair<int,int>> m_destroyedTiles;
+    int m_breakableFirst=0;std::vector<std::uint16_t> m_brokenBreakables;std::vector<float> m_breakableDamage;
+    void removeBreakable(int i);
     // Never copied: a plan belongs to the World it was made on.
     struct DoorPlanSlot {const std::vector<char>* open=nullptr;DoorPlanSlot()=default;DoorPlanSlot(const DoorPlanSlot&){}DoorPlanSlot& operator=(const DoorPlanSlot&){return *this;}};
     mutable DoorPlanSlot m_doorPlan;

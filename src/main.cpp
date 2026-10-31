@@ -261,9 +261,10 @@ __declspec(noinline) static int perfProfile(const wchar_t* listArgument){
   if(!(fields>>name>>level>>xText>>yText>>feetText>>yaw>>pitch>>frames)){report<<"SKIP malformed line: "<<line<<"\n\n";continue;}
   // "start start -" stands at the map's own player start.
   const float x=xText=="start"?std::nanf(""):std::stof(xText),y=yText=="start"?std::nanf(""):std::stof(yText),feet=feetText=="-"?-999.f:std::stof(feetText);
-  bool clear=false,wake=false,guards=false,caution=false,still=false,open=false;int warm=30;float distance=6;std::vector<std::pair<int,int>> spawns;std::vector<std::string> states;std::string word;
+  bool clear=false,wake=false,guards=false,caution=false,still=false,open=false,shove=false;int propCount=0;int warm=30;float distance=6;std::vector<std::pair<int,int>> spawns;std::vector<std::string> states;std::string word;
   while(fields>>word){
    if(word=="clear")clear=true;else if(word=="wake"){wake=true;guards=true;}else if(word=="creatures")wake=true;else if(word=="caution")caution=true;else if(word=="still")still=true;else if(word=="open")open=true;
+   else if(word=="props")fields>>propCount;else if(word=="shove")shove=true;
    else if(word=="warm")fields>>warm;else if(word=="far")fields>>distance;
    else if(word=="spawn"){std::string kind;int count=0;fields>>kind>>count;int k=kindOf(kind);if(k<0){report<<"SKIP unknown creature kind "<<kind<<'\n';continue;}spawns.push_back({k,count});}
    else if(word=="set"){std::string names;fields>>names;std::istringstream each(names);std::string state;while(std::getline(each,state,','))states.push_back(state);}
@@ -273,14 +274,14 @@ __declspec(noinline) static int perfProfile(const wchar_t* listArgument){
   for(const auto&state:states)scene.setState(retro::stateId(state));
   if(caution)for(size_t i=0;i<scene.npcActors().size();++i)if(scene.npcActors()[i].level==scene.level())scene.startGuardCaution(i);
   if(clear)scene.perfClearCreatures();
-  std::string placed;for(auto [kind,count]:spawns){int n=scene.perfSpawn(retro::CreatureKind(kind),count,distance);placed+=" "+std::string(kindNames[kind])+" "+std::to_string(n)+"/"+std::to_string(count);}
+  std::string placed;if(propCount)placed=" props "+std::to_string(scene.perfSpawnProps(propCount))+"/"+std::to_string(propCount);for(auto [kind,count]:spawns){int n=scene.perfSpawn(retro::CreatureKind(kind),count,distance);placed+=" "+std::string(kindNames[kind])+" "+std::to_string(n)+"/"+std::to_string(count);}
   report<<"== "<<name<<": level "<<level<<" at ("<<scene.player().pos.x<<", "<<scene.player().pos.y<<") feet "<<scene.player().z<<", yaw "<<yaw<<", pitch "<<pitch<<"; "<<frames<<" measured frames after "<<warm<<" warm-up"
         <<(wake?guards?"; wake: creatures and guards":"; wake: creatures":"; no wake")<<(placed.empty()?"":"; spawned"+placed)<<"\n   scene build "<<buildMs<<" ms\n   at start: "<<scene.perfPopulation()<<'\n';
   std::vector<std::vector<double>> samples(columns.size());double firstFrame=0;
   for(int frame=-warm;frame<frames;++frame){
    retro::InputState input{};if(!still){input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;}
    if(wake)scene.perfWake(guards&&((frame+warm)%120==0));
-   scene.perfHold();
+   scene.perfHold();if(shove&&(frame+warm)%120==0)scene.perfShoveProps();
    retro::perf::resetFrame();retro::perf::enabled=!bare;
    retro::ai::StateLookupHints::resetStatistics();retro::ai::WalkQueryCache::resetStatistics();
    if(window)window->pump();
@@ -1176,6 +1177,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int frame=0;frame<720&&window.pump();++frame){renderer.render(scene);if(frame==30)std::ofstream("window-inspection.ready")<<reinterpret_cast<std::uintptr_t>(window.handle());Sleep(16);}
      return 0;
     }
+    if(commandArguments().find(L"--physics-inspection")){
+     constexpr int w=1280,h=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(w,h);if(commandArguments().find(L"--vulkan")&&!renderer->enableHardware())return 36;
+     struct View{int view;float seconds;const char*name;};const View views[]={{0,0,"desk-before"},{0,.15f,"desk-shot-015"},{0,2,"desk-shot-2"},{1,0,"monitor-0"},{1,.1f,"monitor-01"},{1,.4f,"monitor-04"},{1,2,"monitor-2"},{2,0,"holds-0"},{3,0,"holds-1"},{4,0,"holds-2"},{5,0,"holds-3"},{6,2,"litter"}};
+     for(const auto&v:views){auto scene=retro::Game::physicsInspection(v.view,v.seconds);renderer->render(scene);std::ofstream out(std::string("physics-")+v.name+".ppm",std::ios::binary);out<<"P6\n"<<w<<' '<<h<<"\n255\n";for(int pixel=0;pixel<w*h;++pixel){auto p=renderer->pixels()[pixel];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}return 0;
+    }
     if(commandArguments().find(L"--barrel-inspection")){
      constexpr int inspectW=1280,inspectH=720;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(inspectW,inspectH);auto& renderer=*rendererStorage;
      if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
@@ -1523,7 +1529,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
          {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
          {"engine-regression",retro::Game::testEngineRegression},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
-         {"lift-mix",retro::AudioEngine::testLiftMix},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
+         {"lift-mix",retro::AudioEngine::testLiftMix},{"glass",retro::Game::testGlass},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"crates",retro::Game::testCrates},
          {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest},

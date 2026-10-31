@@ -369,6 +369,17 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
   auto builds=renderer.m_staticGeometryBuilds;renderer.render(powered);auto dim=renderer.m_pixels;renderer.render(powered);
   check(renderer.m_staticGeometryBuilds>builds&&dim==renderer.m_pixels&&dim!=bright,"Exact authored lamp power invalidates cached emission and fixture illumination");
  }
+ {
+  auto physics=Game::physicsInspection(0,0);auto&pane=const_cast<Breakable&>(physics.world().breakables()[0]);pane.trigger=stateId("physics_cache_pane");auto&phone=const_cast<Clutter&>(physics.clutter()[2]);phone.pos={7.4f,8.12f};renderer.m_gpu->clearStaticCaches();renderer.render(physics);auto cold=renderer.m_pixels;auto hits=renderer.m_gpu->staticCacheHits();renderer.render(physics);
+  check(cold==renderer.m_pixels&&renderer.m_gpu->staticCacheHits()>hits,"Sleeping model props reuse their per-cell cache with stable pixels");
+  auto mainBuilds=renderer.m_staticGeometryBuilds,propBuilds=renderer.m_propGeometryBuilds,paneBuilds=renderer.m_breakableGeometryBuilds;
+  auto&item=const_cast<Clutter&>(physics.clutter()[0]);item.sleeping=false;renderer.render(physics);
+  check(renderer.m_staticGeometryBuilds==mainBuilds&&renderer.m_propGeometryBuilds==propBuilds+1&&renderer.m_breakableGeometryBuilds==paneBuilds,"Waking a prop rebuilds only its occupied cell");
+  renderer.render(physics);double steadyScene=renderer.m_sceneMs;auto paneBegin=std::chrono::steady_clock::now();physics.setState(stateId("physics_cache_pane"),1);physics.update({},1.f/120);renderer.render(physics);report<<"Pane break update + render: "<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-paneBegin).count()<<" ms; CPU scene "<<renderer.m_sceneMs<<" ms; steady scene "<<steadyScene<<" ms; spike "<<renderer.m_sceneMs-steadyScene<<" ms; main static builds "<<renderer.m_staticGeometryBuilds-mainBuilds<<'\n';
+  check(renderer.m_staticGeometryBuilds==mainBuilds&&renderer.m_breakableGeometryBuilds==paneBuilds+1,"Breaking panes rebuilds only the breakable cache and never the main chunk");
+  check(renderer.m_sceneMs-steadyScene<4,"One pane break adds under 4 ms CPU scene time");
+  auto&camera=const_cast<Player&>(physics.player());camera.angle+=.3f;renderer.render(physics);auto turned=renderer.m_pixels;hits=renderer.m_gpu->staticCacheHits();renderer.render(physics);check(turned==renderer.m_pixels&&renderer.m_gpu->staticCacheHits()>hits,"Prop and pane caches stay stable after a camera turn");
+ }
  auto reliefScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);float reliefScale=renderer.m_wall.parallaxScale;renderer.m_wall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_wall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(changed>8,"Nearby wall relief changes the Vulkan image");
  {
   // Per-pixel lamps: shadow faces are drawn and the lit image departs from the bake.

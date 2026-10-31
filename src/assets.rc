@@ -1144,3 +1144,6 @@
 2252 RCDATA "assets/library/office_display_cabinet_wood_1_x.png"
 2253 RCDATA "assets/library/office_display_cabinet_glass_mp_1-q.webp"
 2254 RCDATA "assets/library/office_display_cabinet_metal_6-x2.ntx"
+
+2255 RCDATA "assets/library/audio/glass_shatter.sfx"
+2256 RCDATA "assets/library/audio/bottle_break.sfx"

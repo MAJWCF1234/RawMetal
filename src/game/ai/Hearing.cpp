@@ -10,7 +10,7 @@ std::vector<AiStimulus> Game::aiStimuli()const{
   bool shot=event.sound==Sound::Shot,step=footstepSound(event.sound);
   // A swing or a throw is a whoosh, not a report: what it hits is the noise.
   bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty;
-  bool impact=event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock;
+  bool impact=event.sound==Sound::GlassShatter||event.sound==Sound::BottleBreak||event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock;
   bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
   // A locker's latch, shut and bang carry like any door; its sting is score.
   bool locker=event.sound==Sound::LockerLatch||event.sound==Sound::LockerShut||event.sound==Sound::LockerBang;
