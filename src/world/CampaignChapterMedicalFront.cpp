@@ -294,7 +294,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  terminal(m,{10.9f,1.4f},"WHOLE-BODY COUNT / SHIFT 3","02:44 LAB 4 (ENERGY DIAGNOSTICS): RECOUNT 4.1. TIER 3. ESCORT REQUESTED.",
   "03:58 ALL COUNTS FORWARDED TO INTERNAL INVESTIGATIONS. LOCAL COPIES TO BE DESTROYED.");m.terminals.back().yaw=0;
  for(float y:{2.35f,3.7f}){mdFix(m,model::lab_clean_bench,12.119f,y,f,1.179f,.562f,.808f,kPi*.5f,true);
-  mdFix(m,model::lab_instrument_terminal,12.16f,y,f+.808f,.826f,.421f,.616f,kPi*.5f,false);}
+  mdFix(m,model::lab_instrument_terminal,12.16f,y,f+.808f,.826f,.421f,.616f,-kPi*.5f,false);}
  m.lights.push_back(lamp({11.7f,2.35f},f+1.3f,.5f,3.f,9000,-.2f,WorldLightMount::Bare));
  mdFix(m,model::office_chair,11.35f,2.4f,f,.55f,.55f,.95f,-kPi*.5f,true);
  mdFix(m,model::office_chair,11.1f,3.95f,f,.55f,.55f,.95f,-kPi*.5f+.6f,true);
@@ -695,7 +695,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdFix(m,model::med_vitals_monitor,2.05f,8.6f,f+.81f,.38f,.18f,.28f,mdN,false);
  mdFix(m,model::office_paper_stack,2.55f,8.5f,f+.81f,.33f,.44f,.03f,.15f,false);
  for(auto [x,y,yaw]:{std::tuple{2.88f,8.42f,.3f},{2.95f,8.66f,1.7f}})mdFix(m,model::item_dosimeter,x,y,f+.81f,.31f,.146f,.066f,yaw,false);
- mdFix(m,model::office_chair,1.65f,7.45f,f,.55f,.55f,.95f,1.1f,true);
+ mdFix(m,model::office_chair,1.65f,7.45f,f,.55f,.55f,.95f,1.1f+kPi,true);
  actor(m,"md_triage_clock",ActorVisual::FemaleDoctor,1.7f,{{0,{2.75f,7.85f},f,0,4,1},{1000,{2.75f,7.85f},f,0,4,1}});   // actor 0
  mdBlood(m,2.3f,6.45f,3.25f,7.6f,f);
  // Shot through the glass from the queue: the spray on both faces of the pane.
@@ -753,7 +753,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdFix(m,model::desk,22.25f,5.97f,f,1.4f,.7f,.75f,kPi,true);
  mdFix(m,model::crt_monitor,22.25f,5.85f,f+.75f,.42f,.4f,.38f,0,false);
  mdFix(m,model::keyboard,22.25f,6.15f,f+.75f,.45f,.16f,.03f,0,false);
- mdFix(m,model::office_chair,22.3f,6.75f,f,.55f,.55f,.95f,kPi-.3f,true);
+ mdFix(m,model::office_chair,22.3f,6.75f,f,.55f,.55f,.95f,-.3f,true);
  mdFix(m,model::office_paper_stack,21.8f,6.f,f+.75f,.33f,.44f,.03f,-.2f,false);
  mdFix(m,model::lab_wall_clock,20.02f,6.5f,f+2.f,.4f,.03f,.4f,-kPi*.5f,false);
  // --- Decon: two roses, the drain, the hose, the bench they undressed on ----------------------------

@@ -691,8 +691,8 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
 
  // --- The W arm to Administration (x 1-8.4, y 9-14) ------------------------------------------------
  // Where staff waited to be called to the clearance desk.
- for(float x:{4.2f,6.3f})rfFix(m,model::platform_chair,x,9.27f,f,1.8f,.5f,.8f,0,true);
- for(float x:{2.9f,7.4f})rfFix(m,model::platform_chair,x,13.73f,f,1.8f,.5f,.8f,kPi,true);
+ for(float x:{4.2f,6.3f})rfFix(m,model::platform_chair,x,9.27f,f,1.8f,.5f,.8f,kPi,true);
+ for(float x:{2.9f,7.4f})rfFix(m,model::platform_chair,x,13.73f,f,1.8f,.5f,.8f,0,true);
  rfFix(m,model::lab_wall_clock,5.25f,9.016f,f+2.1f,.402f,.032f,.4f,rfN,false);
  rfFix(m,model::lab_potted_plant,1.5f,9.5f,f,.37f,.43f,.69f,0,false);
  rfFix(m,model::trash_can,1.5f,13.6f,f,.5f,.5f,.62f,0,true);
@@ -702,7 +702,7 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  m.lights.push_back(lamp({6.4f,11.5f},roof-.16f,.75f,5.5f,5600,.05f));
 
  // --- The E arm to Medical (x 15.6-23, y 9-14) ------------------------------------------------------
- for(float x:{17.5f,19.4f})rfFix(m,model::platform_chair,x,9.27f,f,1.8f,.5f,.8f,0,true);
+ for(float x:{17.5f,19.4f})rfFix(m,model::platform_chair,x,9.27f,f,1.8f,.5f,.8f,kPi,true);
  for(float x=16.f;x<22.4f;x+=.9f)floorLine(m,x,11.45f,x+.5f,11.55f,f,13);
  rfFix(m,model::med_wheelchair,16.4f,13.3f,f,.55f,1.03f,.9f,1.2f,true);
  rfFix(m,model::lab_potted_plant,22.5f,9.5f,f,.37f,.43f,.69f,0,false);
@@ -805,7 +805,7 @@ void rfaTable(Map& m,float cx,float cy,float hx,float hy,float z,float h){
  for(float sx:{-1.f,1.f})for(float sy:{-1.f,1.f}){const float x=cx+sx*(hx-.07f),y=cy+sy*(hy-.07f);wall(m,x-.02f,y-.02f,x+.02f,y+.02f,z,z+h-.04f,2);}
 }
 // A leather boardroom chair whose sitter looks along `face` (the model's seat faces -y).
-void rfaChair(Map& m,float x,float y,float z,float face){rfFix(m,model::lab_boardroom_chair,x,y,z,.79f,.74f,.93f,face+kPi,true);}
+void rfaChair(Map& m,float x,float y,float z,float face){rfFix(m,model::lab_boardroom_chair,x,y,z,.79f,.74f,.93f,face,true);}
 
 // RESEARCH ADMINISTRATION (manifest 47). Where the company kept score: the
 // executive floor of the research front. A two-storey atrium where visitors
