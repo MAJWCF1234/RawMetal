@@ -107,5 +107,9 @@ namespace retro {
 bool World::breakableIntact(int i)const{return i>=0&&i<int(breakables().size())&&std::find(m_brokenBreakables.begin(),m_brokenBreakables.end(),i)==m_brokenBreakables.end();}
 int World::breakableAt(float x,float y,float z,float margin)const{for(int i=0;i<int(breakables().size());++i){const auto&b=breakables()[i];if(breakableIntact(i)&&x>=b.x1-margin&&x<=b.x2+margin&&y>=b.y1-margin&&y<=b.y2+margin&&z>=b.bottom-margin&&z<=b.top+margin)return i;}return -1;}
 void World::removeBreakable(int i){if(i<0||i>=int(breakables().size()))return;if(std::find(m_brokenBreakables.begin(),m_brokenBreakables.end(),i)==m_brokenBreakables.end()){m_brokenBreakables.push_back(std::uint16_t(i));std::sort(m_brokenBreakables.begin(),m_brokenBreakables.end());}int index=breakableStructure(i);for(auto&cell:m_structureCells)cell.erase(std::remove(cell.begin(),cell.end(),index),cell.end());if(index<int(m_structures.size())){auto&s=m_structures[index];s.x2=s.x1;s.y2=s.y1;s.top=s.bottom;}m_lightSolids.clear();m_lightNodes.clear();}
-bool World::damageBreakable(int i,float amount){if(!breakableIntact(i)||!std::isfinite(amount)||amount<=0)return false;const auto&b=breakables()[i];m_breakableDamage[i]=std::min(b.holds?180.f:1000000.f,m_breakableDamage[i]+amount);if(!b.holds&&m_breakableDamage[i]>=(b.health>0?b.health:20.f)){removeBreakable(i);return true;}return false;}
+bool World::damageBreakable(int i,float amount){if(!breakableIntact(i)||!std::isfinite(amount)||amount<=0)return false;const auto&b=breakables()[i];m_breakableAge[i]=0;m_breakableDamage[i]=std::min(b.holds?180.f:1000000.f,m_breakableDamage[i]+amount);if(!b.holds&&m_breakableDamage[i]>=(b.health>0?b.health:20.f)){removeBreakable(i);return true;}return false;}
+}
+
+namespace retro {
+void World::ageBreakables(float dt){for(int i=0;i<int(breakables().size());++i)if(breakables()[i].holds&&m_breakableDamage[i]>0){m_breakableAge[i]=std::min(21.f,m_breakableAge[i]+std::max(0.f,dt));if(m_breakableAge[i]>=21)m_breakableDamage[i]=0;}}
 }

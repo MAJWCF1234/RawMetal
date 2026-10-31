@@ -451,7 +451,7 @@ void Game::update(const InputState& input, float dt) {
             m_hazmat.update(m_world,dt);
         }
         {perf::Scope profile(perf::Streaming);crossChunkBoundary();}
-        {perf::Scope profile(perf::Scripts);updateScripts(dt);updateBreakables();
+        {perf::Scope profile(perf::Scripts);updateScripts(dt);updateBreakables(dt);
         updateDarkness(dt);}
         {perf::Scope profile(perf::Hazards);updateHazards(dt);updateStorm(dt);
         for(size_t i=0;i<m_pendingBarrels.size();){if(m_elapsed>=m_pendingBarrels[i].time){auto b=m_pendingBarrels[i];m_pendingBarrels.erase(m_pendingBarrels.begin()+long(i));detonateBarrel(b.level,int(std::floor(b.pos.x)),int(std::floor(b.pos.y)));}else ++i;}}

@@ -824,7 +824,7 @@ private:
     float clutterPathFraction(Point3 from,Point3 to,Point3&normal)const;
     void seedClutter();
     bool damagePane(int level,int index,float amount,Point3 at,Point3 direction);
-    void updateBreakables();
+    void updateBreakables(float dt=0);
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
     void knockClutter(int level,size_t index,Point3 at,Point3 impulse);
     bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);

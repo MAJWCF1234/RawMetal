@@ -389,7 +389,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
- m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);
+ m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
 
  buildLayers(m_mapData->stairs);

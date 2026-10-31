@@ -92,6 +92,9 @@ template<class A> int Game::archiveSave(A& a,int version){
    list(damaged,[&](std::pair<int,float>&v){a(v.first,v.second);if(v.first<0||v.first>=int(w.breakables().size())||v.second<0)throw std::runtime_error("invalid pane damage");});
    if constexpr(A::reading){for(auto [i,damage]:damaged)w.m_breakableDamage[i]=damage;auto broken=w.m_brokenBreakables;for(auto i:broken)w.removeBreakable(i);}
   }
+  if(version>=18){std::vector<std::pair<int,float>> ages;if constexpr(!A::reading)for(int i=0;i<int(w.m_breakableAge.size());++i)if(w.breakables()[i].holds&&w.m_breakableDamage[i]>0)ages.push_back({i,w.m_breakableAge[i]});
+   list(ages,[&](std::pair<int,float>&v){a(v.first,v.second);if(v.first<0||v.first>=int(w.breakables().size())||v.second<0||v.second>21)throw std::runtime_error("invalid pane age");});if constexpr(A::reading)for(auto [i,age]:ages)w.m_breakableAge[i]=age;
+  }
   if constexpr(A::reading)if(!w.m_destroyedTiles.empty()){w.m_lightSolids.clear();w.m_lightNodes.clear();}
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
   if constexpr(A::reading){
@@ -109,8 +112,8 @@ template<class A> int Game::archiveSave(A& a,int version){
  return archivedChunks;
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,17);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 17 "+std::to_string(checksum(payload))+"\n"+payload;
+ Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,18);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE 18 "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  Game next;if(!prepareLoad(data,next))return false;
@@ -120,7 +123,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>17))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>18))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);
   // A save made inside the prologue when it was its own custom world: its map

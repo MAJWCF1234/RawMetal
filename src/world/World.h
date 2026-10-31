@@ -379,6 +379,8 @@ public:
     float breakableDamage(int i)const{return m_breakableDamage.at(i);}
     int breakableAt(float x,float y,float z,float margin=.03f)const;
     bool damageBreakable(int i,float amount);
+    void ageBreakables(float dt);
+    float breakableOpacity(int i)const{return breakables()[i].holds?std::clamp(21.f-m_breakableAge.at(i),0.f,1.f):1.f;}
     const std::vector<std::uint16_t>& brokenBreakables()const{return m_brokenBreakables;}
     const std::vector<Structure>& structures()const{return m_structures;}
     const std::vector<TerrainTriangle>& terrain()const{return m_terrain;}
@@ -433,7 +435,7 @@ public:
     void updateLift(float dt);
     void restoreLift(const World& saved);
     // A rebuilt chunk takes back what play changed: lift, reactor and broken crates.
-    void restoreDynamic(const World& saved){restoreLift(saved);m_breakableDamage=saved.m_breakableDamage;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
+    void restoreDynamic(const World& saved){restoreLift(saved);m_breakableDamage=saved.m_breakableDamage;m_breakableAge=saved.m_breakableAge;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
     const char* liftStatus()const;
     float liftLampPower()const;
     float liftMotorGain()const;
@@ -496,7 +498,7 @@ private:
     friend class Game; // Save codec persists dynamic state, never geometry or pointers.
     std::vector<MapLayer> m_layers;
     std::vector<std::pair<int,int>> m_destroyedTiles;
-    int m_breakableFirst=0;std::vector<std::uint16_t> m_brokenBreakables;std::vector<float> m_breakableDamage;
+    int m_breakableFirst=0;std::vector<std::uint16_t> m_brokenBreakables;std::vector<float> m_breakableDamage,m_breakableAge;
     void removeBreakable(int i);
     // Never copied: a plan belongs to the World it was made on.
     struct DoorPlanSlot {const std::vector<char>* open=nullptr;DoorPlanSlot()=default;DoorPlanSlot(const DoorPlanSlot&){}DoorPlanSlot& operator=(const DoorPlanSlot&){return *this;}};
