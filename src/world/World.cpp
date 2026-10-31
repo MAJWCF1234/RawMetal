@@ -268,6 +268,9 @@ void World::settleExclusionFacilityOnTerrain(){
  for(auto&c:m_creatureSpawns)if(c.z>-100)c.z+=ground(c.position.x,c.position.y);
  for(auto&p:m_pickupSpawns)if(p.z>-100)p.z+=ground(p.position.x,p.position.y);
  auto data=std::make_shared<AuthoredMapData>(*m_mapData);
+ // The collision panes were grounded with the other structures. Keep the
+ // authored breakable boxes used by shots, effects and rendering identical.
+ for(int i=0;i<int(data->breakables.size());++i){const auto&s=m_structures[breakableStructure(i)];data->breakables[i].bottom=s.bottom;data->breakables[i].top=s.top;}
  data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
  for(auto&sign:data->signs)sign.z+=ground(sign.position.x,sign.position.y);
  // Like hazards, a shelter's height band is measured from the ground at its centre.
@@ -318,7 +321,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // updateScripts checks the region for every event, including state-gated events.
  for(size_t i=0;i<map->scriptEvents.size();++i){const auto& e=map->scriptEvents[i];if(!e.id||e.x2<=e.x1||e.y2<=e.y1)reject("scriptEvent",i,"id="+std::to_string(e.id)+" bounds="+std::to_string(e.x1)+","+std::to_string(e.y1)+","+std::to_string(e.x2)+","+std::to_string(e.y2));}
  for(size_t i=0;i<map->clutterSpawns.size();++i){const auto&v=map->clutterSpawns[i];if(v.kind<0||v.kind>7||(v.kind==7&&(v.model<0||v.model>=FacilityModelCount||!(v.width>0&&v.width<=1.6f&&v.depth>0&&v.depth<=1.6f&&v.height>0&&v.height<=1.6f)||!std::isfinite(v.position.x)||!std::isfinite(v.position.y)||!std::isfinite(v.z)||!std::isfinite(v.yaw)||!std::isfinite(v.pitch)||!std::isfinite(v.roll))))reject("prop",i,"invalid model, dimensions or pose");}
- for(size_t i=0;i<map->breakables.size();++i){const auto&v=map->breakables[i];if(!(v.x1>=.3f&&v.y1>=.3f&&v.x2<=23.7f&&v.y2<=23.7f&&v.x2>v.x1&&v.y2>v.y1&&v.bottom<v.top&&std::isfinite(v.bottom)&&std::isfinite(v.top)&&v.health>=0&&std::isfinite(v.health)&&v.fixture>=-1&&v.fixture<int(map->fixtures.size())&&(v.fixture<0||v.part!=0)&&(v.material==17||v.material==10||v.material==22||v.material==23))||bool(map->terrain)||(map->definition.environment==Environment::Outdoor&&(map->skybox=="brutal_wasteland"||map->skybox=="zone_overcast")))reject("breakable",i,"invalid bounds, material or terrain");}
+ for(size_t i=0;i<map->breakables.size();++i){const auto&v=map->breakables[i];if(!(v.x1>=.3f&&v.y1>=.3f&&v.x2<=23.7f&&v.y2<=23.7f&&v.x2>v.x1&&v.y2>v.y1&&v.bottom<v.top&&std::isfinite(v.bottom)&&std::isfinite(v.top)&&v.health>=0&&std::isfinite(v.health)&&v.fixture>=-1&&v.fixture<int(map->fixtures.size())&&(v.fixture<0||v.part!=0)&&(v.material==17||v.material==10||v.material==22||v.material==23)))reject("breakable",i,"invalid bounds, material or terrain");}
  if(!invalid.str().empty())throw std::runtime_error(invalid.str());
  const auto& lift=map->cargoLift;
  if(lift.x1!=lift.x2||lift.y1!=lift.y2||lift.lower!=lift.upper){
