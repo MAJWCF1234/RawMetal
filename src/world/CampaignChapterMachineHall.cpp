@@ -45,13 +45,13 @@ void mhRiser(Map& m,Vec2 c,float bottom,float top,float r,int paint){
 }
 // A glazed run: sill, glass and head between z and z+2.7.
 void mhGlazed(Map& m,float x1,float y1,float x2,float y2,float z){
- wall(m,x1,y1,x2,y2,z,z+.95f,3);wall(m,x1,y1,x2,y2,z+.95f,z+2.35f,17);wall(m,x1,y1,x2,y2,z+2.35f,z+2.7f,3);
+ wall(m,x1,y1,x2,y2,z,z+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,z+.95f,z+2.35f,17,true);wall(m,x1,y1,x2,y2,z+2.35f,z+2.7f,3);
  bool alongX=x2-x1>y2-y1;float len=alongX?x2-x1:y2-y1;int bays=std::max(1,int(len/1.3f+.5f));
  for(int i=1;i<bays;++i){float t=(alongX?x1:y1)+len*i/bays;
   if(alongX)wall(m,t-.04f,y1-.01f,t+.04f,y2+.01f,z+.95f,z+2.35f,12);else wall(m,x1-.01f,t-.04f,x2+.01f,t+.04f,z+.95f,z+2.35f,12);}
 }
 // Hard hats and boots of a crew that never signed out.
-void mhHelmet(Map& m,float x,float y,float floor,float yaw){mhFix(m,model::mine_hard_hat,x,y,floor,.28f,.35f,.15f,yaw,false);}
+void mhHelmet(Map& m,float x,float y,float floor,float yaw){kit::prop(m,model::mine_hard_hat,x,y,floor,.28f,.35f,.15f,yaw);}
 
 // ===========================================================================================
 // THE MACHINE HALL, in hall coordinates (x, y 0..48). Chunk 41 holds x<24,
@@ -567,9 +567,10 @@ const MhHall& mhHall(){
   // The operator's desk under the windows faces the hall; the shift log is on it.
   mhTerminal(m,{38.4f,6.15f},G,kPi,"UNIT CONTROL / SHIFT LOG","02:40 CLEANUP FORCE ORDERS THE HALL CLEARED.","OPERATORS TO MUSTER C. K. VOSS STAYS AT DESK.");
   mhFix(m,model::office_chair,38.6f,5.25f,G,.55f,.55f,.95f,.3f);
-  mhFix(m,model::desk_phone,39.25f,6.2f,G+.75f,.2f,.2f,.1f,kPi,false);
-  mhFix(m,model::mug,37.7f,6.05f,G+.75f,.09f,.09f,.1f,0,false);
-  mhFix(m,model::binder,37.4f,6.35f,G+.75f,.3f,.08f,.32f,kPi,false);
+  mhFix(m,model::lab_exec_desk,38.3f,6.2f,G,2.21f,1.1f,.89f,0);
+  kit::prop(m,model::desk_phone,39.25f,6.2f,G+.89f,.2f,.2f,.1f,kPi);
+  kit::prop(m,model::mug,37.7f,6.05f,G+.89f,.09f,.09f,.1f,0);
+  kit::prop(m,model::binder,37.4f,6.35f,G+.89f,.3f,.08f,.32f,kPi);
   // Bridge from Unit 2's table to the control room door.
   guardRail(m,39.95f,7.f,40.f,9.f,G);guardRail(m,42.f,7.f,42.05f,9.f,G);
   // East strip to Emergency Generation's shutter.
@@ -639,6 +640,7 @@ void mhTakeQuarter(Map& m,int qx,int qy){
  }
  auto clipBox=[&](auto& b)->bool{float x1=std::max(b.x1,ox),x2=std::min(b.x2,ox+24),y1=std::max(b.y1,oy),y2=std::min(b.y2,oy+24);
   if(x2-x1<.01f||y2-y1<.01f)return false;b.x1=x1-ox;b.x2=x2-ox;b.y1=y1-oy;b.y2=y2-oy;return true;};
+ for(auto b:h.breakables)if(clipBox(b))m.breakables.push_back(b);
  for(auto z:h.zones)if(clipBox(z))m.zones.push_back(z);
  for(auto z:h.hazards)if(clipBox(z))m.hazards.push_back(z);
  for(auto z:h.darkZones)if(clipBox(z))m.darkZones.push_back(z);
@@ -691,7 +693,7 @@ std::shared_ptr<const Map> makeMachineHallNorthGallery(){
  // the wall made up below and above the opening.
  rectangle(m.layers[0],0,13,1,17,'.');
  wall(m,0.f,13.f,1.f,17.f,mhFloor,-18.1f,15);wall(m,0.f,13.f,1.f,17.f,-16.1f,mhRoof,15);
- wall(m,.02f,13.f,.06f,17.f,-18.1f,-16.1f,17);
+ kit::breakable(m,.3f,13.f,.34f,17.f,-18.1f,-16.1f,17,true);
  for(float y:{13.f,14.3f,15.6f,16.88f})wall(m,0.f,y,1.f,y+.12f,-18.1f,-16.1f,12);
  wall(m,.9f,12.85f,1.12f,17.15f,-18.35f,-18.1f,12);wall(m,.9f,12.85f,1.12f,17.15f,-16.1f,-15.85f,12);
  // The high-bay restrike: when the player reaches the gallery's east end, where
@@ -890,7 +892,7 @@ std::shared_ptr<const Map> makeAirHandling(){
  mhFix(m,model::cave_web_corner,20.4f,17.4f,f+1.f,1.36f,.02f,.8f,kPi*.25f,false);
  mhBody(m,"mh_air_body_clock",{16.f,19.f},f,1.2f);machineryClock(m,"mh_air_body_clock",60000);
  mhBlood(m,{16.2f,19.2f},f,.5f);
- mhFix(m,model::mine_hard_hat,17.2f,18.2f,f,.28f,.35f,.15f,.6f,false);
+ kit::prop(m,model::mine_hard_hat,17.2f,18.2f,f,.28f,.35f,.15f,.6f);
  m.pickupSpawns.push_back({{19.6f,19.6f},PickupKind::Health,f});
  m.pickupSpawns.push_back({{7.4f,2.f},PickupKind::Ammo,f});
  // --- Plenum 2: it comes when the player is halfway across -------------------------------------

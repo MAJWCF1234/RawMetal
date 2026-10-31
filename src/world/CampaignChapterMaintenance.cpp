@@ -39,7 +39,7 @@ void mntDoorwayY(Map& m,float y1,float y2,float x1,float x2,float f,float top,in
 void mntGlazed(Map& m,float x1,float y1,float x2,float y2,float f,float top,int material=3){
  wall(m,x1,y1,x2,y2,f,f+.95f,material);
  const bool alongX=x2-x1>y2-y1;const float cx=(x1+x2)*.5f,cy=(y1+y2)*.5f,len=alongX?x2-x1:y2-y1;
- if(alongX)wall(m,x1,cy-.01f,x2,cy+.01f,f+.95f,f+2.25f,17);else wall(m,cx-.01f,y1,cx+.01f,y2,f+.95f,f+2.25f,17);
+ if(alongX)kit::glazingPanes(m,x1,cy-.01f,x2,cy+.01f,f+.95f,f+2.25f,17,true);else kit::glazingPanes(m,cx-.01f,y1,cx+.01f,y2,f+.95f,f+2.25f,17,true);
  const int bays=std::max(1,int(len/1.3f+.5f));
  for(int i=0;i<=bays;++i){float t=(alongX?x1:y1)+len*i/bays;t=std::min(t,(alongX?x2:y2)-.06f);
   if(alongX)wall(m,t,y1,t+.06f,y2,f+.95f,f+2.25f,12);else wall(m,x1,t,x2,t+.06f,f+.95f,f+2.25f,12);}
@@ -187,11 +187,11 @@ void mntDesk(Map& m,float x,float y,float f,float face,int variant){
  const float b=f-m.layers.front().elevation;
  m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face,true});
  m.fixtures.push_back({model::office_chair,at(variant%2?.15f:-.1f,-.78f),b,.55f,.55f,.95f,face+kPi+(variant%3-1)*.25f,true});
- m.fixtures.push_back({model::crt_monitor,at(-.1f,.12f),b+.75f,.42f,.4f,.38f,face+kPi,false});
- m.fixtures.push_back({model::keyboard,at(-.1f,-.2f),b+.75f,.45f,.16f,.03f,face+kPi,false});
- m.fixtures.push_back({model::desk_phone,at(.48f,.05f),b+.75f,.2f,.2f,.1f,face+kPi,false});
- if(variant%2)m.fixtures.push_back({model::mug,at(.42f,-.2f),b+.75f,.09f,.09f,.1f,0,false});
- if(variant%3==0)m.fixtures.push_back({model::binder,at(-.52f,.18f),b+.75f,.3f,.08f,.32f,face+kPi,false});
+ kit::prop(m,model::crt_monitor,(at(-.1f,.12f)).x,(at(-.1f,.12f)).y,m.layers.front().elevation+(b+.75f),.42f,.4f,.38f,face+kPi);
+ kit::prop(m,model::keyboard,(at(-.1f,-.2f)).x,(at(-.1f,-.2f)).y,m.layers.front().elevation+(b+.75f),.45f,.16f,.03f,face+kPi);
+ kit::prop(m,model::desk_phone,(at(.48f,.05f)).x,(at(.48f,.05f)).y,m.layers.front().elevation+(b+.75f),.2f,.2f,.1f,face+kPi);
+ if(variant%2)kit::prop(m,model::mug,(at(.42f,-.2f)).x,(at(.42f,-.2f)).y,m.layers.front().elevation+(b+.75f),.09f,.09f,.1f,0);
+ if(variant%3==0)kit::prop(m,model::binder,(at(-.52f,.18f)).x,(at(-.52f,.18f)).y,m.layers.front().elevation+(b+.75f),.3f,.08f,.32f,face+kPi);
 }
 // An industrial pendant: a drop rod from the roof to a reflector head, lit.
 void mntPendant(Map& m,Vec2 p,float roof,float z,float intensity,float range,float kelvin,float tint,float flicker=0){
@@ -262,8 +262,8 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  mntLockers(m,4.65f,5.32f,4,{.85f,0},f,-kPi*.5f);
  bench(m,6.f,2.95f,f);bench(m,6.f,6.3f,f);
  // Hard hats left on the lockers, hi-vis on the hooks, one hat dropped.
- for(float x:{4.3f,5.95f,7.6f})mntFix(m,model::mine_hard_hat,{x,1.5f},f+2.42f,.28f,.35f,.15f,x*1.3f,false);
- mntFix(m,model::mine_hard_hat,{7.4f,3.4f},f,.28f,.35f,.15f,2.1f,false);
+ for(float x:{4.3f,5.95f,7.6f})kit::prop(m,model::mine_hard_hat,x,1.34f,f+2.42f,.28f,.35f,.15f,x*1.3f);
+ kit::prop(m,model::mine_hard_hat,7.4f,3.4f,f,.28f,.35f,.15f,2.1f);
  for(float y:{2.3f,2.9f,3.5f}){wall(m,8.45f,y-.02f,8.6f,y+.02f,f+1.7f,f+1.74f,2);wall(m,8.5f,y-.22f,8.56f,y+.22f,f+1.08f,f+1.68f,18);}
  mntTube(m,{6.f,3.f},rt,false,.9f,6.f,6200,.45f);
  mntTube(m,{6.f,6.9f},rt,false,.8f,6.f,6200,.45f,.45f);
@@ -280,7 +280,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  m.pipes.push_back({{16.62f,1.06f},{16.62f,1.06f},f+.92f,.018f,f+1.18f,5});m.pipes.push_back({{16.62f,1.06f},{16.62f,1.19f},f+1.18f,.018f,f+1.18f,5});
  wall(m,15.4f,1,19.8f,1.38f,f+1.55f,f+2.25f,21);wall(m,15.4f,1.36f,19.8f,1.4f,f+1.55f,f+1.6f,20);
  mntFix(m,model::coffee_machine,{18.3f,1.3f},f+.92f,.35f,.35f,.45f,0,false);
- mntFix(m,model::mug,{18.75f,1.42f},f+.92f,.09f,.09f,.1f,0,false);
+ kit::prop(m,model::mug,18.75f,1.42f,f+.92f,.09f,.09f,.1f,0);
  wall(m,18.85f,1.06f,19.45f,1.48f,f+.92f,f+1.24f,20);wall(m,18.9f,1.47f,19.3f,1.49f,f+.98f,f+1.2f,8);
  mntFix(m,model::lab_sample_fridge,{20.3f,1.47f},f,.7f,.85f,1.f,0,true);
  mntFix(m,model::metro_vending,{22.64f,3.f},f,1.5f,.68f,2.38f,kPi*.5f,true);
@@ -317,7 +317,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  workstation(m,5.2f,21.6f,f,-1,1);
  for(float y:{17.2f,17.8f,18.4f})mntFix(m,model::file_cabinet_tall,{1.35f,y},f,.5f,.6f,1.3f,kPi*.5f,true);
  mntFix(m,model::bookcase,{1.2f,20.4f},f,.9f,.3f,1.8f,kPi*.5f,true);
- for(float z:{f+.75f,f+1.3f})for(int i=0;i<4;++i)mntFix(m,model::binder,{1.22f,20.1f+i*.18f},z,.3f,.08f,.32f,kPi*.5f,false);
+ for(float z:{f+.730714f,f+1.448215f})for(int i=0;i<4;++i)kit::prop(m,model::binder,1.18f,20.1f+i*.18f,z,.26f,.08f,.32f,0);
  mntFix(m,model::control_console,{7.9f,18.7f},f,.78f,.49f,1.3f,-kPi*.5f,true);
  terminal(m,{7.7f,20.3f},"DISTRICT PA / LOG","03:05 ALL MAINTENANCE STAFF TO CENTRAL STORES FOR HEADCOUNT.","03:40 REPEAT. BRING YOUR BADGE. AUTH: CLEANUP DETAIL 4.");
  m.terminals.back().yaw=-kPi*.5f;
@@ -444,7 +444,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(float y:{3.3f,3.9f})mntFix(m,model::file_cabinet_tall,{22.65f,y},f,.5f,.6f,1.3f,-kPi*.5f,true);
  mntFix(m,model::file_cabinet_wide,{22.5f,6.9f},f,.9f,.5f,.75f,-kPi*.5f,true);
  mntFix(m,model::coffee_machine,{22.55f,6.65f},f+.75f,.35f,.35f,.45f,-kPi*.5f,false);
- mntFix(m,model::mug,{22.5f,7.2f},f+.75f,.09f,.09f,.1f,0,false);
+ kit::prop(m,model::mug,22.5f,7.2f,f+.75f,.09f,.09f,.1f,0);
  mntFix(m,model::wall_box,{22.92f,5.3f},f+1.25f,.55f,.15f,.6f,-kPi*.5f,false);
  mntFix(m,model::med_notice_board,{20.f,1.04f},f+1.05f,1.2f,.07f,.9f,0,false);
  mntFix(m,model::med_first_aid_box,{22.95f,2.4f},f+1.35f,.37f,.12f,.35f,-kPi*.5f,false);
@@ -478,7 +478,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  // Lunch tins, flasks, hats and jackets: they expected to go back to work.
  for(int i=0;i<7;++i){const float x=20.3f+i*.32f,y=(i%2?17.f:20.6f)-.05f;wall(m,x-.11f,y-.07f,x+.11f,y+.07f,f+.51f,f+.62f,i%3==0?19:i%3==1?18:20);}
  for(float x:{20.6f,22.3f})m.pipes.push_back({{x,17.22f},{x,17.22f},f+.51f,.045f,f+.82f,5});
- for(Vec2 h:{Vec2{20.9f,17.05f},Vec2{22.6f,20.7f},Vec2{21.2f,19.3f},Vec2{22.4f,15.6f}})mntFix(m,model::mine_hard_hat,h,h.y>19.f&&h.y<20.f?f:(h.y<16.f?f:f+.51f),.28f,.35f,.15f,h.x*2.1f,false);
+ for(Vec2 h:{Vec2{20.96f,16.96f},Vec2{22.55f,20.56f},Vec2{21.2f,19.3f},Vec2{22.4f,15.6f}})kit::prop(m,model::mine_hard_hat,h.x,h.y,h.y>19.f&&h.y<20.f?f:(h.y<16.f?f:f+.51f),.28f,.35f,.15f,h.x*2.1f);
  for(float x:{20.4f,21.9f})wall(m,x-.25f,20.78f,x+.25f,20.86f,f+.55f,f+1.f,23);
  floorLine(m,20.1f,15.f,22.8f,15.12f,f,13);floorLine(m,20.1f,22.5f,22.8f,22.62f,f,13);
  mntSign(m,22.945f,18.8f,f+1.85f,"ASSEMBLY POINT B","FIRE / ROLL CALL / WAIT HERE TO BE COUNTED",2.4f,-kPi*.5f,mntGreen);
@@ -501,7 +501,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  deckSupports(m,m.layers[1],f,3.f);
  for(float x:{5.2f,7.1f,9.f,10.9f,12.8f,14.7f})mntFix(m,model::metal_shelf,{x,1.36f},mz,1.8f,.5f,1.8f,0,true);
  for(int i=0;i<12;++i){const float x=4.55f+i*.95f+(i%2)*.1f,z=mz+(i%3==0?.31f:i%3==1?.97f:1.66f);
-  mntFix(m,model::packing_crate,{x,1.36f},z,.42f,.34f,.26f,(i%4)*.1f,false);}
+  kit::prop(m,model::packing_crate,x,1.36f,z,.42f,.34f,.26f,(i%4)*.1f);}
  for(auto [x,y,yaw]:{std::tuple{9.6f,3.4f,9.6f},{10.15f,3.5f,10.f},{15.6f,3.2f,15.6f}})mntFix(m,model::packing_crate,{x,y},mz,.55f,.4f,.32f,yaw,true);
  terminal(m,{12.f,3.6f},"SMALL PARTS / INDEX","BIN 4411 SEALS. BIN 4412 SEALS. BIN 4413 EMPTY SINCE MAY.","STOCK CHECK OVERDUE / SIGNED OFF ANYWAY / J. OKAFOR",mz-f);m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=0;
@@ -513,7 +513,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  wall(m,11.95f,5.6f,12.25f,5.9f,-15.25f,-14.92f,18);
  for(float y:{5.7f,5.8f})m.pipes.push_back({{12.1f,y},{12.1f,y},-16.2f,.012f,-15.25f,6});
  wall(m,11.98f,5.63f,12.22f,5.87f,-16.42f,-16.2f,18);
- mntFix(m,model::packing_crate,{12.1f,5.75f},-16.95f,.6f,.42f,.4f,.2f,false);
+ mntFix(m,model::packing_crate,{12.1f,5.75f},-16.95f,.6f,.42f,.4f,.2f,false); // Suspended from the parts hoist.
  for(float x:{11.6f,12.6f})wall(m,x,4.88f,x+.06f,5.f,mz,mz+1.1f,18);
  wall(m,11.6f,4.88f,12.66f,5.f,mz+1.04f,mz+1.1f,18);
  // Under the deck: small-parts shelving in bays; a tube that will not stay lit.
@@ -560,7 +560,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(int i=0;i<3;++i){const float x=4.85f+i*.45f;wall(m,x-.19f,21.72f,x+.19f,22.14f,f+.78f,f+.82f,20);
   for(int k=0;k<6;++k){const float bx=x-.15f+(k%3)*.105f,by=21.8f+(k/3)*.17f;wall(m,bx,by,bx+.07f,by+.11f,f+.82f,f+.828f,(i+k)%3==0?19:(i+k)%3==1?18:20);}}
  mntFix(m,model::packing_crate,{6.55f,22.45f},f,.6f,.45f,.42f,.25f,true);
- for(Vec2 h:{Vec2{4.7f,21.8f},Vec2{6.0f,22.f}})mntFix(m,model::mine_hard_hat,h,f+.78f,.28f,.35f,.15f,h.x,false);
+ for(Vec2 h:{Vec2{4.85f,21.95f},Vec2{5.72f,21.95f}})kit::prop(m,model::mine_hard_hat,h.x,h.y,f+.828f,.28f,.35f,.15f,0);
  terminal(m,{3.85f,22.35f},"CLEANUP DETAIL 4 / HEADCOUNT","B SHIFT PRESENT 03:10 - 03:58: 35 OF 41. PROCESSED: 35.","OUTSTANDING: 6. SWEEP THE DISTRICT. ORDER 7 STANDS.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=kPi;
  wall(m,7.17f,22.27f,7.23f,22.33f,f,f+2.f,8);
@@ -684,7 +684,7 @@ std::shared_ptr<const Map> makeFabricationShop(){
  // Marsh, at the lathe he could not use; the empty bar chuck, a flask.
  mntBody(m,"mnt_marsh_clock",ActorVisual::Worker,{3.9f,17.2f},f,2.6f);machineryClock(m,"mnt_marsh_clock",60000);
  for(auto [x,y,r]:{std::tuple{3.7f,17.f,.55f},{4.4f,17.5f,.3f}})wall(m,x-r,y-r*.6f,x+r,y+r*.6f,f,f+.004f,16);
- mntFix(m,model::mine_hard_hat,{6.9f,16.6f},f,.28f,.35f,.15f,.9f,false);
+ kit::prop(m,model::mine_hard_hat,6.9f,16.6f,f,.28f,.35f,.15f,.9f);
  // Workbenches between the machines, vices and a grinder on them.
  auto bench=[&](float y1,float y2){wall(m,1.25f,y1,2.1f,y2,f+.86f,f+.92f,12);
   for(float y:{y1+.05f,y2-.1f})wall(m,1.3f,y,2.05f,y+.05f,f,f+.86f,12);
@@ -778,7 +778,7 @@ std::shared_ptr<const Map> makeMaintenanceAidStation(){
  wall(m,14.85f,5.f,15.15f,7.f,f,roof,3);wall(m,14.85f,8.6f,15.15f,11.f,f,roof,3);
  mntFix(m,model::med_ward_bed,{18.6f,6.3f},f,1.98f,.94f,.84f,kPi,true);
  mntFix(m,model::med_crash_cart,{20.3f,6.6f},f,.74f,.48f,1.f,-kPi*.5f,true);
- mntFix(m,model::med_vitals_monitor,{20.3f,6.6f},f+1.f,.38f,.18f,.28f,-kPi*.5f,false);
+ kit::prop(m,model::med_vitals_monitor,20.3f,6.6f,f+1.f,.38f,.18f,.28f,-kPi*.5f);
  mntFix(m,model::med_supply_cabinet,{20.75f,9.4f},f,1.1f,.44f,1.7f,-kPi*.5f,true);
  // He lies on the mattress the length of the bed, head at the headboard.
  m.actorTracks.push_back({stateId("mnt_aid_last"),ActorVisual::Worker,1.7f,false,false,{{0,{17.85f,6.3f},f+.58f,-kPi*.5f,4,1},{30000,{17.85f,6.3f},f+.58f,-kPi*.5f,4,1}}});

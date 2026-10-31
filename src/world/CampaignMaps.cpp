@@ -113,7 +113,7 @@ std::shared_ptr<const Map> makeFoundry(){
  // West wall framed around the two view-glass openings (sill .95, head 2.1) so the panes are not coplanar with solid plaster.
  wall(m,18,1,18.15f,3.85f,0,.95f,3);wall(m,18,1,18.15f,3.85f,2.1f,low,3);wall(m,18,1,18.15f,1.8f,.95f,2.1f,3);wall(m,18,2.4f,18.15f,2.9f,.95f,2.1f,3);wall(m,18,3.5f,18.15f,3.85f,.95f,2.1f,3);
  wall(m,18,3.85f,19.2f,4,0,low,3);wall(m,20.4f,3.85f,23,4,0,low,3);wall(m,19.2f,3.85f,20.4f,4,2.2f,low,3);
- for(float y:{1.8f,2.9f})wall(m,18,y,18.15f,y+.6f,.95f,2.1f,17); // view glass toward the floor
+ for(float y:{1.8f,2.9f})kit::breakable(m,18,y,18.15f,y+.6f,.95f,2.1f,17,true); // view glass toward the floor
  recordsDesk(m,21.3f,2.f,0);
  terminal(m,{21.3f,2.05f},"SHIFT LOG / 03:17","COOLANT FAILED. THE NIGHT CREW","SEALED FOUNDRY WITH US INSIDE.");m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.815f;
  shelf(m,{19.4f,1.3f},0);
@@ -265,7 +265,7 @@ std::shared_ptr<const Map> makePressureWorks(){
  for(float x:{4.f,7.5f,11.f})recordsDesk(m,x,20.6f,0);
  for(float x:{2.f,3.f,13.f})m.fixtures.push_back({13,{x,22.74f},0,.9f,.5f,1.9f,0,true});
  // Booth: steel sill and glass along x 16, open to the south.
- wall(m,16.f,18.f,16.15f,20.4f,0,1.f,3);wall(m,16.f,18.f,16.15f,20.4f,1.f,2.6f,17);wall(m,16.f,18.f,16.15f,20.4f,2.6f,3.f,3);
+ wall(m,16.f,18.f,16.15f,20.4f,0,1.f,3);kit::breakable(m,16.f,18.f,16.15f,20.4f,1.f,2.6f,17,true);wall(m,16.f,18.f,16.15f,20.4f,2.6f,3.f,3);
  recordsDesk(m,18.f,19.f,0);
  terminal(m,{18.f,19.05f},"CONTROL / NIGHT SHIFT","SURFACE LIFT IS ON EMERGENCY POWER.","THE PUMPS MUST STAY RUNNING.");
  transferExit(m);
@@ -391,7 +391,7 @@ std::shared_ptr<const Map> makeTurbineGantry(){
  deckHangers(m,high,hall);
  // Control room: steel sill, glazing and frame, roofed; doorways from the
  // north run (x 20-21.5) and the bridge (y 6-8).
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,deckZ,deckZ+.9f,3);wall(m,x1,y1,x2,y2,deckZ+.9f,deckZ+2.4f,17);wall(m,x1,y1,x2,y2,deckZ+2.4f,deckZ+2.7f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,deckZ,deckZ+.9f,3);kit::glazingPanes(m,x1,y1,x2,y2,deckZ+.9f,deckZ+2.4f,17,true);wall(m,x1,y1,x2,y2,deckZ+2.4f,deckZ+2.7f,3);};
  glazed(17,3,17.12f,6);glazed(17,8,17.12f,9);
  glazed(17.12f,3,20,3.12f);glazed(21.5f,3,23,3.12f);
  wall(m,20,3,21.5f,3.12f,deckZ+2.2f,deckZ+2.7f,3);
@@ -536,7 +536,8 @@ std::shared_ptr<const Map> makeReactorComplex(){
  m.fixtures.push_back({13,{1.27f,21.2f},0,.9066f,.4956f,2.2f,-kPi*.5f,true});
  cableTray(m,{1.6f,22.8f},{8.4f,22.8f},-6.75f);
  // Containment hall: decontamination booths, hazmat lockers, spent-fuel casks.
- for(float x:{17.5f,20.f}){wall(m,x,20.4f,x+.08f,23,lower,lower+2.2f,17);wall(m,x+2.f,20.4f,x+2.08f,23,lower,lower+2.2f,17);
+ for(float x:{17.5f,20.f}){kit::breakable(m,x,20.4f,x+.08f,23,lower,lower+2.2f,17,true);kit::breakable(m,x+2.f,20.4f,x+2.08f,23,lower,lower+2.2f,17,true);
+  for(float side:{x,x+2.f})wall(m,side,20.4f,side+.08f,23,lower+2.2f,lower+2.23f,20);
   m.pipes.push_back({{x+1.04f,22.6f},{x+1.04f,22.6f},lower+2.1f,.05f,roomTop,1});m.pipes.push_back({{x+1.04f,22.6f},{x+1.04f,22.6f},lower+2.06f,.12f,lower+2.1f,6});}
  for(float x:{10.f,11.f,12.f,13.f,14.f})m.fixtures.push_back({13,{x,22.74f},0,.9066f,.4956f,2.2f,0,true});
  for(float x:{11.f,13.6f}){float h=1.7f,scale=h/2.390135f;m.fixtures.push_back({14,{x,19.4f},0,1.58f*scale,1.62f*scale,h,0,true});}
@@ -748,7 +749,7 @@ std::shared_ptr<const Map> makeReactorCore(){
  for(Vec2 a:{Vec2{8.f,12.f},Vec2{16.f,13.2f},Vec2{12.f,8.f},Vec2{13.2f,16.f}})m.lights.push_back(lamp(a,gantry-.45f,1.4f,6.f,12000,-.05f));
 
  // --- 12A R-03 CONTROL (-6 m) -------------------------------------------------
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gantry,gantry+.9f,3);wall(m,x1,y1,x2,y2,gantry+.9f,gantry+2.4f,17);wall(m,x1,y1,x2,y2,gantry+2.4f,gantry+2.7f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gantry,gantry+.9f,3);kit::glazingPanes(m,x1,y1,x2,y2,gantry+.9f,gantry+2.4f,17,true);wall(m,x1,y1,x2,y2,gantry+2.4f,gantry+2.7f,3);};
  glazed(1,6.88f,7,7);glazed(8.88f,1,9,7);
  wall(m,1,1,9,7,gantry+2.7f,gantry+2.82f,2);
  {AuthoredTerminalData t;t.position={4.5f,6.4f};t.title="REACTOR ACCESS / DRIVE A:";t.z=3;t.reactorAction=1;m.terminals.push_back(std::move(t));}
@@ -1052,7 +1053,7 @@ std::shared_ptr<const Map> makeCoolantReturn(){
  rectangle(g,8,23,11,24,'.');m.doors.push_back({8,11,23.5f,0,false,true});
  wall(m,8,23,11,24,floor+2.5f,roof,3);
  // What floats: a bottle bobbing in the channel, a gasket box in the store.
- m.clutterSpawns={{2,{7.5f,11.5f},surface},{0,{21.f,21.6f},floor}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{2,{7.5f,11.5f},surface},{0,{21.f,21.6f},floor}});
  wallBays(m,floor,roof,4.f,false,false,true,true,11.5f);
  for(float y:{5.5f,16.5f,20.5f})wall(m,1,y-.1f,23,y+.1f,roof-.3f,roof,12);
  // --- Light ---------------------------------------------------------------
@@ -1132,7 +1133,7 @@ std::shared_ptr<const Map> makeCableVaults(){
  // --- Encounters ------------------------------------------------------------
  m.creatureSpawns={{CreatureKind::Huntsman,{4.f,17.f}},{CreatureKind::Huntsman,{13.f,21.f}}};
  m.pickupSpawns={{{20.5f,17.5f},PickupKind::Ammo}};
- m.clutterSpawns={{3,{3.f,6.f}},{0,{2.6f,8.2f}}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{3,{3.f,6.f}},{0,{2.6f,8.2f}}});
  {ScriptEvent trip;trip.id=stateId("vault_relay_trip");trip.level=6;trip.x1=2;trip.y1=1;trip.x2=5;trip.y2=3;trip.bottom=-9.2f;trip.top=-7;
   ScriptAction play;play.type=ScriptAction::Type::PlaySound;play.amount=.6f;play.sound=Sound::Door;trip.actions.push_back(play);m.scriptEvents.push_back(trip);}
  zone(m,"MAINTENANCE BAY",1,4,7.5f,9);
@@ -1208,7 +1209,7 @@ std::shared_ptr<const Map> makePumpAnnex(){
  for(float x:{4.f,9.f,15.f,20.f}){wall(m,x-.15f,1,x+.15f,23,roof-.55f,roof,12);
   for(float y:{1.f,22.75f})wall(m,x-.25f,y,x+.25f,y+.25f,gallery+2.9f,roof-.55f,15);}
  // --- Observation gallery ------------------------------------------------------------
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gallery,gallery+.9f,3);wall(m,x1,y1,x2,y2,gallery+.9f,gallery+2.4f,17);wall(m,x1,y1,x2,y2,gallery+2.4f,gallery+2.7f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gallery,gallery+.9f,3);kit::glazingPanes(m,x1,y1,x2,y2,gallery+.9f,gallery+2.4f,17,true);wall(m,x1,y1,x2,y2,gallery+2.4f,gallery+2.7f,3);};
  glazed(14.f,19.f,19.f,19.12f);glazed(14.f,19.12f,14.12f,21.2f);
  wall(m,14,21.2f,14.12f,22.8f,gallery+2.2f,gallery+2.7f,3);
  wall(m,14,19,19,23,gallery+2.7f,gallery+2.85f,2);
@@ -1281,7 +1282,7 @@ std::shared_ptr<const Map> makeUtilityJunction(){
  wall(m,3,17.35f,5,17.65f,floor+2.5f,roof,3);
  {Door utilities{3,5,17.5f};utilities.requireState=stateId("primary_utilities_permit");utilities.sign=CampaignChunkCount+1;m.doors.push_back(utilities);}
  // --- Dispatch office ------------------------------------------------------------
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,floor,floor+.9f,3);wall(m,x1,y1,x2,y2,floor+.9f,floor+2.4f,17);wall(m,x1,y1,x2,y2,floor+2.4f,floor+2.7f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,floor,floor+.9f,3);kit::glazingPanes(m,x1,y1,x2,y2,floor+.9f,floor+2.4f,17,true);wall(m,x1,y1,x2,y2,floor+2.4f,floor+2.7f,3);};
  glazed(9.f,15.f,11.2f,15.12f);glazed(12.8f,15.f,15.f,15.12f);wall(m,11.2f,15.f,12.8f,15.12f,floor+2.2f,floor+2.7f,3);
  glazed(9.f,15.12f,9.12f,20.f);glazed(14.88f,15.12f,15.f,20.f);
  wall(m,9.f,19.88f,15.f,20.f,floor,floor+2.7f,3);wall(m,9,15,15,20,floor+2.7f,floor+2.85f,2);
@@ -1335,7 +1336,7 @@ std::shared_ptr<const Map> makeUtilityJunction(){
  using C=CreatureKind;using P=PickupKind;
  m.creatureSpawns={{C::Huntsman,{14.f,12.5f}},{C::Wasp,{16.f,17.f}}};
  m.pickupSpawns={{{17.f,13.5f},P::Health},{{21.f,3.5f},P::Ammo},{{3.1f,21.f},P::Ammo},{{8.f,2.f},P::Ammo,bridge}};
- m.clutterSpawns={{3,{20.f,10.2f}},{1,{21.3f,10.3f}},{2,{13.4f,18.f}},{3,{4.6f,20.6f}},{0,{2.f,22.f}},{1,{15.f,13.f}}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{3,{20.f,10.2f}},{1,{21.3f,10.3f}},{2,{13.4f,18.f}},{3,{4.6f,20.6f}},{0,{2.f,22.f}},{1,{15.f,13.f}}});
  zone(m,"DISPATCH",9,15,15,20);
  zone(m,"FREIGHT SERVICES",17,1,23,6);
  zone(m,"PRIMARY UTILITIES",1,17.5f,6.2f,23);
@@ -1380,7 +1381,7 @@ std::shared_ptr<const Map> makeWasteHandling(){
  wall(m,14.1f,5.1f,15.9f,7.f,gallery+.4f,gallery+1.3f,12);
  for(float x:{14.2f,15.7f})for(float y:{5.2f,6.8f})m.pipes.push_back({{x,y},{x,y},gallery+.05f,.04f,gallery+.4f,6});
  // --- Control pulpit over the press ---------------------------------------------
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gallery,gallery+.95f,3);wall(m,x1,y1,x2,y2,gallery+.95f,gallery+2.3f,17);wall(m,x1,y1,x2,y2,gallery+2.3f,gallery+2.6f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,gallery,gallery+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,gallery+.95f,gallery+2.3f,17,true);wall(m,x1,y1,x2,y2,gallery+2.3f,gallery+2.6f,3);};
  glazed(16.5f,6.88f,21.5f,7.f);glazed(21.38f,3.5f,21.5f,6.88f);
  wall(m,16.5f,3.5f,17.6f,3.62f,gallery,gallery+2.6f,3);wall(m,19.f,3.5f,21.5f,3.62f,gallery,gallery+2.6f,3);wall(m,17.6f,3.5f,19.f,3.62f,gallery+2.2f,gallery+2.6f,3);
  wall(m,16.5f,3.62f,16.62f,6.88f,gallery,gallery+2.6f,3);
@@ -1479,7 +1480,7 @@ std::shared_ptr<const Map> makeFreightAccess(){
  rectangle(g,2,0,5,1,'.');m.doors.push_back({2,5,.5f,0,false,false,true});
  // --- Personnel wing (west) -------------------------------------------------------
  // A glazed screen with two doorways divides it from the freight hall.
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,floor,floor+.95f,3);wall(m,x1,y1,x2,y2,floor+.95f,floor+2.25f,17);wall(m,x1,y1,x2,y2,floor+2.25f,roof,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,floor,floor+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,floor+.95f,floor+2.25f,17,true);wall(m,x1,y1,x2,y2,floor+2.25f,roof,3);};
  glazed(6.6f,1,6.8f,4.5f);glazed(6.6f,6.f,6.8f,13.f);glazed(6.6f,14.5f,6.8f,18.f);
  for(float y:{4.5f,13.f})wall(m,6.6f,y,6.8f,y+1.5f,floor+2.25f,roof,3);
  wall(m,1,18.f,6.8f,18.2f,floor,roof,3);
@@ -1542,7 +1543,7 @@ std::shared_ptr<const Map> makeFreightAccess(){
  m.lights.push_back(lamp({12.f,21.2f},roof-.6f,1.1f,5.f,2200,0));
  // --- Supplies ----------------------------------------------------------------
  m.pickupSpawns={{{11.f,5.7f},PickupKind::Ammo},{{3.f,15.5f},PickupKind::Health}};
- m.clutterSpawns={{3,{2.f,16.f}},{1,{18.f,15.f}},{2,{4.f,11.f}}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{3,{2.f,16.f}},{1,{18.f,15.f}},{2,{4.f,11.f}}});
  zone(m,"FREIGHT ACCESS / PERSONNEL",1,1,6.6f,18);
  zone(m,"FREIGHT ACCESS / DOCK OFFICE",16.7f,13.2f,23,18);
  freightFinish(m,10);
@@ -1738,7 +1739,7 @@ std::shared_ptr<const Map> makeReceivingOverlook(){
  deck(m,mezz,1,0,23,4);deck(m,mezz,1,4,8,10);
  m.stairs.push_back({3,9,6,18,-25,-19,32,true,false});
  deckSupports(m,m.layers[1],base,6.f);
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,mezz,mezz+.95f,3);wall(m,x1,y1,x2,y2,mezz+.95f,mezz+2.3f,17);wall(m,x1,y1,x2,y2,mezz+2.3f,mezz+2.6f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,mezz,mezz+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,mezz+.95f,mezz+2.3f,17,true);wall(m,x1,y1,x2,y2,mezz+2.3f,mezz+2.6f,3);};
  // The foreman's booth at the east end of the mezzanine, glazed to the floor.
  glazed(17.f,3.88f,23.f,4.f);glazed(17.f,1.f,17.12f,2.f);wall(m,17.f,3.2f,17.12f,3.88f,mezz,mezz+2.6f,3);wall(m,17.f,2.f,17.12f,3.2f,mezz+2.2f,mezz+2.6f,3);
  wall(m,17.f,1.f,23.f,4.f,mezz+2.6f,mezz+2.75f,2);
@@ -1906,16 +1907,16 @@ std::shared_ptr<const Map> makeWarehouseIntake(){
  taped(m,{8.2f,22.86f},base+2.35f,kPi,Readable::Sticky,"SHUTTER","JAMMED AT 40%. DON'T FORCE IT.","- J.");
  for(float x=10.6f;x<13.4f;x+=.5f)floorLine(m,x,22.1f,x+.25f,22.6f,base,13);
  // --- Intake office, west: glazed onto the floor ------------------------------------------
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,base,base+.95f,3);wall(m,x1,y1,x2,y2,base+.95f,base+2.3f,17);wall(m,x1,y1,x2,y2,base+2.3f,base+2.7f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,base,base+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,base+.95f,base+2.3f,17,true);wall(m,x1,y1,x2,y2,base+2.3f,base+2.7f,3);};
  wall(m,1,7.5f,6,7.7f,base,base+2.7f,3);wall(m,1,13.3f,6,13.5f,base,base+2.7f,3);
  glazed(5.8f,7.7f,6.f,11.8f);wall(m,5.8f,13.f,6.f,13.3f,base,base+2.7f,3);wall(m,5.8f,11.8f,6.f,13.f,base+2.3f,base+2.7f,3);
  wall(m,1,7.5f,6,13.5f,base+2.7f,base+2.85f,2);
  m.fixtures.push_back({24,{3.f,8.15f},0,1.4f,.7f,.75f,0,true});
  m.fixtures.push_back({26,{3.f,9.05f},0,.55f,.55f,.95f,0,true});
- m.fixtures.push_back({27,{2.8f,8.f},.75f,.42f,.4f,.38f,0,false});
- m.fixtures.push_back({28,{3.f,8.4f},.75f,.45f,.16f,.03f,0,false});
- m.fixtures.push_back({33,{3.55f,8.2f},.75f,.2f,.2f,.1f,0,false});
- m.fixtures.push_back({34,{2.3f,8.35f},.75f,.09f,.09f,.1f,0,false});
+ kit::prop(m,27,2.8f,8.f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,0);
+ kit::prop(m,28,3.f,8.4f,m.layers.front().elevation+(.75f),.45f,.16f,.03f,0);
+ kit::prop(m,33,3.55f,8.2f,m.layers.front().elevation+(.75f),.2f,.2f,.1f,0);
+ kit::prop(m,34,2.36f,8.35f,m.layers.front().elevation+(.75f),.09f,.09f,.1f,0);
  for(float y:{10.2f,11.f})m.fixtures.push_back({32,{1.4f,y},0,.5f,.6f,1.3f,kPi*.5f,true});
  m.fixtures.push_back({31,{3.4f,12.95f},0,.9f,.5f,.75f,kPi,true});
  m.fixtures.push_back({35,{5.4f,12.9f},0,.35f,.35f,1.1f,0,true});
@@ -1986,17 +1987,17 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  for(float x:{4.12f,7.08f,10.08f,13.88f})floorLine(m,x-.05f,2.6f,x+.05f,21.6f,base,14);
  for(float x=1.4f;x<16.7f;x+=1.2f)floorLine(m,x,11.5f,x+.6f,12.7f,base,13);
  // --- Operations office, north-east --------------------------------------------------------
- auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,base,base+.95f,3);wall(m,x1,y1,x2,y2,base+.95f,base+2.3f,17);wall(m,x1,y1,x2,y2,base+2.3f,base+2.6f,3);};
+ auto glazed=[&](float x1,float y1,float x2,float y2){wall(m,x1,y1,x2,y2,base,base+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,base+.95f,base+2.3f,17,true);wall(m,x1,y1,x2,y2,base+2.3f,base+2.6f,3);};
  glazed(17.6f,1.f,17.8f,5.8f);wall(m,17.6f,5.8f,17.8f,7.f,base+2.3f,base+2.6f,3);wall(m,17.6f,7.f,17.8f,7.8f,base,base+2.6f,3);
  glazed(17.8f,7.6f,22.7f,7.8f);wall(m,22.7f,1.f,22.9f,7.8f,base,base+2.6f,3);
  wall(m,17.6f,1.f,22.9f,7.8f,base+2.6f,base+2.75f,2);
  m.fixtures.push_back({24,{20.2f,1.62f},0,1.4f,.7f,.75f,0,true});
  m.fixtures.push_back({26,{20.2f,2.55f},0,.55f,.55f,.95f,0,true});
- m.fixtures.push_back({27,{20.f,1.5f},.75f,.42f,.4f,.38f,0,false});
- m.fixtures.push_back({28,{20.2f,1.85f},.75f,.45f,.16f,.03f,0,false});
- m.fixtures.push_back({29,{20.75f,1.55f},.75f,.2f,.45f,.42f,0,false});
- m.fixtures.push_back({33,{19.65f,1.7f},.75f,.2f,.2f,.1f,0,false});
- m.fixtures.push_back({34,{20.55f,1.85f},.75f,.09f,.09f,.1f,0,false});
+ kit::prop(m,27,20.f,1.5f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,0);
+ kit::prop(m,28,20.2f,1.85f,m.layers.front().elevation+(.75f),.45f,.16f,.03f,0);
+ kit::prop(m,29,20.75f,1.55f,m.layers.front().elevation+(.75f),.2f,.45f,.42f,0);
+ kit::prop(m,33,19.65f,1.7f,m.layers.front().elevation+(.75f),.2f,.2f,.1f,0);
+ kit::prop(m,34,20.55f,1.85f,m.layers.front().elevation+(.75f),.09f,.09f,.1f,0);
  m.fixtures.push_back({31,{18.6f,1.35f},0,.9f,.5f,.75f,0,true});
  m.fixtures.push_back({30,{18.6f,1.35f},.75f,.5f,.4f,.42f,0,false});
  for(float y:{3.2f,4.f})m.fixtures.push_back({32,{22.35f,y},0,.5f,.6f,1.3f,-kPi*.5f,true});
@@ -2006,8 +2007,8 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  m.lights.push_back(lamp({20.2f,4.4f},base+2.45f,1.f,5.f,3200));
  // --- Dispatch and packing, south of the office -------------------------------------------
  for(float x:{18.6f,21.6f})m.fixtures.push_back({19,{x,11.f},0,1.367f,.724f,.78f,0,true});
- m.fixtures.push_back({21,{18.4f,10.95f},.78f,.5f,.4f,.35f,.2f,false});
- m.fixtures.push_back({21,{21.9f,10.9f},.78f,.6f,.45f,.3f,-.15f,false});
+ kit::prop(m,21,18.4f,10.95f,m.layers.front().elevation+(.78f),.5f,.4f,.35f,.2f);
+ kit::prop(m,21,21.9f,10.92f,m.layers.front().elevation+(.78f),.6f,.45f,.3f,-.15f);
  cargo(m,18.4f,14.6f,base);cargo(m,19.8f,14.6f,base);cargo(m,21.2f,14.6f,base,false);
  forklift(m,20.2f,19.3f,base);cargo(m,20.2f,16.9f,base);
  terminal(m,{22.4f,19.3f},"FORKLIFT / SHIFT REPORT","DRIVE MOTOR LEFT RUNNING. BATTERY EMPTY.","OPERATOR DID NOT CLOCK OUT.");m.terminals.back().readable=Readable::Letter;
@@ -2016,7 +2017,7 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  m.fixtures.push_back({19,{5.9f,22.5f},0,1.367f,.724f,.78f,0,true});
  for(float x:{5.4f,6.4f})m.fixtures.push_back({18,{x,23.25f},0,.417f,.525f,.95f,kPi,true});
  m.fixtures.push_back({36,{6.3f,22.45f},.78f,.3f,.3f,.4f,0,false});
- m.fixtures.push_back({34,{5.6f,22.5f},.78f,.09f,.09f,.1f,0,false});
+ kit::prop(m,34,5.6f,22.5f,m.layers.front().elevation+(.78f),.09f,.09f,.1f,0);
  terminal(m,{1.8f,22.2f},"WAREHOUSE / BREAK CORNER","RADIO CHECK 02:14 / NO REPLY FROM RECEIVING.","DO NOT USE THE FREIGHT AISLES FOR EVACUATION.");m.terminals.back().readable=Readable::Note;
  wallLamp(m,1.02f,21.9f,base+2.7f,0,1.1f,6.f);
  // --- Walls, roof and services ---------------------------------------------------------
@@ -2247,24 +2248,24 @@ std::shared_ptr<const Map> makeManifestOffices(){
  rectangle(m.layers[0],10,0,14,1,'.');m.doors.push_back({10.5f,13.5f,.5f,0,false,false,true,0});
  // --- The overlook gallery and its window wall --------------------------------------------
  rectangle(m.layers[0],2,0,10,1,'.');
- wall(m,2,0,10,.16f,f,-6.15f,3);wall(m,2,0,10,.16f,-4.35f,ceil,3);
+ wall(m,2,0,10,.16f,f,-6.15f,3);wall(m,2,0,10,.36f,-4.35f,ceil,3);
  for(float x:{2.f,4.6f,7.25f,9.85f})wall(m,x,0,x+.15f,.16f,-6.15f,-4.35f,20);
- wall(m,2.15f,.045f,9.85f,.065f,-6.15f,-4.35f,17);
+ kit::breakable(m,2.15f,.3f,9.85f,.32f,-6.12f,-4.35f,17,true);
  wall(m,2.f,.16f,10.f,.36f,-6.2f,-6.12f,20);
  for(float x:{3.2f,6.f,8.8f}){
   m.fixtures.push_back({24,{x,1.45f},0,1.4f,.7f,.75f,0,true});
   m.fixtures.push_back({26,{x,2.3f},0,.55f,.55f,.95f,0,true});
-  m.fixtures.push_back({27,{x-.15f,1.4f},.75f,.42f,.4f,.38f,0,false});
-  m.fixtures.push_back({28,{x,1.72f},.75f,.45f,.16f,.03f,0,false});
+  kit::prop(m,27,x-.15f,1.4f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,0);
+  kit::prop(m,28,x,1.7f,m.layers.front().elevation+(.75f),.45f,.16f,.03f,0);
  }
- m.fixtures.push_back({38,{6.5f,1.3f},.75f,.3f,.08f,.32f,0,false});
+ kit::prop(m,38,6.5f,1.3f,m.layers.front().elevation+(.75f),.3f,.08f,.32f,0);
  // --- Reception ---------------------------------------------------------------------------
  m.fixtures.push_back({24,{15.2f,2.8f},0,1.4f,.7f,.75f,0,true});
  m.fixtures.push_back({25,{16.7f,2.6f},0,1.2f,1.2f,.75f,kPi*.5f,true});
  m.fixtures.push_back({26,{15.4f,1.9f},0,.55f,.55f,.95f,kPi,true});
- m.fixtures.push_back({27,{15.f,2.85f},.75f,.42f,.4f,.38f,kPi,false});
- m.fixtures.push_back({28,{15.3f,2.55f},.75f,.45f,.16f,.03f,kPi,false});
- m.fixtures.push_back({33,{16.4f,2.9f},.75f,.2f,.2f,.1f,kPi,false});
+ kit::prop(m,27,15.f,2.85f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,kPi);
+ kit::prop(m,28,15.3f,2.55f,m.layers.front().elevation+(.75f),.45f,.16f,.03f,kPi);
+ kit::prop(m,33,16.4f,2.9f,m.layers.front().elevation+(.75f),.2f,.2f,.1f,kPi);
  wall(m,14.4f,3.2f,17.4f,3.4f,f,f+1.08f,21);wall(m,14.35f,3.15f,17.45f,3.55f,f+1.08f,f+1.12f,20);
  for(float x:{19.4f,20.4f,21.4f})m.fixtures.push_back({18,{x,1.5f},0,.417f,.525f,.95f,0,true});
  m.fixtures.push_back({35,{22.5f,1.5f},0,.35f,.35f,1.1f,0,true});
@@ -2281,14 +2282,14 @@ std::shared_ptr<const Map> makeManifestOffices(){
  cubicleBank(m,8.8f,4,13.8f,f,2);
  terminal(m,{6,16},"MANIFEST / MISSED CALLS","RECEIVING: 02:14 / 02:17 / 02:21 / NO ANSWER.","EMPLOYEE TRANSIT LOG: PLATFORM 3.");m.terminals.back().readable=Readable::Note;
  // --- Supervisors' offices, east ----------------------------------------------------------------
- officeGlass(m,17.2f,5.8f,17.4f,17.8f,f,ceil);
- officeGlass(m,17.4f,5.8f,18.4f,6.f,f,ceil);officeDoorway(m,18.4f,19.6f,5.8f,6.f,f,ceil);officeGlass(m,19.6f,5.8f,23.f,6.f,f,ceil);
+ officeGlass(m,17.2f,5.8f,17.4f,17.8f,f,ceil,true);
+ officeGlass(m,17.4f,5.8f,18.4f,6.f,f,ceil,true);officeDoorway(m,18.4f,19.6f,5.8f,6.f,f,ceil);officeGlass(m,19.6f,5.8f,23.f,6.f,f,ceil,true);
  officeWall(m,17.4f,11.7f,23.f,11.9f,f,ceil);
- officeGlass(m,17.4f,17.6f,18.4f,17.8f,f,ceil);officeDoorway(m,18.4f,19.6f,17.6f,17.8f,f,ceil);officeGlass(m,19.6f,17.6f,23.f,17.8f,f,ceil);
+ officeGlass(m,17.4f,17.6f,18.4f,17.8f,f,ceil,true);officeDoorway(m,18.4f,19.6f,17.6f,17.8f,f,ceil);officeGlass(m,19.6f,17.6f,23.f,17.8f,f,ceil,true);
  // North office: the arrival record for Train 27.
  m.fixtures.push_back({25,{21.6f,7.4f},0,1.6f,1.6f,.75f,0,true});
  m.fixtures.push_back({26,{20.9f,8.6f},0,.55f,.55f,.95f,0,true});
- m.fixtures.push_back({27,{21.3f,7.2f},.75f,.42f,.4f,.38f,0,false});
+ kit::prop(m,27,21.3f,7.2f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,0);
  m.fixtures.push_back({31,{22.5f,10.6f},0,.9f,.5f,.75f,-kPi*.5f,true});
  m.fixtures.push_back({30,{22.5f,10.6f},.75f,.5f,.4f,.42f,-kPi*.5f,false});
  m.fixtures.push_back({37,{18.f,11.45f},0,.9f,.3f,1.8f,kPi,true});
@@ -2296,7 +2297,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  // South office: ordinary freight.
  m.fixtures.push_back({24,{21.4f,15.6f},0,1.4f,.7f,.75f,kPi,true});
  m.fixtures.push_back({26,{21.4f,14.8f},0,.55f,.55f,.95f,kPi,true});
- m.fixtures.push_back({27,{21.2f,15.7f},.75f,.42f,.4f,.38f,kPi,false});
+ kit::prop(m,27,21.2f,15.7f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,kPi);
  for(float y:{12.6f,13.4f})m.fixtures.push_back({32,{22.55f,y},0,.5f,.6f,1.3f,-kPi*.5f,true});
  m.fixtures.push_back({37,{18.f,12.25f},0,.9f,.3f,1.8f,0,true});
  terminal(m,{19.4f,14.6f},"MANIFEST / ORDINARY FREIGHT","BEARINGS / FILTERS / FOOD / MEDICAL SUPPLIES.","SPECIALIZED CONTAINMENT HARDWARE: RESEARCH RECEIVING.");m.terminals.back().readable=Readable::Letter;
@@ -2305,7 +2306,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  officeWall(m,1.f,16.6f,6.8f,16.8f,f,ceil);
  wall(m,1.f,17.f,1.65f,22.6f,f,f+.9f,21);wall(m,1.f,16.95f,1.7f,22.65f,f+.9f,f+.94f,20);
  m.fixtures.push_back({36,{1.35f,17.8f},.94f,.35f,.35f,.45f,kPi*.5f,false});
- m.fixtures.push_back({34,{1.35f,18.4f},.94f,.09f,.09f,.1f,0,false});
+ kit::prop(m,34,1.35f,18.4f,m.layers.front().elevation+(.94f),.09f,.09f,.1f,0);
  m.fixtures.push_back({35,{1.4f,23.2f},0,.35f,.35f,1.1f,0,true});
  m.fixtures.push_back({19,{4.2f,20.f},0,1.367f,.724f,.78f,0,true});
  for(float x:{3.7f,4.7f}){m.fixtures.push_back({18,{x,19.25f},0,.417f,.525f,.95f,0,true});m.fixtures.push_back({18,{x,20.75f},0,.417f,.525f,.95f,kPi,true});}
@@ -2340,16 +2341,16 @@ std::shared_ptr<const Map> makeManifestRouting(){
  officeWall(m,1.f,3.4f,2.6f,3.6f,f,ceil);officeDoorway(m,2.6f,3.8f,3.4f,3.6f,f,ceil);officeWall(m,3.8f,3.4f,8.f,3.6f,f,ceil);
  officeWall(m,7.8f,3.6f,8.f,11.6f,f,ceil);officeWall(m,1.f,11.4f,8.f,11.6f,f,ceil);
  for(float y:{5.4f,7.6f,9.8f})for(float x:{3.4f,5.2f})m.fixtures.push_back({7,{x,y},0,1.5f,.45f,1.8f,0,true});
- for(float y:{5.4f,7.6f,9.8f})m.fixtures.push_back({38,{4.3f,y-.1f},1.2f,.3f,.08f,.32f,0,false});
+ for(float y:{5.4f,7.6f,9.8f})kit::prop(m,38,3.94f,y-.1f,m.layers.front().elevation+(.972f),.3f,.08f,.32f,0);
  for(float y:{5.f,6.f,7.f})m.fixtures.push_back({32,{1.4f,y+2.f},0,.5f,.6f,1.3f,kPi*.5f,true});
  m.lights.push_back(lamp({4.8f,7.6f},ceil-.16f,.8f,6.f,4200));
  // --- Briefing room, centre ---------------------------------------------------------------------
- officeGlass(m,9.6f,3.4f,10.4f,3.6f,f,ceil);officeDoorway(m,10.4f,11.6f,3.4f,3.6f,f,ceil);officeGlass(m,11.6f,3.4f,15.2f,3.6f,f,ceil);
- officeGlass(m,9.6f,11.4f,15.2f,11.6f,f,ceil);officeGlass(m,9.6f,3.6f,9.8f,11.4f,f,ceil);officeWall(m,15.f,3.6f,15.2f,11.4f,f,ceil);
+ officeGlass(m,9.6f,3.4f,10.4f,3.6f,f,ceil,true);officeDoorway(m,10.4f,11.6f,3.4f,3.6f,f,ceil);officeGlass(m,11.6f,3.4f,15.2f,3.6f,f,ceil,true);
+ officeGlass(m,9.6f,11.4f,15.2f,11.6f,f,ceil,true);officeGlass(m,9.6f,3.6f,9.8f,11.4f,f,ceil,true);officeWall(m,15.f,3.6f,15.2f,11.4f,f,ceil);
  m.fixtures.push_back({19,{11.8f,7.5f},0,1.2f,3.2f,.78f,0,true});
  for(float y:{6.4f,7.5f,8.6f}){m.fixtures.push_back({26,{10.75f,y},0,.55f,.55f,.95f,-kPi*.5f,true});m.fixtures.push_back({26,{12.85f,y},0,.55f,.55f,.95f,kPi*.5f,true});}
  m.fixtures.push_back({26,{11.8f,9.65f},0,.55f,.55f,.95f,0,true});
- for(Vec2 q:{Vec2{11.6f,6.6f},Vec2{12.f,8.4f}})m.fixtures.push_back({38,q,.78f,.3f,.08f,.32f,.4f,false});
+ for(Vec2 q:{Vec2{11.6f,6.6f},Vec2{12.f,8.4f}})kit::prop(m,38,(q).x,(q).y,m.layers.front().elevation+(.78f),.3f,.08f,.32f,.4f);
  wallSign(m,14.945f,7.5f,f+1.2f,"SHIFT 02 BRIEFING","DEPOT / PLATFORM 3 / DEEP FREIGHT / NO CHANGES",2.4f,-kPi*.5f);
  m.lights.push_back(lamp({11.8f,7.5f},ceil-.16f,.9f,6.f,4000));
  // --- Switch room, north-east -------------------------------------------------------------------
@@ -2368,8 +2369,8 @@ std::shared_ptr<const Map> makeManifestRouting(){
  for(float y:{5.f,6.6f})m.pipes.push_back({{15.3f,y},{15.3f,y},f+2.1f,.04f,ceil-.1f,1});
  m.fixtures.push_back({24,{15.6f,9.f},0,1.4f,.7f,.75f,kPi*.5f,true});
  m.fixtures.push_back({26,{16.45f,9.f},0,.55f,.55f,.95f,kPi*.5f,true});
- m.fixtures.push_back({27,{15.5f,9.2f},.75f,.42f,.4f,.38f,kPi*.5f,false});
- m.fixtures.push_back({28,{15.8f,8.95f},.75f,.45f,.16f,.03f,kPi*.5f,false});
+ kit::prop(m,27,15.5f,9.2f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,kPi*.5f);
+ kit::prop(m,28,15.8f,8.95f,m.layers.front().elevation+(.75f),.45f,.16f,.03f,kPi*.5f);
  m.fixtures.push_back({6,{16.2f,10.8f},0,1.4f,.7f,1.1f,0,true});
  for(float x=15.6f;x<22.6f;x+=.6f)wall(m,x,3.8f,x+.02f,11.2f,f,f+.006f,2);
  for(float y=3.8f;y<11.2f;y+=.6f)wall(m,15.4f,y,22.6f,y+.02f,f,f+.006f,2);
@@ -2390,11 +2391,11 @@ std::shared_ptr<const Map> makeManifestRouting(){
  wall(m,1.f,12.6f,1.5f,15.f,f+1.2f,f+1.25f,20);
  for(float y:{13.f,14.f})for(float z:{1.25f,1.7f})m.fixtures.push_back({30,{1.25f,y},z,.5f,.4f,.42f,kPi*.5f,false});
  // The routing supervisor's booth, east.
- officeGlass(m,19.f,12.6f,19.2f,18.4f,f,ceil);officeGlass(m,19.2f,12.6f,23.f,12.8f,f,ceil);
- officeGlass(m,19.2f,18.2f,19.8f,18.4f,f,ceil);officeDoorway(m,19.8f,21.f,18.2f,18.4f,f,ceil);officeGlass(m,21.f,18.2f,23.f,18.4f,f,ceil);
+ officeGlass(m,19.f,12.6f,19.2f,18.4f,f,ceil,true);officeGlass(m,19.2f,12.6f,23.f,12.8f,f,ceil,true);
+ officeGlass(m,19.2f,18.2f,19.8f,18.4f,f,ceil,true);officeDoorway(m,19.8f,21.f,18.2f,18.4f,f,ceil);officeGlass(m,21.f,18.2f,23.f,18.4f,f,ceil,true);
  terminal(m,{20.4f,16.4f},"MANIFEST / ROUTING SHUTTERS","TRANSFER YARD: ROUTING AUTHORIZATION.","E / RELEASE THE DOWNSTREAM SHUTTERS.",0,stateId("freight_routing"));
  m.fixtures.push_back({25,{21.8f,13.9f},0,1.6f,1.6f,.75f,kPi*.5f,true});
- m.fixtures.push_back({27,{22.2f,13.8f},.75f,.42f,.4f,.38f,-kPi*.5f,false});
+ kit::prop(m,27,22.2f,13.8f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,-kPi*.5f);
  m.fixtures.push_back({26,{20.4f,14.f},0,.55f,.55f,.95f,-kPi*.5f,true});
  m.lights.push_back(lamp({21.f,15.5f},ceil-.16f,.9f,6.f,4000));
  // --- Ceiling and light ------------------------------------------------------------------------

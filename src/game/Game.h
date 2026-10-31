@@ -154,7 +154,8 @@ struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
  int model=-1;std::array<float,3> dims{};float damage=0;bool authored=false,broken=false;Vec2 home{};float homeZ=0;StateId breakState=0;int soundOwner=-1;float blockedTime=0;
- PropMaterial material()const;float mass()const;
+ PropMaterial material()const;float mass()const;float supportHeight()const;
+ bool footprintContains(Vec2 point)const{auto d=point-pos;if(std::fabs(pitch)+std::fabs(roll)<.1f){float c=std::cos(yaw),s=std::sin(yaw);return std::fabs(d.x*c+d.y*s)<=dims[0]*.5f+.001f&&std::fabs(-d.x*s+d.y*c)<=dims[1]*.5f+.001f;}auto e=extent();return std::fabs(d.x)<=e[0]+.001f&&std::fabs(d.y)<=e[1]+.001f;}
  std::array<float,3> size()const{if(model>=0)return dims;constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
  std::array<float,3> rotate(float x,float y,float localZ)const{
   float cp=std::cos(pitch),sp=std::sin(pitch),cr=std::cos(roll),sr=std::sin(roll),cy=std::cos(yaw),sy=std::sin(yaw);
@@ -162,6 +163,8 @@ struct Clutter {
   return {cy*a-sy*c,sy*a+cy*c,d};
  }
  std::array<float,3> extent()const{auto s=size(),a=rotate(s[0]*.5f,0,0),b=rotate(0,s[1]*.5f,0),c=rotate(0,0,s[2]*.5f);return {std::fabs(a[0])+std::fabs(b[0])+std::fabs(c[0]),std::fabs(a[1])+std::fabs(b[1])+std::fabs(c[1]),std::fabs(a[2])+std::fabs(b[2])+std::fabs(c[2])};}
+ // Horizontal projection in model orientation; avoids empty world-AABB corners.
+ std::array<Vec2,9> footprintOffsets()const{auto local=*this;local.yaw=0;auto e=local.extent();std::array<Vec2,9> points;int i=0;float co=std::cos(yaw),si=std::sin(yaw);for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]})points[size_t(i++)]={x*co-y*si,x*si+y*co};return points;}
  float height()const{return extent()[2]*2;}
  float footprint()const{auto s=size();return std::max(s[0],s[1]);}
  Sound impactSound()const{if(model>=0)return propMaterialTraits(material()).impact;return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}

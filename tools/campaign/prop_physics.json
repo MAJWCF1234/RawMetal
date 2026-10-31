@@ -163,5 +163,165 @@
     "material": "Metal",
     "mass": 1.2,
     "health": 0
+  },
+  "item_id_card": {
+    "material": "Plastic",
+    "mass": 0.015,
+    "health": 0
+  },
+  "office_paper_sheet": {
+    "material": "Paper",
+    "mass": 0.005,
+    "health": 0
+  },
+  "office_pc_tower": {
+    "material": "Metal",
+    "mass": 8,
+    "health": 0
+  },
+  "packing_crate": {
+    "material": "Wood",
+    "mass": 9,
+    "health": 25,
+    "size": [
+      0.6,
+      0.42,
+      0.4
+    ]
+  },
+  "wooden_crate": {
+    "material": "Wood",
+    "mass": 9,
+    "health": 25,
+    "size": [
+      0.6,
+      0.6,
+      0.6
+    ]
+  },
+  "med_crutches": {
+    "material": "Metal",
+    "mass": 2,
+    "health": 0
+  },
+  "cctv_tv": {
+    "material": "Electronic",
+    "mass": 7,
+    "health": 0,
+    "size": [
+      0.5,
+      0.4,
+      0.42
+    ]
+  },
+  "coffee_machine": {
+    "material": "Metal",
+    "mass": 4,
+    "health": 0,
+    "size": [
+      0.35,
+      0.35,
+      0.45
+    ]
+  },
+  "office_chair": {
+    "material": "Metal",
+    "mass": 12,
+    "health": 0,
+    "size": [
+      0.55,
+      0.55,
+      0.95
+    ]
+  },
+  "wooden_chair": {
+    "material": "Wood",
+    "mass": 5,
+    "health": 20,
+    "size": [
+      0.417,
+      0.525,
+      0.95
+    ]
+  },
+  "wooden_table": {
+    "material": "Wood",
+    "mass": 14,
+    "health": 35,
+    "size": [
+      1.367,
+      0.724,
+      0.78
+    ]
+  },
+  "lab_boardroom_chair": {
+    "material": "Metal",
+    "mass": 10,
+    "health": 0
+  },
+  "office_armchair_green": {
+    "material": "Cloth",
+    "mass": 22,
+    "health": 0
+  },
+  "trash_can": {
+    "material": "Metal",
+    "mass": 3,
+    "health": 0,
+    "size": [
+      0.35,
+      0.35,
+      0.6
+    ]
+  },
+  "lab_specimen_crate": {
+    "material": "Wood",
+    "mass": 18,
+    "health": 35
+  },
+  "med_wheelchair": {
+    "material": "Metal",
+    "mass": 22,
+    "health": 0
+  },
+  "med_crash_cart": {
+    "material": "Metal",
+    "mass": 35,
+    "health": 0
+  },
+  "med_ward_bed": {
+    "material": "Metal",
+    "mass": 55,
+    "health": 0
+  },
+  "med_mattress_stained": {
+    "material": "Cloth",
+    "mass": 9,
+    "health": 0
+  },
+  "scrap_bedroll": {
+    "material": "Cloth",
+    "mass": 3,
+    "health": 0
+  },
+  "gas_cylinder": {
+    "material": "Metal",
+    "mass": 35,
+    "health": 0,
+    "size": [
+      0.3,
+      0.3,
+      1.4
+    ]
+  },
+  "ind_crate": {
+    "material": "Wood",
+    "mass": 35,
+    "health": 40
+  },
+  "ind_barrel": {
+    "material": "Metal",
+    "mass": 35,
+    "health": 0
   }
 }

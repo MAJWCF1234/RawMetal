@@ -68,7 +68,7 @@ void watLiveWater(Map& m,float x1,float y1,float x2,float y2,float surface,float
 }
 // A glazed partition from z: dado, glass with mullions, header.
 void watGlazed(Map& m,float x1,float y1,float x2,float y2,float z,float h=2.7f){
- wall(m,x1,y1,x2,y2,z,z+.95f,3);wall(m,x1,y1,x2,y2,z+.95f,z+h-.35f,17);wall(m,x1,y1,x2,y2,z+h-.35f,z+h,3);
+ wall(m,x1,y1,x2,y2,z,z+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,z+.95f,z+h-.35f,17,true);wall(m,x1,y1,x2,y2,z+h-.35f,z+h,3);
  bool alongX=x2-x1>y2-y1;float len=alongX?x2-x1:y2-y1;int n=std::max(1,int(len/1.5f+.5f));
  for(int i=1;i<n;++i){float t=(alongX?x1:y1)+len*i/n;
   if(alongX)wall(m,t-.03f,y1-.01f,t+.03f,y2+.01f,z+.95f,z+h-.35f,12);else wall(m,x1-.01f,t-.03f,x2+.01f,t+.03f,z+.95f,z+h-.35f,12);}
@@ -245,7 +245,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  for(float y:{1.8f,2.75f})m.fixtures.push_back({model::electrical_cabinet,{22.75f,y},G-F,.9066f,.4956f,2.2f,kPi*.5f,true});
  m.fixtures.push_back({model::lab_pa_horn,{14.6f,1.36f},G-F+2.05f,.49f,.56f,.43f,kPi,false});
  shelf(m,{15.2f,5.5f},0,G-F);
- for(Vec2 b:{Vec2{14.8f,5.45f},Vec2{15.5f,5.45f}})m.fixtures.push_back({model::binder,b,G-F+1.05f,.3f,.08f,.32f,0,false});
+ for(Vec2 b:{Vec2{14.8f,5.45f},Vec2{15.5f,5.45f}})kit::prop(m,model::binder,(b).x,(b).y,m.layers.front().elevation+(G-F+.972f),.3f,.08f,.32f,0);
  // Under the control room: the treatment MCC, still on the plant supply.
  for(float x:{15.2f,16.2f,17.2f,18.2f})m.fixtures.push_back({model::electrical_cabinet,{x,1.27f},0,.9066f,.4956f,2.2f,kPi,true});
  cableTray(m,{14.6f,1.4f},{19.f,1.4f},F+2.45f);
@@ -309,12 +309,12 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  wall(m,1.f,19.f,7.f,23.f,labTop,labTop+.15f,2);
  m.fixtures.push_back({model::lab_clean_bench,{2.45f,22.42f},0,1.18f,.56f,.81f,0,true});
  m.fixtures.push_back({model::lab_clean_bench,{3.65f,22.42f},0,1.18f,.56f,.81f,0,true});
- m.fixtures.push_back({model::lab_microscope,{2.25f,22.45f},.81f,.18f,.22f,.29f,0,false});
- m.fixtures.push_back({model::lab_field_meter,{3.45f,22.45f},.81f,.25f,.33f,.15f,0,false});
+ kit::prop(m,model::lab_microscope,2.25f,22.45f,m.layers.front().elevation+(.81f),.18f,.22f,.29f,0);
+ kit::prop(m,model::lab_field_meter,3.45f,22.45f,m.layers.front().elevation+(.81f),.25f,.33f,.15f,0);
  m.fixtures.push_back({model::lab_sample_fridge,{4.9f,22.55f},0,.7f,.85f,1.f,0,true});
  m.fixtures.push_back({model::med_scrub_sink,{6.3f,22.7f},0,.49f,.54f,1.13f,0,true});
  shelf(m,{1.27f,21.6f},-kPi*.5f,0);
- for(float y:{21.1f,21.6f,22.1f})m.fixtures.push_back({model::med_specimen_jar,{1.3f,y},1.05f,.15f,.15f,.24f,0,false});
+ for(float y:{21.1f,21.6f,22.1f})kit::prop(m,model::med_specimen_jar,1.3f,y,m.layers.front().elevation+(.972f),.15f,.15f,.24f,0);
  terminal(m,{5.5f,20.2f},"WATER LAB / CONDUCTIVITY","TOWER 2 BASIN 03:02: 9999 US/CM. METER LIMIT.","NO DOSING SINCE 01:40. MANUAL NOTE: IT IS NOT THE SALT.");
  m.terminals.back().yaw=.001f;
  // --- Structure and services -----------------------------------------------------------
@@ -337,7 +337,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  m.lights.push_back(lamp({2.f,9.6f},R-.3f,1.f,7.f,4300,.15f));
  // --- Encounters and script ------------------------------------------------------
  m.pickupSpawns={{{21.6f,5.2f},P::Ammo,G},{{2.f,20.4f},P::Health,F}};
- m.clutterSpawns={{4,{19.6f,4.6f},G},{2,{3.f,22.4f},F+.81f},{0,{18.3f,13.7f},F},{1,{6.8f,3.6f},F},{2,{17.2f,21.6f},F},{3,{21.2f,14.2f},F}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{4,{19.6f,4.6f},G},{2,{3.f,22.4f},F+.81f},{0,{18.3f,13.7f},F},{1,{6.8f,3.6f},F},{2,{17.2f,21.6f},F},{3,{21.2f,14.2f},F}});
  {auto e=watEvent("wat_hub_arrival",3,1,9,4,G-.5f,G+2,0);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
  // Back from the Sump Works with the plant dark behind you: two huntsmen have
  // come up out of the reservoir drains into the hall.
@@ -479,7 +479,7 @@ std::shared_ptr<const Map> makeDrainageGallery(){
  // --- Encounters and script ----------------------------------------------------------
  m.creatureSpawns={{C::Huntsman,{3.6f,4.2f}},{C::Huntsman,{15.f,3.f}}};
  m.pickupSpawns={{{2.4f,8.3f},P::Ammo,F},{{7.4f,21.6f},P::Health,F}};
- m.clutterSpawns={{0,{9.f,6.f},-999,.4f},{2,{7.5f,4.f},-999,1.1f},{0,{15.5f,6.6f},-999,2.f},{2,{17.3f,16.6f},-999,.3f},{3,{20.f,8.3f},F,0},{1,{12.f,21.f},F,.8f}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{0,{9.f,6.f},-999,.4f},{2,{7.5f,4.f},-999,1.1f},{0,{15.5f,6.6f},-999,2.f},{2,{17.3f,16.6f},-999,.3f},{3,{20.f,8.3f},F,0},{1,{12.f,21.f},F,.8f}});
  {auto e=watEvent("wat_drainage_arrival",18,12,24,20,F-.5f,F+2);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
  zone(m,"DRAINAGE GALLERY / CULVERT 2",5,14,18,18);
  zone(m,"DRAINAGE GALLERY / OVERFLOW GALLERY",1,1,23,9);
@@ -637,7 +637,7 @@ std::shared_ptr<const Map> makeSumpWorks(){
  // --- Encounters and script ---------------------------------------------------------
  m.creatureSpawns={{C::Huntsman,{16.75f,22.2f},F,1,0,watIsolated},{C::Huntsman,{21.5f,11.2f},F,1,0,watIsolated},{C::Huntsman,{10.2f,14.2f},F,1,0,watIsolated}};
  m.pickupSpawns={{{4.f,19.8f},P::Health,F},{{12.f,8.f},P::Ammo,G},{{21.5f,19.5f},P::Ammo,F}};
- m.clutterSpawns={{0,{12.8f,16.f},F},{3,{7.5f,21.4f},F},{1,{3.6f,21.6f},F},{1,{18.5f,3.6f},G},{2,{22.f,13.9f},F}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{0,{12.8f,16.f},F},{3,{7.5f,21.4f},F},{1,{3.6f,21.6f},F},{1,{18.5f,3.6f},G},{2,{22.f,13.9f},F}});
  {auto e=watEvent("wat_sump_arrival",7,0,13,5,G-.5f,G+2);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
  watHumPrime(m,"wat_sump_hum_prime","wat_sump_hum_ms",1,0,23,5,G-.5f,G+2.5f);
  // MCC-2 opens: the plant's water goes dead. Every live pool's hum stops, the
@@ -851,7 +851,7 @@ std::shared_ptr<const Map> makeCoolingTowersShell(){
  // --- Encounters and script ---------------------------------------------------------
  m.creatureSpawns={{C::Wasp,{19.6f,18.5f},L1}};
  m.pickupSpawns={{{12.f,8.f},P::Ammo,L3},{{18.6f,2.4f},P::Health,F}};
- m.clutterSpawns={{0,{20.8f,15.f},L1},{2,{6.f,20.5f},L2},{1,{21.f,7.f},L3}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{0,{20.8f,15.f},L1},{2,{6.f,20.5f},L2},{1,{21.f,7.f},L3}});
  {auto e=watEvent("wat_shell_apron",18,0,22,3.5f,F-.5f,F+2,watIsolated);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
  {auto e=watEvent("wat_fill_gallery",20,6,24,10,L3-.5f,L3+2);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
  zone(m,"COOLING TOWER 2 / FILL GALLERY EAST",20,6,24,10,L3-.5f,L3+3);
@@ -1026,7 +1026,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  // --- Encounters and script ----------------------------------------------------------------
  m.creatureSpawns={{C::Wasp,{17.5f,17.2f}},{C::Wasp,{4.f,15.6f}},{C::Huntsman,{20.5f,6.f}}};
  m.pickupSpawns={{{13.f,1.7f},P::Ammo,F},{{2.2f,20.2f},P::Health,F},{{19.4f,5.9f},P::Ammo,F}};
- m.clutterSpawns={{0,{4.2f,7.f},F},{2,{10.6f,19.9f},F},{1,{5.6f,21.2f},F},{3,{14.4f,6.4f},F},{0,{3.f,14.6f},F}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{0,{4.2f,7.f},F},{2,{10.6f,19.9f},F},{1,{5.6f,21.2f},F},{3,{14.4f,6.4f},F},{0,{3.f,14.6f},F}});
  {auto e=watEvent("wat_hx_arrival",0,5,5,10,F-.5f,F+2);e.actions.push_back(watCheckpoint());m.scriptEvents.push_back(e);}
  zone(m,"HEAT EXCHANGE / HX CONTROL",1,17.9f,6.5f,23);
  zone(m,"HEAT EXCHANGE / EXCHANGER ROWS",5,1,23,14.1f);

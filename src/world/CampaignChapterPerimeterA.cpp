@@ -45,12 +45,12 @@ void perDesk(Map& m,float x,float y,float f,float face,int variant){
  const float b=f-m.layers.front().elevation;
  m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face,true});
  m.fixtures.push_back({model::office_chair,at(variant%2?.15f:-.1f,-.78f),b,.55f,.55f,.95f,face+kPi+(variant%3-1)*.25f,true});
- m.fixtures.push_back({model::crt_monitor,at(-.1f,.12f),b+.75f,.42f,.4f,.38f,face+kPi,false});
- m.fixtures.push_back({model::keyboard,at(-.1f,-.2f),b+.75f,.45f,.16f,.03f,face+kPi,false});
- m.fixtures.push_back({model::desk_phone,at(.48f,.05f),b+.75f,.2f,.2f,.1f,face+kPi,false});
- if(variant%2)m.fixtures.push_back({model::mug,at(.42f,-.2f),b+.75f,.09f,.09f,.1f,0,false});
- if(variant%3==0)m.fixtures.push_back({model::binder,at(-.52f,.18f),b+.75f,.3f,.08f,.32f,face+kPi,false});
- if(variant%4==1)m.fixtures.push_back({model::pc_tower,at(.52f,.1f),b,.2f,.45f,.42f,face+kPi,false});
+ kit::prop(m,model::crt_monitor,(at(-.1f,.12f)).x,(at(-.1f,.12f)).y,m.layers.front().elevation+(b+.75f),.42f,.4f,.38f,face+kPi);
+ kit::prop(m,model::keyboard,(at(-.1f,-.2f)).x,(at(-.1f,-.2f)).y,m.layers.front().elevation+(b+.75f),.45f,.16f,.03f,face+kPi);
+ kit::prop(m,model::desk_phone,(at(.48f,.05f)).x,(at(.48f,.05f)).y,m.layers.front().elevation+(b+.75f),.2f,.2f,.1f,face+kPi);
+ if(variant%2)kit::prop(m,model::mug,(at(.42f,-.2f)).x,(at(.42f,-.2f)).y,m.layers.front().elevation+(b+.75f),.09f,.09f,.1f,0);
+ if(variant%3==0)kit::prop(m,model::binder,(at(-.52f,.18f)).x,(at(-.52f,.18f)).y,m.layers.front().elevation+(b+.75f),.3f,.08f,.32f,face+kPi);
+ if(variant%4==1)kit::prop(m,model::pc_tower,(at(.52f,.1f)).x,(at(.52f,.1f)).y,m.layers.front().elevation+(b),.2f,.45f,.42f,face+kPi);
 }
 // A CCTV camera on a wall bracket. (x,y) is on the wall face; (nx,ny) points
 // into the room along one axis; the camera looks along it, slightly down.
@@ -91,7 +91,7 @@ void perDoorwayY(Map& m,float x1,float x2,float y1,float y2,float f,float ceil){
  wall(m,x1-.02f,y1-.08f,x2+.02f,y2+.08f,f+2.12f,f+2.2f,20);wall(m,x1,y1,x2,y2,f+2.2f,ceil,21);
 }
 // A glazed partition along y (officeGlass handles both axes; this keeps a plaster dado).
-void perGlass(Map& m,float x1,float y1,float x2,float y2,float f,float ceil){officeGlass(m,x1,y1,x2,y2,f,ceil);}
+void perGlass(Map& m,float x1,float y1,float x2,float y2,float f,float ceil){officeGlass(m,x1,y1,x2,y2,f,ceil,true);}
 // A wall-hung item: a fixture mounted with its back on a wall face.
 void perWallFix(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw){perFix(m,model,x,y,z,w,d,h,yaw,false);}
 // A lamp switched by a state: lit while it is set, or (invert) until it is; flicker 0..1.
@@ -114,7 +114,7 @@ const AuthoredLayerData* perDeck(const Map& m,float z){for(const auto& l:m.layer
 // A glazed band from z1 to z2 in a wall run: glass between steel mullions, sill and head.
 void perWindow(Map& m,float x1,float y1,float x2,float y2,float z1,float z2,float bay=1.2f){
  const bool ax=x2-x1>y2-y1;const float c=ax?(y1+y2)*.5f:(x1+x2)*.5f,len=ax?x2-x1:y2-y1,a=ax?x1:y1,b=ax?x2:y2;
- if(ax)wall(m,x1,c-.01f,x2,c+.01f,z1,z2,17);else wall(m,c-.01f,y1,c+.01f,y2,z1,z2,17);
+ if(ax)kit::breakable(m,x1,c-.01f,x2,c+.01f,z1,z2,17,true);else kit::breakable(m,c-.01f,y1,c+.01f,y2,z1,z2,17,true);
  const int n=std::max(1,int(len/bay+.5f));
  for(int i=0;i<=n;++i){float s=std::clamp(a+len*i/n-.03f,a,b-.06f);
   if(ax)wall(m,s,y1,s+.06f,y2,z1,z2,12);else wall(m,x1,s,x2,s+.06f,z1,z2,12);}
@@ -125,7 +125,7 @@ void perWindow(Map& m,float x1,float y1,float x2,float y2,float z1,float z2,floa
 void perCurtain(Map& m,float x1,float y1,float x2,float y2,float f,float top){
  const bool ax=x2-x1>y2-y1;const float c=ax?(y1+y2)*.5f:(x1+x2)*.5f,len=ax?x2-x1:y2-y1,a=ax?x1:y1,b=ax?x2:y2;
  wall(m,x1,y1,x2,y2,f,f+.3f,12);
- if(ax)wall(m,x1,c-.012f,x2,c+.012f,f+.3f,top,17);else wall(m,c-.012f,y1,c+.012f,y2,f+.3f,top,17);
+ if(ax)kit::breakable(m,x1,c-.012f,x2,c+.012f,f+.3f,top-.08f,17,true);else kit::breakable(m,c-.012f,y1,c+.012f,y2,f+.3f,top-.08f,17,true);
  const int n=std::max(1,int(len/1.5f+.5f));
  for(int i=0;i<=n;++i){float s=std::clamp(a+len*i/n-.04f,a,b-.08f);
   if(ax)wall(m,s,y1,s+.08f,y2,f+.3f,top,12);else wall(m,x1,s,x2,s+.08f,f+.3f,top,12);}
@@ -250,7 +250,7 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
   wall(m,22.15f,y-.22f,22.55f,y+.22f,f+.63f,f+.7f,10);wall(m,22.2f,y-.18f,22.5f,y+.18f,f+.7f,f+.78f,23);}
  // The tool drop: shelving on the north wall east of the shutter.
  for(float x:{16.f,18.f})m.fixtures.push_back({model::metal_shelf,{x,1.35f},0,1.8f,.5f,1.8f,0,true});
- for(float x:{15.6f,16.4f,17.7f,18.5f})m.fixtures.push_back({model::packing_crate,{x,1.35f},.92f,.5f,.36f,.3f,0,false});
+ for(float x:{15.6f,16.4f,17.7f,18.5f})kit::prop(m,model::packing_crate,x,1.35f,m.layers.front().elevation+(.972f),.5f,.36f,.3f,0);
  // Clean line paint across the whole floor.
  floorLine(m,1.f,6.25f,23.f,6.45f,f,13);
  floorLine(m,10.3f,1.5f,10.42f,6.25f,f,14);floorLine(m,13.58f,1.5f,13.7f,6.25f,f,14);
@@ -270,9 +270,9 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  wall(m,15.15f,4.35f,18.35f,4.95f,f,f+.95f,21);wall(m,15.1f,4.3f,18.4f,5.f,f+.95f,f+.99f,20);
  terminal(m,{15.75f,6.1f},"CLEAN LINE / TURNSTILE LOG","T2 FORCED 03:12 / BADGE: NONE / ALARM ACK.","RESPONSE: CLEANUP DELTA-2. INCIDENT CLOSED.");
  m.terminals.back().yaw=kPi*.5f;
- perFix(m,model::crt_monitor,16.3f,4.65f,f+.99f,.42f,.4f,.38f,0,false);
+ kit::prop(m,model::crt_monitor,16.3f,4.65f,f+.99f,.42f,.4f,.38f,0);
  perFix(m,model::cctv_tv,17.5f,4.65f,f+.99f,.5f,.4f,.42f,0,false);
- perFix(m,model::desk_phone,16.9f,4.7f,f+.99f,.2f,.2f,.1f,0,false);
+ kit::prop(m,model::desk_phone,16.9f,4.7f,f+.99f,.2f,.2f,.1f,0);
  m.lights.push_back(lamp({16.9f,5.6f},ceil-.16f,.8f,4.5f,4000,.1f));
  // An emergency lamp on the booth: lockdown red over the line.
  m.lights.push_back(lamp({14.99f,6.5f},f+2.75f,1.1f,5.f,1300,-.4f,WorldLightMount::Wall,kPi));
@@ -363,8 +363,8 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(float x=15.3f;x<18.5f;x+=.42f)wall(m,x,22.62f,x+.06f,22.85f,f+.1f,f+.22f,8);
  m.fixtures.push_back({model::wooden_table,{17.6f,18.4f},0,1.367f,.724f,.78f,0,true});
  for(float x:{17.1f,18.1f}){m.fixtures.push_back({model::wooden_chair,{x,17.6f},0,.417f,.525f,.95f,0,true});m.fixtures.push_back({model::wooden_chair,{x,19.2f},0,.417f,.525f,.95f,kPi,true});}
- perFix(m,model::mug,17.3f,18.3f,f+.78f,.09f,.09f,.1f,0,false);
- perFix(m,model::binder,17.9f,18.5f,f+.78f,.3f,.08f,.32f,.4f,false);
+ kit::prop(m,model::mug,17.3f,18.3f,f+.78f,.09f,.09f,.1f,0);
+ kit::prop(m,model::binder,17.9f,18.5f,f+.78f,.3f,.08f,.32f,.4f);
  terminal(m,{16.2f,15.f},"PERIMETER / DUTY BOARD","ORDER 7 IN EFFECT: NO STAFF PAST DELTA. NO EXCEPTIONS.","WRITTEN UNDER IT IN PEN: WHO SIGNED THIS?");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=0;
  perWallFix(m,model::lab_notice_board,18.4f,14.27f,f+.95f,1.2f,.07f,.9f,kPi);
@@ -475,7 +475,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
   perFix(m,model::office_chair,7.45f,3.95f,f+.12f,.55f,.55f,.95f,-kPi*.5f+.3f,true);
   wall(m,6.4f,2.52f,7.5f,2.9f,f+1.3f,f+1.34f,12);
   perFix(m,model::cctv_tv,6.8f,2.72f,f+1.34f,.5f,.4f,.42f,0,false);
-  perFix(m,model::binder,7.3f,2.68f,f+1.34f,.3f,.08f,.32f,0,false);
+  kit::prop(m,model::binder,7.3f,2.68f,f+1.34f,.3f,.08f,.32f,0);
   perWallFix(m,model::med_first_aid_box,6.38f,4.8f,f+1.35f,.37f,.12f,.35f,kPi*.5f);
   m.lights.push_back(lamp({7.6f,3.9f},top-.1f,.7f,3.5f,6200,.4f));
   }
@@ -544,7 +544,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  wall(m,4.92f,17.5f,5.28f,17.86f,zd+1.5f,zd+1.82f,8);wall(m,4.95f,17.47f,5.25f,17.5f,zd+1.53f,zd+1.79f,20);
  m.lights.push_back(lamp({5.1f,17.35f},zd+1.66f,2.f,12.f,6000,.05f,WorldLightMount::Bare));
  for(float x:{1.9f,2.68f})perFix(m,model::packing_crate,x,21.95f,f,.7f,.5f,.42f,0,true);
- perFix(m,model::packing_crate,2.3f,21.95f,f+.42f,.7f,.5f,.42f,.15f,false);
+ kit::prop(m,model::packing_crate,1.9f,21.95f,f+.42f,.7f,.5f,.42f,0);
 
  // --- Stock for the gun position, and the forklift that brought it ------------------------------
  forklift(m,21.5f,3.2f,f);
@@ -577,7 +577,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  perFix(m,model::ind_crate,20.45f,16.25f,f+.97f,.81f,.81f,.81f,-.2f,true);
 
  m.pickupSpawns={{{7.f,4.85f},PickupKind::Health,f+.12f},{{2.4f,4.f},PickupKind::Ammo,f},{{2.1f,21.f},PickupKind::Ammo,zd}};
- m.clutterSpawns={{2,{5.6f,6.f},f},{0,{9.f,8.4f},f},{2,{6.4f,11.8f},f},{0,{15.4f,17.6f},f},{2,{19.8f,12.f},f}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{2,{5.6f,6.f},f},{0,{9.f,8.4f},f},{2,{6.4f,11.8f},f},{0,{15.4f,17.6f},f},{2,{19.8f,12.f},f}});
  zone(m,"SECURITY PERIMETER / CHECK 1",6.2f,2.4f,9.f,5.4f);
  zone(m,"SECURITY PERIMETER / SENTRY 1",1,17,6,23,zd-.5f,1000);
  zone(m,"SECURITY PERIMETER / DELTA GATE",7.f,18.f,17.f,23.f);
@@ -708,7 +708,7 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  perWallFix(m,model::lab_id_scanner,9.2f,5.2f,f+1.1f,.3f,.06f,.41f,kPi*.5f);
  for(float x:{10.4f,12.f,13.6f})perFix(m,model::ticket_gate,x,8.f,f,1.f,.3f,1.f,0,true);
  perTable(m,9.5f,10.f,11.f,11.2f,f);
- perFix(m,model::crt_monitor,10.2f,10.6f,f+.86f,.42f,.4f,.38f,kPi,false);
+ kit::prop(m,model::crt_monitor,10.2f,10.6f,f+.86f,.42f,.4f,.38f,kPi);
  perSandbags(m,13.2f,10.f,15.f,10.6f,f,1.f);
  perFinish(m,9.4f,1.f,14.6f,22.f,f,14);
  // --- The holding cells: east wall, bars, the sealed door --------------------------------------
@@ -786,7 +786,7 @@ std::shared_ptr<const Map> makeAdministrativeLink(){
  officeWall(m,10.f,1.f,10.15f,9.f,o,ceil);officeWall(m,10.f,10.6f,10.15f,13.f,o,ceil);
  for(float y:{2.f,3.6f,5.2f})perFix(m,model::bookcase,10.6f,y,o,1.f,.4f,1.9f,kPi*.5f,true);
  // --- The security chief's office (west) -------------------------------------------------------
- officeWall(m,1.f,9.2f,6.5f,9.35f,o,ceil);officeGlass(m,6.5f,1.f,6.65f,7.4f,o,ceil);officeWall(m,6.5f,9.f,6.65f,9.35f,o,ceil);
+ officeWall(m,1.f,9.2f,6.5f,9.35f,o,ceil);officeGlass(m,6.5f,1.f,6.65f,7.4f,o,ceil,true);officeWall(m,6.5f,9.f,6.65f,9.35f,o,ceil);
  perFix(m,model::lab_exec_desk,3.8f,4.f,o,1.85f,.92f,.75f,kPi,true);
  perFix(m,model::lab_boardroom_chair,3.8f,3.f,o,.84f,.79f,.98f,0,true);
  perFix(m,model::bookcase,1.5f,6.f,o,1.f,.4f,1.9f,kPi*.5f,true);

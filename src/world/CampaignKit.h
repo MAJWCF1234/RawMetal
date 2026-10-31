@@ -259,10 +259,19 @@ inline void recessedFittings(Map& m,bool troffer=false){
 }
 // Paper left where it fell, over a box at absolute height z (a floor or a desk
 // top): loose sheets laid flat and every fifth a stack, scattered by `seed`.
-inline void paperDrift(Map& m,float x1,float y1,float x2,float y2,float z,int count,unsigned seed,bool loose=false){
+inline void paperDrift(Map& m,float x1,float y1,float x2,float y2,float z,int count,unsigned seed,bool loose=true){
  const float base=z-m.layers.front().elevation;unsigned h=seed*2654435761u+1;
  auto next=[&h]{h^=h<<13;h^=h>>17;h^=h<<5;return (h&0xffffu)/65535.f;};
- for(int i=0;i<count;++i){const float x=x1+(x2-x1)*next(),y=y1+(y2-y1)*next(),yaw=next()*kPi*2;
+ for(int i=0;i<count;++i){float x=0,y=0,yaw=0;
+  // Loose paper needs open floor, not a random point inside a chair or wall.
+  // Reject at creation so the seeded drift retains its region and piece count.
+  for(int attempt=0;attempt<128;++attempt){x=x1+(x2-x1)*next();y=y1+(y2-y1)*next();yaw=next()*kPi*2;if(!loose)break;
+   float w=i%5==4?.33f:.4f,d=i%5==4?.44f:.293f,co=std::cos(yaw),si=std::sin(yaw),ex=(std::fabs(co)*w+std::fabs(si)*d)*.5f,ey=(std::fabs(si)*w+std::fabs(co)*d)*.5f;bool clear=true;
+   for(const auto& v:m.structures)if(v.top>z+.025f&&v.bottom<z+.03f&&x+ex>v.x1&&x-ex<v.x2&&y+ey>v.y1&&y-ey<v.y2)clear=false;
+   for(const auto& f:m.fixtures)if(f.solid){float bottom=m.layers.front().elevation+f.base;if(bottom+f.height<=z+.025f||bottom>=z+.03f)continue;float c=std::cos(f.yaw),sn=std::sin(f.yaw),dx=x-f.position.x,dy=y-f.position.y;if(std::fabs(dx*c-dy*sn)<f.width*.5f+std::fabs(c)*ex+std::fabs(sn)*ey&&std::fabs(dx*sn+dy*c)<f.depth*.5f+std::fabs(sn)*ex+std::fabs(c)*ey)clear=false;}
+   for(const auto& p:m.clutterSpawns)if(p.kind==ClutterModelKind&&p.z<z+.03f&&p.z+p.height>z+.01f){float c=std::cos(p.yaw),sn=std::sin(p.yaw),px=(std::fabs(c)*p.width+std::fabs(sn)*p.depth)*.5f,py=(std::fabs(sn)*p.width+std::fabs(c)*p.depth)*.5f;if(std::fabs(x-p.position.x)<ex+px&&std::fabs(y-p.position.y)<ey+py)clear=false;}
+   if(clear)break;
+  }
   if(loose){if(i%5==4)m.clutterSpawns.push_back({7,{x,y},z,-yaw,model::office_paper_stack,.33f,.44f,.03f});else m.clutterSpawns.push_back({7,{x,y},z+.001f*(i%4),-yaw,model::office_paper_sheet,.4f,.293f,.004f});continue;}
   if(i%5==4)m.fixtures.push_back({model::office_paper_stack,{x,y},base,.33f,.44f,.03f,yaw,false});
   else m.fixtures.push_back({model::office_paper_sheet,{x,y},base+.001f*(i%4),.4f,.293f,.004f,yaw,false});}
@@ -471,12 +480,18 @@ inline void officeWall(Map& m,float x1,float y1,float x2,float y2,float f,float 
  wall(m,x1,y1,x2,y2,f,ceil,21);
  wall(m,x1-.01f,y1-.01f,x2+.01f,y2+.01f,f,f+.1f,20);
 }
+inline void breakable(Map&,float,float,float,float,float,float,int,bool,StateId,StateId,float);
+// Split only the pane volume; the original authored frames stay in place.
+inline void glazingPanes(Map&m,float x1,float y1,float x2,float y2,float lo,float hi,int material=17,bool holds=false,StateId broken=0,StateId trigger=0,float health=0){
+ bool along=x2-x1>y2-y1;float len=along?x2-x1:y2-y1;int bays=std::max(1,int(len/1.2f+.5f));
+ for(int i=0;i<bays;++i){float a=(along?x1:y1)+len*i/bays,b=(along?x1:y1)+len*(i+1)/bays;if(along)breakable(m,a,y1,b,y2,lo,hi,material,holds,broken,trigger,health);else breakable(m,x1,a,x2,b,lo,hi,material,holds,broken,trigger,health);}
+}
 // A glazed partition: plaster dado, glass with aluminium mullions every
 // 1.2 m and transom, plaster bulkhead to the ceiling.
-inline void officeGlass(Map& m,float x1,float y1,float x2,float y2,float f,float ceil){
+inline void officeGlass(Map& m,float x1,float y1,float x2,float y2,float f,float ceil,bool holds=false){
  wall(m,x1,y1,x2,y2,f,f+.9f,21);wall(m,x1-.01f,y1-.01f,x2+.01f,y2+.01f,f+.88f,f+.94f,20);
  bool alongX=x2-x1>y2-y1;float cx=(x1+x2)*.5f,cy=(y1+y2)*.5f;
- if(alongX)wall(m,x1,cy-.01f,x2,cy+.01f,f+.94f,f+2.3f,17);else wall(m,cx-.01f,y1,cx+.01f,y2,f+.94f,f+2.3f,17);
+ if(alongX)kit::glazingPanes(m,x1,cy-.01f,x2,cy+.01f,f+.94f,f+2.3f,17,holds,0,0,0);else kit::glazingPanes(m,cx-.01f,y1,cx+.01f,y2,f+.94f,f+2.3f,17,holds,0,0,0);
  float len=alongX?x2-x1:y2-y1;int bays=std::max(1,int(len/1.2f+.5f));
  for(int i=0;i<=bays;++i){float t=(alongX?x1:y1)+len*i/bays;
   if(alongX)wall(m,std::min(t,x2-.06f),y1,std::min(t+.06f,x2),y2,f+.94f,f+2.3f,20);else wall(m,x1,std::min(t,y2-.06f),x2,std::min(t+.06f,y2),f+.94f,f+2.3f,20);}
@@ -510,20 +525,23 @@ inline void officeDoorway(Map& m,float x1,float x2,float y1,float y2,float f,flo
 inline void prop(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw,StateId breakState=0){m.clutterSpawns.push_back({ClutterModelKind,{x,y},z,-yaw,model,w,d,h,0,0,breakState});}
 inline void prop(Map& m,int model,float x,float y,float z,float yaw,float scale=1.f,StateId breakState=0){const auto&s=model::propSize[model];prop(m,model,x,y,z,s[0]*scale,s[1]*scale,s[2]*scale,yaw,breakState);}
 inline void propPose(Map& m,int model,float x,float y,float z,float yaw,float pitch,float roll,float scale=1.f){prop(m,model,x,y,z,yaw,scale);auto&p=m.clutterSpawns.back();p.pitch=pitch;p.roll=roll;}
+inline void propPose(Map&m,int model,float x,float y,float z,float w,float d,float h,float yaw,float pitch,float roll){prop(m,model,x,y,z,w,d,h,yaw);m.clutterSpawns.back().pitch=pitch;m.clutterSpawns.back().roll=roll;}
 inline void deskSet(Map& m,Vec2 center,float top,float face,int variant){
  auto place=[&](int model,float x,float y,float scale=1.f){float c=std::cos(face),s=std::sin(face);prop(m,model,center.x+x*c+y*s,center.y-x*s+y*c,top,face+kPi,scale);};
  place(model::crt_monitor,-.10f,.12f);place(model::keyboard,-.10f,-.20f);place(model::desk_phone,.48f,.05f);
  switch((variant%4+4)%4){case 0:place(model::binder,-.52f,.18f);break;case 1:place(model::mug,.42f,-.20f);break;case 2:{const auto&s=model::propSize[model::lab_desk_lamp];place(model::lab_desk_lamp,-.50f,.12f,std::min(1.f,.26f/std::max(s[0],s[1])));break;}case 3:place(model::med_pill_bottle,.42f,-.20f);break;}
 }
-inline void workstation(Map& m,float x,float y,float f,int facing,int variant,bool loose=false){
+inline void workstation(Map& m,float x,float y,float f,int facing,int variant,bool loose=true){
  float base=f-m.layers.front().elevation,seat=facing>0?0.f:kPi,screen=facing>0?kPi:0.f,s=float(facing);
  m.fixtures.push_back({24,{x,y},base,1.4f,.7f,.75f,seat,true});
  // The office chair model faces -y at yaw 0, the opposite of the desk set.
  m.fixtures.push_back({26,{x+(variant%2?.15f:-.1f),y-s*.78f},base,.55f,.55f,.95f,seat+kPi+(variant%3-1)*.25f,true});
- if(loose){deskSet(m,{x,y},f+.75f,seat,variant);
-  // Stage 1 desks still collide as solid boxes down to the floor. The tower
-  // remains its existing non-solid fixture until furniture cavities exist.
-  if(variant%4==1)m.fixtures.push_back({29,{x+.52f,y+s*.1f},base,.2f,.45f,.42f,screen,false});return;}
+ if(loose){
+  prop(m,27,x-.1f,y+s*.12f,f+.75f,.42f,.4f,.38f,screen);prop(m,28,x-.1f,y-s*.2f,f+.75f,.45f,.16f,.03f,screen);prop(m,33,x+.48f,y+s*.05f,f+.75f,.2f,.2f,.1f,screen);
+  if(variant%2)prop(m,34,x+.42f,y-s*.2f,f+.75f,.09f,.09f,.1f,0);
+  if(variant%3==0)prop(m,38,x-.52f,y+s*.18f,f+.75f,.3f,.08f,.32f,screen);
+  if(variant%4==1)prop(m,29,x+.52f,y+s*.1f,f,.2f,.45f,.42f,screen);return;}
+
  m.fixtures.push_back({27,{x-.1f,y+s*.12f},base+.75f,.42f,.4f,.38f,screen,false});
  m.fixtures.push_back({28,{x-.1f,y-s*.2f},base+.75f,.45f,.16f,.03f,screen,false});
  m.fixtures.push_back({33,{x+.48f,y+s*.05f},base+.75f,.2f,.2f,.1f,screen,false});

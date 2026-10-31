@@ -143,14 +143,14 @@ std::shared_ptr<const Map> makePowerDistribution(){
  // East wall: sill, head, two piers and a glazed screen with one mullion.
  wall(m,8.05f,1.f,8.2f,6.85f,base,base+1.f,3);wall(m,8.05f,1.f,8.2f,6.85f,base+2.3f,room,3);
  wall(m,8.05f,1.f,8.2f,1.6f,base+1.f,base+2.3f,3);wall(m,8.05f,6.3f,8.2f,6.85f,base+1.f,base+2.3f,3);
- wall(m,8.11f,1.6f,8.14f,6.3f,base+1.f,base+2.3f,17);
+ kit::breakable(m,8.11f,1.6f,8.14f,6.3f,base+1.f,base+2.3f,17,true);
  wall(m,8.06f,3.9f,8.19f,4.f,base+1.f,base+2.3f,20);
  for(float z:{base+1.f,base+2.26f})wall(m,8.03f,1.6f,8.22f,6.3f,z,z+.04f,20);
  wall(m,1.f,1.f,8.2f,7.f,room,room+.15f,2);
  for(float y:{1.5f,2.37f,3.24f,4.11f})m.fixtures.push_back({model::psx_locker,{1.345f,y},0,.64f,.85f,2.42f,0,true}); // backs on the wall, doors east
  m.fixtures.push_back({model::bench,{2.95f,2.8f},0,1.86f,.44f,.63f,kPi*.5f,true});
  m.fixtures.push_back({model::metal_shelf,{4.7f,1.27f},0,1.8f,.5f,1.8f,0,true});
- for(float x:{4.2f,4.65f,5.1f})m.fixtures.push_back({model::mine_hard_hat,{x,1.27f},1.8f,.28f,.35f,.15f,0,false});
+ for(float x:{4.2f,4.65f,5.1f})kit::prop(m,model::mine_hard_hat,x,1.27f,m.layers.front().elevation+(1.8f),.28f,.35f,.15f,0);
  m.fixtures.push_back({model::pwr_fire_cabinet,{3.f,6.75f},1.1f,.25f,.2f,.56f,kPi,false});
  m.fixtures.push_back({model::med_first_aid_box,{4.1f,6.78f},1.35f,.37f,.12f,.35f,kPi,false});
  terminal(m,{6.6f,1.75f},"PERMIT TO WORK / POWER DISTRIBUTION","OPEN 01:40: SUBSTATION A (OYELARAN, VASK). LOAD CONTROL (HALE).","SIGNED OUT: NONE. ALL PERMITS VOIDED 02:31 BY CLEANUP COMMAND.");m.terminals.back().readable=Readable::Letter;
@@ -336,7 +336,7 @@ std::shared_ptr<const Map> makeDistributionHub(){
  // --- The dead technician by the eastern lane -----------------------------------------------
  machineryClock(m,"pwr_hub_body",60000);
  pwrBody(m,"pwr_hub_body",{17.4f,19.6f},base,2.2f);pwrBlood(m,{17.f,19.9f},base,.6f);
- m.fixtures.push_back({model::mine_hard_hat,{16.4f,20.6f},0,.28f,.35f,.15f,.6f,false});
+ kit::prop(m,model::mine_hard_hat,16.4f,20.6f,m.layers.front().elevation+(0),.28f,.35f,.15f,.6f);
  m.clutterSpawns.push_back({2,{19.2f,20.4f},base});m.clutterSpawns.push_back({0,{8.f,19.f},base,.5f});
  m.pickupSpawns.push_back({{20.4f,3.4f},PickupKind::Ammo,base});
  m.pickupSpawns.push_back({{2.6f,14.6f},PickupKind::Health,base});

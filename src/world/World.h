@@ -51,10 +51,10 @@ struct WorldLight {
  // other fixture model is drawn flush under its mounting surface at this
  // size, turned by yaw (a clinic's recessed fluorescent, say).
  int fitting=-1;float fittingWidth=0,fittingDepth=0,fittingHeight=0;
- bool shadows=true;
+ bool shadows=true;int prop=-1,propLevel=-1;
  // Power can change while the map runs (Game::lampPower), so renderers keep
  // this lamp out of their baked caches and apply its power every frame.
- bool switchable()const{return enabledState||invert||period>0||flicker>0;}
+ bool switchable()const{return enabledState||invert||period>0||flicker>0||prop>=0;}
  Point3 emitter()const{
   if(mount==WorldLightMount::Wall)return {position.x+std::cos(yaw)*.16f,position.y+std::sin(yaw)*.16f,z};
   return {position.x,position.y,z};

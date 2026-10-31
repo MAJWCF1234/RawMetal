@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include "Game.h"
+#include <cstdlib>
 #include "../world/CampaignMaps.h"
 #include "../world/ModelIds.h"
 #include <fstream>
@@ -35,6 +36,8 @@ bool Game::auditMap(int level){
  Game game(WorldId::Campaign);game.loadLevel(level,false);return auditMapScene(game,level);
 }
 bool Game::auditMapScene(Game& game,int level){
+ // Movable heavy props yield to sustained pushing and are not fixed route gates.
+ for(auto&c:game.m_clutter)if(c.model>=0)c.blockedTime=.5f;
  // Doors stand open: the audit asks what is reachable, not what is unlocked.
  for(int i=0;i<int(game.m_world.doors().size());++i)game.m_world.openDoor(i);
  game.m_world.updateDoors(2,true);
@@ -130,23 +133,30 @@ bool Game::auditMapScene(Game& game,int level){
   if(!w.fits(s.position.x,s.position.y,(s.z>-900?s.z:w.supportBelow(s.position.x,s.position.y,w.floorHeight(s.position.x,s.position.y)+.5f))+.03f,.3f,false))fail("STUCK "+name);}
  for(const auto& c:w.clutterSpawns())if(c.kind!=ClutterModelKind&&!w.fits(c.position.x,c.position.y,(c.z>-900?c.z:w.supportBelow(c.position.x,c.position.y,w.floorHeight(c.position.x,c.position.y)+.5f))+.03f,.2f,false))fail("STUCK clutter at "+at(c.position));
  int propCount=0;
+ // Sample the model footprint, not the empty corners of its world AABB.
+ auto footprint=[](const Clutter& c){auto points=c.footprintOffsets();for(auto& p:points)p+=c.pos;return points;};
+ auto intersects=[](const Clutter& a,const Clutter& b){auto aa=a,bb=b;aa.yaw=bb.yaw=0;auto ae=aa.extent(),be=bb.extent();Vec2 ax{std::cos(a.yaw),std::sin(a.yaw)},ay{-ax.y,ax.x},bx{std::cos(b.yaw),std::sin(b.yaw)},by{-bx.y,bx.x},d=b.pos-a.pos;for(Vec2 n:{ax,ay,bx,by})if(std::fabs(dot(d,n))>=ae[0]*std::fabs(dot(ax,n))+ae[1]*std::fabs(dot(ay,n))+be[0]*std::fabs(dot(bx,n))+be[1]*std::fabs(dot(by,n))-.01f)return false;return true;};
  for(const auto&c:game.m_clutter)if(c.model>=0){++propCount;auto e=c.extent();std::string name="prop model "+std::to_string(c.model)+" at "+at(c.pos);float low=1e9f,high=-1e9f;bool buried=false;
-  for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]}){auto p=c.pos+Vec2{x,y};float support=w.supportBelow(p.x,p.y,c.z+.05f);for(const auto&other:game.m_clutter)if(&c!=&other&&other.model>=0&&!other.broken){auto oe=other.extent();if(std::fabs(p.x-other.pos.x)<=oe[0]&&std::fabs(p.y-other.pos.y)<=oe[1]&&other.z+other.height()<=c.z+.025f)support=std::max(support,other.z+other.height());}low=std::min(low,support);high=std::max(high,support);buried|=!w.fits(p.x,p.y,c.z+.011f,std::max(.001f,c.height()-.02f),true,true);}
+  for(auto p:footprint(c)){float support=w.supportBelow(p.x,p.y,c.z+.05f,true);for(const auto&other:game.m_clutter)if(&c!=&other&&other.model>=0&&!other.broken){auto oe=other.extent();if(other.footprintContains(p)&&other.z+other.supportHeight()<=c.z+.025f)support=std::max(support,other.z+other.supportHeight());}low=std::min(low,support);high=std::max(high,support);buried|=!w.fits(p.x,p.y,c.z+.011f,std::max(.001f,c.height()-.02f),true,true);}
+  if(std::getenv("RAWMETAL_AUDIT_VERBOSE"))report<<"PROP "<<c.model<<" at "<<c.pos.x<<' '<<c.pos.y<<" z "<<c.z<<" dims "<<c.dims[0]<<' '<<c.dims[1]<<' '<<c.dims[2]<<" yaw "<<-c.yaw<<" support "<<low<<' '<<high<<" buried "<<buried<<'\n';
   if(c.z-high>.02f)fail("FLOATING "+name);if(c.z-high<-.01f||buried)fail("BURIED "+name);if(high-low>.04f)fail("HANGING "+name);
-  if(c.mass()>60||std::max({c.dims[0],c.dims[1],c.dims[2]})>1.6f)fail("TOO HEAVY "+name);
-  for(const auto&f:w.fixtures())if(f.solid){float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(std::min(c.z+c.height(),base+f.height)-std::max(c.z,base)<=.01f)continue;bool overlap=false;float cosine=std::cos(f.yaw),sine=std::sin(f.yaw);for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]}){auto delta=c.pos+Vec2{x,y}-f.position;if(std::fabs(delta.x*cosine-delta.y*sine)<f.width*f.core*.5f&&std::fabs(delta.x*sine+delta.y*cosine)<f.depth*f.core*.5f)overlap=true;}if(overlap)fail("OVERLAP "+name+" with solid fixture");}
-  const auto&own=model::propSize[c.model];float minRatio=1e9f,maxRatio=0;for(int a=0;a<3;++a)if(own[a]>0){minRatio=std::min(minRatio,c.dims[a]/own[a]);maxRatio=std::max(maxRatio,c.dims[a]/own[a]);}if(maxRatio>minRatio*1.2f)fail("DISTORTED "+name);
-  for(const auto&other:game.m_clutter)if(&other>&c&&other.model>=0){auto oe=other.extent();if(std::min(c.z+c.height(),other.z+other.height())-std::max(c.z,other.z)>.01f&&std::fabs(c.pos.x-other.pos.x)<e[0]+oe[0]-.01f&&std::fabs(c.pos.y-other.pos.y)<e[1]+oe[1]-.01f)fail("OVERLAP "+name);}
+  if(c.mass()>60||std::max({c.dims[0],c.dims[1],c.dims[2]})>3.f)fail("TOO HEAVY "+name);
+  for(const auto&f:w.fixtures())if(f.solid){float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(std::min(c.z+c.height(),base+f.height)-std::max(c.z,base)<=.01f)continue;bool overlap=false;float cosine=std::cos(f.yaw),sine=std::sin(f.yaw);for(auto p:footprint(c)){auto delta=p-f.position;if(std::fabs(delta.x*cosine-delta.y*sine)<f.width*f.core*.5f&&std::fabs(delta.x*sine+delta.y*cosine)<f.depth*f.core*.5f)overlap=true;}if(overlap){bool surface=false;for(auto p:footprint(c)){auto delta=p-f.position;float px=std::fabs(delta.x*cosine-delta.y*sine),py=std::fabs(delta.x*sine+delta.y*cosine);if(px>=f.width*f.core*.5f||py>=f.depth*f.core*.5f)continue;float top=w.fixtureSurface(f,p.x,p.y,c.z+.011f,true),bottom=w.fixtureSurface(f,p.x,p.y,c.z+.011f,false);surface|=top<c.z+c.height()-.01f||bottom>c.z+.025f;}if(surface)fail("OVERLAP "+name+" with solid fixture");}}
+  const auto&own=model::propSize[c.model];float minRatio=1e9f,maxRatio=0;for(int a=0;a<3;++a)if(own[a]>0){minRatio=std::min(minRatio,c.dims[a]/own[a]);maxRatio=std::max(maxRatio,c.dims[a]/own[a]);}if(model::size[c.model][0]>0&&maxRatio>minRatio*1.2f)fail("DISTORTED "+name);
+  for(const auto&other:game.m_clutter)if(&other>&c&&other.model>=0){auto oe=other.extent();if(std::min(c.z+c.supportHeight(),other.z+other.supportHeight())-std::max(c.z,other.z)>.01f&&intersects(c,other))fail("OVERLAP "+name);}
  }
  if(propCount>120)report<<"WARN "<<propCount<<" props exceeds 120 per chunk\n";
  for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];std::string name="breakable["+std::to_string(i)+"]";
   if(b.x1<.3f||b.y1<.3f||b.x2>23.7f||b.y2>23.7f)fail("OUTSIDE/AT SEAM "+name);
   float floor=w.floorHeight((b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f);bool below=b.bottom<=floor+.2f,above=false;
   for(int j=0;j<int(w.structures().size());++j)if(!w.isBreakableStructure(j)){const auto&s=w.structures()[j];bool xy=s.x1<=b.x2+.03f&&s.x2>=b.x1-.03f&&s.y1<=b.y2+.03f&&s.y2>=b.y1-.03f;if(!xy)continue;below|=std::fabs(s.top-b.bottom)<=.03f;above|=std::fabs(s.bottom-b.top)<=.03f;}
-  if(!below||!above)fail("FRAMELESS "+name);
-  for(const auto&f:w.fixtures())if(f.solid){float z=w.floorHeight(f.position.x,f.position.y)+f.base;if(z>=b.top||z+f.height<=b.bottom)continue;float c=std::cos(f.yaw),s=std::sin(f.yaw);float ex=(std::fabs(c)*f.width+std::fabs(s)*f.depth)*.5f,ey=(std::fabs(s)*f.width+std::fabs(c)*f.depth)*.5f;if(f.position.x+ex>b.x1&&f.position.x-ex<b.x2&&f.position.y+ey>b.y1&&f.position.y-ey<b.y2)fail("OVERLAP "+name+" solid fixture");}
+  bool left=false,right=false;bool along=b.x2-b.x1>b.y2-b.y1;
+  for(int j=0;j<int(w.structures().size());++j)if(!w.isBreakableStructure(j)){const auto&s=w.structures()[j];if(s.bottom>b.bottom+.03f||s.top<b.top-.03f)continue;if(along&&s.y1<=b.y2+.03f&&s.y2>=b.y1-.03f){left|=std::fabs(s.x2-b.x1)<=.03f;right|=std::fabs(s.x1-b.x2)<=.03f;}if(!along&&s.x1<=b.x2+.03f&&s.x2>=b.x1-.03f){left|=std::fabs(s.y2-b.y1)<=.03f;right|=std::fabs(s.y1-b.y2)<=.03f;}}
+  if((!below||!above)&&!(left&&right)&&b.fixture<0)fail("FRAMELESS "+name);
+  for(const auto&f:w.fixtures())if(f.solid&&int(&f-w.fixtures().data())!=b.fixture){float z=w.floorHeight(f.position.x,f.position.y)+f.base;if(z>=b.top||z+f.height<=b.bottom)continue;float c=std::cos(f.yaw),s=std::sin(f.yaw);float ex=(std::fabs(c)*f.width+std::fabs(s)*f.depth)*.5f,ey=(std::fabs(s)*f.width+std::fabs(c)*f.depth)*.5f;if(f.position.x+ex>b.x1&&f.position.x-ex<b.x2&&f.position.y+ey>b.y1&&f.position.y-ey<b.y2)fail("OVERLAP "+name+" solid fixture");}
  }
- if(!w.breakables().empty()){auto saved=game.m_world;for(int i=0;i<int(w.breakables().size());++i)if(!w.breakables()[i].holds)game.m_world.damageBreakable(i,1000000);auto opened=flood(Player::CrouchedHeight+.02f);int newly=0;for(size_t i=0;i<opened.visited.size();++i)if(visited[i].empty()&&!opened.visited[i].empty())++newly;game.m_world=std::move(saved);if(newly)report<<"INFO REACHABLE ONLY THROUGH GLASS: "<<newly<<" cells\n";}
+ if(!w.breakables().empty()){auto saved=game.m_world;for(int i=0;i<int(w.breakables().size());++i)if(!w.breakables()[i].holds)game.m_world.damageBreakable(i,1000000);auto opened=flood(Player::CrouchedHeight+.02f);int newly=0;for(size_t i=0;i<opened.visited.size();++i)if(visited[i].empty()&&!opened.visited[i].empty()){++newly;if(std::getenv("RAWMETAL_AUDIT_VERBOSE"))report<<"GLASS CELL "<<(i%N+.5f)*Cell<<' '<<(i/N+.5f)*Cell<<' '<<opened.visited[i].front()<<'\n';}game.m_world=std::move(saved);report<<"INFO REACHABLE ONLY THROUGH GLASS: "<<newly<<" cells\n";}
+ if(!w.breakables().empty()){auto saved=game.m_world;for(int i=0;i<int(w.doors().size());++i)if(game.doorLocked(w.doors()[i]))game.m_world.setDoor(i,0,false);auto sealed=flood(Player::CrouchedHeight+.02f);for(int i=0;i<int(w.breakables().size());++i)if(!w.breakables()[i].holds&&w.breakables()[i].material==17)game.m_world.damageBreakable(i,1000000);auto opened=flood(Player::CrouchedHeight+.02f);int cells=0;for(size_t i=0;i<opened.visited.size();++i)cells+=sealed.visited[i].empty()&&!opened.visited[i].empty();report<<"INFO LOCKED-STATE GLASS REACHABILITY: "<<cells<<" cells"<<'\n';game.m_world=std::move(saved);}
  // A terminal is usable only from a reachable spot within 1.5 m that sees it.
  auto usable=[&](const Terminal& t){
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;
@@ -389,7 +399,7 @@ bool Game::auditMapScene(Game& game,int level){
  // Clutter is dropped, kicked and left where people stood. Pieces scattered
  // across a hall can fall on one line by chance; what reads as a row is four
  // of them within arm's reach of each other along it.
- {const auto& junk=w.clutterSpawns();bool lined=false;
+ {std::vector<ClutterSpawn> junk;for(const auto& c:w.clutterSpawns())if(c.kind!=ClutterModelKind)junk.push_back(c);bool lined=false;
   for(size_t i=0;i<junk.size()&&!lined;++i)for(size_t j=i+1;j<junk.size()&&!lined;++j){
    const Vec2 a=junk[i].position,b=junk[j].position,d=b-a;const float span=length(d);
    if(span<.2f)continue;

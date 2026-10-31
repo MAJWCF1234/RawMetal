@@ -320,7 +320,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  // updateScripts checks the region for every event, including state-gated events.
  for(size_t i=0;i<map->scriptEvents.size();++i){const auto& e=map->scriptEvents[i];if(!e.id||e.x2<=e.x1||e.y2<=e.y1)reject("scriptEvent",i,"id="+std::to_string(e.id)+" bounds="+std::to_string(e.x1)+","+std::to_string(e.y1)+","+std::to_string(e.x2)+","+std::to_string(e.y2));}
- for(size_t i=0;i<map->clutterSpawns.size();++i){const auto&v=map->clutterSpawns[i];if(v.kind<0||v.kind>7||(v.kind==7&&(v.model<0||v.model>=FacilityModelCount||!(v.width>0&&v.width<=1.6f&&v.depth>0&&v.depth<=1.6f&&v.height>0&&v.height<=1.6f)||!std::isfinite(v.position.x)||!std::isfinite(v.position.y)||!std::isfinite(v.z)||!std::isfinite(v.yaw)||!std::isfinite(v.pitch)||!std::isfinite(v.roll))))reject("prop",i,"invalid model, dimensions or pose");}
+ for(size_t i=0;i<map->clutterSpawns.size();++i){const auto&v=map->clutterSpawns[i];if(v.kind<0||v.kind>7||(v.kind==7&&(v.model<0||v.model>=FacilityModelCount||!(v.width>0&&v.width<=3.f&&v.depth>0&&v.depth<=3.f&&v.height>0&&v.height<=3.f)||!std::isfinite(v.position.x)||!std::isfinite(v.position.y)||!std::isfinite(v.z)||!std::isfinite(v.yaw)||!std::isfinite(v.pitch)||!std::isfinite(v.roll))))reject("prop",i,"invalid model, dimensions or pose");}
  for(size_t i=0;i<map->breakables.size();++i){const auto&v=map->breakables[i];if(!(v.x1>=.3f&&v.y1>=.3f&&v.x2<=23.7f&&v.y2<=23.7f&&v.x2>v.x1&&v.y2>v.y1&&v.bottom<v.top&&std::isfinite(v.bottom)&&std::isfinite(v.top)&&v.health>=0&&std::isfinite(v.health)&&v.fixture>=-1&&v.fixture<int(map->fixtures.size())&&(v.fixture<0||v.part!=0)&&(v.material==17||v.material==10||v.material==22||v.material==23)))reject("breakable",i,"invalid bounds, material or terrain");}
  if(!invalid.str().empty())throw std::runtime_error(invalid.str());
  const auto& lift=map->cargoLift;
@@ -373,7 +373,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_actorPoses.clear();for(const auto& track:m_mapData->actorTracks)m_actorPoses.push_back(track.idleKeys.empty()?sampleActor(track,0):sampleActorKeys(track.idleKeys,0,true));
  m_openNorthBoundary=m_mapData->openNorth;m_openSouthBoundary=m_mapData->openSouth;
  m_openWestBoundary=m_mapData->openWest;m_openEastBoundary=m_mapData->openEast;
- m_doors=m_mapData->doors;m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;
+ m_doors=m_mapData->doors;m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;for(auto&l:m_lights)if(l.prop>=0)l.propLevel=level();
  m_creatureSpawns=m_mapData->creatureSpawns;m_pickupSpawns=m_mapData->pickupSpawns;m_clutterSpawns=m_mapData->clutterSpawns;
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_scriptEvents=m_mapData->scriptEvents;
@@ -1234,7 +1234,7 @@ float World::supportBelow(float x,float y,float feet,bool cavities)const{
 }
 float World::supportBelowUncached(float x,float y,float feet,bool cavities)const{
  float fixtureTop=-100;
- for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y)){
+ for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y,cavities?.001f:0)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(cavities){fixtureTop=std::max(fixtureTop,fixtureSurface(f,x,y,feet,false));continue;}
   if(f.model==7)for(float tier:ShelfTiers){float top=base+f.height*tier;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
@@ -1420,10 +1420,13 @@ float World::fixtureSurface(const Fixture&f,float x,float y,float feet,bool ceil
  float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw),u=std::fabs(dx*c-dy*s),v=std::fabs(dx*s+dy*c);
  auto slab=[&](float lo,float hi){lo+=base;hi+=base;if(ceiling){if(hi>feet+.025f)result=std::min(result,std::max(feet,lo));}else if(lo<=feet+.025f)result=std::max(result,hi);};
  bool table=f.model==model::desk||f.model==model::desk_corner||f.model==model::wooden_table;
- bool chair=f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair;
+ bool chair=f.model==model::platform_chair||f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair||f.model==model::med_wheelchair;
  if(f.model==model::metal_shelf){for(float t:ShelfTiers)slab(f.height*t-.045f,f.height*t);if(u>f.width*.5f-.04f&&v>f.depth*.5f-.04f)slab(0,f.height);}
+ else if(f.model==model::bookcase){for(float t:{.013196f,.208428f,.405952f,.60448f,.804564f,1.f})slab(f.height*(t-.009f),f.height*t);if(u>f.width*.5f-.025f||dy*c+dx*s>f.depth*.5f-.025f)slab(0,f.height);}
+ else if(f.model==model::office_bookcase){for(float t:{.012f,.2624f,.534f,.7668f,1.f})slab(f.height*t-.03f,f.height*t);if(u>f.width*.5f-.025f||dy*c+dx*s>f.depth*.5f-.025f)slab(0,f.height);}
  else if(table){slab(f.height-.065f,f.height);if(u>f.width*.5f-.07f&&v>f.depth*.5f-.07f)slab(0,f.height);}
- else if(chair){slab(f.height*.43f,f.height*.5f);if(u>f.width*.5f-.055f&&v>f.depth*.5f-.055f)slab(0,f.height*.5f);if(dy*c+dx*s>f.depth*.5f-.07f)slab(f.height*.5f,f.height);}
+ else if(chair){float seat=f.model==model::med_wheelchair?.57f:f.model==model::platform_chair?.525f:.5f;slab(f.height*(seat-.07f),f.height*seat);if(u>f.width*.5f-.055f&&v>f.depth*.5f-.055f)slab(0,f.height*.5f);if(dy*c+dx*s>f.depth*.5f-.07f)slab(f.height*.5f,f.height);}
+ else if(f.model==model::med_crash_cart){slab(f.height*.18f,f.height*.21f);slab(f.height*.77f,f.height*.809f);if(u>f.width*.5f-.035f&&v>f.depth*.5f-.035f)slab(0,f.height);}
  else if(f.model==model::office_file_cabinet_open){for(float t:{.04f,.5f,1.f})slab(f.height*t-.03f,f.height*t);if(u>f.width*.5f-.04f||dy*c+dx*s>f.depth*.5f-.04f)slab(0,f.height);}
  else slab(0,f.height);
  return result;

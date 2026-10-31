@@ -13,7 +13,7 @@ using namespace kit;
 // --- PerimeterB kit (pb) ---------------------------------------------------------------
 // A glazed screen: painted dado, glass between mullions, painted header.
 void pbGlazed(Map& m,float x1,float y1,float x2,float y2,float f,float top=2.6f){
- wall(m,x1,y1,x2,y2,f,f+.95f,3);wall(m,x1,y1,x2,y2,f+.95f,f+2.3f,17);wall(m,x1,y1,x2,y2,f+2.3f,f+top,3);
+ wall(m,x1,y1,x2,y2,f,f+.95f,3);kit::glazingPanes(m,x1,y1,x2,y2,f+.95f,f+2.3f,17,true);wall(m,x1,y1,x2,y2,f+2.3f,f+top,3);
  const bool alongX=x2-x1>y2-y1;const float len=alongX?x2-x1:y2-y1;const int bays=std::max(1,int(len/1.5f+.5f));
  for(int i=1;i<bays;++i){float t=(alongX?x1:y1)+len*i/bays;
   if(alongX)wall(m,t-.03f,y1-.01f,t+.03f,y2+.01f,f+.95f,f+2.3f,20);else wall(m,x1-.01f,t-.03f,x2+.01f,t+.03f,f+.95f,f+2.3f,20);}
@@ -107,11 +107,11 @@ void pbOpenCrate(Map& m,float x,float y,float f,float s=1.1f){
 }
 // Clean-side glazing: panel dado, pale steel sill, glass with mullions every
 // 1.2 m, transom, panel bulkhead up to the absolute height `top`.
-void pbLabGlass(Map& m,float x1,float y1,float x2,float y2,float f,float top,int mat=28,float sill=.95f,float head=2.4f){
+void pbLabGlass(Map& m,float x1,float y1,float x2,float y2,float f,float top,int mat=28,float sill=.95f,float head=2.4f,bool holds=true){
  wall(m,x1,y1,x2,y2,f,f+sill,mat);
  wall(m,x1-.015f,y1-.015f,x2+.015f,y2+.015f,f+sill-.03f,f+sill+.03f,20);
  const bool alongX=x2-x1>y2-y1;const float cx=(x1+x2)*.5f,cy=(y1+y2)*.5f;
- if(alongX)wall(m,x1,cy-.012f,x2,cy+.012f,f+sill+.03f,f+head,17);else wall(m,cx-.012f,y1,cx+.012f,y2,f+sill+.03f,f+head,17);
+ if(alongX)kit::glazingPanes(m,x1,cy-.012f,x2,cy+.012f,f+sill+.03f,f+head,17,holds);else kit::glazingPanes(m,cx-.012f,y1,cx+.012f,y2,f+sill+.03f,f+head,17,holds);
  const float len=alongX?x2-x1:y2-y1;const int bays=std::max(1,int(len/1.2f+.5f));
  for(int i=0;i<=bays;++i){float t=(alongX?x1:y1)+len*i/bays;
   if(alongX)wall(m,std::min(t,x2-.05f),y1,std::min(t+.05f,x2),y2,f+sill+.03f,f+head,20);
@@ -126,11 +126,11 @@ void pbDesk(Map& m,float x,float y,float f,float face,int variant){
  const float b=f-m.layers.front().elevation;
  m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face,true});
  m.fixtures.push_back({model::office_chair,at(variant%2?.15f:-.1f,-.78f),b,.55f,.55f,.95f,face+kPi+(variant%3-1)*.25f,true});
- m.fixtures.push_back({model::crt_monitor,at(-.1f,.12f),b+.75f,.42f,.4f,.38f,face+kPi,false});
- m.fixtures.push_back({model::keyboard,at(-.1f,-.2f),b+.75f,.45f,.16f,.03f,face+kPi,false});
- m.fixtures.push_back({model::desk_phone,at(.48f,.05f),b+.75f,.2f,.2f,.1f,face+kPi,false});
- if(variant%2)m.fixtures.push_back({model::mug,at(.42f,-.2f),b+.75f,.09f,.09f,.1f,0,false});
- if(variant%3==0)m.fixtures.push_back({model::binder,at(-.52f,.18f),b+.75f,.3f,.08f,.32f,face+kPi,false});
+ kit::prop(m,model::crt_monitor,(at(-.1f,.12f)).x,(at(-.1f,.12f)).y,m.layers.front().elevation+(b+.75f),.42f,.4f,.38f,face+kPi);
+ kit::prop(m,model::keyboard,(at(-.1f,-.2f)).x,(at(-.1f,-.2f)).y,m.layers.front().elevation+(b+.75f),.45f,.16f,.03f,face+kPi);
+ kit::prop(m,model::desk_phone,(at(.48f,.05f)).x,(at(.48f,.05f)).y,m.layers.front().elevation+(b+.75f),.2f,.2f,.1f,face+kPi);
+ if(variant%2)kit::prop(m,model::mug,(at(.42f,-.2f)).x,(at(.42f,-.2f)).y,m.layers.front().elevation+(b+.75f),.09f,.09f,.1f,0);
+ if(variant%3==0)kit::prop(m,model::binder,(at(-.52f,.18f)).x,(at(-.52f,.18f)).y,m.layers.front().elevation+(b+.75f),.3f,.08f,.32f,face+kPi);
 }
 // An armed Cleanup man on an authored beat. A role other than Default needs a
 // squad; enable keeps him on his mark (idle) until that state is set.
@@ -237,7 +237,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  for(float x:{18.8f,20.9f})m.fixtures.push_back({model::office_chair,{x,4.15f},fd-base,.55f,.55f,.95f,x<19?.2f:-.5f,true});
  m.fixtures.push_back({model::file_cabinet_wide,{22.7f,8.f},fd-base,.9f,.5f,.75f,-kPi*.5f,true});
  m.fixtures.push_back({model::cctv_tv,{22.7f,8.f},fd-base+.75f,.5f,.4f,.42f,-kPi*.5f,false});
- m.fixtures.push_back({model::binder,{22.6f,7.55f},fd-base+.75f,.3f,.08f,.32f,-kPi*.5f,false});
+ kit::prop(m,model::binder,22.68f,7.65f,m.layers.front().elevation+(fd-base+.75f),.3f,.08f,.32f,0);
  // The duty engineer: shot at his console when he would not open the lock.
  pbBody(m,"ere_util_clock",ActorVisual::Worker,{21.2f,4.9f},fd,2.2f);
  pbBlood(m,20.5f,4.5f,21.9f,5.4f,fd);pbBlood(m,21.f,5.4f,21.4f,6.1f,fd);
@@ -335,7 +335,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  // --- Encounters and rewards ----------------------------------------------------------
  m.creatureSpawns={{CreatureKind::Huntsman,{6.2f,18.4f},base}};
  m.pickupSpawns={{{1.9f,12.2f},PickupKind::Health,base},{{19.6f,3.f},PickupKind::Ammo,base},{{4.4f,6.f},PickupKind::Ammo,fd}};
- m.clutterSpawns={{3,{18.6f,2.2f},base},{4,{20.4f,6.4f},base},{2,{9.f,12.f},base},{0,{14.f,13.f},base},{1,{19.7f,7.4f},fd}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{3,{18.6f,2.2f},base},{4,{20.4f,6.4f},base},{2,{9.f,12.f},base},{0,{14.f,13.f},base},{1,{19.7f,7.4f},fd}});
  zone(m,"RESTRICTED UTILITIES / CASCADE CONTROL",17,1,23,9,fd-.5f,1000);
  zone(m,"RESTRICTED UTILITIES / FAN DECK",1,1,17,7,fd-.5f,1000);
  zone(m,"RESTRICTED UTILITIES / UPS ROOM",17.2f,1,23,8.8f,-100,fd-.5f);
@@ -466,8 +466,8 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  pbFix(m,model::lab_specimen_crate,16.2f,7.6f,base+.16f,1.08f,1.08f,1.08f,.1f,true);
  // Inspection bench: specimen 4471 unpacked, its seal broken.
  pbFix(m,model::lab_clean_bench,14.7f,14.75f,base,1.18f,.56f,.81f,0,true);
- pbFix(m,model::lab_scope_monitor,15.f,14.8f,base+.81f,.47f,.34f,.45f,0,false);
- pbFix(m,model::lab_field_meter,14.35f,14.7f,base+.81f,.25f,.33f,.15f,0,false);
+ kit::prop(m,model::lab_scope_monitor,15.f,14.8f,base+.81f,.47f,.34f,.45f,0);
+ kit::prop(m,model::lab_field_meter,14.35f,14.7f,base+.81f,.25f,.33f,.15f,0);
  pbFix(m,model::pallet,13.f,14.6f,base,1.2f,1.15f,.16f,0,true);
  pbOpenCrate(m,13.f,14.6f,base+.16f);
  pbFix(m,model::lab_anomaly_relic,13.f,14.6f,base+.64f,.5f,.4f,.4f,.6f,false);
@@ -551,7 +551,7 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  // R-114 has an 8 cm steel floor; occupants and supplies stand on it.
  m.creatureSpawns={{CreatureKind::Huntsman,{3.6f,5.3f},base+.08f},{CreatureKind::Chimera,{5.6f,19.8f},base,1,0,wake},{CreatureKind::Huntsman,{12.f,20.4f},base}};
  m.pickupSpawns={{{2.2f,6.1f},PickupKind::Ammo,base+.08f},{{16.9f,1.6f},PickupKind::Health,base},{{9.2f,21.f},PickupKind::Ammo,gz},{{19.6f,18.4f},PickupKind::Health,base}};
- m.clutterSpawns={{3,{13.2f,3.7f},base},{4,{16.7f,3.8f},base},{0,{9.4f,15.2f},base},{2,{16.6f,16.2f},base},{1,{20.9f,20.5f},gz}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{3,{13.2f,3.7f},base},{4,{16.7f,3.8f},base},{0,{9.4f,15.2f},base},{2,{16.6f,16.2f},base},{1,{20.9f,20.5f},gz}});
  zone(m,"RESEARCH RECEIVING / CLEAN TRANSFER GALLERY",1,17,23,24,gz-.5f,1000);
  zone(m,"RESEARCH RECEIVING / RECEIVING OFFICE",12.4f,1,17.6f,4.2f);
  zone(m,"RESEARCH RECEIVING / STAFF LANE",18.1f,6.1f,23,23,-100,gz-.5f);
@@ -716,7 +716,7 @@ std::shared_ptr<const Map> makeDecontamination(){
  {auto e=pbEvent("ere_decon_release",0,0,24,24,-100,100,cycle);e.actions={pbSet(sealed,0),pbDoor(ScriptAction::Type::OpenDoor,5),pbSave()};m.scriptEvents.push_back(e);}
  // --- Rewards ----------------------------------------------------------------------------
  m.pickupSpawns={{{21.2f,5.8f},PickupKind::Ammo,f},{{2.f,13.8f},PickupKind::Health,f},{{19.4f,9.f},PickupKind::Ammo,f}};
- m.clutterSpawns={{0,{7.f,4.4f},f},{2,{3.f,16.4f},f},{1,{15.9f,5.6f},f}};
+ m.clutterSpawns.insert(m.clutterSpawns.end(),{{0,{7.f,4.4f},f},{2,{3.f,16.4f},f},{1,{15.9f,5.6f},f}});
  zone(m,"DECONTAMINATION / CHAMBER",9.4f,11.6f,14.6f,17.f);
  zone(m,"DECONTAMINATION / STAGE 2 SHOWER",9.4f,7.6f,14.6f,11.4f);
  zone(m,"DECONTAMINATION / OPERATOR BOOTH",15.2f,1.f,23.f,7.4f);
