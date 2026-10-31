@@ -401,3 +401,7 @@ All paths below are in src/world. Rows describe authored creation/run sites, inc
 ## Local delivery
 
 The release is integrated locally in engine-pass and main after checks, with user promotional changes preserved. RawMetal.exe is the verified v1.1.5 executable; the previous root executable is backed up under recovery evidence. The local release folder contains DepthWorks.exe, DepthWorks-v1.1.5.zip, version notes and SHA-256 checksums. The checked ZIP contains the executable and version notes. No remote push or release publication is part of this completion.
+
+## Subsequent visual review and publication request
+
+The user later requested a further visual check, followed by committing and publishing the checked copy as a GitHub release. The 156 additional rendered frames and their coverage limits are recorded in `docs/evidence/visual-review-v1.1.5.md`. No additional game-code defect was confirmed and compiled inputs remain unchanged. This later request supersedes the original local-only delivery scope.
