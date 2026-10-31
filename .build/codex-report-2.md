@@ -400,4 +400,4 @@ All paths below are in src/world. Rows describe authored creation/run sites, inc
 
 ## Local delivery
 
-The release is integrated locally in engine-pass and main after checks, with user promotional changes preserved. RawMetal.exe is the verified v1.1.5 executable; the previous root executable is backed up under recovery evidence. The local release folder contains DepthWorks.exe, DepthWorks-v1.1.5.zip, notes, a Windows guide and SHA-256 checksums. No remote push or release publication is part of this completion.
+The release is integrated locally in engine-pass and main after checks, with user promotional changes preserved. RawMetal.exe is the verified v1.1.5 executable; the previous root executable is backed up under recovery evidence. The local release folder contains DepthWorks.exe, DepthWorks-v1.1.5.zip, version notes and SHA-256 checksums. The checked ZIP contains the executable and version notes. No remote push or release publication is part of this completion.
