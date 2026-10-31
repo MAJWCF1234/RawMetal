@@ -51,6 +51,7 @@ struct WorldLight {
  // other fixture model is drawn flush under its mounting surface at this
  // size, turned by yaw (a clinic's recessed fluorescent, say).
  int fitting=-1;float fittingWidth=0,fittingDepth=0,fittingHeight=0;
+ bool shadows=true;
  // Power can change while the map runs (Game::lampPower), so renderers keep
  // this lamp out of their baked caches and apply its power every frame.
  bool switchable()const{return enabledState||invert||period>0||flicker>0;}

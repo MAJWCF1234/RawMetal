@@ -4,7 +4,7 @@
 // scene.frag and comes from the CPU per face.
 layout(location=0) in vec4 position;
 layout(location=1) in vec2 uv;
-layout(push_constant) uniform ShadowFace {vec4 lamp;vec4 forward;vec4 up;} p;
+layout(push_constant) uniform ShadowFace {vec4 lamp;vec4 forward;vec4 up;vec4 housing;vec4 turn;} p;
 layout(location=0) out vec3 toPoint;
 layout(location=1) out vec2 outUV;
 void main(){

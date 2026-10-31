@@ -103,7 +103,7 @@ bool SoftwareRenderer::testCreatureAnimation(){
  }
  workerReport<<"PASS: six skeletal clips, grounded poses and interpolated hand attachments on the Worker and five staff models\n";return true;
 }
-__declspec(noinline) bool SoftwareRenderer::testHardware(){
+__declspec(noinline) bool SoftwareRenderer::testHardware(bool glazingOnly){
  // Analytic texel/radiance expectations describe native source atlases.
  // Presentation upsampling is exercised by the ordinary gameplay smoke.
  struct NativeAtlasScope {
@@ -124,6 +124,11 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  // Material checks measure the scene shader itself, before the post pass grade.
  renderer.m_gpu->setPostProcessing(false);
  auto check=[&](bool condition,const char* label){report<<label<<": "<<(condition?"PASS":"FAIL")<<'\n';passed&=condition;};
+ // The reference display curve compresses bright values. Compare transmission
+ // in linear light, before that curve, rather than dividing displayed bytes.
+ auto linearLight=[](int pixel){float target=std::pow(pixel/255.f,2.2f),lo=0,hi=16;for(int i=0;i<24;++i){float x=(lo+hi)*.5f,mapped=(x*(2.51f*x+.03f))/(x*(2.43f*x+.59f)+.14f);if(mapped<target)lo=x;else hi=x;}return (lo+hi)*.5f;};
+
+ if(glazingOnly){Texture white{1,1,{0xffffffffu}};auto draw=[&](bool pane){renderer.m_gpu->begin(128,72);renderer.m_gpu->setView(0,0,0,0,0,128.f/72.f,false,0);renderer.m_gpuFrame=true;auto triangle=[&](const Texture&t,float z){renderer.triangle3D({{-.3f,-.3f,z},0,0},{{.3f,-.3f,z},1,0},{{0,.3f,z},.5f,1},t,1);};triangle(white,2);if(pane){triangle(renderer.m_glassTexture,1.01f);triangle(renderer.m_glassTexture,1);}renderer.m_gpu->finish(renderer.m_pixels);renderer.m_gpuFrame=false;return int(renderer.m_pixels[36*128+64]&255);};int direct=draw(false),through=draw(true);float ratio=linearLight(through)/std::max(.0001f,linearLight(direct));report<<"Glazing linear-light transmission "<<ratio<<" direct "<<direct<<" through "<<through<<'\n';check(ratio>=.70f&&ratio<=.82f,"Glossy glazing preserves 70-80 percent of the room brightness");return passed;}
  static_assert(std::is_aggregate_v<Texture>);
  {
   Texture original{2,1,{0xff010203u,0xff040506u}};auto originalId=original.generation.value;
@@ -320,6 +325,10 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(){
  begin();renderer.triangle3D({{.3f,-.3f,1},0,0},{{-.3f,-.3f,1},1,0},{{0,.3f,1},.5f,1},neutralDielectric,1,&frontal);auto freshHemisphere=finish();
  report<<"Opposite-side bake GGX: cached "<<blueChannel(cachedHemisphere)<<", fresh "<<blueChannel(freshHemisphere)<<'\n';
  check(std::abs(blueChannel(cachedHemisphere)-blueChannel(freshHemisphere))<=1&&blueChannel(cachedHemisphere)>30,"Static bake keeps physical normals when the first camera is behind a surface");
+ // Real glazing uses its texture alpha even with a strong specular highlight.
+ Texture white{1,1,{0xffffffffu}};begin();triangle(white,2);auto directGlassBackground=finish();
+ begin();triangle(white,2);triangle(renderer.m_glassTexture,1.01f);triangle(renderer.m_glassTexture,1);auto throughGlass=finish();
+ float glassTransmission=linearLight(blueChannel(throughGlass))/std::max(.0001f,linearLight(blueChannel(directGlassBackground)));report<<"Glazing linear-light transmission "<<glassTransmission<<" direct "<<blueChannel(directGlassBackground)<<" through "<<blueChannel(throughGlass)<<'\n';check(glassTransmission>=.70f&&glassTransmission<=.82f,"Glossy glazing preserves 70-80 percent of the room brightness");
  begin();triangle(red,1);renderer.m_gpu->clearDepth();triangle(blue,2);pixel=finish();check(blueChannel(pixel)>80&&redChannel(pixel)<blueChannel(pixel)/4,"View-model depth range remains independent");
  begin();renderer.triangle3D({{-.3f,-.1f,-.2f},0,0},{{.3f,-.1f,1},1,0},{{0,.3f,1},.5f,1},red,1);finish();size_t coverage=0;for(auto p:renderer.m_pixels)coverage+=(p&0xffffffu)!=0x0c1012u;check(coverage>100,"Near-plane clipping keeps crossing geometry");
  renderer.m_shadowBudgetLimit=10000000;

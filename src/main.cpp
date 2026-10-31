@@ -1455,7 +1455,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--approach-test"))return approachTest();
     if(commandArguments().find(L"--ashfall-performance")||commandArguments().find(L"--ashfall-performance-yard"))return ashfallPerformance(commandArguments().find(L"--ashfall-performance-yard")!=nullptr,false,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
     if(commandArguments().find(L"--performance-window")||commandArguments().find(L"--service-performance-window")||commandArguments().find(L"--door-performance-window")||commandArguments().find(L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
-    if(commandArguments().find(L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
+    if(commandArguments().find(L"--glazing-test"))return retro::SoftwareRenderer::testHardware(true)?0:36;
+     if(commandArguments().find(L"--vulkan-test"))return retro::SoftwareRenderer::testHardware()?0:36;
     if(commandArguments().find(L"--cleanup-split-test"))return retro::Mesh::testCleanupTankAim()?0:47;
     if(commandArguments().find(L"--lift-audio-test"))return retro::AudioEngine::testLiftMix()?0:33;
     if(commandArguments().find(L"--lift-inspection")){

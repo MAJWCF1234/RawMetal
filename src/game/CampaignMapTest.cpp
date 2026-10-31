@@ -209,6 +209,7 @@ bool Game::testCampaignMaps(){
   bool sealed=!doors.empty()&&doors[0].requireState==stateId("chapter2_open")&&g.doorLocked(doors[0]);check(sealed,"Research Intake's inner door is sealed in an ordinary playthrough");
   if(sealed){g.m_player.pos={12.f,1.6f};g.m_player.z=g.world().floorHeight(12.f,1.6f);g.m_player.angle=-kPi*.5f;
    g.executeConsole("unlock");check(!g.doorLocked(g.world().doors()[0])&&g.state(stateId("chapter2_open"))==1,"UNLOCK while facing the seal opens Chapter 2");}}
+ {Game g;g.m_level=67;g.restart();g.ensureChunk(68);int i=int(g.world().doors().size())-1;g.useDoor(i);g.updateStreaming(.1f);check(!g.state(stateId("chapter2_open"))&&g.m_chunks[68].world.doors()[0].open==0&&!g.m_chunks[68].world.doors()[0].opening,"opening chunk 67 never mirrors through the locked Chapter 2 seal");}
  // Chapter 2's first beats, played on their clocks.
  {Game g;g.m_level=68;g.restart();g.m_player.pos={12.f,2.2f};g.m_player.z=g.world().floorHeight(12.f,2.2f);g.m_god=true;
   for(int i=0;i<60*15;++i)g.update({},1.f/60);
@@ -225,10 +226,10 @@ bool Game::testCampaignMaps(){
   check(g.state(stateId("rf_admin_gone"))==1&&!g.doorLocked(g.world().doors()[1]),"He leaves by the far door, and records opens after");
   check(g.world().doors()[2].open<.05f,"The far door shuts behind him");}
  // Triage: the patient stays down while he is watched, and sits up once the player turns to the nurse.
- {Game g;g.m_level=72;g.restart();g.m_player.pos={13.f,11.f};g.m_player.z=g.world().floorHeight(13.f,11.f);g.m_player.angle=0;
+ {Game g;g.m_level=72;g.restart();g.m_player.pos={6.7f,9.8f};g.m_player.z=g.world().floorHeight(6.7f,9.8f);g.m_player.angle=std::atan2(-1.75f,-.95f);g.m_player.pitch=-20;
   for(int i=0;i<180;++i)g.update({},1.f/60);
   const bool down=g.state(stateId("md_triage_rise"))==0&&g.world().actorPose(1).phase>.95f;
-  g.m_player.pos={10.5f,6.f};g.m_player.z=g.world().floorHeight(10.5f,6.f);g.m_player.angle=kPi;
+  g.m_player.pos={4.5f,6.f};g.m_player.z=g.world().floorHeight(4.5f,6.f);g.m_player.angle=std::atan2(1.85f,-1.75f);g.m_player.pitch=-17;
   for(int i=0;i<240;++i)g.update({},1.f/60);
   out<<"triage: down="<<down<<" rise="<<g.state(stateId("md_triage_rise"))<<" phase="<<g.world().actorPose(1).phase<<" actors="<<g.world().actorTracks().size()<<'\n';
   check(down&&g.state(stateId("md_triage_rise"))>0&&g.world().actorPose(1).clip==5,"Triage: the patient sits up behind the player who turns to the nurse");}

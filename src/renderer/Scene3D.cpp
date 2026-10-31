@@ -444,7 +444,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
    for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
-    if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
+    if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=!fixture.shadows||w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
     brightness+=visibility*facing*weight;
    }
    return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+sunTerm(normal)+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f*(1.f-dark),4.f);
@@ -497,7 +497,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
     float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
     float visibility=0;
-    for(auto target:lightFrames[source].shadowSamples){if(shadowBudget<=0)continue;--shadowBudget;visibility+=w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
+    for(auto target:lightFrames[source].shadowSamples){if(shadowBudget<=0)continue;--shadowBudget;visibility+=!fixture.shadows||w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
     float contribution=(visibility/3.f)*(.04f+.96f*facing)*weight;
     if(!lampSwitchable[source])brightness+=contribution;
     else{switched+=lampPower(source)*contribution;if(shadowBudget>0)m_lightingCache.emplace(key|lampTag(source),contribution);}
@@ -526,7 +526,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     if(weight<=lights.weights[1])continue;
     auto start=center+delta*(.04f/std::sqrt(d2));
     if(shadowBudget<=0)continue;
-    auto target=lightFrames[source].target;--shadowBudget;if(!w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z))weight*=.04f;
+    auto target=lightFrames[source].target;--shadowBudget;if(fixture.shadows&&!w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z))weight*=.04f;
     if(weight<=lights.weights[1])continue;
     int slot=weight>lights.weights[0]?0:1;if(slot==0){lights.weights[1]=lights.weights[0];lights.directions[1]=lights.directions[0];}
     lights.weights[slot]=weight;lights.directions[slot]=delta*(1/std::sqrt(d2));
@@ -1718,7 +1718,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Extraction floor remains readable even before its gate unlocks.
  movingGeometry=false;
  if(w.hasLift()&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
- if(w.campaign())for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining(level)==0?m_routePaint:m_redPaint,1.f);}
+ if(w.campaign()&&!w.authored())for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining(level)==0?m_routePaint:m_redPaint,1.f);}
  // Alpha-blend damage into the rendered wall so its grain and lighting remain visible.
  static const Texture impact=[](){Texture t{24,24,std::vector<std::uint32_t>(24*24)};
   for(int y=0;y<24;++y)for(int x=0;x<24;++x){float dx=(x-11.5f)/11.5f,dy=(y-11.5f)/11.5f;

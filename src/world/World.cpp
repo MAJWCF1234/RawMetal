@@ -394,6 +394,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
 
  buildLayers(m_mapData->stairs);
+ // Keep recessed sources below their own opaque housing, including custom fittings.
+ for(auto&l:m_lights)if(l.mount==WorldLightMount::Ceiling&&l.fitting>=0){float mount=clearanceAbove(l.position.x,l.position.y,l.z);l.z=std::min(l.z,mount-l.fittingHeight-.06f);}
  if(hasLift())refreshReactorTerminals();
  // Outdoor wasteland custom packs own a world-space Surface Nets heightfield so
  // the facility and NPCs sit on dirt/rock instead of a flat authored slab.

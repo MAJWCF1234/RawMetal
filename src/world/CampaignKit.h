@@ -94,8 +94,8 @@ inline void container(Map& m,float x,float y,float floor,bool open=false,int mat
  for(float yy:{y,y+5.86f})wall(m,x-.04f,yy,x+3.06f,yy+.12f,floor+2.7f,floor+2.86f,12);
 }
 inline void floorLine(Map& m,float x1,float y1,float x2,float y2,float floor,int material=14){wall(m,x1,y1,x2,y2,floor+.007f,floor+.015f,material);}
-inline void wallLamp(Map& m,float x,float y,float z,float yaw,float intensity=1.f,float range=7.f){
- m.lights.push_back({{x,y},z,WorldLightMount::Wall,yaw,intensity,range});
+inline void wallLamp(Map& m,float x,float y,float z,float yaw,float intensity=1.f,float range=7.f,bool shadows=true){
+ m.lights.push_back({{x,y},z,WorldLightMount::Wall,yaw,intensity,range});m.lights.back().shadows=shadows;
 }
 inline void servicePipe(Map& m,Vec2 a,Vec2 b,float z,float radius,int paint){
  // An end within 0.7 m of a perimeter wall runs on into the wall face.
@@ -244,8 +244,8 @@ inline void recordsDesk(Map& m,float x,float y,float floor){
 // ---------------------------------------------------------------------------
 // Maps 0-3: the original facility, rebuilt as authored maps.
 // ---------------------------------------------------------------------------
-inline WorldLight lamp(Vec2 p,float z,float intensity,float range,float kelvin,float tint=0,WorldLightMount mount=WorldLightMount::Ceiling,float yaw=0){
- WorldLight l{p,z,mount,yaw,intensity,range};l.kelvin=kelvin;l.tint=tint;return l;
+inline WorldLight lamp(Vec2 p,float z,float intensity,float range,float kelvin,float tint=0,WorldLightMount mount=WorldLightMount::Ceiling,float yaw=0,bool shadows=true){
+ WorldLight l{p,z,mount,yaw,intensity,range};l.kelvin=kelvin;l.tint=tint;l.shadows=shadows;return l;
 }
 // Fits every ceiling lamp in the map that still has the original square
 // facility housing with one of the pack's recessed fittings, set flush into

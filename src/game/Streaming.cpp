@@ -29,11 +29,11 @@ void Game::useDoor(int index){
   for(int level=0;level<chunkCount();++level)if(level!=m_level){auto otherOrigin=chunkOffset(level);
    if(probe.x<otherOrigin.x||probe.x>=otherOrigin.x+World::Width||probe.y<otherOrigin.y||probe.y>=otherOrigin.y+World::Height)continue;
    ensureChunk(level);int best=boundaryPartner(level,door);
-   if(best>=0)m_chunks[level].world.setDoor(best,door.open,opening);break;
+   if(best>=0&&!doorLocked(m_chunks[level].world.doors()[best]))m_chunks[level].world.setDoor(best,door.open,opening);break;
   }
  }else{
-  if(door.transfer&&m_level+1<chunkCount()){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,opening);}
-  if(door.entry&&m_level>0){ensureChunk(m_level-1);auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,opening);}
+  if(door.transfer&&m_level+1<chunkCount()){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;if(!next.doors().empty()&&!doorLocked(next.doors()[0]))next.setDoor(0,door.open,opening);}
+  if(door.entry&&m_level>0){ensureChunk(m_level-1);auto&previous=m_chunks[m_level-1].world;if(!previous.doors().empty()&&!doorLocked(previous.doors().back()))previous.setDoor(int(previous.doors().size())-1,door.open,opening);}
  }
  sound(Sound::Door,.65f);
 }
@@ -66,7 +66,7 @@ void Game::updateStreaming(float dt){
     if(probe.x<other.x||probe.x>=other.x+24||probe.y<other.y||probe.y>=other.y+24)continue;
     needed|=door.opening||door.open>0;
     if(needed){ensureChunk(level);auto& target=m_chunks[level].world;
-     int partner=boundaryPartner(level,door);if(partner>=0)target.setDoor(partner,door.open,door.opening);
+     int partner=boundaryPartner(level,door);if(partner>=0&&!doorLocked(target.doors()[partner]))target.setDoor(partner,door.open,door.opening);
     }
    }
    if(needed)ensureChunk(level);else if(m_chunks[level].resident){m_chunks[level].world.unloadGeometry();m_chunks[level].resident=false;}
@@ -112,8 +112,8 @@ void Game::updateStreaming(float dt){
  // opaque leaves fully close, then release static geometry, retaining state.
  for(int index=0;index<int(m_world.doors().size());++index){auto door=m_world.doors()[index];
   if(!door.opening&&door.open>0&&m_player.pos.x>door.left-.25f&&m_player.pos.x<door.right+.25f&&std::fabs(m_player.pos.y-door.y)<.55f){m_world.openDoor(index);door=m_world.doors()[index];}
-  if(door.transfer&&m_level+1<chunkCount()){auto&next=m_chunks[m_level+1].world;next.setDoor(0,door.open,door.opening);}
-  if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
+  if(door.transfer&&m_level+1<chunkCount()){auto&next=m_chunks[m_level+1].world;if(!next.doors().empty()&&!doorLocked(next.doors()[0]))next.setDoor(0,door.open,door.opening);}
+  if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;if(!previous.doors().empty()&&!doorLocked(previous.doors().back()))previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
  }
  for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=friendlyNeeded[size_t(level)];
   auto approaching=[&](const Door& door){

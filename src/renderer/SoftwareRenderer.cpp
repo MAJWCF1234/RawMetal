@@ -206,9 +206,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    // Soft, even film of grime that gathers toward the bottom edge; faint
    // broad wipe marks; no bright specks (they read as stars, not dust).
    float wipe=std::fabs(std::sin((float(x)*.03f+std::sin(float(y)*.02f)*1.2f)));float smear=std::pow(1.f-wipe,10.f)*smooth(float(x),float(y),0x91u,32)*.5f;
-   float a=std::clamp(.14f+dust*.1f+smear*.12f+settle*settle*.1f,0.f,.5f);
+   float a=std::clamp(.115f+dust*.025f+smear*.025f,0.f,.16f);
    float l=std::clamp(.55f+dust*.12f+smear*.1f,0.f,1.f);
-   unsigned r=unsigned(l*170.f),g=unsigned(l*190.f),b=unsigned(l*196.f);
+   unsigned r=unsigned(l*35.f),g=unsigned(l*40.f),b=unsigned(l*44.f);
    t.pixels[size_t(y*n+x)]=(unsigned(a*255.f)<<24)|(r<<16)|(g<<8)|b;}
   t.transparent=true;t.glossStrength=.9f;return t;}();
  prepareDecal(m_glassTexture,false);
@@ -407,12 +407,12 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   m_coastSky.pixels[size_t(y*512+x)]=rgb(ir,ig,ib);
  }
  prepareDecal(m_coastSky,false);
- m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.glossStrength=.92f;auto coolantTint=[](uint32_t pixel){return 0xd6000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
+ m_water=loadTexture(250);attachNormal(m_water,251,true,0);m_water.transparent=true;m_water.liquid=true;m_water.glossStrength=.92f;auto coolantTint=[](uint32_t pixel){return 0xd6000000u|((pixel>>16&255)*90/100<<16)|((pixel>>8&255)*92/100<<8)|((pixel&255)*80/100);};for(auto& pixel:m_water.pixels)pixel=coolantTint(pixel);for(auto& mip:m_water.mips)for(auto& pixel:mip)pixel=coolantTint(pixel);attachNormal(m_wall,187);attachNormal(m_pressureWall,188);attachNormal(m_bulkhead,189);attachNormal(m_floor,190,true,0);
  m_serviceFloor=m_floor;
  auto liftServiceFloor=[](std::uint32_t&pixel){for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*1.45f))<<shift);}};
  for(auto&pixel:m_serviceFloor.pixels)liftServiceFloor(pixel);for(auto&level:m_serviceFloor.mips)for(auto&pixel:level)liftServiceFloor(pixel);
  m_serviceFloor.glossStrength=.42f;
- m_coastWater=loadTexture(250);attachNormal(m_coastWater,251,true,0);m_coastWater.transparent=true;m_coastWater.glossStrength=.90f;
+ m_coastWater=loadTexture(250);attachNormal(m_coastWater,251,true,0);m_coastWater.transparent=true;m_coastWater.liquid=true;m_coastWater.glossStrength=.90f;
  auto seaTint=[](std::uint32_t pixel){int gray=int(((pixel>>16)&255)*.30f+((pixel>>8)&255)*.59f+(pixel&255)*.11f);int delta=(gray-100)/3;
   return 0x58000000u|(std::uint32_t(std::clamp(32+delta,0,255))<<16)|(std::uint32_t(std::clamp(92+delta,0,255))<<8)|std::uint32_t(std::clamp(148+delta,0,255));};
 for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWater.mips)for(auto&pixel:mip)pixel=seaTint(pixel);
@@ -1357,15 +1357,15 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   if(pixelLighting!=m_pixelLighting){m_pixelLighting=pixelLighting;m_chunkLighting={};m_chunkNormalLighting={};m_gpu->clearStaticCaches();}
   // Switchable lamps keep their full intensity in the list (a stable key and
   // shadow maps) and their power goes in per frame beside it.
-  {std::vector<std::array<float,7>> lamps;std::vector<float> powers;
+  {std::vector<std::array<float,13>> lamps;std::vector<float> powers;
    for(int level=0;level<game.chunkCount();++level){if(level!=game.level()&&!game.chunkResident(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
-    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint});powers.push_back(game.lampPower(lamp));}
+    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint,lamp.shadows?1.f:0.f,lamp.fittingWidth*.5f,lamp.fittingDepth*.5f,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z)-lamp.fittingHeight,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z),lamp.yaw});powers.push_back(game.lampPower(lamp));}
    }
    if(lamps.size()>256){Point3 eye{m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye};
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}
     std::nth_element(order.begin(),order.begin()+256,order.end());order.resize(256);std::sort(order.begin(),order.end(),[](const auto&a,const auto&b){return a.second<b.second;});
-    std::vector<std::array<float,7>> nearest;std::vector<float> nearestPowers;for(auto&entry:order){nearest.push_back(lamps[entry.second]);nearestPowers.push_back(powers[entry.second]);}lamps.swap(nearest);powers.swap(nearestPowers);}
+    std::vector<std::array<float,13>> nearest;std::vector<float> nearestPowers;for(auto&entry:order){nearest.push_back(lamps[entry.second]);nearestPowers.push_back(powers[entry.second]);}lamps.swap(nearest);powers.swap(nearestPowers);}
    m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);m_gpu->setLampPowers(powers);
   }
   // Sun cascades: three view-frustum slices, each a texel-snapped square in

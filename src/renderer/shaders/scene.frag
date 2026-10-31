@@ -280,7 +280,7 @@ void main(){
  // Wet porous surfaces darken and their roughness collapses toward a mirror.
  float materialRoughness=clamp(1.0-fract(surface.z),0.18,1.0),wetness=0.0;
  // A liquid: a blended surface with near-mirror gloss reflects like a puddle.
- bool liquid=surface.z>=2.0&&surface.z<3.0&&fract(surface.z)>=0.85;
+ bool liquid=surface.z>=3.0&&surface.z<4.0;
  if(liquid){materialRoughness=0.04;wetness=1.0;}
  if(surface.z<0.5&&surface.w>0.5&&surface.w<1.5&&lampGrid.sunColor.w>0.0){
   vec3 Nw=normalize(cross(dx,dy));if(dot(Nw,view.eyeYaw.xyz-worldPos)<0.0)Nw=-Nw;

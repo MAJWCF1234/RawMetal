@@ -418,7 +418,7 @@ struct GpuRenderer::Impl {
  FullscreenStage taaStage,exposureStage;std::array<Image,2> taaImages{};std::array<VkFramebuffer,2> taaFrames{};std::array<VkImageLayout,2> taaLayouts{VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_UNDEFINED};
  bool tiltShift=true; // composite cinematic lens: DOF, vignette, CA, grain (window only)
  float lensDepthOfField=1,lensEffects=1; // player settings, 1 = the tuned look
- int taaWrite=0;bool taaEnabled=true,taaRan=false,taaHistoryValid=false;uint32_t taaFrame=0;std::array<float,8> taaPrevCamera{};std::array<float,2> taaJitter{};
+ int taaWrite=0;bool taaEnabled=true,taaRan=false,taaHistoryValid=false;uint32_t taaFrame=0;std::array<float,13> taaPrevCamera{};std::array<float,2> taaJitter{};
  void destroyTaaTargets(){for(int i=0;i<2;++i){if(taaFrames[size_t(i)])vkDestroyFramebuffer(device,taaFrames[size_t(i)],nullptr);taaFrames[size_t(i)]=VK_NULL_HANDLE;destroy(taaImages[size_t(i)]);taaLayouts[size_t(i)]=VK_IMAGE_LAYOUT_UNDEFINED;}taaHistoryValid=false;}
  Image& finalImage(){return taaRan?taaImages[size_t(taaWrite)]:postRan?composeStage.image:target;}
  void destroyStageTarget(FullscreenStage& stage){if(stage.framebuffer)vkDestroyFramebuffer(device,stage.framebuffer,nullptr);stage.framebuffer=VK_NULL_HANDLE;destroy(stage.image);}
@@ -503,7 +503,7 @@ struct GpuRenderer::Impl {
  // True darkness (0..1): exposure ceiling and grade lift follow it.
  float darkness=0;std::array<std::array<float,4>,2> weaponFlashes{};
  // lampDirty: 0 current, 1 stale (geometry nearby rebuilt), 2 never drawn.
- std::vector<std::array<float,7>> lamps;std::vector<uint8_t> lampDirty;std::vector<std::array<float,6>> shadowDirtyBounds;
+ std::vector<std::array<float,13>> lamps;std::vector<uint8_t> lampDirty;std::vector<std::array<float,6>> shadowDirtyBounds;
  Image shadowAtlas;std::vector<VkImageView> shadowLayerViews;std::vector<VkFramebuffer> shadowFrames;int shadowCapacity=0;bool shadowLayoutReady=false,shadowAtlasFresh=true;
  VkRenderPass shadowPass=VK_NULL_HANDLE;VkPipeline shadowPipeline=VK_NULL_HANDLE;VkPipelineLayout shadowLayout=VK_NULL_HANDLE;VkSampler shadowSampler=VK_NULL_HANDLE;
  std::uint64_t shadowFacesDrawn=0;
@@ -556,7 +556,7 @@ struct GpuRenderer::Impl {
   // set that changes later, as chunks stream, takes the per-frame budget.
   const bool coldStart=shadowAtlasFresh;shadowAtlasFresh=false;
   const int budget=coldStart?int(lamps.size()):12;std::vector<std::pair<float,size_t>> queue;
-  for(size_t i=0;i<std::min(lamps.size(),size_t(shadowCapacity));++i)if(lampDirty[i]){float dx=lamps[i][0]-viewState[0],dy=lamps[i][1]-viewState[1],dz=lamps[i][2]-viewState[2];queue.push_back({dx*dx+dy*dy+dz*dz,i});}
+  for(size_t i=0;i<std::min(lamps.size(),size_t(shadowCapacity));++i)if(lampDirty[i]&&lamps[i][7]>0){float dx=lamps[i][0]-viewState[0],dy=lamps[i][1]-viewState[1],dz=lamps[i][2]-viewState[2];queue.push_back({dx*dx+dy*dy+dz*dz,i});}
   if(queue.empty())return;
   if(int(queue.size())>budget){std::nth_element(queue.begin(),queue.begin()+budget,queue.end());queue.resize(size_t(budget));}
   VkViewport viewport{0,0,float(ShadowSize),float(ShadowSize),0,1};VkRect2D scissor{{0,0},{ShadowSize,ShadowSize}};
@@ -578,7 +578,7 @@ struct GpuRenderer::Impl {
     vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
     vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowPipeline);
     static constexpr float faces[6][8]={{1,0,0,0,0,0,1,0},{-1,0,0,0,0,0,1,0},{0,1,0,0,0,0,1,0},{0,-1,0,0,0,0,1,0},{0,0,1,0,0,1,0,0},{0,0,-1,0,0,1,0,0}};
-    float push[12]={lamp[0],lamp[1],lamp[2],lamp[3]};std::memcpy(push+4,faces[face],sizeof(faces[face]));vkCmdPushConstants(cmd,shadowLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(push),push);
+    float push[20]={lamp[0],lamp[1],lamp[2],lamp[3]};push[12]=lamp[8];push[13]=lamp[9];push[14]=lamp[10];push[15]=lamp[11];push[16]=std::cos(lamp[12]);push[17]=std::sin(lamp[12]);std::memcpy(push+4,faces[face],sizeof(faces[face]));vkCmdPushConstants(cmd,shadowLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(push),push);
     int axis=face/2;float sign=face%2?-1.f:1.f;const StaticCache* boundCache=nullptr;DrawMerger merger{cmd,shadowLayout,materials};
     for(const auto&candidate:candidates){const auto&run=*candidate.run;
      // Skip runs wholly behind this face.
@@ -733,7 +733,7 @@ struct GpuRenderer::Impl {
   // Present scale lives in high bits so store-low/run-high retunes invalidate cleanly.
   uint64_t base=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;
   uint64_t key=base^(uint64_t(unsigned(scale))<<56);auto found=materials.find(key);if(found!=materials.end())return key;
-  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.glossStrength>=.85f;
+  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;
   mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
   int presentW=std::max(1,t.width*scale),presentH=std::max(1,t.height*scale);
@@ -885,7 +885,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   dependencies[1].srcSubpass=0;dependencies[1].dstSubpass=VK_SUBPASS_EXTERNAL;dependencies[1].srcStageMask=VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;dependencies[1].srcAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;dependencies[1].dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;dependencies[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
   VkRenderPassCreateInfo passInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};passInfo.attachmentCount=1;passInfo.pAttachments=&attachment;passInfo.subpassCount=1;passInfo.pSubpasses=&subpass;passInfo.dependencyCount=2;passInfo.pDependencies=dependencies;
   check(vkCreateRenderPass(m->device,&passInfo,nullptr,&m->shadowPass),"Create lamp shadow pass");
-  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,12*sizeof(float)};VkPipelineLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layoutInfo.setLayoutCount=1;layoutInfo.pSetLayouts=&m->setLayout;layoutInfo.pushConstantRangeCount=1;layoutInfo.pPushConstantRanges=&push;
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,20*sizeof(float)};VkPipelineLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};layoutInfo.setLayoutCount=1;layoutInfo.pSetLayouts=&m->setLayout;layoutInfo.pushConstantRangeCount=1;layoutInfo.pPushConstantRanges=&push;
   check(vkCreatePipelineLayout(m->device,&layoutInfo,nullptr,&m->shadowLayout),"Create lamp shadow layout");
   VkShaderModule shadowVert=VK_NULL_HANDLE,shadowFrag=VK_NULL_HANDLE;
   try{
@@ -1185,12 +1185,12 @@ void GpuRenderer::endStaticCache(){
  }
  Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);
 }
-void GpuRenderer::setLamps(const std::vector<std::array<float,7>>&input,bool enabled,int detail){
+void GpuRenderer::setLamps(const std::vector<std::array<float,13>>&input,bool enabled,int detail){
  size_t count=std::min(input.size(),size_t(Impl::MaxLamps));
  uint64_t key=1469598103934665603ull;auto mix=[&](uint32_t value){key^=value;key*=1099511628211ull;};mix(enabled?1u:0u);mix(uint32_t(detail));mix(uint32_t(count));
  // Intensity is a record update, never shadow/grid identity. The lamp set
  // depends only on its pose, range and colour (plus renderer configuration).
- for(size_t i=0;i<count;++i)for(size_t k=0;k<7;++k)if(k!=4)mix(std::bit_cast<uint32_t>(input[i][k]));
+ for(size_t i=0;i<count;++i)for(size_t k=0;k<13;++k)if(k!=4)mix(std::bit_cast<uint32_t>(input[i][k]));
  if(key==m->lampKey){
   bool changed=false;for(size_t i=0;i<count;++i)if(input[i][4]!=m->lamps[i][4]){
    m->lamps[i][4]=input[i][4];float intensity=input[i][4]*m->lampPowers[i];
@@ -1226,7 +1226,7 @@ void GpuRenderer::setLamps(const std::vector<std::array<float,7>>&input,bool ena
  }
  m->lampData.assign(sizeof(header)+size_t(Impl::MaxLamps)*32+cells.size()*4,0);
  std::memcpy(m->lampData.data(),&header,sizeof(header));
- for(size_t i=0;i<count;++i){float record[8]={input[i][0],input[i][1],input[i][2],input[i][3],input[i][4],enabled&&int(i)<m->shadowCapacity?float(i):-1.f,input[i][5],input[i][6]};std::memcpy(m->lampData.data()+sizeof(header)+i*32,record,32);}
+ for(size_t i=0;i<count;++i){float record[8]={input[i][0],input[i][1],input[i][2],input[i][3],input[i][4],enabled&&input[i][7]>0&&int(i)<m->shadowCapacity?float(i):-1.f,input[i][5],input[i][6]};std::memcpy(m->lampData.data()+sizeof(header)+i*32,record,32);}
  if(!cells.empty())std::memcpy(m->lampData.data()+sizeof(header)+size_t(Impl::MaxLamps)*32,cells.data(),cells.size()*4);
  ++m->lampGeneration;
 }
@@ -1267,7 +1267,7 @@ void GpuRenderer::saveSunCascades(const char* prefix){
 }
 bool GpuRenderer::shadowsPending()const{
  if(!m->pixelLighting)return false;
- for(size_t i=0;i<std::min(m->lampDirty.size(),size_t(m->shadowCapacity));++i)if(m->lampDirty[i])return true;
+ for(size_t i=0;i<std::min(m->lampDirty.size(),size_t(m->shadowCapacity));++i)if(m->lampDirty[i]&&m->lamps[i][7]>0)return true;
  return false;
 }
 void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches){if(entry.second.shadowIndices.handle)m->shadowDirtyBounds.push_back(entry.second.bounds);m->retire(entry.second.buffer);m->retire(entry.second.shadowIndices);}m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
@@ -1326,7 +1326,7 @@ GpuRenderer::ActorMaterial GpuRenderer::prepareActorMaterial(const SoftwareRende
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
  else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
- return {key,sortKey,texture.emission.empty()?0.f:emissionScale,!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f,texture.parallaxScale,(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength};
+ return {key,sortKey,texture.emission.empty()?0.f:emissionScale,!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f,texture.parallaxScale,(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength};
 }
 void GpuRenderer::submitActor(const MeshVertex&a,const MeshVertex&b,const MeshVertex&c,int actor,const ActorMaterial&material){
  uint32_t start=uint32_t(m->actorVertices.size());
@@ -1362,7 +1362,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
   for(int i=0;i<3;++i)for(int j=i+1;j<3;++j)if(std::fabs(v[i]->u+v[j]->u)<.01f&&std::fabs(v[i]->v+v[j]->v)<.01f)impostorCentre=(worldPoint(v[i]->p)+worldPoint(v[j]->p))*.5f;}
  for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{const Projection projection{float(m->width)/m->height};out.position[0]=v.p.x*Projection::horizontal;out.position[1]=-v.p.y*projection.vertical();out.position[2]=v.p.z-Projection::nearPlane;out.position[3]=v.p.z;}
   out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=normals?1.f:0.f;
-  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
+  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
   // Painterly Horizon LOD markers ride in the parallax slot (negative values).
   if(const auto*tag=m->capturing?m->lodTag:nullptr){
    if(tag->impostor){out.position[0]=impostorCentre.x;out.position[1]=impostorCentre.y;out.position[2]=impostorCentre.z;out.position[3]=1.f;

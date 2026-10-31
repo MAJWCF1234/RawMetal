@@ -46,7 +46,7 @@ public:
     static bool testCablePerformance();
     // Every Surface value and structure finish resolves to decodable textures.
     static bool testSurfaceSets(std::string* report=nullptr);
-    static bool testHardware();
+    static bool testHardware(bool glazingOnly=false);
     static bool testPresentationResize();
     static bool testCreatureAnimation();
     static bool testProjection();
@@ -126,7 +126,7 @@ private:
     // generation, while moves transfer it with the uploaded pixel allocation.
     struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; TextureGeneration generation;
         // A dado band: drawn once over its first `band` metres above the floor, `above` over the rest of the face.
-        float band=0; const Texture* above=nullptr; };
+        float band=0; const Texture* above=nullptr; bool liquid=false; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};Point3 surfaceNormal{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true,float reliefScale=.012f);
     static void deriveSurfaceNormal(Texture& texture,float strength);
