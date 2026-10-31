@@ -383,8 +383,8 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  mdFix(m,model::trash_can,4.95f,19.15f,f,.4f,.4f,.5f,0,true);
  // --- S2, the tier-3 hold: strapped down to wait for the transfer ---------------------------------
  for(auto [y,tossed]:{std::pair{15.f,false},{17.8f,true},{20.6f,false}}){
-  if(tossed)mdFix(m,model::med_ward_bed_tossed,6.85f,y,f,2.097f,1.525f,.842f,kPi,true);
-  else mdFix(m,model::med_ward_bed,6.79f,y,f,1.984f,.944f,.842f,kPi,true);
+  if(tossed)mdFix(m,model::med_ward_bed_tossed,6.85f,y,f,2.097f,1.525f,.842f,0,true);
+  else mdFix(m,model::med_ward_bed,6.79f,y,f,1.984f,.944f,.842f,0,true);
   if(!tossed)for(float x:{6.6f,7.4f})wall(m,x,y-.48f,x+.06f,y+.48f,f+.842f,f+.852f,12);
   else{wall(m,7.f,y+.6f,7.06f,y+.64f,f+.25f,f+.84f,12);wall(m,7.6f,y-.62f,7.66f,y-.58f,f+.35f,f+.84f,12);}
   wall(m,5.8f,y-.25f,6.05f,y+.25f,f+1.27f,f+1.3f,20);
@@ -812,9 +812,9 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  for(float x:{12.7f,13.3f})m.pipes.push_back({{x,1.12f},{x,1.12f},f+2.6f,.015f,f+1.13f,0});
  // --- Staff room: the night shift's break, cut short --------------------------------------------------
  mdFix(m,model::wooden_table,20.3f,3.f,f,1.367f,.724f,.78f,0,true);
- mdFix(m,model::wooden_chair,19.95f,2.25f,f,.417f,.525f,.95f,0,true);
- mdFix(m,model::wooden_chair,20.75f,3.9f,f,.417f,.525f,.95f,kPi+.3f,true);
- mdFix(m,model::wooden_chair,21.7f,3.35f,f,.417f,.525f,.95f,-kPi*.5f+.5f,true);
+ mdFix(m,model::wooden_chair,19.95f,2.25f,f,.417f,.525f,.95f,kPi,true);
+ mdFix(m,model::wooden_chair,20.75f,3.9f,f,.417f,.525f,.95f,.3f,true);
+ mdFix(m,model::wooden_chair,21.7f,3.35f,f,.417f,.525f,.95f,kPi*.5f+.5f,true);
  mdFix(m,model::office_armchair_green,17.85f,2.1f,f,1.4f,1.36f,1.19f,1.2f,true);
  wall(m,19.4f,1.f,22.f,1.58f,f,f+.1f,8);wall(m,19.4f,1.f,22.f,1.56f,f+.1f,f+.86f,21);wall(m,19.4f,1.f,22.f,1.62f,f+.86f,f+.9f,20);
  mdFix(m,model::coffee_machine,19.9f,1.3f,f+.9f,.4f,.45f,.5f,0,false);
@@ -1272,9 +1272,9 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  mdFix(m,model::coffee_machine,19.1f,22.72f,f+.9f,.4f,.45f,.5f,kPi,false);
  for(auto [x,y]:{std::pair{19.65f,22.6f},{19.85f,22.75f},{20.4f,22.65f}})m73Loose(m,model::mug,x,y,f+.9f,.09f,.09f,.1f,x);
  mdFix(m,model::wooden_table,17.2f,21.4f,f,1.367f,.724f,.78f,0,true);
- m73Loose(m,model::wooden_chair,16.9f,20.75f,f,.417f,.525f,.95f,0);
- m73Loose(m,model::wooden_chair,17.5f,22.05f,f,.417f,.525f,.95f,kPi+.25f);
- m73Loose(m,model::wooden_chair,18.15f,21.3f,f,.417f,.525f,.95f,-kPi*.5f+.3f);
+ m73Loose(m,model::wooden_chair,16.9f,20.75f,f,.417f,.525f,.95f,kPi);
+ m73Loose(m,model::wooden_chair,17.5f,22.05f,f,.417f,.525f,.95f,.25f);
+ m73Loose(m,model::wooden_chair,18.15f,21.3f,f,.417f,.525f,.95f,kPi*.5f+.3f);
  for(float y:{20.2f,21.06f})mdFix(m,model::psx_locker,22.66f,y,f,.64f,.85f,2.42f,kPi,true);
  mdFix(m,model::office_armchair_green,15.2f,22.2f,f,1.4f,1.36f,1.19f,.25f,true);
  mdFix(m,model::med_notice_board,18.5f,19.635f,f+1.2f,1.2f,.07f,.9f,mdS,false);
