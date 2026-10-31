@@ -1,6 +1,6 @@
 # Physics and Chapter 2 completion — v1.1.5
 
-Gameplay checkpoint: 4a82d3e. Final executable source: 206e2f5; the only subsequent code change equips and verifies the shotgun in the inspection-only --map-shots fire branch. Completed conversion: e147408; release integration: 2ff00a2.
+Gameplay checkpoint: 4a82d3e. Last code change: 206e2f5; the only subsequent code change equips and verifies the shotgun in the inspection-only --map-shots fire branch. Completed conversion: e147408; release integration: 2ff00a2. Clean Release build: a5cff59; subsequent report-only commits do not alter compiled inputs.
 
 The interrupted physics stages and Chapter 2 facing review have been completed. This report supersedes the previous placement-conflict handoff; the original reports and intermediate failed runs remain in local recovery evidence.
 
@@ -91,11 +91,13 @@ Automated logic, save, collision, renderer, authoring and static-view checks are
 
 Normal Build.cmd completed with 1,147 packaged resources, 116 neural reconstructions, 19 animation clips and 193 screened WebP textures. Embedded version: 1.1.5.0. Size: 47,415,808 bytes, below the 67,108,864-byte cap.
 
-SHA-256: `71646d0d8a9831e4baf3383d8c28fdd7af0908b89270aa475da9bb362e9a4d33`. The build log is `N:/rawmetal/.build/recovery-20261031/build-current.log`. Final packaging and the installed copy use this exact executable; their hashes are checked again during delivery.
+SHA-256: `073fc611af0fe870b945acaaf36bc99f3007d489f19e6ee21557b91bfe5d369e`. The build log is `N:/rawmetal/.build/recovery-20261031/build-current.log`. Final packaging and the installed copy use this exact executable; their hashes are checked again during delivery.
 
 ## Tests and result lines
 
 Evidence root: `N:/rawmetal/.build/recovery-20261031/`. All 22 required/supplemental command invocations have a passing run. The broad suites and all-map audits used the gameplay checkpoint 4a82d3e (SHA-256 `9200f5f439be53ec3cb3a89de78f8ca19ecee3111dd2510c124af1808665668c`). On the final executable, the inspection branch, prologue, props, glass, physics-stages and command-arguments checks were rerun successfully. The later code change affects only the inspection firing branch; gameplay and test dispatch are unchanged.
+
+The clean rebuild differs from the inspected/performance candidate only in three PE linker timestamp fields. After zeroing those timestamp fields, the complete executable images match byte-for-byte, including machine code, data and embedded resources. Details: rebuild-equivalence.json. Prologue (22/22), props, glass, physics-stages and command-arguments were also rerun on the exact final hash and all returned 0; raw matching-hash records are in release-final.
 
 | Command | Exit/result | Seconds | Evidence below root |
 |---|---|---:|---|
@@ -106,7 +108,7 @@ Evidence root: `N:/rawmetal/.build/recovery-20261031/`. All 22 required/suppleme
 | `--smoke-test` | 0 | 218.84 | `validation-final/smoke-test` |
 | `--campaign-map-test` | 0 | 44.54 | `validation-final/campaign-map-test` |
 | `--chapter-route-test` | 0 | 10.07 | `validation-final/chapter-route-test` |
-| `--prologue-test` | 0, 22/22 on final executable | 3.2 | `inspection-final/prologue-test.txt` |
+| `--prologue-test` | 0, 22/22 on final executable | — | `release-final/prologue-test.txt` |
 | `--exclusion-test` | 0 | 137.6 | `validation-final/exclusion-test` |
 | `--vulkan-test` | 0 | 113.97 | `validation-final/vulkan-test` |
 | `--guard-ai-test` | 0 | 18.32 | `validation-final/guard-ai-test` |
@@ -122,7 +124,7 @@ Evidence root: `N:/rawmetal/.build/recovery-20261031/`. All 22 required/suppleme
 | `--engine-regression-test` | 0 | 2.48 | `validation-final/engine-regression-test` |
 | `--creature-behaviour-test` | 0 | 7.42 | `validation-final/creature-behaviour-test` |
 
-The broad runner returned exit 1 because its first standalone prologue run could not create a checkpoint under the sandbox system temporary directory. The same binary passed outside that restriction and with TEMP/TMP set to a workspace directory. The final executable also passes 22/22 with workspace-local TEMP/TMP. Raw exits.json is retained unaltered; the passing retry is in inspection-final.
+The broad runner returned exit 1 because its first standalone prologue run could not create a checkpoint under the sandbox system temporary directory. The same binary passed outside that restriction and with TEMP/TMP set to a workspace directory. The final executable also passes 22/22 with workspace-local TEMP/TMP. Raw exits.json is retained unaltered; passing final-hash retries are in release-final.
 
 ```text
 validation-final/each-test/each-test.txt: ALL PASSED 0
@@ -144,7 +146,7 @@ Breaking panes rebuilds only the breakable cache and never the main chunk: PASS
 One pane break adds under 4 ms CPU scene time: PASS
 Breaking a fixture screen updates its bounded part cache without rebuilding the chunk: PASS
 PASS: Vulkan material / depth / clipping checks
-inspection-final/prologue-test.txt: 22/22 checks passed
+release-final/prologue-test.txt: 22/22 checks passed
 ```
 
 Editor record tests: 7 tests, OK (`editor-runtime.txt`); map payload export: PASS (`editor-payload.txt`). Edge checker over maps 34-74: `edges ok` (`edge-check.txt`).
@@ -236,7 +238,7 @@ The nonzero deltas in 68 (30), 69 (27) and 72 (2) are explicitly authored local 
 
 ## Prop performance
 
-Final executable, leaf timers enabled. Times below are CPU wall milliseconds per frame. Update-only scenes use 60 Hz simulation; rendered pairing uses Vulkan, RTX 5060 Ti, linear HDR, 4x MSAA, 640x360 and a hidden presented window.
+Inspected executable with machine code/data identical to the final clean rebuild, leaf timers enabled. Times below are CPU wall milliseconds per frame. Update-only scenes use 60 Hz simulation; rendered pairing uses Vulkan, RTX 5060 Ti, linear HDR, 4x MSAA, 640x360 and a hidden presented window.
 
 | Scene | Prop update mean / p95 | Whole update mean / p95 / max |
 |---|---|---|
@@ -251,7 +253,7 @@ Isolated render comparison uses ABBA order, 120 warm-up and 300 measured frames 
 
 ## Render review
 
-- Fresh final-executable campaign captures: renders/sheet-00.jpg through sheet-16.jpg, with all 68 native 960x540 frames retained as PPM/PNG. Includes desks and glass in Chapter 1 maps 47, 52, 53, 64 and Chapter 2 maps 68-73, before and two seconds after a shotgun shot. renders/map-shots.txt records 20 successful shotgun shots, each loaded 6 -> 5. Fixed observer frames deliberately omit the player HUD. Protected panes crack and remain solid; ordinary panes break. Some desk angles aim through the back of equipment, so these images supplement collision/damage regressions rather than independently proving every desktop hit.
+- Fresh campaign captures from the inspected executable (code/data identical to the final clean rebuild): renders/sheet-00.jpg through sheet-16.jpg, with all 68 native 960x540 frames retained as PPM/PNG. Includes desks and glass in Chapter 1 maps 47, 52, 53, 64 and Chapter 2 maps 68-73, before and two seconds after a shotgun shot. renders/map-shots.txt records 20 successful shotgun shots, each loaded 6 -> 5. Fixed observer frames deliberately omit the player HUD. Protected panes crack and remain solid; ordinary panes break. Some desk angles aim through the back of equipment, so these images supplement collision/damage regressions rather than independently proving every desktop hit.
 
 - Final facing review covers induction theatre rows toward the screen, waiting rows into the hall, boardroom chairs toward the table, terminal seating, ward headboards and both staff rooms. Three hold-room views retain their authored restraint boards. Supplemental inspection-final/sheet.jpg supplies the cart tray/pill view and clear north/east staff-room views; its cart-side frame and the original north staff/cart angles are obstructed camera positions and are not used as evidence of support correctness. The moving-cart support/fall behavior is verified by the regression above.
 
