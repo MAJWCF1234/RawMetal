@@ -38,7 +38,7 @@ void beginNodeGraph(NodeGraph& graph,const World& world,float height,std::span<c
  // Cover candidates sit beside solid waist+ mass. Rails and thin shelves are
  // ignored so the lattice does not treat climbable geometry as fighting cover.
  for(const auto&s:world.structures()){
-  if(s.rail||s.top-s.bottom<.85f||s.top<.7f)continue;
+  if(s.material==17||s.rail||s.top-s.bottom<.85f||s.top<.7f)continue;
   float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f;
   const std::array<Vec2,4> sides={{
    {s.x1-.75f,cy},{s.x2+.75f,cy},{cx,s.y1-.75f},{cx,s.y2+.75f}

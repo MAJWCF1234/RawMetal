@@ -87,6 +87,11 @@ template<class A> int Game::archiveSave(A& a,int version){
  for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading){c.world=makeWorld(index);if(loadProgressCounter)++*loadProgressCounter;}auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   if(version>=16)list(w.m_destroyedTiles,[&](std::pair<int,int>&t){a(t.first,t.second);if(t.first<0||t.second<0||t.first>=World::Width||t.second>=World::Height)throw std::runtime_error("invalid destroyed tile");});
+  if(version>=17){list(w.m_brokenBreakables,[&](std::uint16_t&i){a(i);if(i>=w.breakables().size())throw std::runtime_error("invalid broken pane");});
+   std::vector<std::pair<int,float>> damaged;if constexpr(!A::reading)for(int i=0;i<int(w.m_breakableDamage.size());++i)if(w.m_breakableDamage[i]>0&&w.breakableIntact(i))damaged.push_back({i,w.m_breakableDamage[i]});
+   list(damaged,[&](std::pair<int,float>&v){a(v.first,v.second);if(v.first<0||v.first>=int(w.breakables().size())||v.second<0)throw std::runtime_error("invalid pane damage");});
+   if constexpr(A::reading){for(auto [i,damage]:damaged)w.m_breakableDamage[i]=damage;auto broken=w.m_brokenBreakables;for(auto i:broken)w.removeBreakable(i);}
+  }
   if constexpr(A::reading)if(!w.m_destroyedTiles.empty()){w.m_lightSolids.clear();w.m_lightNodes.clear();}
   int doors=int(w.m_doors.size());a(doors);if(doors<0||doors>128)throw std::runtime_error("invalid door count");
   if constexpr(A::reading){
@@ -148,6 +153,12 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   // the older serialized vector lengths.
   next.seedScripts();Game authored=next.m_worldId==WorldId::Custom?Game(next.m_customCampaign):Game(next.m_worldId);
   auto samePosition=[](Vec2 a,Vec2 b){return lengthSq(a-b)<.0004f;};
+  // Homes are in world XY, independent of which chunk currently owns a prop.
+  // Snapshot the saved identities before reconciliation mutates any list.
+  std::vector<Clutter> savedProps;for(int l=0;l<next.chunkCount();++l)for(const auto&c:next.m_chunks[l].clutter)if(c.model>=0&&c.authored)savedProps.push_back(c);
+  auto sameProp=[&](const Clutter&a,const Clutter&b){return a.model==b.model&&samePosition(a.home,b.home)&&std::fabs(a.homeZ-b.homeZ)<.05f;};
+  auto freshProp=[&](const Clutter&c)->const Clutter*{for(int l=0;l<authored.chunkCount();++l)for(const auto&spawn:authored.m_chunks[l].clutter)if(spawn.model>=0&&spawn.authored&&sameProp(spawn,c))return &spawn;return nullptr;};
+  auto hadSavedProp=[&](const Clutter&c){return std::any_of(savedProps.begin(),savedProps.end(),[&](const Clutter&v){return sameProp(c,v);});};
   for(int level=0;level<next.chunkCount();++level){
    auto&saved=next.m_chunks[level];const auto&fresh=authored.m_chunks[level];
    // Chunks the save never carried (older saves, or maps a custom pack gained
@@ -186,12 +197,12 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
 
    // Current saves own their dynamic clutter population, including imported objects.
    if(version>=8){
-    int held=level==next.m_level?next.m_heldClutter:-1,newHeld=-1;std::vector<Clutter> reconciled;std::vector<bool> used(fresh.clutter.size());
+    int held=level==next.m_level?next.m_heldClutter:-1,newHeld=-1;std::vector<Clutter> reconciled;
     for(int i=0;i<int(saved.clutter.size());++i){auto c=saved.clutter[i];bool keep=c.model<0||!c.authored||i==held;
-     if(c.model>=0&&c.authored)for(size_t j=0;j<fresh.clutter.size();++j){const auto&spawn=fresh.clutter[j];if(!used[j]&&spawn.model==c.model&&samePosition(spawn.home,c.home)&&std::fabs(spawn.homeZ-c.homeZ)<.05f){used[j]=true;c.breakState=spawn.breakState;keep=true;break;}}
+     if(c.model>=0&&c.authored)if(const auto*spawn=freshProp(c)){c.breakState=spawn->breakState;keep=true;}
      if(keep){if(i==held)newHeld=int(reconciled.size());reconciled.push_back(c);}
     }
-    for(size_t j=0;j<fresh.clutter.size();++j)if(!used[j]&&fresh.clutter[j].model>=0)reconciled.push_back(fresh.clutter[j]);
+    for(const auto&spawn:fresh.clutter)if(spawn.model>=0&&!hadSavedProp(spawn))reconciled.push_back(spawn);
     saved.clutter=std::move(reconciled);if(level==next.m_level)next.m_heldClutter=newHeld;continue;
    }
    int heldOld=level==next.m_level?next.m_heldClutter:-1,heldNew=-1;
@@ -208,7 +219,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
-  if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size()))return false;
+  if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size())||(next.m_heldClutter>=0&&next.m_clutter[next.m_heldClutter].broken))return false;
   adoptSession(next);
   next.updateStreaming(0);
   next.rebuildFriendlyActors();
@@ -219,7 +230,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   }
   next.validateTacticalGrenades();
   next.validateEngineerDrones();
-  next.updateMechanisms(0);
+  next.updateMechanisms(0);next.updateBreakables();
   // Ashfall saves from the flat-ground prototype keep their chunk-local X/Y,
   // but grounded feet now belong on the generated terrain surface.
   if(next.m_world.outdoors()&&p.grounded){

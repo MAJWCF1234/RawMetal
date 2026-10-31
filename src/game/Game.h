@@ -277,6 +277,7 @@ public:
     int vrCarryHand()const{return m_vrCarryHand;}
     static bool testClutter();
     static PropTraits propTraits(int model);
+    static bool auditMapScene(Game& game,int level);
     static bool testProps();static bool testPropSaves();static bool testGlass();static Game physicsInspection(int view,float seconds);
     const std::vector<BreakEvent>& breakEvents()const{return m_breakEvents;}
     static Game clutterInspection(int kind,float seconds);
@@ -820,7 +821,10 @@ private:
     float vrInteractionDistance(Point3 target,float housingRadius)const;
     int nearbyInteractionDoor()const;
     int nearbyClutter(int hand=-1)const;
+    float clutterPathFraction(Point3 from,Point3 to,Point3&normal)const;
     void seedClutter();
+    bool damagePane(int level,int index,float amount,Point3 at,Point3 direction);
+    void updateBreakables();
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
     void knockClutter(int level,size_t index,Point3 at,Point3 impulse);
     bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);

@@ -317,6 +317,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // updateScripts checks the region for every event, including state-gated events.
  for(size_t i=0;i<map->scriptEvents.size();++i){const auto& e=map->scriptEvents[i];if(!e.id||e.x2<=e.x1||e.y2<=e.y1)reject("scriptEvent",i,"id="+std::to_string(e.id)+" bounds="+std::to_string(e.x1)+","+std::to_string(e.y1)+","+std::to_string(e.x2)+","+std::to_string(e.y2));}
  for(size_t i=0;i<map->clutterSpawns.size();++i){const auto&v=map->clutterSpawns[i];if(v.kind<0||v.kind>7||(v.kind==7&&(v.model<0||v.model>=FacilityModelCount||!(v.width>0&&v.width<=1.6f&&v.depth>0&&v.depth<=1.6f&&v.height>0&&v.height<=1.6f)||!std::isfinite(v.position.x)||!std::isfinite(v.position.y)||!std::isfinite(v.z)||!std::isfinite(v.yaw)||!std::isfinite(v.pitch)||!std::isfinite(v.roll))))reject("prop",i,"invalid model, dimensions or pose");}
+ for(size_t i=0;i<map->breakables.size();++i){const auto&v=map->breakables[i];if(!(v.x1>=.3f&&v.y1>=.3f&&v.x2<=23.7f&&v.y2<=23.7f&&v.x2>v.x1&&v.y2>v.y1&&v.bottom<v.top&&std::isfinite(v.bottom)&&std::isfinite(v.top)&&v.health>=0&&std::isfinite(v.health)&&v.material==17)||bool(map->terrain)||(map->definition.environment==Environment::Outdoor&&(map->skybox=="brutal_wasteland"||map->skybox=="zone_overcast")))reject("breakable",i,"invalid bounds, material or terrain");}
  if(!invalid.str().empty())throw std::runtime_error(invalid.str());
  const auto& lift=map->cargoLift;
  if(lift.x1!=lift.x2||lift.y1!=lift.y2||lift.lower!=lift.upper){
@@ -388,6 +389,9 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
+ m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);
+ for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
+
  buildLayers(m_mapData->stairs);
  if(hasLift())refreshReactorTerminals();
  // Outdoor wasteland custom packs own a world-space Surface Nets heightfield so
@@ -1315,6 +1319,7 @@ bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bo
 }
 bool World::structureSegmentClear(Vec2 start,float feet,Vec2 goal,float height,bool indexed)const{
  auto clear=[&](const Structure&s){
+  if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)return true;
   if(s.top<=feet+.265f||s.bottom>=feet+height-.005f)return true;
   return !(rayBoxFraction({start.x,start.y,feet},{goal.x-start.x,goal.y-start.y,0},
    {s.x1-.1999f,s.y1-.1999f,s.bottom-height+.005f},{s.x2+.1999f,s.y2+.1999f,s.top-.025f})<1);
@@ -1334,7 +1339,7 @@ bool World::railBlocksHull(float x,float y,float radius,float feet,float height)
  int x0=std::max(0,int(std::floor(x-radius))),x1=std::min(Width-1,int(std::floor(x+radius)));
  int y0=std::max(0,int(std::floor(y-radius))),y1=std::min(Height-1,int(std::floor(y+radius)));
  for(int cy=y0;cy<=y1;++cy)for(int cx=x0;cx<=x1;++cx)for(auto index:m_structureCells[cy*Width+cx]){
-  const auto&s=m_structures[index];if(!s.rail)continue;
+  const auto&s=m_structures[index];if(!s.rail&&!isBreakableStructure(index))continue;
   if(x+radius<=s.x1||x-radius>=s.x2||y+radius<=s.y1||y-radius>=s.y2)continue;
   if(feet<s.top-.025f&&feet+height>s.bottom+.005f)return true;
  }

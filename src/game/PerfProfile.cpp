@@ -71,7 +71,8 @@ std::string Game::perfPopulation()const{
   if(t.ai.mode!=ActorAiMode::Guard){++civilians;continue;}
   ++guards;if(!autonomousActor(t)||npcIncapacitated(i)||npc.pose.clip==4)continue;++autonomous;
   if(factionsHostile(npcFaction(t),AiFaction::Player))++hostile;if(guardState(i)==GuardState::Alert)++alert;}
- out<<"creatures="<<alive<<" hunting="<<hunting;for(const auto&[name,k]:kinds)out<<" ["<<name<<' '<<k.first<<'/'<<k.second<<']';
+   int modelProps=0,awakeProps=0;for(const auto&c:m_clutter)if(c.model>=0&&!c.broken){++modelProps;awakeProps+=!c.sleeping;}out<<"model_props="<<modelProps<<" awake_props="<<awakeProps<<" ";
+   out<<"creatures="<<alive<<" hunting="<<hunting;for(const auto&[name,k]:kinds)out<<" ["<<name<<' '<<k.first<<'/'<<k.second<<']';
  out<<" resident_chunks="<<resident<<" npcs_total="<<m_friendlyActors.size()<<" resident_guards="<<guards<<" autonomous="<<autonomous<<" hostile="<<hostile<<" alert="<<alert<<" resident_civilians="<<civilians
     <<" layers="<<m_world.layers().size()<<" terrain="<<m_world.hasTerrain()<<" doors="<<m_world.doors().size()<<" fixtures="<<m_world.fixtures().size()<<" props="<<m_world.props().size()<<" structures="<<m_world.structures().size()<<" states="<<m_states.size();
  return out.str();

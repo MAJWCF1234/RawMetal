@@ -10,11 +10,12 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
  ShotHit result;result.distance=result.damageDistance=range;result.level=m_level;
  float size=magnitude(direction);if(!std::isfinite(size)||size<.0001f||!std::isfinite(range)||range<=0||range>100||!std::isfinite(origin.x)||!std::isfinite(origin.y)||!std::isfinite(origin.z))return result;
  direction=direction*(1/size);auto activeOrigin=chunkOffset(m_level);
- auto exact=[&](Point3 ray){ShotHit hit;hit.level=m_level;hit.distance=hit.damageDistance=range;hit.point=origin+ray*range;
+ auto exact=[&](Point3 ray){std::vector<ShotPassage> passages;ShotHit hit;hit.level=m_level;hit.distance=hit.damageDistance=range;hit.point=origin+ray*range;
   for(int level=0;level<chunkCount();++level){auto shift=activeOrigin-chunkOffset(level);Point3 local=origin+Point3{shift.x,shift.y,0},end=local+ray*range,n;
    if(rayBoxFraction(local,ray*range,{0,0,-1000},{24,24,1000})>=1)continue;
-   float fraction=chunkResident(level)?(level==m_level?m_world:m_chunks[level].world).shotFraction(local,end,n):rayBoxFraction(local,ray*range,{0,0,-1000},{24,24,1000},&n);
-   if(fraction*range<hit.distance){hit={ShotKind::Solid,level,-1,fraction*range,fraction*range,origin+ray*(fraction*range),n};}
+   ShotTrace trace;float fraction=chunkResident(level)?(level==m_level?m_world:m_chunks[level].world).shotFraction(local,end,n,&trace):rayBoxFraction(local,ray*range,{0,0,-1000},{24,24,1000},&n);
+   if(fraction*range<hit.distance){hit={ShotKind::Solid,level,-1,fraction*range,fraction*range,origin+ray*(fraction*range),n};hit.breakable=trace.blocking;}
+   for(int j=0;j<2;++j)if(trace.passed[j]>=0)passages.push_back({1,level,trace.passed[j],trace.passedAt[j]*range,origin+ray*(trace.passedAt[j]*range),trace.passedNormal[j]});
   }
   auto body=[&](ShotKind kind,int level,int index,Vec2 position,float feet,float height,float radius){auto shift=chunkOffset(level)-activeOrigin;Point3 center{position.x+shift.x,position.y+shift.y,feet};Point3 n;
    if(kind==ignoredEntity.kind&&index==ignoredEntity.index&&(kind==ShotKind::Npc||level==ignoredEntity.level))return;
@@ -33,9 +34,8 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
   }
   for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())body(ShotKind::Drone,drone.level,drone.slot,{drone.position.x,drone.position.y},drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
   if(m_world.hasLift()&&m_hazmat.initialized){int joint=-1;float distance=m_hazmat.rayHit({origin.x,origin.y,origin.z},{ray.x,ray.y,ray.z},joint);if(joint>=0&&distance<hit.distance)hit={ShotKind::Ragdoll,m_level,joint,distance,distance,origin+ray*distance,{}};}
-  std::vector<ShotPassage> passages;
   for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&list=chunkClutter(level);auto shift=chunkOffset(level)-activeOrigin;
-   for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0||(level==m_level&&int(i)==m_heldClutter))continue;auto e=c.extent();Point3 center{c.pos.x+shift.x,c.pos.y+shift.y,c.z+e[2]},n;float distance=rayBoxFraction(origin,ray*range,center-Point3{e[0],e[1],e[2]},center+Point3{e[0],e[1],e[2]},&n)*range;if(distance>=hit.distance)continue;
+   for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0)continue;auto e=c.extent();Point3 center{c.pos.x+shift.x,c.pos.y+shift.y,c.z+e[2]},n;float distance=rayBoxFraction(origin,ray*range,center-Point3{e[0],e[1],e[2]},center+Point3{e[0],e[1],e[2]},&n)*range;if(distance>=hit.distance)continue;
     float block=propMaterialTraits(c.material()).blockMass;if(block>0&&c.mass()>=block)hit={ShotKind::Prop,level,int(i),distance,distance,origin+ray*distance,n};else passages.push_back({2,level,int(i),distance,origin+ray*distance,n});
    }
   }
@@ -65,11 +65,12 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
  for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())candidate(Vec2{drone.position.x,drone.position.y}+chunkOffset(drone.level)-activeOrigin,drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
  return result;
 }
-void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride,AiTargetRef attacker){
- float damage=damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance);
- auto prop=[&](int level,int index,Point3 point){auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};knockClutter(level,size_t(index),point,direction*(definition.propImpulse*damage/definition.dmgNear));damageClutter(level,size_t(index),damage,point,direction);};
- for(const auto&p:hit.passed)if(p.kind==2)prop(p.level,p.index,p.point);
- if(hit.kind==ShotKind::Prop){prop(hit.level,hit.index,hit.point);return;}
+void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& inputDefinition,bool playerFired,float damageOverride,AiTargetRef attacker){
+ HitscanDef definition=inputDefinition;float attenuation=1;
+ auto prop=[&](int level,int index,Point3 point,float distance){float propDamage=hitscanDamageAt(definition,distance)*attenuation;auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};knockClutter(level,size_t(index),point,direction*(definition.propImpulse*propDamage/definition.dmgNear));damageClutter(level,size_t(index),propDamage,point,direction);};
+ for(const auto&p:hit.passed)if(p.kind){if(p.kind==2)prop(p.level,p.index,p.point,p.distance);else{auto shift=chunkOffset(m_level)-chunkOffset(p.level);damagePane(p.level,p.index,hitscanDamageAt(definition,p.distance)*attenuation,p.point+Point3{shift.x,shift.y,0},direction);attenuation*=.8f;}}
+ if(hit.kind==ShotKind::Prop){prop(hit.level,hit.index,hit.point,hit.distance);return;}
+ definition.dmgNear*=attenuation;definition.dmgMid*=attenuation;definition.dmgFar*=attenuation;definition.actorDamage*=attenuation;if(damageOverride>0)damageOverride*=attenuation;
  auto source=Vec2{origin.x,origin.y};auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto&world=friendlyWorld(hit.level);
  if(hit.kind==ShotKind::Player){receiveDamage(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
  if(hit.kind==ShotKind::Drone){damageEngineerDrone(hit.index,damageOverride>0?damageOverride:definition.actorDamage,attacker);if(playerFired)m_hitFlash=1;return;}
@@ -84,6 +85,7 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
   bool killed=applyEnemyDamage(enemy,damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);auto audible=enemy;audible.pos=audible.pos-shift;enemySound(audible,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);return;}
  if(hit.kind==ShotKind::Ragdoll){m_hazmat.impulse(hit.index,{direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.7f});m_sounds.push_back({Sound::PunchHit,{hit.point.x,hit.point.y},.55f,.8f,true,17,hit.point.z});return;}
  if(hit.kind!=ShotKind::Solid)return;
+ if(hit.breakable>=0){auto offset=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,hitscanDamageAt(definition,hit.damageDistance),hit.point+Point3{offset.x,offset.y,0},direction);return;}
  auto point=hit.point+direction*.003f+Point3{shift.x,shift.y,0};int tx=int(std::floor(point.x)),ty=int(std::floor(point.y));char tile=world.tile(tx,ty);float base=world.floorHeight(tx+.5f,ty+.5f);if(point.z<base||point.z>base+(tile=='C'?.6f:tile=='B'?1.1f:0))tile='.';
  if(tile=='C'){world.destroyTile(tx,ty);auto&clutter=hit.level==m_level?m_clutter:m_chunks[hit.level].clutter;for(int i=0;i<4;++i){Clutter c;c.kind=6;c.pos={tx+.5f,ty+.5f};c.z=world.floorHeight(c.pos.x,c.pos.y);c.yaw=i*kPi*.5f;c.pitch=(i%2?-.18f:.18f);c.roll=(i%2?.12f:-.12f);c.velocity={std::cos(c.yaw)*3,std::sin(c.yaw)*3};c.vz=2;c.spin=(i%2?1.f:-1.f)*3;c.pitchSpeed=(i%2?1.f:-1.f)*2;c.rollSpeed=(i%2?-1.f:1.f)*2;clutter.push_back(c);}m_sounds.push_back({Sound::JunkSoft,Vec2{tx+.5f,ty+.5f}-shift,.9f,1,true,17,world.floorHeight(tx+.5f,ty+.5f)+.3f});return;}
  if(tile=='B'){detonateBarrel(hit.level,tx,ty);return;}

@@ -776,7 +776,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Reusing a renderer across maps at the same address must not retain the
   // previous map's finishes, even when its tiles and lamps are identical.
   for(int surface:{w.wallSurface(),w.floorSurface(),w.ceilingSurface()})hash(std::uint64_t(surface+1));
-  for(const auto& structure:w.structures())hash(std::uint64_t(structure.material));
+  for(size_t i=0;i<w.structures().size();++i)if(!w.isBreakableStructure(int(i)))hash(std::uint64_t(w.structures()[i].material));
   for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)hash(static_cast<unsigned char>(w.tile(x,y)));
   for(const auto&door:w.doors())for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);
   // Authored lamp power may change independently of the map/session. Use exact
@@ -983,6 +983,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.emission[size_t(i)]=0xff000000u|(unsigned(255*heat)<<16)|(unsigned(120*heat*heat)<<8)|unsigned(20*heat*heat);}
   return t;}();
  for(auto&s:w.structures()){
+  if(w.isBreakableStructure(int(&s-w.structures().data())))continue;
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(s.material==CollisionProxyMaterial)continue;
@@ -1247,11 +1248,30 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  movingGeometry=false;m_emissionScale=1.f;
  if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible)facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ // Seeded debris is derived from persistent tombstones, never a second simulated population.
+ auto chips=[&](Vec2 center,float z,float width,int count,int seed){for(int i=0;i<count;++i){unsigned h=(unsigned(i+seed)*2654435761u);float a=float(h%6283)*.001f,r=float((h>>12)%1000)*.001f*width;float x=center.x+std::cos(a)*r,y=center.y+std::sin(a)*r,s=.008f+float((h>>22)%20)*.001f;float floor=w.supportBelow(x,y,z+.1f)+.008f;tri({{x-s,y-s,floor},0,0},{{x+s,y-s,floor},1,0},{{x,y+s,floor},.5f,1},m_glassTexture,1.3f);}};
+ static const std::array<Texture,3> cracks=[](){std::array<Texture,3> out;for(int stage=0;stage<3;++stage){auto&t=out[stage];t={128,128,std::vector<std::uint32_t>(128*128)};t.transparent=true;t.clampEdges=true;
+  for(int branch=0;branch<7+stage*5;++branch){float angle=branch*2.399963f;int cx=64+(branch%3-1)*stage*17,cy=64+(branch%2?1:-1)*stage*13;for(int step=0;step<28+stage*15;++step){int x=cx+int(std::cos(angle)*step+std::sin(step*.4f+branch)*1.5f),y=cy+int(std::sin(angle)*step);if(x>=0&&x<128&&y>=0&&y<128)t.pixels[size_t(y*128+x)]=0xbbb7c8c9u;}}
+ }return out;}();
+ if(!w.breakables().empty()){
+  auto key=geometryKey;for(int i=0;i<int(w.breakables().size());++i){key^=std::uint64_t(!w.breakableIntact(i)+1);key*=1099511628211ull;float damage=w.breakableDamage(i);int stage=damage>=180?3:damage>=90?2:damage>=30?1:0;if(!w.breakables()[i].holds&&damage>0)stage=1;key^=stage;key*=1099511628211ull;}
+  bool build=!m_gpuFrame||m_gpu->beginStaticCache(3*Game::MaxChunks+level,key);
+  if(build){if(m_gpuFrame){++m_breakableGeometryBuilds;m_staticGeometryBuild=true;}for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];bool alongX=b.x2-b.x1>b.y2-b.y1;Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};float width=std::max(b.x2-b.x1,b.y2-b.y1);
+   if(w.breakableIntact(i)){float x1=alongX?b.x1:center.x-.012f,x2=alongX?b.x2:center.x+.012f,y1=alongX?center.y-.012f:b.y1,y2=alongX?center.y+.012f:b.y2;box({x1,y1,b.bottom},{x2,y2,b.top},m_glassTexture,1.05f);
+    float damage=w.breakableDamage(i);int stage=damage>=180?3:damage>=90?2:damage>=30?1:0;if(!b.holds&&damage>0)stage=1;if(stage){const auto&t=cracks[stage-1];if(alongX)for(float side:{-.014f,.014f})quad({b.x1,center.y+side,b.bottom},{b.x2,center.y+side,b.bottom},{b.x2,center.y+side,b.top},{b.x1,center.y+side,b.top},t,1.3f);else for(float side:{-.014f,.014f})quad({center.x+side,b.y1,b.bottom},{center.x+side,b.y2,b.bottom},{center.x+side,b.y2,b.top},{center.x+side,b.y1,b.top},t,1.3f);}
+   }else{chips(center,b.bottom,width*.5f+.9f,std::clamp(int(width*(b.top-b.bottom)*30),12,70),i+113);
+    for(int tooth=0;tooth<9;++tooth){float along=width*(tooth+.2f)/9;float h=.04f+(tooth%3)*.035f;Point3 a=alongX?Point3{b.x1+along,center.y,b.bottom}:Point3{center.x,b.y1+along,b.bottom};Point3 u=alongX?Point3{.06f,0,0}:Point3{0,.06f,0};tri({a,0,0},{a+u,1,0},{a+u*.3f+Point3{0,0,h},.5f,1},m_glassTexture,1.2f);}
+   }
+  }if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}
+ }
+ for(const auto&e:game.breakEvents())if(e.level==level){float t=game.elapsed()-e.time;if(t<0||t>2.5f)continue;int count=e.pane?std::clamp(int(e.width*e.height*40),8,40):propMaterialTraits(e.material).shards;
+  for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},e.material==PropMaterial::Ceramic?m_paleSteel:m_glassTexture,1.5f);}
+ }
  auto drawClutter=[&](const Clutter&c){
-  if(c.broken)return;bool woodShard=c.kind==6;auto size=c.size();
+  if(c.broken){if(c.material()==PropMaterial::Glass||c.material()==PropMaterial::Ceramic)chips(c.pos,c.z,.18f,10,c.model);return;}bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},c.footprint()+c.height()))return;
-  if(c.model>=0&&c.footprint()<.15f&&length(c.pos-player.pos)>16)return;
-  if(!w.outdoors()&&length(c.pos-player.pos)<15.f){const WorldLight* source=nullptr;float nearest=25.f;
+  if(c.model>=0&&std::max({size[0],size[1],size[2]})<.15f&&length(c.pos-player.pos)>16)return;
+  if(!w.outdoors()&&(m_staticGeometryBuild||length(c.pos-player.pos)<15.f)){const WorldLight* source=nullptr;float nearest=25.f;
    for(const auto&candidate:w.lights()){auto emitter=candidate.emitter();float dx=emitter.x-c.pos.x,dy=emitter.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.intensity>0&&lampPower(size_t(&candidate-w.lights().data()))>.05f&&emitter.z>mid+.2f&&d2<candidate.range*candidate.range&&d2<nearest){nearest=d2;source=&candidate;}}
    if(source){static const Texture softShadow=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
      for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/7.5f,dy=(y-7.5f)/7.5f,r=dx*dx+dy*dy;unsigned a=unsigned(std::clamp((1.f-r)*.30f,0.f,1.f)*255.f);t.pixels[size_t(y*16+x)]=a<<24;}return t;}();
@@ -1263,7 +1283,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
   if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=v.p-center;auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),1.f);}
+   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=v.p-center;auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),light);}
   }else if(woodShard){
    // Thin splinter with a broken point and irregular edges; use a strip from
    // the crate's own vertical-grain atlas instead of mapping a whole crate face.
@@ -1284,9 +1304,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  };
  std::array<std::vector<const Clutter*>,36> resting;
  for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
- if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty())continue;
+ if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty())continue;float bottom=1000,top=-1000;for(const auto*c:resting[cell]){bottom=std::min(bottom,c->z);top=std::max(top,c->z+c->height());}if(!sphereVisible({(cell%6)*4.f+2,(cell/6)*4.f+2,(bottom+top)*.5f},3.f+(top-bottom)*.5f))continue;
   auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));}
-  if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
+  if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){++m_propGeometryBuilds;m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
  }
 
  // Services belong to the map; custom worlds never inherit campaign pipework.
@@ -1742,6 +1762,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.pixels[size_t(y*n+x)]=(unsigned(a*200.f)<<24)|0x00060505u;
   }return t;}();
  for(const auto&mark:game.bulletImpacts())if(mark.level==level){
+  if(mark.tint==-3){float size=.18f;Point3 normal{mark.normal.x,mark.normal.y,0},tangent{-mark.normal.y,mark.normal.x,0},up{0,0,size};Point3 p{mark.pos.x,mark.pos.y,mark.z};p=p+normal*.02f;auto side=tangent*size;quad(p-side-up,p+side-up,p+side+up,p-side+up,cracks[0],1.3f);continue;}
   if(mark.blood){
    int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);float tint=creatureVisuals[size_t(species)].bloodLight;const Texture&blood=m_bloodVariants[size_t(species)];
    if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}

@@ -481,6 +481,14 @@ inline void officeGlass(Map& m,float x1,float y1,float x2,float y2,float f,float
   if(alongX)wall(m,std::min(t,x2-.06f),y1,std::min(t+.06f,x2),y2,f+.94f,f+2.3f,20);else wall(m,x1,std::min(t,y2-.06f),x2,std::min(t+.06f,y2),f+.94f,f+2.3f,20);}
  wall(m,x1,y1,x2,y2,f+2.3f,f+2.38f,20);wall(m,x1,y1,x2,y2,f+2.38f,ceil,21);
 }
+inline void breakable(Map& m,float x1,float y1,float x2,float y2,float lo,float hi,int material=17,bool holds=false,StateId broken=0,StateId trigger=0,float health=0){m.breakables.push_back({x1,y1,x2,y2,lo,hi,material,health,holds,broken,trigger});}
+inline void glazing(Map& m,float x1,float y1,float x2,float y2,float f,float top,int dado=3,float sill=.95f,float head=2.4f,bool holds=false,StateId broken=0,StateId trigger=0){
+ bool alongX=x2-x1>y2-y1;float cx=(x1+x2)*.5f,cy=(y1+y2)*.5f,len=alongX?x2-x1:y2-y1;int bays=std::max(1,int(len/1.2f+.5f));
+ if(sill>0){wall(m,x1,y1,x2,y2,f,f+sill-.03f,dado);wall(m,x1-.01f,y1-.01f,x2+.01f,y2+.01f,f+sill-.03f,f+sill,20);}
+ for(int i=0;i<bays;++i){float a=(alongX?x1:y1)+len*i/bays+.06f,b=(alongX?x1:y1)+len*(i+1)/bays-.06f;if(alongX)breakable(m,a,cy-.03f,b,cy+.03f,f+sill,f+head,17,holds,broken,trigger);else breakable(m,cx-.03f,a,cx+.03f,b,f+sill,f+head,17,holds,broken,trigger);}
+ for(int i=0;i<=bays;++i){float t=(alongX?x1:y1)+len*i/bays;if(alongX)wall(m,std::max(x1,t-.03f),y1,std::min(x2,t+.03f),y2,f+sill,f+head,20);else wall(m,x1,std::max(y1,t-.03f),x2,std::min(y2,t+.03f),f+sill,f+head,20);}
+ wall(m,x1,y1,x2,y2,f+head,f+head+.08f,20);if(top>f+head+.08f)wall(m,x1,y1,x2,y2,f+head+.08f,top,dado);
+}
 // A doorway frame in a wall run along x at y: architrave posts and head.
 inline void officeDoorway(Map& m,float x1,float x2,float y1,float y2,float f,float ceil){
  for(float x:{x1-.08f,x2})wall(m,x,y1-.02f,x+.08f,y2+.02f,f,f+2.2f,20);
@@ -493,16 +501,19 @@ inline void prop(Map& m,int model,float x,float y,float z,float w,float d,float 
 inline void prop(Map& m,int model,float x,float y,float z,float yaw,float scale=1.f,StateId breakState=0){const auto&s=model::propSize[model];prop(m,model,x,y,z,s[0]*scale,s[1]*scale,s[2]*scale,yaw,breakState);}
 inline void propPose(Map& m,int model,float x,float y,float z,float yaw,float pitch,float roll,float scale=1.f){prop(m,model,x,y,z,yaw,scale);auto&p=m.clutterSpawns.back();p.pitch=pitch;p.roll=roll;}
 inline void deskSet(Map& m,Vec2 center,float top,float face,int variant){
- auto place=[&](int model,float x,float y){float c=std::cos(face),s=std::sin(face);prop(m,model,center.x+x*c+y*s,center.y-x*s+y*c,top,face+kPi);};
+ auto place=[&](int model,float x,float y,float scale=1.f){float c=std::cos(face),s=std::sin(face);prop(m,model,center.x+x*c+y*s,center.y-x*s+y*c,top,face+kPi,scale);};
  place(model::crt_monitor,-.10f,.12f);place(model::keyboard,-.10f,-.20f);place(model::desk_phone,.48f,.05f);
- if(variant%2)place(model::mug,.42f,-.20f);if(variant%3==0)place(model::binder,-.52f,.18f);
+ switch((variant%4+4)%4){case 0:place(model::binder,-.52f,.18f);break;case 1:place(model::mug,.42f,-.20f);break;case 2:{const auto&s=model::propSize[model::lab_desk_lamp];place(model::lab_desk_lamp,-.50f,.12f,std::min(1.f,.26f/std::max(s[0],s[1])));break;}case 3:place(model::med_pill_bottle,.42f,-.20f);break;}
 }
 inline void workstation(Map& m,float x,float y,float f,int facing,int variant,bool loose=false){
  float base=f-m.layers.front().elevation,seat=facing>0?0.f:kPi,screen=facing>0?kPi:0.f,s=float(facing);
  m.fixtures.push_back({24,{x,y},base,1.4f,.7f,.75f,seat,true});
  // The office chair model faces -y at yaw 0, the opposite of the desk set.
  m.fixtures.push_back({26,{x+(variant%2?.15f:-.1f),y-s*.78f},base,.55f,.55f,.95f,seat+kPi+(variant%3-1)*.25f,true});
- if(loose){deskSet(m,{x,y},f+.75f,seat,variant);if(variant%4==1)prop(m,model::pc_tower,x+.52f,y+s*.1f,f,screen);return;}
+ if(loose){deskSet(m,{x,y},f+.75f,seat,variant);
+  // Stage 1 desks still collide as solid boxes down to the floor. The tower
+  // remains its existing non-solid fixture until furniture cavities exist.
+  if(variant%4==1)m.fixtures.push_back({29,{x+.52f,y+s*.1f},base,.2f,.45f,.42f,screen,false});return;}
  m.fixtures.push_back({27,{x-.1f,y+s*.12f},base+.75f,.42f,.4f,.38f,screen,false});
  m.fixtures.push_back({28,{x-.1f,y-s*.2f},base+.75f,.45f,.16f,.03f,screen,false});
  m.fixtures.push_back({33,{x+.48f,y+s*.05f},base+.75f,.2f,.2f,.1f,screen,false});

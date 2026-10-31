@@ -1177,6 +1177,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int frame=0;frame<720&&window.pump();++frame){renderer.render(scene);if(frame==30)std::ofstream("window-inspection.ready")<<reinterpret_cast<std::uintptr_t>(window.handle());Sleep(16);}
      return 0;
     }
+    if(commandArguments().find(L"--physics-inspection")){
+     constexpr int w=1280,h=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(w,h);if(commandArguments().find(L"--vulkan")&&!renderer->enableHardware())return 36;
+     struct View{int view;float seconds;const char*name;};const View views[]={{0,0,"desk-before"},{0,.15f,"desk-shot-015"},{0,2,"desk-shot-2"},{1,0,"monitor-0"},{1,.1f,"monitor-01"},{1,.4f,"monitor-04"},{1,2,"monitor-2"},{2,0,"holds-0"},{3,0,"holds-1"},{4,0,"holds-2"},{5,0,"holds-3"},{6,2,"litter"}};
+     for(const auto&v:views){auto scene=retro::Game::physicsInspection(v.view,v.seconds);renderer->render(scene);std::ofstream out(std::string("physics-")+v.name+".ppm",std::ios::binary);out<<"P6\n"<<w<<' '<<h<<"\n255\n";for(int pixel=0;pixel<w*h;++pixel){auto p=renderer->pixels()[pixel];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}return 0;
+    }
     if(commandArguments().find(L"--barrel-inspection")){
      constexpr int inspectW=1280,inspectH=720;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(inspectW,inspectH);auto& renderer=*rendererStorage;
      if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
@@ -1524,7 +1529,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
          {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
          {"engine-regression",retro::Game::testEngineRegression},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
-         {"lift-mix",retro::AudioEngine::testLiftMix},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
+         {"lift-mix",retro::AudioEngine::testLiftMix},{"glass",retro::Game::testGlass},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"crates",retro::Game::testCrates},
          {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest},
