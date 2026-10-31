@@ -4,6 +4,26 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.5 - Things left behind (2026-10-31)
+
+The things left on desks and shelves across the plant can be picked up, knocked
+aside, thrown and broken. Blasts move them, doors push them aside, and the people
+walking through a room can kick them. What lands or breaks makes a noise they
+can hear; a squad recognises the noise its own men made.
+
+Ordinary glass breaks a pane at a time. Protective glass still stops bullets,
+but its cracks fade away twenty seconds after the last hit. Rooms behind glass
+are easier to see, and recessed lights no longer shadow their own fittings.
+
+Behind the great door, chairs face their tables and ward beds face the equipment
+at their heads. The Chapter 2 seal stays shut until it is meant to open.
+
+The map editor also supports model props and breakable surfaces. Saved damage,
+loose objects and their positions survive saving and travelling between rooms.
+Saves made in this version will not open in older versions.
+
+---
+
 ## v1.1.4 - Heavier (2026-10-31)
 
 Chapter 1 is as you left it.
@@ -782,7 +802,7 @@ SHA256 `75774028EE7F71F6F1C94775ABDDA08CE83A50723F4936013DEDF9249735B812`.
 Promotes the validated round-four winner to the canonical root executable: compact
 Vulkan actor triangle stream (**152 ? 92 bytes**, full float precision) with the
 original lighting ABI via unused W channels, plus MSVC **/Ob3** inlining. Same
-meshes, animation, materials, AI rates and save rules — render/compiler savings only.
+meshes, animation, materials, AI rates and save rules ï¿½ render/compiler savings only.
 
 Fresh interleaved promote check (this session): root preview.6 median **189.8 FPS**
 vs winner **205.9 FPS** (+8.5%); scene **2.83 ? 2.48 ms**. Identical AI queries
@@ -888,7 +908,7 @@ Same radio behavior as preview.1 (Search bark, AllyDown cooldown, reply timing, 
 Preview toward the next complete NPC radio patch. Builds on 0.7.1 chatter election with Search cues, AllyDown cooldown, longer reply timing, and channel holds so delayed copies do not expire while someone else is talking. Superseded for testers by preview.2.
 
 - Lost-contact **Search** elects one Investigate bark; Investigate?Search stays quiet
-- Reply delay stretched (~1.1–2.2 s) so the optional copy lands after the contact call
+- Reply delay stretched (~1.1ï¿½2.2 s) so the optional copy lands after the contact call
 - Pending tactical / work / AllyDown claims hold the channel while `npc_voice_busy` instead of timing out mid-sentence
 - AllyDown picks the nearest living voice, arms a squad cooldown immediately, priority above patrol chatter
 - `--npc-voice-test` covers Search bark, Investigate?Search silence, AllyDown election/cooldown
@@ -901,7 +921,7 @@ Save format still 14. Hard **32 MiB** ceiling unchanged. Confirm in play, then c
 
 ## v0.7.1
 
-Patch on the 0.7 line: Cleanup / Witness NPCs were already in the Exclusion loop; this fixes their placeholder radio behavior so squad contact sounds like chatter instead of a roll call. Exits the `0.7.0-preview.N` series — same playable loop, versioned as a normal patch.
+Patch on the 0.7 line: Cleanup / Witness NPCs were already in the Exclusion loop; this fixes their placeholder radio behavior so squad contact sounds like chatter instead of a roll call. Exits the `0.7.0-preview.N` series ï¿½ same playable loop, versioned as a normal patch.
 
 - Shared Alert / Investigate / Retreat elect one radio voice per squad (spotter wins contact); at most one delayed copy answers
 - Cue cooldowns keep the rest quiet after a call; pending claims no longer drain as a sequential queue
@@ -965,7 +985,7 @@ Lossless animation packaging frees cartridge headroom for the next content pass.
 
 **Validation:** EXE 25,499,648 / 33,554,432 bytes (~8.0 MiB headroom); 229 embedded resources verify; animation codec + split/aim + engineer smokes PASS. See [packaging evidence](docs/space-optimization-20261014.md).
 
-**Play at release:** Same Exclusion Zone / Custom Maps content as preview.13 — packaging only. Superseded for testers by preview.15.
+**Play at release:** Same Exclusion Zone / Custom Maps content as preview.13 ï¿½ packaging only. Superseded for testers by preview.15.
 
 ---
 
