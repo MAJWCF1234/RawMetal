@@ -366,6 +366,8 @@ bool Game::testGlass(){
  report<<(ok?"ALL PASSED glass":"FAILED glass")<<'\n';return ok;
 }
 Game Game::physicsInspection(int view,float seconds){
+ if(view==7){auto m=regression::room();m->definition.playerStart={8,6.5f};m->fixtures.push_back({model::desk,{8,8},0,1.4f,.7f,.75f,0,true});m->fixtures.push_back({model::crt_monitor,{8,8},.75f,.42f,.4f,.38f,kPi,false});kit::fixturePart(*m,1,1,7.82f,7.78f,8.18f,7.82f,.85f,1.08f,0,stateId("fixture_inspection_break"));m->lights.push_back({{8,7},3});Game g(regression::campaign(m));g.m_weaponEquipped=false;g.m_holster=1;g.m_player.angle=kPi*.5f;g.m_player.pitch=-42;if(seconds>0){g.setState(stateId("fixture_inspection_break"),1);g.updateBreakables();g.m_elapsed=seconds;}return g;}
+
  auto map=regression::room();map->name="Physics inspection";map->definition.playerStart={6,5.5f};map->fixtures.push_back({24,{8,8},0,1.4f,.7f,.75f,0,true});kit::deskSet(*map,{8,8},.75f,0,1);
  kit::glazing(*map,10,6,10.12f,10,0,4,3,.1f,2.4f,view>=2&&view<=5,stateId("inspection_broken"),stateId("inspection_trigger"));
  map->lights.push_back({{8,8},3});Game g(regression::campaign(map));g.m_weaponEquipped=false;g.m_holster=1;g.m_player.angle=.78f;g.m_player.pitch=-12;
