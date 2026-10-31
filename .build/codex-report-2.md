@@ -1,30 +1,33 @@
-# Physics job 2 — implementation and verification report
+# Physics and Chapter 2 completion — v1.1.5
 
-**Status: B, C and D are committed and verified. A remains uncommitted and is not complete. E has passing functional/graphics tests and completed render artifacts, but the required all-PASS placement audit condition is not met.**
+Gameplay checkpoint: 4a82d3e. Final executable source: 206e2f5; the only subsequent code change equips and verifies the shotgun in the inspection-only --map-shots fire branch. Completed conversion: e147408; release integration: 2ff00a2.
 
-The exact-position conversions expose authored overlaps and unsupported items. The brief requires the literal creation position/size/yaw to stay unchanged and also requires all audits to pass. A choice between small placement corrections and retaining unsafe items as fixtures is pending. No permission to move those items has been inferred.
+The interrupted physics stages and Chapter 2 facing review have been completed. This report supersedes the previous placement-conflict handoff; the original reports and intermediate failed runs remain in local recovery evidence.
 
-## Branch and commits
+## Behavior delivered
 
-Branch: `codex/physics-stage1`. Fast-forwarded `engine-pass` to `a977305`, preserving and restoring the 22 interrupted files. No push.
+- Existing portable dressing becomes physical across the campaign; authored legacy litter remains in its original kind system. Props can be lifted or pushed according to mass, thrown, shot, kicked, blasted, carried by lifts and swept by doors. Their position and damage persist in saves and across streaming.
+- Glazing is split into independently damageable bays. Protective panes stop bullets, crack, and heal over seconds 20–21 after the last hit; ordinary broken glass stays broken. Noise, attribution, AI hearing, grenade chains, truce consequences and supported furniture contacts use the existing game systems.
+- Bounded fixture destruction, plywood and ceiling breakables, material sounds and custom-map/editor physics records are implemented. The existing campaign gains no new destruction test partitions or ceiling tiles.
+- Recessed lamp self-shadowing, dark glass blending, authored route paint, destination-lock mirroring and the rebuilt Triage beat are corrected.
+- Chapter 2 theatre seating, waiting rows, boardroom chairs, booth terminals, staff-room chairs and ward-bed facing are corrected. The great-door state remains the Chapter 2 entry gate.
 
-```
-aaaeb5a Heal protected glazing after twenty seconds and preserve its timer
-5f81050 Extend prop contacts and destruction to blasts, actors and custom maps
-95d4c99 Keep resting props cheap and retain kick ownership through contacts
-e54907f Fix authored route paint, lamp self shadows, glazing and Chapter 2 seals
-6d28572 Support terrain grounded breakables in Ashfall and custom maps
-d21e8fc Clip broken fixture parts to their authored bounds and retain their casings
-```
+## Recovery corrections and deliberate deviations
 
-## Implemented behavior
+The user authorized completion after the outstanding placement failures and need for corrections were explained. Literal authoring calls were corrected in their intended rooms rather than weakening audits or adding item-search postpasses.
 
-- **B:** Holds panes retain bullet stopping, crack stages and new-hit timer reset. They begin fading at 20 seconds and recover by 21 seconds; their crack decals fade and are erased. Ordinary breakable glass never heals. Save version 18 stores the age and reads older saves.
-- **C:** Blast LOS/impulses and pane damage, grenade barrel/crate chaining, attributed guard/creature kicks, thrown-guard damage and squad-truce consequences, hearing-only glass muffling, heavy-prop blocking with a half-second escape rule, furniture profiles, door sweeps, cargo carry, paper drag, adaptive substeps and tracked-hand pushes. Sleeping-contact work and sound ownership through secondary contacts were corrected and profiled.
-- **C:** Plywood/cubicle and ceiling breakables, material sounds, cabinet helper, fixture-part masks and bounded face clipping that preserves native casings/UVs, separate fixture-part cache, model CLUTTER and BREAKABLE parser/editor support, round-trip checks and terrain grounding for Ashfall. Campaign maps gain no new partitions, ceiling tiles or cabinets.
-- **D:** Campaign route bars are suppressed for authored chunks. Recessed emitters are moved below their fitting and each light excludes its own housing from its shadow map. WorldLight and kit light helpers support shadows=false; maps do not use that option. All door-mirroring paths honor the destination lock, including streaming. Triage watches patient actor 1 and then looks toward nurse actor 0 from the rebuilt positions.
-- **D:** Glossy transparent glass had been misclassified as liquid and blended at a fixed 84 percent. Liquids now have an explicit material flag; glass keeps its highlights and texture alpha. Measured two-surface transmission is **0.773372 in linear light** before the reference display curve (display bytes: direct 227, through 218).
-- **A, pending:** Literal fixture calls become props, workstation contents retain their original placements and variants, existing clutter lists are appended rather than replacing earlier props, glazing runs split into individual bays while keeping their frames, and author-specific protection/trigger/pose choices are applied. Existing desk lights turn off when their bound prop is displaced; specified radio cue sources remain anchored. The Intake case trips rf_intake_alert, and the hold window uses medf_hold_wake.
+- Added measured shelf and furniture support profiles, oriented prop footprint queries, SAT overlap checks, a 1 mm support-edge tolerance, and a medical-cart tray surface below its handles. Runtime and audit use the same prop support geometry. Added regressions for shelf wake/movement, rotated tabletop contact, flush crate corners, moving-cart loads, and NPC-owned shattering.
+- Aligned stacked cartons, moved desktop items apart, centered shelf contents, and placed oversized shelf cartons on adjacent clear floor. Corrected seeded paper placement before creation and ordered the Imaging paper drift after its supporting room geometry. The desktop sets and intended room roles are retained; blocked random paper candidates are rejected during creation.
+- Restored the missing Map 42 operator desk under its pre-existing desktop equipment, using a native-proportioned model. Retained suspended cargo and IV bags as attached fixtures; retained the strapped hold beds with their fixed restraint geometry. These are authored attachment cases, not general conversion exceptions.
+- Kept the final author policy for the Map 70 anteroom pane: protective. The protected interlock, lead glass, records-office and Triage hatch panes remain protective. New glass-only reachability in 68/69/72 belongs to explicitly allowed local route/scare panes, with locked-state comparisons recorded in every audit.
+- Expanded the model-prop dimension bound to 3 m for requested rolling furniture, retaining the 60 kg audit limit and 25 kg lifting limit. Native procedural models use curated nominal sizes; catalog-backed model proportion checks remain active.
+- Fixed the reactor mounting regression to query the ceiling from each emitter, so a new transom below a lamp cannot hide its actual ceiling. This keeps the 15 cm mounting requirement and is stricter than accepting a ceiling found from an unrelated storey sample.
+
+Detailed local correction notes: recovery-20261031/legacy-placement-notes.md, visual-review.md, glazing-safety-notes.md and literal-corrections.json. Asset-library content was referenced through the existing build; no purchased source assets were modified.
+
+## Verification limits
+
+Automated logic, save, collision, renderer, authoring and static-view checks are distinguished from ordinary play and headset testing. No manual VR headset/controller session or complete ordinary campaign playthrough is claimed. Native renderer timing is CPU wall time, not GPU timestamp data.
 
 ## File-by-file changes
 
@@ -33,19 +36,19 @@ d21e8fc Clip broken fixture parts to their authored bounds and retain their casi
 | `src/assets.rc` | Resources 2257–2259 reference the existing wood break, wood impact and plaster break sounds. |
 | `src/audio/Sound.h` | Append sound IDs; sound-event NPC owner. Existing arithmetic resource mapping already covers the appended resources. |
 | `src/game/CampaignMapTest.cpp` | Chapter 2 seal regression and rebuilt nurse/patient Triage beat. |
-| `src/game/Clutter.cpp` | Healing, blasts, actor/VR contacts, thrown hits, door sweeps, drag, substeps, attributed secondary impacts, sleeping fast path, destruction and inspection/regression scenes. Pending A includes settling tolerance and workstation-preservation checks. |
+| `src/game/Clutter.cpp` | Healing, blasts, actor/VR contacts, thrown hits, door sweeps, drag, substeps, attributed secondary impacts, sleeping fast path, destruction and inspection/regression scenes. Shared oriented support/footprint queries, moving-cart trays, settling tolerance and workstation-preservation regressions. |
 | `src/game/Game.cpp` | Age breakables each update and route barrel explosions through prop/pane blast logic. |
 | `src/game/Game.h` | Physics entry points, transient contact state, owner fields and stage tests. |
-| `src/game/MapAudit.cpp` | Pending A: furniture-profile-aware overlap checks, native-model proportion policy, side-supported hatch frames, movable-prop route treatment and explicit glass-only/locked-state reachability reports. Remaining failures are retained. |
-| `src/game/Mechanisms.cpp` | Cargo-platform prop carry; pending A binds lamp power to the authored prop identity. |
+| `src/game/MapAudit.cpp` | furniture-profile-aware overlap checks, native-model proportion policy, side-supported hatch frames, movable-prop route treatment and explicit glass-only/locked-state reachability reports. All final campaign placement audits pass. |
+| `src/game/Mechanisms.cpp` | Cargo-platform prop carry; binds lamp power to the authored prop identity. |
 | `src/game/Movement.cpp` | Heavy-prop approach collision, safe retreat and push-attempt tracking. |
-| `src/game/Saves.cpp` | Version 18 healing-age archive; pending A extends model-prop dimensions for requested rolling furniture. |
+| `src/game/Saves.cpp` | Version 18 healing-age archive; extends model-prop dimensions for requested rolling furniture. |
 | `src/game/Streaming.cpp` | Destination lock checks on every boundary-door mirror path. |
 | `src/game/ai/Hearing.cpp` | New impact sounds, event-owner stimuli and hearing-only intact-glass occlusion. |
 | `src/game/ai/enemy/EnemyAI.cpp` | Acoustic consumers use hearingRayClear; sight keeps its existing path. |
 | `src/game/ai/grenades/TacticalGrenades.cpp` | Grenade blasts reach model props, glazing, barrels and crates. |
 | `src/game/ai/guard/Mind.cpp` | Ignore own-squad attributed prop impacts; glass muffles hearing only. |
-| `src/main.cpp` | physics-stages and glazing test registration; fixture inspection captures. |
+| `src/main.cpp` | Physics/glazing test registration; fixture captures; inspection fire equips a shotgun, checks ammunition use and logs every shot. |
 | `src/renderer/GpuRenderer.cpp` | Per-light shadow flag and housing volume, explicit liquid materials and matching shader data. |
 | `src/renderer/GpuRenderer.h` | Expanded lamp input record. |
 | `src/renderer/Performance.cpp` | Transmission measurement and cache/pixel assertions for breakable fixture parts. |
@@ -56,22 +59,22 @@ d21e8fc Clip broken fixture parts to their authored bounds and retain their casi
 | `src/renderer/shaders/lampshadow.vert` | Matching extended shadow push constants. |
 | `src/renderer/shaders/scene.frag` | Explicit liquid tag replaces gloss-based liquid inference. |
 | `src/world/Ballistics.cpp` | Protected-glass aging, material health defaults and solid stage-3 trace handling. |
-| `src/world/CampaignChapterMachineHall.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignChapterMaintenance.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignChapterMedicalFront.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignChapterPerimeterA.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignChapterPerimeterB.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignChapterPower.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignChapterResearchFront.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignChapterWater.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CampaignKit.h` | Destruction helpers, fixture parts, shadow option; pending A preserves exact workstation sets, loose paper, posed conversions and per-bay glazing. |
-| `src/world/CampaignMaps.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
-| `src/world/CustomCampaign.cpp` | Pending A: literal portable-item and glazing conversions; original creation positions retained, with author protection/trigger choices and existing legacy clutter preserved. |
+| `src/world/CampaignChapterMachineHall.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignChapterMaintenance.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignChapterMedicalFront.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignChapterPerimeterA.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignChapterPerimeterB.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignChapterPower.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignChapterResearchFront.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignChapterWater.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CampaignKit.h` | Destruction helpers, fixture parts, shadow option; preserves exact workstation sets, loose paper, posed conversions and per-bay glazing. |
+| `src/world/CampaignMaps.cpp` | Literal portable-item and glazing conversions with author protection/trigger choices, existing legacy clutter, and documented support/clearance corrections. |
+| `src/world/CustomCampaign.cpp` | Model CLUTTER and BREAKABLE record loading and terrain-grounded custom-map physics. |
 | `src/world/ModelIds.h` | Regenerated from the tracked physics rows, not hand-edited. |
-| `src/world/World.cpp` | Furniture support/clearance profiles and validation, lamp source placement, terrain-grounded breakable data; pending A includes prop dimensions, wheelchair seat and lamp bindings. |
-| `src/world/World.h` | Age storage, fixture-part queries and profile APIs; shadow option; pending A lamp/prop authoring identity. |
+| `src/world/World.cpp` | Furniture support/clearance profiles and validation, lamp source placement, terrain-grounded breakable data; includes prop dimensions, wheelchair seat and lamp bindings. |
+| `src/world/World.h` | Age storage, fixture-part queries and profile APIs; shadow option; lamp/prop authoring identity. |
 | `src/world/WorldDefinition.h` | Wood/plastic impact and break voices. |
-| `tools/campaign/prop_physics.json` | Pending A curated portable/furniture rows and nominal native-model sizes. |
+| `tools/campaign/prop_physics.json` | Curated portable/furniture rows and nominal native-model sizes. |
 | `tools/level-editor/README.md` | Physics fields and custom-map record syntax. |
 | `tools/level-editor/index.html` | Loose model, breakable material, protective pane and break-state controls. |
 | `tools/level-editor/runtime_records.py` | Bounded preservation of CLUTTER and BREAKABLE records. |
@@ -79,31 +82,188 @@ d21e8fc Clip broken fixture parts to their authored bounds and retain their casi
 | `tools/level-editor/test_map_payload.py` | Physical-model and breakable-box export round trip. |
 | `tools/level-editor/test_runtime_records.py` | Exact record preservation through project/runtime export. |
 
-## Authoring and deviations
+| `src/game/Reactor.cpp` | Ceiling mounting regression queries support from each emitter height. |
+| `src/app.rc` | Embedded file/product version 1.1.5.0. |
+| `RELEASE_NOTES.md` | Player-facing v1.1.5 changes and save compatibility. |
 
-New helpers: `boardedGap(m,x1,y1,x2,y2,lo,hi,broken=0,trigger=0)`, `ceilingTiles(m,x1,y1,x2,y2,z,broken=0,trigger=0)`, `glassCabinet(m,x,y,z,w,d,h,broken=0)`, and `fixturePart(m,fixture,partMask,x1,y1,x2,y2,lo,hi,broken=0,trigger=0)`. Part masks select material groups and their authored spatial region; removing a screen does not require deleting its casing.
 
-The editor format is documented in `tools/level-editor/README.md`:
+## Build and executable identity
+
+Normal Build.cmd completed with 1,147 packaged resources, 116 neural reconstructions, 19 animation clips and 193 screened WebP textures. Embedded version: 1.1.5.0. Size: 47,415,808 bytes, below the 67,108,864-byte cap.
+
+SHA-256: `71646d0d8a9831e4baf3383d8c28fdd7af0908b89270aa475da9bb362e9a4d33`. The build log is `N:/rawmetal/.build/recovery-20261031/build-current.log`. Final packaging and the installed copy use this exact executable; their hashes are checked again during delivery.
+
+## Tests and result lines
+
+Evidence root: `N:/rawmetal/.build/recovery-20261031/`. All 22 required/supplemental command invocations have a passing run. The broad suites and all-map audits used the gameplay checkpoint 4a82d3e (SHA-256 `9200f5f439be53ec3cb3a89de78f8ca19ecee3111dd2510c124af1808665668c`). On the final executable, the inspection branch, prologue, props, glass, physics-stages and command-arguments checks were rerun successfully. The later code change affects only the inspection firing branch; gameplay and test dispatch are unchanged.
+
+| Command | Exit/result | Seconds | Evidence below root |
+|---|---|---:|---|
+| `--each-test=props` | 0 | 1.72 | `validation-final/each-test-props` |
+| `--each-test=glass` | 0 | 1.99 | `validation-final/each-test-glass` |
+| `--each-test=physics-stages` | 0 | 0.72 | `validation-final/each-test-physics-stages` |
+| `--each-test` | 0 | 238.3 | `validation-final/each-test` |
+| `--smoke-test` | 0 | 218.84 | `validation-final/smoke-test` |
+| `--campaign-map-test` | 0 | 44.54 | `validation-final/campaign-map-test` |
+| `--chapter-route-test` | 0 | 10.07 | `validation-final/chapter-route-test` |
+| `--prologue-test` | 0, 22/22 on final executable | 3.2 | `inspection-final/prologue-test.txt` |
+| `--exclusion-test` | 0 | 137.6 | `validation-final/exclusion-test` |
+| `--vulkan-test` | 0 | 113.97 | `validation-final/vulkan-test` |
+| `--guard-ai-test` | 0 | 18.32 | `validation-final/guard-ai-test` |
+| `--guard-combat-test` | 0 | 2.32 | `validation-final/guard-combat-test` |
+| `--guard-pursuit-test` | 0 | 5.14 | `validation-final/guard-pursuit-test` |
+| `--guard-policy-test` | 0 | 2.95 | `validation-final/guard-policy-test` |
+| `--guard-tactics-test` | 0 | 1.46 | `validation-final/guard-tactics-test` |
+| `--stealth-test` | 0 | 2.77 | `validation-final/stealth-test` |
+| `--hearing-test` | 0 | 0.41 | `validation-final/hearing-test` |
+| `--tactical-grenade-test` | 0 | 2.95 | `validation-final/tactical-grenade-test` |
+| `--save-test` | 0 | 49.29 | `validation-final/save-test` |
+| `--content-integrity-test` | 0 | 2.02 | `validation-final/content-integrity-test` |
+| `--engine-regression-test` | 0 | 2.48 | `validation-final/engine-regression-test` |
+| `--creature-behaviour-test` | 0 | 7.42 | `validation-final/creature-behaviour-test` |
+
+The broad runner returned exit 1 because its first standalone prologue run could not create a checkpoint under the sandbox system temporary directory. The same binary passed outside that restriction and with TEMP/TMP set to a workspace directory. The final executable also passes 22/22 with workspace-local TEMP/TMP. Raw exits.json is retained unaltered; the passing retry is in inspection-final.
 
 ```text
-CLUTTER|map|7|x|y|z|yaw|model|width|depth|height|pitch|roll|breakState
-BREAKABLE|map|x1|y1|x2|y2|bottom|top|material|health|holds|brokenState|triggerState[|fixtureIndex|partMask]
+validation-final/each-test/each-test.txt: ALL PASSED 0
+PASS guard-kicked fragile prop retains NPC ownership when it shatters
+PASS bookcase binders retain their measured shelf support after wake and motion
+PASS rotated prop moves and settles on its oriented tabletop footprint
+PASS medical cart supports its tray load and wakes it to fall when rolled away
+PASS flush crate corners retain support at floating point boundaries
+ALL PASSED physics-stages
+PASS holds stays at stage 2 at 19 seconds
+PASS holds heal timer survives byte-exact save
+PASS holds intact at 21 seconds with no pane decals
+PASS breakable glass never heals
+ALL PASSED glass
+Glazing linear-light transmission 0.773372 direct 227 through 218
+Glossy glazing preserves 70-80 percent of the room brightness: PASS
+Sleeping model props reuse their per-cell cache with stable pixels: PASS
+Breaking panes rebuilds only the breakable cache and never the main chunk: PASS
+One pane break adds under 4 ms CPU scene time: PASS
+Breaking a fixture screen updates its bounded part cache without rebuilding the chunk: PASS
+PASS: Vulkan material / depth / clipping checks
+inspection-final/prologue-test.txt: 22/22 checks passed
 ```
 
-- The original Stage 1 desktop-size bound is extended to 3 m for the Stage 2 rolling-furniture conversions, with the 60 kg audit limit retained. The gurney row uses 55 kg; it cannot be lifted.
-- Initial settling tolerates up to 2.5 cm of floor-finish penetration, matching the existing collision tolerance, so ordinary authored floor-level items can rest on thin carpet/paint finishes. Creation coordinates remain unchanged.
-- Native facility models have no canonical catalog proportions. Their prop audit uses the same catalog-only distortion rule as the fixture audit; curated nominal sizes still supply masses and desktop dimensions.
-- Two existing seam glazing sites are inset to 0.3 m as A5 requires. No other map positions have been deliberately moved.
-- Hanging IV bags stay attached fixtures under A2’s hanging-item exclusion; there is no new hanging-rope constraint. Specified mounted TVs stay fixed; the overflow TV receives a bounded breakable screen.
-- Protected story/lead/transfer/interlock panes hold. Triage’s spattered band hatch holds under the author’s final amendment, retaining its spatter and nurse story.
-- The reachability audit also closes locked doors for an additional glass-only comparison. Positive Chapter 2 differences correspond to the authors’ explicitly permitted route/scare panes. Routing-wing glass that opened new access is protective.
-- Raw material-17 floor slivers are existing glass litter, not glazing; they stay visual litter.
+Editor record tests: 7 tests, OK (`editor-runtime.txt`); map payload export: PASS (`editor-payload.txt`). Edge checker over maps 34-74: `edges ok` (`edge-check.txt`).
+
+## Campaign placement and glass reachability
+
+Every map below returned exit 0 and `PASS: 0 placement problems`. Counts are the audit result lines for open-state glass-only cells and locked-state glass reachability. n/a means the audit emits no such line because that map has no relevant breakable glass; full raw reports remain under validation-final/audits/map-N.
+
+| Map | Placement result | Glass-only cells | Locked-state cells |
+|---:|---|---:|---:|
+| 0 | PASS: 0 placement problems | 0 | 0 |
+| 1 | PASS: 0 placement problems | 0 | 0 |
+| 2 | PASS: 0 placement problems | 0 | 0 |
+| 3 | PASS: 0 placement problems | 0 | 0 |
+| 4 | PASS: 0 placement problems | n/a | n/a |
+| 5 | PASS: 0 placement problems | n/a | n/a |
+| 6 | PASS: 0 placement problems | n/a | n/a |
+| 7 | PASS: 0 placement problems | 0 | 0 |
+| 8 | PASS: 0 placement problems | 0 | 0 |
+| 9 | PASS: 0 placement problems | 0 | 0 |
+| 10 | PASS: 0 placement problems | 0 | 0 |
+| 11 | PASS: 0 placement problems | n/a | n/a |
+| 12 | PASS: 0 placement problems | n/a | n/a |
+| 13 | PASS: 0 placement problems | 0 | 0 |
+| 14 | PASS: 0 placement problems | n/a | n/a |
+| 15 | PASS: 0 placement problems | 0 | 0 |
+| 16 | PASS: 0 placement problems | 0 | 0 |
+| 17 | PASS: 0 placement problems | n/a | n/a |
+| 18 | PASS: 0 placement problems | n/a | n/a |
+| 19 | PASS: 0 placement problems | n/a | n/a |
+| 20 | PASS: 0 placement problems | 0 | 0 |
+| 21 | PASS: 0 placement problems | 0 | 0 |
+| 22 | PASS: 0 placement problems | n/a | n/a |
+| 23 | PASS: 0 placement problems | n/a | n/a |
+| 24 | PASS: 0 placement problems | n/a | n/a |
+| 25 | PASS: 0 placement problems | n/a | n/a |
+| 26 | PASS: 0 placement problems | n/a | n/a |
+| 27 | PASS: 0 placement problems | n/a | n/a |
+| 28 | PASS: 0 placement problems | n/a | n/a |
+| 29 | PASS: 0 placement problems | n/a | n/a |
+| 30 | PASS: 0 placement problems | n/a | n/a |
+| 31 | PASS: 0 placement problems | n/a | n/a |
+| 32 | PASS: 0 placement problems | 0 | 0 |
+| 33 | PASS: 0 placement problems | n/a | n/a |
+| 34 | PASS: 0 placement problems | 0 | 0 |
+| 35 | PASS: 0 placement problems | n/a | n/a |
+| 36 | PASS: 0 placement problems | n/a | n/a |
+| 37 | PASS: 0 placement problems | n/a | n/a |
+| 38 | PASS: 0 placement problems | n/a | n/a |
+| 39 | PASS: 0 placement problems | n/a | n/a |
+| 40 | PASS: 0 placement problems | n/a | n/a |
+| 41 | PASS: 0 placement problems | 0 | 0 |
+| 42 | PASS: 0 placement problems | 0 | 0 |
+| 43 | PASS: 0 placement problems | n/a | n/a |
+| 44 | PASS: 0 placement problems | n/a | n/a |
+| 45 | PASS: 0 placement problems | n/a | n/a |
+| 46 | PASS: 0 placement problems | n/a | n/a |
+| 47 | PASS: 0 placement problems | 0 | 0 |
+| 48 | PASS: 0 placement problems | n/a | n/a |
+| 49 | PASS: 0 placement problems | 0 | 0 |
+| 50 | PASS: 0 placement problems | n/a | n/a |
+| 51 | PASS: 0 placement problems | n/a | n/a |
+| 52 | PASS: 0 placement problems | 0 | 0 |
+| 53 | PASS: 0 placement problems | 0 | 0 |
+| 54 | PASS: 0 placement problems | 0 | 0 |
+| 55 | PASS: 0 placement problems | 0 | 0 |
+| 56 | PASS: 0 placement problems | n/a | n/a |
+| 57 | PASS: 0 placement problems | 0 | 0 |
+| 58 | PASS: 0 placement problems | 0 | 0 |
+| 59 | PASS: 0 placement problems | 0 | 0 |
+| 60 | PASS: 0 placement problems | 0 | 0 |
+| 61 | PASS: 0 placement problems | 0 | 0 |
+| 62 | PASS: 0 placement problems | n/a | n/a |
+| 63 | PASS: 0 placement problems | 0 | 0 |
+| 64 | PASS: 0 placement problems | 0 | 0 |
+| 65 | PASS: 0 placement problems | 0 | 0 |
+| 66 | PASS: 0 placement problems | n/a | n/a |
+| 67 | PASS: 0 placement problems | n/a | n/a |
+| 68 | PASS: 0 placement problems | 30 | 30 |
+| 69 | PASS: 0 placement problems | 27 | 27 |
+| 70 | PASS: 0 placement problems | 0 | 0 |
+| 71 | PASS: 0 placement problems | 0 | 0 |
+| 72 | PASS: 0 placement problems | 2 | 2 |
+| 73 | PASS: 0 placement problems | 0 | 0 |
+| 74 | PASS: 0 placement problems | n/a | n/a |
+| 179 | PASS: 0 placement problems | n/a | n/a |
+
+The nonzero deltas in 68 (30), 69 (27) and 72 (2) are explicitly authored local breach/scare routes between spaces already connected without a locked state. The Chapter 2 seal, clearance gate, Investigator departure, protected hatch, records and lead-glass barriers retain protective panes or solid wall returns. Owning state/door analysis is recorded in glazing-safety-notes.md; aggregate counts alone are not treated as proof of a sequence break.
+
+## Prop performance
+
+Final executable, leaf timers enabled. Times below are CPU wall milliseconds per frame. Update-only scenes use 60 Hz simulation; rendered pairing uses Vulkan, RTX 5060 Ti, linear HDR, 4x MSAA, 640x360 and a hidden presented window.
+
+| Scene | Prop update mean / p95 | Whole update mean / p95 / max |
+|---|---|---|
+| 150 resting props | 0.043 / 0.065 ms | 0.510 / 0.725 / 0.929 ms |
+| 40-prop shove | 0.200 / 0.663 ms | 0.670 / 1.145 / 1.903 ms |
+| Map 70, 260 props | 0.109 / 0.168 ms | 1.172 / 1.502 / 1.819 ms |
+| Map 73, 379 props | 0.094 / 0.138 ms | 0.533 / 0.656 / 0.812 ms |
+
+The 150-resting-prop update is below 0.2 ms, and the 40-prop shove p95 is below 1.5 ms. No measured update exceeded 8.3 ms. The shove is an initial impulse scene, not a claim that all 40 objects remain awake throughout its settling period.
+
+Isolated render comparison uses ABBA order, 120 warm-up and 300 measured frames per scene. Empty render means: 9.231 and 8.975 ms. With 150 resting props: 9.178 and 9.175 ms. Pooled mean incremental rendering time: **0.074 ms**, below the 0.5 ms target on this machine. These are CPU wall timings including renderer synchronization, not a general hardware guarantee. Raw per-frame CSVs and reports: performance/updates.* and performance/paired.*.
+
+## Render review
+
+- Fresh final-executable campaign captures: renders/sheet-00.jpg through sheet-16.jpg, with all 68 native 960x540 frames retained as PPM/PNG. Includes desks and glass in Chapter 1 maps 47, 52, 53, 64 and Chapter 2 maps 68-73, before and two seconds after a shotgun shot. renders/map-shots.txt records 20 successful shotgun shots, each loaded 6 -> 5. Fixed observer frames deliberately omit the player HUD. Protected panes crack and remain solid; ordinary panes break. Some desk angles aim through the back of equipment, so these images supplement collision/damage regressions rather than independently proving every desktop hit.
+
+- Final facing review covers induction theatre rows toward the screen, waiting rows into the hall, boardroom chairs toward the table, terminal seating, ward headboards and both staff rooms. Three hold-room views retain their authored restraint boards. Supplemental inspection-final/sheet.jpg supplies the cart tray/pill view and clear north/east staff-room views; its cart-side frame and the original north staff/cart angles are obstructed camera positions and are not used as evidence of support correctness. The moving-cart support/fall behavior is verified by the regression above.
+
+- Engine D1-D3 matched before/after evidence is preserved from the earlier implementation run at N:/rawmetal/.build/codex-phys/.build/job2/engine-comparison.png, with original PPMs in engine-before-complete and engine-after-complete. It covers plant-room route bars, recessed fitting shadows in 71/72, and glass at the booth/nurses/hatch. Those rendering code paths were retained through recovery. Current Vulkan tests measure 0.773372 linear-light glass transmission and pass cache/material checks.
+
+- Earlier fixture-part and stage inspection evidence remains at N:/rawmetal/.build/codex-phys/.build/job2/physics-inspection-sheet.png and fixture-part-comparison.png.
 
 ## Glazing site table
 
-This lists campaign creation/run call sites. Parameterized helpers and their policies are listed afterward; their individual bays inherit the run’s policy. Room labels use the authored function/section name.
+All paths below are in src/world. Rows describe authored creation/run sites, including repeated calls on one source line; helpers and loops may generate multiple physical pane bays. Final source lists 111 campaign creation/run sites and 14 helper defaults.
 
-| File:line | Room / run | Policy | Reason |
+| File:line | Room/run | Policy | Reason |
 |---|---|---|---|
 | `CampaignMaps.cpp:116` | makeFoundry / 01 INTAKE | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:268` | makePressureWorks / 06 CONTROL | **holds** | Protective/sequence barrier; preserves authored access. |
@@ -114,49 +274,49 @@ This lists campaign creation/run call sites. Parameterized helpers and their pol
 | `CampaignMaps.cpp:396` | makeTurbineGantry / 08 UPPER GANTRY | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:539` | makeReactorComplex / 11 CONTAINMENT (-9 m) | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:539` | makeReactorComplex / 11 CONTAINMENT (-9 m) | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:751` | makeReactorCore / 12A R-03 CONTROL (-6 m) | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:752` | makeReactorCore / 12A R-03 CONTROL (-6 m) | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:752` | makeReactorCore / 12A R-03 CONTROL (-6 m) | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1211` | makePumpAnnex / Observation gallery | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:753` | makeReactorCore / 12A R-03 CONTROL (-6 m) | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:753` | makeReactorCore / 12A R-03 CONTROL (-6 m) | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1212` | makePumpAnnex / Observation gallery | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1212` | makePumpAnnex / Observation gallery | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1284` | makeUtilityJunction / Dispatch office | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1285` | makeUtilityJunction / Dispatch office | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1213` | makePumpAnnex / Observation gallery | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1213` | makePumpAnnex / Observation gallery | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1285` | makeUtilityJunction / Dispatch office | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1286` | makeUtilityJunction / Dispatch office | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1286` | makeUtilityJunction / Dispatch office | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1383` | makeWasteHandling / Control pulpit over the press | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1287` | makeUtilityJunction / Dispatch office | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1287` | makeUtilityJunction / Dispatch office | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1384` | makeWasteHandling / Control pulpit over the press | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1384` | makeWasteHandling / Control pulpit over the press | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1482` | makeFreightAccess / Personnel wing (west) | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1385` | makeWasteHandling / Control pulpit over the press | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1385` | makeWasteHandling / Control pulpit over the press | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1483` | makeFreightAccess / Personnel wing (west) | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1483` | makeFreightAccess / Personnel wing (west) | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1483` | makeFreightAccess / Personnel wing (west) | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1511` | makeFreightAccess / Freight hall | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1511` | makeFreightAccess / Freight hall | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1741` | makeReceivingOverlook / Mezzanine, booth and balcony | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1743` | makeReceivingOverlook / Mezzanine, booth and balcony | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1743` | makeReceivingOverlook / Mezzanine, booth and balcony | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1909` | makeWarehouseIntake / Intake office, west: glazed onto the floor | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1911` | makeWarehouseIntake / Intake office, west: glazed onto the floor | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:1989` | makeWarehouseAB / Operations office, north-east | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1484` | makeFreightAccess / Personnel wing (west) | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1484` | makeFreightAccess / Personnel wing (west) | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1484` | makeFreightAccess / Personnel wing (west) | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1512` | makeFreightAccess / Freight hall | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1512` | makeFreightAccess / Freight hall | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1742` | makeReceivingOverlook / Mezzanine, booth and balcony | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1744` | makeReceivingOverlook / Mezzanine, booth and balcony | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1744` | makeReceivingOverlook / Mezzanine, booth and balcony | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1910` | makeWarehouseIntake / Intake office, west: glazed onto the floor | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1912` | makeWarehouseIntake / Intake office, west: glazed onto the floor | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1990` | makeWarehouseAB / Operations office, north-east | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:1991` | makeWarehouseAB / Operations office, north-east | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2252` | makeManifestOffices / The overlook gallery and its window wall | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2284` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:1992` | makeWarehouseAB / Operations office, north-east | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2253` | makeManifestOffices / The overlook gallery and its window wall | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:2285` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2285` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2287` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2287` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2347` | makeManifestRouting / Briefing room, centre | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2347` | makeManifestRouting / Briefing room, centre | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2286` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2286` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2288` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2288` | makeManifestOffices / Supervisors' offices, east | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:2348` | makeManifestRouting / Briefing room, centre | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:2348` | makeManifestRouting / Briefing room, centre | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2393` | makeManifestRouting / Routing control room | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignMaps.cpp:2393` | makeManifestRouting / Routing control room | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2349` | makeManifestRouting / Briefing room, centre | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2349` | makeManifestRouting / Briefing room, centre | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:2394` | makeManifestRouting / Routing control room | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignMaps.cpp:2394` | makeManifestRouting / Routing control room | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignChapterMachineHall.cpp:695` | makeMachineHallNorthGallery / makeMachineHallNorthGallery | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2395` | makeManifestRouting / Routing control room | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignMaps.cpp:2395` | makeManifestRouting / Routing control room | **holds** | Protective/sequence barrier; preserves authored access. |
+| `CampaignChapterMachineHall.cpp:696` | makeMachineHallNorthGallery / makeMachineHallNorthGallery | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignChapterMaintenance.cpp:273` | makeMaintenanceDistrict / NE: break room, where the survivors camped | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignChapterMaintenance.cpp:306` | makeMaintenanceDistrict / SW: time office, the shift board and the PA | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignChapterMaintenance.cpp:433` | makeCentralStores / Storeman's office, north-east: glazed onto the floor, the hatch onto the passage | **holds** | Protective/sequence barrier; preserves authored access. |
@@ -205,7 +365,7 @@ This lists campaign creation/run call sites. Parameterized helpers and their pol
 | `CampaignChapterResearchFront.cpp:578` | makePersonnelProcessing / Plan | **breakable** | Ordinary glass or the Chapter 2 author’s explicit break/distraction route. |
 | `CampaignChapterResearchFront.cpp:857` | makeResearchAdministration / Plan | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignChapterResearchFront.cpp:857` | makeResearchAdministration / Plan | **holds** | Protective/sequence barrier; preserves authored access. |
-| `CampaignChapterResearchFront.cpp:866` | makeResearchAdministration / Plan | **breakable** | Ordinary glass or the Chapter 2 author’s explicit break/distraction route. |
+| `CampaignChapterResearchFront.cpp:866` | makeResearchAdministration / Plan | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignChapterResearchFront.cpp:881` | makeResearchAdministration / Plan | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignChapterWater.cpp:227` | makeWaterTreatment / Control room (east end of the gallery) | **holds** | Protective/sequence barrier; preserves authored access. |
 | `CampaignChapterWater.cpp:229` | makeWaterTreatment / Control room (east end of the gallery) | **holds** | Protective/sequence barrier; preserves authored access. |
@@ -236,728 +396,6 @@ This lists campaign creation/run call sites. Parameterized helpers and their pol
 | `rfiGlass` | breakable by default; explicit run arguments override where provided. |
 | `watGlazed` | holds by default; explicit run arguments override where provided. |
 
-## Tests, audits and profiles
+## Local delivery
 
-Every executable was copied to a scratch directory before running. Each test directory has `exe-sha256.txt`; audit directories contain their copied EXE and exit log. These snapshots distinguish earlier broad checks from later focused verification.
-
-| Evidence directory | Result lines |
-|---|---|
-| `.build/job2/baseline` | `--each-test=glass exit 0 elapsed 1.75s`<br>`--each-test=props exit 0 elapsed 1.26s` |
-| `.build/job2/stages-final` | `--each-test=physics-stages exit 0 elapsed 0.9s`<br>`--each-test=props exit 0 elapsed 1.39s`<br>`--each-test=glass exit 0 elapsed 1.62s`<br>`--each-test=clutter exit 0 elapsed 2.66s`<br>`--each-test exit 1 elapsed 261.29s` |
-| `.build/job2/engine` | `--campaign-map-test exit 0 elapsed 52.3s`<br>`--vulkan-test exit 0 elapsed 186.39s` |
-| `.build/job2/guards` | `--guard-ai-test exit 0 elapsed 27.03s`<br>`--guard-combat-test exit 0 elapsed 2.96s`<br>`--guard-pursuit-test exit 0 elapsed 6.58s`<br>`--guard-policy-test exit 0 elapsed 3.53s`<br>`--guard-tactics-test exit 0 elapsed 1.79s`<br>`--stealth-test exit 0 elapsed 3.5s`<br>`--hearing-test exit 0 elapsed 0.6s` |
-| `.build/job2/regression` | `--smoke-test exit 0 elapsed 265.89s`<br>`--chapter-route-test exit 0 elapsed 11.76s`<br>`--prologue-test exit 0 elapsed 3.95s`<br>`--exclusion-test exit 0 elapsed 190.49s`<br>`--content-integrity-test exit 0 elapsed 2.18s`<br>`--engine-regression-test exit 0 elapsed 2.64s`<br>`--creature-behaviour-test exit 0 elapsed 8.67s` |
-| `.build/job2/glazing-linear` | `--glazing-test exit 0 elapsed 13.3s` |
-| `.build/job2/physics-final` | `--each-test=physics-stages exit 1 elapsed 0.99s`<br>`--each-test=props exit 0 elapsed 1.57s`<br>`--each-test=glass exit 0 elapsed 2.15s`<br>`--perf-profile=N:/rawmetal/.build/codex-phys/.build/job2-props-perf.txt --perf-norender --perf-leaf exit 0 elapsed 2.1s` |
-| `.build/job2/owner-final` | `--each-test=physics-stages exit 0 elapsed 0.98s` |
-| `.build/job2/current-final` | `--each-test=physics-stages exit 0 elapsed 0.85s`<br>`--each-test=props exit 0 elapsed 1.53s`<br>`--each-test=glass exit 0 elapsed 2.06s`<br>`--each-test exit 0 elapsed 278.14s` |
-| `.build/job2/review-final` | `--each-test exit 0 elapsed 257.43s`<br>`--campaign-map-test exit 0 elapsed 49.14s` |
-| `.build/job2/vulkan-final` | `--vulkan-test exit 0 elapsed 151.61s` |
-| `.build/job2/fixture-vulkan-final` | `--vulkan-test exit 0 elapsed 133.84s` |
-| `.build/job2/physics-renders` | `--physics-inspection --vulkan exit 0 elapsed 13.49s` |
-| `.build/job2/physics-renders-final` | `--physics-inspection exit 0 elapsed 9.93s`<br>`--vulkan exit -1 elapsed 35.56s` |
-| `.build/job2/engine-before-complete` | `--map-shots=N:/rawmetal/.build/codex-phys/.build/job2-dviews.txt --clean-shots --nopost exit 0 elapsed 20.06s` |
-| `.build/job2/engine-after-complete` | `--map-shots=N:/rawmetal/.build/codex-phys/.build/job2-dviews.txt --clean-shots --nopost exit 0 elapsed 20.29s` |
-| `.build/job2/campaign-renders` | `--map-shots=N:/rawmetal/.build/codex-phys/.build/job2-contact-views.txt --clean-shots exit 0 elapsed 36.31s` |
-| `.build/job2/campaign-renders-final` | `--map-shots=N:/rawmetal/.build/codex-phys/.build/job2-contact-views.txt --clean-shots exit 0 elapsed 34.81s` |
-
-The table preserves intermediate failures as history. Later `current-final` and `review-final` runs supersede the earlier full-suite failure; `owner-final` and the later physics-stages runs supersede the intermediate contact-ownership failure. The standalone `--vulkan` entry in `physics-renders-final` was an accidental normal-game launch after the inspection completed and was closed deliberately; it was not the Vulkan test. The actual `--vulkan-test` passed in `fixture-vulkan-final`.
-
-Representative result lines:
-
-```text
-current-final: ALL PASSED 0
-review-final: ALL PASSED 0
-current-final: PASS holds glass stops every bullet
-current-final: PASS holds glass stops every bullet
-current-final: PASS holds glass stops every bullet
-current-final: PASS holds glass accumulates three crack stages and never breaks
-current-final: PASS holds pane stops even a muzzle crossing its box
-current-final: PASS holds stays at stage 2 at 19 seconds
-current-final: PASS holds heal timer survives byte-exact save
-current-final: PASS holds cracks fade over one second
-current-final: PASS new hit resets healing clock
-current-final: PASS holds intact at 21 seconds with no pane decals
-current-final: PASS breakable glass never heals
-current-final: ALL PASSED glass
-current-final: PASS Ashfall terrain grounds breakable records and collision boxes together
-current-final: PASS terrain-grounded glazing breaks through the normal world path
-current-final: ALL PASSED physics-stages
-fixture-vulkan-final: Glazing linear-light transmission 0.773372 direct 227 through 218
-fixture-vulkan-final: Glossy glazing preserves 70-80 percent of the room brightness: PASS
-fixture-vulkan-final: Breaking a fixture screen updates its bounded part cache without rebuilding the chunk: PASS
-fixture-vulkan-final: PASS: Vulkan material / depth / clipping checks
-```
-
-**Editor:** `.build/job2-editor-tests.txt`: 7 unittest checks, OK. `tools/level-editor/test_map_payload.py`: `level-editor map payload export: PASS`, including the new physics export round trip.
-
-**Edges:** `.build/job2/edge-check.txt`: `edges ok` for 34–74.
-
-**Prop update profile:** `.build/job2/physics-final/perf-profile.txt` (leaf timers enabled):
-
-```text
-== resting150: level 0 at (3.5, 4.5) feet 0, yaw 0, pitch -15; 180 measured frames after 120 warm-up; no wake; spawned props 150/150
-   clutter                      0.051     0.041     0.079     0.091     0.120 ms
-== awake40: level 0 at (3.5, 4.5) feet 0, yaw 0, pitch -15; 180 measured frames after 60 warm-up; no wake; spawned props 40/40
-   clutter                      0.165     0.109     0.498     0.677     0.683 ms
-```
-
-150 resting props: mean 0.051 ms / p95 0.079 ms, under the 0.2 ms update budget. The 40-prop shove scene: p95 0.498 ms, under 1.5 ms. These are update timings, not whole-frame or incremental render-cost claims.
-
-The rendered profile is in `.build/job2/perf-gpu/perf-profile.txt`; it predates the final sleeping-update optimization. It includes the full world render, not an isolated prop-only render delta. The <0.5 ms incremental resting-prop render budget is therefore not established by that measurement. The Vulkan suite separately verifies cache reuse, stable pixels, no main chunk rebuild on pane/fixture-part breaks, and the pane-break CPU scene spike threshold.
-
-### Campaign audit ledger
-
-| Map | Verdict | Glass-only reachability | Locked-state glass reachability |
-|---|---|---|---|
-| 0 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 1 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 2 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 3 | FAIL: 4 placement problems | 0 cells | 0 cells |
-| 4 | PASS: 0 placement problems | no glazing | no glazing |
-| 5 | PASS: 0 placement problems | no glazing | no glazing |
-| 6 | PASS: 0 placement problems | no glazing | no glazing |
-| 7 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 8 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 9 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 10 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 11 | PASS: 0 placement problems | no glazing | no glazing |
-| 12 | PASS: 0 placement problems | no glazing | no glazing |
-| 13 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 14 | PASS: 0 placement problems | no glazing | no glazing |
-| 15 | FAIL: 1 placement problems | 0 cells | 0 cells |
-| 16 | FAIL: 1 placement problems | 0 cells | 0 cells |
-| 17 | PASS: 0 placement problems | no glazing | no glazing |
-| 18 | PASS: 0 placement problems | no glazing | no glazing |
-| 19 | PASS: 0 placement problems | no glazing | no glazing |
-| 20 | FAIL: 5 placement problems | 0 cells | 0 cells |
-| 21 | FAIL: 7 placement problems | 0 cells | 0 cells |
-| 22 | PASS: 0 placement problems | no glazing | no glazing |
-| 23 | PASS: 0 placement problems | no glazing | no glazing |
-| 24 | PASS: 0 placement problems | no glazing | no glazing |
-| 25 | PASS: 0 placement problems | no glazing | no glazing |
-| 26 | PASS: 0 placement problems | no glazing | no glazing |
-| 27 | PASS: 0 placement problems | no glazing | no glazing |
-| 28 | PASS: 0 placement problems | no glazing | no glazing |
-| 29 | PASS: 0 placement problems | no glazing | no glazing |
-| 30 | PASS: 0 placement problems | no glazing | no glazing |
-| 31 | PASS: 0 placement problems | no glazing | no glazing |
-| 32 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 33 | PASS: 0 placement problems | no glazing | no glazing |
-| 34 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 35 | PASS: 0 placement problems | no glazing | no glazing |
-| 36 | PASS: 0 placement problems | no glazing | no glazing |
-| 37 | PASS: 0 placement problems | no glazing | no glazing |
-| 38 | PASS: 0 placement problems | no glazing | no glazing |
-| 39 | PASS: 0 placement problems | no glazing | no glazing |
-| 40 | PASS: 0 placement problems | no glazing | no glazing |
-| 41 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 42 | FAIL: 3 placement problems | 0 cells | 0 cells |
-| 43 | PASS: 0 placement problems | no glazing | no glazing |
-| 44 | PASS: 0 placement problems | no glazing | no glazing |
-| 45 | PASS: 0 placement problems | no glazing | no glazing |
-| 46 | PASS: 0 placement problems | no glazing | no glazing |
-| 47 | FAIL: 5 placement problems | 0 cells | 0 cells |
-| 48 | PASS: 0 placement problems | no glazing | no glazing |
-| 49 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 50 | PASS: 0 placement problems | no glazing | no glazing |
-| 51 | PASS: 0 placement problems | no glazing | no glazing |
-| 52 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 53 | FAIL: 25 placement problems | 0 cells | 0 cells |
-| 54 | FAIL: 8 placement problems | 0 cells | 0 cells |
-| 55 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 56 | PASS: 0 placement problems | no glazing | no glazing |
-| 57 | FAIL: 9 placement problems | 0 cells | 0 cells |
-| 58 | FAIL: 1 placement problems | 0 cells | 0 cells |
-| 59 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 60 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 61 | FAIL: 1 placement problems | 0 cells | 0 cells |
-| 62 | PASS: 0 placement problems | no glazing | no glazing |
-| 63 | FAIL: 1 placement problems | 0 cells | 0 cells |
-| 64 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 65 | PASS: 0 placement problems | 0 cells | 0 cells |
-| 66 | PASS: 0 placement problems | no glazing | no glazing |
-| 67 | PASS: 0 placement problems | no glazing | no glazing |
-| 68 | FAIL: 32 placement problems | 30 cells | 30 cells |
-| 69 | FAIL: 18 placement problems | 27 cells | 27 cells |
-| 70 | FAIL: 181 placement problems | 16 cells | 16 cells |
-| 71 | FAIL: 69 placement problems | 0 cells | 0 cells |
-| 72 | FAIL: 60 placement problems | 2 cells | 2 cells |
-| 73 | FAIL: 37 placement problems | 0 cells | 0 cells |
-| 74 | PASS: 0 placement problems | no glazing | no glazing |
-| 179 | PASS: 0 placement problems | no glazing | no glazing |
-
-Evidence: `.build/job2/review-final/audits`. 19 maps currently fail placement validation; the baseline audits of all 0–74 and 179 passed before conversion.
-
-### Outstanding placement failures
-
-These are not suppressed or relabeled as passes. The table below gives every current failing diagnostic; the corresponding raw audit file retains its reach map and border data. A separate exception or coordinate-correction decision is required before A can be completed and committed.
-
-#### Map 3: FAIL: 4 placement problems
-
-```text
-FRAMELESS breakable[0]
-FRAMELESS breakable[1]
-FRAMELESS breakable[2]
-FRAMELESS breakable[3]
-```
-
-#### Map 15: FAIL: 1 placement problems
-
-```text
-HANGING prop model 34 at 2.30,8.35
-```
-
-#### Map 16: FAIL: 1 placement problems
-
-```text
-HANGING prop model 21 at 21.90,10.90
-```
-
-#### Map 20: FAIL: 5 placement problems
-
-```text
-HANGING prop model 28 at 3.20,1.72
-HANGING prop model 28 at 6.00,1.72
-HANGING prop model 28 at 8.80,1.72
-FRAMELESS breakable[0]
-```
-
-#### Map 21: FAIL: 7 placement problems
-
-```text
-FLOATING prop model 38 at 4.30,5.30
-HANGING prop model 38 at 4.30,5.30
-FLOATING prop model 38 at 4.30,7.50
-HANGING prop model 38 at 4.30,7.50
-FLOATING prop model 38 at 4.30,9.70
-HANGING prop model 38 at 4.30,9.70
-```
-
-#### Map 42: FAIL: 3 placement problems
-
-```text
-FLOATING prop model 33 at 15.25,6.20
-FLOATING prop model 34 at 13.70,6.05
-FLOATING prop model 38 at 13.40,6.35
-```
-
-#### Map 47: FAIL: 5 placement problems
-
-```text
-FLOATING prop model 38 at 14.80,5.45
-FLOATING prop model 38 at 15.50,5.45
-FLOATING prop model 230 at 1.30,21.10
-FLOATING prop model 230 at 1.30,21.60
-FLOATING prop model 230 at 1.30,22.10
-```
-
-#### Map 53: FAIL: 25 placement problems
-
-```text
-HANGING prop model 251 at 4.30,1.50
-HANGING prop model 251 at 7.60,1.50
-BURIED prop model 38 at 1.22,20.10
-OVERLAP prop model 38 at 1.22,20.10 with solid fixture
-OVERLAP prop model 38 at 1.22,20.10
-BURIED prop model 38 at 1.22,20.28
-OVERLAP prop model 38 at 1.22,20.28 with solid fixture
-OVERLAP prop model 38 at 1.22,20.28
-BURIED prop model 38 at 1.22,20.46
-OVERLAP prop model 38 at 1.22,20.46 with solid fixture
-OVERLAP prop model 38 at 1.22,20.46
-BURIED prop model 38 at 1.22,20.64
-OVERLAP prop model 38 at 1.22,20.64 with solid fixture
-BURIED prop model 38 at 1.22,20.10
-OVERLAP prop model 38 at 1.22,20.10 with solid fixture
-OVERLAP prop model 38 at 1.22,20.10
-BURIED prop model 38 at 1.22,20.28
-OVERLAP prop model 38 at 1.22,20.28 with solid fixture
-OVERLAP prop model 38 at 1.22,20.28
-BURIED prop model 38 at 1.22,20.46
-OVERLAP prop model 38 at 1.22,20.46 with solid fixture
-OVERLAP prop model 38 at 1.22,20.46
-BURIED prop model 38 at 1.22,20.64
-OVERLAP prop model 38 at 1.22,20.64 with solid fixture
-```
-
-#### Map 54: FAIL: 8 placement problems
-
-```text
-BURIED prop model 251 at 20.90,17.05
-HANGING prop model 251 at 22.60,20.70
-FLOATING prop model 21 at 12.10,5.75
-BURIED prop model 251 at 4.70,21.80
-HANGING prop model 251 at 4.70,21.80
-BURIED prop model 251 at 6.00,22.00
-HANGING prop model 251 at 6.00,22.00
-```
-
-#### Map 57: FAIL: 9 placement problems
-
-```text
-BURIED prop model 21 at 15.60,1.35
-OVERLAP prop model 21 at 15.60,1.35 with solid fixture
-BURIED prop model 21 at 16.40,1.35
-OVERLAP prop model 21 at 16.40,1.35 with solid fixture
-BURIED prop model 21 at 17.70,1.35
-OVERLAP prop model 21 at 17.70,1.35 with solid fixture
-BURIED prop model 21 at 18.50,1.35
-OVERLAP prop model 21 at 18.50,1.35 with solid fixture
-```
-
-#### Map 58: FAIL: 1 placement problems
-
-```text
-HANGING prop model 21 at 2.30,21.95
-```
-
-#### Map 61: FAIL: 1 placement problems
-
-```text
-FRAMELESS breakable[0]
-```
-
-#### Map 63: FAIL: 1 placement problems
-
-```text
-HANGING prop model 38 at 22.60,7.55
-```
-
-#### Map 68: FAIL: 32 placement problems
-
-```text
-HANGING prop model 30 at 4.95,1.22
-HANGING prop model 30 at 5.50,1.22
-HANGING prop model 30 at 6.05,1.22
-OVERLAP prop model 33 at 8.35,2.75
-HANGING prop model 339 at 8.04,2.72
-OVERLAP prop model 347 at 3.60,10.15
-OVERLAP prop model 347 at 3.60,10.15
-OVERLAP prop model 346 at 4.00,12.60
-OVERLAP prop model 346 at 4.80,12.60
-HANGING prop model 346 at 5.60,12.60
-BURIED prop model 346 at 6.35,14.20
-HANGING prop model 346 at 6.35,14.20
-BURIED prop model 347 at 6.35,14.40
-HANGING prop model 347 at 6.35,14.40
-BURIED prop model 346 at 6.35,16.50
-HANGING prop model 346 at 6.35,16.50
-BURIED prop model 347 at 6.35,16.70
-HANGING prop model 347 at 6.35,16.70
-HANGING prop model 350 at 4.20,15.40
-OVERLAP prop model 350 at 4.20,15.40
-HANGING prop model 339 at 4.25,15.80
-BURIED prop model 59 at 14.75,12.00
-HANGING prop model 203 at 8.40,17.55
-HANGING prop model 203 at 9.15,17.55
-HANGING prop model 203 at 14.85,17.55
-OVERLAP prop model 203 at 14.85,17.55
-HANGING prop model 203 at 15.60,17.55
-HANGING prop model 203 at 16.35,17.55
-BURIED prop model 338 at 9.36,15.63
-OVERLAP prop model 347 at 7.30,13.70
-BURIED prop model 203 at 22.60,19.70
-```
-
-#### Map 69: FAIL: 18 placement problems
-
-```text
-OVERLAP prop model 347 at 13.70,6.45
-HANGING prop model 346 at 13.72,6.95
-BURIED prop model 347 at 8.12,8.45
-BURIED prop model 338 at 3.53,6.31
-HANGING prop model 338 at 3.53,6.31
-BURIED prop model 338 at 4.45,6.26
-HANGING prop model 338 at 4.45,6.26
-BURIED prop model 338 at 5.44,6.44
-HANGING prop model 338 at 5.44,6.44
-HANGING prop model 346 at 15.87,8.20
-HANGING prop model 346 at 17.60,1.27
-HANGING prop model 348 at 16.90,21.75
-BURIED prop model 87 at 1.35,15.00
-OVERLAP prop model 87 at 1.35,15.00
-OVERLAP prop model 87 at 1.35,15.65
-BURIED prop model 87 at 1.35,16.30
-HANGING prop model 346 at 4.85,18.88
-```
-
-#### Map 70: FAIL: 181 placement problems
-
-```text
-OVERLAP prop model 346 at 12.55,14.70
-HANGING prop model 346 at 12.55,14.75
-HANGING prop model 346 at 13.38,14.80
-HANGING prop model 350 at 18.70,4.00
-HANGING prop model 339 at 14.40,20.15
-HANGING prop model 339 at 4.70,4.42
-BURIED prop model 340 at 1.30,3.10
-OVERLAP prop model 340 at 1.30,3.10 with solid fixture
-BURIED prop model 340 at 1.31,3.20
-OVERLAP prop model 340 at 1.31,3.20 with solid fixture
-BURIED prop model 340 at 1.32,3.30
-OVERLAP prop model 340 at 1.32,3.30 with solid fixture
-BURIED prop model 340 at 1.30,3.40
-OVERLAP prop model 340 at 1.30,3.40 with solid fixture
-BURIED prop model 340 at 1.31,3.50
-OVERLAP prop model 340 at 1.31,3.50 with solid fixture
-BURIED prop model 340 at 1.32,3.60
-OVERLAP prop model 340 at 1.32,3.60 with solid fixture
-BURIED prop model 340 at 1.32,3.90
-OVERLAP prop model 340 at 1.32,3.90 with solid fixture
-BURIED prop model 340 at 1.30,4.00
-OVERLAP prop model 340 at 1.30,4.00 with solid fixture
-BURIED prop model 340 at 1.31,4.10
-OVERLAP prop model 340 at 1.31,4.10 with solid fixture
-BURIED prop model 340 at 1.32,4.20
-OVERLAP prop model 340 at 1.32,4.20 with solid fixture
-BURIED prop model 340 at 1.30,4.30
-OVERLAP prop model 340 at 1.30,4.30 with solid fixture
-BURIED prop model 340 at 1.31,4.40
-OVERLAP prop model 340 at 1.31,4.40 with solid fixture
-BURIED prop model 340 at 1.32,4.50
-OVERLAP prop model 340 at 1.32,4.50 with solid fixture
-BURIED prop model 340 at 1.31,4.70
-OVERLAP prop model 340 at 1.31,4.70 with solid fixture
-BURIED prop model 340 at 1.32,4.80
-OVERLAP prop model 340 at 1.32,4.80 with solid fixture
-BURIED prop model 340 at 1.30,4.90
-OVERLAP prop model 340 at 1.30,4.90 with solid fixture
-BURIED prop model 340 at 1.31,3.10
-OVERLAP prop model 340 at 1.31,3.10 with solid fixture
-BURIED prop model 340 at 1.32,3.20
-OVERLAP prop model 340 at 1.32,3.20 with solid fixture
-BURIED prop model 340 at 1.30,3.30
-OVERLAP prop model 340 at 1.30,3.30 with solid fixture
-BURIED prop model 340 at 1.31,3.40
-OVERLAP prop model 340 at 1.31,3.40 with solid fixture
-BURIED prop model 340 at 1.32,3.50
-OVERLAP prop model 340 at 1.32,3.50 with solid fixture
-BURIED prop model 340 at 1.30,3.60
-OVERLAP prop model 340 at 1.30,3.60 with solid fixture
-BURIED prop model 340 at 1.31,3.70
-OVERLAP prop model 340 at 1.31,3.70 with solid fixture
-BURIED prop model 340 at 1.32,3.80
-OVERLAP prop model 340 at 1.32,3.80 with solid fixture
-BURIED prop model 340 at 1.30,4.20
-OVERLAP prop model 340 at 1.30,4.20 with solid fixture
-BURIED prop model 340 at 1.31,4.30
-OVERLAP prop model 340 at 1.31,4.30 with solid fixture
-BURIED prop model 340 at 1.32,4.40
-OVERLAP prop model 340 at 1.32,4.40 with solid fixture
-BURIED prop model 340 at 1.30,4.50
-OVERLAP prop model 340 at 1.30,4.50 with solid fixture
-BURIED prop model 340 at 1.31,4.60
-OVERLAP prop model 340 at 1.31,4.60 with solid fixture
-BURIED prop model 340 at 1.32,4.70
-OVERLAP prop model 340 at 1.32,4.70 with solid fixture
-BURIED prop model 340 at 1.30,3.20
-OVERLAP prop model 340 at 1.30,3.20 with solid fixture
-BURIED prop model 340 at 1.31,3.30
-OVERLAP prop model 340 at 1.31,3.30 with solid fixture
-BURIED prop model 340 at 1.32,3.40
-OVERLAP prop model 340 at 1.32,3.40 with solid fixture
-BURIED prop model 340 at 1.30,3.50
-OVERLAP prop model 340 at 1.30,3.50 with solid fixture
-BURIED prop model 340 at 1.31,3.60
-OVERLAP prop model 340 at 1.31,3.60 with solid fixture
-BURIED prop model 340 at 1.32,3.70
-OVERLAP prop model 340 at 1.32,3.70 with solid fixture
-BURIED prop model 340 at 1.30,3.80
-OVERLAP prop model 340 at 1.30,3.80 with solid fixture
-BURIED prop model 340 at 1.31,3.90
-OVERLAP prop model 340 at 1.31,3.90 with solid fixture
-BURIED prop model 340 at 1.32,4.00
-OVERLAP prop model 340 at 1.32,4.00 with solid fixture
-BURIED prop model 340 at 1.30,4.10
-OVERLAP prop model 340 at 1.30,4.10 with solid fixture
-BURIED prop model 340 at 1.30,4.40
-OVERLAP prop model 340 at 1.30,4.40 with solid fixture
-BURIED prop model 340 at 1.31,4.50
-OVERLAP prop model 340 at 1.31,4.50 with solid fixture
-BURIED prop model 340 at 1.32,4.60
-OVERLAP prop model 340 at 1.32,4.60 with solid fixture
-BURIED prop model 340 at 1.30,4.70
-OVERLAP prop model 340 at 1.30,4.70 with solid fixture
-BURIED prop model 340 at 1.31,4.80
-OVERLAP prop model 340 at 1.31,4.80 with solid fixture
-BURIED prop model 340 at 1.32,4.90
-OVERLAP prop model 340 at 1.32,4.90 with solid fixture
-BURIED prop model 340 at 1.30,3.10
-OVERLAP prop model 340 at 1.30,3.10 with solid fixture
-BURIED prop model 340 at 1.31,3.20
-OVERLAP prop model 340 at 1.31,3.20 with solid fixture
-BURIED prop model 340 at 1.32,3.30
-OVERLAP prop model 340 at 1.32,3.30 with solid fixture
-BURIED prop model 340 at 1.30,3.40
-OVERLAP prop model 340 at 1.30,3.40 with solid fixture
-BURIED prop model 340 at 1.31,3.50
-OVERLAP prop model 340 at 1.31,3.50 with solid fixture
-BURIED prop model 340 at 1.31,4.10
-OVERLAP prop model 340 at 1.31,4.10 with solid fixture
-BURIED prop model 340 at 1.32,4.20
-OVERLAP prop model 340 at 1.32,4.20 with solid fixture
-BURIED prop model 340 at 1.30,4.30
-OVERLAP prop model 340 at 1.30,4.30 with solid fixture
-BURIED prop model 340 at 1.31,4.40
-OVERLAP prop model 340 at 1.31,4.40 with solid fixture
-BURIED prop model 340 at 1.32,4.50
-OVERLAP prop model 340 at 1.32,4.50 with solid fixture
-BURIED prop model 340 at 1.30,4.60
-OVERLAP prop model 340 at 1.30,4.60 with solid fixture
-BURIED prop model 340 at 1.31,4.70
-OVERLAP prop model 340 at 1.31,4.70 with solid fixture
-BURIED prop model 340 at 1.32,4.80
-OVERLAP prop model 340 at 1.32,4.80 with solid fixture
-BURIED prop model 340 at 1.31,4.86
-OVERLAP prop model 340 at 1.31,4.86 with solid fixture
-HANGING prop model 339 at 9.95,4.95
-HANGING prop model 346 at 9.32,6.22
-BURIED prop model 346 at 8.75,9.62
-BURIED prop model 346 at 7.92,9.60
-HANGING prop model 346 at 7.92,9.60
-OVERLAP prop model 347 at 10.05,12.95
-OVERLAP prop model 33 at 10.15,18.08
-OVERLAP prop model 347 at 9.30,16.60
-HANGING prop model 346 at 8.42,18.48
-BURIED prop model 340 at 1.30,2.30
-OVERLAP prop model 340 at 1.30,2.30 with solid fixture
-BURIED prop model 340 at 1.31,2.40
-OVERLAP prop model 340 at 1.31,2.40 with solid fixture
-BURIED prop model 340 at 1.32,2.50
-OVERLAP prop model 340 at 1.32,2.50 with solid fixture
-BURIED prop model 340 at 1.30,2.60
-OVERLAP prop model 340 at 1.30,2.60 with solid fixture
-BURIED prop model 340 at 1.31,3.60
-OVERLAP prop model 340 at 1.31,3.60 with solid fixture
-BURIED prop model 340 at 1.32,3.70
-OVERLAP prop model 340 at 1.32,3.70 with solid fixture
-BURIED prop model 340 at 1.30,3.80
-OVERLAP prop model 340 at 1.30,3.80 with solid fixture
-BURIED prop model 340 at 1.31,3.90
-OVERLAP prop model 340 at 1.31,3.90 with solid fixture
-BURIED prop model 340 at 1.32,4.00
-OVERLAP prop model 340 at 1.32,4.00 with solid fixture
-BURIED prop model 340 at 1.30,4.00
-OVERLAP prop model 340 at 1.30,4.00 with solid fixture
-BURIED prop model 340 at 1.31,4.10
-OVERLAP prop model 340 at 1.31,4.10 with solid fixture
-BURIED prop model 340 at 1.32,2.30
-OVERLAP prop model 340 at 1.32,2.30 with solid fixture
-BURIED prop model 340 at 1.30,2.40
-OVERLAP prop model 340 at 1.30,2.40 with solid fixture
-BURIED prop model 340 at 1.31,2.50
-OVERLAP prop model 340 at 1.31,2.50 with solid fixture
-BURIED prop model 340 at 1.30,3.30
-OVERLAP prop model 340 at 1.30,3.30 with solid fixture
-BURIED prop model 340 at 1.31,3.40
-OVERLAP prop model 340 at 1.31,3.40 with solid fixture
-BURIED prop model 340 at 1.32,2.66
-OVERLAP prop model 340 at 1.32,2.66 with solid fixture
-BURIED prop model 340 at 1.31,2.75
-OVERLAP prop model 340 at 1.31,2.75 with solid fixture
-OVERLAP prop model 340 at 1.85,2.00
-OVERLAP prop model 340 at 1.85,2.00
-OVERLAP prop model 340 at 2.05,1.85
-OVERLAP prop model 340 at 1.80,4.55
-OVERLAP prop model 340 at 2.60,4.70
-OVERLAP prop model 339 at 2.25,4.35
-OVERLAP prop model 27 at 3.45,3.90
-BURIED prop model 338 at 4.32,2.75
-HANGING prop model 338 at 4.32,2.75
-```
-
-#### Map 71: FAIL: 69 placement problems
-
-```text
-HANGING prop model 339 at 3.85,1.95
-BURIED prop model 34 at 1.75,3.05
-OVERLAP prop model 34 at 1.75,3.05 with solid fixture
-BURIED prop model 340 at 6.60,3.35
-HANGING prop model 340 at 6.60,3.35
-OVERLAP prop model 340 at 6.60,3.35 with solid fixture
-OVERLAP prop model 194 at 9.60,8.45
-HANGING prop model 339 at 9.65,8.30
-BURIED prop model 186 at 11.50,7.70
-HANGING prop model 186 at 11.50,7.70
-OVERLAP prop model 186 at 11.50,7.70 with solid fixture
-OVERLAP prop model 26 at 11.10,3.95
-BURIED prop model 346 at 13.20,1.27
-OVERLAP prop model 346 at 13.20,1.27 with solid fixture
-BURIED prop model 346 at 13.70,1.27
-OVERLAP prop model 346 at 13.70,1.27 with solid fixture
-BURIED prop model 346 at 14.20,1.27
-OVERLAP prop model 346 at 14.20,1.27 with solid fixture
-BURIED prop model 346 at 15.65,1.27
-OVERLAP prop model 346 at 15.65,1.27 with solid fixture
-BURIED prop model 346 at 16.15,1.27
-OVERLAP prop model 346 at 16.15,1.27 with solid fixture
-BURIED prop model 346 at 16.95,2.90
-HANGING prop model 346 at 16.95,2.90
-OVERLAP prop model 346 at 16.95,2.90 with solid fixture
-OVERLAP prop model 346 at 16.95,2.90
-BURIED prop model 346 at 16.95,3.40
-HANGING prop model 346 at 16.95,3.40
-OVERLAP prop model 346 at 16.95,3.40 with solid fixture
-OVERLAP prop model 346 at 16.95,3.40
-BURIED prop model 346 at 16.95,3.90
-HANGING prop model 346 at 16.95,3.90
-OVERLAP prop model 346 at 16.95,3.90 with solid fixture
-OVERLAP prop model 349 at 14.10,1.85
-OVERLAP prop model 346 at 14.85,2.75
-OVERLAP prop model 346 at 15.70,3.60
-BURIED prop model 347 at 16.00,4.55
-HANGING prop model 346 at 22.58,6.30
-HANGING prop model 339 at 19.10,13.75
-HANGING prop model 346 at 20.30,12.50
-OVERLAP prop model 27 at 1.55,14.48
-OVERLAP prop model 28 at 1.55,14.66
-HANGING prop model 191 at 1.20,14.55
-HANGING prop model 34 at 2.25,14.75
-BURIED prop model 234 at 6.79,15.00
-BURIED prop model 234 at 6.79,20.60
-BURIED prop model 239 at 10.60,16.25
-BURIED prop model 191 at 14.78,13.42
-OVERLAP prop model 230 at 20.40,16.50
-HANGING prop model 339 at 20.20,16.25
-BURIED prop model 346 at 15.10,22.73
-HANGING prop model 346 at 15.10,22.73
-OVERLAP prop model 346 at 15.10,22.73 with solid fixture
-BURIED prop model 346 at 16.10,22.73
-HANGING prop model 346 at 16.10,22.73
-OVERLAP prop model 346 at 16.10,22.73 with solid fixture
-BURIED prop model 346 at 14.45,21.00
-HANGING prop model 346 at 14.45,21.00
-BURIED prop model 346 at 14.45,22.00
-HANGING prop model 346 at 14.45,22.00
-BURIED prop model 346 at 14.45,20.95
-HANGING prop model 346 at 14.45,20.95
-OVERLAP prop model 346 at 14.45,20.95
-BURIED prop model 346 at 14.45,21.45
-HANGING prop model 346 at 14.45,21.45
-BURIED prop model 346 at 14.45,22.20
-HANGING prop model 346 at 14.45,22.20
-OVERLAP prop model 346 at 14.45,22.20 with solid fixture
-```
-
-#### Map 72: FAIL: 60 placement problems
-
-```text
-OVERLAP prop model 232 at 14.75,9.60
-HANGING prop model 232 at 2.05,8.60
-OVERLAP prop model 339 at 2.55,8.50
-OVERLAP prop model 349 at 2.88,8.42
-BURIED prop model 349 at 2.95,8.66
-HANGING prop model 349 at 2.95,8.66
-BURIED prop model 26 at 1.65,7.45
-HANGING prop model 191 at 1.30,6.22
-HANGING prop model 339 at 1.38,5.20
-OVERLAP prop model 339 at 1.38,5.20
-BURIED prop model 346 at 1.60,4.67
-HANGING prop model 346 at 1.60,4.67
-BURIED prop model 346 at 2.45,4.67
-HANGING prop model 346 at 2.45,4.67
-BURIED prop model 346 at 5.85,1.27
-HANGING prop model 346 at 5.85,1.27
-BURIED prop model 346 at 6.70,1.27
-HANGING prop model 346 at 6.70,1.27
-BURIED prop model 346 at 8.00,1.27
-HANGING prop model 346 at 8.00,1.27
-BURIED prop model 346 at 8.85,1.27
-HANGING prop model 346 at 8.85,1.27
-BURIED prop model 346 at 5.85,1.27
-HANGING prop model 346 at 5.85,1.27
-BURIED prop model 346 at 6.75,1.27
-HANGING prop model 346 at 6.75,1.27
-BURIED prop model 346 at 8.00,1.27
-HANGING prop model 346 at 8.00,1.27
-BURIED prop model 346 at 8.85,1.27
-HANGING prop model 346 at 8.85,1.27
-BURIED prop model 346 at 6.00,1.27
-HANGING prop model 346 at 6.00,1.27
-BURIED prop model 346 at 8.60,1.27
-HANGING prop model 346 at 8.60,1.27
-BURIED prop model 346 at 7.70,6.35
-HANGING prop model 346 at 7.70,6.35
-BURIED prop model 346 at 11.32,3.40
-HANGING prop model 346 at 11.32,3.40
-BURIED prop model 346 at 16.35,4.10
-HANGING prop model 346 at 16.35,4.10
-BURIED prop model 346 at 16.35,4.90
-HANGING prop model 346 at 16.35,4.90
-BURIED prop model 18 at 16.30,17.20
-BURIED prop model 18 at 16.30,17.80
-BURIED prop model 338 at 7.66,19.13
-BURIED prop model 339 at 15.24,18.69
-HANGING prop model 339 at 15.24,18.69
-OVERLAP prop model 339 at 15.24,18.69 with solid fixture
-BURIED prop model 338 at 13.72,18.26
-HANGING prop model 338 at 13.72,18.26
-BURIED prop model 339 at 1.25,14.75
-HANGING prop model 339 at 1.25,14.75
-BURIED prop model 339 at 1.25,16.65
-HANGING prop model 339 at 1.25,16.65
-BURIED prop model 346 at 1.27,20.85
-HANGING prop model 346 at 1.27,20.85
-BURIED prop model 346 at 1.27,21.85
-HANGING prop model 346 at 1.27,21.85
-OVERLAP prop model 347 at 21.18,22.40
-```
-
-#### Map 73: FAIL: 37 placement problems
-
-```text
-BURIED prop model 338 at 12.84,19.10
-HANGING prop model 338 at 12.84,19.10
-BURIED prop model 251 at 7.00,16.05
-BURIED prop model 346 at 9.53,20.95
-HANGING prop model 346 at 9.53,20.95
-BURIED prop model 346 at 9.53,21.85
-HANGING prop model 346 at 9.53,21.85
-HANGING prop model 191 at 15.95,2.20
-HANGING prop model 191 at 19.75,2.20
-BURIED prop model 338 at 22.09,3.52
-HANGING prop model 338 at 22.09,3.52
-BURIED prop model 338 at 22.39,3.49
-HANGING prop model 338 at 22.39,3.49
-BURIED prop model 338 at 17.79,4.68
-HANGING prop model 338 at 17.79,4.68
-OVERLAP prop model 26 at 16.30,7.75
-HANGING prop model 339 at 16.05,8.45
-BURIED prop model 338 at 16.13,8.18
-HANGING prop model 338 at 16.13,8.18
-BURIED prop model 348 at 15.60,9.18
-BURIED prop model 348 at 16.10,9.18
-BURIED prop model 348 at 16.90,9.18
-HANGING prop model 346 at 21.31,16.31
-OVERLAP prop model 346 at 21.31,16.31
-HANGING prop model 346 at 21.89,16.31
-OVERLAP prop model 346 at 21.89,16.31
-OVERLAP prop model 346 at 21.89,16.31
-HANGING prop model 346 at 21.31,16.89
-OVERLAP prop model 346 at 21.31,16.89
-HANGING prop model 346 at 21.89,16.89
-HANGING prop model 346 at 21.31,16.31
-OVERLAP prop model 346 at 21.31,16.31
-BURIED prop model 18 at 17.50,22.05
-OVERLAP prop model 18 at 17.50,22.05 with solid fixture
-BURIED prop model 18 at 18.15,21.30
-OVERLAP prop model 18 at 18.15,21.30 with solid fixture
-```
-
-## Render artifacts
-
-- `.build/job2/campaign-contact-sheet.png`: desk and glazing views before and two seconds after shotgun fire, maps 47, 52, 53, 64 and 68–73. The final capture uses fixed observer framing; some protected panes intentionally remain intact and crack. These are review artifacts while placement failures remain.
-- `.build/job2/engine-comparison.png`: ten matched before/after views of 71/72, without post-processing. The before EXE was built in this worktree after temporarily reverting only the three rendering faults; fixed sources were restored. The plant-room blast view visibly exposes the legacy yellow paint in the before image and removes it afterward.
-- `.build/job2/physics-inspection-sheet.png` and `.build/job2/fixture-part-comparison.png`: desktop impacts, thrown monitor, protected-glass stages/litter and bounded fixture-part destruction.
-- Source PPMs, PNG thumbnails and the copied executables remain in their individual render directories.
-
-## Gaps and handoff
-
-1. **A is not green and is not committed.** The pending decision is whether to allow small placement corrections or retain unsafe items as fixtures. Exact source coordinates were preserved rather than silently moving authored content.
-2. **E is not a complete all-green sign-off** while those placement failures remain. Functional suites and graphics checks passing do not replace that audit requirement.
-3. The prop-only incremental rendering budget is not proven by the full-scene profiler; update and cache/spike evidence are reported separately above.
-4. Physical VR headset/hand interaction was not manually exercised; tracked-hand behavior has an automated simulation check.
-5. No purchased asset was created, changed, moved or deleted. Existing library assets were referenced/read only. No restricted source drive was opened, no other worktree was edited and nothing was pushed.
-
-Latest built EXE SHA-256: `b995c05f631ac9a18c35842286c712f00b32787265304f183e25ab622ddd3d07`; 47,410,176 bytes, below 67,108,864.
+The release is integrated locally in engine-pass and main after checks, with user promotional changes preserved. RawMetal.exe is the verified v1.1.5 executable; the previous root executable is backed up under recovery evidence. The local release folder contains DepthWorks.exe, DepthWorks-v1.1.5.zip, notes, a Windows guide and SHA-256 checksums. No remote push or release publication is part of this completion.
