@@ -26,10 +26,6 @@ void mdGlass(Map& m,float x1,float y1,float x2,float y2,float f,float top,int ma
   else wall(m,x1,std::min(t,y2-.05f),x2,std::min(t+.05f,y2),f+sill+.03f,f+head,20);}
  wall(m,x1,y1,x2,y2,f+head,f+head+.07f,20);if(top>f+head+.07f)wall(m,x1,y1,x2,y2,f+head+.07f,top,mat);
 }
-// A doorway frame in a wall along x at y, from a to b, with its lintel to the roof.
-void mdFrame(Map& m,float a,float b,float y,float f,float roof,int mat=3){
- wall(m,a,y-.1f,b,y+.1f,f+2.65f,roof,mat);for(float x:{a-.08f,b})wall(m,x,y-.14f,x+.08f,y+.14f,f,f+2.7f,20);
-}
 // Somebody left where they fell: a scripted track held in the dead pose.
 void mdBody(Map& m,const char* clock,ActorVisual visual,Vec2 p,float z,float yaw){actor(m,clock,visual,1.7f,{{0,p,z,yaw,4,1},{1000,p,z,yaw,4,1}});}
 void mdBlood(Map& m,float x1,float y1,float x2,float y2,float f){wall(m,x1,y1,x2,y2,f+.004f,f+.010f,16);}
@@ -41,12 +37,6 @@ void mdGuard(Map& m,const char* clock,const std::string& key,ActorVisual visual,
  auto& ai=t.ai;ai.mode=ActorAiMode::Guard;ai.role=role;ai.faction=AiFaction::Raider;ai.squad=squad?stateId(squad):0;ai.armed=true;
  ai.weapon=weapon;ai.sightRange=sight;ai.sightDot=.6f;ai.searchMs=7000;ai.speed=speed;ai.patrol=std::move(beat);
  m.actorTracks.push_back(std::move(t));
-}
-// A reading desk facing north: desk, chair, monitor.
-void mdDeskLocal(Map& m,float x,float y,float f){
- mdFix(m,model::desk,x,y,f,1.4f,.7f,.75f,mdN,true);
- mdFix(m,model::office_chair,x,y+.8f,f,.55f,.55f,.95f,mdN,true);
- mdFix(m,model::crt_monitor,x,y-.12f,f+.75f,.42f,.4f,.38f,mdS,false);
 }
 void mdSequence(Map& m,const char* timer,const char* finish,int durationMs,int finishAtMs,float x1,float y1,float x2,float y2){
  TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(finish);s.x1=x1;s.y1=y1;s.x2=x2;s.y2=y2;
@@ -987,11 +977,35 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  recessedFittings(m);freightFinish(m,-1);
  return p;
 }
-// MEDICAL / IMAGING (manifest 48). The first room past the seal: two X-ray
-// suites behind lead glass, the scanning bay, the reading room and its film
-// archive. The films on the lightboxes are wrong: skulls grown through with
-// something crystalline, and the readings say it is the same on everyone in
-// tier 3. One of the scanned is still in the scanning bay, and awake.
+// --- Chunk 73 helpers (m73) -----------------------------------------------------------------
+// Anything loose: it stands where it was left and does not block (a physics prop later).
+void m73Loose(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw){mdFix(m,model,x,y,z,w,d,h,yaw,false);}
+// A lead-lined doorway in a wall along y (x1..x2 thick): steel jambs and head, and its sliding
+// leaf parked open on the room side (face at `face`, the room toward `dir` in x), slid toward -y
+// along a track under the head.
+void m73LeadDoor(Map& m,float y1,float y2,float x1,float x2,float face,float dir,float f,float roof){
+ m72DoorwayY(m,y1,y2,x1,x2,f,roof);
+ const float w=y2-y1,a=face+dir*.03f,b=face+dir*.09f,lo=std::min(a,b),hi=std::max(a,b);
+ wall(m,lo,y1-w+.02f,hi,y1+.02f,f+.02f,f+2.16f,20);                                  // the leaf
+ wall(m,lo-.004f,y1-w+.02f,hi+.004f,y1+.02f,f+.02f,f+.3f,8);                          // kick plate
+ wall(m,lo-.03f,y1-.16f,hi+.03f,y1-.1f,f+.9f,f+1.3f,8);                                // pull handle
+ const float t1=face,t2=face+dir*.12f;
+ wall(m,std::min(t1,t2),y1-w-.05f,std::max(t1,t2),y2+.05f,f+2.18f,f+2.25f,20);          // the track
+}
+// A film left where it fell: a dark sheet on the floor or a bench.
+void m73Film(Map& m,float x,float y,float z,bool alongX=false){if(alongX)wall(m,x,y,x+.43f,y+.35f,z+.002f,z+.005f,8);else wall(m,x,y,x+.35f,y+.43f,z+.002f,z+.005f,8);}
+
+// MEDICAL / IMAGING (manifest 48). The first rooms past the seal, on the transfer corridor
+// between Screening and Ward C: two X-ray rooms on one lead-glass control booth, the darkroom
+// behind its light trap, the whole-body counter, and across the corridor the reading room,
+// booking, reception, the film library and the radiographers' room. Tonight they X-rayed nine
+// tier-3 skulls and every film showed the same crystalline growth through the sutures; the
+// radiologist was told to report it as exposure, then the Investigator sent a detail for every
+// film. The detail packed the library; one of them opened the counter's steel door on subject
+// nine, who is still sitting in there, and awake. LAB 4's film is the one that came back clear.
+// Route: the S seam from Ward C (or the N door from Screening, on med_override) along the
+// corridor; reception opens off it east to the Pharmacy seam. Loops: reading room -> booking ->
+// reception; booth -> light trap -> darkroom; changing -> counter, and the counter store.
 std::shared_ptr<const Map> makeMedicalImaging(){
  auto p=std::make_shared<Map>();auto& m=*p;
  m.name=CampaignMapNames[73];m.definition=CampaignChunks[73];m.definition.ambient=.20f;
@@ -1002,85 +1016,326 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  openEdge(m,{'E',9.f,14.f,f,false,0});
  openEdge(m,{'S',10.f,14.f,f,false,0});
  machineryClock(m,"md_imaging_clock",60000);
- // --- The spine corridor ------------------------------------------------------------------------
- // West wall: open doorways into the two X-ray suites and the scanning bay, a window onto suite 2.
- wall(m,8.8f,1.f,9.f,4.6f,f,roof,3);wall(m,8.8f,5.8f,9.f,7.2f,f,roof,3);wall(m,8.8f,8.4f,9.f,9.f,f,roof,3);mdGlass(m,8.8f,9.f,9.f,10.6f,f,roof);
- wall(m,8.8f,10.6f,9.f,13.6f,f,roof,3);wall(m,8.8f,15.f,9.f,23.8f,f,roof,3);
- for(float y:{4.6f,7.2f,13.6f})wall(m,8.75f,y,9.05f,y+1.2f,f+2.65f,roof,3);
- wall(m,15.f,1.f,15.2f,9.f,f,roof,3);wall(m,15.f,14.f,15.2f,23.8f,f,roof,3);
- ceilingGrid(m,9.f,1.f,15.f,23.f,roof);
- for(float y:{4.f,11.5f,19.f})m.lights.push_back(lamp({12.f,y},roof-.16f,.7f,5.5f,5400,.05f));
- {auto l=lamp({12.f,15.f},roof-.16f,.7f,5.f,5400,.05f);l.flicker=.5f;m.lights.push_back(l);}
- // --- X-ray suites, north-west: the tables behind a lead-glass control booth -----------------------
- wall(m,1.f,6.f,8.8f,6.2f,f,roof,27);
- for(float y0:{1.f,6.2f}){const float cy=y0+2.4f;
-  mdFix(m,model::med_autopsy_table,5.2f,cy,f,1.98f,.81f,.95f,mdE+kPi*.5f,true);
-  wall(m,4.6f,cy-.3f,5.8f,cy+.3f,f+2.3f,f+2.5f,20);m.pipes.push_back({{5.2f,cy},{5.2f,cy},f+2.5f,.05f,roof,6});
-  mdFix(m,model::med_xray_viewer_skull,1.06f,cy-.6f,f+1.4f,.41f,.1f,.5f,mdE,false);
-  mdFix(m,model::med_xray_viewer_chest,1.06f,cy+.6f,f+1.4f,.41f,.1f,.5f,mdE,false);
-  m.lights.push_back(lamp({1.3f,cy},f+1.6f,.6f,3.f,7500,-.3f,WorldLightMount::Bare));
-  m.lights.push_back(lamp({3.4f,cy},roof-.16f,.6f,4.5f,5600,.04f));}
- mdGlass(m,7.f,1.f,7.2f,4.2f,f,roof,27);   // the booth's lead glass, open at its south end
- mdFix(m,model::lab_control_board,8.7f,3.4f,f+.9f,1.32f,.19f,.6f,mdW,false);   // on the booth wall
- terminal(m,{8.3f,2.2f},"RADIOLOGY / READINGS","03:00 FRONTAL BONE: CRYSTALLINE GROWTH THROUGH THE SUTURES. SAME AS LAST WEEK'S. SAME AS EVERY TIER 3.",
-  "DO NOT REPORT AS ABNORMAL. REPORT AS EXPOSURE, TIER 3. THE BOARD HAS ASKED FOR THE FILMS.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=mdW;
- // --- The scanning bay, south-west ----------------------------------------------------------------
- wall(m,1.f,11.8f,8.8f,12.f,f,roof,27);
- mdFix(m,model::lab_test_chamber,4.4f,16.6f,f,2.5f,1.5f,1.4f,mdE,true);
- mdFix(m,model::lab_control_board,8.7f,13.f,f+.9f,1.32f,.19f,.6f,mdW,false);   // on the bay wall
- mdFix(m,model::desk,8.3f,17.4f,f,1.4f,.7f,.75f,mdW,true);
- mdFix(m,model::lab_scope_monitor,8.35f,17.4f,f+.75f,.47f,.34f,.45f,mdW,false);
- mdFix(m,model::med_wheelchair,7.2f,20.6f,f,.53f,.99f,.87f,2.8f,true);
- mdBlood(m,5.8f,18.6f,7.4f,20.f,f);
- {auto l=lamp({4.4f,16.6f},roof-.2f,.9f,5.f,9000,-.4f);l.flicker=.4f;m.lights.push_back(l);}
- m.lights.push_back(lamp({4.4f,20.8f},roof-.16f,.6f,5.f,5200,.05f));
- m.lights.push_back(lamp({7.6f,17.4f},f+1.3f,.5f,3.f,7200,-.2f,WorldLightMount::Bare));   // the scope's glow
- m.creatureSpawns.push_back({CreatureKind::Transformed,{3.f,20.6f},f});
- // --- The reading room, north-east: lightboxes along the wall --------------------------------------
- wall(m,15.2f,8.8f,17.f,9.f,f,roof,3);wall(m,21.f,8.8f,23.f,9.f,f,roof,3);
- for(float x:{16.4f,17.6f,18.8f,20.f,21.2f})mdFix(m,model::med_xray_viewer_skull,x,1.06f,f+1.4f,.41f,.1f,.5f,mdS,false);
- for(float x:{17.f,20.6f})mdDeskLocal(m,x,3.2f,f);
- mdBody(m,"md_imaging_clock",ActorVisual::SeniorScientist,{18.8f,5.6f},f,1.9f);
- m.lights.push_back(lamp({18.8f,1.4f},f+1.5f,.8f,4.5f,7500,-.3f,WorldLightMount::Bare));
- m.lights.push_back(lamp({19.f,5.6f},roof-.16f,.6f,5.f,4800,.06f));
- // --- The film archive, south-east ----------------------------------------------------------------
- wall(m,15.2f,14.f,21.f,14.2f,f,roof,3);wall(m,22.6f,14.f,23.f,14.2f,f,roof,3);mdFrame(m,21.f,22.6f,14.1f,f,roof);
- for(float y:{15.4f,17.f,18.6f,20.2f})for(float x:{17.f,19.4f})mdFix(m,model::file_cabinet_tall,x,y,f,.5f,.6f,1.3f,mdS,true);
- mdFix(m,model::file_cabinet_tall,22.5f,21.6f,f,.5f,.6f,1.3f,mdW,true);
- m.lights.push_back(lamp({20.f,18.f},roof-.16f,.55f,5.f,4600,.08f));
- // --- What the night left -------------------------------------------------------------------------
- // The reading room: films on the floor, the boxes the board sent for them.
- paperDrift(m,15.6f,1.8f,22.6f,8.4f,f,10,73);
- for(auto [x,y,yaw]:{std::tuple{16.6f,3.1f,.1f},{20.25f,3.25f,-.15f}})mdFix(m,model::office_paper_stack,x,y,f+.75f,.33f,.44f,.03f,yaw,false);
- mdFix(m,model::prop_cardboard_box,16.f,7.9f,f,.727f,.72f,.367f,0,true);
- mdFix(m,model::prop_cardboard_box,16.02f,7.88f,f+.367f,.727f,.72f,.367f,.2f,true);
- mdFix(m,model::prop_cardboard_box_open,22.2f,7.9f,f,.73f,.725f,.726f,-.2f,true);
- // The film archive: the drawer cabinet pulled open, the envelopes thrown down.
- mdFix(m,model::office_file_cabinet_open,21.75f,22.65f,f,1.451f,.699f,1.054f,mdN,true);
- mdFix(m,model::prop_cardboard_box_open,15.9f,22.3f,f,.73f,.725f,.726f,.4f,true);
- paperDrift(m,15.6f,14.6f,22.6f,22.6f,f,10,731);
- // The scanning bay and the spine.
- for(auto [x,y,yaw]:{std::tuple{6.1f,18.9f,.5f},{7.7f,19.6f,2.f}})mdFix(m,model::item_bandage,x,y,f,.075f,.148f,.061f,yaw,false);
- mdFix(m,model::item_id_card,5.5f,18.3f,f,.132f,.085f,.002f,1.2f,false);
- paperDrift(m,9.4f,2.f,14.6f,22.6f,f,6,732);
- extinguisher(m,15.f,20.f,f,mdW);extinguisher(m,2.f,6.f,f,mdN);
- // The archive's walls: shelving of boxed films, the boxes the board has not had yet.
- for(float y:{16.5f,18.6f}){shelf(m,{15.47f,y},mdE,0);mdFix(m,model::prop_cardboard_box,15.5f,y,f+1.8f,.727f,.72f,.367f,y,false);}
- for(float y:{15.6f,17.6f}){shelf(m,{22.73f,y},mdW,0);mdFix(m,model::prop_cardboard_box,22.7f,y+.3f,f+1.8f,.727f,.72f,.367f,-y,false);}
- for(auto [x,y]:{std::pair{18.2f,21.8f},{18.25f,21.82f}})mdFix(m,model::prop_cardboard_box,x,y,x>18.22f?f+.367f:f,.727f,.72f,.367f,x,true);
- // The scanning bay: the cabinet for the contrast, the fridge for the samples.
- mdFix(m,model::med_supply_cabinet,1.23f,14.f,f,1.1f,.444f,1.7f,mdE,true);
- mdFix(m,model::lab_sample_fridge,1.43f,12.55f,f,.7f,.85f,1.f,mdE,true);
- // The spine: gurneys parked against the wall for the morning.
- for(float y:{5.f,18.4f})mdFix(m,model::med_ward_bed,14.5f,y,f,1.98f,.94f,.84f,kPi*.5f,true);
- mdFix(m,model::med_wheelchair,9.5f,21.4f,f,.482f,.9f,.787f,.3f,true);
+ const char* clock="md_imaging_clock";
+ auto crash=[&](float x1,float x2,float y1,float y2){wall(m,x1,y1,x2,y2,f+.86f,f+.96f,20);};
+ // --- Plan (walls .2 m, painted). The corridor keeps the 4 m of the N door and both seams ---------
+ for(auto [a,b]:{std::pair{1.f,3.f},{4.4f,7.2f},{8.4f,12.6f},{14.f,17.4f},{18.6f,23.f}})wall(m,9.8f,a,10.f,b,f,roof,3);
+ for(auto [a,b]:{std::pair{1.f,2.2f},{3.4f,9.f},{14.f,23.f}})wall(m,14.f,a,14.2f,b,f,roof,3);
+ wall(m,14.f,9.f,14.2f,14.f,f+2.6f,roof,3);wall(m,13.98f,9.f,14.22f,14.f,f+2.56f,f+2.6f,20);        // reception's open front
+ for(float y:{9.f,13.94f})wall(m,13.97f,y,14.23f,y+.06f,f,f+2.56f,20);
+ m72DoorwayY(m,2.2f,3.4f,14.f,14.2f,f,roof);                                   // reading room
+ m72DoorwayY(m,7.2f,8.4f,9.8f,10.f,f,roof);                                    // the booth
+ m72DoorwayY(m,17.4f,18.6f,9.8f,10.f,f,roof);                                  // changing
+ m73LeadDoor(m,3.f,4.4f,9.8f,10.f,9.8f,-1,f,roof);                             // X-ray 1
+ m73LeadDoor(m,12.6f,14.f,9.8f,10.f,9.8f,-1,f,roof);                           // X-ray 2
+ // West block: darkroom, X-ray 1, the booth and its light trap, X-ray 2, the counter suite.
+ wall(m,3.4f,1.f,3.6f,6.5f,f,roof,3);m72DoorwayY(m,6.5f,7.4f,3.4f,3.6f,f,roof);wall(m,3.4f,7.4f,3.6f,9.2f,f,roof,3);
+ wall(m,3.6f,6.2f,6.2f,6.4f,f,roof,3);m71Glaze(m,6.2f,6.2f,8.6f,6.4f,f,roof,.95f,2.1f);wall(m,8.6f,6.2f,9.8f,6.4f,f,roof,3);
+ wall(m,5.4f,6.4f,5.6f,8.2f,f,roof,3);m72DoorwayY(m,8.2f,9.1f,5.4f,5.6f,f,roof);wall(m,5.4f,9.1f,5.6f,9.2f,f,roof,3);
+ wall(m,4.4f,7.6f,5.4f,7.8f,f,roof,8);                                                                     // the trap's baffle
+ wall(m,1.f,9.2f,6.2f,9.4f,f,roof,3);m71Glaze(m,6.2f,9.2f,8.6f,9.4f,f,roof,.95f,2.1f);wall(m,8.6f,9.2f,9.8f,9.4f,f,roof,3);
+ wall(m,1.f,15.f,9.8f,15.2f,f,roof,3);
+ wall(m,6.6f,15.2f,6.8f,17.f,f,roof,3);m72DoorwayY(m,17.f,18.2f,6.6f,6.8f,f,roof);wall(m,6.6f,18.2f,6.8f,23.f,f,roof,3);
+ wall(m,6.8f,19.f,8.f,19.2f,f,roof,3);m72Swing(m,8.f,8.9f,19.1f,f,roof,1);wall(m,8.9f,19.f,9.8f,19.2f,f,roof,3);   // door 1: counter store
+ // East block: reading room, booking, reception, film library, radiographers' room.
+ wall(m,14.2f,5.6f,15.f,5.8f,f,roof,3);m72Swing(m,15.f,15.9f,5.7f,f,roof,1);wall(m,15.9f,5.6f,23.f,5.8f,f,roof,3); // door 2: reading room / booking
+ wall(m,14.2f,8.8f,15.f,9.f,f,roof,3);m71Glaze(m,15.f,8.8f,17.4f,9.f,f,roof,.95f,2.f);wall(m,17.4f,8.8f,21.4f,9.f,f,roof,3);
+ m72Swing(m,21.4f,22.3f,8.9f,f,roof,-1);wall(m,22.3f,8.8f,23.f,9.f,f,roof,3);                                   // door 3: booking
+ wall(m,14.2f,14.f,20.f,14.2f,f,roof,3);m72Swing(m,20.f,20.9f,14.1f,f,roof,1);wall(m,20.9f,14.f,23.f,14.2f,f,roof,3); // door 4: library
+ wall(m,14.2f,19.4f,15.2f,19.6f,f,roof,3);m72Swing(m,15.2f,16.1f,19.5f,f,roof,1);wall(m,16.1f,19.4f,23.f,19.6f,f,roof,3); // door 5: staff room
+ for(auto [x1,y1,x2,y2]:{std::tuple{10.f,1.f,14.f,23.f},{3.6f,1.f,9.8f,6.2f},{5.6f,6.4f,9.8f,9.2f},{1.f,1.f,3.4f,9.2f},{1.f,9.4f,9.8f,15.f},
+  {6.8f,15.2f,9.8f,19.f},{6.8f,19.2f,9.8f,23.f},{1.f,15.2f,6.6f,23.f},{14.2f,1.f,23.f,5.6f},{14.2f,5.8f,23.f,8.8f},{14.2f,9.f,23.f,14.f},
+  {14.2f,14.2f,23.f,19.4f},{14.2f,19.6f,23.f,23.f}})ceilingGrid(m,x1,y1,x2,y2,roof);
+ // --- The transfer corridor: nine went down it at 02:40, and the gurneys came back empty ----------
+ for(auto [a,b]:{std::pair{1.05f,2.95f},{4.45f,7.15f},{8.45f,12.55f},{14.05f,15.2f},{15.8f,17.35f},{18.65f,22.95f}})crash(10.f,10.04f,a,b);
+ for(auto [a,b]:{std::pair{1.05f,2.15f},{3.45f,8.95f},{14.05f,22.95f}})crash(13.96f,14.f,a,b);
+ wallSign(m,10.f,3.7f,f+2.3f,"X-RAY","DO NOT ENTER WHEN LIT",1.2f,kPi*.5f);
+ mdFix(m,model::bench,13.7f,5.6f,f,1.86f,.44f,.63f,kPi*.5f,true);
+ for(float y:{15.6f,18.f})mdFix(m,model::med_ward_bed,13.45f,y,f,1.98f,.94f,.84f,kPi*.5f,true);
+ for(float y:{15.05f,15.95f,17.45f})wall(m,12.98f,y,13.92f,y+.06f,f+.84f,f+.848f,8);                   // straps left buckled
+ mdFix(m,model::med_wheelchair,10.6f,10.8f,f,.48f,.9f,.79f,.4f,true);
+ extinguisher(m,10.f,15.5f,f,mdE);
+ mdFix(m,model::med_wall_clock,13.99f,7.9f,f+2.05f,.24f,.02f,.23f,mdW,false);
+ mdFix(m,model::med_notice_board,10.035f,20.8f,f+1.25f,1.2f,.07f,.9f,mdE,false);
+ for(auto [a,b]:{std::pair{1.2f,8.6f},{9.8f,14.4f},{19.6f,22.9f}})for(float x:{11.55f,12.45f})floorLine(m,x,a,x+.04f,b,f,8);   // wheel scuffs
+ for(auto [x,y,yaw]:{std::tuple{12.6f,4.3f,.4f},{11.2f,6.9f,2.1f},{12.9f,21.4f,1.3f}})m73Loose(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
+ paperDrift(m,10.4f,1.5f,13.f,22.5f,f,6,7300);
+ // --- X-ray 1: the general room, the skull series ------------------------------------------------
+ wall(m,5.95f,2.9f,6.85f,3.5f,f,f+.03f,8);wall(m,6.15f,3.f,6.65f,3.4f,f+.03f,f+.66f,20);                 // table base, pedestal
+ wall(m,5.35f,2.85f,7.45f,3.55f,f+.66f,f+.72f,20);wall(m,5.4f,2.9f,7.4f,3.5f,f+.72f,f+.76f,23);         // top, pad
+ wall(m,5.8f,2.82f,6.9f,2.85f,f+.56f,f+.66f,8);                                                         // the bucky tray
+ for(float x:{6.05f,6.95f})wall(m,x,2.84f,x+.06f,3.56f,f+.76f,f+.768f,8);                              // straps
+ for(float y:{2.55f,3.8f})wall(m,4.2f,y,8.8f,y+.05f,roof-.06f,roof,20);                                  // ceiling rails
+ wall(m,6.2f,2.5f,6.6f,3.9f,roof-.14f,roof-.06f,20);                                                      // carriage
+ m.pipes.push_back({{6.4f,3.2f},{6.4f,3.2f},f+1.72f,.065f,roof-.14f,5});                                  // column
+ m.pipes.push_back({{6.4f,2.92f},{6.4f,3.48f},f+1.62f,.13f,f+1.62f,5});                                   // tube head
+ wall(m,6.25f,3.05f,6.55f,3.35f,f+1.3f,f+1.5f,20);wall(m,6.2f,3.15f,6.25f,3.25f,f+1.36f,f+1.44f,8);       // collimator, handle
+ for(float y:{2.97f,3.43f})m.pipes.push_back({{6.4f,y},{6.4f,y},f+1.7f,.022f,roof-.14f,8});   // HT cables to the carriage
+ wall(m,3.6f,4.2f,4.2f,5.1f,f,f+.03f,8);wall(m,3.6f,4.5f,3.76f,4.8f,f+.03f,f+2.25f,20);wall(m,3.76f,4.25f,3.94f,5.05f,f+1.05f,f+1.6f,20); // chest stand
+ for(float y:{4.28f,4.97f})wall(m,3.94f,y,4.06f,y+.05f,f+1.35f,f+1.4f,20);
+ wall(m,3.37f,1.9f,3.63f,2.5f,f+1.f,f+1.5f,20);for(float x:{3.36f,3.63f})wall(m,x,1.95f,x+.01f,2.45f,f+1.05f,f+1.45f,8); // cassette pass box
+ mdFix(m,model::pwr_switchgear_cabinet,8.9f,1.285f,f,1.05f,.57f,1.89f,0,true);   // the generator's control cabinet
+ mdFix(m,model::pwr_switchgear_cabinet,7.75f,1.285f,f,1.05f,.57f,1.89f,0,true);   // and its HT tank cabinet
+ m.pipes.push_back({{7.75f,1.22f},{7.75f,1.22f},f+1.89f,.035f,roof,8});m.pipes.push_back({{8.9f,1.22f},{8.9f,1.22f},f+1.89f,.03f,roof,8});
+ mdFix(m,model::med_supply_cabinet,4.6f,5.98f,f,1.1f,.44f,1.7f,mdN,true);
+ wall(m,9.72f,4.6f,9.8f,6.f,f+1.62f,f+1.66f,20);for(float y:{4.7f,5.15f,5.58f})wall(m,9.66f,y,9.74f,y+.36f,f+.82f,f+1.62f,23); // lead aprons
+ for(float x:{4.6f,5.1f})mdFix(m,model::med_xray_viewer_skull,x,1.05f,f+1.2f,.41f,.1f,.5f,mdS,false);
+ mdFix(m,model::med_wheelchair,8.55f,4.9f,f,.48f,.9f,.79f,2.f,true);
+ mdFix(m,model::trash_can,8.25f,5.85f,f,.45f,.45f,.56f,0,true);
+ m73Loose(m,model::office_paper_sheet,5.95f,3.15f,f+.761f,.4f,.293f,.004f,.3f);
+ m73Loose(m,model::item_id_card,7.2f,4.1f,f,.132f,.085f,.002f,.9f);
+ wall(m,7.6f,3.95f,8.3f,4.4f,f,f+.012f,23);                                                              // the gown, dropped
+ // --- The control booth: two consoles under the lead glass ---------------------------------------
+ for(auto [y1,y2]:{std::pair{6.42f,6.95f},{8.67f,9.18f}}){wall(m,6.3f,y1,8.5f,y2,f+.08f,f+.78f,20);wall(m,6.34f,y1+.02f,8.46f,y2-.02f,f,f+.08f,8);
+  wall(m,6.28f,y1-.02f,8.52f,y2+.02f,f+.78f,f+.82f,8);
+  for(int i=0;i<6;++i){const float x=6.5f+i*.17f,y=(y1+y2)*.5f-.04f;wall(m,x,y,x+.08f,y+.08f,f+.82f,f+.835f,i%3==0?19:18);}}
+ wall(m,7.85f,6.75f,7.93f,6.83f,f+.82f,f+.9f,8);                                                          // exposure switch
+ mdFix(m,model::crt_monitor,8.15f,6.68f,f+.82f,.42f,.4f,.38f,mdS,false);
+ mdFix(m,model::crt_monitor,6.75f,8.92f,f+.82f,.42f,.4f,.38f,mdN,false);
+ terminal(m,{7.15f,6.72f},"X-RAY 1 / EXPOSURE LOG","02:20-03:35 SKULL SERIES, TIER 3. NINE PATIENTS, NINE FILMS. NINE THE SAME.",
+  "03:41 TUBE OFF. THEY CAN TAKE THE FILMS. I AM NOT TAKING ANY MORE.");
+ m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.82f;m.terminals.back().yaw=mdS;
+ mdFix(m,model::office_chair,7.25f,7.75f,f,.55f,.55f,.95f,.35f,false);
+ mdFix(m,model::med_notice_board,5.635f,7.1f,f+1.2f,1.2f,.07f,.9f,mdE,false);                              // the technique charts
+ wall(m,8.65f,8.88f,9.75f,9.18f,f,f+.9f,20);for(int i=0;i<5;++i){const float x=8.8f+i*.2f;wall(m,x,8.92f,x+.02f,9.14f,f+.9f,f+1.2f,8);} // cassette hopper
+ wall(m,9.72f,6.5f,9.78f,6.9f,f+.85f,f+1.6f,23);wall(m,9.74f,6.68f,9.8f,6.72f,f+1.6f,f+1.66f,20);       // an apron on its peg
+ mdFix(m,model::med_wall_clock,9.785f,9.7f,f+2.05f,.24f,.02f,.23f,mdW,false);
+ wall(m,5.6f,8.5f,5.64f,8.8f,f+2.36f,f+2.46f,19);                                                         // darkroom-in-use lamp
+ // --- The light trap: a black dog-leg, so the darkroom never sees the booth -----------------------
+ wall(m,3.6f,6.4f,5.4f,6.42f,f,roof,8);wall(m,3.6f,9.18f,5.4f,9.2f,f,roof,8);
+ wall(m,3.6f,6.42f,3.62f,6.5f,f,roof,8);wall(m,3.6f,7.4f,3.62f,9.18f,f,roof,8);
+ wall(m,5.38f,6.42f,5.4f,8.2f,f,roof,8);wall(m,5.38f,9.1f,5.4f,9.18f,f,roof,8);
+ wall(m,3.6f,6.4f,5.4f,9.2f,roof-.02f,roof,8);
+ for(float x:{4.62f,5.f}){wall(m,x,7.5f,x+.32f,7.56f,f+.95f,f+1.72f,23);wall(m,x+.14f,7.53f,x+.18f,7.6f,f+1.72f,f+1.78f,20);}   // coats off before the dark
+ // --- The darkroom: processor, wet bench, dry bench, the films drying under the safelight ----------
+ wall(m,1.3f,1.05f,2.9f,1.75f,f+.05f,f+1.f,20);wall(m,1.34f,1.09f,2.86f,1.71f,f,f+.05f,8);
+ wall(m,1.35f,1.1f,2.85f,1.7f,f+1.f,f+1.04f,8);wall(m,1.6f,1.75f,2.6f,2.05f,f+.86f,f+.9f,20);             // processor lid, feed tray
+ m.pipes.push_back({{1.6f,1.3f},{1.6f,1.3f},f+1.04f,.06f,roof,5});
+ wall(m,1.f,2.6f,1.62f,5.4f,f+.1f,f+.9f,20);wall(m,1.04f,2.64f,1.58f,5.36f,f,f+.1f,8);                    // the wet bench
+ for(float y:{2.8f,3.5f,4.2f})wall(m,1.1f,y,1.52f,y+.55f,f+.9f,f+1.22f,8);                               // developer, stop, fixer
+ wall(m,1.12f,4.88f,1.5f,5.28f,f+.9f,f+.902f,8);                                                         // the wash
+ m.pipes.push_back({{1.f,5.08f},{1.27f,5.08f},f+1.25f,.015f,f+1.25f,5});m.pipes.push_back({{1.25f,5.08f},{1.25f,5.08f},f+1.1f,.015f,f+1.265f,5});
+ m.pipes.push_back({{1.04f,5.25f},{1.04f,5.25f},f+.9f,.02f,roof,0});
+ wall(m,1.f,2.6f,1.26f,5.4f,f+1.55f,f+1.58f,20);for(float y:{2.8f,5.1f})wall(m,1.f,y,1.2f,y+.03f,f+1.4f,f+1.55f,20);
+ wall(m,2.8f,1.9f,3.4f,4.6f,f+.1f,f+.88f,20);wall(m,2.84f,1.94f,3.4f,4.56f,f,f+.1f,8);wall(m,2.78f,1.88f,3.4f,4.62f,f+.88f,f+.92f,8); // dry bench
+ m73Loose(m,model::prop_cardboard_box,3.1f,3.3f,f+.92f,.33f,.32f,.17f,.2f);                              // a box of unexposed film
+ m73Film(m,2.9f,2.6f,f+.92f);wall(m,2.9f,3.75f,3.3f,4.2f,f+.92f,f+.94f,20);                               // a film, a cassette
+ m.pipes.push_back({{1.f,5.9f},{3.4f,5.9f},f+2.05f,.006f,f+2.05f,5});
+ for(float x:{1.3f,1.75f,2.2f,2.65f}){wall(m,x,5.895f,x+.35f,5.905f,f+1.6f,f+2.02f,8);wall(m,x+.15f,5.89f,x+.2f,5.91f,f+2.02f,f+2.07f,20);}
+ mdFix(m,model::med_records_cabinet,1.245f,8.f,f,.9f,.49f,1.f,mdE,true);                                  // film bin
+ m73Loose(m,model::office_paper_stack,1.25f,8.1f,f+1.f,.33f,.44f,.03f,.15f);
+ m73Loose(m,model::wooden_chair,2.4f,7.9f,f,.417f,.525f,.95f,-1.2f);
+ for(auto [x,y]:{std::pair{1.9f,6.6f},{2.3f,7.35f},{1.7f,4.5f}})m73Film(m,x,y,f,x>2.f);
+ m72DeadTube(m,2.2f,4.6f,roof);
+ // --- X-ray 2: fluoroscopy, the generators for both rooms, a trolley still waiting -------------------
+ for(float y:{10.08f,11.16f})mdFix(m,model::pwr_switchgear_cabinet,1.285f,y,f,1.05f,.57f,1.89f,mdE,true);
+ mdFix(m,model::pwr_step_transformer,1.45f,12.15f,f,.64f,.89f,1.67f,mdE,true);
+ mdFix(m,model::pwr_switchgear_cabinet,1.41f,13.95f,f,1.5f,.82f,2.7f,mdE,true);
+ for(float y:{10.08f,11.16f})m.pipes.push_back({{1.3f,y},{1.3f,y},f+1.89f,.025f,f+2.76f,8});
+ m.pipes.push_back({{1.3f,9.45f},{1.3f,13.95f},f+2.76f,.03f,-999,8});                                     // HT cables, through to X-ray 1
+ wall(m,1.98f,9.17f,2.52f,9.43f,f+1.f,f+1.5f,20);for(float y:{9.16f,9.43f})wall(m,2.03f,y,2.47f,y+.01f,f+1.05f,f+1.45f,8); // pass box
+ wall(m,4.9f,12.1f,6.3f,12.7f,f,f+.04f,8);wall(m,5.3f,12.2f,5.9f,12.6f,f+.04f,f+.74f,20);
+ wall(m,4.5f,12.05f,6.7f,12.75f,f+.74f,f+.8f,20);wall(m,4.55f,12.1f,6.65f,12.7f,f+.8f,f+.84f,23);
+ wall(m,6.7f,12.1f,6.76f,12.7f,f+.6f,f+1.02f,20);                                                         // footboard
+ for(float x:{5.f,6.1f})wall(m,x,12.04f,x+.06f,12.76f,f+.84f,f+.848f,8);
+ wall(m,5.45f,11.62f,5.75f,11.82f,f,f+1.98f,20);wall(m,5.45f,11.62f,5.75f,12.4f,f+1.86f,f+1.98f,20);       // tower and arm
+ m.pipes.push_back({{5.6f,12.4f},{5.6f,12.4f},f+1.34f,.2f,f+1.87f,5});wall(m,5.3f,12.1f,5.9f,12.7f,f+1.3f,f+1.36f,8);wall(m,5.35f,12.15f,5.85f,12.65f,f+1.05f,f+1.3f,30); // intensifier
+ for(float x:{5.2f,5.7f,6.2f})mdFix(m,model::med_xray_viewer_skull,x,14.95f,f+1.2f,.41f,.1f,.5f,mdN,false);
+ for(float y:{11.85f,12.85f})wall(m,3.35f,y,3.85f,y+.1f,f,f+.1f,8);                                        // the mobile lead screen
+ wall(m,3.55f,11.8f,3.65f,13.f,f+.1f,f+1.25f,8);wall(m,3.55f,11.8f,3.65f,13.f,f+1.75f,f+1.9f,8);
+ for(auto [a,b]:{std::pair{11.8f,12.f},{12.8f,13.f}})wall(m,3.55f,a,3.65f,b,f+1.25f,f+1.75f,8);
+ wall(m,3.585f,12.f,3.615f,12.8f,f+1.25f,f+1.75f,17);
+ mdFix(m,model::med_supply_cabinet,4.3f,9.62f,f,1.1f,.44f,1.7f,mdS,true);
+ mdFix(m,model::med_ward_bed,8.2f,14.45f,f,1.98f,.94f,.84f,0,true);
+ for(float x:{7.7f,8.7f})wall(m,x,13.98f,x+.06f,14.92f,f+.84f,f+.848f,8);
+ m73Loose(m,model::prop_cardboard_box_open,7.3f,10.1f,f,.73f,.725f,.73f,.3f);
+ for(auto [x,y]:{std::pair{7.6f,10.9f},{6.9f,11.2f},{8.4f,11.6f}})wall(m,x,y,x+.35f,y+.43f,f,f+.02f,20);   // cassettes, emptied
+ mdFix(m,model::trash_can,9.4f,9.85f,f,.45f,.45f,.56f,0,true);
+ // --- The counter suite: changing, the counter, its store ------------------------------------------
+ wall(m,8.25f,15.2f,8.35f,16.45f,f,f+2.1f,3);wall(m,8.24f,15.2f,8.36f,16.45f,f+2.1f,f+2.13f,20);
+ m72Track(m,{6.8f,16.45f},{8.25f,16.45f},f,roof);m72Track(m,{8.35f,16.45f},{9.8f,16.45f},f,roof);
+ m72Curtain(m,6.8f,7.55f,16.45f,true,f);m72Bunch(m,7.63f,16.45f,f,true);m72Bunch(m,9.7f,16.45f,f,true);
+ m73Loose(m,model::wooden_chair,7.5f,15.6f,f,.417f,.525f,.95f,0);m73Loose(m,model::wooden_chair,9.1f,15.6f,f,.417f,.525f,.95f,.3f);
+ m73Loose(m,model::mine_hard_hat,7.f,16.05f,f,.28f,.35f,.15f,.8f);m73Loose(m,model::item_dosimeter,8.75f,16.1f,f,.31f,.146f,.066f,2.2f);
+ for(auto [x,h]:{std::pair{7.6f,.9f},{8.6f,1.f}}){wall(m,x,15.2f,x+.38f,15.24f,f+h,f+1.7f,23);wall(m,x+.17f,15.2f,x+.21f,15.27f,f+1.7f,f+1.75f,20);}
+ mdFix(m,model::trash_can,7.1f,18.75f,f,.45f,.45f,.56f,.3f,true);                                         // the gown bin
+ // The counter store: lead, check sources, and the phantom they calibrate the counter on.
+ shelf(m,{9.53f,21.4f},kPi*.5f,0);
+ for(float y:{20.95f,21.85f})m73Loose(m,model::prop_cardboard_box,9.53f,y,f+.306f,.58f,.57f,.29f,kPi*.5f+y*.05f);   // lead bricks, boxed
+ for(float y:{20.85f,21.3f,21.8f})m73Loose(m,model::lab_field_meter,9.5f,y,f+.972f,.25f,.33f,.15f,mdW+y*.1f);        // survey meters
+ for(int i=0;i<5;++i)m73Loose(m,model::office_file_binder,9.53f,20.75f+i*.11f,f+1.656f,.09f,.3f,.42f,kPi*.5f);
+ wall(m,7.f,19.2f,7.7f,19.75f,f,f+.85f,8);m.pipes.push_back({{7.35f,19.75f},{7.35f,19.8f},f+.55f,.04f,f+.55f,6});   // source safe
+ mdFix(m,model::wooden_chair,7.55f,21.9f,f,.417f,.525f,.95f,mdE,true);
+ {const float px=7.5f,py=21.9f;
+  m.pipes.push_back({{px,py},{px,py},f+.47f,.15f,f+1.06f,2});m.pipes.push_back({{px,py},{px,py},f+1.06f,.04f,f+1.11f,2});
+  m.pipes.push_back({{px,py},{px,py},f+1.11f,.085f,f+1.34f,2});
+  for(float s:{-.1f,.1f}){m.pipes.push_back({{px,py+s},{px+.42f,py+s},f+.53f,.065f,f+.53f,2});m.pipes.push_back({{px+.44f,py+s},{px+.44f,py+s},f+.03f,.055f,f+.53f,2});}
+  for(float s:{-.21f,.21f})m.pipes.push_back({{px+.02f,py+s},{px+.02f,py+s},f+.62f,.05f,f+1.02f,2});}
+ m73Loose(m,model::prop_cardboard_box_open,8.75f,22.5f,f,.73f,.725f,.73f,.1f);
+ taped(m,{9.35f,19.2f},f+1.5f,0,Readable::Note,"COUNTER / SOURCES","02:00 CHECK SOURCE IN RANGE. 02:05 PHANTOM COUNT IN RANGE.",
+  "03:50 SUBJECT 9 READ HIGHER THAN THE CHECK SOURCE. NOTHING IN A MAN SHOULD.");
+ // The whole-body counter: a steel room in the room, its door open on subject nine.
+ wall(m,1.f,19.6f,2.2f,19.8f,f,f+2.3f,8);wall(m,3.2f,19.6f,4.4f,19.8f,f,f+2.3f,8);wall(m,2.2f,19.6f,3.2f,19.8f,f+2.1f,f+2.3f,8);
+ wall(m,4.2f,19.8f,4.4f,23.f,f,f+2.3f,8);wall(m,1.f,19.6f,4.4f,23.f,f+2.3f,f+2.5f,8);
+ for(auto [a,b]:{std::pair{1.02f,2.2f},{3.2f,4.18f}})wall(m,a,19.8f,b,19.82f,f,f+2.28f,20);
+ wall(m,4.18f,19.82f,4.2f,23.f,f,f+2.28f,20);wall(m,1.f,19.82f,1.02f,23.f,f,f+2.28f,20);wall(m,1.02f,22.98f,4.18f,23.f,f,f+2.28f,20);
+ wall(m,1.f,19.8f,4.2f,23.f,f+2.28f,f+2.3f,20);
+ wall(m,3.2f,18.6f,3.4f,19.6f,f+.02f,f+2.08f,8);m.pipes.push_back({{3.4f,19.f},{3.52f,19.f},f+1.1f,.025f,f+1.1f,6});   // the door, open
+ wall(m,1.3f,21.9f,3.7f,22.6f,f+.55f,f+.62f,20);wall(m,1.35f,21.95f,3.65f,22.55f,f+.62f,f+.66f,23);       // counting bed
+ for(float x:{1.4f,3.55f})wall(m,x,21.95f,x+.06f,22.55f,f,f+.55f,20);
+ mdFix(m,model::lab_test_chamber,2.5f,22.25f,f+1.28f,1.14f,.68f,.64f,0,false);                              // the detector over the bed
+ for(float x:{2.1f,2.9f})m.pipes.push_back({{x,22.25f},{x,22.25f},f+1.92f,.03f,f+2.28f,6});
+ wall(m,2.45f,20.75f,2.75f,21.05f,f+2.22f,f+2.28f,20);
+ wallSign(m,1.6f,19.6f,f+1.45f,"COUNT IN PROGRESS","DOOR SHUT / NO METAL IN THE CHAMBER",1.f,kPi);
+ for(float x:{1.55f,2.65f})mdFix(m,model::pwr_switchgear_cabinet,x,15.485f,f,1.05f,.57f,1.89f,0,true);   // the analyser racks
+ mdFix(m,model::pwr_ammeter_box,3.3f,15.25f,f+1.3f,.23f,.1f,.37f,0,false);
+ m.pipes.push_back({{1.6f,15.45f},{1.6f,15.45f},f+1.89f,.03f,f+2.7f,8});m.pipes.push_back({{1.6f,15.45f},{1.6f,19.9f},f+2.7f,.03f,-999,8});
+ m.pipes.push_back({{1.6f,19.9f},{1.6f,19.9f},f+2.5f,.03f,f+2.7f,8});
+ mdFix(m,model::desk,6.25f,20.6f,f,1.4f,.7f,.75f,mdE,true);
+ mdFix(m,model::office_chair,5.5f,20.65f,f,.55f,.55f,.95f,-kPi*.5f+.2f,false);
+ mdFix(m,model::crt_monitor,6.38f,20.25f,f+.75f,.42f,.4f,.38f,-kPi*.5f,false);
+ mdFix(m,model::keyboard,6.f,20.55f,f+.75f,.45f,.16f,.03f,-kPi*.5f,false);
+ mdFix(m,model::desk_phone,6.4f,20.95f,f+.75f,.2f,.2f,.1f,-kPi*.5f,false);
+ terminal(m,{6.05f,21.05f},"WHOLE BODY COUNT / PRINTOUT","03:52 SUBJECT 9 / TIER 3. COUNT RATE OFF SCALE AND RISING. NO SOURCE IN THE CHAMBER BUT HIM.",
+  "DOOR SHUT ON HIM. DO NOT OPEN IT. HE IS STILL TALKING.");
+ m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.75f;m.terminals.back().yaw=mdW;
+ mdFix(m,model::med_wheelchair,1.9f,17.7f,f,.48f,.9f,.79f,1.f,true);                                       // what he came in
+ m73Loose(m,model::item_id_card,1.95f,17.65f,f+.45f,.132f,.085f,.002f,.4f);
+ floorLine(m,6.42f,17.f,6.5f,18.2f,f,13);
+ // The detail's man who opened it.
+ mdBody(m,clock,ActorVisual::Cleanup,{4.9f,18.1f},f,2.5f);
+ mdBlood(m,4.3f,17.8f,5.5f,18.7f,f);mdBlood(m,3.5f,18.95f,4.1f,19.45f,f);
+ m73Loose(m,model::item_walkie,5.55f,17.55f,f,.11f,.38f,.05f,1.2f);
+ // --- The reading room: the viewer bank, nine skulls the same, and hers ----------------------------
+ wall(m,15.f,1.f,22.45f,1.04f,f+1.16f,f+1.82f,20);wall(m,15.f,1.f,22.45f,1.18f,f+1.12f,f+1.16f,20);
+ for(int i=0;i<15;++i)mdFix(m,i==13?model::med_xray_viewer_chest:model::med_xray_viewer_skull,15.25f+i*.5f,1.09f,f+1.2f,.41f,.1f,.5f,mdS,false);
+ taped(m,{21.75f,1.f},f+.95f,0,Readable::Note,"LAB 4 / ENERGY DIAGNOSTICS / 02:31","SKULL AP: CLEAR. NO GROWTH. THE ONLY CLEAN FILM TONIGHT.",
+  "SENT ON TO WARD C ANYWAY. I.I. ASKED FOR HER FILM BY NAME.");
+ for(auto [x,turn]:{std::pair{16.5f,0.f},{20.3f,.6f}}){
+  mdFix(m,model::desk,x,2.45f,f,1.4f,.7f,.75f,kPi,true);
+  mdFix(m,model::office_chair,x+.1f,3.25f,f,.55f,.55f,.95f,turn,false);
+  mdFix(m,model::lab_desk_lamp,x-.55f,2.2f,f+.75f,.18f,.4f,.52f,0,false);
+  m73Loose(m,model::office_paper_stack,x-.1f,2.45f,f+.75f,.33f,.44f,.03f,.2f);}
+ terminal(m,{16.85f,2.5f},"RADIOLOGY / READINGS","03:00 FRONTAL BONE: CRYSTALLINE GROWTH THROUGH THE SUTURES. SAME AS LAST WEEK'S. SAME AS EVERY TIER 3.",
+  "DO NOT REPORT AS ABNORMAL. REPORT AS EXPOSURE, TIER 3. THE BOARD HAS ASKED FOR THE FILMS.");
+ m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.75f;m.terminals.back().yaw=mdS;
+ m73Loose(m,model::mug,20.75f,2.3f,f+.75f,.09f,.09f,.1f,0);
+ m73Loose(m,model::desk_phone,20.75f,2.6f,f+.75f,.2f,.2f,.1f,mdS);
+ mdBody(m,clock,ActorVisual::SeniorScientist,{18.4f,3.95f},f,1.9f);
+ for(auto [x,y]:{std::pair{17.5f,4.4f},{19.1f,3.3f},{19.4f,4.55f},{16.1f,3.9f}})m73Film(m,x,y,f,x>19.f);
+ paperDrift(m,15.f,3.4f,22.6f,5.f,f,8,7301);
+ mdFix(m,model::office_file_cabinet_open,18.4f,5.25f,f,1.45f,.7f,1.05f,kPi,true);
+ mdFix(m,model::med_records_cabinet,21.6f,5.355f,f,.9f,.49f,1.f,kPi,true);
+ mdFix(m,model::med_crash_cart,22.5f,3.6f,f,.74f,.48f,1.f,kPi*.5f,true);                                  // the film trolley
+ for(float y:{3.45f,3.75f})m73Film(m,22.32f,y-.17f,f+1.f,true);
+ // --- Booking: the clerk behind the hatch, the typists' desks, the jackets out ----------------------
+ mdFix(m,model::med_nurse_desk,16.2f,8.52f,f,1.18f,.56f,.81f,0,true);
+ mdFix(m,model::office_chair,16.3f,7.75f,f,.55f,.55f,.95f,kPi+.3f,false);
+ mdFix(m,model::crt_monitor,16.55f,8.55f,f+.81f,.42f,.4f,.38f,kPi,false);
+ mdFix(m,model::lab_desk_lamp,15.75f,8.5f,f+.81f,.18f,.4f,.52f,0,false);
+ m73Loose(m,model::office_paper_stack,16.05f,8.45f,f+.81f,.33f,.44f,.03f,.1f);
+ workstation(m,19.f,6.15f,f,-1,1);workstation(m,21.3f,6.15f,f,-1,2);
+ mdFix(m,model::med_records_cabinet,22.755f,7.4f,f,.9f,.49f,1.f,mdW,true);
+ for(float y:{7.15f,7.25f,7.35f})m73Loose(m,model::office_file_binder,22.75f,y,f+1.f,.09f,.3f,.42f,kPi*.5f);
+ mdFix(m,model::lab_photocopier,14.6f,8.f,f,.83f,.75f,.97f,-kPi*.5f,true);
+ mdFix(m,model::med_notice_board,14.235f,6.9f,f+1.25f,1.2f,.07f,.9f,mdE,false);
+ mdFix(m,model::med_wall_clock,17.5f,5.82f,f+2.05f,.24f,.02f,.23f,mdS,false);
+ paperDrift(m,14.4f,7.f,22.f,8.6f,f,6,7302);
+ // --- Reception: the hatch, the seats the nine were called from, the way on to Pharmacy -----------
+ wall(m,15.f,9.f,17.4f,9.32f,f+.95f,f+.99f,20);for(float x:{15.3f,17.05f})wall(m,x,9.f,x+.04f,9.28f,f+.75f,f+.95f,20);
+ wall(m,15.f,9.04f,17.4f,9.32f,f+.99f,f+2.f,30);
+ for(auto [x,yaw]:{std::pair{15.6f,.3f},{16.1f,1.9f},{16.9f,.8f}})m73Loose(m,model::item_id_card,x,9.18f,f+.99f,.132f,.085f,.002f,yaw);
+ bench(m,15.75f,13.55f,f);bench(m,18.45f,13.55f,f);
+ mdFix(m,model::med_notice_board,16.2f,13.965f,f+1.3f,1.2f,.07f,.9f,mdN,false);
+ mdFix(m,model::water_cooler,14.5f,9.4f,f,.35f,.35f,1.1f,0,true);
+ mdFix(m,model::lab_potted_plant,22.55f,13.6f,f,.37f,.43f,.69f,0,true);
+ mdFix(m,model::med_wheelchair,21.6f,13.15f,f,.48f,.9f,.79f,kPi,true);
+ for(auto [x,y,yaw]:{std::tuple{17.3f,12.6f,.5f},{19.9f,11.3f,2.3f},{15.2f,11.9f,1.1f}})m73Loose(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
+ m73Loose(m,model::item_dosimeter,18.9f,12.9f,f,.31f,.146f,.066f,.6f);
+ paperDrift(m,14.6f,9.6f,22.f,13.f,f,5,7303);
+ // --- The film library: every tier-3 jacket pulled for Internal Investigations ---------------------
+ for(auto [x,y]:{std::pair{14.47f,15.25f},{14.47f,17.1f},{16.f,15.6f},{16.f,17.4f},{16.5f,15.6f},{16.5f,17.4f},{18.f,15.6f},{18.f,17.4f},{18.5f,15.6f},{18.5f,17.4f}}){
+  shelf(m,{x,y},kPi*.5f,0);const int seed=int(x*10+y*3);
+  for(int t=0;t<3;++t){const float z=f+(t==0?.306f:t==1?.972f:1.656f);
+   for(int i=0;i<14;++i){if((i*7+t*5+seed)%9<3)continue;m73Loose(m,model::office_file_binder,x,y-.8f+i*.123f,z,.09f,.3f,.42f,kPi*.5f);}}}
+ mdFix(m,model::pallet,21.6f,16.6f,f,1.2f,1.15f,.16f,0,true);
+ for(int i=0;i<4;++i)m73Loose(m,model::prop_cardboard_box,21.31f+(i%2)*.58f,16.31f+(i/2)*.58f,f+.16f,.58f,.57f,.29f,i*.03f);
+ for(int i=0;i<2;++i)m73Loose(m,model::prop_cardboard_box,21.31f+i*.58f,16.31f,f+.45f,.58f,.57f,.29f,.05f-i*.04f);
+ for(float x:{19.7f,20.75f})mdFix(m,model::lab_specimen_crate,x,18.55f,f,.9f,.9f,.9f,x-19.7f,true);
+ terminal(m,{19.7f,18.45f},"TIER 3 / FILMS / FOR I.I.","EVERY FILM, EVERY COPY, EVERY JACKET. NOTHING STAYS IN IMAGING.","COUNT THEM IN. COUNT THEM OUT. NOBODY READS THEM. -I.I.");
+ m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.9f;m.terminals.back().yaw=mdN;
+ handCart(m,22.3f,18.55f,f);
+ m73Loose(m,model::prop_cardboard_box_open,19.4f,16.f,f,.73f,.725f,.73f,-.2f);
+ for(auto [x,y]:{std::pair{15.05f,16.6f},{17.1f,15.2f},{17.25f,18.6f},{19.6f,17.1f}})m73Film(m,x,y,f,x>17.f);
+ // --- The radiographers' room: the night shift's tea, the rota, the lockers ------------------------
+ wall(m,18.6f,22.5f,22.f,23.f,f,f+.1f,8);wall(m,18.6f,22.44f,22.f,23.f,f+.1f,f+.86f,21);wall(m,18.6f,22.38f,22.f,23.f,f+.86f,f+.9f,20);
+ mdFix(m,model::coffee_machine,19.1f,22.72f,f+.9f,.4f,.45f,.5f,kPi,false);
+ for(auto [x,y]:{std::pair{19.65f,22.6f},{19.85f,22.75f},{20.4f,22.65f}})m73Loose(m,model::mug,x,y,f+.9f,.09f,.09f,.1f,x);
+ mdFix(m,model::wooden_table,17.2f,21.4f,f,1.367f,.724f,.78f,0,true);
+ m73Loose(m,model::wooden_chair,16.9f,20.75f,f,.417f,.525f,.95f,0);
+ m73Loose(m,model::wooden_chair,17.5f,22.05f,f,.417f,.525f,.95f,kPi+.25f);
+ m73Loose(m,model::wooden_chair,18.15f,21.3f,f,.417f,.525f,.95f,-kPi*.5f+.3f);
+ for(float y:{20.2f,21.06f})mdFix(m,model::psx_locker,22.66f,y,f,.64f,.85f,2.42f,kPi,true);
+ mdFix(m,model::office_armchair_green,15.2f,22.2f,f,1.4f,1.36f,1.19f,.25f,true);
+ mdFix(m,model::med_notice_board,18.5f,19.635f,f+1.2f,1.2f,.07f,.9f,mdS,false);
+ taped(m,{20.4f,19.6f},f+1.5f,0,Readable::Note,"RADIOGRAPHERS / NIGHT","02:15 ALL HANDS TO THE SKULL SERIES. FILMS TO THE LIBRARY, NOT THE WARD.",
+  "04:10 THE DETAIL IS IN THE LIBRARY. WE GO HOME WHEN THEY SAY. NOBODY SAYS.");
+ mdFix(m,model::med_wall_clock,14.22f,21.f,f+2.05f,.24f,.02f,.23f,mdE,false);
+ // --- Subject nine: the counter reads him again when you come in, and he gets up -------------------
+ mdSequence(m,"md_imaging_count","md_imaging_wake",8000,3000,-9,-9,-8,-8);
+ {int t=0;for(int dt:{0,650,550,450,360,290,230,180,140,110,90,80}){t+=dt;cue(m,"md_imaging_count",t,Sound::SuspicionTick,{6.38f,20.25f},"",.7f,f+.95f);}}
+ cue(m,"md_imaging_count",3000,Sound::JunkMetal,{2.6f,21.f},"",.9f,f+.6f);
+ cue(m,"md_imaging_count",3300,Sound::WorkerDying,{2.6f,21.f},"",.8f,f+1.2f);
+ m72Event(m,"md_imaging_count_go",1.f,15.2f,6.6f,23.f,"",{m72Set("md_imaging_count",1)});
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{2.6f,21.f},-999,1,0,stateId("md_imaging_wake")});
+ // After him, the dead man's walkie: the Investigator calling a detail that will not answer.
+ m72Event(m,"md_imaging_radio_go",1.f,15.2f,9.8f,23.f,"md_imaging_wake",{m72Set("md_imaging_radio",1)},true);
+ mdSequence(m,"md_imaging_radio","md_imaging_radio_done",14000,12000,-9,-9,-8,-8);
+ {const Vec2 w{5.55f,17.55f};
+  cue(m,"md_imaging_radio",0,Sound::RadioSquelch,w,"",.8f,f+.1f);
+  cue(m,"md_imaging_radio",500,Sound::Empty,w,"INVESTIGATOR (RADIO): Imaging detail. Report.",.9f,f+.1f);
+  cue(m,"md_imaging_radio",4600,Sound::RadioSquelch,w,"",.8f,f+.1f);
+  cue(m,"md_imaging_radio",5000,Sound::Empty,w,"INVESTIGATOR (RADIO): Imaging detail.",.9f,f+.1f);
+  cue(m,"md_imaging_radio",9000,Sound::RadioSquelch,w,"",.8f,f+.1f);
+  cue(m,"md_imaging_radio",9400,Sound::Empty,w,"INVESTIGATOR (RADIO): Log them with the tier threes.",.9f,f+.1f);}
+ // --- Light (27): cold corridor tubes, dim reading light off the films, the red safelight, the vault ---
+ for(auto [y,i]:{std::pair{2.8f,.55f},{7.8f,.5f},{12.f,.55f},{21.6f,.5f}})m.lights.push_back(m71Tube(12.f,y,roof,i,5.5f,5200,.05f));
+ m.lights.push_back(m71Tube(12.f,17.f,roof,.5f,5.5f,5200,.05f,.35f));
+ m.lights.push_back(m71Tube(16.6f,11.5f,roof,.5f,5.5f,4800,.06f));m.lights.push_back(m71Tube(20.6f,11.5f,roof,.45f,5.5f,4800,.06f));
+ {auto l=m71Tube(19.4f,7.4f,roof,.45f,5.f,4200,.04f);l.fitting=model::clinic_ceiling_lamp_1;l.fittingWidth=1.05f;l.fittingDepth=1.04f;l.fittingHeight=.16f;m.lights.push_back(l);}
+ m.lights.push_back(lamp({15.75f,8.45f},f+1.2f,.3f,2.2f,3000,0,WorldLightMount::Bare));                      // the clerk's lamp
+ m.lights.push_back(m71Tube(18.6f,3.6f,roof,.22f,5.f,4000,.05f));                                            // reading room, dimmed
+ for(float x:{17.f,20.6f})m.lights.push_back(lamp({x,1.5f},f+1.5f,.7f,4.f,7800,-.3f,WorldLightMount::Bare)); // off the viewers
+ m.lights.push_back(m71Tube(17.25f,16.6f,roof,.45f,5.f,4400,.06f));m.lights.push_back(m71Tube(21.2f,16.6f,roof,.4f,5.f,4400,.06f,.3f));
+ m.lights.push_back(m71Tube(18.6f,21.3f,roof,.5f,5.f,3100,0));                                               // staff room, warm
+ m.lights.push_back(m71Tube(5.f,4.6f,roof,.5f,5.f,5600,.04f));
+ m.lights.push_back(lamp({6.4f,3.2f},f+1.25f,.3f,2.f,3600,0,WorldLightMount::Bare));                          // the collimator's light field
+ m.lights.push_back(m71Tube(7.6f,7.8f,roof,.5f,4.5f,3600,.02f));
+ m.lights.push_back(lamp({8.15f,6.95f},f+1.05f,.18f,1.6f,6500,.4f,WorldLightMount::Bare));                     // console screen
+ m.lights.push_back(lamp({1.02f,4.1f},f+2.15f,.55f,5.f,1000,-.45f,WorldLightMount::Wall,0));                   // the safelight
+ m.lights.push_back(lamp({3.62f,8.45f},f+2.05f,.25f,2.5f,1000,-.45f,WorldLightMount::Wall,0));                 // and the trap's
+ m.lights.push_back(m71Tube(4.f,12.f,roof,.5f,5.5f,5400,.05f));
+ m.lights.push_back(lamp({5.7f,14.6f},f+1.5f,.4f,3.f,7800,-.3f,WorldLightMount::Bare));                       // X-ray 2's viewers
+ m.lights.push_back(m71Tube(8.3f,17.8f,roof,.4f,4.f,5000,.08f));
+ m.lights.push_back(m71Tube(8.3f,21.4f,roof,.5f,4.5f,5600,.1f));
+ m.lights.push_back(m71Tube(4.6f,17.2f,roof,.4f,5.f,5200,.05f));
+ m.lights.push_back(lamp({2.6f,20.9f},f+2.16f,.45f,3.5f,6000,.1f,WorldLightMount::Bare));                     // inside the counter
  // --- Rewards and names -------------------------------------------------------------------------
- m.pickupSpawns={{{2.f,3.f},PickupKind::Health,f},{{22.f,4.f},PickupKind::Ammo,f},{{22.f,16.f},PickupKind::Ammo,f}};
- m.clutterSpawns={{0,{18.f,3.4f},f+.75f},{2,{12.6f,20.f},f}};
- zone(m,"MEDICAL / IMAGING / X-RAY",1.f,1.f,8.8f,11.8f);
- zone(m,"MEDICAL / IMAGING / SCANNING BAY",1.f,12.f,8.8f,23.f);
- zone(m,"MEDICAL / IMAGING / READING ROOM",15.2f,1.f,23.f,8.8f);
- zone(m,"MEDICAL / IMAGING / FILM ARCHIVE",15.2f,14.2f,23.f,23.f);
+ m.pickupSpawns={{{21.5f,22.7f},PickupKind::Health,f+.9f},{{3.1f,4.25f},PickupKind::Health,f+.92f},{{5.75f,18.85f},PickupKind::Ammo,f},{{20.3f,15.9f},PickupKind::Ammo,f}};
+ m.clutterSpawns={{2,{1.13f,3.2f},f+1.58f},{2,{1.13f,3.75f},f+1.58f,.6f},{2,{1.15f,4.6f},f+1.58f},{5,{6.2f,21.2f},f+.75f},{1,{17.f,21.25f},f+.78f},
+  {2,{21.f,22.65f},f+.9f},{0,{11.f,20.5f},f},{0,{12.9f,3.8f},f,1.f},{0,{21.9f,10.4f},f,2.f}};
+ zone(m,"MEDICAL / IMAGING / X-RAY 1",3.6f,1.f,9.8f,6.2f);
+ zone(m,"MEDICAL / IMAGING / X-RAY CONTROL",5.6f,6.4f,9.8f,9.2f);
+ zone(m,"MEDICAL / IMAGING / DARKROOM",1.f,1.f,5.4f,9.2f);
+ zone(m,"MEDICAL / IMAGING / X-RAY 2",1.f,9.4f,9.8f,15.f);
+ zone(m,"MEDICAL / IMAGING / COUNTER",1.f,15.2f,6.6f,23.f);
+ zone(m,"MEDICAL / IMAGING / CHANGING",6.8f,15.2f,9.8f,19.f);
+ zone(m,"MEDICAL / IMAGING / COUNTER STORE",6.8f,19.2f,9.8f,23.f);
+ zone(m,"MEDICAL / IMAGING / READING ROOM",14.2f,1.f,23.f,5.6f);
+ zone(m,"MEDICAL / IMAGING / BOOKING",14.2f,5.8f,23.f,8.8f);
+ zone(m,"MEDICAL / IMAGING / RECEPTION",14.2f,9.f,24.f,14.f);
+ zone(m,"MEDICAL / IMAGING / FILM LIBRARY",14.2f,14.2f,23.f,19.4f);
+ zone(m,"MEDICAL / IMAGING / RADIOGRAPHERS",14.2f,19.6f,23.f,23.f);
  zone(m,"MEDICAL / IMAGING",0,0,24,24);
  recessedFittings(m);freightFinish(m,-1);
  return p;

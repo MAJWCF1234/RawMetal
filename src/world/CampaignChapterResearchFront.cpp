@@ -508,72 +508,257 @@ void rfLine(Map& m,const char* node,const char* speaker,const char* line,std::ve
  m.dialogue.push_back({stateId(node),speaker,line,node,std::move(replies)});
 }
 
-// PERSONNEL PROCESSING (manifest 46). The hub every shift passed through: the
-// locker bays, the suit stations, the biometric gates and the clearance door
-// down to the labs. West to Administration, east to Medical Screening. A
-// Cleanup private sits wounded against the lockers; he will not lift his gun,
-// and he is the first to say out loud who is giving the orders.
+// --- Personnel Processing kit (rfp): chunk 69's own helpers ------------------------------------
+// An open doorway from x1 to x2 through a wall along x (y1..y2): steel posts and head, the wall above.
+void rfpDoorX(Map& m,float x1,float x2,float y1,float y2,float f,float top,int mat){
+ for(float x:{x1-.08f,x2})wall(m,x,y1-.03f,x+.08f,y2+.03f,f,f+2.3f,2);
+ wall(m,x1-.08f,y1-.03f,x2+.08f,y2+.03f,f+2.22f,f+2.3f,2);
+ wall(m,x1,y1,x2,y2,f+2.3f,top,mat);
+}
+// A full-height wall along x with open doorways (x pairs) cut through it.
+void rfpWallX(Map& m,float y1,float y2,float x1,float x2,std::initializer_list<std::pair<float,float>> gaps,float f,float top,int mat){
+ float x=x1;for(auto [a,b]:gaps){if(a>x)wall(m,x,y1,a,y2,f,top,mat);rfpDoorX(m,a,b,y1,y2,f,top,mat);x=b;}
+ if(x2>x)wall(m,x,y1,x2,y2,f,top,mat);
+}
+// A seam portal on the W or E chunk wall: steel posts and a panel head at 2.7 m over y 9-14.
+void rfpPortal(Map& m,float x1,float x2,float f,float roof){
+ for(float y:{9.f,13.86f})wall(m,x1,y,x2,y+.14f,f,f+2.7f,2);
+ wall(m,x1,9.f,x2,14.f,f+2.7f,roof,28);wall(m,x1-.02f,9.f,x2+.02f,14.f,f+2.66f,f+2.7f,2);
+}
+// A belt-barrier post run along y at x: steel posts, the belt between them at 0.9 m.
+void rfpBelt(Map& m,float x,float y1,float y2,float f){
+ for(float y:{y1,y2}){wall(m,x-.03f,y-.03f,x+.03f,y+.03f,f,f+.95f,12);wall(m,x-.12f,y-.12f,x+.12f,y+.12f,f,f+.03f,12);}
+ wall(m,x-.012f,y1+.03f,x+.012f,y2-.03f,f+.86f,f+.92f,19);
+}
+
+// PERSONNEL PROCESSING (manifest 46). The hub every shift passed through
+// twice a day: out of street clothes in the locker room, into a suit at the
+// dress-out, banded through the gates, read by the tier clerks, then down
+// through the clearance door to the labs; back the other way through suit
+// return. At 01:58 the lab shift came back up through it in their suits; at
+// 02:30 the tier 2 list stopped the line; at 03:44 the Investigator's detail
+// took every suit on the rail for the sweep at Medical. A Cleanup private
+// who stopped following orders there is sitting it out in the locker room:
+// he will not lift his gun, and he is the first to say out loud who is giving
+// the orders. Route: N seam from Intake into the crossing hall; W arm to
+// Administration (the clearance desk), E arm to Medical Screening, S through
+// the gates to the clearance door (proc_clearance). Staff loops: hall ->
+// lockers -> W arm; hall -> dress-out -> E arm; E arm -> tier office ->
+// screening -> gate hall -> suit return -> W arm.
 std::shared_ptr<const Map> makePersonnelProcessing(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[69];m.definition=CampaignChunks[69];m.definition.ambient=.36f;
- m.wallSurface=SurfacePaintedGreen;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
+ m.name=CampaignMapNames[69];m.definition=CampaignChunks[69];m.definition.ambient=.30f;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceOfficePlaster;
  const float f=-12,roof=m.definition.ceiling;
+ const int panel=28,tile=27,steel=2;
  const StateId clearance=stateId("proc_clearance"),stance=stateId("rf_proc_stance");
  m.layers.push_back(floorLayer(m.name.c_str(),f));
  openEdge(m,{'N',10.f,14.f,f,false,0});
  openEdge(m,{'W',9.f,14.f,f,false,0});
  openEdge(m,{'E',9.f,14.f,f,false,0});
  openEdge(m,{'S',10.f,14.f,f,true,clearance});   // door 0: down to the labs, on clearance
+ rectangle(m.layers[0],1,20,9,23,'#');            // solid behind suit return
  machineryClock(m,"rf_proc_clock",60000);
- // --- The north passage from Intake -----------------------------------------------------------
- wall(m,9.8f,1.f,10.f,3.6f,f,roof,3);wall(m,14.f,1.f,14.2f,3.6f,f,roof,3);
- wall(m,1.f,3.6f,10.f,3.8f,f,roof,3);wall(m,14.f,3.6f,23.f,3.8f,f,roof,3);
- m.lights.push_back(lamp({12.f,2.2f},roof-.16f,.8f,5.f,6000,.04f));
- // --- The locker bays, west (north and south of the way to Administration) ----------------------
- for(int i=0;i<6;++i)rfLockers(m,1.5f+i*.9f,4.5f,f,rfS);
- for(int i=0;i<6;++i)rfLockers(m,1.5f+i*.9f,19.5f,f,rfN);
- wall(m,1.f,8.6f,6.6f,8.8f,f,f+1.1f,3);wall(m,1.f,14.2f,6.6f,14.4f,f,f+1.1f,3);
- for(float y:{6.6f,17.2f})bench(m,3.8f,y,f);
- rfFix(m,model::med_washroom_mirror,6.95f,6.2f,f+1.15f,1.5f,.04f,1.f,rfW,false);
- for(Vec2 l:{Vec2{3.8f,6.2f},Vec2{3.8f,17.6f}})m.lights.push_back(lamp(l,roof-.16f,.85f,5.5f,5600,.05f));
- rfSign(m,4.f,3.82f,f+2.55f,"PERSONNEL PROCESSING","LOCKERS / SUITS / SCREENING / CLEARANCE",4.f,0,rfBlue);
- // --- The hub hall ------------------------------------------------------------------------------
- wall(m,6.8f,3.8f,7.f,8.6f,f,roof,3);wall(m,6.8f,14.4f,7.f,22.f,f,roof,3);
- wall(m,17.f,3.8f,17.2f,8.6f,f,roof,3);wall(m,17.f,14.4f,17.2f,22.f,f,roof,3);
- for(Vec2 c:{Vec2{9.5f,7.f},Vec2{14.5f,7.f},Vec2{9.5f,16.f},Vec2{14.5f,16.f}})wall(m,c.x-.25f,c.y-.25f,c.x+.25f,c.y+.25f,f,roof,20);
- ceilingGrid(m,7.f,3.8f,17.f,22.f,roof);
- for(Vec2 l:{Vec2{12.f,6.f},Vec2{12.f,11.5f},Vec2{12.f,17.f}})m.lights.push_back(lamp(l,roof-.16f,.95f,6.5f,6200,.04f));
- floorLine(m,7.2f,11.4f,16.8f,11.52f,f,20);
- terminal(m,{16.75f,10.f},"PROCESSING / DIRECTIONS","WEST: RESEARCH ADMINISTRATION. EAST: MEDICAL SCREENING. SOUTH: LABORATORIES, CLEARANCE ONLY.",
-  "CLEARANCE IS ISSUED AT THE ADMINISTRATION DESK. TIER 2 AND ABOVE: SCREENING FIRST.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfW;
- // --- The biometric gates and the clearance door, south -----------------------------------------
- wall(m,7.f,21.8f,10.f,22.f,f,roof,3);wall(m,14.f,21.8f,17.f,22.f,f,roof,3);
- for(float x:{8.f,9.4f,14.6f,16.f}){wall(m,x-.12f,19.2f,x+.12f,20.2f,f,f+1.f,20);wall(m,x-.14f,19.18f,x+.14f,20.22f,f+1.f,f+1.04f,12);
-  rfFix(m,model::lab_id_scanner,x,19.4f,f+1.04f,.21f,.042f,.29f,rfN,false);}
- wall(m,10.f,22.f,10.2f,23.8f,f,roof,3);wall(m,13.8f,22.f,14.f,23.8f,f,roof,3);
- rfFix(m,model::lab_id_scanner,9.8f,21.78f,f+1.2f,.15f,.03f,.205f,rfN,false);
- rfFix(m,model::lab_status_display,12.f,21.76f,f+2.72f,.69f,.06f,.2f,rfN,false);
- m.lights.push_back(rfSwitched(lamp({12.f,22.6f},roof-.18f,.8f,4.f,1000,-.5f),clearance,true));
- m.lights.push_back(rfSwitched(lamp({12.f,22.6f},roof-.18f,.8f,4.f,5200,.3f),clearance));
- // --- The suit stations, north-east ---------------------------------------------------------------
- for(float y:{5.0f,7.0f})rfFix(m,model::metal_shelf,22.5f,y,f,1.8f,.5f,1.8f,rfW,true);
- rfFix(m,model::med_supply_cabinet,19.f,4.4f,f,1.1f,.44f,1.7f,rfS,true);
- wall(m,17.2f,8.6f,23.f,8.8f,f,f+1.1f,3);
- bench(m,19.8f,7.2f,f);
- m.lights.push_back(lamp({20.f,6.2f},roof-.16f,.85f,5.5f,5600,.05f));
- // --- Screening intake, south-east: where a tier was read -----------------------------------------
- wall(m,17.2f,14.2f,23.f,14.4f,f,f+1.1f,3);
- rfFix(m,model::med_nurse_desk,20.2f,16.6f,f,1.48f,.7f,1.01f,rfN,true);
- rfFix(m,model::med_vitals_monitor,21.f,16.5f,f+1.01f,.42f,.2f,.31f,rfN,false);
- rfFix(m,model::file_cabinet_tall,22.5f,19.8f,f,.5f,.6f,1.3f,rfW,true);
- rfFix(m,model::med_wall_clock,20.f,21.8f,f+2.3f,.41f,.034f,.39f,rfN,false);
- terminal(m,{18.f,17.f},"SCREENING INTAKE / TIER BOARD","BANDS READ AT THE GATES. TIER 1: CLEAR. TIER 2: SCREENING DUE. TIER 3: OBSERVATION.",
-  "02:30 ALL TIER 2 STAFF HELD FOR SCREENING. 03:52 TIER LIST COPIED TO INTERNAL INVESTIGATIONS.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfE;
- m.lights.push_back(lamp({20.f,17.5f},roof-.16f,.85f,5.5f,5000,.05f));
+
+ // --- Plan ---------------------------------------------------------------------------------------
+ wall(m,9.8f,1.f,10.f,3.8f,f,roof,panel);wall(m,14.f,1.f,14.2f,3.8f,f,roof,panel);          // the link from Intake
+ rfpWallX(m,3.6f,3.8f,1.f,9.8f,{{7.4f,8.4f}},f,roof,tile);                                     // washroom / locker room
+ rfpWallX(m,3.6f,3.8f,14.2f,23.f,{{16.4f,17.4f}},f,roof,panel);                                // suit store / dress-out
+ wall(m,8.6f,3.8f,10.f,4.f,f,roof,panel);wall(m,14.f,3.8f,15.4f,4.f,f,roof,panel);            // hall north
+ wall(m,10.f,3.8f,14.f,4.f,f+2.7f,roof,panel);wall(m,10.f,3.78f,14.f,4.02f,f+2.66f,f+2.7f,steel);
+ rfiWallY(m,8.4f,8.6f,3.8f,9.f,{{5.4f,6.6f}},f,roof,panel);                                     // hall west: lockers
+ rfiWallY(m,15.4f,15.6f,3.8f,9.f,{{5.4f,6.6f}},f,roof,panel);                                   // hall east: dress-out
+ rfpWallX(m,8.8f,9.f,1.f,8.4f,{{1.2f,2.4f}},f,roof,panel);                                      // lockers to the W arm
+ rfpWallX(m,8.8f,9.f,15.6f,23.f,{{20.4f,21.6f}},f,roof,panel);                                  // dress-out to the E arm
+ for(float x:{8.4f,15.4f}){wall(m,x,9.f,x+.2f,14.f,f+2.45f,roof,panel);wall(m,x-.02f,9.f,x+.22f,14.f,f+2.41f,f+2.45f,steel);}   // arm mouths
+ rfpWallX(m,14.f,14.2f,1.f,9.6f,{{5.f,6.2f}},f,roof,panel);                                     // W arm south: suit return
+ rfpWallX(m,14.f,14.2f,14.4f,23.f,{{21.2f,22.2f}},f,roof,panel);                                // E arm south: tier office
+ rfiWallY(m,9.4f,9.6f,14.2f,22.f,{{17.6f,18.8f}},f,roof,panel);                                 // gate hall west
+ wall(m,14.4f,14.2f,14.6f,15.f,f,roof,panel);rfiGlass(m,14.4f,15.f,14.6f,19.4f,f,roof);         // the tier office window
+ rfiWallY(m,14.4f,14.6f,19.4f,22.f,{{20.2f,21.4f}},f,roof,panel);
+ rfpWallX(m,19.2f,19.4f,14.6f,23.f,{{21.4f,22.4f}},f,roof,panel);                               // tier office / screening
+ rfpWallX(m,19.4f,19.6f,1.f,9.4f,{},f,roof,tile);                                               // suit return south
+ wall(m,9.6f,21.8f,10.f,22.f,f,roof,panel);wall(m,14.f,21.8f,14.4f,22.f,f,roof,panel);
+ wall(m,9.8f,22.f,10.f,23.f,f,roof,panel);wall(m,14.f,22.f,14.2f,23.f,f,roof,panel);            // clearance vestibule
+ wall(m,10.f,21.8f,14.f,22.f,f+2.5f,roof,panel);wall(m,10.f,21.78f,14.f,22.02f,f+2.46f,f+2.5f,steel);
+ rfpPortal(m,1.f,1.12f,f,roof);rfpPortal(m,22.88f,23.f,f,roof);
+
+ // --- The link and the crossing hall (x 8.6-15.4, y 4-14) ----------------------------------------
+ // Walk in from Intake and the axis runs straight through the gates to the red door.
+ m.lights.push_back(lamp({12.f,2.4f},roof-.16f,.75f,5.f,6000,.04f));
+ rfFix(m,model::pwr_fire_cabinet,10.f+.1f,2.6f,f+1.3f,.25f,.2f,.56f,rfE,false);
+ rfFix(m,model::lab_wall_clock,12.f,4.036f,f+2.78f,.402f,.032f,.4f,rfN,false);
+ for(float y:{4.4f,13.6f})floorLine(m,10.6f,y,13.4f,y+.1f,f,13);
+ rfFix(m,model::lab_pa_horn,8.882f,4.7f,f+2.55f,.495f,.564f,.433f,rfW,false);
+ rfFix(m,model::trash_can,9.f,4.4f,f,.5f,.5f,.62f,.3f,true);
+ rfFix(m,model::water_cooler,15.1f,4.35f,f,.35f,.35f,1.1f,0,true);
+ // Benches either side under the notices: where the shift waited for its call.
+ rfFix(m,model::bench,8.95f,7.9f,f,1.86f,.44f,.63f,kPi*.5f,true);
+ rfFix(m,model::bench,15.05f,7.9f,f,1.86f,.44f,.63f,-kPi*.5f,true);
+ taped(m,{8.6f,7.6f},f+1.5f,rfE,Readable::Note,"PROCESSING / DIRECTIONS","WEST: RESEARCH ADMINISTRATION. EAST: MEDICAL SCREENING. SOUTH: LABORATORIES, CLEARANCE ONLY.",
+  "CLEARANCE IS ISSUED AT THE ADMINISTRATION DESK. TIER 2 AND ABOVE: SCREENING FIRST.");
+ taped(m,{15.4f,7.9f},f+1.5f,rfW,Readable::Note,"SHIFT ROTA / NIGHT","B SHIFT DOWN 22:00, UP 06:00. TIER 2: SCREENING BEFORE DESCENT.",
+  "01:58 ALL SHIFTS HELD BELOW. LOCKERS TO BE CLEARED BY SECURITY.");
+ // The cart the bands went out on, left where the detail stopped it.
+ handCart(m,13.7f,6.6f,f);
+ rfFix(m,model::prop_cardboard_box_open,13.7f,6.45f,f+.29f,.55f,.55f,.55f,.2f,false);
+ rfFix(m,model::prop_cardboard_box,13.72f,6.95f,f+.29f,.5f,.5f,.25f,-.15f,false);
+ // The queue: a stop line, belts between the lanes, three gates under a lit header.
+ floorLine(m,9.7f,12.05f,14.3f,12.15f,f,13);
+ for(float x:{11.27f,12.73f})rfpBelt(m,x,12.4f,13.36f,f);
+ for(float x:{10.53f,12.f,13.47f})floorLine(m,x-.05f,10.6f,x+.05f,12.f,f,14);
+ for(float x:{9.8f,11.27f,12.73f,14.2f})rfFix(m,model::ticket_gate,x,14.1f,f,.4f,1.42f,1.09f,0,true);
+ wall(m,9.6f,13.9f,14.4f,14.3f,f+2.4f,roof,panel);wall(m,9.6f,13.88f,14.4f,14.32f,f+2.36f,f+2.4f,steel);
+ for(float x:{10.53f,12.f,13.47f})rfFix(m,model::lab_status_display,x,13.85f,f+2.6f,.693f,.058f,.2f,rfS,false);
+ paperDrift(m,9.2f,8.4f,14.8f,12.f,f,8,693);
+ for(auto [x,y,yaw]:{std::tuple{11.4f,12.9f,.5f},{10.1f,11.2f,2.2f},{14.1f,9.8f,1.f},{12.6f,7.4f,2.6f}})rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ for(Vec2 l:{Vec2{12.f,6.4f},Vec2{12.f,10.4f}})m.lights.push_back(lamp(l,roof-.16f,.9f,6.5f,6200,.04f));
+ m.lights.push_back(rfiTube({12.f,13.1f},roof-.16f,1.1f,4.5f,6800,.04f,kPi*.5f));
+ rfSign(m,8.655f,11.5f,f+2.49f,"RESEARCH ADMINISTRATION","CLEARANCE DESK",3.f,rfE,rfBlue);
+ rfSign(m,15.345f,11.5f,f+2.49f,"MEDICAL SCREENING","TIER 2 AND ABOVE",3.f,rfW,rfBlue);
+
+ // --- The gate hall and the clearance door (x 9.6-14.4, y 14.2-22) --------------------------------
+ // The issue ledge under the tier window: dosimeters handed out, never collected.
+ wall(m,14.1f,15.6f,14.4f,18.6f,f+.95f,f+.99f,steel);
+ for(float y:{15.8f,18.4f})wall(m,14.36f,y-.02f,14.4f,y+.02f,f+.7f,f+.95f,steel);
+ for(auto [y,yaw]:{std::pair{15.95f,.1f},{16.5f,-.2f},{17.7f,.3f}})rfFix(m,model::item_dosimeter,14.25f,y,f+.99f,.31f,.146f,.066f,kPi*.5f+yaw,false);
+ rfFix(m,model::item_id_card,14.22f,17.1f,f+.99f,.132f,.085f,.002f,.4f,false);
+ floorLine(m,11.95f,14.9f,12.05f,21.7f,f,14);
+ rfFix(m,model::lab_pa_horn,9.882f,15.3f,f+2.5f,.495f,.564f,.433f,rfW,false);
+ extinguisher(m,9.6f,16.5f,f,rfE);
+ rfFix(m,model::trash_can,10.f,21.4f,f,.5f,.5f,.62f,.7f,true);
+ rfFix(m,model::item_dosimeter,11.2f,19.6f,f,.31f,.146f,.066f,2.3f,false);
+ paperDrift(m,10.f,15.f,14.f,21.f,f,4,694);
+ rfSign(m,12.f,21.745f,f+2.52f,"LABORATORIES","CLEARANCE ONLY / ISSUED AT RESEARCH ADMINISTRATION",3.6f,rfN,rfRed);
+ rfFix(m,model::lab_id_scanner,10.03f,22.6f,f+1.1f,.3f,.06f,.41f,rfW,false);
+ m.lights.push_back(lamp({12.f,16.6f},roof-.16f,.85f,5.5f,6000,.04f));
+ m.lights.push_back(lamp({12.f,19.8f},roof-.16f,.6f,4.5f,5000,.06f));
+ for(auto [x,yaw]:{std::pair{10.f,0.f},{14.f,kPi}})m.lights.push_back(rfSwitched(lamp({x,22.6f},f+2.3f,.8f,4.f,1000,-.5f,WorldLightMount::Wall,yaw),clearance,true));
+ m.lights.push_back(rfSwitched(rfiTube({12.f,22.5f},roof-.16f,.8f,4.f,5200,.05f,kPi*.5f),clearance));
+
+ // --- The locker room (x 1-8.4, y 3.8-8.8) and the washroom (x 1-9.8, y 1-3.6) ---------------------
+ for(int i=0;i<7;++i)rfLockers(m,1.45f+i*.9f,4.25f,f,rfS);
+ for(int i=0;i<6;++i)rfLockers(m,2.85f+i*.9f,8.35f,f,rfN);
+ for(float x:{3.6f,5.6f})rfFix(m,model::bench,x,6.3f,f,1.86f,.44f,.63f,0,true);
+ // Lockers being emptied into boxes when the sweep went to Medical.
+ rfFix(m,model::prop_cardboard_box_open,8.12f,8.45f,f,.45f,.45f,.45f,.3f,false);
+ rfFix(m,model::prop_cardboard_box,7.75f,7.4f,f,.5f,.5f,.25f,-.2f,false);
+ paperDrift(m,2.8f,4.9f,8.2f,7.7f,f,6,69);
+ for(auto [x,y,yaw]:{std::tuple{4.6f,5.2f,.8f},{6.8f,7.5f,2.f}})rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ // The private: the kit he opened, where he bled, the radio he stopped answering.
+ rfFix(m,model::med_first_aid_box,1.06f,5.6f,f+1.35f,.367f,.12f,.349f,rfE,false);
+ wall(m,1.45f,6.35f,2.35f,7.15f,f+.004f,f+.010f,16);
+ for(auto [x,y,yaw]:{std::tuple{1.3f,6.1f,.7f},{2.5f,7.25f,2.1f},{1.25f,7.4f,-.4f}})rfFix(m,model::item_bandage,x,y,f,.075f,.148f,.061f,yaw,false);
+ rfFix(m,model::item_walkie,2.55f,5.95f,f,.114f,.376f,.046f,1.2f,false);
+ extinguisher(m,8.4f,7.9f,f,rfW);
+ m.lights.push_back(rfiTube({3.f,6.3f},roof-.16f,.7f,5.f,5200,.06f,kPi*.5f));
+ m.lights.push_back([&]{auto l=rfiTube({6.4f,6.3f},roof-.16f,.6f,5.f,5200,.06f,kPi*.5f);l.flicker=.3f;return l;}());
+ // The washroom: two stalls, the scrub sinks under one long mirror.
+ for(float x:{2.07f,4.22f})rfFix(m,model::med_washroom_stall,x,1.78f,f,2.13f,1.54f,2.4f,rfS,true);
+ for(float x:{6.1f,6.9f,7.7f})rfFix(m,model::med_scrub_sink,x,1.29f,f,.49f,.54f,1.13f,rfS,true);
+ wall(m,5.75f,1.f,8.05f,1.03f,f+1.f,f+2.f,27);wall(m,5.75f,1.f,8.05f,1.14f,f+1.36f,f+1.39f,steel);   // the splashback and soap shelf
+ rfFix(m,model::med_floor_drain,7.f,2.7f,f,.5f,.5f,.01f,0,false);
+ rfFix(m,model::trash_can,9.35f,1.45f,f,.5f,.5f,.62f,0,true);
+ m.lights.push_back(rfiTube({5.6f,2.4f},roof-.16f,.6f,5.f,5600,.05f,kPi*.5f));
+
+ // --- The dress-out (x 15.6-23, y 3.8-8.8) and the suit store (x 14.2-23, y 1-3.6) ------------------
+ // Suit lockers on the east wall, the dosimeter board, and the suit rail the detail emptied.
+ for(int i=0;i<5;++i)rfLockers(m,22.55f,4.25f+i*.9f,f,rfW);
+ wall(m,18.f,3.8f,20.4f,3.84f,f+1.1f,f+1.9f,steel);
+ for(float z:{1.3f,1.62f})wall(m,18.f,3.84f,20.4f,4.f,f+z,f+z+.03f,steel);
+ for(auto [x,z]:{std::pair{18.3f,1.65f},{18.63f,1.65f},{19.95f,1.65f},{19.3f,1.33f}})rfFix(m,model::item_dosimeter,x,3.92f,f+z,.31f,.146f,.066f,0,false);
+ taped(m,{21.f,3.8f},f+1.45f,rfS,Readable::Note,"SUIT ISSUE / 03:44","18 SUITS, 18 RESPIRATORS TO THE INVESTIGATOR'S DETAIL. RAIL EMPTY.",
+  "NOT SIGNED FOR. BY ORDER: TREAT RETURNS AS EXPOSED.");
+ m.pipes.push_back({{16.6f,8.55f},{20.f,8.55f},f+1.9f,.02f,f+1.9f,1});
+ for(float x:{16.58f,19.98f})wall(m,x,8.5f,x+.04f,8.8f,f+1.86f,f+1.94f,steel);
+ for(float x=16.9f;x<19.8f;x+=.35f)wall(m,x,8.53f,x+.015f,8.57f,f+1.72f,f+1.88f,steel);
+ rfFix(m,model::bench,20.f,6.2f,f,1.86f,.44f,.63f,kPi*.5f,true);
+ rfFix(m,model::metal_shelf,15.87f,7.75f,f,1.8f,.5f,1.8f,kPi*.5f,true);
+ for(auto [y,yaw]:{std::pair{7.25f,.1f},{8.2f,-.15f}})rfFix(m,model::prop_cardboard_box,15.87f,y,f+1.65f,.45f,.45f,.23f,kPi*.5f+yaw,false);
+ rfFix(m,model::prop_cardboard_box_open,18.9f,4.35f,f,.55f,.55f,.55f,-.4f,false);
+ for(auto [x,y,yaw]:{std::tuple{19.9f,5.6f,1.4f},{20.1f,6.85f,1.9f}})rfFix(m,model::item_dosimeter,x,y,f+.63f,.31f,.146f,.066f,yaw,false);
+ paperDrift(m,16.f,4.6f,21.6f,8.4f,f,4,695);
+ m.lights.push_back(rfiTube({17.6f,6.3f},roof-.16f,.7f,5.f,5600,.05f,kPi*.5f));
+ m.lights.push_back(rfiTube({21.f,6.3f},roof-.16f,.7f,5.f,5600,.05f,kPi*.5f));
+ // The store: shelves of suit stock torn into, the cage the respirators came from.
+ for(float x:{16.f,18.f})rfFix(m,model::metal_shelf,x,1.27f,f,1.8f,.5f,1.8f,0,true);
+ for(auto [x,yaw]:{std::pair{15.6f,.1f},{16.3f,-.1f},{17.6f,.15f}})rfFix(m,model::prop_cardboard_box,x,1.27f,f+1.65f,.5f,.45f,.25f,yaw,false);
+ rfFix(m,model::stock_cage,21.3f,1.52f,f,2.4f,1.f,1.1f,0,true);
+ rfFix(m,model::prop_cardboard_box_open,21.f,1.52f,f+1.1f,.55f,.55f,.55f,.3f,false);
+ for(auto [x,y,yaw]:{std::tuple{19.4f,2.9f,.6f},{15.3f,2.85f,-.3f}})rfFix(m,model::prop_cardboard_box_open,x,y,f,.6f,.6f,.6f,yaw,false);
+ rfFix(m,model::prop_cardboard_box,20.3f,3.0f,f,.6f,.6f,.3f,.9f,false);
+ m.lights.push_back(rfiTube({18.6f,2.4f},roof-.16f,.6f,5.f,5000,.08f,kPi*.5f));
+
+ // --- The W arm to Administration (x 1-8.4, y 9-14) ------------------------------------------------
+ // Where staff waited to be called to the clearance desk.
+ for(float x:{4.2f,6.3f})rfFix(m,model::platform_chair,x,9.27f,f,1.8f,.5f,.8f,0,true);
+ for(float x:{2.9f,7.4f})rfFix(m,model::platform_chair,x,13.73f,f,1.8f,.5f,.8f,kPi,true);
+ rfFix(m,model::lab_wall_clock,5.25f,9.016f,f+2.1f,.402f,.032f,.4f,rfN,false);
+ rfFix(m,model::lab_potted_plant,1.5f,9.5f,f,.37f,.43f,.69f,0,false);
+ rfFix(m,model::trash_can,1.5f,13.6f,f,.5f,.5f,.62f,0,true);
+ for(auto [x,y,yaw]:{std::tuple{3.4f,11.3f,1.f},{6.6f,12.2f,2.5f}})rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ paperDrift(m,1.6f,10.f,8.f,13.f,f,4,696);
+ m.lights.push_back(lamp({2.8f,11.5f},roof-.16f,.75f,5.5f,5600,.05f));
+ m.lights.push_back(lamp({6.4f,11.5f},roof-.16f,.75f,5.5f,5600,.05f));
+
+ // --- The E arm to Medical (x 15.6-23, y 9-14) ------------------------------------------------------
+ for(float x:{17.5f,19.4f})rfFix(m,model::platform_chair,x,9.27f,f,1.8f,.5f,.8f,0,true);
+ for(float x=16.f;x<22.4f;x+=.9f)floorLine(m,x,11.45f,x+.5f,11.55f,f,13);
+ rfFix(m,model::med_wheelchair,16.4f,13.3f,f,.55f,1.03f,.9f,1.2f,true);
+ rfFix(m,model::lab_potted_plant,22.5f,9.5f,f,.37f,.43f,.69f,0,false);
+ rfFix(m,model::trash_can,20.6f,13.6f,f,.5f,.5f,.62f,0,true);
+ extinguisher(m,19.f,14.f,f,rfN);
+ m.lights.push_back(lamp({17.6f,11.5f},roof-.16f,.75f,5.5f,5600,.05f));
+ m.lights.push_back(lamp({21.f,11.5f},roof-.16f,.75f,5.5f,5600,.05f));
+
+ // --- The tier office (x 14.6-23, y 14.2-19.2): where a tier was read ------------------------------
+ rfDesk(m,15.45f,15.9f,f,rfW,1);rfDesk(m,15.45f,17.9f,f,rfW,2);
+ terminal(m,{15.62f,15.4f},"SCREENING INTAKE / TIER BOARD","BANDS READ AT THE GATES. TIER 1: CLEAR. TIER 2: SCREENING DUE. TIER 3: OBSERVATION.",
+  "02:30 ALL TIER 2 STAFF HELD FOR SCREENING. 03:52 TIER LIST COPIED TO INTERNAL INVESTIGATIONS.");
+ m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfE;m.terminals.back().surface=.75f;
+ // The tier board: sixteen gate readouts, one per lane and shift.
+ for(int i=0;i<4;++i)for(int j=0;j<4;++j)rfFix(m,model::lab_status_display,22.97f,15.45f+j*.8f,f+1.15f+i*.3f,.693f,.058f,.2f,rfE,false);
+ for(float x:{16.6f,17.6f})rfFix(m,model::med_records_cabinet,x,14.47f,f,.9f,.49f,1.f,rfS,true);
+ rfFix(m,model::lab_photocopier,19.6f,18.8f,f,.83f,.75f,.97f,rfS,true);
+ paperDrift(m,18.4f,17.f,21.2f,18.3f,f,6,697);
+ rfFix(m,model::office_paper_stack,19.5f,18.85f,f+.97f,.33f,.44f,.03f,.2f,false);
+ m.lights.push_back(lamp({17.8f,16.7f},roof-.16f,.85f,5.5f,6000,.04f));
+ m.lights.push_back([&]{auto l=lamp({21.2f,16.7f},roof-.16f,.8f,5.5f,6000,.04f);l.flicker=.25f;return l;}());
+ m.lights.push_back(lamp({22.35f,16.65f},f+1.75f,.7f,3.f,7000,.1f,WorldLightMount::Bare));   // the board's glow
+
+ // --- Screening (x 14.6-23, y 19.4-23): bands read, vitals taken, tier set -------------------------
+ rfFix(m,model::med_nurse_desk,17.f,21.2f,f,1.18f,.56f,.81f,rfW,true);
+ rfFix(m,model::office_chair,17.75f,21.2f,f,.55f,.55f,.95f,rfE,true);
+ rfFix(m,model::office_chair,16.1f,21.25f,f,.55f,.55f,.95f,rfW+.2f,true);
+ rfFix(m,model::med_vitals_monitor,17.1f,20.85f,f+.81f,.38f,.18f,.28f,rfE,false);
+ rfFix(m,model::office_paper_stack,16.95f,21.45f,f+.81f,.33f,.44f,.03f,.15f,false);
+ for(auto [y,yaw]:{std::pair{21.2f,.3f},{21.75f,1.9f}})rfFix(m,model::item_id_card,16.9f,y,f+.81f,.132f,.085f,.002f,yaw,false);
+ rfFix(m,model::lab_id_scanner,14.63f,21.9f,f+1.1f,.3f,.06f,.41f,rfW,false);
+ rfFix(m,model::med_supply_cabinet,22.76f,21.2f,f,1.1f,.44f,1.7f,rfW,true);
+ rfFix(m,model::med_scrub_sink,20.4f,22.71f,f,.49f,.54f,1.13f,rfN,true);
+ rfFix(m,model::med_wheelchair,19.1f,22.2f,f,.55f,1.03f,.9f,.3f,true);
+ rfFix(m,model::med_wall_clock,18.f,22.988f,f+2.3f,.24f,.024f,.23f,rfN,false);
+ m.lights.push_back(lamp({18.8f,21.2f},roof-.16f,.75f,5.f,5000,.05f));
+
+ // --- Suit return (x 1-9.4, y 14.2-19.4): the lab shift came back through here at 02:06 -------------
+ for(float y:{15.f,15.65f,16.3f})rfFix(m,model::ind_barrel,1.35f,y,f,.53f,.56f,.95f,y,true);
+ rfFix(m,model::stock_cage,4.f,18.88f,f,2.4f,1.f,1.1f,0,true);
+ for(auto [x,yaw]:{std::pair{3.3f,.1f},{4.1f,-.2f},{4.85f,.25f}})rfFix(m,model::prop_cardboard_box,x,18.88f,f+1.1f,.6f,.6f,.3f,yaw,false);
+ taped(m,{2.2f,19.4f},f+1.45f,rfN,Readable::Note,"SUIT RETURN / 02:06","LAB SHIFT BACK UP IN SUITS. 23 SUITS BAGGED UNWASHED. TIER 2 HELD.",
+  "02:40 BAGS TO INTERNAL INVESTIGATIONS. DO NOT OPEN.");
+ for(float y:{15.4f,16.2f})rfFix(m,model::med_scrub_sink,9.13f,y,f,.49f,.54f,1.13f,rfW,true);
+ rfFix(m,model::bench,2.8f,14.47f,f,1.86f,.44f,.63f,0,true);
+ rfFix(m,model::med_floor_drain,5.6f,16.8f,f,.5f,.5f,.01f,0,false);
+ handCart(m,7.6f,16.f,f);
+ rfFix(m,model::prop_cardboard_box_open,7.6f,15.8f,f+.29f,.55f,.55f,.55f,.4f,false);
+ rfFix(m,model::item_dosimeter,6.3f,17.6f,f,.31f,.146f,.066f,.9f,false);
+ m.lights.push_back([&]{auto l=rfiTube({6.2f,16.8f},roof-.16f,.85f,5.5f,4300,.25f,kPi*.5f);l.flicker=.35f;return l;}());
+ m.lights.push_back(rfiTube({2.8f,16.6f},roof-.16f,.75f,5.f,4300,.25f,kPi*.5f));
+
  // --- The wounded private ------------------------------------------------------------------------
- // Against the south lockers, gun across his knees. A truce, his by default:
+ // At the end of the locker room aisle, gun down. A truce, his by default:
  // he only turns if the player turns on him.
- rfGuard(m,"rf_proc_clock","rf_proc_private",ActorVisual::CleanupEngineer,GuardSquadRole::Engineer,"rf_proc",{{{5.6f,16.3f},f,60000,rfN}},10,.6f,2,.6f,0,60);
+ rfGuard(m,"rf_proc_clock","rf_proc_private",ActorVisual::CleanupEngineer,GuardSquadRole::Engineer,"rf_proc",{{{1.9f,6.75f},f,60000,rfE}},10,.6f,2,.6f,0,60);
  {auto& t=m.actorTracks.back();t.ai.stance=stance;t.talk=stateId("proc_hello");t.voice=2;}
  rfLine(m,"proc_hello","WOUNDED CLEANUP PRIVATE","Don't. I'm not going to shoot you. I can't lift it.",{
   rfReply("Who's giving your orders down here?","proc_who"),
@@ -589,141 +774,366 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  // Walking in from Intake sets the truce.
  {ScriptEvent e;e.id=stateId("rf_proc_truce");e.x1=9.8f;e.y1=0;e.x2=14.2f;e.y2=4.f;e.bottom=-100;e.top=100;
   ScriptAction a;a.type=ScriptAction::Type::SetState;a.id=stance;a.value=int(SquadStance::Truce);e.actions={a};m.scriptEvents.push_back(e);}
- // --- What the night left -------------------------------------------------------------------------
- // The lockers were being emptied into boxes when the sweep went to Medical.
- rfFix(m,model::prop_cardboard_box_open,1.65f,17.95f,f,.73f,.725f,.726f,.15f,true);
- rfFix(m,model::prop_cardboard_box,6.1f,7.6f,f,.727f,.72f,.367f,-.25f,true);
- paperDrift(m,1.4f,5.2f,6.4f,8.2f,f,5,69);paperDrift(m,1.4f,14.8f,6.4f,18.8f,f,5,691);
- // The private: what he wrapped his leg with, where he bled, the radio he stopped answering.
- wall(m,5.f,15.75f,6.35f,16.85f,f+.004f,f+.010f,16);
- for(auto [x,y,yaw]:{std::tuple{4.85f,15.9f,.7f},{6.4f,16.95f,2.1f},{4.6f,16.4f,-.4f}})rfFix(m,model::item_bandage,x,y,f,.075f,.148f,.061f,yaw,false);
- rfFix(m,model::item_walkie,4.75f,16.85f,f,.114f,.376f,.046f,1.2f,false);
- // Suit stations: stock boxes by the cabinet, dosimeters laid out on the bench for a shift that never came.
- rfFix(m,model::prop_cardboard_box,17.75f,4.45f,f,.727f,.72f,.367f,0,true);
- rfFix(m,model::prop_cardboard_box,17.77f,4.47f,f+.367f,.727f,.72f,.367f,.15f,true);
- for(float x:{18.9f,19.35f,19.8f,20.25f,20.7f})rfFix(m,model::item_dosimeter,x,7.12f,f+.51f,.31f,.146f,.066f,rfE+(x>20.f?.3f:0),false);
- // Screening intake: bands read and left on the desk, the readings under them.
- rfFix(m,model::office_paper_stack,19.65f,16.6f,f+1.01f,.33f,.44f,.03f,rfN+.2f,false);
- for(auto [x,y,yaw]:{std::tuple{20.15f,16.45f,.2f},{20.4f,16.75f,1.7f},{20.05f,16.8f,2.9f}})rfFix(m,model::item_id_card,x,y,f+1.01f,.132f,.085f,.002f,yaw,false);
- rfFix(m,model::office_pc_tower,19.15f,17.3f,f,.262f,.609f,.609f,rfS,true);
- paperDrift(m,17.6f,17.6f,22.4f,21.4f,f,6,692);
- // The hall and the gates.
- paperDrift(m,8.f,12.2f,16.f,18.6f,f,9,693);
- for(auto [x,y,yaw]:{std::tuple{11.8f,18.7f,.5f},{8.7f,18.85f,2.2f},{15.1f,13.f,1.f}})rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
- extinguisher(m,17.f,6.f,f,rfW);extinguisher(m,7.f,18.f,f,rfE);
- // The hub: the PA that called the tiers, the notices nobody reads, the bins by the columns.
- rfFix(m,model::lab_pa_horn,7.28f,7.6f,f+2.6f,.495f,.564f,.433f,rfE,false);
- rfFix(m,model::lab_notice_board,7.04f,16.2f,f+1.3f,1.2f,.07f,.9f,rfE,false);
- for(Vec2 b:{Vec2{10.05f,7.f},Vec2{13.95f,16.f}})rfFix(m,model::trash_can,b.x,b.y,f,.5f,.5f,.62f,0,true);
- rfLockers(m,20.3f,4.5f,f,rfS);
- // The queue for the gates: belt rails funnelling each pair of turnstiles, the lanes taped on the floor.
- for(float x:{8.f,9.4f,14.6f,16.f}){
-  for(float y:{16.6f,17.8f,19.f}){wall(m,x-.03f,y-.03f,x+.03f,y+.03f,f,f+.95f,20);wall(m,x-.05f,y-.05f,x+.05f,y+.05f,f+.95f,f+.99f,12);}
-  wall(m,x-.012f,16.6f,x+.012f,19.f,f+.86f,f+.92f,12);}
- for(float x:{8.7f,15.3f})floorLine(m,x-.06f,14.6f,x+.06f,19.1f,f,13);
- // The way west, past the lockers: the laundry nobody collected.
- rfFix(m,model::prop_cardboard_box_open,5.8f,9.45f,f,.73f,.725f,.726f,-.3f,true);
- rfFix(m,model::prop_cardboard_box,5.75f,13.5f,f,.727f,.72f,.367f,.1f,true);
- // --- Rewards and names ------------------------------------------------------------------------
- m.pickupSpawns={{{2.f,15.6f},PickupKind::Health,f},{{22.2f,10.f},PickupKind::Ammo,f},{{18.6f,6.4f},PickupKind::Health,f}};
- m.clutterSpawns={{1,{20.6f,16.4f},f+1.f},{0,{3.f,7.2f},f}};
- zone(m,"PERSONNEL PROCESSING / LOCKER BAYS",1.f,3.8f,6.8f,22.f);
- zone(m,"PERSONNEL PROCESSING / SUIT STATIONS",17.2f,3.8f,23.f,8.6f);
- zone(m,"PERSONNEL PROCESSING / SCREENING INTAKE",17.2f,14.4f,23.f,22.f);
+
+ // --- Rewards, throwables and names --------------------------------------------------------------
+ m.pickupSpawns={{{1.5f,5.0f},PickupKind::Health,f},{{22.5f,3.f},PickupKind::Ammo,f},{{9.2f,3.1f},PickupKind::Health,f},{{21.f,18.6f},PickupKind::Ammo,f}};
+ m.clutterSpawns={{0,{7.3f,6.0f},f},{1,{18.2f,12.6f},f},{2,{20.6f,17.4f},f},{0,{4.2f,12.4f},f}};
+ zone(m,"PERSONNEL PROCESSING / WASHROOM",1.f,1.f,9.8f,3.6f);
+ zone(m,"PERSONNEL PROCESSING / LOCKER ROOM",1.f,3.8f,8.4f,8.8f);
+ zone(m,"PERSONNEL PROCESSING / SUIT STORE",14.2f,1.f,23.f,3.6f);
+ zone(m,"PERSONNEL PROCESSING / DRESS-OUT",15.6f,3.8f,23.f,8.8f);
+ zone(m,"PERSONNEL PROCESSING / TIER OFFICE",14.6f,14.2f,23.f,19.2f);
+ zone(m,"PERSONNEL PROCESSING / SCREENING",14.6f,19.4f,23.f,23.f);
+ zone(m,"PERSONNEL PROCESSING / SUIT RETURN",1.f,14.2f,9.4f,19.4f);
+ zone(m,"PERSONNEL PROCESSING / GATES",9.6f,13.4f,14.4f,23.f);
  zone(m,"PERSONNEL PROCESSING",0,0,24,24);
  recessedFittings(m,true);freightFinish(m,-1);
  return p;
 }
-// RESEARCH ADMINISTRATION (manifest 47). Where the company kept score: a lobby
-// two floors tall under an observation mezzanine, the boardroom with the last
-// quarter's minutes, the clearance desk, and the records office behind glass.
-// The player first sees the Investigator here, through that glass: reading
-// personnel cards among the cabinets, directing his detail by hand, then
-// leaving by the far door with one card in his coat. Records opens after.
+// --- Research Administration kit (rfa): chunk 70's own helpers ---------------------------------
+// A swinging leaf in a wall along x at y, hinged at x1; the wall run supplies the band over it.
+void rfaDoor(Map& m,float x1,float x2,float y,float swing,StateId lock=0){
+ Door d{x1,x2,y,0};d.swinging=true;d.swing=swing;d.requireState=lock;m.doors.push_back(d);
+}
+// A suspended ceiling of drop tiles with its underside at z, and its grid tees.
+void rfaCeiling(Map& m,float x1,float y1,float x2,float y2,float z,bool grid=true){
+ wall(m,x1,y1,x2,y2,z,z+.08f,22);if(grid)ceilingGrid(m,x1,y1,x2,y2,z);
+}
+// A low table: a wood top on four steel legs, `h` high, at floor z.
+void rfaTable(Map& m,float cx,float cy,float hx,float hy,float z,float h){
+ wall(m,cx-hx,cy-hy,cx+hx,cy+hy,z+h-.04f,z+h,10);
+ for(float sx:{-1.f,1.f})for(float sy:{-1.f,1.f}){const float x=cx+sx*(hx-.07f),y=cy+sy*(hy-.07f);wall(m,x-.02f,y-.02f,x+.02f,y+.02f,z,z+h-.04f,2);}
+}
+// A leather boardroom chair whose sitter looks along `face` (the model's seat faces -y).
+void rfaChair(Map& m,float x,float y,float z,float face){rfFix(m,model::lab_boardroom_chair,x,y,z,.79f,.74f,.93f,face+kPi,true);}
+
+// RESEARCH ADMINISTRATION (manifest 47). Where the company kept score: the
+// executive floor of the research front. A two-storey atrium where visitors
+// waited for laboratory clearance; the clearance counter under a gallery that
+// leads to the director's suite; the boardroom and its copy room; and the
+// personnel records office behind glass on the atrium's west wall, under the
+// company's own slogan. The player walks in from Processing (E 9-14) on the
+// Investigator himself: through that glass he reads the Energy Diagnostics
+// cards, points his door man to the drawers, keeps one card (LAB 4's) and
+// leaves by the far door to service lift 2. The door locks behind him; the
+// records door opens. His detail stays: a heavy at the corridor mouth with
+// his eyes on the glass and the lounge, and a man walking the atrium. The
+// quiet way to the pass terminal is north, behind the counter.
 std::shared_ptr<const Map> makeResearchAdministration(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[70];m.definition=CampaignChunks[70];m.definition.ambient=.34f;
- m.wallSurface=SurfacePaintedMaroon;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
- const float f=-12,roof=m.definition.ceiling,dz=-9;
+ m.name=CampaignMapNames[70];m.definition=CampaignChunks[70];m.definition.ambient=.30f;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceOfficePlaster;
+ const float f=-12,roof=m.definition.ceiling,dz=-9,cf=f+.015f,cu=dz+.015f;
+ const int panel=28,plaster=21,steel=2,carpet=23;
  const StateId gone=stateId("rf_admin_gone"),clearance=stateId("proc_clearance");
  m.layers.push_back(floorLayer(m.name.c_str(),f));
  openEdge(m,{'E',9.f,14.f,f,false,0});
  machineryClock(m,"rf_admin_clock",60000);
- // --- The observation mezzanine, north-east, and its stair ---------------------------------------
- deck(m,dz,12,1,23,5);
- m.stairs.push_back({20.f,5.f,22.f,9.5f,f,dz,16,true,false});
- deckHangers(m,m.layers.back(),roof);
- // No rod where the stair arrives on the deck.
- std::erase_if(m.pipes,[](const PipeRun& r){return r.start.x>19.6f&&r.start.x<22.4f&&r.start.y>4.f&&r.start.y<5.6f;});
- for(float x:{14.5f,17.5f})bench(m,x,2.f,dz);
- rfFix(m,model::lab_scope_monitor,22.f,1.4f,dz+.75f,.47f,.34f,.45f,rfN,false);
- rfFix(m,model::lab_potted_plant,12.6f,1.6f,dz,.5f,.58f,.93f,0,false);
- for(Vec2 l:{Vec2{15.f,3.f},Vec2{20.f,3.f}})m.lights.push_back(lamp(l,roof-.2f,.85f,6.f,5200,.05f));
- // --- The lobby ------------------------------------------------------------------------------------
- for(Vec2 c:{Vec2{15.f,8.f},Vec2{15.f,16.f}})wall(m,c.x-.3f,c.y-.3f,c.x+.3f,c.y+.3f,f,roof,20);
- for(Vec2 l:{Vec2{16.5f,11.5f},Vec2{19.f,16.5f},Vec2{14.f,20.f}})m.lights.push_back(lamp(l,roof-.2f,1.1f,8.f,5800,.04f));
- m.lights.push_back(lamp({19.f,7.f},dz-.25f,.9f,6.f,5600,.04f));
- rfSign(m,23.f,18.f,f+3.2f,"DEPTHWORKS ENERGY RESEARCH","YOUR WORK POWERS THE WORLD",4.4f,rfW,rfBlue);
- for(float y:{19.6f,21.2f})bench(m,20.5f,y,f);
- rfFix(m,model::lab_potted_plant,22.4f,6.f,f,.5f,.58f,.93f,0,false);rfFix(m,model::lab_potted_plant,13.f,22.2f,f,.5f,.58f,.93f,0,false);
- rfFix(m,model::water_cooler,22.5f,15.f,f,.35f,.35f,1.1f,rfW,true);
- // The clearance desk: it issues proc_clearance once the floor is quiet again.
- rfFix(m,model::desk_corner,18.4f,13.6f,f,2.205f,2.211f,.891f,rfS,true);
- rfFix(m,model::crt_monitor,18.4f,13.9f,f+.891f,.42f,.4f,.38f,rfN,false);
- rfFix(m,model::office_chair,18.4f,12.1f,f,.55f,.55f,.95f,rfS,true);
- terminal(m,{18.4f,14.75f},"CLEARANCE DESK / LABORATORY ACCESS","E / ISSUE LABORATORY CLEARANCE TO THIS BAND.",
+ // The way in from Processing: steel posts and a panel head at 2.7 m, as on 69's side of the seam.
+ for(float y:{9.f,13.86f})wall(m,22.88f,y,23.f,y+.14f,f,f+2.7f,steel);
+ wall(m,22.88f,9.f,24.f,14.f,f+2.7f,roof,panel);wall(m,22.86f,9.f,23.02f,14.f,f+2.66f,f+2.7f,steel);
+
+ // --- Plan ------------------------------------------------------------------------------------------
+ // The upper floor (z -9): the director's suite over the boardroom and copy room, the gallery over the counter.
+ deck(m,dz,0,0,12,8);deck(m,dz,12,0,24,5);
+ m.stairs.push_back({21.f,5.f,23.f,8.8f,f,dz,16,true,false});
+ // The boardroom / copy room south wall and the suite's are one run; the doors sit under 2.55 m.
+ wall(m,1.f,7.8f,5.4f,8.f,f,f+2.55f,panel);wall(m,6.6f,7.8f,10.32f,8.f,f,f+2.55f,panel);wall(m,11.48f,7.8f,11.8f,8.f,f,f+2.55f,panel);
+ wall(m,1.f,7.8f,11.8f,8.f,f+2.55f,roof,panel);
+ rfaDoor(m,5.4f,6.6f,7.9f,-1);                                                   // 0: the boardroom
+ rfpDoorX(m,10.4f,11.4f,7.8f,8.f,f,f+2.55f,panel);                             // the copy room, open
+ // Records: the corridor door, the far door to the lift lobby, solid either side of the lobby.
+ wall(m,1.f,10.f,9.6f,10.2f,f,f+2.55f,panel);wall(m,10.8f,10.f,11.8f,10.2f,f,f+2.55f,panel);wall(m,1.f,10.f,11.8f,10.2f,f+2.55f,roof,panel);
+ rfaDoor(m,9.6f,10.8f,10.1f,1,gone);                                              // 1: records, open once he has gone
+ wall(m,1.f,19.f,4.4f,23.f,f,roof,panel);wall(m,9.f,19.f,12.f,23.f,f,roof,panel);
+ wall(m,4.4f,19.f,6.2f,19.2f,f,f+2.55f,panel);wall(m,7.4f,19.f,9.f,19.2f,f,f+2.55f,panel);wall(m,4.4f,19.f,9.f,19.2f,f+2.55f,roof,panel);
+ rfaDoor(m,6.2f,7.4f,19.1f,1,stateId("rf_admin_far_door"));                     // 2: the far door: his, never the player's
+ // The atrium's west face: copy room, the corridor mouth, the records glass, the lounge wall.
+ wall(m,11.8f,1.f,12.f,8.f,f,dz,panel);
+ wall(m,11.8f,8.f,12.f,10.f,f+2.7f,roof,panel);wall(m,11.78f,8.f,12.02f,10.f,f+2.66f,f+2.7f,steel);
+ wall(m,11.8f,10.f,12.f,10.6f,f,roof,panel);
+ // The records glass, and the enquiry hatch in it: two bays open behind steel bars, over a counter.
+ rfGlass(m,11.8f,10.6f,12.f,11.4f,f,roof,panel);rfGlass(m,11.8f,13.8f,12.f,15.8f,f,roof,panel);
+ wall(m,11.8f,11.4f,12.f,13.8f,f,f+1.f,panel);wall(m,11.5f,11.4f,12.3f,13.8f,f+1.f,f+1.05f,12);
+ wall(m,11.8f,11.4f,12.f,13.8f,f+2.05f,roof,panel);wall(m,11.78f,11.4f,12.02f,13.8f,f+2.01f,f+2.05f,steel);
+ wall(m,11.8f,12.575f,12.f,12.625f,f+1.05f,f+2.01f,steel);
+ for(float y=11.5f;y<13.75f;y+=.1f)if(std::fabs(y-12.6f)>.06f)wall(m,11.89f,y-.01f,11.91f,y+.01f,f+1.05f,f+2.01f,steel);
+ wall(m,11.8f,11.4f,12.f,13.8f,f+1.05f,f+2.01f,CollisionProxyMaterial);
+ wall(m,11.8f,15.8f,12.f,19.f,f,roof,panel);
+ // Upstairs: the suite's door off the gallery and its window over the atrium; the director's door.
+ wall(m,11.8f,1.f,12.f,1.6f,dz,roof,panel);rfiDoorY(m,1.6f,2.8f,11.8f,12.f,dz,roof,panel);wall(m,11.8f,2.8f,12.f,5.f,dz,roof,panel);
+ rfGlass(m,11.8f,5.f,12.f,7.8f,dz,roof,panel);wall(m,11.8f,7.8f,12.f,8.f,dz,roof,panel);
+ rfiWallY(m,8.6f,8.8f,1.f,7.8f,{{2.f,3.f}},f,f+2.78f,panel);                  // boardroom / copy room: the service door
+ rfiWallY(m,8.6f,8.8f,1.f,7.8f,{{1.4f,2.6f}},dz,roof,panel);                  // anteroom / director
+ // Ceilings: drop tiles at 2.7 m under the upper floor and in the back rooms; 2.9 m in records and the lounge.
+ rfaCeiling(m,1.f,1.f,8.6f,7.8f,f+2.7f);rfaCeiling(m,8.8f,1.f,11.8f,7.8f,f+2.7f,false);
+ rfaCeiling(m,1.f,8.f,11.8f,10.f,f+2.7f,false);
+ rfaCeiling(m,1.f,10.2f,11.8f,19.f,f+2.9f);
+ rfaCeiling(m,4.4f,19.2f,9.f,23.f,f+2.7f,false);
+ rfaCeiling(m,12.f,1.f,23.f,5.f,f+2.7f,false);
+ wall(m,12.f,4.95f,21.f,5.08f,f+2.55f,dz,panel);                                 // the gallery fascia
+ for(float x:{13.8f,17.8f})wall(m,x,4.6f,x+.4f,5.f,f,f+2.55f,panel);               // and its columns
+ wall(m,12.f,16.f,23.f,16.2f,f+2.9f,roof,panel);wall(m,12.f,15.98f,23.f,16.22f,f+2.86f,f+2.9f,steel);   // the lounge bulkhead
+ for(float x:{15.8f,19.4f})wall(m,x,15.9f,x+.4f,16.3f,f,f+2.86f,panel);
+ rfaCeiling(m,12.f,16.2f,23.f,23.f,f+2.9f);
+ // The gallery's glass balustrade.
+ wall(m,12.f,4.86f,21.f,4.92f,dz,dz+1.f,17);wall(m,12.f,4.84f,21.f,4.94f,dz+1.f,dz+1.05f,20);
+ for(float x=12.f;x<21.1f;x+=1.5f){const float a=std::min(x,20.95f);wall(m,a,4.84f,a+.05f,4.94f,dz,dz+1.f,20);}
+ // Carpet where the company sat: boardroom, lounge, the suite and the gallery.
+ floorLine(m,1.f,1.f,8.6f,7.8f,f,carpet);floorLine(m,12.f,16.2f,23.f,23.f,f,carpet);
+ floorLine(m,1.f,1.f,11.8f,7.8f,dz,carpet);floorLine(m,12.f,1.f,23.f,4.84f,dz,carpet);
+
+ // --- The atrium (x 12-23, y 5-16, 6 m) ----------------------------------------------------------
+ rfSign(m,12.02f,13.2f,f+3.25f,"DEPTHWORKS ENERGY RESEARCH","YOUR WORK POWERS THE WORLD",4.8f,rfE,rfBlue);
+ for(float y:{8.25f,14.f})wall(m,22.88f,y,23.f,y+.75f,f+2.7f,roof,panel);      // the head's face, carried out under the long plate
+ rfSign(m,22.86f,11.5f,f+3.35f,"1,204 DAYS, NO LOST-TIME INCIDENT","SCREENING KEEPS US WORKING",5.6f,rfW,rfBlue);
+ for(Vec2 l:{Vec2{14.6f,8.4f},Vec2{19.4f,8.4f},Vec2{14.6f,13.4f},Vec2{19.4f,13.4f}})m.lights.push_back(lamp(l,roof-.2f,1.15f,9.f,5600,.04f));
+ // Visitors waited here for the counter to call them.
+ for(float x:{14.8f,19.2f})rfFix(m,model::bench,x,7.8f,f,1.86f,.44f,.63f,rfN,true);
+ // The case the company was proud of: the first core out of the deep seam, lit under glass,
+ // beside the records glass and off the line from the way in, so the hatch stays the stage.
+ {const float cx=16.4f,cy=14.5f;
+  wall(m,cx-.45f,cy-.45f,cx+.45f,cy+.45f,f,f+.95f,panel);wall(m,cx-.48f,cy-.48f,cx+.48f,cy+.48f,f,f+.08f,steel);
+  wall(m,cx-.47f,cy-.47f,cx+.47f,cy+.47f,f+.95f,f+.98f,steel);
+  for(float sx:{-1.f,1.f})for(float sy:{-1.f,1.f})wall(m,cx+sx*.42f-.02f,cy+sy*.42f-.02f,cx+sx*.42f+.02f,cy+sy*.42f+.02f,f+.98f,f+1.9f,steel);
+  wall(m,cx-.47f,cy-.47f,cx+.47f,cy+.47f,f+1.9f,f+1.96f,steel);wall(m,cx-.18f,cy-.03f,cx+.18f,cy+.03f,f+1.875f,f+1.9f,20);
+  rfFix(m,model::lab_anomaly_relic,cx,cy,f+.98f,.55f,.44f,.44f,.6f,false);
+  m.lights.push_back(lamp({cx,cy},f+1.8f,1.4f,2.8f,6800,-.15f,WorldLightMount::Bare));
+  for(float s:{-1.4f,1.32f}){floorLine(m,cx-1.4f,cy+s,cx+1.4f,cy+s+.08f,f,20);floorLine(m,cx+s,cy-1.4f,cx+s+.08f,cy+1.4f,f,20);}}
+ for(auto [x,y]:{std::pair{12.55f,7.4f},{20.45f,5.6f},{20.4f,15.4f}})rfFix(m,model::lab_potted_plant,x,y,f,.555f,.645f,1.035f,x,false);
+ // The first boxes carried out of records, waiting by the glass for the lift.
+ rfFix(m,model::prop_cardboard_box,12.55f,14.7f,f,.727f,.72f,.367f,.1f,false);
+ rfFix(m,model::prop_cardboard_box,12.56f,15.45f,f,.727f,.72f,.367f,-.08f,false);
+ rfFix(m,model::prop_cardboard_box,12.55f,14.75f,f+.367f,.727f,.72f,.367f,-.2f,false);
+ handCart(m,13.4f,15.f,f);
+ rfFix(m,model::prop_cardboard_box,13.4f,14.78f,f+.29f,.727f,.72f,.367f,.05f,false);
+ rfFix(m,model::prop_cardboard_box,13.38f,14.8f,f+.657f,.727f,.72f,.367f,-.12f,false);
+ rfFix(m,model::trash_can,20.6f,14.5f,f,.5f,.5f,.62f,.4f,true);
+ paperDrift(m,13.f,8.6f,20.f,15.2f,f,5,704);
+ rfFix(m,model::med_wall_clock,17.6f,15.96f,f+3.5f,.756f,.064f,.746f,kPi,false);    // the atrium clock, on the bulkhead
+ // The company livery under it: an ochre band between pale pinstripes, the length of the bulkhead.
+ wall(m,12.f,15.94f,23.f,16.f,f+3.1f,f+3.34f,14);for(float z:{3.03f,3.37f})wall(m,12.f,15.95f,23.f,16.f,f+z,f+z+.04f,20);
+
+ // --- The clearance counter, under the gallery (x 12-23, y 1-5) ----------------------------------
+ wall(m,13.4f,3.9f,19.6f,4.2f,f,f+1.05f,plaster);wall(m,13.4f,2.6f,13.7f,3.9f,f,f+1.05f,plaster);
+ wall(m,13.35f,3.85f,19.65f,4.3f,f+1.05f,f+1.1f,12);wall(m,13.35f,2.55f,13.75f,3.85f,f+1.05f,f+1.1f,12);
+ wall(m,13.4f,4.2f,19.6f,4.22f,f,f+.1f,8);
+ rfDesk(m,15.4f,2.6f,f,rfS,1);rfDesk(m,17.9f,2.6f,f,rfS,2);
+ for(float x:{13.f,19.7f}){rfFix(m,model::file_cabinet_wide,x,1.25f,f,.9f,.5f,.75f,rfS,true);}
+ rfFix(m,model::cctv_tv,13.f,1.22f,f+.75f,.5f,.4f,.42f,rfS,false);                 // the atrium camera, on the counter's monitor
+ rfFix(m,model::med_wall_clock,16.65f,1.016f,f+2.05f,.378f,.032f,.373f,0,false);
+ const float ledge=f+1.1f;
+ rfFix(m,model::office_paper_stack,15.1f,4.05f,ledge,.329f,.443f,.03f,1.5f,false);     // the visitors' book
+ rfFix(m,model::item_walkie,18.7f,4.f,ledge,.114f,.376f,.046f,.5f,false);              // the detail's radio, left on the ledge
+ for(auto [x,yaw]:{std::pair{16.4f,.4f},{16.62f,-.3f},{17.f,1.2f}})rfFix(m,model::item_id_card,x,4.08f,ledge,.132f,.085f,.002f,yaw,false);
+ // The pass terminal, staff side: it issues proc_clearance once the floor is quiet again.
+ terminal(m,{21.6f,1.45f},"CLEARANCE DESK / LABORATORY ACCESS","E / ISSUE LABORATORY CLEARANCE TO THIS BAND.",
   "CLEARANCE ISSUED. THE PROCESSING DOOR SOUTH WILL READ IT.",0,clearance,gone);m.terminals.back().yaw=rfS;
- // --- The boardroom, north-west ----------------------------------------------------------------
- wall(m,12.f,1.f,12.2f,10.f,f,roof,3);
- wall(m,1.f,10.f,8.f,10.2f,f,roof,3);wall(m,9.5f,10.f,12.2f,10.2f,f,roof,3);rfFrame(m,8.f,9.5f,10.1f,true,f,roof,3);
- m.doors.push_back({8.f,9.5f,10.1f,0});              // 0: boardroom
- rfFix(m,model::lab_exec_desk,6.2f,5.2f,f,2.21f,1.1f,.89f,0,true);
- rfFix(m,model::lab_exec_desk,6.2f,3.f,f,2.21f,1.1f,.89f,0,true);
- for(float x:{4.9f,6.2f,7.5f})for(float y:{1.9f,6.3f})rfFix(m,model::lab_boardroom_chair,x,y,f,.79f,.74f,.93f,y<4?rfS:rfN,true);
- rfFix(m,model::lab_boardroom_chair,3.6f,4.1f,f,.79f,.74f,.93f,rfE,true);
- rfFix(m,model::cctv_tv,11.73f,4.1f,f+1.4f,1.f,.5f,.8f,rfW,false);
- rfFix(m,model::lab_wall_clock,6.2f,1.04f,f+2.6f,.4f,.03f,.4f,rfS,false);
- rfFix(m,model::lab_potted_plant,1.6f,9.f,f,.5f,.58f,.93f,0,false);
- terminal(m,{2.f,7.4f},"BOARD MINUTES / Q3","QUOTA UP 18 PERCENT. SCREENING INTERVAL EXTENDED FROM 30 TO 90 DAYS. MOTION CARRIED.",
-  "EXPOSURE TIER 2 RECLASSIFIED: FIT FOR SHIFT. TIER 3 TO OBSERVATION AT MEDICAL'S DISCRETION.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfE;
- for(Vec2 l:{Vec2{6.2f,4.1f},Vec2{3.f,8.4f}})m.lights.push_back(lamp(l,f+3.4f,.95f,6.f,4600,.08f));
- // --- The corridor and the records office, south-west, behind glass ------------------------------
- wall(m,1.f,12.f,5.f,12.2f,f,roof,3);wall(m,6.5f,12.f,12.f,12.2f,f,roof,3);rfFrame(m,5.f,6.5f,12.1f,true,f,roof,3);
- {Door d{5.f,6.5f,12.1f,0};d.requireState=gone;m.doors.push_back(d);}   // 1: records, open once he has gone
- rfGlass(m,12.f,12.2f,12.2f,21.f,f,roof);
- wall(m,1.f,21.f,3.f,21.2f,f,roof,3);wall(m,4.5f,21.f,12.2f,21.2f,f,roof,3);rfFrame(m,3.f,4.5f,21.1f,true,f,roof,3);
- {Door d{3.f,4.5f,21.1f,0};d.requireState=stateId("rf_admin_far_door");m.doors.push_back(d);}   // 2: the far door: his, never the player's
- // The service closet he leaves into, and the solid block east of it.
- wall(m,6.f,21.2f,12.2f,23.f,f,roof,3);
- for(float x:{1.6f,2.6f,3.6f})for(float y:{14.f,16.f,18.f})rfFix(m,model::file_cabinet_tall,x,y,f,.5f,.6f,1.3f,rfE,true);
- for(float y:{13.2f,15.2f,17.2f,19.2f})rfFix(m,model::file_cabinet_tall,11.4f,y,f,.5f,.6f,1.3f,rfW,true);
- rfFix(m,model::desk,7.f,17.f,f,2.205f,1.092f,.891f,0,true);
- for(float x:{6.4f,7.6f})rfFix(m,model::binder,x,16.9f,f+.891f,.3f,.08f,.32f,x,false);
- rfFix(m,model::lab_desk_lamp,7.9f,17.3f,f+.891f,.18f,.4f,.52f,rfS,false);
- terminal(m,{8.4f,20.5f},"PERSONNEL CARD INDEX","ENERGY DIAGNOSTICS: 14 CARDS ON FILE. 13 IN THE DRAWER.",
-  "LAB 4 ANALYST: CARD SIGNED OUT 04:02 BY INTERNAL INVESTIGATIONS. REASON: CONTAINMENT.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfN;
- // Lit for the glass: the scene in here must read from the lobby.
- for(Vec2 l:{Vec2{3.f,14.f},Vec2{3.f,18.6f},Vec2{7.f,15.f},Vec2{7.f,19.f},Vec2{10.f,17.f}})m.lights.push_back(lamp(l,f+3.f,1.5f,7.f,4800,.06f));
- m.lights.push_back(lamp({7.9f,17.3f},f+1.3f,.9f,3.5f,2800,.2f,WorldLightMount::Bare));
- // --- The detail ----------------------------------------------------------------------------------
- // One man holds the records door; one walks the lobby. They take the
- // Investigator's orders by hand through the glass.
+ rfFix(m,model::trash_can,14.1f,1.35f,f,.5f,.5f,.62f,0,true);
+ for(Vec2 l:{Vec2{14.8f,3.f},Vec2{18.6f,3.f},Vec2{21.8f,3.f}})m.lights.push_back(lamp(l,f+2.5f,.85f,5.f,5200,.04f));
+
+ // --- The lounge (x 12-23, y 16-23) -----------------------------------------------------------------
+ rfFix(m,model::office_couch_green,14.4f,22.3f,cf,2.242f,1.364f,1.192f,rfN,true);
+ rfFix(m,model::office_armchair_green,12.95f,20.f,cf,1.399f,1.364f,1.192f,rfE+.25f,true);
+ rfFix(m,model::office_couch_green,20.3f,22.3f,cf,2.242f,1.364f,1.192f,rfN,true);
+ rfFix(m,model::office_armchair_green,22.28f,20.f,cf,1.399f,1.364f,1.192f,rfW,true);
+ for(float x:{14.6f,20.3f})rfaTable(m,x,20.2f,.6f,.3f,cf,.42f);
+ for(auto [x,y,yaw]:{std::tuple{14.4f,20.15f,.3f},{20.5f,20.2f,-.4f}})rfFix(m,model::office_paper_stack,x,y,cf+.42f,.329f,.443f,.03f,yaw,false);
+ rfFix(m,model::mug,14.9f,20.3f,cf+.42f,.09f,.09f,.1f,0,false);
+ rfFix(m,model::metro_vending,17.35f,22.69f,cf,1.2f,.544f,1.904f,0,true);         // front -(sin,cos) yaw: faces north
+ rfFix(m,model::water_cooler,12.25f,17.1f,cf,.35f,.35f,1.1f,rfE,true);
+ wall(m,22.4f,16.6f,23.f,18.4f,cf,cf+.88f,plaster);wall(m,22.38f,16.58f,23.f,18.42f,cf+.88f,cf+.92f,10);   // the coffee station
+ rfFix(m,model::coffee_machine,22.72f,17.1f,cf+.92f,.4f,.45f,.5f,rfW,false);
+ for(auto [y,yaw]:{std::pair{17.75f,0.f},{17.95f,.8f}})rfFix(m,model::mug,22.65f,y,cf+.92f,.09f,.09f,.1f,yaw,false);
+ rfFix(m,model::lab_potted_plant,12.5f,22.55f,cf,.37f,.43f,.69f,0,false);rfFix(m,model::lab_potted_plant,22.4f,22.45f,cf,.37f,.43f,.69f,1,false);
+ rfFix(m,model::trash_can,18.65f,22.6f,cf,.5f,.5f,.62f,0,true);
+ paperDrift(m,15.6f,17.f,19.f,21.2f,cf,4,705);
+ for(Vec2 l:{Vec2{13.8f,19.2f},Vec2{19.8f,19.2f}})m.lights.push_back(lamp(l,f+2.7f,.8f,6.f,4200,.08f));
+
+ // --- The boardroom: the quarter's numbers, and a meeting nobody closed ------------------------------
+ {const float tz=cf+.74f;
+  wall(m,2.9f,3.35f,7.3f,4.65f,cf+.7f,tz,10);
+  for(float x:{3.8f,6.4f})wall(m,x-.35f,3.75f,x+.35f,4.25f,cf,cf+.7f,plaster);
+  int i=0;for(float x:{3.6f,4.7f,5.8f,6.9f}){
+   rfaChair(m,x+(i%2?.1f:-.05f),2.85f-(i==2?.3f:0),cf,rfS+(i==1?.3f:0));
+   rfaChair(m,x,5.15f+(i==3?.4f:0),cf,rfN-(i==0?.25f:0));++i;}
+  rfaChair(m,2.25f,4.f,cf,rfE);
+  for(auto [x,y,yaw]:{std::tuple{3.6f,3.62f,.1f},{4.7f,3.6f,-.15f},{5.8f,4.4f,3.f},{6.9f,4.38f,3.3f},{4.7f,4.42f,2.9f}})rfFix(m,model::office_paper_stack,x,y,tz,.329f,.443f,.03f,yaw,false);
+  for(auto [x,y]:{std::pair{5.85f,3.62f},{3.75f,4.45f},{6.95f,3.6f}})rfFix(m,model::mug,x,y,tz,.09f,.09f,.1f,0,false);
+  rfFix(m,model::desk_phone,5.2f,4.f,tz,.2f,.2f,.1f,rfE,false);
+  terminal(m,{3.4f,4.f},"BOARD MINUTES / Q3","QUOTA UP 18 PERCENT. SCREENING INTERVAL EXTENDED FROM 30 TO 90 DAYS. MOTION CARRIED.",
+   "EXPOSURE TIER 2 RECLASSIFIED: FIT FOR SHIFT. TIER 3 TO OBSERVATION AT MEDICAL'S DISCRETION.");
+  m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfE;m.terminals.back().surface=.755f;}
+ wall(m,3.4f,1.f,6.8f,1.5f,cf,cf+.72f,plaster);wall(m,3.38f,1.f,6.82f,1.52f,cf+.72f,cf+.76f,10);   // the credenza
+ rfFix(m,model::cctv_tv,5.1f,1.26f,cf+.76f,.5f,.4f,.42f,rfS,false);
+ rfFix(m,model::lab_potted_plant,3.85f,1.25f,cf+.76f,.37f,.43f,.69f,0,false);
+ rfFix(m,model::office_bookcase,1.27f,4.f,cf,2.025f,.5f,2.5f,rfE,true);
+ // The quarter's binders, shelf by shelf (shelf tops at .03, .656, 1.335, 1.917 m), with the gaps of a working room.
+ {const float sh[4]={.03f,.656f,1.335f,1.917f};
+  const int pat[4][19]={{1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,1,1,1},{1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0},
+   {0,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1},{1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,0}};
+  for(int s=0;s<4;++s)for(int i=0;i<19;++i)if(pat[s][i])
+   rfFix(m,model::office_file_binder,1.3f+((i*7+s)%3)*.012f,4.f-.9f+i*.1f,cf+sh[s],.093f,.301f,.424f,rfE+((i*5+s*3)%7-3)*.006f,false);
+  rfFix(m,model::office_file_binder,1.31f,4.f-.9f+17.6f*.1f,cf+sh[1],.093f,.301f,.424f,rfE+.45f,false);}   // one turned in the gap
+ rfFix(m,model::med_wall_clock,8.584f,4.f,f+2.f,.378f,.032f,.373f,rfW,false);
+ rfFix(m,model::lab_potted_plant,1.5f,7.3f,cf,.37f,.43f,.69f,0,false);
+ for(Vec2 l:{Vec2{4.f,4.f},Vec2{6.4f,4.f}})m.lights.push_back(lamp(l,f+2.5f,.8f,5.5f,4200,.08f));
+
+ // --- The copy room: the board's papers, copied, boxed and sealed -----------------------------------
+ rfFix(m,model::lab_photocopier,10.3f,1.43f,f,.826f,.752f,.967f,rfN,true);
+ shelf(m,{11.55f,3.4f},rfW);
+ for(float y:{2.95f,3.85f})rfFix(m,model::prop_cardboard_box,11.55f,y,f+1.65f,.45f,.45f,.23f,rfW+.1f,false);
+ rfFix(m,model::prop_cardboard_box_open,11.55f,3.4f,f+.972f,.45f,.45f,.45f,rfW,false);
+ for(int i=0;i<5;++i)rfFix(m,model::office_file_binder,11.6f,2.75f+i*.12f,f+.306f,.093f,.301f,.424f,rfW+(i==2?.25f:0),false);
+ wall(m,11.2f,5.f,11.8f,7.f,f,f+.88f,plaster);wall(m,11.18f,4.98f,11.8f,7.02f,f+.88f,f+.92f,10);
+ rfFix(m,model::coffee_machine,11.52f,5.5f,f+.92f,.4f,.45f,.5f,rfW,false);
+ for(auto [y,yaw]:{std::pair{6.15f,0.f},{6.4f,1.f}})rfFix(m,model::mug,11.45f,y,f+.92f,.09f,.09f,.1f,yaw,false);
+ rfFix(m,model::water_cooler,9.2f,7.42f,f,.35f,.35f,1.1f,rfN,true);
+ rfFix(m,model::wooden_table,9.9f,4.4f,f,1.367f,.724f,.78f,rfE,true);
+ rfFix(m,model::prop_cardboard_box_open,9.9f,4.f,f+.78f,.45f,.45f,.45f,.15f,false);
+ rfFix(m,model::office_paper_stack,9.85f,4.65f,f+.78f,.329f,.443f,.03f,.2f,false);
+ rfFix(m,model::office_paper_stack,9.95f,4.95f,f+.81f,.329f,.443f,.03f,-.3f,false);
+ rfFix(m,model::prop_cardboard_box,9.3f,6.2f,f,.727f,.72f,.367f,.1f,false);
+ rfFix(m,model::prop_cardboard_box,9.32f,6.22f,f+.367f,.727f,.72f,.367f,-.15f,false);
+ paperDrift(m,9.2f,1.9f,11.f,7.f,f,5,706);
+ m.lights.push_back(lamp({10.3f,4.4f},f+2.5f,.7f,4.5f,5000,.05f));
+
+ // --- The corridor (y 8-10): what the detail bagged, waiting for the lift ----------------------------
+ rfFix(m,model::med_notice_board,3.f,8.035f,f+1.f,1.2f,.07f,.9f,0,false);
+ extinguisher(m,1.f,9.5f,f,rfE);
+ rfFix(m,model::pwr_fire_cabinet,1.1f,8.6f,f+1.3f,.25f,.2f,.56f,rfE,false);
+ rfFix(m,model::prop_cardboard_box,7.9f,9.6f,f,.727f,.72f,.367f,.05f,false);
+ rfFix(m,model::prop_cardboard_box,8.75f,9.62f,f,.727f,.72f,.367f,-.1f,false);
+ rfFix(m,model::prop_cardboard_box,7.92f,9.6f,f+.367f,.727f,.72f,.367f,.2f,false);
+ paperDrift(m,1.5f,8.3f,9.f,9.8f,f,4,707);
+ for(Vec2 l:{Vec2{3.4f,9.f},Vec2{8.f,9.f}})m.lights.push_back(lamp(l,f+2.5f,.6f,4.5f,4800,.05f));
+
+ // --- The records office (x 1-11.8, y 10.2-19) ------------------------------------------------------
+ // The personnel cabinets: a bank on the west wall and an island, both faced into their aisles.
+ for(int i=0;i<16;++i)rfFix(m,model::file_cabinet_tall,1.3f,10.75f+i*.5f,f,.5f,.6f,1.3f,rfE,true);
+ for(int i=0;i<11;++i){const float y=12.25f+i*.5f;rfFix(m,model::file_cabinet_tall,3.9f,y,f,.5f,.6f,1.3f,rfW,true);rfFix(m,model::file_cabinet_tall,4.5f,y,f,.5f,.6f,1.3f,rfE,true);}
+ for(auto [x,y,yaw]:{std::tuple{1.3f,12.3f,.1f},{1.3f,15.8f,-.2f},{4.2f,13.1f,.3f},{4.2f,16.4f,0.f}})rfFix(m,model::prop_cardboard_box,x,y,f+1.3f,.45f,.45f,.23f,yaw,false);
+ // The card index on the north wall: where LAB 4's line still is, and her card is not.
+ for(float x:{2.2f,3.15f})rfFix(m,model::file_cabinet_wide,x,10.45f,f,.9f,.5f,.75f,rfS,true);
+ terminal(m,{3.15f,10.5f},"PERSONNEL CARD INDEX / ENERGY DIAGNOSTICS","LAB 4: ANALYST, ENERGY DIAGNOSTICS. EXPOSURE TIER 2. SCREENING DUE.",
+  "CARD SIGNED OUT 04:02 BY INTERNAL INVESTIGATIONS. REASON: CONTAINMENT.");
+ m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=rfS;m.terminals.back().surface=.75f;
+ rfFix(m,model::med_notice_board,2.68f,10.235f,f+1.15f,1.2f,.07f,.9f,0,false);     // the index clerk's board over it
+ // The drawers he had pulled, and the cards he set on top of them.
+ for(float x:{6.95f,8.45f})rfFix(m,model::office_file_cabinet_open,x,10.55f,f,1.451f,.699f,1.054f,rfS,true);
+ rfFix(m,model::office_paper_stack,7.35f,10.5f,f+1.054f,.329f,.443f,.03f,1.7f,false);
+ for(auto [x,yaw]:{std::pair{7.75f,.3f},{7.95f,1.4f},{8.15f,2.2f}})rfFix(m,model::item_id_card,x,10.6f,f+1.054f,.132f,.085f,.002f,yaw,false);
+ // The collating table under the glass: the cards he went through.
+ for(float y:{13.2f,14.57f})rfFix(m,model::wooden_table,10.f,y,f,1.367f,.724f,.78f,rfE,true);
+ {const float tt=f+.78f;
+  rfFix(m,model::prop_cardboard_box_open,10.05f,12.95f,tt,.45f,.45f,.45f,.2f,false);
+  rfFix(m,model::prop_cardboard_box_open,9.95f,14.95f,tt,.45f,.45f,.45f,-.15f,false);
+  for(auto [x,y,yaw]:{std::tuple{9.8f,13.5f,.3f},{9.95f,13.62f,1.9f},{10.2f,13.55f,.8f},{9.75f,13.85f,2.6f},{10.1f,13.9f,1.1f},{9.9f,14.15f,.2f},{10.25f,14.3f,2.f},{9.8f,14.45f,.6f}})
+   rfFix(m,model::item_id_card,x,y,tt,.132f,.085f,.002f,yaw,false);
+  rfFix(m,model::office_paper_stack,10.15f,14.05f,tt,.329f,.443f,.03f,.1f,false);
+  rfFix(m,model::item_walkie,9.8f,12.75f,tt,.114f,.376f,.046f,.4f,false);}
+ rfDesk(m,10.2f,17.6f,f,rfW,0);
+ rfFix(m,model::lab_desk_lamp,10.3f,18.1f,f+.75f,.18f,.398f,.521f,0,false);
+ // Boxed for the lift, and what fell on the way.
+ handCart(m,10.15f,16.05f,f);
+ rfFix(m,model::prop_cardboard_box,10.15f,15.85f,f+.29f,.727f,.72f,.367f,.08f,false);
+ rfFix(m,model::prop_cardboard_box_open,9.3f,16.6f,f,.45f,.45f,.45f,.9f,false);
+ rfFix(m,model::office_paper_stack,9.15f,16.1f,f,.329f,.443f,.03f,2.3f,false);
+ rfFix(m,model::prop_cardboard_box,8.4f,18.5f,f,.727f,.72f,.367f,.1f,false);
+ rfFix(m,model::prop_cardboard_box,8.42f,18.48f,f+.367f,.727f,.72f,.367f,-.15f,false);
+ rfFix(m,model::prop_cardboard_box_open,5.55f,12.4f,f,.73f,.725f,.726f,.3f,false);
+ rfFix(m,model::prop_cardboard_box_open,5.5f,16.6f,f,.73f,.725f,.726f,-.2f,false);
+ for(auto [x,y,yaw]:{std::tuple{5.1f,13.f,.3f},{6.3f,13.6f,1.9f},{2.4f,13.9f,.8f},{6.f,17.6f,2.6f},{8.3f,15.2f,1.1f},{2.6f,17.1f,.2f},{6.8f,12.4f,2.f},{8.9f,16.2f,.6f},{5.8f,15.1f,1.4f}})
+  rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
+ paperDrift(m,5.2f,11.2f,9.2f,18.6f,f,10,702);
+ // Lit for the glass: what happens in here must read from the atrium.
+ for(Vec2 l:{Vec2{7.6f,12.f},Vec2{10.f,13.2f},Vec2{7.6f,16.8f},Vec2{4.f,14.4f}})m.lights.push_back(lamp(l,f+2.7f,1.6f,7.f,4300,.06f));
+ m.lights.push_back(lamp({10.32f,17.9f},f+1.15f,.6f,3.f,2800,.15f,WorldLightMount::Bare));   // under the desk lamp's shade
+ // The lift lobby behind the far door: service lift 2, the way he came in at 03:40.
+ for(float x:{5.8f,6.8f})wall(m,x+.01f,22.88f,x+.99f,23.f,f,f+2.2f,steel);
+ wall(m,5.6f,22.84f,8.f,23.f,f+2.2f,f+2.32f,12);for(float x:{5.6f,7.88f})wall(m,x,22.84f,x+.12f,23.f,f,f+2.2f,12);
+ rfFix(m,model::lab_id_scanner,8.35f,22.97f,f+1.05f,.3f,.06f,.41f,rfS,false);
+ rfFix(m,model::lab_status_display,6.8f,22.81f,f+2.4f,.693f,.058f,.2f,rfS,false);
+ m.lights.push_back(lamp({6.8f,20.8f},f+2.5f,.6f,4.f,5200,.05f));
+
+ // --- Upstairs: the gallery over the counter -------------------------------------------------------
+ for(float x:{14.6f,18.4f})rfFix(m,model::bench,x,3.2f,cu,1.86f,.44f,.63f,0,true);
+ // The site model visitors were shown: the plant from the surface down, under glass.
+ wall(m,15.7f,1.3f,17.3f,2.2f,cu,cu+.85f,panel);wall(m,15.72f,1.32f,17.28f,2.18f,cu+.85f,cu+.88f,15);
+ // Pale card buildings on the dark base: the mill, the winder house, the headframe over its shaft collar, a stack.
+ wall(m,15.9f,1.5f,16.35f,1.82f,cu+.88f,cu+1.f,28);for(float y:{1.42f,1.95f})floorLine(m,15.75f,y,17.25f,y+.03f,cu+.88f,14);wall(m,16.5f,1.45f,16.95f,1.72f,cu+.88f,cu+.96f,28);
+ wall(m,15.88f,1.48f,16.37f,1.84f,cu+1.f,cu+1.02f,28);
+ wall(m,16.53f,1.79f,16.77f,1.99f,cu+.88f,cu+.9f,20);
+ for(float x:{16.57f,16.69f})wall(m,x,1.87f,x+.04f,1.91f,cu+.9f,cu+1.2f,18);wall(m,16.55f,1.86f,16.75f,1.92f,cu+1.18f,cu+1.22f,18);
+ wall(m,16.02f,1.58f,16.1f,1.66f,cu+1.02f,cu+1.3f,28);
+ wall(m,17.f,1.5f,17.14f,2.f,cu+.88f,cu+.95f,28);
+ for(float y:{1.3f,2.16f})wall(m,15.7f,y,17.3f,y+.04f,cu+.85f,cu+.89f,steel);
+ rfFix(m,model::lab_potted_plant,12.5f,4.3f,cu,.37f,.43f,.69f,0,false);rfFix(m,model::lab_potted_plant,20.5f,1.45f,cu,.37f,.43f,.69f,2,false);
+ rfFix(m,model::med_wall_clock,18.4f,1.016f,dz+2.1f,.378f,.032f,.373f,0,false);
+ wall(m,12.f,1.f,23.f,1.06f,dz+2.55f,dz+2.79f,14);for(float z:{2.48f,2.82f})wall(m,12.f,1.f,23.f,1.05f,dz+z,dz+z+.04f,20);   // the livery, carried round
+ for(Vec2 l:{Vec2{15.f,2.8f},Vec2{19.6f,2.8f}})m.lights.push_back(lamp(l,roof-.2f,.8f,6.f,5000,.05f));
+ // The anteroom: the director's secretary, who saw everyone in.
+ rfDesk(m,10.3f,3.6f,cu,rfE,3);
+ for(float x:{9.95f,10.85f})rfaChair(m,x,6.95f,cu,rfN+(x-10.3f)*.25f);   // waiting, facing her desk
+ rfFix(m,model::file_cabinet_tall,9.1f,4.6f,cu,.5f,.6f,1.3f,rfE,true);
+ rfFix(m,model::lab_potted_plant,9.25f,7.35f,cu,.37f,.43f,.69f,0,false);
+ m.lights.push_back(lamp({10.3f,4.4f},roof-.2f,1.05f,5.5f,4600,.06f));
+ // The director's office: swept by the detail before he was.
+ rfFix(m,model::lab_exec_desk,3.6f,3.2f,cu,2.21f,1.1f,.89f,rfE,true);
+ rfaChair(m,2.5f,3.2f,cu,rfE);
+ rfFix(m,model::office_bookcase,1.27f,3.2f,cu,2.025f,.5f,2.5f,rfE,true);
+ // Swept: the detail took the files and left the shelves bare in bites, and the rest on the floor.
+ {const float sh[4]={.03f,.656f,1.335f,1.917f};
+  const int pat[4][19]={{1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0},{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1},
+   {1,1,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0},{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}};
+  for(int s=0;s<4;++s)for(int i=0;i<19;++i)if(pat[s][i])
+   rfFix(m,model::office_file_binder,1.3f+((i*7+s)%3)*.012f,3.2f-.9f+i*.1f,cu+sh[s],.093f,.301f,.424f,rfE+((i*5+s*3)%7-3)*.006f,false);
+  rfFix(m,model::office_file_binder,1.32f,3.2f-.9f+3.6f*.1f,cu+sh[2],.093f,.301f,.424f,rfE+.5f,false);
+  rfFix(m,model::office_file_binder,1.31f,3.2f-.9f+4.5f*.1f,cu+sh[0],.093f,.301f,.424f,rfE-.4f,false);
+  for(auto [x,y,yaw]:{std::tuple{1.85f,2.f,.5f},{2.05f,1.85f,2.1f},{1.8f,4.55f,1.3f},{2.6f,4.7f,-.4f}})
+   rfFix(m,model::office_file_binder,x,y,cu,.093f,.301f,.424f,yaw,false);
+  for(auto [x,y,yaw]:{std::tuple{2.2f,2.25f,.7f},{2.25f,4.35f,-.5f}})rfFix(m,model::office_paper_stack,x,y,cu,.329f,.443f,.03f,yaw,false);}
+ for(float y:{2.6f,3.8f})rfaChair(m,5.f,y,cu,rfW);
+ {const float dt=cu+.89f;
+  rfFix(m,model::crt_monitor,3.45f,3.9f,dt,.42f,.4f,.38f,rfW,false);
+  rfFix(m,model::keyboard,3.2f,3.85f,dt,.45f,.16f,.03f,rfW,false);
+  rfFix(m,model::lab_desk_lamp,3.4f,2.35f,dt,.18f,.398f,.521f,kPi,false);
+  rfFix(m,model::desk_phone,3.55f,2.8f,dt,.2f,.2f,.1f,rfW,false);
+  terminal(m,{3.75f,3.15f},"DIRECTOR / INTERNAL MAIL","03:41 II: THIS FLOOR IS UNDER INVESTIGATION. YOUR SIGNATURE IS NOT REQUIRED.",
+   "03:50 DIRECTOR: THE TIER 2 LIST WAS THE BOARD'S DECISION, NOT MINE. REPLY NOT SENT.",dz-f);
+  m.terminals.back().readable=Readable::Letter;m.terminals.back().yaw=rfW;m.terminals.back().surface=.905f;}
+ rfFix(m,model::office_couch_green,5.6f,7.12f,cu,2.242f,1.364f,1.192f,rfN,true);
+ rfFix(m,model::office_armchair_green,7.9f,5.8f,cu,1.399f,1.364f,1.192f,rfW,true);
+ rfaTable(m,5.6f,5.5f,.55f,.3f,cu,.42f);
+ rfFix(m,model::med_wall_clock,8.584f,4.4f,dz+2.f,.378f,.032f,.373f,rfW,false);
+ rfFix(m,model::lab_potted_plant,1.5f,7.3f,cu,.37f,.43f,.69f,0,false);
+ rfFix(m,model::prop_cardboard_box_open,6.7f,1.55f,cu,.73f,.725f,.726f,.2f,false);
+ rfFix(m,model::prop_cardboard_box,7.55f,1.5f,cu,.727f,.72f,.367f,-.1f,false);
+ paperDrift(m,1.8f,1.4f,7.f,6.f,cu,8,703);
+ for(Vec2 l:{Vec2{3.6f,3.2f},Vec2{6.f,5.4f}})m.lights.push_back(lamp(l,roof-.2f,1.1f,6.f,4200,.08f));
+
+ // --- The detail ------------------------------------------------------------------------------------
+ // A heavy holds the corridor to the records door, his eyes on the glass and
+ // the lounge; one man walks the atrium. They take their orders by hand.
  const char* clock="rf_admin_clock";
- rfGuard(m,clock,"rf_admin_door",ActorVisual::CleanupHeavy,GuardSquadRole::Heavy,"rf_admin",{{{12.9f,11.1f},f,60000,rfW}},13,.6f,1,1.f,0,130);
- rfGuard(m,clock,"rf_admin_walk",ActorVisual::Cleanup,GuardSquadRole::Assault,"rf_admin",{{{16.5f,19.f},f,5000,rfN},{{20.5f,10.f},f,4000,rfW},{{13.5f,13.5f},f,4000,rfS}},14,.6f,1,1.3f);
+ rfGuard(m,clock,"rf_admin_door",ActorVisual::CleanupHeavy,GuardSquadRole::Heavy,"rf_admin",{{{12.95f,9.3f},f,60000,-.29f}},13,.6f,1,1.f,0,130);
+ rfGuard(m,clock,"rf_admin_walk",ActorVisual::Cleanup,GuardSquadRole::Assault,"rf_admin",
+  {{{14.6f,19.2f},f,5000,rfN},{{19.4f,12.4f},f,4000,rfW},{{17.f,6.3f},f,4000,rfN},{{14.2f,11.f},f,3000,rfS}},14,.6f,1,1.3f);
  // --- The scene through the glass -------------------------------------------------------------------
  rfSequence(m,"rf_admin_scene","rf_admin_leaving",30000,21000,17.f,9.f,24.f,14.f);
  // The Investigator himself (ActorVisual::Investigator, clips: 0 idle, 1 walk,
- // 7 reading a card, 8 pointing). On the scene's clock: he reads, points his
- // door guard to the drawers, takes one card, walks to the far door and is gone.
- {const Vec2 drawers{5.f,17.f},table{6.3f,16.3f},door{3.75f,20.5f},closet{3.75f,22.25f};
-  const float toDoor=std::atan2(door.x-table.x,door.y-table.y);
+ // 7 reading a card, 8 pointing). On the scene's clock: he reads at the open
+ // drawers, points his door man to them, takes his card to the table under
+ // the glass, keeps one, walks to the far door and is gone.
+ {const Vec2 drawers{7.6f,11.9f},table{9.15f,13.2f},mid{7.5f,17.f},door{6.8f,18.6f},closet{6.8f,21.7f};
+  const float aim=std::atan2(12.95f-drawers.x,9.3f-drawers.y),toTable=std::atan2(table.x-drawers.x,table.y-drawers.y);
+  const float toMid=std::atan2(mid.x-table.x,mid.y-table.y),toDoor=std::atan2(door.x-mid.x,door.y-mid.y);
   ActorTrack inv;inv.timerState=stateId("rf_admin_scene");inv.visual=ActorVisual::Investigator;inv.scale=1.8f;
-  inv.keys={{0,drawers,f,rfE,7,0},{8800,drawers,f,rfE,7,4.9f},
-   {9000,drawers,f,rfE,8,0},{10500,drawers,f,rfE,8,1},{12200,drawers,f,rfE,8,1},
-   {12400,drawers,f,rfE,1,0},{13600,table,f,rfE,1,1.1f},
-   {13800,table,f,rfE,7,0},{17600,table,f,rfE,7,2.9f},
-   {17800,table,f,toDoor,1,0},{21800,door,f,toDoor,1,3.6f},{23600,closet,f,rfS,1,5.2f},{24000,closet,f,rfS,0,0},{30000,closet,f,rfS,0,1}};
+  inv.keys={{0,drawers,f,rfN,7,0},{8800,drawers,f,rfN,7,4.9f},
+   {9000,drawers,f,aim,8,0},{10500,drawers,f,aim,8,1},{12200,drawers,f,aim,8,1},
+   {12400,drawers,f,toTable,1,0},{14000,table,f,toTable,1,1.6f},
+   {14200,table,f,rfE,7,0},{17600,table,f,rfE,7,2.9f},
+   {17800,table,f,toMid,1,0},{20000,mid,f,toDoor,1,2.6f},{21800,door,f,rfS,1,3.8f},{23600,closet,f,rfS,1,5.2f},{24000,closet,f,rfS,0,0},{30000,closet,f,rfS,0,1}};
   m.actorTracks.push_back(std::move(inv));}
  // At 21 s the far door opens for him; four seconds later it shuts and the floor is quiet.
  rfSequence(m,"rf_admin_exit","rf_admin_gone",5000,4000);
@@ -733,57 +1143,23 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  {ScriptEvent e;e.id=stateId("rf_admin_door_shut");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.bottom=-100;e.top=100;e.requireState=gone;
   ScriptAction shut;shut.type=ScriptAction::Type::CloseDoor;shut.index=2;ScriptAction save;save.type=ScriptAction::Type::Checkpoint;
   e.actions={shut,save};m.scriptEvents.push_back(e);}
- const Vec2 records{6.6f,16.f};
- cue(m,"rf_admin_scene",2500,Sound::Empty,records,"INVESTIGATOR: Every card from Energy Diagnostics. Bag them.",.7f,f+1.6f,"inv_admin_1");
- cue(m,"rf_admin_scene",6000,Sound::Empty,{12.9f,11.1f},"CLEANUP: Sir.",.6f,f+1.6f,"rf_admin_door_1");
- cue(m,"rf_admin_scene",9500,Sound::Empty,records,"INVESTIGATOR: The rest of this floor can burn with the building.",.7f,f+1.6f,"inv_admin_2");
- cue(m,"rf_admin_scene",15400,Sound::Empty,Vec2{6.3f,16.3f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
- cue(m,"rf_admin_scene",21100,Sound::Door,{3.75f,21.1f},"",.8f,f+1.2f);
- cue(m,"rf_admin_exit",4100,Sound::Door,{3.75f,21.1f},"",.7f,f+1.2f);
- // --- What the night left -------------------------------------------------------------------------
- // The boardroom: the binders of quarters past, the minutes still on the table.
- rfFix(m,model::office_bookcase,1.27f,4.1f,f,2.025f,.5f,2.5f,rfE,true);
- rfFix(m,model::office_bookcase,9.8f,1.27f,f,2.025f,.5f,2.5f,rfS,true);
- for(int i=0;i<7;++i)rfFix(m,model::office_file_binder,1.2f,3.35f+i*.12f,f+1.27f,.093f,.301f,.424f,rfE,false);
- for(int i=0;i<5;++i)rfFix(m,model::office_file_binder,9.2f+i*.12f,1.2f,f+.64f,.093f,.301f,.424f,rfS,false);
- for(auto [x,y,yaw]:{std::tuple{5.4f,3.25f,.1f},{7.f,3.f,-.2f},{6.9f,5.05f,3.f},{5.3f,5.3f,3.3f}})rfFix(m,model::office_paper_stack,x,y,f+.89f,.33f,.44f,.03f,yaw,false);
- // Records: the cabinets he had pulled, the cards he did not want, the boxes for the rest.
- rfFix(m,model::office_file_cabinet_open,7.6f,12.56f,f,1.451f,.699f,1.054f,rfS,true);
- rfFix(m,model::prop_cardboard_box_open,9.5f,14.1f,f,.73f,.725f,.726f,.2f,true);
- rfFix(m,model::prop_cardboard_box,9.5f,19.6f,f,.727f,.72f,.367f,0,true);
- rfFix(m,model::prop_cardboard_box,9.52f,19.62f,f+.367f,.727f,.72f,.367f,-.2f,true);
- paperDrift(m,4.4f,12.8f,10.6f,20.4f,f,14,70);
- for(auto [x,y,yaw]:{std::tuple{4.6f,14.9f,.3f},{5.4f,16.1f,1.9f},{4.2f,18.6f,.8f},{6.f,19.5f,2.6f},{8.3f,15.2f,1.1f},{9.2f,17.f,.2f},{6.8f,13.4f,2.f},{8.9f,14.6f,.6f}})
-  rfFix(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw,false);
- for(auto [x,y,yaw]:{std::tuple{6.45f,17.25f,.4f},{7.35f,16.75f,2.2f},{6.75f,16.7f,1.f}})rfFix(m,model::item_id_card,x,y,f+.891f,.132f,.085f,.002f,yaw,false);
- // The lobby: the waiting group nobody waited in, and the first boxes carried out.
- rfFix(m,model::office_couch_green,16.6f,22.3f,f,2.242f,1.364f,1.192f,rfN,true);
- rfFix(m,model::office_armchair_green,14.4f,21.2f,f,1.399f,1.364f,1.192f,rfE,true);
- rfFix(m,model::prop_cardboard_box,13.f,17.6f,f,.727f,.72f,.367f,.1f,true);
- rfFix(m,model::prop_cardboard_box_open,13.f,18.45f,f,.73f,.725f,.726f,-.1f,true);
- paperDrift(m,13.f,12.6f,22.f,20.4f,f,6,701);
- extinguisher(m,23.f,7.8f,f,rfW);
- rfFix(m,model::trash_can,22.5f,20.4f,f,.5f,.5f,.62f,0,true);
- rfFix(m,model::lab_pa_horn,22.72f,6.f,f+3.5f,.495f,.564f,.433f,rfW,false);
- rfFix(m,model::lab_photocopier,10.6f,20.6f,f,.826f,.752f,.967f,rfN,true);
- // The lobby's walls: what the company hung where visitors waited.
- rfFix(m,model::art_painting_5,12.24f,7.4f,f+1.45f,1.156f,.08f,.983f,rfE,false);
- rfFix(m,model::art_painting_6,12.24f,3.f,f+1.3f,.689f,.03f,.8f,rfE,false);
- rfFix(m,model::art_painting_4,20.f,22.97f,f+1.55f,1.089f,.038f,.9f,rfN,false);
- // And the case it was proud of: the first core out of the deep seam, under glass.
- rfFix(m,model::office_display_cabinet,22.72f,17.2f,f,.968f,.54f,2.1f,rfW,true);
- rfFix(m,model::lab_anomaly_relic,22.75f,17.05f,f+1.02f,.25f,.2f,.2f,.6f,false);
- m.lights.push_back(lamp({21.9f,17.2f},f+2.3f,.7f,2.6f,6800,-.15f,WorldLightMount::Bare));   // the case lit for visitors
- // The boardroom: flowers nobody chose, over the minutes.
- rfFix(m,model::art_painting_6,4.6f,9.97f,f+1.3f,.689f,.03f,.8f,rfN,false);
- // Picture lights: a warm wash on each canvas.
- for(auto [x,y]:{std::pair{12.6f,7.4f},{12.6f,3.f},{20.f,22.5f},{4.6f,9.5f}})m.lights.push_back(lamp({x,y},f+2.5f,.55f,2.2f,3000,.12f,WorldLightMount::Bare));
+ cue(m,"rf_admin_scene",2500,Sound::Empty,{7.6f,11.9f},"INVESTIGATOR: Every card from Energy Diagnostics. Bag them.",.7f,f+1.6f,"inv_admin_1");
+ cue(m,"rf_admin_scene",6000,Sound::Empty,{12.95f,9.3f},"CLEANUP: Sir.",.6f,f+1.6f,"rf_admin_door_1");
+ cue(m,"rf_admin_scene",9500,Sound::Empty,{7.6f,11.9f},"INVESTIGATOR: The rest of this floor can burn with the building.",.7f,f+1.6f,"inv_admin_2");
+ cue(m,"rf_admin_scene",15400,Sound::Empty,{9.15f,13.2f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
+ cue(m,"rf_admin_scene",21100,Sound::Door,{6.8f,19.1f},"",.8f,f+1.2f);
+ cue(m,"rf_admin_exit",4100,Sound::Door,{6.8f,19.1f},"",.7f,f+1.2f);
+
  // --- Rewards and names ---------------------------------------------------------------------------
- m.pickupSpawns={{{22.f,22.f},PickupKind::Ammo,f},{{2.f,2.f},PickupKind::Health,f},{{13.f,2.6f},PickupKind::Ammo,dz}};
- m.clutterSpawns={{0,{7.f,17.4f},f+.891f},{2,{21.f,22.f},f}};
- zone(m,"RESEARCH ADMINISTRATION / BOARDROOM",1.f,1.f,12.f,10.f);
- zone(m,"RESEARCH ADMINISTRATION / RECORDS",1.f,12.2f,12.f,21.f);
- zone(m,"RESEARCH ADMINISTRATION / OBSERVATION GALLERY",12.f,1.f,23.f,5.f,dz-.5f,1000);
+ m.pickupSpawns={{{12.6f,18.3f},PickupKind::Ammo,f},{{10.f,6.4f},PickupKind::Health,f},{{2.5f,18.2f},PickupKind::Health,f},
+  {{13.f,4.2f},PickupKind::Ammo,dz},{{2.4f,6.6f},PickupKind::Ammo,dz}};
+ m.clutterSpawns={{2,{20.1f,20.25f},cf+.42f},{0,{16.2f,20.8f},cf},{2,{11.45f,5.9f},f+.92f},{5,{9.7f,4.6f},f+.78f}};
+ zone(m,"RESEARCH ADMINISTRATION / DIRECTOR'S OFFICE",1.f,1.f,12.f,8.f,dz-.5f,1000);
+ zone(m,"RESEARCH ADMINISTRATION / OBSERVATION GALLERY",12.f,0,24.f,5.f,dz-.5f,1000);
+ zone(m,"RESEARCH ADMINISTRATION / BOARDROOM",1.f,1.f,8.6f,7.8f);
+ zone(m,"RESEARCH ADMINISTRATION / RECORDS",1.f,10.2f,12.f,19.f);
+ zone(m,"RESEARCH ADMINISTRATION / CLEARANCE DESK",12.f,1.f,23.f,4.6f);
+ zone(m,"RESEARCH ADMINISTRATION / LOUNGE",12.f,16.2f,23.f,23.f);
  zone(m,"RESEARCH ADMINISTRATION",0,0,24,24);
  recessedFittings(m,true);freightFinish(m,-1);
  return p;
