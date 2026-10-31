@@ -1529,7 +1529,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
          {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
          {"engine-regression",retro::Game::testEngineRegression},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
-         {"lift-mix",retro::AudioEngine::testLiftMix},{"glass",retro::Game::testGlass},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
+         {"lift-mix",retro::AudioEngine::testLiftMix},{"glass",retro::Game::testGlass},{"physics-stages",retro::Game::testPhysicsStages},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"crates",retro::Game::testCrates},
          {"chapter-route",retro::Game::testChapterRoute},{"chapter-sequence",retro::Game::testChapterSequences},{"darkness",darknessTest},

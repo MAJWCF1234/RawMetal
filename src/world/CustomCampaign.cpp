@@ -383,8 +383,13 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::Ammo))throw std::runtime_error("invalid pickup kind");
    map->pickupSpawns.push_back({{number(f,3,"pickup x"),number(f,4,"pickup y")},PickupKind(kind)});
   }else if(tag=="CLUTTER"){
-   if(f.size()<7)throw std::runtime_error("malformed CLUTTER record");auto map=mapAt(maps,f);int kind=integer(f,2,"clutter kind");if(kind<0||kind>5)throw std::runtime_error("invalid clutter kind");
+   if(f.size()<7)throw std::runtime_error("malformed CLUTTER record");auto map=mapAt(maps,f);int kind=integer(f,2,"clutter kind");if(kind<0||kind>7)throw std::runtime_error("invalid clutter kind");
    map->clutterSpawns.push_back({kind,{number(f,3,"clutter x"),number(f,4,"clutter y")},number(f,5,"clutter z"),number(f,6,"clutter yaw")});
+   if(kind==7){if(f.size()!=14)throw std::runtime_error("model CLUTTER needs model, dimensions, pose and break state");auto&v=map->clutterSpawns.back();v.model=integer(f,7,"prop model");v.width=number(f,8,"prop width");v.depth=number(f,9,"prop depth");v.height=number(f,10,"prop height");v.pitch=number(f,11,"prop pitch");v.roll=number(f,12,"prop roll");v.breakState=stateId(decode(f[13]));}
+  }else if(tag=="BREAKABLE"){
+   if(f.size()!=13&&f.size()!=15)throw std::runtime_error("malformed BREAKABLE record");auto map=mapAt(maps,f);
+   Breakable v{number(f,2,"breakable x1"),number(f,3,"breakable y1"),number(f,4,"breakable x2"),number(f,5,"breakable y2"),number(f,6,"breakable bottom"),number(f,7,"breakable top"),integer(f,8,"breakable material"),number(f,9,"breakable health"),boolean(f,10,"breakable holds"),stateId(decode(f[11])),stateId(decode(f[12]))};
+   if(f.size()==15){v.fixture=integer(f,13,"breakable fixture");v.part=unsigned(integer(f,14,"breakable part"));}map->breakables.push_back(v);
   }else if(tag=="PIPE"){
    if(f.size()<9)throw std::runtime_error("malformed PIPE record");auto map=mapAt(maps,f);map->pipes.push_back({
     {number(f,2,"pipe x1"),number(f,3,"pipe y1")},{number(f,4,"pipe x2"),number(f,5,"pipe y2")},number(f,6,"pipe z"),number(f,7,"pipe radius"),number(f,8,"pipe end z"),f.size()>9?integer(f,9,"pipe material"):0});

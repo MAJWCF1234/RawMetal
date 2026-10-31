@@ -13,7 +13,7 @@ ALLOWED_TAGS = frozenset({
     "ACTOR_GUARD", "ACTOR_PATROL", "ACTOR_WEAPON", "ACTOR_FACTION", "ACTOR_TACTICS", "ACTOR_ROLE", "ACTOR_HEALTH", "ACTOR_SUSPEND",
     "ACTOR_PLATFORM", "ACTOR_PRELUDE", "SEQUENCE_SIGHT", "SEQUENCE_CUE",
     # Map finishes have no editor control yet; carry them through unchanged.
-    "SURFACE",
+    "SURFACE", "CLUTTER", "BREAKABLE",
 })
 
 

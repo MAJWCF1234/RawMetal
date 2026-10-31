@@ -13,8 +13,8 @@ inline const PropMaterialTraits& propMaterialTraits(PropMaterial m){
  static constexpr PropMaterialTraits table[]={
  {"PAPER",.02f,10,0,0,true,Sound::JunkSoft,1.15f,.5f,Sound::JunkSoft,1,0},
  {"CARDBOARD",.04f,8,0,0,true,Sound::JunkSoft,.9f,.65f,Sound::JunkSoft,1,0},
- {"PLASTIC",.15f,6,0,0,true,Sound::JunkSoft,1.25f,.7f,Sound::JunkSoft,1,4},
- {"WOOD",.1f,7,0,6,true,Sound::JunkSoft,.8f,.8f,Sound::JunkSoft,1,4},
+ {"PLASTIC",.15f,6,0,0,true,Sound::WoodImpact,1.25f,.7f,Sound::JunkSoft,1,4},
+ {"WOOD",.1f,7,0,6,true,Sound::WoodImpact,.8f,.8f,Sound::WoodBreak,1,4},
  {"METAL",.2f,5,0,0,false,Sound::JunkMetal,1,1,Sound::JunkMetal,1,4},
  {"GLASS",.2f,6,4.5f,10,true,Sound::JunkGlass,1,1,Sound::BottleBreak,1,0},
  {"CERAMIC",.15f,6,5.5f,8,false,Sound::JunkGlass,.8f,1,Sound::BottleBreak,.8f,4},

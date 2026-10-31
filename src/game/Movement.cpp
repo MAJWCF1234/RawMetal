@@ -25,6 +25,10 @@ bool Game::hullFits(Vec2 p,float feet,float height)const{
   auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);float px=corner.x,py=corner.y;
   if(!w.fits(px,py,feet,height)||w.doorBlocks(px,py,feet,height))return false;
  }
+ // Heavy dressing blocks an approaching hull, but always permits retreat.
+ for(int level=0;level<chunkCount();++level)if(chunkResident(level)){auto shift=chunkOffset(level)-chunkOffset(m_level);const auto&items=chunkClutter(level);
+  for(int i=0;i<int(items.size());++i){const auto&c=items[i];if(c.model<0||c.broken||c.mass()<8||c.blockedTime>=.5f||(level==m_level&&i==m_heldClutter)||feet>=c.z+c.height()||feet+height<=c.z)continue;auto e=c.extent();auto at=c.pos+shift;auto penetration=[&](Vec2 q){return std::min(e[0]+.2f-std::fabs(q.x-at.x),e[1]+.2f-std::fabs(q.y-at.y));};if(penetration(p)>0&&penetration(p)>penetration(m_player.pos)+.00001f)return false;}
+ }
  // Rails are only 5.5 cm thick. Point-sampling the 40 cm player hull can put
  // every sample on one side or the other while the body itself overlaps the rail.
  // Test the hull footprint against rail AABBs so the player can never phase into
@@ -137,6 +141,7 @@ void Game::updateMovement(const InputState& input,float dt){
   }
  }
  // Stuck: trying to walk, not moving, and the body does not fit where it is.
+ m_propPushAttempt=input.forward||input.back||input.left||input.right||input.vrMoveForward!=0||input.vrMoveRight!=0;
  const bool trying=input.forward||input.back||input.left||input.right||(input.vrTracked&&(input.vrMoveForward!=0||input.vrMoveRight!=0));
  if(trying&&lengthSq(m_player.pos-startPosition)<1e-6f&&!hullFits(m_player.pos,m_player.z,m_player.hullHeight()))m_stuckTime+=dt;else m_stuckTime=0;
 }

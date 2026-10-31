@@ -126,6 +126,7 @@ void Game::updateMechanisms(float dt){
   float target=state(lift.downState)?lift.lower:state(lift.callState)?lift.upper:lift.lower;
   height=std::clamp(height+std::clamp(target-height,-lift.speed*dt,lift.speed*dt),lift.lower,lift.upper);
   m_world.setCargoLiftHeight(height);
+  if(dt>0)for(auto&c:m_clutter)if(!c.broken&&m_world.insideCargoLift(c.pos.x,c.pos.y)&&std::fabs(c.z-old)<.04f){c.z+=height-old;c.vz=0;c.sleeping=false;c.restTime=0;}
   if(aboard&&dt>0){m_player.z+=height-old;m_player.verticalVelocity=0;m_player.grounded=true;}
   setState(lift.positionState,int(std::round((height-lift.lower)*1000)));
   if(height>=lift.upper-.01f)setState(lift.arrivedState,1);

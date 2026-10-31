@@ -35,7 +35,7 @@ void Game::seedClutter(){
   c.model=spawn.model;c.dims={spawn.width,spawn.depth,spawn.height};c.pitch=spawn.pitch;c.roll=spawn.roll;c.breakState=spawn.breakState;
   c.z=spawn.z==-999?m_world.supportBelow(c.pos.x,c.pos.y,m_world.floorHeight(c.pos.x,c.pos.y)+.5f):spawn.z;
   if(c.model>=0){c.authored=true;c.home=c.pos+chunkOffset(m_level);c.homeZ=spawn.z;auto e=c.extent();float support=-100;
-   for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]}){float z=m_world.supportBelow(c.pos.x+x,c.pos.y+y,c.z+.05f);for(const auto&other:m_clutter){auto oe=other.extent();if(!other.broken&&std::fabs(c.pos.x+x-other.pos.x)<=oe[0]&&std::fabs(c.pos.y+y-other.pos.y)<=oe[1]&&other.z+other.height()<=c.z+.03f)z=std::max(z,other.z+other.height());}support=std::max(support,z);}
+   for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]}){float z=m_world.supportBelow(c.pos.x+x,c.pos.y+y,c.z+.05f,true);for(const auto&other:m_clutter){auto oe=other.extent();if(!other.broken&&std::fabs(c.pos.x+x-other.pos.x)<=oe[0]&&std::fabs(c.pos.y+y-other.pos.y)<=oe[1]&&other.z+other.height()<=c.z+.03f)z=std::max(z,other.z+other.height());}support=std::max(support,z);}
    if(c.z-support>=-.01f&&c.z-support<=.03f){c.z=support;c.sleeping=true;}
   }
   m_clutter.push_back(c);
@@ -75,12 +75,13 @@ void Game::updateClutter(const InputState&input,float dt){
   if(c.model>=0&&!fit(1)){float lo=0,hi=1;for(int i=0;i<8;++i){float mid=(lo+hi)*.5f;if(fit(mid))lo=mid;else hi=mid;}target=m_player.pos+(target-m_player.pos)*lo;height=eye.z+(height-eye.z)*lo;clear&=lo>.1f;}
   if(clear&&targetWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_vrInputActive?std::atan2(forward.y,forward.x):m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
   else{m_heldClutter=-1;c.projectile=false;}
-  if(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1)&&input.fire&&!m_previousFire&&!m_suppressFire){float speed=9.f*(c.model>=0?std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f):1.f);c.velocity=forward*(speed*std::cos(pitch));c.vz=2.f+speed*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
+  if(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1)&&input.fire&&!m_previousFire&&!m_suppressFire){float speed=9.f*(c.model>=0?std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f):1.f);c.velocity=forward*(speed*std::cos(pitch));c.vz=2.f+speed*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;c.soundOwner=-1;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
  }
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
  for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))simulateClutter(m_chunks[level].clutter,level,dt,-1);
 }
 void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held){
+ const int initialCount=int(list.size());size_t debris=0;for(const auto&b:friendlyWorld(level).breakables())if(b.material!=17)debris+=6;list.reserve(list.size()+debris);
  auto shift=chunkOffset(level)-chunkOffset(m_level);
  auto physicalWorld=[&](Vec2& p)->const World&{auto local=p-shift;if(local.x>=0&&local.x<24&&local.y>=0&&local.y<24){p=local;return level==m_level?m_world:m_chunks[level].world;}return worldAt(p);};
  std::vector<std::array<float,3>> shapes;std::vector<Vec2> bases;shapes.reserve(list.size());bases.reserve(list.size());for(const auto&v:list){shapes.push_back(v.extent());bases.push_back({std::cos(v.yaw),std::sin(v.yaw)});}
@@ -90,16 +91,33 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
  auto support=[&](int self,Vec2 p,float feet){float top=-100;auto consider=[&](int j){if(j==self||j==held)return;const auto&v=list[j];if(v.broken||v.model<0||v.z+shapes[j][2]*2>feet+.025f)return;auto d=p-v.pos;auto e=shapes[j];if(std::fabs(v.pitch)<.05f&&std::fabs(v.roll)<.05f){float c=bases[j].x,s=bases[j].y;auto size=v.size();if(std::fabs(d.x*c+d.y*s)>size[0]*.5f||std::fabs(-d.x*s+d.y*c)>size[1]*.5f)return;}else if(std::fabs(d.x)>e[0]||std::fabs(d.y)>e[1])return;top=std::max(top,v.z+shapes[j][2]*2);};
   if(list.size()>32){for(int y=std::max(0,int(p.y)-1);y<=std::min(23,int(p.y)+1);++y)for(int x=std::max(0,int(p.x)-1);x<=std::min(23,int(p.x)+1);++x)for(int j:buckets[y*24+x])consider(j);}else for(int j=0;j<int(list.size());++j)consider(j);return top;};
  struct RankedProp{float distance;int level,index;};std::vector<RankedProp> nearest;for(int l=0;l<chunkCount();++l)if(chunkResident(l)){auto offset=chunkOffset(l)-chunkOffset(m_level);const auto&items=chunkClutter(l);for(int i=0;i<int(items.size());++i){const auto&v=items[i];if(v.model>=0&&!v.broken&&!v.sleeping&&!dormantEntity(v.z)&&!(l==m_level&&i==m_heldClutter))nearest.push_back({lengthSq(v.pos+offset-m_player.pos),l,i});}}std::sort(nearest.begin(),nearest.end(),[](const RankedProp&a,const RankedProp&b){if(a.distance!=b.distance)return a.distance<b.distance;return a.level!=b.level?a.level<b.level:a.index<b.index;});std::vector<bool> slow(list.size());for(size_t rank=48;rank<nearest.size();++rank)if(nearest[rank].level==level)slow[nearest[rank].index]=true;
- for(int index=0;index<int(list.size());++index){if(index==held)continue;auto&c=list[index];
+ for(int index=0;index<initialCount;++index){if(index==held)continue;auto&c=list[index];
   if(c.broken||dormantEntity(c.z))continue;
-  if(c.model>=0){auto e=c.extent();auto delta=c.pos-(m_player.pos-shift);float nx=e[0]+.2f-std::fabs(delta.x),ny=e[1]+.2f-std::fabs(delta.y);
+  if(c.model>=0){auto e=c.extent();auto delta=c.pos-(m_player.pos-shift);
+   bool pushing=c.mass()>=8&&std::fabs(delta.x)<e[0]+.27f&&std::fabs(delta.y)<e[1]+.27f&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z&&(m_velocity.x*m_velocity.x+m_velocity.y*m_velocity.y>.001f||m_propPushAttempt);
+   if(pushing){c.blockedTime+=dt;Vec2 n=length(delta)>.001f?delta*(1/length(delta)):Vec2{1,0};c.velocity+=n*(dt*4/std::sqrt(c.mass()));c.sleeping=false;c.soundOwner=-1;}else if(std::fabs(delta.x)>e[0]+.4f||std::fabs(delta.y)>e[1]+.4f)c.blockedTime=0;
+float nx=e[0]+.2f-std::fabs(delta.x),ny=e[1]+.2f-std::fabs(delta.y);
    if(nx>0&&ny>0&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z){Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};auto next=c.pos+n*(std::min(nx,ny)+.001f);auto fit=[&](Vec2 p){for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]}){auto q=p+Vec2{x,y}+shift;const auto&w=physicalWorld(q);if(!w.fits(q.x,q.y,c.z,c.height(),true,true)||w.doorBlocks(q.x,q.y,c.z,c.height()))return false;}return true;};if(fit(next))c.pos=next;else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){c.pos=next;n=side;}}float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}
   }else if(length(m_velocity)>.5f&&length(c.pos-(m_player.pos-shift))<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.model>=0){auto probe=c.pos+shift;const auto&under=physicalWorld(probe);if(probe.x<0||probe.x>=24||probe.y<0||probe.y>=24||!chunkResident(under.level())){c.sleeping=true;c.restTime=-1;continue;}if(c.restTime<0){c.sleeping=false;c.restTime=0;}}
+  if(c.model>=0){auto e=c.extent();
+   auto kick=[&](Vec2 actor,float z,float height,Vec2 velocity,int owner){auto delta=c.pos-actor;float nx=e[0]+.22f-std::fabs(delta.x),ny=e[1]+.22f-std::fabs(delta.y);if(nx<=0||ny<=0||c.z>=z+height||c.z+c.height()<=z||lengthSq(velocity)<.001f)return;Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};float speed=std::max(.25f,dot(velocity,n)*std::min(1.f,4/c.mass()));c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.soundOwner=owner;c.sleeping=false;c.restTime=0;};
+   for(size_t a=0;a<m_friendlyActors.size();++a){const auto&npc=m_friendlyActors[a];if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(npc.track()))continue;auto offset=chunkOffset(npc.level)-chunkOffset(level);Vec2 velocity{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)};if(npc.pose.clip!=1)velocity={};kick(npc.pose.position+offset,npc.pose.z,friendlyHullHeight(a,npc.track()),velocity,int(a));}
+   const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;for(const auto&e:enemies)if(e.alive&&e.moving)kick(e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom(),{std::cos(e.heading),std::sin(e.heading)},-1);
+   if(m_vrInputActive&&level==m_level)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]){auto p=m_vrHandPosition[hand],v=m_vrHandVelocity[hand];if(p.z>=c.z-.08f&&p.z<=c.z+c.height()+.08f&&std::fabs(p.x-c.pos.x)<e[0]+.08f&&std::fabs(p.y-c.pos.y)<e[1]+.08f){knockClutter(level,index,p,v*(std::min(2.f,c.mass())*.35f));c.soundOwner=-1;}}
+  }
+  if(c.model>=0){const auto&w=level==m_level?m_world:m_chunks[level].world;auto e=c.extent();
+   for(const auto&door:w.doors()){if(!door.opening&&door.open<=0)continue;float base=w.floorHeight((door.left+door.right)*.5f,door.y)+door.z;if(c.z>=base+2.5f||c.z+c.height()<=base)continue;
+    float angle=door.swinging?door.open*kPi*.5f*door.swing:0;Vec2 axis{std::cos(angle),std::sin(angle)},hinge{door.left,door.y},nearest=hinge+axis*std::clamp(dot(c.pos-hinge,axis),0.f,door.right-door.left);auto d=c.pos-nearest;float radius=std::max(e[0],e[1])+.16f;
+    if(lengthSq(d)>=radius*radius||!w.doorBlocks(nearest.x,nearest.y,c.z,c.height()))continue;Vec2 normal=lengthSq(d)>.00001f?d*(1/length(d)):Vec2{-axis.y,axis.x};auto next=nearest+normal*(radius+.02f);
+    bool clear=true;for(float x:{-e[0],e[0]})for(float y:{-e[1],e[1]})clear&=w.fits(next.x+x,next.y+y,c.z,c.height(),true,true)&&!w.doorBlocks(next.x+x,next.y+y,c.z,c.height());
+    if(clear)c.pos=next;c.velocity+=normal*.8f;c.sleeping=false;c.restTime=0;
+   }
+  }
   if(c.sleeping)continue;
-  if(slow[index]&&m_propHalfStep)continue;float itemDt=dt*(slow[index]?2:1);int steps=std::max(1,int(std::ceil(itemDt*(slow[index]?90:180))));float step=itemDt/steps;
+  if(slow[index]&&m_propHalfStep)continue;float itemDt=dt*(slow[index]?2:1);int steps=c.model>=0&&lengthSq(c.velocity)+c.vz*c.vz<1?1:std::max(1,int(std::ceil(itemDt*(slow[index]?90:180))));float step=itemDt/steps;
   auto impact=[&](float speed){if(speed<.65f||c.impactCooldown>0)return;float gain=std::clamp(speed*.12f,.12f,.85f);if(c.model<0&&c.impactSound()==Sound::JunkSoft)gain*=.65f;
-   const auto&t=propMaterialTraits(c.material());SoundEvent event{c.impactSound(),c.pos+shift,gain,c.model>=0?t.impactPitch:.94f+.1f*std::fabs(std::sin(c.yaw+index)),true,17,c.z+c.height()*.5f};if(c.model>=0){event.gain*=t.impactGain;event.aiRadius=std::clamp(2.f+std::sqrt(c.mass())*speed,2.f,12.f);if(t.breakSpeed>0&&speed>t.breakSpeed)breakClutter(level,index,{c.velocity.x,c.velocity.y,c.vz});}m_sounds.push_back(event);c.impactCooldown=.075f;
+   const auto&t=propMaterialTraits(c.material());SoundEvent event{c.impactSound(),c.pos+shift,gain,c.model>=0?t.impactPitch:.94f+.1f*std::fabs(std::sin(c.yaw+index)),true,17,c.z+c.height()*.5f};if(c.model>=0){event.gain*=t.impactGain;event.owner=c.soundOwner;event.aiRadius=std::clamp(2.f+std::sqrt(c.mass())*speed,2.f,12.f);if(t.breakSpeed>0&&speed>t.breakSpeed)breakClutter(level,index,{c.velocity.x,c.velocity.y,c.vz});}m_sounds.push_back(event);c.impactCooldown=.075f;
   };
   for(int i=0;i<steps;++i){
    if(c.model>=0&&(lengthSq(c.velocity)>.0001f||std::fabs(c.vz)>.05f))for(auto&v:list)if(&v!=&c&&v.model>=0&&!v.broken&&v.sleeping&&std::fabs(v.z-c.z-c.height())<.03f&&length(v.pos-c.pos)<(v.footprint()+c.footprint())*.7f){v.sleeping=false;v.restTime=0;}
@@ -109,8 +127,9 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    auto extent=c.extent();c.z=center-extent[2];
    auto fits=[&](Vec2 p,float z){for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto local=p+Vec2{x,y}+shift;const auto&w=physicalWorld(local);if(!w.fits(local.x,local.y,z,extent[2]*2,true,true)||w.doorBlocks(local.x,local.y,z,extent[2]*2))return false;}return true;};
    auto local=c.pos+shift;const auto&supportWorld=physicalWorld(local);
-   float floor=supportWorld.supportBelow(local.x,local.y,std::max(c.z,center-oldExtent[2])+.025f);
+   float floor=supportWorld.supportBelow(local.x,local.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0);
    if((c.model<0||c.pitch!=oldPitch||c.roll!=oldRoll||c.yaw!=oldYaw)&&!fits(c.pos,std::max(c.z,floor))){c.pitch=oldPitch;c.roll=oldRoll;c.yaw=oldYaw;c.pitchSpeed*=-.2f;c.rollSpeed*=-.2f;c.spin*=-.2f;extent=oldExtent;c.z=center-extent[2];}
+   if(c.model>=0&&c.material()==PropMaterial::Paper){float drag=std::exp(-3.f*step);c.velocity=c.velocity*drag;c.vz*=std::exp(-5.f*step);c.pitchSpeed*=drag;c.rollSpeed*=drag;}
    c.vz-=14.f*step;
    float water=supportWorld.waterSurface(local.x,local.y);
    float immersed=std::clamp((water-c.z)/std::max(.01f,(extent[2]*2)),0.f,1.f);
@@ -133,7 +152,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     else{impact(std::fabs(speed));if(axis==0)c.pitchSpeed+=std::clamp(speed*1.5f,-8.f,8.f);else c.rollSpeed-=std::clamp(speed*1.5f,-8.f,8.f);speed*=-(c.model>=0?propMaterialTraits(c.material()).restitution:.25f);c.projectile=false;}
    }
    floor=-100;float ceiling=100;
-   for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto sample=c.pos+Vec2{x,y};auto p=sample+shift;const auto&w=physicalWorld(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f));if(c.model>=0)floor=std::max(floor,support(index,sample,std::max(c.z,center-oldExtent[2])));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z));}
+   for(float x:{-extent[0],0.f,extent[0]})for(float y:{-extent[1],0.f,extent[1]}){auto sample=c.pos+Vec2{x,y};auto p=sample+shift;const auto&w=physicalWorld(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0));if(c.model>=0)floor=std::max(floor,support(index,sample,std::max(c.z,center-oldExtent[2])));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z,c.model>=0));}
    float z=c.z+c.vz*step;
    if(c.vz>0&&z+(extent[2]*2)>ceiling){c.z=std::max(floor,ceiling-(extent[2]*2));impact(c.vz);c.vz=-c.vz*.2f;}
    else if(z<=floor+.001f){
@@ -151,6 +170,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     if(!(immersed>0&&buoyant)&&length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
    }else{c.z=z;c.restTime=0;}
+   if(c.model>=0&&c.projectile)for(size_t a=0;a<m_friendlyActors.size();++a){const auto&npc=m_friendlyActors[a];auto p=npc.pose.position+chunkOffset(npc.level)-chunkOffset(level);if(npc.pose.clip==4||lengthSq(p-c.pos)>.3f*.3f||c.z>=npc.pose.z+friendlyHullHeight(a,npc.track())||c.z+c.height()<=npc.pose.z)continue;auto velocity=c.velocity;float speed=length(velocity);Point3 dir{velocity.x/std::max(.001f,speed),velocity.y/std::max(.001f,speed),0},at{c.pos.x+shift.x,c.pos.y+shift.y,c.z+c.height()*.5f};resolveShot({ShotKind::Npc,npc.level,int(a),1,1,at,{}},at-dir,dir,kGuardHandgun.hitscan,true,5,{ShotKind::Player,m_level,0});c.projectile=false;c.velocity=c.velocity*-.18f;break;}
    if(c.projectile){auto point=c.pos+shift;const auto&contactWorld=physicalWorld(point);int targetLevel=contactWorld.level();auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;
     for(auto&e:enemies)if(e.alive&&length(e.pos-point)<.5f&&c.z+(extent[2]*2)>e.bodyBottom()&&c.z<e.bodyTop()){
      impact(length(c.velocity));e.awareness=6;e.lastKnown=point;e.lastKnownZ=contactWorld.supportBelow(point.x,point.y,c.z+extent[2]);e.state=Enemy::State::Investigate;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos+shift,.6f,1,true,17,c.z+extent[2]});
@@ -161,7 +181,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
   if(c.broken){c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;c.sleeping=true;c.restTime=0;}
   shapes[index]=c.extent();bases[index]={std::cos(c.yaw),std::sin(c.yaw)};
  }
- for(size_t i=0;i<list.size();++i)shapes[i]=list[i].extent();std::vector<int> seen(list.size(),-1),candidates;
+ shapes.resize(list.size());for(size_t i=0;i<list.size();++i)shapes[i]=list[i].extent();std::vector<int> seen(list.size(),-1),candidates;
  for(int i=0;i<int(list.size());++i){auto&a=list[i];if(a.model<0||a.broken||i==held)continue;
   candidates.clear();auto ae=shapes[i];if(list.size()>32){for(int y=std::max(0,int(a.pos.y-ae[1])-1);y<=std::min(23,int(a.pos.y+ae[1])+1);++y)for(int x=std::max(0,int(a.pos.x-ae[0])-1);x<=std::min(23,int(a.pos.x+ae[0])+1);++x)for(int j:buckets[y*24+x])if(j>i&&seen[j]!=i){seen[j]=i;candidates.push_back(j);}}else for(int j=i+1;j<int(list.size());++j)candidates.push_back(j);
   for(int j:candidates){auto&b=list[j];if(b.model<0||b.broken||j==held||(a.sleeping&&b.sleeping)||std::min(a.z+shapes[i][2]*2,b.z+shapes[j][2]*2)-std::max(a.z,b.z)<=.02f)continue;
@@ -301,8 +321,10 @@ bool Game::damagePane(int level,int index,float amount,Point3 at,Point3 directio
  auto&w=level==m_level?m_world:m_chunks[level].world;if(!w.breakableIntact(index))return false;const auto b=w.breakables().at(index);bool broken=w.damageBreakable(index,amount);auto shift=chunkOffset(level)-chunkOffset(m_level);Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};
  if(!broken){m_bulletImpacts.push_back({{at.x,at.y},at.z,{-direction.x,-direction.y},m_elapsed,level,false,-3});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());m_sounds.push_back({Sound::JunkGlass,center+shift,.4f,.6f,true,17,at.z});return false;}
  m_bulletImpacts.erase(std::remove_if(m_bulletImpacts.begin(),m_bulletImpacts.end(),[&](const BulletImpact&p){return p.level==level&&p.pos.x>=b.x1-.03f&&p.pos.x<=b.x2+.03f&&p.pos.y>=b.y1-.03f&&p.pos.y<=b.y2+.03f&&p.z>=b.bottom-.03f&&p.z<=b.top+.03f;}),m_bulletImpacts.end());
- bool alongX=b.x2-b.x1>b.y2-b.y1;m_breakEvents.push_back({center,b.bottom,direction,m_elapsed,level,PropMaterial::Glass,std::max(b.x2-b.x1,b.y2-b.y1),b.top-b.bottom,true,alongX?Vec2{1,0}:Vec2{0,1}});if(m_breakEvents.size()>24)m_breakEvents.erase(m_breakEvents.begin());
- SoundEvent event{Sound::GlassShatter,center+shift,1,1,true,20,(b.bottom+b.top)*.5f};event.aiRadius=14;m_sounds.push_back(event);if(b.state)setState(b.state,1);
+ bool alongX=b.x2-b.x1>b.y2-b.y1;PropMaterial material=b.material==17?PropMaterial::Glass:b.material==22?PropMaterial::Plastic:PropMaterial::Wood;m_breakEvents.push_back({center,b.bottom,direction,m_elapsed,level,material,std::max(b.x2-b.x1,b.y2-b.y1),b.top-b.bottom,true,alongX?Vec2{1,0}:Vec2{0,1}});if(m_breakEvents.size()>24)m_breakEvents.erase(m_breakEvents.begin());
+ SoundEvent event{b.material==17?Sound::GlassShatter:b.material==22?Sound::PlasterBreak:Sound::WoodBreak,center+shift,1,1,true,20,(b.bottom+b.top)*.5f};event.aiRadius=14;m_sounds.push_back(event);
+ if(b.material!=17){auto&debris=level==m_level?m_clutter:m_chunks[level].clutter;for(int n=0;n<6;++n){Clutter c;c.kind=6;c.pos=center;c.z=b.material==22?b.bottom:(b.bottom+b.top)*.5f;c.velocity={std::cos(n*kPi/3)*1.5f,std::sin(n*kPi/3)*1.5f};c.vz=b.material==22?-1.f:2.f;debris.push_back(c);}}
+ if(b.state)setState(b.state,1);
  auto&list=level==m_level?m_clutter:m_chunks[level].clutter;for(auto&c:list){auto e=c.extent();if(c.pos.x+e[0]>=b.x1-.1f&&c.pos.x-e[0]<=b.x2+.1f&&c.pos.y+e[1]>=b.y1-.1f&&c.pos.y-e[1]<=b.y2+.1f&&c.z+c.height()>=b.bottom-.1f&&c.z<=b.top+.1f&&!c.broken){c.sleeping=false;c.restTime=0;}}
  return true;
 }
@@ -351,5 +373,43 @@ Game Game::physicsInspection(int view,float seconds){
  if(view>=2&&view<=5){float damage=view==2?0:view==3?30:view==4?90:180;if(damage>0)for(int i=0;i<int(g.world().breakables().size());++i){const auto&b=g.world().breakables()[i];g.damagePane(0,i,damage,{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f,(b.bottom+b.top)*.5f},{1,0,0});}}
  if(view==6){g.setState(stateId("inspection_trigger"),1);g.updateBreakables();g.m_player.pos={8.7f,8};g.m_player.angle=0;g.m_player.pitch=-65;}
  for(int i=0;i<int(seconds*120);++i){g.m_elapsed+=1.f/120;g.updateClutter({},1.f/120);}return g;
+}
+}
+
+namespace retro {
+void Game::blastProps(Point3 origin,bool tiles){
+ struct PaneHit{int level,index;float damage;Point3 point,direction;};std::vector<PaneHit> panes;
+ struct TileHit{int level,x,y;char kind;};std::vector<TileHit> targets;
+ auto direction=[&](Point3 p,float&falloff){auto d=p-origin;float r=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);falloff=1-r/4;return r>.001f?d*(1/r):Point3{0,0,1};};
+ for(int level=0;level<chunkCount();++level)if(chunkResident(level)){auto shift=chunkOffset(level)-chunkOffset(m_level);auto&w=friendlyWorld(level);auto&list=level==m_level?m_clutter:m_chunks[level].clutter;
+  for(int i=0;i<int(list.size());++i){const auto&c=list[i];if(c.model<0||c.broken)continue;Point3 local{c.pos.x,c.pos.y,c.z+c.height()*.5f},p=local+Point3{shift.x,shift.y,0};float strength;auto dir=direction(p,strength);if(strength<=0||tacticalGrenadeTrace(origin,p-dir*std::min(.12f,c.footprint()*.5f)).kind==ShotKind::Solid)continue;knockClutter(level,i,local,dir*(40*strength));damageClutter(level,i,60*strength,local,dir);}
+  for(int i=0;i<int(w.breakables().size());++i)if(w.breakableIntact(i)){const auto&b=w.breakables()[i];Point3 p{std::clamp(origin.x-shift.x,b.x1,b.x2),std::clamp(origin.y-shift.y,b.y1,b.y2),std::clamp(origin.z,b.bottom,b.top)};auto global=p+Point3{shift.x,shift.y,0};float strength;auto dir=direction(global,strength);if(strength>0&&tacticalGrenadeTrace(origin,global-dir*.04f).kind!=ShotKind::Solid)panes.push_back({level,i,100*strength,p,dir});}
+  if(tiles)for(int y=0;y<24;++y)for(int x=0;x<24;++x){char t=w.tile(x,y);if(t!='B'&&t!='C')continue;Point3 p{x+.5f+shift.x,y+.5f+shift.y,w.floorHeight(x+.5f,y+.5f)+.3f};float strength;auto dir=direction(p,strength);if(strength>0&&tacticalGrenadeTrace(origin,p-dir*.75f).kind!=ShotKind::Solid)targets.push_back({level,x,y,t});}
+ }
+ // Snapshot the clear lines before any pane falls or a secondary barrel explodes.
+ for(const auto&p:panes)damagePane(p.level,p.index,p.damage,p.point,p.direction);
+ for(const auto&t:targets){auto&w=friendlyWorld(t.level);if(t.kind=='B')detonateBarrel(t.level,t.x,t.y);else if(w.tile(t.x,t.y)=='C'){w.destroyTile(t.x,t.y);auto&list=t.level==m_level?m_clutter:m_chunks[t.level].clutter;for(int i=0;i<6;++i){Clutter c;c.kind=6;c.pos={t.x+.5f,t.y+.5f};c.z=w.floorHeight(c.pos.x,c.pos.y)+.3f;c.velocity={std::cos(i*kPi/3)*3,std::sin(i*kPi/3)*3};c.vz=2;list.push_back(c);}}}
+}
+}
+
+namespace retro {
+bool Game::testPhysicsStages(){
+ std::ofstream out("physics-stages-test.txt");bool ok=true;auto check=[&](bool pass,const char*label){out<<(pass?"PASS ":"FAIL ")<<label<<'\n';out.flush();ok&=pass;};
+ auto prop=[](int model,Vec2 p,float z=0){Clutter c;c.kind=7;c.model=model;c.dims=propTraits(model).size;c.pos=p;c.z=z;c.sleeping=true;return c;};
+ {auto m=regression::room();kit::breakable(*m,9.97f,6,10.03f,10,0,3);Game g(regression::campaign(m));g.m_player.pos={3,3};g.m_clutter={prop(model::crt_monitor,{8,8})};g.blastProps({7,8,1},false);check(length(g.m_clutter[0].velocity)>0&&!g.world().breakableIntact(0),"blast pushes visible props and shatters a clear pane");}
+ {auto m=regression::room();kit::wall(*m,7.5f,5,7.8f,11,0,4);kit::breakable(*m,9.97f,6,10.03f,10,0,3);Game g(regression::campaign(m));g.m_clutter={prop(model::crt_monitor,{8.5f,8})};g.blastProps({7,8,1},false);check(g.m_clutter[0].sleeping&&g.world().breakableIntact(0),"opaque wall shields props and glazing from a blast");}
+ {auto m=regression::room();m->layers[0].rows[8][8]='C';m->layers[0].rows[8][10]='B';Game g(regression::campaign(m));g.blastProps({7,8.5f,.5f},true);check(g.world().tile(8,8)!='C',"grenade destroys a crate on its clear line");g.blastProps({9.5f,8.5f,.5f},true);check(g.world().tile(10,8)!='B',"grenade detonates a barrel");}
+ {auto m=regression::room();kit::breakable(*m,9.97f,5,10.03f,11,0,3);Game g(regression::campaign(m));check(g.soundRayClear({8,8},1,{12,8},1)&&!g.hearingRayClear({8,8},1,{12,8},1),"intact glass muffles hearing without blocking sight");g.damagePane(0,0,100,{10,8,1},{1,0,0});check(g.hearingRayClear({8,8},1,{12,8},1),"broken glass stops muffling hearing");}
+ {auto m=regression::room();m->fixtures.push_back({model::desk,{8,8},0,1.4f,.7f,.75f,0,true});World w(0,m);check(w.fits(8,8,0,.3f,true,true)&&!w.fits(8,8,0,.3f,true,false)&&std::fabs(w.clearanceAbove(8,8,0,true)-.685f)<.001f,"props enter table leg space while player collision stays solid");check(std::fabs(w.supportBelow(8,8,.8f,true)-.75f)<.001f,"profile preserves tabletop support");}
+ {Game g(regression::campaign(regression::room()));g.m_player.pos={7.5f,8};g.m_player.z=0;g.m_clutter={prop(model::crt_monitor,{8,8})};check(!g.hullFits({7.7f,8},0,1.6f)&&g.hullFits({7.4f,8},0,1.6f),"8 kg and heavier props block approach and always permit retreat");g.m_player.angle=0;InputState push;push.forward=true;for(int i=0;i<60;++i){g.updateMovement(push,1.f/60);g.simulateClutter(g.m_clutter,0,1.f/60,-1);}check(g.m_clutter[0].blockedTime>=.5f||g.m_clutter[0].pos.x>8.1f,"sustained pushing yields or releases a heavy prop within half a second");}
+ {auto m=regression::room();auto a=regression::guard({8,8},{8,10});a.ai.squad=stateId("kick_squad");m->actorTracks.push_back(a);Game g(regression::campaign(m));g.m_player.pos={3,3};g.m_friendlyActors[0].pose.clip=1;g.m_clutter={prop(model::keyboard,{8,8.15f})};g.simulateClutter(g.m_clutter,0,1.f/60,-1);check(!g.m_clutter[0].sleeping&&g.m_clutter[0].soundOwner==0,"walking guard kicks a prop with an NPC sound owner");g.m_clutter={prop(model::keyboard,{8,8})};g.m_vrInputActive=true;g.m_vrHandValid[0]=true;g.m_vrHandPosition[0]={8,8,.015f};g.m_vrHandVelocity[0]={2,0,0};g.simulateClutter(g.m_clutter,0,1.f/60,-1);check(g.m_clutter[0].velocity.x>0,"tracked VR hand pushes a nearby prop");}
+ {auto m=regression::room();auto guard=regression::guard({9,8},{9,8});guard.ai.stance=stateId("prop_truce");m->actorTracks.push_back(guard);Game g(regression::campaign(m));g.setState(stateId("prop_truce"),int(SquadStance::Truce));g.m_player.pos={3,3};auto c=prop(model::keyboard,{8.8f,8},.9f);c.sleeping=false;c.projectile=true;c.velocity={4,0};g.m_clutter={c};g.simulateClutter(g.m_clutter,0,1.f/60,-1);check(!g.m_clutter[0].projectile&&g.state(stateId("reg_guard_damage"))>0,"thrown model prop damages a guard through the normal threat path");check(g.state(stateId("prop_truce"))==int(SquadStance::Hostile),"a thrown prop hitting a man ends his squad truce");}
+ {auto m=regression::room();kit::boardedGap(*m,9.97f,6,10.03f,10,0,3,stateId("board_broken"));kit::ceilingTiles(*m,6,6,7.2f,7.2f,3);kit::glassCabinet(*m,14,8,0,1,.6f,1.6f);auto campaign=regression::campaign(m);Game g(campaign);check(!g.world().fits(10,8,0,1.6f),"plywood partition initially blocks movement");g.damagePane(0,0,100,{10,8,1},{1,0,0});check(g.world().fits(10,8,0,1.6f)&&g.state(stateId("board_broken"))&&!g.m_clutter.empty(),"splintered board opens its route and emits debris");g.damagePane(0,1,100,{6.5f,6.5f,3},{0,0,1});check(!g.world().breakableIntact(1)&&std::any_of(g.m_clutter.begin(),g.m_clutter.end(),[](const auto&c){return c.vz<0;}),"ceiling tile breaks into falling debris");auto bytes=g.encodeSave();Game loaded(campaign);check(loaded.decodeSave(bytes)&&!loaded.world().breakableIntact(0)&&!loaded.world().breakableIntact(1),"stage 3 destruction survives save and load");}
+ {auto m=regression::room();m->fixtures.push_back({model::crt_monitor,{8,8},0,.42f,.4f,.38f,0,false});kit::fixturePart(*m,0,2,7.8f,7.78f,8.2f,7.82f,.1f,.35f);Game g(regression::campaign(m));check(g.world().fixtureParts(0)==~0u,"fixture screen begins with its material part present");g.damagePane(0,0,100,{8,7.8f,.2f},{0,1,0});check((g.world().fixtureParts(0)&2u)==0&&(g.world().fixtureParts(0)&1u)!=0,"broken fixture screen removes only its selected part");}
+ {auto m=regression::room();m->cargoLift={6,6,10,10,0,3,1,stateId("pcall"),stateId("prelease"),stateId("ppos"),stateId("pdown"),stateId("parrived"),stateId("pdescended")};Game g(regression::campaign(m));g.m_player.pos={3,3};g.m_clutter={prop(model::keyboard,{8,8})};g.setState(stateId("pcall"),1);g.updateMechanisms(.1f);check(std::fabs(g.m_clutter[0].z-.1f)<.001f,"cargo platform carries a prop resting on its deck");}
+ {auto m=regression::room();Door d{7,10,8};d.swinging=true;d.opening=true;d.open=.2f;m->doors.push_back(d);Game g(regression::campaign(m));g.m_player.pos={3,3};g.m_clutter={prop(model::keyboard,{8,8.3f})};auto before=g.m_clutter[0].pos;g.simulateClutter(g.m_clutter,0,1.f/60,-1);check(length(g.m_clutter[0].pos-before)>.05f,"a swinging door sweeps a sleeping prop aside");}
+ {Game paper(regression::campaign(regression::room())),plastic(regression::campaign(regression::room()));paper.m_player.pos=plastic.m_player.pos={3,3};auto a=prop(model::office_paper_stack,{8,8},2),b=prop(model::keyboard,{8,8},2);a.velocity=b.velocity={2,0};a.sleeping=b.sleeping=false;paper.m_clutter={a};plastic.m_clutter={b};paper.simulateClutter(paper.m_clutter,0,.1f,-1);plastic.simulateClutter(plastic.m_clutter,0,.1f,-1);check(paper.m_clutter[0].velocity.x<plastic.m_clutter[0].velocity.x,"paper has additional air drag");}
+ {std::string text="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Physics parser|0\nMAP|0|Room|0|0|4.5|6.5|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";for(int y=0;y<24;++y)text+="ROW|0|0|"+std::to_string(y)+"|........................\n";text+="CLUTTER|0|7|8|8|0|0|28|.45|.16|.03|0|0|prop_broken\nBREAKABLE|0|9.97|6|10.03|10|0|3|10|35|0|board_broken|board_trigger\n--- CUSTOM_CAMPAIGN_DATA_END ---\n";try{auto campaign=loadCustomCampaignText(text,"physics-parser.txt");Game g(campaign);check(g.m_clutter.size()==1&&g.m_clutter[0].model==28&&g.world().breakables()[0].material==10,"custom CLUTTER model and BREAKABLE records reach runtime physics");auto bytes=g.encodeSave();Game loaded(campaign);check(loaded.decodeSave(bytes)&&loaded.encodeSave()==bytes,"custom physics records roundtrip through a byte-exact save");}catch(const std::exception&e){out<<e.what()<<'\n';check(false,"custom physics parser");}}
+ out<<(ok?"ALL PASSED":"FAILED")<<" physics-stages\n";return ok;
 }
 }

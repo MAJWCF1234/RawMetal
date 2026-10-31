@@ -40,8 +40,8 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal,ShotTrace* trace)
   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top});box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f});box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f});
  };
  for(size_t index=0;index<m_structures.size();++index){const auto&s=m_structures[index];if(isBreakableStructure(int(index))){int i=int(index)-m_breakableFirst;if(!breakableIntact(i))continue;Point3 n;float t=rayBoxFraction(from,delta,{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},&n);
-   if(trace&&!breakables()[i].holds){if(t<trace->passedAt[1]){int slot=t<trace->passedAt[0]?0:1;if(slot==0){trace->passed[1]=trace->passed[0];trace->passedAt[1]=trace->passedAt[0];trace->passedNormal[1]=trace->passedNormal[0];}trace->passed[slot]=i;trace->passedAt[slot]=t;trace->passedNormal[slot]=n;}}
-   else if(t<nearest){nearest=t;normal=n;if(trace)trace->blocking=i;}
+   if(trace&&breakables()[i].material==17&&!breakables()[i].holds){if(t<trace->passedAt[1]){int slot=t<trace->passedAt[0]?0:1;if(slot==0){trace->passed[1]=trace->passed[0];trace->passedAt[1]=trace->passedAt[0];trace->passedNormal[1]=trace->passedNormal[0];}trace->passed[slot]=i;trace->passedAt[slot]=t;trace->passedNormal[slot]=n;}}
+   else if(t<=nearest){nearest=t;normal=n;if(trace)trace->blocking=i;}
   }else if(shapedGround||s.material==17)structure(s);
  }
  if(shapedGround){
@@ -107,7 +107,7 @@ namespace retro {
 bool World::breakableIntact(int i)const{return i>=0&&i<int(breakables().size())&&std::find(m_brokenBreakables.begin(),m_brokenBreakables.end(),i)==m_brokenBreakables.end();}
 int World::breakableAt(float x,float y,float z,float margin)const{for(int i=0;i<int(breakables().size());++i){const auto&b=breakables()[i];if(breakableIntact(i)&&x>=b.x1-margin&&x<=b.x2+margin&&y>=b.y1-margin&&y<=b.y2+margin&&z>=b.bottom-margin&&z<=b.top+margin)return i;}return -1;}
 void World::removeBreakable(int i){if(i<0||i>=int(breakables().size()))return;if(std::find(m_brokenBreakables.begin(),m_brokenBreakables.end(),i)==m_brokenBreakables.end()){m_brokenBreakables.push_back(std::uint16_t(i));std::sort(m_brokenBreakables.begin(),m_brokenBreakables.end());}int index=breakableStructure(i);for(auto&cell:m_structureCells)cell.erase(std::remove(cell.begin(),cell.end(),index),cell.end());if(index<int(m_structures.size())){auto&s=m_structures[index];s.x2=s.x1;s.y2=s.y1;s.top=s.bottom;}m_lightSolids.clear();m_lightNodes.clear();}
-bool World::damageBreakable(int i,float amount){if(!breakableIntact(i)||!std::isfinite(amount)||amount<=0)return false;const auto&b=breakables()[i];m_breakableAge[i]=0;m_breakableDamage[i]=std::min(b.holds?180.f:1000000.f,m_breakableDamage[i]+amount);if(!b.holds&&m_breakableDamage[i]>=(b.health>0?b.health:20.f)){removeBreakable(i);return true;}return false;}
+bool World::damageBreakable(int i,float amount){if(!breakableIntact(i)||!std::isfinite(amount)||amount<=0)return false;const auto&b=breakables()[i];m_breakableAge[i]=0;m_breakableDamage[i]=std::min(b.holds?180.f:1000000.f,m_breakableDamage[i]+amount);if(!b.holds&&m_breakableDamage[i]>=(b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f)){removeBreakable(i);return true;}return false;}
 }
 
 namespace retro {

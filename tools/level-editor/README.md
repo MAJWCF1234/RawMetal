@@ -415,3 +415,16 @@ A building designer can attach a PNG, JPG, or WebP floor plan to the current bui
 - Moving a whole building floor to another elevation carries that floor's reference with it.
 
 This is deliberately a tracing aid for an industrial building workflow, not a texture or game asset, and it does not require compiling RawMetal.
+
+
+### Physics authoring
+
+An asset's Physics inspector can export it as a loose model prop. Set its engine model slot and keep its real dimensions; the model's curated material/mass come from `tools/campaign/prop_physics.json`. A box can be plywood, a cubicle panel, a ceiling tile, or glass, with a break state. Window glass defaults to protective; turn off Holds for ordinary panes. Keep glazing 0.3 m from chunk seams.
+
+The project preserves physical records through JSON and runtime export. Advanced `runtimeRecords` also accepts:
+
+`CLUTTER|map|7|x|y|z|yaw|model|width|depth|height|pitch|roll|breakState`
+
+`BREAKABLE|map|x1|y1|x2|y2|bottom|top|material|health|holds|brokenState|triggerState[|fixtureIndex|partMask]`
+
+Angles in runtime records are radians. Materials are 17 glass, 10 plywood, 23 cubicle panel, and 22 ceiling tile. Health 0 selects the material default. Part masks select mesh material parts (bit `1 << part`); broken parts render in a separate cache. Legacy seven-field CLUTTER records keep their existing meaning.

@@ -153,7 +153,7 @@ struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int leve
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
- int model=-1;std::array<float,3> dims{};float damage=0;bool authored=false,broken=false;Vec2 home{};float homeZ=0;StateId breakState=0;
+ int model=-1;std::array<float,3> dims{};float damage=0;bool authored=false,broken=false;Vec2 home{};float homeZ=0;StateId breakState=0;int soundOwner=-1;float blockedTime=0;
  PropMaterial material()const;float mass()const;
  std::array<float,3> size()const{if(model>=0)return dims;constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
  std::array<float,3> rotate(float x,float y,float localZ)const{
@@ -242,6 +242,7 @@ public:
     const std::vector<Pickup>& chunkPickups(int level)const{return level==m_level?m_pickups:m_chunks.at(size_t(level)).pickups;}
     const std::vector<Clutter>& chunkClutter(int level)const{return level==m_level?m_clutter:m_chunks.at(size_t(level)).clutter;}
     const World& worldAt(Vec2& local)const;
+    bool hearingRayClear(Vec2 from,float fromZ,Vec2 to,float toZ)const;
     bool soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim=0,float farTrim=0)const;
     bool chunkResident(int level)const{return level>=0&&level<chunkCount()&&(level==m_level||m_chunks[size_t(level)].resident);}
 
@@ -278,7 +279,7 @@ public:
     static bool testClutter();
     static PropTraits propTraits(int model);
     static bool auditMapScene(Game& game,int level);
-    static bool testProps();static bool testPropSaves();static bool testGlass();static Game physicsInspection(int view,float seconds);
+    static bool testPhysicsStages();static bool testProps();static bool testPropSaves();static bool testGlass();static Game physicsInspection(int view,float seconds);
     const std::vector<BreakEvent>& breakEvents()const{return m_breakEvents;}
     static Game clutterInspection(int kind,float seconds);
     static bool testStreaming();
@@ -825,6 +826,7 @@ private:
     void seedClutter();
     bool damagePane(int level,int index,float amount,Point3 at,Point3 direction);
     void updateBreakables(float dt=0);
+    void blastProps(Point3 origin,bool tiles);
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
     void knockClutter(int level,size_t index,Point3 at,Point3 impulse);
     bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);
@@ -1013,7 +1015,7 @@ private:
     // Barrels caught in a blast go up after a short fuse.
     std::vector<BarrelExplosion> m_pendingBarrels;
     void detonateBarrel(int level,int tx,int ty);
-    int m_heldClutter=-1;bool m_propHalfStep=false;
+    int m_heldClutter=-1;bool m_propHalfStep=false,m_propPushAttempt=false;
     int m_npcNavBudget=4;
     bool m_aiQueryCaching=true;
     bool m_aiDecisionScheduling=true;

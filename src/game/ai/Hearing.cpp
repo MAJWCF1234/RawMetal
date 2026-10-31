@@ -2,6 +2,7 @@
 #include "../Game.h"
 #include "../../world/CustomCampaign.h"
 #include <fstream>
+#include "../../core/Ray.h"
 namespace retro {
 std::vector<AiStimulus> Game::aiStimuli()const{
  std::vector<AiStimulus> out;
@@ -10,7 +11,7 @@ std::vector<AiStimulus> Game::aiStimuli()const{
   bool shot=event.sound==Sound::Shot,step=footstepSound(event.sound);
   // A swing or a throw is a whoosh, not a report: what it hits is the noise.
   bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty;
-  bool impact=event.sound==Sound::GlassShatter||event.sound==Sound::BottleBreak||event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock;
+  bool impact=event.sound==Sound::WoodBreak||event.sound==Sound::WoodImpact||event.sound==Sound::PlasterBreak||event.sound==Sound::GlassShatter||event.sound==Sound::BottleBreak||event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock;
   bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
   // A locker's latch, shut and bang carry like any door; its sting is score.
   bool locker=event.sound==Sound::LockerLatch||event.sound==Sound::LockerShut||event.sound==Sound::LockerBang;
@@ -24,7 +25,7 @@ std::vector<AiStimulus> Game::aiStimuli()const{
   // Choke/takedown PunchHits carry farther than tossed junk — still under gunshot range.
   float impactCap=event.sound==Sound::PunchHit?10.f:6.f;
   float radius=event.aiRadius>0?event.aiRadius:std::min(event.radius,danger?20.f:weapon?14.f:step?4.5f:mechanism?8.f:impactCap)*std::sqrt(std::clamp(event.gain,0.f,1.f));
-  int owner=-1;
+  int owner=event.owner;
   // NPC firearm sounds also appear in the general mixer. Attribute their
   // captured source so the duplicate cannot bypass own/friendly-shot filters.
   if(shot){auto global=source+chunkOffset(m_level);for(const auto&guardShot:m_guardShots)if(lengthSq(guardShot.source-global)<.0025f&&std::fabs(guardShot.z-z)<.05f){owner=guardShot.npc;break;}}
@@ -132,5 +133,13 @@ bool Game::testHearing(){
   check(*height==0?(accepted&&std::isnan(z)):std::string_view(height)=="|nan"?!accepted:(accepted&&std::fabs(z-3.04f)<.001f),"Custom cue parser preserves legacy records, accepts elevation and rejects nonfinite height");
  }
  return passed;
+}
+}
+
+namespace retro {
+bool Game::hearingRayClear(Vec2 from,float fromZ,Vec2 to,float toZ)const{
+ if(!soundRayClear(from,fromZ,to,toZ))return false;Point3 a{from.x,from.y,fromZ},delta{to.x-from.x,to.y-from.y,toZ-fromZ};auto origin=chunkOffset(m_level);
+ for(int level=0;level<chunkCount();++level)if(chunkResident(level)){auto shift=origin-chunkOffset(level);auto local=a+Point3{shift.x,shift.y,0};const auto&w=chunkWorld(level);for(const auto&s:w.structures())if(s.material==17&&rayBoxFraction(local,delta,{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top})<1)return false;}
+ return true;
 }
 }

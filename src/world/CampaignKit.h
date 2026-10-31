@@ -259,10 +259,11 @@ inline void recessedFittings(Map& m,bool troffer=false){
 }
 // Paper left where it fell, over a box at absolute height z (a floor or a desk
 // top): loose sheets laid flat and every fifth a stack, scattered by `seed`.
-inline void paperDrift(Map& m,float x1,float y1,float x2,float y2,float z,int count,unsigned seed){
+inline void paperDrift(Map& m,float x1,float y1,float x2,float y2,float z,int count,unsigned seed,bool loose=false){
  const float base=z-m.layers.front().elevation;unsigned h=seed*2654435761u+1;
  auto next=[&h]{h^=h<<13;h^=h>>17;h^=h<<5;return (h&0xffffu)/65535.f;};
  for(int i=0;i<count;++i){const float x=x1+(x2-x1)*next(),y=y1+(y2-y1)*next(),yaw=next()*kPi*2;
+  if(loose){if(i%5==4)m.clutterSpawns.push_back({7,{x,y},z,-yaw,model::office_paper_stack,.33f,.44f,.03f});else m.clutterSpawns.push_back({7,{x,y},z+.001f*(i%4),-yaw,model::office_paper_sheet,.4f,.293f,.004f});continue;}
   if(i%5==4)m.fixtures.push_back({model::office_paper_stack,{x,y},base,.33f,.44f,.03f,yaw,false});
   else m.fixtures.push_back({model::office_paper_sheet,{x,y},base+.001f*(i%4),.4f,.293f,.004f,yaw,false});}
 }
@@ -488,6 +489,15 @@ inline void glazing(Map& m,float x1,float y1,float x2,float y2,float f,float top
  for(int i=0;i<bays;++i){float a=(alongX?x1:y1)+len*i/bays+.06f,b=(alongX?x1:y1)+len*(i+1)/bays-.06f;if(alongX)breakable(m,a,cy-.03f,b,cy+.03f,f+sill,f+head,17,holds,broken,trigger);else breakable(m,cx-.03f,a,cx+.03f,b,f+sill,f+head,17,holds,broken,trigger);}
  for(int i=0;i<=bays;++i){float t=(alongX?x1:y1)+len*i/bays;if(alongX)wall(m,std::max(x1,t-.03f),y1,std::min(x2,t+.03f),y2,f+sill,f+head,20);else wall(m,x1,std::max(y1,t-.03f),x2,std::min(y2,t+.03f),f+sill,f+head,20);}
  wall(m,x1,y1,x2,y2,f+head,f+head+.08f,20);if(top>f+head+.08f)wall(m,x1,y1,x2,y2,f+head+.08f,top,dado);
+}
+// Destruction helpers author only the existing breakable record.
+inline void boardedGap(Map&m,float x1,float y1,float x2,float y2,float lo,float hi,StateId broken=0,StateId trigger=0){breakable(m,x1,y1,x2,y2,lo,hi,10,false,broken,trigger,35);}
+inline void ceilingTiles(Map&m,float x1,float y1,float x2,float y2,float z,StateId broken=0,StateId trigger=0){for(float y=y1;y<y2;y+=1.2f)for(float x=x1;x<x2;x+=1.2f)breakable(m,x,y,std::min(x+1.18f,x2),std::min(y+1.18f,y2),z-.04f,z,22,false,broken,trigger,8);}
+inline void fixturePart(Map&m,int fixture,unsigned part,float x1,float y1,float x2,float y2,float lo,float hi,StateId broken=0,StateId trigger=0){breakable(m,x1,y1,x2,y2,lo,hi,17,false,broken,trigger);m.breakables.back().fixture=fixture;m.breakables.back().part=part;}
+inline void glassCabinet(Map&m,float x,float y,float z,float w,float d,float h,StateId broken=0){
+ wall(m,x-w/2,y-d/2,x+w/2,y+d/2,z,z+.06f,10);wall(m,x-w/2,y-d/2,x+w/2,y+d/2,z+h-.06f,z+h,10);
+ for(float side:{-1.f,1.f})wall(m,x+side*(w/2-.03f)-.03f,y-d/2,x+side*(w/2-.03f)+.03f,y+d/2,z+.06f,z+h-.06f,10);
+ breakable(m,x-w/2+.06f,y-d/2-.03f,x+w/2-.06f,y-d/2+.03f,z+.06f,z+h-.06f,17,false,broken);
 }
 // A doorway frame in a wall run along x at y: architrave posts and head.
 inline void officeDoorway(Map& m,float x1,float x2,float y1,float y2,float f,float ceil){

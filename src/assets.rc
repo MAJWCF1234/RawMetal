@@ -1147,3 +1147,7 @@
 
 2255 RCDATA "assets/library/audio/glass_shatter.sfx"
 2256 RCDATA "assets/library/audio/bottle_break.sfx"
+
+2257 RCDATA "assets/library/audio/wood_break.sfx"
+2258 RCDATA "assets/library/audio/wood_impact.sfx"
+2259 RCDATA "assets/library/audio/plaster_break.sfx"

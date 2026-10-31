@@ -94,6 +94,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  bool noiseWake=false;
  for(const auto&noise:stimuli){
   if(noise.npc==int(actor)||!(noise.radius>0)||!(noise.gain>0))continue;
+  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundImpact)&&track.ai.squad&&m_friendlyActors[size_t(noise.npc)].track().ai.squad==track.ai.squad)continue;
   if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&npcFaction(m_friendlyActors[size_t(noise.npc)].track())==npcFaction(track))continue;
   float dz=noise.z-eye;if(lengthSq(noise.source-observer)+dz*dz<noise.radius*noise.radius){noiseWake=true;break;}
  }
@@ -149,8 +150,9 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  for(const auto&noise:stimuli){
   if(!std::isfinite(noise.radius)||noise.radius<=0||!std::isfinite(noise.gain)||noise.gain<=0||!std::isfinite(noise.source.x)||!std::isfinite(noise.source.y)||!std::isfinite(noise.z))continue;
   float height=noise.z-eye;if(lengthSq(noise.source-observer)+height*height>=noise.radius*noise.radius||noise.npc==int(actor))continue;
+  if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundImpact)&&track.ai.squad&&m_friendlyActors[size_t(noise.npc)].track().ai.squad==track.ai.squad)continue;
   if(noise.npc>=0&&size_t(noise.npc)<m_friendlyActors.size()&&(noise.categories&ai::SoundWeapon)&&npcFaction(m_friendlyActors[size_t(noise.npc)].track())==npcFaction(track))continue;
-  float strength=aiSoundStrength(observer,eye,noise.source,noise.z,noise.radius,noise.gain,noise.loud,soundRayClear(observer,eye,noise.source,noise.z));
+  float strength=aiSoundStrength(observer,eye,noise.source,noise.z,noise.radius,noise.gain,noise.loud,hearingRayClear(observer,eye,noise.source,noise.z));
   if(strength<=0)continue;audible|=noise.categories&15u;
   if((noise.categories&soundMask)&&strength>strongest){strongest=strength;heard=&noise;}
  }

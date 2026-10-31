@@ -184,7 +184,7 @@ void Game::updateEnemies(float dt){
    if(!combat&&!stimulus.loud&&stimulus.radius>5.f)continue;
    if((stimulus.categories&ai::SoundImpact)&&!stimulus.loud&&stimulus.gain<=.75f)continue;
    float dz=stimulus.z-e.z-.7f;float planar=lengthSq(stimulus.source-e.pos);if(planar+dz*dz>=stimulus.radius*stimulus.radius||planar<1.f)continue;
-   float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud,soundRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
+   float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud,hearingRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
    if(strength>strongest){strongest=strength;heard=&stimulus;}}
   if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,creatureTraits(e.kind).rushSpeed>0?12.f:6.f);e.state=Enemy::State::Chase;}
   else if(heard){e.lastKnown=heard->source;auto local=heard->source;const auto&sourceWorld=worldAt(local);e.lastKnownZ=sourceWorld.supportBelow(local.x,local.y,heard->z);e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}

@@ -78,7 +78,7 @@ struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
 // set: patients on their beds, a nest that wakes when the lights fail.
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
-struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;};
+struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;int fixture=-1;unsigned part=0;};
 struct ShotTrace {int blocking=-1;std::array<int,2> passed{-1,-1};std::array<float,2> passedAt{1,1};std::array<Point3,2> passedNormal{};};
 inline constexpr int ClutterModelKind=7;
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;};
@@ -373,6 +373,8 @@ public:
     const std::vector<Hazard>& hazards()const{return m_hazards;}
     const std::vector<Compactor>& compactors()const{return m_compactors;}
     const std::vector<Breakable>& breakables()const{static const std::vector<Breakable> none;return m_mapData?m_mapData->breakables:none;}
+    bool fixtureHasParts(int i)const{for(const auto&b:breakables())if(b.fixture==i)return true;return false;}
+    unsigned fixtureParts(int i)const{unsigned mask=~0u;for(int j=0;j<int(breakables().size());++j)if(breakables()[j].fixture==i&&!breakableIntact(j))mask&=~breakables()[j].part;return mask;}
     int breakableStructure(int i)const{return m_breakableFirst+i;}
     bool isBreakableStructure(int i)const{return i>=m_breakableFirst&&i<m_breakableFirst+int(breakables().size());}
     bool breakableIntact(int i)const;
@@ -401,8 +403,9 @@ public:
     std::vector<Span> spansAt(int x,int y)const;
     // Reuse result storage for repeated cell queries.
     void spansAt(int x,int y,std::vector<Span>& result)const;
-    float supportBelow(float x,float y,float feet)const;
-    float clearanceAbove(float x,float y,float feet)const;
+    float supportBelow(float x,float y,float feet,bool cavities=false)const;
+    float clearanceAbove(float x,float y,float feet,bool cavities=false)const;
+    float fixtureSurface(const Fixture& f,float x,float y,float feet,bool ceiling)const;
     bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
     // A heavy crate's box overlaps this column (skipping crate `except`).
     bool crateBlocks(float x,float y,float feet,float height,int except=-1)const;
@@ -537,7 +540,7 @@ private:
     static constexpr int TerrainSamplesY=Height+3;
     static constexpr int TerrainSamplesZ=TerrainMaxZ-TerrainMinZ+3;
     std::vector<std::int8_t> m_terrainDensity;
-    float supportBelowUncached(float x,float y,float feet)const;
+    float supportBelowUncached(float x,float y,float feet,bool cavities=false)const;
     bool fitsUncached(float x,float y,float feet,float height,bool dynamic,bool shelfCavities)const;
     // Highest positive sample per XY column; conservative empty-air bounds.
     std::vector<std::uint8_t> m_terrainTops;

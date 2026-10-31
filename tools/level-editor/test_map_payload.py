@@ -148,7 +148,19 @@ def test_mutant_creature_export() -> None:
     assert any(line.startswith("CREATURE|0|4|") for line in campaign.splitlines())
 
 
+def test_physics_exports() -> None:
+    import json
+    project={"name":"Physics", "chunks":[{"id":"room", "number":0, "gx":0, "gy":0, "layers":[{"id":"floor", "z":0, "ceilingHeight":4,"rows":rows()}], "objects":[
+        {"id":"keyboard","type":"asset","layerId":"floor","x":8,"y":8,"z":0,"w":.45,"d":.16,"h":.03,"rotation":90,"physical":True,"physicsModel":28},
+        {"id":"board","type":"box","layerId":"floor","x":10,"y":8,"z":0,"w":.06,"d":4,"h":3,"breakMaterial":10,"breakHealth":35,"breakState":"opened","breakTrigger":"crash"}]}]}
+    payload,warnings=server.build_runtime_campaign(json.loads(json.dumps(project)),"Physics")
+    assert not warnings, warnings
+    assert "CLUTTER|0|7|8.0|8.0|0.0|" in payload and "|28|0.45|0.16|0.03|" in payload
+    assert "BREAKABLE|0|9.97|6.0|10.03|10.0|0.0|3.0|10|35.0|0|opened|crash" in payload
+
+
 if __name__ == "__main__":
+    test_physics_exports()
     test_payload()
     test_open_stair_exports()
     test_industrial_fixture_exports()

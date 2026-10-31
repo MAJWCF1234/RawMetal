@@ -1,5 +1,6 @@
 #include "../core/FrameProfile.h"
 #include "World.h"
+#include "ModelIds.h"
 #include "CollisionQueryBatch.h"
 #include "TerrainSurfaceCache.h"
 #include "../core/Ray.h"
@@ -317,7 +318,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // updateScripts checks the region for every event, including state-gated events.
  for(size_t i=0;i<map->scriptEvents.size();++i){const auto& e=map->scriptEvents[i];if(!e.id||e.x2<=e.x1||e.y2<=e.y1)reject("scriptEvent",i,"id="+std::to_string(e.id)+" bounds="+std::to_string(e.x1)+","+std::to_string(e.y1)+","+std::to_string(e.x2)+","+std::to_string(e.y2));}
  for(size_t i=0;i<map->clutterSpawns.size();++i){const auto&v=map->clutterSpawns[i];if(v.kind<0||v.kind>7||(v.kind==7&&(v.model<0||v.model>=FacilityModelCount||!(v.width>0&&v.width<=1.6f&&v.depth>0&&v.depth<=1.6f&&v.height>0&&v.height<=1.6f)||!std::isfinite(v.position.x)||!std::isfinite(v.position.y)||!std::isfinite(v.z)||!std::isfinite(v.yaw)||!std::isfinite(v.pitch)||!std::isfinite(v.roll))))reject("prop",i,"invalid model, dimensions or pose");}
- for(size_t i=0;i<map->breakables.size();++i){const auto&v=map->breakables[i];if(!(v.x1>=.3f&&v.y1>=.3f&&v.x2<=23.7f&&v.y2<=23.7f&&v.x2>v.x1&&v.y2>v.y1&&v.bottom<v.top&&std::isfinite(v.bottom)&&std::isfinite(v.top)&&v.health>=0&&std::isfinite(v.health)&&v.material==17)||bool(map->terrain)||(map->definition.environment==Environment::Outdoor&&(map->skybox=="brutal_wasteland"||map->skybox=="zone_overcast")))reject("breakable",i,"invalid bounds, material or terrain");}
+ for(size_t i=0;i<map->breakables.size();++i){const auto&v=map->breakables[i];if(!(v.x1>=.3f&&v.y1>=.3f&&v.x2<=23.7f&&v.y2<=23.7f&&v.x2>v.x1&&v.y2>v.y1&&v.bottom<v.top&&std::isfinite(v.bottom)&&std::isfinite(v.top)&&v.health>=0&&std::isfinite(v.health)&&v.fixture>=-1&&v.fixture<int(map->fixtures.size())&&(v.fixture<0||v.part!=0)&&(v.material==17||v.material==10||v.material==22||v.material==23))||bool(map->terrain)||(map->definition.environment==Environment::Outdoor&&(map->skybox=="brutal_wasteland"||map->skybox=="zone_overcast")))reject("breakable",i,"invalid bounds, material or terrain");}
  if(!invalid.str().empty())throw std::runtime_error(invalid.str());
  const auto& lift=map->cargoLift;
  if(lift.x1!=lift.x2||lift.y1!=lift.y2||lift.lower!=lift.upper){
@@ -966,7 +967,7 @@ __declspec(noinline) bool World::testCollisionCandidates(){
 }
 float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const{
  for(auto index:collisionCandidates(0,x,y)){const auto&fixture=m_fixtures[index];if(fixture.solid&&fixture.base<.025f&&insideFixtureCandidate(index,x,y)){
-  if(shelfCavities&&fixture.model==7)continue;
+  if(shelfCavities)continue;
   return floorHeight(fixture.position.x,fixture.position.y)+fixture.base+fixture.height;
  }}
  for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(p.base<.025f&&std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y)return floorHeight(p.position.x,p.position.y)+p.base+p.height;}
@@ -1217,7 +1218,8 @@ void World::buildLayers(std::span<const Staircase> stairs){
  }
 }
 float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+(m_internalWallHeight>0?m_internalWallHeight:definition().ceiling):m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
-float World::supportBelow(float x,float y,float feet)const{
+float World::supportBelow(float x,float y,float feet,bool cavities)const{
+ if(cavities)return supportBelowUncached(x,y,feet,true);
  perf::LeafScope queryProfile(perf::Support);perf::count(perf::SupportCalls);
  auto*batch=CollisionQueryBatch::active(this);float value;
  if(batch&&batch->find(CollisionQueryBatch::SupportBelow,x,y,feet,0,0,value))return value;
@@ -1225,10 +1227,11 @@ float World::supportBelow(float x,float y,float feet)const{
  if(batch)batch->store(CollisionQueryBatch::SupportBelow,x,y,feet,0,0,value);
  return value;
 }
-float World::supportBelowUncached(float x,float y,float feet)const{
+float World::supportBelowUncached(float x,float y,float feet,bool cavities)const{
  float fixtureTop=-100;
  for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
+  if(cavities){fixtureTop=std::max(fixtureTop,fixtureSurface(f,x,y,feet,false));continue;}
   if(f.model==7)for(float tier:ShelfTiers){float top=base+f.height*tier;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
   else if(base+f.height<=feet+.025f)fixtureTop=std::max(fixtureTop,base+f.height);
  }}
@@ -1246,7 +1249,8 @@ float World::supportBelowUncached(float x,float y,float feet)const{
  for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
 }
-float World::clearanceAbove(float x,float y,float feet)const{
+float World::clearanceAbove(float x,float y,float feet,bool cavities)const{
+ if(cavities){float top=hasTerrain()?std::min(clearanceHeight(x,y,feet),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y,feet);for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y))top=std::min(top,fixtureSurface(f,x,y,feet,true));}for(auto index:structureIndices(x,y)){const auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>feet+.025f)top=std::min(top,s.bottom);}return top;}
  auto result=clearanceAboveIndexed(x,y,feet);if(collisionVerify())verifyCollision(2,sameFloat(result,clearanceAboveReference(x,y,feet)));return result;
 }
 float World::clearanceAboveIndexed(float x,float y,float feet)const{
@@ -1305,11 +1309,10 @@ bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bo
  }else if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y,feet)+.005f)return false;
  for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
-  if(shelfCavities&&f.model==7){
-   for(float tier:ShelfTiers){float top=base+f.height*tier;if(feet<top-.005f&&feet+height>top-.045f)return false;}
-   float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw);
-   float localX=std::fabs(dx*c-dy*s),localY=std::fabs(dx*s+dy*c);
-   if(localX>f.width*.5f-.04f&&localY>f.depth*.5f-.04f&&feet<base+f.height&&feet+height>base)return false;
+  if(shelfCavities){
+   float above=fixtureSurface(f,x,y,feet,true),below=fixtureSurface(f,x,y,feet,false);
+   // A surface intersects this vertical segment, or the point starts inside it.
+   if(above<feet+height-.005f||below>feet+.025f)return false;
   }else if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;
  }}
  for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}}
@@ -1404,4 +1407,20 @@ std::vector<Span> World::spansAtReference(int x,int y)const{
  if(bottom<roof)result.push_back({bottom,roof,0});return result;
 }
 bool World::destroyTile(int x,int y){if(x<0||y<0||x>=Width||y>=Height||m_layers.empty()||tile(x,y)=='.')return false;if(tile(x,y)!='C'&&tile(x,y)!='B')return false;m_destroyedTiles.push_back({x,y});m_lightSolids.clear();m_lightNodes.clear();return true;}
+}
+
+namespace retro {
+float World::fixtureSurface(const Fixture&f,float x,float y,float feet,bool ceiling)const{
+ float base=floorHeight(f.position.x,f.position.y)+f.base,result=ceiling?1000.f:-100.f;
+ float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw),u=std::fabs(dx*c-dy*s),v=std::fabs(dx*s+dy*c);
+ auto slab=[&](float lo,float hi){lo+=base;hi+=base;if(ceiling){if(hi>feet+.025f)result=std::min(result,std::max(feet,lo));}else if(lo<=feet+.025f)result=std::max(result,hi);};
+ bool table=f.model==model::desk||f.model==model::desk_corner||f.model==model::wooden_table;
+ bool chair=f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair;
+ if(f.model==model::metal_shelf){for(float t:ShelfTiers)slab(f.height*t-.045f,f.height*t);if(u>f.width*.5f-.04f&&v>f.depth*.5f-.04f)slab(0,f.height);}
+ else if(table){slab(f.height-.065f,f.height);if(u>f.width*.5f-.07f&&v>f.depth*.5f-.07f)slab(0,f.height);}
+ else if(chair){slab(f.height*.43f,f.height*.5f);if(u>f.width*.5f-.055f&&v>f.depth*.5f-.055f)slab(0,f.height*.5f);if(dy*c+dx*s>f.depth*.5f-.07f)slab(f.height*.5f,f.height);}
+ else if(f.model==model::office_file_cabinet_open){for(float t:{.04f,.5f,1.f})slab(f.height*t-.03f,f.height*t);if(u>f.width*.5f-.04f||dy*c+dx*s>f.depth*.5f-.04f)slab(0,f.height);}
+ else slab(0,f.height);
+ return result;
+}
 }

@@ -945,9 +945,24 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                     sill=max(0,float(opening.get("sill") or .95));height=max(.2,float(opening.get("h") or 1.15));header=min(ceiling,floor_z+sill+height)
                     if sill>.001:lines.append(f"STRUCT|{map_index}|{x}|{y}|{x+1}|{y+1}|{floor_z}|{floor_z+sill}|0|3")
                     if header<ceiling-.001:lines.append(f"STRUCT|{map_index}|{x}|{y}|{x+1}|{y+1}|{header}|{ceiling}|0|3")
+                    if axis=="horizontal":gx1,gx2,gy1,gy2=x+a,x+b,y+.47,y+.53
+                    else:gx1,gx2,gy1,gy2=x+.47,x+.53,y+a,y+b
+                    if min(gx1,gy1)>=.3 and max(gx2,gy2)<=23.7:
+                        lines.append(f"BREAKABLE|{map_index}|{gx1}|{gy1}|{gx2}|{gy2}|{floor_z+sill}|{header}|17|0|{int(bool(opening.get('holds',True)))}||")
+                    else:warnings.append("Window glazing crosses a chunk seam; inset the window at least 0.3 m.")
 
         for obj in objects:
             kind=obj.get("type");layer=by_layer.get(str(obj.get("layerId"))) or base;pt=_resolve_editor_object(chunk,obj,by_id)
+            if kind=="asset" and obj.get("physical"):
+                yaw=math.radians(float(pt["rotation"]));scale=max(.01,float(obj.get("scale") or 1));w=float(obj.get("w") or 1)*scale;d=float(obj.get("d") or 1)*scale;h=float(obj.get("h") or 1)*scale
+                mi=int(obj.get("physicsModel",-1))
+                if mi<0:raise ValueError("A loose model prop needs a valid model slot")
+                lines.append(f"CLUTTER|{map_index}|7|{pt['x']}|{pt['y']}|{pt['z']}|{-yaw}|{mi}|{w}|{d}|{h}|{math.radians(float(obj.get('pitch') or 0))}|{math.radians(float(obj.get('roll') or 0))}|{_runtime_string(obj.get('breakState') or '')}")
+                continue
+            if kind=="box" and obj.get("breakMaterial"):
+                w=float(obj.get("w") or 1);d=float(obj.get("d") or 1);h=float(obj.get("h") or 1);material=int(obj["breakMaterial"])
+                lines.append(f"BREAKABLE|{map_index}|{pt['x']-w/2}|{pt['y']-d/2}|{pt['x']+w/2}|{pt['y']+d/2}|{pt['z']}|{pt['z']+h}|{material}|{float(obj.get('breakHealth') or 0)}|{int(bool(obj.get('holds',False)))}|{_runtime_string(obj.get('breakState') or '')}|{_runtime_string(obj.get('breakTrigger') or '')}")
+                continue
             if kind=="door":
                 axis=str(obj.get("wallAxis") or "horizontal")
                 if axis!="horizontal":
@@ -1012,8 +1027,7 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
 
         if any((layer.get("materials") or {}) for layer in layers):
             warnings.append(f"{chunk.get('name','Map')}: painted per-tile finishes remain editor-only until the World runtime has a material override table.")
-        if any(o.get("type")=="window" for o in objects):
-            warnings.append(f"{chunk.get('name','Map')}: window openings are preserved, but the runtime has no dedicated glass entity.")
+
 
     lines.extend(authored_records)
     return "\n".join(lines),warnings

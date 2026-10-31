@@ -252,6 +252,7 @@ void Game::detonateBarrel(int level,int tx,int ty){
  const float floor=world.floorHeight(tx+.5f,ty+.5f);const Vec2 at{tx+.5f,ty+.5f};world.destroyTile(tx,ty);
  m_barrelExplosions.push_back({at,floor+.55f,m_elapsed,level});if(m_barrelExplosions.size()>16)m_barrelExplosions.erase(m_barrelExplosions.begin());
  auto shift=chunkOffset(m_level)-chunkOffset(level);Vec2 here=at-shift;
+ blastProps({here.x,here.y,floor+.55f},false);
  float near=std::clamp(1.f-length(here-m_player.pos)/9.f,0.f,1.f);
  m_verticalSpringVelocity-=.6f+1.2f*near;m_damageFlash=std::max(m_damageFlash,.25f+.55f*near);
  m_sounds.push_back({Sound::LiftCrash,here,1.f,.8f,true,17,floor+.6f});

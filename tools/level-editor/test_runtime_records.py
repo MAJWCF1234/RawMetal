@@ -25,6 +25,8 @@ RECORDS = [
     "ACTOR_PATROL|0|0|5|5|0|700",
     "ACTOR_PATROL|0|0|5|9|0|500",
     "SURFACE|0|5|8|5",
+    "CLUTTER|0|7|8|8|0|0|28|.45|.16|.03|0|0|prop_broken",
+    "BREAKABLE|0|9.97|6|10.03|10|0|3|10|35|0|board_broken|board_trigger",
 ]
 
 
