@@ -936,7 +936,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
        while(std::getline(each,state,',')){auto eq=state.find('=');scene.setState(retro::stateId(state.substr(0,eq)),eq==std::string::npos?1:std::stoi(state.substr(eq+1)));}action="wait";frames=2;} // set a,b=5000: states on, or to a value (a timer's clock)
       else fields>>frames;
       if(action=="caution"){for(size_t i=0;i<scene.npcActors().size();++i)if(scene.npcActors()[i].level==scene.level())scene.startGuardCaution(i);action="wait";}
-      if(action=="fire"){retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
+      if(action=="fire"){scene.update({},1.f/60.f);scene.equipWeapon(retro::WeaponId::Shotgun);int loaded=scene.player().loaded;retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);
+       const bool fired=scene.player().loaded<loaded;std::ofstream("map-shots.txt",std::ios::app)<<(fired?"SHOTGUN ":"FAILED SHOTGUN ")<<name<<" loaded "<<loaded<<" -> "<<scene.player().loaded<<'\n';if(!fired)return 21;
+       for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
       else{scene.stowWeapon();
        // "hide N": E at the locker in front, then N frames looking out of it.
        if(action=="hide"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);action="wait";}
