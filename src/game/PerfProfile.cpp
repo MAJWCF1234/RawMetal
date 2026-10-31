@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "../world/ModelIds.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -88,4 +89,9 @@ void Game::perfCensus(std::ostream& out){
   bool first=true;for(const auto&[name,n]:kinds){out<<(first?"":", ")<<name<<' '<<n;first=false;}out<<'\n';
  }
 }
+}
+
+namespace retro {
+int Game::perfSpawnProps(int count){m_clutter.clear();m_heldClutter=-1;count=std::clamp(count,0,500);for(int y=0;y<40&&int(m_clutter.size())<count;++y)for(int x=0;x<40&&int(m_clutter.size())<count;++x){Vec2 p{2+x*.5f,2+y*.5f};float z=m_world.supportBelow(p.x,p.y,m_player.z+.1f);if(length(p-m_player.pos)<1||std::fabs(z-m_player.z)>.2f||!m_world.fits(p.x,p.y,z+.01f,.4f,true,true))continue;Clutter c;c.kind=7;c.model=int(m_clutter.size())%3?model::keyboard:model::crt_monitor;c.dims=propTraits(c.model).size;c.pos=p;c.z=z;c.sleeping=true;m_clutter.push_back(c);}return int(m_clutter.size());}
+void Game::perfShoveProps(){for(size_t i=0;i<m_clutter.size();++i){auto&c=m_clutter[i];if(c.model<0||c.broken)continue;float a=i*2.399963f;knockClutter(m_level,i,{c.pos.x,c.pos.y,c.z+c.height()*.5f},{std::cos(a)*c.mass(),std::sin(a)*c.mass(),c.mass()*1.4f});}}
 }

@@ -126,7 +126,16 @@ bool Game::auditMap(int level){
  for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":"health")+" at "+at(s.position);
   check(reachable(s.position,z,.6f),name);
   if(!w.fits(s.position.x,s.position.y,(s.z>-900?s.z:w.supportBelow(s.position.x,s.position.y,w.floorHeight(s.position.x,s.position.y)+.5f))+.03f,.3f,false))fail("STUCK "+name);}
- for(const auto& c:w.clutterSpawns())if(!w.fits(c.position.x,c.position.y,(c.z>-900?c.z:w.supportBelow(c.position.x,c.position.y,w.floorHeight(c.position.x,c.position.y)+.5f))+.03f,.2f,false))fail("STUCK clutter at "+at(c.position));
+ for(const auto& c:w.clutterSpawns())if(c.kind!=ClutterModelKind&&!w.fits(c.position.x,c.position.y,(c.z>-900?c.z:w.supportBelow(c.position.x,c.position.y,w.floorHeight(c.position.x,c.position.y)+.5f))+.03f,.2f,false))fail("STUCK clutter at "+at(c.position));
+ int propCount=0;
+ for(const auto&c:game.m_clutter)if(c.model>=0){++propCount;auto e=c.extent();std::string name="prop model "+std::to_string(c.model)+" at "+at(c.pos);float low=1e9f,high=-1e9f;bool buried=false;
+  for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]}){auto p=c.pos+Vec2{x,y};float support=w.supportBelow(p.x,p.y,c.z+.05f);for(const auto&other:game.m_clutter)if(&c!=&other&&other.model>=0&&!other.broken){auto oe=other.extent();if(std::fabs(p.x-other.pos.x)<=oe[0]&&std::fabs(p.y-other.pos.y)<=oe[1]&&other.z+other.height()<=c.z+.025f)support=std::max(support,other.z+other.height());}low=std::min(low,support);high=std::max(high,support);buried|=!w.fits(p.x,p.y,c.z+.011f,std::max(.001f,c.height()-.02f),true,true);}
+  if(c.z-high>.02f)fail("FLOATING "+name);if(c.z-high<-.01f||buried)fail("BURIED "+name);if(high-low>.04f)fail("HANGING "+name);
+  if(c.mass()>60||std::max({c.dims[0],c.dims[1],c.dims[2]})>1.6f)fail("TOO HEAVY "+name);
+  const auto&own=model::propSize[c.model];float minRatio=1e9f,maxRatio=0;for(int a=0;a<3;++a)if(own[a]>0){minRatio=std::min(minRatio,c.dims[a]/own[a]);maxRatio=std::max(maxRatio,c.dims[a]/own[a]);}if(maxRatio>minRatio*1.2f)fail("DISTORTED "+name);
+  for(const auto&other:game.m_clutter)if(&other>&c&&other.model>=0){auto oe=other.extent();if(std::min(c.z+c.height(),other.z+other.height())-std::max(c.z,other.z)>.01f&&std::fabs(c.pos.x-other.pos.x)<e[0]+oe[0]-.01f&&std::fabs(c.pos.y-other.pos.y)<e[1]+oe[1]-.01f)fail("OVERLAP "+name);}
+ }
+ if(propCount>120)report<<"WARN "<<propCount<<" props exceeds 120 per chunk\n";
  // A terminal is usable only from a reachable spot within 1.5 m that sees it.
  auto usable=[&](const Terminal& t){
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;

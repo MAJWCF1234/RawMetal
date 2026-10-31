@@ -489,11 +489,20 @@ inline void officeDoorway(Map& m,float x1,float x2,float y1,float y2,float f,flo
 // A workstation facing `facing` (+1 south / -1 north) at desk centre (x,y):
 // desk, chair pulled in, monitor and keyboard turned to the seat, phone,
 // and on some desks a mug and binders.
-inline void workstation(Map& m,float x,float y,float f,int facing,int variant){
+inline void prop(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw,StateId breakState=0){m.clutterSpawns.push_back({ClutterModelKind,{x,y},z,-yaw,model,w,d,h,0,0,breakState});}
+inline void prop(Map& m,int model,float x,float y,float z,float yaw,float scale=1.f,StateId breakState=0){const auto&s=model::propSize[model];prop(m,model,x,y,z,s[0]*scale,s[1]*scale,s[2]*scale,yaw,breakState);}
+inline void propPose(Map& m,int model,float x,float y,float z,float yaw,float pitch,float roll,float scale=1.f){prop(m,model,x,y,z,yaw,scale);auto&p=m.clutterSpawns.back();p.pitch=pitch;p.roll=roll;}
+inline void deskSet(Map& m,Vec2 center,float top,float face,int variant){
+ auto place=[&](int model,float x,float y){float c=std::cos(face),s=std::sin(face);prop(m,model,center.x+x*c+y*s,center.y-x*s+y*c,top,face+kPi);};
+ place(model::crt_monitor,-.10f,.12f);place(model::keyboard,-.10f,-.20f);place(model::desk_phone,.48f,.05f);
+ if(variant%2)place(model::mug,.42f,-.20f);if(variant%3==0)place(model::binder,-.52f,.18f);
+}
+inline void workstation(Map& m,float x,float y,float f,int facing,int variant,bool loose=false){
  float base=f-m.layers.front().elevation,seat=facing>0?0.f:kPi,screen=facing>0?kPi:0.f,s=float(facing);
  m.fixtures.push_back({24,{x,y},base,1.4f,.7f,.75f,seat,true});
  // The office chair model faces -y at yaw 0, the opposite of the desk set.
  m.fixtures.push_back({26,{x+(variant%2?.15f:-.1f),y-s*.78f},base,.55f,.55f,.95f,seat+kPi+(variant%3-1)*.25f,true});
+ if(loose){deskSet(m,{x,y},f+.75f,seat,variant);if(variant%4==1)prop(m,model::pc_tower,x+.52f,y+s*.1f,f,screen);return;}
  m.fixtures.push_back({27,{x-.1f,y+s*.12f},base+.75f,.42f,.4f,.38f,screen,false});
  m.fixtures.push_back({28,{x-.1f,y-s*.2f},base+.75f,.45f,.16f,.03f,screen,false});
  m.fixtures.push_back({33,{x+.48f,y+s*.05f},base+.75f,.2f,.2f,.1f,screen,false});

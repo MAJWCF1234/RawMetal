@@ -43,6 +43,22 @@ def main():
         e = sizes.get(slot)
         out.append(' {%.3ff,%.3ff,%.3ff},' % ((e['width'], e['depth'], e['height']) if e else (0, 0, 0)))
     out.append('};')
+    physics = json.load(open(os.path.join(ROOT, 'tools', 'campaign', 'prop_physics.json')))
+    materials = 'Paper Cardboard Plastic Wood Metal Glass Ceramic Electronic Cloth Organic'.split()
+    names = {slot: name for slot, name, _ in rows}
+    for field, ctype, fallback in [('material', 'signed char', -1), ('mass', 'float', 0), ('health', 'float', 0)]:
+        values = []
+        for slot in range(max(sizes) + 1):
+            value = physics.get(names.get(slot), {}).get(field, fallback)
+            if field == 'material' and value != -1: value = materials.index(value)
+            values.append(str(value) if field == 'material' else ('%.3ff' % value))
+        out.append('inline constexpr %s %s[]={%s};' % (ctype, field, ','.join(values)))
+    out.append('inline constexpr float propSize[][3]={')
+    for slot in range(max(sizes) + 1):
+        e = sizes.get(slot)
+        dims = (e['width'], e['depth'], e['height']) if e else physics.get(names.get(slot), {}).get('size', (0,0,0))
+        out.append(' {%.3ff,%.3ff,%.3ff},' % tuple(dims))
+    out.append('};')
     out.append('}')
     open(os.path.join(ROOT, 'src', 'world', 'ModelIds.h'), 'w', newline='\n').write('\n'.join(out) + '\n')
     print('ModelIds.h: %d models' % len(rows))

@@ -41,7 +41,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -538,7 +538,11 @@ void Game::punchImpact(){
   float height=m_player.z+m_player.eye+range*std::tan(m_player.pitch/140.f);
   if(range<nearest&&dot(normalized(delta),forward)>melee.facingDot&&height>=npc.pose.z-.1f&&height<=npc.pose.z+body&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,npc.pose.position,height)){hitNpc=int(i);hitEnemy=nullptr;nearest=range;}
  }
- if(hitEnemy)applyPunchHit(*hitEnemy);else if(hitNpc>=0)applyNpcPunchHit(size_t(hitNpc));
+ if(hitEnemy)applyPunchHit(*hitEnemy);else if(hitNpc>=0)applyNpcPunchHit(size_t(hitNpc));else{
+  Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction{forward.x*std::cos(m_player.pitch/140.f),forward.y*std::cos(m_player.pitch/140.f),std::sin(m_player.pitch/140.f)};auto hit=traceShot(origin,direction,melee.range);
+  for(const auto&p:hit.passed)if(p.kind==2){auto shift=chunkOffset(m_level)-chunkOffset(p.level);auto at=p.point+Point3{shift.x,shift.y,0};knockClutter(p.level,p.index,at,direction*melee.propImpulse);damageClutter(p.level,p.index,melee.damage,at,direction);return;}
+  if(hit.kind==ShotKind::Prop){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto at=hit.point+Point3{shift.x,shift.y,0};knockClutter(hit.level,hit.index,at,direction*melee.propImpulse);damageClutter(hit.level,hit.index,melee.damage,at,direction);}
+ }
 }
 void Game::applyPunchHit(Enemy&enemy){
  sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;

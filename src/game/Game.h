@@ -126,8 +126,9 @@ struct Pickup {
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
 struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;unsigned categories=ai::SoundWorld;};
 struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false,crouched=false,supportAnimation=false,padVisible=false,pistolVisible=false;int supportClip=6;float supportPhase=0,treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0,haul=0;Point3 handle{};};
-enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone};
-struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};};
+enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone,Prop};
+struct ShotPassage {int kind=0,level=0,index=-1;float distance=0;Point3 point{},normal{};};
+struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};int breakable=-1;std::array<ShotPassage,2> passed{};};
 struct AiTargetRef {ShotKind kind=ShotKind::None;int level=0,index=-1;};
 struct TacticalGrenadePose {Point3 position{};float fuse=0;int level=0;};
 struct AiTarget : AiTargetRef {
@@ -147,10 +148,14 @@ struct FriendlyActor {
 struct RadarContact {Vec2 position{};float yaw=0,range=0,cone=0;GuardState state=GuardState::Patrol;size_t actor=0;};
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
+struct PropTraits {PropMaterial material;float mass,health;std::array<float,3> size;};
+struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int level=0;PropMaterial material=PropMaterial::Glass;float width=.1f,height=.1f;bool pane=false;Vec2 along{};};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
- std::array<float,3> size()const{constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
+ int model=-1;std::array<float,3> dims{};float damage=0;bool authored=false,broken=false;Vec2 home{};float homeZ=0;StateId breakState=0;
+ PropMaterial material()const;float mass()const;
+ std::array<float,3> size()const{if(model>=0)return dims;constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
  std::array<float,3> rotate(float x,float y,float localZ)const{
   float cp=std::cos(pitch),sp=std::sin(pitch),cr=std::cos(roll),sr=std::sin(roll),cy=std::cos(yaw),sy=std::sin(yaw);
   float a=cp*x+sp*localZ,b=-sp*x+cp*localZ,c=cr*y-sr*b,d=sr*y+cr*b;
@@ -159,7 +164,7 @@ struct Clutter {
  std::array<float,3> extent()const{auto s=size(),a=rotate(s[0]*.5f,0,0),b=rotate(0,s[1]*.5f,0),c=rotate(0,0,s[2]*.5f);return {std::fabs(a[0])+std::fabs(b[0])+std::fabs(c[0]),std::fabs(a[1])+std::fabs(b[1])+std::fabs(c[1]),std::fabs(a[2])+std::fabs(b[2])+std::fabs(c[2])};}
  float height()const{return extent()[2]*2;}
  float footprint()const{auto s=size();return std::max(s[0],s[1]);}
- Sound impactSound()const{return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
+ Sound impactSound()const{if(model>=0)return propMaterialTraits(material()).impact;return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
 };
 
 struct Player {
@@ -271,6 +276,9 @@ public:
     bool holdingClutter()const{return m_heldClutter>=0;}
     int vrCarryHand()const{return m_vrCarryHand;}
     static bool testClutter();
+    static PropTraits propTraits(int model);
+    static bool testProps();static bool testPropSaves();static bool testGlass();static Game physicsInspection(int view,float seconds);
+    const std::vector<BreakEvent>& breakEvents()const{return m_breakEvents;}
     static Game clutterInspection(int kind,float seconds);
     static bool testStreaming();
     static bool testCampaignMaps();
@@ -706,6 +714,7 @@ public:
     int perfSpawn(CreatureKind kind,int count,float minimumDistance);
     void perfWake(bool guards);
     void perfHold();
+    int perfSpawnProps(int count);void perfShoveProps();
     std::string perfPopulation()const;
     static void perfCensus(std::ostream& out);
 
@@ -812,6 +821,10 @@ private:
     int nearbyInteractionDoor()const;
     int nearbyClutter(int hand=-1)const;
     void seedClutter();
+    void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
+    void knockClutter(int level,size_t index,Point3 at,Point3 impulse);
+    bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);
+    void breakClutter(int level,size_t index,Point3 direction);
     bool tryMove(Vec2 delta);
     bool hullFits(Vec2 position,float feet,float height)const;
     bool unstickPlayer();
@@ -992,10 +1005,11 @@ private:
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<BarrelExplosion> m_barrelExplosions;
+    std::vector<BreakEvent> m_breakEvents;
     // Barrels caught in a blast go up after a short fuse.
     std::vector<BarrelExplosion> m_pendingBarrels;
     void detonateBarrel(int level,int tx,int ty);
-    int m_heldClutter=-1;
+    int m_heldClutter=-1;bool m_propHalfStep=false;
     int m_npcNavBudget=4;
     bool m_aiQueryCaching=true;
     bool m_aiDecisionScheduling=true;

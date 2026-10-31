@@ -16,6 +16,7 @@ struct HitscanDef {
  float actorDamage=34.f;
  float closeHitStop=2.5f;
  float ragdollImpulse=2.5f;
+ float propImpulse=6.f;
 };
 
 struct GunCycleDef {
@@ -45,6 +46,7 @@ struct MeleeDef {
  float vrCooldown=.38f;
  float vrMinSpeed=1.2f;
  float clutterDamage=5.f;
+ float paneDamage=15.f,propImpulse=3.f;
  float barrelDamage=150.f;
  float barrelRadius=3.5f;
 };
@@ -65,7 +67,7 @@ inline constexpr int weaponCount(){return int(sizeof(kWeapons)/sizeof(kWeapons[0
 // NPC sidearm uses the same first-hit ballistics, with a compact magazine and
 // lower impulse. The player's authored firearm inventory remains separate.
 inline constexpr WeaponDef kGuardHandgun{WeaponId::Handgun,"HANDGUN",
- {18.f,.05f,.004f,10.f,8.f,6.f,4.f,9.f,10.f,0.f,.7f},
+ {18.f,.05f,.004f,10.f,8.f,6.f,4.f,9.f,10.f,0.f,.7f,2.f},
  {.32f,1.8f,.08f,0.f,0.f,0.f,.42f,.05f,12,12,Sound::Shot,Sound::Pump,Sound::Empty}};
 
 inline const WeaponDef& weaponDef(WeaponId id){

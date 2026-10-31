@@ -78,7 +78,8 @@ struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
 // set: patients on their beds, a nest that wakes when the lights fail.
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
-struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;};
+inline constexpr int ClutterModelKind=7;
+struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;};
 // One authored liquid basin controls the bed, physics surface and drawn mesh.
 struct WaterVolume {float x1,y1,x2,y2,bed,surface;};
 // Content specifies emitters; rendering does not decide their positions from chunk IDs.

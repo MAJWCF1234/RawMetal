@@ -33,6 +33,13 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
   }
   for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())body(ShotKind::Drone,drone.level,drone.slot,{drone.position.x,drone.position.y},drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
   if(m_world.hasLift()&&m_hazmat.initialized){int joint=-1;float distance=m_hazmat.rayHit({origin.x,origin.y,origin.z},{ray.x,ray.y,ray.z},joint);if(joint>=0&&distance<hit.distance)hit={ShotKind::Ragdoll,m_level,joint,distance,distance,origin+ray*distance,{}};}
+  std::vector<ShotPassage> passages;
+  for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&list=chunkClutter(level);auto shift=chunkOffset(level)-activeOrigin;
+   for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0||(level==m_level&&int(i)==m_heldClutter))continue;auto e=c.extent();Point3 center{c.pos.x+shift.x,c.pos.y+shift.y,c.z+e[2]},n;float distance=rayBoxFraction(origin,ray*range,center-Point3{e[0],e[1],e[2]},center+Point3{e[0],e[1],e[2]},&n)*range;if(distance>=hit.distance)continue;
+    float block=propMaterialTraits(c.material()).blockMass;if(block>0&&c.mass()>=block)hit={ShotKind::Prop,level,int(i),distance,distance,origin+ray*distance,n};else passages.push_back({2,level,int(i),distance,origin+ray*distance,n});
+   }
+  }
+  std::sort(passages.begin(),passages.end(),[](const auto&a,const auto&b){return a.distance<b.distance;});int count=0;for(const auto&p:passages)if(p.distance<hit.distance&&count<2)hit.passed[count++]=p;
   return hit;
  };
  result=exact(direction);
@@ -43,7 +50,7 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
  auto candidate=[&](Vec2 p,float feet,float height,float cone){auto delta=p-Vec2{origin.x,origin.y};float along=dot(delta,forward),lateral=std::fabs(delta.x*forward.y-delta.y*forward.x),z=origin.z+along*direction.z/horizontal;
   if(along<=0||along>=nearest||lateral>cone+along*assist->conePerMeter||z<feet||z>feet+height)return;
   Point3 target{p.x,p.y,z};auto ray=target-origin;float distance=magnitude(ray);if(distance<.001f||distance>range)return;
-  auto selected=exact(ray*(1/distance));if(selected.kind==ShotKind::None||selected.kind==ShotKind::Solid)return;
+  auto selected=exact(ray*(1/distance));if(selected.kind==ShotKind::None||selected.kind==ShotKind::Solid||selected.kind==ShotKind::Prop)return;
   nearest=along;Vec2 victim{selected.point.x,selected.point.y};auto shift=chunkOffset(selected.level)-activeOrigin;
   if(selected.kind==ShotKind::Enemy)victim=(selected.level==m_level?m_enemies:m_chunks[selected.level].enemies)[size_t(selected.index)].pos+shift;
   if(selected.kind==ShotKind::Npc)victim=m_friendlyActors[size_t(selected.index)].pose.position+shift;
@@ -59,6 +66,10 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
  return result;
 }
 void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride,AiTargetRef attacker){
+ float damage=damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance);
+ auto prop=[&](int level,int index,Point3 point){auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};knockClutter(level,size_t(index),point,direction*(definition.propImpulse*damage/definition.dmgNear));damageClutter(level,size_t(index),damage,point,direction);};
+ for(const auto&p:hit.passed)if(p.kind==2)prop(p.level,p.index,p.point);
+ if(hit.kind==ShotKind::Prop){prop(hit.level,hit.index,hit.point);return;}
  auto source=Vec2{origin.x,origin.y};auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto&world=friendlyWorld(hit.level);
  if(hit.kind==ShotKind::Player){receiveDamage(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
  if(hit.kind==ShotKind::Drone){damageEngineerDrone(hit.index,damageOverride>0?damageOverride:definition.actorDamage,attacker);if(playerFired)m_hitFlash=1;return;}

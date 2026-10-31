@@ -1247,9 +1247,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  movingGeometry=false;m_emissionScale=1.f;
  if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible)facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
- for(auto&c:game.chunkClutter(level)){
-  bool woodShard=c.kind==6;auto size=c.size();
-  float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},.4f))continue;
+ auto drawClutter=[&](const Clutter&c){
+  if(c.broken)return;bool woodShard=c.kind==6;auto size=c.size();
+  float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},c.footprint()+c.height()))return;
+  if(c.model>=0&&c.footprint()<.15f&&length(c.pos-player.pos)>16)return;
   if(!w.outdoors()&&length(c.pos-player.pos)<15.f){const WorldLight* source=nullptr;float nearest=25.f;
    for(const auto&candidate:w.lights()){auto emitter=candidate.emitter();float dx=emitter.x-c.pos.x,dy=emitter.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.intensity>0&&lampPower(size_t(&candidate-w.lights().data()))>.05f&&emitter.z>mid+.2f&&d2<candidate.range*candidate.range&&d2<nearest){nearest=d2;source=&candidate;}}
    if(source){static const Texture softShadow=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
@@ -1261,7 +1262,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
   }
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
-  if(woodShard){
+  if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=v.p-center;auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),1.f);}
+  }else if(woodShard){
    // Thin splinter with a broken point and irregular edges; use a strip from
    // the crate's own vertical-grain atlas instead of mapping a whole crate face.
    constexpr int points=6;MeshVertex bottom[points],top[points];
@@ -1278,7 +1281,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}
   }
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
+ };
+ std::array<std::vector<const Clutter*>,36> resting;
+ for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
+ if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty())continue;
+  auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));}
+  if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
  }
+
  // Services belong to the map; custom worlds never inherit campaign pipework.
  // Pipes and their mounting brackets do not animate. Keep the complete
  // geometry in a separate world-space VBO instead of retessellating cylinders,

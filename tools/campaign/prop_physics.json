@@ -1,0 +1,167 @@
+{
+  "crt_monitor": {
+    "material": "Electronic",
+    "mass": 11,
+    "health": 0,
+    "size": [
+      0.42,
+      0.4,
+      0.38
+    ]
+  },
+  "keyboard": {
+    "material": "Plastic",
+    "mass": 0.9,
+    "health": 0,
+    "size": [
+      0.45,
+      0.16,
+      0.03
+    ]
+  },
+  "pc_tower": {
+    "material": "Metal",
+    "mass": 8,
+    "health": 0,
+    "size": [
+      0.2,
+      0.45,
+      0.42
+    ]
+  },
+  "desk_phone": {
+    "material": "Plastic",
+    "mass": 1.1,
+    "health": 0,
+    "size": [
+      0.2,
+      0.2,
+      0.1
+    ]
+  },
+  "mug": {
+    "material": "Ceramic",
+    "mass": 0.35,
+    "health": 4,
+    "size": [
+      0.09,
+      0.09,
+      0.1
+    ]
+  },
+  "binder": {
+    "material": "Cardboard",
+    "mass": 0.9,
+    "health": 0,
+    "size": [
+      0.3,
+      0.08,
+      0.32
+    ]
+  },
+  "office_file_binder": {
+    "material": "Cardboard",
+    "mass": 0.9,
+    "health": 0
+  },
+  "med_pill_bottle": {
+    "material": "Plastic",
+    "mass": 0.08,
+    "health": 0
+  },
+  "med_specimen_jar": {
+    "material": "Glass",
+    "mass": 1.4,
+    "health": 3
+  },
+  "med_blood_bag": {
+    "material": "Organic",
+    "mass": 0.55,
+    "health": 3
+  },
+  "item_dosimeter": {
+    "material": "Electronic",
+    "mass": 0.35,
+    "health": 0
+  },
+  "item_walkie": {
+    "material": "Electronic",
+    "mass": 0.4,
+    "health": 0
+  },
+  "item_bandage": {
+    "material": "Cloth",
+    "mass": 0.03,
+    "health": 0
+  },
+  "office_paper_stack": {
+    "material": "Paper",
+    "mass": 1.2,
+    "health": 0
+  },
+  "lab_microscope": {
+    "material": "Metal",
+    "mass": 3.5,
+    "health": 0
+  },
+  "med_microscope": {
+    "material": "Metal",
+    "mass": 3.5,
+    "health": 0
+  },
+  "lab_field_meter": {
+    "material": "Electronic",
+    "mass": 2.2,
+    "health": 0
+  },
+  "lab_desk_lamp": {
+    "material": "Metal",
+    "mass": 1.6,
+    "health": 0
+  },
+  "lab_scope_monitor": {
+    "material": "Electronic",
+    "mass": 9,
+    "health": 0
+  },
+  "med_vitals_monitor": {
+    "material": "Electronic",
+    "mass": 4.5,
+    "health": 0
+  },
+  "med_first_aid_box": {
+    "material": "Metal",
+    "mass": 1.6,
+    "health": 0
+  },
+  "mine_hard_hat": {
+    "material": "Plastic",
+    "mass": 0.45,
+    "health": 0
+  },
+  "prop_cardboard_box": {
+    "material": "Cardboard",
+    "mass": 4,
+    "health": 0
+  },
+  "prop_cardboard_box_open": {
+    "material": "Cardboard",
+    "mass": 2.5,
+    "health": 0
+  },
+  "lab_potted_plant": {
+    "material": "Ceramic",
+    "mass": 7,
+    "health": 18
+  },
+  "med_extinguisher": {
+    "material": "Metal",
+    "mass": 9,
+    "health": 0
+  },
+  "mine_cage_lamp": {
+    "material": "Metal",
+    "mass": 1.2,
+    "health": 0
+  }
+}
