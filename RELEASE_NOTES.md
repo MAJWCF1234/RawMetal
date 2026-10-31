@@ -4,6 +4,24 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.4 - Heavier (2026-10-31)
+
+Chapter 1 is as you left it.
+
+Behind the great door, every room past it has been torn out and built again to
+the size of the people who worked there: a desk where a clerk sat, a bay where
+a patient waited, a corridor two people could pass in. The door is still shut.
+
+Underneath, the plant has learned what things weigh. Something left on a desk
+can be knocked off it, thrown about as far as its weight allows, or shot apart,
+and whatever breaks makes a noise that carries. Glass can be broken a pane at a
+time, and the panes that were put there to stop a bullet only crack. None of it
+is set into the rooms yet. That comes next.
+
+Saves made in this version will not open in older ones.
+
+---
+
 ## v1.1.3 - Travelling light (2026-10-30)
 
 DepthWorks.exe has gone from 63 MB to 47 MB, and nothing in it looks or sounds
