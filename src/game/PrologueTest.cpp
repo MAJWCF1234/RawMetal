@@ -25,6 +25,19 @@ Game Game::prologueInspection(int stage){
  g.m_logTime=std::min(g.m_logTime,1.f);g.equipWeapon(WeaponId::Fists);g.update({},1.f/60);
  return g;
 }
+// Claire in play, for --body-inspection: the most open spot on the Foundry
+// floor (the one with the longest clear sight lines all round, 4 m at most),
+// shotgun drawn, so she can run a second each way and the camera circle her.
+Game Game::bodyInspection(){
+ auto g=mapInspection({3.5f,4.5f},0,0,0,true,0,true);g.m_inspectionCamera=false;
+ const auto&w=g.m_world;float best=-1;Vec2 spot{3.5f,4.5f};
+ for(int y=2;y<22;++y)for(int x=2;x<22;++x){Vec2 at{x+.5f,y+.5f};const float feet=w.floorHeight(at.x,at.y);float open=4;
+  for(int k=0;k<16;++k){const float a=k*kPi/8;for(float r=.5f;r<=4.f;r+=.5f){Vec2 q=at+Vec2{std::cos(a),std::sin(a)}*r;
+   if(std::fabs(w.floorHeight(q.x,q.y)-feet)>.05f||!w.rayClear(at,feet+1.f,q,feet+1.f)){open=std::min(open,r-.5f);break;}}}
+  if(open>best){best=open;spot=at;}}
+ g.m_player.pos=spot;g.m_player.z=w.floorHeight(spot.x,spot.y);g.m_player.angle=0;g.m_player.pitch=0;g.equipWeapon(WeaponId::Shotgun);g.m_holster=0;
+ for(int i=0;i<30;++i)g.update({},1.f/60);return g;
+}
 // UI captures: 0 title, 1 HUD armed, 2 pause menu, 3 death, 4 inventory, 5 prologue objective.
 Game Game::uiInspection(int view){
  if(view==5)return prologueInspection(0);

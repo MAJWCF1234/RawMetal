@@ -2396,6 +2396,101 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
  }
+ // The player's body: Claire, posed from how the player moves. In first person
+ // her head, hair and arms are left out (the viewmodel's arms stand in for
+ // hers) and she stands a hand's width behind the eye, so looking down shows
+ // her chest, belt, legs and boots in step with the footsteps. Her whole
+ // silhouette throws the floor shadow under the nearest lamp.
+ if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&!m_vrRendering&&!m_environmentInspection&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
+  auto&mesh=m_claireMesh;const auto&state=game.player();
+  if(m_claireFaceTexture.size()!=mesh.triangles.size()){
+   // Classify once, on the bind pose: material by name, and the head (above
+   // the neck) and arms (out past the shoulders above the belt) to leave out.
+   const auto&bind=mesh.bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
+   for(const auto&t:bind)for(const auto&v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
+   const float height=high.y-low.y,middle=(low.x+high.x)*.5f;
+   static constexpr const char* materials[]={"SOCKS","BELTS","PANTS","BOOTS","VEST","SKIRT","JACKET","MASK","EYES","HAIR"};
+   m_claireFaceTexture.assign(bind.size(),0);m_claireFaceHidden.assign(bind.size(),0);
+   for(size_t f=0;f<bind.size();++f){int part=bind[f].part;unsigned char texture=0;
+    if(part>=0&&size_t(part)<mesh.materialNames.size())for(unsigned char m=0;m<10;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos){texture=m;break;}
+    m_claireFaceTexture[f]=texture;bool hidden=texture>=7;
+    for(const auto&v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;hidden=hidden||y>.85f||x>.118f||(x>.08f&&y>.66f);}
+    m_claireFaceHidden[f]=hidden;}
+  }
+  // Which clip: 0 idle, 1-4 run forward/back/left/right, 5 sprint, 6 crouched
+  // idle, 7-10 crouched walk forward/back/left/right, 11 falling, 13 walk.
+  const Vec2 velocity=game.playerVelocity(),forward{std::cos(state.angle),std::sin(state.angle)},right{-forward.y,forward.x};
+  const float speed=length(velocity),ahead=dot(velocity,forward),across=dot(velocity,right),gait=std::fmod(game.bodyGait()/(2*kPi),1.f);
+  const int direction=std::fabs(ahead)>=std::fabs(across)?(ahead>=0?0:1):(across>=0?3:2);
+  int clip=0;float phase=std::fmod(game.elapsed()/2.13f,1.f);
+  // Crouched under a ceiling lower than her crouch, she goes prone.
+  const float headroom=w.clearanceAbove(state.pos.x,state.pos.y,state.z+.05f)-state.z;
+  if(game.dead()){if(m_bodyDeathStart<0)m_bodyDeathStart=game.elapsed();clip=12;phase=std::min(1.f,(game.elapsed()-m_bodyDeathStart)/3.4f);}
+  else if(!state.grounded){clip=11;phase=std::fmod(game.elapsed(),1.f);}
+  else if(state.crouched&&headroom<1.15f){if(speed<.2f)clip=14;else{clip=15;phase=gait;}}
+  else if(state.crouched){if(speed<.25f)clip=6;else{clip=7+direction;phase=gait;}}
+  else if(speed>=.25f){phase=gait;clip=direction==0&&game.bodySprinting()&&speed>4.2f?5:direction==0&&speed<2.f?13:1+direction;}
+  // A change of clip blends over .2 s from the pose it left.
+  const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
+  if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;}
+  m_bodyLastElapsed=now;
+  if(clip!=m_bodyClip){if(m_bodyClip>=0){m_bodyFrom=mesh.triangles;m_bodyBlendStart=now;}m_bodyClip=clip;}
+  mesh.poseCreature(clip,phase);
+  const float blend=m_bodyBlendStart<0?1.f:std::clamp((now-m_bodyBlendStart)/.2f,0.f,1.f);
+  if(blend<1&&m_bodyFrom.size()==mesh.triangles.size())for(size_t f=0;f<mesh.triangles.size();++f)for(int v=0;v<3;++v){auto&p=mesh.triangles[f].v[v].p;const auto&q=m_bodyFrom[f].v[v].p;p=q+(p-q)*blend;}
+  else m_bodyBlendStart=-1;
+  // Stand her on the player's feet at the eye's height (1.55 m tall), a hand's
+  // width behind the eye.
+  Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+  const float scale=1.55f/std::max(.01f,range.y),angle=state.angle;
+  const Vec2 at=state.pos-forward*.14f;const float feet=state.z;
+  Point3 receiver{at.x,at.y,feet+.85f};
+  const WorldLight* keyLight=nullptr;float keyDistance=36.f;
+  if(!w.outdoors())for(const auto&source:w.lights()){auto emitter=source.emitter();float dx=emitter.x-at.x,dy=emitter.y-at.y,d2=dx*dx+dy*dy;
+   if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>feet+1.8f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}}
+  movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
+  auto bodyLights=exteriorLight(receiver,std::max(.2f,range.x*scale),std::max(.2f,range.z*scale),std::max(.2f,range.y*scale),kPi*.5f-angle,true);
+  static const Texture shadowTexture=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
+  // Her FBX puts her left side on +X, so +X is her left (the creatures'
+  // convention mirrors that; she must not be: her armband is on her right).
+  // Mirroring back reverses the winding, so each face swaps two corners.
+  // First person also leaves out anything within reach of the eye (a crouch
+  // puts the eye inside her torso).
+  const Point3 eye{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
+  for(size_t f=0;f<mesh.triangles.size();++f){auto face=mesh.triangles[f];
+   for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
+    v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};}
+   std::swap(face.v[1],face.v[2]);
+   bool nearEye=false;if(!m_bodyOutside)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||(d.z>-.32f&&d.x*d.x+d.y*d.y<.32f*.32f);}
+   if(keyLight){MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
+    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
+     if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
+     if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-at.x,y-at.y)>4.f){valid=false;break;}
+     cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
+    if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadowTexture,1.f);}}
+   if((m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside)continue;
+   Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+   selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+   tri(face.v[0],face.v[1],face.v[2],m_claireTextures[m_claireFaceTexture[f]],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));
+  }
+  // From outside, the gun she carries sits in her right hand and points at
+  // her left (the rifle hold every clip shares).
+  if(m_bodyOutside&&!game.dead()&&game.equippedWeapon()!=WeaponId::Fists){
+   auto world=[&](Point3 p){p=(p-center)*scale;return Point3{at.x+p.z*std::cos(angle)+p.x*std::sin(angle),at.y+p.z*std::sin(angle)-p.x*std::cos(angle),feet+p.y+range.y*scale*.5f+.01f};};
+   const Point3 grip=world(mesh.poseAnchor(0)),support=world(mesh.poseAnchor(1));
+   auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-5f?v*(1/l):Point3{1,0,0};};
+   Point3 gunForward=unit(support-grip);if(std::sqrt((support-grip).x*(support-grip).x+(support-grip).y*(support-grip).y)<.08f)gunForward={std::cos(angle),std::sin(angle),0};
+   const Point3 gunRight=unit({gunForward.y,-gunForward.x,0}),gunUp=unit(cross3(gunRight,gunForward));
+   const bool handgun=game.equippedWeapon()==WeaponId::Handgun;const auto&gunMesh=handgun?m_handgunMesh:m_weaponMesh;const auto&gunTexture=handgun?m_handgunTexture:m_weaponTexture;
+   const float gunScale=handgun?1.f:.75f/(m_weaponMesh.maximum.z-m_weaponMesh.minimum.z);
+   for(auto face:gunMesh.bindTriangles()){if(!handgun&&face.part==3)continue;
+    for(auto&v:face.v){auto p=v.p;if(handgun)v.p=grip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale;else{p=(p-Point3{.02f,.70f,1.10f})*gunScale;v.p=grip+gunRight*p.x+gunUp*p.y-gunForward*p.z;}}
+    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+    selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+    tri(face.v[0],face.v[1],face.v[2],gunTexture,.75f+.3f*std::fabs(n.z)/std::max(.001f,len));}
+  }
+  objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
+ }
  // Recognizable authored supplies, with their original UVs and world depth.
  for(auto&p:game.chunkPickups(level))if(p.active){
   bool health=p.kind==Pickup::Kind::Health;
