@@ -65,7 +65,25 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
  for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())candidate(Vec2{drone.position.x,drone.position.y}+chunkOffset(drone.level)-activeOrigin,drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
  return result;
 }
+// A scripted person the player shoots at flinches (clip 3) even when the story
+// keeps them out of reach: the shot lines up on them and lands no more than
+// 6 m short (on protective glass, bars, a wall in front of them), or strikes
+// within 1.8 m of them. Mechanisms plays the flinch over their keyed pose.
+void Game::startleScriptedActors(const ShotHit& hit,Point3 origin,Point3 direction){
+ if(hit.level<0||hit.level>=chunkCount()||!chunkResident(hit.level))return;
+ const auto&world=friendlyWorld(hit.level);auto shift=chunkOffset(hit.level)-chunkOffset(m_level);
+ float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length<.0001f)return;direction=direction*(1/length);
+ for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];const auto&pose=world.actorPose(i);
+  if(track.platform||autonomousActor(track)||!humanActorVisual(track.visual)||pose.clip==4||(track.deadState&&state(track.deadState)))continue;
+  Point3 chest{pose.position.x+shift.x,pose.position.y+shift.y,pose.z+track.scale*.6f};auto toChest=chest-origin,toImpact=chest-hit.point;
+  float along=toChest.x*direction.x+toChest.y*direction.y+toChest.z*direction.z;auto miss=toChest-direction*along;
+  bool aimed=along>0&&along<30&&miss.x*miss.x+miss.y*miss.y+miss.z*miss.z<1.f&&hit.distance>along-6.f;
+  bool close=toImpact.x*toImpact.x+toImpact.y*toImpact.y+toImpact.z*toImpact.z<1.8f*1.8f;
+  if(aimed||close)setState(actorTrackState(track.timerState,i,"flinch_ms"),ScriptedFlinchMs);
+ }
+}
 void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& inputDefinition,bool playerFired,float damageOverride,AiTargetRef attacker){
+ if(playerFired)startleScriptedActors(hit,origin,direction);
  HitscanDef definition=inputDefinition;float attenuation=1;
  auto prop=[&](int level,int index,Point3 point,float distance){float propDamage=hitscanDamageAt(definition,distance)*attenuation;auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};knockClutter(level,size_t(index),point,direction*(definition.propImpulse*propDamage/definition.dmgNear));damageClutter(level,size_t(index),propDamage,point,direction);};
  for(const auto&p:hit.passed)if(p.kind){if(p.kind==2)prop(p.level,p.index,p.point,p.distance);else{auto shift=chunkOffset(m_level)-chunkOffset(p.level);damagePane(p.level,p.index,hitscanDamageAt(definition,p.distance)*attenuation,p.point+Point3{shift.x,shift.y,0},direction);attenuation*=.8f;}}

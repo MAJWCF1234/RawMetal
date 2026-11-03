@@ -853,13 +853,14 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  wall(m,11.8f,1.f,12.f,8.f,f,dz,panel);
  wall(m,11.8f,8.f,12.f,10.f,f+2.7f,roof,panel);wall(m,11.78f,8.f,12.02f,10.f,f+2.66f,f+2.7f,steel);
  wall(m,11.8f,10.f,12.f,10.6f,f,roof,panel);
- // The records glass, and the enquiry hatch in it: two bays open behind steel bars, over a counter.
+ // The records glass, and the enquiry hatch in it: two bays of steel bars over a counter,
+ // glazed on the atrium side with the same protective glass, so a shot cracks it and stops.
  rfGlass(m,11.8f,10.6f,12.f,11.4f,f,roof,panel,.95f,2.4f,true);rfGlass(m,11.8f,13.8f,12.f,15.8f,f,roof,panel,.95f,2.4f,true);
  wall(m,11.8f,11.4f,12.f,13.8f,f,f+1.f,panel);wall(m,11.5f,11.4f,12.3f,13.8f,f+1.f,f+1.05f,12);
  wall(m,11.8f,11.4f,12.f,13.8f,f+2.05f,roof,panel);wall(m,11.78f,11.4f,12.02f,13.8f,f+2.01f,f+2.05f,steel);
  wall(m,11.8f,12.575f,12.f,12.625f,f+1.05f,f+2.01f,steel);
  for(float y=11.5f;y<13.75f;y+=.1f)if(std::fabs(y-12.6f)>.06f)wall(m,11.89f,y-.01f,11.91f,y+.01f,f+1.05f,f+2.01f,steel);
- wall(m,11.8f,11.4f,12.f,13.8f,f+1.05f,f+2.01f,CollisionProxyMaterial);
+ kit::glazingPanes(m,11.95f,11.4f,11.97f,13.8f,f+1.05f,f+2.01f,17,true);
  wall(m,11.8f,15.8f,12.f,19.f,f,roof,panel);
  // Upstairs: the suite's door off the gallery and its window over the atrium; the director's door.
  wall(m,11.8f,1.f,12.f,1.6f,dz,roof,panel);rfiDoorY(m,1.6f,2.8f,11.8f,12.f,dz,roof,panel);wall(m,11.8f,2.8f,12.f,5.f,dz,roof,panel);
@@ -1049,6 +1050,9 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  paperDrift(m,5.2f,11.2f,9.2f,18.6f,f,10,702);
  // Lit for the glass: what happens in here must read from the atrium.
  for(Vec2 l:{Vec2{7.6f,12.f},Vec2{10.f,13.2f},Vec2{7.6f,16.8f},Vec2{4.f,14.4f}})m.lights.push_back(lamp(l,f+2.7f,1.6f,7.f,4300,.06f));
+ // His black coat goes dark against the cabinets under plain overheads: two cool
+ // lights inside the glass catch the side of him the atrium sees, at the drawers and the table.
+ for(Vec2 l:{Vec2{9.3f,12.1f},Vec2{10.7f,14.6f}})m.lights.push_back(lamp(l,f+2.7f,1.1f,4.f,5200,.04f));
  m.lights.push_back(lamp({10.32f,17.9f},f+1.15f,.6f,3.f,2800,.15f,WorldLightMount::Bare));   // under the desk lamp's shade
  // The lift lobby behind the far door: service lift 2, the way he came in at 03:40.
  for(float x:{5.8f,6.8f})wall(m,x+.01f,22.88f,x+.99f,23.f,f,f+2.2f,steel);
@@ -1126,7 +1130,8 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  // 7 reading a card, 8 pointing). On the scene's clock: he reads at the open
  // drawers, points his door man to them, takes his card to the table under
  // the glass, keeps one, walks to the far door and is gone.
- {const Vec2 drawers{7.6f,11.9f},table{9.15f,13.2f},mid{7.5f,17.f},door{6.8f,18.6f},closet{6.8f,21.7f};
+ // The table stop faces the clear south bay of the glass, not the hatch bars.
+ {const Vec2 drawers{7.6f,11.9f},table{9.15f,14.6f},mid{7.5f,17.f},door{6.8f,18.6f},closet{6.8f,21.7f};
   const float aim=std::atan2(12.95f-drawers.x,9.3f-drawers.y),toTable=std::atan2(table.x-drawers.x,table.y-drawers.y);
   const float toMid=std::atan2(mid.x-table.x,mid.y-table.y),toDoor=std::atan2(door.x-mid.x,door.y-mid.y);
   ActorTrack inv;inv.timerState=stateId("rf_admin_scene");inv.visual=ActorVisual::Investigator;inv.scale=1.8f;
@@ -1147,7 +1152,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  cue(m,"rf_admin_scene",2500,Sound::Empty,{7.6f,11.9f},"INVESTIGATOR: Every card from Energy Diagnostics. Bag them.",.7f,f+1.6f,"inv_admin_1");
  cue(m,"rf_admin_scene",6000,Sound::Empty,{12.95f,9.3f},"CLEANUP: Sir.",.6f,f+1.6f,"rf_admin_door_1");
  cue(m,"rf_admin_scene",9500,Sound::Empty,{7.6f,11.9f},"INVESTIGATOR: The rest of this floor can burn with the building.",.7f,f+1.6f,"inv_admin_2");
- cue(m,"rf_admin_scene",15400,Sound::Empty,{9.15f,13.2f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
+ cue(m,"rf_admin_scene",15400,Sound::Empty,{9.15f,14.6f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
  cue(m,"rf_admin_scene",21100,Sound::Door,{6.8f,19.1f},"",.8f,f+1.2f);
  cue(m,"rf_admin_exit",4100,Sound::Door,{6.8f,19.1f},"",.7f,f+1.2f);
 
