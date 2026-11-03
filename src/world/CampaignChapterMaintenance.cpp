@@ -185,7 +185,7 @@ void mntDesk(Map& m,float x,float y,float f,float face,int variant){
  const Vec2 p{x,y},d{std::sin(face),std::cos(face)},s{std::cos(face),-std::sin(face)};
  auto at=[&](float u,float v){return p+s*u+d*v;};
  const float b=f-m.layers.front().elevation;
- m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face,true});
+ m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face+kPi,true});
  m.fixtures.push_back({model::office_chair,at(variant%2?.15f:-.1f,-.78f),b,.55f,.55f,.95f,face+kPi+(variant%3-1)*.25f,true});
  kit::prop(m,model::crt_monitor,(at(-.1f,.12f)).x,(at(-.1f,.12f)).y,m.layers.front().elevation+(b+.75f),.42f,.4f,.38f,face+kPi);
  kit::prop(m,model::keyboard,(at(-.1f,-.2f)).x,(at(-.1f,-.2f)).y,m.layers.front().elevation+(b+.75f),.45f,.16f,.03f,face+kPi);

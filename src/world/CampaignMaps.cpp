@@ -2002,7 +2002,7 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  m.fixtures.push_back({30,{18.6f,1.35f},.75f,.5f,.4f,.42f,0,false});
  for(float y:{3.2f,4.f})m.fixtures.push_back({32,{22.35f,y},0,.5f,.6f,1.3f,-kPi*.5f,true});
  m.fixtures.push_back({37,{22.5f,5.6f},0,.9f,.3f,1.8f,-kPi*.5f,true});
- m.fixtures.push_back({35,{18.15f,7.25f},0,.35f,.35f,1.1f,0,true});
+ m.fixtures.push_back({35,{18.15f,7.25f},0,.35f,.35f,1.1f,kPi,true});
  terminal(m,{18.6f,3.6f},"WAREHOUSE / OPERATIONS","DO NOT SEND ANYTHING TO RECEIVING.","THEY ARE NOT ANSWERING.");m.terminals.back().readable=Readable::Note;
  m.lights.push_back(lamp({20.2f,4.4f},base+2.45f,1.f,5.f,3200));
  // --- Dispatch and packing, south of the office -------------------------------------------
@@ -2260,7 +2260,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  }
  kit::prop(m,38,6.5f,1.3f,m.layers.front().elevation+(.75f),.3f,.08f,.32f,0);
  // --- Reception ---------------------------------------------------------------------------
- m.fixtures.push_back({24,{15.2f,2.8f},0,1.4f,.7f,.75f,0,true});
+ m.fixtures.push_back({24,{15.2f,2.8f},0,1.4f,.7f,.75f,kPi,true});
  m.fixtures.push_back({25,{16.7f,2.6f},0,1.2f,1.2f,.75f,kPi*.5f,true});
  m.fixtures.push_back({26,{15.4f,1.9f},0,.55f,.55f,.95f,kPi,true});
  kit::prop(m,27,15.f,2.85f,m.layers.front().elevation+(.75f),.42f,.4f,.38f,kPi);

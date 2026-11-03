@@ -567,7 +567,7 @@ const MhHall& mhHall(){
   // The operator's desk under the windows faces the hall; the shift log is on it.
   mhTerminal(m,{38.4f,6.15f},G,kPi,"UNIT CONTROL / SHIFT LOG","02:40 CLEANUP FORCE ORDERS THE HALL CLEARED.","OPERATORS TO MUSTER C. K. VOSS STAYS AT DESK.");
   mhFix(m,model::office_chair,38.6f,5.25f,G,.55f,.55f,.95f,kPi+.3f);
-  mhFix(m,model::lab_exec_desk,38.3f,6.2f,G,2.21f,1.1f,.89f,0);
+  mhFix(m,model::lab_exec_desk,38.3f,6.2f,G,2.21f,1.1f,.89f,kPi);
   kit::prop(m,model::desk_phone,39.25f,6.2f,G+.89f,.2f,.2f,.1f,kPi);
   kit::prop(m,model::mug,37.7f,6.05f,G+.89f,.09f,.09f,.1f,0);
   kit::prop(m,model::binder,37.4f,6.35f,G+.89f,.3f,.08f,.32f,kPi);

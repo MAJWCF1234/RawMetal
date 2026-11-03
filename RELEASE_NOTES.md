@@ -13,6 +13,10 @@ pulled up to them. Chairs sit at their tables instead of turning their backs on
 them, and the ones along a wall look out into the room. The coffee machine in
 the security office finally shows its buttons to the night shift.
 
+The washroom stalls have their paint back, a wall clock that hid behind a
+door frame has come out from under it, and a rack of gas cylinders that stood
+in the dark now has a work light hung over it.
+
 Before anything ships now, every room in the plant is checked for furniture
 facing the wrong way.
 

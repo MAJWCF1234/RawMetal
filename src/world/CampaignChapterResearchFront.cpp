@@ -51,7 +51,7 @@ void rfDesk(Map& m,float x,float y,float f,float face,int variant){
  Vec2 p{x,y},d{std::sin(face),std::cos(face)},s{std::cos(face),-std::sin(face)};
  auto at=[&](float u,float v){return p+s*u+d*v;};
  const float b=f-m.layers.front().elevation;
- m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face,true});
+ m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face+kPi,true});
  {auto p=at(variant%2?.15f:-.1f,-.78f);kit::prop(m,model::office_chair,p.x,p.y,f,.55f,.55f,.95f,face+kPi+(variant%3-1)*.25f);}
  kit::prop(m,model::crt_monitor,(at(-.1f,.12f)).x,(at(-.1f,.12f)).y,m.layers.front().elevation+(b+.75f),.42f,.4f,.38f,face+kPi);
  kit::prop(m,model::keyboard,(at(-.1f,-.2f)).x,(at(-.1f,-.2f)).y,m.layers.front().elevation+(b+.75f),.45f,.16f,.03f,face+kPi);
@@ -180,7 +180,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  wall(m,10.5f,3.15f,13.5f,4.45f,f+2.65f,roof,panel);
  m.doors.push_back({10.5f,13.5f,3.8f,0});                                 // 1: the inner interlock leaf
  floorLine(m,9.f,1.2f,15.f,1.32f,f,13);floorLine(m,9.f,2.95f,15.f,3.07f,f,13);
- rfFix(m,model::lab_id_scanner,10.22f,3.12f,f+1.f,.3f,.06f,.41f,rfS,false);   // lab models face -y: yaw = facing + kPi
+ rfFix(m,model::lab_id_scanner,9.65f,3.12f,f+1.f,.3f,.06f,.41f,rfS,false);   // lab models face -y: yaw = facing + kPi
  rfFix(m,model::lab_status_display,12.f,3.121f,f+2.72f,.693f,.058f,.2f,rfS,false);
  rfFix(m,model::lab_pa_horn,14.918f,2.1f,f+2.45f,.495f,.564f,.433f,rfW,false);
  extinguisher(m,15.2f,2.88f,f,rfW);
@@ -202,7 +202,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  rfFix(m,model::lab_id_scanner,13.43f,6.05f,f+1.f,.3f,.06f,.41f,rfW,false);
  for(float x:{9.8f,14.2f})rfFix(m,model::lab_status_display,x,5.771f,f+2.62f,.693f,.058f,.2f,rfS,false);
  rfSign(m,12.f,5.8f,f+2.6f,"SCREENING SUSPENDED","BY ORDER OF INTERNAL INVESTIGATIONS",3.2f,kPi,rfRed);
- rfFix(m,model::lab_wall_clock,9.9f,7.416f,f+2.75f,.402f,.032f,.4f,rfN,false);
+ rfFix(m,model::lab_wall_clock,9.9f,7.416f,f+2.75f,.402f,.032f,.4f,rfS,false);
  // Lane 1 keeps the staff gate; lane 3 the Investigator closed; lane 2 is the way, painted and lit.
  rfFix(m,model::ticket_gate,9.3f,6.6f,f,.4f,1.42f,1.09f,0,true);
  crewBarrier(m,14.2f,5.72f,f,1.4f);
@@ -588,7 +588,7 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  // Walk in from Intake and the axis runs straight through the gates to the red door.
  m.lights.push_back(lamp({12.f,2.4f},roof-.16f,.75f,5.f,6000,.04f));
  rfFix(m,model::pwr_fire_cabinet,10.f+.1f,2.6f,f+1.3f,.25f,.2f,.56f,rfE,false);
- rfFix(m,model::lab_wall_clock,12.f,4.036f,f+2.78f,.402f,.032f,.4f,rfN,false);
+ rfFix(m,model::lab_wall_clock,12.f,4.036f,f+2.78f,.402f,.032f,.4f,rfS,false);
  for(float y:{4.4f,13.6f})floorLine(m,10.6f,y,13.4f,y+.1f,f,13);
  rfFix(m,model::lab_pa_horn,8.882f,4.7f,f+2.55f,.495f,.564f,.433f,rfE,false);
  kit::prop(m,model::trash_can,9.f,4.4f,f,.5f,.5f,.62f,.3f);
@@ -1080,7 +1080,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  kit::prop(m,model::lab_potted_plant,9.25f,7.35f,cu,.37f,.43f,.69f,0);
  m.lights.push_back(lamp({10.3f,4.4f},roof-.2f,1.05f,5.5f,4600,.06f));
  // The director's office: swept by the detail before he was.
- rfFix(m,model::lab_exec_desk,3.6f,3.2f,cu,2.21f,1.1f,.89f,rfE,true);
+ rfFix(m,model::lab_exec_desk,3.6f,3.2f,cu,2.21f,1.1f,.89f,rfW,true);
  rfaChair(m,2.5f,3.2f,cu,rfE);
  rfFix(m,model::office_bookcase,1.27f,3.2f,cu,2.025f,.5f,2.5f,rfE,true);
  // Swept: the detail took the files and left the shelves bare in bites, and the rest on the floor.

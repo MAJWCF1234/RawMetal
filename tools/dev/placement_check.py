@@ -10,7 +10,8 @@ of every directional model in tools/dev/model_fronts.json, and reports:
   FRONT TO WALL  a cabinet, locker, sink, screen or machine facing a wall
   SIDE TO WALL   a wall-backed piece turned sideways against its wall
   BED REVERSED   a bed with its foot to the wall and its head in the room
-  SCREEN AWAY    a monitor or keyboard turned away from the seat it serves
+  SCREEN AWAY    a monitor turned away from, or side-on to, the seat it serves
+  DESK AWAY      a desk showing its plain back to the chair pulled up to it
   DUPLICATE      the same model twice in the same place
   IN DOORWAY     a non-solid fixture standing in a door opening
   UNKNOWN FRONT  a directional-looking model with no verified front yet
@@ -83,8 +84,8 @@ class Map:
         storey = max((l for l in self.layers if l['z'] <= z + .05), key=lambda l: l['z'], default=self.layers[0] if self.layers else None)
         if storey and len(storey['rows']) > ty and len(storey['rows'][ty]) > tx and storey['rows'][ty][tx] == '#': return True
         for s in self.structs:
-            if not s['rail'] and s['x1'] <= x <= s['x2'] and s['y1'] <= y <= s['y2'] and s['bottom'] <= z <= s['top'] \
-                    and s['top'] - s['bottom'] > 1.2:
+            # Any solid at this height: a full wall, a lintel over a door, a canopy face.
+            if not s['rail'] and s['x1'] <= x <= s['x2'] and s['y1'] <= y <= s['y2'] and s['bottom'] <= z <= s['top']:
                 return True
         return False
 
@@ -177,18 +178,25 @@ def check(level, mp, names, fronts):
                 fault('FRONT TO WALL', it, 'front %.2f m from a wall, back %.2f m clear' % (ahead, behind))
             elif kind == 'wall' and behind > .6 and min(left, right) < .08 and ahead > .3 and not entry.get('sideways_ok'):
                 fault('SIDE TO WALL', it, 'side against a wall (%.2f m) with its back %.2f m from any wall' % (min(left, right), behind))
-            # A screen knocked to the floor serves nobody.
-            if (kind == 'screen' or entry.get('serves_seat')) and z_of(it) > mp.floor + .3:
-                # A screen or keyboard on a desk with a seat at it faces that seat.
+            # A screen on a desk faces the seat at it, and a desk shows its drawer side to
+            # that seat (the nearest one: a visitor's chair stands further off). A screen
+            # knocked to the floor serves nobody.
+            if (kind in ('screen', 'desk') or entry.get('serves_seat')) and (kind == 'desk' or z_of(it) > mp.floor + .3):
                 best = None
                 for s in seats:
-                    dist = math.hypot(s['x'] - it['x'], s['y'] - it['y'])
-                    if dist < 1.3 and (best is None or dist < best[0]): best = (dist, s)
-                if best and best[0] > .05:
-                    v = ((best[1]['x'] - it['x']) / best[0], (best[1]['y'] - it['y']) / best[0])
+                    if fronts[names[s['model']]].get('lounge'): continue  # an armchair is nobody's desk seat
+                    if abs(z_of(s) - z_of(it)) > 1.2: continue  # another storey
+                    q = edge_point(it, s['x'], s['y']) if kind == 'desk' else (it['x'], it['y'])
+                    dist = math.hypot(s['x'] - q[0], s['y'] - q[1])
+                    if dist < (.9 if kind == 'desk' else 1.3) and (best is None or dist < best[0]): best = (dist, s)
+                if best:
+                    d = math.hypot(best[1]['x'] - it['x'], best[1]['y'] - it['y'])
+                    v = ((best[1]['x'] - it['x']) / max(d, 1e-3), (best[1]['y'] - it['y']) / max(d, 1e-3))
                     dot = front[0] * v[0] + front[1] * v[1]
-                    if dot < -.2:
-                        fault('SCREEN AWAY', it, 'turned away from the seat %.2f m away (dot %.2f)' % (best[0], dot))
+                    # A chair at a desk's end is normal; at its back is not.
+                    if d > .05 and dot < (-.3 if kind == 'desk' else .3):
+                        fault('DESK AWAY' if kind == 'desk' else 'SCREEN AWAY', it, '%s the seat %.2f m away (dot %.2f)' % (
+                            'turned away from' if dot < -.3 else 'side-on to', d, dot))
         elif kind == 'bed':
             # front = the foot end; the head belongs against the wall.
             if ahead < .3 and behind > .6:
