@@ -197,7 +197,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  wall(m,9.3f,5.2f,10.7f,5.25f,base+.22f,base+.34f,8);
  m.pipes.push_back({{10.f,5.32f},{10.f,5.32f},base+.02f,.04f,base+.28f,0});
  wall(m,9.75f,5.3f,10.25f,5.8f,base,base+.012f,8);
- for(float x:{4.6f,6.6f,9.2f})m.fixtures.push_back({model::lab_pressure_gauge,{x,5.33f},1.95f,.29f,.11f,.41f,kPi,false});
+ for(float x:{4.6f,6.6f,9.2f})m.fixtures.push_back({model::lab_pressure_gauge,{x,5.33f},1.95f,.29f,.11f,.41f,0,false});
  // Discharge plenum into the riser, and the supply main to the labs along the roof.
  wall(m,14.6f,1.6f,15.f,3.8f,base+.3f,base+2.4f,20);
  wall(m,15.f,1.3f,16.6f,4.f,base,roof,20);
@@ -230,7 +230,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  wall(m,17.4f,1.f,22.7f,1.14f,fd+.8f,fd+2.45f,2);
  for(auto [z,mat]:{std::pair{.95f,19},{1.12f,18},{1.29f,20},{1.46f,14}})wall(m,17.7f,1.14f,22.4f,1.152f,fd+z,fd+z+.05f,mat);
  for(float x=18.2f;x<22.4f;x+=1.05f)wall(m,x,1.14f,x+.04f,1.152f,fd+.9f,fd+1.55f,20);
- for(float x:{18.4f,21.7f})m.fixtures.push_back({model::lab_control_board,{x,1.24f},fd-base+.05f,1.32f,.19f,.6f,kPi,false});
+ for(float x:{18.4f,21.7f})m.fixtures.push_back({model::lab_control_board,{x,1.24f},fd-base+.05f,1.32f,.19f,.6f,0,false});
  terminal(m,{18.8f,3.3f},"CASCADE CONTROL / STATUS","SUPPLY SF-1, SF-2 STOPPED: SECURITY ORDER 7, 02:20.","EXHAUST RUNNING. LABS -310 PA. LOCKS INTERLOCKED.",fd-base);
  terminal(m,{20.7f,3.3f},"SUPPLY FAN SF-2 / RESTART","INTERLOCK: OUTSIDE AIR DAMPER OA-2 MUST BE OPEN.","OA-2 LOCKED OUT: OPEN IT BY HAND, FAN DECK WEST END.",fd-base,supply,damper);
  terminal(m,{22.3f,6.1f},"CASCADE / DUTY LOG","02:20 ORDER 7: STOP LAB SUPPLY. 38 BADGES STILL INSIDE.","02:23 ASKED WHO SIGNED IT. THEY SAID OPEN THE DOOR.",fd-base);m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=-kPi*.5f;
@@ -478,8 +478,8 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  pbBlood(m,8.6f,11.3f,9.4f,11.8f,base);pbBlood(m,9.f,11.7f,9.5f,12.5f,base);pbBlood(m,9.3f,12.4f,10.3f,13.3f,base);
  // --- Under the gallery: the cold hold and the container lift ----------------------------
  wall(m,10.f,22.8f,14.f,24.f,base,under,15);
- for(float x:{3.4f,4.2f,5.f})pbFix(m,model::lab_sample_fridge,x,22.36f,base,.7f,.85f,1.f,0,true);
- pbFix(m,model::lab_specimen_cabinet,7.6f,22.42f,base,1.34f,.74f,2.19f,0,true);
+ for(float x:{3.4f,4.2f,5.f})pbFix(m,model::lab_sample_fridge,x,22.36f,base,.7f,.85f,1.f,kPi,true);
+ pbFix(m,model::lab_specimen_cabinet,7.6f,22.42f,base,1.34f,.74f,2.19f,kPi,true);
  pbFix(m,model::med_wheelchair,2.6f,20.2f,base,.55f,1.04f,.91f,.7f,true);
  pbBlood(m,3.6f,19.4f,6.1f,20.f,base);
  // The container lift CL-2 rises through the gallery to the clean side.
@@ -608,12 +608,12 @@ std::shared_ptr<const Map> makeDecontamination(){
  // The operator's booth: glazed onto stage 1, entered from the clean side.
  pbLabGlass(m,15.f,1.f,15.2f,7.4f,f,ceil);
  m.doors.push_back({18.5f,20.f,7.5f,0});         // 3: booth to the suit store
- for(float x:{17.5f,20.5f})pbFix(m,model::lab_control_board,x,1.12f,f+1.f,1.32f,.19f,.6f,kPi,false);
+ for(float x:{17.5f,20.5f})pbFix(m,model::lab_control_board,x,1.12f,f+1.f,1.32f,.19f,.6f,0,false);
  pbDesk(m,16.1f,4.f,f,pbW,1);
  for(float y:{2.4f,3.5f}){pbFix(m,model::file_cabinet_wide,22.5f,y,f,.9f,.5f,.75f,pbW,true);pbFix(m,model::cctv_tv,22.5f,y,f+.75f,.5f,.4f,.42f,pbW,false);}
  pbFix(m,model::file_cabinet_tall,22.6f,6.6f,f,.5f,.6f,1.3f,pbW,true);
  pbFix(m,model::water_cooler,19.f,1.35f,f,.35f,.35f,1.1f,pbS,true);
- pbFix(m,model::lab_wall_clock,18.f,1.03f,f+2.3f,.4f,.03f,.4f,kPi,false);
+ pbFix(m,model::lab_wall_clock,18.f,1.03f,f+2.3f,.4f,.03f,.4f,0,false);
  terminal(m,{14.45f,4.f},"DECON 1 / OPERATOR LOG","02:20 SUPPLY LOST. CHAMBER SEALED. RELEASE ASKED 02:21, 02:24, 02:31.","03:12 CLEAN DOOR OPENED BY CLEANUP OVERRIDE. 03:13 CLOSED.");m.terminals.back().readable=Readable::Note;m.terminals.back().yaw=pbW;
  m.lights.push_back(lamp({19.f,4.2f},ceil-.16f,.9f,6.f,5200,.03f));
  // --- Stage 2: the shower ------------------------------------------------------------

@@ -1919,7 +1919,7 @@ std::shared_ptr<const Map> makeWarehouseIntake(){
  kit::prop(m,34,2.36f,8.35f,m.layers.front().elevation+(.75f),.09f,.09f,.1f,0);
  for(float y:{10.2f,11.f})m.fixtures.push_back({32,{1.4f,y},0,.5f,.6f,1.3f,kPi*.5f,true});
  m.fixtures.push_back({31,{3.4f,12.95f},0,.9f,.5f,.75f,kPi,true});
- m.fixtures.push_back({35,{5.4f,12.9f},0,.35f,.35f,1.1f,0,true});
+ m.fixtures.push_back({35,{5.4f,12.9f},0,.35f,.35f,1.1f,kPi,true});
  m.lights.push_back(lamp({3.5f,10.5f},base+2.5f,1.f,5.f,3400));
  terminal(m,{5.f,19.f},"WAREHOUSE / TRACK DAMAGE","INTAKE SHUTTER CANNOT FULLY RETRACT.","CROUCH THROUGH THE CLEARANCE OPENING.");m.terminals.back().readable=Readable::Note;
  // --- Scale plate inside the pressure door, and its readout --------------------------------
@@ -2015,7 +2015,7 @@ std::shared_ptr<const Map> makeWarehouseAB(){
  // --- Break corner, south-west ----------------------------------------------------------------
  bench(m,3.2f,23.3f,base);
  m.fixtures.push_back({19,{5.9f,22.5f},0,1.367f,.724f,.78f,0,true});
- for(float x:{5.4f,6.4f})m.fixtures.push_back({18,{x,23.25f},0,.417f,.525f,.95f,kPi,true});
+ for(float x:{5.4f,6.4f})m.fixtures.push_back({18,{x,23.25f},0,.417f,.525f,.95f,0,true});
  m.fixtures.push_back({36,{6.3f,22.45f},.78f,.3f,.3f,.4f,0,false});
  kit::prop(m,34,5.6f,22.5f,m.layers.front().elevation+(.78f),.09f,.09f,.1f,0);
  terminal(m,{1.8f,22.2f},"WAREHOUSE / BREAK CORNER","RADIO CHECK 02:14 / NO REPLY FROM RECEIVING.","DO NOT USE THE FREIGHT AISLES FOR EVACUATION.");m.terminals.back().readable=Readable::Note;
@@ -2267,7 +2267,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  kit::prop(m,28,15.3f,2.55f,m.layers.front().elevation+(.75f),.45f,.16f,.03f,kPi);
  kit::prop(m,33,16.4f,2.9f,m.layers.front().elevation+(.75f),.2f,.2f,.1f,kPi);
  wall(m,14.4f,3.2f,17.4f,3.4f,f,f+1.08f,21);wall(m,14.35f,3.15f,17.45f,3.55f,f+1.08f,f+1.12f,20);
- for(float x:{19.4f,20.4f,21.4f})m.fixtures.push_back({18,{x,1.5f},0,.417f,.525f,.95f,0,true});
+ for(float x:{19.4f,20.4f,21.4f})m.fixtures.push_back({18,{x,1.5f},0,.417f,.525f,.95f,kPi,true});
  m.fixtures.push_back({35,{22.5f,1.5f},0,.35f,.35f,1.1f,0,true});
  // --- Records room, north-west ---------------------------------------------------------------
  officeWall(m,1.f,5.8f,2.2f,6.f,f,ceil);officeDoorway(m,2.2f,3.4f,5.8f,6.f,f,ceil);officeWall(m,3.4f,5.8f,7.f,6.f,f,ceil);
@@ -2309,7 +2309,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  kit::prop(m,34,1.35f,18.4f,m.layers.front().elevation+(.94f),.09f,.09f,.1f,0);
  m.fixtures.push_back({35,{1.4f,23.2f},0,.35f,.35f,1.1f,0,true});
  m.fixtures.push_back({19,{4.2f,20.f},0,1.367f,.724f,.78f,0,true});
- for(float x:{3.7f,4.7f}){m.fixtures.push_back({18,{x,19.25f},0,.417f,.525f,.95f,0,true});m.fixtures.push_back({18,{x,20.75f},0,.417f,.525f,.95f,kPi,true});}
+ for(float x:{3.7f,4.7f}){m.fixtures.push_back({18,{x,19.25f},0,.417f,.525f,.95f,kPi,true});m.fixtures.push_back({18,{x,20.75f},0,.417f,.525f,.95f,0,true});}
  wallSign(m,1.055f,20.f,f+1.6f,"STAFF NOTICES","SHIFT 02 / RADIO CHECK EVERY 30 MIN",1.4f,kPi*.5f);
  // --- Copier corner, south-east ---------------------------------------------------------------
  for(float y:{19.6f,20.6f,21.6f})m.fixtures.push_back({31,{22.5f,y},0,.9f,.5f,.75f,-kPi*.5f,true});

@@ -1,0 +1,30 @@
+[
+ {
+  "map": 71,
+  "model": "lab_boardroom_chair",
+  "x": 14.15,
+  "y": 7.4,
+  "reason": "kicked into the corner of the consult room on purpose"
+ },
+ {
+  "map": 179,
+  "model": "office_chair",
+  "x": 3.4,
+  "y": 5.6,
+  "reason": "swung back from the desk: the guard has just stood up"
+ },
+ {
+  "map": 70,
+  "model": "lab_boardroom_chair",
+  "x": 10.85,
+  "y": 6.95,
+  "reason": "waiting chair against the wall, facing the room; the slab behind is the hatch ledge"
+ },
+ {
+  "map": 35,
+  "model": "pwr_tall_switch_cabinet",
+  "x": 1.55,
+  "y": 21.6,
+  "reason": "in the south-west corner with its door to the room; its side meets the west wall"
+ }
+]

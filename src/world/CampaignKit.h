@@ -533,7 +533,8 @@ inline void deskSet(Map& m,Vec2 center,float top,float face,int variant){
 }
 inline void workstation(Map& m,float x,float y,float f,int facing,int variant,bool loose=true){
  float base=f-m.layers.front().elevation,seat=facing>0?0.f:kPi,screen=facing>0?kPi:0.f,s=float(facing);
- m.fixtures.push_back({24,{x,y},base,1.4f,.7f,.75f,seat,true});
+ // The desk's drawer side (model +y) is the side the chair is on.
+ m.fixtures.push_back({24,{x,y},base,1.4f,.7f,.75f,screen,true});
  // The office chair model faces -y at yaw 0, the opposite of the desk set.
  m.fixtures.push_back({26,{x+(variant%2?.15f:-.1f),y-s*.78f},base,.55f,.55f,.95f,seat+kPi+(variant%3-1)*.25f,true});
  if(loose){

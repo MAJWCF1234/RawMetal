@@ -58,8 +58,8 @@ void mntTable(Map& m,float x,float y,float f,int seed){
  mntFix(m,model::wooden_table,{x,y},f,1.367f,.724f,.78f,0,true);
  const float dx[]={-.36f,.36f};
  for(int i=0;i<2;++i){float jitter=((seed+i)%3-1)*.12f;
-  mntFix(m,model::wooden_chair,{x+dx[i]+jitter*.5f,y-.74f},f,.417f,.525f,.95f,jitter,true);
-  if((seed+i)%4!=3)mntFix(m,model::wooden_chair,{x+dx[i]-jitter*.4f,y+.74f},f,.417f,.525f,.95f,kPi-jitter,true);}
+  mntFix(m,model::wooden_chair,{x+dx[i]+jitter*.5f,y-.74f},f,.417f,.525f,.95f,kPi+jitter,true);
+  if((seed+i)%4!=3)mntFix(m,model::wooden_chair,{x+dx[i]-jitter*.4f,y+.74f},f,.417f,.525f,.95f,-jitter,true);}
 }
 // A run of steel lockers against a wall; `face` is the direction the doors open to.
 // The double-door locker is 0.23 m shallower than the bank it replaced, so its

@@ -1,0 +1,311 @@
+{
+ "_about": "Verified front of each directional model as an OBJ axis (+z draws toward world +y at yaw 0). kind: seat (faces its table), desk (user side), screen, wall (back to the wall), bed (front = foot end), free (no rule). Decided from four-side renders by tools/dev/model_views.py; see tools/dev/placement_check.py.",
+ "art_painting_5": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "art_painting_6": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "bookcase": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "cctv_tv": {
+  "kind": "screen",
+  "front": "+z"
+ },
+ "coffee_machine": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "control_console": {
+  "kind": "screen",
+  "front": "+z"
+ },
+ "crt_monitor": {
+  "kind": "screen",
+  "front": "+z"
+ },
+ "desk": {
+  "kind": "desk",
+  "front": "+z"
+ },
+ "desk_corner": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "desk_phone": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "electrical_cabinet": {
+  "kind": "free",
+  "front": "+z",
+  "note": "panels and warning signs on both faces"
+ },
+ "file_cabinet_tall": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "file_cabinet_wide": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "keyboard": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "lab_anomaly_relic": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "lab_boardroom_chair": {
+  "kind": "seat",
+  "front": "+z"
+ },
+ "lab_control_board": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "lab_desk_lamp": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "lab_door_reader": {
+  "kind": "free",
+  "front": "+z",
+  "note": "textured on both faces"
+ },
+ "lab_exec_desk": {
+  "kind": "desk",
+  "front": "+z"
+ },
+ "lab_id_scanner": {
+  "kind": "free",
+  "front": "+z",
+  "note": "textured on both faces"
+ },
+ "lab_instrument_terminal": {
+  "kind": "screen",
+  "front": "+z"
+ },
+ "lab_mainframe": {
+  "kind": "wall",
+  "front": "-x"
+ },
+ "lab_notice_board": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "lab_pa_horn": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "lab_photocopier": {
+  "kind": "wall",
+  "front": "-x",
+  "sideways_ok": true
+ },
+ "lab_pressure_gauge": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "lab_sample_fridge": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "lab_scope_monitor": {
+  "kind": "screen",
+  "front": "+z"
+ },
+ "lab_specimen_cabinet": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "lab_status_display": {
+  "kind": "free",
+  "front": "+z",
+  "note": "textured on both faces"
+ },
+ "lab_wall_clock": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_bed_frame_wrecked": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "med_extinguisher": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "med_first_aid_box": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "med_notice_board": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_nurse_desk": {
+  "kind": "desk",
+  "front": "-z"
+ },
+ "med_records_cabinet": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_scrub_sink": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_supply_cabinet": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_vitals_monitor": {
+  "kind": "screen",
+  "front": "+z"
+ },
+ "med_wall_clock": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_ward_bed": {
+  "kind": "free",
+  "front": "-x",
+  "note": "head and foot frames read the same in play"
+ },
+ "med_ward_bed_tossed": {
+  "kind": "free",
+  "front": "-x",
+  "note": "head and foot frames read the same in play"
+ },
+ "med_ward_toilet": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_washroom_mirror": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_washroom_stall": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "med_wheelchair": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "med_xray_viewer_chest": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "med_xray_viewer_skull": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "metal_shelf": {
+  "kind": "free",
+  "front": "+z",
+  "note": "open shelving, no back"
+ },
+ "metro_vending": {
+  "kind": "wall",
+  "front": "-z"
+ },
+ "mine_mesh_doorway": {
+  "kind": "free",
+  "front": "+z",
+  "note": "a doorway frame; stands in its opening by design"
+ },
+ "office_armchair_green": {
+  "kind": "seat",
+  "front": "+z",
+  "lounge": true
+ },
+ "office_bookcase": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "office_chair": {
+  "kind": "seat",
+  "front": "-z"
+ },
+ "office_couch_green": {
+  "kind": "seat",
+  "front": "+z",
+  "lounge": true
+ },
+ "office_display_cabinet": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "office_file_cabinet_open": {
+  "kind": "free",
+  "front": "+z",
+  "note": "textured on both faces"
+ },
+ "platform_chair": {
+  "kind": "seat",
+  "front": "-z"
+ },
+ "psx_locker": {
+  "kind": "wall",
+  "front": "+x"
+ },
+ "pwr_breaker_panel": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "pwr_breaker_panel_open": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "pwr_control_cabinet": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "pwr_disconnect_switch": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "pwr_fire_cabinet": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "pwr_switchgear_cabinet": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "pwr_tall_switch_cabinet": {
+  "kind": "wall",
+  "front": "+x"
+ },
+ "pwr_vent_grille": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "test_machine": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "ticket_gate": {
+  "kind": "free",
+  "front": "+z"
+ },
+ "ticket_machine": {
+  "kind": "wall",
+  "front": "-z"
+ },
+ "water_cooler": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "wooden_chair": {
+  "kind": "seat",
+  "front": "-z"
+ }
+}

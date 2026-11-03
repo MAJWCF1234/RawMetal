@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.6 - Facing the room (2026-11-03)
+
+Clocks that had been hung with their faces to the wall have been turned round,
+and so have the control boards, gauges, loudspeakers, fridges, sinks, cabinets
+and screens that kept them company. Desks show their drawers to the chair
+pulled up to them. Chairs sit at their tables instead of turning their backs on
+them, and the ones along a wall look out into the room. The coffee machine in
+the security office finally shows its buttons to the night shift.
+
+Before anything ships now, every room in the plant is checked for furniture
+facing the wrong way.
+
+---
+
 ## v1.1.5 - Things left behind (2026-10-31)
 
 The things left on desks and shelves across the plant can be picked up, knocked

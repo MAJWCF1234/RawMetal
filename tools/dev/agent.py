@@ -20,6 +20,11 @@ never collide.
   python tools/dev/agent.py sweep  NAME LEVEL [--scale 0.5]
       Audit then render the four-direction sweep of every reachable 3 m block
       into .build/agents/NAME/sweep/ as PNGs (contact sheet: sweep-LEVEL.png).
+  python tools/dev/agent.py check  NAME LEVEL [LEVEL ...] [--shots]
+      Dump each level and run tools/dev/placement_check.py: seats turned from
+      their tables, cabinets, screens, clocks and sinks facing the wall, and
+      the like. --shots also renders every fault from the room side into
+      .build/agents/NAME/check/sheet-NN.png for confirming by eye.
   python tools/dev/agent.py test   NAME FLAG [FLAG ...]
       Run test flags (e.g. --campaign-map-test) with the private exe.
 """
@@ -186,6 +191,15 @@ def cmd_sweep(name, level, scale):
     out = os.path.join(d, 'sweep-%s.png' % level); sheet.save(out)
     print('%d frames (rows = points, columns = +x, +y, -x, -y): %s' % (len(frames), out))
 
+def cmd_check(name, levels, shots):
+    d = agent_dir(name)
+    for lv in levels: run_exe(name, ['--map-dump=%s' % lv], timeout=300)
+    out = os.path.join(d, 'check.json')
+    code = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'dev', 'placement_check.py'), d] + list(levels) + ['--json', out]).returncode
+    if shots and code:
+        subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'dev', 'placement_shots.py'), out, d, exe(name), os.path.join(d, 'check')])
+    return code
+
 def cmd_test(name, flags):
     rc = 0
     for fl in flags:
@@ -205,6 +219,9 @@ if __name__ == '__main__':
     if cmd == 'shots': sys.exit(cmd_shots(name, rest[0], scale) or 0)
     if cmd == 'audit': sys.exit(cmd_audit(name, rest))
     if cmd == 'sweep': sys.exit(cmd_sweep(name, rest[0], scale or .5) or 0)
+    if cmd == 'check':
+        shots = '--shots' in rest; rest = [r for r in rest if r != '--shots']
+        sys.exit(cmd_check(name, rest, shots))
     if cmd == 'test': sys.exit(cmd_test(name, rest))
     if cmd == 'locked':  # run a shell command while holding the build lock (lead only)
         with BuildLock(): sys.exit(subprocess.run(' '.join(rest), shell=True, cwd=ROOT).returncode)

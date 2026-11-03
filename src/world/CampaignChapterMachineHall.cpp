@@ -356,7 +356,7 @@ void mhHallFloor(MhHall& hall){
  // --- South of Unit 3: the blade inspection bench --------------------------------------------
  for(float x:{5.2f,6.7f})mhFix(m,model::wooden_table,x,44.f,F,1.402f,.742f,.8f,0);
  for(int i=0;i<6;++i){float x=4.7f+i*.48f;wall(m,x,43.75f,x+.09f,44.3f,F+.8f,F+.83f,20);wall(m,x-.04f,43.7f,x+.13f,43.82f,F+.8f,F+.86f,20);}
- mhFix(m,model::wooden_chair,6.2f,44.9f,F,.417f,.525f,.95f,kPi+.4f);
+ mhFix(m,model::wooden_chair,6.2f,44.9f,F,.417f,.525f,.95f,.4f);
  m.pipes.push_back({{7.3f,44.1f},{7.3f,44.1f},F,.025f,F+1.9f,12});m.pipes.push_back({{7.3f,44.1f},{7.f,44.f},F+1.9f,.02f,F+1.8f,12});
  mhFix(m,model::pendant_lamp,7.f,44.f,F+1.45f,.3f,.3f,.35f,0,false);
  m.lights.push_back(lamp({7.f,44.f},F+1.5f,.8f,4.f,3000,0,WorldLightMount::Bare));
@@ -566,7 +566,7 @@ const MhHall& mhHall(){
   mhFix(m,model::pwr_tall_switch_cabinet,43.3f,2.2f,G,.72f,1.17f,2.3f,kPi);
   // The operator's desk under the windows faces the hall; the shift log is on it.
   mhTerminal(m,{38.4f,6.15f},G,kPi,"UNIT CONTROL / SHIFT LOG","02:40 CLEANUP FORCE ORDERS THE HALL CLEARED.","OPERATORS TO MUSTER C. K. VOSS STAYS AT DESK.");
-  mhFix(m,model::office_chair,38.6f,5.25f,G,.55f,.55f,.95f,.3f);
+  mhFix(m,model::office_chair,38.6f,5.25f,G,.55f,.55f,.95f,kPi+.3f);
   mhFix(m,model::lab_exec_desk,38.3f,6.2f,G,2.21f,1.1f,.89f,0);
   kit::prop(m,model::desk_phone,39.25f,6.2f,G+.89f,.2f,.2f,.1f,kPi);
   kit::prop(m,model::mug,37.7f,6.05f,G+.89f,.09f,.09f,.1f,0);

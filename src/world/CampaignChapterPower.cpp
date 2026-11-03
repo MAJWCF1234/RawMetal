@@ -301,7 +301,7 @@ std::shared_ptr<const Map> makeDistributionHub(){
  // --- The mimic board and its desk, west of the entry -------------------------------------------
  wall(m,1.f,1.f,8.6f,1.4f,base,base+3.f,2);
  wallSign(m,4.8f,1.455f,base+1.25f,"11 KV DISTRIBUTION","SUB A: DEAD    SWITCH HALL: DEAD    FEEDER 9: NO SUPPLY",7.f,0);
- for(float x:{2.6f,4.8f,7.f})m.fixtures.push_back({model::control_console,{x,2.4f},0,1.6f,.8f,1.1f,kPi,true});
+ for(float x:{2.6f,4.8f,7.f})m.fixtures.push_back({model::control_console,{x,2.4f},0,1.6f,.8f,1.1f,0,true});
  m.fixtures.push_back({model::office_chair,{4.8f,3.5f},0,.55f,.55f,.95f,kPi+.4f,true});
  terminal(m,{6.9f,3.6f},"DISTRIBUTION / SHIFT HANDOVER","00:58 T3 EARTH FAULT. SUB A ON T1/T2. 02:13 GRID LOST. ALL FEEDERS TRIPPED.","BLACK START: GENERATION FIRST, THEN SUB A BREAKERS, THEN LOAD CONTROL.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
