@@ -1824,14 +1824,16 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // fists and the pistol, each as played and then the rig from eight sides
      // at arm's length. .build/arms/NAME.ppm
      constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
-     std::filesystem::create_directories(".build/arms");
+     std::filesystem::create_directories(".build/arms");std::ofstream report("arms-inspection.txt");bool bad=false;
      auto save=[&](const std::string& name){std::ofstream out(".build/arms/"+name+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int k=0;k<width*height;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
      struct Pose{const char* name;int mode;float age;};
      const float yaw[]={0,.785398f,1.570796f,2.356194f,3.14159f,-2.356194f,-1.570796f,-.785398f};
      for(const auto&pose:{Pose{"shotgun",2,10},Pose{"shotgun-fired",2,.03f},Pose{"fists",1,10},Pose{"pistol",4,10}}){
       auto scene=retro::Game::weaponInspection(pose.mode,pose.age);renderer->render(scene);save(std::string(pose.name)+"-view");
+      for(int side=0;side<2;++side){auto r=renderer->armsGripReport(side);report<<pose.name<<(side?" left":" right")<<" reach "<<r.reach<<" wrist-twist "<<r.wristTwist<<" deg palm-curl "<<r.palmCurl<<" elbow "<<r.elbow.x<<' '<<r.elbow.y<<' '<<r.elbow.z<<"\n";
+       if(pose.mode!=1&&(r.palmCurl<=0||r.wristTwist>30||r.reach>.97f))bad=true;}
       for(int angle=0;angle<8;++angle){renderer->inspectRig(scene,yaw[angle],angle%2?.45f:.1f,{.12f,-.24f,.70f},.80f);save(std::string(pose.name)+"-"+std::to_string(angle));}}
-     return 0;}
+     report<<(bad?"FAIL":"PASS")<<": palms curl to their palm side, wrists twist under 30 degrees, no arm past 97% of its reach\n";return bad?11:0;}
     if(commandArguments().find(L"--pistol-inspection")){
      // The player's pistol held (Game::weaponInspection modes 4-9) on the GPU:
      // idle, a shot through its rise, both reloads through every phase, low

@@ -138,10 +138,16 @@ blender -b --python tools/player/build_claire_arms.py -- src/assets/models/arms_
   the forearm's last rings and restores some wrist girth, and the renderer skins
   the arms with dual quaternions (`Mesh(111)`), so the grip's large hand-to-forearm
   twist turns the wrist instead of pinching it to a twisted neck.
-- Shotgun wrists sit `kTriggerWrist` and `kSupportWrist` (Scene3D.cpp) off the gun's
-  sockets: the right hand round the stock's wrist behind the trigger guard, the left
-  where it always was: her arm is at full reach there, and any further forward
-  the smoke test's sway and recoil pull the wrist off its socket.
+- The shotgun has its own hold (`kShotgunHold`, `ShotgunView` in Scene3D.cpp),
+  chosen from a sweep of layouts: the gun turned 0.08 rad in toward the
+  crosshair and low on the right so the stock clears the frame, the arm rig
+  placed so the trigger arm bends at about 57% of its reach with its elbow
+  out to the side (`ArmHold::elbow`) and the support arm at 89%, with room for
+  the smoke test's sway and recoil. `RAWMETAL_SHOTGUN_VIEW` ("gx gy gz ax ay az
+  toe tx ty tz sx sy sz") overrides the layout for tuning without a rebuild.
+- Each forearm rolls about its own axis with 90% of its hand's turn
+  (`Mesh::grip`), as the radius turns, so no wrist is wrung: the support
+  hand's palm-up grip is a half turn from the forearm's natural roll.
 - Faces keep her ten materials; her arm skin and gloves are the `BOOTS`
   texture. The viewmodel and VR hands pick her textures by material name, and
   frame the arms about the original rig's centre (`kArmsRigCenter`), not the
@@ -162,3 +168,10 @@ looking down, crawling). Frames go to
 `RawMetal.exe --arms-inspection` renders the arms close up: the shotgun idle and
 just fired, fists and the pistol, each as played and then the rig from eight
 sides at arm's length, into `.build/arms/`.
+
+It also writes `arms-inspection.txt`: for each hand, the arm's reach as a
+share of its length, the wrist's twist from the bind pose, the elbow's
+direction, and the middle finger's curl toward the computed palm normal
+(positive when that hand's palm cross product is the right way round). It
+fails if a palm curls away, a wrist twists past 30 degrees or an arm is
+past 97% of its reach.

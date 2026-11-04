@@ -463,10 +463,22 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool 
    ufbx_vec3 S=position(upper),E=position(elbow),H=position(hand),T{target.x,target.y,target.z};
    if(step==0){auto axis=unit(sub(T,S));double l1=std::sqrt(dot(sub(E,S),sub(E,S))),l2=std::sqrt(dot(sub(H,E),sub(H,E))),d=std::sqrt(dot(sub(T,S),sub(T,S)));d=std::clamp(d,std::fabs(l1-l2)+.001,l1+l2-.001);
     double along=(l1*l1-l2*l2+d*d)/(2*d),height=std::sqrt(std::max(0.,l1*l1-along*along));
-    ufbx_vec3 bend={side?1.:-1.,-.8+double(swing)*.6,-.2+double(swing)};bend=unit(sub(bend,mul(axis,dot(bend,axis))));auto targetElbow=add(S,add(mul(axis,along),mul(bend,height)));
+    ufbx_vec3 bend={side?1.:-1.,-.8+double(swing)*.6,-.2+double(swing)};
+    if(hold){const auto e=hold->elbow[size_t(side)];if(e.x*e.x+e.y*e.y+e.z*e.z>1e-6f)bend={e.x,e.y+double(swing)*.6,e.z+double(swing)};}bend=unit(sub(bend,mul(axis,dot(bend,axis))));auto targetElbow=add(S,add(mul(axis,along),mul(bend,height)));
     changes.push_back({upper->typed_id,rotated(upper,arc(sub(E,S),sub(targetElbow,S)))});
    }else if(step==1)changes.push_back({elbow->typed_id,rotated(elbow,arc(sub(H,E),sub(T,E)))});
-   else {auto parent=ufbx_matrix_to_transform(&hand->parent->node_to_world).rotation;parent={-parent.x,-parent.y,-parent.z,parent.w};auto tr=hand->local_transform;double angle=yaw;ufbx_quat turn{0,std::sin(angle*.5),0,std::cos(angle*.5)},tilt{std::sin(pitch*.5),0,0,std::cos(pitch*.5)};tr.rotation=ufbx_quat_mul(parent,ufbx_quat_mul(turn,ufbx_quat_mul(tilt,handRot[side])));changes.push_back({hand->typed_id,tr});}
+   else {double angle=yaw;ufbx_quat turn{0,std::sin(angle*.5),0,std::cos(angle*.5)},tilt{std::sin(pitch*.5),0,0,std::cos(pitch*.5)};
+    const ufbx_quat desired=ufbx_quat_mul(turn,ufbx_quat_mul(tilt,handRot[side]));
+    // The forearm rolls about its own axis with most of the hand's turn, as the
+    // radius does, so the wrist is not wrung a half turn (a twisted glove).
+    auto forearm=ufbx_matrix_to_transform(&elbow->node_to_world).rotation,now=ufbx_matrix_to_transform(&hand->node_to_world).rotation;
+    ufbx_quat delta=ufbx_quat_mul(desired,ufbx_quat{-now.x,-now.y,-now.z,now.w});if(delta.w<0)delta={-delta.x,-delta.y,-delta.z,-delta.w};
+    const auto axis=unit(sub(H,E));const double along=delta.x*axis.x+delta.y*axis.y+delta.z*axis.z;
+    ufbx_quat twist{axis.x*along,axis.y*along,axis.z*along,delta.w};const double size=std::sqrt(twist.x*twist.x+twist.y*twist.y+twist.z*twist.z+twist.w*twist.w);
+    if(size>1e-9){twist={twist.x/size,twist.y/size,twist.z/size,twist.w/size};twist=ufbx_quat_slerp(ufbx_quat{0,0,0,1},twist,.9);}else twist={0,0,0,1};
+    changes.push_back({elbow->typed_id,rotated(elbow,twist)});
+    const ufbx_quat rolled=ufbx_quat_mul(twist,forearm);const ufbx_quat parent{-rolled.x,-rolled.y,-rolled.z,rolled.w};
+    auto tr=hand->local_transform;tr.rotation=ufbx_quat_mul(parent,desired);changes.push_back({hand->typed_id,tr});}
   }
   for(auto n:m_scene->nodes)if(n->bone&&std::none_of(changes.begin(),changes.end(),[&](auto&c){return c.node_id==n->typed_id;}))changes.push_back({n->typed_id,n->local_transform});
   ufbx_anim_opts ao{};ao.transform_overrides={changes.data(),changes.size()};auto anim=ufbx_create_anim(m_scene,&ao,nullptr);ufbx_evaluate_opts eo{};eo.evaluate_skinning=skin&&step==2;auto posed=ufbx_evaluate_scene(m_scene,anim,0,&eo,nullptr);ufbx_free_anim(anim);
@@ -488,6 +500,33 @@ bool Mesh::poseAction(const char* action,float phase){
    if(!frame)return false;ufbx_free_scene(m_scene);m_scene=frame;extract(frame,m_positionOnlySkinning);return true;
   }
  }return false;
+}
+Mesh::GripReport Mesh::gripReport(int side)const{
+ GripReport r;if(!m_scene||!m_bindScene)return r;const std::string suffix=side?".L":".R";
+ auto node=[&](ufbx_scene*s,const char*n){return ufbx_find_node(s,(n+suffix).c_str());};
+ auto at=[](ufbx_node*n){return Point3{float(n->node_to_world.m03),float(n->node_to_world.m13),float(n->node_to_world.m23)};};
+ auto rot=[](ufbx_node*n){return ufbx_matrix_to_transform(&n->node_to_world).rotation;};
+ auto inv=[](ufbx_quat q){return ufbx_quat{-q.x,-q.y,-q.z,q.w};};
+ auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+ auto upper=node(m_scene,"upper_arm"),fore=node(m_scene,"forearm"),hand=node(m_scene,"hand");
+ auto bf=node(m_bindScene,"forearm"),bh=node(m_bindScene,"hand");
+ auto f1=node(m_scene,"f_middle.01"),f3=node(m_scene,"f_middle.03"),fi=node(m_scene,"f_index.01"),fp=node(m_scene,"f_pinky.01");
+ if(!upper||!fore||!hand||!bf||!bh||!f1||!f3||!fi||!fp)return r;
+ const Point3 S=at(upper),E=at(fore),H=at(hand);r.reach=len(H-S)/std::max(1e-6f,len(E-S)+len(H-E));
+ // The hand's turn relative to its forearm, against the same in the bind pose,
+ // measured about the forearm's own axis.
+ const ufbx_quat now=ufbx_quat_mul(inv(rot(fore)),rot(hand)),bind=ufbx_quat_mul(inv(rot(bf)),rot(bh));
+ ufbx_quat d=ufbx_quat_mul(now,inv(bind));if(d.w<0)d={-d.x,-d.y,-d.z,-d.w};
+ Point3 axis=H-E;axis=axis*(1.f/std::max(1e-6f,len(axis)));const auto fr=inv(rot(fore));
+ // axis into the forearm's frame
+ const ufbx_vec3 local=ufbx_quat_rotate_vec3(fr,ufbx_vec3{axis.x,axis.y,axis.z});
+ const double along=d.x*local.x+d.y*local.y+d.z*local.z;r.wristTwist=float(2*std::atan2(std::fabs(along),d.w)*57.29578);
+ const Point3 mid=(S+H)*.5f;Point3 e=E-mid;r.elbow=e*(1.f/std::max(1e-6f,len(e)));
+ Point3 forward=at(f1)-H,across=at(fi)-at(fp);forward=forward*(1.f/std::max(1e-6f,len(forward)));
+ auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+ Point3 palm=side?cross(forward,across):cross(across,forward);palm=palm*(1.f/std::max(1e-6f,len(palm)));
+ const Point3 curl=at(f3)-at(f1);r.palmCurl=(curl.x*palm.x+curl.y*palm.y+curl.z*palm.z)/std::max(1e-6f,len(curl));
+ return r;
 }
 __declspec(noinline) bool Mesh::testAttachedSkinning(){
  Mesh optimized(111),reference(111);

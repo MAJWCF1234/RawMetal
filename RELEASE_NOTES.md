@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.10 - Shouldered (2026-11-04)
+
+The shotgun sits the way she would carry it: turned in toward where she is
+looking, low on the right, the stock out of the way. Her right elbow comes out
+to the side and her hand closes round the stock instead of folding up under
+it, and her left arm reaches straight along the fore-end, glove and all, with
+no wrung wrist. The turn of each hand is carried along the forearm, the way a
+forearm turns.
+
+---
+
 ## v1.1.9 - All of her (2026-11-04)
 
 Look down and she is there: coat, belt, legs and boots, under your own eyes

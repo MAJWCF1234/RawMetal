@@ -74,6 +74,7 @@ public:
     static bool thirdPerson();
     static bool tiltShift();
     float gripError()const{return m_gripError;}
+    Mesh::GripReport armsGripReport(int side)const{return m_armsMesh.gripReport(side);}
     // The pistol's fingers from the trigger and grip, metres (0 for any other hold).
     float pistolContact()const{return m_pistolContact;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
