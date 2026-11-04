@@ -4,6 +4,23 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.12 - Her size (2026-11-04)
+
+She carries the shotgun now the way it is carried: low on the right, the stock
+tucked under her shoulder and out of the way, the muzzle on what she is looking
+at. Her right hand wraps the narrow of the stock with a finger on the trigger;
+her left closes on the wooden pump and rides it back and forward when she
+works it. The gun and her arms are her size, the same as the legs and coat
+under them.
+
+Hold the right mouse button and she brings it to her eye: square to the view,
+the bead on whatever is in front of her. Let go and it drops back to the hip.
+
+Leaving for the title from the pause menu no longer closes the game when the
+click lands where the title's QUIT is.
+
+---
+
 ## v1.1.11 - Close in (2026-11-04)
 
 The shotgun comes in closer, as close as her fists, and her arms with it.

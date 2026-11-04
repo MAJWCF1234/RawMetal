@@ -255,6 +255,8 @@ public:
     void setDeveloperMode(bool on){m_god=m_peaceful=m_unlockAll=on;if(on){m_player.health=std::max(m_player.health,100.f);m_enemies.clear();}}
     bool developerMode()const{return m_unlockAll;}
     bool reloading()const{return m_reloadTimer>0;}
+    // Aiming down the sights (right mouse with the shotgun up): 0 at the hip, 1 aimed.
+    float aimBlend()const{return m_aimBlend;}
     // VR pump: fired with the support hand on the fore-end, the shotgun waits for
     // a stroke (back 7 cm, forward again). How far back the pump is, for drawing.
     float vrPumpOffset()const{return m_vrChamberEmpty&&m_vrSupportGrip?std::clamp(m_vrPumpRest-m_vrPumpAlong,0.f,.1f):0.f;}
@@ -822,6 +824,7 @@ private:
     std::wstring m_customMapDirectory;
     std::uint64_t m_customCampaignKey=0;
     bool m_titleScreen=false,m_menuFromTitle=false,m_customMapsOpen=false;
+    float m_aimBlend=0;
     int m_titleSelection=0,m_customMenuOffset=0;
     InputState m_titlePrevious;
     void updateTitle(const InputState& input);

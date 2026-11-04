@@ -91,7 +91,7 @@ void Game::updateMenu(const InputState& input){
   if(activate){
    if(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load){
     bool saving=m_menuPage==MenuPage::Save;int backRow=saving?3:4;
-    if(m_menuSelection==backRow){if(m_menuFromTitle)showTitleScreen();else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}}
+    if(m_menuSelection==backRow){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}}
     else if(!saving&&m_menuSelection==3){m_menuMessage.clear();loadCheckpoint();}
     else {m_pendingSlot=m_menuSelection;m_menuMessage.clear();
      if(saving){std::error_code error;bool exists=!m_saveDirectory.empty()&&std::filesystem::exists(std::filesystem::path(m_saveDirectory)/("slot-"+std::to_string(m_pendingSlot+1)+".rms"),error);
@@ -118,10 +118,13 @@ void Game::updateMenu(const InputState& input){
   }
  }
  if(m_menuSelection==5&&(activate||direction))m_settings.invertMouse=!m_settings.invertMouse;
- if(activate&&m_menuSelection==0){if(m_menuFromTitle)showTitleScreen();else {m_paused=false;m_suppressFire=true;}}
+ if(activate&&m_menuSelection==0){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_paused=false;m_suppressFire=true;}}
  if(activate&&m_menuSelection==8){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
  if(activate&&(m_menuSelection==9||m_menuSelection==10)){m_menuPage=m_menuSelection==9?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
- if(activate&&m_menuSelection==11){if(m_menuFromTitle)m_quitRequested=true;else showTitleScreen();}
+ // Returning to the title hands it the input that chose it: a click or key
+ // still held must not land on the title row under the pointer (QUIT GAME
+ // closed the game outright).
+ if(activate&&m_menuSelection==11){if(m_menuFromTitle)m_quitRequested=true;else {showTitleScreen();m_titlePrevious=input;}}
  m_menuPrevious=input;
 }
 void Game::loadSettings(const std::wstring& path){

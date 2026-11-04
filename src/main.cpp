@@ -1819,6 +1819,30 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       obj<<"o pistol\n";for(const auto&t:pistol.triangles){for(const auto&v:t.v){auto g=retro::SoftwareRenderer::vrPistolPoint(v.p,true);obj<<"v "<<g.y<<' '<<.03f-g.x<<' '<<g.z-.075f<<'\n';}obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}
       if(n)++file;}
      return file==5?0:1;}
+    if(commandArguments().find(L"--title-return-test")){
+     // Play, then quit to the title through the pause menu, and keep drawing:
+     // the Exclusion Zone, a campaign chunk and the body-inspection room.
+     constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     std::ofstream report("title-return-test.txt");int step=0;
+     for(int scene=0;scene<3;++scene){auto game=scene==0?retro::Game::exclusionInspection(0):scene==1?retro::Game::bodyInspection():retro::Game::weaponInspection(4,10);
+      for(int i=0;i<90;++i){retro::InputState in{};in.forward=i<40;in.crouch=i>50&&i<70;game.update(in,1.f/60.f);renderer->render(game);}
+      report<<"scene "<<scene<<" played\n";report.flush();
+      retro::InputState esc{};esc.escape=true;game.update(esc,1.f/60.f);renderer->render(game);game.update({},1.f/60.f);
+      for(int i=0;i<11;++i){retro::InputState down{};down.menuDown=true;game.update(down,1.f/60.f);game.update({},1.f/60.f);}
+      retro::InputState accept{};accept.menuAccept=true;game.update(accept,1.f/60.f);
+      report<<"scene "<<scene<<" title "<<game.titleScreen()<<"\n";report.flush();
+      for(int i=0;i<120;++i){game.update({},1.f/60.f);renderer->render(game);++step;}
+      report<<"scene "<<scene<<" title drawn 120 frames\n";report.flush();}
+     // A mouse click on QUIT TO TITLE, the button still held, the pointer left
+     // where the title screen's QUIT GAME row is: the game must stay open.
+     {auto game=retro::Game::exclusionInspection(0);for(int i=0;i<30;++i)game.update({},1.f/60.f);
+      retro::InputState esc{};esc.escape=true;game.update(esc,1.f/60.f);game.update({},1.f/60.f);
+      for(int i=0;i<11;++i){retro::InputState down{};down.menuDown=true;game.update(down,1.f/60.f);game.update({},1.f/60.f);}
+      retro::InputState held{};held.menuAccept=true;held.fire=true;held.pointerX=retro::TitleMenuLayout::X+20;held.pointerY=retro::TitleMenuLayout::Y+4*retro::TitleMenuLayout::RowHeight+10;
+      for(int i=0;i<10;++i){game.update(held,1.f/60.f);renderer->render(game);}
+      const bool open=game.titleScreen()&&!game.quitRequested();report<<"held click on quit-to-title over the title QUIT row: "<<(open?"title stays":"GAME QUIT")<<"\n";
+      if(!open){report<<"FAIL\n";return 12;}}
+     report<<"PASS\n";return 0;}
     if(commandArguments().find(L"--arms-inspection")){
      // Claire's first-person arms close up: the shotgun idle and just fired,
      // fists and the pistol, each as played and then the rig from eight sides
@@ -1833,6 +1857,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int side=0;side<2;++side){auto r=renderer->armsGripReport(side);report<<pose.name<<(side?" left":" right")<<" reach "<<r.reach<<" wrist-twist "<<r.wristTwist<<" deg elbow-twist "<<r.elbowTwist<<" deg palm-curl "<<r.palmCurl<<" elbow "<<r.elbow.x<<' '<<r.elbow.y<<' '<<r.elbow.z<<"\n";
        if(pose.mode!=1&&(r.palmCurl<=0||r.wristTwist>55||r.elbowTwist>45||r.reach>.97f))bad=true;}
       for(int angle=0;angle<8;++angle){renderer->inspectRig(scene,yaw[angle],angle%2?.45f:.1f,{.12f,-.24f,.70f},.80f);save(std::string(pose.name)+"-"+std::to_string(angle));}}
+     // Right mouse held: the shotgun comes to the eye, square, sights on the crosshair.
+     {auto aimed=retro::Game::weaponInspection(2,10);retro::InputState hold{};hold.guard=true;for(int i=0;i<30;++i)aimed.update(hold,1.f/60.f);renderer->render(aimed);save("shotgun-aimed-view");
+      report<<"shotgun aimed blend "<<aimed.aimBlend()<<"\n";if(aimed.aimBlend()<.99f)bad=true;
+      for(int side=0;side<2;++side){auto r=renderer->armsGripReport(side);report<<"shotgun-aimed "<<(side?"left":"right")<<" reach "<<r.reach<<" wrist-twist "<<r.wristTwist<<" deg elbow-twist "<<r.elbowTwist<<" deg palm-curl "<<r.palmCurl<<"\n";
+       if(r.palmCurl<=0||r.wristTwist>55||r.elbowTwist>45||r.reach>.97f)bad=true;}
+      for(int angle=0;angle<8;angle+=2){renderer->inspectRig(aimed,yaw[angle],.1f,{.05f,-.15f,.60f},.80f);save("shotgun-aimed-"+std::to_string(angle));}}
      // Turning and swaying with the shotgun up: no wrist may wring or jump.
      {auto sway=retro::Game::weaponInspection(2,10);float worst[2]{},jump[2]{},last[2]{-1,-1};
       for(int frame=0;frame<60;++frame){retro::InputState input{};input.mouseDx=std::sin(frame*.21f)*90.f;input.mouseDy=std::cos(frame*.17f)*30.f;sway.update(input,1.f/60.f);renderer->render(sway);

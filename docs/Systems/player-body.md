@@ -145,7 +145,21 @@ blender -b --python tools/player/build_claire_arms.py -- src/assets/models/arms_
   placed so the trigger arm bends at about 57% of its reach with its elbow
   out to the side (`ArmHold::elbow`) and the support arm at 89%, with room for
   the smoke test's sway and recoil. `RAWMETAL_SHOTGUN_VIEW` ("gx gy gz ax ay az
-  toe tx ty tz sx sy sz") overrides the layout for tuning without a rebuild.
+  toe tx ty tz sx sy sz scale") overrides the layout for tuning without a rebuild.
+  The whole assembly is drawn at 1.3 times the viewmodel scale, grown about
+  the arm rig's centre so reach and grip are unchanged: at 1.0 the gun and
+  her arms looked small beside her own legs under the view.
+- The shotgun now has two layouts (`shotgunView` in Scene3D.cpp), blended by
+  `Game::aimBlend()` over about a fifth of a second:
+  - hip: the gun's axis runs from off the bottom-right, its stock tucked under
+    her shoulder, to the crosshair (toe 0.26 rad, tilt 0.18 rad);
+  - aimed (right mouse, not sprinting, reloading or switching): square to the
+    view with the bore on the crosshair line. `RAWMETAL_SHOTGUN_AIM` tunes it
+    as `RAWMETAL_SHOTGUN_VIEW` tunes the hip.
+- Her hands sit on measured parts of the Remington (`kTriggerSocket`,
+  `kSupportSocket`): the right on the stock's narrow wrist behind the trigger
+  guard, the left on the rear of the pump's wooden fore-end (the model's
+  `Bolt` part, wide from z -3.0 to -1.5), riding it as the pump is worked.
 - The support hand is held swing-only (`ArmHold::swingOnly`): it aims its
   fingers along the fore-end and keeps the roll its forearm gives it. Forcing
   it palm-up was half a turn from the forearm, which wrung the wrist, then

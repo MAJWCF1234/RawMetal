@@ -518,6 +518,10 @@ void Game::update(const InputState& input, float dt) {
         if(oldReload>0&&m_reloadTimer==0){rounds.loaded=std::min(cycle.tubeCapacity,rounds.total);if(cycle.pumpSoundAt>0)m_shotAge=0;m_emptyReload=false;}
         m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
         m_guarding=heldNpc()<0&&!takedownActive()&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
+        // Right mouse with the shotgun up brings it to the eye (not sprinting,
+        // reloading, switching or holding someone); about a fifth of a second.
+        {const bool aim=input.guard&&!unarmed()&&m_equippedWeapon==WeaponId::Shotgun&&m_holster<.05f&&!reloading()&&!m_bodySprint&&heldNpc()<0&&!takedownActive();
+         m_aimBlend=std::clamp(m_aimBlend+(aim?dt:-dt)*6.f,0.f,1.f);}
         float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&!takedownActive()&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
         // Put away it stays down even straight after a shot (only an emptied gun
         // waits out the last shot before lowering), or it would rise unequipped.
