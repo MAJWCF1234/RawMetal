@@ -61,6 +61,10 @@
   "kind": "free",
   "front": "+z"
  },
+ "lab_analyzer_cabinet": {
+  "kind": "wall",
+  "front": "+z"
+ },
  "lab_anomaly_relic": {
   "kind": "free",
   "front": "+z"
