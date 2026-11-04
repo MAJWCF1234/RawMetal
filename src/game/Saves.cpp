@@ -228,7 +228,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   // Each firearm's pool against its own magazine; the handgun's only when it is owned or its 9 mm waits for it.
   for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return false;}
   if(p.pool(WeaponId::Fists)!=AmmoPool{}||(p.pool(WeaponId::Handgun).loaded>0&&!next.hasHandgun())||!next.ownsWeapon(next.m_equippedWeapon)||!next.ownsWeapon(next.m_switchTarget)||next.m_reloadLength<0||next.m_reloadLength>2||next.m_reloadTimer>next.m_reloadLength+.001f)return false;
-  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return false;
+  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||next.m_reloadTimer<0||next.m_reloadTimer>8||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return false;
   // A save from before the 9 mm stack gives it the first 1x2 cell clear of the others.
   if(version<19){auto taken=[&](int c){for(int i=0;i<3;++i){int at=next.m_itemCells[size_t(i)],w=i==0?4:i==2?2:1;for(int r=c/6;r<c/6+2;++r)if(r>=at/6&&r<at/6+2&&c%6>=at%6&&c%6<at%6+w)return true;}return false;};
    for(int c=0;c<24;++c)if(!taken(c)){next.m_itemCells[3]=c;break;}}

@@ -770,6 +770,15 @@ public:
     // and whether it started from an empty magazine (the longer one, ending
     // with the slide released at cycle.rackAt).
     float reloadDuration()const{return m_reloadTimer>0?m_reloadLength:0.f;}
+    // The pump gun reloads shell by shell, at the pace of its authored clips:
+    // a start, one insert per two missing shells (two to a hand), then the
+    // finish with the pump
+    // racked. Firing with a shell in the tube cuts it short.
+    static constexpr float ShellStart=11/24.f,ShellInsert=17/24.f,ShellFinish=33/24.f,ShellLands=.6f;
+    bool shellReload()const{return m_reloadTimer>0&&m_equippedWeapon==WeaponId::Shotgun;}
+    float reloadElapsed()const{return m_reloadLength-m_reloadTimer;}
+    static constexpr int ShellsPerInsert=2;
+    int reloadShells()const{return std::max(0,int(std::lround((m_reloadLength-ShellStart-ShellFinish)/ShellInsert)));}
     float reloadProgress()const{return m_reloadTimer>0&&m_reloadLength>0?std::clamp(1-m_reloadTimer/m_reloadLength,0.f,1.f):0.f;}
     bool emptyReload()const{return m_reloadTimer>0&&m_emptyReload;}
     // The handgun's slide is held back: its magazine ran dry, until an empty

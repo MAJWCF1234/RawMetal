@@ -32,22 +32,30 @@ constexpr Point3 kArmsRigCenter{0.f,1.515185f,.171566f};
 // Sockets in the Remington's own coordinates: the right hand on the stock's
 // narrow wrist behind the trigger guard (z 1.0-1.5), the left on the rear half
 // of the pump's wooden fore-end (z -3.0 to -1.5, measured from the model).
-constexpr Point3 kTriggerSocket{.02f,.70f,1.10f},kSupportSocket{-.064f,1.10f,-1.85f};
+constexpr Point3 kTriggerSocket{.02f,.70f,1.10f},kSupportSocket{-.064f,1.10f,-2.30f};
 constexpr Point3 kTriggerWrist{.045f,-.035f,-.04f},kSupportWrist{-.085f,-.01f,-.03f};
 // The shotgun's hands keep the frames the rig was tuned to (trigger palm to
 // the stock, support palm up under the fore-end); the trigger elbow points out
 // and a little down, as a shouldered long gun is held, instead of folding down
 // under the gun with the forearm stood upright and the wrist wrung.
-const Mesh::ArmHold kShotgunHold{{Point3{0,.65f,.76f},Point3{-.95f,0,.312f}},{Point3{1,0,0},Point3{0,1,0}},0,{Point3{-1.f,-.3f,-.25f},Point3{}},{false,true},.5f};
+const Mesh::ArmHold kShotgunHoldDefault{{Point3{0,.65f,.76f},Point3{-.95f,0,.312f}},{Point3{1,0,0},Point3{0,1,0}},2,{Point3{-1.f,-.3f,-.25f},Point3{}},{false,true},.5f};
+// RAWMETAL_SHOTGUN_HANDS ("fRx fRy fRz pRx pRy pRz fLx fLy fLz pLx pLy pLz
+// eRx eRy eRz eLx eLy eLz swingLeft roll") and RAWMETAL_SHOTGUN_SOCKETS ("tx ty tz
+// sx sy sz") override the hand frames and sockets for tuning.
+Mesh::ArmHold shotgunHold(){Mesh::ArmHold h=kShotgunHoldDefault;if(const char*e=std::getenv("RAWMETAL_SHOTGUN_HANDS")){float v[20];
+ if(std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10,v+11,v+12,v+13,v+14,v+15,v+16,v+17,v+18,v+19)==20){
+  h.forward={Point3{v[0],v[1],v[2]},Point3{v[6],v[7],v[8]}};h.palm={Point3{v[3],v[4],v[5]},Point3{v[9],v[10],v[11]}};
+  h.elbow={Point3{v[12],v[13],v[14]},Point3{v[15],v[16],v[17]}};h.swingOnly={false,v[18]>.5f};h.forearmRoll=v[19];}}return h;}
+Point3 shotgunSocket(bool support){Point3 t=kTriggerSocket,sp=kSupportSocket;if(const char*e=std::getenv("RAWMETAL_SHOTGUN_SOCKETS"))std::sscanf(e,"%f %f %f %f %f %f",&t.x,&t.y,&t.z,&sp.x,&sp.y,&sp.z);return support?sp:t;}
 // Where the shotgun and her arms sit in view space (chosen from a sweep so the
 // stock clears the frame, the gun and arms sit as close as her fists do, the
 // trigger elbow bends at about 57% of her reach
 // and the support arm at 89%, with room for sway and recoil): the gun's centre, the arm
 // rig's centre, the gun turned in toward the crosshair (radians), and the
 // wrist offsets from the trigger and support sockets. RAWMETAL_SHOTGUN_VIEW
-// ("gx gy gz ax ay az toe tx ty tz sx sy sz scale tilt") overrides it for tuning.
-struct ShotgunView{Point3 gun{.16f,-.18f,.64f},arms{.20f,-.30f,.38f};float toe=.08f;Point3 trigger=kTriggerWrist,support=kSupportWrist;float scale=1.3f;float tilt=0;};   // scale: the gun and her arms at the size of her body under them
-ShotgunView shotgunLayout(ShotgunView v,const char*variable){if(const char*e=std::getenv(variable))std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",&v.gun.x,&v.gun.y,&v.gun.z,&v.arms.x,&v.arms.y,&v.arms.z,&v.toe,&v.trigger.x,&v.trigger.y,&v.trigger.z,&v.support.x,&v.support.y,&v.support.z,&v.scale,&v.tilt);
+// ("gx gy gz ax ay az toe tx ty tz sx sy sz scale tilt roll") overrides it for tuning.
+struct ShotgunView{Point3 gun{.16f,-.18f,.64f},arms{.20f,-.30f,.38f};float toe=.08f;Point3 trigger=kTriggerWrist,support=kSupportWrist;float scale=1.3f;float tilt=0,roll=0;};   // scale: the gun and her arms at the size of her body under them
+ShotgunView shotgunLayout(ShotgunView v,const char*variable){if(const char*e=std::getenv(variable))std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",&v.gun.x,&v.gun.y,&v.gun.z,&v.arms.x,&v.arms.y,&v.arms.z,&v.toe,&v.trigger.x,&v.trigger.y,&v.trigger.z,&v.support.x,&v.support.y,&v.support.z,&v.scale,&v.tilt,&v.roll);
  // The whole assembly grows about the arm rig's centre: gun, sockets and arms
  // keep their proportions, so the reach and the grip are unchanged.
  v.gun=v.arms+(v.gun-v.arms)*v.scale;v.trigger=v.trigger*v.scale;v.support=v.support*v.scale;return v;}
@@ -62,10 +70,12 @@ ShotgunView shotgunView(float aim=0){
  sights=shotgunLayout(sights,"RAWMETAL_SHOTGUN_AIM");const float t=aim*aim*(3-2*aim);
  auto mix=[&](Point3 a,Point3 b){return a+(b-a)*t;};ShotgunView v=hip;
  v.gun=mix(hip.gun,sights.gun);v.arms=mix(hip.arms,sights.arms);v.trigger=mix(hip.trigger,sights.trigger);v.support=mix(hip.support,sights.support);
- v.toe=hip.toe+(sights.toe-hip.toe)*t;v.tilt=hip.tilt+(sights.tilt-hip.tilt)*t;v.scale=hip.scale+(sights.scale-hip.scale)*t;return v;}
+ v.toe=hip.toe+(sights.toe-hip.toe)*t;v.tilt=hip.tilt+(sights.tilt-hip.tilt)*t;v.roll=hip.roll+(sights.roll-hip.roll)*t;v.scale=hip.scale+(sights.scale-hip.scale)*t;return v;}
 // Toe turns the muzzle in toward the crosshair; tilt raises it, dropping the stock.
-Point3 shotgunPlace(const ShotgunView&v,Point3 p){const float c=std::cos(v.toe),sn=std::sin(v.toe),tc=std::cos(v.tilt),ts=std::sin(v.tilt);
- float y=p.y,z=-p.z;const float y2=y*tc+z*ts,z2=-y*ts+z*tc;return Point3{p.x*c+z2*sn+v.gun.x,y2+v.gun.y,-p.x*sn+z2*c+v.gun.z};}
+Point3 shotgunPlace(const ShotgunView&v,Point3 p){const float c=std::cos(v.toe),sn=std::sin(v.toe),tc=std::cos(v.tilt),ts=std::sin(v.tilt),rc=std::cos(v.roll),rs=std::sin(v.roll);
+ // Roll turns the receiver's side toward the eye (about the bore), then tilt
+ // raises the muzzle, then toe turns it in.
+ const float x=p.x*rc-p.y*rs,y=p.x*rs+p.y*rc,z=-p.z;const float y2=y*tc+z*ts,z2=-y*ts+z*tc;return Point3{x*c+z2*sn+v.gun.x,y2+v.gun.y,-x*sn+z2*c+v.gun.z};}
 // Claire's textures (resources 2302-2311, in this order) by FBX material name:
 // her body and her first-person arms both carry her materials.
 static int claireMaterial(const Mesh&mesh,int part){
@@ -742,6 +752,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   size_t side=0;float alignment=-1.e30f;for(size_t i=0;i<6;++i){auto n=lights.normals[i];float dot=normal.x*n.x+normal.y*n.y+normal.z*n.z;if(dot>alignment){alignment=dot;side=i;}}
   objectLight=lights.brightness[side];objectNormalLighting=lights.hasGloss?&lights.gloss[side]:nullptr;
  };
+ if(level==game.level()){const auto&v=m_view;auto hands=exteriorLight({v.pos.x,v.pos.y,v.z+v.eye-.25f},.45f,.45f,.5f,kPi*.5f-v.angle,false);
+  m_handNormals=hands.normals;m_handLight=hands.brightness;m_handLightReady=true;}
  auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
  perf::Scope propProfile(perf::Prop);
   if(base==-999.f)base=w.floorHeight(x,y);if(!m_staticGeometryBuild&&base+height<dormantFloor)return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
@@ -2781,6 +2793,30 @@ SoftwareRenderer::PistolHold SoftwareRenderer::pistolHold(const Game& game)const
  h.wrist[1]=left.wrist;h.forward[1]=left.forward;h.palm[1]=left.palm;
  return h;
 }
+// The shotgun clip for this moment, from game state; the pack's clips run at 24 fps.
+SoftwareRenderer::FpClip SoftwareRenderer::fpShotgunClip(const Game& game)const{
+ auto loop=[&](const char*name,float frames){return FpClip{name,std::fmod(game.elapsed()*24.f/frames,1.f)};};
+ const bool aimed=game.aimBlend()>.5f;const float speed=length(game.playerVelocity());
+ if(game.holster()>.01f)return FpClip{"draw",std::clamp(1-game.holster(),0.f,1.f)};
+ if(game.reloading()){const float t=game.reloadElapsed(),inserts=game.reloadShells()*Game::ShellInsert;   // each clip at its own pace
+  if(t<Game::ShellStart)return FpClip{"reload_start",t/Game::ShellStart};
+  if(t<Game::ShellStart+inserts)return FpClip{"reload_step",std::fmod((t-Game::ShellStart)/Game::ShellInsert,1.f)};
+  return FpClip{"reload_end",std::clamp((t-Game::ShellStart-inserts)/Game::ShellFinish,0.f,1.f)};}
+ const float fire=aimed?25/24.f:1.f;if(game.shotAge()<fire)return FpClip{aimed?"fire_aim":"fire",game.shotAge()/fire};
+ if(aimed)return speed>.3f?loop("walk_aim",40):loop("aim",160);
+ if(game.bodySprinting()&&speed>4.f)return loop("run",20);
+ if(speed>.3f)return loop("walk",40);
+ if(game.player().crouched)return loop("crouch",160);
+ return loop("idle",160);
+}
+// A point on the Remington (its model coordinates) where this frame's pose
+// carries it, in view space (x right, y up, z forward). The baked gun and pump
+// points are its origin and unit axes in the rig's camera space (z back).
+Point3 SoftwareRenderer::fpShotgunPoint(Point3 e,bool pump)const{
+ const char*o=pump?"pump_o":"gun_o";auto at=[&](const char*n){return m_fpShotgun.bonePosition(n);};
+ const Point3 origin=at(o),x=at(pump?"pump_x":"gun_x")-origin,y=at(pump?"pump_y":"gun_y")-origin,z=at(pump?"pump_z":"gun_z")-origin;
+ const Point3 p=origin+x*e.x+y*e.y+z*e.z;return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};
+}
 void SoftwareRenderer::prepareViewModel(const Game& game){
  const auto&motion=game.weaponMotion();std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
  if(game.heldNpc()>=0||game.takedownActive()||locker){
@@ -2797,14 +2833,38 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
   Mesh::ArmHold arms{};arms.curls=1;for(size_t side=0;side<2;++side){arms.forward[side]={-hold.forward[side].x,hold.forward[side].y,hold.forward[side].z};arms.palm[side]={-hold.palm[side].x,hold.palm[side].y,hold.palm[side].z};}
   m_armsMesh.poseAttached(toRig(hold.wrist[0]),toRig(hold.wrist[1]),motion.elbow,0,0,game.elapsed()*2.f,game.weaponKick(),&arms);return;
  }
+ // The shotgun: the pack's authored clips (the procedural hold below remains
+ // only if the baked rig is missing).
+ m_fpShotgunPosed=false;
+ if(m_fpShotgun.bones){const auto clip=fpShotgunClip(game);if(m_fpShotgun.poseAction(clip.name,clip.phase)){m_fpShotgunPosed=true;return;}}
  auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=kViewModelScale/std::max({range.x,range.y,range.z});
  const auto view=shotgunView(game.aimBlend());scale*=view.scale;auto local=[&](Point3 source){return shotgunPlace(view,(source-center)*scale);};
  const Point3 pivot{view.gun.x,view.gun.y,view.gun.z-.30f};
  auto animated=[&](Point3 p){p=p-pivot;float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;};
  auto armCenter=kArmsRigCenter;
  auto toRig=[&](Point3 at){auto p=(at-view.arms)*(1.f/(kViewModelScale*view.scale));p.x=-p.x;return p+armCenter;};
- auto right=animated(local(kTriggerSocket)+view.trigger),left=animated(local(kSupportSocket)+view.support-Point3{0,0,motion.bolt});   // the left hand rides the pump
- m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick(),&kShotgunHold);
+ auto right=animated(local(shotgunSocket(false))+view.trigger),left=animated(local(shotgunSocket(true)+Point3{0,0,motion.bolt/scale})+view.support);   // the left hand rides the pump
+ const auto hands=shotgunHold();
+ auto pose=[&]{m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick(),&hands);};
+ // Fit the hands to the gun: pose, see where the curled fingers landed, move
+ // each wrist by the miss, pose again. The left fingertips close on the pump's
+ // wood, the right on the stock's narrow wrist with the index level with the
+ // trigger along it. Two passes converge (the fingers move with the wrist).
+ {const float unit=kViewModelScale*view.scale;
+  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*unit;p.x=-p.x;return p+view.arms;};
+  auto at=[&](Point3 source,bool pump){return animated(local(pump?source+Point3{0,0,motion.bolt/scale}:source));};
+  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  auto closest=[](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);return a+ab*t;};
+  auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+  const Point3 pumpA=at({-.064f,1.22f,-3.0f},true),pumpB=at({-.064f,1.22f,-1.5f},true),wristA=at({-.064f,1.25f,1.0f},false),wristB=at({-.064f,1.15f,1.5f},false),blade=at({-.064f,1.0f,.45f},false);
+  auto wrap=[&](std::initializer_list<const char*> fingers,const char*side,Point3 a,Point3 b,float radius){Point3 shift{};int n=0;
+   for(const char*f:fingers){Point3 c=bone((std::string(f)+side).c_str()),q=closest(c,a,b),out=c-q;float d=len(out);if(d<1e-5f)continue;shift=shift+(q+out*(radius*unit/d)-c);++n;}
+   if(!n)return Point3{};shift=shift*(1.f/n);const float l=len(shift),cap=.05f*view.scale;return l>cap?shift*(cap/l):shift;};   // a capped step: the arm must still reach
+  for(int pass=0;pass<2;++pass){pose();
+   left=left+wrap({"f_index.03","f_middle.03","f_ring.03","f_pinky.03"},".L",pumpA,pumpB,.030f);
+   Point3 along=wristB-wristA;along=along*(1.f/std::max(1e-6f,len(along)));const Point3 toBlade=blade-bone("f_index.03.R");const float slide=std::clamp(toBlade.x*along.x+toBlade.y*along.y+toBlade.z*along.z,-.08f*view.scale,.08f*view.scale);
+   right=right+wrap({"f_middle.03","f_ring.03","f_pinky.03"},".R",wristA,wristB,.032f)+along*slide;}}
+ m_shotgunTarget={right,left};pose();
 }
 void SoftwareRenderer::drawViewModel(const Game& game){
  perf::Scope viewProfile(perf::ViewModel);
@@ -2828,9 +2888,9 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  };
  // Sockets are authored in the imported gun's coordinates. Palm offsets put the
  // curled fingers around the grip while keeping the wrists outside the stock.
- const Point3 triggerSocket=kTriggerSocket,supportSocket=kSupportSocket;
-  auto rightWrist=animated(gunLocal(triggerSocket)+shotgun.trigger);
-  auto leftWrist=animated(gunLocal(supportSocket)+shotgun.support-Point3{0,0,motion.bolt});
+ const Point3 triggerSocket=shotgunSocket(false),supportSocket=shotgunSocket(true);
+  auto rightWrist=m_shotgunTarget[0];   // the fitted targets prepareViewModel posed to
+  auto leftWrist=m_shotgunTarget[1];
  bool fists=game.unarmed()||locker;
  // The pistol has its own frame, parts and wrist targets (pistolHold).
  const bool pistol=!fists&&heldActor<0&&!game.takedownActive()&&game.activeFirearm()==WeaponId::Handgun;
@@ -2838,15 +2898,25 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  Point3 armCenter=kArmsRigCenter,armOffset=fists?Point3{0,-.22f,.30f}:pistol?pistolArmOffset():shotgun.arms;
  const float armScale=kViewModelScale*(fists||pistol?1.f:shotgun.scale);auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*armScale;p.x=-p.x;return p+armOffset;};
  if(!m_poseReady)prepareViewModel(game);
+ // The shotgun on the pack's authored rig: its clips carry the arms and the gun.
+ const bool fpShotgun=!fists&&!pistol&&heldActor<0&&!game.takedownActive()&&!locker&&m_fpShotgunPosed;
+ // The pack framed its clips for a 90-degree lens; ours is 75, so the aimed
+ // clips sit too close. Push the whole assembly back along the view while
+ // aiming (the sights stay on the crosshair line). RAWMETAL_FP_PUSH "hip aim".
+ {static const float hipPush=[]{float h=0,a=0;if(const char*e=std::getenv("RAWMETAL_FP_PUSH"))std::sscanf(e,"%f",&h);return h;}();
+  static const float aimPush=[]{float h=0,a=0;if(const char*e=std::getenv("RAWMETAL_FP_PUSH"))std::sscanf(e,"%f %f",&h,&a);return a;}();
+  static const float aimDrop=[]{float h,a,d=.02f;if(const char*e=std::getenv("RAWMETAL_FP_PUSH"))std::sscanf(e,"%f %f %f",&h,&a,&d);return d;}();
+  const float t=game.aimBlend(),k=t*t*(3-2*t);m_fpPush=hipPush+(aimPush-hipPush)*k;m_fpDrop=aimDrop*k;}
+ if(!fists&&!pistol&&!fpShotgun){rightWrist=m_shotgunTarget[0];leftWrist=m_shotgunTarget[1];}   // fitted this frame
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
-  if(heldActor>=0||locker)return p;
+  if(heldActor>=0||locker||fpShotgun)return p;   // the clips carry their own sway and draw
   // The pistol tips down first (pistolHold) and drops late, so a switch shows it.
   const float drop=pistol?game.holster()*game.holster():game.holster();
   return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-drop*.85f),p.z};};
  m_gripError=0;
  if(heldActor>=0||game.takedownActive()||locker){auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
  // A pistol's support hand off the gun (at the belt in a reload) is free.
- for(int side=0;side<2&&!fists;++side){if(side&&pistol&&!hold.support)continue;auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
+ for(int side=0;side<2&&!fists&&!fpShotgun;++side){if(side&&pistol&&!hold.support)continue;auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
   auto d=p-(side?leftWrist:rightWrist);m_gripError=std::max(m_gripError,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
  }
  // A wrist on its target is not yet a hand on the pistol, so measure the
@@ -2859,6 +2929,27 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
   m_pistolContact=std::max(metres(bone("f_index.03.R")-hold.point({0,.002f,.034f})),fromAxis(bone("f_middle.02.R")));
   if(hold.support)m_pistolContact=std::max(m_pistolContact,fromAxis(bone("f_middle.02.L")));}
+ m_shotgunContact={};
+ if(fpShotgun){
+  // Measured on the authored pose (metres): left fingertips from the pump's
+  // axis, right from the stock wrist's, the right index from the trigger blade.
+  auto view=[&](const char*n){auto p=m_fpShotgun.bonePosition(n);return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};};
+  auto fromLine=[&](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);Point3 q=d-ab*t;return std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z);};
+  const Point3 pumpA=fpShotgunPoint({-.064f,1.22f,-3.0f},true),pumpB=fpShotgunPoint({-.064f,1.22f,-1.5f},true),wristA=fpShotgunPoint({-.064f,1.25f,1.0f},false),wristB=fpShotgunPoint({-.064f,1.15f,1.5f},false),blade=fpShotgunPoint({-.064f,1.0f,.45f},false);
+  float left=0,right=0;for(const char*f:{"index_03_l","middle_03_l","ring_03_l","pinky_03_l"})left+=fromLine(view(f),pumpA,pumpB);
+  for(const char*f:{"middle_03_r","ring_03_r","pinky_03_r"})right+=fromLine(view(f),wristA,wristB);
+  Point3 d=view("index_03_r")-blade;m_shotgunContact={left/4,right/3,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)};
+ }else if(!fists&&!pistol&&heldActor<0&&!game.takedownActive()&&!locker){
+  // Parts measured from the Remington (its own coordinates): the pump's wood
+  // on its axis, the stock's narrow wrist on its axis, the trigger blade.
+  auto at=[&](Point3 source,bool pump){return animated(gunLocal(pump?source+Point3{0,0,motion.bolt/gunScale}:source));};
+  const float unit=kViewModelScale*shotgun.scale;
+  auto fromLine=[&](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);Point3 q=d-ab*t;return std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z)/unit;};
+  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  const Point3 pumpA=at({-.064f,1.22f,-3.0f},true),pumpB=at({-.064f,1.22f,-1.5f},true),wristA=at({-.064f,1.25f,1.0f},false),wristB=at({-.064f,1.15f,1.5f},false),blade=at({-.064f,1.0f,.45f},false);
+  float left=0,right=0;for(const char*f:{"f_index.03","f_middle.03","f_ring.03","f_pinky.03"}){left+=fromLine(bone((std::string(f)+".L").c_str()),pumpA,pumpB);}
+  for(const char*f:{"f_middle.03","f_ring.03","f_pinky.03"}){right+=fromLine(bone((std::string(f)+".R").c_str()),wristA,wristB);}
+  Point3 d=bone("f_index.03.R")-blade;m_shotgunContact={left/4,right/3,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)/unit};}
  // In true darkness the hands lose the room fill and floor too: only lamps,
  // the torch lens and the shot (longer and brighter there) show them.
  const float darkness=game.darkness(),handFloor=1.f-darkness;
@@ -2878,6 +2969,13 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    if(len>.00001f)n=n*(1.f/len);if(n.x*face.v[0].p.x+n.y*face.v[0].p.y+n.z*face.v[0].p.z>0)n=n*-1.f;
    float light=roomAmbient;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::max(0.f,n.x*l.x+n.y*l.y+n.z*l.z);}
+   if(m_handLightReady&&!m_inspectRig){
+    // Lit as the world lights her body: the face's normal turned into the world
+    // and given the brightness of the probe side it faces.
+    const float cy=std::cos(m_view.angle),sy=std::sin(m_view.angle),cp=std::cos(m_view.pitch/140.f),sp=std::sin(m_view.pitch/140.f);
+    const Point3 out=n;const float forward=out.z*cp-out.y*sp;const Point3 world{-out.x*sy+forward*cy,out.x*cy+forward*sy,out.y*cp+out.z*sp};
+    size_t side=0;float best=-2;for(size_t i=0;i<6;++i){const auto d=m_handNormals[i];const float a=world.x*d.x+world.y*d.y+world.z*d.z;if(a>best){best=a;side=i;}}
+    light=m_handLight[side]*handFloor;}
    light+=game.muzzleFlash()*.65f;
    for(auto&v:face.v)v.light=std::clamp(light,.10f*handFloor,2.5f);
    triangle3D(face.v[0],face.v[1],face.v[2],texture,1.f,&roomLights);
@@ -2896,8 +2994,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
      else if(face.part==7)p.z-=hold.trigger;
      v.p=hold.point(p);if(face.part==5&&hold.magazine==2)v.p=v.p+hold.magazineShift;}
     else{
-     auto local=gunLocal(v.p);
-     if(face.part==2)local.z-=motion.bolt;
+     auto local=gunLocal(face.part==2?v.p+Point3{0,0,motion.bolt/gunScale}:v.p);   // the pump slides along the bore
      if(face.part==3){float t=game.shotAge()-.09f;local=local+Point3{t*1.8f,t*.85f-t*t*3.5f,-t*.3f};}
      v.p=animated(local);
     }
@@ -2906,7 +3003,12 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    shade(face,claire>=0?m_claireTextures[size_t(claire)]:texture);
   }
  };
- draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);
+ if(fpShotgun){
+  for(auto face:m_fpShotgun.triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
+   const int claire=claireMaterial(m_fpShotgun,face.part);shade(face,claire>=0?m_claireTextures[size_t(claire)]:m_arms);}
+  for(auto face:m_weaponMesh.triangles){if(face.part==3&&(game.shotAge()<.09f||game.shotAge()>.45f))continue;
+   for(auto&v:face.v)v.p=fpShotgunPoint(v.p,face.part==2);shade(face,m_weaponTexture);}
+ }else{draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);}
  // The pack's slide is an open shell notched for the hammer: run back, its
  // rear shows the hollow inside. A breech face, slide steel, closes it.
  if(pistol&&hold.slide>.001f){const MeshTriangle*steel=nullptr;for(const auto&t:m_handgunMesh.triangles)if(t.part==4){steel=&t;break;}
@@ -2987,7 +3089,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  // The source arms end in open shoulder rings. Continue those rings into dark
  // sleeves behind the camera, closing the model rather than exposing its interior.
  const Texture& sleeve=m_leatherTexture;
- for(const auto&ring:m_armsMesh.openRings){
+ for(const auto&ring:fpShotgun?std::vector<std::vector<MeshVertex>>{}:m_armsMesh.openRings){
   Point3 center{};for(auto v:ring)center=center+fromRig(v.p);center=center*(1.f/float(ring.size()));
   // Only upper-arm openings are extended; small mesh boundaries are left intact.
   float radius=0;for(auto v:ring){auto d=fromRig(v.p)-center;radius=std::max(radius,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}if(radius<.045f)continue;
@@ -3003,7 +3105,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   Point3 tip{};int count=0;float flashScale=1;
   if(pistol){tip=hold.point(kPistolMuzzle+Point3{0,0,.012f});count=1;flashScale=.35f;}
   else for(auto&t:m_weaponMesh.triangles)for(auto&v:t.v)if(v.p.z<m_weaponMesh.minimum.z+gunRange.z*.015f){tip=tip+v.p;++count;}
-  if(count){auto center=assembly(pistol?tip:animated(gunLocal(tip*(1.f/count))));float age=game.shotAge(),size=(.13f+std::sin(std::min(1.f,age/.07f)*kPi)*.15f)*flashScale;
+  if(count){auto center=assembly(pistol?tip:fpShotgun?fpShotgunPoint(tip*(1.f/count),false):animated(gunLocal(tip*(1.f/count))));float age=game.shotAge(),size=(.13f+std::sin(std::min(1.f,age/.07f)*kPi)*.15f)*flashScale;
    float rotation=std::floor(age*60)*1.7f;Point3 right{std::cos(rotation)*size,std::sin(rotation)*size,0},up{-std::sin(rotation)*size,std::cos(rotation)*size,0};
    float intensity=2.4f*std::max(0.f,1-age/.10f);auto a=center-right-up,b=center+right-up,c=center+right+up,d=center-right+up;
    triangle3D({a,0,1},{b,1,1},{c,1,0},m_muzzleFlash,intensity);triangle3D({a,0,1},{c,1,0},{d,0,0},m_muzzleFlash,intensity);

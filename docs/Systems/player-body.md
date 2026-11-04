@@ -195,3 +195,27 @@ fails if a palm curls away, a wrist twists past 55 degrees or an elbow past
 45 (fists are reported only: they are keyed, not solved), a wrist jumps more
 than 8 degrees in a frame while the shotgun sways, or an arm is
 past 97% of its reach.
+
+## Shotgun (authored rig, v1.1.13)
+
+The shotgun no longer uses the IK hold above. Claire's arms are refitted onto the
+RetroWeaponPack's animated first-person rig and its shotgun clips are baked by
+`tools/player/build_claire_fp_shotgun.py` into resource 2313
+(`src/assets/library/player/claire-fp-shotgun.fbx`, from
+`src/assets/library/fparms/.../FP_Arms_Shotgun_01_Anims.blend`):
+
+- 13 clips (idle, aim, walk, walk_aim, run, crouch, fire, fire_aim, reload_start,
+  reload_step, reload_end, draw, hide), posed by name (`fpShotgunClip`).
+- The Remington rides baked reference points (`gun_*`, `pump_*` bones):
+  `fpShotgunPoint` maps any point of the model into view space each frame.
+- Arm girth is the pack arms' girth (her slim forearm stretched to the pack
+  length read as a twig); the elbow and wrist weights blend across the joint.
+- Aimed: the pack framing, lowered 0.02 m so the rear sight sits on the
+  crosshair (`RAWMETAL_FP_PUSH` "hip aim drop" tunes it).
+- Reload is shell by shell at the clips' own pace (`Game::ShellStart`,
+  `ShellInsert`, `ShellFinish`), two shells per insert; firing with a shell in
+  the tube cuts it short.
+- The arms and guns are lit by the world probe at the eye (the same six-sided
+  `exteriorLight` her body and props use).
+- `--arms-inspection` gates the shotgun on contact: left fingertips within
+  0.05 m of the pump's axis, the right index within 0.03 m of the trigger.

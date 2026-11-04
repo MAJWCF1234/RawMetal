@@ -4,6 +4,21 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.13 - Two at a time (2026-11-04)
+
+She handles the shotgun the way it is meant to be handled now: her left hand
+works the pump, her right closes on the stock with a finger on the trigger,
+and the gun kicks and is racked with the weight of a real one. Bring it up
+with the right mouse button and the sights settle on what she is looking at.
+
+She reloads it shell by shell, two to a hand, and racks it when the tube is
+full. Pull the trigger with a shell inside and she stops loading and fires.
+
+Her hands and the guns in them take the light of the room she is in: brighter
+under a lamp, dark in the dark.
+
+---
+
 ## v1.1.12 - Her size (2026-11-04)
 
 She carries the shotgun now the way it is carried: low on the right, the stock

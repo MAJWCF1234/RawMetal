@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include "../game/Game.h"
 #include <cstdint>
 #include <vector>
@@ -77,6 +78,12 @@ public:
     Mesh::GripReport armsGripReport(int side)const{return m_armsMesh.gripReport(side);}
     // The pistol's fingers from the trigger and grip, metres (0 for any other hold).
     float pistolContact()const{return m_pistolContact;}
+    // Shotgun hands on the gun (metres): mean of the left fingers' tip joints
+    // from the pump's axis, of the right fingers' from the stock wrist's axis,
+    // and the right index's tip joint from the trigger blade.
+    struct ShotgunContact {float leftWrap=0,rightWrap=0,trigger=0;};
+    ShotgunContact shotgunContact()const{return m_shotgunContact;}
+    bool fpShotgunPosed()const{return m_fpShotgunPosed;}   // the last frame drew the pack's authored shotgun rig
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,
     // 0 = final attachment (ordinary gameplay).
@@ -173,6 +180,16 @@ private:
     std::array<Texture,6> m_clutterTextures;
     Texture m_weaponTexture,m_enemyTexture;
     Mesh m_weaponMesh{109},m_armsMesh{111},m_enemyMesh{110};
+    // Claire's arms on the RetroWeaponPack's animated shotgun rig, baked by
+    // tools/player/build_claire_fp_shotgun.py: clips posed by name, the gun
+    // carried by its baked reference points. m_fpShotgunPosed: this frame used it.
+    Mesh m_fpShotgun{2313};bool m_fpShotgunPosed=false;float m_fpPush=0,m_fpDrop=0;
+    // The world's light where she stands (six world directions and their
+    // brightness, the probe her body and every prop is lit by): the arms and gun
+    // take it, so they light like the world they are in.
+    std::array<Point3,6> m_handNormals{};std::array<float,6> m_handLight{};bool m_handLightReady=false;
+    struct FpClip{const char*name;float phase;};FpClip fpShotgunClip(const Game&game)const;
+    Point3 fpShotgunPoint(Point3 remington,bool pump)const;
     Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131};
     // The transformed: the Worker's body (277) on its own six baked clips.
     Mesh m_transformedMesh{277,"",2185};
@@ -357,7 +374,7 @@ private:
     std::array<std::uint64_t,Game::MaxChunks> m_chunkLightSourceKeys{};
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
-    float m_gripError=0,m_pistolContact=0;
+    float m_gripError=0,m_pistolContact=0;ShotgunContact m_shotgunContact{};std::array<Point3,2> m_shotgunTarget{};
     int m_cleanupInspectionStage=0;
     float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0,m_cleanupEdgeStretch=1;
     bool m_inspectRig=false;

@@ -250,7 +250,11 @@ bool Game::testCombat(){
  const auto&tubeState=reload.player().pool(WeaponId::Shotgun);
  InputState reloadKey{};reloadKey.reload=true;reload.update(reloadKey,.01f);
  if(tubeState.total!=8||tubeState.loaded!=2||reload.sessionRevision()!=revision)return false;
- reloadKey.reload=false;for(int i=0;i<80;++i)reload.update(reloadKey,.01f);
+ // Shell by shell, two to an insert: the first pair lands partway through the
+ // first insert, the tube is full after the second, and the finish racks it.
+ reloadKey.reload=false;for(int i=0;i<int((ShellStart+ShellInsert)*100)+2;++i)reload.update(reloadKey,.01f);
+ if(tubeState.loaded!=4)return false;
+ for(int i=0;i<int((ShellInsert+ShellFinish)*100)+4;++i)reload.update(reloadKey,.01f);
  if(tubeState.total!=8||tubeState.loaded!=6||lengthSq(reload.player().pos-position)>.0001f)return false;
  InputState scroll{};scroll.weaponScroll=-1;reload.update(scroll,.01f);if(reload.weaponEquipped())return false;
  scroll.weaponScroll=1;reload.update(scroll,.01f);if(!reload.weaponEquipped())return false;
@@ -350,7 +354,9 @@ void Game::reloadWeapon(){
  if(dead()||m_won||holdingClutter()||!m_weaponEquipped||m_switchTarget!=WeaponId::Fists||m_reloadTimer>0||rounds.loaded>=cycle.tubeCapacity||rounds.total<=rounds.loaded)return;
  // A dry magazine takes longer: the slide is back and has to be released.
  m_emptyReload=rounds.loaded<=0&&cycle.emptyReloadTime>0;
- m_reloadTimer=m_reloadLength=m_emptyReload?cycle.emptyReloadTime:cycle.reloadTime;m_shotCooldown=std::max(m_shotCooldown,m_reloadTimer);m_weaponKick=cycle.reloadKick;
+ m_reloadTimer=m_reloadLength=m_emptyReload?cycle.emptyReloadTime:cycle.reloadTime;
+ if(m_equippedWeapon==WeaponId::Shotgun){const int inserts=(std::min(cycle.tubeCapacity,rounds.total)-rounds.loaded+ShellsPerInsert-1)/ShellsPerInsert;m_reloadTimer=m_reloadLength=ShellStart+inserts*ShellInsert+ShellFinish;}
+ m_shotCooldown=std::max(m_shotCooldown,m_equippedWeapon==WeaponId::Shotgun&&rounds.loaded>0?ShellStart:m_reloadTimer);m_weaponKick=cycle.reloadKick;
  m_vrChamberEmpty=m_vrPumpBack=false; // a reload chambers a round
 }
 
@@ -515,7 +521,14 @@ void Game::update(const InputState& input, float dt) {
          auto cue=[&](float at,Sound s,float gain){if(at>0&&before<at&&after>=at)sound(s,gain);};
          cue(cycle.magOutAt,cycle.magOutSound,.5f);cue(cycle.magInAt,cycle.magInSound,.55f);if(m_emptyReload)cue(cycle.rackAt,cycle.rackSound,.6f);}
         // The magazine is seated: a pump gun also restarts its shot clock for the pump stroke.
-        if(oldReload>0&&m_reloadTimer==0){rounds.loaded=std::min(cycle.tubeCapacity,rounds.total);if(cycle.pumpSoundAt>0)m_shotAge=0;m_emptyReload=false;}
+        if(oldReload>0&&m_equippedWeapon==WeaponId::Shotgun){
+         // Each shell lands partway through its insert; the finish racks the pump.
+         const float before=m_reloadLength-oldReload,after=m_reloadLength-m_reloadTimer;const int shells=reloadShells();
+         auto landed=[&](float t){return std::clamp(int(std::floor((t-ShellStart)/ShellInsert+1-ShellLands)),0,shells);};
+         for(int k=landed(before);k<landed(after);++k){const int room=std::min(cycle.tubeCapacity,rounds.total)-rounds.loaded;if(room>0){rounds.loaded+=std::min(room,ShellsPerInsert);sound(Sound::Pickup,.35f,1.25f);}}
+         const float rack=ShellStart+shells*ShellInsert+ShellFinish*.45f;if(before<rack&&after>=rack)sound(cycle.pumpSound,.8f);
+         if(m_reloadTimer==0)m_emptyReload=false;}
+        else if(oldReload>0&&m_reloadTimer==0){rounds.loaded=std::min(cycle.tubeCapacity,rounds.total);if(cycle.pumpSoundAt>0)m_shotAge=0;m_emptyReload=false;}
         m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
         m_guarding=heldNpc()<0&&!takedownActive()&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
         // Right mouse with the shotgun up brings it to the eye (not sprinting,
@@ -536,7 +549,9 @@ void Game::update(const InputState& input, float dt) {
          if(m_vrChamberEmpty){if(m_vrPumpAlong<m_vrPumpRest-.07f)m_vrPumpBack=true;
           else if(m_vrPumpBack&&m_vrPumpAlong>m_vrPumpRest-.025f){m_vrChamberEmpty=m_vrPumpBack=false;sound(Sound::Pump,.9f);}}}
         if(!input.fire)m_triggerReset=true;
-        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && !(input.vrTracked&&m_vrChamberEmpty&&pumpGun)) {
+        // Firing with a shell in the tube ends a shell-by-shell reload there.
+        if(input.fire&&!m_suppressFire&&shellReload()&&rounds.loaded>0&&reloadElapsed()>=ShellStart){m_reloadTimer=0;m_shotCooldown=0;}
+        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && m_reloadTimer<=0.f && !(input.vrTracked&&m_vrChamberEmpty&&pumpGun)) {
             // Semi-automatic: one round per press, the trigger released before the next.
             const bool raised=m_weaponEquipped&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists,press=!cycle.semiAuto||m_triggerReset;
             if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked&&m_vrSupportGrip&&pumpGun){m_vrChamberEmpty=true;m_vrPumpBack=false;m_vrPumpRest=m_vrPumpAlong;}}

@@ -163,6 +163,9 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
   m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);grip();extract(m_scene);
   description+="Arm opening rings: "+std::to_string(openRings.size())+"\n";
  }
+ if(id==2313){   // Claire's arms on the pack's animated shotgun rig: clips are posed by name
+  for(auto*skin:m_scene->skin_deformers)for(auto&vertex:skin->vertices)vertex.dq_weight=1;
+  m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);}
 }
 Mesh::~Mesh(){ufbx_free_scene(m_scene);ufbx_free_scene(m_bindScene);}
 const std::vector<MeshTriangle>& Mesh::bindTriangles()const{
@@ -644,6 +647,14 @@ void Mesh::pose(float phase,float recoil,int curls){
     constexpr float trigger[3]={.30f,.55f,.35f},grasp[3]={.82f,.90f,.75f},
      wrap[3]={.62f,.85f,.90f},thumbs[2][3]={{.25f,.25f,.25f},{.15f,.15f,.15f}};
     curl=name.find("thumb.")==0?thumbs[support][joint]:support?wrap[joint]:name.find("f_index")==0?trigger[joint]:grasp[joint];
+   }else if(curls==2){
+    // Shotgun: the right hand wraps the stock's wrist with its index on the
+    // trigger, the left closes round the pump. RAWMETAL_SHOTGUN_CURL ("trigger
+    // x3, grasp x3, wrap x3, right thumb, left thumb") tunes it.
+    static const std::array<float,11> table=[]{std::array<float,11> t{.30f,.55f,.35f,.85f,.95f,.80f,.85f,.95f,.90f,.55f,.45f};
+     if(const char*e=std::getenv("RAWMETAL_SHOTGUN_CURL"))std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f",&t[0],&t[1],&t[2],&t[3],&t[4],&t[5],&t[6],&t[7],&t[8],&t[9],&t[10]);return t;}();
+    const int joint=name.find(".01.")!=std::string::npos?0:name.find(".02.")!=std::string::npos?1:2;
+    curl=name.find("thumb.")==0?table[support?10:9]:support?table[size_t(6+joint)]:name.find("f_index")==0?table[size_t(joint)]:table[size_t(3+joint)];
    }else{
     if(support&&name.find(".02.")!=std::string::npos)curl=.85f;
     if(support&&name.find(".03.")!=std::string::npos)curl=.90f;
