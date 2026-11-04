@@ -935,12 +935,39 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       if(!(fields>>name>>level>>x>>y>>z>>yaw>>pitch))continue;fields>>action;
       auto scene=retro::Game::mapInspection({x,y},yaw*retro::kPi/180.f,pitch,level,true,z,true);
       if(action=="set"){std::string states;fields>>states;std::istringstream each(states);std::string state;
-       while(std::getline(each,state,',')){auto eq=state.find('=');scene.setState(retro::stateId(state.substr(0,eq)),eq==std::string::npos?1:std::stoi(state.substr(eq+1)));}action="wait";frames=2;} // set a,b=5000: states on, or to a value (a timer's clock)
+       while(std::getline(each,state,',')){auto eq=state.find('=');scene.setState(retro::stateId(state.substr(0,eq)),eq==std::string::npos?1:std::stoi(state.substr(eq+1)));}action="wait";frames=2; // set a,b=5000: states on, or to a value (a timer's clock)
+       // ...then optionally another action and its frames ("set md_triage_dark pistol-light 30"); a trailing watch stays put.
+       const auto mark=fields.tellg();std::string next;if(fields>>next&&next!="watch"){action=next;fields>>frames;}else{fields.clear();fields.seekg(mark);}}
       else fields>>frames;
       if(action=="caution"){for(size_t i=0;i<scene.npcActors().size();++i)if(scene.npcActors()[i].level==scene.level())scene.startGuardCaution(i);action="wait";}
-      if(action=="fire"){scene.update({},1.f/60.f);scene.equipWeapon(retro::WeaponId::Shotgun);int loaded=scene.player().loaded;retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);
-       const bool fired=scene.player().loaded<loaded;std::ofstream("map-shots.txt",std::ios::app)<<(fired?"SHOTGUN ":"FAILED SHOTGUN ")<<name<<" loaded "<<loaded<<" -> "<<scene.player().loaded<<'\n';if(!fired)return 21;
+      if(action=="fire"){scene.update({},1.f/60.f);scene.equipWeapon(retro::WeaponId::Shotgun);int loaded=scene.player().pool(retro::WeaponId::Shotgun).loaded;retro::InputState fire{};fire.fire=true;scene.update(fire,.02f);
+       const int after=scene.player().pool(retro::WeaponId::Shotgun).loaded;const bool fired=after<loaded;std::ofstream("map-shots.txt",std::ios::app)<<(fired?"SHOTGUN ":"FAILED SHOTGUN ")<<name<<" loaded "<<loaded<<" -> "<<after<<'\n';if(!fired)return 21;
        for(int i=0;i<frames;++i)scene.update({},1.f/60.f);}
+      // "sidearms N": the level's sidearm carriers killed, N frames for them to fall beside their pistols.
+      else if(action=="sidearms"){scene.downSidearmCarriers();scene.stowWeapon();for(int i=0;i<frames;++i)scene.update({},1.f/60.f);std::ofstream("map-shots.txt",std::ios::app)<<"SIDEARMS "<<name<<' '<<scene.droppedSidearms().size()<<'\n';}
+      // "pistol N": the handgun granted and drawn, N frames held; "pistol-fire N" fires it first.
+      // "pistol-reload N" fires five and starts a magazine change N frames before the picture; "pistol-empty N"
+      // fires the magazine dry first (the longer reload, the slide released at the end);
+      // "pistol-sprint N" runs forward N frames; "pistol-switch N" draws it from the shotgun,
+      // N frames into the switch; "pistol-light N" holds it with the torch on.
+      // "pistol-switch-out N" puts it away for the shotgun, "pistol-holster N" for the fists,
+      // and "pistol-from-fists N" draws it from empty hands, each N frames in.
+      else if(action.rfind("pistol",0)==0){scene.update({},1.f/60.f);scene.grantHandgun(36);
+       if(action=="pistol-switch"){scene.equipWeapon(retro::WeaponId::Shotgun);for(int i=0;i<30;++i)scene.update({},1.f/60.f);scene.selectWeapon(retro::WeaponId::Handgun);}
+       else if(action=="pistol-from-fists"){scene.equipWeapon(retro::WeaponId::Fists);for(int i=0;i<30;++i)scene.update({},1.f/60.f);scene.selectWeapon(retro::WeaponId::Handgun);}
+       else scene.equipWeapon(retro::WeaponId::Handgun);
+       if(action=="pistol-switch-out"||action=="pistol-holster"){for(int i=0;i<30;++i)scene.update({},1.f/60.f);scene.selectWeapon(action=="pistol-holster"?retro::WeaponId::Fists:retro::WeaponId::Shotgun);}
+       if(action=="pistol-light"){scene.giveQuestItem(retro::Game::Flashlight);scene.setState(retro::stateId("flashlight_on"),1);}
+       int loaded=scene.player().pool(retro::WeaponId::Handgun).loaded;retro::InputState fire{};fire.fire=true;
+       if(action=="pistol-fire")scene.update(fire,.02f);
+       // A tactical change spends five rounds first; an empty one the whole magazine.
+       if(action=="pistol-reload"||action=="pistol-empty")for(int shot=0;shot<40&&scene.player().pool(retro::WeaponId::Handgun).loaded>(action=="pistol-empty"?0:7);++shot){scene.update(fire,.02f);for(int i=0;i<14;++i)scene.update({},1.f/60.f);}
+       if(action=="pistol-reload"||action=="pistol-empty"){retro::InputState reload{};reload.reload=true;scene.update(reload,1.f/60.f);}
+       const int after=scene.player().pool(retro::WeaponId::Handgun).loaded;
+       const bool ok=action=="pistol-switch"?scene.weaponSwitchTarget()==retro::WeaponId::Handgun:action=="pistol-switch-out"?scene.weaponSwitchTarget()==retro::WeaponId::Shotgun:action=="pistol-holster"?!scene.weaponEquipped():action=="pistol-from-fists"?scene.activeFirearm()==retro::WeaponId::Handgun&&scene.weaponSwitchPhase()==2:scene.activeFirearm()==retro::WeaponId::Handgun&&(action!="pistol-fire"||after<loaded)&&(action!="pistol-reload"&&action!="pistol-empty"||scene.reloading());
+       std::ofstream("map-shots.txt",std::ios::app)<<(ok?"HANDGUN ":"FAILED HANDGUN ")<<action<<' '<<name<<" loaded "<<loaded<<" -> "<<after<<'\n';if(!ok)return 21;
+       retro::InputState run{};run.forward=action=="pistol-sprint";run.sprint=run.forward;
+       for(int i=0;i<frames;++i)scene.update(run,1.f/60.f);}
       else{scene.stowWeapon();
        // "hide N": E at the locker in front, then N frames looking out of it.
        if(action=="hide"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);action="wait";}
@@ -1453,7 +1480,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--gpu-actor-test"))return retro::SoftwareRenderer::testGpuActors()?0:35;
     if(commandArguments().find(L"--gpu-actor-performance"))return gpuActorPerformance();
     if(commandArguments().find(L"--visibility-test"))return retro::SoftwareRenderer::testVisibility()?0:35;
-    if(commandArguments().find(L"--performance-test"))return retro::SoftwareRenderer::testPerformance()?0:35;
+    if(commandArguments().find(L"--performance-test")){
+     // Its scenes are whole Games passed by value through nested measures,
+     // which overflow the main thread's 1 MB stack: run it on a 256 MB one.
+     bool passed=false;HANDLE thread=CreateThread(nullptr,size_t(256)<<20,[](void*result)->DWORD{*static_cast<bool*>(result)=retro::SoftwareRenderer::testPerformance();return 0;},&passed,STACK_SIZE_PARAM_IS_A_RESERVATION,nullptr);
+     if(!thread)return 35;WaitForSingleObject(thread,INFINITE);CloseHandle(thread);return passed?0:35;}
     if(commandArguments().find(L"--lab-profile"))return ashfallPerformance(true,true,false,false,false,true);
     if(commandArguments().find(L"--lab-performance"))return ashfallPerformance(true,true,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
     if(commandArguments().find(L"--approach-test"))return approachTest();
@@ -1546,7 +1577,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"stance",retro::Game::testStance},
          {"dialogue",retro::Game::testDialogue},
          {"storm",retro::Game::testStorm},
-         {"zone-people",retro::Game::testZonePeople}};
+         {"zone-people",retro::Game::testZonePeople},
+         {"handgun",retro::Game::testHandgun}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){
@@ -1610,6 +1642,15 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
             }
             std::ofstream("attachment-test.txt")<<"150 frames: recoil, sway, jump and settle\nMaximum wrist-to-socket error: "<<maxError<<" metres\n";
             if(maxError>.025f)return 10;
+            // The pistol: three shots, sway, a jump, a magazine change and a sprint.
+            retro::Game pistol=retro::Game::weaponInspection(4,10);float pistolError=0;
+            for(int frame=0;frame<240;++frame){retro::InputState motion{};
+                motion.mouseDx=frame<80?std::sin(frame*.17f)*80.f:0;motion.mouseDy=frame<80?std::cos(frame*.13f)*40.f:0;
+                motion.fire=frame==20||frame==40||frame==60;motion.jump=frame==70;motion.reload=frame==100;motion.forward=motion.sprint=frame>=200;
+                pistol.update(motion,1.f/60.f);renderer.render(pistol);pistolError=std::max(pistolError,renderer.gripError());
+            }
+            std::ofstream("attachment-test.txt",std::ios::app)<<"Pistol, 240 frames: three shots, sway, jump, reload and sprint\nMaximum wrist-to-socket error: "<<pistolError<<" metres\n";
+            if(pistolError>.025f)return 10;
         }
         bool reachable[24][24]{};
         std::queue<std::pair<int,int>> pending;
@@ -1672,7 +1713,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          retro::InputState drag{};drag.fire=true;drag.pointerX=retro::MenuLayout::SliderX+15;drag.pointerY=retro::MenuLayout::RowTop+retro::MenuLayout::RowHeight+9;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-low.ppm");
          drag.pointerX=retro::MenuLayout::SliderX+60;drag.pointerY+=50;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-high.ppm");
         }
-        {for(int mode:{1,2,3})for(int stage=0;stage<4;++stage){auto pose=retro::Game::weaponInspection(mode,mode==2?stage*.028f:stage==0?10.f:stage*.12f);renderer.render(pose);saveFrame(("weapon-pass-"+std::to_string(mode)+"-"+std::to_string(stage)+".ppm").c_str());}
+        {for(int mode:{1,2,3,4,5,6})for(int stage=0;stage<4;++stage){auto pose=retro::Game::weaponInspection(mode,mode==2||mode==4?stage*.028f:mode>=5?stage*.25f:stage==0?10.f:stage*.12f);renderer.render(pose);saveFrame(("weapon-pass-"+std::to_string(mode)+"-"+std::to_string(stage)+".ppm").c_str());}
          auto fists=retro::Game::weaponInspection(1,.16f);for(int angle=0;angle<4;++angle){renderer.inspectRig(fists,angle*1.570796f,.25f);saveFrame(("fist-rig-"+std::to_string(angle)+".ppm").c_str());}
         }
         {const retro::Vec2 positions[]={{2.7f,6.8f},{2.7f,10.2f},{19.f,7.f},{18.7f,10.5f},{11.f,15.f},{9.7f,17.5f}};const float yaw[]={1.55f,-1.55f,1.35f,-1.1f,1.6f,-.75f};
@@ -1699,6 +1740,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
           const float yaw[]={0,1.570796f,-1.570796f,0,3.14159f,.7f},pitch[]={0,0,0,1.20f,0,.5f};
           for(int angle=0;angle<6;++angle){renderer.inspectRig(rigScene,yaw[angle],pitch[angle]);saveFrame(("rig-"+std::to_string(pose)+"-"+std::to_string(angle)+".ppm").c_str());}
          }
+         // The pistol rig, idle and just fired.
+         for(int pose=0;pose<2;++pose){auto pistol=retro::Game::weaponInspection(4,pose?.028f:10.f);const float yaw[]={0,1.570796f,-1.570796f,0,3.14159f,.7f},pitch[]={0,0,0,1.20f,0,.5f};
+          for(int angle=0;angle<6;++angle){renderer.inspectRig(pistol,yaw[angle],pitch[angle]);saveFrame(("pistol-rig-"+std::to_string(pose)+"-"+std::to_string(angle)+".ppm").c_str());}}
         }
         for(int kind=0;kind<3;++kind)for(int state=0;state<4;++state){auto scene=retro::Game::validationScene(static_cast<retro::Enemy::Kind>(kind),state==2?.35f:state==3?2.5f:-1.f,state==1?.4f:0);
             renderer.render(scene);saveFrame(("encounter-"+std::to_string(kind)+"-"+std::to_string(state)+".ppm").c_str());
@@ -1718,7 +1762,33 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(bool left:{false,true})for(float curl:{0.f,1.f}){std::ofstream obj(std::string("vr-hand-")+(left?"left":"right")+(curl>0?"-closed":"-open")+".obj");int n=0;
       for(const auto&t:arms.trackedHand(left,{curl,curl,curl,curl,curl})){for(const auto&v:t.v)obj<<"v "<<v.p.x<<' '<<v.p.y<<' '<<v.p.z<<'\n';obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}++file;}
      {retro::Mesh weapon(109);std::ofstream obj("vr-weapon.obj");int n=0;for(const auto&t:weapon.triangles){for(const auto&v:t.v)obj<<"v "<<v.p.x<<' '<<v.p.y<<' '<<v.p.z<<'\n';obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}}
-     return file==4?0:1;}
+     // The pistol held: the right hand closed on its grip (pistolCurls) and the
+     // pistol, both in the skeletal hand frame (across, palm, -forward). The gun
+     // frame sits 7.5 cm along the knuckles and 3 cm into the palm with right =
+     // -palm, up = across and back = -forward (VrRuntime sampleHand).
+     {retro::Mesh pistol(337);std::ofstream obj("vr-pistol-hold.obj");int n=0;obj<<"o hand\n";
+      for(const auto&t:arms.trackedHand(false,retro::SoftwareRenderer::pistolCurls({.5f,.5f,.5f,.5f,.5f}))){for(const auto&v:t.v)obj<<"v "<<v.p.x<<' '<<v.p.y<<' '<<v.p.z<<'\n';obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}
+      obj<<"o pistol\n";for(const auto&t:pistol.triangles){for(const auto&v:t.v){auto g=retro::SoftwareRenderer::vrPistolPoint(v.p,true);obj<<"v "<<g.y<<' '<<.03f-g.x<<' '<<g.z-.075f<<'\n';}obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}
+      if(n)++file;}
+     return file==5?0:1;}
+    if(commandArguments().find(L"--pistol-inspection")){
+     // The player's pistol held (Game::weaponInspection modes 4-9) on the GPU:
+     // idle, a shot through its rise, both reloads through every phase, low
+     // ready, a switch raise and the torch; then the rig from six sides.
+     constexpr int width=960,height=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/shot");float worst=0,contact=0;std::ofstream report("pistol-inspection.txt");
+     auto save=[&](const std::string& name){std::ofstream out(".build/shot/pistol-"+name+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int k=0;k<width*height;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
+     struct Pose{const char* name;int mode;float age;};
+     const Pose poses[]={{"idle",4,10},{"shot-012",4,.012f},{"shot-028",4,.028f},{"shot-050",4,.05f},{"shot-090",4,.09f},{"shot-160",4,.16f},
+      {"reload-05",5,.05f},{"reload-14",5,.14f},{"reload-18",5,.18f},{"reload-26",5,.26f},{"reload-40",5,.40f},{"reload-44",5,.44f},{"reload-47",5,.47f},{"reload-50",5,.50f},{"reload-55",5,.55f},{"reload-60",5,.60f},{"reload-72",5,.72f},{"reload-90",5,.90f},
+      {"empty-00",6,.0f},{"empty-14",6,.14f},{"empty-50",6,.50f},{"empty-60",6,.60f},{"empty-72",6,.72f},{"empty-79",6,.79f},{"empty-83",6,.83f},{"empty-85",6,.85f},{"empty-92",6,.92f},
+      {"sprint-50",7,.5f},{"sprint-100",7,1},{"switch-25",8,.25f},{"switch-50",8,.5f},{"switch-75",8,.75f},{"light",9,0}};
+     for(const auto&pose:poses){auto scene=retro::Game::weaponInspection(pose.mode,pose.age);renderer->render(scene);save(pose.name);worst=std::max(worst,renderer->gripError());contact=std::max(contact,renderer->pistolContact());report<<pose.name<<" grip error "<<renderer->gripError()<<" fingers "<<renderer->pistolContact()<<" m\n";}
+     const float yaw[]={0,1.570796f,-1.570796f,0,3.14159f,.7f},pitch[]={0,0,0,1.20f,0,.5f};
+     for(const auto&pose:{Pose{"rig",4,10},Pose{"rig-reload",5,.55f},Pose{"rig-empty",6,.79f},Pose{"rig-light",9,0}})for(int angle=0;angle<6;++angle){auto scene=retro::Game::weaponInspection(pose.mode,pose.age);renderer->inspectRig(scene,yaw[angle],pitch[angle],renderer->pistolGripView(scene)+retro::Point3{0,-.02f,.06f},.40f);save(std::string(pose.name)+"-"+std::to_string(angle));}
+     // A correct hold measures about .07-.08 m (the rig's hands are large for the
+     // pistol); a hand slid off the grip or a finger off the trigger goes past .095.
+     report<<"worst grip error "<<worst<<"\nworst finger contact "<<contact<<" m\n";return worst<.025f&&contact<.095f?0:10;}
     if(commandArguments().find(L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
     bool vrMode=commandArguments().find(L"--vr")!=nullptr;
     // Double-clicked with a headset SteamVR can see: ask PC or VR. Without one there is nothing to ask.
@@ -1784,7 +1854,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());
-        titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128];if(game.titleScreen())std::swprintf(t,128,L"Depthworks");else std::swprintf(t,128,L"Depthworks | HP %.0f | Shells %d | Monsters %d",game.player().health,game.player().ammo,game.enemiesRemaining());window.setCaption(t);}
+        titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128];if(game.titleScreen())std::swprintf(t,128,L"Depthworks");else std::swprintf(t,128,L"Depthworks | HP %.0f | %ls %d | Monsters %d",game.player().health,game.activeFirearm()==retro::WeaponId::Handgun?L"9mm":L"Shells",game.firearmPool().total,game.enemiesRemaining());window.setCaption(t);}
     }
     if(!settingsPath.empty())game.saveSettings(settingsPath);
     return 0;

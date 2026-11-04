@@ -12,6 +12,10 @@
   "kind": "free",
   "front": "+z"
  },
+ "cave_crystal_bed_blue": {
+  "kind": "free",
+  "front": "+z"
+ },
  "cctv_tv": {
   "kind": "screen",
   "front": "+z"
@@ -137,6 +141,11 @@
   "kind": "free",
   "front": "+z"
  },
+ "med_corpse_supine": {
+  "kind": "free",
+  "front": "+z",
+  "note": "lying on its back, feet toward +z, head toward -z"
+ },
  "med_extinguisher": {
   "kind": "free",
   "front": "+z"
@@ -166,6 +175,10 @@
   "front": "+z"
  },
  "med_vitals_monitor": {
+  "kind": "screen",
+  "front": "+z"
+ },
+ "med_vitals_monitor_dead": {
   "kind": "screen",
   "front": "+z"
  },

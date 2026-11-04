@@ -66,10 +66,15 @@ template<class A> int Game::archiveSave(A& a,int version){
   for(auto&points:{&m_hazmat.p,&m_hazmat.previous})for(auto&p:*points){a(p.x,p.y,p.z);if(p.x<0||p.x>24||p.y<0||p.y>24||p.z<-12||p.z>20)throw std::runtime_error("Invalid hazmat pose");}
   if(m_hazmat.accumulator<0||m_hazmat.accumulator>.06f||m_hazmat.quiet<0||m_hazmat.quiet>10)throw std::runtime_error("Invalid hazmat simulation");
  }
- auto&p=m_player;vec(p.pos);a(p.angle,p.pitch,p.health,p.ammo);if(version>=2)a(p.loaded);a(p.z,p.verticalVelocity,p.grounded,p.crouched,p.eye);vec(m_velocity);
+ // Before version 19 the one ammo/loaded pair was the shotgun's.
+ auto&p=m_player;auto&shells=p.pool(WeaponId::Shotgun);vec(p.pos);a(p.angle,p.pitch,p.health,shells.total);if(version>=2)a(shells.loaded);a(p.z,p.verticalVelocity,p.grounded,p.crouched,p.eye);vec(m_velocity);
  a(m_weaponKick,m_shotCooldown);if(version>=2)a(m_reloadTimer);a(m_shotAge,m_holster,m_punchAge,m_punchLeft,m_guarding,m_verticalSpring,m_verticalSpringVelocity,m_stepDistance,m_stepVariant,m_jumpBuffer,m_coyote);
  a(m_weaponMotion.yaw,m_weaponMotion.pitch,m_weaponMotion.bob,m_weaponMotion.back,m_weaponMotion.elbow,m_weaponMotion.bolt,m_weaponMotion.roll);vec(m_sway);vec(m_swayVelocity);a(m_elbowVelocity);
- for(auto& cell:m_itemCells)a(cell);
+ for(int i=0;i<(version>=19?int(m_itemCells.size()):3);++i)a(m_itemCells[size_t(i)]);
+ // Version 19: the handgun's pool, the firearm in hand, a switch under way and the reload's length.
+ if(version>=19){auto&nine=p.pool(WeaponId::Handgun);a(nine.total,nine.loaded,m_equippedWeapon,m_switchTarget,m_switchRaise,m_reloadLength,m_emptyReload);
+  if(!playerFirearm(m_equippedWeapon)||(m_switchTarget!=WeaponId::Fists&&!playerFirearm(m_switchTarget)))throw std::runtime_error("invalid saved weapon");}
+ else if constexpr(A::reading){m_equippedWeapon=WeaponId::Shotgun;m_switchTarget=WeaponId::Fists;m_switchRaise=false;p.pool(WeaponId::Handgun)={};m_reloadLength=m_reloadTimer>0?playerWeaponDef(WeaponId::Shotgun).cycle.reloadTime:0;m_emptyReload=false;}
  auto list=[&](auto& values,auto visit,int limit=1024){int count=int(values.size());a(count);if(count<0||count>limit)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(count);for(auto&v:values)visit(v);};
  if(version>=6){
   list(m_states,[&](StateValue&v){a(v.id,v.value);if(v.id==0)throw std::runtime_error("invalid state id");},8192);
@@ -104,7 +109,7 @@ template<class A> int Game::archiveSave(A& a,int version){
   list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(version>=15)a(e.wakeState);
    if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid enemy");}
    if(int(e.kind)>(version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
-  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>1)throw std::runtime_error("invalid pickup");});
+  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>(version>=17?7:6))throw std::runtime_error("invalid clutter");if(version>=17){a(v.model,v.damage,v.authored,v.broken,v.homeZ);vec(v.home);for(auto&d:v.dims)a(d);if((v.kind==7)!=(v.model>=0)||v.model>=FacilityModelCount||v.damage<0||(v.kind==7&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return d<=0||d>3.f;})))throw std::runtime_error("invalid prop");}});
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
@@ -112,8 +117,10 @@ template<class A> int Game::archiveSave(A& a,int version){
  return archivedChunks;
 }
 std::string Game::encodeSave()const{
- Game snapshot=*this;int tube=weaponDef(WeaponId::Shotgun).cycle.tubeCapacity;snapshot.m_player.loaded=std::clamp(snapshot.m_player.loaded,0,std::clamp(snapshot.m_player.ammo,0,tube));snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,18);auto payload=writer.stream.str();
- return "RAWMETAL_SAVE 18 "+std::to_string(checksum(payload))+"\n"+payload;
+ // Each pool is clamped to its own magazine or tube.
+ Game snapshot=*this;for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){auto&rounds=snapshot.m_player.pool(id);rounds.loaded=std::clamp(rounds.loaded,0,std::clamp(rounds.total,0,playerWeaponDef(id).cycle.tubeCapacity));}
+ snapshot.m_player.pool(WeaponId::Fists)={};snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,SaveVersion);auto payload=writer.stream.str();
+ return "RAWMETAL_SAVE "+std::to_string(SaveVersion)+" "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
  Game next;if(!prepareLoad(data,next))return false;
@@ -123,14 +130,14 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
  try {
   if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>18))return false;header>>std::ws;if(!header.eof())return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>SaveVersion))return false;header>>std::ws;if(!header.eof())return false;
   auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
   next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);
   // A save made inside the prologue when it was its own custom world: its map
   // has since moved onto the campaign grid, so the night shift starts over.
   auto oldPrologue=[&]{return next.m_worldId==WorldId::Custom&&next.m_customCampaignKey==loadEmbeddedPrologueCampaign()->key;};
   int archived=0;try{archived=next.archiveSave(reader,version);}catch(const std::exception&){if(!oldPrologue())throw;}
-  if(oldPrologue()){next=Game();next.startNewGame();adoptSession(next);return true;}if(version==1){next.m_player.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,next.m_player.ammo);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  if(oldPrologue()){next=Game();next.startNewGame();adoptSession(next);return true;}if(version==1){auto&shells=next.m_player.pool(WeaponId::Shotgun);shells.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,shells.total);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
   // Earlier builds represented a broken crate as four unrelated prop models
   // (kinds 0-3) spawned together. Convert that recognizable saved quartet to
   // the current textured splinter kind so existing saves receive the repair.
@@ -218,8 +225,14 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
    if(level==next.m_level)next.m_heldClutter=heldNew;
   }
   auto&p=next.m_player;
-  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||p.ammo<0||p.loaded<0||p.loaded>weaponDef(WeaponId::Shotgun).cycle.tubeCapacity||p.loaded>p.ammo||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return false;
-  for(int i=0;i<3;++i){int cell=next.m_itemCells[i],width=i==0?4:i==1?1:2;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
+  // Each firearm's pool against its own magazine; the handgun's only when it is owned or its 9 mm waits for it.
+  for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return false;}
+  if(p.pool(WeaponId::Fists)!=AmmoPool{}||(p.pool(WeaponId::Handgun).loaded>0&&!next.hasHandgun())||!next.ownsWeapon(next.m_equippedWeapon)||!next.ownsWeapon(next.m_switchTarget)||next.m_reloadLength<0||next.m_reloadLength>2||next.m_reloadTimer>next.m_reloadLength+.001f)return false;
+  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||next.m_reloadTimer<0||next.m_reloadTimer>2||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return false;
+  // A save from before the 9 mm stack gives it the first 1x2 cell clear of the others.
+  if(version<19){auto taken=[&](int c){for(int i=0;i<3;++i){int at=next.m_itemCells[size_t(i)],w=i==0?4:i==2?2:1;for(int r=c/6;r<c/6+2;++r)if(r>=at/6&&r<at/6+2&&c%6>=at%6&&c%6<at%6+w)return true;}return false;};
+   for(int c=0;c<24;++c)if(!taken(c)){next.m_itemCells[3]=c;break;}}
+  for(int i=0;i<int(next.m_itemCells.size());++i){int cell=next.m_itemCells[size_t(i)],width=i==0?4:i==2?2:1;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size())||(next.m_heldClutter>=0&&next.m_clutter[next.m_heldClutter].broken))return false;
@@ -360,7 +373,7 @@ bool Game::testSaves(){
   if(!check(restored.decodeSave(original.encodeSave())&&std::fabs(restored.player().pitch-pitch)<.001f,"Full vertical camera range survives save/load"))return false;
  }
  for(float time:{0.f,7.f,21.f,34.f,39.5f,42.f,48.f}){
-  auto original=liftInspection(time);original.m_player.health=63;original.m_player.ammo=17;original.m_medkits=2;original.m_weaponEquipped=false;original.m_world.setDoor(0,.35f,true);
+  auto original=liftInspection(time);original.m_player.health=63;original.m_player.pool(WeaponId::Shotgun).total=17;original.m_medkits=2;original.m_weaponEquipped=false;original.m_world.setDoor(0,.35f,true);
   // liftInspection() deliberately removes enemies from every chunk, so do not
   // index the stripped enemy vectors here. Enemy death persistence is covered
   // by the authored-content migration regression below.
@@ -373,7 +386,7 @@ bool Game::testSaves(){
   // not expected for this synthetic save. Verify the mutable state that this
   // test actually owns instead.
   if(!check(restored.decodeSave(data)&&restored.settings().master==.4f&&
-      restored.player().health==original.player().health&&restored.player().ammo==original.player().ammo&&
+      restored.player().health==original.player().health&&restored.player().pools==original.player().pools&&
       restored.medkits()==original.medkits()&&restored.weaponEquipped()==original.weaponEquipped()&&
       restored.world().liftPhase()==original.world().liftPhase()&&
       std::fabs(restored.world().liftHeight()-original.world().liftHeight())<.0001f,
@@ -473,7 +486,7 @@ bool Game::testSaves(){
  }
  Game game;auto pristine=game.encodeSave();auto corrupt=pristine;corrupt.back()='x';
  if(!check(!game.decodeSave(corrupt)&&!game.decodeSave(pristine.substr(0,pristine.size()/2))&&!game.decodeSave("RAWMETAL_SAVE 99 0\n")&&game.encodeSave()==pristine,"Corrupt / truncated / future saves leave the live game untouched"))return false;
- auto invalid=game;invalid.m_player.ammo=-1;if(!check(!game.decodeSave(invalid.encodeSave()),"Valid-checksum invalid gameplay data rejected"))return false;
+ auto invalid=game;invalid.m_player.pool(WeaponId::Shotgun).total=-1;if(!check(!game.decodeSave(invalid.encodeSave()),"Valid-checksum invalid gameplay data rejected"))return false;
  game.m_heldClutter=0;game.m_clutter[0].projectile=true;game.m_clutter[0].velocity={2,3};Game held;if(!check(held.decodeSave(game.encodeSave())&&held.holdingClutter()&&held.m_clutter[0].velocity.x==2,"Held and moving clutter roundtrip"))return false;
  auto directory=std::filesystem::current_path()/("save-test-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));game.setSaveDirectory(directory.wstring());
  struct Cleanup {std::filesystem::path path;~Cleanup(){std::error_code e;for(int i=0;i<3;++i){auto p=slotPath(path.wstring(),i);std::filesystem::remove(p,e);p+=L".tmp";std::filesystem::remove(p,e);}auto c=checkpointPath(path.wstring());std::filesystem::remove(c,e);c+=L".tmp";std::filesystem::remove(c,e);std::filesystem::remove(path,e);}} cleanup{directory};
@@ -481,7 +494,7 @@ bool Game::testSaves(){
  auto click=[&](int row){game.update({},.01f);InputState i{};i.pointerX=MenuLayout::X+30;i.pointerY=MenuLayout::RowTop+row*MenuLayout::RowHeight+7;i.fire=true;game.update(i,.01f);};
  click(9);if(!check(game.paused()&&game.menuPage()==MenuPage::Save,"Esc menu opens Save submenu"))return false;
  auto time=game.elapsed();click(0);if(!check(std::filesystem::exists(slotPath(directory.wstring(),0))&&game.elapsed()==time&&game.menuMessage()=="GAME SAVED","Save slot writes while simulation stays paused"))return false;
- auto before=readFile(slotPath(directory.wstring(),0));game.m_player.ammo=5;click(0);if(!check(game.menuPage()==MenuPage::Overwrite,"Existing slot requires overwrite confirmation"))return false;
+ auto before=readFile(slotPath(directory.wstring(),0));game.m_player.pool(WeaponId::Shotgun).total=5;click(0);if(!check(game.menuPage()==MenuPage::Overwrite,"Existing slot requires overwrite confirmation"))return false;
  click(0);if(!check(readFile(slotPath(directory.wstring(),0))==before,"Cancel preserves old save"))return false;
  click(0);click(1);if(!check(game.menuPage()==MenuPage::Save&&readFile(slotPath(directory.wstring(),0))!=before,"Confirmed overwrite replaces slot"))return false;
  {auto path=slotPath(directory.wstring(),0),temp=path;temp+=L".tmp";auto saved=readFile(path);std::filesystem::create_directory(temp);
@@ -489,9 +502,9 @@ bool Game::testSaves(){
  game.update({},.01f);game.update(escape,.01f);if(!check(game.paused()&&game.menuPage()==MenuPage::Settings,"Esc returns from submenu without resuming"))return false;
  click(10);click(2);click(1);if(!check(game.paused()&&game.menuPage()==MenuPage::Load&&game.menuMessage().find("FAILED")!=std::string::npos,"Empty slot reports load error without losing progress"))return false;
  click(0);click(0);if(!check(game.menuPage()==MenuPage::Load,"Load confirmation can be cancelled"))return false;
- game.m_player.ammo=1;auto revision=game.sessionRevision();click(0);click(1);
- if(!check(!game.paused()&&game.player().ammo==5&&game.sessionRevision()>revision,"Confirmed load resumes and resets audio session"))return false;
- InputState fire{};fire.fire=true;game.update(fire,.01f);if(!check(game.player().ammo==5,"Load click cannot fire the weapon"))return false;
+ game.m_player.pool(WeaponId::Shotgun).total=1;auto revision=game.sessionRevision();click(0);click(1);
+ if(!check(!game.paused()&&game.player().pool(WeaponId::Shotgun).total==5&&game.sessionRevision()>revision,"Confirmed load resumes and resets audio session"))return false;
+ InputState fire{};fire.fire=true;game.update(fire,.01f);if(!check(game.player().pool(WeaponId::Shotgun).total==5,"Load click cannot fire the weapon"))return false;
  for(int slot=1;slot<3;++slot){if(!check(game.saveSlot(slot),"All three slots support independent saves"))return false;}
  game.setState(stateId("checkpoint_test"),37);game.giveQuestItem(stateId("test_fuse"));game.m_player.health=42;
  if(!check(game.saveCheckpoint(),"Autosave checkpoint writes independently of manual slots"))return false;
@@ -510,5 +523,29 @@ namespace retro {
 bool Game::testPropSaves(){
  auto map=regression::room();map->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});auto campaign=regression::campaign(map);Game g(campaign);g.storeChunk();g.m_chunks[0].clutter.clear();g.m_heldClutter=-1;Writer writer;g.archiveSave(writer,16);auto payload=writer.stream.str();Game loaded(campaign);if(!loaded.decodeSave("RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload)||loaded.m_clutter.size()!=1||loaded.m_clutter[0].model!=27)return false;
  loaded.m_heldClutter=0;auto bytes=loaded.encodeSave();Game held(campaign);return held.decodeSave(bytes)&&held.m_heldClutter==0&&held.encodeSave()==bytes;
+}
+// Version 19 keeps each firearm's pool, the gun in hand, a switch under way and
+// the handgun's ownership; a version 18 save loads with its pair as the shotgun's.
+bool Game::testHandgunSaves(std::ostream& report){
+ bool passed=true;auto check=[&](bool ok,const char*label){report<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';passed&=ok;};
+ auto campaign=regression::campaign(regression::room());
+ auto raw=[](Game g,int version){g.storeChunk();Writer writer;g.archiveSave(writer,version);auto payload=writer.stream.str();return "RAWMETAL_SAVE "+std::to_string(version)+" "+std::to_string(checksum(payload))+"\n"+payload;};
+ {Game g(campaign);g.grantHandgun(12);g.m_player.pool(WeaponId::Shotgun)={40,3};g.m_player.pool(WeaponId::Handgun)={30,7};g.equipWeapon(WeaponId::Handgun);g.m_itemCells[3]=4;
+  const auto bytes=g.encodeSave();Game loaded(campaign);const bool ok=loaded.decodeSave(bytes);
+  check(ok&&bytes.rfind("RAWMETAL_SAVE 19 ",0)==0,"A current save is version 19");
+  check(ok&&loaded.player().pools==g.player().pools&&loaded.activeFirearm()==WeaponId::Handgun&&loaded.weaponEquipped()&&loaded.hasHandgun()&&loaded.itemCell(3)==4,"Version 19 round-trips both pools, the handgun in hand, its ownership and the 9 mm cell");
+  check(ok&&loaded.encodeSave()==bytes,"The version 19 save is byte-exact on re-encoding");
+  g.selectWeapon(WeaponId::Shotgun);g.m_holster=.4f;Game mid(campaign);check(mid.decodeSave(g.encodeSave())&&mid.weaponSwitchPhase()==1&&mid.weaponSwitchTarget()==WeaponId::Shotgun&&mid.activeFirearm()==WeaponId::Handgun,"A switch under way is saved");
+  g.equipWeapon(WeaponId::Handgun);g.m_player.pool(WeaponId::Handgun)={20,0};g.reloadWeapon();g.m_reloadTimer=.7f;Game reloading(campaign);
+  check(reloading.decodeSave(g.encodeSave())&&reloading.emptyReload()&&std::fabs(reloading.reloadDuration()-1.9f)<.001f&&std::fabs(reloading.reloadProgress()-(1-.7f/1.9f))<.01f,"An empty reload under way keeps its length and progress");}
+ {Game g(campaign);g.m_player.pool(WeaponId::Shotgun)={23,5};const auto legacy=raw(g,18);Game loaded(campaign);const bool ok=loaded.decodeSave(legacy);
+  check(ok&&loaded.player().pool(WeaponId::Shotgun)==AmmoPool{23,5}&&loaded.player().pool(WeaponId::Handgun)==AmmoPool{}&&loaded.activeFirearm()==WeaponId::Shotgun&&!loaded.hasHandgun(),"A version 18 save loads its ammo and tube into the shotgun pool, no handgun");
+  check(ok&&loaded.itemCell(3)>=0&&loaded.itemCell(3)!=loaded.itemCell(1),"The 9 mm cell is placed clear of the older items");
+  g.m_pickups.push_back({{9,9},Pickup::Kind::HandgunAmmo,true});bool refusedOld=false;try{Game refused(campaign);refusedOld=!refused.decodeSave(raw(g,18));}catch(const std::exception&){refusedOld=true;}check(refusedOld,"A 9 mm box cannot appear in a version 18 archive");}
+ {Game g(campaign);g.grantHandgun(12);g.m_player.pool(WeaponId::Handgun)={20,13};Game loaded(campaign);check(!loaded.decodeSave(raw(g,19)),"A magazine holding more than twelve is refused");
+  Game h(campaign);h.m_player.pool(WeaponId::Handgun)={12,4};Game unowned(campaign);check(!unowned.decodeSave(raw(h,19)),"A loaded handgun pool without the handgun is refused");
+  Game k(campaign);k.m_player.pool(WeaponId::Handgun)={12,0};Game waiting(campaign);check(waiting.decodeSave(raw(k,19))&&waiting.player().pool(WeaponId::Handgun).total==12,"9 mm waiting for the pistol loads");
+  Game s(campaign);s.grantHandgun(12);s.m_player.pool(WeaponId::Shotgun)={12,6};s.m_player.pool(WeaponId::Handgun)={12,12};Game clamp(campaign);check(clamp.decodeSave(s.encodeSave())&&clamp.player().pool(WeaponId::Handgun).loaded==12&&clamp.player().pool(WeaponId::Shotgun).loaded==6,"Each pool keeps its own capacity: twelve 9 mm and six shells");}
+ return passed;
 }
 }

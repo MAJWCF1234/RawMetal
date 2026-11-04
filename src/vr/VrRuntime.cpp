@@ -205,7 +205,7 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  // Menus, inventory and terminals open on the floating panel (no wrist screen).
  const bool panelOpen=menuOpen||game.logTime()>0;
  for(int hand=0;hand<2;++hand){bool grip=focused&&m->hands[hand].tracked&&(states[hand].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip));input.vrGrip[hand]=grip;
-  if(grip&&!m->previousGrip[hand]&&!menuOpen&&!game.holdingClutter()){auto offset=rotateTracking(translation(m->poses[devices[hand]].mDeviceToAbsoluteTracking)-head,m->yaw);if(shoulderSlot(offset,forward)){input.weaponScroll=game.weaponEquipped()?-1:1;m->shoulderConsumed[hand]=true;}}
+  if(grip&&!m->previousGrip[hand]&&!menuOpen&&!game.holdingClutter()){auto offset=rotateTracking(translation(m->poses[devices[hand]].mDeviceToAbsoluteTracking)-head,m->yaw);if(shoulderSlot(offset,forward)){input.weaponSlot=int(game.shoulderSlotWeapon())+1;m->shoulderConsumed[hand]=true;}}
   if(!grip)m->shoulderConsumed[hand]=false;if(m->shoulderConsumed[hand]){input.use=false;input.vrGrip[hand]=false;}m->previousGrip[hand]=grip;
  }
 
@@ -229,7 +229,8 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  }
  if(states[1].rAxis[1].x<=.65f)m->previousWristClick=false;m->pointerX=input.pointerX;m->pointerY=input.pointerY;
  auto origin=game.chunkOffset(game.level());const auto&gunHand=m->hands[1];auto aim=gunHand.handFrame?gunHand.gunOrigin:gunHand.position;aim.x-=origin.x;aim.y-=origin.y;Point3 aimDir=(gunHand.handFrame?gunHand.gunBasis[2]:gunHand.basis[2])*-1;bool support=false;
- if(focused&&m->hands[0].tracked&&m->hands[1].tracked&&game.weaponEquipped()&&!game.unarmed()&&!game.holdingClutter()&&!menuOpen){
+ // Only the shotgun takes a fore-end: the pistol is aimed from the right hand alone.
+ if(focused&&m->hands[0].tracked&&m->hands[1].tracked&&game.weaponEquipped()&&!game.unarmed()&&!game.holdingClutter()&&!menuOpen&&game.activeFirearm()==WeaponId::Shotgun){
   auto right=gunHand.handFrame?gunHand.gunOrigin:gunHand.position,left=m->hands[0].handFrame?m->hands[0].gunOrigin:m->hands[0].position,handForward=aimDir;
   if(foregripSupport(right,left,handForward,input.vrGrip[0])){auto delta=left-right;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);if(length>.0001f){aimDir={delta.x/length,delta.y/length,delta.z/length};support=true;}}
  }

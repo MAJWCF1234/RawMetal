@@ -22,7 +22,12 @@ public:
  ~Mesh();
  Mesh(const Mesh&)=delete;
  Mesh& operator=(const Mesh&)=delete;
- void pose(float phase,float recoil);
+ // A hold's hand frames and finger set for poseAttached: each hand's
+ // wrist-to-middle-knuckle direction and palm normal in rig space ([0] the
+ // trigger hand.R, [1] the support hand.L), and the curl profile (0 the
+ // shotgun's, 1 the pistol's). Without one, the shotgun's fixed frames.
+ struct ArmHold {std::array<Point3,2> forward{},palm{};int curls=0;};
+ void pose(float phase,float recoil,int curls=0);
     bool poseAction(const char* action,float phase);
  static bool testAttachedSkinning();
  static bool testVrHands();
@@ -39,7 +44,7 @@ public:
  const CreatureLayerPose& creatureLayerPose()const{return m_creatureLayerPose;}
  CreatureLayerPose creatureLayerPoseAt(int clip,float phase)const{return sampleCreatureLayerPose(clip,phase);}
  static bool testCleanupTankAim();
- void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil);
+ void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil,const ArmHold* hold=nullptr);
  Point3 bonePosition(const char* name)const;
  std::vector<MeshTriangle> trackedHand(bool left,const std::array<float,5>& curls);
  Point3 poseAnchor(int index)const{return m_poseAnchors.at(size_t(index));}
@@ -86,7 +91,7 @@ private:
  std::vector<std::vector<ufbx_vec3>> m_skinPositionScratch;
  std::vector<unsigned char> m_skinPositionReady;
  void extract(ufbx_scene* scene,bool positionsOnly=false);
- void grip(Point3 right={-.025f,1.55f,.223f},Point3 left={-.025f,1.60f,.49f},float swing=0,float pitch=0,float yaw=0,bool skin=true);
+ void grip(Point3 right={-.025f,1.55f,.223f},Point3 left={-.025f,1.60f,.49f},float swing=0,float pitch=0,float yaw=0,bool skin=true,const ArmHold* hold=nullptr);
  ufbx_scene* m_scene=nullptr;
  ufbx_scene* m_bindScene=nullptr;
  std::vector<ufbx_transform_override> m_fingerGrip;

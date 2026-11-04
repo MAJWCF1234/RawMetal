@@ -7,7 +7,7 @@
 namespace retro {
 namespace {
 Point3 unit(Point3 p){float length=std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);return length>.0001f?p*(1/length):Point3{};}
-struct CleanupBodyFrame {Point3 pelvis{},spine{},rightShoulder{},leftShoulder{};};
+struct CleanupBodyFrame {Point3 pelvis{},spine{},rightShoulder{},leftShoulder{},rightWrist{};};
 struct CleanupBodyFrames {unsigned clips=0;std::vector<unsigned> counts,offsets;std::vector<CleanupBodyFrame> poses;std::vector<float> durations;std::vector<std::pair<Point3,Point3>> fallBounds;};
 const std::array<CleanupBodyFrames,kCleanupBodies>& cleanupBodyFrames(){
  // Share the baked body frame with physical weapon placement. A fixed root
@@ -36,12 +36,12 @@ const std::array<CleanupBodyFrames,kCleanupBodies>& cleanupBodyFrames(){
     table.fallBounds[frame]={low,high};
    }
    if(data.size()!=layerEnd){uint32_t count=0;if(data.size()!=layerEnd+8+size_t(clips)*4||std::memcmp(data.data()+layerEnd,"RMD1",4))throw std::runtime_error("Invalid cleanup animation durations");std::memcpy(&count,data.data()+layerEnd+4,4);if(count!=clips)throw std::runtime_error("Invalid cleanup animation duration count");table.durations.resize(clips);std::memcpy(table.durations.data(),data.data()+layerEnd+8,size_t(clips)*4);for(float duration:table.durations)if(!std::isfinite(duration)||duration<=0||duration>120)throw std::runtime_error("Invalid cleanup animation duration");}
-   for(size_t frame=0;frame<table.poses.size();++frame){size_t base=payload+20+frame*120;auto&pose=table.poses[frame];std::memcpy(&pose.pelvis,data.data()+base,12);std::memcpy(&pose.spine,data.data()+base+12,12);std::memcpy(&pose.rightShoulder,data.data()+base+24,12);std::memcpy(&pose.leftShoulder,data.data()+base+72,12);for(auto point:{pose.pelvis,pose.spine,pose.rightShoulder,pose.leftShoulder})if(!std::isfinite(point.x)||!std::isfinite(point.y)||!std::isfinite(point.z))throw std::runtime_error("Invalid cleanup body frame");}
+   for(size_t frame=0;frame<table.poses.size();++frame){size_t base=payload+20+frame*120;auto&pose=table.poses[frame];std::memcpy(&pose.pelvis,data.data()+base,12);std::memcpy(&pose.spine,data.data()+base+12,12);std::memcpy(&pose.rightShoulder,data.data()+base+24,12);std::memcpy(&pose.leftShoulder,data.data()+base+72,12);std::memcpy(&pose.rightWrist,data.data()+base+48,12);for(auto point:{pose.pelvis,pose.spine,pose.rightShoulder,pose.leftShoulder,pose.rightWrist})if(!std::isfinite(point.x)||!std::isfinite(point.y)||!std::isfinite(point.z))throw std::runtime_error("Invalid cleanup body frame");}
   }return result;
  }();return frames;
 }
 CleanupBodyFrame cleanupBodyFrame(int role,int clip,float phase){
- if(!std::isfinite(phase))throw std::runtime_error("Invalid cleanup stance phase");const auto&table=cleanupBodyFrames().at(size_t(role));if(clip<0||unsigned(clip)>=table.clips)throw std::runtime_error("Invalid cleanup stance clip");unsigned count=table.counts[size_t(clip)],offset=table.offsets[size_t(clip)];float frame=std::clamp(phase,0.f,1.f)*float(count-1);unsigned a=unsigned(frame),b=std::min(a+1,count-1);const auto&A=table.poses[offset+a];const auto&B=table.poses[offset+b];float blend=frame-a;return {A.pelvis+(B.pelvis-A.pelvis)*blend,A.spine+(B.spine-A.spine)*blend,A.rightShoulder+(B.rightShoulder-A.rightShoulder)*blend,A.leftShoulder+(B.leftShoulder-A.leftShoulder)*blend};
+ if(!std::isfinite(phase))throw std::runtime_error("Invalid cleanup stance phase");const auto&table=cleanupBodyFrames().at(size_t(role));if(clip<0||unsigned(clip)>=table.clips)throw std::runtime_error("Invalid cleanup stance clip");unsigned count=table.counts[size_t(clip)],offset=table.offsets[size_t(clip)];float frame=std::clamp(phase,0.f,1.f)*float(count-1);unsigned a=unsigned(frame),b=std::min(a+1,count-1);const auto&A=table.poses[offset+a];const auto&B=table.poses[offset+b];float blend=frame-a;return {A.pelvis+(B.pelvis-A.pelvis)*blend,A.spine+(B.spine-A.spine)*blend,A.rightShoulder+(B.rightShoulder-A.rightShoulder)*blend,A.leftShoulder+(B.leftShoulder-A.leftShoulder)*blend,A.rightWrist+(B.rightWrist-A.rightWrist)*blend};
 }
 }
 float cleanupAnimationDuration(ActorVisual visual,int clip){
@@ -67,6 +67,15 @@ Point3 Game::npcCollar(size_t actor)const{
  Point3 p{0,npc.track().scale*.85f,-.06f};
  if(role>=0){const auto frame=cleanupBodyFrame(role,std::clamp(npc.pose.clip,0,int(cleanupBodyFrames()[size_t(role)].clips)-1),npc.pose.phase);p=(frame.rightShoulder+frame.leftShoulder)*.5f;p.y+=.05f;p.z-=.06f;}
  return {npc.pose.position.x+(p.x*c+p.z*s)*scale,npc.pose.position.y+(-p.x*s+p.z*c)*scale,npc.pose.z+p.y*scale};
+}
+// Where a man lying at the end of his fall has his right hand and his hips,
+// for a body placed at `at` facing `yaw` (the floor pistol goes beside the hand).
+std::pair<Point3,Point3> Game::fallenHand(size_t actor,Point3 at,float yaw)const{
+ const auto&track=m_friendlyActors.at(actor).track();const int role=cleanupActorBody(track.visual);const float c=std::cos(yaw),s=std::sin(yaw),scale=track.scale/1.6f;
+ Point3 hand{-.35f,.05f,.2f},hips{0,.12f,0};
+ if(role>=0){const auto frame=cleanupBodyFrame(role,4,1);hand=frame.rightWrist;hips=frame.pelvis;}
+ auto place=[&](Point3 p){return Point3{at.x+(p.x*c+p.z*s)*scale,at.y+(-p.x*s+p.z*c)*scale,at.z+p.y*scale};};
+ return {place(hand),place(hips)};
 }
 std::pair<Point3,Point3> Game::friendlyShotBounds(size_t actor)const{
  const auto&npc=m_friendlyActors.at(actor);const auto&track=npc.track();Point3 center{npc.pose.position.x,npc.pose.position.y,npc.pose.z};

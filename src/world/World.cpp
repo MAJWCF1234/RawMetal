@@ -336,6 +336,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   if(int(ai.faction)<0||int(ai.faction)>5||(ai.squad&&ai.mode!=ActorAiMode::Guard))throw std::runtime_error("Invalid actor faction or guard squad");
   if(ai.grenades<0||ai.grenades>4||((ai.suppress||ai.grenades)&&(ai.mode!=ActorAiMode::Guard||!ai.armed)))throw std::runtime_error("Tactical combat requires an armed guard and bounded grenade inventory");
   if(ai.weapon<1||ai.weapon>2||(ai.weapon==2&&(ai.mode!=ActorAiMode::Guard||!ai.armed)))throw std::runtime_error("Invalid actor firearm");
+  // Only an armed guard with a pistol (guardHandgun's rule) has one to drop.
+  if(ai.dropsSidearm&&(ai.mode!=ActorAiMode::Guard||!ai.armed||!(ai.weapon==2||ai.role==GuardSquadRole::Medic||ai.role==GuardSquadRole::Engineer)))throw std::runtime_error("Only an armed handgun guard can drop a sidearm");
   if(int(ai.role)<0||int(ai.role)>6||(ai.role!=GuardSquadRole::Default&&(ai.mode!=ActorAiMode::Guard||!ai.armed||!ai.squad)))throw std::runtime_error("Squad roles require an equipped guard and a named squad");
   if(ai.mode==ActorAiMode::Guard){
    if(!std::isfinite(ai.sightRange)||ai.sightRange<1||ai.sightRange>30||!std::isfinite(ai.sightDot)||ai.sightDot<0||ai.sightDot>.99f||ai.recognitionMs<100||ai.recognitionMs>5000||ai.searchMs<250||ai.searchMs>30000||ai.patrol.empty()||ai.patrol.size()>64)throw std::runtime_error("Invalid guard AI configuration");

@@ -8,9 +8,9 @@ std::vector<AiStimulus> Game::aiStimuli()const{
  std::vector<AiStimulus> out;
  for(const auto&event:m_sounds){
   if(event.speech>=0)continue; // Radio dialogue is not a new perception stimulus.
-  bool shot=event.sound==Sound::Shot,step=footstepSound(event.sound);
+  bool shot=gunshotSound(event.sound),step=footstepSound(event.sound);
   // A swing or a throw is a whoosh, not a report: what it hits is the noise.
-  bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty;
+  bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty||(event.sound>=Sound::PistolDry&&event.sound<=Sound::PistolRack);
   bool impact=event.sound==Sound::WoodBreak||event.sound==Sound::WoodImpact||event.sound==Sound::PlasterBreak||event.sound==Sound::GlassShatter||event.sound==Sound::BottleBreak||event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock;
   bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
   // A locker's latch, shut and bang carry like any door; its sting is score.

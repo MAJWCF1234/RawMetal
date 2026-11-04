@@ -374,7 +374,7 @@ bool Game::testProgression(){
  // Both chunks exist before crossing; a locked transfer must not open under combat.
  game=Game{};game.m_player.pos={21.5f,20.5f};game.m_player.angle=kPi*.5f;input={};input.use=true;game.update(input,.01f);
  if(game.world().doors().back().opening||game.chunkView(1).enemies().size()!=9)return false;
- game=Game{};game.m_player.health=67;game.m_player.ammo=23;game.m_pickups.clear();
+ game=Game{};game.m_player.health=67;game.m_player.pool(WeaponId::Shotgun).total=23;game.m_player.pool(WeaponId::Handgun)={19,7};game.m_pickups.clear();
  std::ofstream diagnostic("route-diagnostic.txt");
  for(int level=0;level<2;++level){auto spawns=game.m_enemies;game.m_enemies.clear();World planning=game.m_world;
   for(int i=0;i<int(planning.doors().size());++i)planning.openDoor(i);planning.updateDoors(2);
@@ -404,8 +404,8 @@ bool Game::testProgression(){
    int door=game.world().nearbyDoor(game.player().pos,normalized(delta));input.use=door>=0&&!game.world().doors()[door].opening;
    input.mouseDx=wrapAngle(std::atan2(delta.y,delta.x)-game.player().angle)/(.0022f*game.settings().sensitivity);game.update(input,1.f/120.f);
   }
-  diagnostic<<"Chunk "<<level<<" ticks "<<ticks<<" waypoint "<<waypoint<<"/"<<route.size()<<" position "<<game.player().pos.x<<", "<<game.player().pos.y<<" active "<<game.level()<<" health "<<game.player().health<<" ammo "<<game.player().ammo<<" enemies "<<game.m_enemies.size()<<'\n';
-  if(level==0){if(game.level()!=1||game.player().health!=67||game.player().ammo!=23||game.m_enemies.size()!=9)return false;
+  diagnostic<<"Chunk "<<level<<" ticks "<<ticks<<" waypoint "<<waypoint<<"/"<<route.size()<<" position "<<game.player().pos.x<<", "<<game.player().pos.y<<" active "<<game.level()<<" health "<<game.player().health<<" ammo "<<game.player().pool(WeaponId::Shotgun).total<<" enemies "<<game.m_enemies.size()<<'\n';
+  if(level==0){if(game.level()!=1||game.player().health!=67||game.player().pool(WeaponId::Shotgun).total!=23||game.player().pool(WeaponId::Handgun)!=AmmoPool{19,7}||game.m_enemies.size()!=9)return false;
    // Walk back across the same seam: old doors, kills and pickups must remain changed.
    game.m_player.angle=-kPi*.5f;input={};input.forward=true;for(int i=0;i<70&&game.level()==1;++i)game.update(input,1.f/120.f);
    if(game.level()!=0||!game.m_enemies.empty()||!game.m_pickups.empty()||!game.world().doors().back().opening)return false;

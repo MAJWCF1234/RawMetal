@@ -40,6 +40,7 @@ bool Game::takeQuestItem(StateId id,int count){if(!id||count<=0)return false;int
 const char* Game::questItemName(StateId id){
  if(id==ReactorAuthDisk)return "REACTOR AUTH DISK";
  if(id==Flashlight)return "FLASHLIGHT";
+ if(id==HandgunItem)return "HANDGUN";
  if(id==stateId("keycard"))return "KEYCARD";
  if(id==stateId("fuse"))return "FUSE";
  if(id==stateId("tool"))return "SERVICE TOOL";
@@ -72,7 +73,10 @@ void Game::executeScriptAction(const ScriptAction& action){
  switch(action.type){
   case ScriptAction::Type::SetState:setState(action.id,action.value);break;
   case ScriptAction::Type::SetObjective:setObjective(action.id,static_cast<ObjectiveStatus>(std::clamp(action.value,0,3)));break;
-  case ScriptAction::Type::GiveItem:giveQuestItem(action.id,std::max(1,action.value));if(action.id==Flashlight){m_pickupNotice="FLASHLIGHT ACQUIRED / F TO TOGGLE";m_pickupNoticeTime=3.f;sound(Sound::Pickup,.6f);}break;
+  case ScriptAction::Type::GiveItem:
+   // The pistol comes loaded and in hand: a full magazine per count.
+   if(action.id==HandgunItem){grantHandgun(std::max(1,action.value)*playerWeaponDef(WeaponId::Handgun).cycle.tubeCapacity);equipWeapon(WeaponId::Handgun);m_pickupNotice="HANDGUN / 9MM x "+std::to_string(m_player.pool(WeaponId::Handgun).total);m_pickupNoticeTime=3.f;sound(Sound::Pickup,.6f,.92f);break;}
+   giveQuestItem(action.id,std::max(1,action.value));if(action.id==Flashlight){m_pickupNotice="FLASHLIGHT ACQUIRED / F TO TOGGLE";m_pickupNoticeTime=3.f;sound(Sound::Pickup,.6f);}break;
   case ScriptAction::Type::TakeItem:takeQuestItem(action.id,std::max(1,action.value));break;
   case ScriptAction::Type::OpenDoor:if(action.index>=0&&action.index<int(m_world.doors().size())){auto d=m_world.doors()[size_t(action.index)];m_world.setDoor(action.index,d.open,true);}break;
   case ScriptAction::Type::CloseDoor:if(action.index>=0&&action.index<int(m_world.doors().size())){auto d=m_world.doors()[size_t(action.index)];m_world.setDoor(action.index,d.open,false);}break;

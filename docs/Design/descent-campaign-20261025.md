@@ -325,8 +325,8 @@ dripping, breathing.
 | 74 | MedicalFront | 3,19 | MEDICAL / PHARMACY | -12 | -9 | W 9-14 @-12 |
 | 75 | MedicalWard | 2,20 | MEDICAL / WARD C NORTH | -12 | -9 | N 10-14 @-12; S 2-22 @-12 |
 | 76 | MedicalWard | 2,21 | MEDICAL / WARD C SOUTH | -12 | -9 | N 2-22 @-12; W 15-19 @-12; E 9-14 @-12; S 10-14 @-12 |
-| 77 | MedicalWard | 3,21 | MEDICAL / SURGERY | -12 | -8.5 | W 9-14 @-12 |
-| 78 | MedicalWard | 2,22 | MEDICAL / MORGUE | -15 | -8.5 | N 10-14 @-12; S 10-14 @-15 door [med_morgue_release] |
+| 77 | MedicalDeep | 3,21 | MEDICAL / SURGERY | -12 | -8.5 | W 9-14 @-12 |
+| 78 | MedicalDeep | 2,22 | MEDICAL / MORGUE | -15 | -8.5 | N 10-14 @-12; S 10-14 @-15 door [med_morgue_release] |
 
 ### Analysis Laboratories (chunks 79-84, manifest 49-54)
 

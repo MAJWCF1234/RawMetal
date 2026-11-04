@@ -82,6 +82,7 @@ FRIENDLY = {
     "arms_rig": "Player Arms Rig",
     "first-aid": "First Aid Kit",
     "shells": "12 Gauge Shells",
+    "9mm": "9mm Rounds",
     "trash_1": "Trash",
     "mre_1": "MRE",
     "bottle": "Bottle",
@@ -168,6 +169,7 @@ DEFAULT_SIZE = {
     "column_6": (0.30, 0.30, 3.00),
     "first-aid": (0.65, 0.45, 0.40),
     "shells": (0.48, 0.36, 0.36),
+    "9mm": (0.34, 0.14, 0.08),
     "trash_1": (0.55, 0.55, 0.35),
     "mre_1": (0.45, 0.30, 0.10),
     "bottle": (0.18, 0.18, 0.35),
@@ -427,7 +429,10 @@ CLUTTER_KIND = {
 PICKUP_KIND = {
     "src/assets/pickups/first-aid.fbx": "Health",
     "src/assets/pickups/shells.fbx": "Ammo",
+    "src/assets/pickups/9mm.fbx": "HandgunAmmo",
 }
+# The engine's PickupKind values (WorldDefinition.h); they are saved, so append only.
+PICKUP_KIND_INDEX = {"Health": 0, "Ammo": 1, "HandgunAmmo": 2}
 CREATURE_MODEL_KIND = {
     "src/assets/models/huntsman.fbx": "Huntsman",
     "src/assets/models/wasp.fbx": "Wasp",
@@ -1006,7 +1011,7 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                 elif model in CLUTTER_KIND:
                     ck=CLUTTER_KIND[model];z=-999 if abs(pt["z"]-base_z)<.03 else pt["z"];lines.append(f"CLUTTER|{map_index}|{ck}|{pt['x']}|{pt['y']}|{z}|{yaw}")
                 elif model in PICKUP_KIND:
-                    pk=0 if PICKUP_KIND[model]=="Health" else 1;lines.append(f"PICKUP|{map_index}|{pk}|{pt['x']}|{pt['y']}")
+                    pk=PICKUP_KIND_INDEX[PICKUP_KIND[model]];lines.append(f"PICKUP|{map_index}|{pk}|{pt['x']}|{pt['y']}")
                 elif model in CREATURE_MODEL_KIND:
                     ids={"Huntsman":0,"Wasp":1,"Brute":2,"Warden":3,"Mutant":4};lines.append(f"CREATURE|{map_index}|{ids[CREATURE_MODEL_KIND[model]]}|{pt['x']}|{pt['y']}|{pt['z']}")
                 elif model in {"src/assets/environment/barrel.fbx", "barrel.fbx"}:

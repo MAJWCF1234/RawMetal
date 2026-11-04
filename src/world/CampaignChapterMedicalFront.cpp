@@ -1,6 +1,5 @@
 // DEPTHWORKS MEDICAL (chapter 2, manifest 48 (subchapter)): chunks 71, 72, 73, 74.
-// Screening, Triage and Imaging are authored; Pharmacy is still the plan's
-// placeholder. See docs/Design/descent-campaign-20261025.md for the brief.
+// Screening, Triage, Imaging and Pharmacy are authored. See docs/Design/descent-campaign-20261025.md for the brief.
 #include "CampaignChapters.h"
 #include "CampaignKit.h"
 #include <cmath>
@@ -362,8 +361,8 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // --- S1, the reception office: the call list -------------------------------------------------
  mdFix(m,model::med_nurse_desk,1.75f,14.5f,f,1.179f,.562f,.808f,kPi,true);
  terminal(m,{3.2f,14.62f},"RECEPTION / CALL LIST","02:41 CUBICLE 2: LAB 4. 02:44 CUBICLE 2: RECOUNT.","03:10 CALLS SUSPENDED. HOLD THE ROOM. DO NOT ANSWER QUESTIONS.");m.terminals.back().yaw=0;
- kit::prop(m,model::crt_monitor,1.38f,14.5f,f+.808f,.42f,.4f,.38f,0);
- kit::prop(m,model::keyboard,1.72f,14.5f,f+.808f,.45f,.16f,.03f,0);
+ kit::prop(m,model::crt_monitor,1.4f,14.47f,f+.808f,.336f,.32f,.304f,0);
+ kit::prop(m,model::keyboard,1.4f,14.7f,f+.808f,.405f,.144f,.027f,0);
  kit::prop(m,model::desk_phone,2.23f,14.4f,f+.808f,.2f,.2f,.1f,0);
  const int screeningDeskLamp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,1.99f,14.5f,f+.808f,.18f,.398f,.521f,0);
  m.lights.push_back(lamp({1.99f,14.5f},f+1.25f,.4f,2.5f,3000,0,WorldLightMount::Bare));m.lights.back().prop=screeningDeskLamp;
@@ -467,7 +466,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // B, "the watcher", watches the spine and stares down at the door he is afraid of.
  mdGuard(m,clock,"md_screen_b",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"md_screen",
   {{{20.6f,11.5f},f,6000,-kPi*.5f},{{12.f,12.4f},f,7000,0},{{8.6f,11.2f},f,3000,kPi}},14,2,1.2f);
- {auto& t=m.actorTracks.back();t.ai.stance=stance;t.talk=stateId("medf_b_hello");}
+ {auto& t=m.actorTracks.back();t.ai.stance=stance;t.talk=stateId("medf_b_hello");t.ai.dropsSidearm=true;}
  m.dialogue.push_back({stateId("medf_b_hello"),"MEDICAL DETAIL","Stop. Don't. I've got two rounds and a radio that won't stop talking.","",{
   m71Reply("Who did the booths?","medf_b_booths"),m71Reply("What's behind the Ward C door?","medf_b_wardc"),
   m71Reply("Go. Back the way I came.","","medf_screen_b_spared")}});
@@ -489,6 +488,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
   m71Event(m,"medf_hold_wake_go",10.f,17.f,14.f,23.f,"med_override",{m71Set("medf_hold_wake",1),open});}
  // --- Rewards, names ----------------------------------------------------------------------------
  m.pickupSpawns={{{1.6f,17.6f},PickupKind::Health,f},{{1.8f,20.8f},PickupKind::Health,f},{{21.9f,22.3f},PickupKind::Ammo,f}};
+ m.pickupSpawns.push_back({{10.25f,17.75f},PickupKind::HandgunAmmo,f+.63f});   // 9 mm on the bench by the drain
  m.clutterSpawns.insert(m.clutterSpawns.end(),{{2,{5.f,13.4f},f},{2,{4.6f,1.95f},f+.624f},{1,{4.3f,2.05f},f+.624f},{0,{9.6f,6.1f},f},{2,{20.2f,21.05f},f+.78f}});
  zone(m,"MEDICAL SCREENING / RECEPTION",1.f,9.f,5.6f,18.6f);
  zone(m,"MEDICAL SCREENING / WAITING ROOM",1.f,1.f,7.4f,8.8f);
@@ -956,6 +956,8 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  m.lights.push_back(lamp({21.8f,20.9f},f+2.f,.3f,2.4f,4800,.05f,WorldLightMount::Bare));                      // a work light over the cylinder rack
  // --- Rewards and names -------------------------------------------------------------------------------
  m.pickupSpawns={{{20.3f,3.f},PickupKind::Health,f+.78f},{{5.55f,6.45f},PickupKind::Health,f},{{21.8f,15.45f},PickupKind::Ammo,f},{{20.5f,5.95f},PickupKind::Ammo,f}};
+ // 9 mm on a waiting bench and beside the triage desk's monitor.
+ m.pickupSpawns.insert(m.pickupSpawns.end(),{{{17.05f,13.9f},PickupKind::HandgunAmmo,f+.63f},{{22.8f,6.22f},PickupKind::HandgunAmmo,f+.75f}});
  m.clutterSpawns.insert(m.clutterSpawns.end(),{{2,{1.62f,6.2f},f+.75f},{2,{6.1f,7.12f},f+1.42f},{2,{17.2f,7.35f},f+1.f,.4f},{2,{17.42f,7.5f},f+1.f,1.2f},
   {2,{12.9f,6.42f},f+.9f},{2,{14.3f,6.5f},f+.9f,.7f},{2,{21.6f,1.3f},f+.9f},{1,{20.6f,2.8f},f+.78f,.5f},{5,{2.3f,8.36f},f+.81f,.3f},
   {0,{1.9f,12.4f},f},{0,{4.2f,13.3f},f,1.f},{0,{6.6f,18.6f},f},{0,{11.5f,22.2f},f,2.f},{0,{15.4f,20.6f},f,.8f}});
@@ -1324,6 +1326,8 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  m.lights.push_back(lamp({2.6f,20.9f},f+2.16f,.45f,3.5f,6000,.1f,WorldLightMount::Bare));                     // inside the counter
  // --- Rewards and names -------------------------------------------------------------------------
  m.pickupSpawns={{{21.5f,22.7f},PickupKind::Health,f+.9f},{{3.1f,4.25f},PickupKind::Health,f+.92f},{{5.75f,18.85f},PickupKind::Ammo,f},{{20.3f,15.9f},PickupKind::Ammo,f}};
+ // 9 mm by the detail's dead man, and on the desk beside the phone he never reached.
+ m.pickupSpawns.insert(m.pickupSpawns.end(),{{{4.35f,17.55f},PickupKind::HandgunAmmo,f},{{6.15f,21.2f},PickupKind::HandgunAmmo,f+.75f}});
  m.clutterSpawns.insert(m.clutterSpawns.end(),{{2,{1.13f,3.2f},f+1.58f},{2,{1.13f,3.75f},f+1.58f,.6f},{2,{1.15f,4.6f},f+1.58f},{5,{6.2f,21.2f},f+.75f},{1,{17.f,21.25f},f+.78f},
   {2,{21.f,22.65f},f+.9f},{0,{11.f,20.5f},f},{0,{12.9f,3.8f},f,1.f},{0,{21.9f,10.4f},f,2.f}});
  zone(m,"MEDICAL / IMAGING / X-RAY 1",3.6f,1.f,9.8f,6.2f);
@@ -1342,8 +1346,306 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  recessedFittings(m);freightFinish(m,-1);
  return p;
 }
-// MEDICAL / PHARMACY (manifest 48)
-std::shared_ptr<const Map> makeMedicalPharmacy(){return placeholderChunk(74,{{'W',9.f,14.f,-12.f,false,0}});}
+// --- Chunk 74 helpers (m74) -----------------------------------------------------------------
+// A swinging door held shut until `lock` is set (none: an ordinary door); `head` closes above the leaf.
+void m74Door(Map& m,float x1,float x2,float y,float f,float roof,float swing,const char* lock,int head=3){
+ wall(m,x1,y-.1f,x2,y+.1f,f+2.55f,roof,head);
+ Door d{x1,x2,y,0};d.swinging=true;d.swing=swing;d.maxOpen=.9f;if(*lock)d.requireState=stateId(lock);m.doors.push_back(d);
+}
+// One bay of the controlled-drugs cage: the steel grille standing on the floor, a proxy behind it.
+void m74Bars(Map& m,float cx,float cy,bool alongX,float f){
+ mdFix(m,model::med_cell_bars,cx,cy,f,2.5f,.04f,2.4f,alongX?0.f:kPi*.5f,false);
+ if(alongX)wall(m,cx-1.25f,cy-.02f,cx+1.25f,cy+.02f,f,f+2.4f,30);else wall(m,cx-.02f,cy-1.25f,cx+.02f,cy+1.25f,f,f+2.4f,30);
+}
+// A fitted pharmacy counter along x: steel carcass, kick plinth, drawer line and worktop at `top`.
+void m74Counter(Map& m,float x1,float y1,float x2,float y2,float f,float h,int worktop=28){
+ const float top=f+h;
+ wall(m,x1+.05f,y1+.05f,x2-.05f,y2-.05f,f,f+.08f,8);wall(m,x1,y1,x2,y2,f+.08f,top-.04f,20);
+ wall(m,x1,y1,x2,y2,top-.04f,top,worktop);
+ for(float y:{y1-.006f,y2-.004f})wall(m,x1+.02f,y,x2-.02f,y+.01f,top-.3f,top-.29f,8);
+ for(float x=x1+.6f;x<x2-.3f;x+=.6f)for(float y:{y1-.006f,y2-.004f})wall(m,x,y,x+.01f,y+.01f,f+.1f,top-.06f,8);
+}
+// Bulk stock on a metal shelf along y at x: boxes and bottles on its three boards.
+void m74Stock(Map& m,float x,float y,int seed){
+ shelf(m,{x,y},kPi*.5f,0);const float f=m.layers.front().elevation;
+ for(int t=0;t<3;++t){const float z=f+(t==0?.306f:t==1?.972f:1.656f);
+  for(int i=0;i<3;++i){if((i+t+seed)%4==3)continue;const float yy=y-.58f+i*.58f;
+   if((i*3+t+seed)%5==1)for(int b=0;b<2;++b)kit::prop(m,model::med_pill_bottle,x-.08f+b*.16f,yy+(b?.1f:-.08f),z,.07f,.03f,.13f,b*.7f+seed);
+   else kit::prop(m,model::prop_cardboard_box,x,yy,z,.436f,.432f,.22f,(i+t)%2?0.f:.06f);}}
+}
+
+// MEDICAL / PHARMACY (manifest 48). The dead end off Imaging's reception: the collection hall
+// and its two hatches behind protective glass, the dispensary with the controlled-drugs cage on
+// a twenty-second time lock, three fridges and the walk-in cold room, the night pharmacist's
+// office, and behind it all the goods-in store on the porters' corridor. Tonight it filled the
+// standing order from 71's board: sedate every tier 3 in Ward C, whole shifts, twenty-two beds,
+// four trolleys. Trolley 3 came back up the corridor by itself and the goods-in shutter came
+// down on it and jammed a knee's height open. R., the pharmacist, took trolley 4 down himself
+// and left the cage's first-aid kits for whoever came back. LAB 4 had no order written: the one
+// tier 3 in Ward C nobody put to sleep. Bed 16, certified dead at 03:15, is held in the cold room
+// because the morgue lift is down. He knocks.
+// Route: W seam -> collection hall (hatches shut, staff door locked from inside) -> porters'
+// corridor east -> crouch under the jammed shutter -> goods in -> dispensary -> the cage's time
+// lock (the knocking builds, stops, the cage opens, he slams the door once) -> the staff door
+// opens from inside -> back out west. No combat: the quiet before Ward C.
+std::shared_ptr<const Map> makeMedicalPharmacy(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[74];m.definition=CampaignChunks[74];m.definition.ambient=.20f;
+ m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
+ const float f=-12,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'W',9.f,14.f,f,false,0});
+ rectangle(m.layers[0],1,14,23,23,'#');      // below the corridor: the next department's plant, no way in
+ rectangle(m.layers[0],21,11,23,14,'#');     // the lift shaft at the corridor's end
+ rectangle(m.layers[0],20,1,23,11,'#');      // and the riser behind goods in
+ auto crash=[&](float x1,float x2,float y1,float y2){wall(m,x1,y1,x2,y2,f+.86f,f+.96f,20);};
+ // --- Plan (walls .2 m, painted) ---------------------------------------------------------------
+ // Hall / dispensary: the two hatches, the staff door (door 0, opens from inside).
+ wall(m,1.f,8.8f,1.6f,9.f,f,roof,3);m71Glaze(m,1.6f,8.8f,3.8f,9.f,f,roof,.95f,2.1f,0,true);
+ wall(m,3.8f,8.8f,4.4f,9.f,f,roof,3);m71Glaze(m,4.4f,8.8f,6.6f,9.f,f,roof,.95f,2.1f,0,true);
+ wall(m,6.6f,8.8f,7.6f,9.f,f,roof,3);m74Door(m,7.6f,8.5f,8.9f,f,roof,-1,"medf_staff_door");wall(m,8.5f,8.8f,9.f,9.f,f,roof,3);
+ // The office: west wall to the hall, glazed front to the dispensary (door 1), south wall to the corridor.
+ wall(m,9.f,6.8f,9.2f,11.f,f,roof,3);
+ m71Glaze(m,9.2f,6.8f,11.9f,7.f,f,roof,.95f,2.1f);m72Swing(m,11.9f,12.8f,6.9f,f,roof,-1);wall(m,12.8f,6.8f,13.f,7.f,f,roof,3);
+ // Dispensary / goods in, an open doorway between them; the corridor's north wall and the jammed shutter.
+ wall(m,13.f,1.f,13.2f,4.2f,f,roof,3);m72DoorwayY(m,4.2f,5.4f,13.f,13.2f,f,roof);wall(m,13.f,5.4f,13.2f,10.8f,f,roof,3);
+ wall(m,9.2f,10.8f,15.85f,11.f,f,roof,3);wall(m,19.15f,10.8f,21.f,11.f,f,roof,3);
+ // The goods-in shutter, jammed at knee height on the trolley that came back: crouch under it.
+ for(float x:{15.85f,19.f})wall(m,x,10.72f,x+.15f,11.08f,f,f+2.6f,8);                                    // guides
+ wall(m,16.f,10.86f,19.f,10.94f,f+.84f,f+2.6f,20);
+ for(float z=f+1.05f;z<f+2.55f;z+=.22f)for(float y:{10.85f,10.94f})wall(m,16.f,y,19.f,y+.01f,z,z+.025f,8);    // slat joints
+ wall(m,16.f,10.83f,19.f,10.97f,f+.78f,f+.84f,13);                                                          // the bottom bar
+ wall(m,15.85f,10.45f,19.15f,10.8f,f+2.6f,f+2.95f,8);wall(m,15.85f,10.8f,19.15f,11.f,f+2.6f,roof,3);        // coil box, wall over
+ // The cage: grille bays south and east, the gate (door 2, on the time lock), a steel fascia above.
+ m74Bars(m,2.25f,3.5f,true,f);m74Bars(m,6.15f,3.5f,true,f);m74Bars(m,7.4f,2.25f,false,f);
+ wall(m,3.5f,3.45f,3.6f,3.55f,f,f+2.55f,20);wall(m,4.6f,3.45f,4.9f,3.55f,f,f+2.55f,20);wall(m,7.35f,3.45f,7.45f,3.55f,f,f+2.4f,20);
+ wall(m,1.f,3.46f,3.5f,3.54f,f+2.4f,roof,20);wall(m,4.9f,3.46f,7.45f,3.54f,f+2.4f,roof,20);wall(m,7.36f,1.f,7.44f,3.46f,f+2.4f,roof,20);
+ m74Door(m,3.6f,4.6f,3.5f,f,roof,-1,"medf_cage_open",20);
+ wall(m,3.5f,3.45f,3.6f,3.55f,f+2.55f,roof,20);wall(m,4.6f,3.45f,4.9f,3.55f,f+2.55f,roof,20);
+ // The walk-in cold room: insulated panels to the ceiling, its door shut, a small window on the dark.
+ wall(m,10.f,1.f,10.1f,3.5f,f,roof,28);
+ wall(m,10.f,3.5f,11.35f,3.6f,f,roof,28);wall(m,11.65f,3.5f,13.f,3.6f,f,roof,28);
+ wall(m,11.35f,3.5f,11.65f,3.6f,f,f+1.45f,28);wall(m,11.35f,3.5f,11.65f,3.6f,f+1.75f,roof,28);
+ wall(m,9.96f,1.f,10.f,3.64f,f,f+.12f,20);wall(m,10.f,3.6f,10.92f,3.64f,f,f+.12f,20);wall(m,12.08f,3.6f,13.f,3.64f,f,f+.12f,20); // steel kerb
+ breakable(m,11.35f,3.54f,11.65f,3.56f,f+1.45f,f+1.75f,17,true);
+ for(auto [a,b]:{std::pair{10.95f,11.35f},{11.65f,12.05f}})wall(m,a,3.6f,b,3.68f,f+.02f,f+2.05f,20);
+ wall(m,11.35f,3.6f,11.65f,3.68f,f+.02f,f+1.45f,20);wall(m,11.35f,3.6f,11.65f,3.68f,f+1.75f,f+2.05f,20);
+ for(float x:{10.92f,12.05f})wall(m,x,3.6f,x+.03f,3.69f,f,f+2.08f,8);wall(m,10.92f,3.6f,12.08f,3.69f,f+2.05f,f+2.08f,8);   // gasket
+ wall(m,10.97f,3.68f,12.03f,3.69f,f+.02f,f+.3f,8);                                                          // kick plate
+ wall(m,11.72f,3.68f,11.96f,3.75f,f+1.f,f+1.06f,8);wall(m,11.9f,3.68f,11.96f,3.75f,f+.86f,f+1.06f,8);          // the lever
+ for(float z:{.35f,1.7f})wall(m,10.88f,3.6f,10.95f,3.7f,f+z,f+z+.14f,8);                                    // hinges
+ for(auto [x1,y1,x2,y2]:{std::tuple{1.f,9.f,9.f,14.f},{9.f,11.f,21.f,14.f},{1.f,1.f,13.f,8.8f},{9.2f,7.f,13.f,10.8f},{13.2f,1.f,20.f,10.8f}})ceilingGrid(m,x1,y1,x2,y2,roof);
+ // --- The collection hall: hatches shut since ten, a queue that never came ------------------------
+ for(auto [x1,x2]:{std::pair{1.6f,3.8f},{4.4f,6.6f}}){
+  wall(m,x1,9.f,x2,9.3f,f+.95f,f+.99f,20);for(float x:{x1+.25f,x2-.29f})wall(m,x,9.f,x+.04f,9.25f,f+.78f,f+.95f,20);}
+ // Hatch 2's roller blind, pulled half down on the dispensary side of the glass.
+ wall(m,4.42f,8.72f,6.58f,8.8f,f+2.1f,f+2.2f,8);wall(m,4.45f,8.76f,6.55f,8.785f,f+1.5f,f+2.1f,20);wall(m,4.45f,8.75f,6.55f,8.795f,f+1.47f,f+1.5f,8);
+ taped(m,{4.1f,9.f},f+1.5f,0,Readable::Note,"HATCH CLOSED / 22:00","NO COLLECTIONS. WARD ORDERS ONLY.",
+  "PORTERS: WARD C TROLLEYS THROUGH GOODS IN, END OF THE CORRIDOR.");
+ kit::prop(m,model::item_id_card,2.4f,9.16f,f+.99f,.132f,.085f,.002f,.4f);
+ kit::prop(m,model::med_pill_bottle,5.7f,9.14f,f+.99f,.07f,.03f,.13f,.5f);
+ floorLine(m,1.6f,10.25f,6.6f,10.31f,f,13);                                                                 // wait here
+ extinguisher(m,1.3f,9.f,f,mdS);
+ mdFix(m,model::lab_id_scanner,8.85f,9.03f,f+1.1f,.3f,.06f,.41f,mdS,false);                                  // staff door keypad
+ wall(m,8.82f,9.f,8.88f,9.04f,f+1.56f,f+1.62f,19);
+ bench(m,2.9f,13.55f,f);bench(m,6.4f,13.55f,f);
+ mdFix(m,model::med_notice_board,2.9f,13.965f,f+1.25f,1.2f,.07f,.9f,mdN,false);
+ mdFix(m,model::med_wall_clock,6.4f,13.99f,f+2.05f,.24f,.02f,.23f,mdN,false);
+ mdFix(m,model::water_cooler,8.55f,13.6f,f,.35f,.35f,1.1f,kPi,true);
+ kit::prop(m,model::trash_can,4.65f,13.62f,f,.27f,.27f,.34f,.3f);
+ mdFix(m,model::med_notice_board,8.965f,9.9f,f+1.25f,1.2f,.07f,.9f,mdW,false);
+ kit::prop(m,model::med_wheelchair,5.7f,11.9f,f,.55f,1.04f,.91f,1.25f);
+ kit::prop(m,model::item_dosimeter,7.4f,12.25f,f,.31f,.146f,.066f,2.1f);
+ kit::prop(m,model::item_id_card,3.3f,11.4f,f,.132f,.085f,.002f,.7f);
+ crash(1.f,9.f,13.96f,14.f);
+ paperDrift(m,1.4f,9.6f,8.6f,12.9f,f,4,7401);
+ // --- The porters' corridor: the line to goods in, trolley 3 where it was pulled clear ------------
+ crash(9.2f,15.85f,11.f,11.04f);crash(19.15f,21.f,11.f,11.04f);crash(9.f,17.3f,13.96f,14.f);crash(17.9f,21.f,13.96f,14.f);
+ floorLine(m,5.f,12.62f,16.8f,12.7f,f,14);floorLine(m,16.72f,11.f,16.8f,12.62f,f,14);                       // porters' route
+ kit::prop(m,model::med_crash_cart,15.2f,11.5f,f,.74f,.48f,1.f,.12f);
+ for(auto [x,y,yaw]:{std::tuple{14.4f,11.95f,.4f},{11.9f,12.5f,2.6f}})kit::prop(m,model::med_pill_bottle,x,y,f,.07f,.03f,.13f,yaw);
+ kit::prop(m,model::med_wheelchair,10.1f,13.4f,f,.55f,1.04f,.91f,kPi);
+ mdFix(m,model::med_notice_board,13.f,13.965f,f+1.25f,1.2f,.07f,.9f,mdN,false);
+ extinguisher(m,17.6f,14.f,f,mdN);
+ bench(m,19.3f,13.55f,f);
+ // The service lift to the morgue level, out of service: doors, frame, call panel, dead indicator.
+ for(float y:{11.55f,13.35f})wall(m,20.9f,y,21.f,y+.1f,f,f+2.2f,20);wall(m,20.9f,11.55f,21.f,13.45f,f+2.1f,f+2.2f,20);
+ wall(m,20.95f,11.65f,21.f,12.49f,f,f+2.1f,20);wall(m,20.95f,12.51f,21.f,13.35f,f,f+2.1f,20);wall(m,20.96f,12.49f,21.f,12.51f,f,f+2.1f,8);
+ for(float y:{11.95f,13.05f})wall(m,20.93f,y,20.95f,y+.04f,f+.95f,f+1.25f,8);                               // pulls
+ wall(m,20.93f,11.65f,20.95f,13.35f,f,f+.04f,20);
+ mdFix(m,model::lab_id_scanner,20.97f,11.3f,f+1.1f,.3f,.06f,.41f,mdW,false);
+ mdFix(m,model::lab_status_display,20.97f,12.5f,f+2.3f,.69f,.06f,.2f,mdW,false);
+ taped(m,{21.f,13.75f},f+1.5f,mdW,Readable::Note,"SERVICE LIFT 2","OUT OF SERVICE 03:30. MORGUE LEVEL NOT ANSWERING.",
+  "BODIES TO THE PHARMACY COLD ROOM UNTIL FURTHER NOTICE. -PORTERS");
+ // --- Goods in: the bulk stock, the returns bench, the empty sedation cartons ---------------------
+ // The returns bench along the west wall, under the cold room's condensing unit.
+ wall(m,13.25f,6.25f,13.85f,8.55f,f,f+.08f,8);wall(m,13.2f,6.2f,13.9f,8.6f,f+.08f,f+.86f,20);wall(m,13.2f,6.15f,13.95f,8.65f,f+.86f,f+.9f,10);
+ for(float y=6.8f;y<8.4f;y+=.6f)wall(m,13.9f,y,13.91f,y+.01f,f+.1f,f+.84f,8);wall(m,13.9f,6.22f,13.91f,8.58f,f+.6f,f+.61f,8);
+ terminal(m,{13.72f,7.f},"GOODS IN / RETURNS","03:41 WARD C TROLLEY 3 RETURNED. EMPTY. NOT SIGNED IN. NOBODY AT THE SHUTTER.",
+  "03:44 THE SHUTTER CAME DOWN ON IT AND JAMMED. PULLED IT CLEAR. SHUTTER STAYS WHERE IT IS.");
+ {auto& t=m.terminals.back();t.readable=Readable::Note;t.surface=.9f;t.yaw=mdE;}
+ kit::prop(m,model::desk_phone,13.5f,6.45f,f+.9f,.2f,.2f,.1f,mdE);
+ kit::prop(m,model::prop_cardboard_box,13.58f,7.85f,f+.9f,.5f,.495f,.252f,mdE+.05f);
+ kit::prop(m,model::prop_cardboard_box_open,13.58f,8.38f,f+.9f,.36f,.36f,.36f,.1f);
+ mdFix(m,model::med_first_aid_box,16.f,1.06f,f+1.3f,.37f,.12f,.35f,mdS,false);
+ mdFix(m,model::med_wall_clock,18.4f,1.01f,f+2.05f,.24f,.02f,.23f,mdS,false);
+ for(float y:{2.1f,3.95f,5.8f})m74Stock(m,19.72f,y,int(y*3));
+ m74Stock(m,16.5f,3.f,15);m74Stock(m,17.f,4.85f,34);
+ // The sedation run: its shelves cleared tonight down to the empty cartons.
+ for(auto [x,y]:{std::pair{17.f,3.f},{16.5f,4.85f}})shelf(m,{x,y},kPi*.5f,0);
+ kit::prop(m,model::prop_cardboard_box_open,17.f,2.6f,f+.972f,.4f,.4f,.4f,.1f);kit::prop(m,model::prop_cardboard_box_open,16.5f,5.3f,f+.306f,.4f,.4f,.4f,-.15f);
+ mdFix(m,model::pallet,15.2f,9.4f,f,1.2f,1.15f,.16f,0,true);
+ for(int i=0;i<3;++i)kit::prop(m,model::prop_cardboard_box_open,14.94f+(i%2)*.52f,9.14f+(i/2)*.52f,f+.16f,.5f,.5f,.5f,0);
+ mdFix(m,model::pallet,19.15f,8.2f,f,1.2f,1.15f,.16f,kPi*.5f,true);
+ for(int k=0;k<2;++k)for(int i=0;i<4-k*2;++i)kit::prop(m,model::prop_cardboard_box,18.89f+(i%2)*.52f,7.94f+(i/2)*.52f,f+.16f+k*.252f,.5f,.495f,.252f,0);
+ handCart(m,14.7f,7.1f,f);
+ for(auto [x,y,yaw]:{std::tuple{17.6f,8.7f,.3f},{16.9f,7.3f,2.f}})kit::prop(m,model::prop_cardboard_box_open,x,y,f,.5f,.5f,.5f,yaw);
+ kit::prop(m,model::trash_can,13.55f,9.f,f,.27f,.27f,.34f,0);
+ extinguisher(m,13.2f,9.9f,f,mdE);
+ // The cold room's condensing unit on this side of its wall, piped up through the ceiling.
+ mdFix(m,model::pwr_duct_fan_unit,13.605f,2.25f,f,.79f,1.49f,1.95f,0,true);
+ for(float y:{1.75f,2.f})m.pipes.push_back({{13.45f,y},{13.45f,y},f+1.95f,.03f,roof,8});
+ // --- Dispensary: the hatch counter, the bench, four empty trolley bays, the sedation board -------
+ m74Counter(m,1.2f,8.15f,7.3f,8.8f,f,.95f);
+ kit::prop(m,model::crt_monitor,4.1f,8.55f,f+.95f,.42f,.4f,.38f,kPi);
+ kit::prop(m,model::keyboard,4.1f,8.26f,f+.95f,.45f,.16f,.03f,kPi);
+ kit::prop(m,model::office_paper_stack,2.3f,8.5f,f+.95f,.33f,.44f,.03f,.2f);
+ for(auto [x,yaw]:{std::pair{5.2f,.3f},{5.45f,1.9f}})kit::prop(m,model::med_pill_bottle,x,8.45f,f+.95f,.07f,.03f,.13f,yaw);
+ kit::prop(m,model::desk_phone,6.9f,8.5f,f+.95f,.2f,.2f,.1f,kPi);
+ kit::prop(m,model::office_chair,2.7f,7.6f,f,.55f,.55f,.95f,kPi+.25f);
+ kit::prop(m,model::office_chair,5.45f,7.55f,f,.55f,.55f,.95f,kPi-.35f);
+ // The dispensing bench: worktop, bin shelves over it, everything made up and gone.
+ m74Counter(m,3.4f,5.f,8.4f,5.7f,f,.9f);
+ for(float x:{3.48f,5.88f,8.28f})wall(m,x,5.33f,x+.04f,5.37f,f+.9f,f+1.85f,20);
+ for(float z:{1.35f,1.8f})wall(m,3.45f,5.15f,8.35f,5.55f,f+z,f+z+.03f,20);
+ for(int i=0;i<10;++i){const float x=3.6f+i*.47f;const int c=i%4==1?18:i%4==3?19:20;                      // open bins, emptied
+  wall(m,x,5.18f,x+.42f,5.52f,f+1.38f,f+1.395f,20);wall(m,x,5.18f,x+.42f,5.2f,f+1.395f,f+1.455f,20);wall(m,x,5.5f,x+.42f,5.52f,f+1.395f,f+1.415f,c);
+  for(float e:{x,x+.4f})wall(m,e,5.2f,e+.02f,5.5f,f+1.395f,f+1.455f,20);}
+ for(int i=0;i<2;++i)kit::prop(m,model::med_pill_bottle,4.65f+i*2.7f,5.3f+i*.06f,f+1.83f,.07f,.03f,.13f,i*.6f+.3f);
+ kit::prop(m,model::crt_monitor,3.95f,5.28f,f+.9f,.42f,.4f,.38f,0);
+ kit::prop(m,model::keyboard,4.f,5.58f,f+.9f,.45f,.16f,.03f,0);
+ kit::prop(m,model::office_paper_stack,5.16f,5.3f,f+.9f,.33f,.44f,.03f,kPi*.5f+.1f);                          // label sheets
+ for(auto [x,y,yaw]:{std::tuple{6.1f,5.3f,.2f},{6.6f,5.25f,2.2f},{7.3f,5.45f,.7f}})kit::prop(m,model::med_pill_bottle,x,y,f+.9f,.07f,.03f,.13f,yaw);
+ for(float x:{7.8f,8.12f})kit::prop(m,model::prop_cardboard_box_open,x,5.35f,f+.9f,.24f,.24f,.24f,0);
+ kit::prop(m,model::office_chair,4.f,6.3f,f,.55f,.55f,.95f,.15f);
+ for(float y:{3.75f,4.8f,5.85f,6.9f,7.95f})floorLine(m,1.f,y,1.95f,y+.05f,f,13);                          // trolley bays 1-4
+ wall(m,1.f,3.8f,1.06f,7.9f,f+.85f,f+.9f,20);
+ for(float y:{4.3f,5.35f,6.4f,7.45f}){wall(m,1.06f,y-.015f,1.09f,y+.015f,f+.55f,f+.85f,8);wall(m,1.06f,y-.04f,1.12f,y+.04f,f+.48f,f+.56f,8);}
+ mdFix(m,model::med_notice_board,1.035f,5.4f,f+1.25f,1.2f,.07f,.9f,mdE,false);
+ taped(m,{1.f,6.45f},f+1.6f,mdE,Readable::Note,"WARD C / NIGHT SEDATION / STANDING",
+  "ALL TIER 3, BEDS 3-11 (NINE): MIDAZOLAM 10 MG ON ARRIVAL, REPEAT AS WARD C ASKS. WHOLE SHIFT.",
+  "LAB 4 (ENERGY DIAG.): NO ORDER WRITTEN. QUERIED 03:25. NO ANSWER. -R.");
+ // Cold storage: four under-counter fridges, the stock boxes on them and the logger over them.
+ for(float x:{7.85f,8.6f})mdFix(m,model::lab_sample_fridge,x,1.425f,f,.7f,.85f,1.f,mdS,true);
+ for(auto [x,yaw]:{std::pair{7.7f,.05f},{8.05f,-.08f},{8.75f,.1f}})kit::prop(m,model::prop_cardboard_box,x,1.4f,f+1.f,.24f,.24f,.12f,yaw);
+ kit::prop(m,model::prop_cardboard_box_open,8.45f,1.35f,f+1.f,.24f,.24f,.24f,.2f);
+ mdFix(m,model::lab_sample_fridge,9.35f,1.425f,f,.7f,.85f,1.f,mdS,true);
+ mdFix(m,model::lab_sample_fridge,9.53f,2.45f,f,.7f,.85f,1.f,mdW,true);
+ mdFix(m,model::lab_status_display,9.35f,1.03f,f+1.9f,.69f,.06f,.2f,mdS,false);
+ for(float x:{9.17f,9.5f})kit::prop(m,model::prop_cardboard_box,x,1.4f,f+1.f,.24f,.24f,.12f,0);
+ // The cold room door: what is held behind it.
+ taped(m,{11.5f,3.68f},f+1.25f,0,Readable::Note,"COLD ROOM / HOLDING","WARD C, BED 16. CERTIFIED DEAD 03:15. HELD HERE UNTIL THE MORGUE LIFT RUNS.",
+  "03:58 KNOCKING. DR. SAYS IT IS THE COLD. DO NOT OPEN THIS DOOR.");
+ mdFix(m,model::lab_status_display,11.5f,3.64f,f+2.3f,.69f,.06f,.2f,mdS,false);
+ // Inside, by torchlight through the little window: his trolley, empty, the sheet on the floor.
+ mdFix(m,model::med_ward_bed,11.55f,2.15f,f,1.98f,.94f,.84f,0,true);
+ wall(m,10.4f,2.75f,11.3f,3.35f,f,f+.015f,23);
+ // --- The controlled-drugs cage: the time lock, the register, the kits R. left -------------------
+ // The pad and its note on a steel plate bolted to the east bay's bars, well clear of the gate: a
+ // press here goes to the pad, never to the locked gate beside it.
+ wall(m,6.72f,3.52f,7.08f,3.555f,f+.95f,f+2.f,20);
+ mdFix(m,model::lab_id_scanner,6.9f,3.58f,f+1.1f,.3f,.06f,.41f,mdS,false);
+ taped(m,{6.9f,3.555f},f+1.68f,0,Readable::Note,"CD CAGE / TIME LOCK","KEY THE DELAY AT THE PAD. GATE RELEASES IN 20 SECONDS. STAY WITH IT.",
+  "02:45 KEYED, R. 03:35 KEYED, R. 04:00 KEYED, R. THE LAST OF THE SEDATION, ON TROLLEY 4.");
+ m.terminals.back().activateState=stateId("medf_cage_keyed");
+ for(float x:{2.f,3.6f,4.75f})mdFix(m,model::med_supply_cabinet,x,1.222f,f,1.1f,.444f,1.7f,mdS,true);
+ mdFix(m,model::med_nurse_desk,6.5f,1.33f,f,1.18f,.56f,.81f,kPi,true);
+ kit::prop(m,model::wooden_chair,6.45f,2.05f,f,.417f,.525f,.95f,.1f);
+ terminal(m,{6.3f,1.35f},"CONTROLLED DRUGS REGISTER","MIDAZOLAM: 0. HALOPERIDOL: 0. PHENOBARBITAL: 0. RECEIVED THIS WEEK: 40 BOXES.",
+  "WITNESS SIGNATURE MISSING ON EVERY LINE AFTER 03:20.");
+ {auto& t=m.terminals.back();t.readable=Readable::Note;t.surface=.81f;t.yaw=mdS;}
+ for(float x:{5.98f,6.08f})kit::prop(m,model::office_file_binder,x,1.22f,f+.81f,.093f,.301f,.424f,0);          // the register's back books
+ kit::prop(m,model::prop_cardboard_box_open,6.62f,1.2f,f+.81f,.24f,.24f,.24f,.15f);
+ kit::prop(m,model::desk_phone,6.92f,1.42f,f+.81f,.2f,.2f,.1f,.12f);
+ kit::prop(m,model::med_pill_bottle,6.6f,1.5f,f+.81f,.07f,.03f,.13f,.8f);
+ for(auto [x,y,yaw]:{std::tuple{1.55f,2.75f,.3f},{5.1f,2.9f,2.1f},{6.6f,2.95f,1.1f}})kit::prop(m,model::prop_cardboard_box_open,x,y,f,.36f,.36f,.36f,yaw);   // emptied cartons
+ for(auto [x,y,yaw]:{std::tuple{3.3f,2.7f,2.6f}})kit::prop(m,model::med_pill_bottle,x,y,f,.07f,.03f,.13f,yaw);
+ // Nobody climbs the tall cabinets or the bench's top board to sit under the ceiling.
+ for(float x:{2.f,3.6f,4.75f})wall(m,x-.55f,1.f,x+.55f,1.444f,f+1.7f,roof,30);wall(m,3.45f,5.15f,8.35f,5.55f,f+1.97f,roof,30);
+ // --- The night pharmacist's office: the record of what was given, his note ----------------------
+ mdFix(m,model::desk,11.f,10.4f,f,1.4f,.7f,.75f,kPi,true);
+ kit::prop(m,model::office_chair,11.f,9.6f,f,.55f,.55f,.95f,kPi+.2f);
+ kit::prop(m,model::crt_monitor,11.2f,10.55f,f+.75f,.42f,.4f,.38f,kPi);
+ kit::prop(m,model::keyboard,11.15f,10.18f,f+.75f,.45f,.16f,.03f,kPi);
+ const int officeLamp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,10.45f,10.55f,f+.75f,.18f,.4f,.52f,kPi);
+ terminal(m,{10.72f,10.3f},"DISPENSING RECORD / NIGHT","03:20 STANDING ORDER FROM I.I.: SEDATE ALL TIER 3, WHOLE SHIFTS. 9 BEDS. TROLLEYS 1-3 OUT BY 03:40.",
+  "03:50 WARD C ASKS FOR DOUBLE. 04:00 THE CAGE HAS NOTHING LEFT TO GIVE THEM.");
+ {auto& t=m.terminals.back();t.readable=Readable::Note;t.surface=.75f;t.yaw=kPi;}
+ terminal(m,{11.58f,10.4f},"NIGHT PHARMACIST / 04:02","TROLLEY 3 CAME BACK UP THE CORRIDOR EMPTY. NOBODY PUSHING IT.",
+  "TAKING 4 DOWN MYSELF, THE PORTERS WON'T GO. THE KITS IN THE CAGE ARE FOR WHOEVER COMES BACK. -R.");
+ {auto& t=m.terminals.back();t.readable=Readable::Letter;t.surface=.75f;t.yaw=kPi;}
+ mdFix(m,model::med_records_cabinet,9.445f,8.2f,f,.9f,.49f,1.f,mdE,true);
+ for(float y:{7.95f,8.05f,8.15f})kit::prop(m,model::office_file_binder,9.45f,y,f+1.f,.09f,.3f,.42f,kPi*.5f);
+ mdFix(m,model::med_notice_board,9.235f,9.4f,f+1.25f,1.2f,.07f,.9f,mdE,false);
+ mdFix(m,model::med_wall_clock,12.99f,9.3f,f+2.05f,.24f,.02f,.23f,mdW,false);
+ shelf(m,{12.72f,9.6f},kPi*.5f,0);
+ for(int t=0;t<3;++t)for(int i=0;i<6;++i){if(t!=1||i==3)continue;kit::prop(m,model::office_file_binder,12.72f,8.85f+i*.13f+(i>2?.55f:0),f+(t==0?.306f:t==1?.972f:1.656f),.09f,.3f,.42f,kPi*.5f);}
+ kit::prop(m,model::trash_can,9.5f,10.5f,f,.27f,.27f,.34f,0);
+ // --- The cage's time lock: the knocking builds, stops, the gate releases, and he slams once -------
+ {TimedSequence s;s.timerState=stateId("medf_knock");s.finishState=stateId("medf_knock_done");s.x1=10.f;s.y1=3.7f;s.x2=13.2f;s.y2=6.7f;
+  s.durationMs=4000;s.finishAtMs=4000;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);}
+ const Vec2 knock{11.5f,3.45f};
+ cue(m,"medf_knock",900,Sound::LockerKnock,knock,"(KNOCKING, INSIDE THE COLD ROOM)",.4f,f+1.4f);
+ cue(m,"medf_knock",1500,Sound::LockerKnock,knock,"",.35f,f+1.4f);cue(m,"medf_knock",2200,Sound::LockerKnock,knock,"",.45f,f+1.4f);
+ {TimedSequence s;s.timerState=stateId("medf_cage_timer");s.finishState=stateId("medf_cage_open");s.x1=-9;s.y1=-9;s.x2=-8;s.y2=-8;
+  s.durationMs=21000;s.finishAtMs=19600;s.soundIntervalMs=1000;s.soundUntilMs=15100;s.tickSound=Sound::SuspicionTick;s.gain=.4f;s.pitch=1.f;
+  s.soundAt={6.9f,3.6f};s.soundZ=f+1.2f;m.timedSequences.push_back(s);}
+ for(int t:{5200,5800,6400})cue(m,"medf_cage_timer",t,Sound::LockerKnock,knock,"",.55f,f+1.4f);
+ for(int t:{10000,10400,10800,11200})cue(m,"medf_cage_timer",t,Sound::LockerKnock,knock,"",.75f,f+1.4f);
+ for(int i=0;i<9;++i)cue(m,"medf_cage_timer",13400+i*200,Sound::LockerKnock,knock,i==0?"(HAMMERING ON THE COLD ROOM DOOR)":"",.9f,f+1.2f+(i%3)*.2f);
+ cue(m,"medf_cage_timer",15200,Sound::LockerBang,knock,"",.7f,f+1.4f);
+ cue(m,"medf_cage_timer",19600,Sound::Door,{4.1f,3.5f},"",.9f,f+1.2f);
+ {TimedSequence s;s.timerState=stateId("medf_cage_slam");s.finishState=stateId("medf_cage_slammed");s.x1=-9;s.y1=-9;s.x2=-8;s.y2=-8;
+  s.durationMs=1500;s.finishAtMs=800;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);}
+ cue(m,"medf_cage_slam",800,Sound::LockerBang,knock,"(THE COLD ROOM DOOR, SLAMMED FROM INSIDE)",1.f,f+1.3f);
+ cue(m,"medf_cage_slam",800,Sound::JunkMetal,knock,"",.9f,f+1.f);
+ m71Event(m,"medf_cage_key_go",0,0,24,24,"medf_cage_keyed",{m71Set("medf_cage_timer",1)});      // keyed once: pressing again replays nothing
+ m71Event(m,"medf_cage_slam_go",0,0,24,24,"medf_cage_open",{m71Set("medf_cage_slam",1)});
+ {ScriptAction k;k.type=ScriptAction::Type::Shake;k.amount=.12f;m71Event(m,"medf_cage_slam_hit",0,0,24,24,"medf_cage_slammed",{k});}
+ // The staff door opens from the inside: the way back out to the hall.
+ m71Event(m,"medf_staff_release",7.3f,7.3f,9.f,8.8f,"",{m71Set("medf_staff_door",1)});
+ // --- Light (19): cold dispensary tubes on the goal behind the glass, the corridor going bad, the spill
+ //     under the shutter, the fridges' tube, the cold room's amber alarm -------------------------
+ for(auto [x,y,i]:{std::tuple{2.6f,2.25f,.5f},{5.7f,2.25f,.45f},{2.6f,6.9f,.5f},{6.2f,6.9f,.5f},{9.f,4.4f,.45f},{11.6f,5.2f,.45f}})m.lights.push_back(m71Tube(x,y,roof,i,5.5f,6000,.04f));
+ m.lights.push_back(m71Tube(8.6f,2.3f,roof,.4f,4.5f,6000,.04f));                                           // over the fridges
+ m.lights.push_back(lamp({12.5f,3.6f},f+2.45f,.22f,2.6f,1700,-.25f,WorldLightMount::Wall,kPi*.5f));               // cold room alarm
+ m.lights.push_back(m71Tube(11.1f,8.9f,roof,.4f,4.5f,3800,0));
+ m.lights.push_back(lamp({10.5f,10.4f},f+1.2f,.3f,2.2f,2800,0,WorldLightMount::Bare));m.lights.back().prop=officeLamp;
+ m.lights.push_back(m71Tube(3.2f,11.5f,roof,.5f,5.5f,5200,.05f));
+ m.lights.push_back(m71Tube(7.f,11.5f,roof,.45f,5.5f,5200,.05f,.2f));
+ m.lights.push_back(m71Tube(11.8f,12.5f,roof,.42f,5.f,5000,.05f));
+ m.lights.push_back(m71Tube(15.2f,12.5f,roof,.3f,4.5f,5000,.05f,.5f));
+ m71DeadTube(m,19.f,12.5f,f,roof);
+ m.lights.push_back(lamp({20.9f,11.3f},f+1.32f,.1f,1.2f,1000,-.45f,WorldLightMount::Bare));                     // the call button, still red
+ m.lights.push_back(m71Tube(15.6f,2.6f,roof,.5f,5.5f,4600,.03f));
+ m.lights.push_back(m71Tube(18.4f,4.f,roof,.45f,5.5f,4600,.03f,.2f));
+ m.lights.push_back(m71Tube(17.5f,9.2f,roof,.55f,5.f,4600,.03f));
+ m.lights.push_back(m71Tube(14.8f,7.4f,roof,.4f,4.5f,4600,.03f));
+ // --- Rewards and names -------------------------------------------------------------------------
+ m.pickupSpawns={{{2.7f,2.2f},PickupKind::Health,f},{{5.6f,2.25f},PickupKind::Health,f},{{16.f,1.75f},PickupKind::Health,f}};
+ // 9 mm: the security box signed into the cage with the drugs, on the register desk behind the time
+ // lock; and the escort's box, shaken off trolley 3 when the shutter came down on it.
+ m.pickupSpawns.insert(m.pickupSpawns.end(),{{{6.08f,1.52f},PickupKind::HandgunAmmo,f+.81f},{{14.5f,11.3f},PickupKind::HandgunAmmo,f}});
+ zone(m,"MEDICAL / PHARMACY / CONTROLLED DRUGS",1.f,1.f,7.4f,3.5f);
+ zone(m,"MEDICAL / PHARMACY / OFFICE",9.2f,7.f,13.f,10.8f);
+ zone(m,"MEDICAL / PHARMACY / DISPENSARY",1.f,1.f,13.f,8.8f);
+ zone(m,"MEDICAL / PHARMACY / GOODS IN",13.2f,1.f,20.f,10.8f);
+ zone(m,"MEDICAL / PHARMACY / COLLECTION",0,9.f,9.f,14.f);
+ zone(m,"MEDICAL / PHARMACY / PORTERS' CORRIDOR",9.f,11.f,21.f,14.f);
+ zone(m,"MEDICAL / PHARMACY",0,0,24,24);
+ recessedFittings(m);freightFinish(m,-1);
+ return p;
+}
 }
 void buildChapterMedicalFront(CampaignMapTable& maps){
  maps[71]=makeMedicalScreening();

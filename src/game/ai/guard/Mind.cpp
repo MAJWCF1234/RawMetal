@@ -36,6 +36,8 @@ void Game::validateGuardState(size_t actor)const{
  // Bounded loosely, not by CautionMs: rebuildFriendlyActors cuts a longer one to this build's clock.
  if(int caution=state(guardCautionKey(actor));caution<0||caution>600000)throw std::runtime_error("Invalid saved guard caution");
  if(get("guard_locker")<0||get("guard_locker")>65536)throw std::runtime_error("Invalid saved guard locker memory");
+ // A dropped sidearm (Handgun.cpp): where it lies, its rounds and whether it was taken.
+ if(get("weapon_looted")<0||get("weapon_looted")>1||get("loot_drop")<0||get("loot_drop")>chunkCount()||get("loot_rounds")<0||get("loot_rounds")>kGuardHandgun.cycle.tubeCapacity||get("loot_x")<0||get("loot_x")>24000||get("loot_y")<0||get("loot_y")>24000||get("loot_z")< -100000||get("loot_z")>100000||get("loot_yaw")< -31416||get("loot_yaw")>31416)throw std::runtime_error("Invalid saved sidearm loot");
  validateGuardLocker(actor);
  validateGuardPolicyState(actor);
  validateGuardDanger(actor);

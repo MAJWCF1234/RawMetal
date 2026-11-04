@@ -443,12 +443,14 @@ std::shared_ptr<const Map> makeResearchIntake(){
  rfGuard(m,clock,"rf_intake_lead",ActorVisual::Cleanup,GuardSquadRole::Assault,"rf_intake",{{{12.f,15.f},f,6000,rfN}},14,.6f,1,1.3f,0,110);
  rfGuard(m,clock,"rf_intake_hall",ActorVisual::CleanupMedic,GuardSquadRole::Medic,"rf_intake",
   {{{8.f,8.2f},f,4000,rfE},{{15.8f,8.2f},f,4000,rfW},{{16.2f,16.6f},f,3000,rfN},{{8.2f,16.6f},f,3000,rfN}},13,.6f,2,1.2f);
+ m.actorTracks.back().ai.dropsSidearm=true; // the first pistol the player can take off a body
  rfGuard(m,clock,"rf_intake_sweep_a",ActorVisual::CleanupRusher,GuardSquadRole::Rusher,"rf_intake",
   {{{9.4f,14.9f},f,3000,rfN},{{9.6f,8.2f},f,2500,rfN},{{12.f,8.2f},f,2500,rfN},{{12.f,5.f},f,3000,rfN},{{8.2f,5.f},f,3000,rfW},
    {{6.f,3.6f},f,4000,rfW},{{2.4f,4.4f},f,3000,rfW},{{6.f,3.6f},f,1000,rfE},{{12.f,5.f},f,1000,rfS}},13,.6f,1,1.4f,sweep);
  rfGuard(m,clock,"rf_intake_sweep_b",ActorVisual::CleanupEngineer,GuardSquadRole::Engineer,"rf_intake",
   {{{14.6f,14.9f},f,3000,rfN},{{14.6f,8.2f},f,2500,rfN},{{12.4f,5.2f},f,2000,rfE},{{17.2f,4.f},f,3000,rfE},{{18.3f,5.9f},f,1500,rfS},
    {{18.9f,9.f},f,4000,rfE},{{19.4f,12.4f},f,1500,rfS},{{20.f,16.3f},f,3000,rfW},{{16.4f,18.3f},f,2000,rfW}},12,.6f,2,1.2f,sweep);
+ m.actorTracks.back().ai.dropsSidearm=true;
  for(auto& t:m.actorTracks)if(t.ai.mode==ActorAiMode::Guard)t.ai.alertState=alert;
  // The intake officer: no corpse clip sits, so he lies where he fell.
  actor(m,clock,ActorVisual::Worker,1.7f,{{0,{5.7f,5.45f},f,1.2f,4,1.f},{60000,{5.7f,5.45f},f,1.2f,4,1.f}});
@@ -482,6 +484,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
 
  // --- Rewards, throwables and names -------------------------------------------------------------
  m.pickupSpawns={{{2.6f,2.8f},PickupKind::Ammo,f},{{21.4f,3.3f},PickupKind::Ammo,f},{{5.6f,9.2f},PickupKind::Health,f},{{18.3f,19.2f},PickupKind::Health,f}};
+ m.pickupSpawns.push_back({{18.85f,15.2f},PickupKind::HandgunAmmo,f});   // 9 mm left out in front of the staff lockers
  m.clutterSpawns.insert(m.clutterSpawns.end(),{{5,{8.1f,3.f},ctr},{5,{8.25f,3.15f},ctr},{1,{4.6f,5.6f},f},{2,{11.2f,13.25f},ledge},{3,{5.05f,15.8f},table},
   {4,{20.6f,1.5f},f+.75f},{4,{21.6f,1.55f},f+.75f},{2,{20.9f,16.6f},f+.47f},{2,{21.05f,15.95f},f+.47f},{1,{20.4f,14.1f},f}});
  zone(m,"RESEARCH INTAKE / INTERLOCK",8.8f,1.f,15.2f,4.45f);
@@ -760,7 +763,8 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  // At the end of the locker room aisle, gun down. A truce, his by default:
  // he only turns if the player turns on him.
  rfGuard(m,"rf_proc_clock","rf_proc_private",ActorVisual::CleanupEngineer,GuardSquadRole::Engineer,"rf_proc",{{{1.9f,6.75f},f,60000,rfE}},10,.6f,2,.6f,0,60);
- {auto& t=m.actorTracks.back();t.ai.stance=stance;t.talk=stateId("proc_hello");t.voice=2;}
+ // A truce keeps his pistol on him; it only falls if the player breaks it and downs him.
+ {auto& t=m.actorTracks.back();t.ai.stance=stance;t.talk=stateId("proc_hello");t.voice=2;t.ai.dropsSidearm=true;}
  rfLine(m,"proc_hello","WOUNDED CLEANUP PRIVATE","Don't. I'm not going to shoot you. I can't lift it.",{
   rfReply("Who's giving your orders down here?","proc_who"),
   rfReply("What happened to your squad?","proc_squad"),
@@ -778,6 +782,8 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
 
  // --- Rewards, throwables and names --------------------------------------------------------------
  m.pickupSpawns={{{1.5f,5.0f},PickupKind::Health,f},{{22.5f,3.f},PickupKind::Ammo,f},{{9.2f,3.1f},PickupKind::Health,f},{{21.f,18.6f},PickupKind::Ammo,f}};
+ // 9 mm on the waiting benches, put down by the security that cleared the lockers.
+ m.pickupSpawns.insert(m.pickupSpawns.end(),{{{8.95f,7.35f},PickupKind::HandgunAmmo,f+.63f},{{15.05f,8.45f},PickupKind::HandgunAmmo,f+.63f}});
  m.clutterSpawns.insert(m.clutterSpawns.end(),{{0,{7.3f,6.0f},f},{1,{18.2f,12.6f},f},{2,{20.6f,17.4f},f},{0,{4.2f,12.4f},f}});
  zone(m,"PERSONNEL PROCESSING / WASHROOM",1.f,1.f,9.8f,3.6f);
  zone(m,"PERSONNEL PROCESSING / LOCKER ROOM",1.f,3.8f,8.4f,8.8f);
@@ -1159,6 +1165,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  // --- Rewards and names ---------------------------------------------------------------------------
  m.pickupSpawns={{{12.6f,18.3f},PickupKind::Ammo,f},{{10.f,6.4f},PickupKind::Health,f},{{2.5f,18.2f},PickupKind::Health,f},
   {{13.f,4.2f},PickupKind::Ammo,dz},{{2.4f,6.6f},PickupKind::Ammo,dz}};
+ m.pickupSpawns.push_back({{9.85f,7.f},PickupKind::HandgunAmmo,f});   // 9 mm among the cartons by the cooler
  m.clutterSpawns.insert(m.clutterSpawns.end(),{{2,{20.1f,20.25f},cf+.42f},{0,{16.2f,20.8f},cf},{2,{11.45f,5.9f},f+.92f},{5,{9.7f,4.6f},f+.78f}});
  zone(m,"RESEARCH ADMINISTRATION / DIRECTOR'S OFFICE",1.f,1.f,12.f,8.f,dz-.5f,1000);
  zone(m,"RESEARCH ADMINISTRATION / OBSERVATION GALLERY",12.f,0,24.f,5.f,dz-.5f,1000);

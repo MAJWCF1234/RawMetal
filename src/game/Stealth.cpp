@@ -141,7 +141,8 @@ void Game::releaseNpc(bool unconscious){
   setState(friendlyKey(actor,"guard_x"),int(std::round(global.x*1000)));setState(friendlyKey(actor,"guard_y"),int(std::round(global.y*1000)));setState(friendlyKey(actor,"guard_z"),int(std::round(m_player.z*1000)));
   setState(friendlyKey(actor,"guard_memory"),npc.track().ai.searchMs);setState(friendlyKey(actor,"guard_confirmed"),1);setState(friendlyKey(actor,"guard_recognition"),npc.track().ai.recognitionMs);setState(friendlyKey(actor,"guard_mode"),int(GuardState::Investigate));
  }
- if(weapon>0&&weapon<weaponCount())equipWeapon(WeaponId(weapon));
+ // The gun the player had out before taking hold of him comes back.
+ if(playerFirearm(WeaponId(std::clamp(weapon,0,2)))&&ownsWeapon(WeaponId(weapon)))equipWeapon(WeaponId(weapon));
  m_pickupNotice=unconscious?"GUARD UNCONSCIOUS":"GUARD RELEASED / THEY KNOW YOU ARE HERE";m_pickupNoticeTime=2;m_suppressFire=true;
 }
 void Game::updateStealth(const InputState&input,float){
@@ -438,13 +439,13 @@ bool Game::testLockers(){
   ActorPose facing=g.npcActors()[0].pose;facing.position={3.6f,6.5f};facing.yaw=-kPi*.5f;
   check(!g.guardCanSee(0,facing,g.resolveGuardTarget(0,{ShotKind::Player,0,0})),"A guard square in front of a shut locker cannot see the player in it");
   float closest=99;bool calm=true;auto at=g.player().pos;int steps=0;
-  InputState push;push.forward=true;push.fire=true;push.crouch=true;push.jump=true;int ammo=g.player().ammo,chambered=g.player().loaded;
+  InputState push;push.forward=true;push.fire=true;push.crouch=true;push.jump=true;auto ammo=g.player().pools;
   for(int i=0;i<60*12;++i){g.update(i<120?push:InputState{},1.f/60);closest=std::min(closest,length(g.npcActors()[0].pose.position-at));calm&=g.guardState(0)!=GuardState::Alert&&!g.state(g.friendlyKey(0,"guard_seen"))&&!g.state(g.friendlyKey(0,"guard_locker"));
    for(const auto&s:g.sounds())steps+=!s.spatial&&(footstepSound(s.sound)||s.sound==Sound::Jump||s.sound==Sound::Shot||s.sound==Sound::PunchSwing);} // the player's own sounds are the unplaced ones
   // He turns on his beat as the doors shut: that glimpse sends him to look
   // over the floor in front (Lockers.cpp), never to open them.
   check(closest<2.f&&calm&&g.hiddenLocker()==0,"A guard who walks his beat right up to the doors never sees the player, never opens them and never knows which one");
-  check(length(g.player().pos-at)<.001f&&!g.player().crouched&&g.player().ammo==ammo&&g.player().loaded==chambered&&steps==0,"Inside, walking, crouching, jumping and firing do nothing and make no steps");
+  check(length(g.player().pos-at)<.001f&&!g.player().crouched&&g.player().pools==ammo&&steps==0,"Inside, walking, crouching, jumping and firing do nothing and make no steps");
   check(g.playerExposure()==0,"The light meter reads nothing inside a shut locker");
   // Under a radian a frame, too little to wrap: each way ends hard on its own
   // edge of the cone (the doors face +x, so the facing is angle 0).
@@ -580,7 +581,7 @@ bool Game::testLockers(){
  // each hand is on a leaf (within 6 cm of its face, at a height on it); the
  // gun is away for the whole way in and out and comes back up from below the
  // view only after the way out ends.
- {auto g=scene({{{10.5f,6.5f},0,600},{{4.2f,6.5f},0,4000}},kPi*.5f);g.m_player.ammo=std::max(g.m_player.ammo,8);g.m_weaponEquipped=true;g.m_holster=0;
+ {auto g=scene({{{10.5f,6.5f},0,600},{{4.2f,6.5f},0,4000}},kPi*.5f);g.m_player.pool(WeaponId::Shotgun).total=std::max(g.m_player.pool(WeaponId::Shotgun).total,8);g.m_weaponEquipped=true;g.m_holster=0;
   const auto&f=g.m_world.fixtures()[0];const float sz=f.depth/.9f;const Vec2 o=lockerOut(f),side{-o.y,o.x};
   auto onLeaf=[&](Point3 p){float best=9;for(int leaf=0;leaf<2;++leaf){const float hand=leaf?-1.f:1.f,a=g.lockerDoorOpen(0,0,leaf)*kPi*(110.f/180.f);
     const Vec2 hinge=f.position+o*(f.width*.5f)+side*((leaf?.4412f:.432f)*sz*hand),toward=side*(-hand*std::cos(a))+o*std::sin(a),q{p.x,p.y};
@@ -672,7 +673,7 @@ bool Game::testLockers(){
   report<<"  stow view: dropped "<<dropped<<" degrees by 150 ms, collar in frame "<<inside<<"/"<<(to-from+1)<<" lift frames ("<<share*100<<"%), level after "<<(g.view().pitch-level)<<'\n';
  }
  // The gun comes back up after the way out only if it was up going in.
- for(int armed:{0,1,2}){auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.m_player.ammo=std::max(g.m_player.ammo,8);
+ for(int armed:{0,1,2}){auto g=scene({{{10.5f,6.5f},0,5000}},kPi*.5f);g.m_player.pool(WeaponId::Shotgun).total=std::max(g.m_player.pool(WeaponId::Shotgun).total,8);
   if(armed){g.m_weaponEquipped=true;g.m_holster=armed==1?0.f:1.f;}else g.equipWeapon(WeaponId::Fists);
   hide(g);for(int i=0;i<70;++i)g.update({},1.f/60);g.update(use,1.f/60);for(int i=0;i<60;++i)g.update({},1.f/60);
   if(armed==1)check(g.m_weaponEquipped&&!g.unarmed(),"A gun that was up going in comes back up after the way out");

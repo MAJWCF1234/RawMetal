@@ -32,6 +32,15 @@ struct GunCycleDef {
  Sound fireSound=Sound::Shot;
  Sound pumpSound=Sound::Pump;
  Sound emptySound=Sound::Empty;
+ // Player magazine weapons (appended, so the positional guard row keeps its
+ // meaning). A semi-automatic gun fires once per trigger press. A magazine
+ // reload from empty takes emptyReloadTime and ends with the slide released.
+ // magOutAt/magInAt/rackAt are fractions of the reload; 0 plays no sound.
+ bool semiAuto=false;
+ float emptyReloadTime=0.f;
+ float magOutAt=0.f,magInAt=0.f,rackAt=0.f;
+ Sound magOutSound=Sound::Empty,magInSound=Sound::Empty,rackSound=Sound::Pump;
+ const char* caliber="12 GA";
 };
 
 struct MeleeDef {
@@ -59,8 +68,15 @@ struct WeaponDef {
 };
 
 inline constexpr MeleeDef kUnarmedMelee{};
+// The player's firearms, in wheel order. The handgun is the Cleanup sidearm
+// taken off a body: a 12-round magazine, a tighter cone and lighter hits than
+// the shotgun (about five body hits for a Cleanup soldier).
 inline constexpr WeaponDef kWeapons[]={
  {WeaponId::Shotgun,"SHOTGUN",{},{}},
+ {WeaponId::Handgun,"HANDGUN",
+  {24.f,.2f,.009f,20.f,16.f,12.f,6.f,14.f,20.f,0.f,1.1f,2.8f},
+  {.2f,1.5f,.06f,0.f,0.f,0.f,.42f,.05f,12,12,Sound::PistolShot,Sound::Pump,Sound::PistolDry,
+   true,1.9f,.14f,.58f,.84f,Sound::PistolMagOut,Sound::PistolMagIn,Sound::PistolRack,"9MM"}},
 };
 
 inline constexpr int weaponCount(){return int(sizeof(kWeapons)/sizeof(kWeapons[0]));}
@@ -70,11 +86,18 @@ inline constexpr WeaponDef kGuardHandgun{WeaponId::Handgun,"HANDGUN",
  {18.f,.05f,.004f,10.f,8.f,6.f,4.f,9.f,10.f,0.f,.7f,2.f},
  {.32f,1.8f,.08f,0.f,0.f,0.f,.42f,.05f,12,12,Sound::Shot,Sound::Pump,Sound::Empty}};
 
+// NPC meaning: a guard's sidearm is kGuardHandgun, a long gun the shotgun row.
 inline const WeaponDef& weaponDef(WeaponId id){
  if(id==WeaponId::Handgun)return kGuardHandgun;
  for(const auto&def:kWeapons)if(def.id==id)return def;
  return kWeapons[0];
 }
+// Player meaning: the kWeapons row (Fists falls back to the shotgun's cycle).
+inline const WeaponDef& playerWeaponDef(WeaponId id){
+ for(const auto&def:kWeapons)if(def.id==id)return def;
+ return kWeapons[0];
+}
+constexpr bool playerFirearm(WeaponId id){return id==WeaponId::Shotgun||id==WeaponId::Handgun;}
 
 inline float hitscanDamageAt(const HitscanDef& def,float along){
  return along<def.nearDist?def.dmgNear:(along<def.midDist?def.dmgMid:def.dmgFar);

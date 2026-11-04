@@ -327,7 +327,7 @@ function Convert-LegacyCustomPayload {
     if(-not [string]::IsNullOrWhiteSpace($pickupBody)) {
         foreach($entry in Get-BraceEntries $pickupBody) {
             $f=Split-TopLevel $entry;if($f.Count -lt 2){throw "Malformed pickup spawn in legacy CUSTOM payload."}
-            $p=Parse-Vec2 $f[0] $roof;$kind=if($f[1].Trim() -eq 'PickupKind::Health'){0}elseif($f[1].Trim() -eq 'PickupKind::Ammo'){1}else{throw "Unsupported pickup kind: $($f[1])"}
+            $p=Parse-Vec2 $f[0] $roof;$kind=if($f[1].Trim() -eq 'PickupKind::Health'){0}elseif($f[1].Trim() -eq 'PickupKind::Ammo'){1}elseif($f[1].Trim() -eq 'PickupKind::HandgunAmmo'){2}else{throw "Unsupported pickup kind: $($f[1])"}
             $out.Add("PICKUP|0|$kind|$(Format-MapNumber $p[0])|$(Format-MapNumber $p[1])")
         }
     }

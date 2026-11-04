@@ -2169,7 +2169,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const auto&gunTexture=weapon->handgun?m_handgunTexture:m_weaponTexture;
    GpuRenderer::ActorMaterial gunMaterial{};bool gunMaterialReady=false;
    Point3 holsterGrip=Point3{pose.position.x,pose.position.y,pose.z}+Point3{c,-s,0}*(.27f*track.scale/1.6f)+Point3{s,c,0}*(.025f*track.scale/1.6f)+Point3{0,0,.87f*track.scale/1.6f};
-   for(auto face:gunMesh.bindTriangles()){if(!weapon->handgun&&face.part==3)continue;for(auto&v:face.v){auto p=v.p;
+   // The pistol's magazine part is the player's reload; an actor's gun draws as it always has.
+   for(auto face:gunMesh.bindTriangles()){if(!weapon->handgun&&face.part==3)continue;if(weapon->handgun&&face.part==5)continue;for(auto&v:face.v){auto p=v.p;
     if(engineering&&weapon->handgun)v.p=holsterGrip+(Point3{c,-s,0}*p.x+Point3{s,c,0}*p.y-Point3{0,0,1}*p.z)*gunScale;
     else v.p=weapon->handgun?gunGrip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale:gunPoint(p);}
     actorTriangle(face,gunTexture,gunMaterial,gunMaterialReady);
@@ -2398,8 +2399,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  // Recognizable authored supplies, with their original UVs and world depth.
  for(auto&p:game.chunkPickups(level))if(p.active){
-  bool health=p.kind==Pickup::Kind::Health;
-  prop(health?m_medkitMesh:m_shellsMesh,health?m_medkitTexture:m_shellsTexture,p.pos.x,p.pos.y,health?.4f:.36f,-.3f,health?.65f:.48f,(p.z>-999?p.z:w.floorHeight(p.pos.x,p.pos.y)));
+  const float base=p.z>-999?p.z:w.floorHeight(p.pos.x,p.pos.y);
+  if(p.kind==Pickup::Kind::Health)prop(m_medkitMesh,m_medkitTexture,p.pos.x,p.pos.y,.4f,-.3f,.65f,base);
+  else if(p.kind==Pickup::Kind::HandgunAmmo)prop(m_nineMesh,m_nineTexture,p.pos.x,p.pos.y,.12f,-.3f,.34f,base);
+  else prop(m_shellsMesh,m_shellsTexture,p.pos.x,p.pos.y,.36f,-.3f,.48f,base);
+ }
+ // A downed carrier's pistol where it fell: the actor's own m_handgunMesh,
+ // in metres, lying on its left side (the model's +x is the gun's left, so
+ // it points down) with the barrel along its yaw, magazine in.
+ for(const auto&gun:game.droppedSidearms())if(gun.level==level){
+  perf::Scope propProfile(perf::Prop);Point3 receiver{gun.position.x,gun.position.y,gun.position.z+.03f};
+  if(!sphereVisible(receiver,.25f)||hidden({gun.position.x-.2f,gun.position.y-.2f,gun.position.z},{gun.position.x+.2f,gun.position.y+.2f,gun.position.z+.05f}))continue;
+  const Point3 forward{std::cos(gun.yaw),std::sin(gun.yaw),0},across{-std::sin(gun.yaw),std::cos(gun.yaw),0};
+  objectLighting=true;auto lights=exteriorLight(receiver,.2f,.2f,.05f,gun.yaw,m_handgunTexture.glossStrength>0);
+  for(auto face:m_handgunMesh.triangles){for(auto&v:face.v){auto p=v.p;v.p=receiver+forward*p.z+across*p.y+Point3{0,0,m_handgunMesh.maximum.x-p.x-.03f+.004f};}
+   auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],m_handgunTexture,light);}
+  objectLighting=false;objectNormalLighting=nullptr;
  }
  // Water mesh uses the same authored basins as floor collision and buoyancy.
  if(!w.waterVolumes().empty()){
@@ -2431,6 +2446,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
  }
 }
+Point3 SoftwareRenderer::vrPistolPoint(Point3 p,bool handFrame){
+ // The model is in metres with its grip at the origin, +z the muzzle and +x
+ // the gun's left: turned about up, the barrel runs down the frame's -z and
+ // the grip sits through the fist (the controller frame keeps older offsets).
+ return handFrame?Point3{-p.x,p.y,-p.z}:Point3{-p.x,p.y-.04f,-p.z+.06f};
+}
 void SoftwareRenderer::drawTrackedHands(const Game&game){
  auto origin=game.chunkOffset(game.level());const auto&hands=VrRuntime::active()->hands();
  auto draw=[&](const MeshTriangle&face,const Texture&texture,const VrHand&hand){
@@ -2456,7 +2477,8 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
 
  if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
   VrHand gun=hands[1];if(gun.handFrame){gun.position=gun.gunOrigin;gun.basis=gun.gunBasis;}
-  if(game.vrSupportGrip()&&hands[0].tracked){
+  const bool pistol=game.activeFirearm()==WeaponId::Handgun;
+  if(game.vrSupportGrip()&&hands[0].tracked&&!pistol){
    auto delta=(hands[0].handFrame?hands[0].gunOrigin:hands[0].position)-gun.position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
    if(length>.0001f){Point3 back={-delta.x/length,-delta.y/length,-delta.z/length},upHint=gun.basis[1];
     Point3 side={back.y*upHint.z-back.z*upHint.y,back.z*upHint.x-back.x*upHint.z,back.x*upHint.y-back.y*upHint.x};float sideLength=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);
@@ -2468,13 +2490,108 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   // centre) with the bore about 6 cm above the fist; the controller frame keeps
   // its older offsets.
   const float gripLift=hands[1].handFrame?0.f:.055f,gripBack=hands[1].handFrame?.13f:.25f;
-  for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack};}draw(face,m_weaponTexture,gun);}
+  // The pistol (vrPistolPoint), its slide home or locked back on an empty magazine.
+  if(pistol){const float slide=game.slideLocked()?.026f:0.f;for(auto face:m_handgunMesh.triangles){for(auto&v:face.v){auto p=v.p;if(face.part==4)p.z-=slide;v.p=vrPistolPoint(p,hands[1].handFrame);}draw(face,m_handgunTexture,gun);}}
+  else for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack};}draw(face,m_weaponTexture,gun);}
   // The load, on a plate on the left of the receiver (facing the player's eye
-  // when the gun is held right-handed); drawn both ways round.
-  if(!m_vrAmmoTexture.pixels.empty()){const float x=-.036f,y0=.022f,y1=.052f,z0=-.08f,z1=-.02f;
+  // when the gun is held right-handed), or of the pistol's slide; drawn both ways round.
+  if(!m_vrAmmoTexture.pixels.empty()){const float x=pistol?-.021f:-.036f,y0=pistol?.022f:.022f,y1=pistol?.05f:.052f,z0=pistol?-.11f:-.08f,z1=pistol?-.05f:-.02f;
    MeshTriangle plate{{{{x,y0,z0},0,1},{{x,y0,z1},1,1},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y1,z0},0,0}}};draw(plate,m_vrAmmoTexture,gun);
    plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y0,z1},1,1}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z0},0,0},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);}
  }
+}
+namespace {
+// The player's pistol (medic-handgun.obj): model metres, the grip at the
+// origin, +z to the muzzle and +x the gun's LEFT (the pack's slide stop and
+// safety are there), so the view map turns x round. The magazine leaves down
+// the well, 16 degrees back from straight down.
+constexpr Point3 kPistolMuzzle{0,.0463f,.176f},kPistolWell{0,-.961f,-.276f},kPistolHammerPivot{0,.0345f,-.0224f};
+// The arms sit centred for the pistol and far enough forward that the elbows
+// are nearly straight with the gun out at arm's length.
+Point3 pistolArmOffset(){return {.1f,-.31f,.39f};}
+}
+SoftwareRenderer::PistolHold SoftwareRenderer::pistolHold(const Game& game)const{
+ PistolHold h;const auto&motion=game.weaponMotion();const auto&cycle=playerWeaponDef(WeaponId::Handgun).cycle;const float s=kViewModelScale;
+ auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+ auto unit=[&](Point3 p){return p*(1.f/std::sqrt(std::max(1e-12f,dot(p,p))));};
+ auto smooth=[](float a,float b,float x){x=std::clamp((x-a)/(b-a),0.f,1.f);return x*x*(3-2*x);};
+ // The gun's frame in view space: grip origin O, right R, up U and the bore F,
+ // converging on the crosshair a few metres out, held out at arm's length and
+ // toed in a few degrees so its right flank, not only the glove backs, faces the eye.
+ Point3 O{.13f,-.13f,.56f};
+ Point3 F=unit(Point3{-O.x,-O.y,4.f-O.z}),U=unit(Point3{0,1,0}-F*F.y),R=cross3(U,F);
+ auto turn=[&](Point3 v,Point3 k,float a){return v*std::cos(a)+cross3(k,v)*std::sin(a)+k*(dot(k,v)*(1-std::cos(a)));};
+ // A turn about R by a positive angle tips the muzzle down; about U, right; about F, rolls the top left.
+ auto rotate=[&](Point3 k,float a,Point3 pivot){k=unit(k);O=pivot+turn(O-pivot,k,a);R=turn(R,k,a);U=turn(U,k,a);F=turn(F,k,a);};
+ // Reload: the top cants right and the muzzle turns in and up a little, so the
+ // well faces down-left, away from the right forearm: the magazine coming up
+ // from the left hand shows below the grip instead of behind the glove.
+ const bool reloading=game.reloading()&&game.activeFirearm()==WeaponId::Handgun;
+ const float p=reloading?game.reloadProgress():0.f,duration=std::max(.1f,game.reloadDuration());const bool empty=reloading&&game.emptyReload();
+ const float tilt=reloading?smooth(0,.12f,p)*(1-smooth(empty?.90f:.80f,1,p)):0.f;
+ rotate(U,-.07f,O);rotate(F,-.80f*tilt,O);rotate(R,-.10f*tilt,O);rotate(U,-.35f*tilt,O);O=O+Point3{-.08f,.03f,0}*tilt;
+ // Sprinting: low ready, muzzle down and in.
+ const float run=motion.sprint*(1-tilt);
+ rotate(R,.60f*run,O);rotate(U,-.12f*run,O);rotate(F,.08f*run,O);O=O+Point3{-.030f,-.025f,-.03f}*run;
+ // Lowered (holstered, empty, or a switch): the muzzle tips down as assembly()
+ // drops the arms; a gun coming up from a switch rises canted the other way.
+ const float lowered=game.holster();
+ rotate(R,.90f*lowered,O);rotate(F,(game.weaponSwitchPhase()==2?.35f:-.20f)*lowered,O);
+ // An empty reload ends with the hands back on the grip and the right thumb
+ // on the slide stop: the slide slams home with a small jolt.
+ const float rack=cycle.rackAt,in=cycle.magInAt,out=cycle.magOutAt;
+ if(empty){const float jolt=std::sin(std::clamp((p-rack)/.06f,0.f,1.f)*kPi);rotate(R,.035f*jolt,O);O=O+F*(.006f*jolt);}
+ // A shot: sharp muzzle rise about the wrists, fast return, a short shove back.
+ const float age=game.shotAge(),kick=game.weaponKick();const bool shot=kick>0&&kick+3.f*age>.97f&&!reloading;
+ float rise=0;if(shot)rise=age<.028f?age/.028f:std::exp(-(age-.028f)/.075f);
+ rotate(R,-.16f*rise,O-F*(.07f*s)-U*(.04f*s));O=O-F*(.030f*rise)+U*(.006f*rise);
+ // Sway, bob and drift as the shotgun's, about the grip, less the game's own
+ // kick terms (Game::updateWeaponMotion), which the rise above replaces.
+ {const float pitch=motion.pitch-kick*.065f,back=motion.back-kick*.095f,cp=std::cos(pitch),sp=std::sin(pitch),cy=std::cos(motion.yaw),sy=std::sin(motion.yaw);
+  auto sway=[&](Point3 v){float y=v.y*cp+v.z*sp,z=-v.y*sp+v.z*cp;return Point3{v.x*cy+z*sy,y,-v.x*sy+z*cy};};
+  R=sway(R);U=sway(U);F=sway(F);O=O+Point3{0,motion.bob,-back};}
+ h.origin=O;h.axis={R*-s,U*s,F*s};
+ auto dir=[&](Point3 d){return unit(R*-d.x+U*d.y+F*d.z);};
+ // The slide runs back and home with each shot, stays back on an empty
+ // magazine, and goes home when the empty reload releases it.
+ float back=0;if(shot)back=age<.022f?age/.022f:std::max(0.f,1-(age-.022f)/.05f);
+ if(game.activeFirearm()==WeaponId::Handgun&&game.slideLocked())back=1;
+ h.slide=.026f*back;
+ h.hammer=.30f*std::min(1.f,h.slide/.026f);h.trigger=shot&&age<.06f?.003f:0.f;
+ // The trigger hand: palm on the right panel, the backstrap in its heel, the
+ // middle knuckle under the guard and the index on the trigger.
+ h.wrist[0]=h.point({-.002f,-.03f,-.095f});h.forward[0]=dir({-.25f,.10f,.96f});h.palm[0]=dir({.96f,0.f,.25f});
+ // The support hand: its heel on the left panel, fingers round the firing fingers.
+ struct Pose{Point3 wrist,forward,palm;};
+ const Pose grip{h.point({.06f,-.034f,-.075f}),dir({-.30f,.05f,.95f}),dir({-.95f,0.f,-.30f})};
+ Pose left=grip;
+ if(reloading){
+  // The support hand drops to the belt as the old magazine falls, comes back
+  // with a fresh one under the well, pushes it home and returns to the grip.
+  auto blend=[&](const Pose&a,const Pose&b,float t){t=std::clamp(t,0.f,1.f);t=t*t*(3-2*t);return Pose{a.wrist+(b.wrist-a.wrist)*t,unit(a.forward+(b.forward-a.forward)*t),unit(a.palm+(b.palm-a.palm)*t)};};
+  const Pose belt{Point3{-.30f,-.55f,.30f},unit(Point3{.2f,-1.f,.3f}),unit(Point3{1.f,0.f,0.f})};
+  auto magazineHand=[&](float drop){Point3 base=h.point(Point3{0,-.078f,-.02f}+kPistolWell*drop);return Pose{base+(R*-.06f+U*-.085f+F*-.020f)*s,dir({-.35f,.55f,.75f}),dir({-.70f,.60f,-.20f})};};
+  const float leave=out-.07f,atBelt=.34f,ready=in-.10f,seated=in+.05f,home=empty?rack-.04f:.82f,lift=.1f;
+  const Pose readyHand=magazineHand(lift);
+  if(p<leave)left=grip;
+  else if(p<atBelt)left=blend(grip,belt,(p-leave)/(atBelt-leave));
+  else if(p<atBelt+.03f)left=belt;
+  else if(p<ready)left=blend(belt,readyHand,(p-atBelt-.03f)/(ready-atBelt-.03f));
+  else if(p<in)left=magazineHand(lift*(1-smooth(ready,in,p)));
+  else if(p<seated)left=magazineHand(0);
+  else left=blend(magazineHand(0),grip,(p-seated)/(home-seated));
+  h.support=p<leave||p>=home;
+  // The old magazine slides out and falls clear; the fresh one rides in the hand.
+  const float fall=(p-out-.02f)*duration;
+  if(p<out-.03f)h.magazine=0;
+  else if(p<out+.02f){h.magazine=1;h.magazineDrop=.06f*smooth(out-.03f,out+.02f,p);}
+  else if(fall<.25f){h.magazine=2;h.magazineDrop=.06f;h.magazineShift={0,-4.9f*fall*fall,-.3f*fall};}
+  else if(p<atBelt+.03f)h.magazine=3;
+  else if(p<ready){h.magazine=2;h.magazineDrop=lift;h.magazineShift=left.wrist-readyHand.wrist;}
+  else if(p<in){h.magazine=1;h.magazineDrop=lift*(1-smooth(ready,in,p));}
+ }
+ h.wrist[1]=left.wrist;h.forward[1]=left.forward;h.palm[1]=left.palm;
+ return h;
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){
  const auto&motion=game.weaponMotion();std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
@@ -2484,6 +2601,14 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
   m_armsMesh.poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
  }
  if(game.unarmed()){const auto&melee=game.unarmedMelee();bool jab=game.punchAge()<melee.animLen&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/melee.animLen:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
+ if(game.activeFirearm()==WeaponId::Handgun){
+  // The pistol: both hands on the grip from pistolHold, frames and all (the
+  // rig is the view mirrored in x), with the pistol's finger set.
+  const auto hold=pistolHold(game);auto armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;
+  auto toRig=[&](Point3 view){auto p=(view-pistolArmOffset())*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
+  Mesh::ArmHold arms{};arms.curls=1;for(size_t side=0;side<2;++side){arms.forward[side]={-hold.forward[side].x,hold.forward[side].y,hold.forward[side].z};arms.palm[side]={-hold.palm[side].x,hold.palm[side].y,hold.palm[side].z};}
+  m_armsMesh.poseAttached(toRig(hold.wrist[0]),toRig(hold.wrist[1]),motion.elbow,0,0,game.elapsed()*2.f,game.weaponKick(),&arms);return;
+ }
  auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=kViewModelScale/std::max({range.x,range.y,range.z});
  auto local=[&](Point3 source){auto p=(source-center)*scale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
  const Point3 pivot{.15f,-.155f,.52f};
@@ -2519,17 +2644,33 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto rightWrist=animated(gunLocal(triggerSocket)+Point3{.045f,-.105f,-.07f});
   auto leftWrist=animated(gunLocal(supportSocket)+Point3{-.085f,-.055f,-.03f});
  bool fists=game.unarmed()||locker;
- Point3 armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f,armOffset=fists?Point3{0,-.22f,.30f}:Point3{.15f,-.285f,.52f};
+ // The pistol has its own frame, parts and wrist targets (pistolHold).
+ const bool pistol=!fists&&heldActor<0&&!game.takedownActive()&&game.activeFirearm()==WeaponId::Handgun;
+ PistolHold hold;if(pistol){hold=pistolHold(game);rightWrist=hold.wrist[0];leftWrist=hold.wrist[1];}
+ Point3 armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f,armOffset=fists?Point3{0,-.22f,.30f}:pistol?pistolArmOffset():Point3{.15f,-.285f,.52f};
  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*kViewModelScale;p.x=-p.x;return p+armOffset;};
  if(!m_poseReady)prepareViewModel(game);
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
   if(heldActor>=0||locker)return p;
-  return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-game.holster()*.85f),p.z};};
+  // The pistol tips down first (pistolHold) and drops late, so a switch shows it.
+  const float drop=pistol?game.holster()*game.holster():game.holster();
+  return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-drop*.85f),p.z};};
  m_gripError=0;
  if(heldActor>=0||game.takedownActive()||locker){auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
- for(int side=0;side<2&&!fists;++side){auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
+ // A pistol's support hand off the gun (at the belt in a reload) is free.
+ for(int side=0;side<2&&!fists;++side){if(side&&pistol&&!hold.support)continue;auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
   auto d=p-(side?leftWrist:rightWrist);m_gripError=std::max(m_gripError,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
  }
+ // A wrist on its target is not yet a hand on the pistol, so measure the
+ // fingers too (metres): the trigger finger's tip joint at the trigger, and
+ // each gripping hand's middle finger from the grip's axis, butt to tang.
+ m_pistolContact=0;
+ if(pistol){auto metres=[](Point3 d){return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)/kViewModelScale;};
+  const Point3 butt=hold.point({0,-.072f,-.024f}),tang=hold.point({0,-.005f,-.004f}),along=tang-butt;
+  auto fromAxis=[&](Point3 p){Point3 d=p-butt;float t=std::clamp((d.x*along.x+d.y*along.y+d.z*along.z)/std::max(1e-9f,along.x*along.x+along.y*along.y+along.z*along.z),0.f,1.f);return metres(d-along*t);};
+  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  m_pistolContact=std::max(metres(bone("f_index.03.R")-hold.point({0,.002f,.034f})),fromAxis(bone("f_middle.02.R")));
+  if(hold.support)m_pistolContact=std::max(m_pistolContact,fromAxis(bone("f_middle.02.L")));}
  // In true darkness the hands lose the room fill and floor too: only lamps,
  // the torch lens and the shot (longer and brighter there) show them.
  const float darkness=game.darkness(),handFloor=1.f-darkness;
@@ -2544,18 +2685,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   if(slot==0){roomLights.weights[1]=roomLights.weights[0];roomLights.directions[1]=roomLights.directions[0];}
   roomLights.weights[slot]=weight;roomLights.directions[slot]=cameraPoint(receiver+delta*(1.f/std::sqrt(d2)),game);
  }
- auto draw=[&](Mesh&mesh,const Texture&texture,bool arms){
-  for(auto face:mesh.triangles){
-   if(!arms&&face.part==3&&(game.shotAge()<.09f||game.shotAge()>.45f))continue;
-   for(auto&v:face.v){
-    if(arms)v.p=fromRig(v.p);
-    else{
-     auto local=gunLocal(v.p);
-     if(face.part==2)local.z-=motion.bolt;
-     if(face.part==3){float t=game.shotAge()-.09f;local=local+Point3{t*1.8f,t*.85f-t*t*3.5f,-t*.3f};}
-     v.p=animated(local);
-    }
-   }
+ auto shade=[&](MeshTriangle face,const Texture&texture){
    for(auto&v:face.v){v.p=assembly(v.p);if(m_inspectRig)v.p=inspectionPoint(v.p);}
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    if(len>.00001f)n=n*(1.f/len);if(n.x*face.v[0].p.x+n.y*face.v[0].p.y+n.z*face.v[0].p.z>0)n=n*-1.f;
@@ -2563,9 +2693,37 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    light+=game.muzzleFlash()*.65f;
    for(auto&v:face.v)v.light=std::clamp(light,.10f*handFloor,2.5f);
    triangle3D(face.v[0],face.v[1],face.v[2],texture,1.f,&roomLights);
+ };
+ auto draw=[&](Mesh&mesh,const Texture&texture,bool arms){
+  for(auto face:mesh.triangles){
+   if(!arms&&face.part==3&&(game.shotAge()<.09f||game.shotAge()>.45f))continue;
+   if(&mesh==&m_handgunMesh&&face.part==5&&hold.magazine==3)continue;
+   for(auto&v:face.v){
+    if(arms)v.p=fromRig(v.p);
+    // The pistol's parts: slide (4), magazine (5), hammer (6) and trigger (7).
+    else if(&mesh==&m_handgunMesh){auto p=v.p;
+     if(face.part==4)p.z-=hold.slide;
+     else if(face.part==5)p=p+kPistolWell*hold.magazineDrop;
+     else if(face.part==6){auto q=p-kPistolHammerPivot;const float c=std::cos(hold.hammer),sn=std::sin(hold.hammer);p=Point3{q.x,q.y*c+q.z*sn,-q.y*sn+q.z*c}+kPistolHammerPivot;}
+     else if(face.part==7)p.z-=hold.trigger;
+     v.p=hold.point(p);if(face.part==5&&hold.magazine==2)v.p=v.p+hold.magazineShift;}
+    else{
+     auto local=gunLocal(v.p);
+     if(face.part==2)local.z-=motion.bolt;
+     if(face.part==3){float t=game.shotAge()-.09f;local=local+Point3{t*1.8f,t*.85f-t*t*3.5f,-t*.3f};}
+     v.p=animated(local);
+    }
+   }
+   shade(face,texture);
   }
  };
- draw(m_armsMesh,m_arms,true);if(!fists)draw(m_weaponMesh,m_weaponTexture,false);
+ draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);
+ // The pack's slide is an open shell notched for the hammer: run back, its
+ // rear shows the hollow inside. A breech face, slide steel, closes it.
+ if(pistol&&hold.slide>.001f){const MeshTriangle*steel=nullptr;for(const auto&t:m_handgunMesh.triangles)if(t.part==4){steel=&t;break;}
+  if(steel){const float u=steel->v[0].u,v=steel->v[0].v,z=.006f-hold.slide,x=.0125f,y0=.024f,y1=.061f;
+   auto corner=[&](float cx,float cy){return MeshVertex{hold.point({cx,cy,z}),u,v};};
+   shade({{corner(-x,y0),corner(x,y0),corner(x,y1)},4},m_handgunTexture);shade({{corner(-x,y0),corner(x,y1),corner(-x,y1)},4},m_handgunTexture);}}
  if(game.hasFlashlight()){
   // A small rail torch follows the gun assembly; empty hands keep it strapped
   // to the animated left forearm so neither fist loses its existing action.
@@ -2573,6 +2731,9 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   // The imported gun is over eight source units long. Its narrow side rail
   // needs a full source-unit offset to put the housing outside the receiver.
   Point3 axis{0,0,1},side{1,0,0},up{0,1,0},mount=gunLocal({1.02f,1.25f,-1.45f}),forearm{};
+  // The pistol carries it under the barrel ahead of the guard, its clamp up
+  // into the dust cover: side points away from the gun, down.
+  if(pistol){const float a=0.f;axis=unit(hold.axis[2]);side=unit(unit(hold.axis[1])*-std::cos(a)+unit(hold.axis[0])*std::sin(a));up=unit(cross3(axis,side));mount=hold.point({0.f,0.f,.125f});}
   if(fists){
    auto wrist=fromRig(m_armsMesh.bonePosition("hand.L")),elbow=fromRig(m_armsMesh.bonePosition("forearm.L"));
    axis=unit(wrist-elbow);side=unit(cross3(std::fabs(axis.y)>.95f?Point3{0,0,1}:Point3{0,1,0},axis));up=unit(cross3(axis,side));
@@ -2580,8 +2741,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    // frustum in the guard pose. The inboard saddle keeps the fist clear.
    forearm=wrist-axis*.025f;mount=wrist+axis*.035f+side*.105f+up*.025f;
   }
-  float torchScale=fists?.60f:.68f;
-  auto point=[&](Point3 p){p=assembly(fists?p:animated(p));return m_inspectRig?inspectionPoint(p):p;};
+  float torchScale=fists?.60f:pistol?.45f:.68f;
+  auto point=[&](Point3 p){p=assembly(fists||pistol?p:animated(p));return m_inspectRig?inspectionPoint(p):p;};
   auto tri=[&](Point3 a,Point3 b,Point3 c,const Texture&texture,float emission=0.f){
    a=point(a);b=point(b);c=point(c);auto normal=unit(cross3(b-a,c-a));
    float light=roomAmbient+.18f*handFloor;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
@@ -2606,8 +2767,9 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   }
   else{
    // Closed side brackets join the receiver to the outboard housing.
+   const float reach=pistol?.016f:.094f,seat=pistol?.010f:.025f,width=pistol?.007f:.015f;
    for(float z:{-.055f,.045f}){auto p=mount+axis*(z*torchScale);
-    auto a=p-side*.094f-up*.015f,b=p-side*.025f-up*.015f,c=p-side*.025f+up*.015f,d=p-side*.094f+up*.015f;
+    auto a=p-side*reach-up*width,b=p-side*seat-up*width,c=p-side*seat+up*width,d=p-side*reach+up*width;
     quad(a-axis*.009f,b-axis*.009f,c-axis*.009f,d-axis*.009f,m_panelMetal);
     quad(d+axis*.009f,c+axis*.009f,b+axis*.009f,a+axis*.009f,m_panelMetal);
     quad(a-axis*.009f,a+axis*.009f,b+axis*.009f,b-axis*.009f,m_metal);
@@ -2640,17 +2802,19 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   Point3 center{};for(auto v:ring)center=center+fromRig(v.p);center=center*(1.f/float(ring.size()));
   // Only upper-arm openings are extended; small mesh boundaries are left intact.
   float radius=0;for(auto v:ring){auto d=fromRig(v.p)-center;radius=std::max(radius,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}if(radius<.045f)continue;
-  auto sleeveEnd=[&](Point3 p){return p+Point3{(p.x<.15f?-.08f:.08f),-.14f,-.7f};};
+  auto sleeveEnd=[&](Point3 p){return p+Point3{(p.x<armOffset.x?-.08f:.08f),-.14f,-.7f};};
   auto drawSleeve=[&](Point3 a,Point3 b,Point3 c){a=assembly(a);b=assembly(b);c=assembly(c);if(m_inspectRig){a=inspectionPoint(a);b=inspectionPoint(b);c=inspectionPoint(c);}triangle3D({a,0,0},{b,0,0},{c,0,0},sleeve,.8f);};
   for(size_t i=0;i<ring.size();++i){auto a=fromRig(ring[i].p),b=fromRig(ring[(i+1)%ring.size()].p),A=sleeveEnd(a),B=sleeveEnd(b);
    if(fists)drawSleeve(center,a,b);
    else{drawSleeve(a,b,B);drawSleeve(a,B,A);drawSleeve(sleeveEnd(center),A,B);}
   }
  }
- if(game.shotAge()<.10f&&!fists&&!m_inspectRig){
-  Point3 tip{};int count=0;
-  for(auto&t:m_weaponMesh.triangles)for(auto&v:t.v)if(v.p.z<m_weaponMesh.minimum.z+gunRange.z*.015f){tip=tip+v.p;++count;}
-  if(count){auto center=assembly(animated(gunLocal(tip*(1.f/count))));float age=game.shotAge(),size=.13f+std::sin(std::min(1.f,age/.07f)*kPi)*.15f;
+ // Only a real shot (Game::muzzleFlash): a finished reload restarts the shot clock.
+ if(game.shotAge()<.10f&&game.muzzleFlash()>0&&!fists&&!m_inspectRig){
+  Point3 tip{};int count=0;float flashScale=1;
+  if(pistol){tip=hold.point(kPistolMuzzle+Point3{0,0,.012f});count=1;flashScale=.35f;}
+  else for(auto&t:m_weaponMesh.triangles)for(auto&v:t.v)if(v.p.z<m_weaponMesh.minimum.z+gunRange.z*.015f){tip=tip+v.p;++count;}
+  if(count){auto center=assembly(pistol?tip:animated(gunLocal(tip*(1.f/count))));float age=game.shotAge(),size=(.13f+std::sin(std::min(1.f,age/.07f)*kPi)*.15f)*flashScale;
    float rotation=std::floor(age*60)*1.7f;Point3 right{std::cos(rotation)*size,std::sin(rotation)*size,0},up{-std::sin(rotation)*size,std::cos(rotation)*size,0};
    float intensity=2.4f*std::max(0.f,1-age/.10f);auto a=center-right-up,b=center+right-up,c=center+right+up,d=center-right+up;
    triangle3D({a,0,1},{b,1,1},{c,1,0},m_muzzleFlash,intensity);triangle3D({a,0,1},{c,1,0},{d,0,0},m_muzzleFlash,intensity);
@@ -2658,11 +2822,11 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  }
 }
 Point3 SoftwareRenderer::inspectionPoint(Point3 p)const{
- p=p-Point3{.12f,-.20f,.83f};float x=p.x*std::cos(m_inspectYaw)+p.z*std::sin(m_inspectYaw),z=-p.x*std::sin(m_inspectYaw)+p.z*std::cos(m_inspectYaw);
- return {x,p.y*std::cos(m_inspectPitch)-z*std::sin(m_inspectPitch),1.3f+z*std::cos(m_inspectPitch)+p.y*std::sin(m_inspectPitch)};
+ p=p-m_inspectCenter;float x=p.x*std::cos(m_inspectYaw)+p.z*std::sin(m_inspectYaw),z=-p.x*std::sin(m_inspectYaw)+p.z*std::cos(m_inspectYaw);
+ return {x,p.y*std::cos(m_inspectPitch)-z*std::sin(m_inspectPitch),m_inspectDistance+z*std::cos(m_inspectPitch)+p.y*std::sin(m_inspectPitch)};
 }
-void SoftwareRenderer::inspectRig(const Game&game,float yaw,float pitch){
- clear(0xff242529);m_inspectRig=true;m_inspectYaw=yaw;m_inspectPitch=pitch;
+void SoftwareRenderer::inspectRig(const Game&game,float yaw,float pitch,Point3 center,float distance){
+ clear(0xff242529);m_inspectRig=true;m_inspectYaw=yaw;m_inspectPitch=pitch;m_inspectCenter=center;m_inspectDistance=distance;
  drawViewModel(game);
  text(10,10,"RAWMETAL / RIG INSPECTION",0xffeadcbb);
  text(10,m_height-12,game.weaponKick()>.1f?"RECOIL POSE":"IDLE POSE",0xffbdad8d);

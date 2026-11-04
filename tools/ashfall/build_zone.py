@@ -306,6 +306,9 @@ def build(z):
         z.actor(px, py, 0, yaw)  # stalkers at the fire
     z.actor(20, 87, 0, 1.6, mode=2, faction=5, voice=10)  # the camp guide: an escort who follows on request
     z.pickup(0, 7.5, 83.2); z.pickup(1, 8.6, 83.4)
+    # Weapon test bench: the pistol is handed over on arrival, 9 mm beside the shells.
+    z.event(4, 77, 24, 94, 'zone_test_handgun', [('ITEM', 'handgun', 1)])
+    z.pickup(2, 9.7, 83.3); z.pickup(2, 10.8, 83.1)
     z.zone_name(4, 77, 24, 94, 'ROOKIE CAMP')
     # ================================================================================
     # 2. FUEL STATION (north of the camp road).

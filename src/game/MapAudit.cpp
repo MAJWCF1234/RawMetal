@@ -128,7 +128,7 @@ bool Game::auditMapScene(Game& game,int level){
  for(size_t i=0;i<w.structures().size();++i){const auto& v=w.structures()[i];if(v.x1<-.15f||v.y1<-.15f||v.x2>24.15f||v.y2>24.15f)fail("OUTSIDE CHUNK structure["+std::to_string(i)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
  // Tile decks occupy exactly one cell inside the fixed 24 by 24 layer; their
  // parser/load checks already reject rows of any other width.
- for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":"health")+" at "+at(s.position);
+ for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":s.kind==PickupKind::HandgunAmmo?"9mm":"health")+" at "+at(s.position);
   check(reachable(s.position,z,.6f),name);
   if(!w.fits(s.position.x,s.position.y,(s.z>-900?s.z:w.supportBelow(s.position.x,s.position.y,w.floorHeight(s.position.x,s.position.y)+.5f))+.03f,.3f,false))fail("STUCK "+name);}
  for(const auto& c:w.clutterSpawns())if(c.kind!=ClutterModelKind&&!w.fits(c.position.x,c.position.y,(c.z>-900?c.z:w.supportBelow(c.position.x,c.position.y,w.floorHeight(c.position.x,c.position.y)+.5f))+.03f,.2f,false))fail("STUCK clutter at "+at(c.position));

@@ -10,6 +10,7 @@ void buildCampaignChapters(CampaignMapTable& maps){
  buildChapterResearchFront(maps);
  buildChapterMedicalFront(maps);
  buildChapterMedicalWard(maps);
+ buildChapterMedicalDeep(maps);
  buildChapterAnalysis(maps);
  buildChapterEnergyTestLabs(maps);
  buildChapterObservationRing(maps);

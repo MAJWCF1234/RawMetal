@@ -18,7 +18,7 @@ void Game::executeConsole(std::string command){
   for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
-  m_consoleLog.push_back("RELOAD / WHERE / GOD / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
+  m_consoleLog.push_back("RELOAD / WHERE / GOD / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT|HANDGUN|9MM / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="unlock"){
   // Unlock what the player is looking at for good, by setting the state it
@@ -42,6 +42,9 @@ void Game::executeConsole(std::string command){
   m_customCampaign.reset();m_customCampaignKey=0;m_worldId=WorldId::Ashfall;m_level=13;restart();m_paused=false;m_inventoryOpen=false;m_consoleLog.push_back("LOADED ASHFALL COAST / WALK EAST TO THE WATER.");
  }
  else if(verb=="give"&&arg=="flashlight"&&extra.empty()){giveQuestItem(Flashlight);m_consoleLog.push_back("FLASHLIGHT ADDED. F TO TOGGLE.");}
+ // The handgun with one magazine in it (another magazine if already carried), and 24 rounds of 9 mm.
+ else if(verb=="give"&&arg=="handgun"&&extra.empty()){grantHandgun(playerWeaponDef(WeaponId::Handgun).cycle.tubeCapacity);m_consoleLog.push_back("HANDGUN ADDED. 3 OR THE WHEEL TO DRAW.");}
+ else if(verb=="give"&&arg=="9mm"&&extra.empty()){m_player.pool(WeaponId::Handgun).total+=24;m_consoleLog.push_back("24 ROUNDS 9MM ADDED.");}
  else if(verb=="dev"){setDeveloperMode(!developerMode());m_consoleLog.push_back(developerMode()?"DEVELOPER MODE ON: NO DAMAGE, NO CREATURES, EVERY DOOR OPEN.":"DEVELOPER MODE OFF.");}
  else if(verb=="god"){m_god=!m_god;if(m_god)m_player.health=std::max(m_player.health,100.f);m_consoleLog.push_back(m_god?"GOD MODE ON: NO DAMAGE. DEV ALSO OPENS THE GATES THAT WANT A ROOM CLEARED.":"GOD MODE OFF.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
@@ -126,7 +129,7 @@ bool Game::testConsole(){
  Game game;auto fail=[&](int line){report<<"FAIL at Console.cpp:"<<line<<" level="<<game.level()<<" z="<<game.player().z<<'\n';return false;};
  InputState toggle{};toggle.console=true;game.update(toggle,.02f);if(!game.consoleOpen())return fail(__LINE__);
  auto p=game.player();float time=game.elapsed();InputState input{};input.forward=true;input.fire=true;input.mouseDx=30;
- game.update(input,.02f);if(game.elapsed()!=time||game.player().ammo!=p.ammo||game.player().angle!=p.angle)return fail(__LINE__);
+ game.update(input,.02f);if(game.elapsed()!=time||game.player().pools!=p.pools||game.player().angle!=p.angle)return fail(__LINE__);
  for(int level=0;level<ChunkCount;level+=level<34?1:(level+7<ChunkCount?7:std::max(1,ChunkCount-1-level))){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return fail(__LINE__);}
  for(const auto& alias:std::array<std::pair<const char*,int>,8>{{{"freight",10},{"receiving",13},{"warehouse",16},{"manifest",20},{"yard",22},{"platform",25},{"depot",27},{"tunnels",30}}}){
   input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return fail(__LINE__);

@@ -60,8 +60,11 @@ struct InputState {
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
     bool inventory=false;
-    // 1-4 while a number key is held: a reply in a conversation.
+    // 1-4 while a number key is held: a reply in a conversation. Outside one,
+    // 1/2/3 pick fists, the shotgun or the handgun.
     int choice=0;
+    // A direct weapon pick from the VR shoulder slot: 1 fists, 2 shotgun, 3 handgun.
+    int weaponSlot=0;
     int pointerX=-1,pointerY=-1;
     float mouseDx = 0.0f;
     float mouseDy = 0.0f;
@@ -170,6 +173,11 @@ struct Clutter {
  Sound impactSound()const{if(model>=0)return propMaterialTraits(material()).impact;return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
 };
 
+// One firearm's rounds: total counts the loaded ones too, so the reserve is
+// total-loaded and loaded<=total always.
+struct AmmoPool {int total=0,loaded=0;bool operator==(const AmmoPool&)const=default;};
+// A downed sidearm carrier's unlooted pistol on the floor, in its level's local coordinates.
+struct DroppedSidearm {Point3 position{};float yaw=0;int level=0;size_t actor=0;};
 struct Player {
     static constexpr float StandingHeight=1.6f;
     static constexpr float CrouchedHeight=.58f;
@@ -179,8 +187,10 @@ struct Player {
     float angle = 0.0f;
     float pitch = 0.0f;
     float health = 100.0f;
-    int ammo = 36;
-    int loaded = 6;
+    // Rounds per firearm, indexed by WeaponId (Fists holds none).
+    std::array<AmmoPool,3> pools{AmmoPool{},AmmoPool{36,6},AmmoPool{}};
+    AmmoPool& pool(WeaponId id){return pools[size_t(id)];}
+    const AmmoPool& pool(WeaponId id)const{return pools[size_t(id)];}
     float z = 0.0f;
     float verticalVelocity = 0.0f;
     bool grounded = true;
@@ -188,7 +198,9 @@ struct Player {
     float eye=StandingEye;
     float hullHeight()const{return crouched?CrouchedHeight:StandingHeight;}
 };
-struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0;};
+// sprint (appended, not saved: it settles in a fraction of a second) is how
+// far a firearm has dropped to low ready while running.
+struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,sprint=0;};
 // depthOfField and lensEffects scale the cinematic lens (1 = the tuned look, 0 off, up to 2).
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;};
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=330,RowTop=Y+46,RowHeight=21,Rows=12,SliderX=X+179,SliderWidth=75;};
@@ -305,7 +317,9 @@ public:
     float holster()const{return m_holster;}
     float punchAge()const{return m_punchAge;}
     bool punchLeft()const{return m_punchLeft;}
-    bool unarmed()const{return m_holster>=.98f;}
+    // A gun at the bottom of a switch (going down for another, or about to come
+    // up) is still in hand: no fists, no FISTS on the HUD, no punch.
+    bool unarmed()const{return m_holster>=.98f&&m_switchTarget==WeaponId::Fists&&!m_switchRaise;}
     void stowWeapon(){m_holster=1;}
     bool handsLowered()const{return m_handsLowered;}
     bool guarding()const{return m_guarding;}
@@ -314,6 +328,9 @@ public:
     static bool testUnarmed();
     static bool testVrMelee();
     static bool testVrInteraction();
+    // 1 fists, 2 shotgun shot (age), 3 guard; the handgun: 4 shot (age),
+    // 5 tactical and 6 empty reload (age = 0..1 through it), 7 sprinting
+    // (age = how far lowered), 8 raised from a switch (age = holster), 9 torch on.
     static Game weaponInspection(int mode,float age=0);
     float damageFlash() const { return m_damageFlash; }
     float elapsed() const { return m_elapsed; }
@@ -457,6 +474,19 @@ public:
     static constexpr StateId ReactorAuthDisk=stateId("reactor_auth_disk");
     static constexpr StateId Flashlight=stateId("flashlight");
     bool hasFlashlight()const{return hasQuestItem(Flashlight);}
+    // The handgun is owned as a quest item: saved, carried and cleared with the others.
+    static constexpr StateId HandgunItem=stateId("handgun");
+    bool hasHandgun()const{return hasQuestItem(HandgunItem);}
+    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||id==WeaponId::Shotgun||(id==WeaponId::Handgun&&hasHandgun());}
+    // The handgun with `rounds` more 9 mm; a first one comes with them in its magazine (console, map shots).
+    void grantHandgun(int rounds);
+    // Inspection only (map shots): every sidearm carrier on this level killed, so his pistol falls.
+    void downSidearmCarriers(){for(size_t i=0;i<m_friendlyActors.size();++i)if(m_friendlyActors[i].level==m_level&&m_friendlyActors[i].track().ai.dropsSidearm)damageFriendly(i,1e4f,m_player.pos);updateSidearms();}
+    // Unlooted pistols of downed carriers (dropsSidearm), where they fell.
+    std::vector<DroppedSidearm> droppedSidearms()const;
+    static bool testHandgun();
+    static bool testHandgunSaves(std::ostream& report);
+    static constexpr int SaveVersion=19;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -602,6 +632,7 @@ public:
     // The collar of a body (midway between his shoulders, where a hand takes
     // him), for the hands that stow him.
     Point3 npcCollar(size_t actor)const;
+    std::pair<Point3,Point3> fallenHand(size_t actor,Point3 at,float yaw)const;
     // A confirmed hunt for the player is searched at least HuntSearchMs, so
     // EVASION's clock is the time the hunters really give it.
     static constexpr int HuntSearchMs=20000;
@@ -688,9 +719,41 @@ public:
     bool dormantEntity(float z)const{return m_world.hasLift()&&z<-2&&m_player.z>=-2&&m_world.liftPhase()!=World::LiftPhase::Crashed;}
     bool weaponEquipped()const{return m_weaponEquipped;}
     WeaponId equippedWeapon()const{return m_weaponEquipped?m_equippedWeapon:WeaponId::Fists;}
-    const WeaponDef& equippedWeaponDef()const{return weaponDef(m_equippedWeapon);}
+    // The player's row (kWeapons) for the firearm in hand or last drawn.
+    const WeaponDef& equippedWeaponDef()const{return playerWeaponDef(m_equippedWeapon);}
+    // That firearm and its rounds, whether raised or lowered: the HUD, the VR
+    // plate and the viewmodel read these, and nothing else spends ammunition.
+    WeaponId activeFirearm()const{return m_equippedWeapon;}
+    const AmmoPool& firearmPool()const{return m_player.pool(m_equippedWeapon);}
+    // The ammo counter: only the firearm in hand (none with fists or holstered),
+    // its loaded and reserve rounds, magazine size and caliber.
+    struct HudAmmo {bool shown=false;WeaponId weapon=WeaponId::Fists;int loaded=0,reserve=0,capacity=0;const char* caliber="";};
+    HudAmmo hudAmmo()const{if(unarmed()||!m_weaponEquipped)return {};const auto&rounds=firearmPool();const auto&cycle=equippedWeaponDef().cycle;return {true,m_equippedWeapon,rounds.loaded,std::max(0,rounds.total-rounds.loaded),cycle.tubeCapacity,cycle.caliber};}
     const MeleeDef& unarmedMelee()const{return kUnarmedMelee;}
+    // Immediate: holsters (Fists) or puts an owned firearm in hand, raised when it has rounds.
     void equipWeapon(WeaponId id);
+    // The player's pick (wheel, keys, VR slot): Fists holsters at once; another
+    // firearm lowers the one in hand, swaps at the bottom and raises the new one.
+    void selectWeapon(WeaponId id);
+    // The wheel: up draws the next owned firearm (from fists the last one drawn), down holsters.
+    WeaponId wheelWeapon(int delta)const;
+    // The VR shoulder slot's next pick: fists, the shotgun, the handgun once owned, then fists again.
+    WeaponId shoulderSlotWeapon()const{WeaponId at=m_switchTarget!=WeaponId::Fists?m_switchTarget:equippedWeapon();
+     return at==WeaponId::Fists?WeaponId::Shotgun:at==WeaponId::Shotgun&&hasHandgun()?WeaponId::Handgun:WeaponId::Fists;}
+    // Switch animation: 0 none, 1 lowering the old gun (holster() rising to 1),
+    // 2 raising the new one (holster() falling to raiseHolster). The swap of
+    // activeFirearm() happens on the frame holster() reaches 1.
+    int weaponSwitchPhase()const{return m_switchTarget!=WeaponId::Fists?1:m_switchRaise?2:0;}
+    WeaponId weaponSwitchTarget()const{return m_switchTarget;}
+    // Magazine reload: seconds in all, 0..1 through it (0 when not reloading),
+    // and whether it started from an empty magazine (the longer one, ending
+    // with the slide released at cycle.rackAt).
+    float reloadDuration()const{return m_reloadTimer>0?m_reloadLength:0.f;}
+    float reloadProgress()const{return m_reloadTimer>0&&m_reloadLength>0?std::clamp(1-m_reloadTimer/m_reloadLength,0.f,1.f):0.f;}
+    bool emptyReload()const{return m_reloadTimer>0&&m_emptyReload;}
+    // The handgun's slide is held back: its magazine ran dry, until an empty
+    // reload passes cycle.rackAt (the rack) or rounds are loaded.
+    bool slideLocked()const{return m_equippedWeapon==WeaponId::Handgun&&firearmPool().loaded<=0&&!(m_reloadTimer>0&&m_emptyReload&&reloadProgress()>=equippedWeaponDef().cycle.rackAt);}
     int medkits()const{return m_medkits;}
     int selectedItem()const{return m_selectedItem;}
     int itemCell(int item)const{return m_itemCells[item];}
@@ -999,6 +1062,10 @@ private:
     void damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef attacker={});
     void migrateEnemiesAcrossChunks();
     void updatePickups();
+    // Records where a downed carrier's pistol fell and lets the player take it.
+    void updateSidearms();
+    // The round count a downed carrier's pistol gives: his magazine, 6-12.
+    int sidearmRounds(size_t actor)const;
 
     World m_world;
     Ragdoll m_hazmat;
@@ -1034,6 +1101,12 @@ private:
     std::array<float,2> m_vrFistCooldown{};
     bool m_previousFire = false;
     bool m_previousReload = false;
+    // A semi-automatic trigger must come back up before the next shot.
+    bool m_triggerReset=true;
+    int m_previousChoice=0;
+    // Pending switch: the firearm to swap to at the bottom (Fists: none), then the raise.
+    WeaponId m_switchTarget=WeaponId::Fists;bool m_switchRaise=false;
+    float m_reloadLength=0;bool m_emptyReload=false;
     float m_weaponKick = 0.0f,m_reloadTimer=0.0f;
     float m_shotCooldown = 0.0f;
     Vec2 m_velocity{};float m_stuckTime=0;
@@ -1076,7 +1149,8 @@ private:
     bool m_weaponEquipped=true,m_inventoryClick=false,m_inventoryUse=false;
     WeaponId m_equippedWeapon=WeaponId::Shotgun;
     int m_medkits=0,m_selectedItem=-1;
-    std::array<int,3> m_itemCells{12,0,2};
+    // Storage cells: 0 shotgun 4x2, 1 shells 1x2, 2 first aid 2x2, 3 9 mm 1x2 (version 19).
+    std::array<int,4> m_itemCells{12,0,2,1};
     void sound(Sound sound,float gain=1,float pitch=1);
     void enemySound(const Enemy& enemy,int action,float gain=1,float pitch=1);
     void updateWeaponMotion(const InputState& input,float dt);

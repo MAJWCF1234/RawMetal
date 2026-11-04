@@ -22,7 +22,7 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
   npcVoice(actor,NpcVoiceCue::Down);
   setState(friendlyKey(actor,"killed_by_player"),attacker.kind==ShotKind::Player?1:0);
   if(npcIncapacitated(actor)&&!npcHeld(actor)){setState(friendlyKey(actor,"death_ms"),state(friendlyKey(actor,"restraint_ms")));setState(friendlyKey(actor,"death_fraction"),state(friendlyKey(actor,"restraint_fraction")));}
-  int heldWeapon=state(friendlyKey(actor,"restraint_weapon"));if(npcHeld(actor)&&heldWeapon>0&&heldWeapon<weaponCount())equipWeapon(WeaponId(heldWeapon));
+  int heldWeapon=state(friendlyKey(actor,"restraint_weapon"));if(npcHeld(actor)&&playerFirearm(WeaponId(std::clamp(heldWeapon,0,2)))&&ownsWeapon(WeaponId(heldWeapon)))equipWeapon(WeaponId(heldWeapon));
   for(const char*field:{"restraint","restraint_ms","restraint_fraction","restraint_weapon"})setState(friendlyKey(actor,field),0);
   setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));if(track.ai.mode==ActorAiMode::Guard)clearGuardSchedule(actor);updateMechanisms(0);
  }

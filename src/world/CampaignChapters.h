@@ -14,6 +14,7 @@ void buildChapterPerimeterB(CampaignMapTable& maps);
 void buildChapterResearchFront(CampaignMapTable& maps);
 void buildChapterMedicalFront(CampaignMapTable& maps);
 void buildChapterMedicalWard(CampaignMapTable& maps);
+void buildChapterMedicalDeep(CampaignMapTable& maps);
 void buildChapterAnalysis(CampaignMapTable& maps);
 void buildChapterEnergyTestLabs(CampaignMapTable& maps);
 void buildChapterObservationRing(CampaignMapTable& maps);

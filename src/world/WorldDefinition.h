@@ -28,7 +28,7 @@ enum class Environment { Interior, Outdoor };
 enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
-inline constexpr int FacilityModelCount=356;
+inline constexpr int FacilityModelCount=358;
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed };
 // One record per creature kind: what it is called, how much it takes, the
 // standing height navigation and hits use (hull) against its visible top, its
@@ -76,7 +76,7 @@ inline const CreatureTraits& creatureTraits(CreatureKind kind){
 inline constexpr float TransformedLeap=.4f,TransformedHold=2.f,TransformedStumble=.9f;
 // The area score a map plays; stitched maps share one so the loop carries on.
 enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Count };
-enum class PickupKind { Health, Ammo }; // Values retain the existing save format.
+enum class PickupKind { Health, Ammo, HandgunAmmo }; // Values retain the existing save format (HandgunAmmo from version 19).
 struct ChunkDefinition {
     Vec2 origin;
     Vec2 playerStart;

@@ -13,7 +13,7 @@ if(m_level==1){
 static constexpr MapRows Ground = {$rows};
 m_layers = {{"Ground",0,0,Ground},{"Upper",3.5,0.2,Ground}};
 m_creatureSpawns = {{CreatureKind::Brute,{2,3},0},{CreatureKind::Wasp,{4,5},3.5}};
-m_pickupSpawns = {{{2,2},PickupKind::Ammo},{{3,3},PickupKind::Health}};
+m_pickupSpawns = {{{2,2},PickupKind::Ammo},{{3,3},PickupKind::Health},{{4,4},PickupKind::HandgunAmmo}};
 }
 --- MAP_CODE_END ---
 "@
@@ -28,9 +28,10 @@ foreach($encoding in $encodings) {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $installer -Payload $payload -Mode Auto
         if($LASTEXITCODE -ne 0) { throw 'Auto installation failed' }
         $installed = [IO.File]::ReadAllText((Join-Path $sandbox 'custom maps/Regression.txt'))
-        foreach($tag in @('LAYER', 'CREATURE', 'PICKUP')) {
+        foreach($tag in @('LAYER', 'CREATURE')) {
             if([regex]::Matches($installed, "(?m)^$tag\|").Count -ne 2) { throw "Lost $tag entries during conversion" }
         }
+        if([regex]::Matches($installed, "(?m)^PICKUP\|").Count -ne 3 -or $installed -notmatch "(?m)^PICKUP\|0\|2\|4\|4") { throw "Lost PICKUP entries (or the 9mm kind) during conversion" }
         if([IO.File]::ReadAllText($world) -ne 'main campaign must remain untouched') { throw 'Custom install changed World.cpp' }
     }
 }

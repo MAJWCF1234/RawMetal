@@ -34,7 +34,7 @@ public:
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
     int height() const { return m_height; }
-    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_snatcherMesh.description+m_chimeraMesh.description+m_transformedMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
+    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_snatcherMesh.description+m_chimeraMesh.description+m_transformedMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_nineMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
     void previewModel(int model,float angle);
     bool validate3D();
     static bool testPerformance();
@@ -70,6 +70,8 @@ public:
     static void setTiltShift(bool enabled);
     static bool tiltShift();
     float gripError()const{return m_gripError;}
+    // The pistol's fingers from the trigger and grip, metres (0 for any other hold).
+    float pistolContact()const{return m_pistolContact;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,
     // 0 = final attachment (ordinary gameplay).
@@ -78,7 +80,9 @@ public:
     // Lamp shadow faces drawn so far (Vulkan); 0 on the software path.
     std::uint64_t shadowFacesDrawn()const;
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
-    void inspectRig(const Game& game,float yaw,float pitch);
+    // The view model turned about center (view space) and seen from distance:
+    // the defaults frame the shotgun and its arms; the pistol passes its grip, closer.
+    void inspectRig(const Game& game,float yaw,float pitch,Point3 center={.12f,-.20f,.83f},float distance=1.3f);
 private:
     friend class GpuRenderer;
     std::unique_ptr<GpuRenderer> m_gpu;
@@ -229,7 +233,8 @@ private:
         Mesh{2132},Mesh{2134},Mesh{2136},
         Mesh{2204},Mesh{2209},
         Mesh{2214},Mesh{2216},Mesh{2218},Mesh{2220},Mesh{2222},Mesh{2224},Mesh{2226},Mesh{2228},Mesh{2230},Mesh{2232},Mesh{2234},Mesh{2236},Mesh{2238},Mesh{2240},Mesh{2242},
-        Mesh{2244},Mesh{2246},Mesh{2248},Mesh{2250}};
+        Mesh{2244},Mesh{2246},Mesh{2248},Mesh{2250},
+        Mesh{2265},Mesh{2267}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
@@ -239,8 +244,8 @@ private:
     static constexpr int FirstLibraryModel=63,ImpostorColumns=8,ImpostorRows=3,ImpostorCell=96;
     const Impostor* impostorFor(int model);
     std::unordered_map<int,std::unique_ptr<Impostor>> m_impostors;
-    Mesh m_medkitMesh{133},m_shellsMesh{135};
-    Texture m_medkitTexture,m_shellsTexture;
+    Mesh m_medkitMesh{133},m_shellsMesh{135},m_nineMesh{104};
+    Texture m_medkitTexture,m_shellsTexture,m_nineTexture;
     Texture m_barrelTexture,m_crateTexture,m_concrete,m_bulkhead;
     Texture m_hazard,m_chemicalSign,m_signRust,m_panelMetal,m_routePaint,m_redPaint;
     Texture m_terminalTexture,m_cautionSign;
@@ -257,6 +262,30 @@ private:
     void drawScene(const Game& game,bool clearDepth=true,int level=-1);
     void drawViewModel(const Game& game);
     void prepareViewModel(const Game& game);
+    // The player's pistol in hand (Scene3D.cpp), one source for the arm pose
+    // (on the animation worker: it reads only the game) and the draw: the
+    // model-to-view map before assembly(), the moving parts, and the wrist
+    // targets and hand frames the arm IK reaches for.
+    struct PistolHold {
+     Point3 origin{};std::array<Point3,3> axis{};     // model metres to view; the model's +x is the gun's left
+     float slide=0,hammer=0,trigger=0;               // slide and trigger travel back (model metres), hammer turned back (radians)
+     int magazine=0;float magazineDrop=0;Point3 magazineShift{}; // 0 seated, 1 drawn out down the well (by magazineDrop, model metres), 2 off the gun (out by magazineDrop, moved by magazineShift in view), 3 gone
+     std::array<Point3,2> wrist{},forward{},palm{};   // the trigger hand, then the support hand; view space
+     bool support=true;                               // the support hand holds the gun (its grip error counts)
+     Point3 point(Point3 p)const{return origin+axis[0]*p.x+axis[1]*p.y+axis[2]*p.z;}
+    };
+    PistolHold pistolHold(const Game& game)const;
+public:
+    // VR (drawTrackedHands, --vr-hand-dump): a pistol model point in the right
+    // hand's gun frame (VrHand::gunBasis: right, up, back; the skeletal frame,
+    // or the controller's when handFrame is false), and that hand's curls
+    // (thumb, index, middle, ring, pinky) closed on its grip, the index still
+    // the player's own trigger finger.
+    static Point3 vrPistolPoint(Point3 model,bool handFrame);
+    // Where the pistol's grip is in view space (rig inspection centres on it).
+    Point3 pistolGripView(const Game& game)const{return pistolHold(game).origin;}
+    static std::array<float,5> pistolCurls(const std::array<float,5>& tracked){return {std::clamp(tracked[0],.30f,.50f),std::clamp(tracked[1],.25f,.60f),std::max(tracked[2],.85f),std::max(tracked[3],.85f),std::max(tracked[4],.85f)};}
+private:
     void triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const Texture& texture,float light,const NormalLighting* normalLighting=nullptr);
     Point3 cameraPoint(Point3 p,const Game& game)const;
     Point3 cameraPoint(Point3 p,const Player& player)const;
@@ -304,11 +333,11 @@ private:
     std::array<std::uint64_t,Game::MaxChunks> m_chunkLightSourceKeys{};
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
-    float m_gripError=0;
+    float m_gripError=0,m_pistolContact=0;
     int m_cleanupInspectionStage=0;
     float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0,m_cleanupEdgeStretch=1;
     bool m_inspectRig=false;
-    float m_inspectYaw=0,m_inspectPitch=0;
+    float m_inspectYaw=0,m_inspectPitch=0,m_inspectDistance=1.3f;Point3 m_inspectCenter{.12f,-.20f,.83f};
     Point3 inspectionPoint(Point3 p)const;
     void wornPanel(int x,int y,int width,int height,bool recess=false,bool materialPanel=false);
     struct CreatureVisual {Mesh SoftwareRenderer::*mesh;Texture SoftwareRenderer::*texture;bool xenoblood;float bloodLight;};

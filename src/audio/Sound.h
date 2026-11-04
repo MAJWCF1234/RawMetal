@@ -20,12 +20,16 @@ enum class Sound {
  // Being seen: the player's sting on a guard's '!', the tick as his '?' goes up, and a guard's radio keying.
  DetectSting, SuspicionTick, RadioSquelch,
  // The loop under ALERT and EVASION.
- MusicAlert, GlassShatter, BottleBreak, WoodBreak, WoodImpact, PlasterBreak, Count
+ MusicAlert, GlassShatter, BottleBreak, WoodBreak, WoodImpact, PlasterBreak,
+ // The player's handgun: the shot, the dry click, the magazine out and in, the slide released.
+ PistolShot, PistolDry, PistolMagOut, PistolMagIn, PistolRack, Count
 };
 // AudioEngine maps every sound from ZoneWind on to consecutive library resources
 // and AreaTitle, the locker sounds, the detection sounds and the alert loop to their own: a sound appended after them
 // needs its resource mapped there explicitly, or it would load an unrelated file.
-static_assert(int(Sound::Count)==int(Sound::PlasterBreak)+1,"map the new sound's resource in AudioEngine");
+// GlassShatter on take consecutive resources from 2255 (the pistol from 2260).
+static_assert(int(Sound::Count)==int(Sound::PistolRack)+1,"map the new sound's resource in AudioEngine");
+inline bool gunshotSound(Sound s){return s==Sound::Shot||s==Sound::PistolShot;}
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}
 // A finite z captures the emission origin even when the player's own sound is

@@ -94,6 +94,11 @@ bool Game::testExclusion(){
   check(same,"The seeded terrain generator is deterministic");}
  // Ground cover follows the authored paint.
  check(g.chunkWorld(15).groundKind(20,81.5f)==GroundDry,"The camp road is painted as a dirt track");
+ // The weapon test bench: the pistol is handed over drawn on arrival, 9 mm lies by the fire.
+ {Game h(exclusionCampaign());for(int i=0;i<120;++i)h.update({},1.f/60);auto hud=h.hudAmmo();
+  check(h.level()==15&&h.hasHandgun()&&h.equippedWeapon()==WeaponId::Handgun&&hud.shown&&std::string(hud.caliber)=="9MM"&&hud.loaded==12&&hud.reserve==0,"The rookie camp hands over the handgun, drawn, 12 in the magazine");
+  h.m_player.pos={9.7f,11.3f};h.update({},1.f/60);h.m_player.pos={10.8f,11.1f};h.update({},1.f/60);
+  check(h.player().pool(WeaponId::Handgun).total==36&&h.hudAmmo().reserve==24,"Both 9 mm boxes at the camp feed the pistol");}
  {unsigned kinds=0;for(float y=2;y<96;y+=7)for(float x=2;x<120;x+=7){int kind=g.chunkWorld(zoneLevel({x,y})).groundKind(x,y);if(kind>=0&&kind<GroundKinds)kinds|=1u<<kind;}
   check(std::popcount(kinds)>=6,"The zone shows at least six kinds of ground cover");}
  // Spawns, NPCs and pickups stand on clear ground.

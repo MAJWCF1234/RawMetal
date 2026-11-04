@@ -161,12 +161,12 @@ bool Game::testSettings(){
  auto before=game.player();auto enemy=game.enemies()[0];float time=game.elapsed();
  InputState moving{};moving.forward=true;moving.fire=true;moving.mouseDx=100;
  for(int i=0;i<120;++i)game.update(moving,1.f/60.f);
- if(game.elapsed()!=time||game.player().ammo!=before.ammo||game.player().health!=before.health||game.player().angle!=before.angle||lengthSq(game.player().pos-before.pos)>0||lengthSq(game.enemies()[0].pos-enemy.pos)>0||!game.sounds().empty())return false;
+ if(game.elapsed()!=time||game.player().pools!=before.pools||game.player().health!=before.health||game.player().angle!=before.angle||lengthSq(game.player().pos-before.pos)>0||lengthSq(game.enemies()[0].pos-enemy.pos)>0||!game.sounds().empty())return false;
  game.update({},.02f);InputState down{};down.menuDown=true;game.update(down,.02f);game.update({},.02f);
  InputState left{};left.menuLeft=true;game.update(left,.02f);if(std::fabs(game.settings().master-.95f)>.001f)return false;
  game.update({},.02f);game.update(escape,.02f);if(game.paused())return false;
- moving.forward=false;moving.mouseDx=0;game.update(moving,.02f);if(game.player().ammo!=before.ammo)return false;
- game.update({},.02f);game.update(moving,.02f);if(game.player().ammo!=before.ammo-1)return false;
+ moving.forward=false;moving.mouseDx=0;game.update(moving,.02f);if(game.player().pools!=before.pools)return false;
+ game.update({},.02f);game.update(moving,.02f);if(game.player().pool(WeaponId::Shotgun).total!=before.pool(WeaponId::Shotgun).total-1)return false;
  game.update(escape,.02f);if(!game.paused())return false;game.update({},.02f);
  InputState click{};click.pointerX=MenuLayout::SliderX;click.pointerY=MenuLayout::RowTop+2*MenuLayout::RowHeight+5;click.fire=true;game.update(click,.02f);if(game.settings().music!=0)return false;
  auto settingsPath=(std::filesystem::current_path()/"settings-roundtrip.ini").wstring();game.saveSettings(settingsPath);Game restored;restored.loadSettings(settingsPath);

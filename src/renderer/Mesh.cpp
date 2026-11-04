@@ -417,7 +417,7 @@ __declspec(noinline) bool Mesh::testVrHands(){
  }
  return changed>.0001f;
 }
-void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool skin){
+void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool skin,const ArmHold* hold){
  auto add=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.x+b.x,a.y+b.y,a.z+b.z};};
  auto sub=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.x-b.x,a.y-b.y,a.z-b.z};};
  auto mul=[](ufbx_vec3 a,double s){return ufbx_vec3{a.x*s,a.y*s,a.z*s};};
@@ -436,6 +436,8 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool 
   // Support palm faces up across the fore-end; trigger palm faces the stock.
   ufbx_vec3 desiredForward=unit(s?ufbx_vec3{-.95,0,.312}:ufbx_vec3{0,.65,.76});
   ufbx_vec3 desiredPalm=s?ufbx_vec3{0,1,0}:ufbx_vec3{1,0,0};
+  // A hold supplies its own frames (the pistol's); the palm is squared to the forward.
+  if(hold){auto f=hold->forward[size_t(s)],p=hold->palm[size_t(s)];desiredForward=unit({f.x,f.y,f.z});ufbx_vec3 palm{p.x,p.y,p.z};desiredPalm=unit(sub(palm,mul(desiredForward,dot(palm,desiredForward))));}
   ufbx_vec3 source[]={forward,palm,cross(forward,palm)},target[]={desiredForward,desiredPalm,cross(desiredForward,desiredPalm)};
   ufbx_matrix rotation{};
   for(int row=0;row<3;++row)for(int col=0;col<3;++col)for(int axis=0;axis<3;++axis)rotation.cols[col].v[row]+=target[axis].v[row]*source[axis].v[col];
@@ -459,12 +461,12 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool 
   if(!posed)throw std::runtime_error("Arm IK evaluation failed");ufbx_free_scene(m_scene);m_scene=posed;
  }
 }
-void Mesh::poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil){
+void Mesh::poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil,const ArmHold* hold){
  if(!m_bindScene)return;
  ufbx_free_scene(m_scene);m_scene=m_bindScene;ufbx_retain_scene(m_scene);
  // IK needs bone transforms only. The final finger/recoil pose skins all
  // vertices once, avoiding the redundant skin pass at the end of IK.
- grip(right,left,elbowSwing,pitch,yaw,false);pose(phase,recoil);
+ grip(right,left,elbowSwing,pitch,yaw,false,hold);pose(phase,recoil,hold?hold->curls:0);
 }
 bool Mesh::poseAction(const char* action,float phase){
  if(!m_bindScene)return false;
@@ -478,12 +480,15 @@ bool Mesh::poseAction(const char* action,float phase){
 __declspec(noinline) bool Mesh::testAttachedSkinning(){
  Mesh optimized(111),reference(111);
  reference.m_positionOnlySkinning=false;
- for(int frame=0;frame<6;++frame){
+ // Frames 6-9 hold the pistol: its own hand frames and finger set.
+ for(int frame=0;frame<10;++frame){
   Point3 right{-.025f+frame*.006f,1.55f,.223f},left{-.025f,1.60f,.49f-frame*.004f};
   float elbow=frame*.02f,pitch=frame*.015f,yaw=-frame*.025f,phase=frame*.31f,recoil=frame*.04f;
-  optimized.poseAttached(right,left,elbow,pitch,yaw,phase,recoil);
+  ArmHold pistol{};pistol.curls=1;pistol.forward={Point3{.25f,.1f+frame*.01f,.96f},Point3{.3f,.05f,.95f}};pistol.palm={Point3{-.96f,0,.25f},Point3{.95f,0,-.3f}};
+  const ArmHold* hold=frame>=6?&pistol:nullptr;if(hold){right={.02f,1.50f,.30f+frame*.004f};left={.06f,1.47f,.32f};}
+  optimized.poseAttached(right,left,elbow,pitch,yaw,phase,recoil,hold);
   ufbx_free_scene(reference.m_scene);reference.m_scene=reference.m_bindScene;ufbx_retain_scene(reference.m_scene);
-  reference.grip(right,left,elbow,pitch,yaw,true);reference.pose(phase,recoil);
+  reference.grip(right,left,elbow,pitch,yaw,true,hold);reference.pose(phase,recoil,hold?1:0);
   if(optimized.triangles.size()!=reference.triangles.size())return false;
   for(size_t i=0;i<optimized.triangles.size();++i)for(int v=0;v<3;++v){
    const auto&a=optimized.triangles[i].v[v];const auto&b=reference.triangles[i].v[v];
@@ -544,7 +549,7 @@ void Mesh::extract(ufbx_scene* scene,bool positionsOnly){
   }
   std::vector<uint32_t> indices(mesh->max_face_triangles*3);
   for(size_t faceIndex=0;faceIndex<mesh->faces.count;++faceIndex){auto face=mesh->faces[faceIndex];auto count=ufbx_triangulate_face(indices.data(),indices.size(),mesh,face);
-   for(uint32_t t=0;t<count;++t){MeshTriangle triangle;std::string partName=node->name.data;triangle.part=partName.find("Wing")!=std::string::npos?1:partName=="Bolt"?2:partName=="ShotgunBullet"?3:0;
+   for(uint32_t t=0;t<count;++t){MeshTriangle triangle;std::string partName=node->name.data;triangle.part=partName.find("Wing")!=std::string::npos?1:partName=="Bolt"?2:partName=="ShotgunBullet"?3:partName=="PistolSlide"?4:partName=="PistolMagazine"?5:partName=="PistolHammer"?6:partName=="PistolTrigger"?7:0;
     if(m_materialParts&&mesh->face_material.count>faceIndex){auto materialIndex=mesh->face_material[faceIndex];if(materialIndex<node->materials.count){std::string materialName=node->materials[materialIndex]->name.data;auto found=std::find(materialNames.begin(),materialNames.end(),materialName);triangle.part=int(found-materialNames.begin());}}
     for(int c=0;c<3;++c){uint32_t ix=indices[t*3+c];auto p=ufbx_get_vertex_vec3(&mesh->skinned_position,ix);
      if(mesh->skinned_is_local)p=ufbx_transform_position(&node->geometry_to_world,p);
@@ -556,7 +561,7 @@ void Mesh::extract(ufbx_scene* scene,bool positionsOnly){
  }
  m_topologyReady=true;
 }
-void Mesh::pose(float phase,float recoil){
+void Mesh::pose(float phase,float recoil,int curls){
  if(!bones)return;
  std::vector<ufbx_transform_override> overrides;
  for(auto node:m_scene->nodes){if(!node->bone)continue;
@@ -569,11 +574,21 @@ void Mesh::pose(float phase,float recoil){
    // preserving a relaxed support palm and a distinct trigger finger.
    bool support=name.find(".L")!=std::string::npos;
    float curl=support?.55f:.60f;
-   if(support&&name.find(".02.")!=std::string::npos)curl=.85f;
-   if(support&&name.find(".03.")!=std::string::npos)curl=.90f;
-   if(name.find("f_index")==0&&!support)curl=.20f;
-   if(name.find("thumb.")==0)curl=support?.60f:.56f;
-   if(!support&&name.find(".03.")!=std::string::npos)curl*=.7f;
+   if(curls==1){
+    // Pistol: the firing hand closes round a narrow grip with its index
+    // bent onto the trigger; the support fingers wrap over the firing
+    // fingers; both thumbs lie forward along the frame.
+    const int joint=name.find(".01.")!=std::string::npos?0:name.find(".02.")!=std::string::npos?1:2;
+    constexpr float trigger[3]={.30f,.55f,.35f},grasp[3]={.82f,.90f,.75f},
+     wrap[3]={.62f,.85f,.90f},thumbs[2][3]={{.25f,.25f,.25f},{.15f,.15f,.15f}};
+    curl=name.find("thumb.")==0?thumbs[support][joint]:support?wrap[joint]:name.find("f_index")==0?trigger[joint]:grasp[joint];
+   }else{
+    if(support&&name.find(".02.")!=std::string::npos)curl=.85f;
+    if(support&&name.find(".03.")!=std::string::npos)curl=.90f;
+    if(name.find("f_index")==0&&!support)curl=.20f;
+    if(name.find("thumb.")==0)curl=support?.60f:.56f;
+    if(!support&&name.find(".03.")!=std::string::npos)curl*=.7f;
+   }
    tr.rotation=ufbx_quat_slerp(tr.rotation,authored->transform.rotation,curl);
   }
   const double angle=finger?((authored==m_fingerGrip.end()?.8:0)+std::sin(phase)*.008+recoil*.015):0;

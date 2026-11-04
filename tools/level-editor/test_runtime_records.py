@@ -46,6 +46,15 @@ class RuntimeRecordsTests(unittest.TestCase):
         self.assertIsNot(records, original["runtimeRecords"])
         self.assertEqual(runtime_records(json.loads(json.dumps(original))), RECORDS)
 
+    def test_actor_drops_sidearm_field_passes_through(self) -> None:
+        # ACTOR's optional ninth field (dropsSidearm) reaches the engine untouched.
+        records = ["ACTOR|0|test-timer|8|1.6|0|0|0|1", "ACTOR_WEAPON|0|0|2|650|1000|9|18"]
+        self.assertEqual(runtime_records({"runtimeRecords": records}), records)
+
+    def test_pickup_kinds_follow_the_engine_enum(self) -> None:
+        self.assertEqual(server.PICKUP_KIND_INDEX, {"Health": 0, "Ammo": 1, "HandgunAmmo": 2})
+        self.assertEqual(server.PICKUP_KIND["src/assets/pickups/9mm.fbx"], "HandgunAmmo")
+
     def test_rejects_invalid_types_and_geometry(self) -> None:
         for value in (None, "ACTOR|0", {}, ("ACTOR|0",), [2], [None],
                       [""], ["ACTOR"], ["ACTOR |0"], ["UNKNOWN|0"],

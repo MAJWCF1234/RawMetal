@@ -14,6 +14,8 @@ The supplied `arms_rig.glb` / `arms_rig.fbx` expose 18 clips including grab, gua
 Source library: `O:/retro official`.
 RawMetal audio was copied or converted from the purchased/source library while leaving originals unchanged. Runtime resources include shotgun fire/pump, metal and concrete footsteps, jump/landing, pickup/hurt, creature calls/attacks/deaths, machine ambience, door, melee, clutter impacts, lift motor/creak/snap/crash, and reactor/music loops.
 
+The player handgun's effects (resources 2260-2264, `src/assets/audio/pistol-*.wav` masters, RMS1 `.sfx` from `tools/EncodeEffects.py`'s encoder) come from `Audio/Sound Effects/Firearms`: the shot `Fire/pistol_fire_ufx_2.ogg`, the dry click `Misc/pistol_universal_empty_barrel_ufx_1.ogg`, the magazine `Reloading/pistol_reloading_mag_out_ufx_1.ogg` and `pistol_reloading_mag_in_ufx_1.ogg`, and the slide `Racking/pistol_racking_ufx_1.ogg`. Each was folded to mono at 44.1 kHz and brought to about -24 to -26 LUFS under a -3 dBFS limiter.
+
 Surface-lift/reactor sources include Rust & Blood v1.1d, ROT v1.9, and Echoes v2.1 assets. Runtime WAV effects are 44.1 kHz PCM16; MP3 music is decoded at runtime.
 
 ## Physical clutter
@@ -41,6 +43,8 @@ Copied from `O:/retro official`:
 - first-aid texture: `Textures/first_aid_kit_hr_1.png`
 - shotgun shells: `Weapons & Items/PSXAmmoBoxes/12g/12g_Green_240.fbx`
 - shell texture: `Weapons & Items/PSXAmmoBoxes/12g/Textures/12G_240px.png`
+- 9 mm rounds (`pickups/9mm.fbx`, resource 104): `Weapons & Items/PSXAmmoBoxes/9mm/9mm_240.fbx`
+- 9 mm texture (`pickups/9mm.png`, resource 105): `Weapons & Items/PSXAmmoBoxes/9mm/Texture/9mm_240.png`
 
 ## Pressure Works
 Copied from the purchased `O:/retro official` library:

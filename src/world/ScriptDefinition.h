@@ -78,6 +78,9 @@ struct ActorAiConfig {
  bool suppress=false;int grenades=0;
  GuardSquadRole role=GuardSquadRole::Default;
  int weapon=1;
+ // A handgun carrier whose pistol falls to the floor when he goes down (dead
+ // or knocked out), for the player to take. Off unless authored.
+ bool dropsSidearm=false;
 };
 struct ActorTrack {
  StateId timerState=0;ActorVisual visual=ActorVisual::Worker;

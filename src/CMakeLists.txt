@@ -67,6 +67,7 @@ add_executable(RawMetal WIN32
     game/Settings.cpp
     game/Saves.cpp
     game/Inventory.cpp
+    game/Handgun.cpp
     game/Movement.cpp
     game/GantryTest.cpp
     game/EngineRegressionTest.cpp
@@ -165,6 +166,7 @@ add_executable(RawMetal WIN32
     world/CampaignChapterResearchFront.cpp
     world/CampaignChapterMedicalFront.cpp
     world/CampaignChapterMedicalWard.cpp
+    world/CampaignChapterMedicalDeep.cpp
     world/CampaignChapterAnalysis.cpp
     world/CampaignChapterEnergyTestLabs.cpp
     world/CampaignChapterObservationRing.cpp

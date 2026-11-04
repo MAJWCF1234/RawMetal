@@ -327,6 +327,7 @@ chunk(76, 2, 21, 'MEDICAL / WARD C SOUTH', -12, -9, 34,
       [E('N', 2, 22, -12), E('W', 15, 19, -12), E('E', 9, 14, -12), E('S', 10, 14, -12)],
       """Ward C, second half: the blackout trigger (ScriptEvent sets med_blackout), LAB 4's empty bed with her
 cut band. The service door west to Lab 4. East to Surgery, south to the Morgue.""", manifest='48')
+part('MedicalDeep')
 chunk(77, 3, 21, 'MEDICAL / SURGERY', -12, -8.5, 35,
       [E('W', 9, 14, -12)],
       """Operating theatre with lamps, the medical director's office (power restore toggle for med_blackout,

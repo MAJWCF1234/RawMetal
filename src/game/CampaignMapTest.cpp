@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "../renderer/SoftwareRenderer.h"
 #include "../world/CustomCampaign.h"
+#include "../world/ModelIds.h"
 #include <algorithm>
 #include <cmath>
 #include <chrono>
@@ -253,6 +254,233 @@ bool Game::testCampaignMaps(){
   for(int i=0;i<240;++i)g.update({},1.f/60);
   out<<"triage: down="<<down<<" rise="<<g.state(stateId("md_triage_rise"))<<" phase="<<g.world().actorPose(1).phase<<" actors="<<g.world().actorTracks().size()<<'\n';
   check(down&&g.state(stateId("md_triage_rise"))>0&&g.world().actorPose(1).clip==5,"Triage: the patient sits up behind the player who turns to the nurse");}
+ // The deep wing, 74-78: each set piece played on its clock, the gates held
+ // against a standing player's reach, and the 9 mm taken where it lies.
+ {const StateId dark=stateId("med_blackout");
+  auto fresh=[](Game& g,int level){g.m_level=level;g.restart();g.m_god=true;g.setState(stateId("chapter2_open"));g.setState(stateId("med_override"));};
+  auto put=[](Game& g,Vec2 p,float z,float yaw){g.m_player.pos=p;g.m_player.z=z;g.m_player.angle=yaw;g.m_player.pitch=0;g.m_player.grounded=true;g.m_player.verticalVelocity=0;g.m_player.crouched=false;};
+  auto run=[](Game& g,float seconds){for(int i=0,n=int(seconds*60+.5f);i<n;++i)g.update({},1.f/60);};
+  auto lampAt=[](const Game& g,Vec2 p,int mount=-1)->const WorldLight*{for(const auto& l:g.world().lights())if(length(l.position-p)<.05f&&(mount<0||int(l.mount)==mount))return &l;return nullptr;};
+  auto on=[&](const Game& g,Vec2 p,int mount=-1){const auto* l=lampAt(g,p,mount);return l&&g.lampSwitchedOn(*l);};
+  auto off=[&](const Game& g,Vec2 p,int mount=-1){const auto* l=lampAt(g,p,mount);return l&&!g.lampSwitchedOn(*l);};
+  auto doorAt=[](const Game& g,float left,float right,float y){const auto& d=g.world().doors();for(size_t i=0;i<d.size();++i)if(std::fabs(d[i].left-left)<.02f&&std::fabs(d[i].right-right)<.02f&&std::fabs(d[i].y-y)<.02f)return int(i);return -1;};
+  auto locked=[](const Game& g,int d){return d>=0&&g.doorLocked(g.world().doors()[size_t(d)]);};
+  auto opened=[](const Game& g,int d){return d>=0&&g.world().doors()[size_t(d)].opening;};
+  auto terminalFor=[](const Game& g,StateId activate){const auto& t=g.world().terminals();for(size_t i=0;i<t.size();++i)if(t[i].activateState==activate)return int(i);return -1;};
+  auto press=[](Game& g){InputState key{};key.use=true;g.updateInteraction({},.01f);if(g.logTime()>0){g.updateInteraction(key,.01f);g.updateInteraction({},.01f);}g.updateInteraction(key,.01f);g.updateInteraction({},.01f);};
+  // Stand where E reaches terminal `index`, on its `toward` side, facing it; press E when asked.
+  auto approach=[&](Game& g,int index,Vec2 toward,bool use)->bool{
+   if(index<0)return false;const Vec2 at=g.world().terminals()[size_t(index)].position;const float base=std::atan2(toward.y,toward.x);
+   int doorFirst=0;
+   for(float r:{.7f,.9f,1.1f,1.3f,.55f,1.5f,1.7f})for(float a:{0.f,.3f,-.3f,.6f,-.6f,.9f,-.9f,1.2f,-1.2f,1.45f,-1.45f}){
+    const Vec2 p=at+Vec2{std::cos(base+a),std::sin(base+a)}*r;const float z=g.groundHeight(p,g.world().floorHeight(p.x,p.y)+.215f);
+    if(!g.hullFits(p,z,Player::StandingHeight))continue;
+    put(g,p,z,std::atan2(at.y-p.y,at.x-p.x));if(g.nearbyTerminal()!=index)continue;
+    // E takes a door in front before a terminal, as the game does.
+    if(g.nearbyInteractionDoor()>=0){++doorFirst;continue;}
+    if(use)press(g);if(doorFirst)out<<"    terminal "<<index<<" taken with E at "<<p.x<<','<<p.y<<" after "<<doorFirst<<" nearer spots where a door takes E first\n";return true;}
+   out<<"    terminal "<<index<<" at "<<at.x<<','<<at.y<<": no standing spot reaches it with E ("<<doorFirst<<" spots where a door takes E first)\n";
+   return false;};
+  // Every cell a standing player walks to from `starts` (1/8 m grid, .3 m steps), as the freight route check floods.
+  struct Spot{Vec2 p;float z;};
+  auto flood=[](const Game& g,std::vector<Spot> starts){
+   struct Node{int x,y;float z;};std::queue<Node> queue;std::unordered_set<long long> seen;std::vector<Spot> reached;
+   auto key=[](Node n){return (static_cast<long long>(std::lround((n.z+100)*1000))<<16)|(n.y*192+n.x);};
+   for(const auto& s:starts){Node n{int(s.p.x*8),int(s.p.y*8),s.z};if(seen.insert(key(n)).second)queue.push(n);}
+   while(!queue.empty()){auto a=queue.front();queue.pop();reached.push_back({{(a.x+.5f)*.125f,(a.y+.5f)*.125f},a.z});
+    for(auto d:{Vec2{-1,0},Vec2{1,0},Vec2{0,-1},Vec2{0,1}}){Node b{a.x+int(d.x),a.y+int(d.y),a.z};if(b.x<2||b.x>=190||b.y<2||b.y>=190)continue;
+     const Vec2 q{(b.x+.5f)*.125f,(b.y+.5f)*.125f};b.z=g.groundHeight(q,a.z+.215f);
+     if(std::fabs(b.z-a.z)>.3f||!g.hullFits(q,b.z,Player::StandingHeight)||!seen.insert(key(b)).second)continue;queue.push(b);}}
+   return reached;};
+  auto openDoors=[](Game& g,bool lockedToo){for(size_t d=0;d<g.world().doors().size();++d)if(lockedToo||!g.doorLocked(g.world().doors()[d]))g.m_world.openDoor(int(d));for(int i=0;i<4;++i)g.m_world.updateDoors(1);};
+  auto setsState=[](const ScriptEvent& e,StateId id,int value){return std::any_of(e.actions.begin(),e.actions.end(),[&](const ScriptAction& a){return a.type==ScriptAction::Type::SetState&&a.id==id&&a.value==value;});};
+  auto opensDoor=[](const ScriptEvent& e,int door){return std::any_of(e.actions.begin(),e.actions.end(),[&](const ScriptAction& a){return a.type==ScriptAction::Type::OpenDoor&&a.index==door;});};
+  auto enemyNear=[](const Game& g,Vec2 p){for(size_t i=0;i<g.enemies().size();++i)if(length(g.enemies()[i].pos-p)<.3f)return int(i);return -1;};
+  auto awake=[](const Game& g,int i){return i>=0&&size_t(i)<g.enemies().size()&&g.enemies()[size_t(i)].wakeState==0;};
+  auto dormant=[](const Game& g,int i){return i>=0&&size_t(i)<g.enemies().size()&&g.enemies()[size_t(i)].wakeState!=0;};
+  // Every 9 mm box is taken by a standing player who walked there from the map's entry, every door opened.
+  for(int level=74;level<=78;++level){Game g;fresh(g,level);openDoors(g,true);
+   // Heavy dressing first stands as an obstacle; a box out of reach that way is tried again with the
+   // props yielding, as the engine lets them after half a second of shoving.
+   const Spot entry{g.player().pos,g.player().z};const auto reached=flood(g,{entry});int boxes=0,taken=0;std::vector<Spot> shoved;
+   auto take=[&](size_t i,const std::vector<Spot>& cells,Spot& from){const Vec2 box=g.m_pickups[i].pos;
+    for(const auto& s:cells){if(length(s.p-box)>.85f)continue;put(g,s.p,s.z,length(box-s.p)>.01f?std::atan2(box.y-s.p.y,box.x-s.p.x):0.f);g.updatePickups();if(!g.m_pickups[i].active){from=s;return true;}}
+    return false;};
+   for(size_t i=0;i<g.m_pickups.size();++i){if(g.m_pickups[i].kind!=PickupKind::HandgunAmmo)continue;++boxes;const Vec2 box=g.m_pickups[i].pos;const float boxZ=g.pickupHeight(g.m_pickups[i]);Spot from{};
+    bool got=take(i,reached,from),pushed=false;
+    if(!got){out<<"  map "<<level<<" 9 mm at "<<box.x<<','<<box.y<<','<<boxZ<<" not taken with the props standing; reached cells within 1.2 m:";
+     for(const auto& s:reached)if(length(s.p-box)<1.2f)out<<' '<<s.p.x<<','<<s.p.y;out<<'\n';     if(shoved.empty()){for(auto& c:g.m_clutter)c.blockedTime=1;shoved=flood(g,{entry});}
+     pushed=got=take(i,shoved,from);}
+    taken+=got;out<<"  map "<<level<<" 9 mm at "<<box.x<<','<<box.y<<','<<boxZ;
+    if(got)out<<" taken standing at "<<from.p.x<<','<<from.p.y<<','<<from.z<<(pushed?" (past pushed props)":"")<<'\n';else out<<" NOT TAKEN\n";}
+   check(boxes>0&&taken==boxes,(std::string("Deep wing ")+std::to_string(level)+": every 9 mm box is taken standing from the entry's reach (heavy props shoved if they must be)").c_str());
+   // Its creatures stand clear where they wait, and have a step to take.
+   bool clear=true;for(const auto& e:g.enemies()){const float h=e.bodyTop()-e.bodyBottom();bool step=false;
+    for(int k=0;k<8;++k){const Vec2 n=e.pos+Vec2{std::cos(k*kPi/4),std::sin(k*kPi/4)}*.6f;step|=g.hullFits(n,g.groundHeight(n,e.z+.215f),h);}
+    const bool fits=g.hullFits(e.pos,e.bodyBottom()+.03f,h-.03f);   // clear of floor paint and blood
+    if(!fits||!step){out<<"  map "<<level<<" creature at "<<e.pos.x<<','<<e.pos.y<<','<<e.z<<" top="<<e.bodyTop()<<" fits="<<fits<<" step="<<step<<'\n';
+     const auto& w=g.world();for(size_t i=0;i<w.structures().size();++i){const auto& s=w.structures()[i];if(e.pos.x+.2f>s.x1&&e.pos.x-.2f<s.x2&&e.pos.y+.2f>s.y1&&e.pos.y-.2f<s.y2&&e.bodyBottom()<s.top&&e.bodyTop()>s.bottom)
+      out<<"    structure "<<s.x1<<','<<s.y1<<','<<s.bottom<<".."<<s.x2<<','<<s.y2<<','<<s.top<<" material="<<s.material<<'\n';}}
+    clear&=fits&&step;}
+   check(clear,(std::string("Deep wing ")+std::to_string(level)+": every creature has standing room at its spawn and beside it").c_str());}
+  // --- 74 Pharmacy: the lit breather. Nothing here belongs to the blackout.
+  {Game g;fresh(g,74);const auto& w=g.world();
+   bool blackout=!w.darkZones().empty()||!w.creatureSpawns().empty();for(const auto& l:w.lights())blackout|=l.enabledState==dark;
+   for(const auto& e:w.scriptEvents()){blackout|=e.requireState==dark||setsState(e,dark,1);}
+   bool fittings=w.lights().size()<=30;for(const auto& l:w.lights())if(l.mount==WorldLightMount::Bare&&l.prop<0){bool held=false;for(const auto& f:w.fixtures())held|=length(f.position-l.position)<.25f;fittings&=held;if(!held)out<<"  74 bare lamp at "<<l.position.x<<','<<l.position.y<<" has no fitting\n";}
+   check(!blackout&&fittings,"Pharmacy: no dark zone, creature, blackout lamp or blackout script; every bare lamp has its fitting");
+   const int staff=doorAt(g,7.6f,8.5f,8.9f),office=doorAt(g,11.9f,12.8f,6.9f),gate=doorAt(g,3.6f,4.6f,3.5f);
+   check(w.doors().size()==3&&staff>=0&&gate>=0&&office>=0&&w.doors()[size_t(staff)].requireState==stateId("medf_staff_door")&&w.doors()[size_t(gate)].requireState==stateId("medf_cage_open")&&
+    locked(g,staff)&&locked(g,gate)&&!locked(g,office),"Pharmacy: three doors; the staff door and the cage gate start locked, the office does not");
+   int hatches=0;bool hold=true,window=false;for(const auto& b:w.breakables()){if(b.y1>=8.75f&&b.y2<=9.05f&&b.x1>=1.55f&&b.x2<=6.65f){++hatches;hold&=b.holds;}window|=b.holds&&b.x1>11.3f&&b.x2<11.7f&&b.y1>3.5f&&b.y2<3.6f;}
+   check(hatches>=2&&hold&&window,"Pharmacy: the hatch glass and the cold room window hold");
+   bool sweep=true;for(const auto& c:w.clutterSpawns())if(c.position.y<3.5f&&c.position.x>3.5f&&c.position.x<4.7f&&length(c.position-Vec2{3.6f,3.5f})<1.f){sweep=false;out<<"  74 prop in the gate's swing at "<<c.position.x<<','<<c.position.y<<'\n';}
+   check(sweep,"Pharmacy: nothing stands in the cage gate's swing");
+   auto text=[&](const char* title)->std::string{for(const auto& t:w.terminals())if(t.title&&std::string_view(t.title)==title)return std::string(t.line1)+" "+t.line2;return "";};
+   bool stale=false;for(const auto& t:w.terminals()){const std::string s=std::string(t.title)+" "+t.line1+" "+t.line2;stale|=s.find("22 BEDS")!=std::string::npos||s.find("BEDS 1-22")!=std::string::npos;}
+   const int note=terminalFor(g,stateId("medf_cage_keyed"));
+   check(text("COLD ROOM / HOLDING").find("BED 16")!=std::string::npos&&text("WARD C / NIGHT SEDATION / STANDING").find("BEDS 3-11")!=std::string::npos&&!stale&&
+    note>=0&&std::string(w.terminals()[size_t(note)].line1).find("E /")==std::string::npos,"Pharmacy: the cold room holds bed 16, the sedation board says beds 3-11, and the time-lock note names no key");
+   // The knock waits for the cold room door.
+   run(g,1);const int before=g.state("medf_knock");put(g,{11.5f,5.f},-12,-kPi*.5f);g.update({},1.f/60);g.update({},1.f/60);
+   check(before==0&&g.state("medf_knock")>0,"Pharmacy: the knocking starts at the cold room door, not before");
+   // Under the shutter: crouched, not standing.
+   check(g.hullFits({17.5f,10.9f},-12,Player::CrouchedHeight)&&!g.hullFits({17.5f,10.9f},-12,Player::StandingHeight)&&g.hullFits({17.5f,12.3f},-12,Player::StandingHeight)&&g.hullFits({17.5f,9.6f},-12,Player::StandingHeight),
+    "Pharmacy: the jammed goods-in shutter clears a crouch and stops a standing player");
+   InputState walk{};walk.forward=true;put(g,{17.5f,12.1f},-12,-kPi*.5f);for(int i=0;i<180;++i)g.update(walk,1.f/60);const float standingY=g.player().pos.y;
+   walk.crouch=true;put(g,{17.5f,12.1f},-12,-kPi*.5f);g.m_player.crouched=true;float crouchY=99;for(int i=0;i<360;++i){g.update(walk,1.f/60);crouchY=std::min(crouchY,g.player().pos.y);}
+   out<<"  74 shutter: standing stopped at y="<<standingY<<", crouched reached y="<<crouchY<<'\n';
+   check(standingY>11.f&&crouchY<10.3f,"Pharmacy: walking crouched under the shutter reaches goods in; walking upright does not");}
+  {Game g;fresh(g,74);const int staff=doorAt(g,7.6f,8.5f,8.9f);
+   put(g,{8.05f,9.8f},-12,-kPi*.5f);run(g,.5f);press(g);run(g,.5f);
+   const bool shut=locked(g,staff)&&g.world().doors()[size_t(staff)].open<.05f&&!g.state("medf_staff_door");
+   put(g,{8.2f,8.f},-12,kPi*.5f);run(g,.2f);
+   check(shut&&g.state("medf_staff_door")==1&&!locked(g,staff),"Pharmacy: the staff door will not open from the hall, and lets go from inside the dispensary");}
+  {Game g;fresh(g,74);const int gate=doorAt(g,3.6f,4.6f,3.5f),note=terminalFor(g,stateId("medf_cage_keyed"));
+   const bool keyed=approach(g,note,{0,1},true);const Vec2 spot=g.player().pos;const float spotZ=g.player().z,spotYaw=g.player().angle;
+   float start=-1,open=-1,slam=-1;bool early=false;
+   for(int frame=1;frame<=60*22;++frame){g.update({},1.f/60);const float t=frame/60.f;
+    if(start<0&&g.state("medf_cage_timer")>0)start=t;
+    if(open<0&&g.state("medf_cage_open"))open=t;else if(open<0&&!locked(g,gate))early=true;
+    if(slam<0&&g.state("medf_cage_slammed"))slam=t;}
+   out<<"  74 time lock: keyed="<<keyed<<" at "<<spot.x<<','<<spot.y<<" start_s="<<start<<" open_s="<<open<<" slam_s="<<slam<<" early="<<early<<'\n';
+   check(keyed&&start>0&&start<=.05f&&!early&&open>=19.f&&open<=19.75f&&!locked(g,gate),"Pharmacy: E at the cage pad starts the time lock; the gate holds for 19.6 s, then releases");
+   check(slam>=open+.7f&&slam<=open+1.f,"Pharmacy: the cold room door slams once, 0.8 s after the gate releases");
+   const int timer=g.state("medf_cage_timer"),slamTimer=g.state("medf_cage_slam");put(g,spot,spotZ,spotYaw);const bool again=g.nearbyTerminal()==note;press(g);int low=timer,slamLow=slamTimer;
+   for(int i=0;i<60;++i){g.update({},1.f/60);low=std::min(low,g.state("medf_cage_timer"));slamLow=std::min(slamLow,g.state("medf_cage_slam"));}
+   out<<"  74 rekey: timer "<<timer<<" -> low "<<low<<", slam "<<slamTimer<<" -> low "<<slamLow<<'\n';
+   check(again&&low>=timer&&slamLow>=slamTimer&&g.state("medf_cage_open")==1,"Pharmacy: keying the pad again replays nothing");}
+  // --- 75/76 Ward C: one blackout, on the ward's own circuit.
+  for(int level:{75,76}){Game g;fresh(g,level);const auto& w=g.world();const char* name=level==75?"Ward C north":"Ward C south";
+   int reds=0,beacons=0,stray=0,bare=0;
+   for(const auto& l:w.lights()){
+    if(l.enabledState==dark&&l.invert){bare+=l.mount==WorldLightMount::Bare&&l.prop<0;continue;}
+    if(l.enabledState==dark){++reds;stray+=!(l.mount==WorldLightMount::Wall&&l.kelvin<=1200);continue;}
+    if(l.enabledState==stateId("medw_dead_circuit")&&!l.invert)continue;
+    if(level==76&&!l.enabledState&&l.fitting==model::clinic_ceiling_lamp_1&&length(l.position-Vec2{20.6f,11.5f})<.05f){++beacons;continue;}
+    ++stray;out<<"  "<<level<<" lamp off the ward circuit at "<<l.position.x<<','<<l.position.y<<'\n';}
+   check(stray==0&&bare==0&&reds==(level==75?3:2)&&beacons==(level==76?1:0),(std::string(name)+": every lamp is on the ward circuit or a red emergency wall lamp; 76 keeps the one theatre beacon").c_str());
+   bool zone=false;for(const auto& z:w.darkZones())zone|=z.state==dark&&z.value==1&&!z.invert&&z.jamFlashlight&&z.x1<=0&&z.y1<=0&&z.x2>=24&&z.y2>=24;
+   check(zone,(std::string(name)+": a flashlight-jamming dark zone covers the whole map on med_blackout").c_str());
+   struct Wake{Vec2 at;const char* state;};
+   const std::vector<Wake> wakes=level==75?std::vector<Wake>{{{3.45f,9.65f},"medw_wake_n"},{{2.7f,14.85f},"med_blackout"},{{15.6f,15.47f},"med_blackout"}}:
+    std::vector<Wake>{{{8.4f,9.84f},"medw_wake_c"},{{13.7f,16.95f},"medw_wake_b"},{{16.1f,20.f},"med_blackout"},{{21.4f,11.6f},"medw_wake_d"}};
+   int transformed=0,matched=0;for(const auto& s:w.creatureSpawns()){transformed+=s.kind==CreatureKind::Transformed;for(const auto& k:wakes)matched+=s.kind==CreatureKind::Transformed&&length(s.position-k.at)<.1f&&s.wakeState==stateId(k.state);}
+   check(transformed==int(wakes.size())&&matched==int(wakes.size())&&int(w.creatureSpawns().size())==transformed,(std::string(name)+": its patients wait on their authored wake states").c_str());
+   bool setter=false;for(const auto& t:w.terminals())setter|=t.activateState==dark;
+   if(level==75){for(const auto& e:w.scriptEvents())setter|=setsState(e,dark,1);
+    const int sec1=doorAt(g,4.4f,5.3f,10.5f),sec2=doorAt(g,4.4f,5.3f,12.5f);
+    check(!setter&&sec1>=0&&sec2>=0&&w.doors()[size_t(sec1)].requireState==dark&&w.doors()[size_t(sec2)].requireState==dark&&locked(g,sec1)&&locked(g,sec2),"Ward C north: nothing here starts the blackout; the seclusion doors hold until it");}
+   else{int setters=0,starters=0;bool gated=true,inObs6=false,doors=false;
+    const int obs6=doorAt(g,6.1f,7.3f,19.1f),obs5=doorAt(g,14.5f,15.4f,19.1f),recovery=doorAt(g,20.f,21.2f,8.9f),mortuary=doorAt(g,11.4f,12.6f,19.1f);
+    for(const auto& e:w.scriptEvents()){
+     if(setsState(e,dark,1)){++setters;gated&=e.requireState==stateId("medw_fail_done")&&e.requireValue==1;doors=opensDoor(e,obs5)&&opensDoor(e,recovery)&&opensDoor(e,mortuary);}
+     if(setsState(e,stateId("medw_fail"),1)){++starters;inObs6=e.id==stateId("medw_blackout")&&e.x1>=6.09f&&e.x2<=9.71f&&e.y1>=20.49f&&e.y2<=22.91f&&e.x1<8.7f&&e.x2>8.7f&&e.y1<20.9f&&e.y2>20.9f&&
+      e.requireState==stateId("medw_dark_done")&&e.requireValue==0&&!e.actions.empty()&&e.actions[0].type==ScriptAction::Type::Checkpoint;}}
+    check(!setter&&setters==1&&gated&&starters==1&&inObs6&&doors,"Ward C south: the one blackout starts at OBS 6's bed with a checkpoint, and its fall opens OBS 5, recovery and the mortuary");
+    check(obs6>=0&&w.doors()[size_t(obs6)].open>.5f&&locked(g,obs5)&&locked(g,recovery)&&locked(g,mortuary)&&w.doors()[size_t(recovery)].requireState==dark&&w.doors()[size_t(mortuary)].requireState==dark&&
+     !opened(g,obs5)&&!opened(g,recovery)&&!opened(g,mortuary),"Ward C south: OBS 6 stands open; OBS 5, recovery and the mortuary are maglocked shut while the lights are up");
+    // Before the blackout no standing player gets into the theatre transfer bay or the mortuary corridor.
+    openDoors(g,false);auto reach=flood(g,{{{1.7f,17.f},-12.f},{{12.f,.6f},-12.f}});bool bay=false,morgue=false;
+    for(const auto& s:reach){bay|=s.p.x>17.3f&&s.p.y>9.1f&&s.p.y<13.9f;morgue|=s.p.y>19.3f&&s.p.x>10.1f&&s.p.x<13.9f;}
+    openDoors(g,true);auto all=flood(g,{{{1.7f,17.f},-12.f},{{12.f,.6f},-12.f}});bool bayOpen=false,morgueOpen=false;
+    for(const auto& s:all){bayOpen|=s.p.x>17.3f&&s.p.y>9.1f&&s.p.y<13.9f;morgueOpen|=s.p.y>19.3f&&s.p.x>10.1f&&s.p.x<13.9f;}
+    out<<"  76 reach lit="<<reach.size()<<" bay="<<bay<<" mortuary="<<morgue<<"; unlocked="<<all.size()<<" bay="<<bayOpen<<" mortuary="<<morgueOpen<<'\n';
+    check(reach.size()>2000&&!bay&&!morgue&&bayOpen&&morgueOpen,"Ward C south: with the lights up the transfer bay and the mortuary corridor are out of reach; unlocked, both are reached");}}
+  {Game g;fresh(g,75);put(g,{12.f,14.f},-12,kPi*.5f);
+   const int sec1=enemyNear(g,{3.45f,9.65f}),sec2=enemyNear(g,{2.7f,14.85f}),bay=enemyNear(g,{15.6f,15.47f});
+   run(g,2);const bool lit=g.darkness()<.01f&&!g.state("medw_wake_n")&&dormant(g,sec1)&&dormant(g,sec2)&&dormant(g,bay)&&on(g,{12.f,13.5f})&&off(g,{15.6f,6.02f});
+   g.setState(dark);run(g,.5f);
+   out<<"  75 dark: darkness="<<g.darkness()<<" wake_n="<<g.state("medw_wake_n")<<" lit_before="<<lit<<'\n';
+   check(lit&&g.darkness()>.99f&&g.state("medw_wake_n")==1&&awake(g,sec1)&&awake(g,sec2)&&awake(g,bay)&&off(g,{12.f,13.5f})&&on(g,{15.6f,6.02f})&&on(g,{16.98f,11.5f})&&on(g,{7.02f,19.7f})&&
+    !locked(g,doorAt(g,4.4f,5.3f,10.5f)),"Ward C north: lit, its patients sleep; dark, the tubes die, the reds burn, the ward is black and all three wake");}
+  {Game g;fresh(g,76);const int obs5=doorAt(g,14.5f,15.4f,19.1f),recovery=doorAt(g,20.f,21.2f,8.9f),mortuary=doorAt(g,11.4f,12.6f,19.1f);
+   const int bed4=enemyNear(g,{8.4f,9.84f}),bed12=enemyNear(g,{13.7f,16.95f}),her=enemyNear(g,{16.1f,20.f}),bay=enemyNear(g,{21.4f,11.6f});
+   const Vec2 bed{8.7f,20.9f};const bool fits=g.hullFits(bed,-12,Player::StandingHeight);put(g,bed,-12,kPi);
+   float black=-1,wakeB=-1;bool quiet=false,dead=false;
+   for(int frame=1;frame<=60*12;++frame){g.update({},1.f/60);const float t=frame/60.f;
+    if(black<0&&g.state(dark))black=t;if(wakeB<0&&g.state("medw_wake_b"))wakeB=t;
+    if(frame==150)quiet=!g.state(dark)&&on(g,{12.f,16.6f})&&g.darkness()<.01f&&dormant(g,bed4)&&dormant(g,bed12)&&dormant(g,her)&&dormant(g,bay)&&g.state("medw_dark_done")==1;
+    if(frame==240)dead=g.darkness()>.99f&&off(g,{12.f,16.6f})&&on(g,{9.6f,18.98f})&&on(g,{20.6f,11.5f})&&awake(g,her)&&dormant(g,bed4)&&dormant(g,bay)&&opened(g,obs5)&&opened(g,recovery)&&opened(g,mortuary);}
+   out<<"  76 blackout: fits="<<fits<<" lights_out_s="<<black<<" bed12_wakes_s="<<wakeB<<" quiet_at_2.5s="<<quiet<<" dark_at_4s="<<dead<<'\n';
+   check(fits&&quiet&&black>=2.5f&&black<=2.8f,"Ward C south: at OBS 6's bed the checkpoint is taken and the ward stays lit 2.6 s, its patients asleep");
+   check(dead,"Ward C south: then the tubes die and the ward is black, the reds and the theatre beacon burn, OBS 5 wakes, and the maglocks let go");
+   check(black>0&&wakeB>=black+6.7f&&wakeB<=black+7.2f&&awake(g,bed12),"Ward C south: bed 12 turns 7 s into the dark");
+   g.setState(dark,0);run(g,.6f);const bool back=on(g,{12.f,16.6f})&&g.darkness()<.05f&&opened(g,obs5)&&opened(g,recovery)&&opened(g,mortuary);
+   put(g,bed,-12,kPi);bool once=true;for(int i=0;i<240;++i){g.update({},1.f/60);once&=!g.state(dark);}
+   check(back&&once&&opened(g,recovery)&&opened(g,mortuary),"Ward C south: power restored, the lamps return, the released doors stay open, and the blackout never comes again");}
+  // --- 77 Surgery: the beacon. Its transfer can end the blackout and never start one.
+  {Game g;fresh(g,77);const auto& w=g.world();
+   const int transfer=terminalFor(g,stateId("medd_transfer_thrown")),release=terminalFor(g,stateId("med_morgue_release"));
+   bool starts=terminalFor(g,dark)>=0,ends=false;for(const auto& e:w.scriptEvents()){starts|=std::any_of(e.actions.begin(),e.actions.end(),[&](const ScriptAction& a){return a.type==ScriptAction::Type::SetState&&a.id==dark&&a.value!=0;});
+    ends|=e.requireState==stateId("medd_transfer_thrown")&&e.requireValue==1&&setsState(e,dark,0);}
+   check(transfer>=0&&!w.terminals()[size_t(transfer)].paper()&&w.terminals()[size_t(transfer)].requireState==dark&&!w.terminals()[size_t(transfer)].toggleState&&ends&&!starts&&w.darkZones().empty(),
+    "Surgery: the ward transfer is a control that needs the ward dead and can only end the blackout; no dark zone");
+   check(release>=0&&w.terminals()[size_t(release)].requireState==stateId("medd_ward_transfer")&&!w.doors().empty()&&std::fabs(w.doors()[0].left-21.4f)<.02f&&std::fabs(w.doors()[0].y-7.3f)<.02f&&
+    w.doors()[0].requireState==dark&&w.doors()[0].requireValue==0,"Surgery: the mortuary release needs the ward transfer, and the strongroom lock is on the ward board");
+   const bool litBefore=on(g,{3.f,11.5f},int(WorldLightMount::Ceiling))&&off(g,{3.f,11.5f},int(WorldLightMount::Bare))&&on(g,{3.4f,2.7f});
+   // Lit: the release console and the transfer refuse.
+   const bool consoleLit=approach(g,release,{0,1},true);run(g,.3f);const bool refusedRelease=!g.state("med_morgue_release");
+   const bool deskLit=approach(g,transfer,{0,1},true);run(g,.3f);const bool refusedTransfer=!g.state("medd_transfer_thrown")&&!g.state("medd_ward_transfer");
+   g.setState(dark);run(g,1);
+   bool panels=true;for(auto p:{Vec2{10.f,9.f},Vec2{15.3f,9.f},Vec2{10.f,14.f},Vec2{15.3f,14.f}})panels&=on(g,p);
+   const bool beacon=panels&&off(g,{3.f,11.5f},int(WorldLightMount::Ceiling))&&on(g,{3.f,11.5f},int(WorldLightMount::Bare))&&off(g,{3.4f,2.7f})&&on(g,{19.45f,12.2f})&&g.darkness()<.01f;
+   const bool armed=g.state("medd_ward_transfer")==1&&locked(g,0)&&g.world().doors()[0].open<.05f;
+   press(g);run(g,.5f);const bool restored=!g.state(dark)&&g.state("medd_power_back")==1&&!locked(g,0);
+   press(g);run(g,.3f);const bool stays=!g.state(dark);
+   const bool consoleNow=approach(g,release,{0,1},true);run(g,1);
+   out<<"  77 flow: lit_lamps="<<litBefore<<" console_lit="<<consoleLit<<" refused="<<refusedRelease<<" desk_lit="<<deskLit<<" refused="<<refusedTransfer<<" beacon="<<beacon<<" armed="<<armed
+      <<" restored="<<restored<<" stays="<<stays<<" console="<<consoleNow<<" release="<<g.state("med_morgue_release")<<" cue="<<g.state("medd_release_t")<<'\n';
+   check(litBefore&&beacon,"Surgery: in the blackout the theatre, office and generator lamps stay lit while the ward-board rooms go out");
+   check(consoleLit&&refusedRelease&&deskLit&&refusedTransfer,"Surgery: with the ward lit, neither the transfer nor the mortuary release does anything");
+   check(armed&&restored&&stays,"Surgery: in the dark the strongroom shuts; the transfer relights the ward, opens it, and cannot darken it again");
+   check(consoleNow&&g.state("med_morgue_release")==1&&g.state("medd_release_t")>0,"Surgery: after the transfer the strongroom console releases the mortuary door");}
+  // --- 78 Morgue: dark like the ward, its store darker, its way on behind the release.
+  {Game g;fresh(g,78);const auto& w=g.world();const StateId store=stateId("medd_morgue_dark");
+   check(!w.doors().empty()&&w.doors()[0].transfer&&std::fabs(w.doors()[0].left-10)<.02f&&std::fabs(w.doors()[0].right-14)<.02f&&w.doors()[0].requireState==stateId("med_morgue_release")&&locked(g,0)&&
+    off(g,{15.1f,22.8f})&&on(g,{14.55f,22.8f}),"Morgue: the quarantine door is locked on the mortuary release, its red lamp lit");
+   bool whole=false,inner=false;for(const auto& z:w.darkZones()){whole|=z.state==dark&&z.jamFlashlight&&z.x1<=0&&z.y1<=0&&z.x2>=24&&z.y2>=24;inner|=z.state==store&&z.jamFlashlight&&std::fabs(z.x1-1)<.01f&&std::fabs(z.y1-1)<.01f&&std::fabs(z.x2-9)<.01f&&std::fabs(z.y2-14.8f)<.01f;}
+   int mutants=0;for(const auto& s:w.creatureSpawns())mutants+=s.kind==CreatureKind::Mutant&&length(s.position-Vec2{5.55f,9.2f})<.05f&&s.wakeState==store;
+   bool pop=false,relight=false;for(const auto& e:w.scriptEvents()){pop|=setsState(e,stateId("medd_store_pop"),1)&&e.requireState==store&&e.requireValue==0;relight|=e.requireState==stateId("medd_power_back")&&e.requireValue==1&&setsState(e,store,0);}
+   check(whole&&inner&&mutants==1&&w.creatureSpawns().size()==1&&pop&&relight,"Morgue: a dark zone on the blackout and one on the store; subject 40 waits on the store's dark; the pop needs the store lit, power back relights it");
+   check(std::fabs(w.floorHeight(12,1.5f)+15)<.01f&&std::fabs(w.supportBelow(12,1.5f,-11.9f)+12)<.01f,"Morgue: the entry stands on the ward-level landing over the -15 floor");
+   g.setState(stateId("med_morgue_release"));run(g,.1f);
+   check(!locked(g,0)&&on(g,{15.1f,22.8f})&&off(g,{14.55f,22.8f}),"Morgue: the release unlocks the quarantine door and turns its lamp green");}
+  {Game g;fresh(g,78);const int forty=enemyNear(g,{5.55f,9.2f});put(g,{12.f,1.5f},-12,kPi*.5f);g.setState(dark);run(g,.5f);
+   int lit=0,warm=0;for(const auto& l:g.world().lights())if(g.lampSwitchedOn(l)){++lit;warm+=l.kelvin<=1200;}
+   out<<"  78 blackout: store_dark="<<g.state("medd_morgue_dark")<<" lit="<<lit<<" red="<<warm<<" darkness="<<g.darkness()<<'\n';
+   check(g.state("medd_morgue_dark")==1&&lit<=3&&warm==lit&&g.darkness()>.99f&&awake(g,forty),"Morgue: entered in the blackout it is black but for three reds, and subject 40 is up");}
+  {Game g;fresh(g,78);const int forty=enemyNear(g,{5.55f,9.2f});put(g,{12.f,1.5f},-12,kPi*.5f);run(g,1);
+   const bool calm=!g.state("medd_morgue_dark")&&dormant(g,forty)&&on(g,{6.f,4.f})&&on(g,{4.f,12.6f});
+   const Vec2 aisle{4.f,12.5f};const float z=g.groundHeight(aisle,-14.8f);const bool fits=g.hullFits(aisle,z,Player::StandingHeight);put(g,aisle,z,-kPi*.5f);run(g,1.5f);
+   const bool popped=g.state("medd_morgue_dark")==1&&off(g,{6.f,4.f})&&off(g,{4.f,8.4f})&&off(g,{4.f,12.6f})&&on(g,{3.f,5.8f})&&on(g,{5.f,16.9f})&&awake(g,forty)&&!g.state("medd_knock");
+   float left=0;for(int i=0;i<180;++i){g.update({},1.f/60);if(forty>=0)left=std::max(left,length(g.enemies()[size_t(forty)].pos-Vec2{5.55f,9.2f}));}
+   g.setState(stateId("medd_power_back"));run(g,.2f);
+   out<<"  78 store: calm="<<calm<<" fits="<<fits<<" at z="<<z<<" popped="<<popped<<" subject_40_moved="<<left<<" relit="<<!g.state("medd_morgue_dark")<<'\n';
+   check(calm&&fits&&popped,"Morgue: lit, the store waits; walking its west aisle blows its tubes, lights drawer 9's red and wakes subject 40");
+   check(left>1.f,"Morgue: once woken, subject 40 leaves his bay");
+   check(!g.state("medd_morgue_dark")&&on(g,{6.f,4.f})&&awake(g,forty),"Morgue: power back relights the store, and he stays up");}
+ }
  // Surface sets: every Surface value and structure finish 26-35 resolves to
  // loaded textures, SURFACE records parse, and invalid sets are rejected.
  {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-39 resolves to loaded textures");out<<report;
