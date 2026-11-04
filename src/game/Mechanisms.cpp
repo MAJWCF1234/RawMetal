@@ -187,6 +187,10 @@ void Game::updateMechanisms(float dt){
    world.setActorPose(i,pose);
   }
   if(pose.lookAtActor>=0&&dt>0){pose.yaw=old.yaw;world.setActorPose(i,pose);}
+  // Shot at (startleScriptedActors): a living person flinches where the keys have them.
+  if(StateId flinch=actorTrackState(track.timerState,i,"flinch_ms");humanActorVisual(track.visual)&&!(track.deadState&&state(track.deadState))&&state(flinch)>0){
+   const int left=state(flinch);pose.clip=3;pose.phase=std::clamp(1.f-float(left)/ScriptedFlinchMs,0.f,1.f);
+   if(dt>0)setState(flinch,std::max(0,left-int(std::round(dt*1000))));world.setActorPose(i,pose);}
   if(track.deadState&&state(track.deadState)){pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;pose.phase=1;pose.lookAtActor=-1;world.setActorPose(i,pose);}
   pose=friendlyAwareness(world,level,track,level,i,old,pose,dt);world.setActorPose(i,pose);
   if(dt>0&&level==m_level&&track.platform&&std::fabs(m_player.z-old.z)<.04f&&std::fabs(m_player.pos.x-old.position.x)<track.footprint.x*.5f&&std::fabs(m_player.pos.y-old.position.y)<track.footprint.y*.5f){

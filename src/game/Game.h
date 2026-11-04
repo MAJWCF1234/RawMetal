@@ -855,6 +855,8 @@ private:
     void shoot();
     ShotHit traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc=-1,bool includePlayer=false,const HitscanDef* assist=nullptr,AiTargetRef ignoredEntity={})const;
     void resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& definition,bool playerFired,float damageOverride=0,AiTargetRef attacker={});
+    static constexpr int ScriptedFlinchMs=450;
+    void startleScriptedActors(const ShotHit& hit,Point3 origin,Point3 direction);
     void reloadWeapon();
     void punchImpact();
     void applyPunchHit(Enemy& enemy);

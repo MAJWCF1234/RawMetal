@@ -43,7 +43,7 @@ void perDesk(Map& m,float x,float y,float f,float face,int variant){
  Vec2 p{x,y},d{std::sin(face),std::cos(face)},s{std::cos(face),-std::sin(face)};
  auto at=[&](float u,float v){return p+s*u+d*v;};
  const float b=f-m.layers.front().elevation;
- m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face,true});
+ m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face+kPi,true});
  m.fixtures.push_back({model::office_chair,at(variant%2?.15f:-.1f,-.78f),b,.55f,.55f,.95f,face+kPi+(variant%3-1)*.25f,true});
  kit::prop(m,model::crt_monitor,(at(-.1f,.12f)).x,(at(-.1f,.12f)).y,m.layers.front().elevation+(b+.75f),.42f,.4f,.38f,face+kPi);
  kit::prop(m,model::keyboard,(at(-.1f,-.2f)).x,(at(-.1f,-.2f)).y,m.layers.front().elevation+(b+.75f),.45f,.16f,.03f,face+kPi);
@@ -313,7 +313,7 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  for(auto seg:{std::tuple{3.f,1.85f,7.f,1.9f},std::tuple{3.f,2.22f,6.2f,2.27f},std::tuple{4.9f,1.72f,4.95f,2.4f},std::tuple{6.2f,1.85f,6.25f,2.27f}})
   {auto [x1,z1,x2,z2]=seg;wall(m,x1,7.46f,x2,7.47f,f+z1,f+z2,14);}
  for(float x:{3.4f,4.4f,5.6f,6.6f})wall(m,x,7.46f,x+.08f,7.48f,f+2.02f,f+2.1f,x<5?19:18);
- for(float x:{3.6f,5.f,6.4f})perWallFix(m,model::lab_control_board,x,7.455f,f+.9f,1.32f,.19f,.6f,kPi);
+ for(float x:{3.6f,5.f,6.4f})perWallFix(m,model::lab_control_board,x,7.455f,f+.9f,1.32f,.19f,.6f,0);
  perDesk(m,5.f,9.4f,f,kPi,2);
  terminal(m,{6.6f,13.9f},"PERIMETER OPS / SHIFT LOG","02:51 DELTA-2 HAS THE YARD. OPS STAFF STOOD DOWN.","03:05 GATE RELEASE LOCKED TO THE GATEHOUSE / EAST.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=kPi;
@@ -348,8 +348,8 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  terminal(m,{19.6f,13.f},"BADGE SYSTEM / REVOCATION RUN","02:40 ALL SUB-LEVEL BADGES VOID: 212 HOLDERS.","READERS LOCKED. MANUAL OVERRIDES ONLY.");
  m.terminals.back().yaw=kPi;
  for(float x:{21.3f,22.f})perFix(m,model::file_cabinet_tall,x,7.7f,f,.5f,.6f,1.3f,0,true);
- perWallFix(m,model::lab_notice_board,17.6f,13.93f,f+.95f,1.2f,.07f,.9f,0);
- perWallFix(m,model::lab_wall_clock,20.f,7.4f,f+2.25f,.4f,.03f,.4f,kPi);
+ perWallFix(m,model::lab_notice_board,17.6f,13.93f,f+.95f,1.2f,.07f,.9f,kPi);
+ perWallFix(m,model::lab_wall_clock,20.f,7.4f,f+2.25f,.4f,.03f,.4f,0);
  m.lights.push_back(perTroffer({17.5f,9.5f},ceil,.9f));m.lights.push_back(perTroffer({20.5f,11.8f},ceil,.85f));
 
  // --- Perimeter security ready room: the rifles are gone -------------------------------------------
@@ -362,12 +362,12 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  wall(m,15.f,22.6f,18.6f,22.95f,f,f+.1f,12);wall(m,15.f,22.85f,18.6f,22.95f,f+.1f,f+1.7f,12);wall(m,15.f,22.6f,18.6f,22.95f,f+1.1f,f+1.16f,12);
  for(float x=15.3f;x<18.5f;x+=.42f)wall(m,x,22.62f,x+.06f,22.85f,f+.1f,f+.22f,8);
  m.fixtures.push_back({model::wooden_table,{17.6f,18.4f},0,1.367f,.724f,.78f,0,true});
- for(float x:{17.1f,18.1f}){m.fixtures.push_back({model::wooden_chair,{x,17.6f},0,.417f,.525f,.95f,0,true});m.fixtures.push_back({model::wooden_chair,{x,19.2f},0,.417f,.525f,.95f,kPi,true});}
+ for(float x:{17.1f,18.1f}){m.fixtures.push_back({model::wooden_chair,{x,17.6f},0,.417f,.525f,.95f,kPi,true});m.fixtures.push_back({model::wooden_chair,{x,19.2f},0,.417f,.525f,.95f,0,true});}
  kit::prop(m,model::mug,17.3f,18.3f,f+.78f,.09f,.09f,.1f,0);
  kit::prop(m,model::binder,17.9f,18.5f,f+.78f,.3f,.08f,.32f,.4f);
  terminal(m,{16.2f,15.f},"PERIMETER / DUTY BOARD","ORDER 7 IN EFFECT: NO STAFF PAST DELTA. NO EXCEPTIONS.","WRITTEN UNDER IT IN PEN: WHO SIGNED THIS?");m.terminals.back().readable=Readable::Letter;
  m.terminals.back().yaw=0;
- perWallFix(m,model::lab_notice_board,18.4f,14.27f,f+.95f,1.2f,.07f,.9f,kPi);
+ perWallFix(m,model::lab_notice_board,18.4f,14.27f,f+.95f,1.2f,.07f,.9f,0);
  perFix(m,model::coffee_machine,15.f,21.4f,f+.8f,.35f,.35f,.45f,kPi*.5f,false);
  wall(m,14.6f,20.8f,15.4f,22.1f,f,f+.8f,21);wall(m,14.6f,20.75f,15.45f,22.15f,f+.8f,f+.84f,20);
  perFix(m,model::water_cooler,15.f,19.9f,f,.35f,.35f,1.1f,0,true);
@@ -378,8 +378,8 @@ std::shared_ptr<const Map> makeOperationsCorridor(){
  m.fixtures.push_back({model::bench,{9.85f,20.3f},0,1.86f,.44f,.63f,kPi*.5f,true});
  for(Vec2 pt:{Vec2{10.f,7.75f},Vec2{14.f,15.f}})m.fixtures.push_back({model::lab_potted_plant,pt,0,.37f,.43f,.69f,0,false});
  perWallFix(m,model::pwr_fire_cabinet,14.3f,20.6f,f+1.1f,.25f,.2f,.56f,-kPi*.5f);
- perWallFix(m,model::lab_wall_clock,9.62f,15.8f,f+2.3f,.4f,.03f,.4f,-kPi*.5f);
- perWallFix(m,model::lab_pa_horn,14.12f,15.f,f+2.7f,.49f,.56f,.43f,kPi*.5f);
+ perWallFix(m,model::lab_wall_clock,9.62f,15.8f,f+2.3f,.4f,.03f,.4f,kPi*.5f);
+ perWallFix(m,model::lab_pa_horn,14.12f,15.f,f+2.7f,.49f,.56f,.43f,-kPi*.5f);
  perWallFix(m,model::lab_id_scanner,9.63f,14.95f,f+1.1f,.3f,.06f,.41f,-kPi*.5f);
  perWallFix(m,model::lab_id_scanner,14.37f,14.9f,f+1.1f,.3f,.06f,.41f,kPi*.5f);
  // The yard shutter, jammed at knee height: crouch under it.
@@ -642,7 +642,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterGatehouse(){
  perFix(m,model::ind_crate,11.6f,21.9f,f+.32f,.8f,.8f,.8f,.3f,true);
  // --- Gate desk and the CCTV wall --------------------------------------------------------------
  wall(m,10.2f,12.65f,15.6f,12.82f,f,f+2.1f,2);
- for(float x:{11.f,12.6f,14.2f}){perFix(m,model::file_cabinet_wide,x,13.2f,f,.9f,.6f,.75f,0,true);perFix(m,model::cctv_tv,x,13.2f,f+.75f,.6f,.45f,.5f,kPi,false);}
+ for(float x:{11.f,12.6f,14.2f}){perFix(m,model::file_cabinet_wide,x,13.2f,f,.9f,.6f,.75f,0,true);perFix(m,model::cctv_tv,x,13.2f,f+.75f,.6f,.45f,.5f,0,false);}
  perSign(m,12.f,12.638f,f+1.45f,"PERIMETER GATE / RELEASE","SOUTH GATE / CHECKPOINT DELTA",1.45f,kPi,perAmber);
  terminal(m,{12.f,12.f},"PERIMETER GATE / RELEASE","E / RELEASE THE YARD'S SOUTH GATE TO CHECKPOINT DELTA.","DELTA IS THROUGH THE SOUTH GATE, BACK ACROSS THE YARD.",0,stateId("perim_gate"));
  m.terminals.back().yaw=kPi;

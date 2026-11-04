@@ -243,7 +243,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  terminal(m,{22.3f,4.4f},"TREATMENT / SHIFT LOG","02:51 PRYOR TO TOWER 2 TO RESET THE RECIRC PUMPS.","03:20 NO RADIO FROM PRYOR. NOT SENDING ANYONE ELSE.",G-F);m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=-kPi*.5f;
  for(float y:{1.8f,2.75f})m.fixtures.push_back({model::electrical_cabinet,{22.75f,y},G-F,.9066f,.4956f,2.2f,kPi*.5f,true});
- m.fixtures.push_back({model::lab_pa_horn,{14.6f,1.36f},G-F+2.05f,.49f,.56f,.43f,kPi,false});
+ m.fixtures.push_back({model::lab_pa_horn,{14.6f,1.36f},G-F+2.05f,.49f,.56f,.43f,0,false});
  shelf(m,{15.2f,5.5f},0,G-F);
  for(Vec2 b:{Vec2{14.8f,5.45f},Vec2{15.5f,5.45f}})kit::prop(m,model::binder,(b).x,(b).y,m.layers.front().elevation+(G-F+.972f),.3f,.08f,.32f,0);
  // Under the control room: the treatment MCC, still on the plant supply.
@@ -311,8 +311,8 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  m.fixtures.push_back({model::lab_clean_bench,{3.65f,22.42f},0,1.18f,.56f,.81f,0,true});
  kit::prop(m,model::lab_microscope,2.25f,22.45f,m.layers.front().elevation+(.81f),.18f,.22f,.29f,0);
  kit::prop(m,model::lab_field_meter,3.45f,22.45f,m.layers.front().elevation+(.81f),.25f,.33f,.15f,0);
- m.fixtures.push_back({model::lab_sample_fridge,{4.9f,22.55f},0,.7f,.85f,1.f,0,true});
- m.fixtures.push_back({model::med_scrub_sink,{6.3f,22.7f},0,.49f,.54f,1.13f,0,true});
+ m.fixtures.push_back({model::lab_sample_fridge,{4.9f,22.55f},0,.7f,.85f,1.f,kPi,true});
+ m.fixtures.push_back({model::med_scrub_sink,{6.3f,22.7f},0,.49f,.54f,1.13f,kPi,true});
  shelf(m,{1.27f,21.6f},-kPi*.5f,0);
  for(float y:{21.1f,21.6f,22.1f})kit::prop(m,model::med_specimen_jar,1.3f,y,m.layers.front().elevation+(.972f),.15f,.15f,.24f,0);
  terminal(m,{5.5f,20.2f},"WATER LAB / CONDUCTIVITY","TOWER 2 BASIN 03:02: 9999 US/CM. METER LIMIT.","NO DOSING SINCE 01:40. MANUAL NOTE: IT IS NOT THE SALT.");
@@ -518,7 +518,7 @@ std::shared_ptr<const Map> makeSumpWorks(){
  terminal(m,{6.f,3.2f},"SUMP WORKS / DUTY PUMP LOG","P-2 STARTED 02:40. NO START COMMAND. P-2 STOPPED 02:41. NO STOP COMMAND.","P-2 STARTED 02:52. NOBODY IS LOGGED IN DOWN HERE.",G-F);
  m.terminals.back().yaw=.001f;
  for(float x:{2.f,2.95f})m.fixtures.push_back({model::electrical_cabinet,{x,1.27f},G-F,.9066f,.4956f,2.2f,kPi,true});
- m.fixtures.push_back({model::pwr_tall_switch_cabinet,{13.5f,1.6f},G-F,.95f*.85f,1.54f*.85f,3.02f*.85f,kPi*.5f,true});
+ m.fixtures.push_back({model::pwr_tall_switch_cabinet,{13.5f,1.6f},G-F,.95f*.85f,1.54f*.85f,3.02f*.85f,-kPi*.5f,true});
  cableTray(m,{1.6f,1.3f},{12.6f,1.3f},G+2.75f);
  for(Vec2 d:{Vec2{20.6f,2.f},Vec2{21.4f,2.f},Vec2{21.f,2.75f}})m.fixtures.push_back({model::drum,d,G-F,.6f,.6f,.86f,0,true});
  // Overhead crane runway along both side walls, the bridge parked north.
@@ -931,7 +931,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  // The bank that stood here had its doors a hand's breadth off the south wall;
  // the locker turns round, back to that wall, to open into the vestibule.
  m.fixtures.push_back({model::psx_locker,{1.45f,9.665f},0,.64f,.85f,2.42f,kPi*.5f,true});
- m.fixtures.push_back({model::pwr_fire_cabinet,{4.88f,7.17f},1.1f,.25f,.2f,.56f,kPi*.5f,false});
+ m.fixtures.push_back({model::pwr_fire_cabinet,{4.88f,7.17f},1.1f,.25f,.2f,.56f,-kPi*.5f,false});
  m.fixtures.push_back({model::lab_wall_clock,{3.9f,5.05f},2.05f,.4f,.03f,.4f,0,false});
  // --- Exchanger rows ----------------------------------------------------------------------
  const float axis=F+1.75f,r=1.2f,hotA=-14.f,coldA=-13.3f;
@@ -966,7 +966,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  watGasket(m,16.35f,8.2f+r,1,11.55f,axis,0.f);
  watGasket(m,8.45f,12.8f-r,-1,9.45f,axis,3.f);
  // --- The north service strip and the pump bay -----------------------------------------
- for(float x:{8.f,16.f})m.fixtures.push_back({model::lab_pressure_gauge,{x,1.06f},1.4f,.29f,.11f,.41f,kPi,false});
+ for(float x:{8.f,16.f})m.fixtures.push_back({model::lab_pressure_gauge,{x,1.06f},1.4f,.29f,.11f,.41f,0,false});
  cableTray(m,{5.2f,1.25f},{20.4f,1.25f},F+3.4f);
  for(float y:{1.95f,3.75f}){P3 t=pumpSkid(m,{21.65f,y},F,0,-14.6f);(void)t;}
  pipeRoute(m,{{21.4f,1.95f,-14.6f},{21.4f,3.75f,-14.6f},{23.f,3.75f,-14.6f}},.11f,3,R);

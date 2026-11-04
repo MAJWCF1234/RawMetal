@@ -877,6 +877,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      std::ofstream out("map-dump-"+std::to_string(level)+".txt");
      for(const auto& s:w.structures())out<<"S "<<s.x1<<' '<<s.y1<<' '<<s.x2<<' '<<s.y2<<" z "<<s.bottom<<' '<<s.top<<" rail "<<s.rail<<" mat "<<s.material<<'\n';
      for(const auto& f:w.fixtures())out<<"F "<<f.model<<" at "<<f.position.x<<' '<<f.position.y<<" base "<<f.base<<" size "<<f.width<<' '<<f.depth<<' '<<f.height<<" yaw "<<f.yaw<<" solid "<<f.solid<<'\n';
+     // Model props: z is absolute, yaw turns the other way to a fixture's.
+     for(const auto& c:game.clutter())if(c.model>=0)out<<"C "<<c.model<<" at "<<c.pos.x<<' '<<c.pos.y<<" z "<<c.z<<" size "<<c.dims[0]<<' '<<c.dims[1]<<' '<<c.dims[2]<<" yaw "<<c.yaw<<" tilt "<<c.pitch<<' '<<c.roll<<'\n';
      for(const auto& l:w.lights())out<<"L "<<l.position.x<<' '<<l.position.y<<" z "<<l.z<<" mount "<<int(l.mount)<<" yaw "<<l.yaw<<'\n';
      for(const auto& p:w.pipes())out<<"P "<<p.start.x<<' '<<p.start.y<<" -> "<<p.end.x<<' '<<p.end.y<<" z "<<p.z<<" r "<<p.radius<<" endZ "<<p.endZ<<'\n';
      for(const auto& d:w.doors())out<<"D "<<d.left<<'-'<<d.right<<" y "<<d.y<<" z "<<d.z<<" transfer "<<d.transfer<<" entry "<<d.entry<<" swing "<<d.swinging<<'\n';

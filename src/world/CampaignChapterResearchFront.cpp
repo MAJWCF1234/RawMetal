@@ -51,7 +51,7 @@ void rfDesk(Map& m,float x,float y,float f,float face,int variant){
  Vec2 p{x,y},d{std::sin(face),std::cos(face)},s{std::cos(face),-std::sin(face)};
  auto at=[&](float u,float v){return p+s*u+d*v;};
  const float b=f-m.layers.front().elevation;
- m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face,true});
+ m.fixtures.push_back({model::desk,p,b,1.4f,.7f,.75f,face+kPi,true});
  {auto p=at(variant%2?.15f:-.1f,-.78f);kit::prop(m,model::office_chair,p.x,p.y,f,.55f,.55f,.95f,face+kPi+(variant%3-1)*.25f);}
  kit::prop(m,model::crt_monitor,(at(-.1f,.12f)).x,(at(-.1f,.12f)).y,m.layers.front().elevation+(b+.75f),.42f,.4f,.38f,face+kPi);
  kit::prop(m,model::keyboard,(at(-.1f,-.2f)).x,(at(-.1f,-.2f)).y,m.layers.front().elevation+(b+.75f),.45f,.16f,.03f,face+kPi);
@@ -180,9 +180,9 @@ std::shared_ptr<const Map> makeResearchIntake(){
  wall(m,10.5f,3.15f,13.5f,4.45f,f+2.65f,roof,panel);
  m.doors.push_back({10.5f,13.5f,3.8f,0});                                 // 1: the inner interlock leaf
  floorLine(m,9.f,1.2f,15.f,1.32f,f,13);floorLine(m,9.f,2.95f,15.f,3.07f,f,13);
- rfFix(m,model::lab_id_scanner,10.22f,3.12f,f+1.f,.3f,.06f,.41f,rfS,false);   // lab models face -y: yaw = facing + kPi
+ rfFix(m,model::lab_id_scanner,9.65f,3.12f,f+1.f,.3f,.06f,.41f,rfS,false);   // lab models face -y: yaw = facing + kPi
  rfFix(m,model::lab_status_display,12.f,3.121f,f+2.72f,.693f,.058f,.2f,rfS,false);
- rfFix(m,model::lab_pa_horn,14.918f,2.1f,f+2.45f,.495f,.564f,.433f,rfE,false);
+ rfFix(m,model::lab_pa_horn,14.918f,2.1f,f+2.45f,.495f,.564f,.433f,rfW,false);
  extinguisher(m,15.2f,2.88f,f,rfW);
  m.lights.push_back(lamp({12.f,2.1f},roof-.16f,.8f,5.f,6400,.03f));
  {auto l=lamp({12.f,3.03f},f+2.82f,.18f,1.5f,1100,-.45f,WorldLightMount::Bare);l.period=2;l.onTime=1;m.lights.push_back(l);}   // the cycle pilot
@@ -202,7 +202,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  rfFix(m,model::lab_id_scanner,13.43f,6.05f,f+1.f,.3f,.06f,.41f,rfW,false);
  for(float x:{9.8f,14.2f})rfFix(m,model::lab_status_display,x,5.771f,f+2.62f,.693f,.058f,.2f,rfS,false);
  rfSign(m,12.f,5.8f,f+2.6f,"SCREENING SUSPENDED","BY ORDER OF INTERNAL INVESTIGATIONS",3.2f,kPi,rfRed);
- rfFix(m,model::lab_wall_clock,9.9f,7.416f,f+2.75f,.402f,.032f,.4f,rfN,false);
+ rfFix(m,model::lab_wall_clock,9.9f,7.416f,f+2.75f,.402f,.032f,.4f,rfS,false);
  // Lane 1 keeps the staff gate; lane 3 the Investigator closed; lane 2 is the way, painted and lit.
  rfFix(m,model::ticket_gate,9.3f,6.6f,f,.4f,1.42f,1.09f,0,true);
  crewBarrier(m,14.2f,5.72f,f,1.4f);
@@ -223,8 +223,8 @@ std::shared_ptr<const Map> makeResearchIntake(){
  wall(m,4.6f,1.f,6.4f,1.42f,f+1.5f,f+1.54f,12);
  for(float x:{4.72f,6.28f})wall(m,x-.02f,1.f,x+.02f,1.38f,f+1.3f,f+1.5f,12);
  for(float x:{4.95f,5.5f,6.05f})kit::prop(m,model::cctv_tv,x,1.21f,f+1.54f,.5f,.4f,.42f,rfS);
- rfFix(m,model::lab_control_board,7.6f,1.094f,f+1.f,1.32f,.187f,.6f,rfN,false);
- rfFix(m,model::lab_wall_clock,7.6f,1.016f,f+2.1f,.402f,.032f,.4f,rfN,false);
+ rfFix(m,model::lab_control_board,7.6f,1.094f,f+1.f,1.32f,.187f,.6f,rfS,false);
+ rfFix(m,model::lab_wall_clock,7.6f,1.016f,f+2.1f,.402f,.032f,.4f,rfS,false);
  taped(m,{6.67f,1.f},f+1.25f,rfS,Readable::Note,"II / CCTV","ALL TAPES 01:50-03:40 TO THE INVESTIGATOR.","TAKEN 03:52. NO COPIES.");
  // The PA desk: one call to the holding room speaker.
  terminal(m,{4.1f,1.4f},"INTAKE PA / PAGE HOLDING","ONE CALL TO THE HOLDING ROOM SPEAKER.","LAST PAGE 02:30: TIER 2 TO SCREENING.",0,stateId("rf_intake_page"));m.terminals.back().yaw=rfS;
@@ -274,7 +274,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  for(auto [x,y,yaw]:{std::tuple{4.6f,9.55f,.9f},{4.15f,10.3f,2.4f},{5.2f,10.f,.3f},{4.7f,10.65f,1.9f},{3.75f,9.6f,1.2f},{5.35f,9.65f,2.8f}})
   kit::prop(m,model::item_dosimeter,x,y,f,.31f,.146f,.066f,yaw);
  taped(m,{3.5f,6.6f},f+1.5f,rfS,Readable::Note,"HOLDING / 01:58","HELD: 41. RELEASED: 0. BANDS TAKEN AT THE DOOR.","02:30 TIER 2 WALKED TO SCREENING. REST TO FOLLOW.");
- rfFix(m,model::lab_pa_horn,3.282f,7.3f,f+2.5f,.495f,.564f,.433f,rfW,false);
+ rfFix(m,model::lab_pa_horn,3.282f,7.3f,f+2.5f,.495f,.564f,.433f,rfE,false);
  rfFix(m,model::med_first_aid_box,3.06f,11.f,f+1.3f,.367f,.12f,.349f,rfE,false);
  m.lights.push_back(lamp({3.f,9.9f},f+2.3f,.5f,4.f,2700,0,WorldLightMount::Wall,0));
  // The store: what was taken from the 41, held for the Investigator.
@@ -384,8 +384,8 @@ std::shared_ptr<const Map> makeResearchIntake(){
  rfFix(m,model::lab_photocopier,18.8f,1.4f,f,.826f,.752f,.967f,rfN,true);
  rfFix(m,model::lab_notice_board,19.6f,1.035f,f+.95f,1.2f,.07f,.9f,rfS,false);   // the shift rota, pinned up
  // The band printer, and the cage of bands nobody was issued.
- rfFix(m,model::desk,21.1f,1.35f,f,1.4f,.7f,.75f,rfN,true);
- rfFix(m,model::lab_instrument_terminal,21.1f,1.3f,f+.75f,.918f,.468f,.684f,rfN,false);
+ rfFix(m,model::desk,21.1f,1.35f,f,1.4f,.7f,.75f,rfS,true);
+ rfFix(m,model::lab_instrument_terminal,21.1f,1.3f,f+.75f,.918f,.468f,.684f,rfS,false);
  rfFix(m,model::stock_cage,22.5f,3.f,f,2.4f,1.f,1.1f,rfW,true);
  kit::prop(m,model::prop_cardboard_box,22.5f,2.4f,f+1.1f,.727f,.72f,.367f,.2f);
  for(auto [y,yaw]:{std::pair{3.25f,.1f},{3.45f,-.2f},{3.7f,.15f}})kit::prop(m,model::item_dosimeter,22.45f,y,f+1.1f,.31f,.146f,.066f,yaw);
@@ -588,9 +588,9 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  // Walk in from Intake and the axis runs straight through the gates to the red door.
  m.lights.push_back(lamp({12.f,2.4f},roof-.16f,.75f,5.f,6000,.04f));
  rfFix(m,model::pwr_fire_cabinet,10.f+.1f,2.6f,f+1.3f,.25f,.2f,.56f,rfE,false);
- rfFix(m,model::lab_wall_clock,12.f,4.036f,f+2.78f,.402f,.032f,.4f,rfN,false);
+ rfFix(m,model::lab_wall_clock,12.f,4.036f,f+2.78f,.402f,.032f,.4f,rfS,false);
  for(float y:{4.4f,13.6f})floorLine(m,10.6f,y,13.4f,y+.1f,f,13);
- rfFix(m,model::lab_pa_horn,8.882f,4.7f,f+2.55f,.495f,.564f,.433f,rfW,false);
+ rfFix(m,model::lab_pa_horn,8.882f,4.7f,f+2.55f,.495f,.564f,.433f,rfE,false);
  kit::prop(m,model::trash_can,9.f,4.4f,f,.5f,.5f,.62f,.3f);
  rfFix(m,model::water_cooler,15.1f,4.35f,f,.35f,.35f,1.1f,0,true);
  // Benches either side under the notices: where the shift waited for its call.
@@ -625,7 +625,7 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  for(auto [y,yaw]:{std::pair{15.95f,.1f},{16.5f,-.2f},{17.7f,.3f}})kit::prop(m,model::item_dosimeter,14.25f,y,f+.99f,.31f,.146f,.066f,kPi*.5f+yaw);
  kit::prop(m,model::item_id_card,14.22f,17.1f,f+.99f,.132f,.085f,.002f,.4f);
  floorLine(m,11.95f,14.9f,12.05f,21.7f,f,14);
- rfFix(m,model::lab_pa_horn,9.882f,15.3f,f+2.5f,.495f,.564f,.433f,rfW,false);
+ rfFix(m,model::lab_pa_horn,9.882f,15.3f,f+2.5f,.495f,.564f,.433f,rfE,false);
  extinguisher(m,9.6f,16.5f,f,rfE);
  kit::prop(m,model::trash_can,10.f,21.4f,f,.5f,.5f,.62f,.7f);
  kit::prop(m,model::item_dosimeter,11.2f,19.6f,f,.31f,.146f,.066f,2.3f);
@@ -694,7 +694,7 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  // Where staff waited to be called to the clearance desk.
  for(float x:{4.2f,6.3f})rfFix(m,model::platform_chair,x,9.27f,f,1.8f,.5f,.8f,kPi,true);
  for(float x:{2.9f,7.4f})rfFix(m,model::platform_chair,x,13.73f,f,1.8f,.5f,.8f,0,true);
- rfFix(m,model::lab_wall_clock,5.25f,9.016f,f+2.1f,.402f,.032f,.4f,rfN,false);
+ rfFix(m,model::lab_wall_clock,5.25f,9.016f,f+2.1f,.402f,.032f,.4f,rfS,false);
  kit::prop(m,model::lab_potted_plant,1.5f,9.5f,f,.37f,.43f,.69f,0);
  kit::prop(m,model::trash_can,1.5f,13.6f,f,.5f,.5f,.62f,0);
  for(auto [x,y,yaw]:{std::tuple{3.4f,11.3f,1.f},{6.6f,12.2f,2.5f}})kit::prop(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
@@ -853,13 +853,14 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  wall(m,11.8f,1.f,12.f,8.f,f,dz,panel);
  wall(m,11.8f,8.f,12.f,10.f,f+2.7f,roof,panel);wall(m,11.78f,8.f,12.02f,10.f,f+2.66f,f+2.7f,steel);
  wall(m,11.8f,10.f,12.f,10.6f,f,roof,panel);
- // The records glass, and the enquiry hatch in it: two bays open behind steel bars, over a counter.
+ // The records glass, and the enquiry hatch in it: two bays of steel bars over a counter,
+ // glazed on the atrium side with the same protective glass, so a shot cracks it and stops.
  rfGlass(m,11.8f,10.6f,12.f,11.4f,f,roof,panel,.95f,2.4f,true);rfGlass(m,11.8f,13.8f,12.f,15.8f,f,roof,panel,.95f,2.4f,true);
  wall(m,11.8f,11.4f,12.f,13.8f,f,f+1.f,panel);wall(m,11.5f,11.4f,12.3f,13.8f,f+1.f,f+1.05f,12);
  wall(m,11.8f,11.4f,12.f,13.8f,f+2.05f,roof,panel);wall(m,11.78f,11.4f,12.02f,13.8f,f+2.01f,f+2.05f,steel);
  wall(m,11.8f,12.575f,12.f,12.625f,f+1.05f,f+2.01f,steel);
  for(float y=11.5f;y<13.75f;y+=.1f)if(std::fabs(y-12.6f)>.06f)wall(m,11.89f,y-.01f,11.91f,y+.01f,f+1.05f,f+2.01f,steel);
- wall(m,11.8f,11.4f,12.f,13.8f,f+1.05f,f+2.01f,CollisionProxyMaterial);
+ kit::glazingPanes(m,11.95f,11.4f,11.97f,13.8f,f+1.05f,f+2.01f,17,true);
  wall(m,11.8f,15.8f,12.f,19.f,f,roof,panel);
  // Upstairs: the suite's door off the gallery and its window over the atrium; the director's door.
  wall(m,11.8f,1.f,12.f,1.6f,dz,roof,panel);rfiDoorY(m,1.6f,2.8f,11.8f,12.f,dz,roof,panel);wall(m,11.8f,2.8f,12.f,5.f,dz,roof,panel);
@@ -1049,6 +1050,9 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  paperDrift(m,5.2f,11.2f,9.2f,18.6f,f,10,702);
  // Lit for the glass: what happens in here must read from the atrium.
  for(Vec2 l:{Vec2{7.6f,12.f},Vec2{10.f,13.2f},Vec2{7.6f,16.8f},Vec2{4.f,14.4f}})m.lights.push_back(lamp(l,f+2.7f,1.6f,7.f,4300,.06f));
+ // His black coat goes dark against the cabinets under plain overheads: two cool
+ // lights inside the glass catch the side of him the atrium sees, at the drawers and the table.
+ for(Vec2 l:{Vec2{9.3f,12.1f},Vec2{10.7f,14.6f}})m.lights.push_back(lamp(l,f+2.7f,1.1f,4.f,5200,.04f));
  m.lights.push_back(lamp({10.32f,17.9f},f+1.15f,.6f,3.f,2800,.15f,WorldLightMount::Bare));   // under the desk lamp's shade
  // The lift lobby behind the far door: service lift 2, the way he came in at 03:40.
  for(float x:{5.8f,6.8f})wall(m,x+.01f,22.88f,x+.99f,23.f,f,f+2.2f,steel);
@@ -1080,7 +1084,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  kit::prop(m,model::lab_potted_plant,9.25f,7.35f,cu,.37f,.43f,.69f,0);
  m.lights.push_back(lamp({10.3f,4.4f},roof-.2f,1.05f,5.5f,4600,.06f));
  // The director's office: swept by the detail before he was.
- rfFix(m,model::lab_exec_desk,3.6f,3.2f,cu,2.21f,1.1f,.89f,rfE,true);
+ rfFix(m,model::lab_exec_desk,3.6f,3.2f,cu,2.21f,1.1f,.89f,rfW,true);
  rfaChair(m,2.5f,3.2f,cu,rfE);
  rfFix(m,model::office_bookcase,1.27f,3.2f,cu,2.025f,.5f,2.5f,rfE,true);
  // Swept: the detail took the files and left the shelves bare in bites, and the rest on the floor.
@@ -1126,7 +1130,8 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  // 7 reading a card, 8 pointing). On the scene's clock: he reads at the open
  // drawers, points his door man to them, takes his card to the table under
  // the glass, keeps one, walks to the far door and is gone.
- {const Vec2 drawers{7.6f,11.9f},table{9.15f,13.2f},mid{7.5f,17.f},door{6.8f,18.6f},closet{6.8f,21.7f};
+ // The table stop faces the clear south bay of the glass, not the hatch bars.
+ {const Vec2 drawers{7.6f,11.9f},table{9.15f,14.6f},mid{7.5f,17.f},door{6.8f,18.6f},closet{6.8f,21.7f};
   const float aim=std::atan2(12.95f-drawers.x,9.3f-drawers.y),toTable=std::atan2(table.x-drawers.x,table.y-drawers.y);
   const float toMid=std::atan2(mid.x-table.x,mid.y-table.y),toDoor=std::atan2(door.x-mid.x,door.y-mid.y);
   ActorTrack inv;inv.timerState=stateId("rf_admin_scene");inv.visual=ActorVisual::Investigator;inv.scale=1.8f;
@@ -1147,7 +1152,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  cue(m,"rf_admin_scene",2500,Sound::Empty,{7.6f,11.9f},"INVESTIGATOR: Every card from Energy Diagnostics. Bag them.",.7f,f+1.6f,"inv_admin_1");
  cue(m,"rf_admin_scene",6000,Sound::Empty,{12.95f,9.3f},"CLEANUP: Sir.",.6f,f+1.6f,"rf_admin_door_1");
  cue(m,"rf_admin_scene",9500,Sound::Empty,{7.6f,11.9f},"INVESTIGATOR: The rest of this floor can burn with the building.",.7f,f+1.6f,"inv_admin_2");
- cue(m,"rf_admin_scene",15400,Sound::Empty,{9.15f,13.2f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
+ cue(m,"rf_admin_scene",15400,Sound::Empty,{9.15f,14.6f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
  cue(m,"rf_admin_scene",21100,Sound::Door,{6.8f,19.1f},"",.8f,f+1.2f);
  cue(m,"rf_admin_exit",4100,Sound::Door,{6.8f,19.1f},"",.7f,f+1.2f);
 

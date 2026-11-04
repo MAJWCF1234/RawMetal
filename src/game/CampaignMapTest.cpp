@@ -225,6 +225,26 @@ bool Game::testCampaignMaps(){
   for(int i=0;i<60*28;++i)g.update({},1.f/60);
   check(g.state(stateId("rf_admin_gone"))==1&&!g.doorLocked(g.world().doors()[1]),"He leaves by the far door, and records opens after");
   check(g.world().doors()[2].open<.05f,"The far door shuts behind him");}
+ // Seen from the atrium, out of reach: at the drawers through the hatch, at the
+ // table through the south bay. A shot at him cracks the protective glass and
+ // stops; he flinches and the scene carries on.
+ {Game g;g.m_level=70;g.restart();g.m_player.pos={21.f,11.5f};g.m_player.z=g.world().floorHeight(21.f,11.5f);g.m_god=true;
+  size_t inv=0;for(size_t i=0;i<g.world().actorTracks().size();++i)if(g.world().actorTracks()[i].visual==ActorVisual::Investigator)inv=i;
+  const auto timer=g.world().actorTracks()[inv].timerState;const auto flinch=actorTrackState(timer,inv,"flinch_ms");
+  auto at=[&](int ms){for(int i=0;i<60*40&&g.state(timer)<ms;++i)g.update({},1.f/60);};
+  auto watch=[&](Vec2 from,const char*where){const auto pose=g.world().actorPose(inv);const float floor=g.world().floorHeight(from.x,from.y);
+   Point3 eye{from.x,from.y,floor+1.55f},chest{pose.position.x,pose.position.y,pose.z+1.1f};auto ray=chest-eye;
+   check(g.world().lightRayClear(from,eye.z,pose.position,pose.z+1.6f)&&g.world().lightRayClear(from,eye.z,pose.position,chest.z),(std::string("Research Administration: his head and chest are in view from the atrium ")+where).c_str());
+   auto hit=g.traceShot(eye,ray,30);const auto&panes=g.world().breakables();
+   check(hit.kind==ShotKind::Solid&&hit.breakable>=0&&size_t(hit.breakable)<panes.size()&&panes[size_t(hit.breakable)].holds&&hit.point.x>11.8f,(std::string("Research Administration: a shot at him ")+where+" stops on the protective glass").c_str());
+   g.resolveShot(hit,eye,ray,weaponDef(WeaponId::Shotgun).hitscan,true);g.update({},1.f/60);
+   check(g.state(flinch)>0&&g.world().actorPose(inv).clip==3,(std::string("Research Administration: he flinches from a shot ")+where).c_str());
+   for(int i=0;i<40;++i)g.update({},1.f/60);
+   check(g.state(flinch)==0&&g.world().actorPose(inv).clip!=3&&!g.state(g.world().actorTracks()[inv].deadState),(std::string("Research Administration: and goes back to his business ")+where).c_str());};
+  at(3000);watch({16.5f,11.85f},"through the hatch");
+  at(15000);watch({14.8f,14.4f},"through the south bay");
+  for(int i=0;i<60*15;++i)g.update({},1.f/60);
+  check(g.state(stateId("rf_admin_gone"))==1,"Research Administration: shooting at him does not stop him leaving");}
  // Triage: the patient stays down while he is watched, and sits up once the player turns to the nurse.
  {Game g;g.m_level=72;g.restart();g.m_player.pos={6.7f,9.8f};g.m_player.z=g.world().floorHeight(6.7f,9.8f);g.m_player.angle=std::atan2(-1.75f,-.95f);g.m_player.pitch=-20;
   for(int i=0;i<180;++i)g.update({},1.f/60);
