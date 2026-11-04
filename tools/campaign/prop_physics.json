@@ -323,5 +323,45 @@
     "material": "Metal",
     "mass": 35,
     "health": 0
+  },
+  "anl_cell_charged": {
+    "material": "Metal",
+    "mass": 9,
+    "health": 0,
+    "size": [
+      0.216,
+      0.201,
+      0.406
+    ]
+  },
+  "anl_cell_spent": {
+    "material": "Metal",
+    "mass": 7,
+    "health": 0,
+    "size": [
+      0.216,
+      0.201,
+      0.406
+    ]
+  },
+  "anl_cell_cap": {
+    "material": "Metal",
+    "mass": 2.5,
+    "health": 0,
+    "size": [
+      0.216,
+      0.2,
+      0.141
+    ]
+  },
+  "anl_cell_core": {
+    "material": "Metal",
+    "mass": 5,
+    "health": 0,
+    "size": [
+      0.201,
+      0.201,
+      0.305
+    ]
   }
 }

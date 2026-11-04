@@ -258,6 +258,15 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
     for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
      float k=std::clamp((y-.35f)/.5f,0.f,1.f);unsigned v=unsigned(std::min(255.f,y*255.f*(1+k*.35f)));
      texture.pixels[i]=(p&0xff000000u)|(v<<16)|(v<<8)|std::min(255u,v+6);unsigned e=unsigned(v*k);texture.emission[i]=0xff000000u|(e<<16)|(e<<8)|e;}}
+   // "..._glow": the material lights itself from its own bright texels (a resonance
+   // cell's veins, seams and motes); its dark texels stay dark and take the room's light.
+   if(material.ends_with("_glow")){texture.emission.resize(texture.pixels.size());
+    for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
+     float k=std::clamp((y-.28f)/.4f,0.f,1.f);unsigned r=unsigned(((p>>16)&255)*k),g=unsigned(((p>>8)&255)*k),b=unsigned((p&255)*k);
+     texture.emission[i]=0xff000000u|(r<<16)|(g<<8)|b;}}
+   // "..._glass": a protective pane drawn in the blended pass; the texture's alpha is
+   // its opacity (a light tint, denser at streaks and frosted rims), with a gloss sheen.
+   if(material.ends_with("_glass")){texture.transparent=true;texture.glossStrength=.45f;}
    m_facilityTextures.emplace(material,std::move(texture));}}
  for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
   m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
