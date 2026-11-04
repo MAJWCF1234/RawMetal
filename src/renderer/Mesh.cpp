@@ -224,6 +224,14 @@ void Mesh::poseCreature(int clip,float phase){
  if(hasCreatureLayerPose())m_creatureLayerPose=sampleCreatureLayerPose(clip,phase);
  publishCreatureVertices();
 }
+void Mesh::poseCreatureBlend(int fromClip,float fromPhase,int toClip,float toPhase,float blend){
+ blend=std::clamp(blend,0.f,1.f);
+ if(blend>=1){poseCreature(toClip,toPhase);return;}
+ sampleCreatureClip(fromClip,fromPhase,m_creaturePoseScratchB);
+ sampleCreatureClip(toClip,toPhase,m_creaturePoseScratch);
+ for(size_t i=0;i<m_creaturePoseScratch.size();++i)m_creaturePoseScratch[i]=m_creaturePoseScratchB[i]+(m_creaturePoseScratch[i]-m_creaturePoseScratchB[i])*blend;
+ sampleCreatureAnchors(toClip,toPhase);publishCreatureVertices();
+}
 void Mesh::poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float upperPhase,float aimYaw,float aimPitch){
  perf::Scope frameProfile(perf::Skin);
  // Old animation resources have no joint frames. Preserve their ordinary

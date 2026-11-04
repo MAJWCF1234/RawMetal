@@ -47,6 +47,7 @@ public:
     // Every Surface value and structure finish resolves to decodable textures.
     static bool testSurfaceSets(std::string* report=nullptr);
     static bool testHardware(bool glazingOnly=false);
+    static bool testGameplayRendering();
     static bool testPresentationResize();
     static bool testCreatureAnimation();
     static bool testProjection();

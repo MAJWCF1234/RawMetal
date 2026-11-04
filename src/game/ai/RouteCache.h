@@ -21,7 +21,7 @@ class RouteCache {
 public:
  // One probe: not asked yet, blocked, or clear and ending on `feet`.
  enum EdgeState:uint8_t {Unknown,Blocked,Clear};
- struct Edge {float feet=0;EdgeState state=Unknown;};
+  struct Edge {float feet=0;EdgeState state=Unknown;Vec2 goal{};};
  // stackedWaypoint's graph: a node per walkable span over each interior cell,
  // in the planner's own order, the nodes of cell c at [cells[c].begin,
  // cells[c].end), and each node's step toward +x, -x, +y, -y probed lazily.
@@ -47,8 +47,8 @@ public:
  // nothing may be kept (caching off, or an authored map without an Owner).
  // `fresh` is set when the caller must fill it; edges start unknown. The
  // pointer lives until the next lookup on this thread.
- static Deck* deck(const World&world,float height,bool&fresh);
- static Grid* grid(const World&world,float height,float step,bool sweep,bool&fresh);
+  static Deck* deck(const World&world,float height,bool&fresh,float radius=.20f);
+  static Grid* grid(const World&world,float height,float step,bool sweep,bool&fresh,float radius=.20f);
  // Off: every planner probes live (the differential test's reference).
  inline static thread_local bool enabled=true;
  // RAWMETAL_ROUTE_CACHE_VERIFY, read once.

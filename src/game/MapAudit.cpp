@@ -50,13 +50,16 @@ bool Game::auditMapScene(Game& game,int level){
   float cx=(nx+.5f)*Cell,cy=(ny+.5f)*Cell,mx=(x+.5f)*Cell*.5f+cx*.5f,my=(y+.5f)*Cell*.5f+cy*.5f;
   for(float rise:{Step,Jump}){
    // Like the player, stand on the highest support under the 40 cm hull.
-   float feet=-1e9f;for(float ox:{-.2f,0.f,.2f})for(float oy:{-.2f,0.f,.2f})feet=std::max(feet,w.supportBelow(cx+ox,cy+oy,z+rise));
+   float feet=w.structureSupportBelow(cx,cy,.2f,z+rise);
+   for(float ox:{-.2f,0.f,.2f})for(float oy:{-.2f,0.f,.2f})feet=std::max(feet,w.supportBelow(cx+ox,cy+oy,z+rise));
    if(!std::isfinite(feet)||feet<z-6.f||feet>z+rise)continue;
-   if(!game.hullFits({cx,cy},feet+.02f,body))continue;
+   // This is a static geometry audit. A creature is a temporary combat
+   // obstacle and must not seal the flood or make its own spawn unreachable.
+   if(!game.hullFits({cx,cy},feet+.02f,body,.2f,false))continue;
    // The move between the two cells must clear the hull: at the higher feet
    // for a step, at the apex for a jump.
    float clearAt=rise>Step?std::max(feet,z+Jump-.05f):std::max(feet,z);
-   if(!game.hullFits({mx,my},clearAt+.02f,body))continue;
+   if(!game.hullFits({mx,my},clearAt+.02f,body,.2f,false))continue;
    return feet;
   }
   return nan;
@@ -115,13 +118,13 @@ bool Game::auditMapScene(Game& game,int level){
  for(size_t i=0;i<w.creatureSpawns().size();++i){const auto& s=w.creatureSpawns()[i];const auto& traits=creatureTraits(s.kind);float z=spawnFeet(s.position,s.z);
   std::string name="creature["+std::to_string(i)+"] "+traits.name+" at "+at(s.position)+" z "+std::to_string(z);
   check(reachableIn(standing,s.position,z,.75f),name);
-  if(!w.fits(s.position.x,s.position.y,z+.03f,traits.hull,false))fail("STUCK "+name);
-  const float radius=(s.kind==CreatureKind::Wasp||s.kind==CreatureKind::Huntsman)?.2f:.35f;
-  name+=" radius="+std::to_string(radius)+" top="+std::to_string(z+traits.top);
+  Enemy hull;hull.kind=s.kind;hull.scale=s.scale>0?s.scale:1.f;const float radius=hull.radius(),top=z+traits.top*hull.scale;
+  if(!w.fits(s.position.x,s.position.y,z+.03f,hull.hull(),false))fail("STUCK "+name);
+  name+=" radius="+std::to_string(radius)+" top="+std::to_string(top);
   auto intersects=[&](float x,float y,float hx,float hy){float dx=std::max(std::fabs(x)-hx,0.f),dy=std::max(std::fabs(y)-hy,0.f);return dx*dx+dy*dy<radius*radius;};
-  for(size_t j=0;j<w.structures().size();++j){const auto& v=w.structures()[j];if(v.top<=z+traits.step||v.bottom>=z+traits.top)continue; // a plate or kerb under its feet is a step, not a wall
+  for(size_t j=0;j<w.structures().size();++j){const auto& v=w.structures()[j];if(!v.solid||v.top<=z+traits.step||v.bottom>=top)continue; // a plate or kerb under its feet is a step, not a wall
    if(intersects(s.position.x-(v.x1+v.x2)*.5f,s.position.y-(v.y1+v.y2)*.5f,(v.x2-v.x1)*.5f,(v.y2-v.y1)*.5f))fail("HULL INTERSECTION "+name+" structure["+std::to_string(j)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
-  for(size_t j=0;j<w.fixtures().size();++j){const auto& f=w.fixtures()[j];if(!f.solid||f.core<=0)continue;float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(base+f.height<=z+.01f||base>=z+traits.top)continue;
+  for(size_t j=0;j<w.fixtures().size();++j){const auto& f=w.fixtures()[j];if(!f.solid||f.core<=0)continue;float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(base+f.height<=z+.01f||base>=top)continue;
    float dx=s.position.x-f.position.x,dy=s.position.y-f.position.y,c=std::cos(f.yaw),sn=std::sin(f.yaw);
    if(intersects(dx*c-dy*sn,dx*sn+dy*c,f.width*f.core*.5f,f.depth*f.core*.5f))fail("HULL INTERSECTION "+name+" fixture["+std::to_string(j)+"] base/height "+std::to_string(base)+"/"+std::to_string(f.height)+" position "+at(f.position)+" width/depth/core/yaw "+std::to_string(f.width)+"/"+std::to_string(f.depth)+"/"+std::to_string(f.core)+"/"+std::to_string(f.yaw));}
  }
@@ -187,7 +190,7 @@ bool Game::auditMapScene(Game& game,int level){
  auto surfaces=[](const World& world,Vec2 p){
   std::vector<float> result;auto add=[&](float z){if(!world.fits(p.x,p.y,z+.03f,Player::CrouchedHeight,false))return;for(float existing:result)if(std::fabs(existing-z)<.03f)return;result.push_back(z);};
   add(world.floorHeight(p.x,p.y));
-  for(const auto& v:world.structures())if(!v.rail&&p.x>=v.x1&&p.x<v.x2&&p.y>=v.y1&&p.y<v.y2)add(v.top);
+  for(const auto& v:world.structures())if(v.solid&&!v.rail&&p.x>=v.x1&&p.x<v.x2&&p.y>=v.y1&&p.y<v.y2)add(v.top);
   return result;
  };
  auto exitHeights=surfaces(w,w.exitPoint());bool transferExit=false;
@@ -278,8 +281,10 @@ bool Game::auditMapScene(Game& game,int level){
    if(vertical(p)){float lo=std::min(p.z,topZ(p)),hi=std::max(p.z,topZ(p));float dz=z<lo?lo-z:z>hi?z-hi:0;return std::sqrt(lengthSq(xy-p.start)+dz*dz);}
    Vec2 d=p.end-p.start;float l2=lengthSq(d);float t=l2>1e-6f?std::clamp(dot(xy-p.start,d)/l2,0.f,1.f):0.f;Vec2 c=p.start+d*t;float cz=p.z+(topZ(p)-p.z)*t;return std::sqrt(lengthSq(xy-c)+(z-cz)*(z-cz));};
   // Walkways are floors, decks and stairs: standing on top of a pump is not one.
-  auto onWalkway=[&](Vec2 xy,float feet){
-   for(const auto& layer:w.layers())if(std::fabs(feet-layer.elevation)<.25f)return true;
+   auto onWalkway=[&](Vec2 xy,float feet){
+    int x=int(std::floor(xy.x)),y=int(std::floor(xy.y));if(x<0||y<0||x>=24||y>=24)return false;
+    for(const auto& layer:w.layers())if(std::fabs(feet-layer.elevation)<.25f&&
+      (layer.thickness<=0?w.tile(x,y)!='#':layer.rows[size_t(y)][size_t(x)]=='='))return true;
    if(auto map=campaignMap(level))for(const auto& st:map->stairs)if(xy.x>=st.x1&&xy.x<st.x2&&xy.y>=st.y1&&xy.y<st.y2&&feet>=std::min(st.bottom,st.top)-.1f&&feet<=std::max(st.bottom,st.top)+.1f)return true;
    return false;};
   // Equipment carries pipes: an end inside a fixture or prop footprint is held.
@@ -307,8 +312,14 @@ bool Game::auditMapScene(Game& game,int level){
    Vec2 d=isVertical?Vec2{}:p.end-p.start;int samples=std::max(1,int(std::ceil(length(d)/.25f)));bool through=false,slab=false;
    for(int s=0;s<=samples&&!through;++s){Vec2 q=p.start+d*(float(s)/samples);int cx=int(q.x/Cell),cy=int(q.y/Cell);if(cx<0||cy<0||cx>=N||cy>=N)continue;
     Vec2 centre{(cx+.5f)*Cell,(cy+.5f)*Cell};if(isVertical&&length(centre-q)>radius+.2f)continue;
-    // Only the head space actually open above that floor counts.
-    for(float feet:visited[size_t(cy*N+cx)]){if(!onWalkway(centre,feet))continue;float head=std::min(feet+Player::StandingHeight+.1f,w.clearanceAbove(centre.x,centre.y,feet+.05f));if(lo<head&&hi>feet+.25f){through=true;break;}}
+     // Check this segment's actual height and the deck under the pipe, rather
+     // than projecting its whole height through neighboring gap cells. A pipe
+     // attached to a guardrail is part of that edge, not an aisle obstruction.
+     float here=p.z+(z1-p.z)*(float(s)/samples),sampleLo=isVertical?lo:here-radius,sampleHi=isVertical?hi:here+radius;
+     bool atRail=false;if(!isVertical)for(const auto& rail:w.structures())if(rail.rail&&rail.solid&&
+      q.x>=rail.x1-.09f&&q.x<=rail.x2+.09f&&q.y>=rail.y1-.09f&&q.y<=rail.y2+.09f&&
+      here>=rail.bottom-.09f&&here<=rail.top+.09f){atRail=true;break;}
+     if(!atRail)for(float feet:visited[size_t(cy*N+cx)]){if(!onWalkway(q,feet))continue;float head=std::min(feet+Player::StandingHeight+.1f,w.clearanceAbove(centre.x,centre.y,feet+.05f));if(sampleLo<head&&sampleHi>feet+.25f){through=true;break;}}
     if(!isVertical)for(const auto& layer:w.layers())if(layer.thickness>0&&layer.rows[size_t(std::clamp(int(q.y),0,23))][size_t(std::clamp(int(q.x),0,23))]=='='&&p.z-radius<layer.elevation&&p.z+radius>layer.elevation-layer.thickness)slab=true;
    }
    // A drum or vessel standing wholly on a solid prop (a pallet, a skid)
@@ -442,7 +453,7 @@ bool Game::auditMapScene(Game& game,int level){
   for(auto p:corners(f,.06f)){
    if(w.tile(int(std::floor(p.x)),int(std::floor(p.y)))=='#'&&base<w.floorHeight(p.x,p.y)+3.f){fail("BURIED "+name+" in wall at "+at(p));break;}
    bool hit=false;
-   for(const auto& s:w.structures())if(!s.rail&&p.x>s.x1&&p.x<s.x2&&p.y>s.y1&&p.y<s.y2&&s.top>base+.08f&&s.bottom<std::min(top-.08f,base+2.2f)){hit=true;break;}
+   for(const auto& s:w.structures())if(s.solid&&!s.rail&&s.material!=CollisionProxyMaterial&&p.x>s.x1&&p.x<s.x2&&p.y>s.y1&&p.y<s.y2&&s.top>base+.08f&&s.bottom<std::min(top-.08f,base+2.2f)){hit=true;break;}
    if(hit){fail("BURIED "+name+" in structure at "+at(p));break;}
   }
   for(size_t j=i+1;j<fixtures.size();++j){const auto& g=fixtures[j];if(!g.solid)continue;

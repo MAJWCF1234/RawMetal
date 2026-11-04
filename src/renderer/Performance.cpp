@@ -6,6 +6,7 @@
 #include "../world/TerrainSurfaceCache.h"
 #include "../platform/Win32Window.h"
 #include "../audio/AudioEngine.h"
+#include "../game/EngineRegressionScene.h"
 #include <chrono>
 #include <fstream>
 #include <filesystem>
@@ -15,6 +16,18 @@
 #include <stdexcept>
 #include <climits>
 namespace retro {
+bool SoftwareRenderer::testGameplayRendering(){
+ std::ofstream report("gameplay-rendering-test.txt");auto storage=std::make_unique<SoftwareRenderer>(640,360);auto&r=*storage;
+ if(!r.enableHardware())return false;
+ auto scene=Game::creaturePreview(Enemy::Kind::Chimera,0);scene.posePreviewCreature(2,.6f);r.setEnvironmentInspection(true);
+ r.m_shadowBudgetLimit=20000;for(int i=0;i<8;++i)r.render(scene);
+ std::vector<uint32_t> reference(r.pixels(),r.pixels()+640*360);bool passed=true;
+ for(int budget:{0,1,2200,20000}){r.m_shadowBudgetLimit=budget;r.render(scene);size_t changed=0;int maximum=0;
+  for(size_t i=0;i<reference.size();++i){auto a=reference[i],b=r.pixels()[i];if(a!=b)++changed;for(int shift:{0,8,16})maximum=std::max(maximum,std::abs(int((a>>shift)&255)-int((b>>shift)&255)));}
+  report<<"shadow probe budget "<<budget<<": "<<changed<<" changed pixels; peak channel difference "<<maximum<<'\n';passed&=maximum<=1;
+ }
+ report<<(passed?"PASS":"FAIL")<<": a stationary Chimera's lighting is independent of earlier draws consuming the shadow budget\n";return passed;
+}
 __declspec(noinline) bool SoftwareRenderer::testPresentationResize(){
  Win32Window window(DisplayWidth,DisplayHeight,L"RawMetal presentation check");if(!window.valid())return false;
  auto storage=std::make_unique<SoftwareRenderer>(DisplayWidth,DisplayHeight);auto&renderer=*storage;if(!renderer.enableHardware(window.handle()))return false;
@@ -390,10 +403,16 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(bool glazingOnly){
   auto&camera=const_cast<Player&>(physics.player());camera.angle+=.3f;renderer.render(physics);auto turned=renderer.m_pixels;hits=renderer.m_gpu->staticCacheHits();renderer.render(physics);check(turned==renderer.m_pixels&&renderer.m_gpu->staticCacheHits()>hits,"Prop and pane caches stay stable after a camera turn");
  }
  {auto fixture=Game::physicsInspection(7,0);renderer.m_gpu->clearStaticCaches();renderer.render(fixture);auto intact=renderer.m_pixels;auto builds=renderer.m_staticGeometryBuilds;fixture.setState(stateId("fixture_inspection_break"),1);fixture.update({},1.f/120);renderer.render(fixture);check(intact!=renderer.m_pixels&&renderer.m_staticGeometryBuilds==builds,"Breaking a fixture screen updates its bounded part cache without rebuilding the chunk");}
- auto reliefScene=Game::mapInspection({3.5f,4.5f},0,18,0,false,0,true);float reliefScale=renderer.m_wall.parallaxScale;renderer.m_wall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_wall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(changed>8,"Nearby wall relief changes the Vulkan image");
+ // Keep the material/lamp comparison independent of campaign art selection
+ // and streamed switchable sources, which correctly force pixel lighting.
+ auto materialMap=regression::room();materialMap->definition.playerStart={3.5f,4.5f};
+ for(int y=1;y<23;++y)materialMap->layers.front().rows[y][6]='#';
+ materialMap->lights.push_back({{4.5f,4.5f},2.8f,WorldLightMount::Bare,0,1.5f,10});
+ Game reliefScene(regression::campaign(materialMap));const_cast<Player&>(reliefScene.player()).pitch=18;
+ float reliefScale=renderer.m_pressureWall.parallaxScale;renderer.m_pressureWall.parallaxScale=0;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);auto flatWall=renderer.m_pixels;renderer.m_pressureWall.parallaxScale=reliefScale;renderer.m_gpu->clearStaticCaches();renderer.render(reliefScene);size_t changed=0;for(size_t i=0;i<flatWall.size();++i)changed+=flatWall[i]!=renderer.m_pixels[i];report<<"Parallax material changed pixels at 128x72: "<<changed<<'\n';check(reliefScale>0&&changed>8,"Nearby wall relief changes the Vulkan image");
  {
   // Per-pixel lamps: shadow faces are drawn and the lit image departs from the bake.
-  auto lit=Game::mapInspection({3.5f,4.5f},0,-6,0,false,0,true);
+  auto&lit=reliefScene;const_cast<Player&>(lit.player()).pitch=-6;
   renderer.m_gpu->clearStaticCaches();renderer.render(lit);auto baked=renderer.m_pixels;
   // Shadow faces are drawn a bounded number of lamps per frame; settle first.
   SoftwareRenderer::setPixelLighting(true);auto faces=renderer.m_gpu->shadowFacesDrawn();std::uint64_t drawn=0;

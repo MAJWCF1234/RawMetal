@@ -269,6 +269,10 @@ Office surfaces, `STRUCT` materials 21-24: 21 office block wall, 22 drop ceiling
 23 office carpet, 24 office tile. In custom maps every structure texture
 repeats per metre.
 
+An optional final `STRUCT` field selects collision: `...|rail|material|solid`.
+It defaults to `1`; `0` keeps decorative doorway trim visible while the surrounding
+wall and lintel own collision. Door leaves still block the opening while closed.
+
 ### Surface sets and finish materials (2026-10-25)
 
 A map can choose the finish of its `#` walls, its floor and its ceiling:

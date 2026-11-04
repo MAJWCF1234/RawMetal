@@ -23,12 +23,13 @@ thread_local std::vector<uint32_t> scratch;
 thread_local std::array<Named,8> owners;
 thread_local int ownerCount=0;
 enum Kind:uint32_t {DeckKey=1,GridKey=2};
-Slot* find(const World&world,uint32_t kind,float height,float step,bool sweep,bool&fresh){
+Slot* find(const World&world,uint32_t kind,float height,float step,bool sweep,bool&fresh,float radius){
  fresh=false;if(!RouteCache::enabled)return nullptr;
  const std::shared_ptr<const AuthoredMapData>* owner=nullptr;
  if(world.authored()){for(int i=ownerCount-1;i>=0;--i)if(owners[size_t(i)].world==&world){owner=owners[size_t(i)].map;break;}if(!owner||!*owner)return nullptr;}
  collisionSnapshot(world,scratch);
  scratch.push_back(kind);scratch.push_back(std::bit_cast<uint32_t>(height));scratch.push_back(std::bit_cast<uint32_t>(step));scratch.push_back(sweep);
+  scratch.push_back(std::bit_cast<uint32_t>(radius));
  // The doors a live door plan stands open, 32 to a word.
  const auto*plan=world.doorPlanDoors();const size_t doors=world.doors().size();
  for(size_t base=0;base<doors;base+=32){uint32_t bits=0;for(size_t i=base;i<std::min(doors,base+32);++i)if(plan&&i<plan->size()&&(*plan)[i])bits|=1u<<(i-base);scratch.push_back(bits);}
@@ -50,8 +51,8 @@ RouteCache::Owner::Owner(const World&world,const std::shared_ptr<const AuthoredM
  if(ownerCount<int(owners.size())){owners[size_t(ownerCount++)]={&world,&map};m_pushed=true;}
 }
 RouteCache::Owner::~Owner(){if(m_pushed)--ownerCount;}
-RouteCache::Deck* RouteCache::deck(const World&world,float height,bool&fresh){auto*slot=find(world,DeckKey,height,0,false,fresh);return slot?slot->deck.get():nullptr;}
-RouteCache::Grid* RouteCache::grid(const World&world,float height,float step,bool sweep,bool&fresh){auto*slot=find(world,GridKey,height,step,sweep,fresh);return slot?slot->grid.get():nullptr;}
+RouteCache::Deck* RouteCache::deck(const World&world,float height,bool&fresh,float radius){auto*slot=find(world,DeckKey,height,0,false,fresh,radius);return slot?slot->deck.get():nullptr;}
+RouteCache::Grid* RouteCache::grid(const World&world,float height,float step,bool sweep,bool&fresh,float radius){auto*slot=find(world,GridKey,height,step,sweep,fresh,radius);return slot?slot->grid.get():nullptr;}
 bool RouteCache::verify(){
  static const bool on=[]{
 #ifdef _MSC_VER

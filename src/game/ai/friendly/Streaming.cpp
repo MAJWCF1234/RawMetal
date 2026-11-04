@@ -139,8 +139,8 @@ bool Game::friendlyWalkSegmentUncached(int level,Vec2 start,float feet,Vec2 goal
   for(int step=1;step<=samples;++step){auto point=start+delta*(float(step)/samples);auto previous=start+delta*(float(step-1)/samples);
    if(!aiStructureSegment(w,previous,z,point,height,m_aiQueryCaching))return false;
    if(!doorLine(w,previous,point,z,lattice))return false;
-   float ground=-10000;for(float x:{-.2f,.2f})for(float y:{-.2f,.2f})ground=std::max(ground,w.supportBelow(point.x+x,point.y+y,z+.265f));
-   float stepHeight=w.hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f||w.railBlocksHull(point.x,point.y,.2f,ground,height))return false;
+   float ground=w.structureSupportBelow(point.x,point.y,.2f,z+.265f);for(float x:{-.2f,.2f})for(float y:{-.2f,.2f})ground=std::max(ground,w.supportBelow(point.x+x,point.y+y,z+.265f));
+   float stepHeight=w.hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f||w.structureBlocksHull(point.x,point.y,.2f,ground,height))return false;
    for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f})if(!w.fits(point.x+x,point.y+y,ground,height)||w.doorBlocks(point.x+x,point.y+y,ground,height))return false;
    z=ground;
   }
@@ -154,10 +154,10 @@ bool Game::friendlyWalkSegmentUncached(int level,Vec2 start,float feet,Vec2 goal
   auto off=chunkOffset(center);const auto&centerWorld=friendlyWorld(center);
   if(!aiStructureSegment(centerWorld,before-off,z,global-off,height,m_aiQueryCaching))return false;
   if(!doorLine(centerWorld,before-off,global-off,z,lattice))return false;
-  for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);ground=std::max(ground,friendlyWorld(chunk).supportBelow(local.x,local.y,z+.265f));}
+   for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);auto localCenter=global-chunkOffset(chunk);ground=std::max({ground,w.supportBelow(local.x,local.y,z+.265f),w.structureSupportBelow(localCenter.x,localCenter.y,.2f,z+.265f)});}
   float stepHeight=centerWorld.hasTerrain()?.34f:.24f;if(ground-z>stepHeight+.025f||z-ground>.48f)return false;
   for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);
-   auto localCenter=global-chunkOffset(chunk);if(!w.fits(local.x,local.y,ground,height)||w.doorBlocks(local.x,local.y,ground,height)||w.railBlocksHull(localCenter.x,localCenter.y,.2f,ground,height))return false;}
+   auto localCenter=global-chunkOffset(chunk);if(!w.fits(local.x,local.y,ground,height)||w.doorBlocks(local.x,local.y,ground,height)||w.structureBlocksHull(localCenter.x,localCenter.y,.2f,ground,height))return false;}
   z=ground;previous=center;
  }
  if(endFeet)*endFeet=z;return true;
@@ -174,10 +174,11 @@ float Game::friendlySupportAt(int level,Vec2 position,float feet){
  // global+corner-origin arithmetic, including on chunks far from the origin.
  if(m_aiQueryCaching&&global.x-.2f>=offset.x&&global.y-.2f>=offset.y&&global.x+.2f<offset.x+24&&global.y+.2f<offset.y+24){
   const auto&w=friendlyWorld(center);
+   auto localCenter=global-offset;ground=w.structureSupportBelow(localCenter.x,localCenter.y,.2f,feet);
   for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){auto local=global+Vec2{x,y}-offset;ground=std::max(ground,w.supportBelow(local.x,local.y,feet));}
   return ground>-9999?ground:feet;
  }
- for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))continue;ensureChunk(chunk);auto local=point-chunkOffset(chunk);ground=std::max(ground,friendlyWorld(chunk).supportBelow(local.x,local.y,feet));}
+  for(float x:{-.2f,.2f})for(float y:{-.2f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))continue;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);auto localCenter=global-chunkOffset(chunk);ground=std::max({ground,w.supportBelow(local.x,local.y,feet),w.structureSupportBelow(localCenter.x,localCenter.y,.2f,feet)});}
  return ground>-9999?ground:feet;
 }
 bool Game::friendlyBodyFits(int level,Vec2 position,float feet,float height){
@@ -185,12 +186,12 @@ bool Game::friendlyBodyFits(int level,Vec2 position,float feet,float height){
  auto offset=chunkOffset(center);
  if(m_aiQueryCaching&&global.x-.2f>=offset.x&&global.y-.2f>=offset.y&&global.x+.2f<offset.x+24&&global.y+.2f<offset.y+24){
   const auto&w=friendlyWorld(center);auto localCenter=global-offset;
-  if(w.railBlocksHull(localCenter.x,localCenter.y,.2f,feet,height))return false;
+  if(w.structureBlocksHull(localCenter.x,localCenter.y,.2f,feet,height))return false;
   for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){auto local=global+Vec2{x,y}-offset;if(!w.fits(local.x,local.y,feet,height)||w.doorBlocks(local.x,local.y,feet,height))return false;}
   return true;
  }
  for(float x:{-.2f,0.f,.2f})for(float y:{-.2f,0.f,.2f}){Vec2 point=global+Vec2{x,y};int chunk=friendlyChunkAt(point,center);if(chunk<0||!friendlyBoundaryOpen(center,chunk,point))return false;ensureChunk(chunk);auto local=point-chunkOffset(chunk);const auto&w=friendlyWorld(chunk);
-  auto localCenter=global-chunkOffset(chunk);if(!w.fits(local.x,local.y,feet,height)||w.doorBlocks(local.x,local.y,feet,height)||w.railBlocksHull(localCenter.x,localCenter.y,.2f,feet,height))return false;}
+  auto localCenter=global-chunkOffset(chunk);if(!w.fits(local.x,local.y,feet,height)||w.doorBlocks(local.x,local.y,feet,height)||w.structureBlocksHull(localCenter.x,localCenter.y,.2f,feet,height))return false;}
  return true;
 }
 bool Game::friendlyRayClear(Point3 from,Point3 to)const{

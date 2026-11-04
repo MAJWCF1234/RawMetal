@@ -17,7 +17,7 @@ Game Game::prologueInspection(int stage){
  if(stage==2)place({13.f,5.5f},9,{18.f,5.8f},-4);
  if(stage==3)place({17.f,10.5f},9,{17.f,17.f},-8);
  // 5-8: wide from the south-east corner, the doorway, over the shoulder at the desk, west side.
- if(stage>=5){const Vec2 eye[]={{9.1f,9.1f},{9.6f,6.f},{4.6f,5.6f},{2.7f,5.f}},look[]={{4.2f,3.f},{3.f,4.f},{4.6f,3.f},{6.5f,3.f}};const float pitch[]={-10,-8,-24,-12};place(eye[stage-5],9,look[stage-5],pitch[stage-5]);}
+ if(stage>=5&&stage<=8){const Vec2 eye[]={{9.1f,9.1f},{9.6f,6.f},{4.6f,5.6f},{2.7f,5.f}},look[]={{4.2f,3.f},{3.f,4.f},{4.6f,3.f},{6.5f,3.f}};const float pitch[]={-10,-8,-24,-12};place(eye[stage-5],9,look[stage-5],pitch[stage-5]);}
  // 9-10: standing against corridor walls (close-range post and lamp checks).
  if(stage==9)place({18.3f,5.6f},9,{20.f,5.6f},-4);
  if(stage==10)place({13.f,5.15f},9,{13.4f,3.f},2);

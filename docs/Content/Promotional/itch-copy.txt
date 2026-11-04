@@ -1,0 +1,44 @@
+DEPTHWORKS - itch.io page copy (Chapter 1, spoiler-free)
+
+TITLE
+DepthWorks - Chapter 1
+
+TAGLINE (under 100 characters)
+You work the night shift. Tonight the lift goes lower.
+
+CLASSIFICATION
+Game - Windows - first-person - stealth - horror - single-player
+Status: In development (Chapter 1 of a series). Price: free / pay what you want.
+
+DESCRIPTION
+You work the night shift at the Depthworks plant. Tonight the lift takes you
+somewhere your badge doesn't open.
+
+DEPTHWORKS is a first-person stealth and survival game. Creep, hide, listen,
+and decide how much of the dark you can afford to cross.
+
+- Keep to the dark. Light, distance and movement give you away. Lockers,
+  shadows and patience keep you breathing.
+- Listen. Footsteps, radios, machinery. The plant tells you more than any map.
+- Bring it back. Switch halls, turbine floors, flooded galleries. Every
+  district you wake opens the next, and lights you up for whatever else is
+  down there.
+- One file, nothing to install. A low-res, late-90s look on its own engine and
+  renderer, written from scratch.
+
+CONTROLS
+WASD move, mouse look, Shift sprint, Space jump, C / Ctrl crouch, E use,
+F flashlight, Q subdue, R reload, I inventory, Esc menu.
+
+NEEDS
+Windows 10/11 x64, a GPU with a Vulkan 1.0 driver, the Microsoft Visual C++
+x64 Redistributable. VR (experimental): SteamVR with Quest, Index or Vive.
+
+LINKS
+Releases and checksums: https://github.com/MAJWCF1234/RawMetal/releases
+
+PAGE ASSETS (this folder)
+Cover: cover-630x500.png        Banner: banner-1920x540.png
+Background: background-1920x1080.png (page bg colour #070909, text #D6DED6, links #3BB267)
+Screenshots, in order: shot-01.png .. shot-05.png
+Embed: loop.gif at the top of the description; trailer-720p.mp4 to YouTube, link as the page video.

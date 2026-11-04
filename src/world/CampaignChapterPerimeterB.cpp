@@ -403,15 +403,18 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  wall(m,7.25f,7.85f,7.32f,8.15f,base+1.05f,base+1.2f,19);
  // The fence: chain-link panels, one standing open as the gate, and the
  // cold hold fenced in under the gallery.
- for(float y:{5.195f,8.385f,14.765f})pbFix(m,model::mine_mesh_fence,8.45f,y,base,3.19f,.06f,2.78f,pbE,true);
+  for(float y:{5.195f,8.385f,14.765f}){pbFix(m,model::mine_mesh_fence,8.45f,y,base,3.19f,.06f,2.78f,pbE,true);
+   wall(m,8.42f,y-1.595f,8.48f,y+1.595f,base,base+2.78f,CollisionProxyMaterial);}
  pbFix(m,model::mine_mesh_doorway,8.45f,11.575f,base,3.19f,.06f,2.78f,pbE,false);
  wall(m,8.42f,9.98f,8.48f,11.03f,base,base+2.78f,CollisionProxyMaterial);wall(m,8.42f,12.12f,8.48f,13.17f,base,base+2.78f,CollisionProxyMaterial);
- for(float y:{18.45f,21.35f})pbFix(m,model::mine_mesh_fence,8.45f,y,base,2.9f,.06f,2.78f,pbE,true);
+  for(float y:{18.45f,21.35f}){pbFix(m,model::mine_mesh_fence,8.45f,y,base,2.9f,.06f,2.78f,pbE,true);
+   wall(m,8.42f,y-1.45f,8.48f,y+1.45f,base,base+2.78f,CollisionProxyMaterial);}
  wall(m,8.f,3.2f,8.5f,3.5f,base,base+2.9f,15);wall(m,8.42f,3.5f,8.48f,3.6f,base,base+2.78f,12);
  wall(m,8.4f,16.36f,8.5f,17.f,base,base+2.78f,12);
  for(float y:{3.6f,6.79f,9.98f,13.17f,16.36f,19.9f})wall(m,8.41f,y-.04f,8.49f,y+.04f,base,base+2.78f,12);
- // The freight stair to the gallery, against the west wall.
- m.stairs.push_back({1.3f,12.5f,3.3f,17.f,base,gz,16,true,true});
+  // Leave a full metre beside the freight stair and the stored pallets/cage:
+  // the cold-hold occupant must be able to reach the open receiving gate.
+  m.stairs.push_back({1.2f,12.5f,3.f,17.f,base,gz,16,true,true});
  // R-117: a transfer cage, its door pulled off and bent.
  pbFix(m,model::med_holding_cage,6.25f,14.f,base,3.82f,1.73f,1.71f,kPi,true);
  pbFix(m,model::mine_bent_grate,3.95f,14.f,base,1.6f,.06f,1.72f,pbE,false);
@@ -502,7 +505,7 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  wall(m,1.f,17.f,23.f,17.3f,under-.32f,under,12);
  for(float y:{17.7f,22.f})wall(m,14.f,y,18.f,y+.3f,under-.32f,under,12);
  wall(m,8.6f,16.98f,13.4f,17.18f,gz,gz+1.1f,15);wall(m,8.56f,16.94f,13.44f,17.22f,gz+1.1f,gz+1.16f,20);
- guardRail(m,3.3f,17.f,8.6f,17.06f,gz);guardRail(m,13.4f,17.f,20.8f,17.06f,gz);
+  guardRail(m,3.f,17.f,8.6f,17.06f,gz);guardRail(m,13.4f,17.f,20.8f,17.06f,gz);
  guardRail(m,14.f,17.94f,18.f,18.f,gz);guardRail(m,14.f,22.f,18.f,22.06f,gz);guardRail(m,13.94f,18.f,14.f,22.f,gz);guardRail(m,18.f,18.f,18.06f,22.f,gz);
  pbFix(m,model::mine_cage_gate,13.9f,20.f,gz,2.1f,.07f,2.55f,pbE,false);
  // The clean face: lab panel from the gallery up, the portal to Decon 1.

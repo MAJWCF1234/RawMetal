@@ -260,7 +260,8 @@ bool Game::testCreatureSchedule(){
   rough.m_enemies.push_back(climber);
   for(int i=0;i<3600&&length(rough.m_enemies[0].pos-rough.m_player.pos)>1.5f;++i)rough.updateEnemies(1.f/120.f);
   auto&done=rough.m_enemies[0];float support=rough.world().supportBelow(done.pos.x,done.pos.y,float(World::TerrainMaxZ+1));
-  report<<"brute full dist="<<length(done.pos-rough.m_player.pos)<<" z="<<done.z<<" support="<<support<<" state="<<int(done.state)<<" schedule="<<done.schedule<<'\n';
+   report<<"brute full dist="<<length(done.pos-rough.m_player.pos)<<" z="<<done.z<<" support="<<support<<" state="<<int(done.state)<<" schedule="<<done.schedule
+    <<" hullFits="<<rough.hullFits(done.pos,done.z,done.hull(),done.radius(),false)<<" radius="<<done.radius()<<" search="<<done.searchTime<<" waypoint="<<done.waypoint.x<<','<<done.waypoint.y<<'\n';
   check(length(done.pos-rough.m_player.pos)<=1.8f&&std::fabs(done.z-support)<=.05f,"Brute completes Ashfall rough-terrain pursuit under MaintainSchedule");
  }
 

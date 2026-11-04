@@ -399,6 +399,10 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
 
  buildLayers(m_mapData->stairs);
+  // Sources mounted inside a cargo cab travel with it. The cab draws its own
+  // ceiling panel/emergency housing, so do not suspend a second fitting in it.
+  if(m_cargoLift.upper>m_cargoLift.lower)for(auto&l:m_lights)
+   if(insideCargoLift(l.position.x,l.position.y)&&l.z>m_cargoLift.lower+.1f&&l.z<=m_cargoLift.lower+2.4f){l.cargoLift=true;l.mount=WorldLightMount::Bare;l.shadows=false;}
  // Keep recessed sources below their own opaque housing, including custom fittings.
  for(auto&l:m_lights)if(l.mount==WorldLightMount::Ceiling&&l.fitting>=0){float mount=clearanceAbove(l.position.x,l.position.y,l.z);l.z=std::min(l.z,mount-l.fittingHeight-.06f);}
  if(hasLift())refreshReactorTerminals();
@@ -1150,6 +1154,23 @@ bool World::isExit(float x, float y) const {
 
 void World::buildLayers(std::span<const Staircase> stairs){
  m_lightSolids.clear();m_lightNodes.clear();
+ const size_t authoredStructures=m_structures.size();
+ auto edgeRail=[&](Structure rail){
+  if(!rail.rail){m_structures.push_back(rail);return;}
+  bool alongX=rail.x2-rail.x1>=rail.y2-rail.y1;std::vector<Structure> pieces{rail};
+  for(size_t i=0;i<authoredStructures&&!pieces.empty();++i){const auto&o=m_structures[i];
+   if(!o.rail||std::fabs(o.bottom-rail.bottom)>.025f||o.top<rail.top-.001f||alongX!=(o.x2-o.x1>=o.y2-o.y1))continue;
+   float separation=alongX?std::max({o.y1-rail.y2,rail.y1-o.y2,0.f}):std::max({o.x1-rail.x2,rail.x1-o.x2,0.f});
+   if(separation>.01f)continue;
+   std::vector<Structure> next;
+   for(auto p:pieces){float lo=alongX?p.x1:p.y1,hi=alongX?p.x2:p.y2,cutLo=alongX?o.x1:o.y1,cutHi=alongX?o.x2:o.y2;
+    if(cutHi<=lo||cutLo>=hi){next.push_back(p);continue;}
+    if(cutLo-lo>.065f){auto a=p;if(alongX)a.x2=cutLo;else a.y2=cutLo;next.push_back(a);}
+    if(hi-cutHi>.065f){auto b=p;if(alongX)b.x1=cutHi;else b.y1=cutHi;next.push_back(b);}
+   }pieces.swap(next);
+  }
+  m_structures.insert(m_structures.end(),pieces.begin(),pieces.end());
+ };
  for(const auto& layer:m_layers){
   for(auto row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Invalid map layer row width");
   if(layer.thickness<=0)continue;
@@ -1159,6 +1180,12 @@ void World::buildLayers(std::span<const Staircase> stairs){
   // Wall backing above a deck edge takes the chunk's wall finish, not the grating's.
   const int wallBacker=campaign()&&authored()?3:0;
   auto deck=[&](int x,int y){return x>=0&&y>=0&&x<Width&&y<Height&&layer.rows[y][x]=='=';};
+  auto joinedDeck=[&](int x,int y){
+   if(x<0||y<0||x>=Width||y>=Height)return false;
+   for(const auto&other:m_layers)if(other.thickness>0&&std::fabs(other.elevation-z)<.001f&&other.rows[y][x]=='=')return true;
+   return false;
+  };
+  auto wallBeside=[&](int x,int y){return tile(x,y)=='#'&&wallHeight(x,y)>z+.025f&&floorHeight(x+.5f,y+.5f)<z+railHeight;};
   auto stairConnection=[&](float x,float y){
    if(hasLift()&&z==0&&x>=11&&x<=13&&y>=7.9f&&y<=10)return true;
    for(const auto& stair:stairs)if(x>=stair.x1&&x<stair.x2&&y>=stair.y1&&y<stair.y2){
@@ -1179,21 +1206,17 @@ void World::buildLayers(std::span<const Staircase> stairs){
    // Legacy decks got thin posts; authored maps carry their own columns.
    if(!hasLift()&&!custom()&&!m_mapData&&m_level<6&&(x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
-   if(!deck(x-1,y)&&!(hasLift()&&tile(x-1,y)=='#')&&!stairConnection(x-.001f,y+.5f)){
-    m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x-1,y)=='#')m_structures.push_back({float(x),float(y),x+.055f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
+   if(!joinedDeck(x-1,y)&&!wallBeside(x-1,y)&&!stairConnection(x-.001f,y+.5f)){
+     edgeRail({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
    }
-   if(!deck(x+1,y)&&!(hasLift()&&tile(x+1,y)=='#')&&!stairConnection(x+1.001f,y+.5f)){
-    m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x+1,y)=='#')m_structures.push_back({x+.945f,float(y),x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
+   if(!joinedDeck(x+1,y)&&!wallBeside(x+1,y)&&!stairConnection(x+1.001f,y+.5f)){
+     edgeRail({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
    }
-   if(!deck(x,y-1)&&!(hasLift()&&tile(x,y-1)=='#')&&!stairConnection(x+.5f,y-.001f)){
-    m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y-1)=='#')m_structures.push_back({float(x),float(y),x+1.f,y+.055f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
+   if(!joinedDeck(x,y-1)&&!wallBeside(x,y-1)&&!stairConnection(x+.5f,y-.001f)){
+     edgeRail({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:0});
    }
-   if(!deck(x,y+1)&&!(hasLift()&&tile(x,y+1)=='#')&&!stairConnection(x+.5f,y+1.001f)){
-    m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
-    if(tile(x,y+1)=='#')m_structures.push_back({float(x),y+.945f,x+1.f,y+1.f,z,hasLift()?z+2.7f:ceilingHeight(x+.5f,y+.5f),false,wallBacker});
+   if(!joinedDeck(x,y+1)&&!wallBeside(x,y+1)&&!stairConnection(x+.5f,y+1.001f)){
+     edgeRail({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
    }
   }
  }
@@ -1216,7 +1239,26 @@ void World::buildLayers(std::span<const Staircase> stairs){
    else{m_structures.push_back({x1,y1,x2,y1+.07f,top,top+1.05f,true,2});m_structures.push_back({x1,y2-.07f,x2,y2,top,top+1.05f,true,2});}
   }
  }
- m_structureCells.resize(Width*Height);
+  // End guardrails at real walls/columns. Keep original structure indices:
+  // breakable ownership refers to them, so split rails append new pieces.
+  const size_t structureCount=m_structures.size();
+  for(size_t i=0;i<structureCount;++i)if(m_structures[i].rail){
+   auto original=m_structures[i];bool alongX=original.x2-original.x1>=original.y2-original.y1;
+   std::vector<Structure> pieces{original};
+   for(size_t j=0;j<structureCount&&!pieces.empty();++j){const auto&o=m_structures[j];
+    if(o.rail||!o.solid||o.material==1||o.material==6||o.material==CollisionProxyMaterial||o.bottom>original.bottom+.001f||o.top<original.top-.001f)continue;
+    if(alongX?(o.y1>original.y1+.001f||o.y2<original.y2-.001f):(o.x1>original.x1+.001f||o.x2<original.x2-.001f))continue;
+    std::vector<Structure> next;
+    for(auto p:pieces){float lo=alongX?p.x1:p.y1,hi=alongX?p.x2:p.y2,cutLo=alongX?o.x1:o.y1,cutHi=alongX?o.x2:o.y2;
+     if(cutHi<=lo||cutLo>=hi){next.push_back(p);continue;}
+     if(cutLo-lo>.065f){auto a=p;if(alongX)a.x2=cutLo-.004f;else a.y2=cutLo-.004f;next.push_back(a);}
+     if(hi-cutHi>.065f){auto b=p;if(alongX)b.x1=cutHi+.004f;else b.y1=cutHi+.004f;next.push_back(b);}
+    }pieces.swap(next);
+   }
+   if(pieces.empty()){m_structures[i].x2=m_structures[i].x1;m_structures[i].solid=false;m_structures[i].rail=false;}
+   else{m_structures[i]=pieces.front();for(size_t j=1;j<pieces.size();++j)m_structures.push_back(pieces[j]);}
+  }
+  m_structureCells.resize(Width*Height);
  if(m_structures.size()>65535)throw std::runtime_error("Map exceeds the collision structure capacity");
  for(size_t index=0;index<m_structures.size();++index){
   const auto&s=m_structures[index];
@@ -1253,11 +1295,21 @@ float World::supportBelowUncached(float x,float y,float feet,bool cavities)const
  if(insideCargoLift(x,y)&&m_cargoLiftHeight<=feet+.025f)result=std::max(result,m_cargoLiftHeight);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z+c.size<=feet+.025f)result=std::max(result,c.z+c.size);
  for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<=t.footprint.x*.5f&&std::fabs(y-p.position.y)<=t.footprint.y*.5f&&p.z<=feet+.025f)result=std::max(result,p.z);}
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
  return result;
 }
+float World::structureSupportBelow(float x,float y,float radius,float feet)const{
+ float top=-100.f;
+ auto support=[&](const Structure&s){if(s.solid&&s.x2>s.x1&&s.y2>s.y1&&s.top<=feet+.025f&&
+  x+radius>s.x1+.0001f&&x-radius<s.x2-.0001f&&y+radius>s.y1+.0001f&&y-radius<s.y2-.0001f)top=std::max(top,s.top);};
+ if(!m_collisionCandidatesEnabled||m_structureCells.empty()){for(const auto&s:m_structures)support(s);return top;}
+ int x0=std::max(0,int(std::floor(x-radius))),x1=std::min(Width-1,int(std::floor(x+radius)));
+ int y0=std::max(0,int(std::floor(y-radius))),y1=std::min(Height-1,int(std::floor(y+radius)));
+ for(int cy=y0;cy<=y1;++cy)for(int cx=x0;cx<=x1;++cx)for(auto index:m_structureCells[cy*Width+cx])support(m_structures[index]);
+ return top;
+}
 float World::clearanceAbove(float x,float y,float feet,bool cavities)const{
- if(cavities){float top=hasTerrain()?std::min(clearanceHeight(x,y,feet),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y,feet);for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y))top=std::min(top,fixtureSurface(f,x,y,feet,true));}for(auto index:structureIndices(x,y)){const auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>feet+.025f)top=std::min(top,s.bottom);}return top;}
+ if(cavities){float top=hasTerrain()?std::min(clearanceHeight(x,y,feet),terrainSurfaceAbove(x,y,feet)):clearanceHeight(x,y,feet);for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y))top=std::min(top,fixtureSurface(f,x,y,feet,true));}for(auto index:structureIndices(x,y)){const auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>feet+.025f)top=std::min(top,s.bottom);}return top;}
  auto result=clearanceAboveIndexed(x,y,feet);if(collisionVerify())verifyCollision(2,sameFloat(result,clearanceAboveReference(x,y,feet)));return result;
 }
 float World::clearanceAboveIndexed(float x,float y,float feet)const{
@@ -1271,7 +1323,7 @@ float World::clearanceAboveIndexed(float x,float y,float feet)const{
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
  for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
@@ -1323,19 +1375,19 @@ bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bo
   }else if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;
  }}
  for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}}
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
  for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(insideTerminal(*this,t,x,y)&&feet<base+terminalHeight(*this,t,x,y)-.025f&&feet+height>base)return false;}
  return true;
 }
-bool World::structureSegmentClear(Vec2 start,float feet,Vec2 goal,float height,bool indexed)const{
+bool World::structureSegmentClear(Vec2 start,float feet,Vec2 goal,float height,bool indexed,float radius)const{
  auto clear=[&](const Structure&s){
-  if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)return true;
+   if(!s.solid||s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)return true;
   if(s.top<=feet+.265f||s.bottom>=feet+height-.005f)return true;
   return !(rayBoxFraction({start.x,start.y,feet},{goal.x-start.x,goal.y-start.y,0},
-   {s.x1-.1999f,s.y1-.1999f,s.bottom-height+.005f},{s.x2+.1999f,s.y2+.1999f,s.top-.025f})<1);
+    {s.x1-radius+.0001f,s.y1-radius+.0001f,s.bottom-height+.005f},{s.x2+radius-.0001f,s.y2+radius-.0001f,s.top-.025f})<1);
  };
- float lowX=std::min(start.x,goal.x)-.2001f,lowY=std::min(start.y,goal.y)-.2001f;
- float highX=std::max(start.x,goal.x)+.2001f,highY=std::max(start.y,goal.y)+.2001f;
+  float lowX=std::min(start.x,goal.x)-radius-.0001f,lowY=std::min(start.y,goal.y)-radius-.0001f;
+  float highX=std::max(start.x,goal.x)+radius+.0001f,highY=std::max(start.y,goal.y)+radius+.0001f;
  auto all=[&]{for(const auto&s:m_structures)if(!clear(s))return false;return true;};
  // Sweeps outside the indexed map and long diagonals use the full reference.
  if(!indexed||!m_collisionCandidatesEnabled||m_structureCells.size()!=Width*Height||!(lowX>=0&&lowY>=0&&highX<Width&&highY<Height))return all();
@@ -1349,11 +1401,25 @@ bool World::railBlocksHull(float x,float y,float radius,float feet,float height)
  int x0=std::max(0,int(std::floor(x-radius))),x1=std::min(Width-1,int(std::floor(x+radius)));
  int y0=std::max(0,int(std::floor(y-radius))),y1=std::min(Height-1,int(std::floor(y+radius)));
  for(int cy=y0;cy<=y1;++cy)for(int cx=x0;cx<=x1;++cx)for(auto index:m_structureCells[cy*Width+cx]){
-  const auto&s=m_structures[index];if(!s.rail&&!isBreakableStructure(index))continue;
+   const auto&s=m_structures[index];if(!s.solid||(!s.rail&&!isBreakableStructure(index)))continue;
   if(x+radius<=s.x1||x-radius>=s.x2||y+radius<=s.y1||y-radius>=s.y2)continue;
   if(feet<s.top-.025f&&feet+height>s.bottom+.005f)return true;
  }
  return false;
+}
+bool World::structureBlocksHull(float x,float y,float radius,float feet,float height)const{
+ auto blocks=[&](const Structure&s){return s.solid&&s.x2>s.x1&&s.y2>s.y1&&
+  x+radius>s.x1+.0001f&&x-radius<s.x2-.0001f&&y+radius>s.y1+.0001f&&y-radius<s.y2-.0001f&&
+  feet<s.top-.025f&&feet+height>s.bottom+.005f;};
+ if(!m_collisionCandidatesEnabled||m_structureCells.empty()){for(const auto&s:m_structures)if(blocks(s))return true;return false;}
+ int x0=std::max(0,int(std::floor(x-radius))),x1=std::min(Width-1,int(std::floor(x+radius)));
+ int y0=std::max(0,int(std::floor(y-radius))),y1=std::min(Height-1,int(std::floor(y+radius)));
+ for(int cy=y0;cy<=y1;++cy)for(int cx=x0;cx<=x1;++cx)for(auto index:m_structureCells[cy*Width+cx])if(blocks(m_structures[index]))return true;
+ return false;
+}
+void World::setCargoLiftHeight(float z){
+ float delta=z-m_cargoLiftHeight;m_cargoLiftHeight=z;
+ for(auto&light:m_lights)if(light.cargoLift)light.z+=delta;
 }
 std::vector<Span> World::spansAt(int x,int y)const{
  std::vector<Span> result;spansAt(x,y,result);return result;
@@ -1366,7 +1432,7 @@ void World::spansAtIndexed(int x,int y,std::vector<Span>& result)const{
  float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);thread_local std::vector<std::pair<float,float>> solids;solids.clear();solids.push_back({-100.f,supportHeight(px,py)});
  for(auto index:collisionCandidates(0,px,py)){const auto&f=m_fixtures[index];if(f.solid&&f.base>.025f&&insideFixtureCandidate(index,px,py)){float base=floorHeight(px,py)+f.base;solids.push_back({base,base+f.height});}}
  for(auto index:collisionCandidates(1,px,py)){const auto&p=m_props[index];if(p.base>.025f&&std::fabs(px-p.position.x)<p.halfSize.x&&std::fabs(py-p.position.y)<p.halfSize.y){float base=floorHeight(px,py)+p.base;solids.push_back({base,base+p.height});}}
- for(auto index:structureIndices(px,py)){auto&s=m_structures[index];if(px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});}
+ for(auto index:structureIndices(px,py)){auto&s=m_structures[index];if(s.solid&&px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});}
  std::sort(solids.begin(),solids.end());result.clear();float bottom=-100.f;
  for(auto solid:solids){if(solid.first>bottom)result.push_back({bottom,solid.first,0});bottom=std::max(bottom,solid.second);}
  if(bottom<roof)result.push_back({bottom,roof,0});return;
@@ -1399,7 +1465,7 @@ float World::clearanceAboveReference(float x,float y,float feet)const{
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
  for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
@@ -1408,7 +1474,7 @@ std::vector<Span> World::spansAtReference(int x,int y)const{
  float px=x+.5f,py=y+.5f,roof=ceilingHeight(px,py);std::vector<std::pair<float,float>> solids={{-100.f,supportHeight(px,py)}};
  for(auto&f:m_fixtures)if(f.solid&&f.base>.025f&&insideFixture(f,px,py)){float base=floorHeight(px,py)+f.base;solids.push_back({base,base+f.height});}
  for(auto&p:m_props)if(p.base>.025f&&std::fabs(px-p.position.x)<p.halfSize.x&&std::fabs(py-p.position.y)<p.halfSize.y){float base=floorHeight(px,py)+p.base;solids.push_back({base,base+p.height});}
- for(auto index:structureIndices(px,py)){auto&s=m_structures[index];if(px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});}
+ for(auto index:structureIndices(px,py)){auto&s=m_structures[index];if(s.solid&&px>=s.x1&&px<s.x2&&py>=s.y1&&py<s.y2)solids.push_back({s.bottom,s.top});}
  std::sort(solids.begin(),solids.end());std::vector<Span> result;float bottom=-100.f;
  for(auto solid:solids){if(solid.first>bottom)result.push_back({bottom,solid.first,0});bottom=std::max(bottom,solid.second);}
  if(bottom<roof)result.push_back({bottom,roof,0});return result;

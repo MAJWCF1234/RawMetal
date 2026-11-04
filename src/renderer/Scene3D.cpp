@@ -1,3 +1,5 @@
+#include "BoxSurfaces.h"
+#include "../game/CreatureAnimation.h"
 #include "../world/ModelIds.h"
 #include "Projection.h"
 #include "RenderProfile.h"
@@ -320,7 +322,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  std::uint64_t fixedLightSourceKey=1469598103934665603ull;
  auto hashLightSource=[&](std::uint64_t value){fixedLightSourceKey^=value;fixedLightSourceKey*=1099511628211ull;};
  hashLightSource(w.lights().size());
- for(const auto&light:w.lights())if(!(w.hasLift()&&&light==&w.lights().back())){
+ for(const auto&light:w.lights())if(!light.cargoLift&&!(w.hasLift()&&&light==&w.lights().back())){
   hashLightSource(static_cast<std::uint64_t>(light.mount));
   for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range,light.kelvin,light.tint})hashLightSource(std::bit_cast<std::uint32_t>(value));
  }
@@ -361,7 +363,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto emitter=lightFrames[size_t(&light-w.lights().data())].emitter;
   for(int z=0;z<8;++z)for(int y=0;y<8;++y)for(int x=0;x<8;++x){
    auto separation=[](float p,int cell,float origin){float lo=cell==0?-1000.f:origin+cell*4,hi=cell==7?1000.f:origin+(cell+1)*4;return std::max({lo-p,0.f,p-hi});};
-   float dx=separation(emitter.x,x,-4),dy=separation(emitter.y,y,-4),dz=separation(emitter.z,z,-12);
+   float dx=separation(emitter.x,x,-4),dy=separation(emitter.y,y,-4),dz=light.cargoLift?0.f:separation(emitter.z,z,-12);
    if(dx*dx+dy*dy+dz*dz<=light.range*light.range+.01f)lightCells[(z*8+y)*8+x].push_back(size_t(&light-w.lights().data()));
   }
  }
@@ -455,7 +457,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
    for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
-    if(shadowBudget<=0)continue;--shadowBudget;auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=!fixture.shadows||w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
+    auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=!fixture.shadows||w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
     brightness+=visibility*facing*weight;
    }
    return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+sunTerm(normal)+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f*(1.f-dark),4.f);
@@ -502,7 +504,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     accessibility=1.f-.68f*occlusion*.25f;
    }
    ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
-   if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];auto light=lightFrames[source].emitter;
+   if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(fixture.cargoLift)continue;auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
     auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
@@ -518,7 +520,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(shadowBudget>0){m_lightingCache.emplace(key,brightness);if(!pixelLamps)m_lightingCache.emplace(key|AmbientTag,ambient);}
   }
   brightness=std::clamp(brightness-ambient*dark+switched,.075f*(1.f-dark),1.4f);
-  return std::clamp(brightness+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f*(1.f-dark),4.f);
+  float carried=0;
+  if(!m_staticGeometryBuild)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(!fixture.cargoLift)continue;
+   auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
+   if(d2>.001f)carried+=fixture.falloff(d2)*lampPower(source)*std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/std::sqrt(d2);
+  }
+  return std::clamp(brightness+carried+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f*(1.f-dark),4.f);
  };
  auto normalLightingAt=[&](Point3 center){
   if(m_pixelLighting&&m_staticGeometryBuild)return NormalLighting{};
@@ -536,8 +543,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // beat the second retained light, it cannot affect either material slot.
     if(weight<=lights.weights[1])continue;
     auto start=center+delta*(.04f/std::sqrt(d2));
-    if(shadowBudget<=0)continue;
-    auto target=lightFrames[source].target;--shadowBudget;if(fixture.shadows&&!w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z))weight*=.04f;
+    if(!uncached&&shadowBudget<=0)continue;
+    auto target=lightFrames[source].target;if(!uncached)--shadowBudget;if(fixture.shadows&&!w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z))weight*=.04f;
     if(weight<=lights.weights[1])continue;
     int slot=weight>lights.weights[0]?0:1;if(slot==0){lights.weights[1]=lights.weights[0];lights.directions[1]=lights.directions[0];}
     lights.weights[slot]=weight;lights.directions[slot]=delta*(1/std::sqrt(d2));
@@ -570,7 +577,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   else if(needsNormalLighting){auto lights=normalLightingAt(worldCenter);lights.surfaceNormal=surfaceNormal(worldCenter,worldNormal);triangle3D(a,b,c,t,light,&lights);}
   else triangle3D(a,b,c,t,light);
  };
- auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
+ bool clipArchitecture=false;int surfaceOwner=-1;std::vector<SurfaceBox> surfaceBoxes;
+ for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)if(w.tile(x,y)=='#')
+  surfaceBoxes.push_back({{float(x),float(y),w.floorHeight(x+.5f,y+.5f)},{float(x+1),float(y+1),w.wallHeight(x,y)},y*World::Width+x});
+ for(size_t i=0;i<w.structures().size();++i){const auto&s=w.structures()[i];
+  if(s.rail||w.isBreakableStructure(int(i))||s.material==1||s.material==6||s.material==9||s.material==17||s.material==CollisionProxyMaterial||s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
+  surfaceBoxes.push_back({{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},World::Width*World::Height+int(i)});
+ }
+ auto emitQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
   if(!m_staticGeometryBuild&&std::max({a.z,b.z,c.z,d.z})<dormantFloor)return;
   if(outside(cameraPoint(a,game))&outside(cameraPoint(b,game))&outside(cameraPoint(c,game))&outside(cameraPoint(d,game)))return;
   if(hidden({std::min({a.x,b.x,c.x,d.x}),std::min({a.y,b.y,c.y,d.y}),std::min({a.z,b.z,c.z,d.z})},{std::max({a.x,b.x,c.x,d.x}),std::max({a.y,b.y,c.y,d.y}),std::max({a.z,b.z,c.z,d.z})}))return;
@@ -614,6 +628,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    NormalLighting lights;const NormalLighting* normalState=nullptr;
    if((!t.normalLevels.empty()||t.glossStrength>0)){auto center=a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows);lights=normalLightingAt(center);lights.surfaceNormal=surfaceNormal(center,normal);normalState=&lights;}
    triangle3D(A,B,C,t,light,normalState);triangle3D(A,C,D,t,light,normalState);}
+ };
+ auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
+  if(!clipArchitecture){emitQuad(a,b,c,d,t,light,uvScale,uvOffset);return;}
+  auto u=b-a,v=d-a;
+  for(auto p:exposedBoxFace(a,b,d,surfaceOwner,surfaceBoxes))
+   emitQuad(a+u*p.u0+v*p.v0,a+u*p.u1+v*p.v0,a+u*p.u1+v*p.v1,a+u*p.u0+v*p.v1,t,light,
+    {uvScale.x*(p.u1-p.u0),uvScale.y*(p.v1-p.v0)},{uvOffset.x+uvScale.x*p.u0,uvOffset.y+uvScale.y*(1-p.v1)});
  };
  Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};
  const Texture& iron=m_ironTexture;Texture red{1,1,{0xffb84728u}};
@@ -925,7 +946,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;m_gpu->setLodTag(nullptr);
   }
  }
- for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
+ clipArchitecture=true;
+ for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){surfaceOwner=y*World::Width+x;float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.
   if(w.tile(x,y)!='#'){
    bool serviceMap=w.campaign()&&w.level()>=6&&w.level()<=9;
@@ -1012,6 +1034,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.emission[size_t(i)]=0xff000000u|(unsigned(255*heat)<<16)|(unsigned(120*heat*heat)<<8)|unsigned(20*heat*heat);}
   return t;}();
  for(auto&s:w.structures()){
+  surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
+  if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
   if(w.isBreakableStructure(int(&s-w.structures().data())))continue;
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
@@ -1057,6 +1081,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
  }
+ clipArchitecture=false;surfaceOwner=-1;
  const bool staticFixtures=!w.hasLift()&&w.cargoLift().upper<=w.cargoLift().lower;
  if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))){
   float base=w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base;
@@ -2339,23 +2364,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const auto&visual=creatureVisuals[size_t(e.kind)];
   auto&mesh=this->*visual.mesh;
   auto&texture=this->*visual.texture;
-  if(baked){const auto& traits=creatureTraits(e.kind);int clip=0;float phase=std::fmod(game.elapsed()/traits.idleSeconds+e.home.x*.1f,1.f);
-   if(!e.alive){clip=4;phase=std::min(1.f,e.deathTime/traits.deathSeconds);}
-   else if(e.windup>0){clip=2;phase=(1-std::clamp(e.windup/creatureTraits(e.kind).windup,0.f,1.f))*.4f;}
-   else if(e.strike>0){clip=2;phase=.4f+(1-e.strike)*.6f;}
-   else if(e.painFlash>0){clip=3;phase=1-e.painFlash;}
-   else if(e.moving){clip=1;phase=std::fmod(e.gait/(2*kPi),1.f);}
-   // The transformed's own clips: a leap into the bite and the hold (2), a
-   // missed leap's stumble (the stagger, 3), and the overhead blow (5) as
-   // its wind-up and strike, the fists coming down where the wind-up ends.
-   if(e.kind==Enemy::Kind::Transformed&&e.alive){
-    if(e.stalkMode==Enemy::StalkMode::Rush){clip=2;phase=.15f*(1-std::clamp(e.stalkTimer/TransformedLeap,0.f,1.f));}
-    else if(e.stalkMode==Enemy::StalkMode::Grab){clip=2;phase=.15f+.85f*(1-std::clamp(e.stalkTimer/TransformedHold,0.f,1.f));}
-    else if(e.stalkMode==Enemy::StalkMode::Recover){clip=3;phase=.2f+.8f*(1-std::clamp(e.stalkTimer/TransformedStumble,0.f,1.f));}
-    else if(e.windup>0){clip=5;phase=(1-std::clamp(e.windup/traits.windup,0.f,1.f))*.55f;}
-    else if(e.strike>0){clip=5;phase=.55f+(1-e.strike)*.45f;}
-   }
-   mesh.poseCreature(clip,phase);
+  if(baked){auto p=creatureAnimationSample(e,game.elapsed());
+   if(e.visualClip==p.clip&&e.visualTransition<1){float blend=e.visualTransition*e.visualTransition*(3-2*e.visualTransition);mesh.poseCreatureBlend(e.previousVisualClip,e.previousVisualPhase,p.clip,p.phase,blend);}
+   else mesh.poseCreature(p.clip,p.phase);
   }
   // The transformed wears the Worker's body, gloves (mano) and boots (pies).
   std::array<const Texture*,8> parts{};parts.fill(&texture);

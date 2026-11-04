@@ -914,7 +914,6 @@ void SoftwareRenderer::drawHud(const Game& game){
   int x=m_width/2-65,y=m_height-60;
   uiText(x,y-6,target->name(),paper,0,11,1,1);
   fill(x,y+8,130,3,bone,.15f);fill(x,y+8,int(130*std::max(0.f,target->hp)/target->maxHp),3,target->windup>0?amber:red,1);
-  if(target->windup>0)uiText(cx-uiTextWidth("INCOMING",0,11,2)/2,cy-26,"INCOMING",amber,0,11,1,2);
  }
  bool transferReleased=false;
  for(const auto& door:game.world().doors())if(door.transfer&&(door.requireEnemiesClear||door.requireControl||door.requireState)&&!game.doorLocked(door))transferReleased=true;
@@ -1216,7 +1215,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.1.6  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.1.7  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){

@@ -428,8 +428,11 @@ std::shared_ptr<const Map> makeSwitchHall(){
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
  openEdge(m,{'E',9.f,14.f,-25.f,false,0});openEdge(m,{'S',10.f,14.f,-19.f,false,0});
  wall(m,23.f,9.f,24.f,14.f,base,-25.22f,15);
+ wall(m,10.f,23.f,14.f,24.f,base,-19.22f,15);   // and below the bridge to Load Control
  // --- Catwalk A (-25): the entry platform and the west run ---------------------------------------
  deck(m,-25,16,9,24,14);deck(m,-25,2,9,16,12);
+  // The pit is reachable by dropping off the walks; give it a climb back to A.
+  m.stairs.push_back({13.f,12.f,15.f,16.2f,base,-25,15,true,false});
  m.stairs.push_back({2.f,12.f,4.f,16.2f,-25,-22,15,true,true});
  // --- Catwalk B (-22): the west landing and the run east ----------------------------------------
  deck(m,-22,1,16,22,19);deck(m,-22,18,14,22,16);
@@ -443,7 +446,7 @@ std::shared_ptr<const Map> makeSwitchHall(){
  pwrLineup(m,4.f,5,4.4f,base,1.f);pwrLineup(m,6.5f,5,21.2f,base,-1.f);
  for(float y:{6.f,19.f}){Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=4.f;h.x2=13.f+(y>10?2.5f:0.f);h.y1=y-1.2f;h.y2=y+1.2f;h.bottom=base;h.top=base+2.4f;h.damagePerSecond=45;h.enabledFlag=PwrGen;h.period=2.6f;h.onTime=.8f;h.phase=y*.2f;m.hazards.push_back(h);}
  // --- Signage, risers and the cable shaft -----------------------------------------------------
- for(float x:{6.f,8.f})m.pipes.push_back({{x,1.3f},{x,1.3f},base,.11f,roof,6});
+  for(float x:{6.f,8.f})m.pipes.push_back({{x,1.06f},{x,1.06f},base,.11f,roof,6});
  cableTray(m,{22.6f,1.4f},{22.6f,8.6f},-21.f);cableTray(m,{1.4f,1.4f},{1.4f,8.f},-20.f);
  for(float z:{-24.f,-21.f})servicePipe(m,{22.75f,15.f},{22.75f,22.8f},z,.07f,3);
  // --- Creatures: a huntsman on the middle landing, a wasp in the shaft --------------------------------

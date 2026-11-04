@@ -326,7 +326,7 @@ void Game::posePreviewCreature(int clip,float phase){
  const auto& traits=creatureTraits(e.kind);m_elapsed=(phase-e.home.x*.1f)*traits.idleSeconds;
  if(clip==1){e.moving=true;e.gait=phase*2*kPi;}
  if(clip==2&&e.kind==Enemy::Kind::Transformed){if(phase<.15f){e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=(1-phase/.15f)*TransformedLeap;}else{e.stalkMode=Enemy::StalkMode::Grab;e.stalkTimer=(1-(phase-.15f)/.85f)*TransformedHold;}}
- else if(clip==2){if(phase<.4f)e.windup=(1-phase/.4f)*creatureTraits(e.kind).windup;else e.strike=1-(phase-.4f)/.6f;}
+  else if(clip==2){float contact=e.kind==Enemy::Kind::Chimera?.58f:.4f;if(phase<contact)e.windup=(1-phase/contact)*creatureTraits(e.kind).windup;else e.strike=1-(phase-contact)/(1-contact);}
  if(clip==5){if(phase<.55f)e.windup=(1-phase/.55f)*traits.windup;else e.strike=std::max(.001f,1-(phase-.55f)/.45f);}
  if(clip==3)e.painFlash=1-phase;
  if(clip==4){e.alive=false;e.deathTime=phase*traits.deathSeconds;}

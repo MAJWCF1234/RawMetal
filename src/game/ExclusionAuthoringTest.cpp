@@ -47,8 +47,7 @@ bool Game::testExclusionAuthoring(){
   auto campaign=loadCustomCampaignFile(std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt");Game game(campaign);
   taskDirectory=std::filesystem::temp_directory_path()/("rawmetal-exclusion-authoring-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
   std::filesystem::create_directories(taskDirectory);game.m_saveDirectory=taskDirectory.wstring();
-  // The zone is 5 x 4 maps of 24 m; quest terminals are found by the state
-  // they set, then used from whichever side the player can reach them.
+  // Quest terminals are found by the state they set and used from a clear side.
   auto operate=[&](StateId expected){
    for(int level=0;level<game.chunkCount();++level)for(const auto& terminal:game.chunkWorld(level).terminals()){
     if(terminal.activateState!=expected)continue;
@@ -63,12 +62,30 @@ bool Game::testExclusionAuthoring(){
    }
    return false;
   };
+  auto briefElder=[&](){
+   if(game.level()!=15){game.storeChunk();game.loadLevel(15,true);game.updateStreaming(0);}
+   for(size_t i=0;i<game.m_friendlyActors.size();++i){const auto&npc=game.m_friendlyActors[i];
+    if(npc.level!=15||npc.track().talk!=stateId("elder_hello"))continue;
+    for(int k=0;k<8;++k){float a=k*kPi/4;Vec2 stand=npc.pose.position+Vec2{std::cos(a),std::sin(a)}*1.1f;
+     game.m_player.pos=stand;game.m_player.z=game.groundHeight(stand,float(World::TerrainMaxZ+1));
+     game.m_player.angle=std::atan2(npc.pose.position.y-stand.y,npc.pose.position.x-stand.x);
+     game.m_logTime=0;game.m_activeLog=-1;game.m_previousUse=false;
+     if(!game.hullFits(stand,game.m_player.z,Player::StandingHeight)||game.nearbyTalker()!=int(i)||game.nearbyInteractionDoor()>=0||game.nearbyTerminal()>=0)continue;
+     InputState use;use.use=true;game.updateInteraction(use,.01f);
+     if(!game.talking())continue;
+     auto choose=[&](const char*text){game.updateDialogue({},.4f);auto view=game.dialogueView();if(!view)return false;
+      auto reply=std::find(view->replies.begin(),view->replies.end(),text);if(reply==view->replies.end())return false;
+      InputState key;key.choice=int(reply-view->replies.begin())+1;game.updateDialogue(key,.01f);return true;};
+     return choose("Work.")&&choose("I'll find him.")&&game.state("zone_briefed");
+    }
+   }return false;
+  };
   const auto elder=stateId("zone_obj_elder"),pda=stateId("zone_obj_pda"),tower=stateId("zone_obj_tower"),out=stateId("zone_obj_out");
   check(game.chunkCount()==20&&game.level()==15,"The zone starts at the rookie camp in its south-west map");
   game.updateScripts(0);
   check(game.objective(elder)==ObjectiveStatus::Active&&game.activeObjectiveText()=="Talk to the camp elder by the fire","Arrival shows the elder objective");
   check(operate(stateId("zone_pda"))&&!game.state("zone_pda"),"The courier's PDA stays locked until the elder has briefed the player");
-  check(operate(stateId("zone_briefed"))&&game.state("zone_briefed"),"Real E at the elder's terminal records the briefing");
+  check(briefElder(),"Real E and the elder's dialogue choices record the briefing");
   game.updateScripts(0);
   check(game.objective(elder)==ObjectiveStatus::Complete&&game.objective(pda)==ObjectiveStatus::Active,"The briefing advances to the PDA objective");
   check(operate(stateId("zone_transmit"))&&!game.state("zone_transmit"),"The tower transmitter needs the relay code from the PDA");

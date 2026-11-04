@@ -143,6 +143,14 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  if(wantCrouch&&!crouched){crouched=true;height=crouchHeight;}
  else if(!wantCrouch&&crouched){if(friendlyBodyFits(level,pose.position,pose.z,standing)){crouched=false;height=standing;}else height=crouchHeight;}
  if(crouched)speedScale*=.55f;
+ if(grounded&&config.mode!=ActorAiMode::Scripted&&!friendlyBodyFits(level,pose.position,pose.z,height)){
+  bool recovered=false;float step=world.hasTerrain()?.34f:.24f;
+  for(float radius=.05f;radius<=.6f&&!recovered;radius+=.05f)for(int side=0;side<16;++side){
+   float angle=side*kTwoPi/16;Vec2 p=pose.position+Vec2{std::cos(angle),std::sin(angle)}*radius;float z=friendlySupportAt(level,p,pose.z+step);
+   if(std::fabs(z-pose.z)>step+.025f||!friendlyBodyFits(level,p,z,height)||!world.rayClear(pose.position,pose.z+.6f,p,z+.6f))continue;
+   pose.position=p;pose.z=z;vv=0;put("stuck",0);put("repath",0);recovered=true;break;
+  }
+ }
  float timer=std::max(0.f,std::clamp(get("repath"),0,4000)*.001f-dt);Vec2 waypoint=get("saved")?Vec2{get("way_x")*.001f,get("way_y")*.001f}:pose.position;
  bool navigationDeferred=config.mode==ActorAiMode::Guard&&m_npcNavBudget<=0&&get("guard_route_target")&&get("guard_route_target")!=level+1&&!get("guard_route_next")&&!get("guard_route_wait")&&lengthSq(goal-pose.position)<.00001f;
  if(lengthSq(goal-Vec2{get("goal_x")*.001f,get("goal_y")*.001f})>1.f)timer=0;
@@ -199,9 +207,16 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
   if(grounded)clear=travel>0&&friendlyWalkSegment(level,pose.position,pose.z,next,height,&feet);
   else{if(!grounded&&goalZ>pose.z+.05f&&lengthSq(goal-pose.position)>.01f){direction=normalized(goal-pose.position);next=pose.position+direction*travel;}
    clear=travel>0&&friendlyBodyFits(level,next,pose.z,height);}
-  auto player=m_player.pos+chunkOffset(m_level)-chunkOffset(level);
+   // Slide along a jamb rather than dropping all movement at its corner.
+   if(grounded&&travel>0&&!clear){float best=0;Vec2 slide=pose.position;float slideZ=pose.z;
+    for(auto component:{Vec2{next.x,pose.position.y},Vec2{pose.position.x,next.y}}){float z=pose.z;
+     float progress=dot(component-pose.position,direction);
+     if(progress>best&&friendlyWalkSegment(level,pose.position,pose.z,component,height,&z)){best=progress;slide=component;slideZ=z;}}
+    if(best>0){next=slide;feet=slideZ;clear=true;}
+   }
+   auto player=m_player.pos+chunkOffset(m_level)-chunkOffset(level);
   if(feet<m_player.z+m_player.hullHeight()&&feet+height>m_player.z&&std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;
-  for(const auto&enemy:enemies)if(enemy.alive&&enemy.bodyBottom()<feet+height&&enemy.bodyTop()>feet&&lengthSq(next-enemy.pos)<.45f*.45f&&lengthSq(next-enemy.pos)<lengthSq(pose.position-enemy.pos))clear=false;
+   for(const auto&enemy:enemies)if(enemy.alive&&enemy.bodyBottom()<feet+height&&enemy.bodyTop()>feet&&lengthSq(next-enemy.pos)<(enemy.contactRadius()+.2f)*(enemy.contactRadius()+.2f)&&lengthSq(next-enemy.pos)<lengthSq(pose.position-enemy.pos))clear=false;
   for(const auto&drone:drones){if(feet>=drone.position.z+EngineerDroneHeight||feet+height<=drone.position.z)continue;auto shift=chunkOffset(drone.level)-chunkOffset(level);Vec2 body{drone.position.x+shift.x,drone.position.y+shift.y};
    if(lengthSq(next-body)<.85f*.85f&&lengthSq(next-body)<lengthSq(pose.position-body))clear=false;
   }

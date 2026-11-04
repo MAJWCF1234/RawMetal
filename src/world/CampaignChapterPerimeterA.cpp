@@ -87,8 +87,8 @@ WorldLight perTroffer(Vec2 p,float ceil,float intensity=.95f,float range=6.5f,fl
 // A doorway through a wall that runs along y (an east or west wall): jamb
 // posts, a header to the ceiling. No leaf: leaves only span x.
 void perDoorwayY(Map& m,float x1,float x2,float y1,float y2,float f,float ceil){
- for(float y:{y1-.08f,y2})wall(m,x1-.02f,y,x2+.02f,y+.08f,f,f+2.2f,20);
- wall(m,x1-.02f,y1-.08f,x2+.02f,y2+.08f,f+2.12f,f+2.2f,20);wall(m,x1,y1,x2,y2,f+2.2f,ceil,21);
+ for(float y:{y1-.08f,y2})doorTrim(m,x1-.02f,y,x2+.02f,y+.08f,f,f+2.2f,20);
+ doorTrim(m,x1-.02f,y1-.08f,x2+.02f,y2+.08f,f+2.12f,f+2.2f,20);wall(m,x1,y1,x2,y2,f+2.2f,ceil,21);
 }
 // A glazed partition along y (officeGlass handles both axes; this keeps a plaster dado).
 void perGlass(Map& m,float x1,float y1,float x2,float y2,float f,float ceil){officeGlass(m,x1,y1,x2,y2,f,ceil,true);}

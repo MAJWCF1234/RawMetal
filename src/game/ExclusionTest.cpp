@@ -111,8 +111,24 @@ bool Game::testExclusion(){
  check(guards>=7&&squads.count(stateId("zone_military"))&&squads.count(stateId("zone_bandits")),"Military and bandit squads hold their posts");
  size_t fixtures=0;
  for(int level=0;level<g.chunkCount();++level){Game probe=zoneInspection(level,{12,12},0,0);fixtures+=probe.world().fixtures().size();
-  for(const auto&spawn:probe.world().creatureSpawns())check(probe.hullFits(spawn.position,probe.groundHeight(spawn.position,float(World::TerrainMaxZ+1)),.5f),"Creature spawns stand clear of geometry");
-  for(const auto&spawn:probe.world().pickupSpawns())check(probe.hullFits(spawn.position,probe.groundHeight(spawn.position,float(World::TerrainMaxZ+1)),Player::StandingHeight),"Pickups are reachable standing");}
+   for(const auto&spawn:probe.world().creatureSpawns()){Enemy e;e.kind=spawn.kind;e.scale=spawn.scale;
+    float feet=spawn.z==-999?probe.world().floorHeight(spawn.position.x,spawn.position.y):spawn.z;
+    feet=std::max(feet,probe.groundHeight(spawn.position,feet+creatureTraits(e.kind).step,e.radius()));
+    bool clear=probe.hullFits(spawn.position,feet,e.hull(),e.radius(),false);
+    check(clear,"Creature spawn has its actual standing clearance (map "+std::to_string(level)+" at "+std::to_string(spawn.position.x)+","+std::to_string(spawn.position.y)+")");
+    if(!clear){const auto&w=probe.world();int blockedSamples=0;
+     for(float x:{-e.radius(),0.f,e.radius()})for(float y:{-e.radius(),0.f,e.radius()})
+      if(!w.fits(spawn.position.x+x,spawn.position.y+y,feet,e.hull())||w.doorBlocks(spawn.position.x+x,spawn.position.y+y,feet,e.hull()))++blockedSamples;
+     report<<"DETAIL creature kind="<<int(e.kind)<<" authoredFeet="<<spawn.z<<" checkedFeet="<<feet<<" radius="<<e.radius()<<" height="<<e.hull()<<" blockedSamples="<<blockedSamples<<" structureOverlap="<<w.structureBlocksHull(spawn.position.x,spawn.position.y,e.radius(),feet,e.hull())<<'\n';
+     int found=0;for(float distance=.25f;distance<=6.f&&found<3;distance+=.25f)for(int k=0;k<16&&found<3;++k){
+      float angle=k*kPi/8;Vec2 p=spawn.position+Vec2{std::cos(angle),std::sin(angle)}*distance;
+      if(p.x<.8f||p.y<.8f||p.x>23.2f||p.y>23.2f)continue;
+      float z=probe.groundHeight(p,float(World::TerrainMaxZ+1),e.radius());
+      if(std::fabs(z-feet)>1.5f||!probe.hullFits(p,z,e.hull(),e.radius(),false))continue;
+      report<<"DETAIL candidate="<<p.x<<','<<p.y<<','<<z<<" distance="<<distance<<'\n';++found;
+     }
+    }}
+   for(const auto&spawn:probe.world().pickupSpawns())check(probe.hullFits(spawn.position,probe.groundHeight(spawn.position,float(World::TerrainMaxZ+1)),Player::StandingHeight,.2f,false),"Pickups are reachable standing");}
  report<<"fixtures "<<fixtures<<'\n';
  // Buildings are solid all through, also where they cross into a neighbouring
  // map (collision-only copies there): no standing body fits inside one.

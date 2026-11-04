@@ -329,7 +329,7 @@ def build(z):
     z.model('dumpster', 17.5, 58.5); z.model('tire', 18.6, 60.2, yaw=1.1, solid=False); z.model('tire', 19.1, 59.8, yaw=.2, solid=False)
     z.terminal(28.5, 66.5, 'COURIER / PDA', 'RELAY CODE 4471. THE MILITARY SIT ON THE ROAD EAST.',
                'THE RADIO TOWER ON THE EAST RIDGE CAN STILL TRANSMIT.', 'zone_pda', 'zone_briefed')
-    z.creature(4, 23, 67)  # a mutant has the station
+    z.creature(4, 23, 68)  # a mutant has the station
     z.creature(0, 35, 74)
     z.pickup(1, 21.5, 66); z.pickup(0, 33, 61)
     for i in range(6):
@@ -451,7 +451,7 @@ def build(z):
     z.model('transformer', 82.5, 15, yaw=PI / 2)
     for i in range(6):
         z.model('ind_wall', 82 + i * 4, 4.2, yaw=0)
-    z.creature(2, 95, 18); z.creature(2, 104, 13); z.creature(0, 88, 26); z.creature(0, 110, 18)
+    z.creature(2, 95, 18); z.creature(2, 102.374, 16.927); z.creature(0, 88, 26); z.creature(0, 110, 16)
     z.pickup(1, 97, 17); z.pickup(0, 102, 20)
     z.terminal(93, 18, 'PLANT 2 / SHIFT LOG', 'COOLING LOOP FAILED AT 02:40. EVERYONE WENT TO THE MINE.',
                'SOMETHING CAME UP OUT OF THE RESERVOIR.')
@@ -487,7 +487,7 @@ def build(z):
     z.model('dead_tree_a', 18, 22, yaw=.3); z.model('log', 16, 25, yaw=1.0); z.model('log', 20.5, 26, yaw=2.2)
     for i in range(6):
         z.model('mushrooms', 17 + (i % 3) * 1.1, 23.5 + (i // 3) * 1.3, yaw=i, solid=False)
-    z.creature(4, 18, 24); z.creature(0, 14, 20); z.creature(0, 22, 21)
+    z.creature(4, 18, 25); z.creature(0, 14, 20); z.creature(0, 22, 21)
     z.pickup(0, 19.5, 24.5)
     t.flat(27, 10, 35, 17, None, 4)
     z.clear(31, 13, 5)
@@ -596,11 +596,11 @@ def build(z):
     people(z)
     # --- The transformed (creature 7): people the zone changed. They sleep where
     # they fell and the storm wakes them; a few already walk.
-    for (x, y) in [(97.5, 89.5), (100.5, 86.5), (90.5, 87.5), (106, 84.5)]:  # under the burned village
+    for (x, y) in [(97.5, 89.5), (100.5, 86.5), (90.5, 89.5), (106, 86.5)]:  # under the burned village
         z.creature(7, x, y, wake='zone_storm_wake')
-    for (x, y) in [(109, 12.5), (113, 9.5)]:  # out of the reservoir
+    for (x, y) in [(109.5, 12.5), (113, 12.25)]:  # out of the reservoir
         z.creature(7, x, y, wake='zone_storm_wake')
-    z.creature(7, 60.5, 3.2, wake='zone_storm_wake')  # the lift shaft at the mine
+    z.creature(7, 59, 3.2, wake='zone_storm_wake')  # the lift shaft at the mine
     for (x, y) in [(31, 60.5), (71, 38)]:  # already walking
         z.creature(7, x, y)
     # The first storm wakes them, and they stay awake.

@@ -1,0 +1,75 @@
+DEPTHWORKS - YOUTUBE UPLOAD SHEET (Chapter 1 trailer)
+
+FILE
+  trailer-720p.mp4  (the 81 MB master; YouTube re-encodes, so give it the best copy)
+  Not trailer-720p-web.mp4, which is the compressed copy for sharing.
+
+TITLE  (under 100 characters)
+  DEPTHWORKS - Chapter 1 Trailer | First-Person Stealth Horror | Free on itch.io
+
+  Shorter alternatives:
+  DEPTHWORKS | Chapter 1 Trailer
+  DEPTHWORKS - Keep to the Dark (Chapter 1 Trailer)
+
+DESCRIPTION  (paste as is; the first two lines show above "...more")
+------------------------------------------------------------------------
+You work the night shift. Tonight the lift goes lower.
+DEPTHWORKS Chapter 1 is free on itch.io: https://majwcf1234.itch.io/depthworks
+
+DEPTHWORKS is a first-person stealth and survival game set in a power plant on
+its worst night. Creep, hide, listen, and decide how much of the dark you can
+afford to cross. Keep to the shadows, read the guards before they read you,
+and find out what the lift goes down to.
+
+Chapter 1 is complete: one plant, one night, from the first switch to the last
+door.
+
+Built on RawMetal, a custom engine and renderer written from scratch.
+All footage is in-engine gameplay camera, no UI.
+
+Windows 10/11 (x64), Vulkan 1.0 GPU. Experimental VR (SteamVR).
+
+Play free:        https://majwcf1234.itch.io/depthworks
+Release notes:    https://github.com/MAJWCF1234/RawMetal/releases
+
+#DepthWorks #IndieHorror #StealthGame
+------------------------------------------------------------------------
+
+TAGS  (comma-separated, about 400 characters; paste into the Tags box)
+  DepthWorks, Depth Works, DepthWorks trailer, indie horror, horror game,
+  stealth game, stealth horror, first person horror, survival horror,
+  indie game, indie game trailer, free horror game, itch.io, itch.io games,
+  free game, PSX horror, retro horror, metal gear style stealth,
+  immersive sim, custom game engine, RawMetal, RawMetal engine, Vulkan,
+  game trailer, new indie games 2026, horror games 2026
+
+DETAILS
+  Category:            Gaming
+  Game title field:    leave empty (YouTube only matches known games)
+  Audience:            No, it is not made for kids
+  Age restriction:     not needed (no gore in the trailer); add it if you want
+  Altered content:     No (in-engine footage, no realistic synthetic people)
+  Paid promotion:      No
+  Language:            English
+  Licence:             Standard YouTube Licence
+  Allow embedding:     Yes   (so itch can embed it)
+  Comments:            On
+  Chapters:            Off. They need 3 or more sections of 10 s each and do
+                       nothing for a 45 s trailer, so leave timestamps out.
+
+THUMBNAIL  (1280x720, under 2 MB, JPG or PNG)
+  youtube-thumbnail-1280x720.png (guard silhouette shot with the logo).
+  The cover (630x500) is the wrong shape and gets letterboxed.
+
+END SCREEN  (add after upload, last 10 s from 0:35)
+  One element: Link > itch.io (once the page is published and the channel has
+  link rights), otherwise "Subscribe" plus a "Video: best for viewer" box.
+
+VISIBILITY
+  Unlisted until the itch page is published (it is still a Draft), then
+  Public. Then paste the YouTube link into the itch page's Gameplay video /
+  trailer field so the trailer plays at the top of the page.
+
+PINNED COMMENT
+  Chapter 1 is free here: https://majwcf1234.itch.io/depthworks
+  Tell me where you got caught.

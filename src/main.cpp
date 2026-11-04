@@ -1118,7 +1118,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      return 0;
     }
     if(commandArguments().find(L"--guard-combat-test"))return retro::Game::testGuardCombat()?0:21;
-    if(commandArguments().find(L"--terrain-query-test"))return retro::World::testCollisionCandidates()?0:21;
+    if(commandArguments().find(L"--terrain-query-test")){
+     bool passed=retro::World::testCollisionCandidates();
+     std::ofstream("terrain-query-test.txt")<<(passed?"PASS":"FAIL")<<": indexed collision queries match the full reference\n";
+     return passed?0:21;
+    }
     if(commandArguments().find(L"--ai-query-test"))return retro::Game::testAiQueryBatch()?0:21;
     if(commandArguments().find(L"--ai-decision-test"))return retro::Game::testAiDecisionClock()?0:21;
     if(commandArguments().find(L"--guard-tactics-test"))return retro::Game::testGuardTactics()?0:21;
@@ -1131,6 +1135,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--nav-graph-test"))return retro::Game::testNavGraph()?0:21;
     if(commandArguments().find(L"--creature-behaviour-test"))return retro::Game::testCreatureBehaviour()?0:21;
     if(commandArguments().find(L"--engine-regression-test"))return retro::Game::testEngineRegression()?0:21;
+    if(commandArguments().find(L"--gameplay-fixes-test"))return retro::Game::testGameplayFixes()?0:21;
+    if(commandArguments().find(L"--gameplay-rendering-test"))return retro::SoftwareRenderer::testGameplayRendering()?0:21;
     if(commandArguments().find(L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
     if(commandArguments().find(L"--civilian-schedule-test"))return retro::Game::testCivilianSchedule()?0:21;
     if(commandArguments().find(L"--guard-patient-test"))return retro::Game::testGuardPatient()?0:21;
@@ -1415,7 +1421,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      renderer.setEnvironmentInspection(true);std::filesystem::create_directories("creature-video");
      retro::Game views[2]={retro::Game::creaturePreview(retro::Enemy::Kind(kind),0),retro::Game::creaturePreview(retro::Enemy::Kind(kind),1)};
      struct Segment{const char* name;int clip;float seconds;};
-     const float attack=traits.windup+.25f;
+      const float attack=traits.windup+traits.strikeSeconds;
+      const float contact=kind==int(retro::CreatureKind::Chimera)?.58f:.4f;
      const float pain=1.f/traits.painDecay;
      // The transformed's attack is its leap and two-second pin; its overhead
      // blow is a sixth clip, its wind-up then the strike.
@@ -1429,7 +1436,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       if(s.clip==0)phase=std::fmod(t/traits.idleSeconds,1.f);
       else if(s.clip==1)phase=std::fmod(t*traits.speed*traits.gaitPerMetre/(2*retro::kPi),1.f);
       else if(s.clip==2&&transformed)phase=t<retro::TransformedLeap?.15f*t/retro::TransformedLeap:std::min(1.f,.15f+.85f*(t-retro::TransformedLeap)/retro::TransformedHold);
-      else if(s.clip==2)phase=t<traits.windup?.4f*t/traits.windup:std::min(1.f,.4f+.6f*(t-traits.windup)/.25f);
+       else if(s.clip==2)phase=t<traits.windup?contact*t/traits.windup:std::min(1.f,contact+(1-contact)*(t-traits.windup)/traits.strikeSeconds);
       else if(s.clip==5)phase=t<traits.windup?.55f*t/traits.windup:std::min(1.f,.55f+.45f*(t-traits.windup)/traits.strikeSeconds);
       else if(s.clip==3)phase=std::min(1.f,t/pain);
       else phase=std::min(1.f,t/traits.deathSeconds);
@@ -1605,7 +1612,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"radar",retro::Game::testRadar},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
          {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
-         {"engine-regression",retro::Game::testEngineRegression},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
+         {"engine-regression",retro::Game::testEngineRegression},{"gameplay-fixes",retro::Game::testGameplayFixes},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
          {"lift-mix",retro::AudioEngine::testLiftMix},{"glass",retro::Game::testGlass},{"physics-stages",retro::Game::testPhysicsStages},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
          {"mechanisms",retro::Game::testMechanisms},{"campaign-maps",retro::Game::testCampaignMaps},{"crates",retro::Game::testCrates},

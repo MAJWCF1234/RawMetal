@@ -51,10 +51,10 @@ struct WorldLight {
  // other fixture model is drawn flush under its mounting surface at this
  // size, turned by yaw (a clinic's recessed fluorescent, say).
  int fitting=-1;float fittingWidth=0,fittingDepth=0,fittingHeight=0;
- bool shadows=true;int prop=-1,propLevel=-1;
+  bool shadows=true;int prop=-1,propLevel=-1;bool cargoLift=false;
  // Power can change while the map runs (Game::lampPower), so renderers keep
  // this lamp out of their baked caches and apply its power every frame.
- bool switchable()const{return enabledState||invert||period>0||flicker>0||prop>=0;}
+  bool switchable()const{return enabledState||invert||period>0||flicker>0||prop>=0||cargoLift;}
  Point3 emitter()const{
   if(mount==WorldLightMount::Wall)return {position.x+std::cos(yaw)*.16f,position.y+std::sin(yaw)*.16f,z};
   return {position.x,position.y,z};
@@ -108,7 +108,7 @@ struct CargoLift {
  StateId callState=0,releaseState=0,positionState=0,downState=0,arrivedState=0,descendedState=0;
 };
 struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
-struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;};
+struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;};
 // A structure that only collides: the solid core of something drawn in finer
 // pieces (a steel column's flanges and web), never rendered.
 inline constexpr int CollisionProxyMaterial=30;
@@ -405,6 +405,7 @@ public:
     // Reuse result storage for repeated cell queries.
     void spansAt(int x,int y,std::vector<Span>& result)const;
     float supportBelow(float x,float y,float feet,bool cavities=false)const;
+    float structureSupportBelow(float x,float y,float radius,float feet)const;
     float clearanceAbove(float x,float y,float feet,bool cavities=false)const;
     float fixtureSurface(const Fixture& f,float x,float y,float feet,bool ceiling)const;
     bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
@@ -420,10 +421,11 @@ public:
     void setActorPose(size_t index,ActorPose pose){m_actorPoses.at(index)=pose;}
     const std::vector<SequenceCue>& sequenceCues()const{static const std::vector<SequenceCue> empty;return m_mapData?m_mapData->sequenceCues:empty;}
     float cargoLiftHeight()const{return m_cargoLiftHeight;}
-    void setCargoLiftHeight(float z){m_cargoLiftHeight=z;}
+    void setCargoLiftHeight(float z);
     bool insideCargoLift(float x,float y)const{return m_cargoLift.x2>m_cargoLift.x1&&x>=m_cargoLift.x1&&x<m_cargoLift.x2&&y>=m_cargoLift.y1&&y<m_cargoLift.y2;}
     bool railBlocksHull(float x,float y,float radius,float feet,float height)const;
-    bool structureSegmentClear(Vec2 start,float feet,Vec2 goal,float height,bool indexed=true)const;
+    bool structureBlocksHull(float x,float y,float radius,float feet,float height)const;
+    bool structureSegmentClear(Vec2 start,float feet,Vec2 goal,float height,bool indexed=true,float radius=.20f)const;
     float wallHeight(int x,int y)const;
     bool controlReleased()const{return m_controlReleased;}
     void releaseControl(){m_controlReleased=true;}

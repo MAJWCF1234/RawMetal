@@ -4,6 +4,34 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.7 - In her own hands (2026-11-04)
+
+Look down, and there is someone there. The hands on the shotgun are gloved
+and banded at the wrist, they close on the grip and the slide, and when you
+look at your feet you find legs under you. She stands as tall as she always
+said she did.
+
+There is a sidearm in the plant now, and boxes of nine millimetre for it, though
+not anywhere tonight's work has taken you yet. The count at the corner of the
+screen is for the gun in your hands and nothing else. In the Ashfall Exclusion
+Zone the rookies by the fire will hand you one already drawn.
+
+Doorways no longer catch on a shoulder that was nowhere near the frame, and
+the trim around them stopped pretending to be a wall. Rails and thresholds lift
+your feet instead of stopping your shins. The thing in the cold hold is broader
+than it was, it does not walk through the people it is chasing, and it does
+not stop at the receiving gate any more. Several of the plant's other residents
+have found a quicker pace. Nothing tells you it is coming now except the way
+it moves and the sound it makes.
+
+There is a way back up out of the Switch Hall pit, the inspection stairs are
+clear of the track above them, the fence panels at Research Receiving hold, and
+the lamp in the prologue lift rides with the cab the whole way.
+
+The great door is still shut.
+
+---
+
 ## v1.1.6 - Facing the room (2026-11-03)
 
 Clocks that had been hung with their faces to the wall have been turned round,

@@ -1,5 +1,6 @@
 #include "../../../core/FrameProfile.h"
 #include "../../Game.h"
+#include "../../CreatureAnimation.h"
 #include "../Perception.h"
 #include "../Navigation.h"
 #include "../RouteCache.h"
@@ -10,8 +11,25 @@
 #include <fstream>
 #include <optional>
 namespace retro {
-static float navSupport(const World&w,Vec2 p,float feet){float z=w.supportBelow(p.x,p.y,feet);for(float x:{-.20f,.20f})for(float y:{-.20f,.20f})z=std::max(z,w.supportBelow(p.x+x,p.y+y,feet));return z;}
-static bool navFits(const World&w,Vec2 p,float z,float height){perf::count(perf::NavFits);if(w.railBlocksHull(p.x,p.y,.20f,z,height))return false;for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
+static float navSupport(const World&w,Vec2 p,float feet,float radius=.20f){float z=std::max(w.supportBelow(p.x,p.y,feet),w.structureSupportBelow(p.x,p.y,radius,feet));for(float x:{-radius,radius})for(float y:{-radius,radius})z=std::max(z,w.supportBelow(p.x+x,p.y+y,feet));return z;}
+static bool navFits(const World&w,Vec2 p,float z,float height,float radius=.20f){perf::count(perf::NavFits);if(w.structureBlocksHull(p.x,p.y,radius,z,height))return false;for(float x:{-radius,0.f,radius})for(float y:{-radius,0.f,radius})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
+// Openings need not be centred on the metre grid. Retain a clear point
+// inside each span's cell, nudging away from a jamb when necessary.
+static bool navCellPoint(const World&w,int x,int y,float floor,float height,float radius,Vec2&p,float&z){
+ // Prefer the aperture centre on both sides of a door. Merely finding a safe
+ // point farther from its wall can leave adjacent grid nodes on the jamb side
+ // of a narrow opening, with no edge that actually passes through it.
+ for(const auto&door:w.doors()){
+  float center=(door.left+door.right)*.5f,base=w.floorHeight(center,door.y)+door.z;
+  if(center<x||center>=x+1||std::fabs(y+.5f-door.y)>1.25f||std::fabs(floor-base)>.24f)continue;
+  p={center,y+.5f};z=navSupport(w,p,floor+.215f,radius);
+  if(std::fabs(z-floor)<.24f&&navFits(w,p,z,height,radius))return true;
+ }
+ for(float dx:{0.f,-.25f,.25f})for(float dy:{0.f,-.25f,.25f}){
+  p={x+.5f+dx,y+.5f+dy};z=navSupport(w,p,floor+.215f,radius);
+  if(std::fabs(z-floor)<.24f&&navFits(w,p,z,height,radius))return true;
+ }return false;
+}
 static float roughStep(Enemy::Kind kind){
  return creatureTraits(kind).step;
 }
@@ -19,23 +37,23 @@ static float roughStep(Enemy::Kind kind){
 // one-metre cell centres. A one-metre voxel rise becomes a traversable slope when
 // its short movement samples stay within the creature's step capability, while a
 // real cliff still fails the same test.
-static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr,bool sweep=false){
+static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float stepHeight,float* endZ=nullptr,bool sweep=false,float radius=.20f){
  perf::count(perf::RoughSegment);
- auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height);}
+ auto delta=to-from;float distance=length(delta);if(distance<.001f){if(endZ)*endZ=fromZ;return navFits(w,from,fromZ,height,radius);}
  float pitch=aiWalkSamplePitch(w.hasTerrain());int samples=std::max(1,int(std::ceil(distance/pitch)));float z=fromZ;
- for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f);
-  if(sweep&&!aiStructureSegment(w,from+delta*(float(i-1)/samples),z,p,height))return false;
-  float rise=ground-z,drop=z-ground;if(rise>stepHeight+.025f||drop>std::max(.48f,stepHeight*1.45f)||!navFits(w,p,ground,height))return false;z=ground;
+ for(int i=1;i<=samples;++i){Vec2 p=from+delta*(float(i)/samples);float ground=navSupport(w,p,z+stepHeight+.03f,radius);
+  if(sweep&&!aiStructureSegment(w,from+delta*(float(i-1)/samples),z,p,height,true,radius))return false;
+  float rise=ground-z,drop=z-ground;if(rise>stepHeight+.025f||drop>std::max(.48f,stepHeight*1.45f)||!navFits(w,p,ground,height,radius))return false;z=ground;
  }
  if(endZ)*endZ=z;return true;
 }
 // The deck planner as it probes with nothing kept: the reference the route
 // cache must match, and the planner wherever nothing may be kept.
-static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false){
+static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f){
  perf::Scope stackedProfile(perf::StackedWaypoint);perf::count(perf::StackedCalls);
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
  for(int y=1;y<23;++y)for(int x=1;x<23;++x)for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
-  Vec2 p{x+.5f,y+.5f};float floor=navSupport(w,p,span.floor+.215f);if(!navFits(w,p,floor,height))continue;
+  Vec2 p;float floor;if(!navCellPoint(w,x,y,span.floor,height,radius,p,floor))continue;
   cells[y*24+x].push_back(int(nodes.size()));nodes.push_back({p,floor});}
  perf::count(perf::StackedNodes,nodes.size());
  int origin=-1,target=-1;float a=1e9f,b=1e9f;
@@ -44,8 +62,8 @@ static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,
  while(!queue.empty()&&nodes[target].parent<0){int current=queue.front();queue.pop();auto n=nodes[current];int x=int(n.p.x),y=int(n.p.y);
   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
    for(int next:cells[ny*24+nx]){if(nodes[next].parent>=0)continue;perf::count(perf::StackedEdges);float feet=n.z;bool clear=true;
-    for(int sample=1;sample<=4;++sample){Vec2 p=n.p+d*(sample/4.f);float ground=navSupport(w,p,feet+.215f);
-     if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height)){clear=false;break;}feet=ground;}
+    for(int sample=1;sample<=4;++sample){Vec2 p=n.p+(nodes[next].p-n.p)*(sample/4.f);float ground=navSupport(w,p,feet+.215f,radius);
+     if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height,radius)){clear=false;break;}feet=ground;}
     if(clear&&std::fabs(feet-nodes[next].z)<.03f){nodes[next].parent=current;queue.push(next);}
    }
   }
@@ -54,7 +72,7 @@ static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,
  // The actor can enter a navigation cell near an obstacle corner. Its next
  // cell-to-cell edge is safe from the cell centre, but the diagonal from the
  // actor's actual feet may clip that corner. Reach the origin centre first.
- if(human&&!aiWalkSegment(w,start,startZ,nodes[next].p,height)&&aiWalkSegment(w,start,startZ,nodes[origin].p,height))return nodes[origin].p;
+ if(human&&!roughSegment(w,start,startZ,nodes[next].p,height,.24f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,.24f,nullptr,true,radius))return nodes[origin].p;
  return nodes[next].p;
 }
 static bool sameBits(Vec2 a,Vec2 b){return std::bit_cast<uint32_t>(a.x)==std::bit_cast<uint32_t>(b.x)&&std::bit_cast<uint32_t>(a.y)==std::bit_cast<uint32_t>(b.y);}
@@ -67,11 +85,11 @@ template<class Probe> static auto uncounted(const Probe&probe){auto counts=perf:
 // walk from a node toward a neighbour cell does not depend on which node there
 // it reaches). Origin and target choice, search order, early stop and the
 // corner rule are unchanged, so the waypoint is the live planner's to the bit.
-static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fresh,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human){
+static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fresh,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human,float radius){
  auto&nodes=deck.nodes;auto&cells=deck.cells;
  if(fresh){
   for(int y=1;y<23;++y)for(int x=1;x<23;++x){cells[y*24+x].begin=int(nodes.size());for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
-   Vec2 p{x+.5f,y+.5f};float floor=navSupport(w,p,span.floor+.215f);if(!navFits(w,p,floor,height))continue;
+   Vec2 p;float floor;if(!navCellPoint(w,x,y,span.floor,height,radius,p,floor))continue;
    nodes.push_back({p,floor});}cells[y*24+x].end=int(nodes.size());}
   deck.edges.assign(nodes.size()*4,{});
  }
@@ -84,31 +102,31 @@ static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fre
   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){++direction;int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
    for(int next=cells[ny*24+nx].begin;next<cells[ny*24+nx].end;++next){if(parent[size_t(next)]>=0)continue;perf::count(perf::StackedEdges);
     auto&edge=deck.edges[size_t(current*4+direction)];
-    if(edge.state==ai::RouteCache::Unknown){float feet=n.z;bool clear=true;
-     for(int sample=1;sample<=4;++sample){Vec2 p=n.p+d*(sample/4.f);float ground=navSupport(w,p,feet+.215f);
-      if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height)){clear=false;break;}feet=ground;}
-     edge={feet,clear?ai::RouteCache::Clear:ai::RouteCache::Blocked};}
+    if(edge.state==ai::RouteCache::Unknown||lengthSq(edge.goal-nodes[next].p)>.000001f){float feet=n.z;bool clear=true;
+     for(int sample=1;sample<=4;++sample){Vec2 p=n.p+(nodes[next].p-n.p)*(sample/4.f);float ground=navSupport(w,p,feet+.215f,radius);
+      if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height,radius)){clear=false;break;}feet=ground;}
+     edge={feet,clear?ai::RouteCache::Clear:ai::RouteCache::Blocked,nodes[next].p};}
     if(edge.state==ai::RouteCache::Clear&&std::fabs(edge.feet-nodes[next].z)<.03f){parent[size_t(next)]=current;queue.push(next);}
    }
   }
  }
  if(parent[size_t(target)]<0){perf::count(perf::StackedNoRoute);return start;}int next=target;while(parent[size_t(next)]!=origin&&next!=origin)next=parent[size_t(next)];
- if(human&&!aiWalkSegment(w,start,startZ,nodes[next].p,height)&&aiWalkSegment(w,start,startZ,nodes[origin].p,height))return nodes[origin].p;
+ if(human&&!roughSegment(w,start,startZ,nodes[next].p,height,.24f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,.24f,nullptr,true,radius))return nodes[origin].p;
  return nodes[next].p;
 }
-static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false){
+static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f){
  Vec2 result;
- {perf::Scope stackedProfile(perf::StackedWaypoint);bool fresh=false;auto*deck=ai::RouteCache::deck(w,height,fresh);
-  if(!deck){stackedProfile.stop();return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human);}
-  perf::count(perf::StackedCalls);result=keptStackedWaypoint(w,*deck,fresh,start,startZ,goal,goalZ,height,human);}
- if(ai::RouteCache::verify()&&!sameBits(result,uncounted([&]{return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human);})))perf::count(perf::RouteCacheMismatches);
+ {perf::Scope stackedProfile(perf::StackedWaypoint);bool fresh=false;auto*deck=ai::RouteCache::deck(w,height,fresh,radius);
+  if(!deck){stackedProfile.stop();return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human,radius);}
+  perf::count(perf::StackedCalls);result=keptStackedWaypoint(w,*deck,fresh,start,startZ,goal,goalZ,height,human,radius);}
+ if(ai::RouteCache::verify()&&!sameBits(result,uncounted([&]{return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human,radius);})))perf::count(perf::RouteCacheMismatches);
  return result;
 }
 // One terrain cell-grid edge: the walk from cell a's centre, standing on its
 // support, to neighbour b's centre. With a kept grid each edge is probed once
 // per collision state; verify mode re-probes every kept answer.
-static bool cellEdge(const World&w,ai::RouteCache::Grid*grid,int a,int b,float height,float stepHeight,bool sweep){
- auto probe=[&]{Vec2 p{a%24+.5f,a/24+.5f},q{b%24+.5f,b/24+.5f};return roughSegment(w,p,navSupport(w,p,float(World::TerrainMaxZ+1)),q,height,stepHeight,nullptr,sweep);};
+static bool cellEdge(const World&w,ai::RouteCache::Grid*grid,int a,int b,float height,float stepHeight,bool sweep,float radius=.20f){
+ auto probe=[&]{Vec2 p{a%24+.5f,a/24+.5f},q{b%24+.5f,b/24+.5f};return roughSegment(w,p,navSupport(w,p,float(World::TerrainMaxZ+1),radius),q,height,stepHeight,nullptr,sweep,radius);};
  if(!grid)return probe();
  auto&edge=grid->edges[size_t(a*4+(b==a+1?0:b==a-1?1:b==a+24?2:3))];
  if(edge.state==ai::RouteCache::Unknown)edge.state=probe()?ai::RouteCache::Clear:ai::RouteCache::Blocked;
@@ -151,8 +169,24 @@ void Game::updateEnemies(float dt){
  for(auto&e:m_enemies){
   perf::CreatureScope creatureProfile(int(e.kind));
   if(dormantEntity(e.z))continue;
-  float support=groundHeight(e.pos,e.z+.01f);
+  struct Animate {Enemy&e;float time,dt;~Animate(){advanceCreatureAnimation(e,time,dt);}} animate{e,m_elapsed,dt};
+  // An authored spawn/saved foot starts at the centre's terrain height. Seat
+  // its complete footprint on a legal step before testing movement, otherwise
+  // a wider body can begin with one corner below a sloping floor and never fit.
+  float settle=e.alive&&e.surfaceMode==0&&e.verticalVelocity<=0?(m_world.hasTerrain()?roughStep(e.kind):.215f):.01f;
+  float support=groundHeight(e.pos,e.z+settle,e.radius());
   if(e.surfaceMode==0){if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}}
+  if(e.alive&&e.surfaceMode==0&&e.searchTime>.25f&&!hullFits(e.pos,e.z,e.hull(),e.radius(),false)){
+   // Recover an old/authored pose whose centre is clear but whose body overlaps
+   // a jamb or terrain obstacle. The centre ray prevents crossing a real wall.
+   bool recovered=false;float step=m_world.hasTerrain()?roughStep(e.kind):.215f;
+   for(float radius=.05f;radius<=.6f&&!recovered;radius+=.05f)for(int side=0;side<16;++side){
+    float angle=side*kTwoPi/16;Vec2 p=e.pos+Vec2{std::cos(angle),std::sin(angle)}*radius;float z=groundHeight(p,e.z+step,e.radius());
+    if(std::fabs(z-e.z)>step+.025f||!hullFits(p,z,e.hull(),e.radius(),false)||!m_world.rayClear(e.pos,e.z+.6f,p,z+.6f))continue;
+    e.pos=p;e.z=z;e.verticalVelocity=0;e.repathTimer=0;recovered=true;break;
+   }
+   e.searchTime=0;
+  }
   if(!e.alive){clearCreatureSchedule(e);continue;}
   perf::count(perf::CreatureUpdates);
   // A dormant creature does nothing until its state is set or it is hurt; then
@@ -282,13 +316,14 @@ void Game::updateEnemies(float dt){
    }continue;
   }
   // Close-range committed swing: the player can backstep or circle behind it.
-  if(stalker&&!snatcher&&scheduleStrike&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){
+   if(stalker&&!snatcher&&scheduleStrike&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0&&
+      (e.kind!=Enemy::Kind::Chimera||dot(normalized(to),facing)>.55f)){
    e.heading=std::atan2(to.y,to.x);e.windup=traits.windup;enemySound(e,1,.9f);continue;
   }
   if(e.awareness>0&&creatureTraits(e.kind).opensDoors)requestAiDoor(m_world,m_level,e.pos,e.z,goal);
   // Its pace scales every stalking speed and shortens its stare-downs.
   const float pace=traits.rushSpeed/3.8f;
-  float stalkSpeed=2.1f*pace;bool watching=false;
+  float stalkSpeed=traits.speed;bool watching=false;
   // What a stalker knows about the player's eyes. "Observed" is a full 3D gaze
   // test: looking at the floor beneath it, or over a railing above it, does
   // not count as having it in view.
@@ -303,8 +338,8 @@ void Game::updateEnemies(float dt){
    observed=playerLineOfSight&&gazeDot>.72f;
   }
   auto standable=[&](Vec2 c,float& z){z=navSupport(m_world,c,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.z+.215f);
-   bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,c,e.hull(),roughStep(e.kind)):std::fabs(z-e.z)<.23f;
-   return reachable&&navFits(m_world,c,z,e.hull());};
+   bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,c,e.hull(),roughStep(e.kind),nullptr,true,e.radius()):std::fabs(z-e.z)<.23f;
+   return reachable&&navFits(m_world,c,z,e.hull(),e.radius());};
   // The nearest spot round about that the player cannot see.
   auto hidingSpot=[&](Vec2 fallback){Vec2 best=fallback;float bestScore=1e9f;
    for(int i=0;i<8;++i){float a=float(i)*kPi*.25f;Vec2 c=e.pos+Vec2{std::cos(a),std::sin(a)}*3.2f;float z=0;if(!standable(c,z))continue;
@@ -414,7 +449,7 @@ void Game::updateEnemies(float dt){
   if(stalker&&!snatcher&&friendly<0){
    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
    bool flat=std::fabs(e.z-m_player.z)<.23f;
-   if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,e.hull(),roughStep(e.kind));}
+   if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,e.hull(),roughStep(e.kind),nullptr,true,e.radius());}
    bool freshContact=visible&&!hadAwareness;
 
    // A rush is a short burst, never the Warden's permanent navigation speed.
@@ -463,22 +498,22 @@ void Game::updateEnemies(float dt){
    // Watching is deliberately unnerving: if the player has it in clear view,
    // it holds position. Looking away gives it permission to creep/flank.
    watching=traits.freezesWatched&&observed&&e.awareness>0&&e.stalkMode==Enemy::StalkMode::Watch&&dist>2.f&&dist<9.5f;
-   stalkSpeed=pace*(e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Retreat?2.6f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f);
+   stalkSpeed=e.kind==Enemy::Kind::Chimera?(e.stalkMode==Enemy::StalkMode::Rush?traits.rushSpeed:e.stalkMode==Enemy::StalkMode::Retreat?3.2f:e.stalkMode==Enemy::StalkMode::Flank?traits.speed:traits.speed*.7f):pace*(e.stalkMode==Enemy::StalkMode::Rush?3.8f:e.stalkMode==Enemy::StalkMode::Retreat?2.6f:e.stalkMode==Enemy::StalkMode::Flank?1.55f:.75f);
 
    // Search the last witnessed area; never sample the hidden player's new position.
    if(e.state==Enemy::State::Search&&e.stalkTimer<=0){auto offset=Vec2{std::cos(e.heading+e.stalkSide),std::sin(e.heading+e.stalkSide)}*1.3f;auto candidate=e.lastKnown+offset;float z=navSupport(m_world,candidate,m_world.hasTerrain()?float(World::TerrainMaxZ+1):e.lastKnownZ+.215f);
-    bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,e.hull(),roughStep(e.kind)):std::fabs(z-e.lastKnownZ)<.23f;
-    if(reachable&&navFits(m_world,candidate,z,e.hull())){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=.6f;e.stalkSide=-e.stalkSide;
+    bool reachable=m_world.hasTerrain()?roughSegment(m_world,e.pos,e.z,candidate,e.hull(),roughStep(e.kind),nullptr,true,e.radius()):std::fabs(z-e.lastKnownZ)<.23f;
+    if(reachable&&navFits(m_world,candidate,z,e.hull(),e.radius())){e.lastKnown=candidate;e.lastKnownZ=z;goal=candidate;e.state=Enemy::State::Investigate;e.repathTimer=0;}e.stalkTimer=.6f;e.stalkSide=-e.stalkSide;
    }
   }
   stalkProfile.stop();
   if(e.state==Enemy::State::Search){e.heading+=dt*1.4f;continue;}
   auto look=visible?to:goal-e.pos;
-  if(lengthSq(look)>.01f)e.heading+=wrapAngle(std::atan2(look.y,look.x)-e.heading)*std::min(1.f,dt*(e.kind==Enemy::Kind::Brute?3.5f:14.f));
+   if(lengthSq(look)>.01f&&(!scheduleMove||watching||canMelee))e.heading+=wrapAngle(std::atan2(look.y,look.x)-e.heading)*std::min(1.f,dt*(e.kind==Enemy::Kind::Brute?3.5f:14.f));
   if(scheduleStrike&&!stalker&&visible&&sameLevel&&dist<range&&e.attackCooldown<=0&&e.strike<=0){e.windup=creatureTraits(e.kind).windup;enemySound(e,1,.85f);continue;}
   if(watching||!scheduleMove||length(goal-e.pos)<.3f||(!stalker&&visible&&dist<range*.82f)||e.painFlash>(stalker?.85f:.65f))continue;
   Vec2 destination=goal;
-  float hull=e.hull();
+  float hull=e.hull(),radius=e.radius();
   float stepHeight=m_world.hasTerrain()?roughStep(e.kind):(e.kind==Enemy::Kind::Huntsman?.65f:.215f);
   bool direct=false;
   if(m_world.hasTerrain()){
@@ -486,9 +521,9 @@ void Game::updateEnemies(float dt){
    // Test only the terrain immediately ahead; if a cliff blocks progress the
    // stuck timer falls back to routed navigation around it.
    auto delta=goal-e.pos;float distance=length(delta);Vec2 probe=distance>1.6f?e.pos+delta*(1.6f/distance):goal;
-   direct=roughSegment(m_world,e.pos,e.z,probe,hull,stepHeight);
+   direct=roughSegment(m_world,e.pos,e.z,probe,hull,stepHeight,nullptr,true,radius);
   }else{
-   direct=std::fabs((visible?targetFeet:m_world.supportBelow(goal.x,goal.y,goalZ+.02f))-e.z)<.22f&&m_world.rayClear(e.pos,e.z+.05f,goal,e.z+.05f);
+   direct=roughSegment(m_world,e.pos,e.z,goal,hull,stepHeight,nullptr,true,radius);
   }
   if(e.kind==Enemy::Kind::Huntsman&&visible&&m_world.tile(int(goal.x),int(goal.y))=='C')direct=m_world.rayClear(e.pos,e.z+.7f,goal,targetFeet+.3f);
   // Repeated contact switches to routed movement instead of rebuilding a
@@ -504,12 +539,12 @@ void Game::updateEnemies(float dt){
    if(any)doorPlan.emplace(m_world,operable);}
   // A fast mover reaches a one-metre waypoint before the repath clock runs out.
   if(keepWaypoint)destination=e.waypoint;
-  else if(!direct&&m_world.layers().size()>1){perf::Scope stackedProfile(perf::EnemyStacked);destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull);e.waypoint=destination;e.repathTimer=.35f;e.lostPath=false;
+   else if(!direct&&!m_world.hasTerrain()){perf::Scope stackedProfile(perf::EnemyStacked);destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull,true,radius);e.waypoint=destination;e.repathTimer=.35f;e.lostPath=false;
    // No route through the decks: amble a step the way it faces (or turn) and
    // ask again later; rebuilding the deck graph every frame stalls the game.
    if(lengthSq(destination-e.pos)<.0001f){e.lostPath=true;e.repathTimer=1.6f;
     for(int turn=0;turn<4;++turn){float a=e.heading+float(turn)*kPi*.5f*((int(e.gait*3)&1)?1.f:-1.f);Vec2 step=e.pos+Vec2{std::cos(a),std::sin(a)}*.9f;
-     if(aiWalkSegment(m_world,e.pos,e.z,step,hull)){destination=step;break;}}
+     if(roughSegment(m_world,e.pos,e.z,step,hull,stepHeight,nullptr,true,radius)){destination=step;break;}}
     e.waypoint=destination;}}
   else if(!direct){
    perf::Scope repathProfile(perf::EnemyRepath);perf::count(perf::FloodFills);
@@ -520,11 +555,11 @@ void Game::updateEnemies(float dt){
    int minCell=m_world.hasTerrain()?0:1,maxCell=m_world.hasTerrain()?23:22;
    gx=std::clamp(gx,minCell,maxCell);gy=std::clamp(gy,minCell,maxCell);std::queue<std::pair<int,int>> queue;queue.push({gx,gy});field[gy][gx]=0;
    // Terrain edges are kept per collision state, hull and step (the route cache).
-   bool freshGrid=false;auto*grid=m_world.hasTerrain()?ai::RouteCache::grid(m_world,hull,stepHeight,false,freshGrid):nullptr;
+   bool freshGrid=false;auto*grid=m_world.hasTerrain()?ai::RouteCache::grid(m_world,hull,stepHeight,true,freshGrid,radius):nullptr;
    auto edgeWalkable=[&](int x,int y,int nx,int ny){
     perf::count(perf::FloodEdges);
-    if(!m_world.hasTerrain())return m_world.navigable(x,y,nx,ny,hull);
-    return cellEdge(m_world,grid,y*24+x,ny*24+nx,hull,stepHeight,false);
+    if(!m_world.hasTerrain()){Vec2 a{x+.5f,y+.5f},b{nx+.5f,ny+.5f};float z=navSupport(m_world,a,e.z+stepHeight,radius);return roughSegment(m_world,a,z,b,hull,stepHeight,nullptr,true,radius);}
+    return cellEdge(m_world,grid,y*24+x,ny*24+nx,hull,stepHeight,true,radius);
    };
    // Flooding outward from the goal must test travel TOWARD the goal. A
    // traversable descent is not necessarily a climbable reverse edge.
@@ -544,17 +579,27 @@ void Game::updateEnemies(float dt){
   doorPlan.reset();
   perf::Scope moveProfile(perf::EnemyMove);
   Vec2 direction=normalized(destination-e.pos);
-  if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
+   if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&std::fabs(targetFeet-e.z)<.22f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
   direction=normalized(direction+separation*2.f);
   float speed=stalker?stalkSpeed:traits.speed;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
-  auto old=e.pos;
-  auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight),height=hull;
-   bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);if(ground-e.z<=stepHeight+.01f&&hullFits(next,feet,height)){e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}}
-  };
-  move(e.pos+Vec2{direction.x*speed*dt,0});move(e.pos+Vec2{0,direction.y*speed*dt});
+   auto old=e.pos;
+   auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight,radius),height=hull;
+    bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);
+    if(ground-e.z>stepHeight+.01f||!aiStructureSegment(m_world,e.pos,e.z,next,height,true,radius)||!hullFits(next,feet,height,radius,false))return false;
+    auto approaches=[&](Vec2 body,float bodyFeet,float bodyTop,float clearance){return feet<bodyTop&&feet+height>bodyFeet&&lengthSq(next-body)<clearance*clearance&&lengthSq(next-body)+.000001f<lengthSq(e.pos-body);};
+    if(approaches(m_player.pos,m_player.z,m_player.z+m_player.hullHeight(),e.contactRadius()+.2f))return false;
+    if(friendly>=0&&approaches(target,targetFeet,targetFeet+targetHull,e.contactRadius()+.2f))return false;
+    for(const auto&other:m_enemies)if(&other!=&e&&other.alive&&approaches(other.pos,other.bodyBottom(),other.bodyTop(),radius+other.radius()))return false;
+    e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}return true;
+   };
+   // A full swept step first preserves diagonal speed. Short substeps cannot
+   // tunnel through a jamb, a closed leaf or the player's body on a slow frame.
+   float travel=std::min(speed*dt,length(destination-e.pos));int steps=std::max(1,int(std::ceil(travel/.08f)));Vec2 delta=direction*(travel/steps);
+   for(int i=0;i<steps;++i)if(!move(e.pos+delta)){move(e.pos+Vec2{delta.x,0});move(e.pos+Vec2{0,delta.y});}
   float moved=length(e.pos-old);e.moving=moved>.0001f;e.gait+=moved*creatureTraits(e.kind).gaitPerMetre;
-  e.searchTime=e.moving?0.f:std::min(1.f,e.searchTime+dt);
+   if(e.moving){auto actual=e.pos-old;e.heading+=std::clamp(wrapAngle(std::atan2(actual.y,actual.x)-e.heading),-dt*6.f,dt*6.f);}
+   e.searchTime=dot(e.pos-old,normalized(destination-old))>travel*.2f?0.f:std::min(1.f,e.searchTime+dt);
   if(e.kind==Enemy::Kind::Huntsman&&!m_world.outdoors()&&e.awareness>0&&e.searchTime>.22f){
    float roof=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
    if(roof-floor>2.15f)for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){

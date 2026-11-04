@@ -32,6 +32,7 @@ public:
  static bool testAttachedSkinning();
  static bool testVrHands();
     void poseCreature(int clip,float phase);
+     void poseCreatureBlend(int fromClip,float fromPhase,int toClip,float toPhase,float blend);
  // Tank split: legs from lowerClip, torso/arms from upperClip (blend at waist),
  // then restricted mid/head aim yaw+pitch toward the look target.
  void poseCreatureTank(int lowerClip,float lowerPhase,int upperClip,float upperPhase,float aimYaw,float aimPitch);

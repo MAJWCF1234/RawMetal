@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "ai/Navigation.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -16,38 +17,49 @@ Sound Game::stepSoundAt(const World& world,Vec2 position){
 float Game::groundHeight(Vec2 p)const{
  return groundHeight(p,m_player.z+(m_player.grounded?.215f:0.f));
 }
-float Game::groundHeight(Vec2 p,float feet)const{
- auto center=p;const auto&world=worldAt(center);float height=world.supportBelow(center.x,center.y,feet);
- for(float x:{-.20f,.20f})for(float y:{-.20f,.20f}){auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);height=std::max(height,w.supportBelow(corner.x,corner.y,feet));}return height;
+float Game::groundHeight(Vec2 p,float feet,float radius)const{
+ auto center=p;const auto&world=worldAt(center);float height=std::max(world.supportBelow(center.x,center.y,feet),world.structureSupportBelow(center.x,center.y,radius,feet));
+ const World* checked=&world;
+ for(float x:{-radius,radius})for(float y:{-radius,radius}){auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);height=std::max(height,w.supportBelow(corner.x,corner.y,feet));
+  if(checked!=&w){auto local=corner-Vec2{x,y};height=std::max(height,w.structureSupportBelow(local.x,local.y,radius,feet));checked=&w;}}
+ return height;
 }
-bool Game::hullFits(Vec2 p,float feet,float height)const{
- for(float x:{-.20f,0.f,.20f})for(float y:{-.20f,0.f,.20f}){
+bool Game::hullFits(Vec2 p,float feet,float height,float radius,bool creatures)const{
+ const World* checkedStructureWorld=nullptr;
+ for(float x:{-radius,0.f,radius})for(float y:{-radius,0.f,radius}){
   auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);float px=corner.x,py=corner.y;
-  if(!w.fits(px,py,feet,height)||w.doorBlocks(px,py,feet,height))return false;
+   auto localCenter=corner-Vec2{x,y};
+   if(!w.fits(px,py,feet,height)||w.doorBlocks(px,py,feet,height))return false;
+   if(checkedStructureWorld!=&w){if(w.structureBlocksHull(localCenter.x,localCenter.y,radius,feet,height))return false;checkedStructureWorld=&w;}
  }
  // Heavy dressing blocks an approaching hull, but always permits retreat.
  for(int level=0;level<chunkCount();++level)if(chunkResident(level)){auto shift=chunkOffset(level)-chunkOffset(m_level);const auto&items=chunkClutter(level);
-  for(int i=0;i<int(items.size());++i){const auto&c=items[i];if(c.model<0||c.broken||c.mass()<8||c.blockedTime>=.5f||(level==m_level&&i==m_heldClutter)||feet>=c.z+c.height()||feet+height<=c.z)continue;auto e=c.extent();auto at=c.pos+shift;auto penetration=[&](Vec2 q){return std::min(e[0]+.2f-std::fabs(q.x-at.x),e[1]+.2f-std::fabs(q.y-at.y));};if(penetration(p)>0&&penetration(p)>penetration(m_player.pos)+.00001f)return false;}
+  for(int i=0;i<int(items.size());++i){const auto&c=items[i];if(c.model<0||c.broken||c.mass()<8||c.blockedTime>=.5f||(level==m_level&&i==m_heldClutter)||feet>=c.z+c.height()||feet+height<=c.z)continue;auto e=c.extent();auto at=c.pos+shift;auto penetration=[&](Vec2 q){return std::min(e[0]+radius-std::fabs(q.x-at.x),e[1]+radius-std::fabs(q.y-at.y));};if(penetration(p)>0&&penetration(p)>penetration(m_player.pos)+.00001f)return false;}
  }
- // Rails are only 5.5 cm thick. Point-sampling the 40 cm player hull can put
- // every sample on one side or the other while the body itself overlaps the rail.
- // Test the hull footprint against rail AABBs so the player can never phase into
- // the narrow volume and become trapped inside it.
+  // Full footprint overlap also catches thin walls between the point samples.
  auto center=p;const auto&w=worldAt(center);
- if(w.railBlocksHull(center.x,center.y,.20f,feet,height))return false;
- for(const auto&drone:engineerDrones()){auto off=chunkOffset(drone.level)-chunkOffset(w.level());float radius=EngineerDroneRadius+.2f;
-  if(feet<drone.position.z+EngineerDroneHeight&&feet+height>drone.position.z&&std::fabs(center.x-drone.position.x-off.x)<radius&&std::fabs(center.y-drone.position.y-off.y)<radius)return false;
+ for(const auto&drone:engineerDrones()){auto off=chunkOffset(drone.level)-chunkOffset(w.level());float clearance=EngineerDroneRadius+radius;
+  if(feet<drone.position.z+EngineerDroneHeight&&feet+height>drone.position.z&&std::fabs(center.x-drone.position.x-off.x)<clearance&&std::fabs(center.y-drone.position.y-off.y)<clearance)return false;
  }
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto actor=npc.pose;actor.position+=chunkOffset(npc.level)-chunkOffset(w.level());
   if(track.ai.mode==ActorAiMode::Scripted||npcHeld(i)||actor.clip==4||(track.ai.enableState&&!state(track.ai.enableState)))continue;
   float body=friendlyHullHeight(i,track);
-  if(feet<actor.z+body&&feet+height>actor.z&&std::fabs(center.x-actor.position.x)<.4f&&std::fabs(center.y-actor.position.y)<.4f)return false;
+   if(feet<actor.z+body&&feet+height>actor.z&&std::fabs(center.x-actor.position.x)<radius+.2f&&std::fabs(center.y-actor.position.y)<radius+.2f)return false;
  }
+  if(creatures)for(int level=0;level<chunkCount();++level)if(chunkResident(level)){
+   auto shift=chunkOffset(level)-chunkOffset(m_level);
+   for(const auto&e:chunkEnemies(level))if(e.alive&&feet<e.bodyTop()&&feet+height>e.bodyBottom()){
+    auto at=e.pos+shift;float clearance=e.contactRadius()+radius;
+    // Permit escape from an old save/contact, while preventing deeper overlap.
+    if(lengthSq(p-at)<clearance*clearance&&lengthSq(p-at)+.000001f<lengthSq(m_player.pos-at))return false;
+   }
+  }
  return true;
 }
 bool Game::tryMove(Vec2 delta){
  auto old=m_player.pos;
- for(int axis=0;axis<2;++axis){auto next=m_player.pos;if(axis==0)next.x+=delta.x;else next.y+=delta.y;
+  int steps=std::max(1,int(std::ceil(length(delta)/.08f)));delta=delta*(1.f/steps);
+  for(int step=0;step<steps;++step)for(int axis=0;axis<2;++axis){auto next=m_player.pos;if(axis==0)next.x+=delta.x;else next.y+=delta.y;
   float feet=m_player.z,ground=groundHeight(next);
   if(m_player.grounded&&ground>feet&&ground-feet<=.215f)feet=ground;
   if(hullFits(next,feet,m_player.hullHeight())){m_player.pos=next;m_player.z=feet;}
@@ -380,29 +392,31 @@ bool Game::testProgression(){
  std::ofstream diagnostic("route-diagnostic.txt");
  for(int level=0;level<2;++level){auto spawns=game.m_enemies;game.m_enemies.clear();World planning=game.m_world;
   for(int i=0;i<int(planning.doors().size());++i)planning.openDoor(i);planning.updateDoors(2);
-  int parent[24*24];std::fill(std::begin(parent),std::end(parent),-1);
-  int start=int(game.player().pos.y)*24+int(game.player().pos.x),goal=23*24+21;
+   // The bridges have real handrails between metre-centre samples. Plan the
+   // full player hull at half-metre spacing rather than routing through a rail
+   // that the old point-only collision happened to let this test walk through.
+   constexpr int Grid=48;int parent[Grid*Grid];std::fill(std::begin(parent),std::end(parent),-1);
+   auto cellAt=[](Vec2 p){return int(p.y*2)*Grid+int(p.x*2);};
+   auto point=[](int x,int y){return Vec2{(x+.5f)*.5f,(y+.5f)*.5f};};
+   int start=cellAt(game.player().pos),goal=47*Grid+43;
   std::queue<int> pending;pending.push(start);parent[start]=start;
-  while(!pending.empty()){int cell=pending.front();pending.pop();int x=cell%24,y=cell/24;const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
-   for(int d=0;d<4;++d){int nx=x+dx[d],ny=y+dy[d];if(nx<0||ny<0||nx>=24||ny>=24)continue;int next=ny*24+nx;
+   while(!pending.empty()){int cell=pending.front();pending.pop();int x=cell%Grid,y=cell/Grid;const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
+    for(int d=0;d<4;++d){int nx=x+dx[d],ny=y+dy[d];if(nx<0||ny<0||nx>=Grid||ny>=Grid)continue;int next=ny*Grid+nx;
     // A player walks round hazards (the Foundry's pour, steam, live gear).
-    bool hazardous=false;for(const auto& h:planning.hazards())hazardous|=nx+.5f>h.x1&&nx+.5f<h.x2&&ny+.5f>h.y1&&ny+.5f<h.y2;
-    // The walker stays upright: crawlways need a crouch it does not use.
-    auto standable=[&](float px,float py){return planning.fits(px,py,planning.supportBelow(px,py,planning.floorHeight(px,py)+.4f)+.02f,Player::StandingHeight,false);};
-    // Thin partitions sit on cell edges: test the edge as well as the cell.
-    bool upright=standable(nx+.5f,ny+.5f)&&standable(x+.5f+dx[d]*.5f,y+.5f+dy[d]*.5f);
-    if(parent[next]<0&&!hazardous&&upright&&planning.navigable(x,y,nx,ny)){parent[next]=cell;pending.push(next);}
+    auto from=point(x,y),to=point(nx,ny);bool hazardous=false;for(const auto& h:planning.hazards())hazardous|=to.x>h.x1&&to.x<h.x2&&to.y>h.y1&&to.y<h.y2;
+    float feet=planning.supportBelow(from.x,from.y,planning.floorHeight(from.x,from.y)+.215f);
+    if(parent[next]<0&&!hazardous&&aiWalkSegment(planning,from,feet,to,Player::StandingHeight)){parent[next]=cell;pending.push(next);}
    }
   }
   if(parent[goal]<0){diagnostic<<"No route in chunk "<<level<<'\n';
-   for(int y=0;y<24;++y){for(int x=0;x<24;++x)diagnostic<<(parent[y*24+x]>=0?'.':planning.tile(x,y)=='#'?'#':'x');diagnostic<<'\n';}
+    for(int y=0;y<Grid;++y){for(int x=0;x<Grid;++x)diagnostic<<(parent[y*Grid+x]>=0?'.':planning.tile(x/2,y/2)=='#'?'#':'x');diagnostic<<'\n';}
    return false;}
-  for(auto&e:spawns)if(parent[int(e.pos.y)*24+int(e.pos.x)]<0){diagnostic<<"Unreachable enemy "<<level<<" at "<<e.pos.x<<","<<e.pos.y<<" z "<<e.z;return false;}
-  for(auto&p:game.pickups())if(parent[int(p.pos.y)*24+int(p.pos.x)]<0){diagnostic<<"Unreachable pickup "<<level<<" at "<<p.pos.x<<","<<p.pos.y;return false;}
-  std::vector<Vec2> route;for(int cell=goal;cell!=start;cell=parent[cell])route.push_back({cell%24+.5f,cell/24+.5f});std::reverse(route.begin(),route.end());
+   for(auto&e:spawns)if(parent[cellAt(e.pos)]<0){diagnostic<<"Unreachable enemy "<<level<<" at "<<e.pos.x<<","<<e.pos.y<<" z "<<e.z;return false;}
+   for(auto&p:game.pickups())if(parent[cellAt(p.pos)]<0){diagnostic<<"Unreachable pickup "<<level<<" at "<<p.pos.x<<","<<p.pos.y;return false;}
+   std::vector<Vec2> route;for(int cell=goal;cell!=start;cell=parent[cell])route.push_back(point(cell%Grid,cell/Grid));std::reverse(route.begin(),route.end());
   route.push_back({21.5f,24.25f});size_t waypoint=0;int ticks=0;
   for(;ticks<14000&&!game.won()&&game.level()==level&&waypoint<route.size();++ticks){auto delta=route[waypoint]-game.player().pos;
-   if(length(delta)<.14f){++waypoint;continue;}input={};input.forward=true;
+    if(length(delta)<.08f){++waypoint;continue;}input={};input.forward=true;
    int door=game.world().nearbyDoor(game.player().pos,normalized(delta));input.use=door>=0&&!game.world().doors()[door].opening;
    input.mouseDx=wrapAngle(std::atan2(delta.y,delta.x)-game.player().angle)/(.0022f*game.settings().sensitivity);game.update(input,1.f/120.f);
   }

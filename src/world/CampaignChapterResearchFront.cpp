@@ -36,8 +36,8 @@ void rfGlass(Map& m,float x1,float y1,float x2,float y2,float f,float top,int ma
 }
 // A door frame in a wall line at `at` (along x when alongX) from a to b, with a lintel at 2.65.
 void rfFrame(Map& m,float a,float b,float at,bool alongX,float f,float roof,int mat){
- if(alongX){wall(m,a,at-.1f,b,at+.1f,f+2.65f,roof,mat);for(float x:{a-.08f,b})wall(m,x,at-.14f,x+.08f,at+.14f,f,f+2.7f,20);}
- else{wall(m,at-.1f,a,at+.1f,b,f+2.65f,roof,mat);for(float y:{a-.08f,b})wall(m,at-.14f,y,at+.14f,y+.08f,f,f+2.7f,20);}
+ if(alongX){wall(m,a,at-.1f,b,at+.1f,f+2.65f,roof,mat);for(float x:{a-.08f,b})doorTrim(m,x,at-.14f,x+.08f,at+.14f,f,f+2.7f,20);}
+ else{wall(m,at-.1f,a,at+.1f,b,f+2.65f,roof,mat);for(float y:{a-.08f,b})doorTrim(m,at-.14f,y,at+.14f,y+.08f,f,f+2.7f,20);}
 }
 // A double-door steel locker turned to face `front`.
 void rfLockers(Map& m,float x,float y,float z,float front,float scale=1){
@@ -119,8 +119,8 @@ void rfiSwing(Map& m,float x1,float x2,float y,float f,float top,float swing,int
 }
 // An open doorway from y1 to y2 through a wall along y (x1..x2): steel posts and head, the wall above.
 void rfiDoorY(Map& m,float y1,float y2,float x1,float x2,float f,float top,int mat){
- for(float y:{y1-.08f,y2})wall(m,x1-.03f,y,x2+.03f,y+.08f,f,f+2.3f,2);
- wall(m,x1-.03f,y1-.08f,x2+.03f,y2+.08f,f+2.22f,f+2.3f,2);
+ for(float y:{y1-.08f,y2})doorTrim(m,x1-.03f,y,x2+.03f,y+.08f,f,f+2.3f,2);
+ doorTrim(m,x1-.03f,y1-.08f,x2+.03f,y2+.08f,f+2.22f,f+2.3f,2);
  wall(m,x1,y1,x2,y2,f+2.3f,top,mat);
 }
 // A full-height wall along y with open doorways (y pairs) cut through it.
@@ -515,8 +515,8 @@ void rfLine(Map& m,const char* node,const char* speaker,const char* line,std::ve
 // --- Personnel Processing kit (rfp): chunk 69's own helpers ------------------------------------
 // An open doorway from x1 to x2 through a wall along x (y1..y2): steel posts and head, the wall above.
 void rfpDoorX(Map& m,float x1,float x2,float y1,float y2,float f,float top,int mat){
- for(float x:{x1-.08f,x2})wall(m,x,y1-.03f,x+.08f,y2+.03f,f,f+2.3f,2);
- wall(m,x1-.08f,y1-.03f,x2+.08f,y2+.03f,f+2.22f,f+2.3f,2);
+ for(float x:{x1-.08f,x2})doorTrim(m,x,y1-.03f,x+.08f,y2+.03f,f,f+2.3f,2);
+ doorTrim(m,x1-.08f,y1-.03f,x2+.08f,y2+.03f,f+2.22f,f+2.3f,2);
  wall(m,x1,y1,x2,y2,f+2.3f,top,mat);
 }
 // A full-height wall along x with open doorways (x pairs) cut through it.

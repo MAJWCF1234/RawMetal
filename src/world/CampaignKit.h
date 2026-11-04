@@ -23,6 +23,8 @@ inline AuthoredLayerData floorLayer(const char* name,float z,bool openNorth=fals
  return layer;
 }
 inline void wall(Map& m,float x1,float y1,float x2,float y2,float lo,float hi,int material=2){m.structures.push_back({std::min(x1,x2),std::min(y1,y2),std::max(x1,x2),std::max(y1,y2),std::min(lo,hi),std::max(lo,hi),false,material});}
+// Architraves dress an existing wall opening; its wall and lintel own collision.
+inline void doorTrim(Map& m,float x1,float y1,float x2,float y2,float lo,float hi,int material=20){wall(m,x1,y1,x2,y2,lo,hi,material);m.structures.back().solid=false;}
 inline void cargo(Map& m,float x,float y,float floor,bool loaded=true,float yaw=0){
  m.fixtures.push_back({15,{x,y},floor-m.layers.front().elevation,1.2f,1.15f,.16f,yaw,true});
  if(loaded)m.fixtures.push_back({17,{x,y},floor+.16f-m.layers.front().elevation,1.1f,1.f,.99f,yaw,true});
@@ -516,8 +518,8 @@ inline void glassCabinet(Map&m,float x,float y,float z,float w,float d,float h,S
 }
 // A doorway frame in a wall run along x at y: architrave posts and head.
 inline void officeDoorway(Map& m,float x1,float x2,float y1,float y2,float f,float ceil){
- for(float x:{x1-.08f,x2})wall(m,x,y1-.02f,x+.08f,y2+.02f,f,f+2.2f,20);
- wall(m,x1-.08f,y1-.02f,x2+.08f,y2+.02f,f+2.12f,f+2.2f,20);wall(m,x1,y1,x2,y2,f+2.2f,ceil,21);
+  for(float x:{x1-.08f,x2})doorTrim(m,x,y1-.02f,x+.08f,y2+.02f,f,f+2.2f);
+  doorTrim(m,x1-.08f,y1-.02f,x2+.08f,y2+.02f,f+2.12f,f+2.2f);wall(m,x1,y1,x2,y2,f+2.2f,ceil,21);
 }
 // A workstation facing `facing` (+1 south / -1 north) at desk centre (x,y):
 // desk, chair pulled in, monitor and keyboard turned to the seat, phone,

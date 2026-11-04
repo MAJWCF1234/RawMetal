@@ -1198,7 +1198,15 @@ void GpuRenderer::setLamps(const std::vector<std::array<float,13>>&input,bool en
   }
   if(changed)++m->lampPowerGeneration;return;
  }
- m->lampKey=key;m->pixelLighting=enabled;m->lamps.assign(input.begin(),input.begin()+std::ptrdiff_t(count));m->lampDirty.assign(count,uint8_t(2));m->lampPowers.assign(count,1.f);
+  // A moving cab lamp or a streamed neighbour must not invalidate every
+  // unchanged shadow slot. Reusing its exact source at the same atlas index
+  // keeps nearby lighting steady while changed sources are redrawn.
+  std::vector<uint8_t> dirty(count,uint8_t(2));
+  if(enabled==m->pixelLighting)for(size_t i=0;i<count&&i<m->lamps.size()&&i<m->lampDirty.size();++i){
+   bool same=true;for(size_t k=0;k<13;++k)if(k!=4&&input[i][k]!=m->lamps[i][k]){same=false;break;}
+   if(same)dirty[i]=m->lampDirty[i];
+  }
+  m->lampKey=key;m->pixelLighting=enabled;m->lamps.assign(input.begin(),input.begin()+std::ptrdiff_t(count));m->lampDirty=std::move(dirty);m->lampPowers.assign(count,1.f);
  if(enabled&&int(count)>m->shadowCapacity)m->createShadowAtlas(int((count+15)/16*16));
  // World-space grid; each cell keeps the 16 lamps that can light it most.
  Impl::LampHeader header{};header.flags[0]=enabled?1:0;header.flags[1]=detail;header.size[3]=int(count);

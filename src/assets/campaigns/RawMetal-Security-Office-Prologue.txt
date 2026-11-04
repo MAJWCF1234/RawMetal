@@ -121,7 +121,8 @@ LIGHT|0|13|6|11.85
 LIGHT|0|17|9.5|11.85
 LIGHT|0|16.5|13|11.85
 SIGN|0|21|13|11|1.8|0.42|-1.5707963|SERVICE LIFT|SUB-LEVEL ACCESS|14726704
-LIGHT|0|17|17|2.4
+# Cab-local lamp, below the luminous ceiling panel; the runtime carries it with the cab.
+LIGHT|0|17|17|2.30
 # Flush one-step threshold opens the deck guardrail onto the cab (as Freight).
 STAIR|0|15|13|19|15|8.88|9|1|1|1
 # Service lift cab: starts at the shaft floor and is called up on arrival,

@@ -274,7 +274,7 @@ bool Game::testCampaignMaps(){
    int doorFirst=0;
    for(float r:{.7f,.9f,1.1f,1.3f,.55f,1.5f,1.7f})for(float a:{0.f,.3f,-.3f,.6f,-.6f,.9f,-.9f,1.2f,-1.2f,1.45f,-1.45f}){
     const Vec2 p=at+Vec2{std::cos(base+a),std::sin(base+a)}*r;const float z=g.groundHeight(p,g.world().floorHeight(p.x,p.y)+.215f);
-    if(!g.hullFits(p,z,Player::StandingHeight))continue;
+    if(!g.hullFits(p,z,Player::StandingHeight,.2f,false))continue;
     put(g,p,z,std::atan2(at.y-p.y,at.x-p.x));if(g.nearbyTerminal()!=index)continue;
     // E takes a door in front before a terminal, as the game does.
     if(g.nearbyInteractionDoor()>=0){++doorFirst;continue;}
@@ -290,7 +290,7 @@ bool Game::testCampaignMaps(){
    while(!queue.empty()){auto a=queue.front();queue.pop();reached.push_back({{(a.x+.5f)*.125f,(a.y+.5f)*.125f},a.z});
     for(auto d:{Vec2{-1,0},Vec2{1,0},Vec2{0,-1},Vec2{0,1}}){Node b{a.x+int(d.x),a.y+int(d.y),a.z};if(b.x<2||b.x>=190||b.y<2||b.y>=190)continue;
      const Vec2 q{(b.x+.5f)*.125f,(b.y+.5f)*.125f};b.z=g.groundHeight(q,a.z+.215f);
-     if(std::fabs(b.z-a.z)>.3f||!g.hullFits(q,b.z,Player::StandingHeight)||!seen.insert(key(b)).second)continue;queue.push(b);}}
+     if(std::fabs(b.z-a.z)>.3f||!g.hullFits(q,b.z,Player::StandingHeight,.2f,false)||!seen.insert(key(b)).second)continue;queue.push(b);}}
    return reached;};
   auto openDoors=[](Game& g,bool lockedToo){for(size_t d=0;d<g.world().doors().size();++d)if(lockedToo||!g.doorLocked(g.world().doors()[d]))g.m_world.openDoor(int(d));for(int i=0;i<4;++i)g.m_world.updateDoors(1);};
   auto setsState=[](const ScriptEvent& e,StateId id,int value){return std::any_of(e.actions.begin(),e.actions.end(),[&](const ScriptAction& a){return a.type==ScriptAction::Type::SetState&&a.id==id&&a.value==value;});};
@@ -316,8 +316,8 @@ bool Game::testCampaignMaps(){
    check(boxes>0&&taken==boxes,(std::string("Deep wing ")+std::to_string(level)+": every 9 mm box is taken standing from the entry's reach (heavy props shoved if they must be)").c_str());
    // Its creatures stand clear where they wait, and have a step to take.
    bool clear=true;for(const auto& e:g.enemies()){const float h=e.bodyTop()-e.bodyBottom();bool step=false;
-    for(int k=0;k<8;++k){const Vec2 n=e.pos+Vec2{std::cos(k*kPi/4),std::sin(k*kPi/4)}*.6f;step|=g.hullFits(n,g.groundHeight(n,e.z+.215f),h);}
-    const bool fits=g.hullFits(e.pos,e.bodyBottom()+.03f,h-.03f);   // clear of floor paint and blood
+    for(int k=0;k<8;++k){const Vec2 n=e.pos+Vec2{std::cos(k*kPi/4),std::sin(k*kPi/4)}*.6f;step|=g.hullFits(n,g.groundHeight(n,e.z+.215f),h,e.radius(),false);}
+    const bool fits=g.hullFits(e.pos,e.bodyBottom()+.03f,h-.03f,e.radius(),false);   // clear of floor paint and blood
     if(!fits||!step){out<<"  map "<<level<<" creature at "<<e.pos.x<<','<<e.pos.y<<','<<e.z<<" top="<<e.bodyTop()<<" fits="<<fits<<" step="<<step<<'\n';
      const auto& w=g.world();for(size_t i=0;i<w.structures().size();++i){const auto& s=w.structures()[i];if(e.pos.x+.2f>s.x1&&e.pos.x-.2f<s.x2&&e.pos.y+.2f>s.y1&&e.pos.y-.2f<s.y2&&e.bodyBottom()<s.top&&e.bodyTop()>s.bottom)
       out<<"    structure "<<s.x1<<','<<s.y1<<','<<s.bottom<<".."<<s.x2<<','<<s.y2<<','<<s.top<<" material="<<s.material<<'\n';}}
@@ -634,7 +634,9 @@ bool Game::testCampaignMaps(){
   out<<"MAP "<<level<<" / "<<CampaignMapNames[level]<<'\n';
   check(game.world().campaign()&&!game.world().custom(),"Freight geometry keeps native campaign identity");
   check(game.hullFits(game.player().pos,game.player().z,Player::StandingHeight),"Spawn has standing clearance");
-  for(const auto& enemy:game.enemies())check(game.hullFits(enemy.pos,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom()),"Authored enemy has clearance");
+   // Geometry probes ignore creature contacts, including the creature whose
+   // own spawn is being inspected. Combat bodies do not seal an authored route.
+   for(const auto& enemy:game.enemies())check(game.hullFits(enemy.pos,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),false),"Authored enemy has clearance");
   for(const auto& light:game.world().lights())check(light.z+.13f<game.world().clearanceAbove(light.position.x,light.position.y,light.z)+.01f,"Lamp fits under its support");
   for(int d=0;d<int(game.world().doors().size());++d)game.m_world.openDoor(d);
   game.m_world.updateDoors(4);
@@ -643,27 +645,31 @@ bool Game::testCampaignMaps(){
   auto key=[](Node n){return (static_cast<long long>(std::lround((n.z+100)*1000))<<16)|(n.y*192+n.x);};
   Node start{int(game.player().pos.x*8),int(game.player().pos.y*8),game.player().z};queue.push(start);visited.insert(key(start));
   std::vector<bool> controlsReached(game.world().terminals().size(),false);
-  float low=start.z,high=start.z;std::vector<float> nearest(controlsReached.size(),999.f);
+   float low=start.z,high=start.z;std::vector<float> nearest(controlsReached.size(),999.f);
+   std::vector<Point3> nearestPoint(controlsReached.size());
+   std::ofstream routeDump;if(std::getenv("RAWMETAL_ROUTE_DIAGNOSTICS"))routeDump.open("route-"+std::to_string(level)+".csv");
   while(!queue.empty()){
    auto a=queue.front();queue.pop();Vec2 p{(a.x+.5f)*.125f,(a.y+.5f)*.125f};
    low=std::min(low,a.z);high=std::max(high,a.z);
+    if(routeDump)routeDump<<p.x<<','<<p.y<<','<<a.z<<'\n';
    for(size_t t=0;t<controlsReached.size();++t){const auto& terminal=game.world().terminals()[t];
     // A taped sheet is read standing about 1.5 m under it, as the game reads it.
     const bool taped=terminal.paper()&&terminal.taped;
     float z=game.world().floorHeight(terminal.position.x,terminal.position.y)+terminal.z-(taped?1.5f:0.f);
-    nearest[t]=std::min(nearest[t],length(p-terminal.position)+std::fabs(a.z-z));
+     float distance=length(p-terminal.position)+std::fabs(a.z-z);
+     if(distance<nearest[t]){nearest[t]=distance;nearestPoint[t]={p.x,p.y,a.z};}
     if(length(p-terminal.position)<1.6f&&std::fabs(a.z-z)<(taped?1.f:.3f))controlsReached[t]=true;
    }
    for(auto delta:{Vec2{-1,0},Vec2{1,0},Vec2{0,-1},Vec2{0,1}}){
     Node b{a.x+int(delta.x),a.y+int(delta.y),a.z};if(b.x<2||b.x>=190||b.y<2||b.y>=190)continue;
     Vec2 q{(b.x+.5f)*.125f,(b.y+.5f)*.125f};b.z=game.groundHeight(q,a.z+.215f);
-    if(std::fabs(b.z-a.z)>.3f||!game.hullFits(q,b.z,Player::StandingHeight)||!visited.insert(key(b)).second)continue;queue.push(b);
+    if(std::fabs(b.z-a.z)>.3f||!game.hullFits(q,b.z,Player::StandingHeight,.2f,false)||!visited.insert(key(b)).second)continue;queue.push(b);
    }
   }
   out<<"Route visited "<<visited.size()<<" nodes; elevation "<<low<<" to "<<high<<'\n';
   if(level==17||level==18||level==19||level==28)check(high>=((level==17||level==28)?-19.f:level==18?-13.f:-7.f)-.02f,"Stair route reaches its upper exit landing");
   if(level==22)check(low<=-24.98f,"Transfer stair route reaches the sorting floor");
-  for(size_t t=0;t<controlsReached.size();++t){out<<game.world().terminals()[t].title<<" (nearest "<<nearest[t]<<"): ";check(controlsReached[t],"Control is approachable from the chunk entry with the standing player hull");}
+   for(size_t t=0;t<controlsReached.size();++t){auto p=nearestPoint[t];out<<game.world().terminals()[t].title<<" (nearest "<<nearest[t]<<" at "<<p.x<<','<<p.y<<','<<p.z<<"): ";check(controlsReached[t],"Control is approachable from the chunk entry with the standing player hull");}
  }
  // Drive the real procedure through E and movement. State injection used to
  // conceal a sealed lower landing and controls with no visible confirmation.

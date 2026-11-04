@@ -2735,6 +2735,14 @@ std::shared_ptr<const Map> makeDepotInspectionPits(){
  m.layers.push_back(floorLayer(m.name.c_str(),base,true,true));m.openNorth=true;m.openSouth=true;
  deck(m,bed,1,0,9,24);deck(m,bed,15,0,23,24);deck(m,bed,9,10,15,24);
  for(float x:{5.f,19.f})trackRun(m,x,bed);
+  // Sleepers span the inspection pit. Cut their centres back at the stair so
+  // the player's head is not trapped beneath the track while climbing out.
+  const size_t trackParts=m.structures.size();
+  for(size_t i=0;i<trackParts;++i){auto s=m.structures[i];
+   if(s.material!=2||std::fabs(s.x1-18.f)>.001f||std::fabs(s.x2-20.f)>.001f||
+      std::fabs(s.bottom-(bed-.02f))>.001f||std::fabs(s.top-(bed+.015f))>.001f||s.y2<=14.5f||s.y1>=19.f)continue;
+   m.structures[i].x2=18.4f;s.x1=19.6f;m.structures.push_back(s);
+  }
  for(float x:{8.85f,15.f})wall(m,x,0,x+.15f,10.f,base,bed,15);wall(m,9.f,9.85f,15.f,10.f,base,bed,15);
  // --- Stairs: service road to the beds, then up to the gantry walk ---------------------------------
  m.stairs.push_back({12.f,5.f,14.5f,10.f,base,bed,16,true,true});
@@ -2773,6 +2781,8 @@ std::shared_ptr<const Map> makeDepotInspectionPits(){
  m.pickupSpawns.push_back({{12,3},PickupKind::Ammo,base});
  deckSupports(m,m.layers[2],base,6.f);
  freightFinish(m,28);
+ // The flight to the walks stands on the bed deck: keep the deck under its open treads.
+ rectangle(m.layers[1],9,12,12,21,'=');
  return p;
 }
 

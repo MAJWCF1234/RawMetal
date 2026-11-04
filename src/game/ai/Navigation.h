@@ -13,9 +13,9 @@ inline float aiWalkSamplePitch(bool terrain){return terrain?.16f:.28f;}
 // densifying every retained graph edge and long probe. Door centerlines still
 // sample at aiWalkSamplePitch so thin leaves cannot slip between footprint sites.
 inline float aiWalkAuthorityPitch(bool terrain){return terrain?.55f:.95f;}
-inline bool aiStructureSegment(const World& world,Vec2 start,float feet,Vec2 goal,float height,bool indexed=true){
+inline bool aiStructureSegment(const World& world,Vec2 start,float feet,Vec2 goal,float height,bool indexed=true,float radius=.20f){
  perf::LeafScope queryProfile(perf::Structure);
- return world.structureSegmentClear(start,feet,goal,height,indexed);
+  return world.structureSegmentClear(start,feet,goal,height,indexed,radius);
 }
 bool aiWalkSegment(const World& world,Vec2 start,float feet,Vec2 goal,float height,float* endFeet=nullptr);
 Vec2 aiWalkWaypoint(const World& world,Vec2 start,float feet,Vec2 goal,float goalFeet,float height);

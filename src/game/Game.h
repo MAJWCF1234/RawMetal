@@ -100,6 +100,8 @@ struct Enemy {
     // No route to its goal: it ambles a cell at a time instead of re-planning
     // every frame. Not archived.
     bool lostPath=false;
+    // Presentation transitions are rebuilt after loading; gameplay clocks stay authoritative.
+    int visualClip=-1,previousVisualClip=0;float visualPhase=0,previousVisualPhase=0,visualTransition=1;
     // Ephemeral MaintainSchedule mind. Rebuilt from state after load; not archived.
     int schedule=0,scheduleStep=0,scheduleTask=0,scheduleStatus=0,scheduleMs=0,scheduleCursor=0,scheduleCursorSaved=0,scheduleTransitions=0;
     unsigned scheduleConditions=0;
@@ -116,6 +118,8 @@ struct Enemy {
     float bodyTop()const{return z+creatureTraits(kind).top*scale;}
     float hull()const{return creatureTraits(kind).hull*scale;}
     float reach()const{return creatureTraits(kind).reach*scale;}
+    float radius()const{return (kind==Kind::Chimera?.45f:kind==Kind::Brute?.3f:.2f)*scale;}
+    float contactRadius()const{return (kind==Kind::Chimera?1.f:kind==Kind::Brute?.55f:kind==Kind::Huntsman?.4f:.38f)*scale;}
     const char* name()const{return creatureTraits(kind).name;}
 };
 
@@ -443,6 +447,7 @@ public:
     std::array<Point3,2> heldNpcGrips()const;
     void updateTakedown(float dt);
     static bool testGantry();
+    static bool testGameplayFixes();
     static bool testLift();
     static Game liftInspection(float seconds,int view=0);
     static bool testReactor();
@@ -904,10 +909,10 @@ private:
     bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);
     void breakClutter(int level,size_t index,Point3 direction);
     bool tryMove(Vec2 delta);
-    bool hullFits(Vec2 position,float feet,float height)const;
+    bool hullFits(Vec2 position,float feet,float height,float radius=.20f,bool creatures=true)const;
     bool unstickPlayer();
     float groundHeight(Vec2 position)const;
-    float groundHeight(Vec2 position,float feet)const;
+    float groundHeight(Vec2 position,float feet,float radius=.20f)const;
     void updateMovement(const InputState& input,float dt);
     void updateLift(float dt);
     void updateInteraction(const InputState& input,float dt);

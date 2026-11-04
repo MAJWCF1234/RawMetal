@@ -115,7 +115,7 @@ bool Game::testCampaignExtension(){
   Game game;game.loadLevel(level,false);game.updateStreaming(0);
   out<<"CHUNK "<<level<<'\n';
   if(level>=7)for(const auto& enemy:game.m_enemies)
-   result&=check(game.hullFits(enemy.pos,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom()),"Creature spawns clear stairs, machinery and workstation collision");
+   result&=check(game.hullFits(enemy.pos,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),false),"Creature spawns clear stairs, machinery and workstation collision");
   game.m_enemies.clear();
   // Test geometry with access gates open; the control and locked-door sequence
   // is exercised separately below using a fresh game with closed gates.

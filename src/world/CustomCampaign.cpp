@@ -183,7 +183,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="STRUCT"){
    if(f.size()<10)throw std::runtime_error("malformed STRUCT record");auto map=mapAt(maps,f);map->structures.push_back({
     number(f,2,"structure x1"),number(f,3,"structure y1"),number(f,4,"structure x2"),number(f,5,"structure y2"),
-    number(f,6,"structure bottom"),number(f,7,"structure top"),boolean(f,8,"structure rail"),integer(f,9,"structure material")});
+     number(f,6,"structure bottom"),number(f,7,"structure top"),boolean(f,8,"structure rail"),integer(f,9,"structure material"),f.size()>10&&!f[10].empty()?boolean(f,10,"structure solid"):true});
   }else if(tag=="FIXTURE"){
    if(f.size()<11)throw std::runtime_error("malformed FIXTURE record");auto map=mapAt(maps,f);map->fixtures.push_back({
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),
