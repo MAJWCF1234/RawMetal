@@ -487,17 +487,17 @@ bool Game::testFriendlyAI(){
    map->structures.push_back({10.9f,0,14.1f,24,clearance,clearance+.55f});campaign->maps[0]=map;return Game(campaign);
   };
   for(int rate:{60,120}){auto g=beamScene(1.4f);g.m_player.pos={14.5f,6.5f};tick(g,rate*8,1.f/rate);auto pose=g.friendlyActors()[0].pose;const auto&track=g.friendlyActors()[0].track();float height=g.friendlyHullHeight(0,track);
-   check(g.state(g.friendlyKey(0,"crouched"))&&std::fabs(height-npcCrouchedHeight(track))<.001f&&height>Player::CrouchedHeight+.5f,"Escort anticipates 1.4 m clearance using its own kneeling hull at both frame rates");
+   check(g.state(g.friendlyKey(0,"crouched"))&&std::fabs(height-npcCrouchedHeight(track))<.001f&&height>Player::ProneHeight+.5f,"Escort anticipates 1.4 m clearance using its own kneeling hull at both frame rates");
    check(pose.position.x>11.5f&&g.friendlyBodyFits(0,pose.position,pose.z,height)&&!g.friendlyBodyFits(0,pose.position,pose.z,track.scale),"Crouched escort physically enters a room-wide beam that blocks its standing body");
    Game restored(g.m_customCampaign);bool saved=restored.decodeSave(g.encodeSave());check(saved&&restored.state(restored.friendlyKey(0,"crouched"))&&std::fabs(restored.friendlyHullHeight(0,restored.friendlyActors()[0].track())-height)<.001f,"Save retains the NPC-specific crouched hull inside the low passage");
    tick(g,rate*2,1.f/rate);check(g.state(g.friendlyKey(0,"crouched"))&&g.friendlyBodyFits(0,g.friendlyActors()[0].pose.position,g.friendlyActors()[0].pose.z,height),"Escort stays crouched beneath overhead geometry without a player crouch command");
    g.m_player.pos={8.5f,6.5f};tick(g,rate*8,1.f/rate);pose=g.friendlyActors()[0].pose;
    check(pose.position.x<10.7f&&!g.state(g.friendlyKey(0,"crouched"))&&std::fabs(g.friendlyHullHeight(0,track)-track.scale)<.001f,"Escort exits the beam and restores standing clearance at both frame rates");
   }
-  for(int rate:{60,120}){auto g=beamScene(.9f,1.2f);g.m_player.pos={12.5f,6.5f};g.m_player.crouched=true;g.m_player.eye=Player::CrouchedEye;bool safe=true,kneeling=false;
+  for(int rate:{60,120}){auto g=beamScene(.9f,1.2f);g.m_player.pos={12.5f,6.5f};g.m_player.crouched=true;g.m_player.prone=true;g.m_player.eye=Player::ProneEye;bool safe=true,kneeling=false;
    for(int i=0;i<rate*8;++i){tick(g,1,1.f/rate);const auto&npc=g.friendlyActors()[0];float height=g.friendlyHullHeight(0,npc.track());safe&=npc.pose.position.x<=10.7f&&g.friendlyBodyFits(0,npc.pose.position,npc.pose.z,height);kneeling|=g.state(g.friendlyKey(0,"crouched"))!=0;}
    check(safe&&kneeling&&g.m_player.hullHeight()<.9f&&npcCrouchedHeight(g.friendlyActors()[0].track())>.9f,"Kneeling NPC refuses a .9 m player-only passage without penetrating its beam");
-   g.m_player.pos={8.5f,6.5f};g.m_player.crouched=false;g.m_player.eye=Player::StandingEye;tick(g,rate*6,1.f/rate);const auto&npc=g.friendlyActors()[0];
+   g.m_player.pos={8.5f,6.5f};g.m_player.crouched=false;g.m_player.prone=false;g.m_player.eye=Player::StandingEye;tick(g,rate*6,1.f/rate);const auto&npc=g.friendlyActors()[0];
    check(!g.state(g.friendlyKey(0,"crouched"))&&length(npc.pose.position-g.m_player.pos)<1.3f&&g.friendlyBodyFits(0,npc.pose.position,npc.pose.z,npc.track().scale),"Blocked escort recovers, follows a reachable goal and stands after the player leaves the low passage");
   }
   for(int gun:{1,2}){auto original=scene(ActorAiMode::Escort);auto campaign=std::make_shared<CustomCampaign>(*original.m_customCampaign);auto map=std::make_shared<AuthoredMapData>(*campaign->maps[0]);auto&track=map->actorTracks[0];

@@ -184,7 +184,7 @@ private:
     std::array<Texture,10> m_claireTextures;
     // Per face: its texture, and whether first person leaves it out (her
     // head, hair and arms; the viewmodel's arms stand in for hers).
-    std::vector<unsigned char> m_claireFaceTexture,m_claireFaceHidden;
+    std::vector<unsigned char> m_claireFaceTexture,m_claireFaceHidden,m_claireHeadFace; float m_claireHeadHeight=0;int m_claireHeadSamples=0; int m_bodyStance=-1,m_bodyTransitionClip=-1;float m_bodyTransitionStart=0,m_bodyTransitionLength=1,m_bodyTransitionRange=1;
     // The clip it last showed and the one it is blending from (.2 s).
     int m_bodyClip=-1,m_bodyFromClip=-1;float m_bodyFromPhase=0,m_bodyBlendStart=-1,m_bodyLastElapsed=-1;
     std::vector<MeshTriangle> m_bodyFrom;

@@ -146,7 +146,7 @@ bool Game::testChapterRoute(){
   g.m_player.pitch=0;g.m_player.angle=std::atan2(direction.y,direction.x);
   InputState walking{};walking.forward=true;
   walking.crouch=(edge.chunk==57&&edge.side=='S')||(edge.chunk==58&&edge.side=='N');
-  g.m_player.crouched=walking.crouch;
+  g.m_player.crouched=walking.crouch;g.m_player.prone=walking.crouch&&!g.hullFits(g.m_player.pos,g.m_player.z,Player::CrouchedHeight);   // a kneel that cannot fit is prone
   const float startZ=g.player().z;
   const bool startFits=g.hullFits(g.player().pos,g.player().z,g.player().hullHeight());
   bool crossed=false;int frames=0,uses=0;
@@ -344,9 +344,9 @@ bool Game::testCampaignMaps(){
    // The knock waits for the cold room door.
    run(g,1);const int before=g.state("medf_knock");put(g,{11.5f,5.f},-12,-kPi*.5f);g.update({},1.f/60);g.update({},1.f/60);
    check(before==0&&g.state("medf_knock")>0,"Pharmacy: the knocking starts at the cold room door, not before");
-   // Under the shutter: crouched, not standing.
-   check(g.hullFits({17.5f,10.9f},-12,Player::CrouchedHeight)&&!g.hullFits({17.5f,10.9f},-12,Player::StandingHeight)&&g.hullFits({17.5f,12.3f},-12,Player::StandingHeight)&&g.hullFits({17.5f,9.6f},-12,Player::StandingHeight),
-    "Pharmacy: the jammed goods-in shutter clears a crouch and stops a standing player");
+   // Under the shutter: prone, not standing.
+   check(g.hullFits({17.5f,10.9f},-12,Player::ProneHeight)&&!g.hullFits({17.5f,10.9f},-12,Player::StandingHeight)&&g.hullFits({17.5f,12.3f},-12,Player::StandingHeight)&&g.hullFits({17.5f,9.6f},-12,Player::StandingHeight),
+    "Pharmacy: the jammed goods-in shutter clears a crawl and stops a standing player");
    InputState walk{};walk.forward=true;put(g,{17.5f,12.1f},-12,-kPi*.5f);for(int i=0;i<180;++i)g.update(walk,1.f/60);const float standingY=g.player().pos.y;
    walk.crouch=true;put(g,{17.5f,12.1f},-12,-kPi*.5f);g.m_player.crouched=true;float crouchY=99;for(int i=0;i<360;++i){g.update(walk,1.f/60);crouchY=std::min(crouchY,g.player().pos.y);}
    out<<"  74 shutter: standing stopped at y="<<standingY<<", crouched reached y="<<crouchY<<'\n';

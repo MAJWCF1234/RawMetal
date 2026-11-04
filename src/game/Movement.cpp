@@ -95,25 +95,39 @@ void Game::updateMovement(const InputState& input,float dt){
  unstickPlayer();
  const Vec2 startPosition=m_player.pos;
  if(input.jump&&!m_previousJump)m_jumpBuffer=.12f;m_previousJump=input.jump;
- if(input.crouch&&!m_player.crouched){
+ // Stances: stand; crouch (held) kneels; prone where a kneel cannot fit, when
+ // toggled (Z), or tucked in flight, which keeps the old crouch-jump over
+ // 1.1 m cover. A prone that was not toggled rises to a kneel when it can.
+ if(input.prone&&!m_previousProne)m_proneToggle=!m_proneToggle;m_previousProne=input.prone; if(input.jump||input.sprint)m_proneToggle=false;   // getting up
+ const bool low=input.crouch||m_proneToggle;
+ if(low&&!m_player.crouched){
   // Ducking in flight raises the feet while preserving the top of the hull.
-  if(!m_player.grounded)m_player.z+=Player::StandingHeight-Player::CrouchedHeight;m_player.crouched=true;
- }else if(!input.crouch&&m_player.crouched){
-  float heightDelta=Player::StandingHeight-Player::CrouchedHeight;
+  if(!m_player.grounded){m_player.z+=Player::StandingHeight-Player::ProneHeight;m_player.prone=true;}
+  else m_player.prone=m_proneToggle||!hullFits(m_player.pos,m_player.z,Player::CrouchedHeight);
+  m_player.crouched=true;
+ }else if(!low&&m_player.crouched){
+  float heightDelta=Player::StandingHeight-m_player.hullHeight();
   float feet=m_player.grounded?m_player.z:std::max(groundHeight(m_player.pos),m_player.z-heightDelta);
-  if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.z=feet;}
+  if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.prone=false;m_player.z=feet;}
+  else if(m_player.prone&&m_player.grounded&&hullFits(m_player.pos,m_player.z,Player::CrouchedHeight))m_player.prone=false;
+ }else if(m_player.crouched){
+  if(m_proneToggle&&m_player.grounded)m_player.prone=true;
+  else if(m_player.prone&&!m_proneToggle&&m_player.grounded&&hullFits(m_player.pos,m_player.z,Player::CrouchedHeight))m_player.prone=false;
  }
- if(input.vrTracked)m_player.eye=input.vrEye;else m_player.eye+=((m_player.crouched?Player::CrouchedEye:Player::StandingEye)-m_player.eye)*std::min(1.f,dt*16.f);
+ if(input.vrTracked)m_player.eye=input.vrEye;else m_player.eye+=(m_player.stanceEye()-m_player.eye)*std::min(1.f,dt*16.f);
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x},wish{};
  if(input.forward)wish+=forward;if(input.back)wish+=forward*-1;if(input.right)wish+=right;if(input.left)wish+=right*-1;
  if(input.vrTracked)wish=forward*input.vrMoveForward+right*input.vrMoveRight;
  if(lengthSq(wish)>1||(!input.vrTracked&&lengthSq(wish)>0))wish=normalized(wish);
+ // A kneel walking into a passage it cannot fit goes down onto its belly.
+ if(m_player.crouched&&!m_player.prone&&m_player.grounded&&lengthSq(wish)>.01f){const Vec2 ahead=m_player.pos+normalized(wish)*.3f;const float ground=groundHeight(ahead);
+  if(std::fabs(ground-m_player.z)<.25f&&!hullFits(ahead,ground,Player::CrouchedHeight)&&hullFits(ahead,ground,Player::ProneHeight))m_player.prone=true;}
  int count=std::max(1,int(std::ceil(dt*120)));float step=dt/count;
  for(int tick=0;tick<count;++tick){
   bool grounded=m_player.grounded;auto old=m_player.pos;
   m_jumpBuffer=std::max(0.f,m_jumpBuffer-step);m_coyote=grounded?.075f:std::max(0.f,m_coyote-step);
   if(m_jumpBuffer>0&&m_coyote>0){m_player.verticalVelocity=5.4f;m_player.grounded=false;m_jumpBuffer=0;m_coyote=0;m_verticalSpringVelocity-=.45f;sound(Sound::Jump,.38f,.97f+(m_stepVariant%3)*.025f);}
-  float speed=length(m_velocity),wishSpeed=draggingBody()?1.1f:heldNpc()>=0?1.4f:m_player.crouched?1.65f:input.sprint&&m_grabbed<=0?5.4f:3.6f;
+  float speed=length(m_velocity),wishSpeed=draggingBody()?1.1f:heldNpc()>=0?1.4f:m_player.prone?.9f:m_player.crouched?1.65f:input.sprint&&m_grabbed<=0?5.4f:3.6f;
   // In a Snatcher's hands the player can only struggle.
   if(m_grabbed>0){wishSpeed*=.35f;m_grabbed=std::max(0.f,m_grabbed-step);}
   if(m_player.grounded&&speed>0){float remaining=std::max(0.f,speed-std::max(1.5f,speed)*6.f*step);m_velocity=m_velocity*(remaining/speed);}
@@ -142,7 +156,7 @@ void Game::updateMovement(const InputState& input,float dt){
   float impact=-m_player.verticalVelocity;
   if(m_player.verticalVelocity<=0&&m_player.z<=ground+.005f&&previousZ>=ground-.025f){m_player.z=ground;m_player.verticalVelocity=0;m_player.grounded=true;}
   if(!grounded&&m_player.grounded){sound(Sound::Land,std::clamp(impact*.105f,.2f,.85f),.94f);m_verticalSpringVelocity-=std::min(impact,9.f)*.105f;m_stepDistance=0;}
-  if(grounded&&m_player.grounded){const float stride=m_player.crouched?.85f:input.sprint?1.45f:1.22f;m_stepDistance+=length(m_player.pos-old);
+  if(grounded&&m_player.grounded){const float stride=m_player.prone?.6f:m_player.crouched?.85f:input.sprint?1.45f:1.22f;m_stepDistance+=length(m_player.pos-old);
    // Claire's legs: one gait cycle is two footsteps, so her feet land on the step sounds.
    m_bodyGait=std::fmod(m_bodyGait+kPi*length(m_player.pos-old)/stride,2*kPi);m_bodySprint=input.sprint&&!m_player.crouched;
    if(m_stepDistance>stride){
@@ -338,7 +352,14 @@ bool Game::testMovement(){
  auto clean=[](){auto game=validationScene(Enemy::Kind::Huntsman,3);game.m_enemies.clear();return game;};
  {auto size=clean();if(size.player().hullHeight()!=Player::StandingHeight||std::fabs(size.player().eye-Player::StandingEye)>.001f)return false;
   InputState duck{};duck.crouch=true;size.update(duck,.1f);
-  if(size.player().hullHeight()!=Player::CrouchedHeight||size.player().eye>=Player::StandingEye)return false;}
+  if(size.player().hullHeight()!=Player::CrouchedHeight||size.player().prone||size.player().eye>=Player::StandingEye)return false;
+  // Z toggles prone in the open; a jump gets her up again.
+  InputState down{};down.prone=true;size.update(down,.1f);down.prone=false;for(int i=0;i<120;++i)size.update(down,1.f/120.f);
+  debug<<"prone "<<size.player().prone<<' '<<size.player().crouched<<' '<<size.player().hullHeight()<<' '<<size.player().eye<<' '<<size.player().grounded<<"\n";
+  if(!size.player().prone||size.player().hullHeight()!=Player::ProneHeight||std::fabs(size.player().eye-Player::ProneEye)>.02f)return false;
+  InputState up{};up.jump=true;size.update(up,.02f);up.jump=false;for(int i=0;i<120;++i)size.update(up,1.f/120.f);
+  debug<<"up "<<size.player().crouched<<' '<<size.player().prone<<"\n";
+  if(size.player().crouched||size.player().prone)return false;}
  // Wall slide along the Foundry's bare west wall.
  {auto slide=clean();slide.m_player.pos={1.3f,9.5f};slide.m_velocity={-4,2};slide.tryMove({-.6f,.1f});
   if(slide.player().pos.x<1.199f||slide.player().pos.x>1.21f||std::fabs(slide.player().pos.y-9.6f)>.001f||slide.m_velocity.x!=0||slide.m_velocity.y!=2)return false;
@@ -364,14 +385,14 @@ bool Game::testMovement(){
  // stay down while still beneath it.
  game=clean();game.m_player.pos={2.f,11.f};game.m_player.angle=kPi*.5f;input={};input.forward=true;
  for(int i=0;i<60;++i)game.update(input,1.f/120.f);debug<<"standing "<<game.player().pos.y<<'\n';if(game.player().pos.y>11.81f)return false;
- input.crouch=true;for(int i=0;i<100;++i)game.update(input,1.f/120.f);debug<<"duck "<<game.player().pos.y<<'\n';if(game.player().pos.y<12.6f)return false;
+ input.crouch=true;bool flat=false;for(int i=0;i<200;++i){game.update(input,1.f/120.f);flat|=game.player().prone;}debug<<"duck "<<game.player().pos.y<<" prone "<<flat<<'\n';if(game.player().pos.y<12.6f||!flat)return false;
  input={};game.update(input,.01f);if(game.player().pos.y<13.75f&&!game.player().crouched)return false;
  // The Intake's 1.1 m dock bumper, cleared with a crouch-jump.
  game=clean();game.m_player.pos={11.3f,4.6f};game.m_player.angle=-kPi*.5f;game.m_velocity={0,-3.6f};bool clearedCover=false;
  for(int i=0;i<130;++i){input={};input.jump=i==0;input.crouch=i>=18;input.forward=game.player().pos.y>2.6f;game.update(input,1.f/120.f);
   if(game.player().pos.y<2.6f&&game.player().grounded&&std::fabs(game.player().z)<.01f){clearedCover=true;break;}
  }debug<<"duck-jump clear 1.1m cover "<<game.player().pos.y<<' '<<game.player().z<<' '<<clearedCover<<'\n';if(!clearedCover)return false;
- std::ofstream("movement-test.txt")<<"1.6 m standing hull, low crouch tunnel, crouched jump, airborne duck clearing 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb and blocked standing: PASS\n";return true;
+ std::ofstream("movement-test.txt")<<"1.6 m standing hull, 1.05 m kneel, prone toggle and getting up, a crouch going prone under the low duct, crouched jump, airborne duck clearing 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb and blocked standing: PASS\n";return true;
 }
 bool Game::testProgression(){
  // The Intake's freight gate (y 7.5) holds the player until E opens it.

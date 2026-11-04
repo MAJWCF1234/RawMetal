@@ -98,7 +98,7 @@ bool Game::auditMapScene(Game& game,int level){
  };
  std::ofstream report("map-audit-"+std::to_string(level)+".txt");
  // The player may crouch anywhere; creatures need standing room.
- const auto reach=flood(Player::CrouchedHeight+.02f);const auto& visited=reach.visited;
+ const auto reach=flood(Player::ProneHeight+.02f);const auto& visited=reach.visited;
  const auto standing=flood(Player::StandingHeight+.02f);
  auto reachableIn=[&](const Reach& area,Vec2 p,float z,float radius){
   int r=int(std::ceil(radius/Cell));int cx=int(p.x/Cell),cy=int(p.y/Cell);
@@ -158,8 +158,8 @@ bool Game::auditMapScene(Game& game,int level){
   if((!below||!above)&&!(left&&right)&&b.fixture<0)fail("FRAMELESS "+name);
   for(const auto&f:w.fixtures())if(f.solid&&int(&f-w.fixtures().data())!=b.fixture){float z=w.floorHeight(f.position.x,f.position.y)+f.base;if(z>=b.top||z+f.height<=b.bottom)continue;float c=std::cos(f.yaw),s=std::sin(f.yaw);float ex=(std::fabs(c)*f.width+std::fabs(s)*f.depth)*.5f,ey=(std::fabs(s)*f.width+std::fabs(c)*f.depth)*.5f;if(f.position.x+ex>b.x1&&f.position.x-ex<b.x2&&f.position.y+ey>b.y1&&f.position.y-ey<b.y2)fail("OVERLAP "+name+" solid fixture");}
  }
- if(!w.breakables().empty()){auto saved=game.m_world;for(int i=0;i<int(w.breakables().size());++i)if(!w.breakables()[i].holds)game.m_world.damageBreakable(i,1000000);auto opened=flood(Player::CrouchedHeight+.02f);int newly=0;for(size_t i=0;i<opened.visited.size();++i)if(visited[i].empty()&&!opened.visited[i].empty()){++newly;if(std::getenv("RAWMETAL_AUDIT_VERBOSE"))report<<"GLASS CELL "<<(i%N+.5f)*Cell<<' '<<(i/N+.5f)*Cell<<' '<<opened.visited[i].front()<<'\n';}game.m_world=std::move(saved);report<<"INFO REACHABLE ONLY THROUGH GLASS: "<<newly<<" cells\n";}
- if(!w.breakables().empty()){auto saved=game.m_world;for(int i=0;i<int(w.doors().size());++i)if(game.doorLocked(w.doors()[i]))game.m_world.setDoor(i,0,false);auto sealed=flood(Player::CrouchedHeight+.02f);for(int i=0;i<int(w.breakables().size());++i)if(!w.breakables()[i].holds&&w.breakables()[i].material==17)game.m_world.damageBreakable(i,1000000);auto opened=flood(Player::CrouchedHeight+.02f);int cells=0;for(size_t i=0;i<opened.visited.size();++i)cells+=sealed.visited[i].empty()&&!opened.visited[i].empty();report<<"INFO LOCKED-STATE GLASS REACHABILITY: "<<cells<<" cells"<<'\n';game.m_world=std::move(saved);}
+ if(!w.breakables().empty()){auto saved=game.m_world;for(int i=0;i<int(w.breakables().size());++i)if(!w.breakables()[i].holds)game.m_world.damageBreakable(i,1000000);auto opened=flood(Player::ProneHeight+.02f);int newly=0;for(size_t i=0;i<opened.visited.size();++i)if(visited[i].empty()&&!opened.visited[i].empty()){++newly;if(std::getenv("RAWMETAL_AUDIT_VERBOSE"))report<<"GLASS CELL "<<(i%N+.5f)*Cell<<' '<<(i/N+.5f)*Cell<<' '<<opened.visited[i].front()<<'\n';}game.m_world=std::move(saved);report<<"INFO REACHABLE ONLY THROUGH GLASS: "<<newly<<" cells\n";}
+ if(!w.breakables().empty()){auto saved=game.m_world;for(int i=0;i<int(w.doors().size());++i)if(game.doorLocked(w.doors()[i]))game.m_world.setDoor(i,0,false);auto sealed=flood(Player::ProneHeight+.02f);for(int i=0;i<int(w.breakables().size());++i)if(!w.breakables()[i].holds&&w.breakables()[i].material==17)game.m_world.damageBreakable(i,1000000);auto opened=flood(Player::ProneHeight+.02f);int cells=0;for(size_t i=0;i<opened.visited.size();++i)cells+=sealed.visited[i].empty()&&!opened.visited[i].empty();report<<"INFO LOCKED-STATE GLASS REACHABILITY: "<<cells<<" cells"<<'\n';game.m_world=std::move(saved);}
  // A terminal is usable only from a reachable spot within 1.5 m that sees it.
  auto usable=[&](const Terminal& t){
   float base=w.floorHeight(t.position.x,t.position.y)+t.z;
@@ -188,7 +188,7 @@ bool Game::auditMapScene(Game& game,int level){
  // Match walkable surfaces across the seam; do not mistake a scenery roof
  // for the only exit, or a pit below the adjoining floor for a valid exit.
  auto surfaces=[](const World& world,Vec2 p){
-  std::vector<float> result;auto add=[&](float z){if(!world.fits(p.x,p.y,z+.03f,Player::CrouchedHeight,false))return;for(float existing:result)if(std::fabs(existing-z)<.03f)return;result.push_back(z);};
+  std::vector<float> result;auto add=[&](float z){if(!world.fits(p.x,p.y,z+.03f,Player::ProneHeight,false))return;for(float existing:result)if(std::fabs(existing-z)<.03f)return;result.push_back(z);};
   add(world.floorHeight(p.x,p.y));
   for(const auto& v:world.structures())if(v.solid&&!v.rail&&p.x>=v.x1&&p.x<v.x2&&p.y>=v.y1&&p.y<v.y2)add(v.top);
   return result;
@@ -218,7 +218,7 @@ bool Game::auditMapScene(Game& game,int level){
  // basin jumped into, a pit, a ledge dropped onto). Walk the reach graph
  // backwards from the exit with the same step rule, then list what is left.
  {
-  const float body=Player::CrouchedHeight+.02f;
+  const float body=Player::ProneHeight+.02f;
   std::vector<std::vector<float>> escapes(N*N);
   auto marked=[&](int x,int y,float z){for(float v:escapes[size_t(y*N+x)])if(std::fabs(v-z)<.3f)return true;return false;};
   struct Node{int x,y;float z;};std::queue<Node> open;
@@ -256,7 +256,7 @@ bool Game::auditMapScene(Game& game,int level){
   if(!clear)fail("BLOCKED door["+std::to_string(i)+"] x "+std::to_string(d.left)+"-"+std::to_string(d.right)+" at y "+std::to_string(d.y)+" base "+std::to_string(base));
   for(float side:{-1.f,1.f}){float y=d.y+side*.35f;if(y<0||y>=24)continue;
    float surface=w.supportBelow(cx,y,base+.45f);
-   if(!std::isfinite(surface)||std::fabs(surface-base)>.45f||!w.fits(cx,y,surface+.02f,Player::CrouchedHeight,false))fail("DOOR STEP door["+std::to_string(i)+"] at "+at({cx,d.y})+" left="+std::to_string(d.left)+" right="+std::to_string(d.right)+" relativeZ="+std::to_string(d.z)+" side="+std::to_string(side)+" base="+std::to_string(base)+" surface="+std::to_string(surface));
+   if(!std::isfinite(surface)||std::fabs(surface-base)>.45f||!w.fits(cx,y,surface+.02f,Player::ProneHeight,false))fail("DOOR STEP door["+std::to_string(i)+"] at "+at({cx,d.y})+" left="+std::to_string(d.left)+" right="+std::to_string(d.right)+" relativeZ="+std::to_string(d.z)+" side="+std::to_string(side)+" base="+std::to_string(base)+" surface="+std::to_string(surface));
   }
   game.m_world.setCargoLiftHeight(previousCage);
  }

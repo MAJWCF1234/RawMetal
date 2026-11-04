@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.9 - All of her (2026-11-04)
+
+Look down and she is there: coat, belt, legs and boots, under your own eyes
+instead of a step ahead of them, walking when you walk and turning when you
+turn. Her shadow goes with her, one shape on the floor under the lamp.
+
+She kneels now. Hold crouch and she goes down on one knee, rifle up, and the
+view sinks with her to where her eyes really are. Where a kneel will not fit,
+under the ducts and through the low gaps, she goes down on her belly and
+crawls, and gets up on her own when there is room again. Z puts her flat
+anywhere; a jump or a run brings her back to her feet.
+
+A desk hides a kneeling woman's legs and nothing else. Get lower.
+
+---
+
 ## v1.1.8 - Steady hands (2026-11-04)
 
 Her wrists no longer wring themselves thin where the glove meets the skin. The

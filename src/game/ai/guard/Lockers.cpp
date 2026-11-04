@@ -471,7 +471,7 @@ void Game::inspectLockerGuard(bool stow,bool staged){
  put("guard_x",int(std::round(stand.x*1000)));put("guard_y",int(std::round(stand.y*1000)));put("guard_z",int(std::round((m_world.floorHeight(f.position.x,f.position.y)+f.base)*1000)));put("guard_memory",1);put("guard_travel",0);put("guard_search",0);put("guard_locker",index+1);put("guard_mode",int(GuardState::Investigate));
 }
 void Game::inspectLockerWatch(Vec2 at,float feet,float yaw,float pitch){
- m_lockerView.active=false;m_player.pos=at;m_player.z=feet==-999?m_world.floorHeight(at.x,at.y):feet;m_player.angle=yaw;m_player.pitch=pitch;m_player.crouched=false;m_player.eye=Player::StandingEye;
+ m_lockerView.active=false;m_player.pos=at;m_player.z=feet==-999?m_world.floorHeight(at.x,at.y):feet;m_player.angle=yaw;m_player.pitch=pitch;m_player.crouched=false;m_player.prone=false;m_player.eye=Player::StandingEye;
 }
 // --- Tests ---------------------------------------------------------------------------
 bool Game::testLockerGuards(){

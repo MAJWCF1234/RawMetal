@@ -2439,10 +2439,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const auto&bind=mesh.bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
    for(const auto&t:bind)for(const auto&v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
    const float height=high.y-low.y,middle=(low.x+high.x)*.5f;
-   m_claireFaceTexture.assign(bind.size(),0);m_claireFaceHidden.assign(bind.size(),0);
+   m_claireFaceTexture.assign(bind.size(),0);m_claireFaceHidden.assign(bind.size(),0);m_claireHeadFace.assign(bind.size(),0);
    for(size_t f=0;f<bind.size();++f){const unsigned char texture=static_cast<unsigned char>(std::max(0,claireMaterial(mesh,bind[f].part)));
     m_claireFaceTexture[f]=texture;bool hidden=texture>=7;
     for(const auto&v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;hidden=hidden||y>.85f||x>.118f||(x>.08f&&y>.66f);}
+    bool head=true;for(const auto&v:bind[f].v)head=head&&(v.p.y-low.y)/height>.88f;m_claireHeadFace[f]=head;
+    if(head)for(const auto&v:bind[f].v){m_claireHeadHeight+=(v.p.y-low.y)/height;++m_claireHeadSamples;}
     m_claireFaceHidden[f]=hidden;}
   }
   // Which clip: 0 idle, 1-4 run forward/back/left/right, 5 sprint, 6 crouched
@@ -2451,13 +2453,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const float speed=length(velocity),ahead=dot(velocity,forward),across=dot(velocity,right),gait=std::fmod(game.bodyGait()/(2*kPi),1.f);
   const int direction=std::fabs(ahead)>=std::fabs(across)?(ahead>=0?0:1):(across>=0?3:2);
   int clip=0;float phase=std::fmod(game.elapsed()/2.13f,1.f);
-  // Crouched under a ceiling lower than her crouch, she goes prone.
-  const float headroom=w.clearanceAbove(state.pos.x,state.pos.y,state.z+.05f)-state.z;
   if(game.dead()){if(m_bodyDeathStart<0)m_bodyDeathStart=game.elapsed();clip=12;phase=std::min(1.f,(game.elapsed()-m_bodyDeathStart)/3.4f);}
   else if(!state.grounded){clip=11;phase=std::fmod(game.elapsed(),1.f);}
-  else if(state.crouched&&headroom<1.15f){if(speed<.2f)clip=14;else{clip=15;phase=gait;}}
+  else if(state.prone){if(speed<.2f)clip=14;else{clip=direction==1?19:15;phase=gait;}}
   else if(state.crouched){if(speed<.25f)clip=6;else{clip=7+direction;phase=gait;}}
-  else if(speed>=.25f){phase=gait;clip=direction==0&&game.bodySprinting()&&speed>4.2f?5:direction==0&&speed<2.f?13:1+direction;}
+  else if(speed>=.25f){phase=gait;clip=direction==0&&game.bodySprinting()&&speed>4.2f?5:speed<2.f?(direction==0?13:15+direction):1+direction;}
+  // A change of stance standing still plays its transition once (16-19 are
+  // walk back/left/right and crawl back; 20 stand-crouch, 21 crouch-stand,
+  // 22 crouch-prone, 23 prone-crouch), at a pace the eye's own move matches.
+  {const int stance=state.prone?2:state.crouched?1:0;const float now=game.elapsed();
+   if(m_bodyStance>=0&&stance!=m_bodyStance&&state.grounded&&!game.dead()&&speed<.25f){
+    m_bodyTransitionClip=stance>m_bodyStance?(m_bodyStance==0&&stance==1?20:22):(stance==0?21:23);
+    m_bodyTransitionStart=now;m_bodyTransitionLength=m_bodyTransitionClip==20?.45f:m_bodyTransitionClip==21?.9f:.95f;
+    m_bodyTransitionRange=m_bodyTransitionClip==21?.55f:1.f;}
+   m_bodyStance=stance;
+   if(m_bodyTransitionClip>=0){const float t=(now-m_bodyTransitionStart)/m_bodyTransitionLength;
+    if(t>=1||t<0||speed>=.25f||!state.grounded||game.dead())m_bodyTransitionClip=-1;else{clip=m_bodyTransitionClip;phase=t*m_bodyTransitionRange;}}}
   // A change of clip blends over .2 s from the pose it left.
   const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
   if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;}
@@ -2470,8 +2481,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Stand her on the player's feet as tall as the game's other people (1.7 m,
   // an actor's authored size), a hand's width behind the eye.
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-  const float scale=1.7f/std::max(.01f,range.y),angle=state.angle;
-  const Vec2 at=state.pos-forward*.14f;const float feet=state.z;
+  // First person scales her so her eyes are the camera's (her head's centre
+  // sits about 4 cm above the eye line): at 1.7 m they would be 16 cm above it.
+  const float headFraction=m_claireHeadSamples?m_claireHeadHeight/m_claireHeadSamples:.93f;
+  const float scale=(m_bodyOutside?1.7f:(Player::StandingEye+.04f)/headFraction)/std::max(.01f,range.y),angle=state.angle;
+  // In first person her animated head sits just behind the eye, wherever the
+  // clip carries it (the rifle stance leans, a kneel sits back on the heel),
+  // so her legs fall under and behind the view instead of out in front of it.
+  // From outside she stands a hand's width behind the player's position.
+  Vec2 at=state.pos-forward*.14f;const float feet=state.z;
+  if(!m_bodyOutside){Point3 head{};int count=0;for(size_t f=0;f<mesh.triangles.size()&&f<m_claireHeadFace.size();++f)if(m_claireHeadFace[f])for(const auto&v:mesh.triangles[f].v){head=head+v.p;++count;}
+   if(count){head=(head*(1.f/count)-center)*scale;const Vec2 side{std::sin(angle),-std::cos(angle)};at=state.pos-forward*.10f-forward*head.z-side*head.x;}}
   Point3 receiver{at.x,at.y,feet+.85f};
   const WorldLight* keyLight=nullptr;float keyDistance=36.f;
   if(!w.outdoors())for(const auto&source:w.lights()){auto emitter=source.emitter();float dx=emitter.x-at.x,dy=emitter.y-at.y,d2=dx*dx+dy*dy;
@@ -2489,14 +2509,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
     v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};}
    std::swap(face.v[1],face.v[2]);
-   bool nearEye=false;if(!m_bodyOutside)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||(d.z>-.32f&&d.x*d.x+d.y*d.y<.32f*.32f);}
-   if(keyLight){MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
+   bool nearEye=false;if(!m_bodyOutside)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||(d.z>-.18f&&d.x*d.x+d.y*d.y<.25f*.25f)||(state.crouched&&d.z>-.12f);}
+   // Crouched or prone, anything of hers up at the eye is left out; her whole
+   // body, head included, still throws the one shadow.
+   const bool hiddenHere=(m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside;
+   // Only the faces turned to the lamp cast: a closed body then darkens each
+   // floor pixel about once. Every face casting stacked the translucent
+   // triangles into a faceted black mass, worst crouched over her shadow.
+   bool lit=false;if(keyLight){auto emitter=keyLight->emitter();Point3 c=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f),n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);
+    lit=n.x*(emitter.x-c.x)+n.y*(emitter.y-c.y)+n.z*(emitter.z-c.z)>0;}
+   if(keyLight&&lit){MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
     for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
      if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
      if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-at.x,y-at.y)>4.f){valid=false;break;}
      cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
     if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadowTexture,1.f);}}
-   if((m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside)continue;
+   if(hiddenHere)continue;
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
    tri(face.v[0],face.v[1],face.v[2],m_claireTextures[m_claireFaceTexture[f]],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));

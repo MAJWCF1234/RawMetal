@@ -154,10 +154,10 @@ __declspec(noinline) static int bodyInspection(){
  // Her own arms in first person, looking ahead: the shotgun held, walked,
  // fired and reloaded, then bare fists and a jab.
  renderer->setBodyOrbit(0,0);
- struct View{const char* name;bool forward,fire,reload,fists;int frames,capture;};
- const View views[]={{"fp-idle",0,0,0,0,40,39},{"fp-walk",1,0,0,0,40,39},{"fp-fire",0,1,0,0,40,5},{"fp-reload",0,0,1,0,90,45},{"fp-fists",0,0,0,1,40,39},{"fp-jab",0,1,0,1,40,8}};
- for(const auto&view:views){auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=0;if(view.fists)game.stowWeapon();
-  for(int i=0;i<view.frames&&window.pump();++i){retro::InputState input{};input.forward=view.forward;input.fire=view.fire&&i==0;input.reload=view.reload&&i==0;game.update(input,1.f/60);renderer->render(game);
+ struct View{const char* name;bool forward,fire,reload,fists;int frames,capture;bool crouch=false;float pitch=0;bool prone=false;};
+ const View views[]={{"fp-idle",0,0,0,0,40,39},{"fp-walk",1,0,0,0,40,39},{"fp-fire",0,1,0,0,40,5},{"fp-reload",0,0,1,0,90,45},{"fp-fists",0,0,0,1,40,39},{"fp-jab",0,1,0,1,40,8},{"fp-crouch",0,0,0,0,40,39,true},{"fp-crouch-low",0,0,0,0,40,39,true,-90.f},{"fp-crouch-down",0,0,0,0,40,39,true,-195.f},{"fp-crouch-walk",1,0,0,0,50,49,true,-90.f},{"fp-stand-down",0,0,0,0,40,39,false,-195.f},{"fp-walk-down",1,0,0,0,50,49,false,-150.f},{"fp-prone",0,0,0,0,60,59,false,0,true},{"fp-prone-down",0,0,0,0,60,59,false,-120.f,true},{"fp-prone-crawl",1,0,0,0,70,69,false,-60.f,true}};
+ bool proneOn=false;for(const auto&view:views){auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=view.pitch;if(view.fists)game.stowWeapon();else if(game.unarmed())game.equipWeapon(retro::WeaponId::Shotgun);
+  for(int i=0;i<view.frames&&window.pump();++i){retro::InputState input{};input.forward=view.forward;input.fire=view.fire&&i==0;input.reload=view.reload&&i==0;input.crouch=view.crouch;input.prone=i==0&&view.prone!=proneOn;if(input.prone)proneOn=view.prone;game.update(input,1.f/60);renderer->render(game);
    if(i==view.capture){char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-%s.ppm",shot++,view.name);renderer->saveSceneCapture(file);report<<file<<'\n';}}
  }
  renderer->setBodyOrbit(0,0);retro::SoftwareRenderer::setThirdPerson(false);report<<"PASS: rendered\n";return renderer->hardwareActive()?0:36;

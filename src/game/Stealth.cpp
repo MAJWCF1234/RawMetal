@@ -103,7 +103,7 @@ void Game::restrainNpc(size_t actor,bool held){
   // Standing rear choke: wrap the neck, then drop them. Do not fire the jab
   // animation — crouched punches read as ankle hits. The struggle is a real
   // spatial impact so nearby detail can investigate before the body is found.
-  if(m_player.crouched){float feet=groundHeight(m_player.pos);if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.z=feet;}}
+  if(m_player.crouched){float feet=groundHeight(m_player.pos);if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.prone=false;m_player.z=feet;}}
   m_player.pitch*=.2f;m_takedownActor=int(actor);m_takedownAge=0;
   npc.pose.clip=0;npc.pose.phase=0;saveRestrainedPose(actor);
   m_punchAge=10;m_shotCooldown=.55f;m_suppressFire=true;
@@ -120,7 +120,7 @@ void Game::updateTakedown(float dt){
  auto&npc=m_friendlyActors[size_t(m_takedownActor)];
  if(npc.level!=m_level||state(npc.track().deadState)||!npcIncapacitated(size_t(m_takedownActor))||npcHeld(size_t(m_takedownActor))){m_takedownActor=-1;m_takedownAge=0;return;}
  m_takedownAge+=std::max(0.f,dt);
- if(m_player.crouched){float feet=groundHeight(m_player.pos);if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.z=feet;}}
+ if(m_player.crouched){float feet=groundHeight(m_player.pos);if(hullFits(m_player.pos,feet,Player::StandingHeight)){m_player.crouched=false;m_player.prone=false;m_player.z=feet;}}
  m_player.pitch+=(0.f-m_player.pitch)*std::min(1.f,dt*10.f);
  // Keep them upright and facing away while the arms lock around the neck.
  setState(friendlyKey(size_t(m_takedownActor),"restraint_ms"),0);setState(friendlyKey(size_t(m_takedownActor),"restraint_fraction"),0);
@@ -236,7 +236,7 @@ bool Game::enterLocker(){
  // Who watches the body go in decides who comes for the doors (ai/guard/Lockers.cpp).
  watchLockerEntry(index);
  setState(PlayerLocker,index+1);
- m_player.pos=lockerFront(f,LockerEye);m_player.z=floor;m_player.crouched=false;m_player.eye=Player::StandingEye;m_player.grounded=true;m_player.verticalVelocity=0;
+ m_player.pos=lockerFront(f,LockerEye);m_player.z=floor;m_player.crouched=false;m_player.prone=false;m_player.eye=Player::StandingEye;m_player.grounded=true;m_player.verticalVelocity=0;
  m_player.angle=std::atan2(out.y,out.x);m_player.pitch=0;m_velocity={};m_stepDistance=0;m_jumpBuffer=0;m_suppressFire=true;m_playerExposure=0;
  // The latch lifts with a click only someone at arm's length would notice;
  // the leaves swing wide, the player turns in, and they are pulled to.

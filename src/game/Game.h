@@ -50,6 +50,7 @@ struct InputState {
     bool sprint = false;
     bool jump = false;
     bool crouch = false;
+    bool prone = false;
     bool fire = false;
     bool guard = false;
     bool reload = false;
@@ -184,9 +185,14 @@ struct AmmoPool {int total=0,loaded=0;bool operator==(const AmmoPool&)const=defa
 struct DroppedSidearm {Point3 position{};float yaw=0;int level=0;size_t actor=0;};
 struct Player {
     static constexpr float StandingHeight=1.6f;
-    static constexpr float CrouchedHeight=.58f;
+    // Three stances. A crouch is a kneel (her crouch clips put her eyes near
+    // a metre); prone is the old .58 m crawl hull every low passage is built
+    // for. Crouching where a kneel cannot fit drops her prone.
+    static constexpr float CrouchedHeight=1.05f;
+    static constexpr float ProneHeight=.58f;
     static constexpr float StandingEye=1.42f;
-    static constexpr float CrouchedEye=.48f;
+    static constexpr float CrouchedEye=.92f;
+    static constexpr float ProneEye=.40f;
     Vec2 pos{2.5f, 2.5f};
     float angle = 0.0f;
     float pitch = 0.0f;
@@ -198,9 +204,11 @@ struct Player {
     float z = 0.0f;
     float verticalVelocity = 0.0f;
     bool grounded = true;
-    bool crouched = false;
+    bool crouched = false;   // crouched or prone: low and quiet
     float eye=StandingEye;
-    float hullHeight()const{return crouched?CrouchedHeight:StandingHeight;}
+    bool prone = false;      // appended, not saved: re-derived from the room on load
+    float hullHeight()const{return prone?ProneHeight:crouched?CrouchedHeight:StandingHeight;}
+    float stanceEye()const{return prone?ProneEye:crouched?CrouchedEye:StandingEye;}
 };
 // sprint (appended, not saved: it settles in a fraction of a second) is how
 // far a firearm has dropped to low ready while running.
@@ -1143,7 +1151,7 @@ private:
     // The player's body: gait phase (radians, one cycle per two footsteps) and
     // whether it is sprinting. Presentation only; not archived.
     float m_bodyGait=0;bool m_bodySprint=false;bool m_inspectionCamera=false;
-    bool m_previousJump=false,m_previousUse=false;
+    bool m_previousJump=false,m_previousUse=false,m_previousProne=false,m_proneToggle=false;
     float m_jumpBuffer=0,m_coyote=0,m_logTime=0;
     int m_activeLog=-1;
     int nearbyTerminal()const;
