@@ -4,6 +4,15 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.11 - Close in (2026-11-04)
+
+The shotgun comes in closer, as close as her fists, and her arms with it.
+Her left hand no longer turns itself palm-up under the fore-end: it takes the
+wood the way the arm brings it there, so the elbow stays straight and nothing
+snaps when you turn. The pistol is held the way it was.
+
+---
+
 ## v1.1.10 - Shouldered (2026-11-04)
 
 The shotgun sits the way she would carry it: turned in toward where she is

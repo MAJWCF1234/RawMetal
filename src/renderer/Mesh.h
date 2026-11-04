@@ -26,7 +26,7 @@ public:
  // wrist-to-middle-knuckle direction and palm normal in rig space ([0] the
  // trigger hand.R, [1] the support hand.L), and the curl profile (0 the
  // shotgun's, 1 the pistol's). Without one, the shotgun's fixed frames.
- struct ArmHold {std::array<Point3,2> forward{},palm{};int curls=0;std::array<Point3,2> elbow{};};   // elbow: the way each elbow points (rig space), zero for the default
+ struct ArmHold {std::array<Point3,2> forward{},palm{};int curls=0;std::array<Point3,2> elbow{};std::array<bool,2> swingOnly{};float forearmRoll=0;};   // swingOnly: aim the fingers and keep the forearm's own roll (no palm forced)   // elbow: the way each elbow points (rig space), zero for the default
  void pose(float phase,float recoil,int curls=0);
     bool poseAction(const char* action,float phase);
  static bool testAttachedSkinning();
@@ -35,7 +35,7 @@ public:
  // direction off the shoulder-wrist line (rig space); and palmCurl, the middle
  // finger's bend toward the computed palm normal (positive when the palm
  // frame's cross product is the right way round for that hand).
- struct GripReport {float reach=0,wristTwist=0,palmCurl=0;Point3 elbow{};};
+ struct GripReport {float reach=0,wristTwist=0,palmCurl=0,elbowTwist=0;Point3 elbow{};};   // elbowTwist: the forearm's turn on the upper arm about its own axis, from the bind pose
  GripReport gripReport(int side)const;
  static bool testVrHands();
     void poseCreature(int clip,float phase);

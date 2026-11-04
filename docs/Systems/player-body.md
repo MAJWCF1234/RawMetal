@@ -140,14 +140,18 @@ blender -b --python tools/player/build_claire_arms.py -- src/assets/models/arms_
   twist turns the wrist instead of pinching it to a twisted neck.
 - The shotgun has its own hold (`kShotgunHold`, `ShotgunView` in Scene3D.cpp),
   chosen from a sweep of layouts: the gun turned 0.08 rad in toward the
-  crosshair and low on the right so the stock clears the frame, the arm rig
+  crosshair and low on the right so the stock clears the frame, as close to
+  the eye as her fists are, the arm rig
   placed so the trigger arm bends at about 57% of its reach with its elbow
   out to the side (`ArmHold::elbow`) and the support arm at 89%, with room for
   the smoke test's sway and recoil. `RAWMETAL_SHOTGUN_VIEW` ("gx gy gz ax ay az
   toe tx ty tz sx sy sz") overrides the layout for tuning without a rebuild.
-- Each forearm rolls about its own axis with 90% of its hand's turn
-  (`Mesh::grip`), as the radius turns, so no wrist is wrung: the support
-  hand's palm-up grip is a half turn from the forearm's natural roll.
+- The support hand is held swing-only (`ArmHold::swingOnly`): it aims its
+  fingers along the fore-end and keeps the roll its forearm gives it. Forcing
+  it palm-up was half a turn from the forearm, which wrung the wrist, then
+  (rolled into the forearm) the elbow, and flipped sides when the gun swayed.
+  `ArmHold::forearmRoll` can give the forearm part of a hand's turn; the
+  shotgun's trigger arm takes half, every other hold none.
 - Faces keep her ten materials; her arm skin and gloves are the `BOOTS`
   texture. The viewmodel and VR hands pick her textures by material name, and
   frame the arms about the original rig's centre (`kArmsRigCenter`), not the
@@ -173,5 +177,7 @@ It also writes `arms-inspection.txt`: for each hand, the arm's reach as a
 share of its length, the wrist's twist from the bind pose, the elbow's
 direction, and the middle finger's curl toward the computed palm normal
 (positive when that hand's palm cross product is the right way round). It
-fails if a palm curls away, a wrist twists past 30 degrees or an arm is
+fails if a palm curls away, a wrist twists past 55 degrees or an elbow past
+45 (fists are reported only: they are keyed, not solved), a wrist jumps more
+than 8 degrees in a frame while the shotgun sways, or an arm is
 past 97% of its reach.

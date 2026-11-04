@@ -440,7 +440,7 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool 
  auto rotated=[&](ufbx_node*n,ufbx_quat delta){auto global=ufbx_matrix_to_transform(&n->node_to_world).rotation;auto parent=ufbx_matrix_to_transform(&n->parent->node_to_world).rotation;parent={-parent.x,-parent.y,-parent.z,parent.w};auto tr=n->local_transform;tr.rotation=ufbx_quat_mul(parent,ufbx_quat_mul(delta,global));return tr;};
  // Two-bone IK establishes the grip using the actual upper-arm and forearm bones.
  auto cross=[](ufbx_vec3 a,ufbx_vec3 b){return ufbx_vec3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
- ufbx_quat handRot[2];for(int s=0;s<2;++s){
+ ufbx_quat handRot[2];ufbx_vec3 aimForward[2]{};for(int s=0;s<2;++s){
   std::string suffix=s?".L":".R";auto hand=ufbx_find_node(m_scene,("hand"+suffix).c_str());
   auto forward=unit(sub(position(ufbx_find_node(m_scene,("f_middle.01"+suffix).c_str())),position(hand)));
   auto across=sub(position(ufbx_find_node(m_scene,("f_index.01"+suffix).c_str())),position(ufbx_find_node(m_scene,("f_pinky.01"+suffix).c_str())));
@@ -450,6 +450,7 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool 
   ufbx_vec3 desiredPalm=s?ufbx_vec3{0,1,0}:ufbx_vec3{1,0,0};
   // A hold supplies its own frames (the pistol's); the palm is squared to the forward.
   if(hold){auto f=hold->forward[size_t(s)],p=hold->palm[size_t(s)];desiredForward=unit({f.x,f.y,f.z});ufbx_vec3 palm{p.x,p.y,p.z};desiredPalm=unit(sub(palm,mul(desiredForward,dot(palm,desiredForward))));}
+  aimForward[s]=desiredForward;
   ufbx_vec3 source[]={forward,palm,cross(forward,palm)},target[]={desiredForward,desiredPalm,cross(desiredForward,desiredPalm)};
   ufbx_matrix rotation{};
   for(int row=0;row<3;++row)for(int col=0;col<3;++col)for(int axis=0;axis<3;++axis)rotation.cols[col].v[row]+=target[axis].v[row]*source[axis].v[col];
@@ -468,14 +469,22 @@ void Mesh::grip(Point3 right,Point3 left,float swing,float pitch,float yaw,bool 
     changes.push_back({upper->typed_id,rotated(upper,arc(sub(E,S),sub(targetElbow,S)))});
    }else if(step==1)changes.push_back({elbow->typed_id,rotated(elbow,arc(sub(H,E),sub(T,E)))});
    else {double angle=yaw;ufbx_quat turn{0,std::sin(angle*.5),0,std::cos(angle*.5)},tilt{std::sin(pitch*.5),0,0,std::cos(pitch*.5)};
-    const ufbx_quat desired=ufbx_quat_mul(turn,ufbx_quat_mul(tilt,handRot[side]));
-    // The forearm rolls about its own axis with most of the hand's turn, as the
-    // radius does, so the wrist is not wrung a half turn (a twisted glove).
+    ufbx_quat desired=ufbx_quat_mul(turn,ufbx_quat_mul(tilt,handRot[side]));
+    // A hold may roll the forearm about its own axis with part of the hand's
+    // turn, as the radius does, so the wrist is not wrung; too much of it
+    // twists the elbow instead, so the default is none.
     auto forearm=ufbx_matrix_to_transform(&elbow->node_to_world).rotation,now=ufbx_matrix_to_transform(&hand->node_to_world).rotation;
     ufbx_quat delta=ufbx_quat_mul(desired,ufbx_quat{-now.x,-now.y,-now.z,now.w});if(delta.w<0)delta={-delta.x,-delta.y,-delta.z,-delta.w};
     const auto axis=unit(sub(H,E));const double along=delta.x*axis.x+delta.y*axis.y+delta.z*axis.z;
     ufbx_quat twist{axis.x*along,axis.y*along,axis.z*along,delta.w};const double size=std::sqrt(twist.x*twist.x+twist.y*twist.y+twist.z*twist.z+twist.w*twist.w);
-    if(size>1e-9){twist={twist.x/size,twist.y/size,twist.z/size,twist.w/size};twist=ufbx_quat_slerp(ufbx_quat{0,0,0,1},twist,.9);}else twist={0,0,0,1};
+    if(size>1e-9){twist={twist.x/size,twist.y/size,twist.z/size,twist.w/size};twist=ufbx_quat_slerp(ufbx_quat{0,0,0,1},twist,hold?double(hold->forearmRoll):0.);}else twist={0,0,0,1};
+    // A hand held swing-only (the shotgun's support hand) just turns its
+    // fingers along the fore-end and keeps the roll its forearm gives it: a
+    // forced palm-up there was half a turn from the forearm, which twisted the
+    // elbow and flipped sides the moment the gun swayed.
+    if(hold&&hold->swingOnly[size_t(side)]){auto middle=ufbx_find_node(m_scene,("f_middle.01"+suffix).c_str());
+     const auto want=ufbx_quat_rotate_vec3(ufbx_quat_mul(turn,tilt),aimForward[side]);
+     desired=ufbx_quat_mul(arc(sub(position(middle),H),want),now);twist={0,0,0,1};}
     changes.push_back({elbow->typed_id,rotated(elbow,twist)});
     const ufbx_quat rolled=ufbx_quat_mul(twist,forearm);const ufbx_quat parent{-rolled.x,-rolled.y,-rolled.z,rolled.w};
     auto tr=hand->local_transform;tr.rotation=ufbx_quat_mul(parent,desired);changes.push_back({hand->typed_id,tr});}
@@ -509,9 +518,9 @@ Mesh::GripReport Mesh::gripReport(int side)const{
  auto inv=[](ufbx_quat q){return ufbx_quat{-q.x,-q.y,-q.z,q.w};};
  auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
  auto upper=node(m_scene,"upper_arm"),fore=node(m_scene,"forearm"),hand=node(m_scene,"hand");
- auto bf=node(m_bindScene,"forearm"),bh=node(m_bindScene,"hand");
+ auto bf=node(m_bindScene,"forearm"),bh=node(m_bindScene,"hand"),bu=node(m_bindScene,"upper_arm");
  auto f1=node(m_scene,"f_middle.01"),f3=node(m_scene,"f_middle.03"),fi=node(m_scene,"f_index.01"),fp=node(m_scene,"f_pinky.01");
- if(!upper||!fore||!hand||!bf||!bh||!f1||!f3||!fi||!fp)return r;
+ if(!upper||!fore||!hand||!bf||!bh||!bu||!f1||!f3||!fi||!fp)return r;
  const Point3 S=at(upper),E=at(fore),H=at(hand);r.reach=len(H-S)/std::max(1e-6f,len(E-S)+len(H-E));
  // The hand's turn relative to its forearm, against the same in the bind pose,
  // measured about the forearm's own axis.
@@ -521,6 +530,8 @@ Mesh::GripReport Mesh::gripReport(int side)const{
  // axis into the forearm's frame
  const ufbx_vec3 local=ufbx_quat_rotate_vec3(fr,ufbx_vec3{axis.x,axis.y,axis.z});
  const double along=d.x*local.x+d.y*local.y+d.z*local.z;r.wristTwist=float(2*std::atan2(std::fabs(along),d.w)*57.29578);
+ {const ufbx_quat nowE=ufbx_quat_mul(inv(rot(upper)),rot(fore)),bindE=ufbx_quat_mul(inv(rot(bu)),rot(bf));ufbx_quat q=ufbx_quat_mul(nowE,inv(bindE));if(q.w<0)q={-q.x,-q.y,-q.z,-q.w};
+  const ufbx_vec3 l=ufbx_quat_rotate_vec3(inv(rot(upper)),ufbx_vec3{axis.x,axis.y,axis.z});const double a=q.x*l.x+q.y*l.y+q.z*l.z;r.elbowTwist=float(2*std::atan2(std::fabs(a),q.w)*57.29578);}
  const Point3 mid=(S+H)*.5f;Point3 e=E-mid;r.elbow=e*(1.f/std::max(1e-6f,len(e)));
  Point3 forward=at(f1)-H,across=at(fi)-at(fp);forward=forward*(1.f/std::max(1e-6f,len(forward)));
  auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};

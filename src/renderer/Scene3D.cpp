@@ -34,14 +34,15 @@ constexpr Point3 kTriggerWrist{.045f,-.035f,-.04f},kSupportWrist{-.085f,-.055f,-
 // the stock, support palm up under the fore-end); the trigger elbow points out
 // and a little down, as a shouldered long gun is held, instead of folding down
 // under the gun with the forearm stood upright and the wrist wrung.
-const Mesh::ArmHold kShotgunHold{{Point3{0,.65f,.76f},Point3{-.95f,0,.312f}},{Point3{1,0,0},Point3{0,1,0}},0,{Point3{-1.f,-.3f,-.25f},Point3{}}};
+const Mesh::ArmHold kShotgunHold{{Point3{0,.65f,.76f},Point3{-.95f,0,.312f}},{Point3{1,0,0},Point3{0,1,0}},0,{Point3{-1.f,-.3f,-.25f},Point3{}},{false,true},.5f};
 // Where the shotgun and her arms sit in view space (chosen from a sweep so the
-// stock clears the frame, the trigger elbow bends at about 55% of her reach
+// stock clears the frame, the gun and arms sit as close as her fists do, the
+// trigger elbow bends at about 57% of her reach
 // and the support arm at 89%, with room for sway and recoil): the gun's centre, the arm
 // rig's centre, the gun turned in toward the crosshair (radians), and the
 // wrist offsets from the trigger and support sockets. RAWMETAL_SHOTGUN_VIEW
 // ("gx gy gz ax ay az toe tx ty tz sx sy sz") overrides it for tuning.
-struct ShotgunView{Point3 gun{.18f,-.20f,.84f},arms{.22f,-.32f,.58f};float toe=.08f;Point3 trigger=kTriggerWrist,support=kSupportWrist;};
+struct ShotgunView{Point3 gun{.16f,-.18f,.64f},arms{.20f,-.30f,.38f};float toe=.08f;Point3 trigger=kTriggerWrist,support=kSupportWrist;};
 ShotgunView shotgunView(){ShotgunView v;if(const char*e=std::getenv("RAWMETAL_SHOTGUN_VIEW"))std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f %f %f",&v.gun.x,&v.gun.y,&v.gun.z,&v.arms.x,&v.arms.y,&v.arms.z,&v.toe,&v.trigger.x,&v.trigger.y,&v.trigger.z,&v.support.x,&v.support.y,&v.support.z);return v;}
 Point3 shotgunPlace(const ShotgunView&v,Point3 p){const float c=std::cos(v.toe),sn=std::sin(v.toe),z=-p.z;return Point3{p.x*c+z*sn+v.gun.x,p.y+v.gun.y,-p.x*sn+z*c+v.gun.z};}
 // Claire's textures (resources 2302-2311, in this order) by FBX material name:

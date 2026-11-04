@@ -1830,10 +1830,16 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      const float yaw[]={0,.785398f,1.570796f,2.356194f,3.14159f,-2.356194f,-1.570796f,-.785398f};
      for(const auto&pose:{Pose{"shotgun",2,10},Pose{"shotgun-fired",2,.03f},Pose{"fists",1,10},Pose{"pistol",4,10}}){
       auto scene=retro::Game::weaponInspection(pose.mode,pose.age);renderer->render(scene);save(std::string(pose.name)+"-view");
-      for(int side=0;side<2;++side){auto r=renderer->armsGripReport(side);report<<pose.name<<(side?" left":" right")<<" reach "<<r.reach<<" wrist-twist "<<r.wristTwist<<" deg palm-curl "<<r.palmCurl<<" elbow "<<r.elbow.x<<' '<<r.elbow.y<<' '<<r.elbow.z<<"\n";
-       if(pose.mode!=1&&(r.palmCurl<=0||r.wristTwist>30||r.reach>.97f))bad=true;}
+      for(int side=0;side<2;++side){auto r=renderer->armsGripReport(side);report<<pose.name<<(side?" left":" right")<<" reach "<<r.reach<<" wrist-twist "<<r.wristTwist<<" deg elbow-twist "<<r.elbowTwist<<" deg palm-curl "<<r.palmCurl<<" elbow "<<r.elbow.x<<' '<<r.elbow.y<<' '<<r.elbow.z<<"\n";
+       if(pose.mode!=1&&(r.palmCurl<=0||r.wristTwist>55||r.elbowTwist>45||r.reach>.97f))bad=true;}
       for(int angle=0;angle<8;++angle){renderer->inspectRig(scene,yaw[angle],angle%2?.45f:.1f,{.12f,-.24f,.70f},.80f);save(std::string(pose.name)+"-"+std::to_string(angle));}}
-     report<<(bad?"FAIL":"PASS")<<": palms curl to their palm side, wrists twist under 30 degrees, no arm past 97% of its reach\n";return bad?11:0;}
+     // Turning and swaying with the shotgun up: no wrist may wring or jump.
+     {auto sway=retro::Game::weaponInspection(2,10);float worst[2]{},jump[2]{},last[2]{-1,-1};
+      for(int frame=0;frame<60;++frame){retro::InputState input{};input.mouseDx=std::sin(frame*.21f)*90.f;input.mouseDy=std::cos(frame*.17f)*30.f;sway.update(input,1.f/60.f);renderer->render(sway);
+       for(int side=0;side<2;++side){auto r=renderer->armsGripReport(side);worst[side]=std::max({worst[side],r.wristTwist,r.elbowTwist*55.f/45.f});if(last[side]>=0)jump[side]=std::max(jump[side],std::fabs(r.wristTwist-last[side]));last[side]=r.wristTwist;}
+       if(frame==20||frame==40)save("shotgun-sway-"+std::to_string(frame));}
+      for(int side=0;side<2;++side){report<<"shotgun sway "<<(side?"left":"right")<<" worst wrist-twist "<<worst[side]<<" deg, biggest frame jump "<<jump[side]<<" deg\n";if(worst[side]>55||jump[side]>8)bad=true;}}
+     report<<(bad?"FAIL":"PASS")<<": palms curl to their palm side, wrists under 55 degrees of twist and elbows under 45, none jumping 8 in a frame while swaying, no arm past 97% of its reach\n";return bad?11:0;}
     if(commandArguments().find(L"--pistol-inspection")){
      // The player's pistol held (Game::weaponInspection modes 4-9) on the GPU:
      // idle, a shot through its rise, both reloads through every phase, low
