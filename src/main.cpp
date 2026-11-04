@@ -160,6 +160,17 @@ __declspec(noinline) static int bodyInspection(){
   for(int i=0;i<view.frames&&window.pump();++i){retro::InputState input{};input.forward=view.forward;input.fire=view.fire&&i==0;input.reload=view.reload&&i==0;input.crouch=view.crouch;input.prone=i==0&&view.prone!=proneOn;if(input.prone)proneOn=view.prone;game.update(input,1.f/60);renderer->render(game);
    if(i==view.capture){char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-%s.ppm",shot++,view.name);renderer->saveSceneCapture(file);report<<file<<'\n';}}
  }
+ // Third person as played: aiming, firing, reloading, and turning on the spot.
+ {retro::SoftwareRenderer::setThirdPerson(true);renderer->setBodyOrbit(0,0);
+  if(proneOn){retro::InputState z{};z.prone=true;game.update(z,1.f/60);z.prone=false;for(int i=0;i<60;++i)game.update(z,1.f/60);proneOn=false;}   // stand up from the prone views
+  if(game.unarmed())game.equipWeapon(retro::WeaponId::Shotgun);
+  struct Act{const char* name;int frames,capture;bool aim,fire,reload;float turn;};
+  const Act acts[]={{"tp-aim",40,39,true,false,false,0},{"tp-fire",30,6,true,true,false,0},{"tp-reload",120,70,false,false,true,0},{"tp-turn",60,25,false,false,false,1.3f},{"tp-turned",90,89,false,false,false,1.3f}};
+  for(const auto&act:acts){auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=-10;
+   auto&rounds=const_cast<retro::Player&>(game.player()).pool(retro::WeaponId::Shotgun);rounds={30,act.reload?2:6};
+   for(int i=0;i<act.frames&&window.pump();++i){retro::InputState input{};input.guard=act.aim;input.fire=act.fire&&i==0;input.reload=act.reload&&i==0;
+    if(act.turn!=0&&i==0)player.angle+=act.turn;game.update(input,1.f/60);renderer->render(game);
+    if(i==act.capture){char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-%s.ppm",shot++,act.name);renderer->saveSceneCapture(file);report<<file<<"\n";}}}}
  renderer->setBodyOrbit(0,0);retro::SoftwareRenderer::setThirdPerson(false);report<<"PASS: rendered\n";return renderer->hardwareActive()?0:36;
 }
 // Windowed-path repro: walk the Security Office corridors into walls and

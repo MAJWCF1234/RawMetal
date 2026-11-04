@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.14 - Over the shoulder (2026-11-04)
+
+Seen from behind her (the THIRDPERSON console command), she is a person
+holding a gun now. She brings it up when you aim and the view closes in over
+her shoulder; it kicks when she fires; she reloads it in her hands. Standing
+still she lets her body lag the way she is looking and steps round when she
+has turned far enough. Against a wall the view no longer ends up inside it.
+
+---
+
 ## v1.1.13 - Two at a time (2026-11-04)
 
 She handles the shotgun the way it is meant to be handled now: her left hand

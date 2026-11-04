@@ -2519,6 +2519,36 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    m_bodyStance=stance;
    if(m_bodyTransitionClip>=0){const float t=(now-m_bodyTransitionStart)/m_bodyTransitionLength;
     if(t>=1||t<0||speed>=.25f||!state.grounded||game.dead())m_bodyTransitionClip=-1;else{clip=m_bodyTransitionClip;phase=t*m_bodyTransitionRange;}}}
+  // Aiming, firing and reloading where she stands (24-27: aim idle, crouched
+  // aim idle, the rifle shot, the reload stretched over the shell reload).
+  if(!game.dead()&&state.grounded&&!state.prone&&speed<.25f&&m_bodyTransitionClip<0){
+   if(game.reloading()&&game.activeFirearm()==WeaponId::Shotgun){clip=27;phase=game.reloadProgress();}
+   else if(game.shotAge()<.3f&&!game.unarmed()){clip=26;phase=game.shotAge()/.3f;}
+   else if(game.aimBlend()>.5f){clip=state.crouched?25:24;phase=std::fmod(game.elapsed()/(state.crouched?1.9f:2.03f),1.f);}}
+  // (The map's angle grows clockwise, so a growing look is a right turn.)
+  // Third person: the body trails the look while she stands still (28-31: turn
+  // left/right, crouched turn left/right). In first person it is the look.
+  float bodyAngle=state.angle;
+  if(m_bodyOutside&&SoftwareRenderer::thirdPerson()&&!game.dead()&&!m_turnYawReady){
+   // Measure each turn clip's turn as drawn (the mirror included): her facing is
+   // her eyes against her head, at the clip's first and last frame.
+   auto facing=[&](int c,float ph){mesh.poseCreature(c,ph);Point3 eyes{},head{};int ne=0,nh=0;
+    for(size_t f=0;f<mesh.triangles.size()&&f<m_claireFaceTexture.size();++f){bool e=m_claireFaceTexture[f]==8,h=f<m_claireHeadFace.size()&&m_claireHeadFace[f];if(!e&&!h)continue;
+     for(const auto&v:mesh.triangles[f].v){if(e){eyes=eyes+v.p;++ne;}if(h){head=head+v.p;++nh;}}}
+    if(!ne||!nh)return 0.f;const Point3 d=eyes*(1.f/ne)-head*(1.f/nh);return std::atan2(-d.x,d.z);};
+   for(int i=0;i<4;++i){float a=facing(28+i,0),b=facing(28+i,1),d=b-a;while(d>kPi)d-=2*kPi;while(d<-kPi)d+=2*kPi;m_turnYaw[size_t(i)]=d;}
+   m_turnYawReady=true;}
+  if(m_bodyOutside&&SoftwareRenderer::thirdPerson()&&!game.dead()){const float t=game.elapsed();
+   auto wrap=[](float a){while(a>kPi)a-=2*kPi;while(a<-kPi)a+=2*kPi;return a;};
+   const float dt=m_tpYawTime<0||t<m_tpYawTime?0.f:std::min(.1f,t-m_tpYawTime);m_tpYawTime=t;
+   if(m_tpBodyYaw<-1e8f||dt==0)m_tpBodyYaw=state.angle;
+   if(m_tpTurnClip>=0){const float u=(t-m_tpTurnStart)/m_tpTurnLength;
+    if(u>=1||speed>=.25f||!state.grounded){if(u>=1)m_tpBodyYaw=wrap(m_tpBodyYaw+m_turnYaw[size_t(m_tpTurnClip-28)]);m_tpTurnClip=-1;}else{clip=m_tpTurnClip;phase=u;}}
+   if(m_tpTurnClip<0){const float d=wrap(state.angle-m_tpBodyYaw);
+    if(speed>=.25f||!state.grounded||state.prone||game.aimBlend()>.5f)m_tpBodyYaw=wrap(m_tpBodyYaw+d*std::min(1.f,dt*12.f));
+    else if(std::fabs(d)>1.1f){m_tpTurnSign=d>0?1:-1;{const int base=state.crouched?30:28;m_tpTurnClip=(m_turnYaw[size_t(base-28)]>0)==(d>0)?base:base+1;}m_tpTurnStart=t;m_tpTurnLength=state.crouched?1.27f:1.f;clip=m_tpTurnClip;phase=0;}}
+   bodyAngle=m_tpBodyYaw;}
+  else m_tpBodyYaw=-1e9f;
   // A change of clip blends over .2 s from the pose it left.
   const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
   if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;}
@@ -2534,7 +2564,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // First person scales her so her eyes are the camera's (her head's centre
   // sits about 4 cm above the eye line): at 1.7 m they would be 16 cm above it.
   const float headFraction=m_claireHeadSamples?m_claireHeadHeight/m_claireHeadSamples:.93f;
-  const float scale=(m_bodyOutside?1.7f:(Player::StandingEye+.04f)/headFraction)/std::max(.01f,range.y),angle=state.angle;
+  const float scale=(m_bodyOutside?1.7f:(Player::StandingEye+.04f)/headFraction)/std::max(.01f,range.y),angle=bodyAngle;
   // In first person her animated head sits just behind the eye, wherever the
   // clip carries it (the rifle stance leans, a kneel sits back on the heel),
   // so her legs fall under and behind the view instead of out in front of it.
@@ -2560,9 +2590,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};}
    std::swap(face.v[1],face.v[2]);
    bool nearEye=false;if(!m_bodyOutside)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||(d.z>-.18f&&d.x*d.x+d.y*d.y<.25f*.25f)||(state.crouched&&d.z>-.12f);}
+   // Third person pulled in against a wall: what is within reach of the lens is
+   // left out, so the view sees past her shoulder instead of into her coat.
+   if(m_bodyOutside&&!nearEye)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||d.x*d.x+d.y*d.y+d.z*d.z<.42f*.42f;}
    // Crouched or prone, anything of hers up at the eye is left out; her whole
    // body, head included, still throws the one shadow.
-   const bool hiddenHere=(m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside;
+   const bool hiddenHere=((m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside)||(m_bodyOutside&&nearEye);
    // Only the faces turned to the lamp cast: a closed body then darkens each
    // floor pixel about once. Every face casting stacked the translucent
    // triangles into a faceted black mass, worst crouched over her shadow.
@@ -2591,6 +2624,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const float gunScale=handgun?1.f:.75f/(m_weaponMesh.maximum.z-m_weaponMesh.minimum.z);
    for(auto face:gunMesh.bindTriangles()){if(!handgun&&face.part==3)continue;
     for(auto&v:face.v){auto p=v.p;if(handgun)v.p=grip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale;else{p=(p-Point3{.02f,.70f,1.10f})*gunScale;v.p=grip+gunRight*p.x+gunUp*p.y-gunForward*p.z;}}
+    {bool near=false;for(const auto&v:face.v){Point3 d=v.p-eye;near=near||d.x*d.x+d.y*d.y+d.z*d.z<.42f*.42f;}if(near)continue;}   // as her body, past the lens
     Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
     selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
     tri(face.v[0],face.v[1],face.v[2],gunTexture,.75f+.3f*std::fabs(n.z)/std::max(.001f,len));}

@@ -184,6 +184,11 @@ private:
     // tools/player/build_claire_fp_shotgun.py: clips posed by name, the gun
     // carried by its baked reference points. m_fpShotgunPosed: this frame used it.
     Mesh m_fpShotgun{2313};bool m_fpShotgunPosed=false;float m_fpPush=0,m_fpDrop=0;
+    float m_tpBack=0,m_tpTime=-1;
+    // Third person, standing still: her body trails the look and steps round
+    // with a 90-degree turn clip once it falls more than ~60 degrees behind.
+    float m_tpBodyYaw=-1e9f,m_tpYawTime=-1,m_tpTurnStart=0,m_tpTurnLength=1;int m_tpTurnClip=-1,m_tpTurnSign=0;
+    std::array<float,4> m_turnYaw{};bool m_turnYawReady=false;   // world yaw each turn clip (28-31) turns her, measured once   // third-person camera distance, eased out after a wall pulls it in
     // The world's light where she stands (six world directions and their
     // brightness, the probe her body and every prop is lit by): the arms and gun
     // take it, so they light like the world they are in.

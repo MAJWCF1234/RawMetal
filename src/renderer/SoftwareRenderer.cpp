@@ -1215,7 +1215,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.1.13  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.1.14  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
@@ -1334,13 +1334,25 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   for(float r=.4f;r<=m_bodyOrbit;r+=.1f){Vec2 q=from+Vec2{std::cos(bearing),std::sin(bearing)}*r;if(!clearLens({from.x,from.y,m_view.z+1.f},{q.x,q.y,m_view.z+1.f})){reach=std::max(.4f,r-.3f);break;}}
   m_view.pos+=Vec2{std::cos(bearing),std::sin(bearing)}*reach;m_view.angle=bearing+kPi;m_view.pitch=-14.f;m_view.eye=1.f;m_bodyOutside=true;}
  else if(g_thirdPerson&&!m_vrRendering&&!m_environmentInspection&&!game.titleScreen()&&!game.inspectionCamera()&&game.hiddenLocker()<0&&!game.lockerViewLocked()){
-  // Over the right shoulder, 2.5 m back along the look and .5 m to the side,
-  // pulled in short of anything solid between her head and the lens.
+  // Over the right shoulder: out to her shoulder first (.55 m aside, .12 m
+  // up), then 1.75 m back along the look, each leg stopped short of anything
+  // solid, and the lens kept .2 m clear of every surface so it never sits in
+  // a wall. It snaps in when blocked and eases back out, so it does not pop.
   const float pitch=m_view.pitch/140.f,yaw=m_view.angle;
   const Point3 head{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
-  const Point3 back{-std::cos(pitch)*std::cos(yaw)*2.5f-std::sin(yaw)*.5f,-std::cos(pitch)*std::sin(yaw)*2.5f+std::cos(yaw)*.5f,-std::sin(pitch)*2.5f};
-  float reach=1;for(int i=1;i<=24;++i){float t=i/24.f;if(!clearLens(head,head+back*t)){reach=std::max(0.f,(i-2)/24.f);break;}}
-  const Point3 lens=head+back*reach;m_view.pos={lens.x,lens.y};m_view.z=lens.z-m_view.eye;m_bodyOutside=true;
+  const Point3 side{-std::sin(yaw),std::cos(yaw),0},look{std::cos(pitch)*std::cos(yaw),std::cos(pitch)*std::sin(yaw),std::sin(pitch)};
+  auto leg=[&](Point3 from,Point3 step,int steps){float reach=1;for(int i=1;i<=steps;++i){float t=i/float(steps);if(!clearLens(from,from+step*t)){reach=std::max(0.f,(i-2)/float(steps));break;}}return reach;};
+  // Aiming draws the lens in over the shoulder.
+  const float aim=game.aimBlend(),distance=1.75f-.65f*aim;
+  const Point3 sideStep=side*(.55f-.1f*aim)+Point3{0,0,.12f};const Point3 shoulder=head+sideStep*leg(head,sideStep,12);
+  float back=distance*leg(shoulder,look*-distance,28);
+  const Point3 up{-std::cos(yaw)*std::sin(pitch),-std::sin(yaw)*std::sin(pitch),std::cos(pitch)};
+  for(int i=0;i<8&&back>0;++i){const Point3 lens=shoulder-look*back;bool clear=true;
+   for(Point3 d:{side*.2f,side*-.2f,up*.2f,up*-.2f,look*-.2f})clear=clear&&clearLens(lens,lens+d);if(clear)break;back=std::max(0.f,back-.18f);}
+  const float now=game.elapsed();if(m_tpTime<0||now<m_tpTime||now-m_tpTime>.5f)m_tpBack=back;
+  else m_tpBack=back<m_tpBack?back:m_tpBack+(back-m_tpBack)*std::min(1.f,(now-m_tpTime)*6.f);
+  m_tpTime=now;
+  const Point3 lens=shoulder-look*m_tpBack;m_view.pos={lens.x,lens.y};m_view.z=lens.z-m_view.eye;m_bodyOutside=true;
  }
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  m_cleanupEdgeStretch=1;
