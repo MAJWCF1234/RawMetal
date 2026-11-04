@@ -25,6 +25,7 @@ static int bakeTakes(int argc,char**argv){
  ufbx_load_opts options{};options.target_axes=ufbx_axes_right_handed_y_up;options.target_unit_meters=1;options.evaluate_skinning=true;
  auto target=ufbx_load_file(argv[2],&options,nullptr);if(!target)return 2;
  const char* bones[]={"Hips","Spine","Spine1","Spine2","Neck","Head","LeftUpLeg","RightUpLeg","LeftLeg","RightLeg","LeftFoot","RightFoot","LeftToeBase","RightToeBase","LeftShoulder","RightShoulder","LeftArm","RightArm","LeftForeArm","RightForeArm","LeftHand","RightHand"};
+ std::vector<std::string> fingers;for(const char* side:{"Left","Right"})for(const char* finger:{"Thumb","Index","Middle","Ring","Pinky"})for(int joint=1;joint<=3;++joint)fingers.push_back(std::string(side)+"Hand"+finger+std::to_string(joint));
  auto inverse=[](ufbx_quat q){return ufbx_quat{-q.x,-q.y,-q.z,q.w};};
  auto rotation=[](ufbx_node*n){return ufbx_matrix_to_transform(&n->node_to_world).rotation;};
  auto difference=[](ufbx_node*a,ufbx_node*b){return ufbx_vec3{b->node_to_world.m03-a->node_to_world.m03,b->node_to_world.m13-a->node_to_world.m13,b->node_to_world.m23-a->node_to_world.m23};};
@@ -38,7 +39,9 @@ static int bakeTakes(int argc,char**argv){
   if(it==lookup.end()){if(unique.size()>=65535)return 3;uint16_t id=uint16_t(unique.size());lookup[key]=id;unique.push_back({node,index});remap.push_back(id);}else remap.push_back(it->second);
  }
  // A Mixamo bone of the target, by its Mixamo name or Claire's.
- const std::map<std::string,std::string> claire{{"Spine","Spine1"},{"Spine1","Spine2"},{"Spine2","Spine3"},{"LeftUpLeg","LegUp_L"},{"RightUpLeg","LegUp_R"},{"LeftLeg","LegLow_L"},{"RightLeg","LegLow_R"},{"LeftFoot","Foot_L"},{"RightFoot","Foot_R"},{"LeftToeBase","Toe_L"},{"RightToeBase","Toe_R"},{"LeftShoulder","Shoulder_L"},{"RightShoulder","Shoulder_R"},{"LeftArm","Arm_L"},{"RightArm","Arm_R"},{"LeftForeArm","ForeArm_L"},{"RightForeArm","ForeArm_R"},{"LeftHand","Hand_L"},{"RightHand","Hand_R"}};
+ std::map<std::string,std::string> claire{{"Spine","Spine1"},{"Spine1","Spine2"},{"Spine2","Spine3"},{"LeftUpLeg","LegUp_L"},{"RightUpLeg","LegUp_R"},{"LeftLeg","LegLow_L"},{"RightLeg","LegLow_R"},{"LeftFoot","Foot_L"},{"RightFoot","Foot_R"},{"LeftToeBase","Toe_L"},{"RightToeBase","Toe_R"},{"LeftShoulder","Shoulder_L"},{"RightShoulder","Shoulder_R"},{"LeftArm","Arm_L"},{"RightArm","Arm_R"},{"LeftForeArm","ForeArm_L"},{"RightForeArm","ForeArm_R"},{"LeftHand","Hand_L"},{"RightHand","Hand_R"}};
+ for(const char* side:{"Left","Right"})for(const char* finger:{"Thumb","Index","Middle","Ring","Pinky"})for(int joint=1;joint<=3;++joint)
+  claire[std::string(side)+"Hand"+finger+std::to_string(joint)]=std::string(finger)+std::to_string(joint)+(side[0]=='L'?"_L":"_R");
  auto bone=[&](const char* name)->ufbx_node*{if(auto n=ufbx_find_node(target,(std::string("mixamorig:")+name).c_str()))return n;auto alias=claire.find(name);return ufbx_find_node(target,alias==claire.end()?name:alias->second.c_str());};
  std::vector<std::string> logical(target->nodes.count);
  struct Take{std::string file;int first=1,last=1;bool drift=false,loop=false;};std::vector<Take> takes;
@@ -55,9 +58,13 @@ static int bakeTakes(int argc,char**argv){
   const double rate=source->settings.frames_per_second>0?source->settings.frames_per_second:30.;
   std::vector<int> mapping(target->nodes.count,-1);
   for(auto name:bones){auto a=bone(name),b=ufbx_find_node(source,(std::string("mixamorig:")+name).c_str());if(!a||!b)return 3;mapping[a->typed_id]=int(b->typed_id);logical[a->typed_id]=name;}
+  for(auto&name:fingers){auto a=bone(name.c_str()),b=ufbx_find_node(source,("mixamorig:"+name).c_str());if(a&&b){mapping[a->typed_id]=int(b->typed_id);logical[a->typed_id]=name;}}
   auto tr=bone("RightArm"),tl=bone("LeftArm"),sr=ufbx_find_node(source,"mixamorig:RightArm"),sl=ufbx_find_node(source,"mixamorig:LeftArm");
   double yaw=std::atan2(sr->node_to_world.m23-sl->node_to_world.m23,sr->node_to_world.m03-sl->node_to_world.m03)-std::atan2(tr->node_to_world.m23-tl->node_to_world.m23,tr->node_to_world.m03-tl->node_to_world.m03);
   ufbx_quat align{0,std::sin(yaw*.5),0,std::cos(yaw*.5)};
+  // Wrist and finger bends are carried in each forearm's frame: the rigs' rest arms point differently.
+  ufbx_quat toTarget[2];for(int side=0;side<2;++side){const char* f=side?"RightForeArm":"LeftForeArm";const char* h=side?"RightHand":"LeftHand";
+   toTarget[side]=ufbx_quat_mul(arc(ufbx_quat_rotate_vec3(align,difference(ufbx_find_node(source,(std::string("mixamorig:")+f).c_str()),ufbx_find_node(source,(std::string("mixamorig:")+h).c_str()))),difference(bone(f),bone(h))),align);}
   auto sourceHips=ufbx_find_node(source,"mixamorig:Hips");ufbx_vec3 start{};
   double minimumArmAlignment=1;std::vector<std::vector<ufbx_vec3>> clipFrames;
   for(unsigned sample=0;sample<samples[c];++sample){double frame=take.first-1+double(sample)*(take.last-take.first)/(samples[c]-1);
@@ -70,7 +77,10 @@ static int bakeTakes(int argc,char**argv){
     if(mapped>=0){auto delta=ufbx_quat_mul(rotation(pose->nodes[mapped]),inverse(rotation(source->nodes[mapped])));delta=ufbx_quat_mul(align,ufbx_quat_mul(delta,inverse(align)));global=ufbx_quat_mul(delta,rotation(n));
      const std::string label=logical[n->typed_id];const char* child=label.ends_with("LeftArm")?"LeftForeArm":label.ends_with("RightArm")?"RightForeArm":label.ends_with("LeftForeArm")?"LeftHand":label.ends_with("RightForeArm")?"RightHand":nullptr;
      if(child){auto end=bone(child);auto desired=ufbx_quat_rotate_vec3(align,difference(pose->nodes[mapped],pose->nodes[mapping[end->typed_id]]));global=ufbx_quat_mul(arc(difference(n,end),desired),rotation(n));}
-     if(label.ends_with("LeftHand")||label.ends_with("RightHand"))global=ufbx_quat_mul(parent,ufbx_quat_mul(inverse(rotation(n->parent)),rotation(n)));
+     if(label.find("Hand")!=std::string::npos){const int up=int(source->nodes[mapped]->parent->typed_id);
+      auto bend=ufbx_quat_mul(inverse(ufbx_quat_mul(rotation(pose->nodes[up]),inverse(rotation(source->nodes[up])))),ufbx_quat_mul(rotation(pose->nodes[mapped]),inverse(rotation(source->nodes[mapped]))));
+      const auto q=toTarget[label.starts_with("Right")];bend=ufbx_quat_mul(q,ufbx_quat_mul(bend,inverse(q)));
+      global=ufbx_quat_mul(ufbx_quat_mul(parent,inverse(rotation(n->parent))),ufbx_quat_mul(bend,rotation(n)));}
      tr.rotation=ufbx_quat_mul(inverse(parent),global);
      if(label=="Hips"){double scale=n->node_to_world.m13/source->nodes[mapped]->node_to_world.m13;auto at=pose->nodes[mapped]->node_to_world.cols[3];
       ufbx_vec3 move{take.drift?(at.x-start.x)*scale:0.,(at.y-source->nodes[mapped]->node_to_world.m13)*scale,take.drift?(at.z-start.z)*scale:0.};move=ufbx_quat_rotate_vec3(align,move);

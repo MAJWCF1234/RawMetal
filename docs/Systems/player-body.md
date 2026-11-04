@@ -18,7 +18,9 @@ gitignored library at `src/assets/library/player/`:
 | 2302-2311 | `SOCKS.png` (her skin), `BELTS`, `PANTS`, `BOOTS`, `VEST`, `SKIRT`, `JACKET`, `MASK`, `EYES`, `HAIR` |
 | 2312 | `claire-animation.bin.anchors` (right and left hand per sample) |
 
-Faces find their texture by FBX material name. Her rig names its bones its own
+Faces find their texture by FBX material name. The bake maps every finger
+joint too (`Index1_R` for Mixamo's `RightHandIndex1`), and carries each wrist
+and finger bend in its forearm's frame, so her hands close on the gun. Her rig names its bones its own
 way (`Hips`, `Spine1-3`, `LegUp_L`, `Arm_R`...). `RawMetalCreatureBake --takes`
 maps Mixamo's names onto them.
 
@@ -60,9 +62,9 @@ blends over 0.2 s.
 
 - **First person.** Her head, hair, mask and bare arms are left out, as is
   anything within 32 cm of the eye. The viewmodel's arms stand in for hers.
-  She stands 14 cm behind the eye.
-- **Third person.** Turn it on with `THIRDPERSON` (`ON`, `OFF`, or no argument
-  to toggle) at the console, or `--third-person`. The camera sits 2.5 m back
+  She stands 14 cm behind the eye, 1.7 m tall like the game's other people.
+- **Third person.** A console command only, off at every start: `THIRDPERSON`
+  (`ON`, `OFF`, or no argument to toggle). The camera sits 2.5 m back
   and 0.5 m over her right shoulder, following the look up and down. It pulls
   in short of anything between her head and the lens, and keeps a 0.4 m box
   clear round itself.

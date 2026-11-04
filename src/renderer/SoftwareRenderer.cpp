@@ -38,7 +38,7 @@ bool g_postProcessing = true; // GPU post pass: occlusion, haze, bloom, grade
 bool g_pixelLighting = true; // GPU per-pixel lamps with cube shadow maps
 bool g_temporalAA = true; // windowed temporal anti-aliasing
 bool g_tiltShift = true; // windowed tilt-shift stylisation
-bool g_thirdPerson = false; // forced third person (THIRDPERSON, --third-person)
+bool g_thirdPerson = false; // forced third person: the THIRDPERSON console command
 int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }

@@ -51,7 +51,6 @@ static const CommandArguments& commandArguments(){static const CommandArguments 
 static void applyRenderSwitches(bool withoutPost=false,bool withoutPixel=false){
  const auto& args=commandArguments();
  retro::SoftwareRenderer::setPostProcessing(!args.find(L"--nopost")&&(args.find(L"--post-ao")||!withoutPost),args.find(L"--post-ao")!=nullptr);
- retro::SoftwareRenderer::setThirdPerson(args.find(L"--third-person")!=nullptr);
  retro::SoftwareRenderer::setPixelLighting(!withoutPixel&&!args.find(L"--nopixel"));
 }
 __declspec(noinline) static int neuralTextureRuntimeTest(int W,int H,bool vulkan){
@@ -145,6 +144,12 @@ __declspec(noinline) static int bodyInspection(){
    game.update(input,1.f/60);renderer->render(game);}
   char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-%s-%s.ppm",shot++,pose.name,std::array<const char*,5>{"down","behind","side","quarter","third"}[view]);renderer->saveSceneCapture(file);
   report<<file<<" speed "<<retro::length(game.playerVelocity())<<" gait "<<game.bodyGait()<<" grounded "<<game.player().grounded<<" crouched "<<game.player().crouched<<'\n';
+ }
+ // Her hands on the gun, close: right, front-right, front-left, left.
+ for(int view=0;view<4;++view){auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=0;retro::SoftwareRenderer::setThirdPerson(false);
+  renderer->setBodyOrbit(.9f,std::array<float,4>{-retro::kPi*.5f,-retro::kPi*.2f,retro::kPi*.2f,retro::kPi*.5f}[view]);
+  for(int i=0;i<40&&window.pump();++i){game.update(retro::InputState{},1.f/60);renderer->render(game);}
+  char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-hands-%d.ppm",shot++,view);renderer->saveSceneCapture(file);report<<file<<'\n';
  }
  renderer->setBodyOrbit(0,0);retro::SoftwareRenderer::setThirdPerson(false);report<<"PASS: rendered\n";return renderer->hardwareActive()?0:36;
 }

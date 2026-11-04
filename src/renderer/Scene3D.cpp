@@ -1240,13 +1240,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Fixed lamps and suspension rods use the same world-space shader lighting
  // as cached architecture. The moving reactor lift lamp remains per-frame.
  // Retain the reference path for software rendering and cache comparisons.
+ // A lamp in a freight cab's shaft sits flush: the cab's roof above it is no
+ // mounting surface, and rods to it would run up through the cab floor.
+ auto lampMount=[&](const WorldLight&light){return w.campaign()&&(w.level()>=7||w.authored())&&!w.insideCargoLift(light.position.x,light.position.y)?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;};
  movingGeometry=false;
  const bool cacheCeilingLamps=m_gpuFrame&&m_cacheFixedServices;
  if(cacheCeilingLamps){
   struct CeilingMount {const WorldLight*light;float mount;};std::vector<CeilingMount> mounts;mounts.reserve(w.lights().size());
   std::uint64_t key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
   for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())&&!lampSwitchable[size_t(&light-w.lights().data())]){
-   float mount=w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;
+   float mount=lampMount(light);
    mounts.push_back({&light,mount});
    for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount,float(light.fitting),light.yaw})hash(std::bit_cast<std::uint32_t>(value));
   }
@@ -1262,7 +1265,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Switchable housings draw per frame: their glow follows the lamp's power.
   size_t index=size_t(&light-w.lights().data());
   if(cacheCeilingLamps&&!movingGeometry&&!lampSwitchable[index])continue;
-  ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f,movingGeometry?w.liftLampPower():lampPower(index));
+  ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
  if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data())))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
@@ -2439,10 +2442,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const float blend=m_bodyBlendStart<0?1.f:std::clamp((now-m_bodyBlendStart)/.2f,0.f,1.f);
   if(blend<1&&m_bodyFrom.size()==mesh.triangles.size())for(size_t f=0;f<mesh.triangles.size();++f)for(int v=0;v<3;++v){auto&p=mesh.triangles[f].v[v].p;const auto&q=m_bodyFrom[f].v[v].p;p=q+(p-q)*blend;}
   else m_bodyBlendStart=-1;
-  // Stand her on the player's feet at the eye's height (1.55 m tall), a hand's
-  // width behind the eye.
+  // Stand her on the player's feet as tall as the game's other people (1.7 m,
+  // an actor's authored size), a hand's width behind the eye.
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-  const float scale=1.55f/std::max(.01f,range.y),angle=state.angle;
+  const float scale=1.7f/std::max(.01f,range.y),angle=state.angle;
   const Vec2 at=state.pos-forward*.14f;const float feet=state.z;
   Point3 receiver{at.x,at.y,feet+.85f};
   const WorldLight* keyLight=nullptr;float keyDistance=36.f;
