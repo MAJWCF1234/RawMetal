@@ -151,6 +151,15 @@ __declspec(noinline) static int bodyInspection(){
   for(int i=0;i<40&&window.pump();++i){game.update(retro::InputState{},1.f/60);renderer->render(game);}
   char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-hands-%d.ppm",shot++,view);renderer->saveSceneCapture(file);report<<file<<'\n';
  }
+ // Her own arms in first person, looking ahead: the shotgun held, walked,
+ // fired and reloaded, then bare fists and a jab.
+ renderer->setBodyOrbit(0,0);
+ struct View{const char* name;bool forward,fire,reload,fists;int frames,capture;};
+ const View views[]={{"fp-idle",0,0,0,0,40,39},{"fp-walk",1,0,0,0,40,39},{"fp-fire",0,1,0,0,40,5},{"fp-reload",0,0,1,0,90,45},{"fp-fists",0,0,0,1,40,39},{"fp-jab",0,1,0,1,40,8}};
+ for(const auto&view:views){auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=0;if(view.fists)game.stowWeapon();
+  for(int i=0;i<view.frames&&window.pump();++i){retro::InputState input{};input.forward=view.forward;input.fire=view.fire&&i==0;input.reload=view.reload&&i==0;game.update(input,1.f/60);renderer->render(game);
+   if(i==view.capture){char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-%s.ppm",shot++,view.name);renderer->saveSceneCapture(file);report<<file<<'\n';}}
+ }
  renderer->setBodyOrbit(0,0);retro::SoftwareRenderer::setThirdPerson(false);report<<"PASS: rendered\n";return renderer->hardwareActive()?0:36;
 }
 // Windowed-path repro: walk the Security Office corridors into walls and

@@ -18,6 +18,17 @@ namespace retro {
 // made a standard rifle render almost two metres long on screen.
 namespace {
 constexpr float kViewModelScale=1.15f;
+// The viewmodel frames its arms about this rig-space point: the centre of the
+// original arm rig's default (relax) pose. Fixed, so a different arm mesh
+// (Claire's own, resource 111) keeps the tuned shoulders, grips and framing.
+constexpr Point3 kArmsRigCenter{0.f,1.515185f,.171566f};
+// Claire's textures (resources 2302-2311, in this order) by FBX material name:
+// her body and her first-person arms both carry her materials.
+static int claireMaterial(const Mesh&mesh,int part){
+ static constexpr const char* materials[]={"SOCKS","BELTS","PANTS","BOOTS","VEST","SKIRT","JACKET","MASK","EYES","HAIR"};
+ if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<10;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos)return m;
+ return -1;
+}
 // How a gun-holding civilian's baked body takes the arm attachment, in its
 // rest-OBJ space (civilianActorBody order: Worker, then the five staff).
 // Joints are the FBX RightArm/LeftArm, ForeArm and Hand in the pose that
@@ -2412,10 +2423,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const auto&bind=mesh.bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
    for(const auto&t:bind)for(const auto&v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
    const float height=high.y-low.y,middle=(low.x+high.x)*.5f;
-   static constexpr const char* materials[]={"SOCKS","BELTS","PANTS","BOOTS","VEST","SKIRT","JACKET","MASK","EYES","HAIR"};
    m_claireFaceTexture.assign(bind.size(),0);m_claireFaceHidden.assign(bind.size(),0);
-   for(size_t f=0;f<bind.size();++f){int part=bind[f].part;unsigned char texture=0;
-    if(part>=0&&size_t(part)<mesh.materialNames.size())for(unsigned char m=0;m<10;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos){texture=m;break;}
+   for(size_t f=0;f<bind.size();++f){const unsigned char texture=static_cast<unsigned char>(std::max(0,claireMaterial(mesh,bind[f].part)));
     m_claireFaceTexture[f]=texture;bool hidden=texture>=7;
     for(const auto&v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;hidden=hidden||y>.85f||x>.118f||(x>.08f&&y>.66f);}
     m_claireFaceHidden[f]=hidden;}
@@ -2538,7 +2547,7 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  // The hand mesh sits in SteamVR's skeletal hand frame; without skeletal input
  // it falls back to the controller frame.
  for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}
-  for(const auto&triangle:m_vrHandMeshes[side])draw(triangle,m_arms,frame);}
+  for(const auto&triangle:m_vrHandMeshes[side]){const int claire=claireMaterial(m_armsMesh,triangle.part);draw(triangle,claire>=0?m_claireTextures[size_t(claire)]:m_arms,frame);}}
  // Alyx-style displays (SoftwareRenderer::prepareVrDisplays): camera-facing
  // glass cards on the back of the left hand and on the gun, and title and
  // subtitle cards held ahead of the head. Both windings, so no culling.
@@ -2577,7 +2586,7 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
 void SoftwareRenderer::prepareViewModel(const Game& game){
  const auto&motion=game.weaponMotion();std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
  if(game.heldNpc()>=0||game.takedownActive()||locker){
-  auto center=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
+  auto center=kArmsRigCenter;auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
   auto toRig=[&](Point3 world){auto p=(cameraPoint(world,game)-Point3{0,-.22f,.30f})*(1.f/kViewModelScale);p.x=-p.x;return p+center;};
   m_armsMesh.poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
  }
@@ -2586,7 +2595,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
  auto local=[&](Point3 source){auto p=(source-center)*scale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
  const Point3 pivot{.15f,-.155f,.52f};
  auto animated=[&](Point3 p){p=p-pivot;float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;};
- auto armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;
+ auto armCenter=kArmsRigCenter;
  auto toRig=[&](Point3 view){auto p=(view-Point3{.15f,-.285f,.52f})*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
  auto right=animated(local({.02f,.70f,1.10f})+Point3{.045f,-.105f,-.07f}),left=animated(local({.02f,1.10f,-1.15f})+Point3{-.085f,-.055f,-.03f});
  m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick());
@@ -2617,7 +2626,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto rightWrist=animated(gunLocal(triggerSocket)+Point3{.045f,-.105f,-.07f});
   auto leftWrist=animated(gunLocal(supportSocket)+Point3{-.085f,-.055f,-.03f});
  bool fists=game.unarmed()||locker;
- Point3 armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f,armOffset=fists?Point3{0,-.22f,.30f}:Point3{.15f,-.285f,.52f};
+ Point3 armCenter=kArmsRigCenter,armOffset=fists?Point3{0,-.22f,.30f}:Point3{.15f,-.285f,.52f};
  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*kViewModelScale;p.x=-p.x;return p+armOffset;};
  if(!m_poseReady)prepareViewModel(game);
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
@@ -2660,7 +2669,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    float light=roomAmbient;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::max(0.f,n.x*l.x+n.y*l.y+n.z*l.z);}
    light+=game.muzzleFlash()*.65f;
    for(auto&v:face.v)v.light=std::clamp(light,.10f*handFloor,2.5f);
-   triangle3D(face.v[0],face.v[1],face.v[2],texture,1.f,&roomLights);
+   const int claire=arms?claireMaterial(m_armsMesh,face.part):-1;
+   triangle3D(face.v[0],face.v[1],face.v[2],claire>=0?m_claireTextures[size_t(claire)]:texture,1.f,&roomLights);
   }
  };
  draw(m_armsMesh,m_arms,true);if(!fists)draw(m_weaponMesh,m_weaponTexture,false);

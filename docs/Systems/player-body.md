@@ -17,6 +17,7 @@ gitignored library at `src/assets/library/player/`:
 | 2301 | `claire-animation.bin` (16 clips, RMA3) |
 | 2302-2311 | `SOCKS.png` (her skin), `BELTS`, `PANTS`, `BOOTS`, `VEST`, `SKIRT`, `JACKET`, `MASK`, `EYES`, `HAIR` |
 | 2312 | `claire-animation.bin.anchors` (right and left hand per sample) |
+| 111 | `claire-arms.fbx`: her own arms on the first-person rig (below) |
 
 Faces find their texture by FBX material name. The bake maps every finger
 joint too (`Index1_R` for Mixamo's `RightHandIndex1`), and carries each wrist
@@ -61,7 +62,7 @@ blends over 0.2 s.
 ## Views
 
 - **First person.** Her head, hair, mask and bare arms are left out, as is
-  anything within 32 cm of the eye. The viewmodel's arms stand in for hers.
+  anything within 32 cm of the eye. The viewmodel's arms are her own (below).
   She stands 14 cm behind the eye, 1.7 m tall like the game's other people.
 - **Third person.** A console command only, off at every start: `THIRDPERSON`
   (`ON`, `OFF`, or no argument to toggle). The camera sits 2.5 m back
@@ -76,10 +77,39 @@ blends over 0.2 s.
   body), inside lockers, and in inspection or test cameras
   (`Game::inspectionCamera`, set by `mapInspection`).
 
+## First-person arms
+
+The viewmodel (resource 111) is Claire's own arms, sliced from `Claire.fbx` and
+fitted onto the original arm rig (`src/assets/models/arms_rig.fbx`), so every
+viewmodel action, the grip IK, the finger grips and the VR hands drive them
+unchanged. Rebuild after changing her model:
+
+```
+blender -b --python tools/player/build_claire_arms.py -- src/assets/models/arms_rig.fbx  src/assets/library/player/Claire.fbx src/assets/library/player/claire-arms.fbx
+```
+
+- Faces kept are those whose every corner is mostly weighted to an arm bone
+  (upper arm down to the fingertips); her vest and jacket stay with the torso.
+- Each of her bones maps onto its rig bone: along the bone by their length
+  ratio, so her elbow, wrist and knuckles land on the rig's joints; across it by
+  one arm girth and one palm width, so she keeps her own proportions. The
+  index-to-pinky line keeps the twist.
+- Only the two shoulder cuts stay open: the renderer continues open rings into
+  sleeves, and her armbands and cuffs are open tubes, so the script closes them.
+- The rig's skeleton and its 18 actions are re-exported unchanged (the script's
+  round trip moves no bone), with the original default pose, the first frame
+  of `relax`.
+- Faces keep her ten materials; her arm skin and gloves are the `BOOTS`
+  texture. The viewmodel and VR hands pick her textures by material name, and
+  frame the arms about the original rig's centre (`kArmsRigCenter`), not the
+  mesh's bounds.
+
 ## Inspection
 
 `RawMetal.exe --body-inspection` films her on the most open floor of the
 Foundry, shotgun drawn. It renders eight poses (idle, run, back, strafe,
 sprint, crouch, crouch-walk, jump) from five views: looking down, behind,
-beside, three-quarter, and the live third-person camera. Frames go to
+beside, three-quarter, and the live third-person camera. Then her hands on
+the gun close up from four sides, and first person looking ahead: idle,
+walking, firing, reloading, fists and a jab. Frames go to
 `.build/body/`, with a line per frame in `body-inspection.txt`.

@@ -10,7 +10,7 @@
 106 RCDATA "assets/ai/arms_gloves_01-x2.ntx"
 109 RCDATA "assets/models/PSX-Weapon-Pack/Remington-870/Remington-870.fbx"
 110 RCDATA "assets/models/huntsman.fbx"
-111 RCDATA "assets/models/arms_rig.fbx"
+111 RCDATA "assets/library/player/claire-arms.fbx"
 112 RCDATA "assets/ai/remington-x2.ntx"
 113 RCDATA "assets/spider-q.webp"
 114 RCDATA "assets/models/wasp.fbx"
