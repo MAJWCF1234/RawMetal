@@ -156,6 +156,10 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
    }ufbx_free_scene(frame);}
   }
   description+="Authored grab finger transforms: "+std::to_string(m_fingerGrip.size())+"\n";
+  // Dual-quaternion skinning: the grip turns each hand a long way against its
+  // forearm, and a linear blend over the wrist collapses the twist into a
+  // pinched neck. Blended rotations keep the wrist round.
+  for(auto*skin:m_scene->skin_deformers)for(auto&vertex:skin->vertices)vertex.dq_weight=1;
   m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);grip();extract(m_scene);
   description+="Arm opening rings: "+std::to_string(openRings.size())+"\n";
  }

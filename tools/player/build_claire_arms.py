@@ -89,6 +89,24 @@ for v in arms.data.vertices:
     v.co=p
 # Her groups become the rig's, unmapped influences dropped.
 data=[{mapping[b]:x for b,x in weights(v).items() if b in mapping} for v in arms.data.vertices]
+# Her wrist is hard-weighted: one ring of triangles took every turn of the hand
+# against the forearm and twisted thin like a balloon. Spread the hand's
+# influence over the forearm's last rings (as the original arms were weighted)
+# and give the wrist back some girth: hers is a third slimmer than the rig's.
+def smooth(t,a,b):x=min(1,max(0,(t-a)/(b-a)));return x*x*(3-2*x)
+for side in ('R','L'):
+    e=rg(f'forearm.{side}')[0];w=rg(f'hand.{side}')[0];axis=w-e;L=axis.length;axis.normalize()
+    fa,hd=f'forearm.{side}',f'hand.{side}'
+    for v,wt in zip(arms.data.vertices,data):
+        share=wt.get(fa,0)+wt.get(hd,0)
+        if share<=0:continue                 # fingers and upper arm keep theirs
+        d=v.co-e;t=d.dot(axis)/L
+        if t<.4 or t>1.15:continue
+        h=smooth(t,.45,1.06);wt.pop(fa,None);wt.pop(hd,None)
+        if h<1:wt[fa]=share*(1-h)
+        if h>0:wt[hd]=share*h
+        radial=d-axis*d.dot(axis);bulge=1+.28*max(0,1-abs(t-.95)/.22)
+        v.co=e+axis*d.dot(axis)+radial*bulge
 for g in list(arms.vertex_groups):arms.vertex_groups.remove(g)
 for v,w in zip(arms.data.vertices,data):
     total=sum(w.values())

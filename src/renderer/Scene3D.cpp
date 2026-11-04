@@ -24,6 +24,10 @@ constexpr float kViewModelScale=1.15f;
 // original arm rig's default (relax) pose. Fixed, so a different arm mesh
 // (Claire's own, resource 111) keeps the tuned shoulders, grips and framing.
 constexpr Point3 kArmsRigCenter{0.f,1.515185f,.171566f};
+// Shotgun wrist offsets from the trigger and support sockets (view units).
+// Claire's right hand closes round the stock's wrist behind the trigger guard,
+// her left at the back of the fore-end, as far as her reach holds it through sway and recoil.
+constexpr Point3 kTriggerWrist{.045f,-.035f,-.04f},kSupportWrist{-.085f,-.055f,-.03f};
 // Claire's textures (resources 2302-2311, in this order) by FBX material name:
 // her body and her first-person arms both carry her materials.
 static int claireMaterial(const Mesh&mesh,int part){
@@ -2733,7 +2737,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
  auto animated=[&](Point3 p){p=p-pivot;float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;};
  auto armCenter=kArmsRigCenter;
  auto toRig=[&](Point3 view){auto p=(view-Point3{.15f,-.285f,.52f})*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
- auto right=animated(local({.02f,.70f,1.10f})+Point3{.045f,-.105f,-.07f}),left=animated(local({.02f,1.10f,-1.15f})+Point3{-.085f,-.055f,-.03f});
+ auto right=animated(local({.02f,.70f,1.10f})+kTriggerWrist),left=animated(local({.02f,1.10f,-1.15f})+kSupportWrist);
  m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick());
 }
 void SoftwareRenderer::drawViewModel(const Game& game){
@@ -2759,8 +2763,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  // Sockets are authored in the imported gun's coordinates. Palm offsets put the
  // curled fingers around the grip while keeping the wrists outside the stock.
  const Point3 triggerSocket{.02f,.70f,1.10f},supportSocket{.02f,1.10f,-1.15f};
-  auto rightWrist=animated(gunLocal(triggerSocket)+Point3{.045f,-.105f,-.07f});
-  auto leftWrist=animated(gunLocal(supportSocket)+Point3{-.085f,-.055f,-.03f});
+  auto rightWrist=animated(gunLocal(triggerSocket)+kTriggerWrist);
+  auto leftWrist=animated(gunLocal(supportSocket)+kSupportWrist);
  bool fists=game.unarmed()||locker;
  // The pistol has its own frame, parts and wrist targets (pistolHold).
  const bool pistol=!fists&&heldActor<0&&!game.takedownActive()&&game.activeFirearm()==WeaponId::Handgun;

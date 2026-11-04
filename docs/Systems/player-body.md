@@ -99,6 +99,15 @@ blender -b --python tools/player/build_claire_arms.py -- src/assets/models/arms_
 - The rig's skeleton and its 18 actions are re-exported unchanged (the script's
   round trip moves no bone), with the original default pose, the first frame
   of `relax`.
+- Her wrist was hard-weighted (one ring of triangles took every turn of the hand)
+  and a third slimmer than the rig's. The script blends the hand's influence over
+  the forearm's last rings and restores some wrist girth, and the renderer skins
+  the arms with dual quaternions (`Mesh(111)`), so the grip's large hand-to-forearm
+  twist turns the wrist instead of pinching it to a twisted neck.
+- Shotgun wrists sit `kTriggerWrist` and `kSupportWrist` (Scene3D.cpp) off the gun's
+  sockets: the right hand round the stock's wrist behind the trigger guard, the left
+  where it always was: her arm is at full reach there, and any further forward
+  the smoke test's sway and recoil pull the wrist off its socket.
 - Faces keep her ten materials; her arm skin and gloves are the `BOOTS`
   texture. The viewmodel and VR hands pick her textures by material name, and
   frame the arms about the original rig's centre (`kArmsRigCenter`), not the
@@ -113,3 +122,7 @@ beside, three-quarter, and the live third-person camera. Then her hands on
 the gun close up from four sides, and first person looking ahead: idle,
 walking, firing, reloading, fists and a jab. Frames go to
 `.build/body/`, with a line per frame in `body-inspection.txt`.
+
+`RawMetal.exe --arms-inspection` renders the arms close up: the shotgun idle and
+just fired, fists and the pistol, each as played and then the rig from eight
+sides at arm's length, into `.build/arms/`.

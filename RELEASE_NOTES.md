@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.8 - Steady hands (2026-11-04)
+
+Her wrists no longer wring themselves thin where the glove meets the skin. The
+hand turns on the arm the way a hand does, and the arm keeps its shape doing it.
+
+Her right hand closes round the stock behind the trigger guard instead of
+hanging underneath the gun.
+
+---
+
 ## v1.1.7 - In her own hands (2026-11-04)
 
 Look down, and there is someone there. The hands on the shotgun are gloved

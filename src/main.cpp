@@ -1819,6 +1819,19 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       obj<<"o pistol\n";for(const auto&t:pistol.triangles){for(const auto&v:t.v){auto g=retro::SoftwareRenderer::vrPistolPoint(v.p,true);obj<<"v "<<g.y<<' '<<.03f-g.x<<' '<<g.z-.075f<<'\n';}obj<<"f "<<n+1<<' '<<n+2<<' '<<n+3<<'\n';n+=3;}
       if(n)++file;}
      return file==5?0:1;}
+    if(commandArguments().find(L"--arms-inspection")){
+     // Claire's first-person arms close up: the shotgun idle and just fired,
+     // fists and the pistol, each as played and then the rig from eight sides
+     // at arm's length. .build/arms/NAME.ppm
+     constexpr int width=1280,height=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(width,height);if(!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/arms");
+     auto save=[&](const std::string& name){std::ofstream out(".build/arms/"+name+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int k=0;k<width*height;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
+     struct Pose{const char* name;int mode;float age;};
+     const float yaw[]={0,.785398f,1.570796f,2.356194f,3.14159f,-2.356194f,-1.570796f,-.785398f};
+     for(const auto&pose:{Pose{"shotgun",2,10},Pose{"shotgun-fired",2,.03f},Pose{"fists",1,10},Pose{"pistol",4,10}}){
+      auto scene=retro::Game::weaponInspection(pose.mode,pose.age);renderer->render(scene);save(std::string(pose.name)+"-view");
+      for(int angle=0;angle<8;++angle){renderer->inspectRig(scene,yaw[angle],angle%2?.45f:.1f,{.12f,-.24f,.70f},.80f);save(std::string(pose.name)+"-"+std::to_string(angle));}}
+     return 0;}
     if(commandArguments().find(L"--pistol-inspection")){
      // The player's pistol held (Game::weaponInspection modes 4-9) on the GPU:
      // idle, a shot through its rise, both reloads through every phase, low
