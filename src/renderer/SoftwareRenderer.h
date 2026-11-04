@@ -68,6 +68,9 @@ public:
     static void setTemporalAA(bool enabled);
     static bool temporalAA();
     static void setTiltShift(bool enabled);
+    // Forced third person: the camera over Claire's right shoulder.
+    static void setThirdPerson(bool enabled);
+    static bool thirdPerson();
     static bool tiltShift();
     float gripError()const{return m_gripError;}
     // The pistol's fingers from the trigger and grip, metres (0 for any other hold).
@@ -173,6 +176,25 @@ private:
     Mesh m_transformedMesh{277,"",2185};
     Mesh m_workerMesh{277,"",278};
     std::array<Texture,3> m_workerTextures;
+    // Claire, the player's body (2300 on its fourteen clips 2301) and her ten
+    // materials, by FBX material order: skin (SOCKS.png), belts, shorts, boots,
+    // vest, skirt, jacket, mask, eyes, hair.
+    Mesh m_claireMesh{2300,"",2301,2312};
+    std::array<Texture,10> m_claireTextures;
+    // Per face: its texture, and whether first person leaves it out (her
+    // head, hair and arms; the viewmodel's arms stand in for hers).
+    std::vector<unsigned char> m_claireFaceTexture,m_claireFaceHidden;
+    // The clip it last showed and the one it is blending from (.2 s).
+    int m_bodyClip=-1,m_bodyFromClip=-1;float m_bodyFromPhase=0,m_bodyBlendStart=-1,m_bodyLastElapsed=-1;
+    std::vector<MeshTriangle> m_bodyFrom;
+    // Inspection: film the player's body from outside, the camera this far
+    // away at this bearing from her facing (0 off). Her head and arms show.
+    float m_bodyOrbit=0,m_bodyOrbitYaw=0;
+    // This frame films her from outside (orbit or third person): whole body, gun in hand.
+    bool m_bodyOutside=false;float m_bodyDeathStart=-1;
+public:
+    void setBodyOrbit(float distance,float yaw){m_bodyOrbit=distance;m_bodyOrbitYaw=yaw;}
+private:
     // Research staff (ActorVisual::Scientist..LabTech), each baked with the
     // Worker's six clips and its own hand anchors. A lab coat is one material;
     // the light suit wears the Worker's gloves and boots (the pack ships the

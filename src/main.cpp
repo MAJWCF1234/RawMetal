@@ -122,6 +122,46 @@ __declspec(noinline) static int gpuActorPerformance(){
  report<<"final_health="<<game.player().health<<"\n";
  return renderer->hardwareActive()?0:36;
 }
+// The player's body (Claire) in play: a new game's first room, filmed in the
+// windowed path looking down (standing, walking, running, sprinting, strafing,
+// crouched, falling) and from outside at three bearings, each pose under the
+// same input the player gives. .build/body/NN-name.ppm, body-inspection.txt.
+__declspec(noinline) static int bodyInspection(){
+ retro::Win32Window window(1920,1080,L"Depthworks body inspection");if(!window.valid())return 1;ShowWindow(static_cast<HWND>(window.handle()),SW_HIDE);
+ auto renderer=std::make_unique<retro::SoftwareRenderer>(1920,1080);if(!renderer->enableHardware(window.handle()))return 36;
+ std::filesystem::create_directories(".build/body");std::ofstream report("body-inspection.txt");int shot=0;retro::SoftwareRenderer::setTiltShift(false);
+ auto game=retro::Game::bodyInspection();
+ const auto start=game.player();
+ struct Pose{const char* name;bool forward,back,left,right,sprint,crouch,jump;int frames;};
+ const Pose poses[]={{"idle",0,0,0,0,0,0,0,40},{"walk",1,0,0,0,0,0,0,50},{"back",0,1,0,0,0,0,0,40},{"strafe-right",0,0,0,1,0,0,0,40},{"sprint",1,0,0,0,1,0,0,40},{"crouch",0,0,0,0,0,1,0,40},{"crouch-walk",1,0,0,0,0,1,0,50},{"jump",0,0,0,0,0,0,1,14}};
+ // Views: looking down, from behind, beside, three-quarter, then the forced
+ // third-person camera as the player gets it.
+ for(const auto&pose:poses)for(int view=0;view<5;++view){
+  auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=view==0?-195.f:view==4?-10.f:0.f;
+  retro::SoftwareRenderer::setThirdPerson(view==4);
+  renderer->setBodyOrbit(view==0||view==4?0.f:2.6f,view==1?retro::kPi:view==2?retro::kPi*.5f:retro::kPi*.25f);
+  for(int i=0;i<pose.frames&&window.pump();++i){retro::InputState input{};input.forward=pose.forward;input.back=pose.back;input.left=pose.left;input.right=pose.right;input.sprint=pose.sprint;input.crouch=pose.crouch;input.jump=pose.jump&&i==0;
+   game.update(input,1.f/60);renderer->render(game);}
+  char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-%s-%s.ppm",shot++,pose.name,std::array<const char*,5>{"down","behind","side","quarter","third"}[view]);renderer->saveSceneCapture(file);
+  report<<file<<" speed "<<retro::length(game.playerVelocity())<<" gait "<<game.bodyGait()<<" grounded "<<game.player().grounded<<" crouched "<<game.player().crouched<<'\n';
+ }
+ // Her hands on the gun, close: right, front-right, front-left, left.
+ for(int view=0;view<4;++view){auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=0;retro::SoftwareRenderer::setThirdPerson(false);
+  renderer->setBodyOrbit(.9f,std::array<float,4>{-retro::kPi*.5f,-retro::kPi*.2f,retro::kPi*.2f,retro::kPi*.5f}[view]);
+  for(int i=0;i<40&&window.pump();++i){game.update(retro::InputState{},1.f/60);renderer->render(game);}
+  char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-hands-%d.ppm",shot++,view);renderer->saveSceneCapture(file);report<<file<<'\n';
+ }
+ // Her own arms in first person, looking ahead: the shotgun held, walked,
+ // fired and reloaded, then bare fists and a jab.
+ renderer->setBodyOrbit(0,0);
+ struct View{const char* name;bool forward,fire,reload,fists;int frames,capture;};
+ const View views[]={{"fp-idle",0,0,0,0,40,39},{"fp-walk",1,0,0,0,40,39},{"fp-fire",0,1,0,0,40,5},{"fp-reload",0,0,1,0,90,45},{"fp-fists",0,0,0,1,40,39},{"fp-jab",0,1,0,1,40,8}};
+ for(const auto&view:views){auto&player=const_cast<retro::Player&>(game.player());player=start;player.pitch=0;if(view.fists)game.stowWeapon();
+  for(int i=0;i<view.frames&&window.pump();++i){retro::InputState input{};input.forward=view.forward;input.fire=view.fire&&i==0;input.reload=view.reload&&i==0;game.update(input,1.f/60);renderer->render(game);
+   if(i==view.capture){char file[96];std::snprintf(file,sizeof(file),".build/body/%02d-%s.ppm",shot++,view.name);renderer->saveSceneCapture(file);report<<file<<'\n';}}
+ }
+ renderer->setBodyOrbit(0,0);retro::SoftwareRenderer::setThirdPerson(false);report<<"PASS: rendered\n";return renderer->hardwareActive()?0:36;
+}
 // Windowed-path repro: walk the Security Office corridors into walls and
 // corners for many frames, at a native-sized hidden window, and report any
 // frame where Vulkan drops to the software fallback or the frame time spikes.
@@ -1488,6 +1528,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--lab-profile"))return ashfallPerformance(true,true,false,false,false,true);
     if(commandArguments().find(L"--lab-performance"))return ashfallPerformance(true,true,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
     if(commandArguments().find(L"--approach-test"))return approachTest();
+    if(commandArguments().find(L"--body-inspection"))return bodyInspection();
     if(commandArguments().find(L"--ashfall-performance")||commandArguments().find(L"--ashfall-performance-yard"))return ashfallPerformance(commandArguments().find(L"--ashfall-performance-yard")!=nullptr,false,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
     if(commandArguments().find(L"--performance-window")||commandArguments().find(L"--service-performance-window")||commandArguments().find(L"--door-performance-window")||commandArguments().find(L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
     if(commandArguments().find(L"--glazing-test"))return retro::SoftwareRenderer::testHardware(true)?0:36;

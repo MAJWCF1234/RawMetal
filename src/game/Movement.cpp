@@ -130,8 +130,10 @@ void Game::updateMovement(const InputState& input,float dt){
   float impact=-m_player.verticalVelocity;
   if(m_player.verticalVelocity<=0&&m_player.z<=ground+.005f&&previousZ>=ground-.025f){m_player.z=ground;m_player.verticalVelocity=0;m_player.grounded=true;}
   if(!grounded&&m_player.grounded){sound(Sound::Land,std::clamp(impact*.105f,.2f,.85f),.94f);m_verticalSpringVelocity-=std::min(impact,9.f)*.105f;m_stepDistance=0;}
-  if(grounded&&m_player.grounded){m_stepDistance+=length(m_player.pos-old);
-   if(m_stepDistance>(m_player.crouched?.85f:input.sprint?1.45f:1.22f)){
+  if(grounded&&m_player.grounded){const float stride=m_player.crouched?.85f:input.sprint?1.45f:1.22f;m_stepDistance+=length(m_player.pos-old);
+   // Claire's legs: one gait cycle is two footsteps, so her feet land on the step sounds.
+   m_bodyGait=std::fmod(m_bodyGait+kPi*length(m_player.pos-old)/stride,2*kPi);m_bodySprint=input.sprint&&!m_player.crouched;
+   if(m_stepDistance>stride){
     m_stepDistance=0;unsigned variation=(m_stepVariant++*3)%4;auto base=stepSoundAt(m_world,m_player.pos);
     // A deliberate crouched step is audible only inside roughly one metre;
     // the former two-metre cue turned an investigating guard before a rear

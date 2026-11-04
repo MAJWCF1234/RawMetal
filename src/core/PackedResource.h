@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include "TextureCodec.h"
 #include "AudioPredictor.h"
 #include "BinaryPredictor.h"
@@ -28,7 +29,7 @@ inline std::vector<unsigned char> decodeLosslessTexture(const std::vector<unsign
 inline std::vector<unsigned char> decodeLossyTexture(const std::vector<unsigned char>& input){return decodeWebpTexture(input,1);}
 inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,int aliasDepth=0,int neuralDepth=0) {
  auto res=FindResourceW(module,MAKEINTRESOURCEW(id),MAKEINTRESOURCEW(10));
- if(!res)throw std::runtime_error("Missing embedded resource");
+ if(!res)throw std::runtime_error("Missing embedded resource "+std::to_string(id));
  auto bytes=static_cast<const unsigned char*>(LockResource(LoadResource(module,res)));size_t size=SizeofResource(module,res);
  if(bytes&&size==8&&!std::memcmp(bytes,"RMR1",4)){
   uint32_t target=0;std::memcpy(&target,bytes+4,4);

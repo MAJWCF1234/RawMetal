@@ -18,6 +18,17 @@ namespace retro {
 // made a standard rifle render almost two metres long on screen.
 namespace {
 constexpr float kViewModelScale=1.15f;
+// The viewmodel frames its arms about this rig-space point: the centre of the
+// original arm rig's default (relax) pose. Fixed, so a different arm mesh
+// (Claire's own, resource 111) keeps the tuned shoulders, grips and framing.
+constexpr Point3 kArmsRigCenter{0.f,1.515185f,.171566f};
+// Claire's textures (resources 2302-2311, in this order) by FBX material name:
+// her body and her first-person arms both carry her materials.
+static int claireMaterial(const Mesh&mesh,int part){
+ static constexpr const char* materials[]={"SOCKS","BELTS","PANTS","BOOTS","VEST","SKIRT","JACKET","MASK","EYES","HAIR"};
+ if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<10;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos)return m;
+ return -1;
+}
 // How a gun-holding civilian's baked body takes the arm attachment, in its
 // rest-OBJ space (civilianActorBody order: Worker, then the five staff).
 // Joints are the FBX RightArm/LeftArm, ForeArm and Hand in the pose that
@@ -1240,13 +1251,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Fixed lamps and suspension rods use the same world-space shader lighting
  // as cached architecture. The moving reactor lift lamp remains per-frame.
  // Retain the reference path for software rendering and cache comparisons.
+ // A lamp in a freight cab's shaft sits flush: the cab's roof above it is no
+ // mounting surface, and rods to it would run up through the cab floor.
+ auto lampMount=[&](const WorldLight&light){return w.campaign()&&(w.level()>=7||w.authored())&&!w.insideCargoLift(light.position.x,light.position.y)?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;};
  movingGeometry=false;
  const bool cacheCeilingLamps=m_gpuFrame&&m_cacheFixedServices;
  if(cacheCeilingLamps){
   struct CeilingMount {const WorldLight*light;float mount;};std::vector<CeilingMount> mounts;mounts.reserve(w.lights().size());
   std::uint64_t key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
   for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())&&!lampSwitchable[size_t(&light-w.lights().data())]){
-   float mount=w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;
+   float mount=lampMount(light);
    mounts.push_back({&light,mount});
    for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount,float(light.fitting),light.yaw})hash(std::bit_cast<std::uint32_t>(value));
   }
@@ -1262,7 +1276,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Switchable housings draw per frame: their glow follows the lamp's power.
   size_t index=size_t(&light-w.lights().data());
   if(cacheCeilingLamps&&!movingGeometry&&!lampSwitchable[index])continue;
-  ceilingLamp(light,w.campaign()&&(w.level()>=7||w.authored())?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f,movingGeometry?w.liftLampPower():lampPower(index));
+  ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
  if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data())))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
@@ -2397,6 +2411,99 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
  }
+ // The player's body: Claire, posed from how the player moves. In first person
+ // her head, hair and arms are left out (the viewmodel's arms stand in for
+ // hers) and she stands a hand's width behind the eye, so looking down shows
+ // her chest, belt, legs and boots in step with the footsteps. Her whole
+ // silhouette throws the floor shadow under the nearest lamp.
+ if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&!m_vrRendering&&!m_environmentInspection&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
+  auto&mesh=m_claireMesh;const auto&state=game.player();
+  if(m_claireFaceTexture.size()!=mesh.triangles.size()){
+   // Classify once, on the bind pose: material by name, and the head (above
+   // the neck) and arms (out past the shoulders above the belt) to leave out.
+   const auto&bind=mesh.bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
+   for(const auto&t:bind)for(const auto&v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
+   const float height=high.y-low.y,middle=(low.x+high.x)*.5f;
+   m_claireFaceTexture.assign(bind.size(),0);m_claireFaceHidden.assign(bind.size(),0);
+   for(size_t f=0;f<bind.size();++f){const unsigned char texture=static_cast<unsigned char>(std::max(0,claireMaterial(mesh,bind[f].part)));
+    m_claireFaceTexture[f]=texture;bool hidden=texture>=7;
+    for(const auto&v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;hidden=hidden||y>.85f||x>.118f||(x>.08f&&y>.66f);}
+    m_claireFaceHidden[f]=hidden;}
+  }
+  // Which clip: 0 idle, 1-4 run forward/back/left/right, 5 sprint, 6 crouched
+  // idle, 7-10 crouched walk forward/back/left/right, 11 falling, 13 walk.
+  const Vec2 velocity=game.playerVelocity(),forward{std::cos(state.angle),std::sin(state.angle)},right{-forward.y,forward.x};
+  const float speed=length(velocity),ahead=dot(velocity,forward),across=dot(velocity,right),gait=std::fmod(game.bodyGait()/(2*kPi),1.f);
+  const int direction=std::fabs(ahead)>=std::fabs(across)?(ahead>=0?0:1):(across>=0?3:2);
+  int clip=0;float phase=std::fmod(game.elapsed()/2.13f,1.f);
+  // Crouched under a ceiling lower than her crouch, she goes prone.
+  const float headroom=w.clearanceAbove(state.pos.x,state.pos.y,state.z+.05f)-state.z;
+  if(game.dead()){if(m_bodyDeathStart<0)m_bodyDeathStart=game.elapsed();clip=12;phase=std::min(1.f,(game.elapsed()-m_bodyDeathStart)/3.4f);}
+  else if(!state.grounded){clip=11;phase=std::fmod(game.elapsed(),1.f);}
+  else if(state.crouched&&headroom<1.15f){if(speed<.2f)clip=14;else{clip=15;phase=gait;}}
+  else if(state.crouched){if(speed<.25f)clip=6;else{clip=7+direction;phase=gait;}}
+  else if(speed>=.25f){phase=gait;clip=direction==0&&game.bodySprinting()&&speed>4.2f?5:direction==0&&speed<2.f?13:1+direction;}
+  // A change of clip blends over .2 s from the pose it left.
+  const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
+  if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;}
+  m_bodyLastElapsed=now;
+  if(clip!=m_bodyClip){if(m_bodyClip>=0){m_bodyFrom=mesh.triangles;m_bodyBlendStart=now;}m_bodyClip=clip;}
+  mesh.poseCreature(clip,phase);
+  const float blend=m_bodyBlendStart<0?1.f:std::clamp((now-m_bodyBlendStart)/.2f,0.f,1.f);
+  if(blend<1&&m_bodyFrom.size()==mesh.triangles.size())for(size_t f=0;f<mesh.triangles.size();++f)for(int v=0;v<3;++v){auto&p=mesh.triangles[f].v[v].p;const auto&q=m_bodyFrom[f].v[v].p;p=q+(p-q)*blend;}
+  else m_bodyBlendStart=-1;
+  // Stand her on the player's feet as tall as the game's other people (1.7 m,
+  // an actor's authored size), a hand's width behind the eye.
+  Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+  const float scale=1.7f/std::max(.01f,range.y),angle=state.angle;
+  const Vec2 at=state.pos-forward*.14f;const float feet=state.z;
+  Point3 receiver{at.x,at.y,feet+.85f};
+  const WorldLight* keyLight=nullptr;float keyDistance=36.f;
+  if(!w.outdoors())for(const auto&source:w.lights()){auto emitter=source.emitter();float dx=emitter.x-at.x,dy=emitter.y-at.y,d2=dx*dx+dy*dy;
+   if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>feet+1.8f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}}
+  movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
+  auto bodyLights=exteriorLight(receiver,std::max(.2f,range.x*scale),std::max(.2f,range.z*scale),std::max(.2f,range.y*scale),kPi*.5f-angle,true);
+  static const Texture shadowTexture=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
+  // Her FBX puts her left side on +X, so +X is her left (the creatures'
+  // convention mirrors that; she must not be: her armband is on her right).
+  // Mirroring back reverses the winding, so each face swaps two corners.
+  // First person also leaves out anything within reach of the eye (a crouch
+  // puts the eye inside her torso).
+  const Point3 eye{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
+  for(size_t f=0;f<mesh.triangles.size();++f){auto face=mesh.triangles[f];
+   for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
+    v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};}
+   std::swap(face.v[1],face.v[2]);
+   bool nearEye=false;if(!m_bodyOutside)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||(d.z>-.32f&&d.x*d.x+d.y*d.y<.32f*.32f);}
+   if(keyLight){MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
+    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
+     if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
+     if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-at.x,y-at.y)>4.f){valid=false;break;}
+     cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
+    if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadowTexture,1.f);}}
+   if((m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside)continue;
+   Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+   selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+   tri(face.v[0],face.v[1],face.v[2],m_claireTextures[m_claireFaceTexture[f]],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));
+  }
+  // From outside, the gun she carries sits in her right hand and points at
+  // her left (the rifle hold every clip shares).
+  if(m_bodyOutside&&!game.dead()&&game.equippedWeapon()!=WeaponId::Fists){
+   auto world=[&](Point3 p){p=(p-center)*scale;return Point3{at.x+p.z*std::cos(angle)+p.x*std::sin(angle),at.y+p.z*std::sin(angle)-p.x*std::cos(angle),feet+p.y+range.y*scale*.5f+.01f};};
+   const Point3 grip=world(mesh.poseAnchor(0)),support=world(mesh.poseAnchor(1));
+   auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-5f?v*(1/l):Point3{1,0,0};};
+   Point3 gunForward=unit(support-grip);if(std::sqrt((support-grip).x*(support-grip).x+(support-grip).y*(support-grip).y)<.08f)gunForward={std::cos(angle),std::sin(angle),0};
+   const Point3 gunRight=unit({gunForward.y,-gunForward.x,0}),gunUp=unit(cross3(gunRight,gunForward));
+   const bool handgun=game.equippedWeapon()==WeaponId::Handgun;const auto&gunMesh=handgun?m_handgunMesh:m_weaponMesh;const auto&gunTexture=handgun?m_handgunTexture:m_weaponTexture;
+   const float gunScale=handgun?1.f:.75f/(m_weaponMesh.maximum.z-m_weaponMesh.minimum.z);
+   for(auto face:gunMesh.bindTriangles()){if(!handgun&&face.part==3)continue;
+    for(auto&v:face.v){auto p=v.p;if(handgun)v.p=grip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale;else{p=(p-Point3{.02f,.70f,1.10f})*gunScale;v.p=grip+gunRight*p.x+gunUp*p.y-gunForward*p.z;}}
+    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+    selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+    tri(face.v[0],face.v[1],face.v[2],gunTexture,.75f+.3f*std::fabs(n.z)/std::max(.001f,len));}
+  }
+  objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
+ }
  // Recognizable authored supplies, with their original UVs and world depth.
  for(auto&p:game.chunkPickups(level))if(p.active){
   const float base=p.z>-999?p.z:w.floorHeight(p.pos.x,p.pos.y);
@@ -2461,7 +2568,7 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  // The hand mesh sits in SteamVR's skeletal hand frame; without skeletal input
  // it falls back to the controller frame.
  for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}
-  for(const auto&triangle:m_vrHandMeshes[side])draw(triangle,m_arms,frame);}
+  for(const auto&triangle:m_vrHandMeshes[side]){const int claire=claireMaterial(m_armsMesh,triangle.part);draw(triangle,claire>=0?m_claireTextures[size_t(claire)]:m_arms,frame);}}
  // Alyx-style displays (SoftwareRenderer::prepareVrDisplays): camera-facing
  // glass cards on the back of the left hand and on the gun, and title and
  // subtitle cards held ahead of the head. Both windings, so no culling.
@@ -2596,7 +2703,7 @@ SoftwareRenderer::PistolHold SoftwareRenderer::pistolHold(const Game& game)const
 void SoftwareRenderer::prepareViewModel(const Game& game){
  const auto&motion=game.weaponMotion();std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
  if(game.heldNpc()>=0||game.takedownActive()||locker){
-  auto center=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
+  auto center=kArmsRigCenter;auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
   auto toRig=[&](Point3 world){auto p=(cameraPoint(world,game)-Point3{0,-.22f,.30f})*(1.f/kViewModelScale);p.x=-p.x;return p+center;};
   m_armsMesh.poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
  }
@@ -2604,7 +2711,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
  if(game.activeFirearm()==WeaponId::Handgun){
   // The pistol: both hands on the grip from pistolHold, frames and all (the
   // rig is the view mirrored in x), with the pistol's finger set.
-  const auto hold=pistolHold(game);auto armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;
+  const auto hold=pistolHold(game);auto armCenter=kArmsRigCenter;
   auto toRig=[&](Point3 view){auto p=(view-pistolArmOffset())*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
   Mesh::ArmHold arms{};arms.curls=1;for(size_t side=0;side<2;++side){arms.forward[side]={-hold.forward[side].x,hold.forward[side].y,hold.forward[side].z};arms.palm[side]={-hold.palm[side].x,hold.palm[side].y,hold.palm[side].z};}
   m_armsMesh.poseAttached(toRig(hold.wrist[0]),toRig(hold.wrist[1]),motion.elbow,0,0,game.elapsed()*2.f,game.weaponKick(),&arms);return;
@@ -2613,7 +2720,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
  auto local=[&](Point3 source){auto p=(source-center)*scale;return Point3{p.x+.15f,p.y-.155f,-p.z+.82f};};
  const Point3 pivot{.15f,-.155f,.52f};
  auto animated=[&](Point3 p){p=p-pivot;float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;};
- auto armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f;
+ auto armCenter=kArmsRigCenter;
  auto toRig=[&](Point3 view){auto p=(view-Point3{.15f,-.285f,.52f})*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
  auto right=animated(local({.02f,.70f,1.10f})+Point3{.045f,-.105f,-.07f}),left=animated(local({.02f,1.10f,-1.15f})+Point3{-.085f,-.055f,-.03f});
  m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick());
@@ -2647,7 +2754,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  // The pistol has its own frame, parts and wrist targets (pistolHold).
  const bool pistol=!fists&&heldActor<0&&!game.takedownActive()&&game.activeFirearm()==WeaponId::Handgun;
  PistolHold hold;if(pistol){hold=pistolHold(game);rightWrist=hold.wrist[0];leftWrist=hold.wrist[1];}
- Point3 armCenter=(m_armsMesh.minimum+m_armsMesh.maximum)*.5f,armOffset=fists?Point3{0,-.22f,.30f}:pistol?pistolArmOffset():Point3{.15f,-.285f,.52f};
+ Point3 armCenter=kArmsRigCenter,armOffset=fists?Point3{0,-.22f,.30f}:pistol?pistolArmOffset():Point3{.15f,-.285f,.52f};
  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*kViewModelScale;p.x=-p.x;return p+armOffset;};
  if(!m_poseReady)prepareViewModel(game);
  auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
@@ -2714,7 +2821,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
      v.p=animated(local);
     }
    }
-   shade(face,texture);
+   const int claire=arms?claireMaterial(m_armsMesh,face.part):-1;
+   shade(face,claire>=0?m_claireTextures[size_t(claire)]:texture);
   }
  };
  draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);

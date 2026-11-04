@@ -38,6 +38,7 @@ bool g_postProcessing = true; // GPU post pass: occlusion, haze, bloom, grade
 bool g_pixelLighting = true; // GPU per-pixel lamps with cube shadow maps
 bool g_temporalAA = true; // windowed temporal anti-aliasing
 bool g_tiltShift = true; // windowed tilt-shift stylisation
+bool g_thirdPerson = false; // forced third person: the THIRDPERSON console command
 int g_detailLayer = 1; // close-up detail grain on per-pixel-lit surfaces (2/3: debug views)
 bool g_postOcclusionView = false;
 std::uint32_t rgb(int r,int g,int b){return 0xff000000u | (std::uint32_t(r)<<16) | (std::uint32_t(g)<<8) | std::uint32_t(b); }
@@ -133,6 +134,8 @@ void SoftwareRenderer::setPixelLighting(bool enabled){g_pixelLighting=enabled;}
 bool SoftwareRenderer::pixelLighting(){return g_pixelLighting;}
 void SoftwareRenderer::setTemporalAA(bool enabled){g_temporalAA=enabled;}
 void SoftwareRenderer::setTiltShift(bool enabled){g_tiltShift=enabled;}
+void SoftwareRenderer::setThirdPerson(bool enabled){g_thirdPerson=enabled;}
+bool SoftwareRenderer::thirdPerson(){return g_thirdPerson;}
 bool SoftwareRenderer::tiltShift(){return g_tiltShift;}
 bool SoftwareRenderer::temporalAA(){return g_temporalAA;}
 void SoftwareRenderer::setDetailLayer(int mode){g_detailLayer=mode;}
@@ -149,6 +152,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   // Worker/Witness materials are large too. Deferring their mip construction
   // until the first visible limb caused quarter-second gameplay stalls.
   for(const auto&texture:m_workerTextures)m_gpu->prepare(texture);
+  for(const auto&texture:m_claireTextures)m_gpu->prepare(texture);
   for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})m_gpu->prepare(*texture);
   for(const auto&texture:m_staffTextures)m_gpu->prepare(texture);
   if(!m_logo.pixels.empty())m_gpu->prepare(m_logo);
@@ -174,6 +178,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);m_mutantTexture=loadTexture(273);m_snatcherTexture=loadTexture(2127);m_chimeraTexture=loadTexture(2130);
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
+ for(int i=0;i<10;++i){auto&texture=m_claireTextures[size_t(i)];texture=loadTexture(2302+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=i==3||i==4||i==7?.18f:.05f;}
  // The transformed wear the same suit, drained of colour and darkened with
  // ash: half the saturation, two thirds the light, an olive cast.
  {auto scorch=[](std::uint32_t&pixel){float r=float((pixel>>16)&255),g=float((pixel>>8)&255),b=float(pixel&255),grey=r*.3f+g*.59f+b*.11f;
@@ -896,6 +901,14 @@ void SoftwareRenderer::drawHud(const Game& game){
  std::snprintf(b,sizeof(b),"PURGED  %02d / %02d",game.kills(),int(game.enemies().size()));if(!game.enemies().empty())uiText(m_width/2-uiTextWidth(b,0,10,2)/2,m_height-20,b,muted,0,10,.8f*hud,2);
  if(game.hasFlashlight()){float jam=game.flashlightJam();const char* light=!game.state(stateId("flashlight_on"))?"LIGHT OFF":jam>=Game::FlashlightJamTime?"NO POWER":jam>0?"LIGHT FAILING":"LIGHT ON";uiText(m_width/2-uiTextWidth(light,0,10,2)/2,m_height-34,light,game.flashlightOn()?amber:muted,0,10,.8f*hud,2);}}
  auto cross=game.hitFlash()>0?red:paper;int cx=m_width/2,cy=m_height/2;
+ // In third person the shot still leaves Claire's eye, not the lens over her
+ // shoulder: the cross marks where her aim first meets something solid.
+ if(m_bodyOutside&&g_thirdPerson){const auto&p=game.player();const auto&w=game.world();const float pitch=p.pitch/140.f;
+  const Point3 eye{p.pos.x,p.pos.y,p.z+p.eye},aim{std::cos(p.angle)*std::cos(pitch),std::sin(p.angle)*std::cos(pitch),std::sin(pitch)};
+  float reach=40;for(float t=.25f;t<=40.f;t+=.25f){Point3 q=eye+aim*t;if(q.x<.05f||q.y<.05f||q.x>23.95f||q.y>23.95f||!w.rayClear({eye.x,eye.y},eye.z,{q.x,q.y},q.z)){reach=t;break;}}
+  const Point3 hit=eye+aim*reach;const auto&v=m_view;const float vy=std::cos(v.angle),vx=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=Projection{float(m_width)/m_height}.focal(float(m_width));
+  const Point3 lens{v.pos.x,v.pos.y,v.z+v.eye},forward{vy*cp,vx*cp,sp},right{-vx,vy,0},up{-vy*sp,-vx*sp,cp},d=hit-lens;const float depth=d.x*forward.x+d.y*forward.y+d.z*forward.z;
+  if(depth>.1f){cx=std::clamp(int(m_width*.5f+(d.x*right.x+d.y*right.y+d.z*right.z)/depth*focal),8,m_width-8);cy=std::clamp(int(m_height*.5f-(d.x*up.x+d.y*up.y+d.z*up.z)/depth*focal),8,m_height-8);}}
  if(!locker){fill(cx-7,cy,4,1,cross,.85f);fill(cx+4,cy,4,1,cross,.85f);fill(cx,cy-7,1,4,cross,.85f);fill(cx,cy+4,1,4,cross,.85f);blend(cx,cy,cross,.6f);}
  if(auto target=shut?nullptr:game.targetEnemy()){
   int x=m_width/2-65,y=m_height-60;
@@ -1313,6 +1326,23 @@ void SoftwareRenderer::drawConsole(const Game& game){
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
 void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();
+ m_bodyOutside=false;
+ // A lens position the camera may take: in sight of her head and with room
+ // round it (a .4 m box clear of walls, pillars, props and doors).
+ auto clearLens=[&](Point3 from,Point3 p){const auto&w=game.world();if(p.x<.25f||p.y<.25f||p.x>23.75f||p.y>23.75f||!w.rayClear({from.x,from.y},from.z,{p.x,p.y},p.z))return false;
+  for(float x:{-.2f,.2f})for(float y:{-.2f,.2f})if(!w.fits(p.x+x,p.y+y,p.z-.2f,.4f))return false;return true;};
+ if(m_bodyOrbit>0){const float bearing=m_view.angle+m_bodyOrbitYaw;const Vec2 from=m_view.pos;float reach=m_bodyOrbit;
+  for(float r=.4f;r<=m_bodyOrbit;r+=.1f){Vec2 q=from+Vec2{std::cos(bearing),std::sin(bearing)}*r;if(!clearLens({from.x,from.y,m_view.z+1.f},{q.x,q.y,m_view.z+1.f})){reach=std::max(.4f,r-.3f);break;}}
+  m_view.pos+=Vec2{std::cos(bearing),std::sin(bearing)}*reach;m_view.angle=bearing+kPi;m_view.pitch=-14.f;m_view.eye=1.f;m_bodyOutside=true;}
+ else if(g_thirdPerson&&!m_vrRendering&&!m_environmentInspection&&!game.titleScreen()&&!game.inspectionCamera()&&game.hiddenLocker()<0&&!game.lockerViewLocked()){
+  // Over the right shoulder, 2.5 m back along the look and .5 m to the side,
+  // pulled in short of anything solid between her head and the lens.
+  const float pitch=m_view.pitch/140.f,yaw=m_view.angle;
+  const Point3 head{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
+  const Point3 back{-std::cos(pitch)*std::cos(yaw)*2.5f-std::sin(yaw)*.5f,-std::cos(pitch)*std::sin(yaw)*2.5f+std::cos(yaw)*.5f,-std::sin(pitch)*2.5f};
+  float reach=1;for(int i=1;i<=24;++i){float t=i/24.f;if(!clearLens(head,head+back*t)){reach=std::max(0.f,(i-2)/24.f);break;}}
+  const Point3 lens=head+back*reach;m_view.pos={lens.x,lens.y};m_view.z=lens.z-m_view.eye;m_bodyOutside=true;
+ }
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  m_cleanupEdgeStretch=1;
  bool directPresentation=hardwarePresentsWindow();
@@ -1334,7 +1364,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level))drawScene(game,false,level);
-   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
+   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye,m_view.angle,m_view.pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());

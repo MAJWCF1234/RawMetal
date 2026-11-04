@@ -221,6 +221,8 @@ public:
     float compactorHeight(const Compactor& machine)const;
     void showTitleScreen();
     bool titleScreen()const{return m_titleScreen;}
+    // A camera placed for an inspection or test shot, not a player in play: no body under it.
+    bool inspectionCamera()const{return m_inspectionCamera;}
     // 0..1 beacon level from any running sequence whose repeating sound is the
     // Alarm klaxon: peaks on each blast and decays until the next.
     float alarmPulse()const;
@@ -263,6 +265,9 @@ public:
 
     const World& world() const { return m_world; }
     const Player& player() const { return m_player; }
+    Vec2 playerVelocity()const{return m_velocity;}
+    float bodyGait()const{return m_bodyGait;}
+    bool bodySprinting()const{return m_bodySprint;}
     const Ragdoll& hazmat()const{return m_hazmat;}
     static Game hazmatInspection(int view=0);
     static bool testHazmat();
@@ -426,6 +431,7 @@ public:
     static bool auditMap(int level);
     static Game prologueInspection(int stage);
     static Game uiInspection(int view);
+    static Game bodyInspection();
     static Game exclusionInspection(int stage=0);
     // A standing view anywhere in the Exclusion Zone pack: map, local x/y,
     // yaw in degrees and view pitch, on the ground (for --zone-shots).
@@ -1129,6 +1135,9 @@ private:
     bool m_guarding=false;
     std::vector<SoundEvent> m_sounds;
     float m_stepDistance=0;
+    // The player's body: gait phase (radians, one cycle per two footsteps) and
+    // whether it is sprinting. Presentation only; not archived.
+    float m_bodyGait=0;bool m_bodySprint=false;bool m_inspectionCamera=false;
     bool m_previousJump=false,m_previousUse=false;
     float m_jumpBuffer=0,m_coyote=0,m_logTime=0;
     int m_activeLog=-1;
