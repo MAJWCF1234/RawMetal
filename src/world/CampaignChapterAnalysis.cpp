@@ -562,10 +562,434 @@ std::shared_ptr<const Map> makeSampleStorage(){
  recessedFittings(m);freightFinish(m,-1);
  return p;
 }
-// ENERGY DIAGNOSTICS / LAB 4 (manifest 53)
-std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){return placeholderChunk(83,{{'N',10.f,14.f,-12.f,true,0},{'E',15.f,19.f,-12.f,false,0},{'W',9.f,14.f,-12.f,false,0},{'S',10.f,14.f,-12.f,false,0}});}
-// FIELD MEASUREMENT (manifest 54)
-std::shared_ptr<const Map> makeFieldMeasurement(){return placeholderChunk(84,{{'N',6.f,10.f,-12.f,false,0},{'E',9.f,14.f,-12.f,false,0}});}
+// --- Energy Diagnostics and Field Measurement (83, 84): their own kit (dg), in this file ---------------
+// Somebody left where they fell: a scripted track held in the dead pose on the map's clock.
+void dgBody(Map& m,const char* clock,ActorVisual visual,Vec2 p,float z,float yaw){actor(m,clock,visual,1.7f,{{0,p,z,yaw,4,1},{1000,p,z,yaw,4,1}});}
+// A timeline started by a terminal setting `timer` (no trigger box), or by walking into x1..y2.
+void dgSequence(Map& m,const char* timer,const char* finish,int durationMs,int finishAtMs,float x1=0,float y1=0,float x2=0,float y2=0){
+ TimedSequence s;s.timerState=stateId(timer);s.finishState=stateId(finish);s.x1=x1;s.y1=y1;s.x2=x2;s.y2=y2;
+ s.durationMs=durationMs;s.finishAtMs=finishAtMs;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);
+}
+// A captioned cue on a timeline, at its own pitch (LAB 4's chat line plays high).
+void dgSay(Map& m,const char* timer,int t,Sound s,Vec2 p,float z,const char* caption,float gain,float pitch=1){cue(m,timer,t,s,p,caption,gain,z);m.sequenceCues.back().pitch=pitch;}
+// A guard on a beat (the Medical chapter's mdGuard; to be promoted to the kit with it).
+void dgGuard(Map& m,const char* clock,const std::string& key,ActorVisual visual,GuardSquadRole role,const char* squad,std::vector<ActorPatrolPoint> beat,float sight,int weapon,float speed,int health){
+ ActorTrack t;t.timerState=stateId(clock);t.visual=visual;t.scale=1.6f;t.health=health;
+ t.damageState=stateId(key+"_damage");t.deadState=stateId(key+"_dead");
+ const Vec2 start=beat.front().position;const float z=beat.front().z,look=std::isnan(beat.front().look)?0.f:beat.front().look;
+ t.keys={{0,start,z,look},{60000,start,z,look,0,1}};
+ auto& ai=t.ai;ai.mode=ActorAiMode::Guard;ai.role=role;ai.faction=AiFaction::Raider;ai.squad=squad?stateId(squad):0;ai.armed=true;
+ ai.weapon=weapon;ai.sightRange=sight;ai.sightDot=.6f;ai.searchMs=7000;ai.speed=speed;ai.patrol=std::move(beat);
+ m.actorTracks.push_back(std::move(t));
+}
+// A walking-lamp stake: a steel pole on a foot plate, a caged lamp on top, lit in its turn of the
+// walk while `state` is set (period/on/phase in seconds: the light steps from stake to stake).
+void dgStake(Map& m,Vec2 p,float f,float head,const char* state,float period,float on,float phase){
+ wall(m,p.x-.025f,p.y-.025f,p.x+.025f,p.y+.025f,f,head,20);wall(m,p.x-.16f,p.y-.16f,p.x+.16f,p.y+.16f,f,f+.025f,8);
+ anFix(m,model::mine_cage_lamp,p.x,p.y,head,.21f,.2f,.36f,0,false);
+ auto l=lamp(p,head+.2f,.6f,4.5f,5200,0,WorldLightMount::Bare);l.enabledState=stateId(state);l.period=period;l.onTime=on;l.phase=phase;m.lights.push_back(l);
+}
+// A workstation whose screen is a terminal: the desk set at its east half, the terminal's
+// console volume at the west end, clear of the props.
+void dgDeskTerminal(Map& m,float x,float y,float f,int facing,int variant,const char* title,const char* a,const char* b,StateId state=0,StateId prerequisite=0){
+ workstation(m,x,y,f,facing,variant,false);const float s=float(facing),screen=facing>0?kPi:0.f;
+ kit::prop(m,model::crt_monitor,x+.15f,y+s*.12f,f+.75f,.42f,.4f,.38f,screen);kit::prop(m,model::keyboard,x+.15f,y-s*.2f,f+.75f,.45f,.16f,.03f,screen);
+ terminal(m,{x-.52f,y},title,a,b,0,state,prerequisite);
+}
+// A paper readable lying on furniture `surface` above the floor (0: on the floor itself).
+void dgPaper(Map& m,Vec2 p,float surface,float yaw,Readable kind,const char* title,const char* a,const char* b,StateId state=0){
+ terminal(m,p,title,a,b,0,state);auto& t=m.terminals.back();t.readable=kind;t.surface=surface;t.yaw=yaw;
+}
+// ENERGY DIAGNOSTICS / LAB 4 (manifest 53). Where the cells were read against the
+// deep face. At 01:58:04 every cell on her bench, the cell store and the Level 9
+// face sensor moved on one trace. The I.I. detail came through Chemistry at 02:20
+// to box her desk and was sealed in by the vent at 02:22; the arrays have logged on
+// no feed since the circuits were isolated. Lab 4 itself is lit by what was left on:
+// her desk lamp, the cut cell's violet, the hand lamp of R. Hale, the orderly who
+// came back for her box at 03:24 and lies by the Ward C service door with the
+// medical override disk on him.
+// Route: the N door (or 84's airlock into the hall's west aisle) -> the vestibule ->
+// the array hall, past the detail -> Lab 4 (doorway, hiding slot, or the NE office's
+// cable pass) -> the disk -> the service door -> the corridor E to Ward C. S: the
+// passage to the Test Complex, sealed from the Resonance Laboratory's side.
+std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[83];m.definition=CampaignChunks[83];m.definition.ambient=.18f;
+ m.definition.playerStart={12.f,1.6f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=kPi*.5f;
+ m.wallSurface=SurfaceLabPanel;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ m.definition.haze={.12f,.12f,.14f,.01f};
+ const float f=-12,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'N',10.f,14.f,f,true,0});                                                      // door 0: in from Chemistry
+ openEdge(m,{'E',15.f,19.f,f,false,0});                                                     // the service corridor to Ward C
+ openEdge(m,{'W',9.f,14.f,f,false,0});                                                      // Field Measurement's airlock
+ openEdge(m,{'S',10.f,14.f,f,false,0});                                                     // the Test Complex passage
+ machineryClock(m,"anl_diag_clock",60000);
+ for(auto [x1,y1,x2,y2]:{std::tuple{1.f,.9f,10.f,1.f},{14.f,.9f,23.f,1.f},{.9f,1.f,1.f,9.f},{.9f,14.f,1.f,23.f},{22.9f,1.f,23.f,15.f},{22.9f,19.f,23.f,23.f},{1.f,22.9f,10.f,23.f},{14.f,22.9f,23.f,23.f}})
+  wall(m,x1,y1,x2,y2,f,roof,3);
+ for(auto [x1,y1,x2,y2]:{std::tuple{1.f,1.f,9.f,4.8f},{9.2f,1.f,14.8f,4.8f},{15.f,1.f,22.9f,4.8f},{1.f,5.f,15.f,14.8f},{15.2f,5.f,22.9f,14.8f},{1.f,15.f,9.8f,22.9f},{10.f,15.f,14.f,23.f},{14.2f,15.f,23.f,19.f}})
+  ceilingGrid(m,x1,y1,x2,y2,roof);
+ // --- The vestibule: in from Chemistry, a doorway either side, the glass onto the hall ----------------
+ wall(m,9.f,1.f,9.2f,3.2f,f,roof,3);doorwayY(m,3.2f,4.4f,9.f,9.2f,f,roof);wall(m,9.f,4.4f,9.2f,5.f,f,roof,3);
+ wall(m,14.8f,1.f,15.f,2.6f,f,roof,3);doorwayY(m,2.6f,3.8f,14.8f,15.f,f,roof);wall(m,14.8f,3.8f,15.f,5.f,f,roof,3);
+ glazing(m,9.2f,4.8f,11.4f,5.f,f,roof,3,.95f,2.4f);wall(m,11.4f,4.8f,12.6f,5.f,f+2.4f,roof,3);glazing(m,12.6f,4.8f,14.8f,5.f,f,roof,3,.95f,2.4f);
+ for(float x:{11.34f,12.6f})wall(m,x,4.76f,x+.06f,5.04f,f,f+2.4f,20);
+ for(int i=0;i<2;++i)anFix(m,model::psx_locker,9.53f,1.5f+i*.86f,f,.64f,.85f,2.42f,0,true);
+ wall(m,9.2f,1.05f,9.9f,2.8f,f+2.42f,roof,30);
+ m.lights.push_back(inTube(12.f,2.8f,roof,.4f,6.f,4600,0,.15f));
+ taped(m,{14.79f,1.8f},f+1.45f,anW,Readable::Note,"DIAGNOSTICS / NIGHT ORDER","LAB 4 CIRCUITS ISOLATED AT THE PANEL 02:27 BY ORDER OF I.I. THE ARRAYS RESTARTED 02:28 ON NO FEED. LEAVE THEM.",
+  "NOBODY INTO LAB 4 WITH A TORCH ON. NOBODY INTO LAB 4.");
+ m.pickupSpawns.push_back({{13.9f,1.6f},PickupKind::HandgunAmmo,f});
+ // the detail's radio, the moment the player is in: the Investigator wants the disk left where it is
+ dgSequence(m,"anl_diag_radio","anl_diag_radio_done",22000,21000,9.2f,1.f,14.8f,4.8f);
+ {const Vec2 w{6.9f,1.45f};const float z=f+.8f;
+  dgSay(m,"anl_diag_radio",400,Sound::RadioSquelch,w,z,"",.5f);
+  dgSay(m,"anl_diag_radio",800,Sound::RadioSquelch,w,z,"INVESTIGATOR (RADIO): Diagnostics detail. Report.",.2f);
+  dgSay(m,"anl_diag_radio",3800,Sound::RadioSquelch,w,z,"RADIO: Her drives are boxed. Paper's bagged. Nobody's been in the hall.",.2f);
+  dgSay(m,"anl_diag_radio",8000,Sound::RadioSquelch,w,z,"INVESTIGATOR (RADIO): And the orderly's disk.",.2f);
+  dgSay(m,"anl_diag_radio",11200,Sound::RadioSquelch,w,z,"RADIO: Hale's on the floor in Lab 4 by the service door. Nobody's going in after it.",.2f);
+  dgSay(m,"anl_diag_radio",17000,Sound::RadioSquelch,w,z,"INVESTIGATOR (RADIO): Then the disk stays with him. Hold the hall.",.2f);
+  dgSay(m,"anl_diag_radio",20200,Sound::RadioSquelch,w,z,"RADIO: ...Copy.",.2f);}
+ // --- The NW office: the detail's packing room, her drives and papers boxed for I.I. ----------------
+ wallDoor(m,1.f,9.f,4.8f,5.f,6.6f,7.8f,f,roof,1);
+ workstation(m,2.4f,2.35f,f,1,0);
+ for(auto [x,y,yaw]:{std::tuple{3.6f,3.7f,.1f},{4.5f,3.85f,-.2f}})kit::prop(m,model::prop_cardboard_box_open,x,y,f,.6f,.6f,.6f,yaw);   // boxed for I.I.
+ for(int i=0;i<4;++i)propPose(m,model::office_pc_tower,5.6f+(i%2)*.75f,3.2f+(i/2)*.75f,f,.26f,.61f,.61f,i*.4f,0,kPi*.5f);   // her drives, pulled and laid down
+ for(int i=0;i<5;++i)kit::prop(m,model::office_file_binder,7.9f+i*.13f,4.5f,f,.093f,.301f,.424f,(i%2)*.04f);
+ // the packing bench under the one lamp the detail left on: still light, safe light
+ anModel(m,model::lab_clean_bench,6.6f,1.4f,f,anS,true);wall(m,6.f,1.1f,7.2f,1.7f,f+1.45f,roof,30);
+ const int packLamp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,6.2f,1.35f,f+.81f,.18f,.4f,.52f,kPi);
+ m.lights.push_back(lamp({6.2f,1.5f},f+1.26f,.45f,4.f,3000,0,WorldLightMount::Bare));m.lights.back().prop=packLamp;
+ paperDrift(m,1.2f,1.2f,8.8f,4.6f,f,12,8301);
+ kit::prop(m,model::item_walkie,6.9f,1.45f,f+.81f,.11f,.38f,.05f,.4f);
+ dgPaper(m,{2.65f,2.2f},.75f,kPi,Readable::Letter,"I.I. / RECOVERY ORDER / 02:20","DIAGNOSTICS DETAIL: HOLD ENERGY DIAGNOSTICS. LAB 4 STATION DRIVES, HER PAPERS, ALL PRINTED READINGS, BOXED FOR I.I.",
+  "THE ANALYST GOES TO MEDICAL WITH THE ESCORT. YOU DO NOT SPEAK TO HER.");
+ m.pickupSpawns.push_back({{1.6f,3.6f},PickupKind::Ammo,f});
+ // --- The NE office: the analysts' copier and lockers; its south wall is Lab 4's, with the cable pass --
+ anModel(m,model::lab_photocopier,16.2f,1.5f,f,anS,true);wall(m,15.75f,1.1f,16.65f,1.9f,f+1.45f,roof,30);
+ dgPaper(m,{16.2f,1.5f},.97f,kPi,Readable::Letter,"ARRAY LOG / CONTINUOUS","01:58:04 ARRAYS 1-6 OFF SCALE. 02:20 FEEDS PULLED. 02:21 STILL OFF SCALE.",
+  "02:27 MAINS ISOLATED. 02:28 STILL LOGGING. THE PAPER COMES OUT WARM.");
+ for(float x:{21.3f,22.16f})anFix(m,model::psx_locker,x,1.33f,f,.64f,.85f,2.42f,-kPi*.5f,true);
+ wall(m,20.85f,1.f,22.6f,1.7f,f+2.42f,roof,30);
+ workstation(m,18.6f,2.35f,f,1,1);
+ m.lights.push_back(inTube(19.f,2.8f,roof,.4f,5.f,4200,0));
+ m.pickupSpawns.push_back({{18.4f,3.8f},PickupKind::Health,f});
+ wall(m,15.f,4.8f,21.4f,5.f,f,roof,3);wall(m,21.4f,4.8f,22.4f,5.f,f+.7f,roof,3);wall(m,22.4f,4.8f,22.9f,5.f,f,roof,3);   // the cable pass: prone only
+ anFix(m,model::pwr_vent_grille,21.75f,4.45f,f,.82f,.04f,.8f,anS+.35f,false);                                           // its grille, off and leant aside
+ // --- The array hall: circuits isolated, no ceiling light; the arrays log on nothing -----------------
+ for(float x:{6.2f,7.45f,8.7f,9.95f}){anModel(m,model::anl_switch_cabinet_1,x,8.27f,f,anN,true);anModel(m,model::anl_switch_cabinet_1,x,10.53f,f,anS,true);}
+ wall(m,5.6f,7.94f,10.55f,8.6f,f+2.91f,roof,30);wall(m,5.6f,10.2f,10.55f,10.86f,f+2.91f,roof,30);
+ wall(m,10.55f,8.6f,11.f,10.2f,f,f+2.6f,2);wall(m,10.55f,8.6f,11.f,10.2f,f+2.6f,roof,30);   // the end cap: the slot between the rows opens west
+ floorLine(m,5.6f,9.3f,10.55f,9.5f,f,8);
+ cableTray(m,{1.2f,7.f},{14.8f,7.f},f+3.1f);
+ for(float x:{7.45f,9.95f}){anModel(m,model::lab_status_display,x,7.92f,f+1.6f,anN,false);
+  auto l=lamp({x,7.8f},f+1.7f,.18f,2.5f,6500,.05f,WorldLightMount::Bare,0,false);l.flicker=.1f;m.lights.push_back(l);}
+ // the burst main and what it left: still, wet metal, humming
+ servicePipe(m,{1.f,14.55f},{15.f,14.55f},roof-.35f,.06f,4);
+ m.waterVolumes.push_back({11.6f,11.6f,14.8f,14.8f,f-.14f,f-.03f});
+ for(auto [x1,y1,x2,y2]:{std::tuple{11.35f,11.35f,14.8f,11.6f},{11.35f,11.6f,11.6f,14.8f}})wall(m,x1,y1,x2,y2,f+.001f,f+.003f,8);
+ hazard(m,Hazard::Kind::Anomaly,11.8f,11.8f,14.8f,14.8f,f-.2f,f+2.2f,3.f);
+ anHum(m,"anl_diag_hum",11.2f,11.2f,15.f,14.8f,f,f+2.5f,.5f);
+ m.lights.push_back(lamp({1.02f,6.2f},f+2.4f,.18f,5.f,1000,-.5f,WorldLightMount::Wall,0,true,{1.f,.12f,.06f}));
+ m.lights.push_back(lamp({8.f,14.75f},f+2.4f,.15f,5.f,1000,-.5f,WorldLightMount::Wall,-kPi*.5f,true,{1.f,.12f,.06f}));
+ {auto l=lamp({13.2f,13.2f},f+.3f,.3f,3.f,11000,-.05f,WorldLightMount::Bare,0,false,{.6f,.75f,1.f});l.flicker=.3f;m.lights.push_back(l);}   // the water's glint
+ // the battery packs on the hall's north wall, the only light the isolation left it: cold, low, along the aisle to Lab 4
+ for(float x:{3.6f,8.2f})m.lights.push_back(lamp({x,5.02f},f+2.55f,.3f,6.f,6800,0,WorldLightMount::Wall,kPi*.5f,true));
+ for(float x:{3.6f,8.2f})wall(m,x-.22f,5.f,x+.22f,5.09f,f+2.5f,f+2.62f,20);
+ for(float x:{3.f,8.4f}){m.lights.push_back(lamp({x,14.78f},f+2.55f,.28f,6.f,6800,0,WorldLightMount::Wall,-kPi*.5f,true));wall(m,x-.22f,14.71f,x+.22f,14.8f,f+2.5f,f+2.62f,20);}
+ // its south wall: Array Power's door, the passage mouth
+ wall(m,1.f,14.8f,5.4f,15.f,f,roof,3);swingDoor(m,5.4f,6.6f,14.9f,f,roof,1);wall(m,6.6f,14.8f,10.f,15.f,f,roof,3);
+ wall(m,10.f,14.8f,14.f,15.f,f+2.6f,roof,3);wall(m,14.f,14.8f,15.f,15.f,f,roof,3);
+ // the Diagnostics detail: two men sealed in since 02:22, no torches, standing in still light
+ dgGuard(m,"anl_diag_clock","anl_diag_a",ActorVisual::Cleanup,GuardSquadRole::Assault,"anl_diag_detail",{{{4.f,3.4f},f,16000,-kPi*.5f},{{7.2f,5.8f},f,5000,0}},9,1,1.f,100);
+ dgGuard(m,"anl_diag_clock","anl_diag_b",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"anl_diag_detail",
+  {{{3.2f,6.4f},f,3000,0},{{13.4f,6.4f},f,4000,kPi*.5f},{{13.2f,10.6f},f,2500,kPi},{{3.2f,12.2f},f,3500,kPi}},11,2,1.f,90);
+ m.actorTracks.back().ai.dropsSidearm=true;
+ // --- Lab 4: her room -----------------------------------------------------------------------------
+ wall(m,15.f,5.f,15.2f,6.f,f,roof,3);doorwayY(m,6.f,7.2f,15.f,15.2f,f,roof);wall(m,15.f,7.2f,15.2f,7.6f,f,roof,3);
+ glazing(m,15.f,7.6f,15.2f,14.4f,f,roof,3,.95f,2.4f,true);wall(m,15.f,14.4f,15.2f,14.8f,f,roof,3);
+ anModel(m,model::lab_id_scanner,14.97f,7.4f,f+1.2f,anW,false);
+ taped(m,{14.99f,8.2f},f+.6f,anW,Readable::Note,"DOOR READER / LAB 4","02:24 OUT: LAB 4, ESCORTED. 02:52 IN: LAB 4, R. HALE. 02:55 OUT: LAB 4, R. HALE.","03:24 IN: R. HALE. NO OUT.");
+ wall(m,15.f,14.8f,19.4f,15.f,f,roof,3);
+ {const int d=swingDoor(m,19.4f,20.6f,14.9f,f,roof,1);m.doors[size_t(d)].requireState=stateId("med_override");}
+ wall(m,20.6f,14.8f,22.9f,15.f,f,roof,3);
+ titleCard(m,"LAB 4",15.2f,5.f,22.9f,14.8f);
+ // her desk: a lit pocket in the east wall, square on the line from the array hall's north aisle
+ // through Lab 4's doorway. She sat facing the wall; her screen and lamp face whoever comes in.
+ wall(m,21.f,7.95f,22.9f,8.15f,f,roof,3);                                                        // the pocket's south cheek
+ wall(m,21.f,5.f,21.25f,8.15f,f+2.5f,roof,3);                                                    // its head, framing it from the room
+ for(float y:{5.f,7.89f})wall(m,20.94f,y,21.3f,y+.06f,f,f+2.5f,20);wall(m,20.94f,5.f,21.3f,8.15f,f+2.44f,f+2.5f,20);
+ wall(m,22.84f,5.f,22.9f,7.95f,f,f+2.5f,21);wall(m,21.3f,5.f,22.84f,7.95f,f,f+.006f,23);          // the pocket's plaster back, her square of carpet
+ {const float b=f-m.layers.front().elevation;
+  m.fixtures.push_back({24,{22.4f,6.55f},b,1.4f,.7f,.75f,anW,true});
+  m.fixtures.push_back({26,{21.62f,6.7f},b,.55f,.55f,.95f,anW+.2f,true});}
+ kit::prop(m,model::crt_monitor,22.55f,6.45f,f+.75f,.42f,.4f,.38f,anW);kit::prop(m,model::keyboard,22.22f,6.45f,f+.75f,.45f,.16f,.03f,anW);
+ terminal(m,{22.4f,7.12f},"LAB 4 / DIRECT LINE: SECURITY DESK 2","7 DRAFTS NOT SENT. 1 QUEUED 02:19: CARRIER LOST.","E: OPEN THE DRAFTS.",0,stateId("anl_l4_drafts"));
+ kit::prop(m,model::mug,22.2f,6.1f,f+.75f,.12f,.12f,.1f,0);
+ const int deskLamp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,22.55f,5.98f,f+.75f,.18f,.4f,.52f,anW);
+ m.lights.push_back(lamp({22.45f,6.f},f+1.2f,.6f,3.6f,3000,0,WorldLightMount::Bare));m.lights.back().prop=deskLamp;
+ {auto l=lamp({22.45f,6.f},f+1.22f,.7f,4.5f,2900,0,WorldLightMount::Bare);l.prop=deskLamp;l.enabledState=stateId("anl_l4_gutter");l.period=.16f;l.onTime=.09f;m.lights.push_back(l);}   // the gutter, after her last draft
+ anFix(m,model::pendant_lamp,21.95f,6.5f,f+2.1f,.5f,.5f,.34f,0,false);m.pipes.push_back({{21.95f,6.5f},{21.95f,6.5f},f+2.44f,.016f,f+2.5f,6});
+ m.lights.push_back(lamp({21.95f,6.5f},f+2.f,.42f,4.5f,3100,0,WorldLightMount::Bare));            // the lamp over her desk, left on
+ anModel(m,model::lab_notice_board,22.86f,6.5f,f+1.25f,anW,false);
+ anModel(m,model::art_painting_5,22.87f,5.55f,f+1.45f,anW,false,.5f);
+ kit::prop(m,model::prop_cardboard_box_open,21.45f,5.5f,f,.6f,.6f,.6f,.25f);                    // her box: she asked to fetch it
+ kit::prop(m,model::item_dosimeter,21.6f,7.6f,f,.31f,.146f,.066f,.6f);
+ // her drafts: the prologue's chat from this side, then the session ends
+ dgSequence(m,"anl_l4_drafts","anl_l4_gutter",48000,39500);
+ {const Vec2 d{19.2f,5.6f};const float z=f+1.f;const char* t="anl_l4_drafts";
+  dgSay(m,t,0,Sound::Exit,d,z,"SECURITY DESK 2 / 7 DRAFTS NOT SENT / 1 QUEUED",.2f,1.1f);
+  dgSay(m,t,2500,Sound::Exit,d,z,"LAB 4 (02:03, NOT SENT): the lift. tell me you made the lift.",.35f,1.4f);
+  dgSay(m,t,7000,Sound::Exit,d,z,"LAB 4 (02:06, NOT SENT): every cell on my bench moved at 01:58. the face sensor on 9 moved with them. same instant.",.35f,1.4f);
+  dgSay(m,t,12000,Sound::Exit,d,z,"LAB 4 (02:08, NOT SENT): nothing travels that fast. it isn't a signal. it's one thing down there, and we cut pieces off it.",.35f,1.4f);
+  dgSay(m,t,17500,Sound::Exit,d,z,"LAB 4 (02:11, NOT SENT): i put my hand on the array to steady it. it read me like a cell.",.35f,1.4f);
+  dgSay(m,t,23000,Sound::Exit,d,z,"LAB 4 (02:16, NOT SENT): they reprinted my band. red. nobody will say what red means. i feel fine. that's the part i don't like.",.35f,1.4f);
+  dgSay(m,t,28500,Sound::Exit,d,z,"LAB 4 (02:19, QUEUED): if you're alive don't come down to the labs. go up.",.35f,1.4f);
+  dgSay(m,t,33500,Sound::Exit,d,z,"LAB 4 (02:22, NOT SENT): field measurement's dog is still in my pen. it has never looked at me once. it watches my lamps.",.35f,1.4f);
+  dgSay(m,t,37500,Sound::Machine,{19.8f,5.25f},f+1.f,"",.2f);
+  dgSay(m,t,39000,Sound::Exit,d,z,"LAB 4 (02:55, NOT SENT): hale's giving me two minutes for my things. if you come down anyway, keep your light still. it goes to the light, not to you. i'm sorry about the lift",.35f,1.4f);
+  dgSay(m,t,45500,Sound::Exit,d,z,"SESSION ENDED 02:56 / LOGGED OUT BY I.I.",.2f,1.1f);}
+ // the drive rack, its drives pulled onto the floor; her printout on the board
+ anModel(m,model::anl_switch_cabinet_2,19.3f,5.43f,f,anS,true);wall(m,18.5f,5.f,20.1f,5.86f,f+2.7f,roof,30);
+ for(auto [x,y,yaw]:{std::tuple{18.7f,6.35f,.3f},{19.55f,6.5f,-.2f},{20.35f,6.25f,1.2f}})propPose(m,model::office_pc_tower,x,y,f,.26f,.61f,.61f,yaw,0,kPi*.5f);
+ anModel(m,model::lab_notice_board,22.86f,9.4f,f+1.3f,anW,false);
+ taped(m,{22.89f,10.4f},f+1.45f,anW,Readable::Note,"ARRAY / 01:58:04 / PRINTOUT","DEEP FACE SENSOR (LEVEL 9). CELL BENCH, 14 CELLS. CELL STORE, INSTRUMENTATION. ONE TRACE.",
+  "zero delay over 900 m. nothing travelled. it was already here.");
+ // the cut cell: refined ore, opened, and what it was cut from looking back
+ anModel(m,model::lab_clean_bench,22.3f,11.6f,f,anW,true);
+ kit::prop(m,model::lab_microscope,22.3f,11.2f,f+.81f,.18f,.22f,.29f,anW);
+ kit::prop(m,model::anl_cell_core,22.32f,11.62f,f+.81f,.2f,.2f,.3f,0);
+ kit::prop(m,model::lab_anomaly_relic,22.3f,11.98f,f+.81f,.125f,.1f,.1f,.6f);
+ kit::prop(m,model::med_specimen_jar,22.42f,11.4f,f+.81f,.146f,.146f,.245f,0);
+ m.lights.push_back(lamp({22.2f,11.6f},f+1.15f,.5f,4.5f,9000,-.4f,WorldLightMount::Bare,0,false,{.62f,.35f,1.f}));   // the cut cell: the violet the hall sees through the glass
+ dgPaper(m,{22.18f,11.85f},.81f,anW,Readable::Letter,"ARRAY / CONTACT READ / 02:10","PALM CONTACT, ANALYST'S OWN HAND: 0.11 CELL EQ. TIER 2 STOPS AT 0.05.",
+  "MIRRORED TO I.I. AS TAKEN. 02:15 REPLY: SCREENING. BAND RED. NO NAME GIVEN.");
+ taped(m,{22.89f,11.6f},f+1.4f,anW,Readable::Sticky,"ON THE CUT CELL","same.","");
+ // the pen in the south-west corner, its gate open: R-47 was lent up from Field Measurement
+ anFix(m,model::med_cell_bars,16.65f,12.1f,f,2.5f,.04f,2.4f,0,false);wall(m,15.4f,12.07f,17.9f,12.13f,f,f+2.4f,30);
+ anFix(m,model::med_cell_bars,18.91f,11.38f,f+.02f,2.5f,.04f,2.4f,.62f,false);                                           // the gate, thrown open off its hinge
+ wall(m,15.2f,12.1f,17.9f,14.8f,f+2.4f,f+2.44f,8);wall(m,15.2f,12.05f,17.95f,14.8f,f+2.44f,roof,30);
+ wall(m,15.3f,12.2f,17.8f,14.7f,f,f+.004f,8);kit::prop(m,model::ind_barrel,15.7f,14.3f,f,.4f);
+ // her bench rig: four stakes on the field lamp bus, dead until Field Measurement closes it
+ for(int i=0;i<4;++i)dgStake(m,{21.6f-i*1.8f,10.f},f,f+1.5f,"anl_l4_rig",4.8f,1.2f,4.8f-1.2f*i);
+ terminal(m,{17.f,5.55f},"BENCH RIG / WALKING LAMPS","FOUR STAKES ON THE FIELD LAMP BUS. BUS OPENED AT FIELD MEASUREMENT 02:24.","E / WALK THE LAMPS. E AGAIN / STOP THEM.",0,stateId("anl_l4_rig"),stateId("anl_fm_bus"));
+ m.terminals.back().toggleState=true;
+ wall(m,16.5f,5.17f,17.45f,5.93f,f+1.5f,roof,30);
+ taped(m,{15.21f,7.4f},f+1.5f,anE,Readable::Sticky,"ON THE RIG","it follows light that walks and stops where the light stops.","it has never once looked at me.");
+ // Hale, by the service door, his hand lamp still burning beside him; the disk on him
+ dgBody(m,"anl_diag_clock",ActorVisual::CleanupMedic,{20.1f,14.1f},f,kPi*.5f);
+ wall(m,19.3f,13.3f,21.f,14.7f,f+.004f,f+.01f,16);wall(m,20.7f,14.78f,21.3f,14.8f,f+.9f,f+1.5f,16);
+ kit::prop(m,model::item_walkie,19.6f,13.6f,f,.11f,.38f,.05f,1.9f);
+ const int haleLamp=int(m.clutterSpawns.size());propPose(m,model::mine_cage_lamp,19.3f,13.4f,f,.21f,.2f,.36f,.5f,kPi*.5f,0);
+ m.lights.push_back(lamp({19.3f,13.4f},f+.25f,.75f,5.f,5600,0,WorldLightMount::Bare));m.lights.back().prop=haleLamp;
+ dgPaper(m,{20.9f,13.8f},0,.4f,Readable::Letter,"DETAIL 4 / ORDER 03:20","R. HALE: RETURN TO LAB 4 BY THE SERVICE DOOR. CLEAR THE ANALYST'S DESK. ALL MEDIA TO I.I. BY HAND. DO NOT READ IT.",
+  "THE DIAGNOSTICS DETAIL WILL NOT GO IN. YOU HAVE THE DISK.");
+ dgPaper(m,{20.5f,14.4f},0,-.3f,Readable::Letter,"WARD C OVERRIDE / R. HALE","DEPTHWORKS MEDICAL. EVERY MEDICAL LOCK ANSWERS IT: THE SERVICE DOOR, THE WARD, SCREENING SOUTH.","E / TAKE THE DISK.",stateId("med_override"));
+ taped(m,{19.25f,14.79f},f+1.45f,anN,Readable::Note,"ESCORT / LAB 4 / 02:55","COLLECTED FROM SCREENING 02:50. VIA LAB 4 FOR HER THINGS, AS SHE ASKED. THROUGH TO WARD C.",
+  "SHE LEFT HER BOX ON THE DESK. I SAID I WOULD BRING IT DOWN. -R. HALE");
+ anModel(m,model::lab_id_scanner,21.f,14.78f,f+1.2f,anN,false);
+ taped(m,{21.5f,14.79f},f+1.2f,anN,Readable::Note,"WARD C SERVICE DOOR / READER","MEDICAL OVERRIDE ONLY. EVERY OPENING LOGGED TO I.I.","LAST: 03:24 IN, R. HALE.");
+ wallSign(m,20.f,14.75f,f+2.62f,"WARD C / SERVICE DOOR","MEDICAL OVERRIDE ONLY",1.8f,anN);
+ m.pickupSpawns.push_back({{18.9f,14.4f},PickupKind::HandgunAmmo,f});
+ m.lights.push_back(lamp({22.85f,13.4f},f+2.4f,.09f,3.5f,1000,-.5f,WorldLightMount::Wall,kPi,true,{1.f,.12f,.06f}));
+ // --- The service corridor to Ward C: the way they brought her --------------------------------------
+ wall(m,14.2f,19.f,22.9f,22.9f,f,roof,3);
+ for(float y:{16.6f,17.4f})floorLine(m,14.2f,y,24.f,y+.08f,f,8);
+ {auto l=inTube(19.f,17.f,roof,.4f,5.f,5000,0,0,kPi*.5f);l.enabledState=stateId("med_blackout");l.invert=true;m.lights.push_back(l);}
+ m.lights.push_back(lamp({14.22f,17.f},f+2.4f,.12f,4.f,1000,-.5f,WorldLightMount::Wall,0,true,{1.f,.12f,.06f}));
+ extinguisher(m,14.2f,16.2f,f,anE);
+ dgSequence(m,"anl_l4_door_radio","anl_l4_door_radio_done",15000,14000,18.5f,15.1f,21.5f,16.8f);
+ {const Vec2 w{19.6f,13.6f};const float z=f+.2f;
+  dgSay(m,"anl_l4_door_radio",900,Sound::RadioSquelch,w,z,"",.5f);
+  dgSay(m,"anl_l4_door_radio",1300,Sound::RadioSquelch,w,z,"INVESTIGATOR (RADIO): Lab 4 service door. Opened on the Ward C disk.",.2f);
+  dgSay(m,"anl_l4_door_radio",5600,Sound::RadioSquelch,w,z,"INVESTIGATOR (RADIO): Detail four is lost. So it is not Detail four.",.2f);
+  dgSay(m,"anl_l4_door_radio",10200,Sound::RadioSquelch,w,z,"INVESTIGATOR (RADIO): Diagnostics detail. Whoever carries that disk is not one of ours. Find them.",.2f);}
+ // --- The south passage to the Test Complex: the back door, sealed from the far side ------------------
+ wall(m,9.8f,15.f,10.f,22.9f,f,roof,3);wall(m,14.f,15.f,14.2f,22.9f,f,roof,3);
+ {Door d{10.f,14.f,19.1f,0};d.requireState=stateId("res_lab_unsealed");m.doors.push_back(d);}
+ wall(m,10.f,19.f,14.f,19.2f,f+2.6f,roof,3);
+ m.lights.push_back(lamp({12.f,18.9f},f+2.95f,.3f,4.f,1000,-.5f,WorldLightMount::Wall,-kPi*.5f,true,{1.f,.12f,.06f}));
+ taped(m,{10.01f,18.2f},f+1.45f,anE,Readable::Note,"BACK DOOR / RESONANCE LAB","SEALED FROM THEIR SIDE AT 01:58. IT OPENS WHEN THEY OPEN THEIRS.","IF YOU ARE READING THIS FROM IN HERE, THEY HAVEN'T.");
+ wallSign(m,12.f,18.94f,f+2.65f,"TEST COMPLEX PASSAGE","SEALED FROM THE RESONANCE LABORATORY SIDE",2.4f,anN);
+ m.pickupSpawns.push_back({{13.4f,17.6f},PickupKind::Ammo,f});
+ m.lights.push_back(inTube(12.f,21.f,roof,.3f,4.5f,5000,0,.2f,kPi*.5f));
+ // --- Array Power: the breakers left open ------------------------------------------------------------
+ for(float x:{2.6f,4.6f,6.6f}){anModel(m,model::anl_switch_cabinet_2,x,22.5f,f,anN,true);anModel(m,model::lab_knife_switch,x+.4f,22.06f,f+1.3f,anN,false);}
+ wall(m,1.8f,22.05f,7.4f,22.9f,f+2.7f,roof,30);
+ taped(m,{1.01f,18.6f},f+1.45f,anE,Readable::Note,"ARRAY POWER","MAINS ISOLATED 02:27. ARRAYS 1-6 LOGGING ON NOTHING.","BREAKERS LEFT OPEN. I AM NOT CLOSING THEM TO SEE WHAT HAPPENS.");
+ {auto l=inTube(5.f,19.f,roof,.35f,5.f,4000,0,.25f);m.lights.push_back(l);}
+ m.pickupSpawns.push_back({{8.8f,16.f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{1.8f,21.6f},PickupKind::Health,f});
+ // --- Names and air: Lab 4 a shade violet and thick; the hall dark -----------------------------------
+ zone(m,"ENERGY DIAGNOSTICS / LAB 4",15.2f,5.f,22.9f,14.8f,-1000,1000,{.13f,.11f,.17f,.018f});
+ zone(m,"ENERGY DIAGNOSTICS / SERVICE CORRIDOR",14.2f,15.f,24.f,19.f,-1000,1000,{.12f,.12f,.13f,.012f});
+ zone(m,"ENERGY DIAGNOSTICS / TEST COMPLEX PASSAGE",10.f,15.f,14.f,24.f);
+ zone(m,"ENERGY DIAGNOSTICS / ARRAY POWER",1.f,15.f,9.8f,23.f);
+ zone(m,"ENERGY DIAGNOSTICS / PACKING ROOM",1.f,1.f,9.f,4.8f);
+ zone(m,"ENERGY DIAGNOSTICS / ANALYSTS",15.f,1.f,22.9f,4.8f);
+ zone(m,"ENERGY DIAGNOSTICS / VESTIBULE",9.2f,0.f,14.8f,4.8f);
+ zone(m,"ENERGY DIAGNOSTICS / ARRAY HALL",0.f,5.f,15.f,14.8f,-1000,1000,{.1f,.11f,.13f,.014f});
+ zone(m,"ENERGY DIAGNOSTICS",0,0,24,24);
+ recessedFittings(m);freightFinish(m,-1);
+ return p;
+}
+// FIELD MEASUREMENT (manifest 54). Where the plant's meters were calibrated, until the
+// department found its dogs read the ore better than the meters did. The calibration pan
+// is a flooded basin in five metres of dark; R-46 was kept in it, R-47 lent to Lab 4 at
+// 01:50. Dunne went in for his second meter at 02:10 with the torch in his teeth. The
+// gallery glass held. Across the pan, Chamber 3 holds the field lamp bus that feeds Lab 4's
+// bench rig. The airlock to Energy Diagnostics waits on Chemistry's purge.
+// Route: N from Instrumentation -> the corridor (kit room W, techs' office E) -> the
+// gallery -> (the pan door: round the dry edge to Chamber 3 and the bus) -> the airlock,
+// once purged -> E into Lab 4's array hall, behind the detail.
+std::shared_ptr<const Map> makeFieldMeasurement(){
+ auto p=std::make_shared<Map>();auto& m=*p;
+ m.name=CampaignMapNames[84];m.definition=CampaignChunks[84];m.definition.ambient=.14f;
+ m.definition.playerStart={8.f,1.6f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=kPi*.5f;
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ m.definition.haze={.12f,.13f,.15f,.01f};
+ const float f=-12,roof=m.definition.ceiling;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'N',6.f,10.f,f,false,0});
+ openEdge(m,{'E',9.f,14.f,f,false,0});
+ machineryClock(m,"anl_fm_clock",60000);
+ for(auto [x1,y1,x2,y2]:{std::tuple{1.f,.9f,6.f,1.f},{10.f,.9f,23.f,1.f},{.9f,1.f,1.f,23.f},{22.9f,1.f,23.f,9.f},{22.9f,14.f,23.f,23.f},{1.f,22.9f,23.f,23.f}})wall(m,x1,y1,x2,y2,f,roof,3);
+ // --- The north band: the corridor in from Instrumentation, the kit room west, the techs' office east ---
+ wall(m,5.8f,1.f,6.f,2.2f,f,roof,3);doorwayY(m,2.2f,3.4f,5.8f,6.f,f,roof);wall(m,5.8f,3.4f,6.f,5.f,f,roof,3);
+ wall(m,10.f,1.f,10.2f,2.2f,f,roof,3);doorwayY(m,2.2f,3.4f,10.f,10.2f,f,roof);wall(m,10.f,3.4f,10.2f,5.f,f,roof,3);
+ wall(m,1.f,4.8f,5.8f,5.f,f,roof,3);wall(m,10.2f,4.8f,22.9f,5.f,f,roof,3);
+ wall(m,6.f,4.8f,10.f,5.f,f+2.6f,roof,3);                                                   // the corridor's mouth onto the gallery
+ wall(m,6.f,0.f,10.f,4.8f,f+3.5f,roof,3);ceilingGrid(m,6.f,0.f,10.f,4.8f,f+3.5f);
+ wall(m,1.f,1.f,5.8f,4.8f,f+3.f,roof,3);ceilingGrid(m,1.f,1.f,5.8f,4.8f,f+3.f);
+ wall(m,10.2f,1.f,22.9f,4.8f,f+3.f,roof,3);ceilingGrid(m,10.2f,1.f,22.9f,4.8f,f+3.f);
+ m.lights.push_back(inTube(8.f,2.4f,f+3.5f,.55f,6.f,4400,.02f,0,kPi*.5f));
+ // the kit room: the lockers, the sign-out counter, a gap in the dosimeters that is hers
+ for(int i=0;i<3;++i)anFix(m,model::psx_locker,1.6f+i*.86f,1.33f,f,.64f,.85f,2.42f,-kPi*.5f,true);
+ wall(m,1.05f,1.f,3.8f,1.7f,f+2.42f,f+3.f,30);
+ inCounter(m,1.4f,4.2f,5.6f,4.8f,f,.9f);
+ for(float x:{1.75f,2.15f,4.7f})kit::prop(m,model::lab_field_meter,x,4.5f,f+.9f,.25f,.33f,.15f,x);
+ for(float x:{5.05f,5.3f})kit::prop(m,model::item_walkie,x,4.5f,f+.9f,.11f,.38f,.05f,.1f);
+ for(float x:{2.6f,2.95f,3.65f,4.f})kit::prop(m,model::item_dosimeter,x,4.62f,f+.9f,.31f,.146f,.066f,kPi*.5f);
+ dgPaper(m,{3.3f,4.4f},.9f,kPi,Readable::Note,"FIELD KIT / SIGN-OUT","01:50 LAB 4: R-47 ON LOAN FOR THE BENCH TEST. 1 HAND LAMP. IN HER HAND: BACK BY THREE.",
+  "02:05 DUNNE: 2 METERS, 1 RECORDER, CHASE RIG KEY. NOTHING SIGNED BACK IN.");
+ anModel(m,model::lab_notice_board,1.04f,2.85f,f+1.25f,anE,false);
+ taped(m,{1.01f,3.75f},f+1.45f,anE,Readable::Note,"BODY SURVEY / THIS WEEK","LAB 4 (ENERGY DIAG.): MON 0.03, WED 0.04, FRI 0.06 CELL EQ. TIER 2 STOPS AT 0.05. SCREENING DUE.",
+  "PER I.I. FORMAT: ALL STAFF FIELDS IN CELL EQUIVALENTS. NAMES ON THE COPY THAT GOES UP ONLY.");
+ m.lights.push_back(inTube(3.4f,2.9f,f+3.f,.5f,5.f,4200,0));
+ m.pickupSpawns.push_back({{2.f,3.6f},PickupKind::Health,f});
+ // the techs' office: the survey mirrored up to I.I. as it was taken
+ workstation(m,13.f,2.35f,f,1,3);workstation(m,16.f,2.35f,f,1,1);
+ dgDeskTerminal(m,20.6f,2.35f,f,1,0,"SURVEY / MIRROR TO I.I.","EVERY READING COPIED TO INTERNAL INVESTIGATIONS AS TAKEN. 214 STAFF ON FILE.","03:02 FILE CALLED UP IN FULL BY I.I. 03:02 LOCAL COPY DELETED.");
+ anModel(m,model::lab_notice_board,18.2f,1.04f,f+1.3f,anS,false);
+ taped(m,{19.3f,1.01f},f+1.45f,anS,Readable::Note,"PAN MAP / 01:50","R-46 TURNS TO A LIGHT BEFORE THE METERS DO. ONLY A LIGHT THAT MOVES. THE PLANT'S OWN LAMPS IT IGNORES.",
+  "WE STOPPED CALIBRATING THE METERS. WE CALIBRATE THE DOG.");
+ paperDrift(m,10.6f,3.f,22.6f,4.6f,f,6,8401);
+ m.lights.push_back(inTube(16.5f,2.9f,f+3.f,.5f,5.f,4200,0));
+ m.pickupSpawns.push_back({{22.2f,4.2f},PickupKind::Ammo,f});
+ // --- The gallery: the glass onto the pan, Dunne's desk facing it, the lamp test console ------------
+ wall(m,1.f,5.f,22.9f,8.8f,f+3.4f,roof,3);ceilingGrid(m,1.f,5.f,22.9f,8.8f,f+3.4f);
+ wall(m,1.f,8.8f,2.2f,9.f,f,roof,3);
+ glazing(m,2.2f,8.8f,15.f,9.f,f,roof,3,.95f,2.4f,true);                                     // protective: it holds
+ wall(m,15.f,8.8f,15.4f,9.f,f,roof,3);
+ swingDoor(m,15.4f,16.6f,8.9f,f,roof,1);                                                     // the pan door: never locked
+ wall(m,16.6f,8.8f,19.4f,9.f,f,roof,3);
+ {const int d=swingDoor(m,19.4f,20.6f,8.9f,f,roof,1);m.doors[size_t(d)].requireState=stateId("lab_chem_seal");}   // the airlock, held on Chemistry's reading
+ wall(m,20.6f,8.8f,22.9f,9.f,f,roof,3);
+ wallSign(m,20.f,8.74f,f+2.62f,"ZONE 3 AIRLOCK","HELD ON THE CHEMISTRY READING. PURGE AT INSTRUMENTATION",2.4f,anN);
+ wallSign(m,16.f,8.74f,f+2.62f,"CALIBRATION PAN","LIVE WATER. NO LIGHTS IN THE PAN",1.9f,anN);
+ taped(m,{15.2f,8.79f},f+1.45f,anN,Readable::Note,"PAN ENTRY / 02:10","DUNNE WENT IN FOR HIS SECOND METER WITH THE TORCH IN HIS TEETH. R-46 IS OUT OF ITS PEN.",
+  "NOBODY GOES IN. IF YOU HAVE TO, GO DARK AND GO SLOW. IT HEARS BOOTS.");
+ // Dunne's desk: he faced the glass. His hand lamp, the recorder, the last tape in the machine
+ dgDeskTerminal(m,9.5f,7.6f,f,1,1,"FIELD RECORDER / TAPE 46-11","02:02 / DUNNE. LAST TAPE IN THE MACHINE.","E / PLAY.",stateId("anl_fm_tape"));
+ wall(m,8.75f,6.6f,10.25f,8.f,f+1.55f,f+3.4f,30);
+ const int handLamp=int(m.clutterSpawns.size());kit::prop(m,model::mine_cage_lamp,9.98f,7.55f,f+.75f,.21f,.2f,.36f,.4f);
+ {auto l=lamp({9.98f,7.55f},f+1.f,.7f,5.f,5600,0,WorldLightMount::Bare);l.prop=handLamp;l.enabledState=stateId("anl_fm_desk");l.period=.16f;l.onTime=.09f;m.lights.push_back(l);}
+ dgSequence(m,"anl_fm_tape","anl_fm_desk",32000,17000);                                    // the hand lamp stutters where the tape says it did
+ {const Vec2 d{9.6f,7.8f};const float z=f+1.f;const char* t="anl_fm_tape";
+  dgSay(m,t,400,Sound::Metal1,d,z,"TAPE 46-11. 02:02. DUNNE, FIELD MEASUREMENT. R-46 IN THE PAN. R-47 IS UP IN LAB 4 FOR HER TEST.",.15f);
+  dgSay(m,t,5800,Sound::Metal1,d,z,"DUNNE (TAPE): West lamps walking.",.15f);
+  dgSay(m,t,8600,Sound::Metal1,d,z,"DUNNE (TAPE): It's up. It's going with them. Like a dog after a ball.",.15f);
+  dgSay(m,t,14000,Sound::Metal1,d,z,"DUNNE (TAPE): Lamps off. It stops where the light stopped. It doesn't look for me.",.15f);
+  dgSay(m,t,16400,Sound::Metal1,d,z,"DUNNE (TAPE): Hand lamp on. Two seconds, for the log.",.15f);
+  dgSay(m,t,19300,Sound::Metal1,d,z,"DUNNE (TAPE): Off. Off.",.15f);
+  dgSay(m,t,22500,Sound::Metal1,d,z,"DUNNE (TAPE): It came to the glass. It's sitting where my hand was.",.15f);
+  dgSay(m,t,27500,Sound::Metal1,d,z,"DUNNE (TAPE): Note for Lab 4. Her rule holds. It doesn't see us. It sees what we carry.",.15f);
+  dgSay(m,t,31000,Sound::Machine,d,z,"TAPE 46-11: END.",.2f);}
+ // the lamp test console: runs the west walk by hand
+ wall(m,12.6f,5.f,14.2f,5.03f,f+.9f,f+1.7f,20);anModel(m,model::lab_control_board,13.4f,5.06f,f+1.f,anS,false);
+ terminal(m,{13.4f,5.55f},"FIELD LAMPS / WEST WALK","CHASE RIG, STAKES 1-4. THE LIGHT WALKS THE WEST SIDE OF THE PAN AND STARTS AGAIN.","E / RUN. E AGAIN / STOP.",0,stateId("anl_fm_west"));
+ m.terminals.back().toggleState=true;
+ wall(m,12.9f,5.17f,13.85f,5.93f,f+1.5f,f+3.4f,30);
+ m.lights.push_back(inTube(5.f,7.f,f+3.4f,.3f,5.f,4000,0,.1f));m.lights.push_back(inTube(19.f,7.f,f+3.4f,.3f,5.f,4000,0));
+ // --- The calibration pan: five metres of dark over live water; no working light of its own ----------
+ m.waterVolumes.push_back({5.6f,11.6f,14.4f,20.6f,f-.2f,f-.04f});
+ // the basin's coping: a raised concrete lip with a hazard nosing, and the grated walk round it
+ for(auto [x1,y1,x2,y2]:{std::tuple{5.3f,11.3f,14.7f,11.6f},{5.3f,20.6f,14.7f,20.9f},{5.3f,11.6f,5.6f,20.6f},{14.4f,11.6f,14.7f,20.6f}}){
+  wall(m,x1,y1,x2,y2,f,f+.22f,15);wall(m,x1,y1,x2,y2,f+.22f,f+.24f,13);}
+ for(auto [x1,y1,x2,y2]:{std::tuple{4.3f,10.3f,15.7f,11.3f},{4.3f,20.9f,15.7f,21.9f},{4.3f,11.3f,5.3f,20.9f},{14.7f,11.3f,15.7f,20.9f}})wall(m,x1,y1,x2,y2,f,f+.02f,8);
+ // the walk's inner rail along the coping, open opposite the stand and at the dry edge
+ for(auto [x1,y1,x2,y2]:{std::tuple{5.3f,11.38f,9.1f,11.46f},{10.9f,11.38f,14.7f,11.46f},{5.3f,20.74f,14.7f,20.82f},{5.38f,11.3f,5.46f,20.9f},{14.54f,11.3f,14.62f,15.2f},{14.54f,16.8f,14.62f,20.9f}})
+  guardRail(m,x1,y1,x2,y2,f+.24f);
+ hazard(m,Hazard::Kind::Anomaly,5.6f,11.6f,14.4f,20.6f,f-.3f,f+2.2f,3.f);
+ anHum(m,"anl_fm_hum",5.4f,11.4f,14.6f,20.8f,f,f+2.5f,.5f);
+ for(float x:{3.f,9.f,15.f})anModel(m,model::pwr_vent_grille,x,22.95f,f+3.6f,anN,false);
+ servicePipe(m,{1.f,9.4f},{17.8f,9.4f},roof-.4f,.08f,3);
+ // the reference stand, across the water from the gallery glass: a steel platform, the bench, four
+ // charged cells and the mast that holds the reference lamp still over the pan. Her field book on it.
+ wall(m,8.9f,17.1f,11.1f,18.7f,f,f+.42f,8);for(auto [y1,y2]:{std::pair{17.1f,17.2f},{18.6f,18.7f}})wall(m,8.9f,y1,11.1f,y2,f+.42f,f+.44f,13);
+ anModel(m,model::lab_clean_bench,10.f,17.6f,f+.62f,anN,true);                                // fixtures in the pan stand on its bottom, .2 under the floor
+ for(int i=0;i<4;++i)kit::prop(m,model::anl_cell_charged,9.6f+i*.27f,17.6f,f+1.23f,.22f,.2f,.41f,i*.7f);
+ steelColumn(m,10.f,18.42f,f+.42f,f+3.9f);
+ wall(m,8.2f,18.3f,11.8f,18.54f,f+3.62f,f+3.84f,18);                                           // the crossarm
+ for(float x:{8.4f,11.6f}){anFix(m,model::mine_cage_lamp,x,18.42f,f+3.24f,.21f,.2f,.36f,0,false);}
+ m.lights.push_back(lamp({10.f,17.9f},f+3.f,.95f,9.f,9500,-.4f,WorldLightMount::Bare,0,true,{.62f,.35f,1.f}));   // the reference lamp: still light, the safe kind
+ for(float x:{8.4f,11.6f})m.lights.push_back(lamp({x,18.3f},f+3.1f,.3f,5.f,9500,-.4f,WorldLightMount::Bare,0,false,{.62f,.35f,1.f}));
+ for(auto [x,y]:{std::pair{6.f,12.f},{14.f,12.f},{6.f,20.2f},{14.f,20.2f}})m.lights.push_back(lamp({x,y},f+.12f,.22f,3.2f,9500,-.4f,WorldLightMount::Bare,0,false,{.55f,.4f,1.f}));   // the black water, lit from its rim
+ dgPaper(m,{10.35f,17.45f},1.43f,kPi,Readable::Letter,"FIELD BOOK / LAB 4","light that moves draws the big ones. still light does nothing. dark does nothing. they don't see us, only what we carry.",
+  "so the plant's lamps are safe and our torches aren't. lamps that walk would move them without a hand on them. ask dunne for stakes.");
+ // the dry edge east of the pan, from the pan door to the bus walk: two red battery lamps mark it
+ for(float y:{12.2f,16.2f})m.lights.push_back(lamp({17.76f,y},f+2.4f,.28f,5.5f,1000,-.5f,WorldLightMount::Wall,kPi,true,{1.f,.12f,.06f}));
+ // the west walk: four stakes up the west edge, the light stepping north about a second a stake
+ for(int i=0;i<4;++i)dgStake(m,{3.2f,21.8f-i*3.6f},f,f+1.66f,"anl_fm_west",4.f,1.f,4.f-float(i));
+ // Dunne, where he went down in the south-west corner; his torch rolled off toward the water
+ dgBody(m,"anl_fm_clock",ActorVisual::LabTech,{4.4f,20.9f},f,.3f);
+ wall(m,3.9f,20.4f,5.1f,21.5f,f+.021f,f+.026f,16);
+ propPose(m,model::mine_cage_lamp,5.2f,21.6f,f,.21f,.2f,.36f,1.1f,kPi*.5f,0);
+ kit::prop(m,model::lab_field_meter,3.7f,21.9f,f,.25f,.33f,.15f,2.2f);
+ m.pickupSpawns.push_back({{3.4f,22.2f},PickupKind::HandgunAmmo,f});m.pickupSpawns.push_back({{5.6f,22.3f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{16.6f,10.2f},PickupKind::Health,f});
+ // its east wall: the airlock's window, the bus walk, Chamber 3's window
+ wall(m,17.8f,9.f,18.f,9.6f,f,roof,3);glazing(m,17.8f,9.6f,18.f,13.4f,f,roof,3,.95f,2.4f,true);wall(m,17.8f,13.4f,18.f,14.2f,f,roof,3);
+ wall(m,17.8f,15.4f,18.f,17.f,f,roof,8);glazing(m,17.8f,17.f,18.f,20.6f,f,roof,8,1.f,2.f,true);wall(m,17.8f,20.6f,18.f,22.9f,f,roof,8);
+ // --- The airlock: open east to Energy Diagnostics' hall, held from the gallery -------------------------
+ wall(m,18.f,14.f,22.9f,14.2f,f,roof,3);
+ wall(m,18.f,9.f,24.f,14.f,f+3.f,roof,3);ceilingGrid(m,18.f,9.f,24.f,14.f,f+3.f);
+ for(float y:{9.5f,13.5f})floorLine(m,18.2f,y,22.8f,y+.1f,f,13);
+ wall(m,18.2f,9.6f,22.8f,13.4f,f,f+.004f,8);
+ {auto l=inTube(20.5f,11.5f,f+3.f,.45f,5.f,3200,0);l.gel={1.f,.6f,.2f};m.lights.push_back(l);}
+ // --- The bus walk and Chamber 3: the readings never stopped ----------------------------------------
+ wallDoor(m,18.f,22.9f,15.4f,15.6f,19.6f,20.8f,f,roof,1);
+ wall(m,18.f,15.6f,22.9f,22.9f,f+3.f,roof,8);inDeadTube(m,20.4f,19.f,f+3.f);
+ for(float y:{18.6f,19.f})anModel(m,model::lab_knife_switch,22.85f,y,f+1.5f,anW,false);
+ anModel(m,model::pwr_ammeter_box,22.85f,19.6f,f+1.5f,anW,false);
+ terminal(m,{22.3f,21.f},"FIELD LAMP BUS / CHAMBER 3 PANEL","BUS OPENED BY HAND 02:24 WHEN MEDICAL TOOK LAB 4. HER BENCH RIG DEAD SINCE.","CLOSE TO RESTORE: ENERGY DIAGNOSTICS, LAB 4 BENCH RIG.",0,stateId("anl_fm_bus"));
+ wall(m,21.8f,20.6f,22.8f,21.4f,f+1.5f,f+3.f,30);
+ anModel(m,model::med_crash_cart,21.f,16.4f,f,anS,true);kit::prop(m,model::lab_scope_monitor,21.f,16.4f,f+1.f,.47f,.34f,.45f,anS);
+ wall(m,20.6f,16.1f,21.4f,16.7f,f+1.45f,f+3.f,30);
+ dgPaper(m,{19.6f,16.2f},0,.3f,Readable::Letter,"CHAMBER 3 / LIVE READING","READING RISING SINCE 01:58. MAINS ISOLATED 02:40. READING STILL RISING.","THE NEEDLE LEANS TOWARD WHOEVER WALKS PAST WITH A TORCH.");
+ anModel(m,model::lab_clean_bench,20.2f,22.4f,f,anN,true);
+ taped(m,{18.01f,21.8f},f+1.4f,anE,Readable::Sticky,"CHAMBER 3 / SIT STILL","AN HOUR AND A HALF IN HERE WITH THE LIGHTS OFF. IT CAME TO THE WINDOW ONCE, WHEN I CHECKED MY WATCH.","THE WATCH HAS A LIGHT. I HAVE TAKEN IT OFF.");
+ m.lights.push_back(lamp({21.6f,15.62f},f+2.4f,.12f,3.f,1000,-.5f,WorldLightMount::Wall,kPi*.5f,true,{1.f,.12f,.06f}));
+ m.pickupSpawns.push_back({{22.2f,22.2f},PickupKind::HandgunAmmo,f});m.pickupSpawns.push_back({{18.8f,22.4f},PickupKind::Health,f});
+ // --- Names and air: the pan's air thick and cold, the airlock's amber ---------------------------------
+ zone(m,"FIELD MEASUREMENT / CALIBRATION PAN",1.f,9.f,17.8f,23.f,-1000,1000,{.08f,.08f,.12f,.018f});
+ zone(m,"FIELD MEASUREMENT / AIRLOCK",18.f,9.f,24.f,14.f,-1000,1000,{.2f,.15f,.09f,.014f});
+ zone(m,"FIELD MEASUREMENT / CHAMBER 3",18.f,14.2f,22.9f,23.f,-1000,1000,{.12f,.09f,.09f,.016f});
+ zone(m,"FIELD MEASUREMENT / KIT ROOM",1.f,1.f,5.8f,4.8f);
+ zone(m,"FIELD MEASUREMENT / TECHS' OFFICE",10.2f,1.f,22.9f,4.8f);
+ zone(m,"FIELD MEASUREMENT / GALLERY",1.f,4.8f,22.9f,8.8f);
+ zone(m,"FIELD MEASUREMENT",0,0,24,24);
+ recessedFittings(m);freightFinish(m,-1);
+ return p;
+}
 }
 void buildChapterAnalysis(CampaignMapTable& maps){
  maps[79]=makeMaterialsIntake();

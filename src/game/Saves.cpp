@@ -240,6 +240,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   for(int i=0;i<int(next.m_itemCells.size());++i){int cell=next.m_itemCells[size_t(i)],width=i==0?4:i==2?2:1;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
+  next.updateHungSuits(0);
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size())||(next.m_heldClutter>=0&&next.m_clutter[next.m_heldClutter].broken))return false;
   adoptSession(next);
   next.updateStreaming(0);

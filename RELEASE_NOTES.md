@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.16 - Settling (2026-11-05)
+
+A patch. Nothing you will notice on the way down, and a good deal you will
+not: things tightened, things put back where they belong, a few lights
+rewired. The plant is quieter for it.
+
+The great door is still shut.
+
+---
+
 ## v1.1.15 - Live wires (2026-11-05)
 
 Current has weight now. A live floor spits sparks that fall, bounce off the

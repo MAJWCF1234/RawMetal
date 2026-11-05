@@ -35,6 +35,15 @@ void Ragdoll::seed(const World& world){
   r.p[13]=r.p[13]+RagPoint{.13f,.02f,.03f};r.p[14]=r.p[14]+RagPoint{.22f,-.04f,.02f};r.previous=r.p;
   for(int i=0;i<300;++i)r.update(world,1.f/120);r.sleeping=true;r.previous=r.p;r.quiet=1;r.accumulator=0;return r;}();*this=settled;
 }
+// Hung by the hood: the standing rest pose turned to face `facing` (it faces +y), its head joint
+// on `head`, then let fall slack from there and settled.
+void Ragdoll::hang(const World& world,RagPoint head,float facing,float empty){
+ *this={};initialized=true;pin=2;pinAt=head;slack=empty;const float c=std::cos(facing),s=std::sin(facing);const auto top=asset().rest[2];
+ for(int i=0;i<Count;++i){const auto v=asset().rest[i]-top;p[i]=head+RagPoint{v.x*s+v.y*c,v.y*s-v.x*c,v.z};}
+ // Nothing inside it: the shoulders drop and fall in, the hands hang a little forward.
+ for(int i:{3,6})p[i]=p[i]+RagPoint{0,0,-.08f};for(int i:{10,13})p[i]=p[i]+RagPoint{c*.04f,s*.04f,0};   // the knees a little forward, slackfor(int i:{5,8})p[i]=p[i]+RagPoint{c*.04f,s*.04f,-.03f};
+ previous=p;for(int i=0;i<360&&!sleeping;++i)update(world,1.f/120);sleeping=true;previous=p;quiet=1;accumulator=0;
+}
 void Ragdoll::impulse(int joint,RagPoint velocity){if(!initialized||joint<0||joint>=Count)return;sleeping=false;quiet=0;previous[joint]=previous[joint]-velocity*(1.f/120);}
 void Ragdoll::update(const World&w,float dt){
  if(!initialized||sleeping)return;const auto&radii=collisionRadii();accumulator+=std::clamp(dt,0.f,.05f);constexpr float step=1.f/120;
@@ -57,7 +66,9 @@ void Ragdoll::update(const World&w,float dt){
     bool fits=true;for(float x:{-r,r})for(float y:{-r,r})fits&=w.fits(p[i].x+x,p[i].y+y,p[i].z-support[i],support[i]+r)&&!w.doorBlocks(p[i].x+x,p[i].y+y,p[i].z-support[i],support[i]+r);
     if(!fits){p[i].x=before[i].x;p[i].y=before[i].y;previous[i].x=p[i].x;previous[i].y=p[i].y;}
    }
+   if(pin>=0)p[pin]=pinAt;
   }
+  if(pin>=0)previous[pin]=pinAt;
   float motion=0;for(int i=0;i<Count;++i){float floor=w.supportBelow(p[i].x,p[i].y,p[i].z+.01f);if(p[i].z<=floor+support[i]+.003f){previous[i].x=p[i].x-(p[i].x-previous[i].x)*.65f;previous[i].y=p[i].y-(p[i].y-previous[i].y)*.65f;previous[i].z=p[i].z;}
    motion=std::max(motion,lenR(p[i]-before[i]));}
   quiet=motion<.0015f?quiet+step:0;if(quiet>.6f){sleeping=true;previous=p;accumulator=0;break;}
@@ -73,7 +84,8 @@ void Ragdoll::skin(std::vector<RagPoint>& result)const{
  auto restFront=unitR(crossR(restAcross,asset().rest[1]-asset().rest[0])),front=unitR(crossR(across,p[1]-p[0]));
  auto frame=[](RagPoint axis,RagPoint front,RagPoint across){axis=unitR(axis);auto v=front-axis*dotR(front,axis);if(lenR(v)<.01f)v=across-axis*dotR(across,axis);v=unitR(v);return Frame{axis,v,crossR(axis,v)};};
  for(int i=0;i<Count;++i){restFrames[i]=frame(asset().rest[ends[i]]-asset().rest[i],restFront,restAcross);currentFrames[i]=frame(p[ends[i]]-p[i],front,across);}
- auto deform=[&](RagPoint point,int joint){auto v=point-asset().rest[joint];auto a=restFrames[joint],b=currentFrames[joint];return p[joint]+b.axis*dotR(v,a.axis)+b.front*dotR(v,a.front)+b.side*dotR(v,a.side);};
+ auto deform=[&](RagPoint point,int joint){auto v=point-asset().rest[joint];auto a=restFrames[joint],b=currentFrames[joint];const float k=joint==2?std::sqrt(slack):slack;
+  return p[joint]+b.axis*dotR(v,a.axis)+b.front*(dotR(v,a.front)*k*(slack<1?.78f:1.f))+b.side*(dotR(v,a.side)*k);};   // empty, it flattens front to back most
  result.clear();result.reserve(asset().vertices.size());for(auto&v:asset().vertices)result.push_back(deform(v.p,v.a)*v.weight+deform(v.p,v.b)*(1-v.weight));
 }
 bool Ragdoll::test(){World world(3);Ragdoll rag;rag.seed(world);auto initial=rag.p;rag.impulse(5,{1.5f,1.f,2.f});for(int i=0;i<480;++i)rag.update(world,1.f/120);
@@ -83,7 +95,25 @@ bool Ragdoll::test(){World world(3);Ragdoll rag;rag.seed(world);auto initial=rag
  Ragdoll fast,slow;fast.seed(world);slow=fast;fast.impulse(5,{1.5f,1,2});slow.impulse(5,{1.5f,1,2});
  for(int i=0;i<240;++i)fast.update(world,1.f/60);for(int i=0;i<480;++i)slow.update(world,1.f/120);
  float drift=0;for(int i=0;i<Count;++i)drift=std::max(drift,lenR(fast.p[i]-slow.p[i]));report<<"60/120 Hz drift "<<drift<<'\n';
- return error<.035f&&minimum>-.005f&&lenR(initial[5]-rag.p[5])>.02f&&rag.sleeping&&drift<.001f;
+ const RagPoint hook{8.9f,8.2f,1.47f};Ragdoll hung;hung.hang(world,hook,.6f);float lowest=100;for(auto v:hung.skin())lowest=std::min(lowest,v.z);
+ const bool hangs=hung.sleeping&&lenR(hung.p[2]-hook)<.001f&&hung.p[0].z>.75f&&hung.p[0].z<1.1f&&lowest>-.005f;const auto hand=hung.p[5];
+ hung.impulse(5,{1.5f,0,.2f});for(int i=0;i<30;++i)hung.update(world,1.f/120);const bool swings=lenR(hung.p[5]-hand)>.02f&&lenR(hung.p[2]-hook)<.001f;
+ for(int i=0;i<2400&&!hung.sleeping;++i)hung.update(world,1.f/120);
+ report<<"hung suit: pelvis "<<hung.p[0].z<<" lowest "<<lowest<<" hangs "<<hangs<<" swings "<<swings<<" settles "<<hung.sleeping<<" head on hook "<<lenR(hung.p[2]-hook)<<'\n';
+ return error<.035f&&minimum>-.005f&&lenR(initial[5]-rag.p[5])>.02f&&rag.sleeping&&drift<.001f&&hangs&&swings&&hung.sleeping&&lenR(hung.p[2]-hook)<.001f;
+}
+void Game::updateHungSuits(float dt){
+ if(m_hungSuits.size()<size_t(chunkCount()))m_hungSuits.resize(size_t(chunkCount()));m_suitPushCooldown=std::max(0.f,m_suitPushCooldown-dt);
+ for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;const auto&w=level==m_level?m_world:m_chunks[size_t(level)].world;auto&suits=m_hungSuits[size_t(level)];
+  if(suits.size()!=w.hungSuits().size()){suits.assign(w.hungSuits().size(),{});for(size_t i=0;i<suits.size();++i){const auto&h=w.hungSuits()[i];suits[i].hang(w,{h.hook.x,h.hook.y,h.hook.z},h.facing);}}
+  if(level!=m_level)continue;
+  for(auto&suit:suits){
+   // Brushed past, it swings away from her.
+   if(length(m_velocity)>.5f&&m_suitPushCooldown<=0){int nearest=-1;float best=.42f*.42f;
+    for(int j=0;j<Ragdoll::Count;++j){auto p=suit.p[j];float d=lengthSq(Vec2{p.x,p.y}-m_player.pos);if(d<best&&p.z>m_player.z&&p.z<m_player.z+1.8f){nearest=j;best=d;}}
+    if(nearest>=0){suit.impulse(nearest,{m_velocity.x*.12f,m_velocity.y*.12f,.04f});m_suitPushCooldown=.12f;}}
+   suit.update(w,dt);}
+ }
 }
 Game Game::hazmatInspection(int view){int camera=view%3;auto game=mapInspection(camera==0?Vec2{7.2f,6.1f}:camera==1?Vec2{10.8f,6.1f}:Vec2{8.9f,9.5f},camera==0?.65f:camera==1?2.55f:-kPi*.5f,-35,3,false,0,true);if(view==3)game.m_hazmat.impulse(5,{1.5f,1,2});return game;}
 bool Game::testHazmat(){

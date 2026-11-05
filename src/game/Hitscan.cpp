@@ -34,6 +34,9 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
   }
   for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())body(ShotKind::Drone,drone.level,drone.slot,{drone.position.x,drone.position.y},drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
   if(m_world.hasLift()&&m_hazmat.initialized){int joint=-1;float distance=m_hazmat.rayHit({origin.x,origin.y,origin.z},{ray.x,ray.y,ray.z},joint);if(joint>=0&&distance<hit.distance)hit={ShotKind::Ragdoll,m_level,joint,distance,distance,origin+ray*distance,{}};}
+  // A hung suit is Ragdoll index (suit+1)*Count+joint; the lift's casualty keeps 0..Count-1.
+  {const auto&suits=hungSuits(m_level);for(size_t s=0;s<suits.size();++s){int joint=-1;float distance=suits[s].rayHit({origin.x,origin.y,origin.z},{ray.x,ray.y,ray.z},joint);
+   if(joint>=0&&distance<hit.distance)hit={ShotKind::Ragdoll,m_level,int(s+1)*Ragdoll::Count+joint,distance,distance,origin+ray*distance,{}};}}
   for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&list=chunkClutter(level);auto shift=chunkOffset(level)-activeOrigin;
    for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0)continue;auto e=c.extent();Point3 center{c.pos.x+shift.x,c.pos.y+shift.y,c.z+e[2]},n;float distance=rayBoxFraction(origin,ray*range,center-Point3{e[0],e[1],e[2]},center+Point3{e[0],e[1],e[2]},&n)*range;if(distance>=hit.distance)continue;
     float block=propMaterialTraits(c.material()).blockMass;if(block>0&&c.mass()>=block)hit={ShotKind::Prop,level,int(i),distance,distance,origin+ray*distance,n};else passages.push_back({2,level,int(i),distance,origin+ray*distance,n});
@@ -101,7 +104,8 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
   // A gunshot wound is a stimulus: the creature turns on the shooter even if it never saw them.
   if(playerFired&&enemy.alive){enemy.recognition=1;enemy.lastKnown=m_player.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=m_player.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
   bool killed=applyEnemyDamage(enemy,damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);auto audible=enemy;audible.pos=audible.pos-shift;enemySound(audible,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);return;}
- if(hit.kind==ShotKind::Ragdoll){m_hazmat.impulse(hit.index,{direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.7f});m_sounds.push_back({Sound::PunchHit,{hit.point.x,hit.point.y},.55f,.8f,true,17,hit.point.z});return;}
+ if(hit.kind==ShotKind::Ragdoll){auto&rag=hit.index>=Ragdoll::Count&&size_t(m_level)<m_hungSuits.size()&&size_t(hit.index/Ragdoll::Count-1)<m_hungSuits[size_t(m_level)].size()?m_hungSuits[size_t(m_level)][size_t(hit.index/Ragdoll::Count-1)]:m_hazmat;
+  rag.impulse(hit.index%Ragdoll::Count,{direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.7f});m_sounds.push_back({Sound::PunchHit,{hit.point.x,hit.point.y},.55f,.8f,true,17,hit.point.z});return;}
  if(hit.kind!=ShotKind::Solid)return;
  if(hit.breakable>=0){auto offset=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,hitscanDamageAt(definition,hit.damageDistance),hit.point+Point3{offset.x,offset.y,0},direction);return;}
  auto point=hit.point+direction*.003f+Point3{shift.x,shift.y,0};int tx=int(std::floor(point.x)),ty=int(std::floor(point.y));char tile=world.tile(tx,ty);float base=world.floorHeight(tx+.5f,ty+.5f);if(point.z<base||point.z>base+(tile=='C'?.6f:tile=='B'?1.1f:0))tile='.';

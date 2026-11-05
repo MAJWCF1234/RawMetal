@@ -291,6 +291,7 @@ public:
     float bodyGait()const{return m_bodyGait;}
     bool bodySprinting()const{return m_bodySprint;}
     const Ragdoll& hazmat()const{return m_hazmat;}
+    const std::vector<Ragdoll>& hungSuits(int level)const{static const std::vector<Ragdoll> none;return level>=0&&size_t(level)<m_hungSuits.size()?m_hungSuits[size_t(level)]:none;}
     static Game hazmatInspection(int view=0);
     static bool testHazmat();
     const std::vector<Enemy>& enemies() const { return m_enemies; }
@@ -1166,6 +1167,10 @@ private:
     World m_world;
     Ragdoll m_hazmat;
     float m_hazmatPushCooldown=0;
+    // Empty suits on hooks (World::hungSuits), by chunk: hung when the chunk is resident, swung
+    // by the player and by shots on the current chunk. Not saved: a load hangs them again.
+    std::vector<std::vector<Ragdoll>> m_hungSuits;float m_suitPushCooldown=0;
+    void updateHungSuits(float dt);
     // How long the player has leaned on a heavy crate (it goes at ShoveSeconds).
     float m_crateShove=0;
     void updatePushCrates(const InputState& input,float dt);

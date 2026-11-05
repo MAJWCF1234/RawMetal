@@ -165,7 +165,7 @@ private:
     Mesh m_consoleMesh{240};
     Texture m_consoleTexture;
     std::array<Texture,3> m_hazmatTextures;
-    std::vector<RagPoint> m_hazmatPose;
+    std::vector<RagPoint> m_hazmatPose,m_suitPose;
     std::array<RagPoint,Ragdoll::Count> m_hazmatPoseJoints{};
     bool m_hazmatPoseValid=false;
     Texture m_blood;

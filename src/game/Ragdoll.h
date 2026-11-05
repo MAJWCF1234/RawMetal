@@ -13,6 +13,10 @@ struct Ragdoll {
  static constexpr std::array<int,15> ends={1,2,1,4,5,4,7,8,7,10,11,10,13,14,13};
  std::array<RagPoint,Count> p{},previous{};
  bool initialized=false,sleeping=false;float quiet=0,accumulator=0;
+ // Hung from a hook: joint `pin` is held at `pinAt` (a suit by its hood), and the suit is drawn
+ // `slack` as thick across as when worn, so it reads empty.
+ int pin=-1;RagPoint pinAt{};float slack=1;
+ void hang(const World& world,RagPoint head,float facing,float empty=.7f);
  void seed(const World& world);
  void update(const World& world,float dt);
  void impulse(int joint,RagPoint velocity);

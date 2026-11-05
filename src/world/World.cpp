@@ -274,6 +274,7 @@ void World::settleExclusionFacilityOnTerrain(){
  data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
  for(auto&sign:data->signs)sign.z+=ground(sign.position.x,sign.position.y);
  for(auto&lead:data->leads){lead.anchor.z+=ground(lead.anchor.x,lead.anchor.y);lead.end.z+=ground(lead.end.x,lead.end.y);}
+ for(auto&suit:data->hungSuits)suit.hook.z+=ground(suit.hook.x,suit.hook.y);
  // Like hazards, a shelter's height band is measured from the ground at its centre.
  for(auto&s:data->shelters){float z=ground((s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f);s.bottom+=z;s.top+=z;}
  for(auto&hint:data->navHints)hint.z+=ground(hint.position.x,hint.position.y);

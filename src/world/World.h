@@ -112,6 +112,9 @@ struct Lead {Point3 anchor{},end{},offset{};int prop=-1;bool loose=false;float l
  Point3 socket{},terminal{};int panel=-1,socketPort=-1,terminalPort=-1,lamp=-1;
  bool socketed()const{return socket.x!=0||socket.y!=0||socket.z!=0;}bool plugged()const{return terminal.x!=0||terminal.y!=0||terminal.z!=0;}
  static constexpr float TearMargin=.3f,PlugHead=.018f;};
+// An empty suit hung by its hood from a hook (absolute), its front toward `facing`. Game
+// hangs the hazmat ragdoll from it (Ragdoll::hang): limp, swaying when brushed or shot.
+struct HungSuit {Point3 hook{};float facing=0;};
 // Where test leads connect, by model: an instrument's sockets, a cell's terminal posts, a
 // panel's pilot lens ("lamp"). In the model's own frame at its catalog size (x across its
 // width, y its depth, z up from its base); `out` is the way a seated plug leaves the port.
@@ -332,6 +335,7 @@ struct AuthoredMapData {
     std::vector<Fixture> fixtures;
     std::vector<PipeRun> pipes;
     std::vector<Lead> leads;
+    std::vector<HungSuit> hungSuits;
     std::vector<WorldLight> lights;
     std::vector<CreatureSpawn> creatureSpawns;
     std::vector<PickupSpawn> pickupSpawns;
@@ -475,6 +479,7 @@ public:
     // Electrical leads and their cables as simulated. Game steps them with the
     // clutter physics and decides when a clip tears; the cable itself lives here.
     const std::vector<Lead>& leads()const{static const std::vector<Lead> none;return m_mapData?m_mapData->leads:none;}
+    const std::vector<HungSuit>& hungSuits()const{static const std::vector<HungSuit> none;return m_mapData?m_mapData->hungSuits:none;}
     const std::vector<LeadRope>& leadRopes()const{return m_leadRopes;}
     // Hang lead i's cable at rest from its anchor to `end` (its clip or fixed
     // end) and let it settle asleep; `body` is the prop it is clipped to (null:

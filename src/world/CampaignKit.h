@@ -578,6 +578,9 @@ inline void testLead(Map& m,int panel,const char* socket,int prop,const char* te
  if(const auto error=seatTestLead(m,l,panel,socket,terminal);!error.empty())throw std::runtime_error("kit::testLead: "+error);m.leads.push_back(l);}
 // A test lead already pulled off: it hangs from its panel socket with its plug on its end, any
 // of it that reaches the floor lying off toward `toward`; the panel's pilot is dark.
+// An empty hazmat suit hung by its hood: `hook` is where its head hangs (absolute), its front
+// toward `facing`. Keep it .25 m off the wall behind it; it sways when brushed or shot.
+inline void hungSuit(Map& m,Point3 hook,float facing){m.hungSuits.push_back({hook,facing});}
 inline void looseTestLead(Map& m,int panel,const char* socket,Point3 toward,float length,bool live=false,float radius=.007f,int material=-1){
  Lead l;l.end=toward;l.loose=true;l.length=length;l.live=live;l.radius=radius;l.terminal={0,0,1};l.material=material>=0?material:std::string_view(socket)=="+"?8:7;
  if(const auto error=seatTestLead(m,l,panel,socket,"");!error.empty())throw std::runtime_error("kit::looseTestLead: "+error);m.leads.push_back(l);}

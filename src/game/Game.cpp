@@ -41,7 +41,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_hazmat={};m_hazmatPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -198,6 +198,7 @@ void Game::loadLevel(int level,bool carry) {
     m_darkness=m_flashlightJam=0;m_darknessSettled=false;
     seedClutter();settleLeads(m_level);
     if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
+    updateHungSuits(0);
 }
 void Game::sound(Sound sound,float gain,float pitch){
  bool foot=footstepSound(sound)||sound==Sound::Land;
@@ -500,6 +501,7 @@ void Game::update(const InputState& input, float dt) {
             }
             m_hazmat.update(m_world,dt);
         }
+        {perf::Scope profile(perf::Movement);updateHungSuits(dt);}
         {perf::Scope profile(perf::Streaming);crossChunkBoundary();}
         {perf::Scope profile(perf::Scripts);updateScripts(dt);updateBreakables(dt);
         updateDarkness(dt);}

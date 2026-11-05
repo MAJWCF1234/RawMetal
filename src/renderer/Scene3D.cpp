@@ -1753,6 +1753,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const float size=.025f+rnd(5)*.035f;const Point3 up{0,0,size};
    quad(p-side*size-up,p+side*size-up,p+side*size+up,p-side*size+up,flake,1.1f);}
  }
+ // Empty suits hung on hooks: the hazmat ragdoll, thinned so it reads empty, lit as one object.
+ for(const auto& suit:game.hungSuits(w.level()))if(suit.initialized&&sphereVisible({suit.p[0].x,suit.p[0].y,suit.p[0].z},1.3f)){
+  suit.skin(m_suitPose);const auto&vertices=Ragdoll::asset().vertices;objectLighting=true;objectLight=illumination({suit.p[1].x,suit.p[1].y,suit.p[1].z},{0,0,1});
+  for(size_t i=0;i+2<vertices.size();i+=3){MeshVertex face[3];for(int j=0;j<3;++j){auto p=m_suitPose[i+j];face[j]={{p.x,p.y,p.z},vertices[i+j].u,vertices[i+j].v};}
+   tri(face[0],face[1],face[2],m_hazmatTextures[vertices[i].material],.95f);}
+  objectLighting=false;
+ }
  if(w.campaign()&&w.hasLift()){
   // The shaft, cab and the hazmat casualty belong to every lift map.
   const auto& corpse=game.hazmat();

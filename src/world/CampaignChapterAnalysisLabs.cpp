@@ -67,17 +67,6 @@ void lbCellShelf(Map& m,float x,float y,bool alongY,int seed){
   for(int i=0;i<4;++i){if((i*2+t+seed)%3==0)continue;const float a=-.54f+i*.36f;
    kit::prop(m,model::anl_cell_charged,alongY?x:x+a,alongY?y+a:y,z,(i+t+seed)*.9f);}}
 }
-// An oversuit hung by its hood from a hook on the wall face at wallY, hanging out toward dir, its
-// respirator hung round the neck.
-void lbSuit(Map& m,float x,float wallY,float dir,float f){
- auto part=[&](float a,float b,float n0,float n1,float lo,float hi,int mat){
-  wall(m,x+std::min(a,b),std::min(wallY+dir*n0,wallY+dir*n1),x+std::max(a,b),std::max(wallY+dir*n0,wallY+dir*n1),f+lo,f+hi,mat);m.structures.back().solid=false;};
- part(-.21f,.21f,.02f,.12f,1.f,1.76f,39);                                                    // body
- for(float s:{-1.f,1.f}){part(s*.21f,s*.28f,.03f,.11f,1.06f,1.72f,39);part(s*.21f,s*.28f,.03f,.11f,.96f,1.06f,8);   // sleeves, gloves
-  part(s*.02f,s*.19f,.03f,.11f,.55f,1.f,39);part(s*.03f,s*.18f,.04f,.12f,.47f,.55f,8);}      // legs, the feet folded up
- part(-.12f,.12f,.01f,.14f,1.76f,1.96f,39);part(-.08f,.08f,.14f,.15f,1.8f,1.9f,8);             // hood, its visor
- part(-.07f,.07f,.12f,.17f,1.56f,1.66f,8);for(float s:{-1.f,1.f})part(s*.02f,s*.08f,.17f,.2f,1.57f,1.64f,8);   // respirator, its filters
-}
 // Glass on the floor where something was dropped: slivers scattered round (x,y).
 void lbShards(Map& m,float x,float y,float f,unsigned seed){
  unsigned h=seed*2654435761u+7;auto next=[&h]{h^=h<<13;h^=h>>17;h^=h<<5;return (h&0xffffu)/65535.f;};
@@ -140,7 +129,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  anFix(m,model::med_wall_clock,8.99f,4.25f,f+2.05f,.24f,.02f,.23f,anW,false);
  wall(m,5.6f,4.74f,8.4f,4.8f,f+1.9f,f+1.94f,20);                                            // the suit rail
  for(float x:{5.95f,6.65f,7.35f,8.05f})wall(m,x-.015f,4.66f,x+.015f,4.8f,f+1.82f,f+1.94f,8);  // its four hooks
- for(float x:{5.95f,6.65f,7.35f})lbSuit(m,x,4.8f,-1.f,f);                                      // three back; the fourth hook bare
+ for(auto [x,turn]:{std::pair{5.95f,-.16f},{6.65f,.1f},{7.35f,-.06f}}){hungSuit(m,{x,4.58f,f+1.48f},-kPi*.5f+turn);wall(m,x-.012f,4.6f,x+.012f,4.64f,f+1.66f,f+1.83f,8);m.structures.back().solid=false;}   // three back, hung by their hood loops; the fourth hook bare
  kit::prop(m,model::item_dosimeter,3.1f,3.15f,f+.51f,.31f,.146f,.066f,.4f);
  kit::prop(m,model::item_walkie,5.9f,3.4f,f,.114f,.376f,.046f,2.1f);
  kit::prop(m,model::item_id_card,2.5f,3.75f,f,.132f,.085f,.002f,.9f);
