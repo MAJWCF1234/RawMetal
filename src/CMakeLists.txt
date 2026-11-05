@@ -77,6 +77,7 @@ add_executable(RawMetal WIN32
     game/Console.cpp
     game/Streaming.cpp
     game/Mechanisms.cpp
+    game/Electricity.cpp
     game/ActorTimeline.cpp
     game/ai/Hearing.cpp
     game/ai/Nodes.cpp
@@ -169,6 +170,7 @@ add_executable(RawMetal WIN32
     world/CampaignChapterMedicalWard.cpp
     world/CampaignChapterMedicalDeep.cpp
     world/CampaignChapterAnalysis.cpp
+    world/CampaignChapterAnalysisLabs.cpp
     world/CampaignChapterEnergyTestLabs.cpp
     world/CampaignChapterObservationRing.cpp
     world/CampaignChapterContainmentA.cpp
@@ -193,6 +195,7 @@ add_executable(RawMetal WIN32
     renderer/NormalMapping.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
+    renderer/ElectricFx.cpp
     renderer/Impostors.cpp
     renderer/Performance.cpp
     renderer/GpuRenderer.cpp
@@ -229,6 +232,9 @@ target_link_libraries(RawMetal PRIVATE RawMetalNeuralTextures)
 if(MSVC)
   target_link_libraries(RawMetal PRIVATE delayimp)
   target_link_options(RawMetal PRIVATE /DELAYLOAD:vulkan-1.dll "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/app.manifest")
+  # 8 MB of main-thread stack: the campaign and cable test passes hold dozens of whole Game
+  # objects on one frame, and the default 1 MB overflowed under them.
+  target_link_options(RawMetal PRIVATE /STACK:8388608)
   set_property(TARGET RawMetal APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest")
 endif()
 add_custom_command(TARGET RawMetal POST_BUILD

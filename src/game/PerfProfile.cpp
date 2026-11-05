@@ -46,7 +46,7 @@ void Game::perfWake(bool guards){
  // Creatures: what a heard gunshot does (updateEnemies' own wake), held on the
  // player's position so each one keeps routing to him for the whole run.
  for(auto&e:m_enemies)if(e.alive&&!dormantEntity(e.z)){const auto&traits=creatureTraits(e.kind);
-  e.wakeState=0;e.awareness=std::max(e.awareness,traits.rushSpeed>0?12.f:6.f);e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;
+  e.wakeState=0;e.awareness=std::max(e.awareness,traits.rushSpeed>0?12.f:6.f);e.recognition=1;e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;
   if(e.state==Enemy::State::Idle)e.state=Enemy::State::Investigate;}
  if(!guards)return;
  // Guards hostile to the player in any resident chunk: told where he is and

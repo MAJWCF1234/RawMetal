@@ -54,7 +54,11 @@ bool Game::testWorldIsolation(){
    lightContract&=wall.mount==WorldLightMount::Wall&&std::fabs(wallPoint.x-1)<.0001f&&std::fabs(wallPoint.y-6.16f)<.0001f&&wallTarget.z==2&&wall.range==6&&wall.intensity==1.2f;
    auto fitted=load(base+"LIGHT|0|5|5|3|0|1.5707963|1|8|5600|0|||||||0.1|336|0.44|1.04|0.17\n");const auto& fit=fitted->maps[0]->lights[0];
    lightContract&=ceiling.fitting==-1&&fit.fitting==336&&fit.fittingWidth==.44f&&fit.fittingDepth==1.04f&&fit.fittingHeight==.17f&&fit.flicker==.1f;
+   // A colour gel rides after the fitting (which may stay empty); white is the default.
+   auto gelled=load(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||1|0.1|0.06\n");const auto& gel=gelled->maps[0]->lights[0];
+   lightContract&=ceiling.gel.x==1&&ceiling.gel.y==1&&ceiling.gel.z==1&&fit.gel.x==1&&gel.gel.x==1&&gel.gel.y==.1f&&gel.gel.z==.06f&&gel.fitting==-1;{auto t=gel.tone();lightContract&=t.x>8*t.y&&t.x>8*t.z;}
    auto rejects=[&](const std::string& text){try{load(text);return false;}catch(const std::runtime_error&){return true;}};
+   lightContract&=rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||1|0.1\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||1.5|0|0\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||0|0|0\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||nan|0|1\n");
    lightContract&=rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|336\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|99999|1|1|1\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|336|0|1|1\n");
    lightContract&=std::fabs(ceiling.falloff(25)-3.2f*std::pow(1.f-25.f/144.f,2.f)/(1.f+25.f*.12f))<.000001f&&wall.falloff(36)==0&&wall.falloff(35)>0;
    auto mounted=load(base+"STRUCT|0|0|1|1|20|0|3.4|0|2\nLIGHT|0|1|6|2|1|0|1.2|6\n");World mountedWall(0,mounted->maps[0]);auto target=mountedWall.lights()[0].shadowTarget();

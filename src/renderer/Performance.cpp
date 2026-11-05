@@ -1,6 +1,7 @@
 #include "Projection.h"
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
+#include "ElectricFx.h"
 #include "FrameWorker.h"
 #include "MinimapCache.h"
 #include "../world/TerrainSurfaceCache.h"
@@ -26,7 +27,53 @@ bool SoftwareRenderer::testGameplayRendering(){
   for(size_t i=0;i<reference.size();++i){auto a=reference[i],b=r.pixels()[i];if(a!=b)++changed;for(int shift:{0,8,16})maximum=std::max(maximum,std::abs(int((a>>shift)&255)-int((b>>shift)&255)));}
   report<<"shadow probe budget "<<budget<<": "<<changed<<" changed pixels; peak channel difference "<<maximum<<'\n';passed&=maximum<=1;
  }
- report<<(passed?"PASS":"FAIL")<<": a stationary Chimera's lighting is independent of earlier draws consuming the shadow budget\n";return passed;
+ report<<(passed?"PASS":"FAIL")<<": a stationary Chimera's lighting is independent of earlier draws consuming the shadow budget\n";
+ // A swinging door's leaf was a cached receiver: drawn after the frame's shadow
+ // budget ran out it took ambient alone (a black slab on a cold first frame), and
+ // each face took the light from the other side of the wall. Every view renders
+ // on a cold cache with no budget, then fed: face-on, ten degrees off, both
+ // faces, mid-swing, on Vulkan and on the CPU rasteriser. Its corners once took
+ // light at the jambs, inside the wall, so the side nearer a lamp read darkest.
+ {auto map=regression::room();map->definition.playerStart={7.6f,11.f};
+  map->structures.push_back({0,7.9f,7,8.1f,0,8,false,3});map->structures.push_back({8.2f,7.9f,24,8.1f,0,8,false,3});map->structures.push_back({7,7.9f,8.2f,8.1f,2.55f,8,false,3});
+  {Door door{7,8.2f,8};door.swinging=true;door.maxOpen=.9f;map->doors.push_back(door);}
+  // A lamp on the near (+y) side, one beyond the hinge jamb on that side and a faint one
+  // beyond the wall; none saturates the CPU image. The hinge lamp catches a leaf lit from
+  // its jambs: a ray from there toward it starts inside the wall, and the hinge reads dark.
+  map->lights.push_back({{7.6f,9.7f},2.6f,WorldLightMount::Ceiling,0,.4f,9});map->lights.push_back({{5.6f,9.2f},2.6f,WorldLightMount::Ceiling,0,.3f,9});map->lights.push_back({{7.6f,6.3f},2.6f,WorldLightMount::Ceiling,0,.08f,9});
+  struct View{const char*name;float y,yaw,pitch,open;};
+  const View views[]={{"near face-on",11,-90,0,0},{"near 10 deg left",11,-80,0,0},{"near 10 deg right",11,-100,0,0},{"near 10 deg up",11,-90,24.4f,0},{"far face-on",5,90,0,0},{"far 10 deg off",5,100,0,0},{"near mid-swing",11,-90,0,.45f}};
+  constexpr int W=320,H=180;bool doorPassed=true;
+  for(bool vulkan:{true,false}){
+   auto storage=std::make_unique<SoftwareRenderer>(W,H);auto&d=*storage;if(vulkan&&!d.enableHardware())return false;d.setEnvironmentInspection(true);if(vulkan)d.m_gpu->setPostProcessing(false);
+   float fed[7]{},wall=0;const char*backend=vulkan?"Vulkan":"CPU";
+   for(size_t i=0;i<std::size(views);++i){const auto&v=views[i];Game scene(regression::campaign(map));
+    auto&p=const_cast<Player&>(scene.player());p.pos={7.6f,v.y};p.angle=v.yaw*kPi/180;p.pitch=v.pitch;const_cast<std::vector<Door>&>(scene.world().doors())[0].open=v.open;
+    // Half a metre from the hinge at 1.5 m, on the face toward the viewer.
+    const float angle=v.open*kPi*.5f,side=v.y>8?.0465f:-.0465f;
+    auto luminance=[&](Point3 at){auto c=d.cameraPoint(at,d.m_view);const float f=Projection{float(W)/H}.focal(float(W));int cx=int(W*.5f+c.x*f/c.z),cy=int(H*.5f-c.y*f/c.z);double sum=0;int n=0;
+     for(int y=cy-3;y<=cy+3;++y)for(int x=cx-3;x<=cx+3;++x)if(c.z>.1f&&x>=0&&y>=0&&x<W&&y<H){auto px=d.m_pixels[size_t(y*W+x)];sum+=((px>>16)&255)*.2126+((px>>8)&255)*.7152+(px&255)*.0722;++n;}return float(n?sum/n:-1);};
+    const Point3 probe{7+std::cos(angle)*.5f-std::sin(angle)*side,8+std::sin(angle)*.5f+std::cos(angle)*side,1.5f};
+    for(auto&cache:d.m_chunkLighting)cache.clear();for(auto&cache:d.m_chunkNormalLighting)cache.clear();if(vulkan)d.m_gpu->clearStaticCaches();
+    d.m_shadowBudgetLimit=0;d.render(scene);float starved=luminance(probe);d.m_shadowBudgetLimit=20000;d.render(scene);fed[i]=luminance(probe);
+    if(i==0)wall=luminance({6.5f,8.101f,1.5f});
+    const bool same=starved>=0&&std::fabs(starved-fed[i])<=std::max(2.f,fed[i]*.08f);doorPassed&=same;
+    report<<"Swinging door, "<<backend<<", "<<v.name<<": leaf luminance cold and starved "<<starved<<", fed "<<fed[i]<<(same?"":"  << FAIL")<<'\n';
+    // The hinge and edge thirds of the shut leaf's near face, clear of the posts, sill and head.
+    auto third=[&](float from,float to){double sum=0;int n=0;for(float u:{from,(from+to)*.5f,to})for(float z:{.6f,1.f,1.4f,1.8f}){const float l=luminance({7+u,8+side,z});if(l>=0){sum+=l;++n;}}return float(n?sum/n:-1);};
+    if(i<4){const float hinge=third(.16f,.36f),edge=third(.84f,1.04f);const bool even=hinge>=0&&hinge>=edge;doorPassed&=even;
+     report<<"Swinging door, "<<backend<<", "<<v.name<<": hinge third "<<hinge<<", edge third "<<edge<<" (a lamp beyond the hinge jamb)"<<(even?"":"  << FAIL hinge side darker")<<'\n';}
+   }
+   auto alike=[&](size_t i,size_t reference){return fed[i]>=fed[reference]*.8f&&fed[i]<=fed[reference]*1.25f;};
+   const bool offAxis=alike(1,0)&&alike(2,0)&&alike(3,0)&&alike(5,4),sides=fed[0]>fed[4]*1.3f,swing=fed[6]>fed[0]*.5f,lit=!vulkan||fed[0]>=wall*.4f;
+   report<<"Swinging door, "<<backend<<": ten degrees off reads as face-on "<<(offAxis?"yes":"NO")<<"; lamp side "<<fed[0]<<" over far side "<<fed[4]<<(sides?"":" NO")<<"; mid-swing "<<fed[6]<<(swing?"":" NO");
+   report<<"; leaf "<<fed[0]<<" beside wall "<<wall<<(lit?"":" NO")<<'\n';
+   doorPassed&=offAxis&&sides&&swing&&lit;
+  }
+  report<<(doorPassed?"PASS":"FAIL")<<": a swinging door reads the same cold and fed, face-on and ten degrees off, each face by its own side's light, its hinge side no darker than its edge, mid-swing too\n";passed&=doorPassed;
+ }
+ passed=testElectricRendering(report)&&passed;
+ return passed;
 }
 __declspec(noinline) bool SoftwareRenderer::testPresentationResize(){
  Win32Window window(DisplayWidth,DisplayHeight,L"RawMetal presentation check");if(!window.valid())return false;
@@ -153,6 +200,7 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(bool glazingOnly){
  check(GpuRenderer::testEmissionMips(),"Every emission mip preserves linear intensity, odd edge texels, channel order and half precision");
  check(GpuRenderer::testDiffuseMips(),"Diffuse sRGB mips preserve radiance, odd borders, neutral tint, linear alpha and exact source atlases");
  check(GpuRenderer::testNormalMips(),"Normal mips preserve vector moments, coherence weights, odd edges and finite cancellation");
+ check(GpuRenderer::testLampTones(),"Lamp tones: white gels keep the blackbody, gels hold luminance under their cap, packed colour slots round-trip");
  {
   std::vector<const Texture*> gameAtlases{&renderer.m_vrWristTexture,&renderer.m_water,&renderer.m_glassTexture,&renderer.m_ashfallSky,&renderer.m_coastSky,&renderer.m_coastWater,&renderer.m_muzzleFlash,&renderer.m_pumpTexture,&renderer.m_compressorTexture,&renderer.m_pipeTexture,&renderer.m_gateTexture,&renderer.m_pressureWall,&renderer.m_pressureFloor,&renderer.m_pressureMetal,&renderer.m_transferSign,&renderer.m_pumpSign,&renderer.m_controlSign,&renderer.m_surfaceSign,  &renderer.m_liftSign,&renderer.m_liftDispatch,&renderer.m_wall,&renderer.m_floor,&renderer.m_metal,&renderer.m_serviceFloor,&renderer.m_serviceCeiling,&renderer.m_officeCarpet,&renderer.m_arms,&renderer.m_weaponTexture,&renderer.m_enemyTexture,&renderer.m_waspTexture,&renderer.m_bruteTexture,&renderer.m_wingTexture,&renderer.m_medkitTexture,&renderer.m_shellsTexture,&renderer.m_nineTexture,&renderer.m_barrelTexture,&renderer.m_crateTexture,&renderer.m_concrete,&renderer.m_bulkhead,    &renderer.m_hazard,&renderer.m_chemicalSign,  &renderer.m_signRust,&renderer.m_panelMetal,&renderer.m_routePaint,&renderer.m_redPaint,&renderer.m_terminalTexture,&renderer.m_cautionSign,&renderer.m_blood,&renderer.m_wardenTexture,&renderer.m_mutantTexture,&renderer.m_consoleTexture,&renderer.m_feedSign,&renderer.m_returnSign,  &renderer.m_terrainDirt,&renderer.m_terrainRock,&renderer.m_coastSand,&renderer.m_coastRock,&renderer.m_framePaint,&renderer.m_yellowSteel,&renderer.m_redSteel,&renderer.m_paleSteel};
   for(const auto&texture:renderer.m_bloodVariants)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_hazmatTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_clutterTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_workerTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_staffTextures)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_noticeSigns)gameAtlases.push_back(&texture);for(const auto&texture:renderer.m_serviceAreaSigns)gameAtlases.push_back(&texture);for(const auto&entry:renderer.m_facilityTextures)gameAtlases.push_back(&entry.second);for(const auto&texture:renderer.m_surfaceTextures)gameAtlases.push_back(&texture);
@@ -422,6 +470,21 @@ __declspec(noinline) bool SoftwareRenderer::testHardware(bool glazingOnly){
   report<<"Per-pixel lamps: "<<drawn<<" shadow faces drawn, "<<changed<<" pixels differ from the bake\n";
   check(drawn>=6&&drawn%6==0&&changed>baked.size()/20,"Per-pixel lamps draw cube shadow faces and relight the static world");
   check(stable,"Lamp shadow maps are reused on the next frame");
+  // A colour gel relights the room in its colour; with the post stage on, the
+  // coloured shafts and torch scatter join the shadow stage instead of scene.frag.
+  auto redMap=std::make_shared<AuthoredMapData>(*materialMap);redMap->lights.back().gel={1,.1f,.06f};auto redGame=std::make_unique<Game>(regression::campaign(redMap));auto&gelled=*redGame;const_cast<Player&>(gelled.player()).pitch=-6;
+  auto balance=[](const std::vector<uint32_t>&image){double r=0,g=0,b=0;for(auto p:image){r+=(p>>16)&255;g+=(p>>8)&255;b+=p&255;}return std::array<double,3>{r,g,b};};
+  auto settle=[&](Game&scene){for(int i=0;i<12;++i)renderer.render(scene);return renderer.m_pixels;};
+  // Post off: scene.frag's lamps and analytic shafts; post on: the shadow stage's shafts.
+  {bool previousPost=SoftwareRenderer::postProcessing();
+   for(bool post:{false,true}){SoftwareRenderer::setPostProcessing(post);auto w=balance(settle(lit)),g=balance(settle(gelled));
+    report<<"Gel balance with post "<<(post?"on":"off")<<" (r/g, r/b): white "<<w[0]/w[1]<<", "<<w[0]/w[2]<<"; red "<<g[0]/g[1]<<", "<<g[0]/g[2]<<'\n';
+    check(renderer.m_gpu->postProcessing()==post&&g[0]/g[1]>w[0]/w[1]*1.3&&g[0]/g[2]>w[0]/w[2]*1.3,post?"With the post stage on, a red gel lamp keeps its colour through the coloured shafts and grade":"A red gel lamp lights the static world red per pixel");}
+   auto redPost=renderer.m_pixels;gelled.giveQuestItem(Game::Flashlight);gelled.setState(stateId("flashlight_on"),1);auto torchPost=settle(gelled);gelled.setState(stateId("flashlight_on"),0);
+   auto rp=balance(redPost),tp=balance(torchPost);size_t torchChanged=0;for(size_t i=0;i<redPost.size();++i)torchChanged+=redPost[i]!=torchPost[i];
+   report<<"Torch with post on changes "<<torchChanged<<" pixels\n";
+   check(torchChanged>redPost.size()/20&&tp[0]+tp[1]+tp[2]>rp[0]+rp[1]+rp[2],"The torch (lighting plus shadow-stage scatter) only adds light to the post frame");
+   SoftwareRenderer::setPostProcessing(previousPost);}
   SoftwareRenderer::setPixelLighting(false);
  }
  check(renderer.hardwareActive(),"Hardware remains active without fallback");report<<(passed?"PASS":"FAIL")<<": Vulkan material / depth / clipping checks\n";return passed;
@@ -580,6 +643,29 @@ bool SoftwareRenderer::testPerformance(){
  for(int level=6;level<10;++level){const auto& def=chunkDefinition(WorldId::Campaign,level);
   std::string name="Utility chapter "+std::to_string(level+1)+" turn";
   measure(name.c_str(),Game::mapInspection(def.playerStart,.6f,0,level,false,def.spawnHeight,false),120,true,true);
+ }
+ // Map 51's live intake water arcing in front of the player: hazard arcs, the sparks they spit (stepped
+ // against a basin map's solids) and the light they throw, every frame; then turned away from it.
+ measure("Live water arcs",Game::mapInspection({10,1.2f},kPi*.5f,-18,51,false,-999,false),120,true,false);
+ measure("Live water arcs behind",Game::mapInspection({10,1.2f},kPi*1.5f,-18,51,false,-999,false),120,true,false);
+ // The electricity's own share of those frames, and of map 36's pulsed floor with its plant powered: the
+ // frame's scene worked out, sparks stepped and bolts built into quads (counted, not rasterised).
+ for(int level:{51,36}){auto g=level==51?Game::mapInspection({10,1.2f},kPi*.5f,-18,51,false,-999,false):Game::mapInspection({12.9f,17.4f},-kPi*.5f,-12,36,false,-999,false);
+  if(level==36)g.setState(stateId("pwr_gen_online"),1);double worst=0,total=0;long quads=0,sparks=0,bolts=0;constexpr int frames=240;
+  for(int i=0;i<frames;++i){g.update({},1.f/60);const auto&p=g.player();auto begin=Clock::now();
+   auto stats=ElectricFx::draw(g,g.level(),{p.pos.x,p.pos.y,p.z+p.eye},1.f/Projection{float(DisplayWidth)/DisplayHeight}.focal(float(DisplayWidth)),[&](Point3,Point3,Point3,Point3,const Texture&,float){++quads;});
+   const double ms=std::chrono::duration<double,std::milli>(Clock::now()-begin).count();total+=ms;worst=std::max(worst,ms);sparks+=stats.sparks;bolts+=stats.bolts;}
+  report<<"Electricity on map "<<level<<": avg "<<total/frames<<" ms, max "<<worst<<" ms a frame; "<<sparks/frames<<" sparks, "<<bolts/frames<<" bolts, "<<quads/frames<<" quads a frame\n";report.flush();passed&=total/frames<=2;
+ }
+ // The whole frame (update and render) with the electricity drawn and lit, drawn alone, and not there,
+ // in turns of twelve frames (the last eight timed, the GPU's late work settled), so the machine's load
+ // falls on all three alike: what it costs is the medians' difference.
+ for(int level:{51,36}){SoftwareRenderer renderer(DisplayWidth,DisplayHeight);if(!renderer.enableHardware()){passed=false;break;}
+  auto g=level==51?Game::mapInspection({10,1.2f},kPi*.5f,-18,51,false,-999,false):Game::mapInspection({12.9f,17.4f},-kPi*.5f,-12,36,false,-999,false);if(level==36)g.setState(stateId("pwr_gen_online"),1);
+  std::array<std::vector<double>,3> times;for(int i=0;i<30;++i){g.update({},1.f/60);renderer.render(g);}
+  for(int turn=0;turn<30;++turn){electric::shown=2-turn%3;for(int i=0;i<12;++i){auto begin=Clock::now();g.update({},1.f/60);renderer.render(g);if(i>=4)times[size_t(electric::shown)].push_back(std::chrono::duration<double,std::milli>(Clock::now()-begin).count());}}
+  electric::shown=2;auto median=[](std::vector<double> v){std::sort(v.begin(),v.end());return v[v.size()/2];};const double lit=median(times[2]),drawn=median(times[1]),none=median(times[0]);
+  report<<"Electricity's cost on map "<<level<<" (frame medians): drawn and lit "<<lit<<" ms, drawn unlit "<<drawn<<" ms, none "<<none<<" ms; it costs "<<lit-none<<" ms\n";report.flush();passed&=lit-none<=2;
  }
  // Compare exact output with deck occlusion disabled. Geometry remains present;
  // the optimization must not change what is visible through shaft openings.

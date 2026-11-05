@@ -68,16 +68,12 @@
   {"id":609,"source":"assets/library/oak_b_pine_bark_2.png","factor":2},
   {"id":618,"source":"assets/library/pine_b_pine_bark_1.png","factor":2},
   {"id":646,"source":"assets/library/ground_mud.png","factor":2},
-  {"id":808,"source":"assets/library/lab_anomaly_relic_ancient_artifact_mx_1.png","factor":2},
   {"id":812,"source":"assets/library/lab_cell_gate_metal_6.png","factor":2},
   {"id":813,"source":"assets/library/lab_cell_gate_metal_4.png","factor":2},
-  {"id":818,"source":"assets/library/lab_control_board_electronics_etx_part_2.png","factor":2},
-  {"id":819,"source":"assets/library/lab_control_board_electronics_etx_part_1.png","factor":2},
   {"id":828,"source":"assets/library/lab_exec_desk_desk_1.png","factor":2},
   {"id":846,"source":"assets/library/lab_pa_horn_plastic_mx_3.png","factor":2},
   {"id":847,"source":"assets/library/lab_pa_horn_metal_hr_1_dark_smooth.png","factor":2},
   {"id":867,"source":"assets/library/lab_specimen_crate_metal_crate_3.png","factor":2},
-  {"id":869,"source":"assets/library/lab_status_display_elevator_screen_1.png","factor":2},
   {"id":871,"source":"assets/library/lab_test_chamber_machinery_1.png","factor":2},
   {"id":881,"source":"assets/library/med_cell_bars_metal_mp_6.png","factor":2},
   {"id":887,"source":"assets/library/med_crutches_crutches_textures.png","factor":2},
@@ -113,6 +109,5 @@
   {"id":2152,"source":"assets/library/textures/surface_paint_band_green.png","factor":2},
   {"id":2153,"source":"assets/library/textures/surface_paint_band_maroon.png","factor":2},
   {"id":2205,"source":"assets/library/clinic_ceiling_lamp_1_metal_mp_1.png","factor":2},
-  {"id":2206,"source":"assets/library/clinic_ceiling_lamp_1_metal_mp_4.png","factor":2},
-  {"id":2254,"source":"assets/library/office_display_cabinet_metal_6.png","factor":2}
+  {"id":2206,"source":"assets/library/clinic_ceiling_lamp_1_metal_mp_4.png","factor":2}
 ]

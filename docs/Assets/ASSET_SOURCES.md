@@ -16,6 +16,8 @@ RawMetal audio was copied or converted from the purchased/source library while l
 
 The player handgun's effects (resources 2260-2264, `src/assets/audio/pistol-*.wav` masters, RMS1 `.sfx` from `tools/EncodeEffects.py`'s encoder) come from `Audio/Sound Effects/Firearms`: the shot `Fire/pistol_fire_ufx_2.ogg`, the dry click `Misc/pistol_universal_empty_barrel_ufx_1.ogg`, the magazine `Reloading/pistol_reloading_mag_out_ufx_1.ogg` and `pistol_reloading_mag_in_ufx_1.ogg`, and the slide `Racking/pistol_racking_ufx_1.ogg`. Each was folded to mono at 44.1 kHz and brought to about -24 to -26 LUFS under a -3 dBFS limiter.
 
+A torn electrical lead's arc (`Sound::LeadArc`, resource 2347, the RMS1 `src/assets/library/audio/lead_arc.sfx` embedded from its `lead_arc.wav` master beside it) comes from the ROT Horror Audio Bundle v1.9: `ROT - Horror Audio Bundle v1.9/ROT - Horror Audio Bundle/Audio/Sound Effects/Misc/electric_shock_mx_1.ogg` (the same clip is at the library root's `Audio/Sound Effects/Misc/`). It was raised 5 dB and trimmed to 2.7 s, kept 44.1 kHz stereo PCM16; the spark bursts drawn at a torn end keep time with its crackles (`leadArc` in `src/world/World.h`). Like the rest of `src/assets/library/`, the master and the `.sfx` stay out of git.
+
 Surface-lift/reactor sources include Rust & Blood v1.1d, ROT v1.9, and Echoes v2.1 assets. Runtime WAV effects are 44.1 kHz PCM16; MP3 music is decoded at runtime.
 
 ## Physical clutter

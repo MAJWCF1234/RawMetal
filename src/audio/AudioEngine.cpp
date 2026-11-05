@@ -58,6 +58,8 @@ constexpr int AreaTitleResource=2125;
 constexpr int LockerSoundResource=2140;
 // The detection sting, the '?' tick and the radio squelch, in enum order from 2180.
 constexpr int DetectionSoundResource=2180;
+// A torn lead's arc: ROT Horror Audio Bundle, electric_shock_mx_1, +5 dB, trimmed to 2.7 s.
+constexpr int LeadArcResource=2347;
 std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
  return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
 }
@@ -108,7 +110,7 @@ void AudioEngine::configureMask(MaskFilter& mask,int kind){
 }
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   auto&sample=m_samples[i];

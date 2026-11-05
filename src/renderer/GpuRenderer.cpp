@@ -239,6 +239,10 @@ uint16_t emissionHalf(float value){
 float emissionFloat(uint16_t bits){
  float value=(bits&0x7c00u)==0?std::ldexp(float(bits&0x3ffu),-24):std::ldexp(1.f+float(bits&0x3ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;
 }
+// A lamp record's colour slots (lamps[2i+1].zw) carry its linear tone as half
+// floats: z = red | green<<16, w = blue | 1.0<<16, unpacked with unpackHalf2x16.
+// Channels stay at or above 2^-10, so neither slot's bits form a denormal or NaN.
+std::array<float,2> lampToneSlots(Point3 tone){auto h=[](float v){return uint32_t(emissionHalf(std::clamp(v,1.f/1024.f,60000.f)));};return {std::bit_cast<float>(h(tone.x)|h(tone.y)<<16),std::bit_cast<float>(h(tone.z)|0x3c00u<<16)};}
 std::vector<std::vector<uint8_t>> emissionBytes(const std::vector<EmissionLevel>& levels){
  std::vector<std::vector<uint8_t>> result;result.reserve(levels.size());
  for(const auto&level:levels){std::vector<uint8_t> bytes(level.pixels.size()*8);for(size_t i=0;i<level.pixels.size();++i)for(size_t c=0;c<4;++c){auto half=emissionHalf(level.pixels[i][c]);std::memcpy(bytes.data()+i*8+c*2,&half,2);}result.push_back(std::move(bytes));}
@@ -323,6 +327,31 @@ bool GpuRenderer::testNormalMips(){
  std::vector<Point3> edge(15,{0,0,1});edge.back()={1,0,0};auto last=normalMips(3,5,edge).back().pixels[0];if(std::fabs(last[0]-1.f/15)>.000001f||std::fabs(last[2]-14.f/15)>.000001f)return false;
  return true;
 }
+bool GpuRenderer::testLampTones(){
+ auto luma=[](Point3 c){return c.x*.2126f+c.y*.7152f+c.z*.0722f;};
+ auto unpack=[](std::array<float,2> slots){uint32_t z=std::bit_cast<uint32_t>(slots[0]),w=std::bit_cast<uint32_t>(slots[1]);return std::array<float,4>{emissionFloat(uint16_t(z&0xffffu)),emissionFloat(uint16_t(z>>16)),emissionFloat(uint16_t(w&0xffffu)),emissionFloat(uint16_t(w>>16))};};
+ auto packs=[&](Point3 c){auto slots=lampToneSlots(c);auto u=unpack(slots);float in[3]={c.x,c.y,c.z};
+  for(float s:slots)if(std::fpclassify(s)!=FP_NORMAL)return false;if(u[3]!=1.f)return false;
+  for(int i=0;i<3;++i)if(std::fabs(u[size_t(i)]-std::max(in[i],1.f/1024.f))>std::max(in[i],1.f/1024.f)*.0006f)return false;return true;};
+ for(float kelvin:{1000.f,1300.f,1900.f,3400.f,5600.f,12000.f})for(float tint:{-1.f,0.f,.3f,1.f}){
+  // White gel: exactly the shader's old Planck lampColour (fp32, as scene.frag computed it).
+  const float lambda[3]={610e-9f,550e-9f,465e-9f};float c[3];for(int i=0;i<3;++i)c[i]=1.f/(std::pow(lambda[i],5.f)*(std::exp(1.4388e-2f/(lambda[i]*std::max(kelvin,800.f)))-1.f));
+  c[1]*=1.f+tint*.35f;c[2]*=1.f-tint*.1f;float y=c[0]*.2126f+c[1]*.7152f+c[2]*.0722f;Point3 planck{c[0]/y,c[1]/y,c[2]/y};
+  auto white=WorldLight::tone(kelvin,tint,{1,1,1}),grey=WorldLight::tone(kelvin,tint,{.4f,.4f,.4f});
+  if(std::fabs(white.x-planck.x)>planck.x*2e-4f||std::fabs(white.y-planck.y)>planck.y*2e-4f||std::fabs(white.z-planck.z)>planck.z*2e-4f+1e-6f)return false;
+  if(std::fabs(grey.x-white.x)>1e-5f*white.x||std::fabs(grey.y-white.y)>1e-5f*white.y||std::fabs(luma(white)-1.f)>1e-4f||!packs(white))return false;
+  // Saturated gels keep the authored brightness unless a channel would pass the cap.
+  float bare=std::max({white.x,white.y,white.z});
+  for(Point3 gel:{Point3{1,.1f,.06f},Point3{.1f,1,.15f},Point3{.15f,.35f,1},Point3{1,0,0},Point3{0,0,1}}){
+   auto t=WorldLight::tone(kelvin,tint,gel);float peak=std::max({t.x,t.y,t.z});
+   if(!std::isfinite(peak)||t.x<0||t.y<0||t.z<0||peak>std::max(2.f,bare)*1.0001f||luma(t)>1.0001f||!packs(t))return false;
+   if(peak<std::max(2.f,bare)*.9999f&&std::fabs(luma(t)-1.f)>1e-4f)return false;
+  }
+ }
+ // A red emergency gel reads red, a resonance gel green and a monitor gel blue.
+ auto red=WorldLight::tone(3400,0,{1,.1f,.06f}),green=WorldLight::tone(5600,.3f,{.1f,1,.15f}),blue=WorldLight::tone(6500,0,{.15f,.35f,1});
+ return red.x>8*red.y&&red.x>8*red.z&&green.y>4*green.x&&green.y>4*green.z&&blue.z>1.5f*blue.y&&blue.z>4*blue.x;
+}
 bool GpuRenderer::testEmissionMips(){
  for(auto size:{std::array<int,2>{1,1},{3,5},{5,3},{1,7},{7,1},{9,7},{32,32},{348,307}}){
   int w=size[0],h=size[1];std::vector<uint32_t> source(size_t(w)*h);std::array<double,4> expected{};
@@ -353,8 +382,9 @@ struct GpuRenderer::Impl {
  int surfaceClientWidth=0,surfaceClientHeight=0;
  VkExtent2D mirrorExtent{};VkRenderPass mirrorPass=VK_NULL_HANDLE;VkPipeline mirrorPipeline=VK_NULL_HANDLE;std::vector<VkImageView> mirrorViews;std::vector<VkFramebuffer> mirrorFrames;std::uint64_t mirrorPresented=0;
  // Stereo block: clip, enabled, fog powers, then darkness (ambient scale, muzzle
- // falloff). NPC gun flashes live in the per-frame lamp storage buffer.
- bool vrMode=false;int vrEye=0;std::array<Image,2> vrOutputs{};std::array<float,28> vrProjection=[]{std::array<float,28> v{};v[24]=1.f;v[25]=.045f;return v;}();VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
+ // falloff), then the four fog lamps' linear tones (vec4 each). Transient lights
+ // (gun flashes, sparks, arcs) live in the per-frame lamp storage buffer.
+ bool vrMode=false;int vrEye=0;std::array<Image,2> vrOutputs{};std::array<float,44> vrProjection=[]{std::array<float,44> v{};v[24]=1.f;v[25]=.045f;for(int i=0;i<4;++i){auto t=WorldLight{}.tone();v[size_t(28+i*4)]=t.x;v[size_t(29+i*4)]=t.y;v[size_t(30+i*4)]=t.z;}return v;}();VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
  VkCommandPool pool=VK_NULL_HANDLE;
  // Two frames in flight: CPU prepares frame N while GPU renders frame N-1.
  // Each slot owns its command buffer, fence, dynamic vertex buffer, overlay
@@ -460,7 +490,9 @@ struct GpuRenderer::Impl {
  // geometry near it is rebuilt or the resident lamp set changes.
  static constexpr int MaxLamps=256,LampsPerCell=16,MaxLampCells=16384;static constexpr uint32_t ShadowSize=256;
  // eye/basis: the scene camera, rewritten every frame for the post stages.
- struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[8];};
+ // scatter: the torch's tone when lit (rgb, it scatters in the shadow stage's
+ // march) and w=1 when that stage carries the lamp shafts this frame.
+ struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];};
  // Sun cascades: three 2048x2048 D16 layers redrawn every frame from the
  // static caches (they follow the camera), sampled with hardware comparison.
  static constexpr uint32_t SunSize=2048;static constexpr int SunCascades=3;
@@ -501,9 +533,10 @@ struct GpuRenderer::Impl {
  // shadow maps stay, and the upload is the 8 KB record block, not the grid.
  std::vector<float> lampPowers;uint64_t lampPowerGeneration=1;std::array<uint64_t,FrameCount> lampPowerUploaded{};
  // True darkness (0..1): exposure ceiling and grade lift follow it.
- float darkness=0;std::array<std::array<float,4>,2> weaponFlashes{};
+ // Transient lights (Game::weaponFlashes): four world xyz + strength, then their four linear tones + reach.
+ float darkness=0;std::array<float,32> weaponFlashes{};
  // lampDirty: 0 current, 1 stale (geometry nearby rebuilt), 2 never drawn.
- std::vector<std::array<float,13>> lamps;std::vector<uint8_t> lampDirty;std::vector<std::array<float,6>> shadowDirtyBounds;
+ std::vector<std::array<float,16>> lamps;std::vector<uint8_t> lampDirty;std::vector<std::array<float,6>> shadowDirtyBounds;
  Image shadowAtlas;std::vector<VkImageView> shadowLayerViews;std::vector<VkFramebuffer> shadowFrames;int shadowCapacity=0;bool shadowLayoutReady=false,shadowAtlasFresh=true;
  VkRenderPass shadowPass=VK_NULL_HANDLE;VkPipeline shadowPipeline=VK_NULL_HANDLE;VkPipelineLayout shadowLayout=VK_NULL_HANDLE;VkSampler shadowSampler=VK_NULL_HANDLE;
  std::uint64_t shadowFacesDrawn=0;
@@ -1146,7 +1179,7 @@ void GpuRenderer::setReferenceDisplay(bool enabled){g_referenceDisplay=enabled;}
 void GpuRenderer::setTiltShift(bool enabled){m->tiltShift=enabled;}
 void GpuRenderer::setLens(float depthOfField,float lensEffects){m->lensDepthOfField=std::clamp(depthOfField,0.f,2.f);m->lensEffects=std::clamp(lensEffects,0.f,2.f);}
 void GpuRenderer::setTemporalAA(bool enabled){m->taaEnabled=enabled;if(!enabled)m->taaHistoryValid=false;}
-void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);}
+void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers,const std::array<Point3,4>& tones){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);for(size_t i=0;i<4;++i){m->vrProjection[28+i*4]=tones[i].x;m->vrProjection[29+i*4]=tones[i].y;m->vrProjection[30+i*4]=tones[i].z;}}
 void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
 bool GpuRenderer::beginStaticCache(int slot,std::uint64_t key){
  auto found=m->staticCaches.find(slot);
@@ -1185,12 +1218,12 @@ void GpuRenderer::endStaticCache(){
  }
  Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);
 }
-void GpuRenderer::setLamps(const std::vector<std::array<float,13>>&input,bool enabled,int detail){
+void GpuRenderer::setLamps(const std::vector<std::array<float,16>>&input,bool enabled,int detail){
  size_t count=std::min(input.size(),size_t(Impl::MaxLamps));
  uint64_t key=1469598103934665603ull;auto mix=[&](uint32_t value){key^=value;key*=1099511628211ull;};mix(enabled?1u:0u);mix(uint32_t(detail));mix(uint32_t(count));
  // Intensity is a record update, never shadow/grid identity. The lamp set
  // depends only on its pose, range and colour (plus renderer configuration).
- for(size_t i=0;i<count;++i)for(size_t k=0;k<13;++k)if(k!=4)mix(std::bit_cast<uint32_t>(input[i][k]));
+ for(size_t i=0;i<count;++i)for(size_t k=0;k<16;++k)if(k!=4)mix(std::bit_cast<uint32_t>(input[i][k]));
  if(key==m->lampKey){
   bool changed=false;for(size_t i=0;i<count;++i)if(input[i][4]!=m->lamps[i][4]){
    m->lamps[i][4]=input[i][4];float intensity=input[i][4]*m->lampPowers[i];
@@ -1203,7 +1236,7 @@ void GpuRenderer::setLamps(const std::vector<std::array<float,13>>&input,bool en
   // keeps nearby lighting steady while changed sources are redrawn.
   std::vector<uint8_t> dirty(count,uint8_t(2));
   if(enabled==m->pixelLighting)for(size_t i=0;i<count&&i<m->lamps.size()&&i<m->lampDirty.size();++i){
-   bool same=true;for(size_t k=0;k<13;++k)if(k!=4&&input[i][k]!=m->lamps[i][k]){same=false;break;}
+   bool same=true;for(size_t k=0;k<16;++k)if(k!=4&&input[i][k]!=m->lamps[i][k]){same=false;break;}
    if(same)dirty[i]=m->lampDirty[i];
   }
   m->lampKey=key;m->pixelLighting=enabled;m->lamps.assign(input.begin(),input.begin()+std::ptrdiff_t(count));m->lampDirty=std::move(dirty);m->lampPowers.assign(count,1.f);
@@ -1234,7 +1267,8 @@ void GpuRenderer::setLamps(const std::vector<std::array<float,13>>&input,bool en
  }
  m->lampData.assign(sizeof(header)+size_t(Impl::MaxLamps)*32+cells.size()*4,0);
  std::memcpy(m->lampData.data(),&header,sizeof(header));
- for(size_t i=0;i<count;++i){float record[8]={input[i][0],input[i][1],input[i][2],input[i][3],input[i][4],enabled&&input[i][7]>0&&int(i)<m->shadowCapacity?float(i):-1.f,input[i][5],input[i][6]};std::memcpy(m->lampData.data()+sizeof(header)+i*32,record,32);}
+ // The colour slots carry the final tone (blackbody x tint x gel), not kelvin and tint.
+ for(size_t i=0;i<count;++i){auto tone=lampToneSlots(WorldLight::tone(input[i][5],input[i][6],{input[i][13],input[i][14],input[i][15]}));float record[8]={input[i][0],input[i][1],input[i][2],input[i][3],input[i][4],enabled&&input[i][7]>0&&int(i)<m->shadowCapacity?float(i):-1.f,tone[0],tone[1]};std::memcpy(m->lampData.data()+sizeof(header)+i*32,record,32);}
  if(!cells.empty())std::memcpy(m->lampData.data()+sizeof(header)+size_t(Impl::MaxLamps)*32,cells.data(),cells.size()*4);
  ++m->lampGeneration;
 }
@@ -1244,9 +1278,9 @@ void GpuRenderer::setLampPowers(const std::vector<float>& powers){
   m->lampPowers[i]=power;float intensity=m->lamps[i][4]*power;std::memcpy(m->lampData.data()+sizeof(Impl::LampHeader)+i*32+16,&intensity,4);changed=true;}
  if(changed)++m->lampPowerGeneration;
 }
-void GpuRenderer::setDarkness(float darkness,float muzzleFalloff,const std::array<std::array<float,4>,2>& flashes){
+void GpuRenderer::setDarkness(float darkness,float muzzleFalloff,const std::array<electric::Flash,4>& flashes){
  m->darkness=std::clamp(darkness,0.f,1.f);m->vrProjection[24]=1.f-m->darkness;m->vrProjection[25]=muzzleFalloff;
- m->weaponFlashes=flashes;
+ for(size_t i=0;i<flashes.size();++i){const auto&f=flashes[i];float*at=m->weaponFlashes.data()+i*4,*tone=at+16;at[0]=f.at.x;at[1]=f.at.y;at[2]=f.at.z;at[3]=f.strength;tone[0]=f.tone.x;tone[1]=f.tone.y;tone[2]=f.tone.z;tone[3]=f.reach;}
 }
 std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
 void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
@@ -1396,7 +1430,9 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  else if(m->lampPowerUploaded[m->frameIndex]!=m->lampPowerGeneration&&m->lampData.size()>=sizeof(Impl::LampHeader)+size_t(Impl::MaxLamps)*32){std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+sizeof(Impl::LampHeader),m->lampData.data()+sizeof(Impl::LampHeader),size_t(Impl::MaxLamps)*32);m->lampPowerUploaded[m->frameIndex]=m->lampPowerGeneration;}
  {const auto&v=m->viewState;float camera[8]={v[0],v[1],v[2],v[10],v[3],v[4],v[5],v[6]};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,eye),camera,sizeof(camera));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,sun),m->sunData.data(),sizeof(m->sunData));
-   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flashes),m->weaponFlashes.data(),sizeof(m->weaponFlashes));
+   static_assert(offsetof(Impl::LampHeader,flashTones)==offsetof(Impl::LampHeader,flashes)+64);std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flashes),m->weaponFlashes.data(),sizeof(m->weaponFlashes));
+  // The shadow stage runs (and carries the shafts) exactly when compose does below.
+  {auto torch=v[8]>.5f?WorldLight::tone(5600,0,{1,1,1}):Point3{};float scatter[4]={torch.x,torch.y,torch.z,m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer?1.f:0.f};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,scatter),scatter,sizeof(scatter));}
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+3*sizeof(int32_t),&m->storm,sizeof(int32_t));}
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));

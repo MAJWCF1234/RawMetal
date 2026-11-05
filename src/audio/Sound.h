@@ -22,17 +22,21 @@ enum class Sound {
  // The loop under ALERT and EVASION.
  MusicAlert, GlassShatter, BottleBreak, WoodBreak, WoodImpact, PlasterBreak,
  // The player's handgun: the shot, the dry click, the magazine out and in, the slide released.
- PistolShot, PistolDry, PistolMagOut, PistolMagIn, PistolRack, Count
+ PistolShot, PistolDry, PistolMagOut, PistolMagIn, PistolRack,
+ // A live lead's clip arcing as it tears off, and the crackle after (leadArc keeps its sparks in time).
+ LeadArc, Count
 };
 // AudioEngine maps every sound from ZoneWind on to consecutive library resources
 // and AreaTitle, the locker sounds, the detection sounds and the alert loop to their own: a sound appended after them
 // needs its resource mapped there explicitly, or it would load an unrelated file.
-// GlassShatter on take consecutive resources from 2255 (the pistol from 2260).
-static_assert(int(Sound::Count)==int(Sound::PistolRack)+1,"map the new sound's resource in AudioEngine");
+// GlassShatter to PistolRack take consecutive resources from 2255 (the pistol from 2260); LeadArc is mapped on its own.
+static_assert(int(Sound::Count)==int(Sound::LeadArc)+1,"map the new sound's resource in AudioEngine");
 inline bool gunshotSound(Sound s){return s==Sound::Shot||s==Sound::PistolShot;}
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}
 // A finite z captures the emission origin even when the player's own sound is
 // mixed at the listener. NaN retains legacy events without authored elevation.
+// aiRadius: how far the AI hears it (0: by its kind and gain; below 0: never,
+// a sound for the player's ears alone).
 struct SoundEvent { Sound sound; Vec2 position{}; float gain=1, pitch=1; bool spatial=false; float radius=17; float z=std::numeric_limits<float>::quiet_NaN(); int speech=-1; size_t speaker=0; int speechPriority=0; float aiRadius=0;int owner=-1; };
 }

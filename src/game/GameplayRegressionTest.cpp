@@ -62,13 +62,13 @@ bool Game::testGameplayFixes(){
    for(int i=0;i<120;++i){g.tryMove({.015f,0});clear&=g.hullFits(g.m_player.pos,g.m_player.z,Player::StandingHeight);}
    check(clear&&g.m_player.pos.x>7.2f,"Player steps across a narrow track rail without catching its side");
    check(g.friendlyWalkSegment(0,{5.5f,6},0,{7.3f,6},1.6f),"NPC steps across the same narrow track rail");
-   g.m_player.pos={4,12};g.m_player.z=0;g.spawnCreature({Enemy::Kind::Chimera,{8,12},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Chase;
+   g.m_player.pos={4,12};g.m_player.z=0;g.spawnCreature({Enemy::Kind::Chimera,{8,12},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.recognition=1;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Chase;
    for(int i=0;i<300&&!g.dead();++i){g.updateEnemies(1.f/60);g.m_sounds.clear();}
    check(e.pos.x<6,"Chimera navigation steps across the same track rail");
   }
  // An off-centre opening with protruding visual architraves, in both directions.
  {auto m=regression::room();m->structures.push_back({6.08f,5,6.1f,8,0,4});Game g(regression::campaign(m));g.m_player.pos={3.4f,6};g.m_player.angle=kPi;
-  g.spawnCreature({Enemy::Kind::Chimera,{5.8f,6},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Chase;
+  g.spawnCreature({Enemy::Kind::Chimera,{5.8f,6},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.recognition=1;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Chase;
   for(int i=0;i<120;++i){g.updateEnemies(1.f/60);g.m_sounds.clear();}
   check(e.pos.x<5.4f&&g.hullFits(e.pos,e.z,e.hull(),e.radius(),false),"An obstructed creature pose recovers on the same side of its wall");
   m->actorTracks.push_back(regression::guard({5.95f,6},{4,6}));Game npc(regression::campaign(m));npc.m_player.pos={20,20};
@@ -86,16 +86,24 @@ bool Game::testGameplayFixes(){
   for(int i=0;i<400;++i){npc.update({},1.f/60);npc.m_sounds.clear();}
   check((npc.m_friendlyActors[0].pose.position.y-10.08f)*sign>.7f,"Autonomous NPC walks through the framed opening",std::to_string(sign));
  }
+ // The same frame in a wall along y: its posts stand in the wall's ends, so nothing drawn lies
+ // across the opening (it once laid two full-height trim slabs along it, which did not collide).
+ {auto m=regression::room();kit::officeWall(*m,10,1,10.16f,10.2f,0,3);kit::officeWall(*m,10,11.4f,10.16f,23,0,3);
+  const size_t frame=m->structures.size();kit::officeDoorway(*m,10,10.16f,10.2f,11.4f,0,3);bool clear=true;
+  for(size_t i=frame;i<m->structures.size();++i){const auto&s=m->structures[i];clear&=s.bottom>=2.f||s.y2<=10.21f||s.y1>=11.39f;}
+  Game g(regression::campaign(m));g.m_player.pos={8.9f,10.8f};g.m_player.z=0;
+  bool fits=true;for(int i=0;i<160;++i){g.tryMove({.015f,0});fits&=g.hullFits(g.m_player.pos,0,Player::StandingHeight);}
+  check(clear&&fits&&g.m_player.pos.x>11.f&&!g.hullFits({10.08f,10},0,Player::StandingHeight),"A doorway frame in a wall along y stands at the opening's ends and the player walks through it",std::to_string(g.m_player.pos.x));}
  {auto m=regression::room();m->structures={{1,9.9f,10.1f,10.1f,0,8},{11.5f,9.9f,23,10.1f,0,8},{10.1f,9.9f,11.5f,10.1f,2.5f,8}};
   m->doors.push_back({10.1f,11.5f,10});Game g(regression::campaign(m));g.m_world.setDoor(0,1,true);g.m_player.pos={10.8f,13};g.m_player.angle=kPi*.5f;
-  g.spawnCreature({Enemy::Kind::Chimera,{10.3f,7.5f},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi*.5f;e.lastKnown=g.m_player.pos;e.lastKnownZ=0;e.state=Enemy::State::Chase;
+  g.spawnCreature({Enemy::Kind::Chimera,{10.3f,7.5f},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi*.5f;e.recognition=1;e.lastKnown=g.m_player.pos;e.lastKnownZ=0;e.state=Enemy::State::Chase;
   bool clear=true;for(int i=0;i<700&&!g.dead();++i){g.updateEnemies(1.f/60);g.m_sounds.clear();clear&=!g.m_world.structureBlocksHull(e.pos.x,e.pos.y,e.radius(),e.z,e.hull());}
   check(clear&&e.pos.y>10.5f,"Chimera aligns with an off-centre doorway and crosses without clipping",std::to_string(e.pos.x)+","+std::to_string(e.pos.y));
  }
  // Chase, attack recovery, and a slow frame cannot drive a large body into its prey.
  for(float dt:{1.f/120,1.f/30,.2f}){
   Game g(regression::campaign(regression::room()));g.m_player.pos={6,12};g.m_player.angle=kPi;
-  g.spawnCreature({Enemy::Kind::Chimera,{14,12},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.lastKnown=g.m_player.pos;e.lastKnownZ=0;e.state=Enemy::State::Chase;
+  g.spawnCreature({Enemy::Kind::Chimera,{14,12},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.recognition=1;e.lastKnown=g.m_player.pos;e.lastKnownZ=0;e.state=Enemy::State::Chase;
   float closest=8,peak=0;bool attacked=false;
   for(int i=0;i<int(5/dt)&&!g.dead();++i){auto before=e.pos;g.updateEnemies(dt);closest=std::min(closest,length(e.pos-g.m_player.pos));peak=std::max(peak,length(e.pos-before)/dt);attacked|=e.windup>0||e.strike>0;g.m_sounds.clear();}
   std::ostringstream value;value<<"dt="<<dt<<" closest="<<closest<<" peak="<<peak<<" attacked="<<attacked;
@@ -109,7 +117,7 @@ bool Game::testGameplayFixes(){
   check(closest>=1.199f&&g.state(m->actorTracks[0].damageState)>0,"Chimera attacks NPC prey without entering its body during cooldown",std::to_string(closest));
  }
  {auto m=regression::room();m->structures.push_back({9.8f,11.5f,10.2f,11.85f,0,4});Game g(regression::campaign(m));g.m_player.pos={6,12};g.m_player.angle=kPi;
-  g.spawnCreature({Enemy::Kind::Chimera,{14,12},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.lastKnown=g.m_player.pos;e.lastKnownZ=0;e.state=Enemy::State::Chase;
+  g.spawnCreature({Enemy::Kind::Chimera,{14,12},0},30,false);auto&e=g.m_enemies[0];e.heading=kPi;e.recognition=1;e.lastKnown=g.m_player.pos;e.lastKnownZ=0;e.state=Enemy::State::Chase;
   bool clear=true;float detour=0;
   for(int i=0;i<900&&!g.dead();++i){g.updateEnemies(1.f/60);clear&=!g.m_world.structureBlocksHull(e.pos.x,e.pos.y,e.radius(),e.z,e.hull());detour=std::max(detour,std::fabs(e.pos.y-12));g.m_sounds.clear();}
   check(clear&&e.pos.x<9&&detour>.35f,"Chimera routes its body around an obstacle instead of pushing into it",std::to_string(e.pos.x)+","+std::to_string(e.pos.y));
@@ -133,7 +141,7 @@ bool Game::testGameplayFixes(){
   {Game g;g.loadLevel(64,false);auto found=std::find_if(g.m_enemies.begin(),g.m_enemies.end(),[](const Enemy&e){return e.kind==Enemy::Kind::Chimera;});
    bool authored=found!=g.m_enemies.end();check(authored,"Research Receiving retains its authored Chimera");
    if(authored){auto enemy=*found;g.m_enemies={enemy};auto&e=g.m_enemies[0];g.setState(e.wakeState,1);e.wakeState=0;
-    g.m_player.pos={10.7f,11.55f};g.m_player.z=-19;g.m_player.angle=0;e.heading=-kPi*.5f;e.awareness=60;e.lastKnown=g.m_player.pos;e.lastKnownZ=-19;e.state=Enemy::State::Chase;
+    g.m_player.pos={10.7f,11.55f};g.m_player.z=-19;g.m_player.angle=0;e.heading=-kPi*.5f;e.awareness=60;e.recognition=1;e.lastKnown=g.m_player.pos;e.lastKnownZ=-19;e.state=Enemy::State::Chase;
     bool clear=true;for(int i=0;i<3600&&!g.dead()&&length(e.pos-g.m_player.pos)>1.9f;++i){g.updateEnemies(1.f/120);g.m_sounds.clear();clear&=!g.m_world.structureBlocksHull(e.pos.x,e.pos.y,e.radius(),e.z,e.hull());}
     std::ostringstream value;value<<e.pos.x<<','<<e.pos.y<<','<<e.z<<" distance "<<length(e.pos-g.m_player.pos);
     check(clear&&e.pos.x>8.5f&&length(e.pos-g.m_player.pos)<1.95f,"Authored Chimera leaves the cold hold and passes the receiving gate",value.str());

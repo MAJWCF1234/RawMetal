@@ -42,6 +42,21 @@ struct WorldLight {
  // Colour temperature (K, Planck blackbody) and a green(+)/magenta(-) tint
  // for discharge tubes. 3400 K, 0 is a neutral warm incandescent.
  float kelvin=3400,tint=0;
+ // A colour gel (linear RGB filter, each 0..1): red emergency light, green
+ // resonance glow, monitor blue. White leaves the blackbody untouched.
+ Point3 gel{1,1,1};
+ // Linear RGB at unit luminance: Planck's blackbody sampled at 610, 550 and
+ // 465 nm, the tint, then the gel. A gel keeps the lamp's brightness (CPU
+ // bakes stay scalar) but no channel climbs past 2 (or the bare lamp's own
+ // peak), so a saturated blue or red cannot blow out under the shoulder.
+ static Point3 tone(float kelvin,float tint,Point3 gel){
+  const double lambda[3]={610e-9,550e-9,465e-9},filter[3]={gel.x,gel.y,gel.z};double c[3],bare=0,luma=0,peak=0;
+  for(int i=0;i<3;++i){c[i]=1./(std::pow(lambda[i],5.)*(std::exp(1.4388e-2/(lambda[i]*std::max(double(kelvin),800.)))-1.));}
+  c[1]*=1.+tint*.35;c[2]*=1.-tint*.1;double y=c[0]*.2126+c[1]*.7152+c[2]*.0722;for(double&v:c)v/=std::max(y,1e-300);
+  for(int i=0;i<3;++i){bare=std::max(bare,c[i]);c[i]*=std::clamp(filter[i],0.,1.);luma+=c[i]*(i==0?.2126:i==1?.7152:.0722);peak=std::max(peak,c[i]);}
+  double scale=luma>1e-9?std::min(1./luma,std::max(2.,bare)/peak):0.;return {float(c[0]*scale),float(c[1]*scale),float(c[2]*scale)};
+ }
+ Point3 tone()const{return tone(kelvin,tint,gel);}
  // Switching, mirroring Hazard: lit while (enabledState==0 or its state equals
  // enabledValue) xor invert, and, with a period, inside the on-window. flicker
  // (0..1) adds irregular dropouts: a failing tube or a browned-out circuit.
@@ -74,6 +89,77 @@ struct SunLight {Point3 direction{};float intensity=0,r=1,g=1,b=1;};
 // 4 red steel, 5 pale steel, 6 dark finish. An explicit endZ
 // supplies equipment/bracing geometry without automatic ceiling hangers.
 struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
+// An electrical lead (LEAD record, kit::lead): a cable plugged in at `anchor`
+// (a cabinet's terminals, a machine's posts) whose far end is clipped to the
+// carryable prop this map's clutter spawn `prop` becomes, at `offset` in the
+// prop's own frame (x across its width, y its depth, z up from its base); or
+// tied to the fixed point `end` (prop<0); or already torn (`loose`: it hangs
+// from its anchor, its tail toward `end`). `length` is the cable's own, so the
+// slack is what it has over the span. The clip tears when the prop pulls past
+// length+TearMargin, leaves the map or breaks: a `live` lead arcs as it goes,
+// and tearing sets `state`. Absolute heights; material is a PipeRun finish
+// (0-6) or a cable's insulation: 7 black, 8 red.
+// A test lead (kit::testLead, LEAD's panel|socket|terminal) has a plug at each end. Its
+// `anchor` is a socket on the instrument fixture `panel` (socketPort, from leadPorts()) and
+// `socket` the way the plug and its boot hold the cable out of it; `lamp` is the panel's
+// pilot, a light that dies when any lead on the panel tears. Its `offset` is the terminal
+// post terminalPort on its prop, and `terminal` the post's axis (the prop's frame). The plug
+// there is a right-angle banana plug: its pin down the post, its head PlugHead above the post's
+// top and its boot leaving level, swivelled round the post toward where the cable runs, so it
+// turns with the prop; torn, it stays on the cable's end and swings with its weight. Zero
+// socket or terminal: a bare post or clip, as before.
+struct Lead {Point3 anchor{},end{},offset{};int prop=-1;bool loose=false;float length=1,radius=.006f;int material=7;bool live=false;StateId state=0;
+ Point3 socket{},terminal{};int panel=-1,socketPort=-1,terminalPort=-1,lamp=-1;
+ bool socketed()const{return socket.x!=0||socket.y!=0||socket.z!=0;}bool plugged()const{return terminal.x!=0||terminal.y!=0||terminal.z!=0;}
+ static constexpr float TearMargin=.3f,PlugHead=.018f;};
+// Where test leads connect, by model: an instrument's sockets, a cell's terminal posts, a
+// panel's pilot lens ("lamp"). In the model's own frame at its catalog size (x across its
+// width, y its depth, z up from its base); `out` is the way a seated plug leaves the port.
+struct LeadPort {int model;std::string_view name;Point3 at,out;};
+std::span<const LeadPort> leadPorts();
+int leadPort(int model,std::string_view name);
+// A port on fixture `f` in the world, the fixture's base standing on `floor`; `out` gets its way out.
+Point3 fixturePort(const Fixture& f,const LeadPort& port,float floor,Point3* out=nullptr);
+// A port on a prop spawned at `width` x `depth` x `height`, in the prop's frame (a lead's offset).
+Point3 propPort(int model,float width,float depth,float height,const LeadPort& port);
+// A lead's cable as simulated: verlet points from the anchor out (transient,
+// re-hung on load) and whether its clip has torn (saved). tornAt is the game
+// time it tore (its sparks), clutter the prop's last index in its chunk list,
+// plugUp the axis of the post a seated plug stands on (zero off its post).
+struct LeadRope {std::vector<Point3> points,previous;bool torn=false,sleeping=false;float rest=0,tornAt=-1e9f;int clutter=-1;Point3 plugUp{};};
+// A test lead's right-angle plug at its cable's far end, as drawn: the tip its pin stands out of,
+// the axis up its body (the pin down it) and the way its boot leaves toward the cable. Seated, on
+// its post; torn, on the cable's end, hanging pin down, and laid on its side as the end comes to
+// rest on `support` (the height under it), lifted so no part of it sinks into what it lies on.
+struct LeadPlug {Point3 tip{},up{},side{};};
+LeadPlug leadPlug(const Lead& l,const LeadRope& r,float support);
+// The lowest point of that plug: its pin, moulded body and boot about the lead's `radius`.
+float leadPlugLowest(const LeadPlug& p,float radius);
+// The prop a lead is clipped to, as its cable meets it: the prop's box (centre,
+// unit axes, half sizes). The cable stays out of it and leaves the clip outward
+// through the face the clip is on, held off it as a plug's boot holds a lead.
+struct LeadBody {Point3 centre{},axis[3]{};float half[3]{};};
+// A lead's cable as it is drawn: the Catmull-Rom curve through its points, `t` (0-1) of the
+// way along the piece from point k to point k+1.
+inline Point3 leadCurve(const std::vector<Point3>& p,size_t k,float t){const size_t n=p.size();const auto&p0=p[k?k-1:0];const auto&p1=p[k];const auto&p2=p[std::min(k+1,n-1)];const auto&p3=p[std::min(k+2,n-1)];const float t2=t*t,t3=t2*t;
+ return p0*(-.5f*t3+t2-.5f*t)+p1*(1.5f*t3-2.5f*t2+1)+p2*(-1.5f*t3+2*t2+.5f*t)+p3*(.5f*t3-.5f*t2);}
+// How deep `p` lies inside the body's box (0 or less: outside it).
+inline float leadBodyDepth(const LeadBody& b,Point3 p){const auto d=p-b.centre;float least=1e9f;for(int j=0;j<3;++j)least=std::min(least,b.half[j]-std::fabs(d.x*b.axis[j].x+d.y*b.axis[j].y+d.z*b.axis[j].z));return least;}
+// The body as its cable meets it at `clip`: the face the clip is on (the one it lies nearest,
+// as a share of the box; `face` gets its axis, `side` -1 or 1 which end) is brought down to
+// the clip's own level, as for a plug on a lid below the top of the prop's box. The cable may
+// lie at the level it is plugged in at, never below it.
+inline LeadBody leadBodyAtClip(LeadBody b,Point3 clip,int* face=nullptr,float* side=nullptr){
+ const auto d=clip-b.centre;int f=2;float most=-1,s=1,q=0;
+ for(int j=0;j<3;++j){const float v=d.x*b.axis[j].x+d.y*b.axis[j].y+d.z*b.axis[j].z,share=std::fabs(v)/std::max(b.half[j],1e-3f);if(share>most){most=share;f=j;s=v<0?-1.f:1.f;q=std::fabs(v);}}
+ if(q<b.half[f]){const float cut=(b.half[f]-q)*.5f;b.half[f]-=cut;b.centre=b.centre-b.axis[f]*(s*cut);}
+ if(face)*face=f;if(side)*side=s;return b;}
+// A torn live lead's arcing, by seconds since it tore: the zap, then the
+// crackles of the lead_arc clip it plays (measured from its envelope), then it
+// is dead. The sparks and the sound keep time together. 1 the zap, .6 a spit.
+// `since` gets the seconds into the burst under way.
+inline float leadArc(float age,float* since=nullptr){constexpr float bursts[][2]={{0,.26f},{.40f,.52f},{.60f,1.12f},{1.30f,1.52f},{1.60f,1.68f},{1.90f,1.98f},{2.15f,2.28f},{2.45f,2.52f}};
+ for(const auto& b:bursts)if(age>=b[0]&&age<b[1]){if(since)*since=age-b[0];return b[0]==0?1.f:.6f;}return 0.f;}
 // scale and health (0 = the kind's default) make variants and bosses. A
 // non-zero wakeState keeps the creature dormant and deaf until that state is
 // set: patients on their beds, a nest that wakes when the lights fail.
@@ -170,11 +256,14 @@ struct AuthoredSign {
 // A named region of a map (HUD location label). The first zone containing
 // the player wins; maps without zones show the map name. A zone with a title
 // announces a major area: the first time the player enters it the title
-// card fades in across the top. A title-only zone has no name.
+// card fades in across the top. A title-only zone has no name. A zone that
+// sets a haze gives its box its own air (World::haze); a haze-only zone has
+// neither name nor title.
 struct AuthoredZone {
     std::string name;
     float x1=0,y1=0,x2=24,y2=24,bottom=-1000,top=1000;
     std::string title;
+    Haze haze=EnvironmentHaze;
 };
 struct AuthoredNavHint {
     Vec2 position{};
@@ -242,6 +331,7 @@ struct AuthoredMapData {
     std::vector<WorldProp> props;
     std::vector<Fixture> fixtures;
     std::vector<PipeRun> pipes;
+    std::vector<Lead> leads;
     std::vector<WorldLight> lights;
     std::vector<CreatureSpawn> creatureSpawns;
     std::vector<PickupSpawn> pickupSpawns;
@@ -272,6 +362,11 @@ struct AuthoredMapData {
     std::vector<Shelter> shelters;
     int wallSurface=SurfaceDefault,floorSurface=SurfaceDefault,ceilingSurface=SurfaceDefault;
 };
+// Seat test lead `l` by name: its anchor in socket `socket` of fixture `panel` (or left as it
+// is with no panel), its offset on terminal `terminal` of its prop (or left with none). The
+// first lead on a panel adds the panel's pilot lamp, lit until any lead on it tears. Returns
+// what is wrong (no such fixture, prop or port) or an empty string.
+std::string seatTestLead(AuthoredMapData& m,Lead& l,int panel,std::string_view socket,std::string_view terminal);
 struct CustomCampaign {
     std::string name;
     std::string sourceFile;
@@ -325,6 +420,9 @@ public:
      for(const auto& zone:m_mapData->zones)if(!zone.title.empty()&&p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.title.c_str();
      return nullptr;
     }
+    // The air at a point: the first zone there that sets a haze, else the
+    // map's own, else the environment's (interior, outdoor, or by sky).
+    Haze haze(Vec2 p,float z)const;
     // The map's surface sets (Surface values); SurfaceDefault keeps the legacy finish.
     int wallSurface()const{return m_mapData?m_mapData->wallSurface:SurfaceDefault;}
     int floorSurface()const{return m_mapData?m_mapData->floorSurface:SurfaceDefault;}
@@ -374,6 +472,21 @@ public:
     const std::vector<Hazard>& hazards()const{return m_hazards;}
     const std::vector<Compactor>& compactors()const{return m_compactors;}
     const std::vector<Breakable>& breakables()const{static const std::vector<Breakable> none;return m_mapData?m_mapData->breakables:none;}
+    // Electrical leads and their cables as simulated. Game steps them with the
+    // clutter physics and decides when a clip tears; the cable itself lives here.
+    const std::vector<Lead>& leads()const{static const std::vector<Lead> none;return m_mapData?m_mapData->leads:none;}
+    const std::vector<LeadRope>& leadRopes()const{return m_leadRopes;}
+    // Hang lead i's cable at rest from its anchor to `end` (its clip or fixed
+    // end) and let it settle asleep; `body` is the prop it is clipped to (null:
+    // none), which the cable hangs clear of. Limp (end null) it is only laid
+    // over what is under it, awake: stepping settles it (Game::settleLeads).
+    void hangLead(int i,const Point3* end,const LeadBody* body=nullptr);
+    // One step of lead i's cable: gravity, its length, the floor and solids
+    // under it and its clipped prop; `end` pins its far end (null: the end is free).
+    void stepLead(int i,float dt,const Point3* end,const LeadBody* body=nullptr);
+    // How far any point of lead i's cable moves in `seconds` of play from where it lies (a copy
+    // is stepped, the world untouched): a cable at rest stays within millimetres, one left in mid-air falls.
+    float leadUnrest(int i,float seconds,const Point3* end,const LeadBody* body=nullptr)const;
     bool fixtureHasParts(int i)const{for(const auto&b:breakables())if(b.fixture==i)return true;return false;}
     unsigned fixtureParts(int i)const{unsigned mask=~0u;for(int j=0;j<int(breakables().size());++j)if(breakables()[j].fixture==i&&!breakableIntact(j))mask&=~breakables()[j].part;return mask;}
     int breakableStructure(int i)const{return m_breakableFirst+i;}
@@ -441,7 +554,7 @@ public:
     void updateLift(float dt);
     void restoreLift(const World& saved);
     // A rebuilt chunk takes back what play changed: lift, reactor and broken crates.
-    void restoreDynamic(const World& saved){restoreLift(saved);m_breakableDamage=saved.m_breakableDamage;m_breakableAge=saved.m_breakableAge;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
+    void restoreDynamic(const World& saved){restoreLift(saved);if(saved.m_leadRopes.size()==m_leadRopes.size())m_leadRopes=saved.m_leadRopes;m_breakableDamage=saved.m_breakableDamage;m_breakableAge=saved.m_breakableAge;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
     const char* liftStatus()const;
     float liftLampPower()const;
     float liftMotorGain()const;
@@ -505,6 +618,7 @@ private:
     std::vector<MapLayer> m_layers;
     std::vector<std::pair<int,int>> m_destroyedTiles;
     int m_breakableFirst=0;std::vector<std::uint16_t> m_brokenBreakables;std::vector<float> m_breakableDamage,m_breakableAge;
+    std::vector<LeadRope> m_leadRopes;
     void removeBreakable(int i);
     // Never copied: a plan belongs to the World it was made on.
     struct DoorPlanSlot {const std::vector<char>* open=nullptr;DoorPlanSlot()=default;DoorPlanSlot(const DoorPlanSlot&){}DoorPlanSlot& operator=(const DoorPlanSlot&){return *this;}};

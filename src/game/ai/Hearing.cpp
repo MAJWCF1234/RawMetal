@@ -8,10 +8,11 @@ std::vector<AiStimulus> Game::aiStimuli()const{
  std::vector<AiStimulus> out;
  for(const auto&event:m_sounds){
   if(event.speech>=0)continue; // Radio dialogue is not a new perception stimulus.
+  if(event.aiRadius<0)continue; // Written for the player's ears alone (a creature's feet and breath).
   bool shot=gunshotSound(event.sound),step=footstepSound(event.sound);
   // A swing or a throw is a whoosh, not a report: what it hits is the noise.
   bool weapon=shot||event.sound==Sound::Pump||event.sound==Sound::Empty||(event.sound>=Sound::PistolDry&&event.sound<=Sound::PistolRack);
-  bool impact=event.sound==Sound::WoodBreak||event.sound==Sound::WoodImpact||event.sound==Sound::PlasterBreak||event.sound==Sound::GlassShatter||event.sound==Sound::BottleBreak||event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock;
+  bool impact=event.sound==Sound::WoodBreak||event.sound==Sound::WoodImpact||event.sound==Sound::PlasterBreak||event.sound==Sound::GlassShatter||event.sound==Sound::BottleBreak||event.sound==Sound::JunkMetal||event.sound==Sound::JunkGlass||event.sound==Sound::JunkSoft||event.sound==Sound::PunchHit||event.sound==Sound::Land||event.sound==Sound::LockerKnock||event.sound==Sound::LeadArc;
   bool danger=event.sound==Sound::LiftCrash||event.sound==Sound::LiftSnap;
   // A locker's latch, shut and bang carry like any door; its sting is score.
   bool locker=event.sound==Sound::LockerLatch||event.sound==Sound::LockerShut||event.sound==Sound::LockerBang;
@@ -30,7 +31,7 @@ std::vector<AiStimulus> Game::aiStimuli()const{
   // captured source so the duplicate cannot bypass own/friendly-shot filters.
   if(shot){auto global=source+chunkOffset(m_level);for(const auto&guardShot:m_guardShots)if(lengthSq(guardShot.source-global)<.0025f&&std::fabs(guardShot.z-z)<.05f){owner=guardShot.npc;break;}}
   unsigned category=danger?ai::SoundDanger:weapon?ai::SoundWeapon:impact?ai::SoundImpact:ai::SoundWorld;
-  out.push_back({source,z,radius,event.gain,weapon||danger,owner,category});
+  out.push_back({source,z,radius,event.gain,weapon||danger,owner,category,step});
  }return out;
 }
 bool Game::soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim,float farTrim)const{
@@ -86,6 +87,27 @@ bool Game::testHearing(){
   check(step!=g.m_sounds.end()&&std::isfinite(step->z)&&std::fabs(step->z-g.player().z-.04f)<.001f,"Real standing/crouched movement emits captured foot-contact height at 60/120 Hz");
   if(step==g.m_sounds.end())continue;auto source=step->position;g.m_player.pos={18.5f,18.5f};g.updateEnemies(.01f);
   check(crouch?g.m_enemies[0].awareness==0:(g.m_enemies[0].state==Enemy::State::Investigate&&lengthSq(g.m_enemies[0].lastKnown-source)<.001f),"Walking is heard where emitted while equivalent crouching remains undetected");
+ }
+ // Footsteps carry with the floor and the gait (stepHeard): steel furthest and
+ // grass least, a sprint well over twice a walk, a crouch inside 1.1 m on any
+ // floor (under the 1.25 m takedown reach). A creature hears a sprint six metres
+ // off where a walk goes unheard, and the HUD's noise pips read the last step.
+ {const Sound floors[]={Sound::Metal1,Sound::StepGravel1,Sound::Concrete1,Sound::StepDirt1,Sound::StepGrass1};bool ordered=true,quiet=true;float last=1e9f;
+  for(auto f:floors){const float walk=stepHeard(f,false,false),sprint=stepHeard(f,false,true);report<<"step radius "<<int(f)<<": crouch "<<stepHeard(f,true,false)<<" walk "<<walk<<" sprint "<<sprint<<'\n';
+   ordered&=walk<last&&sprint>walk*2;last=walk;quiet&=stepHeard(f,true,false)<=1.1f&&stepHeard(f,true,true)<=1.1f;}
+  check(ordered&&quiet&&std::fabs(stepHeard(Sound::Concrete1,true,false)-.95f)<.01f&&std::fabs(stepHeard(Sound::Concrete1,false,false)-4.5f*std::sqrt(.48f))<.01f&&std::fabs(stepHeard(Sound::Concrete1,false,true)-7.5f)<.01f&&std::fabs(stepHeard(Sound::Metal1,false,true)-12)<.01f&&std::fabs(stepHeard(Sound::StepGrass1,false,false)-2.184f)<.01f,"A step carries by floor (steel 1.6, gravel 1.35, concrete 1, dirt .85, grass .7) and gait; on concrete a crouch and a walk carry as far as before, and a crouch stays inside 1.1 m on any floor");
+ }
+ {int pips[3]={};float noise[3]={};
+  for(int gait=0;gait<3;++gait){auto g=scene();g.m_player.pos={6.5f,12.4f};g.m_player.angle=kPi*.5f;g.m_stepDistance=2;InputState input{};input.forward=true;input.crouch=gait==0;input.sprint=gait==2;g.updateMovement(input,1.f/60);
+   auto step=std::find_if(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return footstepSound(e.sound);});noise[gait]=g.playerNoise();pips[gait]=int(std::ceil(noise[gait]*5.f-.01f));
+   check(step!=g.m_sounds.end()&&std::fabs(step->aiRadius-(gait==0?.95f:gait==1?3.12f:7.5f))<.01f,"The player's step is written with its floor-and-gait hearing radius (crouch .95, walk 3.12, sprint 7.5 m on concrete)");
+   if(step==g.m_sounds.end())continue;auto source=step->position;g.m_player.pos={18.5f,18.5f};g.updateEnemies(.01f);
+   report<<"gait "<<gait<<" step at "<<source.x<<','<<source.y<<" radius "<<step->aiRadius<<" enemy state="<<int(g.m_enemies[0].state)<<" awareness="<<g.m_enemies[0].awareness<<" noise "<<noise[gait]<<" pips "<<pips[gait]<<'\n';
+   if(gait)check(gait==2?(g.m_enemies[0].state==Enemy::State::Investigate&&lengthSq(g.m_enemies[0].lastKnown-source)<.001f):g.m_enemies[0].awareness==0,"A creature hears a sprint six metres off, where a walk goes unheard");
+   if(gait==2){g.m_stepNoiseAge=.6f;const float held=g.playerNoise();g.m_stepNoiseAge=.85f;const float fading=g.playerNoise();g.m_stepNoiseAge=0;g.update({},.05f);const bool ages=g.m_stepNoiseAge>=.05f;g.m_stepNoiseAge=1.f;
+    check(held==noise[2]&&fading>0&&fading<held&&g.playerNoise()==0&&ages,"The noise meter holds through a stride, then fades out by a second after the step");}
+  }
+  check(pips[0]==1&&pips[1]==2&&pips[2]==4,"The noise pips read one for a crouch, two for a walk and four for a sprint on concrete");
  }
  {auto g=scene(false,true);Clutter object;object.kind=3;object.pos={8.5f,6.5f};object.z=1.2f;object.vz=-4;g.m_clutter={object};
   for(int i=0;i<120&&g.m_sounds.empty();++i)g.updateClutter({},1.f/120);

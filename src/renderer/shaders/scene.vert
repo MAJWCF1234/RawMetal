@@ -19,11 +19,11 @@ layout(location=6) in vec4 worldNormal;
 #endif
 // darkness: x ambient scale (0 in true darkness), y muzzle falloff,
 // z horizontal projection scale, w near plane (from Projection).
-// NPC flashes (world xyz, strength) use the lamp storage buffer.
-layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;} stereo;
+// Transient lights (world xyz, strength; tone, reach) use the lamp storage buffer.
+layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;vec4 fogTone[4];} stereo;
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
 layout(std430,set=1,binding=1) readonly buffer ActorLights {ActorLighting actor[];} actors;
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[2];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];} lampGrid;
 
 layout(push_constant) uniform ViewState {
  vec4 eyeYaw;
@@ -179,20 +179,21 @@ void main(){
    }
   }
 
-  // The player's muzzle flash, then NPC gun flashes; in darkness the falloff
+  // The player's muzzle flash, then the transient lights (NPC guns, sparks, arcs); in darkness the falloff
   // eases so a shot lights the whole room for an instant. Opaque surfaces
   // with per-pixel lamps are lit in the fragment shader (a vertex misses big quads).
-  if(lampGrid.flags.x==0||surface.z>=0.5||lighting.x>=1.5)for(int flash=0;flash<3;++flash){
+  if(lampGrid.flags.x==0||surface.z>=0.5||lighting.x>=1.5)for(int flash=0;flash<5;++flash){
    float strength=flash==0?view.effects.y:lampGrid.flashes[flash-1].w;
    if(strength<=0.0)continue;
    vec3 muzzle=flash==0?eye+forwardWorld*0.42-vec3(0,0,0.10):lampGrid.flashes[flash-1].xyz;
+   float reach=flash==0?12.0:lampGrid.flashTones[flash-1].w,r2=reach*reach;
    vec3 toPoint=vertexPos-muzzle;
    float d2=dot(toPoint,toPoint);
 
-   if(d2<144.0){
+   if(d2<r2){
     float d=max(sqrt(d2),0.001);
     float facing=0.35+0.65*abs(dot(n,toPoint))/d;
-    float edge=1.0-d2/144.0;
+    float edge=1.0-d2/r2;
 
     adjustedLighting.y+=strength*1.4*edge*edge*facing/(1.0+d2*stereo.darkness.y);
    }

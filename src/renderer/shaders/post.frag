@@ -41,30 +41,30 @@ vec3 viewNormal(vec2 at,vec3 center){
 // 4x4 neighbourhood with similar depth removes that pattern without bleeding
 // across silhouettes (denoisedBoth below).
 
-// Lamp visibility from the shadow stage, filtered like the occlusion.
-vec2 denoisedShadow(float depth){
- vec2 sum=vec2(0.0);float weight=0.0;
+// Lamp visibility and coloured shafts from the shadow stage, filtered like the occlusion.
+vec4 denoisedShadow(float depth){
+ vec4 sum=vec4(0.0);float weight=0.0;
  vec2 base=(floor(uv/p.frame.xy-1.5)+0.5)*p.frame.xy;
  for(int y=0;y<4;++y)for(int x=0;x<4;++x){
   vec2 at=base+vec2(x,y)*p.frame.xy;
   float w=exp(-abs(texture(sceneImage,at).a-depth)/(0.04*depth+0.02));
-  sum+=texture(shadowImage,at).rg*w;weight+=w;
+  sum+=texture(shadowImage,at)*w;weight+=w;
  }
- return weight>0.0?sum/weight:vec2(1.0,0.0);
+ return weight>0.0?sum/weight:vec4(1.0,0.0,0.0,0.0);
 }
 // Both filters at once: the same 16 depth taps and weights feed occlusion and
 // lamp visibility, so a surface pixel reads the depth once instead of twice.
-void denoisedBoth(float depth,out vec4 occlusion,out vec2 shadow){
- vec4 occlusionSum=vec4(0.0);vec2 shadowSum=vec2(0.0);float weight=0.0;
+void denoisedBoth(float depth,out vec4 occlusion,out vec4 shadow){
+ vec4 occlusionSum=vec4(0.0);vec4 shadowSum=vec4(0.0);float weight=0.0;
  vec2 base=(floor(uv/p.frame.xy-1.5)+0.5)*p.frame.xy;
  for(int y=0;y<4;++y)for(int x=0;x<4;++x){
   vec2 at=base+vec2(x,y)*p.frame.xy;
   float sampleDepth=texture(sceneImage,at).a;
   float w=exp(-abs(sampleDepth-depth)/(0.04*depth+0.02));
-  occlusionSum+=texture(occlusionImage,at)*w;shadowSum+=texture(shadowImage,at).rg*w;weight+=w;
+  occlusionSum+=texture(occlusionImage,at)*w;shadowSum+=texture(shadowImage,at)*w;weight+=w;
  }
  occlusion=weight>0.0?occlusionSum/weight:texture(occlusionImage,uv);
- shadow=weight>0.0?shadowSum/weight:vec2(1.0,0.0);
+ shadow=weight>0.0?shadowSum/weight:vec4(1.0,0.0,0.0,0.0);
 }
 
 // Single scattering from a point lamp along the view ray, integrated in
@@ -229,8 +229,8 @@ void main(){
  bool surface=depth>0.02&&depth<p.grade.w;
  // Pixels that blend the viewmodel with the world after MSAA resolve keep their own lighting.
  bool worldPixel=texture(materialImage,uv).a>0.99;
- // The denoised shadow-stage pair, filtered at most once per pixel.
- vec2 shadow=vec2(1.0,0.0);bool shadowReady=false;
+ // The denoised shadow stage (visibility, shaft rgb), filtered at most once per pixel.
+ vec4 shadow=vec4(1.0,0.0,0.0,0.0);bool shadowReady=false;
  if(surface&&worldPixel&&p.camera.x!=0.0){
   vec4 occlusion;denoisedBoth(depth,occlusion,shadow);shadowReady=true;
   if(p.camera.x<0.0){outColor=vec4(vec3(occlusion.a),depth);return;}
@@ -286,11 +286,11 @@ void main(){
  }
  if(p.haze.w>0.0){
   // Lamps glow through the air they light; denser air glows more.
-  // The shadow stage writes b=1 everywhere exactly when lampGrid.flags.x is set.
   if(lampGrid.flags.x!=0){
-   // Shadow-mapped shafts from every nearby lamp (shadow stage, denoised here).
+   // Shadow-mapped shafts from every nearby lamp and the torch, each in its own
+   // colour (shadow stage, denoised here); 0.7 keeps the old amber's luminance.
    if(!shadowReady)shadow=denoisedShadow(depth);
-   color+=vec3(1.0,0.86,0.66)*shadow.y*p.haze.w*0.8;
+   color+=shadow.gba*p.haze.w*0.7;
   }else{
    float scatter=0.0;for(int i=0;i<4;++i)scatter+=lampScatter(ray,rayLength,p.lights[i]);
    color+=vec3(1.0,0.86,0.66)*scatter*p.haze.w*0.4;

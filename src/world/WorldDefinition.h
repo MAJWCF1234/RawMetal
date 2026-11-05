@@ -28,7 +28,7 @@ enum class Environment { Interior, Outdoor };
 enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
-inline constexpr int FacilityModelCount=362;
+inline constexpr int FacilityModelCount=364;
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed };
 // One record per creature kind: what it is called, how much it takes, the
 // standing height navigation and hits use (hull) against its visible top, its
@@ -45,30 +45,46 @@ struct CreatureTraits {const char* name;float health,hull,top,speed,damage,windu
  float idleSeconds,gaitPerMetre,painDecay,deathSeconds,reach,rushSpeed,strikeSeconds,cooldown;
  // A stalker that freezes while the player watches it (the reactor's thing);
  // one that does not ends its stare-down and charges when caught flanking.
- bool freezesWatched;};
+ bool freezesWatched;
+ // Its senses. How far it sees and the facing dot its view ends at; how long
+ // (ms) it takes to make the player out at the full rate, which the guards'
+ // formula slows with distance, a crouch, stillness, the edge of view and
+ // shadow (aiRecognitionRate); how much shadow counts against it (1 a sight
+ // hunter, 0 one that hunts by ear); and how far sounds carry to it (x radius).
+ float sightRange,sightDot;int noticeMs;float lightWeight,hearingScale;
+ // How it is heard before it is seen. A footfall each half gait cycle on the
+ // floor it treads (Game::stepSoundAt) at this gain and pitch, a limp's every
+ // other one at stepLimp of the gain (0: an even gait; 0 gain: no feet); and
+ // while unaware, its idle sound about every idlePeriod seconds (0: none).
+ float stepGain,stepPitch,stepLimp;Sound idleSound;float idleGain,idlePitch,idlePeriod;};
 inline const CreatureTraits& creatureTraits(CreatureKind kind){
  static constexpr CreatureTraits table[]={
-   {"HUNTSMAN",       110,1.05f,1.05f,2.2f, 9,.32f,.62f,0,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.f,false},
-   {"XENOWASP",        85,1.6f, 1.55f,2.7f,9,.32f,.46f,1,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,.8f,false},
-   {"SCISSOR FIEND",  280,1.85f,1.85f,1.35f,18,.8f, .34f,2,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.25f,0.f, .25f,1.6f,false},
-  {"REACTOR STALKER",320,1.85f,1.85f,1.4f,30,.55f,.38f,2,.78f, true, true, 2.5f,7.f, 5.f,1.15f,1.1f, 3.8f,.45f,1.05f,true},
-   {"MUTATED HUMAN",  180,1.85f,1.85f,2.7f,16,.55f,.34f,2,1.f,  true, true, 2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.6f,false},
+  // Senses: the huntsman sees well enough in the dark; the wasp hunts by eye
+  // (its wings are its idle sound); the scissor fiend is slow to make a shape
+  // out; the reactor's thing and the chimera are quick and need little light;
+  // the mutated human sees less far and hunts by ear.
+   {"HUNTSMAN",       110,1.05f,1.05f,2.2f, 9,.32f,.62f,0,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.f,false, 11,-.25f,500,.8f,1,    .2f, 1.45f,0,  Sound::SpiderCall,.12f,.62f,7},
+   {"XENOWASP",        85,1.6f, 1.55f,2.7f,9,.32f,.46f,1,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,.8f,false, 11,-.25f,450,1,  1,    0,   1,    0,  Sound::Wings,     0,   1,   0},
+   {"SCISSOR FIEND",  280,1.85f,1.85f,1.35f,18,.8f, .34f,2,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.25f,0.f, .25f,1.6f,false, 11,-.25f,700,1,  1,    .55f,.62f,0,  Sound::BruteCall, .16f,.6f, 8},
+  {"REACTOR STALKER",320,1.85f,1.85f,1.4f,30,.55f,.38f,2,.78f, true, true, 2.5f,7.f, 5.f,1.15f,1.1f, 3.8f,.45f,1.05f,true, 11,-.25f,600,.6f,1,    .42f,.7f, 0,  Sound::BruteCall, .12f,.5f, 10},
+   {"MUTATED HUMAN",  180,1.85f,1.85f,2.7f,16,.55f,.34f,2,1.f,  true, true, 2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.6f,false, 9, -.25f,800,.3f,1.25f,.36f,.88f,0,  Sound::BruteCall, .14f,.78f,6},
   // A transformed worker that ambushes rather than chases: it limps at 1.1 m/s
   // (its injured walk covers 1.9 m a cycle), crouches for .65 s before a 4.6 m/s
-  // lunge, and needs 2.2 s before it can snatch again.
-  {"SNATCHER",       140,1.85f,1.85f,1.1f,14,.65f,.34f,2,1.32f,true, true, 3.f, 3.3f,1.8f,1.2f,1.35f,4.6f,.3f, 2.2f,false},
+  // lunge, and needs 2.2 s before it can snatch again. Its dragged foot falls
+  // at under half the weight of the good one.
+  {"SNATCHER",       140,1.85f,1.85f,1.1f,14,.65f,.34f,2,1.32f,true, true, 3.f, 3.3f,1.8f,1.2f,1.35f,4.6f,.3f, 2.2f,false, 11,-.25f,600,1,  1,    .3f, .95f,.45f,Sound::BruteCall,.1f, 1.15f,8},
   // A resonance specimen on four legs, and a hunter: it stares a player down,
   // circles to the side they are not watching and comes at 5.8 m/s on all
   // fours; caught circling, it charges rather than freezing. A long reach and a
-  // slam that lands hard; it takes a lot of killing.
-   {"CHIMERA",        560,2.35f,2.4f, 2.8f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.8f,1.7f, 5.8f,.35f,2.f,false},
+  // slam that lands hard; it takes a lot of killing. Sharp eyes, a heavy tread.
+   {"CHIMERA",        560,2.35f,2.4f, 2.8f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.8f,1.7f, 5.8f,.35f,2.f,false, 13,-.25f,400,.5f,1,    .5f, .66f,0,  Sound::BruteCall, .18f,.48f,9},
   // A worker the zone's energy changed, still in its suit and still at its
   // habits: it clutches its head in its idle, then comes at a run as fast as a
   // walking player (its lunge run covers 3 m a cycle at 3.6 m/s). It leaps on and
   // pins its prey to bite (14 a bite) or, slower and readable, raises both
   // fists for an overhead blow (the wind-up below, 26 when it lands). Every
   // faction's squads are prey too. A hard hit staggers it; it dies on its back.
-  {"TRANSFORMED",    150,1.85f,1.85f,3.6f,26,1.05f,.34f,2,1.12f,true, true, 3.7f,2.1f, 1.1f,2.5f,1.5f, 0.f,.7f, 1.6f,false}};
+  {"TRANSFORMED",    150,1.85f,1.85f,3.6f,26,1.05f,.34f,2,1.12f,true, true, 3.7f,2.1f, 1.1f,2.5f,1.5f, 0.f,.7f, 1.6f,false, 11,-.25f,600,.8f,1,    .4f, .9f, 0,  Sound::BruteCall, .12f,.95f,7}};
  return table[int(kind)];
 }
 // The transformed's leap (seconds in the air), its pin and the stumble after a
@@ -77,6 +93,14 @@ inline constexpr float TransformedLeap=.4f,TransformedHold=2.f,TransformedStumbl
 // The area score a map plays; stitched maps share one so the loop carries on.
 enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Count };
 enum class PickupKind { Health, Ammo, HandgunAmmo }; // Values retain the existing save format (HandgunAmmo from version 19).
+// The air of a map or zone: linear RGB haze colour (0-1) and density per metre
+// (0-.1). A negative density leaves it to the environment, today's look:
+// interior .11,.15,.18 at .008, outdoors by sky (World::haze). Density also
+// sets how brightly lamps glow through the air (post.frag), so a dense zone
+// brightens its shafts: a smoky furnace bay at .016 doubles them.
+using Haze=std::array<float,4>;
+inline constexpr Haze EnvironmentHaze{0,0,0,-1};
+inline bool validHaze(const Haze& h){return h[3]<0||(h[0]>=0&&h[0]<=1&&h[1]>=0&&h[1]<=1&&h[2]>=0&&h[2]<=1&&h[3]>=0&&h[3]<=.1f);}
 struct ChunkDefinition {
     Vec2 origin;
     Vec2 playerStart;
@@ -91,6 +115,7 @@ struct ChunkDefinition {
     float spawnYaw=.08f,spawnPitch=0;
     // Off-duty openings: no weapon drawn and no viewmodel until the first punch.
     bool startUnarmed=false;
+    Haze haze=EnvironmentHaze;
 };
 inline constexpr int CampaignChunkCount=180;
 inline constexpr int AshfallChunkCount=15;

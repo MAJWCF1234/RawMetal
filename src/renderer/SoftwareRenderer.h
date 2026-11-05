@@ -12,7 +12,10 @@
 namespace retro {
 class GpuRenderer;
 class FrameWorker;
+struct ElectricFx;
 class SoftwareRenderer {
+    // Sparks and arcs draw with the scene's own textures (ElectricFx.cpp).
+    friend struct ElectricFx;
 public:
     SoftwareRenderer(int width, int height);
     ~SoftwareRenderer();
@@ -49,6 +52,8 @@ public:
     static bool testSurfaceSets(std::string* report=nullptr);
     static bool testHardware(bool glazingOnly=false);
     static bool testGameplayRendering();
+    // Sparks and arcs (ElectricFx.cpp): an arc lights the wall beside it and lets it go, frames repeat, budgets hold.
+    static bool testElectricRendering(std::ostream& report);
     static bool testPresentationResize();
     static bool testCreatureAnimation();
     static bool testProjection();
@@ -281,7 +286,8 @@ private:
         Mesh{2214},Mesh{2216},Mesh{2218},Mesh{2220},Mesh{2222},Mesh{2224},Mesh{2226},Mesh{2228},Mesh{2230},Mesh{2232},Mesh{2234},Mesh{2236},Mesh{2238},Mesh{2240},Mesh{2242},
         Mesh{2244},Mesh{2246},Mesh{2248},Mesh{2250},
         Mesh{2265},Mesh{2267},
-        Mesh{2314},Mesh{2322},Mesh{2330},Mesh{2336}};
+        Mesh{2314},Mesh{2322},Mesh{2330},Mesh{2336},
+        Mesh{2343},Mesh{2345}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;

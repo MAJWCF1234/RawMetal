@@ -4,6 +4,28 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.1.15 - Live wires (2026-11-05)
+
+Current has weight now. A live floor spits sparks that fall, bounce off the
+grating and cool from white to red where they land; the arcs that jump across
+it fork and crawl toward the nearest metal, and every time one strikes, the
+room flashes blue. A round that hits steel throws a shower of its own.
+
+The floor under her says how loud she is. Grating rings, gravel crunches,
+grass and dirt keep quiet. Running carries a long way; crouched, she is
+almost nothing. Five marks at the foot of the screen show what the last step
+gave away.
+
+The things down here have learned to look the way the guards do. In the dark
+they need a moment to make out what they are seeing, though a step closer
+than that is too close. You will hear most of them before you see them.
+
+Some cabinets, dials and clocks that came out black now show their paint.
+
+The great door is still shut. Something behind it has been plugged in.
+
+---
+
 ## v1.1.14 - Over the shoulder (2026-11-04)
 
 Seen from behind her (the THIRDPERSON console command), she is a person

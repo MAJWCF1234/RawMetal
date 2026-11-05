@@ -13,7 +13,9 @@ public:
  void begin(int width,int height);
  void beginReuse();
  void setView(float eyeX,float eyeY,float eyeZ,float yaw,float pitch,float aspect,bool flashlight,float muzzleFlash,float elapsed=0.f);
- void setFogLights(const std::array<float,16>& lights,const std::array<float,4>& powers={1.f,1.f,1.f,1.f});
+ // The four nearest lamps for the analytic shafts (VR, or no post stage): world
+ // x, y, top, bottom, their powers and their linear tones (WorldLight::tone).
+ void setFogLights(const std::array<float,16>& lights,const std::array<float,4>& powers={1.f,1.f,1.f,1.f},const std::array<Point3,4>& tones={WorldLight{}.tone(),WorldLight{}.tone(),WorldLight{}.tone(),WorldLight{}.tone()});
  // Crisp keeps source texels square when magnified; smooth is plain bilinear.
  void setCrispTexels(bool crisp);
  // Ambient occlusion, distance haze, wide bloom and grade (HDR, non-VR only).
@@ -35,15 +37,17 @@ public:
  // Lamp shadow maps still queued: a changed lamp set redraws a bounded
  // number per frame, so a new view settles over several frames.
  bool shadowsPending()const;
- // Static lamps (world x, y, z, range, intensity, kelvin, tint) lit per pixel with cube
- // shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
- void setLamps(const std::vector<std::array<float,13>>& lamps,bool enabled,int detail=1);
+ // Static lamps (world x, y, z, range, intensity, kelvin, tint, shadows, fitting
+ // half width, half depth, fitting top, clearance, yaw, gel r, g, b) lit per pixel
+ // with cube shadow maps on static-cache geometry. Disabled: lamps stay in the CPU bake.
+ void setLamps(const std::vector<std::array<float,16>>& lamps,bool enabled,int detail=1);
  // Per-frame power (0..1) for the lamps last passed to setLamps, in the same
  // order: switching and flicker without a new key, grid or shadow redraw.
  void setLampPowers(const std::vector<float>& powers);
  // True darkness 0..1 (ambient fill and its floor, exposure ceiling, grade lift),
- // the muzzle flash falloff and two NPC gun flashes (world xyz, strength).
- void setDarkness(float darkness,float muzzleFalloff,const std::array<std::array<float,4>,2>& flashes);
+ // the muzzle flash falloff and the transient lights besides it (Game::weaponFlashes: NPC guns in
+ // darkness, sparks and arcs; world xyz, strength, linear tone, reach).
+ void setDarkness(float darkness,float muzzleFalloff,const std::array<electric::Flash,4>& flashes);
  // Sun: direction xyz + intensity, colour rgb + pad, then three cascades of
  // four vec4 (origin + texel size, right/up/forward with inverse extents).
  void setSun(const std::array<float,56>& sun);
@@ -109,6 +113,9 @@ public:
  static bool testDiffuseMips();
  static bool testGameDiffuseEncoding(const std::vector<const SoftwareRenderer::Texture*>& textures,std::array<uint64_t,4>& statistics,std::array<double,2>& milliseconds);
  static bool testNormalMips();
+ // Lamp tones: white gels keep the blackbody, gels hold luminance under their cap,
+ // and the packed half-float colour slots round-trip as normal finite floats.
+ static bool testLampTones();
 private:
  struct Impl;
  std::unique_ptr<Impl> m;

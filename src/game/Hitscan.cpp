@@ -99,7 +99,7 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  }
  if(hit.kind==ShotKind::Enemy){auto&enemy=(hit.level==m_level?m_enemies:m_chunks[hit.level].enemies).at(size_t(hit.index));
   // A gunshot wound is a stimulus: the creature turns on the shooter even if it never saw them.
-  if(playerFired&&enemy.alive){enemy.lastKnown=m_player.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=m_player.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
+  if(playerFired&&enemy.alive){enemy.recognition=1;enemy.lastKnown=m_player.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=m_player.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
   bool killed=applyEnemyDamage(enemy,damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);auto audible=enemy;audible.pos=audible.pos-shift;enemySound(audible,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);return;}
  if(hit.kind==ShotKind::Ragdoll){m_hazmat.impulse(hit.index,{direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.7f});m_sounds.push_back({Sound::PunchHit,{hit.point.x,hit.point.y},.55f,.8f,true,17,hit.point.z});return;}
  if(hit.kind!=ShotKind::Solid)return;

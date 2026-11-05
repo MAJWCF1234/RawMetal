@@ -480,6 +480,43 @@ bool Game::testCampaignMaps(){
    check(calm&&fits&&popped,"Morgue: lit, the store waits; walking its west aisle blows its tubes, lights drawer 9's red and wakes subject 40");
    check(left>1.f,"Morgue: once woken, subject 40 leaves his bay");
    check(!g.state("medd_morgue_dark")&&on(g,{6.f,4.f})&&awake(g,forty),"Morgue: power back relights the store, and he stays up");}
+  // --- 79-82 Analysis: every room's door is a leaf in a wall along x. Shut, it stops a player
+  // walking at it; E from the approach swings it and the same walk carries him through.
+  {struct Leaf{int level;float left,right,y;Vec2 from;const char* room;};
+   // Each Game below is heap-held: this function already keeps dozens of them on its frame, and one more overflowed the stack.
+   const Leaf leaves[]={{79,4.6f,5.8f,9.9f,{5.2f,11.4f},"Materials Intake: the manifest booth"},
+    {81,4.15f,5.35f,4.9f,{4.75f,6.4f},"Analytical Chemistry: the suit room"},{81,18.6f,19.8f,4.9f,{19.2f,6.4f},"Analytical Chemistry: decon"},
+    {81,5.6f,6.8f,16.1f,{6.2f,14.6f},"Analytical Chemistry: the solvent store"},{81,16.6f,17.8f,16.1f,{17.2f,14.6f},"Analytical Chemistry: the spill store"},
+    {82,21.5f,22.7f,6.1f,{22.1f,7.4f},"Instrumentation: the cell store"},{82,17.7f,18.9f,14.7f,{18.3f,16.f},"Instrumentation: the control room"},
+    {82,19.f,20.2f,17.1f,{19.6f,15.8f},"Instrumentation: the locker room"}};
+   int swinging[4]={};for(int level=79;level<=82;++level){auto held=std::make_unique<Game>();Game& g=*held;fresh(g,level);for(const auto& d:g.world().doors())swinging[level-79]+=d.swinging;}
+   check(swinging[0]==1&&swinging[1]==0&&swinging[2]==4&&swinging[3]==3,"Analysis: a swinging door for the booth, the suit room, decon, both stores, the control room, the cell store and the locker room");
+   for(const auto& leaf:leaves){auto held=std::make_unique<Game>();Game& g=*held;fresh(g,leaf.level);g.m_enemies.clear();const int d=doorAt(g,leaf.left,leaf.right,leaf.y);const float dir=leaf.y>leaf.from.y?1.f:-1.f;
+    InputState walk{};walk.forward=true;put(g,leaf.from,-12,dir*kPi*.5f);for(int i=0;i<120;++i)g.update(walk,1.f/60);
+    const float shut=(g.player().pos.y-leaf.y)*dir;
+    put(g,leaf.from,-12,dir*kPi*.5f);const bool facing=d>=0&&g.nearbyInteractionDoor()==d;press(g);run(g,1.2f);for(int i=0;i<150;++i)g.update(walk,1.f/60);
+    const float open=(g.player().pos.y-leaf.y)*dir;
+    out<<"  "<<leaf.room<<": door "<<d<<" shut stops the walk "<<-shut<<" m short, E "<<(facing?"takes it":"MISSES it")<<", open the walk ends "<<open<<" m past\n";
+    check(d>=0&&g.world().doors()[size_t(d)].swinging&&shut<-.1f&&facing&&open>.8f,(std::string(leaf.room)+": its door stops the player shut, E opens it and he walks through").c_str());}
+   // A hunter on the far side of a shut door comes through it to the player.
+   auto hunt=[&](int level,Vec2 from,Vec2 at,const Leaf& leaf,const char* what){auto held=std::make_unique<Game>();Game& g=*held;fresh(g,level);const int d=doorAt(g,leaf.left,leaf.right,leaf.y);
+    if(g.m_enemies.empty()||d<0){check(false,what);return;}
+    g.m_enemies.resize(1);if(from.x>0){g.m_enemies[0].pos=g.m_enemies[0].home=from;g.m_enemies[0].z=-12;}
+    put(g,at,-12,0);{auto& e=g.m_enemies[0];e.awareness=60;e.recognition=1;e.lastKnown=at;e.lastKnownZ=-12;e.state=Enemy::State::Chase;}
+    float closest=1e9f;bool struck=false,opened=false;
+    for(int i=0;i<60*30&&!struck;++i){g.update({},1.f/60);const auto& e=g.m_enemies[0];closest=std::min(closest,length(e.pos-g.player().pos));struck|=e.windup>0||e.strike>0;opened|=g.world().doors()[size_t(d)].open>.5f;}
+    out<<"  "<<what<<": door "<<d<<" opened="<<opened<<" struck="<<struck<<" closest="<<closest<<'\n';
+    check(opened&&struck,what);};
+   hunt(79,{-1,-1},{3.6f,7.f},leaves[0],"Materials Intake: the mutated human opens the manifest booth's door to the player inside");
+   hunt(81,{-1,-1},{12.f,14.f},leaves[3],"Analytical Chemistry: Moran opens the solvent store's door and comes for the player in the lab");
+   hunt(81,{12.f,10.f},{19.5f,20.f},leaves[4],"Analytical Chemistry: from the lab she opens the spill store's door to the player shut in it");
+   hunt(82,{-1,-1},{20.5f,11.f},leaves[6],"Instrumentation: the night tech comes round by the back corridor and opens the control room's door");
+   // The lockdown still holds the south door until the purge in Instrumentation, which E still reaches.
+   {auto held=std::make_unique<Game>();Game& g=*held;fresh(g,81);const auto& d=g.world().doors();
+    check(d.size()>1&&d[1].transfer&&d[1].requireState==stateId("lab_chem_seal")&&locked(g,1),"Analytical Chemistry: the south door is held on the lockdown");
+    g.setState(stateId("lab_chem_seal"));check(!locked(g,1),"Analytical Chemistry: the clean reading releases it");}
+   {auto held=std::make_unique<Game>();Game& g=*held;fresh(g,82);const int purge=terminalFor(g,stateId("lab_chem_seal"));
+    check(approach(g,purge,{0,1},true)&&g.state("lab_chem_seal")==1,"Instrumentation: E at the purge console sets the clean reading");}}
  }
  // Surface sets: every Surface value and structure finish 26-35 resolves to
  // loaded textures, SURFACE records parse, and invalid sets are rejected.
@@ -509,6 +546,23 @@ bool Game::testCampaignMaps(){
   auto parse=[&](const char* zone){try{return loadCustomCampaignText(records+zone+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","title-test.txt");}catch(const std::exception&){return std::shared_ptr<const CustomCampaign>{};}};
   auto titled=parse("ZONE|0|0|0|24|24||||OLD WORKINGS\n");
   check(titled&&titled->maps[0]->zones.size()==1&&titled->maps[0]->zones[0].title=="OLD WORKINGS"&&titled->maps[0]->zones[0].name.empty()&&!parse("ZONE|0|0|0|24|24|||\n"),"ZONE records take an optional area title; a zone with neither name nor title is rejected");
+ }
+ // Air per map and per zone: a MAP haze sets the room's, a ZONE haze a box's
+ // inside it (the zone the eye is in wins), no haze keeps today's interior air,
+ // and walking across the line blends over a second.
+ {auto text=[](const std::string& map,const std::string& zones){std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Haze test|0\nMAP|0|Room|0|0|6.5|6.5|0|0|8|0.3||0|0|0|0|0"+map+"\nLAYER|0|0|Floor|0|0\n";
+   for(int y=0;y<24;++y)t+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";return t+zones+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";};
+  auto parse=[&](const std::string& map,const std::string& zones){try{return loadCustomCampaignText(text(map,zones),"haze-test.txt");}catch(const std::exception&){return std::shared_ptr<const CustomCampaign>{};}};
+  const Haze room{.11f,.15f,.18f,.008f},mist{.3f,.4f,.5f,.03f},smoke{.4f,.3f,.2f,.02f};
+  auto plain=parse("",""),aired=parse("|-1|0|0|0|0|0|0.3|0.4|0.5|0.03","ZONE|0|10|0|24|24|||||0.4|0.3|0.2|0.02\n");
+  check(plain&&World(0,plain->maps[0]).haze({3,3},1.4f)==room&&aired&&World(0,aired->maps[0]).haze({3,3},1.4f)==mist&&World(0,aired->maps[0]).haze({12,3},1.4f)==smoke&&!World(0,aired->maps[0]).zoneName({12,3},1.4f),"MAP and ZONE haze set a map's air and a box's inside it (a haze-only zone names nothing); without one a room keeps today's");
+  check(!parse("|-1|0|0|0|0|0|0.3|0.4|0.5","")&&!parse("|-1|0|0|0|0|0|0.3|0.4|0.5|0.2","")&&!parse("","ZONE|0|0|0|24|24|||||1.5|0|0|0.01\n")&&!parse("","ZONE|0|0|0|24|24|||||0|0|0|-1\n")&&!parse("","ZONE|0|0|0|24|24|||||0.4|0.3|0.2\n"),"A haze needs all four fields, channels 0-1 and density 0-0.1");
+  bool rejected=false;if(plain){auto bad=std::make_shared<AuthoredMapData>(*plain->maps[0]);bad->definition.haze={.2f,.2f,.2f,std::numeric_limits<float>::quiet_NaN()};try{World invalid(0,bad);}catch(const std::exception&){rejected=true;}}
+  check(rejected,"World::loadAuthoredMap rejects a nonfinite haze");
+  if(aired){Game g(aired);const Haze first=g.haze();g.update({},1.f/60);const Haze settled=g.haze();g.m_player.pos={12,3};
+   for(int i=0;i<30;++i)g.update({},1.f/60);const Haze half=g.haze();for(int i=0;i<40;++i)g.update({},1.f/60);
+   out<<"  haze: first "<<first[3]<<" settled "<<settled[3]<<" half a second in "<<half[3]<<" after "<<g.haze()[3]<<'\n';
+   check(first==mist&&settled==mist&&half[3]<mist[3]-.001f&&half[3]>smoke[3]+.001f&&half[0]>mist[0]&&half[0]<smoke[0]&&g.haze()==smoke,"The air is the map's at once on load, then blends to a hazed zone's over about a second");}
  }
  {bool spawns=true;for(int level=34;level<CampaignChunkCount;++level){World w(level);const auto& d=w.definition();bool fit=w.fits(d.playerStart.x,d.playerStart.y,d.spawnHeight,1.f)&&std::fabs(w.supportBelow(d.playerStart.x,d.playerStart.y,d.spawnHeight+.3f)-d.spawnHeight)<.05f;if(!fit)out<<"  spawn blocked in chunk "<<level<<"\n";spawns&=fit;}check(spawns,"Every descent chunk loads and its spawn fits a standing hull");}
  {Game gallery;gallery.loadLevel(42,false);gallery.m_player.pos={21.f,10.f};gallery.m_player.z=-24.988f;

@@ -260,6 +260,15 @@ bool Game::auditMapScene(Game& game,int level){
   }
   game.m_world.setCargoLiftHeight(previousCage);
  }
+ // Trim does not collide, so it dresses a wall's end and never stands in for the wall: a
+ // full-height piece long enough to read as a wall, on floor a player reaches and with room for
+ // him in its middle, is a panel he walks through (a doorway frame laid across its own opening).
+ for(size_t i=0;i<w.structures().size();++i){const auto& v=w.structures()[i];const float dx=v.x2-v.x1,dy=v.y2-v.y1;
+  if(v.solid||v.rail||std::min(dx,dy)<.01f||std::max(dx,dy)<.5f)continue;
+  const Vec2 c{(v.x1+v.x2)*.5f,(v.y1+v.y2)*.5f};const float floor=w.supportBelow(c.x,c.y,v.bottom+.3f);
+  if(!std::isfinite(floor)||v.bottom>floor+.3f||v.top<floor+1.8f)continue;
+  if(reachableIn(standing,c,floor,.15f)&&game.hullFits(c,floor+.02f,Player::StandingHeight,.2f,false))
+   fail("GHOST WALL structure["+std::to_string(i)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top)+" does not collide and stands where a player walks");}
  // Water sits in its basin, never as a slab above the floor around it.
  for(const auto& b:w.waterVolumes())if(b.surface>w.layers().front().elevation-.02f)fail("WATER ABOVE FLOOR basin at "+at({b.x1,b.y1})+" surface "+std::to_string(b.surface));
  // Stairs are single flights: two flights that touch read as one broken stair.
@@ -343,6 +352,42 @@ bool Game::auditMapScene(Game& game,int level){
     if(!anchored(p.start,p.z))fail("FLOATING "+name+" (start)");
     if(!anchored(p.end,z1))fail("FLOATING "+name+" (end)");
    }
+  }
+  // Leads plug into something solid; a clipped one opens on its prop, inside its
+  // length, and every cable opens hanging still, finite and above what is under it.
+  for(size_t i=0;i<w.leads().size();++i){const auto& l=w.leads()[i];const auto& r=w.leadRopes()[i];
+   std::string name="lead["+std::to_string(i)+"] at "+at({l.anchor.x,l.anchor.y})+" z "+std::to_string(l.anchor.z);
+   if(!solidNear({l.anchor.x,l.anchor.y},l.anchor.z,l.radius+.07f)&&!onEquipment({l.anchor.x,l.anchor.y},l.anchor.z))fail("FLOATING "+name+" (nothing to plug into)");
+   if(l.prop>=0&&(game.leadProp(level,l)<0||r.torn))fail("TORN "+name+" (its clip does not reach its prop)");
+   // A test lead's plugs sit on ports (leadPorts) within 3 mm and turned their way: in a socket of
+   // its panel (or, naming none, of any fixture there) and on a terminal post of its prop.
+   auto onPort=[](Point3 a,Point3 b){const auto d=a-b;return d.x*d.x+d.y*d.y+d.z*d.z<.003f*.003f;};auto facing=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z>.98f*std::sqrt(b.x*b.x+b.y*b.y+b.z*b.z);};
+   if(l.socketed()){bool seated=false;
+    for(size_t f=0;f<w.fixtures().size();++f){if(l.panel>=0&&int(f)!=l.panel)continue;const auto&fx=w.fixtures()[f];
+     for(const auto&p:leadPorts()){if(p.model!=fx.model||p.name=="lamp")continue;Point3 out{};const auto at=fixturePort(fx,p,w.floorHeight(fx.position.x,fx.position.y),&out);seated|=onPort(at,l.anchor)&&facing(out,l.socket);}}
+    if(!seated)fail("UNSEATED "+name+" (its plug is not in a socket of its panel)");}
+   if(l.plugged()&&l.prop>=0&&l.prop<int(w.clutterSpawns().size())){const auto&c=w.clutterSpawns()[size_t(l.prop)];bool seated=false;
+    for(const auto&p:leadPorts())if(p.model==c.model&&p.name!="lamp")seated|=onPort(propPort(c.model,c.width,c.depth,c.height,p),l.offset)&&facing(p.out,l.terminal);
+    if(!seated)fail("UNSEATED "+name+" (its plug is not on a terminal post of its prop)");}
+   bool hung=r.points.size()>=10&&r.sleeping;for(const auto& p:r.points)hung&=std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z)&&(p.x<0||p.y<0||p.x>=24||p.y>=24||p.z>=w.supportBelow(p.x,p.y,p.z+.02f)-.005f);
+   if(!hung)fail("LOOSE "+name+" (its cable does not open hanging at rest)");
+   // Asleep is not at rest: woken for a second of play, a cable that opens on its own weight
+   // stays put (within 3 cm), and one frozen out over an edge or in mid-air falls.
+   else{Point3 clip{};LeadBody body{};const Point3* end=l.prop<0&&!l.loose?&l.end:nullptr;const LeadBody* on=nullptr;bool held=true;
+    if(l.prop>=0&&!r.torn){const int k=game.leadProp(level,l,r.clutter);held=k>=0;if(held){const auto&c=game.chunkClutter(level)[size_t(k)];clip=leadClip(c,l.offset);body=leadBody(c);end=&clip;on=&body;}}
+    if(const float moved=held?w.leadUnrest(int(i),1.f,end,on):0.f;moved>.03f)fail("LOOSE "+name+" (woken, its cable moves "+std::to_string(int(std::lround(moved*1000)))+" mm: it opened held in the air, not at rest)");}
+   // Its first half metre may run inside the collision box of the equipment it plugs into: out
+   // from an anchor set inside it, or dipping a few centimetres into the face it hangs down. Any
+   // other piece of cable in something solid (sampled four times a segment, so a thin wall
+   // between two points counts) is buried, and so is one 3 cm deep that it did not start inside.
+   auto solid=[&](float x,float y,float z){return x>=0&&y>=0&&x<24&&y<24&&!w.fits(x,y,z-l.radius,l.radius*2,false,true);};
+   bool clear=true,plugged=solid(l.anchor.x,l.anchor.y,l.anchor.z);Point3 where{};const float piece=r.points.size()>1?l.length/float(r.points.size()-1):0.f;
+   for(size_t k=0;k+1<r.points.size();++k)for(int t=k?0:1;t<4;++t){const auto p=r.points[k]+(r.points[k+1]-r.points[k])*(float(t)/4);const bool in=solid(p.x,p.y,p.z);plugged&=in;
+    const bool deep=in&&solid(p.x-.03f,p.y,p.z)&&solid(p.x+.03f,p.y,p.z)&&solid(p.x,p.y-.03f,p.z)&&solid(p.x,p.y+.03f,p.z);
+    if(in&&((float(k)+float(t)/4)*piece>=.5f||(deep&&!plugged))){if(clear)where=p;clear=false;}}
+   if(!clear)fail("BURIED "+name+" (its cable runs through something solid at "+at({where.x,where.y})+" z "+std::to_string(where.z)+")");
+   // A clipped cable leaves its clip and runs clear of the prop: never more than its own radius into the prop's box.
+   if(const float deep=game.leadThrough(level,int(i));deep>l.radius)fail("THROUGH "+name+" (its cable runs "+std::to_string(int(std::lround(deep*1000)))+" mm into the prop it is clipped to)");
   }
  }
  // Lamps: wall lamps sit on a wall face, ceiling lamps under a roof or slab

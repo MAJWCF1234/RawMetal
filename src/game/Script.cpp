@@ -66,7 +66,7 @@ void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announc
  e.hp=e.maxHp=spawn.health>0?spawn.health:creatureTraits(e.kind).health;e.wakeState=spawn.wakeState;
  e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.homeZ=e.z;e.heading=kPi;e.scale=spawn.scale>0?spawn.scale:1;
  e.awareness=std::max(0.f,awareness);e.state=e.awareness>0?Enemy::State::Investigate:Enemy::State::Idle;
- e.voiceTimer=announce?.25f:.8f+float(m_enemies.size())*.9f;m_enemies.push_back(e);
+ e.voiceTimer=announce?.25f:.8f+float(m_enemies.size())*.9f;e.idleTimer=e.voiceTimer;m_enemies.push_back(e);
  if(announce){if(e.kind==Enemy::Kind::Brute)sound(Sound::Land,.8f,.7f);else enemySound(m_enemies.back(),0,.55f,.9f);}
 }
 void Game::executeScriptAction(const ScriptAction& action){

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 namespace retro {
@@ -246,8 +247,9 @@ inline void recordsDesk(Map& m,float x,float y,float floor){
 // ---------------------------------------------------------------------------
 // Maps 0-3: the original facility, rebuilt as authored maps.
 // ---------------------------------------------------------------------------
-inline WorldLight lamp(Vec2 p,float z,float intensity,float range,float kelvin,float tint=0,WorldLightMount mount=WorldLightMount::Ceiling,float yaw=0,bool shadows=true){
- WorldLight l{p,z,mount,yaw,intensity,range};l.kelvin=kelvin;l.tint=tint;l.shadows=shadows;return l;
+// gel: a colour filter (WorldLight::gel), e.g. {1,.1f,.06f} for red emergency light.
+inline WorldLight lamp(Vec2 p,float z,float intensity,float range,float kelvin,float tint=0,WorldLightMount mount=WorldLightMount::Ceiling,float yaw=0,bool shadows=true,Point3 gel={1,1,1}){
+ WorldLight l{p,z,mount,yaw,intensity,range};l.kelvin=kelvin;l.tint=tint;l.gel=gel;l.shadows=shadows;return l;
 }
 // Fits every ceiling lamp in the map that still has the original square
 // facility housing with one of the pack's recessed fittings, set flush into
@@ -282,7 +284,10 @@ inline void paperDrift(Map& m,float x1,float y1,float x2,float y2,float z,int co
 inline void extinguisher(Map& m,float x,float y,float z,float face){
  m.fixtures.push_back({model::med_extinguisher,{x+std::sin(face)*.09f,y+std::cos(face)*.09f},z-m.layers.front().elevation+.45f,.24f,.16f,.66f,face,false});
 }
-inline void zone(Map& m,const char* name,float x1,float y1,float x2,float y2,float bottom=-1000,float top=1000){m.zones.push_back({name,x1,y1,x2,y2,bottom,top});}
+// haze gives the box its own air (Haze: linear RGB and density), e.g.
+// zone(m,"",2,2,9,8,-1000,1000,{.30f,.22f,.14f,.016f}) for a smoky furnace bay;
+// an empty name leaves the HUD label to the zones around it.
+inline void zone(Map& m,const char* name,float x1,float y1,float x2,float y2,float bottom=-1000,float top=1000,Haze haze=EnvironmentHaze){m.zones.push_back({name,x1,y1,x2,y2,bottom,top,{},haze});}
 // Opens a major area: its title card shows the first time the player walks in.
 inline void titleCard(Map& m,const char* title,float x1=0,float y1=0,float x2=24,float y2=24){AuthoredZone z;z.x1=x1;z.y1=y1;z.x2=x2;z.y2=y2;z.title=title;m.zones.push_back(std::move(z));}
 inline void hazard(Map& m,Hazard::Kind kind,float x1,float y1,float x2,float y2,float bottom,float top,float damage){Hazard h;h.kind=kind;h.x1=x1;h.y1=y1;h.x2=x2;h.y2=y2;h.bottom=bottom;h.top=top;h.damagePerSecond=damage;m.hazards.push_back(h);}
@@ -516,10 +521,36 @@ inline void glassCabinet(Map&m,float x,float y,float z,float w,float d,float h,S
  for(float side:{-1.f,1.f})wall(m,x+side*(w/2-.03f)-.03f,y-d/2,x+side*(w/2-.03f)+.03f,y+d/2,z+.06f,z+h-.06f,10);
  breakable(m,x-w/2+.06f,y-d/2-.03f,x+w/2-.06f,y-d/2+.03f,z+.06f,z+h-.06f,17,false,broken);
 }
-// A doorway frame in a wall run along x at y: architrave posts and head.
+// A doorway frame in the wall run x1..x2 by y1..y2, which runs along its longer
+// side: architrave posts at the opening's two ends and a head, the wall closed
+// above. The trim does not collide, so it must stand in the wall's ends, never
+// across the opening. No leaf: a Door spans x only (wallDoor hangs one).
 inline void officeDoorway(Map& m,float x1,float x2,float y1,float y2,float f,float ceil){
-  for(float x:{x1-.08f,x2})doorTrim(m,x,y1-.02f,x+.08f,y2+.02f,f,f+2.2f);
-  doorTrim(m,x1-.08f,y1-.02f,x2+.08f,y2+.02f,f+2.12f,f+2.2f);wall(m,x1,y1,x2,y2,f+2.2f,ceil,21);
+  if(x2-x1>=y2-y1){for(float x:{x1-.08f,x2})doorTrim(m,x,y1-.02f,x+.08f,y2+.02f,f,f+2.2f);
+   doorTrim(m,x1-.08f,y1-.02f,x2+.08f,y2+.02f,f+2.12f,f+2.2f);}
+  else{for(float y:{y1-.08f,y2})doorTrim(m,x1-.02f,y,x2+.02f,y+.08f,f,f+2.2f);
+   doorTrim(m,x1-.02f,y1-.08f,x2+.02f,y2+.08f,f+2.12f,f+2.2f);}
+  wall(m,x1,y1,x2,y2,f+2.2f,ceil,21);
+}
+// A swinging clinic door hinged at x1 in a wall along x at y, opening toward +y
+// (swing 1) or -y (-1): the renderer draws leaf, posts and head to 2.55 m; the
+// wall closes above. Returns the door's index.
+inline int swingDoor(Map& m,float x1,float x2,float y,float f,float top,float swing){
+ wall(m,x1,y-.1f,x2,y+.1f,f+2.55f,top,3);
+ Door d{x1,x2,y,0};d.swinging=true;d.swing=swing;d.maxOpen=.9f;d.z=f-m.layers.front().elevation;m.doors.push_back(d);
+ return int(m.doors.size())-1;
+}
+// A wall along x (y1..y2 thick) from a to b with a swinging door x1..x2 in it.
+inline int wallDoor(Map& m,float a,float b,float y1,float y2,float x1,float x2,float f,float top,float swing){
+ if(x1>a)wall(m,a,y1,x1,y2,f,top,3);if(b>x2)wall(m,x2,y1,b,y2,f,top,3);
+ return swingDoor(m,x1,x2,(y1+y2)*.5f,f,top,swing);
+}
+// An open doorway y1..y2 through a wall along y (x1..x2), where no leaf can
+// hang: pale-steel jambs in the wall's ends, a head, the wall above.
+inline void doorwayY(Map& m,float y1,float y2,float x1,float x2,float f,float top,float head=2.3f){
+ wall(m,x1,y1,x2,y2,f+head,top,3);
+ for(float y:{y1-.06f,y2})wall(m,x1-.03f,y,x2+.03f,y+.06f,f,f+head,20);
+ wall(m,x1-.03f,y1,x2+.03f,y2,f+head-.04f,f+head,20);
 }
 // A workstation facing `facing` (+1 south / -1 north) at desk centre (x,y):
 // desk, chair pulled in, monitor and keyboard turned to the seat, phone,
@@ -528,6 +559,28 @@ inline void prop(Map& m,int model,float x,float y,float z,float w,float d,float 
 inline void prop(Map& m,int model,float x,float y,float z,float yaw,float scale=1.f,StateId breakState=0){const auto&s=model::propSize[model];prop(m,model,x,y,z,s[0]*scale,s[1]*scale,s[2]*scale,yaw,breakState);}
 inline void propPose(Map& m,int model,float x,float y,float z,float yaw,float pitch,float roll,float scale=1.f){prop(m,model,x,y,z,yaw,scale);auto&p=m.clutterSpawns.back();p.pitch=pitch;p.roll=roll;}
 inline void propPose(Map&m,int model,float x,float y,float z,float w,float d,float h,float yaw,float pitch,float roll){prop(m,model,x,y,z,w,d,h,yaw);m.clutterSpawns.back().pitch=pitch;m.clutterSpawns.back().roll=roll;}
+// An electrical lead (World.h Lead) from `anchor` (absolute) to the prop that
+// clutter spawn `prop` becomes, clipped at `offset` in its frame: x across its
+// width, y its depth, z up from its base. A length a fifth or so over the span
+// hangs a sag; pull it past length+Lead::TearMargin and the clip tears.
+// Material is a pipe finish (0-6) or insulation, 7 black and 8 red: a test lead's pair.
+inline void lead(Map& m,Point3 anchor,int prop,Point3 offset,float length,int material=7,bool live=true,float radius=.007f,StateId torn=0){Lead l;l.anchor=anchor;l.prop=prop;l.offset=offset;l.length=length;l.material=material;l.live=live;l.radius=radius;l.state=torn;m.leads.push_back(l);}
+// A lead already pulled off what it held: it hangs from `anchor`, any of it that
+// reaches the floor lying off toward `toward`.
+inline void looseLead(Map& m,Point3 anchor,Point3 toward,float length,int material=7,bool live=false,float radius=.007f){Lead l;l.anchor=anchor;l.end=toward;l.loose=true;l.length=length;l.material=material;l.live=live;l.radius=radius;m.leads.push_back(l);}
+// A test lead by name: from socket `socket` ("+" or "-") of the instrument fixture `panel`
+// (an index into m.fixtures: a lab_field_meter test set) to terminal post `terminal` of
+// clutter spawn `prop` (an anl_cell_charged or _spent: "+" or "-"), a plug seated at each end.
+// Red for "+" and black for "-" unless material says (7 black, 8 red). The panel's pilot lamp
+// comes with its first lead and dies when any lead on it tears. Lengths as kit::lead.
+inline void testLead(Map& m,int panel,const char* socket,int prop,const char* terminal,float length,bool live=true,StateId torn=0,float radius=.007f,int material=-1){
+ Lead l;l.prop=prop;l.length=length;l.live=live;l.radius=radius;l.state=torn;l.material=material>=0?material:std::string_view(socket)=="+"?8:7;
+ if(const auto error=seatTestLead(m,l,panel,socket,terminal);!error.empty())throw std::runtime_error("kit::testLead: "+error);m.leads.push_back(l);}
+// A test lead already pulled off: it hangs from its panel socket with its plug on its end, any
+// of it that reaches the floor lying off toward `toward`; the panel's pilot is dark.
+inline void looseTestLead(Map& m,int panel,const char* socket,Point3 toward,float length,bool live=false,float radius=.007f,int material=-1){
+ Lead l;l.end=toward;l.loose=true;l.length=length;l.live=live;l.radius=radius;l.terminal={0,0,1};l.material=material>=0?material:std::string_view(socket)=="+"?8:7;
+ if(const auto error=seatTestLead(m,l,panel,socket,"");!error.empty())throw std::runtime_error("kit::looseTestLead: "+error);m.leads.push_back(l);}
 inline void deskSet(Map& m,Vec2 center,float top,float face,int variant){
  auto place=[&](int model,float x,float y,float scale=1.f){float c=std::cos(face),s=std::sin(face);prop(m,model,center.x+x*c+y*s,center.y-x*s+y*c,top,face+kPi,scale);};
  place(model::crt_monitor,-.10f,.12f);place(model::keyboard,-.10f,-.20f);place(model::desk_phone,.48f,.05f);

@@ -74,6 +74,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  auto campaign=std::make_shared<CustomCampaign>();campaign->sourceFile=std::move(sourceFile);campaign->key=campaignKey(campaign->sourceFile);
  std::vector<std::shared_ptr<AuthoredMapData>> maps;bool sawCampaign=false;std::array<bool,WorldChunkCapacity> declared{};
  std::vector<std::pair<int,int>> guardTargets;std::shared_ptr<TerrainShape> terrain;
+ // Test leads named by panel socket and prop terminal, seated once every fixture and prop is read.
+ struct Seat{std::shared_ptr<AuthoredMapData> map;size_t lead;int panel;std::string socket,terminal;};std::vector<Seat> seats;
  while(std::getline(stream,line)){
   if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#')continue;
   auto f=fields(line);if(f.empty())continue;const auto& tag=f[0];
@@ -94,6 +96,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=21)map->definition.spawnYaw=number(f,20,"spawn yaw");
    if(f.size()>=22)map->definition.spawnPitch=number(f,21,"spawn pitch");
    if(f.size()>=23)map->definition.startUnarmed=boolean(f,22,"start unarmed");
+   // |hazeR|hazeG|hazeB|hazeDensity: the map's own air (all four, or none for the environment's).
+   if(f.size()>=24&&!f[23].empty()){if(f.size()<27)throw std::runtime_error("a map haze needs its red, green, blue and density");
+    map->definition.haze={number(f,23,"haze red"),number(f,24,"haze green"),number(f,25,"haze blue"),number(f,26,"haze density")};
+    if(map->definition.haze[3]<0||!validHaze(map->definition.haze))throw std::runtime_error("map haze channels must be 0 through 1 and density 0 through 0.1");}
   }else if(tag=="TERRAIN"){
    // TERRAIN|seed|base|amplitude|scale|roughness: the campaign's outdoor heightfield.
    if(f.size()!=6)throw std::runtime_error("malformed TERRAIN record");if(!terrain)terrain=std::make_shared<TerrainShape>();
@@ -199,10 +205,11 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     {number(f,8,"prop half x"),number(f,9,"prop half y")},number(f,10,"prop base")});
    if(map->props.back().kind<0||map->props.back().kind>=4)throw std::runtime_error("invalid prop model");
   }else if(tag=="LIGHT"){
-   // LIGHT|map|x|y|z[|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker|fitting|width|depth|height]:
+   // LIGHT|map|x|y|z[|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker|fitting|width|depth|height|gelR|gelG|gelB]:
    // a lamp; the optional tail switches it like a HAZARD (state gate, timed window) and adds flicker 0-1.
    // A ceiling lamp's fitting is a fixture model drawn flush under its ceiling at width x depth x height.
-   if(f.size()<5||f.size()>22)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
+   // gelR|gelG|gelB (each 0-1, all three) filters its colour: 1|0.1|0.06 is a red emergency lamp.
+   if(f.size()<5||f.size()>25)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
    WorldLight light{{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")};
    if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>2)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
    if(f.size()>=7&&!f[6].empty())light.yaw=number(f,6,"light yaw");
@@ -223,6 +230,11 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     light.fittingWidth=number(f,19,"fitting width");light.fittingDepth=number(f,20,"fitting depth");light.fittingHeight=number(f,21,"fitting height");
     if(light.fittingWidth<=0||light.fittingDepth<=0||light.fittingHeight<=0)throw std::runtime_error("light fitting size must be positive");
    }
+   if(f.size()>=23&&!f[22].empty()){
+    if(f.size()<25)throw std::runtime_error("a light gel needs its red, green and blue");
+    light.gel={number(f,22,"light gel red"),number(f,23,"light gel green"),number(f,24,"light gel blue")};
+    if(!(light.gel.x>=0&&light.gel.x<=1&&light.gel.y>=0&&light.gel.y<=1&&light.gel.z>=0&&light.gel.z<=1)||light.gel.x+light.gel.y+light.gel.z<=0)throw std::runtime_error("light gel channels must be 0 through 1 and not all 0");
+   }
    if(light.period<0||light.onTime<0||light.onTime>light.period||light.flicker<0||light.flicker>1)throw std::runtime_error("light switching needs period >= 0, on time within the period and flicker 0 through 1");
    map->lights.push_back(light);
   }else if(tag=="DARK"){
@@ -239,14 +251,18 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top)throw std::runtime_error("invalid DARK bounds");
    if(map->darkZones.size()>=64)throw std::runtime_error("too many DARK records in one map");map->darkZones.push_back(zone);
   }else if(tag=="ZONE"){
-   // ZONE|map|x1|y1|x2|y2|name[|bottom|top[|title]]: a named HUD location; a
-   // title makes it a major area announced by a title card (name may be empty).
-   if(f.size()<7||f.size()>10)throw std::runtime_error("malformed ZONE record");auto map=mapAt(maps,f);AuthoredZone zone;
+   // ZONE|map|x1|y1|x2|y2|name[|bottom|top[|title[|hazeR|hazeG|hazeB|hazeDensity]]]: a named
+   // HUD location; a title makes it a major area announced by a title card (name
+   // may be empty); a haze gives the box its own air (name and title may then both be empty).
+   if(f.size()<7||f.size()>14)throw std::runtime_error("malformed ZONE record");auto map=mapAt(maps,f);AuthoredZone zone;
    zone.x1=number(f,2,"zone x1");zone.y1=number(f,3,"zone y1");zone.x2=number(f,4,"zone x2");zone.y2=number(f,5,"zone y2");zone.name=f[6];
    if(f.size()>=8&&!f[7].empty())zone.bottom=number(f,7,"zone bottom");
    if(f.size()>=9&&!f[8].empty())zone.top=number(f,8,"zone top");
    if(f.size()>=10)zone.title=f[9];
-   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||(zone.name.empty()&&zone.title.empty())||zone.name.size()>40||zone.title.size()>40)throw std::runtime_error("invalid ZONE bounds, name or title");
+   if(f.size()>=11&&!f[10].empty()){if(f.size()<14)throw std::runtime_error("a zone haze needs its red, green, blue and density");
+    zone.haze={number(f,10,"zone haze red"),number(f,11,"zone haze green"),number(f,12,"zone haze blue"),number(f,13,"zone haze density")};
+    if(zone.haze[3]<0||!validHaze(zone.haze))throw std::runtime_error("zone haze channels must be 0 through 1 and density 0 through 0.1");}
+   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||(zone.name.empty()&&zone.title.empty()&&zone.haze[3]<0)||zone.name.size()>40||zone.title.size()>40)throw std::runtime_error("invalid ZONE bounds, name or title");
    map->zones.push_back(std::move(zone));
   }else if(tag=="TERMINAL"){
    if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);AuthoredTerminalData t;
@@ -396,6 +412,25 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<9)throw std::runtime_error("malformed PIPE record");auto map=mapAt(maps,f);map->pipes.push_back({
     {number(f,2,"pipe x1"),number(f,3,"pipe y1")},{number(f,4,"pipe x2"),number(f,5,"pipe y2")},number(f,6,"pipe z"),number(f,7,"pipe radius"),number(f,8,"pipe end z"),f.size()>9?integer(f,9,"pipe material"):0});
    if(map->pipes.back().material<0||map->pipes.back().material>6)throw std::runtime_error("invalid pipe material");
+  }else if(tag=="LEAD"){
+   // LEAD|map|ax|ay|az|bx|by|bz|length|radius[|material|live|state|prop|ox|oy|oz|loose|panel|socket|terminal]: prop is the map's
+   // CLUTTER record (from 0, file order) it clips to; without one the far end is fixed at b, or loose.
+   // Fields after radius may be empty or left off: material 7, not live, no state or prop, offset 0.
+   // A test lead names its FIXTURE `panel` (from 0) and that model's `socket`, which places its anchor
+   // (ax|ay|az may be empty), and its prop's `terminal`, which places its offset (ox|oy|oz empty).
+   if(f.size()<10||f.size()>21)throw std::runtime_error("malformed LEAD record");auto map=mapAt(maps,f);Lead v;
+   const bool panel=f.size()>18&&!f[18].empty();auto anchor=[&](size_t i,const char* label){return panel&&f[i].empty()?0.f:number(f,i,label);};
+   v.anchor={anchor(2,"lead ax"),anchor(3,"lead ay"),anchor(4,"lead az")};v.end={number(f,5,"lead bx"),number(f,6,"lead by"),number(f,7,"lead bz")};
+   v.length=number(f,8,"lead length");v.radius=number(f,9,"lead radius");if(f.size()>10&&!f[10].empty())v.material=integer(f,10,"lead material");
+   if(f.size()>11&&!f[11].empty())v.live=boolean(f,11,"lead live");if(f.size()>12&&!f[12].empty())v.state=stateId(decode(f[12]));
+   if(f.size()>13&&!f[13].empty())v.prop=integer(f,13,"lead prop");
+   auto offset=[&](size_t i,const char* label){return f[i].empty()?0.f:number(f,i,label);};
+   if(f.size()>16)v.offset={offset(14,"lead ox"),offset(15,"lead oy"),offset(16,"lead oz")};else if(f.size()>14)throw std::runtime_error("lead offset needs all three of ox, oy and oz");
+   if(f.size()>17&&!f[17].empty())v.loose=boolean(f,17,"lead loose");
+   const std::string socket=f.size()>19?f[19]:"",terminal=f.size()>20?f[20]:"";
+   if(panel!=!socket.empty()||(!terminal.empty()&&v.prop<0))throw std::runtime_error("a LEAD panel needs its socket, and a terminal its prop");
+   if(panel||!terminal.empty()){if(panel&&v.loose)v.terminal={0,0,1};seats.push_back({map,map->leads.size(),panel?integer(f,18,"lead panel"):-1,socket,terminal});}
+   map->leads.push_back(v);
   }else if(tag=="WATER"){
    if(f.size()<8)throw std::runtime_error("malformed WATER record");auto map=mapAt(maps,f);map->waterVolumes.push_back({
     number(f,2,"water x1"),number(f,3,"water y1"),number(f,4,"water x2"),number(f,5,"water y2"),number(f,6,"water bed"),number(f,7,"water surface")});
@@ -408,6 +443,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    map->navHints.push_back({{number(f,2,"nav hint x"),number(f,3,"nav hint y")},number(f,4,"nav hint z"),hint});
   }else throw std::runtime_error("unknown custom campaign record: "+tag);
  }
+ for(auto& seat:seats)if(const auto error=seatTestLead(*seat.map,seat.map->leads[seat.lead],seat.panel,seat.socket,seat.terminal);!error.empty())throw std::runtime_error("LEAD record: "+error);
  for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration, weapon or patrol requires Guard actor AI mode");
  if(!sawCampaign||campaign->name.empty())throw std::runtime_error("missing CAMPAIGN record");
  if(maps.empty()||maps.size()>WorldChunkCapacity)throw std::runtime_error("custom campaign has no maps or exceeds engine capacity");

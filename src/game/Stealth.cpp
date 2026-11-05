@@ -525,9 +525,10 @@ bool Game::testLockers(){
   if(inside)check(deployed&&g.hiddenLocker()==0&&g.player().health==health,"An Engineer's drone cannot see or shoot the player shut in a locker");
   else check(deployed&&g.player().health<health,"The same drone fires on the player standing in the open");
  }
- // Nothing that hunts by sight finds the player, but a blast still does.
+ // Nothing that hunts by sight finds the player, but a blast still does. In
+ // the open it makes them out over its notice time (3.3 m off: half a second).
  {auto g=scene({{{20.5f,20.5f},0,5000}},0);Enemy e;e.pos={6.5f,6.5f};e.home=e.pos;e.homeZ=0;e.heading=kPi;g.m_enemies={e};auto watched=g;
-  for(int i=0;i<20;++i)watched.update({},1.f/60);hide(g);for(int i=0;i<20;++i)g.update({},1.f/60);
+  for(int i=0;i<40;++i)watched.update({},1.f/60);hide(g);for(int i=0;i<40;++i)g.update({},1.f/60);
   check(watched.enemies()[0].state==Enemy::State::Chase&&g.enemies()[0].state!=Enemy::State::Chase&&g.enemies()[0].awareness==0,"A creature that sees the player in the open sees nothing of them in a locker");
   g.m_enemies.clear();float health=g.player().health;g.spawnTacticalGrenade({3.2f,6.5f,.3f},{0,0,0},{ShotKind::Npc,0,0},0,AiFaction::Neutral,1800);for(int i=0;i<150;++i)g.update({},1.f/60);
   check(g.player().health<health&&g.hiddenLocker()==0,"A grenade at the doors still hurts the player inside");

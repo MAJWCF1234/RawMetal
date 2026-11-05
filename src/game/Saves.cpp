@@ -106,11 +106,16 @@ template<class A> int Game::archiveSave(A& a,int version){
    for(int door=0;door<doors;++door){float open=0;bool opening=false;a(open,opening);if(open<0||open>1)throw std::runtime_error("invalid door");
     if(door<int(w.m_doors.size())){w.m_doors[door].open=open;w.m_doors[door].opening=opening;}}
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");}
-  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.stepTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(version>=15)a(e.wakeState);
+  list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.idleTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(version>=15)a(e.wakeState);
    if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid enemy");}
-   if(int(e.kind)>(version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0)throw std::runtime_error("invalid enemy");});
+   // Before version 20 the recognition meter was not kept: a creature on a Chase has the player made out.
+   if(version>=20)a(e.recognition);else if constexpr(A::reading)e.recognition=e.state==Enemy::State::Chase&&e.awareness>0?1.f:0.f;
+   if(int(e.kind)>(version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0||!(e.recognition>=0&&e.recognition<=1))throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>(version>=17?7:6))throw std::runtime_error("invalid clutter");if(version>=17){a(v.model,v.damage,v.authored,v.broken,v.homeZ);vec(v.home);for(auto&d:v.dims)a(d);if((v.kind==7)!=(v.model>=0)||v.model>=FacilityModelCount||v.damage<0||(v.kind==7&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return d<=0||d>3.f;})))throw std::runtime_error("invalid prop");}});
+  // Version 21: which leads have torn. The cables themselves are hung again on load.
+  if(version>=21){std::vector<std::uint16_t> torn;if constexpr(!A::reading)for(size_t i=0;i<w.m_leadRopes.size();++i)if(w.m_leadRopes[i].torn)torn.push_back(std::uint16_t(i));
+   list(torn,[&](std::uint16_t&i){a(i);if(i>=w.leads().size())throw std::runtime_error("invalid lead");});if constexpr(A::reading)for(auto i:torn)w.m_leadRopes[i].torn=true;}
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
  }
@@ -238,6 +243,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size())||(next.m_heldClutter>=0&&next.m_clutter[next.m_heldClutter].broken))return false;
   adoptSession(next);
   next.updateStreaming(0);
+  for(int level=0;level<next.chunkCount();++level)if(next.chunkResident(level))next.settleLeads(level);
   next.rebuildFriendlyActors();
   int heldCount=0;
   for(size_t actor=0;actor<next.m_friendlyActors.size();++actor){const auto&npc=next.m_friendlyActors[actor];
@@ -363,6 +369,17 @@ bool Game::testEngineRegressionSaves(std::ostream& report){
   Game loaded(g.m_customCampaign);bool ok=loaded.decodeSave(g.encodeSave());Enemy v{};int count=0;if(ok)for(const auto&x:loaded.m_enemies)if(x.scriptSpawned){v=x;++count;}
   std::ostringstream values;values<<"decoded="<<ok<<" count="<<count<<" homeZ="<<v.homeZ<<" scale="<<v.scale<<" origin="<<v.originLevel<<","<<v.originHome.x<<","<<v.originHome.y<<" surface="<<v.surfaceMode<<","<<v.surfaceNormal.x<<","<<v.surfaceNormal.y;
   check(ok&&count==1&&approx(v.homeZ,3.25f)&&approx(v.scale,1.5f)&&v.originLevel==0&&approx(v.originHome.x,7.25f)&&approx(v.originHome.y,8.75f)&&v.surfaceMode==2&&approx(v.surfaceNormal.x,.6f)&&approx(v.surfaceNormal.y,.8f),"1e enemy fields save",values.str());
+ }
+ // How far each creature has made the player out: one searching that had, one
+ // that has only glimpsed, one chasing an NPC with the player half made out.
+ // A version 19 save rebuilds it from the hunt (the Chase alone).
+ {Game g(regression::campaign(regression::room()));const std::pair<Enemy::State,float> held[]={{Enemy::State::Search,1.f},{Enemy::State::Investigate,.4f},{Enemy::State::Chase,.25f}};
+  for(int i=0;i<3;++i){g.spawnCreature({Enemy::Kind::Huntsman,{6.f+3*i,9},0},5,false);auto&e=g.m_enemies.back();e.scriptSpawned=true;e.state=held[i].first;e.recognition=held[i].second;}
+  auto meters=[](const Game&l){std::array<float,3> r{-1,-1,-1};for(const auto&x:l.m_enemies)for(int i=0;i<3;++i)if(x.scriptSpawned&&lengthSq(x.home-Vec2{6.f+3*i,9})<.0001f)r[size_t(i)]=x.recognition;return r;};
+  Game loaded(g.m_customCampaign);bool ok=loaded.decodeSave(g.encodeSave());const auto kept=meters(loaded);
+  g.storeChunk();Writer writer;g.archiveSave(writer,19);auto payload=writer.stream.str();Game legacy(g.m_customCampaign);bool old=legacy.decodeSave("RAWMETAL_SAVE 19 "+std::to_string(checksum(payload))+"\n"+payload);const auto rebuilt=meters(legacy);
+  std::ostringstream values;values<<"decoded="<<ok<<" search/investigate/chase kept="<<kept[0]<<'/'<<kept[1]<<'/'<<kept[2]<<"; version 19 decoded="<<old<<" rebuilt="<<rebuilt[0]<<'/'<<rebuilt[1]<<'/'<<rebuilt[2];
+  check(ok&&approx(kept[0],1)&&approx(kept[1],.4f)&&approx(kept[2],.25f)&&old&&rebuilt[0]==0&&rebuilt[1]==0&&rebuilt[2]==1,"1f creature recognition save",values.str());
  }
  return passed;
 }
@@ -522,7 +539,15 @@ bool Game::testSaves(){
 namespace retro {
 bool Game::testPropSaves(){
  auto map=regression::room();map->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});auto campaign=regression::campaign(map);Game g(campaign);g.storeChunk();g.m_chunks[0].clutter.clear();g.m_heldClutter=-1;Writer writer;g.archiveSave(writer,16);auto payload=writer.stream.str();Game loaded(campaign);if(!loaded.decodeSave("RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload)||loaded.m_clutter.size()!=1||loaded.m_clutter[0].model!=27)return false;
- loaded.m_heldClutter=0;auto bytes=loaded.encodeSave();Game held(campaign);return held.decodeSave(bytes)&&held.m_heldClutter==0&&held.encodeSave()==bytes;
+ loaded.m_heldClutter=0;auto bytes=loaded.encodeSave();Game held(campaign);if(!held.decodeSave(bytes)||held.m_heldClutter!=0||held.encodeSave()!=bytes)return false;
+ // Version 21 keeps which leads have torn; a version 20 or 19 save opens on the map's own leads, clipped.
+ {auto m=regression::room();m->structures.push_back({5.8f,6,6,10,0,3});m->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});Lead lead;lead.anchor={6.012f,8,1.6f};lead.prop=0;lead.offset={0,0,.38f};lead.length=2.4f;lead.live=true;m->leads.push_back(lead);
+  auto leads=regression::campaign(m);Game source(leads);if(source.world().leadRopes()[0].torn)return false;source.tearLead(0,0);
+  auto raw=[&](int version){source.storeChunk();Writer writer;source.archiveSave(writer,version);auto payload=writer.stream.str();return "RAWMETAL_SAVE "+std::to_string(version)+" "+std::to_string(checksum(payload))+"\n"+payload;};
+  Game current(leads),v20(leads),v19(leads);const auto now=source.encodeSave();
+  if(!current.decodeSave(now)||!current.world().leadRopes()[0].torn||current.encodeSave()!=now)return false;
+  if(!v20.decodeSave(raw(20))||v20.world().leadRopes()[0].torn||!v20.world().leadRopes()[0].sleeping||!v19.decodeSave(raw(19))||v19.world().leadRopes()[0].torn)return false;}
+ return true;
 }
 // Version 19 keeps each firearm's pool, the gun in hand, a switch under way and
 // the handgun's ownership; a version 18 save loads with its pair as the shotgun's.
@@ -532,9 +557,9 @@ bool Game::testHandgunSaves(std::ostream& report){
  auto raw=[](Game g,int version){g.storeChunk();Writer writer;g.archiveSave(writer,version);auto payload=writer.stream.str();return "RAWMETAL_SAVE "+std::to_string(version)+" "+std::to_string(checksum(payload))+"\n"+payload;};
  {Game g(campaign);g.grantHandgun(12);g.m_player.pool(WeaponId::Shotgun)={40,3};g.m_player.pool(WeaponId::Handgun)={30,7};g.equipWeapon(WeaponId::Handgun);g.m_itemCells[3]=4;
   const auto bytes=g.encodeSave();Game loaded(campaign);const bool ok=loaded.decodeSave(bytes);
-  check(ok&&bytes.rfind("RAWMETAL_SAVE 19 ",0)==0,"A current save is version 19");
+  check(ok&&bytes.rfind("RAWMETAL_SAVE 21 ",0)==0,"A current save is version 21");
   check(ok&&loaded.player().pools==g.player().pools&&loaded.activeFirearm()==WeaponId::Handgun&&loaded.weaponEquipped()&&loaded.hasHandgun()&&loaded.itemCell(3)==4,"Version 19 round-trips both pools, the handgun in hand, its ownership and the 9 mm cell");
-  check(ok&&loaded.encodeSave()==bytes,"The version 19 save is byte-exact on re-encoding");
+  check(ok&&loaded.encodeSave()==bytes,"The version 21 save is byte-exact on re-encoding");
   g.selectWeapon(WeaponId::Shotgun);g.m_holster=.4f;Game mid(campaign);check(mid.decodeSave(g.encodeSave())&&mid.weaponSwitchPhase()==1&&mid.weaponSwitchTarget()==WeaponId::Shotgun&&mid.activeFirearm()==WeaponId::Handgun,"A switch under way is saved");
   g.equipWeapon(WeaponId::Handgun);g.m_player.pool(WeaponId::Handgun)={20,0};g.reloadWeapon();g.m_reloadTimer=.7f;Game reloading(campaign);
   check(reloading.decodeSave(g.encodeSave())&&reloading.emptyReload()&&std::fabs(reloading.reloadDuration()-1.9f)<.001f&&std::fabs(reloading.reloadProgress()-(1-.7f/1.9f))<.01f,"An empty reload under way keeps its length and progress");}

@@ -81,6 +81,74 @@ void Game::updateClutter(const InputState&input,float dt){
  }
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
  for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))simulateClutter(m_chunks[level].clutter,level,dt,-1);
+ // Leads follow their props where the props have just been put.
+ for(int level=0;level<chunkCount();++level)if(chunkResident(level))updateLeads(level,dt);
+ updateElectricity(dt);
+}
+int Game::leadProp(int level,const Lead& lead,int hint)const{
+ const auto&w=chunkWorld(level);if(lead.prop<0||lead.prop>=int(w.clutterSpawns().size()))return -1;
+ const auto&spawn=w.clutterSpawns()[size_t(lead.prop)];const auto home=spawn.position+chunkOffset(level);const auto&list=chunkClutter(level);
+ // An authored prop keeps its spawn as home wherever it goes (the lamp-on-a-prop rule).
+ auto same=[&](const Clutter&c){return c.authored&&c.model==spawn.model&&lengthSq(c.home-home)<.0004f&&std::fabs(c.homeZ-spawn.z)<.05f;};
+ if(hint>=0&&hint<int(list.size())&&same(list[size_t(hint)]))return hint;
+ for(int i=0;i<int(list.size());++i)if(same(list[size_t(i)]))return i;
+ return -1;
+}
+Point3 Game::leadClip(const Clutter& c,Point3 offset){auto s=c.size();auto r=c.rotate(offset.x,offset.y,offset.z-s[2]*.5f);return {c.pos.x+r[0],c.pos.y+r[1],c.z+c.height()*.5f+r[2]};}
+LeadBody Game::leadBody(const Clutter& c){
+ const auto s=c.size();LeadBody b{{c.pos.x,c.pos.y,c.z+c.height()*.5f}};
+ for(int j=0;j<3;++j){const auto a=c.rotate(float(j==0),float(j==1),float(j==2));b.axis[j]={a[0],a[1],a[2]};b.half[j]=s[size_t(j)]*.5f;}return b;
+}
+float Game::leadThrough(int level,int index)const{
+ const auto&w=chunkWorld(level);const auto&l=w.leads().at(size_t(index));const auto&r=w.leadRopes().at(size_t(index));const int k=l.prop>=0&&!r.torn?leadProp(level,l,r.clutter):-1;
+ if(k<0||r.points.size()<2)return -1;const auto&c=chunkClutter(level)[size_t(k)];const auto body=leadBodyAtClip(leadBody(c),leadClip(c,l.offset));float deepest=-1;
+ // Eight samples along each piece of the cable as it is drawn, from the anchor up to (not including) the clip.
+ for(size_t j=0;j+1<r.points.size();++j)for(int t=0;t<8;++t)deepest=std::max(deepest,leadBodyDepth(body,leadCurve(r.points,j,float(t)/8)));return deepest;
+}
+void Game::updateLeads(int level,float dt){
+ auto&w=friendlyWorld(level);if(w.leads().empty())return;const auto&list=chunkClutter(level);
+ for(int i=0;i<int(w.leads().size());++i){const auto&l=w.leads()[size_t(i)];auto&r=w.m_leadRopes[size_t(i)];
+  Point3 clip{};LeadBody body{};const Point3* end=l.prop<0&&!l.loose?&l.end:nullptr;const LeadBody* on=nullptr;
+  // The clip reads its prop: carried into another chunk, broken, off the map or
+  // pulled past the cable's length, it tears. A cable not yet hung tears quietly.
+  if(!r.torn&&l.prop>=0){const int k=leadProp(level,l,r.clutter);r.clutter=k;bool away=k<0;
+   if(k>=0){const auto&c=list[size_t(k)];clip=leadClip(c,l.offset);body=leadBody(c);auto d=clip-l.anchor;
+    away=c.broken||c.pos.x<0||c.pos.y<0||c.pos.x>=World::Width||c.pos.y>=World::Height||std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)>l.length+Lead::TearMargin;}
+   if(away)tearLead(level,i,r.points.empty());else{end=&clip;on=&body;}}
+  if(r.points.empty()){w.hangLead(i,end,on);continue;}
+  // Asleep until its clip moves.
+  if(r.sleeping){auto d=end&&!r.torn?*end-r.points.back():Point3{};if(d.x*d.x+d.y*d.y+d.z*d.z<1e-6f)continue;r.sleeping=false;r.rest=0;}
+  w.stepLead(i,dt,end,on);
+ }
+}
+void Game::settleLeads(int level){auto&w=friendlyWorld(level);for(auto&r:w.m_leadRopes){r.points.clear();r.previous.clear();}updateLeads(level,0);
+ // Hanging only lays a cable out (a limp one over what is under it, a clipped one in a heavily
+ // damped sag): each then falls and settles as it would in play (at most four seconds of it) and
+ // sleeps by the play rule, so a map or a save opens on cables at rest, not frozen part-way.
+ for(auto&r:w.m_leadRopes){r.sleeping=false;r.rest=0;}
+ for(int t=0;t<480&&std::any_of(w.m_leadRopes.begin(),w.m_leadRopes.end(),[](const LeadRope&r){return !r.sleeping;});++t)updateLeads(level,1.f/120);}
+void Game::tearLead(int level,int index,bool quiet){
+ auto&w=friendlyWorld(level);auto&r=w.m_leadRopes.at(size_t(index));const auto&l=w.leads()[size_t(index)];if(r.torn)return;
+ // Whether the player's hand is on the prop it was clipped to (it may already be over a seam).
+ bool held=false;if(holdingClutter()&&l.prop>=0&&l.prop<int(w.clutterSpawns().size())){const auto&spawn=w.clutterSpawns()[size_t(l.prop)];const auto&c=m_clutter[size_t(m_heldClutter)];
+  held=c.authored&&c.model==spawn.model&&lengthSq(c.home-(spawn.position+chunkOffset(level)))<.0004f&&std::fabs(c.homeZ-spawn.z)<.05f;}
+ r.torn=true;r.sleeping=false;r.rest=0;r.clutter=-1;if(l.state)setState(l.state,1);
+ // The circuit is broken: the panel's pilot goes out (it stutters while the arc lasts, lampPower).
+ if(l.lamp>=0&&l.lamp<int(w.lights().size())&&w.lights()[size_t(l.lamp)].enabledState)setState(w.lights()[size_t(l.lamp)].enabledState,1);
+ // Torn off under tension the cable had been drawn past its length. Lay it back at its own
+ // length along where it ran, still: it falls and swings rather than buckling as it springs back.
+ {float drawn=0;for(size_t k=1;k<r.points.size();++k){auto d=r.points[k]-r.points[k-1];drawn+=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);}
+  if(r.points.size()>=2&&drawn>l.length*1.01f){const auto ran=r.points;const float rest=l.length/float(ran.size()-1);float walked=0;size_t k=1;
+   for(size_t p=1;p<ran.size();++p){const float want=rest*float(p);float piece=0;
+    for(;k<ran.size();++k){auto d=ran[k]-ran[k-1];piece=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(walked+piece>=want)break;walked+=piece;}
+    r.points[p]=k<ran.size()?ran[k-1]+(ran[k]-ran[k-1])*(piece>1e-6f?(want-walked)/piece:0.f):ran.back();}
+   r.previous=r.points;}}
+ if(quiet)return;
+ r.tornAt=m_elapsed;const Point3 tip=r.points.empty()?l.anchor:r.points.back();const auto shift=chunkOffset(level)-chunkOffset(m_level);const Vec2 at{tip.x+shift.x,tip.y+shift.y};
+ if(!l.live){SoundEvent pop{Sound::JunkMetal,at,.3f,1.6f,true,17,tip.z};pop.aiRadius=3;m_sounds.push_back(pop);return;}
+ // A live clip arcs as it comes away, loud enough to bring anything in earshot.
+ SoundEvent zap{Sound::LeadArc,at,1,1,true,20,tip.z};zap.aiRadius=14;m_sounds.push_back(zap);
+ if(held&&std::fabs(m_elapsed-m_leadShockAt)>.6f){m_leadShockAt=m_elapsed;if(!m_god)m_player.health=std::max(std::min(m_player.health,1.f),m_player.health-LeadShock);m_damageFlash=std::max(m_damageFlash,.8f);m_verticalSpringVelocity-=.5f;sound(Sound::Hurt,.6f,1.15f);}
 }
 void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held){
  const int initialCount=int(list.size());size_t debris=0;for(const auto&b:friendlyWorld(level).breakables())if(b.material!=17)debris+=6;list.reserve(list.size()+debris);
@@ -175,7 +243,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    if(c.model>=0&&c.projectile)for(size_t a=0;a<m_friendlyActors.size();++a){const auto&npc=m_friendlyActors[a];auto p=npc.pose.position+chunkOffset(npc.level)-chunkOffset(level);if(npc.pose.clip==4||lengthSq(p-c.pos)>.3f*.3f||c.z>=npc.pose.z+friendlyHullHeight(a,npc.track())||c.z+c.height()<=npc.pose.z)continue;auto velocity=c.velocity;float speed=length(velocity);Point3 dir{velocity.x/std::max(.001f,speed),velocity.y/std::max(.001f,speed),0},at{c.pos.x+shift.x,c.pos.y+shift.y,c.z+c.height()*.5f};resolveShot({ShotKind::Npc,npc.level,int(a),1,1,at,{}},at-dir,dir,kGuardHandgun.hitscan,true,5,{ShotKind::Player,m_level,0});c.projectile=false;c.velocity=c.velocity*-.18f;break;}
    if(c.projectile){auto point=c.pos+shift;const auto&contactWorld=physicalWorld(point);int targetLevel=contactWorld.level();auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;
     for(auto&e:enemies)if(e.alive&&length(e.pos-point)<.5f&&c.z+(extent[2]*2)>e.bodyBottom()&&c.z<e.bodyTop()){
-     impact(length(c.velocity));e.awareness=6;e.lastKnown=point;e.lastKnownZ=contactWorld.supportBelow(point.x,point.y,c.z+extent[2]);e.state=Enemy::State::Investigate;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos+shift,.6f,1,true,17,c.z+extent[2]});
+     impact(length(c.velocity));e.awareness=6;e.recognition=1;e.lastKnown=point;e.lastKnownZ=contactWorld.supportBelow(point.x,point.y,c.z+extent[2]);e.state=Enemy::State::Investigate;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos+shift,.6f,1,true,17,c.z+extent[2]});
      if(applyEnemyDamage(e,kUnarmedMelee.clutterDamage,false,false,targetLevel)){auto audible=e;audible.pos+=chunkOffset(targetLevel)-chunkOffset(m_level);enemySound(audible,2);}break;
     }
    }
@@ -224,7 +292,7 @@ bool Game::testProps(){
  {auto next=regression::room();next->definition.origin={24,0};auto campaign=regression::campaign(regression::room());campaign->maps.push_back(next);Game resident(campaign);resident.ensureChunk(1);Enemy enemy;enemy.pos=enemy.home=enemy.lastKnown={10,10};resident.m_chunks[1].enemies={enemy};Clutter c;c.kind=7;c.model=model::keyboard;c.dims=propTraits(c.model).size;c.pos={9,10};c.z=.1f;c.velocity={12,0};c.projectile=true;resident.m_chunks[1].clutter={c};for(int i=0;i<120;++i)resident.updateClutter({},1.f/120);check(resident.m_chunks[1].enemies[0].hp==105&&!resident.m_chunks[1].clutter[0].projectile,"resident-neighbour thrown prop hits its creature once for legacy five damage");}
  {Game held(regression::campaign(regression::room()));Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims=propTraits(c.model).size;c.pos={8,8};c.z=.75f;held.m_clutter={c};held.m_heldClutter=0;check(held.traceShot({6,8,.9f},{1,0,0},10).kind==ShotKind::Prop,"held monitor retains its physical bullet-blocking box");held.m_clutter[0].model=model::mug;held.m_clutter[0].dims=propTraits(model::mug).size;held.breakClutter(0,0,{1,0,0});Game loaded(held.m_customCampaign);check(!held.holdingClutter()&&loaded.decodeSave(held.encodeSave())&&loaded.m_clutter[0].broken,"breaking a held prop drops it and leaves a loadable tombstone");}
  for(bool held:{false,true})for(bool broken:{false,true}){auto first=regression::room(),second=regression::room();first->openEast=true;first->layers[0].rows[8][23]='.';second->definition.origin={24,0};second->openWest=true;second->layers[0].rows[8][0]='.';kit::prop(*first,model::mug,22.5f,8,0,0);kit::prop(*second,model::mug,22.5f,8,0,0);auto campaign=regression::campaign(first);campaign->maps.push_back(second);Game g(campaign);g.m_clutter[0].pos={24.1f,8};g.m_player.pos={24.1f,8};if(held)g.m_heldClutter=0;g.crossChunkBoundary();int moved=-1;for(int i=0;i<int(g.m_clutter.size());++i)if(std::fabs(g.m_clutter[i].home.x-22.5f)<.01f)moved=i;if(moved>=0&&broken)g.breakClutter(1,moved,{});auto bytes=g.encodeSave();Game loaded(campaign);bool valid=moved>=0&&loaded.decodeSave(bytes);check(valid&&loaded.level()==1&&loaded.m_clutter.size()==2&&loaded.chunkClutter(0).empty()&&loaded.holdingClutter()==(held&&!broken)&&loaded.encodeSave()==bytes,"cross-seam authored live/held/tombstone identity roundtrips without desk respawn");}
- check(testPropSaves(),"v16 migration and held prop save");
+ check(testPropSaves(),"v16 migration, held prop save, and torn leads kept by v21 and authored from v19/v20");
  for(float dt:{1.f/60,1.f/120}){auto stacked=regression::room();kit::prop(*stacked,model::binder,10,10,0,.3f,.32f,.08f,0);kit::prop(*stacked,model::mug,10,10,.08f,0);Game stack(regression::campaign(stacked));stack.m_player.pos={3,3};stack.knockClutter(0,0,{10,10,.04f},{3,0,0});for(int i=0;i<int(5/dt);++i)stack.updateClutter({},dt);const auto&a=stack.m_clutter[0];const auto&b=stack.m_clutter[1];auto ae=a.extent(),be=b.extent();float overlap=std::min({ae[0]+be[0]-std::fabs(a.pos.x-b.pos.x),ae[1]+be[1]-std::fabs(a.pos.y-b.pos.y),std::min(a.z+a.height(),b.z+b.height())-std::max(a.z,b.z)});check(a.sleeping&&b.sleeping&&!b.broken&&a.z>=-.001f&&b.z>=-.001f&&overlap<.01f,"knocked stack wakes and settles without interpenetration at 60/120 Hz");}
  {Game carry(regression::campaign(regression::room()));carry.m_player.pos={6,6};carry.m_player.angle=0;Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={7,6};c.z=.75f;carry.m_clutter={c};check(carry.interactClutter()&&carry.holdingClutter(),"11 kg monitor can be lifted");InputState fire;fire.fire=true;carry.updateClutter(fire,1.f/120);check(!carry.holdingClutter()&&length(carry.m_clutter[0].velocity)<5,"11 kg monitor throw is under 5 m/s");c.model=0;c.dims={1,1,1};carry.m_clutter={c};carry.m_heldClutter=-1;check(!carry.interactClutter()&&!carry.holdingClutter()&&carry.m_clutter[0].mass()==30,"30 kg uncurated box cannot be lifted");}
  {auto neighbour=regression::room();neighbour->definition.origin={24,0};neighbour->layers[0].rows[10][10]='B';auto multi=regression::campaign(regression::room());multi->maps.push_back(neighbour);Game n(multi);n.ensureChunk(1);Clutter c;c.kind=7;c.model=model::keyboard;c.dims={.45f,.16f,.03f};c.pos={10,10};c.z=2;n.m_chunks[1].clutter={c};n.detonateBarrel(1,10,10);for(int i=0;i<600;++i)n.updateClutter({},1.f/120);check(n.m_chunks[1].clutter.size()==6&&std::all_of(n.m_chunks[1].clutter.begin(),n.m_chunks[1].clutter.end(),[](const Clutter&v){return v.sleeping&&v.z<.02f;}),"resident neighbour prop and actual barrel debris land and sleep");}
@@ -312,6 +380,53 @@ bool Game::testClutter(){
   auto extent=c.extent();auto size=c.size();for(float x:{-.5f,.5f})for(float y:{-.5f,.5f})for(float z:{-.5f,.5f})if(c.z+extent[2]+c.rotate(x*size[0],y*size[1],z*size[2])[2]<-.001f)return false;
  }
  std::ofstream("clutter-test.txt")<<"Bunker debris, rations, electronics, disks and glass bottles: lift/punt, exactly five damage once, gravity, upper-span landing, spatial impacts, silence at rest. Tilted bottles fall onto their sides at 60/120 Hz, sleep and stay above the floor: PASS\n";return true;
+}
+Game Game::leadInspection(int view,float* tearAge){
+ // A test bay of its own, so the evidence never moves with a campaign map: a bench against a
+ // wall, the test set on it turned to a charged cell, red and black test leads from its sockets
+ // to the cell's posts (kit::testLead). Views: 0 the panel close, 1 the cell's terminals close,
+ // 2 the bench, 3 the cell lifted, turned and tipped inside the slack, 4 a plug pulling off,
+ // 5 both off and swinging, 6 the leads hanging still from the set, their plugs on their ends and
+ // the pilot dark, 7 the cell set back on the bench, its posts bare, 8 view 6 saved and loaded (the
+ // torn leads hung again), 9 the bay opening with its black lead already off (kit::looseTestLead).
+ auto m=regression::room();m->name="Lead inspection";m->definition.playerStart={8,10};
+ m->structures.push_back({5,7.8f,11,8,0,3,false,8});
+ m->fixtures.push_back({model::lab_clean_bench,{8,8.28f},0,1.18f,.56f,.81f,0,true});
+ const float face=.55f;m->fixtures.push_back({model::lab_field_meter,{7.72f,8.3f},.81f,.25f,.328f,.148f,std::atan2(-std::cos(face),-std::sin(face)),false});
+ kit::prop(*m,model::anl_cell_charged,8.3f,8.32f,.81f,-kPi*.5f);m->lights.push_back(kit::lamp({8.1f,9.f},2.9f,1.25f,7,4300));m->lights.push_back(kit::lamp({6.4f,10.6f},2.9f,.7f,6,3600));
+ kit::testLead(*m,1,"+",0,"+",1.f,true,stateId("bay_lead_red"));
+ if(view==9)kit::looseTestLead(*m,1,"-",{7.95f,9.3f,0},1.1f);else kit::testLead(*m,1,"-",0,"-",1.1f,true,stateId("bay_lead_black"));
+ Game g(regression::campaign(m));g.m_weaponEquipped=false;g.m_holster=1;
+ auto tick=[&](int n){for(int i=0;i<n;++i){g.m_elapsed+=1.f/120;g.updateClutter({},1.f/120);}};
+ auto look=[&](Point3 eye,Point3 at){g.m_player.pos={eye.x,eye.y};g.m_player.z=0;g.m_player.eye=eye.z;const auto d=at-eye;g.m_player.angle=std::atan2(d.y,d.x);g.m_player.pitch=std::atan2(d.z,std::sqrt(d.x*d.x+d.y*d.y))*140;};
+ const auto&leads=g.world().leads();const auto&pilot=g.world().lights()[size_t(leads[0].lamp)];
+ const Point3 sockets=(leads[0].anchor+leads[1].anchor)*.5f,lens{pilot.position.x,pilot.position.y,pilot.z},lid{8.3f,8.32f,1.21f};
+ // The still views settle first and only then place the camera, so its body never nudges the cell.
+ if(view==0){tick(30);const auto at=sockets*.6f+lens*.4f;look(at+Point3{std::cos(face)*.3f,std::sin(face)*.3f,.24f},at);return g;}
+ if(view==1){tick(30);look(lid+Point3{.17f,.2f,.21f},lid);return g;}
+ if(view==2){tick(30);look({8.12f,9.42f,1.42f},{8.f,8.34f,.92f});return g;}
+ // The hanging views take in the set on the bench and its face down to the floor, where a plug may come to rest.
+ const Point3 hangEye{8.55f,9.7f,1.3f},hangAt{8.f,8.55f,.45f};
+ if(view==9){tick(30);look(hangEye,hangAt);return g;}
+ // Lifted at the bench, turned and tipped in her hands, and carried back inside the leads' slack...
+ g.m_player.pos={8.3f,9.4f};g.m_player.angle=-kPi*.5f;g.m_player.pitch=-40;const auto&ropes=g.m_world.leadRopes();
+ g.m_heldClutter=g.leadProp(0,leads[0]);if(g.m_heldClutter<0)return g;
+ tick(60);for(int i=0;i<60;++i){const float t=float(i+1)/60;auto&c=g.m_clutter[size_t(g.m_heldClutter)];g.m_player.angle=-kPi*.5f+.25f*t;c.pitch=.3f*t;c.roll=-.2f*t;g.m_player.pos.y+=.1f/60;tick(1);}
+ if(view==3){tick(30);return g;}
+ // ...then back until a plug pulls off its post: the tear a few frames in, both off and swinging
+ // just under half a second after the second goes, and the cell set back on the bench, its
+ // posts bare, the leads hanging still from the set with their plugs four and a half seconds on.
+ auto walk=[&](int n){for(int i=0;i<n;++i){g.m_player.pos.y+=.5f/120;tick(1);}};
+ for(int i=0;i<720&&!ropes[0].torn&&!ropes[1].torn;++i)walk(1);
+ const float tore=g.m_elapsed;walk(6);
+ // The tear clip (--lead-clip): view 100+k is view 4 run on k/30 s, walking back until both go, then still.
+ if(view>=100){for(int i=0;i<(view-100)*4;++i)if(!(ropes[0].torn&&ropes[1].torn))walk(1);else tick(1);if(tearAge)*tearAge=g.m_elapsed-tore;return g;}
+ if(view>=5){for(int i=0;i<120&&!(ropes[0].torn&&ropes[1].torn);++i)walk(1);tick(54);}
+ if(view>=6){auto&c=g.m_clutter[size_t(g.m_heldClutter)];g.m_heldClutter=-1;c.pos={8.45f,8.4f};c.z=.81f;c.pitch=c.roll=0;c.yaw=-kPi*.5f;c.velocity={};c.vz=0;c.sleeping=false;c.restTime=0;
+  tick(540);if(view==8){const auto bytes=g.encodeSave();if(!g.decodeSave(bytes))return g;}
+  if(view!=7)look(hangEye,hangAt);else look(Point3{8.45f,8.4f,1.21f}+Point3{.1f,.25f,.2f},{8.45f,8.4f,1.21f});}
+ if(tearAge)*tearAge=g.m_elapsed-tore;
+ return g;
 }
 Game Game::clutterInspection(int kind,float seconds){
  auto game=mapInspection({5.7f,3.5f},.62f,-65,0,false,0,true);game.m_clutter={{{7.1f,4.5f},{},.65f}};auto&c=game.m_clutter[0];c.kind=kind;c.pitch=.65f;c.roll=.1f;
@@ -417,11 +532,148 @@ bool Game::testPhysicsStages(){
  {Game g(regression::campaign(regression::room()));g.m_player.pos={3,3};auto a=prop(model::keyboard,{8,8}),b=prop(model::keyboard,{8.4f,8});a.velocity={2,0};a.sleeping=false;a.soundOwner=0;g.m_clutter={a,b};g.m_sounds.clear();g.simulateClutter(g.m_clutter,0,1.f/60,-1);out<<"contact owners "<<g.m_clutter[0].soundOwner<<','<<g.m_clutter[1].soundOwner<<" z "<<g.m_clutter[0].z<<','<<g.m_clutter[1].z<<" vx "<<g.m_clutter[0].velocity.x<<','<<g.m_clutter[1].velocity.x<<" sounds "<<g.m_sounds.size()<<'\n';check(g.m_clutter[1].soundOwner==0&&std::any_of(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return e.owner==0;}),"prop contacts retain the kicking guard's sound ownership");}
  {Game g(regression::campaign(regression::room()));g.m_player.pos={3,3};auto c=prop(model::mug,{8,8});c.soundOwner=0;g.m_clutter={c};g.m_sounds.clear();g.breakClutter(0,0,{1,0,0});auto stimuli=g.aiStimuli();check(g.m_clutter[0].broken&&g.m_clutter[0].soundOwner==0&&std::any_of(stimuli.begin(),stimuli.end(),[](const AiStimulus&s){return s.npc==0&&(s.categories&ai::SoundImpact);}),"guard-kicked fragile prop retains NPC ownership when it shatters");}
  {auto m=regression::room();m->definition.environment=Environment::Outdoor;m->skybox="brutal_wasteland";kit::breakable(*m,9.97f,6,10.03f,10,0,2);World w(0,m);const auto b=w.breakables()[0];const auto&s=w.structures()[w.breakableStructure(0)];check(w.hasTerrain()&&std::fabs(b.bottom-s.bottom)<.001f&&std::fabs(b.top-s.top)<.001f&&b.bottom!=0,"Ashfall terrain grounds breakable records and collision boxes together");check(w.damageBreakable(0,100)&&!w.breakableIntact(0),"terrain-grounded glazing breaks through the normal world path");}
- {std::string text="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Physics parser|0\nMAP|0|Room|0|0|4.5|6.5|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";for(int y=0;y<24;++y)text+="ROW|0|0|"+std::to_string(y)+"|........................\n";text+="CLUTTER|0|7|8|8|0|0|28|.45|.16|.03|0|0|prop_broken\nBREAKABLE|0|9.97|6|10.03|10|0|3|10|35|0|board_broken|board_trigger\n--- CUSTOM_CAMPAIGN_DATA_END ---\n";try{auto campaign=loadCustomCampaignText(text,"physics-parser.txt");Game g(campaign);check(g.m_clutter.size()==1&&g.m_clutter[0].model==28&&g.world().breakables()[0].material==10,"custom CLUTTER model and BREAKABLE records reach runtime physics");auto bytes=g.encodeSave();Game loaded(campaign);check(loaded.decodeSave(bytes)&&loaded.encodeSave()==bytes,"custom physics records roundtrip through a byte-exact save");}catch(const std::exception&e){out<<e.what()<<'\n';check(false,"custom physics parser");}}
+ {std::string text="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Physics parser|0\nMAP|0|Room|0|0|4.5|6.5|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";for(int y=0;y<24;++y)text+="ROW|0|0|"+std::to_string(y)+"|........................\n";text+="CLUTTER|0|7|8|8|0|0|28|.45|.16|.03|0|0|prop_broken\nBREAKABLE|0|9.97|6|10.03|10|0|3|10|35|0|board_broken|board_trigger\nLEAD|0|9.958|8|1.2|0|0|0|2.6|0.006|6|1|parser_lead|0|0|0|0.03\nLEAD|0|9.958|9|1.2|9.3|9|0|1.6|0.006\nLEAD|0|9.958|9.5|1.2|9.4|9.5|0|1.1|0.006||||||||1\n--- CUSTOM_CAMPAIGN_DATA_END ---\n";try{auto campaign=loadCustomCampaignText(text,"physics-parser.txt");Game g(campaign);check(g.m_clutter.size()==1&&g.m_clutter[0].model==28&&g.world().breakables()[0].material==10,"custom CLUTTER model and BREAKABLE records reach runtime physics");
+   check(g.world().leads().size()==3&&g.world().leads()[0].prop==0&&g.world().leads()[0].live&&g.world().leads()[0].state==stateId("parser_lead")&&!g.world().leadRopes()[0].torn&&g.world().leadRopes()[0].sleeping,"a custom LEAD record clips its cable to the CLUTTER prop it names, hung at rest");
+   {const auto&fixed=g.world().leads()[1];const auto&loose=g.world().leads()[2];const auto&fr=g.world().leadRopes()[1];
+    check(fixed.material==7&&fixed.prop<0&&!fixed.loose&&!fixed.live&&!fixed.state&&!fr.torn&&!fr.points.empty()&&std::fabs(fr.points.back().x-9.3f)<.001f&&loose.loose&&loose.material==7&&loose.prop<0&&loose.offset.x==0&&loose.offset.y==0&&loose.offset.z==0&&g.world().leadRopes()[2].torn,"LEAD fields after the radius default when left off or empty: a fixed end, and a loose lead with no offsets");}auto bytes=g.encodeSave();Game loaded(campaign);check(loaded.decodeSave(bytes)&&loaded.encodeSave()==bytes,"custom physics records roundtrip through a byte-exact save");}catch(const std::exception&e){out<<e.what()<<'\n';check(false,"custom physics parser");}}
 {auto m=regression::room();m->fixtures.push_back({model::office_bookcase,{8,8},0,2.025f,.5f,2.5f,kPi*.5f,true});for(float top:{.03f,.656f,1.335f,1.917f})kit::prop(*m,model::office_file_binder,8.03f,8,top,.093f,.301f,.424f,kPi*.5f+.01f);Game shelves(regression::campaign(m));shelves.m_player.pos={3,3};bool stable=shelves.m_clutter.size()==4;for(auto&c:shelves.m_clutter){stable&=c.sleeping;c.sleeping=false;c.velocity={0,.02f};}for(int t=0;t<120;++t)shelves.updateClutter({},1.f/120);int n=0;for(float top:{.03f,.656f,1.335f,1.917f}){const auto& c=shelves.m_clutter[size_t(n++)];stable&=!c.broken&&c.sleeping&&std::fabs(c.z-top)<.005f&&length(c.pos-Vec2{8.03f,8})<.03f;}check(stable,"bookcase binders retain their measured shelf support after wake and motion");}
   {auto m=regression::room();m->fixtures.push_back({model::desk,{8,8},0,1.4f,.7f,.75f,kPi*.25f,true});kit::prop(*m,model::packing_crate,8,8,.75f,.6f,.3f,.2f,kPi*.25f);Game rotated(regression::campaign(m));rotated.m_player.pos={3,3};auto& c=rotated.m_clutter[0];c.sleeping=false;c.velocity={.05f,-.05f};for(int t=0;t<120;++t)rotated.updateClutter({},1.f/120);check(!c.broken&&c.sleeping&&std::fabs(c.z-.75f)<.005f&&length(c.pos-Vec2{8,8})<.08f,"rotated prop moves and settles on its oriented tabletop footprint");}
  {auto m=regression::room();kit::prop(*m,model::med_crash_cart,8,8,0,.74f,.48f,1,0);kit::prop(*m,model::med_pill_bottle,8,8,.809f,.07f,.03f,.13f,0);Game cart(regression::campaign(m));cart.m_player.pos={3,3};bool rests=cart.m_clutter[1].sleeping&&std::fabs(cart.m_clutter[1].z-.809f)<.001f;cart.knockClutter(0,0,{8,8,.5f},{18,0,0});cart.m_clutter[0].velocity={4,0};for(int t=0;t<180;++t)cart.updateClutter({},1.f/120);check(rests&&(cart.m_clutter[1].broken||cart.m_clutter[1].z<.75f),"medical cart supports its tray load and wakes it to fall when rolled away");}
  {auto m=regression::room();m->fixtures.push_back({model::packing_crate,{8,8},0,.7f,.5f,.42f,0,true});World w(0,m);bool supported=true;for(float x:{7.65f,8.35f})for(float y:{7.75f,8.25f})supported&=std::fabs(w.supportBelow(x,y,.42f,true)-.42f)<.001f;check(supported,"flush crate corners retain support at floating point boundaries");}
+ // Electrical leads: a cable from a wall's face to a cell on a desk (or, east, on the floor by an open seam).
+ {auto leadMap=[](bool live,bool east=false){auto m=regression::room();m->definition.playerStart={3,3};const float wall=east?21.8f:5.8f;m->structures.push_back({wall,6,wall+.2f,10,0,3});
+   if(east){m->openEast=true;m->layers[0].rows[8][23]='.';}else m->fixtures.push_back({model::desk,{8,8},0,1.4f,.7f,.75f,0,true});
+   kit::prop(*m,model::anl_cell_charged,east?23.2f:8.f,east?8.5f:8.f,east?0.f:.75f,0);kit::lead(*m,{wall+.212f,east?8.5f:8.f,1.6f},0,{0,0,.41f},east?2.2f:2.4f,8,live,.007f,stateId("reg_lead_torn"));return m;};
+  auto lowest=[](const LeadRope&r){float z=1e9f;for(auto p:r.points)z=std::min(z,p.z);return z;};
+  auto finite=[](const LeadRope&r){bool f=r.points.size()>=10;for(auto p:r.points)f&=std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);return f;};
+  auto span=[](Point3 a,Point3 b){auto d=b-a;return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);};
+  auto heard=[](const Game&g,Sound s){return std::any_of(g.m_sounds.begin(),g.m_sounds.end(),[&](const SoundEvent&e){return e.sound==s;});};
+  auto run=[](Game&g,int ticks){for(int i=0;i<ticks;++i){g.m_elapsed+=1.f/120;g.updateClutter({},1.f/120);}};
+  auto campaign=regression::campaign(leadMap(true));Game g(campaign);g.m_player.pos={3,3};auto&r=g.m_world.m_leadRopes[0];const auto l=g.world().leads()[0];
+  Point3 clip=leadClip(g.m_clutter[0],l.offset);
+  check(finite(r)&&r.sleeping&&!r.torn&&lowest(r)<std::min(l.anchor.z,clip.z)-.05f&&lowest(r)>0&&span(r.points.back(),clip)<.002f,"a lead opens hanging in a sag below both its ends, clipped and at rest");
+  // Off the prop: the point beside the clip stands up out of the cell's top, and no piece of the cable runs into the cell.
+  auto rises=[&](const Game&w){const auto&p=w.world().leadRopes()[0].points;const auto up=leadBody(w.m_clutter[0]).axis[2],d=p[p.size()-2]-leadClip(w.m_clutter[0],l.offset);return d.x*up.x+d.y*up.y+d.z*up.z;};
+  check(g.leadThrough(0,0)<=l.radius&&rises(g)>.03f,"a clipped lead leaves its clip up out of the prop's face and hangs clear of the prop, not through it");
+  auto rested=r.points;run(g,30);check(r.sleeping&&r.points.size()==rested.size()&&std::equal(rested.begin(),rested.end(),r.points.begin(),[](Point3 a,Point3 b){return a.x==b.x&&a.y==b.y&&a.z==b.z;}),"a settled lead on a prop at rest stays asleep and still");
+  // Carried: she holds the cell up in front of her, inside the lead's slack.
+  g.m_player.pos={8.9f,8};g.m_player.angle=kPi;g.m_player.pitch=0;g.m_heldClutter=0;const Point3 middle=r.points[r.points.size()/2];float carriedDeep=-1;for(int t=0;t<60;++t){run(g,1);carriedDeep=std::max(carriedDeep,g.leadThrough(0,0));}clip=leadClip(g.m_clutter[0],l.offset);
+  check(!r.torn&&span(clip,l.anchor)<l.length&&span(r.points.back(),clip)<.002f&&span(r.points[r.points.size()/2],middle)>.05f&&lowest(r)<std::min(l.anchor.z,clip.z),"a lead follows a carried prop inside its slack, its clip on the prop and the cable sagging");
+  // Turned, tipped and lowered in her hands, the cell never takes its own cable inside it.
+  {Game turn(campaign);turn.m_player.pos={8.9f,8};turn.m_player.angle=kPi;turn.m_heldClutter=0;run(turn,30);turn.m_clutter[0].pitch=.6f;turn.m_clutter[0].roll=-.35f;float deep=-1,rise=1;
+   for(int t=0;t<240;++t){turn.m_player.angle=kPi+std::sin(float(t)/40)*.6f;turn.m_player.pitch=-60.f*float(t)/240;run(turn,1);deep=std::max(deep,turn.leadThrough(0,0));rise=std::min(rise,rises(turn));}
+   out<<"carried lead: deepest into its cell "<<std::max(carriedDeep,deep)*1000<<" mm (radius "<<l.radius*1000<<"), least rise off its face "<<rise*1000<<" mm\n";
+   check(!turn.world().leadRopes()[0].torn&&carriedDeep<=l.radius&&deep<=l.radius&&rise>.03f,"a carried prop, turned and tipped, keeps its lead leaving the clip outward and never through the prop");}
+  // Backing away until the clip goes.
+  const float health=g.m_player.health;float tearSpan=0,tugDeep=-1;for(int i=0;i<900&&!r.torn;++i){g.m_sounds.clear();tearSpan=span(leadClip(g.m_clutter[0],l.offset),l.anchor);g.m_player.pos.x+=.004f;run(g,1);tugDeep=std::max(tugDeep,g.leadThrough(0,0));}
+  check(tugDeep<=l.radius,"drawn taut toward its tear, the lead still runs clear of the prop it pulls on");
+  const auto stimuli=g.aiStimuli();const Point3 tip=r.points.back();
+  check(r.torn&&tearSpan>l.length+Lead::TearMargin-.02f&&tearSpan<l.length+Lead::TearMargin+.02f&&g.state(stateId("reg_lead_torn"))==1,"the clip tears pulled past the lead's length and margin, setting its state");
+  check(std::any_of(g.m_sounds.begin(),g.m_sounds.end(),[](const SoundEvent&e){return e.sound==Sound::LeadArc&&e.aiRadius>=14&&e.spatial;})&&std::any_of(stimuli.begin(),stimuli.end(),[&](const AiStimulus&s){return s.radius>=14&&(s.categories&ai::SoundImpact)&&length(s.source-Vec2{tip.x,tip.y})<.3f;}),"a live lead's tear arcs: LeadArc at the torn end, a 14 m AI stimulus");
+  check(r.tornAt==g.m_elapsed&&leadArc(0)>=1&&leadArc(1.f)>0&&leadArc(2.7f)==0,"the torn end throws its spark burst, spits with the crackle, then goes dead");
+  check(g.m_player.health==health-LeadShock&&g.m_damageFlash>0,"holding the prop as a live lead tears gives a small shock and a hit flash");
+  int settle=0;for(;settle<600&&!r.sleeping;++settle)run(g,1);out<<"torn lead at rest after "<<settle/120.f<<" s, tip z "<<r.points.back().z<<", middle z "<<r.points[r.points.size()/2].z<<'\n';
+  check(r.sleeping&&settle<=480&&finite(r)&&r.points.back().z<l.anchor.z-.5f&&r.points[r.points.size()/2].z<l.anchor.z,"the torn lead falls limp below its anchor and comes to rest inside four seconds");
+  {auto bytes=g.encodeSave();Game loaded(campaign);bool decoded=loaded.decodeSave(bytes);const auto&lr=loaded.world().leadRopes()[0];
+   check(decoded&&lr.torn&&lr.sleeping&&finite(lr)&&lr.points.back().z<l.anchor.z-.5f&&loaded.encodeSave()==bytes,"save and load keep the torn lead torn and hang it limp again");}
+  {Game away(campaign);away.m_player.pos={3,3};const float before=away.m_player.health;auto&cell=away.m_clutter[0];cell.pos={11,8};cell.sleeping=false;away.m_sounds.clear();run(away,1);
+   check(away.world().leadRopes()[0].torn&&heard(away,Sound::LeadArc)&&away.m_player.health==before,"a prop knocked away past the length tears its lead with no shock to a player not holding it");}
+  {Game broken(campaign);broken.m_player.pos={3,3};const float before=broken.m_player.health;broken.breakClutter(0,0,{1,0,0});broken.m_sounds.clear();run(broken,1);
+   check(broken.world().leadRopes()[0].torn&&heard(broken,Sound::LeadArc)&&broken.m_player.health==before,"a prop broken while clipped tears its lead");}
+  {Game dead(regression::campaign(leadMap(false)));dead.m_player.pos={8.9f,8};dead.m_player.angle=kPi;dead.m_heldClutter=0;const float before=dead.m_player.health;run(dead,30);bool tore=false;
+   for(int i=0;i<900&&!tore;++i){dead.m_sounds.clear();dead.m_player.pos.x+=.004f;run(dead,1);tore=dead.world().leadRopes()[0].torn;}
+   check(tore&&!heard(dead,Sound::LeadArc)&&heard(dead,Sound::JunkMetal)&&dead.m_player.health==before,"a dead lead pops off its clip without an arc or a shock");}
+  {auto first=leadMap(true,true),second=regression::room();second->definition.origin={24,0};second->openWest=true;second->layers[0].rows[8][0]='.';auto seam=regression::campaign(first);seam->maps.push_back(second);
+   Game cross(seam);cross.m_heldClutter=0;cross.m_clutter[0].pos={24.1f,8.5f};cross.m_player.pos={24.1f,8.5f};const float before=cross.m_player.health;cross.crossChunkBoundary();cross.m_sounds.clear();run(cross,1);
+   const auto&cr=cross.chunkWorld(0).leadRopes()[0];check(cross.level()==1&&cross.holdingClutter()&&cr.torn&&heard(cross,Sound::LeadArc)&&cross.m_player.health==before-LeadShock,"a prop carried into the next chunk tears its lead, shocking the hand that carries it");}
+  // The audit passes a lead plugged into a wall and fails one hung from thin air or run through the wall.
+  {Game plugged(regression::campaign(leadMap(true)));auto air=leadMap(true);air->leads[0].anchor={7,8,2.4f};Game floating(regression::campaign(air));
+   auto wall=leadMap(true);wall->leads[0].anchor={5.788f,8,1.6f};wall->leads[0].length=2.8f;Game through(regression::campaign(wall));
+   const bool clean=auditMapScene(plugged,0);if(!clean){std::ifstream report("map-audit-0.txt");std::string line;while(std::getline(report,line))if(line.find(" lead[")!=std::string::npos)out<<"  plugged audit: "<<line<<'\n';}
+   check(clean&&!auditMapScene(floating,0)&&!auditMapScene(through,0),"the map audit passes a plugged-in lead and fails one hanging from nothing or run through a wall");}
+  {auto inst=mapInspection({3.75f,2.75f},0,0,82,false,-999,true);const auto&w=inst.world();int clipped=0,loose=0;bool still=w.leads().size()==9;
+   for(size_t i=0;i<w.leads().size();++i){const auto&lr=w.leadRopes()[i];still&=lr.sleeping&&finite(lr)&&inst.leadThrough(82,int(i))<=w.leads()[i].radius;++(lr.torn?loose:clipped);}
+   still&=std::none_of(w.pipes().begin(),w.pipes().end(),[](const PipeRun&p){return p.material==8&&p.radius<.015f;});
+   check(still&&clipped==8&&loose==1,"Instrumentation opens with eight test leads clipped to its cells clear of them, stand 3's hanging loose, all still and no wire pipes");}
+  // A limp cable (torn, or loose from the start) lies as a dropped one does: asleep, each point
+  // out of every solid and on or above what is under it, and woken for a second of play it stays
+  // put (one held out in the air falls). `low` gets its lowest point.
+  auto lies=[&](const World&w,int i,const char*what,Point3*low=nullptr){const auto&l=w.leads()[size_t(i)];const auto&r=w.leadRopes()[size_t(i)];bool rests=r.sleeping&&finite(r);Point3 least{0,0,1e9f};
+   for(const auto&p:r.points){rests&=w.fits(p.x,p.y,p.z-l.radius,l.radius*2,false,true)&&p.z>=w.supportBelow(p.x,p.y,p.z+.02f)-.002f;if(p.z<least.z)least=p;}
+   const float moved=w.leadUnrest(i,1.f,nullptr);if(low)*low=least;
+   out<<what<<" lead "<<i<<": asleep "<<r.sleeping<<", lowest "<<least.x<<','<<least.y<<" z "<<least.z<<", end "<<r.points.back().x<<','<<r.points.back().y<<" z "<<r.points.back().z<<", woken it moves "<<moved*1000<<" mm\n";
+   return rests&&moved<.03f;};
+  // A torn plug (leadPlug, as drawn) never sinks into what is under its cable's end; come to rest on it, it lies on its side.
+  auto plugClear=[&](const World&w,int i,int*resting){const auto&l=w.leads()[size_t(i)];const auto&r=w.leadRopes()[size_t(i)];const auto&e=r.points.back();const float under=w.supportBelow(e.x,e.y,e.z+.02f);
+   const auto plug=leadPlug(l,r,under);const float low=leadPlugLowest(plug,l.radius);const bool rest=e.z-under<l.radius+.002f;if(rest)++*resting;
+   out<<"  plug "<<i<<": end z "<<e.z<<" over "<<under<<", its lowest point "<<low<<", its axis z "<<plug.up.z<<'\n';return low>=under-.0005f&&(!rest||std::fabs(plug.up.z)<.2f);};
+  // Test leads (kit::testLead) in the inspection's own bay: a test set's sockets to a cell's posts.
+  // Seated: the cable's end on the post, the right-angle plug standing up the post's axis as the
+  // cell is turned (its head PlugHead up it, the point past its boot level from there), the
+  // point past the socket's boot straight out of the socket.
+  {auto seated=[&](const Game&g,int i){const auto&l=g.world().leads()[size_t(i)];const auto&r=g.world().leadRopes()[size_t(i)];const int k=g.leadProp(0,l,r.clutter);if(k<0||r.torn||r.points.size()<3)return false;
+     const auto&c=g.m_clutter[size_t(k)];const auto b=leadBody(c);const Point3 up=b.axis[0]*l.terminal.x+b.axis[1]*l.terminal.y+b.axis[2]*l.terminal.z;const auto&p=r.points;const auto plug=p[p.size()-2]-p.back(),boot=p[1]-l.anchor;
+     return span(p.back(),leadClip(c,l.offset))<.002f&&span(r.plugUp,up)<.001f&&std::fabs(plug.x*up.x+plug.y*up.y+plug.z*up.z-Lead::PlugHead)<.001f&&boot.x*l.socket.x+boot.y*l.socket.y+boot.z*l.socket.z>.999f*span(boot,{});};
+   auto pilot=[](const Game&g){const auto&l=g.world().leads()[0];return l.lamp>=0?g.lampPower(g.world().lights()[size_t(l.lamp)]):-1.f;};
+   auto bay=leadInspection(2);const auto&w=bay.world();
+   for(size_t i=0;i<w.leads().size();++i){const auto&l=w.leads()[i];out<<"bay lead "<<i<<": socket "<<(l.socketPort>=0?leadPorts()[size_t(l.socketPort)].name:"?")<<", terminal "<<(l.terminalPort>=0?leadPorts()[size_t(l.terminalPort)].name:"?")<<", seated "<<seated(bay,int(i))<<", asleep "<<w.leadRopes()[i].sleeping<<'\n';}
+   check(w.leads().size()==2&&w.leads()[0].panel==1&&w.leads()[0].material==8&&w.leads()[1].material==7&&w.leads()[0].lamp>=0&&w.leads()[0].lamp==w.leads()[1].lamp&&leadPorts()[size_t(w.leads()[0].socketPort)].name=="+"&&leadPorts()[size_t(w.leads()[1].socketPort)].name=="-"&&leadPorts()[size_t(w.leads()[1].terminalPort)].name=="-",
+    "kit::testLead seats red + to + and black - to - by name, one pilot lamp for the panel");
+   check(seated(bay,0)&&seated(bay,1)&&w.leadRopes()[0].sleeping&&w.leadRopes()[1].sleeping&&pilot(bay)==1,"each plug in its socket and on its post in line with its cable, still, the pilot lit");
+   {const bool clean=auditMapScene(bay,0);if(!clean){std::ifstream report("map-audit-0.txt");std::string line;while(std::getline(report,line))if(line.find(" lead[")!=std::string::npos||line.find(" lamp at ")!=std::string::npos||line.rfind("FAIL",0)==0)out<<"  bay audit: "<<line<<'\n';}
+    check(clean,"the map audit passes the bay's test leads");}
+   auto carried=leadInspection(3);float deep=-1;for(int i=0;i<2;++i)deep=std::max(deep,carried.leadThrough(0,i)-carried.world().leads()[size_t(i)].radius);
+   check(carried.holdingClutter()&&std::fabs(carried.m_clutter[size_t(carried.m_heldClutter)].pitch)>.2f&&seated(carried,0)&&seated(carried,1)&&deep<=0&&pilot(carried)==1,"lifted, turned and tipped, the cell keeps both plugs seated on its posts and turning with it, the cables clear of it, the pilot lit");
+   float age=-1;auto tearing=leadInspection(4,&age);const auto&tr=tearing.world().leadRopes();
+   check(tr[0].torn!=tr[1].torn&&age>0&&age<.1f&&tearing.state(stateId("lead_circuit/Lead inspection/1"))==1&&tearing.state(stateId(tr[0].torn?"bay_lead_red":"bay_lead_black"))==1,"carried past the slack, one plug pulls off its post, breaking the panel's circuit and setting its lead's state");
+   // The pilot follows the circuit: out once a lead tears, stuttering with the arc, then dark.
+   int lit=0,dark=0;for(int i=0;i<360;++i){tearing.m_elapsed+=1.f/120;tearing.updateClutter({},1.f/120);const float p=pilot(tearing);if(i<240)(p>0?lit:dark)+=1;}
+   out<<"pilot over the arc: lit "<<lit<<" of 240 frames, "<<pilot(tearing)<<" at 3 s\n";
+   check(lit>0&&dark>lit&&pilot(tearing)==0,"the panel's pilot stutters with the arc and dies with the circuit");
+   auto torn=leadInspection(5);auto dangling=leadInspection(6);bool keeps=true;
+   for(const Game*g:{&torn,&dangling})for(int i=0;i<2;++i){const auto&l=g->world().leads()[size_t(i)];const auto&r=g->world().leadRopes()[size_t(i)];const auto post=leadClip(g->m_clutter[0],l.offset);
+    keeps&=r.torn&&l.plugged()&&finite(r)&&span(r.points.back(),post)>.1f&&span(r.points.back(),r.points[r.points.size()-2])>.05f;}
+   const auto&hang=dangling.world().leadRopes();const auto&anchor=dangling.world().leads()[0].anchor;
+   check(keeps&&!(torn.world().leadRopes()[0].sleeping&&torn.world().leadRopes()[1].sleeping)&&hang[0].sleeping&&hang[1].sleeping&&hang[0].points.back().z<anchor.z-.3f&&pilot(dangling)==0&&!dangling.holdingClutter(),
+    "torn, each lead keeps its plug on its end, swinging, then hanging still below its socket, the bare posts left on the cell, the pilot dark");
+   {int resting=0;bool clear=true;for(const Game*g:{&torn,&dangling})for(int i=0;i<2;++i)clear&=plugClear(g->world(),i,&resting);
+    check(clear&&resting>=1,"a torn plug never sinks into what is under it, and one come to rest on the floor lies on its side");}
+   // Saved and loaded, the torn leads are hung again from their sockets off the bench's edge, out
+   // of the wall and at rest (not laid across the bench toward the map's corner and left asleep).
+   {auto reloaded=leadInspection(8);const auto&w8=reloaded.world();bool hung=w8.leadRopes().size()==2;int resting=0;
+    for(int i=0;i<2&&hung;++i){const auto&r=w8.leadRopes()[size_t(i)];hung&=r.torn&&lies(w8,i,"reloaded")&&r.points.back().z<w8.leads()[size_t(i)].anchor.z-.3f&&w8.supportBelow(r.points.back().x,r.points.back().y,r.points.back().z+.02f)<.1f&&plugClear(w8,i,&resting);}
+    check(hung&&pilot(reloaded)==0,"saved and loaded, the torn leads hang again from their sockets off the bench's edge, out of the wall and at rest, their plugs on their ends");}
+   // A loose test lead (kit::looseTestLead) opens run off the bench's edge and hanging down its face.
+   {auto loose=leadInspection(9);const auto&w9=loose.world();Point3 low{};const bool lying=w9.leads().size()==2&&w9.leads()[1].loose&&w9.leadRopes()[1].torn&&lies(w9,1,"loose",&low);int resting=0;const bool plug=plugClear(w9,1,&resting);
+    check(lying&&plug&&low.z<.81f-.3f&&low.y<8.56f+.15f&&pilot(loose)==0&&auditMapScene(loose,0),"a loose test lead opens off the bench's edge and hanging at rest, its plug on its end, the pilot dark, and the audit passes it");}
+   // The audit fails a plug off its port: a terminal 2 cm off its post, or a socket's panel moved after the lead was seated.
+   auto bench=[](int fault){auto m=regression::room();m->definition.playerStart={8,10};m->fixtures.push_back({model::lab_clean_bench,{8,8.28f},0,1.18f,.56f,.81f,0,true});
+    m->fixtures.push_back({model::lab_field_meter,{7.72f,8.3f},.81f,.25f,.328f,.148f,-2.1f,false});kit::prop(*m,model::anl_cell_charged,8.3f,8.32f,.81f,0);kit::testLead(*m,1,"+",0,"+",.8f);
+    if(fault==1)m->leads[0].offset.x+=.02f;if(fault==2)m->fixtures[1].position.x+=.03f;if(fault==3)kit::looseTestLead(*m,1,"-",{7.9f,9.2f,0},.7f);return m;};
+   Game good(regression::campaign(bench(0))),offPost(regression::campaign(bench(1))),offSocket(regression::campaign(bench(2)));
+   check(auditMapScene(good,0)&&!auditMapScene(offPost,0)&&!auditMapScene(offSocket,0),"the map audit fails a test lead whose plug is not seated on its terminal post or in its socket");
+   // ...and a cable asleep but held out in the air, as the old limp layout left a loose lead: level
+   // from the bench top out past its edge, 30 cm over nothing. Above its support everywhere, it is not at rest.
+   {Game hanging(regression::campaign(bench(3))),frozen(regression::campaign(bench(3)));auto&fr=frozen.m_world.m_leadRopes[1];
+    for(size_t k=3;k<fr.points.size();++k)fr.points[k]=fr.points[2]+Point3{0,.06f*float(k-2),0};fr.previous=fr.points;fr.sleeping=true;
+    check(auditMapScene(hanging,0)&&!auditMapScene(frozen,0),"the map audit passes a loose test lead hanging off the bench and fails one asleep but held out in the air");}
+   bool refused=false;try{auto m=bench(0);kit::testLead(*m,1,"+",0,"x",.8f);}catch(const std::exception&){refused=true;}
+   check(refused,"kit::testLead refuses a terminal the prop does not have");}
+  // A LEAD record names its panel's socket and its prop's terminal: the same seat as kit::testLead.
+  {std::string text="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Test leads|0\nMAP|0|Bay|0|0|8|10|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";for(int y=0;y<24;++y)text+="ROW|0|0|"+std::to_string(y)+"|........................\n";
+   text+="FIXTURE|0|"+std::to_string(model::lab_clean_bench)+"|8|8.28|0|1.18|0.56|0.81|0|1\nFIXTURE|0|"+std::to_string(model::lab_field_meter)+"|7.72|8.3|0.81|0.25|0.328|0.148|-2.1|0\nCLUTTER|0|7|8.3|8.32|0.81|0|"+std::to_string(model::anl_cell_charged)+"|0.216|0.201|0.406|0|0|cell_broken\n"
+    "LEAD|0||||0|0|0|0.8|0.007|8|1|record_red|0||||0|1|+|+\nLEAD|0||||7.9|9.2|0|0.7|0.007|7|||||||1|1|-|\n--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+   try{auto campaign=loadCustomCampaignText(text,"test-leads.txt");Game g(campaign);const auto&w=g.world();
+    auto m=regression::room();m->fixtures.push_back({model::lab_clean_bench,{8,8.28f},0,1.18f,.56f,.81f,0,true});m->fixtures.push_back({model::lab_field_meter,{7.72f,8.3f},.81f,.25f,.328f,.148f,-2.1f,false});kit::prop(*m,model::anl_cell_charged,8.3f,8.32f,.81f,0);kit::testLead(*m,1,"+",0,"+",.8f);
+    const auto&a=w.leads()[0];const auto&b=m->leads[0];const auto&loose=w.leads()[1];const auto&lr=w.leadRopes()[0];
+    check(w.leads().size()==2&&span(a.anchor,b.anchor)<1e-4f&&span(a.offset,b.offset)<1e-4f&&span(a.socket,b.socket)<1e-4f&&a.plugged()&&a.lamp>=0&&a.state==stateId("record_red")&&!lr.torn&&lr.sleeping&&span(lr.points.back(),leadClip(g.m_clutter[0],a.offset))<.002f
+     &&loose.loose&&loose.socketed()&&loose.plugged()&&loose.lamp==a.lamp&&w.leadRopes()[1].torn&&g.lampPower(w.lights()[size_t(a.lamp)])==0,"LEAD panel|socket|terminal seats a record's plugs as kit::testLead does; a loose one keeps its plug and leaves the pilot dark");
+    {Point3 low{};const bool rests=lies(w,1,"record loose",&low);for(int t=0;t<600;++t)g.updateClutter({},1.f/120);Point3 later{};const bool still=lies(w,1,"record loose, 5 s on",&later);
+     check(rests&&still&&span(low,later)<.002f&&low.z<.6f&&low.y<8.56f+.15f,"a LEAD record's loose test lead opens off the bench's edge and hanging at rest, not held out in the air, and stays");}
+    bool refused=false;try{auto bad=text;bad.replace(bad.find("|1|+|+"),6,"|1|x|+");loadCustomCampaignText(bad,"bad-leads.txt");}catch(const std::exception&){refused=true;}
+    check(refused,"a LEAD record naming a socket its panel lacks is refused");}
+   catch(const std::exception&e){out<<e.what()<<'\n';check(false,"LEAD panel|socket|terminal records");}}
+ }
  out<<(ok?"ALL PASSED":"FAILED")<<" physics-stages\n";return ok;
 }
 }

@@ -189,38 +189,63 @@ void Game::updateEnemies(float dt){
   }
   if(!e.alive){clearCreatureSchedule(e);continue;}
   perf::count(perf::CreatureUpdates);
+  const auto& traits=creatureTraits(e.kind);
+  // A footfall each half gait cycle (two to a move-clip cycle), wherever this
+  // frame's move ends: the floor it treads at its kind's weight, a limp's
+  // dragged foot lighter. The player's ears only: never an AI stimulus.
+  struct Footfall {Game&g;Enemy&e;float stride;~Footfall(){const auto&t=creatureTraits(e.kind);const float now=std::floor(e.gait/kPi);if(now==stride||t.stepGain<=0||!e.alive)return;
+   const unsigned n=unsigned(now)&3u;const bool drag=t.stepLimp>0&&(n&1u);
+   SoundEvent step{Sound(int(stepSoundAt(g.m_world,e.pos))+int(n)),e.pos,t.stepGain*(drag?t.stepLimp:1.f),t.stepPitch*(drag?.86f:.97f+.02f*float(n)),true,17,e.z+.04f};step.aiRadius=-1;g.m_sounds.push_back(step);}} footfall{*this,e,std::floor(e.gait/kPi)};
   // A dormant creature does nothing until its state is set or it is hurt; then
-  // it knows where the player is and calls out.
+  // it knows where the player is (has them made out) and calls out.
   if(e.wakeState){if(!state(e.wakeState)&&e.hp>=e.maxHp){e.moving=false;continue;}
    // A stalker woken by distant noise keeps coming as long as one that saw the player.
-   e.wakeState=0;e.awareness=std::max(e.awareness,creatureTraits(e.kind).rushSpeed>0?12.f:6.f);e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.state=Enemy::State::Investigate;enemySound(e,0,.9f);}
-  bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(1.f/creatureTraits(e.kind).strikeSeconds));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*creatureTraits(e.kind).painDecay);
+   e.wakeState=0;e.awareness=std::max(e.awareness,traits.rushSpeed>0?12.f:6.f);e.recognition=1;e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.state=Enemy::State::Investigate;enemySound(e,0,.9f);}
+  bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(1.f/traits.strikeSeconds));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*traits.painDecay);
   perf::Scope senseProfile(perf::EnemySense);
   Vec2 target=m_player.pos;float targetFeet=m_player.z,targetEye=m_player.eye,targetHull=m_player.hullHeight();int friendly=-1;
   auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   // Shut in a locker the player is out of sight of anything that hunts by eye.
-  bool visible=hiddenLocker()<0&&aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,11.f,-.25f,2.5f);
-  float nearest=visible?dist:11.f;
+  const bool seen=hiddenLocker()<0&&aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,traits.sightRange,traits.sightDot,2.5f);
+  // Making the player out, as a guard does (aiRecognitionRate) at its own
+  // notice time and need of light. Inside 2.5 m it knows them at once, and a
+  // wound the player dealt fills it where it was dealt (Hitscan, the punch, a
+  // thrown prop); a wound from anyone else does not.
+  // Below a full meter it has only seen something: it turns and creeps toward
+  // it (Investigate), and a stalker's stare-down waits for the meter to fill.
+  // Out of sight the meter drains at half speed, but not while it still hunts
+  // what it made out. The meter is the player's alone (a chase after an NPC
+  // does not fill it), and a save keeps it.
+  const bool noticing=e.recognition>0&&e.recognition<1;
+  if(seen){float dz=targetFeet+targetEye-e.z-.7f;
+   e.recognition=dist<2.5f||traits.noticeMs<=0?1.f:std::min(1.f,e.recognition+dt*1000.f/float(traits.noticeMs)*aiRecognitionRate(std::sqrt(dist*dist+dz*dz),traits.sightRange,dist>.001f?dot(to*(1.f/dist),facing):1.f,traits.sightDot,m_player.crouched,length(m_velocity),m_playerExposure,traits.lightWeight));}
+  else if(e.recognition<1||e.awareness<=0)e.recognition=traits.noticeMs>0?std::max(0.f,e.recognition-dt*500.f/float(traits.noticeMs)):0.f;
+  bool visible=seen&&e.recognition>=1,glimpsed=seen&&!visible;
+  float nearest=visible?dist:traits.sightRange;
   for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.level!=m_level)continue;const auto&track=npc.track();const auto&pose=npc.pose;
    if(npcIncapacitated(i)||track.ai.mode==ActorAiMode::Scripted||!track.health||state(track.deadState)||pose.clip==4||(track.ai.enableState&&!state(track.ai.enableState))||!factionsHostile(AiFaction::Creature,npcFaction(track)))continue;
-   float distance=length(pose.position-e.pos);if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,pose.position,pose.z+track.scale*.65f,11.f,-.25f,2.5f)){
-    target=pose.position;targetFeet=pose.z;targetHull=track.scale;targetEye=track.scale*.65f;friendly=int(i);nearest=dist=distance;visible=true;to=target-e.pos;
+   float distance=length(pose.position-e.pos);if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,pose.position,pose.z+track.scale*.65f,traits.sightRange,traits.sightDot,2.5f)){
+    target=pose.position;targetFeet=pose.z;targetHull=track.scale;targetEye=track.scale*.65f;friendly=int(i);nearest=dist=distance;visible=true;glimpsed=false;to=target-e.pos;
    }
   }
   const AiStimulus* heard=nullptr;float strongest=0;
-  // Keep footsteps/impacts/weapons, but ignore long-range world ambience that
-  // would steal lastKnown on Ashfall. Near-field sources are ignored so a
+  // Keep footsteps (a sprint on steel carries 12 m)/impacts/weapons, but ignore
+  // long-range world ambience that would steal lastKnown on Ashfall. Near-field sources are ignored so a
   // Brute cannot hear its own live footfall; soft Land impacts are ignored
   // entirely so updateEnemies-only callers cannot accumulate a trail of
   // historical Brute thumps into Investigate magnets.
+  // Its kind's hearing scales how far each sound carries to it.
   if(!visible)for(const auto&stimulus:stimuli){
    bool combat=stimulus.categories&(ai::SoundWeapon|ai::SoundDanger|ai::SoundImpact);
-   if(!combat&&!stimulus.loud&&stimulus.radius>5.f)continue;
+   if(!combat&&!stimulus.loud&&!stimulus.step&&stimulus.radius>5.f)continue;
    if((stimulus.categories&ai::SoundImpact)&&!stimulus.loud&&stimulus.gain<=.75f)continue;
-   float dz=stimulus.z-e.z-.7f;float planar=lengthSq(stimulus.source-e.pos);if(planar+dz*dz>=stimulus.radius*stimulus.radius||planar<1.f)continue;
-   float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,stimulus.radius,stimulus.gain,stimulus.loud,hearingRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
+   const float radius=stimulus.radius*traits.hearingScale;
+   float dz=stimulus.z-e.z-.7f;float planar=lengthSq(stimulus.source-e.pos);if(planar+dz*dz>=radius*radius||planar<1.f)continue;
+   float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,radius,stimulus.gain,stimulus.loud,hearingRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
    if(strength>strongest){strongest=strength;heard=&stimulus;}}
-  if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,creatureTraits(e.kind).rushSpeed>0?12.f:6.f);e.state=Enemy::State::Chase;}
+  if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,traits.rushSpeed>0?12.f:6.f);e.state=Enemy::State::Chase;}
+  // It has seen something there: it goes to look, as it would at a noise.
+  else if(glimpsed){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
   else if(heard){e.lastKnown=heard->source;auto local=heard->source;const auto&sourceWorld=worldAt(local);e.lastKnownZ=sourceWorld.supportBelow(local.x,local.y,heard->z);e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
   senseProfile.stop();if(e.awareness>0)perf::count(perf::CreaturesHunting);
@@ -241,10 +266,15 @@ void Game::updateEnemies(float dt){
     continue;
    }
   }
-  e.voiceTimer-=dt;e.stepTimer-=dt;
+  e.voiceTimer-=dt;e.idleTimer-=dt;
   if(e.awareness>0&&e.voiceTimer<=0){enemySound(e,0,e.kind==Enemy::Kind::Warden?.28f:.65f);e.voiceTimer=(e.kind==Enemy::Kind::Warden?11.f:6.f)+float(int(e.home.x)%4);}
+  // Unaware, it is still heard: its idle sound at an uneven spacing (.75-1.25
+  // of its period), to the player's ears only, on its own clock so the call
+  // when it notices the player is never held back by it.
+  if(e.awareness<=0&&traits.idlePeriod>0&&e.idleTimer<=0){SoundEvent idle{traits.idleSound,e.pos,traits.idleGain,traits.idlePitch,true,14,(e.bodyBottom()+e.bodyTop())*.5f};idle.aiRadius=-1;m_sounds.push_back(idle);
+   e.idleTimer=traits.idlePeriod*(.75f+.125f*float(int(e.home.x*7.f+e.home.y*13.f+m_elapsed*5.f)%5));}
   // Stalkers (the reactor's thing, the Snatcher) hunt by sight: stare, flank, rush, hide.
-  const auto& traits=creatureTraits(e.kind);const bool stalker=traits.rushSpeed>0;
+  const bool stalker=traits.rushSpeed>0;
   float range=e.reach();
   bool sameLevel=targetFeet<e.bodyTop()&&targetFeet+targetHull>e.bodyBottom();
   // The Snatcher crouches to lunge from further out than its claws reach.
@@ -450,7 +480,9 @@ void Game::updateEnemies(float dt){
    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
    bool flat=std::fabs(e.z-m_player.z)<.23f;
    if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,e.hull(),roughStep(e.kind),nullptr,true,e.radius());}
-   bool freshContact=visible&&!hadAwareness;
+   // Fresh contact is the moment it makes the player out: unaware before, or
+   // aware only of what it was still making out.
+   bool freshContact=visible&&(!hadAwareness||noticing);
 
    // A rush is a short burst, never the Warden's permanent navigation speed.
    // Losing sight cannot leave it sprinting forever.
@@ -582,7 +614,8 @@ void Game::updateEnemies(float dt){
    if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&std::fabs(targetFeet-e.z)<.22f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
   direction=normalized(direction+separation*2.f);
-  float speed=stalker?stalkSpeed:traits.speed;if(e.awareness==0)speed*=.5f;if(e.strike>0)speed*=.35f;
+  // Unaware, or creeping up on something it has only glimpsed, at half pace.
+  float speed=stalker?stalkSpeed:traits.speed;if(e.awareness==0||glimpsed)speed*=.5f;if(e.strike>0)speed*=.35f;
    auto old=e.pos;
    auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight,radius),height=hull;
     bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);
@@ -609,7 +642,6 @@ void Game::updateEnemies(float dt){
     }
    }
   }
-  if(e.moving&&e.kind==Enemy::Kind::Brute&&e.stepTimer<=0){m_sounds.push_back({Sound::Land,e.pos,.7f,.68f,true,17,e.z+.04f});e.stepTimer=.8f;}
  }
  migrateEnemiesAcrossChunks();
 }
@@ -708,7 +740,8 @@ bool Game::testAI(){
   for(int i=0;i<120;++i){e.pos={7.5f,4.5f};g.updateEnemies(1.f/120.f);if(e.windup>0||g.player().health!=100)return false;}
  }
  // Stalker behavior: hold while watched, then commit when the player's gaze breaks.
- {auto g=validationScene(Enemy::Kind::Warden);auto& s=g.m_enemies[0];s.pos={8.f,4.5f};s.home=s.pos;s.heading=kPi;s.awareness=0;s.stalkMode=Enemy::StalkMode::Watch;s.stalkTimer=0;
+ // It has already made the player out (its notice time is creature-behaviour's 12).
+ {auto g=validationScene(Enemy::Kind::Warden);auto& s=g.m_enemies[0];s.pos={8.f,4.5f};s.home=s.pos;s.heading=kPi;s.awareness=0;s.recognition=1;s.stalkMode=Enemy::StalkMode::Watch;s.stalkTimer=0;
   g.m_player.pos={4.5f,4.5f};g.m_player.angle=0;auto start=s.pos;
   for(int i=0;i<60;++i)g.updateEnemies(1.f/120.f);
   debug<<"stalker watch mode "<<int(s.stalkMode)<<" moved "<<length(s.pos-start)<<" timer "<<s.stalkTimer<<'\n';

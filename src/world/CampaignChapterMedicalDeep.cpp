@@ -38,23 +38,7 @@ void ddCorpse(Map& m,float x,float y,float z,float yaw,float s=1){
  box(-.3f,.03f,.34f*s,z+.03f,z+.21f*s);
  box(.03f,.05f,.33f*s,z+.03f,z+.18f*s);                                           // and hanging off the end
 }
-// A swinging clinic door: the renderer draws leaf, posts and head to 2.55 m; the wall closes above.
-int ddSwing(Map& m,float x1,float x2,float y,float f,float top,float swing){
- wall(m,x1,y-.1f,x2,y+.1f,f+2.55f,top,3);
- Door d{x1,x2,y,0};d.swinging=true;d.swing=swing;d.maxOpen=.9f;d.z=f-m.layers.front().elevation;m.doors.push_back(d);
- return int(m.doors.size())-1;
-}
-// A wall along x (y1..y2 thick) from a to b with a swinging door x1..x2 in it.
-int ddWallDoor(Map& m,float a,float b,float y1,float y2,float x1,float x2,float f,float top,float swing){
- if(x1>a)wall(m,a,y1,x1,y2,f,top,3);if(b>x2)wall(m,x2,y1,b,y2,f,top,3);
- return ddSwing(m,x1,x2,(y1+y2)*.5f,f,top,swing);
-}
-// An open doorway through a wall along y: pale-steel jambs and head, wall above.
-void ddDoorwayY(Map& m,float y1,float y2,float x1,float x2,float f,float top,float head=2.3f){
- wall(m,x1,y1,x2,y2,f+head,top,3);
- for(float y:{y1-.06f,y2})wall(m,x1-.03f,y,x2+.03f,y+.06f,f,f+head,20);
- wall(m,x1-.03f,y1,x2+.03f,y2,f+head-.04f,f+head,20);
-}
+// Swinging doors and open doorways: kit::wallDoor and kit::doorwayY.
 // Clinic glazing in a straight wall: painted dado, steel sill and mullions, wired glass to
 // `head`, wall above, an invisible proxy over sill and counter so nobody perches on it.
 void ddGlaze(Map& m,float x1,float y1,float x2,float y2,float f,float top,float sill,float head,bool holds,float counter=0,int forceBays=0){
@@ -202,23 +186,23 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  // --- Plan (walls .2 m, painted) -----------------------------------------------------------------
  // The strongroom door first (door 0): its lock is on the ward board.
  wall(m,16.6f,7.2f,21.4f,7.4f,f,roof,3);
- {const int d=ddWallDoor(m,21.4f,23.f,7.2f,7.4f,21.4f,22.4f,f,roof,-1);m.doors[size_t(d)].requireState=stateId("med_blackout");m.doors[size_t(d)].requireValue=0;}
- ddWallDoor(m,16.6f,23.f,15.6f,15.8f,17.4f,18.4f,f,roof,-1);                              // door 1: the office
- ddWallDoor(m,8.6f,16.6f,15.6f,15.8f,14.f,15.2f,f,roof,1);                                // door 2: the theatre's way out
+ {const int d=wallDoor(m,21.4f,23.f,7.2f,7.4f,21.4f,22.4f,f,roof,-1);m.doors[size_t(d)].requireState=stateId("med_blackout");m.doors[size_t(d)].requireValue=0;}
+ wallDoor(m,16.6f,23.f,15.6f,15.8f,17.4f,18.4f,f,roof,-1);                              // door 1: the office
+ wallDoor(m,8.6f,16.6f,15.6f,15.8f,14.f,15.2f,f,roof,1);                                // door 2: the theatre's way out
  // The theatre's north wall: scrub panel, scrub door (3), lay-up door (4).
  wall(m,8.6f,7.2f,9.f,7.4f,f,roof,3);ddGlaze(m,9.f,7.2f,10.8f,7.4f,f,roof,1.2f,2.2f,false);
- ddWallDoor(m,10.8f,14.6f,7.2f,7.4f,11.f,11.9f,f,roof,1);
- ddWallDoor(m,11.9f,16.6f,7.2f,7.4f,14.6f,15.5f,f,roof,1);
- ddWallDoor(m,6.f,14.2f,18.f,18.2f,9.6f,10.5f,f,roof,1);                                  // door 5: sluice
- ddWallDoor(m,10.5f,19.6f,18.f,18.2f,14.2f,15.1f,f,roof,1);                               // door 6: specimens
- ddWallDoor(m,15.1f,23.f,18.f,18.2f,19.6f,20.8f,f,roof,1);                                // door 7: porters
+ wallDoor(m,10.8f,14.6f,7.2f,7.4f,11.f,11.9f,f,roof,1);
+ wallDoor(m,11.9f,16.6f,7.2f,7.4f,14.6f,15.5f,f,roof,1);
+ wallDoor(m,6.f,14.2f,18.f,18.2f,9.6f,10.5f,f,roof,1);                                  // door 5: sluice
+ wallDoor(m,10.5f,19.6f,18.f,18.2f,14.2f,15.1f,f,roof,1);                               // door 6: specimens
+ wallDoor(m,15.1f,23.f,18.f,18.2f,19.6f,20.8f,f,roof,1);                                // door 7: porters
  // West column: changing, staff room, the transfer bay, recovery.
- wall(m,5.8f,1.f,6.f,2.4f,f,roof,3);ddDoorwayY(m,2.4f,3.4f,5.8f,6.f,f,roof);wall(m,5.8f,3.4f,6.f,6.8f,f,roof,3);
- ddDoorwayY(m,6.8f,7.8f,5.8f,6.f,f,roof);wall(m,5.8f,7.8f,6.f,8.8f,f,roof,3);
+ wall(m,5.8f,1.f,6.f,2.4f,f,roof,3);doorwayY(m,2.4f,3.4f,5.8f,6.f,f,roof);wall(m,5.8f,3.4f,6.f,6.8f,f,roof,3);
+ doorwayY(m,6.8f,7.8f,5.8f,6.f,f,roof);wall(m,5.8f,7.8f,6.f,8.8f,f,roof,3);
  wall(m,1.f,4.4f,5.8f,4.6f,f,roof,3);wall(m,1.f,8.6f,6.f,8.8f,f,roof,3);wall(m,1.f,14.2f,6.f,14.4f,f,roof,3);
- wall(m,5.8f,14.4f,6.f,15.f,f,roof,3);ddDoorwayY(m,15.f,17.2f,5.8f,6.f,f,roof);wall(m,5.8f,17.2f,6.f,23.f,f,roof,3);
+ wall(m,5.8f,14.4f,6.f,15.f,f,roof,3);doorwayY(m,15.f,17.2f,5.8f,6.f,f,roof);wall(m,5.8f,17.2f,6.f,23.f,f,roof,3);
  // The theatre corridor's east wall: scrub entry, the theatre's double doors on the seam axis.
- wall(m,8.6f,1.f,8.8f,4.4f,f,roof,3);ddDoorwayY(m,4.4f,5.6f,8.6f,8.8f,f,roof);wall(m,8.6f,5.6f,8.8f,7.2f,f,roof,3);
+ wall(m,8.6f,1.f,8.8f,4.4f,f,roof,3);doorwayY(m,4.4f,5.6f,8.6f,8.8f,f,roof);wall(m,8.6f,5.6f,8.8f,7.2f,f,roof,3);
  wall(m,8.6f,7.2f,8.8f,10.4f,f,roof,3);wall(m,8.6f,12.6f,8.8f,15.8f,f,roof,3);
  wall(m,8.6f,10.4f,8.8f,12.6f,f+2.4f,roof,3);
  for(float y:{10.34f,12.6f})wall(m,8.56f,y,8.84f,y+.06f,f,f+2.4f,20);
@@ -610,16 +594,16 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  ddTrolley(m,13.9f,1.95f,up,true,true,roof-up);
  wallSign(m,10.055f,1.4f,up+1.35f,"MORTUARY","THE WAY TO QUARANTINE IS THROUGH IT",2.f,kPi*.5f);
  // --- Lower plan (walls .2 m to the slab) ---------------------------------------------------------------
- wall(m,9.f,7.f,9.2f,9.4f,f,up,3);ddDoorwayY(m,9.4f,11.f,9.f,9.2f,f,up);wall(m,9.f,11.f,9.2f,15.2f,f,up,3);  // receiving / body store
- ddWallDoor(m,1.f,9.2f,14.8f,15.f,3.4f,4.6f,f,up,1);                                      // door 1: store to post-mortem
+ wall(m,9.f,7.f,9.2f,9.4f,f,up,3);doorwayY(m,9.4f,11.f,9.f,9.2f,f,up);wall(m,9.f,11.f,9.2f,15.2f,f,up,3);  // receiving / body store
+ wallDoor(m,1.f,9.2f,14.8f,15.f,3.4f,4.6f,f,up,1);                                      // door 1: store to post-mortem
  wall(m,9.2f,14.8f,9.8f,15.4f,f,up,3);
  wall(m,9.2f,15.2f,10.6f,15.4f,f,up,3);ddGlaze(m,10.6f,15.2f,14.6f,15.4f,f,up,.95f,2.2f,true);wall(m,14.6f,15.2f,16.f,15.4f,f,up,3);
- wall(m,9.6f,15.4f,9.8f,19.4f,f,up,3);ddDoorwayY(m,19.4f,20.8f,9.6f,9.8f,f,up);wall(m,9.6f,20.8f,9.8f,23.f,f,up,3);
- wall(m,15.8f,7.f,16.f,8.f,f,up,3);ddDoorwayY(m,8.f,9.1f,15.8f,16.f,f,up);wall(m,15.8f,9.1f,16.f,9.6f,f,up,3);
+ wall(m,9.6f,15.4f,9.8f,19.4f,f,up,3);doorwayY(m,19.4f,20.8f,9.6f,9.8f,f,up);wall(m,9.6f,20.8f,9.8f,23.f,f,up,3);
+ wall(m,15.8f,7.f,16.f,8.f,f,up,3);doorwayY(m,8.f,9.1f,15.8f,16.f,f,up);wall(m,15.8f,9.1f,16.f,9.6f,f,up,3);
  ddGlaze(m,15.8f,9.6f,16.f,11.6f,f,up,.95f,2.1f,false,.3f);
- wall(m,15.8f,11.6f,16.f,19.6f,f,up,3);ddDoorwayY(m,19.6f,20.8f,15.8f,16.f,f,up);wall(m,15.8f,20.8f,16.f,23.f,f,up,3);
- ddWallDoor(m,16.f,23.f,6.6f,6.8f,21.6f,22.5f,f,up,-1);                                  // door 2: plant
- ddWallDoor(m,16.f,23.f,12.4f,12.6f,18.f,18.9f,f,up,1);                                  // door 3: night porter
+ wall(m,15.8f,11.6f,16.f,19.6f,f,up,3);doorwayY(m,19.6f,20.8f,15.8f,16.f,f,up);wall(m,15.8f,20.8f,16.f,23.f,f,up,3);
+ wallDoor(m,16.f,23.f,6.6f,6.8f,21.6f,22.5f,f,up,-1);                                  // door 2: plant
+ wallDoor(m,16.f,23.f,12.4f,12.6f,18.f,18.9f,f,up,1);                                  // door 3: night porter
  wall(m,16.f,17.4f,23.f,17.6f,f,up,3);
  for(auto [x1,y1,x2,y2]:{std::tuple{9.2f,7.15f,15.8f,15.2f},{1.f,15.f,9.6f,23.f},{9.8f,15.4f,15.8f,23.f},{16.f,6.8f,23.f,12.4f},{16.f,1.f,23.f,6.6f},
   {16.f,12.6f,23.f,17.4f},{16.f,17.6f,23.f,23.f}})ceilingGrid(m,x1,y1,x2,y2,ceil);

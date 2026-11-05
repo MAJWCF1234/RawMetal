@@ -27,8 +27,16 @@ never collide.
       .build/agents/NAME/check/sheet-NN.png for confirming by eye.
   python tools/dev/agent.py test   NAME FLAG [FLAG ...]
       Run test flags (e.g. --campaign-map-test) with the private exe.
+  python tools/dev/agent.py selftest
+      Check the source fingerprint that keeps a stale exe from being reused.
+
+Every build records a fingerprint of src/** (path, size, mtime) next to the
+shared exe and next to each private copy (rm-NAME.exe.src). The shared exe is
+reused only while the whole tree still matches it, and every shots, audit,
+sweep, check and test run prints STALE EXE when the private exe was built
+from an older tree.
 """
-import ctypes, glob, os, re, shutil, subprocess, sys, time
+import ctypes, glob, hashlib, json, os, re, shutil, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 kernel32 = ctypes.windll.kernel32
@@ -74,35 +82,66 @@ def errors_in(out):
 
 STAMP = os.path.join(ROOT, '.build', 'agents', 'last-build.txt')
 
-def own_mtime(own):
-    # Newest edit among the caller's files (src/**/*PATTERN*); 0 when unknown.
-    newest = 0
-    for o in own:
-        for f in glob.glob(os.path.join(ROOT, 'src', '**', '*%s*' % o), recursive=True):
-            newest = max(newest, os.path.getmtime(f))
-    return newest
+SHARED_SRC = os.path.join(ROOT, '.build', 'agents', 'last-build.src')  # fingerprint of the tree the shared exe was built from
+
+def src_fingerprint(src=None):
+    # Every file under src/** (build dirs skipped) as (path, size, mtime): an edit, addition or
+    # removal anywhere -- shared headers, assets.rc, the model library -- changes the hash.
+    src = src or os.path.join(ROOT, 'src'); h = hashlib.sha1(); files = {}
+    for dp, dn, fn in os.walk(src):
+        dn[:] = sorted(x for x in dn if x not in ('.build', '__pycache__'))
+        for f in sorted(fn):
+            p = os.path.join(dp, f); st = os.stat(p); r = os.path.relpath(p, src).replace(os.sep, '/')
+            files[r] = st.st_mtime; h.update(('%s|%d|%d\n' % (r, st.st_size, st.st_mtime_ns)).encode('utf-8'))
+    return h.hexdigest(), files
+
+def exe_id(path):
+    st = os.stat(path); return {'size': st.st_size, 'mtime_ns': st.st_mtime_ns}
+
+def exe_summary(path):
+    data = open(path, 'rb').read(); return '%s, %.1f MB, sha1 %s' % (os.path.basename(path), len(data) / 2**20, hashlib.sha1(data).hexdigest()[:12])
+
+def read_json(path):
+    try: return json.load(open(path, encoding='utf-8'))
+    except (OSError, ValueError): return None
+
+def write_json(path, rec):
+    with open(path, 'w', encoding='utf-8') as f: json.dump(rec, f)
+
+def ago(s):
+    return '%d min' % (s // 60) if s >= 60 else '%d s' % s
+
+def stale_reason(rec, src=None):
+    # None when the exe described by rec was built from the tree as it is now; otherwise why not.
+    if not rec or 'hash' not in rec: return 'no source fingerprint for this exe (built before fingerprints or by hand): run build'
+    h, files = src_fingerprint(src)
+    if h == rec['hash']: return None
+    newer = sorted(((m, r) for r, m in files.items() if m > rec['started']), reverse=True)
+    if newer: return 'src/%s changed %s after this build%s' % (newer[0][1], ago(newer[0][0] - rec['started']), ' (+%d more files)' % (len(newer) - 1) if len(newer) > 1 else '')
+    gone = sorted(set(rec.get('files', ())) - set(files))
+    return 'src tree differs from this build (%s)' % ('removed: ' + ', '.join(gone[:3]) if gone else 'a file was restored or replaced with an older timestamp')
 
 def cmd_build(name, own):
-    d = agent_dir(name)
+    d = agent_dir(name); shared = os.path.join(ROOT, 'RawMetal.exe')
     for attempt in range(8):
         with BuildLock():
-            # A build that started after your last edit already contains it:
-            # take its exe instead of building again.
-            last = float(open(STAMP).read()) if os.path.exists(STAMP) else 0
-            mine = own_mtime(own)
-            if own and mine and last > mine and os.path.exists(os.path.join(ROOT, 'RawMetal.exe')):
-                shutil.copy2(os.path.join(ROOT, 'RawMetal.exe'), private_exe(name))
-                print('BUILD OK (shared: a build that started after your last edit)')
+            # Reuse the shared exe only when it is the one the last agent build produced and the
+            # whole src tree still matches the fingerprint taken when that build began.
+            rec = read_json(SHARED_SRC)
+            if rec and os.path.exists(shared) and rec.get('exe') == exe_id(shared) and stale_reason(rec) is None:
+                shutil.copy2(shared, private_exe(name)); write_json(private_exe(name) + '.src', rec)
+                print('BUILD OK (shared: src unchanged since the last build) -- ' + exe_summary(private_exe(name)))
                 return 0
-            started = time.time()
+            started = time.time(); h, files = src_fingerprint()
             code, out = run_build()
             open(os.path.join(d, 'build.log'), 'w', encoding='utf-8').write(out)
             if code == 0:
-                shutil.copy2(os.path.join(ROOT, 'RawMetal.exe'), private_exe(name))
+                shutil.copy2(shared, private_exe(name))
+                rec = {'hash': h, 'started': started, 'files': sorted(files), 'exe': exe_id(shared)}
+                write_json(SHARED_SRC, rec); write_json(private_exe(name) + '.src', rec)
                 open(STAMP, 'w').write(repr(started))
-        size = [l for l in out.splitlines() if 'RawMetal executable' in l]
         if code == 0:
-            print('BUILD OK' + (' -- ' + size[0].strip(' -') if size else ''))
+            print('BUILD OK -- ' + exe_summary(private_exe(name)))
             return 0
         errs = errors_in(out)
         mine = [e for e in errs if not own or any(o.lower() in e.lower() for o in own)]
@@ -132,8 +171,15 @@ def to_png(src, dst, scale):
     if scale != 1: im = im.resize((int(im.width * scale), int(im.height * scale)), Image.BILINEAR)
     im.save(dst)
 
+_warned = set()
+def warn_if_stale(name):
+    # Once per command: say so loudly when the private exe predates the tree it is about to judge.
+    if name in _warned: return
+    _warned.add(name); why = stale_reason(read_json(exe(name) + '.src'))
+    if why: print('STALE EXE: %s' % why, flush=True)
+
 def run_exe(name, args, timeout=900):
-    d = agent_dir(name)
+    d = agent_dir(name); warn_if_stale(name)
     try: os.remove(os.path.join(d, 'RawMetal-error.txt'))
     except OSError: pass
     p = subprocess.run([exe(name)] + args, cwd=d, capture_output=True, timeout=timeout)
@@ -170,7 +216,7 @@ def cmd_audit(name, levels):
         verdict = lines[-1] if lines else 'NO AUDIT OUTPUT (exit %d)' % code
         print('map %s: %s' % (lv, verdict))
         for l in lines:
-            if re.match(r'\s*(UNREACHABLE|STUCK|FLOATING|BURIED|OVERLAP|TRAP|BLOCKED|WATER|STAIRS|PIPE)', l): print('   ', l.strip())
+            if re.match(r'\s*(UNREACHABLE|STUCK|FLOATING|BURIED|OVERLAP|TRAP|BLOCKED|WATER|STAIRS|PIPE|GHOST)', l): print('   ', l.strip())
         bad |= code != 0
     return 1 if bad else 0
 
@@ -206,8 +252,37 @@ def cmd_test(name, flags):
         code = run_exe(name, [fl], timeout=1800); print('%s: exit %d' % (fl, code)); rc |= code != 0
     return rc
 
+def selftest():
+    # A throwaway tree stands in for src/: the fingerprint must match itself and catch an edit to a
+    # file no --own pattern covers (a shared header), a removed file and an old-timestamp restore.
+    import tempfile
+    t = tempfile.mkdtemp(); fails = []
+    def put(r, text, age=0):
+        p = os.path.join(t, *r.split('/')); os.makedirs(os.path.dirname(p), exist_ok=True); open(p, 'w').write(text)
+        if age: os.utime(p, (time.time() - age, time.time() - age))
+    def expect(label, ok):
+        print('  %s %s' % ('PASS' if ok else 'FAIL', label)); ok or fails.append(label)
+    def record(started):
+        h, files = src_fingerprint(t); return {'hash': h, 'started': started, 'files': sorted(files)}
+    try:
+        for r in ('world/CampaignKit.h', 'world/CampaignChapterPower.cpp', 'assets.rc', '.build/x.obj'): put(r, r, 3600)
+        rec = record(time.time() - 1800)
+        expect('unchanged tree is fresh', stale_reason(rec, t) is None)
+        put('.build/x.obj', 'rebuilt'); expect('build dirs ignored', stale_reason(rec, t) is None)
+        put('world/CampaignKit.h', 'edited'); why = stale_reason(rec, t) or ''
+        expect('shared header edit flagged: ' + why, why.startswith('src/world/CampaignKit.h changed 30 min after this build'))
+        rec = record(time.time() + 1); expect('rebuilt tree is fresh again', stale_reason(rec, t) is None)
+        os.remove(os.path.join(t, 'assets.rc')); why = stale_reason(rec, t) or ''
+        expect('removed file flagged: ' + why, 'removed: assets.rc' in why)
+        put('assets.rc', 'assets.rc', 7200); why = stale_reason(rec, t) or ''
+        expect('old-timestamp restore flagged: ' + why, 'restored' in why)
+        expect('exe without a fingerprint flagged', 'no source fingerprint' in (stale_reason(None, t) or ''))
+    finally: shutil.rmtree(t, ignore_errors=True)
+    print('agent selftest: ' + ('PASS' if not fails else 'FAIL (%d)' % len(fails))); return 1 if fails else 0
+
 if __name__ == '__main__':
     a = sys.argv[1:]
+    if a[:1] == ['selftest']: sys.exit(selftest())
     if len(a) < 2: print(__doc__); sys.exit(2)
     cmd, name, rest = a[0], a[1], a[2:]
     scale = 1.0

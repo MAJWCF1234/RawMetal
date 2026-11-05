@@ -1,4 +1,5 @@
 #include "../../Game.h"
+#include "../../EngineRegressionScene.h"
 #include "ScheduleTables.h"
 #include "../Perception.h"
 #include "../Navigation.h"
@@ -43,6 +44,7 @@ bool Game::testCreatureBehaviour(){
  {auto g=dormant();auto&e=g.m_enemies[0];bool sight=visible(g);float movement,turn,awareness;still(g,movement,turn,awareness);
   std::ostringstream v;v<<"player visible="<<sight<<" 3s max displacement="<<movement<<" turn="<<turn<<" awareness="<<awareness<<" wakeState="<<e.wakeState;
   check(sight&&movement<.0001f&&turn<.0001f&&awareness==0&&e.wakeState==wake,"2 dormancy",v.str());
+  check(g.m_sounds.empty(),"2 dormant and silent: no footfall, no idle sound","sounds over 3s="+std::to_string(g.m_sounds.size()));
   float before=length(e.pos-g.m_player.pos),awake=-1;g.setState(wake,1);
   for(int i=1;i<=200;++i){g.updateEnemies(dt);if(awake<0&&e.awareness>0&&!e.wakeState)awake=i*dt;}
   float after=length(e.pos-g.m_player.pos);std::ostringstream w;w<<"awareness at="<<awake<<"s distance="<<before<<" -> "<<after<<" in 2s";
@@ -85,7 +87,7 @@ bool Game::testCreatureBehaviour(){
  {const auto&t=creatureTraits(Enemy::Kind::Transformed);std::ostringstream v;
   v<<t.name<<" health="<<t.health<<" speed="<<t.speed<<" reach="<<t.reach<<" windup="<<t.windup<<" damage="<<t.damage<<" baked="<<t.baked<<" rushSpeed="<<t.rushSpeed<<" kind index="<<int(Enemy::Kind::Transformed);
   check(int(Enemy::Kind::Transformed)==7&&near(t.health,150)&&near(t.speed,3.6f)&&near(t.reach,1.5f)&&near(t.windup,1.05f)&&near(t.damage,26)&&t.baked&&t.opensDoors&&t.rushSpeed==0,"9 transformed traits",v.str());}
- {auto g=scene(Enemy::Kind::Transformed,9.f);auto&e=g.m_enemies[0];e.awareness=10;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Chase;
+ {auto g=scene(Enemy::Kind::Transformed,9.f);auto&e=g.m_enemies[0];e.awareness=10;e.recognition=1;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Chase;
   float run=-1,start=-1;Vec2 from{};for(int i=1;i<=300;++i){g.updateEnemies(dt);if(start<0&&e.moving&&i>20){start=i*dt;from=e.pos;}if(start>=0&&run<0&&i*dt>=start+.5f)run=length(e.pos-from)/(i*dt-start);}
   std::ostringstream v;v<<"run speed over .5 s="<<run<<" m/s";check(run>3.3f&&run<3.75f,"9 transformed runs at a walking player's pace",v.str());}
  {auto g=scene(Enemy::Kind::Transformed,2.6f);auto&e=g.m_enemies[0];float leap=-1,pin=-1,held=0;int bites=0;float lost=0;
@@ -130,6 +132,83 @@ bool Game::testCreatureBehaviour(){
   const bool prey=stance>=0;
   check((prey?first>=0:first<0)&&g.m_player.health==100&&factionsHostile(AiFaction::Creature,faction)==prey,prey?"9 transformed attacks a squad of any stance":"9 transformed leaves a Neutral bystander alone",v.str());
  }
+ // Creatures make the player out as the guards do: one formula (Perception.h),
+ // at each kind's notice time and need of light. Inside 2.5 m at once; further
+ // off a beat in which it has only seen something and creeps up on it; shadow,
+ // a crouch and stillness buy time; out of sight the meter drains at half speed;
+ // a stalker's stare-down begins when the meter fills.
+ {const float within5=aiRecognitionRate(5,11,-1,.65f,true,0,0),sightEnd=aiRecognitionRate(11,11,1,.65f,true,0,0),edge=aiRecognitionRate(8,11,.5f,.65f,false,1,1),byEar=aiRecognitionRate(11,11,1,.65f,true,0,0,0);
+  std::ostringstream v;v<<"within 5 m="<<within5<<" end of sight crouched still unlit="<<sightEnd<<" 8 m at the edge of view="<<edge<<" the same unlit, by ear="<<byEar;
+  check(within5==1&&near(sightEnd,.3f*.6f*.7f*.35f)&&near(edge,.65f*.5f)&&near(byEar,.3f*.6f*.7f),"12 guards and creatures share one recognition rate",v.str());}
+ {bool sane=true;std::ostringstream v;
+  for(int k=0;k<=int(Enemy::Kind::Transformed);++k){const auto&t=creatureTraits(CreatureKind(k));
+   v<<t.name<<" sight="<<t.sightRange<<'/'<<t.sightDot<<" notice="<<t.noticeMs<<" light="<<t.lightWeight<<" hearing="<<t.hearingScale<<" step="<<t.stepGain<<'/'<<t.stepPitch<<'/'<<t.stepLimp<<" idle="<<int(t.idleSound)<<'/'<<t.idleGain<<'/'<<t.idlePitch<<'/'<<t.idlePeriod<<"; ";
+   sane&=t.sightRange>=8&&t.sightRange<=14&&t.sightDot>-1&&t.sightDot<1&&t.noticeMs>=0&&t.noticeMs<=2000&&t.lightWeight>=0&&t.lightWeight<=1&&t.hearingScale>.5f&&t.hearingScale<2&&t.stepGain>=0&&t.stepGain<=1&&t.stepPitch>0&&t.stepLimp>=0&&t.stepLimp<=1&&t.idleGain>=0&&t.idleGain<=.5f&&t.idlePitch>0&&(t.idlePeriod==0||t.idlePeriod>=3);}
+  const auto&wasp=creatureTraits(CreatureKind::Wasp),&snatcher=creatureTraits(CreatureKind::Snatcher),&mutant=creatureTraits(CreatureKind::Mutant);
+  check(sane&&wasp.stepGain==0&&wasp.idlePeriod==0&&snatcher.stepLimp>0&&mutant.lightWeight<.5f&&mutant.hearingScale>1,"12 every kind's senses and sounds in range: the wasp's wings are its only sound, the snatcher limps, the mutated human hunts by ear",v.str());}
+ {auto near2=scene(Enemy::Kind::Huntsman,2.f);near2.updateEnemies(dt);const auto closeState=near2.m_enemies[0].state;
+  auto g=scene(Enemy::Kind::Huntsman,4.f);auto&e=g.m_enemies[0];const bool sight=visible(g);g.updateEnemies(dt);
+  const auto firstState=e.state;const float firstMeter=e.recognition,firstAwareness=e.awareness;float made=-1,at=-1;
+  for(int i=2;i<=100&&made<0;++i){g.updateEnemies(dt);if(e.state==Enemy::State::Chase){made=i*dt;at=length(e.pos-g.m_player.pos);}}
+  std::ostringstream v;v<<"LOS="<<sight<<" 2 m first frame state="<<int(closeState)<<"; 4 m first frame state="<<int(firstState)<<" meter="<<firstMeter<<" awareness="<<firstAwareness<<" made out at="<<made<<"s distance then="<<at;
+  check(sight&&closeState==Enemy::State::Chase&&firstState==Enemy::State::Investigate&&firstMeter>0&&firstMeter<1&&firstAwareness>0&&made>=.45f&&made<=.56f&&at<3.95f,"12 inside 2.5 m at once; at 4 m a half-second beat, creeping closer, before the chase",v.str());}
+ // Held 8 m off: lit and walking against crouched, still and unlit.
+ auto meter=[&](Enemy::Kind kind,bool dark,float seconds){auto g=scene(kind,8.f);auto&e=g.m_enemies[0];const Vec2 at=e.pos;
+  g.m_playerExposure=dark?0.f:1.f;g.m_player.crouched=dark;g.m_velocity=dark?Vec2{}:Vec2{1.f,0};float made=-1;
+  for(int i=1;i<=int(seconds/dt)&&made<0;++i){e.pos=at;e.heading=kPi;g.updateEnemies(dt);if(e.state==Enemy::State::Chase)made=i*dt;}
+  return std::pair{made,e.recognition};};
+ {auto lit=meter(Enemy::Kind::Huntsman,false,2),dark=meter(Enemy::Kind::Huntsman,true,3);auto g=scene(Enemy::Kind::Huntsman,8.f);
+  std::ostringstream v;v<<"LOS="<<visible(g)<<" lit and walking made out at="<<lit.first<<"s; crouched, still, unlit: made out="<<dark.first<<" meter after 3 s="<<dark.second;
+  check(visible(g)&&lit.first>=.7f&&lit.first<=.85f&&dark.first<0&&dark.second>.5f&&dark.second<.9f,"12 shadow, a crouch and stillness keep a huntsman 8 m off from making the player out for over 3 s, against .8 s lit",v.str());}
+ {auto g=scene(Enemy::Kind::Huntsman,4.f);auto&e=g.m_enemies[0];const Vec2 at=e.pos;for(int i=0;i<30;++i){e.pos=at;e.heading=kPi;g.updateEnemies(dt);}
+  const float glimpse=e.recognition;for(int i=0;i<20;++i){e.pos=at;e.heading=0;g.updateEnemies(dt);}const float faded=e.recognition;float again=-1;
+  for(int i=1;i<=100&&again<0;++i){e.pos=at;e.heading=kPi;g.updateEnemies(dt);if(e.state==Enemy::State::Chase)again=i*dt;}
+  std::ostringstream v;v<<"after .3 s in view="<<glimpse<<" after .2 s out of view="<<faded<<" made out .2 s after a second look="<<again<<"s";
+  check(std::fabs(glimpse-.6f)<.021f&&std::fabs(glimpse-faded-.2f)<.011f&&again>=.27f&&again<=.33f,"12 out of view the meter drains at half speed; a second look soon after finishes the job sooner",v.str());}
+ {auto g=scene(Enemy::Kind::Warden,4.f);auto&e=g.m_enemies[0];bool held=true;float made=-1,stare=-1;int mode=-1;
+  for(int i=1;i<=100&&made<0;++i){g.updateEnemies(dt);if(e.state==Enemy::State::Chase){made=i*dt;stare=e.stalkTimer;mode=int(e.stalkMode);}else held&=e.stalkMode==Enemy::StalkMode::Watch;}
+  std::ostringstream v;v<<"made out at="<<made<<"s stalk mode="<<mode<<" stare-down="<<stare<<"s held in Watch until then="<<held;
+  check(made>=.55f&&made<=.65f&&mode==int(Enemy::StalkMode::Watch)&&near(stare,1.6f)&&held,"12 a stalker's stare-down begins as it makes the player out",v.str());}
+ // The meter is the player's alone: a huntsman fighting a guard 3 m off has not
+ // made out the dark, crouched, still player 8 m beyond it, and once the guard
+ // falls it still needs the rest of its notice time.
+ {auto m=regression::room();m->actorTracks.push_back(regression::guard({11.f,12.8f},{11.f,12.8f}));Game g(regression::campaign(m));
+  g.m_player.pos={6,12};g.m_player.z=0;g.m_player.angle=0;g.m_player.crouched=true;g.m_velocity={};g.m_playerExposure=0;
+  g.spawnCreature({Enemy::Kind::Huntsman,{14,12},0},0,false);auto&e=g.m_enemies.back();const Vec2 at=e.pos;e.heading=kPi;const bool sight=visible(g);bool fought=true,onPlayer=false;
+  for(int i=1;i<=300;++i){e.pos=at;e.heading=kPi;if(i==60||i==150)g.applyEnemyDamage(e,1,false,false);g.updateEnemies(dt);if(i>1)fought&=e.state==Enemy::State::Chase;onPlayer|=length(e.lastKnown-g.m_player.pos)<.05f;}
+  const float held=e.recognition;g.setState(m->actorTracks[0].deadState,1);e.pos=at;e.heading=kPi;g.updateEnemies(dt);const auto fallen=e.state;const float after=e.recognition;float made=-1;
+  for(int i=2;i<=200&&made<0;++i){e.pos=at;e.heading=kPi;g.updateEnemies(dt);if(e.state==Enemy::State::Chase)made=i*dt;}
+  std::ostringstream v;v<<"LOS="<<sight<<" chasing the guard for 3 s="<<fought<<" took the player for its target="<<onPlayer<<" meter="<<held<<"; guard down: state="<<int(fallen)<<" meter="<<after<<" made out at="<<made<<"s";
+  check(sight&&fought&&!onPlayer&&held>.5f&&held<.9f&&fallen==Enemy::State::Investigate&&after<1&&made>=.5f&&made<=1.5f,"12 a creature chasing a hostile NPC, and wounded twice by someone else, still needs its notice time to make out a dark, crouched player",v.str());}
+ {auto m=regression::room();Game g(regression::campaign(m));g.m_player.pos={6,12};g.m_player.z=0;g.m_player.angle=0;g.m_player.crouched=true;g.m_velocity={};g.m_playerExposure=0;
+  g.spawnCreature({Enemy::Kind::Huntsman,{14,12},0},0,false);auto&e=g.m_enemies.back();e.heading=kPi;g.updateEnemies(dt);g.applyEnemyDamage(e,1,false,false);g.updateEnemies(dt);const float other=e.recognition;
+  g.applyPunchHit(e);g.updateEnemies(dt);const float own=e.recognition;std::ostringstream v;v<<"meter after another's wound="<<other<<", after the player's="<<own;
+  check(other<.5f&&own>=1,"12 only a wound the player dealt makes a creature know them at once",v.str());}
+ // Heard before seen: a footfall each half gait cycle on the floor trodden, at
+ // the kind's weight, the snatcher's dragged foot lighter, the wasp's none;
+ // an unaware creature's idle sound; none of it an AI stimulus. A mutated human
+ // hears a walk further off than a huntsman does.
+ auto walk=[&](Enemy::Kind kind,std::vector<SoundEvent>&steps,int&strides,int&stimuli,bool&onFloor){auto g=scene(kind,7.f);auto&e=g.m_enemies[0];g.m_player.angle=kPi;
+  e.awareness=10;e.recognition=1;e.state=Enemy::State::Chase;e.lastKnown=g.m_player.pos;strides=stimuli=0;onFloor=true;
+  for(int i=0;i<300;++i){const float before=std::floor(e.gait/kPi);g.m_sounds.clear();g.updateEnemies(dt);strides+=std::floor(e.gait/kPi)!=before;
+   for(const auto&s:g.m_sounds)if(footstepSound(s.sound)){steps.push_back(s);const int base=int(stepSoundAt(g.m_world,s.position));onFloor&=int(s.sound)>=base&&int(s.sound)<=base+3;}
+   for(const auto&s:g.aiStimuli())stimuli+=s.step;}};
+ {std::ostringstream v;bool ok=true;
+  for(auto kind:{Enemy::Kind::Brute,Enemy::Kind::Snatcher,Enemy::Kind::Wasp,Enemy::Kind::Huntsman}){std::vector<SoundEvent> steps;int strides=0,stimuli=0;bool onFloor=true;walk(kind,steps,strides,stimuli,onFloor);const auto&t=creatureTraits(kind);
+   bool silent=true,weight=true;float light=9,heavy=0;for(const auto&s:steps){silent&=s.aiRadius<0&&s.spatial;light=std::min(light,s.gain);heavy=std::max(heavy,s.gain);weight&=s.pitch>=t.stepPitch*.85f&&s.pitch<=t.stepPitch*1.04f;}
+   v<<t.name<<": strides="<<strides<<" footfalls="<<steps.size()<<" gains "<<light<<".."<<heavy<<" step stimuli="<<stimuli<<" floor="<<onFloor<<"; ";
+   if(kind==Enemy::Kind::Wasp)ok&=strides>0&&steps.empty();
+   else ok&=strides>=2&&int(steps.size())==strides&&silent&&weight&&onFloor&&stimuli==0&&near(heavy,t.stepGain)&&(t.stepLimp>0?near(light,t.stepGain*t.stepLimp):near(light,heavy));}
+  check(ok,"13 footfalls on the gait and the floor, the snatcher's uneven, the wasp's none, never an AI stimulus",v.str());}
+ {auto g=scene(Enemy::Kind::Huntsman,6.f);auto&e=g.m_enemies[0];e.heading=0;const auto&t=creatureTraits(e.kind);std::vector<float> at;bool quiet=true;int stimuli=0;
+  for(int i=1;i<=2000;++i){g.m_sounds.clear();g.updateEnemies(dt);for(const auto&s:g.m_sounds)if(s.sound==t.idleSound){at.push_back(i*dt);quiet&=s.aiRadius<0&&near(s.gain,t.idleGain)&&near(s.pitch,t.idlePitch);}stimuli+=int(g.aiStimuli().size());}
+  bool spaced=at.size()>=2&&e.awareness==0;for(size_t k=1;k<at.size();++k)spaced&=at[k]-at[k-1]>=t.idlePeriod*.75f-.02f&&at[k]-at[k-1]<=t.idlePeriod*1.25f+.02f;
+  e.awareness=60;e.state=Enemy::State::Search;int aware=0;for(int i=0;i<1000;++i){g.m_sounds.clear();g.updateEnemies(dt);for(const auto&s:g.m_sounds)aware+=s.sound==t.idleSound&&s.aiRadius<0;}
+  std::ostringstream v;v<<"unaware 20 s: idle sounds at";for(float s:at)v<<' '<<s;v<<" stimuli="<<stimuli<<"; aware 10 s: idle sounds="<<aware;
+  check(spaced&&quiet&&stimuli==0&&aware==0,"13 an unaware huntsman is heard at its idle period, never by the AI, and not once it is hunting",v.str());}
+ {int heard[2]={};for(int k=0;k<2;++k){auto g=scene(k?Enemy::Kind::Mutant:Enemy::Kind::Huntsman,6.f);auto&e=g.m_enemies[0];e.heading=0;
+   SoundEvent step{Sound::Concrete1,e.pos-Vec2{3.5f,0},.48f,1,true,17,.04f};step.aiRadius=3.12f;g.m_sounds={step};g.updateEnemies(dt);heard[k]=e.state==Enemy::State::Investigate;}
+  check(!heard[0]&&heard[1],"13 a walk 3.5 m off: a huntsman does not hear it, a mutated human (hearing x1.25) does","huntsman="+std::to_string(heard[0])+" mutated human="+std::to_string(heard[1]));}
  // The route cache keeps each deck graph and terrain cell grid per exact
  // collision state; what it hands a planner must be the live probe to the bit.
  // Every multi-deck campaign chunk and every fourth one-floor chunk (a guard's

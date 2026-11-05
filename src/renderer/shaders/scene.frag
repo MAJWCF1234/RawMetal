@@ -4,10 +4,11 @@ layout(set=0,binding=1) uniform sampler2D normalMap;
 layout(set=0,binding=2) uniform sampler2D emissionMap;
 layout(set=0,binding=3) uniform sampler2D reliefMap;
 layout(push_constant) uniform ViewState { vec4 eyeYaw; vec4 basis; vec4 effects; vec4 fogLights[4]; vec4 atmosphere; } view;
-layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;} stereo;
+layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;vec4 fogTone[4];} stereo;
 // Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
-// lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot.
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[2];vec4 lamps[512];uint cells[];} lampGrid;
+// lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot, tone.
+// scatter.w is 1 when the shadow stage carries the lamp shafts this frame.
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 lamps[512];uint cells[];} lampGrid;
 // Three sun cascades (orthographic radial depth), compared in hardware.
 layout(set=1,binding=4) uniform sampler2DArrayShadow sunShadows;
 // Six radial-depth faces per lamp, compared in hardware with bilinear PCF.
@@ -96,6 +97,10 @@ vec3 lampColour(float kelvin,float tint){
  radiance*=vec3(1.0,1.0+tint*0.35,1.0-tint*0.1);
  return radiance/max(dot(radiance,vec3(0.2126,0.7152,0.0722)),1e-30);
 }
+
+// A lamp record's final tone (blackbody x tint x gel, WorldLight::tone), packed
+// on the CPU as half floats: z = red, green and w = blue, 1.
+vec3 lampTone(vec4 params){vec2 rg=unpackHalf2x16(floatBitsToUint(params.z)),b=unpackHalf2x16(floatBitsToUint(params.w));return vec3(rg,b.x);}
 
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
 vec3 toDisplay(vec3 c){return pow(max(c,vec3(0.0)),vec3(1.0/2.2));}
@@ -388,7 +393,7 @@ void main(){
     }
     if(shadow<=0.0)continue;
     // Soft terminator: normal maps never cut a lit face to black.
-    vec3 tone=lampColour(params.z>0.0?params.z:3400.0,params.w);
+    vec3 tone=lampTone(params);
     lampLight+=tone*falloff*shadow*(0.04+0.96*max(dot(N,L),0.0))*smoothstep(0.0,0.12,geometric);
     lampSpecularRGB+=tone*falloff*shadow*dielectricSpecular(N,V,L,roughness);
    }
@@ -408,16 +413,18 @@ void main(){
     }
    }
   }
-  // Muzzle flashes (the player's, then NPC guns in darkness), the vertex
-  // formula per pixel: a wall or ceiling quad spanning the room still lights.
-  // Unshadowed, warm, and lifted 1.6x to match the shoulder's low-end slope.
-  for(int flash=0;flash<3;++flash){
+  // Transient lights (the player's muzzle flash, then NPC guns in darkness, sparks
+  // and arcs, each in its own tone and reach), the vertex formula per pixel: a wall
+  // or ceiling quad spanning the room still lights. Unshadowed, lifted 1.6x to
+  // match the shoulder's low-end slope.
+  for(int flash=0;flash<5;++flash){
    float strength=flash==0?view.effects.y:lampGrid.flashes[flash-1].w;if(strength<=0.0)continue;
    vec3 forwardWorld=normalize(vec3(view.eyeYaw.w*view.basis.y,view.basis.x*view.basis.y,view.basis.z));
    vec3 muzzle=flash==0?view.eyeYaw.xyz+forwardWorld*0.42-vec3(0,0,0.10):lampGrid.flashes[flash-1].xyz;
-   vec3 toPoint=worldPos-muzzle;float d2=dot(toPoint,toPoint);if(d2>=144.0)continue;
-   float d=max(sqrt(d2),0.001),edge=1.0-d2/144.0;
-   lampLight+=lampColour(3000.0,0.0)*strength*1.6*1.4*edge*edge*(0.35+0.65*abs(dot(Ng,toPoint))/d)/(1.0+d2*stereo.darkness.y);
+   float reach=flash==0?12.0:lampGrid.flashTones[flash-1].w,r2=reach*reach;
+   vec3 toPoint=worldPos-muzzle;float d2=dot(toPoint,toPoint);if(d2>=r2)continue;
+   float d=max(sqrt(d2),0.001),edge=1.0-d2/r2;
+   lampLight+=(flash==0?lampColour(3000.0,0.0):lampGrid.flashTones[flash-1].rgb)*strength*1.6*1.4*edge*edge*(0.35+0.65*abs(dot(Ng,toPoint))/d)/(1.0+d2*stereo.darkness.y);
   }
   float hemisphere=1.0;
   if(lampGrid.sun.w>0.0){
@@ -491,22 +498,27 @@ void main(){
   float nearWeight=smoothstep(0.75,7.0,distance);
   float extinction=(1.0-exp(-distance*density*mix(0.80,1.20,heightDensity)))*nearWeight;
   vec3 rayDir=(worldPos-view.eyeYaw.xyz)/max(distance,0.001);
-  vec3 sunDir=normalize(vec3(0.5,0.7,0.5));
-  float cosTheta=dot(rayDir,sunDir);
-  float phase=0.90+0.10*cosTheta*cosTheta;
+  // Under a real sun the air scatters a little more toward and away from it;
+  // indoors there is none, so the phase is even (the old curve's mean).
+  float cosTheta=dot(rayDir,lampGrid.sun.xyz);
+  float phase=lampGrid.sun.w>0.0?0.90+0.10*cosTheta*cosTheta:0.9333;
   result=mix(result,toLinear(view.atmosphere.rgb)*phase,min(extinction,0.35));
  }
 
- if(surface.z<0.5&&surface.w<1.5&&view.atmosphere.w>0.0&&materialDistance>=0.05){
-  float scatter=0.0;
+ // Analytic shafts: only the fallback (VR, no post stage, or per-pixel lamps off).
+ // Otherwise the shadow stage's shadow-mapped shafts carry them, never both.
+ if(surface.z<0.5&&surface.w<1.5&&view.atmosphere.w>0.0&&materialDistance>=0.05&&(lampGrid.flags.x==0||lampGrid.scatter.w<0.5)){
+  float scatter=0.0;vec3 tinted=vec3(0.0);
   vec3 direction=(worldPos-view.eyeYaw.xyz)/materialDistance;
   for(int light=0;light<4;++light){
-   scatter+=shaftScattering(view.eyeYaw.xyz,direction,materialDistance,view.fogLights[light],stereo.fogIntensity[light]);
+   float s=shaftScattering(view.eyeYaw.xyz,direction,materialDistance,view.fogLights[light],stereo.fogIntensity[light]);
+   scatter+=s;tinted+=stereo.fogTone[light].rgb*s;
   }
   // Keep shafts subordinate to surface lighting and architectural silhouettes.
   // A smooth shoulder preserves gradients instead of creating a flat plateau.
-  scatter=0.025*(1.0-exp(-scatter/0.025));
-  result+=toLinear(vec3(0.98,0.90,0.78))*scatter*1.0;
+  // Each lamp hangs its own colour in the air, at the old warm glow's luminance (0.81).
+  float shaped=0.025*(1.0-exp(-scatter/0.025));
+  result+=tinted*(scatter>0.0?shaped/scatter:0.0)*0.81;
  }
 
  if(lampGrid.flags.y==2&&detailAmount>0.001)result=vec3(detailValue*0.5);

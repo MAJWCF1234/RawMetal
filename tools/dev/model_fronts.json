@@ -1,5 +1,13 @@
 {
  "_about": "Verified front of each directional model as an OBJ axis (+z draws toward world +y at yaw 0). kind: seat (faces its table), desk (user side), screen, wall (back to the wall), bed (front = foot end), free (no rule). Decided from four-side renders by tools/dev/model_views.py; see tools/dev/placement_check.py.",
+ "anl_switch_cabinet_1": {
+  "kind": "wall",
+  "front": "+z"
+ },
+ "anl_switch_cabinet_2": {
+  "kind": "wall",
+  "front": "+z"
+ },
  "art_painting_5": {
   "kind": "free",
   "front": "+z"
@@ -97,6 +105,10 @@
  },
  "lab_instrument_terminal": {
   "kind": "screen",
+  "front": "+z"
+ },
+ "lab_knife_switch": {
+  "kind": "wall",
   "front": "+z"
  },
  "lab_mainframe": {

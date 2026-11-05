@@ -28,6 +28,7 @@
 #include <optional>
 #include <cstdint>
 #include "Ragdoll.h"
+#include "Electricity.h"
 
 namespace retro {
 // Bumped once per chunk built while a save loads on a worker thread, so the
@@ -84,8 +85,14 @@ struct Enemy {
     Kind kind = Kind::Huntsman;
     float maxHp=110, deathTime=0, windup=0, strike=0, heading=0, gait=0;
     bool moving=false;
-    float voiceTimer=0,stepTimer=0;
+    // Its calls while aware, and its idle sound while unaware (archived where
+    // the Brute's old step clock was).
+    float voiceTimer=0,idleTimer=0;
     float z=0,awareness=0,searchTime=0;
+    // How far it has made the player out (0..1, over its traits' noticeMs):
+    // below 1 it has only seen something. Archived from version 20; an older
+    // save rebuilds it from the hunt (a Chase has them made out).
+    float recognition=0;
     float verticalVelocity=0,repathTimer=0,lastKnownZ=0;
     Vec2 waypoint{};
     Vec2 home{},lastKnown{};
@@ -132,7 +139,8 @@ struct Pickup {
     float z = -999;
 };
 enum class GuardState {Patrol,Suspicious,Investigate,Search,Alert};
-struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;unsigned categories=ai::SoundWorld;};
+// step: a footstep, heard however far its floor and gait carry it (Game::stepHeard).
+struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int npc=-1;unsigned categories=ai::SoundWorld;bool step=false;};
 struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false,crouched=false,supportAnimation=false,padVisible=false,pistolVisible=false;int supportClip=6;float supportPhase=0,treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0,haul=0;Point3 handle{};};
 enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone,Prop};
 struct ShotPassage {int kind=0,level=0,index=-1;float distance=0;Point3 point{},normal{};};
@@ -314,6 +322,26 @@ public:
     static PropTraits propTraits(int model);
     static bool auditMapScene(Game& game,int level);
     static bool testPhysicsStages();static bool testProps();static bool testPropSaves();static bool testGlass();static Game physicsInspection(int view,float seconds);
+    // A test bay of its own (a test set's sockets, test leads, a charged cell): the panel close (0),
+    // the cell's terminals close (1), the bench (2), the cell lifted, turned and tipped (3), a plug
+    // pulling off (4), both off and swinging (5), the leads hanging still (6), the cell set down with
+    // its posts bare (7), view 6 saved and loaded (8), the black lead loose from the start (9).
+    // Seconds into the tear.
+    static Game leadInspection(int view,float* tearAge=nullptr);
+    // Electricity (Electricity.cpp): a shower of sparks thrown from `at` along `along` (chunk-local)
+    // and an arc struck between two points for `seconds`, drawn and lit like every other source.
+    void sparkBurst(int level,Point3 at,Point3 along,float heat=1,int count=24,bool smoke=false);
+    void strikeArc(int level,Point3 from,Point3 to,float seconds,float strength=1,bool resonance=false);
+    // Everything electric in a chunk now, chunk-local: its showers, arcs and their light.
+    void electricScene(int level,electric::Scene& out)const;
+    // electricScene worked out once a frame, however many chunks and eyes draw it and light by it
+    // (ElectricFx, weaponFlashes); anew when the clock, the player or an electric event moves.
+    const electric::Scene& electricNow(int level)const;
+    // A plain room with a live lead run from the wall to a charged cell on a desk, `seconds` after
+    // (before, negative) the cell is knocked and the lead tears, seen from the room (view 0) or close to
+    // the desk (1); a round strikes the wall (2); a live floor along the wall is powered, pulsed (3).
+    // `tearAge` gets the time since the tear (the round, the power).
+    static Game electricInspection(float seconds,int view=0,float* tearAge=nullptr);
     const std::vector<BreakEvent>& breakEvents()const{return m_breakEvents;}
     static Game clutterInspection(int kind,float seconds);
     static bool testStreaming();
@@ -507,10 +535,15 @@ public:
     std::vector<DroppedSidearm> droppedSidearms()const;
     static bool testHandgun();
     static bool testHandgunSaves(std::ostream& report);
-    static constexpr int SaveVersion=19;
+    // 20: how far each creature has made the player out (Enemy::recognition).
+    // 21: each chunk's torn leads.
+    static constexpr int SaveVersion=21;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
+    // How far the last footstep carried (0 silent .. 1 at 12 m, a sprint on
+    // steel): it holds through a stride, then fades out over .3 s. The HUD's noise pips.
+    float playerNoise()const;
     // How long a guard who has the player must be on the radio before his squad knows.
     static constexpr int RadioCallMs=1500;
     void updateExposure(float dt);
@@ -702,11 +735,15 @@ public:
     // 0 lit .. 1 true darkness: the player's eye inside an active DarkZone of
     // the current map, eased over about .3 s (and immediate after a load).
     float darkness()const;
+    // The air the player's eye is in (World::haze: zone, map, environment),
+    // eased over a second from the last; immediate after a load.
+    Haze haze()const;
     // The player's muzzle flash as a light (0 none): about three frames lit; in
     // darkness it holds .12 s, burns brighter and fades out over .2 s after.
     float muzzleFlash()const;
-    // NPC gun flashes lighting the room in darkness: two strongest, world x, y, z, strength.
-    std::array<std::array<float,4>,2> weaponFlashes()const;
+    // Transient lights besides the player's muzzle flash, world xyz: NPC gun flashes in darkness and
+    // every spark shower and arc (electricScene), the four that matter most to where the player stands.
+    std::array<electric::Flash,4> weaponFlashes()const;
     static bool testDarkness();
     bool inventoryOpen()const{return m_inventoryOpen;}
     // A conversation with choices is open (DialogueNode): the world runs on,
@@ -802,6 +839,8 @@ public:
     void posePreviewCreature(int clip,float phase);
     static Game terminalInspection(int level,int terminal=0);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
+    // --map-shots "shut N": the chunk's doors shut again (the inspection opens them all).
+    void shutDoors(){for(int i=0;i<int(m_world.doors().size());++i)m_world.setDoor(i,0,false);}
     static Game barrelInspection(float age);
     // --perf-profile (PerfProfile.cpp): a campaign view with god mode on (a run
     // never ends on a dead player), creatures added on the floor under him, every
@@ -877,6 +916,7 @@ private:
     float m_hazardSoundTimer=0;
     // Darkness ramp and torch jam; runtime only, re-settled after any load.
     float m_darkness=0,m_flashlightJam=0;bool m_darknessSettled=false;
+    Haze m_hazeFrom{},m_hazeTo{};float m_hazeBlend=1;
     // How lit the player is (0 black to 1 floodlit): lamps in reach with a
     // clear line, the map's ambient, true darkness and the flashlight.
     float m_playerExposure=1,m_exposureTimer=0;
@@ -921,6 +961,24 @@ private:
     int nearbyClutter(int hand=-1)const;
     float clutterPathFraction(Point3 from,Point3 to,Point3&normal)const;
     void seedClutter();
+    // Electrical leads (World::leads): each chunk's cables step with the clutter
+    // physics. A clip tears off its prop pulled past the cable's length, carried
+    // out of the chunk or broken; a live one arcs (LeadArc, a 14 m stimulus) and
+    // shocks the hand holding the prop, LeadShock and never the last point.
+    void updateLeads(int level,float dt);
+    // Showers thrown as each burst of a torn live lead's crackle begins; old showers and arcs dropped.
+    void updateElectricity(float dt);
+    // Hang a chunk's cables at rest where their clips now are (a fresh map, a load).
+    void settleLeads(int level);
+    void tearLead(int level,int index,bool quiet=false);
+    int leadProp(int level,const Lead& lead,int hint=-1)const;
+    static Point3 leadClip(const Clutter& c,Point3 offset);
+    // The prop's box as its clipped cable meets it, in the same frame as leadClip.
+    static LeadBody leadBody(const Clutter& c);
+    // How far lead i's cable runs into the prop it is clipped to (its box brought down to the
+    // clip's level, leadBodyAtClip), at worst (0 or less: clear of it).
+    float leadThrough(int level,int index)const;
+    static constexpr float LeadShock=6.f;
     bool damagePane(int level,int index,float amount,Point3 at,Point3 direction);
     void updateBreakables(float dt=0);
     void blastProps(Point3 origin,bool tiles);
@@ -939,6 +997,13 @@ private:
     // First footstep of the set for a surface: painted zone ground gives dirt,
     // grass or gravel; elsewhere metal floors ring and the rest is concrete.
     static Sound stepSoundAt(const World& world,Vec2 position);
+    // How far a step on that floor carries against concrete: steel rings 1.6,
+    // gravel crunches 1.35, packed dirt .85 and grass .7. stepHeard is the
+    // hearing radius it is written with, times that: .95 m crouched (never past
+    // 1.1 m, under the 1.25 m takedown reach) and 3.12 m walking, as concrete
+    // always carried them, and 7.5 m sprinting (it was 3.6).
+    static float stepNoise(Sound step);
+    static float stepHeard(Sound step,bool crouched,bool sprint);
     bool lineOfSight(const Vec2& a, const Vec2& b) const;
     void shoot();
     ShotHit traceShot(Point3 origin,Point3 direction,float range,int ignoredNpc=-1,bool includePlayer=false,const HitscanDef* assist=nullptr,AiTargetRef ignoredEntity={})const;
@@ -1115,6 +1180,10 @@ private:
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<BarrelExplosion> m_barrelExplosions;
     std::vector<BreakEvent> m_breakEvents;
+    std::vector<electric::Burst> m_sparkBursts;std::vector<electric::Arc> m_timedArcs;
+    // This frame's electricity per chunk (electricNow) and the transient lights from it (weaponFlashes).
+    struct ElectricFrame {std::uint64_t key=0;std::vector<electric::Scene> scenes;std::vector<std::uint8_t> made;bool lit=false;std::array<electric::Flash,4> flashes{};};
+    mutable ElectricFrame m_electricFrame;std::uint32_t m_electricEdits=0;
     // Barrels caught in a blast go up after a short fuse.
     std::vector<BarrelExplosion> m_pendingBarrels;
     void detonateBarrel(int level,int tx,int ty);
@@ -1152,6 +1221,8 @@ private:
     bool m_pendingMainCampaign = false;
     bool m_handsLowered = false;
     float m_hitFlash=0;
+    // When a lead last shocked the hand on its prop: a pair torn together shocks once. Not saved.
+    float m_leadShockAt=-10;
     WeaponMotion m_weaponMotion;
     Vec2 m_sway{},m_swayVelocity{};
     float m_elbowVelocity=0,m_shotAge=10;
@@ -1160,6 +1231,8 @@ private:
     bool m_guarding=false;
     std::vector<SoundEvent> m_sounds;
     float m_stepDistance=0;
+    // The last footstep's hearing radius and its age (the noise meter); runtime only.
+    float m_stepNoise=0,m_stepNoiseAge=99;
     // The player's body: gait phase (radians, one cycle per two footsteps) and
     // whether it is sprinting. Presentation only; not archived.
     float m_bodyGait=0;bool m_bodySprint=false;bool m_inspectionCamera=false;

@@ -896,6 +896,9 @@ void SoftwareRenderer::drawHud(const Game& game){
  // How lit you are: five pips under the health bar. Guards make out a lit
  // shape from across the room and a dark one only close up.
  {const int lit=int(std::lround(game.playerExposure()*5.f));for(int pip=0;pip<5;++pip)fill(barX+pip*21,m_height-16,18,3,amber,(pip<lit?.85f:.15f)*hud);}
+ // How far your last step carried, under it: a pip for every 2.4 m (a crouch is
+ // one, a walk on concrete two, a sprint four, five on steel or gravel).
+ {const int loud=int(std::ceil(game.playerNoise()*5.f-.01f));for(int pip=0;pip<5;++pip)fill(barX+pip*21,m_height-10,18,3,bone,(pip<loud?.85f:.15f)*hud);}
  for(int i=1;i<10;++i)fill(barX+i*10,m_height-25,1,4,black,.7f*hud);
  if(game.unarmed()){const char* hands=game.guarding()?"GUARD":"FISTS";uiText(m_width-24-uiTextWidth(hands,0,30,1),m_height-44,hands,bone,0,30,hud,1);uiText(m_width-24-uiTextWidth("UNARMED",0,10,2),m_height-56,"UNARMED",muted,0,10,hud,2);}
  else{const auto ammo=game.hudAmmo();std::snprintf(b,sizeof(b),"%02d",ammo.loaded);int loadedWidth=uiTextWidth(b,0,40);int reserveX=m_width-24-uiTextWidth("/ 00",0,16);
@@ -1224,7 +1227,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.1.14  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.1.15  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
@@ -1388,7 +1391,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye,m_view.angle,m_view.pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
-  std::array<float,16> fogLights{};std::array<float,4> fogPowers{};std::array<float,4> distances{144.f,144.f,144.f,144.f};
+  std::array<float,16> fogLights{};std::array<float,4> fogPowers{};std::array<float,4> distances{144.f,144.f,144.f,144.f};std::array<Point3,4> fogTones;fogTones.fill(WorldLight{}.tone());
   const auto&world=game.world();if(!world.outdoors())for(const auto&lamp:world.lights()){
    if(lamp.mount==WorldLightMount::Wall||lamp.intensity<=0)continue;
    // A switched-off lamp keeps its slot at zero power, so shafts never swap.
@@ -1401,8 +1404,8 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    // Distance only: a facing test swapped lamps in and out of the four post
    // slots while turning, popping lamp shadows and glow.
    if(top-bottom<.8f||floor>eyeZ+2.f||top<eyeZ-2.f||d2>=distances[3])continue;(void)ahead;
-   int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];fogPowers[slot]=fogPowers[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
-   distances[slot]=d2;fogPowers[slot]=lamp.intensity*game.lampPower(lamp);fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
+   int slot=3;while(slot>0&&d2<distances[slot-1]){distances[slot]=distances[slot-1];fogPowers[slot]=fogPowers[slot-1];fogTones[slot]=fogTones[slot-1];for(int c=0;c<4;++c)fogLights[slot*4+c]=fogLights[(slot-1)*4+c];--slot;}
+   distances[slot]=d2;fogPowers[slot]=lamp.intensity*game.lampPower(lamp);fogTones[slot]=lamp.tone();fogLights[slot*4]=lamp.position.x+origin.x;fogLights[slot*4+1]=lamp.position.y+origin.y;fogLights[slot*4+2]=top;fogLights[slot*4+3]=bottom;
   }
   // Per-pixel lamps: every resident lamp in world space, in stable order so
   // shadow maps are reused until the set itself changes.
@@ -1418,15 +1421,15 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   if(pixelLighting!=m_pixelLighting){m_pixelLighting=pixelLighting;m_chunkLighting={};m_chunkNormalLighting={};m_gpu->clearStaticCaches();}
   // Switchable lamps keep their full intensity in the list (a stable key and
   // shadow maps) and their power goes in per frame beside it.
-  {std::vector<std::array<float,13>> lamps;std::vector<float> powers;
+  {std::vector<std::array<float,16>> lamps;std::vector<float> powers;
    for(int level=0;level<game.chunkCount();++level){if(level!=game.level()&&!game.chunkResident(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
-    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint,lamp.shadows?1.f:0.f,lamp.fittingWidth*.5f,lamp.fittingDepth*.5f,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z)-lamp.fittingHeight,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z),lamp.yaw});powers.push_back(game.lampPower(lamp));}
+    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint,lamp.shadows?1.f:0.f,lamp.fittingWidth*.5f,lamp.fittingDepth*.5f,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z)-lamp.fittingHeight,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z),lamp.yaw,lamp.gel.x,lamp.gel.y,lamp.gel.z});powers.push_back(game.lampPower(lamp));}
    }
    if(lamps.size()>256){Point3 eye{m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye};
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}
     std::nth_element(order.begin(),order.begin()+256,order.end());order.resize(256);std::sort(order.begin(),order.end(),[](const auto&a,const auto&b){return a.second<b.second;});
-    std::vector<std::array<float,13>> nearest;std::vector<float> nearestPowers;for(auto&entry:order){nearest.push_back(lamps[entry.second]);nearestPowers.push_back(powers[entry.second]);}lamps.swap(nearest);powers.swap(nearestPowers);}
+    std::vector<std::array<float,16>> nearest;std::vector<float> nearestPowers;for(auto&entry:order){nearest.push_back(lamps[entry.second]);nearestPowers.push_back(powers[entry.second]);}lamps.swap(nearest);powers.swap(nearestPowers);}
    m_gpu->setLamps(lamps,m_pixelLighting,g_detailLayer);m_gpu->setLampPowers(powers);
   }
   // Sun cascades: three view-frustum slices, each a texel-snapped square in
@@ -1447,11 +1450,10 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
    }
    m_gpu->setSun(sunData);}
   m_gpu->setLens(game.settings().depthOfField,game.settings().lensEffects);
-  m_gpu->setFogLights(fogLights,fogPowers);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setTiltShift(g_tiltShift);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
-  std::array<float,4> atmosphere=world.outdoors()?std::array<float,4>{.43f,.52f,.62f,.010f}:std::array<float,4>{.11f,.15f,.18f,.008f};
-  if(world.zoneSky())atmosphere={.55f,.64f,.74f,.0035f};
+  m_gpu->setFogLights(fogLights,fogPowers,fogTones);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setTiltShift(g_tiltShift);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
+  // The air the eye is in: its zone's, its map's or the environment's, eased between them.
+  std::array<float,4> atmosphere=game.haze();
   m_gpu->setSkyStyle(world.zoneSky()?1:0);m_gpu->setStorm(game.stormIntensity());
-  if(world.outdoors()&&std::strcmp(world.skyboxId(),"brutal_wasteland")==0)atmosphere=world.coast()?std::array<float,4>{.62f,.74f,.85f,.006f}:std::array<float,4>{.39f,.39f,.40f,.012f};
   if(world.waterSurface(m_view.pos.x,m_view.pos.y)>m_view.z+m_view.eye+.03f)atmosphere={.10f,.20f,.22f,.085f};
   // True darkness: haze goes black (it still swallows distance), the ambient
   // fill and exposure lift go, and a shot lights the room out to 12 m.

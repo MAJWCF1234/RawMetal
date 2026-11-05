@@ -81,6 +81,7 @@ bool Game::testEngineRegression(){
  auto check=[&](bool ok,const char*name,const std::string&v){report<<(ok?"PASS ":"FAIL ")<<name<<": "<<v<<'\n';report.flush();passed&=ok;};
  // Keep independent groups running after a failed assertion.
  passed=testEngineRegressionSaves(report)&&passed;
+ passed=electric::test(report)&&passed;
  {Game g(regression::campaign(regression::room()));g.m_peaceful=true;g.m_enemies.clear();ScriptAction a;a.enemyKind=Enemy::Kind::Mutant;a.position={9,9};
   g.spawnScriptEnemy(a);size_t empty=g.m_enemies.size();Enemy sentinel{};g.m_enemies.push_back(sentinel);g.spawnScriptEnemy(a);
   check(empty==0&&g.m_enemies.size()==1&&!g.m_enemies[0].scriptSpawned,"2a peaceful script spawn","empty count="+std::to_string(empty)+" sentinel count="+std::to_string(g.m_enemies.size())+" marked="+std::to_string(g.m_enemies[0].scriptSpawned));

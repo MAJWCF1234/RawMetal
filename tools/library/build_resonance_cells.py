@@ -3,7 +3,9 @@ everyone down here is dying. Kit-built from the purchased packs' own textures.
 
 A heavy cell in machined steel: chamfered collars top and bottom, four bars
 seated into both, a hazard band, violet seams lighting the window, and a
-latched terminal lid on top with two folding grips. Inside the bars a
+latched terminal lid on top with two folding grips and two binding posts,
++ in red and - in black, that a test lead's plug seats on (no taller than the
+bolts on the boss, so the cell keeps its catalog size). Inside the bars a
 pane of protective glass (a *_glass material: the engine blends it by its
 alpha), and behind it the held resonance hangs on its own: a dark, twisted mass veined with light,
 a few motes loose around it. You see it from every side and it has depth.
@@ -99,9 +101,14 @@ def textures():
     band = np.clip(1 - np.abs(v - .5) * 2.2, 0, 1)[..., None]
     save(np.concatenate([140 + band * 110, 60 + band * 160, 225 + band * 30], -1), 'cell_seam_glow')
     save(np.concatenate([26 + band * 10, 24 + band * 8, 32 + band * 12], -1), 'cell_seam_dead')
+    # The terminal posts' insulators: moulded red (+) and black (-), the bar's polish as a sheen.
+    save(grade('Props/Metal/Materials/metal_bar.png', (92, 10, 8), (226, 52, 38)), 'cell_pos')
+    save(grade('Props/Metal/Materials/metal_bar.png', (12, 12, 14), (78, 78, 84)), 'cell_neg')
 
 
 R = .1                            # collar radius
+POST = .048                       # the terminal posts stand this far either side of the lid's centre,
+                                  # + toward -x: the engine's lead ports (World.cpp leadPorts) match
 BOT, WIN, TOP = .075, .23, .065   # bottom collar, window, top collar heights
 
 
@@ -194,6 +201,12 @@ def top(m, z, seam):
     for a in range(3):
         t = a * 2 * math.pi / 3
         cyl(.005, .012, lid + .014, m['metal'], 6, x=math.cos(t) * .016, y=math.sin(t) * .016)
+    for s, mat in ((-1, m['pos']), (1, m['neg'])):                           # the terminal posts, + and -
+        x = s * POST
+        cyl(.012, .006, lid, mat, 12, x=x, r2=.0105)                         # the insulating collar
+        cyl(.0078, .004, lid + .006, m['rib'], 6, x=x)                       # the hex nut that holds it
+        cyl(.0085, .011, lid + .01, mat, 12, x=x, r2=.0075)                  # the cap a plug seats on
+        cyl(.004, .004, lid + .021, m['rib'], 8, x=x)                        # its socket's rim, flush at .405
     for s in (-1, 1):                                                        # two folding grips
         box(.012, .05, .012, s * R * 1.02, 0, z + TOP * .3, 0, m['rib'])
         for e in (-1, 1):
@@ -231,7 +244,7 @@ def soot(m):
 
 
 def kit():
-    return {k: material(k, 'cell_' + k) for k in ('metal', 'rib', 'lid', 'hazard', 'mass_glow', 'soot', 'seam_glow', 'seam_dead', 'glass', 'shard_glass')}
+    return {k: material(k, 'cell_' + k) for k in ('metal', 'rib', 'lid', 'hazard', 'mass_glow', 'soot', 'seam_glow', 'seam_dead', 'glass', 'shard_glass', 'pos', 'neg')}
 
 
 def pane(m, z, h, key='glass'):

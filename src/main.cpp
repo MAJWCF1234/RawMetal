@@ -906,6 +906,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(const auto& c:game.clutter())if(c.model>=0)out<<"C "<<c.model<<" at "<<c.pos.x<<' '<<c.pos.y<<" z "<<c.z<<" size "<<c.dims[0]<<' '<<c.dims[1]<<' '<<c.dims[2]<<" yaw "<<c.yaw<<" tilt "<<c.pitch<<' '<<c.roll<<'\n';
      for(const auto& l:w.lights())out<<"L "<<l.position.x<<' '<<l.position.y<<" z "<<l.z<<" mount "<<int(l.mount)<<" yaw "<<l.yaw<<'\n';
      for(const auto& p:w.pipes())out<<"P "<<p.start.x<<' '<<p.start.y<<" -> "<<p.end.x<<' '<<p.end.y<<" z "<<p.z<<" r "<<p.radius<<" endZ "<<p.endZ<<'\n';
+     for(size_t i=0;i<w.leads().size();++i){const auto& l=w.leads()[i];const auto& r=w.leadRopes()[i];out<<"LEAD "<<l.anchor.x<<' '<<l.anchor.y<<" z "<<l.anchor.z<<" prop "<<l.prop<<" length "<<l.length<<" live "<<l.live<<" torn "<<r.torn;if(!r.points.empty())out<<" tip "<<r.points.back().x<<' '<<r.points.back().y<<' '<<r.points.back().z;out<<'\n';}
      for(const auto& d:w.doors())out<<"D "<<d.left<<'-'<<d.right<<" y "<<d.y<<" z "<<d.z<<" transfer "<<d.transfer<<" entry "<<d.entry<<" swing "<<d.swinging<<'\n';
      for(const auto& t:w.terminals())out<<"T "<<t.position.x<<' '<<t.position.y<<" z "<<t.z<<" '"<<t.title<<"'\n";
      for(size_t i=0;i<w.layers().size();++i){out<<"LAYER "<<w.layers()[i].name<<" z "<<w.layers()[i].elevation<<'\n';for(auto& r:w.layers()[i].rows)out<<r<<'\n';}
@@ -977,7 +978,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      std::wstring listPath(arg+12);std::ifstream list{std::filesystem::path(listPath)};std::string line;
      if(!list){std::ofstream("map-shots.txt")<<"ERROR: cannot open list file: "<<std::filesystem::path(listPath).string()<<'\n';return 21;}
      std::ofstream("map-shots.txt")<<"List: "<<std::filesystem::path(listPath).string()<<'\n';
-     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!renderer->enableHardware())return 36;
+     // --software draws them with the CPU rasteriser instead of Vulkan.
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!commandArguments().find(L"--software")&&!renderer->enableHardware())return 36;
      renderer->setEnvironmentInspection(commandArguments().find(L"--clean-shots")!=nullptr);
      std::filesystem::create_directories(".build/shot");
      size_t captures=0;
@@ -1022,6 +1024,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       else{scene.stowWeapon();
        // "hide N": E at the locker in front, then N frames looking out of it.
        if(action=="hide"){retro::InputState use{};use.use=true;scene.update(use,1.f/60.f);action="wait";}
+       // "shut N": the map's doors shut again (every inspection opens them), then N frames.
+       if(action=="shut"){scene.shutDoors();action="wait";}
+       // "swing N": the doors shut, then set opening, N frames into the swing.
+       // "ajar P": every door held still P percent open (a mid-swing leaf for inspection).
+       if(action=="swing"||action=="ajar"){scene.shutDoors();auto&world=const_cast<retro::World&>(scene.world());for(int i=0;i<int(world.doors().size());++i)world.setDoor(i,action=="ajar"?std::min(frames/100.f,world.doors()[size_t(i)].maxOpen):0.f,action=="swing");if(action=="ajar")frames=0;action="wait";}
        // Locker sequences, each from shut in (E, then 70 frames for the way in):
        // "out N" E again, N frames; "peek D" the head turned D degrees;
        // "yank N" the nearest guard is put at the doors and hauls them out, N frames; "knock N" LMB, N frames.
@@ -1269,6 +1276,48 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      constexpr int w=1280,h=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(w,h);if(commandArguments().find(L"--vulkan")&&!renderer->enableHardware())return 36;
      struct View{int view;float seconds;const char*name;};const View views[]={{0,0,"desk-before"},{0,.15f,"desk-shot-015"},{0,2,"desk-shot-2"},{1,0,"monitor-0"},{1,.1f,"monitor-01"},{1,.4f,"monitor-04"},{1,2,"monitor-2"},{2,0,"holds-0"},{3,0,"holds-1"},{4,0,"holds-2"},{5,0,"holds-3"},{6,2,"litter"},{7,0,"fixture-intact"},{7,1,"fixture-broken"}};
      for(const auto&v:views){auto scene=retro::Game::physicsInspection(v.view,v.seconds);renderer->render(scene);std::ofstream out(std::string("physics-")+v.name+".ppm",std::ios::binary);out<<"P6\n"<<w<<' '<<h<<"\n255\n";for(int pixel=0;pixel<w*h;++pixel){auto p=renderer->pixels()[pixel];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}return 0;
+    }
+    if(commandArguments().find(L"--electric-inspection")){
+     // A live lead torn off a cell (Game::electricInspection) as a time sequence: elec-NNNN.ppm (-vulkan
+     // with --vulkan) at 0, 1/30, 2/30, 4/30, 8/30, 0.5, 1 and 1.5 s after the tear (NNNN in ms);
+     // --electric-inspection=clip every 1/30 s from -0.2 to 3 s, =slow every 1/120 s from -0.05 to
+     // 1.5 s (quarter speed at 30 fps); --electric-view=1 from close by, =2 a round striking the wall,
+     // =3 a live floor powered (times from the round, the power). electric-inspection.txt has
+     // each frame's tear age and the strongest light the arc throws.
+     constexpr int w=1280,h=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(w,h);const bool gpu=commandArguments().find(L"--vulkan")!=nullptr;if(gpu&&!renderer->enableHardware())return 36;
+     renderer->setEnvironmentInspection(true);const auto*chosen=commandArguments().find(L"--electric-view=");const int view=chosen?std::clamp(_wtoi(chosen+16),0,3):0;
+     std::vector<float> times{0,1/30.f,2/30.f,4/30.f,8/30.f,.5f,1,1.5f};std::string mode="key";
+     if(commandArguments().find(L"--electric-inspection=clip")){mode="clip";times.clear();for(int i=-6;i<=90;++i)times.push_back(i/30.f);}
+     if(commandArguments().find(L"--electric-inspection=slow")){mode="slow";times.clear();for(int i=-6;i<=180;++i)times.push_back(i/120.f);}
+     std::ofstream report("electric-inspection.txt");
+     for(size_t i=0;i<times.size();++i){float age=-1;auto scene=retro::Game::electricInspection(times[i],view,&age);renderer->render(scene);
+      char name[64];if(mode=="key")std::snprintf(name,sizeof(name),"elec-%04d%s.ppm",int(std::lround(times[i]*1000)),gpu?"-vulkan":"");else std::snprintf(name,sizeof(name),"elec-%s-%04d%s.ppm",mode.c_str(),int(i),gpu?"-vulkan":"");
+      std::ofstream out(name,std::ios::binary);out<<"P6\n"<<w<<' '<<h<<"\n255\n";for(int pixel=0;pixel<w*h;++pixel){auto p=renderer->pixels()[pixel];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+      float light=0;for(const auto&f:scene.weaponFlashes())light=std::max(light,f.strength);
+      report<<name<<": tear age "<<age<<" s, strongest transient light "<<light<<'\n';}
+     return 0;
+    }
+    if(commandArguments().find(L"--lead-inspection")){
+     // The test lead bay (Game::leadInspection): lead-panel, -terminals, -seated, -carried, -tearing,
+     // -torn, -dangling, -bare, -reloaded and -loose (-vulkan with --vulkan), and lead-inspection.txt
+     // with each frame's tear age, the panel's pilot lamp, where the cell is and each cable's end.
+     constexpr int w=1280,h=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(w,h);const bool gpu=commandArguments().find(L"--vulkan")!=nullptr;if(gpu&&!renderer->enableHardware())return 36;
+     renderer->setEnvironmentInspection(commandArguments().find(L"--hud")==nullptr); // no hands or HUD unless asked
+     std::ofstream report("lead-inspection.txt");const char* names[]={"panel","terminals","seated","carried","tearing","torn","dangling","bare","reloaded","loose"};
+     for(int view=0;view<10;++view){float age=-1;auto scene=retro::Game::leadInspection(view,&age);renderer->render(scene);std::ofstream out(std::string("lead-")+names[view]+(gpu?"-vulkan":"")+".ppm",std::ios::binary);out<<"P6\n"<<w<<' '<<h<<"\n255\n";for(int pixel=0;pixel<w*h;++pixel){auto p=renderer->pixels()[pixel];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+      int torn=0;for(const auto&r:scene.world().leadRopes())torn+=r.torn;report<<names[view]<<": tear age "<<age<<" s, leads torn "<<torn<<" of "<<scene.world().leadRopes().size()<<", holding "<<scene.holdingClutter()<<", health "<<scene.player().health;
+      for(const auto&l:scene.world().leads())if(l.lamp>=0){report<<", pilot "<<scene.lampPower(scene.world().lights()[size_t(l.lamp)]);break;}
+      if(!scene.clutter().empty())report<<", cell "<<scene.clutter()[0].pos.x<<','<<scene.clutter()[0].pos.y<<" z "<<scene.clutter()[0].z;
+      for(const auto&r:scene.world().leadRopes())if(!r.points.empty())report<<", end "<<r.points.back().x<<','<<r.points.back().y<<" z "<<r.points.back().z<<(r.sleeping?" still":" moving");report<<'\n';}
+     return 0;
+    }
+    if(commandArguments().find(L"--lead-clip")){
+     // The tear as a clip: lead-clip-NNN.ppm (-vulkan with --vulkan), 30 frames a second for 2.5 s from a plug pulling off.
+     constexpr int w=960,h=540;auto renderer=std::make_unique<retro::SoftwareRenderer>(w,h);const bool gpu=commandArguments().find(L"--vulkan")!=nullptr;if(gpu&&!renderer->enableHardware())return 36;
+     renderer->setEnvironmentInspection(true);
+     for(int k=0;k<75;++k){auto scene=retro::Game::leadInspection(100+k);renderer->render(scene);char name[64];std::snprintf(name,sizeof name,"lead-clip%s-%03d.ppm",gpu?"-vulkan":"",k);std::ofstream out(name,std::ios::binary);out<<"P6\n"<<w<<' '<<h<<"\n255\n";
+      for(int pixel=0;pixel<w*h;++pixel){auto p=renderer->pixels()[pixel];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
+     return 0;
     }
     if(commandArguments().find(L"--barrel-inspection")){
      constexpr int inspectW=1280,inspectH=720;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(inspectW,inspectH);auto& renderer=*rendererStorage;

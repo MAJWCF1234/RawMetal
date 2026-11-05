@@ -193,10 +193,10 @@ void Game::loadLevel(int level,bool carry) {
     if(!carry){m_switchTarget=WeaponId::Fists;m_switchRaise=false;}
     if(m_switchTarget!=WeaponId::Fists){m_equippedWeapon=m_switchTarget;m_switchTarget=WeaponId::Fists;}m_switchRaise=false;
     m_holster=firearmPool().total==0?1.f:0.f;m_punchAge=10;m_punchLeft=false;m_guarding=false;m_verticalSpring=m_verticalSpringVelocity=0;
-    m_sounds.clear();m_stepDistance=0;m_stepVariant=0;
+    m_sounds.clear();m_stepDistance=0;m_stepVariant=0;m_stepNoise=0;
     m_pickupNotice.clear();m_pickupNoticeTime=0;m_areaTitle.clear();
     m_darkness=m_flashlightJam=0;m_darknessSettled=false;
-    seedClutter();
+    seedClutter();settleLeads(m_level);
     if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
 }
 void Game::sound(Sound sound,float gain,float pitch){
@@ -487,7 +487,7 @@ void Game::update(const InputState& input, float dt) {
         auto movement=input;if(heldNpc()>=0||takedownActive()||draggingBody()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         // Shut in a locker the body stays where it is; only the head turns.
         // Crates already sliding and the reset lever carry on without it.
-        {perf::Scope profile(perf::Movement);if(hiddenLocker()<0&&!choreographed&&!talking()){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);}
+        {perf::Scope profile(perf::Movement);m_stepNoiseAge+=dt;if(hiddenLocker()<0&&!choreographed&&!talking()){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);}
         {perf::Scope profile(perf::Stealth);updateExposure(dt);
         updateStealth(input,dt);}
         if(m_world.hasLift()){perf::Scope profile(perf::Movement);
@@ -628,7 +628,7 @@ void Game::punchImpact(){
  }
 }
 void Game::applyPunchHit(Enemy&enemy){
- sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;
+ sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;enemy.recognition=1;
  bool killed=applyEnemyDamage(enemy,kUnarmedMelee.damage,true,true);
  enemySound(enemy,killed?2:0,killed?.85f:.45f,killed?1.f:1.15f);
 }

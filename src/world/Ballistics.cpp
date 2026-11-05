@@ -39,19 +39,27 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal,ShotTrace* trace)
   }
   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top});box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f});box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f});
  };
- for(size_t index=0;index<m_structures.size();++index){const auto&s=m_structures[index];if(isBreakableStructure(int(index))){int i=int(index)-m_breakableFirst;if(!breakableIntact(i))continue;Point3 n;float t=rayBoxFraction(from,delta,{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},&n);
+ auto solid=[&](size_t index){const auto&s=m_structures[index];if(isBreakableStructure(int(index))){int i=int(index)-m_breakableFirst;if(!breakableIntact(i))return;Point3 n;float t=rayBoxFraction(from,delta,{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},&n);
    if(trace&&breakables()[i].material==17&&!breakables()[i].holds){if(t<trace->passedAt[1]){int slot=t<trace->passedAt[0]?0:1;if(slot==0){trace->passed[1]=trace->passed[0];trace->passedAt[1]=trace->passedAt[0];trace->passedNormal[1]=trace->passedNormal[0];}trace->passed[slot]=i;trace->passedAt[slot]=t;trace->passedNormal[slot]=n;}}
    else if(t<=nearest){nearest=t;normal=n;if(trace)trace->blocking=i;}
   }else if(shapedGround||s.material==17)structure(s);
- }
+ };
+ // A short trace (a spark's step, an arc's reach) asks only the structures, props and fixtures filed
+ // under the cells it crosses: the same answer without walking a basin map's thousand-odd solids. A
+ // long one, a traced shot (its passages keep their order) and a map without the index walk them all.
+ const float lowX=std::min(from.x,to.x),lowY=std::min(from.y,to.y),highX=std::max(from.x,to.x),highY=std::max(from.y,to.y);
+ const bool indexed=!trace&&m_collisionCandidatesEnabled&&m_structureCells.size()==size_t(Width*Height)&&lowX>=0&&lowY>=0&&highX<Width&&highY<Height&&(int(highX)-int(lowX)+1)*(int(highY)-int(lowY)+1)<=16;
+ auto cells=[&](auto&& visit){for(int y=int(lowY);y<=int(highY);++y)for(int x=int(lowX);x<=int(highX);++x)visit(x,y);};
+ if(indexed)cells([&](int x,int y){for(auto index:m_structureCells[size_t(y*Width+x)])solid(index);});
+ else for(size_t index=0;index<m_structures.size();++index)solid(index);
  if(shapedGround){
   // The shadow BVH uses a flat floor. Curved terrain and basin beds must use
   // their actual collision field instead; all other authored solids stay exact.
   int x1=std::clamp(int(std::floor(std::min(from.x,to.x))),0,Width-1),x2=std::clamp(int(std::floor(std::max(from.x,to.x))),0,Width-1);
   int y1=std::clamp(int(std::floor(std::min(from.y,to.y))),0,Height-1),y2=std::clamp(int(std::floor(std::max(from.y,to.y))),0,Height-1);
   for(int y=y1;y<=y2;++y)for(int x=x1;x<=x2;++x){char t=tile(x,y);if(t!='#'&&t!='C'&&t!='B'&&t!='T')continue;float floor=floorHeight(x+.5f,y+.5f);box({float(x),float(y),floor},{float(x+1),float(y+1),t=='#'?wallHeight(x,y):floor+(t=='C'?.6f:t=='B'?1.1f:2.62f)});}
-  for(const auto&p:m_props){float base=floorHeight(p.position.x,p.position.y)+p.base;box({p.position.x-p.halfSize.x,p.position.y-p.halfSize.y,base},{p.position.x+p.halfSize.x,p.position.y+p.halfSize.y,base+p.height});}
-  for(const auto&f:m_fixtures)if(f.solid){float base=floorHeight(f.position.x,f.position.y)+f.base;
+  auto prop=[&](const auto&p){float base=floorHeight(p.position.x,p.position.y)+p.base;box({p.position.x-p.halfSize.x,p.position.y-p.halfSize.y,base},{p.position.x+p.halfSize.x,p.position.y+p.halfSize.y,base+p.height});};
+  auto fixture=[&](const auto&f){if(!f.solid)return;float base=floorHeight(f.position.x,f.position.y)+f.base;
    if(f.model==7){for(float tier:{.17f,.54f,.92f}){float top=base+f.height*tier;oriented(f.position,f.width,f.depth,top-.045f,top,f.yaw);}
     float c=std::cos(f.yaw),s=std::sin(f.yaw);for(float x:{-f.width*.5f+.02f,f.width*.5f-.02f})for(float y:{-f.depth*.5f+.02f,f.depth*.5f-.02f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.04f,.04f,base,base+f.height,f.yaw);
   }else if(f.model==19||f.model==18){
@@ -60,7 +68,10 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal,ShotTrace* trace)
     for(float x:{-f.width*.5f+.05f,f.width*.5f-.05f})for(float y:{-f.depth*.5f+.05f,f.depth*.5f-.05f})oriented({f.position.x+x*c+y*s,f.position.y-x*s+y*c},.05f,.05f,base,top-.05f,f.yaw);
     if(f.model==18){Vec2 back{f.position.x+(f.depth*.5f-.03f)*s,f.position.y+(f.depth*.5f-.03f)*c};oriented(back,f.width,.05f,top,base+f.height,f.yaw);}
    }else oriented(f.position,f.width*f.core,f.depth*f.core,base,base+f.height,f.yaw);
-  }
+  };
+  // The candidate grid files props and fixtures under every cell their footprint (and more) covers.
+  if(indexed)cells([&](int x,int y){for(auto i:collisionCandidates(1,x+.5f,y+.5f))prop(m_props[i]);for(auto i:collisionCandidates(0,x+.5f,y+.5f))fixture(m_fixtures[i]);});
+  else{for(const auto&p:m_props)prop(p);for(const auto&f:m_fixtures)fixture(f);}
  }
  // Traveling controls are absent from the cached static BVH.
  for(const auto&t:m_terminals)if(shapedGround||(hasLift()&&t.control)){

@@ -273,6 +273,7 @@ void World::settleExclusionFacilityOnTerrain(){
  for(int i=0;i<int(data->breakables.size());++i){const auto&s=m_structures[breakableStructure(i)];data->breakables[i].bottom=s.bottom;data->breakables[i].top=s.top;}
  data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
  for(auto&sign:data->signs)sign.z+=ground(sign.position.x,sign.position.y);
+ for(auto&lead:data->leads){lead.anchor.z+=ground(lead.anchor.x,lead.anchor.y);lead.end.z+=ground(lead.end.x,lead.end.y);}
  // Like hazards, a shelter's height band is measured from the ground at its centre.
  for(auto&s:data->shelters){float z=ground((s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f);s.bottom+=z;s.top+=z;}
  for(auto&hint:data->navHints)hint.z+=ground(hint.position.x,hint.position.y);
@@ -322,6 +323,10 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(size_t i=0;i<map->scriptEvents.size();++i){const auto& e=map->scriptEvents[i];if(!e.id||e.x2<=e.x1||e.y2<=e.y1)reject("scriptEvent",i,"id="+std::to_string(e.id)+" bounds="+std::to_string(e.x1)+","+std::to_string(e.y1)+","+std::to_string(e.x2)+","+std::to_string(e.y2));}
  for(size_t i=0;i<map->clutterSpawns.size();++i){const auto&v=map->clutterSpawns[i];if(v.kind<0||v.kind>7||(v.kind==7&&(v.model<0||v.model>=FacilityModelCount||!(v.width>0&&v.width<=3.f&&v.depth>0&&v.depth<=3.f&&v.height>0&&v.height<=3.f)||!std::isfinite(v.position.x)||!std::isfinite(v.position.y)||!std::isfinite(v.z)||!std::isfinite(v.yaw)||!std::isfinite(v.pitch)||!std::isfinite(v.roll))))reject("prop",i,"invalid model, dimensions or pose");}
  for(size_t i=0;i<map->breakables.size();++i){const auto&v=map->breakables[i];if(!(v.x1>=.3f&&v.y1>=.3f&&v.x2<=23.7f&&v.y2<=23.7f&&v.x2>v.x1&&v.y2>v.y1&&v.bottom<v.top&&std::isfinite(v.bottom)&&std::isfinite(v.top)&&v.health>=0&&std::isfinite(v.health)&&v.fixture>=-1&&v.fixture<int(map->fixtures.size())&&(v.fixture<0||v.part!=0)&&(v.material==17||v.material==10||v.material==22||v.material==23)))reject("breakable",i,"invalid bounds, material or terrain");}
+ // A lead hangs from a point in the map, clips to a model prop (or nothing) and is a cable: centimetres thick, at most twelve metres.
+ for(size_t i=0;i<map->leads.size();++i){const auto&v=map->leads[i];auto finite=[](Point3 p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z);};
+  if(!(finite(v.anchor)&&finite(v.end)&&finite(v.offset)&&v.anchor.x>=0&&v.anchor.x<=Width&&v.anchor.y>=0&&v.anchor.y<=Height&&v.length>=.1f&&v.length<=12&&v.radius>=.002f&&v.radius<=.05f&&v.material>=0&&v.material<=8&&v.prop>=-1&&v.prop<int(map->clutterSpawns.size())&&(v.prop<0||(!v.loose&&map->clutterSpawns[size_t(v.prop)].kind==ClutterModelKind))))reject("lead",i,"invalid anchor, length, radius, material or prop");
+  const int ports=int(leadPorts().size());if(!(finite(v.socket)&&finite(v.terminal)&&v.panel>=-1&&v.panel<int(map->fixtures.size())&&v.lamp>=-1&&v.lamp<int(map->lights.size())&&v.socketPort>=-1&&v.socketPort<ports&&v.terminalPort>=-1&&v.terminalPort<ports))reject("lead",i,"invalid panel, socket, terminal or lamp");}
  if(!invalid.str().empty())throw std::runtime_error(invalid.str());
  const auto& lift=map->cargoLift;
  if(lift.x1!=lift.x2||lift.y1!=lift.y2||lift.lower!=lift.upper){
@@ -365,10 +370,11 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  for(const auto& fixture:map->fixtures)if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("Invalid authored fixture model or dimensions (model "+std::to_string(fixture.model)+" at "+std::to_string(fixture.position.x)+","+std::to_string(fixture.position.y)+")");
  for(const auto& light:map->lights)if(!std::isfinite(light.position.x)||!std::isfinite(light.position.y)||!std::isfinite(light.z)||!std::isfinite(light.yaw)||!std::isfinite(light.intensity)||!std::isfinite(light.range)||int(light.mount)<0||int(light.mount)>int(WorldLightMount::Bare)||light.intensity<0||light.intensity>8||light.range<=0||light.range>24)throw std::runtime_error("Invalid authored light mount or influence");
- for(const auto& light:map->lights)if(!std::isfinite(light.kelvin)||light.kelvin<1000||light.kelvin>12000||!std::isfinite(light.tint)||light.tint< -1||light.tint>1||!std::isfinite(light.period)||!std::isfinite(light.onTime)||!std::isfinite(light.phase)||!std::isfinite(light.flicker)||light.period<0||light.onTime<0||light.onTime>light.period||light.flicker<0||light.flicker>1)throw std::runtime_error("Invalid authored light switching: finite light colour/timing, period >= 0, on-time within the period, flicker 0-1");
+ for(const auto& light:map->lights)if(!std::isfinite(light.kelvin)||light.kelvin<1000||light.kelvin>12000||!std::isfinite(light.tint)||light.tint< -1||light.tint>1||!(light.gel.x>=0&&light.gel.x<=1&&light.gel.y>=0&&light.gel.y<=1&&light.gel.z>=0&&light.gel.z<=1&&light.gel.x+light.gel.y+light.gel.z>0)||!std::isfinite(light.period)||!std::isfinite(light.onTime)||!std::isfinite(light.phase)||!std::isfinite(light.flicker)||light.period<0||light.onTime<0||light.onTime>light.period||light.flicker<0||light.flicker>1)throw std::runtime_error("Invalid authored light switching: finite light colour/timing, gel channels 0-1 and not black, period >= 0, on-time within the period, flicker 0-1");
  for(const auto& zone:map->darkZones)if(!std::isfinite(zone.x1)||!std::isfinite(zone.y1)||!std::isfinite(zone.x2)||!std::isfinite(zone.y2)||!std::isfinite(zone.bottom)||!std::isfinite(zone.top)||zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||zone.x2<=0||zone.y2<=0||zone.x1>=Width||zone.y1>=Height)throw std::runtime_error("Invalid authored dark zone: a non-empty box overlapping its map");
  for(const auto& sign:map->signs)if(!std::isfinite(sign.width)||!std::isfinite(sign.height)||!std::isfinite(sign.z)||!std::isfinite(sign.yaw)||!std::isfinite(sign.position.x)||!std::isfinite(sign.position.y)||sign.width<=0||sign.height<=0)throw std::runtime_error("Invalid authored sign dimensions");
  for(const auto& prop:map->props)if(prop.kind<0||prop.kind>=4)throw std::runtime_error("Invalid authored prop model");
+ if(!validHaze(map->definition.haze)||std::any_of(map->zones.begin(),map->zones.end(),[](const AuthoredZone&z){return !validHaze(z.haze);}))throw std::runtime_error("Invalid authored haze: colour channels 0-1 and density 0-.1 (or negative for the environment's own)");
  for(int surface:{map->wallSurface,map->floorSurface,map->ceilingSurface})if(surface<SurfaceDefault||surface>=SurfaceCount)throw std::runtime_error("Invalid authored surface set");
  for(const auto& stair:map->stairs)if(stair.steps<1||stair.steps>4096||stair.x1>=stair.x2||stair.y1>=stair.y2||stair.bottom>stair.top||!std::isfinite(stair.treadThickness)||stair.treadThickness<.025f||stair.treadThickness>.5f)throw std::runtime_error("Invalid authored staircase");
  m_definitionSource=map.get();m_mapData=std::move(map);
@@ -396,6 +402,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
  m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);
+ m_leadRopes.assign(leads().size(),{});for(size_t i=0;i<m_leadRopes.size();++i)m_leadRopes[i].torn=leads()[i].loose;
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
 
  buildLayers(m_mapData->stairs);
@@ -569,6 +576,13 @@ float World::outskirtHeight(float worldX,float worldY,float outside)const{
 int World::groundKind(float worldX,float worldY)const{
  if(!m_exclusionTerrain||!m_mapData||!m_mapData->terrain||m_mapData->terrain->ground.empty())return -1;
  return authoredGroundKind(*m_mapData->terrain,worldX,worldY);
+}
+Haze World::haze(Vec2 p,float z)const{
+ if(m_mapData)for(const auto& zone:m_mapData->zones)if(zone.haze[3]>=0&&p.x>=zone.x1&&p.x<zone.x2&&p.y>=zone.y1&&p.y<zone.y2&&z>=zone.bottom&&z<zone.top)return zone.haze;
+ if(definition().haze[3]>=0)return definition().haze;
+ if(zoneSky())return {.55f,.64f,.74f,.0035f};
+ if(outdoors()&&std::string_view(skyboxId())=="brutal_wasteland")return coast()?Haze{.62f,.74f,.85f,.006f}:Haze{.39f,.39f,.40f,.012f};
+ return outdoors()?Haze{.43f,.52f,.62f,.010f}:Haze{.11f,.15f,.18f,.008f};
 }
 void World::buildTerrain(){
  m_terrain.clear();
@@ -873,6 +887,12 @@ __declspec(noinline) bool World::testCollisionCandidates(){
    if(world.structureSegmentClear(from,feet,to,1.6f)!=world.structureSegmentClear(from,feet,to,1.6f,false))return false;
   }
  }
+ // A short shot trace on a basin map (a spark's step, an arc's reach) asks only what is filed under the
+ // cells it crosses: the same fraction and normal as walking every solid.
+ for(int level:{47,49,51,52}){World world(level);uint32_t random=uint32_t(level*7+3);auto unit=[&]{random=random*1664525u+1013904223u;return float(random>>8)/16777216.f;};
+  for(int sample=0;sample<20000;++sample){Point3 from{unit()*24,unit()*24,0};from.z=world.floorHeight(from.x,from.y)+unit()*2.6f-.2f;Point3 to=from+Point3{unit()*1.8f-.9f,unit()*1.8f-.9f,unit()*1.8f-.9f},fast,slow;
+   world.m_collisionCandidatesEnabled=true;const float a=world.shotFraction(from,to,fast);world.m_collisionCandidatesEnabled=false;const float b=world.shotFraction(from,to,slow);world.m_collisionCandidatesEnabled=true;
+   if(a!=b||(b<1&&(fast.x!=slow.x||fast.y!=slow.y||fast.z!=slow.z))){std::fprintf(stderr,"shot_fraction_indexed level %d sample %d: %g against %g\n",level,sample,double(a),double(b));return false;}}}
  // Isolated leaf comparison uses the preserved returning signature on both
  // paths. A checksum keeps both timed loops observable under optimisation.
  {
@@ -1498,5 +1518,202 @@ float World::fixtureSurface(const Fixture&f,float x,float y,float feet,bool ceil
  else if(f.model==model::office_file_cabinet_open){for(float t:{.04f,.5f,1.f})slab(f.height*t-.03f,f.height*t);if(u>f.width*.5f-.04f||dy*c+dx*s>f.depth*.5f-.04f)slab(0,f.height);}
  else slab(0,f.height);
  return result;
+}
+// --- Leads: each cable a verlet rope -------------------------------------------------------------
+// The test set's sockets (the octagonal binding posts on its front, + on the left facing them) and
+// its pilot lens on the front plate above and between them; the cell's binding posts on its lid
+// (build_resonance_cells.py POST), on the charged and the spent cell and on a pulled cap.
+std::span<const LeadPort> leadPorts(){
+ static const LeadPort ports[]={
+  {model::lab_field_meter,"+",{-.030f,-.1485f,.0555f},{0,-1,0}},{model::lab_field_meter,"-",{.030f,-.1485f,.0555f},{0,-1,0}},{model::lab_field_meter,"lamp",{0,-.1335f,.086f},{0,-1,0}},
+  {model::anl_cell_charged,"+",{-.048f,0,.405f},{0,0,1}},{model::anl_cell_charged,"-",{.048f,0,.405f},{0,0,1}},
+  {model::anl_cell_spent,"+",{-.048f,0,.405f},{0,0,1}},{model::anl_cell_spent,"-",{.048f,0,.405f},{0,0,1}},
+  {model::anl_cell_cap,"+",{-.048f,0,.140f},{0,0,1}},{model::anl_cell_cap,"-",{.048f,0,.140f},{0,0,1}}};
+ return ports;}
+int leadPort(int model,std::string_view name){const auto p=leadPorts();for(size_t i=0;i<p.size();++i)if(p[i].model==model&&p[i].name==name)return int(i);return -1;}
+Point3 fixturePort(const Fixture& f,const LeadPort& port,float floor,Point3* out){
+ // As Scene3D places the fixture's model: its frame turned by -yaw, at its own size.
+ const auto&s=model::size[f.model];const float c=std::cos(f.yaw),n=std::sin(f.yaw),x=port.at.x*f.width/s[0],y=port.at.y*f.depth/s[1];
+ if(out)*out={port.out.x*c+port.out.y*n,-port.out.x*n+port.out.y*c,port.out.z};
+ return {f.position.x+x*c+y*n,f.position.y-x*n+y*c,floor+f.base+port.at.z*f.height/s[2]};}
+Point3 propPort(int model,float width,float depth,float height,const LeadPort& port){const auto&s=model::size[model];return {port.at.x*width/s[0],port.at.y*depth/s[1],port.at.z*height/s[2]};}
+std::string seatTestLead(AuthoredMapData& m,Lead& l,int panel,std::string_view socket,std::string_view terminal){
+ const auto ports=leadPorts();const float floor=m.layers.empty()?0.f:m.layers.front().elevation;
+ if(panel>=0){if(panel>=int(m.fixtures.size()))return "no fixture "+std::to_string(panel)+" for its panel";const auto&f=m.fixtures[size_t(panel)];
+  const int s=leadPort(f.model,socket);if(s<0||socket=="lamp")return "fixture "+std::to_string(panel)+" has no socket '"+std::string(socket)+"'";
+  l.panel=panel;l.socketPort=s;l.anchor=fixturePort(f,ports[size_t(s)],floor,&l.socket);
+  // One pilot a panel, lit while the circuit holds: any lead on it tearing sets its state.
+  for(const auto&o:m.leads)if(o.panel==panel&&o.lamp>=0&&&o!=&l)l.lamp=o.lamp;
+  if(const int lens=leadPort(f.model,"lamp");l.lamp<0&&lens>=0){Point3 up{};const auto p=fixturePort(f,ports[size_t(lens)],floor,&up)+up*.008f;
+   WorldLight pilot{{p.x,p.y},p.z,WorldLightMount::Bare};pilot.intensity=.12f;pilot.range=.9f;pilot.kelvin=1900;pilot.gel={1,.3f,.07f};pilot.shadows=false;
+   pilot.enabledState=stateId("lead_circuit/"+m.name+"/"+std::to_string(panel));pilot.invert=true;l.lamp=int(m.lights.size());m.lights.push_back(pilot);}
+  // A lead already pulled off leaves its panel dark from the start.
+  if(l.loose&&l.lamp>=0)m.lights[size_t(l.lamp)].enabledState=0;}
+ if(!terminal.empty()){if(l.prop<0||l.prop>=int(m.clutterSpawns.size()))return "a terminal needs the prop it is on";const auto&c=m.clutterSpawns[size_t(l.prop)];
+  const int t=leadPort(c.model,terminal);if(t<0)return "prop "+std::to_string(l.prop)+" has no terminal '"+std::string(terminal)+"'";
+  l.terminalPort=t;l.offset=propPort(c.model,c.width,c.depth,c.height,ports[size_t(t)]);l.terminal=ports[size_t(t)].out;}
+ return {};}
+namespace {
+// Fixed 1/120 s steps: a frame runs one or two. Damping (air and the cable's own
+// stiffness) lets a dropped lead swing a few times and come to rest in about three seconds.
+constexpr float LeadStep=1.f/120,LeadGravity=9.81f,LeadDamping=1.8f,LeadBend=.8f;
+int leadPointCount(float length){return std::clamp(int(std::lround(length/.08f))+1,10,16);}
+float leadSpan(Point3 a,Point3 b){auto d=b-a;return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);}
+float leadDot(Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+// How far a plug's boot holds the cable off the clip's face before it bends away: about half a
+// segment, at most 5 cm.
+float leadBoot(float segment){return std::min(segment*.45f,.05f);}
+// How far `p` must move to leave the prop's box grown by `grow`, out through the nearest face.
+Point3 leadBodyExit(const LeadBody& b,Point3 p,float grow){
+ const auto d=p-b.centre;int face=-1;float least=1e9f,side=1;
+ for(int j=0;j<3;++j){const float q=leadDot(d,b.axis[j]),depth=b.half[j]+grow-std::fabs(q);if(depth<=0)return {};if(depth<least){least=depth;face=j;side=q<0?-1.f:1.f;}}
+ return b.axis[face]*(least*side);
+}
+// What a test lead's plugs hold still besides the anchor and the clip: the point its socket's
+// boot holds a segment straight out along `socket`, and, seated on a terminal, the point a
+// segment out of its right-angle plug: PlugHead up the post's axis (as the prop is turned) and
+// level from there, swivelled toward `toward` (where the cable runs), so the cable leaves the
+// plug in line with its boot. Torn, the plug is still on the cable's end: that point carries its weight.
+struct LeadPins{bool gland=false,seated=false;Point3 glandAt{},plugAt{},up{};};
+LeadPins leadPins(const Lead& l,size_t n,float segment,const Point3* end,const LeadBody* body,Point3 toward){
+ LeadPins p;if(n<5)return p;
+ if(const float g=std::sqrt(leadDot(l.socket,l.socket));g>1e-6f){p.gland=true;p.glandAt=l.anchor+l.socket*(segment/g);}
+ if(end&&l.plugged()){const auto&t=l.terminal;Point3 up=body?body->axis[0]*t.x+body->axis[1]*t.y+body->axis[2]*t.z:t;
+  if(const float u=std::sqrt(leadDot(up,up));u>1e-6f){up=up*(1/u);auto side=toward-*end;side=side-up*leadDot(side,up);float s=std::sqrt(leadDot(side,side));
+   if(s<1e-4f){side=std::fabs(up.z)<.9f?Point3{-up.y,up.x,0}:Point3{1,0,0};side=side-up*leadDot(side,up);s=std::sqrt(leadDot(side,side));}
+   p.seated=true;p.up=up;p.plugAt=*end+up*Lead::PlugHead+side*(std::sqrt(std::max(segment*segment-Lead::PlugHead*Lead::PlugHead,0.f))/s);}}
+ return p;}
+// How freely a point moves: 0 held (anchor, clip, the plugs' pins), a torn plug's end a third.
+float leadWeight(const Lead& l,const LeadPins& p,size_t k,size_t n,bool end){return k==0||(p.gland&&k==1)||(end&&k==n-1)||(p.seated&&k==n-2)?0.f:!end&&k==n-1&&l.plugged()?.35f:1.f;}
+// Keep a clipped cable off its prop (its box brought down to the clip's level). The point beside
+// the clip stands off the clip's face, as a plug's boot holds a lead out of its terminal (a
+// seated plug holds it already); then each point, and the cable between points (five samples a
+// segment), is pushed out of the box, the held points fixed.
+void clearLeadBody(LeadRope& r,const LeadBody& prop,float radius,float segment,const LeadPins& pins){
+ const size_t n=r.points.size();if(n<3)return;
+ int face=2;float side=1;const auto b=leadBodyAtClip(prop,r.points[n-1],&face,&side);const auto normal=b.axis[face]*side;auto&boot=r.points[n-2];
+ if(!pins.seated){const float out=leadDot(boot-b.centre,normal),need=b.half[face]+radius+leadBoot(segment);if(out<need)boot=boot+normal*(need-out);}
+ for(size_t k=0;k+2<n;++k){auto&a=r.points[k];auto&c=r.points[k+1];const float wa=k==0||(pins.gland&&k==1)?0.f:1.f,wc=pins.seated&&k+1==n-2?0.f:1.f;
+  for(float t:{0.f,.25f,.5f,.75f,1.f}){const float ca=wa*(1-t),cc=wc*t,s=ca*ca+cc*cc;if(s<1e-6f)continue;const auto exit=leadBodyExit(b,a+(c-a)*t,radius);
+   if(exit.x!=0||exit.y!=0||exit.z!=0){a=a+exit*(ca/s);c=c+exit*(cc/s);}}}
+}
+// One step: integrate, hold each segment to its length (alternating sweeps from both ends,
+// the pinned ends immovable), its bends to its stiffness and the cable off the clipped prop,
+// then the floor and solids under it.
+void stepLeadRope(const World& w,const Lead& l,LeadRope& r,float h,const Point3* end,const LeadBody* body,float damping){
+ const size_t n=r.points.size();const float segment=l.length/float(n-1),keep=std::exp(-damping*h);
+ const auto pins=leadPins(l,n,segment,end,body,r.points[n-3]);r.plugUp=pins.up;auto weight=[&](size_t k){return leadWeight(l,pins,k,n,end!=nullptr);};
+ auto pin=[&]{r.points[0]=r.previous[0]=l.anchor;if(pins.gland)r.points[1]=r.previous[1]=pins.glandAt;if(pins.seated)r.points[n-2]=r.previous[n-2]=pins.plugAt;};pin();
+ // A clip pulled past the cable's length: the lead runs taut and straight between its boots, off its prop.
+ if(end&&leadSpan(l.anchor,*end)>=l.length){const size_t a=pins.gland?1:0,b=pins.seated?n-2:n-1;const Point3 from=r.points[a],to=pins.seated?pins.plugAt:*end;
+  for(size_t k=a;k<=b;++k)r.points[k]=from+(to-from)*(float(k-a)/float(b-a));r.points[n-1]=*end;if(body)clearLeadBody(r,*body,l.radius,segment,pins);r.previous=r.points;return;}
+ for(size_t k=1;k<n;++k)if(weight(k)>0){auto v=(r.points[k]-r.previous[k])*keep;r.previous[k]=r.points[k];r.points[k]=r.points[k]+v+Point3{0,0,-LeadGravity*h*h};}
+ if(end){r.previous[n-1]=r.points[n-1];r.points[n-1]=*end;}
+ for(int pass=0;pass<10;++pass){for(size_t j=0;j+1<n;++j){const size_t s=pass%2?n-2-j:j;auto&a=r.points[s];auto&b=r.points[s+1];
+   const float wa=weight(s),wb=weight(s+1);if(wa+wb<=0)continue;auto d=b-a;float span=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(span<1e-6f)continue;
+   auto fix=d*((span-segment)/(span*(wa+wb)));a=a+fix*wa;b=b-fix*wb;}
+  // The cable's own stiffness: two segments on, points stay at least 1.6 segments apart, so no
+  // point turns it more than about 75 degrees and a bend out of a boot or over an edge is a curve.
+  for(size_t j=0;j+2<n;++j){auto&a=r.points[j];auto&c=r.points[j+2];const float wa=weight(j),wc=weight(j+2),least=segment*LeadBend*2;if(wa+wc<=0)continue;
+   auto d=c-a;const float span=std::sqrt(leadDot(d,d));if(span>=least||span<1e-6f)continue;auto fix=d*((span-least)/(span*(wa+wc)));a=a+fix*wa;c=c-fix*wc;}
+  if(body&&end)clearLeadBody(r,*body,l.radius,segment,pins);}
+ for(size_t k=1;k<n;++k){if(weight(k)<=0)continue;auto&p=r.points[k];const auto&was=r.previous[k];if(p.x<0||p.y<0||p.x>=World::Width||p.y>=World::Height)continue;
+  // Into a cabinet, a bench or a wall: back out the way it came.
+  if(!w.fits(p.x,p.y,p.z-l.radius,l.radius*2,false,true)&&w.fits(was.x,was.y,p.z-l.radius,l.radius*2,false,true)){p.x=was.x;p.y=was.y;}
+  const float floor=w.supportBelow(p.x,p.y,std::max(p.z,was.z)+.02f)+l.radius;
+  // Lying on the floor or a bench top it grips: a creep under 15 cm/s stops dead (a cable
+  // draped over an edge stays put); dragged faster, half its sideways speed goes each step.
+  if(p.z<floor){p.z=floor;const float dx=p.x-was.x,dy=p.y-was.y;
+   if(dx*dx+dy*dy<.15f*h*.15f*h){p.x=was.x;p.y=was.y;r.previous[k]=p;}else r.previous[k]={p.x-dx*.5f,p.y-dy*.5f,p.z};}
+ }
+}
+}
+void World::hangLead(int i,const Point3* end,const LeadBody* body){
+ const auto&l=leads().at(size_t(i));auto&r=m_leadRopes.at(size_t(i));const int n=leadPointCount(l.length);const float segment=l.length/float(n-1);
+ // A socketed lead hangs from the end of its boot, a segment out of the socket.
+ const auto pins=leadPins(l,size_t(n),segment,end,body,l.socketed()?l.anchor+l.socket*segment:l.anchor);const int first=pins.gland?1:0;r.plugUp=pins.up;
+ r.points.assign(size_t(n),l.anchor);if(pins.gland)r.points[1]=pins.glandAt;const Point3 a=r.points[size_t(first)];
+ // On a prop the cable leaves its clip straight out of the face (seated on a terminal, up out
+ // of its plug) for a segment and hangs from there.
+ Point3 b=end?*end:a;float cable=l.length-segment*float(first);
+ if(pins.seated){b=pins.plugAt;cable-=segment;}else if(end&&body){int face=2;float side=1;leadBodyAtClip(*body,*end,&face,&side);b=*end+body->axis[face]*(side*segment);cable-=segment;}
+ if(end&&leadSpan(a,b)<cable*.999f){
+  // A parabola through both ends, sagged until its arc is the cable's length
+  // (within millimetres of the catenary it hangs in), laid out evenly along it.
+  constexpr int fine=64;std::array<Point3,fine+1> curve{};
+  auto bend=[&](float sag){float arc=0;for(int k=0;k<=fine;++k){float s=float(k)/fine;curve[size_t(k)]=a+(b-a)*s-Point3{0,0,sag*4*s*(1-s)};if(k)arc+=leadSpan(curve[size_t(k-1)],curve[size_t(k)]);}return arc;};
+  float lo=0,hi=l.length;for(int k=0;k<40;++k){float mid=(lo+hi)*.5f;(bend(mid)<cable?lo:hi)=mid;}bend(lo);
+  float walked=0;size_t k=1;
+  for(int p=first+1;p<n-1;++p){const float want=segment*float(p-first);while(k<fine&&walked+leadSpan(curve[k-1],curve[k])<want){walked+=leadSpan(curve[k-1],curve[k]);++k;}
+   const float piece=leadSpan(curve[k-1],curve[k]);r.points[size_t(p)]=curve[k-1]+(curve[k]-curve[k-1])*(piece>1e-6f?std::clamp((want-walked)/piece,0.f,1.f):0.f);}
+  r.points.back()=*end;
+ }else if(end)for(int p=first;p<n;++p)r.points[size_t(p)]=a+(*end-a)*(float(p-first)/float(n-1-first));
+ else{
+  // Limp: laid as a dropped cable lies. Each point hangs straight down from the last onto what
+  // is under it there, as far as a segment goes, and the rest of the segment runs along the lie
+  // over what it rests on, so the cable runs off a bench's edge and down; a wall or a cabinet in
+  // the way turns it aside. The lie: a loose lead's `end`; a torn one's out of its socket's boot,
+  // else toward where its prop was put (its `end` is unused).
+  Point3 toward=l.end;
+  if(!l.loose&&l.prop>=0){if(std::hypot(l.socket.x,l.socket.y)>.3f*std::sqrt(leadDot(l.socket,l.socket)))toward=a+Point3{l.socket.x,l.socket.y,0};
+   else if(l.prop<int(clutterSpawns().size())){const auto s=clutterSpawns()[size_t(l.prop)].position;toward={s.x,s.y,a.z};}}
+  Vec2 run{toward.x-a.x,toward.y-a.y};const float along=length(run);run=along>.01f?run*(1/along):Vec2{1,0};
+  auto open=[&](Point3 q){return q.x>=0&&q.y>=0&&q.x<Width&&q.y<Height&&fits(q.x,q.y,q.z-l.radius,l.radius*2,false,true);};
+  Point3 p=a;
+  for(int k=first+1;k<n;++k){const float under=supportBelow(p.x,p.y,p.z+.02f)+l.radius,drop=std::clamp(p.z-under,0.f,segment),flat=std::sqrt(std::max(segment*segment-drop*drop,0.f));p.z-=drop;
+   if(flat>1e-4f)for(const Vec2 way:{run,Vec2{-run.y,run.x},Vec2{run.y,-run.x},run*-1.f})if(const Point3 q{p.x+way.x*flat,p.y+way.y*flat,p.z};open(q)){p=q;run=way;break;}
+   r.points[size_t(k)]=p;}
+ }
+ // Never laid through the bench or cabinet under its sag: a point the shape puts inside one
+ // starts on its top (the steps keep a cable out of solids only as it moves into them).
+ {const float high=std::max(a.z,b.z)+.02f;for(size_t k=size_t(first)+1;k+1<r.points.size();++k){auto&p=r.points[k];
+  if(!fits(p.x,p.y,p.z-l.radius,l.radius*2,false,true))p.z=std::max(p.z,supportBelow(p.x,p.y,high)+l.radius);}}
+ r.previous=r.points;r.rest=0;
+ // Limp, it is only laid: left awake, stepping lets it fall and settle with its own damping
+ // (heavy damping here would hold an overhang out in the air, and asleep it would stay there).
+ if(!end){r.sleeping=false;return;}
+ // Heavy damping takes out what is left of the shape's error, so a map opens on still cables.
+ for(int k=0;k<90;++k)stepLeadRope(*this,l,r,LeadStep,end,body,30.f);
+ // A sag laid through the prop it ends on comes out over the prop's top as a hump: let it fall
+ // (lightly damped, at most three seconds) until no free point stands 2 cm above both its ends.
+ auto crest=[&]{float top=-1e9f;for(size_t k=size_t(first)+1;k+2<r.points.size();++k)top=std::max(top,r.points[k].z);return top;};
+ const float rim=std::max(r.points[size_t(first)].z,r.points[r.points.size()-2].z)+.02f;
+ for(int k=0;k<360&&crest()>rim;++k)stepLeadRope(*this,l,r,LeadStep,end,body,4.f);
+ r.previous=r.points;r.sleeping=true;
+}
+float World::leadUnrest(int i,float seconds,const Point3* end,const LeadBody* body)const{
+ const auto&l=leads().at(size_t(i));LeadRope r=m_leadRopes.at(size_t(i));if(r.points.size()<2)return 0;const auto start=r.points;r.previous=r.points;float moved=0;
+ for(int k=0;k<int(seconds/LeadStep+.5f);++k){stepLeadRope(*this,l,r,LeadStep,end,body,LeadDamping);for(size_t j=0;j<start.size();++j)moved=std::max(moved,leadSpan(r.points[j],start[j]));}
+ return moved;}
+LeadPlug leadPlug(const Lead& l,const LeadRope& r,float support){
+ const size_t n=r.points.size();if(n<2)return {};auto unit=[](Point3 v){const float s=std::sqrt(leadDot(v,v));return s>1e-6f?v*(1/s):Point3{};};
+ auto crossed=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+ const Point3 end=r.points[n-1];
+ if(!r.torn&&(r.plugUp.x!=0||r.plugUp.y!=0||r.plugUp.z!=0)){const auto up=unit(r.plugUp);return {end,up,unit(r.points[n-2]-(end+up*Lead::PlugHead))};}
+ // Torn: hanging, the body stands out square to the cable, its pin down (gravity less its pull
+ // along the cable); lying, it is on its side, square to the cable and level. It turns from one
+ // to the other over the last 4 cm the end comes down to what it rests on.
+ const auto side=unit(r.points[n-2]-end);auto down=Point3{0,0,-1}+side*side.z;if(leadDot(down,down)<1e-4f)down=crossed(side,{1,0,0});
+ auto lie=crossed(side,{0,0,1});if(leadDot(lie,lie)<1e-4f)lie=crossed(side,{1,0,0});
+ const float hang=std::clamp((end.z-support-l.radius)/.04f,0.f,1.f);const auto up=unit(unit(lie)*(1-hang)+unit(down)*-hang);
+ LeadPlug p{end-up*Lead::PlugHead,up,side};
+ // Lifted clear of what is under it: it lies on its body, not sunk to the cable's centre.
+ if(const float low=leadPlugLowest(p,l.radius);low<support)p.tip.z+=support-low;
+ return p;}
+float leadPlugLowest(const LeadPlug& p,float radius){
+ // As Scene3D draws it: the pin 13 mm out of the tip, the body to 31 mm up the axis (its widest
+ // ring 1.56 radii), the boot from the head (PlugHead up) 42 mm toward the cable.
+ auto low=[](Point3 a,Point3 b,float r){const auto d=b-a;const float s=std::sqrt(leadDot(d,d)),z=s>1e-6f?d.z/s:1.f;return std::min(a.z,b.z)-r*std::sqrt(std::max(0.f,1-z*z));};
+ const Point3 head=p.tip+p.up*Lead::PlugHead;
+ return std::min({low(p.tip-p.up*.013f,p.tip,.0026f),low(p.tip,p.tip+p.up*.031f,radius*1.56f),low(head+p.side*.004f,head+p.side*.042f,radius*1.32f)});}
+void World::stepLead(int i,float dt,const Point3* end,const LeadBody* body){
+ const auto&l=leads().at(size_t(i));auto&r=m_leadRopes.at(size_t(i));
+ if(r.points.size()<2||r.previous.size()!=r.points.size()){hangLead(i,end,body);return;}
+ if(dt<=0)return;
+ const int steps=std::clamp(int(std::ceil(dt/LeadStep-.001f)),1,8);const float h=dt/float(steps);float fastest=0;
+ for(int s=0;s<steps;++s){stepLeadRope(*this,l,r,h,end,body,LeadDamping);for(size_t k=1;k<r.points.size();++k)fastest=std::max(fastest,leadSpan(r.points[k],r.previous[k])/h);}
+ for(const auto&p:r.points)if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)){hangLead(i,end,body);return;}
+ // Still for half a second (nothing faster than 5 cm/s): asleep until its prop moves.
+ r.rest=fastest<.05f?r.rest+dt:0.f;if(r.rest>.5f){r.sleeping=true;r.previous=r.points;}
 }
 }

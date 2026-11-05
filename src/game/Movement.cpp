@@ -14,6 +14,9 @@ Sound Game::stepSoundAt(const World& world,Vec2 position){
   default:return world.metalFloor(int(position.x),int(position.y))?Sound::Metal1:Sound::Concrete1;
  }
 }
+float Game::stepNoise(Sound step){return step==Sound::Metal1?1.6f:step==Sound::StepGravel1?1.35f:step==Sound::StepDirt1?.85f:step==Sound::StepGrass1?.7f:1.f;}
+float Game::stepHeard(Sound step,bool crouched,bool sprint){return crouched?std::min(1.1f,.95f*stepNoise(step)):(sprint?7.5f:3.12f)*stepNoise(step);}
+float Game::playerNoise()const{return m_stepNoiseAge<.7f?m_stepNoise/12.f:m_stepNoiseAge<1.f?m_stepNoise/12.f*(1.f-(m_stepNoiseAge-.7f)/.3f):0.f;}
 float Game::groundHeight(Vec2 p)const{
  return groundHeight(p,m_player.z+(m_player.grounded?.215f:0.f));
 }
@@ -163,8 +166,10 @@ void Game::updateMovement(const InputState& input,float dt){
     m_stepDistance=0;unsigned variation=(m_stepVariant++*3)%4;auto base=stepSoundAt(m_world,m_player.pos);
     // A deliberate crouched step is audible only inside roughly one metre;
     // the former two-metre cue turned an investigating guard before a rear
-    // melee approach could enter its 1.25 m physical reach.
+    // melee approach could enter its 1.25 m physical reach. How far the AI
+    // hears it (stepHeard) goes with the floor and the gait.
     sound(Sound(int(base)+variation),m_player.crouched?.045f:input.sprint?.65f:.48f,.95f+variation*.035f);
+    m_sounds.back().aiRadius=m_stepNoise=stepHeard(base,m_player.crouched,input.sprint);m_stepNoiseAge=0;
    }
   }
  }

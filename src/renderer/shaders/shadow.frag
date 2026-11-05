@@ -1,7 +1,8 @@
 #version 450
 // Shadow stage: screen-space lamp shadows from the scene's planar depth
-// (alpha). Output: r = lamp visibility (1 lit, lower shadowed). Jittered on
-// the 4x4 Bayer grid; the compose stage's matching 4x4 filter denoises it.
+// (alpha). Output: r = lamp visibility (1 lit, lower shadowed), gba = the
+// coloured lamp and torch shafts. Jittered on the 4x4 Bayer grid; the compose
+// stage's matching 4x4 filter denoises it.
 layout(set=0,binding=0) uniform sampler2D sceneImage;
 layout(push_constant) uniform PostParams {
  vec4 camera;   // x AO strength (negative: debug view), y aspect, z focal, w radius (m)
@@ -13,7 +14,8 @@ layout(push_constant) uniform PostParams {
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 outColor;
 // Per-pixel lamp grid and cube shadow maps (see scene.frag), for shafts.
-layout(std430,set=0,binding=1) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[2];vec4 lamps[512];uint cells[];} lampGrid;
+// scatter.rgb is the torch's tone while it is on.
+layout(std430,set=0,binding=1) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 lamps[512];uint cells[];} lampGrid;
 layout(set=0,binding=2) uniform sampler2DArrayShadow lampShadows;
 const vec3 ShadowFace[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
 const vec3 ShadowUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,1,0),vec3(0,1,0));
@@ -85,17 +87,34 @@ float shadowTap(int slot,vec3 d,float range){
  vec2 st=vec2(dot(d,cross(forward,up)),dot(d,up))/dot(d,forward)*0.5+0.5;
  return texture(lampShadows,vec4(st,float(slot*6+face),length(d)/range-0.004));
 }
-// Shadow-mapped single scattering: light pours through gaps and stops at walls.
-// Jittered on the Bayer grid; compose denoises it with the lamp shadows.
-float lampShafts(float depth,float jitter){
- if(lampGrid.flags.x==0||lampGrid.size.w==0)return 0.0;
+// A lamp record's final tone (blackbody x tint x gel), packed as half floats.
+vec3 lampTone(vec4 params){vec2 rg=unpackHalf2x16(floatBitsToUint(params.z)),b=unpackHalf2x16(floatBitsToUint(params.w));return vec3(rg,b.x);}
+// Shadow-mapped single scattering in each lamp's own colour: light pours
+// through gaps and stops at walls. The torch scatters too, in the same march:
+// its cone from the eye, unshadowed, but the march ends at the visible surface
+// so anything stepping into the beam cuts it. Jittered on the Bayer grid;
+// compose denoises it with the lamp shadows.
+vec3 lampShafts(float depth,float jitter){
+ if(lampGrid.flags.x==0)return vec3(0.0);
  float far=min(depth<0.0?-depth:depth>0.02&&depth<p.grade.w?depth:30.0,24.0);
  vec3 ray=viewPosition(uv,1.0);
- vec3 eye=lampGrid.eye.xyz,direction=normalize(worldFromView(ray)-eye);
- const int Steps=16;float sum=0.0;
+ vec3 eye=lampGrid.eye.xyz,direction=normalize(worldFromView(ray)-eye),forward=normalize(worldFromView(vec3(0.0,0.0,1.0))-eye);
+ bool torch=dot(lampGrid.scatter.rgb,vec3(1.0))>0.0;
+ const int Steps=16;vec3 sum=vec3(0.0);
  for(int s=0;s<Steps;++s){
   float t=far*(float(s)+jitter)/float(Steps);
   vec3 world=worldFromView(ray*t);
+  if(torch){
+   // scene.frag's torch cone and falloff, scattered back toward the eye. The
+   // first half metre is skipped so thick haze never veils the whole lens.
+   vec3 toPoint=world-eye;float d2=dot(toPoint,toPoint),d=sqrt(max(d2,1e-6)),along=dot(toPoint,forward)/d;
+   if(along>0.80&&d2<196.0){
+    float cone=clamp((along-0.80)/0.16,0.0,1.0);cone=cone*cone*(3.0-2.0*cone);
+    float c=dot(direction,-toPoint/d),phase=0.75/pow(1.09-0.6*c,1.5);
+    sum+=lampGrid.scatter.rgb*(cone*1.9/(1.0+d2*0.020)*phase*0.12*smoothstep(0.5,1.5,d));
+   }
+  }
+  if(lampGrid.size.w==0)continue;
   ivec3 cell=ivec3(floor((world-lampGrid.origin.xyz)/lampGrid.origin.w));
   if(any(lessThan(cell,ivec3(0)))||any(greaterThanEqual(cell,lampGrid.size.xyz)))continue;
   int base=((cell.z*lampGrid.size.y+cell.y)*lampGrid.size.x+cell.x)*16;
@@ -107,7 +126,7 @@ float lampShafts(float depth,float jitter){
    float visible=params.y>=0.0?shadowTap(int(params.y),-toLamp,lamp.w):1.0;
    // Mild forward scattering (Henyey-Greenstein, g=0.3) toward the viewer.
    float c=dot(direction,toLamp*inversesqrt(max(d2,1e-4)));float phase=0.75/pow(1.09-0.6*c,1.5);
-   sum+=falloff*visible*phase;
+   sum+=lampTone(params)*(falloff*visible*phase);
   }
  }
  return sum*far/float(Steps)*length(ray);
@@ -115,9 +134,9 @@ float lampShafts(float depth,float jitter){
 
 void main(){
  float depth=depthAt(uv);float jitter=bayer4(gl_FragCoord.xy);
- // g: shadowed shafts, b: 1 when they replace the compose stage's analytic glow.
- float shafts=lampShafts(depth,jitter),shaftFlag=lampGrid.flags.x!=0?1.0:0.0;
- if(depth<0.02||depth>=min(p.grade.w,60.0)){outColor=vec4(1.0,shafts,shaftFlag,1.0);return;} // negative: viewmodel
+ // gba: the coloured shadowed shafts (compose adds them when lampGrid.flags.x is set).
+ vec3 shafts=lampShafts(depth,jitter);
+ if(depth<0.02||depth>=min(p.grade.w,60.0)){outColor=vec4(1.0,shafts);return;} // negative: viewmodel
  vec3 center=viewPosition(uv,depth);
- outColor=vec4(lampVisibility(center,viewNormal(uv,center),jitter),shafts,shaftFlag,1.0);
+ outColor=vec4(lampVisibility(center,viewNormal(uv,center),jitter),shafts);
 }

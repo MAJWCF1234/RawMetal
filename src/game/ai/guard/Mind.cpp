@@ -192,15 +192,11 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   // How fast he makes the player out. Within 5 m nothing saves them; beyond
   // it distance, a crouch, keeping still, the edge of his vision and shadow
   // all buy time (at the end of his sight, three times as long before the rest).
+  // The creatures make the player out by the same formula (Perception.h).
   float rate=1.f;
   if(target.kind==ShotKind::Player&&!confirmed&&!casualty){
    auto toward=target.position-pose.position;float dz=target.feet+target.eye-eye,distance=std::sqrt(lengthSq(toward)+dz*dz);
-   if(distance>5.f){rate=1.f-.7f*std::clamp((distance-5.f)/std::max(1.f,config.sightRange-5.f),0.f,1.f);
-    if(m_player.crouched)rate*=.6f;
-    float speed=length(m_velocity);if(speed<.3f)rate*=.7f;else if(speed>4.2f)rate*=1.4f;
-    if(dot(normalized(toward),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)})<(config.sightDot+1.f)*.5f)rate*=.5f;
-    rate*=.35f+.65f*std::min(1.f,m_playerExposure*1.6f);
-   }
+   rate=aiRecognitionRate(distance,config.sightRange,dot(normalized(toward),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)}),config.sightDot,m_player.crouched,length(m_velocity),m_playerExposure);
    // A squad on Caution knows someone is about: near or far, it makes them out sooner.
    if(guardCaution(actor))rate*=1.6f;
   }

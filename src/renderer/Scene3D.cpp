@@ -8,6 +8,7 @@
 #include "../core/FrameProfile.h"
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
+#include "ElectricFx.h"
 #include "../vr/VrRuntime.h"
 #include <algorithm>
 #include <bit>
@@ -376,7 +377,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  hashLightSource(w.lights().size());
  for(const auto&light:w.lights())if(!light.cargoLift&&!(w.hasLift()&&&light==&w.lights().back())){
   hashLightSource(static_cast<std::uint64_t>(light.mount));
-  for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range,light.kelvin,light.tint})hashLightSource(std::bit_cast<std::uint32_t>(value));
+  for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range,light.kelvin,light.tint,light.gel.x,light.gel.y,light.gel.z})hashLightSource(std::bit_cast<std::uint32_t>(value));
  }
  if(m_chunkLightSourceKeys[w.level()]!=fixedLightSourceKey){
   m_chunkLightSourceKeys[w.level()]=fixedLightSourceKey;m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_chunkLightCells[w.level()].clear();m_chunkLightCounts[w.level()]=0;
@@ -475,7 +476,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
  const float muzzleFlash=game.muzzleFlash(),muzzleFalloff=.045f-.033f*darkness;
  Point3 muzzlePoint{eye.x+flashForward.x*.42f,eye.y+flashForward.y*.42f,eye.z+flashForward.z*.42f-.10f};
- // NPC gun flashes light the room in darkness too (world space to this chunk).
+ // NPC gun flashes in darkness, sparks and arcs light the room too (world space to this chunk).
  const auto weaponFlashes=game.weaponFlashes();const auto chunkOrigin=game.chunkOffset(level);
  auto flashlightContribution=[&](Point3 point,Point3 normal){
   if(!flashlightEnabled)return 0.f;Point3 delta=point-eye;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2<.04f||d2>196.f)return 0.f;
@@ -492,15 +493,20 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   return cone*facing*1.9f/(1.f+d2*.020f);
  };
+ // Sparks and arcs: a small source near the wall, so a steeper falloff and a gentler gain than a gun's,
+ // all of them summed under a soft shoulder -- this rasteriser has no tone curve, and several strikes at
+ // once must lift a wall, not burn it white (the Vulkan path holds them in its display curve).
+ const float electricFalloff=.55f-.4f*darkness;constexpr float ElectricShoulder=.75f;
  auto muzzleContribution=[&](Point3 point,Point3 normal){
-  float total=0.f;
-  for(int flash=0;flash<3;++flash){float strength=flash==0?muzzleFlash:weaponFlashes[size_t(flash-1)][3];if(strength<=0.f)continue;
-   const auto&f=weaponFlashes[size_t(std::max(flash-1,0))];auto delta=point-(flash==0?muzzlePoint:Point3{f[0]-chunkOrigin.x,f[1]-chunkOrigin.y,f[2]});
-   float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>=144.f)continue;
+  float total=0.f,electric=0.f;
+  for(int flash=0;flash<=int(weaponFlashes.size());++flash){float strength=flash==0?muzzleFlash:weaponFlashes[size_t(flash-1)].strength;if(strength<=0.f)continue;
+   const auto&f=weaponFlashes[size_t(std::max(flash-1,0))];auto delta=point-(flash==0?muzzlePoint:Point3{f.at.x-chunkOrigin.x,f.at.y-chunkOrigin.y,f.at.z});
+   const float reach2=flash==0?144.f:f.reach*f.reach;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>=reach2)continue;
    float distance=std::sqrt(std::max(.001f,d2));float facing=.35f+.65f*std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
-   float edge=1.f-d2/144.f;total+=strength*1.4f*edge*edge*facing/(1.f+d2*muzzleFalloff);
+   float edge=1.f-d2/reach2;
+   if(flash==0||f.muzzle)total+=strength*1.4f*edge*edge*facing/(1.f+d2*muzzleFalloff);else electric+=strength*.7f*edge*edge*facing/(1.f+d2*electricFalloff);
   }
-  return total;
+  return electric>0?total+ElectricShoulder*(1.f-std::exp(-electric/ElectricShoulder)):total;
  };
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
@@ -690,6 +696,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  };
  Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};
  const Texture& iron=m_ironTexture;Texture red{1,1,{0xffb84728u}};
+ // Swinging service doors are enamelled steel: a pigment over the fine grain of
+ // the clinic paint finish (the pack surface above finish 36's band), its luma
+ // taken relative to its mean so each plate reads at its pigment's brightness.
+ // A grey-green leaf in a darker grey frame; the rusted bulkhead iron and the
+ // near-black panel metal they had read as one dark slab under any lamp.
+ auto enamel=[&](std::uint32_t pigment,float gloss){Texture t=*finishMaterial(36)->above;double sum=0;for(auto p:t.pixels)sum+=((p>>16)&255)*.2126+((p>>8)&255)*.7152+(p&255)*.0722;const float mean=float(std::max(1.,sum/double(std::max<size_t>(1,t.pixels.size()))));
+  auto paint=[&](std::uint32_t&p){const float grain=std::clamp((((p>>16)&255)*.2126f+((p>>8)&255)*.7152f+(p&255)*.0722f)/mean,.7f,1.25f);std::uint32_t out=p&0xff000000u;for(int c=0;c<3;++c)out|=std::uint32_t(std::clamp(float((pigment>>(c*8))&255)*grain,0.f,255.f))<<(c*8);p=out;};
+  for(auto&p:t.pixels)paint(p);for(auto&mip:t.mips)for(auto&p:mip)paint(p);t.emission.clear();t.glossStrength=gloss;return t;};
+ static const Texture doorLeaf=enamel(0xff7d8a83u,.3f),doorFrame=enamel(0xff585f5cu,.22f);
  Texture cabWindow{1,1,{0xff30464bu}};cabWindow.glossStrength=.46f;
  auto boxFaces=[&](Point3 a,Point3 b,const Texture&texture,float light){
   if(hidden(a,b))return;
@@ -1158,6 +1173,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(m_gpu)m_gpu->setLodTag(nullptr);
  }
  if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
+ // A swinging door's posts and head never move, so they bake with the wall they
+ // stand in (per-pixel lamps on Vulkan): lit like that wall from the first frame,
+ // not left at ambient while a per-frame shadow budget catches up.
+ if(buildStaticGeometry)for(const auto&door:w.doors())if(door.swinging){const float base=w.floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+  box({door.left-.09f,door.y-.17f,base},{door.left+.09f,door.y+.17f,base+2.48f},doorFrame,1.f);
+  box({door.right-.08f,door.y-.17f,base},{door.right+.08f,door.y+.17f,base+2.48f},doorFrame,1.f);
+  box({door.left,door.y-.17f,base+2.35f},{door.right,door.y+.17f,base+2.55f},doorFrame,1.f);}
  if(buildStaticGeometry)for(const auto& sign:w.signs()){
   std::string key=sign.title+'\n'+sign.subtitle+'\n'+std::to_string(sign.accent);
   auto found=m_authoredSigns.find(key);
@@ -1257,19 +1279,50 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   float x=(door.left+door.right)*.5f,y=door.y-.5f,half=(door.right-door.left)*.5f;
   float base=w.floorHeight(x,door.y)+door.z;
   if(door.swinging){
+   // The frame is static (above). The leaf moves, so it is lit as moving
+   // geometry every frame, as locker leaves are: a cached receiver drawn after
+   // the frame's shadow budget ran out took ambient alone and went black. Each
+   // face is wound outward, so it takes the light on its own side of the wall.
    float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;
    Vec2 axis{std::cos(angle),std::sin(angle)},normal{-axis.y,axis.x};
    Vec2 hinge{door.left,door.y},edge=hinge+axis*width;
    auto point=[&](Vec2 p,float side,float z){return Point3{p.x+normal.x*side,p.y+normal.y*side,base+z};};
-   box({door.left-.09f,door.y-.17f,base},{door.left+.09f,door.y+.17f,base+2.48f},m_panelMetal,.85f);
-   box({door.right-.08f,door.y-.17f,base},{door.right+.08f,door.y+.17f,base+2.48f},m_panelMetal,.85f);
-   box({door.left,door.y-.17f,base+2.35f},{door.right,door.y+.17f,base+2.55f},m_panelMetal,.85f);
-   quad(point(edge,-.045f,0),point(hinge,-.045f,0),point(hinge,-.045f,2.35f),point(edge,-.045f,2.35f),m_bulkhead,1.f);
-   quad(point(hinge,.045f,0),point(edge,.045f,0),point(edge,.045f,2.35f),point(hinge,.045f,2.35f),m_bulkhead,1.f);
-   quad(point(edge,.045f,0),point(edge,-.045f,0),point(edge,-.045f,2.35f),point(edge,.045f,2.35f),m_panelMetal,.9f);
+   movingGeometry=true;
+   // A shut leaf's jambs sit on the wall's end faces and its faces inside the wall's
+   // thickness, so a ray from a corner toward a lamp beyond that jamb started in the
+   // wall, and those corners shaded the whole leaf. Light is taken instead at points
+   // set .15 in from the jambs, sill and head and .12 out from the leaf's middle (past
+   // a 20 cm wall's face), a column every 30 cm, and blended across the face. The leaf
+   // is opaque, so only the face on the eye's side is lit and drawn.
+   const Point3 lo{std::min(hinge.x,edge.x)-.05f,std::min(hinge.y,edge.y)-.05f,base},hi{std::max(hinge.x,edge.x)+.05f,std::max(hinge.y,edge.y)+.05f,base+2.35f};
+   static const bool jambLegacy=std::getenv("RM_DOOR_JAMB")!=nullptr;// TEMPORARY A/B switch, removed before the final build
+   if(jambLegacy){quad(point(hinge,-.045f,0),point(edge,-.045f,0),point(edge,-.045f,2.35f),point(hinge,-.045f,2.35f),doorLeaf,1.f,{width*.5f,1.175f});
+    quad(point(edge,.045f,0),point(hinge,.045f,0),point(hinge,.045f,2.35f),point(edge,.045f,2.35f),doorLeaf,1.f,{width*.5f,1.175f});
+    quad(point(edge,-.045f,0),point(edge,.045f,0),point(edge,.045f,2.35f),point(edge,-.045f,2.35f),doorLeaf,.9f,{.045f,1.175f});}
+   else if(sphereVisible((lo+hi)*.5f,width*.5f+1.2f)&&!hidden(lo,hi)){
+    const float eyeSide=(eye.x-hinge.x)*normal.x+(eye.y-hinge.y)*normal.y;const int columns=std::clamp(int(std::ceil(width/.3f)),3,6);constexpr int rows=2;
+    objectLighting=true;objectLight=1;
+    for(float side:{-1.f,1.f}){if(eyeSide*side<-.12f)continue;
+     const Point3 out{normal.x*side,normal.y*side,0};std::array<MeshVertex,7*(rows+1)> grid;
+     // Wound outward: the - face runs hinge to edge, the + face edge to hinge.
+     auto along=[&](float x){return (side<0?x/columns:1-x/columns)*width;};
+     auto sample=[&](float at,float z){return point(hinge+axis*std::clamp(at,.15f,width-.15f),side*.12f,std::clamp(z,.15f,2.2f));};
+     for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){const float z=2.35f*y/rows;
+      grid[size_t(y*(columns+1)+x)]={point(hinge+axis*along(float(x)),side*.045f,z),float(x)/columns*width*.5f,(1-float(y)/rows)*1.175f,illumination(sample(along(float(x)),z),out)};}
+     for(int x=0;x<columns;++x){const auto centre=sample(along(x+.5f),1.175f);NormalLighting lights=normalLightingAt(centre);lights.surfaceNormal=cameraPoint(centre+out,game)-cameraPoint(centre,game);objectNormalLighting=&lights;
+      for(int y=0;y<rows;++y){const size_t i=size_t(y*(columns+1)+x);tri(grid[i],grid[i+1],grid[i+columns+2],doorLeaf,1.f);tri(grid[i],grid[i+columns+2],grid[i+columns+1],doorLeaf,1.f);}}
+     objectNormalLighting=nullptr;
+    }
+    // The free edge, by the light at the leaf's last column on each side.
+    if((eye.x-edge.x)*axis.x+(eye.y-edge.y)*axis.y>0){float lit[2];for(int s=0;s<2;++s)lit[s]=illumination(point(hinge+axis*(width-.15f),s?.12f:-.12f,1.175f),{axis.x,axis.y,0})*.9f;
+     const MeshVertex a{point(edge,-.045f,0),0,1.175f,lit[0]},b{point(edge,.045f,0),.045f,1.175f,lit[1]},c{point(edge,.045f,2.35f),.045f,0,lit[1]},d{point(edge,-.045f,2.35f),0,0,lit[0]};
+     tri(a,b,c,doorLeaf,1.f);tri(a,c,d,doorLeaf,1.f);}
+    objectLighting=false;
+   }
+   // The latch block stands proud of both faces.
    Vec2 latch=hinge+axis*(width-.18f);
-   box({latch.x-.045f,latch.y-.045f,base+1.02f},{latch.x+.045f,latch.y+.045f,base+1.13f},iron,1.1f);
-   continue;
+   box({latch.x-.065f,latch.y-.065f,base+1.02f},{latch.x+.065f,latch.y+.065f,base+1.13f},iron,1.1f);
+   movingGeometry=false;continue;
   }
   float headerTop=std::min(base+3.f,w.ceilingHeight(x,door.y)),headerBottom=std::min(base+2.5f,headerTop-.44f);
   box({x-half,y-.12f,headerBottom},{x+half,y+1.12f,headerTop},m_metal,.8f);
@@ -1424,6 +1477,88 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));}
   if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){++m_propGeometryBuilds;m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
  }
+ // Electrical leads: a thin tube through each cable's points every frame, lit
+ // per point like a moving prop and shaded round its girth, in its pipe finish;
+ // its plugs (a test lead's) or a post where it plugs in and the clip on its
+ // prop. A torn live end's sparks and arcs, in time with its lead_arc clip, are
+ // drawn with all the electricity (ElectricFx, below the hazards).
+ for(size_t index=0;index<w.leadRopes().size()&&index<w.leads().size();++index){const auto&lead=w.leads()[index];const auto&rope=w.leadRopes()[index];const size_t n=std::min<size_t>(rope.points.size(),24);if(n<2)continue;
+  Point3 lo=rope.points[0],hi=lo;for(size_t k=0;k<n;++k){const auto&p=rope.points[k];lo={std::min(lo.x,p.x),std::min(lo.y,p.y),std::min(lo.z,p.z)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y),std::max(hi.z,p.z)};}
+  const float age=game.elapsed()-rope.tornAt;float sinceBurst=0;const float arc=lead.live&&rope.torn?leadArc(age,&sinceBurst):0.f;
+  const auto span=hi-lo;if(!sphereVisible((lo+hi)*.5f,std::sqrt(span.x*span.x+span.y*span.y+span.z*span.z)*.5f+(arc>0?.6f:.05f))||(arc<=0&&hidden(lo-Point3{.05f,.05f,.05f},hi+Point3{.05f,.05f,.05f})))continue;
+  static const Texture insulation[2]={Texture{1,1,{0xff202124u}},Texture{1,1,{0xffa1221au}}};
+  const Texture&finish=lead.material>=7?insulation[lead.material-7]:lead.material==6?iron:lead.material==5?m_paleSteel:lead.material==4?m_redSteel:lead.material==3?m_yellowSteel:lead.material==2?m_panelSteel:lead.material==1?m_metal:m_pipeTexture;
+  movingGeometry=true;objectLighting=true;objectLight=1;objectNormalLighting=nullptr;
+  // The tube follows the cable's curve through its points (leadCurve), three pieces a segment,
+  // so a bend (out of a clip's boot, over a prop's edge, in a sag) is round rather than a
+  // corner; the curve bows to the outside of a bend, away from what the cable is bent over.
+  // Light is taken at the points and blended along. The segment a plug or a socket's boot
+  // holds is drawn straight, so the curve never bows out through the plug's side.
+  constexpr size_t pieces=3;const size_t m=(n-1)*pieces+1;
+  std::array<float,24> pointLit{};std::array<float,24*pieces> lit{};std::array<Point3,24*pieces> curve{},across{},up{};
+  for(size_t k=0;k<n;++k)pointLit[k]=illumination(rope.points[k],{0,0,1});
+  // A seated plug's cable ends in its head, PlugHead up its post; a torn one's at the cable's end.
+  const bool seated=lead.plugged()&&!rope.torn&&(rope.plugUp.x!=0||rope.plugUp.y!=0||rope.plugUp.z!=0);const Point3 tail=seated?rope.points[n-1]+rope.plugUp*Lead::PlugHead:rope.points[n-1];
+  for(size_t k=0;k+1<n;++k)for(size_t s=0;s<pieces;++s){const float t=float(s)/float(pieces);curve[k*pieces+s]=k==0&&lead.socketed()?rope.points[0]+(rope.points[1]-rope.points[0])*t:k+2==n&&lead.plugged()?rope.points[k]+(tail-rope.points[k])*t:leadCurve(rope.points,k,t);lit[k*pieces+s]=pointLit[k]+(pointLit[k+1]-pointLit[k])*t;}
+  curve[m-1]=tail;lit[m-1]=pointLit[n-1];
+  auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
+  auto crossed=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+  for(size_t k=0;k<m;++k){
+   // Each ring is carried from the last along the cable, so the tube never twists.
+   const auto t=unit(curve[std::min(k+1,m-1)]-curve[k>0?k-1:0]);auto u=k?across[k-1]-t*(across[k-1].x*t.x+across[k-1].y*t.y+across[k-1].z*t.z):crossed(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
+   u=unit(u);if(u.x==0&&u.y==0&&u.z==0)u=unit(crossed(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1}));across[k]=u;up[k]=crossed(t,u);}
+  constexpr int sides=6;
+  auto ring=[&](size_t k,int side){const float a=float(side%sides)*kTwoPi/sides;const auto o=across[k]*std::cos(a)+up[k]*std::sin(a);return MeshVertex{curve[k]+o*lead.radius,float(side)/sides*.05f,float(k)*(.06f/float(pieces)),lit[k]*(.68f+.32f*(.5f+.5f*o.z))};};
+  for(size_t k=0;k+1<m;++k)for(int side=0;side<sides;++side){auto a=ring(k,side),b=ring(k,side+1),c=ring(k+1,side+1),d=ring(k+1,side);tri(a,b,c,finish,1.f);tri(a,c,d,finish,1.f);}
+  objectLighting=false;
+  auto cube=[&](Point3 c,float half,const Texture&t,float light){box(c-Point3{half,half,half},c+Point3{half,half,half},t,light);};
+  // A test lead's plugs, in the tube's own lighting: from its tip a pin (hidden in the socket or
+  // the post it is seated in, bare once torn), a steel ferrule, the moulded body in the lead's
+  // colour and a tapering boot the cable leaves in line with (the rope holds the point beyond
+  // it). In the panel's socket the plug is straight, with a ribbed grip, inside the socket's
+  // collar (+ red, - black); on a post it is a right-angle plug, its body standing on the post
+  // and its boot leaving level from the head toward the cable. Torn, the plug hangs pin down
+  // off the cable's end, and lies on its side on what the end comes to rest on (leadPlug).
+  static const Texture moulding[2]={Texture{1,1,{0xff1b1c1fu}},Texture{1,1,{0xffb1281du}}},collar[2]={Texture{1,1,{0xff121315u}},Texture{1,1,{0xffc8301fu}}};
+  auto sleeve=[&](Point3 a,Point3 b,float ra,float rb,const Texture&t,float light,bool capA,bool capB){
+   const auto axis=unit(b-a);const auto u=unit(crossed(axis,std::fabs(axis.z)>.9f?Point3{1,0,0}:Point3{0,0,1})),v=crossed(axis,u);constexpr int sides=8;
+   auto at=[&](Point3 c,float r,int side){const float q=float(side%sides)*kTwoPi/sides;const auto o=u*std::cos(q)+v*std::sin(q);return MeshVertex{c+o*r,float(side)/sides,0,light*(.66f+.34f*(.5f+.5f*o.z))};};
+   for(int side=0;side<sides;++side){tri(at(a,ra,side),at(a,ra,side+1),at(b,rb,side+1),t,1.f);tri(at(a,ra,side),at(b,rb,side+1),at(b,rb,side),t,1.f);
+    if(capA)tri(MeshVertex{a,.5f,.5f,light*.62f},at(a,ra,side+1),at(a,ra,side),t,1.f);if(capB)tri(MeshVertex{b,.5f,.5f,light},at(b,rb,side),at(b,rb,side+1),t,1.f);}};
+  const float r=lead.radius;const auto&body=moulding[lead.material==8?1:0];
+  auto pin=[&](Point3 tip,Point3 out,float light){sleeve(tip-out*.013f,tip-out*.004f,.0019f,.0026f,m_paleSteel,light*1.2f,true,false);sleeve(tip-out*.004f,tip,.0026f,.0021f,m_paleSteel,light*1.2f,false,false);
+   sleeve(tip,tip+out*.004f,r*.98f,r*.98f,m_paleSteel,light*1.1f,true,false);};
+  auto straight=[&](Point3 tip,Point3 out){const float light=illumination(tip+out*.03f,{0,0,1});pin(tip,out,light);
+   sleeve(tip+out*.004f,tip+out*.03f,r*1.38f,r*1.3f,body,light,true,true);for(float g:{.012f,.02f})sleeve(tip+out*g,tip+out*(g+.003f),r*1.48f,r*1.48f,body,light*.85f,true,true);
+   sleeve(tip+out*.03f,tip+out*.058f,r*1.3f,r*1.05f,body,light,false,true);};
+  auto angled=[&](Point3 tip,Point3 up,Point3 side){const Point3 head=tip+up*Lead::PlugHead;const float light=illumination(head,{0,0,1});pin(tip,up,light);
+   sleeve(tip+up*.004f,tip+up*.031f,r*1.48f,r*1.38f,body,light,true,true);sleeve(tip+up*.009f,tip+up*.012f,r*1.56f,r*1.56f,body,light*.85f,true,true);
+   sleeve(head+side*.004f,head+side*.042f,r*1.32f,r*1.05f,body,light,true,true);};
+  objectLighting=true;objectLight=1;
+  if(lead.socketed()){const auto out=unit(lead.socket);const bool positive=lead.socketPort>=0?leadPorts()[size_t(lead.socketPort)].name=="+":lead.material==8;
+   const float shade=illumination(lead.anchor+out*.01f,{0,0,1});sleeve(lead.anchor-out*.002f,lead.anchor+out*.006f,.0196f,.0186f,collar[positive?1:0],shade,false,true);
+   sleeve(lead.anchor+out*.006f,lead.anchor+out*.0075f,.0128f,.0122f,m_paleSteel,shade*1.15f,false,true);straight(lead.anchor+out*.0055f,out);}
+  if(lead.plugged()&&n>=3){const auto&e=rope.points[n-1];const auto plug=leadPlug(lead,rope,seated?e.z:w.supportBelow(e.x,e.y,e.z+.02f));angled(plug.tip,plug.up,plug.side);}
+  objectLighting=false;
+  if(!lead.socketed())cube(lead.anchor,lead.radius*2.2f,iron,.9f);
+  if(!lead.plugged()){if(!rope.torn&&lead.prop>=0)cube(rope.points[n-1],lead.radius*1.8f,iron,.9f);else cube(rope.points[n-1],lead.radius*1.15f,m_paleSteel,1.1f);}
+  movingGeometry=false;objectNormalLighting=nullptr;
+ }
+ // A test set's pilot: a jewel lens over the lamp its leads share, glowing with the lamp's power
+ // (lampPower: lit while the circuit holds, stuttering out with the arc).
+ for(size_t index=0;index<w.leads().size();++index){const int pilot=w.leads()[index].lamp;if(pilot<0||pilot>=int(w.lights().size()))continue;
+  bool first=true;for(size_t j=0;j<index;++j)first&=w.leads()[j].lamp!=pilot;const auto&light=w.lights()[size_t(pilot)];const auto&owner=w.leads()[index];
+  Point3 face=owner.socketed()?owner.socket:Point3{0,0,1};{const float f=std::sqrt(face.x*face.x+face.y*face.y+face.z*face.z);face=face*(1/f);}
+  const Point3 lens=Point3{light.position.x,light.position.y,light.z}-face*.008f;Point3 side{-face.y,face.x,0};if(side.x*side.x+side.y*side.y<1e-6f)side={1,0,0};{const float f=std::sqrt(side.x*side.x+side.y*side.y);side=side*(1/f);}
+  const Point3 rise{face.y*side.z-face.z*side.y,face.z*side.x-face.x*side.z,face.x*side.y-face.y*side.x};
+  if(!first||!sphereVisible(lens,.02f))continue;const float power=game.lampPower(light);static const Texture jewel{1,1,{0xffff7a3au}},dark{1,1,{0xff4a1a12u}};
+  movingGeometry=true;objectLighting=true;objectLight=1;constexpr int sides=10;const float r=.0066f,dome=.005f,bezel=illumination(lens,face);
+  for(int edge=0;edge<sides;++edge){const float a=float(edge)*kTwoPi/sides,b=float(edge+1)*kTwoPi/sides;auto rim=[&](float q,float scale,float z){return lens+side*(std::cos(q)*r*scale)+rise*(std::sin(q)*r*scale)+face*z;};
+   const auto&t=power>.05f?jewel:dark;const float glow=power>.05f?1.6f+1.6f*power:.85f;
+   tri({rim(a,1,0),0,0,1},{rim(b,1,0),1,0,1},{rim(b,.62f,dome*.7f),1,1,1},t,glow);tri({rim(a,1,0),0,0,1},{rim(b,.62f,dome*.7f),1,1,1},{rim(a,.62f,dome*.7f),0,1,1},t,glow);
+   tri({rim(a,.62f,dome*.7f),0,0,1},{rim(b,.62f,dome*.7f),1,0,1},{lens+face*dome,.5f,.5f,1},t,glow);
+   tri({rim(a,1.34f,.0012f),0,0,bezel},{rim(b,1.34f,.0012f),1,0,bezel},{rim(b,1,0),1,1,bezel},m_paleSteel,1.f);tri({rim(a,1.34f,.0012f),0,0,bezel},{rim(b,1,0),1,1,bezel},{rim(a,1,0),0,1,bezel},m_paleSteel,1.f);}
+  objectLighting=false;movingGeometry=false;}
 
  // Services belong to the map; custom worlds never inherit campaign pipework.
  // Pipes and their mounting brackets do not animate. Keep the complete
@@ -1479,41 +1614,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   quad({press.x1,press.y1-2,press.bed+.035f},{press.x2,press.y1-2,press.bed+.035f},{press.x2,press.y2,press.bed+.035f},{press.x1,press.y2,press.bed+.035f},m_floor,.8f,{2,4},{0,isolated?0.f:-game.elapsed()*.12f});
   quad({press.x1,press.y1-.06f,z},{press.x2,press.y1-.06f,z},{press.x2,press.y1-.06f,z+.25f},{press.x1,press.y1-.06f,z+.25f},m_hazard,.95f,{2,1});
  }
- for(const auto& hazard:w.hazards())if(hazard.kind==Hazard::Kind::Electricity&&game.hazardActive(hazard)){
-  // Cable Vault arcs skim the coolant; lifting them above the sump made them
-  // look like detached blue strips instead of live electrical discharge.
-  bool sumpArc=w.level()==6&&!w.authored()&&!w.waterVolumes().empty();
-  if(sumpArc){float z=w.waterVolumes().front().surface+.012f;
-   for(int i=0;i<5;++i){float x=hazard.x1+(hazard.x2-hazard.x1)*(i+.5f)/5.f;
-    quad({x-.025f,hazard.y1,z},{x+.025f,hazard.y1,z},{x+.10f,hazard.y1+.16f,z+.07f},{x+.06f,hazard.y1+.16f,z+.07f},blue,1.8f);}
-   continue;
-  }
-  // Elsewhere current crackles: forked sparks that jump to a new spot several
-  // times a second and are lit only part of the time, lying on the water or
-  // floor they run through. A steady hazard (live water) crackles sparsely, so
-  // a wide basin reads as water that bites, not a bed of blue spikes; a timed
-  // one (a floor that goes live in pulses) is busy while it is on.
-  const float area=(hazard.x2-hazard.x1)*(hazard.y2-hazard.y1);const bool pulsed=hazard.period>0;
-  const int sparks=pulsed?std::clamp(int(area/4.f),2,8):std::clamp(int(area/6.f),1,4);
-  const unsigned seed=unsigned(int(hazard.x1*8.f)*73856093)^unsigned(int(hazard.y1*8.f)*19349663);
-  for(int i=0;i<sparks;++i){
-   unsigned slot=unsigned(game.elapsed()*9.f+float((seed+unsigned(i)*977u)%1000u)*.001f),h=(slot*2654435761u)^(seed+unsigned(i)*40503u);
-   h^=h>>15;h*=2246822519u;h^=h>>13;h*=3266489917u;h^=h>>16;
-   if((h&255u)>=(pulsed?190u:48u))continue;
-   float u=float((h>>8)&255u)/255.f,v=float((h>>16)&255u)/255.f,a=float(h>>24)/255.f*kPi*2;
-   float x=hazard.x1+(hazard.x2-hazard.x1)*(.1f+.8f*u),y=hazard.y1+(hazard.y2-hazard.y1)*(.1f+.8f*v),z=w.supportBelow(x,y,hazard.top);
-   for(const auto& water:w.waterVolumes())if(x>=water.x1&&x<=water.x2&&y>=water.y1&&y<=water.y2&&water.surface>z&&water.surface<hazard.top)z=water.surface;
-   z=std::max(z,hazard.bottom)+.015f;
-   // Four kinked segments, each a flat and an upright strip so the bolt reads
-   // from the catwalk above and from water level.
-   Point3 dir{std::cos(a),std::sin(a),0},across{-dir.y,dir.x,0},p{x,y,z};
-   for(int k=0;k<4;++k){float kink=((h>>(k*3))&1u)?.07f:-.07f;
-    Point3 n=p+dir*.15f+across*kink;n.z=z+(k%2?.05f:.01f);
-    quad(p-across*.012f,n-across*.012f,n+across*.012f,p+across*.012f,blue,2.4f);
-    quad({p.x,p.y,p.z-.012f},{n.x,n.y,n.z-.012f},{n.x,n.y,n.z+.012f},{p.x,p.y,p.z+.012f},blue,2.4f);
-    p=n;}
-  }
- }
+ // Electricity -- live leads' torn ends, Electricity hazards, rounds striking solids and
+ // anything else that throws sparks or strikes an arc -- is drawn by one path (ElectricFx.cpp).
+ // Sparks and bolts are self-lit, so straight to triangles; the smoke is lit as moving geometry (never
+ // cached). Out of view or behind an occluder is asked once a shower or bolt.
+ {const bool moving=movingGeometry;movingGeometry=true;
+  ElectricFx::draw(game,level,eye,1.f/projection.focal(float(m_width)),[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light){tri({a,0,1},{b,1,1},{c,1,0},t,light);tri({a,0,1},{c,1,0},{d,0,0},t,light);},
+   [&](Point3 lo,Point3 hi){const Point3 half=(hi-lo)*.5f;return !sphereVisible(lo+half,std::sqrt(half.x*half.x+half.y*half.y+half.z*half.z))||hidden(lo,hi);});
+  movingGeometry=moving;}
  if(w.campaign()&&w.level()==6&&!w.authored()){
   // Put a real high-voltage warning over the only control that isolates the
   // live sump, then carry hazard tape along its two exposed concrete curbs.
@@ -1895,12 +2003,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto hole=[&](Point3 c,float size,const Texture&t,float light){float cs=std::cos(spin),sn=std::sin(spin);Point3 u=(a*cs+b*sn)*size,v=(a*-sn+b*cs)*size;quad(c-u-v,c+u-v,c+u+v,c-u+v,t,light);};
   hole(p+impactNormal*.003f,.1f,impact,.9f);
   hole(p+impactNormal*.005f,.042f,crater,.9f);
-  float age=game.elapsed()-mark.time;
-  Point3 sparkTangent=std::fabs(mark.normalZ)>.5f?Point3{1,0,0}:Point3{tangentX,tangentY,0},sparkUp=cross3(impactNormal,sparkTangent);
-  if(age>=0&&age<.18f)for(int i=0;i<6;++i){float phase=float(i)*1.0472f,flight=age*2.4f;
-   auto s=p+impactNormal*(.03f+age*1.4f)+sparkTangent*(std::cos(phase)*flight)+sparkUp*(std::sin(phase)*flight)-Point3{0,0,age*age*8.f};
-   quad(s,{s.x+.012f,s.y,s.z},{s.x+.012f,s.y,s.z+.025f},{s.x,s.y,s.z+.025f},amber,1.7f);
-  }
+  // Its sparks are drawn with all the electricity (ElectricFx).
  }
  // Barrel fire stays in world space, so walls and props occlude it. Every
  // mask is generated here; no runtime image dependency is needed.

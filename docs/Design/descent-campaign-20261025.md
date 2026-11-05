@@ -81,36 +81,38 @@ Chapter 1 shows what the Cleanup Force does; Chapter 2 shows who tells it to.
 Depthworks Internal Investigations sent one officer down after the surge to
 "contain the incident": the **Investigator**, a long-coated company
 investigator (the supplied Investigator model) who runs the whole cleanup
-operation from below. They never wear the Force's suit and never raise their
-voice. Every squad answers to them.
+operation from below. He never wears the Force's suit and never raises his
+voice. Every squad answers to him.
 
-- **How they direct.** Orders go out over the squads' radios, and the player
+- **How he directs.** Orders go out over the squads' radios, and the player
   hears them through any guard's handset in earshot, filtered and captioned
   INVESTIGATOR. An order is not flavour: it changes what the squad does. It
   moves a squad to another sector, puts a sector on Caution, orders a sweep, or
   revokes a truce ("Detail six is compromised. Treat them as exposed."), which
   turns that squad's stance and sometimes turns its neighbours on it.
-- **What they want.** The incident buried, and the exposure records with it.
-  They are looking for LAB 4 too, for the company's reasons, not the
+- **What he wants.** The incident buried, and the exposure records with it,
+  and every witness with it: that includes the player, a contracted security
+  officer with no clearance for these sectors.
+  He is looking for LAB 4 too, for the company's reasons, not the
   player's. Her personnel card is gone from Research Administration because the
   Investigator took it first.
-- **How the player meets them.**
+- **How the player meets him.**
   1. *Research Intake (68):* first heard, not seen. A squad's radio gives the
      Investigator's orders while the player hides from them, and the squad
      answers "copy" like men who do not believe it.
   2. *Research Administration (70):* first seen, through the records office
      glass. The Investigator stands among filing cabinets reading personnel
      cards, directing a squad by hand, and leaves by the far door with LAB 4's
-     card. No fight; the glass holds and the door locks behind them.
+     card. No fight; the glass holds and the door locks behind him.
   3. *Containment (94-103):* the orders turn on the Force itself. Squads that
      struck a truce with the player are revoked over the radio, and some men
      argue back on the channel before they obey or desert.
 - **With the stances.** Losing squads resent the orders, and dialogue lets the
   player use it. Allies the player wins are the ones the Investigator writes off.
 - **After Chapter 2.** The Investigator commands the last team at the drill in
-  Chapter 3 and sends the Limitator in Chapter 4. They are never a boss in
-  Chapter 2; they appear, direct and leave.
-- **Marketing.** The Investigator is a Chapter 2 reveal: keep them out of
+  Chapter 3 and sends the Limitator in Chapter 4. He is never a boss in
+  Chapter 2; he appears, directs and leaves.
+- **Marketing.** The Investigator is a Chapter 2 reveal: keep him out of
   trailers and store copy.
 
 #### Chapter 2: three stances, one Force (decided 2026-10-29)

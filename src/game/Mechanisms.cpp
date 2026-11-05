@@ -17,7 +17,14 @@ float Game::lampPower(const WorldLight& lamp)const{
   for(const auto&c:chunkClutter(lamp.propLevel))if(c.authored&&c.model==spawn.model&&lengthSq(c.home-home)<.0004f&&std::fabs(c.homeZ-spawn.z)<.05f){present=!c.broken&&lengthSq(c.pos-spawn.position)<.0025f&&std::fabs(c.z-spawn.z)<.06f&&std::fabs(c.pitch)<.2f&&std::fabs(c.roll)<.2f;break;}if(!present)return 0;
  }
 
- if(!lampSwitchedOn(lamp))return 0.f;
+ if(!lampSwitchedOn(lamp)){
+  // A test set's pilot dies with its circuit (Game::tearLead): while a live lead on it still
+  // arcs, it stutters with the crackle, then stays dark.
+  if(lamp.invert&&lamp.enabledState)for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;const auto&w=chunkWorld(level);const auto&lights=w.lights();
+   if(lights.empty()||std::less<const WorldLight*>()(&lamp,lights.data())||!std::less<const WorldLight*>()(&lamp,lights.data()+lights.size()))continue;const int index=int(&lamp-lights.data());
+   for(size_t i=0;i<w.leads().size()&&i<w.leadRopes().size();++i){const auto&l=w.leads()[i];const auto&r=w.leadRopes()[i];if(l.lamp!=index||!l.live||!r.torn)continue;
+    if(const float arc=leadArc(m_elapsed-r.tornAt);arc>0)return lightNoise(timeSlot(m_elapsed,24.0)*0x9e3779b9u^std::uint32_t(i))<.55f?arc:0.f;}}
+  return 0.f;}
  if(lamp.period>0){double t=std::fmod(double(m_elapsed)+lamp.phase,double(lamp.period));if(t<0)t+=lamp.period;if(t>=lamp.onTime)return 0.f;}
  if(lamp.flicker<=0)return 1.f;
  // A failing tube: mostly on, with stretches of rapid off-blinks between dark,
@@ -43,6 +50,10 @@ float Game::darknessTarget(bool* jamming)const{
 // Before the first update after a load (inspection frames, a restored save)
 // the target applies at once: a dark room never opens with a lit frame.
 float Game::darkness()const{return m_darknessSettled?m_darkness:darknessTarget(nullptr);}
+Haze Game::haze()const{
+ if(!m_darknessSettled)return m_world.haze(m_player.pos,m_player.z+m_player.eye);if(m_hazeBlend>=1)return m_hazeTo;
+ const float t=m_hazeBlend*m_hazeBlend*(3-2*m_hazeBlend);Haze h;for(size_t c=0;c<4;++c)h[c]=m_hazeFrom[c]+(m_hazeTo[c]-m_hazeFrom[c])*t;return h;
+}
 float Game::flashlightJam()const{if(m_darknessSettled)return m_flashlightJam;bool jam=false;darknessTarget(&jam);return jam?FlashlightJamTime:0.f;}
 bool Game::flashlightJammed()const{
  float jam=flashlightJam();if(jam<=0)return false;if(jam>=FlashlightJamTime)return true;
@@ -50,8 +61,10 @@ bool Game::flashlightJammed()const{
  float progress=jam/FlashlightJamTime;return lightNoise(timeSlot(m_elapsed,18.0)*0x9e3779b9u)<.2f+.7f*progress*progress;
 }
 void Game::updateDarkness(float dt){
- bool jamming=false;float target=darknessTarget(&jamming);
- if(!m_darknessSettled){m_darkness=target;m_flashlightJam=jamming?FlashlightJamTime:0.f;m_darknessSettled=true;return;}
+ bool jamming=false;float target=darknessTarget(&jamming);const Haze air=m_world.haze(m_player.pos,m_player.z+m_player.eye);
+ if(!m_darknessSettled){m_darkness=target;m_flashlightJam=jamming?FlashlightJamTime:0.f;m_hazeFrom=m_hazeTo=air;m_hazeBlend=1;m_darknessSettled=true;return;}
+ // Walking into other air blends to it over a second, from wherever the last blend had got to.
+ if(air!=m_hazeTo){m_hazeFrom=haze();m_hazeTo=air;m_hazeBlend=0;}m_hazeBlend=std::min(1.f,m_hazeBlend+dt);
  float jam=m_flashlightJam;m_darkness+=std::clamp(target-m_darkness,-dt/.3f,dt/.3f);
  m_flashlightJam=jamming?std::min(std::max(m_flashlightJam+dt,1e-3f),FlashlightJamTime):0.f;
  if(!hasFlashlight()||!state(stateId("flashlight_on")))return;
@@ -66,15 +79,24 @@ float Game::muzzleFlash()const{
  if(age<length)return (1.f-age/length)*(1.f+1.6f*dark);
  float tail=(age-length)/.2f;return tail<1?dark*.16f*(1-tail)*(1-tail):0.f;
 }
-std::array<std::array<float,4>,2> Game::weaponFlashes()const{
- std::array<std::array<float,4>,2> flashes{};const float dark=darkness();if(dark<=0)return flashes;
- for(size_t i=0;i<m_friendlyActors.size();++i){const auto& npc=m_friendlyActors[i];
+std::array<electric::Flash,4> Game::weaponFlashes()const{
+ // Asked by every chunk's draw and the GPU's light buffer: worked out once a frame (electricNow's key).
+ electricNow(m_level);if(m_electricFrame.lit)return m_electricFrame.flashes;
+ // Kept by how much each matters here: its strength, eased with distance from the player.
+ std::array<electric::Flash,4> flashes{};std::array<float,4> score{};const float dark=darkness();const Vec2 here=m_player.pos+chunkOffset(m_level);
+ auto offer=[&](const electric::Flash& f){if(f.strength<=0)return;const float dx=f.at.x-here.x,dy=f.at.y-here.y,value=f.strength/(1+(dx*dx+dy*dy)*.03f);
+  size_t weakest=0;for(size_t i=1;i<flashes.size();++i)if(score[i]<score[weakest])weakest=i;if(value>score[weakest]){score[weakest]=value;flashes[weakest]=f;}};
+ // NPC guns light the room only in darkness, warm as the player's own.
+ static const Point3 gun=WorldLight::tone(3000,0,{1,1,1});
+ if(dark>0)for(size_t i=0;i<m_friendlyActors.size();++i){const auto& npc=m_friendlyActors[i];
   if(!chunkResident(npc.level)||!state(friendlyKey(i,"weapon_flash")))continue;
   auto weapon=npcWeaponPose(i);if(weapon.flash<=0)continue;auto origin=chunkOffset(npc.level);
-  std::array<float,4> light{weapon.muzzle.x+origin.x,weapon.muzzle.y+origin.y,weapon.muzzle.z,weapon.flash*1.6f*dark};
-  auto& weakest=flashes[0][3]<=flashes[1][3]?flashes[0]:flashes[1];if(light[3]>weakest[3])weakest=light;
+  offer({{weapon.muzzle.x+origin.x,weapon.muzzle.y+origin.y,weapon.muzzle.z},weapon.flash*1.6f*dark,gun,12,true});
  }
- return flashes;
+ // Sparks and arcs light the room lit or dark, and harder in the dark.
+ if(electric::shown>1)for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto origin=chunkOffset(level);
+  for(auto f:electricNow(level).flashes){f.at=f.at+Point3{origin.x,origin.y,0};f.strength*=1+.6f*dark;offer(f);}}
+ m_electricFrame.flashes=flashes;m_electricFrame.lit=true;return flashes;
 }
 std::vector<const SequenceCue*> Game::terminalMessages(int terminal)const{
  std::vector<const SequenceCue*> result;if(terminal<0||terminal>=int(m_world.terminals().size()))return result;
