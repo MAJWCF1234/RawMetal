@@ -19,8 +19,14 @@ Custom campaigns can think a little harder.
 - `SCRIPT_TRIGGER` says where an event listens (its box, its whole map, or
   every map) and whether it fires once or each time its gates come true.
 
-Every map made before still plays the same. The guide's scripting table has
-the new records.
+- The Starter Map has a new room, **Scripts**, east of Levels: a working
+  station for each of these (counter pads, a vault with two locks, either-of-two
+  switches, a doormat that counts visits, a creature pen, a gas strip that
+  warns at low health, and a switch heard by another map).
+- `GUIDE.html` has a new chapter, *Scripting: making things happen*, with a
+  diagram, common patterns and the vault's records to copy.
+
+Every map made before still plays the same.
 
 ---
 

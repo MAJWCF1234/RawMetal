@@ -35,6 +35,9 @@ SHOTS = [
     ('seams', 'Seams', 12, 7, -90, -.3, 2.5, 'A north-south seam: the dirt strip is the edge between two maps, open on both.'),
     ('seam-ew', 'Seams', 15, 12, 0, -.2, 2.0, 'An east-west seam (dirt strip), and a closed edge (mud) at the far end of the next map.'),
     ('doorway', 'Ground paint', 1.5, 6, -90, .05, .3, 'Indoors to outdoors: the model row keeps its wall, with # tiles, except a doorway.'),
+    ('scripts', 'Scripts', 8, 12.5, -90, -.22, 1.0, 'Scripts: three pads ADD to a counter and a MESSAGE shows it; the lamp lights at 3.'),
+    ('scripts-vault', 'Scripts', 18.5, 13.5, -90, -.08, .4, 'The vault door opens on the lever AND three crystals: SCRIPT_REQUIRE.'),
+    ('scripts-south', 'Scripts', 12, 10.2, 92, -.38, .6, 'Match any (two switches), a repeat doormat, a Huntsman pen (@kills, @remaining) and a gas strip (@health).'),
 ]
 
 SECTION_ROWS = [('WELCOME, LIGHTS, HAZARDS, LIFE', 0)]
@@ -96,6 +99,24 @@ def folder_diagram():
         b += rect(x, y - 15, 16, 13, icon, rx=2) + text(x + 24, y - 4, name, 14, color, weight='bold') + text(430, y - 4, note, 13, '#9aa0a8')
         y += 30
     return svg(900, y, b)
+
+
+def script_diagram():
+    """An event left to right: when it is checked, what must hold, what it does."""
+    b = DEFS
+    cols = [(14, 'WHEN', '#3c8cd8', ['SCRIPT_TRIGGER where', 'box: you stand in it', 'map: anywhere on its map', 'campaign: on any map']),
+            (250, 'IF', '#e0b030', ['SCRIPT_EVENT requireState', '+ SCRIPT_REQUIRE x 8', 'state = != < <= > >=', '@kills @remaining', '@health @map',
+                                    'match all (AND) / any (OR)']),
+            (486, 'THEN', '#50b060', ['SCRIPT_ACTION x 16', 'STATE   ADD  (counters)', 'ITEM    TAKE (keys)', 'MESSAGE "{state} left"',
+                                      'OBJECTIVE CHECKPOINT', 'SHAKE COMPLETE']),
+            (722, 'AGAIN?', '#d860a0', ['repeat 0: once ever', 'repeat 1: each time the', 'gates turn true again', '(re-arms when they fail)'])]
+    for x, title, color, lines in cols:
+        b += rect(x, 14, 220, 186, color + '26', color, 6) + text(x + 110, 38, title, 17, color, 'middle', 'bold')
+        for k, line in enumerate(lines):
+            b += text(x + 12, 64 + k * 22, line, 12.5)
+        if x < 722: b += arrow(x + 221, 107, x + 235, 107)
+    b += text(14, 226, 'Every frame, for every armed event: WHEN you are in its scope and IF its gates pass, THEN its actions run in order.', 13, '#9aa0a8')
+    return svg(956, 240, b)
 
 
 def anatomy_diagram():
@@ -371,10 +392,16 @@ RECORDS = [
         ('HAZARD|map|kind|x1|y1|x2|y2|bottom|top|damage', 'Hurts whoever stands in the box, damage per second. Kinds in the hazard table.'),
         ('COMPACTOR|map|x1|y1|x2|y2|bed|raised|period', 'A crushing ceiling that cycles every period seconds.'),
         ('LEAD|map|ax|ay|az|bx|by|bz|length|radius[|material|live|...|loose]', 'A cable between two points; length longer than the gap makes it sag. material 8 is red; live 1 shocks. A loose cable (18th field 1) lies free at its far end.')]),
-    ('Scripting (the basics)', [
+    ('Scripting', [
         ('OBJECTIVE_TEXT|map|id|text', 'Objective wording, used by SCRIPT_ACTION OBJECTIVE.'),
-        ('SCRIPT_EVENT|map|id|x1|y1|x2|y2|bottom|top|requireState|requireValue|needClear', 'Fires once when you enter the box (and the gates pass). requireState may be empty.'),
-        ('SCRIPT_ACTION|map|event|STATE|name|value', 'What an event does. Other kinds: OBJECTIVE id status(1 active, 2 done), ITEM id count, CHECKPOINT, COMPLETE (ends the campaign), SHAKE amount.'),
+        ('SCRIPT_EVENT|map|id|x1|y1|x2|y2|bottom|top|requireState|requireValue|needClear', 'Fires once when you enter the box (and the gates pass). requireState may be empty (then requireValue is 1). needClear 1 also waits for the map\'s creatures to die.'),
+        ('SCRIPT_REQUIRE|map|event|name|op|value', 'One more gate on an event (up to 8). op is = != < <= > >=. name is a state, or a live value: @kills and @remaining (creatures killed and hostiles left on the event\'s map), @health, @map (the map the player is on).'),
+        ('SCRIPT_TRIGGER|map|event|where|match|repeat', 'How the event fires. where: box (its box, the default), map (anywhere on its map) or campaign (on any map). match: all gates must hold (default) or any one. '
+         'repeat 1: fire again each time the gates turn true (each time you walk in), instead of once ever.'),
+        ('SCRIPT_ACTION|map|event|STATE|name|value', 'What an event does, up to 16 per event, in order. Other kinds: OBJECTIVE id status(1 active, 2 done), ITEM id count, CHECKPOINT, COMPLETE (ends the campaign), SHAKE amount.'),
+        ('SCRIPT_ACTION|map|event|ADD|name|amount', 'Adds to a state (negative takes away). Use it as a counter: crystals found, wardens killed, relays attuned.'),
+        ('SCRIPT_ACTION|map|event|TAKE|item|count', 'Takes quest items back, the opposite of ITEM.'),
+        ('SCRIPT_ACTION|map|event|MESSAGE|text|seconds', 'A caption for 0.5 to 15 seconds, up to 96 characters. {name} in the text shows that state\'s value: RELAYS {relays} / 2.'),
         ('TIMED_SEQUENCE|map|startState|doneState|x1|y1|x2|y2|bottom|top|duration|finish|soundInterval|soundCutoff|sound|gain|pitch[|loop]', 'A clock that runs once startState is set: it drives SEQUENCE_CUE lines and ACTOR movement.'),
         ('ACTOR|map|clockState|visual|height|loop|tool|index  +  ACTOR_KEY|map|index|timeMs|x|y|z|yaw|clip|phase', 'A person following keyframes on a clock. Two keys at the same spot (clip 0) make them stand idle, as in the Life room.')]),
 ]
@@ -411,13 +438,14 @@ def main():
     for it in s.index:
         where.setdefault(it['title'], it)
     mapname = {i: m['name'] for i, m in enumerate(s.maps)}
+    scripts_map = next(i for i, m in enumerate(s.maps) if m['name'] == 'Scripts')
     models = starter.models()
 
     o = ['<!doctype html><html><head><meta charset="utf-8"><title>Custom maps: the guide</title><style>%s</style></head><body><main>' % CSS]
     o.append('<h1>Making custom maps</h1><p class="lede">A custom map is one plain text file. Put it in <code>custom maps</code> beside the game, '
              'start the game, and pick it under <b>CUSTOM MAPS</b> on the title screen. This guide shows how the file works, with '
              '<b>Starter Map.txt</b> as the worked example: a walkable debug world with every part of a map lined up and labelled.</p>')
-    o.append('<nav><a href="#start">Quick start</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#records">Records</a>'
+    o.append('<nav><a href="#start">Quick start</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#scripting">Scripting</a><a href="#records">Records</a>'
              '<a href="#starter">Starter Map tour</a><a href="#values">Value tables</a><a href="#models">All models</a><a href="#errors">When it fails</a></nav>')
 
     o.append('<h2 id="start">1. Quick start</h2>')
@@ -497,7 +525,38 @@ def main():
              'where the Outdoors model row opens onto Ground paint, Terrain and Grove.</li>'
              '<li><b>Buildings outdoors</b> are FIXTURE models (houses, sheds, the outdoor set) on a TERRAIN_FLAT pad, or STRUCT boxes. Add a SHELTER inside if the campaign has a STORM.</li></ul>')
 
-    o.append('<h2 id="records">7. Records</h2><p>Fields in <code>[brackets]</code> are optional and can be left off the end. '
+    o.append('<h2 id="scripting">7. Scripting: making things happen</h2>')
+    o.append('<p>Doors that unlock, lamps that switch, counters, messages, the end of the campaign: all of it is <b>states</b> and <b>events</b>. '
+             'A state is a named whole number, 0 until something sets it (<code>starter_lever</code>, <code>relays</code>). Terminals, broken glass, '
+             'timed sequences and events set states; doors, lights, terminals, creatures and events listen for them. An event is a SCRIPT_EVENT '
+             'with the records below it that name it. <b>Scripts</b> in the Starter Map (east of Levels) has one working station for each idea here.</p>')
+    o.append('<figure>%s<figcaption>One event, left to right. Only SCRIPT_EVENT is required: on its own it fires once, the first time you walk into its box.</figcaption></figure>' % script_diagram())
+    o.append('<h3>Patterns</h3>')
+    o.append(table(['You want', 'Write'], [
+        ('A switch that opens a door', '<code>TERMINAL|...|1|LEVER|...|door_power|0</code> and <code>DOOR|...|door_power|1</code>. No event needed.'),
+        ('A counter: collect three crystals', '<span>One box event per crystal with <code>ADD|crystals|1</code>, then an event gated <code>SCRIPT_REQUIRE|map|open|crystals|&gt;=|3</code>.</span>'),
+        ('Two conditions at once (AND)', 'requireState on the SCRIPT_EVENT plus a SCRIPT_REQUIRE, or several SCRIPT_REQUIREs. All must hold.'),
+        ('Either of two (OR)', '<code>SCRIPT_TRIGGER|map|ev|map|any|0</code> with one SCRIPT_REQUIRE per choice.'),
+        ('Something every time you enter', '<code>SCRIPT_TRIGGER|map|ev|box|all|1</code>. Without repeat, an event fires once ever.'),
+        ('After the last creature dies', '<code>SCRIPT_REQUIRE|map|ev|@remaining|=|0</code> with <code>where map</code>; add <code>@kills &gt;= 1</code> so an empty map does not count.'),
+        ('A warning at low health', '<code>SCRIPT_REQUIRE|map|ev|@health|&lt;|30</code>, where map, repeat 1, a MESSAGE action.'),
+        ('A switch on one map that changes another', '<span>Set a state; anything on any map can listen for it. For an event that must run wherever you are, use <code>where campaign</code>.</span>'),
+        ('Show progress', '<code>SCRIPT_ACTION|map|ev|MESSAGE|RELAYS {relays} / 2|4</code>.')]))
+    o.append('<pre>%s</pre>' % esc(
+        '# The Starter Map vault: a lever AND three crystals, checked anywhere on map %d.\n'
+        'SCRIPT_EVENT|{n}|starter_vault_open|0|0|24|24|-1|5|starter_lever|1|0\n'
+        'SCRIPT_REQUIRE|{n}|starter_vault_open|starter_crystals|>=|3\n'
+        'SCRIPT_TRIGGER|{n}|starter_vault_open|map|all|0\n'
+        'SCRIPT_ACTION|{n}|starter_vault_open|STATE|starter_vault|1\n'
+        'SCRIPT_ACTION|{n}|starter_vault_open|MESSAGE|VAULT OPEN: LEVER AND CRYSTALS >= 3 (ALL GATES)|4\n'
+        'DOOR|{n}|17|20|7.5|0|0|0|0|0|0|starter_vault|1            (the door listens for the state)'
+        .replace('{n}', str(scripts_map)) % scripts_map))
+    o.append('<ul><li>Event names are unique across the whole file, and the SCRIPT_REQUIRE, SCRIPT_TRIGGER and SCRIPT_ACTION lines go after their SCRIPT_EVENT.</li>'
+             '<li>A map-wide or campaign-wide event still needs a box in its SCRIPT_EVENT: use <code>0|0|24|24</code>.</li>'
+             '<li>States are saved with the game, so counters and switches survive a reload.</li>'
+             '<li>repeat 1 fires on the change, not every frame: a box event fires once per visit, a gate event once each time its gates go from false to true.</li></ul>')
+
+    o.append('<h2 id="records">8. Records</h2><p>Fields in <code>[brackets]</code> are optional and can be left off the end. '
              'Every record\'s second field is the map number it belongs to.</p>')
     for title, recs in RECORDS:
         o.append('<h3>%s</h3>' % esc(title))
@@ -505,16 +564,16 @@ def main():
     o.append('<p>The format also covers armed guards, dialogue and cargo lifts (the Ashfall Exclusion Zone and the shipped chapters '
              'are built from them). This guide covers the parts every map needs.</p>')
 
-    o.append('<h2 id="starter">8. The Starter Map tour</h2><p>Pick <b>STARTER MAP</b> under CUSTOM MAPS. Everything stands on a plinth with a sign: '
+    o.append('<h2 id="starter">9. The Starter Map tour</h2><p>Pick <b>STARTER MAP</b> under CUSTOM MAPS. Everything stands on a plinth with a sign: '
              'the big text is its ID (the number you type in the record), the small text its name. Stand next to anything and the HUD, top left, '
-             'names it in full. Nothing in it can hurt you unless you climb into a hazard pen or wake a creature by hitting it.</p><div class="shots">')
+             'names it in full. Nothing in it can hurt you unless you climb into a hazard pen, walk the gas strip in Scripts, or wake a creature (by hitting it, or with the Scripts terminal that wakes its Huntsman).</p><div class="shots">')
     for name, *_, caption in SHOTS:
         if os.path.exists(os.path.join(IMAGES, name + '.jpg')):
             o.append('<figure><img src="guide/%s.jpg" alt="%s"><figcaption>%s</figcaption></figure>' % (name, esc(name), esc(caption)))
     o.append('</div><p>To copy anything you see, search <code>Starter Map.txt</code> for its sign text (for example <code>|#27|</code> or <code>HAZARD 4</code>): '
              'the records just above it build that exhibit.</p>')
 
-    o.append('<h2 id="values">9. Value tables</h2>')
+    o.append('<h2 id="values">10. Value tables</h2>')
     o.append('<h3>STRUCT materials</h3>' + table(['material', 'look'], sorted(starter.MATERIALS.items())))
     o.append('<h3>SURFACE sets</h3>' + table(['value', 'finish'], [(-1, 'default')] + list(enumerate(starter.SURFACES))))
     o.append('<h3>Creatures, pickups, hazards, clutter</h3>')
@@ -523,7 +582,7 @@ def main():
                      (starter.CLUTTER_KINDS + ['a model: see CLUTTER 7'])[k] if k < 8 else '') for k in range(8)]))
     o.append('<h3>ACTOR visuals</h3>' + table(['visual', 'body'], list(enumerate(starter.ACTORS))))
 
-    o.append('<h2 id="models">10. All %d models</h2><p>Use the ID as the FIXTURE model. Width x depth x height is the model\'s own size in metres: '
+    o.append('<h2 id="models">11. All %d models</h2><p>Use the ID as the FIXTURE model. Width x depth x height is the model\'s own size in metres: '
              'stretch all three by the same factor to keep it in proportion. "Where" is its plinth in the Starter Map (map name, x, y).</p>' % len(models))
     o.append('<div class="warn">Models 13 (electrical cabinet) and 47 (open container) still draw almost black in custom maps. For a container use 48 (closed).</div>')
     rows = []
@@ -533,13 +592,15 @@ def main():
         rows.append((slot, name, '%.2f x %.2f x %.2f' % (w, d, h), loc))
     o.append(table(['ID', 'name', 'size (m)', 'where'], rows))
 
-    o.append('<h2 id="errors">11. When it fails</h2>')
+    o.append('<h2 id="errors">12. When it fails</h2>')
     o.append(table(['You see', 'Why, and the fix'], [
         ('The map is not in CUSTOM MAPS', 'Open RawMetal-custom-maps.txt beside the game. Each file is OK or ERROR with the line number and record. The file must end in .txt and sit directly in custom maps (not a subfolder).'),
         ('ERROR custom map rows must be exactly 24 characters', 'Count the tiles: every ROW has 24 characters, no spaces.'),
         ('ERROR ... missing CUSTOM_CAMPAIGN_DATA markers', 'Both marker lines must be present exactly as shown, three dashes each side.'),
         ('ERROR custom campaign maps require contiguous MAP records', 'Number maps 0, 1, 2... with no gap, each with one MAP record.'),
         ('ERROR custom map chunk footprints overlap', 'Two maps share an origin area: origins must be 24 m apart.'),
+        ('ERROR SCRIPT_REQUIRE (or SCRIPT_TRIGGER, script action) references an undeclared event', 'Put it after the SCRIPT_EVENT it names, with the same map number and the name spelled the same.'),
+        ('A scripted event never fires', 'Check each gate in the HUD with a MESSAGE showing {state}; a box event needs you inside its box and between bottom and top; @remaining counts sleeping creatures too.'),
         ('You fall through the floor or start in a wall', 'The spawn tile must be floor (.) and inside 0-24.'),
         ('A model is invisible or inside out', 'Check width/depth/height are positive and its yaw; try yaw 0 and 3.142.'),
         ('It is too dark', 'Raise MAP ambient (0.3-0.4) or add LIGHT records just below the ceiling.')]))

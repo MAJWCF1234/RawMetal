@@ -13,6 +13,8 @@ with a clear corridor down the west side joining the rows:
   HAZARDS     the eight hazard kinds fenced off, a compactor, smoke, glass, cables
   LIFE        every creature (asleep until hurt) and every actor body, standing still
   LEVELS      a second layer: a deck over the hall, a stair up, a hole to look down
+  SCRIPTS     east of Levels: counters, AND/ANY gates, repeat, live values (@kills,
+              @remaining, @health) and a campaign-wide event, each one working
   PROPS       the loose clutter kinds and every curated prop you can pick up and throw
   MODELS      every fixture model by set; buildings over 7.5 m shown scaled down
   OUTDOORS    under the model rows: ground paints, terrain, a grove, then the SEAMS
@@ -456,7 +458,117 @@ def build():
                                    s.rec(m, 'FIXTURE', m['index'], sl, cx, cy, base, sw, sd, sh, yaw, int(sh > .05)))(sl, sw, sd, sh, yaw)})
         s.museum(title, items, palette[gi], SURFACES, 2 + gi)
     outdoors(s, slot, catalogue)
+    scripts(s)                  # built last so every earlier map keeps its number
     return s
+
+
+def scripts(s):
+    """SCRIPTS, east of Levels: one working station per scripting feature (1.2.2).
+    Every station is a SCRIPT_EVENT you can trigger, with a sign naming its records."""
+    m = s.new_map('Scripts', 5, 0, ceiling=4.5, surface='lab panel')
+    i = m['index']
+    pink = 0xd860a0
+    levels = next(x for x in s.maps if x['name'] == 'Levels')
+    levels['walls'] |= {(23, y) for y in range(24) if not 10 <= y <= 13}   # keep the Levels wall signs on a wall
+    m['walls'] |= {(0, y) for y in range(24) if not 10 <= y <= 13} | {(x, 23) for x in range(24)}
+    s.zone(m, 0, 9, 2.5, 15, '', 'SCRIPTS')
+
+    def event(name, box, require='', value=1, actions=(), gates=(), where='box', match='all', repeat=0, owner=None):
+        o = owner or m
+        x1, y1, x2, y2 = box
+        s.rec(o, 'SCRIPT_EVENT', o['index'], name, x1, y1, x2, y2, -1, 5, require, value, 0)
+        for g in gates:
+            s.rec(o, 'SCRIPT_REQUIRE', o['index'], name, *g)
+        if (where, match, repeat) != ('box', 'all', 0):
+            s.rec(o, 'SCRIPT_TRIGGER', o['index'], name, where, match, repeat)
+        for a in actions:
+            s.rec(o, 'SCRIPT_ACTION', o['index'], name, *a)
+
+    def label(cx, y, title, sub, facing_south, width=2.4):
+        """A post sign facing the middle aisle (y 9-14)."""
+        if facing_south:
+            s.struct(m, cx - width / 2, y, cx + width / 2, y + .06, 0, .55, 20)
+            s.sign(m, cx, y + .07, .34, width - .06, .3, title, sub, pink, 0)
+        else:
+            s.post_sign(m, cx, y, title, sub, pink, width)
+
+    def station(x1, y1, x2, y2, zone, title, sub):
+        s.zone(m, x1, y1, x2, y2, zone)
+        s.index.append({'map': i, 'section': 'SCRIPTS', 'x': round((x1 + x2) / 2, 2), 'y': round((y1 + y2) / 2, 2), 'title': title, 'name': sub})
+
+    s.rec(m, 'TERMINAL', i, 3.4, 9.0, 0, 0, 'SCRIPTS / READ ME', 'EACH STATION IS A SCRIPT_EVENT. TRIGGER IT AND WATCH.',
+          'THE SIGN NAMES ITS RECORDS. FILE: SEARCH starter_', '', 0, '', 0)
+
+    # Counter: three pads, each ADDs one and shows the running count.
+    for k, x in enumerate((5, 8, 11)):
+        s.struct(m, x - .6, 3.4, x + .6, 4.6, 0, .05, 35)
+        event('starter_pad_%d' % k, (x - .6, 3.4, x + .6, 4.6), actions=[
+            ('ADD', 'starter_crystals', 1), ('MESSAGE', 'ADD: CRYSTALS {starter_crystals} / 3', 3)])
+    s.rec(m, 'LIGHT', i, 8, 4, 4.3, 0, 0, 1.6, 6, 6500, 0, 'starter_crystals', 3, 0, '', '', '', '', '', '', '', '', .2, .9, 1)
+    label(8, 7.4, 'ADD + MESSAGE', 'a counter: step on all 3 pads', True, 3.0)
+    station(3.5, 2.5, 12.5, 8, 'ADD + MESSAGE / a counter, step on each pad', 'ADD + MESSAGE', 'counter pads')
+
+    # AND: the vault opens on the lever AND three crystals (SCRIPT_REQUIRE >=).
+    m['walls'] |= {(14, y) for y in range(1, 8)} | {(x, 7) for x in range(14, 23) if not 17 <= x <= 19}
+    s.rec(m, 'DOOR', i, 17, 20, 7.5, 0, 0, 0, 0, 0, 0, 'starter_vault', 1)
+    s.rec(m, 'TERMINAL', i, 15.5, 8.6, 0, 1, 'VAULT LEVER', 'PULL THE LEVER. THE VAULT ALSO WANTS',
+          'THREE CRYSTALS: SCRIPT_REQUIRE starter_crystals >= 3.', 'starter_lever', 0, '', PI)
+    event('starter_vault_open', (0, 0, 24, 24), 'starter_lever', 1, gates=[('starter_crystals', '>=', 3)], where='map', actions=[
+        ('STATE', 'starter_vault', 1), ('MESSAGE', 'VAULT OPEN: LEVER AND CRYSTALS >= 3 (ALL GATES)', 4)])
+    s.sign(m, 21.45, 8.05, 1.9, 2.3, .45, 'SCRIPT_REQUIRE', 'lever = 1 AND crystals >= 3', pink, 0)
+    s.rec(m, 'PICKUP', i, 0, 17.5, 3.5)
+    s.rec(m, 'PICKUP', i, 1, 19.5, 3.5)
+    s.rec(m, 'LIGHT', i, 18.5, 4, 4.3, 0, 0, 1.4, 6, 3400, 0, 'starter_vault', 1)
+    station(14, 1, 23, 9.5, 'SCRIPT_REQUIRE / lever AND crystals >= 3', 'SCRIPT_REQUIRE', 'vault: all gates')
+
+    # ANY: either switch lights the lamp; both off puts it out again (two repeating events).
+    for x, name, colour in ((4, 'starter_red', 'RED'), (8, 'starter_blue', 'BLUE')):
+        s.rec(m, 'TERMINAL', i, x, 15.6, 0, 1, '%s SWITCH' % colour, 'FLIPS %s ON AND OFF.' % name.upper(),
+              'EITHER SWITCH LIGHTS THE LAMP: MATCH ANY.', name, 1, '', 0)
+    s.rec(m, 'LIGHT', i, 6, 16.5, 4.3, 0, 0, 1.6, 6, 6500, 0, 'starter_either', 1, 0, '', '', '', '', '', '', '', '', .1, 1, .15)
+    event('starter_any_on', (0, 0, 24, 24), gates=[('starter_red', '=', 1), ('starter_blue', '=', 1)], where='map', match='any', repeat=1,
+          actions=[('STATE', 'starter_either', 1), ('MESSAGE', 'MATCH ANY: ONE SWITCH IS ENOUGH', 3)])
+    event('starter_any_off', (0, 0, 24, 24), gates=[('starter_red', '=', 0), ('starter_blue', '=', 0)], where='map', repeat=1,
+          actions=[('STATE', 'starter_either', 0)])
+    label(6, 14.6, 'MATCH ANY', 'either switch lights the lamp', False, 3.0)
+    station(3, 14.5, 9.5, 18.5, 'SCRIPT_TRIGGER any / either switch', 'MATCH ANY', 'two switches, one lamp')
+
+    # Repeat: a doormat that counts every visit, not every frame.
+    s.struct(m, 11, 15.5, 13, 17.5, 0, .03, 13)
+    event('starter_mat', (11, 15.5, 13, 17.5), repeat=1, actions=[
+        ('ADD', 'starter_visits', 1), ('MESSAGE', 'REPEAT 1: VISIT {starter_visits}', 2)])
+    label(12, 14.6, 'REPEAT', 'counts each visit', False, 2.0)
+    station(10.5, 14.5, 13.5, 18.5, 'SCRIPT_TRIGGER repeat 1 / the doormat', 'REPEAT', 'doormat visit counter')
+
+    # Live values: a sleeping Huntsman; once it is dead, @kills and @remaining say so.
+    s.fence(m, 16, 15, 22.5, 21.5)
+    s.rec(m, 'CREATURE', i, 0, 19.2, 18.8, 0, '', '', 'starter_wake')
+    s.rec(m, 'TERMINAL', i, 17.2, 14.2, 0, 1, 'WAKE THE HUNTSMAN', 'IT SLEEPS UNTIL starter_wake IS SET.',
+          'KILL IT: @kills >= 1 AND @remaining = 0 FIRE.', 'starter_wake', 0, '', 0)
+    s.rec(m, 'LIGHT', i, 19.2, 18.2, 4.3, 0, 0, 1.5, 7, 6500, 0, 'starter_pen_clear', 1, 0, '', '', '', '', '', '', '', '', .1, 1, .15)
+    event('starter_pen', (0, 0, 24, 24), gates=[('@kills', '>=', 1), ('@remaining', '=', 0)], where='map', actions=[
+        ('STATE', 'starter_pen_clear', 1), ('MESSAGE', 'LIVE VALUES: @kills >= 1, @remaining = 0', 4)])
+    label(20.5, 14.4, '@kills  @remaining', 'live values: clear the pen', False, 2.6)
+    station(15.5, 14.2, 23, 22, '@kills / @remaining / the Huntsman pen', '@kills @remaining', 'creature pen')
+
+    # @health: a strip of gas; dropping under half health warns you, every time.
+    s.rec(m, 'HAZARD', i, 3, 3.5, 20.2, 9.5, 22.6, 0, 2.2, 12)
+    for x in (3.5, 9.5):
+        s.struct(m, x - .05, 20.2, x + .05, 22.6, 0, 1.1, 2, rail=1)
+    s.rec(m, 'PICKUP', i, 0, 11.5, 21)
+    s.rec(m, 'PICKUP', i, 0, 12.5, 21)
+    event('starter_hurt', (0, 0, 24, 24), gates=[('@health', '<', 50)], where='map', repeat=1, actions=[
+        ('MESSAGE', '@health < 50: GET OUT OF THE GAS', 3)])
+    label(6.5, 19.6, '@health', 'gas strip: warns under 50', False, 2.6)
+    station(3, 19, 13, 23, '@health / a gas strip that warns you', '@health', 'gas strip')
+
+    # Campaign scope: the event lives on map 0 (Welcome) but hears this switch from here.
+    s.rec(m, 'TERMINAL', i, 21.5, 11.8, 0, 1, 'CALL MAP 0', 'SETS starter_call. THE EVENT THAT ANSWERS',
+          'IS ON MAP 0: SCRIPT_TRIGGER campaign.', 'starter_call', 0, '', -HALF)
+    event('starter_call_heard', (0, 0, 24, 24), 'starter_call', 1, where='campaign', owner=s.maps[0], actions=[
+        ('MESSAGE', 'MAP 0 HEARD YOU: SCRIPT_TRIGGER CAMPAIGN', 4)])
+    s.sign(m, 22.95, 11.8, 2.2, 2.4, .45, 'CAMPAIGN SCOPE', 'an event on map 0 answers here', pink, -HALF)
+    station(19.5, 10, 23, 13.8, 'SCRIPT_TRIGGER campaign / call map 0', 'CAMPAIGN SCOPE', 'cross-map event')
 
 
 GROUNDS = ['short grass', 'leafy grass', 'clover', 'wild', 'dry dirt', 'forest litter', 'gravel', 'mud', 'meadow']

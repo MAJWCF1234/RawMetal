@@ -267,6 +267,9 @@ TERMINAL|0|13.6|18.8|0|1|LAMP SWITCH|A CONTROL TERMINAL SETS A STATE.|THE RED LA
 LIGHT|0|14|18.8|4.3|0|0|1.6|5|3400|0|starter_lamp|1|0|||||||||1|0.1|0.06
 ZONE|0|12.4|17.6|14.4|20|TERMINAL control + switched LIGHT|||
 SIGN|0|13.5|19.95|1.4|0.9|0.3|3.1416|TERMINAL|E: red lamp|3968216
+SCRIPT_EVENT|0|starter_call_heard|0|0|24|24|-1|5|starter_call|1|0
+SCRIPT_TRIGGER|0|starter_call_heard|campaign|all|0
+SCRIPT_ACTION|0|starter_call_heard|MESSAGE|MAP 0 HEARD YOU: SCRIPT_TRIGGER CAMPAIGN|4
 
 # ==== Map 1: Lights ====
 MAP|1|Starter Map / Lights|24|0|12|1.6|0|0|3.6|0.12|industrial_night|0|0|1|1|0|-1|0|0|1.5708|0|0
@@ -648,7 +651,7 @@ STRUCT|3|21.52|18.31|22.78|18.37|0|0.6|0|20
 ZONE|3|21.47|16.4|22.83|21|ACTOR visual 15 / Investigator|||
 
 # ==== Map 4: Levels ====
-MAP|4|Starter Map / Levels|96|0|12|1.6|0|0|7.5|0.34|industrial_night|0|0|1|0|0|-1|0|0|1.5708|0|0
+MAP|4|Starter Map / Levels|96|0|12|1.6|0|0|7.5|0.34|industrial_night|0|0|1|1|0|-1|0|0|1.5708|0|0
 LAYER|4|0|Hall floor|0|0
 ROW|4|0|0|########################
 ROW|4|0|1|.......................#
@@ -660,10 +663,10 @@ ROW|4|0|6|.......................#
 ROW|4|0|7|.......................#
 ROW|4|0|8|.......................#
 ROW|4|0|9|.......................#
-ROW|4|0|10|.......................#
-ROW|4|0|11|.......................#
-ROW|4|0|12|.......................#
-ROW|4|0|13|.......................#
+ROW|4|0|10|........................
+ROW|4|0|11|........................
+ROW|4|0|12|........................
+ROW|4|0|13|........................
 ROW|4|0|14|.......................#
 ROW|4|0|15|.......................#
 ROW|4|0|16|.......................#
@@ -3869,4 +3872,128 @@ ZONE|32|0|9|4|15|SEAM E-W / map 32 west edge|||
 STRUCT|32|19.5|11.94|21.5|12|0|0.55|0|20
 SIGN|32|20.5|11.93|0.34|1.94|0.3|3.1416|CLOSED EDGE|openE=0: no neighbour, no way on|9084992
 ZONE|32|19|9|24|15|CLOSED EDGE / openE=0 stops you here|||
+
+# ==== Map 33: Scripts ====
+MAP|33|Starter Map / Scripts|120|0|12|1.6|0|0|4.5|0.34|industrial_night|0|0|1|0|0|-1|0|0|1.5708|0|0
+SURFACE|33|4|0|-1
+LAYER|33|0|Hall floor|0|0
+ROW|33|0|0|########################
+ROW|33|0|1|#.............#........#
+ROW|33|0|2|#.............#........#
+ROW|33|0|3|#.............#........#
+ROW|33|0|4|#.............#........#
+ROW|33|0|5|#.............#........#
+ROW|33|0|6|#.............#........#
+ROW|33|0|7|#.............###...####
+ROW|33|0|8|#......................#
+ROW|33|0|9|#......................#
+ROW|33|0|10|.......................#
+ROW|33|0|11|.......................#
+ROW|33|0|12|.......................#
+ROW|33|0|13|.......................#
+ROW|33|0|14|#......................#
+ROW|33|0|15|#......................#
+ROW|33|0|16|#......................#
+ROW|33|0|17|#......................#
+ROW|33|0|18|#......................#
+ROW|33|0|19|#......................#
+ROW|33|0|20|#......................#
+ROW|33|0|21|#......................#
+ROW|33|0|22|#......................#
+ROW|33|0|23|########################
+LIGHT|33|4|4|4.35|0|0|1.1|13.5
+LIGHT|33|4|12|4.35|0|0|1.1|13.5
+LIGHT|33|4|20|4.35|0|0|1.1|13.5
+LIGHT|33|12|4|4.35|0|0|1.1|13.5
+LIGHT|33|12|12|4.35|0|0|1.1|13.5
+LIGHT|33|12|20|4.35|0|0|1.1|13.5
+LIGHT|33|20|4|4.35|0|0|1.1|13.5
+LIGHT|33|20|12|4.35|0|0|1.1|13.5
+LIGHT|33|20|20|4.35|0|0|1.1|13.5
+ZONE|33|0|9|2.5|15||||SCRIPTS
+TERMINAL|33|3.4|9|0|0|SCRIPTS / READ ME|EACH STATION IS A SCRIPT_EVENT. TRIGGER IT AND WATCH.|THE SIGN NAMES ITS RECORDS. FILE: SEARCH starter_||0||0
+STRUCT|33|4.4|3.4|5.6|4.6|0|0.05|0|35
+SCRIPT_EVENT|33|starter_pad_0|4.4|3.4|5.6|4.6|-1|5||1|0
+SCRIPT_ACTION|33|starter_pad_0|ADD|starter_crystals|1
+SCRIPT_ACTION|33|starter_pad_0|MESSAGE|ADD: CRYSTALS {starter_crystals} / 3|3
+STRUCT|33|7.4|3.4|8.6|4.6|0|0.05|0|35
+SCRIPT_EVENT|33|starter_pad_1|7.4|3.4|8.6|4.6|-1|5||1|0
+SCRIPT_ACTION|33|starter_pad_1|ADD|starter_crystals|1
+SCRIPT_ACTION|33|starter_pad_1|MESSAGE|ADD: CRYSTALS {starter_crystals} / 3|3
+STRUCT|33|10.4|3.4|11.6|4.6|0|0.05|0|35
+SCRIPT_EVENT|33|starter_pad_2|10.4|3.4|11.6|4.6|-1|5||1|0
+SCRIPT_ACTION|33|starter_pad_2|ADD|starter_crystals|1
+SCRIPT_ACTION|33|starter_pad_2|MESSAGE|ADD: CRYSTALS {starter_crystals} / 3|3
+LIGHT|33|8|4|4.3|0|0|1.6|6|6500|0|starter_crystals|3|0|||||||||0.2|0.9|1
+STRUCT|33|6.5|7.4|9.5|7.46|0|0.55|0|20
+SIGN|33|8|7.47|0.34|2.94|0.3|0|ADD + MESSAGE|a counter: step on all 3 pads|14180512
+ZONE|33|3.5|2.5|12.5|8|ADD + MESSAGE / a counter, step on each |||
+DOOR|33|17|20|7.5|0|0|0|0|0|0|starter_vault|1
+TERMINAL|33|15.5|8.6|0|1|VAULT LEVER|PULL THE LEVER. THE VAULT ALSO WANTS|THREE CRYSTALS: SCRIPT_REQUIRE starter_crystals >= 3.|starter_lever|0||3.1416
+SCRIPT_EVENT|33|starter_vault_open|0|0|24|24|-1|5|starter_lever|1|0
+SCRIPT_REQUIRE|33|starter_vault_open|starter_crystals|>=|3
+SCRIPT_TRIGGER|33|starter_vault_open|map|all|0
+SCRIPT_ACTION|33|starter_vault_open|STATE|starter_vault|1
+SCRIPT_ACTION|33|starter_vault_open|MESSAGE|VAULT OPEN: LEVER AND CRYSTALS >= 3 (ALL GATES)|4
+SIGN|33|21.45|8.05|1.9|2.3|0.45|0|SCRIPT_REQUIRE|lever = 1 AND crystals >= 3|14180512
+PICKUP|33|0|17.5|3.5
+PICKUP|33|1|19.5|3.5
+LIGHT|33|18.5|4|4.3|0|0|1.4|6|3400|0|starter_vault|1
+ZONE|33|14|1|23|9.5|SCRIPT_REQUIRE / lever AND crystals >= 3|||
+TERMINAL|33|4|15.6|0|1|RED SWITCH|FLIPS STARTER_RED ON AND OFF.|EITHER SWITCH LIGHTS THE LAMP: MATCH ANY.|starter_red|1||0
+TERMINAL|33|8|15.6|0|1|BLUE SWITCH|FLIPS STARTER_BLUE ON AND OFF.|EITHER SWITCH LIGHTS THE LAMP: MATCH ANY.|starter_blue|1||0
+LIGHT|33|6|16.5|4.3|0|0|1.6|6|6500|0|starter_either|1|0|||||||||0.1|1|0.15
+SCRIPT_EVENT|33|starter_any_on|0|0|24|24|-1|5||1|0
+SCRIPT_REQUIRE|33|starter_any_on|starter_red|=|1
+SCRIPT_REQUIRE|33|starter_any_on|starter_blue|=|1
+SCRIPT_TRIGGER|33|starter_any_on|map|any|1
+SCRIPT_ACTION|33|starter_any_on|STATE|starter_either|1
+SCRIPT_ACTION|33|starter_any_on|MESSAGE|MATCH ANY: ONE SWITCH IS ENOUGH|3
+SCRIPT_EVENT|33|starter_any_off|0|0|24|24|-1|5||1|0
+SCRIPT_REQUIRE|33|starter_any_off|starter_red|=|0
+SCRIPT_REQUIRE|33|starter_any_off|starter_blue|=|0
+SCRIPT_TRIGGER|33|starter_any_off|map|all|1
+SCRIPT_ACTION|33|starter_any_off|STATE|starter_either|0
+STRUCT|33|4.5|14.54|7.5|14.6|0|0.55|0|20
+SIGN|33|6|14.53|0.34|2.94|0.3|3.1416|MATCH ANY|either switch lights the lamp|14180512
+ZONE|33|3|14.5|9.5|18.5|SCRIPT_TRIGGER any / either switch|||
+STRUCT|33|11|15.5|13|17.5|0|0.03|0|13
+SCRIPT_EVENT|33|starter_mat|11|15.5|13|17.5|-1|5||1|0
+SCRIPT_TRIGGER|33|starter_mat|box|all|1
+SCRIPT_ACTION|33|starter_mat|ADD|starter_visits|1
+SCRIPT_ACTION|33|starter_mat|MESSAGE|REPEAT 1: VISIT {starter_visits}|2
+STRUCT|33|11|14.54|13|14.6|0|0.55|0|20
+SIGN|33|12|14.53|0.34|1.94|0.3|3.1416|REPEAT|counts each visit|14180512
+ZONE|33|10.5|14.5|13.5|18.5|SCRIPT_TRIGGER repeat 1 / the doormat|||
+STRUCT|33|16|15|22.5|15.06|0|1.1|1|2
+STRUCT|33|16|21.44|22.5|21.5|0|1.1|1|2
+STRUCT|33|16|15|16.06|21.5|0|1.1|1|2
+STRUCT|33|22.44|15|22.5|21.5|0|1.1|1|2
+CREATURE|33|0|19.2|18.8|0|||starter_wake
+TERMINAL|33|17.2|14.2|0|1|WAKE THE HUNTSMAN|IT SLEEPS UNTIL starter_wake IS SET.|KILL IT: @kills >= 1 AND @remaining = 0 FIRE.|starter_wake|0||0
+LIGHT|33|19.2|18.2|4.3|0|0|1.5|7|6500|0|starter_pen_clear|1|0|||||||||0.1|1|0.15
+SCRIPT_EVENT|33|starter_pen|0|0|24|24|-1|5||1|0
+SCRIPT_REQUIRE|33|starter_pen|@kills|>=|1
+SCRIPT_REQUIRE|33|starter_pen|@remaining|=|0
+SCRIPT_TRIGGER|33|starter_pen|map|all|0
+SCRIPT_ACTION|33|starter_pen|STATE|starter_pen_clear|1
+SCRIPT_ACTION|33|starter_pen|MESSAGE|LIVE VALUES: @kills >= 1, @remaining = 0|4
+STRUCT|33|19.2|14.34|21.8|14.4|0|0.55|0|20
+SIGN|33|20.5|14.33|0.34|2.54|0.3|3.1416|@kills  @remaining|live values: clear the pen|14180512
+ZONE|33|15.5|14.2|23|22|@kills / @remaining / the Huntsman pen|||
+HAZARD|33|3|3.5|20.2|9.5|22.6|0|2.2|12
+STRUCT|33|3.45|20.2|3.55|22.6|0|1.1|1|2
+STRUCT|33|9.45|20.2|9.55|22.6|0|1.1|1|2
+PICKUP|33|0|11.5|21
+PICKUP|33|0|12.5|21
+SCRIPT_EVENT|33|starter_hurt|0|0|24|24|-1|5||1|0
+SCRIPT_REQUIRE|33|starter_hurt|@health|<|50
+SCRIPT_TRIGGER|33|starter_hurt|map|all|1
+SCRIPT_ACTION|33|starter_hurt|MESSAGE|@health < 50: GET OUT OF THE GAS|3
+STRUCT|33|5.2|19.54|7.8|19.6|0|0.55|0|20
+SIGN|33|6.5|19.53|0.34|2.54|0.3|3.1416|@health|gas strip: warns under 50|14180512
+ZONE|33|3|19|13|23|@health / a gas strip that warns you|||
+TERMINAL|33|21.5|11.8|0|1|CALL MAP 0|SETS starter_call. THE EVENT THAT ANSWERS|IS ON MAP 0: SCRIPT_TRIGGER campaign.|starter_call|0||-1.5708
+SIGN|33|22.95|11.8|2.2|2.4|0.45|-1.5708|CAMPAIGN SCOPE|an event on map 0 answers here|14180512
+ZONE|33|19.5|10|23|13.8|SCRIPT_TRIGGER campaign / call map 0|||
 --- CUSTOM_CAMPAIGN_DATA_END ---
