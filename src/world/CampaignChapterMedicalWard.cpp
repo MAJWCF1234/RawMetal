@@ -57,16 +57,21 @@ void mwGlaze(Map& m,float x1,float y1,float x2,float y2,float f,float roof,float
   else{const float a=side>0?x2:x1-counter,b=side>0?x2+counter:x1,lo=std::min(a,b),hi=std::max(a,b),w=side>0?lo:hi;
    wall(m,lo,y1,hi,y2,f+sill-.05f,f+sill,20);for(float y:{y1,y2-.04f})wall(m,lo,y,hi,y+.04f,f,f+sill-.05f,21);wall(m,std::min(w,w+side*.03f),y1,std::max(w,w+side*.03f),y2,f+.3f,f+sill-.05f,21);}
  }
- if(alongX)wall(m,x1,y1-.04f,x2,y2+.04f,f+sill+.01f,f+head,30);else wall(m,x1-.04f,y1,x2+.04f,y2,f+sill+.01f,f+head,30);
+ const float proxyTop=std::max(f+head,roof);
+ if(alongX)wall(m,x1,y1-.04f,x2,y2+.04f,f+sill+.01f,proxyTop,30);else wall(m,x1-.04f,y1,x2+.04f,y2,f+sill+.01f,proxyTop,30);
 }
 // Cubicle curtain under its track: fabric along x at y (or along y at x), feet showing below.
+// A proxy closes the gap above it to the ceiling: nobody crawls along a curtain top.
 void mwCurtain(Map& m,float a,float b,float at,bool alongX,float f){
- if(alongX)wall(m,a,at-.02f,b,at+.02f,f+.30f,f+2.35f,39);else wall(m,at-.02f,a,at+.02f,b,f+.30f,f+2.35f,39);
+ const float roof=m.definition.ceiling;
+ if(alongX){wall(m,a,at-.02f,b,at+.02f,f+.30f,f+2.35f,39);wall(m,a,at-.02f,b,at+.02f,f+2.35f,roof,30);}
+ else{wall(m,at-.02f,a,at+.02f,b,f+.30f,f+2.35f,39);wall(m,at-.02f,a,at+.02f,b,f+2.35f,roof,30);}
 }
 // A curtain drawn back: the fabric bunched at the end of its track.
 void mwBunch(Map& m,float x,float y,float f,bool alongX){
- if(alongX){wall(m,x-.08f,y-.06f,x+.08f,y+.06f,f+.24f,f+2.35f,39);wall(m,x-.06f,y+.04f,x+.1f,y+.12f,f+.27f,f+2.31f,39);}
- else{wall(m,x-.06f,y-.08f,x+.06f,y+.08f,f+.24f,f+2.35f,39);wall(m,x+.04f,y-.06f,x+.12f,y+.1f,f+.27f,f+2.31f,39);}
+ const float roof=m.definition.ceiling;
+ if(alongX){wall(m,x-.08f,y-.06f,x+.08f,y+.06f,f+.24f,f+2.35f,39);wall(m,x-.06f,y+.04f,x+.1f,y+.12f,f+.27f,f+2.31f,39);wall(m,x-.08f,y-.06f,x+.1f,y+.12f,f+2.31f,roof,30);}
+ else{wall(m,x-.06f,y-.08f,x+.06f,y+.08f,f+.24f,f+2.35f,39);wall(m,x+.04f,y-.06f,x+.12f,y+.1f,f+.27f,f+2.31f,39);wall(m,x-.06f,y-.08f,x+.12f,y+.1f,f+2.31f,roof,30);}
 }
 // Ceiling track: hung from the roof by a drop rod at each end.
 void mwTrack(Map& m,Vec2 a,Vec2 b,float f,float roof){

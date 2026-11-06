@@ -51,7 +51,8 @@ void ddGlaze(Map& m,float x1,float y1,float x2,float y2,float f,float top,float 
  for(int i=0;i<=bays;++i){float t=(alongX?x1:y1)+len*i/bays;t=std::clamp(t-.025f,alongX?x1:y1,(alongX?x2:y2)-.05f);
   if(alongX)wall(m,t,y1+.02f,t+.05f,y2-.02f,f+sill+.01f,f+head,20);else wall(m,x1+.02f,t,x2-.02f,t+.05f,f+sill+.01f,f+head,20);}
  wall(m,x1,y1,x2,y2,f+head,f+head+.06f,20);if(top>f+head+.06f)wall(m,x1,y1,x2,y2,f+head+.06f,top,3);
- if(alongX)wall(m,x1,y1-.04f,x2,y2+.04f,f+sill+.01f,f+head,30);else wall(m,x1-.04f-counter,y1,x2+.04f,y2,f+sill+.01f,f+head,30);
+ const float proxyTop=std::max(f+head,top);
+ if(alongX)wall(m,x1,y1-.04f,x2,y2+.04f,f+sill+.01f,proxyTop,30);else wall(m,x1-.04f-counter,y1,x2+.04f,y2,f+sill+.01f,proxyTop,30);
  if(counter>0&&!alongX)wall(m,x1-counter,y1+.05f,x1,y2-.05f,f+sill-.04f,f+sill,20);
 }
 WorldLight ddTube(float x,float y,float mount,float intensity,float range,float kelvin,float tint,float flicker=0){
@@ -78,16 +79,20 @@ void ddCrash(Map& m,float x1,float y1,float x2,float y2,float f){wall(m,x1,y1,x2
 // An IV stand built from parts: weighted base, pole, hook and bag; a proxy keeps it solid.
 void ddDrip(Map& m,float x,float y,float f,bool bag=true){
  wall(m,x-.18f,y-.18f,x+.18f,y+.18f,f,f+.03f,20);
- m.pipes.push_back({{x,y},{x,y},f+.03f,.012f,f+1.9f,5});wall(m,x-.18f,y-.18f,x+.18f,y+.18f,f+.03f,f+1.9f,30);
+ m.pipes.push_back({{x,y},{x,y},f+.03f,.012f,f+1.9f,5});wall(m,x-.18f,y-.18f,x+.18f,y+.18f,f+.03f,m.definition.ceiling,30);   // to the ceiling: nobody stands on a drip
  if(bag){m.pipes.push_back({{x,y},{x+.15f,y},f+1.88f,.008f,f+1.88f,5});ddFix(m,model::med_blood_bag,x+.15f,y,f+1.72f,.11f,.021f,.143f,ddS,false);}
 }
-// Cubicle curtain under its track, and one drawn back to the end of it.
+// Cubicle curtain under its track, and one drawn back to the end of it. A proxy closes the gap
+// above each to the ceiling: nobody crawls along a curtain top.
 void ddCurtain(Map& m,float a,float b,float at,bool alongX,float f){
- if(alongX)wall(m,a,at-.02f,b,at+.02f,f+.30f,f+2.35f,39);else wall(m,at-.02f,a,at+.02f,b,f+.30f,f+2.35f,39);
+ const float roof=m.definition.ceiling;
+ if(alongX){wall(m,a,at-.02f,b,at+.02f,f+.30f,f+2.35f,39);wall(m,a,at-.02f,b,at+.02f,f+2.35f,roof,30);}
+ else{wall(m,at-.02f,a,at+.02f,b,f+.30f,f+2.35f,39);wall(m,at-.02f,a,at+.02f,b,f+2.35f,roof,30);}
 }
 void ddBunch(Map& m,float x,float y,float f,bool alongX){
- if(alongX){wall(m,x-.08f,y-.06f,x+.08f,y+.06f,f+.24f,f+2.35f,39);wall(m,x-.06f,y+.04f,x+.1f,y+.12f,f+.27f,f+2.31f,39);}
- else{wall(m,x-.06f,y-.08f,x+.06f,y+.08f,f+.24f,f+2.35f,39);wall(m,x+.04f,y-.06f,x+.12f,y+.1f,f+.27f,f+2.31f,39);}
+ const float roof=m.definition.ceiling;
+ if(alongX){wall(m,x-.08f,y-.06f,x+.08f,y+.06f,f+.24f,f+2.35f,39);wall(m,x-.06f,y+.04f,x+.1f,y+.12f,f+.27f,f+2.31f,39);wall(m,x-.08f,y-.06f,x+.1f,y+.12f,f+2.31f,roof,30);}
+ else{wall(m,x-.06f,y-.08f,x+.06f,y+.08f,f+.24f,f+2.35f,39);wall(m,x+.04f,y-.06f,x+.12f,y+.1f,f+.27f,f+2.31f,39);wall(m,x-.06f,y-.08f,x+.12f,y+.1f,f+2.31f,roof,30);}
 }
 void ddTrack(Map& m,Vec2 a,Vec2 b,float f,float top){
  m.pipes.push_back({a,b,f+2.40f,.015f,f+2.40f,5});

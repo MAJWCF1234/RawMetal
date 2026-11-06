@@ -68,7 +68,8 @@ void m71Glaze(Map& m,float x1,float y1,float x2,float y2,float f,float roof,floa
   if(alongX)wall(m,t,y1+.02f,t+.05f,y2-.02f,f+sill+.01f,f+head,20);else wall(m,x1+.02f,t,x2-.02f,t+.05f,f+sill+.01f,f+head,20);}
  wall(m,x1,y1,x2,y2,f+head,f+head+.06f,20);if(roof>f+head+.06f)wall(m,x1,y1,x2,y2,f+head+.06f,roof,3);
  // counter: a shelf this deep on the -y (alongX) or -x side, under the proxy.
- if(alongX)wall(m,x1,y1-.04f-counter,x2,y2+.04f,f+sill+.01f,f+head,30);else wall(m,x1-.04f-counter,y1,x2+.04f,y2,f+sill+.01f,f+head,30);
+ const float proxyTop=std::max(f+head,roof);
+ if(alongX)wall(m,x1,y1-.04f-counter,x2,y2+.04f,f+sill+.01f,proxyTop,30);else wall(m,x1-.04f-counter,y1,x2+.04f,y2,f+sill+.01f,proxyTop,30);
 }
 // A ceiling tube that works: the emitter sits clear below its recessed fitting.
 WorldLight m71Tube(float x,float y,float roof,float intensity,float range,float kelvin,float tint,float flicker=0){
@@ -523,13 +524,17 @@ void m72Header(Map& m,float x1,float x2,float y1,float y2,float f,float roof,flo
  wall(m,x1,y1,x2,y2,f+h,roof,3);wall(m,x1,y1-.02f,x2,y2+.02f,f+h-.04f,f+h,20);
 }
 // Cubicle curtain hung under its track: fabric along x at y (or along y at x).
+// A proxy closes the gap above it to the ceiling: nobody crawls along a curtain top.
 void m72Curtain(Map& m,float a,float b,float at,bool alongX,float f){
- if(alongX)wall(m,a,at-.02f,b,at+.02f,f+.30f,f+2.35f,39);else wall(m,at-.02f,a,at+.02f,b,f+.30f,f+2.35f,39);
+ const float roof=m.definition.ceiling;
+ if(alongX){wall(m,a,at-.02f,b,at+.02f,f+.30f,f+2.35f,39);wall(m,a,at-.02f,b,at+.02f,f+2.35f,roof,30);}
+ else{wall(m,at-.02f,a,at+.02f,b,f+.30f,f+2.35f,39);wall(m,at-.02f,a,at+.02f,b,f+2.35f,roof,30);}
 }
 // A curtain drawn back: the fabric bunched at the end of its track.
 void m72Bunch(Map& m,float x,float y,float f,bool alongX){
- if(alongX){wall(m,x-.08f,y-.06f,x+.08f,y+.06f,f+.24f,f+2.35f,39);wall(m,x-.06f,y+.04f,x+.1f,y+.12f,f+.27f,f+2.31f,39);}
- else{wall(m,x-.06f,y-.08f,x+.06f,y+.08f,f+.24f,f+2.35f,39);wall(m,x+.04f,y-.06f,x+.12f,y+.1f,f+.27f,f+2.31f,39);}
+ const float roof=m.definition.ceiling;
+ if(alongX){wall(m,x-.08f,y-.06f,x+.08f,y+.06f,f+.24f,f+2.35f,39);wall(m,x-.06f,y+.04f,x+.1f,y+.12f,f+.27f,f+2.31f,39);wall(m,x-.08f,y-.06f,x+.1f,y+.12f,f+2.31f,roof,30);}
+ else{wall(m,x-.06f,y-.08f,x+.06f,y+.08f,f+.24f,f+2.35f,39);wall(m,x+.04f,y-.06f,x+.12f,y+.1f,f+.27f,f+2.31f,39);wall(m,x-.06f,y-.08f,x+.12f,y+.1f,f+2.31f,roof,30);}
 }
 // Ceiling track: the renderer hangs the run from the roof; a drop rod holds each end.
 void m72Track(Map& m,Vec2 a,Vec2 b,float f,float roof){
@@ -546,7 +551,7 @@ void m72Shelf(Map& m,float x,float wallY,float dir,float f,bool monitor=true){
 // An IV stand built from parts: weighted base, pole, hook, and the bag hanging from it.
 void m72Drip(Map& m,float x,float y,float f,bool bag=true){
  wall(m,x-.18f,y-.18f,x+.18f,y+.18f,f,f+.03f,20);
- m.pipes.push_back({{x,y},{x,y},f+.03f,.012f,f+1.9f,5});wall(m,x-.18f,y-.18f,x+.18f,y+.18f,f+.03f,f+1.9f,30);
+ m.pipes.push_back({{x,y},{x,y},f+.03f,.012f,f+1.9f,5});wall(m,x-.18f,y-.18f,x+.18f,y+.18f,f+.03f,m.definition.ceiling,30);   // to the ceiling: nobody stands on a drip
  if(bag){m.pipes.push_back({{x,y},{x+.15f,y},f+1.88f,.008f,f+1.88f,5});mdFix(m,model::med_blood_bag,x+.15f,y,f+1.72f,.11f,.02f,.14f,mdS,false);}
 }
 // A fitting with its tube dead: the single-tube housing alone, flush to the ceiling.
@@ -627,7 +632,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  wall(m,19.8f,7.6f,20.f,12.75f,f+2.4f,roof,3);wall(m,19.78f,7.6f,20.02f,12.75f,f+2.4f,f+2.44f,20);
  // --- Bays: solid partitions at the head, curtains to the aisle, tracks hung from the roof --------
  for(float x:{7.55f,14.15f})for(auto [y1,y2]:{std::pair{7.f,8.6f},{14.4f,16.f}}){
-  wall(m,x,y1,x+.1f,y2,f,f+2.1f,3);wall(m,x-.01f,y1,x+.11f,y2,f+2.1f,f+2.13f,20);}
+  wall(m,x,y1,x+.1f,y2,f,f+2.1f,3);wall(m,x-.01f,y1,x+.11f,y2,f+2.1f,f+2.13f,20);wall(m,x-.01f,y1,x+.11f,y2,f+2.13f,roof,30);}
  for(float x:{7.6f,14.2f}){m72Curtain(m,8.6f,10.13f,x,false,f);m72Curtain(m,12.87f,14.4f,x,false,f);
   m72Track(m,{x,8.6f},{x,10.15f},f,roof);m72Track(m,{x,12.85f},{x,14.4f},f,roof);}
  for(float y:{10.15f,12.85f}){m72Track(m,{5.2f,y},{9.9f,y},f,roof);m72Track(m,{11.9f,y},{16.6f,y},f,roof);}
@@ -1156,7 +1161,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  for(auto [x,y]:{std::pair{7.6f,10.9f},{6.9f,11.2f},{8.4f,11.6f}})wall(m,x,y,x+.35f,y+.43f,f,f+.02f,20);   // cassettes, emptied
  mdFix(m,model::trash_can,9.4f,9.85f,f,.45f,.45f,.56f,0,true);
  // --- The counter suite: changing, the counter, its store ------------------------------------------
- wall(m,8.25f,15.2f,8.35f,16.45f,f,f+2.1f,3);wall(m,8.24f,15.2f,8.36f,16.45f,f+2.1f,f+2.13f,20);
+ wall(m,8.25f,15.2f,8.35f,16.45f,f,f+2.1f,3);wall(m,8.24f,15.2f,8.36f,16.45f,f+2.1f,f+2.13f,20);wall(m,8.24f,15.2f,8.36f,16.45f,f+2.13f,m.definition.ceiling,30);
  m72Track(m,{6.8f,16.45f},{8.25f,16.45f},f,roof);m72Track(m,{8.35f,16.45f},{9.8f,16.45f},f,roof);
  m72Curtain(m,6.8f,7.55f,16.45f,true,f);m72Bunch(m,7.63f,16.45f,f,true);m72Bunch(m,9.7f,16.45f,f,true);
  kit::prop(m,model::wooden_chair,7.5f,15.6f,f,.417f,.525f,.95f,kPi);kit::prop(m,model::wooden_chair,9.1f,15.6f,f,.417f,.525f,.95f,kPi+.3f);

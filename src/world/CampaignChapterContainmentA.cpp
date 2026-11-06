@@ -105,12 +105,14 @@ void caBlownFront(Map& m,float x1,float y1,float x2,float y2,float f,float roof,
 // (dir -1): seven-stroke figures h high, the string centred on x, its foot at z.
 void caStencil(Map& m,const char* text,float x,float face,int dir,float z,float h,int mat=14){
  const float w=h*.55f,t=h*.14f,gap=h*.24f,y1=dir>0?face:face-.014f,y2=dir>0?face+.014f:face;
- const size_t n=std::char_traits<char>::length(text);float cx=x-(n*w+(n-1)*gap)*.5f;
+ const size_t n=std::char_traits<char>::length(text);const float half=(n*w+(n-1)*gap)*.5f;float cx=0;
+ // Strokes are laid out in reading order; read from the -y side the text runs toward -x.
+ auto stroke=[&](float a,float b,float lo,float hi){const float xa=x+dir*(a-half),xb=x+dir*(b-half);wall(m,std::min(xa,xb),y1,std::max(xa,xb),y2,lo,hi,mat);};
  for(size_t i=0;i<n;++i,cx+=w+gap){const char c=text[i];
   const int k=c=='A'?0x77:c=='0'?0x3f:c=='1'?0x06:c=='2'?0x5b:c=='3'?0x4f:c=='4'?0x66:c=='5'?0x6d:c=='6'?0x7d:c=='7'?0x07:c=='8'?0x7f:c=='9'?0x6f:0;
-  if(k&1)wall(m,cx,y1,cx+w,y2,z+h-t,z+h,mat);if(k&8)wall(m,cx,y1,cx+w,y2,z,z+t,mat);if(k&64)wall(m,cx,y1,cx+w,y2,z+(h-t)*.5f,z+(h+t)*.5f,mat);
-  if(k&2)wall(m,cx+w-t,y1,cx+w,y2,z+h*.5f,z+h,mat);if(k&4)wall(m,cx+w-t,y1,cx+w,y2,z,z+h*.5f,mat);
-  if(k&32)wall(m,cx,y1,cx+t,y2,z+h*.5f,z+h,mat);if(k&16)wall(m,cx,y1,cx+t,y2,z,z+h*.5f,mat);}
+  if(k&1)stroke(cx,cx+w,z+h-t,z+h);if(k&8)stroke(cx,cx+w,z,z+t);if(k&64)stroke(cx,cx+w,z+(h-t)*.5f,z+(h+t)*.5f);
+  if(k&2)stroke(cx+w-t,cx+w,z+h*.5f,z+h);if(k&4)stroke(cx+w-t,cx+w,z,z+h*.5f);
+  if(k&32)stroke(cx,cx+t,z+h*.5f,z+h);if(k&16)stroke(cx,cx+t,z,z+h*.5f);}
 }
 // A drag trail across a floor: smears from point to point, every ~0.7 m, alternately narrow and broad.
 void caTrail(Map& m,std::initializer_list<Vec2> points,float f,unsigned seed){
@@ -212,7 +214,7 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  kit::prop(m,model::prop_cardboard_box_open,7.4f,13.7f,f,.36f,.36f,.36f,.6f);
  for(int i=0;i<4;++i){const float y=7.6f+i*1.9f;
   caFix(m,i==2?model::med_ward_bed_tossed:model::med_ward_bed,2.05f,y,f,0,true);
-  if(i<3)wall(m,1.f,y+.92f,3.7f,y+.98f,f+.25f,f+2.1f,39);
+  if(i<3){wall(m,1.f,y+.92f,3.7f,y+.98f,f+.25f,f+2.1f,39);wall(m,1.f,y+.92f,3.7f,y+.98f,f+2.1f,roof,CollisionProxyMaterial);}
   kit::prop(m,model::med_vitals_monitor_dead,3.55f,y-.62f,f,caE);}
  // Bay 2, framed by the ward doorway from the corridor: the isolation tent the deceased of 03:15 was
  // bagged in. Its corridor side is torn open from inside, the bag lies split on the floor, and the

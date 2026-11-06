@@ -111,6 +111,15 @@ bool Game::auditMapScene(Game& game,int level){
  auto fail=[&](const std::string& what){++problems;report<<what<<'\n';};
  {std::map<int,std::pair<int,int>> heights;for(size_t i=0;i<visited.size();++i)for(float v:visited[i]){auto& h=heights[int(std::floor(v*2))];if(!h.first++)h.second=int(i);}
   report<<"Reached floor heights (m: cells, first at):";for(auto [h,entry]:heights)report<<' '<<h*.5f<<':'<<entry.first<<'@'<<(entry.second%N+.5f)*Cell<<','<<(entry.second/N+.5f)*Cell;report<<'\n';}
+ // Crawl-only perches well above the spawn floor (wall and curtain tops under a ceiling), by what holds them up.
+ {std::map<std::string,std::pair<int,std::string>> perches;
+  for(size_t i=0;i<visited.size();++i)for(float v:visited[i]){if(v<reach.startZ+1.4f)continue;
+   const Vec2 p{(i%N+.5f)*Cell,(i/N+.5f)*Cell};if(game.hullFits(p,v+.02f,Player::StandingHeight+.02f,.2f,false))continue;
+   std::string what="fixture or terrain";
+   for(const auto& s:w.structures())if(s.solid&&std::fabs(s.top-v)<.03f&&p.x+.2f>s.x1&&p.x-.2f<s.x2&&p.y+.2f>s.y1&&p.y-.2f<s.y2){
+    char text[96];std::snprintf(text,sizeof text,"structure %.2f,%.2f-%.2f,%.2f z %.2f..%.2f mat %d",s.x1,s.y1,s.x2,s.y2,s.bottom,s.top,s.material);what=text;break;}
+   auto& e=perches[what];if(!e.first++)e.second=at(p);}
+  for(const auto& [what,e]:perches)report<<"INFO PERCH "<<e.first<<" crawl-only cells on "<<what<<" first at "<<e.second<<'\n';}
  auto check=[&](bool ok,const std::string& what){if(!ok)fail("UNREACHABLE "+what);};
  report<<"Map "<<level<<" ("<<w.definition().playerStart.x<<","<<w.definition().playerStart.y<<" z "<<reach.startZ<<"): "<<reach.nodes<<" reachable cells ("<<standing.nodes<<" standing) of "<<N*N<<"\n";
  auto spawnFeet=[&](Vec2 p,float z){return z==-999?w.floorHeight(p.x,p.y):z;};
