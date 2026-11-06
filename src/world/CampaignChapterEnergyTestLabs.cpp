@@ -93,7 +93,7 @@ void etSuitRail(Map& m,float x1,float y1,float x2,float y2,float f,float facing,
 // closes. W to the High-Energy Test Bay.
 std::shared_ptr<const Map> makeResonanceLaboratory(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[85];m.definition=CampaignChunks[85];m.definition.ambient=.16f;
+ m.name=CampaignMapNames[85];m.definition=CampaignChunks[85];m.definition.ambient=.21f;
  m.definition.playerStart={12.f,21.5f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=-kPi*.5f;
  m.wallSurface=SurfacePaintedGreen;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
@@ -156,8 +156,10 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  const float lid=f+3.2f;
  glazing(m,9.f,9.5f,15.f,9.7f,f,lid,3,.95f,2.4f,true);
  glazing(m,9.f,9.7f,9.2f,14.3f,f,lid,3,.95f,2.4f,true);glazing(m,14.8f,9.7f,15.f,14.3f,f,lid,3,.95f,2.4f,true);
- wall(m,9.f,14.3f,11.4f,14.5f,f,lid,3);swingDoor(m,11.4f,12.6f,14.4f,f,lid,-1);wall(m,12.6f,14.3f,15.f,14.5f,f,lid,3);
- wall(m,8.9f,9.4f,15.1f,14.6f,lid,lid+.25f,8);                                                 // the booth's lead lid
+ glazing(m,9.f,14.3f,11.4f,14.5f,f,lid,3,.95f,2.4f,true);swingDoor(m,11.4f,12.6f,14.4f,f,lid,-1);glazing(m,12.6f,14.3f,15.f,14.5f,f,lid,3,.95f,2.4f,true);
+ // the booth's lid is gone to an open steel frame: the machine hangs down into the glass through it
+ for(auto [x1,y1,x2,y2]:{std::tuple{8.9f,9.4f,15.1f,9.6f},{8.9f,14.4f,15.1f,14.6f},{8.9f,9.4f,9.1f,14.6f},{14.9f,9.4f,15.1f,14.6f},{8.9f,10.45f,15.1f,10.75f},{12.9f,9.4f,13.1f,14.6f}})
+  wall(m,x1,y1,x2,y2,lid,lid+.25f,12);
  // THE RESONATOR (1981): what the booth was built under. One pylon on the west, an arm out over the
  // lid, the primary coil wound along it, the emitter dropped through the lid at R-01; on the east the
  // reservoir tank, and the copper bus that climbs from it to the coil. Lopsided, older than the room.
@@ -175,18 +177,38 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  m.pipes.push_back({{17.6f,8.6f},{13.2f,11.8f},f+4.6f,.12f,f+3.95f,4});m.pipes.push_back({{17.6f,8.6f},{13.4f,11.9f},f+4.3f,.06f,f+4.95f,6});
  wall(m,16.8f,7.8f,18.4f,9.4f,f+4.6f,roof,30);wall(m,6.86f,10.6f,8.5f,13.f,roof-.4f,roof,30);
  m.lights.push_back(etGlow({12.f,9.7f},lid+.55f,.9f,8.f,etViolet,.25f));                        // the emitter, lit from what it holds
- m.lights.push_back(etWall({1.02f,11.8f},f+4.6f,0,.55f,11.f,4200));
- m.lights.push_back(lamp({10.f,11.f},f+5.6f,.7f,6.5f,4400,0,WorldLightMount::Bare,0,true));      // the work lamp over the coil, still on                              // the old floods on the pylon side
- m.lights.push_back(etWall({22.98f,11.8f},f+4.6f,kPi,.45f,10.f,4200,.1f));
+ m.lights.push_back(etWall({1.02f,11.8f},f+4.6f,0,.8f,12.f,4200));                                // the old floods on the pylon side
+ m.lights.push_back(lamp({10.f,11.f},f+5.6f,1.f,7.5f,4400,0,WorldLightMount::Bare,0,true));      // the work lamp over the coil, still on
+ m.lights.push_back(etWall({22.98f,11.8f},f+4.6f,kPi,.7f,12.f,4200,.1f));
+ // What it became: the resonator was never finished being added to. Coils hung off it on chains wherever
+ // a sitting asked for more, down through the open lid into the booth; the second arm, the 1990 arm,
+ // sheared at the pylon on the night of sitting 212 and hangs across the booth's door to the floor,
+ // trailing its feed. And under it all one point, the electrode's tip over R-01, burns white.
+ for(auto [x,y,lo,hi,r]:{std::tuple{10.2f,12.9f,f+2.45f,f+3.35f,.34f},{13.7f,12.4f,f+2.7f,f+3.6f,.3f},{10.3f,10.2f,f+2.9f,f+3.7f,.26f},{14.2f,10.1f,f+3.3f,f+4.3f,.38f}}){
+  m.pipes.push_back({{x,y},{x,y},lo,r,hi,4});
+  for(float z=lo+.1f;z<hi-.05f;z+=.14f)m.pipes.push_back({{x,y},{x,y},z,r+.04f,z+.06f,6});        // the windings
+  m.pipes.push_back({{x,y},{x,y},hi,r*.5f,hi+.12f,6});
+  for(float d:{-.12f,.12f})m.pipes.push_back({{x+d,y},{x+d,y},hi+.12f,.012f,roof-.05f,6});       // its chains to the slab
+  m.pipes.push_back({{x,y-r},{12.f,10.6f},lo+.2f,.03f,f+2.2f,7});}                                // each one's lead to the electrode
+ m.pipes.push_back({{7.85f,12.45f},{9.9f,15.35f},f+5.15f,.15f,f+2.25f,2});                         // the sheared arm
+ m.pipes.push_back({{7.85f,12.5f},{10.05f,15.5f},f+5.3f,.06f,f+2.5f,18});
+ wall(m,9.75f,15.2f,10.15f,15.65f,f+2.05f,f+2.4f,12);                                               // the torn end
+ anFix(m,model::pwr_cable_bundle,11.6f,16.1f,f,4.f,.14f,.22f,.15f,false);
+ m.pipes.push_back({{17.3f,9.f},{15.4f,11.4f},f+4.2f,.07f,f+3.3f,7});m.pipes.push_back({{15.4f,11.4f},{14.2f,10.1f},f+3.3f,.07f,f+4.3f,7});   // the reservoir's feed, sagging to the big coil
+ wall(m,11.92f,10.52f,12.08f,10.68f,f+1.82f,f+1.98f,35);                                             // the tip: white-hot from inside
+ {auto l=lamp({12.f,10.6f},f+1.75f,1.7f,7.f,9500,-.2f,WorldLightMount::Bare,0,false,{.92f,.82f,1.f});l.flicker=.18f;m.lights.push_back(l);}
+ m.lights.push_back(etArcLight({12.f,10.9f},f+2.4f,.9f,6.f,2.6f,.3f,.4f));
+ // the lab's frame: three beams across the slab, so the old room reads in bays round the machine
+ for(float x:{3.2f,15.7f,19.6f})wall(m,x-.15f,7.1f,x+.15f,16.9f,roof-.42f,roof,12);
  equipmentPad(m,11.3f,10.f,12.7f,11.2f,f);wall(m,11.75f,10.35f,12.25f,10.85f,f+.1f,f+1.f,28);
  anFix(m,model::lab_anomaly_relic,12.f,10.6f,f+1.f,.5f,.4f,.4f,.3f,false);                      // R-01
  kit::prop(m,model::wooden_chair,12.f,12.75f,f,.417f,.525f,.95f,0);                            // the chair, turned to it
  for(float y:{10.1f,12.4f})m.pipes.push_back({{9.15f,y},{14.85f,y},f+2.7f,.045f,f+2.7f,4});
- m.lights.push_back(etGlow({12.f,10.6f},f+1.45f,.55f,4.5f,etViolet,.3f));
+ m.lights.push_back(etGlow({12.f,10.6f},f+1.45f,.7f,5.f,etViolet,.3f));
  hazard(m,Hazard::Kind::Anomaly,11.f,9.8f,13.f,11.6f,f,f+2.f,0);
  anHum(m,"et_res_booth_hum",9.2f,9.7f,14.8f,14.3f,f,f+2.5f,.5f);
  kit::prop(m,model::item_id_card,13.4f,13.6f,f,.132f,.085f,.002f,1.1f);
- taped(m,{10.3f,14.29f},f+1.5f,anN,Readable::Note,"SITTING 212 / 01:40","VOLUNTEER IN THE CHAIR, R-01 ON THE PLINTH, LAMPS STEADY. 01:52 HE SAID IT WAS WARM. 01:57 HE SAID IT HAD TURNED ROUND.",
+ taped(m,{10.3f,14.29f},f+.62f,anN,Readable::Note,"SITTING 212 / 01:40","VOLUNTEER IN THE CHAIR, R-01 ON THE PLINTH, LAMPS STEADY. 01:52 HE SAID IT WAS WARM. 01:57 HE SAID IT HAD TURNED ROUND.",
   "01:58 BOOTH ALARM. WE SEALED THE PASSAGE, THEN THE BOOTH. NOBODY ASKED WHICH SIDE OF THE GLASS HE WAS ON.");
  wallSign(m,13.8f,14.5f,f+2.6f,"NO MOVING LIGHT","LAMPS STEADY WHILE A SAMPLE IS ON THE PLINTH",1.8f,anS);
  // the recording desk east of the booth, its operators facing the glass
@@ -218,7 +240,7 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  paperDrift(m,1.5f,8.2f,20.4f,16.5f,f,12,8501);
  m.creatureSpawns.push_back({CreatureKind::Transformed,{19.2f,15.7f},-999,1,0});               // the volunteer, out of the booth after all
  m.pickupSpawns.push_back({{7.6f,8.4f},PickupKind::HandgunAmmo,f});
- for(auto [x,y,fl]:{std::tuple{4.f,10.f,0.f},{4.f,14.2f,.35f},{19.f,8.6f,0.f},{19.f,15.6f,0.f}})m.lights.push_back(etTube(x,y,roof,.55f,6.5f,5600,.04f,fl));
+ for(auto [x,y,fl]:{std::tuple{4.f,10.f,0.f},{4.f,14.2f,.35f},{19.f,8.6f,0.f},{19.f,15.6f,0.f}})m.lights.push_back(etTube(x,y,roof,.75f,7.f,5600,.04f,fl));
  etDeadTube(m,12.f,8.3f,roof);etDeadTube(m,12.f,15.7f,roof);
  // --- The south: the corridor in from the ring, the waiting room and the suit room ---------------
  wallDoor(m,1.f,9.8f,16.9f,17.1f,5.f,6.2f,f,roof,1);wallDoor(m,14.2f,23.f,16.9f,17.1f,18.f,19.2f,f,roof,1);
@@ -250,13 +272,13 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  m.lights.push_back(etTube(18.6f,19.6f,roof,.45f,5.f,4000,.02f,.2f));
  recessedFittings(m);
  // Names, and the air: violet in the booth, stale everywhere else.
- zone(m,"RESONANCE LABORATORY / THE BOOTH",9.2f,9.7f,14.8f,14.3f,-1000,1000,{.24f,.17f,.32f,.026f});
- zone(m,"RESONANCE LABORATORY / PASSAGE",10.f,0,14.f,7.f,-1000,1000,{.13f,.13f,.13f,.01f});
- zone(m,"RESONANCE LABORATORY / ARCHIVE",1.f,1.f,9.8f,6.9f,-1000,1000,{.17f,.14f,.10f,.012f});
- zone(m,"RESONANCE LABORATORY / SAMPLE VAULT",14.2f,1.f,23.f,6.9f,-1000,1000,{.10f,.18f,.12f,.012f});
+ zone(m,"RESONANCE LABORATORY / THE BOOTH",9.2f,9.7f,14.8f,14.3f,-1000,1000,{.15f,.13f,.18f,.007f});
+ zone(m,"RESONANCE LABORATORY / PASSAGE",10.f,0,14.f,7.f,-1000,1000,{.13f,.13f,.13f,.005f});
+ zone(m,"RESONANCE LABORATORY / ARCHIVE",1.f,1.f,9.8f,6.9f,-1000,1000,{.17f,.14f,.10f,.005f});
+ zone(m,"RESONANCE LABORATORY / SAMPLE VAULT",14.2f,1.f,23.f,6.9f,-1000,1000,{.10f,.18f,.12f,.005f});
  zone(m,"RESONANCE LABORATORY / WAITING ROOM",1.f,17.1f,9.8f,23.f);
  zone(m,"RESONANCE LABORATORY / SUIT ROOM",14.2f,17.1f,23.f,23.f);
- zone(m,"RESONANCE LABORATORY",0,0,24,24,-1000,1000,{.14f,.15f,.15f,.012f});
+ zone(m,"RESONANCE LABORATORY",0,0,24,24,-1000,1000,{.14f,.15f,.15f,.005f});
  titleCard(m,"ENERGY TEST COMPLEX",9.8f,17.f,14.2f,24.f);
  freightFinish(m,-1);
  return p;
@@ -271,7 +293,7 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
 // Observation Ring.
 std::shared_ptr<const Map> makeHighEnergyTestBay(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[86];m.definition=CampaignChunks[86];m.definition.ambient=.12f;
+ m.name=CampaignMapNames[86];m.definition=CampaignChunks[86];m.definition.ambient=.17f;
  m.definition.playerStart={21.8f,11.5f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=kPi;
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
  const float f=-20,g=-12,roof=m.definition.ceiling;
@@ -283,7 +305,7 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
  wall(m,1.f,17.f,17.f,23.f,f,g,15);wall(m,10.f,23.f,14.f,24.f,f,g,15);
  for(float z=f+2.f;z<g-.5f;z+=2.f){wall(m,16.96f,1.f,17.f,17.f,z,z+.08f,12);wall(m,1.f,16.96f,17.f,17.f,z,z+.08f,12);}   // the walls' steel courses
  wall(m,16.9f,1.f,17.f,17.f,g-.32f,g,12);wall(m,1.f,16.9f,15.f,17.f,g-.32f,g,12);                // the gallery fascia
- guardRail(m,16.9f,8.f,17.f,16.9f,g);guardRail(m,1.f,16.9f,15.f,17.f,g);
+ guardRail(m,16.9f,8.f,17.f,16.9f,g);guardRail(m,1.f,16.9f,8.f,17.f,g);guardRail(m,10.f,16.9f,15.f,17.f,g);   // broken for the cross-catwalk
  // the long stair down to the bay floor, against the east gallery's face
  m.stairs.push_back({15.f,4.96f,17.f,17.f,f,g,43,true,true});
  // --- The control room (east gallery, north): glass onto the bay --------------------------------
@@ -334,19 +356,19 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
   for(float z:{f+3.f,f+5.f,f+7.f})m.pipes.push_back({t,t,z,.95f,z+.12f,20});                    // the grading rings
   m.lights.push_back(etArcLight(t,f+9.3f,.6f,7.f,3.f+i*.4f,.35f,i*.7f));}
  etArc(m,6.f,6.f,11.f,11.f,f,f+2.4f,35,3.2f,.8f);
- m.lights.push_back(etArcLight({8.5f,8.5f},f+3.4f,.8f,8.f,3.2f,.8f));
+ m.lights.push_back(etArcLight({8.5f,10.1f},f+2.6f,.8f,8.f,3.2f,.8f));
  etArc(m,2.6f,13.1f,4.4f,14.9f,f,f+2.6f,30,2.1f,.5f,1.f);                                        // tower 3 lets go to the floor
  anFix(m,model::transformer,2.4f,9.f,f,4.4f,2.4f,2.6f,anE,true);wall(m,1.2f,6.8f,3.6f,11.2f,f+2.6f,f+3.f,30);
  for(float y:{8.2f,9.8f})anFix(m,model::pwr_cable_bundle,5.4f,y,f,4.f,.14f,.22f,0,false);
  // the crane: its girder east-west over the chamber, the hook block down on its rope
  wall(m,1.f,9.3f,23.f,9.9f,roof-3.6f,roof-2.8f,13);
- m.pipes.push_back({{8.5f,9.6f},{8.5f,9.6f},f+5.f,.02f,roof-3.6f,6});wall(m,8.3f,9.4f,8.7f,9.8f,f+4.6f,f+5.f,12);
+ m.pipes.push_back({{4.6f,9.6f},{4.6f,9.6f},f+5.f,.02f,roof-3.6f,6});wall(m,4.4f,9.4f,4.8f,9.8f,f+4.6f,f+5.f,12);
  // The bay read in three tiers. FLOOR: each tower's foot lit cold from its plinth. MID: the
  // charging gantry, a ring of grating hung on rods round the tower heads with a spoke to each
  // wall, its lamps looking down the towers. TOP: the emitter, hung from the roof over the chamber.
  for(int i=0;i<4;++i){const Vec2 t=towers[i];
   wall(m,t.x-1.f,t.y-1.f,t.x+1.f,t.y+1.f,f,f+.3f,15);floorLine(m,t.x-1.f,t.y-1.f,t.x+1.f,t.y-.88f,f+.3f,13);
-  m.lights.push_back(etGlow({t.x+(t.x<8?1.3f:-1.3f),t.y+(t.y<8?1.3f:-1.3f)},f+.6f,.55f,6.f,{.75f,.85f,1.f}));
+  m.lights.push_back(etGlow({t.x+(t.x<8?1.3f:-1.3f),t.y+(t.y<8?1.3f:-1.3f)},f+.6f,.8f,7.f,{.75f,.85f,1.f}));
   m.pipes.push_back({t,t,f+9.f,.5f,f+9.6f,6});}                                                  // the tower heads
  const float gz=f+10.4f;                                                                       // the gantry deck
  for(auto [x1,y1,x2,y2]:{std::tuple{4.6f,4.6f,12.4f,5.4f},{4.6f,12.6f,12.4f,13.4f},{4.6f,4.6f,5.4f,13.4f},{11.6f,4.6f,12.4f,13.4f},   // the ring
@@ -361,12 +383,27 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
   anFix(m,model::mine_cage_lamp,c.x,c.y,gz-.48f,.21f,.2f,.36f,0,false);
   m.lights.push_back(lamp(c,gz-.55f,.85f,10.f,2300,0,WorldLightMount::Bare));}
  m.lights.push_back(etArcLight({8.5f,5.f},gz+.6f,.5f,8.f,2.4f,.3f,.4f));m.lights.push_back(etArcLight({8.5f,13.f},gz+.6f,.5f,8.f,2.4f,.3f,1.6f));
- // the emitter: a stack of grading rings on a drop column from the roof, aimed down at the chamber
- for(float x:{7.9f,9.1f})m.pipes.push_back({{x,8.5f},{x,8.5f},roof-6.f,.06f,roof-.05f,6});
- m.pipes.push_back({{8.5f,8.5f},{8.5f,8.5f},roof-7.4f,.42f,roof-5.f,20});
- for(float z=roof-7.3f;z<roof-5.1f;z+=.45f)m.pipes.push_back({{8.5f,8.5f},{8.5f,8.5f},z,.95f-(z-roof+7.3f)*.12f,z+.12f,6});
- m.pipes.push_back({{8.5f,8.5f},{8.5f,8.5f},roof-8.f,.12f,roof-7.4f,4});
- m.lights.push_back(etGlow({8.5f,8.5f},roof-8.2f,1.3f,18.f,etViolet,.2f));
+ // THE STACK: the bank's own capacitor column, from the shot chamber's insulator to the roof, can on can,
+ // copper and steel, a grading ring at every joint and a lamp on every can: the one thing in the bay you
+ // can see from anywhere in it, and what the towers have been filling since 01:57.
+ for(int k=0;;++k){const float z0=f+3.2f+k*2.6f;if(z0>roof-1.2f)break;const float z1=std::min(z0+2.2f,roof-.5f);
+  vessel(m,{8.5f,8.5f},.5f,z0,z1,k%2?5:4);
+  m.pipes.push_back({{8.5f,8.5f},{8.5f,8.5f},z1,.24f,z0+2.6f,20});                                   // the insulator neck
+  for(float dz:{.35f,1.85f})m.pipes.push_back({{8.5f,8.5f},{8.5f,8.5f},std::min(z0+dz,z1-.1f),.86f,std::min(z0+dz,z1-.1f)+.08f,20});
+  for(float a:{.8f,2.4f,3.9f,5.5f}){const Vec2 c{8.5f+std::cos(a)*.62f,8.5f+std::sin(a)*.62f};m.pipes.push_back({c,c,z0+.2f,.05f,z1-.2f,6});}   // the tie rods
+  auto l=lamp({8.5f+.95f,8.5f+.95f},z0+1.1f,1.05f,8.5f,8000,-.1f,WorldLightMount::Bare,0,false);l.flicker=.05f;m.lights.push_back(l);
+  auto r=lamp({8.5f-.95f,8.5f-.95f},z0+1.1f,.7f,7.f,8000,-.1f,WorldLightMount::Bare,0,false);m.lights.push_back(r);}
+ m.pipes.push_back({{8.5f,8.5f},{8.5f,8.5f},roof-.5f,.7f,roof,12});                                     // its head plate in the roof
+ // THE CROSS-CATWALK: off the south gallery, straight across the bay at gallery height, round the stack
+ // on a collar and on to the north wall, hung from the roof on rods: the crossing they read the cans from.
+ deck(m,g,8,1,10,17);deck(m,g,7,7,8,10);
+ for(auto& L:m.layers)if(L.thickness>0&&std::fabs(L.elevation-g)<.01f)deckHangers(m,L,roof);
+ for(auto [x1,y1,x2,y2]:{std::tuple{7.92f,1.f,8.f,7.f},{7.92f,10.f,8.f,16.9f},{6.92f,7.f,7.f,10.f},{7.f,6.92f,8.f,7.f},{7.f,10.f,8.f,10.08f},{10.f,1.f,10.08f,16.9f}})guardRail(m,x1,y1,x2,y2,g);
+ for(float y:{3.f,13.f}){anFix(m,model::mine_cage_lamp,10.03f,y,g+1.1f,.21f,.2f,.36f,0,false);m.lights.push_back(lamp({10.03f,y},g+1.3f,.4f,5.f,3400,0,WorldLightMount::Bare,0,false));}
+ // the bay's walls in bays: concrete piers floor to roof, a steel course every four metres
+ for(float x:{6.f,11.f,15.f})wall(m,x-.25f,1.f,x+.25f,1.38f,f,roof,15);
+ for(float y:{5.5f,13.7f})wall(m,1.f,y-.25f,1.38f,y+.25f,f,roof,15);
+ for(float z=f+4.f;z<roof-1.f;z+=4.f){wall(m,1.f,1.f,16.9f,1.08f,z,z+.18f,12);wall(m,1.f,1.f,1.08f,16.9f,z,z+.18f,12);}
  // what the crew left: the one who counted two, his meter, his ammunition
  etBody(m,"et_bay_clock",ActorVisual::LabTech,{11.6f,12.3f},f,kPi*.25f);
  kit::prop(m,model::lab_field_meter,12.4f,11.6f,f,.25f,.328f,.148f,1.2f);
@@ -376,14 +413,14 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{6.2f,15.f},f,1,0});
  m.creatureSpawns.push_back({CreatureKind::Transformed,{9.6f,2.6f},f,1,0});
  // light: sodium high-bays far overhead, two of them out; the towers' blue; the chamber's violet
- etHighBay(m,{5.f,6.f},roof,-6.f,1.8f,22.f,2000);etHighBay(m,{12.f,6.f},roof,-4.f,0,0,0);
- etHighBay(m,{5.f,13.f},roof,-6.f,1.6f,22.f,2000,.25f);etHighBay(m,{12.f,13.f},roof,-4.f,0,0,0);
+ etHighBay(m,{5.f,6.f},roof,-6.f,2.2f,22.f,2000);etHighBay(m,{12.f,6.f},roof,-4.f,0,0,0);
+ etHighBay(m,{5.f,13.f},roof,-6.f,2.f,22.f,2000,.25f);etHighBay(m,{12.f,13.f},roof,-4.f,1.4f,18.f,2100);
  etHighBay(m,{20.f,14.f},roof,-4.f,1.2f,16.f,2100);
  m.lights.push_back(etWall({1.02f,15.f},f+3.f,0,.35f,5.f,3000,0,{1.f,.15f,.08f}));              // the floor's emergency lamp
  hazard(m,Hazard::Kind::Anomaly,7.f,7.f,10.f,10.f,f,f+3.f,0);anHum(m,"et_bay_hum",5.5f,5.5f,11.5f,11.5f,f,f+4.f,.55f);
  zone(m,"HIGH-ENERGY TEST BAY / CONTROL ROOM",17.f,1.f,23.f,8.f);
- zone(m,"HIGH-ENERGY TEST BAY / BAY FLOOR",1.f,1.f,17.f,17.f,f-1.f,g-.5f,{.12f,.13f,.19f,.016f});
- zone(m,"HIGH-ENERGY TEST BAY / GALLERY",0,0,24,24,g-.5f,1000,{.12f,.12f,.15f,.01f});
+ zone(m,"HIGH-ENERGY TEST BAY / BAY FLOOR",1.f,1.f,17.f,17.f,f-1.f,g-.5f,{.1f,.1f,.12f,.005f});
+ zone(m,"HIGH-ENERGY TEST BAY / GALLERY",0,0,24,24,g-.5f,1000,{.11f,.11f,.12f,.004f});
  zone(m,"HIGH-ENERGY TEST BAY",0,0,24,24);
  freightFinish(m,-1);
  return p;
@@ -398,7 +435,7 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
 // door -> S to Experimental Power. The shielding store off the bend.
 std::shared_ptr<const Map> makeShieldingCorridor(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[91];m.definition=CampaignChunks[91];m.definition.ambient=.12f;
+ m.name=CampaignMapNames[91];m.definition=CampaignChunks[91];m.definition.ambient=.18f;
  m.definition.playerStart={21.8f,11.5f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=kPi;
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
  const float f=-12,roof=m.definition.ceiling;
@@ -420,6 +457,7 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  for(auto [x,h]:{std::pair{15.6f,1.72f},{16.5f,1.8f},{17.8f,1.65f},{20.9f,1.78f}}){soot+=.0015f;
   wall(m,x-.24f,9.06f,x+.24f,9.07f,f+.85f,f+h-.28f,16);wall(m,x-.12f,9.06f,x+.12f,9.07f,f+h-.26f,f+h,16);
   wall(m,x-.2f,9.06f,x-.08f,9.07f,f,f+.85f,16);wall(m,x+.08f,9.06f,x+.2f,9.07f,f,f+.85f,16);
+  wall(m,x-.36f,9.06f,x-.24f,9.07f,f+.9f,f+h-.5f,16);wall(m,x+.24f,9.06f,x+.34f,9.07f,f+.95f,f+h-.55f,16);   // the arms, thrown up
   // the burst came down the corridor from the ring: each man's soot is thrown long to the west of
   // him, on the lead and across the floor, and what he carried lies at his feet
   wall(m,x-1.3f,9.07f,x-.24f,9.075f,f+.95f,f+h-.45f,8);wall(m,x-.9f,9.07f,x-.2f,9.075f,f+.15f,f+.8f,8);
@@ -430,9 +468,26 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
   for(auto [x,y,yaw]:{std::tuple{15.9f,10.4f,.3f},{17.2f,10.f,1.9f},{21.2f,10.2f,.8f}})kit::prop(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
   // lead facing the heat brought down: panels slumped off their fixings onto the floor
   wall(m,16.9f,9.08f,18.1f,9.5f,f,f+.05f,8);wall(m,19.9f,9.1f,20.5f,9.75f,f,f+.04f,8);}
- // the one light on them: a caged work lamp on the south wall, hard and sickly, aimed across at the wall
+ // the light on them: a caged work lamp on the south wall, a low fill across at them, and the flood the
+ // detail stood at the bulkhead to look at them by, raking along the lead from the west so every edge of
+ // every man throws its own shadow; the fourth man has his own, past bulkhead 2
  anFix(m,model::mine_cage_lamp,16.3f,13.8f,f+2.25f,.21f,.2f,.36f,kPi,false);wall(m,16.2f,13.92f,16.4f,13.94f,f+2.2f,f+2.7f,12);
- {auto l=lamp({16.3f,13.9f},f+2.4f,1.05f,6.5f,3600,.25f,WorldLightMount::Wall,-kPi*.5f,true,{.85f,1.f,.5f});l.flicker=.06f;m.lights.push_back(l);}
+ {auto l=lamp({16.3f,13.9f},f+2.4f,.4f,6.f,3600,.25f,WorldLightMount::Wall,-kPi*.5f,true,{.85f,1.f,.5f});l.flicker=.06f;m.lights.push_back(l);}
+ for(auto [x,y,heading,power,reach]:{std::tuple{13.35f,9.42f,0.f,2.4f,8.f},{22.62f,9.42f,kPi,1.3f,4.5f}}){
+  wall(m,x-.025f,y-.025f,x+.025f,y+.025f,f,f+1.42f,12);wall(m,x-.2f,y-.2f,x+.2f,y+.2f,f,f+.03f,8);                 // the stand, its foot
+  for(float d:{-.16f,.16f})wall(m,x+d-.012f,y-.012f,x+d+.012f,y+.012f,f,f+.9f,12);
+  anFix(m,model::mine_cage_lamp,x,y,f+1.4f,.21f,.2f,.36f,heading>1?kPi*.5f:-kPi*.5f,false);
+  {auto l=lamp({x+(heading>1?-.14f:.14f),y},f+1.6f,power,reach,3900,.2f,WorldLightMount::Bare,0,true,{.88f,1.f,.62f});l.flicker=.04f;m.lights.push_back(l);}}
+ // what was on them, under them: run and fused to the floor where they stood
+ for(auto [x,seed]:{std::pair{15.6f,1},{16.5f,2},{17.8f,3},{20.9f,4}}){if(seed==3)continue;                   // the third's under the slumped lead
+  wall(m,x-.32f,9.08f,x+.18f,9.4f,f+.001f,f+.003f,8);wall(m,x-.12f,9.12f,x+.3f,9.44f,f+.001f,f+.0032f,8);wall(m,x-.05f,9.2f,x+.12f,9.36f,f+.0032f,f+.004f,20);   // the run of it
+  if(seed%2)propPose(m,model::item_walkie,x+.2f,9.22f,f+.004f,.11f,.38f,.05f,seed*.9f,.25f,1.3f);
+  else propPose(m,model::mug,x-.05f,9.25f,f+.004f,.12f,.12f,.1f,seed*.7f,.6f,.4f);
+  propPose(m,model::item_id_card,x+.32f,9.55f,f+.004f,.132f,.085f,.002f,seed*1.3f,.06f,.1f);
+  if(seed==2)propPose(m,model::item_dosimeter,x-.35f,9.25f,f+.004f,.31f,.146f,.066f,seed*2.1f,.2f,.35f);}
+ // the corridor's ribs: lead-lined steel frames across the ceiling every bay, the cable run on the south wall
+ for(float x:{10.f,14.4f,16.8f,21.f})wall(m,x-.12f,9.f,x+.12f,14.f,roof-.3f,roof,12);
+ cableTray(m,{15.2f,13.7f},{22.8f,13.7f},f+3.2f);
  // --- The bulkheads: concrete frames a metre deep, the leaves swung back --------------------------
  for(float x:{18.6f,12.2f}){
   wall(m,x,9.f,x+.8f,10.f,f,roof,15);wall(m,x,13.f,x+.8f,14.f,f,roof,15);wall(m,x,10.f,x+.8f,13.f,f+2.6f,roof,15);
@@ -470,9 +525,9 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.5f,21.f},-999,1,0});                  // the fitter, still in his apron
  m.lights.push_back(etTube(5.f,18.5f,roof,.35f,4.5f,4000,0,.5f));
  // --- The corridor's lamps: a caged lamp at each bulkhead, dark between ------------------------
- m.lights.push_back(etWall({21.5f,13.92f},f+2.4f,-kPi*.5f,.28f,4.5f,5200));
- m.lights.push_back(etWall({9.02f,11.5f},f+2.4f,0,.45f,5.5f,5200,.2f));
- m.lights.push_back(etWall({14.92f,21.f},f+2.4f,kPi,.45f,5.f,5200));
+ m.lights.push_back(etWall({21.5f,13.92f},f+2.4f,-kPi*.5f,.42f,5.5f,5200));
+ m.lights.push_back(etWall({9.02f,11.5f},f+2.4f,0,.6f,6.5f,5200,.2f));
+ m.lights.push_back(etWall({14.92f,21.f},f+2.4f,kPi,.6f,6.f,5200));
  // --- The Shielding detail: two men, hostile and breaking ----------------------------------------
  const StateId stance=stateId("et_shield_stance");
  etGuard(m,"et_shield_clock","et_shield_a",ActorVisual::Cleanup,GuardSquadRole::Assault,"et_shield",{{{17.f,6.8f},f,9000,kPi*.5f},{{20.f,6.f},f,5000,kPi*.5f}},9,1,1.f,85);
@@ -486,9 +541,9 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  cue(m,"et_shield_radio",10500,Sound::Empty,{19.f,4.4f},"INVESTIGATOR (RADIO): Then be accurate.",.9f,f+1.f);
  etEvent(m,"et_shield_order",0,0,24,24,"et_shield_radio_done",{etSet("et_shield_stance",int(SquadStance::Hostile))});
  m.pickupSpawns.push_back({{13.6f,22.f},PickupKind::Health,f});
- zone(m,"SHIELDING CORRIDOR / DOSIMETRY POST",14.f,4.f,21.f,9.f,-1000,1000,{.15f,.13f,.10f,.01f});
+ zone(m,"SHIELDING CORRIDOR / DOSIMETRY POST",14.f,4.f,21.f,9.f,-1000,1000,{.15f,.13f,.10f,.005f});
  zone(m,"SHIELDING CORRIDOR / SHIELDING STORE",2.f,15.f,9.f,22.f);
- zone(m,"SHIELDING CORRIDOR",0,0,24,24,-1000,1000,{.11f,.12f,.13f,.014f});
+ zone(m,"SHIELDING CORRIDOR",0,0,24,24,-1000,1000,{.11f,.12f,.13f,.005f});
  recessedFittings(m);
  freightFinish(m,-1);
  return p;
@@ -503,7 +558,7 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
 // -> S to the Conversion Lab.
 std::shared_ptr<const Map> makeExperimentalPower(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[92];m.definition=CampaignChunks[92];m.definition.ambient=.13f;
+ m.name=CampaignMapNames[92];m.definition=CampaignChunks[92];m.definition.ambient=.18f;
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=kPi*.5f;
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
  const float f=-16,g=-12,roof=m.definition.ceiling;
@@ -564,8 +619,40 @@ std::shared_ptr<const Map> makeExperimentalPower(){
  // --- The transformers, their pads, the plant bus out --------------------------------------------
  for(float x:{5.5f,18.5f}){equipmentPad(m,x-2.5f,18.2f,x+2.5f,21.4f,f);anFix(m,model::transformer,x,19.8f,f+.1f,4.4f,2.4f,2.6f,anN,true);
   wall(m,x-2.2f,18.6f,x+2.2f,21.f,f+2.7f,f+3.1f,30);}
- m.pipes.push_back({{1.2f,22.5f},{22.8f,22.5f},f+4.2f,.18f,f+4.2f,4});                            // the plant bus, along the south wall
- for(float x:{3.f,8.f,16.f,21.f})m.pipes.push_back({{x,22.5f},{x,22.5f},f+4.4f,.02f,roof,6});
+ // THE BREAKER WALL: the whole south wall, the first thing seen from the landing and the frame of the way
+ // out. Switchgear cubicles along the floor either side of the exit, the plant bus's breaker banks over them
+ // three tiers high on a steel frame to nine metres, the cable trunks out of the top of every bay to the
+ // roof, a striped beam over the exit carrying the bus across it, and bay 5 east of the exit in fault.
+ for(auto [a,b]:{std::pair{1.2f,10.f},{14.f,22.8f}}){
+  const int bays=int((b-a)/1.45f);const float w=(b-a)/bays;
+  for(int i=0;i<bays;++i){const float x=a+w*(i+.5f);const bool fault=a>12&&i==1;
+   anFix(m,i%3==2?model::pwr_tall_switch_cabinet:model::pwr_switchgear_cabinet,x,i%3==2?22.47f:22.59f,f,i%3==2?.95f:1.4f,i%3==2?1.4f:.82f,i%3==2?3.02f:2.7f,i%3==2?kPi*.5f:anN,true);
+   wall(m,x-w*.5f+.03f,22.5f,x+w*.5f-.03f,22.98f,f+3.05f,f+9.f,2);                                   // the bank's back panel
+   for(int r=0;r<3;++r){const float z=f+3.45f+r*1.6f;
+    wall(m,x-w*.5f+.06f,22.44f,x+w*.5f-.06f,22.5f,z-.22f,z+1.1f,r==1?7:2);                            // the tier's face
+    for(float d:{-.33f,0.f,.33f})if(!(fault&&r==0))anModel(m,model::lab_knife_switch,x+d,22.42f,z+.2f,anN,false);
+    wall(m,x-.4f,22.4f,x+.4f,22.44f,z+.78f,z+.9f,(i+r)%4==0?13:20);}                                 // its label plate; every fourth striped
+   anModel(m,model::pwr_ammeter_box,x-.3f,22.4f,f+8.25f,anN,false);anModel(m,model::pwr_ammeter_box,x+.3f,22.4f,f+8.25f,anN,false);
+   wall(m,x-w*.5f,22.36f,x-w*.5f+.06f,22.98f,f+2.7f,f+9.f,12);                                        // the frame's posts
+   m.pipes.push_back({{x,22.72f},{x,22.72f},f+9.f,.2f,roof,7});m.pipes.push_back({{x,22.72f},{x,22.72f},f+9.1f,.26f,f+9.3f,6});   // its trunk to the roof
+   if(fault){for(auto [lo,hi,dx]:{std::tuple{2.8f,6.4f,0.f},{6.4f,8.2f,.25f}})wall(m,x-.55f+dx,22.39f,x+.55f-dx,22.4f,f+lo,f+hi,16);   // soot up the bay
+    anFix(m,model::pwr_breaker_panel_open,x,22.36f,f+3.6f,.318f,.225f,.457f,anN,false);}}
+  wall(m,b-.06f,22.36f,b,22.98f,f+2.7f,f+9.f,12);
+  wall(m,a,22.36f,b,22.98f,f+9.f,f+9.25f,12);wall(m,a,22.3f,b,22.4f,f+2.7f,f+2.9f,13);}               // the frame's head and its kick rail, striped
+ wall(m,10.f,22.3f,14.f,23.f,f+3.2f,f+3.9f,13);wall(m,10.f,22.3f,14.f,23.f,f+3.9f,f+9.25f,2);          // the beam over the exit, the bank carried over it
+ m.pipes.push_back({{1.2f,22.6f},{22.8f,22.6f},f+9.45f,.22f,f+9.45f,4});                               // the plant bus along the top of the wall
+ wall(m,1.2f,22.f,10.f,23.f,f+2.7f,roof,30);wall(m,14.f,22.f,22.8f,23.f,f+2.7f,roof,30);wall(m,10.f,22.f,14.f,23.f,f+3.2f,roof,30);   // nobody up the banks
+ // bay 5's fault: the breaker blown out of the bank, the tier arcing to the frame every few seconds, the
+ // floor in front of it live while it does
+ {const float x=14.f+(22.8f-14.f)/int((22.8f-14.f)/1.45f)*1.5f;
+  m.lights.push_back(etArcLight({x,21.9f},f+3.7f,1.4f,9.f,2.3f,.35f,.2f));
+  m.lights.push_back(etArcLight({x,21.6f},f+1.f,.6f,5.f,2.3f,.35f,.3f));
+  etArc(m,x-.9f,21.25f,x+.9f,22.2f,f,f+2.6f,30,2.3f,.35f,.2f);
+  m.lights.push_back(lamp({x,21.7f},f+3.9f,.5f,4.f,2600,0,WorldLightMount::Bare,0,false,{1.f,.6f,.25f}));m.lights.back().flicker=.6f;}   // what is still burning in it
+ wallSign(m,12.f,22.26f,f+4.6f,"11 KV PLANT BUS","BANKS LIVE. FEED NOT ISOLATED",2.2f,anN);
+ // the wall's own light: floods on the frame head looking down the banks
+ for(float x:{4.f,8.6f,15.6f,20.2f}){anFix(m,model::mine_cage_lamp,x,22.1f,f+9.4f,.21f,.2f,.36f,0,false);
+  m.lights.push_back(lamp({x,21.8f},f+9.f,.9f,10.f,3600,0,WorldLightMount::Bare));}
  // --- The wet corner (northeast): the cracked main, the pool, the cable in it -----------------
  m.pipes.push_back({{17.9f,1.12f},{22.95f,1.12f},f+3.2f,.12f,f+3.2f,3});
  for(float x:{19.4f,21.6f})m.pipes.push_back({{x,1.12f},{x,1.12f},f+3.3f,.02f,roof,6});
@@ -581,14 +668,14 @@ std::shared_ptr<const Map> makeExperimentalPower(){
  anFix(m,model::pallet,3.2f,5.f,f,1.2f,1.15f,.16f,0,true);anModel(m,model::lab_specimen_crate,3.2f,5.f,f+.16f,.3f,true,.8f);
  extinguisher(m,6.f,8.f,f,anW);
  m.creatureSpawns.push_back({CreatureKind::Transformed,{19.8f,10.6f},-999,1,0});
- m.pickupSpawns.push_back({{4.6f,6.4f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{13.6f,21.8f},PickupKind::Health,f});
+ m.pickupSpawns.push_back({{4.6f,6.4f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{13.6f,21.2f},PickupKind::Health,f});
  // --- Light: sodium over the hall, red on the walls, the arcs and the converter --------------------
- etHighBay(m,{4.5f,9.f},roof,-8.6f,.75f,9.f,2000);etHighBay(m,{12.f,16.f},roof,-8.6f,.8f,10.f,2000,.2f);
+ etHighBay(m,{4.5f,9.f},roof,-8.6f,1.f,10.f,2000);etHighBay(m,{12.f,16.f},roof,-8.6f,1.1f,11.f,2000,.2f);
  etHighBay(m,{20.f,9.f},roof,-8.6f,0,0,0);etHighBay(m,{8.f,21.f},roof,-8.6f,.6f,8.f,2000);
- for(auto [x,y,h]:{std::tuple{22.98f,17.f,kPi},{1.02f,20.f,0.f},{16.f,22.98f,-kPi*.5f}})m.lights.push_back(etWall({x,y},f+3.2f,h,.35f,6.f,3000,0,{1.f,.15f,.08f}));
+ for(auto [x,y,h]:{std::tuple{22.98f,17.f,kPi},{1.02f,20.f,0.f}})m.lights.push_back(etWall({x,y},f+3.2f,h,.45f,6.f,3000,0,{1.f,.15f,.08f}));
  zone(m,"EXPERIMENTAL POWER / LANDING",6.f,0,18.f,6.f,g-.5f,1000);
- zone(m,"EXPERIMENTAL POWER / WET CORNER",18.f,1.f,23.f,6.4f,-1000,1000,{.12f,.16f,.22f,.02f});
- zone(m,"EXPERIMENTAL POWER",0,0,24,24,-1000,1000,{.13f,.12f,.12f,.014f});
+ zone(m,"EXPERIMENTAL POWER / WET CORNER",18.f,1.f,23.f,6.4f,-1000,1000,{.12f,.16f,.22f,.008f});
+ zone(m,"EXPERIMENTAL POWER",0,0,24,24,-1000,1000,{.13f,.12f,.12f,.005f});
  freightFinish(m,-1);
  return p;
 }
@@ -602,7 +689,7 @@ std::shared_ptr<const Map> makeExperimentalPower(){
 // control room: OUTPUT ROUTING (cont_power) -> back north, to the ring and Containment.
 std::shared_ptr<const Map> makeConversionLab(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[93];m.definition=CampaignChunks[93];m.definition.ambient=.12f;
+ m.name=CampaignMapNames[93];m.definition=CampaignChunks[93];m.definition.ambient=.17f;
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=-16.f;m.definition.spawnYaw=kPi*.5f;
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
  const float f=-16,g=-12,roof=m.definition.ceiling;
@@ -634,43 +721,48 @@ std::shared_ptr<const Map> makeConversionLab(){
  m.lights.push_back(lamp({16.6f,4.f},g+1.25f,.25f,2.4f,9000,-.15f,WorldLightMount::Bare,0,false));m.lights.back().flicker=.1f;
  {auto l=etWall({20.f,1.02f},g+2.1f,kPi*.5f,.3f,3.5f,4000,0,etGreen);l.enabledState=routed;m.lights.push_back(l);}
  m.lights.push_back(etBeacon({21.f,1.02f},g+2.1f,kPi*.5f,0,routed));
- // --- The conversion columns: three vessels on their pads, the header over them ------------------
- // Columns one and three run down and dark, their sight glasses dim. Column two is the one that never
- // stopped: its lower shell is off for the fill, an open cage of glass round the charge, and it is lit
- // from inside by what it is converting.
- for(float y:{5.f,11.5f,18.f}){const bool live=y>10.f&&y<13.f;
-  equipmentPad(m,2.8f,y-1.7f,6.2f,y+1.7f,f);vessel(m,{4.5f,y},1.3f,live?f+4.2f:f+.1f,f+9.f,6);
-  if(!live){for(float z:{f+2.4f,f+5.6f})m.lights.push_back(etGlow({5.95f,y},z,.12f,2.f,etViolet,.25f));   // the sight glasses, nearly out
-   wall(m,5.75f,y-.25f,5.85f,y+.25f,f+2.f,f+2.8f,17);wall(m,5.75f,y-.25f,5.85f,y+.25f,f+5.2f,f+6.f,17);}
-  m.pipes.push_back({{5.7f,y},{6.7f,y},f+7.5f,.3f,f+7.5f,6});}
- {const float y=11.5f,x1=3.1f,x2=5.9f,y1=y-1.4f,y2=y+1.4f,top=f+4.2f;
-  for(float x:{x1,x2-.16f})for(float yy:{y1,y2-.16f})wall(m,x,yy,x+.16f,yy+.16f,f+.1f,top,12);   // the cage posts
+ // --- The conversion lane: four columns down the hall, alternating sides, each tied to its wall by a waist-
+ // high manifold, so the only way south is a zig-zag between them. One and three are run down and dark:
+ // steel to hide behind. Two and four never stopped: their lower shells are off for the fill, open cages of
+ // glass round the charge, and every couple of seconds each fires, lighting the bend it stands on end to end
+ // and arcing across its cage. Cover, then a lit bend; cover, then a lit bend.
+ struct Column{float x,y;bool live;float phase;};
+ const Column columns[4]={{4.5f,5.f,false,0},{11.5f,8.6f,true,0},{4.5f,12.6f,false,0},{11.5f,16.8f,true,1.1f}};
+ for(const auto& c:columns){
+  equipmentPad(m,c.x-1.7f,c.y-1.7f,c.x+1.7f,c.y+1.7f,f);vessel(m,{c.x,c.y},1.3f,c.live?f+4.2f:f+.1f,f+9.f,6);
+  m.pipes.push_back({{c.x+(c.x<8?1.3f:-1.3f),c.y},{8.f,c.y},f+7.5f,.3f,f+7.5f,6});                       // its draw-off to the header
+  if(!c.live){const float sx=c.x+1.3f;                                                                   // the sight glasses on the lane side, nearly out
+   for(float z:{f+2.4f,f+5.6f})m.lights.push_back(etGlow({sx+.15f,c.y},z,.14f,2.f,etViolet,.25f));
+   wall(m,sx-.05f,c.y-.25f,sx+.05f,c.y+.25f,f+2.f,f+2.8f,17);wall(m,sx-.05f,c.y-.25f,sx+.05f,c.y+.25f,f+5.2f,f+6.f,17);continue;}
+  const float y=c.y,x1=c.x-1.4f,x2=c.x+1.4f,y1=y-1.4f,y2=y+1.4f,top=f+4.2f;
+  for(float x:{x1,x2-.16f})for(float yy:{y1,y2-.16f})wall(m,x,yy,x+.16f,yy+.16f,f+.1f,top,12);         // the cage posts
   wall(m,x1,y1,x2,y2,top-.2f,top,12);wall(m,x1,y1,x2,y2,f+.1f,f+.45f,8);
-  for(float z:{f+1.6f,f+2.9f}){wall(m,x1,y1,x2,y1+.06f,z,z+.06f,12);wall(m,x1,y2-.06f,x2,y2,z,z+.06f,12);wall(m,x2-.06f,y1,x2,y2,z,z+.06f,12);}
+  for(float z:{f+1.6f,f+2.9f}){wall(m,x1,y1,x2,y1+.06f,z,z+.06f,12);wall(m,x1,y2-.06f,x2,y2,z,z+.06f,12);wall(m,x1,y1,x1+.06f,y2,z,z+.06f,12);wall(m,x2-.06f,y1,x2,y2,z,z+.06f,12);}
   wall(m,x1+.16f,y1+.02f,x2-.16f,y1+.06f,f+.45f,top-.2f,17);wall(m,x1+.16f,y2-.06f,x2-.16f,y2-.02f,f+.45f,top-.2f,17);
   wall(m,x2-.06f,y1+.16f,x2-.02f,y2-.16f,f+.45f,top-.2f,17);wall(m,x1+.02f,y1+.16f,x1+.06f,y2-.16f,f+.45f,top-.2f,17);
-  m.pipes.push_back({{4.5f,y},{4.5f,y},f+.4f,.3f,f+1.2f,6});
-  anFix(m,model::lab_anomaly_relic,4.5f,y,f+1.6f,1.1f,.9f,.9f,.5f,false);                           // the charge, held up in its field
-  m.pipes.push_back({{4.5f,y},{4.5f,y},f+2.6f,.12f,top-.2f,4});
-  {auto l=etGlow({4.5f,y},f+2.f,1.8f,4.5f,etViolet,.35f);m.lights.push_back(l);}
-  {auto l=etGlow({4.5f,y},f+3.2f,1.4f,4.f,etViolet);l.period=2.2f;l.onTime=.5f;m.lights.push_back(l);}   // the pulse of each conversion
-  etArc(m,x1,y1,x2,y2,f,top,40,2.2f,.5f);
+  m.pipes.push_back({{c.x,y},{c.x,y},f+.4f,.3f,f+1.2f,6});
+  anFix(m,model::lab_anomaly_relic,c.x,y,f+1.6f,1.1f,.9f,.9f,.5f+c.phase,false);                       // the charge, held up in its field
+  m.pipes.push_back({{c.x,y},{c.x,y},f+2.6f,.12f,top-.2f,4});
+  m.lights.push_back(etGlow({c.x,y},f+2.f,1.5f,4.5f,etViolet,.35f));
+  {auto l=etGlow({c.x-1.6f,y},f+2.4f,1.9f,11.f,{.82f,.62f,1.f});l.period=2.2f;l.onTime=.45f;l.phase=c.phase;m.lights.push_back(l);}   // the fire: the whole bend lit
+  m.lights.push_back(etArcLight({c.x,y},f+3.4f,1.f,7.f,2.2f,.45f,c.phase));
+  etArc(m,x1,y1,x2,y2,f,top,40,2.2f,.45f,c.phase);
   wall(m,x1-.1f,y1-.1f,x2+.1f,y2+.1f,top,f+4.25f,30);}
- // The process lane between the columns and the line: transfer manifolds and the fill pumps' guards
- // stand across it in turn, one from each side, so the lane is cover and blind corners all the way.
- for(auto [x1,x2,y1,y2,h]:{std::tuple{6.2f,7.7f,7.6f,8.3f,1.15f},{7.5f,8.55f,14.4f,15.1f,1.15f},{6.2f,7.6f,19.8f,20.5f,1.15f}}){
-  wall(m,x1,y1,x2,y2,f,f+h,8);wall(m,x1,y1,x2,y1+.06f,f+h-.15f,f+h,13);}
- for(auto [x1,x2,y1,y2]:{std::tuple{7.6f,8.55f,9.4f,9.9f},{6.2f,7.2f,13.1f,13.6f}}){wall(m,x1,y1,x2,y2,f,f+1.9f,2);wall(m,x1,y1,x2,y2,f+1.9f,f+2.f,18);wall(m,x1,y1,x2,y2,f+2.f,f+3.6f,30);}
- floorLine(m,6.25f,3.f,6.37f,21.f,f,13);floorLine(m,8.43f,3.f,8.55f,21.f,f,13);
- wall(m,6.6f,1.f,7.4f,23.f,f+7.1f,f+7.9f,8);                                                  // the header duct
- for(float y=2.5f;y<23.f;y+=3.5f)for(float x:{6.7f,7.3f})m.pipes.push_back({{x,y},{x,y},f+7.9f,.02f,roof,6});
- // --- The filling line on the floor: a belt of cells to the fill head ----------------------------
- floorConveyor(m,9.f,6.f,20.f,f,f+.9f);
- anFix(m,model::lab_test_chamber,9.f,12.f,f+1.6f,1.14f,.68f,.64f,anE,false);                    // the fill head over the belt
- for(float x:{8.65f,9.35f})m.pipes.push_back({{x,12.f},{x,12.f},f+.96f,.04f,f+1.6f,6});
- for(auto [y,yaw]:{std::pair{8.4f,.3f},{10.6f,1.4f},{14.2f,2.f}})kit::prop(m,model::anl_cell_charged,9.f,y,f+.9f,yaw);
- kit::prop(m,model::anl_cell_spent,9.12f,17.4f,f+.9f,.8f);
- m.lights.push_back(etGlow({9.f,12.f},f+1.4f,.3f,3.f,etGreen,.2f));
+ // the manifolds: each column tied to its own wall at waist height, a crouch's cover and no more
+ for(auto [x1,x2,y1,y2]:{std::tuple{12.9f,16.f,8.3f,8.9f},{1.f,3.2f,12.3f,12.9f},{12.9f,16.f,16.5f,17.1f},{1.f,3.2f,4.7f,5.3f}}){
+  wall(m,x1,y1,x2,y2,f,f+1.15f,8);wall(m,x1,y1,x2,y1+.06f,f+1.f,f+1.15f,13);
+  for(float x=x1+.5f;x<x2-.2f;x+=1.f)wall(m,x-.1f,(y1+y2)*.5f-.1f,x+.1f,(y1+y2)*.5f+.1f,f+1.15f,f+1.32f,12);}
+ // the lane's painted edge at each bend, where the fire reaches
+ for(auto [x1,y1,x2,y2]:{std::tuple{6.1f,7.f,10.f,7.12f},{6.1f,10.2f,10.f,10.32f},{6.f,14.9f,10.f,15.02f},{6.f,18.5f,10.f,18.62f}})floorLine(m,x1,y1,x2,y2,f,13);
+ wall(m,7.6f,1.f,8.4f,23.f,f+7.1f,f+7.9f,8);                                                  // the header duct
+ for(float y=2.5f;y<23.f;y+=3.5f)for(float x:{7.7f,8.3f})m.pipes.push_back({{x,y},{x,y},f+7.9f,.02f,roof,6});
+ // --- The filling line, along the stair side between the bends: a belt of cells to the fill head ------
+ floorConveyor(m,14.6f,10.2f,15.6f,f,f+.9f);
+ anFix(m,model::lab_test_chamber,14.6f,12.6f,f+1.6f,1.14f,.68f,.64f,anE,false);                 // the fill head over the belt
+ for(float x:{14.25f,14.95f})m.pipes.push_back({{x,12.6f},{x,12.6f},f+.96f,.04f,f+1.6f,6});
+ for(auto [y,yaw]:{std::pair{10.9f,.3f},{11.7f,1.4f},{14.f,2.f}})kit::prop(m,model::anl_cell_charged,14.6f,y,f+.9f,yaw);
+ kit::prop(m,model::anl_cell_spent,14.72f,15.f,f+.9f,.8f);
+ m.lights.push_back(etGlow({14.6f,12.6f},f+1.4f,.4f,3.f,etGreen,.2f));
  // --- The bank on the south wall: where the output goes, live -----------------------------------
  for(float x:{4.f,6.f,8.f}){anFix(m,model::anl_switch_cabinet_2,x,22.59f,f,1.5f,.82f,2.7f,anN,true);}
  anFix(m,model::pwr_tall_switch_cabinet,11.6f,22.47f,f,.95f,1.54f,3.02f,kPi*.5f,true);
@@ -686,16 +778,16 @@ std::shared_ptr<const Map> makeConversionLab(){
  // --- The suit rail by the door, the crew's things -------------------------------------------
  etSuitRail(m,1.8f,1.f,6.4f,1.06f,f,kPi*.5f,1);
  handCart(m,13.f,4.f,f);for(auto [x,y]:{std::pair{12.9f,3.8f},{13.15f,4.25f}})kit::prop(m,model::anl_cell_charged,x,y,f+.29f,x+y);
- anModel(m,model::lab_specimen_crate,14.2f,8.f,f,.2f,true,.8f);
+ anModel(m,model::lab_specimen_crate,14.9f,5.f,f,.2f,true,.8f);
  extinguisher(m,15.96f,12.f,f,anW);
- m.creatureSpawns.push_back({CreatureKind::Transformed,{12.6f,17.f},-999,1,0});
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{14.2f,20.2f},-999,1,0});
  m.creatureSpawns.push_back({CreatureKind::Transformed,{2.2f,14.8f},-999,1,0});
  m.pickupSpawns.push_back({{14.f,6.2f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{22.f,3.f},PickupKind::Health,g});
  // --- Light: the hall dark under sodium; the columns' violet; the bank's beacons until it is routed
- etHighBay(m,{11.f,6.f},roof,-8.f,.8f,11.f,2000);etHighBay(m,{11.f,16.f},roof,-8.f,.7f,11.f,2000,.3f);
- etHighBay(m,{20.f,16.f},roof,-8.f,.7f,10.f,2000);etHighBay(m,{20.f,21.f},roof,-8.f,0,0,0);
+ etHighBay(m,{9.6f,3.f},roof,-8.f,1.f,11.f,2000);etHighBay(m,{9.6f,12.6f},roof,-8.f,.9f,11.f,2000,.3f);
+ etHighBay(m,{20.f,16.f},roof,-8.f,.9f,10.f,2000);etHighBay(m,{20.f,21.f},roof,-8.f,0,0,0);etHighBay(m,{9.6f,20.5f},roof,-8.f,.8f,10.f,2000);
  zone(m,"CONVERSION LAB / CONTROL ROOM",16.f,1.f,23.f,9.f,g-.5f,1000);
- zone(m,"CONVERSION LAB",0,0,24,24,-1000,1000,{.12f,.12f,.13f,.012f});
+ zone(m,"CONVERSION LAB",0,0,24,24,-1000,1000,{.12f,.12f,.13f,.005f});
  freightFinish(m,-1);
  return p;
 }

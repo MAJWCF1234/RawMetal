@@ -180,9 +180,16 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  // the corridor's light: cold tubes, two gone, the lockdown red down both walls
  for(auto [y,fl]:{std::pair{8.f,0.f},{16.f,.25f}})m.lights.push_back(caTube(12.f,y,roof,.62f,6.f,6000,.04f,fl));
  caDeadTube(m,12.f,12.f,roof);caDeadTube(m,12.f,20.f,roof);
- m.lights.push_back(caBeacon({10.f,13.6f},f+2.55f,clE,0,"cont_power"));
+ m.lights.push_back(caBeacon({10.f,15.4f},f+2.55f,clE,0,"cont_power"));
  m.lights.push_back(caBeacon({14.f,21.8f},f+2.55f,clW,.7f,"cont_power"));
- m.lights.push_back(caTube(12.f,22.4f,roof,.32f,4.5f,5200,.03f,.4f));
+ m.lights.push_back(caTube(12.f,22.4f,roof,.58f,6.f,5600,.03f,.25f));                         // the way on to the hub, still lit
+ // The corridor's soffit: downstand beams across it on a 2.4 m rhythm, the ward's two service runs
+ // along its edges, so the long run reads as bays rather than one plaster tube.
+ {const float westSolid[][2]={{6.2f,7.f},{10.6f,11.2f},{12.6f,15.6f},{19.f,19.8f},{21.2f,23.f}},eastSolid[][2]={{6.2f,6.6f},{8.8f,9.6f},{13.4f,16.f},{20.f,23.f}};
+  auto solid=[](const float (*r)[2],int n,float y){for(int i=0;i<n;++i)if(y-.05f>r[i][0]&&y+.3f<r[i][1])return true;return false;};
+  for(float y=7.4f;y<22.5f;y+=2.4f){wall(m,10.f,y,14.f,y+.24f,roof-.34f,roof,15);                  // pilasters only where the wall is plain
+   if(solid(westSolid,5,y))wall(m,10.f,y-.04f,10.14f,y+.28f,f,roof-.34f,15);if(solid(eastSolid,4,y))wall(m,13.86f,y-.04f,14.f,y+.28f,f,roof-.34f,15);}}
+ for(auto [x,paint]:{std::pair{10.4f,3},{13.6f,4}})servicePipe(m,{x,6.12f},{x,23.f},roof-.2f,.07f,paint);
  caFix(m,model::med_wheelchair,13.4f,14.8f,f,caW+.4f,true);
  kit::prop(m,model::med_crutches,10.4f,17.6f,f,.4f);
  paperDrift(m,10.2f,6.6f,13.8f,22.8f,f,8,9401);
@@ -191,12 +198,12 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  wall(m,13.02f,17.f,13.58f,18.8f,f+.6f,f+.84f,8);m.structures.back().solid=false;
  for(float y:{17.45f,18.3f}){wall(m,12.99f,y,13.61f,y+.07f,f+.6f,f+.86f,13);m.structures.back().solid=false;}
  // The ward alarm: the panel by Q1 still calling a breach nobody answered, under its own amber lamp.
- caFix(m,model::lab_status_display,10.03f,14.2f,f+1.85f,caE,false);
- caFix(m,model::lab_control_board,10.1f,14.2f,f+1.05f,caE,false);
- terminal(m,{10.5f,14.9f},"WARD ALARM / Q1","BAY 2 TENT: SEAL BREACH 04:02. NEGATIVE PRESSURE LOST. BAG 2 OPEN FROM INSIDE.",
+ caFix(m,model::lab_status_display,10.03f,13.45f,f+1.85f,caE,false);
+ caFix(m,model::lab_control_board,10.1f,13.45f,f+1.05f,caE,false);
+ terminal(m,{10.5f,14.15f},"WARD ALARM / Q1","BAY 2 TENT: SEAL BREACH 04:02. NEGATIVE PRESSURE LOST. BAG 2 OPEN FROM INSIDE.",
   "ALARM NOT ACKNOWLEDGED. WARD DOORS NOT RESPONDING. CALLING CLEANUP. CALLING CLEANUP.",0);
  m.terminals.back().yaw=caE;
- { auto l=lamp({10.f,14.2f},f+2.35f,.55f,5.f,3000,0,WorldLightMount::Wall,clE,true,{1.f,.45f,.05f});l.period=.9f;l.onTime=.45f;m.lights.push_back(l);}
+ { auto l=lamp({10.f,13.45f},f+2.35f,.55f,5.f,3000,0,WorldLightMount::Wall,clE,true,{1.f,.45f,.05f});l.period=.9f;l.onTime=.45f;m.lights.push_back(l);}
  // --- Ward Q1: four beds, curtains between, the monitors dark ----------------------------------
  wall(m,1.f,6.2f,9.8f,6.4f,f,roof,3);
  // Q2 boarded from the corridor, so they went through the plaster into Q1: a ragged hole at the east end.
@@ -214,7 +221,14 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  wall(m,3.72f,10.5f,3.8f,12.34f,f+2.18f,f+2.26f,20);wall(m,1.f,10.48f,3.8f,12.34f,f+2.26f,f+2.28f,39);   // head rail, the plastic roof
  for(auto [y1,y2,lo]:{std::tuple{10.58f,11.12f,.55f},{11.78f,12.26f,.3f},{11.3f,11.5f,1.7f}})wall(m,3.75f,y1,3.77f,y2,f+lo,f+2.18f,39);   // the flap, torn out from inside
  wall(m,1.3f,10.9f,3.5f,12.05f,f+.004f,f+.008f,16);wall(m,3.4f,11.25f,4.3f,11.7f,f+.004f,f+.008f,16);                // what ran out of the bed
- {auto l=lamp({3.6f,11.4f},f+2.15f,.5f,4.5f,3000,0,WorldLightMount::Bare,0,false,{1.f,.35f,.12f});l.flicker=.35f;m.lights.push_back(l);}   // the tent's own lamp, failing
+ // The tent's exam lamp, the one hard white light in Q1: framed by the ward doorway from the corridor,
+ // it puts the torn flap, the split bag and the start of the drag in a pool you see from the airlock.
+ m.pipes.push_back({{2.7f,11.4f},{2.7f,11.4f},f+2.2f,.016f,f+2.27f,6});
+ m.fixtures.push_back({model::pendant_lamp,{2.7f,11.4f},f+1.86f-m.layers.front().elevation,.5f,.5f,.34f,0,false});
+ {auto l=lamp({2.7f,11.4f},f+1.8f,1.9f,6.5f,6200,.02f,WorldLightMount::Bare);l.flicker=.08f;m.lights.push_back(l);}
+ {auto l=lamp({3.95f,12.2f},f+2.1f,.7f,5.f,3000,0,WorldLightMount::Bare,0,false,{1.f,.1f,.05f});l.period=1.2f;l.onTime=.6f;m.lights.push_back(l);}   // the bay's alarm, never answered
+ caFix(m,model::med_vitals_monitor,3.9f,12.18f,f+1.45f,caE,false);
+ wall(m,3.8f,12.08f,3.86f,12.3f,f+1.2f,f+1.45f,2);
  for(auto [x1,y1,x2,y2]:{std::tuple{4.1f,10.7f,4.9f,10.95f},{4.5f,12.1f,5.6f,12.32f},{5.2f,11.0f,5.5f,11.6f}})wall(m,x1,y1,x2,y2,f+.002f,f+.012f,39);
  wall(m,4.2f,11.18f,6.f,11.72f,f,f+.07f,8);wall(m,4.2f,11.43f,6.f,11.47f,f+.07f,f+.075f,20);          // the bag, split along its zip
  wall(m,4.6f,11.16f,4.68f,11.74f,f+.07f,f+.078f,13);
@@ -223,7 +237,8 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  m.lights.push_back(caGlow({3.1f,11.9f},f+.35f,.6f,4.5f,4600,{1,1,1},.15f));                        // the exam lamp, on its side in the tent
  caFix(m,model::med_crash_cart,7.6f,7.f,f,0,true);
  caFix(m,model::med_supply_cabinet,6.f,6.62f,f,caS,true);wall(m,5.4f,6.4f,6.6f,6.9f,f+1.72f,roof,CollisionProxyMaterial);
- for(auto [x,y,fl]:{std::tuple{3.6f,8.6f,0.f},{3.6f,12.4f,.3f},{7.4f,10.4f,0.f}})m.lights.push_back(caTube(x,y,roof,.4f,5.f,4300,.25f,fl));
+ for(auto [x,y,fl]:{std::tuple{3.6f,8.4f,0.f},{7.4f,10.4f,.15f}})m.lights.push_back(caTube(x,y,roof,.3f,5.f,4300,.25f,fl));
+ caDeadTube(m,3.6f,13.2f,roof);
  m.pickupSpawns.push_back({{7.8f,13.2f},PickupKind::Health,f});
  // --- Ward Q2 (boarded): what nine people did to a room in an hour ------------------------------
  for(auto [x,y,mdl,yaw]:{std::tuple{2.05f,16.f,model::med_bed_frame_wrecked,0.f},{3.f,18.6f,model::med_ward_bed_tossed,.5f},{2.05f,21.7f,model::med_ward_bed,0.f},{7.2f,21.8f,model::med_bed_frame_wrecked,1.3f}})
@@ -266,8 +281,8 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  // --- Names, the air ----------------------------------------------------------------------------
  recessedFittings(m);
  zone(m,"QUARANTINE WARD / AIRLOCK",8.5f,0,15.5f,6.f,-1000,1000,{.13f,.15f,.16f,.009f});
- zone(m,"QUARANTINE WARD / Q1",1.f,6.4f,9.8f,14.4f,-1000,1000,{.12f,.16f,.12f,.014f});
- zone(m,"QUARANTINE WARD / Q2",1.f,14.6f,9.8f,23.f,-1000,1000,{.16f,.08f,.07f,.02f});
+ zone(m,"QUARANTINE WARD / Q1",1.f,6.4f,9.8f,14.4f,-1000,1000,{.12f,.14f,.13f,.008f});
+ zone(m,"QUARANTINE WARD / Q2",1.f,14.6f,9.8f,23.f,-1000,1000,{.14f,.10f,.09f,.011f});
  zone(m,"QUARANTINE WARD / NURSES' STATION",14.2f,6.4f,23.f,9.f);
  zone(m,"QUARANTINE WARD / HOLDING",14.2f,14.f,23.f,23.f,-1000,1000,{.13f,.14f,.16f,.012f});
  zone(m,"QUARANTINE WARD / EAST PASSAGE",14.2f,9.2f,24.f,13.8f,-1000,1000,{.16f,.12f,.08f,.012f});
@@ -346,7 +361,23 @@ std::shared_ptr<const Map> makeContainmentIntake(){
  {const int lampProp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,8.95f,by,f+1.12f,.18f,.4f,.52f,kPi);
   auto l=caGlow({8.95f,17.1f},f+1.5f,.9f,7.f,3200);l.prop=lampProp;m.lights.push_back(l);}
  kit::prop(m,model::item_walkie,15.05f,16.8f,f+1.12f,.114f,.376f,.046f,.3f);
- caPendant(m,{21.f,17.f},roof,f+3.6f,1.25f,8.f,3600);                                                // the work light over the way round
+ caPendant(m,{21.f,18.3f},roof,f+3.6f,1.25f,8.f,3600);                                              // the work light over the way round
+ // The checkpoint: a floodlight on a mast over the shield, thrown hard on door B, so from the north
+ // door the line reads as a lit firing position with its back to you; and at the east end the
+ // checkpoint gate it was built round, its frame still standing, the leaf wrenched off its hinge.
+ wall(m,11.95f,by-.05f,12.05f,by+.05f,f+2.3f,f+3.15f,12);wall(m,11.7f,by-.2f,12.3f,by+.2f,f+2.3f,f+2.36f,8);
+ wall(m,11.68f,by+.02f,12.32f,by+.34f,f+3.1f,f+3.48f,8);wall(m,11.72f,by+.34f,12.28f,by+.36f,f+3.14f,f+3.44f,20);
+ m.lights.push_back(lamp({12.f,by+.3f},f+3.28f,2.3f,13.f,5200,0,WorldLightMount::Wall,clS,true));
+ for(float x:{19.35f,22.72f})steelColumn(m,x,by,f,f+2.95f,false);
+ wall(m,19.2f,by-.09f,22.87f,by+.09f,f+2.62f,f+2.95f,13);                                        // the gate head, striped
+ caFix(m,model::mine_cage_gate,20.35f,15.55f,f,.95f,true);                                           // the leaf, forced in and left
+ for(auto [x,z]:{std::pair{19.47f,.5f},{19.47f,1.9f}})wall(m,x,by-.06f,x+.1f,by+.06f,f+z,f+z+.18f,8);  // its hinge straps, torn
+ // The hall's frame: a girder line across the roof on two concrete columns down the middle, pilasters
+ // on the north and east walls, so the 7 m box has a structure the eye can measure it by.
+ for(float y:{4.6f,10.35f,15.4f}){wall(m,6.f,y,22.6f,y+.3f,roof-.7f,roof,12);wall(m,6.f,y-.06f,22.6f,y+.36f,roof-.74f,roof-.7f,12);}
+ for(float x:{9.6f,16.4f}){wall(m,x-.35f,10.15f,x+.35f,10.85f,f,roof-.7f,15);wall(m,x-.45f,10.05f,x+.45f,10.95f,f,f+.35f,15);
+  wall(m,x-.42f,10.08f,x+.42f,10.92f,roof-1.05f,roof-.7f,15);floorLine(m,x-.45f,10.05f,x+.45f,10.17f,f+.35f,13);}
+ wallBays(m,f,roof,4,true,false,false,true,12,11.5);
  // the two they brought back out of B's mouth before it shut, and the one who ran for it after
  for(float y:{17.6f,19.8f})m.fixtures.push_back({model::med_corpse_supine,{22.3f,y},0,.744f,1.753f,.411f,0,false});
  caBody(m,clock,ActorVisual::Cleanup,{6.8f,20.6f},f,2.2f);
@@ -374,10 +405,10 @@ std::shared_ptr<const Map> makeContainmentIntake(){
  caPendant(m,{9.f,8.f},roof,f+4.2f,1.5f,11.f,4200);caPendant(m,{16.f,8.f},roof,f+4.2f,1.4f,11.f,4200);
  caPendant(m,{9.5f,13.f},roof,f+4.2f,0,0,0);caPendant(m,{16.f,13.f},roof,f+4.2f,1.2f,10.f,4200,.3f);
  caPendant(m,{12.f,19.6f},roof,f+4.2f,.8f,8.f,4200,.15f);
- for(float y:{4.f,21.f})m.lights.push_back(lamp({23.f,y},f+3.f,.7f,8.f,3400,0,WorldLightMount::Wall,clW));
+ for(float y:{5.6f,21.f})m.lights.push_back(lamp({23.f,y},f+3.f,.7f,8.f,3400,0,WorldLightMount::Wall,clW));
  m.lights.push_back(caBeacon({23.f,18.f},f+2.8f,clW,.4f,"cont_power"));
  m.pickupSpawns.push_back({{19.6f,13.f},PickupKind::Health,f});
- zone(m,"",6.f,18.f,18.f,24.f,-1000,1000,{.20f,.09f,.08f,.016f});
+ zone(m,"",6.f,18.f,18.f,24.f,-1000,1000,{.15f,.12f,.11f,.008f});
  zone(m,"CONTAINMENT INTAKE / GALLERY",0,3.f,6.f,20.f,g-.5f,1000,{.13f,.13f,.14f,.010f});
  zone(m,"CONTAINMENT INTAKE",0,0,24,24,-1000,1000,{.14f,.13f,.13f,.012f});
  freightFinish(m,-1);
@@ -406,25 +437,41 @@ std::shared_ptr<const Map> makeContainmentA(){
  // The block reads from across the floor as one secured wall: four fronts under a hazard band, A1-A4
  // stencilled a metre high over each, the upper service hatches on their gantry, a reader at every
  // pier, each front washed from below the gantry. A4 is the one that went: its front blown out.
- const char* cellNames[4]={"A1","A2","A3","A4"};
+ // The block is two storeys: A1-A4 on the floor, A5-A8 over them off the gantry, each upper cell lit
+ // on its own lamp. The A4/A8 stack is the one that went: A8's front is blown out from inside and
+ // the growth has come out of it, over the gantry and down A4's face to the floor.
+ const char* cellNames[4]={"A1","A2","A3","A4"};const char* upperNames[4]={"A5","A6","A7","A8"};
+ const float up=f+3.04f;
  for(int i=0;i<4;++i){const float a=cells[i][0],b=cells[i][1],cx=(a+b)*.5f;
   wall(m,a,6.5f,a+.5f,6.7f,f,roof,15);wall(m,b-.5f,6.5f,b,6.7f,f,roof,15);
-  if(i==3)caBlownFront(m,a+.5f,6.5f,b-.5f,6.7f,f,roof,1,96);else caGlaze(m,a+.5f,6.5f,b-.5f,6.7f,f,roof,.6f,2.7f,true,15);
+  wall(m,a,1.f,b,6.5f,f+2.9f,up,15);                                                                // the slab between the storeys
+  if(i==3)caBlownFront(m,a+.5f,6.5f,b-.5f,6.7f,f,up,1,96);else caGlaze(m,a+.5f,6.5f,b-.5f,6.7f,f,up,.6f,2.2f,true,15);
+  if(i==3)caBlownFront(m,a+.5f,6.5f,b-.5f,6.7f,up,roof,1,97);else caGlaze(m,a+.5f,6.5f,b-.5f,6.7f,up,roof,.75f,2.15f,true,15);
   floorLine(m,a+.5f,6.95f,b-.5f,7.1f,f,13);
-  if(i<2)m.lights.push_back(lamp({cx,1.f},f+2.9f,i==1?.55f:.75f,6.f,6500,.02f,WorldLightMount::Wall,clS));
+  if(i<2)m.lights.push_back(lamp({cx,1.f},f+2.45f,i==1?.55f:.75f,6.f,6500,.02f,WorldLightMount::Wall,clS));
+  if(i<3)m.lights.push_back(lamp({cx,1.f},up+2.f,.5f,6.f,6800,.02f,WorldLightMount::Wall,clS));      // the upper cells' own lamps
   caFix(m,model::med_floor_drain,cx,4.2f,f,0,false);
   caFix(m,model::lab_id_scanner,b-.25f,6.73f,f+1.15f,caS,false);
-  caStencil(m,cellNames[i],cx,6.7f,1,f+3.35f,1.f);
-  for(float dx:{-1.75f,1.75f}){const float hx=cx+dx;                                              // the upper hatches
-   if(i==3&&dx>0){wall(m,hx-.04f,6.76f,hx+.04f,7.76f,f+3.05f,f+4.85f,11);continue;}             // A4's, swung open
-   wall(m,hx-.5f,6.7f,hx+.5f,6.76f,f+3.05f,f+4.85f,11);
-   for(float e:{-.56f,.5f})wall(m,hx+e,6.7f,hx+e+.06f,6.78f,f+3.f,f+4.9f,12);wall(m,hx-.56f,6.7f,hx+.56f,6.78f,f+4.85f,f+4.92f,12);
-   wall(m,hx+.3f,6.76f,hx+.42f,6.84f,f+3.8f,f+4.1f,19);}
-  m.fixtures.push_back({model::mine_cage_lamp,{cx,7.25f},f+2.62f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
-  m.lights.push_back(caGlow({cx,7.25f},f+2.7f,i==3?.35f:.6f,6.f,6000,{1,1,1},i==3?.5f:0.f));}
- wall(m,1.f,6.7f,23.f,6.74f,f+2.78f,f+2.96f,13);                                                    // the band
- wall(m,1.f,6.74f,23.f,7.6f,f+2.98f,f+3.04f,2);guardRail(m,1.f,7.56f,23.f,7.6f,f+3.04f);              // the hatch gantry
- for(float x=2.f;x<23.f;x+=3.f)m.pipes.push_back({{x,7.5f},{x,7.5f},f+3.04f,.025f,roof,6});
+  caStencil(m,cellNames[i],cx,6.7f,1,f+2.34f,.46f);
+  caStencil(m,upperNames[i],cx,6.7f,1,up+.12f,.5f);
+  if(i==0||i==2)caFix(m,model::med_ward_bed,a+1.6f,2.f,up,0,false);
+  m.fixtures.push_back({model::mine_cage_lamp,{cx,7.25f},f+2.5f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
+  m.lights.push_back(caGlow({cx,7.25f},f+2.58f,i==3?.35f:.7f,6.f,6000,{1,1,1},i==3?.5f:0.f));
+  m.lights.push_back(lamp({cx,7.3f},up+.35f,i==3?.25f:.5f,5.f,6000,.02f,WorldLightMount::Bare,0,false));}   // gantry floods up the upper fronts
+ wall(m,1.f,6.7f,23.f,6.74f,f+2.86f,f+2.98f,13);                                                    // the band
+ wall(m,1.f,6.74f,23.f,7.6f,f+2.98f,up,2);guardRail(m,1.f,7.56f,23.f,7.6f,up);                       // the gantry to the upper cells
+ for(float x=2.f;x<23.f;x+=3.f)m.pipes.push_back({{x,7.5f},{x,7.5f},up,.025f,roof,6});
+ // A8: the source of what got out. Crust lines the cell, a knot of crystal stands lit in it, and the
+ // growth spills out over the sill, runs across the gantry and down A4's piers to a heave on the floor.
+ caCrust(m,18.1f,1.f,22.5f,1.2f,up,roof);caCrust(m,22.75f,1.f,23.f,6.5f,up,roof);caCrust(m,18.1f,1.f,22.5f,6.4f,up,up+.08f);
+ caMound(m,20.6f,3.f,up+.08f,1.2f,1.1f);caKnot(m,20.f,4.4f,up+.08f,1.6f);caKnot(m,21.4f,2.4f,up+.08f,1.2f);
+ m.lights.push_back(caGlow({20.3f,4.2f},up+1.6f,1.3f,8.f,6500,{.72f,.5f,1.f},.12f));
+ caCrust(m,18.4f,6.5f,21.7f,6.74f,up,up+.84f);caCrust(m,18.3f,6.74f,21.8f,7.56f,up,up+.1f);       // over the sill and onto the gantry
+ for(auto [x1,x2,lo]:{std::tuple{18.5f,19.1f,0.f},{19.9f,20.6f,.9f},{21.f,21.5f,.3f}})caCrust(m,x1,7.56f,x2,7.66f,f+lo,up+.06f);   // the run down off the edge
+ for(auto [x1,x2]:{std::pair{17.6f,18.1f},{22.5f,22.75f}})caCrust(m,x1,6.7f,x2,6.78f,f,up);
+ caMound(m,19.9f,7.45f,f,1.f,.55f);caKnot(m,19.4f,7.4f,f+.2f,.9f);caKnot(m,20.7f,7.9f,f+.15f,.7f);
+ m.lights.push_back(caGlow({20.f,7.9f},f+.9f,.7f,5.f,6500,{.72f,.5f,1.f},.2f));
+ caKnot(m,19.f,7.1f,up+.1f,.8f);
  // A4: what went through the front went through it hard. The leaf of the inner door is on the floor.
  wall(m,18.7f,7.7f,20.9f,8.8f,f,f+.07f,11);
  for(auto [x,lo]:{std::pair{17.62f,.6f},{22.55f,.7f},{22.8f,1.3f}})wall(m,x,6.7f,x+.05f,6.712f,f+lo,f+lo+1.1f,16);
@@ -445,7 +492,7 @@ std::shared_ptr<const Map> makeContainmentA(){
  // A4: emptied. The bed broken, the floor scrubbed in a hurry, one smear missed.
  caFix(m,model::med_bed_frame_wrecked,20.2f,2.6f,f,.2f,true);
  wall(m,19.f,4.4f,21.6f,5.2f,f+.004f,f+.01f,16);
- m.lights.push_back(lamp({20.3f,1.f},f+2.9f,.7f,6.f,6500,.02f,WorldLightMount::Wall,clS));m.lights.back().flicker=.4f;
+ m.lights.push_back(lamp({20.3f,1.f},f+2.45f,.7f,6.f,6500,.02f,WorldLightMount::Wall,clS));m.lights.back().flicker=.4f;
  m.lights.push_back(caAlarm({22.98f,3.8f},f+2.4f,clW,.6f));
  for(auto [x1,x2,z]:{std::tuple{18.4f,19.6f,1.2f},{19.f,20.4f,1.6f},{20.8f,21.8f,.9f}})wall(m,x1,1.f,x2,1.012f,f+z,f+z+.05f,16);   // the marks on the back wall
  taped(m,{17.85f,6.71f},f+1.5f,caS,Readable::Note,"A4 / VACATED 02:40","OCCUPANT REMOVED BY CLEANUP DETAIL A ON ORDER. NO TRANSFER RECORD TO BE KEPT.",
@@ -483,7 +530,7 @@ std::shared_ptr<const Map> makeContainmentA(){
  for(auto [x,y,fl]:{std::tuple{5.f,8.8f,0.f},{19.f,8.8f,0.f},{5.f,14.6f,.2f},{12.f,14.6f,0.f},{19.f,14.6f,0.f}})m.lights.push_back(caTube(x,y,roof,.5f,6.f,5000,.03f,fl));
  caDeadTube(m,12.f,8.8f,roof);
  recessedFittings(m);
- zone(m,"",12.1f,1.f,17.4f,6.5f,-1000,1000,{.22f,.17f,.28f,.024f});
+ zone(m,"",12.1f,1.f,17.4f,6.5f,-1000,1000,{.15f,.14f,.18f,.01f});
  zone(m,"CONTAINMENT A / CELLS",1.f,1.f,23.f,6.5f,-1000,1000,{.12f,.14f,.17f,.008f});
  zone(m,"CONTAINMENT A / SOUTH CELLS",1.f,17.5f,23.f,23.f,-1000,1000,{.12f,.14f,.17f,.008f});
  zone(m,"CONTAINMENT A",0,0,24,24,-1000,1000,{.12f,.14f,.17f,.010f});
@@ -511,9 +558,10 @@ std::shared_ptr<const Map> makeContainmentService(){
  // --- The main run: 2.8 m between block walls, end to end ----------------------------------------
  // North of the bulkhead the run's west wall is gone: the run and the valve room are one junction
  // round the manifold, its old wall line kept only as the beam overhead.
- wall(m,10.4f,0,10.6f,3.f,f,roof,15);wall(m,10.4f,10.f,10.6f,15.2f,f,roof,15);
- wall(m,10.3f,2.8f,10.7f,3.2f,f,roof,15);wall(m,10.3f,9.8f,10.7f,10.2f,f,roof,15);                  // the pilasters it stood between
- wall(m,10.38f,3.2f,10.62f,9.8f,f+2.95f,roof,12);
+ // The wall stub at the door is gone too: you come in from A straight onto the manifold.
+ wall(m,10.4f,0,10.6f,1.2f,f,roof,15);wall(m,10.4f,10.f,10.6f,15.2f,f,roof,15);
+ wall(m,10.3f,9.8f,10.7f,10.2f,f,roof,15);                                                         // the pilaster it ended on
+ wall(m,10.38f,1.2f,10.62f,9.8f,f+2.95f,roof,12);
  wall(m,10.4f,15.2f,10.6f,18.8f,f+2.6f,roof,15);wall(m,10.4f,18.8f,10.6f,24.f,f,roof,15);
  wall(m,13.4f,0,13.6f,6.6f,f,roof,15);doorwayY(m,6.6f,8.4f,13.4f,13.6f,f,roof);wall(m,13.4f,8.4f,13.6f,14.5f,f,roof,15);
  doorwayY(m,14.5f,15.9f,13.4f,13.6f,f,roof);wall(m,13.4f,15.9f,13.6f,24.f,f,roof,15);
@@ -523,12 +571,13 @@ std::shared_ptr<const Map> makeContainmentService(){
  m.lights.push_back(caBeacon({10.9f,10.9f},f+2.2f,clN,0,"cont_power"));
  m.lights.push_back(caBeacon({13.1f,11.1f},f+2.2f,clS,.6f,"cont_power"));
  floorLine(m,10.6f,10.4f,13.4f,10.55f,f,13);
- for(float y:{2.f,13.f,20.f})m.lights.push_back(lamp({10.6f,y},f+2.4f,.5f,5.5f,3000,0,WorldLightMount::Wall,clE));
+ m.lights.push_back(lamp({13.4f,2.f},f+2.4f,.5f,5.5f,3000,0,WorldLightMount::Wall,clW));
+ for(float y:{13.f,20.f})m.lights.push_back(lamp({10.6f,y},f+2.4f,.5f,5.5f,3000,0,WorldLightMount::Wall,clE));
  m.lights.back().flicker=.35f;
  // --- The valve room (west, before the bulkhead): where he came to be on his own ----------------
  wall(m,1.f,10.f,10.4f,10.2f,f,roof,15);
  caFix(m,model::pwr_tall_switch_cabinet,1.5f,6.f,f,0,true);wall(m,1.f,5.2f,2.f,6.8f,f+3.02f,roof,CollisionProxyMaterial);
- for(float x:{3.f,3.6f})caFix(m,model::ind_barrel,x,1.6f,f,x,true);
+ for(auto [x,y]:{std::pair{1.6f,9.35f},{2.25f,9.45f}})caFix(m,model::ind_barrel,x,y,f,x,true);
  // The manifold: two headers across the junction on floor shoes, three risers into the roof, a gate
  // valve on every branch, and the east gasket weeping steam onto the floor since the feed dropped.
  const float hy=5.2f;
@@ -537,18 +586,30 @@ std::shared_ptr<const Map> makeContainmentService(){
  for(float z:{f+.9f,f+1.7f})pipeRoute(m,{{4.4f,hy,z},{8.9f,hy,z}},.13f,3,roof,f);
  for(float x:{5.2f,6.8f,8.4f}){m.pipes.push_back({{x,hy},{x,hy},f+.9f,.09f,f+1.7f,3});
   m.pipes.push_back({{x,hy},{x,hy},f+1.7f,.1f,roof,3});flange(m,{x,hy,f+1.9f},{},.1f);
-  gateValve(m,{x+.4f,hy,f+.9f},{1,0},.13f,f,1);}
- caFix(m,model::lab_pressure_gauge,6.8f,hy+.16f,f+1.95f,caS,false);
+  gateValve(m,{x+.4f,hy,f+.9f},{1,0},.13f,f,1);
+  caFix(m,model::lab_pressure_gauge,x,hy+.16f,f+1.95f,caS,false);}
+ // The junction is the plant: a second, older header bank on the north wall feeding a receiver,
+ // a rack of four mains overhead from wall to wall, and the lagged return dropping into the floor,
+ // so every way you look from the door is pipe, valve and gauge, not block wall.
+ vessel(m,{1.95f,3.1f},.62f,f,roof-.12f,4);
+ caFix(m,model::lab_pressure_gauge,1.95f,3.78f,f+1.6f,caS,false);
+ for(auto [z,r,paint]:{std::tuple{f+.55f,.16f,4},{f+1.35f,.11f,1}})pipeRoute(m,{{2.6f,2.1f,z},{9.6f,2.1f,z},{9.6f,2.1f,roof-.05f}},r,paint,roof,f);
+ for(float x:{4.2f,7.1f}){gateValve(m,{x,2.1f,f+.55f},{1,0},.16f,f,1);caFix(m,model::lab_pressure_gauge,x+.5f,2.36f,f+1.62f,caS,false);}
+ wall(m,2.5f,1.6f,10.f,2.6f,f,f+1.6f,CollisionProxyMaterial);
+ for(auto [y,r,paint]:{std::tuple{3.45f,.12f,3},{3.85f,.09f,2},{7.15f,.13f,4},{7.55f,.08f,1}})servicePipe(m,{1.f,y},{13.4f,y},roof-.32f,r,paint);
+ m.pipes.push_back({{12.9f,2.f},{12.9f,2.f},f,.2f,roof,1});flange(m,{12.9f,2.f,f+.1f},{},.2f);flange(m,{12.9f,2.f,roof-.15f},{},.2f);
+ wall(m,12.65f,1.75f,13.15f,2.25f,f,roof,CollisionProxyMaterial);
+ m.emitters.push_back({{6.5f,2.35f},f+.6f,{.1f,.7f},.45f,.7f,.05f,.4f,7});                           // the old bank weeps too
  wall(m,4.3f,hy-.32f,9.05f,hy+.72f,f,roof,CollisionProxyMaterial);
  m.emitters.push_back({{8.96f,hy+.1f},f+1.7f,{.25f,.9f},.55f,.85f,.06f,.45f,9});                      // the gasket
  m.emitters.push_back({{8.96f,hy+.1f},f+1.75f,{.4f,.5f},.9f,.6f,.05f,.35f,6});
  {Hazard h;h.kind=Hazard::Kind::Steam;h.x1=8.7f;h.x2=9.7f;h.y1=hy+.7f;h.y2=hy+1.9f;h.bottom=f-.5f;h.top=f+2.4f;
   h.damagePerSecond=12;h.period=6;h.onTime=1.8f;m.hazards.push_back(h);}
  wall(m,7.9f,hy+.75f,10.2f,hy+2.4f,f+.002f,f+.006f,17);caFix(m,model::med_floor_drain,9.4f,hy+1.9f,f,0,false);
- caPendant(m,{6.8f,hy+1.2f},roof,f+2.75f,1.15f,8.f,3200);
+ caPendant(m,{6.8f,hy+1.2f},roof,f+2.75f,1.7f,9.f,2700);caPendant(m,{5.2f,3.f},roof,f+2.8f,.9f,7.f,3000,.1f);
  caBody(m,clock,ActorVisual::Cleanup,{6.5f,8.f},f,2.f);
  kit::prop(m,model::item_walkie,7.2f,8.4f,f,.114f,.376f,.046f,1.1f);
- taped(m,{6.f,1.01f},f+1.5f,caS,Readable::Note,"(PENCIL, ON A RATION CARD)","TOLD THE SARGE I WAS CHECKING THE VALVES. I'M NOT GOING BACK OUT THERE TO DO WHAT HE SAYS.",
+ taped(m,{1.01f,8.2f},f+1.5f,caE,Readable::Note,"(PENCIL, ON A RATION CARD)","TOLD THE SARGE I WAS CHECKING THE VALVES. I'M NOT GOING BACK OUT THERE TO DO WHAT HE SAYS.",
   "IF SOMEONE FINDS THIS, THE ROUNDS ARE IN THE BOX. I DIDN'T USE THEM ON ANYONE.");
  m.lights.push_back(lamp({5.f,10.f},f+2.5f,.5f,5.5f,3000,0,WorldLightMount::Wall,clN));
  m.pickupSpawns.push_back({{8.8f,8.6f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{2.6f,8.8f},PickupKind::Health,f});
@@ -581,9 +642,9 @@ std::shared_ptr<const Map> makeContainmentService(){
  caCrust(m,1.f,15.2f,3.2f,15.32f,f,f+2.f);caCrust(m,1.f,18.68f,2.6f,18.8f,f,f+1.4f);
  m.lights.push_back(caGlow({1.8f,17.f},f+.35f,.3f,3.f,6500,{.72f,.5f,1.f}));
  m.lights.push_back(lamp({8.f,18.8f},f+2.4f,.4f,5.f,3000,0,WorldLightMount::Wall,clN));m.lights.back().flicker=.5f;
- zone(m,"CONTAINMENT SERVICE / VALVE JUNCTION",1.f,1.f,13.4f,10.9f,-1000,1000,{.15f,.15f,.15f,.016f});
- zone(m,"CONTAINMENT SERVICE / SLOTS",13.6f,6.6f,23.f,8.4f,-1000,1000,{.18f,.14f,.22f,.02f});
- zone(m,"",13.6f,1.f,23.f,6.4f,-1000,1000,{.22f,.14f,.28f,.03f});
+ zone(m,"CONTAINMENT SERVICE / VALVE JUNCTION",1.f,1.f,13.4f,10.9f,-1000,1000,{.16f,.15f,.13f,.01f});
+ zone(m,"CONTAINMENT SERVICE / SLOTS",13.6f,6.6f,23.f,8.4f,-1000,1000,{.14f,.13f,.15f,.008f});
+ zone(m,"",13.6f,1.f,23.f,6.4f,-1000,1000,{.17f,.13f,.2f,.012f});
  zone(m,"CONTAINMENT SERVICE / PLENUM",13.6f,12.f,23.f,20.f,-1000,1000,{.16f,.1f,.09f,.016f});
  zone(m,"CONTAINMENT SERVICE / B SPUR",0,15.2f,10.4f,18.8f,-1000,1000,{.15f,.12f,.16f,.018f});
  zone(m,"CONTAINMENT SERVICE",0,0,24,24,-1000,1000,{.12f,.12f,.11f,.014f});
@@ -636,16 +697,23 @@ std::shared_ptr<const Map> makeContainmentB(){
  hazard(m,Hazard::Kind::Anomaly,1.6f,1.8f,5.2f,5.4f,f,f+3.f,10);
  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.6f,6.2f},f,1,0});
  // The west passage to the Breach Sector is grown shut but for one lane along its south wall, lit
- // by the lamps Kessler's men set on the floor; its rim shimmers and bites. The growth crosses the
- // aisle too and pinches it to a lane under the booth glass, where the detail can see who comes.
+ // by the lamps Kessler's men set on the floor; its rim shimmers and bites. The growth comes on out of
+ // the passage and closes the aisle wall to wall, to the roof: the normal way south is gone. The way
+ // on is the detour Kessler's men lamped: over the heave into E1, through the hole the growth
+ // punched in E1's back wall, through the detail's booth and out by its door to the south passage.
  caCrust(m,1.f,9.f,9.3f,14.f,f,f+.04f);caCrust(m,1.f,9.f,9.3f,9.25f,f,roof);caCrust(m,1.f,13.75f,6.f,14.f,f,f+3.f);
  wall(m,2.6f,9.25f,9.5f,12.4f,f,f+1.1f,34);wall(m,3.2f,9.25f,9.f,11.9f,f+1.1f,f+2.3f,34);wall(m,4.4f,9.25f,7.4f,11.2f,f+2.3f,f+2.9f,34);
- wall(m,9.5f,10.2f,13.f,12.6f,f,f+1.f,34);wall(m,9.5f,10.6f,12.4f,12.2f,f+1.f,f+2.1f,34);wall(m,10.f,10.9f,11.6f,11.9f,f+2.1f,f+2.6f,34);
- for(auto [x,y,z,h]:{std::tuple{4.6f,10.4f,2.9f,1.f},{7.8f,10.6f,2.3f,.8f},{3.6f,11.6f,2.3f,.7f},{10.6f,11.4f,2.6f,.9f},{12.6f,11.f,1.f,.7f},{8.8f,12.1f,1.1f,.6f}})caKnot(m,x,y,f+z,h);
+ wall(m,9.5f,10.f,14.5f,12.5f,f,f+1.5f,34);wall(m,9.5f,10.15f,14.5f,12.35f,f+1.5f,f+2.9f,34);
+ wall(m,9.9f,10.4f,14.3f,12.1f,f+2.9f,f+4.1f,34);wall(m,10.6f,10.7f,13.7f,11.8f,f+4.1f,f+5.2f,34);
+ wall(m,9.5f,10.f,14.5f,12.5f,f,roof,CollisionProxyMaterial);wall(m,2.6f,9.25f,9.5f,12.4f,f+1.1f,roof,CollisionProxyMaterial);
+ for(auto [x,y,z,h]:{std::tuple{4.6f,10.4f,2.9f,1.f},{7.8f,10.6f,2.3f,.8f},{3.6f,11.6f,2.3f,.7f},{11.2f,11.3f,5.2f,1.2f},{12.9f,11.f,4.1f,.9f},{8.8f,12.1f,1.1f,.6f},
+  {13.6f,9.9f,0.f,1.4f},{10.2f,9.9f,0.f,1.1f},{12.f,12.65f,0.f,.9f},{14.1f,12.2f,1.5f,.8f}})caKnot(m,x,y,f+z,h);
  caKnot(m,1.6f,10.2f,f+.04f,.9f);
- hazard(m,Hazard::Kind::Anomaly,2.6f,12.25f,9.5f,12.6f,f,f+2.4f,6);hazard(m,Hazard::Kind::Anomaly,9.5f,9.9f,13.3f,12.9f,f,f+2.4f,5);
+ hazard(m,Hazard::Kind::Anomaly,2.6f,12.25f,9.5f,12.6f,f,f+2.4f,6);hazard(m,Hazard::Kind::Anomaly,9.5f,9.75f,14.5f,12.75f,f,f+2.4f,5);
  caHum(m,"cona_b_hum",1.f,9.f,9.5f,14.f,f,f+3.f,.6f);
- for(auto [x,y]:{std::pair{5.6f,10.f},{11.3f,11.7f}})m.lights.push_back(caGlow({x,y},f+3.4f,.45f,4.5f,6500,{.72f,.5f,1.f},.3f));
+ m.lights.push_back(caGlow({1.8f,11.f},f+2.2f,.45f,4.5f,6500,{.72f,.5f,1.f},.3f));
+ m.lights.push_back(caGlow({12.f,9.6f},f+1.2f,.8f,6.f,6500,{.72f,.5f,1.f},.15f));                       // the wall's face, lit from its own knots
+ m.lights.push_back(caGlow({12.f,9.3f},f+4.6f,.6f,6.f,6500,{.6f,.45f,1.f},.1f));
  for(auto [x,y,yaw]:{std::tuple{8.6f,13.45f,.3f},{5.6f,13.1f,2.1f},{3.f,13.4f,-.7f}}){
   const int lampProp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,x,y,f+.04f,.18f,.4f,.52f,yaw);
   auto l=caGlow({x,y},f+.5f,.42f,3.8f,3000);l.prop=lampProp;m.lights.push_back(l);}
@@ -669,7 +737,17 @@ std::shared_ptr<const Map> makeContainmentB(){
  wall(m,14.5f,15.f,14.7f,19.f,f+3.4f,roof,15);
  wall(m,14.5f,19.f,14.7f,19.35f,f,roof,15);wall(m,14.5f,22.85f,14.7f,23.f,f,roof,15);wall(m,14.5f,19.35f,14.7f,22.85f,f+2.72f,roof,15);
  caFix(m,model::lab_cell_gate,14.6f,21.1f,f,caE,false);wall(m,14.53f,19.35f,14.67f,22.85f,f,f+2.72f,CollisionProxyMaterial);
- wall(m,14.7f,9.5f,23.f,9.7f,f,roof,15);wall(m,14.7f,19.f,23.f,19.2f,f,roof,15);
+ // E1's back wall, holed through into the booth where the growth pushed: ragged concrete, crust round
+ // the lip, the rubble blown out on the booth floor. The detail's lamps mark it from the aisle.
+ wall(m,14.7f,9.5f,15.7f,9.7f,f,roof,15);wall(m,17.1f,9.5f,23.f,9.7f,f,roof,15);wall(m,15.7f,9.5f,17.1f,9.7f,f+2.3f,roof,15);
+ wall(m,15.7f,9.5f,16.05f,9.7f,f+1.85f,f+2.3f,15);wall(m,16.7f,9.5f,17.1f,9.7f,f+2.05f,f+2.3f,15);wall(m,16.85f,9.5f,17.1f,9.7f,f,f+.4f,15);
+ for(float x:{15.58f,17.1f})caCrust(m,x,9.35f,x+.12f,9.85f,f,f+2.3f);caCrust(m,15.7f,9.3f,17.1f,9.5f,f,f+.05f);caCrust(m,15.4f,9.7f,17.4f,10.5f,f,f+.04f);
+ caKnot(m,17.35f,9.25f,f,1.2f);caKnot(m,15.45f,9.95f,f+.04f,.8f);
+ for(auto [x1,y1,x2,y2,h]:{std::tuple{15.9f,10.f,16.3f,10.35f,.22f},{16.6f,10.5f,17.f,10.8f,.16f},{17.3f,9.9f,17.6f,10.2f,.2f}})wall(m,x1,y1,x2,y2,f,f+h,15);
+ for(auto [x,y,yaw]:{std::tuple{13.1f,7.1f,.4f},{15.9f,8.7f,2.2f},{17.6f,10.9f,-.8f}}){
+  const int lampProp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,x,y,f,.18f,.4f,.52f,yaw);
+  auto l=caGlow({x,y},f+.5f,.55f,4.2f,3000);l.prop=lampProp;m.lights.push_back(l);}
+ wall(m,14.7f,19.f,23.f,19.2f,f,roof,15);
  wallDoor(m,14.7f,23.f,14.8f,15.f,18.f,19.2f,f,roof,-1);                                       // door 1: the booth, from the passage
  // E1
  caMound(m,21.f,7.f,f,1.f,.8f);caFix(m,model::med_ward_bed_tossed,18.4f,2.4f,f,.1f,true);
@@ -693,7 +771,7 @@ std::shared_ptr<const Map> makeContainmentB(){
   caReply("What happened in here?","cona_b_what"),caReply("Come with me.","cona_b_come"),caReply("Which way out?","cona_b_way")}});
  m.dialogue.push_back({stateId("cona_b_what"),"B DETAIL","Every cell let go at two. Same second. Kessler held the inner door and the door held him.","",{caReply("Back.","cona_b_hello")}});
  m.dialogue.push_back({stateId("cona_b_come"),"B DETAIL","Doc can't walk. And you heard the radio. Out there we're exposed. In here we're just stuck.","",{caReply("Back.","cona_b_hello")}});
- m.dialogue.push_back({stateId("cona_b_way"),"B DETAIL","West is where it started. Don't. South's the handling floor, then the theater. The service spur east loops back to A.","",{caReply("Back.","cona_b_hello")}});
+ m.dialogue.push_back({stateId("cona_b_way"),"B DETAIL","West is where it started. Don't. The aisle's grown shut; out our door and round is the only way south. Handling floor, then the theater. The spur east loops back to A.","",{caReply("Back.","cona_b_hello")}});
  caEvent(m,"cona_b_truce",9.5f,4.f,14.5f,9.f,"",{caSet("cona_b_stance",int(SquadStance::Truce))});
  // The Investigator writes them off. They hear it. So does the hub.
  caSequence(m,"cona_b_radio","cona_b_radio_done",24000,22000,9.5f,9.f,14.5f,15.f);
@@ -705,17 +783,17 @@ std::shared_ptr<const Map> makeContainmentB(){
  // --- The aisle: the third one, the alarm, the tubes that are left --------------------------------
  m.creatureSpawns.push_back({CreatureKind::Transformed,{12.f,20.6f},f,1,0});
  for(auto [x,y,yaw,ph]:{std::tuple{9.5f,18.9f,clE,0.f},{14.5f,9.8f,clW,.8f},{9.5f,22.7f,clE,1.5f}})m.lights.push_back(caAlarm({x,y},f+2.9f,yaw,ph));
- m.lights.push_back(caTube(12.f,11.6f,roof,.75f,7.5f,6000,.04f,.5f));m.lights.push_back(caTube(12.f,21.6f,roof,.7f,7.f,6000,.04f,.6f));
+ m.lights.push_back(caTube(12.f,14.f,roof,.75f,7.5f,6000,.04f,.5f));m.lights.push_back(caTube(12.f,21.6f,roof,.7f,7.f,6000,.04f,.6f));
  caDeadTube(m,12.f,6.f,roof);caDeadTube(m,12.f,16.8f,roof);
  m.lights.push_back(caTube(12.f,2.4f,roof,.4f,5.f,5600,.03f));
  m.lights.push_back(lamp({20.f,19.f},f+2.4f,.35f,5.f,4200,.2f,WorldLightMount::Wall,clN));
  m.pickupSpawns.push_back({{20.2f,12.8f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{16.f,17.6f},PickupKind::Health,f});
  recessedFittings(m);
- zone(m,"CONTAINMENT B / WEST PASSAGE",0,9.f,9.3f,14.f,-1000,1000,{.22f,.14f,.28f,.03f});
- zone(m,"CONTAINMENT B / BOOTH",14.7f,9.7f,23.f,14.8f,-1000,1000,{.15f,.12f,.1f,.012f});
- zone(m,"CONTAINMENT B / WEST CELLS",1.f,1.f,9.3f,23.f,-1000,1000,{.17f,.12f,.18f,.022f});
- zone(m,"CONTAINMENT B / EAST CELLS",14.7f,1.f,23.f,23.f,-1000,1000,{.17f,.12f,.18f,.022f});
- zone(m,"CONTAINMENT B",0,0,24,24,-1000,1000,{.17f,.12f,.16f,.02f});
+ zone(m,"CONTAINMENT B / WEST PASSAGE",0,9.f,9.3f,14.f,-1000,1000,{.16f,.12f,.18f,.012f});
+ zone(m,"CONTAINMENT B / BOOTH",14.7f,9.7f,23.f,14.8f,-1000,1000,{.15f,.12f,.1f,.008f});
+ zone(m,"CONTAINMENT B / WEST CELLS",1.f,1.f,9.3f,23.f,-1000,1000,{.15f,.12f,.15f,.009f});
+ zone(m,"CONTAINMENT B / EAST CELLS",14.7f,1.f,23.f,23.f,-1000,1000,{.15f,.12f,.15f,.009f});
+ zone(m,"CONTAINMENT B",0,0,24,24,-1000,1000,{.14f,.12f,.14f,.009f});
  freightFinish(m,-1);
  return p;
 }
