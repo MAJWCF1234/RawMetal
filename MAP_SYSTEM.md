@@ -326,6 +326,30 @@ Additional `SCRIPT_ACTION` kinds:
 - `SCRIPT_ACTION|map|event|ENTER_CAMPAIGN`: starts the main campaign at Map 0,
   exactly as the prologue hands off. It applies at the start of the next update. Use it
   to end a prologue.
+- `SCRIPT_ACTION|map|event|ADD|name|amount`: adds a non-zero amount to a state,
+  clamped to -100000..100000. Counters.
+- `SCRIPT_ACTION|map|event|TAKE|item|count`: removes quest items (1-99).
+- `SCRIPT_ACTION|map|event|MESSAGE|text|seconds`: a HUD caption (1-96
+  characters, 0.5-15 s). `{state_name}` is replaced by that state's value when
+  the event fires.
+
+Event gates and triggers (1.2.2). Both records follow their `SCRIPT_EVENT`:
+
+- `SCRIPT_REQUIRE|map|event|name|op|value`: an extra gate, up to 8 per event.
+  `op` is `=` (or `==`), `!=`, `<`, `<=`, `>`, `>=`. `name` is a state, or a
+  live value: `@kills` and `@remaining` (creatures killed and hostiles left on
+  the event's own map), `@health` (the player's, rounded up) or `@map` (the map
+  the player is on). The event's own `requireState|requireValue` still counts
+  as one more `=` gate, and `needClear` always applies on top.
+- `SCRIPT_TRIGGER|map|event|where|match|repeat`: `where` is `box` (the default:
+  inside its box on its own map), `map` (anywhere on its own map) or `campaign`
+  (whatever map the player is on). `match` is `all` (default) or `any` of the
+  gates. `repeat 1` fires the event again each time its gates turn true (each
+  entry into the box), instead of once ever; the latch is saved, so loading a
+  save never refires it.
+
+`RawMetal.exe --each-test=scripting` covers every record above, its rejects and
+a save round trip (`scripting-test.txt`).
 
 Sound ids 42 `Alarm` (a short klaxon, 1.85 s) and 43 `AlarmDistant` (a 22 s
 facility alarm bed). A running `TIMED_SEQUENCE` whose repeating tick sound is

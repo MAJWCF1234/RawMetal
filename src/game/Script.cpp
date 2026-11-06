@@ -89,6 +89,15 @@ void Game::executeScriptAction(const ScriptAction& action){
   // Deferred: the script pass is still iterating this world's events.
   // (Only a custom world hands off: the prologue is a campaign chunk now.)
   case ScriptAction::Type::EnterMainCampaign:if(m_worldId==WorldId::Custom)m_pendingMainCampaign=true;break;
+  case ScriptAction::Type::AddState:setState(action.id,std::clamp(state(action.id)+action.value,-100000,100000));break;
+  case ScriptAction::Type::ShowMessage:{
+   std::string text;
+   for(size_t i=0;i<action.text.size();){
+    if(auto close=action.text.find('}',i);action.text[i]=='{'&&close!=std::string::npos){text+=std::to_string(state(stateId(std::string_view(action.text).substr(i+1,close-i-1))));i=close+1;}
+    else text+=action.text[i++];
+   }
+   m_pickupNotice=std::move(text);m_pickupNoticeTime=action.amount;break;
+  }
  }
 }
 void Game::updateReceivingBreach(){
@@ -121,14 +130,45 @@ void Game::updateReceivingBreach(){
   }
  }
 }
+int Game::scriptValue(const ScriptEvent& event,const ScriptCondition& c)const{
+ using S=ScriptCondition::Source;
+ switch(c.source){
+  case S::State:return state(c.id);
+  case S::Kills:return event.level==m_level?m_kills:m_chunks[event.level].kills;
+  case S::Remaining:return hostilesRemaining(event.level);
+  case S::Health:return int(std::ceil(m_player.health));
+  case S::Map:return m_level;
+ }
+ return 0;
+}
+bool Game::scriptEventReady(const ScriptEvent& event)const{
+ using S=ScriptEvent::Scope;
+ if(event.scope!=S::Campaign&&event.level!=m_level)return false;
+ bool tested=false,any=false,all=true;
+ auto test=[&](bool ok){tested=true;any|=ok;all&=ok;};
+ if(event.requireState)test(state(event.requireState)==event.requireValue);
+ for(const auto&c:event.conditions){
+  int v=scriptValue(event,c);using O=ScriptCondition::Op;
+  test(c.op==O::Equal?v==c.value:c.op==O::NotEqual?v!=c.value:c.op==O::Less?v<c.value:c.op==O::LessEqual?v<=c.value:c.op==O::Greater?v>c.value:v>=c.value);
+ }
+ if(tested&&!(event.matchAny?any:all))return false;
+ if(event.requireEnemiesClear&&hostilesRemaining(event.level)>0)return false;
+ if(event.scope!=S::Box)return true;
+ return m_player.pos.x>=event.x1&&m_player.pos.x<=event.x2&&m_player.pos.y>=event.y1&&m_player.pos.y<=event.y2&&m_player.z>=event.bottom&&m_player.z<=event.top;
+}
 void Game::updateScripts(float){
  updateReceivingBreach();
  for(const auto&event:m_scriptEvents){
-  if(event.level!=m_level||!event.id||(event.once&&containsEvent(m_firedEvents,event.id)))continue;
-  if(event.requireState&&state(event.requireState)!=event.requireValue)continue;
-  if(event.requireEnemiesClear&&enemiesRemaining()>0)continue;
-  if(m_player.pos.x<event.x1||m_player.pos.x>event.x2||m_player.pos.y<event.y1||m_player.pos.y>event.y2||m_player.z<event.bottom||m_player.z>event.top)continue;
-  if(event.once)m_firedEvents.push_back(event.id);for(const auto&action:event.actions)executeScriptAction(action);
+  if(!event.id)continue;
+  bool latched=(event.once||event.rearm)&&containsEvent(m_firedEvents,event.id);
+  if(event.once&&latched)continue;
+  bool ready=scriptEventReady(event);
+  // A rearming event stays latched while its gates hold and re-arms once they fail,
+  // so it fires once per entry (or each time its states line up), not every frame.
+  if(event.rearm&&latched&&!ready){m_firedEvents.erase(std::find(m_firedEvents.begin(),m_firedEvents.end(),event.id));continue;}
+  if(!ready||latched)continue;
+  if(event.once||event.rearm)m_firedEvents.push_back(event.id);
+  for(const auto&action:event.actions)executeScriptAction(action);
  }
 }
 bool Game::hazardActive(const Hazard& h)const{
@@ -297,5 +337,67 @@ bool Game::testSystems(){
 
  ScriptAction finish;finish.type=ScriptAction::Type::CompleteCampaign;game.executeScriptAction(finish);
  return check(game.won(),"Campaign completion is explicit, not tied to the highest compiled chunk");
+}
+
+// Custom-campaign scripting (1.2.2): SCRIPT_REQUIRE gates with comparisons and live
+// values, SCRIPT_TRIGGER scopes (box / map / campaign), all-or-any matching,
+// rearming events, and the ADD / TAKE / MESSAGE actions, from file text to play.
+bool Game::testScripting(){
+ std::ofstream report("scripting-test.txt");int failed=0;
+ auto check=[&](bool ok,const char*name){failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<name<<'\n';report.flush();return ok;};
+ const std::string start="--- CUSTOM_CAMPAIGN_DATA_START ---\n",end="--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+ std::string base="CAMPAIGN|Scripting fixture|0\n";
+ for(int map=0;map<2;++map){
+  base+="MAP|"+std::to_string(map)+"|Room "+std::to_string(map)+"|"+std::to_string(map*24)+"|0|6|6|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|"+std::to_string(map)+"|0|Floor|0|0\n";
+  for(int row=0;row<24;++row)base+="ROW|"+std::to_string(map)+"|0|"+std::to_string(row)+"|"+(row==0||row==23?std::string(24,'#'):"#"+std::string(22,'.')+"#")+"\n";
+ }
+ const std::string script=
+  "OBJECTIVE_TEXT|0|obj_crystals|Collect three crystals\n"
+  "SCRIPT_EVENT|0|pad_a|2|2|3|3|-10|10||1|0\nSCRIPT_ACTION|0|pad_a|ADD|crystals|1\nSCRIPT_ACTION|0|pad_a|MESSAGE|CRYSTALS {crystals} / 3|2\n"
+  "SCRIPT_EVENT|0|pad_b|5|2|6|3|-10|10||1|0\nSCRIPT_ACTION|0|pad_b|ADD|crystals|1\n"
+  "SCRIPT_EVENT|0|pad_c|8|2|9|3|-10|10||1|0\nSCRIPT_ACTION|0|pad_c|ADD|crystals|1\nSCRIPT_ACTION|0|pad_c|TAKE|keycard|1\n"
+  "SCRIPT_EVENT|0|vault|1|1|23|23|-10|10|lever|1|0\nSCRIPT_REQUIRE|0|vault|crystals|>=|3\nSCRIPT_TRIGGER|0|vault|map|all|0\nSCRIPT_ACTION|0|vault|STATE|vault_open|1\n"
+  "SCRIPT_EVENT|0|either|1|1|23|23|-10|10||1|0\nSCRIPT_REQUIRE|0|either|alpha|=|1\nSCRIPT_REQUIRE|0|either|beta|!=|0\nSCRIPT_TRIGGER|0|either|map|any|0\nSCRIPT_ACTION|0|either|ADD|either_count|1\n"
+  "SCRIPT_EVENT|0|door_mat|12|12|13|13|-10|10||1|0\nSCRIPT_TRIGGER|0|door_mat|box|all|1\nSCRIPT_ACTION|0|door_mat|ADD|mat_steps|1\n"
+  "SCRIPT_EVENT|0|healthy|1|1|23|23|-10|10||1|0\nSCRIPT_REQUIRE|0|healthy|@health|>|50\nSCRIPT_REQUIRE|0|healthy|@remaining|=|0\nSCRIPT_REQUIRE|0|healthy|@map|=|0\nSCRIPT_TRIGGER|0|healthy|map|all|1\nSCRIPT_ACTION|0|healthy|ADD|calm|1\n"
+  "SCRIPT_EVENT|1|remote|1|1|23|23|-10|10|vault_open|1|0\nSCRIPT_REQUIRE|1|remote|@kills|=|0\nSCRIPT_TRIGGER|1|remote|campaign|all|0\nSCRIPT_ACTION|1|remote|OBJECTIVE|obj_crystals|2\n"
+  "SCRIPT_EVENT|1|local|1|1|23|23|-10|10|vault_open|1|0\nSCRIPT_TRIGGER|1|local|map|all|0\nSCRIPT_ACTION|1|local|STATE|local_fired|1\n";
+ auto parse=[&](const std::string&records){return loadCustomCampaignText(start+base+records+end,"scripting-fixture.txt");};
+ auto rejects=[&](const std::string&records){try{parse(records);return false;}catch(const std::exception&e){report<<"  rejected: "<<e.what()<<'\n';return true;}};
+ std::shared_ptr<const CustomCampaign> campaign;
+ try{campaign=parse(script);}catch(const std::exception&e){report<<e.what()<<'\n';}
+ if(!check(campaign!=nullptr,"SCRIPT_REQUIRE, SCRIPT_TRIGGER, ADD, TAKE and MESSAGE parse"))return false;
+ const auto&events=campaign->maps[0]->scriptEvents;auto find=[&](const char*id){for(const auto&e:events)if(e.id==stateId(id))return &e;return (const ScriptEvent*)nullptr;};
+ check(find("vault")&&find("vault")->conditions.size()==1&&find("vault")->conditions[0].op==ScriptCondition::Op::GreaterEqual&&find("vault")->scope==ScriptEvent::Scope::Map&&find("either")->matchAny&&find("door_mat")->rearm&&!find("door_mat")->once&&find("pad_a")->once&&find("pad_a")->scope==ScriptEvent::Scope::Box,"Parsed events keep their gates, scope, match mode and repeat flag");
+ const std::string one="SCRIPT_EVENT|0|e|1|1|2|2|-10|10||1|0\n";
+ std::string nine=one;for(int i=0;i<9;++i)nine+="SCRIPT_REQUIRE|0|e|s"+std::to_string(i)+"|=|1\n";
+ check(rejects(one+"SCRIPT_REQUIRE|0|e|a|=>|1\n")&&rejects(one+"SCRIPT_REQUIRE|0|e|@bogus|=|1\n")&&rejects(one+"SCRIPT_REQUIRE|0|missing|a|=|1\n")&&rejects(one+"SCRIPT_REQUIRE|0|e|a|=\n")&&rejects(nine)
+  &&rejects(one+"SCRIPT_TRIGGER|0|e|room|all|0\n")&&rejects(one+"SCRIPT_TRIGGER|0|e|map|some|0\n")&&rejects(one+"SCRIPT_TRIGGER|0|e|map|all|2\n")
+  &&rejects(one+"SCRIPT_ACTION|0|e|ADD|a|0\n")&&rejects(one+"SCRIPT_ACTION|0|e|TAKE|a|0\n")&&rejects(one+"SCRIPT_ACTION|0|e|MESSAGE||2\n")&&rejects(one+"SCRIPT_ACTION|0|e|MESSAGE|hi|30\n"),
+  "Parser rejects bad comparisons, unknown live values, undeclared events, more than 8 gates, bad scopes or modes, zero amounts and bad captions");
+
+ Game game(campaign);game.m_player.pos={6.5f,6.5f};game.m_player.z=0;game.m_player.health=100;
+ game.updateScripts(.01f);
+ check(game.state("calm")==1&&game.state("crystals")==0&&game.state("either_count")==0,"Map-wide gates on live values fire at once; nothing else does");
+ game.giveQuestItem(stateId("keycard"),2);
+ game.m_player.pos={2.5f,2.5f};game.updateScripts(.01f);game.updateScripts(.01f);
+ check(game.state("crystals")==1&&game.pickupNotice()=="CRYSTALS 1 / 3","ADD counts once per one-shot event and MESSAGE shows the live count");
+ game.m_player.pos={5.5f,2.5f};game.updateScripts(.01f);game.m_player.pos={8.5f,2.5f};game.updateScripts(.01f);
+ check(game.state("crystals")==3&&game.questItemCount(stateId("keycard"))==1&&game.state("vault_open")==0,"Three pads make three; TAKE removes one item; the vault still waits for its lever");
+ game.setState(stateId("lever"),1);game.updateScripts(.01f);
+ check(game.state("vault_open")==1,"An event fires once its classic gate and every SCRIPT_REQUIRE hold (AND)");
+ check(game.objective(stateId("obj_crystals"))==ObjectiveStatus::Complete&&game.state("local_fired")==0,"A campaign-scope event on another map fires here; a map-scope one waits for its map");
+ game.setState(stateId("beta"),4);game.updateScripts(.01f);game.updateScripts(.01f);
+ check(game.state("either_count")==1,"An any-match event fires when one gate of several holds, and only once");
+ game.m_player.pos={12.5f,12.5f};game.updateScripts(.01f);game.updateScripts(.01f);
+ game.m_player.pos={15.5f,15.5f};game.updateScripts(.01f);game.m_player.pos={12.5f,12.5f};game.updateScripts(.01f);
+ check(game.state("mat_steps")==2,"A repeating box event fires on each entry, not each frame");
+ game.m_player.health=40;game.updateScripts(.01f);game.m_player.health=90;game.updateScripts(.01f);game.updateScripts(.01f);
+ check(game.state("calm")==2,"A repeating gate re-arms when a live value fails and fires again when it holds");
+ for(int i=0;i<4;++i){ScriptAction add;add.type=ScriptAction::Type::AddState;add.id=stateId("big");add.value=60000;game.executeScriptAction(add);}
+ check(game.state("big")==100000,"ADD clamps to the state range");
+ {Game restored(campaign);bool decoded=restored.decodeSave(game.encodeSave());restored.m_player.pos={12.5f,12.5f};restored.m_player.health=90;restored.updateScripts(.01f);
+  check(decoded&&restored.state("mat_steps")==2&&restored.state("crystals")==3&&restored.state("calm")==2,"A restored save keeps counters and the repeating latches, so nothing refires");}
+ report<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';return failed==0;
 }
 }

@@ -1694,7 +1694,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"dialogue",retro::Game::testDialogue},
          {"storm",retro::Game::testStorm},
          {"zone-people",retro::Game::testZonePeople},
-         {"handgun",retro::Game::testHandgun}};
+         {"handgun",retro::Game::testHandgun},
+         {"scripting",retro::Game::testScripting}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){

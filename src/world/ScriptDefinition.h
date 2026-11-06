@@ -150,11 +150,22 @@ inline StateId actorAiState(int level,size_t actor,StateId timer,std::string_vie
 ActorPose sampleActor(const ActorTrack& track,int ageMs);
 ActorPose sampleActorKeys(const std::vector<ActorKey>& keys,int ageMs,bool loop=false);
 struct ScriptAction {
- enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign,EnterMainCampaign};
+ enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign,EnterMainCampaign,AddState,ShowMessage};
  Type type=Type::SetState;StateId id=0;int value=0,index=0;CreatureKind enemyKind=CreatureKind::Huntsman;Vec2 position{};float z=-999,amount=0;Sound sound=Sound::Exit;
+ std::string text; // ShowMessage: {name} is replaced by that state's value when it fires.
+};
+// SCRIPT_REQUIRE: one test of a named state or of a live game value.
+struct ScriptCondition {
+ enum class Source {State,Kills,Remaining,Health,Map};   // Kills and Remaining count the event's own map.
+ enum class Op {Equal,NotEqual,Less,LessEqual,Greater,GreaterEqual};
+ Source source=Source::State;StateId id=0;Op op=Op::Equal;int value=1;
 };
 struct ScriptEvent {
+ // Box fires inside its volume on its own map; Map anywhere on its own map; Campaign on whatever map the player is on.
+ enum class Scope {Box,Map,Campaign};
  StateId id=0;int level=0;float x1=0,y1=0,x2=0,y2=0,bottom=-100,top=100;StateId requireState=0;int requireValue=1;bool requireEnemiesClear=false,once=true;
+ // rearm: fire once each time the gates become true (latched in the fired list), instead of once ever.
+ Scope scope=Scope::Box;bool matchAny=false,rearm=false;std::vector<ScriptCondition> conditions;
  std::vector<ScriptAction> actions;
 };
 }

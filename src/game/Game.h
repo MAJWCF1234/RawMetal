@@ -748,6 +748,7 @@ public:
     // every spark shower and arc (electricScene), the four that matter most to where the player stands.
     std::array<electric::Flash,4> weaponFlashes()const;
     static bool testDarkness();
+    static bool testScripting();
     bool inventoryOpen()const{return m_inventoryOpen;}
     // A conversation with choices is open (DialogueNode): the world runs on,
     // the player stands and picks a reply with 1-4, the arrows or the mouse.
@@ -927,6 +928,8 @@ private:
     void updateDarkness(float dt);
     void seedScripts();
     void updateScripts(float dt);
+    int scriptValue(const ScriptEvent& event,const ScriptCondition& condition)const;
+    bool scriptEventReady(const ScriptEvent& event)const;
     void updateReceivingBreach();
     void executeScriptAction(const ScriptAction& action);
     void spawnScriptEnemy(const ScriptAction& action);

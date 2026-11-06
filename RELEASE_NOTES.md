@@ -4,6 +4,26 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.2 - Wires and switches (2026-11-06)
+
+Custom campaigns can think a little harder.
+
+- An event can now wait on several things at once, all of them or any one:
+  `SCRIPT_REQUIRE` adds gates that compare a state (`=`, `!=`, `<`, `<=`, `>`,
+  `>=`) or a live value: creatures killed or still alive on the map, the
+  player's health, the map they are on.
+- Counters: `ADD` adds to a state, so "find five crystals" is one rule.
+  `TAKE` takes quest items back.
+- `MESSAGE` puts a caption on the screen, with live numbers in it:
+  `RELAYS {relays} / 2`.
+- `SCRIPT_TRIGGER` says where an event listens (its box, its whole map, or
+  every map) and whether it fires once or each time its gates come true.
+
+Every map made before still plays the same. The guide's scripting table has
+the new records.
+
+---
+
 ## v1.2.1 - Out of doors (2026-11-06)
 
 The custom maps kit, finished.

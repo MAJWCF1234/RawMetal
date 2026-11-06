@@ -157,15 +157,46 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(!f[9].empty())event.requireState=scriptName(f,9,"event gate state");event.requireValue=integer(f,10,"event gate value");
    if(event.requireValue< -100000||event.requireValue>100000||(!event.requireState&&event.requireValue!=1))throw std::runtime_error("invalid script event gate");event.requireEnemiesClear=boolean(f,11,"event enemy-clear gate");event.once=true;
    if(map->scriptEvents.size()>=128)throw std::runtime_error("too many script events");map->scriptEvents.push_back(std::move(event));
+  }else if(tag=="SCRIPT_REQUIRE"){
+   // SCRIPT_REQUIRE|map|event|name|op|value: one more gate on an event, ANDed with the
+   // others unless SCRIPT_TRIGGER says any. op is = != < <= > >=. name is a state, or
+   // @kills / @remaining (the event's map), @health or @map.
+   if(f.size()!=6)throw std::runtime_error("malformed SCRIPT_REQUIRE record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"require event name");
+   auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("SCRIPT_REQUIRE references an undeclared event");
+   ScriptCondition c;using S=ScriptCondition::Source;using O=ScriptCondition::Op;const auto name=decode(f[3]);
+   if(name=="@kills")c.source=S::Kills;else if(name=="@remaining")c.source=S::Remaining;else if(name=="@health")c.source=S::Health;else if(name=="@map")c.source=S::Map;
+   else if(!name.empty()&&name[0]=='@')throw std::runtime_error("unknown SCRIPT_REQUIRE value; use a state name, @kills, @remaining, @health or @map");
+   else c.id=scriptName(f,3,"require state");
+   const auto op=decode(f[4]);
+   if(op=="="||op=="==")c.op=O::Equal;else if(op=="!=")c.op=O::NotEqual;else if(op=="<")c.op=O::Less;else if(op=="<=")c.op=O::LessEqual;else if(op==">")c.op=O::Greater;else if(op==">=")c.op=O::GreaterEqual;
+   else throw std::runtime_error("invalid SCRIPT_REQUIRE comparison; use = != < <= > >=");
+   c.value=integer(f,5,"require value");if(c.value< -100000||c.value>100000)throw std::runtime_error("invalid SCRIPT_REQUIRE value");
+   if(event->conditions.size()>=8)throw std::runtime_error("too many SCRIPT_REQUIRE records for one event (8 at most)");event->conditions.push_back(c);
+  }else if(tag=="SCRIPT_TRIGGER"){
+   // SCRIPT_TRIGGER|map|event|where|match|repeat: where is box (default), map or campaign;
+   // match is all (default) or any; repeat 1 fires each time the gates turn true.
+   if(f.size()!=6)throw std::runtime_error("malformed SCRIPT_TRIGGER record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"trigger event name");
+   auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("SCRIPT_TRIGGER references an undeclared event");
+   const auto where=decode(f[3]),match=decode(f[4]);
+   if(where=="box"||where.empty())event->scope=ScriptEvent::Scope::Box;else if(where=="map")event->scope=ScriptEvent::Scope::Map;else if(where=="campaign")event->scope=ScriptEvent::Scope::Campaign;
+   else throw std::runtime_error("invalid SCRIPT_TRIGGER scope; use box, map or campaign");
+   if(match=="all"||match.empty())event->matchAny=false;else if(match=="any")event->matchAny=true;else throw std::runtime_error("invalid SCRIPT_TRIGGER match; use all or any");
+   event->rearm=boolean(f,5,"trigger repeat");event->once=!event->rearm;
   }else if(tag=="SCRIPT_ACTION"){
    if(f.size()<4)throw std::runtime_error("malformed SCRIPT_ACTION record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"action event name");
    auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("script action references an undeclared event");
    ScriptAction action;const auto&kind=f[3];
-   if(kind=="STATE"||kind=="OBJECTIVE"||kind=="ITEM"){
+   if(kind=="STATE"||kind=="OBJECTIVE"||kind=="ITEM"||kind=="ADD"||kind=="TAKE"){
     if(f.size()!=6)throw std::runtime_error("malformed named SCRIPT_ACTION record");action.id=scriptName(f,4,"action name");action.value=integer(f,5,"action value");
     if(kind=="STATE"){if(action.value< -100000||action.value>100000)throw std::runtime_error("invalid script state value");action.type=ScriptAction::Type::SetState;}
+    else if(kind=="ADD"){if(action.value==0||action.value< -100000||action.value>100000)throw std::runtime_error("invalid ADD amount; use a non-zero whole number");action.type=ScriptAction::Type::AddState;}
     else if(kind=="OBJECTIVE"){if(action.value<0||action.value>3)throw std::runtime_error("invalid script objective status");action.type=ScriptAction::Type::SetObjective;}
+    else if(kind=="TAKE"){if(action.value<1||action.value>99)throw std::runtime_error("invalid script item count");action.type=ScriptAction::Type::TakeItem;}
     else{if(action.value<1||action.value>99)throw std::runtime_error("invalid script item count");action.type=ScriptAction::Type::GiveItem;}
+   }else if(kind=="MESSAGE"){
+    // MESSAGE|text|seconds: a caption; {state_name} shows that state's value.
+    if(f.size()!=6)throw std::runtime_error("malformed MESSAGE SCRIPT_ACTION record");action.type=ScriptAction::Type::ShowMessage;action.text=decode(f[4]);action.amount=number(f,5,"message seconds");
+    if(action.text.empty()||action.text.size()>96||action.amount<.5f||action.amount>15)throw std::runtime_error("invalid MESSAGE; use 1-96 characters for 0.5-15 seconds");
    }else if(kind=="CHECKPOINT"||kind=="COMPLETE"||kind=="ENTER_CAMPAIGN"){
     if(f.size()!=4)throw std::runtime_error("malformed terminal SCRIPT_ACTION record");action.type=kind=="CHECKPOINT"?ScriptAction::Type::Checkpoint:kind=="COMPLETE"?ScriptAction::Type::CompleteCampaign:ScriptAction::Type::EnterMainCampaign;
    }else if(kind=="SHAKE"){
