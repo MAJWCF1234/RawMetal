@@ -9,7 +9,7 @@
 
 namespace retro {
 namespace {
-auto exclusionCampaign(){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";return std::filesystem::exists(path)?loadCustomCampaignFile(path):loadEmbeddedExclusionZoneCampaign();}
+auto exclusionCampaign(){if(!Game::s_zoneInspectionPack.empty())return loadCustomCampaignFile(Game::s_zoneInspectionPack);auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";return std::filesystem::exists(path)?loadCustomCampaignFile(path):loadEmbeddedExclusionZoneCampaign();}
 }
 Game Game::zoneInspection(int level,Vec2 position,float yawDegrees,float pitch,float lift){
  Game g(exclusionCampaign());

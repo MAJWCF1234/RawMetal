@@ -526,6 +526,8 @@ bool Game::testCampaignMaps(){
   auto parse=[&](const char* surface){try{return loadCustomCampaignText(records+surface+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","surface-test.txt");}catch(const std::exception&){return std::shared_ptr<const CustomCampaign>{};}};
   auto rock=parse("SURFACE|0|5|8|5\n"),plain=parse("");
   check(rock&&rock->maps[0]->wallSurface==SurfaceRock&&rock->maps[0]->floorSurface==SurfaceMineTimber&&World(0,rock->maps[0]).ceilingSurface()==SurfaceRock,"SURFACE records set a custom map's wall, floor and ceiling finish");
+  {std::string message;try{loadCustomCampaignText("META_LEVEL_NAME: x\n"+records+"# note\nSURFACE|0|-2|0|0\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","line-test.txt");}catch(const std::exception&e){message=e.what();}
+   check(message.rfind("line 31 (SURFACE): ",0)==0,"A custom map error names its file line and record");}
   check(plain&&World(0,plain->maps[0]).wallSurface()==SurfaceDefault&&!parse(("SURFACE|0|"+std::to_string(int(SurfaceCount))+"|0|0\n").c_str())&&!parse("SURFACE|0|-2|0|0\n")&&!parse("SURFACE|0|1|2\n"),"Absent SURFACE keeps the legacy finish; out-of-range or malformed sets are rejected");
   bool allSets=true;for(int surface=SurfaceDefault;surface<SurfaceCount;++surface){auto record="SURFACE|0|"+std::to_string(surface)+"|"+std::to_string(surface)+"|"+std::to_string(surface)+"\n";auto pack=parse(record.c_str());
    allSets&=pack&&World(0,pack->maps[0]).wallSurface()==surface&&World(0,pack->maps[0]).floorSurface()==surface&&World(0,pack->maps[0]).ceilingSurface()==surface;}

@@ -48,6 +48,13 @@ struct CommandArguments {
  bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
 };
 static const CommandArguments& commandArguments(){static const CommandArguments args;return args;}
+// The shipped folder keeps "custom maps" beside the exe; a shortcut may start the game anywhere.
+static std::wstring customMapsFolder(){
+ std::wstring exe(MAX_PATH,L'\0');DWORD n=0;
+ while((n=GetModuleFileNameW(nullptr,exe.data(),DWORD(exe.size())))>=exe.size())exe.resize(exe.size()*2);
+ std::error_code ec;auto beside=std::filesystem::path(exe.substr(0,n)).parent_path()/L"custom maps";
+ return (n>0&&std::filesystem::is_directory(beside,ec)?beside:std::filesystem::current_path()/L"custom maps").wstring();
+}
 static void applyRenderSwitches(bool withoutPost=false,bool withoutPixel=false){
  const auto& args=commandArguments();
  retro::SoftwareRenderer::setPostProcessing(!args.find(L"--nopost")&&(args.find(L"--post-ao")||!withoutPost),args.find(L"--post-ao")!=nullptr);
@@ -1091,6 +1098,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int stage=0;stage<11;++stage){auto scene=retro::Game::prologueInspection(stage);renderer->render(scene);std::ofstream out(".build/prologue-preview/view-"+std::to_string(stage)+".ppm",std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
      return 0;
     }
+    if(auto pack=commandArguments().find(L"--zone-pack="))retro::Game::s_zoneInspectionPack=pack+12;
     if(auto arg=commandArguments().find(L"--zone-shots=")){
      // Exclusion Zone views: each line "name map x y yaw(deg) pitch [lift m]".
      // --no-impostors renders the same views with every real mesh (A/B for
@@ -1699,7 +1707,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(commandArguments().find(L"--smoke-test")){
         retro::Game game;
-        game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
+        game.loadCustomCampaignDirectory(customMapsFolder());
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
         if(commandArguments().find(L"--vulkan")&&!renderer.enableHardware())return 36;
         std::ofstream("model-report.txt")<<renderer.modelReport();
@@ -1968,7 +1976,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     std::thread loader([&]{
      try{
       auto g=std::make_unique<retro::Game>();auto&game=*g;if(commandArguments().find(L"--dev"))game.setDeveloperMode(true);
-      game.loadCustomCampaignDirectory((std::filesystem::current_path()/L"custom maps").wstring());
+      game.loadCustomCampaignDirectory(customMapsFolder());
       bool exclusionZone=commandArguments().find(L"--exclusion-zone")!=nullptr||commandArguments().find(L"--guard-lab")!=nullptr;
       bool directStart=commandArguments().find(L"--surface-lift")!=nullptr||exclusionZone;
       if(exclusionZone){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";game=retro::Game(std::filesystem::exists(path)?retro::loadCustomCampaignFile(path):retro::loadEmbeddedExclusionZoneCampaign());}

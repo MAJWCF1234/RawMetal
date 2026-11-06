@@ -30,7 +30,7 @@ void Game::loadCustomCampaignDirectory(std::wstring directory){
  // The Exclusion Zone ships inside the exe: list it whenever no copy is installed beside it.
  if(std::none_of(m_customCampaigns.begin(),m_customCampaigns.end(),[](const auto&c){return c&&c->sourceFile=="RawMetal-Ashfall-Exclusion-Zone.txt";}))
   try{m_customCampaigns.push_back(loadEmbeddedExclusionZoneCampaign());}catch(const std::exception&e){errors.push_back(std::string("embedded Exclusion Zone: ")+e.what());}
- std::ofstream report("RawMetal-custom-maps.txt",std::ios::trunc);
+ std::ofstream report(std::filesystem::path(m_customMapDirectory).parent_path()/"RawMetal-custom-maps.txt",std::ios::trunc);
  report<<"Loaded "<<m_customCampaigns.size()<<" custom campaign pack(s).\n";
  for(const auto& campaign:m_customCampaigns)report<<"OK "<<campaign->sourceFile<<" / "<<campaign->name<<" / "<<campaign->maps.size()<<" map(s)\n";
  for(const auto& error:errors)report<<"ERROR "<<error<<'\n';

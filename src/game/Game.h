@@ -479,6 +479,8 @@ public:
     // A standing view anywhere in the Exclusion Zone pack: map, local x/y,
     // yaw in degrees and view pitch, on the ground (for --zone-shots).
     static Game zoneInspection(int level,Vec2 position,float yawDegrees,float pitch,float lift=0);
+    // --zone-pack: the custom campaign file zoneInspection renders instead of the Exclusion Zone.
+    static inline std::wstring s_zoneInspectionPack;
     static bool testStealth();
     bool npcIncapacitated(size_t actor)const;
     bool npcHeld(size_t actor)const;

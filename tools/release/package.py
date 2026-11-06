@@ -4,7 +4,9 @@
 
 The engine builds RawMetal.exe; the files players download carry the game's
 name (--name, DepthWorks by default). Writes into DIR (default .build/release/TAG):
-  GAME-TAG.zip     GAME.exe, this version's notes (and the Windows guide if present)
+  GAME-TAG.zip     GAME.exe, this version's notes (and the Windows guide if present),
+                   and "custom maps/": the folder the game loads maps from, holding the
+                   Starter Map, GUIDE.html and its pictures
   GAME-TAG.sha256  SHA-256 of GAME.exe and of the zip
   body.md              the GitHub release text: download links first, then
                        only this version's section of RELEASE_NOTES.md
@@ -21,6 +23,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 REPO = 'MAJWCF1234/RawMetal'
+# The starter kit shipped in "custom maps/" (other packs there are built into the exe).
+CUSTOM_MAPS = ROOT / 'custom maps'
+STARTER_KIT = ['Starter Map.txt', 'GUIDE.html']
+
+
+def starter_kit():
+    """(source, name in the zip) for the custom maps starter kit."""
+    files = [CUSTOM_MAPS / name for name in STARTER_KIT] + sorted((CUSTOM_MAPS / 'guide').glob('*.jpg'))
+    missing = [str(f) for f in files[:len(STARTER_KIT)] if not f.is_file()]
+    if missing:
+        raise SystemExit('missing starter kit file(s): ' + ', '.join(missing) +
+                         ' (run tools/campaign/make_starter_map.py and make_custom_map_guide.py --shots)')
+    return [(f, 'custom maps/' + f.relative_to(CUSTOM_MAPS).as_posix()) for f in files]
 
 
 def section(tag):
@@ -66,7 +81,10 @@ def main():
         guide = ROOT / 'docs' / 'windows-compatibility.md'
         if guide.is_file():
             z.write(guide, 'windows-compatibility.md')
-    contents = 'the game, these notes and the Windows guide' if guide.is_file() else 'the game and these notes'
+        for source, entry in starter_kit():
+            z.write(source, entry)
+    contents = ('the game, these notes, the Windows guide' if guide.is_file() else 'the game, these notes') + \
+        ' and the custom maps folder (Starter Map and modding guide)'
     checksums = out / ('%s-%s.sha256' % (name, tag))
     # LF endings: sha256sum -c on any platform reads them; Windows text mode would write CRLF.
     with open(checksums, 'w', encoding='ascii', newline='\n') as f:
@@ -77,7 +95,8 @@ def main():
             '- [%s](%s%s): the game on its own (one file, all assets inside)\n'
             '- [%s](%s%s): SHA-256 checksums of both\n\n'
             'Windows 10/11 x64 with a Vulkan 1.0 GPU driver and the Microsoft Visual C++ x64 '
-            'Redistributable. Unzip anywhere and run %s; nothing is installed.\n\n'
+            'Redistributable. Unzip anywhere and run %s; nothing is installed. Custom maps go in the '
+            '`custom maps` folder beside it: open `custom maps/GUIDE.html` to make your own.\n\n'
             '---\n\n' % (archive.name, base, archive.name, contents, exe.name, base, exe.name, checksums.name, base, checksums.name, exe.name)) + notes
     (out / 'body.md').write_text(body, encoding='utf-8')
     print('PACKAGED', out)

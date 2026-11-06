@@ -76,9 +76,13 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  std::vector<std::pair<int,int>> guardTargets;std::shared_ptr<TerrainShape> terrain;
  // Test leads named by panel socket and prop terminal, seated once every fixture and prop is read.
  struct Seat{std::shared_ptr<AuthoredMapData> map;size_t lead;int panel;std::string socket,terminal;};std::vector<Seat> seats;
+ // Errors name the file line, counted from the top, so an author can find the record.
+ // The stream opens on the rest of the start marker's line, so that first read brings this to the marker's line.
+ int lineNumber=int(std::count(text.begin(),text.begin()+std::ptrdiff_t(start),'\n'));
  while(std::getline(stream,line)){
-  if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#')continue;
-  auto f=fields(line);if(f.empty())continue;const auto& tag=f[0];
+  if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#'){++lineNumber;continue;}
+  auto f=fields(line);if(f.empty()){++lineNumber;continue;}const auto& tag=f[0];
+  ++lineNumber;try{
   if(tag=="CAMPAIGN"){
    if(f.size()<3)throw std::runtime_error("malformed CAMPAIGN record");campaign->name=decode(f[1]);campaign->startMap=integer(f,2,"campaign start map");sawCampaign=true;
   }else if(tag=="MAP"){
@@ -442,6 +446,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(hint<0||hint>1)throw std::runtime_error("invalid nav hint kind; use Path (0) or Cover (1)");
    map->navHints.push_back({{number(f,2,"nav hint x"),number(f,3,"nav hint y")},number(f,4,"nav hint z"),hint});
   }else throw std::runtime_error("unknown custom campaign record: "+tag);
+  }catch(const std::exception& error){throw std::runtime_error("line "+std::to_string(lineNumber)+" ("+tag+"): "+error.what());}
  }
  for(auto& seat:seats)if(const auto error=seatTestLead(*seat.map,seat.map->leads[seat.lead],seat.panel,seat.socket,seat.terminal);!error.empty())throw std::runtime_error("LEAD record: "+error);
  for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration, weapon or patrol requires Guard actor AI mode");

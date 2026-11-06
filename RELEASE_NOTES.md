@@ -4,6 +4,27 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.0 - Open house (2026-11-06)
+
+A feature release: custom maps, for anyone.
+
+The download now unpacks with a custom maps folder beside the game. Drop a
+map file in it and it appears under CUSTOM MAPS, wherever the game is
+started from. Inside the folder:
+
+- Starter Map: a walkable debug world. Every model, prop, lamp, hazard,
+  creature and body the engine can place stands in rows on its own plinth,
+  signed with its ID. Stand beside anything and the HUD names it.
+- GUIDE.html: how a map file works, with diagrams, the record reference,
+  every model's size and where to find it in the Starter Map.
+
+A map that fails to load is listed in RawMetal-custom-maps.txt beside the
+game, with the line it failed on.
+
+The great door is still shut.
+
+---
+
 ## v1.1.17 - Head room (2026-11-06)
 
 A patch. Some curtains and partitions down below would hold a person lying
