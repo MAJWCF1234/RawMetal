@@ -4,6 +4,31 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.1 - Out of doors (2026-11-06)
+
+The custom maps kit, finished.
+
+The Starter Map has grown four places:
+
+- Levels, east of Life: a deck over the hall, a stair up to it and a hole to
+  look down through. One map, two floors.
+- Ground paint, Terrain and Grove, out past the last row of models: real
+  ground under a grey sky, every kind of ground cover, a plateau and a road
+  levelled into the hills, and trees standing where they grow.
+- Seams: where one map meets the next, marked on the ground and signed,
+  both ways, and an edge that goes nowhere.
+
+The guide has three new chapters with drawings: stacking floors in a map,
+stitching maps together north-south and east-west, and outdoor maps with
+their terrain, ground paint, horizon woods, storms and shelters.
+
+Two wall panels, a column and a vending machine that stood as black
+shapes now show their paint.
+
+The great door is still shut.
+
+---
+
 ## v1.2.0 - Open house (2026-11-06)
 
 A feature release: custom maps, for anyone.

@@ -330,7 +330,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
   // atlases averaging 25-64/255; lit like any other albedo they fall to a flat
   // black silhouette in a lit room. Same calibration as the wood above.
   // The wire-mesh fences and cell bars (mean 13-27/255) get the same lift.
-  float steelLift=name=="lab_specimen_crate_metal_crate_3"||name=="med_holding_cage_metal_hr_2"||name=="med_holding_cage_metal_floor_mx_1"?2.6f:name=="mine_mesh_fence_fence"||name=="mine_mesh_doorway_fence"?3.5f:name.starts_with("med_cell_bars")||name=="lab_cell_gate_metal_4"?2.6f:0.f;
+  float steelLift=name=="lab_specimen_crate_metal_crate_3"||name=="med_holding_cage_metal_hr_2"||name=="med_holding_cage_metal_floor_mx_1"||name=="wall_6"||name=="wall_7"||name=="vending_machine_1"?2.6f:name=="mine_mesh_fence_fence"||name=="mine_mesh_doorway_fence"?3.5f:name.starts_with("med_cell_bars")||name=="lab_cell_gate_metal_4"?2.6f:0.f;
   if(steelLift>0.f){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*steelLift))<<shift);}prepareDecal(texture,false);}
 
   bool wall=name.starts_with("wall_")&&name!="wall_box_2";
@@ -1227,7 +1227,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.2.0  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.2.1  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){

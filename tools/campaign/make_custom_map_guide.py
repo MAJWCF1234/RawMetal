@@ -18,16 +18,23 @@ MAPS = os.path.join(ROOT, 'custom maps')
 IMAGES = os.path.join(MAPS, 'guide')
 PACK = os.path.join(MAPS, 'Starter Map.txt')
 
-# name, map, x, y, yaw degrees, pitch, lift: map-local views of the Starter Map.
+# name, map name, x, y, yaw degrees, pitch, lift: map-local views of the Starter Map.
 SHOTS = [
-    ('welcome', 0, 12, 2.2, 90, -.05, .3, 'Spawn: the welcome room. Material pillars, stairs, doors, water and pickups.'),
-    ('lights', 1, 12, 15, -90, 0, 0, 'Lights: one booth per kind of lamp. Walk in to see each one alone.'),
-    ('hazards', 2, 1.5, 12, 0, -.12, 1.0, 'Hazards: the eight hazard kinds fenced off, with a compactor, smoke, glass and cables.'),
-    ('life', 3, 12, 8.6, 90, -.1, 0, 'Life: every creature asleep in a pen (they wake if hurt) and every actor body behind.'),
-    ('actors', 3, 12, 15.2, 90, 0, 0, 'Actor bodies stand in a row, each labelled with its ACTOR visual number.'),
-    ('props', 4, 12, 1.2, 90, -.25, 1.2, 'Props: every loose object you can pick up and throw, on plinths.'),
-    ('medical', 12, 12, 1.2, 90, -.2, 1.0, 'A model row (Medical). The HUD top-left names the model you stand at.'),
-    ('industrial', 8, 12, 1.2, 90, -.1, 2.0, 'Industrial: whole buildings, shown at reduced scale (the sign says by how much).'),
+    ('welcome', 'Welcome', 12, 2.2, 90, -.05, .3, 'Spawn: the welcome room. Material pillars, stairs, doors, water and pickups.'),
+    ('lights', 'Lights', 12, 15, -90, 0, 0, 'Lights: one booth per kind of lamp. Walk in to see each one alone.'),
+    ('hazards', 'Hazards', 1.5, 12, 0, -.12, 1.0, 'Hazards: the eight hazard kinds fenced off, with a compactor, smoke, glass and cables.'),
+    ('life', 'Life', 12, 8.6, 90, -.1, 0, 'Life: every creature asleep in a pen (they wake if hurt) and every actor body behind.'),
+    ('actors', 'Life', 12, 15.2, 90, 0, 0, 'Actor bodies stand in a row, each labelled with its ACTOR visual number.'),
+    ('levels', 'Levels', 2.5, 17, -15, .02, .4, 'Levels: a deck (layer 1, 3.5 m) over the ground floor (layer 0), the stair between them.'),
+    ('props', 'Props', 12, 1.2, 90, -.25, 1.2, 'Props: every loose object you can pick up and throw, on plinths.'),
+    ('medical', 'Medical', 12, 1.2, 90, -.2, 1.0, 'A model row (Medical). The HUD top-left names the model you stand at.'),
+    ('industrial', 'Industrial', 12, 1.2, 90, -.1, 2.0, 'Industrial: whole buildings, shown at reduced scale (the sign says by how much).'),
+    ('ground', 'Ground paint', 12, 1.5, 90, -.5, 4.0, 'Outdoors: the nine GROUND paints on a TERRAIN_FLAT pad, under the zone sky.'),
+    ('terrain', 'Terrain', 2.5, 21, -40, -.06, 1.2, 'Terrain: rolling TERRAIN noise, a plateau and a road levelled with TERRAIN_FLAT.'),
+    ('grove', 'Grove', 12, 1.0, 90, -.05, .5, 'Grove: trees and undergrowth as FIXTURE records with base 0, standing on the ground.'),
+    ('seams', 'Seams', 12, 7, -90, -.3, 2.5, 'A north-south seam: the dirt strip is the edge between two maps, open on both.'),
+    ('seam-ew', 'Seams', 15, 12, 0, -.2, 2.0, 'An east-west seam (dirt strip), and a closed edge (mud) at the far end of the next map.'),
+    ('doorway', 'Ground paint', 1.5, 6, -90, .05, .3, 'Indoors to outdoors: the model row keeps its wall, with # tiles, except a doorway.'),
 ]
 
 SECTION_ROWS = [('WELCOME, LIGHTS, HAZARDS, LIFE', 0)]
@@ -203,17 +210,118 @@ def grid_diagram(index):
     cols = max(m['col'] for m in maps) + 1; rows = max(m['row'] for m in maps) + 1
     s, ox, oy = 128, 20, 20
     b = ''
-    colors = {'Welcome': '#3c8cd8', 'Lights': '#e0b030', 'Hazards': '#d84030', 'Life': '#50b060', 'Props': '#9070d0'}
+    colors = {'Welcome': '#3c8cd8', 'Lights': '#e0b030', 'Hazards': '#d84030', 'Life': '#50b060', 'Levels': '#40b8c0', 'Props': '#9070d0',
+              'Ground paint': '#8aa040', 'Terrain': '#8aa040', 'Grove': '#8aa040', 'Seams': '#8aa040'}
     for i, m in enumerate(maps):
         x, y = ox + m['col'] * s, oy + m['row'] * 46
         base = m['name'].rstrip('0123456789 ')
         color = colors.get(base, '#56606c')
         b += rect(x, y, s - 4, 42, color + '60', color) + text(x + 6, y + 16, m['name'][:19], 11, '#fff', weight='bold')
         b += text(x + 6, y + 33, 'map %d  %d,%d' % (i, 24 * m['col'], 24 * m['row']), 10, '#c8ccd2')
-    b += '<circle cx="%g" cy="%g" r="5" fill="#50b060"/>' % (ox + 12 / 24 * (s - 4), oy + 6) + text(ox + 4 * s + 10, oy + 26, '< you spawn in Welcome. Rooms run east.', 12, '#9aa0a8')
-    b += text(ox + 4 * s + 10, oy + 46 + 26, '< each set of models is one row; walk south', 12, '#9aa0a8')
-    b += text(ox + 4 * s + 10, oy + 92 + 26, '  through the corridor along their west side', 12, '#9aa0a8')
-    return svg(max(900, ox + cols * s + 340), oy + rows * 46 + 10, b)
+    tx = ox + cols * s + 10
+    b += '<circle cx="%g" cy="%g" r="5" fill="#50b060"/>' % (ox + 12 / 24 * (s - 4), oy + 6) + text(tx, oy + 26, '< you spawn in Welcome. Rooms run east.', 12, '#9aa0a8')
+    b += text(tx, oy + 46 + 26, '< each set of models is one row; walk south', 12, '#9aa0a8')
+    b += text(tx, oy + 92 + 26, '  through the corridor along their west side', 12, '#9aa0a8')
+    last = max(m['row'] for m in maps if m['name'] in ('Ground paint', 'Seams')) if any(m['name'] == 'Seams' for m in maps) else None
+    if last is not None:
+        b += text(tx, oy + (last - 1) * 46 + 26, '< outdoors: ground paint, terrain, a grove', 12, '#9aa0a8')
+        b += text(tx, oy + last * 46 + 26, '< seams: one of each kind, signed', 12, '#9aa0a8')
+    return svg(max(900, tx + 330), oy + rows * 46 + 10, b)
+
+
+def levels_diagram():
+    """Side view of one map with two layers: what the Levels room builds."""
+    b = DEFS
+    gy, k, ox, kx = 300, 34, 60, 30          # ground line, metres to pixels (up), metres to pixels (across)
+    X = lambda m: ox + m * kx
+    Y = lambda z: gy - z * k
+    b += rect(X(0), Y(7.5), 24 * kx, 7.5 * k, '#1f2329', '#3a4048', 0)
+    b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#8a9099" stroke-width="3"/>' % (X(0), gy, X(24), gy)
+    b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#56606c" stroke-dasharray="6 4"/>' % (X(0), Y(7.5), X(24), Y(7.5))
+    b += text(X(.3), Y(7.5) - 6, 'MAP ceiling 7.5', 12, '#9aa0a8')
+    b += rect(X(23), Y(7.5), kx, 7.5 * k, '#6a6f78', rx=0) + text(X(23.5), Y(3.9), '#', 14, '#111', 'middle', 'bold')
+    for x1, x2 in ((12, 16), (18, 23)):
+        b += rect(X(x1), Y(3.5), (x2 - x1) * kx, .25 * k, '#9070d0', '#c0a8f0', 0)
+    b += text(X(16.5) + 15, Y(3.5) - 8, "hole: '.'", 11, '#c0a8f0', 'middle')
+    b += text(X(19), Y(3.5) - 8, "'=' tiles", 12, '#c0a8f0', 'middle')
+    for i in range(18):                     # the stair, rising east from x 6 to the deck edge at x 12
+        z = 3.5 * (i + 1) / 18
+        b += rect(X(6 + i / 3), Y(z), kx / 3 + .5, z * k, '#c8a05070', rx=0)
+    b += text(X(7.5), Y(1.2), 'STAIR', 12, '#e0c080', 'middle', 'bold') + text(X(7.5), Y(.6), '0 to 3.5', 11, '#e0c080', 'middle')
+    b += rect(X(19.3), Y(3.5 + .75), 1.4 * kx, .75 * k, '#c8a05090', '#c8a050', 0) + text(X(20), Y(4.6), 'base 3.5', 11, '#e0c080', 'middle')
+    b += rect(X(19.3), Y(.75), 1.4 * kx, .75 * k, '#c8a05090', '#c8a050', 0) + text(X(20), Y(1.1), 'base 0', 11, '#e0c080', 'middle')
+    b += text(X(24) + 12, Y(3.5) + 4, 'LAYER 1: elevation 3.5, thickness 0.25', 12, '#c0a8f0')
+    b += text(X(24) + 12, Y(3.5) + 22, '(the walking surface is at 3.5;', 11, '#9aa0a8') + text(X(24) + 12, Y(3.5) + 36, ' the slab hangs 0.25 below it)', 11, '#9aa0a8')
+    b += text(X(24) + 12, gy + 4, 'LAYER 0: elevation 0, thickness 0', 12, '#d8dade')
+    b += text(X(24) + 12, Y(7.5) + 4, "'#' walls on layer 0 run up to the ceiling", 11, '#9aa0a8')
+    b += text(X(0), gy + 26, 'x = 0 (west)', 11, '#6a707a') + text(X(24), gy + 26, 'x = 24 (east)', 11, '#6a707a', 'end')
+    return svg(1100, gy + 40, b)
+
+
+def stitch_diagram():
+    """Four maps from above, joined edge to edge: what the open flags mean."""
+    b = DEFS
+    s, ox, oy = 9, 110, 50                 # pixels per metre
+    maps = [(0, 0, 'map 0', '0 0', (0, 1, 0, 1)), (1, 0, 'map 1', '24 0', (0, 1, 1, 0)),
+            (0, 1, 'map 2', '0 24', (1, 0, 0, 1)), (1, 1, 'map 3', '24 24', (1, 0, 1, 0))]
+    for c, r, name, origin, (n, so, w, e) in maps:
+        x, y = ox + c * 24 * s, oy + r * 24 * s
+        b += rect(x, y, 24 * s, 24 * s, '#2c3036', '#56606c', 0)
+        b += text(x + 12 * s, y + 12 * s - 6, name, 15, '#fff', 'middle', 'bold') + text(x + 12 * s, y + 12 * s + 14, 'origin ' + origin, 12, '#9aa0a8', 'middle')
+        for flag, on, (tx, ty, anchor) in (('openN', n, (x + 12 * s, y + 16, 'middle')), ('openS', so, (x + 12 * s, y + 24 * s - 8, 'middle')),
+                                           ('openW', w, (x + 6, y + 12 * s + 40, 'start')), ('openE', e, (x + 24 * s - 6, y + 12 * s + 40, 'end'))):
+            b += text(tx, ty, '%s=%d' % (flag, on), 11, '#50b060' if on else '#d84030', anchor)
+        for side, on in (('n', n), ('s', so), ('w', w), ('e', e)):
+            if on: continue
+            x1, y1, x2, y2 = {'n': (x, y, x + 24 * s, y), 's': (x, y + 24 * s, x + 24 * s, y + 24 * s),
+                              'w': (x, y, x, y + 24 * s), 'e': (x + 24 * s, y, x + 24 * s, y + 24 * s)}[side]
+            b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#d84030" stroke-width="4"/>' % (x1, y1, x2, y2)
+    mid = ox + 24 * s
+    b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#50b060" stroke-width="4" stroke-dasharray="10 6"/>' % (mid, oy, mid, oy + 48 * s)
+    b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#50b060" stroke-width="4" stroke-dasharray="10 6"/>' % (ox, oy + 24 * s, ox + 48 * s, oy + 24 * s)
+    b += text(mid, oy - 12, 'east-west seam (x = 24)', 13, '#50b060', 'middle', 'bold')
+    b += text(ox - 8, oy + 24 * s + 4, 'north-south seam', 13, '#50b060', 'end', 'bold') + text(ox - 8, oy + 24 * s + 20, '(y = 24)', 12, '#50b060', 'end')
+    b += arrow(ox - 60, oy + 40, ox - 60, oy + 110) + text(ox - 60, oy + 128, 'south', 11, '#e0b030', 'middle')
+    tx = ox + 48 * s + 40
+    for k, line in enumerate(['A seam is walkable when BOTH maps open it:', '  map 0 openE=1  and  map 1 openW=1', '  map 0 openS=1  and  map 2 openN=1',
+                              '', 'The edge tiles on both sides must be floor (.).', 'A wall (#) in that row or column closes', 'that part of the seam, like a wall.',
+                              '', 'Red edges are closed: openX=0, or no map', 'there. Indoors draw them as # walls;', 'outdoors the flag alone stops you.',
+                              '', 'Origins are multiples of 24 so maps touch', 'exactly; overlapping maps fail to load.']):
+        b += text(tx, oy + 14 + k * 20, line, 13, '#d8dade' if line and not line.startswith('  ') else '#9fc8f0')
+    return svg(tx + 380, oy + 48 * s + 20, b)
+
+
+def terrain_diagram():
+    """Side profile of the outdoor ground: noise, a flat pad with its blend, and an indoor seam."""
+    import math
+    b = DEFS
+    gy, k, ox, kx = 210, 22, 40, 11
+    X = lambda m: ox + m * kx
+    Y = lambda z: gy - z * k
+    def height(m):
+        noise = 1 + 2.5 * (.6 * math.sin(m / 9.5) + .4 * math.sin(m / 3.7 + 1))
+        for a, c, h, blend in ((0, 6, 0, 8), (40, 52, 3.5, 5)):
+            d = max(a - m, 0, m - c)
+            t = max(0.0, 1 - d / blend)
+            t = t * t * (3 - 2 * t)
+            noise = noise * (1 - t) + h * t
+        return noise
+    pts = ' '.join('%g,%g' % (X(m / 2), Y(height(m / 2))) for m in range(0, 145))
+    b += '<polygon points="%g,%g %s %g,%g" fill="#4a5a3a" stroke="#8aa040" stroke-width="2"/>' % (X(0), gy + 60, pts, X(72), gy + 60)
+    for z, label in ((1, 'base 1'), (3.5, 'base + amplitude'), (-1.5, 'base - amplitude')):
+        b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#56606c" stroke-dasharray="5 4"/>' % (X(0), Y(z), X(72), Y(z)) + text(X(72) + 6, Y(z) + 4, label, 11, '#9aa0a8')
+    b += rect(X(-3.5), Y(3), 3.5 * kx, 3 * k, '#3a4048', '#8a9099', 0) + text(X(-1.75), Y(3) - 6, 'indoor map', 11, '#9aa0a8', 'middle')
+    b += text(X(3), Y(0) - 8, 'TERRAIN_FLAT 0', 11, '#e0b030', 'middle') + text(X(3), Y(0) + 16, '(meets the floor)', 10, '#e0b030', 'middle')
+    b += text(X(46), Y(3.5) - 26, 'TERRAIN_FLAT 3.5, blend 5', 11, '#e0b030', 'middle')
+    b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#e0b030" stroke-width="3"/>' % (X(40), Y(3.5), X(52), Y(3.5))
+    b += arrow(X(35), Y(5.3), X(38), Y(3.9)) + text(X(30), Y(5.6), 'blend: the slope back to the noise', 10, '#e0b030', 'middle')
+    tree = X(62)
+    hz = Y(height(62))
+    b += '<line x1="%g" y1="%g" x2="%g" y2="%g" stroke="#6a5030" stroke-width="5"/>' % (tree, hz, tree, hz - 46)
+    b += '<circle cx="%g" cy="%g" r="18" fill="#3c6a30"/>' % (tree, hz - 54) + text(tree, hz - 80, 'FIXTURE base 0', 11, '#90d0a0', 'middle')
+    b += text(tree, hz + 18, 'stands on the ground here', 10, '#90d0a0', 'middle')
+    b += text(X(0), gy + 82, 'Outdoor maps: every height (base, z, bottom, top) is measured from the ground under the thing, not from 0.', 13)
+    return svg(X(72) + 140, gy + 96, b)
 
 
 # ---- record reference ---------------------------------------------------------------------------
@@ -223,11 +331,20 @@ RECORDS = [
         ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed]',
          'One per map, numbered 0, 1, 2... with no gaps. origin places the 24 x 24 m map in the world: maps touch at multiples of 24. '
          'spawn is in map metres. environment 0 indoor, 1 outdoor. ceiling is the absolute ceiling height (indoors). ambient 0-1 is the base light (0.3 is a good start). '
-         'skybox: industrial_night indoors. openN/S/W/E 1 lets you walk across that edge into the neighbouring map. lift 0. '
+         'skybox: industrial_night indoors; zone_overcast (or brutal_wasteland) outdoors, which also switches on the campaign TERRAIN. '
+         'openN/S/W/E 1 lets you walk across that edge into the neighbouring map. lift 0. '
          'Optional tail: residency -1, floorMaterial 0 concrete / 1 carpet, music 0, spawnYaw radians, spawnPitch, startUnarmed 0/1.'),
         ('SURFACE|map|wall|floor|ceiling', 'Wall, floor and ceiling finish for the whole map; -1 keeps the default. See the surface table.'),
         ('LAYER|map|layer|name|elevation|thickness', 'A floor level. Layer 0 is the ground (elevation 0, thickness 0). Upper layers use thickness > 0 and = tiles for walkable deck.'),
         ('ROW|map|layer|row|24 characters', 'One line of the tile grid, row 0 (north) to 23 (south). Exactly 24 characters: see the tile diagram.')]),
+    ('Outdoors (campaign-wide, world metres)', [
+        ('TERRAIN|seed|base|amplitude|scale|roughness', 'The ground of every outdoor map. seed picks the pattern; base is the mean height (-10 to 16); amplitude how far hills rise and dip from it (0-12); '
+         'scale the metres between hills (6-400); roughness 0 smooth to 0.9 craggy. One per file.'),
+        ('TERRAIN_FLAT|x1|y1|x2|y2|height|blend', 'Levels the ground inside the box to height, sloping back to the noise over blend metres. Use for roads, building pads, and wherever an outdoor map meets an indoor one (height 0). World metres: map origin + map x, y.'),
+        ('GROUND|x1|y1|x2|y2|kind|edge', 'Paints the ground: 0 short grass, 1 leafy grass, 2 clover, 3 wild, 4 dry dirt, 5 forest litter, 6 gravel, 7 mud, 8 meadow. edge 0-8 metres of soft border.'),
+        ('HORIZON|depth|spacing|rise|model,model,...', 'Woods past every closed outdoor edge: a band depth metres deep, one model every spacing metres, the land rising rise metres away from you.'),
+        ('STORM|calmMs|warningMs|stormMs|damage|ash', 'An ash storm cycle for the whole campaign: calm, a warning, then a storm doing damage per second to anyone outside a SHELTER. ash 0-1 is the haze between storms.'),
+        ('SHELTER|map|x1|y1|x2|y2|bottom|top', 'Map metres. Under this box the storm does no harm. Heights are from the ground at its centre.')]),
     ('Building', [
         ('STRUCT|map|x1|y1|x2|y2|bottom|top|rail|material[|solid]', 'A box: walls, floors, platforms, plinths. x1<x2, y1<y2 in map metres; bottom/top are heights. rail 1 draws it as a thin railing. solid 0 lets you walk through it.'),
         ('STAIR|map|x1|y1|x2|y2|bottom|top|steps|alongY|ascending[|openUnderside|tread|rails]', 'A flight of steps inside the box. alongY 1 climbs along y, ascending 1 rises toward the larger coordinate. Optional open underside, tread thickness (0.12) and side rails.'),
@@ -273,9 +390,10 @@ def shots():
     os.makedirs(IMAGES, exist_ok=True)
     listing = os.path.join(ROOT, '.build', 'guide-shots.txt')
     os.makedirs(os.path.dirname(listing), exist_ok=True)
+    number = {m['name']: m['index'] for m in starter.build().maps}
     with open(listing, 'w') as fh:
         for name, m, x, y, yaw, pitch, lift, _ in SHOTS:
-            fh.write('%s %d %g %g %g %g %g\n' % (name, m, x, y, yaw, pitch, lift))
+            fh.write('%s %d %g %g %g %g %g\n' % (name, number[m], x, y, yaw, pitch, lift))
     subprocess.run([os.path.join(ROOT, 'RawMetal.exe'), '--zone-pack=' + PACK, '--zone-shots=' + listing], cwd=ROOT, check=True)
     from PIL import Image
     for name, *_ in SHOTS:
@@ -299,7 +417,7 @@ def main():
     o.append('<h1>Making custom maps</h1><p class="lede">A custom map is one plain text file. Put it in <code>custom maps</code> beside the game, '
              'start the game, and pick it under <b>CUSTOM MAPS</b> on the title screen. This guide shows how the file works, with '
              '<b>Starter Map.txt</b> as the worked example: a walkable debug world with every part of a map lined up and labelled.</p>')
-    o.append('<nav><a href="#start">Quick start</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#records">Records</a>'
+    o.append('<nav><a href="#start">Quick start</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#records">Records</a>'
              '<a href="#starter">Starter Map tour</a><a href="#values">Value tables</a><a href="#models">All models</a><a href="#errors">When it fails</a></nav>')
 
     o.append('<h2 id="start">1. Quick start</h2>')
@@ -328,20 +446,66 @@ def main():
              'Positions are map metres, so 12 12 is the middle of any map.</figcaption></figure>' % coordinate_diagram())
     o.append('<figure>%s<figcaption>The tile grid: the 24 ROW records of a layer. Tiles give you rooms quickly; STRUCT boxes give you anything finer.</figcaption></figure>' % tiles_diagram())
     o.append('<figure>%s<figcaption>Side view. Every height is in metres from the map\'s bottom layer.</figcaption></figure>' % heights_diagram())
-    o.append('<h3>Joining maps</h3><p>A campaign can hold up to 180 maps. Give each map an origin 24 m from its neighbour '
-             '(0 0, 24 0, 0 24...) and set the shared edge open on both maps (openE on the west map, openW on the east one). '
-             'Leave that edge column or row of tiles as floor. The Starter Map is 27 maps joined like this:</p>')
+    o.append('<h2 id="levels">4. Levels: stacking floors in one map</h2>')
+    o.append('<p>A map can have several layers, one above another. Layer 0 is the ground floor. Each upper layer is its own LAYER record and '
+             'its own 24 ROW records, where <code>=</code> is solid deck and <code>.</code> is open air. Climb between them with a STAIR whose '
+             'top meets the deck edge. <b>Levels</b> in the Starter Map (east of Life) is this exact room.</p>')
+    o.append('<figure>%s<figcaption>One map, two layers, from the side. Heights are always from the bottom layer, so a desk on the deck has base 3.5.</figcaption></figure>' % levels_diagram())
+    o.append('<pre>%s</pre>' % esc('LAYER|4|0|Hall floor|0|0\nROW|4|0|0|########################      (24 rows: walls and floor)\n...\n'
+                                   'LAYER|4|1|Upper deck|3.5|0.25\nROW|4|1|1|............===========.      (24 rows: = is deck, . is air)\n...\n'
+                                   'STAIR|4|6|10|12|12|0|3.5|18|0|1|1|0.08|1     (x 6-12, rises east to 3.5)\n'
+                                   'FIXTURE|4|24|20|14|3.5|1.4|0.7|0.75|0|1        (a desk ON the deck)'))
+    o.append('<ul><li>Leave headroom: the slab hangs <i>thickness</i> below its elevation, so a deck at 3.5 with thickness 0.25 leaves 3.25 m underneath.</li>'
+             '<li>Put the MAP ceiling above the highest deck plus head height (7.5 here), and light both floors: a LIGHT under the deck and one over it.</li>'
+             '<li>A deck can carry on into the next map: give that map an upper layer at the same elevation with <code>=</code> tiles on the shared edge.</li>'
+             '<li>Use ZONE bottom/top to label each floor separately: the HUD then names the floor you stand on.</li></ul>')
+
+    o.append('<h2 id="stitch">5. Stitching maps together</h2>')
+    o.append('<p>One map is 24 x 24 m. Bigger places are several maps laid edge to edge on a grid: '
+             '<b>east-west</b> (side by side, the seam runs north-south) and <b>north-south</b> (one above the other on the plan, the seam runs east-west). '
+             'A campaign can hold up to 180 maps, and you walk across a seam with no loading screen.</p>')
+    o.append('<figure>%s<figcaption>Four maps, two of each kind of seam. Green: open seams. Red: closed edges.</figcaption></figure>' % stitch_diagram())
+    o.append('<ol><li>Give every map an origin on the 24 m grid: <code>0 0</code>, <code>24 0</code>, <code>0 24</code>, <code>24 24</code>... '
+             '(origin is MAP fields 4 and 5). Map numbers are separate from position: map 7 may sit anywhere.</li>'
+             '<li>On each shared edge set the open flag on <b>both</b> maps: openE on the west map and openW on the east one; openS on the north map and openN on the south one.</li>'
+             '<li>Keep the edge tiles floor on both sides. Row 23 of the north map meets row 0 of the south map; column 23 of the west map meets column 0 of the east map. '
+             'A <code>#</code> in either closes that metre of the seam, so you can make doorways in a long seam.</li>'
+             '<li>Match what crosses the seam: the same floor height (layer elevation), similar ceilings, and the same SURFACE if it should look like one room. '
+             'Outdoors, terrain is one surface across the whole campaign, so it lines up by itself.</li>'
+             '<li>Keep each thing inside its own map\'s 0-24 square: split a long wall into one STRUCT per map at the seam.</li></ol>')
+    o.append('<p>The Starter Map is %d maps stitched like this; every open edge is a seam. <b>Seams</b>, under Ground paint, marks one of each with a dirt strip and a sign '
+             'naming both maps\' flags, and a closed edge at its east end.</p>' % len(s.maps))
     o.append('<figure>%s</figure>' % grid_diagram(index))
 
-    o.append('<h2 id="records">4. Records</h2><p>Fields in <code>[brackets]</code> are optional and can be left off the end. '
+    o.append('<h2 id="outdoors">6. Outdoors and terrain</h2>')
+    o.append('<p>A map is outdoors when its MAP environment is <code>1</code>. With the skybox <code>zone_overcast</code> (grey day) or '
+             '<code>brutal_wasteland</code> it also gets real ground: a smooth heightfield shaped by the campaign\'s TERRAIN record and covered in rock and soil. '
+             'There is no ceiling, sun and sky light it, and you can mix outdoor and indoor maps in one campaign.</p>')
+    o.append('<figure>%s<figcaption>The ground in profile: TERRAIN noise between base - amplitude and base + amplitude, levelled by TERRAIN_FLAT boxes.</figcaption></figure>' % terrain_diagram())
+    o.append('<pre>%s</pre>' % esc('TERRAIN|2026|1|2.5|30|0.45                      rolling ground around 1 m\n'
+                                   'TERRAIN_FLAT|0|264|72|266|0|8                   level with the indoor floor where they meet\n'
+                                   'TERRAIN_FLAT|37|275|44|281|3.5|5                a plateau\n'
+                                   'GROUND|24|284|48|286|6|1                        a gravel road\n'
+                                   'HORIZON|60|6|6|121,122,118,150,73              woods past the edges\n'
+                                   'MAP|n|Starter Map / Ground paint|0|264|...|1|2.8|0.3|zone_overcast|1|1|0|1|...'))
+    o.append('<ul><li><b>World metres.</b> TERRAIN_FLAT, GROUND and HORIZON are not tied to a map: their x, y are world positions (map origin plus map x, y). '
+             'A pad at map 12 6 on the map with origin 24 264 is at 36 270.</li>'
+             '<li><b>Heights follow the ground.</b> On an outdoor map every base, z, bottom and top is measured from the ground under it. A tree with base 0 '
+             'stands on the hillside; a sign with z 1.6 is 1.6 m above the ground at its spot.</li>'
+             '<li><b>Rows outdoors.</b> Leave the tiles <code>.</code>: the open flags are the boundary. <code>#</code> tiles still build 2.8 m walls if you want ruins.</li>'
+             '<li><b>Indoor to outdoor.</b> Put a TERRAIN_FLAT at height 0 along the seam so the ground meets the indoor floor; the Starter Map does this '
+             'where the Outdoors model row opens onto Ground paint, Terrain and Grove.</li>'
+             '<li><b>Buildings outdoors</b> are FIXTURE models (houses, sheds, the outdoor set) on a TERRAIN_FLAT pad, or STRUCT boxes. Add a SHELTER inside if the campaign has a STORM.</li></ul>')
+
+    o.append('<h2 id="records">7. Records</h2><p>Fields in <code>[brackets]</code> are optional and can be left off the end. '
              'Every record\'s second field is the map number it belongs to.</p>')
     for title, recs in RECORDS:
         o.append('<h3>%s</h3>' % esc(title))
         o.append(table(['Record', 'What it does'], [('<code>%s</code>' % esc(r), d) for r, d in recs]))
-    o.append('<p>The format also covers outdoor terrain, ash storms, armed guards, dialogue and cargo lifts (the Ashfall Exclusion Zone '
-             'is built from them). This guide covers the parts every map needs.</p>')
+    o.append('<p>The format also covers armed guards, dialogue and cargo lifts (the Ashfall Exclusion Zone and the shipped chapters '
+             'are built from them). This guide covers the parts every map needs.</p>')
 
-    o.append('<h2 id="starter">5. The Starter Map tour</h2><p>Pick <b>STARTER MAP</b> under CUSTOM MAPS. Everything stands on a plinth with a sign: '
+    o.append('<h2 id="starter">8. The Starter Map tour</h2><p>Pick <b>STARTER MAP</b> under CUSTOM MAPS. Everything stands on a plinth with a sign: '
              'the big text is its ID (the number you type in the record), the small text its name. Stand next to anything and the HUD, top left, '
              'names it in full. Nothing in it can hurt you unless you climb into a hazard pen or wake a creature by hitting it.</p><div class="shots">')
     for name, *_, caption in SHOTS:
@@ -350,7 +514,7 @@ def main():
     o.append('</div><p>To copy anything you see, search <code>Starter Map.txt</code> for its sign text (for example <code>|#27|</code> or <code>HAZARD 4</code>): '
              'the records just above it build that exhibit.</p>')
 
-    o.append('<h2 id="values">6. Value tables</h2>')
+    o.append('<h2 id="values">9. Value tables</h2>')
     o.append('<h3>STRUCT materials</h3>' + table(['material', 'look'], sorted(starter.MATERIALS.items())))
     o.append('<h3>SURFACE sets</h3>' + table(['value', 'finish'], [(-1, 'default')] + list(enumerate(starter.SURFACES))))
     o.append('<h3>Creatures, pickups, hazards, clutter</h3>')
@@ -359,9 +523,9 @@ def main():
                      (starter.CLUTTER_KINDS + ['a model: see CLUTTER 7'])[k] if k < 8 else '') for k in range(8)]))
     o.append('<h3>ACTOR visuals</h3>' + table(['visual', 'body'], list(enumerate(starter.ACTORS))))
 
-    o.append('<h2 id="models">7. All %d models</h2><p>Use the ID as the FIXTURE model. Width x depth x height is the model\'s own size in metres: '
+    o.append('<h2 id="models">10. All %d models</h2><p>Use the ID as the FIXTURE model. Width x depth x height is the model\'s own size in metres: '
              'stretch all three by the same factor to keep it in proportion. "Where" is its plinth in the Starter Map (map name, x, y).</p>' % len(models))
-    o.append('<div class="warn">Models 0, 1, 2, 13, 47 and 50 (early engine pieces) draw black: they exist for old maps. Pick another model for new work.</div>')
+    o.append('<div class="warn">Models 13 (electrical cabinet) and 47 (open container) still draw almost black in custom maps. For a container use 48 (closed).</div>')
     rows = []
     for slot, name, w, d, h, _ in models:
         it = where.get('#%d' % slot)
@@ -369,7 +533,7 @@ def main():
         rows.append((slot, name, '%.2f x %.2f x %.2f' % (w, d, h), loc))
     o.append(table(['ID', 'name', 'size (m)', 'where'], rows))
 
-    o.append('<h2 id="errors">8. When it fails</h2>')
+    o.append('<h2 id="errors">11. When it fails</h2>')
     o.append(table(['You see', 'Why, and the fix'], [
         ('The map is not in CUSTOM MAPS', 'Open RawMetal-custom-maps.txt beside the game. Each file is OK or ERROR with the line number and record. The file must end in .txt and sit directly in custom maps (not a subfolder).'),
         ('ERROR custom map rows must be exactly 24 characters', 'Count the tiles: every ROW has 24 characters, no spaces.'),
