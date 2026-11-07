@@ -94,6 +94,8 @@ class Starter:
         self.doors = {}         # (map index, side) -> [(from, to)] metres along that edge left open to outside
         self.thresholds = []    # TERRAIN_FLATs under the door landings, written last so nothing levels them again
         self.raised = []        # (map, world x, world y, height, FIXTURE fields): plants on ledges, based once the ground is known
+        self.absolute = []      # (map, x1, y1, x2, y2, bottom, top, material, rail): outdoor STRUCTs at absolute heights
+        self.sloped = 0         # absolute boxes over ground that falls further than they are tall
         self.closed = set()     # pairs of neighbouring cells whose shared edge stays shut
         self.start = 0          # the map you spawn in
 
@@ -127,6 +129,13 @@ class Starter:
 
     def struct(self, m, x1, y1, x2, y2, bottom, top, material, rail=0):
         self.rec(m, 'STRUCT', m['index'], x1, y1, x2, y2, bottom, top, rail, material)
+
+    def astruct(self, m, x1, y1, x2, y2, bottom, top, material, rail=0):
+        """A STRUCT at absolute heights, level with the indoor floors. Outdoors the engine adds
+        the lowest ground under a box to its bottom and the highest to its top, so these wait
+        for the terrain (settle) and are written with those taken off again."""
+        if not m['outdoor']: return self.struct(m, x1, y1, x2, y2, bottom, top, material, rail)
+        self.absolute.append((m, x1, y1, x2, y2, bottom, top, material, rail))
 
     def post_sign(self, m, cx, front, title, sub, accent, width=.9):
         """A label stand at the front of a pad: a short steel post, the sign on its face."""
@@ -204,6 +213,15 @@ class Starter:
             fields[5] = z - (t.ground(x, y) if t else 0)
             self.rec(m, *fields)
         self.raised = []
+        for m, x1, y1, x2, y2, bottom, top, material, rail in self.absolute:
+            ox, oy = 24 * m['col'], 24 * m['row']                       # World::settleExclusionFacilityOnTerrain
+            nx, ny = max(1, math.ceil((x2 - x1) * 2)), max(1, math.ceil((y2 - y1) * 2))
+            under = [t.ground(ox + x1 + (x2 - x1) * i / nx, oy + y1 + (y2 - y1) * j / ny) if t else 0
+                     for i in range(nx + 1) for j in range(ny + 1)]
+            low, high = bottom - min(under), top - max(under)
+            if high < low: self.sloped += 1                             # ground falls more than the box is tall:
+            self.struct(m, x1, y1, x2, y2, min(low, high), high, material, rail)   # it reaches down to meet it
+        self.absolute = []
 
     def write(self, path):
         self.settle()
@@ -749,10 +767,10 @@ def building(s, slot, catalogue):
             a, b = max(0, a), min(24, b)
             if b - a < .01: return
             if z0 == 0: z0 = -1.2                                              # under the lowered ground at doors
-            if side == 'N': s.struct(m, a, d0, b, d1, z0, z1, mat)
-            elif side == 'S': s.struct(m, a, 24 - d1, b, 24 - d0, z0, z1, mat)
-            elif side == 'W': s.struct(m, d0, a, d1, b, z0, z1, mat)
-            else: s.struct(m, 24 - d1, a, 24 - d0, b, z0, z1, mat)
+            if side == 'N': s.astruct(m, a, d0, b, d1, z0, z1, mat)
+            elif side == 'S': s.astruct(m, a, 24 - d1, b, 24 - d0, z0, z1, mat)
+            elif side == 'W': s.astruct(m, d0, a, d1, b, z0, z1, mat)
+            else: s.astruct(m, 24 - d1, a, 24 - d0, b, z0, z1, mat)
 
         def strip(side, d0, d1):
             """The world-metre box d0-d1 out from this map's edge on that side."""
@@ -830,16 +848,16 @@ def building(s, slot, catalogue):
                 sx, sy = (1, 1) if cx == 0 else (-1, 1)
                 sy = 1 if cy == 0 else -1
                 fx, fy = (tx2 if sx > 0 else tx1), (ty2 if sy > 0 else ty1)
-                s.struct(m, tx1, ty1, tx2, ty2, -1.2, TOWER, WALL)
-                s.struct(m, tx1, ty1, tx2, ty2, TOWER, TOWER + .1, STAIN)
-                s.struct(m, tx1 - .05, ty1 - .05, tx2 + .05, ty2 + .05, -1.2, rng.uniform(.8, 1.6), STAIN)
+                s.astruct(m, tx1, ty1, tx2, ty2, -1.2, TOWER, WALL)
+                s.astruct(m, tx1, ty1, tx2, ty2, TOWER, TOWER + .1, STAIN)
+                s.astruct(m, tx1 - .05, ty1 - .05, tx2 + .05, ty2 + .05, -1.2, rng.uniform(.8, 1.6), STAIN)
                 mx, my = (ty1 + ty2) / 2, (tx1 + tx2) / 2        # a tall stair slit up each open face
-                s.struct(m, min(fx, fx + .03 * sx), mx - .5, max(fx, fx + .03 * sx), mx + .5, 2.5, TOWER - 7, DARK)
-                s.struct(m, my - .5, min(fy, fy + .03 * sy), my + .5, max(fy, fy + .03 * sy), 2.5, TOWER - 7, DARK)
+                s.astruct(m, min(fx, fx + .03 * sx), mx - .5, max(fx, fx + .03 * sx), mx + .5, 2.5, TOWER - 7, DARK)
+                s.astruct(m, my - .5, min(fy, fy + .03 * sy), my + .5, max(fy, fy + .03 * sy), 2.5, TOWER - 7, DARK)
                 s.sign(m, (tx1 + tx2) / 2, fy + .05 * sy, TOWER - 3.6, 5.2, 1.7, 'SITE-01', 'STARTER MAP FACILITY', 0xb8c0bc,
                        0 if sy > 0 else PI)
                 a = rng.uniform(tx1 + .5, tx2 - 2)
-                s.struct(m, a, min(fy, fy + .035 * sy), a + rng.uniform(.6, 1.5), max(fy, fy + .035 * sy), 2, TOWER - 6, STAIN)
+                s.astruct(m, a, min(fy, fy + .035 * sy), a + rng.uniform(.6, 1.5), max(fy, fy + .035 * sy), 2, TOWER - 6, STAIN)
                 if is_forest:
                     sq = lambda d: (wx + (0 if cx == 0 else 24 - d), wy + (0 if cy == 0 else 24 - d),
                                     wx + (d if cx == 0 else 24), wy + (d if cy == 0 else 24))
@@ -851,8 +869,8 @@ def building(s, slot, catalogue):
         if is_forest and {'N', 'S'} <= set(sides) or is_forest and {'W', 'E'} <= set(sides):
             along_y = {'N', 'S'} <= set(sides)
             def span(a, b, z0, z1, mat):
-                if along_y: s.struct(m, a, 0, b, 24, z0, z1, mat)
-                else: s.struct(m, 0, a, 24, b, z0, z1, mat)
+                if along_y: s.astruct(m, a, 0, b, 24, z0, z1, mat)
+                else: s.astruct(m, 0, a, 24, b, z0, z1, mat)
             span(9.5, 14.5, 7.6, 10.6, WALL)
             span(9.5, 14.5, 10.6, 10.68, STAIN)
             span(9.47, 9.5, 8.3, 9.9, DARK)
