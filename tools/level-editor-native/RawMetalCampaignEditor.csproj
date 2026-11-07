@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>RawMetalCampaignEditor</AssemblyName>
+    <RootNamespace>RawMetalCampaignEditor</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OpenTK" Version="4.8.2" />
+    <PackageReference Include="OpenTK.GLControl" Version="4.0.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\level-editor\mappings.json" Link="mappings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The WinForms shell is retired in favour of the WPF MainWindow;
+         the files stay on disk as reference but no longer compile. -->
+    <Compile Remove="EditorForm.cs" />
+    <Compile Remove="EditorForm.Edit.cs" />
+    <Compile Remove="EditorForm.Files.cs" />
+    <Compile Remove="Ui.cs" />
+  </ItemGroup>
+</Project>

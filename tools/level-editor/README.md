@@ -1,4 +1,4 @@
-# Depthworks Level Editor
+# Raw Metal Campaign Editor
 
 Run `LevelEditor.cmd` from the repository root. No build step is required.
 
@@ -13,9 +13,33 @@ The editor is intended for artists and designers, not programmers. The default a
 5. Select placed objects to move, rotate, resize, duplicate, or delete them.
 6. Open **MATERIALS**, click a texture, and paint it onto floor/wall/deck tiles.
 7. Switch to **3D PREVIEW** at any time to inspect the same layout with real models and textures.
-8. Use **MORE -> EXPORT INSTALLER TXT** when the plan is ready to become a RawMetal map. Export JSON remains available as a portable editor-project backup.
+8. Press **WALK** to playtest the building in first person (see below).
+9. Use **MORE -> EXPORT .RMC CAMPAIGN** when the plan is ready to ship. The `.rmc` file goes in the game's `custom maps` folder and appears under CUSTOM MAPS. **MORE -> OPEN .RMC WORLD FILE** reads a shipped campaign back into the editor. Export JSON remains available as a portable editor-project backup.
 
 The **FILES** tab still exposes the underlying asset library for inspection, but artists should normally work from Prefabs and Materials.
+
+## World files (.rmc)
+
+A campaign is one `.rmc` file: readable text in the game's CUSTOM_CAMPAIGN format, with every plan area as one map. Export writes it directly; there is no installer step for custom maps any more. (EXPORT INSTALLER TXT is kept only for legacy MAIN-campaign slots.) Opening an `.rmc` rebuilds maps, floors, doors, stairs, lights, terminals, hazards, fixtures, props, pickups and creature spawns; script records the editor has no controls for are carried through in `runtimeRecords` so re-exporting does not drop them.
+
+## Making it yours: colour, signs, architecture, people
+
+The editor authors the same things the Starter Map shows off:
+
+- **Lights with colour**: select a lamp for warm/cool colour temperature, a gel filter (red alarm light, green lab light...), brightness and reach sliders, and ceiling/wall/bare mounting. Ceiling lamps pool light on the floor in the game; wall lamps throw it into the room.
+- **Signs**: the SIGN tool places real game signs. Type the title and subtitle, pick an accent colour; the words render in 3D and in game.
+- **Architecture**: the ARCHITECTURE tool places the game's 35 true-shape building parts (arches, round columns, vaults, domes, lattice screens, waffle slabs...) with concrete/steel/brick finishes.
+- **Map finishes**: MAP FINISH (right panel) sets the wall/floor/ceiling finish set for the whole map, like the Starter Map rooms.
+- **People with jobs**: PEOPLE dummies export as real actors. Give a person a behaviour — stands here, civilian, or armed guard — and creatures a species (Huntsman, Wasp, Brute, Warden, Mutant).
+- **Campaign checklist** (right panel) walks a first campaign from first wall to exported `.rmc`. **LOAD SAMPLE BUILDING** (quick start or MORE menu) opens a small finished facility using all of the above: playtest it, pull it apart, make it yours.
+
+## Playtest (WALK)
+
+WALK is a basic simulation, not just a camera: you start at the Player Start, click the view for mouse look, and move with WASD (SHIFT runs). Walls, blocks and equipment collide, stairs climb, doors slide open as you approach, hazard areas drain health, and Hostile/Creature dummies hunt you. Death returns you to the Player Start. The game remains authoritative for real gameplay, lighting and AI.
+
+## Asset blob (editor-assets.rmblob)
+
+The game exe is small because the engine bakes and compresses its assets rather than shipping the 1.1 GB source tree. The editor does the same: `py -3 tools/level-editor/build_asset_blob.py` writes `editor-assets.rmblob` (about 26 MB) registering every prefab and material — FBX baked to OBJ with the repo's ufbx (`fbx2obj`), textures downscaled to 512 px for preview. When the blob sits beside the editor, the server serves the catalog and all preview bytes from it, so a standalone editor folder needs no `src/assets` tree. Animation-only FBX files (no mesh) are skipped.
 
 The launcher caches the pinned Three.js editor runtime into `tools/level-editor/vendor` on first use. After that, the editor can reuse the local copy. If the 3D runtime cannot be downloaded, the 2D editor still works and reports the 3D problem instead of leaving the whole editor dead.
 

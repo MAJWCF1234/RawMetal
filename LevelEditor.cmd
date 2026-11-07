@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-echo Starting Depthworks Level Editor...
+echo Starting Raw Metal Campaign Editor...
 where py >nul 2>nul
 if not errorlevel 1 (
     py -3 tools\level-editor\server.py

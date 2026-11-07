@@ -56,3 +56,11 @@ source-assets/medic-motion/UAL2_Standard.fbx
 # Purchased library models (licence forbids public redistribution).
 src/assets/facility/freight/
 src/assets/library/
+
+# Generated level-editor asset blob (tools/level-editor/build_asset_blob.py)
+tools/level-editor/editor-assets.rmblob
+fbx2obj.obj
+
+tools/level-editor-native/bin/
+tools/level-editor-native/obj/
+selftest-*.txt

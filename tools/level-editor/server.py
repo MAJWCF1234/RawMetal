@@ -15,7 +15,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
-from runtime_records import runtime_records
+from runtime_records import ALLOWED_TAGS, runtime_records
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSET_ROOT = ROOT / "src" / "assets"
@@ -245,7 +245,41 @@ def category_for(path: Path) -> str:
         return "Actors"
     return "Other"
 
+BLOB_PATH = EDITOR_ROOT / "editor-assets.rmblob"
+BLOB_DISABLED = False  # build_asset_blob.py sets this to read the loose tree
+_blob_cache: dict | None = None
+
+
+def blob_catalog() -> dict | None:
+    """Catalog from editor-assets.rmblob (see build_asset_blob.py), if present."""
+    global _blob_cache
+    if BLOB_DISABLED or not BLOB_PATH.exists():
+        return None
+    if _blob_cache is None:
+        import zipfile
+        archive = zipfile.ZipFile(BLOB_PATH)
+        catalog = json.loads(archive.read("manifest.json"))
+        _blob_cache = {"archive": archive, "catalog": catalog}
+    return _blob_cache["catalog"]
+
+
+def blob_entry(name: str) -> tuple[bytes, str] | None:
+    if blob_catalog() is None:
+        return None
+    import mimetypes
+    try:
+        data = _blob_cache["archive"].read(name)
+    except KeyError:
+        return None
+    return data, mimetypes.guess_type(name)[0] or "application/octet-stream"
+
+
 def asset_manifest() -> dict:
+    catalog = blob_catalog()
+    if catalog is not None:
+        result = dict(catalog)
+        result["threeReady"] = (VENDOR_ROOT / "three.module.js").exists()
+        return result
     files = []
     if ASSET_ROOT.exists():
         for path in sorted(ASSET_ROOT.rglob("*")):
@@ -956,6 +990,7 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                         lines.append(f"BREAKABLE|{map_index}|{gx1}|{gy1}|{gx2}|{gy2}|{floor_z+sill}|{header}|17|0|{int(bool(opening.get('holds',True)))}||")
                     else:warnings.append("Window glazing crosses a chunk seam; inset the window at least 0.3 m.")
 
+        actor_lines=[];actor_indices=[]
         for obj in objects:
             kind=obj.get("type");layer=by_layer.get(str(obj.get("layerId"))) or base;pt=_resolve_editor_object(chunk,obj,by_id)
             if kind=="asset" and obj.get("physical"):
@@ -989,7 +1024,30 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                 open_under=int(bool(obj.get("openUnderside",False)));tread=max(.025,min(.5,float(obj.get("treadThickness",.12))))
                 lines.append(f"STAIR|{map_index}|{x1}|{y1}|{x2}|{y2}|{bottom}|{topz}|{steps}|{along}|{asc}|{open_under}|{tread}|{int(bool(obj.get('sideRails',False)))}")
             elif kind=="light":
-                lines.append(f"LIGHT|{map_index}|{pt['x']}|{pt['y']}|{pt['z']}")
+                line=f"LIGHT|{map_index}|{pt['x']}|{pt['y']}|{pt['z']}"
+                gel=obj.get("gel") or obj.get("gelColor")
+                if any(obj.get(k) not in (None,"") for k in ("lampMount","intensity","range","kelvin")) or gel:
+                    mounts={"ceiling":0,"wall":1,"bare":2}
+                    yaw=math.radians(float(pt["rotation"]))
+                    tail=[str(mounts.get(str(obj.get("lampMount") or "ceiling"),0)),str(yaw),
+                          str(float(obj.get("intensity") or 1)),str(float(obj.get("range") or 6)),
+                          str(int(float(obj.get("kelvin") or 0)))]
+                    if gel:
+                        hexv=str(gel).lstrip("#");rgb=[int(hexv[i:i+2],16)/255 for i in (0,2,4)] if len(hexv)>=6 else [1,1,1]
+                        tail+=[""]*12+[f"{c:.3f}" for c in rgb]  # fields 11..21 empty, gel at 22..24
+                    line+="|"+"|".join(tail)
+                lines.append(line)
+            elif kind in {"sign","label"}:
+                title=str(obj.get("title") or obj.get("text") or obj.get("name") or "SIGN")
+                subtitle=str(obj.get("subtitle") or "")
+                accent=str(obj.get("accent") or "#d8a03c").lstrip("#")
+                try:accent_int=int(accent[:6],16)
+                except ValueError:accent_int=0xd8a03c
+                yaw=math.radians(float(pt["rotation"]))
+                lines.append(f"SIGN|{map_index}|{pt['x']}|{pt['y']}|{pt['z']}|{float(obj.get('w') or 1.4)}|{float(obj.get('h') or .5)}|{yaw}|{_runtime_string(title)}|{_runtime_string(subtitle)}|{accent_int}")
+            elif kind=="prim":
+                facing=int(round((float(pt["rotation"])%360)/90))%4
+                lines.append(f"PRIM|{map_index}|{_runtime_string(obj.get('primKind') or 'box')}|{pt['x']}|{pt['y']}|{pt['z']}|{float(obj.get('w') or 0)}|{float(obj.get('d') or 0)}|{float(obj.get('h') or 0)}|{facing}|{int(float(obj.get('material') or 40))}|1")
             elif kind=="terminal":
                 title=obj.get("title") or obj.get("name") or "TERMINAL"
                 yaw=math.radians(float(pt["rotation"])) if obj.get("rotation") is not None else math.pi
@@ -1000,8 +1058,27 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                 lines.append(f"HAZARD|{map_index}|{hk}|{pt['x']-w/2}|{pt['y']-d/2}|{pt['x']+w/2}|{pt['y']+d/2}|{pt['z']}|{pt['z']+h}|20")
             elif kind=="spawn":
                 role=str(obj.get("spawnKind") or "Worker")
-                if role in {"Creature","Hostile"}:lines.append(f"CREATURE|{map_index}|0|{pt['x']}|{pt['y']}|{pt['z']}")
-                elif role not in {"Player"}:warnings.append(f"{chunk.get('name','Map')}: {role} dummy '{obj.get('name',role)}' remains blueprint-only; there is no runtime NPC type for that role.")
+                if role in {"Creature","Hostile"}:
+                    species={"Huntsman":0,"Wasp":1,"Brute":2,"Warden":3,"Mutant":4}
+                    lines.append(f"CREATURE|{map_index}|{species.get(str(obj.get('species') or 'Huntsman'),0)}|{pt['x']}|{pt['y']}|{pt['z']}")
+                elif role not in {"Player"}:
+                    visuals={"Worker":0,"Cargo":3,"Cleanup":4,"Security":4,"Scientist":10,"SeniorScientist":11,"FemaleScientist":12,"FemaleDoctor":13,"LabTech":14,"NPC":15,"Investigator":15}
+                    if role not in visuals:
+                        warnings.append(f"{chunk.get('name','Map')}: {role} dummy '{obj.get('name',role)}' remains blueprint-only; there is no runtime NPC type for that role.")
+                    else:
+                        idx=len(actor_indices);actor_indices.append(idx)
+                        yaw=math.radians(float(pt["rotation"]));scale=float(obj.get("personScale") or 1)
+                        actor_lines.append(f"ACTOR|{map_index}|editor_clock|{visuals[role]}|{scale}|0|0|{idx}")
+                        actor_lines.append(f"ACTOR_KEY|{map_index}|{idx}|0|{pt['x']}|{pt['y']}|{pt['z']}|{yaw}|0|0")
+                        actor_lines.append(f"ACTOR_KEY|{map_index}|{idx}|60000|{pt['x']}|{pt['y']}|{pt['z']}|{yaw}|0|1")
+                        behaviour=str(obj.get("behaviour") or "stand")
+                        if behaviour=="civilian":
+                            actor_lines.append(f"ACTOR_AI|{map_index}|{idx}|1||1.4|2|6")
+                        elif behaviour=="guard":
+                            actor_lines.append(f"ACTOR_AI|{map_index}|{idx}|3||1.4|2|6")
+                            armed=str(obj.get("armed") or "none")
+                            if armed in {"handgun","shotgun"}:
+                                actor_lines.append(f"ACTOR_WEAPON|{map_index}|{idx}|{2 if armed=='handgun' else 1}|650|1000|9|18")
             elif kind=="asset":
                 model=_normalize_model_path(obj.get("model"));yaw=math.radians(float(pt["rotation"]));scale=max(.01,float(obj.get("scale") or 1));w=max(.05,float(obj.get("w") or 1)*scale);d=max(.05,float(obj.get("d") or 1)*scale);h=max(.05,float(obj.get("h") or 1)*scale);baseoff=pt["z"]-base_z
                 if model in FACILITY_MODEL_INDEX:
@@ -1030,12 +1107,353 @@ def build_runtime_campaign(project: dict, campaign_name: str) -> tuple[str,list[
                         warnings.append(f"{chunk.get('name','Map')}: breakable crate at ({pt['x']:.2f},{pt['y']:.2f}) is outside grid bounds.")
                 else:warnings.append(f"{chunk.get('name','Map')}: asset '{obj.get('name') or model}' has no RawMetal runtime placement mapping.")
 
+        lines.extend(actor_lines)
+        surface=[int(float(chunk.get(k) if chunk.get(k) not in (None,"") else -1)) for k in ("surfaceWall","surfaceFloor","surfaceCeiling")]
+        if any(v!=-1 for v in surface):
+            lines.append(f"SURFACE|{map_index}|{surface[0]}|{surface[1]}|{surface[2]}")
         if any((layer.get("materials") or {}) for layer in layers):
             warnings.append(f"{chunk.get('name','Map')}: painted per-tile finishes remain editor-only until the World runtime has a material override table.")
 
 
     lines.extend(authored_records)
     return "\n".join(lines),warnings
+
+
+def build_campaign_file(project: dict, campaign_name: str) -> tuple[str, str, list[str]]:
+    """The playable world file: the runtime campaign in its markers, named .rmc.
+
+    This is what the game loads from "custom maps". The installer payload
+    (build_map_payload) remains for legacy MAIN-campaign slots.
+    """
+    runtime_text, warnings = build_runtime_campaign(project, campaign_name)
+    name = re.sub(r'[<>:"/\\|?*]+', "", str(campaign_name or "Depthworks Campaign")).strip() or "Depthworks Campaign"
+    text = ("--- CUSTOM_CAMPAIGN_DATA_START ---\n" + runtime_text.rstrip() +
+            "\n--- CUSTOM_CAMPAIGN_DATA_END ---\n")
+    return name + ".rmc", text, warnings
+
+
+def parse_campaign_project(text: str) -> dict:
+    """Read a .rmc world file back into an editor project.
+
+    Round-trips what build_runtime_campaign writes: maps, layers, rows,
+    doors, stairs, lights, terminals, hazards, fixtures, props, pickups and
+    creature spawns. Script records with no editor control are preserved in
+    runtimeRecords so re-exporting does not silently drop them.
+    """
+    from urllib.parse import unquote
+    start = text.find("--- CUSTOM_CAMPAIGN_DATA_START ---")
+    end = text.find("--- CUSTOM_CAMPAIGN_DATA_END ---")
+    if start >= 0 and end > start:
+        text = text[start:end]
+    maps: dict[int, dict] = {}
+    campaign_name = "Imported Campaign"
+    counter = [0]
+
+    def oid() -> str:
+        counter[0] += 1
+        return f"imp{counter[0]}"
+
+    def num(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    fixture_by_index = {v: k for k, v in FACILITY_MODEL_INDEX.items()}
+    prop_by_kind = {v: k for k, v in WORLD_PROP_KIND.items()}
+    clutter_by_kind = {v: k for k, v in CLUTTER_KIND.items()}
+    pickup_by_index = {}
+    for path, kind_name in PICKUP_KIND.items():
+        pickup_by_index[PICKUP_KIND_INDEX[kind_name]] = path
+    hazard_names = {0: "Electricity", 1: "Steam", 2: "Crusher", 3: "Toxic",
+                    4: "Fire", 5: "FallingDebris", 6: "Pressure", 7: "Anomaly"}
+    creature_names = {0: "Huntsman", 1: "Wasp", 2: "Brute", 3: "Warden", 4: "Mutant"}
+    pending_structs: list[tuple[int, list[str]]] = []
+    pending_doors: list[tuple[int, list[str]]] = []
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "|" not in line:
+            continue
+        f = [unquote(part) for part in line.split("|")]
+        tag = f[0]
+        try:
+            if tag == "CAMPAIGN":
+                campaign_name = f[1] if len(f) > 1 else "Imported Campaign"
+            elif tag == "MAP" and len(f) >= 12:
+                idx = int(num(f[1]))
+                maps[idx] = {
+                    "id": f"map{idx}", "number": idx + 1, "name": f[2] or f"Map {idx + 1}",
+                    "gx": int(num(f[3])) // 24, "gy": int(num(f[4])) // 24,
+                    "layers": [], "objects": [],
+                    "_spawn": (num(f[5], 3.5), num(f[6], 3.5), num(f[7])),
+                    "_skybox": f[11],
+                }
+            elif tag == "LAYER" and len(f) >= 6:
+                chunk = maps.get(int(num(f[1])))
+                if chunk is not None:
+                    chunk["layers"].append({
+                        "id": f"m{f[1]}l{f[2]}", "name": f[3] or f"Floor {int(num(f[2])) + 1}",
+                        "z": num(f[4]), "ceilingHeight": 3.0, "thickness": num(f[5]),
+                        "rows": ["_" * 24 for _ in range(24)],
+                        "materials": {}, "materialScales": {}, "materialRotations": {},
+                        "materialScaleYs": {}, "materialOffsetsX": {}, "materialOffsetsY": {},
+                    })
+            elif tag == "ROW" and len(f) >= 5:
+                chunk = maps.get(int(num(f[1])))
+                li, y = int(num(f[2])), int(num(f[3]))
+                if chunk is not None and 0 <= li < len(chunk["layers"]) and 0 <= y < 24:
+                    row = (f[4] + "_" * 24)[:24]
+                    if li > 0:
+                        row = row.replace("=", ".")
+                    chunk["layers"][li]["rows"][y] = row
+            elif tag == "STRUCT":
+                pending_structs.append((int(num(f[1])), f))
+            elif tag == "DOOR":
+                pending_doors.append((int(num(f[1])), f))
+            elif tag == "SURFACE" and len(f) >= 5:
+                chunk = maps.get(int(num(f[1])))
+                if chunk is not None:
+                    chunk["surfaceWall"] = int(num(f[2], -1))
+                    chunk["surfaceFloor"] = int(num(f[3], -1))
+                    chunk["surfaceCeiling"] = int(num(f[4], -1))
+            elif tag in ("LIGHT", "TERMINAL", "HAZARD", "STAIR", "FIXTURE", "PROP",
+                         "PICKUP", "CREATURE", "BREAKABLE", "CLUTTER", "SIGN", "PRIM",
+                         "ACTOR", "ACTOR_KEY", "ACTOR_AI", "ACTOR_WEAPON"):
+                chunk = maps.get(int(num(f[1])))
+                if chunk is not None:
+                    chunk.setdefault("_records", []).append(f)
+        except (IndexError, ValueError):
+            continue
+
+    # Script records belong to the whole campaign, not one map.
+    # (Collected in a second pass so ordering does not matter.)
+    project_records: list[str] = []
+    in_scope = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("--- CUSTOM_CAMPAIGN_DATA_START"):
+            in_scope = True
+            continue
+        if line.startswith("--- CUSTOM_CAMPAIGN_DATA_END"):
+            in_scope = False
+        if not in_scope and ("CUSTOM_CAMPAIGN_DATA_START" in text):
+            continue
+        tag = line.split("|", 1)[0] if "|" in line else ""
+        if tag in ALLOWED_TAGS and tag not in {"CLUTTER", "BREAKABLE"} and not tag.startswith("ACTOR"):
+            project_records.append(line)
+
+    chunks = []
+    for idx in sorted(maps):
+        chunk = maps[idx]
+        layers = chunk["layers"] or [{
+            "id": f"m{idx}l0", "name": "Ground Floor", "z": 0, "ceilingHeight": 3.0,
+            "thickness": 0, "rows": ["_" * 24 for _ in range(24)],
+            "materials": {}, "materialScales": {}, "materialRotations": {},
+            "materialScaleYs": {}, "materialOffsetsX": {}, "materialOffsetsY": {},
+        }]
+        for li in range(len(layers) - 1):
+            gap = layers[li + 1]["z"] - layers[li]["z"]
+            if gap > 0.5:
+                layers[li]["ceilingHeight"] = round(gap, 3)
+        base_z = layers[0]["z"]
+
+        def layer_for(z, records_map=chunk):
+            return min(layers, key=lambda l: abs(l["z"] - z))
+
+        objects = []
+        sx, sy, sz = chunk.get("_spawn", (3.5, 3.5, base_z))
+        objects.append({"id": oid(), "layerId": layer_for(sz)["id"], "type": "spawn",
+                        "spawnKind": "Player", "name": "Player Start",
+                        "x": sx, "y": sy, "z": sz, "rotation": 0, "mount": "floor",
+                        "w": .65, "d": .65, "h": 1.75})
+        door_cells = set()
+        for midx, f in pending_doors:
+            if midx != idx or len(f) < 6:
+                continue
+            left, right, y, zoff = num(f[2]), num(f[3]), num(f[4]), num(f[5])
+            layer = layer_for(base_z + zoff)
+            objects.append({"id": oid(), "layerId": layer["id"], "type": "door",
+                            "name": "Door", "x": (left + right) / 2, "y": y,
+                            "z": layer["z"], "rotation": 0, "mount": "wall",
+                            "wallAxis": "horizontal", "tileX": int((left + right) / 2),
+                            "tileY": int(y), "w": max(.25, right - left), "d": .18, "h": 2.2})
+            door_cells.add((int((left + right) / 2), int(y)))
+        for midx, f in pending_structs:
+            if midx != idx or len(f) < 8:
+                continue
+            x1, y1, x2, y2, zb, zt = (num(f[i]) for i in range(2, 8))
+            upper = [l for l in layers[1:] if abs(l["z"] - zb) < .06]
+            cell_aligned = all(abs(v - round(v)) < 1e-6 for v in (x1, y1, x2, y2))
+            if upper and cell_aligned and 0 <= x1 < x2 <= 24 and 0 <= y1 < y2 <= 24:
+                rows = upper[0]["rows"]
+                for cy in range(int(y1), int(y2)):
+                    row = list(rows[cy])
+                    for cx in range(int(x1), int(x2)):
+                        row[cx] = "#"
+                    rows[cy] = "".join(row)
+                continue
+            if (int(x1), int(y1)) in door_cells and abs(zb - base_z) < .1:
+                continue  # a door/window opening piece; the door object recreates it
+            if x2 - x1 < .05 or y2 - y1 < .05 or zt - zb < .05:
+                continue
+            objects.append({"id": oid(), "layerId": layer_for(zb)["id"], "type": "box",
+                            "name": "Block", "x": (x1 + x2) / 2, "y": (y1 + y2) / 2,
+                            "z": zb, "rotation": 0, "mount": "floor",
+                            "w": x2 - x1, "d": y2 - y1, "h": zt - zb})
+        for f in chunk.get("_records", []):
+            tag = f[0]
+            if tag == "LIGHT" and len(f) >= 5:
+                z = num(f[4])
+                light = {"id": oid(), "layerId": layer_for(z)["id"], "type": "light",
+                         "name": "Light", "x": num(f[2]), "y": num(f[3]), "z": z,
+                         "rotation": 0, "mount": "floor", "w": .3, "d": .3, "h": .3}
+                if len(f) > 5 and f[5] != "":
+                    light["lampMount"] = {0: "ceiling", 1: "wall", 2: "bare"}.get(int(num(f[5])), "ceiling")
+                    light["rotation"] = math.degrees(num(f[6])) if len(f) > 6 else 0
+                if len(f) > 7 and f[7] != "":
+                    light["intensity"] = num(f[7])
+                if len(f) > 8 and f[8] != "":
+                    light["range"] = num(f[8])
+                if len(f) > 9 and f[9] != "":
+                    light["kelvin"] = int(num(f[9]))
+                if len(f) >= 25 and all(f[i] != "" for i in (22, 23, 24)):
+                    light["gel"] = "#%02x%02x%02x" % tuple(
+                        max(0, min(255, round(num(f[i]) * 255))) for i in (22, 23, 24))
+                objects.append(light)
+            elif tag == "SIGN" and len(f) >= 11:
+                z = num(f[4])
+                objects.append({"id": oid(), "layerId": layer_for(z)["id"], "type": "sign",
+                                "name": f[8] or "Sign", "title": f[8], "subtitle": f[9],
+                                "accent": "#%06x" % (int(num(f[10])) & 0xFFFFFF),
+                                "x": num(f[2]), "y": num(f[3]), "z": z,
+                                "rotation": math.degrees(num(f[7])), "mount": "wall",
+                                "w": num(f[5], 1.4), "d": .1, "h": num(f[6], .5)})
+            elif tag == "PRIM" and len(f) >= 11:
+                z = num(f[5])
+                objects.append({"id": oid(), "layerId": layer_for(z)["id"], "type": "prim",
+                                "name": f[2], "primKind": f[2],
+                                "x": num(f[3]), "y": num(f[4]), "z": z,
+                                "rotation": int(num(f[9])) * 90, "mount": "floor",
+                                "material": int(num(f[10], 40)),
+                                "w": num(f[6], 1), "d": num(f[7], 1), "h": num(f[8], 1)})
+            elif tag == "TERMINAL" and len(f) >= 5:
+                z = base_z + num(f[4])
+                objects.append({"id": oid(), "layerId": layer_for(z)["id"], "type": "terminal",
+                                "name": f[6] if len(f) > 6 else "Terminal",
+                                "x": num(f[2]), "y": num(f[3]), "z": z,
+                                "rotation": 0, "mount": "floor", "w": .55, "d": .35, "h": 1.1})
+            elif tag == "HAZARD" and len(f) >= 10:
+                kind = hazard_names.get(int(num(f[2])), "Electricity")
+                objects.append({"id": oid(), "layerId": layer_for(num(f[7]))["id"], "type": "hazard",
+                                "name": "Hazard", "kind": kind,
+                                "x": (num(f[3]) + num(f[5])) / 2, "y": (num(f[4]) + num(f[6])) / 2,
+                                "z": num(f[7]), "rotation": 0, "mount": "floor",
+                                "w": num(f[5]) - num(f[3]), "d": num(f[6]) - num(f[4]),
+                                "h": max(.1, num(f[8]) - num(f[7]))})
+            elif tag == "STAIR" and len(f) >= 10:
+                x1, y1, x2, y2, bottom, top = (num(f[i]) for i in range(2, 8))
+                along, asc = int(num(f[9])) if len(f) > 9 else 1, int(num(f[10])) if len(f) > 10 else 1
+                rotation = (0 if asc else 180) if along else (270 if asc else 90)
+                objects.append({"id": oid(), "layerId": layer_for(bottom)["id"], "type": "stairs",
+                                "name": "Stairs", "x": (x1 + x2) / 2, "y": (y1 + y2) / 2,
+                                "z": bottom, "rotation": rotation, "mount": "floor",
+                                "w": (x2 - x1) if along else (y2 - y1),
+                                "d": (y2 - y1) if along else (x2 - x1),
+                                "h": max(.25, top - bottom),
+                                "steps": int(num(f[8], 17)) if len(f) > 8 else 17})
+            elif tag == "FIXTURE" and len(f) >= 11:
+                model = fixture_by_index.get(int(num(f[2])))
+                if model:
+                    z = base_z + num(f[5])
+                    objects.append({"id": oid(), "layerId": layer_for(z)["id"], "type": "asset",
+                                    "name": Path(model).stem, "model": model,
+                                    "x": num(f[3]), "y": num(f[4]), "z": z,
+                                    "rotation": math.degrees(num(f[9])), "mount": "floor",
+                                    "w": num(f[6], 1), "d": num(f[7], 1), "h": num(f[8], 1)})
+            elif tag == "PROP" and len(f) >= 8:
+                model = prop_by_kind.get(int(num(f[2])))
+                if model:
+                    objects.append({"id": oid(), "layerId": layer_for(base_z)["id"], "type": "asset",
+                                    "name": Path(model).stem, "model": model,
+                                    "x": num(f[3]), "y": num(f[4]), "z": base_z,
+                                    "rotation": math.degrees(num(f[7])), "mount": "floor",
+                                    "w": num(f[8], 1) * 2 if len(f) > 8 else 1,
+                                    "d": num(f[9], 1) * 2 if len(f) > 9 else 1,
+                                    "h": num(f[5], 1)})
+            elif tag == "PICKUP" and len(f) >= 5:
+                model = pickup_by_index.get(int(num(f[2])))
+                if model:
+                    objects.append({"id": oid(), "layerId": layers[0]["id"], "type": "asset",
+                                    "name": Path(model).stem, "model": model,
+                                    "x": num(f[3]), "y": num(f[4]), "z": base_z,
+                                    "rotation": 0, "mount": "floor", "w": .5, "d": .5, "h": .5})
+            elif tag == "CREATURE" and len(f) >= 6:
+                kind = creature_names.get(int(num(f[2])), "Huntsman")
+                objects.append({"id": oid(), "layerId": layer_for(num(f[5]))["id"], "type": "spawn",
+                                "spawnKind": "Creature", "name": kind + " Spawn",
+                                "x": num(f[3]), "y": num(f[4]), "z": num(f[5]),
+                                "rotation": 0, "mount": "floor", "w": .65, "d": .65, "h": 1.2})
+            elif tag == "BREAKABLE" and len(f) >= 10:
+                objects.append({"id": oid(), "layerId": layer_for(num(f[7]))["id"], "type": "box",
+                                "name": "Breakable", "breakMaterial": int(num(f[9])),
+                                "x": (num(f[3]) + num(f[5])) / 2, "y": (num(f[4]) + num(f[6])) / 2,
+                                "z": num(f[7]), "rotation": 0, "mount": "floor",
+                                "w": num(f[5]) - num(f[3]), "d": num(f[6]) - num(f[4]),
+                                "h": max(.05, num(f[8]) - num(f[7]))})
+            elif tag == "CLUTTER" and len(f) >= 7:
+                objects.append({"id": oid(), "layerId": layer_for(base_z)["id"], "type": "box",
+                                "name": "Clutter", "x": num(f[3]), "y": num(f[4]), "z": base_z,
+                                "rotation": 0, "mount": "floor", "w": .6, "d": .6, "h": .6})
+        # People: ACTOR tracks become spawn dummies at their first key.
+        actors: dict[int, dict] = {}
+        for f in chunk.get("_records", []):
+            if f[0] == "ACTOR" and len(f) >= 8:
+                actors[int(num(f[7]))] = {"visual": int(num(f[3])), "scale": num(f[4], 1),
+                                          "x": None, "behaviour": "stand", "armed": "none"}
+            elif f[0] == "ACTOR_KEY" and len(f) >= 8:
+                actor = actors.get(int(num(f[2])))
+                if actor is not None and actor["x"] is None:
+                    actor.update({"x": num(f[4]), "y": num(f[5]), "z": num(f[6]),
+                                  "rotation": math.degrees(num(f[7]))})
+            elif f[0] == "ACTOR_AI" and len(f) >= 4:
+                actor = actors.get(int(num(f[2])))
+                if actor is not None:
+                    actor["behaviour"] = {1: "civilian", 3: "guard"}.get(int(num(f[3])), "stand")
+            elif f[0] == "ACTOR_WEAPON" and len(f) >= 4:
+                actor = actors.get(int(num(f[2])))
+                if actor is not None:
+                    actor["armed"] = {1: "shotgun", 2: "handgun"}.get(int(num(f[3])), "none")
+        role_names = {0: "Worker", 3: "Cargo", 4: "Security", 10: "Scientist",
+                      11: "SeniorScientist", 12: "FemaleScientist", 13: "FemaleDoctor",
+                      14: "LabTech", 15: "NPC"}
+        for actor in actors.values():
+            if actor["x"] is None:
+                continue
+            role = role_names.get(actor["visual"], "Worker")
+            objects.append({"id": oid(), "layerId": layer_for(actor["z"])["id"], "type": "spawn",
+                            "spawnKind": role, "name": role + " Dummy",
+                            "x": actor["x"], "y": actor["y"], "z": actor["z"],
+                            "rotation": actor.get("rotation", 0), "mount": "floor",
+                            "behaviour": actor["behaviour"], "armed": actor["armed"],
+                            "personScale": actor["scale"], "w": .65, "d": .65, "h": 1.75})
+        chunk["objects"] = objects
+        chunk.pop("_spawn", None)
+        chunk.pop("_records", None)
+        kept = {k: chunk[k] for k in ("id", "number", "name", "gx", "gy", "layers", "objects")}
+        for key in ("surfaceWall", "surfaceFloor", "surfaceCeiling"):
+            if key in chunk:
+                kept[key] = chunk[key]
+        chunks.append(kept)
+
+    if not chunks:
+        raise ValueError("No MAP records found. Is this a .rmc campaign file?")
+    skybox = maps[sorted(maps)[0]].get("_skybox", "industrial_night") if maps else "industrial_night"
+    project = {"version": 5, "name": campaign_name,
+               "skybox": skybox, "chunks": chunks}
+    if project_records:
+        project["runtimeRecords"] = project_records
+    return project
 
 def project_filename(value: str) -> str:
     stem = Path(str(value or "untitled")).stem
@@ -1088,6 +1506,33 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 self.send_json({"error": str(exc)}, 500)
             return
+        if route.startswith('/src/assets/') and blob_catalog() is not None:
+            entry = (blob_catalog().get("registry") or {}).get(route[1:])
+            found = blob_entry(entry) if entry else None
+            if found is None:
+                self.send_error(404)
+                return
+            data, content_type = found
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if route.startswith('/__blob/'):
+            found = blob_entry(route[len('/__blob/'):])
+            if found is None:
+                self.send_error(404)
+                return
+            data, content_type = found
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if route.startswith('/__three/'):
             relative = route[len('/__three/'):]
             target = VENDOR_ROOT / relative
@@ -1124,7 +1569,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         route = urlparse(self.path).path
-        if route not in {"/__depthworks_save_project", "/__depthworks_map_payload"}:
+        if route not in {"/__depthworks_save_project", "/__depthworks_map_payload",
+                         "/__depthworks_campaign", "/__depthworks_import_campaign"}:
             self.send_json({"error": "Not found"}, 404)
             return
         try:
@@ -1132,10 +1578,23 @@ class Handler(SimpleHTTPRequestHandler):
             if length <= 0 or length > 16 * 1024 * 1024:
                 raise ValueError("Invalid project payload size")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if route == "/__depthworks_import_campaign":
+                text = payload.get("text")
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("No campaign text received")
+                self.send_json({"ok": True, "project": parse_campaign_project(text)})
+                return
             project = payload.get("project")
             if not isinstance(project, dict) or not isinstance(project.get("chunks"), list) or not project["chunks"]:
                 raise ValueError("Invalid Depthworks project")
             project["runtimeRecords"] = runtime_records(project)
+            if route == "/__depthworks_campaign":
+                name = str(payload.get("name") or project.get("name") or "Depthworks Campaign").strip()
+                if not name:
+                    raise ValueError("Campaign name is required")
+                filename, text_payload, warnings = build_campaign_file(project, name)
+                self.send_json({"ok": True, "file": filename, "payload": text_payload, "warnings": warnings})
+                return
             if route == "/__depthworks_map_payload":
                 level = int(payload.get("level"))
                 name = str(payload.get("name") or project.get("name") or "Depthworks Map").strip()
@@ -1181,8 +1640,10 @@ def main() -> int:
     threading.Thread(target=open_browser, daemon=True).start()
     try:
         with ThreadingHTTPServer((HOST, PORT), Handler) as server:
-            print(f"Depthworks Level Editor: http://{HOST}:{PORT}/level-editor/")
-            print("Assets are read directly from src/assets. Press Ctrl+C to stop.")
+            print(f"Raw Metal Campaign Editor: http://{HOST}:{PORT}/level-editor/")
+            print(("Assets served from editor-assets.rmblob." if blob_catalog() is not None
+                   else "Assets are read directly from src/assets.") +
+                  " Press Ctrl+C to stop.")
             server.serve_forever()
     except KeyboardInterrupt:
         print("\nLevel editor stopped.")
